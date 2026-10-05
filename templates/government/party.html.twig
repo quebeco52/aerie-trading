@@ -44,7 +44,7 @@
 						<span class="px-2 py-1 rounded bg-surface-container-high text-on-surface-variant">Founded on: {{ party.definedBy|join(' and ')|lower }}</span>
 					</div>
 				</div>
-				<dl class="grid grid-cols-3 gap-3 shrink-0">
+				<dl class="grid {{ polling ? 'grid-cols-2 sm:grid-cols-4' : 'grid-cols-3' }} gap-3 shrink-0">
 					<div class="bg-surface-container-lowest rounded border border-outline-variant/20 px-4 py-3 min-w-28">
 						<dt class="text-xs text-on-surface-variant">Seats</dt>
 						<dd class="text-xl font-semibold font-mono tabular-nums text-on-surface mt-0.5">{{ party.seats }}<span class="text-xs text-on-surface-variant font-normal"> / {{ rules.seats }}</span></dd>
@@ -60,6 +60,12 @@
 							{%- if party.swing is not null %}<span class="text-xs font-normal"> pts</span>{% endif %}
 						</dd>
 					</div>
+					{% if polling %}
+						<div class="bg-surface-container-lowest rounded border border-outline-variant/20 px-4 py-3 min-w-28">
+							<dt class="text-xs text-on-surface-variant" title="The latest monthly poll, {{ polling.date }}">Latest poll</dt>
+							<dd class="text-xl font-semibold font-mono tabular-nums text-on-surface mt-0.5">{{ (polling.share * 100)|number_format(1) }}%<span class="text-xs font-normal {{ polling.change >= 0 ? 'text-secondary' : 'text-tertiary' }}"> {{ (polling.change >= 0 ? '+' : '') ~ (polling.change * 100)|number_format(1) }} pts</span></dd>
+						</div>
+					{% endif %}
 				</dl>
 			</div>
 		</header>

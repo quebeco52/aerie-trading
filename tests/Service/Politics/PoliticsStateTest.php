@@ -37,7 +37,7 @@ class PoliticsStateTest extends TestCase
         $this->assertSame(Diet::SEED_SEATS, (new PoliticsState())->dietSeats);
     }
 
-    /** What Redis keeps comes back as it was written: nested positions, bloc leaders, the talks log, the headline, and the Council's, the Authority's and the Regulator's people and candidates. */
+    /** What Redis keeps comes back as it was written: nested positions, bloc leaders, the talks log, the headline, and the Council's, the Authority's and the Regulator's people, candidates and former holders. */
     public function testTheStateSurvivesTheRoundTripThroughRedis(): void
     {
         $state = new PoliticsState();
@@ -62,6 +62,7 @@ class PoliticsStateTest extends TestCase
         $state->fundHeadName = 'Matthias Okonkwo-Hale';
         $state->fundHeadStance = 0.5;
         $state->fundHeadPassedOver = [['name' => 'Ines Varga', 'birth' => -50.0, 'stance' => 0.0, 'regulation' => 0.0, 'fund' => -0.4]];
+        $state->formerNames = ['Corvin Ashby', 'Bram Ellery'];
         $state->bankCapitalRequirement = 0.1012;
         $state->requirementPhaseFrom = 0.094;
         $state->requirementPhaseStart = 7.0;

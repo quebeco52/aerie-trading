@@ -104,10 +104,7 @@ final class CoalitionFormation
         }
 
         $options = array_values(array_filter(self::options($seats, $positions, $blocs), static fn(array $option): bool => $option['cabinet'] !== $fallen));
-        $utilities = array_map(
-            static fn(array $option): float => self::utility($option['cabinet'], $option['support'], $seats, $positions, $statusQuo, $largest, $blocs),
-            $options
-        );
+        $utilities = self::utilities($options, $seats, $positions, $statusQuo, $largest, $blocs);
 
         $log = [];
         $day = 0.0;
@@ -233,6 +230,44 @@ final class CoalitionFormation
      */
     public static function utility(array $cabinet, array $support, array $seats, array $positions, array $statusQuo, string $largest, array $blocs): float
     {
+        return self::utilityOn($cabinet, $support, $seats, $positions, $statusQuo, $largest, $blocs, self::distances($positions), self::councilMedian($seats, $positions));
+    }
+
+    /**
+     * Every cabinet's log-odds (utility()), with the distances between the parties and the Council median struck once
+     * for them all.
+     *
+     * @param list<array{cabinet: list<string>, support: list<string>}> $options   The cabinets on offer (options()).
+     * @param array<string, int|float>                                 $seats     Seats by party.
+     * @param array<string, array<string, float>>                      $positions Positions by party and axis.
+     * @param list<string>                                             $statusQuo The outgoing cabinet.
+     * @param string                                                   $largest   The Diet's largest party.
+     * @param array<string, string>                                    $blocs     The leader of the bloc each party declared for.
+     * @return list<float>
+     */
+    public static function utilities(array $options, array $seats, array $positions, array $statusQuo, string $largest, array $blocs): array
+    {
+        $distances = self::distances($positions);
+        $median = self::councilMedian($seats, $positions);
+
+        return array_map(
+            static fn(array $option): float => self::utilityOn($option['cabinet'], $option['support'], $seats, $positions, $statusQuo, $largest, $blocs, $distances, $median),
+            $options
+        );
+    }
+
+    /**
+     * @param list<string>                        $cabinet   The cabinet's parties.
+     * @param list<string>                        $support   Its support parties.
+     * @param array<string, int|float>            $seats     Seats by party.
+     * @param array<string, array<string, float>> $positions Positions by party and axis.
+     * @param list<string>                        $statusQuo The outgoing cabinet.
+     * @param array<string, string>               $blocs     The blocs declared.
+     * @param array<string, array<string, float>> $distances Distances between parties (distances()).
+     * @param float                               $median    The Council median (councilMedian()).
+     */
+    private static function utilityOn(array $cabinet, array $support, array $seats, array $positions, array $statusQuo, string $largest, array $blocs, array $distances, float $median): float
+    {
         $minority = self::coalitionSeats($cabinet, $seats) < AerieDiet::MAJORITY_SEATS;
         $sorted = $cabinet;
         sort($sorted);
@@ -242,7 +277,6 @@ final class CoalitionFormation
         $sides = array_values(array_unique(array_map(static fn(string $party): string => $blocs[$party], $government)));
         $pact = count($government) > 1 && count($sides) === 1 && in_array($sides[0], $cabinet, true);
         $leaders = array_filter($cabinet, static fn(string $party): bool => $blocs[$party] === $party);
-        $median = self::councilMedian($seats, $positions);
         $challenge = 0.0;
         foreach ($cabinet as $party) {
             $challenge += abs(AerieDiet::position($party, $positions)[AerieDiet::AXIS_COUNCIL] - $median);
@@ -252,7 +286,7 @@ final class CoalitionFormation
             + (self::isMinimalWinning($cabinet, $seats) ? self::FORMATION_MINIMAL_WINNING_UTILITY : 0.0)
             + (self::FORMATION_PARTY_UTILITY * count($cabinet))
             + (in_array($largest, $cabinet, true) ? self::FORMATION_LARGEST_PARTY_UTILITY : 0.0)
-            + (self::FORMATION_RANGE_UTILITY * self::ideologicalRange($government, $positions))
+            + (self::FORMATION_RANGE_UTILITY * self::rangeOf($government, $distances))
             + ($sorted === $outgoing ? self::FORMATION_STATUS_QUO_UTILITY : 0.0)
             + ($pact ? self::FORMATION_PACT_UTILITY : 0.0)
             + (count($leaders) > 1 ? self::FORMATION_ANTIPACT_UTILITY : 0.0)

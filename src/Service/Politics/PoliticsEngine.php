@@ -266,6 +266,9 @@ class PoliticsEngine
             $state->termStartDeflator = $macro->gdpDeflator;
         }
 
+        // Support is brought up to date before any change of cabinet, so the month's swing lands on those who governed it.
+        OpinionPolls::advance($state, $macro, $dt, $this->mathUtility);
+
         if ($state->cabinetFallsAt >= 0.0 && $state->totalTime >= $state->cabinetFallsAt) {
             $this->fall($state);
         }
@@ -297,6 +300,7 @@ class PoliticsEngine
         SovereignReserveFund::advance($state, $this->mathUtility);
         PoliticalPressure::advance($state, $dt, $this->mathUtility);
         PartyLeaders::advance($state, $dt, $this->mathUtility);
+        ElectionForecast::advance($state, $macro->sovereignDebtToGdp);
 
         $state->eventType = self::headline($state);
     }
@@ -513,30 +517,17 @@ class PoliticsEngine
     {
         $previous = $state->dietVoteShares;
         $outgoingSeats = $state->dietSeats;
-        // The last vote's short-term forces are spent.
-        $shares = self::applyShortTermShocks($previous, array_map(static fn(float $shock): float => -$shock, $state->partyShortTermShocks));
+        // The vote is support on the day: the lasting drift, the government's swing and the short-term swings of the
+        // term, which the polls have been sampling (App\Service\Politics\OpinionPolls).
+        OpinionPolls::update($state, $macro, $this->mathUtility);
+        $shares = self::normaliseShares(OpinionPolls::support($state));
+        OpinionPolls::settle($state);
 
-        $lasting = [];
-        foreach (AerieDiet::PARTIES as $party) {
-            $lasting[$party] = self::swingSd(self::LASTING_SWING_VARIANCE, $party) * $this->mathUtility->generateStandardNormal();
-        }
-        $shares = self::revertToNormalVote($shares, $lasting);
-
+        // For the record: the economy the voters weighed.
         $growthGap = self::annualisedLogChange($state->campaignStartRealGdp, $realGdp, $state->totalTime - $state->campaignStartedAt);
         $growthGap = $growthGap === null ? 0.0 : $growthGap - $macro->laborForceGrowthRate - MacroEngine::TFP_DRIFT;
         $inflationGap = self::annualisedLogChange($state->termStartDeflator, $macro->gdpDeflator, $state->totalTime - $state->termStartedAt);
         $inflationGap = $inflationGap === null ? 0.0 : $inflationGap - MacroEngine::TARGET_INFLATION;
-
-        $alone = count(AerieDiet::governingParties($state->governingCoalition)) === 1;
-        $swing = self::economicVote($growthGap, $inflationGap, $this->mathUtility->generateStandardNormal(), $alone);
-        $shares = self::applyIncumbentSwing($shares, $state->governingCoalition, $swing, $state->supportParties);
-
-        $shocks = [];
-        foreach (AerieDiet::PARTIES as $party) {
-            $shocks[$party] = self::swingSd(self::ELECTION_SHORT_TERM_SWING_VARIANCE, $party) * $this->mathUtility->generateStandardNormal();
-        }
-        $shares = self::normaliseShares(self::applyShortTermShocks($shares, $shocks));
-        $state->partyShortTermShocks = $shocks;
 
         $state->electionGrowthGap = $growthGap;
         $state->electionInflationGap = $inflationGap;
@@ -629,17 +620,21 @@ class PoliticsEngine
      * the residual. Inflation costs every cabinet; growth is credited only to a party governing alone, since voters hold
      * a coalition's parties to no account for it (Powell & Whitten 1993).
      *
+     * Over part of a term (App\Service\Politics\OpinionPolls), the cost of ruling accrues in proportion and the residual
+     * as a random walk, so the parts of a term add up to the whole.
+     *
      * @param float $growthGap    Annualised real per-capita growth over the campaign, less its trend.
      * @param float $inflationGap Annualised inflation over the term, less the target.
      * @param float $residualDraw Standard normal draw for everything the economy does not explain.
      * @param bool  $alone        Whether one party forms the cabinet.
+     * @param float $termShare    Share of the term the swing covers.
      */
-    public static function economicVote(float $growthGap, float $inflationGap, float $residualDraw, bool $alone): float
+    public static function economicVote(float $growthGap, float $inflationGap, float $residualDraw, bool $alone, float $termShare = 1.0): float
     {
         return ($alone ? self::ELECTION_SINGLE_PARTY_GROWTH_SLOPE * $growthGap : 0.0)
             - (self::ELECTION_INFLATION_SLOPE * $inflationGap)
-            - self::ELECTION_COST_OF_RULING
-            + (self::ELECTION_RESIDUAL_SD * $residualDraw);
+            - (self::ELECTION_COST_OF_RULING * $termShare)
+            + (self::ELECTION_RESIDUAL_SD * sqrt($termShare) * $residualDraw);
     }
 
     /**
@@ -693,31 +688,6 @@ class PoliticsEngine
         $moved = [];
         foreach (AerieDiet::PARTIES as $party) {
             $moved[$party] = ($shares[$party] ?? 0.0) * exp($shocks[$party] ?? 0.0);
-        }
-        $total = array_sum($moved);
-
-        return array_map(static fn(float $share): float => $share / $total, $moved);
-    }
-
-    /**
-     * Pulls each party's lasting share back toward its normal vote, the share it won at the founding (Converse 1966),
-     * and moves it by its own lasting swing: its log share against its normal vote decays for a term at the persistence
-     * real parties show and takes the swing, the shares renormalised to the whole electorate (additive logistic form,
-     * Katz & King 1999).
-     *
-     * @param array<string, float> $shares Lasting vote shares by party, short-term swings given back.
-     * @param array<string, float> $swings Lasting log swing by party; a party without one only drifts back.
-     * @return array<string, float> Vote shares by party.
-     */
-    public static function revertToNormalVote(array $shares, array $swings): array
-    {
-        $persistence = self::ELECTION_NORMAL_VOTE_PERSISTENCE ** self::ELECTION_TERM_YEARS;
-
-        $moved = [];
-        foreach (AerieDiet::PARTIES as $party) {
-            $normal = AerieDiet::SEED_VOTE_SHARES[$party];
-            $share = max(self::MIN_VOTE_SHARE, $shares[$party] ?? $normal);
-            $moved[$party] = $normal * exp(($persistence * log($share / $normal)) + ($swings[$party] ?? 0.0));
         }
         $total = array_sum($moved);
 

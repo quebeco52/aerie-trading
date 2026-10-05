@@ -181,8 +181,8 @@ class PoliticsEngineTest extends TestCase
         $this->assertLessThan(0.05, $singlePartyMajority / count($volatility), 'The party system has drifted toward one-party rule.');
     }
 
-    /** A party's short-term swing is given back whole at the next vote. */
-    public function testAShortTermSwingIsUndoneAtTheNextVote(): void
+    /** A party's short-term swing is undone by its negation. */
+    public function testAShortTermSwingIsUndoneByItsNegation(): void
     {
         $shocks = [Diet::CIVIC => 0.3, Diet::VANGUARD => -0.2, Diet::IRON_HARBOR => 0.1, Diet::EXCHANGE => -0.05, Diet::CHARTISTS => 0.2, Diet::COMMON_LOT => -0.1];
         $swung = Politics::applyShortTermShocks(Diet::SEED_VOTE_SHARES, $shocks);
@@ -193,27 +193,6 @@ class PoliticsEngineTest extends TestCase
         foreach (Diet::PARTIES as $party) {
             $this->assertEqualsWithDelta(Diet::SEED_VOTE_SHARES[$party], $restored[$party], 1e-12);
         }
-    }
-
-    /** A lasting lead on the normal vote decays by a term's persistence, a lasting swing moves the party by itself, and the Diet at its normal votes stays there. */
-    public function testALastingLeadDriftsBackTowardTheNormalVote(): void
-    {
-        $persistence = Politics::ELECTION_NORMAL_VOTE_PERSISTENCE ** Politics::ELECTION_TERM_YEARS;
-        $lead = static fn(array $shares): float => log($shares[Diet::CIVIC] / $shares[Diet::VANGUARD]) - log(Diet::SEED_VOTE_SHARES[Diet::CIVIC] / Diet::SEED_VOTE_SHARES[Diet::VANGUARD]);
-
-        $atNormal = Politics::revertToNormalVote(Diet::SEED_VOTE_SHARES, []);
-        $ahead = [Diet::CIVIC => Diet::SEED_VOTE_SHARES[Diet::CIVIC] + 0.08, Diet::VANGUARD => Diet::SEED_VOTE_SHARES[Diet::VANGUARD] - 0.08] + Diet::SEED_VOTE_SHARES;
-        $reverted = Politics::revertToNormalVote($ahead, []);
-        $swung = Politics::revertToNormalVote(Diet::SEED_VOTE_SHARES, [Diet::CIVIC => 0.1]);
-
-        foreach (Diet::PARTIES as $party) {
-            $this->assertEqualsWithDelta(Diet::SEED_VOTE_SHARES[$party], $atNormal[$party], 1e-12);
-        }
-        $this->assertEqualsWithDelta(1.0, array_sum($reverted), 1e-12);
-        $this->assertEqualsWithDelta($persistence * $lead($ahead), $lead($reverted), 1e-12);
-        $this->assertLessThan($ahead[Diet::CIVIC], $reverted[Diet::CIVIC]);
-        $this->assertGreaterThan(Diet::SEED_VOTE_SHARES[Diet::CIVIC], $reverted[Diet::CIVIC]);
-        $this->assertEqualsWithDelta(0.1, $lead($swung), 1e-12);
     }
 
     /** A party's swings scale with its size as real vote shares' do: the Common Lot, 8 seats to the Civic Front's 94, swings the square root of 94/8, 3.4 times, as far in log share. */

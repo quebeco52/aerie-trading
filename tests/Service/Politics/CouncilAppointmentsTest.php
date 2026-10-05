@@ -147,18 +147,42 @@ class CouncilAppointmentsTest extends TestCase
 
         self::runTo($state, AerieCouncil::openingTermEnd(0) - self::DT);
         $medians = Appointments::councilMedians($state, 0);
-        $sitting = $state->councilNames;
+        $reserved = Appointments::reservedNames($state);
         self::runTo($state, AerieCouncil::openingTermEnd(0) + self::DT);
 
         $since = AerieCouncil::openingTermEnd(0);
         $this->assertEqualsWithDelta($since, $state->councilSince[0], 1e-12);
         $this->assertNotSame(AerieCouncil::OPENING_MEMBERS[0], $state->councilNames[0]);
         $this->assertCount(Appointments::SHORTLIST - 1, $state->councillorPassedOver);
-        [$expected, $passedOver] = Appointments::appoint((int) $state->authoritySalt, 'council:0', $since, $medians, $sitting, new MathUtility());
+        [$expected, $passedOver] = Appointments::appoint((int) $state->authoritySalt, 'council:0', $since, $medians, $reserved, new MathUtility());
         $this->assertSame($expected['name'], $state->councilNames[0]);
         $this->assertSame($expected['regulation'], $state->councilRegulationStances[0]);
         $this->assertSame($passedOver, $state->councillorPassedOver);
         $this->assertGreaterThan($since - 0.1, $state->lastCouncillorSeatedAt);
+    }
+
+    /**
+     * A councillor who leaves keeps their name: it joins the former holders, and no later appointee or party leader may
+     * take it, nor the name of anyone sitting, any party's leader past or present, or anyone seated before Year 1.
+     */
+    public function testANameOnceHeldIsNeverDrawnAgain(): void
+    {
+        $state = self::opened();
+        $this->assertSame([], $state->formerNames);
+        $state->leaderNames = ['civic' => 'Carol Ward'];
+        $state->leaderHistory = ['civic' => [['name' => 'Gary Fields', 'birth' => -60.0, 'since' => -9.0, 'until' => -1.0]]];
+
+        self::runTo($state, AerieCouncil::openingTermEnd(0) + self::DT);
+
+        $this->assertSame([AerieCouncil::OPENING_MEMBERS[0]], $state->formerNames);
+        $reserved = Appointments::reservedNames($state);
+        foreach ([...$state->councilNames, ...$state->formerNames, AerieCouncil::OPENING_GOVERNOR, AerieCouncil::OPENING_REGULATOR, AerieCouncil::OPENING_FUND_HEAD, 'Carol Ward', 'Gary Fields'] as $name) {
+            $this->assertContains($name, $reserved);
+        }
+
+        Appointments::retire($state, AerieCouncil::OPENING_MEMBERS[0]);
+        Appointments::retire($state, '');
+        $this->assertSame([AerieCouncil::OPENING_MEMBERS[0]], $state->formerNames, 'Each name kept once; an empty post retires no one.');
     }
 
     /**

@@ -145,6 +145,8 @@ class MacroEngine
     // --- Barro Tax-Smoothing & Automatic Fiscal Stabilizers (Barro 1979) ---
     /** Structural baseline statutory corporate tax rate. */
     public const TARGET_CORPORATE_TAX_RATE = 0.21;
+    /** Adjustment speed of the effective tax burden toward its cyclical target (half-life 0.7y), fitted with CreditFiscalSubsystem::FISCAL_STABILIZER_SENSITIVITY; shared, as the market prices how fast a law reaches the rate (App\Service\Market\PolicyCapitalization). */
+    public const FISCAL_ADJUSTMENT_SPEED = 1.0;
 
     // --- Consumer Sentiment Index & Animal Spirits ---
     /** Baseline consumer sentiment index value (neutral consumer confidence). */
@@ -799,6 +801,19 @@ class MacroEngine
         $state->authorityConcession = $policy->authorityConcession ?? 0.0;
         $state->bankCapitalRequirement = $policy->bankCapitalRequirement ?? $state->bankCapitalRequirement;
         $state->sovereignFundMandateEquityShare = $policy->reserveFundEquityShare ?? $state->sovereignFundMandateEquityShare;
+
+        $state->previousExpectedCorporateTaxPolicyShift = $state->expectedCorporateTaxPolicyShift;
+        $state->previousExpectedBankLevyRate = $state->expectedBankLevyRate;
+        $state->previousExpectedPolicyFrom = $state->expectedPolicyFrom;
+        $state->previousSittingCorporateTaxPolicyShift = $state->sittingCorporateTaxPolicyShift;
+        $state->previousSittingBankLevyRate = $state->sittingBankLevyRate;
+        $state->previousSittingPolicyFrom = $state->sittingPolicyFrom;
+        $state->sittingCorporateTaxPolicyShift = $policy->sittingCorporateTaxPolicyShift ?? $policy->corporateTaxPolicyShift;
+        $state->sittingBankLevyRate = $policy->sittingBankLevyRate ?? $policy->bankLevyRate;
+        $state->sittingPolicyFrom = $policy->sittingPolicyFrom ?? -1.0;
+        $state->expectedCorporateTaxPolicyShift = $policy->expectedCorporateTaxPolicyShift ?? $policy->corporateTaxPolicyShift;
+        $state->expectedBankLevyRate = $policy->expectedBankLevyRate ?? $policy->bankLevyRate;
+        $state->expectedPolicyFrom = $policy->expectedPolicyFrom ?? -1.0;
     }
 
     /**

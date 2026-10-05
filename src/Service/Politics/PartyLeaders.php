@@ -213,7 +213,7 @@ final class PartyLeaders
 
     /**
      * A new leader: their age when chosen from the record of new leaders (a normal truncated to the youngest and oldest
-     * on it), and a name no councillor, Authority member or other party's leader holds.
+     * on it), and a name for their birth decade no one sitting or who ever sat holds (CouncilAppointments::reservedNames()).
      *
      * @return array{name: string, birth: float}
      */
@@ -221,17 +221,12 @@ final class PartyLeaders
     {
         $key = CouncilAppointments::vacancyKey("leader:{$party}", $since);
         $age = $math->truncatedNormalInverse(CouncilAppointments::uniform($salt, "{$key}:age"), self::SELECTION_AGE_MEAN, self::SELECTION_AGE_SD, self::SELECTION_AGE_MIN, self::SELECTION_AGE_MAX);
-        $taken = array_merge(CouncilAppointments::sittingNames($state), array_values($state->leaderNames));
-        for ($attempt = 0; ; ++$attempt) {
-            $name = AerieNames::pick(
-                CouncilAppointments::uniform($salt, "{$key}:tradition:{$attempt}"),
-                CouncilAppointments::uniform($salt, "{$key}:given:{$attempt}"),
-                CouncilAppointments::uniform($salt, "{$key}:family:{$attempt}")
-            );
-            if (!in_array($name, $taken, true)) {
-                return ['name' => $name, 'birth' => $since - $age];
-            }
-        }
+        $birth = $since - $age;
+
+        return [
+            'name' => AerieNames::draw($birth, static fn(string $part): float => CouncilAppointments::uniform($salt, "{$key}:name:{$part}"), CouncilAppointments::reservedNames($state)),
+            'birth' => $birth,
+        ];
     }
 
     /**

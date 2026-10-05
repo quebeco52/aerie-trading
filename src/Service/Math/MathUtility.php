@@ -1799,6 +1799,23 @@ class MathUtility
     }
 
     /**
+     * Share of a growing perpetuity's value that a lasting change starting some years from now captures, phasing in at a
+     * given speed from then. A stream growing at g and discounted at k accrues its value at the density
+     * (k - g) e^{-(k - g) t} (Gordon 1959), so the part after t0 is e^{-(k - g) t0}; a change that closes the gap to its
+     * full size at speed lambda keeps lambda / (lambda + k - g) of that.
+     *
+     * @param float $capRate     The discount rate less growth, k - g.
+     * @param float $years       Years until the change starts.
+     * @param float $phaseInSpeed Speed at which the change reaches its full size once started, a year; INF for at once.
+     */
+    public static function perpetuityShareAfter(float $capRate, float $years, float $phaseInSpeed = INF): float
+    {
+        $atStart = exp(-$capRate * max(0.0, $years));
+
+        return is_infinite($phaseInSpeed) ? $atStart : $atStart * $phaseInSpeed / ($phaseInSpeed + $capRate);
+    }
+
+    /**
      * A bank levy for a year: the full rate on short-term funding, half of it on long-term funding and on uninsured
      * deposits from customers outside finance; insured deposits and Tier 1 equity are left out (UK Finance Act 2011,
      * Schedule 19).

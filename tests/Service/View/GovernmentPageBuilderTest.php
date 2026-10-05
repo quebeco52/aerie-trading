@@ -500,6 +500,7 @@ class GovernmentPageBuilderTest extends TestCase
         $this->assertSame('Year 1 Q1', GovernmentPageBuilder::simDate(0.0));
         $this->assertSame('Year 4 Q4', GovernmentPageBuilder::simDate(3.99));
         $this->assertSame('Year 5 Q1', GovernmentPageBuilder::simDate(4.0));
+        $this->assertSame('Year 41 Q1', GovernmentPageBuilder::simDate(40.0 - 1e-11), 'A vote the accumulated clock holds a hair short of its day.');
     }
 
     /**
@@ -632,6 +633,78 @@ class GovernmentPageBuilderTest extends TestCase
         $this->assertSame(['today', self::simDate(6.0)], array_column($party['leaders'], 'toLabel'));
 
         $this->assertNull($this->builder()->build($macro, new PoliticsStateDTO())['government']['primeMinister'], 'No one is named before the leaders are drawn.');
+    }
+
+    /**
+     * The polls panel draws each party's line from the last result across the term to the latest poll, lists the
+     * parties by the latest poll with the seats it would give them, and counts the cabinet's; none shows before the
+     * term's first poll.
+     */
+    public function testThePollsRunFromTheLastResultToTheLatestPoll(): void
+    {
+        $this->assertNull($this->builder()->build(new MacroStateDTO(), new PoliticsStateDTO())['polls']);
+
+        $first = array_merge(Diet::SEED_VOTE_SHARES, [Diet::CIVIC => Diet::SEED_VOTE_SHARES[Diet::CIVIC] - 0.02, Diet::VANGUARD => Diet::SEED_VOTE_SHARES[Diet::VANGUARD] + 0.02]);
+        $latest = array_merge(Diet::SEED_VOTE_SHARES, [Diet::CIVIC => Diet::SEED_VOTE_SHARES[Diet::CIVIC] - 0.06, Diet::VANGUARD => Diet::SEED_VOTE_SHARES[Diet::VANGUARD] + 0.06]);
+        $politics = new PoliticsStateDTO(totalTime: 6.0, lastElectionAt: 4.0, polls: [['t' => 4.5, 'shares' => $first], ['t' => 6.0, 'shares' => $latest]]);
+        $polls = $this->builder()->build(new MacroStateDTO(totalTime: 6.0), $politics)['polls'];
+
+        $this->assertSame('Year 5 Q1', $polls['since']);
+        $this->assertSame('Year 7 Q1', $polls['latest']);
+        $this->assertSame(['Year 5', 'Year 6', 'Year 7', 'Year 8', 'Year 9'], array_column($polls['years'], 'label'));
+        [$left, $right] = $polls['plot'];
+        $this->assertEqualsWithDelta(($left + $right) / 2.0, $polls['today'], 0.1, 'Half the term has run.');
+
+        $rows = array_column($polls['parties'], null, 'name');
+        $vanguard = $rows[Diet::PARTY_NAMES[Diet::VANGUARD]];
+        $this->assertSame(Diet::PARTY_NAMES[Diet::VANGUARD], $polls['parties'][0]['name'], 'Listed by the latest poll.');
+        $this->assertEqualsWithDelta(0.06, $vanguard['change'], 1e-12);
+        $this->assertCount(3, explode(' ', $vanguard['line']), 'The result, then each poll.');
+        $this->assertStringStartsWith($left . ',', $vanguard['line']);
+        $seats = PoliticsEngine::dHondt($latest, Diet::SEATS);
+        $this->assertSame($seats[Diet::VANGUARD], $vanguard['seats']);
+        $this->assertSame(Diet::SEATS, array_sum(array_column($polls['parties'], 'seats')));
+        $this->assertSame($seats[Diet::VANGUARD], $polls['cabinet']['seats'], 'The founding cabinet is the Vanguard alone.');
+        $this->assertSame($seats[Diet::VANGUARD] + $seats[Diet::EXCHANGE] + $seats[Diet::CHARTISTS] + $seats[Diet::NEW_HORIZON], $polls['cabinet']['supportedSeats']);
+
+        $party = $this->builder()->buildParty(new MacroStateDTO(totalTime: 6.0), $politics, Diet::VANGUARD)['polling'];
+        $this->assertEqualsWithDelta($latest[Diet::VANGUARD], $party['share'], 1e-12);
+        $this->assertEqualsWithDelta(0.06, $party['change'], 1e-12);
+        $this->assertSame('Year 7 Q1', $party['date']);
+        $this->assertNull($this->builder()->buildParty(new MacroStateDTO(), new PoliticsStateDTO(), Diet::VANGUARD)['polling']);
+    }
+
+    /**
+     * The market panel lists the parties by their chance of leading the next government, the likeliest governments by
+     * name, and each law in force against the one expected, the corporate tax as a rate; none shows before a forecast.
+     */
+    public function testTheMarketPanelShowsTheOddsAndTheLawsExpected(): void
+    {
+        $this->assertNull($this->builder()->build(new MacroStateDTO(), new PoliticsStateDTO())['market']);
+
+        $standing = PoliticsEngine::standingLevers(new PoliticsStateDTO());
+        $politics = new PoliticsStateDTO(
+            totalTime: 6.0,
+            forecastAt: 6.0,
+            forecastFor: 8.0,
+            forecastLeaders: [Diet::CIVIC => 0.62, Diet::VANGUARD => 0.375, Diet::EXCHANGE => 0.005] + array_fill_keys(Diet::PARTIES, 0.0),
+            forecastCabinets: [['cabinet' => [Diet::CIVIC, Diet::IRON_HARBOR], 'support' => [Diet::COMMON_LOT], 'chance' => 0.41]],
+            forecastLevers: ['corporateTax' => 0.03, 'bankLevyRate' => 0.0015] + $standing,
+        );
+        $market = $this->builder()->build(new MacroStateDTO(totalTime: 6.0), $politics)['market'];
+
+        $this->assertFalse($market['talks']);
+        $this->assertSame('Year 9 Q1', $market['vote']);
+        $this->assertSame('Year 9 Q3', $market['takesEffect']);
+        $this->assertSame([Diet::PARTY_NAMES[Diet::CIVIC], Diet::PARTY_NAMES[Diet::VANGUARD]], array_column($market['leaders'], 'name'), 'Likeliest first; a chance under a point is left off.');
+        $this->assertSame([Diet::PARTY_NAMES[Diet::CIVIC], Diet::PARTY_NAMES[Diet::IRON_HARBOR]], $market['cabinets'][0]['cabinet']);
+        $this->assertSame([Diet::PARTY_NAMES[Diet::COMMON_LOT]], $market['cabinets'][0]['support']);
+
+        $levers = array_column($market['levers'], null, 'name');
+        $this->assertEqualsWithDelta(MacroEngine::TARGET_CORPORATE_TAX_RATE, $levers['Corporate tax rate']['enacted'], 1e-12);
+        $this->assertEqualsWithDelta(MacroEngine::TARGET_CORPORATE_TAX_RATE + 0.03, $levers['Corporate tax rate']['expected'], 1e-12);
+        $this->assertTrue($levers['Bank levy']['moves']);
+        $this->assertFalse($levers['Average tariff on imports']['moves']);
     }
 
     /**

@@ -143,6 +143,8 @@ class PoliticsState
     /** @var list<array{name: string, birth: float, stance: float, regulation: float, fund: float}> */
     public array $fundHeadPassedOver;
     public float $lastFundHeadAppointedAt;
+    /** @var list<string> */
+    public array $formerNames;
     public float $pressureSince;
     public float $pressureCabinet;
     public float $pressureGivingIn;
@@ -162,6 +164,32 @@ class PoliticsState
     public float $leadersReviewedElection;
     public float $lastLeaderChangeAt;
     public string $lastLeaderChangeParty;
+    /** @var array<string, float> */
+    public array $supportLasting;
+    /** @var array<string, float> */
+    public array $supportIncumbency;
+    public float $supportUpdatedAt;
+    public float $supportGrowthCounted;
+    public float $supportInflationCounted;
+    /** @var list<array{t: float, shares: array<string, float>}> */
+    public array $polls;
+    /** @var array<string, float> */
+    public array $pollAverage;
+    /** @var array<string, float> */
+    public array $pollAverageVariance;
+    public float $pollAveragedAt;
+    /** @var list<array{cabinet: list<string>, support: list<string>, chance: float}> */
+    public array $forecastCabinets;
+    /** @var array<string, float> */
+    public array $forecastLeaders;
+    /** @var array<string, float> */
+    public array $forecastSeats;
+    /** @var array<string, float> */
+    public array $forecastLevers;
+    /** @var array<string, float> */
+    public array $sittingLevers;
+    public float $forecastFor;
+    public float $forecastAt;
 
     /** @var array<string, mixed>|null */
     private static ?array $openings = null;
@@ -212,9 +240,11 @@ class PoliticsState
                 $field === 'partyPositions' => self::hydratePositions($value),
                 $field === 'dietBlocs' => array_map('strval', $value),
                 $field === 'formationLog' => array_values($value),
-                $field === 'councilNames' || $field === 'memberNames' => array_values(array_map('strval', $value)),
+                $field === 'councilNames' || $field === 'memberNames' || $field === 'formerNames' => array_values(array_map('strval', $value)),
                 $field === 'leaderNames' => array_map('strval', $value),
                 $field === 'leaderHistory' => self::hydrateLeaderHistory($value),
+                $field === 'polls' => self::hydratePolls($value),
+                $field === 'forecastCabinets' => self::hydrateCabinets($value),
                 in_array($field, ['councillorPassedOver', 'governorPassedOver', 'regulatorPassedOver', 'fundHeadPassedOver'], true) => self::hydrateCandidates($value),
                 is_string($opening) => is_scalar($value) ? (string) $value : $opening,
                 is_array($opening) => array_map('floatval', $value),
@@ -288,6 +318,46 @@ class PoliticsState
                         'until' => is_numeric($leader['until'] ?? null) ? (float) $leader['until'] : 0.0,
                     ];
                 }
+            }
+        }
+
+        return $hydrated;
+    }
+
+    /**
+     * Published polls off the wire: each one's date and shares by party.
+     *
+     * @param array<mixed> $polls Polls as decoded.
+     * @return list<array{t: float, shares: array<string, float>}>
+     */
+    private static function hydratePolls(array $polls): array
+    {
+        $hydrated = [];
+        foreach ($polls as $poll) {
+            if (is_array($poll) && is_numeric($poll['t'] ?? null) && is_array($poll['shares'] ?? null)) {
+                $hydrated[] = ['t' => (float) $poll['t'], 'shares' => array_map('floatval', $poll['shares'])];
+            }
+        }
+
+        return $hydrated;
+    }
+
+    /**
+     * Forecast governments off the wire: each one's cabinet, support parties and chance.
+     *
+     * @param array<mixed> $cabinets Governments as decoded.
+     * @return list<array{cabinet: list<string>, support: list<string>, chance: float}>
+     */
+    private static function hydrateCabinets(array $cabinets): array
+    {
+        $hydrated = [];
+        foreach ($cabinets as $option) {
+            if (is_array($option) && is_array($option['cabinet'] ?? null) && is_numeric($option['chance'] ?? null)) {
+                $hydrated[] = [
+                    'cabinet' => array_values(array_map('strval', $option['cabinet'])),
+                    'support' => is_array($option['support'] ?? null) ? array_values(array_map('strval', $option['support'])) : [],
+                    'chance' => (float) $option['chance'],
+                ];
             }
         }
 

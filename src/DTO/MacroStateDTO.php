@@ -328,6 +328,27 @@ readonly class MacroStateDTO
         public float $authorityCommitteeSeated = 0.0,
         /** 1 while the Monetary Authority gives ground to the cabinet's pressure, else 0 (App\Service\Politics\PoliticalPressure). */
         public float $authorityConcession = 0.0,
+        /** The corporate tax shift as the tax rate has taken it in so far: the shift in force through the rate's own adjustment (App\Service\Macro\Subsystem\CreditFiscalSubsystem::calculateDynamicFiscalPolicy()). */
+        public float $corporateTaxShiftRealized = 0.0,
+        /** The shift as the trailing year's earnings carry it: the realized shift through a first-order lag of the year's mean lag. */
+        public float $corporateTaxShiftEmbodied = 0.0,
+        /** The bank levy as the trailing year's earnings carry it, the same lag. */
+        public float $bankLevyEmbodied = 0.0,
+        /** The corporate tax shift and bank levy the sitting government will pass at its next budget round, and when that falls (-1: not yet read). */
+        public float $sittingCorporateTaxPolicyShift = 0.0,
+        public float $sittingBankLevyRate = 0.0,
+        public float $sittingPolicyFrom = -1.0,
+        /** The corporate tax shift and bank levy the market expects from the next government's first budget, and when that falls (-1: no forecast yet) (App\Service\Politics\ElectionForecast). */
+        public float $expectedCorporateTaxPolicyShift = 0.0,
+        public float $expectedBankLevyRate = 0.0,
+        public float $expectedPolicyFrom = -1.0,
+        /** The same three as the market expected them the tick before, so a revision reprices at once (App\Service\Market\PolicyCapitalization). */
+        public float $previousExpectedCorporateTaxPolicyShift = 0.0,
+        public float $previousExpectedBankLevyRate = 0.0,
+        public float $previousExpectedPolicyFrom = -1.0,
+        public float $previousSittingCorporateTaxPolicyShift = 0.0,
+        public float $previousSittingBankLevyRate = 0.0,
+        public float $previousSittingPolicyFrom = -1.0,
         /** How far the inflation the public expects the Authority to tolerate has drifted above its target, under pressure it gave ground to (App\Service\Macro\Subsystem\MonetaryPolicySubsystem::updateInflationAnchor()). */
         public float $inflationAnchorDrift = 0.0,
         /** The CET1 requirement on the District's banks in force, as a share of risk-weighted assets, countercyclical buffer aside (App\Service\Politics\FinancialRegulator). */

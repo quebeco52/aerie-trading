@@ -107,6 +107,56 @@ class GovernmentPolicyTest extends TestCase
         $this->assertLessThan($firm->policyRate - 0.003, $giving->policyRate);
     }
 
+    /** The market's forecast goes in as handed over, the one before it kept for the tick, so a revision can be seen; with no forecast the laws in force are expected to stand. */
+    public function testTheMarketsForecastGoesInWithTheOneBefore(): void
+    {
+        $state = new MacroState();
+        $forecast = static fn(?float $tax, ?float $levy, ?float $from): GovernmentPolicyDTO => new GovernmentPolicyDTO(
+            corporateTaxPolicyShift: 0.01,
+            importTariffRate: 0.0,
+            laborForceGrowthRate: MacroEngine::STRUCTURAL_LABOR_GROWTH_RATE,
+            mergerReviewLeniency: 0.0,
+            greenBeltStringency: 0.0,
+            carbonPrice: 0.0,
+            extractionStringency: 0.0,
+            stampDutyRate: FinancialConstants::STAMP_DUTY_RATE,
+            bankLevyRate: 0.0005,
+            electionPulse: 0.0,
+            expectedCorporateTaxPolicyShift: $tax,
+            expectedBankLevyRate: $levy,
+            expectedPolicyFrom: $from,
+        );
+
+        $this->enactPolicyDto($state, $forecast(null, null, null));
+        $this->assertSame(0.01, $state->expectedCorporateTaxPolicyShift);
+        $this->assertSame(0.0005, $state->expectedBankLevyRate);
+        $this->assertSame(-1.0, $state->expectedPolicyFrom);
+
+        $this->enactPolicyDto($state, $forecast(0.04, 0.002, 8.5));
+        $this->assertSame(0.04, $state->expectedCorporateTaxPolicyShift);
+        $this->assertSame(8.5, $state->expectedPolicyFrom);
+        $this->assertSame(0.01, $state->previousExpectedCorporateTaxPolicyShift);
+        $this->assertSame(-1.0, $state->previousExpectedPolicyFrom);
+
+        $this->enactPolicyDto($state, $forecast(0.04, 0.002, 8.5));
+        $this->assertSame(0.04, $state->previousExpectedCorporateTaxPolicyShift, 'No revision, nothing to reprice.');
+        $this->assertSame(0.002, $state->previousExpectedBankLevyRate);
+    }
+
+    /** A state from before the lags has its earnings already carrying the laws in force. */
+    public function testAStateFromBeforeTheLagsCarriesTheLawsInForce(): void
+    {
+        $payload = (new MacroState())->toArray();
+        $payload['corporate_tax_policy_shift'] = 0.03;
+        $payload['bank_levy_rate'] = 0.001;
+        unset($payload['corporate_tax_shift_realized'], $payload['corporate_tax_shift_embodied'], $payload['bank_levy_embodied']);
+
+        $state = MacroState::fromArray($payload);
+        $this->assertSame(0.03, $state->corporateTaxShiftRealized);
+        $this->assertSame(0.03, $state->corporateTaxShiftEmbodied);
+        $this->assertSame(0.001, $state->bankLevyEmbodied);
+    }
+
     private static function policy(?float $concession): GovernmentPolicyDTO
     {
         return new GovernmentPolicyDTO(

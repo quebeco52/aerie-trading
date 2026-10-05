@@ -61,7 +61,9 @@ class MarketPricingContext
         /** The payout ratio the firm's dividend policy steers to; zero for a firm with no dividend policy. */
         public float $targetPayoutRatio = 0.0,
         /** Share of the gap to its target dividend the firm closes each quarter (Lintner 1956). */
-        public float $dividendAdjustmentSpeed = 1.0
+        public float $dividendAdjustmentSpeed = 1.0,
+        /** What the bank levy is charged on, per share (OperatingStrategyInterface::annualBankLevyBase()); zero for a firm that is not a bank. */
+        public float $bankLevyBasePerShare = 0.0
     ) {}
 
     /**
@@ -126,7 +128,8 @@ class MarketPricingContext
             orderFlowVariance: (float) ($stock->getImpactVarianceEma() ?? 0.0),
             tangibleBookValuePerShare: $stock->getTangibleEquity() / $shares,
             targetPayoutRatio: $stock->getPolicyPayoutRatio(),
-            dividendAdjustmentSpeed: (float) $stock->getDividendSpeed()
+            dividendAdjustmentSpeed: (float) $stock->getDividendSpeed(),
+            bankLevyBasePerShare: $strategy->annualBankLevyBase($stock) / $shares
         );
     }
 }

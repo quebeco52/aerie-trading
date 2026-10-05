@@ -7,6 +7,7 @@ namespace App\DTO;
 use App\Data\AerieDiet;
 use App\Service\Macro\MacroEngine;
 use App\Service\Math\FinancialConstants;
+use App\Service\Politics\ElectionForecast;
 use App\Service\Politics\PoliticsEngine;
 use App\Service\Politics\PoliticsState;
 use App\Service\Politics\PoliticalPressure;
@@ -40,7 +41,7 @@ readonly class PoliticsStateDTO
         public array $supportParties = AerieDiet::SEED_SUPPORT,
         /** @var array<string, string> The leader of the bloc each party declared for before the last vote. */
         public array $dietBlocs = AerieDiet::SEED_BLOCS,
-        /** @var array<string, float> Each party's short-term log swing at the last vote, given back at the next. */
+        /** @var array<string, float> Each party's short-term log swing in support, fading between votes (App\Service\Politics\OpinionPolls). */
         public array $partyShortTermShocks = [],
         public float $coalitionFormedAt = 0.0,
         /** @var array<string, float> 1.0 for a party in the cabinet the talks produced, until it takes office. */
@@ -147,6 +148,8 @@ readonly class PoliticsStateDTO
         /** @var list<array{name: string, birth: float, stance: float, regulation: float, fund: float}> The candidates the Council passed over when it named the head. */
         public array $fundHeadPassedOver = [],
         public float $lastFundHeadAppointedAt = -1.0,
+        /** @var list<string> Everyone who has left a Council seat or a post at the Monetary Authority, the Financial Regulator or the Sovereign Reserve Fund, whose names no later appointee takes. */
+        public array $formerNames = [],
         /** The cabinet's pressure on the Monetary Authority (App\Service\Politics\PoliticalPressure): when the episode under way began (-1: none), the cabinet that began it (when it formed), whether the Authority is giving ground (1) or holding firm (0), and when the last episode began. */
         public float $pressureSince = -1.0,
         public float $pressureCabinet = -1.0,
@@ -169,6 +172,35 @@ readonly class PoliticsStateDTO
         /** When a party last changed its leader, and which party. */
         public float $lastLeaderChangeAt = -1.0,
         public string $lastLeaderChangeParty = '',
+        /** @var array<string, float> Support between votes (App\Service\Politics\OpinionPolls): each party's lasting share, its short-term swing set aside (empty: read off the last vote). */
+        public array $supportLasting = [],
+        /** @var array<string, float> Each party's log swing this term for or against the governments it served in, folded into its lasting share at the vote. */
+        public array $supportIncumbency = [],
+        /** When support was last brought up to date (-1: never), and the growth and the inflation the voters had counted by then this term. */
+        public float $supportUpdatedAt = -1.0,
+        public float $supportGrowthCounted = 0.0,
+        public float $supportInflationCounted = 0.0,
+        /** @var list<array{t: float, shares: array<string, float>}> The polls published since the last vote, oldest first. */
+        public array $polls = [],
+        /** @var array<string, float> The market's average of the polls (App\Service\Politics\ElectionForecast), by party (empty: none yet). */
+        public array $pollAverage = [],
+        /** @var array<string, float> Its variance by party, in shares squared. */
+        public array $pollAverageVariance = [],
+        /** When the average last took a poll or a result (-1: never). */
+        public float $pollAveragedAt = -1.0,
+        /** @var list<array{cabinet: list<string>, support: list<string>, chance: float}> The governments the market gives a chance, likeliest first. */
+        public array $forecastCabinets = [],
+        /** @var array<string, float> Each party's chance of leading the next government. */
+        public array $forecastLeaders = [],
+        /** @var array<string, float> The seats the market expects each party to win. */
+        public array $forecastSeats = [],
+        /** @var array<string, float> The laws the market expects after the vote, each government's budget weighted by its chance (PoliticsEngine::LEVER_FIELDS keys). */
+        public array $forecastLevers = [],
+        /** @var array<string, float> The laws the sitting government will pass at its next budget round (the laws in force for a caretaker). */
+        public array $sittingLevers = [],
+        /** The vote the forecast is for, and when it was made (-1: none). */
+        public float $forecastFor = -1.0,
+        public float $forecastAt = -1.0,
     ) {}
 
     /** Snapshots the engine's working state. */
@@ -212,6 +244,12 @@ readonly class PoliticsStateDTO
             bankCapitalRequirement: $this->regulatorName === '' ? null : $this->bankCapitalRequirement,
             reserveFundEquityShare: $this->fundHeadName === '' || $this->fundHeadTermStart < 0.0 ? null : SovereignReserveFund::equityShare($this->fundHeadStance),
             authorityConcession: $this->authoritySalt < 0.0 ? null : PoliticalPressure::concession($this),
+            sittingCorporateTaxPolicyShift: $this->sittingLevers['corporateTax'] ?? null,
+            sittingBankLevyRate: $this->sittingLevers['bankLevyRate'] ?? null,
+            sittingPolicyFrom: $this->sittingLevers === [] ? null : (floor(($this->totalTime / MacroEngine::BUDGET_ROUND_PERIOD_YEARS) + 1e-9) + 1.0) * MacroEngine::BUDGET_ROUND_PERIOD_YEARS,
+            expectedCorporateTaxPolicyShift: $this->forecastLevers['corporateTax'] ?? null,
+            expectedBankLevyRate: $this->forecastLevers['bankLevyRate'] ?? null,
+            expectedPolicyFrom: $this->forecastLevers === [] ? null : ElectionForecast::takesEffect($this),
         );
     }
 }

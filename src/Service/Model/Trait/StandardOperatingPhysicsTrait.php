@@ -115,6 +115,12 @@ trait StandardOperatingPhysicsTrait
         return 0.0;
     }
 
+    /** A firm that is not a bank has nothing the levy is charged on. */
+    public function annualBankLevyBase(Stock $stock): float
+    {
+        return 0.0;
+    }
+
     // --- Input Cost Basket ---
     /** Share of an input price shock a firm with full pricing power recovers in its own prices; the rest lands on margin (incomplete pass-through, Gopinath & Itskhoki 2010). */
     public const MAX_INPUT_COST_PASS_THROUGH = 0.80;

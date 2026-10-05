@@ -5,173 +5,182 @@ declare(strict_types=1);
 namespace App\Data;
 
 /**
- * The names the District's public figures are drawn from: a given name and a family name, each picked from a hash of
- * the game and the vacancy (App\Service\Politics\CouncilAppointments::candidate()), so every candidate for the Council,
- * the governorship and the rate committee is someone.
+ * The names the District's public figures go by, drawn as US officeholders are named (App\Data\UsNameFrequencies): a
+ * surname by its 2010 Census frequency and its bearer's race or ethnicity group by the surname's shares, post-stratified
+ * so the groups come in the US Congress's mix (Holt & Smith 1979); then a given name of the person's sex from the Social
+ * Security applicants born in their decade, weighted by that group's share of the name's bearers (Bayes' rule, given name
+ * and surname independent within a group, as in the BIFSG proxy; Voicu 2018).
+ *
+ * Every draw is a uniform the caller hashes from the game and the vacancy (App\Service\Politics\CouncilAppointments::uniform()),
+ * so every candidate for the Council, the Authority, the Regulator and the Fund, and every party leader, is someone.
  */
 final class AerieNames
 {
-    // --- Traditions ---
-    /** American tradition. */
-    public const TRADITION_AMERICAN = 'american';
-    /** Anglo-Saxon tradition. */
-    public const TRADITION_ANGLO_SAXON = 'anglo_saxon';
-    /** Western European tradition. */
-    public const TRADITION_WESTERN_EUROPEAN = 'western_european';
-    /** Japanese tradition. */
-    public const TRADITION_JAPANESE = 'japanese';
-    /** Swedish tradition. */
-    public const TRADITION_SWEDISH = 'swedish';
+    // --- Calendar ---
+    /** The mainland year Year 1 begins in (2009Q1): someone born t years after Year 1 began was born in 2009 + t. */
+    public const YEAR_ONE_CALENDAR_YEAR = 2009;
 
-    /** All supported naming traditions. */
-    public const TRADITIONS = [
-        self::TRADITION_AMERICAN,
-        self::TRADITION_ANGLO_SAXON,
-        self::TRADITION_WESTERN_EUROPEAN,
-        self::TRADITION_JAPANESE,
-        self::TRADITION_SWEDISH,
-    ];
+    // --- Officeholders ---
+    /** Voting members of the 119th Congress (Jan 2025, Pew Research) in UsNameFrequencies::GROUPS order, each once: its 3 Black Hispanic members as Hispanic, its 2 Black and Asian members as two or more races, as the Census places them. */
+    public const OFFICEHOLDERS = [394, 61, 19, 4, 2, 53];
 
     // --- Gender Balance ---
-    /** Minimum target share of male given names in the pool (72% realized). */
-    public const MALE_SHARE_TARGET = 0.70;
+    /** Share of the District's public figures who are men (70%). */
+    public const MALE_SHARE = 0.70;
 
-    // --- Pools ---
-    /** Given and family names organized by tradition, with given names tilted at least 70% male. */
-    public const POOLS = [
-        self::TRADITION_AMERICAN => [
-            'given' => [
-                // Male (18 = 72%)
-                'Alexander', 'Benjamin', 'Calvin', 'Clifford', 'Elliott',
-                'Franklin', 'Graham', 'Grant', 'Harrison', 'Jackson',
-                'Malcolm', 'Nathaniel', 'Russell', 'Samuel', 'Theodore',
-                'Thomas', 'Walter', 'Warren',
-                // Female (7 = 28%)
-                'Abigail', 'Clara', 'Eleanor', 'Evelyn', 'Grace',
-                'Louisa', 'Lydia',
-            ],
-            'family' => [
-                'Adams', 'Alden', 'Bradford', 'Brookfield', 'Calloway',
-                'Carver', 'Chase', 'Davis', 'Emerson', 'Hamilton',
-                'Hayes', 'Lowell', 'Madison', 'Marshall', 'Mercer',
-                'Morgan', 'Palmer', 'Prescott', 'Reed', 'Rockefeller',
-                'Sterling', 'Sumner', 'Vance', 'Vanderbilt', 'Winslow',
-            ],
-        ],
-        self::TRADITION_ANGLO_SAXON => [
-            'given' => [
-                // Male (18 = 72%)
-                'Alistair', 'Ambrose', 'Arthur', 'Desmond', 'Dorian',
-                'Edmund', 'Edward', 'Gareth', 'Godfrey', 'Jasper',
-                'Julian', 'Laurence', 'Percival', 'Piers', 'Roland',
-                'Rupert', 'Sebastian', 'Silas',
-                // Female (7 = 28%)
-                'Beatrice', 'Charlotte', 'Constance', 'Florence', 'Penelope',
-                'Rosalind', 'Victoria',
-            ],
-            'family' => [
-                'Arkwright', 'Ashby', 'Blackwood', 'Crawford', 'Crewe',
-                'Farrow', 'Finch', 'Gresham', 'Harrington', 'Hastings',
-                'Holt', 'Kincaid', 'Langford', 'Montague', 'Ormerod',
-                'Ravenscroft', 'Selwyn', 'Stanhope', 'Strickland', 'Thackeray',
-                'Thornton', 'Waverly', 'Wexford', 'Whitlock', 'Wilde',
-            ],
-        ],
-        self::TRADITION_WESTERN_EUROPEAN => [
-            'given' => [
-                // Male (18 = 72%)
-                'Augustin', 'Benedikt', 'Christoph', 'Etienne', 'Fabian',
-                'Florian', 'Guillaume', 'Henri', 'Leopold', 'Luc',
-                'Ludwig', 'Marcel', 'Matthias', 'Nicolas', 'Philippe',
-                'Stefan', 'Valentin', 'Xavier',
-                // Female (7 = 28%)
-                'Delphine', 'Genevieve', 'Isabelle', 'Juliette', 'Marguerite',
-                'Sabine', 'Sophie',
-            ],
-            'family' => [
-                'Beaumont', 'Brandt', 'Castel', 'De Jong', 'De Vries',
-                'Delacroix', 'Dubois', 'Dupont', 'Eberhardt', 'Fontaine',
-                'Hoffmann', 'Keller', 'Laurent', 'Marchand', 'Meyer',
-                'Moreau', 'Müller', 'Renaud', 'Richter', 'Roche',
-                'Schneider', 'Sorel', 'Van Dijk', 'Vogel', 'Weber',
-            ],
-        ],
-        self::TRADITION_JAPANESE => [
-            'given' => [
-                // Male (18 = 72%)
-                'Daiki', 'Haruto', 'Hiroshi', 'Kaito', 'Kazuki',
-                'Kenji', 'Makoto', 'Masashi', 'Ren', 'Ryota',
-                'Satoshi', 'Shin', 'Shota', 'Taichi', 'Takahiro',
-                'Takumi', 'Yasuhiro', 'Yuto',
-                // Female (7 = 28%)
-                'Emi', 'Hana', 'Keiko', 'Mei', 'Naomi',
-                'Sakura', 'Yoko',
-            ],
-            'family' => [
-                'Fujimoto', 'Hayashi', 'Inoue', 'Ishikawa', 'Ito',
-                'Kato', 'Kobayashi', 'Matsuda', 'Matsui', 'Mori',
-                'Nakamura', 'Ogawa', 'Saito', 'Sato', 'Shimizu',
-                'Suzuki', 'Takahashi', 'Tanaka', 'Taniguchi', 'Watanabe',
-                'Yamada', 'Yamaguchi', 'Yamamoto', 'Yamazaki', 'Yoshida',
-            ],
-        ],
-        self::TRADITION_SWEDISH => [
-            'given' => [
-                // Male (18 = 72%)
-                'Anders', 'Arvid', 'Björn', 'Emil', 'Erik',
-                'Fredrik', 'Gunnar', 'Gustav', 'Henrik', 'Johan',
-                'Karl', 'Lars', 'Magnus', 'Nils', 'Oskar',
-                'Sven', 'Torsten', 'Viktor',
-                // Female (7 = 28%)
-                'Astrid', 'Ebba', 'Elsa', 'Freja', 'Ingrid',
-                'Linnea', 'Sigrid',
-            ],
-            'family' => [
-                'Berg', 'Blomqvist', 'Dahlberg', 'Ekström', 'Engström',
-                'Hedlund', 'Holm', 'Larsson', 'Lindberg', 'Lindgren',
-                'Lindqvist', 'Lindström', 'Lund', 'Norberg', 'Nyberg',
-                'Nyström', 'Olofsson', 'Persson', 'Quist', 'Sandberg',
-                'Sjöberg', 'Ström', 'Sundqvist', 'Söderberg', 'Wallin',
-            ],
-        ],
-    ];
+    /** @var array{names: list<string>, cumulative: list<float>, groups: list<list<float>>}|null */
+    private static ?array $surnames = null;
 
-    // --- Aggregates ---
-    /** All given names across traditions. */
-    public const GIVEN = [
-        ...self::POOLS[self::TRADITION_AMERICAN]['given'],
-        ...self::POOLS[self::TRADITION_ANGLO_SAXON]['given'],
-        ...self::POOLS[self::TRADITION_WESTERN_EUROPEAN]['given'],
-        ...self::POOLS[self::TRADITION_JAPANESE]['given'],
-        ...self::POOLS[self::TRADITION_SWEDISH]['given'],
-    ];
+    /** @var array<string, array{names: list<string>, cumulative: list<float>}> Keyed by decade, sex and group. */
+    private static array $given = [];
 
-    /** All family names across traditions. */
-    public const FAMILY = [
-        ...self::POOLS[self::TRADITION_AMERICAN]['family'],
-        ...self::POOLS[self::TRADITION_ANGLO_SAXON]['family'],
-        ...self::POOLS[self::TRADITION_WESTERN_EUROPEAN]['family'],
-        ...self::POOLS[self::TRADITION_JAPANESE]['family'],
-        ...self::POOLS[self::TRADITION_SWEDISH]['family'],
-    ];
+    /** @var array<string, int>|null */
+    private static ?array $famous = null;
 
     /**
-     * Picks a coherent given and family name from a single tradition.
+     * A name for someone born at $birth that no one in $taken holds and no famous person bears, drawn again on fresh
+     * uniforms until one is.
      *
-     * @param float $traditionDraw Uniform on [0, 1) to select the cultural tradition.
-     * @param float $givenDraw     Uniform on [0, 1) to select the given name within that tradition.
-     * @param float $familyDraw    Uniform on [0, 1) to select the family name within that tradition.
+     * @param float                   $birth   Birth date, in years after Year 1 began (negative before it).
+     * @param \Closure(string): float $uniform A uniform on (0, 1) for each key asked of it.
+     * @param list<string>            $taken
      */
-    public static function pick(float $traditionDraw, float $givenDraw, float $familyDraw): string
+    public static function draw(float $birth, \Closure $uniform, array $taken): string
     {
-        $traditions = self::TRADITIONS;
-        $traditionIndex = (int) floor(max(0.0, min(0.999999999999999, $traditionDraw)) * count($traditions));
-        $tradition = $traditions[$traditionIndex];
-        $pool = self::POOLS[$tradition];
+        for ($attempt = 0; ; ++$attempt) {
+            $name = self::pick($birth, $uniform("surname:{$attempt}"), $uniform("group:{$attempt}"), $uniform("sex:{$attempt}"), $uniform("given:{$attempt}"));
+            if (!self::isFamous($name) && !in_array($name, $taken, true)) {
+                return $name;
+            }
+        }
+    }
 
-        $givenIndex = (int) floor(max(0.0, min(0.999999999999999, $givenDraw)) * count($pool['given']));
-        $familyIndex = (int) floor(max(0.0, min(0.999999999999999, $familyDraw)) * count($pool['family']));
+    /**
+     * A full name for someone born at $birth (years after Year 1 began), from four uniforms on [0, 1): the surname, its
+     * bearer's group, their sex and their given name.
+     */
+    public static function pick(float $birth, float $surnameDraw, float $groupDraw, float $sexDraw, float $givenDraw): string
+    {
+        [$surname, $group] = self::surname($surnameDraw, $groupDraw);
+        $sex = self::clamp($sexDraw) < self::MALE_SHARE ? 'M' : 'F';
 
-        return $pool['given'][$givenIndex] . ' ' . $pool['family'][$familyIndex];
+        return self::givenName(self::birthDecade($birth), $sex, $group, $givenDraw) . ' ' . $surname;
+    }
+
+    /**
+     * A surname, and its bearer's group as an index into UsNameFrequencies::GROUPS: each surname-group cell weighted by
+     * its bearers, times the group's share of OFFICEHOLDERS over its share among the listed surnames' bearers.
+     *
+     * @return array{0: string, 1: int}
+     */
+    public static function surname(float $surnameDraw, float $groupDraw): array
+    {
+        $table = self::surnameTable();
+        $index = self::search($table['cumulative'], $surnameDraw);
+
+        return [$table['names'][$index], self::search($table['groups'][$index], $groupDraw)];
+    }
+
+    /**
+     * A given name for someone of $sex ('M' or 'F') and $group born in $decade: each name among the decade's applicants
+     * weighted by its applicants times the group's share of its bearers.
+     */
+    public static function givenName(int $decade, string $sex, int $group, float $draw): string
+    {
+        $key = "{$decade}:{$sex}:{$group}";
+        if (!isset(self::$given[$key])) {
+            $names = $cumulative = [];
+            $sum = 0.0;
+            foreach (UsNameFrequencies::GIVEN[$decade][$sex] as $name => $applicants) {
+                $sum += $applicants * (UsNameFrequencies::GIVEN_SHARES[$name] ?? UsNameFrequencies::GIVEN_UNLISTED_SHARES)[$group];
+                $names[] = (string) $name;
+                $cumulative[] = $sum;
+            }
+            self::$given[$key] = ['names' => $names, 'cumulative' => $cumulative];
+        }
+
+        return self::$given[$key]['names'][self::search(self::$given[$key]['cumulative'], $draw)];
+    }
+
+    /** The decade whose applicants name someone born at $birth: their own, or the nearest the tables hold. */
+    public static function birthDecade(float $birth): int
+    {
+        $decade = (int) (floor((self::YEAR_ONE_CALENDAR_YEAR + $birth) / 10.0) * 10);
+
+        return max(array_key_first(UsNameFrequencies::GIVEN), min(array_key_last(UsNameFrequencies::GIVEN), $decade));
+    }
+
+    /** Whether a famous person holds the name. */
+    public static function isFamous(string $name): bool
+    {
+        self::$famous ??= array_flip(UsNameFrequencies::FAMOUS);
+
+        return isset(self::$famous[$name]);
+    }
+
+    /** @return array{names: list<string>, cumulative: list<float>, groups: list<list<float>>} */
+    private static function surnameTable(): array
+    {
+        if (self::$surnames !== null) {
+            return self::$surnames;
+        }
+
+        $listed = array_fill(0, count(UsNameFrequencies::GROUPS), 0.0);
+        foreach (UsNameFrequencies::SURNAMES as $row) {
+            foreach (array_slice($row, 1) as $group => $share) {
+                $listed[$group] += $row[0] * $share;
+            }
+        }
+        $officeholders = array_sum(self::OFFICEHOLDERS);
+        $bearers = array_sum($listed);
+        $strata = [];
+        foreach ($listed as $group => $weight) {
+            $strata[$group] = (self::OFFICEHOLDERS[$group] / $officeholders) / ($weight / $bearers);
+        }
+
+        $names = $cumulative = $groups = [];
+        $sum = 0.0;
+        foreach (UsNameFrequencies::SURNAMES as $surname => $row) {
+            $cells = [];
+            $cell = 0.0;
+            foreach (array_slice($row, 1) as $group => $share) {
+                $cell += $row[0] * $share * $strata[$group];
+                $cells[] = $cell;
+            }
+            $sum += $cell;
+            $names[] = (string) $surname;
+            $cumulative[] = $sum;
+            $groups[] = $cells;
+        }
+
+        return self::$surnames = ['names' => $names, 'cumulative' => $cumulative, 'groups' => $groups];
+    }
+
+    /**
+     * The first entry whose running weight passes the draw's share of the total: an inverse-CDF draw, entries of no
+     * weight never chosen.
+     *
+     * @param list<float> $cumulative Running weights, non-decreasing.
+     */
+    private static function search(array $cumulative, float $draw): int
+    {
+        $target = self::clamp($draw) * $cumulative[count($cumulative) - 1];
+        $low = 0;
+        $high = count($cumulative) - 1;
+        while ($low < $high) {
+            $middle = intdiv($low + $high, 2);
+            if ($cumulative[$middle] > $target) {
+                $high = $middle;
+            } else {
+                $low = $middle + 1;
+            }
+        }
+
+        return $low;
+    }
+
+    private static function clamp(float $draw): float
+    {
+        return max(0.0, min(1.0 - PHP_FLOAT_EPSILON, $draw));
     }
 }

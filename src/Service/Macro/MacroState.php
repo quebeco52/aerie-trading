@@ -385,6 +385,23 @@ class MacroState
     // tolerate has drifted above its target.
     public float $authorityConcession;
     public float $inflationAnchorDrift;
+    // The corporate tax shift and the bank levy as the tax rate and the trailing year's earnings carry them, and the
+    // laws the market expects from the next government, this tick and the tick before.
+    public float $corporateTaxShiftRealized;
+    public float $corporateTaxShiftEmbodied;
+    public float $bankLevyEmbodied;
+    public float $sittingCorporateTaxPolicyShift;
+    public float $sittingBankLevyRate;
+    public float $sittingPolicyFrom;
+    public float $previousSittingCorporateTaxPolicyShift;
+    public float $previousSittingBankLevyRate;
+    public float $previousSittingPolicyFrom;
+    public float $expectedCorporateTaxPolicyShift;
+    public float $expectedBankLevyRate;
+    public float $expectedPolicyFrom;
+    public float $previousExpectedCorporateTaxPolicyShift;
+    public float $previousExpectedBankLevyRate;
+    public float $previousExpectedPolicyFrom;
     // The CET1 requirement the Financial Regulator has in force on the District's banks, the capital built toward it and
     // the buffer, and the two together as the last tick required them.
     public float $bankCapitalRequirement;
@@ -507,6 +524,16 @@ class MacroState
         }
 
         // Openings derived from the values above, for the fields a payload predating them omits.
+        // A state predating the lags has its earnings already carrying the laws in force.
+        if (!isset($carried['corporateTaxShiftRealized'])) {
+            $state->corporateTaxShiftRealized = $state->corporateTaxPolicyShift;
+        }
+        if (!isset($carried['corporateTaxShiftEmbodied'])) {
+            $state->corporateTaxShiftEmbodied = $state->corporateTaxShiftRealized;
+        }
+        if (!isset($carried['bankLevyEmbodied'])) {
+            $state->bankLevyEmbodied = $state->bankLevyRate;
+        }
         if (!isset($carried['balanceSheetIntensity'])) {
             // Balance sheet intensity was recorded as a one-sided qe_intensity before QT existed.
             $state->balanceSheetIntensity = (float) ($data['qe_intensity'] ?? 0.0);

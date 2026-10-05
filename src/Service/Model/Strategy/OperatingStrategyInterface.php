@@ -39,6 +39,11 @@ interface OperatingStrategyInterface
      */
     public function calculateAnnualBankLevy(Stock $stock, MacroStateDTO $macroState): float;
     /**
+     * What the bank levy is charged on, in currency: the levy a year at a rate of one on short-term funding, so the
+     * levy at any rate is the rate times this; zero for a firm that is not a bank.
+     */
+    public function annualBankLevyBase(Stock $stock): float;
+    /**
      * MacroStateDTO field names (snake_case, matching MacroStateDTO::toArray()) this model's own
      * operating code reads: calculateSectorPhysics(), getMacroPhysics(), calculateInterestIncome(),
      * processPassiveLiabilityGrowth(), getForwardCreditLossMultiplier() and the helpers they call,

@@ -90,7 +90,7 @@ final class MonetaryAuthority
         $changed = false;
         $governorTerm = CouncilAppointments::termStart($time, self::OPENING_GOVERNOR_TERM_END, self::GOVERNOR_TERM_YEARS);
         if (abs($state->governorTermStart - $governorTerm) > 1e-9) {
-            [$chosen, $state->governorPassedOver] = CouncilAppointments::appoint($salt, 'governor', $governorTerm, [CouncilAppointments::AXIS_MONEY => CouncilAppointments::median($state->councilStances)], CouncilAppointments::sittingNames($state), $math);
+            [$chosen, $state->governorPassedOver] = CouncilAppointments::appoint($salt, 'governor', $governorTerm, [CouncilAppointments::AXIS_MONEY => CouncilAppointments::median($state->councilStances)], CouncilAppointments::reservedNames($state), $math);
             self::seatGovernor($state, $chosen, $governorTerm);
             $state->lastGovernorAppointedAt = $time;
             $changed = true;
@@ -99,7 +99,7 @@ final class MonetaryAuthority
         for ($member = 0; $member < self::COMMITTEE_MEMBERS; ++$member) {
             $since = CouncilAppointments::termStart($time, self::memberOpeningTermEnd($member), self::MEMBER_TERM_YEARS);
             if (abs(($state->memberSince[$member] ?? -INF) - $since) > 1e-9) {
-                [$chosen] = CouncilAppointments::appoint($salt, "member:{$member}", $since, [CouncilAppointments::AXIS_MONEY => $state->governorStance], CouncilAppointments::sittingNames($state), $math);
+                [$chosen] = CouncilAppointments::appoint($salt, "member:{$member}", $since, [CouncilAppointments::AXIS_MONEY => $state->governorStance], CouncilAppointments::reservedNames($state), $math);
                 self::seatMember($state, $member, $chosen, $since);
                 $changed = true;
             }
@@ -128,7 +128,7 @@ final class MonetaryAuthority
         $state->memberNames = $state->memberBirths = $state->memberSince = $state->memberStances = [];
 
         $governorTerm = CouncilAppointments::termStart($time, self::OPENING_GOVERNOR_TERM_END, self::GOVERNOR_TERM_YEARS);
-        [$chosen, $state->governorPassedOver] = CouncilAppointments::appoint($salt, 'governor', $governorTerm, [CouncilAppointments::AXIS_MONEY => CouncilAppointments::median($state->councilStances)], CouncilAppointments::sittingNames($state), $math);
+        [$chosen, $state->governorPassedOver] = CouncilAppointments::appoint($salt, 'governor', $governorTerm, [CouncilAppointments::AXIS_MONEY => CouncilAppointments::median($state->councilStances)], CouncilAppointments::reservedNames($state), $math);
         if ($governorTerm < 0.0) {
             $chosen['name'] = AerieCouncil::OPENING_GOVERNOR;
         }
@@ -136,7 +136,7 @@ final class MonetaryAuthority
 
         for ($member = 0; $member < self::COMMITTEE_MEMBERS; ++$member) {
             $since = CouncilAppointments::termStart($time, self::memberOpeningTermEnd($member), self::MEMBER_TERM_YEARS);
-            [$chosen] = CouncilAppointments::appoint($salt, "member:{$member}", $since, [CouncilAppointments::AXIS_MONEY => $state->governorStance], CouncilAppointments::sittingNames($state), $math);
+            [$chosen] = CouncilAppointments::appoint($salt, "member:{$member}", $since, [CouncilAppointments::AXIS_MONEY => $state->governorStance], CouncilAppointments::reservedNames($state), $math);
             self::seatMember($state, $member, $chosen, $since);
         }
         $state->committeeMajority = self::rebalance($state);
@@ -251,6 +251,7 @@ final class MonetaryAuthority
     /** @param array{name: string, birth: float, stance: float, regulation: float, fund: float} $person */
     private static function seatGovernor(PoliticsState $state, array $person, float $termStart): void
     {
+        CouncilAppointments::retire($state, $state->governorName);
         $state->governorName = $person['name'];
         $state->governorBirth = $person['birth'];
         $state->governorTermStart = $termStart;
@@ -260,6 +261,7 @@ final class MonetaryAuthority
     /** @param array{name: string, birth: float, stance: float, regulation: float, fund: float} $person */
     private static function seatMember(PoliticsState $state, int $member, array $person, float $since): void
     {
+        CouncilAppointments::retire($state, $state->memberNames[$member] ?? '');
         $state->memberNames[$member] = $person['name'];
         $state->memberBirths[$member] = $person['birth'];
         $state->memberSince[$member] = $since;

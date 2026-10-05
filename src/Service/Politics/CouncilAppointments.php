@@ -77,7 +77,7 @@ final class CouncilAppointments
 
         foreach (AerieCouncil::roster($time) as $seat => $holder) {
             if (abs(($state->councilSince[$seat] ?? -INF) - $holder['since']) > 1e-9) {
-                [$chosen, $state->councillorPassedOver] = self::appoint($salt, "council:{$seat}", $holder['since'], self::councilMedians($state, $seat), self::sittingNames($state), $math);
+                [$chosen, $state->councillorPassedOver] = self::appoint($salt, "council:{$seat}", $holder['since'], self::councilMedians($state, $seat), self::reservedNames($state), $math);
                 self::seatCouncillor($state, $seat, $chosen, $holder['since']);
                 $state->lastCouncillorSeatedAt = $time;
             }
@@ -99,9 +99,10 @@ final class CouncilAppointments
         $state->governorName = '';
         $state->regulatorName = '';
         $state->fundHeadName = '';
+        $state->formerNames = [];
 
         foreach (AerieCouncil::roster($time) as $seat => $holder) {
-            $drawn = self::candidate($salt, self::vacancyKey("council:{$seat}", $holder['since']), 0, $holder['since'], self::sittingNames($state), $math);
+            $drawn = self::candidate($salt, self::vacancyKey("council:{$seat}", $holder['since']), 0, $holder['since'], self::reservedNames($state), $math);
             if ($holder['beforeYearOne']) {
                 $drawn['name'] = AerieCouncil::OPENING_MEMBERS[$seat];
             }
@@ -154,7 +155,8 @@ final class CouncilAppointments
      * A candidate for a vacancy: their stance on money (App\Service\Politics\MonetaryAuthority::drawStance()), on the
      * banks (App\Service\Politics\FinancialRegulator::drawStance()) and on the reserves
      * (App\Service\Politics\SovereignReserveFund::drawStance()), their age at the term's start from the Board's record
-     * (a normal truncated to the youngest and oldest on it, by inverse transform), and a name no one sitting holds.
+     * (a normal truncated to the youngest and oldest on it, by inverse transform), and a name for their birth decade
+     * (App\Data\AerieNames) that no one in $taken holds.
      *
      * @param list<string> $taken
      * @return array{name: string, birth: float, stance: float, regulation: float, fund: float}
@@ -162,21 +164,11 @@ final class CouncilAppointments
     public static function candidate(int $salt, string $vacancy, int $slot, float $since, array $taken, MathUtility $math): array
     {
         $age = $math->truncatedNormalInverse(self::uniform($salt, "{$vacancy}:{$slot}:age"), self::APPOINTMENT_AGE_MEAN, self::APPOINTMENT_AGE_SD, self::APPOINTMENT_AGE_MIN, self::APPOINTMENT_AGE_MAX);
-
-        for ($attempt = 0; ; ++$attempt) {
-            $name = AerieNames::pick(
-                self::uniform($salt, "{$vacancy}:{$slot}:tradition:{$attempt}"),
-                self::uniform($salt, "{$vacancy}:{$slot}:given:{$attempt}"),
-                self::uniform($salt, "{$vacancy}:{$slot}:family:{$attempt}")
-            );
-            if (!in_array($name, $taken, true)) {
-                break;
-            }
-        }
+        $birth = $since - $age;
 
         return [
-            'name' => $name,
-            'birth' => $since - $age,
+            'name' => AerieNames::draw($birth, static fn(string $part): float => self::uniform($salt, "{$vacancy}:{$slot}:name:{$part}"), $taken),
+            'birth' => $birth,
             'stance' => MonetaryAuthority::drawStance(self::uniform($salt, "{$vacancy}:{$slot}:stance")),
             'regulation' => FinancialRegulator::drawStance(self::uniform($salt, "{$vacancy}:{$slot}:regulation")),
             'fund' => SovereignReserveFund::drawStance(self::uniform($salt, "{$vacancy}:{$slot}:fund")),
@@ -234,6 +226,39 @@ final class CouncilAppointments
         ));
     }
 
+    /**
+     * Every name a new appointee or party leader may not take: everyone sitting on the Council, at the Monetary
+     * Authority, the Financial Regulator and the Sovereign Reserve Fund or leading a party, everyone who ever did, and
+     * the people seated before Year 1.
+     *
+     * @return list<string>
+     */
+    public static function reservedNames(PoliticsState $state): array
+    {
+        $names = array_merge(
+            self::sittingNames($state),
+            array_values($state->leaderNames),
+            $state->formerNames,
+            AerieCouncil::OPENING_MEMBERS,
+            [AerieCouncil::OPENING_GOVERNOR, AerieCouncil::OPENING_REGULATOR, AerieCouncil::OPENING_FUND_HEAD]
+        );
+        foreach ($state->leaderHistory as $leaders) {
+            foreach ($leaders as $leader) {
+                $names[] = $leader['name'];
+            }
+        }
+
+        return $names;
+    }
+
+    /** An outgoing holder of a Council seat or a department post, kept out of every later draw (reservedNames()). */
+    public static function retire(PoliticsState $state, string $outgoing): void
+    {
+        if ($outgoing !== '' && !in_array($outgoing, $state->formerNames, true)) {
+            $state->formerNames[] = $outgoing;
+        }
+    }
+
     /** A vacancy's key: the seat and when its term begins, to the microyear. */
     public static function vacancyKey(string $seat, float $since): string
     {
@@ -255,6 +280,7 @@ final class CouncilAppointments
     /** @param array{name: string, birth: float, stance: float, regulation: float, fund: float} $person */
     private static function seatCouncillor(PoliticsState $state, int $seat, array $person, float $since): void
     {
+        self::retire($state, $state->councilNames[$seat] ?? '');
         $state->councilNames[$seat] = $person['name'];
         $state->councilBirths[$seat] = $person['birth'];
         $state->councilSince[$seat] = $since;

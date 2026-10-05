@@ -51,10 +51,10 @@ class CreditFiscalSubsystem
     public const SOVEREIGN_CEILING_PASSTHROUGH = 0.50;
 
     // --- Barro Tax-Smoothing & Automatic Fiscal Stabilizers (Barro 1979) ---
-    /** Tax-rate response to the output gap, fitted with the speed below by indirect inference on the US primary deficit's Auerbach (2002) reaction, 1960-2019: automatic -0.29, discretionary -0.038 per pp of lagged gap a quarter, persistence -0.047; the engine's regression lands within half a standard error of all three. */
+    /** Tax-rate response to the output gap, fitted with the speed it adjusts at (MacroEngine::FISCAL_ADJUSTMENT_SPEED) by indirect inference on the US primary deficit's Auerbach (2002) reaction, 1960-2019: automatic -0.29, discretionary -0.038 per pp of lagged gap a quarter, persistence -0.047; the engine's regression lands within half a standard error of all three. */
     public const FISCAL_STABILIZER_SENSITIVITY = 0.35;
-    /** Adjustment speed of the effective tax burden toward its cyclical target (half-life 0.7y), the same fit. */
-    public const FISCAL_ADJUSTMENT_SPEED = 1.0;
+    /** Mean lag, in years, of the tax a trailing year's earnings carry behind the tax charged: half the year, as a first-order lag (the convention of MacroAggregateSubsystem::DEMAND_TRANSMISSION_LAGS). */
+    public const TRAILING_EARNINGS_MEAN_LAG_YEARS = 0.5;
     /** Statutory corporate tax rate floor during deep economic recessions. */
     public const MIN_CORPORATE_TAX_RATE = 0.12;
     /** Statutory corporate tax rate ceiling during overheating economic booms. */
@@ -388,7 +388,13 @@ class CreditFiscalSubsystem
         $targetTaxRate = MacroEngine::TARGET_CORPORATE_TAX_RATE + $state->corporateTaxPolicyShift + (self::FISCAL_STABILIZER_SENSITIVITY * $state->outputGapEma);
         $targetTaxRate = max(self::MIN_CORPORATE_TAX_RATE, min(self::MAX_CORPORATE_TAX_RATE, $targetTaxRate));
 
-        $state->corporateTaxRate += self::FISCAL_ADJUSTMENT_SPEED * ($targetTaxRate - $state->corporateTaxRate) * $dt;
+        $state->corporateTaxRate += MacroEngine::FISCAL_ADJUSTMENT_SPEED * ($targetTaxRate - $state->corporateTaxRate) * $dt;
+
+        // The legislated part of that adjustment on its own, and the laws as the trailing year's earnings carry them,
+        // which the market measures what it expects against (App\Service\Market\PolicyCapitalization).
+        $state->corporateTaxShiftRealized += MacroEngine::FISCAL_ADJUSTMENT_SPEED * ($state->corporateTaxPolicyShift - $state->corporateTaxShiftRealized) * $dt;
+        $state->corporateTaxShiftEmbodied += ($state->corporateTaxShiftRealized - $state->corporateTaxShiftEmbodied) * $dt / self::TRAILING_EARNINGS_MEAN_LAG_YEARS;
+        $state->bankLevyEmbodied += ($state->bankLevyRate - $state->bankLevyEmbodied) * $dt / self::TRAILING_EARNINGS_MEAN_LAG_YEARS;
     }
 
     /**

@@ -1822,4 +1822,24 @@ class CreditFiscalSubsystemTest extends TestCase
         $this->subsystem->calculateSovereignDebt($unfunded, 0.25);
         $this->assertTrue(is_finite($unfunded->primaryDeficitToGdp), 'With no fund there is no scale, and nothing is booked.');
     }
+
+    /** The tax rate takes in a legislated shift at its own speed, and the trailing year's earnings carry it half a year later on average; a levy reaches them the same way. */
+    public function testTheEarningsCarryTheLawsAfterTheRateDoes(): void
+    {
+        $state = new MacroState();
+        $state->corporateTaxPolicyShift = 0.04;
+        $state->bankLevyRate = 0.002;
+        $fiscal = new CreditFiscalSubsystem(new MathUtility());
+        $rate = $state->corporateTaxRate;
+        $dt = 1.0 / 252.0;
+        for ($tick = 0; $tick < 252; ++$tick) {
+            $fiscal->calculateDynamicFiscalPolicy($state, $dt);
+        }
+
+        $this->assertEqualsWithDelta($state->corporateTaxRate - $rate, $state->corporateTaxShiftRealized, 1e-9, 'With the cycle at rest, the rate has moved by the shift as far as it has taken it in.');
+        $this->assertEqualsWithDelta(0.04 * (1.0 - exp(-MacroEngine::FISCAL_ADJUSTMENT_SPEED)), $state->corporateTaxShiftRealized, 2e-4);
+        $this->assertLessThan($state->corporateTaxShiftRealized, $state->corporateTaxShiftEmbodied);
+        $this->assertGreaterThan(0.0, $state->corporateTaxShiftEmbodied);
+        $this->assertEqualsWithDelta(0.002 * (1.0 - exp(-1.0 / CreditFiscalSubsystem::TRAILING_EARNINGS_MEAN_LAG_YEARS)), $state->bankLevyEmbodied, 2e-5);
+    }
 }

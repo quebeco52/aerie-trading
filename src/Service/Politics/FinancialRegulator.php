@@ -65,7 +65,7 @@ final class FinancialRegulator
                 'regulator',
                 $term,
                 [CouncilAppointments::AXIS_REGULATION => CouncilAppointments::median($state->councilRegulationStances)],
-                CouncilAppointments::sittingNames($state),
+                CouncilAppointments::reservedNames($state),
                 $math
             );
             self::seatHead($state, $chosen, $term);
@@ -93,7 +93,7 @@ final class FinancialRegulator
             'regulator',
             $term,
             [CouncilAppointments::AXIS_REGULATION => CouncilAppointments::median($state->councilRegulationStances)],
-            CouncilAppointments::sittingNames($state),
+            CouncilAppointments::reservedNames($state),
             $math
         );
         if ($term < 0.0) {
@@ -167,6 +167,7 @@ final class FinancialRegulator
     /** @param array{name: string, birth: float, stance: float, regulation: float, fund: float} $person */
     private static function seatHead(PoliticsState $state, array $person, float $termStart): void
     {
+        CouncilAppointments::retire($state, $state->regulatorName);
         $state->regulatorName = $person['name'];
         $state->regulatorBirth = $person['birth'];
         $state->regulatorTermStart = $termStart;

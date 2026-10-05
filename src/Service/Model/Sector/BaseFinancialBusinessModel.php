@@ -83,6 +83,15 @@ abstract class BaseFinancialBusinessModel implements BusinessModelInterface
             return 0.0;
         }
 
+        return $macroState->bankLevyRate * $this->annualBankLevyBase($stock);
+    }
+
+    public function annualBankLevyBase(Stock $stock): float
+    {
+        if (!static::PAYS_BANK_LEVY) {
+            return 0.0;
+        }
+
         $wholesale = (float) $stock->getWholesaleDebt();
         $floating = max(0.0, min(1.0, (float) ($stock->getFloatingDebtRatio() ?? 0.0)));
         $uninsuredDeposits = (float) ($stock->getCustomerDeposits() ?? 0.0) * (1.0 - FinancialConstants::INSURED_DEPOSIT_SHARE);
@@ -90,7 +99,7 @@ abstract class BaseFinancialBusinessModel implements BusinessModelInterface
         return MathUtility::calculateAnnualBankLevy(
             shortTermFunding: ($wholesale * $floating) + (float) $stock->getRevolverDrawn(),
             longTermFunding: ($wholesale * (1.0 - $floating)) + $uninsuredDeposits,
-            shortTermRate: $macroState->bankLevyRate,
+            shortTermRate: 1.0,
         );
     }
 

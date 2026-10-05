@@ -59,7 +59,7 @@ final class SovereignReserveFund
             'fund',
             $term,
             [CouncilAppointments::AXIS_FUND => CouncilAppointments::median($state->councilFundStances)],
-            CouncilAppointments::sittingNames($state),
+            CouncilAppointments::reservedNames($state),
             $math
         );
         if ($term < 0.0) {
@@ -68,6 +68,7 @@ final class SovereignReserveFund
             $state->fundHeadPassedOver = [];
         }
 
+        CouncilAppointments::retire($state, $state->fundHeadName);
         $state->fundHeadName = $chosen['name'];
         $state->fundHeadBirth = $chosen['birth'];
         $state->fundHeadTermStart = $term;

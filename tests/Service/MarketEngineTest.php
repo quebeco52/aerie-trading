@@ -4,6 +4,7 @@ namespace App\Tests\Service;
 
 use PHPUnit\Framework\TestCase;
 use App\Service\Market\MarketEngine;
+use App\Service\Market\PolicyCapitalization;
 use App\Service\Math\MathUtility;
 use App\DTO\MarketPricingContext;
 use App\DTO\MacroStateDTO;
@@ -172,6 +173,64 @@ class MarketEngineTest extends TestCase
     }
 
     /** A firm with a dividend policy, priced with no drift or shocks so only the dividend inputs vary. */
+    /**
+     * A forecast revised this tick moves the price at once by as much as it moves the fair value, rather than leaving
+     * the price to drift there; a bank, which also expects the levy, is marked down by more than a firm that owes none.
+     */
+    public function testARevisedForecastMovesThePriceWithTheTarget(): void
+    {
+        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
+        $this->mathUtilityMock->method('checkProbability')->willReturn(false);
+        $inForce = PolicyCapitalization::LONG_RUN_CORPORATE_TAX_SHIFT;
+        $levy = PolicyCapitalization::LONG_RUN_BANK_LEVY_RATE;
+        $macro = static fn(float $expectedTax, float $expectedLevy, float $previousTax, float $previousLevy): MacroStateDTO => new MacroStateDTO(
+            totalTime: 6.0,
+            corporateTaxPolicyShift: $inForce,
+            bankLevyRate: $levy,
+            corporateTaxShiftRealized: $inForce,
+            corporateTaxShiftEmbodied: $inForce,
+            bankLevyEmbodied: $levy,
+            expectedCorporateTaxPolicyShift: $expectedTax,
+            expectedBankLevyRate: $expectedLevy,
+            expectedPolicyFrom: 8.5,
+            previousExpectedCorporateTaxPolicyShift: $previousTax,
+            previousExpectedBankLevyRate: $previousLevy,
+            previousExpectedPolicyFrom: 8.5,
+        );
+        $priced = fn (MacroStateDTO $state, string $model, float $levyBase): array => $this->engine->calculateNextPrice(new MarketPricingContext(
+            currentPrice: 100.0,
+            currentVolatility: 0.2,
+            longTermVolatility: 0.2,
+            earningsPerShare: 8.0,
+            dt: 1.0 / 252.0,
+            lambda: 0.0,
+            macroState: $state,
+            bookValuePerShare: 60.0,
+            currentRoic: 0.12,
+            roicTtm: 0.12,
+            businessModel: $model,
+            liveCostOfEquity: 0.10,
+            bankLevyBasePerShare: $levyBase,
+        ));
+
+        $steady = $priced($macro($inForce, $levy, $inForce, $levy), 'tech', 0.0);
+        $revised = $priced($macro($inForce + 0.04, $levy, $inForce, $levy), 'tech', 0.0);
+        $repricing = $revised['perceived_fair_value'] / $steady['perceived_fair_value'];
+        $this->assertLessThan(0.99, $repricing, 'A four-point rise from the next government\'s first budget costs the firm its share of the tax for as long as the rise is expected to last.');
+        $this->assertGreaterThan(1.0 - (0.04 / 0.79), $repricing, 'Less than a rise for good would.');
+        $this->assertEqualsWithDelta($repricing, $revised['price'] / $steady['price'], 1e-3);
+
+        $settled = $priced($macro($inForce + 0.04, $levy, $inForce + 0.04, $levy), 'tech', 0.0);
+        $this->assertEqualsWithDelta($revised['perceived_fair_value'], $settled['perceived_fair_value'], 1e-9);
+        $this->assertLessThan(0.1 * abs($revised['price'] - $steady['price']), abs($settled['price'] - $steady['price']), 'Once the revision is in the price, the next tick only drifts toward the target, as every tick does.');
+
+        $bank = $priced($macro($inForce, $levy + 0.002, $inForce, $levy + 0.002), 'commercial_bank', 400.0);
+        $bankSteady = $priced($macro($inForce, $levy, $inForce, $levy), 'commercial_bank', 400.0);
+        $this->assertLessThan($bankSteady['perceived_fair_value'], $bank['perceived_fair_value']);
+        $firm = $priced($macro($inForce, $levy + 0.002, $inForce, $levy + 0.002), 'tech', 0.0);
+        $this->assertEqualsWithDelta($steady['perceived_fair_value'], $firm['perceived_fair_value'], 1e-9, 'A firm owing no levy does not price one.');
+    }
+
     private function incomeContext(float $quarterlyDividend, float $targetPayout, float $speed, string $businessModel = 'none'): MarketPricingContext
     {
         return new MarketPricingContext(

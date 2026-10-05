@@ -33,27 +33,27 @@ final class AerieCouncil
 
     /** The councillors sitting at Year 1, by seat, seated before the District's records begin. */
     public const OPENING_MEMBERS = [
-        'Adelaide Voss',
-        'Tobias Renwick',
-        'Mireille Castellane',
-        'Harlan Oduya',
-        'Seraphine Kalder',
-        'Emory Lindqvist',
-        'Beatrix Hallorann',
-        'Cassius Mbeki-Rowe',
-        'Ottoline Fairweather',
-        'Lucan Treadwell',
-        'Imogen Sarkis',
-        'Percival Achterberg',
-        'Rosalind Okafor',
+        'George Duncan',
+        'Ruben Velasco',
+        'Richard Bradford',
+        'Jon Keyes',
+        'Joyce Hall',
+        'Peter Scott',
+        'Nancy Tellez',
+        'Barbara Barnes',
+        'Johnny McLaughlin',
+        'Daniel Langston',
+        'Ronald Wynn',
+        'Joseph Dunn',
+        'David Hoffman',
     ];
 
     /** The Monetary Authority's governor sitting at Year 1, named before it. */
-    public const OPENING_GOVERNOR = 'Ilse Marchand';
+    public const OPENING_GOVERNOR = 'Patricia Lewis';
     /** The Financial Regulator's head sitting at Year 1, named before it. */
-    public const OPENING_REGULATOR = 'Leontine Ashby';
+    public const OPENING_REGULATOR = 'Linda Clements';
     /** The Sovereign Reserve Fund's head sitting at Year 1, named before it. */
-    public const OPENING_FUND_HEAD = 'Matthias Okonkwo-Hale';
+    public const OPENING_FUND_HEAD = 'Richard Bland';
 
     // --- Departments ---
     /**
