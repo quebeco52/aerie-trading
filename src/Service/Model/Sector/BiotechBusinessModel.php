@@ -241,16 +241,29 @@ class BiotechBusinessModel extends StandardCorporateBusinessModel
      * persisted now: the clock ticks once more, a cliff that is due starts eroding, an active erosion
      * advances. Nothing here is drawn, so the forecast and next quarter's physics agree exactly.
      */
-    private function nextQuarterCommercialMultiplier(float $franchise, float $clock, float $elapsed, float $exposureShare, float $loeHazard): float
+    private function nextQuarterCommercialMultiplier(float $franchise, float $clock, float $elapsed, float $exposureShare, float $biologicShare): float
     {
         if ($elapsed > 0.0) {
             $elapsed += 1.0;
         } elseif ($clock - 1.0 <= 0.0 && $exposureShare > 0.0) {
             $elapsed = 1.0;
         }
-        $erodedFraction = $elapsed > 0.0 ? $exposureShare * (1.0 - exp(-$loeHazard * $elapsed)) : 0.0;
 
-        return $franchise * (1.0 - $erodedFraction);
+        return $franchise * (1.0 - ($exposureShare * $this->loeErodedShare($biologicShare, $elapsed)));
+    }
+
+    /**
+     * Share of the exposed franchise lost after `elapsed` quarters off exclusivity: the revenue-weighted mixture
+     * of the two modality survival curves, each decaying on its own hazard.
+     */
+    private function loeErodedShare(float $biologicShare, float $elapsed): float
+    {
+        if ($elapsed <= 0.0) {
+            return 0.0;
+        }
+
+        return ($biologicShare * (1.0 - exp(-self::BIOLOGIC_LOE_HAZARD * $elapsed)))
+            + ((1.0 - $biologicShare) * (1.0 - exp(-self::SMALL_MOLECULE_LOE_HAZARD * $elapsed)));
     }
 
     /**
@@ -301,11 +314,9 @@ class BiotechBusinessModel extends StandardCorporateBusinessModel
             }
         }
 
-        // Exponential LOE erosion of the exposed franchise at the portfolio's modality-weighted hazard.
+        // Exponential LOE erosion of the exposed franchise, each modality on its own hazard.
         $biologicShare = max(0.0, min(1.0, $params[ModelParam::BiologicRevenueShare]));
-        $loeHazard = ($biologicShare * self::BIOLOGIC_LOE_HAZARD)
-            + ((1.0 - $biologicShare) * self::SMALL_MOLECULE_LOE_HAZARD);
-        $erodedFraction = $elapsed > 0.0 ? $exposureShare * (1.0 - exp(-$loeHazard * $elapsed)) : 0.0;
+        $erodedFraction = $exposureShare * $this->loeErodedShare($biologicShare, $elapsed);
         $erosionFactor  = 1.0 - $erodedFraction;
 
         $commercialMultiplier = $franchise * $erosionFactor;
@@ -398,7 +409,7 @@ class BiotechBusinessModel extends StandardCorporateBusinessModel
         $streams->registerState(self::STATE_RND_REPLACEMENT_RATIO, $rndRatio);
         $streams->registerState(
             self::STATE_KNOWN_COMMERCIAL_SHIFT,
-            $establishedWeight * ($this->nextQuarterCommercialMultiplier($franchise, $clock, $elapsed, $exposureShare, $loeHazard) - 1.0)
+            $establishedWeight * ($this->nextQuarterCommercialMultiplier($franchise, $clock, $elapsed, $exposureShare, $biologicShare) - 1.0)
         );
 
         // What was expected of each stream, the known franchise and erosion included: only the draw is a surprise.

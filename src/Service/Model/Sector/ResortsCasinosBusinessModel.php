@@ -142,13 +142,14 @@ class ResortsCasinosBusinessModel extends StandardCorporateBusinessModel
     {
         $physics = parent::getMacroPhysics($stock, $macroState);
 
-        $sentimentShift = $macroState->sentimentDeviation();
+        // The parent shift already carries the output gap and the exchange rate, so confidence adds only its
+        // residual over the gap (Lemmon & Portniaguina 2006) and FX is not added again.
+        $sentimentShift = $macroState->sentimentResidual();
         $beta = $this->getOperatingCyclicality($stock);
 
         // Visitors fly in: the foreign bloc's cycle fills the rooms the district's own does not.
         $physics['macro_demand_shift'] += ($sentimentShift * $beta * self::SENTIMENT_SENSITIVITY_SCALAR)
-            + MathUtility::calculateForeignDemandShift($macroState->foreignOutputGapEma, sensitivity: self::FOREIGN_DEMAND_SENSITIVITY)
-            + $this->resolveFxDemandShift($macroState);
+            + MathUtility::calculateForeignDemandShift($macroState->foreignOutputGapEma, sensitivity: self::FOREIGN_DEMAND_SENSITIVITY);
 
         return $physics;
     }

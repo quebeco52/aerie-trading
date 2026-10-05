@@ -159,11 +159,8 @@ class TechBusinessModel extends StandardCorporateBusinessModel
         $adCyclicalityScalar = $params[ModelParam::AdvertisingCyclicality];
 
         $aggression = max(0.0, min(1.0, $params[ModelParam::MonopolyAggression]));
-        // Risk vs Reward Trade-off:
-        // Reward: Lower variable costs (higher margins) via aggressive pricing and data harvesting
-        $marginBonus = $aggression * 0.10; // Up to 1000 bps baseline margin expansion
-
-        // Risk: Massive amplification of regulatory scrutiny
+        // The reward of aggressive pricing and data harvesting is already in the seeded margin the engine hands in;
+        // what aggression adds here is regulatory scrutiny.
         // At aggression=1.0, Z-score threshold shifts from -2.5 to -1.25 (frequent fines), and penalty severity is 1.5x.
         // At aggression=0.0, Z-score threshold shifts to -3.75 (nearly impossible), and penalty is 0.5x.
         $regulatoryZThreshold = self::REGULATORY_FINE_Z_SCORE * (1.5 - $aggression);
@@ -255,7 +252,7 @@ class TechBusinessModel extends StandardCorporateBusinessModel
         // & Platform data-harvesting stream ($adWeight), insulating enterprise subscription margins.
         $complianceDrag = $decreeElapsed > 1 ? self::CONSENT_DECREE_COMPLIANCE_PENALTY * (0.5 + $aggression) : 0.0;
         $adCostAddon = ($regulatoryShock + $complianceDrag) * $adWeight;
-        $rawMargin = $realizedVariableMargin + $inputCostDrag + $saasOperatingLeverageShift + $adCostAddon - $marginBonus;
+        $rawMargin = $realizedVariableMargin + $inputCostDrag + $saasOperatingLeverageShift + $adCostAddon;
         $clampedMargin = $this->clampMargin($rawMargin);
 
         // Primary shock Z-score selects the most extreme driver across streams

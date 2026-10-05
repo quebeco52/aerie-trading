@@ -8,6 +8,7 @@ use App\Data\ModelParam;
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use App\Service\Model\Sector\RailroadBusinessModel;
+use App\Service\Model\Sector\TechBusinessModel;
 use App\Service\Model\Sector\StandardCorporateBusinessModel;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
@@ -72,12 +73,12 @@ final class BusinessModelPricingPowerResolutionTest extends TestCase
     }
 
     /**
-     * The sector constant has to reach the macro demand path too, not just the pass-through path. Railroad
+     * The sector constant has to reach the macro demand path too, not just the pass-through path. Tech
      * inherits StandardCorporate::getMacroPhysics wholesale, so it is the honest witness for that route.
      */
     public function testSectorPricingPowerScalesInheritedMacroDemandShift(): void
     {
-        $model = new RailroadBusinessModel();
+        $model = new TechBusinessModel();
 
         $stock = new Stock();
         $stock->setTicker(self::UNTUNED_TICKER);
@@ -88,14 +89,14 @@ final class BusinessModelPricingPowerResolutionTest extends TestCase
 
         $beta = $model->getOperatingCyclicality($stock);
         $expected = $outputGap
-            * (StandardCorporateBusinessModel::MIN_BETA_PRICING_POWER_FLOOR + RailroadBusinessModel::PRICING_POWER_INDEX)
+            * (StandardCorporateBusinessModel::MIN_BETA_PRICING_POWER_FLOOR + TechBusinessModel::PRICING_POWER_INDEX)
             * $beta;
 
         $this->assertEqualsWithDelta(
             $expected,
             $model->getMacroPhysics($stock, $macro)['macro_demand_shift'],
             1e-12,
-            'Railroad declares pricing power 0.80; the inherited macro demand shift must use 0.5 + 0.80, not the median 0.5 + 0.5.'
+            'Tech declares pricing power 0.75; the inherited macro demand shift must use 0.5 + 0.75, not the median 0.5 + 0.5.'
         );
     }
 

@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace App\Service\Model\Sector;
 
 use App\Data\InputOutputExposures;
-use App\Service\Math\FinancialConstants;
 
 use App\Data\ModelParam;
 use App\DTO\MacroStateDTO;
@@ -226,7 +225,8 @@ class ApparelManufacturingBusinessModel extends StandardCorporateBusinessModel
         $pricingPower = max(0.0, min(1.0, $params[ModelParam::PricingPowerIndex]));
 
         $outputGap = $this->resolveLaggedOutputGap($macroState);
-        $sentimentShift = $macroState->sentimentDeviation();
+        // The gap is priced beside it, so confidence enters as its residual over the gap (Lemmon & Portniaguina 2006).
+        $sentimentShift = $macroState->sentimentResidual();
         $beta = $this->getOperatingCyclicality($stock);
 
         // Hybrid demand physics: Pro-cyclical consumer sentiment + output gap,
@@ -288,8 +288,7 @@ class ApparelManufacturingBusinessModel extends StandardCorporateBusinessModel
         }
 
         // Currency FX Export Competitiveness & Global Trade: A weaker currency and positive trade balance boost textile exports.
-        $fxShift = ($macroState->exchangeRateIndexEma - FinancialConstants::FX_INDEX_BASE) / FinancialConstants::FX_INDEX_BASE;
-        $contractFxBonus = $fxShift * self::CONTRACT_FX_EXPORT_SCALAR;
+        $contractFxBonus = $this->resolveFxDemandShift($macroState, self::CONTRACT_FX_EXPORT_SCALAR);
         $tradeShift = MathUtility::calculateTradeBalanceShift($macroState->tradeBalanceToGdpEma, sensitivity: self::TRADE_BALANCE_SENSITIVITY)
             + MathUtility::calculateForeignDemandShift($macroState->foreignOutputGapEma, sensitivity: self::FOREIGN_DEMAND_SENSITIVITY);
 

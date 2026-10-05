@@ -133,7 +133,8 @@ class AdvertisingAgencyBusinessModel extends StandardCorporateBusinessModel
         $martechWeight = $activeWeights['martech_consulting'];
 
         // Ad budgets expand aggressively during GDP booms and contract sharply during recessions and consumer sentiment drops
-        $sentimentShift = $macroState->sentimentDeviation();
+        // The gap is priced beside it, so confidence enters as its residual over the gap (Lemmon & Portniaguina 2006).
+        $sentimentShift = $macroState->sentimentResidual();
         $macroAdSpendShift = ($macroState->outputGapEma * 1.5 * $beta) + ($sentimentShift * 0.50 * $beta);
 
         $mediaZ   = $streams->generateZ('media_buying_commissions', 0.25);

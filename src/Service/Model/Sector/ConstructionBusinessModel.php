@@ -92,6 +92,8 @@ class ConstructionBusinessModel extends StandardCorporateBusinessModel
 
     /** Drag on construction financing per unit of SLOOS bank lending standard tightening. */
     public const SLOOS_CREDIT_TIGHTENING_SCALAR = 0.30;
+    /** Private EPC orders lost per unit of restrictive real policy rate above r*: 100bp of tight stance takes 2% off awards before cyclicality. */
+    public const RATE_STANCE_ORDER_SENSITIVITY = 2.0;
     /** Sensitivity of private development EPC orders to the credit-to-GDP gap. */
     public const CREDIT_GAP_ORDER_SENSITIVITY = 0.50;
     /** Civil orders per unit of district catastrophe burden above an average year: a season at twice the average burden adds a tenth to the infrastructure order book. */
@@ -207,7 +209,9 @@ class ConstructionBusinessModel extends StandardCorporateBusinessModel
         $sloosDrag = max(0.0, $macroState->sloosTighteningIndexEma) * self::SLOOS_CREDIT_TIGHTENING_SCALAR;
 
         $commercialMacroBoost = ($outputGap * 1.5 * $beta) + ($commercialPropertyShift * 0.30) + ($residentialShift * 0.20) + $housingStartsShift + ($macroState->creditToGdpGapEma * self::CREDIT_GAP_ORDER_SENSITIVITY);
-        $commercialCreditDrag = max(0.0, ($policyRate - $macroState->naturalRateEma) * 2.0 * $beta) + $sloosDrag;
+        // Policy stance is the real rate gap, nominal policy less expected inflation less r* (Laubach & Williams 2003).
+        $realRateGap = $policyRate - $macroState->tipsBreakevenEma - $macroState->naturalRateEma;
+        $commercialCreditDrag = max(0.0, $realRateGap * self::RATE_STANCE_ORDER_SENSITIVITY * $beta) + $sloosDrag;
         $maintenanceMacroBoost = ($outputGap * 0.3 * $beta);
         $govSpendShift = ($macroState->governmentSpendingIndexEma - 100.0) / 100.0;
         // Reconstruction after a storm season is civil work booked into the backlog (Hallegatte 2008 on post-disaster reconstruction demand).

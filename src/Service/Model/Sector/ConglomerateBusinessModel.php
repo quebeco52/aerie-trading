@@ -52,8 +52,8 @@ class ConglomerateBusinessModel extends StandardCorporateBusinessModel
     public const OPERATING_CYCLICALITY = 0.90;
     /** Own-price elasticity of demand: volume lost per unit of real price increase. */
     public const PRICE_ELASTICITY_OF_DEMAND = 0.50;
-    /** Share of an idiosyncratic revenue gain taken from same-industry peers rather than won from a larger market. "Conglomerates" is a listing convention, not a product market, so a group's gain is mostly won in the end markets its segments actually serve. */
-    public const INDUSTRY_SUBSTITUTABILITY = 0.40;
+    /** Share of an idiosyncratic revenue gain taken from same-industry peers rather than won from a larger market. "Conglomerates" is a listing convention, not a product market: a rail-and-insurance group and a staples group sell nothing the other buys, so a group's gain is won in its segments' end markets, none of it from its listed peers. */
+    public const INDUSTRY_SUBSTITUTABILITY = 0.00;
 
     // --- Input Cost Basket ---
     /** Shares of the variable cost base by input channel, measured from the BEA input-output accounts with supply-chain content (labor still the model's own). */

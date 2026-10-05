@@ -69,8 +69,8 @@ class ComputerHardwareBusinessModel extends StandardCorporateBusinessModel
     // --- Revenue & Shock Physics ---
     /** Inventory obsolescence increases variance. */
     public const REVENUE_VARIANCE_SCALAR = 0.35;
-    /** Structural variable cost ratio of enterprise hardware sales (high margin). */
-    public const ENTERPRISE_VARIABLE_COST_RATIO = 0.35;
+    /** Enterprise hardware's margin premium over consumer devices, as a share of revenue (Dell FY2024 segments: ISG ~12.7% vs CSG ~6.4% operating margin). */
+    public const ENTERPRISE_MARGIN_PREMIUM = 0.063;
 
     // --- Tail Risk & Shock Events ---
     /** Negative z-score threshold indicating a severe semiconductor fab shortage. */
@@ -198,20 +198,15 @@ class ComputerHardwareBusinessModel extends StandardCorporateBusinessModel
         $streams->recordStreamShares($streamRevenues);
 
         // --- Structural Margin Blending ---
-        // Enterprise B2B hardware operates at a structurally lower variable cost (higher margin).
-        // Consumer hardware is a higher volume, lower margin business.
-        $expectedEnterpriseRevenue = $expectedRevenue * $enterpriseWeight;
-        $expectedConsumerRevenue = $expectedRevenue * $consumerWeight;
+        // Enterprise B2B hardware runs a lower variable cost ratio than consumer devices by the segment margin
+        // premium; both are struck around the engine's ratio so the baseline mix reproduces it exactly.
+        $enterpriseVariableCostRatio = max(0.0, $realizedVariableMargin - ($consumerWeight * self::ENTERPRISE_MARGIN_PREMIUM));
+        $consumerVariableCostRatio = $consumerWeight > 0.0
+            ? ($realizedVariableMargin - ($enterpriseWeight * $enterpriseVariableCostRatio)) / $consumerWeight
+            : $realizedVariableMargin;
 
-        $enterpriseBaselineCosts = $expectedEnterpriseRevenue * self::ENTERPRISE_VARIABLE_COST_RATIO;
-
-        // Derive required consumer cost ratio to hit the engine's target margin at baseline
-        $targetTotalCosts = $expectedRevenue * $realizedVariableMargin;
-        $consumerBaselineCosts = max(0.0, $targetTotalCosts - $enterpriseBaselineCosts);
-        $consumerVariableMargin = $expectedConsumerRevenue > 0 ? $consumerBaselineCosts / $expectedConsumerRevenue : $realizedVariableMargin;
-
-        // Apply derived distinct margins to actual shocked revenues
-        $actualVariableCosts = ($enterpriseRevenue * self::ENTERPRISE_VARIABLE_COST_RATIO) + ($consumerRevenue * $consumerVariableMargin);
+        // Apply the distinct ratios to actual shocked revenues
+        $actualVariableCosts = ($enterpriseRevenue * $enterpriseVariableCostRatio) + ($consumerRevenue * $consumerVariableCostRatio);
 
         // Input cost basket: components and wholesale goods, metals, freight and assembly payroll, recovered
         // in list prices at the firm's pricing power.

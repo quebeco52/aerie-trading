@@ -134,12 +134,7 @@ class FinancialDataBusinessModel extends StandardCorporateBusinessModel
         // DCM Debt Rating & Data Feed API Macro Channel:
         // Rating issuance mandates (SHRK) surge when corporate debt syndication booms (tight credit spreads + positive output gap).
         // Market data API feeds (TICK) see elevated transaction volume during high-volatility regimes (VIX > 20%).
-        $creditSpreadGap = MacroEngine::BASE_CREDIT_SPREAD - $macroState->macroCreditSpreadEma;
-        $dcmIssuanceBoost = ($creditSpreadGap * 2.0) + ($macroState->outputGapEma * 1.5 * $this->getOperatingCyclicality($stock));
-        $vixVolBoost = max(0.0, ($macroState->marketVolatilityEma - 0.20) * 0.50);
-        $dealActivityShift = ($macroState->dealActivityIndexEma - MacroEngine::DEAL_ACTIVITY_BASELINE) / MacroEngine::DEAL_ACTIVITY_BASELINE;
-        $dealActivityRatingBoost = $dealActivityShift * self::DEAL_ACTIVITY_RATING_SENSITIVITY;
-        $transactionMacroBonus = $dcmIssuanceBoost + $vixVolBoost + $dealActivityRatingBoost;
+        $transactionMacroBonus = $this->resolveTransactionMacroShift($stock, $macroState);
 
         $subscriptionRevenue = max(0.0, $expectedRevenue * $subscriptionWeight * (1.0 + ($subscriptionZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR))));
         $transactionRevenue  = max(0.0, $expectedRevenue * $transactionWeight * (1.0 + ($transactionZ * ($baselineVol * (self::REVENUE_VARIANCE_SCALAR * 5.0))) + $transactionMacroBonus));
@@ -173,6 +168,47 @@ class FinancialDataBusinessModel extends StandardCorporateBusinessModel
             streamZ: $streams->getStreamZ(),
             streamRevenue: $streamRevenues,
         );
+    }
+
+    /**
+     * Seat subscriptions renew through the cycle and the transaction stream carries its own cycle terms, so
+     * the root shift keeps only the exchange-rate term.
+     */
+    public function getMacroPhysics(Stock $stock, \App\DTO\MacroStateDTO $macroState): array
+    {
+        $physics = parent::getMacroPhysics($stock, $macroState);
+        $physics['macro_demand_shift'] = $this->resolveFxDemandShift($macroState);
+
+        return $physics;
+    }
+
+    /** The activity the cost base is staffed to: the transaction stream's macro shift at its target weight. */
+    public function resolveSectorActivityShift(Stock $stock, \App\DTO\MacroStateDTO $macroState): float
+    {
+        $params = $this->resolveModelParameters($stock, [
+            ModelParam::SubscriptionRevenueWeight->value => self::SUBSCRIPTION_REVENUE_WEIGHT,
+            ModelParam::TransactionRevenueWeight->value  => self::TRANSACTION_REVENUE_WEIGHT,
+        ]);
+        $totalWeight = $params[ModelParam::SubscriptionRevenueWeight] + $params[ModelParam::TransactionRevenueWeight];
+        if ($totalWeight <= 0.0) {
+            return 0.0;
+        }
+
+        return ($params[ModelParam::TransactionRevenueWeight] / $totalWeight) * $this->resolveTransactionMacroShift($stock, $macroState);
+    }
+
+    /**
+     * Rating issuance mandates surge when corporate debt syndication booms (tight credit spreads, positive output
+     * gap) and deals close; market data feeds see elevated volume in high-volatility regimes.
+     */
+    private function resolveTransactionMacroShift(Stock $stock, \App\DTO\MacroStateDTO $macroState): float
+    {
+        $creditSpreadGap = MacroEngine::BASE_CREDIT_SPREAD - $macroState->macroCreditSpreadEma;
+        $dcmIssuanceBoost = ($creditSpreadGap * 2.0) + ($macroState->outputGapEma * 1.5 * $this->getOperatingCyclicality($stock));
+        $vixVolBoost = max(0.0, ($macroState->marketVolatilityEma - 0.20) * 0.50);
+        $dealActivityShift = ($macroState->dealActivityIndexEma - MacroEngine::DEAL_ACTIVITY_BASELINE) / MacroEngine::DEAL_ACTIVITY_BASELINE;
+
+        return $dcmIssuanceBoost + $vixVolBoost + ($dealActivityShift * self::DEAL_ACTIVITY_RATING_SENSITIVITY);
     }
 
     public function getMarginReversionSpeed(): float

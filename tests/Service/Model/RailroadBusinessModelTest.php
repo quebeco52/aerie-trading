@@ -160,4 +160,21 @@ class RailroadBusinessModelTest extends TestCase
             'Season tickets must ride through the cycle more steadily than intermodal containers.'
         );
     }
+
+    public function testTheCycleReachesRevenueOnceThroughTheStreams(): void
+    {
+        // The streams carry their own elasticities, so the root shift must carry no output gap: passing the
+        // parent's gap shift through as well put KSTL's commuter book at ~1.55x the gap instead of 0.25x.
+        $stock = new Stock();
+        $stock->setTicker('KSTL');
+        $stock->setBeta('1.0');
+        $recession = new MacroStateDTO(outputGapEma: -0.03, exchangeRateIndexEma: 100.0);
+
+        $this->assertEqualsWithDelta(0.0, $this->model->getMacroPhysics($stock, $recession)['macro_demand_shift'], 1e-12);
+
+        // The sticky cost base still has to see the recession: it reads the target-mix stream shift instead.
+        // KSTL at -3%: intermodal 0.25 x 1.6, industrial 0.15 x 1.2, commuter 0.50 x 0.25 of the gap.
+        $expected = -0.03 * ((0.25 * 1.6) + (0.15 * 1.2) + (0.50 * RailroadBusinessModel::TRANSIT_EMPLOYMENT_ELASTICITY));
+        $this->assertEqualsWithDelta($expected, $this->model->resolveSectorActivityShift($stock, $recession), 1e-9);
+    }
 }

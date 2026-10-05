@@ -312,7 +312,8 @@ class AutoManufacturerBusinessModel extends HeavyManufacturingBusinessModel
         $softwareShock = $softwareZ * ($baselineVol * self::SOFTWARE_VARIANCE_SCALAR);
         $cuShift = MathUtility::calculateCapacityUtilizationShift($macroState->capacityUtilizationRateEma, MacroEngine::CU_BASELINE, self::CAPACITY_UTILIZATION_THROUGHPUT_SCALAR);
 
-        $salesRevenue    = max(0.0, $expectedRevenue * $salesWeight    * (1.0 + $salesShock + $this->resolveFxDemandShift($macroState) + $cuShift) * $salesMultiplier);
+        // FX reaches every stream once through the root macro_demand_shift.
+        $salesRevenue    = max(0.0, $expectedRevenue * $salesWeight    * (1.0 + $salesShock + $cuShift) * $salesMultiplier);
         $apexRevenue     = max(0.0, $expectedRevenue * $apexWeight     * (1.0 + $apexShock + $apexMacroBoost));
         $softwareRevenue = max(0.0, $expectedRevenue * $softwareWeight * (1.0 + $softwareShock));
 

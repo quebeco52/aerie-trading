@@ -163,7 +163,8 @@ class InternetRetailBusinessModel extends StandardCorporateBusinessModel
 
         // --- Macro Sensitivities ---
         $outputGap = $macroState->outputGapEma;
-        $sentimentShift = $macroState->sentimentDeviation();
+        // The gap is priced beside it, so confidence enters as its residual over the gap (Lemmon & Portniaguina 2006).
+        $sentimentShift = $macroState->sentimentResidual();
 
         // 1P Retail bears the absolute brunt of consumer recessions, and household confidence moves the basket
         // before the output gap does: a shopper who fears for their job trades down while GDP is still growing.
