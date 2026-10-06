@@ -62,31 +62,17 @@ class BiotechBusinessModelTest extends TestCase
             + ((1.0 - $biologic) * (1.0 - exp(-BiotechBusinessModel::SMALL_MOLECULE_LOE_HAZARD * $quarters)));
     }
 
-    public function testPatentCliffAndBlockbusterAssetDepreciationDecay(): void
+    /** R&D pays off through the readout hazard alone: the shared reinvestment margin drift would pay it a second time. */
+    public function testRndReinvestmentNeverMovesTheOperatingMargin(): void
     {
         $model = new BiotechBusinessModel();
 
-        // Exact replacement R&D reinvestment (R = 1.0): Zero drift
-        $stock = $this->makeStock();
-        $stock->setOperatingMargin('0.30');
-        $model->applyAssetDepreciationDecay($stock, 1.0, 0.25);
-        $this->assertEquals('0.30', $stock->getOperatingMargin());
-
-        // Patent Cliff Underinvestment (R = 0.5): Margin erodes toward generic floor (0.08)
-        $stock->setOperatingMargin('0.30');
-        $model->applyAssetDepreciationDecay($stock, 0.5, 0.25);
-        $decayed = (float) $stock->getOperatingMargin();
-        $this->assertLessThan(0.30, $decayed);
-        $this->assertGreaterThanOrEqual(BiotechBusinessModel::MIN_OPERATING_MARGIN_FLOOR, $decayed);
-
-        // Blockbuster Super-Cycle Overinvestment (R = 1.5): Margin expands toward the protection-blended ceiling
-        $stock->setOperatingMargin('0.30');
-        $model->applyAssetDepreciationDecay($stock, 1.5, 0.25);
-        $expanded = (float) $stock->getOperatingMargin();
-
-        // Default protected share 0.85 => ceiling = 0.20 + (0.50 - 0.20) * 0.85 = 0.455
-        $this->assertGreaterThan(0.30, $expanded);
-        $this->assertLessThanOrEqual(0.455, $expanded);
+        foreach ([0.5, 1.0, 1.5] as $ratio) {
+            $stock = $this->makeStock();
+            $stock->setOperatingMargin('0.30');
+            $model->applyAssetDepreciationDecay($stock, $ratio, 0.25);
+            $this->assertSame('0.30', $stock->getOperatingMargin());
+        }
     }
 
     public function testRndReplacementRatioIsPersistedForNextQuartersReadoutHazard(): void
@@ -101,27 +87,15 @@ class BiotechBusinessModelTest extends TestCase
         $this->assertSame(0.40, $state[BiotechBusinessModel::STATE_RND_REPLACEMENT_RATIO]);
     }
 
-    public function testGenericManufacturerNeverEarnsBlockbusterMargins(): void
+    public function testGenericManufacturerCompoundsAtCommodityRates(): void
     {
         $model = new BiotechBusinessModel();
 
         // A fully off-patent (generic) manufacturer: no revenue under exclusivity.
-        $stock = $this->makeStock([BiotechBusinessModel::STATE_PROTECTED_SHARE => 0.0]);
-        $stock->setOperatingMargin('0.30');
+        $generic = $this->makeStock([BiotechBusinessModel::STATE_PROTECTED_SHARE => 0.0]);
+        $this->assertSame(BiotechBusinessModel::GENERIC_SECULAR_GROWTH_RATE, $model->getSecularGrowthRate($generic));
 
-        // Heavy reinvestment cannot buy a patent monopoly the firm does not own: its ceiling is 0.20,
-        // already below the current margin, so no blockbuster expansion is granted.
-        $model->applyAssetDepreciationDecay($stock, 1.5, 0.25);
-        $this->assertEquals('0.30', $stock->getOperatingMargin());
-
-        // Generics compound at commodity manufacturing rates, not branded pharma rates.
-        $this->assertSame(BiotechBusinessModel::GENERIC_SECULAR_GROWTH_RATE, $model->getSecularGrowthRate($stock));
-
-        // A fully protected branded portfolio still expands toward the patented ceiling.
         $branded = $this->makeStock([BiotechBusinessModel::STATE_PROTECTED_SHARE => 1.0]);
-        $branded->setOperatingMargin('0.30');
-        $model->applyAssetDepreciationDecay($branded, 1.5, 0.25);
-        $this->assertGreaterThan(0.30, (float) $branded->getOperatingMargin());
         $this->assertSame(BiotechBusinessModel::PATENTED_SECULAR_GROWTH_RATE, $model->getSecularGrowthRate($branded));
     }
 
@@ -184,19 +158,33 @@ class BiotechBusinessModelTest extends TestCase
         // (1.0 * 27 + 0.12 * 40) / 1.12 = 28.392857...
         $this->assertEqualsWithDelta(28.392857, $state[BiotechBusinessModel::STATE_EXCLUSIVITY_QUARTERS], 1e-5);
 
-        // The launched asset is known: next quarter's commercial shift is persisted for the engine, and the
-        // model hands it over as the demand shift so EXPECTED revenue carries the step, not the surprise.
-        $knownShift = $state['weight:commercial_therapeutics'] * (1.12 - 1.0);
-        $this->assertEqualsWithDelta($knownShift, $state[BiotechBusinessModel::STATE_KNOWN_COMMERCIAL_SHIFT], 1e-9);
+        // The new asset weighs in at its share of revenue whatever the franchise has grown to: a firm at twice
+        // the base refreshes its clock by exactly as much.
+        $grown = $model->computeActualFinancials(
+            $this->makeStock([BiotechBusinessModel::STATE_FRANCHISE_INDEX => 2.0]),
+            self::EXPECTED_REVENUE,
+            self::VARIABLE_MARGIN,
+            self::FIXED_COSTS,
+            self::BASELINE_VOL,
+            new MacroStateDTO(),
+            $this->mockMath([0.0, 0.0], [true, true])
+        );
+        $this->assertEqualsWithDelta(28.392857, $grown->streamZ[BiotechBusinessModel::STATE_EXCLUSIVITY_QUARTERS], 1e-5);
+
+        // The launched asset is known and is new capacity, not overtime on the old: the step reaches EXPECTED
+        // revenue through the structural multiplier, and the utilization shift carries no erosion at all.
+        $multiplier = 1.0 + ($state['weight:commercial_therapeutics'] * (1.12 - 1.0));
+        $this->assertEqualsWithDelta($multiplier, $state[BiotechBusinessModel::STATE_STRUCTURAL_MULTIPLIER], 1e-9);
         $stock->setEarningsMomentumZ($state);
-        $this->assertEqualsWithDelta($knownShift, $model->getMacroPhysics($stock, new MacroStateDTO())['macro_demand_shift'], 1e-9);
+        $this->assertEqualsWithDelta($multiplier, $model->getStructuralRevenueMultiplier($stock), 1e-9);
+        $this->assertEqualsWithDelta(0.0, $model->getMacroPhysics($stock, new MacroStateDTO())['macro_demand_shift'], 1e-9);
 
         // Next quarter, with no new event, the higher base is still there — this is the behaviour the
         // old one-quarter revenue multiplier could not produce. The engine's expected revenue arrives
-        // with the shift in it, and the physics strips it back out before applying the franchise.
+        // with the multiplier in it, and the physics strips it back out before applying the franchise.
         $nextQuarter = $model->computeActualFinancials(
             $stock,
-            self::EXPECTED_REVENUE * (1.0 + $knownShift),
+            self::EXPECTED_REVENUE * $multiplier,
             self::VARIABLE_MARGIN,
             self::FIXED_COSTS,
             self::BASELINE_VOL,
@@ -315,9 +303,11 @@ class BiotechBusinessModelTest extends TestCase
         // Price concessions defending the brand: 0.30 + 0.04 * 0.35 * 0.70 = 0.3098
         $this->assertEqualsWithDelta(0.3098, $result->clampedMargin, 1e-9);
 
-        // Off-patent revenue leaves the protected book permanently.
+        // The whole exposed book leaves exclusivity the day generics may enter, not as its sales erode.
+        $protectedFranchise = BiotechBusinessModel::DEFAULT_PATENT_PROTECTED_SHARE - BiotechBusinessModel::DEFAULT_LOE_EXPOSURE_SHARE;
+        $this->assertEqualsWithDelta($protectedFranchise, $result->streamZ[BiotechBusinessModel::STATE_PROTECTED_FRANCHISE], 1e-9);
         $this->assertEqualsWithDelta(
-            BiotechBusinessModel::DEFAULT_PATENT_PROTECTED_SHARE - $erodedFraction,
+            $protectedFranchise / (1.0 - $erodedFraction),
             $result->streamZ[BiotechBusinessModel::STATE_PROTECTED_SHARE],
             1e-9
         );
@@ -357,6 +347,79 @@ class BiotechBusinessModelTest extends TestCase
         // The window closes and the clock is rearmed for the next franchise's patent life.
         $this->assertSame(0.0, $state[BiotechBusinessModel::STATE_LOE_ELAPSED_QUARTERS]);
         $this->assertSame(BiotechBusinessModel::DEFAULT_EXCLUSIVITY_QUARTERS, $state[BiotechBusinessModel::STATE_EXCLUSIVITY_QUARTERS]);
+    }
+
+    /** Revenue folded into the base off patent stays unprotected: the share does not snap back when the window closes. */
+    public function testTheProtectedShareHoldsAfterTheErosionWindowCloses(): void
+    {
+        $model = new BiotechBusinessModel();
+        $protectedFranchise = BiotechBusinessModel::DEFAULT_PATENT_PROTECTED_SHARE - BiotechBusinessModel::DEFAULT_LOE_EXPOSURE_SHARE;
+
+        $closing = $model->computeActualFinancials(
+            $this->makeStock([
+                BiotechBusinessModel::STATE_EXCLUSIVITY_QUARTERS => 0.0,
+                BiotechBusinessModel::STATE_LOE_ELAPSED_QUARTERS => BiotechBusinessModel::LOE_EROSION_WINDOW_QUARTERS - 1.0,
+                BiotechBusinessModel::STATE_LOE_EXPOSURE => BiotechBusinessModel::DEFAULT_LOE_EXPOSURE_SHARE,
+                BiotechBusinessModel::STATE_PROTECTED_FRANCHISE => $protectedFranchise,
+            ]),
+            self::EXPECTED_REVENUE, self::VARIABLE_MARGIN, self::FIXED_COSTS, self::BASELINE_VOL, new MacroStateDTO(),
+            $this->mockMath([0.0, 0.0], [false])
+        );
+
+        $folded = 1.0 - (BiotechBusinessModel::DEFAULT_LOE_EXPOSURE_SHARE * $this->loeErodedShare(BiotechBusinessModel::LOE_EROSION_WINDOW_QUARTERS));
+        $share = $protectedFranchise / $folded;
+        $this->assertEqualsWithDelta($share, $closing->streamZ[BiotechBusinessModel::STATE_PROTECTED_SHARE], 1e-9);
+        $this->assertLessThan(BiotechBusinessModel::DEFAULT_PATENT_PROTECTED_SHARE, $share);
+
+        $stock = $this->makeStock($closing->streamZ);
+        $after = $model->computeActualFinancials(
+            $stock, self::EXPECTED_REVENUE, self::VARIABLE_MARGIN, self::FIXED_COSTS, self::BASELINE_VOL, new MacroStateDTO(),
+            $this->mockMath([0.0, 0.0], [false])
+        );
+        $this->assertEqualsWithDelta($share, $after->streamZ[BiotechBusinessModel::STATE_PROTECTED_SHARE], 1e-9);
+        $stock->setEarningsMomentumZ($after->streamZ);
+        $this->assertLessThan(
+            BiotechBusinessModel::GENERIC_SECULAR_GROWTH_RATE + ((BiotechBusinessModel::PATENTED_SECULAR_GROWTH_RATE - BiotechBusinessModel::GENERIC_SECULAR_GROWTH_RATE) * BiotechBusinessModel::DEFAULT_PATENT_PROTECTED_SHARE),
+            $model->getSecularGrowthRate($stock)
+        );
+    }
+
+    public function testAnApprovalAddsItsLaunchToTheProtectedBook(): void
+    {
+        $model = new BiotechBusinessModel();
+        $stock = $this->makeStock([BiotechBusinessModel::STATE_PROTECTED_FRANCHISE => 0.5]);
+
+        $result = $model->computeActualFinancials(
+            $stock, self::EXPECTED_REVENUE, self::VARIABLE_MARGIN, self::FIXED_COSTS, self::BASELINE_VOL, new MacroStateDTO(),
+            $this->mockMath([0.0, 0.0], [true, true])
+        );
+
+        $this->assertEqualsWithDelta(0.5 + BiotechBusinessModel::APPROVAL_FRANCHISE_STEP, $result->streamZ[BiotechBusinessModel::STATE_PROTECTED_FRANCHISE], 1e-9);
+        $this->assertEqualsWithDelta(0.62 / 1.12, $result->streamZ[BiotechBusinessModel::STATE_PROTECTED_SHARE], 1e-9);
+    }
+
+    /** A book mostly off patent already cannot lose more exclusivity than it has: the cliff takes what is left. */
+    public function testACliffNeverErodesMoreThanTheProtectedBook(): void
+    {
+        $model = new BiotechBusinessModel();
+        $stock = $this->makeStock([
+            BiotechBusinessModel::STATE_EXCLUSIVITY_QUARTERS => 1.0,
+            BiotechBusinessModel::STATE_PROTECTED_FRANCHISE => 0.10,
+        ]);
+
+        $result = $model->computeActualFinancials(
+            $stock, self::EXPECTED_REVENUE, self::VARIABLE_MARGIN, self::FIXED_COSTS, self::BASELINE_VOL, new MacroStateDTO(),
+            $this->mockMath([0.0, 0.0], [false])
+        );
+
+        $this->assertSame(ShockEvent::BIOTECH_PATENT_CLIFF, $result->eventType);
+        $this->assertEqualsWithDelta(0.10, $result->streamZ[BiotechBusinessModel::STATE_LOE_EXPOSURE], 1e-9);
+        $this->assertEqualsWithDelta(0.0, $result->streamZ[BiotechBusinessModel::STATE_PROTECTED_FRANCHISE], 1e-9);
+        $this->assertEqualsWithDelta(
+            self::EXPECTED_REVENUE * BiotechBusinessModel::ESTABLISHED_DRUG_WEIGHT * (1.0 - (0.10 * $this->loeErodedShare(1.0))),
+            $result->streamRevenue['commercial_therapeutics'],
+            1.0
+        );
     }
 
     public function testReadoutHazardScalesWithPipelineBreadthAndRndIntensity(): void

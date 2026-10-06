@@ -86,6 +86,12 @@ interface OperatingStrategyInterface
      */
     public function updateDynamicRoic(Stock $stock, float $actualTotalNetIncome, float $investedCapital, float $ebit, float $corporateTaxRate, float $wacc = 0.08, float $costOfEquity = 0.10, ?\App\DTO\MacroStateDTO $macroState = null, float $depreciation = 0.0): float;
     public function getSecularGrowthRate(Stock $stock): float;
+    /**
+     * Revenue the firm's capital earns at full utilization relative to its stored asset turnover, for a franchise
+     * level the model carries itself (an approved drug). It scales capacity and the cost base together, so it is
+     * neither overtime nor idle plant.
+     */
+    public function getStructuralRevenueMultiplier(Stock $stock): float;
     public function getCapexCyclicality(): float;
     /** The cycle the capital budget answers to, as a log deviation; getCapexCyclicality() is its elasticity. */
     public function getCapexCycleSignal(Stock $stock, MacroStateDTO $macroState): float;
