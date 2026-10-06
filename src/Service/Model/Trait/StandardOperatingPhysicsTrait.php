@@ -21,6 +21,11 @@ trait StandardOperatingPhysicsTrait
         return 0.02; // DEFAULT_SECULAR_GROWTH_RATE
     }
 
+    public function getStructuralRevenueMultiplier(Stock $stock): float
+    {
+        return 1.0;
+    }
+
     public function getCapexCyclicality(): float
     {
         return 1.5; // DEFAULT_CAPEX_CYCLICALITY

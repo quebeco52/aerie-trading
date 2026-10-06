@@ -35,7 +35,7 @@ use App\Service\Math\MathUtility;
  * - Big pharma:      high EstablishedDrugWeight, high PatentProtectedRevenueShare, real LOE exposure.
  * - Clinical-stage:  PipelineDrugWeight dominant, LoeExposureShare 0.0 (nothing marketed to lose).
  * - Generic/specialty: PipelineDrugWeight ~0.0 and PatentProtectedRevenueShare 0.0, which collapses
- *   both the readout hazard and the operating margin ceiling to commodity manufacturing levels.
+ *   the readout hazard and secular growth to commodity manufacturing levels; the margin is the ticker's own.
  */
 class BiotechBusinessModel extends StandardCorporateBusinessModel
 {
@@ -100,13 +100,19 @@ class BiotechBusinessModel extends StandardCorporateBusinessModel
     // --- Persisted Structural State Keys ---
     /** Cumulative commercial franchise index: permanent revenue base carried across quarters. */
     public const STATE_FRANCHISE_INDEX = 'state:commercial_franchise';
+    /** Next quarter's structural revenue multiplier, 1 + weight x (franchise - 1): the approved book the firm's capital now earns on. */
+    public const STATE_STRUCTURAL_MULTIPLIER = 'state:structural_franchise_multiplier';
     /** Quarters of marketing exclusivity remaining on the portfolio before the next patent cliff. */
     public const STATE_EXCLUSIVITY_QUARTERS = 'state:exclusivity_quarters';
     /** Quarters elapsed inside an active loss-of-exclusivity erosion window (0.0 = no active cliff). */
     public const STATE_LOE_ELAPSED_QUARTERS = 'state:loe_elapsed_quarters';
-    /** Live share of revenue still under patent or regulatory exclusivity protection. */
+    /** Live share of marketed revenue still under patent or regulatory exclusivity protection. */
     public const STATE_PROTECTED_SHARE = 'state:patent_protected_share';
-    /** Next quarter's known commercial shift, weight x (franchise x erosion - 1): what the exclusivity clock already says, handed to expected revenue. */
+    /** Marketed revenue still under exclusivity, in franchise-index units: a cliff takes it away at onset, an approval adds to it. */
+    public const STATE_PROTECTED_FRANCHISE = 'state:protected_franchise';
+    /** Share of the marketed franchise the active (or next) loss of exclusivity erodes, fixed for the whole window. */
+    public const STATE_LOE_EXPOSURE = 'state:loe_exposure';
+    /** Next quarter's known erosion of the marketed book as a share of structural revenue: what the exclusivity clock already says, handed to expected revenue. */
     public const STATE_KNOWN_COMMERCIAL_SHIFT = 'state:known_commercial_shift';
     /** Prior-quarter R&D reinvestment ratio relative to the patent replacement rate. */
     public const STATE_RND_REPLACEMENT_RATIO = 'state:rnd_replacement_ratio';
@@ -152,7 +158,7 @@ class BiotechBusinessModel extends StandardCorporateBusinessModel
     public const DEFAULT_EXCLUSIVITY_QUARTERS = 28.0;
     /** Default share of commercial revenue exposed to the next loss of exclusivity. */
     public const DEFAULT_LOE_EXPOSURE_SHARE = 0.35;
-    /** Default share of revenue still under patent or regulatory exclusivity protection. */
+    /** Default share of marketed revenue still under patent or regulatory exclusivity protection. */
     public const DEFAULT_PATENT_PROTECTED_SHARE = 0.85;
     /** Default share of the commercial book made up of biologics rather than small molecules. */
     public const DEFAULT_BIOLOGIC_REVENUE_SHARE = 0.50;
@@ -172,18 +178,6 @@ class BiotechBusinessModel extends StandardCorporateBusinessModel
     public const MIN_RECAP_ICR_FLOOR       = 15.0;
     /** Target leverage as a share of the debt tolerance; below it the firm is under-levered. */
     public const UNDERLEVERAGED_DEBT_RATIO = 0.50;
-
-    // --- Patent Cliff & Blockbuster Capital Reinvestment Physics ---
-    /** Quarterly margin decay rate per unit of R&D underinvestment below patent replacement rate. */
-    public const PATENT_CLIFF_DECAY_RATE      = 0.025;
-    /** Quarterly margin gain scalar per unit of logarithmic R&D overinvestment above replacement rate. */
-    public const BLOCKBUSTER_GAIN_RATE        = 0.012;
-    /** Structural minimum operating margin floor under severe generic drug competition (off-patent). */
-    public const MIN_OPERATING_MARGIN_FLOOR   = 0.08;
-    /** Structural maximum operating margin ceiling for a fully patent-protected biologic portfolio. */
-    public const MAX_OPERATING_MARGIN_CEILING = 0.50;
-    /** Structural operating margin ceiling for unprotected commodity generic manufacturing. */
-    public const GENERIC_MARGIN_CEILING       = 0.20;
 
     // --- Secular Growth Rails ---
     /** Secular growth for a fully patent-protected branded portfolio (demographics plus branded pricing). */
@@ -227,9 +221,9 @@ class BiotechBusinessModel extends StandardCorporateBusinessModel
     {
         // Biotechs are structural secular growth stories driven by R&D and demographics, making them
         // largely decoupled from standard macro business cycles. The demand shift carries instead what the
-        // exclusivity clock already says about this quarter: a patent cliff is dated, an approved asset is
-        // on the market, and analysts read both, so the erosion and the franchise step belong in EXPECTED
-        // revenue. Left to the physics alone they were a miss or a beat every quarter for years.
+        // exclusivity clock already says about this quarter: a patent cliff is dated and analysts read it, so
+        // the erosion belongs in EXPECTED revenue. It runs through utilization so the cost base is slow to
+        // follow a collapsing brand; the approved book itself is structural (getStructuralRevenueMultiplier).
         return [
             'macro_demand_shift' => (float) (($stock->getEarningsMomentumZ() ?? [])[self::STATE_KNOWN_COMMERCIAL_SHIFT] ?? 0.0),
             'pricing_power_multiplier' => 1.0,
@@ -237,11 +231,21 @@ class BiotechBusinessModel extends StandardCorporateBusinessModel
     }
 
     /**
-     * The commercial multiplier the exclusivity clock will apply next quarter, from the state being
-     * persisted now: the clock ticks once more, a cliff that is due starts eroding, an active erosion
-     * advances. Nothing here is drawn, so the forecast and next quarter's physics agree exactly.
+     * The approved franchise scales what the firm's capital earns and the cost base with it: a launched drug is
+     * new capacity, not overtime on the old one. Before the state exists the franchise rode in the demand shift,
+     * so the neutral 1.0 keeps that quarter's expected revenue consistent with the shift it was persisted with.
      */
-    private function nextQuarterCommercialMultiplier(float $franchise, float $clock, float $elapsed, float $exposureShare, float $biologicShare): float
+    public function getStructuralRevenueMultiplier(Stock $stock): float
+    {
+        return max(self::MIN_FRANCHISE_INDEX, (float) (($stock->getEarningsMomentumZ() ?? [])[self::STATE_STRUCTURAL_MULTIPLIER] ?? 1.0));
+    }
+
+    /**
+     * The erosion factor the exclusivity clock will apply next quarter, from the state being persisted now:
+     * the clock ticks once more, a cliff that is due starts eroding, an active erosion advances. Nothing here
+     * is drawn, so the forecast and next quarter's physics agree exactly.
+     */
+    private function nextQuarterErosionFactor(float $clock, float $elapsed, float $exposureShare, float $biologicShare): float
     {
         if ($elapsed > 0.0) {
             $elapsed += 1.0;
@@ -249,7 +253,16 @@ class BiotechBusinessModel extends StandardCorporateBusinessModel
             $elapsed = 1.0;
         }
 
-        return $franchise * (1.0 - ($exposureShare * $this->loeErodedShare($biologicShare, $elapsed)));
+        return 1.0 - ($exposureShare * $this->loeErodedShare($biologicShare, $elapsed));
+    }
+
+    /**
+     * The share of the marketed book the next loss of exclusivity takes: the ticker's exposure, but never more than
+     * is still protected, since revenue already off patent cannot lose exclusivity a second time.
+     */
+    private function resolveCliffExposure(float $exposureParam, float $protectedFranchise, float $franchise): float
+    {
+        return max(0.0, min(1.0, $exposureParam, $protectedFranchise / max(self::MIN_FRANCHISE_INDEX, $franchise)));
     }
 
     /**
@@ -298,10 +311,16 @@ class BiotechBusinessModel extends StandardCorporateBusinessModel
         $pipelineZ    = $streams->generateZ('pipeline_licensing_milestones', self::PIPELINE_PERSISTENCE_PHI);
 
         // --- Exclusivity Clock: schedule the next patent cliff and advance any active erosion ---
-        $exposureShare = max(0.0, min(1.0, $params[ModelParam::LoeExposureShare]));
         $franchise = $streams->getPersistedState(self::STATE_FRANCHISE_INDEX, 1.0);
         $clock     = $streams->getPersistedState(self::STATE_EXCLUSIVITY_QUARTERS, $params[ModelParam::ExclusivityQuarters]);
         $elapsed   = $streams->getPersistedState(self::STATE_LOE_ELAPSED_QUARTERS, 0.0);
+        $protectedFranchise = $streams->getPersistedState(
+            self::STATE_PROTECTED_FRANCHISE,
+            $franchise * max(0.0, min(1.0, $params[ModelParam::PatentProtectedRevenueShare]))
+        );
+        $exposureShare = $elapsed > 0.0
+            ? $streams->getPersistedState(self::STATE_LOE_EXPOSURE, $this->resolveCliffExposure($params[ModelParam::LoeExposureShare], $protectedFranchise, $franchise))
+            : $this->resolveCliffExposure($params[ModelParam::LoeExposureShare], $protectedFranchise, $franchise);
 
         $eventType = null;
         if ($elapsed > 0.0) {
@@ -311,6 +330,8 @@ class BiotechBusinessModel extends StandardCorporateBusinessModel
             if ($clock <= 0.0 && $exposureShare > 0.0) {
                 $elapsed = 1.0;
                 $eventType = ShockEvent::BIOTECH_PATENT_CLIFF;
+                // The whole exposed book goes off patent the day generics may enter; erosion of its sales follows.
+                $protectedFranchise = max(0.0, $protectedFranchise - ($exposureShare * $franchise));
             }
         }
 
@@ -321,11 +342,11 @@ class BiotechBusinessModel extends StandardCorporateBusinessModel
 
         $commercialMultiplier = $franchise * $erosionFactor;
 
-        // Expected revenue already carries this quarter's known commercial shift (getMacroPhysics handed
-        // it to the engine from the state persisted last quarter); strip it to get the base the franchise
+        // Expected revenue already carries the approved franchise (structural multiplier) and this quarter's
+        // known erosion (demand shift), both persisted last quarter; strip them to get the base the franchise
         // and the erosion are applied to, so neither is counted twice.
         $knownShift = $streams->getPersistedState(self::STATE_KNOWN_COMMERCIAL_SHIFT, 0.0);
-        $baseRevenue = $expectedRevenue / max(0.1, 1.0 + $knownShift);
+        $baseRevenue = $expectedRevenue / (max(0.1, 1.0 + $knownShift) * $this->getStructuralRevenueMultiplier($stock));
 
         $reimbursementBaseline = \App\Service\Macro\MacroEngine::TARGET_INFLATION - \App\Service\Macro\MacroEngine::REIMBURSEMENT_PRODUCTIVITY_OFFSET;
         $reimbursementShift    = $macroState->reimbursementRateGrowth - $reimbursementBaseline;
@@ -354,9 +375,11 @@ class BiotechBusinessModel extends StandardCorporateBusinessModel
                 $pipelineRevenue *= self::APPROVAL_MILESTONE_REV_MULT;
                 $patentModifier  += self::APPROVAL_LAUNCH_COST_MARGIN_PENALTY * $pipelineWeight;
 
-                // Portfolio-weighted average remaining exclusivity, refreshed by the new asset's patent life.
-                $clock = (($franchise * $clock) + (self::APPROVAL_FRANCHISE_STEP * self::NEW_APPROVAL_EXCLUSIVITY_QUARTERS))
-                    / ($franchise + self::APPROVAL_FRANCHISE_STEP);
+                // Revenue-weighted average remaining exclusivity: the new asset is APPROVAL_FRANCHISE_STEP of the
+                // existing book whatever its size, so the franchise level cancels out of the weights.
+                $clock = ($clock + (self::APPROVAL_FRANCHISE_STEP * self::NEW_APPROVAL_EXCLUSIVITY_QUARTERS))
+                    / (1.0 + self::APPROVAL_FRANCHISE_STEP);
+                $protectedFranchise += self::APPROVAL_FRANCHISE_STEP * $franchise;
                 $franchise = min(self::MAX_FRANCHISE_INDEX, $franchise * (1.0 + self::APPROVAL_FRANCHISE_STEP));
 
                 // A patent cliff onset is the larger structural event, so it keeps the public narrative.
@@ -392,24 +415,33 @@ class BiotechBusinessModel extends StandardCorporateBusinessModel
 
         // Once the erosion window closes, the residual off-patent level becomes the permanent base
         // and the clock is reset to the next franchise's remaining patent life.
+        $marketedFranchise = $franchise * $erosionFactor;
         if ($elapsed >= self::LOE_EROSION_WINDOW_QUARTERS) {
-            $franchise = max(self::MIN_FRANCHISE_INDEX, $franchise * $erosionFactor);
+            $franchise = max(self::MIN_FRANCHISE_INDEX, $marketedFranchise);
+            $marketedFranchise = $franchise;
             $elapsed = 0.0;
             $clock = max($clock, $params[ModelParam::ExclusivityQuarters]);
         }
 
-        // Revenue that has gone off patent is permanently unprotected: it caps structural margins
-        // and secular growth from the following quarter onward.
-        $protectedShare = max(0.0, min(1.0, $params[ModelParam::PatentProtectedRevenueShare] - $erodedFraction));
+        // The off-patent residual stays unprotected after it is folded into the base; only approvals restore the
+        // protected share. It lowers secular growth from the following quarter.
+        $protectedShare = max(0.0, min(1.0, $protectedFranchise / max(self::MIN_FRANCHISE_INDEX, $marketedFranchise)));
+        $nextExposure = $elapsed > 0.0
+            ? $exposureShare
+            : $this->resolveCliffExposure($params[ModelParam::LoeExposureShare], $protectedFranchise, $franchise);
 
         $streams->registerState(self::STATE_FRANCHISE_INDEX, $franchise);
         $streams->registerState(self::STATE_EXCLUSIVITY_QUARTERS, $clock);
         $streams->registerState(self::STATE_LOE_ELAPSED_QUARTERS, $elapsed);
         $streams->registerState(self::STATE_PROTECTED_SHARE, $protectedShare);
+        $streams->registerState(self::STATE_PROTECTED_FRANCHISE, $protectedFranchise);
+        $streams->registerState(self::STATE_LOE_EXPOSURE, $nextExposure);
         $streams->registerState(self::STATE_RND_REPLACEMENT_RATIO, $rndRatio);
+        $structuralMultiplier = max(self::MIN_FRANCHISE_INDEX, 1.0 + ($establishedWeight * ($franchise - 1.0)));
+        $streams->registerState(self::STATE_STRUCTURAL_MULTIPLIER, $structuralMultiplier);
         $streams->registerState(
             self::STATE_KNOWN_COMMERCIAL_SHIFT,
-            $establishedWeight * ($this->nextQuarterCommercialMultiplier($franchise, $clock, $elapsed, $exposureShare, $biologicShare) - 1.0)
+            $establishedWeight * $franchise * ($this->nextQuarterErosionFactor($clock, $elapsed, $nextExposure, $biologicShare) - 1.0) / $structuralMultiplier
         );
 
         // What was expected of each stream, the known franchise and erosion included: only the draw is a surprise.
@@ -465,32 +497,14 @@ class BiotechBusinessModel extends StandardCorporateBusinessModel
     }
 
     /**
-     * Carries R&D replacement intensity into the next quarter's pivotal readout hazard (a portfolio starved
-     * of research funding stops generating late-stage readouts), then applies the shared reinvestment physics:
-     * patent-cliff amortization on under-investment, blockbuster pipeline expansion on over-investment.
+     * R&D pays off through the pipeline only: the replacement ratio sets next quarter's pivotal readout hazard (a
+     * portfolio starved of research stops producing late-stage readouts) and nothing else. The shared margin
+     * drift would pay it twice, since approvals already step the franchise up and the exclusivity clock already
+     * erodes an unreplaced book.
      */
     public function applyAssetDepreciationDecay(Stock $stock, float $reinvestmentRatio, float $dt): void
     {
         $this->persistState($stock, self::STATE_RND_REPLACEMENT_RATIO, max(0.0, $reinvestmentRatio));
-        parent::applyAssetDepreciationDecay($stock, $reinvestmentRatio, $dt);
-    }
-
-    /** Patent cliff amortization: under-investment lets patents expire without replacement. */
-    public function getDepreciationDecayRate(): float
-    {
-        return self::PATENT_CLIFF_DECAY_RATE;
-    }
-
-    /** Blockbuster pipeline expansion: R&D over-investment creates proprietary biologic monopolies. */
-    public function getModernizationGainRate(): float
-    {
-        return self::BLOCKBUSTER_GAIN_RATE;
-    }
-
-    /** A portfolio with no exclusivity left cannot earn monopoly margins no matter what it spends. */
-    public function getMaxOperatingMarginCeiling(Stock $stock): float
-    {
-        return $this->resolveMarginCeiling($stock);
     }
 
     /** Clinical-stage biotechs trade entirely on pipeline rNPV and cash runway, not on book. */
@@ -499,22 +513,6 @@ class BiotechBusinessModel extends StandardCorporateBusinessModel
         return 0.0;
     }
 
-
-    /**
-     * Structural operating margin ceiling, blended between a patent monopoly and commodity generic
-     * manufacturing by the share of revenue still under exclusivity.
-     */
-    private function resolveMarginCeiling(Stock $stock): float
-    {
-        $params = $this->resolveModelParameters($stock, [
-            ModelParam::PatentedMarginCeiling->value => self::MAX_OPERATING_MARGIN_CEILING,
-        ]);
-        $patentedCeiling = $params[ModelParam::PatentedMarginCeiling];
-        $protectedShare  = $this->resolveProtectedShare($stock);
-
-        return self::GENERIC_MARGIN_CEILING
-            + (($patentedCeiling - self::GENERIC_MARGIN_CEILING) * $protectedShare);
-    }
 
     /**
      * Live share of revenue under patent or regulatory exclusivity, tracked by the physics loop and
@@ -545,8 +543,8 @@ class BiotechBusinessModel extends StandardCorporateBusinessModel
     /**
      * MacroStateDTO fields (snake_case) this model's operating physics genuinely reads in
      * calculateSectorPhysics()/getMacroPhysics() — see OperatingStrategyInterface for the full rule.
-     * Both operating methods return hardcoded constants — biotech's physics is R&D-cycle driven,
-     * not macro-coupled, so this model draws no conduits at all.
+     * Biotech's physics is R&D-cycle driven: the only macro reads are the administered reimbursement update and
+     * the real wage gap behind the labor share of the input basket.
      *
      * @return list<string>
      */

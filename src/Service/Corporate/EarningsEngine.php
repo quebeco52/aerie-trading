@@ -594,7 +594,8 @@ class EarningsEngine
      */
     private function capacityRevenueAt(EarningsSimulationContext $ctx, float $pricingPowerMultiplier, float $capacityUtilization): array
     {
-        $structuralRevenue = max(1.0, $ctx->revenueGeneratingCapital * $ctx->assetTurnover * $pricingPowerMultiplier);
+        $structuralRevenue = max(1.0, $ctx->revenueGeneratingCapital * $ctx->assetTurnover * $pricingPowerMultiplier
+            * $ctx->strategy->getStructuralRevenueMultiplier($ctx->stock));
 
         // The firm's addressable market in the unit its capacity is measured in: its own structural revenue
         // scaled up to a full addressable share, on the base every share reading uses (equity for a lender,
