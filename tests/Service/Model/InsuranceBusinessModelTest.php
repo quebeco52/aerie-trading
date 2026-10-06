@@ -394,10 +394,14 @@ class InsuranceBusinessModelTest extends TestCase
         // Rates at the level the book was priced at: the whole capacity is worth writing.
         $this->assertEqualsWithDelta(1.0, $writtenCapacity($this->underwriterAtShare(0.40)), 0.001);
 
-        // Capital past the market's optimal scale: rates soften far enough that the marginal treaty costs more than it
-        // brings in, and the book is cut back rather than written at a loss. The hurdle is the long yield plus the
-        // premium, which the float's yield covers for only a short stretch past that scale.
-        $soft = $writtenCapacity($this->underwriterAtShare(0.58));
+        // Rates 6% soft put the combined ratio over 100, but the float the book brings over a renewal year still
+        // covers the underwriting loss: cash-flow underwriting, and the whole book is written.
+        $this->assertEqualsWithDelta(1.0, $writtenCapacity($this->underwriterAtShare(0.58)), 0.001);
+
+        // Softer still, the book loses money float included, and the firm sheds it. A firm whose float already
+        // held earns more than its hurdle can afford to keep part of it.
+        $floatRich = $this->underwriterAtShare(0.65, floatToEquity: 6.0);
+        $soft = $writtenCapacity($floatRich);
         $this->assertLessThan(1.0, $soft);
         $this->assertGreaterThan(InsuranceBusinessModel::MIN_WRITTEN_CAPACITY, $soft);
 
@@ -407,11 +411,44 @@ class InsuranceBusinessModelTest extends TestCase
 
         // The manager's own hurdle decides where that line falls (Jensen's agency cost, in its underwriting
         // form): an empire builder keeps writing a market a fortress has already withdrawn from.
-        $fortress = $this->underwriterAtShare(0.58);
+        $fortress = $this->underwriterAtShare(0.65, floatToEquity: 6.0);
         $fortress->setManagementStyle(\App\Data\ManagementStyle::Fortress);
-        $empireBuilder = $this->underwriterAtShare(0.58);
+        $empireBuilder = $this->underwriterAtShare(0.65, floatToEquity: 6.0);
         $empireBuilder->setManagementStyle(\App\Data\ManagementStyle::EmpireBuilder);
         $this->assertGreaterThan($writtenCapacity($fortress), $writtenCapacity($empireBuilder));
+    }
+
+    /**
+     * Float now follows the book, so writing a unit of it brings reserves that earn the portfolio yield (Myers &
+     * Cohn 1987). Treating the float as already invested — what it was while it grew with GDP — makes a firm in a
+     * soft market shed a book whose float would have carried it, and then lose the float too.
+     */
+    public function testTheFloatABookBringsCountsInTheDecisionToWriteIt(): void
+    {
+        $model = new InsuranceBusinessModel();
+        $mathUtility = new MathUtility();
+        $macroState = new \App\DTO\MacroStateDTO(
+            policyRate: InsuranceBusinessModel::DEFAULT_POLICY_RATE_FALLBACK,
+            policyRateEma: InsuranceBusinessModel::DEFAULT_POLICY_RATE_FALLBACK,
+        );
+        $writtenCapacity = static fn(Stock $s): float => $model->getTargetMetrics($s, $macroState, $mathUtility)['baseline_roic']
+            / (InsuranceBusinessModel::KENNEY_CAPACITY_RATIO * (float) $s->getOperatingMargin() * (1.0 - $macroState->corporateTaxRate));
+
+        // An underwriting loss the book's float covers: written in full, whatever float the firm already holds.
+        foreach ([1.2, 3.0] as $floatToEquity) {
+            $this->assertEqualsWithDelta(1.0, $writtenCapacity($this->underwriterAtShare(0.58, $floatToEquity)), 0.001);
+        }
+
+        // With no yield on float the same rate is an outright loss, and the book is shed.
+        $noYield = new \App\DTO\MacroStateDTO(
+            policyRate: InsuranceBusinessModel::DEFAULT_POLICY_RATE_FALLBACK,
+            policyRateEma: InsuranceBusinessModel::DEFAULT_POLICY_RATE_FALLBACK,
+            yield10yEma: 0.0,
+            equityRiskPremium: 0.0,
+        );
+        $stock = $this->underwriterAtShare(0.58);
+        $roic = $model->getTargetMetrics($stock, $noYield, $mathUtility)['baseline_roic'];
+        $this->assertLessThan(1.0, $roic / (InsuranceBusinessModel::KENNEY_CAPACITY_RATIO * 0.045 * (1.0 - $noYield->corporateTaxRate)));
     }
 
     /**
@@ -559,13 +596,13 @@ class InsuranceBusinessModelTest extends TestCase
      * An underwriter carrying a real float, at the given multiple of the market it serves, whose prior book
      * is small enough that the hard-market revenue floor does not hold its written premium up.
      */
-    private function underwriterAtShare(float $capitalShareOfMarket): Stock
+    private function underwriterAtShare(float $capitalShareOfMarket, float $floatToEquity = 3.0): Stock
     {
         $stock = $this->shareStock($capitalShareOfMarket);
         $equity = (float) $stock->getTotalEquity();
         $stock->setOperatingMargin('0.045');
-        $stock->setCustomerDeposits((string) ($equity * 3.0));
-        $stock->setCorporateTreasury((string) ($equity * 3.0));
+        $stock->setCustomerDeposits((string) ($equity * $floatToEquity));
+        $stock->setCorporateTreasury((string) ($equity * $floatToEquity));
         $stock->setTotalRevenue((string) ($equity * 0.50));
 
         return $stock;
