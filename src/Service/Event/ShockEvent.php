@@ -91,6 +91,8 @@ class ShockEvent
     public const SEMICONDUCTOR_INVENTORY_CORRECTION = 'semiconductor_inventory_correction';
     public const REIT_TENANT_BANKRUPTCIES = 'reit_tenant_bankruptcies';
     public const REIT_ELEVATED_VACANCIES = 'reit_elevated_vacancies';
+    /** Regulators curb high-limit play at a casino resort (junket bans, licence conditions); lasts until lifted. */
+    public const GAMING_CRACKDOWN = 'gaming_crackdown';
     public const CATASTROPHIC_CLAIM_LOSSES = 'catastrophic_claim_losses';
     public const ELEVATED_CLAIM_PAYOUTS = 'elevated_claim_payouts';
     public const PE_CARRIED_INTEREST_SURGE = 'pe_carried_interest_surge';

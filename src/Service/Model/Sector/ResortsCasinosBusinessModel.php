@@ -5,13 +5,12 @@ declare(strict_types=1);
 namespace App\Service\Model\Sector;
 
 use App\Data\InputOutputExposures;
-use App\Service\Model\BusinessModelInterface;
-
 use App\Data\ModelParam;
 use App\DTO\MacroStateDTO;
 use App\DTO\SectorPhysicsResult;
 use App\DTO\StreamContext;
 use App\Entity\Stock;
+use App\Service\Corporate\EarningsEngine;
 use App\Service\Event\ShockEvent;
 use App\Service\Macro\MacroEngine;
 use App\Service\Math\MathUtility;
@@ -20,11 +19,15 @@ use App\Service\Math\MathUtility;
  * Earnings strategy for Integrated Resorts & Casinos.
  *
  * Financial Physics:
- * - Ultra-Discretionary: Sensitive to consumer sentiment, leisure budgets, and the "Wealth Effect."
- * - High Operating Leverage: Massive physical resort infrastructure creates high fixed overhead.
- * - Table Hold Variance: VIP Baccarat and high-roller gaming revenue is subject to statistical hold volatility.
- * - Promotional Comps: When sentiment drops, operators comp rooms and F&B to defend gaming floor foot traffic.
- * - CRE Tenant Concessions: Weak output gaps force landlords to offer concessions (TI/LCs), compressing NOI margins.
+ * - Visitor demand: one driver (output gap, exchange rate, confidence beyond the gap, the foreign bloc's cycle)
+ *   reaches the gaming floor, the hotel and the tenants' tills alike.
+ * - Hold luck: the high-limit tables win or lose by chance alone, independent of demand and gone next quarter.
+ * - Regulatory regimes: a crackdown on high-limit play takes a share of gaming revenue for years, not a quarter.
+ * - Resort landlord: base rent on a staggered lease roll, priced off tenant sales, plus a percentage of tenants'
+ *   gross receipts, less the rent lost to tenant failures.
+ * - Expected revenue carries what is visible as the quarter opens (visitor demand, a crackdown in force, the
+ *   rent roll); surprises are volume noise, hold luck and regime switches.
+ * - Promotional comps: when sentiment drops, operators comp rooms and F&B to defend gaming floor foot traffic.
  */
 class ResortsCasinosBusinessModel extends StandardCorporateBusinessModel
 {
@@ -35,6 +38,8 @@ class ResortsCasinosBusinessModel extends StandardCorporateBusinessModel
     public const PRICE_ELASTICITY_OF_DEMAND = 0.90;
     /** Share of an idiosyncratic revenue gain taken from same-industry peers rather than won from a larger market. */
     public const INDUSTRY_SUBSTITUTABILITY = 0.60;
+    /** Rooms, food and beverage, entertainment and shop rents are services: selling prices track supercore, not goods breakevens. */
+    public const PRICING_INFLATION_BASIS = 'supercore_inflation_ema';
 
     // --- Input Cost Basket ---
     /** Shares of the variable cost base by input channel, measured from the BEA input-output accounts with supply-chain content (labor still the model's own). */
@@ -64,35 +69,55 @@ class ResortsCasinosBusinessModel extends StandardCorporateBusinessModel
     /** Baseline fraction of revenue derived from Non-Gaming (Rooms, F&B, Entertainment, Conventions). */
     public const NON_GAMING_REVENUE_WEIGHT = 0.45;
 
-    // --- Macro & Sentiment Physics ---
-    /** Hard floor on pricing power given the ultra-discretionary nature of leisure travel. */
-    public const MIN_BETA_PRICING_POWER_FLOOR = 0.40;
-    /** Scalar for how aggressively consumer sentiment shifts drive macro demand. */
+    // --- Visitor Demand ---
+    /** Scalar for how aggressively confidence beyond the output gap drives visitor demand. */
     public const SENTIMENT_SENSITIVITY_SCALAR = 0.25;
     /** Visitor volume per unit of the foreign bloc's output gap: inbound tourism and convention traffic. */
     public const FOREIGN_DEMAND_SENSITIVITY = 1.00;
+    /** AR(1) persistence of the firm's own visitor volume shocks (hotel occupancy, convention backlog, gaming drop). */
+    public const VISITOR_DEMAND_PERSISTENCE = 0.35;
     /** Scalar for how much variable margins compress via promotional comps when sentiment drops. */
     public const PROMOTIONAL_COMP_DRAG_SCALAR = 0.15;
 
     // --- Revenue Volatility & Stream Physics ---
-    /** Volatility multiplier for top-line revenue shocks reflecting gaming hold and tourism swings. */
+    /** Volatility multiplier for top-line revenue shocks reflecting gaming volume and tourism swings. */
     public const REVENUE_VARIANCE_SCALAR = 0.30;
     /** Volatility dampener applied to sticky non-gaming revenue (like convention backlog). */
     public const NON_GAMING_VOLATILITY_SCALAR = 0.50;
     /** The structural intensity of non-gaming variable costs relative to gaming costs. */
     public const NON_GAMING_COST_INTENSITY = 2.0;
 
-    // --- Tail Risk & Shock Events (Symmetric Hold Variance) ---
-    /** Negative z-score threshold indicating a severe gaming regulatory crackdown or VIP junket ban. */
-    public const GAMING_REGULATION_CRACKDOWN_Z = -2.20;
-    /** Revenue haircut applied to gaming operations during regulatory crackdowns. */
+    // --- Hold Luck ---
+    /** Share of gaming win from high-limit baccarat, the only play whose hold varies by luck (Las Vegas Strip ~20%, UNLV Center for Gaming Research). */
+    public const HIGH_LIMIT_SHARE_OF_GAMING = 0.20;
+    /** Quarterly s.d. of high-limit win from hold luck: Macau rolling-chip win runs 2.5-3.5% around a 2.85% theoretical, read as +/-2 s.d. */
+    public const HIGH_LIMIT_HOLD_VOLATILITY = 0.088;
+
+    // --- Regulatory Regimes (Markov switching) ---
+    /** Annual arrival intensity of a crackdown on high-limit play (junket bans, licence conditions): about one in eighteen years. */
+    public const GAMING_CRACKDOWN_INTENSITY = 0.056;
+    /** Share of gaming revenue lost while a crackdown regime lasts. */
     public const GAMING_REGULATION_HAIRCUT = 0.25;
-    /** Positive z-score threshold indicating extraordinary house win percentage (House holds big). */
-    public const WHALE_LOSS_SURGE_Z = 2.40;
-    /** Negative z-score threshold indicating VIP players running hot (House loses). */
-    public const WHALE_WIN_CRASH_Z = -2.40;
-    /** Absolute multiplier shock applied to gaming revenue during extreme hold variance quarters. */
-    public const WHALE_HOLD_SHOCK_MULT = 0.18;
+    /** Mean years a crackdown regime lasts (Macau GGR 2013 MOP 360bn, back to 303bn by 2018 after the 2014 campaign). */
+    public const GAMING_CRACKDOWN_MEAN_YEARS = 3.0;
+    /** Regime key for an active crackdown. */
+    public const CRACKDOWN_REGIME = 'gaming_crackdown';
+
+    // --- Resort Landlord (CRE) ---
+    /** Percentage rent on tenants' gross receipts as a share of rent (Simon Property Group 2018: overage $162m on minimum rent $3,489m). */
+    public const OVERAGE_RENT_SHARE = 0.044;
+    /** Weighted average lease term of the shop and restaurant roll, as the REIT model's. */
+    public const CRE_LEASE_WALT_YEARS = ReitBusinessModel::LEASE_WALT_YEARS;
+    /** Bound on the gap between in-place and market rents, as the REIT model's. */
+    public const CRE_MAX_RELEASING_SPREAD = ReitBusinessModel::MAX_RELEASING_SPREAD;
+    /** Rent lost per unit of relative excess retail default rate, as the REIT model's retail tenant channel. */
+    public const RETAIL_TENANT_DEFAULT_RENT_LOSS = ReitBusinessModel::RETAIL_DEFAULT_VACANCY_SCALAR;
+    /** Volatility dampener applied to commercial real estate leases due to long-term lockups. */
+    public const CRE_VOLATILITY_SCALAR = 0.20;
+    /** AR(1) persistence of leasing noise on the rent roll. */
+    public const CRE_LEASING_PERSISTENCE = 0.50;
+    /** Persisted state key: in-place rent relative to trend, carried across quarters as the roll turns over. */
+    public const STATE_IN_PLACE_RENT = 'state:in_place_rent';
 
     // --- Property Reinvestment & Asset Decay ---
     /** Quarterly margin decay rate per unit of underinvestment in resort remodels and attractions. */
@@ -104,52 +129,50 @@ class ResortsCasinosBusinessModel extends StandardCorporateBusinessModel
     /** Structural maximum operating margin ceiling for flagship premier Strip resorts. */
     public const MAX_OPERATING_MARGIN_CEILING = 0.36;
 
-    // --- Commercial Real Estate (CRE) Physics ---
-    /** Fraction of excess inflation captured by CRE lease rent escalators. */
-    public const CRE_RENT_ESCALATOR_CAPTURE = 0.50;
-    /** Sensitivity of CRE leasing demand to the macroeconomic output gap. */
-    public const CRE_DEMAND_ELASTICITY = 0.50;
-    /** Volatility dampener applied to commercial real estate leases due to long-term lockups. */
-    public const CRE_VOLATILITY_SCALAR = 0.20;
-    /** Operating margin penalty per Z-score of distress representing vacancy costs and unabsorbed overhead. */
-    public const CRE_VACANCY_MARGIN_HIT = 0.05;
-    /** Variable margin penalty representing costly Tenant Concessions (TI/LCs) in weak economies. */
-    public const CRE_TENANT_CONCESSION_DRAG = 0.10;
-    /** Negative Z-score threshold triggering severe tenant distress and vacancy shocks. */
-    public const CRE_VACANCY_DISTRESS_Z = -1.50;
+    // --- Structural Rates ---
+    /** Speed at which operating margin reverts to its structural level. */
+    public const MARGIN_REVERSION_SPEED = 0.15;
+    /** Return spread over WACC a destination resort's location and licence defend. */
+    public const MOAT_SPREAD = 0.015;
+    /** Working capital per unit of revenue: cage cash and receivables net of payables and advance deposits. */
+    public const WORKING_CAPITAL_INTENSITY = 0.02;
+    /** Share of construction in progress completed per quarter (multi-year resort builds). */
+    public const CAPEX_COMPLETION_RATE = 0.15;
+    /** Nominal secular growth of destination leisure spending. */
+    public const SECULAR_GROWTH_RATE = 0.03;
+    /** Capex response to the cycle: resort expansions are deferred in slumps and launched in booms. */
+    public const CAPEX_CYCLICALITY = 2.50;
+    /** Calendar-quarter seasonality of a coastal resort: Atlantic City land-based casino win 2015 (NJ DGE) by quarter over its mean. */
+    public const SEASONALITY_FACTORS = [0.90, 0.99, 1.18, 0.93];
 
-        public function getReversionSpeed(): float { return 0.15; }
-    public function getMoatSpread(): float { return 0.015; }
-    public function getWorkingCapitalIntensity(Stock $stock): float { return 0.02; }
-    public function getCapExCompletionRate(Stock $stock): float { return 0.15; }
+    public function getReversionSpeed(): float { return self::MARGIN_REVERSION_SPEED; }
+    public function getMoatSpread(): float { return self::MOAT_SPREAD; }
+    public function getWorkingCapitalIntensity(Stock $stock): float { return self::WORKING_CAPITAL_INTENSITY; }
+    public function getCapExCompletionRate(Stock $stock): float { return self::CAPEX_COMPLETION_RATE; }
 
     public function getSeasonalityFactors(): array
     {
-        return [0.85, 1.15, 1.25, 0.75]; // Q2-Q3 summer vacation & holiday travel peaks
+        return self::SEASONALITY_FACTORS;
     }
 
     public function getSecularGrowthRate(Stock $stock): float
     {
-        return 0.03;
+        return self::SECULAR_GROWTH_RATE;
     }
 
     public function getCapexCyclicality(): float
     {
-        return 2.50;
+        return self::CAPEX_CYCLICALITY;
     }
 
+    /**
+     * The root shift is the revenue-weighted shift of every stream as the quarter opens: what analysts can see in
+     * visitor demand, a crackdown in force and the rent roll. Each stream takes its own back in calculateSectorPhysics().
+     */
     public function getMacroPhysics(Stock $stock, MacroStateDTO $macroState): array
     {
         $physics = parent::getMacroPhysics($stock, $macroState);
-
-        // The parent shift already carries the output gap and the exchange rate, so confidence adds only its
-        // residual over the gap (Lemmon & Portniaguina 2006) and FX is not added again.
-        $sentimentShift = $macroState->sentimentResidual();
-        $beta = $this->getOperatingCyclicality($stock);
-
-        // Visitors fly in: the foreign bloc's cycle fills the rooms the district's own does not.
-        $physics['macro_demand_shift'] += ($sentimentShift * $beta * self::SENTIMENT_SENSITIVITY_SCALAR)
-            + MathUtility::calculateForeignDemandShift($macroState->foreignOutputGapEma, sensitivity: self::FOREIGN_DEMAND_SENSITIVITY);
+        $physics['macro_demand_shift'] = $this->resolveRootShift($stock, $macroState, $this->resolveVisitorDemandShift($stock, $macroState));
 
         return $physics;
     }
@@ -163,94 +186,83 @@ class ResortsCasinosBusinessModel extends StandardCorporateBusinessModel
         MacroStateDTO $macroState,
         MathUtility $mathUtility
     ): SectorPhysicsResult {
-        $params = $this->resolveModelParameters($stock, [
-            ModelParam::PricingPowerIndex->value          => self::MIN_BETA_PRICING_POWER_FLOOR,
-            ModelParam::GamingRevenueWeight->value        => self::GAMING_REVENUE_WEIGHT,
-            ModelParam::NonGamingRevenueWeight->value     => self::NON_GAMING_REVENUE_WEIGHT,
-            ModelParam::CommercialRealEstateWeight->value => 0.00,
-        ]);
-
-        $rawCreWeight = $params[ModelParam::CommercialRealEstateWeight];
-        $pricingPower = max(0.0, min(1.0, $params[ModelParam::PricingPowerIndex]));
+        $pricingPower = $this->resolvePricingPower($stock);
+        $targetWeights = $this->resolveTargetWeights($stock);
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
         $streams  = $this->createStreamContext($momentum, $mathUtility, $macroState, $stock);
 
-        $targetWeights = [
-            'gaming'     => $params[ModelParam::GamingRevenueWeight],
-            'non_gaming' => $params[ModelParam::NonGamingRevenueWeight],
-        ];
-        if ($rawCreWeight > 0.0) {
-            $targetWeights['cre'] = $rawCreWeight;
-        }
-
-        // --- Dynamic Revenue Mix Drift ---
-        $activeWeights = $streams->resolveActiveStreamWeights($targetWeights);
-
+        $activeWeights   = $streams->resolveActiveStreamWeights($targetWeights);
         $gamingWeight    = $activeWeights['gaming'];
         $nonGamingWeight = $activeWeights['non_gaming'];
         $creWeight       = $activeWeights['cre'] ?? 0.0;
 
-        $gamingZ    = $streams->generateZ('gaming', 0.15); // Table hold luck (near i.i.d.)
-        $nonGamingZ = $streams->generateZ('non_gaming', 0.35); // Hotel occupancy & convention backlog
-        $eventZ     = $streams->generateExogenousZ('event', 0.10);
+        // Expected revenue already carries the root shift; each stream adds its own shift less it.
+        $visitorShift = $this->resolveVisitorDemandShift($stock, $macroState);
+        $rootShift = $this->resolveRootShift($stock, $macroState, $visitorShift);
+        $tenantDefaultLoss = $this->resolveTenantDefaultLoss($macroState);
 
-        // --- Tail Risk Events (Symmetric Hold Variance) ---
-        $whaleMultiplier = 1.0;
-        $gamingHaircut   = 1.0;
-        $eventType       = null;
+        $gamingZ    = $streams->generateZ('gaming', self::VISITOR_DEMAND_PERSISTENCE);
+        $nonGamingZ = $streams->generateZ('non_gaming', self::VISITOR_DEMAND_PERSISTENCE);
+        $holdZ      = $streams->generateExogenousZ('hold', 0.0);
+        $eventZ     = $streams->generateExogenousZ('event', 0.0);
 
-        if ($eventZ < self::GAMING_REGULATION_CRACKDOWN_Z) {
-            $gamingHaircut = 1.0 - self::GAMING_REGULATION_HAIRCUT;
-            $eventType = ShockEvent::REGULATORY_FINE;
-        } elseif ($gamingZ > self::WHALE_LOSS_SURGE_Z) {
-            $whaleMultiplier = 1.0 + self::WHALE_HOLD_SHOCK_MULT;
-        } elseif ($gamingZ < self::WHALE_WIN_CRASH_Z) {
-            $whaleMultiplier = max(0.10, 1.0 - self::WHALE_HOLD_SHOCK_MULT);
+        // --- Regulatory Regime (Hamilton 1989 Markov switching) ---
+        $quarter = EarningsEngine::QUARTERLY_TIME_STEP;
+        $streams->evolveRegime(self::CRACKDOWN_REGIME, 0.0, 1.0 - exp(-$quarter / self::GAMING_CRACKDOWN_MEAN_YEARS));
+        $eventType = null;
+        if ($mathUtility->calculateNormalCDF($eventZ) < 1.0 - exp(-self::GAMING_CRACKDOWN_INTENSITY * $quarter)
+            && $streams->getRegimeElapsed(self::CRACKDOWN_REGIME) === 0) {
+            $streams->startRegime(self::CRACKDOWN_REGIME);
+            $eventType = ShockEvent::GAMING_CRACKDOWN;
         }
 
-        // --- Multi-Stream Revenue Calculation ---
-        $gamingRevenue = max(0.0, $expectedRevenue * $gamingWeight)
-            * (1.0 + ($gamingZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)))
-            * $whaleMultiplier * $gamingHaircut;
+        // --- Rent roll: only the slice expiring this quarter reprices to market ---
+        $inPlaceRent = $streams->getPersistedState(self::STATE_IN_PLACE_RENT, $visitorShift);
+        [$rolledInPlaceRent, $releasingSpread] = MathUtility::rollLeaseLadder(
+            $inPlaceRent,
+            $visitorShift,
+            self::CRE_LEASE_WALT_YEARS,
+            self::CRE_MAX_RELEASING_SPREAD,
+            $quarter
+        );
 
-        $nonGamingRevenue = max(0.0, $expectedRevenue * $nonGamingWeight)
-            * (1.0 + ($nonGamingZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR * self::NON_GAMING_VOLATILITY_SCALAR)));
+        $shifts = $this->resolveStreamShifts($visitorShift, $streams->getRegimeElapsed(self::CRACKDOWN_REGIME) > 0, $rolledInPlaceRent, $tenantDefaultLoss);
+        // Each stream's level over the one expected revenue was built at.
+        $relative = static fn (float $shift): float => ((1.0 + $shift) / max(0.01, 1.0 + $rootShift)) - 1.0;
+
+        // --- Gaming: volume on the visitor cycle, hold luck on the high-limit tables ---
+        $gamingVolumeRevenue = max(0.0, $expectedRevenue * $gamingWeight
+            * (1.0 + $relative($shifts['gaming']) + ($gamingZ * $baselineVol * self::REVENUE_VARIANCE_SCALAR)));
+        $holdLuck = $holdZ * self::HIGH_LIMIT_SHARE_OF_GAMING * self::HIGH_LIMIT_HOLD_VOLATILITY;
+        $gamingRevenue = max(0.0, $gamingVolumeRevenue * (1.0 + $holdLuck));
+
+        $nonGamingRevenue = max(0.0, $expectedRevenue * $nonGamingWeight
+            * (1.0 + $relative($shifts['non_gaming']) + ($nonGamingZ * $baselineVol * self::REVENUE_VARIANCE_SCALAR * self::NON_GAMING_VOLATILITY_SCALAR)));
 
         $streamRevenues = [
             'gaming'     => $gamingRevenue,
             'non_gaming' => $nonGamingRevenue,
         ];
 
-        $creRevenue              = 0.0;
-        $creZ                    = 0.0;
-        $creDemandShock          = 0.0;
-        $rentEscalator           = 0.0;
-        $creVacancyShock         = 0.0;
-        $creTenantConcessionDrag = 0.0;
-
+        // --- Resort Landlord ---
+        $creZ = 0.0;
+        $creLeasedRevenue = 0.0;
+        $kpis = [];
         if ($creWeight > 0.0) {
-            $creZ = $streams->generateZ('cre', 0.50);
+            $creZ = $streams->generateZ('cre', self::CRE_LEASING_PERSISTENCE);
+            $leasingShock = $creZ * $baselineVol * self::REVENUE_VARIANCE_SCALAR * self::CRE_VOLATILITY_SCALAR;
+            $streams->registerState(self::STATE_IN_PLACE_RENT, $rolledInPlaceRent);
 
-            $creShift = ($macroState->commercialPropertyIndexEma - 100.0) / 100.0;
-            $resShift = ($macroState->residentialPropertyIndexEma - 100.0) / 100.0;
-            $blendedPropertyShift = ($creShift * 0.70) + ($resShift * 0.30);
-            
-            $creDemandShock = ($macroState->outputGapEma * $this->getOperatingCyclicality($stock) * self::CRE_DEMAND_ELASTICITY) + ($blendedPropertyShift * 0.50);
+            // The leased footprint carries the operating cost; the rent it earns moves with the roll and tenant sales.
+            $creLeasedRevenue = max(0.0, $expectedRevenue * $creWeight * (1.0 + $leasingShock + $relative(0.0)));
+            $streamRevenues['cre'] = max(0.0, $expectedRevenue * $creWeight * (1.0 + $leasingShock + $relative($shifts['cre'])));
 
-            $excessInflation = max(0.0, $macroState->inflationEma - MacroEngine::TARGET_INFLATION);
-            $rentEscalator = $excessInflation * self::CRE_RENT_ESCALATOR_CAPTURE;
-
-            $creRevenue = max(0.0, $expectedRevenue * $creWeight * (1.0 + ($creZ * $baselineVol * self::REVENUE_VARIANCE_SCALAR * self::CRE_VOLATILITY_SCALAR) + $creDemandShock + $rentEscalator));
-            $streamRevenues['cre'] = $creRevenue;
-
-            if ($macroState->outputGapEma < 0.0) {
-                $creTenantConcessionDrag = abs($macroState->outputGapEma) * self::CRE_TENANT_CONCESSION_DRAG;
-            }
-
-            if ($creZ < self::CRE_VACANCY_DISTRESS_Z) {
-                $creVacancyShock = abs($creZ) * self::CRE_VACANCY_MARGIN_HIT;
-            }
+            $kpis = [
+                'walt_years' => self::CRE_LEASE_WALT_YEARS,
+                'releasing_spread' => $releasingSpread,
+                'in_place_rent_index' => $rolledInPlaceRent,
+            ];
         }
 
         $actualRevenue = max(0.0, array_sum($streamRevenues));
@@ -266,48 +278,112 @@ class ResortsCasinosBusinessModel extends StandardCorporateBusinessModel
             ? abs($sentimentShift) * $this->getOperatingCyclicality($stock) * self::PROMOTIONAL_COMP_DRAG_SCALAR
             : 0.0;
 
-        // Structural Margin Blending
         $baseGamingMargin = $realizedVariableMargin / max(0.01, ($gamingWeight + (self::NON_GAMING_COST_INTENSITY * $nonGamingWeight) + $creWeight));
-
-        // Promotional comps isolate entirely to the hotel/F&B ledger
-        $gamingVariableMargin    = $baseGamingMargin;
+        // Promotional comps isolate entirely to the hotel/F&B ledger.
         $nonGamingVariableMargin = ($baseGamingMargin * self::NON_GAMING_COST_INTENSITY) + $promotionalDrag;
 
-        // CRE Landlords operating on NNN leases are immune to casino operational footprint costs
-        $creVariableMargin       = $baseGamingMargin + $creVacancyShock + $creTenantConcessionDrag;
+        // Costs follow volume: hold luck, rent repricing, percentage rent and lost rent move revenue alone.
+        $actualVariableCosts = ($gamingVolumeRevenue * $baseGamingMargin)
+            + ($nonGamingRevenue * $nonGamingVariableMargin)
+            + ($creLeasedRevenue * $baseGamingMargin);
 
-        $actualVariableCosts = ($nonGamingRevenue * $nonGamingVariableMargin)
-            + ($gamingRevenue * $gamingVariableMargin)
-            + ($creRevenue * $creVariableMargin);
-
-        // Energy drag scales strictly against the physical resort operations (gaming + non-gaming)
-        $operationalFootprint = $gamingWeight + $nonGamingWeight;
-        $effectiveInputCostDrag = $inputCostDrag * $operationalFootprint;
+        $effectiveInputCostDrag = $inputCostDrag * ($gamingWeight + $nonGamingWeight);
 
         $rawMargin = ($actualVariableCosts / max(1.0, $actualRevenue)) + $effectiveInputCostDrag;
         $clampedMargin = $this->clampMargin($rawMargin);
 
-        // Shock Determination
-        $primaryShockZ = $streams->resolveDominantShockZ([$gamingZ, $nonGamingZ, $creWeight > 0.0 ? $creZ : 0.0], $eventZ);
-
-        $gamingShock = (($gamingZ * $baselineVol * self::REVENUE_VARIANCE_SCALAR) * $whaleMultiplier * $gamingHaircut) + ($whaleMultiplier * $gamingHaircut - 1.0);
-        $nonGamingShock = $nonGamingZ * $baselineVol * self::REVENUE_VARIANCE_SCALAR * self::NON_GAMING_VOLATILITY_SCALAR;
-        $creShock = $creWeight > 0.0
-            ? ($creZ * $baselineVol * self::REVENUE_VARIANCE_SCALAR * self::CRE_VOLATILITY_SCALAR) + $creDemandShock + $rentEscalator
-            : 0.0;
-
-        $observableShockZ = ($gamingShock * $gamingWeight) + ($nonGamingShock * $nonGamingWeight) + ($creShock * $creWeight);
+        $primaryShockZ = $streams->resolveDominantShockZ([$gamingZ, $nonGamingZ, $holdZ, $creZ], $eventZ);
 
         return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,
             rawVariableMargin: $clampedMargin,
             primaryShockZ: $primaryShockZ,
-            observableShockZ: $observableShockZ,
+            // Monthly gaming filings and the rent roll reveal the quarter's revenue against expectations.
+            observableShockZ: ($actualRevenue / max(1.0, $expectedRevenue)) - 1.0,
             eventType: $eventType,
             isPublicEvent: $eventType !== null ? true : null,
             streamZ: $streams->getStreamZ(),
-            streamRevenue: $streamRevenues
+            streamRevenue: $streamRevenues,
+            kpis: $kpis,
         );
+    }
+
+    /**
+     * Visitor demand: the lagged output gap and exchange rate, confidence beyond the gap (Lemmon & Portniaguina
+     * 2006) and the foreign bloc's cycle, which fills the rooms the district's own does not.
+     */
+    private function resolveVisitorDemandShift(Stock $stock, MacroStateDTO $macroState): float
+    {
+        return $this->resolveCycleDemandShift($stock, $macroState)
+            + ($macroState->sentimentResidual() * $this->getOperatingCyclicality($stock) * self::SENTIMENT_SENSITIVITY_SCALAR)
+            + MathUtility::calculateForeignDemandShift($macroState->foreignOutputGapEma, sensitivity: self::FOREIGN_DEMAND_SENSITIVITY);
+    }
+
+    /**
+     * Each stream's shift from trend: visitor demand on the floor and in the hotel, less the crackdown haircut on
+     * gaming; on the rent roll, in-place base rent plus a percentage of tenants' gross receipts, less rent lost to
+     * tenant failures.
+     *
+     * @return array{gaming: float, non_gaming: float, cre: float}
+     */
+    private function resolveStreamShifts(float $visitorShift, bool $crackdown, float $inPlaceRent, float $tenantDefaultLoss): array
+    {
+        return [
+            'gaming'     => ((1.0 + $visitorShift) * ($crackdown ? 1.0 - self::GAMING_REGULATION_HAIRCUT : 1.0)) - 1.0,
+            'non_gaming' => $visitorShift,
+            'cre'        => ((1.0 - self::OVERAGE_RENT_SHARE) * $inPlaceRent) + (self::OVERAGE_RENT_SHARE * $visitorShift) - $tenantDefaultLoss,
+        ];
+    }
+
+    /**
+     * Revenue-weighted stream shift over the target mix, from the state the quarter opens with (last quarter's
+     * regime and rent roll): the part of the quarter analysts can already see, carried in expected revenue.
+     */
+    private function resolveRootShift(Stock $stock, MacroStateDTO $macroState, float $visitorShift): float
+    {
+        $momentum = $stock->getEarningsMomentumZ() ?? [];
+        $shifts = $this->resolveStreamShifts(
+            $visitorShift,
+            (float) ($momentum[StreamContext::REGIME_STATE_PREFIX . self::CRACKDOWN_REGIME] ?? 0.0) > 0.0,
+            (float) ($momentum[self::STATE_IN_PLACE_RENT] ?? $visitorShift),
+            $this->resolveTenantDefaultLoss($macroState)
+        );
+
+        $weights = $this->resolveTargetWeights($stock);
+        $rootShift = 0.0;
+        foreach ($weights as $key => $weight) {
+            $rootShift += $weight * $shifts[$key];
+        }
+
+        return $rootShift / max(1e-9, array_sum($weights));
+    }
+
+    /** Rent lost to retail tenant failures, from the excess retail default rate. */
+    private function resolveTenantDefaultLoss(MacroStateDTO $macroState): float
+    {
+        return MathUtility::excessOverBaseline($macroState->retailDefaultRateEma, MacroEngine::RETAIL_DEFAULT_BASELINE)
+            * self::RETAIL_TENANT_DEFAULT_RENT_LOSS;
+    }
+
+    /** @return array<string, float> */
+    private function resolveTargetWeights(Stock $stock): array
+    {
+        $params = $this->resolveModelParameters($stock, [
+            ModelParam::GamingRevenueWeight->value        => self::GAMING_REVENUE_WEIGHT,
+            ModelParam::NonGamingRevenueWeight->value     => self::NON_GAMING_REVENUE_WEIGHT,
+            ModelParam::CommercialRealEstateWeight->value => 0.00,
+        ]);
+
+        $weights = [
+            'gaming'     => (float) $params[ModelParam::GamingRevenueWeight],
+            'non_gaming' => (float) $params[ModelParam::NonGamingRevenueWeight],
+        ];
+        $creWeight = (float) $params[ModelParam::CommercialRealEstateWeight];
+        if ($creWeight > 0.0) {
+            $weights['cre'] = $creWeight;
+        }
+
+        return $weights;
     }
 
     /** Under-investment below replacement CapEx erodes operating margin toward the sector floor. */
@@ -331,13 +407,12 @@ class ResortsCasinosBusinessModel extends StandardCorporateBusinessModel
     public function getOperatingMacroFields(): array
     {
         return [
-            'commercial_property_index_ema',
             'consumer_sentiment_index_ema',
             'exchange_rate_index_ema',
             'foreign_output_gap_ema',
-            'inflation_ema',
             'output_gap_ema',
-            'residential_property_index_ema',
+            'retail_default_rate_ema',
+            'supercore_inflation_ema',
             'tips_breakeven_ema',
             'real_wage_gap',
         ];

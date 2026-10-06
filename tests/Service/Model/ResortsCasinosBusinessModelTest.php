@@ -16,18 +16,23 @@ use App\Service\Corporate\EarningsEngine;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\TestCase;
 
+/**
+ * Draw order in calculateSectorPhysics(): gaming, non_gaming, hold, event, then cre for a landlord.
+ */
 #[AllowMockObjectsWithoutExpectations]
 class ResortsCasinosBusinessModelTest extends TestCase
 {
     private function createMacroState(
         float $inflation = 0.02,
         float $outputGap = 0.0,
-        float $consumerSentimentIndexEma = 100.0,
+        float $consumerSentimentIndexEma = MacroEngine::SENTIMENT_TREND_LEVEL,
         float $energyPriceIndexEma = 100.0,
         float $macroCreditSpread = 0.015,
         float $yield10y = 0.04,
         float $energyCostPushLag = 0.0,
-        float $realWageGap = 0.0
+        float $realWageGap = 0.0,
+        float $commercialPropertyIndexEma = 100.0,
+        float $retailDefaultRateEma = MacroEngine::RETAIL_DEFAULT_BASELINE
     ): MacroStateDTO {
         return new MacroStateDTO(
             outputGap: $outputGap,
@@ -70,113 +75,196 @@ class ResortsCasinosBusinessModelTest extends TestCase
             nsCurvature: 0.0,
             potentialGdpIndex: 1.0,
             nominalGdpIndex: 1.0,
+            commercialPropertyIndex: $commercialPropertyIndexEma,
+            commercialPropertyIndexEma: $commercialPropertyIndexEma,
+            retailDefaultRateEma: $retailDefaultRateEma,
         );
     }
 
+    /** @param list<float> $persistentZCalls */
     private function createMathUtilityMock(array $persistentZCalls = []): MathUtility
     {
         $mock = $this->getMockBuilder(MathUtility::class)
-            ->onlyMethods(['generatePersistentZ'])
+            ->onlyMethods(['generatePersistentZ', 'checkProbability'])
             ->getMock();
 
         if (!empty($persistentZCalls)) {
             $mock->method('generatePersistentZ')
                 ->willReturnOnConsecutiveCalls(...array_values($persistentZCalls));
         }
+        // Regime exits never fire, so a crackdown's persistence is deterministic.
+        $mock->method('checkProbability')->willReturn(false);
 
         return $mock;
     }
 
-    public function testConsumerSentimentAndWealthEffectDemandShift(): void
+    private function stock(string $ticker, array $momentum = []): Stock
     {
-        $model = new ResortsCasinosBusinessModel();
         $stock = new Stock();
-        $stock->setTicker('CASINO');
-        $stock->setBeta('1.4');
+        $stock->setTicker($ticker);
+        $stock->setBeta('1.0');
+        if ($momentum !== []) {
+            $stock->setEarningsMomentumZ($momentum);
+        }
 
-        // Sentiment boom (twenty points above where the index sits at trend -> +0.20 shift)
-        $macroBoom = $this->createMacroState(consumerSentimentIndexEma: MacroEngine::SENTIMENT_TREND_LEVEL + 20.0);
-        $physicsBoom = $model->getMacroPhysics($stock, $macroBoom);
-
-        // Expected shift: outputGap (0) + 0.20 * cyclicality * 0.25
-        $this->assertEqualsWithDelta(0.20 * ResortsCasinosBusinessModel::OPERATING_CYCLICALITY * 0.25, $physicsBoom['macro_demand_shift'], 0.001);
-
-        // Sentiment slump (twenty points below it -> -0.20 shift)
-        $macroSlump = $this->createMacroState(consumerSentimentIndexEma: MacroEngine::SENTIMENT_TREND_LEVEL - 20.0);
-        $physicsSlump = $model->getMacroPhysics($stock, $macroSlump);
-
-        // Expected shift: -0.20 * cyclicality * 0.25
-        $this->assertEqualsWithDelta(-0.20 * ResortsCasinosBusinessModel::OPERATING_CYCLICALITY * 0.25, $physicsSlump['macro_demand_shift'], 0.001);
+        return $stock;
     }
 
-    public function testSymmetricWhaleHoldLuckSurgeAndCrash(): void
+    /** The firm's cycle shift before confidence and the foreign bloc: lagged gap x (0.5 + pricing power) x cyclicality + FX. */
+    private function cycleShift(ResortsCasinosBusinessModel $model, Stock $stock, MacroStateDTO $macro): float
     {
-        $model = new ResortsCasinosBusinessModel();
-        $stock = new Stock();
-        $stock->setTicker('CASINO');
-
-        // 1. Whale loss surge (house holds big, gamingZ = 2.5 > 2.40)
-        // gamingZ = 2.5, nonGamingZ = 0.0, eventZ = 0.0
-        $mathSurge = $this->createMathUtilityMock([2.5, 0.0, 0.0]);
-        $macroState = $this->createMacroState();
-
-        $resSurge = $model->computeActualFinancials($stock, 10_000.0, 0.58, 2000.0, 0.15, $macroState, $mathSurge);
-        // Gaming revenue should receive 1.18x whale multiplier
-        // Expected base gaming: 10_000 * 0.55 * (1 + 2.5 * 0.15 * 0.30) * 1.18 = 5500 * 1.1125 * 1.18 = 7220.125
-        $this->assertEqualsWithDelta(7220.125, $resSurge->streamRevenue['gaming'], 1.0);
-        $this->assertNull($resSurge->eventType);
-
-        // 2. Whale win crash (house loses to high rollers, gamingZ = -2.5 < -2.40)
-        // gamingZ = -2.5, nonGamingZ = 0.0, eventZ = 0.0
-        $mathCrash = $this->createMathUtilityMock([-2.5, 0.0, 0.0]);
-
-        $resCrash = $model->computeActualFinancials($stock, 10_000.0, 0.58, 2000.0, 0.15, $macroState, $mathCrash);
-        // Gaming revenue should receive 0.82x whale multiplier
-        // Expected base gaming: 10_000 * 0.55 * (1 - 2.5 * 0.15 * 0.30) * 0.82 = 5500 * 0.8875 * 0.82 = 4002.625
-        $this->assertEqualsWithDelta(4002.625, $resCrash->streamRevenue['gaming'], 1.0);
-        $this->assertNull($resCrash->eventType);
+        return (float) (new \ReflectionMethod(StandardCorporateBusinessModel::class, 'resolveCycleDemandShift'))->invoke($model, $stock, $macro);
     }
 
-    public function testGamingRegulatoryCrackdownAndHaircut(): void
+    /** GULL's share of revenue that moves with visitor volume: gaming, non-gaming and percentage rent. */
+    private function gullVisitorShare(): float
+    {
+        return 0.20 + 0.10 + (0.70 * ResortsCasinosBusinessModel::OVERAGE_RENT_SHARE);
+    }
+
+    public function testConsumerSentimentResidualShiftsVisitorDemand(): void
     {
         $model = new ResortsCasinosBusinessModel();
-        $stock = new Stock();
-        $stock->setTicker('CASINO');
 
-        // eventZ = -2.5 (< -2.20 GAMING_REGULATION_CRACKDOWN_Z)
-        // gamingZ = 0.0, nonGamingZ = 0.0, eventZ = -2.5
-        $mathMock = $this->createMathUtilityMock([0.0, 0.0, -2.5]);
-        $macroState = $this->createMacroState();
+        // Confidence twenty points above trend with no output gap: all of it is residual.
+        $boom = $model->getMacroPhysics($this->stock('CASINO'), $this->createMacroState(consumerSentimentIndexEma: MacroEngine::SENTIMENT_TREND_LEVEL + 20.0));
+        $this->assertEqualsWithDelta(0.20 * ResortsCasinosBusinessModel::OPERATING_CYCLICALITY * ResortsCasinosBusinessModel::SENTIMENT_SENSITIVITY_SCALAR, $boom['macro_demand_shift'], 0.001);
 
-        $result = $model->computeActualFinancials($stock, 10_000.0, 0.58, 2000.0, 0.15, $macroState, $mathMock);
+        $slump = $model->getMacroPhysics($this->stock('CASINO'), $this->createMacroState(consumerSentimentIndexEma: MacroEngine::SENTIMENT_TREND_LEVEL - 20.0));
+        $this->assertEqualsWithDelta(-0.20 * ResortsCasinosBusinessModel::OPERATING_CYCLICALITY * ResortsCasinosBusinessModel::SENTIMENT_SENSITIVITY_SCALAR, $slump['macro_demand_shift'], 0.001);
+    }
 
-        $this->assertSame(ShockEvent::REGULATORY_FINE, $result->eventType);
-        // Gaming revenue should receive 0.75 haircut (down 25% from 5,500 to 4,125)
-        $this->assertEqualsWithDelta(4125.0, $result->streamRevenue['gaming'], 1.0);
+    public function testLandlordRootShiftIsTheVisitorShareOfTheCycle(): void
+    {
+        $model = new ResortsCasinosBusinessModel();
+        $gap = -0.03;
+        // Confidence exactly where the gap puts it adds nothing beyond the gap (Lemmon & Portniaguina 2006).
+        $macro = new MacroStateDTO(
+            outputGapEma: $gap,
+            consumerSentimentIndexEma: MacroEngine::SENTIMENT_TREND_LEVEL + (MacroEngine::SENTIMENT_GAP_LOADING * $gap),
+            exchangeRateIndexEma: 100.0,
+        );
+
+        $cycle = $this->cycleShift($model, $this->stock('GULL'), $macro);
+        $this->assertLessThan(0.0, $cycle);
+
+        // Base rent contracted at trend: only a third of a 70% landlord's revenue moves with visitors this quarter.
+        $root = $model->getMacroPhysics($this->stock('GULL', ['state:in_place_rent' => 0.0]), $macro)['macro_demand_shift'];
+        $this->assertEqualsWithDelta($cycle * $this->gullVisitorShare(), $root, 1e-9);
+
+        // A roll already at market moves one for one: the whole firm then follows visitors.
+        $atMarket = $model->getMacroPhysics($this->stock('GULL', ['state:in_place_rent' => $cycle]), $macro)['macro_demand_shift'];
+        $this->assertEqualsWithDelta($cycle, $atMarket, 1e-9);
+    }
+
+    public function testEachStreamCarriesItsOwnVisitorExposureAndRentRollsSlowly(): void
+    {
+        $model = new ResortsCasinosBusinessModel();
+        // Confidence on the gap's fit, so the cycle shift is the whole visitor shift.
+        $macro = $this->createMacroState(outputGap: -0.04, consumerSentimentIndexEma: MacroEngine::SENTIMENT_TREND_LEVEL + (MacroEngine::SENTIMENT_GAP_LOADING * -0.04));
+        $visitor = $this->cycleShift($model, $this->stock('GULL'), $macro);
+        $root = $visitor * $this->gullVisitorShare();
+
+        // In-place rents opened at trend last quarter; all draws zero. Expected revenue holds the root shift, as the engine builds it.
+        $result = $model->computeActualFinancials($this->stock('GULL', ['state:in_place_rent' => 0.0]), 10_000.0 * (1.0 + $root), 0.33, 2000.0, 0.15, $macro, $this->createMathUtilityMock([0.0, 0.0, 0.0, 0.0, 0.0]));
+        $w = $result->streamZ;
+
+        // The gaming floor takes the whole visitor shift.
+        $this->assertEqualsWithDelta(1.0 + $visitor, $result->streamRevenue['gaming'] / (10_000.0 * $w['weight:gaming']), 1e-9);
+
+        // The rent roll reprices only its expiring slice toward market; percentage rent follows tenant sales.
+        $o = ResortsCasinosBusinessModel::OVERAGE_RENT_SHARE;
+        $rolled = $visitor * EarningsEngine::QUARTERLY_TIME_STEP / ResortsCasinosBusinessModel::CRE_LEASE_WALT_YEARS;
+        $expectedCre = 1.0 + ((1.0 - $o) * $rolled) + ($o * $visitor);
+        $this->assertEqualsWithDelta($expectedCre, $result->streamRevenue['cre'] / (10_000.0 * $w['weight:cre']), 1e-9);
+        $this->assertEqualsWithDelta($rolled, $result->streamZ[ResortsCasinosBusinessModel::STATE_IN_PLACE_RENT], 1e-12);
+        $this->assertEqualsWithDelta($rolled, $result->kpis['in_place_rent_index'], 1e-12);
+    }
+
+    public function testRentIgnoresPropertyPricesAndInflation(): void
+    {
+        $model = new ResortsCasinosBusinessModel();
+        $momentum = ['state:in_place_rent' => 0.0];
+
+        $neutral = $model->computeActualFinancials($this->stock('GULL', $momentum), 10_000.0, 0.33, 2000.0, 0.15, $this->createMacroState(), $this->createMathUtilityMock([0.0, 0.0, 0.0, 0.0, 0.0]));
+        // Prices up 50% (cap-rate compression) and inflation 4pp over target: rent income is set by tenant sales and
+        // the contracted roll, and expected revenue already carries the pricing pass-through.
+        $hot = $model->computeActualFinancials($this->stock('GULL', $momentum), 10_000.0, 0.33, 2000.0, 0.15, $this->createMacroState(inflation: 0.06, commercialPropertyIndexEma: 150.0), $this->createMathUtilityMock([0.0, 0.0, 0.0, 0.0, 0.0]));
+
+        $this->assertEqualsWithDelta($neutral->streamRevenue['cre'], $hot->streamRevenue['cre'], 1e-6);
+    }
+
+    public function testTenantDefaultsCostRent(): void
+    {
+        $model = new ResortsCasinosBusinessModel();
+        $momentum = ['state:in_place_rent' => 0.0];
+
+        $calm = $model->computeActualFinancials($this->stock('GULL', $momentum), 10_000.0, 0.33, 2000.0, 0.15, $this->createMacroState(), $this->createMathUtilityMock([0.0, 0.0, 0.0, 0.0, 0.0]));
+        // Retail defaults at twice their baseline: one unit of relative excess, already seen in expected revenue.
+        $macroWave = $this->createMacroState(retailDefaultRateEma: 2.0 * MacroEngine::RETAIL_DEFAULT_BASELINE);
+        $root = $model->getMacroPhysics($this->stock('GULL', $momentum), $macroWave)['macro_demand_shift'];
+        $wave = $model->computeActualFinancials($this->stock('GULL', $momentum), 10_000.0 * (1.0 + $root), 0.33, 2000.0, 0.15, $macroWave, $this->createMathUtilityMock([0.0, 0.0, 0.0, 0.0, 0.0]));
+
+        $lost = 10_000.0 * $calm->streamZ['weight:cre'] * ResortsCasinosBusinessModel::RETAIL_TENANT_DEFAULT_RENT_LOSS;
+        $this->assertEqualsWithDelta(-0.70 * ResortsCasinosBusinessModel::RETAIL_TENANT_DEFAULT_RENT_LOSS, $root, 1e-9);
+        $this->assertEqualsWithDelta($lost, $calm->streamRevenue['cre'] - $wave->streamRevenue['cre'], 1e-6);
+        // Lost rent saves no operating cost.
+        $this->assertEqualsWithDelta($calm->clampedMargin * $calm->actualRevenue, $wave->clampedMargin * $wave->actualRevenue, 1e-6);
+    }
+
+    public function testHoldLuckMovesGamingWinWithoutCost(): void
+    {
+        $model = new ResortsCasinosBusinessModel();
+        $macro = $this->createMacroState();
+
+        $even = $model->computeActualFinancials($this->stock('CASINO'), 10_000.0, 0.58, 2000.0, 0.15, $macro, $this->createMathUtilityMock([0.0, 0.0, 0.0, 0.0]));
+        $hot = $model->computeActualFinancials($this->stock('CASINO'), 10_000.0, 0.58, 2000.0, 0.15, $macro, $this->createMathUtilityMock([0.0, 0.0, 2.0, 0.0]));
+
+        $luck = 2.0 * ResortsCasinosBusinessModel::HIGH_LIMIT_SHARE_OF_GAMING * ResortsCasinosBusinessModel::HIGH_LIMIT_HOLD_VOLATILITY;
+        $this->assertEqualsWithDelta($even->streamRevenue['gaming'] * (1.0 + $luck), $hot->streamRevenue['gaming'], 1e-6);
+        $this->assertEqualsWithDelta($even->streamRevenue['non_gaming'], $hot->streamRevenue['non_gaming'], 1e-6);
+        // The house's extra win drops straight through: variable costs are unchanged in dollars.
+        $this->assertEqualsWithDelta($even->clampedMargin * $even->actualRevenue, $hot->clampedMargin * $hot->actualRevenue, 1e-6);
+        $this->assertNull($hot->eventType);
+    }
+
+    public function testCrackdownPersistsAcrossQuarters(): void
+    {
+        $model = new ResortsCasinosBusinessModel();
+        $macro = $this->createMacroState();
+        $stock = $this->stock('CASINO');
+
+        // eventZ -2.5: Phi(-2.5) = 0.6% under the quarterly arrival probability 1 - exp(-0.056 / 4) = 1.4%.
+        $onset = $model->computeActualFinancials($stock, 10_000.0, 0.58, 2000.0, 0.15, $macro, $this->createMathUtilityMock([0.0, 0.0, 0.0, -2.5]));
+        $this->assertSame(ShockEvent::GAMING_CRACKDOWN, $onset->eventType);
+        $this->assertEqualsWithDelta(5500.0 * (1.0 - ResortsCasinosBusinessModel::GAMING_REGULATION_HAIRCUT), $onset->streamRevenue['gaming'], 1e-6);
+
+        // Next quarter, no fresh event: the regime still holds gaming down, is not announced again, and expected
+        // revenue already carries it.
+        $stock->setEarningsMomentumZ($onset->streamZ);
+        $root = $model->getMacroPhysics($stock, $macro)['macro_demand_shift'];
+        $this->assertEqualsWithDelta(-ResortsCasinosBusinessModel::GAMING_REVENUE_WEIGHT * ResortsCasinosBusinessModel::GAMING_REGULATION_HAIRCUT, $root, 1e-9);
+        $later = $model->computeActualFinancials($stock, 10_000.0 * (1.0 + $root), 0.58, 2000.0, 0.15, $macro, $this->createMathUtilityMock([0.0, 0.0, 0.0, 0.0]));
+        $this->assertNull($later->eventType);
+        $this->assertEqualsWithDelta(1.0 - ResortsCasinosBusinessModel::GAMING_REGULATION_HAIRCUT, $later->streamRevenue['gaming'] / (10_000.0 * $later->streamZ['weight:gaming']), 1e-9);
+        $this->assertEqualsWithDelta(1.0, $later->streamRevenue['non_gaming'] / (10_000.0 * $later->streamZ['weight:non_gaming']), 1e-9);
+
+        // A draw that is not in the tail starts nothing.
+        $calm = $model->computeActualFinancials($this->stock('CASINO'), 10_000.0, 0.58, 2000.0, 0.15, $macro, $this->createMathUtilityMock([0.0, 0.0, 0.0, -2.0]));
+        $this->assertNull($calm->eventType);
+        $this->assertEqualsWithDelta(5500.0, $calm->streamRevenue['gaming'], 1e-6);
     }
 
     public function testPromotionalCompsIsolatesToNonGamingLedger(): void
     {
         $model = new ResortsCasinosBusinessModel();
-        $stock = new Stock();
-        $stock->setTicker('CASINO');
-        $stock->setBeta('1.0');
 
-        // gamingZ = 0.0, nonGamingZ = 0.0, eventZ = 0.0
-        $mathMock = $this->createMathUtilityMock([0.0, 0.0, 0.0]);
-
-        // Sentiment slump of 20 points below where the index sits at trend -> -0.20 shift
-        // promotionalDrag = 0.20 * cyclicality * 0.15
-        $promotionalDrag = 0.20 * ResortsCasinosBusinessModel::OPERATING_CYCLICALITY * 0.15;
+        $promotionalDrag = 0.20 * ResortsCasinosBusinessModel::OPERATING_CYCLICALITY * ResortsCasinosBusinessModel::PROMOTIONAL_COMP_DRAG_SCALAR;
         $macroState = $this->createMacroState(consumerSentimentIndexEma: MacroEngine::SENTIMENT_TREND_LEVEL - 20.0);
 
-        // Gaming weight = 0.55, Non-gaming weight = 0.45.
-        // baseGamingMargin = 0.58 / (0.55 + 2.0 * 0.45) = 0.58 / 1.45 = 0.40.
-        // gamingVariableMargin = 0.40 (unaffected by promotional comps)
-        // nonGamingVariableMargin = 0.80 + promotionalDrag (diluted by comp rooms & F&B)
-        $result = $model->computeActualFinancials($stock, 10_000.0, 0.58, 2000.0, 0.15, $macroState, $mathMock);
+        // baseGamingMargin = 0.58 / (0.55 + 2.0 * 0.45) = 0.40; hotel and F&B run at 0.80 plus the comps.
+        $result = $model->computeActualFinancials($this->stock('CASINO'), 10_000.0, 0.58, 2000.0, 0.15, $macroState, $this->createMathUtilityMock([0.0, 0.0, 0.0, 0.0]));
 
-        // Total variable costs: (5500 * 0.40) + (4500 * (0.80 + promotionalDrag))
         $expectedMargin = ((5500.0 * 0.40) + (4500.0 * (0.80 + $promotionalDrag))) / 10_000.0;
         $this->assertEqualsWithDelta($expectedMargin, $result->clampedMargin, 0.001);
     }
@@ -189,67 +277,40 @@ class ResortsCasinosBusinessModelTest extends TestCase
         // fuel and food content under the materiality floor). The basket buys at spot, so the full move lands in the cost
         // base this quarter; room and menu pricing recovers pricingPower x MAX_INPUT_COST_PASS_THROUGH of it with the
         // pass-through lag.
-        $energyDeviation = 0.10 * ResortsCasinosBusinessModel::INPUT_COST_EXPOSURES['labor'];
+        $wageDeviation = 0.10 * ResortsCasinosBusinessModel::INPUT_COST_EXPOSURES['labor'];
         $recoveryWeight = 1.0 - exp(-EarningsEngine::QUARTERLY_TIME_STEP / FinancialConstants::DEFAULT_INPUT_PASS_THROUGH_LAG_YEARS);
         $macroBase = $this->createMacroState();
-        $macroEnergy = $this->createMacroState(realWageGap: 0.10);
+        $macroWage = $this->createMacroState(realWageGap: 0.10);
 
-        // 1. Pure-Play Casino Resort (100% operational footprint, median pricing power 0.50)
-        $stockPure = new Stock();
-        $stockPure->setTicker('CASINO');
-        $stockPure->setBeta('1.0');
-        $resPureBase = $model->computeActualFinancials($stockPure, 10_000.0, 0.58, 2000.0, 0.15, $macroBase, $this->createMathUtilityMock([0.0, 0.0, 0.0]));
+        // 1. Pure-play casino resort: whole footprint, the sector's pricing power.
+        $resPureBase = $model->computeActualFinancials($this->stock('CASINO'), 10_000.0, 0.58, 2000.0, 0.15, $macroBase, $this->createMathUtilityMock([0.0, 0.0, 0.0, 0.0]));
+        $resPure = $model->computeActualFinancials($this->stock('CASINO'), 10_000.0, 0.58, 2000.0, 0.15, $macroWage, $this->createMathUtilityMock([0.0, 0.0, 0.0, 0.0]));
 
-        $stockPureSpike = new Stock();
-        $stockPureSpike->setTicker('CASINO');
-        $stockPureSpike->setBeta('1.0');
-        $resPure = $model->computeActualFinancials($stockPureSpike, 10_000.0, 0.58, 2000.0, 0.15, $macroEnergy, $this->createMathUtilityMock([0.0, 0.0, 0.0]));
-
-        $pureRecovered = StandardCorporateBusinessModel::MIN_BETA_PRICING_POWER_FLOOR * ResortsCasinosBusinessModel::MAX_INPUT_COST_PASS_THROUGH * $recoveryWeight;
-        $expectedPureDrag = 0.58 * $energyDeviation * (1.0 - $pureRecovered);
-        // Same ~5% relative slack the test always carried (the resolved pricing power sits a little under the floor constant).
+        $pureRecovered = ResortsCasinosBusinessModel::PRICING_POWER_INDEX * ResortsCasinosBusinessModel::MAX_INPUT_COST_PASS_THROUGH * $recoveryWeight;
+        $expectedPureDrag = 0.58 * $wageDeviation * (1.0 - $pureRecovered);
         $this->assertEqualsWithDelta($expectedPureDrag, $resPure->clampedMargin - $resPureBase->clampedMargin, 0.05 * $expectedPureDrag);
 
-        // 2. Landlord Empire (Silver Gull Resorts 'GULL': 20% gaming, 10% non-gaming, 70% CRE -> footprint = 0.30)
-        // GULL has PricingPowerIndex = 1.00 (from StockModelTuning), so it recovers the full pass-through share,
-        // and only the physical resort footprint carries the operating bill; NNN tenants staff and run their own.
-        $stockGullBase = new Stock();
-        $stockGullBase->setTicker('GULL');
-        $stockGullBase->setBeta('1.0');
-        $resGullBase = $model->computeActualFinancials($stockGullBase, 10_000.0, 0.33, 2000.0, 0.15, $macroBase, $this->createMathUtilityMock([0.0, 0.0, 0.0, 0.0]));
-
-        $stockGull = new Stock();
-        $stockGull->setTicker('GULL');
-        $stockGull->setBeta('1.0');
-        $resGull = $model->computeActualFinancials($stockGull, 10_000.0, 0.33, 2000.0, 0.15, $macroEnergy, $this->createMathUtilityMock([0.0, 0.0, 0.0, 0.0]));
+        // 2. Landlord (GULL: 20% gaming, 10% non-gaming, 70% CRE -> footprint 0.30, pricing power 1.00). Only the
+        // physical resort carries the operating bill; NNN tenants staff and run their own.
+        $momentum = ['state:in_place_rent' => 0.0];
+        $resGullBase = $model->computeActualFinancials($this->stock('GULL', $momentum), 10_000.0, 0.33, 2000.0, 0.15, $macroBase, $this->createMathUtilityMock([0.0, 0.0, 0.0, 0.0, 0.0]));
+        $resGull = $model->computeActualFinancials($this->stock('GULL', $momentum), 10_000.0, 0.33, 2000.0, 0.15, $macroWage, $this->createMathUtilityMock([0.0, 0.0, 0.0, 0.0, 0.0]));
 
         $gullRecovered = 1.00 * ResortsCasinosBusinessModel::MAX_INPUT_COST_PASS_THROUGH * $recoveryWeight;
-        $expectedGullDrag = 0.33 * $energyDeviation * (1.0 - $gullRecovered) * 0.30;
+        $expectedGullDrag = 0.33 * $wageDeviation * (1.0 - $gullRecovered) * 0.30;
         $this->assertEqualsWithDelta($expectedGullDrag, $resGull->clampedMargin - $resGullBase->clampedMargin, 0.05 * $expectedGullDrag);
         $this->assertLessThan($expectedPureDrag, $expectedGullDrag);
     }
 
-    public function testCommercialRealEstateHybridLandlordPhysics(): void
+    public function testSeasonalityAveragesToOne(): void
     {
-        $model = new ResortsCasinosBusinessModel();
-        $stock = new Stock();
-        $stock->setTicker('GULL');
-        $stock->setBeta('1.0');
+        $factors = (new ResortsCasinosBusinessModel())->getSeasonalityFactors();
 
-        // gamingZ = 0.0, nonGamingZ = 0.0, eventZ = 0.0, creZ = -2.0 (< -1.50 CRE_VACANCY_DISTRESS_Z)
-        $mathMock = $this->createMathUtilityMock([0.0, 0.0, 0.0, -2.0]);
-
-        // Recession: outputGap = -0.04 -> tenant concession drag = 0.04 * 0.10 = 0.004
-        // Vacancy shock: creVacancyShock = 2.0 * 0.05 = 0.10
-        // Excess inflation: 0.04 (2% excess) -> rentEscalator = 0.02 * 0.50 = 0.01
-        $macroState = $this->createMacroState(inflation: 0.04, outputGap: -0.04);
-
-        $result = $model->computeActualFinancials($stock, 10_000.0, 0.33, 2000.0, 0.15, $macroState, $mathMock);
-
-        // CRE margin: base (0.30) + vacancyShock (0.10) + concessionDrag (0.004) = 0.404
-        // CRE revenue receives rentEscalator (+0.01) and demandShock (-0.04 * 0.50 = -0.02) and creZ shock (-2.0 * 0.15 * 0.30 * 0.20 = -0.018)
-        $this->assertGreaterThan(0.33, $result->clampedMargin);
-        $this->assertNotNull($result->streamRevenue['cre']);
+        $this->assertCount(4, $factors);
+        $this->assertEqualsWithDelta(1.0, array_sum($factors) / 4.0, 0.005);
+        // Coastal resort: the summer quarter peaks, the winter quarter troughs.
+        $this->assertSame(2, array_search(max($factors), $factors, true));
+        $this->assertSame(0, array_search(min($factors), $factors, true));
     }
 
     public function testResortAgingAndModernizationCapEx(): void
@@ -275,11 +336,9 @@ class ResortsCasinosBusinessModelTest extends TestCase
     public function testDynamicRevenueMixDriftsAcrossStreams(): void
     {
         $model = new ResortsCasinosBusinessModel();
-        $stock = new Stock();
-        $stock->setTicker('GULL');
 
         // Previous quarter had heavy gaming share surge
-        $stock->setEarningsMomentumZ([
+        $stock = $this->stock('GULL', [
             'weight:gaming'     => 0.20,
             'weight:non_gaming' => 0.10,
             'weight:cre'        => 0.70,
@@ -288,14 +347,10 @@ class ResortsCasinosBusinessModelTest extends TestCase
             'share:cre'         => 0.50,
         ]);
 
-        $mathUtility = new MathUtility();
-        $macroState = $this->createMacroState();
-
-        $result = $model->computeActualFinancials($stock, 10_000.0, 0.33, 2000.0, 0.15, $macroState, $mathUtility);
+        $result = $model->computeActualFinancials($stock, 10_000.0, 0.33, 2000.0, 0.15, $this->createMacroState(), new MathUtility());
 
         // Gaming active weight should drift up from 0.20
-        $activeGaming = $result->streamZ['weight:gaming'];
-        $this->assertGreaterThan(0.20, $activeGaming);
+        $this->assertGreaterThan(0.20, $result->streamZ['weight:gaming']);
 
         // Total active weights sum to 1.0
         $totalWeight = $result->streamZ['weight:gaming'] + $result->streamZ['weight:non_gaming'] + $result->streamZ['weight:cre'];

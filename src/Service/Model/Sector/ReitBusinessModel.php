@@ -12,6 +12,7 @@ use App\Service\Model\BusinessModelInterface;
 use App\Data\ModelParam;
 use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
+use App\Service\Corporate\EarningsEngine;
 use App\Service\Math\MathUtility;
 use App\Service\Event\ShockEvent;
 use App\Service\Macro\MacroEngine;
@@ -277,9 +278,7 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
         $housingSupplyShift = MathUtility::calculateHousingStartsShift($macroState->housingStartsIndexEma, sensitivity: self::HOUSING_SUPPLY_COMPETITION_SENSITIVITY);
         // Lease ladder: roll in-place rents toward market at the quarterly rollover rate implied by WALT.
         $inPlaceRent = $streams->getPersistedState(self::STATE_IN_PLACE_RENT, $blendedPropertyShift);
-        $quarterlyRollover = 1.0 / max(1.0, self::LEASE_WALT_YEARS * 4.0);
-        $releasingSpread = max(-self::MAX_RELEASING_SPREAD, min(self::MAX_RELEASING_SPREAD, $blendedPropertyShift - $inPlaceRent));
-        $rolledInPlaceRent = $inPlaceRent + ($releasingSpread * $quarterlyRollover);
+        [$rolledInPlaceRent, $releasingSpread] = MathUtility::rollLeaseLadder($inPlaceRent, $blendedPropertyShift, self::LEASE_WALT_YEARS, self::MAX_RELEASING_SPREAD, EarningsEngine::QUARTERLY_TIME_STEP);
         $streams->registerState(self::STATE_IN_PLACE_RENT, $rolledInPlaceRent);
 
         // Only the mark-to-market captured on the expiring slice reaches revenue this quarter.

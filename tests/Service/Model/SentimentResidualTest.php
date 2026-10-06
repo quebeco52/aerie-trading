@@ -11,7 +11,6 @@ use App\Service\Math\MathUtility;
 use App\Service\Model\BusinessModelInterface;
 use App\Service\Model\Sector\AdvertisingAgencyBusinessModel;
 use App\Service\Model\Sector\InternetRetailBusinessModel;
-use App\Service\Model\Sector\ResortsCasinosBusinessModel;
 use App\Service\Model\Sector\RestaurantBusinessModel;
 use App\Service\Model\Sector\StandardCorporateBusinessModel;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -48,7 +47,6 @@ class SentimentResidualTest extends TestCase
     public static function rootShiftModels(): iterable
     {
         yield 'restaurant BREW' => [new RestaurantBusinessModel(), 'BREW'];
-        yield 'casino GULL' => [new ResortsCasinosBusinessModel(), 'GULL'];
     }
 
     #[DataProvider('rootShiftModels')]

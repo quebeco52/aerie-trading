@@ -119,15 +119,24 @@ class StandardCorporateBusinessModel implements BusinessModelInterface
 
     public function getMacroPhysics(Stock $stock, \App\DTO\MacroStateDTO $macroState): array
     {
+        return [
+            'macro_demand_shift' => $this->resolveCycleDemandShift($stock, $macroState),
+            ...$this->resolvePricingMultipliers($stock, $macroState),
+        ];
+    }
+
+    /**
+     * The firm's demand shift from the lagged output gap and the exchange rate. Pure: unlike getMacroPhysics() it
+     * steps no pass-through state, so a sector model may read it again inside its own physics.
+     */
+    protected function resolveCycleDemandShift(Stock $stock, \App\DTO\MacroStateDTO $macroState): float
+    {
         $macroSensitivityMultiplier = self::MIN_BETA_PRICING_POWER_FLOOR + $this->resolvePricingPower($stock);
 
         $outputGap = $this->resolveLaggedOutputGap($macroState);
         $beta = $this->getOperatingCyclicality($stock);
 
-        return [
-            'macro_demand_shift' => ($outputGap * $macroSensitivityMultiplier * $beta) + $this->resolveFxDemandShift($macroState),
-            ...$this->resolvePricingMultipliers($stock, $macroState),
-        ];
+        return ($outputGap * $macroSensitivityMultiplier * $beta) + $this->resolveFxDemandShift($macroState);
     }
 
     /**
