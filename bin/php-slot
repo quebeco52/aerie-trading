@@ -4,12 +4,16 @@
 #   bin/php-slot php -d memory_limit=3G vendor/bin/phpunit --bootstrap var/harness/bootstrap.php --no-configuration X.php
 #   bin/php-slot --status    how many slots are taken
 #
+# A `php` command also gets opcache and the tracing JIT (see the end of the file).
+#
 # A slot is an flock on one file in a directory every sandbox sees; the command inherits the lock and the kernel drops
 # it when the command exits, so a killed run never leaks a slot. Waiters poll, so a slot goes to whoever asks first, not
 # first in line: each Claude session (CLAUDE_CODE_SESSION_ID, subagents included) is held to PHP_SESSION_SLOTS of the
 # PHP_SLOTS, so one session's sweep cannot starve another's run. Defaults 12 and 8: harness runs peak at 0.3-0.8 GB
 # against 30 GB, and 12 of the 9700X's 16 threads leave the ticker and the database theirs. PHP_SLOT_DIR overrides
 # the lock directory.
+# The body is one { } group, so bash reads it whole: a run waiting for a slot survives an edit to this file.
+{
 set -uo pipefail
 
 slots=${PHP_SLOTS:-12}
@@ -59,4 +63,11 @@ until take_lock "$dir" "$slots"; do
     waited=$((waited + 2))
 done
 (( waited )) && echo "php-slot: got a slot after ${waited}s" >&2
+# The CLI ships with opcache and JIT off; the tracing JIT runs a whole-board harness ~1.5x faster with identical output.
+# PHP_SLOT_JIT=0 turns it off.
+if [[ ${PHP_SLOT_JIT:-1} != 0 && $(basename -- "$1") == php ]]; then
+    exec "$1" -d opcache.enable_cli=1 -d opcache.jit=tracing -d opcache.jit_buffer_size=128M "${@:2}"
+fi
 exec "$@"
+}
+exit
