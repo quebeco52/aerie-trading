@@ -5,34 +5,58 @@
 #   bin/php-slot --status    how many slots are taken
 #
 # A slot is an flock on one file in a directory every sandbox sees; the command inherits the lock and the kernel drops
-# it when the command exits, so a killed run never leaks a slot. PHP_SLOTS (default 8: 8 x 3 GB fits the 30 GB box and
-# leaves the ticker its cores) and PHP_SLOT_DIR override the defaults.
+# it when the command exits, so a killed run never leaks a slot. Waiters poll, so a slot goes to whoever asks first, not
+# first in line: each Claude session (CLAUDE_CODE_SESSION_ID, subagents included) is held to PHP_SESSION_SLOTS of the
+# PHP_SLOTS, so one session's sweep cannot starve another's run. Defaults 12 and 8: harness runs peak at 0.3-0.8 GB
+# against 30 GB, and 12 of the 9700X's 16 threads leave the ticker and the database theirs. PHP_SLOT_DIR overrides
+# the lock directory.
 set -uo pipefail
 
-slots=${PHP_SLOTS:-8}
+slots=${PHP_SLOTS:-12}
+per_session=${PHP_SESSION_SLOTS:-8}
 dir=${PHP_SLOT_DIR:-/tmp/claude-$(id -u)/php-slots}
+session=${CLAUDE_CODE_SESSION_ID:-}
 mkdir -p "$dir"
 
-if [[ ${1:-} == --status ]]; then
-    busy=0
-    for ((i = 0; i < slots; i++)); do
-        flock -n "$dir/$i" true 2>/dev/null || busy=$((busy + 1))
+count_busy() { # <lock dir> <n>
+    local busy=0 i
+    for ((i = 0; i < $2; i++)); do
+        flock -n "$1/$i" true 2>/dev/null || busy=$((busy + 1))
     done
-    echo "$busy of $slots PHP slots taken"
+    echo "$busy"
+}
+
+if [[ ${1:-} == --status ]]; then
+    line="$(count_busy "$dir" "$slots") of $slots PHP slots taken"
+    [[ -n $session && -d $dir/session-$session ]] \
+        && line+=", $(count_busy "$dir/session-$session" "$per_session") of $per_session by this session"
+    echo "$line"
     exit 0
 fi
 (( $# )) || { echo "usage: bin/php-slot <command> [args...] | --status" >&2; exit 2; }
 
-waited=0
-while :; do
-    for ((i = 0; i < slots; i++)); do
-        exec {fd}>>"$dir/$i"
-        if flock -n "$fd"; then
-            (( waited )) && echo "php-slot: got slot $i after ${waited}s" >&2
-            exec "$@"
-        fi
+# take_lock <lock dir> <n>: holds the first free lock in the dir on a new fd that the command inherits; fails if none.
+take_lock() {
+    local i fd
+    for ((i = 0; i < $2; i++)); do
+        exec {fd}>>"$1/$i"
+        flock -n "$fd" && return 0
         exec {fd}>&-
     done
+    return 1
+}
+
+waited=0
+if [[ -n $session ]]; then
+    mkdir -p "$dir/session-$session"
+    until take_lock "$dir/session-$session" "$per_session"; do
+        sleep 2
+        waited=$((waited + 2))
+    done
+fi
+until take_lock "$dir" "$slots"; do
     sleep 2
     waited=$((waited + 2))
 done
+(( waited )) && echo "php-slot: got a slot after ${waited}s" >&2
+exec "$@"

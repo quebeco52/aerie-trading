@@ -42,7 +42,7 @@ spend them where the answer is emergent.
   on the final version. Reuse a cached baseline arm when `src/` is unchanged.
 - **What the live game is doing:** `make macro-dump` first; a harness only for the counterfactual.
 
-One seed proves nothing about a moment. All PHP processes on the machine share 8 slots through `bin/php-slot`.
+One seed proves nothing about a moment. All PHP processes on the machine share 12 slots through `bin/php-slot`, at most 8 per session.
 
 ## Research
 Pin numbers, don't survey a literature. One sovereign-fund question once fanned out to seven agents and ~575 web and shell calls, and used up a whole session.

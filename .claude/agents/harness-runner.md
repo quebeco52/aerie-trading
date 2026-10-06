@@ -61,8 +61,8 @@ number they can trust and a verdict, not a transcript. Your report is all they s
 - **Measure, never assume, the firm's numbers.** Fair value, the discount rate less growth, cost bases and price over
   fair value all come from the real engine on a seeded board. A probe built on guessed ratios once overstated a broker's
   election-day move threefold.
-- **Ticks.** Production runs 3,600 ticks a year. The engine is measured dt-neutral, so a harness may run coarser (48
-  or 360 a year); state what you used.
+- **Ticks.** The engine is measured dt-neutral, so a harness show run with a fast step rate
+  (48 or 360 a year); state what you used.
 
 ## Context budget
 
@@ -82,8 +82,8 @@ grew from 21k to 100-150k tokens and spent ~2.5M input tokens each.
 - **Do not poll.** A background call notifies you when it exits, so wait for that notice. No `sleep; ls`, `wc -l`,
   `tail *.log` or `ps` checks in between: each one re-reads your whole context for a few bytes. If you must block
   inside a call, use one `until <done>; do sleep 30; done` in a single call.
-- **Launch every PHP process as `bin/php-slot php ...`.** The machine has 8 slots shared by every session and worktree
-  (`-d memory_limit=3G` each); the wrapper waits for a free one, so queue a whole sweep at once (`for s in ...; do
+- **Launch every PHP process as `bin/php-slot php ...`.** The machine has 12 slots shared by every session and worktree,
+  at most 8 per session (`-d memory_limit=3G` each); the wrapper waits for a free one, so queue a whole sweep at once (`for s in ...; do
   bin/php-slot php ... & done; wait`) instead of batching by hand. A session was killed (exit 137) at 16, and three
   parallel sessions without a shared cap once ran 25.
 - No Docker, no database, no network to the app. `make` targets that call `docker compose` fail here.
