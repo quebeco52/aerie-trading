@@ -3,6 +3,7 @@
 namespace App\Service\Event;
 
 use App\Data\AerieCouncil;
+use App\Data\Institutions;
 
 class NarrativeEngine
 {
@@ -34,10 +35,10 @@ class NarrativeEngine
                 "Faced a sudden liquidity crisis as depositors withdrew \$" . ($context['amount'] ?? '0.00') . "B in a panic.",
                 "Experienced severe capital flight requiring a \$" . ($context['amount'] ?? '0.00') . "B emergency liquidity injection."
             ]),
-            ShockEvent::BANK_SEIZURE => $this->getRandomPhrase([
-                "Breached statutory minimum capital requirements. Regulators stepped in with an emergency seizure.",
-                "Seized by banking regulators following severe capital depletion and balance sheet insolvency.",
-                "Fell below statutory Basel capital minimums, triggering an immediate regulatory takeover."
+            ShockEvent::CAPITAL_BELOW_MINIMUM => $this->getRandomPhrase([
+                "Fell below the minimum capital requirement. The " . Institutions::FINANCIAL_REGULATOR . " barred dividends and buybacks and ordered a capital plan.",
+                "Losses took core capital under the regulatory minimum. The bank must rebuild it before paying shareholders again.",
+                "Breached its minimum capital ratio. The " . Institutions::FINANCIAL_REGULATOR . " placed it under restriction until capital is restored."
             ]),
             ShockEvent::MASSIVE_CREDIT_PROVISION => $this->getRandomPhrase([
                 "Took a massive provision for credit losses due to rising loan defaults.",

@@ -44,6 +44,10 @@ return [
         'path' => './assets/js/pages/reserve.js',
         'entrypoint' => true,
     ],
+    'pages/news' => [
+        'path' => './assets/js/pages/news.js',
+        'entrypoint' => true,
+    ],
     '@hotwired/stimulus' => [
         'version' => '3.2.2',
     ],

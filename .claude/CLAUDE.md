@@ -1,9 +1,14 @@
 @../.agents/AGENTS.md
 
 ## Claude Code here
-- The sandbox has no Docker, database or network to the running app, so `make` fails. Use `bin/verify` or
-  `php vendor/bin/phpunit <file>`. Controller tests need MySQL; skip them.
-- For live state, ask the user to run `! make macro-dump [YEARS=20]`, then read `var/macro-gap-history.jsonl`.
+- The sandbox has no Docker, so `make` fails. Use `bin/verify` or `php vendor/bin/phpunit <file>`. Controller
+  tests need MySQL at the `aerie-database` host; skip them.
+- The live dev database is readable: start `socat TCP-LISTEN:13306,bind=127.0.0.1,fork
+  PROXY:localhost:127.0.0.1:3306,proxyport=3128,proxyauth=<user:pass from $HTTP_PROXY>` in the background, connect
+  PDO to `127.0.0.1:13306/symfony_db` with the credentials in `.env.dev`'s DATABASE_URL, then kill the relay. Needs
+  `sandbox.network.allowedDomains: ["127.0.0.1:3306"]` in `.claude/settings.local.json`. The `symfony` DB user can write;
+  run SELECTs only.
+- For macro state over time, ask the user to run `! make macro-dump [YEARS=20]`, then read `var/macro-gap-history.jsonl`.
 - Multi-seed runs and sweeps go to `harness-runner`; model review and calibration to `financial-model-architect`.
 - Hooks block writes under migrations/ and run PHPStan on changed files at Stop. Fix what they report.
 - At most 8 PHP processes at once; the session has been killed at 16.

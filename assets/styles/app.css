@@ -83,7 +83,8 @@
     transition: color 150ms ease-out, background-color 150ms ease-out;
   }
   .seg-btn:hover { color: var(--color-on-surface); }
-  .seg-btn[aria-pressed="true"] {
+  .seg-btn[aria-pressed="true"],
+  .seg-btn[aria-current="page"] {
     background-color: var(--color-surface-container-highest);
     color: var(--color-on-surface);
   }

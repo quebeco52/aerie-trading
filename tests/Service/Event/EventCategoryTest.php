@@ -56,13 +56,13 @@ class EventCategoryTest extends TestCase
 
     /**
      * Every literal type passed to MarketEventPublisher::publish in src, the literal deal types the M&A
-     * engine configures, and the two the debt engine picks between at run time.
+     * engine configures, the two the debt engine picks between at run time, and the two district desks.
      *
      * @return iterable<string, array{string}>
      */
     public static function publishedTypes(): iterable
     {
-        $types = ['CREDIT_UPGRADE' => true, 'CREDIT_DOWNGRADE' => true];
+        $types = ['CREDIT_UPGRADE' => true, 'CREDIT_DOWNGRADE' => true, 'ECONOMY' => true, 'GOVERNMENT' => true];
         $files = new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator(dirname(__DIR__, 3) . '/src'));
 
         foreach ($files as $file) {

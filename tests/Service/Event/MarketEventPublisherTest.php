@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Tests\Service\Event;
 
+use App\Entity\DistrictNews;
 use App\Entity\Etf;
 use App\Entity\EtfEvent;
 use App\Entity\Stock;
@@ -140,7 +141,7 @@ class MarketEventPublisherTest extends TestCase
      */
     public function testEventDescriptionsAreStoredAsUnboundedText(): void
     {
-        foreach ([StockEvent::class, EtfEvent::class] as $entity) {
+        foreach ([StockEvent::class, EtfEvent::class, DistrictNews::class] as $entity) {
             $column = (new \ReflectionProperty($entity, 'description'))->getAttributes(\Doctrine\ORM\Mapping\Column::class)[0]->newInstance();
             $this->assertSame(\Doctrine\DBAL\Types\Types::TEXT, $column->type, $entity);
         }
@@ -157,5 +158,74 @@ class MarketEventPublisherTest extends TestCase
         $this->assertSame('CONGLOMERATE EXPANSION', $result['presented']['badge']);
         $this->assertIsString($result['presented']['recordedAt']);
         $this->assertEquals($result['presented'], json_decode((string) json_encode($result['presented']), true));
+    }
+
+    /** A district story is persisted on its desk, belongs to no instrument, and goes out as a district headline. */
+    public function testADistrictStoryIsPublishedOnItsDeskWithNoInstrument(): void
+    {
+        $this->emMock->expects($this->once())
+            ->method('persist')
+            ->with($this->callback(fn (mixed $entity): bool => $entity instanceof DistrictNews
+                && $entity->getDesk() === DistrictNews::DESK_GOVERNMENT
+                && $entity->getTopic() === 'election_held'
+                && $entity->getChangePercent() === '-1.25'));
+        $this->redisMock->expects($this->once())->method('lPush');
+
+        $result = $this->publisher->publishDistrict(DistrictNews::DESK_GOVERNMENT, 'election_held', 'The Diet has been elected.', -1.25);
+
+        $this->assertNull($result['ticker']);
+        $this->assertSame('district', $result['scope']);
+        $this->assertSame('district', $result['section']);
+        $this->assertTrue($result['headline']);
+        $this->assertSame('ELECTION', $result['presented']['badge']);
+    }
+
+    /** A company's wire copy is filed and judged against the stock's own volatility, as a page load judges it. */
+    public function testACompanyStoryIsFiledAndJudgedOnTheWire(): void
+    {
+        $stock = (new Stock())->setTicker('WEAV')->setVolatility('0.20');
+
+        $big = $this->publisher->publish($stock, 'ANALYST', 'Sell-side cut its price target on WEAV to $80.00 from $100.00.', -6.0);
+        $small = $this->publisher->publish($stock, 'ANALYST', 'Sell-side cut its price target on WEAV to $95.00 from $100.00.', -0.5);
+
+        $this->assertSame(['company', 'companies'], [$big['scope'], $big['section']]);
+        $this->assertTrue($big['headline']);
+        $this->assertFalse($small['headline']);
+    }
+
+    /** Every event published after the ticker stamps a tick carries that tick's simulation time, persisted and on the wire. */
+    public function testEventsCarryTheStampedSimulationTime(): void
+    {
+        $persisted = [];
+        $this->emMock->method('persist')->willReturnCallback(function (object $entity) use (&$persisted): void {
+            $persisted[] = $entity;
+        });
+
+        $unstamped = $this->publisher->publish((new Stock())->setTicker('WEAV'), 'SPLIT', '2-for-1 split.', 0.0);
+        $this->publisher->stampSimTime(13.25);
+        $stock = $this->publisher->publish((new Stock())->setTicker('WEAV'), 'SPLIT', '2-for-1 split.', 0.0);
+        $district = $this->publisher->publishDistrict(DistrictNews::DESK_ECONOMY, 'recession_declared', 'A recession has been declared.', null);
+
+        $this->assertNull($unstamped['sim_time']);
+        $this->assertSame([13.25, 13.25], [$stock['sim_time'], $district['sim_time']]);
+        $this->assertSame([null, 13.25, 13.25], array_map(fn (object $e): ?float => $e->getSimTime(), $persisted));
+        $this->assertSame('1 Apr, Year 14', $district['presented']['dateline']);
+    }
+
+    /** A deal's size decides its headline, and the verdict is stored with the row so a page load agrees with the wire. */
+    public function testADealsVerdictIsJudgedOnItsSizeAndStored(): void
+    {
+        $persisted = [];
+        $this->emMock->method('persist')->willReturnCallback(function (object $entity) use (&$persisted): void {
+            $persisted[] = $entity;
+        });
+        $stock = (new Stock())->setTicker('WEAV')->setVolatility('0.20');
+
+        $large = $this->publisher->publish($stock, 'STRATEGIC ACQUISITION', 'Weave Holdings executed a $12.0B STRATEGIC ACQUISITION of Target Co.', 0.4, 0.15);
+        $small = $this->publisher->publish($stock, 'STRATEGIC ACQUISITION', 'Weave Holdings executed a $1.0B STRATEGIC ACQUISITION of Target Co.', 0.1, 0.02);
+        $district = $this->publisher->publishDistrict(DistrictNews::DESK_ECONOMY, 'recession_declared', 'A recession has been declared.', null);
+
+        $this->assertSame([true, false, true], [$large['headline'], $small['headline'], $district['headline']]);
+        $this->assertSame([true, false, true], array_map(fn (object $e): ?bool => $e->getHeadline(), $persisted));
     }
 }

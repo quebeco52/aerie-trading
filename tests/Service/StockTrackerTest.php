@@ -129,7 +129,7 @@ class StockTrackerTest extends TestCase
         return $stock;
     }
 
-    public function testUpdateStocksStandardFlowWithoutEventsOrHistory()
+    public function testUpdateStocksStandardFlowWithoutEventsOrHistory(): void
     {
         $stock = $this->createDummyStock();
         
@@ -170,9 +170,9 @@ class StockTrackerTest extends TestCase
         $this->assertEquals('0.21', $stock->getCurrentVolatility());
     }
 
-    public function testUpdateStocksWithMarketShockAndHistoryRecording()
+    public function testUpdateStocksWithMarketShockAndHistoryRecording(): void
     {
-        $stock = $this->createDummyStock();
+        $stock = $this->createDummyStock()->setName('Test Corp');
 
         $this->marketEngineMock->method('calculateNextPrice')->willReturn([
             'price' => 90.0,
@@ -190,12 +190,13 @@ class StockTrackerTest extends TestCase
             'event' => null
         ]);
 
-        $this->marketEventMock->method('publish')->willReturn([
-            'type' => 'SHOCK',
-            'ticker' => 'TEST',
-            'description' => 'Sudden market shock detected.',
-            'change_percent' => -10.0
-        ]);
+        // The wire line names the company and says what its shares did.
+        $published = [];
+        $this->marketEventMock->method('publish')->willReturnCallback(function (...$args) use (&$published): array {
+            $published[] = array_slice($args, 1, 3);
+
+            return ['type' => $args[1], 'ticker' => 'TEST', 'description' => $args[2], 'change_percent' => $args[3]];
+        });
 
         $this->entityManagerMock->expects($this->never())->method('persist');
         $this->entityManagerMock->expects($this->never())->method('flush');
@@ -204,6 +205,7 @@ class StockTrackerTest extends TestCase
 
         $this->assertCount(1, $result['events']);
         $this->assertEquals('SHOCK', $result['events'][0]['type']);
+        $this->assertSame([['SHOCK', 'Test Corp shares drop 10.0% in a sudden move.', -10.0]], $published);
         
         $this->assertIsArray($result['history']);
         $this->assertCount(1, $result['history']);

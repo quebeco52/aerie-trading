@@ -6,6 +6,7 @@ use App\Data\AerieCouncil;
 use App\Data\AerieDiet;
 use App\DTO\MacroStateDTO;
 use App\DTO\PoliticsStateDTO;
+use App\Entity\DistrictNews;
 use App\Entity\Etf;
 use App\Service\Macro\MacroEngine;
 use App\Service\Macro\Subsystem\SovereignFundSubsystem;
@@ -18,8 +19,8 @@ use App\Service\Politics\SovereignReserveFund;
 use App\Service\View\GovernmentPageBuilder;
 
 /**
- * Publishes the tick's district-wide event as a headline on the benchmark fund: the economy's, or when the economy has
- * none, the government's (a vote, a fall, a cabinet taking office, a budget).
+ * Publishes the tick's district-wide event as a story on its own desk: the economy's, or when the economy has none, the
+ * government's (a vote, a fall, a cabinet taking office, a budget). The benchmark fund only supplies the month's move.
  *
  * The number on the card is what the benchmark actually did over the last month, not a size the event is
  * assumed to have: a systemic event moves prices only through the economy the engine runs, so a fixed
@@ -83,9 +84,9 @@ class SystemicEventReporter
 
         $monthMove = $this->priceChangeFeed->changeForTicker((string) $benchmark->getTicker(), (float) $benchmark->getPrice());
 
-        return $this->marketEvent->publish(
-            $benchmark,
-            'SHOCK',
+        return $this->marketEvent->publishDistrict(
+            $macro->eventType !== null ? DistrictNews::DESK_ECONOMY : DistrictNews::DESK_GOVERNMENT,
+            $eventType,
             $this->narrativeEngine->generateLore($eventType, $context),
             $monthMove === null ? null : 100.0 * $monthMove
         );

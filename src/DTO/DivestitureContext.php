@@ -72,7 +72,6 @@ class DivestitureContext
     public float $lostEquity = 0.0;
     
     public float $salePrice = 0.0;
-    public float $baseDistressValue = 0.0;
     public float $newTreasury = 0.0;
     public float $gainOnSale = 0.0;
     

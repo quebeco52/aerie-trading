@@ -107,7 +107,7 @@ class DistrictEventFeed
             'iconClass' => $presented['iconClass'] ?? null,
             'headline' => $presented['headline'] ?? $event->getDescription(),
             'changePercent' => $presented['changePercent'] ?? null,
-            'recordedAt' => $recordedAt->format('Y-m-d H:i'),
+            'recordedAt' => $presented['dateline'] ?? $recordedAt->format('Y-m-d H:i'),
             'recordedAtTs' => $recordedAt->getTimestamp(),
             'recent' => $recordedAt->getTimestamp() >= $windowOpensAt,
         ];

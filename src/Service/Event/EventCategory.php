@@ -44,11 +44,24 @@ final class EventCategory
         'INDEX' => 'index',
         'DIVIDEND' => 'income',
         'MANAGEMENT CHANGE' => 'governance',
+        'ECONOMY' => 'economy',
+        'GOVERNMENT' => 'government',
     ];
 
     /** The card a published type renders as; 'general' for a type no presenter claims. */
     public static function forType(string $type): string
     {
         return self::TYPES[strtoupper(trim($type))] ?? 'general';
+    }
+
+    /**
+     * Every published type that renders as one of the given cards, for selecting stories by card in a query.
+     *
+     * @param  list<string> $categories
+     * @return list<string>
+     */
+    public static function typesIn(array $categories): array
+    {
+        return array_keys(array_filter(self::TYPES, static fn(string $category): bool => in_array($category, $categories, true)));
     }
 }

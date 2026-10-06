@@ -15,13 +15,24 @@ function el(tag, className, text) {
     return node;
 }
 
-/** Mirrors the row markup in templates/stock/index.html.twig (#events-feed). */
-function buildCard(card) {
+/**
+ * Mirrors templates/partials/_event_card.html.twig. `source` ({ ticker, name }) names the company or fund on the
+ * newswire; `headline` sets the story in the heavier weight a headline takes there.
+ */
+export function buildCard(card, { source = null, headline = false } = {}) {
     const root = el('article', 'py-3 space-y-1.5');
 
     const header = el('div', 'flex items-start justify-between gap-3');
     const left = el('div', 'flex items-center flex-wrap gap-x-2 gap-y-1 min-w-0');
     left.appendChild(el('span', `badge ${card.badgeClass || 'badge-neutral'}`, sentenceCase(card.badge || card.type || 'Event')));
+
+    if (source && source.ticker) {
+        const link = el('a', 'text-xs text-on-surface-variant hover:text-primary transition-colors');
+        link.href = `/stock/${encodeURIComponent(source.ticker)}`;
+        link.appendChild(el('span', 'font-mono font-semibold text-on-surface', source.ticker));
+        if (source.name) link.appendChild(document.createTextNode(` ${source.name}`));
+        left.appendChild(link);
+    }
 
     if (card.isEarnings && card.eps) {
         left.appendChild(el('span', 'text-xs font-semibold font-mono text-on-surface', `EPS ${card.eps}`));
@@ -41,12 +52,12 @@ function buildCard(card) {
     if (change !== null && change !== 0 && Number.isFinite(change)) {
         right.appendChild(el('span', signedClass(change), formatPercent(change, 2, true, true)));
     }
-    right.appendChild(el('time', 'text-on-surface-variant whitespace-nowrap', card.recordedAt || ''));
+    right.appendChild(el('time', 'text-on-surface-variant whitespace-nowrap', card.dateline || card.recordedAt || ''));
     header.appendChild(right);
     root.appendChild(header);
 
     if (!card.isEarnings && card.headline) {
-        root.appendChild(el('p', 'text-sm text-on-surface leading-relaxed', card.headline));
+        root.appendChild(el('p', `text-sm text-on-surface leading-relaxed${headline ? ' font-semibold' : ''}`, card.headline));
     }
 
     if (Array.isArray(card.pills) && card.pills.length > 0) {

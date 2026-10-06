@@ -153,8 +153,8 @@ class MergerAndAcquisitionEngine
     /** Cash fortress ratio to prevent divestitures. */
     public const DIV_CASH_FORTRESS_RATIO = 0.10;
 
-    /** Minimum cents on the dollar for fire sale. */
-    public const DIV_FIRE_SALE_MIN_CENTS = 0.40;
+    /** Discount a distressed seller takes to the market value of the assets it sells (~14%; Pulvino 1998, aircraft fire sales). */
+    public const DIV_FIRE_SALE_DISCOUNT = 0.14;
     /** Ceiling on the acquisition hazard, cached: the styles and constants it is built from never change. */
     private static ?float $acquisitionHazardCeiling = null;
 
@@ -237,9 +237,6 @@ class MergerAndAcquisitionEngine
     {
         return max(self::DIV_DYING_ANNUAL_PROB, self::DIV_DISTRESSED_ANNUAL_PROB, self::DIV_PREMIUM_ANNUAL_PROB);
     }
-
-    /** Maximum cents on the dollar for fire sale. */
-    public const DIV_FIRE_SALE_MAX_CENTS = 0.80;
 
     public function __construct(
         private MarketEventPublisher $marketEvent,
@@ -838,7 +835,7 @@ class MergerAndAcquisitionEngine
         $marketCap = max(1.0, $ctx->price * $ctx->shares);
         $ctx->eventShock = max(-100.0, ($ctx->synergyValueCreation / $marketCap) * 100.0);
 
-        $event = $this->marketEvent->publish($ctx->acquirer, $ctx->config['type'], $desc, $ctx->eventShock);
+        $event = $this->marketEvent->publish($ctx->acquirer, $ctx->config['type'], $desc, $ctx->eventShock, $ctx->purchasePrice / $marketCap);
 
         return [
             'event' => $event,
@@ -993,14 +990,11 @@ class MergerAndAcquisitionEngine
             ? $this->calculateBookValueDisposed($ctx->seller, $ctx->divestedFraction) - $ctx->lostDebt
             : $ctx->strategy->calculateDivestedEquity($ctx->seller, $ctx->divestedFraction, $ctx->currentEquity, $ctx->currentDebt, $ctx->treasury, $ctx->investedCapital, $ctx->lostDebt);
 
-        // What the assets fetch on their own. A buyer of a plant pays at least its distressed liquidation
-        // value whatever the seller's trailing earnings say, so the earnings-based price is floored at the
-        // fire-sale value of the book that leaves. Without the floor a firm whose net income had collapsed
-        // sold a division at 3-5x that collapsed figure against a book carried at cost, booked the gap as a
-        // loss on sale, and destroyed more equity in one disposal than the downturn that forced it.
-        $ctx->baseDistressValue = max($ctx->currentEquity, $ctx->investedCapital * 0.25);
-        $bookDisposed = $ctx->lostEquity > 0.0 ? $ctx->lostEquity : $ctx->baseDistressValue * $ctx->divestedFraction;
-        $fireSaleValue = $bookDisposed * $this->mathUtility->generateUniformBetween(self::DIV_FIRE_SALE_MIN_CENTS, self::DIV_FIRE_SALE_MAX_CENTS);
+        // What the assets fetch on their own: the market's value of the slice sold, less the discount a forced seller
+        // takes (Shleifer & Vishny 1992; Pulvino 1998). The floor reads the market, not the book: a firm trading
+        // below book has assets the market values below cost, and a floor on book sold them for more than they were
+        // worth. The buyer takes its share of the debt, so this is the slice's equity value, as the earnings price is.
+        $fireSaleValue = $ctx->divestedFraction * max(0.0, $ctx->price * $ctx->shares) * (1.0 - self::DIV_FIRE_SALE_DISCOUNT);
 
         $ctx->salePrice = $ctx->normalizedNetIncome > 0
             ? max($ctx->lostNetIncome * $ctx->saleMultiple, $fireSaleValue)
@@ -1122,7 +1116,7 @@ class MergerAndAcquisitionEngine
         $marketCap = max(1.0, $ctx->price * $ctx->shares);
         $ctx->eventShock = max(-100.0, (($ctx->salePrice - ($ctx->divestedFraction * $marketCap)) / $marketCap) * 100.0);
 
-        $event = $this->marketEvent->publish($ctx->seller, 'DIVESTITURE', $desc, $ctx->eventShock);
+        $event = $this->marketEvent->publish($ctx->seller, 'DIVESTITURE', $desc, $ctx->eventShock, $ctx->salePrice / $marketCap);
 
         return ['event' => $event, 'shock' => $ctx->eventShock / 100.0];
     }

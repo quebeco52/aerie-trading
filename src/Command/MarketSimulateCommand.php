@@ -12,6 +12,7 @@ use App\Service\Math\FinancialConstants;
 use App\Service\Market\Index\MarketIndex;
 use App\Service\Macro\MacroEngine;
 use App\Service\Market\MarketOperator;
+use App\Service\Event\MarketEventPublisher;
 use App\Service\Event\SystemicEventReporter;
 use App\Service\Politics\PoliticsEngine;
 use Doctrine\ORM\EntityManagerInterface;
@@ -51,6 +52,7 @@ class MarketSimulateCommand extends Command
         private SystemicEventReporter $systemicEvents,
         private PoliticsEngine $politicsEngine,
         private \Redis $redis,
+        private ?MarketEventPublisher $marketEvent = null,
     ) {
         parent::__construct();
     }
@@ -119,6 +121,7 @@ class MarketSimulateCommand extends Command
             $macroState = $this->macroEngine->updateMacroState($dt, policy: $policy);
             $politics = $this->politicsEngine->updatePolitics($macroState, $dt);
             $policy = $politics->policy();
+            $this->marketEvent?->stampSimTime($macroState->totalTime);
 
             $isHistoryTick = ($tick % 30 === 0);
 

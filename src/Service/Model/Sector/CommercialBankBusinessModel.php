@@ -57,11 +57,11 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
     // --- Model Thresholds ---
     /** Minimum Interest Coverage Ratio (ICR) required before distress. */
     public const THRESHOLD_MIN_ICR = 1.05;
-    /** Equity multiplier where bankruptcy risk becomes critical. */
+    /** Tangible capital over assets, in percentage points, below which the lender has failed: 2%, the critically undercapitalized line at which US prompt corrective action puts a bank into receivership (12 CFR 324.403). */
     public const THRESHOLD_BANKRUPT_EQUITY = 2.0;
-    /** Equity multiplier indicating severe financial distress. */
+    /** Tangible capital over assets, in percentage points, below which the lender is in distress: 4%, the leverage ratio under which prompt corrective action rates a bank undercapitalized. */
     public const THRESHOLD_DISTRESS_EQUITY = 4.0;
-    /** Equity multiplier serving as an early warning indicator. */
+    /** Tangible capital over assets, in percentage points, below which the lender is on watch: a point above the 5% well-capitalized leverage ratio. */
     public const THRESHOLD_WARNING_EQUITY = 6.0;
     /** Maximum allowed wholesale leverage multiplier. */
     public const THRESHOLD_WHOLESALE_LEVERAGE_LIMIT = 2.0;
@@ -293,9 +293,13 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
     // --- Basel III Capital Adequacy & CCB ---
     /** Risk weight for risk-free cash and central bank treasury reserves under Basel III Standardized Approach. */
     public const BASEL_RISK_WEIGHT_TREASURY = 0.0;
-    /** Average risk weight on a bank's earning (non-cash) assets: US insured banks reporting RWA at end-2024 held $14.90T of RWA against $20.69T of non-cash assets (FDIC Call Reports; under the standardized approach Treasuries weigh 0%, agency MBS 20%, first-lien mortgages 50%, business and consumer loans 100%). */
-    public const BASEL_RISK_WEIGHT_EARNING_ASSETS = 0.72;
-    /** Basel III Pillar 1 minimum Common Equity Tier 1 (CET1) ratio, below which the bank is seized (BCBS 2011, para. 50). */
+    /** Risk weight on a first-lien residential mortgage under the US standardized approach: 50% (12 CFR 217.32(g)). */
+    public const BASEL_RISK_WEIGHT_RESIDENTIAL_MORTGAGE = 0.50;
+    /** Risk weight on business, commercial real estate and consumer loans: 100% (12 CFR 217.32(f), (l)). High-volatility construction lending at 150% is not split out. */
+    public const BASEL_RISK_WEIGHT_LOANS = 1.00;
+    /** Risk weight on the securities sleeve: 20%, the weight on agency MBS and GSE debt, the bulk of a US bank's securities (12 CFR 217.32(c)). On the H.8 loan mix the three weights give 0.73 of earning assets; US insured banks held $14.90T of RWA on $20.69T of non-cash assets at end-2024, 0.72 (FDIC Call Reports). */
+    public const BASEL_RISK_WEIGHT_SECURITIES = 0.20;
+    /** Basel III Pillar 1 minimum Common Equity Tier 1 (CET1) ratio, below which the bank is undercapitalized and under supervisory restriction (BCBS 2011, para. 50); it fails only at THRESHOLD_BANKRUPT_EQUITY. */
     public const BASEL_MIN_CET1_RATIO = 0.045;
     /** Basel III minimum plus the 2.5% capital conservation buffer: the payout stop for a lender outside the District's bank requirement. */
     public const BASEL_CCB_CET1_RATIO = 0.070;
@@ -529,7 +533,7 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
 
         $eventType = null;
         if ($cet1Ratio < self::BASEL_MIN_CET1_RATIO) {
-            $eventType = ShockEvent::BANK_SEIZURE;
+            $eventType = ShockEvent::CAPITAL_BELOW_MINIMUM;
         } elseif ($lossMultiple > static::SECTOR_SHOCK_MASSIVE_LOSS_MULTIPLE) {
             $eventType = ShockEvent::MASSIVE_CREDIT_PROVISION;
         } elseif ($lossMultiple > static::SECTOR_SHOCK_ELEVATED_LOSS_MULTIPLE) {
@@ -601,7 +605,7 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
     }
 
     /**
-     * This quarter's annual loss rate on the loan book, segment by segment. Each segment reads the systematic factor
+     * This quarter's annual loss rate on earning assets, read off the loan book segment by segment. Each segment reads the systematic factor
      * the macro default rate implies (households the retail rate, firms the corporate rate) and applies it at the
      * macro's own correlation to the segment's long-run PD, so every lender in the District takes the same credit
      * cycle through its own book; the low-PD segments (mortgages, CRE) swing furthest, as they did in 2009-10.
@@ -645,7 +649,7 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
         $householdWeight = $residentialShare + $consumerShare;
 
         return [
-            'loss_rate' => $lossRate,
+            'loss_rate' => $lossRate * $this->getLoanShareOfEarningAssets(),
             'systematic_z' => ($householdWeight * $householdZ) + ((1.0 - $householdWeight) * $corporateZ),
         ];
     }
@@ -707,20 +711,31 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
     }
 
     /**
-     * Through-the-cycle loss on this lender's book: each segment's long-run charge-off rate (Basel's PD x LGD), which
-     * is the mean of the conditional losses whenever the macro default rates average at their baselines. A neutral
-     * H.8 book loses 0.92% a year; US banks charged off 0.89% over 1991-2019 (FRED CORALACBS).
+     * Through-the-cycle loss on this lender's earning assets: each segment's long-run charge-off rate (Basel's PD x
+     * LGD), which is the mean of the conditional losses whenever the macro default rates average at their baselines,
+     * on the loan share of the book. A neutral H.8 loan book loses 0.92% a year; US banks charged off 0.89% of loans
+     * over 1991-2019 (FRED CORALACBS).
      */
     public function getThroughTheCycleCreditLossRate(?Stock $stock = null): float
     {
         $mix = $stock instanceof Stock ? $this->resolveLoanBookMix($stock) : $this->resolveDefaultLoanBookMix();
 
-        return $this->resolveCreditRiskScale($stock) * (
+        return $this->getLoanShareOfEarningAssets() * $this->resolveCreditRiskScale($stock) * (
             ($mix['residential'] * static::RESIDENTIAL_CHARGE_OFF_RATE)
             + ($mix['consumer'] * static::CONSUMER_CHARGE_OFF_RATE)
             + ($mix['commercial_real_estate'] * static::COMMERCIAL_REAL_ESTATE_CHARGE_OFF_RATE)
             + ($mix['business'] * static::BUSINESS_CHARGE_OFF_RATE)
         );
+    }
+
+    /**
+     * Loans as a share of earning assets: the part of the book that defaults. The securities sleeve is marked through
+     * equity (resolveSecuritiesBook()), never charged off, so segment charge-off rates, which are rates on loans, reach
+     * the book at this share.
+     */
+    public function getLoanShareOfEarningAssets(): float
+    {
+        return 1.0 - FinancialConstants::SECURITIES_SHARE_OF_EARNING_ASSETS;
     }
 
     public function getCreditLossHorizonYears(): float
@@ -955,7 +970,7 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
     public function resolveSecuritiesBook(Stock $stock, ?float $currentTreasury = null): float
     {
         return max(0.0, $this->resolveEarningAssets($stock, $currentTreasury))
-            * FinancialConstants::SECURITIES_SHARE_OF_EARNING_ASSETS;
+            * (1.0 - $this->getLoanShareOfEarningAssets());
     }
 
     /**
@@ -997,7 +1012,22 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
             ? $stock->getNetEarningAssets()
             : max(0.0, $stock->getTangibleEquity() + (float) $stock->getTotalDebt() - $treasury);
 
-        return ($earningAssets * self::BASEL_RISK_WEIGHT_EARNING_ASSETS) + ($treasury * self::BASEL_RISK_WEIGHT_TREASURY);
+        return ($earningAssets * $this->calculateRiskWeightDensity($stock)) + ($treasury * self::BASEL_RISK_WEIGHT_TREASURY);
+    }
+
+    /**
+     * Risk-weighted assets per unit of earning assets, from the lender's own book: mortgages at half weight, other
+     * loans at full weight, the securities sleeve at the agency weight. A mortgage lender needs less capital per
+     * dollar lent than a business lender, as the standardized approach intends.
+     */
+    public function calculateRiskWeightDensity(Stock $stock): float
+    {
+        $mix = $this->resolveLoanBookMix($stock);
+        $loanDensity = ($mix['residential'] * self::BASEL_RISK_WEIGHT_RESIDENTIAL_MORTGAGE)
+            + (($mix['consumer'] + $mix['commercial_real_estate'] + $mix['business']) * self::BASEL_RISK_WEIGHT_LOANS);
+        $loanShare = $this->getLoanShareOfEarningAssets();
+
+        return ($loanShare * $loanDensity) + ((1.0 - $loanShare) * self::BASEL_RISK_WEIGHT_SECURITIES);
     }
 
     /**

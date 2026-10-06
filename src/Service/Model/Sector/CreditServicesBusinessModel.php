@@ -377,7 +377,8 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
         $pd = static::CONSUMER_CHARGE_OFF_RATE * $this->resolveCreditRiskScale($stock) / self::LGD_BASELINE;
 
         return [
-            'loss_rate' => $mathUtility->calculateVasicekExpectedLoss($householdZ, $pd, \App\Service\Macro\Subsystem\CreditFiscalSubsystem::RETAIL_ASRF_RHO, self::LGD_BASELINE),
+            'loss_rate' => $mathUtility->calculateVasicekExpectedLoss($householdZ, $pd, \App\Service\Macro\Subsystem\CreditFiscalSubsystem::RETAIL_ASRF_RHO, self::LGD_BASELINE)
+                * $this->getLoanShareOfEarningAssets(),
             'systematic_z' => $householdZ,
         ];
     }

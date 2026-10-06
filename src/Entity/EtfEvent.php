@@ -8,6 +8,7 @@ use Doctrine\ORM\Mapping as ORM;
 #[ORM\Entity(repositoryClass: \App\Repository\EtfEventRepository::class)]
 #[ORM\Table(name: 'etf_events')]
 #[ORM\Index(name: 'idx_etf_event_recorded', columns: ['etf_id', 'recorded_at'])]
+#[ORM\Index(name: 'idx_etf_event_recorded_all', columns: ['recorded_at'])]
 class EtfEvent
 {
     #[ORM\Id]
@@ -30,6 +31,14 @@ class EtfEvent
 
     #[ORM\Column(type: Types::DATETIME_MUTABLE)]
     private \DateTimeInterface $recordedAt;
+
+    /** Simulation time, in years, of the tick that published it; null for rows from before it was recorded. */
+    #[ORM\Column(nullable: true)]
+    private ?float $simTime = null;
+
+    /** Whether the news desk ran it as a headline when it was published; null for rows from before it was recorded. */
+    #[ORM\Column(nullable: true)]
+    private ?bool $headline = null;
 
     public function __construct()
     {
@@ -97,6 +106,30 @@ class EtfEvent
     public function setEtf(Etf $etf): static
     {
         $this->etf = $etf;
+
+        return $this;
+    }
+
+    public function getSimTime(): ?float
+    {
+        return $this->simTime;
+    }
+
+    public function setSimTime(?float $simTime): static
+    {
+        $this->simTime = $simTime;
+
+        return $this;
+    }
+
+    public function getHeadline(): ?bool
+    {
+        return $this->headline;
+    }
+
+    public function setHeadline(?bool $headline): static
+    {
+        $this->headline = $headline;
 
         return $this;
     }

@@ -1,36 +1,48 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Entity;
 
 use Doctrine\DBAL\Types\Types;
 use Doctrine\ORM\Mapping as ORM;
 
-#[ORM\Entity(repositoryClass: \App\Repository\StockEventRepository::class)]
-#[ORM\Table(name: 'stock_events')]
-#[ORM\Index(name: 'idx_stock_event_recorded', columns: ['stock_id', 'recorded_at'])]
-#[ORM\Index(name: 'idx_stock_event_recorded_all', columns: ['recorded_at'])]
-class StockEvent
+/**
+ * A district-wide story: the economy's (a crisis, a rescue, a recession) or the government's (a vote, a cabinet, a
+ * budget, an appointment). It belongs to no listed instrument, so it is not filed against the benchmark fund.
+ */
+#[ORM\Entity(repositoryClass: \App\Repository\DistrictNewsRepository::class)]
+#[ORM\Table(name: 'district_news')]
+#[ORM\Index(name: 'idx_district_news_recorded', columns: ['recorded_at'])]
+class DistrictNews
 {
+    /** The desk for the economy's stories. */
+    public const DESK_ECONOMY = 'ECONOMY';
+    /** The desk for the government's stories. */
+    public const DESK_GOVERNMENT = 'GOVERNMENT';
+
     #[ORM\Id]
     #[ORM\GeneratedValue]
     #[ORM\Column]
     private ?int $id = null;
 
-    #[ORM\ManyToOne(targetEntity: Stock::class)]
-    #[ORM\JoinColumn(nullable: false, onDelete: 'CASCADE')]
-    private Stock $stock;
+    /** DESK_ECONOMY or DESK_GOVERNMENT; doubles as the event type the presenter routes on. */
+    #[ORM\Column(length: 20)]
+    private string $desk;
 
+    /** The narrative event that made the story, a ShockEvent constant. */
     #[ORM\Column(length: 50)]
-    private string $eventType;
+    private string $topic;
 
     #[ORM\Column(type: Types::TEXT)]
     private string $description;
 
+    /** What the benchmark did over the month before the story, in percent; null without buffered history. */
     #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 2, nullable: true)]
     private ?string $changePercent = null;
 
     #[ORM\Column(type: Types::DATETIME_MUTABLE)]
-    private \DateTime $recordedAt;
+    private \DateTimeInterface $recordedAt;
 
     /** Simulation time, in years, of the tick that published it; null for rows from before it was recorded. */
     #[ORM\Column(nullable: true)]
@@ -50,19 +62,31 @@ class StockEvent
         return $this->id;
     }
 
-    public function getEventType(): ?string
+    public function getDesk(): string
     {
-        return $this->eventType;
+        return $this->desk;
     }
 
-    public function setEventType(string $eventType): static
+    public function setDesk(string $desk): static
     {
-        $this->eventType = $eventType;
+        $this->desk = $desk;
 
         return $this;
     }
 
-    public function getDescription(): ?string
+    public function getTopic(): string
+    {
+        return $this->topic;
+    }
+
+    public function setTopic(string $topic): static
+    {
+        $this->topic = $topic;
+
+        return $this;
+    }
+
+    public function getDescription(): string
     {
         return $this->description;
     }
@@ -86,26 +110,14 @@ class StockEvent
         return $this;
     }
 
-    public function getRecordedAt(): \DateTime
+    public function getRecordedAt(): \DateTimeInterface
     {
         return $this->recordedAt;
     }
 
-    public function setRecordedAt(\DateTime $recordedAt): static
+    public function setRecordedAt(\DateTimeInterface $recordedAt): static
     {
         $this->recordedAt = $recordedAt;
-
-        return $this;
-    }
-
-    public function getStock(): Stock
-    {
-        return $this->stock;
-    }
-
-    public function setStock(?Stock $stock): static
-    {
-        $this->stock = $stock;
 
         return $this;
     }

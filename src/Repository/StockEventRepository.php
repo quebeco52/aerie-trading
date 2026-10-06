@@ -32,6 +32,32 @@ class StockEventRepository extends ServiceEntityRepository
     }
 
     /**
+     * The newest events across every company, newest first, optionally only those of the given types, with each
+     * event's company loaded in the same query.
+     *
+     * @param  list<string>|null $types
+     * @return list<StockEvent>
+     */
+    public function findLatest(int $limit, ?array $types = null): array
+    {
+        $query = $this->createQueryBuilder('e')
+            ->addSelect('s')
+            ->join('e.stock', 's')
+            ->orderBy('e.recordedAt', 'DESC')
+            ->addOrderBy('e.id', 'DESC')
+            ->setMaxResults($limit);
+
+        if ($types !== null) {
+            if ($types === []) {
+                return [];
+            }
+            $query->andWhere('e.eventType IN (:types)')->setParameter('types', $types);
+        }
+
+        return $query->getQuery()->getResult();
+    }
+
+    /**
      * Each company's newest $perStock events, grouped by company and newest first within each.
      *
      * One query for the whole set rather than one per company, and the limit is per company, so

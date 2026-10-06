@@ -6,6 +6,7 @@ namespace App\Service\View;
 
 use App\Data\AerieCouncil;
 use App\Data\AerieDiet;
+use App\Data\DistrictCalendar;
 use App\Data\AeriePartyProfiles;
 use App\DTO\MacroStateDTO;
 use App\DTO\PoliticsStateDTO;
@@ -780,17 +781,10 @@ class GovernmentPageBuilder
         return 'the ' . (preg_replace('/^The /', '', AerieDiet::PARTY_NAMES[$party]) ?? AerieDiet::PARTY_NAMES[$party]);
     }
 
-    /**
-     * A simulation time as the page names it: the year, counted from Year 1 when the District's records begin, and the quarter.
-     * The time is read to the microyear, so a vote the accumulated clock puts a hair short of the term's end is dated on it.
-     */
+    /** A simulation time as the page names it: the year and the quarter (DistrictCalendar::quarter). */
     public static function simDate(float $simTime): string
     {
-        $simTime = round($simTime, 6);
-        $year = (int) floor($simTime);
-        $quarter = (int) floor(($simTime - $year) * 4.0 + 1e-9) + 1;
-
-        return sprintf('Year %d Q%d', $year + 1, min(4, $quarter));
+        return DistrictCalendar::quarter($simTime);
     }
 
     /**

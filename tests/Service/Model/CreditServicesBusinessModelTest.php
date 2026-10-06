@@ -8,6 +8,7 @@ use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\CreditServicesBusinessModel;
+use App\Service\Math\FinancialConstants;
 use PHPUnit\Framework\TestCase;
 
 class CreditServicesBusinessModelTest extends TestCase
@@ -122,16 +123,18 @@ class CreditServicesBusinessModelTest extends TestCase
     /**
      * A card book is unsecured consumer credit, so it loses the industry's card charge-off rate through the cycle,
      * scaled by underwriting: the prime network three quarters of it, the subprime instalment lender 1.6x, OneMain's
-     * 6.02% of 2019 over the industry's rate that year.
+     * 6.02% of 2019 over the industry's rate that year. The rate is on receivables, so the earning-asset book loses it
+     * on its loan share; the securities sleeve is marked, not charged off.
      */
     public function testTheCardBookLosesTheIndustryRateScaledByUnderwriting(): void
     {
         $prime = (new Stock())->setTicker('TALN');
         $subprime = (new Stock())->setTicker('STRK');
+        $cardRate = CreditServicesBusinessModel::CONSUMER_CHARGE_OFF_RATE * (1.0 - FinancialConstants::SECURITIES_SHARE_OF_EARNING_ASSETS);
 
-        $this->assertEqualsWithDelta(CreditServicesBusinessModel::CONSUMER_CHARGE_OFF_RATE, $this->model->getThroughTheCycleCreditLossRate(), 1e-12);
-        $this->assertEqualsWithDelta(0.75 * CreditServicesBusinessModel::CONSUMER_CHARGE_OFF_RATE, $this->model->getThroughTheCycleCreditLossRate($prime), 1e-12);
-        $this->assertEqualsWithDelta(1.6 * CreditServicesBusinessModel::CONSUMER_CHARGE_OFF_RATE, $this->model->getThroughTheCycleCreditLossRate($subprime), 1e-12);
+        $this->assertEqualsWithDelta($cardRate, $this->model->getThroughTheCycleCreditLossRate(), 1e-12);
+        $this->assertEqualsWithDelta(0.75 * $cardRate, $this->model->getThroughTheCycleCreditLossRate($prime), 1e-12);
+        $this->assertEqualsWithDelta(1.6 * $cardRate, $this->model->getThroughTheCycleCreditLossRate($subprime), 1e-12);
     }
 
     /**

@@ -182,50 +182,12 @@
 							</div>
 						</div>
 
-						{# Corporate news. assets/js/stock/events-feed.js builds the same row for live events. #}
+						{# Corporate news, one partials/_event_card.html.twig row per story. #}
 						<div class="bg-surface-container-low rounded-lg p-5 border border-outline-variant/20">
 							<h2 class="text-sm font-semibold text-on-surface mb-1">News and corporate events</h2>
 							<div class="divide-y divide-outline-variant/10" id="events-feed">
 								{% for rawEvent in events %}
-									{% set event = present_event(rawEvent) %}
-									<article class="py-3 space-y-1.5">
-										<div class="flex items-start justify-between gap-3">
-											<div class="flex items-center flex-wrap gap-x-2 gap-y-1 min-w-0">
-												<span class="badge {{ event.badgeClass }}">{{ event.badge|lower|capitalize }}</span>
-												{% if event.isEarnings and event.eps %}
-													<span class="text-xs font-semibold font-mono text-on-surface">EPS {{ event.eps }}</span>
-												{% endif %}
-												{% if event.isEarnings and event.surpriseType != 'met' and event.surpriseAmount %}
-													<span class="text-xs font-mono {{ event.surpriseType == 'beat' ? 'text-secondary' : 'text-tertiary' }}">{{ event.surpriseText }}</span>
-												{% elseif event.isEarnings and event.surpriseType == 'met' %}
-													<span class="text-xs text-on-surface-variant">In line</span>
-												{% endif %}
-												{% if event.isEarnings and event.eva %}
-													<span class="text-xs font-mono {{ event.evaPositive ? 'text-secondary' : 'text-tertiary' }}">{{ event.eva }}</span>
-												{% endif %}
-											</div>
-
-											<div class="shrink-0 flex items-baseline gap-2.5 text-xs font-mono tabular-nums">
-												{% if event.changePercent is not null and event.changePercent != 0 %}
-													<span class="{{ event.changePercent|signed_class }}">{{ event.changePercent > 0 ? '+' : '' }}{{ event.changePercent|number_format(2) }}%</span>
-												{% endif %}
-												<time class="text-on-surface-variant whitespace-nowrap">{{ event.recordedAt|date('Y-m-d H:i') }}</time>
-											</div>
-										</div>
-
-										{% if not event.isEarnings and event.headline %}
-											<p class="text-sm text-on-surface leading-relaxed">{{ event.headline }}</p>
-										{% endif %}
-
-										{# Corporate actions that came with the report: dividends, buybacks, debt. #}
-										{% if event.pills is defined and event.pills|length > 0 %}
-											<ul class="flex flex-wrap gap-x-4 gap-y-1 text-xs text-on-surface-variant">
-												{% for pill in event.pills %}
-													<li>{{ pill.text }}</li>
-												{% endfor %}
-											</ul>
-										{% endif %}
-									</article>
+									{% include 'partials/_event_card.html.twig' with { event: present_event(rawEvent) } only %}
 								{% else %}
 									<p id="no-events-msg" class="py-6 text-center text-sm text-on-surface-variant">No news for {{ asset.ticker }} yet.</p>
 								{% endfor %}

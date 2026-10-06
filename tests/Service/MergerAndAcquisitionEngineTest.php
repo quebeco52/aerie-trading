@@ -16,7 +16,6 @@ use App\Service\Corporate\MergerAndAcquisitionEngine;
 use App\Service\Event\MarketEventPublisher;
 use App\Service\Math\CorporateMetrics;
 use App\Service\Math\MathUtility;
-use Doctrine\ORM\EntityManagerInterface;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\MockObject\Stub;
@@ -25,7 +24,6 @@ use PHPUnit\Framework\TestCase;
 #[AllowMockObjectsWithoutExpectations]
 class MergerAndAcquisitionEngineTest extends TestCase
 {
-    private EntityManagerInterface&Stub $entityManagerMock;
     private MarketEventPublisher&Stub $marketEventPublisherMock;
     private DebtEngine&Stub $debtEngineMock;
     private MathUtility&Stub $mathUtilityMock;
@@ -34,7 +32,6 @@ class MergerAndAcquisitionEngineTest extends TestCase
 
     protected function setUp(): void
     {
-        $this->entityManagerMock = $this->createStub(EntityManagerInterface::class);
         $this->marketEventPublisherMock = $this->createStub(MarketEventPublisher::class);
         $this->debtEngineMock = $this->createStub(DebtEngine::class);
         $this->mathUtilityMock = $this->createStub(MathUtility::class);
@@ -1283,7 +1280,12 @@ class MergerAndAcquisitionEngineTest extends TestCase
         $this->assertEqualsWithDelta(($proceeds - (0.25 * $marketCap)) / $marketCap, $sale['shock'], 1e-9);
     }
 
-    public function testAWrittenDownSellerGainsAndARichlyValuedOneLosesOnTheSameFireSale(): void
+    /**
+     * A forced seller with nothing to sell on earnings fetches the market's value of the slice less the fire-sale
+     * discount, whatever its book says: a firm written down far below book gains nothing from the sale, and its
+     * shareholders lose the discount on the slice sold.
+     */
+    public function testAFireSaleLosesTheDiscountOnTheSliceWhateverTheSellersBook(): void
     {
         $this->primeDistressedDivestiture(operatingBase: 10_000_000_000.0, fraction: 0.25);
         $shock = function (float $price): float {
@@ -1297,8 +1299,9 @@ class MergerAndAcquisitionEngineTest extends TestCase
             return $this->engine->evaluateCorporateDivestiture($stock, new MacroStateDTO(policyRateEma: 0.04, corporateTaxRate: 0.20, yield5yEma: 0.04, nominalGdpIndex: 1.0), 1.0)['shock'];
         };
 
-        $this->assertGreaterThan(0.0, $shock(5.0));
-        $this->assertLessThan(0.0, $shock(2_000.0));
+        $expected = -0.25 * MergerAndAcquisitionEngine::DIV_FIRE_SALE_DISCOUNT;
+        $this->assertEqualsWithDelta($expected, $shock(5.0), 1e-9, 'written down far below book');
+        $this->assertEqualsWithDelta($expected, $shock(2_000.0), 1e-9, 'valued far above book');
     }
 
     private function buildLedgeredAcquirer(string $ticker, float $treasury, float $debt, float $shares): Stock
@@ -1426,7 +1429,7 @@ class MergerAndAcquisitionEngineTest extends TestCase
         $this->corporateMetricsMock->method('calculateOperatingBase')->willReturn($operatingBase);
         $this->corporateMetricsMock->method('calculateScaleRatio')->willReturn(0.10);
         $this->mathUtilityMock->method('checkProbability')->willReturn(true);
-        // One draw serves both the divested fraction and the fire-sale cents on the dollar.
+        // One draw serves the divested fraction and every other uniform the deal takes.
         $this->mathUtilityMock->method('generateUniformBetween')->willReturn($fraction);
         $this->marketEventPublisherMock->method('publish')->willReturn(['event_type' => 'DIVESTITURE']);
     }

@@ -2,6 +2,7 @@
 
 namespace App\Service\Market;
 
+use App\Service\Event\EventPresenter;
 use App\Data\StrategicHoldings;
 use App\Entity\Stock;
 use App\DTO\MacroStateDTO;
@@ -223,7 +224,7 @@ class StockTracker
             $nextVolatility = $calculation['next_volatility'];
 
             if ($calculation['shock'] !== null) {
-                $events[] = $this->eventService->publish($stock, 'SHOCK', "Sudden market shock detected.", $calculation['shock']);
+                $events[] = $this->eventService->publish($stock, 'SHOCK', EventPresenter::shockHeadline($stock->getName() . ' shares', $calculation['shock']), $calculation['shock']);
             }
 
             // Permanent order flow price impact: applied to price and accounted in impact variance EMA.

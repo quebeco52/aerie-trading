@@ -2,11 +2,13 @@
 
 namespace App\Tests\Service\Event;
 
+use App\Entity\DistrictNews;
 use App\Entity\Etf;
 use App\Entity\EtfEvent;
 use App\Entity\Stock;
 use App\Entity\StockEvent;
 use App\Service\Event\EventPresenter;
+use App\Service\Event\ShockEvent;
 use PHPUnit\Framework\TestCase;
 
 class EventPresenterTest extends TestCase
@@ -136,6 +138,51 @@ class EventPresenterTest extends TestCase
         $this->assertSame('MARKET SHOCK', $presented['badge']);
         $this->assertSame('bolt', $presented['icon']);
         $this->assertSame(-4.50, $presented['changePercent']);
+    }
+
+    /** A district story is badged for what happened; a crisis takes the caution tone, an election does not. */
+    public function testPresentDistrictStoryByTopic(): void
+    {
+        $crisis = (new DistrictNews())->setDesk(DistrictNews::DESK_ECONOMY)->setTopic(ShockEvent::BANKING_CRISIS)->setDescription('Banks stop lending to each other.')->setChangePercent('-7.10');
+        $vote = (new DistrictNews())->setDesk(DistrictNews::DESK_GOVERNMENT)->setTopic(ShockEvent::ELECTION_HELD)->setDescription('The Diet has been elected.');
+
+        $crisisCard = $this->presenter->present($crisis);
+        $voteCard = $this->presenter->present($vote);
+
+        $this->assertSame(['economy', 'BANKING CRISIS', 'badge-warn'], [$crisisCard['category'], $crisisCard['badge'], $crisisCard['badgeClass']]);
+        $this->assertSame(-7.1, $crisisCard['changePercent']);
+        $this->assertSame(['government', 'ELECTION', 'badge-accent'], [$voteCard['category'], $voteCard['badge'], $voteCard['badgeClass']]);
+        $this->assertNull($voteCard['changePercent']);
+        $this->assertSame('GOVERNMENT', $this->presenter->present(['type' => 'GOVERNMENT', 'description' => 'x'])['badge'], 'A topic with no badge reads as its desk.');
+    }
+
+    /** A story is dated in the District's calendar; a row from before it carried a simulation time keeps its clock time. */
+    public function testAStoryIsDatedInTheDistrictsCalendar(): void
+    {
+        $stamped = (new StockEvent())->setEventType('SPLIT')->setDescription('2-for-1 split.')->setSimTime(13.25);
+        $old = (new StockEvent())->setEventType('SPLIT')->setDescription('2-for-1 split.')->setRecordedAt(new \DateTime('2026-10-06 14:22'));
+
+        $this->assertSame('1 Apr, Year 14', $this->presenter->present($stamped)['dateline']);
+        $this->assertSame('2026-10-06 14:22', $this->presenter->present($old)['dateline']);
+        $this->assertSame('1 Apr, Year 14', $this->presenter->presentForWire(['type' => 'SPLIT', 'description' => 'x', 'sim_time' => 13.25])['dateline']);
+    }
+
+    /** A quarter's results read as a sentence, so the headline strip and the district map can print them. */
+    public function testEarningsReadAsASentence(): void
+    {
+        $headline = fn (string $desc): string => $this->presenter->present(['type' => 'EARNINGS', 'description' => $desc])['headline'];
+
+        $this->assertSame('Quarterly earnings of $1.42 a share beat forecasts by $0.11.', $headline('Q-Earnings: $1.42 (Beat expectations by $0.11 | +$1.20B EVA).'));
+        $this->assertSame('Quarterly loss of $0.45 a share missed forecasts by $0.10.', $headline('Q-Earnings: -$0.45 (Missed expectations by $0.10 | -$15.00M EVA).'));
+        $this->assertSame('Quarterly earnings of $1.00 a share were in line with forecasts.', $headline('Q-Earnings: $1.00 (Met expectations exactly | +$5.00M EVA).'));
+    }
+
+    /** A price shock says what the shares did, including one published before the copy named the move. */
+    public function testAPriceShockSaysWhatTheSharesDid(): void
+    {
+        $this->assertSame('Hummock Foods shares jump 12.4% in a sudden move.', \App\Service\Event\EventPresenter::shockHeadline('Hummock Foods shares', 12.44));
+        $this->assertSame('Shares drop 11.0% in a sudden move.', $this->presenter->present(['type' => 'SHOCK', 'description' => 'Sudden market shock detected.', 'change_percent' => -11.0])['headline']);
+        $this->assertSame('Shares moved sharply.', $this->presenter->present(['type' => 'SHOCK', 'description' => 'Sudden market shock detected.'])['headline']);
     }
 
     public function testPresentStockSplit(): void

@@ -8,6 +8,7 @@ use App\Data\Sectors;
 use App\Entity\CorporateReport;
 use App\Entity\Stock;
 use App\Repository\CorporateReportRepository;
+use App\Service\Model\Sector\CommercialBankBusinessModel;
 use App\Service\Model\Sector\InsuranceBusinessModel;
 use App\Service\Math\FinancialConstants;
 
@@ -70,7 +71,7 @@ class FinancialSummaryBuilder
         $strategy = Sectors::strategyFor($stock->getIndustry());
 
         $tiles = match (true) {
-            (float) $report->getEarningAssets() > 0.0 && $strategy->isFinancial() => $this->lenderTiles($report),
+            (float) $report->getEarningAssets() > 0.0 && $strategy->isFinancial() => $this->lenderTiles($report, $strategy instanceof CommercialBankBusinessModel ? $strategy->getLoanShareOfEarningAssets() : null),
             $strategy->requiresAlternativeZScore() => $this->capitalTiles($report, $strategy instanceof InsuranceBusinessModel),
             default => $this->operatingTiles($report),
         };
@@ -84,17 +85,22 @@ class FinancialSummaryBuilder
         return ['financialSummary' => array_slice(array_values(array_filter($tiles)), 0, self::MAX_TILES)];
     }
 
-    /** @return list<array{label: string, value: float, format: string}|null> */
-    private function lenderTiles(CorporateReport $report): array
+    /**
+     * A bank quotes its reserve and charge-offs on loans, the part of the book that can default; another lender on
+     * its whole book.
+     *
+     * @return list<array{label: string, value: float, format: string}|null>
+     */
+    private function lenderTiles(CorporateReport $report, ?float $loanShare): array
     {
-        $book = (float) $report->getEarningAssets();
+        $book = (float) $report->getEarningAssets() * ($loanShare ?? 1.0);
 
         return [
             $this->tile('Net interest margin', $report->getNetInterestMargin(), 'percent'),
             $report->getCet1Ratio() !== null
                 ? $this->tile('CET1 ratio', $report->getCet1Ratio(), 'percent')
                 : $this->tile('Capital ratio', $report->getCapitalRatio(), 'percent'),
-            $this->tile('Reserve / book', (float) $report->getCreditLossAllowance() / $book, 'percent'),
+            $this->tile($loanShare !== null ? 'Reserve / loans' : 'Reserve / book', (float) $report->getCreditLossAllowance() / $book, 'percent'),
             $this->tile('Net charge-off rate', ((float) $report->getNetChargeOffs() * FinancialConstants::QUARTERS_PER_YEAR) / $book, 'percent'),
             $this->tile('ROE', $report->getReturnOnEquity(), 'percent'),
         ];

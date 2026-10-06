@@ -10,7 +10,8 @@ class ShockEvent
     public const REGULATORY_FINE = 'regulatory_fine';
     public const SEVERE_CHURN = 'severe_churn';
     public const BANK_RUN = 'bank_run';
-    public const BANK_SEIZURE = 'bank_seizure';
+    /** A bank's CET1 ratio fell below the Pillar 1 minimum: payouts are barred and a capital plan is ordered, but it keeps trading. */
+    public const CAPITAL_BELOW_MINIMUM = 'capital_below_minimum';
     public const MASSIVE_CREDIT_PROVISION = 'massive_credit_provision';
     public const ELEVATED_LOAN_DEFAULTS = 'elevated_loan_defaults';
     public const RESERVE_RELEASE = 'reserve_release';

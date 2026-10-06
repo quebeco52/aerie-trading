@@ -1520,7 +1520,7 @@ export default class extends Controller {
         const entry = {
             ...card,
             color,
-            recordedAt: card.recordedAt || nowStamp(),
+            recordedAt: card.dateline || card.recordedAt || nowStamp(),
             recordedAtTs: Date.now() / 1000,
         };
 

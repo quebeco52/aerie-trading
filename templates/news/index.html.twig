@@ -1,0 +1,38 @@
+{% extends 'base.html.twig' %}
+
+{% block title %}Newswire | Aerie Exchange{% endblock %}
+
+{% block body %}
+<div class="max-w-400 mx-auto px-4 sm:px-6 lg:px-8 pt-8 pb-12 w-full space-y-6">
+
+	<header class="pb-5 border-b border-outline-variant/15">
+		<h1 class="text-2xl md:text-3xl font-semibold text-on-surface tracking-tight">Newswire</h1>
+		<p class="mt-1.5 text-sm text-on-surface-variant">The District's economic and political news, company announcements and index fund notices, newest first.</p>
+	</header>
+
+	{# Sections are links, so each has an address and the server reads only the tables it draws on. #}
+	<nav class="flex flex-wrap gap-1" aria-label="Newswire sections">
+		{% for slug, label in sections %}
+			<a href="{{ slug == 'all' ? '/news' : '/news?section=' ~ slug }}" class="seg-btn" {% if slug == section %}aria-current="page"{% endif %}>{{ label }}</a>
+		{% endfor %}
+	</nav>
+
+	<div class="max-w-4xl bg-surface-container-low rounded-lg px-5 py-2 border border-outline-variant/20">
+		{# Live stories are prepended by assets/js/pages/news.js when they belong to this section. #}
+		<div class="divide-y divide-outline-variant/10" id="news-feed" data-section="{{ section }}">
+			{% for item in items %}
+				{% include 'partials/_event_card.html.twig' with { event: item.card, source: { ticker: item.ticker, name: item.name }, headline: item.headline } only %}
+			{% else %}
+				<p id="no-news-msg" class="py-6 text-center text-sm text-on-surface-variant">Nothing on the wire in this section yet.</p>
+			{% endfor %}
+		</div>
+	</div>
+</div>
+{% endblock %}
+
+{% block javascripts %}
+	{{ parent() }}
+	<script type="module">
+		import 'pages/news';
+	</script>
+{% endblock %}

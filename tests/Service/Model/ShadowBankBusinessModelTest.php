@@ -8,6 +8,7 @@ use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\ShadowBankBusinessModel;
+use App\Service\Math\FinancialConstants;
 use PHPUnit\Framework\TestCase;
 
 class ShadowBankBusinessModelTest extends TestCase
@@ -143,13 +144,13 @@ class ShadowBankBusinessModelTest extends TestCase
         $this->assertEqualsWithDelta($base->clampedMargin, $distress->clampedMargin, 1e-12, 'credit losses do not touch the operating margin');
     }
 
-    /** The book is its two portfolios at the bank segment rates: 60% mortgages at 0.43% and 40% direct loans at 0.73%. */
+    /** The loans are its two portfolios at the bank segment rates: 60% mortgages at 0.43% and 40% direct loans at 0.73%, on the loan share of the book. */
     public function testThroughTheCycleLossIsTheMortgageAndDirectLendingBlend(): void
     {
         $pool = (new Stock())->setTicker('POOL');
 
         $this->assertEqualsWithDelta(
-            0.60 * ShadowBankBusinessModel::RESIDENTIAL_CHARGE_OFF_RATE + 0.40 * ShadowBankBusinessModel::BUSINESS_CHARGE_OFF_RATE,
+            (1.0 - FinancialConstants::SECURITIES_SHARE_OF_EARNING_ASSETS) * (0.60 * ShadowBankBusinessModel::RESIDENTIAL_CHARGE_OFF_RATE + 0.40 * ShadowBankBusinessModel::BUSINESS_CHARGE_OFF_RATE),
             $this->model->getThroughTheCycleCreditLossRate($pool),
             1e-12
         );

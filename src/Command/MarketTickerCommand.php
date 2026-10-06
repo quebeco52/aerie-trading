@@ -408,6 +408,7 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
             $lastBoardStampDuty = null;
             $lastStrategicStakeCash = null;
             $simTime = $macroState->totalTime;
+            $this->marketEvent->stampSimTime($simTime);
             $lap('macro');
 
             // Retention, on the clock its cutoffs are measured against. The boundary test is the same one

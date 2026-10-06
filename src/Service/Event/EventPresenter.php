@@ -2,6 +2,8 @@
 
 namespace App\Service\Event;
 
+use App\Data\DistrictCalendar;
+use App\Entity\DistrictNews;
 use App\Entity\EtfEvent;
 use App\Entity\StockEvent;
 
@@ -11,27 +13,86 @@ use App\Entity\StockEvent;
  */
 class EventPresenter
 {
+    // --- District Stories ---
+
+    /** The badge a district story carries for the event that made it; a topic not listed reads as its desk. */
+    private const TOPIC_BADGES = [
+        ShockEvent::BANKING_CRISIS => 'BANKING CRISIS',
+        ShockEvent::TITAN_INTERVENTION => 'ASSET PURCHASES',
+        ShockEvent::SOVEREIGN_WEALTH_DEPLOYMENT => 'FUND REBALANCE',
+        ShockEvent::SOVEREIGN_WEALTH_TRIM => 'FUND REBALANCE',
+        ShockEvent::SYSTEMIC_LIQUIDITY_FREEZE => 'FUNDING STRESS',
+        ShockEvent::CREDIT_MARKET_SEIZURE => 'CREDIT STRESS',
+        ShockEvent::SOVEREIGN_DOWNGRADE => 'SOVEREIGN DEBT',
+        ShockEvent::RECESSION_DECLARED => 'RECESSION',
+        ShockEvent::YIELD_CURVE_INVERSION_ALARM => 'YIELD CURVE',
+        ShockEvent::HOUSEHOLD_DELEVERAGING => 'HOUSEHOLDS',
+        ShockEvent::NATURAL_CATASTROPHE => 'CATASTROPHE',
+        ShockEvent::ELECTION_HELD => 'ELECTION',
+        ShockEvent::GOVERNMENT_FELL => 'GOVERNMENT FALLS',
+        ShockEvent::GOVERNMENT_FORMED => 'NEW GOVERNMENT',
+        ShockEvent::PRIME_MINISTER_CHANGED => 'PRIME MINISTER',
+        ShockEvent::BUDGET_ENACTED => 'BUDGET',
+        ShockEvent::GOVERNOR_APPOINTED => 'APPOINTMENT',
+        ShockEvent::REGULATOR_APPOINTED => 'APPOINTMENT',
+        ShockEvent::FUND_HEAD_APPOINTED => 'APPOINTMENT',
+        ShockEvent::AUTHORITY_PRESSED => 'MONETARY POLICY',
+        ShockEvent::AUTHORITY_GIVES_GROUND => 'MONETARY POLICY',
+        ShockEvent::AUTHORITY_MAJORITY_SHIFT => 'MONETARY POLICY',
+        ShockEvent::MONETARY_DECISION => 'RATE DECISION',
+        ShockEvent::PARTY_LEADER_CHANGED => 'PARTY LEADER',
+        ShockEvent::COUNCILLOR_SEATED => 'COUNCIL SEAT',
+    ];
+
+    /** What a price shock's description said before it named the move. */
+    private const LEGACY_SHOCK_TEXT = 'Sudden market shock detected.';
+
+    /** District stories that warn of stress rather than report a fall, so they carry the caution tone. */
+    private const CAUTION_TOPICS = [
+        ShockEvent::BANKING_CRISIS,
+        ShockEvent::SYSTEMIC_LIQUIDITY_FREEZE,
+        ShockEvent::CREDIT_MARKET_SEIZURE,
+        ShockEvent::SOVEREIGN_DOWNGRADE,
+        ShockEvent::RECESSION_DECLARED,
+        ShockEvent::YIELD_CURVE_INVERSION_ALARM,
+        ShockEvent::HOUSEHOLD_DELEVERAGING,
+        ShockEvent::NATURAL_CATASTROPHE,
+        ShockEvent::GOVERNMENT_FELL,
+    ];
+
     /**
      * Presents an event entity or associative array into a structured view model.
      *
-     * @param StockEvent|EtfEvent|array<string, mixed> $event
+     * @param StockEvent|EtfEvent|DistrictNews|array<string, mixed> $event
      * @return array<string, mixed>
      */
-    public function present(StockEvent|EtfEvent|array $event): array
+    public function present(StockEvent|EtfEvent|DistrictNews|array $event): array
     {
-        if ($event instanceof StockEvent || $event instanceof EtfEvent) {
+        $topic = null;
+        $simTime = null;
+        if ($event instanceof DistrictNews) {
+            $rawType = $event->getDesk();
+            $topic = $event->getTopic();
+            $rawDesc = $event->getDescription();
+            $changePct = $event->getChangePercent() !== null ? (float) $event->getChangePercent() : null;
+            $recordedAt = $event->getRecordedAt();
+            $simTime = $event->getSimTime();
+        } elseif ($event instanceof StockEvent || $event instanceof EtfEvent) {
             $rawType = strtoupper((string) $event->getEventType());
             $rawDesc = (string) $event->getDescription();
             $changePct = $event->getChangePercent() !== null ? (float) $event->getChangePercent() : null;
             $recordedAt = $event->getRecordedAt();
+            $simTime = $event->getSimTime();
         } else {
             $rawType = strtoupper((string) ($event['type'] ?? $event['eventType'] ?? 'EVENT'));
             $rawDesc = (string) ($event['description'] ?? '');
             $changePct = isset($event['change_percent']) ? (float) $event['change_percent'] : (isset($event['changePercent']) ? (float) $event['changePercent'] : null);
+            $topic = isset($event['topic']) ? (string) $event['topic'] : null;
+            $simTime = isset($event['sim_time']) ? (float) $event['sim_time'] : (isset($event['simTime']) ? (float) $event['simTime'] : null);
             $recordedAt = isset($event['recorded_at']) ? new \DateTime((string) $event['recorded_at']) : (isset($event['recordedAt']) ? ($event['recordedAt'] instanceof \DateTimeInterface ? $event['recordedAt'] : new \DateTime((string) $event['recordedAt'])) : new \DateTime());
         }
 
-        return match (EventCategory::forType($rawType)) {
+        $card = match (EventCategory::forType($rawType)) {
             'earnings' => $this->presentEarnings($rawType, $rawDesc, $changePct, $recordedAt),
             'shock' => $this->presentShock($rawType, $rawDesc, $changePct, $recordedAt),
             'split' => $this->presentSplit($rawType, $rawDesc, $changePct, $recordedAt),
@@ -44,7 +105,38 @@ class EventPresenter
             'index' => $this->presentIndex($rawType, $rawDesc, $changePct, $recordedAt),
             'income' => $this->presentDistribution($rawType, $rawDesc, $changePct, $recordedAt),
             'governance' => $this->presentSuccession($rawType, $rawDesc, $changePct, $recordedAt),
+            'economy', 'government' => $this->presentDistrictStory($rawType, $topic, $rawDesc, $changePct, $recordedAt),
             default => $this->presentGeneral($rawType, $rawDesc, $changePct, $recordedAt),
+        };
+
+        // Dated in the District's calendar; a row from before events carried their simulation time keeps its clock time.
+        $card['simTime'] = $simTime;
+        $card['dateline'] = $simTime !== null ? DistrictCalendar::dateline($simTime) : $recordedAt->format('Y-m-d H:i');
+
+        return $card;
+    }
+
+    /** A price shock as a wire line: "Hummock Foods shares jump 12.4% in a sudden move." */
+    public static function shockHeadline(string $subject, float $changePercent): string
+    {
+        return sprintf('%s %s %s%% in a sudden move.', $subject, $changePercent >= 0.0 ? 'jump' : 'drop', number_format(abs($changePercent), 1));
+    }
+
+    /**
+     * A quarter's results as a sentence: "Quarterly earnings of $1.42 a share beat forecasts by $0.11." A negative
+     * figure is a loss.
+     */
+    private static function earningsHeadline(string $eps, ?string $surpriseType, ?string $surpriseAmount): string
+    {
+        $isLoss = str_starts_with($eps, '-');
+        $result = sprintf('Quarterly %s of %s a share', $isLoss ? 'loss' : 'earnings', ltrim($eps, '+-'));
+        $by = $surpriseAmount !== null ? ' by ' . ltrim($surpriseAmount, '+-') : '';
+        $verb = $isLoss ? 'was' : 'were';
+
+        return match ($surpriseType) {
+            'beat' => "{$result} beat forecasts{$by}.",
+            'miss' => "{$result} missed forecasts{$by}.",
+            default => "{$result} {$verb} in line with forecasts.",
         };
     }
 
@@ -103,7 +195,7 @@ class EventPresenter
 
             $eva = trim($matches[4]);
             $evaPositive = !str_starts_with($eva, '-');
-            $headline = "Q-Earnings: {$eps}";
+            $headline = self::earningsHeadline($eps, $surpriseType, $surpriseAmount);
             $remainingText = trim(substr($rawDesc, strlen($matches[0])));
         }
 
@@ -161,7 +253,12 @@ class EventPresenter
     private function presentShock(string $type, string $rawDesc, ?float $changePct, \DateTimeInterface $recordedAt): array
     {
         $isPositive = $changePct !== null ? $changePct >= 0 : true;
-        $headline = !empty($rawDesc) ? $rawDesc : 'Sudden market shock detected.';
+        // Shocks were once published as a bare log line; read with their move, they say what the shares did.
+        $headline = match (true) {
+            $rawDesc !== '' && $rawDesc !== self::LEGACY_SHOCK_TEXT => $rawDesc,
+            $changePct !== null => self::shockHeadline('Shares', $changePct),
+            default => 'Shares moved sharply.',
+        };
 
         return [
             'type' => $type,
@@ -310,6 +407,34 @@ class EventPresenter
             'iconClass' => $evicted ? 'bg-warning/20 text-warning' : 'bg-primary/20 text-primary',
             'isEarnings' => false,
             'headline' => !empty($rawDesc) ? $rawDesc : 'Glasswater Row roster reconstituted.',
+            'pills' => [],
+            'changePercent' => $changePct,
+            'recordedAt' => $recordedAt,
+            'rawDescription' => $rawDesc,
+        ];
+    }
+
+    /**
+     * A district-wide story from the economy or government desk (SystemicEventReporter). The number is what the
+     * benchmark did over the month before it, so it carries the sign colour and the badge only says what happened.
+     *
+     * @return array<string, mixed>
+     */
+    private function presentDistrictStory(string $type, ?string $topic, string $rawDesc, ?float $changePct, \DateTimeInterface $recordedAt): array
+    {
+        $caution = $topic !== null && in_array($topic, self::CAUTION_TOPICS, true);
+
+        return [
+            'type' => $type,
+            'category' => $type === DistrictNews::DESK_GOVERNMENT ? 'government' : 'economy',
+            'topic' => $topic,
+            'badge' => self::TOPIC_BADGES[$topic ?? ''] ?? $type,
+            'badgeClass' => $caution ? 'badge-warn' : 'badge-accent',
+            'borderClass' => $caution ? 'border-l-warning' : 'border-l-primary',
+            'icon' => $type === DistrictNews::DESK_GOVERNMENT ? 'account_balance' : 'public',
+            'iconClass' => $caution ? 'bg-warning/15 text-warning' : 'bg-primary/10 text-primary',
+            'isEarnings' => false,
+            'headline' => $rawDesc,
             'pills' => [],
             'changePercent' => $changePct,
             'recordedAt' => $recordedAt,

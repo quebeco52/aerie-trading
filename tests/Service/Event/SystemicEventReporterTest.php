@@ -7,8 +7,8 @@ namespace App\Tests\Service\Event;
 use App\Data\AerieDiet as Diet;
 use App\DTO\MacroStateDTO;
 use App\DTO\PoliticsStateDTO;
+use App\Entity\DistrictNews;
 use App\Entity\Etf;
-use App\Entity\EtfEvent;
 use App\Service\Event\MarketEventPublisher;
 use App\Service\Event\NarrativeEngine;
 use App\Service\Event\ShockEvent;
@@ -22,7 +22,7 @@ use Psr\Log\LoggerInterface;
 #[AllowMockObjectsWithoutExpectations]
 class SystemicEventReporterTest extends TestCase
 {
-    /** @var list<EtfEvent> */
+    /** @var list<DistrictNews> */
     private array $persisted = [];
 
     protected function setUp(): void
@@ -42,9 +42,25 @@ class SystemicEventReporterTest extends TestCase
         $headline = $this->reporter(bufferedPrice: 100.0)->report($this->macroWith(ShockEvent::BANKING_CRISIS), new PoliticsStateDTO(), $this->benchmarkAt('94'));
 
         $this->assertNotNull($headline);
-        $this->assertSame('SHOCK', $headline['type']);
+        $this->assertSame(DistrictNews::DESK_ECONOMY, $headline['type']);
         $this->assertEqualsWithDelta(-6.0, $headline['change_percent'], 1e-9);
         $this->assertSame('-6', $this->persisted[0]->getChangePercent());
+    }
+
+    /** The story goes on the desk of the engine that made it, carries its topic, and is a headline on the wire. */
+    public function testAStoryIsFiledOnItsDeskWithItsTopicAsAHeadline(): void
+    {
+        $crisis = $this->reporter(bufferedPrice: 100.0)->report($this->macroWith(ShockEvent::BANKING_CRISIS), new PoliticsStateDTO(), $this->benchmarkAt('94'));
+        $budget = $this->reporter(bufferedPrice: 100.0)->report(new MacroStateDTO(), new PoliticsStateDTO(eventType: ShockEvent::BUDGET_ENACTED), $this->benchmarkAt('94'));
+
+        $this->assertNotNull($crisis);
+        $this->assertNotNull($budget);
+        $this->assertSame([DistrictNews::DESK_ECONOMY, DistrictNews::DESK_GOVERNMENT], [$this->persisted[0]->getDesk(), $this->persisted[1]->getDesk()]);
+        $this->assertSame([ShockEvent::BANKING_CRISIS, ShockEvent::BUDGET_ENACTED], [$this->persisted[0]->getTopic(), $this->persisted[1]->getTopic()]);
+        $this->assertNull($crisis['ticker']);
+        $this->assertSame(['district', 'district'], [$crisis['section'], $budget['section']]);
+        $this->assertTrue($crisis['headline'] && $budget['headline']);
+        $this->assertSame(['BANKING CRISIS', 'BUDGET'], [$crisis['presented']['badge'], $budget['presented']['badge']]);
     }
 
     /** A rescue is reported with the move the market made, so a programme launched into a falling market reads as one. */
@@ -416,7 +432,7 @@ class SystemicEventReporterTest extends TestCase
 
         $entityManager = $this->createStub(EntityManagerInterface::class);
         $entityManager->method('persist')->willReturnCallback(function (object $entity): void {
-            $this->assertInstanceOf(EtfEvent::class, $entity);
+            $this->assertInstanceOf(DistrictNews::class, $entity, 'A district story is not filed against the benchmark fund.');
             $this->persisted[] = $entity;
         });
 

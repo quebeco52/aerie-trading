@@ -1,0 +1,45 @@
+{# One news row, from EventPresenter's card. The stock page and the newswire both render it, and
+   assets/js/stock/events-feed.js buildCard() builds the same row for live events.
+   `event`: the presented card. `source` (optional): { ticker, name } for a company or fund story on the wire.
+   `headline` (optional): the story is a headline (App\Service\Event\NewsDesk), set in a heavier weight. #}
+<article class="py-3 space-y-1.5">
+	<div class="flex items-start justify-between gap-3">
+		<div class="flex items-center flex-wrap gap-x-2 gap-y-1 min-w-0">
+			<span class="badge {{ event.badgeClass }}">{{ event.badge|lower|capitalize }}</span>
+			{% if source is defined and source and source.ticker %}
+				<a href="/stock/{{ source.ticker }}" class="text-xs text-on-surface-variant hover:text-primary transition-colors"><span class="font-mono font-semibold text-on-surface">{{ source.ticker }}</span> {{ source.name }}</a>
+			{% endif %}
+			{% if event.isEarnings and event.eps %}
+				<span class="text-xs font-semibold font-mono text-on-surface">EPS {{ event.eps }}</span>
+			{% endif %}
+			{% if event.isEarnings and event.surpriseType != 'met' and event.surpriseAmount %}
+				<span class="text-xs font-mono {{ event.surpriseType == 'beat' ? 'text-secondary' : 'text-tertiary' }}">{{ event.surpriseText }}</span>
+			{% elseif event.isEarnings and event.surpriseType == 'met' %}
+				<span class="text-xs text-on-surface-variant">In line</span>
+			{% endif %}
+			{% if event.isEarnings and event.eva %}
+				<span class="text-xs font-mono {{ event.evaPositive ? 'text-secondary' : 'text-tertiary' }}">{{ event.eva }}</span>
+			{% endif %}
+		</div>
+
+		<div class="shrink-0 flex items-baseline gap-2.5 text-xs font-mono tabular-nums">
+			{% if event.changePercent is not null and event.changePercent != 0 %}
+				<span class="{{ event.changePercent|signed_class }}">{{ (event.changePercent / 100)|pct(2, true) }}</span>
+			{% endif %}
+			<time class="text-on-surface-variant whitespace-nowrap">{{ event.dateline|default(event.recordedAt|date('Y-m-d H:i')) }}</time>
+		</div>
+	</div>
+
+	{% if not event.isEarnings and event.headline %}
+		<p class="text-sm text-on-surface leading-relaxed{{ headline|default(false) ? ' font-semibold' : '' }}">{{ event.headline }}</p>
+	{% endif %}
+
+	{# Corporate actions that came with the report: dividends, buybacks, debt. #}
+	{% if event.pills is defined and event.pills|length > 0 %}
+		<ul class="flex flex-wrap gap-x-4 gap-y-1 text-xs text-on-surface-variant">
+			{% for pill in event.pills %}
+				<li>{{ pill.text }}</li>
+			{% endfor %}
+		</ul>
+	{% endif %}
+</article>

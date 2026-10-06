@@ -194,7 +194,8 @@ class CommercialBankBusinessModelTest extends TestCase
     /**
      * The through-the-cycle rate is the book's mean loss over the credit cycle: with the systematic factor standard
      * normal (so both macro default rates average at their baselines) and flat collateral, the segment losses average
-     * to each segment's charge-off rate, and a neutral H.8 book to 0.92% a year (US banks: 0.89%, FRED CORALACBS).
+     * to each segment's charge-off rate, and a neutral H.8 loan book to 0.92% a year (US banks: 0.89%, FRED CORALACBS).
+     * The rates are on loans, so the earning-asset book, a fifth of it securities, loses them on its loan share alone.
      */
     public function testOverTheCycleTheBookLosesItsThroughTheCycleRate(): void
     {
@@ -214,15 +215,18 @@ class CommercialBankBusinessModelTest extends TestCase
 
         $ttc = $this->model->getThroughTheCycleCreditLossRate($stock);
         $this->assertEqualsWithDelta($ttc, $meanLoss, 0.002 * $ttc);
+        $loanShare = 1.0 - FinancialConstants::SECURITIES_SHARE_OF_EARNING_ASSETS;
+        $this->assertEqualsWithDelta($loanShare, $this->model->getLoanShareOfEarningAssets(), 1e-12);
         $this->assertEqualsWithDelta(
-            CommercialBankBusinessModel::RESIDENTIAL_MORTGAGE_SHARE * CommercialBankBusinessModel::RESIDENTIAL_CHARGE_OFF_RATE
+            $loanShare * (CommercialBankBusinessModel::RESIDENTIAL_MORTGAGE_SHARE * CommercialBankBusinessModel::RESIDENTIAL_CHARGE_OFF_RATE
                 + CommercialBankBusinessModel::CONSUMER_LOAN_SHARE * CommercialBankBusinessModel::CONSUMER_CHARGE_OFF_RATE
                 + CommercialBankBusinessModel::COMMERCIAL_REAL_ESTATE_SHARE * CommercialBankBusinessModel::COMMERCIAL_REAL_ESTATE_CHARGE_OFF_RATE
-                + (1.0 - CommercialBankBusinessModel::RESIDENTIAL_MORTGAGE_SHARE - CommercialBankBusinessModel::CONSUMER_LOAN_SHARE - CommercialBankBusinessModel::COMMERCIAL_REAL_ESTATE_SHARE) * CommercialBankBusinessModel::BUSINESS_CHARGE_OFF_RATE,
+                + (1.0 - CommercialBankBusinessModel::RESIDENTIAL_MORTGAGE_SHARE - CommercialBankBusinessModel::CONSUMER_LOAN_SHARE - CommercialBankBusinessModel::COMMERCIAL_REAL_ESTATE_SHARE) * CommercialBankBusinessModel::BUSINESS_CHARGE_OFF_RATE),
             $ttc,
-            1e-12
+            1e-12,
+            'securities are marked, never charged off'
         );
-        $this->assertEqualsWithDelta(0.0092, $ttc, 0.0002, 'a neutral H.8 book loses ~0.92% a year');
+        $this->assertEqualsWithDelta(0.0092, $ttc / $loanShare, 0.0002, 'a neutral H.8 loan book loses ~0.92% a year');
     }
 
     /**
@@ -504,19 +508,47 @@ class CommercialBankBusinessModelTest extends TestCase
         $bank->setWholesaleDebt('10000000000'); // $10B
         $bank->setCorporateTreasury('5000000000'); // $5B
 
-        // Earning Assets = 10B + 90B - 5B = 95B
-        // RWA = 95B * 0.72 + 5B * 0.0 = 68.4B
+        // Earning Assets = 10B + 90B - 5B = 95B, risk-weighted at the H.8 book's density; cash weighs 0%.
+        $density = $this->model->calculateRiskWeightDensity($bank);
         $rwa = $this->model->calculateRiskWeightedAssets($bank);
-        $this->assertEqualsWithDelta(68_400_000_000.0, $rwa, 1.0);
+        $this->assertEqualsWithDelta(95_000_000_000.0 * $density, $rwa, 1.0);
 
-        // CET1 = 10B / 68.4B = ~14.6%
+        // CET1 = 10B / (95B * 0.734) = ~14.3%
         $cet1 = $this->model->calculateCet1Ratio($bank);
-        $this->assertEqualsWithDelta(10.0 / 68.4, $cet1, 0.0001);
+        $this->assertEqualsWithDelta(10.0 / (95.0 * $density), $cet1, 0.0001);
         $this->assertGreaterThan(FinancialConstants::OPENING_BANK_CAPITAL_REQUIREMENT, $cet1);
 
         // Dividend cap for healthy bank is 1.0
         $divCap = $this->model->getRegulatoryDividendCap($bank, 5_000_000_000.0);
         $this->assertSame(1.0, $divCap);
+    }
+
+    /**
+     * Standardized risk weights follow the book (12 CFR 217.32): mortgages at 50%, other loans at 100%, the securities
+     * sleeve at the agency 20%. The H.8 book lands on the insured system's 0.72 of non-cash assets; a mortgage lender
+     * needs less capital per dollar lent and a business lender more.
+     */
+    public function testRiskWeightsFollowTheLoanBook(): void
+    {
+        $lender = static fn (float $residential): CommercialBankBusinessModel => new class ($residential) extends CommercialBankBusinessModel {
+            public function __construct(private readonly float $residential) {}
+
+            protected function resolveLoanBookMix(Stock $stock): array
+            {
+                return ['residential' => $this->residential, 'consumer' => 0.0, 'commercial_real_estate' => 0.0, 'business' => 1.0 - $this->residential];
+            }
+        };
+        $stock = $this->creditTestBank('RWA');
+        $loanShare = 1.0 - FinancialConstants::SECURITIES_SHARE_OF_EARNING_ASSETS;
+        $securities = FinancialConstants::SECURITIES_SHARE_OF_EARNING_ASSETS * CommercialBankBusinessModel::BASEL_RISK_WEIGHT_SECURITIES;
+
+        $this->assertEqualsWithDelta(0.72, $this->model->calculateRiskWeightDensity($stock), 0.02, 'US insured banks, end-2024: $14.90T of RWA on $20.69T of non-cash assets');
+        $this->assertEqualsWithDelta(($loanShare * 0.50) + $securities, $lender(1.0)->calculateRiskWeightDensity($stock), 1e-12);
+        $this->assertEqualsWithDelta($loanShare + $securities, $lender(0.0)->calculateRiskWeightDensity($stock), 1e-12);
+
+        $mortgageCet1 = $lender(0.65)->calculateCet1Ratio($stock);
+        $this->assertGreaterThan($this->model->calculateCet1Ratio($stock), $mortgageCet1, 'the same equity covers a mortgage book with room to spare');
+        $this->assertGreaterThan($lender(0.0)->calculateCet1Ratio($stock) * 1.3, $mortgageCet1);
     }
 
     public function testCapitalConservationBufferHaltsDividends(): void
@@ -529,7 +561,7 @@ class CommercialBankBusinessModelTest extends TestCase
         $bank->setCorporateTreasury('5000000000'); // $5B
 
         // Earning Assets = 5B + 90B - 5B = 90B
-        // CET1 = 5B / (90B * 0.72) = ~7.7% (between the 4.5% minimum and the 9.4% requirement)
+        // CET1 = 5B / (90B * 0.734) = ~7.6% (between the 4.5% minimum and the 9.4% requirement)
         $cet1 = $this->model->calculateCet1Ratio($bank);
         $this->assertGreaterThan(CommercialBankBusinessModel::BASEL_MIN_CET1_RATIO, $cet1);
         $this->assertLessThan(FinancialConstants::OPENING_BANK_CAPITAL_REQUIREMENT, $cet1);
@@ -548,7 +580,7 @@ class CommercialBankBusinessModelTest extends TestCase
         $bank->setWholesaleDebt('10000000000'); // $10B
         $bank->setCorporateTreasury('5000000000'); // $5B
 
-        // CET1 = 7.5B / (92.5B * 0.72) = ~11.3% (> 9.4% requirement, but < 9.4% + 2.0% CCyB = 11.4%)
+        // CET1 = 7.5B / (92.5B * 0.734) = ~11.0% (> 9.4% requirement, but < 9.4% + 2.0% CCyB = 11.4%)
         $cet1 = $this->model->calculateCet1Ratio($bank);
         $this->assertGreaterThan(FinancialConstants::OPENING_BANK_CAPITAL_REQUIREMENT, $cet1);
         $this->assertLessThan(FinancialConstants::OPENING_BANK_CAPITAL_REQUIREMENT + 0.020, $cet1);
@@ -572,9 +604,9 @@ class CommercialBankBusinessModelTest extends TestCase
         $bank->setWholesaleDebt('10000000000');
         $bank->setCorporateTreasury('5000000000');
 
-        // CET1 = 7B / (92B * 0.72) = ~10.6%: inside a light requirement, short of a strict one.
+        // CET1 = 7B / (92B * 0.734) = ~10.4%: inside a light requirement, short of a strict one.
         $cet1 = $this->model->calculateCet1Ratio($bank);
-        $this->assertEqualsWithDelta(7.0 / (92.0 * 0.72), $cet1, 1e-9);
+        $this->assertEqualsWithDelta(7.0 / (92.0 * $this->model->calculateRiskWeightDensity($bank)), $cet1, 1e-9);
 
         $light = new MacroStateDTO(bankCapitalRequirement: 0.0843);
         $strict = new MacroStateDTO(bankCapitalRequirement: 0.1315);
@@ -618,7 +650,7 @@ class CommercialBankBusinessModelTest extends TestCase
         $this->assertLessThan(0.7, $density, 'Lakebird runs at about the insured system\'s 64% density');
     }
 
-    public function testInsolventBankTriggersBankSeizureShockEvent(): void
+    public function testABankBelowTheCapitalMinimumIsFlagged(): void
     {
         $bank = new Stock();
         $bank->setTicker('INSOLVENT_BANK');
@@ -629,7 +661,7 @@ class CommercialBankBusinessModelTest extends TestCase
         $bank->setCorporateTreasury('5000000000'); // $5B
 
         // Earning Assets = 2B + 90B - 5B = 87B
-        // CET1 = 2B / (87B * 0.72) = ~3.19% (< 4.5% Pillar 1 minimum)
+        // CET1 = 2B / (87B * 0.734) = ~3.1% (< 4.5% Pillar 1 minimum)
         $cet1 = $this->model->calculateCet1Ratio($bank);
         $this->assertLessThan(CommercialBankBusinessModel::BASEL_MIN_CET1_RATIO, $cet1);
 
@@ -652,7 +684,7 @@ class CommercialBankBusinessModelTest extends TestCase
             mathUtility: $mathMock
         );
 
-        $this->assertSame(ShockEvent::BANK_SEIZURE, $result->eventType);
+        $this->assertSame(ShockEvent::CAPITAL_BELOW_MINIMUM, $result->eventType);
     }
 
     public function testSloosCreditTighteningDampensLoanOrigination(): void
@@ -887,7 +919,7 @@ class CommercialBankBusinessModelTest extends TestCase
         $stock->setEarningAssets('45000000000');
         $stock->setCreditLossAllowance('900000000');
         $this->assertEqualsWithDelta(44_100_000_000.0, $this->model->resolveEarningAssets($stock), 1.0);
-        $this->assertEqualsWithDelta(44_100_000_000.0 * CommercialBankBusinessModel::BASEL_RISK_WEIGHT_EARNING_ASSETS, $this->model->calculateRiskWeightedAssets($stock), 1.0, 'risk weights apply to the book, not the proxy');
+        $this->assertEqualsWithDelta(44_100_000_000.0 * $this->model->calculateRiskWeightDensity($stock), $this->model->calculateRiskWeightedAssets($stock), 1.0, 'risk weights apply to the book, not the proxy');
 
         $macro = new MacroStateDTO(outputGapEma: 0.0, policyRateEma: 0.04, yield2yEma: 0.04, yield10yEma: 0.045, macroCreditSpreadEma: 0.02);
         $result = $this->model->computeActualFinancials($stock, expectedRevenue: 1_000_000_000.0, realizedVariableMargin: 0.50, fixedCosts: 200_000_000.0, baselineVol: 0.10, macroState: $macro, mathUtility: $this->mathUtility);

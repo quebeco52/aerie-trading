@@ -28,4 +28,21 @@ class EtfEventRepository extends ServiceEntityRepository
     {
         return $this->findBy(['etf' => $etf], ['recordedAt' => 'DESC'], $limit);
     }
+
+    /**
+     * The newest announcements across every fund, newest first, with each event's fund loaded in the same query.
+     *
+     * @return list<EtfEvent>
+     */
+    public function findLatest(int $limit): array
+    {
+        return $this->createQueryBuilder('e')
+            ->addSelect('f')
+            ->join('e.etf', 'f')
+            ->orderBy('e.recordedAt', 'DESC')
+            ->addOrderBy('e.id', 'DESC')
+            ->setMaxResults($limit)
+            ->getQuery()
+            ->getResult();
+    }
 }

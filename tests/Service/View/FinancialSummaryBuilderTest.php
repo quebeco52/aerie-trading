@@ -8,6 +8,7 @@ use App\Entity\CorporateReport;
 use App\Entity\Stock;
 use App\Repository\CorporateReportRepository;
 use App\Service\View\FinancialSummaryBuilder;
+use App\Service\Math\FinancialConstants;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -29,9 +30,11 @@ class FinancialSummaryBuilderTest extends TestCase
 
         $tiles = $this->tiles($this->stock('Banks - Diversified'), $report);
 
-        $this->assertSame(['Net interest margin', 'CET1 ratio', 'Reserve / book', 'Net charge-off rate', 'ROE'], array_column($tiles, 'label'));
-        $this->assertEqualsWithDelta(0.015, $tiles[2]['value'], 1e-12, 'allowance over the book');
-        $this->assertEqualsWithDelta(0.01, $tiles[3]['value'], 1e-12, 'a quarter of charge-offs, annualized over the book');
+        $loans = 800_000_000_000.0 * (1.0 - FinancialConstants::SECURITIES_SHARE_OF_EARNING_ASSETS);
+
+        $this->assertSame(['Net interest margin', 'CET1 ratio', 'Reserve / loans', 'Net charge-off rate', 'ROE'], array_column($tiles, 'label'));
+        $this->assertEqualsWithDelta(12_000_000_000.0 / $loans, $tiles[2]['value'], 1e-12, 'a bank quotes its allowance on loans, not on its securities');
+        $this->assertEqualsWithDelta(8_000_000_000.0 / $loans, $tiles[3]['value'], 1e-12, 'a quarter of charge-offs, annualized over loans');
     }
 
     public function testAnInsurerIsReadOnItsCombinedRatio(): void

@@ -62,6 +62,7 @@ final class PagesRenderTest extends KernelTestCase
                 ['username' => 'marlowe', 'total_value' => 1402113.50, 'cash_balance' => 30211.0, 'stock_value' => 1300000.0, 'etf_value' => 71902.5],
                 ['username' => 'ptarmigan', 'total_value' => 1210990.00, 'cash_balance' => 410990.0, 'stock_value' => 800000.0, 'etf_value' => 0.0],
             ]]],
+            'news' => ['/news', 'news/index.html.twig', self::newswire()],
             'login' => ['/login', 'security/login.html.twig', ['error' => null, 'last_username' => '']],
             'economy' => ['/economy', 'economy/index.html.twig', ['economic_cycle' => 'Expansion', 'macro' => ['inflation' => 0.0241, 'outputGap' => 0.0132, 'policyRate' => 0.0425, 'yield10y' => 0.0461, 'qeActive' => false, 'qeIntensity' => 0.0]]],
             'stock' => ['/stock/LAKE', 'stock/index.html.twig', [
@@ -112,5 +113,28 @@ final class PagesRenderTest extends KernelTestCase
             $stack->pop();
             $this->assertFileExists(OfflinePage::write($name, $html));
         }
+    }
+
+    /** A newswire page from the presenter, so each card is the one the page renders live. */
+    private static function newswire(): array
+    {
+        $presenter = new \App\Service\Event\EventPresenter();
+        $stories = [
+            ['GOVERNMENT', 'budget_enacted', null, null, 'The Diet passed the Civic-Vanguard budget: corporate tax at 21.0%, tariffs at 2.5%.', -0.8, true],
+            ['EARNINGS', null, 'HUMM', 'Hummock Foods', 'Q-Earnings: $1.42 (Beat expectations by $0.11 | +$1.20B EVA).', 6.4, true],
+            ['SHOCK', null, 'ORRA', 'Orra Biosciences', 'Orra Biosciences shares drop 13.2% in a sudden move.', -13.2, true],
+            ['INDEX', null, 'LBI', 'Skein Lakebird 30', 'Admitted: HUMM. Dropped: KITE.', 0.0, false],
+            ['CREDIT_DOWNGRADE', null, 'KITE', 'Kite Freight', '[CREDIT DOWNGRADE] KITE: Credit rating downgraded from BBB to BB due to deteriorating credit profile.', -3.0, true],
+            ['ECONOMY', 'banking_crisis', null, null, 'Interbank lending has frozen: the overnight spread stands at 310 basis points.', -7.1, true],
+            ['MANAGEMENT CHANGE', null, 'LAKE', 'Lakebird Bank', 'Lakebird Bank named a new chief executive after 6.1 years.', 0.0, false],
+        ];
+
+        $items = [];
+        foreach ($stories as $i => [$type, $topic, $ticker, $name, $description, $change, $headline]) {
+            $card = $presenter->present(['type' => $type, 'topic' => $topic, 'description' => $description, 'change_percent' => $change, 'recorded_at' => sprintf('2026-10-06 14:%02d', 50 - 7 * $i), 'sim_time' => 13.71 - 0.013 * $i]);
+            $items[] = ['card' => $card, 'ticker' => $ticker, 'name' => $name, 'headline' => $headline];
+        }
+
+        return ['section' => 'all', 'sections' => \App\Service\Event\NewsDesk::SECTIONS, 'items' => $items];
     }
 }

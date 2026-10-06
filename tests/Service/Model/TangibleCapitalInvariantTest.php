@@ -103,6 +103,7 @@ class TangibleCapitalInvariantTest extends TestCase
         $model = new \App\Service\Model\Sector\CommercialBankBusinessModel();
         $bank = static function (float $equity, float $goodwill): Stock {
             $stock = new Stock();
+            $stock->setTicker('GDWL');
             $stock->setIndustry('Banks - Diversified');
             $stock->setAociFiltered(false);
             $stock->setTotalEquity((string) $equity);
