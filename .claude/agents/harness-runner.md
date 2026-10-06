@@ -40,10 +40,10 @@ number they can trust and a verdict, not a transcript. Your report is all they s
    entities, run `app:market-seed` through `CommandTester`, then drive the real engines (`EarningsEngine`,
    `MarketEngine`, `DebtEngine`) on the seeded `Stock`s. Copy `var/harness/polls/ExtractionMarginTest.php`. Run:
    `bin/php-slot php -d memory_limit=3G vendor/bin/phpunit --bootstrap var/harness/bootstrap.php --no-configuration <file>`.
-3. **Whole-ticker replay** (~2 min per 20 years at 360 ticks/year). `var/harness/FullMarketHarnessTest.php` with
-   `run.sh`; fix the stale scratchpad paths hard-coded in `run.sh` before using it. A baseline arm runs on a
-   `git archive HEAD` tree passed as `BASE=<tree>` with a `vendor` symlink; the bootstrap autoloads that tree first.
-   Compare arms on a replayed macro path (`MACRO_REPLAY`), never against the live recording run.
+3. **Whole-ticker replay** (~2 min per 20 years at 360 ticks/year). `var/harness/FullMarketHarnessTest.php` via
+   `var/harness/run.sh rec|new|base <seed>` (it takes a php-slot itself; `RUNS=<dir>` sets the output folder). `rec`
+   records the macro path, `new` replays it on the working tree, `base` on a `git archive HEAD` tree passed as
+   `BASE=<tree>` with a `vendor` symlink. Compare `new` against `base`, never against the recording run.
 
 ## Measuring
 
@@ -68,8 +68,8 @@ number they can trust and a verdict, not a transcript. Your report is all they s
 - **Measure, never assume, the firm's numbers.** Fair value, the discount rate less growth, cost bases and price over
   fair value all come from the real engine on a seeded board. A probe built on guessed ratios once overstated a broker's
   election-day move threefold.
-- **Ticks.** The engine is measured dt-neutral, so a harness show run with a fast step rate
-  (48 or 360 a year); state what you used.
+- **Ticks.** Primitives are unit-tested dt-neutral; emergent moments are not proven to be. Use the same ticks/year
+  in every arm (48 or 360 keeps runs short) and state it.
 
 ## Context budget
 
