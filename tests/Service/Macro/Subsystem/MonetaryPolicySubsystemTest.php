@@ -1187,18 +1187,12 @@ class MonetaryPolicySubsystemTest extends TestCase
         return $state;
     }
 
-    /** Drechsler, Savov & Schnabl (2017): the deposit beta rises with the level of rates and vanishes at the lower bound. */
-    public function testTheSystemDepositBetaRisesWithTheLevelOfRates(): void
+    /** Drechsler, Savov & Schnabl (2017): deposits pass 0.46 of the policy rate through at every level, so the spread banks keep scales with the rate. */
+    public function testTheSystemPassesTheSameShareOfTheRateThroughAtEveryLevel(): void
     {
-        $neutral = $this->settledDepositChannel(MacroEngine::BASE_NATURAL_RATE + MacroEngine::TARGET_INFLATION);
-        $tight = $this->settledDepositChannel(0.05);
-        $floor = $this->settledDepositChannel(0.0);
-
-        $this->assertEqualsWithDelta(MacroEngine::SYSTEM_DEPOSIT_BETA_BASE, $neutral->systemDepositBeta, 0.01, 'At the neutral rate the system beta is the level the bank model is normalised to.');
-        $expectedTight = MacroEngine::SYSTEM_DEPOSIT_BETA_BASE + MacroEngine::DEPOSIT_BETA_RATE_SENSITIVITY * (0.05 - (MacroEngine::BASE_NATURAL_RATE + MacroEngine::TARGET_INFLATION));
-        $this->assertEqualsWithDelta($expectedTight, $tight->systemDepositBeta, 0.01, 'A 5% policy rate passes a good deal more through: the beta rises with the level.');
-        $this->assertGreaterThan(0.25, $tight->systemDepositBeta);
-        $this->assertEqualsWithDelta(MacroEngine::DEPOSIT_BETA_FLOOR, $floor->systemDepositBeta, 0.01, 'At the lower bound there is nothing to pass through.');
+        foreach ([0.0, MacroEngine::BASE_NATURAL_RATE + MacroEngine::TARGET_INFLATION, 0.05] as $policyRate) {
+            $this->assertEqualsWithDelta(0.46, $this->settledDepositChannel($policyRate)->systemDepositBeta, 1e-12);
+        }
     }
 
     public function testMoneyFundsGainShareOnlyWhenTheDepositSpreadOpens(): void
@@ -1211,16 +1205,6 @@ class MonetaryPolicySubsystemTest extends TestCase
         $this->assertGreaterThan($neutral->moneyMarketFundShare + 0.03, $tight->moneyMarketFundShare, 'A wide deposit spread pulls several points of liquid assets into money funds.');
         $this->assertLessThan($neutral->moneyMarketFundShare, $floor->moneyMarketFundShare, 'and a decade at the lower bound sends them back.');
         $this->assertGreaterThanOrEqual(MonetaryPolicySubsystem::MIN_MMF_SHARE, $floor->moneyMarketFundShare);
-    }
-
-    public function testDepositsRepriceOverQuartersNotTicks(): void
-    {
-        $state = new MacroState();
-        $state->policyRateEma = 0.05;
-        $this->subsystem->calculateDepositChannel($state, 1.0 / 252.0);
-
-        $this->assertGreaterThan(MacroEngine::SYSTEM_DEPOSIT_BETA_BASE, $state->systemDepositBeta);
-        $this->assertLessThan(MacroEngine::SYSTEM_DEPOSIT_BETA_BASE + 0.002, $state->systemDepositBeta, 'One trading day moves the system beta by a fraction of a point.');
     }
 
     /**

@@ -365,7 +365,9 @@ class CommercialBankBusinessModelTest extends TestCase
      */
     public function testAParallelPointReachesInterestYieldAtTheBooksRepricingSpeed(): void
     {
+        // The US funding mix: deposits ~80% of assets and wholesale ~10%, the wholesale short-term and repricing in full.
         $stock = $this->creditTestBank('NEUTRAL');
+        $stock->setFloatingDebtRatio('1.0');
         $this->carryBook($this->model, $stock, new MacroStateDTO(), 1);
         $before = $this->model->resolveInterestYield($stock, new MacroStateDTO());
 
@@ -929,14 +931,57 @@ class CommercialBankBusinessModelTest extends TestCase
         $stock->setFloatingDebtRatio('0.0');
 
         $neutralSystem = MacroStateDTO::fromArray(['system_deposit_beta_ema' => MacroEngine::SYSTEM_DEPOSIT_BETA_BASE]);
-        $tightSystem = MacroStateDTO::fromArray(['system_deposit_beta_ema' => 2.0 * MacroEngine::SYSTEM_DEPOSIT_BETA_BASE]);
+        $tightSystem = MacroStateDTO::fromArray(['system_deposit_beta_ema' => 1.5 * MacroEngine::SYSTEM_DEPOSIT_BETA_BASE]);
 
         $withoutMacro = $this->model->calculateInterestExpenseAndWholesaleRate($stock, 0.05, 0.05, 0.05, 0.05, 15.0, 100.0, 1000.0);
         $neutral = $this->model->calculateInterestExpenseAndWholesaleRate($stock, 0.05, 0.05, 0.05, 0.05, 15.0, 100.0, 1000.0, $neutralSystem);
         $tight = $this->model->calculateInterestExpenseAndWholesaleRate($stock, 0.05, 0.05, 0.05, 0.05, 15.0, 100.0, 1000.0, $tightSystem);
 
         $this->assertEqualsWithDelta($withoutMacro->interestExpense, $neutral->interestExpense, 1e-9, 'At the normalisation level the system scale is one, so a caller without a macro reading gets the same answer.');
-        $this->assertEqualsWithDelta(2.0 * $neutral->interestExpense, $tight->interestExpense, 1e-9, 'A system passing twice as much through doubles the deposit interest on the same franchise.');
+        $this->assertEqualsWithDelta(1.5 * $neutral->interestExpense, $tight->interestExpense, 1e-9, 'A system passing half as much again through raises by half the deposit interest on the same franchise.');
+    }
+
+    /**
+     * Deposits reprice toward 0.46 of the policy rate over three quarters (Drechsler, Savov & Schnabl 2017, 2021): a
+     * point on the policy rate lifts what the bank pays by 1 - exp(-0.25/0.75) of 46bp in the first quarter, and by
+     * the whole 46bp once the deposits have repriced.
+     */
+    public function testDepositsRepriceTowardTheLongRunPassThroughOverQuarters(): void
+    {
+        $stock = $this->creditTestBank('LAKE');
+        $opening = new MacroStateDTO();
+        $raised = new MacroStateDTO(policyRateEma: $opening->policyRateEma + 0.01);
+        $paid = fn (): float => $this->model->calculateInterestExpenseAndWholesaleRate($stock, 0.0, 0.0, 0.0, $raised->policyRateEma, 15.0, 10e9, 90e9, $raised)->interestExpense;
+        $stock->setWholesaleDebt('0');
+
+        $this->carryBook($this->model, $stock, $opening, 1);
+        $before = $paid();
+        $this->carryBook($this->model, $stock, $raised, 1);
+        $this->assertEqualsWithDelta(80e9 * 0.0046 * (1.0 - exp(-0.25 / 0.75)), $paid() - $before, 1e3);
+
+        $this->carryBook($this->model, $stock, $raised, 80);
+        $this->assertEqualsWithDelta(80e9 * 0.0046, $paid() - $before, 1e3);
+    }
+
+    /** The cash beside the book earns its own interest below the line, so the franchise's revenue target leaves it out. */
+    public function testTheFranchiseCalibrationCountsTheCashBesideTheBook(): void
+    {
+        $calibration = static fn (CommercialBankBusinessModel $model, Stock $stock): float => (new \ReflectionMethod($model, 'resolveCalibrationYield'))->invoke($model, $stock, new MacroStateDTO());
+        $cashless = new class extends CommercialBankBusinessModel {
+            protected function resolveTreasuryIncome(Stock $stock, MacroStateDTO $macroState): float
+            {
+                return 0.0;
+            }
+        };
+        $stock = $this->creditTestBank('LAKE');
+        $treasuryIncome = (5e9 - (10e9 * CommercialBankBusinessModel::INTEREST_INCOME_CASH_BUFFER)) * $this->model->calculateCashYield(new MacroStateDTO());
+
+        $this->assertGreaterThan(0.0, $treasuryIncome);
+        $this->assertEqualsWithDelta(
+            $treasuryIncome,
+            ($calibration($cashless, $stock) - $calibration($this->model, $stock)) * $this->model->resolveEarningAssets($stock),
+            1e3
+        );
     }
 
     /**

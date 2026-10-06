@@ -799,10 +799,9 @@ class MonetaryPolicySubsystem
 
     /**
      * The deposits channel (Drechsler, Savov & Schnabl 2017): banks' market power over deposits means the
-     * deposit rate follows the policy rate only in part, and the part grows with the level of rates. The
-     * spread that opens is what money-market funds compete on, so household liquid assets migrate toward
-     * them as rates rise and drift back at the lower bound. Both move slowly: deposits reprice over a few
-     * quarters and households reallocate over about a year.
+     * deposit rate follows the policy rate only in part, so the spread they keep scales with the rate. That
+     * spread is what money-market funds compete on, so household liquid assets migrate toward them as rates
+     * rise and drift back at the lower bound, over about a year.
      *
      * @param MacroState $state Current macroeconomic state.
      * @param float      $dt    Time increment in years.
@@ -812,12 +811,7 @@ class MonetaryPolicySubsystem
         $policyRate = max(0.0, $state->policyRateEma);
         $neutralRate = MacroEngine::BASE_NATURAL_RATE + MacroEngine::TARGET_INFLATION;
 
-        $state->systemDepositBeta = $this->mathUtility->calculateDistributedLag(
-            currentLaggedValue: $state->systemDepositBeta,
-            targetValue: MathUtility::calculateSystemDepositBetaTarget($policyRate),
-            dt: $dt,
-            lagTimeConstant: MacroEngine::DEPOSIT_REPRICING_YEARS
-        );
+        $state->systemDepositBeta = MacroEngine::SYSTEM_DEPOSIT_BETA_BASE;
 
         $depositSpread = $policyRate * (1.0 - $state->systemDepositBeta);
         $neutralSpread = $neutralRate * (1.0 - MacroEngine::SYSTEM_DEPOSIT_BETA_BASE);

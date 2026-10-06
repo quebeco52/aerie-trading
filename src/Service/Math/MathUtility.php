@@ -3186,19 +3186,6 @@ class MathUtility
     }
 
     /**
-     * The deposit beta the banking system converges to at a policy rate (Drechsler, Savov & Schnabl 2017): imperfect
-     * pass-through that rises with the level of rates, paid at the base beta at the neutral nominal rate and held
-     * between the lower-bound floor and the ceiling.
-     */
-    public static function calculateSystemDepositBetaTarget(float $policyRate): float
-    {
-        $neutralRate = MacroEngine::BASE_NATURAL_RATE + MacroEngine::TARGET_INFLATION;
-
-        return max(MacroEngine::DEPOSIT_BETA_FLOOR, min(MacroEngine::MAX_SYSTEM_DEPOSIT_BETA,
-            MacroEngine::SYSTEM_DEPOSIT_BETA_BASE + (MacroEngine::DEPOSIT_BETA_RATE_SENSITIVITY * (max(0.0, $policyRate) - $neutralRate))));
-    }
-
-    /**
      * Calculates broad liquidity expansion/contraction shifts from M2 money supply growth (Friedman-Schwartz).
      *
      * Evaluates systemic financial liquidity driving deposit growth, AUM fund inflows, and retail market participation.

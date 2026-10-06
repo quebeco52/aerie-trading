@@ -266,10 +266,15 @@ final class BusinessModelMacroFieldDeclarationTest extends TestCase
         // Helpers invoked on $this resolve late-bound against the concrete class.
         if (preg_match_all('/\$this->([a-zA-Z0-9_]+)\(/', $body, $helpers) > 0) {
             foreach (array_unique($helpers[1]) as $helper) {
-                if ($helper === $method || !method_exists($concreteClass, $helper)) {
+                if ($helper === $method) {
                     continue;
                 }
-                $helperOwner = (new ReflectionMethod($concreteClass, $helper))->getDeclaringClass()->getName();
+                // A private helper of an ancestor is invisible on the concrete class: it resolves where it is called.
+                $resolver = method_exists($concreteClass, $helper) ? $concreteClass : $ownerClass;
+                if (!method_exists($resolver, $helper)) {
+                    continue;
+                }
+                $helperOwner = (new ReflectionMethod($resolver, $helper))->getDeclaringClass()->getName();
                 $this->walk($concreteClass, $helperOwner, $helper, $fields, $visited);
             }
         }
