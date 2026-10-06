@@ -121,12 +121,14 @@ class GovernmentPolicyTest extends TestCase
             extractionStringency: 0.0,
             stampDutyRate: FinancialConstants::STAMP_DUTY_RATE,
             bankLevyRate: 0.0005,
+            reserveDrawShare: 0.55,
             electionPulse: 0.0,
             expectedLevers: $levers,
             expectedPolicyFrom: $from,
         );
 
         $this->enactPolicyDto($state, $forecast(null, null));
+        $this->assertSame(0.55, $state->reserveDrawShare, 'The share of the fund\'s return spent goes in as passed.');
         $this->assertSame([], $state->expectedLevers);
         $this->assertSame(-1.0, $state->expectedPolicyFrom);
 
@@ -181,6 +183,7 @@ class GovernmentPolicyTest extends TestCase
             extractionStringency: 0.0,
             stampDutyRate: FinancialConstants::STAMP_DUTY_RATE,
             bankLevyRate: 0.0,
+            reserveDrawShare: MacroEngine::RESERVE_DRAW_CEILING,
             electionPulse: 0.0,
             authorityConcession: $concession,
         );
@@ -224,6 +227,7 @@ class GovernmentPolicyTest extends TestCase
             extractionStringency: 0.0,
             stampDutyRate: FinancialConstants::STAMP_DUTY_RATE,
             bankLevyRate: 0.0,
+            reserveDrawShare: MacroEngine::RESERVE_DRAW_CEILING,
             electionPulse: $pulse,
         )]);
     }

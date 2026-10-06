@@ -635,5 +635,16 @@ class CommodityLogisticsSubsystemTest extends TestCase
         $this->assertEqualsWithDelta($adder, CommodityLogisticsSubsystem::carbonPowerPriceAdder(70.37), 1e-12);
         $this->assertEqualsWithDelta(MacroEngine::WHOLESALE_POWER_BASELINE * $adder / CommodityLogisticsSubsystem::REFERENCE_POWER_PRICE, $priced->wholesalePowerPriceIndex - $free->wholesalePowerPriceIndex, 1e-9);
         $this->assertSame(0.0, CommodityLogisticsSubsystem::carbonPowerPriceAdder(0.0));
+        $this->assertEqualsWithDelta(($priced->wholesalePowerPriceIndex - $free->wholesalePowerPriceIndex) / MacroEngine::WHOLESALE_POWER_BASELINE, CommodityLogisticsSubsystem::carbonPowerPriceUplift(70.37), 1e-9, 'The uplift is the carbon part of the power index\'s move off its baseline.');
+    }
+
+    /** A state from before the carbon lag has its earnings already carrying the carbon price in force. */
+    public function testAStateFromBeforeTheLagCarriesTheCarbonPriceInForce(): void
+    {
+        $payload = (new MacroState())->toArray();
+        $payload['carbon_price'] = 40.0;
+        unset($payload['carbon_power_uplift_embodied']);
+
+        $this->assertSame(CommodityLogisticsSubsystem::carbonPowerPriceUplift(40.0), MacroState::fromArray($payload)->carbonPowerUpliftEmbodied);
     }
 }

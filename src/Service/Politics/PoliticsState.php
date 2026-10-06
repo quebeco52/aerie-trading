@@ -77,6 +77,7 @@ class PoliticsState
     public float $extractionStringency;
     public float $stampDutyRate;
     public float $bankLevyRate;
+    public float $reserveDrawShare;
     public float $lastBudgetEnactedAt;
     public float $lastCouncilBrakeAt;
 

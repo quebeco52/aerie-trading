@@ -80,6 +80,8 @@ readonly class PoliticsStateDTO
         public float $stampDutyRate = FinancialConstants::STAMP_DUTY_RATE,
         /** Bank levy on short-term funding, a year (half that on long-term funding). */
         public float $bankLevyRate = 0.0,
+        /** Share of the reserve fund's expected long-term real return the budget spends. */
+        public float $reserveDrawShare = MacroEngine::RESERVE_DRAW_CEILING,
         public float $lastBudgetEnactedAt = -1.0,
         public float $lastCouncilBrakeAt = -1.0,
         /** Salt the Council's hashed draws are taken from, drawn once when it forms (-1: not yet formed; App\Service\Politics\CouncilAppointments). */
@@ -257,6 +259,7 @@ readonly class PoliticsStateDTO
             extractionStringency: $this->extractionStringency,
             stampDutyRate: $this->stampDutyRate,
             bankLevyRate: $this->bankLevyRate,
+            reserveDrawShare: $this->reserveDrawShare,
             electionPulse: PoliticsEngine::electionPulse($this->totalTime, $this->lastElectionAt, $this->coalitionTakesOfficeAt),
             authorityMajority: $this->authoritySalt < 0.0 ? null : $this->committeeMajority,
             bankCapitalRequirement: $this->regulatorName === '' ? null : $this->bankCapitalRequirement,

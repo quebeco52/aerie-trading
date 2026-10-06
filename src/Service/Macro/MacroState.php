@@ -4,6 +4,7 @@ namespace App\Service\Macro;
 
 use App\Data\MacroFieldRegistry;
 use App\Service\Macro\Subsystem\AssetMarketSubsystem;
+use App\Service\Macro\Subsystem\CommodityLogisticsSubsystem;
 use App\Service\Macro\Subsystem\MacroAggregateSubsystem;
 use App\Service\Math\MathUtility;
 
@@ -33,6 +34,9 @@ class MacroState
 
     public float $unemploymentRate;
     public float $unemploymentRateEma;
+    /** @var list<float> */
+    public array $unemploymentMonthly;
+    public float $sahmRecessionIndicator;
     public float $jobVacanciesRate;
     public float $jobVacanciesRateEma;
     public float $laborTightness;
@@ -381,6 +385,7 @@ class MacroState
     public float $extractionStringency;
     public float $stampDutyRate;
     public float $bankLevyRate;
+    public float $reserveDrawShare;
     // The Monetary Authority's rate committee: its supermajority, and whether politics hands one over at all.
     public float $authorityMajority;
     public float $authorityCommitteeSeated;
@@ -395,6 +400,7 @@ class MacroState
     public float $bankLevyEmbodied;
     public float $extractionCostFactorEmbodied;
     public float $stampDutyVolumeFactorEmbodied;
+    public float $carbonPowerUpliftEmbodied;
     /** @var array<string, float> */
     public array $sittingLevers;
     public float $sittingPolicyFrom;
@@ -429,6 +435,7 @@ class MacroState
     // Flows: this budget year's draw (currency per year), the rebalance still to trade, its pace, the months left
     // on it, its size against the board's float, this tick's trade, and when the last programme started.
     public float $sovereignFundAnnualDraw;
+    public float $sovereignFundDrawShare;
     public float $sovereignFundRebalanceBacklog;
     public float $sovereignFundRebalanceRate;
     public float $sovereignFundRebalanceMonthsLeft;
@@ -522,6 +529,7 @@ class MacroState
             $carried[$field] = true;
             $state->$field = match ($field) {
                 'sectorZ', 'sectorDemandZ', 'sittingLevers', 'previousSittingLevers', 'expectedLevers', 'previousExpectedLevers' => is_array($data[$key]) ? array_map('floatval', $data[$key]) : [],
+                'unemploymentMonthly' => is_array($data[$key]) ? array_values(array_map('floatval', $data[$key])) : [],
                 'qeActive', 'qtActive' => (bool) $data[$key],
                 'eventType' => (string) $data[$key],
                 default => (float) $data[$key],
@@ -544,6 +552,9 @@ class MacroState
         }
         if (!isset($carried['stampDutyVolumeFactorEmbodied'])) {
             $state->stampDutyVolumeFactorEmbodied = MathUtility::calculateStampDutyVolumeFactor($state->stampDutyRate);
+        }
+        if (!isset($carried['carbonPowerUpliftEmbodied'])) {
+            $state->carbonPowerUpliftEmbodied = CommodityLogisticsSubsystem::carbonPowerPriceUplift($state->carbonPrice);
         }
         if (!isset($carried['balanceSheetIntensity'])) {
             // Balance sheet intensity was recorded as a one-sided qe_intensity before QT existed.

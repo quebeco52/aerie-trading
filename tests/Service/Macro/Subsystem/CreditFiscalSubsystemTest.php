@@ -5,6 +5,7 @@ namespace App\Tests\Service\Macro\Subsystem;
 use App\Service\Macro\MacroEngine;
 use App\Service\Macro\MacroState;
 use App\Service\Macro\Subsystem\AssetMarketSubsystem;
+use App\Service\Macro\Subsystem\CommodityLogisticsSubsystem;
 use App\Service\Macro\Subsystem\CreditFiscalSubsystem;
 use App\Service\Macro\Subsystem\MacroAggregateSubsystem;
 use App\Service\Math\FinancialConstants;
@@ -1872,7 +1873,7 @@ class CreditFiscalSubsystemTest extends TestCase
         $this->assertTrue(is_finite($unfunded->primaryDeficitToGdp), 'With no fund there is no scale, and nothing is booked.');
     }
 
-    /** The tax rate takes in a legislated shift at its own speed, and the trailing year's earnings carry it half a year later on average; a levy, the rules on extraction and the stamp duty reach them the same way. */
+    /** The tax rate takes in a legislated shift at its own speed, and the trailing year's earnings carry it half a year later on average; a levy, the rules on extraction, the stamp duty and the carbon price reach them the same way. */
     public function testTheEarningsCarryTheLawsAfterTheRateDoes(): void
     {
         $state = new MacroState();
@@ -1880,6 +1881,7 @@ class CreditFiscalSubsystemTest extends TestCase
         $state->bankLevyRate = 0.002;
         $state->extractionStringency = 1.0;
         $state->stampDutyRate = 0.002;
+        $state->carbonPrice = 40.0;
         $fiscal = new CreditFiscalSubsystem(new MathUtility());
         $rate = $state->corporateTaxRate;
         $dt = 1.0 / 252.0;
@@ -1895,5 +1897,6 @@ class CreditFiscalSubsystemTest extends TestCase
         $this->assertEqualsWithDelta(0.002 * $carried, $state->bankLevyEmbodied, 2e-5);
         $this->assertEqualsWithDelta(1.0 + ((MathUtility::calculateExtractionCostFactor(1.0) - 1.0) * $carried), $state->extractionCostFactorEmbodied, 1e-2 * (MathUtility::calculateExtractionCostFactor(1.0) - 1.0));
         $this->assertEqualsWithDelta(1.0 + ((MathUtility::calculateStampDutyVolumeFactor(0.002) - 1.0) * $carried), $state->stampDutyVolumeFactorEmbodied, 1e-2 * (1.0 - MathUtility::calculateStampDutyVolumeFactor(0.002)));
+        $this->assertEqualsWithDelta(CommodityLogisticsSubsystem::carbonPowerPriceUplift(40.0) * $carried, $state->carbonPowerUpliftEmbodied, 1e-2 * CommodityLogisticsSubsystem::carbonPowerPriceUplift(40.0));
     }
 }

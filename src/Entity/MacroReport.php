@@ -541,6 +541,10 @@ class MacroReport
     #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 6, nullable: true)]
     private ?string $bankLevyRate = null;
 
+    // Share of the reserve fund's expected long-term real return the budget spends.
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 6, nullable: true)]
+    private ?string $reserveDrawShare = null;
+
     // The rate committee's supermajority: 1 hawkish, -1 dovish, 0 neither.
     #[ORM\Column(type: Types::DECIMAL, precision: 3, scale: 0, nullable: true)]
     private ?string $authorityMajority = null;

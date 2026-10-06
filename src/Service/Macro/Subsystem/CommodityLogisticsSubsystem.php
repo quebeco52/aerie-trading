@@ -383,7 +383,7 @@ class CommodityLogisticsSubsystem
         $gasRelative = max(0.01, $state->naturalGasPriceIndex / MacroEngine::NATURAL_GAS_BASELINE);
         $spot = MacroEngine::WHOLESALE_POWER_BASELINE * ($gasRelative ** self::POWER_GAS_ELASTICITY)
             * exp($state->powerHeatRateLog) * self::resolvePowerSeasonalFactor($state->totalTime);
-        $carbon = MacroEngine::WHOLESALE_POWER_BASELINE * self::carbonPowerPriceAdder($state->carbonPrice) / self::REFERENCE_POWER_PRICE;
+        $carbon = MacroEngine::WHOLESALE_POWER_BASELINE * self::carbonPowerPriceUplift($state->carbonPrice);
         $state->wholesalePowerPriceIndex = max(5.0, min(800.0, $spot + $carbon));
     }
 
@@ -396,6 +396,17 @@ class CommodityLogisticsSubsystem
     public static function carbonPowerPriceAdder(float $carbonPrice): float
     {
         return self::CARBON_POWER_PASS_THROUGH * self::NATURAL_GAS_CO2_TONNES_PER_MMBTU * self::GAS_FLEET_HEAT_RATE * $carbonPrice;
+    }
+
+    /**
+     * What a carbon price adds to wholesale power, as a share of the power price at the index baseline: the part of the
+     * power index's move off its baseline the carbon price makes.
+     *
+     * @param float $carbonPrice Dollars a tonne of CO2.
+     */
+    public static function carbonPowerPriceUplift(float $carbonPrice): float
+    {
+        return self::carbonPowerPriceAdder($carbonPrice) / self::REFERENCE_POWER_PRICE;
     }
 
     /** The load-season multiplier on wholesale power at a point in simulated time (years); it averages one over the year. */

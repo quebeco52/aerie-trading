@@ -291,7 +291,7 @@
 					{% else %}
 						Traders' odds on the government the vote of {{ market.vote }} will seat, read from the polls, and the laws they expect at its first budget, {{ market.takesEffect }}.
 					{% endif %}
-					Share prices carry them: a firm is valued on the taxes it expects to pay, a bank on the levy it expects to owe, a miner or driller on the extraction rules it expects to work under, and a broker on the trading the stamp duty will leave it, not only on what each pays today.
+					Share prices carry them: a firm is valued on the taxes it expects to pay, a bank on the levy it expects to owe, a miner or driller on the extraction rules it expects to work under, a broker on the trading the stamp duty will leave it, and a power producer on what the carbon price will add to the price of power, not only on what each pays or earns today.
 				</p>
 				<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-4">
 					<div>
@@ -385,6 +385,9 @@
 									{% elseif lever.status == 'held' %}
 										<span class="font-semibold text-warning">Held by the Council</span>
 										<span class="block text-on-surface-variant">A cut in revenue while debt is above the line</span>
+									{% elseif lever.status == 'fund' %}
+										<span class="font-semibold text-warning">Held by the Sovereign Reserve Fund</span>
+										<span class="block text-on-surface-variant">More than {{ rules.reserveDrawCeiling|pct(0) }} is spent only with its consent, given only in a recession</span>
 									{% elseif lever.status == 'blocked' %}
 										<span class="font-semibold text-warning">Blocked by its supporters</span>
 										<span class="block text-on-surface-variant">They will not vote to move it further from their own policy</span>

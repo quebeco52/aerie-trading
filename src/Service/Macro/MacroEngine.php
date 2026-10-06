@@ -241,6 +241,14 @@ class MacroEngine
     // --- Fund-Financed Fiscal Stabilisation (IMF Norway Selected Issues 2025, Table 5) ---
     /** Budget rounds a year apart by half: the National Budget each October and the Revised National Budget each May (Norway's Ministry of Finance). */
     public const BUDGET_ROUND_PERIOD_YEARS = 0.5;
+
+    // --- Reserve Draw (Singapore Net Investment Returns framework; Constitution of Singapore, art. 142(1A)) ---
+    /** Share of the reserve fund's expected long-term real return the budget may spend without the fund's consent: half, Singapore's constitutional limit on the Net Investment Returns Contribution. The share the District opened with. */
+    public const RESERVE_DRAW_CEILING = 0.50;
+
+    // --- Sahm Rule (Sahm 2019, Hamilton Project) ---
+    /** Rise of the three-month average unemployment rate above its low of the twelve months before that signals a recession under way: half a point, which has signalled each US recession since 1970 in its first months. */
+    public const SAHM_RECESSION_THRESHOLD = 0.005;
     /** Fund-financed rise in the structural balance per unit of output gap a budget round: fitted by indirect inference so the engine's whole discretionary balance, tax leg included, answers the annual gap at Norway's 0.450 (se 0.194); 0.43 with the round reading the gap as it stands (var/harness/stab_cycle.sh). */
     public const FUND_STABILISATION_GAP_RESPONSE = 0.47;
     /** Share of last year's fund-financed impulse reversed this year: Norway's lagged-change coefficient, -0.452 (se 0.093). */
@@ -758,8 +766,7 @@ class MacroEngine
             $state->sovereignRiskSpread >= self::SYSTEMIC_SOVEREIGN_STRESS_SPREAD
             => ShockEvent::SOVEREIGN_DOWNGRADE,
 
-            $state->recessionProbability >= self::SYSTEMIC_RECESSION_DECLARE_PROBABILITY
-                && $state->outputGap <= self::SYSTEMIC_RECESSION_DECLARE_GAP
+            self::isRecession($state->recessionProbability, $state->outputGap)
             => ShockEvent::RECESSION_DECLARED,
 
             // Natural catastrophe physical damage shock event (Hallegatte et al. 2007).
@@ -785,6 +792,21 @@ class MacroEngine
     }
 
     /**
+     * Whether the District is in a recession it has formally declared: the probit's odds of one above even, with output
+     * a point below potential to confirm it. The downturn the RECESSION_DECLARED headline names.
+     */
+    public static function isRecession(float $recessionProbability, float $outputGap): bool
+    {
+        return $recessionProbability >= self::SYSTEMIC_RECESSION_DECLARE_PROBABILITY && $outputGap <= self::SYSTEMIC_RECESSION_DECLARE_GAP;
+    }
+
+    /** Whether unemployment says a recession is under way: the Sahm rule's reading at its threshold or above. */
+    public static function inSahmRecession(float $sahmIndicator): bool
+    {
+        return $sahmIndicator >= self::SAHM_RECESSION_THRESHOLD;
+    }
+
+    /**
      * Puts the government's levers in force and takes its election pulse. A tariff's change moves productivity by
      * Furceri et al.'s (2018) output loss, a level potential absorbs over the years that follow.
      */
@@ -803,6 +825,7 @@ class MacroEngine
         $state->extractionStringency = $policy->extractionStringency;
         $state->stampDutyRate = $policy->stampDutyRate;
         $state->bankLevyRate = $policy->bankLevyRate;
+        $state->reserveDrawShare = $policy->reserveDrawShare;
         $state->electionPulse = $policy->electionPulse;
         $state->authorityMajority = $policy->authorityMajority ?? 0.0;
         $state->authorityCommitteeSeated = $policy->authorityMajority === null ? 0.0 : 1.0;

@@ -129,7 +129,8 @@ class SovereignReservePageBuilder
             'holdings' => $this->holdings($board, $macro->sovereignFundOwnershipShare),
             'strategic' => $this->strategicHoldings($board, $macro->sovereignFundOwnershipShare),
             'mandate' => [
-                'spendingShare' => SovereignFundSubsystem::NIR_SPENDING_SHARE,
+                'spendingShare' => $macro->reserveDrawShare,
+                'drawCeiling' => MacroEngine::RESERVE_DRAW_CEILING,
                 'foreignEquityShare' => $incepted && $target < 1.0 ? ($equityPolicy - $target) / (1.0 - $target) : SovereignFundSubsystem::FOREIGN_EQUITY_SHARE,
                 'transitionMonths' => SovereignFundSubsystem::POLICY_TRANSITION_MONTHS,
                 'foreignBondDuration' => SovereignFundSubsystem::FOREIGN_BOND_DURATION,

@@ -409,9 +409,11 @@ class CreditFiscalSubsystem
         $state->corporateTaxShiftRealized += MacroEngine::FISCAL_ADJUSTMENT_SPEED * ($state->corporateTaxPolicyShift - $state->corporateTaxShiftRealized) * $dt;
         $state->corporateTaxShiftEmbodied += ($state->corporateTaxShiftRealized - $state->corporateTaxShiftEmbodied) * $dt / self::TRAILING_EARNINGS_MEAN_LAG_YEARS;
         $state->bankLevyEmbodied += ($state->bankLevyRate - $state->bankLevyEmbodied) * $dt / self::TRAILING_EARNINGS_MEAN_LAG_YEARS;
-        // The rules on extraction and the stamp duty reach costs and turnover at once, so their factors are lagged as the levy is.
+        // The rules on extraction, the stamp duty and the carbon price reach costs, turnover and the power price at once, so
+        // their measures are lagged as the levy is.
         $state->extractionCostFactorEmbodied += (MathUtility::calculateExtractionCostFactor($state->extractionStringency) - $state->extractionCostFactorEmbodied) * $dt / self::TRAILING_EARNINGS_MEAN_LAG_YEARS;
         $state->stampDutyVolumeFactorEmbodied += (MathUtility::calculateStampDutyVolumeFactor($state->stampDutyRate) - $state->stampDutyVolumeFactorEmbodied) * $dt / self::TRAILING_EARNINGS_MEAN_LAG_YEARS;
+        $state->carbonPowerUpliftEmbodied += (CommodityLogisticsSubsystem::carbonPowerPriceUplift($state->carbonPrice) - $state->carbonPowerUpliftEmbodied) * $dt / self::TRAILING_EARNINGS_MEAN_LAG_YEARS;
     }
 
     /**

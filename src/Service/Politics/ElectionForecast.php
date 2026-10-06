@@ -23,7 +23,10 @@ use App\Service\Math\MathUtility;
  * talks, whose cabinet given the seats is exactly the logit over every cabinet on offer (CoalitionFormation::talks()
  * draws each attempt from it and its success does not depend on which was drawn). Each cabinet's laws are the budget it
  * would pass on the Diet as it stands (PoliticsEngine::budget()). Between the vote and a cabinet taking office the
- * seats are known and only the talks are weighed; once it takes office, its laws are known.
+ * seats are known and only the talks are weighed; once it takes office its laws are the sitting government's budget,
+ * and the forecast turns to the vote after, from the result. The forecast predicts the next government's laws as well
+ * four years out as one year out (Erikson & Wlezien 2012's reliability slope, about 0.94 at every horizon on the game's
+ * own terms, var/harness/forecast), so nothing more stale stands in for it while the first poll is awaited.
  *
  * Its draws come from a stream of its own, seeded from the game and the day, so forecasting changes nothing else.
  */
@@ -39,11 +42,11 @@ final class ElectionForecast
 
     /**
      * One tick: reads the sitting government's coming budget, pools a poll published on it and forecasts afresh; on the day of the vote the average becomes the result
-     * and the talks are weighed on the seats; on the day a cabinet takes office its laws are the forecast.
+     * and the talks are weighed on the seats; on the day a cabinet takes office the next vote is forecast from the result.
      */
-    public static function advance(PoliticsState $state, float $debtToGdp): void
+    public static function advance(PoliticsState $state, float $debtToGdp, bool $recession = false): void
     {
-        $state->sittingLevers = self::sittingBudget($state, $debtToGdp);
+        $state->sittingLevers = self::sittingBudget($state, $debtToGdp, $recession);
         if ($state->authoritySalt < 0.0) {
             return;
         }
@@ -74,12 +77,7 @@ final class ElectionForecast
         if ($state->coalitionTakesOfficeAt >= 0.0 && $state->talksStartedAt === $state->lastElectionAt) {
             return;
         }
-        if ($state->lastGovernmentFormedAt === $time && $state->forecastFor === $state->lastElectionAt) {
-            self::publish($state, self::seated($state, $debtToGdp), $time);
-
-            return;
-        }
-        if ($polled) {
+        if ($polled || ($state->lastGovernmentFormedAt === $time && $state->forecastFor === $state->lastElectionAt)) {
             $draws = MathUtility::ownStream(crc32(sprintf('%d:forecast:%.6f', (int) $state->authoritySalt, $time)));
             self::publish($state, self::forecast($state, $debtToGdp, $draws), self::nextVote($time));
         }
@@ -194,10 +192,12 @@ final class ElectionForecast
      * enactBudget()). While the parties talk after a cabinet falls between votes, the sitting government is the one the
      * talks will seat, weighed by its odds on the seats as they stand, the cabinet that fell excluded as the talks
      * exclude it; after a vote the talks' government is the forecast's, and the caretaker passes nothing until then.
+     * The reserve fund's consent to a draw above its ceiling is read on the recession as it stands; a government further
+     * off is expected to pass its budget without it, the consent lasting only the slump.
      *
      * @return array<string, float>
      */
-    public static function sittingBudget(PoliticsState $state, float $debtToGdp): array
+    public static function sittingBudget(PoliticsState $state, float $debtToGdp, bool $recession = false): array
     {
         $standing = PoliticsEngine::standingLevers($state);
         if ($state->coalitionTakesOfficeAt >= 0.0) {
@@ -207,7 +207,7 @@ final class ElectionForecast
             $seats = array_map('intval', $state->dietSeats);
             $odds = self::cabinetOdds($seats, $state->dietVoteShares, $state->partyPositions, [], $state->dietBlocs, AerieDiet::governingParties($state->governingCoalition));
 
-            return self::tally([['seats' => $seats, 'shares' => $state->dietVoteShares, 'odds' => $odds]], 1.0, $state->partyPositions, $standing, $debtToGdp)['levers'];
+            return self::tally([['seats' => $seats, 'shares' => $state->dietVoteShares, 'odds' => $odds]], 1.0, $state->partyPositions, $standing, $debtToGdp, $recession)['levers'];
         }
 
         return PoliticsEngine::budget(
@@ -216,7 +216,8 @@ final class ElectionForecast
             $state->dietSeats,
             $state->partyPositions,
             $standing,
-            $debtToGdp
+            $debtToGdp,
+            $recession
         )['levers'];
     }
 
@@ -303,28 +304,16 @@ final class ElectionForecast
     }
 
     /**
-     * The cabinet that took office, certain.
-     *
-     * @return array{cabinets: array<string, array{cabinet: list<string>, support: list<string>, chance: float}>, leaders: array<string, float>, seats: array<string, float>, levers: array<string, float>}
-     */
-    private static function seated(PoliticsState $state, float $debtToGdp): array
-    {
-        $seats = array_map('intval', $state->dietSeats);
-        $odds = [['cabinet' => AerieDiet::governingParties($state->governingCoalition), 'support' => AerieDiet::governingParties($state->supportParties), 'chance' => 1.0]];
-
-        return self::tally([['seats' => $seats, 'shares' => $state->dietVoteShares, 'odds' => $odds]], 1.0, $state->partyPositions, PoliticsEngine::standingLevers($state), $debtToGdp);
-    }
-
-    /**
      * Adds the outcomes up: each cabinet's chance, each party's chance of leading the government, the seats to expect,
      * and the laws to expect, each cabinet's budget weighted by its chance.
      *
      * @param list<array{seats: array<string, int>, shares: array<string, float>, odds: list<array{cabinet: list<string>, support: list<string>, chance: float}>}> $outcomes
      * @param array<string, array<string, float>> $positions Positions by party and axis.
      * @param array<string, float>                $standing  The levers in force.
+     * @param bool                                $recession Whether the fund consents to a draw above its ceiling.
      * @return array{cabinets: array<string, array{cabinet: list<string>, support: list<string>, chance: float}>, leaders: array<string, float>, seats: array<string, float>, levers: array<string, float>}
      */
-    private static function tally(array $outcomes, float $weight, array $positions, array $standing, float $debtToGdp): array
+    private static function tally(array $outcomes, float $weight, array $positions, array $standing, float $debtToGdp, bool $recession = false): array
     {
         $cabinets = [];
         $leaders = array_fill_keys(AerieDiet::PARTIES, 0.0);
@@ -343,7 +332,7 @@ final class ElectionForecast
                 $cabinets[$key] ??= ['cabinet' => $option['cabinet'], 'support' => $option['support'], 'chance' => 0.0];
                 $cabinets[$key]['chance'] += $chance;
                 $leaders[CoalitionFormation::leader($option['cabinet'], $order)] += $chance;
-                $enacted = PoliticsEngine::budget($option['cabinet'], $option['support'], $outcome['seats'], $positions, $standing, $debtToGdp)['levers'];
+                $enacted = PoliticsEngine::budget($option['cabinet'], $option['support'], $outcome['seats'], $positions, $standing, $debtToGdp, $recession)['levers'];
                 foreach ($enacted as $lever => $value) {
                     $levers[$lever] += $chance * $value;
                 }

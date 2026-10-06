@@ -559,8 +559,13 @@ class MacroAggregateSubsystem
         $discretionaryFiscal = (self::KALDOR_FISCAL_MULTIPLIER * (MacroEngine::TARGET_CORPORATE_TAX_RATE - $state->corporateTaxRate))
             + (self::KALDOR_GOVT_SPENDING_MULTIPLIER * $spendingShift);
         // The sovereign fund's stabilisation reaches demand through the purchases channel, on purchases that are the target
-        // tax take of GDP. Its legislative lag is the budget round that sets it, so it flows at the rate the round sets.
-        $fundStabilisation = self::KALDOR_GOVT_SPENDING_MULTIPLIER * $state->sovereignFundStabilisationToGdp / MacroEngine::TARGET_CORPORATE_TAX_RATE;
+        // tax take of GDP. Its legislative lag is the budget round that sets it, so it flows at the rate the round sets. So
+        // does the part of the rule draw above the founding share, the spending a budget drawing more of the fund's return
+        // adds to the baseline the founding draw is in.
+        $drawAboveFounding = $state->sovereignFundDrawShare > 0.0
+            ? $state->sovereignFundDrawToGdp * ($state->sovereignFundDrawShare - MacroEngine::RESERVE_DRAW_CEILING) / $state->sovereignFundDrawShare
+            : 0.0;
+        $fundStabilisation = self::KALDOR_GOVT_SPENDING_MULTIPLIER * ($state->sovereignFundStabilisationToGdp + $drawAboveFounding) / MacroEngine::TARGET_CORPORATE_TAX_RATE;
 
         // Blanchard & Perotti (2002) AUTOMATIC stabilisers and Friedman (1957) income smoothing, on the
         // contemporaneous gap: nobody decides them, so they carry no lag and act as a spring rather than an anti-damper.
