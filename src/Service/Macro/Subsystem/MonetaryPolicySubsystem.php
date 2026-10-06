@@ -135,9 +135,6 @@ class MonetaryPolicySubsystem
     /** Extra runoff speed at full overheating pressure (Fed 2017-19 then 2022 roughly doubled its monthly caps), on top of the passive BALANCE_SHEET_RAMP_SPEED. */
     public const QT_RUNOFF_ACCELERATION = 1.0;
 
-    // --- Sovereign Debt Dynamics (Greenwood-Vayanos 2014) ---
-    /** Long-end term premium sensitivity per unit excess debt/GDP above neutral threshold. */
-    public const SOVEREIGN_DEBT_YIELD_SENSITIVITY = 0.01;
 
     // --- Deposits Channel (Drechsler, Savov & Schnabl 2017) ---
     /** Money-market share per unit of deposit spread beyond the neutral spread (the neutral rate less the base beta's share of it): the 2022-23 cycle moved ~5 points of share on ~100 bps of extra spread. */
@@ -380,7 +377,8 @@ class MonetaryPolicySubsystem
             tau: 10.0,
             habitatSensitivity: MacroEngine::PREFERRED_HABITAT_DURATION_SENSITIVITY
         );
-        $premiumDeviation = ($state->termPremium10yEma - $habitatShiftAtTenYears) - MacroEngine::NS_BASE_TERM_PREMIUM;
+        // Sovereign credit risk is left in the yield: a rule easing as the debt premium rises is fiscal dominance.
+        $premiumDeviation = ($state->termPremium10yEma - $habitatShiftAtTenYears - $state->sovereignRiskSpreadEma) - MacroEngine::NS_BASE_TERM_PREMIUM;
 
         $slopeLoad10y = (1.0 - exp(-10.0 * MacroEngine::SVENSSON_SLOPE_LAMBDA)) / (10.0 * MacroEngine::SVENSSON_SLOPE_LAMBDA);
         $endpointDeviation = self::KOZICKI_TINSLEY_ENDPOINT_WEIGHT
@@ -626,10 +624,9 @@ class MonetaryPolicySubsystem
             + (self::SVENSSON_CURVATURE1_GAP_SCALE * $state->outputGap)
             + $state->expectedPathShock;
 
+        // Debt is priced once, through the Laubach (2009) sovereign spread in the term premium above.
         $fiscalShift = ($state->governmentSpendingIndexEma / MacroEngine::GOVT_SPENDING_BASELINE) - 1.0;
-        $excessDebt = max(0.0, $state->sovereignDebtToGdpEma - MacroEngine::SOVEREIGN_DEBT_NEUTRAL_THRESHOLD);
-        $debtCurvature = $excessDebt * self::SOVEREIGN_DEBT_YIELD_SENSITIVITY;
-        $nsBeta3 = (self::SVENSSON_CURVATURE2_FISCAL_SCALE * $fiscalShift) + $debtCurvature;
+        $nsBeta3 = self::SVENSSON_CURVATURE2_FISCAL_SCALE * $fiscalShift;
 
         // Greenwood & Vayanos (2014) preferred-habitat long-end duration demand hurdle.
         $scale30y = MathUtility::calculateTermPremiumDurationScale(30.0, MacroEngine::TERM_PREMIUM_DURATION_HORIZON_YEARS);
@@ -650,7 +647,7 @@ class MonetaryPolicySubsystem
         $riskNeutral10y = $level + ($nsBeta1 * $durationFactor10y) + ($nsBeta2 * $factor2_10y);
         $termPremium10y = $yield10y - $riskNeutral10y;
 
-        $structural10y = $this->calculateSvenssonTenor(10.0, $level, $nsBeta1, $nsBeta2, $debtCurvature, $state, $totalBaseTermPremium, $longEndPremium);
+        $structural10y = $this->calculateSvenssonTenor(10.0, $level, $nsBeta1, $nsBeta2, 0.0, $state, $totalBaseTermPremium, $longEndPremium);
 
         return [
             'level' => $level,

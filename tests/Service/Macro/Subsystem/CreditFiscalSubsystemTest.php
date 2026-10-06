@@ -196,7 +196,7 @@ class CreditFiscalSubsystemTest extends TestCase
 
         // Bohn (1998) adjustment: higher debt induces primary fiscal surplus, counteracting interest burden
         // dDebt/dt rate of increase must be constrained by the Bohn stabilizer
-        $excessDebtAmount = 1.20 - MacroEngine::SOVEREIGN_DEBT_NEUTRAL_THRESHOLD;
+        $excessDebtAmount = 1.20 - CreditFiscalSubsystem::SOVEREIGN_DEBT_NEUTRAL_THRESHOLD;
         $expectedBohnSurplus = CreditFiscalSubsystem::BOHN_FISCAL_REACTION_SENSITIVITY * $excessDebtAmount;
         $this->assertGreaterThan(0.0, $expectedBohnSurplus);
     }
@@ -508,7 +508,7 @@ class CreditFiscalSubsystemTest extends TestCase
     public function testTheFiscalPositionTheReactionDefendsCarriesNoRiskPremium(): void
     {
         $this->assertSame(0.0, $this->settledSovereignSpread(self::SOUND_DEBT_TO_GDP));
-        $this->assertSame(0.0, $this->settledSovereignSpread(MacroEngine::SOVEREIGN_DEBT_NEUTRAL_THRESHOLD), 'The Bohn threshold is where the fiscal reaction starts, not where the market re-rates.');
+        $this->assertSame(0.0, $this->settledSovereignSpread(CreditFiscalSubsystem::SOVEREIGN_DEBT_NEUTRAL_THRESHOLD), 'The Bohn threshold is where the fiscal reaction starts, not where the market re-rates.');
         $this->assertSame(0.0, $this->settledSovereignSpread(MacroEngine::SOVEREIGN_RISK_DEBT_THRESHOLD), 'At the line itself there is nothing to charge for yet.');
     }
 
@@ -911,16 +911,89 @@ class CreditFiscalSubsystemTest extends TestCase
         $this->assertEqualsWithDelta(-$revenue, $tariffed->primaryDeficitToGdp - $neutral->primaryDeficitToGdp, 1e-12);
     }
 
-    public function testDebtErodesAtTheLabourForcesGrowth(): void
+    public function testDebtErodesAtNominalGdpGrowth(): void
     {
         $slow = $this->neutralBudget(1.0);
         $fast = $this->neutralBudget(1.0);
-        $fast->laborForceGrowthRate = MacroEngine::STRUCTURAL_LABOR_GROWTH_RATE + 0.01;
+        $fast->nominalGdpGrowth = $slow->nominalGdpGrowth + 0.01;
 
         $this->subsystem->calculateSovereignDebt($slow, 0.25);
         $this->subsystem->calculateSovereignDebt($fast, 0.25);
 
         $this->assertEqualsWithDelta(-0.01 * 1.0 * 0.25, $fast->sovereignDebtToGdp - $slow->sovereignDebtToGdp, 1e-12);
+    }
+
+    /**
+     * Taxes are levied on the GDP produced, so at a given rate their share of GDP does not move with the gap; the slump
+     * shows in the budget through purchases set on trend, whose share of a smaller GDP rises.
+     */
+    public function testTheGapReachesTheBudgetThroughPurchasesNotATaxBaseCountedTwice(): void
+    {
+        $neutral = $this->neutralBudget(0.60);
+        $neutral->governmentSpendingIndex = 0.0;
+        $slump = $this->neutralBudget(0.60, 0.97);
+        $slump->outputGap = -0.03;
+        $slump->governmentSpendingIndex = 0.0;
+
+        $this->subsystem->calculateSovereignDebt($neutral, 0.25);
+        $this->subsystem->calculateSovereignDebt($slump, 0.25);
+
+        $this->assertEqualsWithDelta($neutral->primaryDeficitToGdp, $slump->primaryDeficitToGdp, 1e-12, 'Revenue over GDP at a given rate is the rate.');
+
+        $spending = $this->neutralBudget(0.60);
+        $spendingSlump = $this->neutralBudget(0.60, 0.97);
+        $spendingSlump->outputGap = -0.03;
+
+        $this->subsystem->calculateSovereignDebt($spending, 0.25);
+        $this->subsystem->calculateSovereignDebt($spendingSlump, 0.25);
+
+        $this->assertEqualsWithDelta(
+            MacroEngine::TARGET_CORPORATE_TAX_RATE * ((1.0 / 0.97) - 1.0),
+            $spendingSlump->primaryDeficitToGdp - $spending->primaryDeficitToGdp,
+            1e-12,
+            'Purchases on trend are a larger share of a GDP 3% under it.'
+        );
+    }
+
+    /**
+     * The ratio is struck on actual GDP, so the growth eroding it is that GDP's growth: a slump that recovers to where
+     * it began hands back every point it took, where reading the gap's level as a growth rate kept the slump's toll.
+     */
+    public function testASlumpThatRecoversLeavesNoGrowthErosionBehind(): void
+    {
+        $aggregate = new MacroAggregateSubsystem(new MathUtility());
+        $state = new MacroState();
+        $state->laborForceGrowthRate = 0.0;
+        $state->domesticInflation = 0.0;
+        $state->outputGap = 0.0;
+        $state->potentialGdpIndex = 1.0;
+        $state->gdpDeflator = 1.0;
+        $state->nominalGdpIndex = 1.0;
+
+        $dt = 0.25;
+        $erosion = 0.0;
+        foreach ([0.0, -0.02, -0.03, -0.03, -0.02, -0.01, 0.0] as $gap) {
+            $state->outputGap = $gap;
+            $aggregate->calculatePotentialAndNominalGdp($state, $dt, 0.0);
+            $erosion += $state->nominalGdpGrowth * $dt;
+        }
+
+        $this->assertEqualsWithDelta(0.0, $erosion, 1e-12);
+        $this->assertLessThan(-0.019, $this->firstQuarterGrowth(-0.02, $dt), 'The slump itself still shrinks the denominator.');
+    }
+
+    private function firstQuarterGrowth(float $gap, float $dt): float
+    {
+        $state = new MacroState();
+        $state->laborForceGrowthRate = 0.0;
+        $state->domesticInflation = 0.0;
+        $state->potentialGdpIndex = 1.0;
+        $state->gdpDeflator = 1.0;
+        $state->nominalGdpIndex = 1.0;
+        $state->outputGap = $gap;
+        (new MacroAggregateSubsystem(new MathUtility()))->calculatePotentialAndNominalGdp($state, $dt, 0.0);
+
+        return $state->nominalGdpGrowth * $dt;
     }
 
     private function budgetRound(MacroState $state, float $time): void

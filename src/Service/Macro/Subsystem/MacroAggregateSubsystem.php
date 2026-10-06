@@ -42,7 +42,7 @@ class MacroAggregateSubsystem
     public const EXCHANGE_RATE_TREND_HORIZON_YEARS = 20.0;
 
     // --- Distributed Lag Transmission Constants ---
-    /** Headline inflation per unit farm-price shock (~13% food CPI weight at ~15% pass-through), symmetric in both directions. */
+    /** CPI level per unit farm-price deviation (~13% food CPI weight at ~15% pass-through), symmetric in both directions. */
     public const AGRI_COST_PUSH_TRANSMISSION = 0.020;
 
     // --- Demand Transmission Lags ---
@@ -403,7 +403,7 @@ class MacroAggregateSubsystem
      * demographics and safe-asset demand, is not modelled.
      *
      * @param MacroState $state           Current macroeconomic state.
-     * @param float      $trendGrowthRate Trend productivity growth from calculateTotalFactorProductivity(), before absorbed level shocks.
+     * @param float      $trendGrowthRate Secular trend productivity growth, before absorbed level shocks and the cycle's R&D term.
      * @param float      $dt              Time increment in years.
      */
     public function calculateNaturalRate(MacroState $state, float $trendGrowthRate, float $dt): void
@@ -961,7 +961,11 @@ class MacroAggregateSubsystem
         $state->coreGoodsInflation += $reversionWeight * ($targetCoreGoods - $state->coreGoodsInflation);
         $state->coreGoodsInflation = max(-0.02, min(0.20, $state->coreGoodsInflation));
 
-        // Shapiro (2022) Sector 3: Distributed lag energy cost-push pass-through.
+        // Shapiro (2022) Sector 3: the energy and food lags are the share of the CPI LEVEL their commodity has reached
+        // (sector models read them as cost levels); headline takes their rate of change, so a price that stays high
+        // adds a step to the level and then no more inflation.
+        $priorEnergyCostPushLag = $state->energyCostPushLag;
+        $priorAgriCostPushLag = $state->agriCostPushLag;
         $rawEnergyCostPush = ($state->energyPriceShock / MacroEngine::ENERGY_BASELINE) * MacroEngine::ENERGY_COST_PUSH_TRANSMISSION;
         $state->energyCostPushLag = $this->mathUtility->calculateDistributedLag(
             currentLaggedValue: $state->energyCostPushLag,
@@ -989,10 +993,14 @@ class MacroAggregateSubsystem
             lagTimeConstant: self::ENERGY_COST_PUSH_LAG_YEARS
         );
         $carbonCostPush = self::CPI_ELECTRICITY_WEIGHT * ($state->electricityCarbonPriceLevel - $priorCarbonLevel) / $dt;
+        $energyCostPush = ($state->energyCostPushLag - $priorEnergyCostPushLag) / $dt;
+        $agriCostPush = ($state->agriCostPushLag - $priorAgriCostPushLag) / $dt;
+        $noncorePassThrough = $energyCostPush + $agriCostPush + $carbonCostPush;
+        $state->noncorePassThroughEma += (1.0 - exp(-$dt / self::STANDARD_EMA_HORIZON_YEARS)) * ($noncorePassThrough - $state->noncorePassThroughEma);
 
         // Shapiro (2022) commodity basket aggregation normalized by expenditure weight.
         $commodityBasketInflation = $targetInflation + $anchorSlip
-            + (($state->energyCostPushLag + $state->agriCostPushLag + $carbonCostPush) / self::INFLATION_WEIGHT_COMMODITY)
+            + ($noncorePassThrough / self::INFLATION_WEIGHT_COMMODITY)
             + $importPriceInflation;
 
         // Shapiro (2022) expenditure-weighted headline consumer price aggregation.
@@ -1004,6 +1012,12 @@ class MacroAggregateSubsystem
         $newInflation = $blendedInflation + $noise;
         $boundedInflation = max(-0.02, min(0.25, $newInflation));
 
+        // The GDP deflator prices what the District produces, so the imported legs come out of it: the import prices and
+        // the energy and food the District buys abroad (SNA 2008, 15.180). The carbon price is a domestic tax and stays.
+        $importedInflation = $energyCostPush + $agriCostPush
+            + ((self::INFLATION_WEIGHT_GOODS + self::INFLATION_WEIGHT_COMMODITY) * $importPriceInflation);
+        $state->domesticInflation = $boundedInflation - $importedInflation;
+
         // The blend is linear with weights summing to one, so headline splits exactly into what each channel put in
         // it, with the gap between a sector's rate and the rate it is moving toward booked as the sticky-price lag.
         if ($this->diagnostics?->isEnabled()) {
@@ -1014,8 +1028,8 @@ class MacroAggregateSubsystem
                 'demandPull' => $convexDemandPressure * (self::INFLATION_WEIGHT_SUPERCORE + (self::CORE_GOODS_DEMAND_SENSITIVITY * self::INFLATION_WEIGHT_GOODS)),
                 'wagePush' => $wageCostPush * self::INFLATION_WEIGHT_SUPERCORE,
                 'goodsSupply' => $goodsSupplyFriction * self::INFLATION_WEIGHT_GOODS,
-                'energyPassThrough' => $state->energyCostPushLag,
-                'foodPassThrough' => $state->agriCostPushLag,
+                'energyPassThrough' => $energyCostPush,
+                'foodPassThrough' => $agriCostPush,
                 'carbonPassThrough' => $carbonCostPush,
                 'importPrices' => $importPriceInflation * (self::INFLATION_WEIGHT_GOODS + self::INFLATION_WEIGHT_COMMODITY),
                 'stickyPriceLag' => (self::INFLATION_WEIGHT_SUPERCORE * ($state->supercoreInflation - $targetSupercore))
@@ -1044,8 +1058,8 @@ class MacroAggregateSubsystem
      */
     public function calculateTipsBreakeven(MacroState $state, float $targetInflation): float
     {
-        // Headline runs over core by the lagged energy and food pass-through the commodity basket adds.
-        $headlineOverCore = $state->energyCostPushLag + $state->agriCostPushLag;
+        // Headline runs over core by the energy, food and carbon pass-through rate the commodity basket adds.
+        $headlineOverCore = $state->noncorePassThroughEma;
 
         return $targetInflation
             + (self::BREAKEVEN_CORE_LOADING * (self::coreInflationEma($state) - $targetInflation))
@@ -1087,9 +1101,12 @@ class MacroAggregateSubsystem
         $state->immigrationPopulationShift += ($state->laborForceGrowthRate - MacroEngine::STRUCTURAL_LABOR_GROWTH_RATE) * $dt;
 
         $currentDeflator = $state->gdpDeflator > 0.0 ? $state->gdpDeflator : 1.0;
-        $state->gdpDeflator = max(0.01, $currentDeflator * exp($state->inflation * $dt));
+        $state->gdpDeflator = max(0.01, $currentDeflator * exp($state->domesticInflation * $dt));
+        $state->consumerPriceLevel = max(0.01, ($state->consumerPriceLevel > 0.0 ? $state->consumerPriceLevel : $currentDeflator) * exp($state->inflation * $dt));
 
+        $priorNominalGdp = $state->nominalGdpIndex;
         $state->nominalGdpIndex = max(0.10, $state->potentialGdpIndex * (1.0 + $state->outputGap) * $state->gdpDeflator);
+        $state->nominalGdpGrowth = $priorNominalGdp > 0.0 ? log($state->nominalGdpIndex / $priorNominalGdp) / $dt : $state->nominalGdpGrowth;
     }
 
     /**

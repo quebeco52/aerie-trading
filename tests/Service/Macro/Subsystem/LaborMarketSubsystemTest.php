@@ -51,6 +51,20 @@ class LaborMarketSubsystemTest extends TestCase
         $this->assertEqualsWithDelta($expected, $settle(-0.01), 1e-6, 'The productivity part of the gap moves unemployment like any other.');
     }
 
+    /** A labour market at its NAIRU is at the natural tightness, scarred or not, so scarring is not read as slack. */
+    public function testTightnessAtTheNairuIsTheNaturalTightnessWhateverTheNairu(): void
+    {
+        foreach ([MacroEngine::NATURAL_UNEMPLOYMENT, 0.06] as $nairu) {
+            $state = new MacroState();
+            $state->nairu = $nairu;
+            $state->unemploymentRate = $nairu;
+
+            $this->subsystem->calculateLaborMarketAndWages($state, MacroEngine::TFP_DRIFT, 0.25);
+
+            $this->assertEqualsWithDelta(MacroEngine::NATURAL_LABOR_TIGHTNESS, $state->laborTightness, 1e-9, sprintf('NAIRU %.3f', $nairu));
+        }
+    }
+
     public function testBeveridgeMatchingDeterminesVacanciesAndWageGrowth(): void
     {
         $state = new MacroState();
@@ -90,7 +104,7 @@ class LaborMarketSubsystemTest extends TestCase
         $state->nairu = \App\Service\Macro\MacroEngine::NATURAL_UNEMPLOYMENT;
         $state->tipsBreakeven = $expectedInflation;
         $state->tipsBreakevenEma = $expectedInflation;
-        $state->inflation = $expectedInflation;
+        $state->domesticInflation = $expectedInflation;
         $state->wageGrowth = 0.0;
         $state->realWageGap = 0.0; // real pay on its productivity path
 
@@ -264,7 +278,7 @@ class LaborMarketSubsystemTest extends TestCase
         $state->unemploymentRate = MacroEngine::NATURAL_UNEMPLOYMENT;
         $state->nairu = MacroEngine::NATURAL_UNEMPLOYMENT;
         $state->tipsBreakevenEma = 0.02;
-        $state->inflation = 0.02;
+        $state->domesticInflation = 0.02;
         $state->wageGrowth = 0.02 + MacroEngine::TFP_DRIFT;
         $state->realWageGap = $realWageGap;
 
@@ -274,7 +288,7 @@ class LaborMarketSubsystemTest extends TestCase
     public function testTheRealWageGapIntegratesWagesLessPricesAndTrendProductivity(): void
     {
         $state = $this->restingLabourMarket(0.0);
-        $state->inflation = 0.03;
+        $state->domesticInflation = 0.03;
 
         $this->subsystem->calculateLaborMarketAndWages($state, MacroEngine::TFP_DRIFT, 0.25);
 

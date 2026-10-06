@@ -63,7 +63,7 @@ class MacroEngine
     // --- Energy Shock Jump-Diffusion (Schwartz 1997 Commodity Dynamics) ---
     /** Baseline index value for energy prices (neutral commodity equilibrium). */
     public const ENERGY_BASELINE = 100.0;
-    /** Headline inflation per unit energy shock (~7% CPI weight at ~35% retail pass-through): +60% energy adds ~1.5pp. */
+    /** CPI level per unit energy-price deviation (~7% CPI weight at ~35% retail pass-through): +60% energy lifts it ~1.5%. */
     public const ENERGY_COST_PUSH_TRANSMISSION = 0.025;
 
     // --- Physical Catastrophes (Klugman, Panjer & Willmot compound Poisson; Noy 2009) ---
@@ -231,8 +231,6 @@ class MacroEngine
     // --- Sovereign Debt Dynamics (Greenwood-Vayanos 2014) ---
     /** Sovereign debt-to-GDP at simulation start: where the fiscal rule holds it with output at trend (median 0.93, 32 seeds x 100y); the old 0.60 took 40 years to climb out of. */
     public const INITIAL_DEBT_TO_GDP = 0.93;
-    /** Debt-to-GDP baseline level below which no excess fiscal term premium applies. */
-    public const SOVEREIGN_DEBT_NEUTRAL_THRESHOLD = 0.70;
     /** Gross debt kept outstanding with no borrowing need, for the benchmark curve to price (Singapore and Hong Kong issue for market development through surpluses); below it a surplus buys the fund's paper instead. */
     public const SOVEREIGN_DEBT_FLOOR = 0.20;
     /** Debt-to-GDP above which the market prices fiscal risk and the Council holds its veto over the budget (Reinhart & Rogoff 2010's 90% line). Deliberately above the 70% the Bohn reaction defends: the engine's own steady state runs 85-90%, and a premium charged for that normal state was measured to lift IG 30 bps and 2s10s 45 bps everywhere. */
@@ -560,8 +558,9 @@ class MacroEngine
         // productivity growth (wage bargains, unit labour cost, money demand, potential GDP) reads that path.
         $productivityGrowthRate = $this->aggregateSubsystem->absorbProductivityShocks($state, $tfpTrendGrowthRate, $dt);
 
-        // 2. Holston, Laubach & Williams (2017) natural rate of interest (r*), on trend growth only.
-        $this->aggregateSubsystem->calculateNaturalRate($state, $tfpTrendGrowthRate, $dt);
+        // 2. Holston, Laubach & Williams (2017) natural rate of interest (r*), on trend growth only: the secular drift,
+        // not the R&D term that rides the output gap, which the docblock there keeps out of r*.
+        $this->aggregateSubsystem->calculateNaturalRate($state, self::TFP_DRIFT, $dt);
 
         // 3. Okun (1962) & Diamond-Mortensen-Pissarides (1994) labor market dynamics.
         $this->laborSubsystem->calculateUnemployment($state, $dt);

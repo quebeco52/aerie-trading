@@ -44,6 +44,10 @@ class MacroFieldRegistryTest extends TestCase
         'metalsXi' => 'Latent OU state behind industrialMetalsIndex, which is recorded.',
         'agriChi' => 'Latent OU state behind agriculturalCommodityIndex, which is recorded.',
         'agriXi' => 'Latent OU state behind agriculturalCommodityIndex, which is recorded.',
+        'noncorePassThroughEma' => 'Rate of change of energyCostPushLag and agriCostPushLag, which are recorded.',
+        'nominalGdpGrowth' => 'Per-tick log change of nominalGdpIndex, which is recorded.',
+        'domesticInflation' => 'Per-tick log change of gdpDeflator, which is recorded.',
+        'consumerPriceLevel' => 'Headline inflation compounded, which is recorded; read by the polls over a term.',
 
         'energySupplyEma' => 'Internal to the energy process; energyPriceIndex is the observable and is recorded.',
         'energyInventoryIndex' => 'energyInventoryIndexEma is the quarter-scale reading and is recorded.',

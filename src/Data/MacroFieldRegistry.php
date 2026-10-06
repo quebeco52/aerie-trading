@@ -176,6 +176,8 @@ final class MacroFieldRegistry
         'energyBasePrice' => 'energyPriceIndex',
         'supercoreInflation' => 'inflation',
         'coreGoodsInflation' => 'inflation',
+        'domesticInflation' => 'inflation',
+        'consumerPriceLevel' => 'gdpDeflator',
         'sovereignNetDebtToGdp' => 'sovereignDebtToGdp',
         'outputGapLag3m' => 'outputGapEma',
         'outputGapLag6m' => 'outputGapEma',

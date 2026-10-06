@@ -165,7 +165,9 @@ class LaborMarketSubsystem
     public function calculateLaborMarketAndWages(MacroState $state, float $tfpGrowthRate, float $dt): void
     {
         $effectiveUnemployment = max(self::MIN_FRICTIONAL_UNEMPLOYMENT, $state->unemploymentRate);
-        $beveridgeConstant = self::BEVERIDGE_CURVE_CONSTANT * ($state->nairu / MacroEngine::NATURAL_UNEMPLOYMENT);
+        // A scarred NAIRU is a matching-efficiency loss (Pissarides 2000): the curve shifts out by the square of the NAIRU's
+        // rise, so tightness at the NAIRU stays the natural tightness and scarring is not read as standing slack.
+        $beveridgeConstant = self::BEVERIDGE_CURVE_CONSTANT * (($state->nairu / MacroEngine::NATURAL_UNEMPLOYMENT) ** 2);
         $state->jobVacanciesRate = max(0.01, min(0.12, $beveridgeConstant / $effectiveUnemployment));
         $state->laborTightness = $state->jobVacanciesRate / $effectiveUnemployment;
 
@@ -194,7 +196,8 @@ class LaborMarketSubsystem
             $this->diagnostics->recordValues('labour', ['downwardRigidShare' => $wageGap > 0 ? 0.0 : 1.0], $dt);
         }
 
-        // The wage level against prices and potential productivity: what a unit of output costs in labour.
-        $state->realWageGap += ($state->wageGrowth - $state->inflation - $tfpGrowthRate) * $dt;
+        // The wage level against the price of what is produced and potential productivity: what a unit of output costs
+        // in labour, the product wage Blanchard & Katz fit on (compensation over the output deflator).
+        $state->realWageGap += ($state->wageGrowth - $state->domesticInflation - $tfpGrowthRate) * $dt;
     }
 }

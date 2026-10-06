@@ -509,12 +509,14 @@ class CommodityLogisticsSubsystem
      */
     public function calculateAgriculturalCommodityIndex(MacroState $state, float $dt): void
     {
+        // The weather jumps only raise prices, so the short factor reverts below zero by their mean log rate over its
+        // speed: a drought is a transient disruption, and the equilibrium stays with the long-term factor (Merton 1976).
         $result = $this->mathUtility->calculateTwoFactorOU(
             chi: $state->agriChi,
             xi: $state->agriXi,
             kappaChi: self::AGRI_SHORT_TERM_KAPPA,
             kappaXi: self::AGRI_LONG_TERM_KAPPA,
-            thetaChi: 0.0,
+            thetaChi: -(self::AGRI_WEATHER_JUMP_PROBABILITY * self::AGRI_WEATHER_JUMP_MEAN) / self::AGRI_SHORT_TERM_KAPPA,
             thetaXi: log(MacroEngine::AGRI_BASELINE),
             sigChi: self::AGRI_SHORT_TERM_SIGMA,
             sigXi: self::AGRI_LONG_TERM_SIGMA,

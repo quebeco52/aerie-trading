@@ -27,8 +27,8 @@ readonly class MacroStateDTO
     /** Policy rate at the opening: the Taylor rule's own target with output at trend (3.42%), so the first tick does not move it. */
     private const OPENING_POLICY_RATE = 0.034;
 
-    /** Ten-year at the opening: the engine's curve evaluated at the opening state (at-trend median 4.78%). */
-    private const OPENING_YIELD_10Y = 0.0479;
+    /** Ten-year at the opening: the engine's curve evaluated at the opening state. */
+    private const OPENING_YIELD_10Y = 0.0472;
 
     /**
      * Seeds this snapshot adds to the shared set, for openings only a snapshot needs.
@@ -107,6 +107,8 @@ readonly class MacroStateDTO
         public float $energySupplyEma = MacroEngine::ENERGY_BASELINE,
         public float $energyCostPushLag = 0.0,
         public float $agriCostPushLag = 0.0,
+        public float $noncorePassThroughEma = 0.0,
+        public float $domesticInflation = MacroEngine::TARGET_INFLATION,
         public float $consumerSentimentIndex = MacroEngine::SENTIMENT_TREND_LEVEL,
         public float $consumerSentimentIndexEma = MacroEngine::SENTIMENT_TREND_LEVEL,
         public float $exchangeRateIndex = 100.0,
@@ -146,16 +148,16 @@ readonly class MacroStateDTO
         public float $policyRate = self::OPENING_POLICY_RATE,
         public float $policyRateEma = self::OPENING_POLICY_RATE,
         public float $targetRate = self::OPENING_POLICY_RATE,
-        public float $yield2y = 0.0381,
-        public float $yield2yEma = 0.0381,
-        public float $yield5y = 0.0428,
-        public float $yield5yEma = 0.0428,
+        public float $yield2y = 0.0378,
+        public float $yield2yEma = 0.0378,
+        public float $yield5y = 0.0423,
+        public float $yield5yEma = 0.0423,
         public float $yield10y = self::OPENING_YIELD_10Y,
         public float $yield10yEma = self::OPENING_YIELD_10Y,
-        public float $yield30y = 0.0534,
-        public float $yield30yEma = 0.0534,
-        public float $termPremium10y = 0.0132,
-        public float $termPremium10yEma = 0.0132,
+        public float $yield30y = 0.0530,
+        public float $yield30yEma = 0.0530,
+        public float $termPremium10y = 0.0125,
+        public float $termPremium10yEma = 0.0125,
         public float $riskNeutral10y = 0.0347,
         public float $riskNeutral10yEma = 0.0347,
         public float $termPremiumShock = 0.0,
@@ -215,17 +217,19 @@ readonly class MacroStateDTO
         public float $nsSlopeEma = self::OPENING_YIELD_10Y - self::OPENING_POLICY_RATE,
         public float $structuralSlope = self::OPENING_YIELD_10Y - self::OPENING_POLICY_RATE,
         public float $nsCurvature = 0.0,
-        public float $nsCurvature2 = 0.0023,
+        public float $nsCurvature2 = 0.0,
         public float $nsBeta1 = self::OPENING_POLICY_RATE - (MacroEngine::BASE_NATURAL_RATE + MacroEngine::TARGET_INFLATION),
         public float $nsBaseTermPremium = 0.0125,
         public float $nsLongEndPremium = 0.0109,
         public float $potentialGdpIndex = 1.0,
         public float $nominalGdpIndex = 1.0,
+        public float $nominalGdpGrowth = MacroEngine::STRUCTURAL_LABOR_GROWTH_RATE + MacroEngine::TFP_DRIFT + MacroEngine::TARGET_INFLATION,
         public float $equityMarketCap = 0.0,
         public float $equityMarketCapEma = 0.0,
         public float $equityWealthRatio = 0.0,
         public float $equityWealthTrend = 0.0,
         public float $gdpDeflator = 1.0,
+        public float $consumerPriceLevel = 1.0,
         public ?string $eventType = null,
         public float $eventCooldownTimer = 0.0,
         public float $supercoreInflation = MacroEngine::TARGET_INFLATION,
@@ -518,7 +522,10 @@ readonly class MacroStateDTO
         if (isset($data[$fields['exchangeRateIndex']]) && !isset($args['exchangeRateDeviation'])) {
             $args['exchangeRateDeviation'] = $resolve('exchangeRateIndex') / AssetMarketSubsystem::exchangeRateFundamentalAt(
                 $resolve('policyRate'),
+                $resolve('tipsBreakeven'),
                 $resolve('foreignPolicyRate'),
+                AssetMarketSubsystem::mainlandBreakeven(($resolve('foreignCoreInflation') + $resolve('foreignCoreInflationLag1')
+                    + $resolve('foreignCoreInflationLag2') + $resolve('foreignCoreInflationLag3')) / 4.0),
                 $resolve('energyPriceIndexEma'),
                 $resolve('industrialMetalsIndexEma'),
                 $resolve('marketVolatilityEma'),
