@@ -174,10 +174,14 @@ class ElectionForecastTest extends TestCase
                 $this->assertSame($odds, $state->forecastCabinets);
             }
         }
+        // Once a government takes office its first budget is the sitting one, and the forecast turns to the next vote.
         $cabinet = Diet::governingParties($state->governingCoalition);
-        $this->assertSame([['cabinet' => $cabinet, 'support' => Diet::governingParties($state->supportParties), 'chance' => 1.0]], $state->forecastCabinets);
         $budget = Politics::budget($cabinet, Diet::governingParties($state->supportParties), $state->dietSeats, $state->partyPositions, Politics::standingLevers($state), 0.6);
-        $this->assertEqualsWithDelta($budget['levers']['corporateTax'], $state->forecastLevers['corporateTax'], 1e-12);
+        $this->assertEqualsWithDelta($budget['levers']['corporateTax'], $state->sittingLevers['corporateTax'], 1e-12);
+        $this->assertSame(8.0, $state->forecastFor);
+        $this->assertSame($state->totalTime, $state->forecastAt, 'Forecast on the day it takes office, before any poll.');
+        $this->assertEqualsWithDelta(1.0, array_sum($state->forecastLeaders), 1e-9);
+        $this->assertLessThan(1.0, $state->forecastCabinets[0]['chance'], 'Four years out, no government is certain.');
     }
 
     /** What the politics hands the economy carries the forecast laws and when they take effect; nothing before a forecast. */

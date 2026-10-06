@@ -348,6 +348,36 @@ class LaborMarketSubsystemTest extends TestCase
         $this->assertGreaterThan(-0.001, $state->realWageGap, 'Thirty years on, wages have caught up with the productivity they are paid out of.');
     }
 
+    /**
+     * The Sahm rule reads the three-month average unemployment rate against its lowest of the twelve months before, one
+     * reading at each month end: flat unemployment reads nothing, and a rise of 0.6 points over three months reads the
+     * rise in the average above the year's low.
+     */
+    public function testTheSahmRuleReadsTheThreeMonthAverageAboveItsYearLow(): void
+    {
+        $dt = 1.0 / 360.0;
+        $state = new MacroState();
+        $path = array_merge(array_fill(0, 15, 0.040), [0.042, 0.044, 0.046]);
+        foreach ($path as $month => $rate) {
+            $state->unemploymentRate = $rate;
+            for ($tick = 0; $tick < 30; ++$tick) {
+                $state->totalTime = (($month * 30) + $tick + 1) * $dt;
+                $this->subsystem->recordSahmIndicator($state, $dt);
+            }
+            if ($month === 14) {
+                $this->assertSame(0.0, $state->sahmRecessionIndicator, 'Flat unemployment signals nothing.');
+            }
+        }
 
+        $this->assertCount(LaborMarketSubsystem::SAHM_LOOKBACK_MONTHS + LaborMarketSubsystem::SAHM_AVERAGE_MONTHS, $state->unemploymentMonthly);
+        $this->assertEqualsWithDelta(((0.042 + 0.044 + 0.046) / 3.0) - 0.040, $state->sahmRecessionIndicator, 1e-12);
+        $this->assertFalse(MacroEngine::inSahmRecession($state->sahmRecessionIndicator), 'A rise of 0.4 points in the average is short of the rule.');
 
+        $state->unemploymentRate = 0.050;
+        for ($tick = 0; $tick < 30; ++$tick) {
+            $state->totalTime += $dt;
+            $this->subsystem->recordSahmIndicator($state, $dt);
+        }
+        $this->assertTrue(MacroEngine::inSahmRecession($state->sahmRecessionIndicator), 'Half a point and more is a recession under way.');
+    }
 }

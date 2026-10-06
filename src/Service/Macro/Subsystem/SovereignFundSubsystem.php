@@ -10,8 +10,9 @@ use App\Service\Math\MathUtility;
  * The district's sovereign reserve fund: a rule-bound investor that sits beside the central bank, not in place of it.
  *
  * Three published rules and the head's mandate:
- *  - It pays the budget up to half its expected long-term real return, fixed once a year (Singapore's Net
- *    Investment Returns framework, 2008). The rest stays invested, so a fund compounding at about twice potential
+ *  - It pays the budget the share of its expected long-term real return the Diet passes, fixed once a year and redrawn
+ *    when a budget moves the share (Singapore's Net Investment Returns framework, 2008): up to half, and more only with
+ *    the fund's consent (App\Service\Politics\PoliticsEngine::budget()). The rest stays invested, so a fund compounding at about twice potential
  *    growth keeps pace with the economy. "Long-term" is the COMPOUND rate: spending half the arithmetic mean of a
  *    volatile portfolio overspends by half its variance every year and erodes the fund it is meant to preserve.
  *  - It holds three sleeves at policy weights: a cap-weighted slice of the whole board, and foreign equities and
@@ -42,8 +43,6 @@ use App\Service\Math\MathUtility;
 class SovereignFundSubsystem
 {
     // --- Spending Rule (Singapore Net Investment Returns framework, 2008) ---
-    /** Share of the expected long-term real return the budget may spend each year; the rest stays invested (Singapore NIR framework). */
-    public const NIR_SPENDING_SHARE = 0.50;
     /** The budget year: the draw is set once a year from the fund's value at its start. */
     public const DRAW_RESET_PERIOD_YEARS = 1.0;
 
@@ -139,6 +138,8 @@ class SovereignFundSubsystem
         if (MathUtility::crossedSimulatedBoundary($state->totalTime, $dt, self::DRAW_RESET_PERIOD_YEARS)) {
             $this->setAnnualDraw($state);
             $this->closeStampDutyYear($state);
+        } elseif ($state->reserveDrawShare !== $state->sovereignFundDrawShare) {
+            $this->redrawAtShare($state);
         }
         $this->payDraw($state, $dt);
 
@@ -339,21 +340,35 @@ class SovereignFundSubsystem
         $state->sovereignFundStampDutyYearToDate = 0.0;
     }
 
-    /** Sets this budget year's draw, and publishes the expected return it was set from. */
+    /** Sets this budget year's draw, and publishes the expected return and the share it was set from. */
     private function setAnnualDraw(MacroState $state): void
     {
         $state->sovereignFundExpectedRealReturn = $this->currentExpectedRealReturn($state);
         $state->sovereignFundAnnualDraw = $this->calculateAnnualDraw($state);
+        $state->sovereignFundDrawShare = $state->reserveDrawShare;
     }
 
     /**
-     * This budget year's draw: half the expected long-term (compound) real return on the fund at the start of the year.
+     * A budget round that moves the share spent mid-year redraws the rest of the year at it, on the return and the fund
+     * the year's draw was set from.
+     */
+    private function redrawAtShare(MacroState $state): void
+    {
+        if ($state->sovereignFundDrawShare > 0.0) {
+            $state->sovereignFundAnnualDraw *= $state->reserveDrawShare / $state->sovereignFundDrawShare;
+        }
+        $state->sovereignFundDrawShare = $state->reserveDrawShare;
+    }
+
+    /**
+     * This budget year's draw: the share the Diet has passed of the expected long-term (compound) real return on the
+     * fund at the start of the year, half of it without the fund's consent (MacroEngine::RESERVE_DRAW_CEILING).
      *
      * @return float Currency per year.
      */
     public function calculateAnnualDraw(MacroState $state): float
     {
-        return self::NIR_SPENDING_SHARE * max(0.0, $this->currentExpectedRealReturn($state)) * $this->fundValue($state);
+        return $state->reserveDrawShare * max(0.0, $this->currentExpectedRealReturn($state)) * $this->fundValue($state);
     }
 
     /** The expected compound real return on the fund at its sleeve weights today; zero for an empty fund. */

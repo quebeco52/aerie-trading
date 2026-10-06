@@ -80,6 +80,7 @@ class GovernmentPageBuilder
         'extractionStringency' => ['Extraction compliance cost', 'pct'],
         'stampDutyRate' => ['Stamp duty on share trades', 'pct'],
         'bankLevyRate' => ['Bank levy', 'pct'],
+        'reserveDrawShare' => ['Share of reserve returns spent', 'pct'],
     ];
     /** The polls chart's plot area in its 600 by 210 drawing: left, right, top and bottom edges. */
     private const POLL_CHART_PLOT = [34.0, 590.0, 8.0, 182.0];
@@ -112,6 +113,7 @@ class GovernmentPageBuilder
         'extractionStringency' => 'extraction rules',
         'stampDutyRate' => 'stamp duty',
         'bankLevyRate' => 'bank levy',
+        'reserveDrawShare' => 'reserve draw',
     ];
     /** Font size of the end words and party labels, in SVG units. */
     private const COMPASS_FONT_SIZE = 7.0;
@@ -216,6 +218,7 @@ class GovernmentPageBuilder
                 'councilSeats' => AerieCouncil::SEATS,
                 'councilTermYears' => AerieCouncil::TERM_YEARS,
                 'debtBrake' => MacroEngine::SOVEREIGN_RISK_DEBT_THRESHOLD,
+                'reserveDrawCeiling' => MacroEngine::RESERVE_DRAW_CEILING,
                 'budgetRoundMonths' => 12.0 * MacroEngine::BUDGET_ROUND_PERIOD_YEARS,
                 'blocLeaders' => array_map(self::midSentenceName(...), $leaders),
                 'blocSeats' => array_map(
@@ -467,6 +470,7 @@ class GovernmentPageBuilder
                 ['name' => 'Extraction compliance cost', 'unit' => 'pct', 'platform' => self::extractionCostUplift($platform['extractionStringency']), 'enacted' => self::extractionCostUplift($politics->extractionStringency)],
                 ['name' => 'Stamp duty on share trades', 'unit' => 'pct', 'platform' => $platform['stampDutyRate'], 'enacted' => $politics->stampDutyRate],
                 ['name' => 'Bank levy', 'unit' => 'pct', 'platform' => $platform['bankLevyRate'], 'enacted' => $politics->bankLevyRate],
+                ['name' => 'Share of reserve returns spent', 'unit' => 'pct', 'platform' => $platform['reserveDrawShare'], 'enacted' => $politics->reserveDrawShare],
             ],
             'leaders' => self::leaders($politics, $party),
             'polling' => $politics->polls === [] ? null : (static function (array $poll) use ($politics, $party): array {
@@ -591,7 +595,7 @@ class GovernmentPageBuilder
     private function budget(MacroStateDTO $macro, PoliticsStateDTO $politics, array $coalition, array $support, bool $talking): array
     {
         $standing = PoliticsEngine::standingLevers($politics);
-        $budget = PoliticsEngine::budget($coalition, $support, $politics->dietSeats, $politics->partyPositions, $standing, $macro->sovereignDebtToGdp);
+        $budget = PoliticsEngine::budget($coalition, $support, $politics->dietSeats, $politics->partyPositions, $standing, $macro->sovereignDebtToGdp, MacroEngine::inSahmRecession($macro->sahmRecessionIndicator));
         $round = MacroEngine::BUDGET_ROUND_PERIOD_YEARS;
         $nextRound = self::simDate((floor($macro->totalTime / $round) + 1.0) * $round);
 
@@ -600,6 +604,7 @@ class GovernmentPageBuilder
                 abs($budget['platform'][$lever] - $standing[$lever]) < 1e-9 => 'enacted',
                 $talking => 'caretaker',
                 $budget['councilHeld'][$lever] => 'held',
+                $lever === 'reserveDrawShare' && $budget['fundHeld'] => 'fund',
                 $budget['supportHeld'][$lever] && abs($budget['levers'][$lever] - $standing[$lever]) < 1e-9 => 'blocked',
                 $budget['supportHeld'][$lever] => 'partial',
                 default => 'pending',
@@ -702,6 +707,17 @@ class GovernmentPageBuilder
                     'note' => $macro->boardBankLevy > 0.0
                         ? sprintf('On banks\' short-term funding, half that on long-term funding and uninsured deposits; the banks owe %s a year', (new NumberFormatExtension())->formatLargeNumber($macro->boardBankLevy, '$'))
                         : 'On banks\' short-term funding, half that on long-term funding and uninsured deposits',
+                ],
+                [
+                    'name' => 'Share of reserve returns spent',
+                    'axis' => AerieDiet::AXIS_STATE,
+                    'platform' => $budget['platform']['reserveDrawShare'],
+                    'target' => $budget['levers']['reserveDrawShare'],
+                    'enacted' => $standing['reserveDrawShare'],
+                    'status' => $status('reserveDrawShare'),
+                    'note' => $macro->sovereignFundDrawToGdp > 0.0
+                        ? sprintf('Of the Sovereign Reserve Fund\'s expected return; it pays the budget %.1f%% of GDP this year', 100.0 * $macro->sovereignFundDrawToGdp)
+                        : 'Of the Sovereign Reserve Fund\'s expected return, paid to the budget each year',
                 ],
             ],
             'debt' => $macro->sovereignDebtToGdp,

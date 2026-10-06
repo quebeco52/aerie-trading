@@ -42,7 +42,7 @@ class SovereignFundSubsystemTest extends TestCase
 
         // The draw is struck on the expected return it publishes.
         $this->assertEqualsWithDelta(
-            SovereignFundSubsystem::NIR_SPENDING_SHARE * $state->sovereignFundExpectedRealReturn * $fund->fundValue($state),
+            $state->reserveDrawShare * $state->sovereignFundExpectedRealReturn * $fund->fundValue($state),
             $state->sovereignFundAnnualDraw,
             1e-9 * $state->sovereignFundAnnualDraw
         );
@@ -731,6 +731,29 @@ class SovereignFundSubsystemTest extends TestCase
         $state->sovereignFundPolicyEquityShare = 0.0;
         $this->step($fund, $state, $dt);
         $this->assertEqualsWithDelta($fund->policyEquityShare($state->sovereignFundTargetWeight), $state->sovereignFundPolicyEquityShare, 1e-12);
+    }
+
+    /**
+     * A budget that moves the share of the expected return spent redraws the rest of the year at it, on the return and
+     * the fund the year was set from; the next year's draw is struck at the share in force.
+     */
+    public function testABudgetMovingTheShareRedrawsTheYearAtIt(): void
+    {
+        $fund = new SovereignFundSubsystem(new MathUtility());
+        $tpy = 720;
+        $state = $this->openFund($fund, $tpy);
+        $opened = $state->sovereignFundAnnualDraw;
+        $this->assertSame(MacroEngine::RESERVE_DRAW_CEILING, $state->sovereignFundDrawShare);
+
+        $state->reserveDrawShare = 0.6;
+        $this->step($fund, $state, 1.0 / $tpy);
+        $this->assertEqualsWithDelta($opened * 0.6 / MacroEngine::RESERVE_DRAW_CEILING, $state->sovereignFundAnnualDraw, 1e-9 * $opened);
+        $this->assertSame(0.6, $state->sovereignFundDrawShare);
+
+        while ($state->totalTime < 1.0) {
+            $this->step($fund, $state, 1.0 / $tpy);
+        }
+        $this->assertEqualsWithDelta(0.6 * $state->sovereignFundExpectedRealReturn * $fund->fundValue($state), $state->sovereignFundAnnualDraw, 5e-3 * $state->sovereignFundAnnualDraw, 'The new year is struck at the share in force, on the fund before the tick\'s draw and trades.');
     }
 
     private function openFund(SovereignFundSubsystem $fund, int $tpy, float $foreignPolicyRate = 0.0): MacroState

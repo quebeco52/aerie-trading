@@ -1188,4 +1188,40 @@ class PoliticsEngineTest extends TestCase
         $this->assertEqualsWithDelta(0.0021, Politics::platform(Diet::position(Diet::CIVIC, $positions))['bankLevyRate'], 1e-15);
         $this->assertTrue(Politics::REVENUE_LEVERS['bankLevyRate']);
     }
+
+    /**
+     * The share of the reserve fund's return spent runs from the founding half at the Vanguard's end to 60% at the Civic
+     * Front's. The fund holds the second key on anything above half: it consents only while unemployment shows a recession under way,
+     * and out of one the share above lapses, whatever the Council would say of the revenue.
+     */
+    public function testTheFundHoldsTheSecondKeyOnTheDrawAboveHalf(): void
+    {
+        $positions = Diet::HOME_POSITIONS;
+        $this->assertEqualsWithDelta(MacroEngine::RESERVE_DRAW_CEILING, Politics::platform(Diet::position(Diet::VANGUARD, $positions))['reserveDrawShare'], 1e-15);
+        $this->assertEqualsWithDelta(Politics::POLICY_BIG_STATE_RESERVE_DRAW_SHARE, Politics::platform(Diet::position(Diet::CIVIC, $positions))['reserveDrawShare'], 1e-15);
+        $this->assertTrue(Politics::REVENUE_LEVERS['reserveDrawShare']);
+
+        $founding = Politics::standingLevers(new PoliticsStateDTO());
+        $refused = Politics::budget([Diet::CIVIC], [], Diet::SEED_SEATS, $positions, $founding, 0.5);
+        $this->assertSame(MacroEngine::RESERVE_DRAW_CEILING, $refused['levers']['reserveDrawShare'], 'Out of a recession the fund refuses a draw above half.');
+        $this->assertTrue($refused['fundHeld']);
+        $this->assertEqualsWithDelta(Politics::POLICY_BIG_STATE_RESERVE_DRAW_SHARE, $refused['platform']['reserveDrawShare'], 1e-15);
+
+        $consented = Politics::budget([Diet::CIVIC], [], Diet::SEED_SEATS, $positions, $founding, 0.5, recession: true);
+        $this->assertEqualsWithDelta(Politics::POLICY_BIG_STATE_RESERVE_DRAW_SHARE, $consented['levers']['reserveDrawShare'], 1e-15, 'In a declared recession it consents.');
+        $this->assertFalse($consented['fundHeld']);
+
+        // The slump over, the draw goes back to half even above the debt line, where the Council holds any other cut in revenue.
+        $drawn = Politics::standingLevers(new PoliticsStateDTO(reserveDrawShare: Politics::POLICY_BIG_STATE_RESERVE_DRAW_SHARE));
+        $lapsed = Politics::budget([Diet::VANGUARD], [], Diet::SEED_SEATS, $positions, $drawn, MacroEngine::SOVEREIGN_RISK_DEBT_THRESHOLD + 0.1);
+        $this->assertTrue($lapsed['councilGuards']);
+        $this->assertSame(MacroEngine::RESERVE_DRAW_CEILING, $lapsed['levers']['reserveDrawShare']);
+        $this->assertFalse($lapsed['councilHeld']['reserveDrawShare']);
+        $this->assertTrue($lapsed['fundHeld']);
+
+        // Spending less than half needs no consent, and the brake holds it as any revenue.
+        $kept = Politics::budget([Diet::VANGUARD], [], Diet::SEED_SEATS, $positions, $founding, MacroEngine::SOVEREIGN_RISK_DEBT_THRESHOLD + 0.1);
+        $this->assertSame(MacroEngine::RESERVE_DRAW_CEILING, $kept['levers']['reserveDrawShare']);
+        $this->assertFalse($kept['fundHeld']);
+    }
 }

@@ -29,6 +29,8 @@ final readonly class GovernmentPolicyDTO
         public float $stampDutyRate,
         /** Bank levy on short-term funding, a year (half that on long-term funding). */
         public float $bankLevyRate,
+        /** Share of the reserve fund's expected long-term real return the budget spends (MacroEngine::RESERVE_DRAW_CEILING without the fund's consent). */
+        public float $reserveDrawShare,
         /** Nearness to the vote (0 at mid-term, 1 on its eve and through the talks after it) less its long-run mean. */
         public float $electionPulse,
         /** The Monetary Authority's rate committee's supermajority: 1 hawkish, -1 dovish, 0 neither; null before the committee has formed. */

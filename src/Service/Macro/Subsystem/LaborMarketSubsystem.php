@@ -5,6 +5,7 @@ namespace App\Service\Macro\Subsystem;
 use App\Service\Macro\MacroEngine;
 use App\Service\Macro\MacroState;
 use App\Service\Macro\Recorder\MacroDiagnosticsProbe;
+use App\Service\Math\MathUtility;
 
 /**
  * Handles labor market dynamics, unemployment frictional adjustments,
@@ -45,6 +46,12 @@ class LaborMarketSubsystem
     // --- Wage Error Correction (Blanchard & Katz 1999) ---
     /** Annual pull of wage growth against the real wage's gap to trend productivity: US nonfarm business 1960-1999, wages on the lagged labor share (se 0.10; var/harness/labor_real.py). */
     public const WAGE_ERROR_CORRECTION_SPEED = 0.12;
+
+    // --- Sahm Rule (Sahm 2019) ---
+    /** Months the unemployment rate is averaged over. */
+    public const SAHM_AVERAGE_MONTHS = 3;
+    /** Months before the latest whose three-month averages the low is taken from. */
+    public const SAHM_LOOKBACK_MONTHS = 12;
 
     public function __construct(
         /** Records what moved unemployment, the NAIRU and wages. Null in a test or a headless harness, off everywhere the ticker is not. */
@@ -95,6 +102,30 @@ class LaborMarketSubsystem
         }
 
         $state->unemploymentRate += $adjustmentSpeed * $unemploymentGap * $dt;
+        $this->recordSahmIndicator($state, $dt);
+    }
+
+    /**
+     * The Sahm rule (Sahm 2019): at each month end, the three-month average unemployment rate less its lowest over the
+     * twelve months before. It reads a recession already under way, from data as they arrive, where the yield curve
+     * forecasts one a year out.
+     */
+    public function recordSahmIndicator(MacroState $state, float $dt): void
+    {
+        if (!MathUtility::crossedSimulatedBoundary($state->totalTime, $dt, 1.0 / 12.0)) {
+            return;
+        }
+        $months = $state->unemploymentMonthly;
+        $months[] = $state->unemploymentRate;
+        $months = array_slice($months, -(self::SAHM_LOOKBACK_MONTHS + self::SAHM_AVERAGE_MONTHS));
+        $state->unemploymentMonthly = $months;
+
+        $averages = [];
+        for ($end = self::SAHM_AVERAGE_MONTHS; $end <= count($months); ++$end) {
+            $averages[] = array_sum(array_slice($months, $end - self::SAHM_AVERAGE_MONTHS, self::SAHM_AVERAGE_MONTHS)) / self::SAHM_AVERAGE_MONTHS;
+        }
+        $current = array_pop($averages);
+        $state->sahmRecessionIndicator = $current === null || $averages === [] ? 0.0 : max(0.0, $current - min($averages));
     }
 
     /**

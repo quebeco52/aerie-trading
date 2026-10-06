@@ -1412,6 +1412,33 @@ class MacroAggregateSubsystemTest extends TestCase
     }
 
     /**
+     * The founding draw is in the baseline; the part a budget draws above the founding share is new spending, and
+     * reaches demand as the stabilisation does.
+     */
+    public function testTheDrawAboveTheFoundingShareReachesDemandAsPurchasesDo(): void
+    {
+        $dt = 1.0 / 3600.0;
+        $contribution = function (float $share) use ($dt): float {
+            $probe = new OutputGapProbe();
+            $probe->enable();
+            $state = $this->probedState();
+            $state->sovereignFundDrawToGdp = 0.012;
+            $state->sovereignFundDrawShare = $share;
+            $this->probedSubsystem($probe, 0.0)->calculateOutputGap($state, 0.03, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, $dt, 1.0);
+
+            return $probe->snapshot()['current']['contributions']['fundStabilisation'] / $dt;
+        };
+
+        $this->assertSame(0.0, $contribution(MacroEngine::RESERVE_DRAW_CEILING), 'The founding draw adds nothing to the baseline it is in.');
+        $this->assertEqualsWithDelta(
+            MacroAggregateSubsystem::DOMESTIC_GAP_WEIGHT * MacroAggregateSubsystem::KALDOR_GOVT_SPENDING_MULTIPLIER * (0.012 * 0.1 / 0.6) / MacroEngine::TARGET_CORPORATE_TAX_RATE,
+            $contribution(0.6),
+            1e-15,
+            'A sixth of a draw at 60% is the spending above the founding half.'
+        );
+    }
+
+    /**
      * The decomposition has to add up to the move it claims to explain.
      *
      * The probe is a second reading of a sum the subsystem also computes, and a second reading is worth

@@ -84,6 +84,10 @@ readonly class MacroStateDTO
         public float $capitalStockOverhangEma = 0.0,
         public float $unemploymentRate = MacroEngine::NATURAL_UNEMPLOYMENT,
         public float $unemploymentRateEma = MacroEngine::NATURAL_UNEMPLOYMENT,
+        /** @var list<float> The unemployment rate at each of the last month ends, oldest first, as many as the Sahm rule reads. */
+        public array $unemploymentMonthly = [],
+        /** The Sahm rule's reading: the three-month average unemployment rate above its lowest of the twelve months before (App\Service\Macro\Subsystem\LaborMarketSubsystem::recordSahmIndicator()). */
+        public float $sahmRecessionIndicator = 0.0,
         public float $jobVacanciesRate = MacroEngine::NATURAL_UNEMPLOYMENT * MacroEngine::NATURAL_LABOR_TIGHTNESS,
         public float $jobVacanciesRateEma = MacroEngine::NATURAL_UNEMPLOYMENT * MacroEngine::NATURAL_LABOR_TIGHTNESS,
         public float $laborTightness = MacroEngine::NATURAL_LABOR_TIGHTNESS,
@@ -323,6 +327,8 @@ readonly class MacroStateDTO
         public float $extractionStringency = 0.0,
         public float $stampDutyRate = FinancialConstants::STAMP_DUTY_RATE,
         public float $bankLevyRate = 0.0,
+        /** Share of the reserve fund's expected long-term real return the budget spends, as the Diet passed it with the fund's consent above the ceiling. */
+        public float $reserveDrawShare = MacroEngine::RESERVE_DRAW_CEILING,
         /** The rate committee's supermajority, 1 hawkish, -1 dovish, 0 neither (App\Service\Politics\MonetaryAuthority). */
         public float $authorityMajority = 0.0,
         /** 1 while politics hands the macro a rate committee, else 0: the policy rule reads the supermajority only then. */
@@ -378,6 +384,8 @@ readonly class MacroStateDTO
         public float $sovereignFundMandateEquityShare = 0.0,
         public float $sovereignFundDollarsPerGdp = 0.0,
         public float $sovereignFundAnnualDraw = 0.0,
+        /** The share of the expected return this budget year's draw was set at; a budget that moves the share rescales the draw from its round. */
+        public float $sovereignFundDrawShare = MacroEngine::RESERVE_DRAW_CEILING,
         public float $sovereignFundRebalanceBacklog = 0.0,
         public float $sovereignFundRebalanceRate = 0.0,
         public float $sovereignFundRebalanceMonthsLeft = 0.0,
@@ -450,6 +458,7 @@ readonly class MacroStateDTO
 
             $args[$field] = match ($field) {
                 'sectorZ', 'sectorDemandZ', 'sittingLevers', 'previousSittingLevers', 'expectedLevers', 'previousExpectedLevers' => is_array($data[$key]) ? array_map('floatval', $data[$key]) : [],
+                'unemploymentMonthly' => is_array($data[$key]) ? array_values(array_map('floatval', $data[$key])) : [],
                 'qeActive', 'qtActive' => (bool) $data[$key],
                 'eventType' => (string) $data[$key],
                 default => (float) $data[$key],
