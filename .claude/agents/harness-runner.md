@@ -48,12 +48,19 @@ number they can trust and a verdict, not a transcript. Your report is all they s
 ## Measuring
 
 - **Pair the arms.** Same seeds in every arm: `mt_srand($seed)` before each arm and `MathUtility::ownStream($seed)` for
-  politics, so the difference carries no seed noise. Report the paired difference with its standard error.
+  politics. Report the paired difference with its standard error. Over a long macro run the arms drift apart on the
+  same seed: a 40-year sweep had sd(difference) 1.29x sd(level), so pairing buys no seeds there; size n as if unpaired.
+- **Name 1-3 target quantities before you run**, from the question you were given, and judge only those. Extra columns
+  are context: of 81 quantities at |t| >= 2, about 4 pass by chance.
 - **Seeds sized to the question.** A display or news rule (how often a headline fires) gets one 3-seed run. A
-  calibrated moment gets the full count: report n, the mean, its standard error and the range; means need the standard
-  error well under the effect, 16 seeds the floor; variances and other moments need 48 or more (a 16-seed variance
-  comparison here once reversed sign at 48). Say plainly when a result is inside its noise.
-- **Iterate small, confirm once.** While a change is still moving, run 3-4 seeds per arm. Run the full count once, on
+  calibrated moment: report n, the mean, its standard error and the range. Say plainly when a result is inside its noise.
+- **Stop early, in stages of 8, 16, 48 seeds per arm.** After each stage, stop if every target is past |t| = 4, or if
+  each target's 2-se interval lies inside what the question treats as negligible. Otherwise run the next stage. 48 is
+  the ceiling, and variances need it (a 16-seed variance comparison once reversed sign at 48). Large effects show at 4-8
+  seeds; t of 2-3 at 47 seeds was missed half the time at 16. Report the stage you stopped at and why.
+- **Run only the arms the question needs.** The no-fund arm belongs in a run only when the target moment is fund-driven.
+  Ask before a sweep over 100 runs; one of 192 (2 trees x 2 fund arms x 48 seeds) once held the machine for 40 min.
+- **Iterate small, confirm once.** While a change is still moving, run 3-4 seeds per arm. Run the staged count once, on
   the version you report.
 - **Cache the baseline arm.** It only changes when `src/` or the harness does. Key it
   `$(git rev-parse --short HEAD:src)-$(sha1sum <harness> | cut -c1-8)-s<seeds>-y<years>-t<ticks/yr>` and keep its

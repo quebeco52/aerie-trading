@@ -37,9 +37,11 @@ spend them where the answer is emergent.
   source and the test are the evidence.
 - **A display or news rule** (a threshold, how often something shows to the player): one run of 3 seeds, to check
   the rate is sane.
-- **Tuning toward a measured moment, or a claim that a change moves one:** paired arms on the same seeds, reporting n,
-  mean and standard error: 16 seeds for a mean, 48 for a variance. Iterate on 3-4 seeds and run the full count once,
-  on the final version. Reuse a cached baseline arm when `src/` is unchanged.
+- **Tuning toward a measured moment, or a claim that a change moves one:** arms on the same seeds, reporting n, mean
+  and standard error for 1-3 target quantities named before the run. Run in stages of 8, 16, then 48 seeds per arm;
+  stop once every target is past |t| = 4 or is clearly negligible. 48 is the ceiling, and variances need it. Iterate
+  on 3-4 seeds and run the stages once, on the final version. Run only the arms the question needs (no-fund only for a
+  fund-driven moment), reuse a cached baseline arm when `src/` is unchanged, and ask before a sweep over 100 runs.
 - **What the live game is doing:** `make macro-dump` first; a harness only for the counterfactual.
 
 One seed proves nothing about a moment. All PHP processes on the machine share 12 slots through `bin/php-slot`, at most 8 per session.
