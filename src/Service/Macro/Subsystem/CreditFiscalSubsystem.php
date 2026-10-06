@@ -66,17 +66,21 @@ class CreditFiscalSubsystem
     /** Diffusion of log civilian purchases / potential, the same fit; jumps are not significant (LR 2.1), so the process is Gaussian. */
     public const GOVT_SPENDING_VOLATILITY = 0.0148;
 
-    // --- VASICEK ASRF RETAIL DEFAULT RATE ---
+    // --- VASICEK ASRF RETAIL DEFAULT RATE (fitted on US household delinquency 1991-2019, var/harness/retail_default_fit) ---
     /** Basel II/III consumer asset correlation factor for retail exposures. */
     public const RETAIL_ASRF_RHO = 0.12;
-    /** Sensitivity of consumer macro credit Z-score to unemployment rate deviations from natural rate. */
-    public const RETAIL_UNEMPLOYMENT_SENSITIVITY = 40.0;
-    /** Sensitivity of consumer macro credit Z-score to inflation deviations from target. */
-    public const RETAIL_INFLATION_SENSITIVITY = 25.0;
-    /** Sensitivity of consumer macro credit Z-score to debt service and corporate borrowing spread stress. */
-    public const RETAIL_DEBT_SERVICE_SENSITIVITY = 15.0;
-    /** Stochastic volatility of idiosyncratic consumer credit shocks. */
-    public const RETAIL_CREDIT_VOLATILITY = 0.35;
+    /** Household credit Z at NAIRU, base spreads and trend house prices: -0.06 (se 0.08), the intercept of the fit below; the US channels average -0.17 on top, which with it puts mean delinquency at the 2.5% the PD is struck at. */
+    public const RETAIL_CREDIT_INTERCEPT = -0.06;
+    /** Household credit Z per unit of unemployment over NAIRU: 18.3 (se 2.9), the Vasicek-inverted 0.7 mortgage / 0.3 consumer 30-day delinquency rate (FRED DRSFRMACBS, DRCLACBS) on the engine's own channels; R2 0.84. */
+    public const RETAIL_UNEMPLOYMENT_SENSITIVITY = 18.3;
+    /** Household credit Z per unit of excess borrowing spread (IG over its base plus TED over its base): 17.7 (se 4.6), the same fit. */
+    public const RETAIL_CREDIT_SPREAD_SENSITIVITY = 17.7;
+    /** Household credit Z per unit of log house price over its 5-year trend: 2.65 (se 0.61), the same fit; negative equity is the mortgage default trigger (Foote, Gerardi & Willen 2008). Loss severity reads house prices separately, through the lenders' collateral LGD. */
+    public const RETAIL_HOUSE_PRICE_SENSITIVITY = 2.65;
+    /** Mean reversion (per year) of the household credit factor the channels leave unexplained: 0.37 (se 0.28), the fit's residual AR(1) corrected for the rate's quarterly EMA. */
+    public const RETAIL_CREDIT_FACTOR_KAPPA = 0.37;
+    /** Stationary standard deviation of that factor in Z units: 0.23 (se 0.085), the same residual. */
+    public const RETAIL_CREDIT_FACTOR_SD = 0.23;
 
     // --- INTERBANK LIQUIDITY SPREAD (CIR PROCESS & JUMPS) ---
     /** Floor on the interbank spread (1 bp) keeping the CIR process strictly positive. */
@@ -157,8 +161,6 @@ class CreditFiscalSubsystem
     public const MAX_CCYB = 0.025;
     /** Phase-in time (years) of a buffer decision: Basel gives banks twelve months. */
     public const CCYB_PHASE_IN_YEARS = 1.0;
-    /** Retail default z-score per unit of debt-service gap (ratio over its long-run average): a point of income more in debt service is ~0.3 z of stress. */
-    public const RETAIL_DSR_SENSITIVITY = 30.0;
 
     // --- Credit Crisis Hazard (Schularick & Taylor 2012; Jorda, Schularick & Taylor 2013) ---
     /** Logit intercept: -3.77 (se 0.25), crisis starts on the lagged Basel (one-sided HP) household credit gap, JST Macrohistory R6, 17 economies 1950-2020 outside war years and 5-year post-crisis windows; 2.2% a year at trend. */
@@ -321,8 +323,12 @@ class CreditFiscalSubsystem
     /**
      * Vasicek (2002) One-Factor Asymptotic Single Risk Factor (ASRF) Retail Default Model (Basel II/III).
      *
-     * Derives conditional retail loan default probability (PD) driven by a macroeconomic systemic factor
-     * reflecting unemployment shocks (Okun's Law) and inflation-induced disposable income erosion.
+     * Derives the household default probability (PD) from a systematic factor: unemployment (job loss), borrowing
+     * spreads (refinancing), house prices against their trend (negative equity, the mortgage default trigger), and a
+     * persistent factor those channels leave unexplained, stepped as an exact OU so its effect does not depend on the
+     * tick length. The weights are a joint fit to US delinquency; inflation and the debt-service gap took the wrong
+     * sign there and are left out (the debt-service gap predicts crises a year or two ahead, Drehmann & Juselius
+     * 2014, and acts through the crisis hazard and deleveraging instead).
      *
      * @param MacroState $state Current macroeconomic state.
      * @param float      $dt    Time increment in years.
@@ -330,16 +336,24 @@ class CreditFiscalSubsystem
     public function calculateRetailDefaultRate(MacroState $state, float $dt): void
     {
         $unemploymentShock = ($state->unemploymentRateEma - $state->nairu) * self::RETAIL_UNEMPLOYMENT_SENSITIVITY;
-        $inflationShock = ($state->inflationEma - MacroEngine::TARGET_INFLATION) * self::RETAIL_INFLATION_SENSITIVITY;
 
         $borrowingSpreadStress = max(0.0, $state->macroCreditSpreadEma - MacroEngine::BASE_CREDIT_SPREAD);
         $interbankStress = max(0.0, $state->interbankLiquiditySpreadEma - MacroEngine::INTERBANK_BASELINE_SPREAD);
-        // Drehmann, Illes, Juselius & Santos (2015) debt service burden on conditional default rates.
-        $debtServiceShock = (($borrowingSpreadStress + $interbankStress) * self::RETAIL_DEBT_SERVICE_SENSITIVITY)
-            + ($state->householdDebtServiceGap * self::RETAIL_DSR_SENSITIVITY);
+        $spreadShock = ($borrowingSpreadStress + $interbankStress) * self::RETAIL_CREDIT_SPREAD_SENSITIVITY;
 
-        $dW = $this->mathUtility->generateStandardNormal();
-        $macroZ = - ($unemploymentShock + $inflationShock + $debtServiceShock) + ($dW * self::RETAIL_CREDIT_VOLATILITY);
+        $housePriceGap = $state->residentialWealthTrend > 0.0 && $state->residentialPropertyIndexEma > 0.0
+            ? log($state->residentialPropertyIndexEma / $state->residentialWealthTrend)
+            : 0.0;
+
+        $state->retailCreditFactor = MathUtility::calculateOrnsteinUhlenbeckStep(
+            $state->retailCreditFactor,
+            self::RETAIL_CREDIT_FACTOR_KAPPA,
+            self::RETAIL_CREDIT_FACTOR_SD,
+            $dt,
+            $this->mathUtility->generateStandardNormal()
+        );
+
+        $macroZ = self::RETAIL_CREDIT_INTERCEPT + ($housePriceGap * self::RETAIL_HOUSE_PRICE_SENSITIVITY) - $unemploymentShock - $spreadShock + $state->retailCreditFactor;
 
         $conditionalPd = $this->mathUtility->calculateVasicekExpectedLoss(
             macroZ: $macroZ,

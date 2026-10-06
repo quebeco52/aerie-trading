@@ -51,7 +51,7 @@ class ShadowBankBusinessModelTest extends TestCase
 
         $this->assertArrayHasKey('origination_fees', $result->streamZ);
         $this->assertArrayHasKey('direct_lending', $result->streamZ);
-        $this->assertArrayHasKey('credit', $result->streamZ);
+        $this->assertArrayNotHasKey('credit', $result->streamZ, 'losses are systematic: no idiosyncratic default draw');
 
         $this->assertGreaterThan(0.0, $result->actualRevenue);
         $this->assertEqualsWithDelta(
@@ -126,30 +126,47 @@ class ShadowBankBusinessModelTest extends TestCase
         );
     }
 
-    public function testRetailDefaultAndCommercialPropertyDistressIncreasesProvisionDrag(): void
+    /**
+     * The mortgage book defaults with households: a surge in the retail default rate is charged off (the allowance
+     * roll-forward replaces it through EBIT), not overlaid on the operating margin.
+     */
+    public function testHouseholdDefaultSurgeIsChargedOffOnTheMortgageBook(): void
     {
         $stock = new Stock();
         $stock->setTicker('RITM');
         $stock->setBeta('1.0');
 
-        $baseMacro = new MacroStateDTO(
-            retailDefaultRateEma: 0.025,
-            commercialPropertyIndexEma: 100.0
+        [$base, $baseRate] = $this->chargeOffs($stock, new MacroStateDTO(retailDefaultRateEma: 0.025));
+        [$distress, $distressRate] = $this->chargeOffs($stock, new MacroStateDTO(retailDefaultRateEma: 0.050));
+
+        $this->assertGreaterThan(1.5 * $baseRate, $distressRate);
+        $this->assertEqualsWithDelta($base->clampedMargin, $distress->clampedMargin, 1e-12, 'credit losses do not touch the operating margin');
+    }
+
+    /** The book is its two portfolios at the bank segment rates: 60% mortgages at 0.43% and 40% direct loans at 0.73%. */
+    public function testThroughTheCycleLossIsTheMortgageAndDirectLendingBlend(): void
+    {
+        $pool = (new Stock())->setTicker('POOL');
+
+        $this->assertEqualsWithDelta(
+            0.60 * ShadowBankBusinessModel::RESIDENTIAL_CHARGE_OFF_RATE + 0.40 * ShadowBankBusinessModel::BUSINESS_CHARGE_OFF_RATE,
+            $this->model->getThroughTheCycleCreditLossRate($pool),
+            1e-12
         );
+        $this->assertEqualsWithDelta($this->model->getThroughTheCycleCreditLossRate($pool), $this->model->getThroughTheCycleCreditLossRate(), 1e-12);
+    }
 
-        $distressMacro = new MacroStateDTO(
-            retailDefaultRateEma: 0.050, // Elevated defaults
-            commercialPropertyIndexEma: 80.0 // CRE valuation collapse
-        );
+    /**
+     * Annualized charge-offs over the book for one quarter at this macro state, with the collateral reference at par.
+     *
+     * @return array{0: \App\DTO\ActualFinancialsDTO, 1: float}
+     */
+    private function chargeOffs(Stock $stock, MacroStateDTO $macro): array
+    {
+        $stock->setEarningsMomentumZ([ShadowBankBusinessModel::STATE_RESIDENTIAL_ORIGINATION_PRICE => 100.0]);
+        $result = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.50, 20_000_000.0, 0.0, $macro, $this->mathUtility);
 
-        $mathMock = $this->createStub(MathUtility::class);
-        $mathMock->method('generatePersistentZ')->willReturn(0.0);
-
-        $baseResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.50, 20_000_000.0, 0.0, $baseMacro, $mathMock);
-        $distressResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.50, 20_000_000.0, 0.0, $distressMacro, $mathMock);
-
-        // Distress increases default drag and provisions, increasing the variable cost ratio (clampedMargin)
-        $this->assertGreaterThan($baseResult->clampedMargin, $distressResult->clampedMargin);
+        return [$result, $result->netChargeOffs * 4.0 / $this->model->resolveEarningAssets($stock)];
     }
 
     public function testResidentialPropertyIndexDrivesMortgageOriginationAndProvisions(): void
@@ -161,11 +178,8 @@ class ShadowBankBusinessModelTest extends TestCase
         $depressedMacro = new MacroStateDTO(residentialPropertyIndexEma: 75.0);
         $boomMacro = new MacroStateDTO(residentialPropertyIndexEma: 130.0);
 
-        $mathMock = $this->createStub(MathUtility::class);
-        $mathMock->method('generatePersistentZ')->willReturn(0.0);
-
-        $depressedResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.50, 20_000_000.0, 0.0, $depressedMacro, $mathMock);
-        $boomResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.50, 20_000_000.0, 0.0, $boomMacro, $mathMock);
+        [$depressedResult, $depressedRate] = $this->chargeOffs($stock, $depressedMacro);
+        [$boomResult, $boomRate] = $this->chargeOffs($stock, $boomMacro);
 
         // High residential property values stimulate mortgage origination
         $this->assertGreaterThan(
@@ -174,11 +188,7 @@ class ShadowBankBusinessModelTest extends TestCase
             'Residential property index growth should expand mortgage origination fee volume.'
         );
 
-        $this->assertGreaterThan(
-            $boomResult->clampedMargin,
-            $depressedResult->clampedMargin,
-            'Depressed residential property values must increase credit provision costs on mortgage portfolios.'
-        );
+        $this->assertGreaterThan($boomRate, $depressedRate, 'Homes below the price they were lent against lose more on each mortgage default (Frye 2000).');
     }
 
     public function testInterbankLiquiditySpreadCompressesShadowBankMortgageNIM(): void
@@ -251,16 +261,14 @@ class ShadowBankBusinessModelTest extends TestCase
             recessionProbabilityEma: 0.65
         );
 
-        $mathMock = $this->createStub(MathUtility::class);
-        $mathMock->method('generatePersistentZ')->willReturn(0.0);
+        [, $benignRate] = $this->chargeOffs($stock, $benignMacro);
+        [, $stressRate] = $this->chargeOffs($stock, $stressMacro);
 
-        $benignResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.50, 20_000_000.0, 0.0, $benignMacro, $mathMock);
-        $stressResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.50, 20_000_000.0, 0.0, $stressMacro, $mathMock);
-
+        $this->assertGreaterThan($benignRate, $stressRate, 'Surging corporate defaults are charged off on the direct lending book.');
         $this->assertGreaterThan(
-            $benignResult->clampedMargin,
-            $stressResult->clampedMargin,
-            'Surging corporate default rates and forward recession risk must increase shadow bank loss provisions and CECL reserves.'
+            $this->model->getForwardCreditLossMultiplier($stock, $benignMacro),
+            $this->model->getForwardCreditLossMultiplier($stock, $stressMacro),
+            'Forward recession risk raises the reserve target.'
         );
     }
 

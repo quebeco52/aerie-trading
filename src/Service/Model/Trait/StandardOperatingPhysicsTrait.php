@@ -605,6 +605,7 @@ trait StandardOperatingPhysicsTrait
             kpis: $physics->kpis,
             creditLossProvision: $physics->creditLossProvision,
             netChargeOffs: $physics->netChargeOffs,
+            netInterestSqueeze: $physics->netInterestSqueeze,
             priceRevenue: $priceRevenue,
             demandShockZ: $demandShockZ,
             sectorShockZ: $sectorShockZ,

@@ -1198,7 +1198,34 @@ class CreditFiscalSubsystemTest extends TestCase
         $this->assertEqualsWithDelta(MacroEngine::HOUSEHOLD_DEBT_TO_INCOME_BASELINE * exp(-CreditFiscalSubsystem::DELEVERAGING_SPEED * 0.02), $above->householdDebtToIncome, 1e-9, 'Two points over the line repay 3.5% of the stock a year.');
     }
 
-    public function testRetailDefaultsRiseWithTheDebtServiceRatioAtFixedUnemployment(): void
+    public function testRetailDefaultsRiseAsHousePricesFallBelowTrendAtFixedUnemployment(): void
+    {
+        $subsystem = $this->quietSubsystem();
+
+        $neutral = new MacroState();
+        $neutral->unemploymentRateEma = $neutral->nairu;
+        $neutral->residentialPropertyIndexEma = 100.0;
+        $neutral->residentialWealthTrend = 100.0;
+        $subsystem->calculateRetailDefaultRate($neutral, 0.25);
+
+        $underwater = new MacroState();
+        $underwater->unemploymentRateEma = $underwater->nairu;
+        $underwater->residentialPropertyIndexEma = 80.0;
+        $underwater->residentialWealthTrend = 100.0;
+        $subsystem->calculateRetailDefaultRate($underwater, 0.25);
+
+        $math = new MathUtility();
+        $this->assertEqualsWithDelta($math->calculateVasicekExpectedLoss(CreditFiscalSubsystem::RETAIL_CREDIT_INTERCEPT, MacroEngine::RETAIL_DEFAULT_BASELINE, CreditFiscalSubsystem::RETAIL_ASRF_RHO, 1.0), $neutral->retailDefaultRate, 1e-12, 'At NAIRU, base spreads and trend prices the systematic factor is the intercept.');
+        $expected = $math->calculateVasicekExpectedLoss(CreditFiscalSubsystem::RETAIL_CREDIT_INTERCEPT + log(0.8) * CreditFiscalSubsystem::RETAIL_HOUSE_PRICE_SENSITIVITY, MacroEngine::RETAIL_DEFAULT_BASELINE, CreditFiscalSubsystem::RETAIL_ASRF_RHO, 1.0);
+        $this->assertEqualsWithDelta($expected, $underwater->retailDefaultRate, 1e-9, 'Homes 20% below trend default more households at the same unemployment.');
+        $this->assertGreaterThan($neutral->retailDefaultRate, $underwater->retailDefaultRate);
+    }
+
+    /**
+     * The debt-service gap took the wrong sign against US delinquency, so it reaches households through the crisis
+     * hazard and deleveraging, not the default rate.
+     */
+    public function testTheDebtServiceGapDoesNotMoveTheRetailDefaultRate(): void
     {
         $subsystem = $this->quietSubsystem();
 
@@ -1211,7 +1238,29 @@ class CreditFiscalSubsystemTest extends TestCase
         $burdened->householdDebtServiceGap = 0.02;
         $subsystem->calculateRetailDefaultRate($burdened, 0.25);
 
-        $this->assertGreaterThan($neutral->retailDefaultRate, $burdened->retailDefaultRate, 'A heavier instalment defaults more households at the same unemployment.');
+        $this->assertSame($neutral->retailDefaultRate, $burdened->retailDefaultRate);
+    }
+
+    /** The unexplained household credit factor is state: a shock today is still in the default rate next quarter. */
+    public function testTheHouseholdCreditFactorPersistsAcrossTicks(): void
+    {
+        $math = new class extends MathUtility {
+            public float $draw = -1.0;
+            public function generateStandardNormal(): float { return $this->draw; }
+        };
+        $subsystem = new CreditFiscalSubsystem($math);
+
+        $state = new MacroState();
+        $state->unemploymentRateEma = $state->nairu;
+        $subsystem->calculateRetailDefaultRate($state, 0.25);
+        $shocked = $state->retailCreditFactor;
+        $math->draw = 0.0;
+        $subsystem->calculateRetailDefaultRate($state, 0.25);
+
+        $this->assertLessThan(0.0, $shocked);
+        $this->assertEqualsWithDelta($shocked * exp(-CreditFiscalSubsystem::RETAIL_CREDIT_FACTOR_KAPPA * 0.25), $state->retailCreditFactor, 1e-12, 'With no new shock the factor decays at its own rate.');
+        $atRest = (new MathUtility())->calculateVasicekExpectedLoss(CreditFiscalSubsystem::RETAIL_CREDIT_INTERCEPT, MacroEngine::RETAIL_DEFAULT_BASELINE, CreditFiscalSubsystem::RETAIL_ASRF_RHO, 1.0);
+        $this->assertGreaterThan($atRest, $state->retailDefaultRate, 'A bad factor still defaults more households a quarter later.');
     }
 
     /**

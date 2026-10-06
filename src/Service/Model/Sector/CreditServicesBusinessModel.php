@@ -76,29 +76,26 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
     public const POLICY_APR_SPREAD        = 0.35;
 
     // --- Credit Losses (ASC 326) ---
-    /** Through-the-cycle annual net charge-off rate on unsecured card receivables (US card industry long-run average ~3.5%). */
-    public const CARD_CHARGE_OFF_RATE = 0.035;
+    /** The book is unsecured consumer credit: no mortgages. */
+    public const RESIDENTIAL_MORTGAGE_SHARE = 0.0;
+    /** The whole book is consumer: card balances and instalment loans. */
+    public const CONSUMER_LOAN_SHARE = 1.0;
+    /** No commercial property lending. */
+    public const COMMERCIAL_REAL_ESTATE_SHARE = 0.0;
+    /** Credit card charge-offs at US commercial banks: 4.69% a year over 1991-2019, peak 10.54% in 2010 (FRED CORCCACBS). */
+    public const CONSUMER_CHARGE_OFF_RATE = 0.0469;
     /** Years of expected loss the allowance covers: revolving balances turn over in well under two years. */
     public const CECL_LIFETIME_HORIZON_YEARS = 1.5;
+    /** Charge-offs over the through-the-cycle rate above which card defaults are elevated: 1.26x the 1991-2019 mean in 2001-02 (FRED CORCCACBS). */
+    public const SECTOR_SHOCK_ELEVATED_LOSS_MULTIPLE = 1.2;
+    /** Above which provisions are massive: 2.01x in 2009-10, peaking at 2.25x; card losses swing less than a bank book's. */
+    public const SECTOR_SHOCK_MASSIVE_LOSS_MULTIPLE = 1.8;
+    /** Below which reserves are released: card losses bottomed at 0.62x in the late 2010s. */
+    public const SECTOR_SHOCK_RESERVE_RELEASE_LOSS_MULTIPLE = 0.7;
 
-    // --- Revenue & Default Shock Physics ---
+    // --- Revenue Shock Physics ---
     /** Volatility multiplier for top-line revenue shocks in transaction swipe markets. */
     public const REVENUE_VARIANCE_SCALAR   = 0.20;
-    /** Macroeconomic default scalar translating negative output gaps into unsecured loan defaults. */
-    public const MACRO_DEFAULT_SCALAR      = 0.35;
-    /** Macro default scalar translating elevated unemployment rates into revolving credit card charge-offs. */
-    public const UNEMPLOYMENT_CHARGE_OFF_SCALAR = 0.50;
-    /** Credit provision loss weight for elevated household debt service ratio stress above neutral. */
-    public const SHOCK_WEIGHT_DSR_DEFAULT  = 0.20;
-    /** Severe credit z-score threshold triggering elevated unsecured default provisions. */
-    public const CREDIT_STRESS_Z_THRESHOLD = -1.50;
-    /** Loss provision multiplier applied to credit stress severity. */
-    public const LOSS_PROVISION_SCALAR     = 0.08;
-    /** Z-score threshold above which benign credit conditions trigger a reserve release. */
-    public const HEALTHY_CREDIT_Z_FLOOR    = 1.00;
-    /** Maximum quarterly reserve release clamp. Credit cycle is lumpier than bank loans: cap at 5%. */
-    public const MAX_PROVISION_REVERSAL      = 0.02;
-    public const PROVISION_REVERSAL_SCALE    = 0.01;
 
     public const BASE_COVERAGE_VISIBILITY = 0.50;
     public const BASE_COVERAGE_ERROR = 0.10;
@@ -132,14 +129,6 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
     public const NIM_QUADRATIC_COEFF        = 0.15;
     /** Sensitivity of unsecured lending funding cost squeeze to interbank liquidity freezes (TED spread). */
     public const TED_SPREAD_NIM_PENALTY     = 1.50;
-
-    // --- Event Lore Thresholds ---
-    /** Severe credit z-score threshold indicating massive unsecured credit default provisions. */
-    public const LORE_MASSIVE_PROVISION_Z   = -2.00;
-    /** Severe credit z-score threshold indicating elevated credit card default margin penalties. */
-    public const LORE_ELEVATED_DEFAULT_Z    = -1.50;
-    /** Benign z-score threshold triggering reserve release event lore. */
-    public const LORE_RESERVE_RELEASE_Z     = 2.00;
 
     /**
      * A card issuer's receivables revolve and reprice at will, so the book carries almost no duration; what
@@ -187,7 +176,6 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
         // Independent stream Z-scores with AR(1) persistence
         $lendingZ = $streams->generateZ('lending', 0.25); // Revolving credit loan origination volume
         $swipeZ   = $streams->generateZ('swipe', 0.25); // Payment gateway transaction swipe volume
-        $defaultZ = $streams->generateExogenousZ('default', 0.20); // Consumer credit default Z-score
 
         // Inflation Bonus (Interchange Swipe Fees):
         // Swipe fees (Visa/MC network) are a percentage of transaction value — higher prices = higher revenue.
@@ -214,30 +202,13 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
         $actualRevenue = max(0.0, array_sum($streamRevenues));
         $streams->recordStreamShares($streamRevenues);
 
-        // Unsecured Default Shock:
-        // Credit card debt is unsecured. Consumers default on cards long before mortgages during recessions.
-        $sentimentShift = $macroState->sentimentDeviation();
-        $retailDefaultShift = MathUtility::excessOverBaseline($macroState->retailDefaultRateEma, MacroEngine::RETAIL_DEFAULT_BASELINE);
-        $unemploymentShift = MathUtility::excessOverBaseline($macroState->unemploymentRateEma, MacroEngine::NATURAL_UNEMPLOYMENT);
-        $dsrShift = max(0.0, $macroState->householdDebtServiceGap) / MacroEngine::HOUSEHOLD_DSR_NEUTRAL;
-        $macroDefaultDrag = ($sentimentShift < 0.0 ? abs($sentimentShift) * self::MACRO_DEFAULT_SCALAR : 0.0)
-            + ($retailDefaultShift * 0.15)
-            + ($unemploymentShift * self::UNEMPLOYMENT_CHARGE_OFF_SCALAR * 0.10)
-            + ($dsrShift * self::SHOCK_WEIGHT_DSR_DEFAULT);
-
-        if ($defaultZ < self::CREDIT_STRESS_Z_THRESHOLD) {
-            $provisionShock = abs($defaultZ) * self::LOSS_PROVISION_SCALAR;
-        } elseif ($defaultZ > self::HEALTHY_CREDIT_Z_FLOOR) {
-            // Scaled reserve release: replaces flat HEALTHY_CREDIT_BONUS.
-            $provisionShock = -min(self::MAX_PROVISION_REVERSAL, ($defaultZ - self::HEALTHY_CREDIT_Z_FLOOR) * self::PROVISION_REVERSAL_SCALE);
-        } else {
-            $provisionShock = 0.0;
-        }
-        $lossProvisionShock = $provisionShock + $macroDefaultDrag;
-
-        // The forward-looking CECL reserve (spreads, recession forecast) moves the allowance TARGET through
-        // getForwardCreditLossMultiplier(), where the per-ticker CeclSpreadSensitivity sets how far this issuer's
-        // reserve travels with spreads. The roll-forward books the build once; it is not a margin cost here.
+        // Charge-offs are the card book's conditional loss at the household default cycle (the bank's segment model
+        // with the whole book consumer). They reach EBIT once, through the allowance roll-forward. The forward-looking
+        // CECL reserve moves the allowance TARGET through getForwardCreditLossMultiplier(), where the per-ticker
+        // CeclSpreadSensitivity sets how far this issuer's reserve travels with spreads.
+        $credit = $this->resolveConditionalCreditLossRate($stock, $macroState, $streams, $mathUtility);
+        $netChargeOffs = ($credit['loss_rate'] / FinancialConstants::QUARTERS_PER_YEAR) * $this->resolveEarningAssets($stock);
+        $lossMultiple = $credit['loss_rate'] / max(1e-9, $this->getThroughTheCycleCreditLossRate($stock));
 
         // Net Interest Margin (NIM) Squeeze (1.5x more sensitive than banks due to wholesale funding dependency)
         $yield10y = $macroState->yield10yEma;
@@ -253,23 +224,22 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
         }
 
         // Structural efficiency floor: Total Operating Costs (Fixed + Variable) / Revenue >= MIN_EFFICIENCY_RATIO.
-        // Crucially, unsecured default provisions and NIM squeeze apply proportionally to the Revolving
-        // Lending share ($lendingWeight), leaving Payment Network Swipe Interchange completely insulated.
+        // Crucially, the NIM squeeze applies proportionally to the Revolving Lending share ($lendingWeight),
+        // leaving Payment Network Swipe Interchange completely insulated.
         $minVariableMargin = max(0.01, self::MIN_EFFICIENCY_RATIO - ($fixedCosts / max(1.0, $actualRevenue)));
-        $lendingCostAddon = ($lossProvisionShock + $nimSqueeze) * $lendingWeight;
-        $rawMargin = $realizedVariableMargin + $lendingCostAddon;
+        $rawMargin = $realizedVariableMargin + ($nimSqueeze * $lendingWeight);
         $clampedMargin = $this->clampMargin($rawMargin, $minVariableMargin);
 
         $eventType = null;
-        if ($defaultZ < self::LORE_MASSIVE_PROVISION_Z) {
+        if ($lossMultiple > static::SECTOR_SHOCK_MASSIVE_LOSS_MULTIPLE) {
             $eventType = ShockEvent::MASSIVE_CREDIT_PROVISION;
-        } elseif ($defaultZ < self::LORE_ELEVATED_DEFAULT_Z) {
+        } elseif ($lossMultiple > static::SECTOR_SHOCK_ELEVATED_LOSS_MULTIPLE) {
             $eventType = ShockEvent::ELEVATED_LOAN_DEFAULTS;
-        } elseif ($defaultZ > self::LORE_RESERVE_RELEASE_Z) {
+        } elseif ($lossMultiple < static::SECTOR_SHOCK_RESERVE_RELEASE_LOSS_MULTIPLE) {
             $eventType = ShockEvent::RESERVE_RELEASE;
         }
 
-        $primaryShockZ = $streams->resolveDominantShockZ([$defaultZ, $lendingZ]);
+        $primaryShockZ = $streams->resolveDominantShockZ([$credit['systematic_z'], $lendingZ]);
         // observableShockZ: inflation bonus and swipe volume are visible, lending is partially visible
         $lendingBase = max(1.0, $expectedRevenue * $lendingWeight);
         $lendingShock = ($lendingRevenue - $lendingBase) / $lendingBase;
@@ -285,6 +255,7 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
             eventType: $eventType,
             streamZ: $streams->getStreamZ(),
             streamRevenue: $streamRevenues,
+            netChargeOffs: $netChargeOffs,
             priceRevenue: $priceRevenue,
         );
     }
@@ -332,7 +303,7 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
         $targetCash = $this->calculateTargetOperatingCash($effectiveEquity, $optimalDeposits, $optimalWholesaleDebt);
         $optimalEarningAssets = $effectiveEquity + $optimalDebt - $targetCash;
 
-        // Pre-provision operating profit: unsecured card receivables charge off at CARD_CHARGE_OFF_RATE through
+        // Pre-provision operating profit: unsecured card receivables charge off at CONSUMER_CHARGE_OFF_RATE through
         // the cycle and the allowance roll-forward books that against EBIT every quarter, so the ROE target
         // has to be earned on top of it or the reported return is the target minus the loss rate.
         $optimalCreditProvision = $this->resolveThroughTheCycleCreditProvision($stock, $optimalEarningAssets);
@@ -390,10 +361,25 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
         return new InterestExpenseDTO(interestExpense: $wholesaleInterest + $depositInterest, wholesaleRate: $wholesaleRate);
     }
 
-    /** Unsecured consumer credit loses far more through the cycle than a prime bank loan book. */
-    public function getThroughTheCycleCreditLossRate(?Stock $stock = null): float
+    /**
+     * The card book is one unsecured consumer segment: the bank's segment model with nothing secured on property, so
+     * the loss rate reads the household default cycle alone.
+     *
+     * @return array{loss_rate: float, systematic_z: float}
+     */
+    protected function resolveConditionalCreditLossRate(Stock $stock, \App\DTO\MacroStateDTO $macroState, \App\DTO\StreamContext $streams, MathUtility $mathUtility): array
     {
-        return self::CARD_CHARGE_OFF_RATE;
+        $householdZ = $mathUtility->calculateVasicekSystematicFactor(
+            $macroState->retailDefaultRateEma,
+            MacroEngine::RETAIL_DEFAULT_BASELINE,
+            \App\Service\Macro\Subsystem\CreditFiscalSubsystem::RETAIL_ASRF_RHO
+        );
+        $pd = static::CONSUMER_CHARGE_OFF_RATE * $this->resolveCreditRiskScale($stock) / self::LGD_BASELINE;
+
+        return [
+            'loss_rate' => $mathUtility->calculateVasicekExpectedLoss($householdZ, $pd, \App\Service\Macro\Subsystem\CreditFiscalSubsystem::RETAIL_ASRF_RHO, self::LGD_BASELINE),
+            'systematic_z' => $householdZ,
+        ];
     }
 
     /** A subprime originator's reserve travels further with credit spreads than a prime card network's. */
@@ -458,9 +444,7 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
     public function getOperatingMacroFields(): array
     {
         return [
-            'consumer_sentiment_index_ema',
             'credit_to_gdp_gap_ema',
-            'household_debt_service_gap',
             'inflation_ema',
             'interbank_liquidity_spread_ema',
             'macro_credit_spread_ema',
@@ -471,7 +455,6 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
             'recession_probability_ema',
             'retail_default_rate_ema',
             'sloos_tightening_index_ema',
-            'unemployment_rate_ema',
             'yield_10y_ema',
             'yield_2y_ema',
         ];

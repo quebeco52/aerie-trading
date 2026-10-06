@@ -950,6 +950,7 @@ class EarningsEngine
         $ctx->kpis['price_revenue'] = $actuals->priceRevenue;
         $ctx->creditLossProvision = $actuals->creditLossProvision;
         $ctx->netChargeOffs = max(0.0, $actuals->netChargeOffs);
+        $ctx->netInterestSqueeze = $actuals->netInterestSqueeze;
 
         // Stock-based compensation (ASC 718) is already inside the operating cost base: it changes no margin,
         // but it is non-cash (added back to FCF below) and is settled in newly issued shares.

@@ -821,7 +821,13 @@ class DebtEngine
             return false;
         }
 
-        if ($health->interestCoverage < self::REFINANCING_MIN_COVERAGE) {
+        // Coverage is how a lender underwrites an operating borrower, whose interest is a charge on its cash flow. A
+        // lender, or any institution steering to a capital ratio, is underwritten on its capital instead: its interest
+        // expense is its cost of goods, and a provisioning quarter is not a missed coupon. Its rating reads the capital.
+        $strategy = \App\Data\Sectors::strategyFor($stock->getIndustry());
+        $underwrittenOnCapital = $strategy instanceof \App\Service\Model\Sector\CommercialBankBusinessModel
+            || $strategy->getTargetCapitalRatio($stock) !== null;
+        if (!$underwrittenOnCapital && $health->interestCoverage < self::REFINANCING_MIN_COVERAGE) {
             return false;
         }
 

@@ -40,6 +40,7 @@ class MacroFieldRegistryTest extends TestCase
         'marketJumpMultiplier' => 'Per-tick jump scale; marketVolatility carries the quarter-scale reading.',
 
         'metalsChi' => 'Latent OU state behind industrialMetalsIndex, which is recorded.',
+        'retailCreditFactor' => 'Latent OU state behind retailDefaultRate, which is recorded.',
         'metalsXi' => 'Latent OU state behind industrialMetalsIndex, which is recorded.',
         'agriChi' => 'Latent OU state behind agriculturalCommodityIndex, which is recorded.',
         'agriXi' => 'Latent OU state behind agriculturalCommodityIndex, which is recorded.',

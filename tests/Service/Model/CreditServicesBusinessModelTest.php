@@ -58,7 +58,7 @@ class CreditServicesBusinessModelTest extends TestCase
 
         $this->assertSame($without['invested_capital'], $withLosses['invested_capital']);
         $this->assertEqualsWithDelta(
-            CreditServicesBusinessModel::CARD_CHARGE_OFF_RATE * (1.0 - $macro->corporateTaxRate),
+            $this->model->getThroughTheCycleCreditLossRate($stock) * (1.0 - $macro->corporateTaxRate),
             $withLosses['baseline_roic'] - $without['baseline_roic'],
             1e-9,
             'the after-tax return target must rise by exactly the through-the-cycle loss rate the ledger charges'
@@ -94,55 +94,44 @@ class CreditServicesBusinessModelTest extends TestCase
         $this->assertGreaterThan(0.0, $result->streamRevenue['swipe']);
     }
 
-    public function testUnemploymentSpikeIncreasesChargeOffProvisions(): void
+    /**
+     * Card losses follow the household default cycle and are charged off, not overlaid on the margin: a default surge
+     * raises this quarter's charge-offs (which the allowance roll-forward replaces through EBIT) and leaves the
+     * operating margin alone, as the bank's book does.
+     */
+    public function testHouseholdDefaultSurgeIsChargedOffNotOverlaidOnTheMargin(): void
     {
         $stock = new Stock();
         $stock->setTicker('COF');
         $stock->setBeta('1.0');
 
-        $lowUnemploymentMacro = new MacroStateDTO(
-            inflationEma: 0.02,
-            consumerSentimentIndexEma: 100.0,
-            retailDefaultRateEma: 0.025,
-            unemploymentRateEma: 0.040
-        );
+        $lossRate = function (float $retailDefaultRate) use ($stock): array {
+            $result = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.55, 20_000_000.0, 0.0, new MacroStateDTO(retailDefaultRateEma: $retailDefaultRate), $this->mathUtility);
 
-        $highUnemploymentMacro = new MacroStateDTO(
-            inflationEma: 0.02,
-            consumerSentimentIndexEma: 100.0,
-            retailDefaultRateEma: 0.025,
-            unemploymentRateEma: 0.080
-        );
+            return [$result, $result->netChargeOffs * 4.0 / $this->model->resolveEarningAssets($stock)];
+        };
 
-        $mathMock = $this->createStub(MathUtility::class);
-        $mathMock->method('generatePersistentZ')->willReturn(0.0);
+        [$calm, $calmRate] = $lossRate(0.025);
+        [$surge, $surgeRate] = $lossRate(0.060);
 
-        $baseResult = $this->model->computeActualFinancials(
-            $stock,
-            expectedRevenue: 100_000_000.0,
-            realizedVariableMargin: 0.55,
-            fixedCosts: 20_000_000.0,
-            baselineVol: 0.0,
-            macroState: $lowUnemploymentMacro,
-            mathUtility: $mathMock
-        );
+        $this->assertGreaterThan(1.8 * $calmRate, $surgeRate, 'card charge-offs ran 2.25x their mean at the 2010 peak (FRED CORCCACBS)');
+        $this->assertEqualsWithDelta($calm->clampedMargin, $surge->clampedMargin, 1e-12, 'credit losses do not touch the operating margin');
+        $this->assertSame(\App\Service\Event\ShockEvent::MASSIVE_CREDIT_PROVISION, $surge->eventType);
+    }
 
-        $surgeResult = $this->model->computeActualFinancials(
-            $stock,
-            expectedRevenue: 100_000_000.0,
-            realizedVariableMargin: 0.55,
-            fixedCosts: 20_000_000.0,
-            baselineVol: 0.0,
-            macroState: $highUnemploymentMacro,
-            mathUtility: $mathMock
-        );
+    /**
+     * A card book is unsecured consumer credit, so it loses the industry's card charge-off rate through the cycle,
+     * scaled by underwriting: the prime network three quarters of it, the subprime instalment lender 1.6x, OneMain's
+     * 6.02% of 2019 over the industry's rate that year.
+     */
+    public function testTheCardBookLosesTheIndustryRateScaledByUnderwriting(): void
+    {
+        $prime = (new Stock())->setTicker('TALN');
+        $subprime = (new Stock())->setTicker('STRK');
 
-        $this->assertGreaterThan(
-            $baseResult->clampedMargin,
-            $surgeResult->clampedMargin,
-            'Elevated unemployment must increase credit card charge-offs and expand the variable cost margin.'
-        );
-        $this->assertLessThan($baseResult->ebit, $surgeResult->ebit);
+        $this->assertEqualsWithDelta(CreditServicesBusinessModel::CONSUMER_CHARGE_OFF_RATE, $this->model->getThroughTheCycleCreditLossRate(), 1e-12);
+        $this->assertEqualsWithDelta(0.75 * CreditServicesBusinessModel::CONSUMER_CHARGE_OFF_RATE, $this->model->getThroughTheCycleCreditLossRate($prime), 1e-12);
+        $this->assertEqualsWithDelta(1.6 * CreditServicesBusinessModel::CONSUMER_CHARGE_OFF_RATE, $this->model->getThroughTheCycleCreditLossRate($subprime), 1e-12);
     }
 
     /**

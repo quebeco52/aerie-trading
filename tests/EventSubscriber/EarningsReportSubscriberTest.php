@@ -373,6 +373,7 @@ class EarningsReportSubscriberTest extends TestCase
         $ctx->creditLossProvision = 700000.0;
         $ctx->netChargeOffs = 500000.0;
         $ctx->netLoanOriginations = 3000000.0;
+        $ctx->netInterestSqueeze = 400000.0;
         $ctx->debtMetrics = new \App\DTO\DebtMetricsDTO(4000000.0, 0.04, 0.04, 0.01, 0.04, 0.04, 1.0, 1.0, 0.0, 1.0);
 
         $this->reportRepository->method('findLatestFor')->willReturn(null);
@@ -390,8 +391,8 @@ class EarningsReportSubscriberTest extends TestCase
         $this->assertEqualsWithDelta(3000000.0, (float) $persisted->getNetLoanOriginations(), 0.01);
         $this->assertEqualsWithDelta(300000000.0, (float) $persisted->getCustomerDeposits(), 0.01);
         $this->assertNull($persisted->getCet1Ratio(), 'only a real bank model can state a capital ratio');
-        // (8.0M of interest earned - 1.0M of interest paid this quarter) / 354M net book, annualized.
-        $this->assertEqualsWithDelta(((8000000.0 - 1000000.0) / 354000000.0) * 4.0, (float) $persisted->getNetInterestMargin(), 1e-4);
+        // (8.0M of interest earned - 1.0M of interest paid - 0.4M the curve squeeze took this quarter) / 354M net book, annualized.
+        $this->assertEqualsWithDelta(((8000000.0 - 1000000.0 - 400000.0) / 354000000.0) * 4.0, (float) $persisted->getNetInterestMargin(), 1e-4);
         $this->assertEqualsWithDelta((float) $persisted->getTotalAssets(), (float) $persisted->getTotalLiabilities() + (float) $persisted->getEquity(), 0.01, 'the statement balances');
     }
 

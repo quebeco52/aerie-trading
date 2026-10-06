@@ -530,6 +530,41 @@ class DebtEngineTest extends TestCase
     }
 
     /**
+     * A bank is underwritten on its capital, not its interest coverage: a loss quarter that leaves a single-A savings
+     * bank's coverage under one still rolls its covered bonds. An operating firm at the same rating and coverage does not.
+     */
+    public function testACapitalTargetingBankRefinancesThroughALossQuarter(): void
+    {
+        $engine = new DebtEngine(new MathUtility(), new CorporateMetrics(), null, null);
+        $health = $this->buildHealthForMaturity(interestCoverage: 0.6, dynamicSpread: 0.01);
+
+        $bank = $this->buildMaturityIssuer('A', 0.006);
+        $bank->setTicker('PLVR');
+        $bank->setIndustry('Banks - Regional');
+
+        $this->assertNotNull(\App\Data\Sectors::strategyFor('Banks - Regional')->getTargetCapitalRatio($bank), 'PLVR steers to its capital ratio');
+        $this->assertTrue($engine->rollMaturities($bank, $health, 0.0)->refinanced);
+        $this->assertFalse($engine->rollMaturities($this->buildMaturityIssuer('A', 0.006), $health, 0.0)->refinanced);
+    }
+
+    /**
+     * A lender with no capital target is still a lender: a card book provisioning through a downturn takes its
+     * coverage under one without missing a coupon, and the market rolls its notes on its capital.
+     */
+    public function testALenderWithoutACapitalTargetRefinancesThroughAProvisioningQuarter(): void
+    {
+        $engine = new DebtEngine(new MathUtility(), new CorporateMetrics(), null, null);
+        $health = $this->buildHealthForMaturity(interestCoverage: -0.8, dynamicSpread: 0.03);
+
+        $cardLender = $this->buildMaturityIssuer('BBB', 0.02);
+        $cardLender->setTicker('STRK');
+        $cardLender->setIndustry('Credit Services');
+
+        $this->assertNull(\App\Data\Sectors::strategyFor('Credit Services')->getTargetCapitalRatio($cardLender), 'STRK runs no capital target');
+        $this->assertTrue($engine->rollMaturities($cardLender, $health, 0.0)->refinanced);
+    }
+
+    /**
      * Market access is looser than the test for taking on NEW leverage: an investment-grade issuer with
      * ample coverage rolls its debt straight through a recession, which is what actually happens.
      */

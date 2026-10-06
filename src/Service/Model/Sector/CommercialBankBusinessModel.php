@@ -114,17 +114,27 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
     public const COMMERCIAL_REAL_ESTATE_SHARE  = 0.23;
     /** Years the collateral reference price averages over: the weighted-average age of a seasoned loan book (~4 years), so LGD reads the price fall since the loans were written, not since a fixed baseline. */
     public const COLLATERAL_ORIGINATION_YEARS  = 4.0;
+
+    // --- Segment Charge-Off Rates (FRED, all commercial banks, 1991-2019 means; each segment's PD is its rate over LGD_BASELINE) ---
+    /** Single-family residential mortgages: 0.43% a year (CORSFRMACBS, peak 2.80%). */
+    public const RESIDENTIAL_CHARGE_OFF_RATE = 0.0043;
+    /** Consumer loans, cards and autos together: 2.61% a year (CORCACBS, peak 6.60%). */
+    public const CONSUMER_CHARGE_OFF_RATE = 0.0261;
+    /** Commercial real estate excluding farmland: 0.53% a year (CORCREXFACBS, peak 2.85%). */
+    public const COMMERCIAL_REAL_ESTATE_CHARGE_OFF_RATE = 0.0053;
+    /** Business (C&I) loans: 0.73% a year (CORBLACBS, peak 2.57%). The H.8 mix of the four gives 0.92%, all loans 0.89% (CORALACBS). */
+    public const BUSINESS_CHARGE_OFF_RATE = 0.0073;
     /** Persisted origination reference for the residential property index. */
     public const STATE_RESIDENTIAL_ORIGINATION_PRICE = 'state:collateral_origination_residential';
     /** Persisted origination reference for the commercial property index. */
     public const STATE_COMMERCIAL_ORIGINATION_PRICE  = 'state:collateral_origination_commercial';
 
     // --- Underwriting Risk Appetite ---
-    /** Neutral appetite: a bank here lends at exactly the economy's default rates, households at the retail rate and firms at the corporate rate. */
+    /** Neutral appetite: a bank here loses each segment's US charge-off rate, and its defaults move with the economy's. */
     public const NEUTRAL_CREDIT_RISK_APPETITE  = 0.50;
-    /** Appetite floor (0.2x the economy's PDs, ~30-50bps): a book this clean is sovereign paper wearing a loan's clothes. */
+    /** Appetite floor (0.2x the segment PDs, ~0.2% a year on the H.8 mix): a book this clean is sovereign paper wearing a loan's clothes. */
     public const MIN_CREDIT_RISK_APPETITE      = 0.10;
-    /** Appetite ceiling (2x the economy's PDs, ~3-5%): the edge of a viable commercial book before it is subprime lending. */
+    /** Appetite ceiling (2x the segment PDs, ~1.8% a year on the H.8 mix): the edge of a viable commercial book before it is subprime lending. */
     public const MAX_CREDIT_RISK_APPETITE      = 1.00;
 
     // --- CECL Forward Reserve (ASC 326 lifetime allowance conditioned on the macro forecast) ---
@@ -513,17 +523,18 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
         $minVariableMargin = max(0.01, self::MIN_EFFICIENCY_RATIO - ($fixedCosts / max(1.0, $actualRevenue)));
         $rawMargin = $realizedVariableMargin + ($nimSqueeze * $niiWeight);
         $clampedMargin = $this->clampMargin($rawMargin, $minVariableMargin);
+        $netInterestSqueeze = ($clampedMargin - $this->clampMargin($realizedVariableMargin, $minVariableMargin)) * $actualRevenue;
 
         $cet1Ratio = $this->calculateCet1Ratio($stock);
 
         $eventType = null;
         if ($cet1Ratio < self::BASEL_MIN_CET1_RATIO) {
             $eventType = ShockEvent::BANK_SEIZURE;
-        } elseif ($lossMultiple > self::SECTOR_SHOCK_MASSIVE_LOSS_MULTIPLE) {
+        } elseif ($lossMultiple > static::SECTOR_SHOCK_MASSIVE_LOSS_MULTIPLE) {
             $eventType = ShockEvent::MASSIVE_CREDIT_PROVISION;
-        } elseif ($lossMultiple > self::SECTOR_SHOCK_ELEVATED_LOSS_MULTIPLE) {
+        } elseif ($lossMultiple > static::SECTOR_SHOCK_ELEVATED_LOSS_MULTIPLE) {
             $eventType = ShockEvent::ELEVATED_LOAN_DEFAULTS;
-        } elseif ($lossMultiple < self::SECTOR_SHOCK_RESERVE_RELEASE_LOSS_MULTIPLE) {
+        } elseif ($lossMultiple < static::SECTOR_SHOCK_RESERVE_RELEASE_LOSS_MULTIPLE) {
             $eventType = ShockEvent::RESERVE_RELEASE;
         }
 
@@ -537,6 +548,7 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
             streamRevenue: $streamRevenues,
             creditLossProvision: 0.0,
             netChargeOffs: $netChargeOffs,
+            netInterestSqueeze: $netInterestSqueeze,
         );
     }
 
@@ -565,10 +577,10 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
     }
 
     /**
-     * How far this bank's underwriting sits from the economy's default rates. Two banks funded identically do not
-     * underwrite identically: a universal lender syndicating investment-grade corporate paper runs a cleaner book than
-     * a regional lender competing on speed for contractor and developer credit. CreditRiskAppetite scales both segment
-     * PDs around a neutral 0.50, which is the only place a bank's stated underwriting posture reaches the loss model.
+     * How far this bank's underwriting sits from the segment norms. Two banks funded identically do not underwrite
+     * identically: a universal lender syndicating investment-grade corporate paper runs a cleaner book than a regional
+     * lender competing on speed for contractor and developer credit. CreditRiskAppetite scales every segment PD around
+     * a neutral 0.50, which is the only place a bank's stated underwriting posture reaches the loss model.
      */
     protected function resolveCreditRiskScale(?Stock $stock): float
     {
@@ -591,9 +603,9 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
     /**
      * This quarter's annual loss rate on the loan book, segment by segment. Each segment reads the systematic factor
      * the macro default rate implies (households the retail rate, firms the corporate rate) and applies it at the
-     * macro's own correlation to this bank's long-run PD, so every lender in the District takes the same credit cycle
-     * through its own book, and a neutral lender defaults at exactly the economy's rate. Property-secured segments
-     * lose more as collateral falls below the price the loans were written at (Frye 2000).
+     * macro's own correlation to the segment's long-run PD, so every lender in the District takes the same credit
+     * cycle through its own book; the low-PD segments (mortgages, CRE) swing furthest, as they did in 2009-10.
+     * Property-secured segments lose more as collateral falls below the price the loans were written at (Frye 2000).
      *
      * @return array{loss_rate: float, systematic_z: float}
      */
@@ -622,15 +634,13 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
         $streams->registerState(self::STATE_RESIDENTIAL_ORIGINATION_PRICE, $mathUtility->calculateDistributedLag($residentialOrigination, $residentialPrice, $quarter, self::COLLATERAL_ORIGINATION_YEARS));
         $streams->registerState(self::STATE_COMMERCIAL_ORIGINATION_PRICE, $mathUtility->calculateDistributedLag($commercialOrigination, $commercialPrice, $quarter, self::COLLATERAL_ORIGINATION_YEARS));
 
-        $riskScale = $this->resolveCreditRiskScale($stock);
-        $householdPd = MacroEngine::RETAIL_DEFAULT_BASELINE * $riskScale;
-        $corporatePd = MacroEngine::CORPORATE_DEFAULT_BASELINE * $riskScale;
+        $pdScale = $this->resolveCreditRiskScale($stock) / self::LGD_BASELINE;
         $householdRho = CreditFiscalSubsystem::RETAIL_ASRF_RHO;
         $corporateRho = CreditFiscalSubsystem::CORPORATE_DEFAULT_RHO;
-        $lossRate = ($residentialShare * $mathUtility->calculateVasicekExpectedLoss($householdZ, $householdPd, $householdRho, $residentialLgd))
-            + ($consumerShare * $mathUtility->calculateVasicekExpectedLoss($householdZ, $householdPd, $householdRho, self::LGD_BASELINE))
-            + ($creShare * $mathUtility->calculateVasicekExpectedLoss($corporateZ, $corporatePd, $corporateRho, $commercialLgd))
-            + ($businessShare * $mathUtility->calculateVasicekExpectedLoss($corporateZ, $corporatePd, $corporateRho, self::LGD_BASELINE));
+        $lossRate = ($residentialShare * $mathUtility->calculateVasicekExpectedLoss($householdZ, static::RESIDENTIAL_CHARGE_OFF_RATE * $pdScale, $householdRho, $residentialLgd))
+            + ($consumerShare * $mathUtility->calculateVasicekExpectedLoss($householdZ, static::CONSUMER_CHARGE_OFF_RATE * $pdScale, $householdRho, self::LGD_BASELINE))
+            + ($creShare * $mathUtility->calculateVasicekExpectedLoss($corporateZ, static::COMMERCIAL_REAL_ESTATE_CHARGE_OFF_RATE * $pdScale, $corporateRho, $commercialLgd))
+            + ($businessShare * $mathUtility->calculateVasicekExpectedLoss($corporateZ, static::BUSINESS_CHARGE_OFF_RATE * $pdScale, $corporateRho, self::LGD_BASELINE));
 
         $householdWeight = $residentialShare + $consumerShare;
 
@@ -649,13 +659,38 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
     protected function resolveLoanBookMix(Stock $stock): array
     {
         $params = $this->resolveModelParameters($stock, [
-            ModelParam::ResidentialMortgageShare->value  => self::RESIDENTIAL_MORTGAGE_SHARE,
-            ModelParam::ConsumerLoanShare->value         => self::CONSUMER_LOAN_SHARE,
-            ModelParam::CommercialRealEstateShare->value => self::COMMERCIAL_REAL_ESTATE_SHARE,
+            ModelParam::ResidentialMortgageShare->value  => static::RESIDENTIAL_MORTGAGE_SHARE,
+            ModelParam::ConsumerLoanShare->value         => static::CONSUMER_LOAN_SHARE,
+            ModelParam::CommercialRealEstateShare->value => static::COMMERCIAL_REAL_ESTATE_SHARE,
         ]);
-        $residential = max(0.0, (float) $params[ModelParam::ResidentialMortgageShare]);
-        $consumer = max(0.0, (float) $params[ModelParam::ConsumerLoanShare]);
-        $commercialRealEstate = max(0.0, (float) $params[ModelParam::CommercialRealEstateShare]);
+
+        return self::completeLoanBookMix(
+            (float) $params[ModelParam::ResidentialMortgageShare],
+            (float) $params[ModelParam::ConsumerLoanShare],
+            (float) $params[ModelParam::CommercialRealEstateShare]
+        );
+    }
+
+    /**
+     * The sector's own mix, for a lender not yet seeded.
+     *
+     * @return array{residential: float, consumer: float, commercial_real_estate: float, business: float}
+     */
+    protected function resolveDefaultLoanBookMix(): array
+    {
+        return self::completeLoanBookMix(static::RESIDENTIAL_MORTGAGE_SHARE, static::CONSUMER_LOAN_SHARE, static::COMMERCIAL_REAL_ESTATE_SHARE);
+    }
+
+    /**
+     * Three named segment shares, scaled back to a whole book if they overrun it, with business lending as the remainder.
+     *
+     * @return array{residential: float, consumer: float, commercial_real_estate: float, business: float}
+     */
+    protected static function completeLoanBookMix(float $residential, float $consumer, float $commercialRealEstate): array
+    {
+        $residential = max(0.0, $residential);
+        $consumer = max(0.0, $consumer);
+        $commercialRealEstate = max(0.0, $commercialRealEstate);
         $named = $residential + $consumer + $commercialRealEstate;
         if ($named > 1.0) {
             $residential /= $named;
@@ -672,21 +707,20 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
     }
 
     /**
-     * Through-the-cycle loss on this bank's loan book: each segment's long-run average PD at the base loss given
-     * default (Basel's PD x LGD), which is the mean of the conditional losses whenever the macro default rates
-     * average at their baselines. A neutral H.8 book loses ~0.88% a year; US banks charged off 0.93% over 1985-2019
-     * (FRED CORALACBN).
+     * Through-the-cycle loss on this lender's book: each segment's long-run charge-off rate (Basel's PD x LGD), which
+     * is the mean of the conditional losses whenever the macro default rates average at their baselines. A neutral
+     * H.8 book loses 0.92% a year; US banks charged off 0.89% over 1991-2019 (FRED CORALACBS).
      */
     public function getThroughTheCycleCreditLossRate(?Stock $stock = null): float
     {
-        $mix = $stock instanceof Stock
-            ? $this->resolveLoanBookMix($stock)
-            : ['residential' => self::RESIDENTIAL_MORTGAGE_SHARE, 'consumer' => self::CONSUMER_LOAN_SHARE, 'commercial_real_estate' => self::COMMERCIAL_REAL_ESTATE_SHARE, 'business' => 1.0 - self::RESIDENTIAL_MORTGAGE_SHARE - self::CONSUMER_LOAN_SHARE - self::COMMERCIAL_REAL_ESTATE_SHARE];
-        $householdShare = $mix['residential'] + $mix['consumer'];
-        $corporateShare = $mix['commercial_real_estate'] + $mix['business'];
+        $mix = $stock instanceof Stock ? $this->resolveLoanBookMix($stock) : $this->resolveDefaultLoanBookMix();
 
-        return self::LGD_BASELINE * $this->resolveCreditRiskScale($stock)
-            * (($householdShare * MacroEngine::RETAIL_DEFAULT_BASELINE) + ($corporateShare * MacroEngine::CORPORATE_DEFAULT_BASELINE));
+        return $this->resolveCreditRiskScale($stock) * (
+            ($mix['residential'] * static::RESIDENTIAL_CHARGE_OFF_RATE)
+            + ($mix['consumer'] * static::CONSUMER_CHARGE_OFF_RATE)
+            + ($mix['commercial_real_estate'] * static::COMMERCIAL_REAL_ESTATE_CHARGE_OFF_RATE)
+            + ($mix['business'] * static::BUSINESS_CHARGE_OFF_RATE)
+        );
     }
 
     public function getCreditLossHorizonYears(): float

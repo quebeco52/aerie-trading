@@ -1851,6 +1851,26 @@ class MathUtility
     }
 
     /**
+     * One exact step of a zero-mean Ornstein-Uhlenbeck factor given its stationary standard deviation: the decay and
+     * the conditional variance are those of the continuous process over dt, so the factor's distribution does not
+     * depend on the tick length.
+     *
+     *   x' = x e^(-kappa dt) + s sqrt(1 - e^(-2 kappa dt)) dW
+     *
+     * @param float $current      The factor now.
+     * @param float $kappa        Mean reversion per year.
+     * @param float $stationarySd Standard deviation of the factor's stationary distribution.
+     * @param float $dt           Time step in years.
+     * @param float $dW           Standard normal draw.
+     */
+    public static function calculateOrnsteinUhlenbeckStep(float $current, float $kappa, float $stationarySd, float $dt, float $dW): float
+    {
+        $decay = exp(-max(0.0, $kappa) * $dt);
+
+        return ($current * $decay) + ($stationarySd * sqrt(max(0.0, 1.0 - ($decay * $decay))) * $dW);
+    }
+
+    /**
      * A price taker's variable cost ratio at the price it realized, given the ratio at the price its cost base
      * was sized for. The costs are paid per unit produced (lifting, haulage, processing), so the dollars per
      * unit do not move with the market price and the ratio moves inversely with it: revenue = P x Q while

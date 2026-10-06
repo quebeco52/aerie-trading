@@ -9,6 +9,7 @@ use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use App\Service\Event\ShockEvent;
 use App\Service\Macro\MacroEngine;
+use App\Service\Macro\Subsystem\CreditFiscalSubsystem;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\ShadowBankBusinessModel;
@@ -190,29 +191,58 @@ class CommercialBankBusinessModelTest extends TestCase
         $this->assertEqualsWithDelta($rates[0], $rates[2], 1e-15);
     }
 
-    /** At a neutral cycle (both default rates at their Vasicek medians) and flat collateral, the book loses exactly its through-the-cycle rate. */
     /**
-     * A neutral lender at the macro's own correlations defaults at exactly the economy's rates, so with both default
-     * rates at their long-run averages and flat collateral the book loses exactly its through-the-cycle rate (PD x LGD).
+     * The through-the-cycle rate is the book's mean loss over the credit cycle: with the systematic factor standard
+     * normal (so both macro default rates average at their baselines) and flat collateral, the segment losses average
+     * to each segment's charge-off rate, and a neutral H.8 book to 0.92% a year (US banks: 0.89%, FRED CORALACBS).
      */
-    public function testAtLongRunDefaultRatesTheBookLosesItsThroughTheCycleRate(): void
+    public function testOverTheCycleTheBookLosesItsThroughTheCycleRate(): void
     {
         $stock = $this->creditTestBank('NEUTRAL');
-        $macro = new MacroStateDTO(retailDefaultRateEma: MacroEngine::RETAIL_DEFAULT_BASELINE, corporateDefaultRateEma: MacroEngine::CORPORATE_DEFAULT_BASELINE);
-
-        $result = $this->model->computeActualFinancials($stock, 1_000_000_000.0, 0.50, 200_000_000.0, 0.10, $macro, $this->mathUtility);
+        $math = new MathUtility();
+        $step = 0.05;
+        $meanLoss = 0.0;
+        for ($z = -7.0; $z <= 7.0 + 1e-9; $z += $step) {
+            $macro = new MacroStateDTO(
+                retailDefaultRateEma: $math->calculateVasicekExpectedLoss($z, MacroEngine::RETAIL_DEFAULT_BASELINE, CreditFiscalSubsystem::RETAIL_ASRF_RHO, 1.0),
+                corporateDefaultRateEma: $math->calculateVasicekExpectedLoss($z, MacroEngine::CORPORATE_DEFAULT_BASELINE, CreditFiscalSubsystem::CORPORATE_DEFAULT_RHO, 1.0),
+            );
+            $stock->setEarningsMomentumZ([]);
+            $result = $this->model->computeActualFinancials($stock, 1_000_000_000.0, 0.50, 200_000_000.0, 0.10, $macro, $this->mathUtility);
+            $meanLoss += $step * exp(-0.5 * $z * $z) / sqrt(2.0 * M_PI) * $result->netChargeOffs * FinancialConstants::QUARTERS_PER_YEAR / $this->model->resolveEarningAssets($stock);
+        }
 
         $ttc = $this->model->getThroughTheCycleCreditLossRate($stock);
-        $this->assertEqualsWithDelta($ttc, $result->netChargeOffs * FinancialConstants::QUARTERS_PER_YEAR / $this->model->resolveEarningAssets($stock), 1e-7);
+        $this->assertEqualsWithDelta($ttc, $meanLoss, 0.002 * $ttc);
         $this->assertEqualsWithDelta(
-            CommercialBankBusinessModel::LGD_BASELINE * (
-                (CommercialBankBusinessModel::RESIDENTIAL_MORTGAGE_SHARE + CommercialBankBusinessModel::CONSUMER_LOAN_SHARE) * MacroEngine::RETAIL_DEFAULT_BASELINE
-                + (1.0 - CommercialBankBusinessModel::RESIDENTIAL_MORTGAGE_SHARE - CommercialBankBusinessModel::CONSUMER_LOAN_SHARE) * MacroEngine::CORPORATE_DEFAULT_BASELINE
-            ),
+            CommercialBankBusinessModel::RESIDENTIAL_MORTGAGE_SHARE * CommercialBankBusinessModel::RESIDENTIAL_CHARGE_OFF_RATE
+                + CommercialBankBusinessModel::CONSUMER_LOAN_SHARE * CommercialBankBusinessModel::CONSUMER_CHARGE_OFF_RATE
+                + CommercialBankBusinessModel::COMMERCIAL_REAL_ESTATE_SHARE * CommercialBankBusinessModel::COMMERCIAL_REAL_ESTATE_CHARGE_OFF_RATE
+                + (1.0 - CommercialBankBusinessModel::RESIDENTIAL_MORTGAGE_SHARE - CommercialBankBusinessModel::CONSUMER_LOAN_SHARE - CommercialBankBusinessModel::COMMERCIAL_REAL_ESTATE_SHARE) * CommercialBankBusinessModel::BUSINESS_CHARGE_OFF_RATE,
             $ttc,
-            1e-12,
-            'a neutral H.8 book loses ~0.88% a year, against the 0.93% US banks charged off over 1985-2019'
+            1e-12
         );
+        $this->assertEqualsWithDelta(0.0092, $ttc, 0.0002, 'a neutral H.8 book loses ~0.92% a year');
+    }
+
+    /**
+     * Calibrating each segment to its own charge-off mean at a common LGD puts the low-PD segments furthest out in a
+     * bust, the order US banks' charge-offs peaked in in 2009-10 relative to their means: mortgages 6.5x, CRE 5.3x,
+     * business 3.5x, consumer 2.5x (FRED).
+     */
+    public function testInABustTheLowPdSegmentsSwingFurthest(): void
+    {
+        $math = new MathUtility();
+        $z = -2.0;
+        $swing = static fn (float $rate, float $rho): float => $math->calculateVasicekExpectedLoss($z, $rate / CommercialBankBusinessModel::LGD_BASELINE, $rho, 1.0) / ($rate / CommercialBankBusinessModel::LGD_BASELINE);
+
+        $residential = $swing(CommercialBankBusinessModel::RESIDENTIAL_CHARGE_OFF_RATE, CreditFiscalSubsystem::RETAIL_ASRF_RHO);
+        $consumer = $swing(CommercialBankBusinessModel::CONSUMER_CHARGE_OFF_RATE, CreditFiscalSubsystem::RETAIL_ASRF_RHO);
+        $commercialRealEstate = $swing(CommercialBankBusinessModel::COMMERCIAL_REAL_ESTATE_CHARGE_OFF_RATE, CreditFiscalSubsystem::CORPORATE_DEFAULT_RHO);
+        $business = $swing(CommercialBankBusinessModel::BUSINESS_CHARGE_OFF_RATE, CreditFiscalSubsystem::CORPORATE_DEFAULT_RHO);
+
+        $this->assertGreaterThan($consumer, $residential);
+        $this->assertGreaterThan($business, $commercialRealEstate);
     }
 
     /**
@@ -242,9 +272,12 @@ class CommercialBankBusinessModelTest extends TestCase
             return $result->netChargeOffs / $model->resolveEarningAssets($stock);
         };
 
-        // At long-run default rates: mortgages at the retail PD, the business remainder at the corporate PD.
-        $mortgageLoss = 0.80 * MacroEngine::RETAIL_DEFAULT_BASELINE;
-        $businessLoss = 0.20 * MacroEngine::CORPORATE_DEFAULT_BASELINE * 0.45;
+        // At long-run default rates each segment defaults at its conditional PD for the factor those rates imply.
+        $math = new MathUtility();
+        $householdZ = $math->calculateVasicekSystematicFactor(MacroEngine::RETAIL_DEFAULT_BASELINE, MacroEngine::RETAIL_DEFAULT_BASELINE, CreditFiscalSubsystem::RETAIL_ASRF_RHO);
+        $corporateZ = $math->calculateVasicekSystematicFactor(MacroEngine::CORPORATE_DEFAULT_BASELINE, MacroEngine::CORPORATE_DEFAULT_BASELINE, CreditFiscalSubsystem::CORPORATE_DEFAULT_RHO);
+        $mortgageLoss = 0.80 * $math->calculateVasicekExpectedLoss($householdZ, CommercialBankBusinessModel::RESIDENTIAL_CHARGE_OFF_RATE / 0.45, CreditFiscalSubsystem::RETAIL_ASRF_RHO, 1.0);
+        $businessLoss = 0.20 * $math->calculateVasicekExpectedLoss($corporateZ, CommercialBankBusinessModel::BUSINESS_CHARGE_OFF_RATE / 0.45, CreditFiscalSubsystem::CORPORATE_DEFAULT_RHO, 1.0) * 0.45;
         $this->assertEqualsWithDelta(
             ($mortgageLoss * (1.0 - 0.55 * 0.70) + $businessLoss) / ($mortgageLoss * 0.45 + $businessLoss),
             $lossRate($mortgageLender, 70.0) / $lossRate($mortgageLender, 100.0),
@@ -331,6 +364,15 @@ class CommercialBankBusinessModelTest extends TestCase
             $steepResult->clampedMargin,
             $invertedResult->clampedMargin,
             'Yield curve inversion must compress NIM and increase variable cost margin relative to steep curve.'
+        );
+
+        // The squeeze is disclosed in the net interest margin: the dollars it moved the cost ratio by.
+        $this->assertLessThan(0.0, $steepResult->netInterestSqueeze, 'a steep curve widens the margin');
+        $this->assertGreaterThan(0.0, $invertedResult->netInterestSqueeze, 'an inverted curve narrows it');
+        $this->assertEqualsWithDelta(
+            ($invertedResult->clampedMargin - $steepResult->clampedMargin) * $invertedResult->actualRevenue,
+            $invertedResult->netInterestSqueeze - $steepResult->netInterestSqueeze,
+            1.0
         );
     }
 

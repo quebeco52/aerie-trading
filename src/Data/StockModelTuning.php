@@ -116,6 +116,7 @@ class StockModelTuning
             ModelParam::LendingRevenueWeight->value  => 0.55,
             ModelParam::NetworkRevenueWeight->value  => 0.45,
             ModelParam::CeclSpreadSensitivity->value => 1.40,
+            ModelParam::CreditRiskAppetite->value    => 0.375, // Prime cardholders: three quarters of the industry's card losses, ~3.5% a year
         ],
 
         // --- Stork Consumer Credit (STRK) ---
@@ -124,6 +125,7 @@ class StockModelTuning
             ModelParam::LendingRevenueWeight->value  => 0.95,
             ModelParam::NetworkRevenueWeight->value  => 0.05,
             ModelParam::CeclSpreadSensitivity->value => 2.20,
+            ModelParam::CreditRiskAppetite->value    => 0.80, // Subprime instalment book: 1.6x the card industry, as OneMain's 6.02% against it in 2019 (~7.5% a year)
         ],
 
         // =====================================================================

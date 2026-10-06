@@ -43,6 +43,8 @@ readonly class ActualFinancialsDTO
         public float $creditLossProvision = 0.0,
         /** Dollar earning assets that went bad this quarter, written off against the allowance. */
         public float $netChargeOffs = 0.0,
+        /** Dollars of funding cost the duration squeeze added to the variable cost ratio this quarter (negative when a steep curve lowered it): net interest income the margin disclosure deducts. */
+        public float $netInterestSqueeze = 0.0,
         /** Dollars of actual revenue that are pure price above the expected level and carried no variable cost. */
         public float $priceRevenue = 0.0,
         /** Revenue-weighted composite Z of the firm's demand streams this quarter: the axis the revenue surprise is attributed along. */

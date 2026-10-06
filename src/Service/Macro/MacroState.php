@@ -88,6 +88,8 @@ class MacroState
 
     public float $retailDefaultRate;
     public float $retailDefaultRateEma;
+    // The persistent household credit factor the cycle's own channels leave unexplained, in Z units (an exact OU).
+    public float $retailCreditFactor;
 
     public float $agriculturalCommodityIndex;
     public float $agriculturalCommodityIndexEma;

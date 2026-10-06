@@ -126,6 +126,7 @@ readonly class MacroStateDTO
         public float $residentialPriceMomentum = 0.0,
         public float $retailDefaultRate = MacroEngine::RETAIL_DEFAULT_BASELINE,
         public float $retailDefaultRateEma = MacroEngine::RETAIL_DEFAULT_BASELINE,
+        public float $retailCreditFactor = 0.0,
         public float $agriculturalCommodityIndex = 100.0,
         public float $agriculturalCommodityIndexEma = 100.0,
         public float $agriculturalCommodityIndexTrend = 0.0,

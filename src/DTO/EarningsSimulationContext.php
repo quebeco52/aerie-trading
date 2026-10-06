@@ -143,6 +143,8 @@ class EarningsSimulationContext
     public float $expectedCreditLossProvision = 0.0;
     /** Earning assets written off against the allowance this quarter (financials). */
     public float $netChargeOffs = 0.0;
+    /** Funding cost the duration squeeze added to the cost ratio this quarter, which the net interest margin deducts (banks). */
+    public float $netInterestSqueeze = 0.0;
     /** Cash deployed into new earning assets less assets sold (financials). */
     public float $netLoanOriginations = 0.0;
     /** Loss realized on earning assets sold below carrying value, booked to equity as other comprehensive loss. */

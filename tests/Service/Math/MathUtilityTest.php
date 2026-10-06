@@ -630,6 +630,38 @@ class MathUtilityTest extends TestCase
     }
 
     /** Frye (2000): recovery scales with collateral value since origination; LGD stays within [0, 1]. */
+    /**
+     * The OU step is exact: a year taken in one step or in 360 has the same decay and the same conditional variance, so
+     * the factor does not depend on the tick length. The variance is summed from each draw's loading, the step being
+     * linear in the draws.
+     */
+    public function testOrnsteinUhlenbeckStepIsTimestepNeutral(): void
+    {
+        $kappa = 0.37;
+        $sd = 0.23;
+        $horizon = 1.0;
+        $exact = $sd * $sd * (1.0 - exp(-2.0 * $kappa * $horizon));
+
+        foreach ([1, 4, 360] as $steps) {
+            $dt = $horizon / $steps;
+            $x = 1.0;
+            for ($i = 0; $i < $steps; $i++) {
+                $x = MathUtility::calculateOrnsteinUhlenbeckStep($x, $kappa, $sd, $dt, 0.0);
+            }
+            $this->assertEqualsWithDelta(exp(-$kappa * $horizon), $x, 1e-12, "decay over {$steps} steps");
+
+            $variance = 0.0;
+            for ($shocked = 0; $shocked < $steps; $shocked++) {
+                $x = 0.0;
+                for ($i = 0; $i < $steps; $i++) {
+                    $x = MathUtility::calculateOrnsteinUhlenbeckStep($x, $kappa, $sd, $dt, $i === $shocked ? 1.0 : 0.0);
+                }
+                $variance += $x * $x;
+            }
+            $this->assertEqualsWithDelta($exact, $variance, 1e-12, "variance over {$steps} steps");
+        }
+    }
+
     public function testCollateralLgdRisesAsCollateralFallsBelowOrigination(): void
     {
         $this->assertEqualsWithDelta(0.45, MathUtility::calculateCollateralLgd(0.45, 100.0, 100.0), 1e-12);

@@ -66,30 +66,18 @@ class ShadowBankBusinessModel extends CommercialBankBusinessModel
     public const MAX_GROSS_ASSET_YIELD    = 0.50;
 
     // --- Credit Losses (ASC 326) ---
-    /** Through-the-cycle annual loss on the blended book: mortgages lose a few tens of basis points, direct lending about a point. */
-    public const PORTFOLIO_CHARGE_OFF_RATE = 0.005;
+    /** Default mortgage share of the book (MortgageOriginationWeight), lent against homes; direct lending takes the rest as business credit. Through the cycle the blend loses ~0.55% a year at the bank segment rates. */
+    public const DEFAULT_MORTGAGE_BOOK_SHARE = 0.60;
     /** Years of expected loss the allowance covers: mortgages prepay and middle-market loans mature well inside their contractual terms. */
     public const CECL_LIFETIME_HORIZON_YEARS = 3.0;
 
-    // --- Revenue & Default Shock Physics ---
+    // --- Revenue Shock Physics ---
     /** Volatility multiplier for top-line revenue shocks in non-bank lending markets. */
     public const REVENUE_VARIANCE_SCALAR = 0.20;
-    /** Macroeconomic default scalar translating negative output gaps into mortgage default losses. */
-    public const MACRO_DEFAULT_SCALAR    = 1.20;
-    /** Severe credit z-score threshold triggering elevated loan default provisions. */
-    public const CREDIT_STRESS_Z_THRESHOLD = -1.50;
-    /** Loss provision multiplier applied to credit stress severity. */
-    public const LOSS_PROVISION_SCALAR   = 0.12;
-    /** Healthy credit environment z-score threshold triggering minor provision write-backs. */
-    public const HEALTHY_CREDIT_Z_FLOOR    = 1.00;
-    /** Sensitivity scale for loan provision write-backs during exceptionally healthy credit environments. */
-    public const PROVISION_REVERSAL_SCALE  = 0.020;
     /** Lifetime-loss multiplier per unit of IG spread widening on a leveraged private-credit book: +300bps lifts the reserve target ~0.30x. */
     public const CECL_RESERVE_SPREAD_SENSITIVITY = 10.0;
     /** Direct lending volume per unit of capital the regulated banks must hold beyond the District's opening requirement, the countercyclical buffer included: a bank syndicate with 1pp less Tier 1 headroom leaves 1.547pp more of a loan to nonbanks, on a 23.1% mean nonbank share (Irani, Iyer, Meisenzahl & Peydro 2021, RFS, Table 5 col. 1); the Basel III shock in their fn. 33 is six times larger. */
     public const CAPITAL_ARBITRAGE_SENSITIVITY = 6.70;
-    /** Direct lending and mortgage provision sensitivity to elevated household debt service ratio stress above neutral. */
-    public const SHOCK_WEIGHT_DSR_DEFAULT = 0.15;
     /** Structural minimum operating cost-to-revenue ratio for non-bank lending operations. */
     public const MIN_EFFICIENCY_RATIO      = 0.45;
 
@@ -98,8 +86,6 @@ class ShadowBankBusinessModel extends CommercialBankBusinessModel
     public const CECL_BASELINE_CREDIT_SPREAD    = MacroEngine::BASE_CREDIT_SPREAD;
     /** Expansion sensitivity of direct lending origination when commercial banks tighten credit standards (SLOOS). */
     public const SLOOS_PRIVATE_CREDIT_EXPANSION = 0.30;
-    /** Weight of corporate speculative default rate surges applied to direct lending portfolio provisions. */
-    public const SHOCK_WEIGHT_CORPORATE_DEFAULT = 0.12;
     /** Baseline 12-month forward recession probability; the lifetime loss estimate is struck at 1.0x here. */
     public const CECL_BASELINE_RECESSION_PROB   = 0.15;
     /** Lifetime-loss multiplier per unit of recession probability above baseline: a near-certain recession lifts the reserve target ~0.85x. */
@@ -123,18 +109,31 @@ class ShadowBankBusinessModel extends CommercialBankBusinessModel
     /** Quadratic coefficient amplifying repo funding freeze costs during extreme yield curve inversions. */
     public const NIM_QUADRATIC_COEFF        = 0.20;
 
-    // --- Event Lore Thresholds ---
-    /** Negative credit z-score threshold indicating toxic mortgage-backed security write-downs. */
-    public const LORE_TOXIC_WRITE_DOWN_Z = -2.00;
-    /** Negative credit z-score threshold indicating elevated default margin penalties. */
-    public const LORE_ELEVATED_DEFAULT_Z = -1.50;
-
     // --- Analyst Visibility & Error ---
     // Moved to getCoverageProfile() — see MarketConsensusEngine.
 
-    public function getThroughTheCycleCreditLossRate(?Stock $stock = null): float
+    /**
+     * The book is the two portfolios the revenue streams earn on: mortgages, secured on homes, and direct loans to
+     * middle-market firms, charged off at the bank segment rates.
+     *
+     * @return array{residential: float, consumer: float, commercial_real_estate: float, business: float}
+     */
+    protected function resolveLoanBookMix(Stock $stock): array
     {
-        return self::PORTFOLIO_CHARGE_OFF_RATE;
+        $params = $this->resolveModelParameters($stock, [
+            ModelParam::MortgageOriginationWeight->value => self::DEFAULT_MORTGAGE_BOOK_SHARE,
+            ModelParam::DirectLendingWeight->value       => 1.0 - self::DEFAULT_MORTGAGE_BOOK_SHARE,
+        ]);
+        $mortgage = max(0.0, (float) $params[ModelParam::MortgageOriginationWeight]);
+        $total = $mortgage + max(0.0, (float) $params[ModelParam::DirectLendingWeight]);
+
+        return self::completeLoanBookMix($total > 0.0 ? $mortgage / $total : self::DEFAULT_MORTGAGE_BOOK_SHARE, 0.0, 0.0);
+    }
+
+    /** @return array{residential: float, consumer: float, commercial_real_estate: float, business: float} */
+    protected function resolveDefaultLoanBookMix(): array
+    {
+        return self::completeLoanBookMix(self::DEFAULT_MORTGAGE_BOOK_SHARE, 0.0, 0.0);
     }
 
     public function getCreditLossHorizonYears(): float
@@ -272,7 +271,6 @@ class ShadowBankBusinessModel extends CommercialBankBusinessModel
         // Independent stream Z-scores
         $originationZ = $streams->generateZ('origination_fees', 0.20);
         $lendingZ     = $streams->generateZ('direct_lending', 0.45);
-        $creditZ      = $streams->generateExogenousZ('credit', 0.25);
 
         // 1. Mortgage Origination Volume Channel:
         // Spiking 30Y mortgage rates destroy refinancing demand and freeze home purchases.
@@ -304,29 +302,13 @@ class ShadowBankBusinessModel extends CommercialBankBusinessModel
         $actualRevenue = max(0.0, array_sum($streamRevenues));
         $streams->recordStreamShares($streamRevenues);
 
-        // CECL Forward Provisioning & Default Shock:
-        // Shadow Banks primarily hold highly leveraged mortgages and direct loans.
-        $outputGap = $macroState->outputGapEma;
-        $retailDefaultShift = MathUtility::excessOverBaseline($macroState->retailDefaultRateEma, MacroEngine::RETAIL_DEFAULT_BASELINE);
-        $corporateDefaultShift = MathUtility::excessOverBaseline($macroState->corporateDefaultRateEma, MacroEngine::CORPORATE_DEFAULT_BASELINE);
-        $dsrShift = max(0.0, $macroState->householdDebtServiceGap) / MacroEngine::HOUSEHOLD_DSR_NEUTRAL;
-        $creShift = ($macroState->commercialPropertyIndexEma - 100.0) / 100.0;
-        
-        $propertyDrag = ($creShift < 0.0 ? abs($creShift) * 0.05 : 0.0) + ($residentialShift < 0.0 ? abs($residentialShift) * 0.05 : 0.0);
-        $corporateLendingDrag = $corporateDefaultShift * self::SHOCK_WEIGHT_CORPORATE_DEFAULT * $lendingWeight;
-        $macroDefaultDrag = ($outputGap < 0.0 ? abs($outputGap) * self::MACRO_DEFAULT_SCALAR : 0.0)
-            + ($retailDefaultShift * 0.10)
-            + ($dsrShift * self::SHOCK_WEIGHT_DSR_DEFAULT)
-            + $propertyDrag
-            + $corporateLendingDrag;
-
-        // The forward-looking CECL reserve (spreads, recession forecast) moves the allowance TARGET through
-        // getForwardCreditLossMultiplier(); the ledger roll-forward books the build once. Not a margin term.
-        $lossProvisionShock = ($creditZ < self::CREDIT_STRESS_Z_THRESHOLD
-            ? abs($creditZ) * self::LOSS_PROVISION_SCALAR
-            : ($creditZ > self::HEALTHY_CREDIT_Z_FLOOR
-                ? - ($creditZ - self::HEALTHY_CREDIT_Z_FLOOR) * self::PROVISION_REVERSAL_SCALE
-                : 0.0)) + $macroDefaultDrag;
+        // Charge-offs are the book's conditional loss at the household and corporate default cycles, mortgages losing
+        // more as homes fall below the price they were lent against (the bank segment model). They reach EBIT once,
+        // through the allowance roll-forward; the forward-looking CECL reserve moves the allowance TARGET through
+        // getForwardCreditLossMultiplier(). Neither is a margin term.
+        $credit = $this->resolveConditionalCreditLossRate($stock, $macroState, $streams, $mathUtility);
+        $netChargeOffs = ($credit['loss_rate'] / FinancialConstants::QUARTERS_PER_YEAR) * $this->resolveEarningAssets($stock);
+        $lossMultiple = $credit['loss_rate'] / max(1e-9, $this->getThroughTheCycleCreditLossRate($stock));
 
         // Shadow Bank NIM Squeeze (high VULNERABILITY):
         $mortgageSpread = $yield30y - ($policyRate + $macroState->interbankLiquiditySpreadEma);
@@ -338,18 +320,18 @@ class ShadowBankBusinessModel extends CommercialBankBusinessModel
         }
 
         $minVariableMargin = max(0.01, self::MIN_EFFICIENCY_RATIO - ($fixedCosts / max(1.0, $actualRevenue)));
-        $clampedMargin = $this->clampMargin($realizedVariableMargin + $lossProvisionShock + $nimSqueeze, $minVariableMargin);
+        $clampedMargin = $this->clampMargin($realizedVariableMargin + $nimSqueeze, $minVariableMargin);
 
         $eventType = null;
-        if ($creditZ < self::LORE_TOXIC_WRITE_DOWN_Z) {
+        if ($lossMultiple > static::SECTOR_SHOCK_MASSIVE_LOSS_MULTIPLE) {
             $eventType = ShockEvent::MASSIVE_CREDIT_PROVISION;
-        } elseif ($creditZ < self::LORE_ELEVATED_DEFAULT_Z) {
+        } elseif ($lossMultiple > static::SECTOR_SHOCK_ELEVATED_LOSS_MULTIPLE) {
             $eventType = ShockEvent::ELEVATED_LOAN_DEFAULTS;
-        } elseif ($creditZ > 1.80) {
+        } elseif ($lossMultiple < static::SECTOR_SHOCK_RESERVE_RELEASE_LOSS_MULTIPLE) {
             $eventType = ShockEvent::RESERVE_RELEASE;
         }
 
-        $primaryShockZ = $streams->resolveDominantShockZ([$creditZ, $originationZ, $lendingZ]);
+        $primaryShockZ = $streams->resolveDominantShockZ([$credit['systematic_z'], $originationZ, $lendingZ]);
 
         $mortgageBase = max(1.0, $expectedRevenue * $mortgageWeight);
         $mortgageShock = ($mortgageRevenue - $mortgageBase) / $mortgageBase;
@@ -365,6 +347,7 @@ class ShadowBankBusinessModel extends CommercialBankBusinessModel
             eventType: $eventType,
             streamZ: $streams->getStreamZ(),
             streamRevenue: $streamRevenues,
+            netChargeOffs: $netChargeOffs,
         );
     }
 
@@ -389,7 +372,6 @@ class ShadowBankBusinessModel extends CommercialBankBusinessModel
             'commercial_property_index_ema',
             'corporate_default_rate_ema',
             'countercyclical_buffer_rate_ema',
-            'household_debt_service_gap',
             'housing_starts_index_ema',
             'inflation_ema',
             'interbank_liquidity_spread_ema',
@@ -397,7 +379,6 @@ class ShadowBankBusinessModel extends CommercialBankBusinessModel
             'money_market_fund_share',
             'money_market_fund_share_ema',
             'money_supply_growth_ema',
-            'output_gap_ema',
             'output_gap_lag_9m',
             'policy_rate_ema',
             'recession_probability_ema',
