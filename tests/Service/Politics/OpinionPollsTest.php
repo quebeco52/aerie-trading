@@ -125,12 +125,12 @@ class OpinionPollsTest extends TestCase
         $state->termStartDeflator = 1.0;
         $state->campaignStartedAt = 0.0;
         $state->campaignStartRealGdp = 1.0;
-        $boom = new MacroStateDTO(totalTime: 2.0, potentialGdpIndex: 1.1, gdpDeflator: 1.2);
+        $boom = new MacroStateDTO(totalTime: 2.0, potentialGdpIndex: 1.1, consumerPriceLevel: 1.2);
         $this->assertSame(0.0, OpinionPolls::growthCounted($state, $boom), 'The campaign has not opened this term.');
 
         $state->totalTime = self::ELECTION_AT;
         $state->campaignStartedAt = self::ELECTION_AT - Politics::ELECTION_CAMPAIGN_WINDOW_YEARS;
-        $economy = new MacroStateDTO(totalTime: self::ELECTION_AT, potentialGdpIndex: 1.03, gdpDeflator: 1.12);
+        $economy = new MacroStateDTO(totalTime: self::ELECTION_AT, potentialGdpIndex: 1.03, consumerPriceLevel: 1.12);
         $trend = MacroEngine::STRUCTURAL_LABOR_GROWTH_RATE + MacroEngine::TFP_DRIFT;
         $this->assertEqualsWithDelta((log(1.03) / Politics::ELECTION_CAMPAIGN_WINDOW_YEARS) - $trend, OpinionPolls::growthCounted($state, $economy), 1e-12);
         $this->assertEqualsWithDelta((log(1.12) / self::ELECTION_AT) - MacroEngine::TARGET_INFLATION, OpinionPolls::inflationCounted($state, $economy), 1e-12);
@@ -263,7 +263,7 @@ class OpinionPollsTest extends TestCase
         $state->supportParties = [];
         $state->cabinetFallsAt = 100.0;
         $state->termStartedAt = 0.0;
-        $state->termStartDeflator = $this->economy(0.0)->gdpDeflator;
+        $state->termStartDeflator = $this->economy(0.0)->consumerPriceLevel;
         $state->campaignStartedAt = 0.0;
         $state->campaignStartRealGdp = Politics::realGdp($this->economy(0.0));
         // The game's salt, which a fresh game draws on its first tick, after that tick's poll would have been published.
@@ -278,7 +278,7 @@ class OpinionPollsTest extends TestCase
         return new MacroStateDTO(
             totalTime: $totalTime,
             potentialGdpIndex: exp((MacroEngine::STRUCTURAL_LABOR_GROWTH_RATE + MacroEngine::TFP_DRIFT) * $totalTime),
-            gdpDeflator: exp(MacroEngine::TARGET_INFLATION * $totalTime),
+            consumerPriceLevel: exp(MacroEngine::TARGET_INFLATION * $totalTime),
         );
     }
 

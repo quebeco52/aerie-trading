@@ -77,29 +77,35 @@ class AssetMarketSubsystemTest extends TestCase
         $this->assertGreaterThan(0.0, $state->residentialPropertyIndex);
     }
 
+    /**
+     * Rents keep pace with expected inflation, so a ten-year yield that rises one for one with it leaves the Gordon
+     * value where it was; the same rise in the real yield is a higher cap rate and a lower value.
+     */
     public function testCommercialPropertyRentIndexationProtectsValuationsDuringInflation(): void
     {
-        $stateNoInflation = new MacroState();
-        $stateNoInflation->yield10yEma = 0.055;
-        $stateNoInflation->macroCreditSpreadEma = 0.02;
-        $stateNoInflation->unemploymentRateEma = 0.04;
-        $stateNoInflation->inflationEma = 0.02;
-        $stateNoInflation->outputGapEma = 0.01;
-        $stateNoInflation->commercialPropertyIndex = 100.0;
+        $anchored = $this->creFundamentalTick(0.055, 0.02);
 
-        $stateWithInflation = new MacroState();
-        $stateWithInflation->yield10yEma = 0.055;
-        $stateWithInflation->macroCreditSpreadEma = 0.02;
-        $stateWithInflation->unemploymentRateEma = 0.04;
-        $stateWithInflation->inflationEma = 0.04; // Higher inflation boosts contract rents
-        $stateWithInflation->outputGapEma = 0.01;
-        $stateWithInflation->commercialPropertyIndex = 100.0;
+        $this->assertEqualsWithDelta($anchored, $this->creFundamentalTick(0.065, 0.03), 1e-9, 'Inflation priced into the yield and the rents nets out.');
+        $this->assertLessThan($anchored, $this->creFundamentalTick(0.065, 0.02), 'A higher real yield must lower values.');
+    }
 
-        $this->subsystem->calculateCommercialPropertyIndex($stateNoInflation, 0.25);
-        $this->subsystem->calculateCommercialPropertyIndex($stateWithInflation, 0.25);
+    private function creFundamentalTick(float $yield10y, float $expectedInflation): float
+    {
+        $math = $this->createStub(MathUtility::class);
+        $math->method('generateStandardNormal')->willReturn(0.0);
+        $math->method('calculateSchwartz1Factor')->willReturnCallback(fn(float $currentPrice, float $kappa, float $theta) => $theta);
 
-        // Rent growth indexation must support commercial property values when inflation is elevated
-        $this->assertGreaterThan($stateNoInflation->commercialPropertyIndex, $stateWithInflation->commercialPropertyIndex);
+        $state = new MacroState();
+        $state->yield10yEma = $yield10y;
+        $state->tipsBreakevenEma = $expectedInflation;
+        $state->inflationEma = $expectedInflation;
+        $state->macroCreditSpreadEma = 0.02;
+        $state->unemploymentRateEma = $state->nairu;
+        $state->outputGapEma = 0.01;
+        $state->commercialPropertyIndex = 100.0;
+        (new AssetMarketSubsystem($math))->calculateCommercialPropertyIndex($state, 0.25);
+
+        return $state->commercialPropertyIndex;
     }
 
     public function testCalculateCapitalMarketsDealIndex(): void
@@ -255,6 +261,26 @@ class AssetMarketSubsystemTest extends TestCase
         $energyMove = $neutral - $this->settledFx(['energyPriceIndexEma' => 150.0]);
         $metalsMove = $neutral - $this->settledFx(['industrialMetalsIndexEma' => 150.0]);
         $this->assertGreaterThan($metalsMove, $energyMove, 'Energy is the larger share of the import basket.');
+    }
+
+    /**
+     * Frankel (1979): the currency follows the real rate differential. A rate that only keeps pace with expected
+     * inflation leaves it where it was; the same rise against anchored expectations strengthens it.
+     */
+    public function testTheCurrencyFollowsTheRealRateDifferential(): void
+    {
+        $base = $this->fundamental(0.04, 0.02);
+
+        $this->assertEqualsWithDelta($base, $this->fundamental(0.05, 0.03), 1e-9, 'A rate rise matching expected inflation is not a stronger currency.');
+        $this->assertEqualsWithDelta($base * exp(AssetMarketSubsystem::UIP_SENSITIVITY * 0.01), $this->fundamental(0.05, 0.02), 1e-9);
+
+        $mainlandHot = AssetMarketSubsystem::exchangeRateFundamentalAt(0.04, 0.02, MacroEngine::MAINLAND_NEUTRAL_RATE, AssetMarketSubsystem::mainlandBreakeven(0.04), 100.0, 100.0, 0.0, 0.0);
+        $this->assertGreaterThan($base, $mainlandHot, 'Higher mainland inflation at the same mainland rate is a lower mainland real rate.');
+    }
+
+    private function fundamental(float $policyRate, float $expectedInflation): float
+    {
+        return AssetMarketSubsystem::exchangeRateFundamentalAt($policyRate, $expectedInflation, MacroEngine::MAINLAND_NEUTRAL_RATE, AssetMarketSubsystem::mainlandBreakeven(MacroEngine::TARGET_INFLATION), 100.0, 100.0, 0.0, 0.0);
     }
 
     /**

@@ -243,6 +243,42 @@ class FinancialInvariantTest extends TestCase
 
     // --- Working (1949) Commodity Convenience Yield Invariants ---
 
+    /**
+     * Merton (1976) compensation: the weather jumps only raise farm prices, and the short factor must revert below zero
+     * by their mean log rate so that a drought is a transient disruption, not a standing premium. Uncompensated, the
+     * factor averages lambda x mu / kappa (+1.0%), about ten standard errors from zero on these paths.
+     */
+    public function testAgriculturalWeatherJumpsLeaveTheLogPriceLevelUnbiased(): void
+    {
+        mt_srand(20261006);
+        $commodity = new CommodityLogisticsSubsystem($this->math);
+        $dt = 1.0 / 48.0;
+        $pathMeans = [];
+
+        for ($path = 0; $path < 192; $path++) {
+            $state = new MacroState();
+            $state->agriChi = 0.0;
+            $state->agriXi = log(MacroEngine::AGRI_BASELINE);
+            $sum = 0.0;
+            $count = 0;
+            for ($tick = 0; $tick < 110 * 48; $tick++) {
+                $state->totalTime = $tick * $dt;
+                $commodity->calculateAgriculturalCommodityIndex($state, $dt);
+                if ($tick >= 10 * 48) {
+                    $sum += $state->agriChi;
+                    $count++;
+                }
+            }
+            $pathMeans[] = $sum / $count;
+        }
+
+        $mean = array_sum($pathMeans) / count($pathMeans);
+        $variance = array_sum(array_map(fn(float $m) => ($m - $mean) ** 2, $pathMeans)) / (count($pathMeans) - 1);
+        $standardError = sqrt($variance / count($pathMeans));
+
+        $this->assertLessThan(3.0 * $standardError, abs($mean), sprintf('Short factor mean %.4f, se %.4f.', $mean, $standardError));
+    }
+
     public function testWorkingCommodityConvenienceYieldRealAndBounded(): void
     {
         // Test convenience yield across physical inventory levels:

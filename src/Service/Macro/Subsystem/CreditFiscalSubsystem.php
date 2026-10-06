@@ -35,6 +35,8 @@ class CreditFiscalSubsystem
     // --- Sovereign Debt Dynamics (Greenwood-Vayanos 2014) ---
     /** Structural primary fiscal deficit as a fraction of GDP with no sovereign fund; with one, the structural deficit is the fund's draw, spent. */
     public const SOVEREIGN_STRUCTURAL_DEFICIT = 0.020;
+    /** Debt-to-GDP above which the Bohn (1998) fiscal reaction starts running primary surpluses. */
+    public const SOVEREIGN_DEBT_NEUTRAL_THRESHOLD = 0.70;
     /** Bohn (1998, 2008) fiscal reaction: primary surplus response per unit of debt above the neutral threshold (~0.10, the upper end of advanced-economy estimates), which stabilizes debt near 90% against a 2% structural deficit, and just above the 70% threshold once a sovereign fund's draw pays that deficit. */
     public const BOHN_FISCAL_REACTION_SENSITIVITY = 0.10;
     /** Runaway guard on gross debt, about Japan's postwar peak (~2.6x GDP, IMF WEO 2020); the Bohn reaction holds debt far below it. */
@@ -495,7 +497,10 @@ class CreditFiscalSubsystem
      */
     public function calculateSovereignDebt(MacroState $state, float $dt): void
     {
-        $output = $state->nominalGdpIndex * (1.0 + $state->outputGap);
+        // Taxes are levied on the GDP produced, which already carries the gap; purchases are appropriated on trend, so
+        // their share of GDP rises in a slump (the denominator half of the automatic stabilisers, Girouard & Andre 2005).
+        $output = $state->nominalGdpIndex;
+        $trendNominalGdp = $state->nominalGdpIndex / (1.0 + $state->outputGap);
         $taxRevenue = (($state->corporateTaxRate - $state->corporateTaxPolicyShift) * $output)
             + ($state->corporateTaxPolicyShift * self::CORPORATE_PROFITS_TO_GDP * $output)
             + ($state->importTariffRate * MacroAggregateSubsystem::DISTRICT_IMPORT_SHARE * MacroAggregateSubsystem::GOODS_SHARE_OF_IMPORTS
@@ -503,10 +508,10 @@ class CreditFiscalSubsystem
             + ($state->carbonPrice * self::POWER_SECTOR_CO2_PER_GDP_DOLLAR * $output)
             + ($state->sovereignFundDollarsPerGdp > 0.0 ? $state->boardBankLevy / $state->sovereignFundDollarsPerGdp : 0.0);
         $govtSpendingFlow = ($state->governmentSpendingIndex / MacroEngine::GOVT_SPENDING_BASELINE)
-            * MacroEngine::TARGET_CORPORATE_TAX_RATE * $state->nominalGdpIndex;
+            * MacroEngine::TARGET_CORPORATE_TAX_RATE * $trendNominalGdp;
 
         // Bohn (1998) fiscal reaction function: debt stabilization via primary budget surplus.
-        $excessDebt = max(0.0, $state->sovereignDebtToGdp - MacroEngine::SOVEREIGN_DEBT_NEUTRAL_THRESHOLD);
+        $excessDebt = max(0.0, $state->sovereignDebtToGdp - self::SOVEREIGN_DEBT_NEUTRAL_THRESHOLD);
         $bohnFiscalAdjustment = self::BOHN_FISCAL_REACTION_SENSITIVITY * $excessDebt * $state->nominalGdpIndex;
 
         // Singapore's Net Investment Returns Contribution: the sovereign fund's draw is budget revenue (zero with no fund),
@@ -521,10 +526,9 @@ class CreditFiscalSubsystem
         $state->primaryDeficitToGdp = $primaryDeficit / max(0.1, $state->nominalGdpIndex);
         $interestCost = $state->yield10yEma * $state->sovereignDebtToGdp;
 
-        // Blanchard (2019) sovereign debt accumulation driven by growth-adjusted real rate (r - g).
-        $realPotentialGrowth = $state->laborForceGrowthRate + MacroEngine::TFP_DRIFT;
-        $nominalGrowthRate = $realPotentialGrowth + $state->outputGap + $state->inflationEma;
-        $growthErosion = $nominalGrowthRate * $state->sovereignDebtToGdp;
+        // Blanchard (2019) sovereign debt accumulation driven by growth-adjusted real rate (r - g), g being the growth
+        // of the nominal GDP the ratio is struck on: a slump lowers it and the recovery hands it back.
+        $growthErosion = $state->nominalGdpGrowth * $state->sovereignDebtToGdp;
 
         $dDebt = ($primaryDeficit / max(0.1, $state->nominalGdpIndex)) + $interestCost - $growthErosion;
         $state->sovereignDebtToGdp += $dDebt * $dt;

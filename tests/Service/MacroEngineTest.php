@@ -558,8 +558,11 @@ class MacroEngineTest extends TestCase
             'nairu_ema' => MacroEngine::NATURAL_UNEMPLOYMENT,
             'yield_10y' => 0.0504,
             'yield_10y_ema' => 0.0504,
-            'macro_credit_spread' => MacroEngine::BASE_CREDIT_SPREAD,
-            'macro_credit_spread_ema' => MacroEngine::BASE_CREDIT_SPREAD,
+            // The cap rate at its neutral: 5.04% less 2% expected rent inflation, plus a 1.36% spread and the 2% premium.
+            'macro_credit_spread' => 0.0136,
+            'macro_credit_spread_ema' => 0.0136,
+            'tips_breakeven' => MacroEngine::TARGET_INFLATION,
+            'tips_breakeven_ema' => MacroEngine::TARGET_INFLATION,
             'commercial_property_index' => 100.0,
             'commercial_property_index_ema' => 100.0,
             'inflation' => MacroEngine::TARGET_INFLATION,
@@ -1587,27 +1590,21 @@ class MacroEngineTest extends TestCase
         $this->assertLessThan($rateFloorOverTheQuarter, $slumpState->totalFactorProductivityIndex, 'A three-sigma innovation must reach the index at full size, not be clipped to the annual growth-rate band.');
     }
 
-    public function testNaturalRateEvolvesDynamicallyDuringFullMacroUpdate(): void
+    /** r* follows the trend growth of potential, which the labour force sets beside productivity, and not the cycle. */
+    public function testNaturalRateFollowsTrendGrowthAndNotTheCycle(): void
     {
-        $existingState = [
-            'inflation' => 0.02,
-            'output_gap' => 0.03,
-            'output_gap_ema' => 0.03,
-            'natural_rate' => MacroEngine::BASE_NATURAL_RATE,
-            'natural_rate_ema' => MacroEngine::BASE_NATURAL_RATE,
-            'total_factor_productivity_index' => 100.0,
-        ];
+        $aggregate = new \App\Service\Macro\Subsystem\MacroAggregateSubsystem(new MathUtility());
 
-        $this->redisMock->method('get')->willReturn(json_encode($existingState));
-        $this->redisMock->method('set')->willReturn(true);
+        $boom = new \App\Service\Macro\MacroState();
+        $boom->outputGap = 0.03;
+        $boom->outputGapEma = 0.03;
+        $aggregate->calculateNaturalRate($boom, MacroEngine::TFP_DRIFT, 0.5);
+        $this->assertSame(MacroEngine::BASE_NATURAL_RATE, $boom->naturalRate, 'A boom is not a higher natural rate.');
 
-        // Positive technology wave
-        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(2.0);
-
-        $result = $this->engine->updateMacroState(0.5);
-
-        $this->assertNotEquals(MacroEngine::BASE_NATURAL_RATE, $result->naturalRate, 'Natural real rate r* must move dynamically and not remain static.');
-        $this->assertGreaterThan(MacroEngine::BASE_NATURAL_RATE, $result->naturalRate, 'Natural rate must rise during a technology/productivity expansion.');
+        $growing = new \App\Service\Macro\MacroState();
+        $growing->laborForceGrowthRate = MacroEngine::STRUCTURAL_LABOR_GROWTH_RATE + 0.01;
+        $aggregate->calculateNaturalRate($growing, MacroEngine::TFP_DRIFT, 0.5);
+        $this->assertGreaterThan(MacroEngine::BASE_NATURAL_RATE, $growing->naturalRate, 'Faster trend growth raises r*.');
     }
 
     public function testSymmetricWagePushAndWageDragInflationTransmission(): void
@@ -1893,8 +1890,12 @@ class MacroEngineTest extends TestCase
         $stateLowDebt = new \App\Service\Macro\MacroState();
         $stateLowDebt->sovereignDebtToGdpEma = 0.60;
 
+        $stateLowDebt->sovereignRiskSpreadEma = 0.0;
+
+        // Debt reaches the curve through the premium the market charges on it (Laubach 2009): ~1pp at 120% of GDP.
         $stateHighDebt = clone $stateLowDebt;
-        $stateHighDebt->sovereignDebtToGdpEma = 1.20; // 120% of GDP
+        $stateHighDebt->sovereignDebtToGdpEma = 1.20;
+        $stateHighDebt->sovereignRiskSpreadEma = 0.01;
 
         $curveLow  = $monetarySubsystem->calculateYieldCurveAndQE($stateLowDebt, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE, $dt);
         $curveHigh = $monetarySubsystem->calculateYieldCurveAndQE($stateHighDebt, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE, $dt);
@@ -1902,7 +1903,7 @@ class MacroEngineTest extends TestCase
         $this->assertGreaterThan(
             $curveLow['yield_30y'],
             $curveHigh['yield_30y'],
-            'Greenwood-Vayanos preferred habitat: higher sovereign debt must increase long-end yields.'
+            'The sovereign premium on high debt must lift long-end yields.'
         );
         $this->assertGreaterThan(
             $curveLow['term_premium_10y'],

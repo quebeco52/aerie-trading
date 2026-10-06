@@ -253,7 +253,7 @@ class PoliticsEngine
         // A state that predates the marks opens them where it stands and measures from there.
         if ($state->termStartedAt < 0.0) {
             $state->termStartedAt = $state->totalTime;
-            $state->termStartDeflator = $macro->gdpDeflator;
+            $state->termStartDeflator = $macro->consumerPriceLevel;
         }
         if (
             $state->campaignStartedAt < 0.0
@@ -270,7 +270,7 @@ class PoliticsEngine
             $this->holdElection($state, $macro, $realGdp);
 
             $state->termStartedAt = $state->totalTime;
-            $state->termStartDeflator = $macro->gdpDeflator;
+            $state->termStartDeflator = $macro->consumerPriceLevel;
         }
 
         // Support is brought up to date before any change of cabinet, so the month's swing lands on those who governed it.
@@ -551,7 +551,7 @@ class PoliticsEngine
         // For the record: the economy the voters weighed.
         $growthGap = self::annualisedLogChange($state->campaignStartRealGdp, $realGdp, $state->totalTime - $state->campaignStartedAt);
         $growthGap = $growthGap === null ? 0.0 : $growthGap - $macro->laborForceGrowthRate - MacroEngine::TFP_DRIFT;
-        $inflationGap = self::annualisedLogChange($state->termStartDeflator, $macro->gdpDeflator, $state->totalTime - $state->termStartedAt);
+        $inflationGap = self::annualisedLogChange($state->termStartDeflator, $macro->consumerPriceLevel, $state->totalTime - $state->termStartedAt);
         $inflationGap = $inflationGap === null ? 0.0 : $inflationGap - MacroEngine::TARGET_INFLATION;
 
         $state->electionGrowthGap = $growthGap;

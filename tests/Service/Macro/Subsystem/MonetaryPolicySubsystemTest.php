@@ -5,6 +5,7 @@ namespace App\Tests\Service\Macro\Subsystem;
 use App\Service\Macro\MacroEngine;
 use App\Service\Macro\MacroState;
 use App\Service\Macro\Recorder\MacroDiagnosticsProbe;
+use App\Service\Macro\Subsystem\CreditFiscalSubsystem;
 use App\Service\Macro\Subsystem\MacroAggregateSubsystem;
 use App\Service\Macro\Subsystem\MonetaryPolicySubsystem;
 use App\Service\Math\MathUtility;
@@ -883,6 +884,7 @@ class MonetaryPolicySubsystemTest extends TestCase
         $state->outputGap = 0.0;
         $state->outputGapEma = 0.0;
         $state->termPremium10yEma = MacroEngine::NS_BASE_TERM_PREMIUM;
+        $state->sovereignRiskSpreadEma = 0.0;
 
         // QE compresses the ten-year premium by the habitat shift; the rule must read that as its own doing.
         $qe = clone $state;
@@ -891,6 +893,36 @@ class MonetaryPolicySubsystemTest extends TestCase
         $qe->termPremium10yEma = MacroEngine::NS_BASE_TERM_PREMIUM - 0.008;
 
         $this->assertEqualsWithDelta(0.0, $this->subsystem->calculateLongRateGap($qe, MacroEngine::BASE_NATURAL_RATE), 0.00001, 'Balance-sheet compression is excluded from the long-rate gap.');
+    }
+
+    /**
+     * Debt is priced once, through the Laubach (2009) sovereign spread, and the rule does not ease against it: a central
+     * bank cutting as the debt premium rises is fiscal dominance, not the Bernanke (2006) term-premium offset.
+     */
+    public function testSovereignCreditRiskIsPricedOnceAndNotEasedAgainst(): void
+    {
+        $sound = new MacroState();
+        $sound->sovereignRiskSpreadEma = 0.0;
+        $sound->termPremium10yEma = MacroEngine::NS_BASE_TERM_PREMIUM;
+
+        $indebted = clone $sound;
+        $indebted->sovereignRiskSpreadEma = 0.005;
+        $indebted->termPremium10yEma = MacroEngine::NS_BASE_TERM_PREMIUM + 0.005;
+        $indebted->sovereignDebtToGdpEma = 1.30;
+
+        $this->assertEqualsWithDelta(
+            $this->subsystem->calculateLongRateGap($sound, MacroEngine::BASE_NATURAL_RATE),
+            $this->subsystem->calculateLongRateGap($indebted, MacroEngine::BASE_NATURAL_RATE),
+            1e-12
+        );
+
+        $debtOnly = clone $sound;
+        $debtOnly->sovereignDebtToGdpEma = 1.30;
+        $this->assertSame(
+            $this->subsystem->calculateYieldCurve($sound, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE)['curvature2'],
+            $this->subsystem->calculateYieldCurve($debtOnly, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE)['curvature2'],
+            'Debt reaches the curve through the sovereign spread alone.'
+        );
     }
 
     public function testTaylorRuleLeansAgainstAMarketThatHasRepricedNeutralUpward(): void
@@ -1311,7 +1343,7 @@ class MonetaryPolicySubsystemTest extends TestCase
     /** Debt inside the 70% the Bohn reaction defends and no market premium on it: the curve carries no fiscal term. */
     private function holdSoundFiscalPosition(MacroState $state): void
     {
-        $state->sovereignDebtToGdpEma = MacroEngine::SOVEREIGN_DEBT_NEUTRAL_THRESHOLD;
+        $state->sovereignDebtToGdpEma = CreditFiscalSubsystem::SOVEREIGN_DEBT_NEUTRAL_THRESHOLD;
         $state->sovereignRiskSpreadEma = 0.0;
     }
 }

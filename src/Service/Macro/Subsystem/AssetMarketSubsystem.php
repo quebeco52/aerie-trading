@@ -183,10 +183,8 @@ class AssetMarketSubsystem
     public const CRE_OCCUPANCY_UNEMPLOYMENT_SENSITIVITY = 3.0;
     /** Structural risk premium spread above 10Y yield for CRE cap rate derivation. */
     public const CRE_CAP_RATE_RISK_PREMIUM = 0.02;
-    /** Pre-calibrated neutral cap rate at macro equilibrium. */
-    public const CRE_NEUTRAL_CAP_RATE = 0.0904;
-    /** Elasticity of commercial net operating income (NOI) to general price inflation and GDP demand. */
-    public const CRE_RENT_GROWTH_ELASTICITY = 0.80;
+    /** Cap rate at the engine's own equilibrium, net of expected rent inflation (mean real 10Y plus spread and premium, 48 seeds): 6.4%, inside the US NCREIF/ACLI 1990-2019 range of ~6-8%. */
+    public const CRE_NEUTRAL_CAP_RATE = 0.064;
     /** Mean-reversion speed of commercial property values toward fundamental equilibrium. */
     public const CRE_MEAN_REVERSION = 0.25;
     /** Stochastic volatility of commercial property valuations (stationary noise ~7% so cap rates, not noise, drive the cycle). */
@@ -309,7 +307,8 @@ class AssetMarketSubsystem
      * DiPasquale-Wheaton (1996) Two-Quadrant Commercial Real Estate (CRE) Econometric Model.
      *
      * Couples the spatial tenant market (unemployment occupancy contraction) with the capital asset
-     * market (cap rate = 10Y yield + credit spread + CRE risk premium) with physical market adjustment lag.
+     * market (cap rate = 10Y yield - expected inflation + credit spread + CRE risk premium) with physical market
+     * adjustment lag. Rents keep pace with expected inflation, so the Gordon cap rate nets it out of the nominal yield.
      *
      * @param MacroState $state Current macroeconomic state.
      * @param float      $dt    Time increment in years.
@@ -320,13 +319,11 @@ class AssetMarketSubsystem
         $occupancyFactor = 1.0 - ($excessUnemployment * self::CRE_OCCUPANCY_UNEMPLOYMENT_SENSITIVITY);
         $occupancyFactor = max(0.30, min(1.80, $occupancyFactor));
 
-        // DiPasquale-Wheaton (1996) commercial real estate rent adjustment with inflation and demand.
-        $rentGrowthFactor = 1.0 + (($state->inflationEma - MacroEngine::TARGET_INFLATION) * self::CRE_RENT_GROWTH_ELASTICITY)
-            + ($state->outputGapEma * 0.50);
-        $rentGrowthFactor = max(0.50, min(2.0, $rentGrowthFactor));
+        // DiPasquale-Wheaton (1996) commercial real estate real rent level with demand.
+        $rentFactor = max(0.50, min(2.0, 1.0 + ($state->outputGapEma * 0.50)));
 
-        $capRate = max(self::CRE_MIN_CAP_RATE, $state->yield10yEma + $state->macroCreditSpreadEma + self::CRE_CAP_RATE_RISK_PREMIUM);
-        $fundamentalValue = self::CRE_BASELINE * $occupancyFactor * $rentGrowthFactor * (self::CRE_NEUTRAL_CAP_RATE / $capRate);
+        $capRate = max(self::CRE_MIN_CAP_RATE, $state->yield10yEma - $state->tipsBreakevenEma + $state->macroCreditSpreadEma + self::CRE_CAP_RATE_RISK_PREMIUM);
+        $fundamentalValue = self::CRE_BASELINE * $occupancyFactor * $rentFactor * (self::CRE_NEUTRAL_CAP_RATE / $capRate);
 
         $dW = $this->mathUtility->generateStandardNormal();
         $newIndex = $this->mathUtility->calculateSchwartz1Factor(
@@ -577,7 +574,9 @@ class AssetMarketSubsystem
      * departures from that fundamental, the purchasing-power deviations (Rogoff 1996), decay slowly. The fundamental
      * is the parity level with two further real-world loadings, because a rate differential alone leaves the
      * currency deaf to the two events that move it most:
-     *   log(FX* / 100) = UIP * (i - i*) - TOT * ImportBasket + Haven * max(0, vol - threshold) - Fiscal * spread
+     *   log(FX* / 100) = UIP * ((i - pi_e) - (i* - pi*_e)) - TOT * ImportBasket + Haven * max(0, vol - threshold) - Fiscal * spread
+     * The differential is in real rates (Frankel 1979): a rate that only keeps pace with expected inflation does not
+     * strengthen the currency.
      * A dearer import basket is a terms-of-trade loss for a district that buys its commodities, and a volatility
      * panic bids its currency the way it already bids its bonds. The index is that fundamental times a Schwartz (1997)
      * deviation reverting to one. A higher index is a STRONGER currency throughout, which is why net exports and the
@@ -615,7 +614,9 @@ class AssetMarketSubsystem
     {
         return self::exchangeRateFundamentalAt(
             $state->policyRate,
+            $state->tipsBreakeven,
             $state->foreignPolicyRate,
+            self::mainlandBreakeven(self::mainlandCoreYearOnYear($state)),
             $state->energyPriceIndexEma,
             $state->industrialMetalsIndexEma,
             $state->marketVolatilityEma,
@@ -627,7 +628,9 @@ class AssetMarketSubsystem
      * The fundamental on its inputs, for the readers that hold them as values rather than as a state.
      *
      * @param float $policyRate              District policy rate.
+     * @param float $expectedInflation       District expected inflation (ten-year breakeven).
      * @param float $foreignPolicyRate       Mainland policy rate.
+     * @param float $foreignExpectedInflation Mainland expected inflation (ten-year breakeven).
      * @param float $energyPriceIndexEma     Smoothed energy price index.
      * @param float $industrialMetalsIndexEma Smoothed industrial metals index.
      * @param float $marketVolatilityEma     Smoothed equity volatility.
@@ -636,13 +639,15 @@ class AssetMarketSubsystem
      */
     public static function exchangeRateFundamentalAt(
         float $policyRate,
+        float $expectedInflation,
         float $foreignPolicyRate,
+        float $foreignExpectedInflation,
         float $energyPriceIndexEma,
         float $industrialMetalsIndexEma,
         float $marketVolatilityEma,
         float $sovereignRiskSpreadEma
     ): float {
-        $rateDiff = $policyRate - $foreignPolicyRate;
+        $rateDiff = ($policyRate - $expectedInflation) - ($foreignPolicyRate - $foreignExpectedInflation);
 
         // Harrod-Balassa-Samuelson terms-of-trade import price effect on real exchange rates.
         $energyShift = ($energyPriceIndexEma / MacroEngine::ENERGY_BASELINE) - 1.0;
@@ -660,6 +665,29 @@ class AssetMarketSubsystem
         return self::EXCHANGE_RATE_BASELINE * exp(
             (self::UIP_SENSITIVITY * $rateDiff) - $termsOfTradeShift + $safeHavenBid - $fiscalRiskDiscount
         );
+    }
+
+    /**
+     * The mainland's year-on-year core inflation: its four quarters of annualized log inflation averaged.
+     *
+     * @param MacroState $state Current macroeconomic state.
+     * @return float Mainland core inflation, year on year.
+     */
+    public static function mainlandCoreYearOnYear(MacroState $state): float
+    {
+        return ($state->foreignCoreInflation + $state->foreignCoreInflationLag1 + $state->foreignCoreInflationLag2 + $state->foreignCoreInflationLag3) / 4.0;
+    }
+
+    /**
+     * The mainland's ten-year breakeven: the mainland is the US process, so it is the US fit the District's breakeven
+     * uses (Gurkaynak, Sack & Wright 2010) on its core inflation; it carries no headline pass-through term.
+     *
+     * @param float $coreYearOnYear Mainland core inflation, year on year.
+     * @return float Mainland ten-year breakeven inflation.
+     */
+    public static function mainlandBreakeven(float $coreYearOnYear): float
+    {
+        return MacroEngine::TARGET_INFLATION + (MacroAggregateSubsystem::BREAKEVEN_CORE_LOADING * ($coreYearOnYear - MacroEngine::TARGET_INFLATION));
     }
 
     /**
@@ -870,7 +898,7 @@ class AssetMarketSubsystem
         $state->foreignCoreInflation = $inflation;
 
         // Four quarters of annualized log inflation average to the year-on-year rate the rule is fitted on.
-        $yearOnYear = ($state->foreignCoreInflation + $state->foreignCoreInflationLag1 + $state->foreignCoreInflationLag2 + $state->foreignCoreInflationLag3) / 4.0;
+        $yearOnYear = self::mainlandCoreYearOnYear($state);
         $ruleRate = MacroEngine::MAINLAND_NEUTRAL_RATE
             + (self::FED_RULE_INFLATION_RESPONSE * ($yearOnYear - MacroEngine::TARGET_INFLATION))
             + (self::FED_RULE_GAP_RESPONSE * $state->foreignOutputGap);

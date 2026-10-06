@@ -238,12 +238,12 @@ final class OpinionPolls
      */
     public static function inflationCounted(PoliticsState $state, MacroStateDTO $macro): float
     {
-        if ($state->termStartDeflator <= 0.0 || $macro->gdpDeflator <= 0.0) {
+        if ($state->termStartDeflator <= 0.0 || $macro->consumerPriceLevel <= 0.0) {
             return 0.0;
         }
         $years = $state->totalTime - $state->termStartedAt;
 
-        return (log($macro->gdpDeflator / $state->termStartDeflator) - (MacroEngine::TARGET_INFLATION * $years)) / PoliticsEngine::ELECTION_TERM_YEARS;
+        return (log($macro->consumerPriceLevel / $state->termStartDeflator) - (MacroEngine::TARGET_INFLATION * $years)) / PoliticsEngine::ELECTION_TERM_YEARS;
     }
 
     /**

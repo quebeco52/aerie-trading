@@ -113,6 +113,8 @@ class MacroState
     public float $tipsBreakevenEma;
     public float $energyCostPushLag;
     public float $agriCostPushLag;
+    public float $noncorePassThroughEma;
+    public float $domesticInflation;
 
     public float $nsLevel;
     public float $nsSlope;
@@ -165,6 +167,7 @@ class MacroState
 
     public float $potentialGdpIndex;
     public float $nominalGdpIndex;
+    public float $nominalGdpGrowth;
 
     // The whole board's capitalisation, in currency, fed back by the ticker one tick behind. NOT an index
     // level: a level is a tradable instrument's scale and is restated whenever that instrument splits, which
@@ -187,6 +190,7 @@ class MacroState
     // scale out, which is the whole reason the raw capitalisation can be used without a baseline to calibrate.
     public float $equityWealthTrend;
     public float $gdpDeflator;
+    public float $consumerPriceLevel;
 
     public float $marketVolatility;
     public float $marketVolatilityEma;

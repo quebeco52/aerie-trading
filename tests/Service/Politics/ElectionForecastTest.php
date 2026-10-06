@@ -212,7 +212,7 @@ class ElectionForecastTest extends TestCase
             totalTime: $totalTime,
             sovereignDebtToGdp: 0.6,
             potentialGdpIndex: exp((MacroEngine::STRUCTURAL_LABOR_GROWTH_RATE + MacroEngine::TFP_DRIFT) * $totalTime),
-            gdpDeflator: exp(MacroEngine::TARGET_INFLATION * $totalTime),
+            consumerPriceLevel: exp(MacroEngine::TARGET_INFLATION * $totalTime),
         );
     }
 

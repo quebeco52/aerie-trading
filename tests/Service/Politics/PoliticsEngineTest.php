@@ -983,7 +983,7 @@ class PoliticsEngineTest extends TestCase
         $state->campaignStartedAt = self::ELECTION_AT - Politics::ELECTION_CAMPAIGN_WINDOW_YEARS;
         $state->campaignStartRealGdp = Politics::realGdp($economy) * exp(-($trendGrowth + $growthGap) * Politics::ELECTION_CAMPAIGN_WINDOW_YEARS);
         $state->termStartedAt = 0.0;
-        $state->termStartDeflator = $economy->gdpDeflator * exp(-(MacroEngine::TARGET_INFLATION + $inflationGap) * self::ELECTION_AT);
+        $state->termStartDeflator = $economy->consumerPriceLevel * exp(-(MacroEngine::TARGET_INFLATION + $inflationGap) * self::ELECTION_AT);
 
         return $state;
     }
@@ -1030,7 +1030,7 @@ class PoliticsEngineTest extends TestCase
         $state->totalTime = self::ELECTION_AT;
         $state->lastElectionAt = self::ELECTION_AT;
         $state->termStartedAt = self::ELECTION_AT;
-        $state->termStartDeflator = $economy->gdpDeflator;
+        $state->termStartDeflator = $economy->consumerPriceLevel;
         $state->campaignStartedAt = self::ELECTION_AT - Politics::ELECTION_CAMPAIGN_WINDOW_YEARS;
         $state->campaignStartRealGdp = Politics::realGdp($economy);
         $state->pendingCoalition = Diet::membership([Diet::VANGUARD]);

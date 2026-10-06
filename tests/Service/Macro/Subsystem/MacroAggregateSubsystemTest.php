@@ -233,6 +233,10 @@ class MacroAggregateSubsystemTest extends TestCase
         );
     }
 
+    /**
+     * Energy reaches headline as a step in the price level, at its full transmission and undiluted by the basket
+     * weight, and a price that stays high adds no further inflation once the lag has caught up.
+     */
     public function testCommodityCostPushPassesThroughToHeadlineInflationWithoutAttenuation(): void
     {
         $stateNormal = new MacroState();
@@ -255,11 +259,16 @@ class MacroAggregateSubsystemTest extends TestCase
 
         $subsystemWithMock = new MacroAggregateSubsystem($mathMock);
 
-        $infNormal = $subsystemWithMock->calculateInflation($stateNormal, MacroEngine::TARGET_INFLATION, 1.0, 0.25);
-        $infEnergy = $subsystemWithMock->calculateInflation($stateEnergy, MacroEngine::TARGET_INFLATION, 1.0, 0.25);
+        $dt = 0.25;
+        $infNormal = $subsystemWithMock->calculateInflation($stateNormal, MacroEngine::TARGET_INFLATION, 1.0, $dt);
+        $infEnergy = $subsystemWithMock->calculateInflation($stateEnergy, MacroEngine::TARGET_INFLATION, 1.0, $dt);
 
-        $expectedLift = MacroEngine::ENERGY_COST_PUSH_TRANSMISSION;
-        $this->assertEqualsWithDelta($expectedLift, $infEnergy - $infNormal, 0.0001, 'Energy shock must transmit to headline inflation without being diluted by basket weight.');
+        $this->assertEqualsWithDelta(MacroEngine::ENERGY_COST_PUSH_TRANSMISSION, ($infEnergy - $infNormal) * $dt, 1e-9, 'Energy shock must lift the price level by its full transmission, undiluted by basket weight.');
+
+        $infNormalHeld = $subsystemWithMock->calculateInflation($stateNormal, MacroEngine::TARGET_INFLATION, 1.0, $dt);
+        $infEnergyHeld = $subsystemWithMock->calculateInflation($stateEnergy, MacroEngine::TARGET_INFLATION, 1.0, $dt);
+
+        $this->assertEqualsWithDelta(0.0, $infEnergyHeld - $infNormalHeld, 1e-9, 'Energy held high is a price level, not a standing inflation rate.');
     }
 
     public function testCalculateManufacturingPmi(): void
@@ -1002,8 +1011,7 @@ class MacroAggregateSubsystemTest extends TestCase
         $core->supercoreInflationEma += 0.01;
         $core->coreGoodsInflationEma += 0.01;
         $commodity = $this->onTargetInflationState();
-        $commodity->energyCostPushLag = 0.006;
-        $commodity->agriCostPushLag = 0.004;
+        $commodity->noncorePassThroughEma = 0.01;
 
         $this->assertEqualsWithDelta(MacroAggregateSubsystem::BREAKEVEN_CORE_LOADING * 0.01, $this->breakeven($core) - $this->breakeven($base), 1e-15);
         $this->assertEqualsWithDelta(MacroAggregateSubsystem::BREAKEVEN_NONCORE_LOADING * 0.01, $this->breakeven($commodity) - $this->breakeven($base), 1e-15);
@@ -1016,9 +1024,9 @@ class MacroAggregateSubsystemTest extends TestCase
     public function testAnEnergySpikeReachesTheTenYearOnlyAsFarAsItDoesInTheUs(): void
     {
         $spike = $this->onTargetInflationState();
-        $spike->energyCostPushLag = 0.015;
+        $spike->noncorePassThroughEma = 0.015;
 
-        $share = ($this->breakeven($spike) - MacroEngine::TARGET_INFLATION) / $spike->energyCostPushLag;
+        $share = ($this->breakeven($spike) - MacroEngine::TARGET_INFLATION) / $spike->noncorePassThroughEma;
 
         $this->assertGreaterThan(0.10, $share);
         $this->assertLessThan(0.20, $share);
@@ -1048,8 +1056,7 @@ class MacroAggregateSubsystemTest extends TestCase
         $state = new MacroState();
         $state->supercoreInflationEma = MacroEngine::TARGET_INFLATION;
         $state->coreGoodsInflationEma = MacroEngine::TARGET_INFLATION;
-        $state->energyCostPushLag = 0.0;
-        $state->agriCostPushLag = 0.0;
+        $state->noncorePassThroughEma = 0.0;
 
         return $state;
     }
