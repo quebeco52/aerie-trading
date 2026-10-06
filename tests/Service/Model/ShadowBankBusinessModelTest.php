@@ -9,6 +9,7 @@ use App\Entity\Stock;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\ShadowBankBusinessModel;
 use App\Service\Math\FinancialConstants;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\TestCase;
 
 class ShadowBankBusinessModelTest extends TestCase
@@ -67,28 +68,95 @@ class ShadowBankBusinessModelTest extends TestCase
         $this->assertSame(8.0, $this->model->getWholesaleLeverageLimit());
     }
 
-    public function testCalculateInterestIncomeYieldsFromMortgageAndDirectLendingPortfolios(): void
+    /**
+     * The book opens priced as its two portfolios: mortgages at the 30-year plus their spread and direct loans at SOFR
+     * plus theirs, on the funded book (equity + total debt - treasury with no ledger yet), and the excess cash earns
+     * the cash yield beside it.
+     */
+    public function testTheBookOpensPricedAsItsTwoPortfolios(): void
     {
-        $stock = new Stock();
-        $stock->setTicker('POOL');
-        $stock->setWholesaleDebt('400000000000.0'); // $400B debt
-        $stock->setCorporateTreasury('40000000000.0'); // $40B cash
+        $stock = $this->pool();
+        $opening = new MacroStateDTO();
+        $book = 55e9 + 225e9 - 27.5e9;
+        $bookYield = (0.60 * ($opening->yield30yEma + ShadowBankBusinessModel::MORTGAGE_PORTFOLIO_SPREAD))
+            + (0.40 * ($opening->policyRateEma + ShadowBankBusinessModel::DIRECT_LENDING_PORTFOLIO_SPREAD));
+        $excessCash = 27.5e9 - (55e9 * ShadowBankBusinessModel::TARGET_OPERATING_BUFFER);
 
-        $macro = new MacroStateDTO(
-            policyRateEma: 0.04, // 4%
-            yield30yEma: 0.055   // 5.5%
+        $this->assertEqualsWithDelta(
+            ($book * $bookYield) + ($excessCash * $this->model->calculateCashYield($opening)),
+            $this->model->calculateInterestIncome($stock, $opening, $this->mathUtility),
+            1_000.0
         );
+    }
 
-        $income = $this->model->calculateInterestIncome($stock, $macro, $this->mathUtility);
+    /**
+     * Fees are struck once so that, at the opening macro, fees at the lore margin plus the book's interest less the
+     * wholesale funding cost and the through-the-cycle credit charge earn the lender its structural return.
+     */
+    public function testTheFranchiseEarnsItsStructuralReturnAtTheOpeningMacro(): void
+    {
+        $stock = $this->pool();
+        $opening = new MacroStateDTO();
+        $metrics = $this->model->getTargetMetrics($stock, $opening, $this->mathUtility);
+        $tax = $opening->corporateTaxRate;
+        $feeRevenue = $metrics['invested_capital'] * $metrics['baseline_roic'] / (0.50 * (1.0 - $tax));
+        $interestExpense = 225e9 * ((0.30 * 0.050) + (0.70 * ($opening->policyRateEma + 0.019)));
+        $provision = $this->model->getThroughTheCycleCreditLossRate($stock) * $metrics['invested_capital'];
 
-        // The portfolio is struck on the funded book. This fixture has never reported, so no earning-asset
-        // ledger is open yet and the book falls back to the identity: equity + total debt - treasury
-        // = 0B + 400B - 40B = 360B. A seasoned shadow bank reads its live ledger instead.
-        // Mortgage: 360B * 60% = 216B. Yield: 0.055 + 0.0225 = 0.0775 -> 216B * 0.0775 = 16.74B
-        // Direct Lending: 360B * 40% = 144B. Yield: 0.04 + 0.0450 = 0.0850 -> 144B * 0.0850 = 12.24B
-        // Cash: excess cash = 40B - operatingBuffer (0.05 * 0 = 0) = 40B. Cash yield = max(0, 0.04 - 0.0025) = 0.0375 -> 40B * 0.0375 = 1.5B
-        // Total = 16.74B + 12.24B + 1.5B = 30.48B
-        $this->assertEqualsWithDelta(30_480_000_000.0, $income, 1_000_000.0);
+        $netIncome = (($feeRevenue * 0.50) + $this->model->calculateInterestIncome($stock, $opening, $this->mathUtility) - $interestExpense - $provision) * (1.0 - $tax);
+
+        $this->assertEqualsWithDelta(0.29, $netIncome / 55e9, 1e-9);
+    }
+
+    /**
+     * A rise in the policy rate reaches the direct loans at their next reset, inside the quarter, on the share of the
+     * book they make up; the mortgages, priced off the long end, and the fees do not move.
+     */
+    #[AllowMockObjectsWithoutExpectations]
+    public function testARateRiseLandsInDirectLendingIncomeWithinAQuarterAndFeesDoNotReprice(): void
+    {
+        $stock = $this->pool();
+        $opening = new MacroStateDTO();
+        $raised = new MacroStateDTO(policyRateEma: $opening->policyRateEma + 0.01);
+        $mathMock = $this->getMockBuilder(MathUtility::class)->onlyMethods(['generatePersistentZ'])->getMock();
+        $mathMock->method('generatePersistentZ')->willReturn(0.0);
+
+        $stock->setEarningsMomentumZ($this->model->computeActualFinancials($stock, 1_000_000_000.0, 0.50, 200_000_000.0, 0.0, $opening, $mathMock)->streamZ);
+        $carried = $stock->getEarningsMomentumZ();
+        $before = $this->model->resolveInterestYield($stock, $opening);
+        $base = $this->model->computeActualFinancials($stock, 1_000_000_000.0, 0.50, 200_000_000.0, 0.0, $opening, $mathMock);
+        $stock->setEarningsMomentumZ($carried);
+        $after = $this->model->computeActualFinancials($stock, 1_000_000_000.0, 0.50, 200_000_000.0, 0.0, $raised, $mathMock);
+        $stock->setEarningsMomentumZ($after->streamZ);
+
+        $directLendingShare = (1.0 - FinancialConstants::SECURITIES_SHARE_OF_EARNING_ASSETS) * 0.40;
+        $this->assertEqualsWithDelta($directLendingShare * 0.01, $this->model->resolveInterestYield($stock, $raised) - $before, 1e-9);
+        $this->assertEqualsWithDelta($base->streamRevenue['origination_fees'], $after->streamRevenue['origination_fees'], 1e-3);
+        $this->assertEqualsWithDelta($base->streamRevenue['direct_lending'], $after->streamRevenue['direct_lending'], 1e-3, 'deal fees do not reprice');
+        $this->assertEqualsWithDelta(
+            $this->model->getTargetMetrics($stock, $opening, $this->mathUtility)['baseline_roic'],
+            $this->model->getTargetMetrics($stock, $raised, $this->mathUtility)['baseline_roic'],
+            1e-12,
+            'the fee target is not re-solved to hold the return'
+        );
+    }
+
+    /** Brine Pool Capital's opening balance sheet and lore. */
+    private function pool(): Stock
+    {
+        $stock = (new Stock())->setTicker('POOL');
+        $stock->setTotalEquity('55000000000');
+        $stock->setWholesaleDebt('225000000000');
+        $stock->setCustomerDeposits('0');
+        $stock->setCorporateTreasury('27500000000');
+        $stock->setBaselineRoe('0.29');
+        $stock->setOperatingMargin('0.50');
+        $stock->setFloatingDebtRatio('0.70');
+        $stock->setHistoricalFixedRate('0.050');
+        $stock->setCreditSpread('0.0190');
+        $stock->setBeta('1.6');
+
+        return $stock;
     }
 
     /**
@@ -192,23 +260,15 @@ class ShadowBankBusinessModelTest extends TestCase
         $this->assertGreaterThan($boomRate, $depressedRate, 'Homes below the price they were lent against lose more on each mortgage default (Frye 2000).');
     }
 
-    public function testInterbankLiquiditySpreadCompressesShadowBankMortgageNIM(): void
+    /**
+     * An interbank freeze raises the repo funding cost (DebtEngine) but not what the book earns: direct loans reset
+     * over SOFR, a secured rate. Nor is it a cost-ratio term; rate risk is the repricing gap.
+     */
+    public function testAnInterbankSpikeDoesNotLiftTheBookOrTheCostRatio(): void
     {
-        $stock = new Stock();
-        $stock->setTicker('RITM');
-        $stock->setBeta('1.0');
-
-        $calmMacro = new MacroStateDTO(
-            policyRateEma: 0.04,
-            yield30yEma: 0.06,
-            interbankLiquiditySpreadEma: 0.0010
-        );
-
-        $tedSpikeMacro = new MacroStateDTO(
-            policyRateEma: 0.04,
-            yield30yEma: 0.06,
-            interbankLiquiditySpreadEma: 0.0200
-        );
+        $stock = $this->pool();
+        $calmMacro = new MacroStateDTO(interbankLiquiditySpreadEma: 0.0010);
+        $tedSpikeMacro = new MacroStateDTO(interbankLiquiditySpreadEma: 0.0200);
 
         $mathMock = $this->createStub(MathUtility::class);
         $mathMock->method('generatePersistentZ')->willReturn(0.0);
@@ -216,12 +276,12 @@ class ShadowBankBusinessModelTest extends TestCase
         $calmResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.50, 20_000_000.0, 0.0, $calmMacro, $mathMock);
         $spikeResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.50, 20_000_000.0, 0.0, $tedSpikeMacro, $mathMock);
 
-        $this->assertGreaterThan(
-            $calmResult->clampedMargin,
-            $spikeResult->clampedMargin,
-            'TED spread spike raises shadow bank repo borrowing costs, squeezes mortgage NIM, and expands variable cost ratio.'
+        $this->assertEqualsWithDelta($calmResult->clampedMargin, $spikeResult->clampedMargin, 1e-12);
+        $this->assertEqualsWithDelta(
+            $this->model->calculateInterestIncome($stock, $calmMacro, $this->mathUtility),
+            $this->model->calculateInterestIncome($stock, $tedSpikeMacro, $this->mathUtility),
+            1.0
         );
-        $this->assertLessThan($calmResult->ebit, $spikeResult->ebit);
     }
 
     public function testSloosCreditTighteningExpandsDirectLendingOrigination(): void

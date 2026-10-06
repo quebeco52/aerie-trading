@@ -67,7 +67,7 @@ final class LenderRevenueCapacityTest extends TestCase
             $stock->setIndustry($industry);
             $stock->setTotalEquity('100000000000');
             $stock->setWholesaleDebt('150000000000');
-            $stock->setCustomerDeposits('500000000000');
+            $stock->setCustomerDeposits($model instanceof ShadowBankBusinessModel ? '0' : '500000000000'); // a shadow bank takes no deposits
             $stock->setCorporateTreasury('40000000000');
             $stock->setBaselineRoe((string) $baselineRoe);
             $stock->setOperatingMargin('0.35');
