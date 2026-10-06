@@ -4,11 +4,12 @@
 #
 #   bin/verify            PHPStan, then every test file that ran under a second in the last full run, plus the slow
 #                         ones written for a changed class (FooTest.php for Foo.php) or changed themselves
-#   bin/verify --full     PHPStan, then the whole Fast suite (~3 min), and records each file's time for the quick run
+#   bin/verify --full     PHPStan, then the Fast suite with each Realism file in its own process beside it (~1 min),
+#                         and records each file's time for the quick run
 #   bin/verify --phpstan  PHPStan on the changed files only
 #
 # Controller tests need MySQL and are left out of both runs. The quick run skips the long-run realism tests unless
-# their own class changed; run --full before committing.
+# their own class changed; run --full before committing. Every PHP process waits for a machine-wide bin/php-slot.
 set -uo pipefail
 
 cd "$(dirname "$0")/.." || exit 2
@@ -25,7 +26,7 @@ mapfile -t changed < <({
 status=0
 if (( ${#changed[@]} == 0 )); then
     echo "PHPStan: no changed PHP files"
-elif out=$(php vendor/bin/phpstan analyse --memory-limit=1G --no-progress --error-format=raw "${changed[@]}" 2>&1); then
+elif out=$(bin/php-slot php vendor/bin/phpstan analyse --memory-limit=1G --no-progress --error-format=raw "${changed[@]}" 2>&1); then
     echo "PHPStan: ${#changed[@]} changed files clean"
 else
     echo "PHPStan: errors in the changed files"
@@ -44,18 +45,38 @@ sed -e 's/stopOnDefect="true"/stopOnDefect="false"/' \
     -e "s#cacheDirectory=\"#cacheDirectory=\"$root/#" \
     -e "s#<directory>#<directory>$root/#g" \
     -e "s#<file>#<file>$root/#g" \
+    -e "s#<exclude>#<exclude>$root/#g" \
     phpunit.dist.xml > "$tmp/phpunit.xml"
-phpunit=(php vendor/bin/phpunit -c "$tmp/phpunit.xml" --testsuite Fast --no-progress --colors=never)
+phpunit=(bin/php-slot php vendor/bin/phpunit -c "$tmp/phpunit.xml" --no-progress --colors=never)
 
 if [[ $mode == --full || ! -s $times ]]; then
     [[ $mode == --full ]] || echo "No test timings yet, so running the whole suite once to record them"
-    echo "Tests: Fast suite (~3 min)"
-    "${phpunit[@]}" --exclude-filter Controller --log-junit "$tmp/junit.xml"
+    # Each Realism file takes 10-60 s alone, so they run beside the Fast suite rather than after it.
+    mapfile -t realism < <("${phpunit[@]}" --testsuite Realism --list-test-files | sed -n 's/^ - //p')
+    echo "Tests: Fast suite, with ${#realism[@]} Realism files alongside (~1 min)"
+    pids=()
+    for i in "${!realism[@]}"; do
+        "${phpunit[@]}" --log-junit "$tmp/junit-realism-$i.xml" "${realism[$i]}" > "$tmp/realism-$i.log" 2>&1 &
+        pids+=($!)
+    done
+    "${phpunit[@]}" --testsuite Fast --exclude-filter Controller --log-junit "$tmp/junit-fast.xml"
     tests=$?
+    failed=0
+    for i in "${!pids[@]}"; do
+        wait "${pids[$i]}" && continue
+        failed=$((failed + 1))
+        echo "Realism: ${realism[$i]#"$root"/} failed"
+        cat "$tmp/realism-$i.log"
+    done
+    echo "Realism: $(( ${#realism[@]} - failed )) of ${#realism[@]} files passed"
+    (( failed )) && tests=1
     mkdir -p "$(dirname "$times")"
     php -r '$t = [];
-        foreach (simplexml_load_file($argv[1])->xpath("//testcase") as $c) { $t[(string) $c["file"]] = ($t[(string) $c["file"]] ?? 0.0) + (float) $c["time"]; }
-        foreach ($t as $file => $seconds) { echo $file, "\t", round($seconds, 3), "\n"; }' "$tmp/junit.xml" > "$times"
+        foreach (array_slice($argv, 1) as $junit) {
+            if (!is_file($junit) || filesize($junit) === 0) { continue; }
+            foreach (simplexml_load_file($junit)->xpath("//testcase") as $c) { $t[(string) $c["file"]] = ($t[(string) $c["file"]] ?? 0.0) + (float) $c["time"]; }
+        }
+        foreach ($t as $file => $seconds) { echo $file, "\t", round($seconds, 3), "\n"; }' "$tmp"/junit-*.xml > "$times"
     exit $(( status || tests ))
 fi
 
@@ -69,7 +90,7 @@ for f in "${changed[@]}"; do
 done
 
 printf '%s\n' "${!wanted[@]}" > "$tmp/wanted"
-"${phpunit[@]}" --list-test-files | sed -n 's/^ - //p' | grep -vE '/tests/(Controller|Panther)/' > "$tmp/all"
+"${phpunit[@]}" --testsuite Fast,Realism --list-test-files | sed -n 's/^ - //p' | grep -vE '/tests/(Controller|Panther)/' > "$tmp/all"
 # A file with no recorded time is new, so it runs.
 skipped=$(awk -F'\t' -v slow="$slow_seconds" -v out="$tmp/files" '
     FILENAME == ARGV[1] { t[$1] = $2; next }
@@ -78,7 +99,7 @@ skipped=$(awk -F'\t' -v slow="$slow_seconds" -v out="$tmp/files" '
     END { print skipped + 0 }' "$times" "$tmp/wanted" "$tmp/all")
 
 echo "Tests: $(wc -l < "$tmp/files") files; $skipped slow ones left for --full"
-"${phpunit[@]}" --test-files-file "$tmp/files"
+"${phpunit[@]}" --testsuite Fast,Realism --test-files-file "$tmp/files"
 tests=$?
 
 exit $(( status || tests ))

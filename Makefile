@@ -1,4 +1,4 @@
-.PHONY: up down clean install seed reset ticker ticker-stop macro-dump tailwind-watch bash test test-unit test-integration test-functional test-financial test-e2e test-all test-coverage phpstan profile-cmd profile-clean
+.PHONY: up down clean install seed reset ticker ticker-stop macro-dump tailwind-watch bash test test-unit test-integration test-functional test-financial test-realism test-e2e test-all test-coverage phpstan profile-cmd profile-clean
 
 DC = docker compose --env-file .env.dev -f docker-compose.dev.yml
 EXEC_PHP = $(DC) exec aerie-app
@@ -55,6 +55,9 @@ test-functional: up
 
 test-financial: up
 	$(EXEC_PHP) vendor/bin/phpunit --testsuite Financial --no-progress
+
+test-realism: up
+	$(EXEC_PHP) vendor/bin/phpunit --testsuite Realism --no-progress
 
 test-e2e: up
 	$(EXEC_PHP) vendor/bin/phpunit --testsuite E2E --no-progress

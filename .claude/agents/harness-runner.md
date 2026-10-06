@@ -25,6 +25,7 @@ number they can trust and a verdict, not a transcript. Your report is all they s
 - **Is a harness the right tool?** If the question is what the *live* game is doing, say so and recommend the user run
   `! make macro-dump` (writes `var/macro-gap-history.jsonl`, one record per simulated quarter). You cannot reach the
   running app or Docker from here. A harness is for counterfactuals: paired arms, constant sweeps, distributions.
+  A cited constant or an identity fix needs a unit test, not a harness: say so and stop.
 
 ## The three harness shapes
 
@@ -38,7 +39,7 @@ number they can trust and a verdict, not a transcript. Your report is all they s
    from `var/harness/bootstrap.php` (in-memory Redis that keeps state), stub the EntityManager to capture persisted
    entities, run `app:market-seed` through `CommandTester`, then drive the real engines (`EarningsEngine`,
    `MarketEngine`, `DebtEngine`) on the seeded `Stock`s. Copy `var/harness/polls/ExtractionMarginTest.php`. Run:
-   `php -d memory_limit=3G vendor/bin/phpunit --bootstrap var/harness/bootstrap.php --no-configuration <file>`.
+   `bin/php-slot php -d memory_limit=3G vendor/bin/phpunit --bootstrap var/harness/bootstrap.php --no-configuration <file>`.
 3. **Whole-ticker replay** (~2 min per 20 years at 360 ticks/year). `var/harness/FullMarketHarnessTest.php` with
    `run.sh`; fix the stale scratchpad paths hard-coded in `run.sh` before using it. A baseline arm runs on a
    `git archive HEAD` tree passed as `BASE=<tree>` with a `vendor` symlink; the bootstrap autoloads that tree first.
@@ -48,9 +49,15 @@ number they can trust and a verdict, not a transcript. Your report is all they s
 
 - **Pair the arms.** Same seeds in every arm: `mt_srand($seed)` before each arm and `MathUtility::ownStream($seed)` for
   politics, so the difference carries no seed noise. Report the paired difference with its standard error.
-- **Enough seeds for the question.** Report n, the mean, its standard error and the range. Means need the standard
-  error well under the effect; 16 seeds is the floor. Variances and other moments need 48 or more: a 16-seed variance
-  comparison here once reversed sign at 48. Say plainly when a result is inside its noise.
+- **Seeds sized to the question.** A display or news rule (how often a headline fires) gets one 3-seed run. A
+  calibrated moment gets the full count: report n, the mean, its standard error and the range; means need the standard
+  error well under the effect, 16 seeds the floor; variances and other moments need 48 or more (a 16-seed variance
+  comparison here once reversed sign at 48). Say plainly when a result is inside its noise.
+- **Iterate small, confirm once.** While a change is still moving, run 3-4 seeds per arm. Run the full count once, on
+  the version you report.
+- **Cache the baseline arm.** It only changes when `src/` or the harness does. Key it
+  `$(git rev-parse --short HEAD:src)-$(sha1sum <harness> | cut -c1-8)-s<seeds>-y<years>-t<ticks/yr>` and keep its
+  output in `var/harness/<topic>/base/<key>/`; if that directory exists, reuse it and run only the new arm.
 - **Measure, never assume, the firm's numbers.** Fair value, the discount rate less growth, cost bases and price over
   fair value all come from the real engine on a seeded board. A probe built on guessed ratios once overstated a broker's
   election-day move threefold.
@@ -75,8 +82,10 @@ grew from 21k to 100-150k tokens and spent ~2.5M input tokens each.
 - **Do not poll.** A background call notifies you when it exits, so wait for that notice. No `sleep; ls`, `wc -l`,
   `tail *.log` or `ps` checks in between: each one re-reads your whole context for a few bytes. If you must block
   inside a call, use one `until <done>; do sleep 30; done` in a single call.
-- **At most 8 PHP processes at once**, the kernel harness included (`-d memory_limit=3G` each). The session was killed
-  (exit 137) at 16.
+- **Launch every PHP process as `bin/php-slot php ...`.** The machine has 8 slots shared by every session and worktree
+  (`-d memory_limit=3G` each); the wrapper waits for a free one, so queue a whole sweep at once (`for s in ...; do
+  bin/php-slot php ... & done; wait`) instead of batching by hand. A session was killed (exit 137) at 16, and three
+  parallel sessions without a shared cap once ran 25.
 - No Docker, no database, no network to the app. `make` targets that call `docker compose` fail here.
 - Never write `phpunit.tmp.xml`: that name is tracked in git. Scratch files go in `$TMPDIR` or the topic folder.
 - Do not start anything over ~30 minutes without saying so in your report and stopping there; propose it instead.
