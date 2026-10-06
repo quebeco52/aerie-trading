@@ -58,6 +58,32 @@ class RetailInsuranceBusinessModelTest extends TestCase
         );
     }
 
+    /**
+     * A carrier short of capital hardens its renewal rates through the regime, which reaches the P&L via the
+     * pricing-power multiplier. Its claims this quarter cost the same as a well-capitalised peer's.
+     */
+    public function testCapitalShortfallDoesNotDiscountThisQuartersClaims(): void
+    {
+        $run = function (string $equity): \App\DTO\ActualFinancialsDTO {
+            $stock = new Stock();
+            $stock->setTicker('DOVE');
+            $stock->setBeta('0.8');
+            $stock->setTotalEquity($equity);
+            $mathMock = $this->createStub(MathUtility::class);
+            $mathMock->method('generatePersistentZ')->willReturn(0.0);
+            $mathMock->method('generateStandardNormal')->willReturn(0.0);
+
+            return $this->model->computeActualFinancials($stock, 10_000_000_000.0, 0.70, 1_000_000_000.0, 0.08, new MacroStateDTO(), $mathMock);
+        };
+
+        $impaired = $run('5000000000');
+        $adequate = $run('50000000000');
+        $regimeKey = \App\DTO\StreamContext::REGIME_STATE_PREFIX . RetailInsuranceBusinessModel::REGIME_HARD_MARKET;
+
+        $this->assertSame(1.0, $impaired->streamZ[$regimeKey] ?? 0.0, 'The shortfall must start the regime that carries the rate.');
+        $this->assertEqualsWithDelta($adequate->clampedMargin, $impaired->clampedMargin, 1e-12);
+    }
+
     public function testObservableShockZCalculation(): void
     {
         $stock = new Stock();

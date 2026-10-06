@@ -3665,6 +3665,18 @@ class MathUtility
     }
 
     /**
+     * First lower partial moment of the standard normal, E[max(0, t - Z)] = t·Φ(t) + φ(t): the expected
+     * payout of a unit layer that pays the shortfall of a standard normal draw below t (the Bachelier put).
+     *
+     * @param float $threshold The level t below which the layer pays.
+     * @return float The expected shortfall below t, in standard deviations.
+     */
+    public function calculateNormalLowerPartialMoment(float $threshold): float
+    {
+        return ($threshold * $this->calculateNormalCDF($threshold)) + $this->calculateNormalPDF($threshold);
+    }
+
+    /**
      * The two Black-Scholes moneyness deviates, d1 and d2.
      *
      * Shared by the price, every greek and the smile, all of which are functions of the same pair. Returns

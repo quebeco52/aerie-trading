@@ -125,31 +125,30 @@ class InsuranceBusinessModelTest extends TestCase
         $this->assertNotNull($stock->getRoeTtm());
     }
 
-    public function testBenignClaimEnvironmentReducesLossRatioWhilePreservingExpenseRatio(): void
+    public function testQuietDistrictYearLowersLossRatioAndLeavesExpenseRatio(): void
     {
         $model = new InsuranceBusinessModel();
         $stock = new Stock();
         $stock->setTicker('TEST_BENIGN');
         $stock->setBeta('1.0');
         // Surplus covering the ANNUAL book at the Kenney ratio ($40B written / 1.5), so the capacity
-        // channel stays out of a test about the claim channel: an underwriter short of capital hardens
-        // its renewal rates, and the combined ratio below would carry that discount too.
+        // channel stays out of a test about the claim channel.
         $stock->setTotalEquity('26666666667.0');
 
         $mathUtilityMock = $this->getMockBuilder(MathUtility::class)
             ->onlyMethods(['generateStandardNormal'])
             ->getMock();
-        // Revenue Z = 0.0 (no revenue shock), Claim Z = 2.0 (benign environment)
+        // Firm factor = 0.0, Revenue Z = 0.0, Claim Z = 2.0: nothing in the firm's own large-loss layer.
         $mathUtilityMock->method('generateStandardNormal')
-            ->willReturnOnConsecutiveCalls(0.0, 0.0, 2.0); // Firm factor = 0.0, Revenue Z = 0.0, Claim Z = 2.0
+            ->willReturnOnConsecutiveCalls(0.0, 0.0, 2.0);
 
+        $quietBurden = 0.5;
         $macroState = \App\DTO\MacroStateDTO::fromArray([
             'inflation_ema' => 0.02,
             'policy_rate' => 0.05,
             'gdp_growth' => 0.02,
             'credit_spread' => 0.015,
-            'commercial_property_index_ema' => 100.0,
-            'residential_property_index_ema' => 100.0,
+            'catastrophe_loss_index_ema' => $quietBurden,
         ]);
 
         $baseVariableMargin = 0.60;
@@ -165,13 +164,35 @@ class InsuranceBusinessModelTest extends TestCase
             $mathUtilityMock
         );
 
-        // Baseline Loss Ratio = 0.60 * 0.65 = 0.39
-        // Baseline Expense Ratio = 0.60 * 0.35 = 0.21
-        // Benign claim bonus = -0.08 * (1.0) = -0.08 applied only to loss ratio -> realized loss ratio = 0.31
-        // Realized expense ratio remains 0.21
-        // Realized combined ratio = 0.31 + 0.21 = 0.52
-        $this->assertEqualsWithDelta(0.52, $result->clampedMargin, 0.001);
-        $this->assertEqualsWithDelta(5_200_000_000.0, $result->actualVariableCosts, 1_000.0);
+        // Loss ratio 0.60 x 0.65 = 0.39, less half an average year's catastrophe load, less the large-loss
+        // layer's expected payout that the structural margin prices in and this quarter did not use.
+        // Expense ratio 0.60 x 0.35 = 0.21 is untouched by claims.
+        $expectedLayer = InsuranceBusinessModel::CATASTROPHE_LOSS_SCALAR
+            * (new MathUtility())->calculateNormalLowerPartialMoment(InsuranceBusinessModel::CATASTROPHE_Z_THRESHOLD);
+        $lossRatio = 0.39 - (InsuranceBusinessModel::DISTRICT_CATASTROPHE_LOAD * (1.0 - $quietBurden)) - $expectedLayer;
+        $this->assertEqualsWithDelta($lossRatio + 0.21, $result->clampedMargin, 1e-9);
+        $this->assertEqualsWithDelta(($lossRatio + 0.21) * $expectedRevenue, $result->actualVariableCosts, 1_000.0);
+    }
+
+    /**
+     * The district term is linear in the burden, so a storm season and an equally quiet one cancel: the
+     * structural margin is the average year's, catastrophe load included, and the season only spreads it.
+     */
+    public function testDistrictCatastropheClaimsAreCentredOnTheAverageYear(): void
+    {
+        $model = new InsuranceBusinessModel();
+        $run = function (float $burden) use ($model): float {
+            $stock = new Stock();
+            $stock->setTicker('CENT');
+            $stock->setBeta('1.0');
+            $stock->setTotalEquity('200000000000');
+            $macro = new \App\DTO\MacroStateDTO(inflationEma: 0.02, policyRateEma: 0.03, yield10yEma: 0.04, catastropheLossIndexEma: $burden);
+
+            return $model->computeActualFinancials($stock, 10_000_000_000.0, 0.60, 1.0e9, 0.10, $macro, $this->scriptedMath())->clampedMargin;
+        };
+
+        $this->assertEqualsWithDelta(2.0 * $run(1.0), $run(1.6) + $run(0.4), 1e-12);
+        $this->assertEqualsWithDelta(InsuranceBusinessModel::DISTRICT_CATASTROPHE_LOAD * 0.6, $run(1.6) - $run(1.0), 1e-12);
     }
 
     public function testExpenseRatioScalesWithRevenueFluctuations(): void
@@ -497,8 +518,9 @@ class InsuranceBusinessModelTest extends TestCase
         $impairedMargin = $model->computeActualFinancials($impaired, $quarterlyPremium, 0.90, 1.0e9, 0.10, new \App\DTO\MacroStateDTO(), $this->scriptedMath())->clampedMargin;
         $adequateMargin = $model->computeActualFinancials($adequate, $quarterlyPremium, 0.90, 1.0e9, 0.10, new \App\DTO\MacroStateDTO(), $this->scriptedMath())->clampedMargin;
 
-        // Hard-market rate increases on renewal pull the combined ratio down for the impaired underwriter.
-        $this->assertLessThan($adequateMargin, $impairedMargin);
+        // The harder rate reaches the combined ratio through the pricing-power multiplier at renewal; the
+        // shortfall itself must not discount this quarter's claims a second time.
+        $this->assertEqualsWithDelta($adequateMargin, $impairedMargin, 1e-12);
 
         // And the capital shock puts it into the regime, which persists past the quarter that caused it.
         $regimeKey = \App\DTO\StreamContext::REGIME_STATE_PREFIX . InsuranceBusinessModel::REGIME_HARD_MARKET;
