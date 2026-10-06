@@ -17,7 +17,6 @@ use App\Entity\Stock;
 use App\Service\Math\MathUtility;
 use App\Service\Event\ShockEvent;
 use App\Service\Macro\MacroEngine;
-use App\Service\Math\FinancialConstants;
 
 /**
  * Earnings strategy for Insurance companies.
@@ -55,12 +54,6 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
     public const KENNEY_PREMIUM_QUARTERS  = 4.0;
     /** Implied runoff equity fraction of customer deposit float allowed for insolvent insurers. */
     public const IMPLIED_RUNOFF_EQUITY    = 0.10;
-    /** Baseline logistic inflection point (80% of equity limit) where capacity tightens for pure corporate debt. */
-    public const CAPACITY_INFLECTION_BASE = 0.80;
-    /** Inflection shift (10%) moving the regulatory midpoint to 80% for volatile policyholder float. */
-    public const CAPACITY_INFLECTION_FLOAT_SHIFT = 0.10;
-    /** Steepness (12.0) of NAIC statutory capital constraints and rating agency capacity clamping around real sector limits. */
-    public const CAPACITY_LOGISTIC_STEEPNESS = 12.0;
     /** Minimum fraction of prior revenue retained during hard market pricing (post-catastrophe capacity support). */
     public const HARD_MARKET_REVENUE_FLOOR = 0.85;
 
@@ -190,39 +183,17 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
     /** Franchise floor multiplier applied to revenue floor value for sticky premium & float franchise. */
     public const PREMIUM_FRANCHISE_FLOOR_MULT   = 0.70;
 
-    // --- Passive Liability Growth & Float Expansion ---
-    /** Baseline structural annual economic growth addition for insurance float expansion. */
-    public const BASE_ECONOMIC_GROWTH_ADD = 0.02;
-    /** Output gap multiplier scaling systemic float growth during economic expansions. */
-    public const EXPANSION_GAP_MULT       = 0.50;
-    /** Output gap multiplier scaling systemic float contraction during economic recessions. Insurance float is sticky. */
-    public const RECESSION_GAP_MULT       = 0.50;
-    /** Minimum stock beta clamp applied to liability float growth sensitivity. */
-    public const MIN_BETA_GROWTH_CLAMP    = 0.75;
-    /** Maximum stock beta clamp applied to liability float growth sensitivity. */
-    public const MAX_BETA_GROWTH_CLAMP    = 1.25;
-    /** Maximum allowable quarterly liability float change clamp. */
-    public const MAX_FLOAT_CHANGE_CLAMP   = 0.15;
-    /** Minimum allowable quarterly liability float change clamp. */
-    public const MIN_FLOAT_CHANGE_CLAMP   = -0.15;
-    /** Standard deviation of random noise applied to quarterly liability float growth. */
-    public const FLOAT_GROWTH_NOISE_STD   = 0.005;
-    /** Event shock penalty applied when catastrophe claim payouts cause cash insolvency. */
-    public const EVENT_SHOCK_INSOLVENCY   = -5.00;
-    /** Threshold fraction of policy roll-offs triggering negative underwriting lore (2.5% quarterly drop). */
-    public const LORE_ROLLOFF_THRESHOLD   = -0.025;
-    /** Threshold fraction of new premium capture triggering positive underwriting lore (2.5% quarterly gain). */
-    public const LORE_CAPTURE_THRESHOLD   = 0.025;
-    /** Event shock penalty applied during significant quarterly policy roll-offs. */
-    public const EVENT_SHOCK_ROLLOFF      = -1.00;
-    /** Event shock bonus applied during significant quarterly new premium capture. */
-    public const EVENT_SHOCK_CAPTURE      = 0.50;
+    // --- Loss Reserves (the float as a stock) ---
+    /** Float per unit of annual net premium earned on a US P&C book: NAIC 2024 loss and LAE reserves $977B on NPE $905B (1.08), plus half a year's written premium unearned on annual policies (0.52). */
+    public const RESERVE_TO_PREMIUM_RATIO = 1.60;
+    /** Years of renewals an underwriter weighs the float a new book brings against its underwriting result: the annual policy term. */
+    public const FLOAT_DECISION_HORIZON_YEARS = 1.0;
+    /** State key holding the quarter's net incurred claims, on which the reserve stock is rolled forward. */
+    public const STATE_INCURRED_CLAIMS = 'state:reserves:incurred_claims';
+    /** Event shock penalty applied when claim payouts exceed cash reserves. */
+    public const EVENT_SHOCK_INSOLVENCY = -5.00;
 
-    // --- Balance Sheet Capacity & Leverage Decay ---
-    /** Baseline capacity modifier ceiling when wholesale debt leverage is near zero. */
-    public const CAPACITY_MODIFIER_CEILING    = 2.50;
-    /** Minimum allowable capacity modifier floor during severe wholesale debt distress. */
-    public const CAPACITY_MODIFIER_FLOOR      = 0.01;
+    // --- Investment Portfolio Duration ---
     /** Macaulay duration of the long bond tranche of float, matched against liabilities an insurer pays out over decades. */
     public const DEFAULT_FLOAT_BOND_DURATION_YEARS = 7.0;
 
@@ -358,17 +329,18 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
      * only lever is how much capital it hands back.
      *
      * The rule is the same one every other deployment gate in this engine applies: write while the capital
-     * that business consumes still earns its hurdle. An insurer's return has two parts, and only one of them
-     * is on offer — the float is already invested and earns whether or not another treaty is signed, so the
-     * marginal question is whether the premium's own contribution keeps the total above the hurdle:
+     * that business consumes still earns its hurdle. An insurer's return has two parts. The float it already
+     * holds runs off whether or not another treaty is signed; the book it writes brings new float, and over
+     * one policy term a share 1 − e^(−H/τ) of that book's settled reserves (total-return ratemaking, Myers &
+     * Cohn 1987). Over that horizon:
      *
-     *     u * underwritingReturn + floatReturn >= appliedHurdle
+     *     u * (underwritingReturn + bookFloatReturn) + heldFloatReturn >= appliedHurdle
      *
-     * At a rate that still earns an underwriting profit the answer is the whole book. Below it the equality
-     * gives the fraction directly, with no free parameter: a firm whose float covers its hurdle handsomely
-     * can absorb a soft market and keep writing (cash-flow underwriting), one whose float barely covers it
-     * cannot. The manager's own hurdle bias applies, so an empire builder keeps writing into a market a
-     * fortress has already withdrawn from, which is Jensen's agency cost in its underwriting form.
+     * Where the book's own return, float included, is positive the answer is the whole book. Below it the
+     * equality gives the fraction directly, with no free parameter: a firm whose held float covers its hurdle
+     * handsomely can absorb a soft market and keep writing (cash-flow underwriting), one whose float barely
+     * covers it cannot. The manager's own hurdle bias applies, so an empire builder keeps writing into a
+     * market a fortress has already withdrawn from, which is Jensen's agency cost in its underwriting form.
      */
     protected function resolveWrittenCapacity(Stock $stock, MacroStateDTO $macroState, MathUtility $mathUtility, float $operatingEquity, float $capacityReturnAtNeutralRates): float
     {
@@ -383,14 +355,22 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
         $marginAtOfferedRate = 1.0 - ((1.0 - $stableMargin) / $pricingPower);
         $underwritingReturn = $capacityReturnAtNeutralRates * ($marginAtOfferedRate / $stableMargin);
 
-        if ($underwritingReturn >= 0.0) {
+        $afterTax = 1.0 - $macroState->corporateTaxRate;
+        $floatYield = $this->resolveFloatYield($stock, $macroState);
+        $heldAfterHorizon = exp(-self::FLOAT_DECISION_HORIZON_YEARS / $this->resolveReserveRunoffYears($stock));
+
+        $bookFloatReturn = $floatYield * $afterTax * $this->resolveReserveToPremiumRatio($stock) * self::KENNEY_CAPACITY_RATIO * (1.0 - $heldAfterHorizon);
+        $bookReturn = $underwritingReturn + $bookFloatReturn;
+        if ($bookReturn >= 0.0) {
             return 1.0;
         }
 
-        $floatReturn = ($this->calculateInterestIncome($stock, $macroState, $mathUtility) * (1.0 - $macroState->corporateTaxRate)) / $operatingEquity;
+        $floatIncome = min((float) $stock->getCorporateTreasury(), (float) $stock->getCustomerDeposits()) * $floatYield;
+        $heldIncome = $this->calculateInterestIncome($stock, $macroState, $mathUtility) - ($floatIncome * (1.0 - $heldAfterHorizon));
+        $heldFloatReturn = ($heldIncome * $afterTax) / $operatingEquity;
         $hurdle = $stock->getManagementProfile()->appliedHurdle($macroState->yield10yEma + $macroState->equityRiskPremium);
 
-        return max(self::MIN_WRITTEN_CAPACITY, min(1.0, ($hurdle - $floatReturn) / $underwritingReturn));
+        return max(self::MIN_WRITTEN_CAPACITY, min(1.0, ($hurdle - $heldFloatReturn) / $bookReturn));
     }
 
     /**
@@ -583,6 +563,7 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
 
         $combinedRatio = $realizedLossRatio + $realizedExpenseRatio + $reinstatementPremium;
         $clampedMargin = $this->clampMargin($combinedRatio);
+        $this->registerIncurredClaims($streams, $actualRevenue, $clampedMargin - $reinstatementPremium);
 
         $eventType = $this->resolveClaimEvent($claims['gross'], 1.0, $recovery > 0.0);
 
@@ -621,13 +602,28 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
      */
     public function calculateInterestIncome(Stock $stock, MacroStateDTO $macroState, MathUtility $mathUtility, ?float $realizedWholesaleRate = null): float
     {
+        $cash       = (float) $stock->getCorporateTreasury();
+        $policyRate = $macroState->policyRateEma;
+        $floatYield = $this->resolveFloatYield($stock, $macroState);
+
+        $policyholderFloat = (float) $stock->getCustomerDeposits();
+        $investableFloat = min($cash, $policyholderFloat);
+        $excessCash = max(0.0, $cash - $investableFloat);
+
+        $moneyMarketYield = max(0.0, $policyRate - MacroEngine::CASH_YIELD_SPREAD);
+
+        return ($investableFloat * $floatYield) + ($excessCash * $moneyMarketYield);
+    }
+
+    /** The annual yield on a unit of investable float across the liquidity, bond and equity tranches. */
+    protected function resolveFloatYield(Stock $stock, MacroStateDTO $macroState): float
+    {
         // Resolve company-specific tuned float allocation parameters
         $params = $this->resolveModelParameters($stock, [
             ModelParam::FloatEquityWeight->value => self::FLOAT_EQUITY_WEIGHT,
         ]);
 
         $floatEquityWeight = $params[ModelParam::FloatEquityWeight];
-        $cash              = (float) $stock->getCorporateTreasury();
         $policyRate        = $macroState->policyRateEma;
         $yield10y          = $macroState->yield10yEma;
 
@@ -658,15 +654,7 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
         $catastropheEquityPenalty = max(0.0, ($vixEma - self::CATASTROPHE_VIX_THRESHOLD) * self::CATASTROPHE_EQUITY_CORRELATION);
         $stochasticEquityReturn -= $catastropheEquityPenalty;
 
-        $floatYield = $baseYield + ($floatEquityWeight * $stochasticEquityReturn);
-
-        $policyholderFloat = (float) $stock->getCustomerDeposits();
-        $investableFloat = min($cash, $policyholderFloat);
-        $excessCash = max(0.0, $cash - $investableFloat);
-
-        $moneyMarketYield = max(0.0, $policyRate - MacroEngine::CASH_YIELD_SPREAD);
-
-        return ($investableFloat * $floatYield) + ($excessCash * $moneyMarketYield);
+        return $baseYield + ($floatEquityWeight * $stochasticEquityReturn);
     }
 
     /**
@@ -743,26 +731,6 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
             'is_hoarder'      => $excessCash > ($totalDebt * self::HOARDER_THRESHOLD),
             'is_mega_hoarder' => $excessCash > ($totalDebt * self::MEGA_HOARDER_THRESHOLD),
         ];
-    }
-
-    /**
-     * Winter-Cummins (1994/1997) Logistic Capacity Model.
-     * 
-     * Replaces exponential decay with sigmoidal statutory surplus elasticity: abundant capacity when surplus 
-     * is strong, inflecting smoothly at regulatory midpoints, and collapsing when statutory limits are breached.
-     */
-    public function calculateFloatCapacityMultiplier(float $totalDebt, float $equity, float $equityLimit, ?float $coreLiabilities = null): float
-    {
-        $utilization = $equity > 0.0 ? ($totalDebt / ($equity * $equityLimit)) : 1.0;
-        $floatRatio = $totalDebt > 0 ? (($coreLiabilities ?? 0.0) / $totalDebt) : 0.0;
-
-        $inflectionPoint = self::CAPACITY_INFLECTION_BASE - (self::CAPACITY_INFLECTION_FLOAT_SHIFT * $floatRatio);
-        $elasticity = self::CAPACITY_LOGISTIC_STEEPNESS;
-
-        $logisticSpread = self::CAPACITY_MODIFIER_CEILING - self::CAPACITY_MODIFIER_FLOOR;
-        $capacityModifier = self::CAPACITY_MODIFIER_FLOOR + ($logisticSpread / (1.0 + exp($elasticity * ($utilization - $inflectionPoint))));
-
-        return max(self::CAPACITY_MODIFIER_FLOOR, min(self::CAPACITY_MODIFIER_CEILING, $capacityModifier));
     }
 
     public function calculateMaxBuybackSpend(float $excessCash, float $retainedEarningsThisQuarter, bool $isMegaHoarder): float
@@ -908,44 +876,76 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
         return max(self::MIN_STRUCTURAL_ROE_FLOOR, $blendedRoe);
     }
 
+    /**
+     * The float is the claims the firm has incurred and not yet paid: Δreserves = incurred − paid. The
+     * P&L has already charged the quarter's incurred claims against the cash it booked, so moving cash with
+     * the reserve change leaves the treasury debited when a claim is paid, not when it is incurred.
+     */
     public function processPassiveLiabilityGrowth(Stock $stock, MacroStateDTO $macroState, array &$state, MathUtility $mathUtility): void
     {
-        $currentLiabilities = $state['customerDeposits'];
-        if ($currentLiabilities <= 0) return;
-
-        $equity = (float) $stock->getTotalEquity();
-        $totalDebt = $state['wholesaleDebt'] + $currentLiabilities;
-        $equityLimit = \App\Data\Sectors::equityLimit($stock->getIndustry());
-
-        // Nominal Systemic Growth: The Float grows naturally alongside the M2 Money Supply.
-        $systemicGrowthQuarterly = ($macroState->inflationEma + self::BASE_ECONOMIC_GROWTH_ADD + (($macroState->outputGapEma > 0.0 ? $macroState->outputGapEma * self::EXPANSION_GAP_MULT : $macroState->outputGapEma * self::RECESSION_GAP_MULT))) / FinancialConstants::QUARTERS_PER_YEAR;
-
-        // Premium-to-Surplus Capacity constraint (Kenney Rule) throttles growth if they don't have enough equity to back the policies.
-        $capacityMultiplier = $this->calculateFloatCapacityMultiplier($totalDebt, $equity, $equityLimit, $currentLiabilities);
-        
-        // Capacity should only boost positive market capture. It should not accelerate shrinkage during recessions.
-        $effectiveSystemicGrowth = $systemicGrowthQuarterly > 0.0 ? $systemicGrowthQuarterly * $capacityMultiplier : $systemicGrowthQuarterly;
-        $baseGrowth = $effectiveSystemicGrowth * max(self::MIN_BETA_GROWTH_CLAMP, min(self::MAX_BETA_GROWTH_CLAMP, $this->getOperatingCyclicality($stock)));
-        
-        $effectiveNoise = ($mathUtility->generateStandardNormal() * self::FLOAT_GROWTH_NOISE_STD) * min(1.0, $capacityMultiplier);
-        $liabilityChange = $currentLiabilities * max(self::MIN_FLOAT_CHANGE_CLAMP, min(self::MAX_FLOAT_CHANGE_CLAMP, $baseGrowth + $effectiveNoise));
-
-        if (abs($liabilityChange) > 0) {
-            $state['treasury'] += $liabilityChange;
-            $state['customerDeposits'] += $liabilityChange;
-
-            if ($state['treasury'] < 0.0) {
-                $liquidityShortfall = abs($state['treasury']);
-                $state['treasury'] = 0.0;
-                $state['wholesaleDebt'] += $liquidityShortfall;
-                $amtB = number_format($liquidityShortfall / 1_000_000_000, 2);
-                $state['events'][] = ['description' => "Catastrophe claim payouts exceeded cash reserves. Forced to borrow \${$amtB}B.", 'shock' => self::EVENT_SHOCK_INSOLVENCY];
-            }
-
-            $stock->setCustomerDeposits((string) max(0.0, $state['customerDeposits']));
-            if (($liabilityChange / $currentLiabilities) < self::LORE_ROLLOFF_THRESHOLD) $state['events'][] = ['description' => "Suffered \$" . number_format(abs($liabilityChange) / 1_000_000_000, 2) . "B in policy roll-offs.", 'shock' => self::EVENT_SHOCK_ROLLOFF];
-            elseif (($liabilityChange / $currentLiabilities) > self::LORE_CAPTURE_THRESHOLD) $state['events'][] = ['description' => "Captured \$" . number_format($liabilityChange / 1_000_000_000, 2) . "B in new premium Float.", 'shock' => self::EVENT_SHOCK_CAPTURE];
+        $incurred = ($stock->getEarningsMomentumZ() ?? [])[self::STATE_INCURRED_CLAIMS] ?? null;
+        if ($incurred === null) {
+            return;
         }
+
+        $reserves = max(0.0, (float) $state['customerDeposits']);
+        $roll = $this->rollLossReserves($reserves, (float) $incurred, $this->resolveReserveRunoffYears($stock));
+        $reserveChange = $roll['reserves'] - $reserves;
+
+        $state['treasury'] += $reserveChange;
+        $state['customerDeposits'] = $roll['reserves'];
+
+        if ($state['treasury'] < 0.0) {
+            $liquidityShortfall = abs($state['treasury']);
+            $state['treasury'] = 0.0;
+            $state['wholesaleDebt'] += $liquidityShortfall;
+            $amtB = number_format($liquidityShortfall / 1_000_000_000, 2);
+            $state['events'][] = ['description' => "Claim payouts exceeded cash reserves. Forced to borrow \${$amtB}B.", 'shock' => self::EVENT_SHOCK_INSOLVENCY];
+        }
+
+        $stock->setCustomerDeposits((string) $roll['reserves']);
+    }
+
+    /**
+     * One quarter of a reserve stock paid out at rate 1/τ (exponential runoff, the continuous form of a
+     * paid-loss development pattern): reserves move toward annualized incurred × τ, and what leaves is paid.
+     *
+     * @return array{reserves: float, paid: float}
+     */
+    public function rollLossReserves(float $reserves, float $incurred, float $runoffYears): array
+    {
+        $dt = \App\Service\Corporate\EarningsEngine::QUARTERLY_TIME_STEP;
+        $settled = max(0.0, MathUtility::getInstance()->calculateDistributedLag(
+            currentLaggedValue: $reserves,
+            targetValue: ($incurred / $dt) * $runoffYears,
+            dt: $dt,
+            lagTimeConstant: $runoffYears
+        ));
+
+        return ['reserves' => $settled, 'paid' => $reserves + $incurred - $settled];
+    }
+
+    /** Float per unit of annual premium the firm's book carries once its reserves have settled. */
+    public function resolveReserveToPremiumRatio(Stock $stock): float
+    {
+        return static::RESERVE_TO_PREMIUM_RATIO;
+    }
+
+    /**
+     * Mean years from incurred to paid. Set so a steady book on its structural claims ratio (the variable
+     * cost line at neutral rates, (1 − margin) × (1 − fixed share)) holds exactly the pinned reserve ratio.
+     */
+    public function resolveReserveRunoffYears(Stock $stock): float
+    {
+        $structuralClaimsRatio = (1.0 - (float) $stock->getOperatingMargin()) * (1.0 - (float) $stock->getFixedCostRatio());
+
+        return $this->resolveReserveToPremiumRatio($stock) / max(0.01, $structuralClaimsRatio);
+    }
+
+    /** Books the quarter's incurred claims, net of the cover's recovery, for the reserve roll-forward. */
+    protected function registerIncurredClaims(StreamContext $streams, float $actualRevenue, float $netClaimsRatio): void
+    {
+        $streams->registerState(self::STATE_INCURRED_CLAIMS, max(0.0, $actualRevenue * $netClaimsRatio));
     }
 
     public function isUnderLeveraged(float $currentDebtRatio, float $targetDebtTolerance, float $interestCoverage, float $minIcr): bool
@@ -990,7 +990,6 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
     {
         return [
             'catastrophe_loss_index_ema',
-            'inflation_ema',
             'market_volatility_ema',
             'nominal_gdp_index',
             'output_gap_ema',

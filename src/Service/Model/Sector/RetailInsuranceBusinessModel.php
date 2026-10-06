@@ -43,6 +43,10 @@ class RetailInsuranceBusinessModel extends InsuranceBusinessModel
     /** Volatility multiplier for sticky, long-duration Life insurance premium cash flows. */
     public const LIFE_VARIANCE_SCALAR = 0.05;
 
+    // --- Loss Reserves ---
+    /** Policy reserves per unit of annual life premium: ACLI Fact Book 2025, individual life reserves $1.72T on direct premium $175B (2024). */
+    public const LIFE_RESERVE_TO_PREMIUM_RATIO = 9.9;
+
     protected function calculateSectorPhysics(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, \App\DTO\MacroStateDTO $macroState, MathUtility $mathUtility): SectorPhysicsResult
     {
         $params = $this->resolveModelParameters($stock, [
@@ -96,6 +100,7 @@ class RetailInsuranceBusinessModel extends InsuranceBusinessModel
         $this->advanceUnderwritingCycle($streams, $stock, $macroState, $surplusDeficitRatio, $recovery > 0.0);
 
         $clampedMargin = $this->clampMargin($realizedVariableMargin + $claims['excess'] - $recovery + $reinstatementPremium);
+        $this->registerIncurredClaims($streams, $actualRevenue, $clampedMargin - $reinstatementPremium);
 
         $eventType = $this->resolveClaimEvent($claims['gross'], $pcWeight, $recovery > 0.0);
 
@@ -122,6 +127,21 @@ class RetailInsuranceBusinessModel extends InsuranceBusinessModel
         );
     }
 
+    /** The P&C and life books' reserve ratios, weighted by the premium each writes. */
+    public function resolveReserveToPremiumRatio(Stock $stock): float
+    {
+        $params = $this->resolveModelParameters($stock, [
+            ModelParam::PropertyCasualtyWeight->value    => self::PROPERTY_CASUALTY_WEIGHT,
+            ModelParam::LifeAndAnnuityWeight->value      => self::LIFE_INSURANCE_WEIGHT,
+            ModelParam::LifeReserveToPremiumRatio->value => self::LIFE_RESERVE_TO_PREMIUM_RATIO,
+        ]);
+        $pcWeight = $params[ModelParam::PropertyCasualtyWeight];
+        $lifeWeight = $params[ModelParam::LifeAndAnnuityWeight];
+
+        return (($pcWeight * static::RESERVE_TO_PREMIUM_RATIO) + ($lifeWeight * $params[ModelParam::LifeReserveToPremiumRatio]))
+            / max(0.01, $pcWeight + $lifeWeight);
+    }
+
     /**
      * MacroStateDTO fields (snake_case) this model's operating physics genuinely reads in
      * calculateSectorPhysics()/getMacroPhysics() — see OperatingStrategyInterface for the full rule.
@@ -132,7 +152,6 @@ class RetailInsuranceBusinessModel extends InsuranceBusinessModel
     {
         return [
             'catastrophe_loss_index_ema',
-            'inflation_ema',
             'market_volatility_ema',
             'nominal_gdp_index',
             'output_gap_ema',

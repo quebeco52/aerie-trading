@@ -160,6 +160,9 @@ class StockModelTuning
             ModelParam::CatastropheZThreshold->value     => -1.80,
             ModelParam::CatastropheLossScalar->value     => 0.08,
             ModelParam::FloatEquityWeight->value         => 0.10,
+            // Held at the seeded float (275B on 127.5B of premium) rather than ACLI's 9.9x: life reserves here earn
+            // the portfolio yield and pay no crediting rate, so the cited ratio would more than double a free float.
+            ModelParam::LifeReserveToPremiumRatio->value => 2.84,
         ],
 
         // =====================================================================

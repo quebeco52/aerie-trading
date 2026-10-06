@@ -43,6 +43,8 @@ enum ModelParam: string
     case LifeAndAnnuityWeight = 'life_and_annuity_weight';
     case TreatyReinsuranceWeight = 'treaty_reinsurance_weight';
     case CatBondSpreadWeight = 'cat_bond_spread_weight';
+    /** Life policy reserves per unit of annual life premium. */
+    case LifeReserveToPremiumRatio = 'life_reserve_to_premium_ratio';
 
     // --- Reporting Calendar ---
     /** Calendar quarter index (0-3) in which the fiscal year begins; 0 = calendar year. */

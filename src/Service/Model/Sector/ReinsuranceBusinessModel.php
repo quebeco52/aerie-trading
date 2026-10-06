@@ -29,6 +29,10 @@ class ReinsuranceBusinessModel extends InsuranceBusinessModel
     /** Expected catastrophe claims as a share of treaty premium in an average district year: Swiss Re's 2024 large nat cat budget of $1.8B against ~$22.9B of P&C Re premiums earned (~8%). */
     public const DISTRICT_CATASTROPHE_LOAD = 0.08;
 
+    // --- Loss Reserves ---
+    /** Float per unit of treaty premium earned: Swiss Re P&C Re 2023 unpaid claims $58.6B on premiums earned $22.9B (2.56), plus an unearned share of ~0.5 (group UPR split by premiums written). */
+    public const TREATY_RESERVE_TO_PREMIUM_RATIO = 3.0;
+
     // --- Operating Cyclicality & Demand Structure ---
     /** Elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). Treaty volume follows primary premiums with a lag. */
     public const OPERATING_CYCLICALITY = 0.80;
@@ -119,6 +123,7 @@ class ReinsuranceBusinessModel extends InsuranceBusinessModel
         $streams->recordStreamShares($streamRevenues);
 
         $clampedMargin = $this->clampMargin($realizedVariableMargin + $claims['excess'] - $catBondShield);
+        $this->registerIncurredClaims($streams, $actualRevenue, $clampedMargin);
 
         $eventType = $this->resolveClaimEvent($claims['gross'], $treatyWeight, $coverAttached);
 
@@ -143,6 +148,18 @@ class ReinsuranceBusinessModel extends InsuranceBusinessModel
         );
     }
 
+    /** Only the treaty book carries reserves: ILS structuring and management fees are earned as they are billed. */
+    public function resolveReserveToPremiumRatio(Stock $stock): float
+    {
+        $params = $this->resolveModelParameters($stock, [
+            ModelParam::TreatyReinsuranceWeight->value => self::TREATY_REINSURANCE_WEIGHT,
+            ModelParam::CatBondSpreadWeight->value     => self::CAT_BOND_WEIGHT,
+        ]);
+        $treatyWeight = $params[ModelParam::TreatyReinsuranceWeight];
+
+        return self::TREATY_RESERVE_TO_PREMIUM_RATIO * $treatyWeight / max(0.01, $treatyWeight + $params[ModelParam::CatBondSpreadWeight]);
+    }
+
     /**
      * MacroStateDTO fields (snake_case) this model's operating physics genuinely reads in
      * calculateSectorPhysics()/getMacroPhysics() — see OperatingStrategyInterface for the full rule.
@@ -155,7 +172,6 @@ class ReinsuranceBusinessModel extends InsuranceBusinessModel
     {
         return [
             'catastrophe_loss_index_ema',
-            'inflation_ema',
             'market_volatility_ema',
             'nominal_gdp_index',
             'output_gap_ema',
