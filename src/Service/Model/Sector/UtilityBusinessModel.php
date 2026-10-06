@@ -13,6 +13,7 @@ use App\Data\ModelParam;
 use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
 use App\DTO\MacroStateDTO;
+use App\Service\Math\FinancialConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Event\ShockEvent;
 use App\Service\Macro\MacroEngine;
@@ -256,6 +257,14 @@ class UtilityBusinessModel extends StandardCorporateBusinessModel
         $merchantFuelDrag = $volumeRevenue > 0.0
             ? $merchantVolumeRevenue * $this->resolveMerchantFuelCostChange($params[ModelParam::MerchantPowerShare], $params[ModelParam::MerchantGasFleetShare], $macroState) / $volumeRevenue
             : 0.0;
+        // What the carbon price's power uplift adds to earnings, per unit of it: the price on the share sold at the
+        // wholesale price, less the carbon its gas-fired part pays, which the uplift carries at its pass-through.
+        $streams->registerState(
+            FinancialConstants::STATE_CARBON_POWER_EARNINGS_SHARE,
+            $actualRevenue > 0.0
+                ? $merchantVolumeRevenue * $params[ModelParam::MerchantPowerShare] * (1.0 - ($params[ModelParam::MerchantGasFleetShare] / CommodityLogisticsSubsystem::CARBON_POWER_PASS_THROUGH)) / $actualRevenue
+                : 0.0
+        );
 
         // --- Margin Aggregation ---
         // Costs are per MWh: re-expressed against the realized price, they fall as a share of revenue when the

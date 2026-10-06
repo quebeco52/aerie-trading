@@ -56,6 +56,13 @@ interface OperatingStrategyInterface
      */
     public function annualStampDutyTurnoverBase(Stock $stock): float;
     /**
+     * What a year's earnings before tax gain per unit of power price the carbon price adds, as a share of the power
+     * price at the index baseline (CommodityLogisticsSubsystem::carbonPowerPriceUplift()), in currency: positive for a
+     * generator that keeps more of the price than it pays in carbon, negative for one that pays more; zero for a firm
+     * whose accounts the power price does not reach.
+     */
+    public function annualCarbonPowerEarningsBase(Stock $stock): float;
+    /**
      * MacroStateDTO field names (snake_case, matching MacroStateDTO::toArray()) this model's own
      * operating code reads: calculateSectorPhysics(), getMacroPhysics(), calculateInterestIncome(),
      * processPassiveLiabilityGrowth(), getForwardCreditLossMultiplier(), getFixedCostFactor() and the helpers they call,

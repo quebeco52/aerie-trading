@@ -133,7 +133,8 @@ class MarketPricingContext
                 'bankLevyRate' => $strategy->annualBankLevyBase($stock) / $shares,
                 'extractionStringency' => $strategy->annualExtractionCostBase($stock) / $shares,
                 'stampDutyRate' => $strategy->annualStampDutyTurnoverBase($stock) / $shares,
-            ], static fn (float $base): bool => $base > 0.0)
+                'carbonPrice' => $strategy->annualCarbonPowerEarningsBase($stock) / $shares,
+            ], static fn (float $base): bool => $base !== 0.0)
         );
     }
 }

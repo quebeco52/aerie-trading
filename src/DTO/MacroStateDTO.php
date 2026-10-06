@@ -339,6 +339,8 @@ readonly class MacroStateDTO
         public float $extractionCostFactorEmbodied = 1.0,
         /** The stamp duty's share turnover factor as the trailing year's earnings carry it, the same lag (MathUtility::calculateStampDutyVolumeFactor()). */
         public float $stampDutyVolumeFactorEmbodied = 1.0,
+        /** The carbon price's uplift on the power price as the trailing year's earnings carry it, the same lag (CommodityLogisticsSubsystem::carbonPowerPriceUplift()). */
+        public float $carbonPowerUpliftEmbodied = 0.0,
         /** @var array<string, float> The levers the sitting government will pass at its next budget round, keyed as App\Service\Politics\PoliticsEngine::LEVER_FIELDS; empty before they have been read. */
         public array $sittingLevers = [],
         /** When that round falls (-1: not yet read). */

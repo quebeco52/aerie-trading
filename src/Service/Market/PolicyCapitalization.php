@@ -6,6 +6,7 @@ namespace App\Service\Market;
 
 use App\DTO\MacroStateDTO;
 use App\Service\Macro\MacroEngine;
+use App\Service\Macro\Subsystem\CommodityLogisticsSubsystem;
 use App\Service\Math\MathUtility;
 use App\Service\Politics\PoliticsEngine;
 
@@ -13,8 +14,8 @@ use App\Service\Politics\PoliticsEngine;
  * The laws the market expects, in the price: a firm is worth its cash flows under the laws it expects over its life,
  * not under the ones its trailing earnings carry (Knight 2006: the Bush and Gore platforms were priced into the firms
  * they favoured as the odds moved; Snowberg, Wolfers & Zitzewitz 2007). Priced are the laws a firm's own accounts
- * answer to: the corporate tax, the bank levy, the rules on extraction a mine or field pays for in its unit costs, and
- * the stamp duty a broker's commissions thin with.
+ * answer to: the corporate tax, the bank levy, the rules on extraction a mine or field pays for in its unit costs, the
+ * stamp duty a broker's commissions thin with, and the carbon price a generator sells its power with.
  *
  * The expected path runs from the laws in force, through the budget the sitting government will pass at its next round
  * and the next government's first budget as the market's forecast has it (App\Service\Politics\ElectionForecast), and
@@ -22,7 +23,8 @@ use App\Service\Politics\PoliticsEngine;
  * as the Diet's own laws have drifted back from one term to the next. Each part counts for the share of the firm's
  * value accruing while it holds (MathUtility::perpetuityShareAfter()), the tax phasing in at the speed the tax rate
  * follows the law. A law is measured as the earnings feel it: the levy and the tax shift as they stand, the rules on
- * extraction by the cost factor they put on each unit, the duty by the turnover it leaves. What the trailing earnings
+ * extraction by the cost factor they put on each unit, the duty by the turnover it leaves, the carbon price by what it
+ * adds to the power price. What the trailing earnings
  * already carry is not counted again, so a law the market foresaw neither moves the price when it is passed nor when
  * the earnings take it in.
  */
@@ -45,6 +47,10 @@ final class PolicyCapitalization
     public const LONG_RUN_STAMP_DUTY_VOLUME_FACTOR = 0.949;
     /** Share of that factor's distance from its average still there a term later: 0.360 (sd across games 0.13), the duty being no revenue the Council guards. */
     public const STAMP_DUTY_VOLUME_TERM_PERSISTENCE = 0.360;
+    /** What the carbon price adds to the power price on average over the long run, as a share of it (CommodityLogisticsSubsystem::carbonPowerPriceUplift()): 8.26% (se 1.12%), a carbon price of $12.3 a tonne. */
+    public const LONG_RUN_CARBON_POWER_UPLIFT = 0.0826;
+    /** Share of that uplift's distance from its average still there a term later: 0.838 (sd across games 0.12). */
+    public const CARBON_POWER_TERM_PERSISTENCE = 0.838;
 
     // --- Discounting ---
     /** Smallest discount rate less growth a firm's value is spread at, the floor the intrinsic multiple puts under its spread (MathUtility::calculateIntrinsicFairValuePE()). */
@@ -103,13 +109,26 @@ final class PolicyCapitalization
     }
 
     /**
+     * What the market expects the carbon price to add to the power price over a firm's life, weighted the same way, less
+     * the uplift its trailing earnings carry. The power price carries a carbon price from the day it is passed.
+     *
+     * @param bool $previous Whether to read the forecast as it stood the tick before.
+     */
+    public static function carbonPowerUpliftGap(MacroStateDTO $macro, float $capRate, bool $previous = false): float
+    {
+        return self::expectedOverLife($macro, $capRate, $previous, 'carbonPrice', $macro->carbonPrice, CommodityLogisticsSubsystem::carbonPowerPriceUplift(...), self::LONG_RUN_CARBON_POWER_UPLIFT, self::CARBON_POWER_TERM_PERSISTENCE)
+            - $macro->carbonPowerUpliftEmbodied;
+    }
+
+    /**
      * What the laws expected beyond the ones the trailing earnings carry add to a year's earnings after tax, per share:
-     * less the levy, which is not deductible, and less the extraction rules' extra cost and plus the duty's extra
-     * turnover, both before tax.
+     * less the levy, which is not deductible, and less the extraction rules' extra cost, plus the duty's extra turnover
+     * and what the carbon price's power uplift adds, all three before tax.
      *
      * @param array<string, float> $basesPerShare What each law is charged on or moves, per share, keyed by lever
      *                                            (OperatingStrategyInterface::annualBankLevyBase(), annualExtractionCostBase(),
-     *                                            annualStampDutyTurnoverBase()).
+     *                                            annualStampDutyTurnoverBase(), annualCarbonPowerEarningsBase(), the last
+     *                                            signed).
      * @param float $effectiveTaxExpected The firm's effective tax rate at the rate in force plus the expected shift's gap.
      * @param bool  $previous             Whether to read the forecast as it stood the tick before.
      */
@@ -124,6 +143,9 @@ final class PolicyCapitalization
         }
         if (($basesPerShare['stampDutyRate'] ?? 0.0) > 0.0) {
             $gap += (1.0 - $effectiveTaxExpected) * self::stampDutyVolumeGap($macro, $capRate, $previous) * $basesPerShare['stampDutyRate'];
+        }
+        if (($basesPerShare['carbonPrice'] ?? 0.0) !== 0.0) {
+            $gap += (1.0 - $effectiveTaxExpected) * self::carbonPowerUpliftGap($macro, $capRate, $previous) * $basesPerShare['carbonPrice'];
         }
 
         return $gap;

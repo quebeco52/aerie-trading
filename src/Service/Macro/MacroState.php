@@ -4,6 +4,7 @@ namespace App\Service\Macro;
 
 use App\Data\MacroFieldRegistry;
 use App\Service\Macro\Subsystem\AssetMarketSubsystem;
+use App\Service\Macro\Subsystem\CommodityLogisticsSubsystem;
 use App\Service\Macro\Subsystem\MacroAggregateSubsystem;
 use App\Service\Math\MathUtility;
 
@@ -395,6 +396,7 @@ class MacroState
     public float $bankLevyEmbodied;
     public float $extractionCostFactorEmbodied;
     public float $stampDutyVolumeFactorEmbodied;
+    public float $carbonPowerUpliftEmbodied;
     /** @var array<string, float> */
     public array $sittingLevers;
     public float $sittingPolicyFrom;
@@ -544,6 +546,9 @@ class MacroState
         }
         if (!isset($carried['stampDutyVolumeFactorEmbodied'])) {
             $state->stampDutyVolumeFactorEmbodied = MathUtility::calculateStampDutyVolumeFactor($state->stampDutyRate);
+        }
+        if (!isset($carried['carbonPowerUpliftEmbodied'])) {
+            $state->carbonPowerUpliftEmbodied = CommodityLogisticsSubsystem::carbonPowerPriceUplift($state->carbonPrice);
         }
         if (!isset($carried['balanceSheetIntensity'])) {
             // Balance sheet intensity was recorded as a one-sided qe_intensity before QT existed.

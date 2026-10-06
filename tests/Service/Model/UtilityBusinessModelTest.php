@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Tests\Service\Model;
 
 use App\Entity\Stock;
+use App\Service\Math\FinancialConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\UtilityBusinessModel;
 use App\DTO\StreamContext;
@@ -257,5 +258,38 @@ class UtilityBusinessModelTest extends TestCase
         $mixed = new Stock();
         $mixed->setTicker('UTIL');
         $this->assertEqualsWithDelta($adderShare - (UtilityBusinessModel::MERCHANT_GAS_FLEET_SHARE * $carbonShare), (new UtilityBusinessModel())->describeMerchantPowerImpact($mixed, $macro), 1e-12);
+    }
+
+    /**
+     * The share of revenue the utility reports the carbon price's power uplift adding to its earnings is what the uplift
+     * adds: a renewable merchant fleet keeps all of it, a fleet with gas at the US share keeps what the gas does not pay
+     * in carbon beyond the price's pass-through.
+     */
+    public function testTheReportedCarbonShareIsWhatTheUpliftAddsToEarnings(): void
+    {
+        $model = new UtilityBusinessModel();
+        $run = function (string $ticker, float $carbon) use ($model): ActualFinancialsDTO {
+            $stock = new Stock();
+            $stock->setTicker($ticker);
+            $stock->setBeta('0.5');
+            $math = $this->getMockBuilder(MathUtility::class)->onlyMethods(['generatePersistentZ', 'checkProbability'])->getMock();
+            $math->method('generatePersistentZ')->willReturn(0.0);
+            $math->method('checkProbability')->willReturn(false);
+            $uplift = CommodityLogisticsSubsystem::carbonPowerPriceUplift($carbon);
+            $macro = new MacroStateDTO(inflationEma: 0.02, carbonPrice: $carbon, wholesalePowerPriceIndexEma: MacroEngine::WHOLESALE_POWER_BASELINE * (1.0 + $uplift));
+
+            return $model->computeActualFinancials($stock, 100_000_000.0, 0.40, 20_000_000.0, 0.10, $macro, $math);
+        };
+
+        $uplift = CommodityLogisticsSubsystem::carbonPowerPriceUplift(40.0);
+        foreach (['BIRD' => 0.0, 'UTIL' => UtilityBusinessModel::MERCHANT_GAS_FLEET_SHARE] as $ticker => $gasShare) {
+            $without = $run($ticker, 0.0);
+            $with = $run($ticker, 40.0);
+            $share = $with->streamZ[FinancialConstants::STATE_CARBON_POWER_EARNINGS_SHARE];
+
+            $this->assertEqualsWithDelta($without->streamRevenue['unregulated_merchant'] / $without->actualRevenue * (1.0 - ($gasShare / CommodityLogisticsSubsystem::CARBON_POWER_PASS_THROUGH)), $without->streamZ[FinancialConstants::STATE_CARBON_POWER_EARNINGS_SHARE], 1e-12, $ticker);
+            $this->assertGreaterThan(0.0, $share, $ticker);
+            $this->assertEqualsWithDelta($share * $with->actualRevenue * $uplift, $with->ebit - $without->ebit, 1e-6 * $with->actualRevenue, $ticker);
+        }
     }
 }

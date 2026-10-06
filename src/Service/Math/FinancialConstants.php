@@ -815,6 +815,8 @@ class FinancialConstants
     public const ENVIRONMENTAL_REGULATION_TFP_LOSS = 0.048;
     /** Stream-state key: the share of a mine's or field's revenue the rules on extraction scale as cost, before them; the market prices a change in the rules against it. */
     public const STATE_EXTRACTION_COST_SHARE = 'state:extraction_cost_share';
+    /** Stream-state key: the share of a firm's revenue its earnings before tax gain per unit of power price the carbon price adds (CommodityLogisticsSubsystem::carbonPowerPriceUplift()); the market prices a change in the carbon price against it. */
+    public const STATE_CARBON_POWER_EARNINGS_SHARE = 'state:carbon_power_earnings_share';
 
     // --- ETF Creation, Redemption and the Arbitrage Band (Petajisto 2017; Madhavan 2016) ---
     /** Fee an authorized participant is charged for one creation or redemption, as a fraction of the basket. Part of the round trip it has to earn back before arbitraging a deviation is worth doing. */
