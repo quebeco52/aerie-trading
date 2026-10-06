@@ -180,6 +180,11 @@ interface OperatingStrategyInterface
      * resolves a firm-specific long-run default rate, and falls back to the sector rate without it.
      */
     public function getThroughTheCycleCreditLossRate(?Stock $stock = null): float;
+    /**
+     * Annual operating (noninterest) cost as a share of earning assets, for a lender whose cost base is struck on
+     * its book. Null for every business whose structural costs are the operating margin's complement of revenue.
+     */
+    public function getOperatingCostToEarningAssets(Stock $stock): ?float;
     /** Years of expected loss the credit-loss allowance covers (ASC 326 lifetime horizon). */
     public function getCreditLossHorizonYears(): float;
     /**

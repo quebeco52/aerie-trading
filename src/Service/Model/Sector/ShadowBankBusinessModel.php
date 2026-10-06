@@ -136,6 +136,12 @@ class ShadowBankBusinessModel extends CommercialBankBusinessModel
         return self::completeLoanBookMix(self::DEFAULT_MORTGAGE_BOOK_SHARE, 0.0, 0.0);
     }
 
+    /** A shadow bank's revenue target is struck on its operating margin (getTargetMetrics), so its cost base is that margin's complement. */
+    public function getOperatingCostToEarningAssets(Stock $stock): ?float
+    {
+        return null;
+    }
+
     public function getCreditLossHorizonYears(): float
     {
         return self::CECL_LIFETIME_HORIZON_YEARS;

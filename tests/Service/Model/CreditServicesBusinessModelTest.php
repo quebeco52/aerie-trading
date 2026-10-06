@@ -27,7 +27,8 @@ class CreditServicesBusinessModelTest extends TestCase
      * against EBIT every quarter, so the operating target has to fund them. It did not: revenue was
      * reverse-engineered from ROE with no provision term, so a card issuer reported its target ROE minus
      * its loss rate forever, missed consensus every quarter, and its trailing ROE then fed back into a
-     * lower target. The pre-tax return target must rise by exactly the loss rate.
+     * lower target. Revenue per unit of book must rise by exactly the loss rate: the cost base is struck on the
+     * book and does not grow with it.
      */
     public function testTargetOperatingProfitFundsTheThroughTheCycleChargeOffs(): void
     {
@@ -58,11 +59,12 @@ class CreditServicesBusinessModelTest extends TestCase
         $without = $lossFree->getTargetMetrics($stock, $macro, $this->mathUtility);
 
         $this->assertSame($without['invested_capital'], $withLosses['invested_capital']);
+        $grossYield = static fn (array $metrics): float => $metrics['baseline_roic'] / (0.45 * (1.0 - $macro->corporateTaxRate));
         $this->assertEqualsWithDelta(
-            $this->model->getThroughTheCycleCreditLossRate($stock) * (1.0 - $macro->corporateTaxRate),
-            $withLosses['baseline_roic'] - $without['baseline_roic'],
+            $this->model->getThroughTheCycleCreditLossRate($stock),
+            $grossYield($withLosses) - $grossYield($without),
             1e-9,
-            'the after-tax return target must rise by exactly the through-the-cycle loss rate the ledger charges'
+            'revenue per unit of book must rise by exactly the through-the-cycle loss rate the ledger charges'
         );
     }
 

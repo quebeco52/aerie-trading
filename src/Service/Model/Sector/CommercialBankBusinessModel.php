@@ -174,8 +174,10 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
     public const NIM_BASE_SPREAD_BUFFER        = 0.005;
     /** Calibrated baseline sensitivity for NIM duration gap exposure before company-specific ALM adjustments. */
     public const NIM_INVERSION_SENSITIVITY     = 10.0;
-    /** Structural minimum efficiency ratio: the lowest cost-to-revenue ratio any bank can reach, even at perfect NIM. */
-    public const MIN_EFFICIENCY_RATIO          = 0.55;
+
+    // --- Operating Cost Base ---
+    /** Annual noninterest expense per unit of earning assets: 2.85%, US insured institutions in 2019 (2.58% of assets, earning assets 90.5% of assets; FDIC Quarterly Banking Profile, Table III-A). */
+    public const OPERATING_COST_TO_EARNING_ASSETS = 0.0285;
 
     // --- Analyst Visibility & Error ---
     /** Baseline coverage visibility for analyst estimates. */
@@ -397,8 +399,10 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
 
         $stableMargin = max(0.01, (float) $stock->getOperatingMargin());
 
-        // Derive target revenue from EBIT, capping gross yield to prevent margin compression distortion.
-        $unboundedRevenue = max(0.0, $targetEbit) / $stableMargin;
+        // Target revenue is the target EBIT plus the operating cost of running the book, capping gross yield to
+        // prevent margin compression distortion. The cost is struck on the book, so a rate rise that passes into
+        // funding cost lifts revenue by that cost alone.
+        $unboundedRevenue = max(0.0, $targetEbit) + ($earningAssets * $this->resolveOperatingCostToEarningAssets($stock));
         $targetRevenue = min($unboundedRevenue, $earningAssets * self::MAX_GROSS_ASSET_YIELD);
 
         $grossYield = $targetRevenue / max(1.0, abs($earningAssets));
@@ -521,13 +525,11 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
         $curveDeviation = $bankSpread - self::NIM_BASE_SPREAD_BUFFER;
         $nimSqueeze = - ($curveDeviation * $effectiveDurationGap);
 
-        // Physics-grounded Efficiency Floor: Total Operating Costs (Fixed + Variable) / Revenue >= MIN_EFFICIENCY_RATIO.
-        // Crucially, the NIM squeeze applies in proportion to the NII revenue share ($niiWeight),
-        // leaving Non-Interest custodial / wealth / transaction fee income completely insulated.
-        $minVariableMargin = max(0.01, self::MIN_EFFICIENCY_RATIO - ($fixedCosts / max(1.0, $actualRevenue)));
+        // The NIM squeeze applies in proportion to the NII revenue share ($niiWeight), leaving non-interest
+        // custodial / wealth / transaction fee income insulated.
         $rawMargin = $realizedVariableMargin + ($nimSqueeze * $niiWeight);
-        $clampedMargin = $this->clampMargin($rawMargin, $minVariableMargin);
-        $netInterestSqueeze = ($clampedMargin - $this->clampMargin($realizedVariableMargin, $minVariableMargin)) * $actualRevenue;
+        $clampedMargin = $this->clampMargin($rawMargin);
+        $netInterestSqueeze = ($clampedMargin - $this->clampMargin($realizedVariableMargin)) * $actualRevenue;
 
         $cet1Ratio = $this->calculateCet1Ratio($stock);
 
@@ -741,6 +743,20 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
     public function getCreditLossHorizonYears(): float
     {
         return self::CECL_LIFETIME_HORIZON_YEARS;
+    }
+
+    /** A lender's cost base is struck on its book (EarningsEngine reads this in place of the margin's complement). */
+    public function getOperatingCostToEarningAssets(Stock $stock): ?float
+    {
+        return $this->resolveOperatingCostToEarningAssets($stock);
+    }
+
+    /** This lender's annual operating cost per unit of earning assets: the sector's unless its lore sets its own. */
+    protected function resolveOperatingCostToEarningAssets(Stock $stock): float
+    {
+        return max(0.0, (float) $this->resolveModelParameters($stock, [
+            ModelParam::OperatingCostToEarningAssets->value => static::OPERATING_COST_TO_EARNING_ASSETS,
+        ])[ModelParam::OperatingCostToEarningAssets]);
     }
 
     /** Deposits are the raw material: whatever is not needed as reserves is lent. */

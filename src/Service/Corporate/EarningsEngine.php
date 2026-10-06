@@ -547,7 +547,13 @@ class EarningsEngine
         // The cost base inflates with INPUT prices (expected inflation), not with the firm's own selling
         // price: a price setter's excess pass-through reaches its margin, a price taker's shortfall squeezes
         // it. Scaling costs by the pricing-power multiplier gave every firm a fixed margin whatever it charged.
-        $structuralCosts = $balancedStructuralRevenue * ($inputCostMultiplier / max(0.5, $pricingPowerMultiplier)) * (1.0 - $ctx->stableMargin);
+        // A lender's cost base is struck on its book, not on its gross interest income: branches and staff do not
+        // cost more because the policy rate rose and the loans reprice (FDIC: noninterest expense ~2.6% of assets
+        // through rate cycles).
+        $costToEarningAssets = $strategy->getOperatingCostToEarningAssets($stock);
+        $structuralCosts = $costToEarningAssets !== null
+            ? $ctx->revenueGeneratingCapital * $costToEarningAssets / self::TTM_QUARTERS * ($inputCostMultiplier / max(0.5, $pricingPowerMultiplier))
+            : $balancedStructuralRevenue * ($inputCostMultiplier / max(0.5, $pricingPowerMultiplier)) * (1.0 - $ctx->stableMargin);
 
         // Carve structural depreciation out of cash operating costs so EBITDA sits above depreciation and EBIT below.
         $ctx->structuralDepreciation = $this->resolveStructuralDepreciation($ctx);

@@ -31,8 +31,9 @@ class CommercialBankBusinessModelTest extends TestCase
 
     /**
      * The ROE target is earned after the through-the-cycle credit charge the allowance roll-forward books
-     * against EBIT, so the operating target must fund it: the after-tax return target rises by exactly the
-     * loss rate (the firm's own, CreditRiskAppetite-scaled) over a loss-free control.
+     * against EBIT, so the operating target must fund it: revenue per unit of book rises by exactly the loss rate
+     * (the firm's own, CreditRiskAppetite-scaled) over a loss-free control, since the cost base is struck on the book
+     * and does not grow with it.
      */
     public function testTargetOperatingProfitFundsTheThroughTheCycleCreditCharge(): void
     {
@@ -66,11 +67,8 @@ class CommercialBankBusinessModelTest extends TestCase
         $without = $lossFree->getTargetMetrics($stock, $macro, $this->mathUtility);
 
         $this->assertSame($without['invested_capital'], $withLosses['invested_capital']);
-        $this->assertEqualsWithDelta(
-            $lossRate * (1.0 - $macro->corporateTaxRate),
-            $withLosses['baseline_roic'] - $without['baseline_roic'],
-            1e-9
-        );
+        $grossYield = static fn (array $metrics): float => $metrics['baseline_roic'] / (0.40 * (1.0 - $macro->corporateTaxRate));
+        $this->assertEqualsWithDelta($lossRate, $grossYield($withLosses) - $grossYield($without), 1e-9);
     }
 
     public function testDualStreamsAndRevenueAccounting(): void

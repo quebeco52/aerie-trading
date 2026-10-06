@@ -86,6 +86,12 @@ trait StandardOperatingPhysicsTrait
         return 0.10;
     }
 
+    /** An operating company's cost base follows its revenue: the operating margin's complement. */
+    public function getOperatingCostToEarningAssets(Stock $stock): ?float
+    {
+        return null;
+    }
+
     /** An operating company's assets are plant and a trade cycle, not credit: nothing to charge off. */
     public function getThroughTheCycleCreditLossRate(?Stock $stock = null): float
     {

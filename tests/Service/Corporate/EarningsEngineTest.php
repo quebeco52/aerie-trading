@@ -7,6 +7,7 @@ namespace App\Tests\Service\Corporate;
 use App\Service\Event\EarningsReportedEvent;
 use Symfony\Component\EventDispatcher\EventDispatcher;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
+use App\Service\Model\Sector\CommercialBankBusinessModel;
 use PHPUnit\Framework\TestCase;
 use App\Data\LifecycleStage;
 use App\Entity\Stock;
@@ -1706,6 +1707,42 @@ class EarningsEngineTest extends TestCase
             max(1.0, abs($assets) * 1e-6),
             'operating, investing and financing flows reconcile to the change in cash'
         );
+    }
+
+    /**
+     * A lender's cost base is struck on its book, not on its gross interest income (FDIC: noninterest expense ~2.6% of
+     * assets through rate cycles). The same bank at a 1% and a 5% policy rate carries the same structural cost, its
+     * book times the operating cost ratio, while its revenue rises with the funding cost it passes through.
+     */
+    public function testALendersCostBaseDoesNotMoveWithTheRateLevel(): void
+    {
+        $run = function (float $policyRate): EarningsSimulationContext {
+            $captured = null;
+            $dispatcher = new EventDispatcher();
+            $dispatcher->addListener(EarningsReportedEvent::class, function (EarningsReportedEvent $event) use (&$captured): void {
+                $captured = $event->getContext();
+            });
+            $stock = $this->buildCardLender('RATE');
+            $stock->setIndustry('Banks - Diversified');
+            mt_srand(20261006);
+            $this->buildEngine($dispatcher)->calculate($stock, new MacroStateDTO(
+                corporateTaxRate: 0.21, policyRate: $policyRate, policyRateEma: $policyRate, yield2yEma: $policyRate, yield5yEma: $policyRate + 0.002,
+                yield10yEma: $policyRate + 0.005, equityRiskPremium: 0.05, nominalGdpIndex: 1.0, macroCreditSpreadEma: 0.015
+            ), EarningsEngine::resolveReportingTick('RATE', 252));
+            $this->assertNotNull($captured);
+
+            return $captured;
+        };
+        $structuralCost = static fn (EarningsSimulationContext $ctx): float => ($ctx->fixedCosts / $ctx->committedCostScale)
+            + ($ctx->baselineVariableMargin * $ctx->structuralRevenue) + $ctx->structuralDepreciation;
+
+        $low = $run(0.01);
+        $high = $run(0.05);
+        $expected = $low->revenueGeneratingCapital * CommercialBankBusinessModel::OPERATING_COST_TO_EARNING_ASSETS / EarningsEngine::TTM_QUARTERS;
+
+        $this->assertEqualsWithDelta($expected, $structuralCost($low), $expected * 1e-6, 'a quarter of the book times the cost ratio');
+        $this->assertEqualsWithDelta($structuralCost($low), $structuralCost($high), $expected * 1e-6, 'four points of policy rate cost a bank nothing in branches');
+        $this->assertGreaterThan($low->structuralRevenue * 1.1, $high->structuralRevenue, 'the funding cost passes into revenue');
     }
 
     /**

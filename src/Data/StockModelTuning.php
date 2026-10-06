@@ -82,6 +82,7 @@ class StockModelTuning
             ModelParam::ConsumerLoanShare->value         => 0.15,
             ModelParam::CommercialRealEstateShare->value => 0.15, // Leads the syndicated corporate book instead
             ModelParam::TargetCapitalRatio->value        => 0.084, // Its seeded book equity/assets (JPMorgan 8.6% at end-2024)
+            ModelParam::OperatingCostToEarningAssets->value => 0.0279, // US international banks, 2019: 2.45% of assets, 87.9% earning (FDIC QBP)
         ],
 
         // --- Riverstone Financial (RIVR) ---
@@ -95,6 +96,7 @@ class StockModelTuning
             ModelParam::ConsumerLoanShare->value         => 0.00,
             ModelParam::CommercialRealEstateShare->value => 0.45, // Commercial mortgages for contractors and developers
             ModelParam::TargetCapitalRatio->value        => 0.111, // Its seeded book equity/assets
+            ModelParam::OperatingCostToEarningAssets->value => 0.0282, // US commercial lenders, 2019: 2.56% of assets, 90.7% earning (FDIC QBP)
         ],
 
         // --- Plover Savings Bank (PLVR) ---
@@ -108,6 +110,7 @@ class StockModelTuning
             ModelParam::ConsumerLoanShare->value         => 0.10,
             ModelParam::CommercialRealEstateShare->value => 0.10, // Small landlords; business loans take the last 15%
             ModelParam::TargetCapitalRatio->value        => 0.084, // Its seeded book equity/assets
+            ModelParam::OperatingCostToEarningAssets->value => 0.0267, // US mortgage lenders, 2019: 2.54% of assets, 95.1% earning (FDIC QBP)
         ],
 
         // --- Talon Credit (TALN) ---
@@ -126,6 +129,7 @@ class StockModelTuning
             ModelParam::NetworkRevenueWeight->value  => 0.05,
             ModelParam::CeclSpreadSensitivity->value => 2.20,
             ModelParam::CreditRiskAppetite->value    => 0.80, // Subprime instalment book: 1.6x the card industry, as OneMain's 6.02% against it in 2019 (~7.5% a year)
+            ModelParam::OperatingCostToEarningAssets->value => 0.059, // OneMain consumer lending, 2019: $1,290M on $17,055M average receivables (7.6%), on the 78% loan share
         ],
 
         // =====================================================================

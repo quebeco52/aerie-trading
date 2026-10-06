@@ -117,8 +117,8 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
     public const CREDIT_GAP_LENDING_SENSITIVITY = 0.50;
 
     // --- Structural Efficiency Floor ---
-    /** Minimum cost-to-revenue ratio: even at perfect NIM, structural fixed costs (personnel, compliance, tech) prevent margin going below 50%. */
-    public const MIN_EFFICIENCY_RATIO        = 0.50;
+    /** Annual noninterest expense per unit of earning assets for a card issuer: 7.42%, US credit card banks in 2019 (7.11% of assets, earning assets 95.9% of assets; FDIC Quarterly Banking Profile, Table III-A). */
+    public const OPERATING_COST_TO_EARNING_ASSETS = 0.0742;
 
     // --- NIM Squeeze & Yield Curve Inversion ---
     /** Baseline spread buffer before NIM squeeze compression begins. */
@@ -223,12 +223,10 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
             $nimSqueeze = (self::NIM_SPREAD_BUFFER - $bankSpread) * self::NIM_LINEAR_SENSITIVITY;
         }
 
-        // Structural efficiency floor: Total Operating Costs (Fixed + Variable) / Revenue >= MIN_EFFICIENCY_RATIO.
-        // Crucially, the NIM squeeze applies proportionally to the Revolving Lending share ($lendingWeight),
-        // leaving Payment Network Swipe Interchange completely insulated.
-        $minVariableMargin = max(0.01, self::MIN_EFFICIENCY_RATIO - ($fixedCosts / max(1.0, $actualRevenue)));
+        // The NIM squeeze applies in proportion to the revolving lending share ($lendingWeight), leaving payment
+        // network swipe interchange insulated.
         $rawMargin = $realizedVariableMargin + ($nimSqueeze * $lendingWeight);
-        $clampedMargin = $this->clampMargin($rawMargin, $minVariableMargin);
+        $clampedMargin = $this->clampMargin($rawMargin);
 
         $eventType = null;
         if ($lossMultiple > static::SECTOR_SHOCK_MASSIVE_LOSS_MULTIPLE) {
@@ -319,7 +317,7 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
 
         $stableMargin = max(0.01, (float) $stock->getOperatingMargin());
 
-        $unboundedRevenue = max(0.0, $targetEbit) / $stableMargin;
+        $unboundedRevenue = max(0.0, $targetEbit) + ($earningAssets * $this->resolveOperatingCostToEarningAssets($stock));
         $blendedCostOfFunds = ($depositRatio * $depositRate) + ((1.0 - $depositRatio) * $blendedWholesaleRate);
         $maxApr = max(self::MIN_APR_YIELD_FLOOR, $blendedCostOfFunds + self::POLICY_APR_SPREAD);
         $targetRevenue = min($unboundedRevenue, $earningAssets * $maxApr); // Floating gross yield ceiling based on blended cost of funds

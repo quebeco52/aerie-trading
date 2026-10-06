@@ -26,6 +26,8 @@ enum ModelParam: string
     case ResidentialMortgageShare = 'residential_mortgage_share';
     case ConsumerLoanShare = 'consumer_loan_share';
     case CommercialRealEstateShare = 'commercial_real_estate_share';
+    /** A lender's annual operating (noninterest) cost as a share of earning assets. */
+    case OperatingCostToEarningAssets = 'operating_cost_to_earning_assets';
     case AumMarketBetaScalar = 'aum_market_beta_scalar';
     case PerformanceFeeZFloor = 'performance_fee_z_floor';
     case PerformanceFeeScalar = 'performance_fee_scalar';
