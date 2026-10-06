@@ -164,7 +164,6 @@ enum ModelParam: string
     case LoeExposureShare = 'loe_exposure_share';
     case ExclusivityQuarters = 'exclusivity_quarters';
     case BiologicRevenueShare = 'biologic_revenue_share';
-    case PatentedMarginCeiling = 'patented_margin_ceiling';
     case InpatientCareWeight = 'inpatient_care_weight';
     case ElectiveOutpatientWeight = 'elective_outpatient_weight';
     case InsuranceArbitrageWeight = 'insurance_arbitrage_weight';
