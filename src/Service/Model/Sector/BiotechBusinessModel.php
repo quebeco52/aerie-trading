@@ -6,11 +6,13 @@ namespace App\Service\Model\Sector;
 
 use App\Data\InputOutputExposures;
 use App\Data\ModelParam;
+use App\DTO\ModelParameters;
 use App\DTO\SectorCoverageProfile;
 use App\DTO\SectorPhysicsResult;
 use App\DTO\StreamContext;
 use App\Entity\Stock;
 use App\Service\Event\ShockEvent;
+use App\Service\Math\FinancialConstants;
 use App\Service\Math\MathUtility;
 
 /**
@@ -18,24 +20,22 @@ use App\Service\Math\MathUtility;
  *
  * Financial Physics:
  * - CapEx represents high-risk R&D that creates intangible patent assets.
- * - Clinical development is a phase-transition (Markov) process: pivotal readouts arrive as a
- *   Bernoulli hazard scaled by pipeline breadth and R&D replacement intensity, and succeed at
- *   published industry transition rates rather than as symmetric Gaussian tail draws.
- * - Approvals are permanent: an approved asset steps up the commercial franchise base and
- *   refreshes the portfolio's weighted-average remaining exclusivity. Only the upfront milestone
- *   payment is a single-quarter event.
- * - Loss of Exclusivity (LOE) is a discrete, scheduled REVENUE event, not a margin drift: an
- *   exclusivity clock expires and the exposed franchise erodes exponentially at modality-specific
- *   hazards (small molecule collapses within a year, biologics bleed over several years).
+ * - Clinical development is a phase-transition (Markov) chain: a stock of late-stage programmes reads out at one
+ *   over the Phase III duration each, succeeds at published industry transition rates, and is refilled by R&D.
+ * - The marketed book is a ledger of drug cohorts, each with its own peak size, Bass launch ramp and exclusivity
+ *   expiry. An approval adds a cohort; at expiry the cohort erodes on its modality hazard (small molecules collapse
+ *   within a year, biologics bleed over several) and is never folded back into a protected base.
+ * - Peak size per approval is set by the replacement identity: at replacement R&D the expected launches exactly
+ *   replace the revenue that expiries take, so the book is stationary.
  * - Reverse operating leverage at LOE is produced by the engine itself (fixed costs are carried
  *   separately in the EBIT bridge), so this model only adds the price-defense discounting.
  * - Inelastic demand: highly immune to macroeconomic output gap recessions.
  *
  * Archetypes are expressed through StockModelTuning overrides rather than subclasses:
- * - Big pharma:      high EstablishedDrugWeight, high PatentProtectedRevenueShare, real LOE exposure.
+ * - Big pharma:      high EstablishedDrugWeight, high PatentProtectedRevenueShare, several late-stage assets.
  * - Clinical-stage:  PipelineDrugWeight dominant, LoeExposureShare 0.0 (nothing marketed to lose).
- * - Generic/specialty: PipelineDrugWeight ~0.0 and PatentProtectedRevenueShare 0.0, which collapses
- *   the readout hazard and secular growth to commodity manufacturing levels; the margin is the ticker's own.
+ * - Generic/specialty: LateStageAssetCount 0.0 and PatentProtectedRevenueShare 0.0: the whole book is mature
+ *   established product, nothing launches and nothing expires; the margin is the ticker's own.
  */
 class BiotechBusinessModel extends StandardCorporateBusinessModel
 {
@@ -98,75 +98,83 @@ class BiotechBusinessModel extends StandardCorporateBusinessModel
     public const PIPELINE_PERSISTENCE_PHI = 0.10;
 
     // --- Persisted Structural State Keys ---
-    /** Cumulative commercial franchise index: permanent revenue base carried across quarters. */
+    /** Marketed commercial book in franchise units (1.0 = the seeded book): every cohort on its launch, exclusivity and erosion path. */
     public const STATE_FRANCHISE_INDEX = 'state:commercial_franchise';
-    /** Next quarter's structural revenue multiplier, 1 + weight x (franchise - 1): the approved book the firm's capital now earns on. */
+    /** Next quarter's structural revenue multiplier, 1 + weight x (launched book - 1): the approved book the firm's capital now earns on. */
     public const STATE_STRUCTURAL_MULTIPLIER = 'state:structural_franchise_multiplier';
-    /** Quarters of marketing exclusivity remaining on the portfolio before the next patent cliff. */
-    public const STATE_EXCLUSIVITY_QUARTERS = 'state:exclusivity_quarters';
-    /** Quarters elapsed inside an active loss-of-exclusivity erosion window (0.0 = no active cliff). */
-    public const STATE_LOE_ELAPSED_QUARTERS = 'state:loe_elapsed_quarters';
     /** Live share of marketed revenue still under patent or regulatory exclusivity protection. */
     public const STATE_PROTECTED_SHARE = 'state:patent_protected_share';
-    /** Marketed revenue still under exclusivity, in franchise-index units: a cliff takes it away at onset, an approval adds to it. */
-    public const STATE_PROTECTED_FRANCHISE = 'state:protected_franchise';
-    /** Share of the marketed franchise the active (or next) loss of exclusivity erodes, fixed for the whole window. */
-    public const STATE_LOE_EXPOSURE = 'state:loe_exposure';
-    /** Next quarter's known erosion of the marketed book as a share of structural revenue: what the exclusivity clock already says, handed to expected revenue. */
+    /** Next quarter's known erosion of the marketed book as a share of structural revenue: what the exclusivity dates already say, handed to expected revenue. */
     public const STATE_KNOWN_COMMERCIAL_SHIFT = 'state:known_commercial_shift';
-    /** Prior-quarter R&D reinvestment ratio relative to the patent replacement rate. */
+    /** Prior-quarter R&D reinvestment relative to what keeps the book level: replacement plus capital growth with the firm's market. */
     public const STATE_RND_REPLACEMENT_RATIO = 'state:rnd_replacement_ratio';
+    /** Late-stage (Phase III) programmes in the pipeline: every readout draws it down, R&D refills it. */
+    public const STATE_LATE_STAGE_ASSETS = 'state:late_stage_assets';
+    /** Prefix of the cohort ledger, one slot per marketed drug: state:cohort:{slot}:{peak|adoption|exclusivity}. */
+    public const STATE_COHORT_PREFIX = 'state:cohort:';
+    /** Off-patent biologic revenue moved out of the ledger after its erosion window, still decaying on the biosimilar hazard. */
+    public const STATE_OFF_PATENT_BIOLOGIC = 'state:off_patent_biologic';
+    /** Off-patent small-molecule revenue moved out of the ledger after its erosion window, still decaying on the generic hazard. */
+    public const STATE_OFF_PATENT_SMALL_MOLECULE = 'state:off_patent_small_molecule';
+    /** Mature established-products book the lore seeds as already off patent: its exclusivity rents are gone and it is held like a generic line. */
+    public const STATE_ESTABLISHED_PRODUCTS = 'state:established_products';
 
-    // --- Clinical Development Hazard (industry phase-transition rates) ---
-    /** Expected pivotal readouts per quarter at full pipeline concentration, before R&D intensity scaling. */
-    public const PIVOTAL_READOUT_HAZARD = 0.40;
-    /** Probability a pivotal Phase III trial meets its primary endpoint (industry Phase III transition rate). */
-    public const PHASE_III_SUCCESS_RATE = 0.58;
-    /** Probability a filed NDA/BLA clears regulatory review after a successful pivotal readout. */
-    public const REGULATORY_APPROVAL_RATE = 0.91;
-    /** Elasticity of readout frequency to R&D reinvestment above or below the patent replacement rate. */
-    public const READOUT_HAZARD_RND_ELASTICITY = 0.60;
-    /** Lower clamp on the R&D intensity multiplier applied to the readout hazard. */
-    public const MIN_READOUT_HAZARD_MULTIPLIER = 0.25;
-    /** Upper clamp on the R&D intensity multiplier applied to the readout hazard. */
-    public const MAX_READOUT_HAZARD_MULTIPLIER = 2.00;
-    /** Ceiling on the quarterly probability that a portfolio produces a pivotal readout. */
-    public const MAX_QUARTERLY_READOUT_HAZARD = 0.50;
+    // --- Late-Stage Pipeline (phase-transition rates) ---
+    /** Mean Phase III duration in years (DiMasi, Grabowski & Hansen 2016, ~30.5 months): each late-stage programme reads out at a hazard of one over it. */
+    public const PHASE_III_DURATION_YEARS = 2.54;
+    /** Probability a pivotal Phase III trial meets its primary endpoint (BIO/Informa/QLS 2021, programmes 2011-2020: 57.8%). */
+    public const PHASE_III_SUCCESS_RATE = 0.578;
+    /** Probability a filed NDA/BLA clears regulatory review (BIO/Informa/QLS 2021, programmes 2011-2020: 90.6%). */
+    public const REGULATORY_APPROVAL_RATE = 0.906;
+    /** Value-weighted late-stage programmes of a branded portfolio with no lore of its own. */
+    public const DEFAULT_LATE_STAGE_ASSETS = 3.0;
+    /** Elasticity of Phase III entries to R&D reinvestment above or below the patent replacement rate. */
+    public const PIPELINE_REFILL_RND_ELASTICITY = 0.60;
+    /** Lower clamp on the R&D intensity multiplier applied to Phase III entries. */
+    public const MIN_PIPELINE_REFILL_MULTIPLIER = 0.25;
+    /** Upper clamp on the R&D intensity multiplier applied to Phase III entries. */
+    public const MAX_PIPELINE_REFILL_MULTIPLIER = 2.00;
 
-    // --- Approval Persistence & Franchise Physics ---
-    /** Permanent step-up in the commercial revenue base contributed by a newly launched approved asset. */
-    public const APPROVAL_FRANCHISE_STEP = 0.12;
-    /** Upper bound on the cumulative commercial franchise index (portfolio launch capacity). */
-    public const MAX_FRANCHISE_INDEX = 3.00;
-    /** Lower bound on the commercial franchise index after repeated generic erosion cycles. */
+    // --- Launch Ramp (Bass diffusion) ---
+    /** Imitation-to-innovation ratio q/p of the Bass adoption curve (Sultan, Farley & Lehmann 1990 meta-analysis: q 0.38, p 0.03). */
+    public const BASS_IMITATION_RATIO = 12.667;
+    /** Years from launch to peak sales: ~8 for first-in-class, 3-4 for followers (Robey & David 2018), about a third of approvals first-in-class (Lanthier et al. 2013). */
+    public const LAUNCH_YEARS_TO_PEAK = 5.0;
+    /** Share of plateau adoption reached at peak sales on the cumulative Bass curve. */
+    public const LAUNCH_PEAK_ADOPTION = 0.90;
+
+    // --- Approved Cohorts ---
+    /** Slots in the marketed-drug ledger: ~10 protected launches and ~3 in their erosion window at steady state, plus room for the seeded book. */
+    public const MAX_COHORTS = 24;
+    /** Protected cohorts the lore book is seeded as: the lead franchise plus followers on evenly staggered expiries. */
+    public const SEED_PROTECTED_COHORTS = 4;
+    /** Lower bound on the structural franchise multiplier, so the revenue base a quarter is stripped back to stays finite. */
     public const MIN_FRANCHISE_INDEX = 0.15;
-    /** Marketing exclusivity granted to a newly approved asset, in quarters (~10 years of effective patent life). */
-    public const NEW_APPROVAL_EXCLUSIVITY_QUARTERS = 40.0;
-    /** Single-quarter upfront and milestone payment multiplier on collaboration revenue at approval. */
-    public const APPROVAL_MILESTONE_REV_MULT = 1.20;
+    /** Market exclusivity granted to a newly approved asset, in quarters (~12.6 years for NMEs above $100m in sales, Grabowski, Long, Mortimer & Boyo 2016). */
+    public const NEW_APPROVAL_EXCLUSIVITY_QUARTERS = 50.0;
+    /** Swing in collaboration and milestone revenue between a pivotal success and a miss, centred on the odds (+29% / -31% at a 52% approval rate) so the stream stays unbiased. */
+    public const READOUT_MILESTONE_SWING = 0.60;
     /** Launch-quarter variable cost penalty from commercial build-out and payer access spending. */
     public const APPROVAL_LAUNCH_COST_MARGIN_PENALTY = 0.03;
-    /** Collaboration and milestone revenue retained in the quarter a pivotal trial misses its endpoint. */
-    public const TRIAL_FAILURE_PIPELINE_RETENTION = 0.60;
-    /** Variable margin penalty from expensing a terminated late-stage development program. */
+    /** Variable margin penalty from expensing the wind-down of a terminated late-stage development program. */
     public const TRIAL_FAILURE_MARGIN_PENALTY = 0.10;
     /** Continuous variable margin sensitivity to interim Phase II/III clinical trial readouts. */
     public const CONTINUOUS_PIPELINE_MARGIN_SENSITIVITY = 0.015;
 
-    // --- Exclusivity Clock & Loss of Exclusivity (LOE) Erosion ---
-    /** Default remaining marketing exclusivity on the commercial portfolio, in quarters (~7 years). */
+    // --- Loss of Exclusivity (LOE) Erosion ---
+    /** Default remaining marketing exclusivity on the lead franchise, in quarters (~7 years). */
     public const DEFAULT_EXCLUSIVITY_QUARTERS = 28.0;
-    /** Default share of commercial revenue exposed to the next loss of exclusivity. */
+    /** Default share of commercial revenue in the lead franchise, the next to lose exclusivity. */
     public const DEFAULT_LOE_EXPOSURE_SHARE = 0.35;
     /** Default share of marketed revenue still under patent or regulatory exclusivity protection. */
     public const DEFAULT_PATENT_PROTECTED_SHARE = 0.85;
     /** Default share of the commercial book made up of biologics rather than small molecules. */
     public const DEFAULT_BIOLOGIC_REVENUE_SHARE = 0.50;
-    /** Quarterly erosion hazard for small-molecule brands at generic entry: -ln(0.15)/4, ~85% volume loss in one year. */
+    /** Quarterly erosion hazard for small-molecule brands at generic entry: -ln(0.15)/4, ~85% volume loss in one year (Grabowski, Long & Mortimer 2014: 16% brand share at one year). */
     public const SMALL_MOLECULE_LOE_HAZARD = 0.4742;
     /** Quarterly erosion hazard for biologics under biosimilar entry: -ln(0.60)/10, ~40% loss over two and a half years. */
     public const BIOLOGIC_LOE_HAZARD = 0.0511;
-    /** Quarters an erosion window runs before the residual off-patent revenue is folded into the permanent base. */
+    /** Quarters an expired cohort's erosion runs through utilization before the capacity base follows it down. */
     public const LOE_EROSION_WINDOW_QUARTERS = 12.0;
     /** Variable margin penalty from price concessions defending an off-patent brand against generic entrants. */
     public const LOE_PRICE_DEFENSE_MARGIN_PENALTY = 0.04;
@@ -221,9 +229,9 @@ class BiotechBusinessModel extends StandardCorporateBusinessModel
     {
         // Biotechs are structural secular growth stories driven by R&D and demographics, making them
         // largely decoupled from standard macro business cycles. The demand shift carries instead what the
-        // exclusivity clock already says about this quarter: a patent cliff is dated and analysts read it, so
+        // exclusivity dates already say about this quarter: a patent cliff is dated and analysts read it, so
         // the erosion belongs in EXPECTED revenue. It runs through utilization so the cost base is slow to
-        // follow a collapsing brand; the approved book itself is structural (getStructuralRevenueMultiplier).
+        // follow a collapsing brand; the launched book itself is structural (getStructuralRevenueMultiplier).
         return [
             'macro_demand_shift' => (float) (($stock->getEarningsMomentumZ() ?? [])[self::STATE_KNOWN_COMMERCIAL_SHIFT] ?? 0.0),
             'pricing_power_multiplier' => 1.0,
@@ -231,7 +239,7 @@ class BiotechBusinessModel extends StandardCorporateBusinessModel
     }
 
     /**
-     * The approved franchise scales what the firm's capital earns and the cost base with it: a launched drug is
+     * The launched book scales what the firm's capital earns and the cost base with it: a launched drug is
      * new capacity, not overtime on the old one. Before the state exists the franchise rode in the demand shift,
      * so the neutral 1.0 keeps that quarter's expected revenue consistent with the shift it was persisted with.
      */
@@ -241,33 +249,74 @@ class BiotechBusinessModel extends StandardCorporateBusinessModel
     }
 
     /**
-     * The erosion factor the exclusivity clock will apply next quarter, from the state being persisted now:
-     * the clock ticks once more, a cliff that is due starts eroding, an active erosion advances. Nothing here
-     * is drawn, so the forecast and next quarter's physics agree exactly.
+     * Peak quarterly revenue of one approval, in franchise units, from the replacement identity: at the target
+     * pipeline, approvals per quarter x peak x lifetime revenue per unit of peak equals the protected book the lore
+     * seeds, so launches replace what expiries take and the book is stationary at replacement R&D.
      */
-    private function nextQuarterErosionFactor(float $clock, float $elapsed, float $exposureShare, float $biologicShare): float
+    public function approvalPeakSize(float $targetAssets, float $protectedShare, float $biologicShare): float
     {
-        if ($elapsed > 0.0) {
-            $elapsed += 1.0;
-        } elseif ($clock - 1.0 <= 0.0 && $exposureShare > 0.0) {
-            $elapsed = 1.0;
+        $approvalsPerQuarter = max(0.0, $targetAssets) * $this->readoutHazardPerQuarter() * self::PHASE_III_SUCCESS_RATE * self::REGULATORY_APPROVAL_RATE;
+        if ($approvalsPerQuarter <= 0.0) {
+            return 0.0;
         }
 
-        return 1.0 - ($exposureShare * $this->loeErodedShare($biologicShare, $elapsed));
+        return max(0.0, $protectedShare) / ($approvalsPerQuarter * $this->lifetimeRevenuePerPeak($biologicShare));
     }
 
     /**
-     * The share of the marketed book the next loss of exclusivity takes: the ticker's exposure, but never more than
-     * is still protected, since revenue already off patent cannot lose exclusivity a second time.
+     * Quarters of peak revenue a launched drug earns over its life: the Bass ramp to its exclusivity expiry, then
+     * the erosion tail of each modality to zero. Run on the same ledger mechanics the physics uses.
      */
-    private function resolveCliffExposure(float $exposureParam, float $protectedFranchise, float $franchise): float
+    public function lifetimeRevenuePerPeak(float $biologicShare): float
     {
-        return max(0.0, min(1.0, $exposureParam, $protectedFranchise / max(self::MIN_FRANCHISE_INDEX, $franchise)));
+        $book = [
+            'cohorts' => [['peak' => 1.0, 'adoption' => 0.0, 'exclusivity' => self::NEW_APPROVAL_EXCLUSIVITY_QUARTERS]],
+            'biologic' => 0.0,
+            'smallMolecule' => 0.0,
+            'established' => 0.0,
+        ];
+
+        $total = 0.0;
+        while ($book['cohorts'] !== []) {
+            $book = $this->advanceBook($book)['book'];
+            $total += $this->measureBook($book, $biologicShare)['marketed'];
+            $book = $this->foldErodedCohorts($book, $biologicShare);
+        }
+
+        // What was folded out keeps decaying geometrically on each modality's hazard.
+        $biologicRetention = exp(-self::BIOLOGIC_LOE_HAZARD);
+        $smallMoleculeRetention = exp(-self::SMALL_MOLECULE_LOE_HAZARD);
+
+        return $total
+            + ($book['biologic'] * $biologicRetention / (1.0 - $biologicRetention))
+            + ($book['smallMolecule'] * $smallMoleculeRetention / (1.0 - $smallMoleculeRetention));
+    }
+
+    /** Per-programme readout hazard over one quarter: one over the Phase III duration. */
+    private function readoutHazardPerQuarter(): float
+    {
+        return 1.0 / (FinancialConstants::QUARTERS_PER_YEAR * self::PHASE_III_DURATION_YEARS);
     }
 
     /**
-     * Share of the exposed franchise lost after `elapsed` quarters off exclusivity: the revenue-weighted mixture
-     * of the two modality survival curves, each decaying on its own hazard.
+     * One quarter of cumulative Bass adoption (Bass 1969), stepped on the closed form so the ramp is exact at any
+     * horizon: F(t) = (1 - e^{-(p+q)t}) / (1 + (q/p) e^{-(p+q)t}). The speed p+q is fixed by the time to peak.
+     */
+    private function bassAdoptionStep(float $adoption): float
+    {
+        $adoption = max(0.0, min(1.0, $adoption));
+        $ratio = self::BASS_IMITATION_RATIO;
+        $peakDecay = (1.0 - self::LAUNCH_PEAK_ADOPTION) / (1.0 + ($ratio * self::LAUNCH_PEAK_ADOPTION));
+        $speed = -log($peakDecay) / self::LAUNCH_YEARS_TO_PEAK;
+
+        $decay = ((1.0 - $adoption) / (1.0 + ($ratio * $adoption))) * exp(-$speed / FinancialConstants::QUARTERS_PER_YEAR);
+
+        return (1.0 - $decay) / (1.0 + ($ratio * $decay));
+    }
+
+    /**
+     * Share of an expired cohort lost after `elapsed` quarters off exclusivity: the revenue-weighted mixture of the
+     * two modality survival curves, each decaying on its own hazard.
      */
     private function loeErodedShare(float $biologicShare, float $elapsed): float
     {
@@ -279,9 +328,236 @@ class BiotechBusinessModel extends StandardCorporateBusinessModel
             + ((1.0 - $biologicShare) * (1.0 - exp(-self::SMALL_MOLECULE_LOE_HAZARD * $elapsed)));
     }
 
+    private static function cohortKey(int $slot, string $field): string
+    {
+        return self::STATE_COHORT_PREFIX . $slot . ':' . $field;
+    }
+
     /**
-     * Biotech is driven by a persistent commercial franchise that approvals step up and patent
-     * cliffs erode, plus lumpy collaboration income exposed to binary pivotal trial readouts.
+     * The marketed book carried in from last quarter, or the lore book on first use.
+     *
+     * @return array{cohorts: list<array{peak: float, adoption: float, exclusivity: float}>, biologic: float, smallMolecule: float, established: float}
+     */
+    private function openBook(StreamContext $streams, ModelParameters $params): array
+    {
+        $cohorts = [];
+        for ($slot = 0; $slot < self::MAX_COHORTS; $slot++) {
+            $peak = $streams->getPersistedState(self::cohortKey($slot, 'peak'), -1.0);
+            if ($peak < 0.0) {
+                break;
+            }
+            $cohorts[] = [
+                'peak' => $peak,
+                'adoption' => $streams->getPersistedState(self::cohortKey($slot, 'adoption'), 1.0),
+                'exclusivity' => $streams->getPersistedState(self::cohortKey($slot, 'exclusivity'), 0.0),
+            ];
+        }
+
+        if ($cohorts === [] && $streams->getPersistedState(self::STATE_LATE_STAGE_ASSETS, -1.0) < 0.0) {
+            return $this->seedBook($streams, $params);
+        }
+
+        return [
+            'cohorts' => $cohorts,
+            'biologic' => $streams->getPersistedState(self::STATE_OFF_PATENT_BIOLOGIC, 0.0),
+            'smallMolecule' => $streams->getPersistedState(self::STATE_OFF_PATENT_SMALL_MOLECULE, 0.0),
+            'established' => $streams->getPersistedState(self::STATE_ESTABLISHED_PRODUCTS, 0.0),
+        ];
+    }
+
+    /**
+     * Translates the lore into a ledger: the lead franchise holds the exposure share and expires on the lore clock,
+     * the rest of the protected book follows in equal cohorts on expiries staggered out to a new approval's life,
+     * and the unprotected remainder is mature established product. All of it is at plateau. A firm that already
+     * reported keeps the size of book it carried, so the switch does not move revenue; the split is the lore's,
+     * since a share drained under the old single-clock physics would be held as established product for good.
+     *
+     * @return array{cohorts: list<array{peak: float, adoption: float, exclusivity: float}>, biologic: float, smallMolecule: float, established: float}
+     */
+    private function seedBook(StreamContext $streams, ModelParameters $params): array
+    {
+        $book = max(0.0, $streams->getPersistedState(self::STATE_FRANCHISE_INDEX, 1.0));
+        $protectedShare = max(0.0, min(1.0, $params[ModelParam::PatentProtectedRevenueShare]));
+        $lead = max(0.0, min($protectedShare, $params[ModelParam::LoeExposureShare]));
+        $leadExpiry = max(1.0, $params[ModelParam::ExclusivityQuarters]);
+        $followers = self::SEED_PROTECTED_COHORTS - 1;
+        $spacing = max(0.0, self::NEW_APPROVAL_EXCLUSIVITY_QUARTERS - $leadExpiry) / self::SEED_PROTECTED_COHORTS;
+
+        $cohorts = [];
+        if ($lead > 0.0) {
+            $cohorts[] = ['peak' => $lead * $book, 'adoption' => 1.0, 'exclusivity' => $leadExpiry];
+        }
+        $followerSize = ($protectedShare - $lead) / $followers;
+        for ($j = 1; $followerSize > 0.0 && $j <= $followers; $j++) {
+            $cohorts[] = ['peak' => $followerSize * $book, 'adoption' => 1.0, 'exclusivity' => $leadExpiry + ($j * $spacing)];
+        }
+
+        return [
+            'cohorts' => $cohorts,
+            'biologic' => 0.0,
+            'smallMolecule' => 0.0,
+            'established' => (1.0 - $protectedShare) * $book,
+        ];
+    }
+
+    /**
+     * Ages the book one quarter: exclusivity runs down, protected cohorts climb their launch ramp, and the folded
+     * off-patent revenue decays on its hazards. Nothing here is drawn, so the forecast persisted last quarter and
+     * this quarter's book agree exactly.
+     *
+     * @param array{cohorts: list<array{peak: float, adoption: float, exclusivity: float}>, biologic: float, smallMolecule: float, established: float} $book
+     * @return array{book: array{cohorts: list<array{peak: float, adoption: float, exclusivity: float}>, biologic: float, smallMolecule: float, established: float}, expired: float}
+     */
+    private function advanceBook(array $book): array
+    {
+        $expired = 0.0;
+        $cohorts = [];
+        foreach ($book['cohorts'] as $cohort) {
+            $exclusivity = $cohort['exclusivity'] - 1.0;
+            $adoption = $cohort['adoption'];
+            if ($exclusivity > 0.0) {
+                $adoption = $this->bassAdoptionStep($adoption);
+            } elseif ($cohort['exclusivity'] > 0.0) {
+                // Generic entry freezes the ramp: the patients the brand had are what the erosion starts from.
+                $expired += $cohort['peak'] * $adoption;
+            }
+            $cohorts[] = ['peak' => $cohort['peak'], 'adoption' => $adoption, 'exclusivity' => $exclusivity];
+        }
+
+        return [
+            'book' => [
+                'cohorts' => $cohorts,
+                'biologic' => $book['biologic'] * exp(-self::BIOLOGIC_LOE_HAZARD),
+                'smallMolecule' => $book['smallMolecule'] * exp(-self::SMALL_MOLECULE_LOE_HAZARD),
+                'established' => $book['established'],
+            ],
+            'expired' => $expired,
+        ];
+    }
+
+    /**
+     * The book in franchise units: what is protected, what the capacity base carries (cohorts inside their erosion
+     * window at their pre-expiry level) and what is actually marketed.
+     *
+     * @param array{cohorts: list<array{peak: float, adoption: float, exclusivity: float}>, biologic: float, smallMolecule: float, established: float} $book
+     * @return array{protected: float, launched: float, marketed: float, window: float}
+     */
+    private function measureBook(array $book, float $biologicShare): array
+    {
+        $protected = 0.0;
+        $window = 0.0;
+        $windowMarketed = 0.0;
+        foreach ($book['cohorts'] as $cohort) {
+            $level = $cohort['peak'] * $cohort['adoption'];
+            if ($cohort['exclusivity'] > 0.0) {
+                $protected += $level;
+            } else {
+                $window += $level;
+                $windowMarketed += $level * (1.0 - $this->loeErodedShare($biologicShare, 1.0 - $cohort['exclusivity']));
+            }
+        }
+        $offPatent = $book['biologic'] + $book['smallMolecule'] + $book['established'];
+
+        return [
+            'protected' => $protected,
+            'launched' => $protected + $window + $offPatent,
+            'marketed' => $protected + $windowMarketed + $offPatent,
+            'window' => $window,
+        ];
+    }
+
+    /**
+     * Moves cohorts whose erosion window has closed out of the ledger into the off-patent stocks, each modality at
+     * what is left of it; from here on the capacity base follows their decay.
+     *
+     * @param array{cohorts: list<array{peak: float, adoption: float, exclusivity: float}>, biologic: float, smallMolecule: float, established: float} $book
+     * @return array{cohorts: list<array{peak: float, adoption: float, exclusivity: float}>, biologic: float, smallMolecule: float, established: float}
+     */
+    private function foldErodedCohorts(array $book, float $biologicShare): array
+    {
+        $kept = [];
+        foreach ($book['cohorts'] as $cohort) {
+            $elapsed = 1.0 - $cohort['exclusivity'];
+            if ($cohort['exclusivity'] > 0.0 || $elapsed < self::LOE_EROSION_WINDOW_QUARTERS) {
+                $kept[] = $cohort;
+                continue;
+            }
+            $level = $cohort['peak'] * $cohort['adoption'];
+            $book['biologic'] += $biologicShare * $level * exp(-self::BIOLOGIC_LOE_HAZARD * $elapsed);
+            $book['smallMolecule'] += (1.0 - $biologicShare) * $level * exp(-self::SMALL_MOLECULE_LOE_HAZARD * $elapsed);
+        }
+        $book['cohorts'] = $kept;
+
+        return $book;
+    }
+
+    /**
+     * Adds a launched drug to the ledger. A full ledger first moves the longest-expired cohort out early; one with
+     * nothing expired merges the launch into the latest-expiring cohort, the closest in age.
+     *
+     * @param array{cohorts: list<array{peak: float, adoption: float, exclusivity: float}>, biologic: float, smallMolecule: float, established: float} $book
+     * @return array{cohorts: list<array{peak: float, adoption: float, exclusivity: float}>, biologic: float, smallMolecule: float, established: float}
+     */
+    private function admitCohort(array $book, float $peak, float $biologicShare): array
+    {
+        $launch = ['peak' => $peak, 'adoption' => 0.0, 'exclusivity' => self::NEW_APPROVAL_EXCLUSIVITY_QUARTERS];
+        if (count($book['cohorts']) < self::MAX_COHORTS) {
+            $book['cohorts'][] = $launch;
+
+            return $book;
+        }
+
+        $oldest = null;
+        $youngest = null;
+        foreach ($book['cohorts'] as $slot => $cohort) {
+            if ($cohort['exclusivity'] <= 0.0 && ($oldest === null || $cohort['exclusivity'] < $book['cohorts'][$oldest]['exclusivity'])) {
+                $oldest = $slot;
+            }
+            if ($youngest === null || $cohort['exclusivity'] > $book['cohorts'][$youngest]['exclusivity']) {
+                $youngest = $slot;
+            }
+        }
+
+        if ($oldest !== null) {
+            $cohort = $book['cohorts'][$oldest];
+            $level = $cohort['peak'] * $cohort['adoption'];
+            $elapsed = 1.0 - $cohort['exclusivity'];
+            $book['biologic'] += $biologicShare * $level * exp(-self::BIOLOGIC_LOE_HAZARD * $elapsed);
+            $book['smallMolecule'] += (1.0 - $biologicShare) * $level * exp(-self::SMALL_MOLECULE_LOE_HAZARD * $elapsed);
+            $book['cohorts'][$oldest] = $launch;
+
+            return $book;
+        }
+
+        $host = $book['cohorts'][(int) $youngest];
+        $merged = $host['peak'] + $peak;
+        $book['cohorts'][(int) $youngest] = [
+            'peak' => $merged,
+            'adoption' => $merged > 0.0 ? ($host['peak'] * $host['adoption']) / $merged : 0.0,
+            'exclusivity' => $host['exclusivity'],
+        ];
+
+        return $book;
+    }
+
+    /**
+     * @param array{cohorts: list<array{peak: float, adoption: float, exclusivity: float}>, biologic: float, smallMolecule: float, established: float} $book
+     */
+    private function persistBook(StreamContext $streams, array $book): void
+    {
+        foreach (array_values($book['cohorts']) as $slot => $cohort) {
+            $streams->registerState(self::cohortKey($slot, 'peak'), $cohort['peak']);
+            $streams->registerState(self::cohortKey($slot, 'adoption'), $cohort['adoption']);
+            $streams->registerState(self::cohortKey($slot, 'exclusivity'), $cohort['exclusivity']);
+        }
+        $streams->registerState(self::STATE_OFF_PATENT_BIOLOGIC, $book['biologic']);
+        $streams->registerState(self::STATE_OFF_PATENT_SMALL_MOLECULE, $book['smallMolecule']);
+        $streams->registerState(self::STATE_ESTABLISHED_PRODUCTS, $book['established']);
+    }
+
+    /**
+     * Biotech is driven by a ledger of marketed drug cohorts that launches add to and patent expiries erode, plus
+     * lumpy collaboration income exposed to binary pivotal trial readouts.
      */
     protected function calculateSectorPhysics(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, \App\DTO\MacroStateDTO $macroState, MathUtility $mathUtility): SectorPhysicsResult
     {
@@ -292,6 +568,7 @@ class BiotechBusinessModel extends StandardCorporateBusinessModel
             ModelParam::ExclusivityQuarters->value         => self::DEFAULT_EXCLUSIVITY_QUARTERS,
             ModelParam::BiologicRevenueShare->value        => self::DEFAULT_BIOLOGIC_REVENUE_SHARE,
             ModelParam::PatentProtectedRevenueShare->value => self::DEFAULT_PATENT_PROTECTED_SHARE,
+            ModelParam::LateStageAssetCount->value         => self::DEFAULT_LATE_STAGE_ASSETS,
         ]);
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
@@ -310,93 +587,84 @@ class BiotechBusinessModel extends StandardCorporateBusinessModel
         $establishedZ = $streams->generateZ('commercial_therapeutics', self::COMMERCIAL_PERSISTENCE_PHI);
         $pipelineZ    = $streams->generateZ('pipeline_licensing_milestones', self::PIPELINE_PERSISTENCE_PHI);
 
-        // --- Exclusivity Clock: schedule the next patent cliff and advance any active erosion ---
-        $franchise = $streams->getPersistedState(self::STATE_FRANCHISE_INDEX, 1.0);
-        $clock     = $streams->getPersistedState(self::STATE_EXCLUSIVITY_QUARTERS, $params[ModelParam::ExclusivityQuarters]);
-        $elapsed   = $streams->getPersistedState(self::STATE_LOE_ELAPSED_QUARTERS, 0.0);
-        $protectedFranchise = $streams->getPersistedState(
-            self::STATE_PROTECTED_FRANCHISE,
-            $franchise * max(0.0, min(1.0, $params[ModelParam::PatentProtectedRevenueShare]))
-        );
-        $exposureShare = $elapsed > 0.0
-            ? $streams->getPersistedState(self::STATE_LOE_EXPOSURE, $this->resolveCliffExposure($params[ModelParam::LoeExposureShare], $protectedFranchise, $franchise))
-            : $this->resolveCliffExposure($params[ModelParam::LoeExposureShare], $protectedFranchise, $franchise);
-
-        $eventType = null;
-        if ($elapsed > 0.0) {
-            $elapsed += 1.0;
-        } else {
-            $clock -= 1.0;
-            if ($clock <= 0.0 && $exposureShare > 0.0) {
-                $elapsed = 1.0;
-                $eventType = ShockEvent::BIOTECH_PATENT_CLIFF;
-                // The whole exposed book goes off patent the day generics may enter; erosion of its sales follows.
-                $protectedFranchise = max(0.0, $protectedFranchise - ($exposureShare * $franchise));
-            }
-        }
-
-        // Exponential LOE erosion of the exposed franchise, each modality on its own hazard.
+        // --- Marketed Book: age every cohort one quarter on its known launch and exclusivity schedule ---
         $biologicShare = max(0.0, min(1.0, $params[ModelParam::BiologicRevenueShare]));
-        $erodedFraction = $exposureShare * $this->loeErodedShare($biologicShare, $elapsed);
-        $erosionFactor  = 1.0 - $erodedFraction;
+        $aged = $this->advanceBook($this->openBook($streams, $params));
+        $book = $aged['book'];
+        $measured = $this->measureBook($book, $biologicShare);
 
-        $commercialMultiplier = $franchise * $erosionFactor;
+        $eventType = $aged['expired'] > 0.0 ? ShockEvent::BIOTECH_PATENT_CLIFF : null;
 
-        // Expected revenue already carries the approved franchise (structural multiplier) and this quarter's
-        // known erosion (demand shift), both persisted last quarter; strip them to get the base the franchise
-        // and the erosion are applied to, so neither is counted twice.
+        // Expected revenue already carries the launched book (structural multiplier) and this quarter's known
+        // erosion (demand shift), both persisted last quarter; strip them to get the base the book is applied to,
+        // so neither is counted twice.
         $knownShift = $streams->getPersistedState(self::STATE_KNOWN_COMMERCIAL_SHIFT, 0.0);
         $baseRevenue = $expectedRevenue / (max(0.1, 1.0 + $knownShift) * $this->getStructuralRevenueMultiplier($stock));
 
         $reimbursementBaseline = \App\Service\Macro\MacroEngine::TARGET_INFLATION - \App\Service\Macro\MacroEngine::REIMBURSEMENT_PRODUCTIVITY_OFFSET;
         $reimbursementShift    = $macroState->reimbursementRateGrowth - $reimbursementBaseline;
-        $establishedRevenue    = max(0.0, $baseRevenue * $establishedWeight * $commercialMultiplier * (1.0 + ($establishedZ * ($baselineVol * self::COMMERCIAL_VARIANCE_SCALAR)) + $reimbursementShift));
+        $establishedRevenue    = max(0.0, $baseRevenue * $establishedWeight * $measured['marketed'] * (1.0 + ($establishedZ * ($baselineVol * self::COMMERCIAL_VARIANCE_SCALAR)) + $reimbursementShift));
         $pipelineRevenue       = max(0.0, $baseRevenue * $pipelineWeight    * (1.0 + ($pipelineZ    * ($baselineVol * self::PIPELINE_VARIANCE_SCALAR))));
 
         $preEventPipelineRevenue = $pipelineRevenue;
-        $preErosionEstablished   = $erosionFactor > 0.0 ? ($establishedRevenue / $erosionFactor) : $establishedRevenue;
 
         // Continuous pipeline clinical progress smoothly adjusts variable margin. Trial spend itself is
         // capitalized as intangible R&D CapEx in this architecture, so progress reads through as
         // higher-value royalty and collaboration mix rather than as near-term operating expense.
         $patentModifier = -self::CONTINUOUS_PIPELINE_MARGIN_SENSITIVITY * $pipelineZ * $pipelineWeight;
 
-        // --- Pivotal Readout: Bernoulli hazard scaled by pipeline breadth and R&D replacement intensity ---
-        $rndRatio = $streams->getPersistedState(self::STATE_RND_REPLACEMENT_RATIO, 1.0);
-        $rndMultiplier = min(
-            self::MAX_READOUT_HAZARD_MULTIPLIER,
-            max(self::MIN_READOUT_HAZARD_MULTIPLIER, pow(max(0.01, $rndRatio), self::READOUT_HAZARD_RND_ELASTICITY))
-        );
-        $readoutHazard = min(self::MAX_QUARTERLY_READOUT_HAZARD, self::PIVOTAL_READOUT_HAZARD * $pipelineWeight * $rndMultiplier);
+        // --- Pivotal Readouts: each late-stage programme reads out at one over the Phase III duration ---
+        $targetAssets = max(0.0, $params[ModelParam::LateStageAssetCount]);
+        $assets = max(0.0, $streams->getPersistedState(self::STATE_LATE_STAGE_ASSETS, $targetAssets));
+        $readouts = min((int) ceil($assets), $mathUtility->generatePoissonCount($assets * $this->readoutHazardPerQuarter()));
 
-        if ($readoutHazard > 0.0 && $mathUtility->checkProbability($readoutHazard)) {
-            if ($mathUtility->checkProbability(self::PHASE_III_SUCCESS_RATE * self::REGULATORY_APPROVAL_RATE)) {
-                // Upfront and milestone cash lands this quarter; the launched asset is permanent.
-                $pipelineRevenue *= self::APPROVAL_MILESTONE_REV_MULT;
-                $patentModifier  += self::APPROVAL_LAUNCH_COST_MARGIN_PENALTY * $pipelineWeight;
-
-                // Revenue-weighted average remaining exclusivity: the new asset is APPROVAL_FRANCHISE_STEP of the
-                // existing book whatever its size, so the franchise level cancels out of the weights.
-                $clock = ($clock + (self::APPROVAL_FRANCHISE_STEP * self::NEW_APPROVAL_EXCLUSIVITY_QUARTERS))
-                    / (1.0 + self::APPROVAL_FRANCHISE_STEP);
-                $protectedFranchise += self::APPROVAL_FRANCHISE_STEP * $franchise;
-                $franchise = min(self::MAX_FRANCHISE_INDEX, $franchise * (1.0 + self::APPROVAL_FRANCHISE_STEP));
-
-                // A patent cliff onset is the larger structural event, so it keeps the public narrative.
-                $eventType ??= ShockEvent::BIOTECH_DRUG_APPROVAL;
+        $successRate = self::PHASE_III_SUCCESS_RATE * self::REGULATORY_APPROVAL_RATE;
+        $approvals = 0;
+        $failures = 0;
+        for ($i = 0; $i < $readouts; $i++) {
+            if ($mathUtility->checkProbability($successRate)) {
+                $approvals++;
             } else {
-                // A failed pivotal trial destroys future optionality and collaboration income.
-                // It does NOT touch marketed commercial revenue: the asset never had any.
-                $pipelineRevenue *= self::TRIAL_FAILURE_PIPELINE_RETENTION;
-                $patentModifier  += self::TRIAL_FAILURE_MARGIN_PENALTY * $pipelineWeight;
-                $eventType ??= ShockEvent::BIOTECH_TRIAL_SETBACK;
+                $failures++;
             }
         }
 
-        if ($elapsed > 0.0) {
-            // Price concessions defending the off-patent brand. Reverse operating leverage against
+        // R&D refills Phase III: at the replacement rate entries match the expected readouts of the target pipeline,
+        // so a failure is a programme gone until research replaces it.
+        $rndRatio = $streams->getPersistedState(self::STATE_RND_REPLACEMENT_RATIO, 1.0);
+        $refillMultiplier = min(
+            self::MAX_PIPELINE_REFILL_MULTIPLIER,
+            max(self::MIN_PIPELINE_REFILL_MULTIPLIER, pow(max(0.01, $rndRatio), self::PIPELINE_REFILL_RND_ELASTICITY))
+        );
+        $assets = max(0.0, $assets - $readouts) + ($targetAssets * $this->readoutHazardPerQuarter() * $refillMultiplier);
+
+        $peakSize = $this->approvalPeakSize($targetAssets, max(0.0, min(1.0, $params[ModelParam::PatentProtectedRevenueShare])), $biologicShare);
+        for ($i = 0; $i < $approvals; $i++) {
+            $book = $this->admitCohort($book, $peakSize, $biologicShare);
+        }
+
+        // Upfront and milestone cash on a success, lost collaboration income on a miss: both are news against the
+        // odds the expected stream already carries.
+        $readoutNews = ($approvals * (1.0 - $successRate)) - ($failures * $successRate);
+        $pipelineRevenue *= max(0.0, 1.0 + (self::READOUT_MILESTONE_SWING * $readoutNews));
+
+        if ($approvals > 0) {
+            // The launched asset ramps in from next quarter.
+            $patentModifier  += self::APPROVAL_LAUNCH_COST_MARGIN_PENALTY * $pipelineWeight * $approvals;
+            // A patent cliff onset is the larger structural event, so it keeps the public narrative.
+            $eventType ??= ShockEvent::BIOTECH_DRUG_APPROVAL;
+        }
+        if ($failures > 0) {
+            // A failed pivotal trial destroys future optionality and collaboration income. It does NOT touch
+            // marketed commercial revenue: the asset never had any.
+            $patentModifier  += self::TRIAL_FAILURE_MARGIN_PENALTY * $pipelineWeight * $failures;
+            $eventType ??= ShockEvent::BIOTECH_TRIAL_SETBACK;
+        }
+
+        if ($measured['window'] > 0.0) {
+            // Price concessions defending the off-patent brands. Reverse operating leverage against
             // the collapsing revenue base is produced by the engine's fixed cost bridge.
-            $patentModifier += self::LOE_PRICE_DEFENSE_MARGIN_PENALTY * $exposureShare * $establishedWeight;
+            $patentModifier += self::LOE_PRICE_DEFENSE_MARGIN_PENALTY * ($measured['window'] / max(self::MIN_FRANCHISE_INDEX, $measured['launched'])) * $establishedWeight;
         }
 
         $streamRevenues = [
@@ -405,7 +673,12 @@ class BiotechBusinessModel extends StandardCorporateBusinessModel
         ];
 
         $actualRevenue = max(0.0, array_sum($streamRevenues));
-        $streams->recordStreamShares($streamRevenues);
+        // The mix adapts to the draws, not to the book: the book already scales the commercial stream, and a weight
+        // that chased it would count each launch and expiry a second time.
+        $streams->recordStreamShares([
+            'commercial_therapeutics'       => $establishedRevenue / max(self::MIN_FRANCHISE_INDEX, $measured['marketed']),
+            'pipeline_licensing_milestones' => $pipelineRevenue,
+        ]);
 
         // API, fill-finish and technician costs reach the cost base behind long supply agreements and are
         // recovered on-label at exclusivity pricing.
@@ -413,49 +686,42 @@ class BiotechBusinessModel extends StandardCorporateBusinessModel
 
         $clampedMargin = $this->clampMargin($realizedVariableMargin + $patentModifier + $inputCostDrag);
 
-        // Once the erosion window closes, the residual off-patent level becomes the permanent base
-        // and the clock is reset to the next franchise's remaining patent life.
-        $marketedFranchise = $franchise * $erosionFactor;
-        if ($elapsed >= self::LOE_EROSION_WINDOW_QUARTERS) {
-            $franchise = max(self::MIN_FRANCHISE_INDEX, $marketedFranchise);
-            $marketedFranchise = $franchise;
-            $elapsed = 0.0;
-            $clock = max($clock, $params[ModelParam::ExclusivityQuarters]);
-        }
+        // Revenue still under exclusivity sets secular growth from the following quarter. A launch earns nothing in
+        // its approval quarter, so it reaches the share as it ramps.
+        $protectedShare = $measured['marketed'] > 0.0 ? max(0.0, min(1.0, $measured['protected'] / $measured['marketed'])) : 0.0;
 
-        // The off-patent residual stays unprotected after it is folded into the base; only approvals restore the
-        // protected share. It lowers secular growth from the following quarter.
-        $protectedShare = max(0.0, min(1.0, $protectedFranchise / max(self::MIN_FRANCHISE_INDEX, $marketedFranchise)));
-        $nextExposure = $elapsed > 0.0
-            ? $exposureShare
-            : $this->resolveCliffExposure($params[ModelParam::LoeExposureShare], $protectedFranchise, $franchise);
+        $book = $this->foldErodedCohorts($book, $biologicShare);
+        $this->persistBook($streams, $book);
 
-        $streams->registerState(self::STATE_FRANCHISE_INDEX, $franchise);
-        $streams->registerState(self::STATE_EXCLUSIVITY_QUARTERS, $clock);
-        $streams->registerState(self::STATE_LOE_ELAPSED_QUARTERS, $elapsed);
+        // Next quarter's book is fully known now: the launched part is capacity, the in-window erosion is a known
+        // shortfall of utilization.
+        $next = $this->measureBook($this->advanceBook($book)['book'], $biologicShare);
+        $structuralMultiplier = max(self::MIN_FRANCHISE_INDEX, 1.0 + ($establishedWeight * ($next['launched'] - 1.0)));
+
+        $streams->registerState(self::STATE_FRANCHISE_INDEX, $measured['marketed']);
         $streams->registerState(self::STATE_PROTECTED_SHARE, $protectedShare);
-        $streams->registerState(self::STATE_PROTECTED_FRANCHISE, $protectedFranchise);
-        $streams->registerState(self::STATE_LOE_EXPOSURE, $nextExposure);
+        $streams->registerState(self::STATE_LATE_STAGE_ASSETS, $assets);
         $streams->registerState(self::STATE_RND_REPLACEMENT_RATIO, $rndRatio);
-        $structuralMultiplier = max(self::MIN_FRANCHISE_INDEX, 1.0 + ($establishedWeight * ($franchise - 1.0)));
         $streams->registerState(self::STATE_STRUCTURAL_MULTIPLIER, $structuralMultiplier);
         $streams->registerState(
             self::STATE_KNOWN_COMMERCIAL_SHIFT,
-            $establishedWeight * $franchise * ($this->nextQuarterErosionFactor($clock, $elapsed, $nextExposure, $biologicShare) - 1.0) / $structuralMultiplier
+            $establishedWeight * ($next['marketed'] - $next['launched']) / $structuralMultiplier
         );
 
-        // What was expected of each stream, the known franchise and erosion included: only the draw is a surprise.
-        $establishedBase = max(1.0, $baseRevenue * $establishedWeight * $commercialMultiplier);
+        // What was expected of each stream, the known book included: only the draw is a surprise.
+        $establishedBase = max(1.0, $baseRevenue * $establishedWeight * $measured['marketed']);
         $pipelineBase    = max(1.0, $baseRevenue * $pipelineWeight);
         $establishedShock = ($establishedRevenue - $establishedBase) / $establishedBase;
         $pipelineShock    = ($pipelineRevenue - $pipelineBase) / $pipelineBase;
         $observableShockZ = ($establishedShock * $establishedWeight) + ($pipelineShock * $pipelineWeight);
 
-        // Standardize the discrete event's revenue impact into Z units of pipeline dispersion.
+        // Standardize the discrete event into Z units of pipeline dispersion. A readout moves the asset's expected
+        // peak revenue by its outcome less the odds already priced; an expiry is dated, so its erosion is no news.
         $eventZ = null;
         if ($eventType !== null) {
+            $assetNews = $readoutNews * $peakSize;
             $eventRevenueDelta = ($pipelineRevenue - $preEventPipelineRevenue)
-                + ($establishedRevenue - $preErosionEstablished);
+                + ($baseRevenue * $establishedWeight * $assetNews);
             $eventSigma = max(1.0, $expectedRevenue * $baselineVol * self::PIPELINE_VARIANCE_SCALAR);
             $eventZ = $eventRevenueDelta / $eventSigma;
         }
@@ -497,14 +763,20 @@ class BiotechBusinessModel extends StandardCorporateBusinessModel
     }
 
     /**
-     * R&D pays off through the pipeline only: the replacement ratio sets next quarter's pivotal readout hazard (a
-     * portfolio starved of research stops producing late-stage readouts) and nothing else. The shared margin
-     * drift would pay it twice, since approvals already step the franchise up and the exclusivity clock already
-     * erodes an unreplaced book.
+     * R&D pays off through the pipeline only: the reinvestment ratio sets next quarter's Phase III entries (a
+     * portfolio starved of research stops producing late-stage programmes) and nothing else. The shared margin
+     * drift would pay it twice, since launches already add to the book and expiries already erode an unreplaced one.
+     *
+     * The ratio is struck against depreciation, but a firm whose capital grows with its market spends
+     * (g + delta) / delta of it by perpetual inventory, and capital x turnover already turns that growth into revenue.
+     * Only spend above that trend refills the pipeline faster than the book needs.
      */
     public function applyAssetDepreciationDecay(Stock $stock, float $reinvestmentRatio, float $dt): void
     {
-        $this->persistState($stock, self::STATE_RND_REPLACEMENT_RATIO, max(0.0, $reinvestmentRatio));
+        $depreciationRate = (float) $stock->getDepreciationRate();
+        $trendRatio = $depreciationRate > 0.0 ? 1.0 + ($this->getSecularGrowthRate($stock) / $depreciationRate) : 1.0;
+
+        $this->persistState($stock, self::STATE_RND_REPLACEMENT_RATIO, max(0.0, $reinvestmentRatio) / $trendRatio);
     }
 
     /** Clinical-stage biotechs trade entirely on pipeline rNPV and cash runway, not on book. */
@@ -516,7 +788,7 @@ class BiotechBusinessModel extends StandardCorporateBusinessModel
 
     /**
      * Live share of revenue under patent or regulatory exclusivity, tracked by the physics loop and
-     * falling as scheduled losses of exclusivity erode the marketed franchise.
+     * falling as scheduled losses of exclusivity erode the marketed book.
      */
     private function resolveProtectedShare(Stock $stock): float
     {

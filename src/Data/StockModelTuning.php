@@ -587,6 +587,7 @@ class StockModelTuning
             ModelParam::LoeExposureShare->value            => 0.35, // Share of revenue exposed to the next cliff
             ModelParam::ExclusivityQuarters->value         => 26.0, // ~6.5 years until lead franchise LOE
             ModelParam::BiologicRevenueShare->value        => 0.55, // Biologics erode slowly under biosimilars
+            ModelParam::LateStageAssetCount->value         => 4.0,  // Value-weighted Phase III programmes: ~1.6 readouts and ~0.8 launches a year
         ],
 
         // --- Crane Medical Network (CRAN) ---
