@@ -275,7 +275,8 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
         $optimalEbit = $optimalEbt + $optimalInterestExpense + $optimalCreditProvision;
         $structuralAssetYield = $optimalEbit / max(1.0, $optimalEarningAssets);
 
-        $targetEbit = $earningAssets * $structuralAssetYield;
+        // The cash beside the book earns its own interest below the line, so the book need not.
+        $targetEbit = ($earningAssets * $structuralAssetYield) - $this->resolveTreasuryIncome($stock, $macroState);
 
         $coreLiabilities = $totalDebt;
         $minLendingEbit = $coreLiabilities * self::MIN_LENDING_EBIT_YIELD; // Floor is higher than banks due to high-yield credit card loans
@@ -307,14 +308,10 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
         return max(self::MIN_DEPOSIT_RATE, $policyRate * min(self::MAX_DEPOSIT_BETA_CLAMP, max(self::MIN_DEPOSIT_BETA_CLAMP, $systemDepositBeta + self::HIGH_YIELD_BETA_SPREAD)));
     }
 
-    public function calculateInterestIncome(Stock $stock, \App\DTO\MacroStateDTO $macroState, MathUtility $mathUtility, ?float $realizedWholesaleRate = null): float
+    /** The card book's interest is revenue (its gross yield), so only cash beyond the operating target earns here. */
+    protected function resolveTreasuryIncome(Stock $stock, \App\DTO\MacroStateDTO $macroState): float
     {
-        // Credit services generate their interest income from their unsecured loan book, but that is largely
-        // captured in Revenue (Gross Yield). We only return the supplemental interest from excess treasury
-        // cash to avoid double-counting.
-        $operatingBase = $this->getOperatingBase($stock);
-        // Credit services act like banks and use standard cash buffering
-        $excessCash = max(0.0, (float) $stock->getCorporateTreasury() - ($operatingBase * self::TARGET_CASH_OPERATING_MULT));
+        $excessCash = max(0.0, (float) $stock->getCorporateTreasury() - ($this->getOperatingBase($stock) * self::TARGET_CASH_OPERATING_MULT));
 
         return $excessCash * $this->calculateCashYield($macroState);
     }
@@ -329,8 +326,7 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
         $wholesaleRate = $wholesaleDebt > 0 ? ($wholesaleInterest / $wholesaleDebt) : $currentMarketFixedRate;
 
         // Credit services must offer highly competitive APYs on their high-yield savings accounts to attract funding
-        $depositRate = $this->resolveDepositRate($policyRate, $macroState !== null ? $macroState->systemDepositBetaEma : self::DEPOSIT_BETA_NORMALIZATION_BASELINE);
-        $depositInterest = $customerDeposits * $depositRate;
+        $depositInterest = $customerDeposits * $this->resolvePaidDepositRate($stock, $policyRate, $macroState);
 
         return new InterestExpenseDTO(interestExpense: $wholesaleInterest + $depositInterest, wholesaleRate: $wholesaleRate);
     }

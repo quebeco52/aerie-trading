@@ -212,6 +212,10 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
     public const DEPOSIT_BETA_NORMALIZATION_BASELINE = MacroEngine::SYSTEM_DEPOSIT_BETA_BASE;
     /** Floor on any deposit rate: banks always pay some yield. */
     public const MIN_DEPOSIT_RATE              = 0.001;
+    /** Years over which the rate paid on deposits adjusts to the policy rate: 0.75, which with the 0.46 long-run pass-through gives the US funding mix (deposits 78%, wholesale ~10% of assets) a four-quarter interest expense beta of 0.36 (Drechsler, Savov & Schnabl 2021). */
+    public const DEPOSIT_REPRICING_YEARS       = 0.75;
+    /** Persisted rate paid on the deposit base as it has repriced. */
+    public const STATE_DEPOSIT_RATE            = 'state:deposit_rate';
 
     // --- Rate-Risk Matching (Drechsler, Savov & Schnabl 2021: all US commercial banks, 1984-2017) ---
     /** Slope of banks' interest income betas on their interest expense betas: 0.768. A bank holds the asset repricing its deposit franchise hedges. */
@@ -365,8 +369,8 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
 
     /**
      * The gross yield on earning assets that earns this lender its structural return at a given macro state: the
-     * target EBIT plus the operating cost of the book, over the book. Used once, at the opening macro, to strike the
-     * franchise's loan spread and fee yield (resolveFranchisePricing()).
+     * target EBIT less the treasury income its cash earns, plus the operating cost of the book, over the book. Used
+     * once, at the opening macro, to strike the franchise's loan spread and fee yield (resolveFranchisePricing()).
      */
     protected function resolveCalibrationYield(Stock $stock, MacroStateDTO $macroState): float
     {
@@ -396,7 +400,11 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
         $optimalEbt = ($effectiveEquity * $targetRoe) / (1.0 - $taxRate);
         $optimalEbit = $optimalEbt + $optimalInterestExpense + $this->resolveThroughTheCycleCreditProvision($stock, $optimalEarningAssets);
 
-        $targetEbit = max($totalDebt * self::MIN_CORE_LENDING_YIELD, $earningAssets * $optimalEbit / max(1.0, $optimalEarningAssets));
+        // The cash beside the book earns its own interest below the line, so the book need not.
+        $targetEbit = max(
+            $totalDebt * self::MIN_CORE_LENDING_YIELD,
+            ($earningAssets * $optimalEbit / max(1.0, $optimalEarningAssets)) - $this->resolveTreasuryIncome($stock, $macroState)
+        );
         $targetRevenue = min(
             max(0.0, $targetEbit) + ($earningAssets * $this->resolveOperatingCostToEarningAssets($stock)),
             $earningAssets * self::MAX_GROSS_ASSET_YIELD
@@ -455,17 +463,15 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
     /**
      * The interest expense beta this lender's funding carries at a macro state, per unit of total assets, measured
      * as DSS measure it: the four-quarter change in interest expense per point of policy rate. Deposits reprice at
-     * the deposit rate as the system beta moves toward its new target; floating wholesale funding reprices in full and
-     * the fixed part as it rolls.
+     * the deposit rate's pass-through; floating wholesale funding reprices in full and the fixed part as it rolls.
      */
     public function resolveExpenseBeta(Stock $stock, MacroStateDTO $macroState): float
     {
         $point = 0.01;
         $policyRate = $macroState->policyRateEma;
         $systemBeta = $macroState->systemDepositBetaEma;
-        $repriced = 1.0 - exp(-static::BETA_HORIZON_YEARS / MacroEngine::DEPOSIT_REPRICING_YEARS);
-        $movedBeta = $systemBeta + ((MathUtility::calculateSystemDepositBetaTarget($policyRate + $point) - $systemBeta) * $repriced);
-        $depositChange = $this->resolveDepositRate($policyRate + $point, $movedBeta) - $this->resolveDepositRate($policyRate, $systemBeta);
+        $depositChange = ($this->resolveDepositRate($policyRate + $point, $systemBeta) - $this->resolveDepositRate($policyRate, $systemBeta))
+            * (1.0 - exp(-static::BETA_HORIZON_YEARS / self::DEPOSIT_REPRICING_YEARS));
 
         $floatingRatio = max(0.0, min(1.0, (float) $stock->getFloatingDebtRatio()));
         $rolled = 1.0 - ((1.0 - $this->getDebtMaturityRolloverRate()) ** (static::BETA_HORIZON_YEARS * FinancialConstants::QUARTERS_PER_YEAR));
@@ -623,6 +629,8 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
         foreach ($parts as $key => [$marketYield, $repricingYears]) {
             $streams->registerState($key, $mathUtility->calculateDistributedLag($streams->getPersistedState($key, $marketYield), $marketYield, $quarter, $repricingYears));
         }
+        $longRunDepositRate = $this->resolveDepositRate($macroState->policyRateEma, $macroState->systemDepositBetaEma);
+        $streams->registerState(self::STATE_DEPOSIT_RATE, $mathUtility->calculateDistributedLag($streams->getPersistedState(self::STATE_DEPOSIT_RATE, $longRunDepositRate), $longRunDepositRate, $quarter, self::DEPOSIT_REPRICING_YEARS));
         $streams->registerState(self::STATE_FLOATING_LOAN_SHARE, $pricing['floating_share']);
         $streams->registerState(self::STATE_LOAN_SPREAD, $pricing['loan_spread']);
         $streams->registerState(self::STATE_FEE_YIELD, $pricing['fee_yield']);
@@ -960,12 +968,17 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
      */
     public function calculateInterestIncome(Stock $stock, MacroStateDTO $macroState, MathUtility $mathUtility, ?float $realizedWholesaleRate = null): float
     {
-        $operatingBase = $this->getOperatingBase($stock);
-        $excessCash = max(0.0, (float) $stock->getCorporateTreasury() - ($operatingBase * self::INTEREST_INCOME_CASH_BUFFER));
-
         // Interest EARNED here is treasury income only: the spread on the loan book is already inside
         // net_interest_income on the revenue side, so the realized wholesale funding rate is deliberately
         // not read — reading it would price the same book twice.
+        return $this->resolveTreasuryIncome($stock, $macroState);
+    }
+
+    /** Annual money-market income on the cash held beyond the operating buffer. */
+    protected function resolveTreasuryIncome(Stock $stock, MacroStateDTO $macroState): float
+    {
+        $excessCash = max(0.0, (float) $stock->getCorporateTreasury() - ($this->getOperatingBase($stock) * self::INTEREST_INCOME_CASH_BUFFER));
+
         return $excessCash * $this->calculateCashYield($macroState);
     }
 
@@ -1008,6 +1021,20 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
         return max(self::MIN_DEPOSIT_RATE, $policyRate * min(self::MAX_DEPOSIT_BETA, $systemDepositBeta));
     }
 
+    /**
+     * The rate this lender pays on its deposits as they have repriced (advanceBookYields()), or its long-run rate at
+     * the policy rate for a book not yet carried forward.
+     */
+    protected function resolvePaidDepositRate(Stock $stock, float $policyRate, ?MacroStateDTO $macroState): float
+    {
+        $momentum = $stock->getEarningsMomentumZ() ?? [];
+        if (isset($momentum[self::STATE_DEPOSIT_RATE])) {
+            return (float) $momentum[self::STATE_DEPOSIT_RATE];
+        }
+
+        return $this->resolveDepositRate($policyRate, $macroState !== null ? $macroState->systemDepositBetaEma : self::DEPOSIT_BETA_NORMALIZATION_BASELINE);
+    }
+
     /** A deposit bank's own beta at the neutral rate: the system's (its pass-through is the rate cycle's). */
     public function calculateDepositBeta(float $totalDebt, float $equity, float $equityLimit, float $customerDeposits): float
     {
@@ -1037,10 +1064,9 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
         $wholesaleInterest = ($wholesaleDebt * (1.0 - $floatingRatio) * $blendedFixedRate) + ($wholesaleDebt * $floatingRatio * $floatingInterestRate);
         $wholesaleRate = $wholesaleDebt > 0 ? ($wholesaleInterest / $wholesaleDebt) : $currentMarketFixedRate;
 
-        // Deposits are cheap, but the bank must pay an APY to prevent capital flight, and how much of the
-        // policy rate the whole system passes through moves with the level of rates.
-        $depositRate = $this->resolveDepositRate($policyRate, $macroState !== null ? $macroState->systemDepositBetaEma : self::DEPOSIT_BETA_NORMALIZATION_BASELINE);
-        $depositInterest = $customerDeposits * $depositRate;
+        // Deposits are cheap, but the bank must pay an APY to prevent capital flight; it pays the rate its
+        // deposits have repriced to, which follows the policy rate with a lag.
+        $depositInterest = $customerDeposits * $this->resolvePaidDepositRate($stock, $policyRate, $macroState);
 
         return new InterestExpenseDTO(interestExpense: $wholesaleInterest + $depositInterest, wholesaleRate: $wholesaleRate);
     }
@@ -1076,7 +1102,7 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
 
         $policyRate = $macroState->policyRateEma;
 
-        $state['bank_apy'] = $this->resolveDepositRate($policyRate, $macroState->systemDepositBetaEma);
+        $state['bank_apy'] = $this->resolvePaidDepositRate($stock, $policyRate, $macroState);
 
         // Money demand has unit income elasticity (Lucas 2000), so the deposit base grows with trend nominal
         // income: realized inflation plus potential real growth. The rate channel is the migration into money

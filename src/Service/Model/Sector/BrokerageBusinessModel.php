@@ -297,8 +297,8 @@ class BrokerageBusinessModel extends BaseFinancialBusinessModel
         // Brokerages hold uninvested client deposit sweeps and earn NII spread over pass-through deposit rates.
         $operatingBase = $this->getOperatingBase($stock);
         $sweepBalances = max(0.0, $operatingBase * self::CLIENT_SWEEP_BASE_RATIO);
-        // Sweep pass-through is the brokerage's floor; when the whole system reprices deposits faster, clients get that.
-        $sweepBeta = max(self::SWEEP_DEPOSIT_BETA, $macroState->systemDepositBetaEma);
+        // A sweep pays its own beta, well below the banking system's: the sweep is where the broker keeps the spread.
+        $sweepBeta = self::SWEEP_DEPOSIT_BETA;
         $clientDepositRate = $policyRate > self::SWEEP_RATE_BUFFER
             ? ($policyRate - self::SWEEP_RATE_BUFFER) * $sweepBeta
             : 0.001;
@@ -377,7 +377,6 @@ class BrokerageBusinessModel extends BaseFinancialBusinessModel
             'output_gap_ema',
             'policy_rate_ema',
             'stamp_duty_rate',
-            'system_deposit_beta_ema',
             'yield_5y_ema',
         ];
     }

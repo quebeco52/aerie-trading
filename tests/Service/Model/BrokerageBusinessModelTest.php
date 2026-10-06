@@ -240,8 +240,8 @@ class BrokerageBusinessModelTest extends TestCase
     }
 
 
-    /** The sweep beta is a floor: when the system passes more through, clients get the system rate. */
-    public function testClientSweepPassThroughFollowsTheSystemDepositBetaAboveItsFloor(): void
+    /** A sweep pays its own beta, not the banking system's: the system's deposit pass-through does not reach the broker's spread. */
+    public function testClientSweepPaysItsOwnBetaWhateverTheSystemPassesThrough(): void
     {
         $stock = new Stock();
         $stock->setWholesaleDebt('10000000');
@@ -252,10 +252,10 @@ class BrokerageBusinessModelTest extends TestCase
         $lowBeta = MacroStateDTO::fromArray(['policy_rate_ema' => 0.05, 'corporate_tax_rate' => 0.21, 'system_deposit_beta_ema' => 0.10]);
         $highBeta = MacroStateDTO::fromArray(['policy_rate_ema' => 0.05, 'corporate_tax_rate' => 0.21, 'system_deposit_beta_ema' => 0.40]);
 
-        $this->assertGreaterThan(
-            $this->model->calculateInterestIncome($stock, $highBeta, $this->mathUtility),
+        $this->assertEqualsWithDelta(
             $this->model->calculateInterestIncome($stock, $lowBeta, $this->mathUtility),
-            'A system beta above the sweep floor costs the brokerage sweep spread.'
+            $this->model->calculateInterestIncome($stock, $highBeta, $this->mathUtility),
+            1e-6
         );
     }
 
