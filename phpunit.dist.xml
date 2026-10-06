@@ -44,6 +44,21 @@
             <directory>tests/Support</directory>
             <directory>tests/Repository</directory>
             <directory>tests/Controller</directory>
+            <!-- Owned by the Realism suite. -->
+            <exclude>tests/Service/Politics/PoliticsEngineTest.php</exclude>
+            <exclude>tests/Service/Politics/OpinionPollsTest.php</exclude>
+            <exclude>tests/Service/Politics/ElectionForecastTest.php</exclude>
+            <exclude>tests/Service/Macro/BusinessCycleRealismTest.php</exclude>
+            <exclude>tests/Service/Macro/YieldCurveRealismTest.php</exclude>
+        </testsuite>
+
+        <!-- Realism: multi-seed long-run runs, 10-60 s each. The full bin/verify runs them one process per file. -->
+        <testsuite name="Realism">
+            <file>tests/Service/Politics/PoliticsEngineTest.php</file>
+            <file>tests/Service/Politics/OpinionPollsTest.php</file>
+            <file>tests/Service/Politics/ElectionForecastTest.php</file>
+            <file>tests/Service/Macro/BusinessCycleRealismTest.php</file>
+            <file>tests/Service/Macro/YieldCurveRealismTest.php</file>
         </testsuite>
 
         <!-- Unit: no I/O, no kernel, no database. Pure collaborator-free logic. -->

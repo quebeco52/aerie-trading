@@ -31,8 +31,18 @@ measurement where you can. The user can override anything, but you must point ou
   measured trend, not the baseline.
 
 ## Evidence
-A claim about simulation behaviour needs a number. Compare arms on the same seeds and report n, mean and standard
-error: 16 seeds minimum for a mean, 48 for a variance. One seed proves nothing.
+A claim about simulation behaviour needs a number, sized to the claim. Harness runs are the slowest part of a change;
+spend them where the answer is emergent.
+- **A cited constant, or a fix that restores an identity or a formula:** a unit test that pins it. No harness; the
+  source and the test are the evidence.
+- **A display or news rule** (a threshold, how often something shows to the player): one run of 3 seeds, to check
+  the rate is sane.
+- **Tuning toward a measured moment, or a claim that a change moves one:** paired arms on the same seeds, reporting n,
+  mean and standard error: 16 seeds for a mean, 48 for a variance. Iterate on 3-4 seeds and run the full count once,
+  on the final version. Reuse a cached baseline arm when `src/` is unchanged.
+- **What the live game is doing:** `make macro-dump` first; a harness only for the counterfactual.
+
+One seed proves nothing about a moment. All PHP processes on the machine share 8 slots through `bin/php-slot`.
 
 ## Research
 Pin numbers, don't survey a literature. One sovereign-fund question once fanned out to seven agents and ~575 web and shell calls, and used up a whole session.
@@ -63,8 +73,10 @@ in the commit message, not the code.
 - Suite membership is explicit in `phpunit.dist.xml`; a test in an unlisted directory never runs.
 - Stochastic behaviour: invariant or distribution tests in `tests/Financial/`, not exact values. Break the guarded
   term by hand once to confirm the test fails.
-- `make test-unit` (~0.2 s), `make test` (Fast suite, ~3 min), `make phpstan FILE=<path>`. Without Docker:
-  `bin/verify` (PHPStan on changed files plus quick tests, ~20 s), `bin/verify --full` before committing.
+- `make test-unit` (~0.2 s), `make test` (Fast suite, ~1 min), `make test-realism` (five multi-seed long-run tests,
+  ~3 min serial), `make phpstan FILE=<path>`. Without Docker: `bin/verify` (PHPStan on changed files plus quick
+  tests, ~20 s), `bin/verify --full` (both suites side by side, ~1 min on an idle machine) before committing.
+- A realism test that runs over ~5 s belongs in the Realism suite in `phpunit.dist.xml`, not Fast.
 - Never create a file named `phpunit.tmp.xml`; it is tracked.
 
 ## Database

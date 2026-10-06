@@ -91,7 +91,9 @@ Sector models compose the `Standard*Trait` defaults and override only where the 
 - Pricing power goes only through `resolvePricingPower()`.
 - dt-neutrality tests on emergent quantities have no power; test each primitive.
 
-**Verify numerically, not rhetorically.** A claim about model behavior needs a number behind it. Write a throwaway harness in the scratchpad and run it.
+**Verify numerically, not rhetorically.** A claim about model behavior needs a number behind it, sized to the claim
+(the Evidence tiers in AGENTS.md): a cited constant or an identity fix needs a unit test, not a harness. For an
+emergent behaviour, write a throwaway harness in the scratchpad and run it as `bin/php-slot php ...`.
 
 ## Running things (Docker is unavailable in this sandbox)
 
@@ -99,7 +101,7 @@ Sector models compose the `Standard*Trait` defaults and override only where the 
 
 ```
 bin/verify            # PHPStan on changed files + every test file under 1 s, plus the slow ones for changed classes (~20 s)
-bin/verify --full     # PHPStan + the whole Fast suite (~3 min; Controller tests need MySQL and are left out)
+bin/verify --full     # PHPStan + Fast suite + Realism files side by side (~1 min; Controller tests need MySQL, left out)
 bin/verify --phpstan  # PHPStan on the changed files only
 php vendor/bin/phpunit tests/Path/To/OneTest.php   # a single file (stops at its first defect)
 ```
@@ -125,7 +127,8 @@ change needs, stop when each has one citable source, and stay within ~20 web cal
 1. `bin/verify` while working; `bin/verify --full` before you report.
 2. A test for any new model or mechanism, in a directory listed in `phpunit.dist.xml`. Stochastic behaviour gets an
    invariant test in `tests/Financial/`; break the guarded term by hand once to confirm it fails.
-3. Report the before/after mean and standard error for the quantity you changed, same seeds.
+3. If you tuned toward a moment, report its before/after mean and standard error on the same seeds, run once on the
+   final version. A cited constant or a bug fix reports the test that pins it instead.
 4. Offer long checks (mutation runs, long sweeps) rather than running them before you report.
 
 ## Realism recommendations

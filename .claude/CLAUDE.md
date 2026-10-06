@@ -11,4 +11,6 @@
 - For macro state over time, ask the user to run `! make macro-dump [YEARS=20]`, then read `var/macro-gap-history.jsonl`.
 - Multi-seed runs and sweeps go to `harness-runner`; model review and calibration to `financial-model-architect`.
 - Hooks block writes under migrations/ and run PHPStan on changed files at Stop. Fix what they report.
-- At most 8 PHP processes at once; the session has been killed at 16.
+- At most 8 PHP processes on the whole machine, across every session and worktree; one was killed at 16 and three
+  parallel sessions once ran 25. Launch every harness and long PHP run as `bin/php-slot php ...`: it waits for one of
+  8 shared slots. `bin/php-slot --status` shows how many are taken.
