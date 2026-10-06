@@ -75,8 +75,8 @@ final class AerieDiet
     ];
     /** Each party's home, where it stood at the founding and is pulled back toward between elections; openness and the Council axis run together as they do in Western Europe (Chapel Hill 2014-2024: corr +0.84), so the Chartists stand open and the Common Lot, the Harbor and the Accord lean populist. On the environment each party stands where its other three places put it in Western Europe (Chapel Hill 2014-2024, 378 parties against their country's mean: environment = 0.694 state + 0.355 openness - 0.075 Council, R-squared 0.67). */
     public const HOME_POSITIONS = [
-        self::CIVIC => [self::AXIS_STATE => 0.6, self::AXIS_OPENNESS => -0.1, self::AXIS_COUNCIL => -0.1, self::AXIS_ENVIRONMENT => 0.34],
-        self::VANGUARD => [self::AXIS_STATE => -0.6, self::AXIS_OPENNESS => 0.0, self::AXIS_COUNCIL => 0.3, self::AXIS_ENVIRONMENT => -0.48],
+        self::CIVIC => [self::AXIS_STATE => 0.7, self::AXIS_OPENNESS => -0.1, self::AXIS_COUNCIL => -0.1, self::AXIS_ENVIRONMENT => 0.34],
+        self::VANGUARD => [self::AXIS_STATE => -0.7, self::AXIS_OPENNESS => 0.1, self::AXIS_COUNCIL => 0.3, self::AXIS_ENVIRONMENT => -0.48],
         self::IRON_HARBOR => [self::AXIS_STATE => 0.1, self::AXIS_OPENNESS => -0.8, self::AXIS_COUNCIL => -0.4, self::AXIS_ENVIRONMENT => -0.23],
         self::EXCHANGE => [self::AXIS_STATE => -0.1, self::AXIS_OPENNESS => 0.8, self::AXIS_COUNCIL => 0.4, self::AXIS_ENVIRONMENT => -0.02],
         self::CHARTISTS => [self::AXIS_STATE => -0.4, self::AXIS_OPENNESS => 0.6, self::AXIS_COUNCIL => 0.8, self::AXIS_ENVIRONMENT => -0.2],

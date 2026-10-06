@@ -522,6 +522,7 @@ class GovernmentPageBuilder
                 'supporting' => in_array($party, $support, true),
                 'fixedAxes' => array_keys(AerieDiet::FIXED_POSITIONS[$party]),
                 'leadsBloc' => $blocs[$party] === $party,
+                'blocKey' => $blocs[$party],
                 'bloc' => self::PARTY_LABELS[$blocs[$party]],
                 'blocColor' => self::PARTY_COLORS[$blocs[$party]],
                 'partyLeader' => self::leader($politics, $party),
@@ -793,7 +794,7 @@ class GovernmentPageBuilder
     }
 
     /**
-     * The seats of the chamber drawing, filled with the parties from the largest state on the left to the smallest.
+     * The seats of the chamber drawing, bloc by bloc, each running from the party wanting the largest state to the smallest.
      *
      * Rows hold seats in proportion to their radius so the spacing is even, and seats are dealt out by angle so each
      * party takes a wedge.
@@ -827,8 +828,22 @@ class GovernmentPageBuilder
         }
         usort($slots, static fn(array $a, array $b): int => [$b['angle'], $a['radius']] <=> [$a['angle'], $b['radius']]);
 
+        // Each bloc sits together, the one wanting the larger state on the left; within a bloc, the larger state leftmost.
+        $blocState = [];
+        foreach ($parties as $party) {
+            $blocState[$party['blocKey']][] = [$seats[$party['key']], $party['state']];
+        }
+        $blocState = array_map(static function (array $members): float {
+            $weight = array_sum(array_column($members, 0));
+
+            return $weight > 0
+                ? array_sum(array_map(static fn(array $member): float => $member[0] * $member[1], $members)) / $weight
+                : array_sum(array_column($members, 1)) / count($members);
+        }, $blocState);
+
         $order = $parties;
-        usort($order, static fn(array $a, array $b): int => $b['state'] <=> $a['state']);
+        usort($order, static fn(array $a, array $b): int => [$blocState[$b['blocKey']], $a['blocKey'], $b['state']]
+            <=> [$blocState[$a['blocKey']], $b['blocKey'], $a['state']]);
 
         $drawn = [];
         $slot = 0;

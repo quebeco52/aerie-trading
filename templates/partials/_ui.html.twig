@@ -12,3 +12,9 @@
 		<span class="block absolute {{ arrowVerticalClass }} {{ arrowPosition }} w-2.5 h-2.5 bg-surface-container-high border-outline-variant/40 transform rotate-45"></span>
 	</span>
 {% endmacro %}
+
+{# A count of days with its noun, at least one: talks settled within a day took office on its first. #}
+{% macro days(count) -%}
+	{%- set whole = max(1, count|round) -%}
+	{{- whole|number_format(0) }} {{ whole == 1 ? 'day' : 'days' -}}
+{%- endmacro %}

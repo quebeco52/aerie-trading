@@ -9,6 +9,8 @@
 	<meta property="og:type" content="website">
 {% endblock %}
 
+{% import 'partials/_ui.html.twig' as ui %}
+
 {% block body %}
 	<div class="max-w-400 mx-auto px-4 sm:px-6 lg:px-8 py-5 w-full space-y-5" id="governmentPage">
 
@@ -82,7 +84,7 @@
 							{% if talks.underWay %}
 								Day {{ talks.day|number_format(0) }}{{ talks.afterFall ? ' since the cabinet fell on ' ~ talks.startedOn : '' }}. The {{ talks.afterFall ? 'cabinet that fell' : 'outgoing cabinet' }} stays on as caretaker and passes no budget until a new government takes office{{ talks.afterFall ? '; no election is called' : '' }}.
 							{% else %}
-								A government took office after {{ talks.day|number_format(0) }} days and {{ talks.attempts }} {{ talks.attempts == 1 ? 'attempt' : 'attempts' }}.
+								A government took office after {{ ui.days(talks.day) }} and {{ talks.attempts }} {{ talks.attempts == 1 ? 'attempt' : 'attempts' }}.
 							{% endif %}
 						</p>
 					</div>
@@ -117,7 +119,7 @@
 		<div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
 			<section class="bg-surface-container-low rounded-lg p-5 border border-outline-variant/20" aria-labelledby="diet-heading">
 				<h2 id="diet-heading" class="text-sm font-semibold text-on-surface">The Diet</h2>
-				<p class="text-2xs text-on-surface-variant mt-0.5">{{ rules.seats }} seats, from the largest state on the left to the smallest on the right. The cabinet's seats are solid, its supporters' half-filled.
+				<p class="text-2xs text-on-surface-variant mt-0.5">{{ rules.seats }} seats, grouped by bloc. Within each bloc, the parties that want the largest state sit on the left. The cabinet's seats are solid, its supporters' half-filled.
 					The blocs: {% for bloc in rules.blocSeats %}<span class="inline-block w-1.5 h-1.5 rounded-full mx-0.5 align-middle" style="background-color: {{ bloc.color }}" aria-hidden="true"></span>{{ bloc.name }}'s {{ bloc.seats }}{{ not loop.last ? ', ' : '.' }}{% endfor %}</p>
 
 				<svg viewBox="-108 -106 216 114" class="w-full mt-4 max-h-72" role="img" aria-label="Diet seats by party: {% for party in parties %}{{ party.name }} {{ party.seats }}{{ not loop.last ? ', ' : '' }}{% endfor %}">
@@ -690,7 +692,7 @@
 												<span class="block text-2xs text-on-surface-variant">Supported by {% for member in row.support %}{{ member.name }}{{ not loop.last ? ', ' : '' }}{% endfor %}</span>
 											{% endif %}
 											<span class="block text-2xs font-mono tabular-nums text-on-surface-variant">
-												{%- if row.attempts == 0 %}A majority of its own{% else %}{{ row.formationDays|number_format(0) }} days, {{ row.attempts }} {{ row.attempts == 1 ? 'attempt' : 'attempts' }}{% endif -%}
+												{%- if row.attempts == 0 %}A majority of its own{% else %}{{ ui.days(row.formationDays) }}, {{ row.attempts }} {{ row.attempts == 1 ? 'attempt' : 'attempts' }}{% endif -%}
 											</span>
 											{% if row.changed %}<span class="text-xs font-medium text-primary">New government</span>{% endif %}
 											{% for fall in row.falls %}
@@ -707,7 +709,7 @@
 														{% if fall.support is not empty %}
 															<span class="block text-2xs text-on-surface-variant">Supported by {% for member in fall.support %}{{ member.name }}{{ not loop.last ? ', ' : '' }}{% endfor %}</span>
 														{% endif %}
-														<span class="block text-2xs font-mono tabular-nums text-on-surface-variant">{{ fall.formationDays|number_format(0) }} days, {{ fall.attempts }} {{ fall.attempts == 1 ? 'attempt' : 'attempts' }}</span>
+														<span class="block text-2xs font-mono tabular-nums text-on-surface-variant">{{ ui.days(fall.formationDays) }}, {{ fall.attempts }} {{ fall.attempts == 1 ? 'attempt' : 'attempts' }}</span>
 													{% endif %}
 												</span>
 											{% endfor %}
@@ -743,7 +745,7 @@
 					heading: 'Forming a government',
 					items: [
 						{name: 'Majority', text: 'A party that wins ' ~ rules.majority ~ ' seats governs alone. Otherwise the parties negotiate, and the outgoing cabinet stays on as caretaker, passing no budget, until a new one takes office.'},
-						{name: 'Two blocs', text: 'Before each election the parties declare for one of two blocs, each led by its largest party, today ' ~ rules.blocLeaders|join(' and ') ~ '. The two leaders compete for the premiership and will not govern together.'},
+						{name: 'Two blocs', text: 'Before each election the parties declare for one of two blocs, each led by its largest party going into the vote, today ' ~ rules.blocLeaders|join(' and ') ~ '. The two leaders compete for the premiership and will not govern together.'},
 						{name: 'Minority government', text: 'Most governments hold fewer than ' ~ rules.majority ~ ' seats and rely on support parties that vote for their budgets without joining the cabinet.'},
 						{name: 'The Council question', text: 'Parties at either end of the argument over the Council rarely join a cabinet; they back one from outside instead.'},
 						{name: 'Falls', text: 'A cabinet can fall between elections when a partner walks out or its supporters withdraw. The parties then negotiate a new government in the same Diet.'}

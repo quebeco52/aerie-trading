@@ -71,6 +71,34 @@ class GovernmentPageBuilderTest extends TestCase
         $this->assertContains($rightmost['color'], [GovernmentPageBuilder::PARTY_COLORS[Diet::VANGUARD]]);
     }
 
+    /**
+     * Each bloc sits together even when it spans the size-of-state axis: with the Vanguard in the Civic Front's bloc,
+     * a chamber sorted on that axis alone would wrap the bloc around the other one.
+     */
+    public function testEachBlocSitsTogether(): void
+    {
+        $blocs = Diet::SEED_BLOCS;
+        $blocs[Diet::VANGUARD] = Diet::CIVIC;
+        $blocs[Diet::EXCHANGE] = Diet::EXCHANGE;
+        $blocs[Diet::CHARTISTS] = Diet::EXCHANGE;
+        $blocs[Diet::NEW_HORIZON] = Diet::EXCHANGE;
+        $page = $this->builder()->build(new MacroStateDTO(), new PoliticsStateDTO(dietBlocs: $blocs));
+
+        $blocOf = [];
+        foreach ($page['parties'] as $party) {
+            $blocOf[$party['color']] = $party['blocKey'];
+        }
+        $seats = $page['hemicycle'];
+        usort($seats, static fn(array $a, array $b): int => atan2($b['y'], $b['x']) <=> atan2($a['y'], $a['x']));
+        $runs = 1;
+        for ($i = 1, $n = count($seats); $i < $n; ++$i) {
+            $runs += $blocOf[$seats[$i]['color']] !== $blocOf[$seats[$i - 1]['color']] ? 1 : 0;
+        }
+
+        $this->assertSame(2, $runs, 'Each bloc is one wedge of the chamber.');
+        $this->assertSame(GovernmentPageBuilder::PARTY_COLORS[Diet::CIVIC], $seats[0]['color'], 'The bigger-state bloc sits on the left, its biggest-state party leftmost.');
+    }
+
     /** The history runs newest first, marks a change of government, and each vote leaves a point on every party's trail. */
     public function testTheHistoryRunsNewestFirst(): void
     {
