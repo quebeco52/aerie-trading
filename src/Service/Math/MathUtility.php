@@ -967,6 +967,26 @@ class MathUtility
     }
 
     /**
+     * One step of a staggered lease roll: the slice of the rent roll expiring over dt (dt / WALT) reprices to
+     * market, the rest stays contracted. The mark-to-market gap is bounded, past which tenants renegotiate or
+     * hand back space.
+     *
+     * @param float $inPlaceRent   In-place rent level, as a deviation from the trend rent.
+     * @param float $marketRent    Market rent on the same scale.
+     * @param float $waltYears     Weighted average lease term of the roll.
+     * @param float $maxSpread     Bound on |market - in-place|.
+     * @param float $dt            Step in years.
+     * @return array{0: float, 1: float} Rolled in-place rent, re-leasing spread.
+     */
+    public static function rollLeaseLadder(float $inPlaceRent, float $marketRent, float $waltYears, float $maxSpread, float $dt): array
+    {
+        $releasingSpread = max(-$maxSpread, min($maxSpread, $marketRent - $inPlaceRent));
+        $rollover = $dt / max($dt, $waltYears);
+
+        return [$inPlaceRent + ($releasingSpread * $rollover), $releasingSpread];
+    }
+
+    /**
      * A leverage (debt-to-equity) limit with a capital buffer added to the equity it implies.
      *
      * A debt-to-equity cap L is a minimum equity share of assets 1/(1+L). Basel III's countercyclical buffer

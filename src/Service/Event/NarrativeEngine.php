@@ -136,6 +136,11 @@ class NarrativeEngine
                 "Major commercial portfolio defaults required emergency lease restructurings.",
                 "Elevated tenant delinquencies and bad debt provisions weighed on quarterly NOI."
             ]),
+            ShockEvent::GAMING_CRACKDOWN => $this->getRandomPhrase([
+                "Gaming regulators restricted high-limit play and the agents who bring in premium players.",
+                "New licence conditions closed private salons and capped credit to premium players.",
+                "Tighter gaming rules cut table play from premium visitors for the foreseeable future."
+            ]),
             ShockEvent::REIT_ELEVATED_VACANCIES => $this->getRandomPhrase([
                 "Elevated commercial vacancies and unpaid rent impacted quarterly NOI.",
                 "Leasing velocity slowed as corporate occupiers downsized square footage.",
