@@ -140,14 +140,6 @@ class MonetaryPolicySubsystem
     public const SOVEREIGN_DEBT_YIELD_SENSITIVITY = 0.01;
 
     // --- Deposits Channel (Drechsler, Savov & Schnabl 2017) ---
-    /** Deposit beta at the effective lower bound: banks pass almost nothing through when there is nothing to pass. */
-    public const DEPOSIT_BETA_FLOOR = 0.05;
-    /** Deposit beta per unit of policy rate, rising with the level as DSS document: the line is anchored so the base beta is paid at the neutral nominal rate, which puts it near 0.30 at 5.25% (the cumulative betas of the 2022-23 cycle) and at the floor below 1%. */
-    public const DEPOSIT_BETA_RATE_SENSITIVITY = 6.0;
-    /** Ceiling on the system deposit beta; even in the 1980s banks kept a third of the rate. */
-    public const MAX_SYSTEM_DEPOSIT_BETA = 0.60;
-    /** Time constant (years) of deposit repricing: banks lag the policy rate by about three quarters. */
-    public const DEPOSIT_REPRICING_YEARS = 0.75;
     /** Money-market share per unit of deposit spread beyond the neutral spread (the neutral rate less the base beta's share of it): the 2022-23 cycle moved ~5 points of share on ~100 bps of extra spread. */
     public const MMF_SPREAD_SENSITIVITY = 5.0;
     /** Time constant (years) of household migration between deposits and money funds: a slow reallocation, not a run. */
@@ -820,14 +812,11 @@ class MonetaryPolicySubsystem
         $policyRate = max(0.0, $state->policyRateEma);
         $neutralRate = MacroEngine::BASE_NATURAL_RATE + MacroEngine::TARGET_INFLATION;
 
-        // Drechsler, Savov & Schnabl (2017) imperfect deposit beta pass-through across rate cycles.
-        $targetBeta = MacroEngine::SYSTEM_DEPOSIT_BETA_BASE + (self::DEPOSIT_BETA_RATE_SENSITIVITY * ($policyRate - $neutralRate));
-        $targetBeta = max(self::DEPOSIT_BETA_FLOOR, min(self::MAX_SYSTEM_DEPOSIT_BETA, $targetBeta));
         $state->systemDepositBeta = $this->mathUtility->calculateDistributedLag(
             currentLaggedValue: $state->systemDepositBeta,
-            targetValue: $targetBeta,
+            targetValue: MathUtility::calculateSystemDepositBetaTarget($policyRate),
             dt: $dt,
-            lagTimeConstant: self::DEPOSIT_REPRICING_YEARS
+            lagTimeConstant: MacroEngine::DEPOSIT_REPRICING_YEARS
         );
 
         $depositSpread = $policyRate * (1.0 - $state->systemDepositBeta);

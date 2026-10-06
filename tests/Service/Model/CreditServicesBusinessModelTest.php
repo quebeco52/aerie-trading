@@ -207,34 +207,23 @@ class CreditServicesBusinessModelTest extends TestCase
         );
     }
 
-    public function testInterbankLiquidityFreezeSqueezesCreditServicesNim(): void
+    /**
+     * A card book is indexed to prime, which follows the policy rate: an interbank freeze lifts a LIBOR-indexed
+     * business loan's yield but not a card's, so it reaches the issuer as dearer wholesale funding alone.
+     */
+    public function testACardBookIsIndexedToPrimeNotToInterbankFunding(): void
     {
-        $stock = new Stock();
-        $stock->setTicker('COF');
-        $stock->setBeta('1.0');
+        $stock = (new Stock())->setTicker('COF');
+        $stock->setTotalEquity('120000000000');
+        $stock->setCustomerDeposits('850000000000');
+        $stock->setWholesaleDebt('48000000000');
+        $stock->setCorporateTreasury('90000000000');
+        $calm = new MacroStateDTO(interbankLiquiditySpreadEma: 0.0010);
+        $freeze = new MacroStateDTO(interbankLiquiditySpreadEma: 0.0150);
 
-        $calmMacro = new MacroStateDTO(
-            yield10yEma: 0.05,
-            yield2yEma: 0.04,
-            interbankLiquiditySpreadEma: 0.0010
-        );
+        $this->assertEqualsWithDelta($this->model->resolveInterestYield($stock, $calm), $this->model->resolveInterestYield($stock, $freeze), 1e-12);
 
-        $freezeMacro = new MacroStateDTO(
-            yield10yEma: 0.05,
-            yield2yEma: 0.04,
-            interbankLiquiditySpreadEma: 0.0150 // 150 bps blowout
-        );
-
-        $mathMock = $this->createStub(MathUtility::class);
-        $mathMock->method('generatePersistentZ')->willReturn(0.0);
-
-        $calmResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.55, 20_000_000.0, 0.0, $calmMacro, $mathMock);
-        $freezeResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.55, 20_000_000.0, 0.0, $freezeMacro, $mathMock);
-
-        $this->assertGreaterThan(
-            $calmResult->clampedMargin,
-            $freezeResult->clampedMargin,
-            'Interbank liquidity freeze must compress lending spreads and inflate variable funding costs.'
-        );
+        $bank = new \App\Service\Model\Sector\CommercialBankBusinessModel();
+        $this->assertGreaterThan($bank->resolveInterestYield($stock, $calm), $bank->resolveInterestYield($stock, $freeze), 'a LIBOR-indexed loan reprices with the interbank spread');
     }
 }

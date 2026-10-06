@@ -391,6 +391,7 @@ class ShadowBankBusinessModel extends CommercialBankBusinessModel
             'residential_property_index_ema',
             'retail_default_rate_ema',
             'sloos_tightening_index_ema',
+            'system_deposit_beta_ema',
             'yield_30y_ema',
         ];
     }

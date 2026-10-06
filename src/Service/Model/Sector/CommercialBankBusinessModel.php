@@ -91,10 +91,8 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
     public function getCapExCompletionRate(Stock $stock): float { return self::THRESHOLD_CAPEX_COMPLETION_RATE; }
 
 
-    // --- Dual-Stream Banking Architecture ---
-    /** Baseline fraction of bank revenue derived from Net Interest Income (NII). */
-    public const NII_REVENUE_WEIGHT      = 0.75;
-    /** Baseline fraction of bank revenue derived from Non-Interest / Fee Income (Custodial, Wealth, Payments). */
+    // --- Non-Interest Revenue Mix ---
+    /** Fee income's weight in the non-interest revenue (custodial, wealth, payments); the lore may add captive stake dividends beside it. */
     public const FEE_REVENUE_WEIGHT      = 0.25;
 
     // --- Revenue & Shock Physics ---
@@ -161,19 +159,35 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
     /** Sensitivity of commercial bank core deposit expansion and lending capacity to M2 broad money growth. */
     public const M2_DEPOSIT_GROWTH_SENSITIVITY = 0.40;
 
-    // --- Macaulay Duration Gap & IRRBB NIM Physics ---
-    /** Weighted average Macaulay duration of bank loan and mortgage assets in years. */
+    // --- Securities Mark ---
+    /** Weighted average Macaulay duration of the securities the bank marks through equity, in years. */
     public const ASSET_DURATION_YEARS          = 4.5;
+    /** Share of the floating-rate funding mix that offsets the securities' duration when they are marked. */
+    public const FLOATING_HEDGE_EFFICIENCY     = 0.50;
     /** Years of expected loss the CECL allowance covers. At the through-the-cycle loss rate (~0.9% of loans) this puts the reserve near 1.8% of loans, where large US banks have run since CECL adoption. */
     public const CECL_LIFETIME_HORIZON_YEARS   = 2.0;
-    /** Weighted average Macaulay duration of customer deposit and wholesale liabilities in years. */
-    public const LIABILITY_DURATION_YEARS      = 1.5;
-    /** Floating-rate asset/liability natural hedge effectiveness dampening duration mismatch exposure. */
-    public const FLOATING_HEDGE_EFFICIENCY     = 0.50;
-    /** Break-even NIM floor (~50bps): the neutral 2s10s slope (~70bps) less the interbank spread the funding side pays. Steeper = profit; flat or inverted = squeeze. */
-    public const NIM_BASE_SPREAD_BUFFER        = 0.005;
-    /** Calibrated baseline sensitivity for NIM duration gap exposure before company-specific ALM adjustments. */
-    public const NIM_INVERSION_SENSITIVITY     = 10.0;
+
+    // --- Asset Repricing (Drechsler, Savov & Schnabl 2021, Table A.2: US commercial banks 1997-2017, aggregate) ---
+    /** Repricing maturity of residential loans: 9.5 years. The residential book reprices off the curve at this tenor. */
+    public const RESIDENTIAL_REPRICING_YEARS   = 9.5;
+    /** Repricing maturity of all other loans: 2.4 years, floating and fixed together. */
+    public const OTHER_LOAN_REPRICING_YEARS    = 2.4;
+    /** Repricing maturity of the securities portfolio: 8.4 years, most of it mortgage-linked. */
+    public const SECURITIES_REPRICING_YEARS    = 8.4;
+    /** Share of the system's non-residential loans at floating rates: about half ($3.5T floating against ~$6T of non-residential loans at end-2014; Kirti 2017, IMF WP/17/3). Fixes the fixed part's repricing maturity. */
+    public const FLOATING_RATE_LOAN_SHARE      = 0.50;
+    /** Average time to a floating-rate loan's next reset: half a quarter, between monthly and quarterly index resets. */
+    public const FLOATING_RESET_YEARS          = 0.125;
+    /** Persisted yield on the residential book (loan spread included). */
+    public const STATE_BOOK_YIELD_RESIDENTIAL  = 'state:book_yield_residential';
+    /** Persisted yield on the fixed-rate part of the other loans (loan spread included). */
+    public const STATE_BOOK_YIELD_FIXED        = 'state:book_yield_fixed';
+    /** Persisted yield on the securities portfolio. */
+    public const STATE_BOOK_YIELD_SECURITIES   = 'state:book_yield_securities';
+    /** Persisted loan pricing spread over the market rate each loan reprices at, struck once. */
+    public const STATE_LOAN_SPREAD             = 'state:loan_pricing_spread';
+    /** Persisted non-interest (fee) revenue per unit of earning assets, struck once. */
+    public const STATE_FEE_YIELD               = 'state:fee_yield';
 
     // --- Operating Cost Base ---
     /** Annual noninterest expense per unit of earning assets: 2.85%, US insured institutions in 2019 (2.58% of assets, earning assets 90.5% of assets; FDIC Quarterly Banking Profile, Table III-A). */
@@ -185,25 +199,35 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
     /** Baseline error rate for analyst estimates. */
     public const BASE_COVERAGE_ERROR = 0.06;
 
-    // --- Model Specific Constants ---
-    /** Hard ceiling on gross asset yield: prevents hyperinflated loan yields during margin compression. */
+    // --- Franchise Calibration ---
+    /** Hard ceiling on the gross asset yield the franchise is calibrated to. */
     public const MAX_GROSS_ASSET_YIELD  = 0.40;
-    /** EBIT floor as a fraction of core liabilities: ensures the bank never shuts down its loan book. */
+    /** EBIT floor as a fraction of core liabilities in the franchise calibration. */
     public const MIN_CORE_LENDING_YIELD = 0.015;
 
-    // --- Deposit Beta: exp(-decayRate * utilization) model ---
-    /** Maximum beta offered at zero utilization — how much of the policy rate the bank passes to depositors. */
-    public const DEPOSIT_BETA_AMPLITUDE        = 0.80;
-    /** Base exponential decay rate: erodes the beta as the bank approaches its regulatory leverage limit. */
-    public const DEPOSIT_BETA_BASE_DECAY       = 0.50;
-    /** Accelerating decay when the bank is heavily deposit-funded and competing harder for cheap liabilities. */
-    public const DEPOSIT_BETA_RATIO_DECAY_MULT = 2.00;
+    // --- Deposit Pricing (Drechsler, Savov & Schnabl 2017) ---
     /** Upper bound: banks rarely pay more than 70% of the policy rate to retain depositors. */
     public const MAX_DEPOSIT_BETA              = 0.70;
-    /** Lower bound: regulatory and reputational floor — banks always pay some yield. */
-    public const MIN_DEPOSIT_BETA              = 0.10;
-    /** Market-average beta baseline: the level the system deposit beta scales the firm's own beta from. */
+    /** The system deposit beta at the neutral rate: the beta a deposit bank's own is expressed against. */
     public const DEPOSIT_BETA_NORMALIZATION_BASELINE = MacroEngine::SYSTEM_DEPOSIT_BETA_BASE;
+    /** Floor on any deposit rate: banks always pay some yield. */
+    public const MIN_DEPOSIT_RATE              = 0.001;
+
+    // --- Rate-Risk Matching (Drechsler, Savov & Schnabl 2021: all US commercial banks, 1984-2017) ---
+    /** Slope of banks' interest income betas on their interest expense betas: 0.768. A bank holds the asset repricing its deposit franchise hedges. */
+    public const INCOME_EXPENSE_BETA_MATCHING_SLOPE = 0.768;
+    /** Average interest income beta, the matching line's anchor: 0.379. */
+    public const MEAN_INCOME_BETA              = 0.379;
+    /** Average interest expense beta, the matching line's anchor: 0.360. */
+    public const MEAN_EXPENSE_BETA             = 0.360;
+    /** Window a beta is measured over: the contemporaneous and three lagged quarters. */
+    public const BETA_HORIZON_YEARS            = 1.0;
+    /** Persisted share of the other loans repricing at floating rates (swap overlays included), struck once. */
+    public const STATE_FLOATING_LOAN_SHARE     = 'state:floating_loan_share';
+
+    // --- Non-Interest Income ---
+    /** Annual non-interest income per unit of earning assets: 1.62%, US insured institutions in 2019 (1.47% of assets, earning assets 90.5% of assets; FDIC Quarterly Banking Profile, Table III-A). */
+    public const NON_INTEREST_INCOME_TO_EARNING_ASSETS = 0.0162;
     /** Deposit flow per unit of money-market share moved this quarter: share gained leaves the deposit base and share lost returns to it (Drechsler, Savov & Schnabl 2017). */
     public const MMF_MIGRATION_DEPOSIT_DRAG = 1.2;
 
@@ -272,8 +296,6 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
     public const STREAM_Z_PERSISTENCE_NII = 0.35;
     /** Persistence (AR1) parameter for Fee Income Z-score drift. */
     public const STREAM_Z_PERSISTENCE_FEE = 0.25;
-    /** Minimum duration gap multiplier acting as a hedge floor. */
-    public const HEDGE_FLOOR_MULTIPLIER = 0.10;
     /** Minimum base expansion probability floor. */
     public const DEBT_EXPANSION_PROB_MIN = 0.05;
     /** Minimum base expansion aggressiveness floor. */
@@ -324,93 +346,286 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
     public const LIABILITY_CAPTURE_THRESHOLD = 0.005;
 
     /**
-     * Returns a stable structural ROIC proxy to keep top-line loan revenue rock solid.
-     * Dynamic NIM (Net Interest Margin) expansion/compression is handled strictly in computeActualFinancials.
+     * The book's gross yield: interest earned on loans and securities as they have repriced, plus fee income. The
+     * return on equity is what that yield leaves after funding, operating cost and credit losses, so it moves with the
+     * rate cycle as the bank's own book and deposit franchise carry it (Drechsler, Savov & Schnabl 2021).
      *
-     * @param Stock       $stock       The bank stock entity.
-     * @param MacroStateDTO $macroState  The macroeconomic state.
-     * @param MathUtility $mathUtility Mathematical utility.
      * @return array{invested_capital: float, baseline_roic: float}
      */
     public function getTargetMetrics(Stock $stock, MacroStateDTO $macroState, MathUtility $mathUtility): array
     {
+        $grossYield = $this->resolveInterestYield($stock, $macroState) + $this->resolveFranchisePricing($stock)['fee_yield'];
+        $stableMargin = max(0.01, (float) $stock->getOperatingMargin());
+
+        return [
+            'invested_capital' => $this->resolveEarningAssets($stock),
+            'baseline_roic' => max(0.0, $grossYield) * $stableMargin * (1.0 - $macroState->corporateTaxRate),
+        ];
+    }
+
+    /**
+     * The gross yield on earning assets that earns this lender its structural return at a given macro state: the
+     * target EBIT plus the operating cost of the book, over the book. Used once, at the opening macro, to strike the
+     * franchise's loan spread and fee yield (resolveFranchisePricing()).
+     */
+    protected function resolveCalibrationYield(Stock $stock, MacroStateDTO $macroState): float
+    {
         // Capital is tangible: goodwill absorbs no loss, so it neither sizes the book nor earns the return target.
         $equity = $stock->getTangibleEquity();
         $totalDebt = (float) $stock->getTotalDebt();
-        $treasury = (float) $stock->getCorporateTreasury();
-
         $effectiveEquity = max(1.0, $equity);
-
-        // Earning assets are the loan book the yield is struck on: the ledger once it is open, and before
-        // that the funding deployed away from idle cash.
-        $earningAssets = $this->resolveEarningAssets($stock, $treasury);
-        $baselineRoe = $this->resolveStructuralTargetRoe($stock, $macroState);
-
-        $equityLimit = \App\Data\Sectors::equityLimit($stock->getIndustry());
+        $earningAssets = $this->resolveEarningAssets($stock);
+        $targetRoe = $this->resolveCalibrationRoe($stock, $macroState);
 
         $policyRate = $macroState->policyRateEma;
-        $yield5y = $macroState->yield5yEma;
-        $structuralSpread = (float) $stock->getCreditSpread();
         $floatingRatio = (float) $stock->getFloatingDebtRatio();
-
         $taxRate = $macroState->corporateTaxRate;
-
         $customerDeposits = (float) $stock->getCustomerDeposits();
         $wholesaleDebt = (float) $stock->getWholesaleDebt();
 
-        // Calculate what the bank MUST pay depositors to keep them from fleeing.
-        $depositRatio = $totalDebt > 0 ? ($customerDeposits / $totalDebt) : 0.0;
-        $depositBeta = $this->calculateDepositBeta($totalDebt, $equity, $equityLimit, $customerDeposits);
-        $depositRate = max(0.001, $policyRate * $this->resolveEffectiveDepositBeta($depositBeta, $macroState));
+        $depositRate = $this->resolveDepositRate($policyRate, $macroState->systemDepositBetaEma);
+        $blendedWholesaleRate = ($floatingRatio * ($policyRate + $macroState->interbankLiquiditySpreadEma)) + ((1.0 - $floatingRatio) * $macroState->yield5yEma) + (float) $stock->getCreditSpread();
 
-        $blendedWholesaleRate = ($floatingRatio * ($policyRate + $macroState->interbankLiquiditySpreadEma)) + ((1.0 - $floatingRatio) * $yield5y) + $structuralSpread;
-
-        // Derive structural asset yield using actual deployed wholesale leverage capped at regulatory limits.
-        $actualWholesaleLeverage = $effectiveEquity > 0 ? ($wholesaleDebt / $effectiveEquity) : 0.0;
-        $wholesaleLeverageLimit = $this->getWholesaleLeverageLimit();
-
-        $allowedWholesaleLeverage = min($actualWholesaleLeverage, max(0.0, $wholesaleLeverageLimit));
+        $allowedWholesaleLeverage = min($wholesaleDebt / $effectiveEquity, max(0.0, $this->getWholesaleLeverageLimit()));
         $optimalWholesaleDebt = $effectiveEquity * $allowedWholesaleLeverage;
-
         $optimalDeposits = $customerDeposits;
-        $optimalDebt = $optimalWholesaleDebt + $optimalDeposits;
-
         $targetCash = $this->calculateTargetOperatingCash($effectiveEquity, $optimalDeposits, $optimalWholesaleDebt);
-        $optimalEarningAssets = $effectiveEquity + $optimalDebt - $targetCash;
+        $optimalEarningAssets = $effectiveEquity + $optimalWholesaleDebt + $optimalDeposits - $targetCash;
 
         $optimalInterestExpense = ($optimalWholesaleDebt * $blendedWholesaleRate) + ($optimalDeposits * $depositRate);
+        $optimalEbt = ($effectiveEquity * $targetRoe) / (1.0 - $taxRate);
+        $optimalEbit = $optimalEbt + $optimalInterestExpense + $this->resolveThroughTheCycleCreditProvision($stock, $optimalEarningAssets);
 
-        $optimalNetIncome = $effectiveEquity * $baselineRoe;
-        $optimalEbt = $optimalNetIncome / (1.0 - $taxRate);
+        $targetEbit = max($totalDebt * self::MIN_CORE_LENDING_YIELD, $earningAssets * $optimalEbit / max(1.0, $optimalEarningAssets));
+        $targetRevenue = min(
+            max(0.0, $targetEbit) + ($earningAssets * $this->resolveOperatingCostToEarningAssets($stock)),
+            $earningAssets * self::MAX_GROSS_ASSET_YIELD
+        );
 
-        // Target is pre-provision operating profit, carrying the through-the-cycle credit charge.
-        $optimalCreditProvision = $this->resolveThroughTheCycleCreditProvision($stock, $optimalEarningAssets);
-        $optimalEbit = $optimalEbt + $optimalInterestExpense + $optimalCreditProvision;
-        $structuralAssetYield = $optimalEbit / max(1.0, $optimalEarningAssets);
+        return $targetRevenue / max(1.0, $earningAssets);
+    }
 
-        // Apply structural yield to actual physical loan book.
-        $targetEbit = $earningAssets * $structuralAssetYield;
+    /** The return the franchise is calibrated to: the lender's structural ROE, never below the cost-of-equity proxy. */
+    protected function resolveCalibrationRoe(Stock $stock, MacroStateDTO $macroState): float
+    {
+        return max($macroState->yield10yEma + $macroState->equityRiskPremium, max(0.01, (float) $stock->getBaselineRoe()));
+    }
 
-        // Floor target EBIT based on core liabilities to maintain baseline lending operations.
-        $coreLiabilities = $totalDebt;
-        $minLendingEbit = $coreLiabilities * self::MIN_CORE_LENDING_YIELD;
+    /**
+     * The franchise's pricing, struck once at the opening macro and carried from then on: the share of its other
+     * loans it reprices at floating rates, the spread its loans earn over the market rate they reprice at, and its
+     * non-interest income per unit of book. Fees are its peer group's (FDIC); the floating share puts its interest
+     * income beta on the matching line its own expense beta implies (Drechsler, Savov & Schnabl 2021); the spread is
+     * what is left of the revenue its structural return requires at the opening macro. After that the rate cycle
+     * reaches the book through repricing alone.
+     *
+     * @return array{floating_share: float, loan_spread: float, fee_yield: float}
+     */
+    protected function resolveFranchisePricing(Stock $stock): array
+    {
+        $momentum = $stock->getEarningsMomentumZ() ?? [];
+        if (isset($momentum[self::STATE_FLOATING_LOAN_SHARE], $momentum[self::STATE_LOAN_SPREAD], $momentum[self::STATE_FEE_YIELD])) {
+            return [
+                'floating_share' => (float) $momentum[self::STATE_FLOATING_LOAN_SHARE],
+                'loan_spread' => (float) $momentum[self::STATE_LOAN_SPREAD],
+                'fee_yield' => (float) $momentum[self::STATE_FEE_YIELD],
+            ];
+        }
 
-        $targetEbit = max($minLendingEbit, $targetEbit);
-
-        $stableMargin = max(0.01, (float) $stock->getOperatingMargin());
-
-        // Target revenue is the target EBIT plus the operating cost of running the book, capping gross yield to
-        // prevent margin compression distortion. The cost is struck on the book, so a rate rise that passes into
-        // funding cost lifts revenue by that cost alone.
-        $unboundedRevenue = max(0.0, $targetEbit) + ($earningAssets * $this->resolveOperatingCostToEarningAssets($stock));
-        $targetRevenue = min($unboundedRevenue, $earningAssets * self::MAX_GROSS_ASSET_YIELD);
-
-        $grossYield = $targetRevenue / max(1.0, abs($earningAssets));
+        $opening = new MacroStateDTO();
+        $floatingShare = $this->resolveMatchedFloatingShare($stock, $opening);
+        $feeYield = $this->resolveNonInterestIncomeToEarningAssets($stock);
+        $interestYield = $this->resolveCalibrationYield($stock, $opening) - $feeYield;
 
         return [
-            'invested_capital' => $earningAssets,
-            'baseline_roic' => ($grossYield * $stableMargin) * (1.0 - $taxRate)
+            'floating_share' => $floatingShare,
+            'loan_spread' => ($interestYield - $this->resolveMarketInterestYield($stock, $opening, $floatingShare)) / max(1e-9, $this->getLoanShareOfEarningAssets()),
+            'fee_yield' => $feeYield,
         ];
+    }
+
+    /** This lender's non-interest income per unit of earning assets: its sector's unless its lore sets its peer group's. */
+    protected function resolveNonInterestIncomeToEarningAssets(Stock $stock): float
+    {
+        return max(0.0, (float) $this->resolveModelParameters($stock, [
+            ModelParam::NonInterestIncomeToEarningAssets->value => static::NON_INTEREST_INCOME_TO_EARNING_ASSETS,
+        ])[ModelParam::NonInterestIncomeToEarningAssets]);
+    }
+
+    /**
+     * The interest expense beta this lender's funding carries at a macro state, per unit of total assets, measured
+     * as DSS measure it: the four-quarter change in interest expense per point of policy rate. Deposits reprice at
+     * the deposit rate as the system beta moves toward its new target; floating wholesale funding reprices in full and
+     * the fixed part as it rolls.
+     */
+    public function resolveExpenseBeta(Stock $stock, MacroStateDTO $macroState): float
+    {
+        $point = 0.01;
+        $policyRate = $macroState->policyRateEma;
+        $systemBeta = $macroState->systemDepositBetaEma;
+        $repriced = 1.0 - exp(-static::BETA_HORIZON_YEARS / MacroEngine::DEPOSIT_REPRICING_YEARS);
+        $movedBeta = $systemBeta + ((MathUtility::calculateSystemDepositBetaTarget($policyRate + $point) - $systemBeta) * $repriced);
+        $depositChange = $this->resolveDepositRate($policyRate + $point, $movedBeta) - $this->resolveDepositRate($policyRate, $systemBeta);
+
+        $floatingRatio = max(0.0, min(1.0, (float) $stock->getFloatingDebtRatio()));
+        $rolled = 1.0 - ((1.0 - $this->getDebtMaturityRolloverRate()) ** (static::BETA_HORIZON_YEARS * FinancialConstants::QUARTERS_PER_YEAR));
+        $wholesaleChange = $point * ($floatingRatio + ((1.0 - $floatingRatio) * $rolled));
+
+        return (((float) $stock->getCustomerDeposits() * $depositChange) + ((float) $stock->getWholesaleDebt() * $wholesaleChange))
+            / ($this->resolveBetaAssets($stock) * $point);
+    }
+
+    /** Total assets as a beta is struck on them: the earning book and the cash beside it. */
+    private function resolveBetaAssets(Stock $stock): float
+    {
+        return max(1.0, $this->resolveEarningAssets($stock) + max(0.0, (float) $stock->getCorporateTreasury()));
+    }
+
+    /**
+     * The share of the other loans repriced at floating rates (swap overlays included) that puts this lender's
+     * four-quarter interest income beta on the DSS matching line through its own expense beta: banks hold the asset
+     * repricing their deposit franchise hedges, which is why bank profits barely move with rates. Both betas are on
+     * total assets, as DSS strike them, so the cash earning the policy rate is part of the income the line is met
+     * with. Bounded by a book all fixed and a book all floating.
+     */
+    protected function resolveMatchedFloatingShare(Stock $stock, MacroStateDTO $macroState): float
+    {
+        $assetIncomeBeta = static::MEAN_INCOME_BETA
+            + (static::INCOME_EXPENSE_BETA_MATCHING_SLOPE * ($this->resolveExpenseBeta($stock, $macroState) - static::MEAN_EXPENSE_BETA));
+        $earningAssets = max(1.0, $this->resolveEarningAssets($stock));
+        $earningCash = max(0.0, (float) $stock->getCorporateTreasury() - ($this->getOperatingBase($stock) * self::INTEREST_INCOME_CASH_BUFFER));
+        $targetIncomeBeta = (($assetIncomeBeta * $this->resolveBetaAssets($stock)) - $earningCash) / $earningAssets;
+        $repriced = static fn (float $years): float => 1.0 - exp(-static::BETA_HORIZON_YEARS / $years);
+
+        $loanShare = $this->getLoanShareOfEarningAssets();
+        $residentialShare = $this->resolveLoanBookMix($stock)['residential'];
+        $otherShare = $loanShare * (1.0 - $residentialShare);
+        $fixedRepriced = $repriced($this->resolveFixedLoanRepricingYears());
+        if ($otherShare * (1.0 - $fixedRepriced) <= 0.0) {
+            return static::FLOATING_RATE_LOAN_SHARE;
+        }
+
+        $withNoFloating = ($loanShare * $residentialShare * $repriced(static::RESIDENTIAL_REPRICING_YEARS))
+            + ((1.0 - $loanShare) * $repriced(static::SECURITIES_REPRICING_YEARS))
+            + ($otherShare * $fixedRepriced);
+
+        return max(0.0, min(1.0, ($targetIncomeBeta - $withNoFloating) / ($otherShare * (1.0 - $fixedRepriced))));
+    }
+
+    /**
+     * Annual interest yield on earning assets as the book stands: residential loans, the floating and fixed parts of
+     * the other loans and the securities, each at the yield it last repriced to, less the return a saturated market
+     * takes off a lender grown past its optimal scale (Penrose).
+     */
+    public function resolveInterestYield(Stock $stock, MacroStateDTO $macroState): float
+    {
+        $pricing = $this->resolveFranchisePricing($stock);
+        $spread = $pricing['loan_spread'];
+        $rates = $this->resolveRepricingRates($stock, $macroState);
+        $momentum = $stock->getEarningsMomentumZ() ?? [];
+        $book = static fn (string $key, float $steadyState): float => isset($momentum[$key]) ? (float) $momentum[$key] : $steadyState;
+
+        $loanShare = $this->getLoanShareOfEarningAssets();
+        $residentialShare = $this->resolveLoanBookMix($stock)['residential'];
+        $floatingShare = $pricing['floating_share'];
+        $loanYield = ($residentialShare * $book(self::STATE_BOOK_YIELD_RESIDENTIAL, $rates['residential'] + $spread))
+            + ((1.0 - $residentialShare) * (($floatingShare * ($rates['floating'] + $spread)) + ((1.0 - $floatingShare) * $book(self::STATE_BOOK_YIELD_FIXED, $rates['fixed'] + $spread))));
+
+        return ($loanShare * $loanYield)
+            + ((1.0 - $loanShare) * $book(self::STATE_BOOK_YIELD_SECURITIES, $rates['securities']))
+            - $this->resolveSaturationYield($stock, $macroState);
+    }
+
+    /** The interest yield a book repriced entirely at today's market rates would earn before any loan spread. */
+    protected function resolveMarketInterestYield(Stock $stock, MacroStateDTO $macroState, float $floatingShare): float
+    {
+        $rates = $this->resolveRepricingRates($stock, $macroState);
+        $residentialShare = $this->resolveLoanBookMix($stock)['residential'];
+        $loanShare = $this->getLoanShareOfEarningAssets();
+
+        return ($loanShare * (($residentialShare * $rates['residential'])
+                + ((1.0 - $residentialShare) * (($floatingShare * $rates['floating']) + ((1.0 - $floatingShare) * $rates['fixed'])))))
+            + ((1.0 - $loanShare) * $rates['securities']);
+    }
+
+    /**
+     * The market rate each part of the book reprices at: a floating loan at the policy rate plus the interbank spread
+     * its index carries, a fixed loan, a mortgage or a security at the curve's rate for its repricing maturity.
+     *
+     * @return array{floating: float, fixed: float, residential: float, securities: float}
+     */
+    protected function resolveRepricingRates(Stock $stock, MacroStateDTO $macroState): array
+    {
+        return [
+            'floating' => $macroState->policyRateEma + $macroState->interbankLiquiditySpreadEma,
+            'fixed' => $this->resolveCurveRate($macroState, $this->resolveFixedLoanRepricingYears()),
+            'residential' => $this->resolveCurveRate($macroState, static::RESIDENTIAL_REPRICING_YEARS),
+            'securities' => $this->resolveCurveRate($macroState, static::SECURITIES_REPRICING_YEARS),
+        ];
+    }
+
+    /** The smoothed curve read linearly between its tenors: the policy rate at zero, then 2, 5, 10 and 30 years. */
+    private function resolveCurveRate(MacroStateDTO $macroState, float $years): float
+    {
+        $curve = [[0.0, $macroState->policyRateEma], [2.0, $macroState->yield2yEma], [5.0, $macroState->yield5yEma], [10.0, $macroState->yield10yEma], [30.0, $macroState->yield30yEma]];
+        $previousTenor = 0.0;
+        $previousRate = $macroState->policyRateEma;
+        foreach ($curve as [$tenor, $rate]) {
+            if ($years <= $tenor) {
+                $width = $tenor - $previousTenor;
+
+                return $width > 0.0 ? $previousRate + (($rate - $previousRate) * ($years - $previousTenor) / $width) : $rate;
+            }
+            $previousTenor = $tenor;
+            $previousRate = $rate;
+        }
+
+        return $previousRate;
+    }
+
+    /**
+     * Repricing maturity of the fixed-rate part of the other loans: what keeps the system's floating and fixed parts
+     * together at the other loans' measured repricing maturity (~4.7 years).
+     */
+    protected function resolveFixedLoanRepricingYears(): float
+    {
+        return (self::OTHER_LOAN_REPRICING_YEARS - (self::FLOATING_RATE_LOAN_SHARE * self::FLOATING_RESET_YEARS)) / (1.0 - self::FLOATING_RATE_LOAN_SHARE);
+    }
+
+    /**
+     * The yield a saturated market takes off a lender grown past its optimal scale: the Penrose penalty on its return,
+     * never past the cost-of-equity proxy, as interest yield on the book.
+     */
+    private function resolveSaturationYield(Stock $stock, MacroStateDTO $macroState): float
+    {
+        $penalty = \App\Service\Math\CorporateMetrics::getInstance()->calculateMarketSaturationPenalty($stock, max(1.0, (float) $stock->getTotalEquity()), $macroState);
+        $headroom = max(0.0, max(0.01, (float) $stock->getBaselineRoe()) - ($macroState->yield10yEma + $macroState->equityRiskPremium));
+
+        return min($penalty, $headroom) * max(1.0, $stock->getTangibleEquity())
+            / ((1.0 - $macroState->corporateTaxRate) * max(1.0, $this->resolveEarningAssets($stock)));
+    }
+
+    /**
+     * Carries the book one quarter forward: each fixed-rate part reprices toward today's market rate plus the loan
+     * spread at the hazard its repricing maturity implies, and the franchise pricing is persisted with it.
+     */
+    protected function advanceBookYields(Stock $stock, MacroStateDTO $macroState, StreamContext $streams, MathUtility $mathUtility): void
+    {
+        $pricing = $this->resolveFranchisePricing($stock);
+        $rates = $this->resolveRepricingRates($stock, $macroState);
+        $quarter = 1.0 / FinancialConstants::QUARTERS_PER_YEAR;
+
+        $parts = [
+            self::STATE_BOOK_YIELD_RESIDENTIAL => [$rates['residential'] + $pricing['loan_spread'], static::RESIDENTIAL_REPRICING_YEARS],
+            self::STATE_BOOK_YIELD_FIXED => [$rates['fixed'] + $pricing['loan_spread'], $this->resolveFixedLoanRepricingYears()],
+            self::STATE_BOOK_YIELD_SECURITIES => [$rates['securities'], static::SECURITIES_REPRICING_YEARS],
+        ];
+        foreach ($parts as $key => [$marketYield, $repricingYears]) {
+            $streams->registerState($key, $mathUtility->calculateDistributedLag($streams->getPersistedState($key, $marketYield), $marketYield, $quarter, $repricingYears));
+        }
+        $streams->registerState(self::STATE_FLOATING_LOAN_SHARE, $pricing['floating_share']);
+        $streams->registerState(self::STATE_LOAN_SPREAD, $pricing['loan_spread']);
+        $streams->registerState(self::STATE_FEE_YIELD, $pricing['fee_yield']);
     }
 
     public function getMacroPhysics(Stock $stock, MacroStateDTO $macroState): array
@@ -431,32 +646,24 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
     protected function calculateSectorPhysics(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, MacroStateDTO $macroState, MathUtility $mathUtility): SectorPhysicsResult
     {
         $params = $this->resolveModelParameters($stock, [
-            ModelParam::NiiRevenueWeight->value          => self::NII_REVENUE_WEIGHT,
             ModelParam::FeeRevenueWeight->value          => self::FEE_REVENUE_WEIGHT,
             ModelParam::ProprietaryDividendWeight->value => 0.00,
-            ModelParam::NimInversionSensitivity->value   => self::NIM_INVERSION_SENSITIVITY,
         ]);
-
-        $rawProprietaryWeight = $params[ModelParam::ProprietaryDividendWeight];
-        $inversionSensitivity = $params[ModelParam::NimInversionSensitivity];
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
         $streams  = $this->createStreamContext($momentum, $mathUtility, $macroState, $stock);
 
-        $targetWeights = [
-            'net_interest_income' => $params[ModelParam::NiiRevenueWeight],
-            'fee_income'          => $params[ModelParam::FeeRevenueWeight],
-        ];
-        if ($rawProprietaryWeight > 0.0) {
-            $targetWeights['proprietary_dividend'] = $rawProprietaryWeight;
-        }
-
-        // --- Dynamic Revenue Mix Drift with Strategic Mean Reversion ---
-        $activeWeights = $streams->resolveActiveStreamWeights($targetWeights);
-
-        $niiWeight                 = $activeWeights['net_interest_income'];
-        $feeWeight                 = $activeWeights['fee_income'];
-        $proprietaryDividendWeight = $activeWeights['proprietary_dividend'] ?? 0.0;
+        // Interest income is the book's yield as it has repriced, so the rate cycle reaches this stream alone; fees
+        // and the captive stake dividends split the rest as the lore splits them.
+        $interestYield = max(0.0, $this->resolveInterestYield($stock, $macroState));
+        $grossYield = $interestYield + $this->resolveFranchisePricing($stock)['fee_yield'];
+        $niiWeight = $grossYield > 0.0 ? $interestYield / $grossYield : 1.0;
+        $rawFeeWeight = max(0.0, (float) $params[ModelParam::FeeRevenueWeight]);
+        $rawProprietaryWeight = max(0.0, (float) $params[ModelParam::ProprietaryDividendWeight]);
+        $nonInterestWeight = $rawFeeWeight + $rawProprietaryWeight;
+        $feeWeight = $nonInterestWeight > 0.0 ? (1.0 - $niiWeight) * $rawFeeWeight / $nonInterestWeight : 0.0;
+        $proprietaryDividendWeight = (1.0 - $niiWeight) - $feeWeight;
+        $this->advanceBookYields($stock, $macroState, $streams, $mathUtility);
 
         // Independent stream Z-scores with AR(1) persistence
         $revenueZ = $streams->generateZ('net_interest_income', self::STREAM_Z_PERSISTENCE_NII); // NII loan origination volume
@@ -510,26 +717,10 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
         // build once and releases it when the outlook clears. Charging it here every quarter the outlook
         // stayed bad priced a level as news and cost a lender its reserve build several times over.
 
-        // Macaulay Duration Gap & IRRBB NIM Physics:
-        // Bank assets (long-term loans/mortgages) have higher duration than liabilities (short-term deposits/repo).
-        // Banks utilize interest rate swaps & natural floating-rate debt to hedge a portion of this duration gap.
-        $yield10y = $macroState->yield10yEma;
-        $yield2y  = $macroState->yield2yEma;
-        $bankSpread = $yield10y - ($yield2y + $macroState->interbankLiquiditySpreadEma);
-
-        $rawDurationGap = max(0.0, self::ASSET_DURATION_YEARS - self::LIABILITY_DURATION_YEARS);
-        $floatingRatio = (float) $stock->getFloatingDebtRatio();
-        $hedgeMultiplier = ($inversionSensitivity / self::NIM_INVERSION_SENSITIVITY) * (1.0 - ($floatingRatio * self::FLOATING_HEDGE_EFFICIENCY));
-        $effectiveDurationGap = $rawDurationGap * max(self::HEDGE_FLOOR_MULTIPLIER, $hedgeMultiplier);
-
-        $curveDeviation = $bankSpread - self::NIM_BASE_SPREAD_BUFFER;
-        $nimSqueeze = - ($curveDeviation * $effectiveDurationGap);
-
-        // The NIM squeeze applies in proportion to the NII revenue share ($niiWeight), leaving non-interest
-        // custodial / wealth / transaction fee income insulated.
-        $rawMargin = $realizedVariableMargin + ($nimSqueeze * $niiWeight);
-        $clampedMargin = $this->clampMargin($rawMargin);
-        $netInterestSqueeze = ($clampedMargin - $this->clampMargin($realizedVariableMargin)) * $actualRevenue;
+        // Rate risk is the repricing gap itself: the book's yield follows the market at its repricing maturities
+        // while funding reprices at the deposit beta, so a curve that moves reaches the margin through interest
+        // income and expense, not through the cost ratio.
+        $clampedMargin = $this->clampMargin($realizedVariableMargin);
 
         $cet1Ratio = $this->calculateCet1Ratio($stock);
 
@@ -554,7 +745,6 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
             streamRevenue: $streamRevenues,
             creditLossProvision: 0.0,
             netChargeOffs: $netChargeOffs,
-            netInterestSqueeze: $netInterestSqueeze,
         );
     }
 
@@ -810,36 +1000,18 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
     }
 
     /**
-     * How far the system's deposit pass-through sits from the level the firm's beta is normalised to. The
-     * firm's beta is its structural franchise; the system's is the rate cycle (Drechsler, Savov & Schnabl
-     * 2017), and the deposit rate is the product. Without a macro reading the scale is one.
+     * The rate a deposit bank pays at a policy rate and system deposit beta: the system's pass-through, which rises
+     * with the level of rates (Drechsler, Savov & Schnabl 2017), capped below the policy rate.
      */
-    private function resolveSystemDepositBetaScale(?\App\DTO\MacroStateDTO $macroState): float
+    protected function resolveDepositRate(float $policyRate, float $systemDepositBeta): float
     {
-        if ($macroState === null) {
-            return 1.0;
-        }
-
-        return max(0.25, min(3.0, $macroState->systemDepositBetaEma / self::DEPOSIT_BETA_NORMALIZATION_BASELINE));
+        return max(self::MIN_DEPOSIT_RATE, $policyRate * min(self::MAX_DEPOSIT_BETA, $systemDepositBeta));
     }
 
-    /**
-     * Resolves effective deposit beta scaled by system rate pass-through, strictly capped at MAX_DEPOSIT_BETA.
-     * Prevents deposit rates or APYs from ever exceeding the central bank policy rate.
-     */
-    private function resolveEffectiveDepositBeta(float $depositBeta, ?\App\DTO\MacroStateDTO $macroState): float
-    {
-        return min(self::MAX_DEPOSIT_BETA, $depositBeta * $this->resolveSystemDepositBetaScale($macroState));
-    }
-
+    /** A deposit bank's own beta at the neutral rate: the system's (its pass-through is the rate cycle's). */
     public function calculateDepositBeta(float $totalDebt, float $equity, float $equityLimit, float $customerDeposits): float
     {
-        $utilization = $equity > 0.0 ? ($totalDebt / ($equity * $equityLimit)) : 1.0;
-        $depositRatio = $totalDebt > 0 ? ($customerDeposits / $totalDebt) : 0.0;
-
-        $decayRate = self::DEPOSIT_BETA_BASE_DECAY + (self::DEPOSIT_BETA_RATIO_DECAY_MULT * $depositRatio);
-
-        return min(self::MAX_DEPOSIT_BETA, max(self::MIN_DEPOSIT_BETA, self::DEPOSIT_BETA_AMPLITUDE * exp(-$decayRate * $utilization)));
+        return self::DEPOSIT_BETA_NORMALIZATION_BASELINE;
     }
 
     public function calculateMaxBuybackSpend(float $excessCash, float $retainedEarningsThisQuarter, bool $isMegaHoarder): float
@@ -867,8 +1039,7 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
 
         // Deposits are cheap, but the bank must pay an APY to prevent capital flight, and how much of the
         // policy rate the whole system passes through moves with the level of rates.
-        $depositBeta = $this->calculateDepositBeta($debt, $totalEquity, $equityLimit, $customerDeposits);
-        $depositRate = max(0.001, $policyRate * $this->resolveEffectiveDepositBeta($depositBeta, $macroState));
+        $depositRate = $this->resolveDepositRate($policyRate, $macroState !== null ? $macroState->systemDepositBetaEma : self::DEPOSIT_BETA_NORMALIZATION_BASELINE);
         $depositInterest = $customerDeposits * $depositRate;
 
         return new InterestExpenseDTO(interestExpense: $wholesaleInterest + $depositInterest, wholesaleRate: $wholesaleRate);
@@ -905,12 +1076,7 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
 
         $policyRate = $macroState->policyRateEma;
 
-        $equity = (float) $stock->getTotalEquity();
-        $totalDebt = $state['wholesaleDebt'] + $currentLiabilities;
-        $equityLimit = \App\Data\Sectors::equityLimit($stock->getIndustry());
-
-        $depositApyBeta = $this->calculateDepositBeta($totalDebt, $equity, $equityLimit, $currentLiabilities);
-        $state['bank_apy'] = max(0.001, $policyRate * $this->resolveEffectiveDepositBeta($depositApyBeta, $macroState));
+        $state['bank_apy'] = $this->resolveDepositRate($policyRate, $macroState->systemDepositBetaEma);
 
         // Money demand has unit income elasticity (Lucas 2000), so the deposit base grows with trend nominal
         // income: realized inflation plus potential real growth. The rate channel is the migration into money
@@ -976,9 +1142,9 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
      *
      * This is the line where the two halves of a bank's rate risk divide, and getting it wrong doubles the
      * charge. ASC 320 remarks SECURITIES through equity; ASC 310 carries LOANS at amortized cost and never
-     * marks them, which is why a loan book's rate exposure surfaces as compressed margin rather than as a
-     * writedown — and the NIM squeeze above is already charging exactly that. Marking the loans here as
-     * well would bill the same duration gap twice, once as a stock and once as a flow.
+     * marks them, which is why a loan book's rate exposure surfaces as a book yield that lags the market
+     * rather than as a writedown — and the repricing book already charges exactly that. Marking the loans
+     * here as well would bill the same duration gap twice, once as a stock and once as a flow.
      *
      * Reserves at the central bank are excluded for the same reason: cash carries no duration, and marking
      * it would price the one asset a bank holds precisely because it does not move.
@@ -990,23 +1156,15 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
     }
 
     /**
-     * The same natural hedge the NIM squeeze credits, read the same way.
-     *
-     * Floating-rate assets reprice, and the model's existing view is that they offset the gap at
-     * FLOATING_HEDGE_EFFICIENCY rather than one-for-one. Marking the book against an unhedged duration
-     * while charging the margin against a hedged one would have the two halves of the same gap disagree.
+     * The floating-rate funding mix offsets the securities' duration at FLOATING_HEDGE_EFFICIENCY rather than
+     * one-for-one when the portfolio is marked.
      */
     public function getSecuritiesFloatingShare(Stock $stock): float
     {
         return max(0.0, min(1.0, (float) $stock->getFloatingDebtRatio() * self::FLOATING_HEDGE_EFFICIENCY));
     }
 
-    /**
-     * The same asset-side duration the NIM squeeze is struck against, resolved late so a subclass with a
-     * longer book (a thirty-year mortgage lender) marks its own. The squeeze itself still reads self:: and
-     * so still uses the deposit bank's figure — deliberately, because re-pointing it would move a margin
-     * calibration that has nothing to do with this mark.
-     */
+    /** The securities' duration for the mark, resolved late so a subclass with a longer book marks its own. */
     public function getDefaultSecuritiesDuration(): float
     {
         return static::ASSET_DURATION_YEARS;
@@ -1144,6 +1302,8 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
             'system_deposit_beta_ema',
             'yield_10y_ema',
             'yield_2y_ema',
+            'yield_30y_ema',
+            'yield_5y_ema',
         ];
     }
 }

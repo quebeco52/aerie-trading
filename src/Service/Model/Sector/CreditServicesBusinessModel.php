@@ -32,11 +32,6 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
     public const OPERATING_CYCLICALITY = 1.20;
 
         public function getMoatSpread(): float { return 0.005; }
-    // --- Dual-Stream Credit Services Architecture ---
-    /** Baseline fraction of revenue derived from revolving consumer lending interest. */
-    public const LENDING_REVENUE_WEIGHT  = 0.65;
-    /** Baseline fraction of revenue derived from payment network interchange / swipe fees. */
-    public const NETWORK_REVENUE_WEIGHT  = 0.35;
 
     // --- ROE & Target Architecture ---
     /** Minimum lending EBIT floor as a fraction of core debt liabilities. */
@@ -116,19 +111,13 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
     /** Card balances per unit of the household credit-to-GDP gap: revolving credit rides the same boom. */
     public const CREDIT_GAP_LENDING_SENSITIVITY = 0.50;
 
-    // --- Structural Efficiency Floor ---
+    // --- Operating Cost Base ---
     /** Annual noninterest expense per unit of earning assets for a card issuer: 7.42%, US credit card banks in 2019 (7.11% of assets, earning assets 95.9% of assets; FDIC Quarterly Banking Profile, Table III-A). */
     public const OPERATING_COST_TO_EARNING_ASSETS = 0.0742;
 
-    // --- NIM Squeeze & Yield Curve Inversion ---
-    /** Baseline spread buffer before NIM squeeze compression begins. */
-    public const NIM_SPREAD_BUFFER          = 0.005;
-    /** Linear sensitivity scalar for spread compression when yield curve flattens. */
-    public const NIM_LINEAR_SENSITIVITY     = 1.50;
-    /** Quadratic coefficient amplifying funding costs during yield curve inversions. */
-    public const NIM_QUADRATIC_COEFF        = 0.15;
-    /** Sensitivity of unsecured lending funding cost squeeze to interbank liquidity freezes (TED spread). */
-    public const TED_SPREAD_NIM_PENALTY     = 1.50;
+    // --- Non-Interest Income ---
+    /** Annual non-interest income per unit of earning assets for a card issuer: 4.68%, US credit card banks in 2019 (4.49% of assets, earning assets 95.9% of assets; FDIC Quarterly Banking Profile, Table III-A). */
+    public const NON_INTEREST_INCOME_TO_EARNING_ASSETS = 0.0468;
 
     /**
      * A card issuer's receivables revolve and reprice at will, so the book carries almost no duration; what
@@ -151,27 +140,16 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
 
     protected function calculateSectorPhysics(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, \App\DTO\MacroStateDTO $macroState, MathUtility $mathUtility): SectorPhysicsResult
     {
-        // Resolve company-specific tuned credit services parameters
-        $params = $this->resolveModelParameters($stock, [
-            ModelParam::LendingRevenueWeight->value  => self::LENDING_REVENUE_WEIGHT,
-            ModelParam::NetworkRevenueWeight->value  => self::NETWORK_REVENUE_WEIGHT,
-            ModelParam::CeclSpreadSensitivity->value => self::CECL_SPREAD_SENSITIVITY,
-        ]);
-
-        $lendingWeight   = $params[ModelParam::LendingRevenueWeight];
-        $networkWeight   = $params[ModelParam::NetworkRevenueWeight];
-
         $momentum = $stock->getEarningsMomentumZ() ?? [];
         $streams  = $this->createStreamContext($momentum, $mathUtility, $macroState, $stock);
 
-        // --- Dynamic Revenue Mix Drift with Strategic Mean Reversion ---
-        $activeWeights = $streams->resolveActiveStreamWeights([
-            'lending' => $params[ModelParam::LendingRevenueWeight],
-            'swipe'   => $params[ModelParam::NetworkRevenueWeight],
-        ]);
-
-        $lendingWeight = $activeWeights['lending'];
-        $networkWeight = $activeWeights['swipe'];
+        // Lending revenue is the card book's yield as it has repriced, so the rate cycle reaches this stream alone;
+        // interchange is the rest.
+        $interestYield = max(0.0, $this->resolveInterestYield($stock, $macroState));
+        $grossYield = $interestYield + $this->resolveFranchisePricing($stock)['fee_yield'];
+        $lendingWeight = $grossYield > 0.0 ? $interestYield / $grossYield : 1.0;
+        $networkWeight = 1.0 - $lendingWeight;
+        $this->advanceBookYields($stock, $macroState, $streams, $mathUtility);
 
         // Independent stream Z-scores with AR(1) persistence
         $lendingZ = $streams->generateZ('lending', 0.25); // Revolving credit loan origination volume
@@ -210,23 +188,9 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
         $netChargeOffs = ($credit['loss_rate'] / FinancialConstants::QUARTERS_PER_YEAR) * $this->resolveEarningAssets($stock);
         $lossMultiple = $credit['loss_rate'] / max(1e-9, $this->getThroughTheCycleCreditLossRate($stock));
 
-        // Net Interest Margin (NIM) Squeeze (1.5x more sensitive than banks due to wholesale funding dependency)
-        $yield10y = $macroState->yield10yEma;
-        $yield2y  = $macroState->yield2yEma;
-        $tedSpread = max(0.0, $macroState->interbankLiquiditySpreadEma - MacroEngine::INTERBANK_BASELINE_SPREAD);
-        $bankSpread = ($yield10y - $yield2y) - ($tedSpread * self::TED_SPREAD_NIM_PENALTY);
-
-        if ($bankSpread < 0) {
-            $nimSqueeze = (self::NIM_SPREAD_BUFFER - $bankSpread)
-                + pow(abs($bankSpread) * FinancialConstants::YIELD_CURVE_INVERSION_SENSITIVITY, 2) * self::NIM_QUADRATIC_COEFF;
-        } else {
-            $nimSqueeze = (self::NIM_SPREAD_BUFFER - $bankSpread) * self::NIM_LINEAR_SENSITIVITY;
-        }
-
-        // The NIM squeeze applies in proportion to the revolving lending share ($lendingWeight), leaving payment
-        // network swipe interchange insulated.
-        $rawMargin = $realizedVariableMargin + ($nimSqueeze * $lendingWeight);
-        $clampedMargin = $this->clampMargin($rawMargin);
+        // Rate risk is the repricing gap: the card book reprices with prime while funding reprices at the deposit
+        // beta, so the curve reaches the margin through interest income and expense, not the cost ratio.
+        $clampedMargin = $this->clampMargin($realizedVariableMargin);
 
         $eventType = null;
         if ($lossMultiple > static::SECTOR_SHOCK_MASSIVE_LOSS_MULTIPLE) {
@@ -260,7 +224,11 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
 
 
 
-    public function getTargetMetrics(Stock $stock, \App\DTO\MacroStateDTO $macroState, MathUtility $mathUtility): array
+    /**
+     * The card book's calibration yield: the target EBIT plus the book's operating cost over the book, under the APR
+     * ceiling the funding cost sets, at a given macro state.
+     */
+    protected function resolveCalibrationYield(Stock $stock, \App\DTO\MacroStateDTO $macroState): float
     {
         // Capital is tangible: goodwill absorbs no loss, so it neither sizes the book nor earns the return target.
         $equity = $stock->getTangibleEquity();
@@ -269,7 +237,7 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
 
         $effectiveEquity = max(1.0, $equity);
         $earningAssets = max($effectiveEquity, $effectiveEquity + $totalDebt - $treasury);
-        $baselineRoe = $this->resolveStructuralTargetRoe($stock, $macroState);
+        $baselineRoe = $this->resolveCalibrationRoe($stock, $macroState);
 
         $taxRate = $macroState->corporateTaxRate;
         $policyRate = $macroState->policyRateEma;
@@ -283,8 +251,7 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
         $depositRatio = $totalDebt > 0 ? ($customerDeposits / $totalDebt) : 0.0;
 
         // Credit services require highly competitive APYs on their high-yield savings accounts
-        $depositBeta = min(self::MAX_DEPOSIT_BETA_CLAMP, max(self::MIN_DEPOSIT_BETA_CLAMP, $this->calculateDepositBeta($totalDebt, $equity, $equityLimit, $customerDeposits) + self::HIGH_YIELD_BETA_SPREAD));
-        $depositRate = max(0.001, $policyRate * $depositBeta);
+        $depositRate = $this->resolveDepositRate($policyRate, $macroState->systemDepositBetaEma);
         $blendedWholesaleRate = ($floatingRatio * $policyRate) + ((1.0 - $floatingRatio) * $yield5y) + $structuralSpread;
 
         $actualLeverage = $effectiveEquity > 0 ? ($totalDebt / $effectiveEquity) : 0.0;
@@ -315,19 +282,29 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
 
         $targetEbit = max($minLendingEbit, $targetEbit);
 
-        $stableMargin = max(0.01, (float) $stock->getOperatingMargin());
-
         $unboundedRevenue = max(0.0, $targetEbit) + ($earningAssets * $this->resolveOperatingCostToEarningAssets($stock));
         $blendedCostOfFunds = ($depositRatio * $depositRate) + ((1.0 - $depositRatio) * $blendedWholesaleRate);
         $maxApr = max(self::MIN_APR_YIELD_FLOOR, $blendedCostOfFunds + self::POLICY_APR_SPREAD);
         $targetRevenue = min($unboundedRevenue, $earningAssets * $maxApr); // Floating gross yield ceiling based on blended cost of funds
 
-        $grossYield = $targetRevenue / max(1.0, abs($earningAssets));
+        return $targetRevenue / max(1.0, abs($earningAssets));
+    }
 
-        return [
-            'invested_capital' => $earningAssets,
-            'baseline_roic' => ($grossYield * $stableMargin) * (1.0 - $taxRate)
-        ];
+    /**
+     * A card APR is a margin over the prime rate, which follows the policy rate and not the interbank market: an
+     * interbank freeze raises the issuer's wholesale funding cost without lifting what its book earns.
+     *
+     * @return array{floating: float, fixed: float, residential: float, securities: float}
+     */
+    protected function resolveRepricingRates(Stock $stock, \App\DTO\MacroStateDTO $macroState): array
+    {
+        return ['floating' => $macroState->policyRateEma] + parent::resolveRepricingRates($stock, $macroState);
+    }
+
+    /** A high-yield savings deposit pays the system's pass-through plus the premium that wins the balance, within its bounds. */
+    protected function resolveDepositRate(float $policyRate, float $systemDepositBeta): float
+    {
+        return max(self::MIN_DEPOSIT_RATE, $policyRate * min(self::MAX_DEPOSIT_BETA_CLAMP, max(self::MIN_DEPOSIT_BETA_CLAMP, $systemDepositBeta + self::HIGH_YIELD_BETA_SPREAD)));
     }
 
     public function calculateInterestIncome(Stock $stock, \App\DTO\MacroStateDTO $macroState, MathUtility $mathUtility, ?float $realizedWholesaleRate = null): float
@@ -352,8 +329,7 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
         $wholesaleRate = $wholesaleDebt > 0 ? ($wholesaleInterest / $wholesaleDebt) : $currentMarketFixedRate;
 
         // Credit services must offer highly competitive APYs on their high-yield savings accounts to attract funding
-        $depositBeta = min(self::MAX_DEPOSIT_BETA_CLAMP, max(self::MIN_DEPOSIT_BETA_CLAMP, $this->calculateDepositBeta($debt, $totalEquity, $equityLimit, $customerDeposits) + self::HIGH_YIELD_BETA_SPREAD));
-        $depositRate = max(0.001, $policyRate * $depositBeta);
+        $depositRate = $this->resolveDepositRate($policyRate, $macroState !== null ? $macroState->systemDepositBetaEma : self::DEPOSIT_BETA_NORMALIZATION_BASELINE);
         $depositInterest = $customerDeposits * $depositRate;
 
         return new InterestExpenseDTO(interestExpense: $wholesaleInterest + $depositInterest, wholesaleRate: $wholesaleRate);
@@ -454,8 +430,9 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
             'recession_probability_ema',
             'retail_default_rate_ema',
             'sloos_tightening_index_ema',
+            'system_deposit_beta_ema',
             'yield_10y_ema',
-            'yield_2y_ema',
+            'yield_5y_ema',
         ];
     }
 }

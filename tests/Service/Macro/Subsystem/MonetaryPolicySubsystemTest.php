@@ -1195,10 +1195,10 @@ class MonetaryPolicySubsystemTest extends TestCase
         $floor = $this->settledDepositChannel(0.0);
 
         $this->assertEqualsWithDelta(MacroEngine::SYSTEM_DEPOSIT_BETA_BASE, $neutral->systemDepositBeta, 0.01, 'At the neutral rate the system beta is the level the bank model is normalised to.');
-        $expectedTight = MacroEngine::SYSTEM_DEPOSIT_BETA_BASE + MonetaryPolicySubsystem::DEPOSIT_BETA_RATE_SENSITIVITY * (0.05 - (MacroEngine::BASE_NATURAL_RATE + MacroEngine::TARGET_INFLATION));
+        $expectedTight = MacroEngine::SYSTEM_DEPOSIT_BETA_BASE + MacroEngine::DEPOSIT_BETA_RATE_SENSITIVITY * (0.05 - (MacroEngine::BASE_NATURAL_RATE + MacroEngine::TARGET_INFLATION));
         $this->assertEqualsWithDelta($expectedTight, $tight->systemDepositBeta, 0.01, 'A 5% policy rate passes a good deal more through: the beta rises with the level.');
         $this->assertGreaterThan(0.25, $tight->systemDepositBeta);
-        $this->assertEqualsWithDelta(MonetaryPolicySubsystem::DEPOSIT_BETA_FLOOR, $floor->systemDepositBeta, 0.01, 'At the lower bound there is nothing to pass through.');
+        $this->assertEqualsWithDelta(MacroEngine::DEPOSIT_BETA_FLOOR, $floor->systemDepositBeta, 0.01, 'At the lower bound there is nothing to pass through.');
     }
 
     public function testMoneyFundsGainShareOnlyWhenTheDepositSpreadOpens(): void

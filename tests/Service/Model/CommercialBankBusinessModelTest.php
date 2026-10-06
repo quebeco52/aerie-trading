@@ -309,192 +309,181 @@ class CommercialBankBusinessModelTest extends TestCase
         return $stock;
     }
 
-    public function testMacaulayDurationGapNIMSqueezeUnderInversion(): void
+    /** Every tenor of the opening curve moved by the same amount: a parallel shift. */
+    private function shiftedMacro(float $shift): MacroStateDTO
     {
-        $stock = new Stock();
-        $stock->setTicker('RIVR');
-        $stock->setBeta('1.0');
-        $stock->setTotalEquity('2000000000');
-        $stock->setCustomerDeposits('15000000000');
-        $stock->setWholesaleDebt('3000000000');
-        $stock->setCorporateTreasury('1000000000');
-        $stock->setFloatingDebtRatio('0.10');
+        $opening = new MacroStateDTO();
 
-        // Steep curve: 10Y = 5%, 2Y = 3% (Spread = +200 bps)
-        $steepMacro = new MacroStateDTO(
-            outputGapEma: 0.0,
-            policyRateEma: 0.03,
-            yield2yEma: 0.03,
-            yield10yEma: 0.05,
-            macroCreditSpreadEma: 0.02
+        return new MacroStateDTO(
+            policyRateEma: $opening->policyRateEma + $shift,
+            yield2yEma: $opening->yield2yEma + $shift,
+            yield5yEma: $opening->yield5yEma + $shift,
+            yield10yEma: $opening->yield10yEma + $shift,
+            yield30yEma: $opening->yield30yEma + $shift,
         );
+    }
 
-        // Inverted curve: 10Y = 3%, 2Y = 5% (Spread = -200 bps)
-        $invertedMacro = new MacroStateDTO(
-            outputGapEma: 0.0,
-            policyRateEma: 0.05,
-            yield2yEma: 0.05,
-            yield10yEma: 0.03,
-            macroCreditSpreadEma: 0.02
-        );
+    /** Runs the bank's physics for a number of quarters at one macro state, carrying the book forward as the engine does. */
+    private function carryBook(CommercialBankBusinessModel $model, Stock $stock, MacroStateDTO $macro, int $quarters): void
+    {
+        for ($quarter = 0; $quarter < $quarters; $quarter++) {
+            $result = $model->computeActualFinancials($stock, 1_000_000_000.0, 0.50, 200_000_000.0, 0.0, $macro, $this->mathUtility);
+            $stock->setEarningsMomentumZ($result->streamZ);
+        }
+    }
 
-        $steepMath = $this->createMathUtilityMock([0.0, 0.0, 0.0]);
-        $invertedMath = $this->createMathUtilityMock([0.0, 0.0, 0.0]);
+    /**
+     * The franchise is priced once, at the opening macro, so the revenue its structural return requires is exactly
+     * what its book and fees earn there: the opening board opens where it did, and the rate cycle moves it afterwards.
+     */
+    public function testTheFranchiseReproducesTheOpeningRevenue(): void
+    {
+        $model = new class extends CommercialBankBusinessModel {
+            public function calibrationYield(Stock $stock): float
+            {
+                return $this->resolveCalibrationYield($stock, new MacroStateDTO());
+            }
+        };
+        $stock = $this->creditTestBank('LAKE');
+        $stock->setBaselineRoe('0.15');
+        $stock->setOperatingMargin('0.40');
+        $opening = new MacroStateDTO();
 
-        $steepResult = $this->model->computeActualFinancials(
-            $stock,
-            expectedRevenue: 500_000_000.0,
-            realizedVariableMargin: 0.50,
-            fixedCosts: 100_000_000.0,
-            baselineVol: 0.05,
-            macroState: $steepMacro,
-            mathUtility: $steepMath
-        );
+        $metrics = $model->getTargetMetrics($stock, $opening, $this->mathUtility);
+        $grossYield = $metrics['baseline_roic'] / (0.40 * (1.0 - $opening->corporateTaxRate));
 
-        $invertedResult = $this->model->computeActualFinancials(
-            $stock,
-            expectedRevenue: 500_000_000.0,
-            realizedVariableMargin: 0.50,
-            fixedCosts: 100_000_000.0,
-            baselineVol: 0.05,
-            macroState: $invertedMacro,
-            mathUtility: $invertedMath
-        );
+        $this->assertEqualsWithDelta($model->calibrationYield($stock), $grossYield, 1e-9);
+        $this->carryBook($model, $stock, $opening, 4);
+        $this->assertEqualsWithDelta($grossYield, $model->getTargetMetrics($stock, $opening, $this->mathUtility)['baseline_roic'] / (0.40 * (1.0 - $opening->corporateTaxRate)), 1e-9, 'a book at its steady state stays there');
+    }
 
-        // Inversion must result in a higher cost ratio (NIM squeeze) than a steep yield curve
-        $this->assertGreaterThan(
-            $steepResult->clampedMargin,
-            $invertedResult->clampedMargin,
-            'Yield curve inversion must compress NIM and increase variable cost margin relative to steep curve.'
-        );
+    /**
+     * Each part of the book reprices toward the market at the hazard its measured repricing maturity implies
+     * (Drechsler, Savov & Schnabl 2021, Table A.2), and the bank floats as much of its other loans as puts its
+     * four-quarter interest income beta on DSS's matching line through its own expense beta: after a parallel point
+     * the rise in interest yield is that line's value, and the bank's ROA barely moves.
+     */
+    public function testAParallelPointReachesInterestYieldAtTheBooksRepricingSpeed(): void
+    {
+        $stock = $this->creditTestBank('NEUTRAL');
+        $this->carryBook($this->model, $stock, new MacroStateDTO(), 1);
+        $before = $this->model->resolveInterestYield($stock, new MacroStateDTO());
 
-        // The squeeze is disclosed in the net interest margin: the dollars it moved the cost ratio by.
-        $this->assertLessThan(0.0, $steepResult->netInterestSqueeze, 'a steep curve widens the margin');
-        $this->assertGreaterThan(0.0, $invertedResult->netInterestSqueeze, 'an inverted curve narrows it');
+        $shifted = $this->shiftedMacro(0.01);
+        $this->carryBook($this->model, $stock, $shifted, 4);
+        $rise = ($this->model->resolveInterestYield($stock, $shifted) - $before) / 0.01;
+
+        $expenseBeta = $this->model->resolveExpenseBeta($stock, new MacroStateDTO());
+        $matched = CommercialBankBusinessModel::MEAN_INCOME_BETA
+            + (CommercialBankBusinessModel::INCOME_EXPENSE_BETA_MATCHING_SLOPE * ($expenseBeta - CommercialBankBusinessModel::MEAN_EXPENSE_BETA));
+
+        // DSS strike both betas on total assets, so the cash earning the policy rate beside the book counts as income.
+        $earningAssets = $this->model->resolveEarningAssets($stock);
+        $cash = (float) $stock->getCorporateTreasury();
+        $earningCash = $cash - ((float) $stock->getTotalEquity() * CommercialBankBusinessModel::INTEREST_INCOME_CASH_BUFFER);
+        $assetIncomeBeta = (($rise * $earningAssets) + $earningCash) / ($earningAssets + $cash);
+
+        $this->assertEqualsWithDelta($matched, $assetIncomeBeta, 1e-6, 'income beta on the DSS matching line');
+        $this->assertEqualsWithDelta(0.360, $expenseBeta, 0.03, 'US banks: interest expense beta 0.360 (DSS 2021)');
+        $this->assertLessThan(0.05, abs($assetIncomeBeta - $expenseBeta), 'a matched bank\'s net interest income barely moves with rates');
+
+        $this->carryBook($this->model, $stock, $shifted, 160);
+        $this->assertEqualsWithDelta(1.0, ($this->model->resolveInterestYield($stock, $shifted) - $before) / 0.01, 0.01, 'in the long run the whole book reprices');
+    }
+
+    /**
+     * Non-interest income is the bank's FDIC peer group's per unit of book, and the loan spread takes what is left of
+     * the revenue its structural return needs: a lender earning more from fees prices its loans thinner.
+     */
+    public function testFeesAreThePeerGroupsAndTheLoanSpreadTakesTheRest(): void
+    {
+        $model = new class extends CommercialBankBusinessModel {
+            /** @return array{floating_share: float, loan_spread: float, fee_yield: float} */
+            public function pricing(Stock $stock): array
+            {
+                return $this->resolveFranchisePricing($stock);
+            }
+        };
+        $untuned = $this->creditTestBank('PLAIN');
+        $international = $this->creditTestBank('LAKE');
+
+        $this->assertEqualsWithDelta(CommercialBankBusinessModel::NON_INTEREST_INCOME_TO_EARNING_ASSETS, $model->pricing($untuned)['fee_yield'], 1e-12);
+        $this->assertEqualsWithDelta(0.0207, $model->pricing($international)['fee_yield'], 1e-12, 'US international banks, 2019 (FDIC QBP)');
+        $this->assertLessThan($model->pricing($untuned)['loan_spread'], $model->pricing($international)['loan_spread']);
+    }
+
+    /** A mortgage book reprices over nearly a decade, a business book within a couple of years. */
+    public function testAMortgageBookRepricesSlowerThanABusinessBook(): void
+    {
+        $mortgageLender = new class extends CommercialBankBusinessModel {
+            protected function resolveLoanBookMix(Stock $stock): array
+            {
+                return ['residential' => 1.0, 'consumer' => 0.0, 'commercial_real_estate' => 0.0, 'business' => 0.0];
+            }
+        };
+        $businessLender = new class extends CommercialBankBusinessModel {
+            protected function resolveLoanBookMix(Stock $stock): array
+            {
+                return ['residential' => 0.0, 'consumer' => 0.0, 'commercial_real_estate' => 0.0, 'business' => 1.0];
+            }
+        };
+
+        $rise = function (CommercialBankBusinessModel $model): float {
+            $stock = $this->creditTestBank('MIX');
+            $this->carryBook($model, $stock, new MacroStateDTO(), 1);
+            $before = $model->resolveInterestYield($stock, new MacroStateDTO());
+            $this->carryBook($model, $stock, $this->shiftedMacro(0.01), 4);
+
+            return $model->resolveInterestYield($stock, $this->shiftedMacro(0.01)) - $before;
+        };
+
+        $this->assertGreaterThan(3.0 * $rise($mortgageLender), $rise($businessLender));
+    }
+
+    /**
+     * A mortgage reprices off the long end of the curve: a point on the 10-year alone, with the short end held, lifts a
+     * fully repriced residential book by the curve's move at its 9.5-year repricing tenor.
+     */
+    public function testAMortgageBookIsPricedOffTheLongEnd(): void
+    {
+        $mortgageLender = new class extends CommercialBankBusinessModel {
+            protected function resolveLoanBookMix(Stock $stock): array
+            {
+                return ['residential' => 1.0, 'consumer' => 0.0, 'commercial_real_estate' => 0.0, 'business' => 0.0];
+            }
+        };
+        $opening = new MacroStateDTO();
+        $steeper = new MacroStateDTO(yield10yEma: $opening->yield10yEma + 0.01);
+        $stock = $this->creditTestBank('MORT');
+
+        $tenorMove = (CommercialBankBusinessModel::RESIDENTIAL_REPRICING_YEARS - 5.0) / 5.0;
+        $securitiesMove = (CommercialBankBusinessModel::SECURITIES_REPRICING_YEARS - 5.0) / 5.0;
+        $loanShare = 1.0 - FinancialConstants::SECURITIES_SHARE_OF_EARNING_ASSETS;
         $this->assertEqualsWithDelta(
-            ($invertedResult->clampedMargin - $steepResult->clampedMargin) * $invertedResult->actualRevenue,
-            $invertedResult->netInterestSqueeze - $steepResult->netInterestSqueeze,
-            1.0
+            0.01 * (($loanShare * $tenorMove) + ((1.0 - $loanShare) * $securitiesMove)),
+            $mortgageLender->resolveInterestYield($stock, $steeper) - $mortgageLender->resolveInterestYield($stock, $opening),
+            1e-9
         );
     }
 
-    public function testHedgeRatioBluntingProtectsHedgedBank(): void
+    /** The rate cycle reaches interest income alone: a repriced book earns more interest and the same fees. */
+    public function testARateRiseLandsInInterestIncomeAlone(): void
     {
-        // Hedged titan bank: high floating ratio, lower sensitivity
-        $hedgedBank = new Stock();
-        $hedgedBank->setTicker('LAKE');
-        $hedgedBank->setBeta('1.0');
-        $hedgedBank->setTotalEquity('10000000000');
-        $hedgedBank->setCustomerDeposits('80000000000');
-        $hedgedBank->setWholesaleDebt('10000000000');
-        $hedgedBank->setCorporateTreasury('5000000000');
-        $hedgedBank->setFloatingDebtRatio('0.60');
+        $stock = $this->creditTestBank('LAKE');
+        $streams = function (MacroStateDTO $macro) use ($stock): array {
+            $metrics = $this->model->getTargetMetrics($stock, $macro, $this->mathUtility);
+            $expectedRevenue = $metrics['invested_capital'] * $metrics['baseline_roic'] / (max(0.01, (float) $stock->getOperatingMargin()) * (1.0 - $macro->corporateTaxRate)) / 4.0;
+            $result = $this->model->computeActualFinancials($stock, $expectedRevenue, 0.50, 200_000_000.0, 0.0, $macro, $this->createMathUtilityMock());
 
-        // Unhedged regional lender: low floating ratio, higher sensitivity
-        $unhedgedBank = new Stock();
-        $unhedgedBank->setTicker('RIVR');
-        $unhedgedBank->setBeta('1.0');
-        $unhedgedBank->setTotalEquity('10000000000');
-        $unhedgedBank->setCustomerDeposits('80000000000');
-        $unhedgedBank->setWholesaleDebt('10000000000');
-        $unhedgedBank->setCorporateTreasury('5000000000');
-        $unhedgedBank->setFloatingDebtRatio('0.10');
+            return $result->streamRevenue;
+        };
 
-        // Inverted curve: 10Y = 3.5%, 2Y = 5.5% (Spread = -200 bps)
-        $invertedMacro = new MacroStateDTO(
-            outputGapEma: 0.0,
-            policyRateEma: 0.055,
-            yield2yEma: 0.055,
-            yield10yEma: 0.035,
-            macroCreditSpreadEma: 0.02
-        );
+        $base = $streams(new MacroStateDTO());
+        $raised = $streams($this->shiftedMacro(0.01));
 
-        $mathMockHedged = $this->createMathUtilityMock([0.0, 0.0, 0.0, 0.0]);
-        $hedgedResult = $this->model->computeActualFinancials(
-            $hedgedBank,
-            expectedRevenue: 2_000_000_000.0,
-            realizedVariableMargin: 0.50,
-            fixedCosts: 400_000_000.0,
-            baselineVol: 0.0,
-            macroState: $invertedMacro,
-            mathUtility: $mathMockHedged
-        );
-
-        $mathMockUnhedged = $this->createMathUtilityMock([0.0, 0.0, 0.0, 0.0]);
-        $unhedgedResult = $this->model->computeActualFinancials(
-            $unhedgedBank,
-            expectedRevenue: 2_000_000_000.0,
-            realizedVariableMargin: 0.50,
-            fixedCosts: 400_000_000.0,
-            baselineVol: 0.0,
-            macroState: $invertedMacro,
-            mathUtility: $mathMockUnhedged
-        );
-
-        $this->assertLessThan(
-            $unhedgedResult->clampedMargin,
-            $hedgedResult->clampedMargin,
-            'Hedged bank with higher floating ratio and ALM tuning must suffer less margin compression during inversion.'
-        );
-    }
-
-    public function testInterbankLiquiditySpreadCompressesNIM(): void
-    {
-        $bank = new Stock();
-        $bank->setTicker('BANK');
-        $bank->setBeta('1.0');
-        $bank->setTotalEquity('10000000000');
-        $bank->setCustomerDeposits('50000000000');
-        $bank->setWholesaleDebt('20000000000');
-        $bank->setCorporateTreasury('2000000000');
-        $bank->setFloatingDebtRatio('0.50');
-
-        $calmMacro = new MacroStateDTO(
-            outputGapEma: 0.0,
-            policyRateEma: 0.03,
-            yield2yEma: 0.03,
-            yield10yEma: 0.05,
-            macroCreditSpreadEma: 0.02,
-            interbankLiquiditySpreadEma: 0.0010
-        );
-
-        $tedBlowoutMacro = new MacroStateDTO(
-            outputGapEma: 0.0,
-            policyRateEma: 0.03,
-            yield2yEma: 0.03,
-            yield10yEma: 0.05,
-            macroCreditSpreadEma: 0.02,
-            interbankLiquiditySpreadEma: 0.0150
-        );
-
-        $mathMock = $this->createMathUtilityMock([0.0, 0.0, 0.0]);
-
-        $calmResult = $this->model->computeActualFinancials(
-            $bank,
-            expectedRevenue: 1_000_000_000.0,
-            realizedVariableMargin: 0.50,
-            fixedCosts: 200_000_000.0,
-            baselineVol: 0.0,
-            macroState: $calmMacro,
-            mathUtility: $mathMock
-        );
-
-        $tedResult = $this->model->computeActualFinancials(
-            $bank,
-            expectedRevenue: 1_000_000_000.0,
-            realizedVariableMargin: 0.50,
-            fixedCosts: 200_000_000.0,
-            baselineVol: 0.0,
-            macroState: $tedBlowoutMacro,
-            mathUtility: $mathMock
-        );
-
-        $this->assertGreaterThan(
-            $calmResult->clampedMargin,
-            $tedResult->clampedMargin,
-            'TED spread spike must increase wholesale borrowing costs, compress NIM, and raise the variable cost ratio.'
-        );
-        $this->assertLessThan($calmResult->ebit, $tedResult->ebit);
+        $this->assertGreaterThan($base['net_interest_income'], $raised['net_interest_income']);
+        $this->assertEqualsWithDelta($base['fee_income'], $raised['fee_income'], $base['fee_income'] * 1e-9, 'fees do not reprice');
+        $this->assertEqualsWithDelta($base['proprietary_dividend'] ?? 0.0, $raised['proprietary_dividend'] ?? 0.0, 1.0);
     }
 
     public function testBaselThreeRwaAndCet1Calculations(): void

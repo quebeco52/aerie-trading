@@ -21,7 +21,8 @@ enum ModelParam: string
     /** Propensity of this management team to steer reported earnings toward consensus with accruals. */
     case EarningsManagementPropensity = 'earnings_management_propensity';
     case CeclSpreadSensitivity = 'cecl_spread_sensitivity';
-    case NimInversionSensitivity = 'nim_inversion_sensitivity';
+    /** A lender's annual non-interest income as a share of earning assets. */
+    case NonInterestIncomeToEarningAssets = 'non_interest_income_to_earning_assets';
     case CreditRiskAppetite = 'credit_risk_appetite';
     case ResidentialMortgageShare = 'residential_mortgage_share';
     case ConsumerLoanShare = 'consumer_loan_share';
@@ -75,11 +76,8 @@ enum ModelParam: string
     case HfQuantAlphaWeight = 'hf_quant_alpha_weight';
 
     // --- Banking & Credit Services ---
-    case NiiRevenueWeight = 'nii_revenue_weight';
     case FeeRevenueWeight = 'fee_revenue_weight';
     case ProprietaryDividendWeight = 'proprietary_dividend_weight';
-    case LendingRevenueWeight = 'lending_revenue_weight';
-    case NetworkRevenueWeight = 'network_revenue_weight';
     case MortgageOriginationWeight = 'mortgage_origination_weight';
     case DirectLendingWeight = 'direct_lending_weight';
     /** Book equity-to-assets ratio the institution manages its capital toward: its seeded ratio, since bank leverage converges to bank-specific, time-invariant targets (Gropp & Heider 2010). */

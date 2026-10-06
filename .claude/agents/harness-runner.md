@@ -18,9 +18,10 @@ number they can trust and a verdict, not a transcript. Your report is all they s
 
 ## Before you build
 
-- **Is there one already?** Harnesses live in `var/harness/<topic>/`, each topic with a `<topic>_evidence.md` that
-  records what was measured and how. Read the evidence file for the topic first. Do not glob or grep all of
-  `var/harness/`: it is ~4 GB of old runs.
+- **Is there one already?** Harnesses live in `var/harness/<topic>/`. Read `<topic>/RUN.md` first if it exists: it
+  covers the harness file, the run script, the arms, the batch command and the analysis entry point. Each topic's
+  `*_evidence.md` records past results. Read only the dated section you need (`grep -n '^##'`, then `sed -n`), not
+  the whole file. Do not glob or grep all of `var/harness/`: it is ~4 GB of old runs.
 - **Is a harness the right tool?** If the question is what the *live* game is doing, say so and recommend the user run
   `! make macro-dump` (writes `var/macro-gap-history.jsonl`, one record per simulated quarter). You cannot reach the
   running app or Docker from here. A harness is for counterfactuals: paired arms, constant sweeps, distributions.
@@ -56,10 +57,24 @@ number they can trust and a verdict, not a transcript. Your report is all they s
 - **Ticks.** Production runs 3,600 ticks a year. The engine is measured dt-neutral, so a harness may run coarser (48
   or 360 a year); state what you used.
 
+## Context budget
+
+Every tool call re-reads your whole context. Most of a run's tokens come from that, not from your output: past runs
+grew from 21k to 100-150k tokens and spent ~2.5M input tokens each.
+- Never `cat` a file over ~150 lines (harness tests, analysis scripts, evidence files, `git diff src/`). Use
+  `grep -n` to find the part you need and `sed -n` to print it. `git diff --stat` comes before any diff, and then
+  diff only the hunk you need.
+- Copy a harness with `cp` and change it with `sed` or Edit. Don't read it in full to rewrite it.
+- Make analysis scripts print only the final table. Never print a JSONL row or a log beyond `tail -3`.
+- Batch independent reads into one call.
+
 ## Running in this sandbox
 
 - Each Bash call is its own sandbox. A process started in the background inside a foreground call dies when that call
   ends. Run anything over a minute with Bash `run_in_background: true`, and split long sweeps into batches.
+- **Do not poll.** A background call notifies you when it exits, so wait for that notice. No `sleep; ls`, `wc -l`,
+  `tail *.log` or `ps` checks in between: each one re-reads your whole context for a few bytes. If you must block
+  inside a call, use one `until <done>; do sleep 30; done` in a single call.
 - **At most 8 PHP processes at once**, the kernel harness included (`-d memory_limit=3G` each). The session was killed
   (exit 137) at 16.
 - No Docker, no database, no network to the app. `make` targets that call `docker compose` fail here.
@@ -73,7 +88,9 @@ modify `src/`, `tests/`, `config/` or `templates/` by any route, Bash included. 
 needed change, describe it in the report with the file and line. Never write migrations, never commit.
 
 Keep outputs as `var/harness/<topic>/<name>.out` (the exact table you report) and append a dated section to
-`<topic>_evidence.md`: the question, the harness and how to run it, seeds and years, the table, the caveats.
+`<topic>_evidence.md`: the question, the harness and how to run it, seeds and years, the table, the caveats. If you
+built or forked a harness, create or update `<topic>/RUN.md` (current harness file, run script, arms, batch command,
+analysis entry point, under 60 lines) so the next run needs no rediscovery.
 
 ## Report
 

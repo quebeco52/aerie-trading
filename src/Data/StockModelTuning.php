@@ -74,50 +74,45 @@ class StockModelTuning
         // Universal banking behemoth with captive corporate Lakebird Syndicate dividend streams.
         'LAKE' => [
             ModelParam::ProprietaryDividendWeight->value => 0.20,
-            ModelParam::NiiRevenueWeight->value          => 0.60,
             ModelParam::FeeRevenueWeight->value          => 0.20,
-            ModelParam::NimInversionSensitivity->value   => 8.0,
             ModelParam::CreditRiskAppetite->value        => 0.40,
             ModelParam::ResidentialMortgageShare->value  => 0.30, // The District's main mortgage lender
             ModelParam::ConsumerLoanShare->value         => 0.15,
             ModelParam::CommercialRealEstateShare->value => 0.15, // Leads the syndicated corporate book instead
             ModelParam::TargetCapitalRatio->value        => 0.084, // Its seeded book equity/assets (JPMorgan 8.6% at end-2024)
             ModelParam::OperatingCostToEarningAssets->value => 0.0279, // US international banks, 2019: 2.45% of assets, 87.9% earning (FDIC QBP)
+            ModelParam::NonInterestIncomeToEarningAssets->value => 0.0207, // US international banks, 2019: 1.82% of assets (FDIC QBP)
         ],
 
         // --- Riverstone Financial (RIVR) ---
         // Agile regional lender poaching district SMEs. Pure NII model (90%) hyper-sensitive to NIM inversion.
         'RIVR' => [
-            ModelParam::NiiRevenueWeight->value          => 0.90,
             ModelParam::FeeRevenueWeight->value          => 0.10,
-            ModelParam::NimInversionSensitivity->value   => 12.0,
             ModelParam::CreditRiskAppetite->value        => 0.60,
             ModelParam::ResidentialMortgageShare->value  => 0.00, // Business lender: no household book
             ModelParam::ConsumerLoanShare->value         => 0.00,
             ModelParam::CommercialRealEstateShare->value => 0.45, // Commercial mortgages for contractors and developers
             ModelParam::TargetCapitalRatio->value        => 0.111, // Its seeded book equity/assets
             ModelParam::OperatingCostToEarningAssets->value => 0.0282, // US commercial lenders, 2019: 2.56% of assets, 90.7% earning (FDIC QBP)
+            ModelParam::NonInterestIncomeToEarningAssets->value => 0.0117, // US commercial lenders, 2019: 1.06% of assets (FDIC QBP)
         ],
 
         // --- Plover Savings Bank (PLVR) ---
         // Deposit-funded savings bank lending mostly fixed-rate mortgages: the board's longest duration gap.
         'PLVR' => [
-            ModelParam::NiiRevenueWeight->value          => 0.85,
             ModelParam::FeeRevenueWeight->value          => 0.15,
-            ModelParam::NimInversionSensitivity->value   => 14.0, // Fixed-rate mortgages funded by sight deposits
             ModelParam::CreditRiskAppetite->value        => 0.45, // Prime owner-occupier lending
             ModelParam::ResidentialMortgageShare->value  => 0.65,
             ModelParam::ConsumerLoanShare->value         => 0.10,
             ModelParam::CommercialRealEstateShare->value => 0.10, // Small landlords; business loans take the last 15%
             ModelParam::TargetCapitalRatio->value        => 0.084, // Its seeded book equity/assets
             ModelParam::OperatingCostToEarningAssets->value => 0.0267, // US mortgage lenders, 2019: 2.54% of assets, 95.1% earning (FDIC QBP)
+            ModelParam::NonInterestIncomeToEarningAssets->value => 0.0147, // US mortgage lenders, 2019: 1.40% of assets (FDIC QBP)
         ],
 
         // --- Talon Credit (TALN) ---
         // Prime credit card & digital merchant payment rail network. Substantial swipe interchange fee tollbooth (45%).
         'TALN' => [
-            ModelParam::LendingRevenueWeight->value  => 0.55,
-            ModelParam::NetworkRevenueWeight->value  => 0.45,
             ModelParam::CeclSpreadSensitivity->value => 1.40,
             ModelParam::CreditRiskAppetite->value    => 0.375, // Prime cardholders: three quarters of the industry's card losses, ~3.5% a year
         ],
@@ -125,11 +120,10 @@ class StockModelTuning
         // --- Stork Consumer Credit (STRK) ---
         // Subprime consumer finance & installment loan originator. Highly exposed to credit spread widening.
         'STRK' => [
-            ModelParam::LendingRevenueWeight->value  => 0.95,
-            ModelParam::NetworkRevenueWeight->value  => 0.05,
             ModelParam::CeclSpreadSensitivity->value => 2.20,
             ModelParam::CreditRiskAppetite->value    => 0.80, // Subprime instalment book: 1.6x the card industry, as OneMain's 6.02% against it in 2019 (~7.5% a year)
             ModelParam::OperatingCostToEarningAssets->value => 0.059, // OneMain consumer lending, 2019: $1,290M on $17,055M average receivables (7.6%), on the 78% loan share
+            ModelParam::NonInterestIncomeToEarningAssets->value => 0.0285, // OneMain, 2019: $622M of insurance and other revenue on $17,055M average receivables (3.65%), on the 78% loan share
         ],
 
         // =====================================================================

@@ -361,6 +361,14 @@ class MacroEngine
     // --- Deposits Channel (Drechsler, Savov & Schnabl 2017) ---
     /** System-wide deposit beta at the neutral policy rate (~0.20): the share of a rate rise banks pass to depositors, and the level the bank model's competitive advantage is normalised to. */
     public const SYSTEM_DEPOSIT_BETA_BASE = 0.20;
+    /** Deposit beta at the effective lower bound: banks pass almost nothing through when there is nothing to pass. */
+    public const DEPOSIT_BETA_FLOOR = 0.05;
+    /** Deposit beta per unit of policy rate, rising with the level as DSS document: the line is anchored so the base beta is paid at the neutral nominal rate, which puts it near 0.30 at 5.25% (the cumulative betas of the 2022-23 cycle) and at the floor below 1%. */
+    public const DEPOSIT_BETA_RATE_SENSITIVITY = 6.0;
+    /** Ceiling on the system deposit beta; even in the 1980s banks kept a third of the rate. */
+    public const MAX_SYSTEM_DEPOSIT_BETA = 0.60;
+    /** Time constant (years) of deposit repricing: banks lag the policy rate by about three quarters. */
+    public const DEPOSIT_REPRICING_YEARS = 0.75;
     /** Share of household liquid assets held in money-market funds at the neutral deposit spread (~15%, the US share outside a hiking cycle). */
     public const MMF_SHARE_BASE = 0.15;
 
