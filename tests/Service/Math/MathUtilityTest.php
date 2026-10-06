@@ -1318,6 +1318,18 @@ class MathUtilityTest extends TestCase
         $this->assertEqualsWithDelta(1.40, $betaDampened, 0.0001);
     }
 
+    /** E[max(0, t - Z)] = tΦ(t) + φ(t): φ(0) at the mean, ~0.0293 at t = -1.5, and the identity f(t) - f(-t) = t. */
+    public function testNormalLowerPartialMoment(): void
+    {
+        $math = new MathUtility();
+
+        $this->assertEqualsWithDelta(1.0 / sqrt(2.0 * M_PI), $math->calculateNormalLowerPartialMoment(0.0), 1e-6);
+        $this->assertEqualsWithDelta(0.029307, $math->calculateNormalLowerPartialMoment(-1.5), 1e-5);
+        foreach ([0.5, 1.5, 3.0] as $t) {
+            $this->assertEqualsWithDelta($t, $math->calculateNormalLowerPartialMoment($t) - $math->calculateNormalLowerPartialMoment(-$t), 1e-6);
+        }
+    }
+
     public function testCalculateNormalCDF(): void
     {
         // Standard normal symmetry: N(0) = 0.5

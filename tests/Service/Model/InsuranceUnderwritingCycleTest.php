@@ -8,6 +8,8 @@ use App\DTO\MacroStateDTO;
 use App\DTO\StreamContext;
 use App\Entity\Stock;
 use App\Service\Math\MathUtility;
+use App\Service\Event\ShockEvent;
+use App\Service\Macro\MacroEngine;
 use App\Service\Model\Sector\InsuranceBusinessModel;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\TestCase;
@@ -83,68 +85,35 @@ final class InsuranceUnderwritingCycleTest extends TestCase
         $this->assertEqualsWithDelta(1.0, $exhausted, 1e-9, 'Once capital is fully back the uplift is gone.');
     }
 
-    /** A catastrophe puts the market into the hard regime. */
-    public function testCatastropheStartsTheHardMarket(): void
+    /**
+     * A loss that exhausts the carrier's catastrophe retention puts it into the hard regime, even with its
+     * capital intact and the district burden short of the market-wide threshold.
+     */
+    public function testCoverAttachmentStartsTheHardMarket(): void
     {
-        $model = new InsuranceBusinessModel();
+        // Own claim draw -3.0 on a district season at 2.5 average years: past the retention, under the threshold.
+        $attached = $this->runQuarter(-3.0, 2.5);
+        $this->assertSame(ShockEvent::REINSURANCE_ATTACHMENT_BREACH, $attached->eventType);
+        $this->assertGreaterThan(0.0, $attached->streamZ[self::REGIME_KEY] ?? 0.0, 'An attached cover must turn the market hard.');
 
-        $math = $this->getMockBuilder(MathUtility::class)->onlyMethods(['generateStandardNormal'])->getMock();
-        // Firm factor, revenue Z, then a claim draw past the reinsurance attachment point.
-        $math->method('generateStandardNormal')->willReturnOnConsecutiveCalls(0.0, 0.0, -3.0);
-
-        $result = $model->computeActualFinancials(
-            $this->makeStock(),
-            50_000_000_000.0,
-            0.60,
-            2_000_000_000.0,
-            0.15,
-            $this->makeMacro(self::Q3_TIME),
-            $math
-        );
-
-        $this->assertArrayHasKey(self::REGIME_KEY, $result->streamZ);
-        $this->assertGreaterThan(0.0, $result->streamZ[self::REGIME_KEY], 'A capital event must turn the market hard.');
+        // The same large loss in an average year stays inside the retention and leaves the market alone: the
+        // firm's own bad quarter is not a market event.
+        $retained = $this->runQuarter(-3.0, 1.0);
+        $this->assertNotSame(ShockEvent::REINSURANCE_ATTACHMENT_BREACH, $retained->eventType);
+        $this->assertSame(0.0, (float) ($retained->streamZ[self::REGIME_KEY] ?? 0.0));
     }
 
-    /** The same loss draw clears a shallower bar in the wind season than out of it. */
-    public function testCatastropheSeasonRaisesFrequencyWithoutTouchingPremiums(): void
+    /**
+     * The wind season reaches claims through the district burden, whose arrivals already follow the calendar.
+     * The same burden and draw must cost the same in any quarter: a second, firm-level season counted it twice.
+     */
+    public function testTheSeasonReachesClaimsOnlyThroughTheDistrictBurden(): void
     {
-        $claimDraw = -1.50; // Inside the Q3 seasonal threshold, outside the Q4 one.
+        $windSeason = $this->runQuarter(-2.0, 1.5, self::Q3_TIME);
+        $quietSeason = $this->runQuarter(-2.0, 1.5, self::Q4_TIME);
 
-        $run = function (float $totalTime) use ($claimDraw) {
-            $model = new InsuranceBusinessModel();
-            $math = $this->getMockBuilder(MathUtility::class)->onlyMethods(['generateStandardNormal'])->getMock();
-            $math->method('generateStandardNormal')->willReturnOnConsecutiveCalls(0.0, 0.0, $claimDraw);
-
-            return $model->computeActualFinancials(
-                $this->makeStock(),
-                50_000_000_000.0,
-                0.60,
-                2_000_000_000.0,
-                0.15,
-                $this->makeMacro($totalTime),
-                $math
-            );
-        };
-
-        $windSeason = $run(self::Q3_TIME);
-        $quietSeason = $run(self::Q4_TIME);
-
-        $this->assertGreaterThan(
-            $quietSeason->actualVariableCosts,
-            $windSeason->actualVariableCosts,
-            'An identical loss draw must cost more in the wind season, because the frequency bar is lower there.'
-        );
-
-        // The correctness point of the whole mechanic: a hurricane season does not sell more policies. If
-        // seasonality had been applied to revenue instead of loss frequency, this would fail — and the
-        // combined ratio, the surprise machinery and the analyst de-seasonalization would all be wrong.
-        $this->assertEqualsWithDelta(
-            $quietSeason->actualRevenue,
-            $windSeason->actualRevenue,
-            1e-6,
-            'Premiums written are not seasonal; only catastrophe frequency is.'
-        );
+        $this->assertEqualsWithDelta($quietSeason->actualVariableCosts, $windSeason->actualVariableCosts, 1e-3);
+        $this->assertEqualsWithDelta($quietSeason->actualRevenue, $windSeason->actualRevenue, 1e-6, 'Premiums written are not seasonal.');
     }
 
     /** Seasonal multipliers must average to one, or the calendar would change annual loss expectancy. */
@@ -152,11 +121,31 @@ final class InsuranceUnderwritingCycleTest extends TestCase
     {
         $this->assertEqualsWithDelta(
             4.0,
-            array_sum(InsuranceBusinessModel::CATASTROPHE_SEASONALITY),
+            array_sum(MacroEngine::CATASTROPHE_SEASONALITY),
             1e-9,
             'The season redistributes losses across the year, it does not add any.'
         );
-        $this->assertCount(4, InsuranceBusinessModel::CATASTROPHE_SEASONALITY);
+        $this->assertCount(4, MacroEngine::CATASTROPHE_SEASONALITY);
+    }
+
+    /** One quarter for a carrier holding three years of its book in surplus, so no capital trigger fires. */
+    private function runQuarter(float $claimDraw, float $burden, float $totalTime = self::Q4_TIME): \App\DTO\ActualFinancialsDTO
+    {
+        $model = new InsuranceBusinessModel();
+        $math = $this->getMockBuilder(MathUtility::class)->onlyMethods(['generateStandardNormal'])->getMock();
+        // Firm factor, revenue Z, then the claim draw.
+        $math->method('generateStandardNormal')->willReturnOnConsecutiveCalls(0.0, 0.0, $claimDraw);
+
+        $stock = $this->makeStock();
+        $stock->setTotalEquity('600000000000');
+        $macro = MacroStateDTO::fromArray([
+            'total_time' => $totalTime,
+            'inflation_ema' => 0.02,
+            'policy_rate' => InsuranceBusinessModel::DEFAULT_POLICY_RATE_FALLBACK,
+            'catastrophe_loss_index_ema' => $burden,
+        ]);
+
+        return $model->computeActualFinancials($stock, 50_000_000_000.0, 0.60, 2_000_000_000.0, 0.15, $macro, $math);
     }
 
     /** The quarter is derived from elapsed simulation time, matching what the earnings engine counts. */

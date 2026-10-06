@@ -59,7 +59,12 @@ class ReinsuranceBusinessModelTest extends TestCase
         );
     }
 
-    public function testHardMarketPricingExpandsTreatyRevenueWithoutMarginDoubleDip(): void
+    /**
+     * A capital shortfall reaches treaty revenue once, through the hard-market rate on the pricing-power
+     * multiplier. Adding it to this quarter's treaty revenue as well booked a price rise as volume, which the
+     * engine then costs at the full claims ratio.
+     */
+    public function testCapitalShortfallStartsTheHardMarketWithoutBookingItAsTreatyVolume(): void
     {
         $stock = new Stock();
         $stock->setTicker('REIN');
@@ -90,12 +95,16 @@ class ReinsuranceBusinessModelTest extends TestCase
             mathUtility: $mathMock
         );
 
-        // Treaty revenue should be boosted by hard market pricing bonus (> baseline weight * expectedRevenue)
         $baselineTreatyRevenue = $expectedRevenue * ReinsuranceBusinessModel::TREATY_REINSURANCE_WEIGHT;
-        $this->assertGreaterThan($baselineTreatyRevenue, $result->streamRevenue['treaty_reinsurance']);
+        $this->assertEqualsWithDelta($baselineTreatyRevenue, $result->streamRevenue['treaty_reinsurance'], 1.0);
 
-        // Margin should NOT have hardMarketPricingBonus subtracted from it (it should equal realizedVariableMargin since claimZ = 0)
-        $this->assertEqualsWithDelta($realizedVariableMargin, $result->clampedMargin, 0.0001);
+        $regimeKey = \App\DTO\StreamContext::REGIME_STATE_PREFIX . ReinsuranceBusinessModel::REGIME_HARD_MARKET;
+        $this->assertSame(1.0, $result->streamZ[$regimeKey] ?? 0.0, 'The shortfall must start the regime that carries the rate.');
+
+        // A quiet quarter: only the unused large-loss layer allowance is credited back.
+        $expectedLayer = ReinsuranceBusinessModel::TREATY_REINSURANCE_WEIGHT * ReinsuranceBusinessModel::CATASTROPHE_LOSS_SCALAR
+            * $this->mathUtility->calculateNormalLowerPartialMoment(ReinsuranceBusinessModel::CATASTROPHE_Z_THRESHOLD);
+        $this->assertEqualsWithDelta($realizedVariableMargin - $expectedLayer, $result->clampedMargin, 1e-9);
     }
 
     public function testCatBondAttachmentBreachAbsorbsUncappedTailRisk(): void
@@ -106,14 +115,16 @@ class ReinsuranceBusinessModelTest extends TestCase
         $stock->setTotalEquity('30000000000');
 
         $mathMock = $this->createStub(MathUtility::class);
-        // Return Z-scores: treatyZ = 0.0, catBondZ = 0.0, claimZ = -3.0 (breaches attachment at -2.50)
+        // treatyZ = 0.0, catBondZ = 0.0, claimZ = -3.0: a large loss of the reinsurer's own in a heavy district season.
         $mathMock->method('generatePersistentZ')->willReturnOnConsecutiveCalls(0.0, 0.0, -3.0);
         $mathMock->method('generateStandardNormal')->willReturn(0.0);
 
+        $burden = 6.0;
         $macro = new MacroStateDTO(
             outputGapEma: 0.0,
             yield10yEma: 0.04,
-            policyRateEma: 0.02
+            policyRateEma: 0.02,
+            catastropheLossIndexEma: $burden,
         );
 
         $expectedRevenue = 10_000_000_000.0;
@@ -135,14 +146,44 @@ class ReinsuranceBusinessModelTest extends TestCase
         $expectedCatBondRevenue = $expectedRevenue * ReinsuranceBusinessModel::CAT_BOND_WEIGHT * (1.0 - ReinsuranceBusinessModel::CAT_BOND_DEFAULT_HAIRCUT);
         $this->assertEqualsWithDelta($expectedCatBondRevenue, $result->streamRevenue['catastrophe_bonds'], 1.0);
 
-        // Underwriting shock applies to Treaty Reinsurance book (0.65 weight)
-        // and Cat Bond collateral absorbs 40% of tail severity beyond attachment point (Z = -2.50)
-        $treatyShock = 3.0 * ReinsuranceBusinessModel::CATASTROPHE_LOSS_SCALAR * ReinsuranceBusinessModel::TREATY_REINSURANCE_WEIGHT;
-        $excessTailShock = (3.0 - 2.50) * ReinsuranceBusinessModel::CATASTROPHE_LOSS_SCALAR * ReinsuranceBusinessModel::TREATY_REINSURANCE_WEIGHT;
-        $catBondShield = $excessTailShock * ReinsuranceBusinessModel::CAT_BOND_ATTACHMENT_SHIELD_SHARE;
-        $expectedNetShock = $treatyShock - $catBondShield;
-        $expectedMargin = $realizedVariableMargin + $expectedNetShock;
-        $this->assertEqualsWithDelta($expectedMargin, $result->clampedMargin, 0.0001);
+        // Claims on the treaty book: the large-loss layer below the threshold plus the reinsurer's share of the
+        // district season; cat bond collateral absorbs its share of everything above the retention.
+        $treaty = ReinsuranceBusinessModel::TREATY_REINSURANCE_WEIGHT;
+        $threshold = ReinsuranceBusinessModel::CATASTROPHE_Z_THRESHOLD;
+        $layer = $treaty * ReinsuranceBusinessModel::CATASTROPHE_LOSS_SCALAR * ($threshold - (-3.0));
+        $expectedLayer = $treaty * ReinsuranceBusinessModel::CATASTROPHE_LOSS_SCALAR * $this->mathUtility->calculateNormalLowerPartialMoment($threshold);
+        $district = $treaty * ReinsuranceBusinessModel::DISTRICT_CATASTROPHE_LOAD * ($burden - 1.0);
+        $gross = $layer + $district;
+        $shield = ($gross - (ReinsuranceBusinessModel::MAX_REINSURED_LOSS_SHOCK * $treaty)) * ReinsuranceBusinessModel::CAT_BOND_ATTACHMENT_SHIELD_SHARE;
+        $this->assertGreaterThan(0.0, $shield, 'The scenario must breach the retention.');
+        $this->assertEqualsWithDelta($realizedVariableMargin + $gross - $expectedLayer - $shield, $result->clampedMargin, 1e-9);
+    }
+
+    /** The same large loss of its own, in an average district year, stays inside the retention: no breach, no haircut. */
+    public function testOwnLargeLossInAnAverageYearStaysInsideTheRetention(): void
+    {
+        $stock = new Stock();
+        $stock->setTicker('REIN');
+        $stock->setBeta('0.9');
+        $stock->setTotalEquity('30000000000');
+
+        $mathMock = $this->createStub(MathUtility::class);
+        $mathMock->method('generatePersistentZ')->willReturnOnConsecutiveCalls(0.0, 0.0, -3.0);
+        $mathMock->method('generateStandardNormal')->willReturn(0.0);
+
+        $expectedRevenue = 10_000_000_000.0;
+        $result = $this->model->computeActualFinancials(
+            $stock,
+            expectedRevenue: $expectedRevenue,
+            realizedVariableMargin: 0.60,
+            fixedCosts: 1_000_000_000.0,
+            baselineVol: 0.10,
+            macroState: new MacroStateDTO(outputGapEma: 0.0, yield10yEma: 0.04, policyRateEma: 0.02),
+            mathUtility: $mathMock
+        );
+
+        $this->assertNotSame(ShockEvent::REINSURANCE_ATTACHMENT_BREACH, $result->eventType);
+        $this->assertEqualsWithDelta($expectedRevenue * ReinsuranceBusinessModel::CAT_BOND_WEIGHT, $result->streamRevenue['catastrophe_bonds'], 1.0);
     }
 
     public function testExtremeCatastropheExpandsVariableMarginBeyondStandardCap(): void

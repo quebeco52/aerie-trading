@@ -10,17 +10,15 @@ use App\Data\ModelParam;
 use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
 use App\Service\Math\MathUtility;
-use App\Service\Event\ShockEvent;
-use App\Service\Macro\MacroEngine;
 
 /**
  * Earnings strategy for Retail Insurance (Life, Property & Casualty).
- * 
+ *
  * Financial Physics:
  * - Insulates tail-risk by passing it up to Reinsurance.
  * - Revenue is split between short-tail Property & Casualty premiums and highly sticky, long-duration Life Insurance premiums.
- * - P&C is sensitive to catastrophe claims, replacement inflation, and competitive pricing cycles.
- * - Life & Annuities is long-duration, immune to weather catastrophes, and sensitive to 10Y interest rate term spreads.
+ * - P&C carries the catastrophe claims and the competitive pricing cycle.
+ * - Life & Annuities is long-duration and immune to weather catastrophes.
  * - Inherits all standard insurance physics (float, Kenney Rule) from InsuranceBusinessModel.
  */
 class RetailInsuranceBusinessModel extends InsuranceBusinessModel
@@ -71,20 +69,14 @@ class RetailInsuranceBusinessModel extends InsuranceBusinessModel
         $pcWeight     = $activeWeights['property_casualty_premiums'];
         $lifeWeight   = $activeWeights['life_insurance_premiums'];
 
-        // Independent stream Z-scores
+        // Independent stream Z-scores; claims fall on the property and casualty book alone.
         $pcZ    = $streams->generateZ('property_casualty_premiums', 0.25);
         $lifeZ  = $streams->generateZ('life_insurance_premiums', 0.50);
-        $claimZ = $this->resolveClaimZ($streams, $macroState, self::CATASTROPHE_MACRO_LOADING);
-
-        // Life & Annuities spreads benefit from a steep yield curve (spread over guaranteed crediting rates)
-        $yield10y = $macroState->yield10yEma;
-        $policyRate = $macroState->policyRateEma;
-        $termSpread = max(-0.02, min(0.04, $yield10y - $policyRate));
-        $lifeSpreadBonus = $termSpread * 1.5;
+        $claims = $this->resolveExcessClaims($streams, $macroState, $pcWeight, $catThreshold, $catScalar);
 
         $pcRevenue   = max(0.0, $expectedRevenue * $pcWeight * (1.0 + ($pcZ * ($baselineVol * self::PC_VARIANCE_SCALAR))));
-        $lifeRevenue = max(0.0, $expectedRevenue * $lifeWeight * (1.0 + ($lifeZ * ($baselineVol * self::LIFE_VARIANCE_SCALAR)) + $lifeSpreadBonus));
-        
+        $lifeRevenue = max(0.0, $expectedRevenue * $lifeWeight * (1.0 + ($lifeZ * ($baselineVol * self::LIFE_VARIANCE_SCALAR))));
+
         $streamRevenues = [
             'property_casualty_premiums' => $pcRevenue,
             'life_insurance_premiums'    => $lifeRevenue,
@@ -93,36 +85,21 @@ class RetailInsuranceBusinessModel extends InsuranceBusinessModel
         $actualRevenue = max(0.0, array_sum($streamRevenues));
         $streams->recordStreamShares($streamRevenues);
 
-        // The Combined Ratio Shock applies primarily to Property & Casualty operations
-        $underwritingShock = $claimZ < $catThreshold
-            ? abs($claimZ) * $catScalar * $pcWeight
-            : ($claimZ > self::BENIGN_CLAIM_Z_FLOOR ? self::BENIGN_CLAIM_BONUS * $pcWeight : 0.0);
+        // The tail is ceded upward: the cover takes everything above the retention on the P&C book and
+        // charges a reinstatement premium for the limit it used.
+        $recovery = $this->resolveCatastropheRecovery($claims['gross'], $pcWeight);
+        $reinstatementPremium = $recovery > 0.0 ? self::REINSTATEMENT_PREMIUM_RATE * $pcWeight : 0.0;
 
-        // Kenney Rule Hard-Market Capital Recovery
+        // A primary carrier renews its book annually and holds the harder rate well past the loss; the rate
+        // reaches the P&L through the pricing-power multiplier, so a capital shortfall is not discounted here.
         $surplusDeficitRatio = $this->resolveSurplusDeficitRatio($expectedRevenue, (float) $stock->getTotalEquity());
-        $hardMarketRecoveryDiscount = min(0.25, $surplusDeficitRatio * 0.30 * $pcWeight);
+        $this->advanceUnderwritingCycle($streams, $stock, $macroState, $surplusDeficitRatio, $recovery > 0.0);
 
-        // A primary carrier renews its book annually and holds the harder rate well past the loss.
-        $this->advanceUnderwritingCycle($streams, $stock, $macroState, $surplusDeficitRatio, $claimZ);
+        $clampedMargin = $this->clampMargin($realizedVariableMargin + $claims['excess'] - $recovery + $reinstatementPremium);
 
-        $reinsuranceSurcharge = 0.0;
-        if ($claimZ < self::REINSURANCE_ATTACHMENT_Z) {
-            $underwritingShock = min($underwritingShock, self::MAX_REINSURED_LOSS_SHOCK * $pcWeight);
-            $reinsuranceSurcharge = self::REINSURANCE_HARD_MARKET_RATE * $pcWeight;
-        }
+        $eventType = $this->resolveClaimEvent($claims['gross'], $pcWeight, $recovery > 0.0);
 
-        $clampedMargin = $this->clampMargin($realizedVariableMargin + $underwritingShock + $reinsuranceSurcharge - $hardMarketRecoveryDiscount);
-
-        $eventType = null;
-        if ($claimZ < self::REINSURANCE_ATTACHMENT_Z) {
-            $eventType = ShockEvent::REINSURANCE_ATTACHMENT_BREACH;
-        } elseif ($claimZ < self::LORE_SYSTEMIC_DISASTER_Z) {
-            $eventType = ShockEvent::CATASTROPHIC_CLAIM_LOSSES;
-        } elseif ($claimZ < self::LORE_ELEVATED_CLAIMS_Z) {
-            $eventType = ShockEvent::ELEVATED_CLAIM_PAYOUTS;
-        }
-
-        $structuralClaimShock = abs($claimZ) > abs($catThreshold) ? $claimZ : 0.0;
+        $structuralClaimShock = $claims['claimZ'] < $catThreshold ? $claims['claimZ'] : 0.0;
         $primaryShockZ = $streams->resolveDominantShockZ([$structuralClaimShock, $pcZ, $lifeZ]);
 
         $pcBase = max(1.0, $expectedRevenue * $pcWeight);

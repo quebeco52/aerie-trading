@@ -89,12 +89,10 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
     public const REVENUE_VARIANCE_SCALAR  = 0.05;
     /** Baseline fraction of variable underwriting expenses attributed to operating and policy acquisition expenses (Expense Ratio share). */
     public const BASE_EXPENSE_RATIO_SHARE = 0.35;
-    /** Catastrophe claim z-score threshold triggering severe underwriting combined ratio penalties. */
+    /** Firm claim z-score below which the large-loss layer starts paying (one quarter in fifteen): fires, liability verdicts, single risks no peer shares. */
     public const CATASTROPHE_Z_THRESHOLD  = -1.50;
-    /** Underwriting loss multiplier applied to catastrophe claim severity. */
+    /** Large-loss claims, as a share of the book's premium, per standard deviation of the firm's claim draw below the threshold. */
     public const CATASTROPHE_LOSS_SCALAR  = 0.15;
-    /** Benign underwriting environment z-score threshold triggering minor margin bonuses. */
-    public const BENIGN_CLAIM_Z_FLOOR     = 1.50;
 
     // --- Underwriting Cycle (Winter 1994 / Gron 1994 capacity constraint) ---
     /** Regime key for the hard market: the multi-year stretch of rate increases and tightened terms that follows a capital shock. */
@@ -118,31 +116,25 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
     /** Years for a change in an underwriter's capital to reach the rates it is quoted: statutory filings, rating reviews and annual renewal dates all sit between the two, and that delay is what turns the capacity cycle into a cycle rather than a level. */
     public const CAPACITY_OBSERVATION_LAG_YEARS = 1.50;
 
-    // --- Catastrophe Seasonality & District Losses ---
-    /** Relative catastrophe frequency by calendar quarter, the same calendar the district loss process draws on. */
-    public const CATASTROPHE_SEASONALITY = MacroEngine::CATASTROPHE_SEASONALITY;
-    /** Claim z-score lost per standard deviation of district catastrophe burden: a primary carrier holds a diversified book, so a district year at three times the average burden reaches its catastrophe threshold on its own. Additive to the firm's draw, so the calibrated frequency in an average year is unchanged. */
-    public const CATASTROPHE_MACRO_LOADING = 0.75;
+    // --- District Catastrophe Losses (industry loss plus basis) ---
+    /** Expected catastrophe claims as a share of a property book's premium in an average district year: Verisk's US modelled average annual loss of $117B against $895B of 2024 US P&C premiums earned (~13%). */
+    public const DISTRICT_CATASTROPHE_LOAD = 0.13;
     /** District loss burden (average-year units, smoothed) at which the market hardens for every carrier, capital shock or not (the 1992, 2005 and 2017 seasons). */
     public const CAT_HARD_MARKET_THRESHOLD = 3.0;
-    /** Minor variable cost reduction during exceptionally benign underwriting environments. */
-    public const BENIGN_CLAIM_BONUS       = -0.08;
     /** Cummins & Danzon (1997) soft-market underwriting combined ratio compression sensitivity to high float yields. */
     public const SOFT_MARKET_CYCLE_BETA   = 1.50;
 
     // --- Event Lore Thresholds ---
-    /** Severe claim z-score threshold indicating major systemic disaster and catastrophic claim losses. */
-    public const LORE_SYSTEMIC_DISASTER_Z = -2.00;
-    /** Severe claim z-score threshold indicating elevated claim payouts and underwriting margin pressure. */
-    public const LORE_ELEVATED_CLAIMS_Z   = -1.50;
+    /** Excess claims, in average years of the book's catastrophe load, at which a quarter reads as a systemic disaster (~1.5% of quarters). */
+    public const LORE_SYSTEMIC_DISASTER_LOADS = 3.0;
+    /** Excess claims, in average years of the book's catastrophe load, at which a quarter's payouts make the news (~one quarter in eleven). */
+    public const LORE_ELEVATED_CLAIMS_LOADS   = 1.0;
 
-    // --- Reinsurance & Attachment Physics ---
-    /** Catastrophe z-score threshold where Excess of Loss (XOL) reinsurance treaties attach (`Z < -2.50`). */
-    public const REINSURANCE_ATTACHMENT_Z = -2.50;
-    /** Maximum net underwriting loss shock absorbed by primary insurer after reinsurance recovery cap. */
+    // --- Catastrophe Excess-of-Loss Cover ---
+    /** Excess claims, as a share of the covered book's premium, the carrier retains before its catastrophe cover attaches (one year in twenty for a primary book). */
     public const MAX_REINSURED_LOSS_SHOCK = 0.375;
-    /** Quarterly surcharge rate per unit of reinsurance recovery amortized during hard market renewals. */
-    public const REINSURANCE_HARD_MARKET_RATE = 0.04;
+    /** Reinstatement premium, as a share of the covered book's premium, paid in the quarter the cover pays out to restore the exhausted limit. */
+    public const REINSTATEMENT_PREMIUM_RATE = 0.04;
 
     // --- Loss Reserve & Investment Portfolio Physics ---
     /** Target operating cash reserve ratio applied to corporate operating base. */
@@ -402,6 +394,56 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
     }
 
     /**
+     * The quarter's claims on a book above its structural loss ratio, as a share of that book's premium.
+     *
+     * Industry loss plus basis (Cummins, Lalonde & Phillips 2004): the book's share of the district's
+     * catastrophe losses, which every carrier pays together, plus a large-loss layer on the firm's own
+     * claim draw. The structural margin is the through-the-cycle margin, catastrophe load included, so both
+     * terms are centred: the district burden averages one, and the layer's expected payout is deducted
+     * (the unit layer's expectation is the normal lower partial moment). Seasonality arrives through the
+     * district calendar alone.
+     *
+     * 'gross' is the uncentred loss the catastrophe cover measures its retention against; 'excess' is what
+     * moves the loss ratio.
+     *
+     * @return array{excess: float, gross: float, claimZ: float}
+     */
+    protected function resolveExcessClaims(StreamContext $streams, MacroStateDTO $macroState, float $bookWeight, float $catThreshold, float $catScalar): array
+    {
+        $claimZ = $streams->generateExogenousZ('claim', 0.05);
+
+        $layerScale = $bookWeight * $catScalar;
+        $largeLoss = $layerScale * max(0.0, $catThreshold - $claimZ);
+        $expectedLargeLoss = $layerScale * MathUtility::getInstance()->calculateNormalLowerPartialMoment($catThreshold);
+        $districtLoss = $bookWeight * static::DISTRICT_CATASTROPHE_LOAD * ($macroState->catastropheLossIndexEma - 1.0);
+
+        return [
+            'excess' => $largeLoss + $districtLoss - $expectedLargeLoss,
+            'gross'  => $largeLoss + $districtLoss,
+            'claimZ' => $claimZ,
+        ];
+    }
+
+    /** What the catastrophe excess-of-loss cover on a book pays: every claim above the retention. */
+    protected function resolveCatastropheRecovery(float $grossExcessClaims, float $bookWeight): float
+    {
+        return max(0.0, $grossExcessClaims - (self::MAX_REINSURED_LOSS_SHOCK * $bookWeight));
+    }
+
+    /** The claim headline a quarter's losses make, sized against the book's own average catastrophe year. */
+    protected function resolveClaimEvent(float $grossExcessClaims, float $bookWeight, bool $coverAttached): ?string
+    {
+        $averageYearLoad = $bookWeight * static::DISTRICT_CATASTROPHE_LOAD;
+
+        return match (true) {
+            $coverAttached => ShockEvent::REINSURANCE_ATTACHMENT_BREACH,
+            $grossExcessClaims >= $averageYearLoad * self::LORE_SYSTEMIC_DISASTER_LOADS => ShockEvent::CATASTROPHIC_CLAIM_LOSSES,
+            $grossExcessClaims >= $averageYearLoad * self::LORE_ELEVATED_CLAIMS_LOADS => ShockEvent::ELEVATED_CLAIM_PAYOUTS,
+            default => null,
+        };
+    }
+
+    /**
      * Advances the hard-market clock: the multi-year stretch of rate increases that follows a capital shock.
      *
      * The underwriting cycle is a CAPACITY cycle, not a rate cycle. A catastrophe destroys surplus, capacity
@@ -410,32 +452,16 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
      * rather than a function of this quarter's surplus is the point: rates stay hard well after the capital
      * is back, which is the discipline lag the cycle is named for.
      *
-     * It lives here, called by every insurance model's own physics, because the subclasses replace
-     * calculateSectorPhysics() outright: the clock used to run in this class's copy alone, so the reinsurer
-     * and the retail carrier — the two listed underwriters — could never enter the regime at all, and the
-     * uplift getMacroPhysics() reads off it was permanently zero for both.
+     * Called by every insurance model's own physics, because the subclasses replace calculateSectorPhysics()
+     * outright. The regime's rate uplift reaches the P&L only through the pricing-power multiplier.
      */
-    /**
-     * The claim draw every carrier shares in: its own exogenous AR(1) draw, less the district catastrophe
-     * burden standardised and scaled by how much of that burden this kind of book holds. The macro term is
-     * additive rather than a variance-preserving blend so an average district year leaves the firm's
-     * calibrated claim frequency exactly where it was.
-     */
-    protected function resolveClaimZ(StreamContext $streams, MacroStateDTO $macroState, float $macroLoading): float
-    {
-        $idiosyncraticZ = $streams->generateExogenousZ('claim', 0.05);
-        $districtBurdenZ = ($macroState->catastropheLossIndexEma - 1.0) / MacroEngine::CATASTROPHE_LOSS_INDEX_SD;
-
-        return $idiosyncraticZ - ($macroLoading * $districtBurdenZ);
-    }
-
-    protected function advanceUnderwritingCycle(StreamContext $streams, Stock $stock, MacroStateDTO $macroState, float $surplusDeficitRatio, float $claimZ): void
+    protected function advanceUnderwritingCycle(StreamContext $streams, Stock $stock, MacroStateDTO $macroState, float $surplusDeficitRatio, bool $coverAttached): void
     {
         $streams->evolveRegime(self::REGIME_HARD_MARKET, 0.0, self::HARD_MARKET_EXIT_HAZARD);
 
         if (
             $surplusDeficitRatio >= self::HARD_MARKET_ONSET_SURPLUS_DEFICIT
-            || $claimZ < self::REINSURANCE_ATTACHMENT_Z
+            || $coverAttached
             || $macroState->catastropheLossIndexEma >= self::CAT_HARD_MARKET_THRESHOLD
         ) {
             $streams->startRegime(self::REGIME_HARD_MARKET);
@@ -526,10 +552,10 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
         $momentum = $stock->getEarningsMomentumZ() ?? [];
         $streams = $this->createStreamContext($momentum, $mathUtility, $macroState, $stock);
 
-        // Premium volume loads on the firm and sector demand factors; claims are exogenous and near i.i.d.,
-        // shifted by the district's own storm season so every carrier is hit by the same one.
+        // Premium volume loads on the firm and sector demand factors; claims are the firm's own large losses
+        // plus its share of the district's storm season, which every carrier pays together.
         $revenueZ = $streams->generateZ('revenue', 0.25);
-        $claimZ   = $this->resolveClaimZ($streams, $macroState, self::CATASTROPHE_MACRO_LOADING);
+        $claims   = $this->resolveExcessClaims($streams, $macroState, 1.0, $catThreshold, $catScalar);
 
         $actualRevenue = $expectedRevenue * (1.0 + ($revenueZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)));
 
@@ -544,68 +570,24 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
         $expenseScale = $expectedRevenue > 0.0 ? ($expectedRevenue / max(1.0, $actualRevenue)) : 1.0;
         $realizedExpenseRatio = $baselineExpenseRatio * $expenseScale;
 
-        // B. Loss Ratio Dynamics (Catastrophes/Underwriting Cycle):
-        // Catastrophe Risk Beta: high-catastrophe insurers earn higher premium margins in benign years.
-        // Combines both Frequency ($catThreshold) and Severity ($catScalar) to price expected tail risk.
-        $frequencyBeta = self::CATASTROPHE_Z_THRESHOLD / min(-0.1, $catThreshold);
-        $severityBeta  = $catScalar / self::CATASTROPHE_LOSS_SCALAR;
-        $catRiskBeta   = $frequencyBeta * $severityBeta;
-        $benignBonus   = self::BENIGN_CLAIM_BONUS * $catRiskBeta;
-        // Incorporate Property Valuation Inflation on claim costs
-        $creShift = ($macroState->commercialPropertyIndexEma - 100.0) / 100.0;
-        $resShift = ($macroState->residentialPropertyIndexEma - 100.0) / 100.0;
-        $propertyClaimInflation = max(0.0, ($creShift * 0.50) + ($resShift * 0.50)) * 0.05; // Modest drag on variable margin when property replacement values surge
+        // B. Loss Ratio: the catastrophe cover takes everything above the retention and charges a reinstatement
+        // premium to restore the limit it used.
+        $recovery = $this->resolveCatastropheRecovery($claims['gross'], 1.0);
+        $reinstatementPremium = $recovery > 0.0 ? self::REINSTATEMENT_PREMIUM_RATE : 0.0;
+        $realizedLossRatio = max(0.0, $baselineLossRatio + $claims['excess'] - $recovery);
 
-        // Catastrophes are seasonal but premiums are not: a hurricane season does not sell more policies,
-        // it makes a loss more likely against premiums already written. The season therefore moves the
-        // frequency threshold, never revenue — the same z-draw clears a shallower bar in Q3 than in Q4.
-        // The firm's structural exposure ($frequencyBeta above) stays on the unseasonalized threshold,
-        // because how exposed a book is does not change with the calendar.
-        $seasonalCatFrequency = self::CATASTROPHE_SEASONALITY[$macroState->calendarQuarter()] ?? 1.0;
-        $seasonalCatThreshold = $catThreshold / max(0.10, $seasonalCatFrequency);
-
-        $lossRatioShock = ($claimZ < $seasonalCatThreshold
-            ? abs($claimZ) * $catScalar
-            : ($claimZ > self::BENIGN_CLAIM_Z_FLOOR ? $benignBonus : 0.0)) + $propertyClaimInflation;
-
-        // 3. Cummins & Danzon (1997) Soft-Market Underwriting Offset:
-        // When interest rates and float yields boom above baseline, price competition intensifies across the industry
-        // as insurers discount premium rates to capture market share and gather float (The Soft Underwriting Cycle).
-        // (This effect is fully captured upstream in getMacroPhysics via pricing_power_multiplier to ensure accurate market expectations)
-
-        // 4. Cummins & Danzon (1997) Hard-Market Capital Recovery:
-        // When an insurer's capital surplus drops below its Kenney target (Equity < Target Surplus),
-        // the insurer enters a Hard Market—raising premium rates and tightening underwriting criteria
-        // to rebuild surplus capital.
+        // A capital shortfall hardens rates through the regime this advances, which reaches revenue and the cost
+        // ratio through the pricing-power multiplier; it is not discounted from the combined ratio again here.
         $surplusDeficitRatio = $this->resolveSurplusDeficitRatio($expectedRevenue, (float) $stock->getTotalEquity());
-        // Strengthened Hard-Market pricing power scaled by company catastrophe exposure ($catRiskBeta):
-        // Reinsurers absorbing higher frequency ($catThreshold) & severity ($catScalar) gain stronger post-disaster pricing power.
-        $hardMarketRecoveryDiscount = min(0.30, $surplusDeficitRatio * 0.35 * $catRiskBeta);
+        $this->advanceUnderwritingCycle($streams, $stock, $macroState, $surplusDeficitRatio, $recovery > 0.0);
 
-        $this->advanceUnderwritingCycle($streams, $stock, $macroState, $surplusDeficitRatio, $claimZ);
-
-        $reinsuranceSurcharge = 0.0;
-        if ($claimZ < self::REINSURANCE_ATTACHMENT_Z) {
-            $lossRatioShock = min($lossRatioShock, self::MAX_REINSURED_LOSS_SHOCK);
-            $reinsuranceSurcharge = self::REINSURANCE_HARD_MARKET_RATE;
-        }
-
-        $realizedLossRatio = max(0.0, $baselineLossRatio + $lossRatioShock);
-        $combinedRatio = $realizedLossRatio + $realizedExpenseRatio + $reinsuranceSurcharge - $hardMarketRecoveryDiscount;
-
+        $combinedRatio = $realizedLossRatio + $realizedExpenseRatio + $reinstatementPremium;
         $clampedMargin = $this->clampMargin($combinedRatio);
 
-        $eventType = null;
-        if ($claimZ < self::REINSURANCE_ATTACHMENT_Z) {
-            $eventType = ShockEvent::REINSURANCE_ATTACHMENT_BREACH;
-        } elseif ($claimZ < self::LORE_SYSTEMIC_DISASTER_Z) {
-            $eventType = ShockEvent::CATASTROPHIC_CLAIM_LOSSES;
-        } elseif ($claimZ < self::LORE_ELEVATED_CLAIMS_Z) {
-            $eventType = ShockEvent::ELEVATED_CLAIM_PAYOUTS;
-        }
+        $eventType = $this->resolveClaimEvent($claims['gross'], 1.0, $recovery > 0.0);
 
-        // Only trigger a structural volatility shock if the claim variance is an actual catastrophe.
-        $structuralClaimShock = abs($claimZ) > abs(self::CATASTROPHE_Z_THRESHOLD) ? $claimZ : 0.0;
+        // Only a draw inside the large-loss layer is a structural shock to the firm.
+        $structuralClaimShock = $claims['claimZ'] < $catThreshold ? $claims['claimZ'] : 0.0;
         $primaryShockZ = $streams->resolveDominantShockZ([$structuralClaimShock, $revenueZ]);
 
         return new SectorPhysicsResult(
@@ -1008,14 +990,12 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
     {
         return [
             'catastrophe_loss_index_ema',
-            'commercial_property_index_ema',
             'inflation_ema',
             'market_volatility_ema',
             'nominal_gdp_index',
             'output_gap_ema',
             'output_gap_lag_6m',
             'policy_rate_ema',
-            'residential_property_index_ema',
             'yield_10y_ema',
         ];
     }

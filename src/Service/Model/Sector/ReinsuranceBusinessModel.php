@@ -10,7 +10,6 @@ use App\Data\ModelParam;
 use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
 use App\Service\Math\MathUtility;
-use App\Service\Event\ShockEvent;
 
 /**
  * Earnings strategy for Global Reinsurance & Alternative Risk Transfer.
@@ -27,8 +26,8 @@ use App\Service\Event\ShockEvent;
 class ReinsuranceBusinessModel extends InsuranceBusinessModel
 {
     // --- District Catastrophe Exposure ---
-    /** A reinsurer holds the tail every primary carrier cedes, so it carries the district burden in full. */
-    public const REINSURANCE_CATASTROPHE_MACRO_LOADING = 1.0;
+    /** Expected catastrophe claims as a share of treaty premium in an average district year: Swiss Re's 2024 large nat cat budget of $1.8B against ~$22.9B of P&C Re premiums earned (~8%). */
+    public const DISTRICT_CATASTROPHE_LOAD = 0.08;
 
     // --- Operating Cyclicality & Demand Structure ---
     /** Elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). Treaty volume follows primary premiums with a lag. */
@@ -92,38 +91,23 @@ class ReinsuranceBusinessModel extends InsuranceBusinessModel
         // Independent stream Z-scores
         $treatyZ  = $streams->generateZ('treaty_reinsurance', 0.30);
         $catBondZ = $streams->generateZ('catastrophe_bonds', 0.15);
-        $claimZ   = $this->resolveClaimZ($streams, $macroState, self::REINSURANCE_CATASTROPHE_MACRO_LOADING);
+        // Claims fall on the treaty book: the reinsurer's share of the district season plus its own large losses.
+        $claims   = $this->resolveExcessClaims($streams, $macroState, $treatyWeight, $catThreshold, $catScalar);
 
-        // Catastrophe Risk Beta & Combined Ratio Shock
-        $frequencyBeta = self::CATASTROPHE_Z_THRESHOLD / min(-0.1, $catThreshold);
-        $severityBeta  = $catScalar / self::CATASTROPHE_LOSS_SCALAR;
-        $catRiskBeta   = $frequencyBeta * $severityBeta;
-        $benignBonus   = self::BENIGN_CLAIM_BONUS * $catRiskBeta;
+        // Above the retention, cat bond collateral absorbs part of the tail and the ILS fee and coupon revenue
+        // takes the default haircut.
+        $tailAboveRetention = $this->resolveCatastropheRecovery($claims['gross'], $treatyWeight);
+        $coverAttached = $tailAboveRetention > 0.0;
+        $catBondShield = $tailAboveRetention * self::CAT_BOND_ATTACHMENT_SHIELD_SHARE;
+        $catBondMultiplier = $coverAttached ? (1.0 - self::CAT_BOND_DEFAULT_HAIRCUT) : 1.0;
 
-        // Underwriting claim shock applies to the Treaty Reinsurance book
-        $underwritingShock = $claimZ < $catThreshold
-            ? abs($claimZ) * $catScalar * $treatyWeight
-            : ($claimZ > self::BENIGN_CLAIM_Z_FLOOR ? $benignBonus * $treatyWeight : 0.0);
-
-        // Kenney Rule Hard-Market Capital Recovery:
-        // Post-catastrophe capital depletion triggers massive rate increases on treaty reinsurance renewals.
+        // Rates on a renewed treaty stay hard for years after the capital that withdrew has come back. The
+        // harder rate reaches treaty revenue through the pricing-power multiplier, which the cost base does
+        // not follow; a capital shortfall is not added to revenue again here.
         $surplusDeficitRatio = $this->resolveSurplusDeficitRatio($expectedRevenue, (float) $stock->getTotalEquity());
-        $hardMarketPricingBonus = min(0.35, $surplusDeficitRatio * 0.40 * $catRiskBeta);
+        $this->advanceUnderwritingCycle($streams, $stock, $macroState, $surplusDeficitRatio, $coverAttached);
 
-        // Rates on a renewed treaty stay hard for years after the capital that withdrew has come back.
-        $this->advanceUnderwritingCycle($streams, $stock, $macroState, $surplusDeficitRatio, $claimZ);
-
-        // Cat Bond Principal / Yield Haircut during extreme catastrophe attachment:
-        // When attachment points breach, Cat Bond collateral shields the ILS tranche by absorbing tail severity,
-        // while ILS management and coupon fee revenue suffers the default haircut.
-        $catBondMultiplier = 1.0;
-        if ($claimZ < self::REINSURANCE_ATTACHMENT_Z) {
-            $catBondMultiplier = (1.0 - self::CAT_BOND_DEFAULT_HAIRCUT);
-            $excessTailShock = (abs($claimZ) - abs(self::REINSURANCE_ATTACHMENT_Z)) * $catScalar * $treatyWeight;
-            $underwritingShock -= ($excessTailShock * self::CAT_BOND_ATTACHMENT_SHIELD_SHARE);
-        }
-
-        $treatyRevenue  = max(0.0, $expectedRevenue * $treatyWeight * (1.0 + ($treatyZ * ($baselineVol * self::TREATY_VARIANCE_SCALAR)) + $hardMarketPricingBonus));
+        $treatyRevenue  = max(0.0, $expectedRevenue * $treatyWeight * (1.0 + ($treatyZ * ($baselineVol * self::TREATY_VARIANCE_SCALAR))));
         $catBondRevenue = max(0.0, $expectedRevenue * $catBondWeight * (1.0 + ($catBondZ * ($baselineVol * self::CAT_BOND_VARIANCE_SCALAR))) * $catBondMultiplier);
         
         $streamRevenues = [
@@ -134,18 +118,11 @@ class ReinsuranceBusinessModel extends InsuranceBusinessModel
         $actualRevenue = max(0.0, array_sum($streamRevenues));
         $streams->recordStreamShares($streamRevenues);
 
-        $clampedMargin = $this->clampMargin($realizedVariableMargin + $underwritingShock);
+        $clampedMargin = $this->clampMargin($realizedVariableMargin + $claims['excess'] - $catBondShield);
 
-        $eventType = null;
-        if ($claimZ < self::REINSURANCE_ATTACHMENT_Z) {
-            $eventType = ShockEvent::REINSURANCE_ATTACHMENT_BREACH;
-        } elseif ($claimZ < self::LORE_SYSTEMIC_DISASTER_Z) {
-            $eventType = ShockEvent::CATASTROPHIC_CLAIM_LOSSES;
-        } elseif ($claimZ < self::LORE_ELEVATED_CLAIMS_Z) {
-            $eventType = ShockEvent::ELEVATED_CLAIM_PAYOUTS;
-        }
+        $eventType = $this->resolveClaimEvent($claims['gross'], $treatyWeight, $coverAttached);
 
-        $structuralClaimShock = abs($claimZ) > abs($catThreshold) ? $claimZ : 0.0;
+        $structuralClaimShock = $claims['claimZ'] < $catThreshold ? $claims['claimZ'] : 0.0;
         $primaryShockZ = $streams->resolveDominantShockZ([$structuralClaimShock, $treatyZ, $catBondZ]);
 
         $treatyBase = max(1.0, $expectedRevenue * $treatyWeight);
