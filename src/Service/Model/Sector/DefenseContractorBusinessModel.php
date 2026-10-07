@@ -347,12 +347,13 @@ class DefenseContractorBusinessModel extends StandardCorporateBusinessModel
 
         // Contract awards fund a multi-year backlog; revenue is recognized on percentage of completion, so
         // appropriations, continuing resolutions and export bans hit ORDERS in full and revenue gradually.
+        // Foreign military sales are bought out of the same allied budgets, so they take the same award term.
         $costPlusBook = $streams->recognizeBacklog('cost_plus_procurement', $expectedRevenue * $costPlusWeight,
             max(0.0, (1.0 + ($costPlusZ * $baselineVol * self::COST_PLUS_VARIANCE_SCALAR) + $costPlusBonus + $alliedOrders) * $costPlusMultiplier), self::COST_PLUS_BACKLOG_BURN_RATE);
         $fixedPriceBook = $streams->recognizeBacklog('fixed_price_development', $expectedRevenue * $fixedPriceWeight,
             max(0.0, (1.0 + ($fixedPriceZ * $baselineVol * self::FIXED_PRICE_DEV_VARIANCE_SCALAR) + $alliedOrders) * $fixedPriceMultiplier), self::FIXED_PRICE_BACKLOG_BURN_RATE);
         $fmsBook = $streams->recognizeBacklog('foreign_military_sales', $expectedRevenue * $fmsWeight,
-            max(0.0, (1.0 + ($fmsZ * $baselineVol * self::FMS_VARIANCE_SCALAR) + $this->resolveFxDemandShift($macroState)) * $fmsMultiplier), self::FMS_BACKLOG_BURN_RATE);
+            max(0.0, (1.0 + ($fmsZ * $baselineVol * self::FMS_VARIANCE_SCALAR) + $alliedOrders + $this->resolveFxDemandShift($macroState)) * $fmsMultiplier), self::FMS_BACKLOG_BURN_RATE);
 
         $costPlusRevenue = $costPlusBook['revenue'];
         $fixedPriceRevenue = $fixedPriceBook['revenue'];

@@ -11,6 +11,7 @@ use App\Entity\Stock;
 use App\Data\InitialMarket;
 use App\Data\Sectors;
 use App\DTO\MacroStateDTO;
+use App\Service\Macro\MacroEngine;
 
 class BrokerageBusinessModelTest extends TestCase
 {
@@ -53,7 +54,7 @@ class BrokerageBusinessModelTest extends TestCase
         $mathMock = $this->createStub(MathUtility::class);
         $mathMock->method('generatePersistentZ')->willReturn(0.0);
 
-        // Macro state with elevated VIX (30% vs 20% baseline)
+        // Macro state with elevated VIX (30% against the 15% anchor)
         $macroState = MacroStateDTO::fromArray([
             'output_gap_ema' => 0.0,
             'policy_rate_ema' => 0.04,
@@ -73,13 +74,63 @@ class BrokerageBusinessModelTest extends TestCase
         );
 
         // ROOK custom tuning overrides: trading_weight = 0.85, advisory_weight = 0.15
-        // VIX bonus = (0.30 - 0.20) * 0.50 = 0.05
-        // Trading revenue = 1000 * 0.85 * (1.0 + 0.05) = 892.5
+        // VIX term = (0.30 - 0.15 anchor) * 0.50 = 0.075
+        // Trading revenue = 1000 * 0.85 * (1.0 + 0.075) = 913.75
         // Advisory revenue = 1000 * 0.15 * 1.0 = 150.0
-        // Total expected revenue = 892.5 + 150.0 = 1042.5
-        $this->assertEqualsWithDelta(1042.5, $result->actualRevenue, 0.01);
-        $this->assertEqualsWithDelta(892.5, $result->streamRevenue['trading'], 0.01);
+        // Total expected revenue = 913.75 + 150.0 = 1063.75
+        $this->assertEqualsWithDelta(1063.75, $result->actualRevenue, 0.01);
+        $this->assertEqualsWithDelta(913.75, $result->streamRevenue['trading'], 0.01);
         $this->assertEqualsWithDelta(150.0, $result->streamRevenue['advisory'], 0.01);
+    }
+
+    /**
+     * The volatility term is centred where the sim's volatility lives: at the anchor it moves nothing, and a
+     * quiet tape thins commissions as a busy one swells them.
+     */
+    public function testTheVolatilityTermIsNeutralAtTheAnchor(): void
+    {
+        $stock = (new Stock())->setTicker('ROOK');
+        $mathMock = $this->createStub(MathUtility::class);
+        $mathMock->method('generatePersistentZ')->willReturn(0.0);
+        $anchor = new MacroStateDTO(marketVolatilityEma: MacroEngine::MACRO_VOL_BASE_ANCHOR);
+        $quiet = new MacroStateDTO(marketVolatilityEma: MacroEngine::MACRO_VOL_BASE_ANCHOR - 0.05);
+
+        $atAnchor = $this->model->computeActualFinancials($stock, 1000.0, 0.35, 100.0, 0.0, $anchor, $mathMock);
+        $this->assertEqualsWithDelta(1000.0, $atAnchor->actualRevenue, 1e-9);
+
+        $quietReport = $this->model->computeActualFinancials($stock, 1000.0, 0.35, 100.0, 0.0, $quiet, $mathMock);
+        $this->assertEqualsWithDelta(
+            1.0 - 0.05 * BrokerageBusinessModel::VIX_REVENUE_SCALAR,
+            $quietReport->streamRevenue['trading'] / $atAnchor->streamRevenue['trading'],
+            1e-9
+        );
+    }
+
+    /** M2 growth over trend reaches revenue once, through the trading stream at its documented sensitivity; the root demand shift does not carry it. */
+    public function testBroadMoneyEntersTheTradingStreamOnce(): void
+    {
+        $stock = (new Stock())->setTicker('ROOK');
+        $mathMock = $this->createStub(MathUtility::class);
+        $mathMock->method('generatePersistentZ')->willReturn(0.0);
+        $deviation = 0.05;
+        $atTrend = new MacroStateDTO(marketVolatilityEma: MacroEngine::MACRO_VOL_BASE_ANCHOR);
+        $flush = new MacroStateDTO(
+            marketVolatilityEma: MacroEngine::MACRO_VOL_BASE_ANCHOR,
+            moneySupplyGrowthEma: MacroEngine::M2_BASE_GROWTH + $deviation
+        );
+
+        $this->assertEqualsWithDelta(
+            $this->model->getMacroPhysics($stock, $atTrend)['macro_demand_shift'],
+            $this->model->getMacroPhysics($stock, $flush)['macro_demand_shift'],
+            1e-12,
+            'The root demand shift does not carry M2.'
+        );
+
+        $base = $this->model->computeActualFinancials($stock, 1000.0, 0.35, 100.0, 0.0, $atTrend, $mathMock);
+        $liquid = $this->model->computeActualFinancials($stock, 1000.0, 0.35, 100.0, 0.0, $flush, $mathMock);
+        $dTradingDm2 = ($liquid->streamRevenue['trading'] / $base->streamRevenue['trading'] - 1.0) / $deviation;
+        $this->assertEqualsWithDelta(BrokerageBusinessModel::M2_RETAIL_TRADING_SENSITIVITY, $dTradingDm2, 1e-9);
+        $this->assertEqualsWithDelta($base->streamRevenue['advisory'], $liquid->streamRevenue['advisory'], 1e-9);
     }
 
     public function testClearinghouseCashBackingRequirements(): void

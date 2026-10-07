@@ -1468,6 +1468,12 @@ class MathUtility
      */
     public function calculateNormalCDF(float $z): float
     {
+        return self::standardNormalCdf($z);
+    }
+
+    /** Standard normal CDF (Abramowitz & Stegun 26.2.17), static so model code reads it without the sampler. */
+    public static function standardNormalCdf(float $z): float
+    {
         $b1 = 0.319381530;
         $b2 = -0.356563782;
         $b3 = 1.781477937;
@@ -1485,6 +1491,12 @@ class MathUtility
             return ($c * exp(-$z * $z / 2.0) * $t *
                 ($t * ($t * ($t * ($t * $b5 + $b4) + $b3) + $b2) + $b1));
         }
+    }
+
+    /** Standard normal density. */
+    public static function standardNormalPdf(float $z): float
+    {
+        return exp(-$z * $z / 2.0) / sqrt(2.0 * M_PI);
     }
 
     /**

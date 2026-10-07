@@ -18,7 +18,7 @@ use App\Service\Event\ShockEvent;
  *
  * Financial Physics:
  * - Dual-Desk Architecture: Advisory (M&A/underwriting) and Sales & Trading are structurally decorrelated.
- * - Cost of Capital Deal Flow: M&A volumes scale with macro output gap and ERP; DCM scales with credit spreads and yield curve slope.
+ * - Cost of Capital Deal Flow: M&A and ECM scale with the output gap and the deal activity index; DCM with credit spreads and yield curve slope.
  * - Basel FRTB VaR Volatility Targeting: S&T desk captures volatility arbitrage up to regulatory capital limits.
  * - Options Gamma Hedging: High market volatility boosts top-line options premium but incurs localized gamma friction.
  * - Compensation-Driven Cost Structure: IB variable costs are dominated by discretionary bonuses (40–85%).
@@ -66,22 +66,24 @@ class InvestmentBankBusinessModel extends BrokerageBusinessModel
     public const DCM_NEUTRAL_CURVE_SLOPE     = 0.008;
     /** Sensitivity of M&A deal flow to corporate expansion (output gap). */
     public const MNA_OUTPUT_GAP_ELASTICITY   = 3.00;
-    /** Sensitivity of M&A deal flow to Equity Risk Premium (ERP) cost of capital changes. */
-    public const MNA_ERP_ELASTICITY          = 5.00;
     /** Sensitivity of DCM bond issuance to corporate credit spread tightness. */
     public const DCM_CREDIT_SPREAD_ELASTICITY = 10.0;
     /** Sensitivity of DCM bond issuance to yield curve steepness. */
     public const DCM_CURVE_SLOPE_ELASTICITY  = 2.50;
-    /** Sensitivity of advisory/underwriting deal flow to aggregate capital markets deal activity index (Jovanovic-Rousseau 2002). */
+    /** Sensitivity of M&A and ECM deal flow to the capital markets deal activity index (Jovanovic-Rousseau 2002), which carries their ERP, spread, volatility and EPU response. */
     public const DEAL_ACTIVITY_INDEX_ELASTICITY = 0.40;
     /** Sensitivity of DCM debt syndication and equity underwriting absorption to M2 money supply growth. */
     public const M2_SYNDICATION_LIQUIDITY_SENSITIVITY = 0.30;
 
+    // --- Advisory Fee Pool Mix ---
+    /** M&A advisory share of the advisory and underwriting fee pool (Goldman Sachs 2019 10-K: advisory $3,197M of $6,798M, 47%). */
+    public const MNA_ADVISORY_SHARE             = 0.47;
+    /** ECM equity underwriting share of the advisory and underwriting fee pool (GS 2019: $1,482M, 22%). */
+    public const ECM_ADVISORY_SHARE             = 0.22;
+    /** DCM debt underwriting share of the advisory and underwriting fee pool (GS 2019: $2,119M, 31%). */
+    public const DCM_ADVISORY_SHARE             = 0.31;
+
     // --- Equity Capital Markets (ECM) & IPO Window Physics ---
-    /** Baseline share of advisory deal flow attributed to ECM underwriting versus M&A advisory. */
-    public const ADVISORY_ECM_SHARE             = 0.35;
-    /** Sensitivity of ECM equity underwriting deal volume to Equity Risk Premium (ERP) cost of capital. */
-    public const ECM_ERP_ELASTICITY             = 4.00;
     /** Sensitivity of ECM equity underwriting deal volume to macroeconomic output gap. */
     public const ECM_OUTPUT_GAP_ELASTICITY      = 2.50;
     /** VIX panic threshold (~35%) above which institutional IPO windows freeze. */
@@ -118,8 +120,8 @@ class InvestmentBankBusinessModel extends BrokerageBusinessModel
     public const ARCHEGOS_LOSS_PENALTY          = 0.12;
 
     // --- S&T Volatility Arbitrage & Basel FRTB VaR Limits ---
-    /** Baseline VIX floor (~18%) above which volatility arbitrage opportunities expand. */
-    public const VIX_ARBITRAGE_FLOOR        = 0.18;
+    /** Volatility at which the S&T, vega and gamma terms are neutral: the sim's volatility anchor, where marketVolatilityEma lives. */
+    public const VIX_ARBITRAGE_FLOOR        = MacroEngine::MACRO_VOL_BASE_ANCHOR;
     /** S&T desk gross trading revenue capture scalar per point of excess VIX. */
     public const VIX_ARBITRAGE_SCALAR       = 1.20;
     /** Maximum regulatory VIX threshold before FRTB VaR capital limits force aggressive balance sheet deleveraging. */
@@ -480,37 +482,39 @@ class InvestmentBankBusinessModel extends BrokerageBusinessModel
         ]);
     }
 
-    /** The advisory and underwriting fee pool against normal: M&A, ECM and DCM on their macro drivers, net deal activity and M2. */
+    /**
+     * The advisory and underwriting fee pool against normal: M&A, ECM and DCM each on its own drivers, weighted by
+     * its share of the pool, plus M2. The deal activity index already prices ERP, high-yield spreads, volatility
+     * and policy uncertainty (MathUtility::calculateCapitalMarketsDealIndexStep), so M&A and ECM read it and
+     * not ERP directly; DCM reads the investment-grade spread and the curve, which the index does not carry.
+     */
     private function resolveAdvisoryMacroFactor(\App\DTO\MacroStateDTO $macroState): float
     {
-        $erpGap = MacroEngine::BASE_EQUITY_RISK_PREMIUM - $macroState->equityRiskPremium;
-
-        // 1. M&A Deal Flow: Scales with corporate expansion (output gap) and cheap equity cost of capital (ERP) on M&A share.
-        $mnaStimulus = (($macroState->outputGapEma * self::MNA_OUTPUT_GAP_ELASTICITY) + ($erpGap * self::MNA_ERP_ELASTICITY)) * (1.0 - self::ADVISORY_ECM_SHARE);
-
-        // 2. ECM Underwriting: Scales with output gap and ERP on ECM share.
-        $ecmStimulus = (($macroState->outputGapEma * self::ECM_OUTPUT_GAP_ELASTICITY) + ($erpGap * self::ECM_ERP_ELASTICITY)) * self::ADVISORY_ECM_SHARE;
-
-        // 3. DCM Issuance: Governed by credit spread tightness and yield curve slope relative to neutral slope.
-        $creditSpreadGap = self::DEAL_BASELINE_CREDIT_SPREAD - $macroState->macroCreditSpreadEma;
-        $curveSlope = $macroState->yield5yEma - $macroState->policyRateEma;
-        $curveSlopeGap = $curveSlope - self::DCM_NEUTRAL_CURVE_SLOPE;
-        $dcmStimulus = ($creditSpreadGap * self::DCM_CREDIT_SPREAD_ELASTICITY) + ($curveSlopeGap * self::DCM_CURVE_SLOPE_ELASTICITY);
-
-        // 4. ECM Deal Activity & IPO Window Freeze:
-        // Aggregate deal activity stimulates advisory fees, but acute market volatility (VIX > 35%) freezes the institutional IPO window.
         $dealActivityShift = ($macroState->dealActivityIndexEma - MacroEngine::DEAL_ACTIVITY_BASELINE) / MacroEngine::DEAL_ACTIVITY_BASELINE;
-        $ecmDealActivity = $dealActivityShift * self::DEAL_ACTIVITY_INDEX_ELASTICITY;
+        $dealActivity = $dealActivityShift * self::DEAL_ACTIVITY_INDEX_ELASTICITY;
+
+        // 1. M&A: corporate expansion (output gap) and the deal cycle.
+        $mnaStimulus = ($macroState->outputGapEma * self::MNA_OUTPUT_GAP_ELASTICITY) + $dealActivity;
+
+        // 2. ECM: output gap and the deal cycle, less the IPO window freezing shut in acute volatility (VIX > 35%).
         $vixEma = $macroState->marketVolatilityEma;
         $freezeDiscount = 0.0;
         if ($vixEma > self::IPO_WINDOW_FREEZE_VIX) {
             $freezeDiscount = min(0.30, ($vixEma - self::IPO_WINDOW_FREEZE_VIX) * self::IPO_FREEZE_PENALTY);
         }
-        $ecmNetActivity = ($ecmDealActivity - $freezeDiscount) * self::ADVISORY_ECM_SHARE;
+        $ecmStimulus = ($macroState->outputGapEma * self::ECM_OUTPUT_GAP_ELASTICITY) + $dealActivity - $freezeDiscount;
+
+        // 3. DCM: credit spread tightness and the 5Y-over-policy slope against its neutral.
+        $creditSpreadGap = self::DEAL_BASELINE_CREDIT_SPREAD - $macroState->macroCreditSpreadEma;
+        $curveSlopeGap = ($macroState->yield5yEma - $macroState->policyRateEma) - self::DCM_NEUTRAL_CURVE_SLOPE;
+        $dcmStimulus = ($creditSpreadGap * self::DCM_CREDIT_SPREAD_ELASTICITY) + ($curveSlopeGap * self::DCM_CURVE_SLOPE_ELASTICITY);
 
         $m2SyndicationBoost = MathUtility::calculateBroadMoneyLiquidityShift($macroState->moneySupplyGrowthEma, $macroState->moneySupplyGrowthTrend, sensitivity: self::M2_SYNDICATION_LIQUIDITY_SENSITIVITY);
 
-        return $mnaStimulus + $ecmStimulus + $dcmStimulus + $ecmNetActivity + $m2SyndicationBoost;
+        return (self::MNA_ADVISORY_SHARE * $mnaStimulus)
+            + (self::ECM_ADVISORY_SHARE * $ecmStimulus)
+            + (self::DCM_ADVISORY_SHARE * $dcmStimulus)
+            + $m2SyndicationBoost;
     }
 
     /** Sales and trading revenue against normal: volatility captured inside VaR limits plus FICC client flow. */

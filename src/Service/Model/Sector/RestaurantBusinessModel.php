@@ -61,9 +61,15 @@ class RestaurantBusinessModel extends StandardCorporateBusinessModel
 
     // --- Revenue & Shock Physics ---
     public const REVENUE_VARIANCE_SCALAR = 0.40;
-    public const FRANCHISE_COST_INTENSITY = 0.05;
-    public const LEASE_COST_INTENSITY     = 0.02;
     public const LEASE_INFLATION_CAPTURE  = 0.80; // CPI rent escalation clause
+
+    // --- Stream Cost Allocation ---
+    /** Royalty variable cost per dollar, relative to a company-store dollar. */
+    public const FRANCHISE_COST_INTENSITY = 0.05;
+    /** Franchise rent variable cost per dollar, relative to a company-store dollar. */
+    public const LEASE_COST_INTENSITY     = 0.02;
+    /** Most a company-store sales dollar can cost: food & paper 31.2% plus crew payroll 29.6% (McDonald's 2023 10-K). */
+    public const COMPANY_STORE_VARIABLE_COST_CEILING = 0.608;
 
     // --- Tail Risk & Shock Events ---
     public const FOOD_SAFETY_SCANDAL_Z_SCORE = -2.20;
@@ -195,15 +201,8 @@ class RestaurantBusinessModel extends StandardCorporateBusinessModel
         $actualRevenue = array_sum($streamRevenues);
         $streams->recordStreamShares($streamRevenues);
 
-        // Structural Margin Blending:
-        // Corporate stores pay the bulk of variable costs.
-        // Franchise royalties & real estate lease rents carry minimal variable cost.
-        $blendedDivisor = $corporateWeight + (self::FRANCHISE_COST_INTENSITY * $franchiseWeight) + (self::LEASE_COST_INTENSITY * $leaseWeight);
-        $corporateVariableMargin = $blendedDivisor > 0 ? ($realizedVariableMargin / $blendedDivisor) : $realizedVariableMargin;
-        $franchiseVariableMargin = $corporateVariableMargin * self::FRANCHISE_COST_INTENSITY;
-        $leaseVariableMargin     = $corporateVariableMargin * self::LEASE_COST_INTENSITY;
-
-        $actualVariableCosts = ($corporateRevenue * $corporateVariableMargin) + ($franchiseRevenue * $franchiseVariableMargin) + ($leaseRevenue * $leaseVariableMargin);
+        $costRatios = self::resolveStreamCostRatios($corporateWeight, $franchiseWeight, $leaseWeight, $realizedVariableMargin);
+        $actualVariableCosts = ($corporateRevenue * $costRatios['company']) + ($franchiseRevenue * $costRatios['franchise']) + ($leaseRevenue * $costRatios['lease']);
 
         // Input cost basket: food commodities, kitchen crew wages, utilities and packaging reach company-operated
         // kitchens at spot and are recovered on the menu board with the repricing lag. Franchise royalties and
@@ -233,6 +232,34 @@ class RestaurantBusinessModel extends StandardCorporateBusinessModel
             streamRevenue: $streamRevenues,
             priceRevenue: $priceRevenue,
         );
+    }
+
+    /**
+     * Variable cost ratio of each stream, weighted to the firm's variable cost ratio at plan. A company-store dollar
+     * costs at most a company store's food, paper and crew; what a franchisor's cost base holds beyond that is
+     * system cost (ad funds, field support) that scales with franchisee sales, so it rides the royalty and rent streams.
+     *
+     * @return array{company: float, franchise: float, lease: float}
+     */
+    public static function resolveStreamCostRatios(float $corporateWeight, float $franchiseWeight, float $leaseWeight, float $variableMargin): array
+    {
+        $franchiseIntensity = (self::FRANCHISE_COST_INTENSITY * $franchiseWeight) + (self::LEASE_COST_INTENSITY * $leaseWeight);
+        $divisor = $corporateWeight + $franchiseIntensity;
+        if ($divisor <= 0.0) {
+            return ['company' => $variableMargin, 'franchise' => $variableMargin, 'lease' => $variableMargin];
+        }
+
+        $companyRatio = $variableMargin / $divisor;
+        if ($franchiseIntensity > 0.0) {
+            $companyRatio = min(self::COMPANY_STORE_VARIABLE_COST_CEILING, $companyRatio);
+        }
+        $franchiseScale = $franchiseIntensity > 0.0 ? max(0.0, $variableMargin - ($corporateWeight * $companyRatio)) / $franchiseIntensity : 0.0;
+
+        return [
+            'company'   => $companyRatio,
+            'franchise' => self::FRANCHISE_COST_INTENSITY * $franchiseScale,
+            'lease'     => self::LEASE_COST_INTENSITY * $franchiseScale,
+        ];
     }
 
     public function getCoverageProfile(\App\Entity\Stock $stock): \App\DTO\SectorCoverageProfile

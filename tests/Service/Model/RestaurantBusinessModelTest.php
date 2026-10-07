@@ -55,6 +55,30 @@ class RestaurantBusinessModelTest extends TestCase
         $this->assertGreaterThan(0.0, $result->streamRevenue['franchise_real_estate_leases']);
     }
 
+    public function testFranchisorCompanyStoresCostNoMoreThanACompanyStore(): void
+    {
+        // SWFT: 5% company stores. The old blend divided the firm's whole variable cost by 0.0855, so a company-store
+        // dollar cost 2.9 dollars and a strong quarter at the stores lowered EBIT.
+        [$w, $f, $l, $vm] = [0.05, 0.55, 0.40, 0.25];
+        $ratios = RestaurantBusinessModel::resolveStreamCostRatios($w, $f, $l, $vm);
+
+        $this->assertLessThanOrEqual(RestaurantBusinessModel::COMPANY_STORE_VARIABLE_COST_CEILING, $ratios['company']);
+        $this->assertLessThan(1.0, $ratios['franchise']);
+        $this->assertEqualsWithDelta($vm, ($w * $ratios['company']) + ($f * $ratios['franchise']) + ($l * $ratios['lease']), 1e-12);
+    }
+
+    public function testOperatorBlendIsUnchangedBelowTheCeiling(): void
+    {
+        // BREW: 70% company stores, whose implied cost ratio sits under the ceiling, keeps the relative-intensity blend.
+        [$w, $f, $l, $vm] = [0.70, 0.10, 0.20, 0.37];
+        $divisor = $w + (RestaurantBusinessModel::FRANCHISE_COST_INTENSITY * $f) + (RestaurantBusinessModel::LEASE_COST_INTENSITY * $l);
+        $ratios = RestaurantBusinessModel::resolveStreamCostRatios($w, $f, $l, $vm);
+
+        $this->assertEqualsWithDelta($vm / $divisor, $ratios['company'], 1e-12);
+        $this->assertEqualsWithDelta(RestaurantBusinessModel::FRANCHISE_COST_INTENSITY * $vm / $divisor, $ratios['franchise'], 1e-12);
+        $this->assertEqualsWithDelta(RestaurantBusinessModel::LEASE_COST_INTENSITY * $vm / $divisor, $ratios['lease'], 1e-12);
+    }
+
     public function testFoodCommodityDragIncreasesVariableCostAndKitchenFuelIsImmaterial(): void
     {
         // BEA 2017: farm products through the supply chain are 3.8% of a restaurant's variable costs (the USDA food-dollar farm

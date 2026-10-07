@@ -322,6 +322,35 @@ class PrivateEquityBusinessModelTest extends TestCase
         $this->assertFalse($this->model->isUnderLeveraged(2.4, $sectorTolerance, 5.0, 1.05));
     }
 
+    /** At trend with a flat draw, carry is the target grossed up by the share of trend quarters that clear the hurdle. */
+    public function testTrendCarryIsGrossedUpForTheHurdleCliff(): void
+    {
+        $stock = new Stock();
+        $stock->setTicker('PE_CORP');
+        $stock->setTotalEquity('100.0');
+        $stock->setWholesaleDebt('50.0');
+        $stock->setEarningsMomentumZ(['carried_interest' => 0.0, 'management_fees' => 0.0]);
+
+        $mathMock = $this->createStub(MathUtility::class);
+        $mathMock->method('generatePersistentZ')->willReturn(0.0);
+
+        $trend = MacroStateDTO::fromArray([
+            'output_gap_ema' => 0.0,
+            'policy_rate_ema' => 0.03,
+            'high_yield_credit_spread_ema' => PrivateEquityBusinessModel::LBO_CREDIT_SPREAD_BASELINE,
+            'deal_activity_index_ema' => MacroEngine::DEAL_ACTIVITY_BASELINE,
+        ]);
+        $result = $this->model->computeActualFinancials($stock, 100.0, 0.35, 10.0, 0.10, $trend, $mathMock);
+
+        $shockScale = 0.10 * PrivateEquityBusinessModel::REVENUE_VARIANCE_SCALAR * PrivateEquityBusinessModel::CARRY_BASE_VOLATILITY_SCALAR
+            * (1.0 + (0.5 * PrivateEquityBusinessModel::CARRY_LEVERAGE_AMPLIFIER_SCALAR));
+        $this->assertEqualsWithDelta(
+            100.0 * 0.65 / PrivateEquityBusinessModel::expectedHurdleClearedCarry($shockScale),
+            $result->streamRevenue['carried_interest'],
+            1e-6
+        );
+    }
+
     public function testDealActivityIndexStimulatesPeCarriedInterest(): void
     {
         $stock = new Stock();

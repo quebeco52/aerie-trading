@@ -57,10 +57,6 @@ class ToolsAndAccessoriesBusinessModel extends StandardCorporateBusinessModel
     /** Baseline fraction of revenue derived from highly cyclical consumer retail scrap. */
     public const CONSUMER_WEIGHT = 0.40;
 
-    // --- Pricing Power & Macro Physics ---
-    /** "Structural ransom" pricing power for mission-critical industrial tools. */
-    public const MIN_BETA_PRICING_POWER_FLOOR = 0.90; 
-
     // --- Revenue & Shock Physics ---
     /** Very insulated from typical manufacturing boom/bust. */
     public const REVENUE_VARIANCE_SCALAR = 0.20;
@@ -96,6 +92,8 @@ class ToolsAndAccessoriesBusinessModel extends StandardCorporateBusinessModel
     public const PMI_COMMERCIAL_SENSITIVITY = 0.40;
     /** Sensitivity of retail and prosumer tool sales to residential housing starts. */
     public const HOUSING_STARTS_SENSITIVITY = 0.35;
+    /** Prosumer volume per unit of confidence beyond what the output gap explains, before cyclicality (Lemmon & Portniaguina 2006 residual; Carroll, Fuhrer & Wilcox 1994). */
+    public const CONSUMER_SENTIMENT_SENSITIVITY = 0.50;
     /** Alloy and carbide supply contracts fix input prices for about a quarter. */
     public const INPUT_COST_LAG_YEARS = 0.25;
 
@@ -111,19 +109,54 @@ class ToolsAndAccessoriesBusinessModel extends StandardCorporateBusinessModel
         return ['eps_weight' => 0.70, 'revenue_weight' => 0.30];
     }
 
+    /**
+     * The cycle reaches each stream once inside the sector physics (commercial on the gap and the PMI, consumer on
+     * the gap, confidence and housing), so the root shift carries no demand term.
+     */
     public function getMacroPhysics(Stock $stock, MacroStateDTO $macroState): array
     {
         $physics = parent::getMacroPhysics($stock, $macroState);
+        $physics['macro_demand_shift'] = 0.0;
 
-        // Extremely insulated from typical manufacturing boom/bust, but tied to industrial tooling & construction
-        $outputGap = $this->resolveLaggedOutputGap($macroState);
+        return $physics;
+    }
+
+    /** The volume the plants are staffed to: the target-mix cycle shift of both streams. */
+    public function resolveSectorActivityShift(Stock $stock, MacroStateDTO $macroState): float
+    {
+        $params = $this->resolveModelParameters($stock, [
+            ModelParam::CommercialWeight->value => self::COMMERCIAL_WEIGHT,
+            ModelParam::ConsumerWeight->value   => self::CONSUMER_WEIGHT,
+        ]);
+        $commercialWeight = $params[ModelParam::CommercialWeight];
+        $consumerWeight = $params[ModelParam::ConsumerWeight];
+        $totalWeight = $commercialWeight + $consumerWeight;
+        if ($totalWeight <= 0.0) {
+            return 0.0;
+        }
+
+        $shifts = $this->resolveStreamMacroShifts($stock, $macroState);
+
+        return (($commercialWeight * $shifts['commercial']) + ($consumerWeight * $shifts['consumer'])) / $totalWeight;
+    }
+
+    /**
+     * Each stream's volume shift, the gap at the firm's cyclicality entering once: commercial tooling on the lagged
+     * gap and the manufacturing PMI; prosumer sales on the gap, confidence net of the gap, and housing starts.
+     *
+     * @return array{commercial: float, consumer: float}
+     */
+    private function resolveStreamMacroShifts(Stock $stock, MacroStateDTO $macroState): array
+    {
         $beta = $this->getOperatingCyclicality($stock);
+        $fxShift = $this->resolveFxDemandShift($macroState);
         $pmiShift = MathUtility::calculatePmiDemandShift($macroState->manufacturingPmiEma, sensitivity: self::PMI_COMMERCIAL_SENSITIVITY);
         $housingShift = MathUtility::calculateHousingStartsShift($macroState->housingStartsIndexEma, sensitivity: self::HOUSING_STARTS_SENSITIVITY);
 
-        $physics['macro_demand_shift'] = ($outputGap * $beta * 0.50) + ($pmiShift * 0.60) + ($housingShift * 0.40);
-
-        return $physics;
+        return [
+            'commercial' => ($this->resolveLaggedOutputGap($macroState) * $beta) + $pmiShift + $fxShift,
+            'consumer'   => (($macroState->outputGapEma + ($macroState->sentimentResidual() * self::CONSUMER_SENTIMENT_SENSITIVITY)) * $beta) + $housingShift + $fxShift,
+        ];
     }
 
     protected function calculateSectorPhysics(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, MacroStateDTO $macroState, MathUtility $mathUtility): SectorPhysicsResult
@@ -154,14 +187,10 @@ class ToolsAndAccessoriesBusinessModel extends StandardCorporateBusinessModel
         $eventZ      = $streams->generateExogenousZ('event', 0.10);
 
         $pricingPower = $this->resolvePricingPower($stock);
-        $macroSensitivityMultiplier = self::MIN_BETA_PRICING_POWER_FLOOR + $pricingPower;
 
-        $sentimentShift = $macroState->sentimentDeviation();
-        $pmiShift = MathUtility::calculatePmiDemandShift($macroState->manufacturingPmiEma, sensitivity: self::PMI_COMMERCIAL_SENSITIVITY);
-        $housingShift = MathUtility::calculateHousingStartsShift($macroState->housingStartsIndexEma, sensitivity: self::HOUSING_STARTS_SENSITIVITY);
-
-        $commercialMacroVolumeShock = ($macroState->outputGapEma * $macroSensitivityMultiplier * $this->getOperatingCyclicality($stock)) + $this->resolveFxDemandShift($macroState) + $pmiShift;
-        $consumerMacroVolumeShock = ($sentimentShift * $macroSensitivityMultiplier * $this->getOperatingCyclicality($stock)) + $this->resolveFxDemandShift($macroState) + $housingShift;
+        $macroShifts = $this->resolveStreamMacroShifts($stock, $macroState);
+        $commercialMacroVolumeShock = $macroShifts['commercial'];
+        $consumerMacroVolumeShock = $macroShifts['consumer'];
 
         // Tail Risk Events
         $cycleMultiplier = 1.0;

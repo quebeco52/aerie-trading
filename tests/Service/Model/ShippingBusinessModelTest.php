@@ -163,9 +163,55 @@ class ShippingBusinessModelTest extends TestCase
         $after = $run($ongoing->streamZ, true);
         $this->assertSame(0.0, $after->streamZ[$regimeKey]);
         $this->assertLessThan($ongoing->actualRevenue, $after->actualRevenue, 'spot rates normalize once berths clear');
-        $this->assertEqualsWithDelta($clean->actualRevenue, $after->actualRevenue, $clean->actualRevenue * 0.01, 'back to baseline within mix-drift tolerance');
+        // The charter book and the mix have moved on meanwhile, so the baseline is the same firm with no regime on its books.
+        $sameBookNoRegime = $ongoing->streamZ;
+        unset($sameBookNoRegime[$regimeKey]);
+        $baseline = $run($sameBookNoRegime, false);
+        $this->assertEqualsWithDelta($baseline->actualRevenue, $after->actualRevenue, $baseline->actualRevenue * 1e-9, 'back to baseline once the regime exits');
     }
 
+
+    /**
+     * Spot revenue is rate times cargo, each entering once. The gap used to reach the spot book three times (a root
+     * shift at cyclicality x MACRO_DEMAND_SCALAR, a direct 3.5x spot-rate term, and the freight index that already
+     * prices world demand) and the contract book took the exchange rate twice.
+     */
+    public function testTheCycleFillsTheShipsOnceAndTheFreightRateIsPrice(): void
+    {
+        $model = new ShippingBusinessModel();
+        $stock = new Stock();
+        $stock->setTicker('XSHP');
+        $stock->setBeta('1.0');
+        $quiet = $this->createStub(MathUtility::class);
+        $run = fn (MacroStateDTO $state) => $model->computeActualFinancials($stock, 1000.0, 0.40, 50.0, 0.15, $state, $quiet);
+        $cargoElasticity = ShippingBusinessModel::OPERATING_CYCLICALITY * ShippingBusinessModel::MACRO_DEMAND_SCALAR;
+
+        $gap = -0.01;
+        $neutral = new MacroStateDTO(outputGapEma: 0.0, exchangeRateIndexEma: 100.0, freightRateIndexEma: MacroEngine::FREIGHT_BASELINE);
+        $slump = new MacroStateDTO(outputGapEma: $gap, exchangeRateIndexEma: 100.0, freightRateIndexEma: MacroEngine::FREIGHT_BASELINE);
+
+        // The root carries no cycle; the spot book takes the cargo elasticity, and a fresh charter book its burn rate of it.
+        $this->assertEqualsWithDelta(0.0, $model->getMacroPhysics($stock, $slump)['macro_demand_shift'], 1e-12);
+        $base = $run($neutral);
+        $low = $run($slump);
+        $this->assertEqualsWithDelta($gap * $cargoElasticity, ($low->streamRevenue['spot'] / $base->streamRevenue['spot']) - 1.0, 1e-9);
+        $this->assertEqualsWithDelta($gap * $cargoElasticity * ShippingBusinessModel::CONTRACT_BACKLOG_BURN_RATE, ($low->streamRevenue['contract'] / $base->streamRevenue['contract']) - 1.0, 1e-9);
+        $this->assertEqualsWithDelta(
+            ShippingBusinessModel::SPOT_CHARTER_WEIGHT * $gap * $cargoElasticity,
+            $model->resolveSectorActivityShift($stock, $slump),
+            1e-9
+        );
+
+        // A freight-rate move reprices the same cargo one for one, books as price, and leaves the charter book alone.
+        $dear = $run(new MacroStateDTO(outputGapEma: 0.0, exchangeRateIndexEma: 100.0, freightRateIndexEma: 1.2 * MacroEngine::FREIGHT_BASELINE));
+        $this->assertEqualsWithDelta(1.2, $dear->streamRevenue['spot'] / $base->streamRevenue['spot'], 1e-9);
+        $this->assertEqualsWithDelta($dear->streamRevenue['spot'] - $base->streamRevenue['spot'], $dear->priceRevenue, 1e-9);
+        $this->assertEqualsWithDelta($base->streamRevenue['contract'], $dear->streamRevenue['contract'], 1e-9);
+
+        // The exchange rate reaches the charter book once, through the root shift, not again in its orders.
+        $strong = $run(new MacroStateDTO(outputGapEma: 0.0, exchangeRateIndexEma: 120.0, freightRateIndexEma: MacroEngine::FREIGHT_BASELINE));
+        $this->assertEqualsWithDelta($base->streamRevenue['contract'], $strong->streamRevenue['contract'], 1e-9);
+    }
 
     /** The world's cycle, not only the district's, fills the ships. */
     public function testAForeignBoomLiftsShippingDemandWithTheDistrictFlat(): void
@@ -178,9 +224,16 @@ class ShippingBusinessModelTest extends TestCase
         $home = new MacroStateDTO(outputGapEma: 0.0, tradeBalanceToGdpEma: MacroEngine::TRADE_BALANCE_BASELINE);
         $abroad = new MacroStateDTO(outputGapEma: 0.0, tradeBalanceToGdpEma: MacroEngine::TRADE_BALANCE_BASELINE, foreignOutputGapEma: 0.03);
 
-        $shiftHome = $model->getMacroPhysics($stock, $home)['macro_demand_shift'];
-        $shiftAbroad = $model->getMacroPhysics($stock, $abroad)['macro_demand_shift'];
+        $quiet = $this->createStub(MathUtility::class);
+        $spotHome = $model->computeActualFinancials($stock, 1000.0, 0.40, 50.0, 0.15, $home, $quiet)->streamRevenue['spot'];
+        $spotAbroad = $model->computeActualFinancials($stock, 1000.0, 0.40, 50.0, 0.15, $abroad, $quiet)->streamRevenue['spot'];
 
-        $this->assertEqualsWithDelta(0.03 * ShippingBusinessModel::FOREIGN_DEMAND_SENSITIVITY, $shiftAbroad - $shiftHome, 1e-9);
+        // Cargo volume, once: the spot book carries the foreign gap at FOREIGN_DEMAND_SENSITIVITY, the root shift none of it.
+        $this->assertEqualsWithDelta(0.03 * ShippingBusinessModel::FOREIGN_DEMAND_SENSITIVITY, ($spotAbroad / $spotHome) - 1.0, 1e-9);
+        $this->assertEqualsWithDelta(
+            $model->getMacroPhysics($stock, $home)['macro_demand_shift'],
+            $model->getMacroPhysics($stock, $abroad)['macro_demand_shift'],
+            1e-12
+        );
     }
 }

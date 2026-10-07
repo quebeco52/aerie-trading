@@ -124,6 +124,33 @@ class FinancialDataBusinessModelTest extends TestCase
         );
     }
 
+    /**
+     * Feed volume follows volatility around the sim's anchor: at the anchor, with spreads, the gap and the deal
+     * index neutral, the transaction stream books its expected share and the cost base staffs to no swing; a
+     * volatility point either side moves the stream by the documented sensitivity.
+     */
+    public function testTheVolatilityTermIsNeutralAtTheAnchor(): void
+    {
+        $model = new FinancialDataBusinessModel();
+        $math = $this->createStub(MathUtility::class);
+        $math->method('generatePersistentZ')->willReturn(0.0);
+        $math->method('generateStandardNormal')->willReturn(0.0);
+        $anchorVol = \App\Service\Macro\MacroEngine::MACRO_VOL_BASE_ANCHOR;
+        $stock = (new Stock())->setTicker('SHRK');
+
+        $anchor = new MacroStateDTO(marketVolatilityEma: $anchorVol);
+        $this->assertEqualsWithDelta(0.0, $model->resolveSectorActivityShift($stock, $anchor), 1e-12);
+
+        $atAnchor = $model->computeActualFinancials((new Stock())->setTicker('SHRK'), 1000.0, 0.35, 50.0, 0.0, $anchor, $math);
+        $quiet = $model->computeActualFinancials((new Stock())->setTicker('SHRK'), 1000.0, 0.35, 50.0, 0.0, new MacroStateDTO(marketVolatilityEma: $anchorVol - 0.05), $math);
+        $this->assertEqualsWithDelta(1000.0, $atAnchor->actualRevenue, 1e-9);
+        $this->assertEqualsWithDelta(
+            1.0 - 0.05 * FinancialDataBusinessModel::MARKET_DATA_VOLATILITY_SENSITIVITY,
+            $quiet->streamRevenue['transaction'] / $atAnchor->streamRevenue['transaction'],
+            1e-9
+        );
+    }
+
     public function testSubscriptionsRideThroughTheCycleAndTransactionsCarryItOnce(): void
     {
         // Seat subscriptions renew through the cycle, so the root shift carries no output gap; the transaction

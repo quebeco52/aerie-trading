@@ -132,12 +132,25 @@ class AutoManufacturerBusinessModel extends HeavyManufacturingBusinessModel
     /** Baseline credit spread above which CECL forward provisioning accelerates, the macro through-the-cycle IG spread. */
     public const CECL_BASELINE_CREDIT_SPREAD = MacroEngine::BASE_CREDIT_SPREAD;
 
-    // --- Interest Rate & Sentiment Sensitivity ---
-    /** Neutral policy rate (~3.0%). Rates above this destroy consumer auto financing demand. */
-    public const NEUTRAL_POLICY_RATE = 0.03;
+    // --- Demand Transmission Lag ---
+    /** Years for a move in the output gap to reach the assembly line: dealer stock runs about two to three months of sales, so build schedules follow showroom demand within a quarter. */
+    public const DEMAND_LAG_YEARS = 0.25;
 
-    /** Scalar for demand destruction per 100bps of policy rate above neutral. */
+    // --- Durable Demand, Interest Rate & Sentiment Sensitivity ---
+    /** Vehicle purchases per unit of the gap beyond cyclicality: purchases are the flow that adjusts a durable stock, so they swing a multiple of income (Chow 1957 stock adjustment); ~3.75x the gap at cyclicality 1.5. */
+    public const DURABLE_STOCK_ADJUSTMENT_MULTIPLIER = 2.50;
+
+    /** Scalar for demand destruction per 100bps of real policy rate above r*. */
     public const RATE_SENSITIVITY_SCALAR = 1.25;
+
+    /** Share of the tightening slope an easy stance gives back: policy pushes on a string below neutral (Tenreyro & Thwaites 2016). */
+    public const RATE_EASING_SLOPE_SHARE = 0.50;
+
+    /** Ceiling on the volume an easy real-rate stance can add (10%). */
+    public const MAX_RATE_EASING_BOOST = 0.10;
+
+    /** Vehicle volume per unit of confidence beyond what the output gap explains, before cyclicality (Lemmon & Portniaguina 2006 residual). */
+    public const CONSUMER_SENTIMENT_SENSITIVITY = 0.40;
 
     // --- Apex Luxury & Veblen Wealth Effect ---
     /** Sensitivity of ultra-luxury hypercar deliveries to equity risk premium compression (asset wealth expansion). */
@@ -183,28 +196,22 @@ class AutoManufacturerBusinessModel extends HeavyManufacturingBusinessModel
             ModelParam::RateSensitivityScalar->value => self::RATE_SENSITIVITY_SCALAR,
         ]);
         $rateScalar = $params[ModelParam::RateSensitivityScalar->value];
-
-        $policyRate = $macroState->policyRateEma;
         $beta = $this->getOperatingCyclicality($stock);
 
-        // Model consumer durable demand using lagged output gap and FX demand shift.
-        $physics['macro_demand_shift'] = ($this->resolveLaggedOutputGap($macroState) * $beta)
+        // A vehicle is a durable: the gap reaches purchases once, through the stock-adjustment multiplier.
+        $physics['macro_demand_shift'] = ($this->resolveLaggedOutputGap($macroState) * $beta * self::DURABLE_STOCK_ADJUSTMENT_MULTIPLIER)
             + $this->resolveFxDemandShift($macroState);
 
-        // High policy rates destroy debt-financed consumer auto purchases
-        $ratePenalty = 0.0;
-        if ($policyRate > self::NEUTRAL_POLICY_RATE) {
-            $ratePenalty = ($policyRate - self::NEUTRAL_POLICY_RATE) * $beta * $rateScalar;
-        } else {
-            // Capped boost when rates are ultra-low
-            $ratePenalty = max(-0.10, ($policyRate - self::NEUTRAL_POLICY_RATE) * $beta * ($rateScalar * 0.5));
-        }
-
+        // Debt-financed purchases read the real policy stance, nominal policy less expected inflation less r*
+        // (Laubach & Williams 2003); easing gives back less than tightening takes.
+        $realRateGap = $macroState->policyRateEma - $macroState->tipsBreakevenEma - $macroState->naturalRateEma;
+        $ratePenalty = $realRateGap > 0.0
+            ? $realRateGap * $beta * $rateScalar
+            : max(-self::MAX_RATE_EASING_BOOST, $realRateGap * $beta * $rateScalar * self::RATE_EASING_SLOPE_SHARE);
         $physics['macro_demand_shift'] -= $ratePenalty;
 
-        // Consumer sentiment impact on demand scaled by beta.
-        $sentimentShift = $macroState->sentimentDeviation();
-        $physics['macro_demand_shift'] += ($sentimentShift * $beta * 0.40);
+        // The gap is priced above, so confidence enters as its residual over the gap.
+        $physics['macro_demand_shift'] += $macroState->sentimentResidual() * $beta * self::CONSUMER_SENTIMENT_SENSITIVITY;
 
         return $physics;
     }
@@ -222,17 +229,12 @@ class AutoManufacturerBusinessModel extends HeavyManufacturingBusinessModel
             ModelParam::AutoSalesWeight->value        => self::AUTO_SALES_WEIGHT,
             ModelParam::ApexLuxuryWeight->value       => self::APEX_LUXURY_WEIGHT,
             ModelParam::SoftwareServicesWeight->value => self::SOFTWARE_SERVICES_WEIGHT,
-            ModelParam::PricingPowerIndex->value      => self::PRICING_POWER_INDEX,
         ]);
 
-        $salesWeight    = $params[ModelParam::AutoSalesWeight];
-        $apexWeight     = $params[ModelParam::ApexLuxuryWeight];
-        $softwareWeight = $params[ModelParam::SoftwareServicesWeight];
-        $pricingPower   = $params[ModelParam::PricingPowerIndex];
+        $pricingPower = $this->resolvePricingPower($stock);
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
         $streams = $this->createStreamContext($momentum, $mathUtility, $macroState, $stock);
-        $beta = $this->getOperatingCyclicality($stock);
 
         // --- Dynamic Revenue Mix Drift with Strategic Mean Reversion ---
         $activeWeights = $streams->resolveActiveStreamWeights([
@@ -280,8 +282,9 @@ class AutoManufacturerBusinessModel extends HeavyManufacturingBusinessModel
         $gscpiShift = max(0.0, $macroState->supplyChainPressureIndexEma - MacroEngine::GSCPI_BASELINE);
         $inflationCostPenalty = ($inputCostDrag / max(0.05, $salesWeight)) + ($gscpiShift * self::SUPPLY_CHAIN_PRESSURE_COST_SCALAR * (1.0 - ($pricingPower * 0.50)));
 
-        // Captive Finance NIM Squeeze & Subprime Provisioning
-        $sentimentShift = $macroState->sentimentDeviation();
+        // Captive Finance NIM Squeeze & Subprime Provisioning. The default rates carry the cycle, so confidence
+        // enters as its residual over the gap.
+        $sentimentShift = $macroState->sentimentResidual();
         $retailDefaultShift = MathUtility::excessOverBaseline($macroState->retailDefaultRateEma, MacroEngine::RETAIL_DEFAULT_BASELINE);
         $corporateDefaultShift = MathUtility::excessOverBaseline($macroState->corporateDefaultRateEma, MacroEngine::CORPORATE_DEFAULT_BASELINE);
         $dsrShift = max(0.0, $macroState->householdDebtServiceGap) / MacroEngine::HOUSEHOLD_DSR_NEUTRAL;
@@ -391,7 +394,9 @@ class AutoManufacturerBusinessModel extends HeavyManufacturingBusinessModel
             'inflation_ema',
             'macro_credit_spread',
             'manufacturing_pmi_ema',
-            'output_gap_lag_12m',
+            'natural_rate_ema',
+            'output_gap_ema',
+            'output_gap_lag_3m',
             'policy_rate_ema',
             'qe_active',
             'qe_intensity',

@@ -89,6 +89,14 @@ class FinancialDataBusinessModel extends StandardCorporateBusinessModel
     /** Sensitivity of credit rating issuance fees and market data feed volume to aggregate deal activity. */
     public const DEAL_ACTIVITY_RATING_SENSITIVITY = 0.25;
 
+    // --- Transaction Stream Macro Channel ---
+    /** Rating-issuance revenue per unit of IG spread below MacroEngine::BASE_CREDIT_SPREAD (+2% per 100bp of tightening). */
+    public const DCM_SPREAD_ISSUANCE_SENSITIVITY = 2.0;
+    /** Rating-issuance revenue per unit of output gap, before operating cyclicality (+1.5% per 1% gap). */
+    public const DCM_OUTPUT_GAP_ISSUANCE_SENSITIVITY = 1.5;
+    /** Market-data feed revenue per unit of volatility over MacroEngine::MACRO_VOL_BASE_ANCHOR, both ways (+0.5% per vol point). */
+    public const MARKET_DATA_VOLATILITY_SENSITIVITY = 0.50;
+
     // --- Data Platform Reinvestment & Monopoly Moat Physics ---
     /** Quarterly margin decay rate per unit of software/platform underinvestment below replacement. */
     public const PLATFORM_DECAY_RATE          = 0.015;
@@ -133,7 +141,7 @@ class FinancialDataBusinessModel extends StandardCorporateBusinessModel
 
         // DCM Debt Rating & Data Feed API Macro Channel:
         // Rating issuance mandates (SHRK) surge when corporate debt syndication booms (tight credit spreads + positive output gap).
-        // Market data API feeds (TICK) see elevated transaction volume during high-volatility regimes (VIX > 20%).
+        // Market data API feeds (TICK) carry more transaction volume when volatility runs above its anchor, less below.
         $transactionMacroBonus = $this->resolveTransactionMacroShift($stock, $macroState);
 
         $subscriptionRevenue = max(0.0, $expectedRevenue * $subscriptionWeight * (1.0 + ($subscriptionZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR))));
@@ -199,13 +207,15 @@ class FinancialDataBusinessModel extends StandardCorporateBusinessModel
 
     /**
      * Rating issuance mandates surge when corporate debt syndication booms (tight credit spreads, positive output
-     * gap) and deals close; market data feeds see elevated volume in high-volatility regimes.
+     * gap) and deals close. Market data feed volume follows volatility: the volume-volatility relation (Karpoff
+     * 1987) linearised at the sim's volatility anchor, so the term averages out there.
      */
     private function resolveTransactionMacroShift(Stock $stock, \App\DTO\MacroStateDTO $macroState): float
     {
         $creditSpreadGap = MacroEngine::BASE_CREDIT_SPREAD - $macroState->macroCreditSpreadEma;
-        $dcmIssuanceBoost = ($creditSpreadGap * 2.0) + ($macroState->outputGapEma * 1.5 * $this->getOperatingCyclicality($stock));
-        $vixVolBoost = max(0.0, ($macroState->marketVolatilityEma - 0.20) * 0.50);
+        $dcmIssuanceBoost = ($creditSpreadGap * self::DCM_SPREAD_ISSUANCE_SENSITIVITY)
+            + ($macroState->outputGapEma * self::DCM_OUTPUT_GAP_ISSUANCE_SENSITIVITY * $this->getOperatingCyclicality($stock));
+        $vixVolBoost = ($macroState->marketVolatilityEma - MacroEngine::MACRO_VOL_BASE_ANCHOR) * self::MARKET_DATA_VOLATILITY_SENSITIVITY;
         $dealActivityShift = ($macroState->dealActivityIndexEma - MacroEngine::DEAL_ACTIVITY_BASELINE) / MacroEngine::DEAL_ACTIVITY_BASELINE;
 
         return $dcmIssuanceBoost + $vixVolBoost + ($dealActivityShift * self::DEAL_ACTIVITY_RATING_SENSITIVITY);

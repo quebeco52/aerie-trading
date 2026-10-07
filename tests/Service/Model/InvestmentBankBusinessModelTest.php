@@ -51,13 +51,13 @@ class InvestmentBankBusinessModelTest extends TestCase
         $mathMock->method('generateStandardNormal')->willReturn(0.0);
         $mathMock->method('generateUniform')->willReturn(0.50); // No regulatory fine
 
-        // Neutral macro baseline with VIX = 0.28 (10% above VIX_ARBITRAGE_FLOOR 0.18, within BASEL_VAR_VOL_TARGET 0.30)
+        // Neutral macro baseline with VIX 10 points above the anchor (VIX_ARBITRAGE_FLOOR 0.15), within BASEL_VAR_VOL_TARGET 0.30
         $macroState = \App\DTO\MacroStateDTO::fromArray([
             'output_gap_ema'          => 0.0,
             'policy_rate'             => 0.04, // synced with EMA: isolate this test's variable, avoid a phantom FICC rate-shock
             'policy_rate_ema'         => 0.04,
             'yield_5y_ema'            => 0.04 + InvestmentBankBusinessModel::DCM_NEUTRAL_CURVE_SLOPE, // Neutral curve slope: no DCM stimulus either way
-            'market_volatility_ema'   => 0.28,
+            'market_volatility_ema'   => InvestmentBankBusinessModel::VIX_ARBITRAGE_FLOOR + 0.10,
             'macro_credit_spread_ema' => InvestmentBankBusinessModel::DEAL_BASELINE_CREDIT_SPREAD, // Neutral spread (0.02)
             'equity_risk_premium'     => MacroEngine::BASE_EQUITY_RISK_PREMIUM, // Neutral ERP (0.045)
         ]);
@@ -74,7 +74,7 @@ class InvestmentBankBusinessModelTest extends TestCase
 
         // CORV overrides: advisory_weight = 0.25, trading_weight = 0.75, vix_arbitrage_scalar = 2.00
         // advisoryRevenue = 1000.0 * 0.25 * 1.0 = 250.0
-        // volatilityArbitrage = (0.28 - 0.18) * 2.00 * 1.0 (varDeleverageFactor = 1.0) = 0.20
+        // volatilityArbitrage = 0.10 * 2.00 * 1.0 (varDeleverageFactor = 1.0) = 0.20
         // tradingRevenue  = 1000.0 * 0.75 * (1.0 + 0.20) = 900.0
         // actualRevenue   = 250.0 + 900.0 = 1150.0
         $this->assertEqualsWithDelta(1150.0, $result->actualRevenue, 0.001);
@@ -89,9 +89,9 @@ class InvestmentBankBusinessModelTest extends TestCase
         $mathMock->method('generateStandardNormal')->willReturn(0.0);
         $mathMock->method('generateUniform')->willReturn(0.50);
 
-        // Extreme 2008-level VIX panic (0.80) -> vixGap = 0.62
+        // Extreme 2008-level VIX panic (0.80) -> vixGap = 0.80 - 0.15 anchor = 0.65
         // Basel FRTB volatility targeting deleveraging: varDeleverageFactor = 0.30 / 0.80 = 0.375
-        // volatilityArbitrage = (0.62 * 1.20) * 0.375 = 0.279
+        // volatilityArbitrage = (0.65 * 1.20) * 0.375 = 0.2925
         $macroState = \App\DTO\MacroStateDTO::fromArray([
             'output_gap_ema'          => 0.0,
             'policy_rate'             => 0.04, // synced with EMA: isolate this test's variable, avoid a phantom FICC rate-shock
@@ -113,12 +113,12 @@ class InvestmentBankBusinessModelTest extends TestCase
         );
 
         // Default weights: advisory = 0.40, trading = 0.60
-        // Under extreme panic (VIX = 0.80), the IPO window freeze triggers max discount (0.30 * 0.35 = -0.105 on advisory)
-        // advisoryRevenue = 1000.0 * 0.40 * (1.0 - 0.105) = 358.0
-        // tradingRevenue  = 1000.0 * 0.60 * (1.0 + 0.279) = 767.4
-        // total           = 358.0 + 767.4 = 1125.4
-        // Without VaR deleveraging, tradingRevenue would be 1000 * 0.60 * (1 + 0.744) = 1046.4, total = 1404.4
-        $this->assertEqualsWithDelta(1125.4, $result->actualRevenue, 0.01);
+        // Under extreme panic (VIX = 0.80), the IPO window freeze takes its max discount off the ECM share (0.30 * 0.22 = -0.066 on advisory)
+        // advisoryRevenue = 1000.0 * 0.40 * (1.0 - 0.066) = 373.6
+        // tradingRevenue  = 1000.0 * 0.60 * (1.0 + 0.2925) = 775.5
+        // total           = 373.6 + 775.5 = 1149.1
+        // Without VaR deleveraging, tradingRevenue would be 1000 * 0.60 * (1 + 0.78) = 1068.0, total = 1441.6
+        $this->assertEqualsWithDelta(1149.1, $result->actualRevenue, 0.01);
     }
 
     public function testOptionsDeskVegaAndIsolatedGammaPhysics(): void
@@ -135,7 +135,7 @@ class InvestmentBankBusinessModelTest extends TestCase
             'policy_rate'             => 0.04, // synced with EMA: isolate this test's variable, avoid a phantom FICC rate-shock
             'policy_rate_ema'         => 0.04,
             'yield_5y_ema'            => 0.04 + InvestmentBankBusinessModel::DCM_NEUTRAL_CURVE_SLOPE, // neutral slope over the 4% policy rate: no DCM stimulus
-            'market_volatility_ema'   => 0.28, // vixGap = 0.10
+            'market_volatility_ema'   => InvestmentBankBusinessModel::VIX_ARBITRAGE_FLOOR + 0.10, // vixGap = 0.10
             'macro_credit_spread_ema' => InvestmentBankBusinessModel::DEAL_BASELINE_CREDIT_SPREAD,
             'equity_risk_premium'     => MacroEngine::BASE_EQUITY_RISK_PREMIUM,
         ]);
@@ -171,15 +171,16 @@ class InvestmentBankBusinessModelTest extends TestCase
         $mathMock->method('generateStandardNormal')->willReturn(0.0);
         $mathMock->method('generateUniform')->willReturn(0.50);
 
-        // Boom conditions: +2% output gap, ERP down 50bps, Credit spreads tight by 50bps, curve steep by 200bps
+        // Boom conditions: +2% output gap, ERP down 50bps, Credit spreads tight by 50bps, curve steep by 200bps.
+        // ERP reaches advisory only through the deal activity index, which this static state holds at baseline.
         $macroState = \App\DTO\MacroStateDTO::fromArray([
             'output_gap_ema'          => 0.02,  // output gap boom
-            'equity_risk_premium'     => 0.04,  // erpGap = (0.045 - 0.04) = 0.005
+            'equity_risk_premium'     => 0.04,
             'macro_credit_spread_ema' => InvestmentBankBusinessModel::DEAL_BASELINE_CREDIT_SPREAD - 0.005, // creditSpreadGap = 0.005 * 10.0 = 0.05
             'policy_rate'             => 0.03, // synced with EMA: isolate this test's variable, avoid a phantom FICC rate-shock
             'policy_rate_ema'         => 0.03,
             'yield_5y_ema'            => 0.03 + InvestmentBankBusinessModel::DCM_NEUTRAL_CURVE_SLOPE + 0.02, // curveSlopeGap = +0.02 over neutral -> 0.02 * 2.50 = 0.05
-            'market_volatility_ema'   => 0.18,  // neutral VIX floor
+            'market_volatility_ema'   => InvestmentBankBusinessModel::VIX_ARBITRAGE_FLOOR,  // neutral volatility
         ]);
 
         $result = $this->model->computeActualFinancials(
@@ -192,14 +193,86 @@ class InvestmentBankBusinessModelTest extends TestCase
             $mathMock
         );
 
-        // M&A stimulus (65% share) = (0.02 * 3.00 + 0.005 * 5.00) * 0.65 = 0.085 * 0.65 = 0.05525
-        // ECM stimulus (35% share) = (0.02 * 2.50 + 0.005 * 4.00) * 0.35 = 0.070 * 0.35 = 0.0245
-        // DCM stimulus = (0.005 * 10.0) + (0.020 * 2.50) = 0.05 + 0.05 = 0.10
-        // advisoryMacroFactor = 0.05525 + 0.0245 + 0.10 = 0.17975 (+17.975% stimulus)
-        // advisoryRevenue = 1000.0 * 0.75 * (1.0 + 0.17975) = 884.8125
+        // M&A stimulus (47% share) = (0.02 * 3.00) * 0.47 = 0.0282
+        // ECM stimulus (22% share) = (0.02 * 2.50) * 0.22 = 0.011
+        // DCM stimulus (31% share) = ((0.005 * 10.0) + (0.020 * 2.50)) * 0.31 = 0.10 * 0.31 = 0.031
+        // advisoryMacroFactor = 0.0282 + 0.011 + 0.031 = 0.0702 (+7.02% stimulus)
+        // advisoryRevenue = 1000.0 * 0.75 * (1.0 + 0.0702) = 802.65
         // tradingRevenue  = 1000.0 * 0.25 * 1.0 = 250.0
-        // actualRevenue   = 884.8125 + 250.0 = 1134.8125
-        $this->assertEqualsWithDelta(1134.8125, $result->actualRevenue, 0.01);
+        // actualRevenue   = 802.65 + 250.0 = 1052.65
+        $this->assertEqualsWithDelta(1052.65, $result->actualRevenue, 0.01);
+    }
+
+    /** M&A, ECM and DCM split one advisory fee pool (GS 2019 10-K mix), so their shares sum to one. */
+    public function testAdvisoryDealSharesSumToOne(): void
+    {
+        $this->assertEqualsWithDelta(
+            1.0,
+            InvestmentBankBusinessModel::MNA_ADVISORY_SHARE + InvestmentBankBusinessModel::ECM_ADVISORY_SHARE + InvestmentBankBusinessModel::DCM_ADVISORY_SHARE,
+            1e-12
+        );
+    }
+
+    /**
+     * A +3pp investment-grade spread move reaches advisory through debt underwriting alone, at the DCM share of the
+     * pool; ERP at a fixed deal index moves nothing, because the deal index is where advisory reads it.
+     */
+    public function testSpreadAndErpReachAdvisoryOnceEach(): void
+    {
+        $stock = (new Stock())->setTicker('KING');
+        $mathMock = $this->createStub(MathUtility::class);
+        $mathMock->method('generateStandardNormal')->willReturn(0.0);
+        $mathMock->method('generateUniform')->willReturn(0.50);
+        $advisory = function (array $overrides) use ($stock, $mathMock): float {
+            $macro = \App\DTO\MacroStateDTO::fromArray($overrides + [
+                'output_gap_ema'          => 0.0,
+                'equity_risk_premium'     => MacroEngine::BASE_EQUITY_RISK_PREMIUM,
+                'macro_credit_spread_ema' => InvestmentBankBusinessModel::DEAL_BASELINE_CREDIT_SPREAD,
+                'policy_rate'             => 0.04,
+                'policy_rate_ema'         => 0.04,
+                'yield_5y_ema'            => 0.04 + InvestmentBankBusinessModel::DCM_NEUTRAL_CURVE_SLOPE,
+                'market_volatility_ema'   => InvestmentBankBusinessModel::VIX_ARBITRAGE_FLOOR,
+            ]);
+
+            return $this->model->computeActualFinancials($stock, 1000.0, 0.50, 100.0, 0.0, $macro, $mathMock)->streamRevenue['advisory'];
+        };
+
+        $neutral = $advisory([]);
+        $wide = $advisory(['macro_credit_spread_ema' => InvestmentBankBusinessModel::DEAL_BASELINE_CREDIT_SPREAD + 0.03]);
+        $this->assertEqualsWithDelta(
+            -InvestmentBankBusinessModel::DCM_ADVISORY_SHARE * InvestmentBankBusinessModel::DCM_CREDIT_SPREAD_ELASTICITY * 0.03,
+            $wide / $neutral - 1.0,
+            1e-9
+        );
+        $this->assertEqualsWithDelta($neutral, $advisory(['equity_risk_premium' => MacroEngine::BASE_EQUITY_RISK_PREMIUM + 0.02]), 1e-9);
+    }
+
+    /**
+     * Every volatility term is centred on the sim's volatility anchor: there the S&T capture, the vega bonus and the
+     * gamma friction are all zero, so each desk books its expected share and the cost base staffs to no swing.
+     */
+    public function testEveryVolatilityTermIsNeutralAtTheAnchor(): void
+    {
+        $mathMock = $this->createStub(MathUtility::class);
+        $mathMock->method('generateStandardNormal')->willReturn(0.0);
+        $mathMock->method('generateUniform')->willReturn(0.50);
+        $anchor = \App\DTO\MacroStateDTO::fromArray([
+            'output_gap_ema'          => 0.0,
+            'macro_credit_spread_ema' => InvestmentBankBusinessModel::DEAL_BASELINE_CREDIT_SPREAD,
+            'policy_rate'             => 0.04,
+            'policy_rate_ema'         => 0.04,
+            'yield_5y_ema'            => 0.04 + InvestmentBankBusinessModel::DCM_NEUTRAL_CURVE_SLOPE,
+            'market_volatility_ema'   => MacroEngine::MACRO_VOL_BASE_ANCHOR,
+        ]);
+
+        foreach (['GS', 'CORV', 'PERE'] as $ticker) {
+            $stock = (new Stock())->setTicker($ticker);
+            $report = $this->model->computeActualFinancials($stock, 1000.0, 0.50, 100.0, 0.0, $anchor, $mathMock);
+
+            $this->assertEqualsWithDelta(1000.0, $report->actualRevenue, 1e-9, "$ticker books its expected revenue at the anchor.");
+            $this->assertEqualsWithDelta(0.50, $report->clampedMargin, 1e-12, "$ticker pays no gamma friction at the anchor.");
+            $this->assertEqualsWithDelta(0.0, $this->model->resolveSectorActivityShift($stock, $anchor), 1e-12);
+        }
     }
 
     public function testWholesaleLeverageLimitMatchesOperatingCapacity(): void
@@ -374,7 +447,7 @@ class InvestmentBankBusinessModelTest extends TestCase
             'policy_rate'             => 0.04, // synced with EMA: isolate this test's variable, avoid a phantom FICC rate-shock
             'policy_rate_ema'         => 0.04,
             'yield_5y_ema'            => 0.04 + InvestmentBankBusinessModel::DCM_NEUTRAL_CURVE_SLOPE, // neutral slope over the 4% policy rate: no DCM stimulus
-            'market_volatility_ema'   => 0.28,
+            'market_volatility_ema'   => InvestmentBankBusinessModel::VIX_ARBITRAGE_FLOOR + 0.10,
         ]);
 
         $result = $this->model->computeActualFinancials(

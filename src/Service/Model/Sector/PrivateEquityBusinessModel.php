@@ -296,6 +296,17 @@ class PrivateEquityBusinessModel extends AssetManagementBusinessModel
             + ($dealActivityShift * self::DEAL_ACTIVITY_EXIT_SCALAR);
     }
 
+    /**
+     * E[(1 + sZ)·1{Z ≥ k}] for Z ~ N(0,1) at the trend cliff k: the share of target carry a trend fund books,
+     * (1 − Φ(k)) + s·φ(k).
+     */
+    public static function expectedHurdleClearedCarry(float $carryShockScale): float
+    {
+        $cliff = self::HURDLE_RATE_Z_CLIFF;
+
+        return (1.0 - MathUtility::standardNormalCdf($cliff)) + ($carryShockScale * MathUtility::standardNormalPdf($cliff));
+    }
+
     /** Revenue per unit of carry economic condition: the stream's volatility, amplified by the sponsor's own leverage. */
     private function resolveCarryShockScale(Stock $stock, float $baselineVol): float
     {
@@ -350,10 +361,13 @@ class PrivateEquityBusinessModel extends AssetManagementBusinessModel
         // --- Clamped Multi-Stream Revenue ---
         $mgmtRevenue = max(0.0, $optimalRevenue * $mgmtWeight * (1.0 + ($mgmtZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR * self::MGMT_BASE_VOLATILITY_SCALAR))));
 
-        // 5. Leverage-amplified carry
+        // 5. Leverage-amplified carry, paid only in quarters the funds clear their hurdle. The payout is grossed up
+        // by its expectation at trend, as a jump is compensated in drift: a fund whose deal flow and credit sit at
+        // trend books its target carry on average, and only a worse-than-trend cycle widens the miss.
+        $carryShockScale = $this->resolveCarryShockScale($stock, $baselineVol);
         $carriedInterestRevenue = max(0.0, $optimalRevenue * $carryWeight
-            * (1.0 + ($economicCondition * $this->resolveCarryShockScale($stock, $baselineVol)))
-            * $multipleCompression);
+            * (1.0 + ($economicCondition * $carryShockScale))
+            * $multipleCompression) / self::expectedHurdleClearedCarry($carryShockScale);
 
         // Binary Cliff Check
         $missedHurdle = false;

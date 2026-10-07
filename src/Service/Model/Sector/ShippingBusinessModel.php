@@ -8,7 +8,9 @@ use App\Data\InputOutputExposures;
 use App\Service\Model\BusinessModelInterface;
 
 use App\Data\ModelParam;
+use App\DTO\MacroStateDTO;
 use App\DTO\SectorPhysicsResult;
+use App\DTO\StreamContext;
 use App\Entity\Stock;
 use App\Service\Math\MathUtility;
 use App\Service\Math\FinancialConstants;
@@ -77,7 +79,7 @@ class ShippingBusinessModel extends StandardCorporateBusinessModel
     public const CONTRACT_CHARTER_WEIGHT = 0.50;
 
     // --- Hyper-Cyclical Spot Rate Physics ---
-    /** Macroeconomic demand shift sensitivity to global trade output gaps. */
+    /** Cargo volume per unit of the output gap beyond cyclicality: trade swings harder than output (Freund 2009 trade-income elasticity). */
     public const MACRO_DEMAND_SCALAR       = 1.80;
     /** Volatility multiplier for top-line revenue shocks driven by maritime freight spot rates. */
     public const REVENUE_VARIANCE_SCALAR   = 0.25;
@@ -85,16 +87,12 @@ class ShippingBusinessModel extends StandardCorporateBusinessModel
     public const SPOT_BOOM_GAP_THRESHOLD   = 0.015;
     /** Negative output gap threshold triggering vessel capacity glut penalties. */
     public const SPOT_GLUT_GAP_THRESHOLD   = -0.015;
-    /** Continuous global trade elasticity scalar scaling spot freight rates smoothly with output gap. */
-    public const CONTINUOUS_SPOT_RATE_SCALAR = 3.50;
 
     // --- Global Trade & Supply Chain Pressure Transmission ---
     /** Sensitivity of maritime container and bulk freight demand to trade balance shifts. */
     public const TRADE_BALANCE_SENSITIVITY = 1.50;
     /** Export volume per unit of the foreign bloc's output gap: the customers-abroad half of the trade term. */
     public const FOREIGN_DEMAND_SENSITIVITY = 3.00;
-    /** Spot freight rate surge multiplier per unit of NY Fed global supply chain pressure. */
-    public const GSCPI_FREIGHT_BOOST_SCALAR = 0.10;
 
 
     // --- Event Lore Thresholds ---
@@ -140,18 +138,48 @@ class ShippingBusinessModel extends StandardCorporateBusinessModel
     /** Book weight in fair value through the rest of the freight cycle. */
     public const MID_CYCLE_BOOK_WEIGHT = 0.30;
 
-    public function getMacroPhysics(Stock $stock, \App\DTO\MacroStateDTO $macroState): array
+    /**
+     * Spot revenue is the freight rate times the cargo carried, and time charters take the cargo cycle through their
+     * order book, so the cycle and trade reach revenue inside the sector physics once; the root carries only the
+     * exchange rate, which every stream meets.
+     */
+    public function getMacroPhysics(Stock $stock, MacroStateDTO $macroState): array
     {
-        $outputGap = $this->resolveLaggedOutputGap($macroState);
-        $tradeShift = MathUtility::calculateTradeBalanceShift($macroState->tradeBalanceToGdpEma, sensitivity: self::TRADE_BALANCE_SENSITIVITY)
-            + MathUtility::calculateForeignDemandShift($macroState->foreignOutputGapEma, sensitivity: self::FOREIGN_DEMAND_SENSITIVITY);
-        $beta = $this->getOperatingCyclicality($stock);
-
-        // Extreme sensitivity to global economic momentum and trade volume
         return [
-            'macro_demand_shift' => ($outputGap * $beta * self::MACRO_DEMAND_SCALAR) + $this->resolveFxDemandShift($macroState) + $tradeShift,
+            'macro_demand_shift' => $this->resolveFxDemandShift($macroState),
             ...$this->resolvePricingMultipliers($stock, $macroState),
         ];
+    }
+
+    /**
+     * The fleet's crewed workload: spot cargo volume and the opening workload of the time-charter book, at
+     * target weights. Freight-rate moves are price and need no extra crew.
+     */
+    public function resolveSectorActivityShift(Stock $stock, MacroStateDTO $macroState): float
+    {
+        $params = $this->resolveModelParameters($stock, [
+            ModelParam::SpotCharterWeight->value     => self::SPOT_CHARTER_WEIGHT,
+            ModelParam::ContractCharterWeight->value => self::CONTRACT_CHARTER_WEIGHT,
+        ]);
+        $spotWeight = $params[ModelParam::SpotCharterWeight];
+        $contractWeight = $params[ModelParam::ContractCharterWeight];
+        $totalWeight = $spotWeight + $contractWeight;
+        if ($totalWeight <= 0.0) {
+            return 0.0;
+        }
+
+        $workload = StreamContext::openingWorkload($stock->getEarningsMomentumZ() ?? [], 'contract', self::CONTRACT_BACKLOG_BURN_RATE);
+
+        return (($spotWeight * $this->resolveCargoVolumeShift($stock, $macroState)) + ($contractWeight * ($workload - 1.0))) / $totalWeight;
+    }
+
+    /** Cargo volume: the lagged gap through the trade-income elasticity, plus the trade balance and customers abroad. */
+    private function resolveCargoVolumeShift(Stock $stock, MacroStateDTO $macroState): float
+    {
+        $tradeShift = MathUtility::calculateTradeBalanceShift($macroState->tradeBalanceToGdpEma, sensitivity: self::TRADE_BALANCE_SENSITIVITY)
+            + MathUtility::calculateForeignDemandShift($macroState->foreignOutputGapEma, sensitivity: self::FOREIGN_DEMAND_SENSITIVITY);
+
+        return ($this->resolveLaggedOutputGap($macroState) * $this->getOperatingCyclicality($stock) * self::MACRO_DEMAND_SCALAR) + $tradeShift;
     }
 
     protected function calculateSectorPhysics(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, \App\DTO\MacroStateDTO $macroState, MathUtility $mathUtility): SectorPhysicsResult
@@ -180,15 +208,12 @@ class ShippingBusinessModel extends StandardCorporateBusinessModel
         $spotZ     = $streams->generateZ('spot', 0.35); // Spot ocean freight / Baltic Dry variance
         $contractZ = $streams->generateZ('contract', 0.50); // Multi-year contracted logistics lines
 
-        // Spot Rate Super-Cycle vs. Capacity Glut
-        // Crucially, spot rate elasticity applies continuously to spot charter revenue ($spotWeight).
+        // Spot revenue = freight rate x cargo (Stopford 2009). The freight index already prices world demand against
+        // the fleet, so the domestic gap reaches the spot book through cargo volume only.
         $outputGap = $macroState->outputGapEma;
-        $freightShift = ($macroState->freightRateIndexEma - 100.0) / 100.0;
-        $metalsShift = ($macroState->industrialMetalsIndexEma - 100.0) / 100.0;
-        $tradeShift = MathUtility::calculateTradeBalanceShift($macroState->tradeBalanceToGdpEma, sensitivity: self::TRADE_BALANCE_SENSITIVITY)
-            + MathUtility::calculateForeignDemandShift($macroState->foreignOutputGapEma, sensitivity: self::FOREIGN_DEMAND_SENSITIVITY);
+        $cargoVolumeShift = $this->resolveCargoVolumeShift($stock, $macroState);
+        $spotRateShift = ($macroState->freightRateIndexEma - MacroEngine::FREIGHT_BASELINE) / MacroEngine::FREIGHT_BASELINE;
         $gscpiShift = max(0.0, $macroState->supplyChainPressureIndexEma - MacroEngine::GSCPI_BASELINE);
-        $spotRateMultiplier = ($outputGap * self::CONTINUOUS_SPOT_RATE_SCALAR) + ($freightShift * 0.50) + ($metalsShift * 0.15) + $tradeShift + ($gscpiShift * self::GSCPI_FREIGHT_BOOST_SCALAR);
         $eventType = null;
 
         // Congestion and glut are regimes, not blips: berths take quarters to clear and a newbuild
@@ -205,16 +230,17 @@ class ShippingBusinessModel extends StandardCorporateBusinessModel
         }
 
         if ($congestionElapsed > 0) {
-            $spotRateMultiplier += self::PORT_CONGESTION_SPOT_RATE_BOOST;
+            $spotRateShift += self::PORT_CONGESTION_SPOT_RATE_BOOST;
         } elseif ($glutElapsed > 0) {
-            $spotRateMultiplier -= self::CAPACITY_GLUT_SPOT_RATE_DRAG;
+            $spotRateShift -= self::CAPACITY_GLUT_SPOT_RATE_DRAG;
         }
 
-        $spotRevenue     = max(0.0, $expectedRevenue * $spotWeight * (1.0 + ($spotZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)) + $spotRateMultiplier));
-        // Spot freight rates reprice a fixed fleet's voyages: the rate cycle is price, the ships sail either way.
-        $priceRevenue    = $expectedRevenue * $spotWeight * $spotRateMultiplier;
-        // Time charters are fixed into a multi-quarter contract backlog and recognized as voyages complete.
-        $contractBook = $streams->recognizeBacklog('contract', $expectedRevenue * $contractWeight, max(0.0, 1.0 + ($contractZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)) + $this->resolveFxDemandShift($macroState)), self::CONTRACT_BACKLOG_BURN_RATE);
+        $spotCargo       = $expectedRevenue * $spotWeight * max(0.0, 1.0 + ($spotZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)) + $cargoVolumeShift);
+        $spotRevenue     = $spotCargo * max(0.0, 1.0 + $spotRateShift);
+        // The rate leg reprices a fixed fleet's voyages: price, the ships sail either way.
+        $priceRevenue    = $spotRevenue - $spotCargo;
+        // Time charters are fixed into a multi-quarter contract backlog: new fixtures take the cargo cycle, and the book smooths it.
+        $contractBook = $streams->recognizeBacklog('contract', $expectedRevenue * $contractWeight, max(0.0, 1.0 + ($contractZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)) + $cargoVolumeShift), self::CONTRACT_BACKLOG_BURN_RATE);
         $contractRevenue = $contractBook['revenue'];
 
         $streamRevenues = [

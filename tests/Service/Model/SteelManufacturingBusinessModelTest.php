@@ -176,4 +176,36 @@ class SteelManufacturingBusinessModelTest extends TestCase
             'Foreign recession combined with strong domestic currency must compress spot steel revenue via import dumping.'
         );
     }
+
+    /**
+     * The cycle reaches tonnage once. The root shift used to carry the lagged gap at 1.5x cyclicality and both
+     * streams added another 1.2x of the current gap on half their weight, ~3.15x the gap at cyclicality 1.5
+     * where the documented elasticity is 2.25x.
+     */
+    public function testTheCycleReachesTonnageOnceThroughTheStreams(): void
+    {
+        $stock = new Stock();
+        $stock->setTicker('XSTL');
+        $stock->setBeta('1.0');
+        $quiet = $this->createStub(MathUtility::class);
+        $expectedRevenue = 100_000_000.0;
+
+        // Total revenue response: the root shift scales expected revenue, the streams act on it.
+        $response = function (float $gap) use ($stock, $quiet, $expectedRevenue): float {
+            $state = new MacroStateDTO(outputGapEma: $gap, foreignOutputGapEma: 0.0, exchangeRateIndexEma: 100.0, industrialMetalsIndexEma: 100.0);
+            $root = $this->model->getMacroPhysics($stock, $state)['macro_demand_shift'];
+            $streams = $this->model->computeActualFinancials($stock, $expectedRevenue, 0.35, 20_000_000.0, 0.10, $state, $quiet)->actualRevenue;
+
+            return $root + ($streams / $expectedRevenue) - 1.0;
+        };
+
+        $gap = -0.03;
+        $elasticity = SteelManufacturingBusinessModel::OPERATING_CYCLICALITY * SteelManufacturingBusinessModel::INVESTMENT_ACCELERATOR_MULTIPLIER;
+        $this->assertEqualsWithDelta($gap * $elasticity, $response($gap) - $response(0.0), 1e-9);
+
+        // The root carries none of it, and the sticky cost base sees the same tonnage through the sector shift.
+        $recession = new MacroStateDTO(outputGapEma: $gap, foreignOutputGapEma: 0.0, exchangeRateIndexEma: 100.0);
+        $this->assertEqualsWithDelta(0.0, $this->model->getMacroPhysics($stock, $recession)['macro_demand_shift'], 1e-12);
+        $this->assertEqualsWithDelta($gap * $elasticity, $this->model->resolveSectorActivityShift($stock, $recession), 1e-9);
+    }
 }

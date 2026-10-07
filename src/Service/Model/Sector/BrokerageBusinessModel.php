@@ -46,7 +46,7 @@ class BrokerageBusinessModel extends BaseFinancialBusinessModel
     public const MACRO_DEMAND_SCALAR = 0.50;
     /** Sensitivity of brokerage capital markets advisory revenue to aggregate deal activity. */
     public const DEAL_ACTIVITY_ADVISORY_SCALAR = 0.25;
-    /** Sensitivity of retail brokerage trading activity and margin borrowing to M2 money supply growth. */
+    /** Sensitivity of the trading stream to M2 growth over trend; it enters that stream only, not the root demand shift. */
     public const M2_RETAIL_TRADING_SENSITIVITY = 0.40;
 
         public function getWholesaleLeverageLimit(): float { return 8.0; }
@@ -57,10 +57,8 @@ class BrokerageBusinessModel extends BaseFinancialBusinessModel
     /** Baseline fraction of revenue derived from capital markets advisory, placement, and wealth services. */
     public const ADVISORY_REVENUE_WEIGHT = 0.40;
 
-    // --- VIX & Trading Volume Bonus ---
-    /** Baseline VIX threshold above which market volatility boosts trading volume and fee revenue. */
-    public const VIX_BASELINE_THRESHOLD = 0.20;
-    /** Sensitivity scalar translating excess VIX points into direct top-line revenue bonuses. */
+    // --- VIX & Trading Volume ---
+    /** Trading-stream revenue per unit of volatility over MacroEngine::MACRO_VOL_BASE_ANCHOR, both ways (+0.5% per vol point). */
     public const VIX_REVENUE_SCALAR     = 0.50;
     /** Extreme VIX threshold triggering record trading volume event lore. */
     public const VIX_EXTREME_THRESHOLD  = 0.30;
@@ -97,11 +95,11 @@ class BrokerageBusinessModel extends BaseFinancialBusinessModel
     public function getMacroPhysics(Stock $stock, \App\DTO\MacroStateDTO $macroState): array
     {
         $outputGap = $this->resolveLaggedOutputGap($macroState);
-        $m2Shift = MathUtility::calculateBroadMoneyLiquidityShift($macroState->moneySupplyGrowthEma, $macroState->moneySupplyGrowthTrend, sensitivity: self::M2_RETAIL_TRADING_SENSITIVITY);
         $beta = $this->getOperatingCyclicality($stock);
 
+        // M2 reaches the trading stream in calculateSectorPhysics(); adding it here as well counted it twice.
         return [
-            'macro_demand_shift' => ($outputGap * $beta * self::MACRO_DEMAND_SCALAR) + $m2Shift,
+            'macro_demand_shift' => $outputGap * $beta * self::MACRO_DEMAND_SCALAR,
             'pricing_power_multiplier' => 1.0,
         ];
     }
@@ -136,16 +134,11 @@ class BrokerageBusinessModel extends BaseFinancialBusinessModel
         $tradingZ  = $streams->generateZ('trading', 0.20); // Trading volume, flow capture, prop desk P&L
         $advisoryZ = $streams->generateZ('advisory', 0.35); // Advisory mandates, prime brokerage balances
 
-        // The Volatility Bonus (Trading Volume) & M2 Broad Money Liquidity:
-        // Brokerage trading revenues are hyper-sensitive to the VIX (Systemic Market Volatility) and retail liquidity (M2 growth).
-        // High Volatility = Massive trading volume (panic selling or euphoria buying) which generates massive fees.
-        // Crucially, this VIX bonus and M2 retail volume apply to the trading revenue stream ($tradingWeight).
+        // Trading volume follows volatility and retail liquidity (M2 growth); both land on the trading stream only.
         $vixEma = $macroState->marketVolatilityEma;
-        $volatilityBonus = max(0.0, ($vixEma - self::VIX_BASELINE_THRESHOLD) * self::VIX_REVENUE_SCALAR);
-        $m2Shift = MathUtility::calculateBroadMoneyLiquidityShift($macroState->moneySupplyGrowthEma, $macroState->moneySupplyGrowthTrend, sensitivity: self::M2_RETAIL_TRADING_SENSITIVITY);
-
-        $dealActivityShift = ($macroState->dealActivityIndexEma - MacroEngine::DEAL_ACTIVITY_BASELINE) / MacroEngine::DEAL_ACTIVITY_BASELINE;
-        $advisoryDealBonus = $dealActivityShift * self::DEAL_ACTIVITY_ADVISORY_SCALAR;
+        $volatilityBonus = $this->resolveTradingVolatilityShift($macroState);
+        $m2Shift = $this->resolveRetailLiquidityShift($macroState);
+        $advisoryDealBonus = $this->resolveAdvisoryDealShift($macroState);
 
         // Commissions are paid per trade, so a stamp duty that thins the District's turnover thins them with it.
         $dutyVolumeFactor = MathUtility::calculateStampDutyVolumeFactor($macroState->stampDutyRate);
@@ -177,9 +170,9 @@ class BrokerageBusinessModel extends BaseFinancialBusinessModel
             $eventType = ShockEvent::ADVISORY_CRASH;
         }
 
-        // observableShockZ: the VIX bonus is completely public via daily VIX tracking — analysts can anticipate it fully.
+        // observableShockZ: volatility, M2 and deal flow are all published, so analysts anticipate their terms fully.
         $primaryShockZ = $streams->resolveDominantShockZ([$tradingZ, $advisoryZ]);
-        $observableShockZ = ($volatilityBonus * $tradingWeight) + ($advisoryDealBonus * $advisoryWeight);
+        $observableShockZ = (($volatilityBonus + $m2Shift) * $tradingWeight) + ($advisoryDealBonus * $advisoryWeight);
 
         return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,
@@ -190,6 +183,29 @@ class BrokerageBusinessModel extends BaseFinancialBusinessModel
             streamZ: $streams->getStreamZ(),
             streamRevenue: $streamRevenues,
         );
+    }
+
+    /**
+     * Trading volume against normal: the volume-volatility relation (Karpoff 1987) linearised at the sim's volatility
+     * anchor, so a quiet tape thins commissions as a busy one swells them and the term averages out at the anchor.
+     */
+    protected function resolveTradingVolatilityShift(\App\DTO\MacroStateDTO $macroState): float
+    {
+        return ($macroState->marketVolatilityEma - MacroEngine::MACRO_VOL_BASE_ANCHOR) * self::VIX_REVENUE_SCALAR;
+    }
+
+    /** Retail trading and margin borrowing against normal: M2 growth over its trend. */
+    protected function resolveRetailLiquidityShift(\App\DTO\MacroStateDTO $macroState): float
+    {
+        return MathUtility::calculateBroadMoneyLiquidityShift($macroState->moneySupplyGrowthEma, $macroState->moneySupplyGrowthTrend, sensitivity: self::M2_RETAIL_TRADING_SENSITIVITY);
+    }
+
+    /** Placement and advisory mandates against normal: the capital-markets deal activity index over its baseline. */
+    protected function resolveAdvisoryDealShift(\App\DTO\MacroStateDTO $macroState): float
+    {
+        $dealActivityShift = ($macroState->dealActivityIndexEma - MacroEngine::DEAL_ACTIVITY_BASELINE) / MacroEngine::DEAL_ACTIVITY_BASELINE;
+
+        return $dealActivityShift * self::DEAL_ACTIVITY_ADVISORY_SCALAR;
     }
 
     public function getTargetMetrics(Stock $stock, \App\DTO\MacroStateDTO $macroState, MathUtility $mathUtility): array

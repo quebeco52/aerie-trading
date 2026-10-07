@@ -279,9 +279,9 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
      */
     protected function resolvePremiumRateLevel(Stock $stock, MacroStateDTO $macroState): float
     {
-        // Cash-flow underwriting (Cummins & Danzon 1997): when float yields are high insurers discount
-        // premium to gather investable money, so a high policy rate softens rates on its own.
-        $softMarketRateDiscount = max(0.0, ($macroState->policyRateEma - self::DEFAULT_POLICY_RATE_FALLBACK) * self::SOFT_MARKET_CYCLE_BETA);
+        // Cash-flow underwriting (Cummins & Danzon 1997): premium is the discounted value of losses, so a policy
+        // rate above the neutral rate softens rates and one below it hardens them. At neutral the book prices at par.
+        $softMarketRateDiscount = ($macroState->policyRateEma - $macroState->perceivedNeutralRate) * self::SOFT_MARKET_CYCLE_BETA;
 
         // The capacity cycle sits on top of it and dominates. The regime clock is advanced by this model's
         // own physics (see calculateSectorPhysics) and read back here a quarter later, which is right:
@@ -994,6 +994,7 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
             'nominal_gdp_index',
             'output_gap_ema',
             'output_gap_lag_6m',
+            'perceived_neutral_rate',
             'policy_rate_ema',
             'yield_10y_ema',
         ];

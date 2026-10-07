@@ -47,9 +47,9 @@ final class InsuranceUnderwritingCycleTest extends TestCase
         return MacroStateDTO::fromArray([
             'total_time'   => $totalTime,
             'inflation_ema' => 0.02,
-            // Policy rate at the model's own baseline leaves the cash-flow-underwriting discount at zero,
+            // Policy rate at the neutral rate leaves the cash-flow-underwriting discount at zero,
             // isolating the capacity cycle.
-            'policy_rate'  => InsuranceBusinessModel::DEFAULT_POLICY_RATE_FALLBACK,
+            'policy_rate'  => MacroEngine::BASE_NATURAL_RATE + MacroEngine::TARGET_INFLATION,
             'gdp_growth'   => 0.02,
             'credit_spread' => 0.015,
         ]);
@@ -69,6 +69,26 @@ final class InsuranceUnderwritingCycleTest extends TestCase
             $hard['pricing_power_multiplier'],
             'Withdrawn capacity has to show up as higher premium rates.'
         );
+    }
+
+    /**
+     * Cash-flow underwriting reads the measured neutral rate: at neutral the book prices at par, and the discount
+     * is symmetric around it. It once read a fixed 2% against a 3.5% neutral, pricing every trend quarter 2.25% low.
+     */
+    public function testFloatYieldDiscountIsCentredOnTheNeutralRate(): void
+    {
+        $model = new InsuranceBusinessModel();
+        $neutral = MacroEngine::BASE_NATURAL_RATE + MacroEngine::TARGET_INFLATION;
+        $rate = fn (float $policyRate) => $model->getMacroPhysics($this->makeStock(), MacroStateDTO::fromArray([
+            'inflation_ema' => 0.02,
+            'policy_rate'   => $policyRate,
+            'gdp_growth'    => 0.02,
+            'credit_spread' => 0.015,
+        ]))['pricing_power_multiplier'];
+
+        $this->assertEqualsWithDelta(1.0, $rate($neutral), 1e-9);
+        $this->assertEqualsWithDelta(-0.01 * InsuranceBusinessModel::SOFT_MARKET_CYCLE_BETA, $rate($neutral + 0.01) - 1.0, 1e-9, 'High float yields soften rates.');
+        $this->assertEqualsWithDelta(0.01 * InsuranceBusinessModel::SOFT_MARKET_CYCLE_BETA, $rate($neutral - 0.01) - 1.0, 1e-9, 'Low float yields harden them.');
     }
 
     /** Rates erode as capital returns, even while the regime is still running. */

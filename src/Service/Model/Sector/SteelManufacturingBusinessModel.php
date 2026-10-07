@@ -8,6 +8,7 @@ use App\Data\InputOutputExposures;
 use App\Service\Model\BusinessModelInterface;
 
 use App\Data\ModelParam;
+use App\DTO\MacroStateDTO;
 use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
 use App\Service\Math\MathUtility;
@@ -64,6 +65,8 @@ class SteelManufacturingBusinessModel extends StandardCorporateBusinessModel
     public const SPOT_VARIANCE_SCALAR     = 0.60;
     /** Sensitivity of steel mill order demand to manufacturing PMI survey shifts. */
     public const PMI_DEMAND_SENSITIVITY   = 0.50;
+    /** Tonnage per unit of the lagged output gap beyond cyclicality: steel goes into investment goods, which swing harder than output (Clark 1917 accelerator). */
+    public const INVESTMENT_ACCELERATOR_MULTIPLIER = 1.50;
     /** Spot tonnage per unit of the foreign bloc's output gap: export orders, which fall away first when the world slows. */
     public const FOREIGN_DEMAND_SENSITIVITY = 1.50;
     /** Share of spot order volume exposed to foreign currency competition and overseas steel dumping. */
@@ -113,15 +116,57 @@ class SteelManufacturingBusinessModel extends StandardCorporateBusinessModel
         return ['eps_weight' => 0.40, 'revenue_weight' => 0.60];
     }
 
-    public function getMacroPhysics(Stock $stock, \App\DTO\MacroStateDTO $macroState): array
+    /**
+     * The cycle reaches tonnage once, inside each stream's physics; the root shift carries no demand term
+     * (the exchange rate is the spot stream's import-dumping term).
+     */
+    public function getMacroPhysics(Stock $stock, MacroStateDTO $macroState): array
     {
         $physics = parent::getMacroPhysics($stock, $macroState);
-        $outputGap = $this->resolveLaggedOutputGap($macroState);
+        $physics['macro_demand_shift'] = 0.0;
+
+        return $physics;
+    }
+
+    /**
+     * The tonnage the mill is staffed to run: the target-mix volume shift of its streams. Hot-rolled coil
+     * repricing is price and needs no crew, so the metals term stays out.
+     */
+    public function resolveSectorActivityShift(Stock $stock, MacroStateDTO $macroState): float
+    {
+        $params = $this->resolveModelParameters($stock, [
+            ModelParam::ContractOemWeight->value => self::CONTRACTED_OEM_WEIGHT,
+            ModelParam::SpotHrcWeight->value     => self::SPOT_HRC_WEIGHT,
+        ]);
+        $contractWeight = $params[ModelParam::ContractOemWeight];
+        $spotWeight = $params[ModelParam::SpotHrcWeight];
+        $totalWeight = $contractWeight + $spotWeight;
+        if ($totalWeight <= 0.0) {
+            return 0.0;
+        }
+
+        $cycleShift = $this->resolveCycleVolumeShift($stock, $macroState);
+
+        return (($contractWeight * $cycleShift) + ($spotWeight * ($cycleShift + $this->resolveImportDumpingShift($macroState)))) / $totalWeight;
+    }
+
+    /** Domestic tonnage on the lagged output gap through the investment accelerator, led by the manufacturing PMI. */
+    private function resolveCycleVolumeShift(Stock $stock, MacroStateDTO $macroState): float
+    {
         $beta = $this->getOperatingCyclicality($stock);
         $pmiShift = MathUtility::calculatePmiDemandShift($macroState->manufacturingPmiEma, MacroEngine::PMI_BASELINE, self::PMI_DEMAND_SENSITIVITY);
 
-        $physics['macro_demand_shift'] = ($outputGap * $beta * 1.50) + ($pmiShift * $beta);
-        return $physics;
+        return ($this->resolveLaggedOutputGap($macroState) * $beta * self::INVESTMENT_ACCELERATOR_MULTIPLIER) + ($pmiShift * $beta);
+    }
+
+    /**
+     * Export tonnage clears in the spot market: foreign activity expands orders, while a foreign slowdown with a
+     * strong domestic currency invites import dumping.
+     */
+    private function resolveImportDumpingShift(MacroStateDTO $macroState): float
+    {
+        return MathUtility::calculateForeignDemandShift($macroState->foreignOutputGapEma, sensitivity: self::FOREIGN_DEMAND_SENSITIVITY)
+            + $this->resolveFxDemandShift($macroState, self::FX_REVENUE_EXPOSURE);
     }
 
     protected function calculateSectorPhysics(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, \App\DTO\MacroStateDTO $macroState, MathUtility $mathUtility): SectorPhysicsResult
@@ -129,16 +174,12 @@ class SteelManufacturingBusinessModel extends StandardCorporateBusinessModel
         $params = $this->resolveModelParameters($stock, [
             ModelParam::ContractOemWeight->value => self::CONTRACTED_OEM_WEIGHT,
             ModelParam::SpotHrcWeight->value     => self::SPOT_HRC_WEIGHT,
-            ModelParam::PricingPowerIndex->value => 0.40,
         ]);
 
-        $contractWeight = $params[ModelParam::ContractOemWeight];
-        $spotWeight     = $params[ModelParam::SpotHrcWeight];
-        $pricingPower   = max(0.0, min(1.0, $params[ModelParam::PricingPowerIndex]));
+        $pricingPower = $this->resolvePricingPower($stock);
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
         $streams  = $this->createStreamContext($momentum, $mathUtility, $macroState, $stock);
-        $beta     = $this->getOperatingCyclicality($stock);
 
         // --- Dynamic Revenue Mix Drift with Strategic Mean Reversion ---
         $activeWeights = $streams->resolveActiveStreamWeights([
@@ -149,21 +190,16 @@ class SteelManufacturingBusinessModel extends StandardCorporateBusinessModel
         $contractWeight = $activeWeights['contracted_oem_steel'];
         $spotWeight     = $activeWeights['spot_hrc_market'];
 
-        // Strongly tied to macro output gap, manufacturing PMI, and energy prices
-        $pmiShift = MathUtility::calculatePmiDemandShift($macroState->manufacturingPmiEma, MacroEngine::PMI_BASELINE, self::PMI_DEMAND_SENSITIVITY);
-        $macroBoost = ($macroState->outputGapEma * 1.2 * $beta) + ($pmiShift * $beta);
+        // The cycle reaches both books once, at the same tonnage elasticity; spot adds export orders and import dumping.
+        $cycleShift = $this->resolveCycleVolumeShift($stock, $macroState);
+        $importDumpingShift = $this->resolveImportDumpingShift($macroState);
         $metalsShift = ($macroState->industrialMetalsIndexEma - 100.0) / 100.0;
-        // Export tonnage clears in the spot market: foreign economic activity expands orders,
-        // while a foreign slowdown combined with a strong domestic currency invites foreign import dumping.
-        $foreignShift = MathUtility::calculateForeignDemandShift($macroState->foreignOutputGapEma, sensitivity: self::FOREIGN_DEMAND_SENSITIVITY);
-        $fxShift = $this->resolveFxDemandShift($macroState, self::FX_REVENUE_EXPOSURE);
-        $importDumpingShift = $foreignShift + $fxShift;
 
         $contractZ = $streams->generateZ('contracted_oem_steel', 0.35);
         $spotZ     = $streams->generateZ('spot_hrc_market', 0.15);
 
-        $contractRevenue = max(0.0, $expectedRevenue * $contractWeight * (1.0 + ($contractZ * ($baselineVol * self::CONTRACT_VARIANCE_SCALAR)) + ($macroBoost * 0.5)));
-        $spotRevenue     = max(0.0, $expectedRevenue * $spotWeight     * (1.0 + ($spotZ     * ($baselineVol * self::SPOT_VARIANCE_SCALAR)) + ($metalsShift * 0.50) + ($macroBoost * 0.5) + $importDumpingShift));
+        $contractRevenue = max(0.0, $expectedRevenue * $contractWeight * (1.0 + ($contractZ * ($baselineVol * self::CONTRACT_VARIANCE_SCALAR)) + $cycleShift));
+        $spotRevenue     = max(0.0, $expectedRevenue * $spotWeight     * (1.0 + ($spotZ     * ($baselineVol * self::SPOT_VARIANCE_SCALAR)) + ($metalsShift * 0.50) + $cycleShift + $importDumpingShift));
         // Hot-rolled coil repricing on the same tonnage is price: the mill's variable cost per tonne does not follow the spot quote.
         $priceRevenue    = $expectedRevenue * $spotWeight * ($metalsShift * 0.50);
 
@@ -188,7 +224,7 @@ class SteelManufacturingBusinessModel extends StandardCorporateBusinessModel
         $primaryShockZ = $streams->resolveDominantShockZ([$spotZ, $contractZ]);
         $observableShockZ = ($contractZ * $contractWeight * self::CONTRACT_VARIANCE_SCALAR * $baselineVol)
             + ($spotZ * $spotWeight * self::SPOT_VARIANCE_SCALAR * $baselineVol)
-            + ($macroBoost * self::SPOT_HRC_WEIGHT);
+            + ($cycleShift * $spotWeight);
 
         return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,
@@ -235,7 +271,6 @@ class SteelManufacturingBusinessModel extends StandardCorporateBusinessModel
             'foreign_output_gap_ema',
             'industrial_metals_index_ema',
             'manufacturing_pmi_ema',
-            'output_gap_ema',
             'output_gap_lag_9m',
             'tips_breakeven_ema',
             'real_wage_gap',
