@@ -227,6 +227,45 @@ class ClearingHouseBusinessModelTest extends TestCase
     }
 
     /**
+     * Volatility is centred where the sim's volatility lives: at the anchor, with a flat curve and the custody
+     * rate at its pivot, the house books exactly its expected revenue and staffs to no swing at all.
+     */
+    public function testVolatilityIsNeutralAtTheAnchor(): void
+    {
+        $anchor = $this->clearingMacro(\App\Service\Macro\MacroEngine::MACRO_VOL_BASE_ANCHOR);
+        $stock = (new Stock())->setTicker('ACC');
+
+        $report = $this->model->computeActualFinancials($stock, 100.0, 0.30, 0.0, 0.20, $anchor, $this->quietDraws());
+
+        $this->assertEqualsWithDelta(100.0, $report->actualRevenue, 1e-9);
+        $this->assertSame(0.0, $this->model->getMacroPhysics($stock, $anchor)['macro_demand_shift']);
+        $this->assertEqualsWithDelta(0.0, $this->model->resolveSectorActivityShift($stock, $anchor), 1e-12);
+    }
+
+    /** Volatility reaches fees through one channel, clearing volume: custody float and data licences do not move with it, nor does the root demand shift. */
+    public function testVolatilityMovesClearingVolumeAndNothingElse(): void
+    {
+        $anchorVol = \App\Service\Macro\MacroEngine::MACRO_VOL_BASE_ANCHOR;
+        $calm = $this->model->computeActualFinancials((new Stock())->setTicker('ACC'), 100.0, 0.30, 0.0, 0.20, $this->clearingMacro($anchorVol), $this->quietDraws());
+        $busy = $this->model->computeActualFinancials((new Stock())->setTicker('ACC'), 100.0, 0.30, 0.0, 0.20, $this->clearingMacro($anchorVol + 0.10), $this->quietDraws());
+
+        $this->assertEqualsWithDelta(
+            1.0 + 0.10 * ClearingHouseBusinessModel::VIX_REVENUE_SCALAR,
+            $busy->streamRevenue['clearing_fees'] / $calm->streamRevenue['clearing_fees'],
+            1e-9
+        );
+        $this->assertEqualsWithDelta($calm->streamRevenue['custody_float'], $busy->streamRevenue['custody_float'], 1e-9);
+        $this->assertEqualsWithDelta($calm->streamRevenue['data_licensing'], $busy->streamRevenue['data_licensing'], 1e-9);
+        $this->assertSame(0.0, $this->model->getMacroPhysics(new Stock(), $this->clearingMacro($anchorVol + 0.10))['macro_demand_shift']);
+    }
+
+    /** A flat 2s10s curve and the custody rate at its 2% pivot, so only volatility can move fees. */
+    private function clearingMacro(float $volatility): MacroStateDTO
+    {
+        return new MacroStateDTO(policyRateEma: 0.02, yield2yEma: 0.04, yield10yEma: 0.04, marketVolatilityEma: $volatility);
+    }
+
+    /**
      * @param array<string, float> $momentum
      * @return array{customerDeposits: float, treasury: float, events: list<array<string, mixed>>}
      */

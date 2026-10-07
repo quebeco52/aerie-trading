@@ -139,7 +139,7 @@ final class OperatingCostFlexTest extends TestCase
      */
     public function testActivityAModelMovesInsideItsOwnPhysicsReachesTheCommittedBase(): void
     {
-        $scaleAfterAQuarter = function (float $outputGap, float $equityRiskPremium): float {
+        $scaleAfterAQuarter = function (float $outputGap, float $dealActivityIndex): float {
             $stock = $this->buildMatureIndustrial('IBX');
             $stock->setIndustry('Investment Banking');
             $stock->setCommittedCostScale('1.0');
@@ -148,7 +148,7 @@ final class OperatingCostFlexTest extends TestCase
                 MacroStateDTO::fromArray([
                     'corporate_tax_rate' => 0.21,
                     'output_gap_ema' => $outputGap,
-                    'equity_risk_premium' => $equityRiskPremium,
+                    'deal_activity_index_ema' => $dealActivityIndex,
                     'macro_credit_spread_ema' => \App\Service\Model\Sector\InvestmentBankBusinessModel::DEAL_BASELINE_CREDIT_SPREAD,
                     'market_volatility_ema' => \App\Service\Model\Sector\InvestmentBankBusinessModel::VIX_ARBITRAGE_FLOOR,
                     'policy_rate' => 0.04,
@@ -164,8 +164,8 @@ final class OperatingCostFlexTest extends TestCase
             return $this->resolveScale($ctx);
         };
 
-        $this->assertEqualsWithDelta(1.0, $scaleAfterAQuarter(0.0, \App\Service\Macro\MacroEngine::BASE_EQUITY_RISK_PREMIUM), 1e-6, 'Normal deal flow keeps the whole base.');
-        $this->assertLessThan(0.97, $scaleAfterAQuarter(-0.045, \App\Service\Macro\MacroEngine::BASE_EQUITY_RISK_PREMIUM + 0.02), 'A deal drought starts trimming the base the quarter it arrives.');
+        $this->assertEqualsWithDelta(1.0, $scaleAfterAQuarter(0.0, \App\Service\Macro\MacroEngine::DEAL_ACTIVITY_BASELINE), 1e-6, 'Normal deal flow keeps the whole base.');
+        $this->assertLessThan(0.97, $scaleAfterAQuarter(-0.045, 0.70 * \App\Service\Macro\MacroEngine::DEAL_ACTIVITY_BASELINE), 'A deal drought starts trimming the base the quarter it arrives.');
     }
 
     /**

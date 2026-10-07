@@ -299,6 +299,7 @@ class InsuranceBusinessModelTest extends TestCase
         $macroState = new \App\DTO\MacroStateDTO(
             policyRate: InsuranceBusinessModel::DEFAULT_POLICY_RATE_FALLBACK,
             policyRateEma: InsuranceBusinessModel::DEFAULT_POLICY_RATE_FALLBACK,
+            perceivedNeutralRate: InsuranceBusinessModel::DEFAULT_POLICY_RATE_FALLBACK,
         );
         $afterTaxMargin = static fn(float $margin): float => $margin * (1.0 - $macroState->corporateTaxRate);
 
@@ -336,11 +337,12 @@ class InsuranceBusinessModelTest extends TestCase
     public function testSoftMarketDiscountsRatesOnceCapitalOutgrowsItsMarket(): void
     {
         $model = new InsuranceBusinessModel();
-        // Policy rate at the model's own fallback so the Cummins-Danzon float-yield discount is zero and
+        // Policy rate at the neutral rate so the Cummins-Danzon float-yield discount is zero and
         // the capacity term is the only thing moving the multiplier.
         $macroState = new \App\DTO\MacroStateDTO(
-            policyRate: InsuranceBusinessModel::DEFAULT_POLICY_RATE_FALLBACK,
-            policyRateEma: InsuranceBusinessModel::DEFAULT_POLICY_RATE_FALLBACK,
+            policyRate: 0.035,
+            policyRateEma: 0.035,
+            perceivedNeutralRate: 0.035,
         );
         $pricingPower = static fn(Stock $s): float => (float) $model->getMacroPhysics($s, $macroState)['pricing_power_multiplier'];
 
@@ -380,9 +382,11 @@ class InsuranceBusinessModelTest extends TestCase
     {
         $model = new InsuranceBusinessModel();
         $mathUtility = new MathUtility();
+        // Policy rate at neutral: the float-yield discount is zero and the capacity glut alone softens rates.
         $macroState = new \App\DTO\MacroStateDTO(
             policyRate: InsuranceBusinessModel::DEFAULT_POLICY_RATE_FALLBACK,
             policyRateEma: InsuranceBusinessModel::DEFAULT_POLICY_RATE_FALLBACK,
+            perceivedNeutralRate: InsuranceBusinessModel::DEFAULT_POLICY_RATE_FALLBACK,
         );
         $writtenCapacity = static function (Stock $s) use ($model, $macroState, $mathUtility): float {
             $roic = $model->getTargetMetrics($s, $macroState, $mathUtility)['baseline_roic'];
@@ -430,6 +434,7 @@ class InsuranceBusinessModelTest extends TestCase
         $macroState = new \App\DTO\MacroStateDTO(
             policyRate: InsuranceBusinessModel::DEFAULT_POLICY_RATE_FALLBACK,
             policyRateEma: InsuranceBusinessModel::DEFAULT_POLICY_RATE_FALLBACK,
+            perceivedNeutralRate: InsuranceBusinessModel::DEFAULT_POLICY_RATE_FALLBACK,
         );
         $writtenCapacity = static fn(Stock $s): float => $model->getTargetMetrics($s, $macroState, $mathUtility)['baseline_roic']
             / (InsuranceBusinessModel::KENNEY_CAPACITY_RATIO * (float) $s->getOperatingMargin() * (1.0 - $macroState->corporateTaxRate));
@@ -490,6 +495,7 @@ class InsuranceBusinessModelTest extends TestCase
         $macroState = new \App\DTO\MacroStateDTO(
             policyRate: InsuranceBusinessModel::DEFAULT_POLICY_RATE_FALLBACK,
             policyRateEma: InsuranceBusinessModel::DEFAULT_POLICY_RATE_FALLBACK,
+            perceivedNeutralRate: InsuranceBusinessModel::DEFAULT_POLICY_RATE_FALLBACK,
         );
 
         // Capital already well past the market's optimal scale, but nothing has been filed or rated yet.

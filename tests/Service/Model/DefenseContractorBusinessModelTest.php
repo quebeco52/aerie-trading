@@ -480,24 +480,28 @@ class DefenseContractorBusinessModelTest extends TestCase
         $stock->setTicker('GRIP');
         $stock->setBeta('0.8');
 
-        $baseMacro = new MacroStateDTO(
-            alliedDefenseSpendingIndexEma: 100.0,
-            exchangeRateIndexEma: 100.0
-        );
-
-        $shockMacro = new MacroStateDTO(
-            alliedDefenseSpendingIndexEma: 120.0, // an allied build-up is the makers' order book
-            exchangeRateIndexEma: 120.0 // Strong dollar creates FMS export headwind
-        );
-
         $mathMock = $this->createStub(MathUtility::class);
         $mathMock->method('generatePersistentZ')->willReturn(0.0);
+        $run = fn (MacroStateDTO $macro) => $model->computeActualFinancials($stock, 100_000_000.0, 0.30, 20_000_000.0, 0.0, $macro, $mathMock)->streamRevenue;
 
-        $baseResult = $model->computeActualFinancials($stock, 100_000_000.0, 0.30, 20_000_000.0, 0.0, $baseMacro, $mathMock);
-        $shockResult = $model->computeActualFinancials($stock, 100_000_000.0, 0.30, 20_000_000.0, 0.0, $shockMacro, $mathMock);
+        $base = $run(new MacroStateDTO(alliedDefenseSpendingIndexEma: 100.0, exchangeRateIndexEma: 100.0));
+        $buildUp = $run(new MacroStateDTO(alliedDefenseSpendingIndexEma: 120.0, exchangeRateIndexEma: 100.0));
+        $strongCurrency = $run(new MacroStateDTO(alliedDefenseSpendingIndexEma: 100.0, exchangeRateIndexEma: 120.0));
 
-        $this->assertGreaterThan($baseResult->streamRevenue['cost_plus_procurement'], $shockResult->streamRevenue['cost_plus_procurement']);
-        $this->assertLessThan($baseResult->streamRevenue['foreign_military_sales'], $shockResult->streamRevenue['foreign_military_sales']);
+        // Exports are bought out of the same allied budgets as the programmes: a build-up lifts both books' orders
+        // by the same proportion (the burn rates differ, so compare each book's lift on its own opening backlog).
+        $costPlusLift = $buildUp['cost_plus_procurement'] / $base['cost_plus_procurement'] - 1.0;
+        $fmsLift = $buildUp['foreign_military_sales'] / $base['foreign_military_sales'] - 1.0;
+        $this->assertGreaterThan(0.0, $fmsLift, 'An allied build-up fills the export book too.');
+        $this->assertEqualsWithDelta(
+            $costPlusLift / DefenseContractorBusinessModel::COST_PLUS_BACKLOG_BURN_RATE,
+            $fmsLift / DefenseContractorBusinessModel::FMS_BACKLOG_BURN_RATE,
+            1e-9
+        );
+
+        // A strong currency prices exports out against foreign primes; domestic-currency programmes do not see it.
+        $this->assertLessThan($base['foreign_military_sales'], $strongCurrency['foreign_military_sales']);
+        $this->assertEqualsWithDelta($base['cost_plus_procurement'], $strongCurrency['cost_plus_procurement'], 1e-6);
     }
     /** The District fields no army: its own purchases buy no arms, and its makers' programmes follow allied budgets. */
     public function testDistrictPurchasesBuyNoArmsButAlliedBudgetsDo(): void

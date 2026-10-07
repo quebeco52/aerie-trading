@@ -295,6 +295,63 @@ class AutoManufacturerBusinessModelTest extends TestCase
         $this->assertLessThan(-0.20, $shift($severe) - $neutralShift, 'a 2008-scale shock still collapses volume');
     }
 
+    /**
+     * The gap reaches vehicle demand once, through the stock-adjustment multiplier. Confidence used to be read whole
+     * beside the gap, and it carries SENTIMENT_GAP_LOADING points of gap, so a second ~2.3x the gap rode in on it
+     * unpriced. With confidence at the level its gap implies, sentiment adds nothing and nothing else moves.
+     */
+    public function testTheGapReachesVehicleDemandOnceThroughTheDurableMultiplier(): void
+    {
+        $stock = new Stock();
+        $stock->setTicker('XAUT');
+        $stock->setBeta('1.0');
+        $quiet = $this->createStub(MathUtility::class);
+        $expectedRevenue = 100_000_000.0;
+
+        $stateAt = fn (float $gap): MacroStateDTO => new MacroStateDTO(
+            outputGapEma: $gap,
+            consumerSentimentIndexEma: MacroEngine::SENTIMENT_TREND_LEVEL + (MacroEngine::SENTIMENT_GAP_LOADING * $gap),
+            exchangeRateIndexEma: 100.0,
+        );
+        $response = function (float $gap) use ($stock, $quiet, $expectedRevenue, $stateAt): float {
+            $root = $this->model->getMacroPhysics($stock, $stateAt($gap))['macro_demand_shift'];
+            $streams = $this->model->computeActualFinancials($stock, $expectedRevenue, 0.20, 25_000_000.0, 0.0, $stateAt($gap), $quiet)->actualRevenue;
+
+            return $root + ($streams / $expectedRevenue) - 1.0;
+        };
+
+        $gap = -0.03;
+        $elasticity = AutoManufacturerBusinessModel::OPERATING_CYCLICALITY * AutoManufacturerBusinessModel::DURABLE_STOCK_ADJUSTMENT_MULTIPLIER;
+        $this->assertEqualsWithDelta($gap * $elasticity, $response($gap) - $response(0.0), 1e-9);
+    }
+
+    /** Financing demand reads the real stance: the same real rate over r* costs the same volume at any inflation. */
+    public function testRatePenaltyReadsTheRealPolicyStanceNotTheNominalRate(): void
+    {
+        $stock = new Stock();
+        $stock->setTicker('XAUT');
+        $stock->setBeta('1.0');
+        $shift = fn (float $policy, float $breakeven): float => $this->model->getMacroPhysics($stock, new MacroStateDTO(
+            policyRateEma: $policy,
+            tipsBreakevenEma: $breakeven,
+            naturalRateEma: MacroEngine::BASE_NATURAL_RATE,
+            exchangeRateIndexEma: 100.0,
+        ))['macro_demand_shift'];
+
+        // Neutral at 2% and at 4% expected inflation alike; a nominal 3% neutral would read the second as 250bp tight.
+        $neutralLowInflation = $shift(MacroEngine::BASE_NATURAL_RATE + 0.02, 0.02);
+        $neutralHighInflation = $shift(MacroEngine::BASE_NATURAL_RATE + 0.04, 0.04);
+        $this->assertEqualsWithDelta(0.0, $neutralLowInflation, 1e-12);
+        $this->assertEqualsWithDelta(0.0, $neutralHighInflation, 1e-12);
+
+        // 100bp of real tightness takes cyclicality x the rate scalar of it off volume.
+        $this->assertEqualsWithDelta(
+            -0.01 * AutoManufacturerBusinessModel::OPERATING_CYCLICALITY * AutoManufacturerBusinessModel::RATE_SENSITIVITY_SCALAR,
+            $shift(MacroEngine::BASE_NATURAL_RATE + 0.03, 0.02),
+            1e-12
+        );
+    }
+
     public function testFalcCalibratedFinancialsUnderMacroShifts(): void
     {
         $stock = new Stock();

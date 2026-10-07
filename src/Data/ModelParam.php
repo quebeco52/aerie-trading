@@ -37,8 +37,6 @@ enum ModelParam: string
     case CatastropheZThreshold = 'catastrophe_z_threshold';
     case CatastropheLossScalar = 'catastrophe_loss_scalar';
     case FloatEquityWeight = 'float_equity_weight';
-    case EquityPortfolioVol = 'equity_portfolio_vol';
-    case PncWeight = 'pnc_weight';
     case PropertyCasualtyWeight = 'property_casualty_weight';
     case LifeAndAnnuityWeight = 'life_and_annuity_weight';
     case TreatyReinsuranceWeight = 'treaty_reinsurance_weight';
@@ -66,8 +64,6 @@ enum ModelParam: string
     case ManagementFeeWeight = 'management_fee_weight';
     case CarriedInterestWeight = 'carried_interest_weight';
     case PrincipalInvestmentsWeight = 'principal_investments_weight';
-    case AdvisoryFeeWeight = 'advisory_fee_weight';
-    case AssetRecoveryWeight = 'asset_recovery_weight';
     case LoanToOwnGainsWeight = 'loan_to_own_gains_weight';
     case RestructuringAdvisoryWeight = 'restructuring_advisory_weight';
     case TurnaroundGainsWeight = 'turnaround_gains_weight';
@@ -89,7 +85,6 @@ enum ModelParam: string
     case ClearingFeeWeight = 'clearing_fee_weight';
     case CustodyFloatWeight = 'custody_float_weight';
     case DataSubscriptionWeight = 'data_subscription_weight';
-    case MarginInterestWeight = 'margin_interest_weight';
 
     // --- Real Estate (REIT) & Resorts/Casinos ---
     case StickyLeaseWeight = 'sticky_lease_weight';
@@ -141,7 +136,6 @@ enum ModelParam: string
     // --- Defense & Security ---
     case CostPlusWeight = 'cost_plus_weight';
     case FixedPriceDevWeight = 'fixed_price_dev_weight';
-    case DomesticProcurementWeight = 'domestic_procurement_weight';
     case ForeignMilitarySalesWeight = 'foreign_military_sales_weight';
     case GovernmentContractWeight = 'government_contract_weight';
     case RetainerWeight = 'retainer_weight';
@@ -178,11 +172,7 @@ enum ModelParam: string
     case VolumeCommodityWeight = 'volume_commodity_weight';
     case CommodityTradingWeight = 'commodity_trading_weight';
     case LandSpeculationWeight = 'land_speculation_weight';
-    case CorporateWeight = 'corporate_weight';
-    case FranchiseWeight = 'franchise_weight';
     case CommercialWeight = 'commercial_weight';
-    case ApparelWeight = 'apparel_weight';
-    case FootwearWeight = 'footwear_weight';
     case ThirdPartyWeight = 'third_party_weight';
     case FirstPartyWeight = 'first_party_weight';
     case DigitalAdsWeight = 'digital_ads_weight';
@@ -201,7 +191,6 @@ enum ModelParam: string
 
     // --- Automotive ---
     case AutoSalesWeight = 'auto_sales_weight';
-    case AutoFinancingWeight = 'auto_financing_weight';
     case SoftwareServicesWeight = 'software_services_weight';
     case ApexLuxuryWeight = 'apex_luxury_weight';
 

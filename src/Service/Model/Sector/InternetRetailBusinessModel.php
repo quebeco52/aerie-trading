@@ -245,9 +245,11 @@ class InternetRetailBusinessModel extends StandardCorporateBusinessModel
         $tpCosts = $tpRevenue * self::THIRD_PARTY_COST_RATIO;
         $adsCosts = $adsRevenue * self::DIGITAL_ADS_COST_RATIO;
 
-        // Back-calculate the 1st Party Retail margin constraints based on the global expectation
+        // The 1P cost ratio is what the plan leaves after 3P and ads at their planned revenue: struck on realized
+        // 3P/ads costs, a 3P surge would cut the 1P ratio by exactly its own cost and come out costless.
         $targetTotalCosts = $expectedRevenue * $realizedVariableMargin;
-        $fpBaselineCosts = max(0.0, $targetTotalCosts - $tpCosts - $adsCosts);
+        $plannedTpAdsCosts = $expectedRevenue * (($tpWeight * self::THIRD_PARTY_COST_RATIO) + ($adsWeight * self::DIGITAL_ADS_COST_RATIO));
+        $fpBaselineCosts = max(0.0, $targetTotalCosts - $plannedTpAdsCosts);
         $fpVariableMargin = $expectedRevenue * $fpWeight > 0 ? $fpBaselineCosts / ($expectedRevenue * $fpWeight) : $realizedVariableMargin;
         
         $fxShift = ($macroState->exchangeRateIndexEma - FinancialConstants::FX_INDEX_BASE) / FinancialConstants::FX_INDEX_BASE;

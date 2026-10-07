@@ -75,9 +75,9 @@ class ClearingHouseBusinessModel extends BaseFinancialBusinessModel
     // --- VIX & Transaction Volume Bonus ---
     /** Absolute 2s10s slope at which rates-clearing volumes are normal (~70bps, the neutral curve); a curve steepening or inverting past it brings swap hedging flow. */
     public const RATES_VOL_NEUTRAL_SLOPE = 0.007;
-    /** Baseline VIX threshold above which volatility expands clearing transaction volume. */
-    public const VIX_BASELINE_THRESHOLD = 0.20;
-    /** Sensitivity scalar translating excess VIX points into direct top-line clearing fee bonuses. */
+    /** Clearing-fee revenue per unit of 2s10s slope beyond the neutral slope (+2% per 100bp of swap hedging flow). */
+    public const RATES_VOL_REVENUE_SCALAR = 2.0;
+    /** Clearing-fee revenue per unit of volatility over MacroEngine::MACRO_VOL_BASE_ANCHOR, both ways (+0.4% per vol point); the only volatility channel into fees. */
     public const VIX_REVENUE_SCALAR     = 0.40;
     /** Extreme VIX threshold triggering record clearing volume event lore. */
     public const VIX_EXTREME_THRESHOLD  = 0.30;
@@ -110,8 +110,6 @@ class ClearingHouseBusinessModel extends BaseFinancialBusinessModel
     public const MIN_OPERATING_BUFFER    = 0.02;
 
     // --- Passive Margin Pool Growth ---
-    /** Sensitivity of clearing demand to volatility above its baseline (high VIX brings hedging and liquidation flow). */
-    public const VIX_POOL_GROWTH_SCALAR  = 0.50;
     /** Elasticity of initial margin to the volatility it is struck on: IM is a VaR over the liquidation period, so at fixed positions it scales one-for-one with sigma (EMIR RTS 153/2013 Arts. 24-26; CFTC 17 CFR 39.13(g)). */
     public const MARGIN_VOLATILITY_ELASTICITY = 1.0;
     /** Persisted smoothed volatility the margin pool was last struck on. */
@@ -184,20 +182,8 @@ class ClearingHouseBusinessModel extends BaseFinancialBusinessModel
         $momentum = $stock->getEarningsMomentumZ() ?? [];
         $streams  = $this->createStreamContext($momentum, $mathUtility, $macroState, $stock);
 
-        $params = $this->resolveModelParameters($stock, [
-            ModelParam::ClearingFeeWeight->value      => 0.50,
-            ModelParam::CustodyFloatWeight->value     => 0.30,
-            ModelParam::DataSubscriptionWeight->value => 0.20,
-        ]);
-
-        $targetWeights = [
-            'clearing_fees'  => $params[ModelParam::ClearingFeeWeight],
-            'custody_float'  => $params[ModelParam::CustodyFloatWeight],
-            'data_licensing' => $params[ModelParam::DataSubscriptionWeight],
-        ];
-
         // --- Dynamic Revenue Mix Drift with Strategic Mean Reversion ---
-        $activeWeights = $streams->resolveActiveStreamWeights($targetWeights);
+        $activeWeights = $streams->resolveActiveStreamWeights($this->resolveTargetStreamWeights($stock));
 
         $clearingWeight = $activeWeights['clearing_fees'];
         $custodyWeight  = $activeWeights['custody_float'];
@@ -207,16 +193,9 @@ class ClearingHouseBusinessModel extends BaseFinancialBusinessModel
         $custodyZ = $streams->generateZ('custody_float', 0.20);
         $dataZ    = $streams->generateZ('data_licensing', 0.45); // Separate Z-score for sticky data subscriptions
 
-        // The Volatility Bonus (Transaction Volume):
-        // Clearinghouses thrive on sheer volume. Market panics = massive liquidations = massive fees.
+        // Clearing volume: equity volatility and rates hedging flow, on the clearing stream alone.
         $vixEma = $macroState->marketVolatilityEma;
-        $volatilityBonus = max(0.0, ($vixEma - self::VIX_BASELINE_THRESHOLD) * self::VIX_REVENUE_SCALAR);
-
-        // Interest Rate Volatility Bonus. If the yield curve is violently steepening or inverting, IRS clearing volumes spike.
-        $yieldCurveSlope = abs($macroState->yield10yEma - $macroState->yield2yEma);
-        $ratesVolBonus = $yieldCurveSlope > self::RATES_VOL_NEUTRAL_SLOPE ? ($yieldCurveSlope - self::RATES_VOL_NEUTRAL_SLOPE) * 2.0 : 0.0;
-
-        $totalMacroBonus = $volatilityBonus + $ratesVolBonus;
+        $totalMacroBonus = $this->resolveClearingVolumeShift($macroState);
 
         // Initial margin is struck on the smoothed volatility, so the margin rate moves with its CHANGE. The
         // log change is carried to the treasury, which rolls the pool later in the quarter.
@@ -283,15 +262,58 @@ class ClearingHouseBusinessModel extends BaseFinancialBusinessModel
         return $result;
     }
 
+    /**
+     * Volatility moves clearing volume, not custody float or data licences, so it enters through the clearing
+     * stream in calculateSectorPhysics() and the root demand shift carries nothing.
+     */
     public function getMacroPhysics(Stock $stock, \App\DTO\MacroStateDTO $macroState): array
     {
-        // Volatility is the primary macro driver for clearinghouses.
-        $vixEma = $macroState->marketVolatilityEma;
-        $volatilityShift = ($vixEma - self::VIX_BASELINE_THRESHOLD) * self::VIX_POOL_GROWTH_SCALAR; // High VIX = Higher Demand for clearing
+        return [
+            'macro_demand_shift' => 0.0,
+            'pricing_power_multiplier' => 1.0,
+        ];
+    }
+
+    /** The activity the cost base is staffed to: the clearing stream's volume shift at its target weight. */
+    public function resolveSectorActivityShift(Stock $stock, \App\DTO\MacroStateDTO $macroState): float
+    {
+        $weights = $this->resolveTargetStreamWeights($stock);
+        $totalWeight = array_sum($weights);
+        if ($totalWeight <= 0.0) {
+            return 0.0;
+        }
+
+        return ($weights['clearing_fees'] / $totalWeight) * $this->resolveClearingVolumeShift($macroState);
+    }
+
+    /**
+     * Clearing volume against normal. Equity volatility enters as the volume-volatility relation (Karpoff 1987)
+     * linearised at the sim's volatility anchor, both ways; a curve steepening or inverting past its neutral
+     * slope adds swap hedging flow.
+     */
+    private function resolveClearingVolumeShift(\App\DTO\MacroStateDTO $macroState): float
+    {
+        $volatilityShift = ($macroState->marketVolatilityEma - MacroEngine::MACRO_VOL_BASE_ANCHOR) * self::VIX_REVENUE_SCALAR;
+
+        $yieldCurveSlope = abs($macroState->yield10yEma - $macroState->yield2yEma);
+        $ratesVolBonus = $yieldCurveSlope > self::RATES_VOL_NEUTRAL_SLOPE ? ($yieldCurveSlope - self::RATES_VOL_NEUTRAL_SLOPE) * self::RATES_VOL_REVENUE_SCALAR : 0.0;
+
+        return $volatilityShift + $ratesVolBonus;
+    }
+
+    /** @return array{clearing_fees: float, custody_float: float, data_licensing: float} */
+    private function resolveTargetStreamWeights(Stock $stock): array
+    {
+        $params = $this->resolveModelParameters($stock, [
+            ModelParam::ClearingFeeWeight->value      => 0.50,
+            ModelParam::CustodyFloatWeight->value     => 0.30,
+            ModelParam::DataSubscriptionWeight->value => 0.20,
+        ]);
 
         return [
-            'macro_demand_shift' => $volatilityShift,
-            'pricing_power_multiplier' => 1.0,
+            'clearing_fees'  => $params[ModelParam::ClearingFeeWeight],
+            'custody_float'  => $params[ModelParam::CustodyFloatWeight],
+            'data_licensing' => $params[ModelParam::DataSubscriptionWeight],
         ];
     }
 
