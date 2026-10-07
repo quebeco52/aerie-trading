@@ -161,6 +161,8 @@ class MonetaryPolicySubsystem
     public const MIN_M2_GROWTH = -0.020;
     /** Upper bound ceiling for annual M2 money supply expansion (+25.0% wartime/crisis expansion). */
     public const MAX_M2_GROWTH = 0.250;
+    /** Time constant (years) of M2 growth's measured trend: a decade, past the 2-4 year QE programmes and credit swings its readers respond to, so the trend is the medium-term growth a reference value is set on (ECB 1998's M3 reference value). */
+    public const M2_TREND_YEARS = 10.0;
 
     public function __construct(
         private readonly MathUtility $mathUtility,
@@ -883,5 +885,7 @@ class MonetaryPolicySubsystem
             dW: $dW,
             params: $params
         );
+        // The level its cyclical readers measure a liquidity surge against, measured rather than assumed.
+        $state->moneySupplyGrowthTrend += (1.0 - exp(-$dt / self::M2_TREND_YEARS)) * ($state->moneySupplyGrowth - $state->moneySupplyGrowthTrend);
     }
 }

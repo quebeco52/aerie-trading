@@ -289,7 +289,12 @@ class OilGasProducerBusinessModel extends StandardCorporateBusinessModel
     {
         $tranches = self::HEDGE_LADDER_TRANCHES;
         $spot = $macroState->energyBasePrice > 0.0 ? $macroState->energyBasePrice : $macroState->energyPriceIndexEma;
-        $theta = CommodityLogisticsSubsystem::resolveEnergyEquilibriumPrice($macroState->globalDemandGapEma, $macroState->energySupplyEma);
+        // The spot averages its equilibrium, so the curve's long end must too: hand the forward the Schwartz theta for that mean.
+        $theta = MathUtility::schwartzThetaForMean(
+            CommodityLogisticsSubsystem::resolveEnergyEquilibriumPrice($macroState->globalDemandGapEma, $macroState->energySupplyEma),
+            CommodityLogisticsSubsystem::ENERGY_MEAN_REVERSION,
+            CommodityLogisticsSubsystem::ENERGY_VOLATILITY
+        );
         $math = MathUtility::getInstance();
         $forward = static fn (int $quartersAhead): float => $math->calculateSchwartzForwardPrice(
             $spot,

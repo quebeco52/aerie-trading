@@ -508,7 +508,7 @@ class InvestmentBankBusinessModel extends BrokerageBusinessModel
         }
         $ecmNetActivity = ($ecmDealActivity - $freezeDiscount) * self::ADVISORY_ECM_SHARE;
 
-        $m2SyndicationBoost = MathUtility::calculateBroadMoneyLiquidityShift($macroState->moneySupplyGrowthEma, sensitivity: self::M2_SYNDICATION_LIQUIDITY_SENSITIVITY);
+        $m2SyndicationBoost = MathUtility::calculateBroadMoneyLiquidityShift($macroState->moneySupplyGrowthEma, $macroState->moneySupplyGrowthTrend, sensitivity: self::M2_SYNDICATION_LIQUIDITY_SENSITIVITY);
 
         return $mnaStimulus + $ecmStimulus + $dcmStimulus + $ecmNetActivity + $m2SyndicationBoost;
     }
@@ -568,6 +568,7 @@ class InvestmentBankBusinessModel extends BrokerageBusinessModel
             'macro_credit_spread_ema',
             'market_volatility_ema',
             'money_supply_growth_ema',
+            'money_supply_growth_trend',
             'ns_slope',
             'ns_slope_ema',
             'output_gap_ema',

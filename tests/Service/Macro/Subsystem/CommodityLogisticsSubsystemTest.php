@@ -102,7 +102,8 @@ class CommodityLogisticsSubsystemTest extends TestCase
         // One year of the exact log-OU transition with no noise.
         $kappa = CommodityLogisticsSubsystem::GOLD_MEAN_REVERSION;
         $sigma = CommodityLogisticsSubsystem::GOLD_VOLATILITY;
-        $alpha = log(MacroEngine::GOLD_BASELINE) - ($sigma * $sigma) / (2.0 * $kappa);
+        // The log mean that leaves the level averaging the equilibrium: ln theta - sigma^2 / 4 kappa.
+        $alpha = log(MacroEngine::GOLD_BASELINE) - ($sigma * $sigma) / (4.0 * $kappa);
         $expected = exp((exp(-$kappa) * log(150.0)) + ((1.0 - exp(-$kappa)) * $alpha));
         $this->assertEqualsWithDelta($expected, $state->goldPriceIndex, 1e-6);
         $this->assertEqualsWithDelta(0.51, exp(-$kappa), 0.01, 'deviations carry half their size into the next year');

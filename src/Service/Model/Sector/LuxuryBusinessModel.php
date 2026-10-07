@@ -12,7 +12,6 @@ use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
 use App\Service\Math\MathUtility;
 use App\Service\Event\ShockEvent;
-use App\Service\Macro\MacroEngine;
 
 /**
  * Earnings strategy for Luxury Goods & Elite Brand Conglomerates.
@@ -117,7 +116,7 @@ class LuxuryBusinessModel extends StandardCorporateBusinessModel
         $beta = $this->getOperatingCyclicality($stock);
 
         $resShift = ($macroState->residentialPropertyIndexEma - 100.0) / 100.0; // Wealth effect from property
-        $m2Shift = MathUtility::calculateBroadMoneyLiquidityShift($macroState->moneySupplyGrowthEma, MacroEngine::M2_BASE_GROWTH, self::M2_LIQUIDITY_SENSITIVITY);
+        $m2Shift = MathUtility::calculateBroadMoneyLiquidityShift($macroState->moneySupplyGrowthEma, $macroState->moneySupplyGrowthTrend, self::M2_LIQUIDITY_SENSITIVITY);
 
         // The ultra-wealthy buyer is as often abroad as at home: the foreign bloc's cycle is half the client book.
         $foreignShift = MathUtility::calculateForeignDemandShift($macroState->foreignOutputGapEma, sensitivity: self::FOREIGN_DEMAND_SENSITIVITY);
@@ -253,6 +252,7 @@ class LuxuryBusinessModel extends StandardCorporateBusinessModel
             'foreign_output_gap_ema',
             'industrial_metals_index_ema',
             'money_supply_growth_ema',
+            'money_supply_growth_trend',
             'output_gap_ema',
             'residential_property_index_ema',
             'tips_breakeven_ema',

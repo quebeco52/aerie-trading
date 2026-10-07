@@ -104,6 +104,7 @@ final class MacroFieldCatalog
         'recession_probability_ema' => ['label' => 'Recession Probability', 'unit' => self::UNIT_PERCENT],
         'sloos_tightening_index_ema' => ['label' => 'Lending Standards (net tightening)', 'unit' => self::UNIT_PERCENT],
         'money_supply_growth_ema' => ['label' => 'Broad Money Growth', 'unit' => self::UNIT_PERCENT],
+        'money_supply_growth_trend' => ['label' => 'Broad Money Growth Trend', 'unit' => self::UNIT_PERCENT],
         'money_market_fund_share' => ['label' => 'Money-Market Share (spot)', 'unit' => self::UNIT_PERCENT],
         'qe_intensity' => ['label' => 'QE Intensity', 'unit' => self::UNIT_PERCENT],
         'qe_active' => ['label' => 'QE Programme', 'unit' => self::UNIT_PERCENT],

@@ -315,6 +315,28 @@ class SystemicEventTest extends TestCase
         );
     }
 
+    /**
+     * The cooldown lets a catastrophe through, but the level conditions it is suppressing must not then outrank it: a
+     * storm in the middle of a recession and a funding freeze is still the storm's headline, not a repeat of theirs.
+     */
+    public function testACatastropheInsideTheCooldownIsNotOutrankedByTheLevelEventsItSuppresses(): void
+    {
+        $state = new MacroState();
+        $state->totalTime = 3.0;
+        $state->eventCooldownTimer = 0.15;
+        $state->interbankLiquiditySpread = MacroEngine::SYSTEMIC_LIQUIDITY_FREEZE_SPREAD + 0.005;
+        $state->highYieldCreditSpread = MacroEngine::SYSTEMIC_CREDIT_SEIZURE_SPREAD + 0.02;
+        $state->recessionProbability = 0.9;
+        $state->outputGap = -0.05;
+        $state->lastCatastropheAt = 3.0;
+        $state->lastCatastropheSeverity = 2.0;
+
+        $this->assertSame(ShockEvent::NATURAL_CATASTROPHE, $this->fire($state));
+
+        $state->totalTime += 1.0 / self::TICKS_PER_YEAR;
+        $this->assertNull($this->fire($state), 'and the level events stay suppressed for the rest of the cooldown.');
+    }
+
     public function testABankingCrisisIsReportedOnTheDayAndOutranksTheFreezeItCauses(): void
     {
         $state = new MacroState();

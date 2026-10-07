@@ -97,7 +97,7 @@ class BrokerageBusinessModel extends BaseFinancialBusinessModel
     public function getMacroPhysics(Stock $stock, \App\DTO\MacroStateDTO $macroState): array
     {
         $outputGap = $this->resolveLaggedOutputGap($macroState);
-        $m2Shift = MathUtility::calculateBroadMoneyLiquidityShift($macroState->moneySupplyGrowthEma, sensitivity: self::M2_RETAIL_TRADING_SENSITIVITY);
+        $m2Shift = MathUtility::calculateBroadMoneyLiquidityShift($macroState->moneySupplyGrowthEma, $macroState->moneySupplyGrowthTrend, sensitivity: self::M2_RETAIL_TRADING_SENSITIVITY);
         $beta = $this->getOperatingCyclicality($stock);
 
         return [
@@ -142,7 +142,7 @@ class BrokerageBusinessModel extends BaseFinancialBusinessModel
         // Crucially, this VIX bonus and M2 retail volume apply to the trading revenue stream ($tradingWeight).
         $vixEma = $macroState->marketVolatilityEma;
         $volatilityBonus = max(0.0, ($vixEma - self::VIX_BASELINE_THRESHOLD) * self::VIX_REVENUE_SCALAR);
-        $m2Shift = MathUtility::calculateBroadMoneyLiquidityShift($macroState->moneySupplyGrowthEma, sensitivity: self::M2_RETAIL_TRADING_SENSITIVITY);
+        $m2Shift = MathUtility::calculateBroadMoneyLiquidityShift($macroState->moneySupplyGrowthEma, $macroState->moneySupplyGrowthTrend, sensitivity: self::M2_RETAIL_TRADING_SENSITIVITY);
 
         $dealActivityShift = ($macroState->dealActivityIndexEma - MacroEngine::DEAL_ACTIVITY_BASELINE) / MacroEngine::DEAL_ACTIVITY_BASELINE;
         $advisoryDealBonus = $dealActivityShift * self::DEAL_ACTIVITY_ADVISORY_SCALAR;
@@ -374,6 +374,7 @@ class BrokerageBusinessModel extends BaseFinancialBusinessModel
             'interbank_liquidity_spread_ema',
             'market_volatility_ema',
             'money_supply_growth_ema',
+            'money_supply_growth_trend',
             'output_gap_ema',
             'policy_rate_ema',
             'stamp_duty_rate',

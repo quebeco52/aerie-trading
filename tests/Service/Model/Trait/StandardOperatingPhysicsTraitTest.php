@@ -238,6 +238,28 @@ final class StandardOperatingPhysicsTraitTest extends TestCase
     }
 
     /**
+     * The basket holds price LEVELS and PPI is a RATE. A wholesale price level running a steady x over target settles
+     * x times the horizon above its one-year EMA trend (L - EMA_H(L) = H EMA_H(dL/dt)); the ppi channel must read that
+     * level gap, carrying the horizon's units, not the rate itself.
+     */
+    public function testThePpiChannelIsTheWholesalePriceLevelAgainstItsTrend(): void
+    {
+        $excess = 0.03;
+        $horizon = \App\Service\Macro\Subsystem\MacroAggregateSubsystem::COMMODITY_TREND_HORIZON_YEARS;
+        $dt = 0.01;
+        $level = 0.0;
+        $trend = 0.0;
+        for ($step = 0; $step < 2000; ++$step) {
+            $level += $excess * $dt;
+            $trend += (1.0 - exp(-$dt / $horizon)) * ($level - $trend);
+        }
+
+        $hot = new MacroStateDTO(producerPriceInflationEma: MacroEngine::TARGET_INFLATION + $excess);
+        $this->assertEqualsWithDelta($level - $trend, $this->model->resolveInputPriceDeviations($hot)['ppi'], 3e-4, 'Twenty years of a steady excess hold the level H x excess above its trend.');
+        $this->assertEqualsWithDelta($horizon * $excess, $this->model->resolveInputPriceDeviations($hot)['ppi'], 1e-12);
+    }
+
+    /**
      * A real wage that rises and STAYS risen keeps costing: the drag settles at margin x share x gap x the share
      * pricing cannot recover, and does not fade. Read as a growth rate, the channel charged the rise only while
      * it was happening and forgot it the moment wage growth returned to trend.

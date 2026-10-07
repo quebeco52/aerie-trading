@@ -1501,4 +1501,24 @@ class DebtEngineTest extends TestCase
         $this->assertNotNull($graded);
         $this->assertSame($graded, $engine->resolveDistanceToDefault($stock, $macroState));
     }
+
+    /**
+     * The firm's spread follows the IG market's deviation from its measured through-the-cycle level, both ways and from
+     * the first basis point: a 40 bps widening that never reached the old fixed 200 bps line still raises the cost of
+     * debt, a tight market lowers it, and the same deviation costs the same whatever level the trend has settled at.
+     */
+    public function testTheCreditCycleReachesTheCostOfDebtAsTheDeviationFromItsTrend(): void
+    {
+        $engine = $this->costOfCapitalEngine();
+        $spread = fn (float $ema, float $trend): float => $engine->calculateInterestExpense(
+            $this->leveredFirm('CYCL', '1.20', '0.010'),
+            new MacroStateDTO(inflationEma: 0.02, policyRateEma: 0.04, yield5yEma: 0.045, macroCreditSpreadEma: $ema, macroCreditSpreadTrend: $trend, corporateTaxRate: 0.21)
+        )->dynamicSpread;
+
+        $atTrend = $spread(0.015, 0.015);
+
+        $this->assertEqualsWithDelta($atTrend + (0.004 * 1.20), $spread(0.019, 0.015), 1e-12, 'A widening under 200 bps reaches the firm at its beta.');
+        $this->assertEqualsWithDelta($atTrend - (0.003 * 1.20), $spread(0.012, 0.015), 1e-12, 'A tight market lowers the cost of new debt.');
+        $this->assertEqualsWithDelta($spread(0.019, 0.015), $spread(0.022, 0.018), 1e-12, 'The deviation is read against the measured trend, not a fixed level.');
+    }
 }

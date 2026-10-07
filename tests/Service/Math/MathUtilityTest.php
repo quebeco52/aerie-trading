@@ -1966,6 +1966,16 @@ class MathUtilityTest extends TestCase
         $this->assertGreaterThanOrEqual(-0.04, $qtGrowth);
     }
 
+    /** Lending standards enter M2's target signed (Lown & Morgan 2006): easing lends deposits into being as tightening withholds them, symmetrically. */
+    public function testBroadMoneyReadsLendingStandardsBothWays(): void
+    {
+        $params = ['qeSens' => 0.0, 'sloosSens' => 0.06, 'gapSens' => 0.0, 'kappa' => 1.0, 'sigma' => 0.0, 'min' => -0.04, 'max' => 0.25];
+        $growth = fn (float $sloos): float => $this->mathUtility->calculateBroadMoneyGrowth(0.04, 0.04, 0.0, $sloos, 0.0, 0.25, 0.0, $params);
+
+        $this->assertEqualsWithDelta(0.04 - $growth(0.20), $growth(-0.20) - 0.04, 1e-12, 'Easing lifts M2 as much as tightening of the same size cuts it.');
+        $this->assertGreaterThan(0.04, $growth(-0.20));
+    }
+
     public function testCalculateDiminishingDistressMultiplier(): void
     {
         // Zero or negative distress signal yields 0.0

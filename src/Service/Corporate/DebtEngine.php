@@ -25,6 +25,16 @@ class DebtEngine
     /** BGG (1999) Financial Accelerator external finance premium sensitivity to leverage during recessions. */
     private const BGG_ACCELERATOR_SENSITIVITY = 0.050;
 
+    // --- Macro Credit Cycle & Equity Volatility Premium ---
+    /** Smallest market beta a firm's spread follows the IG cycle at: a defensive name still refinances in the same bond market. */
+    private const MIN_CREDIT_CYCLE_BETA = 0.5;
+    /** Equity volatility below which bondholders charge no idiosyncratic premium (20%, about the VIX's long-run mean of 19.5). */
+    private const VOLATILITY_PREMIUM_THRESHOLD = 0.20;
+    /** Spread per unit of equity volatility above that threshold, 2 bps per point: Campbell & Taksler (2003) firm volatility channel, magnitude not re-pinned. */
+    private const VOLATILITY_PREMIUM_SENSITIVITY = 0.02;
+    /** Floor on a firm's baseline spread (15 bps), so a tight credit market never prices a cash-rich issuer's debt through the riskless curve. */
+    private const MIN_BASELINE_CREDIT_SPREAD = 0.0015;
+
     // --- Leverage Covenant (Net Debt / EBITDA) ---
     /** Sector limits at or above this are a no-test sentinel: financials are bound by regulatory capital, not cash-flow leverage. */
     public const EBITDA_COVENANT_EXEMPT_LIMIT = 999.0;
@@ -94,22 +104,20 @@ class DebtEngine
         // THE MACROECONOMIC CREDIT CYCLE
         // Spreads widen during recessions (negative gap) as lenders panic, and tighten during booms.
         // High-beta (cyclical) stocks see their spreads widen much faster than low-beta (defensive) stocks.
-        $betaSensitivity = $rawBeta >= 0.0 ? max(0.5, $rawBeta) : min(-0.5, $rawBeta);
+        $betaSensitivity = $rawBeta >= 0.0 ? max(self::MIN_CREDIT_CYCLE_BETA, $rawBeta) : min(-self::MIN_CREDIT_CYCLE_BETA, $rawBeta);
 
-        // Use the aggregate Macro Credit Spread (excess over the 200bps baseline)
-        $aggregateCreditSpread = $macroState->macroCreditSpreadEma;
-        $macroCreditExcess = max(0.0, $aggregateCreditSpread - 0.02);
+        // The IG spread's deviation from its measured through-the-cycle level, both ways: a firm's own spread is its
+        // through-the-cycle one, and new issues price at the market's spread, tight in a boom and wide in a bust.
+        $macroCreditDeviation = $macroState->macroCreditSpreadEma - $macroState->macroCreditSpreadTrend;
 
         // High beta stocks suffer the full brunt (or more) of credit market blowouts
-        $macroCreditAdjustment = $macroCreditExcess * abs($betaSensitivity);
+        $macroCreditAdjustment = $macroCreditDeviation * abs($betaSensitivity);
 
         // IDIOSYNCRATIC VOLATILITY PREMIUM
         // Bondholders hate individual uncertainty. High stock volatility pays a risk premium.
-        $volatilityPremium = max(0.0, ($volatility - 0.20) * 0.02);
+        $volatilityPremium = max(0.0, ($volatility - self::VOLATILITY_PREMIUM_THRESHOLD) * self::VOLATILITY_PREMIUM_SENSITIVITY);
 
-        // Calculate the Dynamic Baseline Spread
-        // Floored at 15 bps (0.0015) so ultra-safe Titans don't get negative spreads during massive economic booms.
-        $baselineCreditSpread = max(0.0015, $rawCreditSpread + $macroCreditAdjustment + $volatilityPremium);
+        $baselineCreditSpread = max(self::MIN_BASELINE_CREDIT_SPREAD, $rawCreditSpread + $macroCreditAdjustment + $volatilityPremium);
 
         $floatingRatio = (float) $stock->getFloatingDebtRatio();
         $industry = $stock->getIndustry() ?: 'General';

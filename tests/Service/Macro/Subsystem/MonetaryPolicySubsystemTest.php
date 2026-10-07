@@ -573,6 +573,30 @@ class MonetaryPolicySubsystemTest extends TestCase
         $this->assertGreaterThan($structural->moneySupplyGrowth, $faster->moneySupplyGrowth, 'A faster-growing labour force needs faster money growth.');
     }
 
+    /** M2 growth's trend is measured, a decade's average of the growth itself, not the fixed base its readers once used. */
+    public function testMoneyGrowthTrendIsADecadesAverageOfTheGrowth(): void
+    {
+        $quiet = new MonetaryPolicySubsystem(new class extends MathUtility {
+            public function generateStandardNormal(): float { return 0.0; }
+        });
+        $neutralGrowth = MacroEngine::TARGET_INFLATION + MacroEngine::TFP_DRIFT + MacroEngine::STRUCTURAL_LABOR_GROWTH_RATE;
+        $state = new MacroState();
+        $state->moneySupplyGrowth = $neutralGrowth;
+        $state->moneySupplyGrowthTrend = MacroEngine::M2_BASE_GROWTH;
+
+        for ($tick = 0; $tick < 40; ++$tick) {
+            $quiet->calculateMoneySupplyGrowth($state, 0.25, MacroEngine::TFP_DRIFT);
+        }
+
+        $this->assertEqualsWithDelta($neutralGrowth, $state->moneySupplyGrowth, 1e-12);
+        $this->assertEqualsWithDelta(
+            $neutralGrowth + ((MacroEngine::M2_BASE_GROWTH - $neutralGrowth) * exp(-10.0 / MonetaryPolicySubsystem::M2_TREND_YEARS)),
+            $state->moneySupplyGrowthTrend,
+            1e-12,
+            'Ten years at neutral growth close the trend on it at its decade time constant.'
+        );
+    }
+
     public function testCalculateMoneySupplyGrowth(): void
     {
         $dt = 0.25;

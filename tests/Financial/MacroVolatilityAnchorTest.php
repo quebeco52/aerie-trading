@@ -52,7 +52,7 @@ class MacroVolatilityAnchorTest extends TestCase
      */
     private const ANCHOR_TOLERANCE = 0.08;
 
-    /** @var array{rms: float, floorShare: float}|null Memoized: one run serves both measurements. */
+    /** @var array{rms: float, floorShare: float, leverage: float, jumpTickVarianceRise: float, calmTickVarianceRise: float}|null Memoized: one run serves every measurement. */
     private static ?array $measured = null;
 
     /**
@@ -68,10 +68,10 @@ class MacroVolatilityAnchorTest extends TestCase
      */
     private static function theoreticalJumpContribution(): float
     {
-        $meanVarianceJump = (AssetMarketSubsystem::SVJJ_P_UP * MacroEngine::SVJJ_MU_V * MathUtility::VARIANCE_JUMP_UPSIDE_MEAN_SHARE)
-            + ((1.0 - AssetMarketSubsystem::SVJJ_P_UP) * MacroEngine::SVJJ_MU_V);
+        $meanVarianceJump = (MacroEngine::SYSTEMIC_JUMP_PROBABILITY_UP * MacroEngine::SYSTEMIC_JUMP_VARIANCE_MEAN * MathUtility::VARIANCE_JUMP_UPSIDE_MEAN_SHARE)
+            + ((1.0 - MacroEngine::SYSTEMIC_JUMP_PROBABILITY_UP) * MacroEngine::SYSTEMIC_JUMP_VARIANCE_MEAN);
 
-        return (AssetMarketSubsystem::SVJJ_LAMBDA * $meanVarianceJump) / AssetMarketSubsystem::MACRO_VOL_KAPPA;
+        return (MacroEngine::SYSTEMIC_JUMP_INTENSITY * $meanVarianceJump) / AssetMarketSubsystem::MACRO_VOL_KAPPA;
     }
 
     /** The anchor the diffusion alone is given, as the subsystem actually computes it. */
@@ -184,13 +184,40 @@ class MacroVolatilityAnchorTest extends TestCase
     }
 
     /**
+     * The leverage effect (Heston 1993 rho; Ait-Sahalia, Fan & Li 2013): a falling market lifts variance. Before the
+     * variance innovation loaded on the market shock the two were independent and the correlation sat at zero.
+     */
+    public function testVarianceRisesWhenTheMarketFalls(): void
+    {
+        $leverage = $this->measure()['leverage'];
+
+        $this->assertLessThan(-0.5, $leverage, sprintf('corr(market shock, variance change) is %.3f; the leverage effect is missing.', $leverage));
+        $this->assertGreaterThan(-1.0, $leverage);
+    }
+
+    /**
+     * Contemporaneous jumps (Duffie, Pan & Singleton 2000; Eraker, Johannes & Polson 2003): the variance jumps on the
+     * tick the market jumps, not on a clock of its own.
+     */
+    public function testVarianceJumpsLandWithTheMarketJump(): void
+    {
+        $measured = $this->measure();
+
+        $this->assertGreaterThan(
+            $measured['calmTickVarianceRise'] + (0.5 * MacroEngine::SYSTEMIC_JUMP_VARIANCE_MEAN),
+            $measured['jumpTickVarianceRise'],
+            'A market-wide jump must carry its variance jump on the same tick.'
+        );
+    }
+
+    /**
      * Runs the variance process forward under neutral macro drivers and measures what it delivers.
      *
      * Neutral matters: with a zero output gap, a baseline credit spread and an upward-sloping curve the
      * macro driver is exactly zero, so the long-run target IS the anchor and nothing else can be blamed for
      * a gap between them.
      *
-     * @return array{rms: float, floorShare: float}
+     * @return array{rms: float, floorShare: float, leverage: float, jumpTickVarianceRise: float, calmTickVarianceRise: float}
      */
     private function measure(): array
     {
@@ -214,9 +241,14 @@ class MacroVolatilityAnchorTest extends TestCase
         $varianceSum = 0.0;
         $measured = 0;
         $onFloor = 0;
+        $sumZ = $sumDv = $sumZz = $sumDvDv = $sumZDv = 0.0;
+        $jumpRise = $calmRise = 0.0;
+        $jumpTicks = 0;
 
         for ($tick = 0; $tick < $ticks; $tick++) {
-            $state->marketVolatility = $subsystem->calculateMarketVolatility($state, $dt);
+            $previousVariance = $state->marketVolatility ** 2;
+            $shock = $subsystem->updateSystemicMarketFactor($state, $dt);
+            $state->marketVolatility = $subsystem->calculateMarketVolatility($state, $dt, $shock['varianceJump'], $shock['returnInnovation']);
 
             if ($tick < $warmup) {
                 continue;
@@ -228,7 +260,25 @@ class MacroVolatilityAnchorTest extends TestCase
             if ($state->marketVolatility <= AssetMarketSubsystem::MACRO_VOL_FLOOR) {
                 $onFloor++;
             }
+
+            $dv = ($state->marketVolatility ** 2) - $previousVariance;
+            $z = $state->marketZ;
+            $sumZ += $z;
+            $sumDv += $dv;
+            $sumZz += $z * $z;
+            $sumDvDv += $dv * $dv;
+            $sumZDv += $z * $dv;
+            if ($state->marketJumpMultiplier !== 1.0) {
+                $jumpRise += $dv;
+                $jumpTicks++;
+            } else {
+                $calmRise += $dv;
+            }
         }
+
+        $covariance = ($sumZDv / $measured) - (($sumZ / $measured) * ($sumDv / $measured));
+        $varZ = ($sumZz / $measured) - (($sumZ / $measured) ** 2);
+        $varDv = ($sumDvDv / $measured) - (($sumDv / $measured) ** 2);
 
         // The anchor is a variance target, so the series is scored on root-mean-square volatility. The plain
         // mean of a right-skewed variance process sits below it by Jensen and would score a correct process
@@ -236,6 +286,9 @@ class MacroVolatilityAnchorTest extends TestCase
         return self::$measured = [
             'rms' => sqrt($varianceSum / $measured),
             'floorShare' => $onFloor / $measured,
+            'leverage' => $covariance / sqrt($varZ * $varDv),
+            'jumpTickVarianceRise' => $jumpRise / max(1, $jumpTicks),
+            'calmTickVarianceRise' => $calmRise / max(1, $measured - $jumpTicks),
         ];
     }
 }

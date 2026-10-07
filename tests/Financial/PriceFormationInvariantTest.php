@@ -96,7 +96,7 @@ final class PriceFormationInvariantTest extends TestCase
                 pUp: MacroEngine::SYSTEMIC_JUMP_PROBABILITY_UP,
                 etaUp: MacroEngine::SYSTEMIC_JUMP_ETA_UP,
                 etaDown: MacroEngine::SYSTEMIC_JUMP_ETA_DOWN,
-                muV: MacroEngine::SVJJ_MU_V,
+                muV: MacroEngine::SYSTEMIC_JUMP_VARIANCE_MEAN,
                 dt: $dt,
             );
             $jumpMultiplier = $systemic['price_multiplier'];
