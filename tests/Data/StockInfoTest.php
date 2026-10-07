@@ -26,6 +26,16 @@ class StockInfoTest extends TestCase
         $this->assertNotEmpty(StockInfo::DESCRIPTIONS, 'StockInfo::DESCRIPTIONS must not be empty.');
     }
 
+    /** Quotes belong to listed companies: a delisted ticker's quote is dead copy, a listed one without is a gap. */
+    public function testQuotesMatchTheListedCompanies(): void
+    {
+        $listed = array_column(InitialMarket::STOCKS, 'ticker');
+        $quoted = array_keys(StockInfo::QUOTES);
+
+        $this->assertSame([], array_values(array_diff($quoted, $listed)), 'Quotes for tickers not on the board.');
+        $this->assertSame([], array_values(array_diff($listed, $quoted)), 'Listed companies without a quote.');
+    }
+
     #[DataProvider('tickerProvider')]
     public function testStockHasValidDescription(string $ticker): void
     {
