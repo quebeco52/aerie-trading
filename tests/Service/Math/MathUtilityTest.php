@@ -2500,10 +2500,10 @@ class MathUtilityTest extends TestCase
 
     public function testExpectedNominalGrowthCarriesTheCycleAndIsCapped(): void
     {
-        // Boom: secular 2% + half of a 2% gap at beta 1 = 3% real, plus half of 2% inflation = 4% nominal.
-        $this->assertEqualsWithDelta(0.04, $this->mathUtility->calculateExpectedNominalGrowth(0.02, 0.02, 1.0, 0.02, 0.0), 1e-12);
-        // Bust at the same beta takes the same amount off; a flat 2% is what the corporate engines used to assume everywhere.
-        $this->assertEqualsWithDelta(0.02, $this->mathUtility->calculateExpectedNominalGrowth(0.02, -0.02, 1.0, 0.02, 0.0), 1e-12);
+        // Boom: secular 2% + half of a 2% gap at beta 1 = 3% real, plus 2% inflation = 5% nominal, at the cap.
+        $this->assertEqualsWithDelta(0.05, $this->mathUtility->calculateExpectedNominalGrowth(0.02, 0.02, 1.0, 0.02, 0.0), 1e-12);
+        // Bust at the same beta takes the same amount off: 1% real plus 2% inflation.
+        $this->assertEqualsWithDelta(0.03, $this->mathUtility->calculateExpectedNominalGrowth(0.02, -0.02, 1.0, 0.02, 0.0), 1e-12);
         // Stagflation drag reaches a firm with no moat and is offset by pricing power.
         $this->assertLessThan(
             $this->mathUtility->calculateExpectedNominalGrowth(0.02, 0.0, 1.0, 0.06, 1.0),
@@ -2780,5 +2780,20 @@ class MathUtilityTest extends TestCase
         self::assertEqualsWithDelta(0.10, MathUtility::equityReturnFromRoic(0.10, 50.0, 50.0, 0.04), 1e-12);
         self::assertEqualsWithDelta(0.02 + (3.0 * (0.02 - 0.04)), MathUtility::equityReturnFromRoic(0.02, 100.0, 25.0, 0.04), 1e-12);
         self::assertSame(0.10, MathUtility::equityReturnFromRoic(0.10, 100.0, 0.0, 0.04));
+    }
+
+    /** Nominal growth is real growth plus all of inflation; at target inflation and a closed gap nothing else enters. */
+    public function testExpectedNominalGrowthCarriesInflationInFull(): void
+    {
+        $math = new MathUtility();
+        $target = MacroEngine::TARGET_INFLATION;
+
+        self::assertEqualsWithDelta(0.02 + $target, $math->calculateExpectedNominalGrowth(0.02, 0.0, 1.0, $target, 0.0), 1e-12);
+        // Above target, only the part pricing power cannot offset is lost from real growth.
+        self::assertEqualsWithDelta(
+            0.02 - ((0.04 - $target) * 0.6) + 0.04,
+            $math->calculateExpectedNominalGrowth(0.02, 0.0, 1.0, 0.04, 0.4),
+            1e-12
+        );
     }
 }

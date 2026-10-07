@@ -1052,7 +1052,7 @@ class MathUtility
     /**
      * Nominal expected growth used to strike a fair-value multiple, the same transmission for everyone
      * who strikes one: secular real growth, the cyclical part scaled by beta, a stagflation drag on real
-     * growth that pricing power offsets, then partial pass-through of inflation into the nominal rate.
+     * growth that pricing power offsets, then inflation in full for the nominal rate.
      * Capped below any plausible hurdle so the Gordon denominator cannot diverge.
      *
      * Management and the market MUST read the same figure. The corporate engines used to strike their
@@ -1073,9 +1073,12 @@ class MathUtility
         $inflationDrag = max(0.0, ($inflation - MacroEngine::TARGET_INFLATION) * (1.0 - $moatSpread));
         $realGrowth -= $inflationDrag;
 
+        // Nominal growth is real growth plus inflation (Fisher): the cash flows are discounted at a nominal rate,
+        // so growing them at less than full inflation is the inflation illusion of Modigliani & Cohn (1979). Weak
+        // pricing power is the stagflation drag above, not a haircut on inflation for every firm.
         return max(0.0, min(
             FinancialConstants::MAX_EXPECTED_GROWTH,
-            $realGrowth + ($inflation * FinancialConstants::INFLATION_NOMINAL_GROWTH_PASS_THROUGH)
+            $realGrowth + $inflation
         ));
     }
 

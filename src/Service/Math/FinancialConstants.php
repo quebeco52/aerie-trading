@@ -109,8 +109,6 @@ class FinancialConstants
     // --- Fundamental Growth Transmission ---
     /** Share of the output gap that reaches a firm's real growth rate, before its beta scales the cyclical exposure. */
     public const CYCLICAL_GROWTH_PASS_THROUGH = 0.50;
-    /** Share of inflation that carries into the nominal growth rate used for valuation. */
-    public const INFLATION_NOMINAL_GROWTH_PASS_THROUGH = 0.50;
     /** Cap on nominal expected growth, held below any plausible hurdle rate so the Gordon Growth denominator cannot diverge. */
     public const MAX_EXPECTED_GROWTH = 0.05;
 
