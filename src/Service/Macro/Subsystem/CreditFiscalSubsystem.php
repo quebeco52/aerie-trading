@@ -224,6 +224,14 @@ class CreditFiscalSubsystem
     /** How capital not yet built reads to lending standards, as excess bond premium per unit of shortfall: fitted so a 1pp rise phased in over four years leaves output 0.17% below baseline at 18 quarters, the median of the MAG's (2010, Interim Report pp. 21-22) models that read lending standards and let monetary policy respond. */
     public const SLOOS_CAPITAL_SHORTFALL_PREMIUM_EQUIVALENT = 0.87;
 
+    // --- Mortgage Loan-to-Value Cap (Iacoviello 2005 collateral constraint; Richter, Schularick & Shim 2019) ---
+    /** Combined LTV bin edges of US home-purchase loans at origination (FHFA National Mortgage Database aggregate statistics); the top bin ends at 102% (a VA loan at 100% plus its funding fee) and the bottom one starts where the bins' mean is NMDB's 82.2%. */
+    public const NEW_PURCHASE_CLTV_EDGES = [0.44, 0.70, 0.80, 0.90, 0.95, 0.97, 1.02];
+    /** Share of US home-purchase loans in each bin, NMDB annual national averages 1998-2019: 19.3% to 70%, 23.6% to 80%, 13.5% to 90%, 12.6% to 95%, 14.2% to 97%, 16.9% above. */
+    public const NEW_PURCHASE_CLTV_SHARES = [0.1928, 0.2355, 0.1347, 0.1260, 0.1419, 0.1693];
+    /** Years over which a tightened cap takes household credit to its new level: a first-order lag through Richter, Schularick & Shim's (2019, Table 11) real household credit response, -1.37 / -4.11 / -5.95 / -5.94% at 1 / 4 / 8 / 12 quarters. */
+    public const MORTGAGE_LTV_CUT_YEARS = 1.0;
+
     // --- Excess Bond Premium (Gilchrist & Zakrajsek 2012), a displaced lognormal ---
     /** Displacement (141 bps): the premium plus this is lognormal. Profile maximum likelihood on the GZ series, 1973-2026 (95% CI 116-185 bps); in logs the shocks are the same size at every level, in levels they grow 2.8x from low to high. */
     public const EBP_DISPLACEMENT = 0.0141;
@@ -652,7 +660,18 @@ class CreditFiscalSubsystem
         $housePriceLift = $state->residentialWealthTrend > 0.0
             ? ($state->residentialPropertyIndexEma / $state->residentialWealthTrend) - 1.0
             : 0.0;
-        $relativeExcess = ($state->householdDebtToIncome - MacroEngine::HOUSEHOLD_DEBT_TO_INCOME_BASELINE) / MacroEngine::HOUSEHOLD_DEBT_TO_INCOME_BASELINE;
+        // Iacoviello (2005): a loan-to-value cap the borrowers press against lowers the leverage they hold for good. A
+        // tighter cap is built into the stock at Richter, Schularick & Shim's (2019) pace; a looser one lifts the
+        // constraint at once and borrowing rises only as households choose to lever up, through the reversion below
+        // toward the baseline the cap now allows.
+        $leverageBaseline = MacroEngine::HOUSEHOLD_DEBT_TO_INCOME_BASELINE * exp(-$state->ltvCutBuilt);
+        $ltvTarget = self::mortgageLtvCreditCut($state->mortgageLtvCap);
+        $ltvBuilt = $ltvTarget > $state->ltvCutBuilt
+            ? $this->mathUtility->calculateDistributedLag($state->ltvCutBuilt, $ltvTarget, $dt, self::MORTGAGE_LTV_CUT_YEARS)
+            : $ltvTarget;
+        $ltvSqueeze = max(0.0, $ltvBuilt - $state->ltvCutBuilt);
+        $state->ltvCutBuilt = $ltvBuilt;
+        $relativeExcess = ($state->householdDebtToIncome - $leverageBaseline) / $leverageBaseline;
         $excessDsr = max(0.0, $state->householdDebtServiceGap - MacroEngine::HOUSEHOLD_DSR_STRESS_MARGIN);
 
         // The terms US household credit supports (1976-2019). Rates, the gap and business-loan standards have no
@@ -672,7 +691,7 @@ class CreditFiscalSubsystem
         $state->bankCapitalRequiredLast = $capitalRequired;
 
         $previousLeverage = $state->householdDebtToIncome;
-        $state->householdDebtToIncome = max(self::MIN_HOUSEHOLD_DEBT_TO_INCOME, min(self::MAX_HOUSEHOLD_DEBT_TO_INCOME, $state->householdDebtToIncome * exp(($growth * $dt) + $noise - $capitalSqueeze)));
+        $state->householdDebtToIncome = max(self::MIN_HOUSEHOLD_DEBT_TO_INCOME, min(self::MAX_HOUSEHOLD_DEBT_TO_INCOME, $state->householdDebtToIncome * exp(($growth * $dt) + $noise - $capitalSqueeze - $ltvSqueeze)));
         // Drehmann, Juselius & Korinek (2018) new borrowing, net of what holds leverage level: the year's average of
         // the change in leverage. It averages zero because leverage reverts, so spending needs no compensator for it.
         $state->householdNewBorrowing = $this->mathUtility->calculateDistributedLag(
@@ -729,6 +748,27 @@ class CreditFiscalSubsystem
             dt: $dt,
             lagTimeConstant: self::REQUIREMENT_BUILD_YEARS
         );
+    }
+
+    /**
+     * How far a mortgage loan-to-value cap holds household debt below where it would stand without one, in logs, once the
+     * stock has taken it in. Iacoviello's (2005) collateral constraint over the loan-to-value of US home-purchase loans
+     * (FHFA NMDB): borrowers above the cap borrow at it, so new mortgage lending falls by the part of the distribution
+     * above the cap over its mean, and household debt by that times the mortgage share. A cap above every loan, or
+     * none (null), holds nothing.
+     *
+     * @param float|null $cap The loan-to-value cap in force, as a share of the property's value; null for none.
+     */
+    public static function mortgageLtvCreditCut(?float $cap): float
+    {
+        if ($cap === null) {
+            return 0.0;
+        }
+
+        $excess = MathUtility::histogramUpperPartialMoment(self::NEW_PURCHASE_CLTV_EDGES, self::NEW_PURCHASE_CLTV_SHARES, $cap);
+        $mean = MathUtility::histogramUpperPartialMoment(self::NEW_PURCHASE_CLTV_EDGES, self::NEW_PURCHASE_CLTV_SHARES, 0.0);
+
+        return -log(1.0 - (self::HOUSEHOLD_MORTGAGE_DEBT_SHARE * $excess / $mean));
     }
 
     /**

@@ -1,4 +1,4 @@
-import { THEME_COLORS, withAlpha } from '../utils/colors.js';
+import { THEME_COLORS, SERIES, withAlpha } from '../utils/colors.js';
 import { formatCurrency, signedClass, SIGNED_CLASSES } from '../utils/formatters.js';
 import { CHART_FONT_MONO } from '../utils/fonts.js';
 import { readPageData } from '../utils/page-data.js';
@@ -23,6 +23,8 @@ let initialPortfolioValue = 0;
 let livePrices = {};
 let portfolioChart = null;
 let areaSeries = null;
+/** The benchmark fund rebased to the portfolio's first value, so the gap between the lines is the account's lead. */
+let indexSeries = null;
 let currentRange = '1m';
 let chartResizeObserver = null;
 
@@ -99,6 +101,18 @@ function initDashboard() {
             });
         }
 
+        if (typeof portfolioChart.addSeries === 'function' && LightweightCharts.LineSeries) {
+            indexSeries = portfolioChart.addSeries(LightweightCharts.LineSeries, {
+                color: SERIES.orange,
+                lineWidth: 1,
+                lineStyle: LightweightCharts.LineStyle ? LightweightCharts.LineStyle.Dashed : 2,
+                lastValueVisible: false,
+                priceLineVisible: false,
+                crosshairMarkerVisible: false,
+                priceFormat: { type: 'price', precision: 2, minMove: 0.01 },
+            });
+        }
+
         chartResizeObserver = new ResizeObserver(entries => {
             if (entries.length === 0 || !entries[0].contentRect) return;
             const newRect = entries[0].contentRect;
@@ -121,6 +135,27 @@ function initDashboard() {
         });
     }
 
+    /**
+     * The index's points scaled so its first point equals the portfolio's first value: the line shows what the
+     * account would be worth had it bought the index at the start of the window and held it (price only).
+     */
+    function rebasedIndex(index, chartPoints) {
+        if (!Array.isArray(index) || index.length === 0 || chartPoints.length === 0) return [];
+        const first = parseFloat(index[0].price);
+        if (!(first > 0)) return [];
+        const scale = chartPoints[0].value / first;
+
+        const points = [];
+        let lastTime = 0;
+        index.forEach(d => {
+            let t = Math.floor(new Date(d.recorded_at).getTime() / 1000);
+            if (t <= lastTime) t = lastTime + 1;
+            lastTime = t;
+            points.push({ time: t, value: parseFloat(d.price) * scale });
+        });
+        return points;
+    }
+
     async function loadPortfolioData(range) {
         const spinner = document.getElementById('portfolio-chart-spinner');
         if (spinner) {
@@ -131,7 +166,9 @@ function initDashboard() {
         try {
             const res = await fetch(`/api/portfolio/history?range=${encodeURIComponent(range)}`);
             if (!res.ok) throw new Error('Failed to fetch portfolio history');
-            const data = await res.json();
+            const body = await res.json();
+            const data = Array.isArray(body) ? body : (body.portfolio || []);
+            const index = Array.isArray(body) ? [] : (body.index || []);
 
             if (areaSeries && Array.isArray(data) && data.length === 0) {
                 areaSeries.setData([{ time: Math.floor(Date.now() / 1000), value: initialPortfolioValue }]);
@@ -153,6 +190,7 @@ function initDashboard() {
                 });
 
                 areaSeries.setData(chartPoints);
+                if (indexSeries) indexSeries.setData(rebasedIndex(index, chartPoints));
                 if (portfolioChart) portfolioChart.timeScale().fitContent();
             }
         } catch (e) {

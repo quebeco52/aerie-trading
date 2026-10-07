@@ -110,6 +110,31 @@ class FinancialRegulatorTest extends TestCase
     }
 
     /**
+     * Each regime carries its jurisdiction's mortgage cap, null where there is none: from Hong Kong's 70% to the
+     * Netherlands' and Luxembourg's 100%, the US among those with none; a stance on record reads its own regime's cap.
+     */
+    public function testEachRegimeCarriesItsMortgageCap(): void
+    {
+        $this->assertCount(count(Regulator::OBSERVED_REQUIREMENTS), Regulator::OBSERVED_LTV_CAPS);
+        $this->assertSame(0.70, min(array_filter(Regulator::OBSERVED_LTV_CAPS, static fn (?float $cap): bool => $cap !== null)));
+        $this->assertSame(1.00, max(Regulator::OBSERVED_LTV_CAPS));
+        $this->assertNull(Regulator::OBSERVED_LTV_CAPS[array_search(0.1230, Regulator::OBSERVED_REQUIREMENTS, true)], 'The US runs none.');
+        $this->assertCount(6, array_filter(Regulator::OBSERVED_LTV_CAPS, static fn (?float $cap): bool => $cap === null));
+        foreach (Regulator::OBSERVED_REQUIREMENTS as $index => $requirement) {
+            $this->assertSame(Regulator::OBSERVED_LTV_CAPS[$index], Regulator::ltvCapForStance(Regulator::stance($requirement)), "regime {$index}");
+        }
+    }
+
+    /** The head sitting at Year 1 runs no mortgage cap, and the economy is handed none. */
+    public function testTheHeadAtYearOneRunsNoMortgageCap(): void
+    {
+        $state = self::opened();
+
+        $this->assertNull(Regulator::ltvCap($state));
+        $this->assertNull(PoliticsStateDTO::fromState($state)->policy()->mortgageLtvCap);
+    }
+
+    /**
      * At the opening head's term end the Council names the candidate nearest its median on the banks; the new head's
      * requirement takes effect as the head's rule says, the appointment makes the headline, and nothing changes again
      * until the next term ends.
@@ -130,6 +155,9 @@ class FinancialRegulatorTest extends TestCase
             $this->assertSame($passedOver, $state->regulatorPassedOver);
             $this->assertGreaterThan(Regulator::OPENING_HEAD_TERM_END - self::DT, $appointedAt);
             $this->assertEqualsWithDelta(FinancialConstants::OPENING_BANK_CAPITAL_REQUIREMENT, $state->requirementPhaseFrom, 1e-12);
+
+            $this->assertSame(Regulator::ltvCapForStance($state->regulatorStance), Regulator::ltvCap($state), 'The head runs their regime\'s cap.');
+            $this->assertSame(Regulator::ltvCap($state), PoliticsStateDTO::fromState($state)->policy()->mortgageLtvCap, 'In force from the seating, with no phase-in.');
 
             $target = Regulator::requirement($state->regulatorStance);
             $this->assertEqualsWithDelta(Regulator::requirementInForce($target, FinancialConstants::OPENING_BANK_CAPITAL_REQUIREMENT, $state->totalTime - $appointedAt), $state->bankCapitalRequirement, 1e-12);

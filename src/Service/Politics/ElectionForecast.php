@@ -163,17 +163,16 @@ final class ElectionForecast
      * @param array<string, array<string, float>> $positions Positions by party and axis.
      * @param list<string>                        $statusQuo The outgoing cabinet.
      * @param array<string, string>               $blocs     The blocs declared for the vote.
-     * @param list<string>                        $fallen    The cabinet that fell between votes, which cannot be seated again as it was.
      * @return list<array{cabinet: list<string>, support: list<string>, chance: float}>
      */
-    public static function cabinetOdds(array $seats, array $shares, array $positions, array $statusQuo, array $blocs, array $fallen = []): array
+    public static function cabinetOdds(array $seats, array $shares, array $positions, array $statusQuo, array $blocs): array
     {
         $order = CoalitionFormation::bySize($seats, $shares);
         if (($seats[$order[0]] ?? 0) >= AerieDiet::MAJORITY_SEATS) {
             return [['cabinet' => [$order[0]], 'support' => [], 'chance' => 1.0]];
         }
 
-        $options = array_values(array_filter(CoalitionFormation::options($seats, $positions, $blocs), static fn(array $option): bool => $option['cabinet'] !== $fallen));
+        $options = CoalitionFormation::options($seats, $positions, $blocs);
         $utilities = CoalitionFormation::utilities($options, $seats, $positions, $statusQuo, $order[0], $blocs);
         $top = max($utilities);
         $weights = array_map(static fn(float $utility): float => exp($utility - $top), $utilities);
@@ -190,8 +189,8 @@ final class ElectionForecast
     /**
      * The laws the sitting government will pass at its next budget round, on the Diet as it stands (PoliticsEngine::
      * enactBudget()). While the parties talk after a cabinet falls between votes, the sitting government is the one the
-     * talks will seat, weighed by its odds on the seats as they stand, the cabinet that fell excluded as the talks
-     * exclude it; after a vote the talks' government is the forecast's, and the caretaker passes nothing until then.
+     * talks will seat, weighed by its odds on the seats as they stand, the cabinet that fell weighed as any other,
+     * as the talks weigh it; after a vote the talks' government is the forecast's, and the caretaker passes nothing until then.
      * The reserve fund's consent to a draw above its ceiling is read on the recession as it stands; a government further
      * off is expected to pass its budget without it, the consent lasting only the slump.
      *
@@ -205,7 +204,7 @@ final class ElectionForecast
                 return $standing;
             }
             $seats = array_map('intval', $state->dietSeats);
-            $odds = self::cabinetOdds($seats, $state->dietVoteShares, $state->partyPositions, [], $state->dietBlocs, AerieDiet::governingParties($state->governingCoalition));
+            $odds = self::cabinetOdds($seats, $state->dietVoteShares, $state->partyPositions, [], $state->dietBlocs);
 
             return self::tally([['seats' => $seats, 'shares' => $state->dietVoteShares, 'odds' => $odds]], 1.0, $state->partyPositions, $standing, $debtToGdp, $recession)['levers'];
         }

@@ -590,7 +590,7 @@
 		{% if regulator %}
 			{% set head = regulator.head %}
 			<section class="bg-surface-container-low rounded-lg p-5 border border-outline-variant/20" aria-labelledby="regulator-heading">
-				<h2 id="regulator-heading" class="text-sm font-semibold text-on-surface">The Financial Regulator</h2>
+				<h2 id="regulator-heading" class="text-sm font-semibold text-on-surface"><a href="/regulator" class="hover:underline">The Financial Regulator</a></h2>
 				<p class="text-2xs text-on-surface-variant mt-0.5">
 					The Council names the head for a single {{ regulator.rules.termYears|number_format(0) }}-year term from a shortlist of {{ regulator.rules.shortlist }}, choosing the candidate nearest its own view of the banks.
 					The head sets the core capital every deposit-taking bank must hold against its loans and other risk-weighted assets, anywhere from {{ regulator.rules.lightest|pct(1) }} to {{ regulator.rules.strictest|pct(1) }}, the range the world's largest banks are held to.

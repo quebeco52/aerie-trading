@@ -51,6 +51,32 @@ class GovernmentPolicyTest extends TestCase
         $this->assertSame(0.0, $state->tfpShockLevel, 'No tariff moved, so no productivity did.');
     }
 
+    /** The Regulator's mortgage cap goes into force as handed over, and a policy without one lifts it. */
+    public function testTheMortgageCapGoesIntoForceAsHandedOver(): void
+    {
+        $state = new MacroState();
+        $this->assertNull($state->mortgageLtvCap, 'The District opens with no cap, as the US runs none.');
+
+        $this->enactPolicyDto($state, new GovernmentPolicyDTO(
+            corporateTaxPolicyShift: 0.0,
+            importTariffRate: 0.0,
+            laborForceGrowthRate: MacroEngine::STRUCTURAL_LABOR_GROWTH_RATE,
+            mergerReviewLeniency: 0.0,
+            greenBeltStringency: 0.0,
+            carbonPrice: 0.0,
+            extractionStringency: 0.0,
+            stampDutyRate: FinancialConstants::STAMP_DUTY_RATE,
+            bankLevyRate: 0.0,
+            reserveDrawShare: MacroEngine::RESERVE_DRAW_CEILING,
+            electionPulse: 0.0,
+            mortgageLtvCap: 0.85,
+        ));
+        $this->assertSame(0.85, $state->mortgageLtvCap);
+
+        $this->enact($state, tariff: 0.0);
+        $this->assertNull($state->mortgageLtvCap);
+    }
+
     public function testATariffCostsProductivityAndItsRepealGivesItBack(): void
     {
         $state = new MacroState();

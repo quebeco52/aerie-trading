@@ -1,0 +1,127 @@
+{% extends 'base.html.twig' %}
+
+{% block title %}Financial Regulator - Aerie Exchange{% endblock %}
+
+{% block meta %}
+	<meta name="description" content="The District's Financial Regulator: the core capital its banks must hold, the most a home buyer may borrow against the property, and the banks it supervises.">
+	<meta property="og:title" content="Financial Regulator | Aerie Exchange">
+	<meta property="og:type" content="website">
+{% endblock %}
+
+{% block body %}
+<div class="max-w-400 mx-auto px-4 sm:px-6 lg:px-8 pt-8 pb-12 w-full space-y-6">
+
+	<header class="pb-5 border-b border-outline-variant/15 max-w-3xl">
+		<h1 class="text-2xl md:text-3xl font-semibold text-on-surface tracking-tight">Financial Regulator</h1>
+		<p class="mt-2 text-sm text-on-surface-variant leading-relaxed">
+			The District's bank supervisor. It sets two rules: the core capital every deposit-taking bank must hold against
+			its loans, and the most a home buyer may borrow against the property they buy. Its head is named by the Aerie
+			Council for a single term and sets both.
+		</p>
+		<p class="mt-3 text-sm"><a href="/government" class="text-primary hover:underline underline-offset-2">How the District is governed</a></p>
+	</header>
+
+	{% if regulator %}
+		{% set head = regulator.head %}
+		<section class="bg-surface-container-low rounded-lg p-5 border border-outline-variant/20" aria-labelledby="head-heading">
+			<h2 id="head-heading" class="text-sm font-semibold text-on-surface">The head</h2>
+			<p class="text-sm font-semibold text-on-surface mt-2">{{ head.name }}</p>
+			<p class="text-xs text-on-surface-variant mt-0.5">Age {{ head.age }} · seated {{ head.sinceLabel }} · term ends <span class="font-mono tabular-nums">{{ head.termEndsLabel }}</span></p>
+			<p class="text-sm text-on-surface mt-2 max-w-3xl">
+				{{- {light: 'A light-touch regulator', middle: 'A moderate regulator', strict: 'A strict regulator'}[head.stance] }}, setting core capital at <span class="font-mono tabular-nums">{{ head.requirement|pct(1) }}</span>
+				and {{ head.ltvCap is null ? 'no limit on mortgage borrowing' : 'mortgages at ' ~ head.ltvCap|pct(0) ~ ' of a home\'s price' }}
+				{%- if head.passedOver is not empty %}, chosen over {% for candidate in head.passedOver %}{{ candidate.name }} <span class="text-on-surface-variant">(<span class="font-mono tabular-nums">{{ candidate.requirement|pct(1) }}</span>{% if candidate.ltvCap is defined %}, {{ candidate.ltvCap is null ? 'no limit' : candidate.ltvCap|pct(0) ~ ' limit' }}{% endif %}, {{ candidate.age }})</span>{{ loop.last ? '' : (loop.revindex == 2 ? ' and ' : ', ') }}{% endfor %}{% endif %}.
+			</p>
+			<p class="text-xs text-on-surface-variant mt-2 max-w-3xl">
+				The Council names the head for a single {{ regulator.rules.termYears|number_format(0) }}-year term from a shortlist of {{ regulator.rules.shortlist }}, choosing the candidate nearest its own view of the banks.
+				A head brings a whole regime with them, the rules of a supervisor they know, and both rules change when the head does.
+			</p>
+		</section>
+
+		<div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
+			<section class="bg-surface-container-low rounded-lg p-5 border border-outline-variant/20" aria-labelledby="capital-heading">
+				<h2 id="capital-heading" class="text-sm font-semibold text-on-surface">Core capital</h2>
+				<p class="mt-2 text-2xl font-semibold font-mono tabular-nums text-on-surface">{{ regulator.inForce|pct(2) }}</p>
+				<p class="text-xs text-on-surface-variant">of risk-weighted assets, with a countercyclical buffer of <span class="font-mono tabular-nums">{{ regulator.buffer|pct(2) }}</span> on top</p>
+				{% if regulator.phasing %}
+					<p class="text-xs text-warning mt-1">Rising to <span class="font-mono tabular-nums">{{ regulator.phasing.target|pct(1) }}</span> by <span class="font-mono tabular-nums">{{ regulator.phasing.completeLabel }}</span></p>
+				{% endif %}
+				<p class="text-xs text-on-surface-variant mt-3 leading-relaxed">
+					A head may set anywhere from {{ regulator.rules.lightest|pct(1) }} to {{ regulator.rules.strictest|pct(1) }}, the range the world's largest banks are held to.
+					A rise takes effect over {{ regulator.rules.phaseInMonths }} months, a cut at once. A bank below the requirement and buffer may pay no dividend and buy back no shares,
+					and banks raising capital lend less while they do.
+				</p>
+			</section>
+
+			<section class="bg-surface-container-low rounded-lg p-5 border border-outline-variant/20" aria-labelledby="mortgage-heading">
+				<h2 id="mortgage-heading" class="text-sm font-semibold text-on-surface">Mortgage lending</h2>
+				{% if mortgage.cap is null %}
+					<p class="mt-2 text-2xl font-semibold text-on-surface">No limit</p>
+					<p class="text-xs text-on-surface-variant">on how much of a home's price a buyer may borrow</p>
+				{% else %}
+					<p class="mt-2 text-2xl font-semibold font-mono tabular-nums text-on-surface">{{ mortgage.cap|pct(0) }}</p>
+					<p class="text-xs text-on-surface-variant">the most a buyer may borrow against the price of a home</p>
+				{% endif %}
+				{% if mortgage.heldBelow > 0.0005 %}
+					<p class="text-xs text-on-surface mt-1">Household borrowing stands about <span class="font-mono tabular-nums">{{ mortgage.heldBelow|pct(1) }}</span> below where it would be without the limit.</p>
+				{% endif %}
+				<p class="text-xs text-on-surface-variant mt-1">Household debt is <span class="font-mono tabular-nums">{{ mortgage.debtToIncome|pct(0) }}</span> of disposable income.</p>
+				<p class="text-xs text-on-surface-variant mt-3 leading-relaxed">
+					A limit binds only on buyers who would have borrowed more, so a loose one changes little and a tight one holds back many buyers.
+					It takes effect on the day the head is seated; household borrowing adjusts over the following year or two. A lifted limit frees buyers to borrow again, but they take on new debt only gradually.
+					{% if mortgage.tightestCap is not null %}
+						Of the {{ mortgage.regimes }} regimes a head may bring, {{ mortgage.uncapped }} set no limit and the rest set between {{ mortgage.tightestCap|pct(0) }} and {{ mortgage.loosestCap|pct(0) }}.
+					{% endif %}
+				</p>
+			</section>
+		</div>
+	{% else %}
+		<p class="text-sm text-on-surface-variant">The Regulator has no head yet.</p>
+	{% endif %}
+
+	<section class="bg-surface-container-low rounded-lg border border-outline-variant/20 overflow-hidden" aria-labelledby="banks-heading">
+		<div class="p-5 pb-3">
+			<h2 id="banks-heading" class="text-sm font-semibold text-on-surface">Banks under supervision</h2>
+			<p class="text-xs text-on-surface-variant mt-0.5">Each bank's core capital at its last quarterly report, against the requirement and buffer of <span class="font-mono tabular-nums">{{ required|pct(2) }}</span>.</p>
+		</div>
+		{% if banks is empty %}
+			<p class="px-5 pb-5 text-xs text-on-surface-variant">No bank has reported yet.</p>
+		{% else %}
+			<div class="overflow-x-auto">
+				<table class="w-full text-left border-collapse text-sm min-w-120">
+					<thead>
+						<tr class="table-head bg-surface-container-highest/20">
+							<th scope="col" class="px-5 py-3">Bank</th>
+							<th scope="col" class="px-4 py-3 text-right">Core capital</th>
+							<th scope="col" class="px-4 py-3 text-right">Headroom</th>
+							<th scope="col" class="px-5 py-3 text-right">Standing</th>
+						</tr>
+					</thead>
+					<tbody class="divide-y divide-outline-variant/10">
+						{% for bank in banks %}
+							<tr>
+								<th scope="row" class="px-5 py-2.5 font-normal text-left">
+									<a href="/stock/{{ bank.ticker }}" class="font-mono font-bold text-on-surface hover:text-primary transition-colors">{{ bank.ticker }}</a>
+									<span class="ml-2 text-xs text-on-surface-variant">{{ bank.name }}</span>
+								</th>
+								<td class="px-4 py-2.5 text-right font-mono tabular-nums text-on-surface">{{ bank.cet1|pct(2) }}</td>
+								<td class="px-4 py-2.5 text-right font-mono tabular-nums {{ bank.headroom < 0 ? 'text-warning' : 'text-on-surface-variant' }}">{{ bank.headroom|pct(2, true) }}</td>
+								<td class="px-5 py-2.5 text-right">
+									{% if bank.status == 'below' %}
+										<span class="badge badge-warn">Payouts stopped</span>
+									{% elseif bank.status == 'near' %}
+										<span class="badge badge-neutral">Close to the line</span>
+									{% else %}
+										<span class="badge badge-up">Clear</span>
+									{% endif %}
+								</td>
+							</tr>
+						{% endfor %}
+					</tbody>
+				</table>
+			</div>
+		{% endif %}
+		<p class="source-note px-5 pb-4">{{ source_line('financial-regulator') }}</p>
+	</section>
+</div>
+{% endblock %}

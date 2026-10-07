@@ -86,8 +86,8 @@ class PoliticsState
     // money, and each councillor's on the banks; when each councillor took their seat and when they will leave it early,
     // if they will; the candidates passed over at the last Council vacancy and for the governorship; the committee's
     // balance and supermajority; the last rate meeting; when a governor or councillor was last seated, a councillor last
-    // left early and the majority last shifted; the Financial Regulator's head and the requirement in force; and the
-    // Sovereign Reserve Fund's head.
+    // left early and the majority last shifted; the Financial Regulator's head, the requirement in force and the head's
+    // mortgage cap; and the Sovereign Reserve Fund's head.
     public float $authoritySalt;
     /** @var list<string> */
     public array $councilNames;
@@ -154,6 +154,7 @@ class PoliticsState
     public float $requirementPhaseFrom;
     public float $requirementPhaseStart;
     public float $lastRegulatorAppointedAt;
+    public ?float $regulatorLtvCap;
     public string $fundHeadName;
     public float $fundHeadBirth;
     public float $fundHeadTermStart;

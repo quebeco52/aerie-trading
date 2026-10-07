@@ -384,6 +384,10 @@ readonly class MacroStateDTO
         public float $bankCapitalBuilt = FinancialConstants::OPENING_BANK_CAPITAL_REQUIREMENT,
         /** The requirement and the buffer together as the last tick required them: a rise from it cuts household lending. */
         public float $bankCapitalRequiredLast = FinancialConstants::OPENING_BANK_CAPITAL_REQUIREMENT,
+        /** The mortgage loan-to-value cap on the District's lenders in force, as a share of the property's value; null for none (App\Service\Politics\FinancialRegulator). */
+        public ?float $mortgageLtvCap = null,
+        /** How far the cap has so far held household debt below where it would stand without one, in logs (App\Service\Macro\Subsystem\CreditFiscalSubsystem::mortgageLtvCreditCut()). */
+        public float $ltvCutBuilt = 0.0,
         public float $electricityCarbonPriceLevel = 0.0,
         public float $moneySupplyGrowth = MacroEngine::M2_BASE_GROWTH,
         public float $moneySupplyGrowthEma = MacroEngine::M2_BASE_GROWTH,

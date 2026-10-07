@@ -1283,7 +1283,7 @@ class GovernmentPageBuilder
      *
      * @return array<string, mixed>|null
      */
-    private function regulator(PoliticsStateDTO $politics, MacroStateDTO $macro): ?array
+    public function regulator(PoliticsStateDTO $politics, MacroStateDTO $macro): ?array
     {
         if ($politics->regulatorName === '') {
             return null;

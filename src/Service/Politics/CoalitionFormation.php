@@ -82,20 +82,19 @@ final class CoalitionFormation
     private const RANGE_TOLERANCE = 1e-9;
 
     /**
-     * The talks after a vote, or after a cabinet falls between votes: the cabinet that fell cannot be seated again as it
-     * was, since its parties have just parted.
+     * The talks after a vote, or after a cabinet falls between votes. After a fall there is no status quo: the parties that
+     * fell may form again, usually under a new prime minister, but weigh in as any other cabinet would.
      *
      * @param array<string, int|float>            $seats     Seats by party.
      * @param array<string, float>                $shares    Vote shares by party, which order parties tied on seats.
      * @param array<string, array<string, float>> $positions Positions by party and axis.
      * @param list<string>                        $statusQuo The outgoing cabinet.
      * @param array<string, string>               $blocs     The leader of the bloc each party declared for (declareBlocs()).
-     * @param list<string>                        $fallen    The cabinet that fell, in party order; none after a vote.
      * @return array{cabinet: list<string>, support: list<string>, days: float, log: list<array{day: float, formateur: string, formed: bool, cabinet: list<string>, support: list<string>}>}
      *         The cabinet and its support parties, the days the talks took, and each attempt: the day it ended, the
      *         party that led it, whether it formed a government, and the cabinet it tried.
      */
-    public static function talks(array $seats, array $shares, array $positions, array $statusQuo, array $blocs, MathUtility $draws, array $fallen = []): array
+    public static function talks(array $seats, array $shares, array $positions, array $statusQuo, array $blocs, MathUtility $draws): array
     {
         $order = self::bySize($seats, $shares);
         $largest = $order[0];
@@ -103,7 +102,7 @@ final class CoalitionFormation
             return ['cabinet' => [$largest], 'support' => [], 'days' => 0.0, 'log' => []];
         }
 
-        $options = array_values(array_filter(self::options($seats, $positions, $blocs), static fn(array $option): bool => $option['cabinet'] !== $fallen));
+        $options = self::options($seats, $positions, $blocs);
         $utilities = self::utilities($options, $seats, $positions, $statusQuo, $largest, $blocs);
 
         $log = [];

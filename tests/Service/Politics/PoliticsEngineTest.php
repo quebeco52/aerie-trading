@@ -20,6 +20,7 @@ use App\Service\Macro\Subsystem\MonetaryPolicySubsystem;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Politics\CoalitionFormation;
+use App\Service\Politics\ElectionForecast;
 use App\Service\Politics\PoliticsEngine as Politics;
 use App\Service\Politics\PoliticsState;
 use PHPUnit\Framework\TestCase;
@@ -416,18 +417,28 @@ class PoliticsEngineTest extends TestCase
         $this->assertGreaterThan($state->dietSeats[Diet::IRON_HARBOR], $state->dietSeats[Diet::CIVIC], 'The vote gives the Civic Front back its lead, after the blocs were declared.');
     }
 
-    /** The talks never seat the cabinet that fell, however likely it was. */
-    public function testTheTalksAfterAFallNeverSeatTheCabinetThatFell(): void
+    /**
+     * After a fall the parties that fell may govern together again, as at least 42% of West European successors between
+     * votes do (ParlGov), with no incumbency weight: the talks seat them as often as their odds among all cabinets say.
+     */
+    public function testThePartiesThatFellMayFormAgainWithoutIncumbency(): void
     {
-        $stream = MathUtility::ownStream(8);
-        $fallen = [Diet::VANGUARD];
-        for ($trial = 0; $trial < 200; ++$trial) {
-            $talks = CoalitionFormation::talks(Diet::SEED_SEATS, Diet::SEED_VOTE_SHARES, Diet::HOME_POSITIONS, [], Diet::SEED_BLOCS, $stream, $fallen);
-            $this->assertNotSame($fallen, $talks['cabinet']);
-            foreach ($talks['log'] as $attempt) {
-                $this->assertNotSame($fallen, $attempt['cabinet']);
-            }
+        $fallen = Diet::governingParties(Diet::SEED_COALITION);
+        $odds = ElectionForecast::cabinetOdds(Diet::SEED_SEATS, Diet::SEED_VOTE_SHARES, Diet::HOME_POSITIONS, [], Diet::SEED_BLOCS);
+        $chance = 0.0;
+        foreach ($odds as $option) {
+            $chance += $option['cabinet'] === $fallen ? $option['chance'] : 0.0;
         }
+        $this->assertGreaterThan(0.0, $chance, 'The cabinet that fell is among the cabinets the talks may seat.');
+
+        $stream = MathUtility::ownStream(8);
+        $runs = 1500;
+        $again = 0;
+        for ($trial = 0; $trial < $runs; ++$trial) {
+            $talks = CoalitionFormation::talks(Diet::SEED_SEATS, Diet::SEED_VOTE_SHARES, Diet::HOME_POSITIONS, [], Diet::SEED_BLOCS, $stream);
+            $again += $talks['cabinet'] === $fallen ? 1 : 0;
+        }
+        $this->assertGreaterThan(0, $again, 'The parties that fell can govern together again.');
     }
 
     /** A cabinet's day is an exponential wait at its kind's hazard, drawn once when it has none: the waits average the hazard's inverse. */

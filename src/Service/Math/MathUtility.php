@@ -3756,6 +3756,54 @@ class MathUtility
     }
 
     /**
+     * First upper partial moment of a histogram, E[max(0, X - t)], with X uniform within each bin: the part of a
+     * binned distribution standing above a threshold. Its derivative in t is minus the share above it
+     * (histogramUpperTailShare()), and at a threshold below every bin it is the mean.
+     *
+     * @param list<float> $edges   Bin edges, ascending; one more than the weights.
+     * @param list<float> $weights Each bin's mass; normalised by their sum.
+     * @param float       $threshold The level t.
+     */
+    public static function histogramUpperPartialMoment(array $edges, array $weights, float $threshold): float
+    {
+        $total = array_sum($weights);
+        $moment = 0.0;
+        foreach ($weights as $bin => $weight) {
+            $low = max($edges[$bin], $threshold);
+            $high = $edges[$bin + 1];
+            if ($high <= $low) {
+                continue;
+            }
+            $massAbove = ($weight / $total) * ($high - $low) / ($high - $edges[$bin]);
+            $moment += $massAbove * ((($low + $high) / 2.0) - $threshold);
+        }
+
+        return $moment;
+    }
+
+    /**
+     * Share of a histogram above a threshold, with mass uniform within each bin.
+     *
+     * @param list<float> $edges   Bin edges, ascending; one more than the weights.
+     * @param list<float> $weights Each bin's mass; normalised by their sum.
+     * @param float       $threshold The level t.
+     */
+    public static function histogramUpperTailShare(array $edges, array $weights, float $threshold): float
+    {
+        $total = array_sum($weights);
+        $share = 0.0;
+        foreach ($weights as $bin => $weight) {
+            $low = max($edges[$bin], $threshold);
+            $high = $edges[$bin + 1];
+            if ($high > $low) {
+                $share += ($weight / $total) * ($high - $low) / ($high - $edges[$bin]);
+            }
+        }
+
+        return $share;
+    }
+
+    /**
      * The two Black-Scholes moneyness deviates, d1 and d2.
      *
      * Shared by the price, every greek and the smile, all of which are functions of the same pair. Returns

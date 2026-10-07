@@ -466,7 +466,41 @@ class DashboardController extends AbstractController
                 'recorded_at' => $row['recorded_at'],
             ];
         }
+        $results = array_reverse($results);
 
-        return $this->json(array_reverse($results));
+        return $this->json([
+            'portfolio' => $results,
+            'index' => $results === [] ? [] : $this->indexOver($conn, $results[0]['recorded_at'], $results[count($results) - 1]['recorded_at']),
+            'indexName' => 'Lakebird 30',
+        ]);
+    }
+
+    /** Points the index line draws at most; the fund's history is thinned evenly to this. */
+    private const INDEX_LINE_POINTS = 600;
+
+    /**
+     * The benchmark fund's price over the same wall-clock window as the portfolio series, for the comparison line.
+     * The page rebases it to the portfolio's first value, so the two lines start together.
+     *
+     * @return list<array{price: float, recorded_at: string}>
+     */
+    private function indexOver(\Doctrine\DBAL\Connection $conn, string $from, string $to): array
+    {
+        $rows = $conn->fetchAllAssociative(
+            'SELECT h.price, h.recorded_at FROM etf_history h JOIN etfs e ON e.id = h.etf_id
+             WHERE e.ticker = :ticker AND h.recorded_at BETWEEN :from AND :to
+             ORDER BY h.recorded_at',
+            ['ticker' => \App\Entity\Season::BENCHMARK_TICKER, 'from' => $from, 'to' => $to]
+        );
+
+        $step = max(1, (int) ceil(count($rows) / self::INDEX_LINE_POINTS));
+        $points = [];
+        foreach ($rows as $i => $row) {
+            if ($i % $step === 0 || $i === count($rows) - 1) {
+                $points[] = ['price' => (float) $row['price'], 'recorded_at' => (string) $row['recorded_at']];
+            }
+        }
+
+        return $points;
     }
 }

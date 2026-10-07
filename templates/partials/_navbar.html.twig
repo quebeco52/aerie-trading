@@ -12,6 +12,7 @@
     { href: '/economy', label: 'Economy', active: current_path == '/economy' },
     { href: '/government', label: 'Government', active: current_path starts with '/government' },
     { href: '/reserve', label: 'Sovereign Reserve Fund', active: current_path == '/reserve' },
+    { href: '/regulator', label: 'Financial Regulator', active: current_path == '/regulator' },
     { href: '/district/glasswater-row', label: 'Glasswater Row', active: current_path starts with '/district' }
 ] %}
 {% set district_active = district_links|filter(link => link.active)|length > 0 %}

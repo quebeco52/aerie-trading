@@ -66,6 +66,7 @@ class PoliticsStateTest extends TestCase
         $state->bankCapitalRequirement = 0.1012;
         $state->requirementPhaseFrom = 0.094;
         $state->requirementPhaseStart = 7.0;
+        $state->regulatorLtvCap = 0.85;
 
         $decoded = json_decode(json_encode($state->toArray(), JSON_THROW_ON_ERROR | JSON_PRESERVE_ZERO_FRACTION), true, 512, JSON_THROW_ON_ERROR);
 
@@ -88,5 +89,6 @@ class PoliticsStateTest extends TestCase
         $this->assertSame(Diet::SEED_SEATS, $state->dietSeats);
         $this->assertNull($state->eventType);
         $this->assertSame(Diet::SEED_COALITION, $state->governingCoalition);
+        $this->assertNull($state->regulatorLtvCap, 'A state saved before the mortgage cap runs none.');
     }
 }

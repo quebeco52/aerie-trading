@@ -81,6 +81,8 @@ class MacroFieldRegistryTest extends TestCase
         'previousExpectedPolicyFrom' => 'Last tick\'s forecast date, kept only to see a revision.',
         'bankCapitalBuilt' => 'Lagged build-up toward the requirement and buffer, which bank_capital_requirement and countercyclical_buffer_rate record.',
         'bankCapitalRequiredLast' => 'Last tick\'s requirement plus buffer, kept only to see a rise; both parts are recorded.',
+        'mortgageLtvCap' => 'Input the Financial Regulator\'s head hands the economy; the politics state records it (regulatorLtvCap).',
+        'ltvCutBuilt' => 'Lagged build-up of the cap\'s cut toward CreditFiscalSubsystem::mortgageLtvCreditCut(), which household_debt_to_income carries.',
         'electricityCarbonPriceLevel' => 'Lagged pass-through of carbon_price into the electricity bill, which is recorded.',
         'lastQeLaunchAt' => 'Edge marker for the launch headline; qe_active and qe_intensity record the programme.',
 
