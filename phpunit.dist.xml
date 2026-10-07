@@ -86,6 +86,8 @@
             <file>tests/Service/Market/BulkRowUpdateTest.php</file>
             <file>tests/Service/Market/StockTickColumnsTest.php</file>
             <file>tests/Service/Market/TickCadenceTest.php</file>
+            <file>tests/Service/Season/SeasonStatisticsTest.php</file>
+            <file>tests/Service/Notification/PlayerNotificationTest.php</file>
             <file>tests/Service/Market/OptionDeskSweepTest.php</file>
             <file>tests/Service/Market/OptionSettlementBatchTest.php</file>
             <file>tests/Service/Market/OptionChainListingTest.php</file>
@@ -142,6 +144,8 @@
             <exclude>tests/Service/Market/OpeningBoardBuilderTest.php</exclude>
             <exclude>tests/Service/Market/TickCadenceTest.php</exclude>
             <exclude>tests/Service/Market/ChartBufferWritesTest.php</exclude>
+            <exclude>tests/Service/Season/SeasonStatisticsTest.php</exclude>
+            <exclude>tests/Service/Notification/PlayerNotificationTest.php</exclude>
             <exclude>tests/Service/Corporate/MacroDriverAttributionTest.php</exclude>
         </testsuite>
 

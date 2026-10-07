@@ -133,15 +133,25 @@ class TradeOrderRepository extends ServiceEntityRepository
      *
      * @return list<TradeOrder>
      */
-    public function findSettledForUser(User $user, int $limit): array
+    public function findSettledForUser(User $user, int $limit, int $offset = 0): array
     {
         return $this->findBy(
             [
                 'user' => $user,
                 'status' => [TradeOrder::STATUS_FILLED, TradeOrder::STATUS_CANCELLED],
             ],
-            ['createdAt' => 'DESC'],
-            $limit
+            ['createdAt' => 'DESC', 'id' => 'DESC'],
+            $limit,
+            $offset
         );
+    }
+
+    /** How many settled orders an account has, for paging its history. */
+    public function countSettledForUser(User $user): int
+    {
+        return $this->count([
+            'user' => $user,
+            'status' => [TradeOrder::STATUS_FILLED, TradeOrder::STATUS_CANCELLED],
+        ]);
     }
 }

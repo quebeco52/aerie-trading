@@ -14,6 +14,8 @@
  *   by this wall-clock cadence, not by how fast the simulation ticks (SIM_TICK_INTERVAL_US),
  *   and several wire frames landing inside one cost one write, not several. `points` on a
  *   frame entry cover that entry's wire frame only; do not chart from `market:frame`.
+ * - `player:notification` — a message for the signed-in account alone (a fill, a margin call,
+ *   an alert); never coalesced, never part of a frame.
  */
 
 /**
@@ -128,6 +130,11 @@ export function initMarketStream() {
         globalMarketSocket.onmessage = function(event) {
             try {
                 const payload = JSON.parse(event.data);
+                // A message for this account alone (App\Service\Notification\PlayerNotifier), not a market frame.
+                if (payload && payload.type === 'notification') {
+                    document.dispatchEvent(new CustomEvent('player:notification', { detail: payload }));
+                    return;
+                }
                 document.dispatchEvent(new CustomEvent('market:update', { detail: payload }));
                 absorbIntoFrame(payload);
                 scheduleFrame();

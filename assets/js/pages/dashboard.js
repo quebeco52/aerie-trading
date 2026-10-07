@@ -175,6 +175,16 @@ function initDashboard() {
         payload.stocks.forEach(stock => {
             livePrices[stock.ticker] = parseFloat(stock.price);
 
+            // Watchlist rows carry their ticker; the price cell follows the feed like a holding's does.
+            const watchEl = document.querySelector(`[data-watch-price="${CSS.escape(stock.ticker)}"]`);
+            if (watchEl) {
+                const watchPrice = parseFloat(stock.price);
+                const watchOld = parseFloat(watchEl.dataset.last || watchPrice);
+                setText(watchEl, formatCurrency(watchPrice));
+                flashTick(watchEl, watchPrice - watchOld);
+                watchEl.dataset.last = String(watchPrice);
+            }
+
             const quantity = holdings[stock.ticker]?.quantity ?? null;
 
             if (quantity && quantity > 0) {

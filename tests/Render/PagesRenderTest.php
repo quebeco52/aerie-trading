@@ -57,11 +57,35 @@ final class PagesRenderTest extends KernelTestCase
                 'stocks' => $stocks,
             ]],
             'screener' => ['/screener', 'screener/index.html.twig', ['stocks' => $stocks]],
-            'leaderboard' => ['/leaderboard', 'leaderboard/index.html.twig', ['leaders' => [
-                ['username' => 'kestrel', 'total_value' => 1834221.12, 'cash_balance' => 120331.0, 'stock_value' => 1500000.0, 'etf_value' => 213890.12],
-                ['username' => 'marlowe', 'total_value' => 1402113.50, 'cash_balance' => 30211.0, 'stock_value' => 1300000.0, 'etf_value' => 71902.5],
-                ['username' => 'ptarmigan', 'total_value' => 1210990.00, 'cash_balance' => 410990.0, 'stock_value' => 800000.0, 'etf_value' => 0.0],
-            ]]],
+            'leaderboard' => ['/leaderboard', 'leaderboard/index.html.twig', [
+                'view' => 'season',
+                'views' => ['season' => 'This season', 'networth' => 'Net worth', 'past' => 'Past seasons'],
+                'myId' => 2,
+                'season' => [
+                    'number' => 4, 'span' => 'Year 13 Q1 to Year 17 Q1', 'realSecondsLeft' => 9.5 * 86400, 'qualifyingWeeks' => 13,
+                    'ranked' => [
+                        ['rank' => 1, 'userId' => 1, 'username' => 'kestrel', 'value' => 18342.12, 'return' => 0.312, 'excess' => 0.141, 'sharpe' => 1.42, 'beta' => 1.31, 'maxDrawdown' => 0.183],
+                        ['rank' => 2, 'userId' => 2, 'username' => 'marlowe', 'value' => 14021.50, 'return' => 0.198, 'excess' => 0.027, 'sharpe' => 0.94, 'beta' => 0.88, 'maxDrawdown' => 0.091],
+                        ['rank' => 3, 'userId' => 3, 'username' => 'ptarmigan', 'value' => 12109.90, 'return' => -0.041, 'excess' => -0.212, 'sharpe' => -0.18, 'beta' => 2.05, 'maxDrawdown' => 0.402],
+                    ],
+                    'rankedCount' => 3,
+                    'unranked' => [['rank' => null, 'userId' => 4, 'username' => 'wren', 'value' => 23011.0, 'return' => 0.052, 'excess' => 0.011, 'sharpe' => null, 'beta' => null, 'maxDrawdown' => 0.0]],
+                    'mine' => null, 'mineShown' => true,
+                ],
+            ]],
+            'guide' => ['/guide', 'guide/index.html.twig', [
+                'startingCapital' => 23456.0, 'stampDutyRate' => 0.001, 'cashSpread' => 0.0025, 'marginSpread' => 0.03,
+                'initialMargin' => 0.5, 'maintenanceLong' => 0.25, 'maintenanceShort' => 0.30, 'contractSize' => 100, 'bondFace' => 1000.0,
+                'seasonYears' => 4.0, 'qualifyingWeeks' => 13, 'maxAlerts' => 25, 'maxWatchlist' => 40,
+            ]],
+            'notifications' => ['/notifications', 'notifications/index.html.twig', [
+                'page' => 1, 'pages' => 1, 'total' => 3,
+                'notifications' => [
+                    ['read' => false, 'tone' => 'badge-accent', 'label' => 'Order filled', 'ticker' => 'LAKE', 'dateline' => '3 Mar, Year 14', 'link' => '/stock/LAKE', 'title' => 'Bought 100 LAKE at $81.95', 'body' => 'Your limit order filled.'],
+                    ['read' => false, 'tone' => 'badge-warn', 'label' => 'Margin call', 'ticker' => null, 'dateline' => '28 Feb, Year 14', 'link' => '/dashboard', 'title' => 'Margin call: your broker closed positions to meet the maintenance requirement', 'body' => 'Sold 120 GULL; bought back 2 GULL-C25 contracts.'],
+                    ['read' => true, 'tone' => 'badge-neutral', 'label' => 'Watchlist', 'ticker' => 'HUMM', 'dateline' => '12 Feb, Year 14', 'link' => '/stock/HUMM', 'title' => 'HUMM: Earnings beat expectations by $0.11', 'body' => null],
+                ],
+            ]],
             'news' => ['/news', 'news/index.html.twig', self::newswire()],
             'login' => ['/login', 'security/login.html.twig', ['error' => null, 'last_username' => '']],
             'economy' => ['/economy', 'economy/index.html.twig', ['economic_cycle' => 'Expansion', 'macro' => ['inflation' => 0.0241, 'outputGap' => 0.0132, 'policyRate' => 0.0425, 'yield10y' => 0.0461, 'qeActive' => false, 'qeIntensity' => 0.0]]],
@@ -92,6 +116,21 @@ final class PagesRenderTest extends KernelTestCase
                 'totalRealised' => 3150.25, 'cashRate' => 0.0425, 'marginRate' => 0.075,
                 'sectorBreakdown' => [['name' => 'Financials', 'value' => 500000, 'percent' => 48.3], ['name' => 'Industrials', 'value' => 300000, 'percent' => 29.0]],
                 'margin' => ['buyingPower' => 200000, 'shortMarketValue' => 0, 'optionShortValue' => 0, 'equity' => 1234567, 'maintenanceRequirement' => 0, 'isCalled' => false, 'equityRatio' => 1.0, 'callAmount' => 0], 'marginDebit' => 0, 'livePrices' => [], 'totalInvestedCost' => 1000000,
+                'couponPayments' => [], 'tradePage' => 1, 'tradePages' => 1,
+                'checklist' => ['complete' => false, 'items' => [
+                    ['label' => 'Read the investor guide', 'done' => false, 'href' => '/guide'],
+                    ['label' => 'Buy your first shares', 'done' => true, 'href' => '/'],
+                    ['label' => 'Place a limit or stop order', 'done' => true, 'href' => '/guide#orders'],
+                    ['label' => 'Watch a company', 'done' => false, 'href' => '/screener'],
+                    ['label' => 'Set a price alert', 'done' => false, 'href' => '/guide#alerts'],
+                ]],
+                'season' => [
+                    'number' => 4, 'endsOn' => 'Year 17 Q1', 'realSecondsLeft' => 9.5 * 86400, 'progress' => 0.66, 'ranked' => 31, 'entrants' => 38, 'qualifyingWeeks' => 13,
+                    'row' => ['rank' => 7, 'forfeited' => false, 'weeks' => 137, 'return' => 0.214, 'benchmarkReturn' => 0.171, 'excess' => 0.043, 'sharpe' => 0.81, 'beta' => 1.12, 'alpha' => 0.018, 'maxDrawdown' => 0.137],
+                ],
+                'watchlist' => [['ticker' => 'HUMM', 'name' => 'Hummock Foods', 'assetType' => 'STOCK', 'price' => 41.07, 'change' => -0.0121]],
+                'priceAlerts' => [['ticker' => 'HUMM', 'direction' => 'BELOW', 'targetPrice' => 38.0]],
+                'freshStartBlocker' => null, 'freshStartCapital' => 23456.0,
             ]],
         ];
 

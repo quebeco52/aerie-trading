@@ -55,6 +55,39 @@ final class ChartBufferWritesTest extends TestCase
         }
     }
 
+    /**
+     * A fine tick grid does not grow the buffer: past the cap a stock is buffered every k-th tick, the list still
+     * holds a month, and the short ranges count entries at the thinned rate.
+     */
+    public function testAFineTickGridThinsTheBufferToItsCap(): void
+    {
+        $this->assertSame(1, TickCadence::equityBufferStride(self::TICKS_PER_YEAR), 'Below the cap every tick is buffered.');
+
+        foreach ([604800, 1209600, 302400] as $ticksPerYear) {
+            $stride = TickCadence::equityBufferStride($ticksPerYear);
+            $perYear = TickCadence::equityBufferEntriesPerYear($ticksPerYear);
+
+            $this->assertLessThanOrEqual(TickCadence::MAX_BUFFER_ENTRIES_PER_YEAR, $perYear);
+            $this->assertEqualsWithDelta($ticksPerYear / $stride, $perYear, 1e-9);
+
+            $written = 0;
+            for ($tick = 1; $tick <= 10 * $stride; $tick++) {
+                $writes = TickCadence::chartBufferWrites(self::EQUITY, [], $tick, $ticksPerYear);
+                $equityWritten = $writes !== [] && $writes[0][0] === self::EQUITY;
+                $this->assertSame($tick % $stride === 0, $equityWritten, "Tick {$tick} at {$ticksPerYear}/yr.");
+                if ($equityWritten) {
+                    $written++;
+                    $this->assertSame(ChartRange::bufferLength($perYear), $writes[0][1], 'The list holds a month of thinned entries.');
+                }
+            }
+            $this->assertSame(10, $written);
+        }
+
+        // A year a week at one tick a second: ten ticks per entry, 5,040 entries a month instead of 50,400.
+        $this->assertSame(10, TickCadence::equityBufferStride(604800));
+        $this->assertSame(5040, ChartRange::bufferLength(TickCadence::equityBufferEntriesPerYear(604800)));
+    }
+
     /** Each list keeps a month of its own entries: three hundred ticks, or twenty marks. */
     public function testEachBufferIsTrimmedToAMonthOfItsOwnEntries(): void
     {

@@ -1,0 +1,46 @@
+{% extends 'base.html.twig' %}
+
+{% block title %}Search | Aerie Exchange{% endblock %}
+
+{% block body %}
+<div class="max-w-400 mx-auto px-4 sm:px-6 lg:px-8 pt-8 pb-12 w-full space-y-6">
+
+	<header class="pb-5 border-b border-outline-variant/15">
+		<h1 class="text-2xl md:text-3xl font-semibold text-on-surface tracking-tight">Search</h1>
+		<p class="mt-1.5 text-sm text-on-surface-variant">Listings matching “{{ query }}”: shares, index funds and bonds.</p>
+	</header>
+
+	<form action="/search" method="GET" role="search" class="max-w-xl flex gap-2">
+		<label for="search-page-input" class="sr-only">Search ticker or company</label>
+		<input id="search-page-input" name="q" type="search" value="{{ query }}" class="grow bg-surface-container-lowest border border-outline-variant/25 rounded px-3 py-1.5 text-sm text-on-surface outline-none focus:ring-1 focus:ring-primary">
+		<button type="submit" class="px-3 py-1.5 rounded border border-outline-variant/40 text-sm font-medium text-on-surface hover:bg-surface-container-high transition-colors cursor-pointer">Search</button>
+	</form>
+
+	<div class="max-w-4xl bg-surface-container-low border border-outline-variant/20 rounded-lg overflow-hidden">
+		{% if results|length > 0 %}
+			<table class="w-full text-left border-collapse text-sm">
+				<thead>
+					<tr class="table-head bg-surface-container-highest/20">
+						<th scope="col" class="px-5 py-3">Ticker</th>
+						<th scope="col" class="px-4 py-3">Name</th>
+						<th scope="col" class="px-4 py-3">Type</th>
+						<th scope="col" class="px-5 py-3 text-right">Price</th>
+					</tr>
+				</thead>
+				<tbody class="divide-y divide-outline-variant/10">
+					{% for result in results %}
+						<tr class="hover:bg-surface-container-high/30 transition-colors">
+							<td class="px-5 py-2.5"><a href="{{ result.url }}" class="font-mono font-bold text-primary hover:underline">{{ result.ticker }}</a></td>
+							<td class="px-4 py-2.5 text-on-surface">{{ result.name }}</td>
+							<td class="px-4 py-2.5 text-on-surface-variant text-xs">{{ result.type }}</td>
+							<td class="px-5 py-2.5 text-right font-mono tabular-nums text-on-surface">{{ result.price|money(2) }}</td>
+						</tr>
+					{% endfor %}
+				</tbody>
+			</table>
+		{% else %}
+			<p class="px-5 py-8 text-center text-sm text-on-surface-variant">No listing matches “{{ query }}”. Try a ticker, or part of a company's name.</p>
+		{% endif %}
+	</div>
+</div>
+{% endblock %}

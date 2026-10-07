@@ -2,51 +2,185 @@
 
 {% block title %}Leaderboard | Aerie Exchange{% endblock %}
 
+{% macro season_row(row, myId) %}
+    {% set isMe = myId is not null and row.userId == myId %}
+    <tr class="{{ isMe ? 'bg-primary/5' : 'hover:bg-surface-container-high/30' }} transition-colors">
+        <td class="px-5 py-3 text-right font-mono tabular-nums text-on-surface-variant">{{ row.rank ?? '—' }}</td>
+        <th scope="row" class="px-5 py-3 font-medium text-on-surface text-left">
+            {{ row.username }}
+            {% if isMe %}<span class="ml-2 text-xs font-normal text-primary">You</span>{% endif %}
+        </th>
+        <td class="px-4 py-3 font-mono tabular-nums text-right font-semibold {{ row.return is null ? 'text-on-surface-faint' : row.return|signed_class }}">{{ row.return is null ? '—' : row.return|pct(2, true) }}</td>
+        <td class="px-4 py-3 font-mono tabular-nums text-right {{ row.excess is null ? 'text-on-surface-faint' : row.excess|signed_class }}">{{ row.excess is null ? '—' : row.excess|pct(2, true) }}</td>
+        <td class="px-4 py-3 font-mono tabular-nums text-right {{ row.sharpe is null ? 'text-on-surface-faint' : 'text-on-surface-variant' }}">{{ row.sharpe is null ? '—' : row.sharpe|number_format(2) }}</td>
+        <td class="px-4 py-3 font-mono tabular-nums text-right {{ row.beta is null ? 'text-on-surface-faint' : 'text-on-surface-variant' }}">{{ row.beta is null ? '—' : row.beta|number_format(2) }}</td>
+        <td class="px-4 py-3 font-mono tabular-nums text-right {{ row.maxDrawdown > 0 ? 'text-tertiary' : 'text-on-surface-faint' }}">{{ row.maxDrawdown > 0 ? (-row.maxDrawdown)|pct(1, true) : '—' }}</td>
+        <td class="px-5 py-3 font-mono tabular-nums text-right text-on-surface-variant">{{ row.value|money(2) }}</td>
+    </tr>
+{% endmacro %}
+
+{% macro season_head() %}
+    <thead>
+        <tr class="table-head bg-surface-container-highest/20">
+            <th scope="col" class="px-5 py-3 w-16 text-right">Rank</th>
+            <th scope="col" class="px-5 py-3">Trader</th>
+            <th scope="col" class="px-4 py-3 text-right">Return</th>
+            <th scope="col" class="px-4 py-3 text-right">Vs index</th>
+            <th scope="col" class="px-4 py-3 text-right">Sharpe</th>
+            <th scope="col" class="px-4 py-3 text-right">Beta</th>
+            <th scope="col" class="px-4 py-3 text-right">Deepest fall</th>
+            <th scope="col" class="px-5 py-3 text-right">Net worth</th>
+        </tr>
+    </thead>
+{% endmacro %}
+
 {% block body %}
 <div class="max-w-400 mx-auto px-4 sm:px-6 lg:px-8 pt-8 pb-12 w-full space-y-6">
 
     <header class="pb-5 border-b border-outline-variant/15">
         <h1 class="text-2xl md:text-3xl font-semibold text-on-surface tracking-tight">Leaderboard</h1>
-        <p class="mt-1.5 text-sm text-on-surface-variant">Accounts on the exchange, ranked by net worth.</p>
+        <p class="mt-1.5 text-sm text-on-surface-variant">Each season ranks accounts by their return over the same span, whatever they started with.</p>
     </header>
 
-    {% set me = app.user ? app.user.username : null %}
-    <div class="bg-surface-container-low border border-outline-variant/20 rounded-lg overflow-hidden">
-        <div class="overflow-x-auto">
-            <table class="w-full text-left border-collapse min-w-150">
-                <thead>
-                    <tr class="table-head bg-surface-container-highest/20">
-                        <th scope="col" class="px-5 py-3 w-16 text-right">Rank</th>
-                        <th scope="col" class="px-5 py-3">Trader</th>
-                        <th scope="col" class="px-4 py-3 text-right">Net cash</th>
-                        <th scope="col" class="px-4 py-3 text-right">Holdings</th>
-                        <th scope="col" class="px-5 py-3 text-right">Net worth</th>
-                    </tr>
-                </thead>
-                <tbody class="divide-y divide-outline-variant/10 text-sm">
-                    {% for leader in leaders %}
-                        {% set isMe = me is not null and leader.username == me %}
-                        <tr class="{{ isMe ? 'bg-primary/5' : 'hover:bg-surface-container-high/30' }} transition-colors">
-                            <td class="px-5 py-3 text-right font-mono tabular-nums text-on-surface-variant">{{ loop.index }}</td>
-                            <th scope="row" class="px-5 py-3 font-medium text-on-surface text-left">
-                                {{ leader.username }}
-                                {% if isMe %}<span class="ml-2 text-xs font-normal text-primary">You</span>{% endif %}
-                            </th>
-                            {# Cash net of any margin loan, and every position plus value working in open orders,
-                               so the two columns add up to net worth. #}
-                            <td class="px-4 py-3 font-mono tabular-nums text-right text-on-surface-variant">{{ (leader.cash_balance - leader.margin_debit)|money(2) }}</td>
-                            <td class="px-4 py-3 font-mono tabular-nums text-right text-on-surface-variant">{{ (leader.stock_value + leader.etf_value + leader.bond_value + leader.option_value + leader.escrow_value)|money(2) }}</td>
-                            <td class="px-5 py-3 font-mono tabular-nums text-right font-semibold text-on-surface">{{ leader.total_value|money(2) }}</td>
+    <nav class="flex flex-wrap gap-1" aria-label="Tables">
+        {% for slug, label in views %}
+            <a href="{{ path('app_leaderboard', slug == 'season' ? {} : { view: slug }) }}" class="seg-btn" {% if slug == view %}aria-current="page"{% endif %}>{{ label }}</a>
+        {% endfor %}
+    </nav>
+
+    {% if view == 'season' %}
+        {% if season %}
+            <p class="text-sm text-on-surface-variant">
+                Season {{ season.number }}, {{ season.span }}{% if season.realSecondsLeft > 0 %}, ends in about {{ season.realSecondsLeft|duration_words }}{% endif %}.
+                An account is ranked once it has {{ season.qualifyingWeeks }} weeks on the record; vs index is its return less the Lakebird 30's over the same weeks, distributions reinvested.
+            </p>
+
+            <div class="bg-surface-container-low border border-outline-variant/20 rounded-lg overflow-hidden">
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left border-collapse min-w-175">
+                        {{ _self.season_head() }}
+                        <tbody class="divide-y divide-outline-variant/10 text-sm">
+                            {% for row in season.ranked %}
+                                {{ _self.season_row(row, myId) }}
+                            {% else %}
+                                <tr><td colspan="8" class="px-6 py-10 text-center text-on-surface-variant text-sm">No account has a full quarter on the record yet.</td></tr>
+                            {% endfor %}
+                            {% if season.mine and not season.mineShown and season.mine.rank %}
+                                <tr aria-hidden="true"><td colspan="8" class="px-5 py-1 text-center text-on-surface-faint">⋯</td></tr>
+                                {{ _self.season_row(season.mine, myId) }}
+                            {% endif %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            {% if season.unranked|length > 0 %}
+                <div class="bg-surface-container-low border border-outline-variant/20 rounded-lg overflow-hidden">
+                    <div class="px-5 pt-4 pb-2">
+                        <h2 class="text-sm font-semibold text-on-surface">Not yet ranked</h2>
+                        <p class="text-xs text-on-surface-variant mt-0.5">Accounts that joined this season with fewer than {{ season.qualifyingWeeks }} weeks on the record.</p>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left border-collapse min-w-175">
+                            {{ _self.season_head() }}
+                            <tbody class="divide-y divide-outline-variant/10 text-sm">
+                                {% for row in season.unranked %}
+                                    {{ _self.season_row(row, myId) }}
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            {% endif %}
+        {% else %}
+            <p class="text-sm text-on-surface-variant">The first season opens at the next weekly close.</p>
+        {% endif %}
+
+    {% elseif view == 'networth' %}
+        <p class="text-sm text-on-surface-variant">Every account by net worth, across all seasons.</p>
+        <div class="bg-surface-container-low border border-outline-variant/20 rounded-lg overflow-hidden">
+            <div class="overflow-x-auto">
+                <table class="w-full text-left border-collapse min-w-150">
+                    <thead>
+                        <tr class="table-head bg-surface-container-highest/20">
+                            <th scope="col" class="px-5 py-3 w-16 text-right">Rank</th>
+                            <th scope="col" class="px-5 py-3">Trader</th>
+                            <th scope="col" class="px-4 py-3 text-right">Net cash</th>
+                            <th scope="col" class="px-4 py-3 text-right">Holdings</th>
+                            <th scope="col" class="px-5 py-3 text-right">Net worth</th>
                         </tr>
-                    {% else %}
-                        <tr>
-                            <td colspan="5" class="px-6 py-10 text-center text-on-surface-variant text-sm">No accounts have been opened yet.</td>
-                        </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
+                    </thead>
+                    <tbody class="divide-y divide-outline-variant/10 text-sm">
+                        {% for leader in leaders %}
+                            {% set isMe = myId is not null and leader.user_id == myId %}
+                            <tr class="{{ isMe ? 'bg-primary/5' : 'hover:bg-surface-container-high/30' }} transition-colors">
+                                <td class="px-5 py-3 text-right font-mono tabular-nums text-on-surface-variant">{{ loop.index }}</td>
+                                <th scope="row" class="px-5 py-3 font-medium text-on-surface text-left">
+                                    {{ leader.username }}
+                                    {% if isMe %}<span class="ml-2 text-xs font-normal text-primary">You</span>{% endif %}
+                                </th>
+                                {# Cash net of any margin loan, and every position plus value working in open orders,
+                                   so the two columns add up to net worth. #}
+                                <td class="px-4 py-3 font-mono tabular-nums text-right text-on-surface-variant">{{ (leader.cash_balance - leader.margin_debit)|money(2) }}</td>
+                                <td class="px-4 py-3 font-mono tabular-nums text-right text-on-surface-variant">{{ (leader.stock_value + leader.etf_value + leader.bond_value + leader.option_value + leader.escrow_value)|money(2) }}</td>
+                                <td class="px-5 py-3 font-mono tabular-nums text-right font-semibold text-on-surface">{{ leader.total_value|money(2) }}</td>
+                            </tr>
+                        {% else %}
+                            <tr>
+                                <td colspan="5" class="px-6 py-10 text-center text-on-surface-variant text-sm">No accounts have been opened yet.</td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
         </div>
-    </div>
+
+    {% else %}
+        {% if myHistory|length > 0 %}
+            <div class="bg-surface-container-low border border-outline-variant/20 rounded-lg p-5">
+                <h2 class="text-sm font-semibold text-on-surface mb-3">Your seasons</h2>
+                <table class="w-full text-left border-collapse text-sm">
+                    <thead>
+                        <tr class="table-head">
+                            <th class="py-2">Season</th>
+                            <th class="py-2 text-right">Finish</th>
+                            <th class="py-2 text-right">Return</th>
+                            <th class="py-2 text-right">Index</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-outline-variant/10">
+                        {% for entry in myHistory %}
+                            <tr>
+                                <td class="py-2 text-on-surface">Season {{ entry.season.number }}</td>
+                                <td class="py-2 text-right font-mono tabular-nums text-on-surface-variant">{{ entry.finalRank ?? (entry.forfeited ? 'Left' : 'Unranked') }}</td>
+                                <td class="py-2 text-right font-mono tabular-nums {{ entry.finalReturn is null ? 'text-on-surface-faint' : entry.finalReturn|signed_class }}">{{ entry.finalReturn is null ? '—' : entry.finalReturn|pct(2, true) }}</td>
+                                <td class="py-2 text-right font-mono tabular-nums {{ entry.finalBenchmarkReturn is null ? 'text-on-surface-faint' : entry.finalBenchmarkReturn|signed_class }}">{{ entry.finalBenchmarkReturn is null ? '—' : entry.finalBenchmarkReturn|pct(2, true) }}</td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% endif %}
+
+        <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+            {% for podium in podiums %}
+                <div class="bg-surface-container-low border border-outline-variant/20 rounded-lg p-5">
+                    <h2 class="text-sm font-semibold text-on-surface">Season {{ podium.number }}</h2>
+                    <p class="text-xs text-on-surface-variant mb-3">{{ podium.span }}{% if podium.places[0] is defined and podium.places[0].benchmarkReturn is not null %}; index {{ podium.places[0].benchmarkReturn|pct(1, true) }}{% endif %}</p>
+                    <ol class="space-y-1.5 text-sm">
+                        {% for place in podium.places %}
+                            <li class="flex items-center justify-between gap-3">
+                                <span class="text-on-surface"><span class="font-mono text-on-surface-variant mr-2">{{ place.rank }}</span>{{ place.username }}</span>
+                                <span class="font-mono tabular-nums {{ place.return is null ? 'text-on-surface-faint' : place.return|signed_class }}">{{ place.return is null ? '—' : place.return|pct(1, true) }}</span>
+                            </li>
+                        {% endfor %}
+                    </ol>
+                </div>
+            {% else %}
+                <p class="text-sm text-on-surface-variant">No season has closed yet.</p>
+            {% endfor %}
+        </div>
+    {% endif %}
 
 </div>
 {% endblock %}

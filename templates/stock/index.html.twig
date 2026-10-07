@@ -49,6 +49,16 @@
 
 					<div class="mt-1.5 flex flex-wrap items-center gap-x-2.5 gap-y-1.5 text-sm text-on-surface-variant">
 						<span class="font-mono font-semibold text-on-surface">{{ asset.ticker }}</span>
+						{% if app.user %}
+							<form action="{{ path('app_watchlist_toggle', { ticker: asset.ticker }) }}" method="POST" class="inline-flex">
+								<input type="hidden" name="_token" value="{{ csrf_token('watchlist') }}">
+								<button type="submit" aria-pressed="{{ isWatched ? 'true' : 'false' }}"
+										class="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs border transition-colors cursor-pointer {{ isWatched ? 'text-primary border-primary/40 bg-primary/10' : 'text-on-surface-variant border-outline-variant/30 hover:text-on-surface' }}">
+									<span class="material-symbols-outlined text-sm leading-none {{ isWatched ? 'icon-filled' : '' }}" aria-hidden="true">star</span>
+									{{ isWatched ? 'Watching' : 'Watch' }}
+								</button>
+							</form>
+						{% endif %}
 						<span class="text-on-surface-variant/40" aria-hidden="true">&middot;</span>
 						<span class="group relative cursor-help focus-visible:outline-none" tabindex="0">
 							<span class="term">{{ isEtf ? indexFacts.indexName : asset.industry|default('General') }}</span>
@@ -388,6 +398,10 @@
 								</form>
 							{% endif %}
 						</div>
+
+						{% if app.user and not (not isEtf and asset.isBankrupt) %}
+							{% include 'stock/_price_alerts.html.twig' with { ticker: asset.ticker, price: asset.price, alerts: priceAlerts } only %}
+						{% endif %}
 
 												{% if not isEtf %}
 							<div class="bg-surface-container-low rounded-lg p-5 border border-outline-variant/20">

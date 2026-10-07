@@ -128,12 +128,15 @@ class ShortPositionAccountingTest extends TestCase
         foreach ($sources as $source) {
             $contents = (string) file_get_contents(\dirname(__DIR__, 3) . '/' . $source);
 
+            // Either subtracts it itself or ranks on the shared statement, which is checked below.
             $this->assertMatchesRegularExpression(
-                '/margin_debit|getMarginDebit/',
+                '/margin_debit|getMarginDebit|NET_WORTH_SQL/',
                 $contents,
                 "{$source} totals a user's net worth and must subtract borrowed cash."
             );
         }
+
+        $this->assertStringContainsString('u.cash_balance - u.margin_debit', \App\Service\User\Portfolio::NET_WORTH_SQL);
     }
 
     public function testTheEscrowFragmentStillValuesEveryAssetClass(): void

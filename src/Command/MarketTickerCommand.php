@@ -108,6 +108,12 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
         private \App\Service\Politics\PoliticsEngine $politicsEngine,
         /** Writes the Diet's vote on the tick it is held. */
         private \App\Service\Politics\ElectionRecorder $electionRecorder,
+        /** Account messages raised inside the tick, sent once it commits. */
+        private \App\Service\Notification\PlayerNotifier $notifier,
+        /** Price alerts: bounds read once a tick, fired on the worker. */
+        private \App\Service\Notification\PriceAlertService $priceAlerts,
+        /** The league: each account's week, and the season's turn. */
+        private \App\Service\Season\SeasonService $seasons,
 
         private int $tickIntervalUs,
         private int $ticksPerYear,
@@ -290,6 +296,9 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
 
         $conn = $this->entityManager->getConnection();
 
+        // Alert bounds live in Redis as a cache of the table; rebuilt here so a flushed Redis loses no alert.
+        $this->priceAlerts->rebuildAll();
+
         /**
          * Open, high, low and volume accumulating between history writes, keyed by ticker.
          *
@@ -301,6 +310,9 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
          * @var array<string, array{open: float, high: float, low: float, volume: float}>
          */
         $bars = [];
+
+        /** @var array<string, float> Volume traded since each stock or fund's last chart buffer entry. */
+        $bufferVolume = [];
 
         /**
          * Wall time per phase of the tick just run, in ms. Reported with a lag warning so an overrun names
@@ -409,6 +421,7 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
             $lastStrategicStakeCash = null;
             $simTime = $macroState->totalTime;
             $this->marketEvent->stampSimTime($simTime);
+            $this->notifier->stampSimTime($simTime);
             $lap('macro');
 
             // Retention, on the clock its cutoffs are measured against. The boundary test is the same one
@@ -453,6 +466,7 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
                 // Same rule the margin sweep already follows below, and a tick that rolls back now drops
                 // these instead of having asked the worker to fill against a price that never happened.
                 $pendingLimitOrderChecks = [];
+                $pendingAlertChecks = [];
 
                 $lap('operator+hedge');
                 $result = $this->stockTracker->updateStocks($stocks, $dt, $isHistoryTick, $macroState, $tickCount, $this->ticksPerYear);
@@ -762,6 +776,27 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
                     }
                 }
 
+                // Price alerts: one read of every instrument's nearest targets, a dispatch only when one is reached.
+                // The gate is shared with resting orders under its own keys.
+                $alertBounds = $this->redis->hGetAll(\App\Service\Notification\PriceAlertService::REDIS_KEY);
+                if (is_array($alertBounds) && $alertBounds !== []) {
+                    foreach (array_merge($stockUpdates, $etfUpdates) as $update) {
+                        $ticker = $update['ticker'];
+                        if (!isset($alertBounds[$ticker]) || !empty($update['is_bankrupt'])) {
+                            continue;
+                        }
+                        $bounds = json_decode((string) $alertBounds[$ticker], true);
+                        $gateKey = "alert:{$ticker}";
+                        if (is_array($bounds) && \App\Service\Notification\PriceAlertService::crossed($bounds, (float) $update['price'])) {
+                            if ($this->limitOrderGate->allow($gateKey, $tickCount)) {
+                                $pendingAlertChecks[$ticker] = (float) $update['price'];
+                            }
+                        } else {
+                            $this->limitOrderGate->settle($gateKey);
+                        }
+                    }
+                }
+
                 $lap('limit orders');
 
                 if ($isHistoryTick) {
@@ -834,6 +869,12 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
                 $nowStr = (new \DateTime())->format('Y-m-d H:i:s');
 
                 // A bond buffers its day's mark and nothing between: see chartBufferWrites().
+                // At a fine tick grid a buffer entry stands for several ticks, so it carries their volume, not its own.
+                foreach (array_merge($stockUpdates, $etfUpdates) as $update) {
+                    if (isset($update['volume'])) {
+                        $bufferVolume[$update['ticker']] = ($bufferVolume[$update['ticker']] ?? 0.0) + (float) $update['volume'];
+                    }
+                }
                 $buffers = TickCadence::chartBufferWrites(array_merge($stockUpdates, $etfUpdates), $bondResult['updates'], $tickCount, $this->ticksPerYear);
 
                 $pipeline = $this->redis->multi(\Redis::PIPELINE);
@@ -856,7 +897,8 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
                         // what tells the chart to draw no histogram at all instead of an empty one.
                         $point = ['price' => $chartPrice, 'recorded_at' => $nowStr];
                         if (isset($update['volume'])) {
-                            $point['volume'] = $update['volume'];
+                            $point['volume'] = $bufferVolume[$update['ticker']] ?? $update['volume'];
+                            unset($bufferVolume[$update['ticker']]);
                         }
                         // A bond's yield rides along too, so its yield chart has the same short ranges as its price.
                         if (isset($update['yield_to_maturity'])) {
@@ -989,9 +1031,15 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
                 $this->entityManager->commit();
                 $lap('commit');
 
+                // Expiries and watched-name news raised inside the tick go out only now it has committed.
+                $this->notifier->publish();
+
                 // Drained here, with the tick's locks released: the worker is free to take the rows it needs.
                 foreach ($pendingLimitOrderChecks as $pendingTicker => $pendingPrice) {
                     $this->messageBus->dispatch(new \App\Message\ProcessLimitOrdersMessage($pendingTicker, $pendingPrice));
+                }
+                foreach ($pendingAlertChecks as $pendingTicker => $pendingPrice) {
+                    $this->messageBus->dispatch(new \App\Message\ProcessPriceAlertsMessage($pendingTicker, $pendingPrice));
                 }
                 $lap('limit dispatch');
 
@@ -1001,6 +1049,14 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
                 if ($tickCount % $snapshotInterval === 0) {
                     $this->liquidationService->sweep($macroState->policyRate, $snapshotInterval * $dt);
                     $lap('margin sweep');
+
+                    // The season's week, on the snapshot's cadence and after the sweep, so a forced sale is in it.
+                    $this->seasons->recordWeek(
+                        $macroState->totalTime,
+                        $snapshotInterval * $dt,
+                        \App\Service\User\Portfolio::cashSweepRate($macroState->policyRateEma)
+                    );
+                    $lap('season');
                 }
             } catch (RetryableException $e) {
                 // A deadlock or a lock-wait timeout is not a fault in the tick: InnoDB saw two transactions
@@ -1014,6 +1070,7 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
                 if ($this->entityManager->getConnection()->isTransactionActive()) {
                     $this->entityManager->rollback();
                 }
+                $this->notifier->discard();
 
                 $output->writeln("<comment>Tick {$tickCount} lost to lock contention: " . $e->getMessage() . "</comment>");
 
@@ -1030,6 +1087,7 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
                 if ($this->entityManager->getConnection()->isTransactionActive()) {
                     $this->entityManager->rollback();
                 }
+                $this->notifier->discard();
                 $output->writeln("<error>Error: " . $e->getMessage() . "</error>");
 
                 // If the EntityManager has closed entirely, exit to let Supervisor restart the daemon

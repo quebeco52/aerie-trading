@@ -1,0 +1,32 @@
+{# Price alerts on one instrument: set one at a price, see and cancel those waiting. An alert above the current price
+   waits for a rise, one below waits for a fall; each fires once. #}
+<div class="bg-surface-container-low rounded-lg p-5 border border-outline-variant/20" id="price-alerts">
+	<h3 class="text-sm font-semibold text-on-surface mb-1">Price alerts</h3>
+	<p class="text-xs text-on-surface-variant mb-3">Get a notification the first time {{ ticker }} trades at your price.</p>
+
+	<form action="{{ path('app_alert_create', { ticker: ticker }) }}" method="POST" class="flex items-center gap-2">
+		<input type="hidden" name="_token" value="{{ csrf_token('price_alert') }}">
+		<label for="alert-price" class="sr-only">Alert price</label>
+		<div class="relative grow">
+			<span class="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-on-surface-variant" aria-hidden="true">$</span>
+			<input id="alert-price" name="price" type="number" step="0.01" min="0.01" required inputmode="decimal"
+				   placeholder="{{ price|number_format(2, '.', '') }}"
+				   class="w-full bg-surface-container-lowest border border-outline-variant/25 rounded pl-6 pr-2 py-1.5 text-sm font-mono text-on-surface outline-none focus:ring-1 focus:ring-primary placeholder:text-on-surface-faint">
+		</div>
+		<button type="submit" class="shrink-0 px-3 py-1.5 rounded border border-outline-variant/40 text-sm font-medium text-on-surface hover:bg-surface-container-high transition-colors cursor-pointer">Set alert</button>
+	</form>
+
+	{% if alerts|length > 0 %}
+		<ul class="mt-3 divide-y divide-outline-variant/15 text-sm">
+			{% for alert in alerts %}
+				<li class="py-2 flex items-center justify-between gap-3">
+					<span class="text-on-surface-variant">{{ alert.direction == 'ABOVE' ? 'Rises to' : 'Falls to' }} <span class="font-mono tabular-nums text-on-surface">{{ alert.targetPrice|money(2) }}</span></span>
+					<form action="{{ path('app_alert_cancel', { id: alert.id }) }}" method="POST">
+						<input type="hidden" name="_token" value="{{ csrf_token('price_alert') }}">
+						<button type="submit" class="text-xs text-on-surface-variant hover:text-tertiary transition-colors cursor-pointer">Cancel</button>
+					</form>
+				</li>
+			{% endfor %}
+		</ul>
+	{% endif %}
+</div>

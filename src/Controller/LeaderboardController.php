@@ -2,67 +2,143 @@
 
 namespace App\Controller;
 
+use App\Data\DistrictCalendar;
+use App\Entity\User;
+use App\Repository\SeasonEntryRepository;
+use App\Repository\SeasonRepository;
+use App\Service\Season\SeasonService;
+use App\Service\Season\SeasonStanding;
+use App\Service\View\PlayerPanelBuilder;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
+use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Attribute\Route;
 use Symfony\Contracts\Cache\CacheInterface;
 use Symfony\Contracts\Cache\ItemInterface;
 
+/**
+ * The league tables: the open season ranked by return, every account by net worth, and the podiums of seasons past.
+ */
 class LeaderboardController extends AbstractController
 {
-    #[Route('/leaderboard', name: 'app_leaderboard')]
-    public function index(EntityManagerInterface $entityManager, CacheInterface $cache): Response
-    {
-        // Cache the aggregation query for 5 seconds for fast reloads without DB throttling
-        $leaders = $cache->get('leaderboard_top_100', function (ItemInterface $item) use ($entityManager) {
-            $item->expiresAfter(5);
-            
-            $conn = $entityManager->getConnection();
-            
-            // Value committed to open limit orders counts: it has left the cash balance (a BUY) or the
-            // holdings table (a SELL), so leaving it out ranked traders by how few orders they had working.
-            $sql = "
-            SELECT COALESCE(u.username, 'Anonymous Trader') as username,
-                   u.cash_balance,
-                   COALESCE(stock_totals.stock_val, 0) as stock_value,
-                   COALESCE(etf_totals.etf_val, 0) as etf_value,
-                   COALESCE(bond_totals.bond_val, 0) as bond_value,
-                   COALESCE(option_totals.option_val, 0) as option_value,
-                   COALESCE(escrow.escrow_val, 0) as escrow_value,
-                   u.margin_debit,
-                   (u.cash_balance - u.margin_debit + COALESCE(stock_totals.stock_val, 0) + COALESCE(etf_totals.etf_val, 0) + COALESCE(bond_totals.bond_val, 0) + COALESCE(option_totals.option_val, 0) + COALESCE(escrow.escrow_val, 0)) as total_value
-            FROM users u
-            LEFT JOIN (
-                -- A short's quantity is negative, so this one SUM marks longs and shorts alike.
-                SELECT us.user_id, SUM(us.quantity * s.price) as stock_val
-                FROM user_stocks us
-                JOIN stocks s ON us.stock_id = s.id
-                GROUP BY us.user_id
-            ) stock_totals ON stock_totals.user_id = u.id
-            LEFT JOIN (
-                SELECT ue.user_id, SUM(ue.quantity * e.price) as etf_val
-                FROM user_etfs ue
-                JOIN etfs e ON ue.etf_id = e.id
-                GROUP BY ue.user_id
-            ) etf_totals ON etf_totals.user_id = u.id
-            LEFT JOIN (
-                SELECT ub.user_id, SUM(ub.quantity * b.price) as bond_val
-                FROM user_bonds ub
-                JOIN bonds b ON ub.bond_id = b.id
-                GROUP BY ub.user_id
-            ) bond_totals ON bond_totals.user_id = u.id
-            LEFT JOIN (" . \App\Service\User\Portfolio::OPTION_VALUE_SQL . ") option_totals ON option_totals.user_id = u.id
-            LEFT JOIN (" . \App\Service\User\Portfolio::OPEN_ORDER_ESCROW_SQL . ") escrow ON escrow.user_id = u.id
-            ORDER BY total_value DESC
-            LIMIT 100
-        ";
-            
-            return $conn->fetchAllAssociative($sql);
-        });
+    // --- Display ---
+    /** Rows a table shows; an account further down sees its own row pinned under them. */
+    private const TABLE_ROWS = 100;
+    /** Seconds a computed table is reused; it is one query per account plus the net worth statement. */
+    private const CACHE_SECONDS = 5;
+    /** Closed seasons whose podium the history view lists. */
+    private const PAST_SEASONS = 12;
 
-        return $this->render('leaderboard/index.html.twig', [
-            'leaders' => $leaders,
-        ]);
+    private const VIEWS = ['season' => 'This season', 'networth' => 'Net worth', 'past' => 'Past seasons'];
+
+    #[Route('/leaderboard', name: 'app_leaderboard')]
+    public function index(
+        Request $request,
+        EntityManagerInterface $entityManager,
+        CacheInterface $cache,
+        SeasonRepository $seasons,
+        SeasonEntryRepository $entries,
+        SeasonService $seasonService,
+        PlayerPanelBuilder $panels,
+        \App\Service\Macro\MacroStateProvider $macroStates,
+    ): Response {
+        $view = (string) $request->query->get('view', 'season');
+        if (!isset(self::VIEWS[$view])) {
+            $view = 'season';
+        }
+
+        $user = $this->getUser();
+        $userId = $user instanceof User ? $user->getId() : null;
+        $data = ['view' => $view, 'views' => self::VIEWS, 'myId' => $userId];
+
+        if ($view === 'networth') {
+            $data['leaders'] = $cache->get('leaderboard_top_100', function (ItemInterface $item) use ($entityManager) {
+                $item->expiresAfter(self::CACHE_SECONDS);
+
+                // Value committed to open limit orders counts: it has left the cash balance (a BUY) or the holdings
+                // table (a SELL), so leaving it out ranked traders by how few orders they had working.
+                return $entityManager->getConnection()->fetchAllAssociative(
+                    \App\Service\User\Portfolio::NET_WORTH_SQL . ' ORDER BY total_value DESC LIMIT ' . self::TABLE_ROWS
+                );
+            });
+
+            return $this->render('leaderboard/index.html.twig', $data);
+        }
+
+        if ($view === 'past') {
+            $podiums = [];
+            foreach ($entries->podiums(3, self::PAST_SEASONS) as $entry) {
+                $season = $entry->getSeason();
+                $podiums[$season->getNumber()] ??= [
+                    'number' => $season->getNumber(),
+                    'span' => DistrictCalendar::quarter($season->getStartTime()) . ' to ' . DistrictCalendar::quarter($season->getEndTime()),
+                    'places' => [],
+                ];
+                $podiums[$season->getNumber()]['places'][] = [
+                    'rank' => $entry->getFinalRank(),
+                    'username' => $entry->getUser()->getUsername() ?? 'Anonymous Trader',
+                    'return' => $entry->getFinalReturn(),
+                    'benchmarkReturn' => $entry->getFinalBenchmarkReturn(),
+                ];
+            }
+            $data['podiums'] = array_values($podiums);
+            $data['myHistory'] = $user instanceof User ? $entries->history($user, self::PAST_SEASONS) : [];
+
+            return $this->render('leaderboard/index.html.twig', $data);
+        }
+
+        $season = $seasons->findOpen();
+        $data['season'] = null;
+        if ($season !== null) {
+            $rows = $cache->get('leaderboard_season_' . $season->getNumber(), function (ItemInterface $item) use ($seasonService, $season) {
+                $item->expiresAfter(self::CACHE_SECONDS);
+
+                return array_map(self::rowArray(...), $seasonService->liveTable($season));
+            });
+
+            $ranked = array_values(array_filter($rows, static fn (array $r): bool => $r['rank'] !== null));
+            $unranked = array_values(array_filter($rows, static fn (array $r): bool => $r['rank'] === null && !$r['forfeited']));
+            $mine = null;
+            foreach ($rows as $row) {
+                if ($row['userId'] === $userId) {
+                    $mine = $row;
+                }
+            }
+
+            $yearsLeft = SeasonService::yearsLeft($season, $macroStates->liveState()->totalTime);
+            $data['season'] = [
+                'number' => $season->getNumber(),
+                'span' => DistrictCalendar::quarter($season->getStartTime()) . ' to ' . DistrictCalendar::quarter($season->getEndTime()),
+                'realSecondsLeft' => $yearsLeft * $panels->realSecondsPerYear(),
+                'qualifyingWeeks' => \App\Entity\Season::MIN_QUALIFYING_WEEKS,
+                'ranked' => array_slice($ranked, 0, self::TABLE_ROWS),
+                'rankedCount' => count($ranked),
+                'unranked' => array_slice($unranked, 0, self::TABLE_ROWS),
+                'mine' => $mine,
+                'mineShown' => $mine !== null && $mine['rank'] !== null && $mine['rank'] <= self::TABLE_ROWS,
+            ];
+        }
+
+        return $this->render('leaderboard/index.html.twig', $data);
+    }
+
+    /** @return array<string, mixed> A standing as plain data, so the table can be cached. */
+    private static function rowArray(SeasonStanding $s): array
+    {
+        return [
+            'rank' => $s->rank,
+            'userId' => $s->userId,
+            'username' => $s->username,
+            'value' => $s->value,
+            'return' => $s->return,
+            'benchmarkReturn' => $s->benchmarkReturn,
+            'excess' => $s->excess(),
+            'sharpe' => $s->sharpe,
+            'beta' => $s->beta,
+            'maxDrawdown' => $s->maxDrawdown,
+            'weeks' => $s->weeks,
+            'forfeited' => $s->forfeited,
+        ];
     }
 }

@@ -17,6 +17,10 @@ final class TickCadence
     /** Target history bars per simulated year (~4.8 a trading day), each paying the flush, the tick-column write and a history row; the actual rate is this or one per tick, whichever is coarser. */
     public const TARGET_HISTORY_POINTS_PER_YEAR = 1200;
 
+    // --- Chart Buffer ---
+    /** Most entries a stock or fund chart buffer takes per simulated year (~240 a trading day); above it the buffer keeps every k-th tick, so a slow wall clock with a fine tick grid does not grow Redis by a month of ticks per name. */
+    public const MAX_BUFFER_ENTRIES_PER_YEAR = 60480;
+
     // --- Working Set ---
     /** Times per simulated year the identity map is cleared and the working set re-read from the database: once a trading day. */
     public const WORKING_SET_RELOADS_PER_YEAR = 252;
@@ -73,7 +77,8 @@ final class TickCadence
     /**
      * The chart buffers one tick writes: which quotes, the length each list is trimmed to, and whether it trims.
      *
-     * Stocks and funds buffer every tick and are trimmed once a bar. A bond buffers its day's mark and nothing
+     * Stocks and funds buffer every tick (every equityBufferStride() ticks at a fine tick grid) and are trimmed once a
+     * bar. A bond buffers its day's mark and nothing
      * between, because its clean price moves on nothing else: pushing the same number every tick was three
      * quarters of the buffer pipeline. Each list keeps the month the short ranges read, counted in its own
      * entries (see ChartRange).
@@ -84,13 +89,35 @@ final class TickCadence
      */
     public static function chartBufferWrites(array $equityUpdates, array $bondUpdates, int $tickCount, int $ticksPerYear): array
     {
-        $writes = [[$equityUpdates, ChartRange::bufferLength($ticksPerYear), self::isHistoryTick($tickCount, $ticksPerYear)]];
+        $writes = [];
+
+        if (self::isEquityBufferTick($tickCount, $ticksPerYear)) {
+            $writes[] = [$equityUpdates, ChartRange::bufferLength(self::equityBufferEntriesPerYear($ticksPerYear)), self::isHistoryTick($tickCount, $ticksPerYear)];
+        }
 
         if (self::isBondMarkTick($tickCount, $ticksPerYear)) {
             $writes[] = [$bondUpdates, ChartRange::bufferLength(self::bondMarksPerYear($ticksPerYear)), true];
         }
 
         return $writes;
+    }
+
+    /** Ticks between two entries of a stock or fund chart buffer: one, until the tick rate passes the buffer cap. */
+    public static function equityBufferStride(int $ticksPerYear): int
+    {
+        return max(1, (int) ceil($ticksPerYear / self::MAX_BUFFER_ENTRIES_PER_YEAR));
+    }
+
+    /** Entries a stock or fund chart buffer receives per simulated year, which is the rate its short ranges are counted in. */
+    public static function equityBufferEntriesPerYear(int $ticksPerYear): float
+    {
+        return max(1, $ticksPerYear) / self::equityBufferStride($ticksPerYear);
+    }
+
+    /** Whether a tick writes the stock and fund chart buffers. */
+    public static function isEquityBufferTick(int $tickCount, int $ticksPerYear): bool
+    {
+        return $tickCount % self::equityBufferStride($ticksPerYear) === 0;
     }
 
     /** History bars between events that should happen a given number of times a simulated year. */

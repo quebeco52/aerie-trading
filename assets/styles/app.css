@@ -169,6 +169,10 @@
   .material-symbols-outlined {
     font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
   }
+  /* A toggled-on icon (a watched name's star). */
+  .material-symbols-outlined.icon-filled {
+    font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+  }
 
   /* Applied and cleared by assets/js/utils/tick-flash.js. The transition sits on the resting
      state and is switched off in the flashed one, so a tick snaps straight to its colour — the

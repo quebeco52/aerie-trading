@@ -33,6 +33,12 @@ class TradeOrder
     /** Every type an order may be placed as. */
     public const VALID_TYPES = [self::TYPE_MARKET, self::TYPE_LIMIT, self::TYPE_STOP, self::TYPE_STOP_LIMIT];
 
+    // --- Origin ---
+    /** Sold by the broker to meet a maintenance call. */
+    public const ORIGIN_MARGIN_CALL = 'MARGIN_CALL';
+    /** Bought back because the lender recalled the stock. */
+    public const ORIGIN_BUY_IN = 'BUY_IN';
+
     #[ORM\Id]
     #[ORM\GeneratedValue]
     #[ORM\Column]
@@ -43,7 +49,7 @@ class TradeOrder
     private ?User $user = null;
 
     #[ORM\Column(length: 10)]
-    private ?string $assetType = null; // 'STOCK' or 'ETF'
+    private ?string $assetType = null; // 'STOCK', 'ETF' or 'BOND'
 
     #[ORM\Column(length: 20)]
     private ?string $ticker = null;
@@ -102,6 +108,10 @@ class TradeOrder
 
     #[ORM\Column(type: Types::DATETIME_MUTABLE, nullable: true)]
     private ?\DateTimeInterface $filledAt = null;
+
+    /** Why an order the account holder did not place exists: one of the ORIGIN_* constants, null for their own orders. */
+    #[ORM\Column(length: 20, nullable: true)]
+    private ?string $origin = null;
 
     public function __construct()
     {
@@ -306,6 +316,17 @@ class TradeOrder
     public function setFilledAt(?\DateTimeInterface $filledAt): static
     {
         $this->filledAt = $filledAt;
+        return $this;
+    }
+
+    public function getOrigin(): ?string
+    {
+        return $this->origin;
+    }
+
+    public function setOrigin(?string $origin): static
+    {
+        $this->origin = $origin;
         return $this;
     }
 }

@@ -1,0 +1,65 @@
+{# The account's standing in the open season: return since it entered, against the index fund over the same span,
+   and the risk figures from its weekly record. Built by App\Service\View\PlayerPanelBuilder. #}
+{% import 'partials/_ui.html.twig' as ui %}
+{% set row = season.row %}
+<div class="bg-surface-container-low rounded-lg p-5 border border-outline-variant/20">
+	<div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4">
+		<div>
+			<h2 class="text-sm font-semibold text-on-surface">Season {{ season.number }}</h2>
+			<p class="text-xs text-on-surface-variant mt-0.5">
+				Ends {{ season.endsOn }}{% if season.realSecondsLeft > 0 %}, in about {{ season.realSecondsLeft|duration_words }}{% endif %}.
+				Ranked by return against every other account; the Lakebird 30 is the yardstick.
+			</p>
+		</div>
+		<a href="{{ path('app_leaderboard') }}" class="text-sm text-primary hover:underline shrink-0">Season table</a>
+	</div>
+
+	<div class="h-1 rounded-full bg-surface-container-highest mb-4" role="progressbar" aria-label="Season elapsed" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{ (season.progress * 100)|round }}">
+		<div class="h-1 rounded-full bg-primary" style="width: {{ (season.progress * 100)|round(1) }}%"></div>
+	</div>
+
+	{% if row %}
+		<dl class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-x-6 gap-y-3">
+			<div>
+				<dt class="text-xs text-on-surface-variant">Rank</dt>
+				<dd class="mt-0.5 text-sm font-semibold font-mono tabular-nums text-on-surface">
+					{% if row.rank %}{{ row.rank }} <span class="font-sans text-xs font-normal text-on-surface-variant">of {{ season.ranked }}</span>
+					{% elseif row.forfeited %}<span class="font-sans text-xs font-normal text-on-surface-variant">Left this season</span>
+					{% else %}<span class="font-sans text-xs font-normal text-on-surface-variant">After {{ season.qualifyingWeeks }} weeks ({{ row.weeks }} so far)</span>{% endif %}
+				</dd>
+			</div>
+			<div>
+				<dt class="text-xs text-on-surface-variant">Your return</dt>
+				<dd class="mt-0.5 text-sm font-semibold font-mono tabular-nums {{ row.return is null ? 'text-on-surface-faint' : row.return|signed_class }}">{{ row.return is null ? '—' : row.return|pct(2, true) }}</dd>
+			</div>
+			<div>
+				<dt class="text-xs text-on-surface-variant">Index</dt>
+				<dd class="mt-0.5 text-sm font-semibold font-mono tabular-nums {{ row.benchmarkReturn is null ? 'text-on-surface-faint' : row.benchmarkReturn|signed_class }}">{{ row.benchmarkReturn is null ? '—' : row.benchmarkReturn|pct(2, true) }}</dd>
+			</div>
+			<div>
+				<dt class="text-xs text-on-surface-variant">Ahead of index</dt>
+				<dd class="mt-0.5 text-sm font-semibold font-mono tabular-nums {{ row.excess is null ? 'text-on-surface-faint' : row.excess|signed_class }}">{{ row.excess is null ? '—' : row.excess|pct(2, true) }}</dd>
+			</div>
+			<div>
+				<dt class="text-xs text-on-surface-variant"><span class="group relative cursor-help" tabindex="0"><span class="term">Sharpe ratio</span>{{ ui.tooltip('Return above the cash rate for each unit of week-to-week swing, a year at a time. Higher is better.') }}</span></dt>
+				<dd class="mt-0.5 text-sm font-semibold font-mono tabular-nums {{ row.sharpe is null ? 'text-on-surface-faint' : 'text-on-surface' }}">{{ row.sharpe is null ? '—' : row.sharpe|number_format(2) }}</dd>
+			</div>
+			<div>
+				<dt class="text-xs text-on-surface-variant"><span class="group relative cursor-help" tabindex="0"><span class="term">Beta</span>{{ ui.tooltip('How far your account moves when the index moves 1%. Above 1 amplifies the market, below 1 dampens it.') }}</span></dt>
+				<dd class="mt-0.5 text-sm font-semibold font-mono tabular-nums {{ row.beta is null ? 'text-on-surface-faint' : 'text-on-surface' }}">{{ row.beta is null ? '—' : row.beta|number_format(2) }}</dd>
+			</div>
+			<div>
+				<dt class="text-xs text-on-surface-variant"><span class="group relative cursor-help" tabindex="0"><span class="term">Deepest fall</span>{{ ui.tooltip('The largest drop from a weekly high to a later weekly low this season.') }}</span></dt>
+				<dd class="mt-0.5 text-sm font-semibold font-mono tabular-nums {{ row.maxDrawdown > 0 ? 'text-tertiary' : 'text-on-surface-variant' }}">{{ row.maxDrawdown > 0 ? (-row.maxDrawdown)|pct(1, true) : '—' }}</dd>
+			</div>
+		</dl>
+		{% if row.alpha is not null %}
+			<p class="mt-3 text-xs text-on-surface-variant">
+				Of your return, the market exposure accounts for a beta of <span class="font-mono">{{ row.beta|number_format(2) }}</span>; the rest, your stock picking, comes to
+				<span class="font-mono {{ row.alpha|signed_class }}">{{ row.alpha|pct(1, true) }}</span> a year.
+			</p>
+		{% endif %}
+	{% else %}
+		<p class="text-sm text-on-surface-variant">You join the table at the next weekly close.</p>
+	{% endif %}
+</div>

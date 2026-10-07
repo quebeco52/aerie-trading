@@ -1,0 +1,100 @@
+{% extends 'base.html.twig' %}
+
+{% block title %}Investor guide | Aerie Exchange{% endblock %}
+
+{% set sections = [
+	{ id: 'account', label: 'Your account' },
+	{ id: 'orders', label: 'Placing orders' },
+	{ id: 'costs', label: 'What a trade costs' },
+	{ id: 'margin', label: 'Margin and short selling' },
+	{ id: 'options', label: 'Options' },
+	{ id: 'bonds', label: 'Bonds' },
+	{ id: 'income', label: 'Income' },
+	{ id: 'alerts', label: 'Watchlist, alerts and notifications' },
+	{ id: 'seasons', label: 'Seasons and the leaderboard' },
+] %}
+
+{% block body %}
+<div class="max-w-400 mx-auto px-4 sm:px-6 lg:px-8 pt-8 pb-12 w-full">
+
+	<header class="pb-5 mb-6 border-b border-outline-variant/15">
+		<h1 class="text-2xl md:text-3xl font-semibold text-on-surface tracking-tight">Investor guide</h1>
+		<p class="mt-1.5 text-sm text-on-surface-variant">How the Aerie Exchange works for a new account, from a first order to the season table.</p>
+	</header>
+
+	<div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+		<nav class="lg:col-span-3" aria-label="Guide sections">
+			<ol class="lg:sticky lg:top-20 space-y-1 text-sm">
+				{% for section in sections %}
+					<li><a href="#{{ section.id }}" class="block px-3 py-1.5 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors">{{ section.label }}</a></li>
+				{% endfor %}
+			</ol>
+		</nav>
+
+		<article class="lg:col-span-9 max-w-3xl space-y-10 text-sm leading-relaxed text-on-surface-variant [&_h2]:text-lg [&_h2]:font-semibold [&_h2]:text-on-surface [&_h2]:mb-3 [&_p]:mb-3 [&_strong]:text-on-surface [&_strong]:font-semibold">
+
+			<section id="account" class="scroll-mt-20">
+				<h2>Your account</h2>
+				<p>A new account opens with <strong class="font-mono">{{ startingCapital|money(2) }}</strong> in cash. The amount keeps pace with prices in the District, so an account opened today has the same buying power as one opened in Year 1.</p>
+				<p>Cash you are not using is swept overnight into money market funds and earns the Monetary Authority's policy rate less <span class="font-mono">{{ cashSpread|pct(2) }}</span>, credited weekly. Holding cash is a position too: when rates are high, it pays to wait.</p>
+				<p>Your <a href="/dashboard" class="text-primary hover:underline">portfolio</a> shows what you hold, what it has earned and what is waiting in open orders.</p>
+			</section>
+
+			<section id="orders" class="scroll-mt-20">
+				<h2>Placing orders</h2>
+				<p>Every company and index fund page has an order ticket. Four order types are offered:</p>
+				<ul class="list-disc pl-5 space-y-1.5 mb-3">
+					<li><strong>Market</strong> fills now at the price the dealers quote.</li>
+					<li><strong>Limit</strong> waits until the price comes to yours and never fills worse. A limit buy sets the cash aside; a limit sell sets the shares aside.</li>
+					<li><strong>Stop</strong> waits until the price moves through your trigger, then sells (or buys) at the market. Use it to cut a loss. In a fast fall it can fill well below the trigger.</li>
+					<li><strong>Stop-limit</strong> triggers like a stop, then waits like a limit, so it never fills worse than your limit but may not fill at all.</li>
+				</ul>
+				<p>A resting order works until it fills or you cancel it, and you are notified when it fills.</p>
+			</section>
+
+			<section id="costs" class="scroll-mt-20">
+				<h2>What a trade costs</h2>
+				<p>You buy at the dealers' offer and sell at their bid; the gap between them is the spread, and it widens when markets are stressed. A large order also moves the price against itself as it fills, more so in thinly traded names. The ticket shows both before you send the order.</p>
+				<p>Trades in listed shares pay a stamp duty of <span class="font-mono">{{ stampDutyRate|pct(2) }}</span> on each side, set by the Diet and paid to the Sovereign Reserve Fund. Index funds and bonds pay no duty. An order larger than the dealers can absorb at once is refused; work a large position in pieces.</p>
+			</section>
+
+			<section id="margin" class="scroll-mt-20">
+				<h2>Margin and short selling</h2>
+				<p>Margin is off until you switch it on in the Account tab of your portfolio. With it on you can borrow against your holdings at the policy rate plus <span class="font-mono">{{ marginSpread|pct(2) }}</span>, sell shares short and write options.</p>
+				<p>A new position needs equity of <span class="font-mono">{{ initialMargin|pct(0) }}</span> of its value. After that, equity must stay above <span class="font-mono">{{ maintenanceLong|pct(0) }}</span> of long positions and <span class="font-mono">{{ maintenanceShort|pct(0) }}</span> of shorts. Below that line your broker issues a <strong>margin call</strong> at the weekly review: written options are bought back first, then your largest holdings are sold at the market until the account meets the requirement.</p>
+				<p>Borrowed stock carries a fee, charged weekly, that rises as a name becomes hard to borrow. If lenders recall their stock, a short is <strong>bought in</strong> however well the account is doing. Losses on a short have no ceiling.</p>
+			</section>
+
+			<section id="options" class="scroll-mt-20">
+				<h2>Options</h2>
+				<p>Listed companies with an option chain show it on their page. One contract covers <span class="font-mono">{{ contractSize }}</span> shares, and option orders trade at the market. A call gains when the shares rise and a put when they fall; the most a buyer can lose is the premium paid.</p>
+				<p>At expiry, any contract in the money is exercised automatically and settled in shares at the strike price. One that expires out of the money lapses worthless. Writing contracts requires margin, and a writer can be assigned.</p>
+			</section>
+
+			<section id="bonds" class="scroll-mt-20">
+				<h2>Bonds</h2>
+				<p>The <a href="/bonds" class="text-primary hover:underline">bond board</a> lists the Exchequer's bonds and the companies' own. Prices are quoted clean, per bond of <span class="font-mono">{{ bondFace|money(0) }}</span> face value. A bond pays its coupon twice a year and returns its face value at maturity. Its price falls when yields rise, and a corporate bond also carries the risk that its issuer defaults.</p>
+			</section>
+
+			<section id="income" class="scroll-mt-20">
+				<h2>Income</h2>
+				<p>Dividends are paid into your cash on each ex-date, index fund distributions each quarter, and bond coupons on their payment dates. All of it is listed in your portfolio and counted in your return.</p>
+			</section>
+
+			<section id="alerts" class="scroll-mt-20">
+				<h2>Watchlist, alerts and notifications</h2>
+				<p>Choose <strong>Watch</strong> on a company or fund to add it to your watchlist (up to <span class="font-mono">{{ maxWatchlist }}</span> names). Every story about it then reaches your notifications.</p>
+				<p>Under the order ticket you can set a <strong>price alert</strong>: one above the current price waits for a rise, one below for a fall, and each fires once. You can have <span class="font-mono">{{ maxAlerts }}</span> waiting at a time.</p>
+				<p>The bell at the top of every page counts unread notifications: filled orders, margin calls and buy-ins, option expiries, alerts, news on watched names and season results. They also appear as they happen while a page is open.</p>
+			</section>
+
+			<section id="seasons" class="scroll-mt-20">
+				<h2>Seasons and the leaderboard</h2>
+				<p>The <a href="{{ path('app_leaderboard') }}" class="text-primary hover:underline">leaderboard</a> runs in seasons of <span class="font-mono">{{ seasonYears|number_format(0) }}</span> years. Each season ranks every account by its return from the moment it entered, so a new account competes on equal terms with one that has traded for decades. Your account carries over from one season to the next; only the scoring resets.</p>
+				<p>An account is ranked once it has <span class="font-mono">{{ qualifyingWeeks }}</span> weekly closes on the record. The table also shows each account's return against the Lakebird 30 index fund, its Sharpe ratio (return for the risk taken), its beta (how closely it follows the market) and its deepest fall.</p>
+				<p>If an account has lost too much to go on, you can start afresh from the Account tab of your portfolio. Your holdings and history are cleared, and you sit out the rest of the season.</p>
+			</section>
+		</article>
+	</div>
+</div>
+{% endblock %}

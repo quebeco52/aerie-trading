@@ -67,8 +67,26 @@ $worker->onWorkerStart = function ($worker) {
     
     $redis = new Client($redisUrl);
     
-    // Subscribe to the channel that MarketTickerCommand publishes to
-    $redis->subscribe(['market_updates'], function ($channel, $message) use ($worker) {
+    // market_updates is the public feed, sent to every connection. player_notifications carries one account's
+    // message (App\Service\Notification\PlayerNotifier) and goes only to that account's connections, uid stripped.
+    $redis->subscribe(['market_updates', 'player_notifications'], function ($channel, $message) use ($worker) {
+        if ($channel === 'player_notifications') {
+            $payload = json_decode($message, true);
+            $target = is_array($payload) ? (string) ($payload['uid'] ?? '') : '';
+            if ($target === '' || $target === 'guest') {
+                return;
+            }
+            unset($payload['uid']);
+            $outgoing = json_encode($payload);
+            foreach ($worker->connections as $connection) {
+                if (isset($connection->uid) && (string) $connection->uid === $target) {
+                    $connection->send($outgoing);
+                }
+            }
+
+            return;
+        }
+
         foreach ($worker->connections as $connection) {
             if (isset($connection->uid)) {
                 $connection->send($message);

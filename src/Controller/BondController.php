@@ -17,6 +17,7 @@ use App\Service\Math\FinancialConstants;
 use App\Service\User\CostBasisCalculator;
 use App\Service\User\CouponIncomeCalculator;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
+use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Attribute\Route;
@@ -116,7 +117,8 @@ class BondController extends AbstractController
         BondPricingEngine $pricingEngine,
         PriceChangeFeed $priceChangeFeed,
         CostBasisCalculator $costBasis,
-        CouponIncomeCalculator $couponIncome
+        CouponIncomeCalculator $couponIncome,
+        #[Autowire('%app.ticks_per_year%')] int $ticksPerYear,
     ): Response {
         $bond = $bondRepository->findOneByTicker($ticker);
         if (!$bond instanceof Bond) {
@@ -169,7 +171,7 @@ class BondController extends AbstractController
             'userCouponIncome' => $userCouponIncome,
             'openOrders' => $openOrders,
             'curve' => $this->sampleCurve($pricingEngine, $macro),
-            'ticksPerYear' => (int) ($_ENV['SIM_TICKS_PER_YEAR'] ?? 14400),
+            'ticksPerYear' => $ticksPerYear,
         ]);
     }
 
