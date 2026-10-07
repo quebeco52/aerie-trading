@@ -4,10 +4,13 @@ declare(strict_types=1);
 
 namespace App\Service\Market;
 
+use App\Entity\Notification;
 use App\Entity\Stock;
+use App\Entity\TradeOrder;
 use App\Entity\User;
 use App\Service\Macro\MacroEngine;
 use App\Service\Math\FinancialConstants;
+use App\Service\Notification\PlayerNotifier;
 use Doctrine\ORM\EntityManagerInterface;
 use Psr\Log\LoggerInterface;
 
@@ -32,7 +35,11 @@ final class ForcedLiquidationService
         private readonly SecuritiesLendingDesk $lendingDesk,
         private readonly TradeExecutionService $tradeExecution,
         private readonly LoggerInterface $logger,
+        private readonly ?PlayerNotifier $notifier = null,
     ) {}
+
+    /** @var array<int, array<string, list<string>>> Forced orders filled this sweep, by account and origin. */
+    private array $forced = [];
 
     /**
      * Runs one sweep.
@@ -58,10 +65,12 @@ final class ForcedLiquidationService
         $liquidated = 0;
         $boughtIn = 0;
 
+        $this->forced = [];
         foreach ($this->accountsAtRisk() as $user) {
             $boughtIn += $this->processBuyIns($user);
             $liquidated += $this->processMarginCall($user);
         }
+        $this->notifyForced();
 
         return [
             'interest' => $interest,
@@ -223,7 +232,7 @@ final class ForcedLiquidationService
                 continue;
             }
 
-            if ($this->forceOrder($user, (string) $row['ticker'], 'COVER', $quantity, 'buy-in')) {
+            if ($this->forceOrder($user, (string) $row['ticker'], 'COVER', $quantity, TradeOrder::ORIGIN_BUY_IN)) {
                 $boughtIn++;
             }
         }
@@ -293,7 +302,7 @@ final class ForcedLiquidationService
                 continue;
             }
 
-            if ($this->forceOrder($user, (string) $position['ticker'], 'SELL', $quantity, 'margin call')) {
+            if ($this->forceOrder($user, (string) $position['ticker'], 'SELL', $quantity, TradeOrder::ORIGIN_MARGIN_CALL)) {
                 $remaining -= $quantity * $price;
                 $sold++;
             }
@@ -335,7 +344,7 @@ final class ForcedLiquidationService
                 continue;
             }
 
-            if (!$this->forceOrder($user, (string) $position['ticker'], 'COVER', $contracts, 'margin call')) {
+            if (!$this->forceOrder($user, (string) $position['ticker'], 'COVER', $contracts, TradeOrder::ORIGIN_MARGIN_CALL)) {
                 continue;
             }
 
@@ -362,7 +371,18 @@ final class ForcedLiquidationService
     private function forceOrder(User $user, string $ticker, string $action, int $quantity, string $reason): bool
     {
         try {
-            $this->tradeExecution->executeOrder($user, $ticker, $action, 'MARKET', $quantity);
+            $assetType = $this->tradeExecution->executeOrder($user, $ticker, $action, 'MARKET', $quantity, null, null, $reason);
+
+            if ($user->getId() !== null) {
+                $unit = $assetType === 'OPTION' ? ($quantity === 1 ? ' contract' : ' contracts') : '';
+                $this->forced[$user->getId()][$reason][] = sprintf(
+                    '%s %s %s%s',
+                    $action === 'SELL' ? 'sold' : 'bought back',
+                    number_format($quantity),
+                    $ticker,
+                    $unit
+                );
+            }
 
             return true;
         } catch (\Throwable $e) {
@@ -377,5 +397,32 @@ final class ForcedLiquidationService
 
             return false;
         }
+    }
+
+    /** One message per account and cause, listing what was sold or bought back in its name this sweep. */
+    private function notifyForced(): void
+    {
+        if ($this->notifier === null || $this->forced === []) {
+            return;
+        }
+
+        foreach ($this->forced as $userId => $byOrigin) {
+            foreach ($byOrigin as $origin => $lines) {
+                $isBuyIn = $origin === TradeOrder::ORIGIN_BUY_IN;
+                $this->notifier->queue(
+                    $userId,
+                    $isBuyIn ? Notification::KIND_BUY_IN : Notification::KIND_MARGIN_CALL,
+                    $isBuyIn
+                        ? 'Buy-in: the lender recalled stock you had sold short'
+                        : 'Margin call: your broker closed positions to meet the maintenance requirement',
+                    ucfirst(implode('; ', $lines)) . '.',
+                    null,
+                    '/dashboard'
+                );
+            }
+        }
+
+        $this->forced = [];
+        $this->notifier->publish();
     }
 }

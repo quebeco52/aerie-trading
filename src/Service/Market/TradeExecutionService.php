@@ -14,6 +14,7 @@ use App\Entity\UserStock;
 use App\Service\Market\Flow\OrderFlowStoreInterface;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\MathUtility;
+use App\Service\Notification\PlayerNotifier;
 use App\Service\User\Portfolio;
 use Doctrine\ORM\EntityManagerInterface;
 
@@ -55,6 +56,7 @@ class TradeExecutionService
         private OptionTradeService $optionTradeService,
         private \App\Service\User\CashLedger $cashLedger,
         private ?\App\Service\Macro\MacroStateProvider $macroStates = null,
+        private ?\App\Service\Notification\PlayerNotifier $notifier = null,
     ) {}
 
     /**
@@ -149,7 +151,7 @@ class TradeExecutionService
      *
      * @return string The asset class filled: STOCK, ETF, BOND or OPTION.
      */
-    public function executeOrder(User $user, string $ticker, string $action, string $orderType, int $quantity, ?string $limitPrice = null, ?string $stopPrice = null): string
+    public function executeOrder(User $user, string $ticker, string $action, string $orderType, int $quantity, ?string $limitPrice = null, ?string $stopPrice = null, ?string $origin = null): string
     {
         if ($quantity <= 0) {
             throw new \Exception('Invalid quantity.');
@@ -268,6 +270,7 @@ class TradeExecutionService
             $order->setQuantity($quantity);
             $order->setLimitPrice($limitPrice);
             $order->setStopPrice($stopPrice);
+            $order->setOrigin($origin);
 
             if ($orderType === TradeOrder::TYPE_MARKET) {
                 // Execute immediately at market price
@@ -796,6 +799,18 @@ class TradeExecutionService
             $this->em->getConnection()->commit();
 
             $this->updateRedisBounds($ticker);
+
+            if ($this->notifier !== null && $user->getId() !== null) {
+                $this->notifier->queue(
+                    $user->getId(),
+                    \App\Entity\Notification::KIND_FILL,
+                    PlayerNotifier::fillLine($order->getAction(), $quantity, $ticker, $fillPrice),
+                    sprintf('Your %s order filled.', strtolower(str_replace('_', '-', (string) $order->getOrderType()))),
+                    $ticker,
+                    PlayerNotifier::assetLink($asset->type, $ticker)
+                );
+                $this->notifier->publish();
+            }
 
         } catch (\Throwable $e) {
             if ($this->em->getConnection()->isTransactionActive()) {

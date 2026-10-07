@@ -28,6 +28,7 @@ framework:
             # synchronously in whichever process dispatched it, which put every resting-order check,
             # its row locks and its flushes inside the market ticker's per-tick transaction.
             App\Message\ProcessLimitOrdersMessage: async
+            App\Message\ProcessPriceAlertsMessage: async
             # Retention runs off the simulation clock, triggered by the ticker. Routed so the DELETEs run on
             # the worker; unrouted, Messenger would handle it in-process and put them in the tick loop.
             App\Message\PruneHistoryMessage: async

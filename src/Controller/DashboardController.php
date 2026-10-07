@@ -37,7 +37,9 @@ class DashboardController extends AbstractController
         \App\Service\User\DividendIncomeCalculator $dividendIncome,
         \App\Service\User\CouponIncomeCalculator $couponIncome,
         \App\Service\Market\MarginEngine $marginEngine,
-        \App\Service\Macro\MacroStateProvider $macroStateProvider
+        \App\Service\Macro\MacroStateProvider $macroStateProvider,
+        \App\Service\View\PlayerPanelBuilder $playerPanels,
+        Request $request,
     ): Response
     {
         /** @var User $user */
@@ -307,7 +309,9 @@ class DashboardController extends AbstractController
         usort($holdingsData, fn($a, $b) => $b['marketValue'] <=> $a['marketValue']);
 
         $openOrders = $orders->findOpenForUser($user);
-        $tradeHistory = $orders->findSettledForUser($user, self::TRADE_HISTORY_ROWS);
+        $tradePages = max(1, (int) ceil($orders->countSettledForUser($user) / self::TRADE_HISTORY_ROWS));
+        $tradePage = min($tradePages, max(1, $request->query->getInt('trades', 1)));
+        $tradeHistory = $orders->findSettledForUser($user, self::TRADE_HISTORY_ROWS, ($tradePage - 1) * self::TRADE_HISTORY_ROWS);
 
         // Prepare Sector Diversification percentages
         $sectorBreakdown = [];
@@ -399,7 +403,33 @@ class DashboardController extends AbstractController
             'marginRate' => \App\Service\Market\ForcedLiquidationService::marginLoanRate($macro->policyRate),
             'totalDividendIncome' => $totalDividendIncome,
             'dividendPayments' => $dividendIncome->recentPayments($user),
-        ]);
+            'couponPayments' => $couponIncome->recentPayments($user),
+            'tradePage' => $tradePage,
+            'tradePages' => $tradePages,
+        ] + $playerPanels->build($user, $macro->totalTime, $filledOrders !== []));
+    }
+
+    /** Closes the account's book and reopens it with starting capital; see App\Service\User\FreshStart. */
+    #[Route('/account/fresh-start', name: 'app_fresh_start', methods: ['POST'])]
+    public function freshStart(Request $request, \App\Service\User\FreshStart $freshStart): Response
+    {
+        /** @var User $user */
+        $user = $this->getUser();
+
+        if (!$this->isCsrfTokenValid('fresh_start', (string) $request->request->get('_token')) || $request->request->get('confirm') !== '1') {
+            $this->addFlash('error', 'Tick the box to confirm before starting afresh.');
+
+            return $this->redirectToRoute('app_dashboard', [], Response::HTTP_SEE_OTHER);
+        }
+
+        try {
+            $freshStart->restart($user);
+            $this->addFlash('success', sprintf('Your account starts afresh with %s in cash.', '$' . number_format((float) $user->getCashBalance(), 2)));
+        } catch (\RuntimeException $e) {
+            $this->addFlash('error', $e->getMessage());
+        }
+
+        return $this->redirectToRoute('app_dashboard', [], Response::HTTP_SEE_OTHER);
     }
 
     /**

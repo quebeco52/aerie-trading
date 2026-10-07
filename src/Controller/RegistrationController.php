@@ -24,7 +24,9 @@ class RegistrationController extends AbstractController
         UserPasswordHasherInterface $userPasswordHasher, 
         EntityManagerInterface $entityManager,
         VerifyEmailHelperInterface $verifyEmailHelper,
-        MailerInterface $mailer
+        MailerInterface $mailer,
+        \App\Service\Macro\MacroStateProvider $macroStates,
+        \App\Service\Season\SeasonService $seasons,
     ): Response {
         if ($this->getUser()) {
             return $this->redirectToRoute('app_dashboard'); 
@@ -49,13 +51,17 @@ class RegistrationController extends AbstractController
             $user = new User();
             $user->setEmail($email);
             $user->setUsername($username);
-            $user->setCashBalance('10000.00'); 
+            // Year-1 starting cash at today's price level, so a late joiner starts with the same purchasing power.
+            $macro = $macroStates->liveState();
+            $user->setCashBalance(\App\Service\Season\SeasonService::startingCapital($macro->consumerPriceLevel));
 
             $hashedPassword = $userPasswordHasher->hashPassword($user, $plainPassword);
             $user->setPassword($hashedPassword);
 
             try {
                 $entityManager->persist($user);
+                $entityManager->flush();
+                $seasons->join($user, $macro->totalTime, (float) $user->getCashBalance());
                 $entityManager->flush();
 
                 // Generate a signed url and email it to the user

@@ -44,6 +44,33 @@
             </dl>
         </header>
 
+        {% if not checklist.complete %}
+            <div class="bg-surface-container-low rounded-lg p-5 border border-outline-variant/20" data-controller="checklist">
+                <div class="flex items-start justify-between gap-4 mb-3">
+                    <div>
+                        <h2 class="text-sm font-semibold text-on-surface">Your first week</h2>
+                        <p class="text-xs text-on-surface-variant mt-0.5">A few steps that show what the Exchange can do for you.</p>
+                    </div>
+                    <button type="button" data-action="checklist#dismiss" class="text-xs text-on-surface-variant hover:text-on-surface transition-colors cursor-pointer">Hide</button>
+                </div>
+                <ol class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2 text-sm">
+                    {% for item in checklist.items %}
+                        <li>
+                            <a href="{{ item.href }}" class="flex items-center gap-2 rounded border border-outline-variant/20 px-3 py-2 hover:bg-surface-container-high transition-colors {{ item.done ? 'text-on-surface-variant' : 'text-on-surface' }}">
+                                <span class="material-symbols-outlined text-base {{ item.done ? 'text-secondary icon-filled' : 'text-on-surface-faint' }}" aria-hidden="true">{{ item.done ? 'check_circle' : 'radio_button_unchecked' }}</span>
+                                <span class="{{ item.done ? 'line-through' : '' }}">{{ item.label }}</span>
+                                {% if item.done %}<span class="sr-only">(done)</span>{% endif %}
+                            </a>
+                        </li>
+                    {% endfor %}
+                </ol>
+            </div>
+        {% endif %}
+
+        {% if season %}
+            {% include 'dashboard/_season.html.twig' with { season: season } only %}
+        {% endif %}
+
         <div class="bg-surface-container-low rounded-lg p-5 border border-outline-variant/20">
             <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-4">
                 <h2 class="text-sm font-semibold text-on-surface">Value over time</h2>
@@ -77,6 +104,12 @@
                     Orders
                     {% if openOrders|length > 0 %}
                         <span class="text-xs font-normal text-on-surface-variant tabular-nums">{{ openOrders|length }}</span>
+                    {% endif %}
+                </button>
+                <button class="portfolio-tab-btn pb-2.5 text-sm font-medium border-b-2 transition-colors flex items-center gap-1.5 whitespace-nowrap text-on-surface-variant hover:text-on-surface border-transparent cursor-pointer" data-tab="watchlist" data-tabs-target="tab" data-action="click->tabs#select">
+                    Watchlist
+                    {% if watchlist|length > 0 %}
+                        <span class="text-xs font-normal text-on-surface-variant tabular-nums">{{ watchlist|length }}</span>
                     {% endif %}
                 </button>
                 <button class="portfolio-tab-btn pb-2.5 text-sm font-medium border-b-2 transition-colors flex items-center gap-1.5 whitespace-nowrap text-on-surface-variant hover:text-on-surface border-transparent cursor-pointer" data-tab="analytics" data-tabs-target="tab" data-action="click->tabs#select">
@@ -261,7 +294,15 @@
             <div class="bg-surface-container-low border border-outline-variant/20 rounded-lg p-5">
                 <div class="flex items-center justify-between mb-3">
                     <h3 class="text-sm font-semibold text-on-surface">Trade history</h3>
-                    <span class="text-xs text-on-surface-variant">Last {{ tradeHistory|length }} trades</span>
+                    {% if tradePages > 1 %}
+                        <nav class="flex items-center gap-2 text-xs text-on-surface-variant" aria-label="Trade history pages">
+                            {% if tradePage > 1 %}<a class="seg-btn" href="{{ path('app_dashboard', { trades: tradePage - 1 }) }}#orders">Newer</a>{% endif %}
+                            <span>Page <span class="font-mono">{{ tradePage }}</span> of <span class="font-mono">{{ tradePages }}</span></span>
+                            {% if tradePage < tradePages %}<a class="seg-btn" href="{{ path('app_dashboard', { trades: tradePage + 1 }) }}#orders">Older</a>{% endif %}
+                        </nav>
+                    {% else %}
+                        <span class="text-xs text-on-surface-variant">{{ tradeHistory|length }} {{ tradeHistory|length == 1 ? 'trade' : 'trades' }}</span>
+                    {% endif %}
                 </div>
 
                 {% if tradeHistory|length > 0 %}
@@ -289,7 +330,14 @@
                                     {% set isOption = trade.assetType == 'OPTION' %}
                                     <tr>
                                         <td class="py-2.5 text-xs text-on-surface-variant font-mono">{{ (trade.filledAt ?? trade.createdAt)|date('Y-m-d H:i') }}</td>
-                                        <td class="py-2.5 text-xs text-on-surface-variant">{{ trade.orderType|replace({'_': ' '})|lower|capitalize }}</td>
+                                        <td class="py-2.5 text-xs text-on-surface-variant">
+                                            {{ trade.orderType|replace({'_': ' '})|lower|capitalize }}
+                                            {% if trade.origin == 'MARGIN_CALL' %}
+                                                <span class="badge badge-warn ml-1" title="Sold by your broker to meet a margin call">Margin call</span>
+                                            {% elseif trade.origin == 'BUY_IN' %}
+                                                <span class="badge badge-warn ml-1" title="Bought back because the lender recalled the stock">Buy-in</span>
+                                            {% endif %}
+                                        </td>
                                         <td class="py-2.5 font-bold {{ trade.action in ['BUY', 'COVER'] ? 'text-secondary' : 'text-tertiary' }}">{{ trade.action|lower|capitalize }}</td>
                                         <td class="py-2.5">
                                             <a href="{{ trade.assetType == 'BOND' ? path('app_bond_view', { ticker: trade.ticker }) : '/stock/' ~ (isOption ? trade.ticker|split('-')|first : trade.ticker) }}" class="font-bold text-on-surface hover:text-primary transition-colors">{{ trade.ticker }}</a>
@@ -354,6 +402,97 @@
                 {% else %}
                     <div class="py-6 text-center text-on-surface-variant text-xs">
                         No dividends received yet.
+                    </div>
+                {% endif %}
+            </div>
+
+            {% if couponPayments|length > 0 %}
+                <div class="bg-surface-container-low border border-outline-variant/20 rounded-lg p-5">
+                    <div class="mb-3">
+                        <h3 class="text-sm font-semibold text-on-surface">Bond payments</h3>
+                        <p class="text-xs text-on-surface-variant mt-0.5">Coupons and redemptions credited to your cash on each payment date</p>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left border-collapse min-w-100">
+                            <thead>
+                                <tr class="table-head">
+                                    <th class="py-2.5">Paid</th>
+                                    <th class="py-2.5">Bond</th>
+                                    <th class="py-2.5">Type</th>
+                                    <th class="py-2.5 text-right">Bonds held</th>
+                                    <th class="py-2.5 text-right">Per bond</th>
+                                    <th class="py-2.5 text-right">Amount</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-outline-variant/10 text-xs sm:text-sm">
+                                {% for payment in couponPayments %}
+                                    <tr>
+                                        <td class="py-2.5 text-xs text-on-surface-variant font-mono">{{ payment.paidAt|date('Y-m-d H:i') }}</td>
+                                        <td class="py-2.5">
+                                            <a href="{{ path('app_bond_view', { ticker: payment.ticker }) }}" class="font-mono font-bold text-on-surface hover:text-primary transition-colors">{{ payment.ticker }}</a>
+                                        </td>
+                                        <td class="py-2.5 text-xs text-on-surface-variant">{{ payment.paymentType|lower|capitalize }}</td>
+                                        <td class="py-2.5 text-right font-mono tabular-nums text-on-surface-variant">{{ payment.bondsHeld|number_format }}</td>
+                                        <td class="py-2.5 text-right font-mono tabular-nums text-on-surface-variant">{{ payment.amountPerBond|money(4) }}</td>
+                                        <td class="py-2.5 text-right font-mono tabular-nums font-bold text-secondary">+{{ payment.amount|money(2) }}</td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            {% endif %}
+        </div>
+
+        <div id="tab-content-watchlist" class="portfolio-tab-panel hidden space-y-5" data-tabs-target="panel" data-tab-panel="watchlist">
+            <div class="bg-surface-container-low border border-outline-variant/20 rounded-lg p-5">
+                <div class="mb-3">
+                    <h3 class="text-sm font-semibold text-on-surface">Watchlist</h3>
+                    <p class="text-xs text-on-surface-variant mt-0.5">Every story on these names reaches your notifications. Add one with Watch on its page.</p>
+                </div>
+                {% if watchlist|length > 0 %}
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left border-collapse min-w-100">
+                            <thead>
+                                <tr class="table-head">
+                                    <th class="py-2.5">Name</th>
+                                    <th class="py-2.5 text-right">Price</th>
+                                    <th class="py-2.5 text-right">Change</th>
+                                    <th class="py-2.5 text-right">Alerts</th>
+                                    <th class="py-2.5 text-right"><span class="sr-only">Remove</span></th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-outline-variant/10 text-xs sm:text-sm">
+                                {% for item in watchlist %}
+                                    {% set itemAlerts = priceAlerts|filter(a => a.ticker == item.ticker) %}
+                                    <tr>
+                                        <td class="py-2.5">
+                                            <a href="/stock/{{ item.ticker }}" class="font-mono font-bold text-on-surface hover:text-primary transition-colors">{{ item.ticker }}</a>
+                                            <span class="block text-xs text-on-surface-variant truncate max-w-60">{{ item.name }}</span>
+                                        </td>
+                                        <td class="py-2.5 text-right font-mono tabular-nums text-on-surface tick-flash" data-watch-price="{{ item.ticker }}" data-last="{{ item.price }}">{{ item.price|money(2) }}</td>
+                                        <td class="py-2.5 text-right font-mono tabular-nums {{ item.change is null ? 'text-on-surface-faint' : item.change|signed_class }}">{{ item.change is null ? '—' : item.change|pct(2, true) }}</td>
+                                        <td class="py-2.5 text-right text-xs text-on-surface-variant">
+                                            {% for alert in itemAlerts %}
+                                                <span class="block font-mono tabular-nums">{{ alert.direction == 'ABOVE' ? '≥' : '≤' }} {{ alert.targetPrice|money(2) }}</span>
+                                            {% else %}
+                                                <a href="/stock/{{ item.ticker }}#price-alerts" class="hover:text-primary transition-colors">Set one</a>
+                                            {% endfor %}
+                                        </td>
+                                        <td class="py-2.5 text-right">
+                                            <form action="{{ path('app_watchlist_toggle', { ticker: item.ticker }) }}" method="POST">
+                                                <input type="hidden" name="_token" value="{{ csrf_token('watchlist') }}">
+                                                <button type="submit" class="text-xs text-on-surface-variant hover:text-tertiary transition-colors cursor-pointer">Remove</button>
+                                            </form>
+                                        </td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                {% else %}
+                    <div class="py-6 text-center text-on-surface-variant text-xs">
+                        You are not watching any names yet. Open a company's page and choose Watch.
                     </div>
                 {% endif %}
             </div>
@@ -496,6 +635,29 @@
                             Equity is {{ margin.equityRatio|pct(1) }} of gross exposure.
                         </p>
                     {% endif %}
+                {% endif %}
+            </div>
+
+            <div class="bg-surface-container-low border border-outline-variant/20 rounded-lg p-5 space-y-3">
+                <div>
+                    <h3 class="text-sm font-semibold text-on-surface">Start afresh</h3>
+                    <p class="text-xs text-on-surface-variant mt-1 leading-relaxed max-w-2xl">
+                        Close this account's book and reopen it with {{ freshStartCapital|money(2) }} in cash. Your holdings,
+                        open orders, trade history and income records are cleared, and you leave the current season;
+                        you rejoin the table when the next one opens. This cannot be undone.
+                    </p>
+                </div>
+                {% if freshStartBlocker %}
+                    <p class="text-xs text-warning">{{ freshStartBlocker }}</p>
+                {% else %}
+                    <form action="{{ path('app_fresh_start') }}" method="POST" class="flex flex-wrap items-center gap-3">
+                        <input type="hidden" name="_token" value="{{ csrf_token('fresh_start') }}">
+                        <label class="flex items-center gap-2 text-xs text-on-surface-variant">
+                            <input type="checkbox" name="confirm" value="1" required class="accent-primary">
+                            I understand my holdings and history will be cleared
+                        </label>
+                        <button type="submit" class="cursor-pointer px-3 py-1.5 rounded text-sm font-medium text-tertiary border border-tertiary/30 hover:bg-tertiary/10 transition-colors">Start afresh</button>
+                    </form>
                 {% endif %}
             </div>
         </div>

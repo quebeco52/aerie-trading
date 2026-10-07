@@ -1,0 +1,47 @@
+{% extends 'base.html.twig' %}
+
+{% block title %}Notifications | Aerie Exchange{% endblock %}
+
+{% block body %}
+<div class="max-w-400 mx-auto px-4 sm:px-6 lg:px-8 pt-8 pb-12 w-full space-y-6">
+
+	<header class="pb-5 border-b border-outline-variant/15">
+		<h1 class="text-2xl md:text-3xl font-semibold text-on-surface tracking-tight">Notifications</h1>
+		<p class="mt-1.5 text-sm text-on-surface-variant">Fills, margin calls, expiries, price alerts and news on the names you watch, newest first.</p>
+	</header>
+
+	<div class="max-w-4xl bg-surface-container-low rounded-lg px-5 py-2 border border-outline-variant/20">
+		<ul class="divide-y divide-outline-variant/10">
+			{% for note in notifications %}
+				<li class="py-3 flex items-start gap-3">
+					<span class="mt-1.5 w-1.5 h-1.5 rounded-full shrink-0 {{ note.read ? 'bg-transparent' : 'bg-primary' }}" aria-hidden="true"></span>
+					<div class="min-w-0 grow">
+						<div class="flex flex-wrap items-center gap-2 mb-1">
+							<span class="badge {{ note.tone }}">{{ note.label }}</span>
+							{% if note.ticker %}<span class="font-mono text-xs font-semibold text-on-surface">{{ note.ticker }}</span>{% endif %}
+							<span class="text-xs font-mono tabular-nums text-on-surface-variant">{{ note.dateline ?? note.createdAt|date('j M, H:i') }}</span>
+							{% if not note.read %}<span class="sr-only">Unread</span>{% endif %}
+						</div>
+						{% if note.link %}
+							<a href="{{ note.link }}" class="text-sm font-medium text-on-surface hover:text-primary transition-colors">{{ note.title }}</a>
+						{% else %}
+							<p class="text-sm font-medium text-on-surface">{{ note.title }}</p>
+						{% endif %}
+						{% if note.body %}<p class="text-xs text-on-surface-variant mt-0.5">{{ note.body }}</p>{% endif %}
+					</div>
+				</li>
+			{% else %}
+				<li class="py-6 text-center text-sm text-on-surface-variant">Nothing yet. Resting orders that fill, price alerts you set and news on names you watch will appear here.</li>
+			{% endfor %}
+		</ul>
+	</div>
+
+	{% if pages > 1 %}
+		<nav class="max-w-4xl flex items-center justify-between text-sm" aria-label="Pages">
+			{% if page > 1 %}<a class="seg-btn" href="{{ path('app_notifications', { page: page - 1 }) }}">Newer</a>{% else %}<span></span>{% endif %}
+			<span class="text-on-surface-variant">Page <span class="font-mono">{{ page }}</span> of <span class="font-mono">{{ pages }}</span></span>
+			{% if page < pages %}<a class="seg-btn" href="{{ path('app_notifications', { page: page + 1 }) }}">Older</a>{% else %}<span></span>{% endif %}
+		</nav>
+	{% endif %}
+</div>
+{% endblock %}

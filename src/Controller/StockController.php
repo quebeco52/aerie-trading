@@ -35,7 +35,9 @@ class StockController extends AbstractController
         string $ticker,
         StockRepository $stocks,
         EtfRepository $etfs,
-        StockPageBuilder $pageBuilder
+        EntityManagerInterface $entityManager,
+        StockPageBuilder $pageBuilder,
+        \App\Service\Notification\PriceAlertService $priceAlerts,
     ): Response {
         $asset = $stocks->findOneByTicker($ticker) ?? $etfs->findOneByTicker($ticker);
         if ($asset === null) {
@@ -45,7 +47,12 @@ class StockController extends AbstractController
         /** @var User|null $currentUser */
         $currentUser = $this->getUser();
 
-        return $this->render('stock/index.html.twig', $pageBuilder->build($asset, $ticker, $currentUser));
+        $page = $pageBuilder->build($asset, $ticker, $currentUser);
+        $page['isWatched'] = $currentUser !== null
+            && $entityManager->getRepository(\App\Entity\WatchlistItem::class)->count(['user' => $currentUser, 'ticker' => $asset->getTicker()]) > 0;
+        $page['priceAlerts'] = $currentUser !== null ? $priceAlerts->waiting($currentUser, $asset->getTicker()) : [];
+
+        return $this->render('stock/index.html.twig', $page);
     }
 
     /**
@@ -58,7 +65,13 @@ class StockController extends AbstractController
      * @return JsonResponse Returns a JSON array of historical data points.
      */
     #[Route('/api/history', name: 'api_history')]
-    public function history(Request $request, EntityManagerInterface $entityManager, \Redis $redis, PriceBarAggregator $barAggregator): JsonResponse
+    public function history(
+        Request $request,
+        EntityManagerInterface $entityManager,
+        \Redis $redis,
+        PriceBarAggregator $barAggregator,
+        #[\Symfony\Component\DependencyInjection\Attribute\Autowire('%app.ticks_per_year%')] int $ticksPerYear,
+    ): JsonResponse
     {
         $ticker = $request->query->get('ticker');
         $range = (string) $request->query->get('range', ChartRange::DEFAULT_RANGE);
@@ -72,18 +85,16 @@ class StockController extends AbstractController
         $targetBars = $isLine ? PriceBarAggregator::LINE_TARGET_BARS : PriceBarAggregator::TARGET_BARS;
         $minRowsPerBar = $isLine ? PriceBarAggregator::LINE_MIN_ROWS_PER_BAR : PriceBarAggregator::MIN_ROWS_PER_BAR;
 
-        $ticksPerYear = (int) ($_ENV['SIM_TICKS_PER_YEAR'] ?? 14400);
-
         // A bond can be charted by its yield instead of its clean price; the series is otherwise the same.
         $chartsYield = $request->query->get('field') === 'yield';
 
         // Redis cache for short timeframes, counted in the buffer's own entries: a bond pushes its day's mark
-        // and nothing between, everything else pushes every tick.
+        // and nothing between, everything else every tick (or every few at a fine tick grid).
         if (ChartRange::isBuffered($range)) {
             $isBond = $entityManager->getRepository(\App\Entity\Bond::class)->count(['ticker' => $ticker]) > 0;
             $entriesPerYear = $isBond
                 ? TickCadence::bondMarksPerYear($ticksPerYear)
-                : $ticksPerYear;
+                : TickCadence::equityBufferEntriesPerYear($ticksPerYear);
 
             $cacheKey = "chart_buffer:{$ticker}";
             $redisData = $redis->lRange($cacheKey, 0, ChartRange::entries($range, $entriesPerYear) - 1);

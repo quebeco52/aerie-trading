@@ -50,6 +50,7 @@ final class OptionSettlementEngine
     public function __construct(
         private readonly EntityManagerInterface $em,
         private readonly \App\Service\User\CashLedger $cashLedger,
+        private readonly ?\App\Service\Notification\PlayerNotifier $notifier = null,
     ) {}
 
     /**
@@ -116,6 +117,7 @@ final class OptionSettlementEngine
                 if ($exercised) {
                     $this->deliver($position, $contract, $position->getContract()->getStock(), $settlementPrice);
                 }
+                $this->queueExpiryMessage($position, $contract, (string) $row['underlying'], $exercised);
 
                 $this->em->remove($position);
             }
@@ -290,6 +292,39 @@ final class OptionSettlementEngine
         return $contracts
             * FinancialConstants::OPTION_CONTRACT_MULTIPLIER
             * ($isCall ? 1 : -1);
+    }
+
+    /** Tells the holder or writer what expiry did to the position; queued, published once the tick commits. */
+    private function queueExpiryMessage(UserOption $position, OptionContract $contract, string $underlying, bool $exercised): void
+    {
+        $contracts = (int) $position->getQuantity();
+        $userId = $position->getUser()->getId();
+        if ($this->notifier === null || $contracts === 0 || $userId === null) {
+            return;
+        }
+
+        $kind = $contract->isCall() ? 'call' : 'put';
+        $series = sprintf('%s %s %s%s', $underlying, number_format((float) $contract->getStrike(), 2), $kind, abs($contracts) === 1 ? '' : 's');
+        $written = $contracts < 0;
+        $shares = self::shareDelta($contracts, $contract->isCall());
+
+        if ($exercised) {
+            $title = $written
+                ? sprintf('Assigned on %s written %s', number_format(abs($contracts)), $series)
+                : sprintf('%s %s exercised at expiry', number_format(abs($contracts)), $series);
+            $body = sprintf(
+                '%s %s %s at the strike of $%s.',
+                $shares > 0 ? 'Bought' : 'Sold',
+                number_format(abs($shares)),
+                $underlying,
+                number_format((float) $contract->getStrike(), 2)
+            );
+        } else {
+            $title = sprintf('%s %s%s expired worthless', number_format(abs($contracts)), $written ? 'written ' : '', $series);
+            $body = $written ? 'The premium you received is yours to keep.' : null;
+        }
+
+        $this->notifier->queue($userId, \App\Entity\Notification::KIND_OPTION_EXPIRY, $title, $body, $underlying, '/stock/' . rawurlencode($underlying));
     }
 
     /**

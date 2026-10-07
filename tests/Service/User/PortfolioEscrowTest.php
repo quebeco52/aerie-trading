@@ -39,7 +39,8 @@ final class PortfolioEscrowTest extends TestCase
      */
     private const BOND_VALUATION_EVIDENCE = [
         'src/Service/User/Portfolio.php' => '/user_bonds|UserBond/',
-        'src/Controller/LeaderboardController.php' => '/user_bonds|UserBond/',
+        // Ranks on Portfolio::NET_WORTH_SQL, which testTheSharedNetWorthStatementIsComplete() checks.
+        'src/Controller/LeaderboardController.php' => '/Portfolio::NET_WORTH_SQL/',
         'src/Controller/DashboardController.php' => '/findBondHoldings\(/',
     ];
 
@@ -142,14 +143,28 @@ final class PortfolioEscrowTest extends TestCase
     {
         foreach (self::NAV_SOURCES as $source) {
             $this->assertMatchesRegularExpression(
-                "/escrow/i",
+                "/escrow|NET_WORTH_SQL/i",
                 $this->read($source),
                 "{$source} totals a user's net worth and must include open-order escrow."
             );
         }
     }
 
-    /** The two shared-SQL callers use the one fragment rather than each writing their own join. */
+    /**
+     * The one net-worth statement the leaderboard, the weekly snapshot and the season record all rank on values
+     * every asset class, the open book and the margin loan.
+     */
+    public function testTheSharedNetWorthStatementIsComplete(): void
+    {
+        $sql = Portfolio::NET_WORTH_SQL;
+
+        foreach (['user_stocks', 'user_etfs', 'user_bonds', 'user_options', 'u.margin_debit'] as $part) {
+            $this->assertStringContainsString($part, $sql, "Net worth must include {$part}.");
+        }
+        $this->assertStringContainsString(Portfolio::OPEN_ORDER_ESCROW_SQL, $sql, 'Net worth must include the open book.');
+    }
+
+    /** The shared-SQL callers use the one statement rather than each writing their own join. */
     public function testSharedQueriesUseTheOneFragment(): void
     {
         $this->assertStringContainsString(
@@ -158,7 +173,7 @@ final class PortfolioEscrowTest extends TestCase
             'Both Portfolio snapshots must build on the shared fragment.'
         );
         $this->assertStringContainsString(
-            'Portfolio::OPEN_ORDER_ESCROW_SQL',
+            'Portfolio::NET_WORTH_SQL',
             $this->read('src/Controller/LeaderboardController.php'),
             'The leaderboard ranks on the same definition of net worth the history chart records.'
         );
@@ -183,7 +198,7 @@ final class PortfolioEscrowTest extends TestCase
 
             // Either by joining the shared fragment or by inlining the same aggregate.
             $this->assertMatchesRegularExpression(
-                "/OPEN_ORDER_ESCROW_SQL|trade_orders/",
+                "/OPEN_ORDER_ESCROW_SQL|NET_WORTH_SQL|trade_orders/",
                 $body,
                 "{$method}() must value the open order book."
             );

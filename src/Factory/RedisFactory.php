@@ -47,6 +47,18 @@ if (!class_exists('Redis')) {
             return is_array($this->storage[$key] ?? null) ? $this->storage[$key] : [];
         }
 
+        public function hDel(string $key, string ...$fields): int
+        {
+            $removed = 0;
+            foreach ($fields as $field) {
+                if (isset($this->storage[$key][$field])) {
+                    unset($this->storage[$key][$field]);
+                    $removed++;
+                }
+            }
+            return $removed;
+        }
+
         public function setex(string $key, int $ttl, mixed $val): bool
         {
             $this->storage[$key] = $val;

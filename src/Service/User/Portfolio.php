@@ -76,6 +76,46 @@ class Portfolio
         FROM (" . self::OPEN_ORDER_ESCROW_DETAIL_SQL . ") d
     ";
 
+    /**
+     * Every account's net worth with its parts: cash less margin debt, plus stocks, funds, bonds and options at the
+     * live price, plus value sitting in open orders. The one statement behind the leaderboard, the weekly snapshot
+     * and the season record, so the three cannot rank on different definitions.
+     */
+    public const NET_WORTH_SQL = "
+        SELECT u.id AS user_id,
+               COALESCE(u.username, 'Anonymous Trader') AS username,
+               u.cash_balance,
+               u.margin_debit,
+               COALESCE(stock_totals.stock_val, 0) AS stock_value,
+               COALESCE(etf_totals.etf_val, 0) AS etf_value,
+               COALESCE(bond_totals.bond_val, 0) AS bond_value,
+               COALESCE(option_totals.option_val, 0) AS option_value,
+               COALESCE(escrow.escrow_val, 0) AS escrow_value,
+               (u.cash_balance - u.margin_debit + COALESCE(stock_totals.stock_val, 0) + COALESCE(etf_totals.etf_val, 0) + COALESCE(bond_totals.bond_val, 0) + COALESCE(option_totals.option_val, 0) + COALESCE(escrow.escrow_val, 0)) AS total_value
+        FROM users u
+        LEFT JOIN (
+            -- A short's quantity is negative, so this one SUM marks longs and shorts alike.
+            SELECT us.user_id, SUM(us.quantity * s.price) AS stock_val
+            FROM user_stocks us
+            JOIN stocks s ON us.stock_id = s.id
+            GROUP BY us.user_id
+        ) stock_totals ON stock_totals.user_id = u.id
+        LEFT JOIN (
+            SELECT ue.user_id, SUM(ue.quantity * e.price) AS etf_val
+            FROM user_etfs ue
+            JOIN etfs e ON ue.etf_id = e.id
+            GROUP BY ue.user_id
+        ) etf_totals ON etf_totals.user_id = u.id
+        LEFT JOIN (
+            SELECT ub.user_id, SUM(ub.quantity * b.price) AS bond_val
+            FROM user_bonds ub
+            JOIN bonds b ON ub.bond_id = b.id
+            GROUP BY ub.user_id
+        ) bond_totals ON bond_totals.user_id = u.id
+        LEFT JOIN (" . self::OPTION_VALUE_SQL . ") option_totals ON option_totals.user_id = u.id
+        LEFT JOIN (" . self::OPEN_ORDER_ESCROW_SQL . ") escrow ON escrow.user_id = u.id
+    ";
+
     public function __construct(
         private EntityManagerInterface $entityManager
     ) {}
@@ -122,39 +162,22 @@ class Portfolio
      */
     public function recordBulkSnapshots(): void
     {
-        $conn = $this->entityManager->getConnection();
-        
-        $snapshotSql = "
-            INSERT INTO portfolio_history (user_id, total_value, recorded_at)
-            SELECT u.id,
-                   (u.cash_balance - u.margin_debit + COALESCE(stock_totals.stock_val, 0) + COALESCE(etf_totals.etf_val, 0) + COALESCE(bond_totals.bond_val, 0) + COALESCE(option_totals.option_val, 0) + COALESCE(escrow.escrow_val, 0)),
-                   :now
-            FROM users u
-            LEFT JOIN (
-                SELECT us.user_id, SUM(us.quantity * s.price) as stock_val
-                FROM user_stocks us
-                JOIN stocks s ON us.stock_id = s.id
-                GROUP BY us.user_id
-            ) stock_totals ON stock_totals.user_id = u.id
-            LEFT JOIN (
-                SELECT ue.user_id, SUM(ue.quantity * e.price) as etf_val
-                FROM user_etfs ue
-                JOIN etfs e ON ue.etf_id = e.id
-                GROUP BY ue.user_id
-            ) etf_totals ON etf_totals.user_id = u.id
-            LEFT JOIN (
-                SELECT ub.user_id, SUM(ub.quantity * b.price) as bond_val
-                FROM user_bonds ub
-                JOIN bonds b ON ub.bond_id = b.id
-                GROUP BY ub.user_id
-            ) bond_totals ON bond_totals.user_id = u.id
-            LEFT JOIN (" . self::OPTION_VALUE_SQL . ") option_totals ON option_totals.user_id = u.id
-            LEFT JOIN (" . self::OPEN_ORDER_ESCROW_SQL . ") escrow ON escrow.user_id = u.id
-        ";
+        $this->entityManager->getConnection()->executeStatement(
+            'INSERT INTO portfolio_history (user_id, total_value, recorded_at)
+             SELECT nw.user_id, nw.total_value, :now FROM (' . self::NET_WORTH_SQL . ') nw',
+            ['now' => (new \DateTime())->format('Y-m-d H:i:s')]
+        );
+    }
 
-        $conn->executeStatement($snapshotSql, [
-            'now' => (new \DateTime())->format('Y-m-d H:i:s')
-        ]);
+    /** @return array<int, float> Net worth by account id. */
+    public function netWorths(): array
+    {
+        $values = [];
+        foreach ($this->entityManager->getConnection()->fetchAllAssociative(self::NET_WORTH_SQL) as $row) {
+            $values[(int) $row['user_id']] = (float) $row['total_value'];
+        }
+
+        return $values;
     }
 
     /**

@@ -28,6 +28,7 @@ if (!class_exists('Redis')) {
         public function hGet($key, $field) { return false; }
         public function hSet($key, $field, $value) { return 1; }
         public function hGetAll($key) { return []; }
+        public function hDel($key, ...$fields) { return 0; }
         public function hIncrByFloat(string $key, string $field, float $value): \Redis|float|false { return $value; }
         public function setex($key, $ttl, $val) {}
         public function del($key) {}

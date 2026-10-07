@@ -23,7 +23,8 @@ class MarketEventPublisher
         private EntityManagerInterface $entityManager,
         private LoggerInterface $logger,
         private \Redis $redis,
-        private EventPresenter $presenter = new EventPresenter()
+        private EventPresenter $presenter = new EventPresenter(),
+        private ?\App\Service\Notification\PlayerNotifier $notifier = null,
     ) {
     }
 
@@ -83,6 +84,15 @@ class MarketEventPublisher
         );
         $event->setHeadline($wire['headline']);
         $this->entityManager->persist($event);
+
+        // Every story on a watched name goes to its watchers, resolved and sent once the tick commits.
+        $headline = $wire['presented']['headline'] ?? null;
+        $this->notifier?->queueForWatchers(
+            $asset->getTicker(),
+            sprintf('%s: %s', $asset->getTicker(), is_string($headline) && $headline !== '' ? $headline : $description),
+            $description,
+            '/stock/' . rawurlencode($asset->getTicker())
+        );
 
         return $wire;
     }
