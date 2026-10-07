@@ -161,7 +161,8 @@ class EtfTracker
                 $etf->getNavPremium(),
                 $netFlowValue,
                 $navPerShare * $etf->getSharesOutstanding(),
-                $band
+                $band,
+                $dt
             );
 
             $premium = $settled['premium'];

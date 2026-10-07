@@ -2720,4 +2720,56 @@ class MathUtilityTest extends TestCase
             'The older wait less.'
         );
     }
+    /** A steady return of sigma sqrt(dt) every tick holds the estimate at sigma^2, whatever the tick. */
+    public function testEwmaAnnualizedVarianceHoldsATrueVarianceAtAnyTickRate(): void
+    {
+        foreach ([1.0 / 252.0, 1.0 / 14400.0] as $dt) {
+            self::assertEqualsWithDelta(
+                0.09,
+                MathUtility::ewmaAnnualizedVariance(0.09, 0.30 * sqrt($dt), $dt, 0.25),
+                1e-12
+            );
+        }
+    }
+
+    /** The memory is a span of simulated time: after one tau of quiet the estimate has decayed by e at any tick rate. */
+    public function testEwmaAnnualizedVarianceMemoryIsInYears(): void
+    {
+        foreach ([1.0 / 252.0, 1.0 / 14400.0] as $dt) {
+            $variance = 0.04;
+            $steps = (int) round(0.25 / $dt);
+            for ($i = 0; $i < $steps; $i++) {
+                $variance = MathUtility::ewmaAnnualizedVariance($variance, 0.0, $dt, 0.25);
+            }
+            self::assertEqualsWithDelta(0.04 * exp(-1.0), $variance, 1e-9);
+        }
+
+        self::assertSame(0.04, MathUtility::ewmaAnnualizedVariance(0.04, 0.1, 0.0, 0.25));
+    }
+
+    /** The closed form agrees with the jumps calculateSVJJJumps() actually draws, cap included. */
+    public function testMeanVarianceJumpMatchesTheDrawnJumps(): void
+    {
+        mt_srand(20261007);
+        $math = new MathUtility();
+        $pUp = 0.40;
+        $muV = 0.05;
+        $n = 40000;
+        $sum = 0.0;
+        $sumSq = 0.0;
+        for ($i = 0; $i < $n; $i++) {
+            $jump = $math->calculateSVJJJumps(lambda: 1.0, pUp: $pUp, etaUp: 20.0, etaDown: 10.0, muV: $muV, dt: 1.0)['var_jump'];
+            $sum += $jump;
+            $sumSq += $jump * $jump;
+        }
+        $mean = $sum / $n;
+        $se = sqrt((($sumSq / $n) - ($mean * $mean)) / $n);
+
+        self::assertEqualsWithDelta(MathUtility::meanVarianceJump($pUp, $muV), $mean, 4.0 * $se);
+        self::assertEqualsWithDelta(
+            $muV * (1.0 - exp(-MathUtility::MAX_VARIANCE_JUMP_MEAN_MULTIPLE)),
+            MathUtility::meanVarianceJump(0.0, $muV),
+            1e-15
+        );
+    }
 }

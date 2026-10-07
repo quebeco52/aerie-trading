@@ -70,6 +70,12 @@ final readonly class AgentMarketViewDTO
         public float $abnormalVolume = 1.0,
         /** Whether the name carried a corporate event this tick — earnings, a shock, a deal. The one attention sort that is not a market statistic. */
         public bool $hasNews = false,
+        /** The last trading day's move: an exponentially weighted sum of log returns over AGENT_RETAIL_ATTENTION_HORIZON_YEARS, kept by the engine. */
+        public float $recentMove = 0.0,
+        /** Abnormal volume averaged over the last trading day, kept by the engine; one is an ordinary day. */
+        public float $recentAbnormalVolume = 1.0,
+        /** How recently the name was in the news: one on the tick it was, decaying over a trading day. */
+        public float $recentNews = 0.0,
     ) {}
 
     /**
@@ -94,6 +100,9 @@ final readonly class AgentMarketViewDTO
             $this->passiveOwnershipMultiple,
             $this->abnormalVolume,
             $this->hasNews,
+            $this->recentMove,
+            $this->recentAbnormalVolume,
+            $this->recentNews,
         );
     }
 
@@ -118,6 +127,36 @@ final readonly class AgentMarketViewDTO
             $this->passiveOwnershipMultiple,
             $this->abnormalVolume,
             $this->hasNews,
+            $this->recentMove,
+            $this->recentAbnormalVolume,
+            $this->recentNews,
+        );
+    }
+
+    /**
+     * The same view with what attention-driven retail has noticed over the last trading day, from the engine's book.
+     */
+    public function withAttention(float $recentMove, float $recentAbnormalVolume, float $recentNews): self
+    {
+        return new self(
+            $this->ticker,
+            $this->price,
+            $this->perceivedFairValue,
+            $this->momentumTrend,
+            $this->averageDailyVolume,
+            $this->logReturn,
+            $this->financialConditions,
+            $this->dt,
+            $this->riskFreeRate,
+            $this->annualizedVolatility,
+            $this->splitRatio,
+            $this->marketLogMispricing,
+            $this->passiveOwnershipMultiple,
+            $this->abnormalVolume,
+            $this->hasNews,
+            $recentMove,
+            $recentAbnormalVolume,
+            $recentNews,
         );
     }
 

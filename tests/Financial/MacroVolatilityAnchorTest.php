@@ -68,8 +68,10 @@ class MacroVolatilityAnchorTest extends TestCase
      */
     private static function theoreticalJumpContribution(): float
     {
-        $meanVarianceJump = (MacroEngine::SYSTEMIC_JUMP_PROBABILITY_UP * MacroEngine::SYSTEMIC_JUMP_VARIANCE_MEAN * MathUtility::VARIANCE_JUMP_UPSIDE_MEAN_SHARE)
-            + ((1.0 - MacroEngine::SYSTEMIC_JUMP_PROBABILITY_UP) * MacroEngine::SYSTEMIC_JUMP_VARIANCE_MEAN);
+        // Each variance jump is an exponential capped at K times its mean, so its mean is m (1 - e^-K).
+        $meanVarianceJump = ((MacroEngine::SYSTEMIC_JUMP_PROBABILITY_UP * MacroEngine::SYSTEMIC_JUMP_VARIANCE_MEAN * MathUtility::VARIANCE_JUMP_UPSIDE_MEAN_SHARE)
+            + ((1.0 - MacroEngine::SYSTEMIC_JUMP_PROBABILITY_UP) * MacroEngine::SYSTEMIC_JUMP_VARIANCE_MEAN))
+            * (1.0 - exp(-MathUtility::MAX_VARIANCE_JUMP_MEAN_MULTIPLE));
 
         return (MacroEngine::SYSTEMIC_JUMP_INTENSITY * $meanVarianceJump) / AssetMarketSubsystem::MACRO_VOL_KAPPA;
     }

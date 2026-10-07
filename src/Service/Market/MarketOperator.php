@@ -10,8 +10,9 @@ use App\Service\Corporate\DebtEngine;
 use App\Service\Event\MarketEventPublisher;
 
 /**
- * The "Invisible Hand" of the Aerie District.
- * Runs periodically to prevent the math models from destroying the economy.
+ * The failure sweep: decides which listed companies fail this pass and carries the failure through —
+ * restructuring or liquidation, the listed debt, the options on cancelled shares, and the plant the
+ * industry roster loses. It does not touch prices or volatility.
  */
 class MarketOperator
 {
@@ -32,11 +33,7 @@ class MarketOperator
     ) {}
 
     /**
-     * Wakes up periodically to enforce the laws of game-design physics.
-     *
-     * Iterates over all stocks to prevent runaway balance sheet feedback loops:
-     * 1. Evaluates companies for potential bankruptcy restructuring.
-     * 2. Damps extreme instantaneous volatility spikes back towards safety bounds.
+     * Runs the restructuring rule over every listed company that has not already failed.
      *
      * @param Stock[]       $stocks     List of all active stock entities.
      * @param MacroStateDTO $macroState The current macroeconomic state.

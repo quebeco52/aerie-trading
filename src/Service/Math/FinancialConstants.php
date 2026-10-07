@@ -793,6 +793,8 @@ class FinancialConstants
     public const AGENT_RETAIL_VOLUME_MULTIPLE = 3.00;
     /** Attention contributed by a name being in the news at all, before any move or volume. News is the third of the paper's three sorts and the only one that is not a market statistic. */
     public const AGENT_RETAIL_NEWS_ATTENTION = 0.50;
+    /** Memory of what retail has noticed, in years (one trading day): Barber & Odean sort on the previous day's return, volume and news, so a tick's worth of it is the same day at any tick rate. */
+    public const AGENT_RETAIL_ATTENTION_HORIZON_YEARS = 1.0 / 252.0;
 
     // --- Sell-Side Price Targets (Brav & Lehavy 2003) ---
     /** How far above fair value the published twelve-month target is set. Targets are systematically optimistic; Brav & Lehavy measure them around 28% above price, and with price near fair value on average this lands in the same place. */
@@ -827,8 +829,8 @@ class FinancialConstants
     public const ETF_MAX_ARBITRAGE_BAND = 0.08;
     /** Premium, as a fraction of net assets, created by net demand equal to the fund's entire net assets in one tick. The linear pressure the fund's own order flow exerts before an AP steps in. */
     public const ETF_FLOW_PRESSURE = 0.50;
-    /** Share of a standing premium or discount that survives one tick absent any flow. Deviations are transient: the AP community closes them, and what is left decays rather than compounding. */
-    public const ETF_PREMIUM_PERSISTENCE = 0.60;
+    /** Decay time of a standing premium or discount absent flow, in years (~2 trading days: 60% survives a day). Deviations are transient and mean-revert within days (Petajisto 2017, FAJ). */
+    public const ETF_PREMIUM_DECAY_TAU_YEARS = 0.0078;
     /** Share of the arbitrage band a market maker quotes the fund inside. Below one because a maker sits inside the arbitrage, not at it — quoting AT the band would mean the creation trade never pays. */
     public const ETF_QUOTE_BAND_SHARE = 0.35;
     /** Shares a fund is seeded with, so a creation has a book to be measured against on the first tick. */

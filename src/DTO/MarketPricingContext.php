@@ -62,6 +62,8 @@ class MarketPricingContext
         public float $targetPayoutRatio = 0.0,
         /** Share of the gap to its target dividend the firm closes each quarter (Lintner 1956). */
         public float $dividendAdjustmentSpeed = 1.0,
+        /** Market vol the stored total variance was built with (last tick's); null strips at this tick's. */
+        public ?float $priorMarketVol = null,
         /** @var array<string, float> What each law the firm's accounts answer to is charged on or moves, per share, keyed by lever (App\Service\Market\PolicyCapitalization::earningsGap()); empty for a firm with none. */
         public array $policyBasesPerShare = []
     ) {}
@@ -80,7 +82,8 @@ class MarketPricingContext
         DebtHealthDTO $health,
         AnchorStakeLedger $anchorStakes,
         float $dt = 0.0,
-        float $maShock = 0.0
+        float $maShock = 0.0,
+        ?float $priorMarketVol = null
     ): self {
         $strategy = Sectors::strategyFor($stock->getIndustry());
         $shares = max(1.0, (float) $stock->getSharesOutstanding());
@@ -129,6 +132,7 @@ class MarketPricingContext
             tangibleBookValuePerShare: $stock->getTangibleEquity() / $shares,
             targetPayoutRatio: $stock->getPolicyPayoutRatio(),
             dividendAdjustmentSpeed: (float) $stock->getDividendSpeed(),
+            priorMarketVol: $priorMarketVol,
             policyBasesPerShare: array_filter([
                 'bankLevyRate' => $strategy->annualBankLevyBase($stock) / $shares,
                 'extractionStringency' => $strategy->annualExtractionCostBase($stock) / $shares,

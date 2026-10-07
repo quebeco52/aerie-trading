@@ -14,6 +14,7 @@ use App\Service\Event\MarketEventPublisher;
 use App\Service\Market\Flow\OrderFlowStoreInterface;
 use App\Service\Math\CorporateMetrics;
 use App\Service\Math\FinancialConstants;
+use App\Service\Math\MathUtility;
 
 /**
  * Service responsible for tracking and updating stock prices.
@@ -29,6 +30,9 @@ class StockTracker
     private const MOMENTUM_FORMATION_YEARS = 0.50;
     /** Absolute cap on the accumulated trend, bounding how far momentum can delay fundamental mean reversion. */
     private const MAX_MOMENTUM_TREND = 0.50;
+
+    /** Market vol of the last tick priced, at which every stored variance was built; null before the first. */
+    private ?float $priorMarketVol = null;
 
     /**
      * Constructor.
@@ -86,6 +90,9 @@ class StockTracker
         // Pull systemic variables from the Macro Engine
         $macroDTO = $macroState ?? new \App\DTO\MacroStateDTO();
         $marketVol = $macroDTO->marketVolatility;
+        // Each name's stored variance was built at last tick's market vol and is stripped at it.
+        $priorMarketVol = $this->priorMarketVol;
+        $this->priorMarketVol = $marketVol;
         // The stamp duty the Diet has in force thins every name's turnover, and so its depth, this tick.
         $this->liquidityEngine->setStampDutyRate($macroDTO->stampDutyRate);
 
@@ -215,7 +222,7 @@ class StockTracker
             $priceAtTickStart = (float) $stock->getPrice();
             $floatCapAtTickStart = IndexCommittee::floatAdjustedCap($stock);
 
-            $pricingCtx = \App\DTO\MarketPricingContext::forStock($stock, $macroDTO, $health, $this->anchorStakes, $dt, $maShock);
+            $pricingCtx = \App\DTO\MarketPricingContext::forStock($stock, $macroDTO, $health, $this->anchorStakes, $dt, $maShock, $priorMarketVol);
 
             // Calculate new price (GBM + SVJJ)
             $calculation = $this->marketEngine->calculateNextPrice($pricingCtx);
@@ -276,12 +283,12 @@ class StockTracker
             // budget draws on, so it has to decay: a name that was heavily traded a year ago must not keep
             // reclaiming variance it no longer supplies.
             if ($dt > 0.0) {
-                $impactPhi = exp(-$dt / FinancialConstants::IMPACT_VARIANCE_EMA_YEARS);
-                $annualizedTickVariance = ($budgetedImpactLogReturn * $budgetedImpactLogReturn) / $dt;
-
-                $stock->setImpactVarianceEma(
-                    (($stock->getImpactVarianceEma() ?? 0.0) * $impactPhi) + ($annualizedTickVariance * (1.0 - $impactPhi))
-                );
+                $stock->setImpactVarianceEma(MathUtility::ewmaAnnualizedVariance(
+                    $stock->getImpactVarianceEma() ?? 0.0,
+                    $budgetedImpactLogReturn,
+                    $dt,
+                    FinancialConstants::IMPACT_VARIANCE_EMA_YEARS
+                ));
             }
 
             $stock->setPrice((string) $newPrice);
@@ -349,13 +356,12 @@ class StockTracker
 
             // Realized variance EMA: annualized trailing window variance tracked for index and screener selection.
             if ($dt > 0.0 && $priceAtTickStart > 0.0 && $currentPriceAfterEarnings > 0.0) {
-                $realizedPhi = exp(-$dt / FinancialConstants::INDEX_TRAILING_VOLATILITY_YEARS);
-                $annualizedTickVariance = ($tickLogReturn * $tickLogReturn) / $dt;
-
-                $stock->setRealizedVarianceEma(
-                    (($stock->getRealizedVarianceEma() ?? 0.0) * $realizedPhi)
-                        + ($annualizedTickVariance * (1.0 - $realizedPhi))
-                );
+                $stock->setRealizedVarianceEma(MathUtility::ewmaAnnualizedVariance(
+                    $stock->getRealizedVarianceEma() ?? 0.0,
+                    $tickLogReturn,
+                    $dt,
+                    FinancialConstants::INDEX_TRAILING_VOLATILITY_YEARS
+                ));
             }
 
             // CORPORATE ACTIONS (SPLITS)

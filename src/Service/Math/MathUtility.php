@@ -138,6 +138,27 @@ class MathUtility
     }
 
     /**
+     * One step of an exponentially weighted estimate of annualized variance (RiskMetrics 1996):
+     * sigma^2_t = phi sigma^2_{t-1} + (1 - phi) r_t^2 / dt, phi = exp(-dt / tau), with the memory set in
+     * simulated years so the same window means the same thing at any tick rate.
+     *
+     * @param float $prior     Last estimate, annualized.
+     * @param float $logReturn The return observed over this step.
+     * @param float $dt        Step length in years.
+     * @param float $tauYears  Memory of the average in years.
+     */
+    public static function ewmaAnnualizedVariance(float $prior, float $logReturn, float $dt, float $tauYears): float
+    {
+        if ($dt <= 0.0 || $tauYears <= 0.0) {
+            return $prior;
+        }
+
+        $phi = exp(-$dt / $tauYears);
+
+        return (max(0.0, $prior) * $phi) + ((1.0 - $phi) * (($logReturn * $logReturn) / $dt));
+    }
+
+    /**
      * Whether this tick crossed a boundary of the given period in SIMULATED time.
      *
      * The ticker's retention job and the macro's calendar (a fund's month-end check, a budget year) all ask
@@ -781,6 +802,22 @@ class MathUtility
             'var_jump'         => 0.0,
             'shock_pct'        => null
         ];
+    }
+
+    /**
+     * Expected size of one calculateSVJJJumps() variance jump: mean muV on a down jump and
+     * VARIANCE_JUMP_UPSIDE_MEAN_SHARE x muV on an up jump, each an exponential capped at
+     * MAX_VARIANCE_JUMP_MEAN_MULTIPLE of its mean, so E[min(X, K m)] = m (1 - e^-K). Intensity times this,
+     * over the reversion speed, is what the jumps add to the stationary variance (Duffie, Pan & Singleton 2000).
+     *
+     * @param float $pUp Probability a price jump is upward.
+     * @param float $muV Mean variance jump on a down jump.
+     */
+    public static function meanVarianceJump(float $pUp, float $muV): float
+    {
+        $truncation = 1.0 - exp(-self::MAX_VARIANCE_JUMP_MEAN_MULTIPLE);
+
+        return max(0.0, $muV) * $truncation * (($pUp * self::VARIANCE_JUMP_UPSIDE_MEAN_SHARE) + (1.0 - $pUp));
     }
 
     /**

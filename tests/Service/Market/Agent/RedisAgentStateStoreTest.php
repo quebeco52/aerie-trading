@@ -294,7 +294,7 @@ class RedisAgentStateStoreTest extends TestCase
 
     public function testExposuresAndVarianceRideWithTheBookAndAnOlderBookReadsBackAsWritten(): void
     {
-        $full = ['positions' => ['momentum' => 10.0], 'fitness' => ['momentum' => 0.5], 'exposures' => ['momentum' => 0.8], 'variance' => 0.0625];
+        $full = ['positions' => ['momentum' => 10.0], 'fitness' => ['momentum' => 0.5], 'exposures' => ['momentum' => 0.8], 'variance' => 0.0625, 'attention' => ['move' => -0.03, 'volume' => 1.8, 'news' => 0.4]];
 
         $this->redis->method('hGetAll')->willReturn([
             'NEW' => json_encode($full),

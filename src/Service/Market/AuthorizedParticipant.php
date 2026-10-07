@@ -60,17 +60,19 @@ final class AuthorizedParticipant
      * @param float $netFlowValue  Net demand for fund shares this tick, in currency; positive is buying.
      * @param float $netAssets     The whole fund at net asset value.
      * @param float $band          Half-width from band().
+     * @param float $dt            Tick length in years; the prior premium decays as exp(-dt/tau).
      * @return array{premium: float, creationValue: float} The new premium, and the basket the AP had to
      *         buy (positive) or sell (negative) in currency.
      */
-    public function settle(float $priorPremium, float $netFlowValue, float $netAssets, float $band): array
+    public function settle(float $priorPremium, float $netFlowValue, float $netAssets, float $band, float $dt): array
     {
         if ($netAssets <= 0.0) {
             return ['premium' => 0.0, 'creationValue' => 0.0];
         }
 
         $pressure = FinancialConstants::ETF_FLOW_PRESSURE * ($netFlowValue / $netAssets);
-        $raw = ($priorPremium * FinancialConstants::ETF_PREMIUM_PERSISTENCE) + $pressure;
+        $persistence = exp(-max(0.0, $dt) / FinancialConstants::ETF_PREMIUM_DECAY_TAU_YEARS);
+        $raw = ($priorPremium * $persistence) + $pressure;
 
         if (abs($raw) <= $band) {
             return ['premium' => $raw, 'creationValue' => 0.0];

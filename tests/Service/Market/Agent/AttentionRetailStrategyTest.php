@@ -45,13 +45,19 @@ final class AttentionRetailStrategyTest extends TestCase
             annualizedVolatility: $annualizedVolatility,
             abnormalVolume: $abnormalVolume,
             hasNews: $hasNews,
+            // The strategy reads the engine's last-trading-day reading; here the day is the one given.
+            recentMove: $logReturn,
+            recentAbnormalVolume: $abnormalVolume,
+            recentNews: $hasNews ? 1.0 : 0.0,
         );
     }
 
-    /** One tick's standard deviation, which is the unit the return leg is measured in. */
+    /** The day's move has this standard deviation, which is the unit the return leg is measured in. */
     private function tickSigma(float $annualizedVolatility = 0.25, float $dt = 0.004): float
     {
-        return $annualizedVolatility * sqrt($dt);
+        $phi = exp(-$dt / FinancialConstants::AGENT_RETAIL_ATTENTION_HORIZON_YEARS);
+
+        return $annualizedVolatility * sqrt($dt / (1.0 - ($phi * $phi)));
     }
 
     public function testAQuietNameIsHeldAtTheBaseShare(): void
@@ -209,6 +215,9 @@ final class AttentionRetailStrategyTest extends TestCase
             passiveOwnershipMultiple: 2.5,
             abnormalVolume: 3.5,
             hasNews: true,
+            recentMove: -0.04,
+            recentAbnormalVolume: 2.2,
+            recentNews: 0.6,
         );
 
         $properties = (new ReflectionClass(AgentMarketViewDTO::class))->getProperties();
@@ -217,13 +226,15 @@ final class AttentionRetailStrategyTest extends TestCase
         foreach ([
             'withMarketLogMispricing' => $view->withMarketLogMispricing(0.9),
             'withAnnualizedVolatility' => $view->withAnnualizedVolatility(0.77),
+            'withAttention' => $view->withAttention(0.01, 1.1, 0.2),
         ] as $wither => $copy) {
             foreach ($properties as $property) {
                 $name = $property->getName();
 
                 // The one field each wither exists to replace.
                 if (($wither === 'withMarketLogMispricing' && $name === 'marketLogMispricing')
-                    || ($wither === 'withAnnualizedVolatility' && $name === 'annualizedVolatility')) {
+                    || ($wither === 'withAnnualizedVolatility' && $name === 'annualizedVolatility')
+                    || ($wither === 'withAttention' && in_array($name, ['recentMove', 'recentAbnormalVolume', 'recentNews'], true))) {
                     continue;
                 }
 

@@ -258,16 +258,18 @@ final class PriceFactorTransmissionTest extends TestCase
 
         // The budget is what keeps a jump from being free variance: turning the name's own jump process on
         // must not make the name more volatile, because whatever the jump now supplies the diffusion gives
-        // back. This is the property the whole accounting exists for.
+        // back. No jump ever fires here (checkProbability is false), so the jumpy name's diffusion step sits
+        // BELOW the calm one by what it gave up, and by no more than the budget allows. The stationary
+        // identity, jumps included, is pinned in StockVarianceStateTest.
         $calm = $settledVolatility(1.0, 0.0);
         $jumpy = $settledVolatility(1.0, 1.50);
 
-        $this->assertEqualsWithDelta(
+        $this->assertLessThanOrEqual(
             $calm,
             $jumpy,
-            $calm * 0.02,
             sprintf('Jump intensity is creating variance rather than displacing it: %.4f vs %.4f.', $calm, $jumpy)
         );
+        $this->assertGreaterThan($calm * 0.90, $jumpy, 'The diffusion gave up more than the jumps can supply.');
 
         // Total volatility RISES with beta, because a name's market loading is part of what it realizes.
         // The previous decomposition had this backwards: it published the diffusion anchor alone, so a

@@ -7,6 +7,7 @@ namespace App\Tests\Service\Market;
 use App\DTO\AgentMarketViewDTO;
 use App\Service\Market\Agent\AgentFlowEngine;
 use App\Service\Market\Agent\AgentPopulation;
+use App\Service\Market\Agent\AttentionRetailStrategy;
 use App\Service\Market\Agent\FundamentalistStrategy;
 use App\Service\Market\Agent\IndexFundStrategy;
 use App\Service\Market\Agent\InMemoryAgentStateStore;
@@ -555,5 +556,45 @@ class AgentFlowEngineTest extends TestCase
 
         $this->assertSame(0.0, $result['positions']['relative_value']);
         $this->assertSame(0.0, $result['flow']);
+    }
+    /**
+     * What retail notices is remembered for a span of simulated time, not a number of ticks: a move, a
+     * day of heavy volume and a news item read the same one trading day later whether the day was one
+     * tick or sixty.
+     */
+    public function testAttentionMemoryIsInTimeNotTicks(): void
+    {
+        $readings = [];
+        foreach ([1, 60] as $ticksPerDay) {
+            $this->stateStore = new InMemoryAgentStateStore();
+            $engine = $this->engine([new AttentionRetailStrategy()], []);
+            $dt = 1.0 / (252.0 * $ticksPerDay);
+
+            for ($tick = 0; $tick < 2 * $ticksPerDay; $tick++) {
+                $firstDay = $tick < $ticksPerDay;
+                $engine->trade(new AgentMarketViewDTO(
+                    ticker: 'TEST',
+                    price: 100.0,
+                    perceivedFairValue: 100.0,
+                    momentumTrend: 0.0,
+                    averageDailyVolume: 1000000.0,
+                    logReturn: $tick === $ticksPerDay - 1 ? -0.06 : 0.0,
+                    financialConditions: 0.0,
+                    dt: $dt,
+                    annualizedVolatility: 0.25,
+                    abnormalVolume: $firstDay ? 4.0 : 1.0,
+                    hasNews: $tick === $ticksPerDay - 1,
+                ));
+            }
+
+            $readings[$ticksPerDay] = $this->stateStore->read('TEST')['attention'] ?? null;
+        }
+
+        self::assertNotNull($readings[1]);
+        self::assertNotNull($readings[60]);
+        foreach (['move', 'volume', 'news'] as $leg) {
+            self::assertEqualsWithDelta($readings[1][$leg], $readings[60][$leg], 1e-9, "{$leg} remembered per tick.");
+        }
+        self::assertEqualsWithDelta(-0.06 * exp(-1.0), $readings[60]['move'], 1e-9);
     }
 }

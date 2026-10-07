@@ -22,7 +22,6 @@ class MarketEngine
 
     // Jump Diffusion Constants
     private const SVJJ_P_UP = 0.40;
-    private const SVJJ_P_DOWN = 0.60;
 
     // Analyst Multipliers
     private const VALUE_ANALYST_BOOK_MULT = 0.80;
@@ -135,8 +134,12 @@ class MarketEngine
             // Untruncated second moment of the Kou jump, 2 * scale^2 * (pUp + pDown * ratio^2), which is
             // monotone in the scale and therefore invertible for the budget. Truncation only removes mass,
             // so solving on it and deducting the truncated figure at the budget can never over-reclaim.
-            $rawSecondMomentPerUnit = 2.0 * (self::SVJJ_P_UP
-                + (self::SVJJ_P_DOWN * self::JUMP_DOWNSIDE_SCALE_RATIO * self::JUMP_DOWNSIDE_SCALE_RATIO));
+            $rawSecondMomentPerUnit = MathUtility::getInstance()->calculateKouJumpMoment(
+                2,
+                self::SVJJ_P_UP,
+                1.0,
+                1.0 / self::JUMP_DOWNSIDE_SCALE_RATIO
+            );
             $budget = self::longTermIdiosyncraticVariance($longTermVolatility, $beta)
                 * self::MAX_IDIOSYNCRATIC_JUMP_VARIANCE_SHARE;
             $configured = $lambda * $rawSecondMomentPerUnit * $jumpScale * $jumpScale;
@@ -173,6 +176,25 @@ class MarketEngine
     public static function varianceReversionSpeed(float $lambda, float $baseKappa = self::BASE_VARIANCE_REVERSION_SPEED): float
     {
         return $baseKappa * (1.0 + ($lambda * self::JUMP_REGIME_KAPPA_SENSITIVITY));
+    }
+
+    /**
+     * Share of the idiosyncratic variance target given back to the variance jumps (Duffie, Pan & Singleton 2000).
+     *
+     * The jump mean is proportional to the state (muV = c v), so one step of the QE scheme plus a jump has
+     * stationary mean theta_a / (1 - L), L = lambda dt c m / (1 - e^(-kappa dt)), with m the mean jump per
+     * unit muV. Striking theta_a = theta (1 - L) lands the process on theta; L tends to lambda c m / kappa as
+     * dt goes to zero.
+     */
+    public static function varianceJumpLoad(float $lambda, float $kappa, float $dt): float
+    {
+        if ($lambda <= 0.0 || $kappa <= 0.0 || $dt <= 0.0) {
+            return 0.0;
+        }
+
+        $meanJumpShare = MathUtility::meanVarianceJump(self::SVJJ_P_UP, self::VARIANCE_JUMP_MEAN_SHARE);
+
+        return ($lambda * $dt * $meanJumpShare) / (1.0 - exp(-$kappa * $dt));
     }
 
     /**
@@ -270,18 +292,6 @@ class MarketEngine
         $dynamicEtaUp = $jumpParameters['eta_up'];
         $dynamicEtaDown = $jumpParameters['eta_down'];
 
-        $dynamicMuV = max(0.0, $currentVar) * self::VARIANCE_JUMP_MEAN_SHARE;
-
-        // The SVJJ Jump Process (Kou Distribution)
-        $jumpData = $this->mathUtility->calculateSVJJJumps(
-            lambda: $lambda,
-            pUp: self::SVJJ_P_UP,  // Maintain the 30/70 behavioral skew
-            etaUp: $dynamicEtaUp,  // Calibrated upside jump
-            etaDown: $dynamicEtaDown, // Calibrated downside crash
-            muV: $dynamicMuV,      // Calibrated volatility explosion
-            dt: $dt
-        );
-
         // Merton jump compensation: adjust CAPM drift by the jump arrival compensator to preserve expected return.
         $jumpCompensator = $lambda * $this->mathUtility->kouTruncatedCompensator(
             self::SVJJ_P_UP,
@@ -368,17 +378,35 @@ class MarketEngine
         // What the idiosyncratic diffusion is left with once every other source of variance has been paid
         // for. Every jump the name is exposed to is charged here, which is the only bucket that can flex:
         // the systematic loading is pinned at beta * marketVol and is not the engine's to spend.
+        // The variance jumps below add to the stationary mean, so the target is struck low enough that the
+        // process still settles on it: see varianceJumpLoad().
         $adjustedTheta = max(
             0.0001,
-            ($longTermIdiosyncraticVar * $cycleVolModifier) - $systemicJumpVariance - $idiosyncraticJumpVariance - $impactVariance
+            (($longTermIdiosyncraticVar * $cycleVolModifier) - $systemicJumpVariance - $idiosyncraticJumpVariance - $impactVariance)
+                * (1.0 - self::varianceJumpLoad($lambda, $dynamicKappa, $dt))
         );
 
         // The state arrives as the name's TOTAL variance, which is what every other part of the system
         // reads, so every source the engine adds back below is stripped out before the process steps
-        // forward. Stripping exactly what is added keeps the round trip lossless at any tick rate.
+        // forward. The systematic part is stripped at the market vol it was added at, last tick's, so a
+        // move in market vol does not leak into the idiosyncratic state.
+        $priorMarketVol = $ctx->priorMarketVol ?? $marketVol;
+        $priorSystematicVar = ($beta * $priorMarketVol) * ($beta * $priorMarketVol);
         $currentIdiosyncraticVar = max(
             $minIdiosyncraticVar,
-            $currentVar - $systematicVar - $systemicJumpVariance - $idiosyncraticJumpVariance
+            $currentVar - $priorSystematicVar - $systemicJumpVariance - $idiosyncraticJumpVariance
+        );
+
+        // The SVJJ Jump Process (Kou Distribution). The variance jump scales with the name's own
+        // idiosyncratic variance: the systematic loading is pinned at beta * marketVol, and a market-wide
+        // spike must not inflate a single name's jumps on top of it.
+        $jumpData = $this->mathUtility->calculateSVJJJumps(
+            lambda: $lambda,
+            pUp: self::SVJJ_P_UP,
+            etaUp: $dynamicEtaUp,
+            etaDown: $dynamicEtaDown,
+            muV: max(0.0, $currentIdiosyncraticVar) * self::VARIANCE_JUMP_MEAN_SHARE,
+            dt: $dt
         );
 
         // Variance Process via Quadratic-Exponential (QE) Scheme, run on the idiosyncratic variance.

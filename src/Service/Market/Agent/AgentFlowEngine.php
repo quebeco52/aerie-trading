@@ -203,6 +203,9 @@ final class AgentFlowEngine
 
         $view = $view->withAnnualizedVolatility(sqrt(max(0.0, $variance)));
 
+        $attention = $this->rollAttention($state['attention'] ?? null, $view);
+        $view = $view->withAttention($attention['move'], $attention['volume'], $attention['news']);
+
         // This name's score feeds the style score the NEXT tick reads. The one read at the open is what
         // every name is judged against this tick, so the order names are visited in cannot matter.
         foreach ($fitness as $identifier => $score) {
@@ -274,9 +277,31 @@ final class AgentFlowEngine
             'fitness' => $fitness,
             'exposures' => $updatedExposures,
             'variance' => $variance,
+            'attention' => $attention,
         ]);
 
         return ['flow' => $flow, 'shares' => $shares, 'positions' => $updatedPositions];
+    }
+
+    /**
+     * What attention-driven retail has noticed over the last trading day (Barber & Odean 2008 sort on the
+     * previous day's return, volume and news). Each leg decays over AGENT_RETAIL_ATTENTION_HORIZON_YEARS
+     * and takes this tick in, so a tick is the same slice of a day at any tick rate: the move is a leaky sum
+     * of returns, the volume a weighted mean of abnormal volume, and the news a flag that fades.
+     *
+     * @param array{move: float, volume: float, news: float}|null $attention The book's last reading; null for a new book.
+     * @return array{move: float, volume: float, news: float}
+     */
+    private function rollAttention(?array $attention, AgentMarketViewDTO $view): array
+    {
+        $phi = exp(-max(0.0, $view->dt) / FinancialConstants::AGENT_RETAIL_ATTENTION_HORIZON_YEARS);
+        $prior = $attention ?? ['move' => 0.0, 'volume' => 1.0, 'news' => 0.0];
+
+        return [
+            'move' => ($prior['move'] * $phi) + $view->logReturn,
+            'volume' => ($prior['volume'] * $phi) + ((1.0 - $phi) * $view->abnormalVolume),
+            'news' => max($prior['news'] * $phi, $view->hasNews ? 1.0 : 0.0),
+        ];
     }
 
     /**

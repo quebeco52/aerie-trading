@@ -18,6 +18,7 @@ use PHPUnit\Framework\TestCase;
 final class AuthorizedParticipantTest extends TestCase
 {
     private const NET_ASSETS = 25_000_000_000.0;
+    private const ONE_DAY = 1.0 / FinancialConstants::TRADING_DAYS_PER_YEAR;
 
     private AuthorizedParticipant $ap;
 
@@ -59,7 +60,7 @@ final class AuthorizedParticipantTest extends TestCase
         $band = $this->ap->band(0.002);
         $flow = self::NET_ASSETS * ($band / FinancialConstants::ETF_FLOW_PRESSURE) * 0.5;
 
-        $settled = $this->ap->settle(0.0, $flow, self::NET_ASSETS, $band);
+        $settled = $this->ap->settle(0.0, $flow, self::NET_ASSETS, $band, self::ONE_DAY);
 
         self::assertGreaterThan(0.0, $settled['premium'], 'Buying the fund makes it dearer than its basket.');
         self::assertLessThan($band, $settled['premium']);
@@ -72,7 +73,7 @@ final class AuthorizedParticipantTest extends TestCase
         $band = $this->ap->band(0.002);
         $flow = self::NET_ASSETS * ($band / FinancialConstants::ETF_FLOW_PRESSURE) * 4.0;
 
-        $settled = $this->ap->settle(0.0, $flow, self::NET_ASSETS, $band);
+        $settled = $this->ap->settle(0.0, $flow, self::NET_ASSETS, $band, self::ONE_DAY);
 
         self::assertEqualsWithDelta($band, $settled['premium'], 1e-12, 'Back to where the arbitrage stops paying.');
         self::assertGreaterThan(0.0, $settled['creationValue'], 'A premium is met by creating shares.');
@@ -85,7 +86,7 @@ final class AuthorizedParticipantTest extends TestCase
         $band = $this->ap->band(0.002);
         $flow = -self::NET_ASSETS * ($band / FinancialConstants::ETF_FLOW_PRESSURE) * 4.0;
 
-        $settled = $this->ap->settle(0.0, $flow, self::NET_ASSETS, $band);
+        $settled = $this->ap->settle(0.0, $flow, self::NET_ASSETS, $band, self::ONE_DAY);
 
         self::assertEqualsWithDelta(-$band, $settled['premium'], 1e-12);
         self::assertLessThan(0.0, $settled['creationValue'], 'A discount is met by taking the basket out.');
@@ -95,10 +96,29 @@ final class AuthorizedParticipantTest extends TestCase
     public function testAStandingPremiumDecaysWithNoFlow(): void
     {
         $band = $this->ap->band(0.002);
-        $settled = $this->ap->settle($band * 0.8, 0.0, self::NET_ASSETS, $band);
+        $settled = $this->ap->settle($band * 0.8, 0.0, self::NET_ASSETS, $band, self::ONE_DAY);
 
         self::assertGreaterThan(0.0, $settled['premium']);
         self::assertLessThan($band * 0.8, $settled['premium']);
+    }
+
+    /** The decay is a rate in time, not per tick: a day of no flow leaves the same premium however finely the day is cut. */
+    public function testPremiumDecayIsNeutralToTheTickGrid(): void
+    {
+        $band = $this->ap->band(0.002);
+        $start = $band * 0.8;
+
+        $daily = $this->ap->settle($start, 0.0, self::NET_ASSETS, $band, self::ONE_DAY)['premium'];
+
+        $fine = $start;
+        $slices = 57;
+        for ($i = 0; $i < $slices; $i++) {
+            $fine = $this->ap->settle($fine, 0.0, self::NET_ASSETS, $band, self::ONE_DAY / $slices)['premium'];
+        }
+
+        self::assertEqualsWithDelta($daily, $fine, 1e-12);
+        // Calibrated to the 60% daily survival the fund was built on.
+        self::assertEqualsWithDelta(0.60, $daily / $start, 0.005);
     }
 
     /** The same ticket is a rounding error to a large fund and a squeeze on a small one. */
@@ -107,8 +127,8 @@ final class AuthorizedParticipantTest extends TestCase
         $band = $this->ap->band(0.002);
         $flow = 50_000_000.0;
 
-        $large = $this->ap->settle(0.0, $flow, self::NET_ASSETS, $band);
-        $small = $this->ap->settle(0.0, $flow, self::NET_ASSETS / 100.0, $band);
+        $large = $this->ap->settle(0.0, $flow, self::NET_ASSETS, $band, self::ONE_DAY);
+        $small = $this->ap->settle(0.0, $flow, self::NET_ASSETS / 100.0, $band, self::ONE_DAY);
 
         self::assertGreaterThan($large['premium'], $small['premium']);
     }
@@ -117,7 +137,7 @@ final class AuthorizedParticipantTest extends TestCase
     {
         self::assertSame(
             ['premium' => 0.0, 'creationValue' => 0.0],
-            $this->ap->settle(0.05, 1_000_000.0, 0.0, 0.01)
+            $this->ap->settle(0.05, 1_000_000.0, 0.0, 0.01, self::ONE_DAY)
         );
     }
 

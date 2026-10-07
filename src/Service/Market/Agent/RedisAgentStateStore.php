@@ -225,7 +225,7 @@ final class RedisAgentStateStore implements AgentStateStoreInterface
      * The optional fields are passed through only when the stored book has them, so a book written before
      * they existed reads back exactly as it was written.
      *
-     * @return array{positions: array<string, float>, fitness: array<string, float>, exposures?: array<string, float>, variance?: float}|null
+     * @return array{positions: array<string, float>, fitness: array<string, float>, exposures?: array<string, float>, variance?: float, attention?: array{move: float, volume: float, news: float}}|null
      */
     private function decode(mixed $raw): ?array
     {
@@ -249,6 +249,14 @@ final class RedisAgentStateStore implements AgentStateStoreInterface
 
         if (isset($decoded['variance']) && (is_int($decoded['variance']) || is_float($decoded['variance']))) {
             $book['variance'] = (float) $decoded['variance'];
+        }
+
+        if (isset($decoded['attention']['move'], $decoded['attention']['volume'], $decoded['attention']['news'])) {
+            $book['attention'] = [
+                'move' => (float) $decoded['attention']['move'],
+                'volume' => (float) $decoded['attention']['volume'],
+                'news' => (float) $decoded['attention']['news'],
+            ];
         }
 
         return $book;
