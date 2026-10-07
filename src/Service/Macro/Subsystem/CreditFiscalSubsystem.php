@@ -32,6 +32,12 @@ class CreditFiscalSubsystem
     /** Power-sector CO2 per dollar of GDP, in tonnes: 1,425 million tonnes in 2023 (EIA) over $27.36 trillion of GDP (BEA): the base a carbon price on power is levied on, held at today's emissions. */
     public const POWER_SECTOR_CO2_PER_GDP_DOLLAR = 1425.0e6 / 27.36e12;
 
+    // --- Sovereign Debt Maturity Ladder (fit to US Treasury average interest rate on marketable debt, 2001-2019) ---
+    /** Share of the debt that reprices at the bill rate within the year (bills and maturing coupons): 0.28, fit of the Treasury's average rate on total marketable debt to the 3-month bill and 10-year (2001-2019 RMSE 21bp; 2020-2026 out of sample 35bp, against 69bp for the 10-year charged on the whole stock). */
+    public const SOVEREIGN_DEBT_BILL_SHARE = 0.28;
+    /** Time constant (years) of the coupon stock's rate toward the 10-year as it rolls over, same fit. */
+    public const SOVEREIGN_COUPON_REPRICING_YEARS = 2.0;
+
     // --- Sovereign Debt Dynamics (Greenwood-Vayanos 2014) ---
     /** Structural primary fiscal deficit as a fraction of GDP with no sovereign fund, levied as taxes that far below the purchases share; with a fund, the structural deficit is the fund's draw, spent. */
     public const SOVEREIGN_STRUCTURAL_DEFICIT = 0.020;
@@ -543,10 +549,11 @@ class CreditFiscalSubsystem
      *
      * Accumulates sovereign debt-to-GDP ratio from primary deficit flow, net interest expenses,
      * and nominal GDP growth erosion:
-     *   d(Debt/GDP) = [ (G - T)/GDP + (r_10y - g_nominal) * (Debt/GDP) ] * dt
+     *   d(Debt/GDP) = [ (G - T)/GDP + (r_eff - g_nominal) * (Debt/GDP) ] * dt
      * where G is purchases plus the outlays the sovereign fund pays for, and T is taxes plus the fund's draw on its
-     * expected returns (NIRC), revenue like a tax. Every term is a flow: the Bohn surplus and, with no fund, the
-     * structural deficit are in the tax rate (fiscalStance()), which demand reads, not a ledger beside it.
+     * expected returns (NIRC), revenue like a tax, and r_eff is the rate the debt pays (sovereignEffectiveRate()).
+     * Every term is a flow: the Bohn surplus and, with no fund, the structural deficit are in the tax rate
+     * (fiscalStance()), which demand reads, not a ledger beside it.
      *
      * The tax rate's cyclical and structural parts are the whole budget's response, so T books them on GDP as fitted.
      * The shift the Diet legislates, as far as it has reached the rate, is a change in the corporate rate alone and is
@@ -592,7 +599,10 @@ class CreditFiscalSubsystem
         $revenue = $taxRevenue + $fundContribution;
         $primaryDeficit = $spending - $revenue;
         $state->primaryDeficitToGdp = $primaryDeficit / max(0.1, $state->nominalGdpIndex);
-        $interestCost = $state->yield10yEma * $state->sovereignDebtToGdp;
+        // The debt pays what it was issued at, not today's 10-year: the coupon stock reprices as it rolls over, the
+        // bills at once (Treasury average rate on marketable debt, fitted above).
+        $state->sovereignCouponRate += (1.0 - exp(-$dt / self::SOVEREIGN_COUPON_REPRICING_YEARS)) * ($state->yield10y - $state->sovereignCouponRate);
+        $interestCost = self::sovereignEffectiveRate($state) * $state->sovereignDebtToGdp;
 
         // Blanchard (2019) sovereign debt accumulation driven by growth-adjusted real rate (r - g), g being the growth
         // of the nominal GDP the ratio is struck on: a slump lowers it and the recovery hands it back.
@@ -719,6 +729,17 @@ class CreditFiscalSubsystem
             dt: $dt,
             lagTimeConstant: self::REQUIREMENT_BUILD_YEARS
         );
+    }
+
+    /**
+     * The average interest rate the sovereign debt pays: the bill share at the policy rate, the coupon stock at the rate
+     * it was issued at as it has rolled over.
+     *
+     * @param MacroState $state Current macroeconomic state.
+     */
+    public static function sovereignEffectiveRate(MacroState $state): float
+    {
+        return (self::SOVEREIGN_DEBT_BILL_SHARE * $state->policyRate) + ((1.0 - self::SOVEREIGN_DEBT_BILL_SHARE) * $state->sovereignCouponRate);
     }
 
     /**

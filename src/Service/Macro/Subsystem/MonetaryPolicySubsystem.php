@@ -36,6 +36,8 @@ class MonetaryPolicySubsystem
     // --- Term Premium Dynamics (ACM 2013 persistence, Campbell-Pflueger-Viceira 2020 regimes) ---
     /** Mean reversion of transitory term premium shocks (half-life ~8 months): ACM show the premium is persistent but not permanent. */
     public const TERM_PREMIUM_SHOCK_KAPPA = 1.0;
+    /** Loading of the District term premium on the mainland's (one global factor; Jotikasthira, Le & Lundblad 2015: long yields co-move across currencies mostly through risk compensation), the own factors scaled by sqrt(1 - b^2) so the premium's variance is unchanged. Calibrated to a District-on-mainland 10-year pass-through of 0.40, between Switzerland's 0.43 and Singapore's 0.35 (Bayoumi, Gagnon et al. 2015, daily, second-hand). */
+    public const GLOBAL_TERM_PREMIUM_LOADING = 0.45;
     /** Cap on the transitory shock (200bps either way), the largest ACM swing on record. */
     public const TERM_PREMIUM_SHOCK_CAP = 0.02;
     /** Mean reversion of the structural term premium regime (half-life ~8 years): eras such as the 1990s at 2% and the 2010s near zero, set by the bond-stock correlation. */
@@ -560,6 +562,42 @@ class MonetaryPolicySubsystem
 
         $state->termPremiumShock = max(-self::TERM_PREMIUM_SHOCK_CAP, min(self::TERM_PREMIUM_SHOCK_CAP, $factors['chi']));
         $state->termPremiumRegime = max(self::MIN_TERM_PREMIUM_REGIME, min(self::MAX_TERM_PREMIUM_REGIME, $factors['xi']));
+
+        // The mainland's own premium, the global factor: the same ACM-fitted process, since the mainland is the US.
+        $foreign = $this->mathUtility->calculateTwoFactorOU(
+            chi: $state->foreignTermPremiumShock,
+            xi: $state->foreignTermPremiumRegime,
+            kappaChi: self::TERM_PREMIUM_SHOCK_KAPPA,
+            kappaXi: self::TERM_PREMIUM_REGIME_KAPPA,
+            thetaChi: 0.0,
+            thetaXi: MacroEngine::NS_BASE_TERM_PREMIUM,
+            sigChi: self::TERM_PREMIUM_SHOCK_SIGMA,
+            sigXi: self::TERM_PREMIUM_REGIME_SIGMA,
+            rho: 0.0,
+            dt: $dt
+        );
+        $state->foreignTermPremiumShock = max(-self::TERM_PREMIUM_SHOCK_CAP, min(self::TERM_PREMIUM_SHOCK_CAP, $foreign['chi']));
+        $state->foreignTermPremiumRegime = max(self::MIN_TERM_PREMIUM_REGIME, min(self::MAX_TERM_PREMIUM_REGIME, $foreign['xi']));
+    }
+
+    /**
+     * The District term premium's transitory and structural parts: its own factors and the mainland's, in a one-factor
+     * split whose weights' squares sum to one, so each part keeps the ACM-fitted variance and correlates with the
+     * mainland's at the global loading.
+     *
+     * @return array{shock: float, regime: float}
+     */
+    public static function districtTermPremiumFactors(MacroState $state): array
+    {
+        $global = self::GLOBAL_TERM_PREMIUM_LOADING;
+        $own = sqrt(1.0 - ($global ** 2));
+
+        return [
+            'shock' => ($own * $state->termPremiumShock) + ($global * $state->foreignTermPremiumShock),
+            'regime' => MacroEngine::NS_BASE_TERM_PREMIUM
+                + ($own * ($state->termPremiumRegime - MacroEngine::NS_BASE_TERM_PREMIUM))
+                + ($global * ($state->foreignTermPremiumRegime - MacroEngine::NS_BASE_TERM_PREMIUM)),
+        ];
     }
 
     /**
@@ -609,7 +647,8 @@ class MonetaryPolicySubsystem
         $flightToSafetyShift = self::FLIGHT_TO_SAFETY_SENSITIVITY * max(0.0, $state->marketVolatilityEma - MacroEngine::FLIGHT_TO_SAFETY_VOL_THRESHOLD);
         $cyclicalTermPremium = $state->outputGap * self::NS_GAP_TERM_PREMIUM_SCALE;
         // Laubach (2009) structural fiscal debt-to-GDP term premium component.
-        $structuralTermPremium = $state->termPremiumRegime + $state->termPremiumShock + $state->sovereignRiskSpreadEma;
+        $termPremiumFactors = self::districtTermPremiumFactors($state);
+        $structuralTermPremium = $termPremiumFactors['regime'] + $termPremiumFactors['shock'] + $state->sovereignRiskSpreadEma;
         $totalBaseTermPremium = max(self::MIN_TERM_PREMIUM_10Y, $structuralTermPremium + $inflationRiskPremium + $cyclicalTermPremium - $flightToSafetyShift);
 
         // Nelson-Siegel (1987) & Diebold-Li (2006) asymptotic risk-neutral rate level beta0.
@@ -634,7 +673,7 @@ class MonetaryPolicySubsystem
         $scale30y = MathUtility::calculateTermPremiumDurationScale(30.0, MacroEngine::TERM_PREMIUM_DURATION_HORIZON_YEARS);
         $longEndHurdle = $naturalRate + $targetInflation + (MacroEngine::NS_BASE_TERM_PREMIUM * $scale30y);
         $habitatDemandShift = self::HABITAT_LONG_END_DEMAND_SENSITIVITY * max(0.0, $state->yield30yEma - $longEndHurdle);
-        $longEndPremium = max(0.0, $state->termPremiumRegime - $habitatDemandShift);
+        $longEndPremium = max(0.0, $termPremiumFactors['regime'] - $habitatDemandShift);
 
         $yield2y  = $this->calculateSvenssonTenor(2.0, $level, $nsBeta1, $nsBeta2, $nsBeta3, $state, $totalBaseTermPremium, $longEndPremium);
         $yield5y  = $this->calculateSvenssonTenor(5.0, $level, $nsBeta1, $nsBeta2, $nsBeta3, $state, $totalBaseTermPremium, $longEndPremium);

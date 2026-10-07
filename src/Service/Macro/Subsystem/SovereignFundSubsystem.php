@@ -265,8 +265,8 @@ class SovereignFundSubsystem
     /**
      * The foreign sovereign zero-coupon yield at a maturity, on the domestic curve's own building blocks: the foreign
      * policy rate's expected path back to its neutral level at the Bliss slope decay (the Vasicek expectations loading),
-     * plus the Adrian-Crump-Moench term premium scaled for duration. The foreign bloc has no curve shocks of its own,
-     * so the paper reprices only as the foreign rate moves with the foreign cycle.
+     * plus the Adrian-Crump-Moench term premium scaled for duration: the mainland's own premium, the global factor the
+     * District's loads on (MonetaryPolicySubsystem::districtTermPremiumFactors()), so the paper carries duration risk.
      */
     public function foreignZeroYield(MacroState $state, float $maturity): float
     {
@@ -281,7 +281,7 @@ class SovereignFundSubsystem
         );
 
         return $expectationsYield
-            + (MacroEngine::NS_BASE_TERM_PREMIUM * MathUtility::calculateTermPremiumDurationScale($maturity, MacroEngine::TERM_PREMIUM_DURATION_HORIZON_YEARS));
+            + (($state->foreignTermPremiumRegime + $state->foreignTermPremiumShock) * MathUtility::calculateTermPremiumDurationScale($maturity, MacroEngine::TERM_PREMIUM_DURATION_HORIZON_YEARS));
     }
 
     /**

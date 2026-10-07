@@ -8,6 +8,7 @@ use App\Service\Macro\Recorder\MacroDiagnosticsProbe;
 use App\Service\Macro\Subsystem\CreditFiscalSubsystem;
 use App\Service\Macro\Subsystem\MacroAggregateSubsystem;
 use App\Service\Macro\Subsystem\MonetaryPolicySubsystem;
+use App\Service\Macro\Subsystem\SovereignFundSubsystem;
 use App\Service\Math\MathUtility;
 use PHPUnit\Framework\TestCase;
 
@@ -674,7 +675,9 @@ class MonetaryPolicySubsystemTest extends TestCase
         );
 
         $lowPremium = clone $state;
+        // A low-premium era is global, as the 2010s were: the District's own factor and the mainland's both at the floor.
         $lowPremium->termPremiumRegime = 0.0;
+        $lowPremium->foreignTermPremiumRegime = 0.0;
         $curveLowPremium = $this->subsystem->calculateYieldCurve($lowPremium, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE);
         $this->assertLessThan(-0.0025, $curveLowPremium['yield_10y'] - $curveLowPremium['yield_2y'], 'in a low-premium era the curve inverts by a meaningful margin');
     }
@@ -781,8 +784,9 @@ class MonetaryPolicySubsystemTest extends TestCase
         $calm->tipsBreakeven = MacroEngine::TARGET_INFLATION;
         $calm->outputGap = 0.0;
 
+        // A 100bps move in the District premium's transitory part, all of it from the District's own factor.
         $tantrum = clone $calm;
-        $tantrum->termPremiumShock = 0.01;
+        $tantrum->termPremiumShock = 0.01 / sqrt(1.0 - (MonetaryPolicySubsystem::GLOBAL_TERM_PREMIUM_LOADING ** 2));
 
         $curveCalm = $this->subsystem->calculateYieldCurve($calm, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE);
         $curveTantrum = $this->subsystem->calculateYieldCurve($tantrum, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE);
@@ -794,6 +798,54 @@ class MonetaryPolicySubsystemTest extends TestCase
         $move30y = $curveTantrum['yield_30y'] - $curveCalm['yield_30y'];
         $this->assertEqualsWithDelta($move10y, $move30y, 0.00001, 'The thirty-year moves with the ten-year: the 10s30s spread is stable through a tantrum, not amplified half again.');
         $this->assertEqualsWithDelta($curveCalm['risk_neutral_10y'], $curveTantrum['risk_neutral_10y'], 0.00001, 'The expected policy path is untouched; the shock is all premium.');
+    }
+
+    /** A mainland premium shock is the global factor: it reaches the District ten-year at the loading, as premium alone. */
+    public function testAMainlandTermPremiumShockReachesTheDistrictTenYearAtTheGlobalLoading(): void
+    {
+        $calm = new MacroState();
+        $calm->policyRate = 0.03;
+        $calm->targetRate = 0.03;
+        $calm->tipsBreakeven = MacroEngine::TARGET_INFLATION;
+        $calm->outputGap = 0.0;
+        $mainlandTantrum = clone $calm;
+        $mainlandTantrum->foreignTermPremiumShock = 0.01;
+
+        $curveCalm = $this->subsystem->calculateYieldCurve($calm, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE);
+        $curveTantrum = $this->subsystem->calculateYieldCurve($mainlandTantrum, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE);
+
+        $this->assertEqualsWithDelta(0.01 * MonetaryPolicySubsystem::GLOBAL_TERM_PREMIUM_LOADING, $curveTantrum['yield_10y'] - $curveCalm['yield_10y'], 1e-9);
+        $this->assertEqualsWithDelta($curveCalm['risk_neutral_10y'], $curveTantrum['risk_neutral_10y'], 1e-12, 'The District path is untouched.');
+    }
+
+    /** The one-factor split keeps each premium part's variance: the own and global weights' squares sum to one. */
+    public function testTheGlobalSplitKeepsTheDistrictPremiumVariance(): void
+    {
+        $own = new MacroState();
+        $own->termPremiumShock = 1.0;
+        $own->foreignTermPremiumShock = 0.0;
+        $global = new MacroState();
+        $global->termPremiumShock = 0.0;
+        $global->foreignTermPremiumShock = 1.0;
+
+        $ownWeight = MonetaryPolicySubsystem::districtTermPremiumFactors($own)['shock'];
+        $globalWeight = MonetaryPolicySubsystem::districtTermPremiumFactors($global)['shock'];
+        $this->assertEqualsWithDelta(1.0, ($ownWeight ** 2) + ($globalWeight ** 2), 1e-12);
+        $this->assertEqualsWithDelta(MonetaryPolicySubsystem::GLOBAL_TERM_PREMIUM_LOADING, $globalWeight, 1e-12);
+    }
+
+    /** The mainland's bonds now carry its premium: a mainland tantrum lifts the yield the fund's foreign paper is priced on. */
+    public function testTheMainlandBondYieldCarriesItsOwnTermPremium(): void
+    {
+        $fund = new SovereignFundSubsystem(new MathUtility());
+        $calm = new MacroState();
+        $calm->foreignPolicyRate = MacroEngine::MAINLAND_NEUTRAL_RATE;
+        $calm->foreignTermPremiumShock = 0.0;
+        $calm->foreignTermPremiumRegime = MacroEngine::NS_BASE_TERM_PREMIUM;
+        $tantrum = clone $calm;
+        $tantrum->foreignTermPremiumShock = 0.01;
+
+        $this->assertEqualsWithDelta(0.01, $fund->foreignZeroYield($tantrum, 10.0) - $fund->foreignZeroYield($calm, 10.0), 1e-9);
     }
 
     public function testBlissSlopeDecayKeepsTheTwoYearNearThePolicyRateAtTheLowerBound(): void
