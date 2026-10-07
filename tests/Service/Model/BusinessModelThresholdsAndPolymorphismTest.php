@@ -154,11 +154,16 @@ class BusinessModelThresholdsAndPolymorphismTest extends TestCase
         $riskFreeRate = 0.04;
 
         // Financials: purely BVPS * Structural Roic = 50.0 * 0.10 = 5.0
-        $finEps = $fin->calculateStructuralEps($bookValuePerShare, $structuralRoic, $revenuePerShare, $riskFreeRate);
+        $finEps = $fin->calculateStructuralEps($bookValuePerShare, $structuralRoic, $revenuePerShare, $riskFreeRate, 0.04);
         $this->assertEquals(5.0, $finEps);
 
         // Corporates: accounts for operating cash vs operating BV
-        $corpEps = $corp->calculateStructuralEps($bookValuePerShare, $structuralRoic, $revenuePerShare, $riskFreeRate);
+        $corpEps = $corp->calculateStructuralEps($bookValuePerShare, $structuralRoic, $revenuePerShare, $riskFreeRate, 0.04);
+        $this->assertGreaterThan(0.0, $corpEps);
+
+        // A financial's return is already on equity and is not levered again; a corporate's is.
+        $this->assertSame(0.10, $fin->getEquityReturn(0.10, 500.0, 50.0, 0.03));
+        $this->assertGreaterThan(0.10, $corp->getEquityReturn(0.10, 100.0, 50.0, 0.03));
         $this->assertGreaterThan(0.0, $corpEps);
     }
 

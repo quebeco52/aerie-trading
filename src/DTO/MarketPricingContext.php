@@ -64,6 +64,8 @@ class MarketPricingContext
         public float $dividendAdjustmentSpeed = 1.0,
         /** Market vol the stored total variance was built with (last tick's); null strips at this tick's. */
         public ?float $priorMarketVol = null,
+        /** The firm's pre-tax marginal borrowing rate (DebtMetricsDTO::$currentMarketRate); null prices debt at the 10Y plus the IG spread. */
+        public ?float $costOfDebt = null,
         /** @var array<string, float> What each law the firm's accounts answer to is charged on or moves, per share, keyed by lever (App\Service\Market\PolicyCapitalization::earningsGap()); empty for a firm with none. */
         public array $policyBasesPerShare = []
     ) {}
@@ -133,6 +135,7 @@ class MarketPricingContext
             targetPayoutRatio: $stock->getPolicyPayoutRatio(),
             dividendAdjustmentSpeed: (float) $stock->getDividendSpeed(),
             priorMarketVol: $priorMarketVol,
+            costOfDebt: $health->rawMetrics->currentMarketRate,
             policyBasesPerShare: array_filter([
                 'bankLevyRate' => $strategy->annualBankLevyBase($stock) / $shares,
                 'extractionStringency' => $strategy->annualExtractionCostBase($stock) / $shares,

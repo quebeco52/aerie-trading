@@ -251,7 +251,6 @@ class MarketEngine
         $currentRoic = $ctx->currentRoic;
         $roicTtm = $ctx->roicTtm;
         $dividendPerShare = $ctx->dividendPerShare;
-        $liveWacc = $ctx->liveWacc;
         $baselineIndustryPE = $ctx->baselineIndustryPE;
         $revenuePerShare = $ctx->revenuePerShare;
         $businessModel = $ctx->businessModel;
@@ -335,7 +334,10 @@ class MarketEngine
             );
         }
 
-        $finalDrift = $this->mathUtility->calculateCAPM($riskFreeRate, $beta, $erp)
+        // Expected total return is the cost of equity the fair value is discounted at (CAPM on the 10Y,
+        // DebtEngine::calculateHealth()), so a fairly priced name drifts at the rate it is valued at; the
+        // dividend leaves the price on the ex-date.
+        $finalDrift = $liveCostOfEquity
             - $jumpCompensator
             - $systemicCompensator;
 
@@ -439,7 +441,7 @@ class MarketEngine
             $outputGap,
             $inflation,
             $beta,
-            $liveWacc,
+            $ctx->costOfDebt,
             $reversionSpeed,
             $earningsPerShare,
             $currentRoic,
@@ -549,7 +551,7 @@ class MarketEngine
      * @param float $outputGap           The macroeconomic output gap (boom vs bust).
      * @param float $inflation           The current inflation rate.
      * @param float $beta                The stock's sensitivity to systemic market moves.
-     * @param float $liveWacc            The true dynamic Weighted Average Cost of Capital.
+     * @param float|null $costOfDebt     The firm's pre-tax marginal borrowing rate; null prices it at the 10Y plus the IG spread.
      * @param float $reversionSpeed      The baseline speed at which the stock reverts to fair value.
      * @param float $earningsPerShare    The current EPS (Earnings Per Share).
      * @param float $currentRoic         The current Return on Invested Capital (or ROE for banks).
@@ -560,7 +562,7 @@ class MarketEngine
      * @param float $baselineIndustryPE  The standard P/E multiple for this industry.
      * @param float $revenuePerShare     The total revenue per share.
      * @param string $businessModel      The type of business (e.g., 'tech', 'bank', 'retail').
-     * @param float $liveCostOfEquity    The Cost of Equity (CAPM) for financial institutions.
+     * @param float $liveCostOfEquity    The Cost of Equity (CAPM on the 10Y), the hurdle every equity leg is discounted at.
      * @param float $currentVolatility   The current asset volatility.
      * @param float $netDebtPerShare     The net debt per share.
      * @param float $secularGrowth       The long-term growth rate of the sector/economy.
@@ -578,7 +580,7 @@ class MarketEngine
         float $outputGap,
         float $inflation,
         float $beta,
-        float $liveWacc,
+        ?float $costOfDebt,
         float $reversionSpeed,
         float $earningsPerShare,
         float $currentRoic,
@@ -605,7 +607,14 @@ class MarketEngine
     ): array {
 
         $strategy = \App\Data\Sectors::getBusinessModelStrategy($businessModel);
-        $hurdleRate = $strategy->isFinancial() ? $liveCostOfEquity : $liveWacc;
+        $macro = $macroState ?? new MacroStateDTO();
+
+        // Every leg below values EQUITY: levered earnings on a P/E, book equity on a P/B, equity earnings on the
+        // policy gap. All are discounted at the cost of equity on the return the firm earns on its equity
+        // (Damodaran 2012, ch. 18-20); WACC belongs to unlevered cash flows, which nothing here capitalises.
+        $hurdleRate = $liveCostOfEquity;
+        $afterTaxCostOfDebt = ($costOfDebt ?? ($macro->yield10yEma + $macro->macroCreditSpread))
+            * (1.0 - $strategy->getEffectiveTaxRate($macro->corporateTaxRate));
 
         // Structural ROIC is determined by the business model strategy, allowing sectors like Insurance
         // to smooth out extreme catastrophic volatility and price based on through-the-cycle baseline capacity.
@@ -616,6 +625,11 @@ class MarketEngine
             $bookValuePerShare,
             $baselineMargin
         );
+
+        // Without a balance sheet there is no leverage to apply, and the operating return stands in.
+        $equityReturn = $investedCapitalPerShare > 0.0
+            ? $strategy->getEquityReturn($structuralRoic, $investedCapitalPerShare, $bookValuePerShare, $afterTaxCostOfDebt)
+            : $structuralRoic;
 
         // MACROECONOMIC STRESS INDEX (MSI)
         $recessionStress = max(0.0, -$outputGap);
@@ -633,13 +647,13 @@ class MarketEngine
                 $inflation,
                 $strategy->getMoatSpread()
             ),
-            $structuralRoic,
+            $equityReturn,
             $targetPayoutRatio
         );
 
         $fairValuePE = $this->mathUtility->calculateQualityAdjustedFairValuePE(
             $hurdleRate,
-            $structuralRoic,
+            $equityReturn,
             $expectedGrowth,
             $baselineIndustryPE,
             $accrualsRatio
@@ -650,6 +664,7 @@ class MarketEngine
             $structuralRoic,
             $revenuePerShare,
             $riskFreeRate,
+            $afterTaxCostOfDebt,
             // Real capital employed when the caller supplied a balance sheet; the model's structural
             // approximation from revenue and book value otherwise.
             $investedCapitalPerShare > 0.0 ? $investedCapitalPerShare : null
@@ -711,7 +726,7 @@ class MarketEngine
         // The multiple belongs to the business model: plant earning above its hurdle is worth more than the
         // plant, while a portfolio of marketable stakes is worth the portfolio, so a trust declares 1.0 and
         // this term hands its model net asset value per share rather than a multiple of it.
-        $pbFairValue = $bookValuePerShare * $strategy->getIntrinsicPbMultiple($structuralRoic, $hurdleRate);
+        $pbFairValue = $bookValuePerShare * $strategy->getIntrinsicPbMultiple($equityReturn, $hurdleRate);
 
         // A financial is valued on tangible book, since its regulator deducts goodwill from capital. The same
         // earnings over the smaller base give the same value wherever the multiple is interior; the change is

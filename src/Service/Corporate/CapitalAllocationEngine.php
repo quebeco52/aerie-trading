@@ -365,9 +365,12 @@ class CapitalAllocationEngine
 
         $saturationSeverity = $this->resolveRedeploymentSeverity($ctx, $trueReturn);
 
+        // The multiple values equity, so it is struck at the cost of equity on the return on equity, as the
+        // market strikes it (MarketEngine); the spread above stays ROIC against the hurdle, an EVA test.
+        $equityRates = $ctx->strategy->getEquityValuationRates($stock, $trueReturn, $ctx->health, $ctx->macroState->corporateTaxRate);
         $fairValuePE = $this->mathUtility->calculateManagementFairValuePE(
-            $hurdleRate,
-            $trueReturn,
+            $equityRates['costOfEquity'],
+            $equityRates['equityReturn'],
             $ctx->strategy->getSecularGrowthRate($stock),
             $ctx->macroState->outputGap,
             $ctx->health->leveredBeta,
@@ -600,7 +603,7 @@ class CapitalAllocationEngine
             $ctx->recapActionTaken = true;
 
             if ($borrowing > 500_000_000.0) {
-                $ctx->events[] = ['description' => "Issued \$" . number_format($borrowing / 1_000_000_000, 2) . "B in bonds for recapitalization.", 'shock' => 0.5];
+                $ctx->events[] = ['description' => "Issued \$" . number_format($borrowing / 1_000_000_000, 2) . "B in bonds for recapitalization."];
             }
         }
 

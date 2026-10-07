@@ -60,22 +60,24 @@ trait StandardValuationTrait
     }
 
 
-    public function calculateStructuralEps(float $bookValuePerShare, float $structuralRoic, float $revenuePerShare, float $riskFreeRate, ?float $investedCapitalPerShare = null): float
+    public function calculateStructuralEps(float $bookValuePerShare, float $structuralRoic, float $revenuePerShare, float $riskFreeRate, float $afterTaxCostOfDebt, ?float $investedCapitalPerShare = null): float
     {
         // For non-financials, Structural ROIC applies to Invested Capital, not Equity (Book Value). The real
         // figure is used when the caller has one; the revenue-and-book approximation remains only for
         // callers without a balance sheet in hand. With real capital the implied debt below becomes the
         // firm's actual net debt, so the interest drag is charged on what it genuinely owes.
-        $investedCapitalPerShare ??= max($revenuePerShare * 0.5, $bookValuePerShare * 1.5);
+        $investedCapitalPerShare ??= max(
+            $revenuePerShare * FinancialConstants::STRUCTURAL_INVESTED_CAPITAL_TO_REVENUE,
+            $bookValuePerShare * FinancialConstants::STRUCTURAL_INVESTED_CAPITAL_TO_BOOK
+        );
         $investedCapitalPerShare = max(0.01, $investedCapitalPerShare);
 
         // NOPAT = Invested Capital * ROIC
         $structuralNopat = $investedCapitalPerShare * $structuralRoic;
 
-        // Structural after-tax interest expense drag for levered capital structure
+        // After-tax interest on the debt financing the rest, at the firm's own marginal borrowing rate and tax.
         $impliedDebt = max(0.0, $investedCapitalPerShare - $bookValuePerShare);
-        $costOfDebt = $riskFreeRate + 0.02;
-        $structuralInterestExpense = $impliedDebt * $costOfDebt * (1.0 - 0.21);
+        $structuralInterestExpense = $impliedDebt * $afterTaxCostOfDebt;
 
         $structuralOperatingEps = max(0.0, $structuralNopat - $structuralInterestExpense);
 
@@ -88,5 +90,22 @@ trait StandardValuationTrait
     public function calculateStructuralRoic(float $roicTtm, float $baselineRoic, float $revenuePerShare, float $bookValuePerShare, float $baselineMargin): float
     {
         return $roicTtm;
+    }
+
+    /** Levered through the identity: an operating return is earned on invested capital, not on equity. */
+    public function getEquityReturn(float $returnOnCapital, float $investedCapital, float $equity, float $afterTaxCostOfDebt): float
+    {
+        return MathUtility::equityReturnFromRoic($returnOnCapital, $investedCapital, $equity, $afterTaxCostOfDebt);
+    }
+
+    /** @return array{costOfEquity: float, equityReturn: float} */
+    public function getEquityValuationRates(\App\Entity\Stock $stock, float $returnOnCapital, \App\DTO\DebtHealthDTO $health, float $corporateTaxRate): array
+    {
+        $afterTaxCostOfDebt = $health->rawMetrics->currentMarketRate * (1.0 - $this->getEffectiveTaxRate($corporateTaxRate));
+
+        return [
+            'costOfEquity' => $health->costOfEquity,
+            'equityReturn' => $this->getEquityReturn($returnOnCapital, $stock->getInvestedCapital(), (float) $stock->getTotalEquity(), $afterTaxCostOfDebt),
+        ];
     }
 }

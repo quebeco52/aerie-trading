@@ -2772,4 +2772,13 @@ class MathUtilityTest extends TestCase
             1e-15
         );
     }
+
+    /** ROE = ROIC + D/E (ROIC - kd(1-t)), and an equity at or below zero is not levered by. */
+    public function testEquityReturnFromRoicIsTheLeverageIdentity(): void
+    {
+        self::assertEqualsWithDelta(0.10 + (1.0 * (0.10 - 0.04)), MathUtility::equityReturnFromRoic(0.10, 100.0, 50.0, 0.04), 1e-12);
+        self::assertEqualsWithDelta(0.10, MathUtility::equityReturnFromRoic(0.10, 50.0, 50.0, 0.04), 1e-12);
+        self::assertEqualsWithDelta(0.02 + (3.0 * (0.02 - 0.04)), MathUtility::equityReturnFromRoic(0.02, 100.0, 25.0, 0.04), 1e-12);
+        self::assertSame(0.10, MathUtility::equityReturnFromRoic(0.10, 100.0, 0.0, 0.04));
+    }
 }

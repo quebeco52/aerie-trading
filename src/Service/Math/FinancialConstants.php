@@ -835,4 +835,10 @@ class FinancialConstants
     public const ETF_QUOTE_BAND_SHARE = 0.35;
     /** Shares a fund is seeded with, so a creation has a book to be measured against on the first tick. */
     public const ETF_SEED_SHARES_OUTSTANDING = 250_000_000.0;
+
+    // --- Structural Capital Approximation (callers without a balance sheet) ---
+    /** Invested capital per unit of revenue (0.5, capital turned about twice a year); the long-standing approximation, of the order of Damodaran's US sales-to-capital tables (not pinned). */
+    public const STRUCTURAL_INVESTED_CAPITAL_TO_REVENUE = 0.5;
+    /** Invested capital per unit of book equity (1.5, a book debt-to-equity of 0.5); the long-standing approximation, of the order of US non-financial leverage at book (not pinned). */
+    public const STRUCTURAL_INVESTED_CAPITAL_TO_BOOK = 1.5;
 }

@@ -190,8 +190,6 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
     public const FLOAT_DECISION_HORIZON_YEARS = 1.0;
     /** State key holding the quarter's net incurred claims, on which the reserve stock is rolled forward. */
     public const STATE_INCURRED_CLAIMS = 'state:reserves:incurred_claims';
-    /** Event shock penalty applied when claim payouts exceed cash reserves. */
-    public const EVENT_SHOCK_INSOLVENCY = -5.00;
 
     // --- Investment Portfolio Duration ---
     /** Macaulay duration of the long bond tranche of float, matched against liabilities an insurer pays out over decades. */
@@ -900,7 +898,7 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
             $state['treasury'] = 0.0;
             $state['wholesaleDebt'] += $liquidityShortfall;
             $amtB = number_format($liquidityShortfall / 1_000_000_000, 2);
-            $state['events'][] = ['description' => "Claim payouts exceeded cash reserves. Forced to borrow \${$amtB}B.", 'shock' => self::EVENT_SHOCK_INSOLVENCY];
+            $state['events'][] = ['description' => "Claim payouts exceeded cash reserves. Forced to borrow \${$amtB}B."];
         }
 
         $stock->setCustomerDeposits((string) $roll['reserves']);

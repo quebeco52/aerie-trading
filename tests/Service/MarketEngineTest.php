@@ -320,6 +320,7 @@ class MarketEngineTest extends TestCase
             currentRoic: 0.25,
             roicTtm: 0.25,
             liveWacc: 0.09,
+            liveCostOfEquity: 0.09, // All equity: the WACC is the cost of equity.
             revenuePerShare: 50.0,
             businessModel: 'tech'
         );
@@ -417,5 +418,37 @@ class MarketEngineTest extends TestCase
 
         // An operating company is valued on its invested capital's return; the tangible book is not read.
         $this->assertEqualsWithDelta($valueAnalyst(0.01, null, 'none'), $valueAnalyst(0.01, 40.0, 'none'), 1e-9);
+    }
+
+    /**
+     * Fair value prices equity, so it is discounted at the cost of equity and the WACC does not enter it:
+     * two firms differing only in their WACC price identically, and a dearer equity is worth less.
+     */
+    public function testFairValueIsDiscountedAtTheCostOfEquityNotTheWacc(): void
+    {
+        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
+        $this->mathUtilityMock->method('checkProbability')->willReturn(false);
+
+        $priced = fn (float $wacc, float $costOfEquity): array => $this->engine->calculateNextPrice(new MarketPricingContext(
+            currentPrice: 80.0,
+            currentVolatility: 0.25,
+            longTermVolatility: 0.25,
+            earningsPerShare: 6.0,
+            dt: 1.0 / 252.0,
+            lambda: 0.0,
+            bookValuePerShare: 30.0,
+            currentRoic: 0.12,
+            roicTtm: 0.12,
+            liveWacc: $wacc,
+            revenuePerShare: 60.0,
+            liveCostOfEquity: $costOfEquity,
+            investedCapitalPerShare: 50.0,
+            costOfDebt: 0.05,
+        ));
+
+        $base = $priced(0.08, 0.10);
+        $this->assertEqualsWithDelta($base['perceived_fair_value'], $priced(0.06, 0.10)['perceived_fair_value'], 1e-9, 'The WACC moved an equity value.');
+        $this->assertEqualsWithDelta($base['price'], $priced(0.06, 0.10)['price'], 1e-9);
+        $this->assertLessThan($base['perceived_fair_value'], $priced(0.08, 0.12)['perceived_fair_value'], 'A dearer equity must be worth less.');
     }
 }

@@ -47,6 +47,7 @@ abstract class BaseFinancialBusinessModel implements BusinessModelInterface
         FinancialPhysicsTrait::getRegulatoryDividendCap insteadof StandardCapitalAllocationTrait;
         FinancialPhysicsTrait::checkBuybackRegulatoryLockout insteadof StandardCapitalAllocationTrait;
         FinancialPhysicsTrait::calculateStructuralEps insteadof StandardValuationTrait;
+        FinancialPhysicsTrait::getEquityReturn insteadof StandardValuationTrait;
     }
 
     // --- Return Reversion ---

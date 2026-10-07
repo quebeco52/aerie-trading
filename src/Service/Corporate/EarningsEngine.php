@@ -1247,19 +1247,39 @@ class EarningsEngine
         );
         $stock->setTotalNetIncome((string) $trailingNetIncome);
 
-        $rawEpsSurprise = abs($ctx->expectedQuarterlyEps) > 0.01
-            ? $ctx->surpriseAmountQuarterly / abs($ctx->expectedQuarterlyEps)
-            : ($ctx->surpriseAmountQuarterly > 0 ? self::ZERO_BASE_SURPRISE_PCT : ($ctx->surpriseAmountQuarterly < 0 ? -self::ZERO_BASE_SURPRISE_PCT : 0.0));
+        $ctx->surprisePct = $this->blendedSurprise($ctx, $ctx->expectedQuarterlyEps, $ctx->analystExpectedRevenue);
+
+        // What the price reacts to is the surprise against the consensus the market anticipates. Analysts walk
+        // the published number down (MarketConsensusEngine::ANALYST_WALKDOWN_BIAS) so most firms beat it, and the
+        // market knows it: whisper forecasts sit above the published consensus and price the expected beat
+        // (Bagnoli, Beneish & Watts 1999). The walk-down scales expected revenue and variable cost alike, so the
+        // anticipated consensus adds back that contribution, after tax.
+        $bias = MarketConsensusEngine::ANALYST_WALKDOWN_BIAS;
+        $shadedContribution = ($ctx->analystExpectedRevenue - $ctx->analystExpectedVariableCosts) * ($bias / (1.0 - $bias));
+        $taxOnShade = $ctx->expectedQuarterlyNetIncome > 0.0 ? $ctx->corporateTaxRate : 0.0;
+        $ctx->pricedSurprisePct = $this->blendedSurprise(
+            $ctx,
+            $ctx->expectedQuarterlyEps + (($shadedContribution * (1.0 - $taxOnShade)) / $shares),
+            $ctx->analystExpectedRevenue / (1.0 - $bias)
+        );
+    }
+
+    /** Revenue and EPS surprise against a consensus, blended by the business model's weights. */
+    private function blendedSurprise(EarningsSimulationContext $ctx, float $expectedEps, float $expectedRevenue): float
+    {
+        $surpriseAmount = $ctx->actualQuarterlyEps - $expectedEps;
+        $rawEpsSurprise = abs($expectedEps) > 0.01
+            ? $surpriseAmount / abs($expectedEps)
+            : ($surpriseAmount > 0 ? self::ZERO_BASE_SURPRISE_PCT : ($surpriseAmount < 0 ? -self::ZERO_BASE_SURPRISE_PCT : 0.0));
         $epsSurprisePct = max(-1.0, min(1.0, $rawEpsSurprise));
 
-        $revenueSurprisePct = abs($ctx->analystExpectedRevenue) > 1.0
-            ? ($ctx->actualRevenue - $ctx->analystExpectedRevenue) / abs($ctx->analystExpectedRevenue)
+        $revenueSurprisePct = abs($expectedRevenue) > 1.0
+            ? ($ctx->actualRevenue - $expectedRevenue) / abs($expectedRevenue)
             : 0.0;
 
         $blendWeights = $ctx->strategy->getSurpriseBlendWeights();
-        $epsWeight = $blendWeights['eps_weight'];
-        $revWeight = $blendWeights['revenue_weight'];
-        $ctx->surprisePct = ($revenueSurprisePct * $revWeight) + ($epsSurprisePct * $epsWeight);
+
+        return ($revenueSurprisePct * $blendWeights['revenue_weight']) + ($epsSurprisePct * $blendWeights['eps_weight']);
     }
 
     private function calculateFreeCashFlow(EarningsSimulationContext $ctx): void
@@ -1970,7 +1990,7 @@ class EarningsEngine
             $currentPE = $priceToSales * (1.0 / $structuralAfterTaxMargin);
         }
 
-        $ctx->priceGapPct = $this->resolveDampedPriceGap($ctx->surprisePct, (float) $stock->getBeta(), $this->resolveGrowthPremium($currentPE));
+        $ctx->priceGapPct = $this->resolveDampedPriceGap($ctx->pricedSurprisePct, (float) $stock->getBeta(), $this->resolveGrowthPremium($currentPE));
         $ctx->totalShockPct = $ctx->priceGapPct;
         $ctx->corporateActionDescriptions = "";
 
@@ -1996,7 +2016,8 @@ class EarningsEngine
                     $desc = $subEvent['description'] ?? '';
                 }
                 $ctx->corporateActionDescriptions .= "\n• " . $desc;
-                $ctx->totalShockPct += ($subEvent['shock'] / 100.0);
+                // Only an announcement with a measured return carries one; distress is already in fair value.
+                $ctx->totalShockPct += (($subEvent['shock'] ?? 0.0) / 100.0);
             }
         }
 

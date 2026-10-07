@@ -613,6 +613,11 @@ class TreasuryEngineTest extends TestCase
             1e-6,
             'the share count the engine writes back has to carry the dilution, or the raise is booked with no shares behind it'
         );
+
+        // The offering's announcement return is the measured one, whatever the valuation that prompted it.
+        $offerings = array_values(array_filter($ctx->events, static fn (array $e): bool => str_contains($e['description'] ?? '', 'offering')));
+        $this->assertCount(1, $offerings);
+        $this->assertSame(TreasuryEngine::SEASONED_EQUITY_OFFERING_ANNOUNCEMENT_PCT, $offerings[0]['shock'] ?? null);
     }
 
     /**
@@ -705,6 +710,12 @@ class TreasuryEngineTest extends TestCase
 
         $this->assertTrue($stock->isPaymentDefault(), 'a maturity nobody will fund is an event of default');
         $this->assertSame(1, $stock->getQuartersInDefault(), 'the grace clock starts at one');
+
+        // Distress is news, not a scripted price move: fair value already carries it through leverage and the cost of equity.
+        $this->assertNotEmpty($ctx->events);
+        foreach ($ctx->events as $event) {
+            $this->assertSame(0.0, (float) ($event['shock'] ?? 0.0), 'A distress event moved the price: ' . ($event['description'] ?? ''));
+        }
         $this->assertEqualsWithDelta(140_000_000.0, $ctx->unfundedMaturity, 1.0, 'only the part the revolver could not cover is unfunded');
         $this->assertEqualsWithDelta(160_000_000.0, $ctx->principalRepaid, 1.0, 'cash plus the full commitment went to the bondholders');
         $this->assertGreaterThan(0.0, (float) $stock->getTotalEquity(), 'the firm is still notionally solvent');

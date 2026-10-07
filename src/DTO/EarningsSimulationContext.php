@@ -189,6 +189,8 @@ class EarningsSimulationContext
     public float $expectedQuarterlyEps = 0.0;
     public float $surpriseAmountQuarterly = 0.0;
     public float $surprisePct = 0.0;
+    /** The surprise against the consensus the market anticipates (before the analysts' walk-down); what the price gaps on. */
+    public float $pricedSurprisePct = 0.0;
     public float $priceGapPct = 0.0;
 
     // FCF & Capital

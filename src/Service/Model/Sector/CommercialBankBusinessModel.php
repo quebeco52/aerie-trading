@@ -335,12 +335,6 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
     // --- Passive Liability Growth ---
     /** Standard deviation of idiosyncratic drift applied to passive liability growth. */
     public const LIABILITY_GROWTH_DRIFT_STD = 0.005;
-    /** Sentiment shock magnitude applied during a severe bank run event. */
-    public const EVENT_SHOCK_BANK_RUN = -5.0;
-    /** Sentiment shock magnitude applied when significant customer deposits flee. */
-    public const EVENT_SHOCK_DEPOSIT_FLIGHT = -2.0;
-    /** Sentiment shock magnitude applied when new deposits are heavily captured. */
-    public const EVENT_SHOCK_DEPOSIT_CAPTURE = 0.5;
 
     /** Absolute limit on quarterly liability change fraction. */
     public const LIABILITY_MAX_CHANGE_LIMIT = 0.15;
@@ -1120,13 +1114,13 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
             if ($state['treasury'] < 0.0) {
                 $liquidityShortfall = abs($state['treasury']);
                 $amtB = number_format($liquidityShortfall / 1_000_000_000, 2);
-                $state['events'][] = ['event_type' => ShockEvent::BANK_RUN, 'context' => ['amount' => $amtB], 'shock' => self::EVENT_SHOCK_BANK_RUN];
+                $state['events'][] = ['event_type' => ShockEvent::BANK_RUN, 'context' => ['amount' => $amtB]];
             }
             $stock->setCustomerDeposits((string) max(0.0, $state['customerDeposits']));
             // News is the departure from trend: a base growing with the economy is not a capture.
             $departureFromTrend = ($liabilityChange / $currentLiabilities) - $trendGrowthQuarterly;
-            if ($departureFromTrend < self::LIABILITY_FLIGHT_THRESHOLD) $state['events'][] = ['event_type' => ShockEvent::CUSTOMER_DEPOSIT_FLIGHT, 'context' => ['amount' => number_format(abs($liabilityChange) / 1_000_000_000, 2)], 'shock' => self::EVENT_SHOCK_DEPOSIT_FLIGHT];
-            elseif ($departureFromTrend > self::LIABILITY_CAPTURE_THRESHOLD) $state['events'][] = ['event_type' => ShockEvent::CAPTURED_NEW_DEPOSITS, 'context' => ['amount' => number_format($liabilityChange / 1_000_000_000, 2)], 'shock' => self::EVENT_SHOCK_DEPOSIT_CAPTURE];
+            if ($departureFromTrend < self::LIABILITY_FLIGHT_THRESHOLD) $state['events'][] = ['event_type' => ShockEvent::CUSTOMER_DEPOSIT_FLIGHT, 'context' => ['amount' => number_format(abs($liabilityChange) / 1_000_000_000, 2)]];
+            elseif ($departureFromTrend > self::LIABILITY_CAPTURE_THRESHOLD) $state['events'][] = ['event_type' => ShockEvent::CAPTURED_NEW_DEPOSITS, 'context' => ['amount' => number_format($liabilityChange / 1_000_000_000, 2)]];
         }
     }
 

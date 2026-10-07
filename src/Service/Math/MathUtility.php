@@ -1093,6 +1093,27 @@ class MathUtility
     }
 
     /**
+     * Return on equity implied by a return on invested capital and the debt financing the rest of it:
+     * ROE = ROIC + (D/E)(ROIC - kd(1 - t)), the leverage identity of Modigliani & Miller (1958, Proposition II
+     * in accounting returns). Equity at or below zero has no ratio to lever by and returns ROIC unlevered.
+     *
+     * @param float $returnOnCapital    ROIC.
+     * @param float $investedCapital    Debt plus equity financing the operating assets (any scale; per share or total).
+     * @param float $equity             Book equity, on the same scale.
+     * @param float $afterTaxCostOfDebt kd (1 - t).
+     */
+    public static function equityReturnFromRoic(float $returnOnCapital, float $investedCapital, float $equity, float $afterTaxCostOfDebt): float
+    {
+        if ($equity <= 0.0) {
+            return $returnOnCapital;
+        }
+
+        $debt = max(0.0, $investedCapital - $equity);
+
+        return $returnOnCapital + (($debt / $equity) * ($returnOnCapital - $afterTaxCostOfDebt));
+    }
+
+    /**
      * The intrinsic fair-value P/E net of the earnings-quality discount: Damodaran multiple shrunk toward
      * the sector prior, less the Sloan (1996) accruals penalty, floored at the distressed multiple.
      * One function so the market's anchor and management's are the same number.
