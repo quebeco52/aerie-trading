@@ -1,0 +1,53 @@
+#!/usr/bin/env bash
+# Runs a harness run script over seeds and arms in one call and prints one line per arm, so a harness agent launches
+# a whole stage with run_in_background and reads a few lines back instead of looping, polling and tailing logs.
+#
+#   bin/harness-batch var/harness/<topic>/run.sh 1-16 before after
+#   bin/harness-batch var/harness/<topic>/run.sh 1-16 rec && bin/harness-batch var/harness/<topic>/run.sh 1-16 after \
+#       && python3 var/harness/<topic>/analyse.py > var/harness/<topic>/<name>.out && cat var/harness/<topic>/<name>.out
+#
+# Calls `<run script> <arm> <seed>` for every pair at once; the script takes its own slot with bin/php-slot, which
+# holds the session to its share of the machine. Each run's output goes to LOGS (default: logs/ beside the script) as
+# <arm>-<seed>.log. Seeds are `a-b`, a single seed, or a comma list. Exits non-zero if any run failed.
+set -uo pipefail
+
+(( $# >= 3 )) || { echo "usage: bin/harness-batch <run script> <seeds: 1-16 | 3 | 1,4,9> <arm>..." >&2; exit 2; }
+script=$1 seeds=$2
+shift 2
+[[ -x $script ]] || { echo "harness-batch: $script is not an executable file" >&2; exit 2; }
+logs=${LOGS:-$(dirname "$script")/logs}
+mkdir -p "$logs"
+
+list=()
+for part in ${seeds//,/ }; do
+    if [[ $part == *-* ]]; then
+        for ((s = ${part%-*}; s <= ${part#*-}; s++)); do list+=("$s"); done
+    else
+        list+=("$part")
+    fi
+done
+
+declare -A pid
+for arm in "$@"; do
+    for s in "${list[@]}"; do
+        "$script" "$arm" "$s" > "$logs/$arm-$s.log" 2>&1 &
+        pid[$arm-$s]=$!
+    done
+done
+
+status=0
+start=$SECONDS
+for arm in "$@"; do
+    failed=()
+    for s in "${list[@]}"; do
+        wait "${pid[$arm-$s]}" || failed+=("$s")
+    done
+    line="$arm: $(( ${#list[@]} - ${#failed[@]} ))/${#list[@]} ok"
+    if (( ${#failed[@]} )); then
+        status=1
+        line+=", failed seeds ${failed[*]} (last line of $logs/$arm-${failed[0]}.log: $(tail -n 1 "$logs/$arm-${failed[0]}.log"))"
+    fi
+    echo "$line"
+done
+echo "wall $(( SECONDS - start )) s, logs in $logs"
+exit $status

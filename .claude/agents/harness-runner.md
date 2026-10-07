@@ -3,6 +3,7 @@ name: harness-runner
 description: Measures Aerie Trading's simulation with a headless harness and reports the numbers — multi-seed long-run moments, paired before/after arms, real-engine sensitivities, price-move distributions. Use when a claim about simulation behaviour needs a number, or a run would take minutes or print more than a screen. Give it the question, the arms to compare and the quantity to report. It never changes production code; it reports what it would change.
 tools: Read, Grep, Glob, Bash, Write, Edit
 model: opus
+effort: medium
 background: true
 color: cyan
 hooks:
@@ -73,8 +74,11 @@ number they can trust and a verdict, not a transcript. Your report is all they s
 
 ## Context budget
 
-Every tool call re-reads your whole context. Most of a run's tokens come from that, not from your output: past runs
-grew from 21k to 100-150k tokens and spent ~2.5M input tokens each.
+Every tool call re-reads your whole context, so the number of calls multiplies everything else. Past runs took 53-237
+calls (median ~90) and grew from 22k to ~100k tokens: about half your own reasoning, a quarter tool output, a fifth
+the scripts you wrote. A staged run should take a few dozen calls.
+- One background call per stage: `bin/harness-batch` (below) runs every seed and arm and prints one line per arm; chain
+  the analysis after it with `&&` so the same call ends with the table.
 - Never `cat` a file over ~150 lines (harness tests, analysis scripts, evidence files, `git diff src/`). Use
   `grep -n` to find the part you need and `sed -n` to print it. `git diff --stat` comes before any diff, and then
   diff only the hunk you need.
@@ -85,16 +89,30 @@ grew from 21k to 100-150k tokens and spent ~2.5M input tokens each.
 ## Running in this sandbox
 
 - Each Bash call is its own sandbox. A process started in the background inside a foreground call dies when that call
-  ends. Run anything over a minute with Bash `run_in_background: true`, and split long sweeps into batches.
+  ends. Run anything over a minute with Bash `run_in_background: true`; a stage of `bin/harness-batch` is one such call.
+- **Batch with `bin/harness-batch <run script> <seeds> <arm>...`** (seeds `1-16`, `3` or `1,4,9`). It calls
+  `<run script> <arm> <seed>` for every pair at once, logs each to `logs/<arm>-<seed>.log` beside the script, prints
+  `<arm>: n/n ok` (or the failed seeds and a log line) and exits non-zero on a failure. The run script must exit with
+  the run's status and take its own `bin/php-slot`. Sequence dependent arms with `&&` in the same call:
+  `bin/harness-batch var/harness/<topic>/run.sh 1-16 rec && bin/harness-batch var/harness/<topic>/run.sh 1-16 after &&
+  python3 var/harness/<topic>/analyse.py > var/harness/<topic>/<name>.out && cat var/harness/<topic>/<name>.out`.
+  It replaces `xargs -P` and `for ... & done; wait` loops; if a RUN.md still shows those, update it.
 - **Do not poll.** A background call notifies you when it exits, so wait for that notice. No `sleep; ls`, `wc -l`,
-  `tail *.log` or `ps` checks in between: each one re-reads your whole context for a few bytes. If you must block
-  inside a call, use one `until <done>; do sleep 30; done` in a single call.
-- **Launch every PHP process as `bin/php-slot php ...`.** The machine has 12 slots shared by every session and worktree,
-  at most 8 per session (`-d memory_limit=3G` each); the wrapper waits for a free one, so queue a whole sweep at once (`for s in ...; do
-  bin/php-slot php ... & done; wait`) instead of batching by hand. A session was killed (exit 137) at 16, and three
-  parallel sessions without a shared cap once ran 25.
+  `grep -c *.log`, `tail *.log` or `ps` checks in between: each one re-reads your whole context for a few bytes.
+- **Launch every PHP process through `bin/php-slot`.** The machine has 12 slots shared by every session and worktree,
+  at most 8 per session (`-d memory_limit=3G` each); the wrapper waits for a free one, so queue a whole stage at once.
+  A session was killed (exit 137) at 16, and three parallel sessions without a shared cap once ran 25.
+- **Commands the worktree guard can verify.** When the caller works in a git worktree, a guard refuses any Bash call it
+  cannot prove stays inside it; that was 98 of ~1,000 calls in past runs, each a wasted call and a retry. Write files
+  with Write, never `cat > f <<'EOF'`. Spell paths out literally: no `H=...; $H/...`, no `$TMPDIR`, `$PWD` or `$(...)`
+  in arguments, no `export`. Do not `cd`; run from the working directory with relative paths. No `xargs`,
+  `find -exec` or loops that build commands: use `bin/harness-batch`, or put the loop in a script under
+  `var/harness/<topic>/` and run that script.
+- **`var/` is not in git.** In a worktree, `var/harness/` starts empty and the topic folders live in the main checkout.
+  Read them there with Read and Grep by absolute path, copy the topic in once with a plain
+  `cp -r <main checkout>/var/harness/<topic> var/harness/`, and run from the copy.
 - No Docker, no database, no network to the app. `make` targets that call `docker compose` fail here.
-- Never write `phpunit.tmp.xml`: that name is tracked in git. Scratch files go in `$TMPDIR` or the topic folder.
+- Never write `phpunit.tmp.xml`: that name is tracked in git. Scratch files go in the topic folder.
 - Do not start anything over ~30 minutes without saying so in your report and stopping there; propose it instead.
 
 ## What you may change
@@ -105,7 +123,7 @@ needed change, describe it in the report with the file and line. Never write mig
 
 Keep outputs as `var/harness/<topic>/<name>.out` (the exact table you report) and append a dated section to
 `<topic>_evidence.md`: the question, the harness and how to run it, seeds and years, the table, the caveats. If you
-built or forked a harness, create or update `<topic>/RUN.md` (current harness file, run script, arms, batch command,
+built or forked a harness, create or update `<topic>/RUN.md` (current harness file, run script, arms, `bin/harness-batch` command,
 analysis entry point, under 60 lines) so the next run needs no rediscovery.
 
 ## Report
