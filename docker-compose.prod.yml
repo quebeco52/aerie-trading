@@ -1,3 +1,11 @@
+# Production pacing: one simulated year per real week, one tick a second (quarter ~42 h, earnings season ~17 h,
+# league season 4 weeks). Set here rather than in any .env file because the dev ticker also runs with --env=prod and
+# must keep its own fast clock from .env. Slower: 1209600 ticks a year is a year a fortnight; faster: 302400 is a year
+# in 3.5 days. Changing SIM_TICKS_PER_YEAR on a running world: restart the ticker once with --rebase-clock.
+x-sim-pace: &sim-pace
+  SIM_TICK_INTERVAL_US: "1000000"
+  SIM_TICKS_PER_YEAR: "604800"
+
 services:
   aerie-caddy:
     build:
@@ -26,6 +34,7 @@ services:
     depends_on:
       - aerie-database
       - aerie-redis
+    environment: *sim-pace
     env_file:
       - .env.local
 
@@ -39,6 +48,7 @@ services:
       - aerie-redis
     command: php bin/console messenger:consume async --memory-limit=128M --time-limit=3600
     restart: unless-stopped
+    environment: *sim-pace
     env_file:
       - .env.local
 
@@ -52,6 +62,7 @@ services:
     depends_on:
       - aerie-database
       - aerie-redis
+    environment: *sim-pace
     env_file:
       - .env.local
   
@@ -66,6 +77,7 @@ services:
     depends_on:
       - aerie-redis
       - aerie-database
+    environment: *sim-pace
     env_file:
       - .env.local
 
