@@ -190,6 +190,9 @@ class CreditFiscalSubsystemTest extends TestCase
             $state->corporateTaxRate = 0.235;
             $state->governmentSpendingIndex = 104.0;
             $state->yield10yEma = 0.05;
+            $state->yield10y = 0.05;
+            $state->policyRate = 0.05;
+            $state->sovereignCouponRate = 0.05;
             $state->nominalGdpGrowth = 0.03;
             if ($funded) {
                 $state->sovereignFundDollarsPerGdp = 2.0e13;
@@ -1119,9 +1122,70 @@ class CreditFiscalSubsystemTest extends TestCase
         $state = $this->neutralBudget($debtToGdp);
         $state->corporateTaxRate = MacroEngine::TARGET_CORPORATE_TAX_RATE + $surplus;
         $state->inflationEma = MacroEngine::TARGET_INFLATION;
-        $state->yield10yEma = MacroEngine::STRUCTURAL_LABOR_GROWTH_RATE + MacroEngine::TFP_DRIFT + MacroEngine::TARGET_INFLATION;
+        $trendGrowth = MacroEngine::STRUCTURAL_LABOR_GROWTH_RATE + MacroEngine::TFP_DRIFT + MacroEngine::TARGET_INFLATION;
+        $state->yield10yEma = $trendGrowth;
+        $state->yield10y = $trendGrowth;
+        $state->policyRate = $trendGrowth;
+        $state->sovereignCouponRate = $trendGrowth;
 
         return $state;
+    }
+
+    // --- Sovereign Debt Maturity Ladder ---
+
+    /** With rates held, the coupon stock rolls onto the 10-year and the debt pays the bill and coupon rates in their shares. */
+    public function testTheDebtPaysItsBillAndCouponRatesInTheirShares(): void
+    {
+        $state = $this->neutralBudget(0.80);
+        $state->policyRate = 0.01;
+        $state->yield10y = 0.05;
+        $state->sovereignCouponRate = 0.02;
+        for ($i = 0; $i < 400; ++$i) {
+            $this->subsystem->calculateSovereignDebt($state, 0.1);
+        }
+
+        $this->assertEqualsWithDelta(0.05, $state->sovereignCouponRate, 1e-6);
+        $this->assertEqualsWithDelta(
+            (CreditFiscalSubsystem::SOVEREIGN_DEBT_BILL_SHARE * 0.01) + ((1.0 - CreditFiscalSubsystem::SOVEREIGN_DEBT_BILL_SHARE) * 0.05),
+            CreditFiscalSubsystem::sovereignEffectiveRate($state),
+            1e-6
+        );
+    }
+
+    /** A jump in the 10-year reaches the coupon stock over its repricing constant, at any tick length. */
+    public function testTheCouponStockRepricesOnItsFittedTimeConstant(): void
+    {
+        $tau = CreditFiscalSubsystem::SOVEREIGN_COUPON_REPRICING_YEARS;
+        foreach ([0.25, 1.0 / 360.0] as $dt) {
+            $state = $this->neutralBudget(0.80);
+            $state->policyRate = 0.03;
+            $state->sovereignCouponRate = 0.03;
+            $state->yield10y = 0.05;
+            for ($i = 0, $n = (int) round($tau / $dt); $i < $n; ++$i) {
+                $this->subsystem->calculateSovereignDebt($state, $dt);
+            }
+
+            $this->assertEqualsWithDelta(0.03 + (0.02 * (1.0 - exp(-1.0))), $state->sovereignCouponRate, 1e-9, "One time constant in at dt {$dt}.");
+        }
+    }
+
+    /** Debt issued at low rates keeps paying them: a spike in the 10-year costs the budget only as the debt rolls. */
+    public function testTheInterestBillIsTheRateTheDebtWasIssuedAtNotTodaysTenYear(): void
+    {
+        $locked = $this->neutralBudget(1.0);
+        $locked->policyRate = 0.02;
+        $locked->sovereignCouponRate = 0.02;
+        $locked->yield10y = 0.06;
+        $locked->yield10yEma = 0.06;
+        $repriced = clone $locked;
+        $repriced->sovereignCouponRate = 0.06;
+        $repriced->policyRate = 0.06;
+
+        $this->subsystem->calculateSovereignDebt($locked, 0.01);
+        $this->subsystem->calculateSovereignDebt($repriced, 0.01);
+
+        // One hundredth of a year: interest 0.0002 of GDP on locked-in debt against 0.0006 had it all repriced.
+        $this->assertEqualsWithDelta(0.04 * 0.01, $repriced->sovereignDebtToGdp - $locked->sovereignDebtToGdp, 2e-5);
     }
 
 

@@ -163,6 +163,9 @@ readonly class MacroStateDTO
         public float $termPremiumShock = 0.0,
         public float $expectedPathShock = 0.0,
         public float $termPremiumRegime = MacroEngine::NS_BASE_TERM_PREMIUM,
+        /** The mainland's ten-year term premium factors, the global factor the District's loads on (App\Service\Macro\Subsystem\MonetaryPolicySubsystem::updateTermPremiumDynamics()). */
+        public float $foreignTermPremiumShock = 0.0,
+        public float $foreignTermPremiumRegime = MacroEngine::NS_BASE_TERM_PREMIUM,
         public float $perceivedNeutralRate = MacroEngine::BASE_NATURAL_RATE + MacroEngine::TARGET_INFLATION,
         public float $marketVolatility = 0.14,
         public float $marketVolatilityEma = 0.14,
@@ -177,6 +180,8 @@ readonly class MacroStateDTO
         /** The tax rate's measured structural level, a decade's exponential average (App\Service\Macro\Subsystem\CreditFiscalSubsystem::calculateDynamicFiscalPolicy()). */
         public float $corporateTaxRateTrend = MacroEngine::BASE_CORPORATE_TAX_RATE,
         public float $sovereignDebtToGdp = MacroEngine::INITIAL_DEBT_TO_GDP,
+        /** Interest rate the coupon stock of the debt pays, repricing toward the 10-year as it rolls (App\Service\Macro\Subsystem\CreditFiscalSubsystem::calculateSovereignDebt()). */
+        public float $sovereignCouponRate = self::OPENING_YIELD_10Y,
         public float $sovereignDebtToGdpEma = MacroEngine::INITIAL_DEBT_TO_GDP,
         public float $sovereignNetDebtToGdp = MacroEngine::INITIAL_DEBT_TO_GDP,
         public float $sovereignNetDebtToGdpEma = MacroEngine::INITIAL_DEBT_TO_GDP,

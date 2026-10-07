@@ -142,6 +142,8 @@ class MacroState
     public float $termPremiumShock;
     public float $expectedPathShock;
     public float $termPremiumRegime;
+    public float $foreignTermPremiumShock;
+    public float $foreignTermPremiumRegime;
     public float $perceivedNeutralRate;
 
     public bool $qeActive;
@@ -157,6 +159,7 @@ class MacroState
     public float $corporateTaxRate;
     public float $corporateTaxRateTrend;
     public float $sovereignDebtToGdp;
+    public float $sovereignCouponRate;
     public float $sovereignDebtToGdpEma;
     // Gross debt less the debt instruments the sovereign fund holds (IMF GFSM 2014 net debt): what the market prices
     // default risk on. Equal to the gross ratio in a run with no fund.
