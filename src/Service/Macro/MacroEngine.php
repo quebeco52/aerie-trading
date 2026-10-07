@@ -88,10 +88,6 @@ class MacroEngine
     /** Long-run equilibrium baseline volatility during neutral economic conditions. */
     public const MACRO_VOL_BASE_ANCHOR            = 0.15;
 
-    // --- SVJJ Stochastic Volatility & Contemporaneous Jumps (Duffie, Pan, & Singleton 2000) ---
-    /** Mean variance jump (mu_v): a downside jump lifts vol from the 15% anchor to ~19%. Sized so the jumps fund about a fifth of long-run variance, leaving the diffusion an anchor of its own well clear of the 8% floor; at 0.05 they funded 73% of it and the diffusive anchor sat BELOW that floor. */
-    public const SVJJ_MU_V = 0.015;
-
     // --- Taylor Rule & The Evans Rule (Forward Guidance) ---
     /** Inflation panic threshold above which central bank accelerates hiking to Volcker speed. */
     public const CB_INFLATION_PANIC_THRESHOLD = 0.035;
@@ -347,8 +343,8 @@ class MacroEngine
     public const SYSTEMIC_JUMP_ETA_UP = 40.0;
     /** Decay rate of downward market jumps; the reciprocal is the mean crash log return (~3.6%). */
     public const SYSTEMIC_JUMP_ETA_DOWN = 28.0;
-    /** Mean of the contemporaneous variance jump accompanying a market-wide price jump. */
-    public const SYSTEMIC_JUMP_VARIANCE_MEAN = 0.02;
+    /** Mean variance jump on a market-wide crash (Duffie, Pan & Singleton 2000 SVCJ): a crash lifts vol from the 15% anchor to ~16%; at four arrivals a year the jumps fund about a fifth of the long-run variance, leaving the diffusion an anchor well clear of the 8% floor. */
+    public const SYSTEMIC_JUMP_VARIANCE_MEAN = 0.003;
 
     // --- Sector Factor ---
     /** Fraction of a stock's non-market variance loaded onto its sector factor, setting within- vs cross-sector correlation. */
@@ -599,7 +595,7 @@ class MacroEngine
 
         $this->monetarySubsystem->applyYieldCurve($state, $yieldData, $dt);
 
-        $this->assetSubsystem->updateSystemicMarketFactor($state, $dt);
+        $systemicShock = $this->assetSubsystem->updateSystemicMarketFactor($state, $dt);
         $this->aggregateSubsystem->updateCapitalStockOverhang($state, $dt);
         // Baker, Bloom & Davis (2016) economic policy uncertainty index simulation.
         $this->creditFiscalSubsystem->calculatePolicyUncertainty($state, $dt);
@@ -635,10 +631,9 @@ class MacroEngine
         $this->assetSubsystem->calculateResidentialPropertyIndex($state, $expectedInflation, $dt);
         $this->assetSubsystem->calculateHousingStarts($state, $expectedInflation, $dt);
 
-        $stressMultiplier = 1.0 + (abs($state->outputGap) * self::STRESS_MULTIPLIER_GAP_SENSITIVITY);
-        $state->inflation = $this->aggregateSubsystem->calculateInflation($state, $inflationAnchor, $stressMultiplier, $dt);
+        $state->inflation = $this->aggregateSubsystem->calculateInflation($state, $inflationAnchor, $productivityGrowthRate, $dt);
         $this->aggregateSubsystem->calculateProducerPriceInflation($state, $productivityGrowthRate, $dt);
-        $state->marketVolatility = $this->assetSubsystem->calculateMarketVolatility($state, $dt);
+        $state->marketVolatility = $this->assetSubsystem->calculateMarketVolatility($state, $dt, $systemicShock['varianceJump'], $systemicShock['returnInnovation']);
 
         $this->aggregateSubsystem->calculateManufacturingPmi($state, $dt);
         $this->monetarySubsystem->calculateMoneySupplyGrowth($state, $dt, $productivityGrowthRate);
@@ -647,6 +642,7 @@ class MacroEngine
         $this->aggregateSubsystem->updateExponentialMovingAverages($state, $dt);
 
         $this->creditFiscalSubsystem->calculateMacroCreditSpread($state);
+        $this->creditFiscalSubsystem->updateCreditSpreadTrend($state, $dt);
         $this->creditFiscalSubsystem->calculateInterbankLiquiditySpread($state, $dt);
         $this->creditFiscalSubsystem->calculateSloosCreditStandards($state, $dt);
         $this->creditFiscalSubsystem->calculateCorporateDefaultRate($state, $dt);
@@ -720,9 +716,10 @@ class MacroEngine
         // Pulse trigger: resets instantaneous systemic event classification before evaluation.
         $state->eventType = null;
 
+        // Inside the cooldown only an edge-triggered event lands: the level conditions it suppresses must not outrank it.
+        $edgeOnly = false;
         if ($state->eventCooldownTimer > 0.0) {
             $state->eventCooldownTimer = max(0.0, $state->eventCooldownTimer - $dt);
-            // Preserves unhandled edge-triggered systemic shocks during refractory cooldown.
             if ($state->lastCatastropheAt !== $state->totalTime
                 && $state->lastCreditCrisisAt !== $state->totalTime
                 && $state->lastQeLaunchAt !== $state->totalTime
@@ -730,6 +727,7 @@ class MacroEngine
             ) {
                 return;
             }
+            $edgeOnly = true;
         }
 
         $eventType = match (true) {
@@ -748,16 +746,16 @@ class MacroEngine
             $state->lastSovereignRebalanceAt === $state->totalTime && $state->sovereignFundRebalanceBacklog < 0.0
             => ShockEvent::SOVEREIGN_WEALTH_TRIM,
 
-            $state->interbankLiquiditySpread >= self::SYSTEMIC_LIQUIDITY_FREEZE_SPREAD
+            !$edgeOnly && $state->interbankLiquiditySpread >= self::SYSTEMIC_LIQUIDITY_FREEZE_SPREAD
             => ShockEvent::SYSTEMIC_LIQUIDITY_FREEZE,
 
-            $state->highYieldCreditSpread >= self::SYSTEMIC_CREDIT_SEIZURE_SPREAD
+            !$edgeOnly && $state->highYieldCreditSpread >= self::SYSTEMIC_CREDIT_SEIZURE_SPREAD
             => ShockEvent::CREDIT_MARKET_SEIZURE,
 
-            $state->sovereignRiskSpread >= self::SYSTEMIC_SOVEREIGN_STRESS_SPREAD
+            !$edgeOnly && $state->sovereignRiskSpread >= self::SYSTEMIC_SOVEREIGN_STRESS_SPREAD
             => ShockEvent::SOVEREIGN_DOWNGRADE,
 
-            self::isRecession($state->recessionProbability, $state->outputGap)
+            !$edgeOnly && self::isRecession($state->recessionProbability, $state->outputGap)
             => ShockEvent::RECESSION_DECLARED,
 
             // Natural catastrophe physical damage shock event (Hallegatte et al. 2007).
@@ -765,11 +763,12 @@ class MacroEngine
             => ShockEvent::NATURAL_CATASTROPHE,
 
             // Drehmann & Juselius (2012) household balance sheet debt-service deleveraging shock.
-            $state->householdDebtServiceGap >= self::HOUSEHOLD_DSR_STRESS_MARGIN
+            !$edgeOnly
+                && $state->householdDebtServiceGap >= self::HOUSEHOLD_DSR_STRESS_MARGIN
                 && $state->householdDebtToIncome < $state->householdDebtToIncomeEma
             => ShockEvent::HOUSEHOLD_DELEVERAGING,
 
-            $state->inversionDuration >= self::SYSTEMIC_INVERSION_ALARM_YEARS
+            !$edgeOnly && $state->inversionDuration >= self::SYSTEMIC_INVERSION_ALARM_YEARS
             => ShockEvent::YIELD_CURVE_INVERSION_ALARM,
 
             default => null,

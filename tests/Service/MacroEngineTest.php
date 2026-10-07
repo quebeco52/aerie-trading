@@ -966,18 +966,16 @@ class MacroEngineTest extends TestCase
             'exponent' => null,
         ]);
 
-        // Expect the CIR method to be called with exact constants
+        // Expect the CIR method to be called with the engine's constants, its reversion stiffened by the panic jumps'
+        // Merton compensator c: kappa + c towards kappa theta / (kappa + c), the same pull towards theta net of the jumps.
+        $cir = null;
         $mathUtility->expects($this->once())
             ->method('calculateCIR')
-            ->with(
-                0.05, // Current elevated 500 bps spread
-                MacroEngine::INTERBANK_SPREAD_KAPPA,
-                MacroEngine::INTERBANK_BASELINE_SPREAD,
-                MacroEngine::INTERBANK_SPREAD_SIGMA,
-                0.25, // dt
-                0.0   // dW
-            )
-            ->willReturn(0.035); // Mock a reversion down to 350 bps
+            ->willReturnCallback(function (float ...$args) use (&$cir): float {
+                $cir = $args;
+
+                return 0.035; // Mock a reversion down to 350 bps
+            });
 
         $creditFiscalSubsystem = new CreditFiscalSubsystem($mathUtility);
 
@@ -987,6 +985,11 @@ class MacroEngineTest extends TestCase
 
         $creditFiscalSubsystem->calculateInterbankLiquiditySpread($state, 0.25);
 
+        $this->assertNotNull($cir);
+        [$current, $kappa, $theta, $sigma, $dt, $dW] = $cir;
+        $this->assertSame([0.05, MacroEngine::INTERBANK_SPREAD_SIGMA, 0.25, 0.0], [$current, $sigma, $dt, $dW]);
+        $this->assertGreaterThan(MacroEngine::INTERBANK_SPREAD_KAPPA, $kappa, 'The jumps are compensated in the drift.');
+        $this->assertEqualsWithDelta(MacroEngine::INTERBANK_SPREAD_KAPPA * MacroEngine::INTERBANK_BASELINE_SPREAD, $kappa * $theta, 1e-15);
         $this->assertEquals(0.035, $state->interbankLiquiditySpread, 'Interbank spread must mean-revert using CIR.');
     }
 
@@ -1184,8 +1187,8 @@ class MacroEngineTest extends TestCase
 
         $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
 
-        $infHigh = $this->aggregateSubsystem->calculateInflation($stateHighEma, 0.02, 1.0, 0.25);
-        $infAnchored = $this->aggregateSubsystem->calculateInflation($stateAnchored, 0.02, 1.0, 0.25);
+        $infHigh = $this->aggregateSubsystem->calculateInflation($stateHighEma, 0.02, MacroEngine::TFP_DRIFT, 0.25);
+        $infAnchored = $this->aggregateSubsystem->calculateInflation($stateAnchored, 0.02, MacroEngine::TFP_DRIFT, 0.25);
 
         $this->assertGreaterThan($infAnchored, $infHigh, 'Un-anchored expectations must result in higher inflation drift.');
     }
@@ -1223,7 +1226,7 @@ class MacroEngineTest extends TestCase
         $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
 
         // Quarter 1 step
-        $infQ1 = $this->aggregateSubsystem->calculateInflation($state, MacroEngine::TARGET_INFLATION, 1.0, 0.25);
+        $infQ1 = $this->aggregateSubsystem->calculateInflation($state, MacroEngine::TARGET_INFLATION, MacroEngine::TFP_DRIFT, 0.25);
         $lagQ1 = $state->energyCostPushLag;
 
         // The energy lag should have partially transmitted, but not fully reached raw transmission
@@ -1232,7 +1235,7 @@ class MacroEngineTest extends TestCase
         $this->assertLessThan($rawTransmission, $lagQ1, 'Energy shock should be sticky and not instantly transmit at 100% in first quarter.');
 
         // Advance to Quarter 2 with persistent shock
-        $infQ2 = $this->aggregateSubsystem->calculateInflation($state, MacroEngine::TARGET_INFLATION, 1.0, 0.25);
+        $infQ2 = $this->aggregateSubsystem->calculateInflation($state, MacroEngine::TARGET_INFLATION, MacroEngine::TFP_DRIFT, 0.25);
         $lagQ2 = $state->energyCostPushLag;
 
         $this->assertGreaterThan($lagQ1, $lagQ2, 'Sticky cost lag should accumulate and rise across successive quarters of elevated energy.');
@@ -1559,7 +1562,7 @@ class MacroEngineTest extends TestCase
 
         // Inflation pass-through check
         $tightState->outputGap = 0.01;
-        $newInflation = $this->aggregateSubsystem->calculateInflation($tightState, MacroEngine::TARGET_INFLATION, 1.0, 0.25);
+        $newInflation = $this->aggregateSubsystem->calculateInflation($tightState, MacroEngine::TARGET_INFLATION, MacroEngine::TFP_DRIFT, 0.25);
         $this->assertGreaterThan(0.020, $newInflation, 'Excess wage growth must pass through into headline services inflation.');
     }
 
@@ -1621,7 +1624,7 @@ class MacroEngineTest extends TestCase
         $hotWageState->energyPriceShock = 0.0;
         $hotWageState->energyCostPushLag = 0.0;
 
-        $hotInflation = $this->aggregateSubsystem->calculateInflation($hotWageState, MacroEngine::TARGET_INFLATION, 1.0, 0.25);
+        $hotInflation = $this->aggregateSubsystem->calculateInflation($hotWageState, MacroEngine::TARGET_INFLATION, MacroEngine::TFP_DRIFT, 0.25);
         $this->assertGreaterThan(0.02, $hotInflation, 'Excess wage growth above 3.5% must exert positive cost-push inflation pressure.');
 
         // 2. Slack wage scenario (w = 2.5% < 3.5% trend)
@@ -1633,7 +1636,7 @@ class MacroEngineTest extends TestCase
         $slackWageState->energyPriceShock = 0.0;
         $slackWageState->energyCostPushLag = 0.0;
 
-        $slackInflation = $this->aggregateSubsystem->calculateInflation($slackWageState, MacroEngine::TARGET_INFLATION, 1.0, 0.25);
+        $slackInflation = $this->aggregateSubsystem->calculateInflation($slackWageState, MacroEngine::TARGET_INFLATION, MacroEngine::TFP_DRIFT, 0.25);
         $this->assertLessThan(0.02, $slackInflation, 'Slack wage growth below 3.5% must exert symmetric disinflationary wage-drag.');
 
         // 3. Check symmetry of transmission magnitude around 2.0%
@@ -1749,8 +1752,8 @@ class MacroEngineTest extends TestCase
 
         $this->assertLessThan($gapNormal, $gapShock, 'Supply-side stagflation: energy price spike must drag down output gap.');
 
-        $infNormal = $this->aggregateSubsystem->calculateInflation($stateNormal, MacroEngine::TARGET_INFLATION, $stressMultiplier, $dt);
-        $infShock  = $this->aggregateSubsystem->calculateInflation($stateShock, MacroEngine::TARGET_INFLATION, $stressMultiplier, $dt);
+        $infNormal = $this->aggregateSubsystem->calculateInflation($stateNormal, MacroEngine::TARGET_INFLATION, MacroEngine::TFP_DRIFT, $dt);
+        $infShock  = $this->aggregateSubsystem->calculateInflation($stateShock, MacroEngine::TARGET_INFLATION, MacroEngine::TFP_DRIFT, $dt);
 
         $this->assertGreaterThan($infNormal, $infShock, 'Cost-push channel: energy price spike must raise headline inflation.');
     }
@@ -1758,7 +1761,6 @@ class MacroEngineTest extends TestCase
     public function testFoodCpiChannelFromAgriculturalSpike(): void
     {
         $dt = 0.25;
-        $stressMultiplier = 1.0;
 
         $stateNormal = new \App\Service\Macro\MacroState();
         $stateNormal->agriculturalCommodityIndex = 100.0;
@@ -1766,8 +1768,8 @@ class MacroEngineTest extends TestCase
         $stateSpike = clone $stateNormal;
         $stateSpike->agriculturalCommodityIndex = 200.0; // 100% agri commodity surge
 
-        $infNormal = $this->aggregateSubsystem->calculateInflation($stateNormal, MacroEngine::TARGET_INFLATION, $stressMultiplier, $dt);
-        $infSpike  = $this->aggregateSubsystem->calculateInflation($stateSpike, MacroEngine::TARGET_INFLATION, $stressMultiplier, $dt);
+        $infNormal = $this->aggregateSubsystem->calculateInflation($stateNormal, MacroEngine::TARGET_INFLATION, MacroEngine::TFP_DRIFT, $dt);
+        $infSpike  = $this->aggregateSubsystem->calculateInflation($stateSpike, MacroEngine::TARGET_INFLATION, MacroEngine::TFP_DRIFT, $dt);
 
         $this->assertGreaterThan($infNormal, $infSpike, 'Food CPI channel: agricultural commodity spike must increase headline inflation.');
         $this->assertGreaterThan(0.0, $stateSpike->agriCostPushLag, 'Distributed lag accumulator for food CPI must be positive.');

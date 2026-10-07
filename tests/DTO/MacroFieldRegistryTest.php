@@ -41,6 +41,9 @@ class MacroFieldRegistryTest extends TestCase
 
         'metalsChi' => 'Latent OU state behind industrialMetalsIndex, which is recorded.',
         'retailCreditFactor' => 'Latent OU state behind retailDefaultRate, which is recorded.',
+        'macroCreditSpreadTrend' => 'Decade-long average of macro_credit_spread, which is recorded.',
+        'corporateTaxRateTrend' => 'Decade-long average of corporate_tax_rate, which is recorded.',
+        'moneySupplyGrowthTrend' => 'Decade-long average of money_supply_growth, which is recorded.',
         'metalsXi' => 'Latent OU state behind industrialMetalsIndex, which is recorded.',
         'agriChi' => 'Latent OU state behind agriculturalCommodityIndex, which is recorded.',
         'agriXi' => 'Latent OU state behind agriculturalCommodityIndex, which is recorded.',

@@ -68,15 +68,9 @@ class AssetMarketSubsystem
     /** Volatility of volatility (sigma) in the macroeconomic variance diffusion. Kept under sqrt(2 * kappa * theta) measured on the JUMP-ADJUSTED anchor (~0.26), so the Feller condition holds and the variance stays strictly positive. Above it the stationary density piles onto the 8% clamp, and the clamp -- not this anchor -- sets the realized level. */
     public const MACRO_VOL_SIGMA                  = 0.15;
 
-    // --- SVJJ Stochastic Volatility & Contemporaneous Jumps (Duffie, Pan, & Singleton 2000) ---
-    /** Annual Poisson arrival intensity of market-wide volatility jump shocks. */
-    public const SVJJ_LAMBDA = 0.80;
-    /** Probability of an upward market return jump given a Poisson jump event. */
-    public const SVJJ_P_UP = 0.35;
-    /** Exponential decay rate parameter for positive return jumps (eta+). */
-    public const SVJJ_ETA_UP = 10.0;
-    /** Exponential decay rate parameter for negative return crashes (eta-). */
-    public const SVJJ_ETA_DOWN = 5.0;
+    // --- Leverage Effect (Heston 1993) ---
+    /** Correlation of the variance innovation with the market return, the Heston rho: -0.77 on bias-corrected high-frequency S&P 500 data (Ait-Sahalia, Fan & Li 2013). */
+    public const MACRO_VOL_LEVERAGE_RHO = -0.77;
 
     // --- Consumer Sentiment Index & Animal Spirits ---
     /** Sensitivity of consumer misery index (unemployment and inflation) on sentiment. */
@@ -191,6 +185,12 @@ class AssetMarketSubsystem
     public const CRE_VOLATILITY = 0.05;
     /** Minimum cap rate floor to prevent division instability in extreme rate environments. */
     public const CRE_MIN_CAP_RATE = 0.03;
+    /** Elasticity of real commercial rents to the output gap (DiPasquale-Wheaton rent equation): a -4% gap takes 2% off rents. */
+    public const CRE_RENT_OUTPUT_GAP_ELASTICITY = 0.50;
+    /** Guards on the commercial property index, below a 2009-style 70% fall and above a 2.5x boom; the fitted process does not reach them. */
+    public const CRE_MIN_INDEX = 30.0;
+    /** Upper guard on the commercial property index. */
+    public const CRE_MAX_INDEX = 250.0;
 
     // --- JORGENSON USER COST RESIDENTIAL REAL ESTATE ---
     /**
@@ -278,6 +278,8 @@ class AssetMarketSubsystem
     public const MIN_TRADE_BALANCE = -0.080;
     /** Upper bound ceiling for trade balance surplus as a percentage of GDP (+3.0%). */
     public const MAX_TRADE_BALANCE = 0.030;
+    /** Time constant (years) of the trade balance's adjustment to its target: half a year, the J-curve's two-quarter delivery lag on contracts already signed (Magee 1973). */
+    public const TRADE_BALANCE_ADJUSTMENT_YEARS = 0.5;
 
     // --- Tobin's Q Housing Investment Dynamics (Poterba 1984, Topel-Rosen 1988) ---
     /** Sensitivity of housing starts to Tobin's q ratio (home price valuation vs replacement cost). */
@@ -315,12 +317,13 @@ class AssetMarketSubsystem
      */
     public function calculateCommercialPropertyIndex(MacroState $state, float $dt): void
     {
+        // Okun's law bounds excess unemployment to about +-8pp and the output gap is clamped at -12%/+10%, so both
+        // factors stay within ~0.75-1.25 and 0.94-1.05 without a clamp of their own.
         $excessUnemployment = $state->unemploymentRateEma - $state->nairu;
         $occupancyFactor = 1.0 - ($excessUnemployment * self::CRE_OCCUPANCY_UNEMPLOYMENT_SENSITIVITY);
-        $occupancyFactor = max(0.30, min(1.80, $occupancyFactor));
 
         // DiPasquale-Wheaton (1996) commercial real estate real rent level with demand.
-        $rentFactor = max(0.50, min(2.0, 1.0 + ($state->outputGapEma * 0.50)));
+        $rentFactor = 1.0 + ($state->outputGapEma * self::CRE_RENT_OUTPUT_GAP_ELASTICITY);
 
         $capRate = max(self::CRE_MIN_CAP_RATE, $state->yield10yEma - $state->tipsBreakevenEma + $state->macroCreditSpreadEma + self::CRE_CAP_RATE_RISK_PREMIUM);
         $fundamentalValue = self::CRE_BASELINE * $occupancyFactor * $rentFactor * (self::CRE_NEUTRAL_CAP_RATE / $capRate);
@@ -329,13 +332,13 @@ class AssetMarketSubsystem
         $newIndex = $this->mathUtility->calculateSchwartz1Factor(
             currentPrice: $state->commercialPropertyIndex,
             kappa: self::CRE_MEAN_REVERSION,
-            theta: $fundamentalValue,
+            theta: MathUtility::schwartzThetaForMean($fundamentalValue, self::CRE_MEAN_REVERSION, self::CRE_VOLATILITY),
             sigma: self::CRE_VOLATILITY,
             dt: $dt,
             dW: $dW
         );
 
-        $state->commercialPropertyIndex = max(30.0, min(250.0, $newIndex));
+        $state->commercialPropertyIndex = max(self::CRE_MIN_INDEX, min(self::CRE_MAX_INDEX, $newIndex));
     }
 
     /**
@@ -381,7 +384,7 @@ class AssetMarketSubsystem
         $newIndex = $this->mathUtility->calculateSchwartz1Factor(
             currentPrice: $state->residentialPropertyIndex,
             kappa: self::RESIDENTIAL_MEAN_REVERSION,
-            theta: $fundamentalPrice,
+            theta: MathUtility::schwartzThetaForMean($fundamentalPrice, self::RESIDENTIAL_MEAN_REVERSION, self::RESIDENTIAL_VOLATILITY),
             sigma: self::RESIDENTIAL_VOLATILITY,
             dt: $dt,
             dW: $dW
@@ -464,18 +467,21 @@ class AssetMarketSubsystem
     }
 
     /**
-     * Engle, Ghysels & Sohn (2013) Spline-GARCH Macro Link with SVJJ Jump-Diffusion (Bates 1996).
+     * Engle, Ghysels & Sohn (2013) Spline-GARCH Macro Link with SVCJ Contemporaneous Jumps (Duffie, Pan & Singleton 2000).
      *
      * Models aggregate equity implied volatility using continuous macroeconomic fundamental scaling
-     * (output gap, the excess bond premium, yield curve slope, policy uncertainty) driven by a Quadratic
-     * Exponential (Broadie-Kaya) variance step and asymmetric Poisson compound jumps (SVJJ). It reads the
-     * premium the credit spread is built on, not the spread, which reads volatility back.
+     * (output gap, the excess bond premium, yield curve slope, policy uncertainty) driven by an Andersen (2008)
+     * QE variance step. Its innovation loads on the market return at the Heston rho, and the variance jumps
+     * land with the market-wide price jumps (SVCJ: Duffie, Pan & Singleton 2000; Eraker, Johannes & Polson 2003).
+     * It reads the premium the credit spread is built on, not the spread, which reads volatility back.
      *
-     * @param MacroState $state Current macroeconomic state.
-     * @param float      $dt    Time increment in years.
+     * @param MacroState $state            Current macroeconomic state.
+     * @param float      $dt               Time increment in years.
+     * @param float      $varianceJump     Variance jump the market-wide price jump drew this tick (updateSystemicMarketFactor()).
+     * @param float|null $returnInnovation This tick's i.i.d. market return innovation, unit variance; null leaves the variance uncorrelated.
      * @return float Implied equity market volatility (clamped between 8% and 80%).
      */
-    public function calculateMarketVolatility(MacroState $state, float $dt): float
+    public function calculateMarketVolatility(MacroState $state, float $dt, float $varianceJump = 0.0, ?float $returnInnovation = null): float
     {
         $currentMarketVol = $state->marketVolatility;
 
@@ -493,25 +499,31 @@ class AssetMarketSubsystem
         $currentVar = $currentMarketVol * $currentMarketVol;
         $longTermVar = $longTermVol * $longTermVol;
 
-        $jumpData = $this->mathUtility->calculateSVJJJumps(
-            lambda: self::SVJJ_LAMBDA,
-            pUp: self::SVJJ_P_UP,
-            etaUp: self::SVJJ_ETA_UP,
-            etaDown: self::SVJJ_ETA_DOWN,
-            muV: MacroEngine::SVJJ_MU_V,
-            dt: $dt
-        );
-
         $adjustedTheta = max(0.0001, $longTermVar - self::jumpVarianceDrag());
 
-        $nextVar = $this->mathUtility->calculateQEVarianceStep($currentVar, $adjustedTheta, self::MACRO_VOL_KAPPA, self::MACRO_VOL_SIGMA, $dt);
-        $nextVar += $jumpData['var_jump'];
+        $varianceShock = null;
+        if ($returnInnovation !== null) {
+            $loading = self::leverageLoading();
+            $varianceShock = ($loading * $returnInnovation) + (sqrt(1.0 - ($loading * $loading)) * $this->mathUtility->generateStandardNormal());
+        }
+
+        $nextVar = $this->mathUtility->calculateQEVarianceStep($currentVar, $adjustedTheta, self::MACRO_VOL_KAPPA, self::MACRO_VOL_SIGMA, $dt, $varianceShock);
+        $nextVar += $varianceJump;
 
         return max(self::MACRO_VOL_FLOOR, min(self::MACRO_VOL_CEILING, sqrt($nextVar)));
     }
 
     /**
-     * Long-run variance the SVJJ jumps supply, which the diffusion's anchor must give back.
+     * Loading of the variance shock on the i.i.d. leg of the market innovation that puts its correlation with the whole
+     * return at MACRO_VOL_LEVERAGE_RHO: that leg carries 1 - MARKET_FACTOR_REGIME_VARIANCE_SHARE of the return variance.
+     */
+    public static function leverageLoading(): float
+    {
+        return max(-1.0, min(1.0, self::MACRO_VOL_LEVERAGE_RHO / sqrt(1.0 - MacroEngine::MARKET_FACTOR_REGIME_VARIANCE_SHARE)));
+    }
+
+    /**
+     * Long-run variance the market-wide jumps supply, which the diffusion's anchor must give back.
      *
      * The jumps are additive: for dv = kappa*(theta_adj - v)dt + sigma*sqrt(v)dW + dJ with arrivals at
      * lambda and mean size m, the stationary mean is theta_adj + lambda*m/kappa. So a process that is to
@@ -531,10 +543,10 @@ class AssetMarketSubsystem
      */
     public static function jumpVarianceDrag(): float
     {
-        $meanVarianceJump = (self::SVJJ_P_UP * MacroEngine::SVJJ_MU_V * MathUtility::VARIANCE_JUMP_UPSIDE_MEAN_SHARE)
-            + ((1.0 - self::SVJJ_P_UP) * MacroEngine::SVJJ_MU_V);
+        $meanVarianceJump = (MacroEngine::SYSTEMIC_JUMP_PROBABILITY_UP * MacroEngine::SYSTEMIC_JUMP_VARIANCE_MEAN * MathUtility::VARIANCE_JUMP_UPSIDE_MEAN_SHARE)
+            + ((1.0 - MacroEngine::SYSTEMIC_JUMP_PROBABILITY_UP) * MacroEngine::SYSTEMIC_JUMP_VARIANCE_MEAN);
 
-        return (self::SVJJ_LAMBDA * $meanVarianceJump) / self::MACRO_VOL_KAPPA;
+        return (MacroEngine::SYSTEMIC_JUMP_INTENSITY * $meanVarianceJump) / self::MACRO_VOL_KAPPA;
     }
 
     /**
@@ -542,8 +554,9 @@ class AssetMarketSubsystem
      *
      * @param MacroState $state Current macroeconomic state.
      * @param float      $dt    Time increment in years.
+     * @return array{returnInnovation: float, varianceJump: float} The return's i.i.d. innovation and the jump's variance jump, for calculateMarketVolatility().
      */
-    public function updateSystemicMarketFactor(MacroState $state, float $dt): void
+    public function updateSystemicMarketFactor(MacroState $state, float $dt): array
     {
         // Two-factor equity market innovation: AR(1) regime persistence plus Student's t heavy tails.
         $marketFactorPhi = exp(-$dt / MacroEngine::MARKET_FACTOR_DECAY_TAU_YEARS);
@@ -565,6 +578,8 @@ class AssetMarketSubsystem
             dt: $dt
         );
         $state->marketJumpMultiplier = $systemicJump['price_multiplier'];
+
+        return ['returnInnovation' => $tailShock, 'varianceJump' => $systemicJump['var_jump']];
     }
 
     /**
@@ -594,7 +609,7 @@ class AssetMarketSubsystem
         $state->exchangeRateDeviation = $this->mathUtility->calculateSchwartz1Factor(
             currentPrice: $state->exchangeRateDeviation,
             kappa: self::EXCHANGE_RATE_MEAN_REVERSION,
-            theta: 1.0,
+            theta: MathUtility::schwartzThetaForMean(1.0, self::EXCHANGE_RATE_MEAN_REVERSION, MacroEngine::EXCHANGE_RATE_VOLATILITY),
             sigma: MacroEngine::EXCHANGE_RATE_VOLATILITY,
             dt: $dt,
             dW: $this->mathUtility->generateStandardNormal()
@@ -839,12 +854,13 @@ class AssetMarketSubsystem
      */
     public function calculateAlliedDefenseSpending(MacroState $state, float $dt): void
     {
-        // Merton compensator: the target nets out the jumps' expected drift, lambda * (E[e^J] - 1) / kappa in log.
-        $jumpDrift = self::ALLIED_MOBILISATION_PROBABILITY * (exp(self::ALLIED_MOBILISATION_MEAN + ((self::ALLIED_MOBILISATION_VOL ** 2) / 2.0)) - 1.0);
+        // Its reader takes log(index / baseline) (MacroAggregateSubsystem::alliedDefenseGap()), so the log centres on the
+        // baseline: the mobilisations' log drift lambda mu / kappa is netted out (Merton 1976), then Schwartz's alpha.
+        $jumpLogShift = self::ALLIED_MOBILISATION_PROBABILITY * self::ALLIED_MOBILISATION_MEAN / self::ALLIED_DEFENSE_MEAN_REVERSION;
         $baseProcess = $this->mathUtility->calculateSchwartz1Factor(
             currentPrice: $state->alliedDefenseSpendingIndex,
             kappa: self::ALLIED_DEFENSE_MEAN_REVERSION,
-            theta: MacroEngine::ALLIED_DEFENSE_BASELINE * exp(-$jumpDrift / self::ALLIED_DEFENSE_MEAN_REVERSION),
+            theta: MathUtility::schwartzThetaForLogMean(MacroEngine::ALLIED_DEFENSE_BASELINE * exp(-$jumpLogShift), self::ALLIED_DEFENSE_MEAN_REVERSION, self::ALLIED_DEFENSE_VOLATILITY),
             sigma: self::ALLIED_DEFENSE_VOLATILITY,
             dt: $dt,
             dW: $this->mathUtility->generateStandardNormal()
@@ -928,8 +944,9 @@ class AssetMarketSubsystem
 
         $targetTradeBalance = max(self::MIN_TRADE_BALANCE, min(self::MAX_TRADE_BALANCE, $targetTradeBalance));
 
-        $state->tradeBalanceToGdp += 2.0 * ($targetTradeBalance - $state->tradeBalanceToGdp) * $dt;
-        $state->tradeBalanceToGdp = max(self::MIN_TRADE_BALANCE, min(self::MAX_TRADE_BALANCE, $state->tradeBalanceToGdp));
+        // Exact exponential smoothing: a convex step toward an in-band target cannot leave the band.
+        $adjustmentWeight = 1.0 - exp(-$dt / self::TRADE_BALANCE_ADJUSTMENT_YEARS);
+        $state->tradeBalanceToGdp += $adjustmentWeight * ($targetTradeBalance - $state->tradeBalanceToGdp);
     }
 
     /**
@@ -995,8 +1012,9 @@ class AssetMarketSubsystem
      */
     public function calculateHousingStarts(MacroState $state, float $expectedInflation, float $dt): void
     {
-        $residentialPriceRatio = $state->residentialPropertyIndex / self::RESIDENTIAL_BASELINE;
-        $metalsCostRatio = $state->industrialMetalsIndex / MacroEngine::METALS_BASELINE;
+        // Both legs of q read the level against the trend it has measurably settled at, not the baseline it is built on.
+        $residentialPriceRatio = $state->residentialPropertyIndex / $state->residentialWealthTrend;
+        $metalsCostRatio = $state->industrialMetalsIndexTrend > 0.0 ? $state->industrialMetalsIndex / $state->industrialMetalsIndexTrend : 1.0;
         // Building labour priced as a LEVEL in the same real terms as the home price index: the real wage against its
         // trend-productivity path. Read as 1 + wage growth, it charged a standing 1.75% premium in a calm economy and
         // saw only the acceleration of pay, never a real wage that stayed high.

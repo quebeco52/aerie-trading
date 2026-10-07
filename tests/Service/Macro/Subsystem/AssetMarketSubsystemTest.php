@@ -153,6 +153,47 @@ class AssetMarketSubsystemTest extends TestCase
     }
 
 
+    /**
+     * Tobin's q reads each leg against the trend it has settled at: the residential index rests near 94, not on the 100
+     * it is built from, and the metals index wherever its supercycle stands. At rest, starts sit at their baseline.
+     */
+    public function testHousingStartsRestAtTheirBaselineWhenPricesAndCostsSitOnTheirTrends(): void
+    {
+        $math = new class extends MathUtility {
+            public function generateStandardNormal(): float { return 0.0; }
+        };
+        $state = $this->neutralBuildingState();
+        $state->yield10yEma = MacroEngine::BASE_NATURAL_RATE + MacroEngine::TARGET_INFLATION + MacroEngine::NS_BASE_TERM_PREMIUM;
+        $state->residentialPropertyIndex = 94.0;
+        $state->residentialWealthTrend = 94.0;
+        $state->industrialMetalsIndex = 130.0;
+        $state->industrialMetalsIndexTrend = 130.0;
+
+        (new AssetMarketSubsystem($math))->calculateHousingStarts($state, MacroEngine::TARGET_INFLATION, 0.25);
+
+        $this->assertEqualsWithDelta(MacroEngine::HOUSING_STARTS_BASELINE, $state->housingStartsIndex, 1e-9, 'At rest q is one and starts hold their baseline.');
+    }
+
+    /** The trade balance closes on its target by exact exponential smoothing: two half steps land where one full step does. */
+    public function testTheTradeBalanceAdjustsByExactSmoothing(): void
+    {
+        $step = function (MacroState $state, float $dt): void {
+            $state->exchangeRateIndex = 115.0;
+            $state->outputGap = 0.03;
+            $this->subsystem->calculateTradeBalance($state, $dt);
+        };
+        $once = new MacroState();
+        $once->tradeBalanceToGdp = MacroEngine::TRADE_BALANCE_BASELINE;
+        $twice = clone $once;
+
+        $step($once, 0.5);
+        $step($twice, 0.25);
+        $step($twice, 0.25);
+
+        $this->assertEqualsWithDelta($once->tradeBalanceToGdp, $twice->tradeBalanceToGdp, 1e-12);
+        $this->assertNotEqualsWithDelta(MacroEngine::TRADE_BALANCE_BASELINE, $once->tradeBalanceToGdp, 1e-6, 'and it does move.');
+    }
+
     /** Houses at their neutral price, built with materials and labour at their neutral real cost. */
     private function neutralBuildingState(): MacroState
     {
@@ -449,7 +490,7 @@ class AssetMarketSubsystemTest extends TestCase
             {
                 return ['price_multiplier' => 1.0, 'var_jump' => 0.0, 'shock_pct' => 0.0];
             }
-            public function calculateQEVarianceStep(float $currentVar, float $theta, float $kappa, float $sigma, float $dt): float
+            public function calculateQEVarianceStep(float $currentVar, float $theta, float $kappa, float $sigma, float $dt, ?float $varianceShock = null): float
             {
                 return $theta;
             }
@@ -483,7 +524,7 @@ class AssetMarketSubsystemTest extends TestCase
             {
                 return ['price_multiplier' => 1.0, 'var_jump' => 0.0, 'shock_pct' => 0.0];
             }
-            public function calculateQEVarianceStep(float $currentVar, float $theta, float $kappa, float $sigma, float $dt): float
+            public function calculateQEVarianceStep(float $currentVar, float $theta, float $kappa, float $sigma, float $dt, ?float $varianceShock = null): float
             {
                 return $theta;
             }
@@ -523,7 +564,7 @@ class AssetMarketSubsystemTest extends TestCase
 
     /**
      * Allied defence spending is its customers' budgets: a build-up fades on the fitted SIPRI half-life
-     * (1.4 years) toward a trend set below the baseline by the mobilisations' Merton compensator and the Ito term.
+     * (1.4 years) toward a trend set below the baseline by the mobilisations' level shift and the Jensen term.
      */
     public function testAnAlliedBuildUpFadesOnItsFittedHalfLife(): void
     {
@@ -536,9 +577,10 @@ class AssetMarketSubsystemTest extends TestCase
         $state->alliedDefenseSpendingIndex = 150.0;
 
         $kappa = AssetMarketSubsystem::ALLIED_DEFENSE_MEAN_REVERSION;
-        $jumpDrift = AssetMarketSubsystem::ALLIED_MOBILISATION_PROBABILITY
-            * (exp(AssetMarketSubsystem::ALLIED_MOBILISATION_MEAN + ((AssetMarketSubsystem::ALLIED_MOBILISATION_VOL ** 2) / 2.0)) - 1.0);
-        $logTrend = log(MacroEngine::ALLIED_DEFENSE_BASELINE) - ($jumpDrift / $kappa) - ((AssetMarketSubsystem::ALLIED_DEFENSE_VOLATILITY ** 2) / (2.0 * $kappa));
+        // The quiet path's log level: the baseline less the mobilisations' log drift, which leaves the jumping process's
+        // LOG averaging ln(baseline), the centre its log reader (alliedDefenseGap) measures from.
+        $logTrend = log(MacroEngine::ALLIED_DEFENSE_BASELINE)
+            - (AssetMarketSubsystem::ALLIED_MOBILISATION_PROBABILITY * AssetMarketSubsystem::ALLIED_MOBILISATION_MEAN / $kappa);
 
         $dt = 1.0 / 360.0;
         $halfLife = log(2.0) / $kappa;
@@ -739,7 +781,8 @@ class AssetMarketSubsystemTest extends TestCase
         $state->exchangeRateDeviation = 1.10;
         $this->subsystem->calculateExchangeRate($state, 1.0);
         $decay = exp(-AssetMarketSubsystem::EXCHANGE_RATE_MEAN_REVERSION);
-        $itoMean = -(MacroEngine::EXCHANGE_RATE_VOLATILITY ** 2) / (2.0 * AssetMarketSubsystem::EXCHANGE_RATE_MEAN_REVERSION);
+        // The log mean that leaves the level averaging one: -sigma^2 / 4 kappa.
+        $itoMean = -(MacroEngine::EXCHANGE_RATE_VOLATILITY ** 2) / (4.0 * AssetMarketSubsystem::EXCHANGE_RATE_MEAN_REVERSION);
         $this->assertEqualsWithDelta((log(1.10) * $decay) + ($itoMean * (1.0 - $decay)), log($state->exchangeRateDeviation), 1e-12);
     }
 

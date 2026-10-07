@@ -33,11 +33,11 @@ class CreditFiscalSubsystem
     public const POWER_SECTOR_CO2_PER_GDP_DOLLAR = 1425.0e6 / 27.36e12;
 
     // --- Sovereign Debt Dynamics (Greenwood-Vayanos 2014) ---
-    /** Structural primary fiscal deficit as a fraction of GDP with no sovereign fund; with one, the structural deficit is the fund's draw, spent. */
+    /** Structural primary fiscal deficit as a fraction of GDP with no sovereign fund, levied as taxes that far below the purchases share; with a fund, the structural deficit is the fund's draw, spent. */
     public const SOVEREIGN_STRUCTURAL_DEFICIT = 0.020;
-    /** Debt-to-GDP above which the Bohn (1998) fiscal reaction starts running primary surpluses. */
+    /** Net debt-to-GDP above which the Bohn (1998) fiscal reaction starts running primary surpluses. */
     public const SOVEREIGN_DEBT_NEUTRAL_THRESHOLD = 0.70;
-    /** Bohn (1998, 2008) fiscal reaction: primary surplus response per unit of debt above the neutral threshold (~0.10, the upper end of advanced-economy estimates), which stabilizes debt near 90% against a 2% structural deficit, and just above the 70% threshold once a sovereign fund's draw pays that deficit. */
+    /** Bohn (1998, 2008) fiscal reaction: primary surplus response per unit of net debt above the neutral threshold (~0.10, the upper end of advanced-economy estimates), which stabilizes debt near 90% against a 2% structural deficit, and just above the 70% threshold once a sovereign fund's draw pays that deficit. */
     public const BOHN_FISCAL_REACTION_SENSITIVITY = 0.10;
     /** Runaway guard on gross debt, about Japan's postwar peak (~2.6x GDP, IMF WEO 2020); the Bohn reaction holds debt far below it. */
     public const SOVEREIGN_DEBT_CEILING = 2.50;
@@ -49,7 +49,7 @@ class CreditFiscalSubsystem
     public const SOVEREIGN_RISK_REPRICING_YEARS = 0.5;
     /** Cap on the sovereign risk spread (600 bps): the level at which an advanced sovereign lost market access in 2011. */
     public const MAX_SOVEREIGN_RISK_SPREAD = 0.06;
-    /** Share of the sovereign spread that passes into the corporate IG base (Durbin & Ng 2005 sovereign ceiling; Almeida et al. 2017 find about half). */
+    /** Share of the sovereign spread a corporate bond's YIELD carries over the riskless curve: Durbin & Ng (2005, Table IV) 0.455 (se 0.074), corporate on sovereign spread changes over US Treasuries; Almeida et al. (2017) find about half. */
     public const SOVEREIGN_CEILING_PASSTHROUGH = 0.50;
 
     // --- Barro Tax-Smoothing & Automatic Fiscal Stabilizers (Barro 1979) ---
@@ -89,6 +89,18 @@ class CreditFiscalSubsystem
     public const INTERBANK_MIN_SPREAD = 0.0001;
     /** Poisson intensity of severe interbank credit freeze/panic events. */
     public const INTERBANK_JUMP_PROBABILITY = 0.05;
+    /** Panic intensity lift per unit of excess bond premium relative to the IG base, at half the premium's own ratio. */
+    public const INTERBANK_JUMP_PREMIUM_LOADING = 0.5;
+    /** Cap on the panic intensity (one a year in five), so a vol and premium blowout together cannot make a panic routine. */
+    public const INTERBANK_MAX_JUMP_PROBABILITY = 0.20;
+
+    // --- Through-the-Cycle Spread Level ---
+    /** Time constant (years) of the IG spread's measured trend: a decade spans a full credit cycle (US IG OAS peaks 1990, 2002, 2009, 2020), so the trend is the spread's through-the-cycle level, not the base it is built from. */
+    public const CREDIT_SPREAD_TREND_YEARS = 10.0;
+
+    // --- Structural Tax Level ---
+    /** Time constant (years) of the tax rate's measured trend: demand answers a change in the fiscal stance (Blanchard 1990 fiscal impulse), and a stance held for a decade is in potential, not the gap. */
+    public const TAX_RATE_TREND_YEARS = 10.0;
 
     // --- Corporate Default Dynamics (Moody's all-rated, Vasicek single factor) ---
     /** Asset correlation of the all-rated default rate: ~0.1 puts the Vasicek median at the post-1983 record's ~1.2% against its 1.6% mean (0.2 gives 0.8%); fits over 1920-2008 reach 0.2 on the 1930s, a tail this macro index already generates itself. */
@@ -123,7 +135,7 @@ class CreditFiscalSubsystem
     public const MAX_EPU = 400.0;
 
     // --- Administered Healthcare Prices (CMS market-basket update) ---
-    /** Reimbursement update cut per unit of sovereign debt above the risk threshold (90%): the sequester that a fiscal correction imposes on administered prices. */
+    /** Reimbursement update cut per unit of net sovereign debt above the risk threshold (90%): the sequester that a fiscal correction imposes on administered prices. */
     public const REIMBURSEMENT_FISCAL_CUT_SENSITIVITY = 0.02;
     /** Floor on the annual update: administered prices are held, not cut, in a deflationary year. */
     public const REIMBURSEMENT_MIN_UPDATE = 0.0;
@@ -145,6 +157,10 @@ class CreditFiscalSubsystem
     public const CREDIT_GROWTH_SIGMA = 0.020;
     /** Extra annual credit contraction per unit of debt-service gap above the warning line (Mian & Sufi 2018): 1.75 (se 0.44), the same regression, so two points over the line repay 3.5% of the stock a year. */
     public const DELEVERAGING_SPEED = 1.75;
+    /** Mortgage net charge-offs a year at the retail PD's long-run average: 0.43% (FRED CORSFRMACBS, all commercial banks, 1991-2019; peak 2.80%). */
+    public const HOUSEHOLD_MORTGAGE_CHARGE_OFF_RATE = 0.0043;
+    /** Consumer-loan net charge-offs a year at the same average: 2.61% (FRED CORCACBS, 1991-2019; peak 6.60%). */
+    public const HOUSEHOLD_CONSUMER_CHARGE_OFF_RATE = 0.0261;
     /** Horizon (years) of the new-borrowing flow spending answers: the year's borrowing Drehmann, Juselius & Korinek (2018) measure. */
     public const HOUSEHOLD_NEW_BORROWING_HORIZON_YEARS = 1.0;
     /** Bounds on household debt to income. */
@@ -250,11 +266,8 @@ class CreditFiscalSubsystem
     {
         $interbankStress = max(0.0, $state->interbankLiquiditySpreadEma - MacroEngine::INTERBANK_BASELINE_SPREAD);
 
-        // Borensztein, Cowan & Valenzuela (2013) sovereign ceiling transmission to corporate credit spreads.
-        $baseIgSpread = MacroEngine::BASE_CREDIT_SPREAD + (self::SOVEREIGN_CEILING_PASSTHROUGH * $state->sovereignRiskSpreadEma);
-
         $trancheSpreads = $this->mathUtility->calculateDualTrancheCreditSpreads(
-            baseIgSpread: $baseIgSpread,
+            baseIgSpread: MacroEngine::BASE_CREDIT_SPREAD,
             outputGapEma: $state->outputGapEma,
             marketVolEma: $state->marketVolatilityEma,
             interbankStress: $interbankStress,
@@ -262,9 +275,25 @@ class CreditFiscalSubsystem
             hyBaseMultiplier: MacroEngine::HY_BASE_SPREAD_MULTIPLIER
         );
 
-        // Dual-tranche credit spread boundary clamping (Merton 1974 structural model).
-        $state->macroCreditSpread = $trancheSpreads['ig'];
-        $state->highYieldCreditSpread = $trancheSpreads['hy'];
+        // Durbin & Ng (2005): a corporate yield carries the sovereign spread at the pass-through
+        // share, and the District curve these spreads sit over already carries all of it, so the spread over that curve
+        // carries the difference (it narrows as the sovereign widens, as corporates trading through their sovereign do).
+        $sovereignLoading = (self::SOVEREIGN_CEILING_PASSTHROUGH - 1.0) * $state->sovereignRiskSpreadEma;
+        $state->macroCreditSpread = max(MacroEngine::MIN_CREDIT_SPREAD, $trancheSpreads['ig'] + $sovereignLoading);
+        $state->highYieldCreditSpread = max($state->macroCreditSpread, $trancheSpreads['hy'] + $sovereignLoading);
+    }
+
+    /**
+     * The IG spread's through-the-cycle level, measured: an exponential average over a full credit cycle. The spread's
+     * own mean sits wherever its premium, volatility and contagion legs put it, not at the base it is built from, so a
+     * reader of its cyclical deviation (the firms' cost of debt, DebtEngine) reads it against this.
+     *
+     * @param MacroState $state Current macroeconomic state.
+     * @param float      $dt    Time increment in years.
+     */
+    public function updateCreditSpreadTrend(MacroState $state, float $dt): void
+    {
+        $state->macroCreditSpreadTrend += (1.0 - exp(-$dt / self::CREDIT_SPREAD_TREND_YEARS)) * ($state->macroCreditSpread - $state->macroCreditSpreadTrend);
     }
 
     /**
@@ -272,6 +301,8 @@ class CreditFiscalSubsystem
      *
      * Models wholesale interbank lending liquidity spreads (TED / Libor-OIS spread) using a strictly
      * positive mean-reverting CIR square-root process compounded with volatility-sensitive Poisson panic jumps.
+     * The jumps, and the run a credit crisis forces, are Merton (1976) compensated in the drift, so they fatten the
+     * tail without lifting the mean off the premium-coupled level.
      *
      * @param MacroState $state Current macroeconomic state.
      * @param float      $dt    Time increment in years.
@@ -285,19 +316,24 @@ class CreditFiscalSubsystem
         $positivePremium = max(0.0, $state->excessBondPremium);
         $premiumCoupledTheta = MacroEngine::INTERBANK_BASELINE_SPREAD + ($positivePremium * self::INTERBANK_PREMIUM_COUPLING);
 
+        $volatilityRatio = max(1.0, $state->marketVolatilityEma / MacroEngine::MACRO_VOL_BASE_ANCHOR);
+        $creditRatio = 1.0 + ($positivePremium / MacroEngine::BASE_CREDIT_SPREAD);
+        $jumpProbability = min(self::INTERBANK_MAX_JUMP_PROBABILITY, self::INTERBANK_JUMP_PROBABILITY * $volatilityRatio * (1.0 + self::INTERBANK_JUMP_PREMIUM_LOADING * ($creditRatio - 1.0)));
+
+        // Proportional jumps add lambda E[J - 1] X a year to the drift; netting it from the reversion, kappa (theta - X)
+        // - c X = (kappa + c)(kappa theta / (kappa + c) - X), leaves theta the stationary mean.
+        $jumpCompensator = $this->interbankJumpCompensator($jumpProbability, $state->creditCrisisHazard);
+        $compensatedKappa = MacroEngine::INTERBANK_SPREAD_KAPPA + $jumpCompensator;
+
         $dW = $this->mathUtility->generateStandardNormal();
         $baseProcess = $this->mathUtility->calculateCIR(
             currentValue: $currentSpread,
-            kappa: MacroEngine::INTERBANK_SPREAD_KAPPA,
-            theta: $premiumCoupledTheta,
+            kappa: $compensatedKappa,
+            theta: MacroEngine::INTERBANK_SPREAD_KAPPA * $premiumCoupledTheta / $compensatedKappa,
             sigma: MacroEngine::INTERBANK_SPREAD_SIGMA,
             dt: $dt,
             dW: $dW
         );
-
-        $volatilityRatio = max(1.0, $state->marketVolatilityEma / MacroEngine::MACRO_VOL_BASE_ANCHOR);
-        $creditRatio = 1.0 + ($positivePremium / MacroEngine::BASE_CREDIT_SPREAD);
-        $jumpProbability = min(0.20, self::INTERBANK_JUMP_PROBABILITY * $volatilityRatio * (1.0 + 0.5 * ($creditRatio - 1.0)));
 
         $jumpData = $this->mathUtility->calculateJumpDiffusion(
             lambda: $jumpProbability,
@@ -320,6 +356,20 @@ class CreditFiscalSubsystem
             self::INTERBANK_MIN_SPREAD,
             min(self::INTERBANK_MAX_SPREAD, $baseProcess + $jumpAmount)
         );
+    }
+
+    /**
+     * Expected proportional jump a year in the interbank spread (Merton 1976): the panic arrivals times their lognormal
+     * mean less one, plus the crisis hazard times the run a crisis forces.
+     *
+     * @param float $panicIntensity Panic jump arrivals per year.
+     * @param float $crisisHazard   Credit crisis arrivals per year.
+     */
+    public function interbankJumpCompensator(float $panicIntensity, float $crisisHazard): float
+    {
+        $panicMean = exp(self::INTERBANK_JUMP_MEAN + (0.5 * (self::INTERBANK_JUMP_VOL ** 2))) - 1.0;
+
+        return ($panicIntensity * $panicMean) + ($crisisHazard * (exp(self::INTERBANK_JUMP_MEAN) - 1.0));
     }
 
     /**
@@ -394,17 +444,20 @@ class CreditFiscalSubsystem
      *
      * Adjusts the corporate tax rate continuously via an Ornstein-Uhlenbeck institutional process:
      * raises effective tax burden during economic booms to cool demand, and cuts taxes during recessions.
-     * The rate it returns to is the neutral rate plus the shift the Diet has legislated.
+     * The rate it returns to is the neutral rate plus the shift the Diet has legislated, plus the structural fiscal
+     * stance (fiscalStance()): the rate is the instrument the budget's surplus is raised with, and the one demand reads.
      *
      * @param MacroState $state Current macroeconomic state.
      * @param float      $dt    Time increment in years.
      */
     public function calculateDynamicFiscalPolicy(MacroState $state, float $dt): void
     {
-        $targetTaxRate = MacroEngine::TARGET_CORPORATE_TAX_RATE + $state->corporateTaxPolicyShift + (self::FISCAL_STABILIZER_SENSITIVITY * $state->outputGapEma);
+        $targetTaxRate = MacroEngine::TARGET_CORPORATE_TAX_RATE + $state->corporateTaxPolicyShift + (self::FISCAL_STABILIZER_SENSITIVITY * $state->outputGapEma)
+            + self::fiscalStance($state);
         $targetTaxRate = max(self::MIN_CORPORATE_TAX_RATE, min(self::MAX_CORPORATE_TAX_RATE, $targetTaxRate));
 
         $state->corporateTaxRate += MacroEngine::FISCAL_ADJUSTMENT_SPEED * ($targetTaxRate - $state->corporateTaxRate) * $dt;
+        $state->corporateTaxRateTrend += (1.0 - exp(-$dt / self::TAX_RATE_TREND_YEARS)) * ($state->corporateTaxRate - $state->corporateTaxRateTrend);
 
         // The legislated part of that adjustment on its own, and the laws as the trailing year's earnings carry them,
         // which the market measures what it expects against (App\Service\Market\PolicyCapitalization).
@@ -416,6 +469,21 @@ class CreditFiscalSubsystem
         $state->extractionCostFactorEmbodied += (MathUtility::calculateExtractionCostFactor($state->extractionStringency) - $state->extractionCostFactorEmbodied) * $dt / self::TRAILING_EARNINGS_MEAN_LAG_YEARS;
         $state->stampDutyVolumeFactorEmbodied += (MathUtility::calculateStampDutyVolumeFactor($state->stampDutyRate) - $state->stampDutyVolumeFactorEmbodied) * $dt / self::TRAILING_EARNINGS_MEAN_LAG_YEARS;
         $state->carbonPowerUpliftEmbodied += (CommodityLogisticsSubsystem::carbonPowerPriceUplift($state->carbonPrice) - $state->carbonPowerUpliftEmbodied) * $dt / self::TRAILING_EARNINGS_MEAN_LAG_YEARS;
+    }
+
+    /**
+     * The structural part of the tax take over the purchases share, as a share of GDP: the Bohn (1998) reaction to net
+     * debt above its threshold, less the structural deficit a budget with no fund runs (with one, the draw pays that
+     * deficit as spending). Debt is net of the fund's bonds, the position the market prices (Hadzi-Vaskov & Ricci 2016);
+     * equal to gross with no fund. Zero at the debt the reaction holds against the structural deficit (90%).
+     *
+     * @param MacroState $state Current macroeconomic state.
+     */
+    public static function fiscalStance(MacroState $state): float
+    {
+        $bohnSurplus = self::BOHN_FISCAL_REACTION_SENSITIVITY * max(0.0, $state->sovereignNetDebtToGdp - self::SOVEREIGN_DEBT_NEUTRAL_THRESHOLD);
+
+        return $state->sovereignFundDollarsPerGdp > 0.0 ? $bohnSurplus : $bohnSurplus - self::SOVEREIGN_STRUCTURAL_DEFICIT;
     }
 
     /**
@@ -475,18 +543,22 @@ class CreditFiscalSubsystem
      *
      * Accumulates sovereign debt-to-GDP ratio from primary deficit flow, net interest expenses,
      * and nominal GDP growth erosion:
-     *   d(Debt/GDP) = [ (G - T + S - NIRC)/GDP + (r_10y - g_nominal) * (Debt/GDP) ] * dt
-     * where S is the structural deficit and NIRC the sovereign fund's draw on its expected returns, revenue like a tax.
+     *   d(Debt/GDP) = [ (G - T)/GDP + (r_10y - g_nominal) * (Debt/GDP) ] * dt
+     * where G is purchases plus the outlays the sovereign fund pays for, and T is taxes plus the fund's draw on its
+     * expected returns (NIRC), revenue like a tax. Every term is a flow: the Bohn surplus and, with no fund, the
+     * structural deficit are in the tax rate (fiscalStance()), which demand reads, not a ledger beside it.
      *
-     * The tax rate's cyclical part is the whole budget's automatic response, so T books it on GDP as it was fitted. The
-     * shift the Diet legislates is a change in the corporate rate alone and is levied on corporate profits; the tariff is
-     * levied on imported goods, which shrink by their price elasticity as the duty raises their price; the carbon price
-     * is levied on the power sector's emissions; the bank levy is what the board's banks owe on their balance sheets,
-     * in currency, read through the reserve fund's dollars per unit of GDP (none is booked before the fund opens).
+     * The tax rate's cyclical and structural parts are the whole budget's response, so T books them on GDP as fitted.
+     * The shift the Diet legislates, as far as it has reached the rate, is a change in the corporate rate alone and is
+     * levied on corporate profits; the tariff is levied on imported goods, which shrink by their price elasticity as the
+     * duty raises their price; the carbon price is levied on the power sector's emissions; the bank levy is what the
+     * board's banks owe on their balance sheets, in currency, read through the reserve fund's dollars per unit of GDP
+     * (none is booked before the fund opens).
      *
-     * With a fund the budget spends the draw: S is the draw itself, as Norway's fiscal rule sets the structural non-oil
-     * deficit at the fund's expected real return. The draw is sized to the fund and the fund compounds with its markets,
-     * so a fixed S would turn a fund that outgrows the economy into a standing surplus with nothing left to retire.
+     * With a fund the budget spends the draw: the structural deficit is the draw itself, as Norway's fiscal rule sets the
+     * structural non-oil deficit at the fund's expected real return. The draw is sized to the fund and the fund compounds
+     * with its markets, so a fixed deficit would turn a fund that outgrows the economy into a standing surplus with
+     * nothing left to retire.
      *
      * Gross debt has a floor, the stock the benchmark curve is kept on. A surplus that would take debt below it buys
      * assets instead: it is paid into the fund (sovereignFundBudgetInflow, credited on the fund's next tick), as
@@ -501,8 +573,8 @@ class CreditFiscalSubsystem
         // their share of GDP rises in a slump (the denominator half of the automatic stabilisers, Girouard & Andre 2005).
         $output = $state->nominalGdpIndex;
         $trendNominalGdp = $state->nominalGdpIndex / (1.0 + $state->outputGap);
-        $taxRevenue = (($state->corporateTaxRate - $state->corporateTaxPolicyShift) * $output)
-            + ($state->corporateTaxPolicyShift * self::CORPORATE_PROFITS_TO_GDP * $output)
+        $taxRevenue = (($state->corporateTaxRate - $state->corporateTaxShiftRealized) * $output)
+            + ($state->corporateTaxShiftRealized * self::CORPORATE_PROFITS_TO_GDP * $output)
             + ($state->importTariffRate * MacroAggregateSubsystem::DISTRICT_IMPORT_SHARE * MacroAggregateSubsystem::GOODS_SHARE_OF_IMPORTS
                 * ((1.0 + $state->importTariffRate) ** -MacroAggregateSubsystem::IMPORT_PRICE_ELASTICITY) * $output)
             + ($state->carbonPrice * self::POWER_SECTOR_CO2_PER_GDP_DOLLAR * $output)
@@ -510,19 +582,15 @@ class CreditFiscalSubsystem
         $govtSpendingFlow = ($state->governmentSpendingIndex / MacroEngine::GOVT_SPENDING_BASELINE)
             * MacroEngine::TARGET_CORPORATE_TAX_RATE * $trendNominalGdp;
 
-        // Bohn (1998) fiscal reaction function: debt stabilization via primary budget surplus.
-        $excessDebt = max(0.0, $state->sovereignDebtToGdp - self::SOVEREIGN_DEBT_NEUTRAL_THRESHOLD);
-        $bohnFiscalAdjustment = self::BOHN_FISCAL_REACTION_SENSITIVITY * $excessDebt * $state->nominalGdpIndex;
-
         // Singapore's Net Investment Returns Contribution: the sovereign fund's draw is budget revenue (zero with no fund),
-        // and with a fund the structural deficit is that draw, spent, together with the stabilisation the fund pays for.
-        // The fund's currency bridge is set only at inception.
+        // and with a fund it is spent, together with the stabilisation the fund pays for. The fund's currency bridge is
+        // set only at inception.
         $funded = $state->sovereignFundDollarsPerGdp > 0.0;
-        $fundPaidToGdp = $state->sovereignFundDrawToGdp + $state->sovereignFundStabilisationToGdp;
-        $fundContribution = $fundPaidToGdp * $state->nominalGdpIndex;
-        $structuralDeficitToGdp = $funded ? $fundPaidToGdp : self::SOVEREIGN_STRUCTURAL_DEFICIT;
+        $fundContribution = $funded ? ($state->sovereignFundDrawToGdp + $state->sovereignFundStabilisationToGdp) * $output : 0.0;
 
-        $primaryDeficit = ($govtSpendingFlow - $taxRevenue) + ($structuralDeficitToGdp * $state->nominalGdpIndex) - $bohnFiscalAdjustment - $fundContribution;
+        $spending = $govtSpendingFlow + $fundContribution;
+        $revenue = $taxRevenue + $fundContribution;
+        $primaryDeficit = $spending - $revenue;
         $state->primaryDeficitToGdp = $primaryDeficit / max(0.1, $state->nominalGdpIndex);
         $interestCost = $state->yield10yEma * $state->sovereignDebtToGdp;
 
@@ -578,10 +646,13 @@ class CreditFiscalSubsystem
         $excessDsr = max(0.0, $state->householdDebtServiceGap - MacroEngine::HOUSEHOLD_DSR_STRESS_MARGIN);
 
         // The terms US household credit supports (1976-2019). Rates, the gap and business-loan standards have no
-        // direct pull on it once house prices are in; they act through the collateral and the debt service.
+        // direct pull on it once house prices are in; they act through the collateral and the debt service. What is
+        // charged off leaves the stock; the fit's net series carries the charge-off at the default rate's long-run
+        // average, so only the excess over it is booked.
         $growth = (self::CREDIT_GROWTH_HOUSE_PRICE * $housePriceLift)
             - (self::CREDIT_MEAN_REVERSION * $relativeExcess)
-            - (self::DELEVERAGING_SPEED * $excessDsr);
+            - (self::DELEVERAGING_SPEED * $excessDsr)
+            - ($this->householdChargeOffRate($state->retailDefaultRate) - $this->householdChargeOffRate(MacroEngine::RETAIL_DEFAULT_BASELINE));
         $noise = self::CREDIT_GROWTH_SIGMA * sqrt($dt) * $this->mathUtility->generateStandardNormal();
         // Bridges et al. (2014): banks cut lending to households as the capital they must hold rises, secured and unsecured
         // in the stock's proportions, and do not lend it back when it falls.
@@ -648,6 +719,20 @@ class CreditFiscalSubsystem
             dt: $dt,
             lagTimeConstant: self::REQUIREMENT_BUILD_YEARS
         );
+    }
+
+    /**
+     * Household net charge-offs a year as a share of the debt stock: the mortgage and consumer books' long-run rates
+     * moved by the systematic factor the retail default rate implies (Vasicek 2002), in the stock's proportions.
+     *
+     * @param float $retailDefaultRate The household default rate in force.
+     */
+    public function householdChargeOffRate(float $retailDefaultRate): float
+    {
+        $householdZ = $this->mathUtility->calculateVasicekSystematicFactor($retailDefaultRate, MacroEngine::RETAIL_DEFAULT_BASELINE, self::RETAIL_ASRF_RHO);
+
+        return (self::HOUSEHOLD_MORTGAGE_DEBT_SHARE * $this->mathUtility->calculateVasicekExpectedLoss($householdZ, self::HOUSEHOLD_MORTGAGE_CHARGE_OFF_RATE, self::RETAIL_ASRF_RHO, 1.0))
+            + ((1.0 - self::HOUSEHOLD_MORTGAGE_DEBT_SHARE) * $this->mathUtility->calculateVasicekExpectedLoss($householdZ, self::HOUSEHOLD_CONSUMER_CHARGE_OFF_RATE, self::RETAIL_ASRF_RHO, 1.0));
     }
 
     /**
@@ -807,10 +892,11 @@ class CreditFiscalSubsystem
                 - $jumpLogCompensator
         );
 
+        // Every reader takes log(EPU / baseline), so it is the log the process centres on the target.
         $baseProcess = $this->mathUtility->calculateSchwartz1Factor(
             currentPrice: max(self::MIN_EPU, $state->policyUncertaintyIndex),
             kappa: self::EPU_MEAN_REVERSION,
-            theta: $target,
+            theta: MathUtility::schwartzThetaForLogMean($target, self::EPU_MEAN_REVERSION, self::EPU_VOLATILITY),
             sigma: self::EPU_VOLATILITY,
             dt: $dt,
             dW: $this->mathUtility->generateStandardNormal()
@@ -834,7 +920,7 @@ class CreditFiscalSubsystem
      *
      * Hospital reimbursement is an administered price: reset once a year to the inflation the payer observes
      * at the update, less a statutory productivity offset (ACA s.3401), less a sequester that scales with the
-     * sovereign's excess debt. It is a step function, not a diffusion -- between updates the rate is flat
+     * sovereign's excess net debt. It is a step function, not a diffusion -- between updates the rate is flat
      * whatever inflation does, which is why a hospital's margin is squeezed through an inflation spike and
      * repaired a year later.
      *
@@ -848,7 +934,8 @@ class CreditFiscalSubsystem
             return;
         }
 
-        $excessDebt = max(0.0, $state->sovereignDebtToGdpEma - MacroEngine::SOVEREIGN_RISK_DEBT_THRESHOLD);
+        // Keyed to net debt, as the fiscal reaction it belongs to is (fiscalStance()).
+        $excessDebt = max(0.0, $state->sovereignNetDebtToGdpEma - MacroEngine::SOVEREIGN_RISK_DEBT_THRESHOLD);
         $update = $state->inflationEma
             - MacroEngine::REIMBURSEMENT_PRODUCTIVITY_OFFSET
             - (self::REIMBURSEMENT_FISCAL_CUT_SENSITIVITY * $excessDebt);

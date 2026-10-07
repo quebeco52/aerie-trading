@@ -86,7 +86,7 @@ class MacroAggregateSubsystemTest extends TestCase
         $state->wageGrowth = 0.035;
 
         $newGap = $this->subsystem->calculateOutputGap($state, 0.03, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, 0.25, 1.0);
-        $newInflation = $this->subsystem->calculateInflation($state, MacroEngine::TARGET_INFLATION, 1.0, 0.25);
+        $newInflation = $this->subsystem->calculateInflation($state, MacroEngine::TARGET_INFLATION, MacroEngine::TFP_DRIFT, 0.25);
 
         $this->assertGreaterThan(-0.12, $newGap);
         $this->assertLessThan(0.10, $newGap);
@@ -113,13 +113,13 @@ class MacroAggregateSubsystemTest extends TestCase
         $state->outputGap = 0.03;
         $state->laborTightness = 1.60; // Hot labor market
         $state->wageGrowth = 0.055;    // Elevated wage growth
-        $state->freightRateIndexEma = 150.0; // Supply chain friction
+        $state->supplyChainPressureIndex = 2.0; // Supply chain pressure building over its quarter average
         $state->inflation = 0.02;
 
-        $newInflation = $this->subsystem->calculateInflation($state, MacroEngine::TARGET_INFLATION, 1.0, 0.25);
+        $newInflation = $this->subsystem->calculateInflation($state, MacroEngine::TARGET_INFLATION, MacroEngine::TFP_DRIFT, 0.25);
 
         $this->assertGreaterThan(MacroEngine::TARGET_INFLATION, $state->supercoreInflation, 'Hot labor market must push supercore services inflation up');
-        $this->assertGreaterThan(MacroEngine::TARGET_INFLATION, $state->coreGoodsInflation, 'Elevated freight must push core goods inflation up');
+        $this->assertGreaterThan(MacroEngine::TARGET_INFLATION, $state->coreGoodsInflation, 'Rising supply-chain pressure must push core goods inflation up');
         $this->assertGreaterThan(MacroEngine::TARGET_INFLATION, $newInflation, 'Headline inflation must rise above target');
     }
 
@@ -146,7 +146,7 @@ class MacroAggregateSubsystemTest extends TestCase
         $stateWage->industrialMetalsIndexEma = 100.0;
         $stateWage->inflation = 0.02;
 
-        $this->subsystem->calculateInflation($stateWage, MacroEngine::TARGET_INFLATION, 1.0, 0.25);
+        $this->subsystem->calculateInflation($stateWage, MacroEngine::TARGET_INFLATION, MacroEngine::TFP_DRIFT, 0.25);
 
         // Supercore Services must absorb wage-push inflation more heavily than Core Goods
         $this->assertGreaterThan($stateWage->coreGoodsInflation, $stateWage->supercoreInflation, 'Wage surge must drive supercore services higher than core goods');
@@ -154,11 +154,10 @@ class MacroAggregateSubsystemTest extends TestCase
         // 2. Supply chain shock scenario: neutral wage growth, high freight
         $stateSupply = new MacroState();
         $stateSupply->wageGrowth = 0.035; // Neutral wage growth
-        $stateSupply->freightRateIndexEma = 200.0; // 100% freight surge
-        $stateSupply->industrialMetalsIndexEma = 150.0;
+        $stateSupply->supplyChainPressureIndex = 2.0; // A freight doubling's worth of pressure, still building
         $stateSupply->inflation = 0.02;
 
-        $this->subsystem->calculateInflation($stateSupply, MacroEngine::TARGET_INFLATION, 1.0, 0.25);
+        $this->subsystem->calculateInflation($stateSupply, MacroEngine::TARGET_INFLATION, MacroEngine::TFP_DRIFT, 0.25);
 
         // Core Goods must absorb supply chain frictions more heavily than Supercore Services
         $this->assertGreaterThan($stateSupply->supercoreInflation, $stateSupply->coreGoodsInflation, 'Supply chain bottleneck must drive core goods higher than supercore services');
@@ -260,13 +259,13 @@ class MacroAggregateSubsystemTest extends TestCase
         $subsystemWithMock = new MacroAggregateSubsystem($mathMock);
 
         $dt = 0.25;
-        $infNormal = $subsystemWithMock->calculateInflation($stateNormal, MacroEngine::TARGET_INFLATION, 1.0, $dt);
-        $infEnergy = $subsystemWithMock->calculateInflation($stateEnergy, MacroEngine::TARGET_INFLATION, 1.0, $dt);
+        $infNormal = $subsystemWithMock->calculateInflation($stateNormal, MacroEngine::TARGET_INFLATION, MacroEngine::TFP_DRIFT, $dt);
+        $infEnergy = $subsystemWithMock->calculateInflation($stateEnergy, MacroEngine::TARGET_INFLATION, MacroEngine::TFP_DRIFT, $dt);
 
         $this->assertEqualsWithDelta(MacroEngine::ENERGY_COST_PUSH_TRANSMISSION, ($infEnergy - $infNormal) * $dt, 1e-9, 'Energy shock must lift the price level by its full transmission, undiluted by basket weight.');
 
-        $infNormalHeld = $subsystemWithMock->calculateInflation($stateNormal, MacroEngine::TARGET_INFLATION, 1.0, $dt);
-        $infEnergyHeld = $subsystemWithMock->calculateInflation($stateEnergy, MacroEngine::TARGET_INFLATION, 1.0, $dt);
+        $infNormalHeld = $subsystemWithMock->calculateInflation($stateNormal, MacroEngine::TARGET_INFLATION, MacroEngine::TFP_DRIFT, $dt);
+        $infEnergyHeld = $subsystemWithMock->calculateInflation($stateEnergy, MacroEngine::TARGET_INFLATION, MacroEngine::TFP_DRIFT, $dt);
 
         $this->assertEqualsWithDelta(0.0, $infEnergyHeld - $infNormalHeld, 1e-9, 'Energy held high is a price level, not a standing inflation rate.');
     }
@@ -457,7 +456,7 @@ class MacroAggregateSubsystemTest extends TestCase
         $state->agriCostPushLag = 0.0;
 
         for ($i = 0; $i < 8; $i++) {
-            $this->subsystem->calculateInflation($state, MacroEngine::TARGET_INFLATION, 1.0, 0.25);
+            $this->subsystem->calculateInflation($state, MacroEngine::TARGET_INFLATION, MacroEngine::TFP_DRIFT, 0.25);
         }
 
         $this->assertLessThan(0.0, $state->agriCostPushLag, 'Falling farm prices must pass through as a food-CPI dividend, symmetric to a spike.');
@@ -969,6 +968,23 @@ class MacroAggregateSubsystemTest extends TestCase
         return (1.0 - exp(-$dt / MacroAggregateSubsystem::MONETARY_TRANSMISSION_LAG_YEARS)) ** 2;
     }
 
+    /** Demand answers a change in the tax stance, not its level: a rate held for a decade is in potential (Blanchard 1990). */
+    public function testTheTaxChannelReadsTheRateAgainstItsTrend(): void
+    {
+        $neutral = $this->neutralBorrowingState();
+        $heldHigh = $this->neutralBorrowingState();
+        $heldHigh->corporateTaxRate = MacroEngine::TARGET_CORPORATE_TAX_RATE + 0.04;
+        $heldHigh->corporateTaxRateTrend = $heldHigh->corporateTaxRate;
+        $freshRise = $this->neutralBorrowingState();
+        $freshRise->corporateTaxRate = MacroEngine::TARGET_CORPORATE_TAX_RATE + 0.04;
+
+        $gap = fn (MacroState $state): float => $this->subsystem->calculateOutputGap($state, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, 0.25, 1.0);
+        $gapNeutral = $gap($neutral);
+
+        $this->assertEqualsWithDelta($gapNeutral, $gap($heldHigh), 1e-12, 'A stance the trend has caught up with leaves the gap alone.');
+        $this->assertLessThan($gapNeutral, $gap($freshRise), 'A rise the trend has not caught up with costs demand.');
+    }
+
     /** A state with every demand channel at its baseline, so only the borrowing-cost terms can move the gap. */
     private function neutralBorrowingState(): MacroState
     {
@@ -980,6 +996,7 @@ class MacroAggregateSubsystemTest extends TestCase
         $state->policyRate = MacroEngine::BASE_NATURAL_RATE + MacroEngine::TARGET_INFLATION;
         $state->naturalRate = MacroEngine::BASE_NATURAL_RATE;
         $state->corporateTaxRate = MacroEngine::TARGET_CORPORATE_TAX_RATE;
+        $state->corporateTaxRateTrend = MacroEngine::TARGET_CORPORATE_TAX_RATE;
         $state->macroCreditSpreadEma = MacroEngine::BASE_CREDIT_SPREAD;
         $state->interbankLiquiditySpreadEma = MacroEngine::INTERBANK_BASELINE_SPREAD;
         $state->governmentSpendingIndexEma = MacroEngine::GOVT_SPENDING_BASELINE;
@@ -1953,8 +1970,8 @@ class MacroAggregateSubsystemTest extends TestCase
         $dt = 0.01;
         $levelGap = 0.0;
         for ($i = 0; $i < 3000; $i++) {
-            $restInflation = $this->subsystem->calculateInflation($atRest, MacroEngine::TARGET_INFLATION, 1.0, $dt);
-            $levelGap += ($this->subsystem->calculateInflation($appreciated, MacroEngine::TARGET_INFLATION, 1.0, $dt) - $restInflation) * $dt;
+            $restInflation = $this->subsystem->calculateInflation($atRest, MacroEngine::TARGET_INFLATION, MacroEngine::TFP_DRIFT, $dt);
+            $levelGap += ($this->subsystem->calculateInflation($appreciated, MacroEngine::TARGET_INFLATION, MacroEngine::TFP_DRIFT, $dt) - $restInflation) * $dt;
         }
 
         $importedShare = MacroAggregateSubsystem::INFLATION_WEIGHT_GOODS + MacroAggregateSubsystem::INFLATION_WEIGHT_COMMODITY;
@@ -2010,7 +2027,7 @@ class MacroAggregateSubsystemTest extends TestCase
         $added = 0.0;
         $last = 0.0;
         for ($step = 0; $step < 1000; ++$step) {
-            $last = $subsystem->calculateInflation($priced, MacroEngine::TARGET_INFLATION, 1.0, $dt) - $subsystem->calculateInflation($free, MacroEngine::TARGET_INFLATION, 1.0, $dt);
+            $last = $subsystem->calculateInflation($priced, MacroEngine::TARGET_INFLATION, MacroEngine::TFP_DRIFT, $dt) - $subsystem->calculateInflation($free, MacroEngine::TARGET_INFLATION, MacroEngine::TFP_DRIFT, $dt);
             $added += $last * $dt;
         }
 
@@ -2019,5 +2036,131 @@ class MacroAggregateSubsystemTest extends TestCase
         $this->assertEqualsWithDelta(0.0, $last, 1e-9, 'Once passed through, inflation is back where it was.');
         $this->assertGreaterThan(0.002, $step);
         $this->assertLessThan(0.006, $step);
+    }
+
+    // --- Productivity, Noise, Supply Chains, Deflator ---
+
+    /**
+     * A technology gain is disinflationary (Gali 1999; Basu, Fernald & Kimball 2006). Ceteris paribus -- wages not yet
+     * caught up, the supply part of the gap open by the gain -- inflation falls: unit labour cost drops, and the
+     * output the gain lifts is not demand. Read on the whole gap and against trend productivity, it rose.
+     */
+    public function testAProductivityGainLowersInflationCeterisParibus(): void
+    {
+        $calm = $this->neutralBorrowingState();
+        $calm->inflationEma = MacroEngine::TARGET_INFLATION;
+        $calm->wageGrowth = MacroEngine::TFP_DRIFT + MacroEngine::TARGET_INFLATION;
+        $gain = clone $calm;
+        $gain->productivitySupplyGap = 0.01;
+        $gain->outputGap = 0.01;
+        $supplyOnly = clone $gain;
+
+        $calmInflation = $this->subsystem->calculateInflation($calm, MacroEngine::TARGET_INFLATION, MacroEngine::TFP_DRIFT, 0.25);
+        $supplyInflation = $this->subsystem->calculateInflation($supplyOnly, MacroEngine::TARGET_INFLATION, MacroEngine::TFP_DRIFT, 0.25);
+        $gainInflation = $this->subsystem->calculateInflation($gain, MacroEngine::TARGET_INFLATION, MacroEngine::TFP_DRIFT + 0.01, 0.25);
+
+        $this->assertEqualsWithDelta($calmInflation, $supplyInflation, 1e-15, 'The supply part of the gap pulls no demand inflation.');
+        $this->assertLessThan($calmInflation, $gainInflation, 'Faster productivity at given wages lowers unit labour cost and inflation.');
+        $this->assertLessThan($calm->supercoreInflation, $gain->supercoreInflation);
+    }
+
+    /**
+     * Headline and producer prices are levels recomputed every tick, so white noise added to them scaled with sqrt(dt)
+     * shrank with the tick rate (to nothing at 54,000 ticks a year). Neither draws noise of its own: their variance
+     * comes from the shocked processes they read, at any tick length.
+     */
+    public function testInflationAndProducerPricesCarryNoTickRateNoise(): void
+    {
+        $high = new MacroAggregateSubsystem(new class extends MathUtility {
+            public function generateStandardNormal(): float { return 3.0; }
+            public function checkProbability(float $probability): bool { return false; }
+        });
+        $low = new MacroAggregateSubsystem(new class extends MathUtility {
+            public function generateStandardNormal(): float { return -3.0; }
+            public function checkProbability(float $probability): bool { return false; }
+        });
+
+        foreach ([0.25, 1.0 / 54000.0] as $dt) {
+            $up = $this->neutralBorrowingState();
+            $up->industrialMetalsIndex = 140.0;
+            $up->industrialMetalsIndexTrend = 100.0;
+            $up->wageGrowth = 0.05;
+            $down = clone $up;
+
+            $this->assertSame(
+                $high->calculateInflation($up, MacroEngine::TARGET_INFLATION, MacroEngine::TFP_DRIFT, $dt),
+                $low->calculateInflation($down, MacroEngine::TARGET_INFLATION, MacroEngine::TFP_DRIFT, $dt),
+                "Headline inflation draws no noise at dt {$dt}."
+            );
+            $high->calculateProducerPriceInflation($up, MacroEngine::TFP_DRIFT, $dt);
+            $low->calculateProducerPriceInflation($down, MacroEngine::TFP_DRIFT, $dt);
+            $this->assertSame($up->producerPriceInflation, $down->producerPriceInflation, "PPI draws no noise at dt {$dt}.");
+        }
+    }
+
+    /**
+     * Supply-chain pressure is a cost LEVEL of landed goods (Carriere-Swallow et al. 2023): pressure that builds lifts
+     * the core goods price level once, by the loading, and pressure that stays high -- freight and metals parked above
+     * their baselines, the composite's quarter average caught up -- adds no standing inflation.
+     */
+    public function testPersistentSupplyChainPressureAddsNoStandingCoreGoodsInflation(): void
+    {
+        $calm = $this->neutralBorrowingState();
+        $calm->wageGrowth = MacroEngine::TFP_DRIFT + MacroEngine::TARGET_INFLATION;
+        $parked = clone $calm;
+        $parked->freightRateIndexEma = 2.0 * MacroEngine::FREIGHT_BASELINE;
+        $parked->industrialMetalsIndexEma = 1.5 * MacroEngine::METALS_BASELINE;
+        $parked->supplyChainPressureIndex = 2.0;
+        $parked->supplyChainPressureIndexEma = 2.0;
+        $building = clone $calm;
+        $building->supplyChainPressureIndex = 2.0;
+
+        $dt = 0.01;
+        $levelGap = 0.0;
+        for ($step = 0; $step < 1500; ++$step) {
+            $this->subsystem->calculateInflation($calm, MacroEngine::TARGET_INFLATION, MacroEngine::TFP_DRIFT, $dt);
+            $this->subsystem->calculateInflation($parked, MacroEngine::TARGET_INFLATION, MacroEngine::TFP_DRIFT, $dt);
+            $this->subsystem->calculateInflation($building, MacroEngine::TARGET_INFLATION, MacroEngine::TFP_DRIFT, $dt);
+            $this->assertSame($calm->coreGoodsInflation, $parked->coreGoodsInflation, 'Parked pressure adds no core goods inflation.');
+            $levelGap += ($building->coreGoodsInflation - $calm->coreGoodsInflation) * $dt;
+            $building->supplyChainPressureIndexEma += (1.0 - exp(-$dt / MacroAggregateSubsystem::STANDARD_EMA_HORIZON_YEARS)) * ($building->supplyChainPressureIndex - $building->supplyChainPressureIndexEma);
+        }
+
+        $this->assertEqualsWithDelta(2.0 * MacroAggregateSubsystem::CORE_GOODS_SUPPLY_CHAIN_LEVEL_LOADING, $levelGap, 1e-4, 'A freight doubling lifts core goods prices 2.8%, once.');
+        $this->assertEqualsWithDelta(0.0, $building->coreGoodsInflation - $calm->coreGoodsInflation, 1e-4, 'and then inflation is back where it was.');
+    }
+
+    /**
+     * The District makes no goods: its GDP deflator is the services it sells and the local distribution margin on the
+     * goods, fuel and food it imports, which is non-traded services too (Burstein, Neves & Rebelo 2003). No leg of an
+     * imported basket -- currency, supply chains, energy, food -- reaches it; the carbon tax does, on the District's
+     * share of the basket.
+     */
+    public function testTheDeflatorExcludesImportedBasketsBeyondTheirDistributionMargin(): void
+    {
+        $this->assertEqualsWithDelta(0.73, MacroAggregateSubsystem::domesticDeflatorWeight(), 1e-12, 'Services 55% plus 40% of the 45% imported.');
+
+        $calm = $this->neutralBorrowingState();
+        $calm->wageGrowth = MacroEngine::TFP_DRIFT + MacroEngine::TARGET_INFLATION;
+        $imported = clone $calm;
+        $imported->exchangeRateIndexEma = 110.0;
+        $imported->supplyChainPressureIndex = 2.0;
+        $imported->energyPriceShock = 50.0;
+        $imported->agriculturalCommodityIndex = 150.0;
+
+        $calmHeadline = $this->subsystem->calculateInflation($calm, MacroEngine::TARGET_INFLATION, MacroEngine::TFP_DRIFT, 0.25);
+        $importedHeadline = $this->subsystem->calculateInflation($imported, MacroEngine::TARGET_INFLATION, MacroEngine::TFP_DRIFT, 0.25);
+
+        $this->assertGreaterThan(0.001, abs($importedHeadline - $calmHeadline), 'The imported legs move headline');
+        $this->assertSame($calm->domesticInflation, $imported->domesticInflation, 'but not the deflator.');
+        $this->assertSame($imported->supercoreInflation, $imported->domesticInflation);
+
+        $taxed = clone $calm;
+        $taxed->carbonPrice = 70.0;
+        $priorCarbon = $taxed->electricityCarbonPriceLevel;
+        $this->subsystem->calculateInflation($taxed, MacroEngine::TARGET_INFLATION, MacroEngine::TFP_DRIFT, 0.25);
+        $carbonPush = MacroAggregateSubsystem::CPI_ELECTRICITY_WEIGHT * ($taxed->electricityCarbonPriceLevel - $priorCarbon) / 0.25;
+        $this->assertGreaterThan(0.0, $carbonPush);
+        $this->assertEqualsWithDelta($taxed->supercoreInflation + ($carbonPush / MacroAggregateSubsystem::domesticDeflatorWeight()), $taxed->domesticInflation, 1e-15);
     }
 }

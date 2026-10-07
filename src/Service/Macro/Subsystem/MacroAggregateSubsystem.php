@@ -264,14 +264,14 @@ class MacroAggregateSubsystem
     public const SUPERCORE_WAGE_TRANSMISSION = 0.25;
     /** Demand sensitivity factor scaling aggregate output gap pressure into core goods prices. */
     public const CORE_GOODS_DEMAND_SENSITIVITY = 0.80;
-    /** Pass-through elasticity of ocean freight logistics bottlenecks into core goods inflation. */
-    public const CORE_GOODS_FREIGHT_SENSITIVITY = 0.015;
-    /** Pass-through elasticity of industrial metals supply friction into core goods inflation. */
-    public const CORE_GOODS_METALS_SENSITIVITY = 0.008;
-    /** Pass-through elasticity of global supply chain pressure index (GSCPI Z-score) into core goods inflation. */
-    public const CORE_GOODS_GSCPI_SENSITIVITY = 0.003;
-    /** Stochastic diffusion volatility (sigma) of headline inflation fluctuations. */
-    public const INFLATION_DIFFUSION_SIGMA = 0.002;
+
+    // --- Supply-Chain Costs in Core Goods (Carriere-Swallow, Deb, Furceri, Jimenez & Ostry 2023) ---
+    /** Headline price level a year after container freight rates double: ~0.7pp, peaking at twelve months (IMF blog, March 2022, on the paper's local projections). */
+    public const FREIGHT_DOUBLING_HEADLINE_EFFECT = 0.007;
+    /** Supply-chain pressure points a doubling of freight adds to the composite: half its weight on freight, 25 index points to a point (MathUtility::calculateGscpiComposite). */
+    public const SUPPLY_CHAIN_POINTS_PER_FREIGHT_DOUBLING = 2.0;
+    /** Log core goods price level per point of smoothed supply-chain pressure (1.4%): the freight effect carried wholly by the goods basket. */
+    public const CORE_GOODS_SUPPLY_CHAIN_LEVEL_LOADING = self::FREIGHT_DOUBLING_HEADLINE_EFFECT / self::INFLATION_WEIGHT_GOODS / self::SUPPLY_CHAIN_POINTS_PER_FREIGHT_DOUBLING;
 
     // --- SOLOW-SWAN TOTAL FACTOR PRODUCTIVITY (TFP) ---
     /** Level innovation of TFP per sqrt(year): Fernald's utilization-adjusted quarterly TFP 1947-2026 is a random walk at 1-3 year horizons with this sd (annual kurtosis 2.2, so no jump component). */
@@ -554,9 +554,10 @@ class MacroAggregateSubsystem
         // Kaldor (1940) non-linear asymmetric capacity ceiling constraint.
         $cubicConstraint = $y > 0.0 ? self::KALDOR_CAPACITY * pow($y, 3) : 0.0;
         // Blanchard & Perotti (2002) DISCRETIONARY fiscal impulse: a statutory rate and an appropriated
-        // outlay both clear a legislative lag, so this leg reaches demand late by construction.
+        // outlay both clear a legislative lag, so this leg reaches demand late by construction. The rate is read against
+        // its own decade trend: a stance held that long is in potential (Blanchard 1990 fiscal impulse), not the gap.
         $spendingShift = ($state->governmentSpendingIndexEma / MacroEngine::GOVT_SPENDING_BASELINE) - 1.0;
-        $discretionaryFiscal = (self::KALDOR_FISCAL_MULTIPLIER * (MacroEngine::TARGET_CORPORATE_TAX_RATE - $state->corporateTaxRate))
+        $discretionaryFiscal = (self::KALDOR_FISCAL_MULTIPLIER * ($state->corporateTaxRateTrend - $state->corporateTaxRate))
             + (self::KALDOR_GOVT_SPENDING_MULTIPLIER * $spendingShift);
         // The sovereign fund's stabilisation reaches demand through the purchases channel, on purchases that are the target
         // tax take of GDP. Its legislative lag is the budget round that sets it, so it flows at the rate the round sets. So
@@ -913,29 +914,29 @@ class MacroAggregateSubsystem
      * accelerate inflation non-linearly, while downward nominal wage/price rigidity flattens the curve during recessions.
      * Decomposes inflation into wage-push supercore services, freight/materials core goods, and energy/food pass-through.
      *
-     * @param MacroState $state            Current macroeconomic state.
-     * @param float      $targetInflation Central bank inflation target.
-     * @param float      $stressMultiplier Non-linear crisis volatility multiplier.
-     * @param float      $dt               Time increment in years.
+     * @param MacroState $state                  Current macroeconomic state.
+     * @param float      $targetInflation        Central bank inflation target.
+     * @param float      $productivityGrowthRate Productivity growth potential output is built on (absorbProductivityShocks()), the growth wage bargains index.
+     * @param float      $dt                     Time increment in years.
      * @return float Updated headline inflation rate.
      */
-    public function calculateInflation(MacroState $state, float $targetInflation, float $stressMultiplier, float $dt): float
+    public function calculateInflation(MacroState $state, float $targetInflation, float $productivityGrowthRate, float $dt): float
     {
-        $infZ = $this->mathUtility->generateStandardNormal();
-
         // Mankiw, Reis & Wolfers (2004) adaptive inflation expectations unanchoring.
         $anchorSlip = ($state->inflationEma - $targetInflation) * self::INFLATION_ADAPTIVE_EXPECTATIONS_WEIGHT;
 
-        // Benigno & Eggertsson (2023) non-linear convex demand-pull Phillips curve.
+        // Benigno & Eggertsson (2023) non-linear convex demand-pull Phillips curve, on the demand part of the gap: output
+        // a technology gain lifts is not excess demand, and the gain is disinflationary (Gali 1999; Basu, Fernald & Kimball 2006).
         $convexDemandPressure = $this->mathUtility->calculateConvexPhillipsCurve(
-            outputGap: $state->outputGap,
+            outputGap: $state->outputGap - $state->productivitySupplyGap,
             maxCapacity: self::PHILLIPS_MAX_CAPACITY,
             kappa: self::PHILLIPS_CONVEX_KAPPA,
             downwardRigidityFactor: self::PHILLIPS_DOWNWARD_RIGIDITY_FACTOR
         );
 
-        // Shapiro (2022) Sector 1: Supercore services labor wage-push inflation channel.
-        $wageGap = $state->wageGrowth - (MacroEngine::TFP_DRIFT + $targetInflation);
+        // Shapiro (2022) Sector 1: supercore services, pushed by unit labour cost (wage growth less the productivity growth
+        // it buys) over target, the same ULC the PPI reads.
+        $wageGap = $state->wageGrowth - $productivityGrowthRate - $targetInflation;
         $wageCostPush = $wageGap * self::SUPERCORE_WAGE_TRANSMISSION;
         $targetSupercore = $targetInflation + $anchorSlip + $convexDemandPressure + $wageCostPush;
 
@@ -946,11 +947,11 @@ class MacroAggregateSubsystem
         $state->importPriceLevel = $this->mathUtility->calculateDistributedLag($priorImportPriceLevel, self::importPriceLevelTarget($state->exchangeRateIndexEma, $state->importTariffRate), $dt, self::IMPORT_PRICE_ADJUSTMENT_YEARS);
         $importPriceInflation = (1.0 - self::IMPORT_DISTRIBUTION_SHARE) * ($state->importPriceLevel - $priorImportPriceLevel) / $dt;
 
-        // Shapiro (2022) Sector 2: Core goods intermediate supply chain and materials cost pressures.
-        $freightShift = ($state->freightRateIndexEma / MacroEngine::FREIGHT_BASELINE) - 1.0;
-        $metalsShift = ($state->industrialMetalsIndexEma / MacroEngine::METALS_BASELINE) - 1.0;
-        $gscpiFriction = max(-0.01, $state->supplyChainPressureIndexEma * self::CORE_GOODS_GSCPI_SENSITIVITY);
-        $goodsSupplyFriction = ($freightShift * self::CORE_GOODS_FREIGHT_SENSITIVITY) + ($metalsShift * self::CORE_GOODS_METALS_SENSITIVITY) + $gscpiFriction;
+        // Shapiro (2022) Sector 2: core goods. Supply-chain pressure (Benigno et al. 2022: freight, metals, inventories) sets
+        // a cost LEVEL of the landed goods (Carriere-Swallow et al. 2023); inflation is its rate of change, as its quarter
+        // EMA moves this tick, so pressure that stays high adds a step to the level and then no more inflation.
+        $supplyChainStep = (1.0 - exp(-$dt / self::STANDARD_EMA_HORIZON_YEARS)) * ($state->supplyChainPressureIndex - $state->supplyChainPressureIndexEma);
+        $goodsSupplyFriction = self::CORE_GOODS_SUPPLY_CHAIN_LEVEL_LOADING * $supplyChainStep / $dt;
         $targetCoreGoods = $targetInflation + $anchorSlip + (self::CORE_GOODS_DEMAND_SENSITIVITY * $convexDemandPressure) + $goodsSupplyFriction + $importPriceInflation;
 
         // Calvo (1983) sticky price dynamics via continuous AR(1) state adjustment.
@@ -1008,15 +1009,12 @@ class MacroAggregateSubsystem
             + (self::INFLATION_WEIGHT_GOODS * $state->coreGoodsInflation)
             + (self::INFLATION_WEIGHT_COMMODITY * $commodityBasketInflation);
 
-        $noise = self::INFLATION_DIFFUSION_SIGMA * $stressMultiplier * sqrt($dt) * $infZ;
-        $newInflation = $blendedInflation + $noise;
-        $boundedInflation = max(-0.02, min(0.25, $newInflation));
+        $boundedInflation = max(-0.02, min(0.25, $blendedInflation));
 
-        // The GDP deflator prices what the District produces, so the imported legs come out of it: the import prices and
-        // the energy and food the District buys abroad (SNA 2008, 15.180). The carbon price is a domestic tax and stays.
-        $importedInflation = $energyCostPush + $agriCostPush
-            + ((self::INFLATION_WEIGHT_GOODS + self::INFLATION_WEIGHT_COMMODITY) * $importPriceInflation);
-        $state->domesticInflation = $boundedInflation - $importedInflation;
+        // The GDP deflator prices what the District produces (SNA 2008, 15.180). It makes no goods, so of the goods,
+        // fuel and food baskets only the local distribution margin is its own, and that margin is non-traded services
+        // priced like them (Burstein, Neves & Rebelo 2003). The carbon price is a domestic tax and stays.
+        $state->domesticInflation = $state->supercoreInflation + ($carbonCostPush / self::domesticDeflatorWeight());
 
         // The blend is linear with weights summing to one, so headline splits exactly into what each channel put in
         // it, with the gap between a sector's rate and the rate it is moving toward booked as the sticky-price lag.
@@ -1034,8 +1032,7 @@ class MacroAggregateSubsystem
                 'importPrices' => $importPriceInflation * (self::INFLATION_WEIGHT_GOODS + self::INFLATION_WEIGHT_COMMODITY),
                 'stickyPriceLag' => (self::INFLATION_WEIGHT_SUPERCORE * ($state->supercoreInflation - $targetSupercore))
                     + (self::INFLATION_WEIGHT_GOODS * ($state->coreGoodsInflation - $targetCoreGoods)),
-                'noise' => $noise,
-                'clamp' => $boundedInflation - $newInflation,
+                'clamp' => $boundedInflation - $blendedInflation,
             ], $boundedInflation, $dt);
         }
 
@@ -1064,6 +1061,15 @@ class MacroAggregateSubsystem
         return $targetInflation
             + (self::BREAKEVEN_CORE_LOADING * (self::coreInflationEma($state) - $targetInflation))
             + (self::BREAKEVEN_NONCORE_LOADING * $headlineOverCore);
+    }
+
+    /**
+     * The consumer basket's District value added as a share of it: the services, and the local distribution margin of
+     * the imported goods, fuel and food (Burstein, Neves & Rebelo 2003). The deflator's weights renormalise on it.
+     */
+    public static function domesticDeflatorWeight(): float
+    {
+        return self::INFLATION_WEIGHT_SUPERCORE + (self::IMPORT_DISTRIBUTION_SHARE * (self::INFLATION_WEIGHT_GOODS + self::INFLATION_WEIGHT_COMMODITY));
     }
 
     /**
@@ -1385,9 +1391,7 @@ class MacroAggregateSubsystem
             max: MacroEngine::MAX_PPI_INFLATION
         );
 
-        $dW = $this->mathUtility->generateStandardNormal();
-        $diffusion = 0.003 * sqrt($dt) * $dW;
-        $state->producerPriceInflation = max(self::MIN_PPI_INFLATION, min(MacroEngine::MAX_PPI_INFLATION, $targetPpi + $diffusion));
+        $state->producerPriceInflation = $targetPpi;
     }
 
     /**

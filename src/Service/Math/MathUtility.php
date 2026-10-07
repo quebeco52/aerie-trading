@@ -37,6 +37,10 @@ class MathUtility
     /** Exponent rate at which the closed-form compensator switches to its removable-singularity limit, where eta approaches one. */
     public const COMPENSATOR_UNIT_RATE_TOLERANCE = 1.0e-6;
 
+    // --- Levy-Driven OU Compensator ---
+    /** Even number of Simpson intervals on [0, 1] for the jump level shift; the integrand is smooth, so 32 is exact to ~1e-9. */
+    public const LEVY_OU_COMPENSATOR_SIMPSON_INTERVALS = 32;
+
     // --- Yield To Maturity Solver ---
 
     /** Newton-Raphson iteration cap; a well-bracketed bond converges in well under ten. */
@@ -577,6 +581,9 @@ class MathUtility
      * @param float $kappa      Reversion speed.
      * @param float $sigma      Volatility of volatility.
      * @param float $dt         Time step.
+     * @param float|null $varianceShock Unit-variance shock to drive the step with, for a variance correlated with the
+     *                          price (Heston rho); null draws a fresh one. Both branches are monotone in one uniform
+     *                          U_V (Andersen 2008), so the exponential branch reads U_V = Phi(shock).
      * @return float The next strictly positive variance.
      */
     public function calculateQEVarianceStep(
@@ -584,7 +591,8 @@ class MathUtility
         float $theta,
         float $kappa,
         float $sigma,
-        float $dt
+        float $dt,
+        ?float $varianceShock = null
     ): float {
         $expKappaDt = exp(-$kappa * $dt);
 
@@ -603,13 +611,13 @@ class MathUtility
             // Non-central chi-square approximation (Quadratic)
             $b2 = 2 / $psi - 1 + sqrt((2 / $psi) * (2 / $psi - 1));
             $a = $m / (1 + $b2);
-            $Zv = $this->generateStandardNormal();
+            $Zv = $varianceShock ?? $this->generateStandardNormal();
             $nextVar = $a * pow(sqrt($b2) + $Zv, 2);
         } else {
             // Exponential approximation
             $p = ($psi - 1) / ($psi + 1);
             $beta = (1 - $p) / $m;
-            $U = $this->generateUniform();
+            $U = $varianceShock !== null ? $this->calculateNormalCDF($varianceShock) : $this->generateUniform();
 
             if ($U > $p) {
                 // Prevent log(0) if U is extremely close to 1
@@ -1841,9 +1849,13 @@ class MathUtility
      * Uses an Ornstein-Uhlenbeck (OU) process on the natural logarithm of the price,
      * ensuring strictly positive, right-skewed log-normal distributions.
      *
+     * Schwartz's own parameterisation, theta = e^mu with alpha = mu - sigma^2 / 2 kappa: the stationary mean of S is
+     * theta x e^(-sigma^2 / 4 kappa), not theta. A caller whose theta is the level S should average passes
+     * schwartzThetaForMean() instead.
+     *
      * @param float $currentPrice The current commodity price (S).
      * @param float $kappa        The speed of mean reversion.
-     * @param float $theta        The long-term equilibrium price level.
+     * @param float $theta        Schwartz's e^mu (see above), not the stationary mean.
      * @param float $sigma        The volatility of the log price.
      * @param float $dt           The time step delta.
      * @param float $dW           The Brownian motion Z-score.
@@ -1854,7 +1866,7 @@ class MathUtility
         $currentPrice = max(0.0001, $currentPrice);
         $currentLogPrice = log($currentPrice);
 
-        // The long term mean of the log-price needs an Ito correction to match the expected level of the spot price
+        // Schwartz (1997) eq. 3: alpha = mu - sigma^2 / 2 kappa, the drift of ln S under dS = kappa (mu - ln S) S dt + sigma S dz.
         $alpha = log($theta) - ($sigma * $sigma) / (2.0 * max(0.0001, $kappa));
 
         // Exact solution for OU process to prevent Euler discretization errors for large kappa * dt
@@ -1868,6 +1880,59 @@ class MathUtility
         $nextLogPrice = $drift + $diffusion;
 
         return exp($nextLogPrice);
+    }
+
+    /**
+     * The theta calculateSchwartz1Factor() needs for its stationary mean to be `$mean`: the log-OU's stationary log
+     * variance is sigma^2 / 2 kappa, so E[S] = theta x e^(-sigma^2 / 4 kappa) and theta is the mean lifted by the inverse.
+     *
+     * @param float $mean  Level the price is to average.
+     * @param float $kappa Speed of mean reversion of the log price.
+     * @param float $sigma Volatility of the log price.
+     */
+    public static function schwartzThetaForMean(float $mean, float $kappa, float $sigma): float
+    {
+        return $mean * exp(($sigma * $sigma) / (4.0 * max(0.0001, $kappa)));
+    }
+
+    /**
+     * The theta calculateSchwartz1Factor() needs for its stationary LOG mean to be ln(`$level`): Schwartz's alpha
+     * subtracts sigma^2 / 2 kappa, so theta is lifted by the inverse. For processes whose readers take log(S / level).
+     *
+     * @param float $level Level whose log the price is to average.
+     * @param float $kappa Speed of mean reversion of the log price.
+     * @param float $sigma Volatility of the log price.
+     */
+    public static function schwartzThetaForLogMean(float $level, float $kappa, float $sigma): float
+    {
+        return $level * exp(($sigma * $sigma) / (2.0 * max(0.0001, $kappa)));
+    }
+
+    /**
+     * How much compound-Poisson log jumps lift the stationary mean LEVEL of a log-OU, as a log shift: the OU driven by a
+     * Levy process has stationary cumulant K(u) = integral_0^inf psi(u e^(-kappa s)) ds (Barndorff-Nielsen & Shephard
+     * 2001), which for Merton (1976) normal jumps at u = 1 is (lambda / kappa) integral_0^1 (E[e^(wJ)] - 1) / w dw.
+     * Dividing a target by e^(this) puts the jump-diffusion's mean level back on it.
+     *
+     * @param float $lambda   Jump arrivals per year.
+     * @param float $kappa    Speed of mean reversion of the log price.
+     * @param float $jumpMean Mean log jump.
+     * @param float $jumpVol  Standard deviation of the log jump.
+     */
+    public static function logOuJumpLevelShift(float $lambda, float $kappa, float $jumpMean, float $jumpVol): float
+    {
+        // (E[e^(wJ)] - 1) / w is smooth on [0, 1] and tends to the mean jump at w = 0; composite Simpson integrates it.
+        $integrand = static fn (float $w): float => $w > 0.0
+            ? (exp(($jumpMean * $w) + (0.5 * $jumpVol * $jumpVol * $w * $w)) - 1.0) / $w
+            : $jumpMean;
+        $intervals = self::LEVY_OU_COMPENSATOR_SIMPSON_INTERVALS;
+        $h = 1.0 / $intervals;
+        $sum = $integrand(0.0) + $integrand(1.0);
+        for ($i = 1; $i < $intervals; $i++) {
+            $sum += ($i % 2 === 1 ? 4.0 : 2.0) * $integrand($i * $h);
+        }
+
+        return ($lambda / max(0.0001, $kappa)) * ($sum * $h / 3.0);
     }
 
     /**
@@ -2791,8 +2856,8 @@ class MathUtility
     /**
      * One step of the de-seasonalised 3:2:1 refining crack spread: a Schwartz (1997) log mean-reverting margin
      * around a target set by demand and physical inventory tightness. Margins are right-skewed and cannot go
-     * negative across a sustained run, so the log is what reverts. The exact transition settles at
-     * target x exp(-sigma^2 / 4 kappa), so the target is lifted by that factor to put the stationary mean on it.
+     * negative across a sustained run, so the log is what reverts. The target is handed over through
+     * schwartzThetaForMean(), so the stationary mean sits on it.
      *   Target = baseline * (1 + gapSens * outputGap) + inventory tightness add-on
      *
      * @param float $currentCrack          Current de-seasonalised crack spread in $/bbl.
@@ -2818,9 +2883,7 @@ class MathUtility
         $demandFactor = 1.0 + (1.20 * $outputGap);
         $inventoryTightness = max(0.0, (100.0 - $energyInventoryIndex) / 100.0) * 15.0;
         $targetCrack = ($baselineCrack * max(0.30, $demandFactor)) + $inventoryTightness;
-        $meanCompensatedTarget = $targetCrack * exp(($sigma * $sigma) / (4.0 * max(0.0001, $kappa)));
-
-        $newCrack = $this->calculateSchwartz1Factor(max(0.01, $currentCrack), $kappa, $meanCompensatedTarget, $sigma, $dt, $dW);
+        $newCrack = $this->calculateSchwartz1Factor(max(0.01, $currentCrack), $kappa, self::schwartzThetaForMean($targetCrack, $kappa, $sigma), $sigma, $dt, $dW);
 
         return max(4.0, min(80.0, $newCrack));
     }
@@ -3030,6 +3093,8 @@ class MathUtility
      * Derives annual M2 broad money supply growth from central bank balance sheet liquidity creation (QE/QT),
      * commercial banking credit multipliers (SLOOS underwriting standards), and output gap credit demand:
      *   Target = BaseGrowth + betaQE * BalanceSheet - betaSLOOS * SLOOS + betaY * OutputGap
+     * Standards enter signed: easing lends deposits into being as tightening withholds them (Lown & Morgan 2006 read
+     * the signed net-tightening series).
      *
      * @param float $currentM2Growth  Current annual M2 money supply growth rate.
      * @param float $baseGrowth       Long-run neutral M2 growth matching potential output and inflation target.
@@ -3053,7 +3118,7 @@ class MathUtility
     ): float {
         $targetM2Growth = $baseGrowth
             + ($params['qeSens'] * $balanceSheetIntensity)
-            - ($params['sloosSens'] * max(0.0, $sloosTightening))
+            - ($params['sloosSens'] * $sloosTightening)
             + ($params['gapSens'] * $outputGap);
 
         $clampedTarget = max($params['min'], min($params['max'], $targetM2Growth));
@@ -3209,15 +3274,17 @@ class MathUtility
      * Calculates broad liquidity expansion/contraction shifts from M2 money supply growth (Friedman-Schwartz).
      *
      * Evaluates systemic financial liquidity driving deposit growth, AUM fund inflows, and retail market participation.
+     * A cyclical reading: pass the measured trend (MacroStateDTO::$moneySupplyGrowthTrend) as the baseline, since
+     * M2 growth settles wherever its QE, standards and gap legs put it, not at M2_BASE_GROWTH.
      *
      * @param float $m2Growth    Annual broad money supply M2 growth rate.
-     * @param float $baseline    Neutral equilibrium M2 growth rate (~5.5%).
+     * @param float $baseline    M2 growth's measured trend.
      * @param float $sensitivity Liquidity sensitivity multiplier.
      * @return float Liquidity shift bounded in [-0.15, 0.15].
      */
     public static function calculateBroadMoneyLiquidityShift(
         float $m2Growth,
-        float $baseline = MacroEngine::M2_BASE_GROWTH,
+        float $baseline,
         float $sensitivity = 0.50
     ): float {
         $deviation = $m2Growth - $baseline;

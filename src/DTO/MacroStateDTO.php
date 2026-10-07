@@ -174,6 +174,8 @@ readonly class MacroStateDTO
         /** @var array<string, float> Persistent per-macro-sector demand factor shared by every firm's earnings physics in the sector. */
         public array $sectorDemandZ = [],
         public float $corporateTaxRate = MacroEngine::BASE_CORPORATE_TAX_RATE,
+        /** The tax rate's measured structural level, a decade's exponential average (App\Service\Macro\Subsystem\CreditFiscalSubsystem::calculateDynamicFiscalPolicy()). */
+        public float $corporateTaxRateTrend = MacroEngine::BASE_CORPORATE_TAX_RATE,
         public float $sovereignDebtToGdp = MacroEngine::INITIAL_DEBT_TO_GDP,
         public float $sovereignDebtToGdpEma = MacroEngine::INITIAL_DEBT_TO_GDP,
         public float $sovereignNetDebtToGdp = MacroEngine::INITIAL_DEBT_TO_GDP,
@@ -181,6 +183,8 @@ readonly class MacroStateDTO
         public float $equityRiskPremium = MacroEngine::BASE_EQUITY_RISK_PREMIUM,
         public float $macroCreditSpread = MacroEngine::BASE_CREDIT_SPREAD,
         public float $macroCreditSpreadEma = MacroEngine::BASE_CREDIT_SPREAD,
+        /** The IG spread's measured through-the-cycle level, a decade's exponential average (App\Service\Macro\Subsystem\CreditFiscalSubsystem::updateCreditSpreadTrend()). */
+        public float $macroCreditSpreadTrend = MacroEngine::BASE_CREDIT_SPREAD,
         public float $interbankLiquiditySpread = MacroEngine::INTERBANK_BASELINE_SPREAD,
         public float $interbankLiquiditySpreadEma = MacroEngine::INTERBANK_BASELINE_SPREAD,
         public float $excessBondPremium = 0.0,
@@ -378,6 +382,8 @@ readonly class MacroStateDTO
         public float $electricityCarbonPriceLevel = 0.0,
         public float $moneySupplyGrowth = MacroEngine::M2_BASE_GROWTH,
         public float $moneySupplyGrowthEma = MacroEngine::M2_BASE_GROWTH,
+        /** M2 growth's measured trend, the level its cyclical readers compare it with (App\Service\Macro\Subsystem\MonetaryPolicySubsystem::calculateMoneySupplyGrowth()). */
+        public float $moneySupplyGrowthTrend = MacroEngine::M2_BASE_GROWTH,
         public float $sovereignFundDomesticEquity = 0.0,
         public float $sovereignFundForeignEquity = 0.0,
         public float $sovereignFundForeignBonds = 0.0,

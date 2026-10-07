@@ -8,6 +8,7 @@ use App\Service\Macro\Subsystem\AssetMarketSubsystem;
 use App\Service\Macro\Subsystem\CommodityLogisticsSubsystem;
 use App\Service\Macro\Subsystem\CreditFiscalSubsystem;
 use App\Service\Macro\Subsystem\MacroAggregateSubsystem;
+use App\Service\Macro\Subsystem\MonetaryPolicySubsystem;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\MathUtility;
 use PHPUnit\Framework\TestCase;
@@ -83,6 +84,8 @@ class CreditFiscalSubsystemTest extends TestCase
         $stateNormal->outputGapEma = 0.01;
         $stateNormal->marketVolatilityEma = 0.15;
         $stateNormal->interbankLiquiditySpreadEma = MacroEngine::INTERBANK_BASELINE_SPREAD;
+        // The multiple is the corporate-risk part's; the sovereign's share is additive (Durbin & Ng 2005), so hold it at zero.
+        $stateNormal->sovereignRiskSpreadEma = 0.0;
 
         $this->subsystem->calculateMacroCreditSpread($stateNormal);
         $this->assertEqualsWithDelta(MacroEngine::BASE_CREDIT_SPREAD, $stateNormal->macroCreditSpread, 0.005);
@@ -92,6 +95,7 @@ class CreditFiscalSubsystemTest extends TestCase
         $stateRecession->outputGapEma = -0.05;
         $stateRecession->marketVolatilityEma = 0.35;
         $stateRecession->interbankLiquiditySpreadEma = 0.006;
+        $stateRecession->sovereignRiskSpreadEma = 0.0;
 
         $this->subsystem->calculateMacroCreditSpread($stateRecession);
         // Investment grade widens moderately
@@ -111,6 +115,7 @@ class CreditFiscalSubsystemTest extends TestCase
         $state->outputGapEma = -0.08;
         $state->marketVolatilityEma = 0.60;
         $state->interbankLiquiditySpreadEma = CreditFiscalSubsystem::INTERBANK_MAX_SPREAD;
+        $state->sovereignRiskSpreadEma = 0.0;
 
         $this->subsystem->calculateMacroCreditSpread($state);
 
@@ -170,35 +175,97 @@ class CreditFiscalSubsystemTest extends TestCase
         $this->assertGreaterThanOrEqual(1.0, $twoSigmaLow, 'Panic jumps must never reduce the interbank spread.');
     }
 
-    public function testBohnFiscalReactionStabilizesExcessDebt(): void
+    /**
+     * The budget closes as a flow identity: the debt moves by spending less revenue plus interest less growth erosion,
+     * with no surplus booked beside the flows. Spending is purchases plus what the fund pays for; revenue is taxes at
+     * the rate in force plus the fund's draw.
+     */
+    public function testTheDeficitIsSpendingLessRevenueWithNoLedgerBesideIt(): void
     {
-        $stateSustainable = new MacroState();
-        $stateSustainable->sovereignDebtToGdp = 0.60; // Below neutral threshold (0.70)
-        $stateSustainable->nominalGdpIndex = 1.0;
-        $stateSustainable->yield10yEma = 0.04;
-        $stateSustainable->outputGap = 0.0;
-        $stateSustainable->inflationEma = 0.02;
-        $stateSustainable->corporateTaxRate = 0.21;
-        $stateSustainable->governmentSpendingIndex = 100.0;
+        $dt = 0.25;
+        foreach ([false, true] as $funded) {
+            $state = $this->neutralBudget(1.20, 1.3);
+            $state->sovereignNetDebtToGdp = 1.20;
+            $state->outputGap = -0.02;
+            $state->corporateTaxRate = 0.235;
+            $state->governmentSpendingIndex = 104.0;
+            $state->yield10yEma = 0.05;
+            $state->nominalGdpGrowth = 0.03;
+            if ($funded) {
+                $state->sovereignFundDollarsPerGdp = 2.0e13;
+                $state->sovereignFundDrawToGdp = 0.02;
+                $state->sovereignFundStabilisationToGdp = 0.005;
+            }
+            $debt = $state->sovereignDebtToGdp;
 
-        $this->subsystem->calculateSovereignDebt($stateSustainable, 0.25);
+            $this->subsystem->calculateSovereignDebt($state, $dt);
 
-        $stateExcessDebt = new MacroState();
-        $stateExcessDebt->sovereignDebtToGdp = 1.20; // Well above neutral threshold (0.70)
-        $stateExcessDebt->nominalGdpIndex = 1.0;
-        $stateExcessDebt->yield10yEma = 0.04;
-        $stateExcessDebt->outputGap = 0.0;
-        $stateExcessDebt->inflationEma = 0.02;
-        $stateExcessDebt->corporateTaxRate = 0.21;
-        $stateExcessDebt->governmentSpendingIndex = 100.0;
+            $output = 1.3;
+            $fundPaid = $funded ? 0.025 * $output : 0.0;
+            $spending = (104.0 / MacroEngine::GOVT_SPENDING_BASELINE) * MacroEngine::TARGET_CORPORATE_TAX_RATE * ($output / 0.98) + $fundPaid;
+            $revenue = (0.235 * $output) + $fundPaid;
+            $deficitToGdp = ($spending - $revenue) / $output;
 
-        $this->subsystem->calculateSovereignDebt($stateExcessDebt, 0.25);
+            $this->assertEqualsWithDelta($deficitToGdp, $state->primaryDeficitToGdp, 1e-12, 'The published deficit is spending less revenue.');
+            $this->assertEqualsWithDelta($debt + (($deficitToGdp + ((0.05 - 0.03) * $debt)) * $dt), $state->sovereignDebtToGdp, 1e-12, 'Debt over the 70% line runs no surplus the tax rate does not levy.');
+        }
+    }
 
-        // Bohn (1998) adjustment: higher debt induces primary fiscal surplus, counteracting interest burden
-        // dDebt/dt rate of increase must be constrained by the Bohn stabilizer
-        $excessDebtAmount = 1.20 - CreditFiscalSubsystem::SOVEREIGN_DEBT_NEUTRAL_THRESHOLD;
-        $expectedBohnSurplus = CreditFiscalSubsystem::BOHN_FISCAL_REACTION_SENSITIVITY * $excessDebtAmount;
-        $this->assertGreaterThan(0.0, $expectedBohnSurplus);
+    /**
+     * Bohn (1998) acts through the tax rate: debt above the line raises the rate the budget levies, which is the rate the
+     * demand equation reads (MacroAggregateSubsystem's discretionary fiscal leg), and the higher take shows in revenue.
+     */
+    public function testDebtAboveTheLineRaisesTheTaxRateDemandReads(): void
+    {
+        $sound = new MacroState();
+        $sound->outputGapEma = 0.0;
+        $sound->corporateTaxRate = MacroEngine::TARGET_CORPORATE_TAX_RATE;
+        $sound->sovereignDebtToGdp = 0.90;
+        $sound->sovereignNetDebtToGdp = 0.90;
+        $indebted = clone $sound;
+        $indebted->sovereignDebtToGdp = 1.20;
+        $indebted->sovereignNetDebtToGdp = 1.20;
+
+        $sound->corporateTaxRateTrend = MacroEngine::TARGET_CORPORATE_TAX_RATE;
+        $indebted->corporateTaxRateTrend = MacroEngine::TARGET_CORPORATE_TAX_RATE;
+        $impulse = static fn (MacroState $state): float => MacroAggregateSubsystem::KALDOR_FISCAL_MULTIPLIER * ($state->corporateTaxRateTrend - $state->corporateTaxRate);
+        $impulseAt = [];
+        for ($i = 1; $i <= 4000; ++$i) {
+            $this->subsystem->calculateDynamicFiscalPolicy($sound, 0.01);
+            $this->subsystem->calculateDynamicFiscalPolicy($indebted, 0.01);
+            $impulseAt[$i] = $impulse($indebted);
+        }
+
+        // At 90% the reaction exactly pays the 2% structural deficit, so the rate sits at its neutral level.
+        $this->assertEqualsWithDelta(MacroEngine::TARGET_CORPORATE_TAX_RATE, $sound->corporateTaxRate, 1e-6);
+        $this->assertEqualsWithDelta(0.30 * CreditFiscalSubsystem::BOHN_FISCAL_REACTION_SENSITIVITY, $indebted->corporateTaxRate - $sound->corporateTaxRate, 1e-6);
+        $this->assertLessThan(-0.008, $impulseAt[200], 'The consolidation costs demand while it is enacted.');
+        $this->assertGreaterThan(-0.001, $impulseAt[4000], 'Forty years on, the higher rate is in potential, not the gap.');
+
+        $soundBudget = $this->neutralBudget(1.20);
+        $soundBudget->corporateTaxRate = $sound->corporateTaxRate;
+        $indebtedBudget = $this->neutralBudget(1.20);
+        $indebtedBudget->corporateTaxRate = $indebted->corporateTaxRate;
+        $this->subsystem->calculateSovereignDebt($soundBudget, 0.25);
+        $this->subsystem->calculateSovereignDebt($indebtedBudget, 0.25);
+        $this->assertEqualsWithDelta(-0.03, $indebtedBudget->primaryDeficitToGdp - $soundBudget->primaryDeficitToGdp, 1e-6, 'The surplus is the revenue the higher rate raises.');
+    }
+
+    /** With a fund the reaction answers to debt net of the fund's bonds, as the market prices it: gross debt it holds bonds against is no call for a surplus. */
+    public function testWithAFundTheReactionKeysToNetDebt(): void
+    {
+        $unfunded = new MacroState();
+        $unfunded->sovereignDebtToGdp = 0.90;
+        $unfunded->sovereignNetDebtToGdp = 0.90;
+        $funded = clone $unfunded;
+        $funded->sovereignFundDollarsPerGdp = 2.0e13;
+        $funded->sovereignNetDebtToGdp = 0.60;
+        $fundedAtLine = clone $funded;
+        $fundedAtLine->sovereignNetDebtToGdp = 0.90;
+
+        $this->assertEqualsWithDelta(0.0, CreditFiscalSubsystem::fiscalStance($unfunded), 1e-12, 'No fund: the reaction at 90% pays the structural deficit.');
+        $this->assertSame(0.0, CreditFiscalSubsystem::fiscalStance($funded), 'Net of its bonds the funded sovereign sits under the line.');
+        $this->assertEqualsWithDelta(0.20 * CreditFiscalSubsystem::BOHN_FISCAL_REACTION_SENSITIVITY, CreditFiscalSubsystem::fiscalStance($fundedAtLine), 1e-12, 'The draw pays the structural deficit, so the whole reaction is surplus.');
     }
 
     public function testRetailDefaultRateCoupledToCreditSpreadStress(): void
@@ -321,9 +388,9 @@ class CreditFiscalSubsystemTest extends TestCase
 
     public function testInterbankSpreadMeanTracksTheBondPremium(): void
     {
-        // With diffusion silenced the CIR process converges on its premium-coupled mean: lenders repricing credit
-        // risk must pull the interbank spread well above baseline, so a credit crisis shows up in TED rather than
-        // random jumps.
+        // With diffusion and jumps silenced the CIR process converges on its premium-coupled mean less the jumps'
+        // Merton compensator: lenders repricing credit risk must pull the interbank spread well above baseline, so a
+        // credit crisis shows up in TED rather than random jumps. The jumps put back what the compensator takes.
         $quiet = new class extends MathUtility {
             public function generateStandardNormal(): float
             {
@@ -346,8 +413,10 @@ class CreditFiscalSubsystemTest extends TestCase
             $subsystem->calculateInterbankLiquiditySpread($state, 0.25);
         }
 
-        $expectedMean = MacroEngine::INTERBANK_BASELINE_SPREAD + (0.034 * CreditFiscalSubsystem::INTERBANK_PREMIUM_COUPLING);
-        $this->assertEqualsWithDelta($expectedMean, $state->interbankLiquiditySpread, 0.0005);
+        $theta = MacroEngine::INTERBANK_BASELINE_SPREAD + (0.034 * CreditFiscalSubsystem::INTERBANK_PREMIUM_COUPLING);
+        $compensator = $subsystem->interbankJumpCompensator(CreditFiscalSubsystem::INTERBANK_MAX_JUMP_PROBABILITY, 0.0);
+        $betweenJumps = MacroEngine::INTERBANK_SPREAD_KAPPA * $theta / (MacroEngine::INTERBANK_SPREAD_KAPPA + $compensator);
+        $this->assertEqualsWithDelta($betweenJumps, $state->interbankLiquiditySpread, 0.0001);
         $this->assertGreaterThan(0.010, $state->interbankLiquiditySpread, "2008's 340 bps premium must lift TED past 100 bps.");
     }
 
@@ -372,7 +441,7 @@ class CreditFiscalSubsystemTest extends TestCase
         $state = new MacroState();
         $state->totalTime = 4.001; // the tick that crossed the year end
         $state->inflationEma = 0.04;
-        $state->sovereignDebtToGdpEma = self::SOUND_DEBT_TO_GDP; // below the neutral threshold: no sequester
+        $state->sovereignNetDebtToGdpEma = self::SOUND_DEBT_TO_GDP; // below the neutral threshold: no sequester
 
         $this->subsystem->calculateReimbursementRate($state, 0.01);
 
@@ -385,12 +454,12 @@ class CreditFiscalSubsystemTest extends TestCase
         $solvent = new MacroState();
         $solvent->totalTime = 4.001;
         $solvent->inflationEma = 0.03;
-        $solvent->sovereignDebtToGdpEma = MacroEngine::SOVEREIGN_RISK_DEBT_THRESHOLD;
+        $solvent->sovereignNetDebtToGdpEma = MacroEngine::SOVEREIGN_RISK_DEBT_THRESHOLD;
 
         $indebted = new MacroState();
         $indebted->totalTime = 4.001;
         $indebted->inflationEma = 0.03;
-        $indebted->sovereignDebtToGdpEma = MacroEngine::SOVEREIGN_RISK_DEBT_THRESHOLD + 0.30;
+        $indebted->sovereignNetDebtToGdpEma = MacroEngine::SOVEREIGN_RISK_DEBT_THRESHOLD + 0.30;
 
         $this->subsystem->calculateReimbursementRate($solvent, 0.01);
         $this->subsystem->calculateReimbursementRate($indebted, 0.01);
@@ -580,11 +649,11 @@ class CreditFiscalSubsystemTest extends TestCase
         $this->assertSame($withoutFund->sovereignDebtToGdp, $withoutFund->sovereignNetDebtToGdp, 'No fund, nothing to net.');
         $this->assertEqualsWithDelta($withFund->sovereignDebtToGdp - 0.50, $withFund->sovereignNetDebtToGdp, 1e-12);
 
-        // What the government itself answers to stays gross: the coupons it pays and the Bohn reaction on its own debt.
-        $this->assertSame($withoutFund->sovereignDebtToGdp, $withFund->sovereignDebtToGdp, 'Holding bonds does not change what the budget owes or how it reacts.');
+        // The coupons are paid on gross debt, so the stock the budget accumulates stays gross.
+        $this->assertSame($withoutFund->sovereignDebtToGdp, $withFund->sovereignDebtToGdp, 'Holding bonds does not change what the budget owes.');
     }
 
-    public function testTheSequesterAnswersToGrossDebt(): void
+    public function testTheSequesterAnswersToNetDebt(): void
     {
         $unfunded = new MacroState();
         $unfunded->totalTime = 4.001;
@@ -597,23 +666,38 @@ class CreditFiscalSubsystemTest extends TestCase
         $this->subsystem->calculateReimbursementRate($unfunded, 0.01);
         $this->subsystem->calculateReimbursementRate($funded, 0.01);
 
-        $this->assertSame($unfunded->reimbursementRateGrowth, $funded->reimbursementRateGrowth, 'A legislated cut is written on the debt the budget carries.');
+        $this->assertGreaterThan($unfunded->reimbursementRateGrowth, $funded->reimbursementRateGrowth, 'A cut is written on the position the fiscal reaction answers to, net of the fund.');
     }
 
-    public function testTheSovereignCeilingLiftsTheCorporateBase(): void
+    /**
+     * Durbin & Ng (2005): a corporate yield carries the sovereign spread at the pass-through share. The District curve
+     * carries all of it at the ten-year point, so the spread over that curve carries the share less one, and the
+     * corporate yield (curve plus spread) loads the sovereign spread once.
+     */
+    public function testACorporateYieldCarriesTheSovereignSpreadAtThePassThroughShare(): void
     {
         $sound = new MacroState();
         $sound->outputGapEma = 0.0;
         $sound->sovereignRiskSpreadEma = 0.0;
-        $stressed = new MacroState();
-        $stressed->outputGapEma = 0.0;
-        $stressed->sovereignRiskSpreadEma = 0.02;
+        $stressed = clone $sound;
+        $stressed->sovereignRiskSpreadEma = 0.008;
 
         $this->subsystem->calculateMacroCreditSpread($sound);
         $this->subsystem->calculateMacroCreditSpread($stressed);
 
-        $this->assertEqualsWithDelta(0.02 * CreditFiscalSubsystem::SOVEREIGN_CEILING_PASSTHROUGH, $stressed->macroCreditSpread - $sound->macroCreditSpread, 1e-6, 'At a zero gap the pass-through reaches IG one-for-one with its share.');
-        $this->assertGreaterThan($sound->highYieldCreditSpread, $stressed->highYieldCreditSpread);
+        $curve = new MonetaryPolicySubsystem(new MathUtility());
+        $soundCurve = $curve->calculateYieldCurve($sound, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE);
+        $stressedCurve = $curve->calculateYieldCurve($stressed, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE);
+
+        $this->assertEqualsWithDelta(0.008, $stressedCurve['yield_10y'] - $soundCurve['yield_10y'], 1e-9, 'The sovereign curve carries its own spread in full.');
+        $this->assertEqualsWithDelta((CreditFiscalSubsystem::SOVEREIGN_CEILING_PASSTHROUGH - 1.0) * 0.008, $stressed->macroCreditSpread - $sound->macroCreditSpread, 1e-12);
+        $this->assertEqualsWithDelta(
+            CreditFiscalSubsystem::SOVEREIGN_CEILING_PASSTHROUGH * 0.008,
+            ($stressedCurve['yield_10y'] + $stressed->macroCreditSpread) - ($soundCurve['yield_10y'] + $sound->macroCreditSpread),
+            1e-9,
+            'The corporate ten-year yield loads the sovereign spread once, at the pass-through share.'
+        );
+        $this->assertEqualsWithDelta($stressed->macroCreditSpread - $sound->macroCreditSpread, $stressed->highYieldCreditSpread - $sound->highYieldCreditSpread, 1e-12, 'The sovereign share is the same for every rating.');
     }
 
     public function testTheDeficitIsPublishedAsAShareOfGdp(): void
@@ -623,11 +707,12 @@ class CreditFiscalSubsystemTest extends TestCase
         $state->nominalGdpIndex = 1.0;
         $state->outputGap = 0.0;
         $state->governmentSpendingIndex = 100.0;
-        $state->corporateTaxRate = MacroEngine::TARGET_CORPORATE_TAX_RATE;
+        $state->sovereignNetDebtToGdp = self::SOUND_DEBT_TO_GDP;
+        $state->corporateTaxRate = MacroEngine::TARGET_CORPORATE_TAX_RATE + CreditFiscalSubsystem::fiscalStance($state);
 
         $this->subsystem->calculateSovereignDebt($state, 0.25);
 
-        $this->assertEqualsWithDelta(CreditFiscalSubsystem::SOVEREIGN_STRUCTURAL_DEFICIT, $state->primaryDeficitToGdp, 1e-9, 'At neutral spending and tax the primary deficit is the structural one.');
+        $this->assertEqualsWithDelta(CreditFiscalSubsystem::SOVEREIGN_STRUCTURAL_DEFICIT, $state->primaryDeficitToGdp, 1e-9, 'Under the Bohn line the rate levies the structural deficit short of neutral spending.');
     }
 
     /**
@@ -642,6 +727,8 @@ class CreditFiscalSubsystemTest extends TestCase
         $large = clone $small;
         $large->sovereignFundDrawToGdp = 0.06;
         $unfunded = $this->neutralBudget(self::SOUND_DEBT_TO_GDP, 1.3);
+        $unfunded->sovereignNetDebtToGdp = self::SOUND_DEBT_TO_GDP;
+        $unfunded->corporateTaxRate += CreditFiscalSubsystem::fiscalStance($unfunded);
 
         $this->subsystem->calculateSovereignDebt($small, 0.25);
         $this->subsystem->calculateSovereignDebt($large, 0.25);
@@ -877,6 +964,8 @@ class CreditFiscalSubsystemTest extends TestCase
         $state->outputGapEma = 0.0;
         $state->corporateTaxRate = MacroEngine::TARGET_CORPORATE_TAX_RATE;
         $state->corporateTaxPolicyShift = -0.025;
+        // At the debt where the Bohn reaction pays the structural deficit, the fiscal stance is neutral.
+        $state->sovereignNetDebtToGdp = 0.90;
 
         for ($i = 0; $i < 2000; ++$i) {
             $this->subsystem->calculateDynamicFiscalPolicy($state, 0.01);
@@ -890,12 +979,18 @@ class CreditFiscalSubsystemTest extends TestCase
         $neutral = $this->neutralBudget(0.60);
         $raised = $this->neutralBudget(0.60);
         $raised->corporateTaxPolicyShift = 0.03;
+        $raised->corporateTaxShiftRealized = 0.03;
         $raised->corporateTaxRate += 0.03;
+        // Enacted but not yet in the rate firms pay: nothing is levied yet.
+        $enacted = $this->neutralBudget(0.60);
+        $enacted->corporateTaxPolicyShift = 0.03;
 
         $this->subsystem->calculateSovereignDebt($neutral, 0.25);
         $this->subsystem->calculateSovereignDebt($raised, 0.25);
+        $this->subsystem->calculateSovereignDebt($enacted, 0.25);
 
         $this->assertEqualsWithDelta(-0.03 * CreditFiscalSubsystem::CORPORATE_PROFITS_TO_GDP, $raised->primaryDeficitToGdp - $neutral->primaryDeficitToGdp, 1e-12);
+        $this->assertEqualsWithDelta($neutral->primaryDeficitToGdp, $enacted->primaryDeficitToGdp, 1e-12, 'Revenue is the rate in force, not the law ahead of it.');
     }
 
     public function testATariffIsLeviedOnImportedGoodsAtTheirReducedVolume(): void
@@ -1042,6 +1137,55 @@ class CreditFiscalSubsystemTest extends TestCase
         $state->householdDebtServiceTrend = MacroEngine::HOUSEHOLD_DSR_NEUTRAL;
 
         return $state;
+    }
+
+    /**
+     * What lenders charge off leaves the household debt stock: a default rate above its long-run average takes the
+     * excess charge-off flow out of leverage, and at the average nothing beyond what the fitted drift already carries.
+     */
+    public function testChargedOffDebtLeavesTheHouseholdStock(): void
+    {
+        $subsystem = $this->quietSubsystem();
+        $calm = $this->householdStateAtNeutralRates();
+        $calm->retailDefaultRate = MacroEngine::RETAIL_DEFAULT_BASELINE;
+        $crisis = $this->householdStateAtNeutralRates();
+        $crisis->retailDefaultRate = 0.06;
+
+        $subsystem->calculateHouseholdCredit($calm, 1.0);
+        $subsystem->calculateHouseholdCredit($crisis, 1.0);
+
+        $excessChargeOff = $subsystem->householdChargeOffRate(0.06) - $subsystem->householdChargeOffRate(MacroEngine::RETAIL_DEFAULT_BASELINE);
+        $this->assertEqualsWithDelta(MacroEngine::HOUSEHOLD_DEBT_TO_INCOME_BASELINE, $calm->householdDebtToIncome, 1e-12, 'At the long-run default rate the stock holds.');
+        $this->assertEqualsWithDelta(exp(-$excessChargeOff), $crisis->householdDebtToIncome / $calm->householdDebtToIncome, 1e-12, 'The excess charge-off flow leaves the stock.');
+        $this->assertGreaterThan(0.01, $excessChargeOff, 'A 2009-scale default rate charges off well over a point of the stock a year.');
+    }
+
+    /** The household book charges off at its segments' FRED long-run rates, in the stock's mortgage and consumer shares. */
+    public function testHouseholdChargeOffsSitAtTheirLongRunRatesInCalmYears(): void
+    {
+        $longRun = (CreditFiscalSubsystem::HOUSEHOLD_MORTGAGE_DEBT_SHARE * CreditFiscalSubsystem::HOUSEHOLD_MORTGAGE_CHARGE_OFF_RATE)
+            + ((1.0 - CreditFiscalSubsystem::HOUSEHOLD_MORTGAGE_DEBT_SHARE) * CreditFiscalSubsystem::HOUSEHOLD_CONSUMER_CHARGE_OFF_RATE);
+
+        $this->assertEqualsWithDelta($longRun, $this->subsystem->householdChargeOffRate(MacroEngine::RETAIL_DEFAULT_BASELINE), 0.1 * $longRun);
+        $this->assertGreaterThan($this->subsystem->householdChargeOffRate(MacroEngine::RETAIL_DEFAULT_BASELINE), $this->subsystem->householdChargeOffRate(0.04));
+    }
+
+    /** The IG spread's measured trend closes on a sustained level over its decade's time constant, whatever the tick. */
+    public function testTheCreditSpreadTrendIsADecadesAverage(): void
+    {
+        $path = function (int $ticksPerYear): float {
+            $state = new MacroState();
+            $state->macroCreditSpreadTrend = MacroEngine::BASE_CREDIT_SPREAD;
+            $state->macroCreditSpread = MacroEngine::BASE_CREDIT_SPREAD + 0.01;
+            for ($tick = 0; $tick < 10 * $ticksPerYear; ++$tick) {
+                $this->subsystem->updateCreditSpreadTrend($state, 1.0 / $ticksPerYear);
+            }
+
+            return $state->macroCreditSpreadTrend;
+        };
+
+        $this->assertEqualsWithDelta(MacroEngine::BASE_CREDIT_SPREAD + (0.01 * (1.0 - exp(-10.0 / CreditFiscalSubsystem::CREDIT_SPREAD_TREND_YEARS))), $path(12), 1e-12);
+        $this->assertEqualsWithDelta($path(12), $path(252), 1e-12);
     }
 
     public function testLeverageBuildsOnAHousePriceBoom(): void
@@ -1951,6 +2095,8 @@ class CreditFiscalSubsystemTest extends TestCase
     {
         $state = new MacroState();
         $state->corporateTaxPolicyShift = 0.04;
+        // The debt the Bohn reaction holds against the structural deficit: the fiscal stance at rest.
+        $state->sovereignNetDebtToGdp = 0.90;
         $state->bankLevyRate = 0.002;
         $state->extractionStringency = 1.0;
         $state->stampDutyRate = 0.002;

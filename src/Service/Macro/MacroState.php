@@ -155,6 +155,7 @@ class MacroState
 
     public float $inversionDuration;
     public float $corporateTaxRate;
+    public float $corporateTaxRateTrend;
     public float $sovereignDebtToGdp;
     public float $sovereignDebtToGdpEma;
     // Gross debt less the debt instruments the sovereign fund holds (IMF GFSM 2014 net debt): what the market prices
@@ -206,6 +207,7 @@ class MacroState
 
     public float $macroCreditSpread;
     public float $macroCreditSpreadEma;
+    public float $macroCreditSpreadTrend;
 
     public float $interbankLiquiditySpread;
     public float $interbankLiquiditySpreadEma;
@@ -296,6 +298,7 @@ class MacroState
 
     public float $moneySupplyGrowth;
     public float $moneySupplyGrowthEma;
+    public float $moneySupplyGrowthTrend;
 
     // Administered healthcare prices: an annual step, not a diffusion.
     public float $reimbursementRateIndex;

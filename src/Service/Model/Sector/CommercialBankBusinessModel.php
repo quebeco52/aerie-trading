@@ -685,7 +685,7 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
         // Residential housing starts drive mortgage purchase origination, and broad money (M2) growth expands deposit lending capacity.
         $sloosOriginationDrag = $macroState->sloosTighteningIndexEma * self::SLOOS_NII_ORIGINATION_SENSITIVITY;
         $housingMortgageBoost = MathUtility::calculateHousingStartsShift($macroState->housingStartsIndexEma, sensitivity: self::HOUSING_MORTGAGE_ORIGINATION_SENSITIVITY);
-        $m2LiquidityBoost = MathUtility::calculateBroadMoneyLiquidityShift($macroState->moneySupplyGrowthEma, sensitivity: self::M2_DEPOSIT_GROWTH_SENSITIVITY);
+        $m2LiquidityBoost = MathUtility::calculateBroadMoneyLiquidityShift($macroState->moneySupplyGrowthEma, $macroState->moneySupplyGrowthTrend, sensitivity: self::M2_DEPOSIT_GROWTH_SENSITIVITY);
         $creditBoomBoost = $macroState->creditToGdpGapEma * self::CREDIT_GAP_ORIGINATION_SENSITIVITY;
 
         $niiRevenue = max(0.0, $expectedRevenue * $niiWeight
@@ -1318,6 +1318,7 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
             'money_market_fund_share',
             'money_market_fund_share_ema',
             'money_supply_growth_ema',
+            'money_supply_growth_trend',
             'output_gap_ema',
             'output_gap_lag_9m',
             'policy_rate_ema',

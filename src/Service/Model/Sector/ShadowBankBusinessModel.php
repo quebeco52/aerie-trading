@@ -278,7 +278,7 @@ class ShadowBankBusinessModel extends CommercialBankBusinessModel
         // The loans' floating coupon is interest income on the book (calculateInterestIncome()); this stream is the
         // fees on new deals, which bank credit retreat (SLOOS tightening) and M2 liquidity send to private credit.
         $sloosDirectLendingBoost = max(0.0, $macroState->sloosTighteningIndexEma) * self::SLOOS_PRIVATE_CREDIT_EXPANSION;
-        $m2Shift = MathUtility::calculateBroadMoneyLiquidityShift($macroState->moneySupplyGrowthEma, sensitivity: self::M2_SHADOW_LIQUIDITY_SENSITIVITY);
+        $m2Shift = MathUtility::calculateBroadMoneyLiquidityShift($macroState->moneySupplyGrowthEma, $macroState->moneySupplyGrowthTrend, sensitivity: self::M2_SHADOW_LIQUIDITY_SENSITIVITY);
         $capitalTightness = max(0.0, $macroState->countercyclicalBufferRateEma) + ($macroState->bankCapitalRequirement - FinancialConstants::OPENING_BANK_CAPITAL_REQUIREMENT);
         $ccybArbitrageBoost = $capitalTightness * self::CAPITAL_ARBITRAGE_SENSITIVITY;
 
@@ -364,6 +364,7 @@ class ShadowBankBusinessModel extends CommercialBankBusinessModel
             'money_market_fund_share',
             'money_market_fund_share_ema',
             'money_supply_growth_ema',
+            'money_supply_growth_trend',
             'output_gap_lag_9m',
             'policy_rate_ema',
             'recession_probability_ema',

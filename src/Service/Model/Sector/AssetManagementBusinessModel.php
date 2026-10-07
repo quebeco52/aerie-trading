@@ -302,7 +302,7 @@ class AssetManagementBusinessModel extends BaseFinancialBusinessModel
     private function resolveClientFlowShift(Stock $stock, \App\DTO\MacroStateDTO $macroState, float $aumBetaScalar): float
     {
         $aumMarketBeta = $this->resolveAumCycleFlow($stock, $macroState, $aumBetaScalar);
-        $m2InflowBoost = MathUtility::calculateBroadMoneyLiquidityShift($macroState->moneySupplyGrowthEma, sensitivity: self::M2_AUM_INFLOW_SENSITIVITY);
+        $m2InflowBoost = MathUtility::calculateBroadMoneyLiquidityShift($macroState->moneySupplyGrowthEma, $macroState->moneySupplyGrowthTrend, sensitivity: self::M2_AUM_INFLOW_SENSITIVITY);
         $mmfInflowBoost = max(0.0, $macroState->moneyMarketFundShare - $macroState->moneyMarketFundShareEma) * self::MMF_AUM_INFLOW_SENSITIVITY;
 
         return $aumMarketBeta + $m2InflowBoost + $mmfInflowBoost;
@@ -520,6 +520,7 @@ class AssetManagementBusinessModel extends BaseFinancialBusinessModel
             'money_market_fund_share',
             'money_market_fund_share_ema',
             'money_supply_growth_ema',
+            'money_supply_growth_trend',
             'output_gap_ema',
             'policy_rate_ema',
             'yield_10y_ema',

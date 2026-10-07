@@ -220,7 +220,7 @@ class CommodityLogisticsSubsystem
         $baseProcess = $this->mathUtility->calculateSchwartz1Factor(
             currentPrice: $currentBase,
             kappa: self::ENERGY_MEAN_REVERSION,
-            theta: $equilibriumPrice,
+            theta: self::resolveEnergyProcessTheta($equilibriumPrice),
             sigma: self::ENERGY_VOLATILITY,
             dt: $dt,
             dW: $dW
@@ -253,6 +253,17 @@ class CommodityLogisticsSubsystem
 
         $state->energyPriceIndex = max(10.0, min(350.0, $state->energyBasePrice + $conveniencePricePremium));
         $state->energyPriceShock = $state->energyPriceIndex - MacroEngine::ENERGY_BASELINE;
+    }
+
+    /**
+     * The Schwartz theta that makes the jump-diffusion's base price average the equilibrium: the diffusion's
+     * Jensen lift and the oil shocks' Merton (1976) level drift both netted out of the target.
+     */
+    public static function resolveEnergyProcessTheta(float $equilibriumPrice): float
+    {
+        $jumpShift = MathUtility::logOuJumpLevelShift(self::ENERGY_JUMP_PROBABILITY, self::ENERGY_MEAN_REVERSION, self::ENERGY_JUMP_MEAN, self::ENERGY_JUMP_VOL);
+
+        return MathUtility::schwartzThetaForMean($equilibriumPrice * exp(-$jumpShift), self::ENERGY_MEAN_REVERSION, self::ENERGY_VOLATILITY);
     }
 
     /**
@@ -323,11 +334,9 @@ class CommodityLogisticsSubsystem
      */
     public function calculateNaturalGasIndex(MacroState $state, float $dt): void
     {
-        // Schwartz (1997) one-factor log-price mean-reversion drift with jump compensator.
-        $ratioTarget = exp(
-            ((self::GAS_OIL_RATIO_SIGMA ** 2) / (4.0 * self::GAS_OIL_RATIO_KAPPA))
-                - (self::GAS_JUMP_PROBABILITY * self::GAS_JUMP_MEAN / self::GAS_OIL_RATIO_KAPPA)
-        );
+        // Schwartz (1997) log-OU whose level averages one: the squeezes' Merton level drift netted out, the Jensen lift added.
+        $jumpShift = MathUtility::logOuJumpLevelShift(self::GAS_JUMP_PROBABILITY, self::GAS_OIL_RATIO_KAPPA, self::GAS_JUMP_MEAN, self::GAS_JUMP_VOL);
+        $ratioTarget = MathUtility::schwartzThetaForMean(exp(-$jumpShift), self::GAS_OIL_RATIO_KAPPA, self::GAS_OIL_RATIO_SIGMA);
         $ratio = $this->mathUtility->calculateSchwartz1Factor(
             currentPrice: exp($state->gasOilRatioLog),
             kappa: self::GAS_OIL_RATIO_KAPPA,
@@ -361,7 +370,7 @@ class CommodityLogisticsSubsystem
      *
      * Gas sets the clearing price in most hours, so power moves with it at the log elasticity the hubs show. The
      * implied heat rate on top (which plant is marginal, weather, outages) is a fast log-OU around its mean times a
-     * deterministic twin-peak load season. Its target is compensated by exp(sigma^2 / 4 kappa), so the index
+     * deterministic twin-peak load season. Its target is handed over through schwartzThetaForMean(), so the index
      * averages its baseline rather than settling at its median. A carbon price adds the marginal gas plant's carbon
      * cost per MWh, as far as the market passes it through.
      *
@@ -373,7 +382,7 @@ class CommodityLogisticsSubsystem
         $heatRate = $this->mathUtility->calculateSchwartz1Factor(
             currentPrice: exp($state->powerHeatRateLog),
             kappa: self::POWER_HEAT_RATE_KAPPA,
-            theta: exp((self::POWER_HEAT_RATE_SIGMA ** 2) / (4.0 * self::POWER_HEAT_RATE_KAPPA)),
+            theta: MathUtility::schwartzThetaForMean(1.0, self::POWER_HEAT_RATE_KAPPA, self::POWER_HEAT_RATE_SIGMA),
             sigma: self::POWER_HEAT_RATE_SIGMA,
             dt: $dt,
             dW: $this->mathUtility->generateStandardNormal()
@@ -456,7 +465,7 @@ class CommodityLogisticsSubsystem
         $gold = $this->mathUtility->calculateSchwartz1Factor(
             currentPrice: $state->goldPriceIndex > 0.0 ? $state->goldPriceIndex : MacroEngine::GOLD_BASELINE,
             kappa: self::GOLD_MEAN_REVERSION,
-            theta: $equilibrium,
+            theta: MathUtility::schwartzThetaForMean($equilibrium, self::GOLD_MEAN_REVERSION, self::GOLD_VOLATILITY),
             sigma: self::GOLD_VOLATILITY,
             dt: $dt,
             dW: $this->mathUtility->generateStandardNormal()
@@ -576,7 +585,7 @@ class CommodityLogisticsSubsystem
         $newFreight = $this->mathUtility->calculateSchwartz1Factor(
             currentPrice: $state->freightRateIndex,
             kappa: self::FREIGHT_MEAN_REVERSION,
-            theta: $equilibriumRate,
+            theta: MathUtility::schwartzThetaForMean($equilibriumRate, self::FREIGHT_MEAN_REVERSION, self::FREIGHT_VOLATILITY),
             sigma: self::FREIGHT_VOLATILITY,
             dt: $dt,
             dW: $dW
