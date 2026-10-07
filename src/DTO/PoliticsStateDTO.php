@@ -160,6 +160,8 @@ readonly class PoliticsStateDTO
         public float $requirementPhaseFrom = FinancialConstants::OPENING_BANK_CAPITAL_REQUIREMENT,
         public float $requirementPhaseStart = -1.0,
         public float $lastRegulatorAppointedAt = -1.0,
+        /** The mortgage loan-to-value cap the head runs, as a share of the property's value, in force from their seating; null for none. */
+        public ?float $regulatorLtvCap = null,
         /** The Sovereign Reserve Fund's head in office: name, birth date, when their term began, and stance on the reserves. */
         public string $fundHeadName = '',
         public float $fundHeadBirth = 0.0,
@@ -263,6 +265,7 @@ readonly class PoliticsStateDTO
             electionPulse: PoliticsEngine::electionPulse($this->totalTime, $this->lastElectionAt, $this->coalitionTakesOfficeAt),
             authorityMajority: $this->authoritySalt < 0.0 ? null : $this->committeeMajority,
             bankCapitalRequirement: $this->regulatorName === '' ? null : $this->bankCapitalRequirement,
+            mortgageLtvCap: $this->regulatorLtvCap,
             reserveFundEquityShare: $this->fundHeadName === '' || $this->fundHeadTermStart < 0.0 ? null : SovereignReserveFund::equityShare($this->fundHeadStance),
             authorityConcession: $this->authoritySalt < 0.0 ? null : PoliticalPressure::concession($this),
             sittingLevers: $this->sittingLevers === [] ? null : $this->sittingLevers,

@@ -428,6 +428,10 @@ class MacroState
     public float $bankCapitalRequirement;
     public float $bankCapitalBuilt;
     public float $bankCapitalRequiredLast;
+    // The mortgage loan-to-value cap the Financial Regulator has in force (null: none), and how far it has so far held
+    // household debt below where it would stand without it, in logs.
+    public ?float $mortgageLtvCap;
+    public float $ltvCutBuilt;
     // How far the carbon price has lifted the household electricity bill so far (log), at the energy pass-through lag.
     public float $electricityCarbonPriceLevel;
 

@@ -821,6 +821,7 @@ class MacroEngine
         $state->authorityCommitteeSeated = $policy->authorityMajority === null ? 0.0 : 1.0;
         $state->authorityConcession = $policy->authorityConcession ?? 0.0;
         $state->bankCapitalRequirement = $policy->bankCapitalRequirement ?? $state->bankCapitalRequirement;
+        $state->mortgageLtvCap = $policy->mortgageLtvCap;
         $state->sovereignFundMandateEquityShare = $policy->reserveFundEquityShare ?? $state->sovereignFundMandateEquityShare;
 
         $state->previousSittingLevers = $state->sittingLevers;

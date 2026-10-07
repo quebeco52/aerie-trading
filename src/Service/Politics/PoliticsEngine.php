@@ -596,14 +596,15 @@ class PoliticsEngine
 
     /**
      * The cabinet loses the Diet between votes: it stays on as caretaker and the parties talk, on the seats the last vote
-     * gave them, for a cabinet other than the one that fell. No election is called; the calendar is fixed.
+     * gave them. No election is called; the calendar is fixed. The parties that fell may form again, as at least 42% of
+     * West European successors between votes do (ParlGov 1945-2020, 185 cases), but without the incumbency weight a
+     * sitting cabinet carries into talks after a vote: with it, two in three falls re-formed the same cabinet.
      */
     private function fall(PoliticsState $state): void
     {
-        $fallen = AerieDiet::governingParties($state->governingCoalition);
         $state->lastCabinetFellAt = $state->totalTime;
         $state->cabinetFallsAt = -1.0;
-        self::beginTalks($state, CoalitionFormation::talks($state->dietSeats, $state->dietVoteShares, $state->partyPositions, [], $state->dietBlocs, $this->mathUtility, $fallen));
+        self::beginTalks($state, CoalitionFormation::talks($state->dietSeats, $state->dietVoteShares, $state->partyPositions, [], $state->dietBlocs, $this->mathUtility));
     }
 
     /**

@@ -78,6 +78,21 @@ final class PagesRenderTest extends KernelTestCase
                 'initialMargin' => 0.5, 'maintenanceLong' => 0.25, 'maintenanceShort' => 0.30, 'contractSize' => 100, 'bondFace' => 1000.0,
                 'seasonYears' => 4.0, 'qualifyingWeeks' => 13, 'maxAlerts' => 25, 'maxWatchlist' => 40,
             ]],
+            'regulator' => ['/regulator', 'regulator/index.html.twig', [
+                'regulator' => [
+                    'head' => ['name' => 'Leontine Ashby', 'age' => 54, 'sinceLabel' => 'Year 12 Q3', 'termEndsLabel' => 'Year 17 Q3', 'stance' => 'middle', 'requirement' => 0.1046, 'ltvCap' => 0.85,
+                        'passedOver' => [['name' => 'Osric Vane', 'age' => 49, 'requirement' => 0.0843, 'ltvCap' => 1.0], ['name' => 'Maren Holt', 'age' => 58, 'requirement' => 0.1255, 'ltvCap' => null]]],
+                    'inForce' => 0.1012, 'buffer' => 0.005, 'phasing' => ['target' => 0.1046, 'completeLabel' => 'Year 13 Q3'],
+                    'rules' => ['termYears' => 5.0, 'shortlist' => 3, 'lightest' => 0.0843, 'strictest' => 0.1315, 'phaseInMonths' => 12],
+                ],
+                'required' => 0.1062,
+                'banks' => [
+                    ['ticker' => 'PLVR', 'name' => 'Plover Savings', 'cet1' => 0.1011, 'headroom' => -0.0051, 'status' => 'below'],
+                    ['ticker' => 'LAKE', 'name' => 'Lakebird Bank', 'cet1' => 0.1128, 'headroom' => 0.0066, 'status' => 'near'],
+                    ['ticker' => 'POOL', 'name' => 'Pool Street Trust', 'cet1' => 0.1342, 'headroom' => 0.0280, 'status' => 'clear'],
+                ],
+                'mortgage' => ['cap' => 0.85, 'heldBelow' => 0.031, 'debtToIncome' => 0.98, 'tightestCap' => 0.70, 'loosestCap' => 1.0, 'regimes' => 17, 'uncapped' => 7],
+            ]],
             'notifications' => ['/notifications', 'notifications/index.html.twig', [
                 'page' => 1, 'pages' => 1, 'total' => 3,
                 'notifications' => [

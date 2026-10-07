@@ -73,22 +73,22 @@ class ElectionForecastTest extends TestCase
     /**
      * A cabinet that falls between votes is replaced within weeks, not at the next vote: while the parties talk, the
      * coming budget is the talks' government's, each cabinet weighed by the odds the talks seat it with, the one that
-     * fell excluded as the talks exclude it, due the round after the talks are expected to end. After a vote the
+     * fell weighed as any other cabinet, due the round after the talks are expected to end. After a vote the
      * caretaker passes nothing; the forecast weighs those talks.
      */
     public function testACabinetThatFallsBetweenVotesIsReplacedInTheComingBudget(): void
     {
         $seats = Politics::dHondt(Diet::SEED_VOTE_SHARES, Diet::SEATS);
         $fallen = Diet::governingParties(Diet::SEED_COALITION);
-        $odds = ElectionForecast::cabinetOdds($seats, Diet::SEED_VOTE_SHARES, Diet::HOME_POSITIONS, [], Diet::SEED_BLOCS, $fallen);
-        $this->assertNotContains($fallen, array_column($odds, 'cabinet'));
+        $odds = ElectionForecast::cabinetOdds($seats, Diet::SEED_VOTE_SHARES, Diet::HOME_POSITIONS, [], Diet::SEED_BLOCS);
+        $this->assertContains($fallen, array_column($odds, 'cabinet'), 'The cabinet that fell may form again.');
         $this->assertEqualsWithDelta(1.0, array_sum(array_column($odds, 'chance')), 1e-12);
 
         $draws = MathUtility::ownStream(78);
         $runs = 1200;
         $seen = [];
         for ($run = 0; $run < $runs; ++$run) {
-            $talks = CoalitionFormation::talks($seats, Diet::SEED_VOTE_SHARES, Diet::HOME_POSITIONS, [], Diet::SEED_BLOCS, $draws, $fallen);
+            $talks = CoalitionFormation::talks($seats, Diet::SEED_VOTE_SHARES, Diet::HOME_POSITIONS, [], Diet::SEED_BLOCS, $draws);
             $key = implode('+', $talks['cabinet']) . '|' . implode('+', $talks['support']);
             $seen[$key] = ($seen[$key] ?? 0) + 1;
         }
