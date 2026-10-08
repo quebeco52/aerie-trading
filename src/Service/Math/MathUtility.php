@@ -159,6 +159,38 @@ class MathUtility
     }
 
     /**
+     * An exponentially weighted level: the prior decays by exp(-dt/tau) toward the observation, and a missing prior
+     * starts at the observation.
+     */
+    public static function ewmaLevel(?float $prior, float $observation, float $dt, float $tauYears): float
+    {
+        if ($prior === null) {
+            return $observation;
+        }
+        if ($dt <= 0.0 || $tauYears <= 0.0) {
+            return $prior;
+        }
+
+        $phi = exp(-$dt / $tauYears);
+
+        return ($prior * $phi) + ((1.0 - $phi) * $observation);
+    }
+
+    /**
+     * The constant return worth the same as a trailing return that fades back to its long-run level. In Ohlson's (1995)
+     * residual income model an abnormal return with persistence omega is worth omega/(1+r-omega) of itself and a
+     * permanent one 1/r of itself, so the permanent equivalent keeps r*omega/(1+r-omega) of the gap. Omega is one less
+     * the 38% a year profitability closes its gap (Fama & French 2000).
+     */
+    public static function persistentEquivalentReturn(float $trailingReturn, float $longRunReturn, float $discountRate): float
+    {
+        $persistence = 1.0 - FinancialConstants::PROFITABILITY_MEAN_REVERSION_RATE;
+        $rate = max(0.0, $discountRate);
+
+        return $longRunReturn + (($trailingReturn - $longRunReturn) * $rate * $persistence / (1.0 + $rate - $persistence));
+    }
+
+    /**
      * Whether this tick crossed a boundary of the given period in SIMULATED time.
      *
      * The ticker's retention job and the macro's calendar (a fund's month-end check, a budget year) all ask

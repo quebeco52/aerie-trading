@@ -533,14 +533,24 @@ class FinancialConstants
     /** Ceiling on the quoted half-spread (2%), so even a distressed name stays tradable at a price. */
     public const MAX_HALF_SPREAD = 0.02;
 
+    // --- Profitability Persistence (Fama & French 2000; Ohlson 1995) ---
+    /** Share of a firm's gap between its return on capital and its own long-run level that closes each year: about 38% (Fama & French 2000, J. Business, partial-adjustment model). */
+    public const PROFITABILITY_MEAN_REVERSION_RATE = 0.38;
+    /** Time constant in years of each firm's measured long-run return, the level its profitability reverts to: five years, the span Damodaran normalizes earnings over. */
+    public const LONG_RUN_RETURN_EMA_YEARS = 5.0;
+
     // --- Market Microstructure: Impact (Almgren, Thum, Hauptmann & Li 2005) ---
-    /** Linear permanent impact coefficient. At 1.0 trading one full day's volume moves the price by one daily standard deviation; linear so the mark is additive across ticks and independent of the tick rate (Huberman & Stanzl 2004). */
-    public const PERMANENT_IMPACT_GAMMA = 1.00;
-    /** Temporary impact as a share of the permanent move. The price walks to its new level while the order fills, so the taker's average fill is the midpoint of that walk: exactly one half. */
+    /** Linear peak impact coefficient. At 1.0 trading one full day's volume moves the price by one daily standard deviation; linear so the mark is additive across ticks and independent of the tick rate (Huberman & Stanzl 2004). */
+    public const PEAK_IMPACT_GAMMA = 1.00;
+    /** Share of the peak move that stays in the price; the rest relaxes away. Metaorder impact settles at ~2/3 of its peak (Farmer, Gerig, Lillo & Waelbroeck 2013; Bershova & Rakhlin 2013). */
+    public const PERMANENT_IMPACT_SHARE = 2.0 / 3.0;
+    /** Half-life of the transient part of impact, in years: NYSE price pressures decay with a 0.92-trading-day half-life (Hendershott & Menkveld 2014, JFE). */
+    public const TRANSIENT_IMPACT_HALF_LIFE_YEARS = 0.92 / self::TRADING_DAYS_PER_YEAR;
+    /** Temporary impact as a share of the peak move. The price walks to its new level while the order fills, so the taker's average fill is the midpoint of that walk: exactly one half. */
     public const TEMPORARY_IMPACT_ETA = 0.50;
     /** Largest multiple of average daily volume a single order may consume. Past it the impact law is extrapolation, and a capped impact would be a free lunch for size. */
     public const MAX_ORDER_ADV_MULTIPLE = 2.00;
-    /** Ceiling on the price move one tick's net order flow may leave behind, as a log return; the impact law is a per-order measurement and a tick's aggregate is not bounded by the per-order size cap. */
+    /** Ceiling on the peak price move of one tick's net order flow, as a log return; the impact law is a per-order measurement and a tick's aggregate is not bounded by the per-order size cap. */
     public const MAX_TICK_IMPACT_LOG_RETURN = 0.2624;
     /** Floor on a fund's half-spread. Creation and redemption keep a broad fund close to its basket, so it quotes tighter than any single constituent — but never tighter than this. */
     public const ETF_HALF_SPREAD = 0.0001;

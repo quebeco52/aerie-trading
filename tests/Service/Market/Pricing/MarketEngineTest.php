@@ -451,4 +451,41 @@ class MarketEngineTest extends TestCase
         $this->assertEqualsWithDelta($base['price'], $priced(0.06, 0.10)['price'], 1e-9);
         $this->assertLessThan($base['perceived_fair_value'], $priced(0.08, 0.12)['perceived_fair_value'], 'A dearer equity must be worth less.');
     }
+
+    /**
+     * A good year is not capitalized as permanent: a trailing return above the firm's long-run level is valued on its
+     * persistent-equivalent share of the gap (Ohlson 1995; Fama & French 2000), and a firm with no long-run record yet
+     * is valued on its trailing return.
+     */
+    public function testAReturnAboveItsLongRunLevelIsValuedAsItFades(): void
+    {
+        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
+        $this->mathUtilityMock->method('checkProbability')->willReturn(false);
+
+        $fairValue = fn (float $trailing, ?float $longRun): float => $this->engine->calculateNextPrice(new MarketPricingContext(
+            currentPrice: 80.0,
+            currentVolatility: 0.25,
+            longTermVolatility: 0.25,
+            earningsPerShare: 6.0,
+            dt: 1.0 / 252.0,
+            lambda: 0.0,
+            bookValuePerShare: 30.0,
+            currentRoic: $trailing,
+            roicTtm: $trailing,
+            liveWacc: 0.08,
+            revenuePerShare: 60.0,
+            liveCostOfEquity: 0.10,
+            investedCapitalPerShare: 50.0,
+            costOfDebt: 0.05,
+            longRunReturn: $longRun,
+        ))['perceived_fair_value'];
+
+        $this->assertEqualsWithDelta($fairValue(0.20, null), $fairValue(0.20, 0.20), 1e-9);
+        $this->assertLessThan($fairValue(0.20, null), $fairValue(0.20, 0.12), 'A good year was capitalized as permanent.');
+        $this->assertEqualsWithDelta(
+            $fairValue(MathUtility::persistentEquivalentReturn(0.20, 0.12, 0.10), null),
+            $fairValue(0.20, 0.12),
+            1e-9
+        );
+    }
 }

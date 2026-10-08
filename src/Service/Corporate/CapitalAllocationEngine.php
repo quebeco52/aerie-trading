@@ -369,7 +369,8 @@ class CapitalAllocationEngine
 
         // The multiple values equity, so it is struck at the cost of equity on the return on equity, as the
         // market strikes it (MarketEngine); the spread above stays ROIC against the hurdle, an EVA test.
-        $equityRates = $ctx->strategy->getEquityValuationRates($stock, $trueReturn, $ctx->health, $ctx->macroState->corporateTaxRate);
+        $valuationReturn = $ctx->strategy->getValuationReturn($trueReturn, $stock->getLongRunReturn() !== null ? (float) $stock->getLongRunReturn() : null, $ctx->health->costOfEquity);
+        $equityRates = $ctx->strategy->getEquityValuationRates($stock, $valuationReturn, $ctx->health, $ctx->macroState->corporateTaxRate);
         $fairValuePE = $this->mathUtility->calculateManagementFairValuePE(
             $equityRates['costOfEquity'],
             $equityRates['equityReturn'],

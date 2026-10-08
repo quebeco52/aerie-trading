@@ -148,7 +148,7 @@ class LiquidityEngineTest extends TestCase
     {
         foreach ([0.15, 0.28, 0.55, 0.90] as $volatility) {
             $stock = $this->stock(volatility: $volatility);
-            $impact = $this->engine->permanentImpact($stock, $this->engine->averageDailyVolume($stock));
+            $impact = $this->engine->peakImpact($stock, $this->engine->averageDailyVolume($stock));
 
             $this->assertEqualsWithDelta($this->engine->dailyVolatility($stock), $impact, 1e-12);
         }
@@ -162,8 +162,8 @@ class LiquidityEngineTest extends TestCase
         $stock = $this->stock();
         $adv = $this->engine->averageDailyVolume($stock);
 
-        $single = $this->engine->permanentImpact($stock, $adv * 0.04);
-        $quadruple = $this->engine->permanentImpact($stock, $adv * 0.16);
+        $single = $this->engine->peakImpact($stock, $adv * 0.04);
+        $quadruple = $this->engine->peakImpact($stock, $adv * 0.16);
 
         $this->assertEqualsWithDelta(4.0, $quadruple / $single, 1e-9);
     }
@@ -178,28 +178,51 @@ class LiquidityEngineTest extends TestCase
         $stock = $this->stock();
         $dailyFlow = $this->engine->averageDailyVolume($stock) * 0.30;
 
-        $oneBlock = $this->engine->permanentImpact($stock, $dailyFlow);
+        $oneBlock = $this->engine->peakImpact($stock, $dailyFlow);
 
         $sliced = 0.0;
         for ($tick = 0; $tick < 40; $tick++) {
-            $sliced += $this->engine->permanentImpact($stock, $dailyFlow / 40.0);
+            $sliced += $this->engine->peakImpact($stock, $dailyFlow / 40.0);
         }
 
         $this->assertEqualsWithDelta($oneBlock, $sliced, 1e-12);
+    }
+
+    /**
+     * The transient part of impact relaxes at a rate per unit of time (Obizhaeva & Wang 2013): one half-life in one
+     * step or in a thousand leaves the same half behind, and a fresh move adds only its transient share.
+     */
+    public function testTheTransientImpactHalvesOverItsHalfLifeAtAnyTickRate(): void
+    {
+        $halfLife = FinancialConstants::TRANSIENT_IMPACT_HALF_LIFE_YEARS;
+
+        $this->assertEqualsWithDelta(0.005, LiquidityEngine::transientImpactAfter(0.01, 0.0, $halfLife), 1e-15);
+
+        $fine = 0.01;
+        for ($step = 0; $step < 1000; $step++) {
+            $fine = LiquidityEngine::transientImpactAfter($fine, 0.0, $halfLife / 1000.0);
+        }
+        $this->assertEqualsWithDelta(0.005, $fine, 1e-12);
+
+        $this->assertEqualsWithDelta(
+            (1.0 - FinancialConstants::PERMANENT_IMPACT_SHARE) * 0.03,
+            LiquidityEngine::transientImpactAfter(0.0, 0.03, 1.0 / 14400.0),
+            1e-15
+        );
     }
 
     public function testImpactIsSignedByDirectionAndZeroWhenFlowNets(): void
     {
         $stock = $this->stock();
 
-        $this->assertGreaterThan(0.0, $this->engine->permanentImpact($stock, 10000.0));
-        $this->assertLessThan(0.0, $this->engine->permanentImpact($stock, -10000.0));
-        $this->assertSame(0.0, $this->engine->permanentImpact($stock, 0.0));
+        $this->assertGreaterThan(0.0, $this->engine->peakImpact($stock, 10000.0));
+        $this->assertLessThan(0.0, $this->engine->peakImpact($stock, -10000.0));
+        $this->assertSame(0.0, $this->engine->peakImpact($stock, 0.0));
 
         // A buy and an equal sell in the same window leave the price where they found it.
         $this->assertEqualsWithDelta(
             0.0,
-            $this->engine->permanentImpact($stock, 10000.0) + $this->engine->permanentImpact($stock, -10000.0),
+            $this->engine->peakImpact($stock, 10000.0) + $this->engine->peakImpact($stock, -10000.0),
             1e-15
         );
     }
@@ -210,8 +233,8 @@ class LiquidityEngineTest extends TestCase
         $thin = $this->stock(shares: 5.0e6, volatility: 0.70);
 
         $this->assertGreaterThan(
-            $this->engine->permanentImpact($liquid, 50000.0),
-            $this->engine->permanentImpact($thin, 50000.0)
+            $this->engine->peakImpact($liquid, 50000.0),
+            $this->engine->peakImpact($thin, 50000.0)
         );
     }
 
@@ -247,7 +270,7 @@ class LiquidityEngineTest extends TestCase
         $quote = $this->engine->quote($stock, 'BUY', $quantity, 100.0);
 
         $expectedFraction = $this->engine->halfSpreadFraction($stock)
-            + (FinancialConstants::TEMPORARY_IMPACT_ETA * abs($quote->permanentImpact));
+            + (FinancialConstants::TEMPORARY_IMPACT_ETA * abs($quote->peakImpact));
 
         $this->assertEqualsWithDelta(100.0 * (1.0 + $expectedFraction), $quote->executionPrice, 1e-9);
         $this->assertEqualsWithDelta(100.0 * $expectedFraction * $quantity, $quote->totalCost(), 1e-6);
@@ -280,7 +303,7 @@ class LiquidityEngineTest extends TestCase
         $this->assertLessThan(100.0, $short->executionPrice);
         $this->assertGreaterThan(100.0, $cover->executionPrice);
         $this->assertEqualsWithDelta($buy->executionPrice, $cover->executionPrice, 1e-9);
-        $this->assertGreaterThan(0.0, $cover->permanentImpact, 'Covering is buying pressure.');
+        $this->assertGreaterThan(0.0, $cover->peakImpact, 'Covering is buying pressure.');
         $this->assertGreaterThan($short->executionPrice, $cover->executionPrice, 'Crossing twice costs twice.');
     }
 
@@ -320,7 +343,7 @@ class LiquidityEngineTest extends TestCase
 
         $this->assertEqualsWithDelta(100.0 * (1.0 + FinancialConstants::ETF_HALF_SPREAD), $quote->executionPrice, 1e-9);
         $this->assertSame(0.0, $quote->impactCost);
-        $this->assertSame(0.0, $quote->permanentImpact);
+        $this->assertSame(0.0, $quote->peakImpact);
         $this->assertGreaterThan(0.0, $quote->spreadCost);
     }
 
@@ -341,7 +364,7 @@ class LiquidityEngineTest extends TestCase
         $direct = $this->engine->quote($stock, 'BUY', $quantity, 100.0);
 
         $this->assertEquals($direct, $viaAsset);
-        $this->assertGreaterThan(0.0, $viaAsset->permanentImpact);
+        $this->assertGreaterThan(0.0, $viaAsset->peakImpact);
     }
 
     // --- Turnover seeding ---

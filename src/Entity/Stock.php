@@ -423,6 +423,13 @@ class Stock
     private string $roicTtm = '0.0000';
 
     /**
+     * @var string|null The firm's measured long-run return (an EMA of its trailing ROIC, or ROE for a balance-sheet firm),
+     *                  the level its profitability reverts to and fair value anchors on; null until it has one.
+     */
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
+    private ?string $longRunReturn = null;
+
+    /**
      * @var string|null Annual capital turnover (revenue / invested capital), the DuPont component fixing how much
      *                  revenue a dollar of physical capital can generate. Seeded once from baseline ROIC and margin,
      *                  then held structural; null until the first earnings report seeds it.
@@ -2172,6 +2179,17 @@ class Stock
     public function setRoicTtm(string $roicTtm): self
     {
         $this->roicTtm = self::cleanBcStr($roicTtm, 4);
+        return $this;
+    }
+
+    public function getLongRunReturn(): ?string
+    {
+        return $this->longRunReturn;
+    }
+
+    public function setLongRunReturn(?string $longRunReturn): self
+    {
+        $this->longRunReturn = $longRunReturn !== null ? self::cleanBcStr($longRunReturn, 4) : null;
         return $this;
     }
 

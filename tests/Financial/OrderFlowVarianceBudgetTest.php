@@ -136,7 +136,7 @@ class OrderFlowVarianceBudgetTest extends TestCase
 
             if ($flowFraction > 0.0) {
                 $quantity = $liquidity->averageDailyVolume($stock) * $flowFraction * $sign;
-                $impact = $liquidity->permanentImpact($stock, $quantity);
+                $impact = $liquidity->peakImpact($stock, $quantity);
                 $nextPrice = max(0.01, $nextPrice * exp($impact));
             }
 

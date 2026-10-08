@@ -857,6 +857,12 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
         return $normalizedEps > 0.0 ? self::FAIR_VALUE_BOOK_POS_EPS : 1.0;
     }
 
+    /** The through-the-cycle capacity blend in calculateStructuralRoic() is this model's persistence; the trailing return reaches it unfaded. */
+    public function getValuationReturn(float $trailingReturn, ?float $longRunReturn, float $discountRate): float
+    {
+        return $trailingReturn;
+    }
+
     public function calculateStructuralRoic(float $roicTtm, float $baselineRoic, float $revenuePerShare, float $bookValuePerShare, float $baselineMargin): float
     {
         // DuPont Decomposition anchored by Kenney Rule capacity (Premium-to-Surplus ratio = 1.50)

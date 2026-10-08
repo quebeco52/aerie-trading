@@ -148,7 +148,7 @@ class AgentMarketDynamicsTest extends TestCase
             $drained = $orderFlow->drain();
 
             if ($agents && ($drained['AGT'] ?? 0.0) !== 0.0) {
-                $impact = $liquidity->permanentImpact($stock, $drained['AGT']);
+                $impact = $liquidity->peakImpact($stock, $drained['AGT']);
                 $nextPrice = max(0.01, $nextPrice * exp($impact));
             }
 

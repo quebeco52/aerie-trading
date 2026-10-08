@@ -98,11 +98,13 @@ class OpeningBoardBuilder
             $stock->setBaselineRoe((string) $roe);
             $stock->setCurrentRoe((string) $roe);
             $stock->setRoeTtm((string) $roe);
+            $stock->setLongRunReturn((string) $roe);
         } else {
             $roic = $stockData['baseline_roic'] ?? 0.10;
             $stock->setBaselineRoic((string) $roic);
             $stock->setCurrentRoic((string) $roic);
             $stock->setRoicTtm((string) $roic);
+            $stock->setLongRunReturn((string) $roic);
         }
 
         $stock->setCapexRatio((string) ($stockData['capex_ratio'] ?? 0.20));

@@ -84,7 +84,7 @@ class ShortSqueezeDynamicsTest extends TestCase
         $stock = $this->stock();
         $covered = $this->liquidity->averageDailyVolume($stock) * 0.30;
 
-        $this->assertGreaterThan(0.0, $this->liquidity->permanentImpact($stock, $covered));
+        $this->assertGreaterThan(0.0, $this->liquidity->peakImpact($stock, $covered));
     }
 
     public function testEachRoundOfCoveringRaisesTheCostOfStayingShortForEveryoneElse(): void
@@ -166,7 +166,7 @@ class ShortSqueezeDynamicsTest extends TestCase
             // The covering both moves the price and frees borrow for everyone else.
             $shortInterest = max(0.0, $shortInterest - $toCover);
             $stock->setShortInterestShares((string) $shortInterest);
-            $price *= exp($this->liquidity->permanentImpact($stock, $toCover));
+            $price *= exp($this->liquidity->peakImpact($stock, $toCover));
         }
 
         $this->assertGreaterThan(0, $rounds, 'The rally must actually call the short.');

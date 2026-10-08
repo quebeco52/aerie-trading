@@ -208,18 +208,46 @@ class OrderFlowImpactWiringTest extends TestCase
         $this->assertLessThan(100.0, (float) $stock->getPrice());
     }
 
-    public function testTheAppliedMoveIsExactlyTheEnginesPermanentImpact(): void
+    public function testTheAppliedMoveIsExactlyTheEnginesPeakImpact(): void
     {
         // Only the permanent leg belongs here. The temporary leg was already paid by whoever traded, as
         // slippage on their own fill; applying it again would charge it twice and leave it in the quote.
         $stock = $this->stock();
         $quantity = $this->liquidity->averageDailyVolume($stock) * 0.35;
-        $expected = 100.0 * exp($this->liquidity->permanentImpact($stock, $quantity));
+        $expected = 100.0 * exp($this->liquidity->peakImpact($stock, $quantity));
 
         $this->orderFlow->record('APEX', $quantity);
         $this->tracker()->updateStocks([$stock], 1.0 / 14400.0, false, new MacroStateDTO());
 
         $this->assertEqualsWithDelta($expected, (float) $stock->getPrice(), 1e-9);
+    }
+
+    /**
+     * Impact is partly transient (propagator model, Bouchaud et al. 2004): the peak move lands on the tick, a third
+     * of it relaxes back with the resilience half-life, and two thirds stay (Farmer et al. 2013).
+     */
+    public function testAShareOfTheMoveRelaxesAwayAndTheRestStays(): void
+    {
+        $stock = $this->stock();
+        $tracker = $this->tracker();
+        $peak = $this->liquidity->peakImpact($stock, $this->liquidity->averageDailyVolume($stock) * 0.35);
+        $transient = (1.0 - FinancialConstants::PERMANENT_IMPACT_SHARE) * $peak;
+        $halfLife = FinancialConstants::TRANSIENT_IMPACT_HALF_LIFE_YEARS;
+
+        $this->orderFlow->record('APEX', $this->liquidity->averageDailyVolume($stock) * 0.35);
+        $tracker->updateStocks([$stock], 1.0 / 14400.0, false, new MacroStateDTO());
+        $this->assertEqualsWithDelta(100.0 * exp($peak), (float) $stock->getPrice(), 1e-9);
+
+        for ($tick = 0; $tick < 10; $tick++) {
+            $tracker->updateStocks([$stock], $halfLife / 10.0, false, new MacroStateDTO());
+        }
+        $this->assertEqualsWithDelta(100.0 * exp($peak - ($transient / 2.0)), (float) $stock->getPrice(), 1e-9);
+
+        for ($tick = 0; $tick < 400; $tick++) {
+            $tracker->updateStocks([$stock], $halfLife / 10.0, false, new MacroStateDTO());
+        }
+        // Two thirds stay: the fair-pricing plateau (Farmer et al. 2013), pinned rather than read back.
+        $this->assertEqualsWithDelta(100.0 * exp((2.0 / 3.0) * $peak), (float) $stock->getPrice(), 1e-9);
     }
 
     public function testARepurchaseProgramIsWorkedAtTheTenBEighteenPaceThroughTheImpactChannel(): void
@@ -235,7 +263,7 @@ class OrderFlowImpactWiringTest extends TestCase
         $stock->setCorporateFlowBacklog($program);
 
         $expectedSlice = $adv * FinancialConstants::CORPORATE_FLOW_MAX_ADV_SHARE_PER_DAY * $stepDays;
-        $expectedPrice = 100.0 * exp($this->liquidity->permanentImpact($stock, $expectedSlice));
+        $expectedPrice = 100.0 * exp($this->liquidity->peakImpact($stock, $expectedSlice));
 
         $this->tracker()->updateStocks([$stock], $dt, false, new MacroStateDTO());
 
@@ -278,10 +306,13 @@ class OrderFlowImpactWiringTest extends TestCase
         $this->orderFlow->record('APEX', $this->liquidity->averageDailyVolume($stock) * 0.20);
         $tracker->updateStocks([$stock], 1.0 / 14400.0, false, new MacroStateDTO());
         $afterFirstTick = (float) $stock->getPrice();
+        $transient = (1.0 - FinancialConstants::PERMANENT_IMPACT_SHARE) * log($afterFirstTick / 100.0);
 
         $tracker->updateStocks([$stock], 1.0 / 14400.0, false, new MacroStateDTO());
 
-        $this->assertSame($afterFirstTick, (float) $stock->getPrice(), 'A drained quantity must not be applied again.');
+        // The only move left is the transient part relaxing; the drained quantity is not applied again.
+        $relaxed = LiquidityEngine::transientImpactAfter($transient, 0.0, 1.0 / 14400.0);
+        $this->assertEqualsWithDelta($afterFirstTick * exp($relaxed - $transient), (float) $stock->getPrice(), 1e-9, 'A drained quantity must not be applied again.');
     }
 
     public function testImpactVarianceIsMeasuredAndHandedBackToTheDiffusion(): void
@@ -296,6 +327,13 @@ class OrderFlowImpactWiringTest extends TestCase
 
         $measured = $stock->getImpactVarianceEma();
         $this->assertGreaterThan(0.0, $measured, 'Flow that moved the price must be recorded as variance it supplied.');
+        // Only the two thirds that stay are long-run variance; the transient third washes out within days.
+        $stays = (2.0 / 3.0) * $this->liquidity->peakImpact($stock, $this->liquidity->averageDailyVolume($stock) * 0.20);
+        $this->assertEqualsWithDelta(
+            MathUtility::ewmaAnnualizedVariance(0.0, $stays, 1.0 / 14400.0, FinancialConstants::IMPACT_VARIANCE_EMA_YEARS),
+            $measured,
+            1e-12
+        );
 
         // The next tick hands the measurement to the price engine, which is where the diffusion gives back
         // what the flow supplied.
@@ -451,8 +489,8 @@ class OrderFlowImpactWiringTest extends TestCase
         $trade = 0.002 * $boardFloat;
 
         // Each name takes its float's share of the currency traded, in shares at the price the tick opens on.
-        $expectedApex = $this->liquidity->permanentImpact($apex, $trade * (9.0e9 / $boardFloat) / 100.0);
-        $expectedBeta = $this->liquidity->permanentImpact($beta, $trade * (5.0e9 / $boardFloat) / 50.0);
+        $expectedApex = $this->liquidity->peakImpact($apex, $trade * (9.0e9 / $boardFloat) / 100.0);
+        $expectedBeta = $this->liquidity->peakImpact($beta, $trade * (5.0e9 / $boardFloat) / 50.0);
 
         $this->tracker()->updateStocks(
             [$apex, $beta],

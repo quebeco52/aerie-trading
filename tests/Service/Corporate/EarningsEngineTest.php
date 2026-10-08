@@ -2380,4 +2380,24 @@ class EarningsEngineTest extends TestCase
         $share = (float) ($founding->stock->getEarningsMomentumZ()[FinancialConstants::STATE_EXTRACTION_COST_SHARE] ?? 0.0);
         $this->assertGreaterThan($founding->fixedCosts / $founding->actualRevenue, $share);
     }
+
+    /**
+     * Each report rolls the firm's long-run return toward its trailing return over LONG_RUN_RETURN_EMA_YEARS, so the
+     * valuation's anchor is a measured level, not the lore baseline.
+     */
+    public function testEachReportRollsTheLongRunReturnTowardTheTrailingOne(): void
+    {
+        $stock = $this->buildMatureIndustrial('LRUN');
+        $stock->setLongRunReturn('0.0500');
+        $macroState = new MacroStateDTO(corporateTaxRate: 0.21, policyRateEma: 0.04, yield5yEma: 0.04);
+
+        $this->earningsEngine->calculate($stock, $macroState, EarningsEngine::resolveReportingTick('LRUN', 252));
+
+        $trailing = \App\Data\Sectors::strategyFor($stock->getIndustry())->getTrueReturn($stock);
+        $this->assertEqualsWithDelta(
+            0.05 + ((1.0 - exp(-0.25 / 5.0)) * ($trailing - 0.05)),
+            (float) $stock->getLongRunReturn(),
+            1e-4
+        );
+    }
 }

@@ -472,7 +472,8 @@ class MarketEngine
             $ctx->tangibleBookValuePerShare,
             $ctx->targetPayoutRatio,
             $ctx->dividendAdjustmentSpeed,
-            $ctx->policyBasesPerShare
+            $ctx->policyBasesPerShare,
+            $ctx->longRunReturn
         );
 
         $perceivedFairValue = $fundamentalState['perceived_fair_value'];
@@ -588,6 +589,7 @@ class MarketEngine
      * @param float $targetPayoutRatio   The payout ratio the firm's dividend policy steers to.
      * @param float $dividendAdjustmentSpeed Share of the gap to its target dividend the firm closes each quarter.
      * @param array<string, float> $policyBasesPerShare What each law the firm's accounts answer to is charged on or moves, per share, keyed by lever.
+     * @param float|null $longRunReturn  The firm's measured long-run return; the trailing return's gap to it is valued as it fades.
      * @return array{perceived_fair_value: float, dynamic_reversion: float, policy_repricing: float, analyst_targets: array}
      */
     private function evaluateFundamentalState(
@@ -618,7 +620,8 @@ class MarketEngine
         ?float $tangibleBookValuePerShare = null,
         float $targetPayoutRatio = 0.0,
         float $dividendAdjustmentSpeed = 1.0,
-        array $policyBasesPerShare = []
+        array $policyBasesPerShare = [],
+        ?float $longRunReturn = null
     ): array {
 
         $strategy = \App\Data\Sectors::getBusinessModelStrategy($businessModel);
@@ -634,7 +637,7 @@ class MarketEngine
         // Structural ROIC is determined by the business model strategy, allowing sectors like Insurance
         // to smooth out extreme catastrophic volatility and price based on through-the-cycle baseline capacity.
         $structuralRoic = $strategy->calculateStructuralRoic(
-            $roicTtm,
+            $strategy->getValuationReturn($roicTtm, $longRunReturn, $liveCostOfEquity),
             $baselineRoic,
             $revenuePerShare,
             $bookValuePerShare,

@@ -92,6 +92,18 @@ trait StandardValuationTrait
         return $roicTtm;
     }
 
+    /**
+     * The trailing return with only the persistent-equivalent share of its gap to the long-run level: profitability closes
+     * about 38% of that gap a year (Fama & French 2000), so a good or bad year is not capitalized as permanent
+     * (MathUtility::persistentEquivalentReturn()). A firm with no long-run record yet is valued on its trailing return.
+     */
+    public function getValuationReturn(float $trailingReturn, ?float $longRunReturn, float $discountRate): float
+    {
+        return $longRunReturn === null
+            ? $trailingReturn
+            : MathUtility::persistentEquivalentReturn($trailingReturn, $longRunReturn, $discountRate);
+    }
+
     /** Levered through the identity: an operating return is earned on invested capital, not on equity. */
     public function getEquityReturn(float $returnOnCapital, float $investedCapital, float $equity, float $afterTaxCostOfDebt): float
     {

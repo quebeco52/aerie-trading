@@ -732,4 +732,13 @@ class InsuranceBusinessModelTest extends TestCase
         $stock->setSecuritiesCarryingYield(null);
         $this->assertGreaterThan($atBook, $model->calculateInterestIncome($stock, new MacroStateDTO(yield10yEma: 0.06), $math));
     }
+
+    /** An insurer's through-the-cycle capacity blend is its persistence model, so the trailing return reaches it unfaded. */
+    public function testAnInsurerIsValuedOnItsOwnCapacityBlendNotTheFade(): void
+    {
+        $insurer = \App\Data\Sectors::getBusinessModelStrategy('insurance');
+
+        $this->assertSame(0.20, $insurer->getValuationReturn(0.20, 0.10, 0.09));
+        $this->assertNotSame(0.20, \App\Data\Sectors::getBusinessModelStrategy('none')->getValuationReturn(0.20, 0.10, 0.09));
+    }
 }

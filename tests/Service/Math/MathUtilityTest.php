@@ -2498,6 +2498,40 @@ class MathUtilityTest extends TestCase
         $this->assertSame(0.0, MathUtility::excessOverBaseline(0.02, 0.02));
     }
 
+    /**
+     * Ohlson (1995): a gap between the trailing return and its long-run level that fades at omega a year is worth
+     * sum d omega^t / (1+r)^t; the permanent equivalent is the constant gap with the same value, d_eq / r. Omega is
+     * pinned at one less Fama & French's (2000) 38% a year.
+     */
+    public function testThePersistentEquivalentReturnIsWorthWhatTheFadingReturnIs(): void
+    {
+        $rate = 0.09;
+        $gap = 0.08;
+        $fading = 0.0;
+        for ($year = 1; $year <= 400; $year++) {
+            $fading += $gap * (0.62 ** $year) / ((1.0 + $rate) ** $year);
+        }
+
+        $equivalentGap = MathUtility::persistentEquivalentReturn(0.12 + $gap, 0.12, $rate) - 0.12;
+
+        $this->assertEqualsWithDelta($fading, $equivalentGap / $rate, 1e-12);
+        $this->assertSame(0.12, MathUtility::persistentEquivalentReturn(0.12, 0.12, $rate));
+        $this->assertEqualsWithDelta(0.12, MathUtility::persistentEquivalentReturn(0.30, 0.12, 0.0), 1e-15);
+    }
+
+    /** A level EMA forgets per unit of time: four quarters at a time leave what one year does, and a first reading starts it. */
+    public function testALevelAverageForgetsAtTheSameRateAtAnyStep(): void
+    {
+        $quarterly = 0.08;
+        for ($quarter = 0; $quarter < 4; $quarter++) {
+            $quarterly = MathUtility::ewmaLevel($quarterly, 0.20, 0.25, 5.0);
+        }
+
+        $this->assertEqualsWithDelta(MathUtility::ewmaLevel(0.08, 0.20, 1.0, 5.0), $quarterly, 1e-15);
+        $this->assertEqualsWithDelta(0.08 + ((1.0 - exp(-1.0)) * 0.12), MathUtility::ewmaLevel(0.08, 0.20, 5.0, 5.0), 1e-15);
+        $this->assertSame(0.20, MathUtility::ewmaLevel(null, 0.20, 0.25, 5.0));
+    }
+
     public function testExpectedNominalGrowthCarriesTheCycleAndCapsOnlyThePerpetualPartAtTrend(): void
     {
         $trend = MacroEngine::TREND_REAL_GROWTH;

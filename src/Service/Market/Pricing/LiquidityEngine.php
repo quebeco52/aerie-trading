@@ -31,6 +31,9 @@ use App\Service\Math\MathUtility;
  *
  * The split is the whole point. A single blended impact term that permanently moved the price by the full
  * execution cost would both overcharge the trader and inflate realized volatility.
+ *
+ * The move itself is split again, as in the propagator model (Bouchaud, Gefen, Potters & Wyart 2004) with
+ * exponential resilience (Obizhaeva & Wang 2013): a share stays, and the rest relaxes back over about a day.
  */
 final class LiquidityEngine
 {
@@ -168,7 +171,8 @@ final class LiquidityEngine
     }
 
     /**
-     * The log return a net signed quantity leaves permanently in the price.
+     * The log return a net signed quantity moves the price by at once; PERMANENT_IMPACT_SHARE of it stays and
+     * the rest relaxes away (see transientImpactAfter()).
      *
      * Linear in participation, signed by direction. This used to be the square-root law, which is the
      * right shape for the TOTAL cost of a metaorder but the wrong one for a mark that is applied every
@@ -185,7 +189,7 @@ final class LiquidityEngine
      * @param Stock $stock          The name traded.
      * @param float $signedQuantity Positive for net buying, negative for net selling.
      */
-    public function permanentImpact(Stock $stock, float $signedQuantity): float
+    public function peakImpact(Stock $stock, float $signedQuantity): float
     {
         if ($signedQuantity === 0.0) {
             return 0.0;
@@ -193,7 +197,23 @@ final class LiquidityEngine
 
         $participation = $signedQuantity / $this->averageDailyVolume($stock);
 
-        return FinancialConstants::PERMANENT_IMPACT_GAMMA * $this->dailyVolatility($stock) * $participation;
+        return FinancialConstants::PEAK_IMPACT_GAMMA * $this->dailyVolatility($stock) * $participation;
+    }
+
+    /**
+     * The transient displacement still in the price after dt: what was outstanding, relaxed at the resilience
+     * rate (Obizhaeva & Wang 2013; half-life from Hendershott & Menkveld 2014), plus the transient share of
+     * this tick's peak move.
+     *
+     * @param float $outstanding Log displacement left by earlier flow.
+     * @param float $peakImpact  This tick's peak move, as a log return.
+     * @param float $dt          Tick length in years.
+     */
+    public static function transientImpactAfter(float $outstanding, float $peakImpact, float $dt): float
+    {
+        $resilience = exp(-M_LN2 * max(0.0, $dt) / FinancialConstants::TRANSIENT_IMPACT_HALF_LIFE_YEARS);
+
+        return ($outstanding * $resilience) + ((1.0 - FinancialConstants::PERMANENT_IMPACT_SHARE) * $peakImpact);
     }
 
     /**
@@ -252,9 +272,9 @@ final class LiquidityEngine
 
         $advShares = $this->averageDailyVolume($stock);
         $halfSpread = $this->halfSpreadFraction($stock);
-        $permanentImpact = $this->permanentImpact($stock, $signed);
+        $peakImpact = $this->peakImpact($stock, $signed);
 
-        $temporaryFraction = FinancialConstants::TEMPORARY_IMPACT_ETA * abs($permanentImpact);
+        $temporaryFraction = FinancialConstants::TEMPORARY_IMPACT_ETA * abs($peakImpact);
 
         $spreadCost = $midPrice * $halfSpread * $quantity;
         $impactCost = $midPrice * $temporaryFraction * $quantity;
@@ -266,7 +286,7 @@ final class LiquidityEngine
             executionPrice: max(0.01, $executionPrice),
             spreadCost: $spreadCost,
             impactCost: $impactCost,
-            permanentImpact: $permanentImpact,
+            peakImpact: $peakImpact,
             participationRate: $advShares > 0.0 ? abs($signed) / $advShares : 0.0,
         );
     }
@@ -308,7 +328,7 @@ final class LiquidityEngine
             executionPrice: max(0.01, $midPrice * (1.0 + ($direction * $halfSpread))),
             spreadCost: $midPrice * $halfSpread * $quantity,
             impactCost: 0.0,
-            permanentImpact: 0.0,
+            peakImpact: 0.0,
             participationRate: 0.0,
         );
     }

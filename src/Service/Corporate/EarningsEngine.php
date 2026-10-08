@@ -1107,6 +1107,15 @@ class EarningsEngine
             $ctx->quarterlyDepreciation
         );
 
+        // The firm's long-run return, the level its profitability reverts to and its valuation anchors on.
+        $priorLongRun = $stock->getLongRunReturn();
+        $stock->setLongRunReturn((string) MathUtility::ewmaLevel(
+            $priorLongRun !== null ? (float) $priorLongRun : null,
+            $ctx->strategy->getTrueReturn($stock),
+            self::REPORT_INTERVAL_YEARS,
+            FinancialConstants::LONG_RUN_RETURN_EMA_YEARS
+        ));
+
         $this->testGoodwillForImpairment($ctx);
     }
 

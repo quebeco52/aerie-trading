@@ -35,6 +35,9 @@ class StockTracker
     /** Market vol of the last tick priced, at which every stored variance was built; null before the first. */
     private ?float $priorMarketVol = null;
 
+    /** @var array<string, float> Each name's transient impact still in its price, as a log displacement; lives as long as the ticker process. */
+    private array $transientImpact = [];
+
     /**
      * Constructor.
      *
@@ -235,7 +238,8 @@ class StockTracker
                 $events[] = $this->eventService->publish($stock, 'SHOCK', EventPresenter::shockHeadline($stock->getName() . ' shares', $calculation['shock']), $calculation['shock']);
             }
 
-            // Permanent order flow price impact: applied to price and accounted in impact variance EMA.
+            // Order flow price impact: the peak move is applied, a share of it relaxes away, and the share that stays
+            // is accounted in the impact variance EMA.
             $tickFlow = $netOrderFlow[$stock->getTicker()] ?? 0.0;
 
             // The company's own program — a repurchase still being executed, or issued stock still being
@@ -256,6 +260,7 @@ class StockTracker
 
             $impactLogReturn = 0.0;
             $budgetedImpactLogReturn = 0.0;
+            $outstandingTransient = $this->transientImpact[$stock->getTicker()] ?? 0.0;
 
             if ($tickFlow !== 0.0 || $fundShares !== 0.0) {
                 // Bounded because this is the one price move that answers to nothing else: it is applied
@@ -263,8 +268,8 @@ class StockTracker
                 // enforces says nothing about what a tick's NET flow adds up to — many orders, the players'
                 // and the agents' together, land in the same tick. The same per-move bound every jump in the
                 // system obeys applies here, so a pathological tick cannot dislocate a name without limit.
-                $flowImpact = $tickFlow !== 0.0 ? $this->liquidityEngine->permanentImpact($stock, $tickFlow) : 0.0;
-                $fundImpact = $fundShares !== 0.0 ? $this->liquidityEngine->permanentImpact($stock, $fundShares) : 0.0;
+                $flowImpact = $tickFlow !== 0.0 ? $this->liquidityEngine->peakImpact($stock, $tickFlow) : 0.0;
+                $fundImpact = $fundShares !== 0.0 ? $this->liquidityEngine->peakImpact($stock, $fundShares) : 0.0;
 
                 $impactLogReturn = max(
                     -FinancialConstants::MAX_TICK_IMPACT_LOG_RETURN,
@@ -273,11 +278,19 @@ class StockTracker
                 // Impact is linear in the quantity, so the fund's part separates exactly. It hits every name at
                 // once, which makes it SYSTEMATIC: the budget below is the name's idiosyncratic one and must not
                 // be charged for it, or every rebalance would quietly shrink single-name volatility.
-                $budgetedImpactLogReturn = max(
+                // Only the share that stays is long-run variance; the transient part washes out within days.
+                $budgetedImpactLogReturn = FinancialConstants::PERMANENT_IMPACT_SHARE * max(
                     -FinancialConstants::MAX_TICK_IMPACT_LOG_RETURN,
                     min(FinancialConstants::MAX_TICK_IMPACT_LOG_RETURN, $flowImpact)
                 );
-                $newPrice = max(0.01, $newPrice * exp($impactLogReturn));
+            }
+
+            // The peak move lands now; its transient share then relaxes back at the resilience rate, every tick.
+            $nextTransient = LiquidityEngine::transientImpactAfter($outstandingTransient, $impactLogReturn, $dt);
+            $this->transientImpact[$stock->getTicker()] = $nextTransient;
+            $impactPriceMove = (FinancialConstants::PERMANENT_IMPACT_SHARE * $impactLogReturn) + ($nextTransient - $outstandingTransient);
+            if ($impactPriceMove !== 0.0) {
+                $newPrice = max(0.01, $newPrice * exp($impactPriceMove));
             }
 
             // Realized impact variance, annualized, as an exponentially weighted mean. This is what the

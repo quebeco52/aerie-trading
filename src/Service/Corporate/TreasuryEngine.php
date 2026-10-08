@@ -605,7 +605,8 @@ class TreasuryEngine
         $economicSpread = $trueReturn - $hurdleRate;
 
         // Struck as the market strikes it: cost of equity on the return on equity (MarketEngine).
-        $equityRates = $ctx->strategy->getEquityValuationRates($stock, $trueReturn, $ctx->health, $ctx->macroState->corporateTaxRate);
+        $valuationReturn = $ctx->strategy->getValuationReturn($trueReturn, $stock->getLongRunReturn() !== null ? (float) $stock->getLongRunReturn() : null, $ctx->health->costOfEquity);
+        $equityRates = $ctx->strategy->getEquityValuationRates($stock, $valuationReturn, $ctx->health, $ctx->macroState->corporateTaxRate);
         $fairValuePE = $this->mathUtility->calculateManagementFairValuePE(
             $equityRates['costOfEquity'],
             $equityRates['equityReturn'],

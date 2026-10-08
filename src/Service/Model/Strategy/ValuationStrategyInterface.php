@@ -39,6 +39,12 @@ interface ValuationStrategyInterface
     public function calculateStructuralRoic(float $roicTtm, float $baselineRoic, float $revenuePerShare, float $bookValuePerShare, float $baselineMargin): float;
 
     /**
+     * The return the firm's equity is valued on, from its trailing return and its measured long-run level, discounted at
+     * the given rate; the market and management both strike their multiple on it.
+     */
+    public function getValuationReturn(float $trailingReturn, ?float $longRunReturn, float $discountRate): float;
+
+    /**
      * The intrinsic price-to-book multiple applied to book value per share.
      *
      * An operating company's book is plant and working capital, worth what the returns it earns justify,
