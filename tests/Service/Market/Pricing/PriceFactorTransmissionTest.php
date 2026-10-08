@@ -6,6 +6,7 @@ namespace App\Tests\Service\Market\Pricing;
 
 use App\DTO\MacroStateDTO;
 use App\DTO\MarketPricingContext;
+use App\Service\Macro\MacroEngine;
 use App\Service\Market\Pricing\MarketEngine;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\MathUtility;
@@ -51,9 +52,14 @@ final class PriceFactorTransmissionTest extends TestCase
         float $sectorZ = 0.0,
         float $marketJumpMultiplier = 1.0,
         float $beta = 1.0,
-        float $recentPriceTrend = 0.0,
         float $currentPrice = 60.0
     ): float {
+        return $this->stepOf($sectorZ, $marketJumpMultiplier, $beta, $currentPrice)['price'];
+    }
+
+    /** @return array{price: float, dynamic_reversion: float, perceived_fair_value: float} */
+    private function stepOf(float $sectorZ, float $marketJumpMultiplier, float $beta, float $currentPrice): array
+    {
         $ctx = new MarketPricingContext(
             currentPrice: $currentPrice,
             currentVolatility: 0.25,
@@ -74,11 +80,10 @@ final class PriceFactorTransmissionTest extends TestCase
             liveWacc: 0.08,
             revenuePerShare: 50.0,
             liveCostOfEquity: 0.10,
-            recentPriceTrend: $recentPriceTrend,
             baselineRoic: 0.15
         );
 
-        return $this->engine->calculateNextPrice($ctx)['price'];
+        return $this->engine->calculateNextPrice($ctx);
     }
 
     public function testSectorShockMovesThePriceAndScalesLinearlyWithTheShock(): void
@@ -152,77 +157,141 @@ final class PriceFactorTransmissionTest extends TestCase
         );
     }
 
-    public function testMomentumResistsFundamentalReversionInEitherDirection(): void
+    /**
+     * The pull toward fair value runs at the name's own speed however wide the gap: a gap closes over years
+     * (Balvers, Wu & Gilliland 2000). Arbitrage that steps up as a gap widens and trend-chasing that resists
+     * it are the agent populations' trades; a second, gap-scaled pull here closed a 30% gap in a quarter.
+     */
+    public function testThePullTowardFairValueRunsAtTheSameSpeedWhateverTheGap(): void
     {
-        // Deeply undervalued, so the fair value anchor is pulling the price up hard.
-        $undervalued = 20.0;
+        $fairValue = $this->stepOf(0.0, 1.0, 1.0, 60.0)['perceived_fair_value'];
+        // The step a fairly valued name takes is the drift alone; what a mispriced one adds is the pull.
+        $drift = log($this->stepOf(0.0, 1.0, 1.0, $fairValue)['price'] / $fairValue);
+        $closed = function (float $priceOverFairValue) use ($fairValue, $drift): float {
+            $price = $fairValue * $priceOverFairValue;
 
-        $noTrend = $this->priceOf(recentPriceTrend: 0.0, currentPrice: $undervalued);
-        $rising = $this->priceOf(recentPriceTrend: 0.40, currentPrice: $undervalued);
-        $falling = $this->priceOf(recentPriceTrend: -0.40, currentPrice: $undervalued);
+            return (log($this->stepOf(0.0, 1.0, 1.0, $price)['price'] / $price) - $drift) / log($fairValue / $price);
+        };
 
-        $this->assertLessThan(
-            $noTrend,
-            $rising,
-            'A trending stock must resist the pull to fair value, so it ends nearer its own path.'
-        );
+        $narrow = $closed(0.9);
+        $wide = $closed(0.5);
 
-        // Only the magnitude of the trend matters. Subtracting a signed trend, as the dead code did, would
-        // have made a rising stock revert FASTER than a flat one and a falling stock revert slower.
-        $this->assertEqualsWithDelta($rising, $falling, 1e-9, 'Momentum resistance must be direction neutral.');
+        $this->assertGreaterThan(0.0, $narrow, 'a mispriced name is pulled toward fair value');
+        $this->assertEqualsWithDelta($narrow, $wide, 1e-6 * $narrow + 1e-12, 'a deep gap closes the same share per step as a shallow one');
     }
 
     /**
-     * Momentum must slow fundamental reversion, never abolish it, at any tick rate.
-     *
-     * Resistance divides the reversion rate. Adding it to the reversion WEIGHT instead looks equivalent on a
-     * coarse step and is catastrophic on a fine one: at the district's 3600 ticks a year the weight is already
-     * 0.9999, so any constant offset saturates the clamp and cuts the price loose from fair value entirely.
+     * Gordon at the market price: a name off its fair value earns fair-value growth plus the yield its price
+     * actually offers. At fair value a dividend changes nothing; at half of it the same cash dividend is twice
+     * the yield, so a payer gains 4D/FV a year over a non-payer at the same gap. Before, the fixed-dollar
+     * ex-dividend drop made a payer's discount compound instead of being supported.
      */
-    public function testMomentumSlowsReversionByTheSameFractionAtAnyTickRate(): void
+    public function testADividendSupportsAPriceBelowFairValueByTheExtraYieldItOffers(): void
     {
-        $undervalued = 20.0;
-        $maxTrend = 0.50;
+        $dt = 1.0 / 252.0;
+        $quarterlyDividend = 1.25;
+        $step = function (float $dividend, float $priceOverFairValue) use ($dt): array {
+            $context = fn (float $price): MarketPricingContext => new MarketPricingContext(
+                currentPrice: $price,
+                currentVolatility: 0.25,
+                longTermVolatility: 0.25,
+                earningsPerShare: 5.0,
+                dividendPerShare: $dividend,
+                dt: $dt,
+                lambda: 0.0,
+                beta: 1.0,
+                marketVol: 0.15,
+                macroState: new MacroStateDTO(policyRate: 0.04, equityRiskPremium: 0.045),
+                bookValuePerShare: 40.0,
+                currentRoic: 0.15,
+                roicTtm: 0.15,
+                liveWacc: 0.08,
+                revenuePerShare: 50.0,
+                liveCostOfEquity: 0.10,
+                baselineRoic: 0.15
+            );
+            $fairValue = $this->engine->calculateNextPrice($context(60.0))['perceived_fair_value'];
+            $price = $fairValue * $priceOverFairValue;
+            $result = $this->engine->calculateNextPrice($context($price));
 
-        $retainedFraction = function (float $dt) use ($undervalued, $maxTrend): float {
-            $withMomentum = $this->priceOfAtStep($dt, $maxTrend, $undervalued);
-            $without = $this->priceOfAtStep($dt, 0.0, $undervalued);
-
-            // How much of the pull toward fair value survives the momentum resistance.
-            return log($withMomentum / $undervalued) / log($without / $undervalued);
+            return ['log' => log($result['price'] / $price), 'fair_value' => $fairValue, 'kappa' => $result['dynamic_reversion']];
         };
 
-        $daily = $retainedFraction(1.0 / 252.0);
-        $live = $retainedFraction(1.0 / 3600.0);
+        $payerAtValue = $step($quarterlyDividend, 1.0);
+        $this->assertEqualsWithDelta($step(0.0, 1.0)['log'], $payerAtValue['log'], 1e-12, 'at fair value the yield is the one fair value already prices');
 
-        // Dividing the rate retains 1 / (1 + trend x resistance) of the reversion, independent of the step.
-        $this->assertGreaterThan(0.50, $live, 'Reversion must survive the maximum trend at the live tick rate.');
-        $this->assertLessThan(0.90, $live, 'Momentum must still visibly slow reversion.');
-        $this->assertEqualsWithDelta($daily, $live, 0.05, 'The momentum effect must not depend on the tick rate.');
+        $payer = $step($quarterlyDividend, 0.5);
+        $nonPayer = $step(0.0, 0.5);
+        $extraYield = 4.0 * $quarterlyDividend / $payer['fair_value'];
+        $this->assertEqualsWithDelta(
+            exp(-$payer['kappa'] * $dt) * $extraYield * $dt,
+            $payer['log'] - $nonPayer['log'],
+            1e-9,
+            'at half of fair value the payer earns the extra yield on top of the same pull'
+        );
     }
 
-    private function priceOfAtStep(float $dt, float $trend, float $currentPrice): float
+    /**
+     * The market-wide jump reaches a name as beta x Y, floored and capped per jump, so its drift must give back
+     * exactly that clamped jump's mean, lambda x E[e^clamp(beta Y) - 1], at every beta and sign; otherwise the
+     * expected return moves with beta and a high-beta name settles away from its fair value. The mean is
+     * integrated here from the Kou density directly, not taken from the engine's own helper.
+     */
+    public function testTheDriftGivesBackTheSystemicJumpMeanAtEveryBeta(): void
     {
-        $ctx = new MarketPricingContext(
-            currentPrice: $currentPrice,
-            currentVolatility: 0.25,
-            longTermVolatility: 0.25,
-            earningsPerShare: 5.0,
-            dt: $dt,
-            lambda: 0.0,
-            beta: 1.0,
-            macroState: new MacroStateDTO(policyRate: 0.04, equityRiskPremium: 0.045),
-            bookValuePerShare: 40.0,
-            currentRoic: 0.15,
-            roicTtm: 0.15,
-            liveWacc: 0.08,
-            revenuePerShare: 50.0,
-            liveCostOfEquity: 0.10,
-            recentPriceTrend: $trend,
-            baselineRoic: 0.15
-        );
+        $dt = 1.0 / 252.0;
+        $logStep = function (float $beta) use ($dt): float {
+            $step = fn (float $price): array => $this->engine->calculateNextPrice(new MarketPricingContext(
+                currentPrice: $price,
+                currentVolatility: 0.01,
+                longTermVolatility: 0.01,
+                earningsPerShare: 5.0,
+                dt: $dt,
+                lambda: 0.0,
+                beta: $beta,
+                marketVol: 0.0,
+                macroState: new MacroStateDTO(policyRate: 0.04, equityRiskPremium: 0.045),
+                bookValuePerShare: 40.0,
+                currentRoic: 0.15,
+                roicTtm: 0.15,
+                liveWacc: 0.08,
+                revenuePerShare: 50.0,
+                liveCostOfEquity: 0.10,
+                baselineRoic: 0.15
+            ));
+            // Start on fair value so the pull adds nothing; what is left is the drift.
+            $fairValue = $step(60.0)['perceived_fair_value'];
+            $result = $step($fairValue);
 
-        return $this->engine->calculateNextPrice($ctx)['price'];
+            return log($result['price'] / $fairValue) / exp(-$result['dynamic_reversion'] * $dt);
+        };
+
+        $unexposed = $logStep(0.0);
+        foreach ([0.3, 1.3, 2.4, -0.6] as $beta) {
+            $expected = -MacroEngine::SYSTEMIC_JUMP_INTENSITY * $this->clampedSystemicJumpMean($beta) * $dt;
+            $this->assertEqualsWithDelta($expected, $logStep($beta) - $unexposed, 1e-3 * abs($expected), "beta {$beta}");
+        }
+    }
+
+    /** E[e^clamp(beta Y) - 1] for the systemic Kou jump Y, by midpoint quadrature over each tail. */
+    private function clampedSystemicJumpMean(float $beta): float
+    {
+        $tail = function (float $eta, float $sign) use ($beta): float {
+            $steps = 200_000;
+            $upper = 60.0 / $eta;
+            $width = $upper / $steps;
+            $sum = 0.0;
+            for ($i = 0; $i < $steps; $i++) {
+                $y = ($i + 0.5) * $width;
+                $x = max(FinancialConstants::MIN_JUMP_LOG_RETURN, min(FinancialConstants::MAX_JUMP_LOG_RETURN, $beta * $sign * $y));
+                $sum += $eta * exp(-$eta * $y) * (exp($x) - 1.0) * $width;
+            }
+
+            return $sum;
+        };
+
+        return (MacroEngine::SYSTEMIC_JUMP_PROBABILITY_UP * $tail(MacroEngine::SYSTEMIC_JUMP_ETA_UP, 1.0))
+            + ((1.0 - MacroEngine::SYSTEMIC_JUMP_PROBABILITY_UP) * $tail(MacroEngine::SYSTEMIC_JUMP_ETA_DOWN, -1.0));
     }
 
     /**

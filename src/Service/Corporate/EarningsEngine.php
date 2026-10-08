@@ -961,10 +961,15 @@ class EarningsEngine
         $ctx->netChargeOffs = max(0.0, $actuals->netChargeOffs);
         $ctx->netInterestSqueeze = $actuals->netInterestSqueeze;
 
-        // Stock-based compensation (ASC 718) is already inside the operating cost base: it changes no margin,
-        // but it is non-cash (added back to FCF below) and is settled in newly issued shares.
-        $ctx->stockCompensation = max(0.0, $ctx->actualRevenue) * $ctx->strategy->getStockCompensationIntensity($ctx->stock);
-        $ctx->kpis['stock_compensation'] = $ctx->stockCompensation;
+        // Stock-based compensation (ASC 718) is already inside the operating cost base: it changes no margin.
+        // What is settled in new shares is non-cash (added back to FCF below), but only up to the shares a
+        // board can grant: shareholders and proxy advisers cap the annual burn rate (ISS benchmarks), so a
+        // firm whose price has fallen pays the rest of the same pay bill in cash rather than printing stock.
+        $stockCompensationExpense = max(0.0, $ctx->actualRevenue) * $ctx->strategy->getStockCompensationIntensity($ctx->stock);
+        $burnRateCap = FinancialConstants::EQUITY_BURN_RATE_CAP_BY_SECTOR[(string) $ctx->stock->getSector()] ?? FinancialConstants::DEFAULT_EQUITY_BURN_RATE_CAP;
+        $grantableValue = $burnRateCap * $ctx->dt * max(0.0, $ctx->sharesOutstanding) * max(0.0, (float) $ctx->stock->getPrice());
+        $ctx->stockCompensation = min($stockCompensationExpense, $grantableValue);
+        $ctx->kpis['stock_compensation'] = $stockCompensationExpense;
 
         // The order book is a disclosed, forward-looking number: analysts read it off the report and carry
         // it into next quarter's estimate (see MarketConsensusEngine). Held on the stock so the consensus

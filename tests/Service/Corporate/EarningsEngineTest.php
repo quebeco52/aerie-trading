@@ -455,6 +455,10 @@ class EarningsEngineTest extends TestCase
 
         $stock = $this->buildMatureIndustrial('SAAS');
         $stock->setIndustry('Software - Application');
+        $stock->setSector('Information Technology');
+        // About ten times sales, where software trades: a tenth of revenue in equity is ~1% of the company a
+        // year, inside the sector's burn-rate cap, so all of it is settled in shares.
+        $stock->setPrice('300.00');
         $stock->setOperatingMargin('0.25');
         $stock->setLifecycleStage(LifecycleStage::Mature);
         $macroState = new MacroStateDTO(corporateTaxRate: 0.21, policyRateEma: 0.04, yield5yEma: 0.04);
@@ -478,8 +482,48 @@ class EarningsEngineTest extends TestCase
         $this->assertEqualsWithDelta($expectedOperatingCashFlow, $captured->operatingCashFlow, 1.0);
 
         // Settled in shares: the count ends above whatever the capital allocation left it at, by SBC / price.
-        $expectedShares = ((float) $captured->allocation['new_shares']) + ($captured->stockCompensation / 50.0);
+        $expectedShares = ((float) $captured->allocation['new_shares']) + ($captured->stockCompensation / 300.0);
         $this->assertEqualsWithDelta($expectedShares, (float) $stock->getSharesOutstanding(), 1.0);
+    }
+
+    /**
+     * A board cannot grant past its burn-rate cap (ISS benchmarks): at a fifth of software's usual valuation the
+     * same pay bill would print several percent of the company a year, so only the capped value is settled in
+     * shares and the rest of the expense is paid in cash. The full charge is still reported; the add-back and
+     * the dilution are the share-settled part alone.
+     */
+    public function testStockCompensationPastTheBurnRateCapIsPaidInCash(): void
+    {
+        $captured = null;
+        $dispatcher = new EventDispatcher();
+        $dispatcher->addListener(EarningsReportedEvent::class, function (EarningsReportedEvent $event) use (&$captured): void {
+            $captured = $event->getContext();
+        });
+        $engine = $this->buildEngine($dispatcher);
+
+        $stock = $this->buildMatureIndustrial('CAPD');
+        $stock->setIndustry('Software - Application');
+        $stock->setSector('Information Technology');
+        $stock->setPrice('50.00');
+        $stock->setOperatingMargin('0.25');
+        $stock->setLifecycleStage(LifecycleStage::Mature);
+        $sharesBefore = (float) $stock->getSharesOutstanding();
+
+        $engine->calculate($stock, new MacroStateDTO(corporateTaxRate: 0.21, policyRateEma: 0.04, yield5yEma: 0.04), EarningsEngine::resolveReportingTick('CAPD', 252));
+
+        $this->assertNotNull($captured);
+        $expense = $captured->actualRevenue * \App\Data\Sectors::getBusinessModelStrategy('tech')->getStockCompensationIntensity($stock);
+        $grantable = FinancialConstants::EQUITY_BURN_RATE_CAP_BY_SECTOR['Information Technology'] * 0.25 * $sharesBefore * 50.0;
+
+        $this->assertGreaterThan($grantable, $expense, 'the fixture only means anything while the bill exceeds the cap');
+        $this->assertEqualsWithDelta($expense, $captured->kpis['stock_compensation'], 1.0, 'the full charge is reported');
+        $this->assertEqualsWithDelta($grantable, $captured->stockCompensation, 1.0, 'only the grantable value is settled in shares');
+        $this->assertEqualsWithDelta(
+            ((float) $captured->allocation['new_shares']) + ($grantable / 50.0),
+            (float) $stock->getSharesOutstanding(),
+            1.0,
+            'dilution stops at the burn-rate cap'
+        );
     }
 
     /**

@@ -41,7 +41,6 @@ class MarketPricingContext
         public string $businessModel = 'none',
         public float $liveCostOfEquity = 0.10,
         public float $netDebtPerShare = 0.0,
-        public float $recentPriceTrend = 0.0,
         public float $secularGrowth = 0.02,
         public float $baselineRoic = 0.10,
         public float $baselineMargin = 0.20,
@@ -124,7 +123,6 @@ class MarketPricingContext
             // The model's own net debt, as DebtEngine reads it: a lender's deposits and a clearinghouse's margin fund
             // its book rather than finance it, so they are no claim ahead of the equity.
             netDebtPerShare: max(0.0, $strategy->getNetDebtCapital((float) $stock->getTotalDebt(), (float) $stock->getWholesaleDebt(), (float) $stock->getCorporateTreasury())) / $shares,
-            recentPriceTrend: (float) ($stock->getPriceMomentumTrend() ?? 0.0),
             secularGrowth: $strategy->getFadedSecularGrowthRate($stock, $macroState->totalTime),
             // The anchor the firm's own model measures it by: a lender or underwriter carries a placeholder in
             // baselineRoic, and its through-the-cycle return is its ROE.

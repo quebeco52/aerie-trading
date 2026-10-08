@@ -26,10 +26,6 @@ class MarketEngine
     // Analyst Multipliers
     private const VALUE_ANALYST_BOOK_MULT = 0.80;
 
-    // --- Momentum (Hong & Stein 1999) ---
-    /** Divisor applied to the reversion rate per unit of accumulated price trend; at the 0.50 trend cap a name reverts at two thirds speed. */
-    private const MOMENTUM_REVERSION_RESISTANCE = 1.00;
-
     // --- Variance Process Calibration ---
     /** Speed the idiosyncratic variance reverts to its long-run level, in reversions per year; a shock is most of the way gone inside two months. */
     public const BASE_VARIANCE_REVERSION_SPEED = 6.0;
@@ -256,7 +252,6 @@ class MarketEngine
         $businessModel = $ctx->businessModel;
         $liveCostOfEquity = $ctx->liveCostOfEquity;
         $netDebtPerShare = $ctx->netDebtPerShare;
-        $recentPriceTrend = $ctx->recentPriceTrend;
         $secularGrowth = $ctx->secularGrowth;
         $baselineRoic = $ctx->baselineRoic;
         $baselineMargin = $ctx->baselineMargin;
@@ -445,7 +440,6 @@ class MarketEngine
         $nextVolatility = max(self::MIN_VOLATILITY, min(self::MAX_VOLATILITY, $nextVolatility));
 
         $fundamentalState = $this->evaluateFundamentalState(
-            $currentPrice,
             $outputGap,
             $inflation,
             $beta,
@@ -478,9 +472,17 @@ class MarketEngine
         $perceivedFairValue = $fundamentalState['perceived_fair_value'];
         $dynamicReversion = $fundamentalState['dynamic_reversion'];
 
-        // Ornstein-Uhlenbeck mean reversion in log-space, damped by price momentum magnitude.
-        $momentumResistance = 1.0 + (abs($recentPriceTrend) * self::MOMENTUM_REVERSION_RESISTANCE);
-        $reversionWeight = max(0.0, min(1.0, exp(-($dynamicReversion / $momentumResistance) * $dt)));
+        // Gordon (1962) at the market price: expected total return is fair-value growth plus the yield the
+        // price actually offers (Fama & French 2002, r = D/P + g). The drift above is the return at fair value;
+        // below it the same cash dividend is a fatter yield, above it a thinner one. Without this the fixed-dollar
+        // ex-dividend drop compounded a discount instead of supporting it.
+        $annualDividend = max(0.0, $dividendPerShare) * FinancialConstants::QUARTERS_PER_YEAR;
+        $finalDrift += ($annualDividend / max(0.01, $currentPrice)) - ($annualDividend / max(0.01, $perceivedFairValue));
+
+        // Ornstein-Uhlenbeck mean reversion in log-space at the name's own speed. Arbitrage that grows with the
+        // gap and trend-chasing that resists it are traded by the agent populations, not imposed here: a gap
+        // closes over years, not months (Balvers, Wu & Gilliland 2000; Boswijk, Hommes & Manzan 2007).
+        $reversionWeight = max(0.0, min(1.0, exp(-$dynamicReversion * $dt)));
 
         // Pure Geometric Brownian Motion (GBM) Step
         $idiosyncraticShock = $this->mathUtility->generateStandardNormal();
@@ -552,10 +554,9 @@ class MarketEngine
 
     /**
      * Evaluates the fundamental fair value and dynamic reversion speed of a company
-     * by combining structural ROIC, cost of capital, Kalman-smoothed EPS run-rates,
-     * and ESTAR non-linear arbitrage dynamics.
+     * by combining structural ROIC, cost of capital and Kalman-smoothed EPS run-rates. The reversion speed is
+     * the name's own, slowed when funding liquidity dries up.
      * 
-     * @param float $currentPrice        The current market price of the stock.
      * @param float $outputGap           The macroeconomic output gap (boom vs bust).
      * @param float $inflation           The current inflation rate.
      * @param float $beta                The stock's sensitivity to systemic market moves.
@@ -584,7 +585,6 @@ class MarketEngine
      * @return array{perceived_fair_value: float, dynamic_reversion: float, policy_repricing: float, analyst_targets: array}
      */
     private function evaluateFundamentalState(
-        float $currentPrice,
         float $outputGap,
         float $inflation,
         float $beta,
@@ -766,22 +766,11 @@ class MarketEngine
 
         $perceivedFairValue = max(0.01, $fairValue);
 
-        // 1. ESTAR (Exponential Smooth Transition Autoregressive) Mean Reversion
-        // Explains non-linear institutional arbitrage around a fundamental target (Taylor, Peel, & Sarno, 2001).
-        // Within narrow valuation bands, transaction costs and noise-trader risk keep institutional arbitrage near zero.
-        // As mispricing spreads widen, institutions enter aggressively, scaling reversion speed smoothly toward an upper asymptotic limit.
-        $logValuationGap = abs(log(max(0.01, $currentPrice) / max(0.01, $perceivedFairValue)));
-        $arbitrageElasticity = FinancialConstants::ESTAR_ARBITRAGE_ELASTICITY;
-        $maxReversionCap = FinancialConstants::MAX_REVERSION_FORCE_CAP;
-
-        $estarTransition = 1.0 - exp(-$arbitrageElasticity * ($logValuationGap * $logValuationGap));
-        $effectiveReversion = $reversionSpeed + (($maxReversionCap - $reversionSpeed) * $estarTransition);
-
-        // 2. Brunnermeier-Pedersen Funding Liquidity Dampener (2009)
+        // Brunnermeier-Pedersen Funding Liquidity Dampener (2009)
         // During macroeconomic stress and systemic crises, funding liquidity dries up and capital-constrained 
         // arbitrageurs pull back, slowing down market efficiency and price correction speed.
         $liquidityDampener = 1.0 / (1.0 + ($systemicStressIndex * FinancialConstants::FUNDING_LIQUIDITY_STRESS_FACTOR));
-        $dynamicReversion = $effectiveReversion * $liquidityDampener;
+        $dynamicReversion = $reversionSpeed * $liquidityDampener;
 
         return [
             'perceived_fair_value' => $perceivedFairValue,

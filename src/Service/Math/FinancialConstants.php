@@ -116,10 +116,6 @@ class FinancialConstants
     public const MIN_INTRINSIC_PB = 0.40;
     /** Absolute ceiling on price-to-book valuation multiple. */
     public const MAX_INTRINSIC_PB = 10.0;
-    /** Maximum mean-reversion drift force pulling price toward fundamental fair value. */
-    public const MAX_REVERSION_FORCE_CAP = 15.0;
-    /** Smooth transition autoregressive elasticity parameter scaling mispricing arbitrage speed. */
-    public const ESTAR_ARBITRAGE_ELASTICITY = 2.0;
     /** Multiplier scaling liquidity drag when systemic interbank funding spreads widen. */
     public const FUNDING_LIQUIDITY_STRESS_FACTOR = 2.0;
 
@@ -307,6 +303,18 @@ class FinancialConstants
     public const DEFAULT_LEASE_LIABILITY_INTENSITY = 0.05;
     /** Default stock-based compensation (ASC 718) as a fraction of revenue: non-cash expense, real dilution. */
     public const DEFAULT_STOCK_COMPENSATION_INTENSITY = 0.01;
+
+    // --- Equity Grant Burn Rate ---
+    /** Most shares a large company grants in a year, as a share of shares outstanding, by GICS sector: ISS 2026 S&P 500 value-adjusted burn-rate benchmarks (86th percentile). */
+    public const EQUITY_BURN_RATE_CAP_BY_SECTOR = [
+        'Information Technology' => 0.0215,
+        'Communication Services' => 0.0172,
+        'Consumer Discretionary' => 0.0133,
+        'Financials'             => 0.0103,
+        'Health Care'            => 0.0088,
+    ];
+    /** ISS 2026 S&P 500 burn-rate benchmark for every other sector (energy, materials, industrials, staples, utilities, real estate): 0.77% a year. */
+    public const DEFAULT_EQUITY_BURN_RATE_CAP = 0.0077;
     /** Goodwill impairment smaller than this fraction of the goodwill balance is immaterial and not booked. */
     public const MIN_GOODWILL_IMPAIRMENT_FRACTION = 0.01;
 
