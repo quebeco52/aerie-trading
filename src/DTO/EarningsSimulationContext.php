@@ -190,8 +190,10 @@ class EarningsSimulationContext
     public float $expectedQuarterlyEps = 0.0;
     public float $surpriseAmountQuarterly = 0.0;
     public float $surprisePct = 0.0;
-    /** The surprise against the consensus the market anticipates (before the analysts' walk-down); what the price gaps on. */
-    public float $pricedSurprisePct = 0.0;
+    /** Fair value per share struck on the books before the report; its revision is what the price gaps on. */
+    public float $fairValueBeforeReport = 0.0;
+    /** The cost of equity that fair value was struck at: the return it was expected to earn by this report. */
+    public float $costOfEquityBeforeReport = 0.0;
     public float $priceGapPct = 0.0;
 
     // FCF & Capital

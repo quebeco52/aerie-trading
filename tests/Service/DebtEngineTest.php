@@ -15,6 +15,7 @@ use App\Service\Event\MarketEventPublisher;
 use App\Service\Market\Bond\CreditRatingAgency;
 use App\Service\Math\CorporateMetrics;
 use App\Service\Math\MathUtility;
+use App\Service\Market\Pricing\MarketEngine;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\MockObject\Stub;
@@ -1131,6 +1132,25 @@ class DebtEngineTest extends TestCase
             $engine->resolveAssetVolatility($bank, 1_000_000_000.0, 1_000_000_000.0, 0.04),
             $engine->resolveAssetVolatility($bank, 1_000_000_000.0, 4_000_000_000.0, 0.04)
         );
+    }
+
+    /**
+     * The Merton horizon's equity volatility reverts at the speed the price process reverts the name's variance
+     * at, jump regime included, so a vol spike is priced into credit for as long as it lasts in the tape.
+     */
+    public function testTheMertonHorizonVolRevertsAtThePriceProcesssOwnSpeed(): void
+    {
+        $engine = $this->costOfCapitalEngine();
+        $bank = $this->leveredFirm('LEND', '1.00', '0.01');
+        $bank->setIndustry('Banks - Diversified');
+        $bank->setVolatility('0.20');
+        $bank->setCurrentVolatility('0.40');
+        $bank->setJumpIntensity('1.5');
+
+        // A lender's asset vol is the de-levered identity, so at E = D it is half the horizon equity vol.
+        $horizonVol = (new MathUtility())->averageMeanRevertingVolatility(0.40, 0.20, MarketEngine::varianceReversionSpeed(1.5), 5.0);
+
+        $this->assertEqualsWithDelta(0.5 * $horizonVol, $engine->resolveAssetVolatility($bank, 1_000_000_000.0, 1_000_000_000.0, 0.04), 1e-12);
     }
 
     /**

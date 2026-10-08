@@ -61,8 +61,8 @@ class AdvertisingAgencyBusinessModel extends StandardCorporateBusinessModel
     // --- Balance Sheet Realism ---
     /** Capitalized operating lease liabilities as a fraction of annual revenue (IFRS 16 / ASC 842). Agency networks lease their studio and office footprint in every market they serve. */
     public const LEASE_LIABILITY_INTENSITY = 0.12;
-    /** Stock-based compensation as a fraction of revenue (ASC 718): non-cash, added back to FCF, settled in new shares. Creative leadership retention grants. */
-    public const STOCK_COMPENSATION_INTENSITY = 0.03;
+    /** Stock-based compensation (ASC 718) as a share of revenue: Advertising, 3.23% of revenue, 52 firms (Damodaran, Employee data by industry, US, January 2026). */
+    public const STOCK_COMPENSATION_INTENSITY = 0.0323;
 
     // --- Analyst Visibility & Error ---
     public const BASE_COVERAGE_VISIBILITY = 0.25;

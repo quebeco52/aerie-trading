@@ -107,7 +107,6 @@ class OrderFlowVarianceBudgetTest extends TestCase
                 currentPrice: $price,
                 currentVolatility: $volatility,
                 longTermVolatility: self::BASELINE_VOLATILITY,
-                earningsPerShare: 5.0,
                 dt: $dt,
                 lambda: 2.0,
                 jumpVol: 0.10,

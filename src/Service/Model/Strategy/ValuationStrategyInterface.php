@@ -36,7 +36,7 @@ interface ValuationStrategyInterface
      * @return array{costOfEquity: float, equityReturn: float}
      */
     public function getEquityValuationRates(\App\Entity\Stock $stock, float $returnOnCapital, \App\DTO\DebtHealthDTO $health, float $corporateTaxRate): array;
-    public function calculateStructuralRoic(float $roicTtm, float $baselineRoic, float $revenuePerShare, float $bookValuePerShare, float $baselineMargin): float;
+    public function calculateStructuralRoic(float $roicTtm, float $baselineRoic, float $revenuePerShare, float $bookValuePerShare, float $baselineMargin, float $discountRate): float;
 
     /**
      * The return the firm's equity is valued on, from its trailing return and its measured long-run level, discounted at

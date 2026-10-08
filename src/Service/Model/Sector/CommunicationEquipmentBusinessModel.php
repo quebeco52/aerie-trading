@@ -68,8 +68,8 @@ class CommunicationEquipmentBusinessModel extends StandardCorporateBusinessModel
     public const FOREIGN_DEMAND_SENSITIVITY = 1.00;
 
     // --- Balance Sheet Realism ---
-    /** Stock-based compensation as a fraction of revenue (ASC 718): non-cash, added back to FCF, settled in new shares. */
-    public const STOCK_COMPENSATION_INTENSITY = 0.02;
+    /** Stock-based compensation (ASC 718) as a share of revenue: Telecom. Equipment, 5.20% of revenue, 57 firms (Damodaran, Employee data by industry, US, January 2026). */
+    public const STOCK_COMPENSATION_INTENSITY = 0.0520;
 
     // --- Revenue Mix ---
     /** Baseline fraction of revenue from carrier radio access and core network deployment contracts. */

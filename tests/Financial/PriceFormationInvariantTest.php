@@ -67,9 +67,9 @@ final class PriceFormationInvariantTest extends TestCase
      *
      * @return array{returns: list<float>, market: list<float>, ratios: list<float>}
      */
-    private function simulate(float $beta, float $volatility, float $lambda, float $jumpVol, float $marketVol): array
+    private function simulate(float $beta, float $volatility, float $lambda, float $jumpVol, float $marketVol, int $seed = 20260913): array
     {
-        mt_srand(20260913);
+        mt_srand($seed);
 
         $macro = new MacroStateDTO(
             outputGap: 0.0,
@@ -111,7 +111,6 @@ final class PriceFormationInvariantTest extends TestCase
                 currentPrice: $price,
                 currentVolatility: $currentVol,
                 longTermVolatility: $volatility,
-                earningsPerShare: 5.0 * $growth,
                 dt: $dt,
                 lambda: $lambda,
                 jumpVol: $jumpVol,
@@ -211,10 +210,14 @@ final class PriceFormationInvariantTest extends TestCase
     #[DataProvider('seededProfiles')]
     public function testRealisedVolatilityMatchesTheConfiguredVolatility(float $beta, float $volatility, float $lambda, float $jumpVol): void
     {
-        $path = $this->simulate($beta, $volatility, $lambda, $jumpVol, MacroEngine::MACRO_VOL_BASE_ANCHOR);
+        // Pooled over four fixed paths: a single path's realised variance is decided by its few largest jumps.
+        $variances = [];
+        foreach ([20260913, 20260914, 20260915, 20260916] as $seed) {
+            $variances[] = self::variance($this->simulate($beta, $volatility, $lambda, $jumpVol, MacroEngine::MACRO_VOL_BASE_ANCHOR, $seed)['returns']);
+        }
 
         $dt = 1.0 / self::TICKS_PER_YEAR;
-        $realised = sqrt(self::variance($path['returns']) / $dt);
+        $realised = sqrt((array_sum($variances) / count($variances)) / $dt);
 
         // Every variance source a name is exposed to is budgeted against the configured figure, so the
         // realised total has to land on it. Left unbudgeted, the name's own jump alone pushed the median

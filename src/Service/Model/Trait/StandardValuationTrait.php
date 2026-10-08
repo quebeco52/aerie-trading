@@ -87,7 +87,7 @@ trait StandardValuationTrait
         return max(0.01, $structuralOperatingEps + $structuralCashYieldEps);
     }
 
-    public function calculateStructuralRoic(float $roicTtm, float $baselineRoic, float $revenuePerShare, float $bookValuePerShare, float $baselineMargin): float
+    public function calculateStructuralRoic(float $roicTtm, float $baselineRoic, float $revenuePerShare, float $bookValuePerShare, float $baselineMargin, float $discountRate): float
     {
         return $roicTtm;
     }

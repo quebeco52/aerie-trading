@@ -364,7 +364,7 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
 
             // Re-hedge option inventory on history bar cadence before draining order flow.
             if ($isHistoryTick) {
-                $this->optionDesk->hedge($stocks);
+                $this->optionDesk->hedge($stocks, 1.0 / TickCadence::historyPointsPerYear($this->ticksPerYear));
             }
 
             try {

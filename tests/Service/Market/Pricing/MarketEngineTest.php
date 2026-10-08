@@ -6,6 +6,7 @@ use PHPUnit\Framework\TestCase;
 use App\Service\Market\Pricing\MarketEngine;
 use App\Service\Market\Pricing\PolicyCapitalization;
 use App\Service\Math\MathUtility;
+use App\Service\Math\FinancialConstants;
 use App\DTO\MarketPricingContext;
 use App\DTO\MacroStateDTO;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
@@ -36,7 +37,6 @@ class MarketEngineTest extends TestCase
             currentPrice: 100.0,
             currentVolatility: 0.2,
             longTermVolatility: 0.2,
-            earningsPerShare: 5.0,
             dt: 1.0,
             lambda: 0.0 // lambda = 0 means NO jump
         );
@@ -69,7 +69,6 @@ class MarketEngineTest extends TestCase
             currentPrice: 100.0,
             currentVolatility: 0.2,
             longTermVolatility: 0.2,
-            earningsPerShare: 5.0,
             dt: 1.0,
             lambda: 1000.0, // massive lambda guarantees checkProbability triggers
             jumpVol: 0.05
@@ -94,7 +93,6 @@ class MarketEngineTest extends TestCase
             currentPrice: 50.0,
             currentVolatility: 0.2,
             longTermVolatility: 0.2,
-            earningsPerShare: 5.0,
             dt: 1.0,
             lambda: 0.0,            reversionSpeed: 0.5,
             bookValuePerShare: 50.0,
@@ -117,7 +115,6 @@ class MarketEngineTest extends TestCase
             currentPrice: 40.0,
             currentVolatility: 0.2,
             longTermVolatility: 0.2,
-            earningsPerShare: 0.50, // low margin
             dt: 1.0,
             lambda: 0.0,            reversionSpeed: 0.25,
             bookValuePerShare: 25.0,
@@ -144,7 +141,6 @@ class MarketEngineTest extends TestCase
             currentPrice: 100.0,
             currentVolatility: 0.2,
             longTermVolatility: 0.2,
-            earningsPerShare: 5.0,
             dt: 1.0,
             lambda: 0.0,
             reversionSpeed: 0.5,
@@ -157,7 +153,6 @@ class MarketEngineTest extends TestCase
             currentPrice: 100.0,
             currentVolatility: 0.2,
             longTermVolatility: 0.2,
-            earningsPerShare: 5.0,
             dt: 1.0,
             lambda: 0.0,
             reversionSpeed: 0.5,
@@ -177,6 +172,35 @@ class MarketEngineTest extends TestCase
      * A forecast revised this tick moves the price at once by as much as it moves the fair value, rather than leaving
      * the price to drift there; a bank, which also expects the levy, is marked down by more than a firm that owes none.
      */
+    /**
+     * A policy gap is capitalized on the same clamped perpetual growth the multiple is struck on. In an inflationary
+     * boom the raw outlook can reach the hurdle; spread over that, a levy gap once wiped a broker's value out.
+     */
+    public function testAPolicyGapIsCapitalizedOnTheClampedPerpetualGrowth(): void
+    {
+        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
+        $this->mathUtilityMock->method('checkProbability')->willReturn(false);
+        $levy = PolicyCapitalization::LONG_RUN_BANK_LEVY_RATE;
+        $value = fn (float $expectedLevy): float => $this->engine->calculateNextPrice(new MarketPricingContext(
+            currentPrice: 100.0, currentVolatility: 0.2, longTermVolatility: 0.2, dt: 1.0 / 252.0, lambda: 0.0, beta: 2.0,
+            macroState: new MacroStateDTO(
+                totalTime: 6.0, inflation: 0.12, outputGap: 0.03, bankLevyRate: $levy, bankLevyEmbodied: $levy,
+                expectedLevers: ['bankLevyRate' => $expectedLevy], expectedPolicyFrom: 8.5,
+                previousExpectedLevers: ['bankLevyRate' => $expectedLevy], previousExpectedPolicyFrom: 8.5,
+            ),
+            bookValuePerShare: 60.0, currentRoic: 0.12, roicTtm: 0.12, businessModel: 'commercial_bank', liveCostOfEquity: 0.10,
+            policyBasesPerShare: ['bankLevyRate' => 400.0],
+        ))['perceived_fair_value'];
+
+        // The outlook here (12% inflation plus a boom at beta 2) is above the hurdle; the multiple holds it at +6%.
+        $this->assertEqualsWithDelta(0.06, MathUtility::perpetualGrowthRate(0.10, 0.20), 1e-12);
+        $this->assertEqualsWithDelta(max(FinancialConstants::MIN_COST_OF_EQUITY, 0.05) - FinancialConstants::MIN_PERPETUAL_GROWTH_SPREAD, MathUtility::perpetualGrowthRate(0.05, 0.20), 1e-12);
+
+        $ratio = $value($levy + 0.002) / $value($levy);
+        $this->assertLessThan(1.0, $ratio, 'A higher expected levy still costs the bank.');
+        $this->assertGreaterThan(0.5, $ratio, 'Spread over the clamped growth, it does not wipe the bank out.');
+    }
+
     public function testARevisedForecastMovesThePriceWithTheTarget(): void
     {
         $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
@@ -199,7 +223,6 @@ class MarketEngineTest extends TestCase
             currentPrice: 100.0,
             currentVolatility: 0.2,
             longTermVolatility: 0.2,
-            earningsPerShare: 8.0,
             dt: 1.0 / 252.0,
             lambda: 0.0,
             macroState: $state,
@@ -247,7 +270,6 @@ class MarketEngineTest extends TestCase
             currentPrice: 100.0,
             currentVolatility: 0.2,
             longTermVolatility: 0.2,
-            earningsPerShare: 8.0,
             dt: 1.0,
             lambda: 0.0,
             bookValuePerShare: 60.0,
@@ -259,6 +281,48 @@ class MarketEngineTest extends TestCase
             targetPayoutRatio: $targetPayout,
             dividendAdjustmentSpeed: $speed
         );
+    }
+
+    /**
+     * The re-strike a report tick hands its agents is the price step's own fair value, struck without a draw, so
+     * it cannot shift any scripted random stream.
+     */
+    public function testAFairValueStrikeMatchesThePriceStepAndDrawsNothing(): void
+    {
+        $this->mathUtilityMock->expects($this->never())->method('generateStandardNormal');
+        $this->mathUtilityMock->expects($this->never())->method('checkProbability');
+        $context = $this->incomeContext(1.0, 0.5, 0.2, 'tech');
+
+        $strike = $this->engine->strikeFairValue($context);
+
+        $stepping = new MarketEngine(new MathUtility());
+        $step = $stepping->calculateNextPrice($context);
+        $this->assertEqualsWithDelta($step['perceived_fair_value'], $strike['perceived_fair_value'], 1e-9);
+        $this->assertEqualsWithDelta($step['analyst_targets'], $strike['analyst_targets'], 1e-9);
+    }
+
+    /**
+     * The sovereign fund's measured impact variance comes out of the market factor's diffusion, (beta sigma_m)^2
+     * less it, so the systematic loading the tape realizes stays beta sigma_m. The +/-Z spread isolates the factor
+     * term: drift, Ito and reversion pull cancel in it.
+     */
+    public function testTheFundsImpactVarianceComesOutOfTheMarketFactorDiffusion(): void
+    {
+        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
+        $this->mathUtilityMock->method('checkProbability')->willReturn(false);
+        $spread = function (float $fundVariance): float {
+            $at = fn (float $z): float => log($this->engine->calculateNextPrice(new MarketPricingContext(
+                currentPrice: 100.0, currentVolatility: 0.25, longTermVolatility: 0.25,
+                dt: 1.0 / 252.0, lambda: 0.0, beta: 1.2, marketZ: $z, marketVol: 0.15, bookValuePerShare: 50.0,
+                fundImpactVariance: $fundVariance
+            ))['price']);
+
+            return $at(1.0) - $at(-1.0);
+        };
+
+        $systematic = (1.2 * 0.15) ** 2;
+        $this->assertEqualsWithDelta(sqrt(1.0 - (0.01 / $systematic)), $spread(0.01) / $spread(0.0), 1e-9);
+        $this->assertEqualsWithDelta(0.0, $spread($systematic * 2.0), 1e-12, 'Floored at zero, never negative.');
     }
 
     /**
@@ -313,7 +377,6 @@ class MarketEngineTest extends TestCase
             currentPrice: 150.0,
             currentVolatility: 0.2,
             longTermVolatility: 0.2,
-            earningsPerShare: 10.0,
             dt: 1.0,
             lambda: 0.0,
             bookValuePerShare: 2.0, // Negligible book value
@@ -340,7 +403,6 @@ class MarketEngineTest extends TestCase
                 currentPrice: 100.0,
                 currentVolatility: 0.15,
                 longTermVolatility: 0.15,
-                earningsPerShare: 5.0,
                 dt: 1.0 / 252.0,
                 lambda: 2.0,
                 jumpVol: 0.10
@@ -365,7 +427,6 @@ class MarketEngineTest extends TestCase
             currentPrice: 1500.0,
             currentVolatility: 0.10,
             longTermVolatility: 0.10,
-            earningsPerShare: 200.0,
             dt: 1.0 / 252.0,
             lambda: 0.15,
             jumpVol: 0.06,
@@ -397,7 +458,6 @@ class MarketEngineTest extends TestCase
             currentPrice: 50.0,
             currentVolatility: 0.2,
             longTermVolatility: 0.2,
-            earningsPerShare: 100.0 * $roe,
             dt: 1.0,
             lambda: 0.0,
             bookValuePerShare: 100.0,
@@ -433,7 +493,6 @@ class MarketEngineTest extends TestCase
             currentPrice: 80.0,
             currentVolatility: 0.25,
             longTermVolatility: 0.25,
-            earningsPerShare: 6.0,
             dt: 1.0 / 252.0,
             lambda: 0.0,
             bookValuePerShare: 30.0,
@@ -466,7 +525,6 @@ class MarketEngineTest extends TestCase
             currentPrice: 80.0,
             currentVolatility: 0.25,
             longTermVolatility: 0.25,
-            earningsPerShare: 6.0,
             dt: 1.0 / 252.0,
             lambda: 0.0,
             bookValuePerShare: 30.0,

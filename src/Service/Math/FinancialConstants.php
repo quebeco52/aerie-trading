@@ -78,6 +78,8 @@ class FinancialConstants
     public const MIN_PERPETUAL_GROWTH_RATE = -0.05;
     /** Absolute perpetual growth ceiling (6%) to prevent exceeding long-term nominal GDP growth. */
     public const MAX_PERPETUAL_GROWTH_RATE = 0.06;
+    /** Floor on the spread between a discount rate and a perpetual growth rate (50bp), so a perpetuity never divides by zero. */
+    public const MIN_PERPETUAL_GROWTH_SPREAD = 0.005;
 
     // --- Valuation & Multiples ---
     /** Baseline long-run market equilibrium price-to-earnings multiple. */
@@ -116,10 +118,6 @@ class FinancialConstants
     public const MIN_INTRINSIC_PB = 0.40;
     /** Absolute ceiling on price-to-book valuation multiple. */
     public const MAX_INTRINSIC_PB = 10.0;
-    /** Maximum mean-reversion drift force pulling price toward fundamental fair value. */
-    public const MAX_REVERSION_FORCE_CAP = 15.0;
-    /** Smooth transition autoregressive elasticity parameter scaling mispricing arbitrage speed. */
-    public const ESTAR_ARBITRAGE_ELASTICITY = 2.0;
     /** Multiplier scaling liquidity drag when systemic interbank funding spreads widen. */
     public const FUNDING_LIQUIDITY_STRESS_FACTOR = 2.0;
 
@@ -305,8 +303,8 @@ class FinancialConstants
     // --- Balance Sheet Realism ---
     /** Default capitalized operating lease liability (IFRS 16 / ASC 842) as a fraction of annual revenue. */
     public const DEFAULT_LEASE_LIABILITY_INTENSITY = 0.05;
-    /** Default stock-based compensation (ASC 718) as a fraction of revenue: non-cash expense, real dilution. */
-    public const DEFAULT_STOCK_COMPENSATION_INTENSITY = 0.01;
+    /** Default stock-based compensation (ASC 718) as a fraction of revenue, non-cash expense and real dilution: 1.57% for the US total market, 5,994 firms (Damodaran, Employee data by industry, January 2026). */
+    public const DEFAULT_STOCK_COMPENSATION_INTENSITY = 0.0157;
 
     // --- Equity Grant Burn Rate ---
     /** Most shares a large company grants in a year, as a share of shares outstanding, by GICS sector: ISS 2026 S&P 500 value-adjusted burn-rate benchmarks (86th percentile). */
@@ -698,7 +696,7 @@ class FinancialConstants
     // --- Dealer Gamma Hedging (Barbon & Buraschi 2020; Baltussen, Da, Lammers & Radeva 2021) ---
     /** Share of the desk's delta exposure that actually reaches the market as a hedge. A desk nets customer flow against itself first and only hedges the residual, so the whole of its book never trades. */
     public const DEALER_HEDGE_RATIO = 0.80;
-    /** Ceiling on one tick's hedging flow as a multiple of the name's average daily volume. A short-gamma desk chasing a gap would otherwise demand more liquidity in one tick than the name trades in a day, and the impact law is extrapolation past that point. */
+    /** Ceiling on the desk's hedging flow per trading day as a share of the name's average daily volume, the Rule 10b-18 pacing corporate flow uses. Past it the impact law is extrapolation; the clipped remainder carries to the next pass. */
     public const MAX_DEALER_HEDGE_ADV_MULTIPLE = 0.25;
 
     /** Markup from the variance a desk expects to the variance it quotes (Carr & Wu 2009). A desk that quotes its own forecast loses money on average, which is why implied runs above subsequent realized. Held modest because the premium on SINGLE-NAME options is a fraction of the index premium (Bakshi, Kapadia & Madan 2003). */

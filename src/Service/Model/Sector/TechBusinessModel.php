@@ -53,8 +53,8 @@ class TechBusinessModel extends StandardCorporateBusinessModel
     // --- Balance Sheet Realism ---
     /** Capitalized operating lease liabilities as a fraction of annual revenue (IFRS 16 / ASC 842). Office campuses and colocation leases. */
     public const LEASE_LIABILITY_INTENSITY = 0.10;
-    /** Stock-based compensation as a fraction of revenue (ASC 718): non-cash, added back to FCF, settled in new shares. Engineering talent is paid heavily in equity; FCF runs well above GAAP earnings. */
-    public const STOCK_COMPENSATION_INTENSITY = 0.10;
+    /** Stock-based compensation (ASC 718) as a share of revenue: Software (System & Application), 7.83% of revenue, 309 firms (Damodaran, Employee data by industry, US, January 2026). */
+    public const STOCK_COMPENSATION_INTENSITY = 0.0783;
 
     // --- FX Exposure ---
     /** Share of revenue whose competitiveness moves with the trade-weighted exchange rate. Software and cloud are sold worldwide from a home cost base, so a strong domestic currency translates foreign ARR down. */

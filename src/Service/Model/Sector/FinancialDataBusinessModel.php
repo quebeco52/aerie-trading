@@ -42,8 +42,8 @@ class FinancialDataBusinessModel extends StandardCorporateBusinessModel
     public const PRICING_POWER_INDEX = 0.85;
 
     // --- Balance Sheet Realism ---
-    /** Stock-based compensation as a fraction of revenue (ASC 718): non-cash, added back to FCF, settled in new shares. Data and platform engineering paid partly in equity. */
-    public const STOCK_COMPENSATION_INTENSITY = 0.04;
+    /** Stock-based compensation (ASC 718) as a share of revenue: Information Services, 1.62% of revenue, 15 firms (Damodaran, Employee data by industry, US, January 2026). */
+    public const STOCK_COMPENSATION_INTENSITY = 0.0162;
 
     // --- Analyst Visibility & Error ---
     public const BASE_COVERAGE_VISIBILITY = 0.80;

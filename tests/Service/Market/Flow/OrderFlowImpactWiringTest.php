@@ -520,6 +520,45 @@ class OrderFlowImpactWiringTest extends TestCase
         $this->assertSame(0.0, $stock->getImpactVarianceEma(), 'A flow that hits every name at once is systematic, not this name\'s own variance.');
     }
 
+    public function testTheMarketVarianceTrendIsMeasuredFromWhereTheMarketSettles(): void
+    {
+        $captured = null;
+        $tracker = $this->tracker($captured);
+        $dt = 1.0 / 252.0;
+
+        $tracker->updateStocks([$this->stock()], $dt, false, new MacroStateDTO(marketVolatility: 0.30));
+
+        $anchor = \App\Service\Macro\MacroEngine::MACRO_VOL_BASE_ANCHOR;
+        $expected = MathUtility::ewmaLevel($anchor * $anchor, 0.09, $dt, MarketEngine::MARKET_VARIANCE_TREND_YEARS);
+        $this->assertNotNull($captured);
+        $this->assertEqualsWithDelta($expected, $captured->marketVarianceTrend, 1e-15);
+        $this->assertGreaterThan($anchor * $anchor, $captured->marketVarianceTrend, 'A turbulent tick lifts the trend, slowly.');
+    }
+
+    public function testTheSovereignFundsImpactIsChargedToTheSystematicBudget(): void
+    {
+        $stock = $this->stock();
+        $boardFloat = 100.0 * 1.0e8 * 0.90;
+        $captured = null;
+        $tracker = $this->tracker($captured);
+        $dt = 1.0 / 14400.0;
+
+        $tracker->updateStocks([$stock], $dt, false, new MacroStateDTO(sovereignFundTrade: 0.002 * $boardFloat, boardFloatCap: $boardFloat));
+        $this->assertNotNull($captured);
+        $this->assertSame(0.0, $captured->fundImpactVariance, 'Nothing measured before the first trade.');
+        // The peak move lands in full on the tick, so the price's move is the fund's whole peak impact.
+        $fundMove = log((float) $stock->getPrice() / 100.0);
+
+        $tracker->updateStocks([$stock], $dt, false, new MacroStateDTO());
+
+        // The permanent share of the fund's move, annualized into the EMA, reaches the next tick's pricing; the
+        // name's own idiosyncratic budget is still untouched.
+        $expected = MathUtility::ewmaAnnualizedVariance(0.0, FinancialConstants::PERMANENT_IMPACT_SHARE * $fundMove, $dt, FinancialConstants::IMPACT_VARIANCE_EMA_YEARS);
+        $this->assertEqualsWithDelta($expected, $captured->fundImpactVariance, 1e-9 * $expected);
+        $this->assertGreaterThan(0.0, $captured->fundImpactVariance);
+        $this->assertSame(0.0, $stock->getImpactVarianceEma());
+    }
+
     public function testTheBoardIsReportedAsTheSovereignFundReadsIt(): void
     {
         $apex = $this->stock();

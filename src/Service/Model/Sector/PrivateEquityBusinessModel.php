@@ -32,8 +32,8 @@ class PrivateEquityBusinessModel extends AssetManagementBusinessModel
     public const OPERATING_CYCLICALITY = 1.40;
 
     // --- Balance Sheet Realism ---
-    /** Stock-based compensation as a fraction of revenue (ASC 718): non-cash, added back to FCF, settled in new shares. Deal team deferrals settle in manager equity. */
-    public const STOCK_COMPENSATION_INTENSITY = 0.05;
+    /** Stock-based compensation (ASC 718) as a share of revenue: Investments & Asset Management, 5.08% of revenue, 283 firms (Damodaran, Employee data by industry, US, January 2026). */
+    public const STOCK_COMPENSATION_INTENSITY = 0.0508;
 
     // --- Labor Intensity ---
     /** Labor share of the fixed cost base exposed to the Beveridge wage squeeze. Deal team compensation dominates private equity overhead. */

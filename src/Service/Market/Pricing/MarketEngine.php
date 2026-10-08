@@ -26,9 +26,15 @@ class MarketEngine
     // Analyst Multipliers
     private const VALUE_ANALYST_BOOK_MULT = 0.80;
 
-    // --- Momentum (Hong & Stein 1999) ---
-    /** Divisor applied to the reversion rate per unit of accumulated price trend; at the 0.50 trend cap a name reverts at two thirds speed. */
-    private const MOMENTUM_REVERSION_RESISTANCE = 1.00;
+    // --- Fair-Value Pull ---
+    /**
+     * Half-life of a mispricing, in years: log P = log F + a stationary gap (Summers 1986; Poterba & Summers 1988).
+     * Balvers, Wu & Gilliland (2000) estimate ~3y for national indices; a shorter, deliberate in-world choice keeps
+     * gaps readable while leaving a slow enough pull for momentum.
+     */
+    public const FAIR_VALUE_PULL_HALF_LIFE_YEARS = 1.0;
+    /** The pull's base speed per year, ln 2 over the half-life; funding stress slows it (Brunnermeier & Pedersen 2009). */
+    public const FAIR_VALUE_PULL_SPEED = M_LN2 / self::FAIR_VALUE_PULL_HALF_LIFE_YEARS;
 
     // --- Variance Process Calibration ---
     /** Speed the idiosyncratic variance reverts to its long-run level, in reversions per year; a shock is most of the way gone inside two months. */
@@ -39,6 +45,12 @@ class MarketEngine
     private const MAX_SYSTEMIC_VARIANCE_DRAG_SHARE = 0.25;
     /** Ceiling on the share of a name's long-run IDIOSYNCRATIC variance its OWN jump process may supply; the jump component of single-stock return variance is a minority of the total (Huang & Tauchen 2005). */
     private const MAX_IDIOSYNCRATIC_JUMP_VARIANCE_SHARE = 0.25;
+
+    // --- Common Idiosyncratic Volatility (Herskovic, Kelly, Lustig & Van Nieuwerburgh 2016) ---
+    /** Loading of a firm's residual variance on the common idiosyncratic factor: 0.71-1.54 by size quintile, about one (HKLV, calibration table). Market variance stands in for the factor, which tracks it (correlation 0.64, annual levels 1926-2010). */
+    public const IDIOSYNCRATIC_COMMON_FACTOR_LOADING = 1.0;
+    /** Years the market variance trend averages over: one postwar business cycle, 58.4 months of expansion plus 11.1 of contraction (NBER, 1945-2009). */
+    public const MARKET_VARIANCE_TREND_YEARS = (58.4 + 11.1) / 12.0;
     /** Floor on the share of a name's configured variance that stays idiosyncratic, for a configuration whose beta alone already consumes the whole of its stated volatility. */
     private const MIN_IDIOSYNCRATIC_VARIANCE_SHARE = 0.20;
 
@@ -157,6 +169,21 @@ class MarketEngine
     }
 
     /** Probability that a single-name jump is upwards; the behavioural skew the price process carries. */
+    /**
+     * The scale on a name's long-run residual variance from the common idiosyncratic factor: market variance over its
+     * measured trend, at the firm loading, so residual volatility rises in a turbulent market and falls in a calm one
+     * and is unchanged on average. Without a trend it reads the level the market settles at. Floored at zero.
+     *
+     * @param float|null $marketVarianceTrend Measured trend of market variance (StockTracker).
+     */
+    public static function commonIdiosyncraticVarianceScale(float $marketVol, ?float $marketVarianceTrend = null): float
+    {
+        $trend = $marketVarianceTrend ?? (MacroEngine::MACRO_VOL_BASE_ANCHOR * MacroEngine::MACRO_VOL_BASE_ANCHOR);
+        $marketVarianceRatio = $trend > 0.0 ? ($marketVol * $marketVol) / $trend : 1.0;
+
+        return max(0.0, 1.0 + (self::IDIOSYNCRATIC_COMMON_FACTOR_LOADING * ($marketVarianceRatio - 1.0)));
+    }
+
     public static function jumpProbabilityUp(): float
     {
         return self::SVJJ_P_UP;
@@ -209,7 +236,6 @@ class MarketEngine
      * @param float $currentPrice       The current price of the stock.
      * @param float $currentVolatility  The current instantaneous volatility.
      * @param float $longTermVolatility The long-run mean volatility.
-     * @param float $earningsPerShare   The current earnings per share (EPS).
      * @param float $dt                 The time step for the simulation (in years).
      * @param float $lambda             The jump intensity (average number of jumps per year).
      * @param float $jumpVol            The volatility of the jump size.
@@ -232,7 +258,6 @@ class MarketEngine
         $currentPrice = $ctx->currentPrice;
         $currentVolatility = $ctx->currentVolatility;
         $longTermVolatility = $ctx->longTermVolatility;
-        $earningsPerShare = $ctx->earningsPerShare;
         $dt = $ctx->dt;
         $lambda = $ctx->lambda;
         $jump_vol = $ctx->jumpVol;
@@ -256,7 +281,6 @@ class MarketEngine
         $businessModel = $ctx->businessModel;
         $liveCostOfEquity = $ctx->liveCostOfEquity;
         $netDebtPerShare = $ctx->netDebtPerShare;
-        $recentPriceTrend = $ctx->recentPriceTrend;
         $secularGrowth = $ctx->secularGrowth;
         $baselineRoic = $ctx->baselineRoic;
         $baselineMargin = $ctx->baselineMargin;
@@ -280,6 +304,12 @@ class MarketEngine
         // SYSTEMATIC / IDIOSYNCRATIC SPLIT
         // See longTermIdiosyncraticVariance() for why the loading is delivered outright rather than implied.
         $systematicVar = ($beta * $marketVol) * ($beta * $marketVol);
+
+        // The sovereign fund trades every name in proportion to its float, so the impact it measurably supplies is
+        // systematic variance: the market factor's diffusion gives it back, floored at zero, as the idiosyncratic
+        // diffusion gives back the name's own flow.
+        $fundImpactVariance = min(max(0.0, $ctx->fundImpactVariance), $systematicVar);
+        $diffusionMarketVol = $systematicVar > 0.0 ? $marketVol * sqrt(1.0 - ($fundImpactVariance / $systematicVar)) : $marketVol;
         $longTermIdiosyncraticVar = self::longTermIdiosyncraticVariance($longTermVolatility, $beta);
 
         // The floor the same split guarantees, which the variance state is held to when it is stripped back
@@ -341,11 +371,7 @@ class MarketEngine
             - $jumpCompensator
             - $systemicCompensator;
 
-        $cycleVolModifier = 1.0;
-        if ($macroState !== null) {
-            // Positive output gap (boom) reduces vol slightly, negative gap (bust) increases vol
-            $cycleVolModifier = 1.0 - $macroState->outputGap;
-        }
+        $commonIdiosyncraticScale = self::commonIdiosyncraticVarianceScale($marketVol, $ctx->marketVarianceTrend);
 
         // Dynamically scale variance reversion speed (kappa) during jump diffusion regimes
         // instead of linearly clamping theta, preventing artificial volatility suppression
@@ -392,7 +418,7 @@ class MarketEngine
         // process still settles on it: see varianceJumpLoad().
         $adjustedTheta = max(
             0.0001,
-            (($longTermIdiosyncraticVar * $cycleVolModifier) - $systemicJumpVariance - $idiosyncraticJumpVariance - $impactVariance - $announcementVariance)
+            (($longTermIdiosyncraticVar * $commonIdiosyncraticScale) - $systemicJumpVariance - $idiosyncraticJumpVariance - $impactVariance - $announcementVariance)
                 * (1.0 - self::varianceJumpLoad($lambda, $dynamicKappa, $dt))
         );
 
@@ -444,37 +470,7 @@ class MarketEngine
         // Enforce bounds to prevent flatlining in extreme bull markets and runaway chaos in crashes
         $nextVolatility = max(self::MIN_VOLATILITY, min(self::MAX_VOLATILITY, $nextVolatility));
 
-        $fundamentalState = $this->evaluateFundamentalState(
-            $currentPrice,
-            $outputGap,
-            $inflation,
-            $beta,
-            $ctx->costOfDebt,
-            $reversionSpeed,
-            $earningsPerShare,
-            $currentRoic,
-            $roicTtm,
-            $riskFreeRate,
-            $bookValuePerShare,
-            $dividendPerShare,
-            $baselineIndustryPE,
-            $revenuePerShare,
-            $businessModel,
-            $liveCostOfEquity,
-            $currentVolatility,
-            $netDebtPerShare,
-            $secularGrowth,
-            $baselineRoic,
-            $baselineMargin,
-            $accrualsRatio,
-            $investedCapitalPerShare,
-            $macroState,
-            $ctx->tangibleBookValuePerShare,
-            $ctx->targetPayoutRatio,
-            $ctx->dividendAdjustmentSpeed,
-            $ctx->policyBasesPerShare,
-            $ctx->longRunReturn
-        );
+        $fundamentalState = $this->fundamentalStateFor($ctx);
 
         $perceivedFairValue = $fundamentalState['perceived_fair_value'];
         $dynamicReversion = $fundamentalState['dynamic_reversion'];
@@ -486,9 +482,9 @@ class MarketEngine
         $annualDividend = max(0.0, $dividendPerShare) * FinancialConstants::QUARTERS_PER_YEAR;
         $finalDrift += ($annualDividend / max(0.01, $currentPrice)) - ($annualDividend / max(0.01, $perceivedFairValue));
 
-        // Ornstein-Uhlenbeck mean reversion in log-space, damped by price momentum magnitude.
-        $momentumResistance = 1.0 + (abs($recentPriceTrend) * self::MOMENTUM_REVERSION_RESISTANCE);
-        $reversionWeight = max(0.0, min(1.0, exp(-($dynamicReversion / $momentumResistance) * $dt)));
+        // Ornstein-Uhlenbeck mean reversion in log-space at a constant speed: the exact discretization, so the pull
+        // per year is the same at any tick rate.
+        $reversionWeight = max(0.0, min(1.0, exp(-$dynamicReversion * $dt)));
 
         // Pure Geometric Brownian Motion (GBM) Step
         $idiosyncraticShock = $this->mathUtility->generateStandardNormal();
@@ -504,7 +500,7 @@ class MarketEngine
             gravityDrift: 0.0, // Set to zero, handled below
             dt: $dt,
             beta: $beta,
-            marketVol: $marketVol,
+            marketVol: $diffusionMarketVol,
             marketZ: $marketZ,
             w1: $idiosyncraticShock,
             sectorZ: $sectorZ,
@@ -559,17 +555,66 @@ class MarketEngine
     }
 
     /**
+     * Fair value and analyst targets struck on a context, with no price step and no random draw.
+     *
+     * The ticker re-strikes on a report tick, so the agents and analysts who trade after the filing value the
+     * books it filed rather than the ones the tick's price step saw.
+     *
+     * @return array{perceived_fair_value: float, analyst_targets: array<string, float>}
+     */
+    public function strikeFairValue(\App\DTO\MarketPricingContext $ctx): array
+    {
+        $state = $this->fundamentalStateFor($ctx);
+
+        return ['perceived_fair_value' => $state['perceived_fair_value'], 'analyst_targets' => $state['analyst_targets']];
+    }
+
+    /**
+     * @return array{perceived_fair_value: float, dynamic_reversion: float, policy_repricing: float, analyst_targets: array<string, float>}
+     */
+    private function fundamentalStateFor(\App\DTO\MarketPricingContext $ctx): array
+    {
+        return $this->evaluateFundamentalState(
+            $ctx->macroState->outputGap ?? 0.0,
+            $ctx->macroState->inflation ?? 0.02,
+            $ctx->beta,
+            $ctx->costOfDebt,
+            $ctx->reversionSpeed,
+            $ctx->currentRoic,
+            $ctx->roicTtm,
+            $ctx->macroState->policyRate ?? 0.04,
+            $ctx->bookValuePerShare,
+            $ctx->dividendPerShare,
+            $ctx->baselineIndustryPE,
+            $ctx->revenuePerShare,
+            $ctx->businessModel,
+            $ctx->liveCostOfEquity,
+            $ctx->currentVolatility,
+            $ctx->netDebtPerShare,
+            $ctx->secularGrowth,
+            $ctx->baselineRoic,
+            $ctx->baselineMargin,
+            $ctx->accrualsRatio,
+            $ctx->investedCapitalPerShare,
+            $ctx->macroState,
+            $ctx->tangibleBookValuePerShare,
+            $ctx->targetPayoutRatio,
+            $ctx->dividendAdjustmentSpeed,
+            $ctx->policyBasesPerShare,
+            $ctx->longRunReturn
+        );
+    }
+
+    /**
      * Evaluates the fundamental fair value and dynamic reversion speed of a company
-     * by combining structural ROIC, cost of capital, Kalman-smoothed EPS run-rates,
-     * and ESTAR non-linear arbitrage dynamics.
-     * 
-     * @param float $currentPrice        The current market price of the stock.
+     * by combining structural ROIC, cost of capital and the structural EPS run-rate. The reversion speed is
+     * the constant pull, slowed when funding liquidity dries up.
+     *
      * @param float $outputGap           The macroeconomic output gap (boom vs bust).
      * @param float $inflation           The current inflation rate.
      * @param float $beta                The stock's sensitivity to systemic market moves.
      * @param float|null $costOfDebt     The firm's pre-tax marginal borrowing rate; null prices it at the 10Y plus the IG spread.
      * @param float $reversionSpeed      The baseline speed at which the stock reverts to fair value.
-     * @param float $earningsPerShare    The current EPS (Earnings Per Share).
      * @param float $currentRoic         The current Return on Invested Capital (or ROE for banks).
      * @param float $roicTtm             The Trailing Twelve Month ROIC (or ROE).
      * @param float $riskFreeRate        The central bank's policy rate.
@@ -593,13 +638,11 @@ class MarketEngine
      * @return array{perceived_fair_value: float, dynamic_reversion: float, policy_repricing: float, analyst_targets: array}
      */
     private function evaluateFundamentalState(
-        float $currentPrice,
         float $outputGap,
         float $inflation,
         float $beta,
         ?float $costOfDebt,
         float $reversionSpeed,
-        float $earningsPerShare,
         float $currentRoic,
         float $roicTtm,
         float $riskFreeRate,
@@ -641,7 +684,8 @@ class MarketEngine
             $baselineRoic,
             $revenuePerShare,
             $bookValuePerShare,
-            $baselineMargin
+            $baselineMargin,
+            $hurdleRate
         );
 
         // Without a balance sheet there is no leverage to apply, and the operating return stands in.
@@ -663,7 +707,7 @@ class MarketEngine
                 $outputGap,
                 $beta,
                 $inflation,
-                $strategy->getMoatSpread()
+                $hurdleRate
             ),
             $equityReturn,
             $targetPayoutRatio,
@@ -689,18 +733,9 @@ class MarketEngine
             $investedCapitalPerShare > 0.0 ? $investedCapitalPerShare : null
         );
 
-        // 2. STRUCTURAL EPS SMOOTHING (Past Performance via Kalman Filter)
-        // Real analysts value a company based on its established structural run-rate.
-        // We use a 1D Kalman Filter to optimally estimate the true EPS by weighing the structural prior 
-        // against the noisy quarterly measurement.
-        $safeStructuralEps = max(0.01, $trueStructuralEps);
-
-        $normalizedEps = $this->mathUtility->calculateKalmanSmoothedEps(
-            $safeStructuralEps,
-            $earningsPerShare,
-            $currentVolatility,
-            $systemicStressIndex
-        );
+        // The structural run-rate is the normalized EPS: the trailing print already reaches it once, through the
+        // persistent-equivalent return (Ohlson 1995), and blending the print in again would count it twice.
+        $normalizedEps = max(0.01, $trueStructuralEps);
 
         $peFairValue = max(0.00, $normalizedEps * $fairValuePE);
 
@@ -768,7 +803,9 @@ class MarketEngine
         // moves the price with the target, as news does, rather than leaving it to drift there.
         $policyRepricing = 1.0;
         if ($macroState !== null) {
-            $capRate = max(PolicyCapitalization::MIN_CAP_RATE, $hurdleRate - $expectedGrowth);
+            // Capitalized on the same perpetual growth the multiple is struck on: the raw outlook can sit within a few
+            // basis points of the hurdle in an inflationary boom, and a policy gap spread over that would wipe out value.
+            $capRate = max(PolicyCapitalization::MIN_CAP_RATE, $hurdleRate - MathUtility::perpetualGrowthRate($hurdleRate, $expectedGrowth));
             $repriced = $this->repriceForPolicy($fairValue, $macroState, $strategy, $policyBasesPerShare, $capRate, false);
             $policyRepricing = $repriced / $this->repriceForPolicy($fairValue, $macroState, $strategy, $policyBasesPerShare, $capRate, true);
             $fairValue = $repriced;
@@ -776,22 +813,11 @@ class MarketEngine
 
         $perceivedFairValue = max(0.01, $fairValue);
 
-        // 1. ESTAR (Exponential Smooth Transition Autoregressive) Mean Reversion
-        // Explains non-linear institutional arbitrage around a fundamental target (Taylor, Peel, & Sarno, 2001).
-        // Within narrow valuation bands, transaction costs and noise-trader risk keep institutional arbitrage near zero.
-        // As mispricing spreads widen, institutions enter aggressively, scaling reversion speed smoothly toward an upper asymptotic limit.
-        $logValuationGap = abs(log(max(0.01, $currentPrice) / max(0.01, $perceivedFairValue)));
-        $arbitrageElasticity = FinancialConstants::ESTAR_ARBITRAGE_ELASTICITY;
-        $maxReversionCap = FinancialConstants::MAX_REVERSION_FORCE_CAP;
-
-        $estarTransition = 1.0 - exp(-$arbitrageElasticity * ($logValuationGap * $logValuationGap));
-        $effectiveReversion = $reversionSpeed + (($maxReversionCap - $reversionSpeed) * $estarTransition);
-
-        // 2. Brunnermeier-Pedersen Funding Liquidity Dampener (2009)
+        // Brunnermeier-Pedersen Funding Liquidity Dampener (2009)
         // During macroeconomic stress and systemic crises, funding liquidity dries up and capital-constrained 
         // arbitrageurs pull back, slowing down market efficiency and price correction speed.
         $liquidityDampener = 1.0 / (1.0 + ($systemicStressIndex * FinancialConstants::FUNDING_LIQUIDITY_STRESS_FACTOR));
-        $dynamicReversion = $effectiveReversion * $liquidityDampener;
+        $dynamicReversion = $reversionSpeed * $liquidityDampener;
 
         return [
             'perceived_fair_value' => $perceivedFairValue,

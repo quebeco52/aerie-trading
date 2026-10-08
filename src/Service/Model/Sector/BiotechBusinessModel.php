@@ -12,6 +12,7 @@ use App\DTO\SectorPhysicsResult;
 use App\DTO\StreamContext;
 use App\Entity\Stock;
 use App\Service\Event\ShockEvent;
+use App\Service\Macro\MacroEngine;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\MathUtility;
 
@@ -190,10 +191,18 @@ class BiotechBusinessModel extends StandardCorporateBusinessModel
     public const UNDERLEVERAGED_DEBT_RATIO = 0.50;
 
     // --- Secular Growth Rails ---
-    /** Secular growth for a fully patent-protected branded portfolio (demographics plus branded pricing). */
-    public const PATENTED_SECULAR_GROWTH_RATE = 0.045;
-    /** Secular growth for unprotected generic manufacturing, where volume gains offset relentless price erosion. */
-    public const GENERIC_SECULAR_GROWTH_RATE  = 0.010;
+    /** US retail prescription drug spending as a share of nominal GDP in 2000: $122.0B of $10,251B (CMS National Health Expenditure, Health, United States 2020-2021, Table HExpType). Brands hold a share of spending that is largely unchanged over two decades (IQVIA), so they grow at the total's rate. */
+    public const PATENTED_SHARE_2000 = 0.01190;
+    /** The same share in 2019: $369.7B of $21,381B. */
+    public const PATENTED_SHARE_2019 = 0.01729;
+    /** Years between the two prescription-spending benchmarks. */
+    public const PATENTED_SHARE_WINDOW_YEARS = 19.0;
+    /** US generic drug spending as a share of nominal GDP in 2010: ~$78B (IMS, second-hand) of $15,049B. */
+    public const GENERIC_SHARE_2010 = 0.00518;
+    /** The same share in 2018: $103B, 21.3% of $482B invoice spending (IQVIA, Medicine Use and Spending in the U.S.), of $20,533B. */
+    public const GENERIC_SHARE_2018 = 0.00502;
+    /** Years between the two generic benchmarks. */
+    public const GENERIC_SHARE_WINDOW_YEARS = 8.0;
 
     public function getReversionSpeed(): float
     {
@@ -211,15 +220,27 @@ class BiotechBusinessModel extends StandardCorporateBusinessModel
     }
 
     /**
-     * Branded portfolios compound on demographics and branded pricing; unprotected generic
-     * manufacturing barely grows because volume gains are consumed by price erosion.
+     * Trend real growth plus the measured drift in each book's share of GDP, blended by the share still under
+     * exclusivity: branded spending outgrew the economy, generic spending shrank against it as prices eroded.
      */
     public function getSecularGrowthRate(Stock $stock): float
     {
         $protectedShare = $this->resolveProtectedShare($stock);
+        $generic = self::genericSecularGrowthRate();
 
-        return self::GENERIC_SECULAR_GROWTH_RATE
-            + ((self::PATENTED_SECULAR_GROWTH_RATE - self::GENERIC_SECULAR_GROWTH_RATE) * $protectedShare);
+        return $generic + ((self::patentedSecularGrowthRate() - $generic) * $protectedShare);
+    }
+
+    /** Secular real growth of a fully patent-protected branded book. */
+    public static function patentedSecularGrowthRate(): float
+    {
+        return MacroEngine::TREND_REAL_GROWTH + MathUtility::gdpShareDrift(self::PATENTED_SHARE_2000, self::PATENTED_SHARE_2019, self::PATENTED_SHARE_WINDOW_YEARS);
+    }
+
+    /** Secular real growth of an unprotected generic book. */
+    public static function genericSecularGrowthRate(): float
+    {
+        return MacroEngine::TREND_REAL_GROWTH + MathUtility::gdpShareDrift(self::GENERIC_SHARE_2010, self::GENERIC_SHARE_2018, self::GENERIC_SHARE_WINDOW_YEARS);
     }
 
     public function getSurpriseBlendWeights(): array

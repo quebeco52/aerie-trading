@@ -857,13 +857,13 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
         return $normalizedEps > 0.0 ? self::FAIR_VALUE_BOOK_POS_EPS : 1.0;
     }
 
-    /** The through-the-cycle capacity blend in calculateStructuralRoic() is this model's persistence; the trailing return reaches it unfaded. */
+    /** calculateStructuralRoic() fades the trailing return toward through-the-cycle capacity, so it reaches it unfaded here. */
     public function getValuationReturn(float $trailingReturn, ?float $longRunReturn, float $discountRate): float
     {
         return $trailingReturn;
     }
 
-    public function calculateStructuralRoic(float $roicTtm, float $baselineRoic, float $revenuePerShare, float $bookValuePerShare, float $baselineMargin): float
+    public function calculateStructuralRoic(float $roicTtm, float $baselineRoic, float $revenuePerShare, float $bookValuePerShare, float $baselineMargin, float $discountRate): float
     {
         // DuPont Decomposition anchored by Kenney Rule capacity (Premium-to-Surplus ratio = 1.50)
         $actualTurnover = $bookValuePerShare > 0.0 ? ($revenuePerShare / $bookValuePerShare) : self::KENNEY_CAPACITY_RATIO;
@@ -875,9 +875,9 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
 
         $structuralRoe = ($effectiveTurnover * $baselineMargin) + $investmentLeg;
 
-        // Blend through-the-cycle structural capacity with actual TTM ROE
-        $blendedRoe = ($structuralRoe * 0.70) + ($roicTtm * 0.30);
-        return max(self::MIN_STRUCTURAL_ROE_FLOOR, $blendedRoe);
+        // The trailing ROE's gap to through-the-cycle capacity is valued at its persistent-equivalent share, the same
+        // Ohlson / Fama-French fade every other firm's trailing return gets (MathUtility::persistentEquivalentReturn).
+        return max(self::MIN_STRUCTURAL_ROE_FLOOR, MathUtility::persistentEquivalentReturn($roicTtm, $structuralRoe, $discountRate));
     }
 
     /**

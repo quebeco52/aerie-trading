@@ -53,8 +53,8 @@ class InternetRetailBusinessModel extends StandardCorporateBusinessModel
     // --- Balance Sheet Realism ---
     /** Capitalized operating lease liabilities as a fraction of annual revenue (IFRS 16 / ASC 842). Fulfilment and data-centre footprints are largely leased. */
     public const LEASE_LIABILITY_INTENSITY = 0.35;
-    /** Stock-based compensation as a fraction of revenue (ASC 718): non-cash, added back to FCF, settled in new shares. Technology and fulfilment leadership paid partly in equity. */
-    public const STOCK_COMPENSATION_INTENSITY = 0.06;
+    /** Stock-based compensation (ASC 718) as a share of revenue: 4.18% at the lead US marketplace, $24.0B of $574.8B (Amazon 10-K, FY2023); Damodaran files online retail inside Retail (General). */
+    public const STOCK_COMPENSATION_INTENSITY = 0.0418;
 
     // --- Analyst Visibility & Error ---
     public const BASE_COVERAGE_VISIBILITY = 0.40; // 1P sales are visible, but 3P/Ads are a black box

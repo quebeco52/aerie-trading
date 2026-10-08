@@ -23,7 +23,6 @@ class ContextDTOTest extends TestCase
             currentPrice: 100.0,
             currentVolatility: 0.20,
             longTermVolatility: 0.20,
-            earningsPerShare: 5.0,
             dt: 1.0,
             macroState: $macro,
             bookValuePerShare: 40.0
@@ -31,7 +30,6 @@ class ContextDTOTest extends TestCase
 
         $this->assertSame(100.0, $ctx->currentPrice);
         $this->assertSame(0.20, $ctx->currentVolatility);
-        $this->assertSame(5.0, $ctx->earningsPerShare);
         $this->assertSame(1.0, $ctx->dt);
         $this->assertSame($macro, $ctx->macroState);
         $this->assertSame(40.0, $ctx->bookValuePerShare);

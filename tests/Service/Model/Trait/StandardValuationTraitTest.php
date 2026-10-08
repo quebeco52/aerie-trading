@@ -96,8 +96,8 @@ final class StandardValuationTraitTest extends TestCase
      */
     public function testStructuralRoicPassesThroughForNonFinancials(): void
     {
-        $this->assertSame(0.14, $this->model->calculateStructuralRoic(0.14, 0.09, 30.0, 20.0, 0.25));
-        $this->assertSame(-0.03, $this->model->calculateStructuralRoic(-0.03, 0.09, 30.0, 20.0, 0.25), 'A negative return passes through unclamped at this layer.');
+        $this->assertSame(0.14, $this->model->calculateStructuralRoic(0.14, 0.09, 30.0, 20.0, 0.25, 0.10));
+        $this->assertSame(-0.03, $this->model->calculateStructuralRoic(-0.03, 0.09, 30.0, 20.0, 0.25, 0.10), 'A negative return passes through unclamped at this layer.');
     }
 
     /**
