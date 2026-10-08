@@ -12,7 +12,7 @@ use App\Entity\Stock;
 use App\Repository\StockRepository;
 use App\Service\Corporate\DebtEngine;
 use App\Service\Corporate\Holdings\AnchorStakeLedger;
-use App\Service\Market\MarketEngine;
+use App\Service\Market\Pricing\MarketEngine;
 use App\Service\Model\Sector\CommercialBankBusinessModel;
 use App\Service\Model\Sector\InsuranceBusinessModel;
 use App\Service\Math\FinancialConstants;
@@ -108,7 +108,7 @@ class CompanySnapshotBuilder
 
     /**
      * The lines the regulator acts on, in percent of tangible assets: above the warning line the firm is well
-     * capitalized, below the distress line it is distressed, and below the closure line MarketOperator
+     * capitalized, below the distress line it is distressed, and below the closure line FailureSweep
      * liquidates it. Null for a firm its capital ratio does not govern.
      *
      * @return array{warning: float, distress: float, bankrupt: float}|null

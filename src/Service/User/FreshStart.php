@@ -7,7 +7,7 @@ namespace App\Service\User;
 use App\Entity\TradeOrder;
 use App\Entity\User;
 use App\Service\Macro\MacroStateProvider;
-use App\Service\Market\TradeExecutionService;
+use App\Service\Market\Trading\TradeExecutionService;
 use App\Service\Season\SeasonService;
 use Doctrine\ORM\EntityManagerInterface;
 

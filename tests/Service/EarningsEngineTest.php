@@ -12,7 +12,7 @@ use App\Service\Math\MathUtility;
 use App\Service\Math\CorporateMetrics;
 use App\Service\Event\NarrativeEngine;
 use App\Service\Event\MarketEventPublisher;
-use App\Service\Market\MarketConsensusEngine;
+use App\Service\Market\Pricing\MarketConsensusEngine;
 use App\Data\EconomicCycle;
 use App\Entity\Stock;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
@@ -571,7 +571,7 @@ class EarningsEngineTest extends TestCase
             $this->engine->calculate($stock, $positiveMacro, $tick, 252);
             // The stored anchor is the posterior BEFORE the walkdown, so it cannot compound through the
             // next estimate; the number analysts PUBLISH is the anchor shaded by the walkdown.
-            $consensusRevenues[] = (float) $stock->getLastAnalystRevenue() * (1.0 - \App\Service\Market\MarketConsensusEngine::ANALYST_WALKDOWN_BIAS);
+            $consensusRevenues[] = (float) $stock->getLastAnalystRevenue() * (1.0 - \App\Service\Market\Pricing\MarketConsensusEngine::ANALYST_WALKDOWN_BIAS);
             $actualRevenues[] = (float) $stock->getTotalRevenue() / 4.0;
         }
 

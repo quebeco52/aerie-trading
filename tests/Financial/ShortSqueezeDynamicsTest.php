@@ -5,10 +5,10 @@ declare(strict_types=1);
 namespace App\Tests\Financial;
 
 use App\Entity\Stock;
-use App\Service\Market\LiquidityEngine;
-use App\Service\Market\MarginEngine;
-use App\Service\Market\OptionMarginCalculator;
-use App\Service\Market\SecuritiesLendingDesk;
+use App\Service\Market\Pricing\LiquidityEngine;
+use App\Service\Market\Trading\MarginEngine;
+use App\Service\Market\Option\OptionMarginCalculator;
+use App\Service\Market\Trading\SecuritiesLendingDesk;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\MathUtility;
 use Doctrine\ORM\EntityManagerInterface;

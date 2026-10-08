@@ -141,7 +141,7 @@ class MacroEngine
     // --- Barro Tax-Smoothing & Automatic Fiscal Stabilizers (Barro 1979) ---
     /** Structural baseline statutory corporate tax rate. */
     public const TARGET_CORPORATE_TAX_RATE = 0.21;
-    /** Adjustment speed of the effective tax burden toward its cyclical target (half-life 0.7y), fitted with CreditFiscalSubsystem::FISCAL_STABILIZER_SENSITIVITY; shared, as the market prices how fast a law reaches the rate (App\Service\Market\PolicyCapitalization). */
+    /** Adjustment speed of the effective tax burden toward its cyclical target (half-life 0.7y), fitted with CreditFiscalSubsystem::FISCAL_STABILIZER_SENSITIVITY; shared, as the market prices how fast a law reaches the rate (App\Service\Market\Pricing\PolicyCapitalization). */
     public const FISCAL_ADJUSTMENT_SPEED = 1.0;
 
     // --- Consumer Sentiment Index & Animal Spirits ---

@@ -9,10 +9,10 @@ use App\DTO\SovereignCurveDTO;
 use App\Entity\Bond;
 use App\Service\Macro\MacroEngine;
 use App\Service\Macro\MacroState;
-use App\Service\Market\BondLedgerService;
-use App\Service\Market\BondPricingEngine;
-use App\Service\Market\BondTracker;
-use App\Service\Market\TreasuryAuctionService;
+use App\Service\Market\Bond\BondLedgerService;
+use App\Service\Market\Bond\BondPricingEngine;
+use App\Service\Market\Bond\BondTracker;
+use App\Service\Market\Bond\TreasuryAuctionService;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\MathUtility;
 use Doctrine\DBAL\Connection;
@@ -238,7 +238,7 @@ class BondLifecycleTest extends TestCase
         // The counts come from a map keyed by ticker, so a second redemption of the same issue would have
         // overwritten rather than duplicated. The real guard is that no issue outlives its own maturity in
         // the working set, which the run asserts by never re-reporting one.
-        $this->assertSame(count($this->redemptions), count(array_unique(array_keys($this->redemptions))));
+        $this->assertCount(count($this->redemptions), array_unique(array_keys($this->redemptions)));
     }
 
     public function testTheLadderReachesASteadyCompositionRatherThanGrowingWithoutBound(): void

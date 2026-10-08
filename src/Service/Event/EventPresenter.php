@@ -443,7 +443,7 @@ class EventPresenter
     }
 
     /**
-     * An index reconstitution (App\Service\Market\IndexCommittee): who was admitted and who was dropped. Not
+     * An index reconstitution (App\Service\Market\Index\IndexCommittee): who was admitted and who was dropped. Not
      * a price event — the divisor is restated across the change, so the level itself does not move on it.
      *
      * @return array<string, mixed>
@@ -468,7 +468,7 @@ class EventPresenter
     }
 
     /**
-     * A fund distribution (App\Service\Market\IndexFundAccountant): dividend cash the fund collected from
+     * A fund distribution (App\Service\Market\Index\IndexFundAccountant): dividend cash the fund collected from
      * its constituents and passed on to its holders.
      *
      * Not a price event, though the price falls by the payment on the same tick. The holder has the cash

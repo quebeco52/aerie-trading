@@ -7,11 +7,11 @@ namespace App\Service\View;
 use App\Entity\Etf;
 use App\Entity\Stock;
 use App\Repository\StockRepository;
-use App\Service\Market\EtfTracker;
+use App\Service\Market\Index\EtfTracker;
 use App\Service\Market\Index\IndexRanking;
 use App\Service\Market\Index\MarketIndex;
-use App\Service\Market\IndexCommittee;
-use App\Service\Market\PriceChangeFeed;
+use App\Service\Market\Index\IndexCommittee;
+use App\Service\Market\Chart\PriceChangeFeed;
 use App\Service\Math\FinancialConstants;
 
 /**

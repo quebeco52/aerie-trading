@@ -11,7 +11,7 @@ use App\Entity\Stock;
 use App\Repository\StockRepository;
 use App\Service\Macro\MacroEngine;
 use App\Service\Macro\Subsystem\SovereignFundSubsystem;
-use App\Service\Market\IndexCommittee;
+use App\Service\Market\Index\IndexCommittee;
 use App\Service\Math\FinancialConstants;
 use App\Service\Politics\SovereignReserveFund;
 

@@ -17,7 +17,7 @@ use Doctrine\ORM\Mapping as ORM;
  * The recorded price is the clean price, so a chart does not show the coupon accrual sawtooth as volatility.
  *
  * Nothing loads this class through the ORM: the table is written in batches by
- * App\Service\Market\BondTracker, read by App\Controller\StockController and pruned by
+ * App\Service\Market\Bond\BondTracker, read by App\Controller\StockController and pruned by
  * App\Command\PruneHistoryCommand, all in raw SQL, because a tick series is bulk rows rather than an
  * object graph. The mapping exists so Doctrine can diff the table into a migration, so do not delete
  * it as an unused class — the next migration would drop a live table.

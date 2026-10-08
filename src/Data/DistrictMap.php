@@ -464,7 +464,7 @@ class DistrictMap
     /**
      * Span of simulated time, in years, a building's event badge counts over (one simulated
      * month — the same window the kerb's change figure is measured across, see
-     * App\Service\Market\PriceChangeFeed). The badge used to print the whole capped backfill,
+     * App\Service\Market\Chart\PriceChangeFeed). The badge used to print the whole capped backfill,
      * so once a tenant had six lifetime events it read "6" for good and carried nothing.
      */
     public const EVENT_BADGE_WINDOW_YEARS = 1.0 / 12.0;

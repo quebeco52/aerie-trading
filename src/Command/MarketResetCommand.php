@@ -14,8 +14,8 @@ use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Style\SymfonyStyle;
 use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
 use App\Service\Math\FinancialConstants;
-use App\Service\Market\OpeningBoardBuilder;
-use App\Service\Market\StockTickColumns;
+use App\Service\Market\Pricing\OpeningBoardBuilder;
+use App\Service\Market\Ticker\StockTickColumns;
 
 #[AsCommand(
     name: 'app:market-reset',
@@ -27,7 +27,7 @@ class MarketResetCommand extends Command
         private EntityManagerInterface $entityManager,
         private \Redis $redis,
         private UserPasswordHasherInterface $passwordHasher,
-        private \App\Service\Market\TreasuryAuctionService $treasuryAuction,
+        private \App\Service\Market\Bond\TreasuryAuctionService $treasuryAuction,
         private OpeningBoardBuilder $openingBoard
     ) {
         parent::__construct();

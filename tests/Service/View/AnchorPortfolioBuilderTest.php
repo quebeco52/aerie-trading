@@ -7,7 +7,7 @@ namespace App\Tests\Service\View;
 use App\Data\AnchorHoldings;
 use App\Entity\Stock;
 use App\Repository\StockRepository;
-use App\Service\Market\PriceChangeFeed;
+use App\Service\Market\Chart\PriceChangeFeed;
 use App\Service\View\AnchorPortfolioBuilder;
 use App\Tests\Support\StockBuilder;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;

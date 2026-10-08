@@ -7,7 +7,7 @@ namespace App\Tests\Financial;
 use App\DTO\MacroStateDTO;
 use App\DTO\MarketPricingContext;
 use App\Service\Macro\MacroEngine;
-use App\Service\Market\MarketEngine;
+use App\Service\Market\Pricing\MarketEngine;
 use App\Service\Math\MathUtility;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;

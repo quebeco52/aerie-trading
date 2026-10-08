@@ -12,7 +12,7 @@ use App\Data\ManagementStyle;
 use App\Entity\Stock;
 use App\Service\Corporate\DebtEngine;
 use App\Service\Event\MarketEventPublisher;
-use App\Service\Market\CreditRatingAgency;
+use App\Service\Market\Bond\CreditRatingAgency;
 use App\Service\Math\CorporateMetrics;
 use App\Service\Math\MathUtility;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;

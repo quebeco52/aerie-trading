@@ -41,7 +41,7 @@ final class SecuritiesMarkIsNotIncomeTest extends TestCase
         $this->engine = (new ReflectionClass(EarningsEngine::class))->newInstanceWithoutConstructor();
         $securities = new \ReflectionProperty(EarningsEngine::class, 'securitiesBook');
         $securities->setValue($this->engine, new \App\Service\Corporate\SecuritiesBookService(
-            new \App\Service\Market\BondPricingEngine(new \App\Service\Math\MathUtility())
+            new \App\Service\Market\Bond\BondPricingEngine(new \App\Service\Math\MathUtility())
         ));
 
         $this->roll = new ReflectionMethod(EarningsEngine::class, 'rollForwardSecuritiesBook');

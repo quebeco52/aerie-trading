@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Tests\Command;
 
-use App\Service\Market\HistoryPruner;
+use App\Service\Market\Ticker\HistoryPruner;
 use App\Command\MacroGapDumpCommand;
 use App\Command\PruneHistoryCommand;
 use App\Service\Macro\Recorder\OutputGapProbe;

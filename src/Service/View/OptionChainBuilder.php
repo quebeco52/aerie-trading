@@ -11,9 +11,9 @@ use App\Entity\Stock;
 use App\Entity\User;
 use App\Entity\UserOption;
 use App\Repository\OptionContractRepository;
-use App\Service\Market\Gamma\DealerGammaStoreInterface;
-use App\Service\Market\OptionChainService;
-use App\Service\Market\OptionPricingEngine;
+use App\Service\Market\Option\DealerGammaStoreInterface;
+use App\Service\Market\Option\OptionChainService;
+use App\Service\Market\Option\OptionPricingEngine;
 use App\Service\Math\FinancialConstants;
 use Doctrine\ORM\EntityManagerInterface;
 

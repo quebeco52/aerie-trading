@@ -2,7 +2,7 @@
 
 namespace App\Controller\Admin;
 
-use App\Service\Market\HistoryPruner;
+use App\Service\Market\Ticker\HistoryPruner;
 use App\Data\OutputGapChannels;
 use App\Service\Macro\Recorder\MacroDiagnosticsProbe;
 use App\Service\Macro\Recorder\OutputGapProbe;

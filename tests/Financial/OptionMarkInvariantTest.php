@@ -32,12 +32,12 @@ class OptionMarkInvariantTest extends TestCase
         // Declares the table and writes the mark; does not query it.
         'src/Entity/OptionContract.php',
         // Produce the mark rather than consuming a stored one.
-        'src/Service/Market/OptionPricingEngine.php',
-        'src/Service/Market/OptionSettlementEngine.php',
+        'src/Service/Market/Option/OptionPricingEngine.php',
+        'src/Service/Market/Option/OptionSettlementEngine.php',
         // Owns the held-only marking gate this whole invariant rests on.
-        'src/Service/Market/OptionDeskService.php',
+        'src/Service/Market/Option/OptionDeskService.php',
         // Lists and relists contracts; reads symbols, never marks.
-        'src/Service/Market/OptionChainService.php',
+        'src/Service/Market/Option/OptionChainService.php',
         // Truncates the table on a reset.
         'src/Command/MarketResetCommand.php',
     ];
@@ -121,7 +121,7 @@ class OptionMarkInvariantTest extends TestCase
 
     public function testTheSweepMarksOnlyHeldContracts(): void
     {
-        $source = file_get_contents(dirname(__DIR__, 2) . '/src/Service/Market/OptionDeskService.php');
+        $source = file_get_contents(dirname(__DIR__, 2) . '/src/Service/Market/Option/OptionDeskService.php');
 
         $this->assertIsString($source);
 
@@ -134,7 +134,7 @@ class OptionMarkInvariantTest extends TestCase
 
     public function testTheTradePathMarksAContractAsItBecomesHeld(): void
     {
-        $source = file_get_contents(dirname(__DIR__, 2) . '/src/Service/Market/OptionTradeService.php');
+        $source = file_get_contents(dirname(__DIR__, 2) . '/src/Service/Market/Option/OptionTradeService.php');
 
         $this->assertIsString($source);
 

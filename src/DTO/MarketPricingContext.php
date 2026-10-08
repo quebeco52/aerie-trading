@@ -27,7 +27,7 @@ class MarketPricingContext
         public float $marketJumpMultiplier = 1.0,
         public float $marketVol = 0.15,
         public float $reversionSpeed = 0.25,
-        public float $kappa = \App\Service\Market\MarketEngine::BASE_VARIANCE_REVERSION_SPEED,
+        public float $kappa = \App\Service\Market\Pricing\MarketEngine::BASE_VARIANCE_REVERSION_SPEED,
         public float $volOfVol = 0.3,
         public ?MacroStateDTO $macroState = null,
         public float $bookValuePerShare = 0.0,
@@ -66,7 +66,7 @@ class MarketPricingContext
         public ?float $priorMarketVol = null,
         /** The firm's pre-tax marginal borrowing rate (DebtMetricsDTO::$currentMarketRate); null prices debt at the 10Y plus the IG spread. */
         public ?float $costOfDebt = null,
-        /** @var array<string, float> What each law the firm's accounts answer to is charged on or moves, per share, keyed by lever (App\Service\Market\PolicyCapitalization::earningsGap()); empty for a firm with none. */
+        /** @var array<string, float> What each law the firm's accounts answer to is charged on or moves, per share, keyed by lever (App\Service\Market\Pricing\PolicyCapitalization::earningsGap()); empty for a firm with none. */
         public array $policyBasesPerShare = []
     ) {}
 

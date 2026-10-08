@@ -11,7 +11,7 @@ use App\Entity\TradeOrder;
 use App\Repository\TradeOrderRepository;
 use App\Service\Corporate\DebtEngine;
 use App\Service\Event\MarketEventPublisher;
-use App\Service\Market\MarketOperator;
+use App\Service\Corporate\FailureSweep;
 use App\Service\Math\CorporateMetrics;
 use App\Service\Math\MathUtility;
 use Doctrine\DBAL\Connection;
@@ -41,7 +41,7 @@ final class SolvencyLiquidationInvariantTest extends TestCase
     /** Quarters in default to test with: far past any cure period, so the grace clock cannot be what saves it. */
     private const UNCURED_QUARTERS = 8;
 
-    private function buildOperator(): MarketOperator
+    private function buildOperator(): FailureSweep
     {
         $entityManager = $this->createMock(EntityManagerInterface::class);
         $entityManager->method('getRepository')->willReturn(
@@ -52,7 +52,7 @@ final class SolvencyLiquidationInvariantTest extends TestCase
         $publisher = $this->createStub(MarketEventPublisher::class);
         $publisher->method('publish')->willReturn([]);
 
-        return new MarketOperator(
+        return new FailureSweep(
             $entityManager,
             $this->createStub(LoggerInterface::class),
             $publisher,
@@ -107,7 +107,7 @@ final class SolvencyLiquidationInvariantTest extends TestCase
             $stock->setPaymentDefault(true);
             $stock->setQuartersInDefault(self::UNCURED_QUARTERS);
 
-            $operator->enforceMarketStability([$stock], $macro);
+            $operator->sweep([$stock], $macro);
 
             $this->assertFalse(
                 $stock->isBankrupt(),
@@ -132,7 +132,7 @@ final class SolvencyLiquidationInvariantTest extends TestCase
         $stock->setPaymentDefault(true);
         $stock->setQuartersInDefault(self::UNCURED_QUARTERS);
 
-        $this->buildOperator()->enforceMarketStability([$stock], new MacroStateDTO());
+        $this->buildOperator()->sweep([$stock], new MacroStateDTO());
 
         $this->assertTrue($stock->isBankrupt(), 'a business with no going-concern value is liquidated');
         $this->assertSame('0.00000000', $stock->getPrice());
@@ -149,7 +149,7 @@ final class SolvencyLiquidationInvariantTest extends TestCase
         $stock->setPaymentDefault(true);
         $stock->setQuartersInDefault(self::UNCURED_QUARTERS);
 
-        $this->buildOperator()->enforceMarketStability([$stock], MacroStateDTO::fromArray(['yield_5y_ema' => 0.04, 'policy_rate_ema' => 0.03, 'corporate_tax_rate' => 0.21]));
+        $this->buildOperator()->sweep([$stock], MacroStateDTO::fromArray(['yield_5y_ema' => 0.04, 'policy_rate_ema' => 0.03, 'corporate_tax_rate' => 0.21]));
 
         $this->assertFalse($stock->isBankrupt(), 'a viable business is reorganized, not liquidated');
         $this->assertFalse($stock->isPaymentDefault(), 'confirmation cures the default');
@@ -166,7 +166,7 @@ final class SolvencyLiquidationInvariantTest extends TestCase
     {
         $stock = $this->buildInsolventShipper('ZOMB', '-0.40');
 
-        $this->buildOperator()->enforceMarketStability([$stock], new MacroStateDTO());
+        $this->buildOperator()->sweep([$stock], new MacroStateDTO());
 
         $this->assertFalse($stock->isBankrupt());
         $this->assertSame('0.20', $stock->getPrice());

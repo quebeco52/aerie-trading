@@ -560,7 +560,7 @@
 						{% endif %}
 
 						{# Credit & Solvency: what would put an operating company into bankruptcy, as its lenders see it.
-						   An operating firm files when it cannot pay, not when a score turns (MarketOperator). #}
+						   An operating firm files when it cannot pay, not when a score turns (FailureSweep). #}
 						{% if creditHealth|default(null) %}
 							{% set credit = creditHealth %}
 							<div class="bg-surface-container-low rounded-lg p-6 border {{ credit.inDefault ? 'border-tertiary/40' : 'border-outline-variant/15 hover:border-outline-variant/30' }} transition-all" id="credit-health-card">

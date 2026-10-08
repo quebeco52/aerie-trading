@@ -164,7 +164,7 @@ class EarningsReportSubscriber implements EventSubscriberInterface
         $roe = $finalEquity > 0 ? ($ctx->reportedActualNetIncome / $finalEquity) * 4.0 : 0.0;
         $report->setReturnOnEquity(\App\Service\Math\MathUtility::formatDecimal($roe, 4));
 
-        // The ratio the regulator closes the firm on (MarketOperator via DebtEngine::calculateAltmanZScore):
+        // The ratio the regulator closes the firm on (FailureSweep via DebtEngine::calculateAltmanZScore):
         // tangible equity over tangible assets. A firm the capital ratio does not govern discloses none.
         if ($ctx->strategy->requiresAlternativeZScore()) {
             $capitalBase = $this->debtEngine->resolveTangibleCapitalBase($stock, (float) $stock->getTotalRevenue());

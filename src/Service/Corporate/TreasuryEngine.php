@@ -37,7 +37,7 @@ class TreasuryEngine
         private CapExEngine $capExEngine,
         private MathUtility $mathUtility,
         /** Investment securities mark. Defaulted so a harness or a unit test builds an engine without wiring the curve. */
-        private SecuritiesBookService $securitiesBook = new SecuritiesBookService(new \App\Service\Market\BondPricingEngine(new MathUtility()))
+        private SecuritiesBookService $securitiesBook = new SecuritiesBookService(new \App\Service\Market\Bond\BondPricingEngine(new MathUtility()))
     ) {}
 
     /**
@@ -817,7 +817,7 @@ class TreasuryEngine
      * Records an event of default when principal came due that the firm could neither refinance, repay from
      * cash, nor cover with an emergency raise. This is a payment default, which is a separate failure mode
      * from balance-sheet insolvency: a firm can be worth more than it owes on paper and still fail because
-     * the money was not there on the day. MarketOperator liquidates on either.
+     * the money was not there on the day. FailureSweep liquidates on either.
      */
     private function processPaymentDefault(CapitalAllocationContext $ctx): void
     {

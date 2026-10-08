@@ -10,7 +10,7 @@ use App\Entity\DistrictNews;
 use App\Entity\Etf;
 use App\Service\Macro\MacroEngine;
 use App\Service\Macro\Subsystem\SovereignFundSubsystem;
-use App\Service\Market\PriceChangeFeed;
+use App\Service\Market\Chart\PriceChangeFeed;
 use App\Service\Politics\CoalitionFormation;
 use App\Service\Politics\FinancialRegulator;
 use App\Service\Politics\MonetaryAuthority;

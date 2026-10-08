@@ -14,7 +14,7 @@ use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Style\SymfonyStyle;
 use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
-use App\Service\Market\OpeningBoardBuilder;
+use App\Service\Market\Pricing\OpeningBoardBuilder;
 
 #[AsCommand(
     name: 'app:market-seed',
@@ -25,7 +25,7 @@ class MarketSeedCommand extends Command
     public function __construct(
         private EntityManagerInterface $entityManager,
         private UserPasswordHasherInterface $passwordHasher,
-        private \App\Service\Market\TreasuryAuctionService $treasuryAuction,
+        private \App\Service\Market\Bond\TreasuryAuctionService $treasuryAuction,
         private OpeningBoardBuilder $openingBoard
     ) {
         parent::__construct();

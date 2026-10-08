@@ -96,7 +96,7 @@ final class PortfolioCashInterestTest extends TestCase
     {
         $spread = \App\Service\Math\FinancialConstants::MARGIN_LOAN_SPREAD;
 
-        $this->assertEqualsWithDelta(0.05 + $spread, \App\Service\Market\ForcedLiquidationService::marginLoanRate(0.05), 1e-12);
-        $this->assertEqualsWithDelta($spread, \App\Service\Market\ForcedLiquidationService::marginLoanRate(-0.01), 1e-12);
+        $this->assertEqualsWithDelta(0.05 + $spread, \App\Service\Market\Trading\ForcedLiquidationService::marginLoanRate(0.05), 1e-12);
+        $this->assertEqualsWithDelta($spread, \App\Service\Market\Trading\ForcedLiquidationService::marginLoanRate(-0.01), 1e-12);
     }
 }

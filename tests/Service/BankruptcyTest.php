@@ -15,10 +15,9 @@ use App\Entity\UserStock;
 use App\Service\Corporate\DebtEngine;
 use App\Service\Corporate\EarningsEngine;
 use App\Service\Event\MarketEventPublisher;
-use App\Service\Market\MarketOperator;
-use App\Service\Market\StockTracker;
-use App\Service\Market\TradeExecutionService;
-use App\Service\Math\MathUtility;
+use App\Service\Corporate\FailureSweep;
+use App\Service\Market\Pricing\StockTracker;
+use App\Service\Market\Trading\TradeExecutionService;
 use App\Service\User\Portfolio;
 use Doctrine\DBAL\Connection;
 use Doctrine\ORM\EntityManagerInterface;
@@ -36,7 +35,6 @@ class BankruptcyTest extends TestCase
     private LoggerInterface&Stub $loggerMock;
     private MarketEventPublisher&MockObject $marketEventMock;
     private DebtEngine&MockObject $debtEngineMock;
-    private MathUtility&Stub $mathUtilityMock;
     private Connection&MockObject $connectionMock;
     private TradeOrderRepository&MockObject $tradeOrderRepoMock;
 
@@ -46,7 +44,6 @@ class BankruptcyTest extends TestCase
         $this->loggerMock = $this->createStub(LoggerInterface::class);
         $this->marketEventMock = $this->createMock(MarketEventPublisher::class);
         $this->debtEngineMock = $this->createMock(DebtEngine::class);
-        $this->mathUtilityMock = $this->createStub(MathUtility::class);
         $this->connectionMock = $this->createMock(Connection::class);
         $this->tradeOrderRepoMock = $this->createMock(TradeOrderRepository::class);
 
@@ -111,14 +108,14 @@ class BankruptcyTest extends TestCase
             ->with($stock, 'BANKRUPTCY', $this->logicalAnd($this->stringContains('Dead Corp'), $this->stringContains('Chapter 7')), -100.00)
             ->willReturn(['type' => 'BANKRUPTCY']);
 
-        $operator = new MarketOperator(
+        $operator = new FailureSweep(
             $this->entityManagerMock,
             $this->loggerMock,
             $this->marketEventMock,
             $this->debtEngineMock
         );
 
-        $events = $operator->enforceMarketStability([$stock], new MacroStateDTO());
+        $events = $operator->sweep([$stock], new MacroStateDTO());
 
         $this->assertCount(1, $events);
         $this->assertTrue($stock->isBankrupt());
@@ -131,7 +128,7 @@ class BankruptcyTest extends TestCase
         $this->assertEquals('600.0000', (string) $buyer->getCashBalance());
     }
 
-    public function testMarketOperatorSkipsAlreadyBankruptStock(): void
+    public function testTheFailureSweepSkipsAnAlreadyBankruptStock(): void
     {
         $stock = new Stock();
         $stock->setTicker('DEAD');
@@ -141,14 +138,14 @@ class BankruptcyTest extends TestCase
         $this->debtEngineMock->expects($this->never())->method('calculateAltmanZScore');
         $this->debtEngineMock->expects($this->never())->method('assessGoingConcern');
 
-        $operator = new MarketOperator(
+        $operator = new FailureSweep(
             $this->entityManagerMock,
             $this->loggerMock,
             $this->marketEventMock,
             $this->debtEngineMock
         );
 
-        $events = $operator->enforceMarketStability([$stock], new MacroStateDTO());
+        $events = $operator->sweep([$stock], new MacroStateDTO());
         $this->assertEmpty($events);
     }
 
@@ -175,8 +172,8 @@ class BankruptcyTest extends TestCase
         $this->debtEngineMock->expects($this->never())->method('assessGoingConcern');
         $this->marketEventMock->expects($this->never())->method('publish');
 
-        $operator = new MarketOperator($this->entityManagerMock, $this->loggerMock, $this->marketEventMock, $this->debtEngineMock);
-        $events = $operator->enforceMarketStability([$stock], new MacroStateDTO());
+        $operator = new FailureSweep($this->entityManagerMock, $this->loggerMock, $this->marketEventMock, $this->debtEngineMock);
+        $events = $operator->sweep([$stock], new MacroStateDTO());
 
         $this->assertSame([], $events);
         $this->assertFalse($stock->isBankrupt());
@@ -193,8 +190,8 @@ class BankruptcyTest extends TestCase
 
         $this->debtEngineMock->expects($this->never())->method('assessGoingConcern');
 
-        $operator = new MarketOperator($this->entityManagerMock, $this->loggerMock, $this->marketEventMock, $this->debtEngineMock);
-        $operator->enforceMarketStability([$stock], new MacroStateDTO());
+        $operator = new FailureSweep($this->entityManagerMock, $this->loggerMock, $this->marketEventMock, $this->debtEngineMock);
+        $operator->sweep([$stock], new MacroStateDTO());
 
         $this->assertFalse($stock->isBankrupt());
         $this->assertTrue($stock->isPaymentDefault(), 'the default stands; only a plan or the money cures it');
@@ -220,8 +217,8 @@ class BankruptcyTest extends TestCase
             ->with($stock, 'REORGANIZATION', $this->stringContains('shareholders keep the company'), $this->anything())
             ->willReturn([]);
 
-        $operator = new MarketOperator($this->entityManagerMock, $this->loggerMock, $this->marketEventMock, $this->debtEngineMock);
-        $operator->enforceMarketStability([$stock], new MacroStateDTO(yield5yEma: 0.04));
+        $operator = new FailureSweep($this->entityManagerMock, $this->loggerMock, $this->marketEventMock, $this->debtEngineMock);
+        $operator->sweep([$stock], new MacroStateDTO(yield5yEma: 0.04));
 
         $this->assertFalse($stock->isBankrupt(), 'a solvent firm must not be liquidated for a missed payment');
         $this->assertSame('25.00', $stock->getPrice(), 'the equity is not wiped');
@@ -261,8 +258,8 @@ class BankruptcyTest extends TestCase
             ->with($stock, 'REORGANIZATION', $this->logicalAnd($this->stringContains('Chapter 11'), $this->stringContains('creditors now own')), -100.0)
             ->willReturn([]);
 
-        $operator = new MarketOperator($this->entityManagerMock, $this->loggerMock, $this->marketEventMock, $this->debtEngineMock, $ledger);
-        $operator->enforceMarketStability([$stock], new MacroStateDTO(yield5yEma: 0.04));
+        $operator = new FailureSweep($this->entityManagerMock, $this->loggerMock, $this->marketEventMock, $this->debtEngineMock, $ledger);
+        $operator->sweep([$stock], new MacroStateDTO(yield5yEma: 0.04));
 
         // Exit debt is the tightest of: coverage 50M / (5% x (2.0 + 1.5)) = 285.7M, the airline 3.5x covenant
         // 3.5 x 80M + 20M = 300M, and the 320M the assets are worth. The other 1.71B became the equity.
@@ -301,14 +298,14 @@ class BankruptcyTest extends TestCase
             }
         );
 
-        $operator = new MarketOperator(
+        $operator = new FailureSweep(
             $this->entityManagerMock,
             $this->loggerMock,
             $this->marketEventMock,
             $this->debtEngineMock
         );
 
-        $operator->enforceMarketStability([$stock], new MacroStateDTO());
+        $operator->sweep([$stock], new MacroStateDTO());
 
         $this->assertTrue($stock->isBankrupt());
         $this->assertEquals('0.00000000', $stock->getPrice());
@@ -337,8 +334,8 @@ class BankruptcyTest extends TestCase
         $this->tradeOrderRepoMock->method('findOpenByTicker')->willReturn([]);
         $this->marketEventMock->method('publish')->willReturn([]);
 
-        $operator = new MarketOperator($this->entityManagerMock, $this->loggerMock, $this->marketEventMock, $this->debtEngineMock);
-        $operator->enforceMarketStability([$stock], new MacroStateDTO());
+        $operator = new FailureSweep($this->entityManagerMock, $this->loggerMock, $this->marketEventMock, $this->debtEngineMock);
+        $operator->sweep([$stock], new MacroStateDTO());
 
         $this->assertTrue($stock->isBankrupt());
     }
@@ -356,14 +353,14 @@ class BankruptcyTest extends TestCase
         $stock->setTotalRevenue('1000000000');
         $stock->setOperatingMargin('0.15');
 
-        $operator = new MarketOperator(
+        $operator = new FailureSweep(
             $this->entityManagerMock,
             $this->loggerMock,
             $this->marketEventMock,
             $this->debtEngineMock
         );
 
-        $operator->enforceMarketStability([$stock], new MacroStateDTO());
+        $operator->sweep([$stock], new MacroStateDTO());
 
         $this->assertFalse($stock->isBankrupt());
     }
@@ -418,24 +415,24 @@ class BankruptcyTest extends TestCase
             $portfolio,
             $redis,
             new \Psr\Log\NullLogger(),
-            new \App\Service\Market\AssetResolver($this->entityManagerMock),
-            new \App\Service\Market\LiquidityEngine(new \App\Service\Math\MathUtility()),
+            new \App\Service\Market\Trading\AssetResolver($this->entityManagerMock),
+            new \App\Service\Market\Pricing\LiquidityEngine(new \App\Service\Math\MathUtility()),
             new \App\Service\Market\Flow\InMemoryOrderFlowStore(),
-            new \App\Service\Market\MarginEngine(
+            new \App\Service\Market\Trading\MarginEngine(
                 $this->entityManagerMock,
-                new \App\Service\Market\OptionMarginCalculator($this->entityManagerMock, new \App\Service\Math\MathUtility())
+                new \App\Service\Market\Option\OptionMarginCalculator($this->entityManagerMock, new \App\Service\Math\MathUtility())
             ),
-            new \App\Service\Market\SecuritiesLendingDesk(),
-            new \App\Service\Market\OptionTradeService(
+            new \App\Service\Market\Trading\SecuritiesLendingDesk(),
+            new \App\Service\Market\Option\OptionTradeService(
                 $this->entityManagerMock,
-                new \App\Service\Market\OptionPricingEngine(
+                new \App\Service\Market\Option\OptionPricingEngine(
                     new \App\Service\Math\MathUtility(),
-                    new \App\Service\Market\BondPricingEngine(new \App\Service\Math\MathUtility())
+                    new \App\Service\Market\Bond\BondPricingEngine(new \App\Service\Math\MathUtility())
                 ),
                 new \App\Service\Macro\MacroStateProvider($redis),
-                new \App\Service\Market\MarginEngine(
+                new \App\Service\Market\Trading\MarginEngine(
                     $this->entityManagerMock,
-                    new \App\Service\Market\OptionMarginCalculator($this->entityManagerMock, new \App\Service\Math\MathUtility())
+                    new \App\Service\Market\Option\OptionMarginCalculator($this->entityManagerMock, new \App\Service\Math\MathUtility())
                 ),
                 new \App\Service\Math\MathUtility(),
                 new \App\Service\User\CashLedger()
@@ -458,7 +455,7 @@ class BankruptcyTest extends TestCase
         $stock->setPrice('0.00');
         $stock->setSharesOutstanding('1000000');
 
-        $marketEngine = $this->createMock(\App\Service\Market\MarketEngine::class);
+        $marketEngine = $this->createMock(\App\Service\Market\Pricing\MarketEngine::class);
         $earningsEngine = $this->createMock(EarningsEngine::class);
         $corpActionEngine = $this->createMock(\App\Service\Corporate\CorporateActionEngine::class);
         $maEngine = $this->createStub(\App\Service\Corporate\MergerAndAcquisitionEngine::class);
@@ -476,7 +473,7 @@ class BankruptcyTest extends TestCase
             $this->marketEventMock,
             $this->debtEngineMock,
             $corpMetrics,
-            new \App\Service\Market\LiquidityEngine(new \App\Service\Math\MathUtility()),
+            new \App\Service\Market\Pricing\LiquidityEngine(new \App\Service\Math\MathUtility()),
             new \App\Service\Market\Flow\InMemoryOrderFlowStore(),
             new \App\Service\Market\Agent\AgentFlowEngine(
                 new \App\Service\Market\Agent\AgentPopulation(),
@@ -568,8 +565,8 @@ class BankruptcyTest extends TestCase
         $this->tradeOrderRepoMock->method('findOpenByTicker')->willReturn([]);
         $this->marketEventMock->method('publish')->willReturn(['type' => 'BANKRUPTCY']);
 
-        $operator = new MarketOperator($this->entityManagerMock, $this->loggerMock, $this->marketEventMock, $this->debtEngineMock, $ledger);
-        $operator->enforceMarketStability([$failed, $survivor], new MacroStateDTO());
+        $operator = new FailureSweep($this->entityManagerMock, $this->loggerMock, $this->marketEventMock, $this->debtEngineMock, $ledger);
+        $operator->sweep([$failed, $survivor], new MacroStateDTO());
 
         $this->assertTrue($failed->isBankrupt());
         $this->assertSame(0.0, $store->readIndustry('Airlines')['DEAD']['capacity'], 'the failed firm\'s plant is gone');

@@ -7,7 +7,7 @@ namespace App\Tests\Service\Corporate;
 use App\DTO\MacroStateDTO;
 use App\DTO\SecuritiesMarkDTO;
 use App\Service\Corporate\SecuritiesBookService;
-use App\Service\Market\BondPricingEngine;
+use App\Service\Market\Bond\BondPricingEngine;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\MathUtility;
 use PHPUnit\Framework\TestCase;

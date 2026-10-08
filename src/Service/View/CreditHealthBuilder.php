@@ -13,7 +13,7 @@ use App\Service\Math\FinancialConstants;
 /**
  * What would put an operating company into bankruptcy, as its lenders see it.
  *
- * An operating firm files when it cannot pay (MarketOperator: a payment default still uncured once the grace
+ * An operating firm files when it cannot pay (FailureSweep: a payment default still uncured once the grace
  * period lapses), so the card leads with that state and the three things that decide it: the committed line
  * it can still draw, the covenant that closes the bond market to it, and how many times its operating
  * income covers the interest. Merton's distance to default is the forward-looking reading the rating agency
@@ -43,7 +43,7 @@ class CreditHealthBuilder
         return ['creditHealth' => [
             'inDefault' => $stock->isPaymentDefault(),
             'quartersInDefault' => $stock->getQuartersInDefault(),
-            // MarketOperator accelerates once the default has stood past the grace period.
+            // FailureSweep accelerates once the default has stood past the grace period.
             'cureDueNextReport' => $stock->isPaymentDefault() && $stock->getQuartersInDefault() >= FinancialConstants::PAYMENT_DEFAULT_GRACE_QUARTERS,
             'revolverCommitment' => $commitment,
             'revolverDrawn' => $drawn,

@@ -12,7 +12,7 @@ use App\DTO\DistrictHeightEnvelope;
 use App\DTO\DistrictInstitutionDTO;
 use App\DTO\DistrictPlotDTO;
 use App\Entity\Stock;
-use App\Service\Market\CreditRatingAgency;
+use App\Service\Market\Bond\CreditRatingAgency;
 
 /**
  * Builds the render state for the district street elevation from live company fundamentals.

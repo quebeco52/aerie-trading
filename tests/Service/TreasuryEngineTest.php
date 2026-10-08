@@ -688,7 +688,7 @@ class TreasuryEngineTest extends TestCase
 
     /**
      * When no market will lend at any price, the maturity really is an event of default -- and it is a
-     * curable one. The firm is flagged and its grace clock starts; MarketOperator no longer liquidates on it.
+     * curable one. The firm is flagged and its grace clock starts; FailureSweep no longer liquidates on it.
      */
     public function testMaturityBeyondTheCommitmentDefaultsWhenNoMarketWillLend(): void
     {

@@ -9,7 +9,7 @@ use App\Entity\Stock;
 use App\Repository\StockRepository;
 use App\Service\Corporate\DebtEngine;
 use App\Service\Corporate\Holdings\AnchorStakeLedger;
-use App\Service\Market\MarketEngine;
+use App\Service\Market\Pricing\MarketEngine;
 use App\Service\Math\CorporateMetrics;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\CommercialBankBusinessModel;
@@ -46,7 +46,7 @@ class CompanySnapshotCapitalTest extends TestCase
         $this->assertNotNull($capital['cet1']);
 
         $closure = $this->debtEngine->calculateAltmanZScore($bank, 0.0, (float) $bank->getTotalRevenue(), 50.0);
-        $this->assertEqualsWithDelta($closure['z_score'] / 100.0, $capital['ratio'], 1e-12, 'the ratio MarketOperator closes the firm on');
+        $this->assertEqualsWithDelta($closure['z_score'] / 100.0, $capital['ratio'], 1e-12, 'the ratio FailureSweep closes the firm on');
         $this->assertSame($closure['zone'], $capital['zone']);
     }
 

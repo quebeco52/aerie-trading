@@ -6,7 +6,7 @@ use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use App\Service\Event\MarketEventPublisher;
 use App\Service\Macro\MacroEngine;
-use App\Service\Market\CreditRatingAgency;
+use App\Service\Market\Bond\CreditRatingAgency;
 use App\Service\Math\CorporateMetrics;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\MathUtility;
@@ -839,7 +839,7 @@ class DebtEngine
             return false;
         }
 
-        $ranks = \App\Service\Market\CreditRatingAgency::RATING_RANKS;
+        $ranks = \App\Service\Market\Bond\CreditRatingAgency::RATING_RANKS;
 
         return ($ranks[$stock->getCreditRating()] ?? $ranks['BBB'])
             >= ($ranks[self::REFINANCING_RATING_FLOOR] ?? 1);
