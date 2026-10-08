@@ -15,7 +15,7 @@ use App\Service\Corporate\EarningsEngine;
 use App\Service\Corporate\TreasuryEngine;
 use App\Service\Event\MarketEventPublisher;
 use App\Service\Event\NarrativeEngine;
-use App\Service\Market\MarketConsensusEngine;
+use App\Service\Market\Pricing\MarketConsensusEngine;
 use App\Service\Math\CorporateMetrics;
 use App\Service\Math\MathUtility;
 use PHPUnit\Framework\TestCase;

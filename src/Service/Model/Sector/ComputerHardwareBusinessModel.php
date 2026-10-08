@@ -13,6 +13,8 @@ use App\Entity\Stock;
 use App\DTO\MacroStateDTO;
 use App\Service\Math\MathUtility;
 use App\Service\Event\ShockEvent;
+use App\Service\Macro\MacroEngine;
+use App\Service\Math\FinancialConstants;
 
 /**
  * Earnings strategy for Computer Hardware (Supercomputers, PCs, Peripherals).
@@ -115,9 +117,17 @@ class ComputerHardwareBusinessModel extends StandardCorporateBusinessModel
         public function getReversionSpeed(): float { return 0.25; }
     public function getMoatSpread(): float { return 0.02; }
 
+    // --- Secular Demand ---
+    /** Spending on personal computers and peripherals plus business investment in computers and peripheral equipment as a share of US nominal GDP in 1997 (BEA NIPA Table 2.4.5, personal consumption expenditures and Table 5.3.5). */
+    public const SECULAR_SHARE_1997 = 0.0125;
+    /** The same share in 2019. */
+    public const SECULAR_SHARE_2019 = 0.0082;
+
+    /** Trend real growth plus the sector's measured drift in its share of GDP. */
     public function getSecularGrowthRate(Stock $stock): float
     {
-        return 0.045;
+        return MacroEngine::TREND_REAL_GROWTH
+            + MathUtility::gdpShareDrift(self::SECULAR_SHARE_1997, self::SECULAR_SHARE_2019, FinancialConstants::SECULAR_SHARE_WINDOW_YEARS);
     }
 
     public function getMacroPhysics(Stock $stock, MacroStateDTO $macroState): array

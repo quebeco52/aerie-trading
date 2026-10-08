@@ -2498,37 +2498,73 @@ class MathUtilityTest extends TestCase
         $this->assertSame(0.0, MathUtility::excessOverBaseline(0.02, 0.02));
     }
 
-    public function testExpectedNominalGrowthCarriesTheCycleAndIsCapped(): void
+    /**
+     * Ohlson (1995): a gap between the trailing return and its long-run level that fades at omega a year is worth
+     * sum d omega^t / (1+r)^t; the permanent equivalent is the constant gap with the same value, d_eq / r. Omega is
+     * pinned at one less Fama & French's (2000) 38% a year.
+     */
+    public function testThePersistentEquivalentReturnIsWorthWhatTheFadingReturnIs(): void
     {
-        // Boom: secular 2% + half of a 2% gap at beta 1 = 3% real, plus half of 2% inflation = 4% nominal.
-        $this->assertEqualsWithDelta(0.04, $this->mathUtility->calculateExpectedNominalGrowth(0.02, 0.02, 1.0, 0.02, 0.0), 1e-12);
-        // Bust at the same beta takes the same amount off; a flat 2% is what the corporate engines used to assume everywhere.
-        $this->assertEqualsWithDelta(0.02, $this->mathUtility->calculateExpectedNominalGrowth(0.02, -0.02, 1.0, 0.02, 0.0), 1e-12);
+        $rate = 0.09;
+        $gap = 0.08;
+        $fading = 0.0;
+        for ($year = 1; $year <= 400; $year++) {
+            $fading += $gap * (0.62 ** $year) / ((1.0 + $rate) ** $year);
+        }
+
+        $equivalentGap = MathUtility::persistentEquivalentReturn(0.12 + $gap, 0.12, $rate) - 0.12;
+
+        $this->assertEqualsWithDelta($fading, $equivalentGap / $rate, 1e-12);
+        $this->assertSame(0.12, MathUtility::persistentEquivalentReturn(0.12, 0.12, $rate));
+        $this->assertEqualsWithDelta(0.12, MathUtility::persistentEquivalentReturn(0.30, 0.12, 0.0), 1e-15);
+    }
+
+    /** A level EMA forgets per unit of time: four quarters at a time leave what one year does, and a first reading starts it. */
+    public function testALevelAverageForgetsAtTheSameRateAtAnyStep(): void
+    {
+        $quarterly = 0.08;
+        for ($quarter = 0; $quarter < 4; $quarter++) {
+            $quarterly = MathUtility::ewmaLevel($quarterly, 0.20, 0.25, 5.0);
+        }
+
+        $this->assertEqualsWithDelta(MathUtility::ewmaLevel(0.08, 0.20, 1.0, 5.0), $quarterly, 1e-15);
+        $this->assertEqualsWithDelta(0.08 + ((1.0 - exp(-1.0)) * 0.12), MathUtility::ewmaLevel(0.08, 0.20, 5.0, 5.0), 1e-15);
+        $this->assertSame(0.20, MathUtility::ewmaLevel(null, 0.20, 0.25, 5.0));
+    }
+
+    public function testExpectedNominalGrowthCarriesTheCycleAndCapsOnlyThePerpetualPartAtTrend(): void
+    {
+        $trend = MacroEngine::TREND_REAL_GROWTH;
+        // Boom: trend secular growth + half of a 2% gap at beta 1, plus 2% inflation. The cycle is transitory and passes.
+        $this->assertEqualsWithDelta($trend + 0.01 + 0.02, $this->mathUtility->calculateExpectedNominalGrowth($trend, 0.02, 1.0, 0.02, 0.0), 1e-12);
+        // Bust at the same beta takes the same amount off.
+        $this->assertEqualsWithDelta($trend - 0.01 + 0.02, $this->mathUtility->calculateExpectedNominalGrowth($trend, -0.02, 1.0, 0.02, 0.0), 1e-12);
         // Stagflation drag reaches a firm with no moat and is offset by pricing power.
         $this->assertLessThan(
-            $this->mathUtility->calculateExpectedNominalGrowth(0.02, 0.0, 1.0, 0.06, 1.0),
-            $this->mathUtility->calculateExpectedNominalGrowth(0.02, 0.0, 1.0, 0.06, 0.0)
+            $this->mathUtility->calculateExpectedNominalGrowth($trend, 0.0, 1.0, 0.06, 1.0),
+            $this->mathUtility->calculateExpectedNominalGrowth($trend, 0.0, 1.0, 0.06, 0.0)
         );
-        $this->assertSame(FinancialConstants::MAX_EXPECTED_GROWTH, $this->mathUtility->calculateExpectedNominalGrowth(0.10, 0.05, 2.0, 0.02, 0.0));
+        // No sector outgrows the economy forever: a 10% secular rate is priced at trend (Damodaran stable growth).
+        $this->assertEqualsWithDelta($trend + 0.02, $this->mathUtility->calculateExpectedNominalGrowth(0.10, 0.0, 1.0, 0.02, 0.0), 1e-12);
         $this->assertSame(0.0, $this->mathUtility->calculateExpectedNominalGrowth(-0.10, 0.0, 1.0, 0.0, 0.0));
     }
 
     /**
-     * Damodaran's fundamental growth: a firm grows at its return on capital times the share of earnings it keeps.
-     * The outlook's growth stands while retention funds it and is cut to what retention funds when it does not;
-     * a firm that keeps nothing, or earns nothing, grows at nothing.
+     * Damodaran's fundamental growth in real terms: retention funds real growth at the return on capital, and the
+     * plant already in place grows with the price level. A firm that keeps nothing still grows with inflation; the
+     * outlook stands while retention funds it.
      */
-    public function testFundableGrowthIsTheOutlookCappedAtWhatRetentionFunds(): void
+    public function testFundableGrowthIsTheOutlookCappedAtInflationPlusWhatRetentionFunds(): void
     {
-        $this->assertEqualsWithDelta(0.045, $this->mathUtility->calculateFundableGrowth(0.045, 0.15, 0.40), 1e-12);
-        $this->assertEqualsWithDelta(0.15 * 0.10, $this->mathUtility->calculateFundableGrowth(0.045, 0.15, 0.90), 1e-12);
-        $this->assertSame(0.0, $this->mathUtility->calculateFundableGrowth(0.045, 0.15, 1.20));
-        $this->assertSame(0.0, $this->mathUtility->calculateFundableGrowth(0.045, -0.05, 0.40));
+        $this->assertEqualsWithDelta(0.045, $this->mathUtility->calculateFundableGrowth(0.045, 0.15, 0.40, 0.02), 1e-12);
+        $this->assertEqualsWithDelta(0.02 + (0.15 * 0.10), $this->mathUtility->calculateFundableGrowth(0.045, 0.15, 0.90, 0.02), 1e-12);
+        $this->assertEqualsWithDelta(0.02, $this->mathUtility->calculateFundableGrowth(0.045, 0.15, 1.20, 0.02), 1e-12);
+        $this->assertEqualsWithDelta(0.02, $this->mathUtility->calculateFundableGrowth(0.045, -0.05, 0.40, 0.02), 1e-12);
     }
 
     public function testManagementAndTheMarketStrikeTheSameFairValueMultiple(): void
     {
-        $growth = $this->mathUtility->calculateFundableGrowth($this->mathUtility->calculateExpectedNominalGrowth(0.03, 0.01, 1.2, 0.025, 0.02), 0.18, 0.40);
+        $growth = $this->mathUtility->calculateFundableGrowth($this->mathUtility->calculateExpectedNominalGrowth(0.03, 0.01, 1.2, 0.025, 0.02), 0.18, 0.40, 0.025);
         $market = $this->mathUtility->calculateQualityAdjustedFairValuePE(0.09, 0.18, $growth, 22.0, 0.04);
         $management = $this->mathUtility->calculateManagementFairValuePE(0.09, 0.18, 0.03, 0.01, 1.2, 0.025, 0.02, 22.0, 0.04, 0.40);
 
@@ -2538,7 +2574,6 @@ class MathUtilityTest extends TestCase
         // The Sloan discount is inside the shared figure, floored at the distressed multiple.
         $clean = $this->mathUtility->calculateQualityAdjustedFairValuePE(0.09, 0.18, $growth, 22.0, 0.0);
         $this->assertEqualsWithDelta($clean - 0.04 * FinancialConstants::ACCRUALS_ANOMALY_PE_PENALTY_SCALE, $market, 1e-12);
-        $this->assertSame(FinancialConstants::MIN_INTRINSIC_PE, $this->mathUtility->calculateQualityAdjustedFairValuePE(0.09, 0.18, $growth, 22.0, 10.0));
     }
 
     public function testFringeAdjustedPriceLevelReducesToCournotWithNoFringeResponseAndSoftensItOtherwise(): void
@@ -2719,5 +2754,125 @@ class MathUtilityTest extends TestCase
             MathUtility::gompertzMakehamWait(0.5, $age + 20.0, $level, $slope, $background),
             'The older wait less.'
         );
+    }
+    /** A steady return of sigma sqrt(dt) every tick holds the estimate at sigma^2, whatever the tick. */
+    public function testEwmaAnnualizedVarianceHoldsATrueVarianceAtAnyTickRate(): void
+    {
+        foreach ([1.0 / 252.0, 1.0 / 14400.0] as $dt) {
+            self::assertEqualsWithDelta(
+                0.09,
+                MathUtility::ewmaAnnualizedVariance(0.09, 0.30 * sqrt($dt), $dt, 0.25),
+                1e-12
+            );
+        }
+    }
+
+    /** The memory is a span of simulated time: after one tau of quiet the estimate has decayed by e at any tick rate. */
+    public function testEwmaAnnualizedVarianceMemoryIsInYears(): void
+    {
+        foreach ([1.0 / 252.0, 1.0 / 14400.0] as $dt) {
+            $variance = 0.04;
+            $steps = (int) round(0.25 / $dt);
+            for ($i = 0; $i < $steps; $i++) {
+                $variance = MathUtility::ewmaAnnualizedVariance($variance, 0.0, $dt, 0.25);
+            }
+            self::assertEqualsWithDelta(0.04 * exp(-1.0), $variance, 1e-9);
+        }
+
+        self::assertSame(0.04, MathUtility::ewmaAnnualizedVariance(0.04, 0.1, 0.0, 0.25));
+    }
+
+    /** The closed form agrees with the jumps calculateSVJJJumps() actually draws, cap included. */
+    public function testMeanVarianceJumpMatchesTheDrawnJumps(): void
+    {
+        mt_srand(20261007);
+        $math = new MathUtility();
+        $pUp = 0.40;
+        $muV = 0.05;
+        $n = 40000;
+        $sum = 0.0;
+        $sumSq = 0.0;
+        for ($i = 0; $i < $n; $i++) {
+            $jump = $math->calculateSVJJJumps(lambda: 1.0, pUp: $pUp, etaUp: 20.0, etaDown: 10.0, muV: $muV, dt: 1.0)['var_jump'];
+            $sum += $jump;
+            $sumSq += $jump * $jump;
+        }
+        $mean = $sum / $n;
+        $se = sqrt((($sumSq / $n) - ($mean * $mean)) / $n);
+
+        self::assertEqualsWithDelta(MathUtility::meanVarianceJump($pUp, $muV), $mean, 4.0 * $se);
+        self::assertEqualsWithDelta(
+            $muV * (1.0 - exp(-MathUtility::MAX_VARIANCE_JUMP_MEAN_MULTIPLE)),
+            MathUtility::meanVarianceJump(0.0, $muV),
+            1e-15
+        );
+    }
+
+    /** ROE = ROIC + D/E (ROIC - kd(1-t)), and an equity at or below zero is not levered by. */
+    public function testEquityReturnFromRoicIsTheLeverageIdentity(): void
+    {
+        self::assertEqualsWithDelta(0.10 + (1.0 * (0.10 - 0.04)), MathUtility::equityReturnFromRoic(0.10, 100.0, 50.0, 0.04), 1e-12);
+        self::assertEqualsWithDelta(0.10, MathUtility::equityReturnFromRoic(0.10, 50.0, 50.0, 0.04), 1e-12);
+        self::assertEqualsWithDelta(0.02 + (3.0 * (0.02 - 0.04)), MathUtility::equityReturnFromRoic(0.02, 100.0, 25.0, 0.04), 1e-12);
+        self::assertSame(0.10, MathUtility::equityReturnFromRoic(0.10, 100.0, 0.0, 0.04));
+    }
+
+    /** Nominal growth is real growth plus all of inflation; at target inflation and a closed gap nothing else enters. */
+    public function testExpectedNominalGrowthCarriesInflationInFull(): void
+    {
+        $math = new MathUtility();
+        $target = MacroEngine::TARGET_INFLATION;
+
+        self::assertEqualsWithDelta(0.02 + $target, $math->calculateExpectedNominalGrowth(0.02, 0.0, 1.0, $target, 0.0), 1e-12);
+        // Above target, only the part pricing power cannot offset is lost from real growth.
+        self::assertEqualsWithDelta(
+            0.02 - ((0.04 - $target) * 0.6) + 0.04,
+            $math->calculateExpectedNominalGrowth(0.02, 0.0, 1.0, 0.04, 0.4),
+            1e-12
+        );
+    }
+
+    /** A sector's demand drift is the annual log change in its GDP share; a share that does not move adds nothing. */
+    public function testGdpShareDriftIsTheAnnualLogChangeInTheShare(): void
+    {
+        self::assertEqualsWithDelta(log(2.0) / 10.0, MathUtility::gdpShareDrift(0.01, 0.02, 10.0), 1e-12);
+        self::assertSame(0.0, MathUtility::gdpShareDrift(0.03, 0.03, 22.0));
+        self::assertLessThan(0.0, MathUtility::gdpShareDrift(0.03, 0.02, 22.0));
+        self::assertSame(0.0, MathUtility::gdpShareDrift(0.0, 0.02, 22.0));
+    }
+
+    /** The excess over trend halves every half-life and the rate settles on trend; a trend sector never moves. */
+    public function testSecularGrowthFadesTowardTrendAtItsHalfLife(): void
+    {
+        self::assertEqualsWithDelta(0.06, MathUtility::fadeTowardTrend(0.06, 0.02, 0.0, 8.0), 1e-12);
+        self::assertEqualsWithDelta(0.04, MathUtility::fadeTowardTrend(0.06, 0.02, 8.0, 8.0), 1e-12);
+        self::assertEqualsWithDelta(0.00, MathUtility::fadeTowardTrend(-0.02, 0.02, 8.0, 8.0), 1e-12);
+        self::assertEqualsWithDelta(0.02, MathUtility::fadeTowardTrend(0.06, 0.02, 400.0, 8.0), 1e-12);
+        self::assertSame(0.02, MathUtility::fadeTowardTrend(0.02, 0.02, 5.0, 8.0));
+    }
+
+    /** The flexible accelerator: demand growth plus a share of the log capital gap, never a negative build. */
+    public function testTheFlexibleAcceleratorGrowsWithDemandAndClosesItsGapWithoutDisinvesting(): void
+    {
+        self::assertEqualsWithDelta(0.04, MathUtility::flexibleAcceleratorGrowth(0.04, 0.0, 0.062), 1e-12);
+        self::assertEqualsWithDelta(0.04 + (0.062 * log(1.5)), MathUtility::flexibleAcceleratorGrowth(0.04, log(1.5), 0.062), 1e-12);
+        self::assertEqualsWithDelta(0.04 - (0.062 * 0.5), MathUtility::flexibleAcceleratorGrowth(0.04, -0.5, 0.062), 1e-12);
+        self::assertSame(0.0, MathUtility::flexibleAcceleratorGrowth(0.04, -1.0, 0.062), 'an overbuilt firm stops building; it does not sell plant');
+    }
+
+    /** What a level compounds is the integral of the faded rate: the closed form matches a fine Riemann sum. */
+    public function testTheFadedExcessIntegralIsTheSumOfTheFadedRate(): void
+    {
+        $steps = 100000;
+        $from = 3.0;
+        $to = 15.0;
+        $sum = 0.0;
+        for ($i = 0; $i < $steps; $i++) {
+            $t = $from + (($i + 0.5) * ($to - $from) / $steps);
+            $sum += (MathUtility::fadeTowardTrend(0.05, 0.02, $t, 8.0) - 0.02) * ($to - $from) / $steps;
+        }
+
+        self::assertEqualsWithDelta($sum, MathUtility::fadedExcessIntegral(0.03, $from, $to, 8.0), 1e-9);
+        self::assertEqualsWithDelta(0.03 * 8.0 / M_LN2, MathUtility::fadedExcessIntegral(0.03, 0.0, 1.0e6, 8.0), 1e-9, 'a fading excess compounds a bounded amount');
     }
 }

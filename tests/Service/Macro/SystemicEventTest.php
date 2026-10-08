@@ -14,7 +14,7 @@ use ReflectionMethod;
 /**
  * Covers the district-wide systemic event channel.
  *
- * MacroState::$eventType is consumed by MarketTickerCommand and MarketSimulateCommand to publish an
+ * MacroState::$eventType is consumed by MarketTickerCommand to publish an
  * index-level headline against the LBI ETF. These tests pin the two properties that make that channel
  * usable: the right regime produces the right event, and a crisis that persists for thousands of ticks
  * reports a handful of times rather than flooding the 50-item news feed.

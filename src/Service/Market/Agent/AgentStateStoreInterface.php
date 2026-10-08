@@ -21,16 +21,17 @@ interface AgentStateStoreInterface
 {
     /**
      * A book: every participant's position in shares, every competing belief's accumulated fitness and
-     * the exposure one of its agents holds, and the realized variance the name's agents have observed.
+     * the exposure one of its agents holds, the realized variance the name's agents have observed, and
+     * the last trading day's move, volume and news that attention-driven retail sorts on.
      * The last two are absent from a book written before they existed and are treated as empty and zero.
      *
-     * @return array{positions: array<string, float>, fitness: array<string, float>, exposures?: array<string, float>, variance?: float}|null
+     * @return array{positions: array<string, float>, fitness: array<string, float>, exposures?: array<string, float>, variance?: float, attention?: array{move: float, volume: float, news: float}, skip?: float}|null
      *         Null when this name has no book yet.
      */
     public function read(string $ticker): ?array;
 
     /**
-     * @param array{positions: array<string, float>, fitness: array<string, float>, exposures?: array<string, float>, variance?: float} $state
+     * @param array{positions: array<string, float>, fitness: array<string, float>, exposures?: array<string, float>, variance?: float, attention?: array{move: float, volume: float, news: float}, skip?: float} $state
      */
     public function write(string $ticker, array $state): void;
 

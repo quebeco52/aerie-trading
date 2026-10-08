@@ -3,7 +3,7 @@
 namespace App\MessageHandler;
 
 use App\Message\ProcessLimitOrdersMessage;
-use App\Service\Market\TradeExecutionService;
+use App\Service\Market\Trading\TradeExecutionService;
 use Symfony\Component\Messenger\Attribute\AsMessageHandler;
 
 #[AsMessageHandler]

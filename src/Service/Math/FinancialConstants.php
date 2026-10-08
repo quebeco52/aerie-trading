@@ -9,16 +9,6 @@ namespace App\Service\Math;
 class FinancialConstants
 {
     // --- Earnings & Volatility Tuning ---
-    /** Standardized earnings surprise Z-score threshold triggering extreme market reaction. */
-    public const SURPRISE_Z_SCORE_THRESHOLD = 1.5;
-    /** Z-score threshold below which quarterly earnings are considered inline/inconsequential. */
-    public const BORING_Z_SCORE_THRESHOLD = 0.5;
-    /** Additive base volatility shock applied during significant earnings surprises. */
-    public const VOLATILITY_SHOCK_FACTOR = 0.2;
-    /** Decay rate per quarter dissipating elevated idiosyncratic volatility back to baseline. */
-    public const VOLATILITY_COOLING_FACTOR = 0.25;
-    /** Absolute ceiling capping short-term volatility relative to baseline asset volatility. */
-    public const MAX_VOLATILITY_MULTIPLIER = 3.0;
     /** Minimum operating capital floor ($10M) preventing zero-division in asset-light scaling. */
     public const MIN_OPERATING_BASE_CASH = 10000000.0;
 
@@ -39,18 +29,6 @@ class FinancialConstants
     public const BAYESIAN_BASE_PRIOR_VARIANCE = 0.0036;
     /** Multiplier scaling analyst consensus prior uncertainty as VIX rises. */
     public const BAYESIAN_VIX_SCALING_FACTOR = 0.02;
-
-    // --- Analyst Estimate Dispersion ---
-    /** Calm-market volatility at which the per-sector analyst error standard deviations are calibrated. */
-    public const DISPERSION_BASELINE_VOLATILITY = 0.15;
-    /** Sensitivity of analyst estimate dispersion to market volatility above its calibration baseline. */
-    public const DISPERSION_VIX_SENSITIVITY = 3.0;
-    /** Ceiling on dispersion widening, so a volatility spike cannot drive the SUE denominator to infinity. */
-    public const DISPERSION_MAX_SCALE = 2.50;
-
-    // --- Leverage Effect (Black, 1976) ---
-    /** Asymmetric leverage effect scalar magnifying volatility on negative earnings surprises. */
-    public const NEGATIVE_SURPRISE_VOL_MULTIPLIER = 1.4;
 
     // --- Jump Diffusion (Fundamental vs Price) ---
     /** Scale factor for fundamental jump intensity relative to price jumps. */
@@ -106,13 +84,19 @@ class FinancialConstants
     public const BASELINE_MARKET_PE = 15.0;
     /** Baseline long-term stable GDP growth rate for Gordon Growth valuation. */
     public const DEFAULT_PERPETUAL_GROWTH_RATE = 0.02;
+    // --- Secular Demand ---
+    /** Years between the BEA benchmark shares a sector's demand drift is measured over, 1997 to 2019. */
+    public const SECULAR_SHARE_WINDOW_YEARS = 22.0;
+    /** Half-life of a sector's demand drift: 8 years, how much of US industries' 1997-2008 GDP-share drift carried into 2008-2019 (BEA GDP by Industry, non-commodity industries). */
+    public const SECULAR_EXCESS_HALF_LIFE_YEARS = 8.0;
+
+    // --- Capacity Investment ---
+    /** Share of the log gap between demand-implied and installed capital a firm closes each year: 6.2% (Bloom, Bond & Van Reenen 2007, UK company panel, error-correction term). */
+    public const CAPITAL_ERROR_CORRECTION_SPEED = 0.062;
+
     // --- Fundamental Growth Transmission ---
     /** Share of the output gap that reaches a firm's real growth rate, before its beta scales the cyclical exposure. */
     public const CYCLICAL_GROWTH_PASS_THROUGH = 0.50;
-    /** Share of inflation that carries into the nominal growth rate used for valuation. */
-    public const INFLATION_NOMINAL_GROWTH_PASS_THROUGH = 0.50;
-    /** Cap on nominal expected growth, held below any plausible hurdle rate so the Gordon Growth denominator cannot diverge. */
-    public const MAX_EXPECTED_GROWTH = 0.05;
 
     /** Absolute floor on intrinsic fundamental P/E multiple. */
     public const MIN_INTRINSIC_PE = 4.0;
@@ -323,6 +307,18 @@ class FinancialConstants
     public const DEFAULT_LEASE_LIABILITY_INTENSITY = 0.05;
     /** Default stock-based compensation (ASC 718) as a fraction of revenue: non-cash expense, real dilution. */
     public const DEFAULT_STOCK_COMPENSATION_INTENSITY = 0.01;
+
+    // --- Equity Grant Burn Rate ---
+    /** Most shares a large company grants in a year, as a share of shares outstanding, by GICS sector: ISS 2026 S&P 500 value-adjusted burn-rate benchmarks (86th percentile). */
+    public const EQUITY_BURN_RATE_CAP_BY_SECTOR = [
+        'Information Technology' => 0.0215,
+        'Communication Services' => 0.0172,
+        'Consumer Discretionary' => 0.0133,
+        'Financials'             => 0.0103,
+        'Health Care'            => 0.0088,
+    ];
+    /** ISS 2026 S&P 500 burn-rate benchmark for every other sector (energy, materials, industrials, staples, utilities, real estate): 0.77% a year. */
+    public const DEFAULT_EQUITY_BURN_RATE_CAP = 0.0077;
     /** Goodwill impairment smaller than this fraction of the goodwill balance is immaterial and not booked. */
     public const MIN_GOODWILL_IMPAIRMENT_FRACTION = 0.01;
 
@@ -537,14 +533,24 @@ class FinancialConstants
     /** Ceiling on the quoted half-spread (2%), so even a distressed name stays tradable at a price. */
     public const MAX_HALF_SPREAD = 0.02;
 
+    // --- Profitability Persistence (Fama & French 2000; Ohlson 1995) ---
+    /** Share of a firm's gap between its return on capital and its own long-run level that closes each year: about 38% (Fama & French 2000, J. Business, partial-adjustment model). */
+    public const PROFITABILITY_MEAN_REVERSION_RATE = 0.38;
+    /** Time constant in years of each firm's measured long-run return, the level its profitability reverts to: five years, the span Damodaran normalizes earnings over. */
+    public const LONG_RUN_RETURN_EMA_YEARS = 5.0;
+
     // --- Market Microstructure: Impact (Almgren, Thum, Hauptmann & Li 2005) ---
-    /** Linear permanent impact coefficient. At 1.0 trading one full day's volume moves the price by one daily standard deviation; linear so the mark is additive across ticks and independent of the tick rate (Huberman & Stanzl 2004). */
-    public const PERMANENT_IMPACT_GAMMA = 1.00;
-    /** Temporary impact as a share of the permanent move. The price walks to its new level while the order fills, so the taker's average fill is the midpoint of that walk: exactly one half. */
+    /** Linear peak impact coefficient. At 1.0 trading one full day's volume moves the price by one daily standard deviation; linear so the mark is additive across ticks and independent of the tick rate (Huberman & Stanzl 2004). */
+    public const PEAK_IMPACT_GAMMA = 1.00;
+    /** Share of the peak move that stays in the price; the rest relaxes away. Metaorder impact settles at ~2/3 of its peak (Farmer, Gerig, Lillo & Waelbroeck 2013; Bershova & Rakhlin 2013). */
+    public const PERMANENT_IMPACT_SHARE = 2.0 / 3.0;
+    /** Half-life of the transient part of impact, in years: NYSE price pressures decay with a 0.92-trading-day half-life (Hendershott & Menkveld 2014, JFE). */
+    public const TRANSIENT_IMPACT_HALF_LIFE_YEARS = 0.92 / self::TRADING_DAYS_PER_YEAR;
+    /** Temporary impact as a share of the peak move. The price walks to its new level while the order fills, so the taker's average fill is the midpoint of that walk: exactly one half. */
     public const TEMPORARY_IMPACT_ETA = 0.50;
     /** Largest multiple of average daily volume a single order may consume. Past it the impact law is extrapolation, and a capped impact would be a free lunch for size. */
     public const MAX_ORDER_ADV_MULTIPLE = 2.00;
-    /** Ceiling on the price move one tick's net order flow may leave behind, as a log return; the impact law is a per-order measurement and a tick's aggregate is not bounded by the per-order size cap. */
+    /** Ceiling on the peak price move of one tick's net order flow, as a log return; the impact law is a per-order measurement and a tick's aggregate is not bounded by the per-order size cap. */
     public const MAX_TICK_IMPACT_LOG_RETURN = 0.2624;
     /** Floor on a fund's half-spread. Creation and redemption keep a broad fund close to its basket, so it quotes tighter than any single constituent — but never tighter than this. */
     public const ETF_HALF_SPREAD = 0.0001;
@@ -755,6 +761,8 @@ class FinancialConstants
     public const AGENT_FUNDAMENTALIST_GAIN = 2.50;
     /** Chartist conviction per unit of accumulated price trend. */
     public const AGENT_MOMENTUM_GAIN = 3.00;
+    /** The most recent month the chartists' formation window skips: last month's winners reverse (Jegadeesh 1990), so momentum is formed on the months before it (Jegadeesh & Titman 1993; the Fama-French UMD factor skips one month). */
+    public const AGENT_MOMENTUM_SKIP_YEARS = 1.0 / 12.0;
     /** Share of the others' flow a market maker takes the other side of in calm conditions (Grossman & Miller 1988 immediacy). The rest reaches the price at once. */
     public const AGENT_MAKER_ABSORPTION = 0.35;
     /** Time a maker takes to work 63% of its inventory back to flat, in years (~1 trading day; Hendershott & Menkveld 2014 find inventories mean-revert on that order). Carrying risk is not what it is paid for. */
@@ -793,6 +801,8 @@ class FinancialConstants
     public const AGENT_RETAIL_VOLUME_MULTIPLE = 3.00;
     /** Attention contributed by a name being in the news at all, before any move or volume. News is the third of the paper's three sorts and the only one that is not a market statistic. */
     public const AGENT_RETAIL_NEWS_ATTENTION = 0.50;
+    /** Memory of what retail has noticed, in years (one trading day): Barber & Odean sort on the previous day's return, volume and news, so a tick's worth of it is the same day at any tick rate. */
+    public const AGENT_RETAIL_ATTENTION_HORIZON_YEARS = 1.0 / 252.0;
 
     // --- Sell-Side Price Targets (Brav & Lehavy 2003) ---
     /** How far above fair value the published twelve-month target is set. Targets are systematically optimistic; Brav & Lehavy measure them around 28% above price, and with price near fair value on average this lands in the same place. */
@@ -827,10 +837,16 @@ class FinancialConstants
     public const ETF_MAX_ARBITRAGE_BAND = 0.08;
     /** Premium, as a fraction of net assets, created by net demand equal to the fund's entire net assets in one tick. The linear pressure the fund's own order flow exerts before an AP steps in. */
     public const ETF_FLOW_PRESSURE = 0.50;
-    /** Share of a standing premium or discount that survives one tick absent any flow. Deviations are transient: the AP community closes them, and what is left decays rather than compounding. */
-    public const ETF_PREMIUM_PERSISTENCE = 0.60;
+    /** Decay time of a standing premium or discount absent flow, in years (~2 trading days: 60% survives a day). Deviations are transient and mean-revert within days (Petajisto 2017, FAJ). */
+    public const ETF_PREMIUM_DECAY_TAU_YEARS = 0.0078;
     /** Share of the arbitrage band a market maker quotes the fund inside. Below one because a maker sits inside the arbitrage, not at it — quoting AT the band would mean the creation trade never pays. */
     public const ETF_QUOTE_BAND_SHARE = 0.35;
     /** Shares a fund is seeded with, so a creation has a book to be measured against on the first tick. */
     public const ETF_SEED_SHARES_OUTSTANDING = 250_000_000.0;
+
+    // --- Structural Capital Approximation (callers without a balance sheet) ---
+    /** Invested capital per unit of revenue (0.5, capital turned about twice a year); the long-standing approximation, of the order of Damodaran's US sales-to-capital tables (not pinned). */
+    public const STRUCTURAL_INVESTED_CAPITAL_TO_REVENUE = 0.5;
+    /** Invested capital per unit of book equity (1.5, a book debt-to-equity of 0.5); the long-standing approximation, of the order of US non-financial leverage at book (not pinned). */
+    public const STRUCTURAL_INVESTED_CAPITAL_TO_BOOK = 1.5;
 }

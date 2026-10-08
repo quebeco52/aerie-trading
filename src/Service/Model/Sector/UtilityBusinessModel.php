@@ -73,9 +73,17 @@ class UtilityBusinessModel extends StandardCorporateBusinessModel
         return [1.15, 0.85, 1.15, 0.85]; // Twin peaks: Q1 winter heating and Q3 summer air conditioning
     }
 
+    // --- Secular Demand ---
+    /** Utilities value added as a share of US nominal GDP in 1997 (BEA GDP by Industry, value added). */
+    public const SECULAR_SHARE_1997 = 0.0200;
+    /** The same share in 2019. */
+    public const SECULAR_SHARE_2019 = 0.0154;
+
+    /** Trend real growth plus the sector's measured drift in its share of GDP. */
     public function getSecularGrowthRate(Stock $stock): float
     {
-        return 0.01;
+        return MacroEngine::TREND_REAL_GROWTH
+            + MathUtility::gdpShareDrift(self::SECULAR_SHARE_1997, self::SECULAR_SHARE_2019, FinancialConstants::SECULAR_SHARE_WINDOW_YEARS);
     }
     public function getCapexCyclicality(): float
     {

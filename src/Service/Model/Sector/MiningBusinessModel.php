@@ -101,8 +101,6 @@ class MiningBusinessModel extends StandardCorporateBusinessModel
     public const MAX_OPERATING_MARGIN_CEILING = 0.32;
     /** Mine CapEx follows the price deck: US mining structures investment (BEA B320RA3A086NBEA) on the real IMF metals cycle (PMETAINDEXM/CPIAUCSL), HP(6.25) annual 1992-2024, elasticity 0.60. */
     public const CAPEX_CYCLICALITY = 0.60;
-    /** Baseline secular growth rate for a mature producer. */
-    public const SECULAR_GROWTH = 0.01;
     /** Share of construction in progress completed each quarter (about two years for a brownfield expansion). */
     public const CAPEX_COMPLETION_RATE = 0.125;
     /** Annual mean reversion of ROIC toward the cost of capital. */
@@ -126,10 +124,6 @@ class MiningBusinessModel extends StandardCorporateBusinessModel
         return self::CAPEX_COMPLETION_RATE;
     }
 
-    public function getSecularGrowthRate(Stock $stock): float
-    {
-        return self::SECULAR_GROWTH;
-    }
 
     public function getCapexCyclicality(): float
     {

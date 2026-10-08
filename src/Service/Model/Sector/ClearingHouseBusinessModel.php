@@ -414,13 +414,11 @@ class ClearingHouseBusinessModel extends BaseFinancialBusinessModel
                 $amtB = number_format(abs($liabilityChange) / 1_000_000_000, 2);
                 $state['events'][] = [
                     'description' => "Initial margin pool contracted by \${$amtB}B amid declining market volatility.",
-                    'shock' => -0.5
                 ];
             } elseif ($changePct > self::LORE_POOL_CHANGE_THRESHOLD) {
                 $amtB = number_format($liabilityChange / 1_000_000_000, 2);
                 $state['events'][] = [
                     'description' => "Collected \${$amtB}B in additional Initial Margin deposits due to elevated market volatility.",
-                    'shock' => 0.5
                 ];
             }
         }

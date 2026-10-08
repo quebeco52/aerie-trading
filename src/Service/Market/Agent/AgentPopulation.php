@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Service\Market\Agent;
 
 use App\Service\Math\FinancialConstants;
+use App\Service\Math\MathUtility;
 
 /**
  * How capital is distributed across competing beliefs, and how it moves between them.
@@ -215,12 +216,11 @@ final class AgentPopulation
      */
     public function realizedVariance(float $variance, float $logReturn, float $dt): float
     {
-        if ($dt <= 0.0) {
-            return $variance;
-        }
-
-        $phi = exp(-$dt / FinancialConstants::AGENT_REALIZED_VOLATILITY_HORIZON_YEARS);
-
-        return (max(0.0, $variance) * $phi) + ((1.0 - $phi) * (($logReturn * $logReturn) / $dt));
+        return MathUtility::ewmaAnnualizedVariance(
+            $variance,
+            $logReturn,
+            $dt,
+            FinancialConstants::AGENT_REALIZED_VOLATILITY_HORIZON_YEARS
+        );
     }
 }

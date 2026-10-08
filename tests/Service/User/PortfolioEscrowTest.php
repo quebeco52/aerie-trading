@@ -91,7 +91,7 @@ final class PortfolioEscrowTest extends TestCase
     {
         $this->assertStringContainsString(
             'Portfolio::OPEN_ORDER_ESCROW_DETAIL_SQL',
-            $this->read('src/Service/Market/MarginEngine.php'),
+            $this->read('src/Service/Market/Trading/MarginEngine.php'),
             'MarginEngine must value the open book on the same definition as net asset value.'
         );
     }
@@ -226,7 +226,7 @@ final class PortfolioEscrowTest extends TestCase
         $sources = [
             'src/Service/User/Portfolio.php',
             'src/Service/Corporate/CorporateLedgerService.php',
-            'src/Service/Market/EtfTracker.php',
+            'src/Service/Market/Index/EtfTracker.php',
         ];
 
         $checked = 0;

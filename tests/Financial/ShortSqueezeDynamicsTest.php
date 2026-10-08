@@ -5,10 +5,10 @@ declare(strict_types=1);
 namespace App\Tests\Financial;
 
 use App\Entity\Stock;
-use App\Service\Market\LiquidityEngine;
-use App\Service\Market\MarginEngine;
-use App\Service\Market\OptionMarginCalculator;
-use App\Service\Market\SecuritiesLendingDesk;
+use App\Service\Market\Pricing\LiquidityEngine;
+use App\Service\Market\Trading\MarginEngine;
+use App\Service\Market\Option\OptionMarginCalculator;
+use App\Service\Market\Trading\SecuritiesLendingDesk;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\MathUtility;
 use Doctrine\ORM\EntityManagerInterface;
@@ -84,7 +84,7 @@ class ShortSqueezeDynamicsTest extends TestCase
         $stock = $this->stock();
         $covered = $this->liquidity->averageDailyVolume($stock) * 0.30;
 
-        $this->assertGreaterThan(0.0, $this->liquidity->permanentImpact($stock, $covered));
+        $this->assertGreaterThan(0.0, $this->liquidity->peakImpact($stock, $covered));
     }
 
     public function testEachRoundOfCoveringRaisesTheCostOfStayingShortForEveryoneElse(): void
@@ -166,7 +166,7 @@ class ShortSqueezeDynamicsTest extends TestCase
             // The covering both moves the price and frees borrow for everyone else.
             $shortInterest = max(0.0, $shortInterest - $toCover);
             $stock->setShortInterestShares((string) $shortInterest);
-            $price *= exp($this->liquidity->permanentImpact($stock, $toCover));
+            $price *= exp($this->liquidity->peakImpact($stock, $toCover));
         }
 
         $this->assertGreaterThan(0, $rounds, 'The rally must actually call the short.');

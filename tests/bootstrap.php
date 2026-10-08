@@ -39,6 +39,7 @@ if (!class_exists('Redis')) {
         public function multi($mode = self::MULTI) { return $this; }
         public function exec() { return []; }
         public function publish($channel, $message) { return 0; }
+        public function flushAll(?bool $sync = null): \Redis|bool { return true; }
     }
 }
 

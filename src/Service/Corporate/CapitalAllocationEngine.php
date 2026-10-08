@@ -51,7 +51,8 @@ class CapitalAllocationEngine
         MacroStateDTO $macroState,
         float $actualTotalNetIncome = 0.0,
         float $stockCompensation = 0.0,
-        ?float $openingCapitalRatio = null
+        ?float $openingCapitalRatio = null,
+        ?float $expansionBudget = null
     ): array {
         $ctx = new CapitalAllocationContext(
             $stock,
@@ -61,7 +62,8 @@ class CapitalAllocationEngine
             $currentPrice,
             $sharesOutstanding,
             $actualTotalNetIncome,
-            $stockCompensation
+            $stockCompensation,
+            $expansionBudget
         );
         $ctx->openingCapitalRatio = $openingCapitalRatio;
 
@@ -228,7 +230,7 @@ class CapitalAllocationEngine
             $ctx->wholesaleDebt = (float) $stock->getWholesaleDebt();
             $ctx->newTreasury += $distributionShortfall;
 
-            if ($distributionShortfall > 500_000_000.0) {
+            if (TreasuryEngine::isNewsworthy($ctx->stock, $distributionShortfall)) {
                 $purpose = $requiredDividend >= $heldDividend ? 'its required REIT distribution' : 'its dividend';
                 $ctx->events[] = ['description' => "Borrowed \$" . number_format($distributionShortfall / 1_000_000_000, 2) . "B to fund {$purpose}.", 'shock' => 0.0];
             }
@@ -365,10 +367,14 @@ class CapitalAllocationEngine
 
         $saturationSeverity = $this->resolveRedeploymentSeverity($ctx, $trueReturn);
 
+        // The multiple values equity, so it is struck at the cost of equity on the return on equity, as the
+        // market strikes it (MarketEngine); the spread above stays ROIC against the hurdle, an EVA test.
+        $valuationReturn = $ctx->strategy->getValuationReturn($trueReturn, $stock->getLongRunReturn() !== null ? (float) $stock->getLongRunReturn() : null, $ctx->health->costOfEquity);
+        $equityRates = $ctx->strategy->getEquityValuationRates($stock, $valuationReturn, $ctx->health, $ctx->macroState->corporateTaxRate);
         $fairValuePE = $this->mathUtility->calculateManagementFairValuePE(
-            $hurdleRate,
-            $trueReturn,
-            $ctx->strategy->getSecularGrowthRate($stock),
+            $equityRates['costOfEquity'],
+            $equityRates['equityReturn'],
+            $ctx->strategy->getFadedSecularGrowthRate($stock, $ctx->macroState->totalTime),
             $ctx->macroState->outputGap,
             $ctx->health->leveredBeta,
             $ctx->macroState->inflation,
@@ -599,8 +605,8 @@ class CapitalAllocationEngine
             $ctx->debtActionTaken = true;
             $ctx->recapActionTaken = true;
 
-            if ($borrowing > 500_000_000.0) {
-                $ctx->events[] = ['description' => "Issued \$" . number_format($borrowing / 1_000_000_000, 2) . "B in bonds for recapitalization.", 'shock' => 0.5];
+            if (TreasuryEngine::isNewsworthy($ctx->stock, $borrowing)) {
+                $ctx->events[] = ['description' => "Issued \$" . number_format($borrowing / 1_000_000_000, 2) . "B in bonds for recapitalization."];
             }
         }
 

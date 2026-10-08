@@ -13,6 +13,7 @@ use App\Entity\Stock;
 use App\Service\Math\MathUtility;
 use App\Service\Event\ShockEvent;
 use App\Service\Macro\MacroEngine;
+use App\Service\Math\FinancialConstants;
 
 /**
  * Earnings strategy for Semiconductor Foundries and Photolithography Equipment Manufacturers.
@@ -59,9 +60,17 @@ class SemiconductorBusinessModel extends StandardCorporateBusinessModel
         public function getReversionSpeed(): float { return 0.15; }
     public function getMoatSpread(): float { return 0.02; }
     public function getCapExCompletionRate(Stock $stock): float { return 0.125; }
+    // --- Secular Demand ---
+    /** Business and household investment in information processing equipment as a share of US nominal GDP in 1997 (BEA NIPA Table 5.3.5, private fixed investment and Table 2.4.5). */
+    public const SECULAR_SHARE_1997 = 0.0300;
+    /** The same share in 2019. */
+    public const SECULAR_SHARE_2019 = 0.0272;
+
+    /** Trend real growth plus the sector's measured drift in its share of GDP. */
     public function getSecularGrowthRate(Stock $stock): float
     {
-        return 0.05;
+        return MacroEngine::TREND_REAL_GROWTH
+            + MathUtility::gdpShareDrift(self::SECULAR_SHARE_1997, self::SECULAR_SHARE_2019, FinancialConstants::SECULAR_SHARE_WINDOW_YEARS);
     }
     public function getCapexCyclicality(): float
     {

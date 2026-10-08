@@ -64,6 +64,30 @@ class BiotechBusinessModelTest extends TestCase
             + ((1.0 - $biologic) * (1.0 - exp(-BiotechBusinessModel::SMALL_MOLECULE_LOE_HAZARD * $quarters)));
     }
 
+    /**
+     * Equity pay is blended on the firm's own book: Ibis, 85% marketed franchise, pays near the pharmaceutical
+     * industry's 1.71% of revenue rather than the biotechnology industry's 7.20%; the default mix sits between.
+     */
+    public function testStockCompensationIsBlendedOnTheFirmsMarketedAndPipelineBook(): void
+    {
+        $model = new BiotechBusinessModel();
+        $ibis = $this->makeStock();
+        $ibis->setTicker('IBIS');
+
+        self::assertEqualsWithDelta(
+            (0.85 * BiotechBusinessModel::MARKETED_STOCK_COMPENSATION_INTENSITY) + (0.15 * BiotechBusinessModel::PIPELINE_STOCK_COMPENSATION_INTENSITY),
+            $model->getStockCompensationIntensity($ibis),
+            1e-12
+        );
+        self::assertEqualsWithDelta(
+            (BiotechBusinessModel::ESTABLISHED_DRUG_WEIGHT * BiotechBusinessModel::MARKETED_STOCK_COMPENSATION_INTENSITY)
+                + (BiotechBusinessModel::PIPELINE_DRUG_WEIGHT * BiotechBusinessModel::PIPELINE_STOCK_COMPENSATION_INTENSITY),
+            $model->getStockCompensationIntensity($this->makeStock()),
+            1e-12
+        );
+        self::assertLessThan(0.03, $model->getStockCompensationIntensity($ibis), 'a big pharma does not pay like a clinical-stage biotech');
+    }
+
     /** R&D pays off through the readout hazard alone: the shared reinvestment margin drift would pay it a second time. */
     public function testRndReinvestmentNeverMovesTheOperatingMargin(): void
     {

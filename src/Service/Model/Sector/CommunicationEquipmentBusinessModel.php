@@ -13,6 +13,8 @@ use App\DTO\StreamContext;
 use App\Entity\Stock;
 use App\Service\Event\ShockEvent;
 use App\Service\Math\MathUtility;
+use App\Service\Macro\MacroEngine;
+use App\Service\Math\FinancialConstants;
 
 /**
  * Earnings strategy for Communication Equipment (radio access networks, core routing, standard-essential patents).
@@ -157,9 +159,17 @@ class CommunicationEquipmentBusinessModel extends StandardCorporateBusinessModel
     public function getMoatSpread(): float { return 0.025; }
     public function getWorkingCapitalIntensity(Stock $stock): float { return 0.15; }
 
+    // --- Secular Demand ---
+    /** Business investment in communication equipment plus household telephone equipment as a share of US nominal GDP in 1997 (BEA NIPA Tables 5.5.5 and 2.4.5). */
+    public const SECULAR_SHARE_1997 = 0.0097;
+    /** The same share in 2019. */
+    public const SECULAR_SHARE_2019 = 0.0073;
+
+    /** Trend real growth plus the sector's measured drift in its share of GDP. */
     public function getSecularGrowthRate(Stock $stock): float
     {
-        return 0.03;
+        return MacroEngine::TREND_REAL_GROWTH
+            + MathUtility::gdpShareDrift(self::SECULAR_SHARE_1997, self::SECULAR_SHARE_2019, FinancialConstants::SECULAR_SHARE_WINDOW_YEARS);
     }
 
     public function getCapexCyclicality(): float

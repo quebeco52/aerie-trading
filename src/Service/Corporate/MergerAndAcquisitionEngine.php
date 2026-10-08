@@ -354,10 +354,13 @@ class MergerAndAcquisitionEngine
         $ctx->hurdleRate = $ctx->strategy->getHurdleRate($ctx->health);
         $ctx->economicSpread = $ctx->trueReturn - $ctx->hurdleRate;
         
+        // Struck as the market strikes it: cost of equity on the return on equity (MarketEngine).
+        $valuationReturn = $ctx->strategy->getValuationReturn($ctx->trueReturn, $stock->getLongRunReturn() !== null ? (float) $stock->getLongRunReturn() : null, $ctx->health->costOfEquity);
+        $equityRates = $ctx->strategy->getEquityValuationRates($stock, $valuationReturn, $ctx->health, $ctx->macroState->corporateTaxRate);
         $ctx->fairValuePE = $this->mathUtility->calculateManagementFairValuePE(
-            $ctx->hurdleRate,
-            $ctx->trueReturn,
-            $ctx->strategy->getSecularGrowthRate($stock),
+            $equityRates['costOfEquity'],
+            $equityRates['equityReturn'],
+            $ctx->strategy->getFadedSecularGrowthRate($stock, $ctx->macroState->totalTime),
             $ctx->macroState->outputGap,
             $ctx->health->leveredBeta,
             $ctx->macroState->inflation,

@@ -85,7 +85,10 @@ interface OperatingStrategyInterface
      *                             is defined before it (a REIT's cap rate is struck on net operating income).
      */
     public function updateDynamicRoic(Stock $stock, float $actualTotalNetIncome, float $investedCapital, float $ebit, float $corporateTaxRate, float $wacc = 0.08, float $costOfEquity = 0.10, ?\App\DTO\MacroStateDTO $macroState = null, float $depreciation = 0.0): float;
+    /** The sector's secular real growth at the open: trend growth plus its measured demand drift. Read the faded rate below. */
     public function getSecularGrowthRate(Stock $stock): float;
+    /** Secular real growth at a simulated time: the opening rate's excess over trend faded toward zero. */
+    public function getFadedSecularGrowthRate(Stock $stock, float $simYears): float;
     /**
      * Revenue the firm's capital earns at full utilization relative to its stored asset turnover, for a franchise
      * level the model carries itself (an approved drug). It scales capacity and the cost base together, so it is
@@ -152,9 +155,10 @@ interface OperatingStrategyInterface
     /**
      * Stock-based compensation (ASC 718) as a fraction of revenue. It is already inside the cost base, so it
      * changes no margin; it is a non-cash expense added back to free cash flow and settled in new shares,
-     * which is why software and biotech report FCF above earnings and dilute a few percent a year.
+     * which is why software and biotech report FCF above earnings and dilute a few percent a year. Per firm,
+     * since a model may blend rates by the firm's own business mix.
      */
-    public function getStockCompensationIntensity(): float;
+    public function getStockCompensationIntensity(Stock $stock): float;
     /**
      * Calendar quarter (0 = Jan-Mar .. 3 = Oct-Dec) in which the fiscal year begins. Seasonality stays on the
      * calendar; the fiscal quarter drives annual events such as the goodwill impairment test.

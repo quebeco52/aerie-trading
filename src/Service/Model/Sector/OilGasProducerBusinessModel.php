@@ -101,8 +101,6 @@ class OilGasProducerBusinessModel extends StandardCorporateBusinessModel
     public const MAX_OPERATING_MARGIN_CEILING = 0.32;
     /** Upstream CapEx follows the price deck: US oil & gas drilling (FRED IPN213111S) on the real WTI cycle (WTISPLC/CPIAUCSL), HP(1600) quarterly 1972-2024, peak elasticity 0.58 at a 1-2 quarter lag. */
     public const CAPEX_CYCLICALITY = 0.58;
-    /** Baseline secular growth rate for a mature producer. */
-    public const SECULAR_GROWTH = 0.01;
     /** Share of construction in progress completed each quarter (about two years from sanction to first production). */
     public const CAPEX_COMPLETION_RATE = 0.125;
     /** Annual mean reversion of ROIC toward the cost of capital. */
@@ -126,10 +124,6 @@ class OilGasProducerBusinessModel extends StandardCorporateBusinessModel
         return self::CAPEX_COMPLETION_RATE;
     }
 
-    public function getSecularGrowthRate(Stock $stock): float
-    {
-        return self::SECULAR_GROWTH;
-    }
 
     public function getCapexCyclicality(): float
     {

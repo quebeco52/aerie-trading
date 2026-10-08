@@ -368,7 +368,7 @@ readonly class MacroStateDTO
         public array $expectedLevers = [],
         /** When that budget falls (-1: no forecast yet). */
         public float $expectedPolicyFrom = -1.0,
-        /** @var array<string, float> The sitting government's levers as they stood the tick before, so a revision reprices at once (App\Service\Market\PolicyCapitalization). */
+        /** @var array<string, float> The sitting government's levers as they stood the tick before, so a revision reprices at once (App\Service\Market\Pricing\PolicyCapitalization). */
         public array $previousSittingLevers = [],
         /** When that round fell, as read the tick before. */
         public float $previousSittingPolicyFrom = -1.0,

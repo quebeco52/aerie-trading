@@ -8,7 +8,7 @@ use App\DTO\SovereignCurveDTO;
 use App\Entity\Bond;
 use App\Service\Macro\MacroEngine;
 use App\Service\Macro\Subsystem\MonetaryPolicySubsystem;
-use App\Service\Market\BondPricingEngine;
+use App\Service\Market\Bond\BondPricingEngine;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\MathUtility;
 use App\Tests\Support\MacroStateBuilder;
@@ -85,7 +85,7 @@ class BondDeskTest extends TestCase
             balanceSheetIntensity: $state->balanceSheetIntensity,
         );
 
-        foreach ([2.0 => 'yield_2y', 5.0 => 'yield_5y', 10.0 => 'yield_10y', 30.0 => 'yield_30y'] as $tenor => $key) {
+        foreach ([[2.0, 'yield_2y'], [5.0, 'yield_5y'], [10.0, 'yield_10y'], [30.0, 'yield_30y']] as [$tenor, $key]) {
             $this->assertEqualsWithDelta(
                 $yieldData[$key],
                 $this->engine->zeroYield($curve, $tenor),

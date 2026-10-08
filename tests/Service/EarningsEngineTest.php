@@ -12,7 +12,7 @@ use App\Service\Math\MathUtility;
 use App\Service\Math\CorporateMetrics;
 use App\Service\Event\NarrativeEngine;
 use App\Service\Event\MarketEventPublisher;
-use App\Service\Market\MarketConsensusEngine;
+use App\Service\Market\Pricing\MarketConsensusEngine;
 use App\Data\EconomicCycle;
 use App\Entity\Stock;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
@@ -218,7 +218,11 @@ class EarningsEngineTest extends TestCase
         $this->assertGreaterThan(10.00, (float) $stock->getEarningsPerShare());
     }
 
-    public function testExtremeEarningsTriggersVolatilityShock(): void
+    /**
+     * An extreme quarter moves the price on the report and is booked as a scheduled jump; it does not bump the
+     * name's volatility state, which only the price process steps (and its variance jumps cluster).
+     */
+    public function testAnExtremeSurpriseIsBookedAsAnnouncementVarianceNotAVolatilityBump(): void
     {
         $stock = new Stock();
         $stock->setTicker('SHOCK');
@@ -234,14 +238,15 @@ class EarningsEngineTest extends TestCase
         $stock->setBaselineRoic('0.10');
         $stock->setOperatingMargin('0.20');
 
-        // Force an extreme blowout quarter (SUE Z > 1.5 triggers the shock)
+        // Force an extreme blowout quarter.
         $this->mathUtilityMock->method('generateStandardNormal')->willReturn(3.5);
 
         $reportingTick = $this->getReportingTick('SHOCK');
         $macroState = new \App\DTO\MacroStateDTO();
         $this->engine->calculate($stock, $macroState, $reportingTick, 252);
 
-        $this->assertGreaterThan(0.20, (float) $stock->getCurrentVolatility(), 'Volatility should have spiked due to the extreme surprise.');
+        $this->assertSame(0.20, (float) $stock->getCurrentVolatility(), 'The report must not write the volatility state.');
+        $this->assertGreaterThan(0.0, (float) $stock->getAnnouncementVarianceEma(), 'The report move must be booked as announcement variance.');
     }
 
     public function testNegativeEpsBenefitsFromRecoveryBoost(): void
@@ -328,31 +333,6 @@ class EarningsEngineTest extends TestCase
             $capturedContext->ebit,
             'A firm that charges depreciation must report EBIT below EBITDA.'
         );
-    }
-
-    public function testVolatilityShockTriggersOnCompositeEarningsMiss(): void
-    {
-        $stock = new Stock();
-        $stock->setTicker('MISS');
-        $stock->setEarningsPerShare('10.00');
-        $stock->setSharesOutstanding('1000000');
-        $stock->setVolatility('0.20');
-        $stock->setCurrentVolatility('0.20');
-        $stock->setBeta('1.0');
-        $stock->setTotalEquity('150000000');
-        $stock->setWholesaleDebt('0');
-        $stock->setCorporateTreasury('10000000');
-        $stock->setBaselineRoic('0.10');
-        $stock->setOperatingMargin('0.20');
-
-        // Negative surprise shock (SUE Z < -1.5) creates a massive miss triggering volatility shock
-        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(-3.5);
-
-        $reportingTick = $this->getReportingTick('MISS');
-        $macroState = new \App\DTO\MacroStateDTO();
-        $this->engine->calculate($stock, $macroState, $reportingTick, 252);
-
-        $this->assertGreaterThan(0.20, (float) $stock->getCurrentVolatility(), 'Volatility should have spiked due to the composite earnings miss.');
     }
 
     public function testWorkingCapitalStrainDrainsFreeCashFlowEvenOnFlatRevenue(): void
@@ -571,7 +551,7 @@ class EarningsEngineTest extends TestCase
             $this->engine->calculate($stock, $positiveMacro, $tick, 252);
             // The stored anchor is the posterior BEFORE the walkdown, so it cannot compound through the
             // next estimate; the number analysts PUBLISH is the anchor shaded by the walkdown.
-            $consensusRevenues[] = (float) $stock->getLastAnalystRevenue() * (1.0 - \App\Service\Market\MarketConsensusEngine::ANALYST_WALKDOWN_BIAS);
+            $consensusRevenues[] = (float) $stock->getLastAnalystRevenue() * (1.0 - \App\Service\Market\Pricing\MarketConsensusEngine::ANALYST_WALKDOWN_BIAS);
             $actualRevenues[] = (float) $stock->getTotalRevenue() / 4.0;
         }
 
@@ -622,28 +602,6 @@ class EarningsEngineTest extends TestCase
             (float) $stockShocked->getEarningsPerShare(),
             'Cyclical margin compression must reduce EPS and produce an earnings miss.'
         );
-    }
-
-    public function testSueNormalizedVolatilityShock(): void
-    {
-        $stock = new Stock();
-        $stock->setTicker('SUE_VOL');
-        $stock->setIndustry('Heavy Manufacturing');
-        $stock->setSharesOutstanding('1000000');
-        $stock->setTotalEquity('100000000');
-        $stock->setBaselineRoic('0.10');
-        $stock->setOperatingMargin('0.20');
-        $stock->setVolatility('0.20');
-        $stock->setCurrentVolatility('0.20');
-
-        $reportingTick = $this->getReportingTick('SUE_VOL');
-        $macro = new \App\DTO\MacroStateDTO();
-
-        // 1. Extreme surprise (Z = 3.5) normalized by SUE dispersion (> 1.5) triggers volatility shock
-        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(3.5);
-        $this->engine->calculate($stock, $macro, $reportingTick, 252);
-
-        $this->assertGreaterThan(0.20, (float) $stock->getCurrentVolatility(), 'High SUE surprise must trigger volatility expansion.');
     }
 
     public function testSeasonalityProducesOperatingLeverageWithoutSpuriousSurprise(): void
@@ -890,5 +848,36 @@ class EarningsEngineTest extends TestCase
 
         // Annualized EPS must remain positive despite winter seasonal trough
         $this->assertGreaterThan(0.0, (float) $stock->getEarningsPerShare());
+    }
+
+    /**
+     * A firm that lands exactly on the consensus the market anticipates publishes a beat of the walked-down
+     * number, and the price does not gap on it: the beat was expected (Bagnoli, Beneish & Watts 1999).
+     */
+    public function testAnExpectedBeatOfTheWalkedDownConsensusIsNotPricedAsNews(): void
+    {
+        $bias = MarketConsensusEngine::ANALYST_WALKDOWN_BIAS;
+        $tax = 0.20;
+        $fixed = 200.0;
+
+        $ctx = new EarningsSimulationContext(new Stock(), new \App\DTO\MacroStateDTO(), new \App\Service\Model\Sector\StandardCorporateBusinessModel(), 'none');
+        $ctx->sharesOutstanding = 100.0;
+        $ctx->corporateTaxRate = $tax;
+
+        // Published consensus: revenue and variable cost both shaded by the walk-down.
+        $ctx->analystExpectedRevenue = 1000.0 * (1.0 - $bias);
+        $ctx->analystExpectedVariableCosts = 600.0 * (1.0 - $bias);
+        $publishedNetIncome = ($ctx->analystExpectedRevenue - $ctx->analystExpectedVariableCosts - $fixed) * (1.0 - $tax);
+        $ctx->expectedQuarterlyNetIncome = $publishedNetIncome;
+        $ctx->reportedExpectedNetIncome = $publishedNetIncome;
+
+        // Actuals: exactly the unshaded consensus.
+        $ctx->actualRevenue = 1000.0;
+        $ctx->reportedActualNetIncome = (1000.0 - 600.0 - $fixed) * (1.0 - $tax);
+
+        (new \ReflectionMethod($this->engine, 'calculateEPSAndSurprise'))->invoke($this->engine, $ctx);
+
+        $this->assertGreaterThan(0.01, $ctx->surprisePct, 'The published number is beaten, as the walk-down intends.');
+        $this->assertEqualsWithDelta(0.0, $ctx->pricedSurprisePct, 1e-12, 'An anticipated beat is not news to the price.');
     }
 }

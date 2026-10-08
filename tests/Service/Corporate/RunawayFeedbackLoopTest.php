@@ -183,7 +183,7 @@ class RunawayFeedbackLoopTest extends TestCase
         $marketEventPublisher = $this->createStub(\App\Service\Event\MarketEventPublisher::class);
         $narrativeEngine = $this->createStub(\App\Service\Event\NarrativeEngine::class);
         $eventDispatcher = $this->createMock(\Symfony\Contracts\EventDispatcher\EventDispatcherInterface::class);
-        $consensusEngine = new \App\Service\Market\MarketConsensusEngine();
+        $consensusEngine = new \App\Service\Market\Pricing\MarketConsensusEngine();
 
         $engine = new \App\Service\Corporate\EarningsEngine(
             $eventDispatcher,
@@ -286,7 +286,7 @@ class RunawayFeedbackLoopTest extends TestCase
         $marketEventPublisher = $this->createStub(\App\Service\Event\MarketEventPublisher::class);
         $narrativeEngine = $this->createStub(\App\Service\Event\NarrativeEngine::class);
         $eventDispatcher = $this->createMock(\Symfony\Contracts\EventDispatcher\EventDispatcherInterface::class);
-        $consensusEngine = new \App\Service\Market\MarketConsensusEngine();
+        $consensusEngine = new \App\Service\Market\Pricing\MarketConsensusEngine();
 
         $engine = new \App\Service\Corporate\EarningsEngine(
             $eventDispatcher,

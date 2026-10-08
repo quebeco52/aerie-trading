@@ -3,7 +3,7 @@
 namespace App\Controller;
 
 use App\Entity\TradeOrder;
-use App\Service\Market\TradeExecutionService;
+use App\Service\Market\Trading\TradeExecutionService;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;

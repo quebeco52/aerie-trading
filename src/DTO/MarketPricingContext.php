@@ -27,7 +27,7 @@ class MarketPricingContext
         public float $marketJumpMultiplier = 1.0,
         public float $marketVol = 0.15,
         public float $reversionSpeed = 0.25,
-        public float $kappa = \App\Service\Market\MarketEngine::BASE_VARIANCE_REVERSION_SPEED,
+        public float $kappa = \App\Service\Market\Pricing\MarketEngine::BASE_VARIANCE_REVERSION_SPEED,
         public float $volOfVol = 0.3,
         public ?MacroStateDTO $macroState = null,
         public float $bookValuePerShare = 0.0,
@@ -56,14 +56,22 @@ class MarketPricingContext
          * calibrated volatility is left alone.
          */
         public float $orderFlowVariance = 0.0,
+        /** Annualized variance this name's announcements (reports and warnings) have been supplying, from the measured EMA; the diffusion gives it back. */
+        public float $announcementVariance = 0.0,
         /** Book equity less goodwill, per share; null when the caller has none, and the P/B leg then reads book. */
         public ?float $tangibleBookValuePerShare = null,
         /** The payout ratio the firm's dividend policy steers to; zero for a firm with no dividend policy. */
         public float $targetPayoutRatio = 0.0,
         /** Share of the gap to its target dividend the firm closes each quarter (Lintner 1956). */
         public float $dividendAdjustmentSpeed = 1.0,
-        /** @var array<string, float> What each law the firm's accounts answer to is charged on or moves, per share, keyed by lever (App\Service\Market\PolicyCapitalization::earningsGap()); empty for a firm with none. */
-        public array $policyBasesPerShare = []
+        /** Market vol the stored total variance was built with (last tick's); null strips at this tick's. */
+        public ?float $priorMarketVol = null,
+        /** The firm's pre-tax marginal borrowing rate (DebtMetricsDTO::$currentMarketRate); null prices debt at the 10Y plus the IG spread. */
+        public ?float $costOfDebt = null,
+        /** @var array<string, float> What each law the firm's accounts answer to is charged on or moves, per share, keyed by lever (App\Service\Market\Pricing\PolicyCapitalization::earningsGap()); empty for a firm with none. */
+        public array $policyBasesPerShare = [],
+        /** The firm's measured long-run return (Stock::$longRunReturn); null values it on its trailing return. */
+        public ?float $longRunReturn = null
     ) {}
 
     /**
@@ -80,7 +88,8 @@ class MarketPricingContext
         DebtHealthDTO $health,
         AnchorStakeLedger $anchorStakes,
         float $dt = 0.0,
-        float $maShock = 0.0
+        float $maShock = 0.0,
+        ?float $priorMarketVol = null
     ): self {
         $strategy = Sectors::strategyFor($stock->getIndustry());
         $shares = max(1.0, (float) $stock->getSharesOutstanding());
@@ -118,7 +127,7 @@ class MarketPricingContext
             // its book rather than finance it, so they are no claim ahead of the equity.
             netDebtPerShare: max(0.0, $strategy->getNetDebtCapital((float) $stock->getTotalDebt(), (float) $stock->getWholesaleDebt(), (float) $stock->getCorporateTreasury())) / $shares,
             recentPriceTrend: (float) ($stock->getPriceMomentumTrend() ?? 0.0),
-            secularGrowth: $strategy->getSecularGrowthRate($stock),
+            secularGrowth: $strategy->getFadedSecularGrowthRate($stock, $macroState->totalTime),
             // The anchor the firm's own model measures it by: a lender or underwriter carries a placeholder in
             // baselineRoic, and its through-the-cycle return is its ROE.
             baselineRoic: $strategy->getBaselineReturn($stock),
@@ -126,9 +135,13 @@ class MarketPricingContext
             accrualsRatio: (float) ($stock->getAccrualsRatio() ?? 0.0),
             investedCapitalPerShare: $stock->getInvestedCapital() / $shares,
             orderFlowVariance: (float) ($stock->getImpactVarianceEma() ?? 0.0),
+            announcementVariance: (float) ($stock->getAnnouncementVarianceEma() ?? 0.0),
             tangibleBookValuePerShare: $stock->getTangibleEquity() / $shares,
             targetPayoutRatio: $stock->getPolicyPayoutRatio(),
             dividendAdjustmentSpeed: (float) $stock->getDividendSpeed(),
+            priorMarketVol: $priorMarketVol,
+            costOfDebt: $health->rawMetrics->currentMarketRate,
+            longRunReturn: $stock->getLongRunReturn() !== null ? (float) $stock->getLongRunReturn() : null,
             policyBasesPerShare: array_filter([
                 'bankLevyRate' => $strategy->annualBankLevyBase($stock) / $shares,
                 'extractionStringency' => $strategy->annualExtractionCostBase($stock) / $shares,

@@ -138,6 +138,59 @@ class MathUtility
     }
 
     /**
+     * One step of an exponentially weighted estimate of annualized variance (RiskMetrics 1996):
+     * sigma^2_t = phi sigma^2_{t-1} + (1 - phi) r_t^2 / dt, phi = exp(-dt / tau), with the memory set in
+     * simulated years so the same window means the same thing at any tick rate.
+     *
+     * @param float $prior     Last estimate, annualized.
+     * @param float $logReturn The return observed over this step.
+     * @param float $dt        Step length in years.
+     * @param float $tauYears  Memory of the average in years.
+     */
+    public static function ewmaAnnualizedVariance(float $prior, float $logReturn, float $dt, float $tauYears): float
+    {
+        if ($dt <= 0.0 || $tauYears <= 0.0) {
+            return $prior;
+        }
+
+        $phi = exp(-$dt / $tauYears);
+
+        return (max(0.0, $prior) * $phi) + ((1.0 - $phi) * (($logReturn * $logReturn) / $dt));
+    }
+
+    /**
+     * An exponentially weighted level: the prior decays by exp(-dt/tau) toward the observation, and a missing prior
+     * starts at the observation.
+     */
+    public static function ewmaLevel(?float $prior, float $observation, float $dt, float $tauYears): float
+    {
+        if ($prior === null) {
+            return $observation;
+        }
+        if ($dt <= 0.0 || $tauYears <= 0.0) {
+            return $prior;
+        }
+
+        $phi = exp(-$dt / $tauYears);
+
+        return ($prior * $phi) + ((1.0 - $phi) * $observation);
+    }
+
+    /**
+     * The constant return worth the same as a trailing return that fades back to its long-run level. In Ohlson's (1995)
+     * residual income model an abnormal return with persistence omega is worth omega/(1+r-omega) of itself and a
+     * permanent one 1/r of itself, so the permanent equivalent keeps r*omega/(1+r-omega) of the gap. Omega is one less
+     * the 38% a year profitability closes its gap (Fama & French 2000).
+     */
+    public static function persistentEquivalentReturn(float $trailingReturn, float $longRunReturn, float $discountRate): float
+    {
+        $persistence = 1.0 - FinancialConstants::PROFITABILITY_MEAN_REVERSION_RATE;
+        $rate = max(0.0, $discountRate);
+
+        return $longRunReturn + (($trailingReturn - $longRunReturn) * $rate * $persistence / (1.0 + $rate - $persistence));
+    }
+
+    /**
      * Whether this tick crossed a boundary of the given period in SIMULATED time.
      *
      * The ticker's retention job and the macro's calendar (a fund's month-end check, a budget year) all ask
@@ -784,6 +837,22 @@ class MathUtility
     }
 
     /**
+     * Expected size of one calculateSVJJJumps() variance jump: mean muV on a down jump and
+     * VARIANCE_JUMP_UPSIDE_MEAN_SHARE x muV on an up jump, each an exponential capped at
+     * MAX_VARIANCE_JUMP_MEAN_MULTIPLE of its mean, so E[min(X, K m)] = m (1 - e^-K). Intensity times this,
+     * over the reversion speed, is what the jumps add to the stationary variance (Duffie, Pan & Singleton 2000).
+     *
+     * @param float $pUp Probability a price jump is upward.
+     * @param float $muV Mean variance jump on a down jump.
+     */
+    public static function meanVarianceJump(float $pUp, float $muV): float
+    {
+        $truncation = 1.0 - exp(-self::MAX_VARIANCE_JUMP_MEAN_MULTIPLE);
+
+        return max(0.0, $muV) * $truncation * (($pUp * self::VARIANCE_JUMP_UPSIDE_MEAN_SHARE) + (1.0 - $pUp));
+    }
+
+    /**
      * One additive, mean-compensated Kou (2002) double-exponential jump drawn over a step of dt.
      *
      * Kou's jump is asymmetric by construction: up with probability pUp and size Exp(etaUp), otherwise down
@@ -1015,8 +1084,11 @@ class MathUtility
     /**
      * Nominal expected growth used to strike a fair-value multiple, the same transmission for everyone
      * who strikes one: secular real growth, the cyclical part scaled by beta, a stagflation drag on real
-     * growth that pricing power offsets, then partial pass-through of inflation into the nominal rate.
-     * Capped below any plausible hurdle so the Gordon denominator cannot diverge.
+     * growth that pricing power offsets, then inflation in full for the nominal rate. The perpetual part, the
+     * sector's secular rate, is capped at the economy's trend real growth: no firm outgrows the economy forever
+     * (Damodaran, Investment Valuation, ch. 12, the stable-growth rule). Damodaran proxies that growth with the
+     * long risk-free rate; here the economy's trend is known, and the two need not agree. The cycle is transitory
+     * and passes both ways.
      *
      * Management and the market MUST read the same figure. The corporate engines used to strike their
      * buyback, issuance and M&A multiples on a flat 2% while the pricing engine read the cycle, which made
@@ -1030,29 +1102,97 @@ class MathUtility
         float $inflation,
         float $moatSpread
     ): float {
-        $realGrowth = $secularGrowth + ($outputGap * FinancialConstants::CYCLICAL_GROWTH_PASS_THROUGH * $beta);
+        $realGrowth = min($secularGrowth, MacroEngine::TREND_REAL_GROWTH) + ($outputGap * FinancialConstants::CYCLICAL_GROWTH_PASS_THROUGH * $beta);
 
         // Stagflation drag: inflation above target compresses real growth where pricing power is weak.
         $inflationDrag = max(0.0, ($inflation - MacroEngine::TARGET_INFLATION) * (1.0 - $moatSpread));
         $realGrowth -= $inflationDrag;
 
-        return max(0.0, min(
-            FinancialConstants::MAX_EXPECTED_GROWTH,
-            $realGrowth + ($inflation * FinancialConstants::INFLATION_NOMINAL_GROWTH_PASS_THROUGH)
-        ));
+        // Nominal growth is real growth plus inflation (Fisher): the cash flows are discounted at a nominal rate,
+        // so growing them at less than full inflation is the inflation illusion of Modigliani & Cohn (1979). Weak
+        // pricing power is the stagflation drag above, not a haircut on inflation for every firm.
+        return max(0.0, $realGrowth + $inflation);
     }
 
     /**
      * The growth a firm can fund from what it keeps (Damodaran: g = return on capital x reinvestment rate; Higgins
-     * 1977): the outlook's growth, capped at what its return earns on the share of earnings its payout policy
-     * retains. The value-driver multiple assumes the firm reinvests g / ROIC of its earnings, so a firm that pays
-     * that out instead cannot be priced as if it grew at the outlook.
+     * 1977): the outlook's growth, capped at inflation plus what its return earns on the share of earnings its
+     * payout policy retains. Reinvestment funds REAL growth (Damodaran: reinvestment rate = real g / real ROC);
+     * the plant already in place sells at the going price level, so a firm that pays out everything still grows
+     * with inflation.
      */
-    public function calculateFundableGrowth(float $expectedGrowth, float $returnOnCapital, float $payoutRatio): float
+    public function calculateFundableGrowth(float $expectedGrowth, float $returnOnCapital, float $payoutRatio, float $inflation): float
     {
         $retention = 1.0 - max(0.0, min(1.0, $payoutRatio));
 
-        return min($expectedGrowth, max(0.0, $returnOnCapital * $retention));
+        return min($expectedGrowth, max(0.0, $inflation) + max(0.0, $returnOnCapital * $retention));
+    }
+
+    /**
+     * A sector's demand drift relative to the economy: the annual log change in its share of nominal GDP between
+     * two benchmark years. Added to trend real growth it is the sector's secular real growth, and shares that sum
+     * to GDP drift to zero on average, so the sectors together grow with the economy.
+     */
+    public static function gdpShareDrift(float $shareStart, float $shareEnd, float $years): float
+    {
+        if ($shareStart <= 0.0 || $shareEnd <= 0.0 || $years <= 0.0) {
+            return 0.0;
+        }
+
+        return log($shareEnd / $shareStart) / $years;
+    }
+
+    /**
+     * Secular growth faded toward the economy's trend: the excess over trend at the open decays at a half-life,
+     * because above-trend growth does not persist (Chan, Karceski & Lakonishok 2003), and a drift held forever
+     * compounds a sector's share without bound.
+     */
+    public static function fadeTowardTrend(float $openingGrowth, float $trendGrowth, float $simYears, float $halfLifeYears): float
+    {
+        return $trendGrowth + (($openingGrowth - $trendGrowth) * exp(-M_LN2 * max(0.0, $simYears) / $halfLifeYears));
+    }
+
+    /**
+     * The excess growth a fading sector accumulates between two times: the integral of the faded excess, so a
+     * level that compounds it (an industry's demand over trend GDP) follows the same fade as the rate.
+     */
+    public static function fadedExcessIntegral(float $openingExcess, float $fromYears, float $toYears, float $halfLifeYears): float
+    {
+        $decay = M_LN2 / $halfLifeYears;
+
+        return $openingExcess * (exp(-$decay * max(0.0, $fromYears)) - exp(-$decay * max(0.0, $toYears))) / $decay;
+    }
+
+    /**
+     * Growth of the capital stock a firm plans, per year: the growth of the demand its capital serves plus a
+     * share of the log gap between the capital that demand implies and the capital installed (the flexible
+     * accelerator, Chenery 1952 and Koyck 1954, in error-correction form). Never negative: plant is not sold
+     * back to fund a shortfall in demand, it is left to depreciate (Abel & Eberly 1994).
+     */
+    public static function flexibleAcceleratorGrowth(float $demandGrowth, float $logCapitalGap, float $adjustmentSpeed): float
+    {
+        return max(0.0, $demandGrowth + ($adjustmentSpeed * $logCapitalGap));
+    }
+
+    /**
+     * Return on equity implied by a return on invested capital and the debt financing the rest of it:
+     * ROE = ROIC + (D/E)(ROIC - kd(1 - t)), the leverage identity of Modigliani & Miller (1958, Proposition II
+     * in accounting returns). Equity at or below zero has no ratio to lever by and returns ROIC unlevered.
+     *
+     * @param float $returnOnCapital    ROIC.
+     * @param float $investedCapital    Debt plus equity financing the operating assets (any scale; per share or total).
+     * @param float $equity             Book equity, on the same scale.
+     * @param float $afterTaxCostOfDebt kd (1 - t).
+     */
+    public static function equityReturnFromRoic(float $returnOnCapital, float $investedCapital, float $equity, float $afterTaxCostOfDebt): float
+    {
+        if ($equity <= 0.0) {
+            return $returnOnCapital;
+        }
+
+        $debt = max(0.0, $investedCapital - $equity);
+
+        return $returnOnCapital + (($debt / $equity) * ($returnOnCapital - $afterTaxCostOfDebt));
     }
 
     /**
@@ -1174,7 +1314,8 @@ class MathUtility
         $expectedGrowth = $this->calculateFundableGrowth(
             $this->calculateExpectedNominalGrowth($secularGrowth, $outputGap, $beta, $inflation, $moatSpread),
             $trueReturn,
-            $payoutRatio
+            $payoutRatio,
+            $inflation
         );
 
         return $this->calculateQualityAdjustedFairValuePE($hurdleRate, $trueReturn, $expectedGrowth, $sectorMultiple, $accrualsRatio);

@@ -7,8 +7,8 @@ namespace App\Tests\Financial;
 use App\DTO\MacroStateDTO;
 use App\DTO\MarketPricingContext;
 use App\Entity\Stock;
-use App\Service\Market\LiquidityEngine;
-use App\Service\Market\MarketEngine;
+use App\Service\Market\Pricing\LiquidityEngine;
+use App\Service\Market\Pricing\MarketEngine;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\MathUtility;
 use PHPUnit\Framework\TestCase;
@@ -136,7 +136,7 @@ class OrderFlowVarianceBudgetTest extends TestCase
 
             if ($flowFraction > 0.0) {
                 $quantity = $liquidity->averageDailyVolume($stock) * $flowFraction * $sign;
-                $impact = $liquidity->permanentImpact($stock, $quantity);
+                $impact = $liquidity->peakImpact($stock, $quantity);
                 $nextPrice = max(0.01, $nextPrice * exp($impact));
             }
 

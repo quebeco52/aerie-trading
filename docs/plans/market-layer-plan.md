@@ -26,7 +26,7 @@ Dependency order is real, not cosmetic:
 stack on top of it.**
 
 `MarketEngine` already enforces exactly this for the systemic jump
-(`SYSTEMIC_JUMP_SECOND_MOMENT`, `MAX_SYSTEMIC_VARIANCE_DRAG_SHARE`, `src/Service/Market/MarketEngine.php:161-172`):
+(`SYSTEMIC_JUMP_SECOND_MOMENT`, `MAX_SYSTEMIC_VARIANCE_DRAG_SHARE`, `src/Service/Market/Pricing/MarketEngine.php:161-172`):
 the district jump supplies part of the return variance, so `theta` gives the same amount back.
 Order-flow impact (Phase 1), forced liquidations (Phase 3), and agent flow (Phase 4) are all
 additional return variance. Wired in naively, each one re-breaks the calibration that comment
@@ -112,7 +112,7 @@ BASELINE_ANNUAL_TURNOVER        = 1.20
 
 ### New files
 
-- `src/Service/Market/LiquidityEngine.php` — ADV maintenance, spread from volatility, permanent
+- `src/Service/Market/Pricing/LiquidityEngine.php` — ADV maintenance, spread from volatility, permanent
   and temporary impact given order size. Pure math, no persistence, unit-testable in isolation.
 - `src/Service/Market/OrderFlowStoreInterface.php` + `RedisOrderFlowStore.php` +
   `InMemoryOrderFlowStore.php` — accumulated signed order flow and traded volume per ticker per
@@ -122,11 +122,11 @@ BASELINE_ANNUAL_TURNOVER        = 1.20
 
 ### Integration points
 
-1. `TradeExecutionService::executeOrder()` (`src/Service/Market/TradeExecutionService.php:33`) —
+1. `TradeExecutionService::executeOrder()` (`src/Service/Market/Trading/TradeExecutionService.php:33`) —
    quote from `LiquidityEngine`, fill at mid ± half-spread ± temporary impact, write the signed
    quantity to the order-flow store, persist the cost breakdown on the `TradeOrder`. Same in
    `fillOpenOrder()` (line 292) for resting limit orders, which currently fill at the live price.
-2. `StockTracker::updateStocks()` (`src/Service/Market/StockTracker.php:204`) — between
+2. `StockTracker::updateStocks()` (`src/Service/Market/Pricing/StockTracker.php:204`) — between
    `calculateNextPrice()` and `setPrice()`, drain the tick's net order flow and apply permanent
    impact.
 3. `MarketEngine::calculateNextPrice()` — subtract the expected permanent-impact variance from
@@ -143,7 +143,7 @@ impact before submit.
 
 ### Tests
 
-- Unit (`tests/Service/Market/LiquidityEngineTest.php`): square-root scaling — quadrupling size
+- Unit (`tests/Service/Market/Pricing/LiquidityEngineTest.php`): square-root scaling — quadrupling size
   doubles permanent impact; spread widens monotonically in volatility; zero net flow is zero
   permanent impact.
 - Financial (`tests/Financial/`): **the variance budget test.** Run a seeded stock through N ticks
@@ -261,11 +261,11 @@ honest to hang: issuance size scales with the deficit, and heavy issuance feeds 
 
 ### New files
 
-- `src/Service/Market/BondPricingEngine.php` — price, YTM, duration, convexity, accrued from live
+- `src/Service/Market/Bond/BondPricingEngine.php` — price, YTM, duration, convexity, accrued from live
   curve state.
-- `src/Service/Market/TreasuryAuctionService.php` — quarterly on-the-run issuance, coupon set to
+- `src/Service/Market/Bond/TreasuryAuctionService.php` — quarterly on-the-run issuance, coupon set to
   par at auction, previous on-the-run demoted to off-the-run.
-- `src/Service/Market/BondTracker.php` — per-tick repricing and history, alongside `StockTracker`.
+- `src/Service/Market/Bond/BondTracker.php` — per-tick repricing and history, alongside `StockTracker`.
 
 ### Integration points
 
@@ -368,9 +368,9 @@ Handle all three deliberately in this phase. Do not assume the arithmetic works 
 
 ### New files
 
-- `src/Service/Market/MarginEngine.php` — equity, buying power, maintenance checks, liquidation sizing.
-- `src/Service/Market/SecuritiesLendingDesk.php` — utilization, fee curve, buy-in decisions.
-- `src/Service/Market/ForcedLiquidationService.php` — routes liquidations through the same
+- `src/Service/Market/Trading/MarginEngine.php` — equity, buying power, maintenance checks, liquidation sizing.
+- `src/Service/Market/Trading/SecuritiesLendingDesk.php` — utilization, fee curve, buy-in decisions.
+- `src/Service/Market/Trading/ForcedLiquidationService.php` — routes liquidations through the same
   `LiquidityEngine` path as player orders. A margin call that fills at mid is not a margin call.
 
 ### Integration points

@@ -24,7 +24,12 @@ class CapitalAllocationContext
          * Quarterly stock-based compensation (ASC 718). The expense is already inside net income; its
          * credit side is additional paid-in capital, so it must be added back when equity rolls forward.
          */
-        public readonly float $stockCompensation = 0.0
+        public readonly float $stockCompensation = 0.0,
+        /**
+         * Growth plant the treasury may still fund this quarter, cash or borrowed: what the flexible accelerator
+         * allows less what the earnings engine already built. Null where no plant budget applies (a lender).
+         */
+        public ?float $expansionBudget = null
     ) {}
 
     // Core Business Traits

@@ -11,7 +11,7 @@ use App\Repository\StockRepository;
 use App\Service\Corporate\DebtEngine;
 use App\Service\Corporate\Holdings\AnchorStakeLedger;
 use App\Service\Macro\MacroEngine;
-use App\Service\Market\MarketEngine;
+use App\Service\Market\Pricing\MarketEngine;
 use App\Service\Math\CorporateMetrics;
 use App\Service\Math\MathUtility;
 use App\Service\View\CompanySnapshotBuilder;

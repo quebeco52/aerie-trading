@@ -8,7 +8,7 @@ use App\Data\DistrictCalendar;
 use App\Entity\Season;
 use App\Entity\User;
 use App\Repository\SeasonRepository;
-use App\Service\Market\PriceChangeFeed;
+use App\Service\Market\Chart\PriceChangeFeed;
 use App\Service\Notification\PriceAlertService;
 use App\Service\Season\SeasonService;
 use App\Service\Season\SeasonStanding;

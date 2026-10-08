@@ -13,7 +13,7 @@ use App\Entity\Stock;
 use App\Service\Corporate\CapExEngine;
 use App\Service\Corporate\DebtEngine;
 use App\Service\Corporate\TreasuryEngine;
-use App\Service\Market\CreditRatingAgency;
+use App\Service\Market\Bond\CreditRatingAgency;
 use App\Service\Math\CorporateMetrics;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\StandardCorporateBusinessModel;

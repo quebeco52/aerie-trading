@@ -15,9 +15,9 @@ use App\Repository\EtfEventRepository;
 use App\Repository\StockEventRepository;
 use App\Service\Macro\MacroStateProvider;
 use App\Service\Market\Index\MarketIndex;
-use App\Service\Market\LiquidityEngine;
-use App\Service\Market\PriceChangeFeed;
-use App\Service\Market\SecuritiesLendingDesk;
+use App\Service\Market\Pricing\LiquidityEngine;
+use App\Service\Market\Chart\PriceChangeFeed;
+use App\Service\Market\Trading\SecuritiesLendingDesk;
 use App\Service\Math\FinancialConstants;
 
 /**

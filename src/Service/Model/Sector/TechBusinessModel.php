@@ -75,9 +75,17 @@ class TechBusinessModel extends StandardCorporateBusinessModel
     public function getMoatSpread(): float { return 0.025; }
     public function getWorkingCapitalIntensity(Stock $stock): float { return -0.05; }
     public function getCapExCompletionRate(Stock $stock): float { return 0.5; }
+    // --- Secular Demand ---
+    /** Business and household spending on software as a share of US nominal GDP in 1997 (BEA NIPA Table 5.3.5, private fixed investment and Table 2.4.5). */
+    public const SECULAR_SHARE_1997 = 0.0118;
+    /** The same share in 2019. */
+    public const SECULAR_SHARE_2019 = 0.0265;
+
+    /** Trend real growth plus the sector's measured drift in its share of GDP. */
     public function getSecularGrowthRate(Stock $stock): float
     {
-        return 0.06;
+        return MacroEngine::TREND_REAL_GROWTH
+            + MathUtility::gdpShareDrift(self::SECULAR_SHARE_1997, self::SECULAR_SHARE_2019, FinancialConstants::SECULAR_SHARE_WINDOW_YEARS);
     }
     public function getCapexCyclicality(): float
     {

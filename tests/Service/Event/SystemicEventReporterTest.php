@@ -13,7 +13,7 @@ use App\Service\Event\MarketEventPublisher;
 use App\Service\Event\NarrativeEngine;
 use App\Service\Event\ShockEvent;
 use App\Service\Event\SystemicEventReporter;
-use App\Service\Market\PriceChangeFeed;
+use App\Service\Market\Chart\PriceChangeFeed;
 use Doctrine\ORM\EntityManagerInterface;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\TestCase;

@@ -15,6 +15,7 @@ use App\Entity\Stock;
 use App\Service\Event\ShockEvent;
 use App\Service\Macro\MacroEngine;
 use App\Service\Math\MathUtility;
+use App\Service\Math\FinancialConstants;
 
 /**
  * Earnings strategy for Consumer Staples (Food, Beverage, Tobacco, Household Goods).
@@ -63,8 +64,6 @@ class ConsumerStaplesBusinessModel extends StandardCorporateBusinessModel
     public const BASE_COVERAGE_ERROR = 0.05;
 
     // --- Core Sector Structural Constants ---
-    /** Baseline secular growth rate tethered to steady population growth and nominal GDP. */
-    public const STAPLES_SECULAR_GROWTH = 0.03;
     /** Mild CapEx cyclicality; staples upgrade facilities but avoid heavy industrial boom/bust cycles. */
     public const STAPLES_CAPEX_CYCLICALITY = 0.80;
     /** Weight assigned to EPS surprises (Staples trade on reliable bottom-line earnings). */
@@ -133,9 +132,17 @@ class ConsumerStaplesBusinessModel extends StandardCorporateBusinessModel
     public function getReversionSpeed(): float { return 0.15; }
     public function getMoatSpread(): float { return 0.015; }
 
+    // --- Secular Demand ---
+    /** Spending on food and beverages for off-premises consumption as a share of US nominal GDP in 1997 (BEA NIPA Table 2.4.5, personal consumption expenditures). */
+    public const SECULAR_SHARE_1997 = 0.0554;
+    /** The same share in 2019. */
+    public const SECULAR_SHARE_2019 = 0.0503;
+
+    /** Trend real growth plus the sector's measured drift in its share of GDP. */
     public function getSecularGrowthRate(Stock $stock): float
     {
-        return self::STAPLES_SECULAR_GROWTH;
+        return MacroEngine::TREND_REAL_GROWTH
+            + MathUtility::gdpShareDrift(self::SECULAR_SHARE_1997, self::SECULAR_SHARE_2019, FinancialConstants::SECULAR_SHARE_WINDOW_YEARS);
     }
 
     public function getCapexCyclicality(): float

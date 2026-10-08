@@ -423,6 +423,13 @@ class Stock
     private string $roicTtm = '0.0000';
 
     /**
+     * @var string|null The firm's measured long-run return (an EMA of its trailing ROIC, or ROE for a balance-sheet firm),
+     *                  the level its profitability reverts to and fair value anchors on; null until it has one.
+     */
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
+    private ?string $longRunReturn = null;
+
+    /**
      * @var string|null Annual capital turnover (revenue / invested capital), the DuPont component fixing how much
      *                  revenue a dollar of physical capital can generate. Seeded once from baseline ROIC and margin,
      *                  then held structural; null until the first earnings report seeds it.
@@ -530,6 +537,15 @@ class Stock
      */
     #[ORM\Column(type: 'float', nullable: true, options: ['default' => 0.0], updatable: false)]
     private ?float $impactVarianceEma = 0.0;
+
+    /**
+     * @var float|null Exponentially weighted variance of the name's announcement returns (reports and warnings), annualized.
+     *
+     * An announcement is a scheduled jump, so the diffusion gives back what the name's own announcements
+     * actually moved it by (Dubinsky, Johannes, Kaeck & Seeger 2019).
+     */
+    #[ORM\Column(type: 'float', nullable: true, options: ['default' => 0.0])]
+    private ?float $announcementVarianceEma = 0.0;
 
     /**
      * @var float|null Exponentially weighted realized variance of the name's TOTAL return, annualized.
@@ -1626,6 +1642,17 @@ class Stock
         return $this->impactVarianceEma;
     }
 
+    public function setAnnouncementVarianceEma(?float $announcementVarianceEma): static
+    {
+        $this->announcementVarianceEma = $announcementVarianceEma;
+        return $this;
+    }
+
+    public function getAnnouncementVarianceEma(): ?float
+    {
+        return $this->announcementVarianceEma;
+    }
+
     public function setRealizedVarianceEma(?float $realizedVarianceEma): static
     {
         $this->realizedVarianceEma = $realizedVarianceEma === null ? null : max(0.0, $realizedVarianceEma);
@@ -2152,6 +2179,17 @@ class Stock
     public function setRoicTtm(string $roicTtm): self
     {
         $this->roicTtm = self::cleanBcStr($roicTtm, 4);
+        return $this;
+    }
+
+    public function getLongRunReturn(): ?string
+    {
+        return $this->longRunReturn;
+    }
+
+    public function setLongRunReturn(?string $longRunReturn): self
+    {
+        $this->longRunReturn = $longRunReturn !== null ? self::cleanBcStr($longRunReturn, 4) : null;
         return $this;
     }
 

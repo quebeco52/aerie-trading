@@ -7,7 +7,7 @@ namespace App\Tests\Financial;
 use App\DTO\MacroStateDTO;
 use App\DTO\MarketPricingContext;
 use App\Service\Macro\MacroEngine;
-use App\Service\Market\MarketEngine;
+use App\Service\Market\Pricing\MarketEngine;
 use App\Service\Math\MathUtility;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
@@ -23,8 +23,9 @@ use PHPUnit\Framework\TestCase;
  *  - A name realizes the VOLATILITY it is configured with. The jump processes stacked variance on top of a
  *    calibrated diffusion without the diffusion giving any of it back.
  *  - A name's expected return does not depend on how jumpy it is. Both Kou processes are skewed down, so an
- *    uncompensated drift lost lambda * E[e^J - 1] a year and the price settled below its own fair value by
- *    an amount that widened with beta.
+ *    uncompensated drift lost lambda * E[e^J - 1] a year and the price settled below its own fair value. That
+ *    the systemic jump is given back at every beta is pinned deterministically in PriceFactorTransmissionTest:
+ *    once mispricing closes over years, one path cannot resolve a beta trend in the level.
  *
  * The bands are wide on purpose: these pin the accounting, not a calibration. A legitimate retune should not
  * have to fight them, but dropping a variance source or a compensator again will.
@@ -34,6 +35,8 @@ final class PriceFormationInvariantTest extends TestCase
     private const TICKS_PER_YEAR = 1200;
     private const YEARS = 20;
     private const BURN_IN_YEARS = 2;
+    /** The fixture's cost of equity: the name pays no dividend, so a fairly priced one compounds its fundamentals at it. */
+    private const COST_OF_EQUITY = 0.10;
 
     private MathUtility $math;
     private MarketEngine $engine;
@@ -100,12 +103,15 @@ final class PriceFormationInvariantTest extends TestCase
                 dt: $dt,
             );
             $jumpMultiplier = $systemic['price_multiplier'];
+            // Retained earnings compound the per-share fundamentals at the rate the price drifts at, so fair
+            // value and price grow together and the ratio reads the jump accounting rather than a frozen book.
+            $growth = exp(self::COST_OF_EQUITY * $tick * $dt);
 
             $result = $this->engine->calculateNextPrice(new MarketPricingContext(
                 currentPrice: $price,
                 currentVolatility: $currentVol,
                 longTermVolatility: $volatility,
-                earningsPerShare: 5.0,
+                earningsPerShare: 5.0 * $growth,
                 dt: $dt,
                 lambda: $lambda,
                 jumpVol: $jumpVol,
@@ -115,18 +121,18 @@ final class PriceFormationInvariantTest extends TestCase
                 marketJumpMultiplier: $jumpMultiplier,
                 marketVol: $marketVol,
                 macroState: $macro,
-                bookValuePerShare: 40.0,
+                bookValuePerShare: 40.0 * $growth,
                 currentRoic: 0.125,
                 roicTtm: 0.125,
                 liveWacc: 0.085,
                 baselineIndustryPE: 20.0,
-                revenuePerShare: 50.0,
-                liveCostOfEquity: 0.10,
-                netDebtPerShare: 5.0,
+                revenuePerShare: 50.0 * $growth,
+                liveCostOfEquity: self::COST_OF_EQUITY,
+                netDebtPerShare: 5.0 * $growth,
                 secularGrowth: 0.02,
                 baselineRoic: 0.125,
                 baselineMargin: 0.10,
-                investedCapitalPerShare: 45.0,
+                investedCapitalPerShare: 45.0 * $growth,
             ));
 
             $next = $result['price'];
@@ -240,28 +246,6 @@ final class PriceFormationInvariantTest extends TestCase
                 $calmRatio,
                 $jumpyRatio
             )
-        );
-    }
-
-    public function testPriceDoesNotSettleSystematicallyBelowFairValueAsBetaRises(): void
-    {
-        // The uncompensated systemic jump reached the stock through its beta, so the discount to fair value
-        // grew monotonically with it: 0.983 at beta 0.3, 0.940 at 1.3, 0.915 at 2.8.
-        $ratios = [];
-        foreach ([0.30, 1.30, 2.40] as $beta) {
-            $path = $this->simulate($beta, 0.20 + (0.06 * $beta), 0.60, 0.10, MacroEngine::MACRO_VOL_BASE_ANCHOR);
-            $ratios[] = array_sum($path['ratios']) / count($path['ratios']);
-        }
-
-        $spread = max($ratios) - min($ratios);
-
-        $this->assertLessThan(
-            0.08,
-            $spread,
-            sprintf('Price to fair value still trends with beta: %s.', implode(', ', array_map(
-                static fn (float $r): string => sprintf('%.4f', $r),
-                $ratios
-            )))
         );
     }
 }

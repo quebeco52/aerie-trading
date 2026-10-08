@@ -2,7 +2,7 @@
  * The live market feed, and the two events it raises on `document`:
  *
  * - `market:update` — one per WebSocket message, which is one WIRE FRAME: the ticker
- *   coalesces its ticks server-side (App\Service\Market\WireFrame, ten frames a second) into
+ *   coalesces its ticks server-side (App\Service\Market\Chart\WireFrame, ten frames a second) into
  *   the latest quote per ticker, every event of the frame, the latest macro state and curve,
  *   and on each quote a `points` array of the ticks the frame spans — `[tick, price, volume]`
  *   in tick order, price being the chart's series (a bond's clean price). For consumers that

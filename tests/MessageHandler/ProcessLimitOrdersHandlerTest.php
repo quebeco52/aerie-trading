@@ -6,7 +6,7 @@ namespace App\Tests\MessageHandler;
 
 use App\Message\ProcessLimitOrdersMessage;
 use App\MessageHandler\ProcessLimitOrdersHandler;
-use App\Service\Market\TradeExecutionService;
+use App\Service\Market\Trading\TradeExecutionService;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;

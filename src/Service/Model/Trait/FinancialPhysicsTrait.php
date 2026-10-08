@@ -261,9 +261,15 @@ trait FinancialPhysicsTrait
     public function allowsPhysicalOrganicCapex(): bool { return false; }
     public function getReturnBasisIncome(Stock $stock, float $quarterlyNopat, float $actualTotalNetIncome): float { return $actualTotalNetIncome; }
     public function shouldForceDeleveragingOnJunkOrHoarding(): bool { return false; }
-    public function calculateStructuralEps(float $bookValuePerShare, float $structuralRoic, float $revenuePerShare, float $riskFreeRate, ?float $investedCapitalPerShare = null): float
+    public function calculateStructuralEps(float $bookValuePerShare, float $structuralRoic, float $revenuePerShare, float $riskFreeRate, float $afterTaxCostOfDebt, ?float $investedCapitalPerShare = null): float
     {
         return $bookValuePerShare * $structuralRoic;
+    }
+
+    /** A financial's return is already struck on equity (getTrueReturn() is ROE); its debt is its inventory, not its financing. */
+    public function getEquityReturn(float $returnOnCapital, float $investedCapital, float $equity, float $afterTaxCostOfDebt): float
+    {
+        return $returnOnCapital;
     }
 
     public function getRegulatoryDividendCap(Stock $stock, float $currentTreasury, ?MacroStateDTO $macroState = null): ?float

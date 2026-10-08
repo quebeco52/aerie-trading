@@ -10,7 +10,7 @@ use App\Service\Math\CorporateMetrics;
 use App\Service\Math\MathUtility;
 use App\Service\Event\NarrativeEngine;
 use App\Service\Math\FinancialConstants;
-use App\Service\Market\MarketConsensusEngine;
+use App\Service\Market\Pricing\MarketConsensusEngine;
 use App\DTO\EarningsSimulationContext;
 use App\Service\Corporate\Holdings\AnchorStakeLedger;
 use App\Service\Corporate\Industry\IndustryShareLedger;
@@ -84,13 +84,15 @@ class EarningsEngine
     /** Fiscal quarter index at which the annual goodwill impairment test runs (fiscal Q4). */
     public const FISCAL_YEAR_END_QUARTER = 3;
 
-    // --- SUE Dispersion ---
-    /** Minimum analyst estimate dispersion floor to avoid division by near-zero in SUE. */
-    public const MIN_ESTIMATE_DISPERSION = 0.02;
-    /** Quarters of past surprises retained as the sample the SUE denominator is estimated from (Foster, Olsen & Shevlin 1984). */
+    // --- Surprise Record ---
+    /** Quarters of past surprises kept on the firm's surprise record, the sample SUE is conventionally scaled over (Foster, Olsen & Shevlin 1984). */
     public const SUE_HISTORY_QUARTERS = 8;
-    /** Reports required before the firm's own surprise history replaces the sector's analyst dispersion in the SUE denominator. */
-    public const SUE_MIN_HISTORY_QUARTERS = 4;
+
+    // --- Announcement Variance ---
+    /** Years between quarterly reports. */
+    public const REPORT_INTERVAL_YEARS = 0.25;
+    /** Years the announcement-variance estimate averages over: the eight reports the surprise record spans. */
+    public const ANNOUNCEMENT_VARIANCE_EMA_YEARS = self::SUE_HISTORY_QUARTERS * self::REPORT_INTERVAL_YEARS;
 
     // --- Trailing Twelve Month Earnings ---
     /** Number of reported quarters summed into the trailing twelve month earnings figure. */
@@ -119,7 +121,7 @@ class EarningsEngine
         /** Listed anchor stakes. Required, not optional: a sphere with no ledger would silently never open a plant ledger either. Holds only a per-tick price map, so a harness builds one free. */
         private AnchorStakeLedger $anchorStakes = new AnchorStakeLedger(),
         /** Investment securities mark. Defaulted so a harness or a unit test builds an engine without wiring the curve. */
-        private SecuritiesBookService $securitiesBook = new SecuritiesBookService(new \App\Service\Market\BondPricingEngine(new MathUtility()))
+        private SecuritiesBookService $securitiesBook = new SecuritiesBookService(new \App\Service\Market\Bond\BondPricingEngine(new MathUtility()))
     ) {}
 
     public function calculate(Stock $stock, \App\DTO\MacroStateDTO $macroState, int $tickCount = 0, int $ticksPerYear = 252): ?array
@@ -166,7 +168,7 @@ class EarningsEngine
         $this->manageReportedEarnings($ctx);
         $this->calculateEPSAndSurprise($ctx);
         $this->calculateFreeCashFlow($ctx);
-        $this->executePriceAndVolatilityShocks($ctx);
+        $this->executeAnnouncementReturn($ctx);
 
         return $this->publishEventAndReport($ctx);
     }
@@ -268,6 +270,7 @@ class EarningsEngine
             $this->resolveDampedPriceGap(-min(1.0, $shortfallRatio), (float) $stock->getBeta(), $this->resolveGrowthPremium($currentPE))
         );
         $stock->setPrice(number_format(max(0.01, $currentPrice * (1.0 + $reaction)), 8, '.', ''));
+        $this->recordAnnouncementVariance($stock, log(1.0 + $reaction), false);
 
         return [$this->marketEvent->publish(
             $stock,
@@ -515,7 +518,7 @@ class EarningsEngine
         $jumpMagnitude = $jumpData['exponent'] ?? 0.0;
 
         $idiosyncraticDemandShock = $revenueVol * sqrt($ctx->dt) * $z1;
-        $secularGrowthRate = $strategy->getSecularGrowthRate($stock);
+        $secularGrowthRate = $strategy->getFadedSecularGrowthRate($stock, $ctx->macroState->totalTime);
         $secularDrift = $secularGrowthRate * $ctx->dt;
 
         $ctx->secularDrift = $secularDrift;
@@ -915,7 +918,6 @@ class EarningsEngine
         );
         $ctx->analystExpectedRevenue = $consensus->analystExpectedRevenue;
         $ctx->analystExpectedVariableCosts = $consensus->analystExpectedVariableCosts;
-        $ctx->estimateDispersion = $consensus->estimateDispersion;
 
         // Depreciation is the most forecastable line on the income statement — it follows a schedule the
         // firm has already disclosed — so analysts get it right and it is not a source of surprise. A lender's
@@ -959,10 +961,15 @@ class EarningsEngine
         $ctx->netChargeOffs = max(0.0, $actuals->netChargeOffs);
         $ctx->netInterestSqueeze = $actuals->netInterestSqueeze;
 
-        // Stock-based compensation (ASC 718) is already inside the operating cost base: it changes no margin,
-        // but it is non-cash (added back to FCF below) and is settled in newly issued shares.
-        $ctx->stockCompensation = max(0.0, $ctx->actualRevenue) * $ctx->strategy->getStockCompensationIntensity();
-        $ctx->kpis['stock_compensation'] = $ctx->stockCompensation;
+        // Stock-based compensation (ASC 718) is already inside the operating cost base: it changes no margin.
+        // What is settled in new shares is non-cash (added back to FCF below), but only up to the shares a
+        // board can grant: shareholders and proxy advisers cap the annual burn rate (ISS benchmarks), so a
+        // firm whose price has fallen pays the rest of the same pay bill in cash rather than printing stock.
+        $stockCompensationExpense = max(0.0, $ctx->actualRevenue) * $ctx->strategy->getStockCompensationIntensity($ctx->stock);
+        $burnRateCap = FinancialConstants::EQUITY_BURN_RATE_CAP_BY_SECTOR[(string) $ctx->stock->getSector()] ?? FinancialConstants::DEFAULT_EQUITY_BURN_RATE_CAP;
+        $grantableValue = $burnRateCap * $ctx->dt * max(0.0, $ctx->sharesOutstanding) * max(0.0, (float) $ctx->stock->getPrice());
+        $ctx->stockCompensation = min($stockCompensationExpense, $grantableValue);
+        $ctx->kpis['stock_compensation'] = $stockCompensationExpense;
 
         // The order book is a disclosed, forward-looking number: analysts read it off the report and carry
         // it into next quarter's estimate (see MarketConsensusEngine). Held on the stock so the consensus
@@ -1099,6 +1106,15 @@ class EarningsEngine
             $ctx->macroState,
             $ctx->quarterlyDepreciation
         );
+
+        // The firm's long-run return, the level its profitability reverts to and its valuation anchors on.
+        $priorLongRun = $stock->getLongRunReturn();
+        $stock->setLongRunReturn((string) MathUtility::ewmaLevel(
+            $priorLongRun !== null ? (float) $priorLongRun : null,
+            $ctx->strategy->getTrueReturn($stock),
+            self::REPORT_INTERVAL_YEARS,
+            FinancialConstants::LONG_RUN_RETURN_EMA_YEARS
+        ));
 
         $this->testGoodwillForImpairment($ctx);
     }
@@ -1247,19 +1263,39 @@ class EarningsEngine
         );
         $stock->setTotalNetIncome((string) $trailingNetIncome);
 
-        $rawEpsSurprise = abs($ctx->expectedQuarterlyEps) > 0.01
-            ? $ctx->surpriseAmountQuarterly / abs($ctx->expectedQuarterlyEps)
-            : ($ctx->surpriseAmountQuarterly > 0 ? self::ZERO_BASE_SURPRISE_PCT : ($ctx->surpriseAmountQuarterly < 0 ? -self::ZERO_BASE_SURPRISE_PCT : 0.0));
+        $ctx->surprisePct = $this->blendedSurprise($ctx, $ctx->expectedQuarterlyEps, $ctx->analystExpectedRevenue);
+
+        // What the price reacts to is the surprise against the consensus the market anticipates. Analysts walk
+        // the published number down (MarketConsensusEngine::ANALYST_WALKDOWN_BIAS) so most firms beat it, and the
+        // market knows it: whisper forecasts sit above the published consensus and price the expected beat
+        // (Bagnoli, Beneish & Watts 1999). The walk-down scales expected revenue and variable cost alike, so the
+        // anticipated consensus adds back that contribution, after tax.
+        $bias = MarketConsensusEngine::ANALYST_WALKDOWN_BIAS;
+        $shadedContribution = ($ctx->analystExpectedRevenue - $ctx->analystExpectedVariableCosts) * ($bias / (1.0 - $bias));
+        $taxOnShade = $ctx->expectedQuarterlyNetIncome > 0.0 ? $ctx->corporateTaxRate : 0.0;
+        $ctx->pricedSurprisePct = $this->blendedSurprise(
+            $ctx,
+            $ctx->expectedQuarterlyEps + (($shadedContribution * (1.0 - $taxOnShade)) / $shares),
+            $ctx->analystExpectedRevenue / (1.0 - $bias)
+        );
+    }
+
+    /** Revenue and EPS surprise against a consensus, blended by the business model's weights. */
+    private function blendedSurprise(EarningsSimulationContext $ctx, float $expectedEps, float $expectedRevenue): float
+    {
+        $surpriseAmount = $ctx->actualQuarterlyEps - $expectedEps;
+        $rawEpsSurprise = abs($expectedEps) > 0.01
+            ? $surpriseAmount / abs($expectedEps)
+            : ($surpriseAmount > 0 ? self::ZERO_BASE_SURPRISE_PCT : ($surpriseAmount < 0 ? -self::ZERO_BASE_SURPRISE_PCT : 0.0));
         $epsSurprisePct = max(-1.0, min(1.0, $rawEpsSurprise));
 
-        $revenueSurprisePct = abs($ctx->analystExpectedRevenue) > 1.0
-            ? ($ctx->actualRevenue - $ctx->analystExpectedRevenue) / abs($ctx->analystExpectedRevenue)
+        $revenueSurprisePct = abs($expectedRevenue) > 1.0
+            ? ($ctx->actualRevenue - $expectedRevenue) / abs($expectedRevenue)
             : 0.0;
 
         $blendWeights = $ctx->strategy->getSurpriseBlendWeights();
-        $epsWeight = $blendWeights['eps_weight'];
-        $revWeight = $blendWeights['revenue_weight'];
-        $ctx->surprisePct = ($revenueSurprisePct * $revWeight) + ($epsSurprisePct * $epsWeight);
+
+        return ($revenueSurprisePct * $blendWeights['revenue_weight']) + ($epsSurprisePct * $blendWeights['eps_weight']);
     }
 
     private function calculateFreeCashFlow(EarningsSimulationContext $ctx): void
@@ -1368,7 +1404,8 @@ class EarningsEngine
             $ctx->macroState,
             $ctx->actualQuarterlyNetIncome,
             $ctx->stockCompensation,
-            $ctx->openingCapitalRatio
+            $ctx->openingCapitalRatio,
+            $ctx->expansionBudget
         );
 
         $stock->setSharesOutstanding((string) $ctx->allocation['new_shares']);
@@ -1862,9 +1899,11 @@ class EarningsEngine
      * profit. A loss-making growth firm therefore keeps investing from its cash pile while a boom quarter does
      * not trigger a one-off splurge. The stock's capexRatio is its reinvestment rate (g = reinvestment x ROIC).
      *
-     * Two real-world gates apply:
+     * Three real-world gates apply:
      *  1. NPV rule: no growth investment while the structural return fails the model's hurdle rate.
-     *  2. Funding constraint: spend is bounded by internally generated cash plus cash above the operating floor.
+     *  2. Demand: no more plant than the flexible accelerator allows (resolveExpansionBudget()).
+     *  3. Funding constraint: spend is bounded by internally generated cash plus cash above the operating floor.
+     * What the accelerator still allows after this spend is left on the context for the treasury.
      */
     private function calculateGrowthCapEx(EarningsSimulationContext $ctx, float $cycleCapExModifier, float $maintenanceCapEx, float $deltaNwc): float
     {
@@ -1881,33 +1920,17 @@ class EarningsEngine
         // ROIC reversion downstream then prices exactly that value destruction.
         $appliedHurdle = $manager->appliedHurdle($hurdleRate);
 
+        $expansionBudget = $this->resolveExpansionBudget($ctx, $cycleCapExModifier, $maintenanceCapEx);
+        $ctx->expansionBudget = $expansionBudget;
+
         if ($reinvestmentRate <= 0.0 || $ctx->baselineRoic < $appliedHurdle) {
             return 0.0;
         }
 
         $structuralQuarterlyNopat = $ctx->baselineRoic * abs($ctx->investedCapital) / 4.0;
         $plannedGrowthCapEx = $structuralQuarterlyNopat * $reinvestmentRate * $cycleCapExModifier;
-
-        // Marginal return on share-taking capex: structural return less Cournot price haircut and scale diseconomies.
-        $shareTakingReturn = $this->corporateMetrics->applyScaleDiseconomies(
-            $stock,
-            $ctx->baselineRoic - $this->corporateMetrics->calculateCournotPriceHaircut(
-                $stock,
-                $ctx->addressableShare,
-                abs($ctx->investedCapital),
-                $ctx->macroState
-            ),
-            $ctx->addressableShare
-        );
-        if ($shareTakingReturn < $appliedHurdle) {
-            // Trend is the sector's secular real growth plus the price level. Replacement-cost maintenance
-            // has already carried part of the price level onto the plant ledger this quarter (the slice it
-            // replaced dearer than it was booked), so only the remainder is growth spend.
-            $trendNominalGrowth = max(0.0, $ctx->strategy->getSecularGrowthRate($stock) + max(0.0, $ctx->macroState->inflationEma));
-            $revaluationAlreadyBooked = max(0.0, $maintenanceCapEx - $ctx->quarterlyDepreciation);
-            $plantBase = $stock->getGrossPpe() !== null ? max(0.0, $stock->getNetPpe()) : abs($ctx->investedCapital);
-            $trendTranche = max(0.0, $plantBase * $trendNominalGrowth / 4.0 - $revaluationAlreadyBooked);
-            $plannedGrowthCapEx = min($plannedGrowthCapEx, $trendTranche);
+        if ($expansionBudget !== null) {
+            $plannedGrowthCapEx = min($plannedGrowthCapEx, $expansionBudget);
         }
         $operatingBase = $this->corporateMetrics->calculateOperatingBase((float) $stock->getTotalRevenue(), (float) $stock->getTotalEquity());
         $minOperatingCash = $ctx->strategy->calculateMinOperatingCash($operatingBase, (float) $stock->getCustomerDeposits(), (float) $stock->getWholesaleDebt());
@@ -1920,7 +1943,44 @@ class EarningsEngine
         $internalCashFlow = $ctx->actualQuarterlyNetIncome + $ctx->quarterlyDepreciation - $deltaNwc - $maintenanceCapEx - $requiredDistribution;
         $fundingCapacity = max(0.0, $internalCashFlow + $deployableCash);
 
-        return min($plannedGrowthCapEx, $fundingCapacity);
+        $growthCapEx = min($plannedGrowthCapEx, $fundingCapacity);
+        if ($expansionBudget !== null) {
+            $ctx->expansionBudget = max(0.0, $expansionBudget - $growthCapEx);
+        }
+
+        return $growthCapEx;
+    }
+
+    /**
+     * Growth plant the quarter's demand calls for, by the flexible accelerator in error-correction form: the
+     * plant grows with the nominal demand its sector sees and closes a share of the gap between the plant the
+     * firm's share of trend demand implies and the plant it runs (Chenery 1952; speed from Bloom, Bond & Van
+     * Reenen 2007). A firm that has built ahead of its market adds nothing until demand catches up; one that
+     * has fallen behind builds faster. The cycle signal scales it as it scales every capex line.
+     *
+     * Replacement-cost maintenance has already carried part of the price level onto the plant ledger this
+     * quarter (the slice it replaced dearer than it was booked), so only the remainder is growth spend. Null
+     * for a lender, whose expansion is a loan book sized by its funding and capital, not plant.
+     */
+    private function resolveExpansionBudget(EarningsSimulationContext $ctx, float $cycleCapExModifier, float $maintenanceCapEx): ?float
+    {
+        if ($ctx->strategy->isFinancial()) {
+            return null;
+        }
+
+        $stock = $ctx->stock;
+        $trendNominalGrowth = max(0.0, $ctx->strategy->getFadedSecularGrowthRate($stock, $ctx->macroState->totalTime) + max(0.0, $ctx->macroState->inflationEma));
+        $capitalGap = $this->industryShareLedger?->resolveTrendCapacityGap(
+            $stock,
+            $ctx->macroState,
+            IndustryShareLedger::secularExcessGrowth($ctx->strategy, $stock)
+        ) ?? 0.0;
+        $plantGrowth = MathUtility::flexibleAcceleratorGrowth($trendNominalGrowth, $capitalGap, FinancialConstants::CAPITAL_ERROR_CORRECTION_SPEED);
+
+        $revaluationAlreadyBooked = max(0.0, $maintenanceCapEx - $ctx->quarterlyDepreciation);
+        $plantBase = $stock->getGrossPpe() !== null ? max(0.0, $stock->getNetPpe()) : abs($ctx->investedCapital);
+
+        return max(0.0, $plantBase * $plantGrowth * $ctx->dt * $cycleCapExModifier - $revaluationAlreadyBooked);
     }
 
     /**
@@ -1948,14 +2008,14 @@ class EarningsEngine
         return max(-FinancialConstants::MAX_PRICE_GAP, min(FinancialConstants::MAX_PRICE_GAP, $damped));
     }
 
-    private function executePriceAndVolatilityShocks(EarningsSimulationContext $ctx): void
+    /**
+     * The report's price move: the earnings response to the priced surprise plus any announcement with a
+     * measured return, booked as a scheduled jump into the name's announcement variance.
+     */
+    private function executeAnnouncementReturn(EarningsSimulationContext $ctx): void
     {
         $stock = $ctx->stock;
 
-        // Derive a composite earnings Z-score from the blended surprise percentage.
-        $dispersion = $this->resolveSurpriseDispersion($ctx);
-        $earningsSurpriseZ = $ctx->surprisePct / $dispersion;
-        $this->applyVolatilityShock($stock, $earningsSurpriseZ, $ctx->baselineVol);
         $this->recordSurprise($stock, $ctx->surprisePct);
 
         $currentPrice = (float) $stock->getPrice();
@@ -1970,7 +2030,7 @@ class EarningsEngine
             $currentPE = $priceToSales * (1.0 / $structuralAfterTaxMargin);
         }
 
-        $ctx->priceGapPct = $this->resolveDampedPriceGap($ctx->surprisePct, (float) $stock->getBeta(), $this->resolveGrowthPremium($currentPE));
+        $ctx->priceGapPct = $this->resolveDampedPriceGap($ctx->pricedSurprisePct, (float) $stock->getBeta(), $this->resolveGrowthPremium($currentPE));
         $ctx->totalShockPct = $ctx->priceGapPct;
         $ctx->corporateActionDescriptions = "";
 
@@ -1996,7 +2056,8 @@ class EarningsEngine
                     $desc = $subEvent['description'] ?? '';
                 }
                 $ctx->corporateActionDescriptions .= "\n• " . $desc;
-                $ctx->totalShockPct += ($subEvent['shock'] / 100.0);
+                // Only an announcement with a measured return carries one; distress is already in fair value.
+                $ctx->totalShockPct += (($subEvent['shock'] ?? 0.0) / 100.0);
             }
         }
 
@@ -2007,6 +2068,9 @@ class EarningsEngine
         $exDivPrice = ($currentPrice * (1.0 + $ctx->totalShockPct)) - (float) ($ctx->allocation['dividend_paid'] ?? 0.0);
         $newPrice = max(0.01, $exDivPrice);
         $stock->setPrice(number_format($newPrice, 8, '.', ''));
+
+        // The dividend is not a return: the holder has the cash. The announcement return is the move alone.
+        $this->recordAnnouncementVariance($stock, log(1.0 + $ctx->totalShockPct), true);
     }
 
     private function publishEventAndReport(EarningsSimulationContext $ctx): array
@@ -2052,39 +2116,7 @@ class EarningsEngine
         return [$earningsEvent];
     }
 
-    /**
-     * Resolves the denominator that turns an earnings surprise into a standardized one (SUE).
-     *
-     * Unexpected earnings are standardized by the dispersion of the firm's OWN past unexpected earnings
-     * (Foster, Olsen & Shevlin 1984), not by a static per-sector constant. The sector constants describe how
-     * well analysts cover an industry; they say nothing about how large the surprises this engine actually
-     * generates are, and the two had drifted apart badly. Measured over forty quarters the realized surprise
-     * scale ran from 1.5x the assumed dispersion for a bank to 5.8x for an industrial, so the "sigma event"
-     * threshold was tripped in 42% to 95% of quarters instead of the ~13% a true Z-score implies, and the
-     * volatility shock that rides on it kept half the district permanently elevated.
-     *
-     * The sector's analyst dispersion remains a floor: it carries the coverage quality signal and scales with
-     * market volatility, so forecasts still fan out in a panicked regime. Until the firm has enough reports
-     * to estimate its own scale, that floor is all there is.
-     */
-    private function resolveSurpriseDispersion(EarningsSimulationContext $ctx): float
-    {
-        $analystDispersion = max(self::MIN_ESTIMATE_DISPERSION, $ctx->estimateDispersion);
-
-        $history = $ctx->stock->getEarningsSurpriseHistory() ?? [];
-        if (count($history) < self::SUE_MIN_HISTORY_QUARTERS) {
-            return $analystDispersion;
-        }
-
-        $realizedScale = $this->mathUtility->calculateMeanAbsoluteScale(array_map('floatval', array_values($history)));
-
-        return max($analystDispersion, $realizedScale);
-    }
-
-    /**
-     * Appends this quarter's surprise to the rolling SUE sample, after it has been standardized against the
-     * prior quarters. Standardizing a surprise partly by itself would shrink every outlier toward the mean.
-     */
+    /** Appends this quarter's surprise to the firm's rolling surprise record. */
     private function recordSurprise(Stock $stock, float $surprisePct): void
     {
         $history = $stock->getEarningsSurpriseHistory() ?? [];
@@ -2095,26 +2127,24 @@ class EarningsEngine
         );
     }
 
-    private function applyVolatilityShock(Stock $stock, float $earningsZ, float $baselineVol): void
+    /**
+     * Books an announcement return into the name's annualized announcement variance, which the price process
+     * gives back from its diffusion (MarketEngine). A report closes the quarter and decays the estimate one
+     * report interval. A warning between reports is added at the weight that, once the report has decayed it,
+     * counts it the same as the report's own move, so the estimate settles on reports per year times the
+     * expected sum of a quarter's squared announcement returns.
+     */
+    private function recordAnnouncementVariance(Stock $stock, float $logReturn, bool $closesQuarter): void
     {
-        $currentVol = (float) $stock->getCurrentVolatility();
-        $zScore = abs($earningsZ);
+        $prior = (float) ($stock->getAnnouncementVarianceEma() ?? 0.0);
 
-        if ($zScore > FinancialConstants::SURPRISE_Z_SCORE_THRESHOLD) {
-            $shockFactor = $earningsZ < 0
-                ? FinancialConstants::VOLATILITY_SHOCK_FACTOR * FinancialConstants::NEGATIVE_SURPRISE_VOL_MULTIPLIER
-                : FinancialConstants::VOLATILITY_SHOCK_FACTOR;
-
-            // Measured from the threshold that opened the shock, so volatility rises continuously from the
-            // moment a surprise becomes material. Against a bare 1.0 the multiplier jumped straight to 1.10
-            // the instant the 1.5-sigma line was crossed, which put a step in the volatility path with
-            // nothing behind it.
-            $shockMultiplier = 1.0 + (($zScore - FinancialConstants::SURPRISE_Z_SCORE_THRESHOLD) * $shockFactor);
-            $newVol = min($currentVol * $shockMultiplier, $baselineVol * FinancialConstants::MAX_VOLATILITY_MULTIPLIER);
-            $stock->setCurrentVolatility((string) $newVol);
-        } elseif ($zScore < FinancialConstants::BORING_Z_SCORE_THRESHOLD && $currentVol > $baselineVol) {
-            $newVol = $currentVol - (($currentVol - $baselineVol) * FinancialConstants::VOLATILITY_COOLING_FACTOR);
-            $stock->setCurrentVolatility((string) max($newVol, $baselineVol));
+        if ($closesQuarter) {
+            $next = MathUtility::ewmaAnnualizedVariance($prior, $logReturn, self::REPORT_INTERVAL_YEARS, self::ANNOUNCEMENT_VARIANCE_EMA_YEARS);
+        } else {
+            $weight = exp(self::REPORT_INTERVAL_YEARS / self::ANNOUNCEMENT_VARIANCE_EMA_YEARS) - 1.0;
+            $next = max(0.0, $prior) + ($weight * ($logReturn * $logReturn) / self::REPORT_INTERVAL_YEARS);
         }
+
+        $stock->setAnnouncementVarianceEma($next);
     }
 }

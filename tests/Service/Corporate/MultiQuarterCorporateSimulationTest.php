@@ -19,7 +19,7 @@ use App\Service\Math\MathUtility;
 use App\Service\Math\CorporateMetrics;
 use App\Service\Event\NarrativeEngine;
 use App\Service\Event\MarketEventPublisher;
-use App\Service\Market\MarketConsensusEngine;
+use App\Service\Market\Pricing\MarketConsensusEngine;
 use App\Data\Sectors;
 use Symfony\Contracts\EventDispatcher\EventDispatcherInterface;
 

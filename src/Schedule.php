@@ -2,7 +2,7 @@
 
 namespace App;
 
-use App\Service\Market\HistoryPruner;
+use App\Service\Market\Ticker\HistoryPruner;
 use Symfony\Component\Console\Messenger\RunCommandMessage;
 use Symfony\Component\Scheduler\Attribute\AsSchedule;
 use Symfony\Component\Scheduler\RecurringMessage;

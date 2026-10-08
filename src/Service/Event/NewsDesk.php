@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Service\Event;
 
-use App\Service\Market\CreditRatingAgency;
+use App\Service\Market\Bond\CreditRatingAgency;
 use App\Service\Math\FinancialConstants;
 
 /**

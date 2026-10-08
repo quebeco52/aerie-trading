@@ -17,6 +17,14 @@ use App\DTO\CapitalAllocationContext;
  */
 class TreasuryEngine
 {
+    // --- Seasoned Equity Offering ---
+    /** Announcement return of a seasoned equity offering, in percent: about -3% over two days for industrial issuers (Asquith & Mullins 1986), the adverse-selection signal (Myers & Majluf 1984). Distress is not added on top: fair value already prices it. */
+    public const SEASONED_EQUITY_OFFERING_ANNOUNCEMENT_PCT = -3.0;
+
+    // --- Financing News ---
+    /** A financing action is news at 1% of the firm's total assets, the top of the 0.5-1% of total assets auditors take as materiality (practitioner guidance; second-hand). */
+    public const FINANCING_NEWS_MATERIALITY = 0.01;
+
     // --- CapEx & Deployment Rates ---
     /** Base organic spend rate (15%) for retained cash hoards. */
     private const BASE_ORGANIC_SPEND_RATE = 0.15;
@@ -33,7 +41,7 @@ class TreasuryEngine
         private CapExEngine $capExEngine,
         private MathUtility $mathUtility,
         /** Investment securities mark. Defaulted so a harness or a unit test builds an engine without wiring the curve. */
-        private SecuritiesBookService $securitiesBook = new SecuritiesBookService(new \App\Service\Market\BondPricingEngine(new MathUtility()))
+        private SecuritiesBookService $securitiesBook = new SecuritiesBookService(new \App\Service\Market\Bond\BondPricingEngine(new MathUtility()))
     ) {}
 
     /**
@@ -42,6 +50,20 @@ class TreasuryEngine
      * This must run BEFORE buybacks so that newly issued debt cash can fund Leveraged Buybacks,
      * and Growth CapEx takes priority over share repurchases.
      */
+    /**
+     * Whether a financing action is material enough to the firm to make its news: measured against its total
+     * assets, so a revolver draw that is routine for a bank still reads as news for a mid-size retailer. Before
+     * the first ledger, equity plus funding stands in for total assets by identity.
+     */
+    public static function isNewsworthy(Stock $stock, float $amount): bool
+    {
+        $totalAssets = $stock->hasBalanceSheetLedger()
+            ? $stock->getTotalAssets()
+            : (float) $stock->getTotalEquity() + (float) $stock->getTotalDebt();
+
+        return $amount > self::FINANCING_NEWS_MATERIALITY * max(FinancialConstants::MIN_OPERATING_BASE_CASH, $totalAssets);
+    }
+
     public function executeCorporateStrategy(CapitalAllocationContext $ctx): void
     {
         // SYSTEMIC M2 MONEY SUPPLY GROWTH
@@ -196,10 +218,10 @@ class TreasuryEngine
         $unrecognizedMark = -$realizedMark * FinancialConstants::DEFAULT_HTM_BOOK_SHARE;
         $ctx->assetSaleLoss += ($carryingValueSold * $haircut) + $unrecognizedMark;
 
-        if ($proceeds > 500_000_000.0) {
+        if (self::isNewsworthy($ctx->stock, $proceeds)) {
             $amtB = number_format($proceeds / 1_000_000_000, 2);
             $lossB = number_format(($carryingValueSold - $proceeds) / 1_000_000_000, 2);
-            $ctx->events[] = ['description' => "Sold \${$amtB}B of securities and loans below carrying value to meet withdrawals, realizing a \${$lossB}B loss.", 'shock' => -3.0];
+            $ctx->events[] = ['description' => "Sold \${$amtB}B of securities and loans below carrying value to meet withdrawals, realizing a \${$lossB}B loss."];
         }
     }
 
@@ -269,6 +291,12 @@ class TreasuryEngine
             // Max 25% of operations per quarter (Quarterly Flow Limit)
             $trueExpansionCapacity = min($trueExpansionCapacity, $liveInvestedCapital * 0.25);
 
+            // Pecking order (Myers & Majluf 1984): a firm borrows to fund plant it has chosen to build, and only
+            // for the part its spare cash cannot meet; headroom on its own is not a reason to build.
+            if ($ctx->expansionBudget !== null && !$isUnderLeveragedForDebt) {
+                $trueExpansionCapacity = min($trueExpansionCapacity, max(0.0, $ctx->expansionBudget - $excessCash));
+            }
+
             if ($trueExpansionCapacity > 0) {
                 $rawSpread = max(0.0, $marginalReturn - $hurdleRate);
                 $spreadMultiplier = min(1.0, $rawSpread * 10.0);
@@ -305,9 +333,9 @@ class TreasuryEngine
                         $ctx->recapActionTaken = true;
                     }
 
-                    if ($newDebtIssued > 500_000_000.0) {
+                    if (self::isNewsworthy($ctx->stock, $newDebtIssued)) {
                         $amtB = number_format($newDebtIssued / 1_000_000_000, 2);
-                        $ctx->events[] = ['description' => "Issued \${$amtB}B in bonds for " . ($isUnderLeveragedForDebt ? "recapitalization" : "expansion") . ".", 'shock' => 0.5];
+                        $ctx->events[] = ['description' => "Issued \${$amtB}B in bonds for " . ($isUnderLeveragedForDebt ? "recapitalization" : "expansion") . "."];
                     }
                 }
             }
@@ -392,6 +420,13 @@ class TreasuryEngine
                 $expansionSpend = 0.0;
             }
 
+            // No more plant than demand calls for, however it is funded: what the accelerator left after the
+            // earnings engine's own growth spend. Cash it does not need stays for distribution or paydown.
+            if ($ctx->expansionBudget !== null) {
+                $expansionSpend = min($expansionSpend, $ctx->expansionBudget);
+                $ctx->expansionBudget -= max(0.0, $expansionSpend);
+            }
+
             if ($expansionSpend > 0) {
                 $ctx->organicCapex = $expansionSpend;
                 $ctx->newTreasury -= $expansionSpend;
@@ -417,7 +452,7 @@ class TreasuryEngine
                         'reit' => 'property acquisitions and development',
                         default => 'organic expansion'
                     };
-                    $ctx->events[] = ['description' => "Deployed \${$amtB}B in {$actionText}.", 'shock' => 0.5];
+                    $ctx->events[] = ['description' => "Deployed \${$amtB}B in {$actionText}."];
                 }
             }
         }
@@ -475,7 +510,7 @@ class TreasuryEngine
                 'distressed_debt' => 'distressed credit and turnaround equity acquisitions',
                 default => 'earning assets'
             };
-            $ctx->events[] = ['description' => "Deployed \${$amtB}B in {$actionText}.", 'shock' => 0.5];
+            $ctx->events[] = ['description' => "Deployed \${$amtB}B in {$actionText}."];
         }
     }
 
@@ -512,11 +547,10 @@ class TreasuryEngine
         $ctx->unfundedMaturity = $roll->unfundedShortfall;
         $ctx->wholesaleDebt = (float) $ctx->stock->getWholesaleDebt();
 
-        if ($roll->principalRepaid > 500_000_000.0) {
+        if (self::isNewsworthy($ctx->stock, $roll->principalRepaid)) {
             $amtB = number_format($roll->principalRepaid / 1_000_000_000, 2);
             $ctx->events[] = [
                 'description' => "Shut out of the bond market and forced to repay \${$amtB}B of maturing notes in cash.",
-                'shock' => -4.0
             ];
         }
     }
@@ -542,7 +576,7 @@ class TreasuryEngine
                 $ctx->debtActionTaken = true;
 
                 if ($cashShortfall > 10_000_000.0) {
-                    $ctx->events[] = ['description' => "Forced to borrow \$" . number_format($cashShortfall / 1_000_000_000, 2) . "B at penalty rates due to cash shortfall.", 'shock' => -5.0];
+                    $ctx->events[] = ['description' => "Forced to borrow \$" . number_format($cashShortfall / 1_000_000_000, 2) . "B at penalty rates due to cash shortfall."];
                 }
             } else {
                 $ctx->failedEmergencyBorrow = true;
@@ -570,10 +604,13 @@ class TreasuryEngine
         $hurdleRate = $ctx->strategy->getHurdleRate($ctx->health);
         $economicSpread = $trueReturn - $hurdleRate;
 
+        // Struck as the market strikes it: cost of equity on the return on equity (MarketEngine).
+        $valuationReturn = $ctx->strategy->getValuationReturn($trueReturn, $stock->getLongRunReturn() !== null ? (float) $stock->getLongRunReturn() : null, $ctx->health->costOfEquity);
+        $equityRates = $ctx->strategy->getEquityValuationRates($stock, $valuationReturn, $ctx->health, $ctx->macroState->corporateTaxRate);
         $fairValuePE = $this->mathUtility->calculateManagementFairValuePE(
-            $hurdleRate,
-            $trueReturn,
-            $ctx->strategy->getSecularGrowthRate($stock),
+            $equityRates['costOfEquity'],
+            $equityRates['equityReturn'],
+            $ctx->strategy->getFadedSecularGrowthRate($stock, $ctx->macroState->totalTime),
             $ctx->macroState->outputGap,
             $ctx->health->leveredBeta,
             $ctx->macroState->inflation,
@@ -612,7 +649,6 @@ class TreasuryEngine
 
             $targetRaise = 0.0;
             $reason = "";
-            $shock = 0.0;
 
             if ($isDeathSpiral) {
                 $shortfall = max(0.0, $minOperatingCash - $ctx->newTreasury) + max(0.0, $ctx->unfundedMaturity);
@@ -620,14 +656,12 @@ class TreasuryEngine
                 $maxEmergencyRaise = max(FinancialConstants::MIN_OPERATING_BASE_CASH, $marketCap * FinancialConstants::MAX_EMERGENCY_EQUITY_RAISE_RATIO);
                 $targetRaise = min($shortfall * 1.5, $maxEmergencyRaise);
                 $reason = "execute a highly dilutive emergency stock offering to stave off bankruptcy";
-                $shock = -15.0;
             } elseif ($isBubble) {
                 $marketCap = $ctx->sharesOutstanding * $ctx->currentPrice;
                 $investedCapital = (float) $stock->getInvestedCapital();
                 $maxRaise = abs($investedCapital) * 0.10;
                 $targetRaise = min($marketCap * 0.05, $maxRaise);
                 $reason = "exploit premium valuation with a secondary offering";
-                $shock = -5.0;
             }
 
             if ($targetRaise > 10_000_000.0) {
@@ -650,7 +684,7 @@ class TreasuryEngine
                 $amtB = number_format($targetRaise / 1_000_000_000, 2);
                 $ctx->events[] = [
                     'description' => "Issued new shares to raise \${$amtB}B and {$reason}.",
-                    'shock' => $shock
+                    'shock' => self::SEASONED_EQUITY_OFFERING_ANNOUNCEMENT_PCT
                 ];
 
                 $ctx->failedEmergencyBorrow = false;
@@ -744,22 +778,20 @@ class TreasuryEngine
             $this->fundMaturityFromCash($ctx, $uncoveredMaturity);
         }
 
-        if ($drawn > 500_000_000.0) {
+        if (self::isNewsworthy($ctx->stock, $drawn)) {
             $amtB = number_format($drawn / 1_000_000_000, 2);
             $ctx->events[] = [
                 'description' => "Drew \${$amtB}B on its committed revolving credit facility to cover a cash shortfall.",
-                'shock' => -3.0
             ];
         }
 
         // News, not a price move of its own: the market prices what the refusal leads to (the emergency
         // paper, the rescue raise or the default), each of which carries its own reaction.
         $refused = min($overdraft + $maturity, $stock->getRevolverUndrawn());
-        if ($drawRefused && $refused > 500_000_000.0) {
+        if ($drawRefused && self::isNewsworthy($ctx->stock, $refused)) {
             $amtB = number_format($refused / 1_000_000_000, 2);
             $ctx->events[] = [
                 'description' => "Lenders refused a \${$amtB}B draw on its revolving credit facility while it is in breach of its leverage covenant.",
-                'shock' => 0.0
             ];
         }
     }
@@ -817,7 +849,7 @@ class TreasuryEngine
      * Records an event of default when principal came due that the firm could neither refinance, repay from
      * cash, nor cover with an emergency raise. This is a payment default, which is a separate failure mode
      * from balance-sheet insolvency: a firm can be worth more than it owes on paper and still fail because
-     * the money was not there on the day. MarketOperator liquidates on either.
+     * the money was not there on the day. FailureSweep liquidates on either.
      */
     private function processPaymentDefault(CapitalAllocationContext $ctx): void
     {
@@ -848,7 +880,6 @@ class TreasuryEngine
         $amtB = number_format($ctx->unfundedMaturity / 1_000_000_000, 2);
         $ctx->events[] = [
             'description' => "Failed to repay \${$amtB}B of maturing debt, triggering an event of default.",
-            'shock' => -25.0
         ];
     }
 
@@ -872,7 +903,6 @@ class TreasuryEngine
         $stock->setQuartersInDefault(0);
         $ctx->events[] = [
             'description' => 'Funded the principal it had missed and cured its event of default.',
-            'shock' => 8.0
         ];
     }
 
@@ -910,12 +940,11 @@ class TreasuryEngine
                     $ctx->newTreasury -= $actualPaydown;
                     $ctx->debtActionTaken = true;
 
-                    if ($actualPaydown > 500_000_000.0) {
+                    if (self::isNewsworthy($ctx->stock, $actualPaydown)) {
                         $amtB = number_format($actualPaydown / 1_000_000_000, 2);
                         $reason = $isLiquidityCrisis ? "survive a liquidity crisis" : "reduce debt burden and escape negative carry";
                         $ctx->events[] = [
                             'description' => "Paid down \${$amtB}B of debt to {$reason}.",
-                            'shock' => 1.0
                         ];
                     }
                 }
@@ -989,11 +1018,10 @@ class TreasuryEngine
                     $stock->setWholesaleDebt((string) $ctx->wholesaleDebt);
                     $ctx->newTreasury -= $debtToPayOff;
 
-                    if ($debtToPayOff > 500_000_000.0) {
+                    if (self::isNewsworthy($ctx->stock, $debtToPayOff)) {
                         $amtB = number_format($debtToPayOff / 1_000_000_000, 2);
                         $ctx->events[] = [
                             'description' => "Swept \${$amtB}B cash to aggressively deleverage.",
-                            'shock' => 2.0
                         ];
                     }
                 }

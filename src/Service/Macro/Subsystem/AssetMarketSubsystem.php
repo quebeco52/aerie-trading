@@ -543,8 +543,10 @@ class AssetMarketSubsystem
      */
     public static function jumpVarianceDrag(): float
     {
-        $meanVarianceJump = (MacroEngine::SYSTEMIC_JUMP_PROBABILITY_UP * MacroEngine::SYSTEMIC_JUMP_VARIANCE_MEAN * MathUtility::VARIANCE_JUMP_UPSIDE_MEAN_SHARE)
-            + ((1.0 - MacroEngine::SYSTEMIC_JUMP_PROBABILITY_UP) * MacroEngine::SYSTEMIC_JUMP_VARIANCE_MEAN);
+        $meanVarianceJump = MathUtility::meanVarianceJump(
+            MacroEngine::SYSTEMIC_JUMP_PROBABILITY_UP,
+            MacroEngine::SYSTEMIC_JUMP_VARIANCE_MEAN
+        );
 
         return (MacroEngine::SYSTEMIC_JUMP_INTENSITY * $meanVarianceJump) / self::MACRO_VOL_KAPPA;
     }

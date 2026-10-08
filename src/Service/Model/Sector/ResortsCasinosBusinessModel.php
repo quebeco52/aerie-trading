@@ -14,6 +14,7 @@ use App\Service\Corporate\EarningsEngine;
 use App\Service\Event\ShockEvent;
 use App\Service\Macro\MacroEngine;
 use App\Service\Math\MathUtility;
+use App\Service\Math\FinancialConstants;
 
 /**
  * Earnings strategy for Integrated Resorts & Casinos.
@@ -138,8 +139,6 @@ class ResortsCasinosBusinessModel extends StandardCorporateBusinessModel
     public const WORKING_CAPITAL_INTENSITY = 0.02;
     /** Share of construction in progress completed per quarter (multi-year resort builds). */
     public const CAPEX_COMPLETION_RATE = 0.15;
-    /** Nominal secular growth of destination leisure spending. */
-    public const SECULAR_GROWTH_RATE = 0.03;
     /** Capex response to the cycle: resort expansions are deferred in slumps and launched in booms. */
     public const CAPEX_CYCLICALITY = 2.50;
     /** Calendar-quarter seasonality of a coastal resort: Atlantic City land-based casino win 2015 (NJ DGE) by quarter over its mean. */
@@ -155,9 +154,17 @@ class ResortsCasinosBusinessModel extends StandardCorporateBusinessModel
         return self::SEASONALITY_FACTORS;
     }
 
+    // --- Secular Demand ---
+    /** Amusements, gambling and recreation plus accommodation value added as a share of US nominal GDP in 1997 (BEA GDP by Industry, value added). */
+    public const SECULAR_SHARE_1997 = 0.0132;
+    /** The same share in 2019. */
+    public const SECULAR_SHARE_2019 = 0.0135;
+
+    /** Trend real growth plus the sector's measured drift in its share of GDP. */
     public function getSecularGrowthRate(Stock $stock): float
     {
-        return self::SECULAR_GROWTH_RATE;
+        return MacroEngine::TREND_REAL_GROWTH
+            + MathUtility::gdpShareDrift(self::SECULAR_SHARE_1997, self::SECULAR_SHARE_2019, FinancialConstants::SECULAR_SHARE_WINDOW_YEARS);
     }
 
     public function getCapexCyclicality(): float

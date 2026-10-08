@@ -398,7 +398,7 @@ class EarningsReportSubscriberTest extends TestCase
 
     /**
      * The capital ratio on the report is the one the regulator closes the firm on: tangible equity over
-     * tangible assets, the score DebtEngine::calculateAltmanZScore hands MarketOperator. A goodwill write-off
+     * tangible assets, the score DebtEngine::calculateAltmanZScore hands FailureSweep. A goodwill write-off
      * moves book equity and goodwill together and so leaves it where it was; a firm the capital ratio does not
      * govern states none.
      */

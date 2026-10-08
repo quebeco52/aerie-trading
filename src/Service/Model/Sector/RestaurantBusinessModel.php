@@ -14,6 +14,7 @@ use App\DTO\MacroStateDTO;
 use App\Service\Math\MathUtility;
 use App\Service\Event\ShockEvent;
 use App\Service\Macro\MacroEngine;
+use App\Service\Math\FinancialConstants;
 
 /**
  * Earnings strategy for Restaurant Franchisors & Fast Food Giants.
@@ -105,9 +106,17 @@ class RestaurantBusinessModel extends StandardCorporateBusinessModel
         return [0.85, 1.10, 1.20, 0.85]; // Spring/summer patio dining and vacation demand
     }
 
+    // --- Secular Demand ---
+    /** Food services and drinking places value added as a share of US nominal GDP in 1997 (BEA GDP by Industry, value added). */
+    public const SECULAR_SHARE_1997 = 0.0176;
+    /** The same share in 2019. */
+    public const SECULAR_SHARE_2019 = 0.0228;
+
+    /** Trend real growth plus the sector's measured drift in its share of GDP. */
     public function getSecularGrowthRate(Stock $stock): float
     {
-        return 0.035;
+        return MacroEngine::TREND_REAL_GROWTH
+            + MathUtility::gdpShareDrift(self::SECULAR_SHARE_1997, self::SECULAR_SHARE_2019, FinancialConstants::SECULAR_SHARE_WINDOW_YEARS);
     }
 
     public function getMacroPhysics(Stock $stock, MacroStateDTO $macroState): array

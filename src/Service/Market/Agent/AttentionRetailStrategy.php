@@ -56,12 +56,12 @@ final class AttentionRetailStrategy implements AgentStrategyInterface
     private function attention(AgentMarketViewDTO $view): float
     {
         $market = max($this->extremeReturnLeg($view), $this->abnormalVolumeLeg($view));
-        $news = $view->hasNews ? FinancialConstants::AGENT_RETAIL_NEWS_ATTENTION : 0.0;
+        $news = $view->recentNews * FinancialConstants::AGENT_RETAIL_NEWS_ATTENTION;
 
         return min(1.0, $market + $news);
     }
 
-    /** The move, in units of what this name normally does over one tick. */
+    /** The last trading day's move, in units of what this name's day normally does. */
     private function extremeReturnLeg(AgentMarketViewDTO $view): float
     {
         if ($view->dt <= 0.0 || $view->annualizedVolatility <= 0.0) {
@@ -69,15 +69,18 @@ final class AttentionRetailStrategy implements AgentStrategyInterface
         }
 
         // Standardized per name, not in raw percent: a 3% day is unremarkable for a speculative small cap
-        // and front-page news for a utility, and attention is about the second reading.
-        $tickSigma = $view->annualizedVolatility * sqrt($view->dt);
-        $saturation = $tickSigma * FinancialConstants::AGENT_RETAIL_RETURN_SIGMA;
+        // and front-page news for a utility, and attention is about the second reading. The day's move is
+        // a leaky sum of returns, whose stationary variance is sigma^2 dt / (1 - phi^2): sigma^2 tau / 2 at
+        // a fine tick, about a day's variance at a daily one.
+        $phi = exp(-$view->dt / FinancialConstants::AGENT_RETAIL_ATTENTION_HORIZON_YEARS);
+        $daySigma = $view->annualizedVolatility * sqrt($view->dt / (1.0 - ($phi * $phi)));
+        $saturation = $daySigma * FinancialConstants::AGENT_RETAIL_RETURN_SIGMA;
 
         if ($saturation <= 0.0) {
             return 0.0;
         }
 
-        return min(1.0, abs($view->logReturn) / $saturation);
+        return min(1.0, abs($view->recentMove) / $saturation);
     }
 
     /**
@@ -91,7 +94,7 @@ final class AttentionRetailStrategy implements AgentStrategyInterface
     {
         $headroom = FinancialConstants::AGENT_RETAIL_VOLUME_MULTIPLE - 1.0;
 
-        return max(0.0, min(1.0, ($view->abnormalVolume - 1.0) / $headroom));
+        return max(0.0, min(1.0, ($view->recentAbnormalVolume - 1.0) / $headroom));
     }
 
     public function competesForCapital(): bool

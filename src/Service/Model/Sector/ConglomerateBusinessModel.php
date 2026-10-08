@@ -163,10 +163,6 @@ class ConglomerateBusinessModel extends StandardCorporateBusinessModel
     public function getMoatSpread(): float { return 0.015; }
     public function getCapExCompletionRate(Stock $stock): float { return 0.15; }
 
-    public function getSecularGrowthRate(Stock $stock): float
-    {
-        return 0.02; // Stable mature holding company growth
-    }
 
     public function getCapexCyclicality(): float
     {

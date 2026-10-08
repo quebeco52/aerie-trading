@@ -1,0 +1,362 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Service\Market\Option;
+
+use App\Entity\OptionContract;
+use App\Entity\Stock;
+use App\Service\Math\FinancialConstants;
+use Doctrine\DBAL\ArrayParameterType;
+use Doctrine\ORM\EntityManagerInterface;
+use App\Service\Market\Pricing\LiquidityEngine;
+
+/**
+ * Decides what is listed: which names carry a class, which expiries are open, and which strikes exist.
+ *
+ * Listing is a market rule rather than a modelling choice, and it is the rule that keeps the chain finite.
+ * Exchanges open a class against a float and a trading record, list a handful of near expiries on a shared
+ * monthly grid, and add strikes around the money as the underlying moves — they do not list every strike on
+ * every name forever. Following that gives roughly a hundred live contracts per optionable name instead of
+ * an unbounded surface, which is what makes repricing the whole market inside a tick possible at all.
+ *
+ * Strikes are never withdrawn once listed. A contract with open interest has to stay tradable so the holder
+ * can close it, and the ladder empties on its own when the expiry settles.
+ */
+final class OptionChainService
+{
+    // --- Listing Write ---
+    /**
+     * The columns a newly listed contract is written with, in the order a listing row lays them out.
+     *
+     * Every column the table requires is named here rather than left to a default, so a listing is one
+     * statement whose shape does not depend on the schema's opinion of a missing value. OptionChainListingTest
+     * pins the list against the mapping.
+     */
+    public const LISTING_COLUMNS = [
+        'ticker', 'stock_id', 'option_type', 'strike', 'expiry_serial', 'expires_at_time', 'listed_at_time',
+        'status', 'price', 'implied_volatility', 'delta', 'gamma', 'vega', 'theta', 'open_interest',
+        'structural_open_interest', 'updated_at',
+    ];
+
+    /** Contracts written per INSERT. A slice's first pass opens its whole chain, so the batch is sized for that rather than for the quiet case. */
+    public const LISTINGS_PER_STATEMENT = 500;
+
+    public function __construct(
+        private readonly EntityManagerInterface $em,
+        private readonly LiquidityEngine $liquidityEngine,
+    ) {}
+
+    /**
+     * The monthly listing serial a moment in simulation time falls in.
+     *
+     * Expiries sit on a grid shared by every name, so an expiry is a market-wide event — one day when the
+     * whole market's hedges roll — rather than 52 unrelated ones.
+     */
+    public static function expirySerial(float $currentTime): int
+    {
+        return (int) floor($currentTime * 12.0);
+    }
+
+    /** Simulation time, in years, at which a serial expires. */
+    public static function expiryTime(int $serial): float
+    {
+        return $serial / 12.0;
+    }
+
+    /**
+     * The earliest simulation time at which a serial could have been listed.
+     *
+     * Listing only ever opens serials AHEAD of the clock, the furthest of them OPTION_EXPIRY_MONTHS out, so a
+     * serial sitting in the table is proof that the clock once stood at least that far back from its expiry.
+     * That makes the chain a witness to how far the simulation has actually run — which is the one thing a
+     * clock restored from a lossy cache cannot vouch for about itself.
+     */
+    public static function earliestTimeFor(int $serial): float
+    {
+        return self::expiryTime($serial - max(FinancialConstants::OPTION_EXPIRY_MONTHS));
+    }
+
+    /** The furthest serial ever listed, or null if no chain has been opened yet. */
+    public function furthestListedSerial(): ?int
+    {
+        $serial = $this->em->getConnection()->fetchOne('SELECT MAX(expiry_serial) FROM option_contracts');
+
+        return $serial === null || $serial === false ? null : (int) $serial;
+    }
+
+    /**
+     * The serials open for listing as of now.
+     *
+     * @return array<int, int> Ascending.
+     */
+    public static function listedSerials(float $currentTime): array
+    {
+        $current = self::expirySerial($currentTime);
+
+        return array_map(
+            static fn (int $months): int => $current + $months,
+            FinancialConstants::OPTION_EXPIRY_MONTHS
+        );
+    }
+
+    /**
+     * The round increment a name's ladder is struck on.
+     *
+     * A ladder spaced at a flat fraction of spot would put strikes on numbers nobody quotes. Real ladders
+     * snap to round figures, and which round figure depends on the price level, so the increment is the
+     * smallest listed one that is at least the target spacing.
+     */
+    public static function strikeIncrement(float $spot): float
+    {
+        $target = $spot * FinancialConstants::OPTION_STRIKE_SPACING_FRACTION;
+        $increments = FinancialConstants::OPTION_STRIKE_INCREMENTS;
+
+        foreach ($increments as $increment) {
+            if ($increment >= $target) {
+                return $increment;
+            }
+        }
+
+        return (float) end($increments);
+    }
+
+    /**
+     * The strikes listed around a spot price.
+     *
+     * DENSE AT THE MONEY, SPARSE IN THE WINGS, which is how a chain is actually listed: the strikes anyone
+     * asks for sit near the money, and a uniform grid all the way to the edge of the ladder spends most of
+     * its rows where nobody trades. Every row costs a quote on each sweep and an INSERT when its serial
+     * rolls, so the uniform version was paying full price for the thinnest part of the book.
+     *
+     * The thinning is safe for the physics only because the public's book is allocated as a DENSITY over
+     * the ladder (OptionDemandEngine::evolve): a rung standing in for three increments carries the open
+     * interest of three, so the desk's gamma is what it was and only the row count moved. It is NOT safe
+     * against a point-weighted allocation, where dropping wing rungs concentrates the same book nearer the
+     * money and lifts dealer gamma by a fifth or more. Measured both ways before this was changed.
+     *
+     * The coarse grid is anchored to absolute multiples of the increment rather than to spot, so a name
+     * drifting through its ladder does not shuffle which wing strikes exist underneath it.
+     *
+     * @return array<int, float> Ascending, on the round increment, inside the ladder width.
+     */
+    public static function strikeLadder(float $spot): array
+    {
+        if ($spot <= 0.0) {
+            return [];
+        }
+
+        $increment = self::strikeIncrement($spot);
+        $width = FinancialConstants::OPTION_STRIKE_LADDER_WIDTH;
+        $band = $spot * FinancialConstants::OPTION_STRIKE_DENSE_BAND;
+        $wing = max(1, FinancialConstants::OPTION_STRIKE_WING_INCREMENT_MULTIPLE);
+
+        $lowest = max($increment, ceil(($spot * (1.0 - $width)) / $increment) * $increment);
+        $highest = floor(($spot * (1.0 + $width)) / $increment) * $increment;
+
+        $edge = $increment * 1.0e-9;
+        $strikes = [];
+
+        for ($strike = $lowest; $strike <= $highest + $edge; $strike += $increment) {
+            // The ends are always listed. Thinning is meant to cost rows, never RANGE — and on a name whose
+            // round increment is coarse enough that the whole ladder is five strikes, dropping an odd rung
+            // is dropping an end, which narrows the delta the book is spread over and lifts the desk's gamma
+            // with it. That is the one thing this change is not allowed to do.
+            $isEnd = $strike <= $lowest + $edge || $strike >= $highest - $edge;
+            $onCoarseGrid = ((int) round($strike / $increment)) % $wing === 0;
+
+            if ($isEnd || $onCoarseGrid || abs($strike - $spot) <= $band + $edge) {
+                $strikes[] = round($strike, 4);
+            }
+        }
+
+        return $strikes;
+    }
+
+    /**
+     * Whether a name meets the listing standard.
+     *
+     * A bankrupt shell, a sub-dollar name whose ladder would be one strike wide, and a name nobody trades
+     * all fail for the same reason: there is no market to write contracts against.
+     */
+    public function isListable(Stock $stock): bool
+    {
+        if ($stock->isBankrupt()) {
+            return false;
+        }
+
+        if ((float) $stock->getPrice() < FinancialConstants::OPTION_LISTING_MIN_PRICE) {
+            return false;
+        }
+
+        return $this->liquidityEngine->structuralDailyVolume($stock) >= FinancialConstants::OPTION_LISTING_MIN_ADV;
+    }
+
+    /**
+     * The symbol one contract trades under: underlying, expiry serial, side, strike.
+     *
+     * Readable rather than the OCC's fixed-width encoding, because a player types it.
+     */
+    public static function contractTicker(string $underlying, int $serial, string $optionType, float $strike): string
+    {
+        $strikeText = rtrim(rtrim(number_format($strike, 2, '.', ''), '0'), '.');
+
+        return sprintf(
+            '%s-%d%s%s',
+            $underlying,
+            $serial,
+            $optionType === OptionContract::TYPE_CALL ? 'C' : 'P',
+            $strikeText
+        );
+    }
+
+    /**
+     * Opens whatever is missing from the chains of a whole slice of the market.
+     *
+     * Idempotent: called each listing sweep, it adds the strikes the underlyings have moved into and leaves
+     * everything already open untouched.
+     *
+     * WRITTEN AS DATA, and for the whole slice at once, because listing is bursty. The expiry grid is monthly
+     * and shared, so when a serial rolls, every name in the market wants a fresh expiry on the same pass —
+     * a couple of hundred contracts for one slice. Persisting those through the unit of work sent one INSERT
+     * each and put the sweep thirty milliseconds over a twenty-millisecond tick every simulated month. One
+     * query to see what exists and one INSERT per hundred contracts costs the same whether the slice is
+     * quiet or a serial has just rolled.
+     *
+     * @param array<int, Stock> $stocks The slice being swept.
+     * @return int Contracts newly listed.
+     */
+    public function listChains(array $stocks, float $currentTime): int
+    {
+        $listable = [];
+
+        foreach ($stocks as $stock) {
+            $id = $stock->getId();
+
+            if ($id !== null && $this->isListable($stock)) {
+                $listable[$id] = $stock;
+            }
+        }
+
+        if ($listable === []) {
+            return 0;
+        }
+
+        $serials = self::listedSerials($currentTime);
+        $existing = $this->existingTickers(array_keys($listable), $serials);
+        $stamp = (new \DateTime())->format('Y-m-d H:i:s');
+        $rows = [];
+
+        foreach ($listable as $stockId => $stock) {
+            $strikes = self::strikeLadder((float) $stock->getPrice());
+
+            foreach ($serials as $serial) {
+                $expiresAt = self::expiryTime($serial);
+
+                foreach ($strikes as $strike) {
+                    foreach ([OptionContract::TYPE_CALL, OptionContract::TYPE_PUT] as $optionType) {
+                        $ticker = self::contractTicker($stock->getTicker(), $serial, $optionType, $strike);
+
+                        if (isset($existing[$ticker])) {
+                            continue;
+                        }
+
+                        $existing[$ticker] = true;
+
+                        $rows[] = [
+                            $ticker,
+                            $stockId,
+                            $optionType,
+                            (string) $strike,
+                            $serial,
+                            $expiresAt,
+                            $currentTime,
+                            OptionContract::STATUS_ACTIVE,
+                            '0.00000000',
+                            '0.000000',
+                            '0.00000000',
+                            '0.000000000000',
+                            '0.00000000',
+                            '0.00000000',
+                            0,
+                            0,
+                            $stamp,
+                        ];
+                    }
+                }
+            }
+        }
+
+        if ($rows === []) {
+            return 0;
+        }
+
+        $this->insert($rows);
+
+        return count($rows);
+    }
+
+    /**
+     * The symbols already taken on a set of names, whatever became of them.
+     *
+     * Symbols only, and one query for the slice rather than one per name. Listing needs to know which
+     * contracts exist, not what they are worth, and hydrating a hundred entities to read one string off each
+     * of them meant every sweep loaded the whole chain twice — once here and once to mark it.
+     *
+     * EVERY status, not just the live ones. A symbol is unique across the whole table, so a settled contract
+     * still owns its name and re-listing it is not a duplicate chain but a failed INSERT that takes the whole
+     * tick down with it. It is tempting to argue that cannot happen — the expiry grid only ever looks
+     * forward, so a serial that has settled is behind us forever — but that argument rests on the clock never
+     * going backwards, and the clock does not live here. Simulation time is accumulated in REDIS while the
+     * chain is in the database, so anything that loses or rewinds the Redis state (a flush, a restore, a
+     * ticker restarted against a half-old stack) puts the grid back over serials whose contracts are still
+     * sitting in the table, settled. Asking whether the name is taken costs the same query and does not care.
+     *
+     * SCOPED TO THE SERIALS BEING LISTED, which is not the same compromise. Filtering on status would give up
+     * the guard above outright; filtering on the serials the caller is about to write cannot, because every
+     * candidate symbol carries one of them by construction, so a settled contract on a rewound serial is
+     * still in the answer. What it drops is the twelve years of retired months that share nothing with this
+     * pass — the table keeps every contract it ever listed, so an unscoped read was pulling tens of thousands
+     * of dead symbols through PDO and into a hash map, every sweep, to compare them against the few hundred
+     * the front months actually contain.
+     *
+     * @param array<int, int> $stockIds
+     * @param array<int, int> $serials  The expiry serials this pass may write.
+     * @return array<string, true>
+     */
+    private function existingTickers(array $stockIds, array $serials): array
+    {
+        if ($serials === []) {
+            return [];
+        }
+
+        return array_fill_keys(
+            $this->em->getConnection()->fetchFirstColumn(
+                'SELECT ticker FROM option_contracts WHERE stock_id IN (:stocks) AND expiry_serial IN (:serials)',
+                ['stocks' => $stockIds, 'serials' => array_values($serials)],
+                ['stocks' => ArrayParameterType::INTEGER, 'serials' => ArrayParameterType::INTEGER]
+            ),
+            true
+        );
+    }
+
+    /**
+     * Writes listing rows, LISTINGS_PER_STATEMENT at a time.
+     *
+     * @param array<int, array<int, mixed>> $rows
+     */
+    private function insert(array $rows): void
+    {
+        $connection = $this->em->getConnection();
+        $columns = implode(', ', self::LISTING_COLUMNS);
+        $placeholders = '(' . implode(', ', array_fill(0, count(self::LISTING_COLUMNS), '?')) . ')';
+
+        foreach (array_chunk($rows, self::LISTINGS_PER_STATEMENT) as $chunk) {
+            $connection->executeStatement(
+                'INSERT INTO option_contracts (' . $columns . ') VALUES '
+                . implode(', ', array_fill(0, count($chunk), $placeholders)),
+                array_merge(...$chunk)
+            );
+        }
+    }
+}

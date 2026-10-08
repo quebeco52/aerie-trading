@@ -613,6 +613,11 @@ class TreasuryEngineTest extends TestCase
             1e-6,
             'the share count the engine writes back has to carry the dilution, or the raise is booked with no shares behind it'
         );
+
+        // The offering's announcement return is the measured one, whatever the valuation that prompted it.
+        $offerings = array_values(array_filter($ctx->events, static fn (array $e): bool => str_contains($e['description'] ?? '', 'offering')));
+        $this->assertCount(1, $offerings);
+        $this->assertSame(TreasuryEngine::SEASONED_EQUITY_OFFERING_ANNOUNCEMENT_PCT, $offerings[0]['shock'] ?? null);
     }
 
     /**
@@ -683,7 +688,7 @@ class TreasuryEngineTest extends TestCase
 
     /**
      * When no market will lend at any price, the maturity really is an event of default -- and it is a
-     * curable one. The firm is flagged and its grace clock starts; MarketOperator no longer liquidates on it.
+     * curable one. The firm is flagged and its grace clock starts; FailureSweep no longer liquidates on it.
      */
     public function testMaturityBeyondTheCommitmentDefaultsWhenNoMarketWillLend(): void
     {
@@ -705,6 +710,12 @@ class TreasuryEngineTest extends TestCase
 
         $this->assertTrue($stock->isPaymentDefault(), 'a maturity nobody will fund is an event of default');
         $this->assertSame(1, $stock->getQuartersInDefault(), 'the grace clock starts at one');
+
+        // Distress is news, not a scripted price move: fair value already carries it through leverage and the cost of equity.
+        $this->assertNotEmpty($ctx->events);
+        foreach ($ctx->events as $event) {
+            $this->assertSame(0.0, (float) ($event['shock'] ?? 0.0), 'A distress event moved the price: ' . ($event['description'] ?? ''));
+        }
         $this->assertEqualsWithDelta(140_000_000.0, $ctx->unfundedMaturity, 1.0, 'only the part the revolver could not cover is unfunded');
         $this->assertEqualsWithDelta(160_000_000.0, $ctx->principalRepaid, 1.0, 'cash plus the full commitment went to the bondholders');
         $this->assertGreaterThan(0.0, (float) $stock->getTotalEquity(), 'the firm is still notionally solvent');
@@ -1095,6 +1106,86 @@ class TreasuryEngineTest extends TestCase
         return $stock;
     }
 
+    /**
+     * Pecking order (Myers & Majluf 1984): an operating company borrows for plant it has chosen to build, and only
+     * the part its spare cash cannot fund. The same balance sheet with headroom and a return well over its hurdle
+     * borrows when no plant budget applies, and borrows nothing once demand has been met.
+     */
+    public function testAFirmBorrowsForExpansionOnlyWhatItsPlantBudgetLeavesUnfunded(): void
+    {
+        $borrow = function (?float $expansionBudget): float {
+            mt_srand(3);
+            $stock = new Stock();
+            $stock->setTicker('PECK');
+            $stock->setTotalEquity('1000000000.00');
+            $stock->setWholesaleDebt('200000000.00');
+            $stock->setCorporateTreasury('300000000.00');
+
+            $ctx = $this->createAllocationContext($stock, stockCompensation: 0.0);
+            $ctx->debtActionTaken = false;
+            $ctx->expansionBudget = $expansionBudget;
+
+            $this->corporateMetrics->method('calculateLiveInvestedCapital')->willReturn(1_000_000_000.0);
+            $this->corporateMetrics->method('calculateMarketSaturationPenalty')->willReturn(0.0);
+            $this->corporateMetrics->method('calculateMarginalReturn')->willReturn(0.40);
+
+            $issued = 0.0;
+            $debtEngine = $this->createStub(DebtEngine::class);
+            $debtEngine->method('rollMaturities')->willReturn(new MaturityRollDTO());
+            $debtEngine->method('issueDebt')->willReturnCallback(static function (Stock $issuer, float $amount) use (&$issued): void {
+                $issued += $amount;
+            });
+            (new TreasuryEngine($this->corporateMetrics, $debtEngine, $this->createStub(CapExEngine::class), $this->mathUtility))->executeCorporateStrategy($ctx);
+
+            return $issued;
+        };
+
+        $this->assertGreaterThan(0.0, $borrow(null), 'The fixture only means anything while the unbudgeted firm borrows.');
+        $this->assertSame(0.0, $borrow(0.0), 'Headroom alone is not a reason to borrow.');
+    }
+
+    /**
+     * However it is funded, organic plant stops at what the flexible accelerator leaves after the earnings
+     * engine's own growth spend: spare cash above it stays for distribution, and borrowing taken this quarter
+     * no longer forces the proceeds into plant.
+     */
+    public function testOrganicCapexStopsAtThePlantBudgetEvenWhenDebtWasRaised(): void
+    {
+        $deploy = function (?float $expansionBudget, bool $debtRaised): CapitalAllocationContext {
+            mt_srand(7);
+            $stock = new Stock();
+            $stock->setTicker('ACCL');
+            $stock->setTotalEquity('1000000000.00');
+            $stock->setCorporateTreasury('200000000.00');
+
+            $ctx = $this->createAllocationContext($stock, stockCompensation: 0.0);
+            $ctx->newTreasury = 200_000_000.0;
+            $ctx->debtActionTaken = $debtRaised;
+            $ctx->debtIssued = $debtRaised ? 100_000_000.0 : 0.0;
+            $ctx->expansionBudget = $expansionBudget;
+            $ctx->health = new DebtHealthDTO(
+                grossCost: 0.05, effectiveCost: 0.05, cashYield: 0.04, isNegativeCarry: false, isSevereNegativeCarry: false,
+                interestCoverage: 15.0, wantsToPaydownDebt: false, canIssueDebt: false, debtTolerance: 1.0, wacc: 0.30,
+                costOfEquity: 0.32, leveredBeta: 1.0, rawMetrics: $ctx->health->rawMetrics, isLiquidityCrisis: false,
+                isLiquidityWarning: false, isUnderLeveraged: false
+            );
+
+            $this->corporateMetrics->method('calculateLiveInvestedCapital')->willReturn(1_000_000_000.0);
+            $this->corporateMetrics->method('calculateMarketSaturationPenalty')->willReturn(0.0);
+            $this->corporateMetrics->method('calculateMarginalReturn')->willReturn(0.40);
+
+            (new TreasuryEngine($this->corporateMetrics, $this->debtEngine, $this->createStub(CapExEngine::class), $this->mathUtility))->executeCorporateStrategy($ctx);
+
+            return $ctx;
+        };
+
+        $budget = 5_000_000.0;
+        $this->assertGreaterThan($budget, $deploy(null, false)->organicCapex, 'The fixture only means anything while the unbudgeted firm spends past the budget.');
+        $this->assertEqualsWithDelta($budget, $deploy($budget, false)->organicCapex, 1e-6, 'Cash-funded plant stops at the budget.');
+        $this->assertGreaterThan(0.0, $deploy(null, true)->organicCapex, 'Borrowing used to force the proceeds into plant.');
+        $this->assertEqualsWithDelta(0.0, $deploy(0.0, true)->organicCapex, 1e-9, 'With demand met, borrowed cash builds nothing.');
+    }
+
     private function createAllocationContext(Stock $stock, float $stockCompensation, float $currentPrice = 50.0): CapitalAllocationContext
     {
         $macro = MacroStateDTO::fromArray([
@@ -1394,5 +1485,27 @@ class TreasuryEngineTest extends TestCase
         $this->assertEqualsWithDelta(0.0, $ctx->loanOriginations, 1.0, 'a bank below its capital buffer cannot add risk-weighted assets');
         $this->assertEqualsWithDelta(2_000_000_000.0, (float) $stock->getEarningAssets(), 1.0);
         $this->assertEqualsWithDelta(500_000_000.0, $ctx->newTreasury, 1.0);
+    }
+
+    /** A financing action is news in proportion to the firm: one percent of its total assets, not a fixed dollar line. */
+    public function testFinancingNewsIsMaterialToTheFirmRatherThanAFixedSum(): void
+    {
+        $operating = (new Stock())->setCorporateTreasury('2000000000')->setGrossPpe('18000000000');
+        $totalAssets = $operating->getTotalAssets();
+        $this->assertGreaterThan(0.0, $totalAssets);
+
+        $this->assertTrue(TreasuryEngine::isNewsworthy($operating, $totalAssets * 0.0101));
+        $this->assertFalse(TreasuryEngine::isNewsworthy($operating, $totalAssets * 0.0099));
+
+        // Before its first ledger a firm's total assets are its equity plus its funding.
+        $unreported = (new Stock())->setTotalEquity('3000000000')->setWholesaleDebt('1000000000');
+        $this->assertFalse($unreported->hasBalanceSheetLedger());
+        $this->assertTrue(TreasuryEngine::isNewsworthy($unreported, 41_000_000.0));
+        $this->assertFalse(TreasuryEngine::isNewsworthy($unreported, 39_000_000.0));
+
+        // The same $600M draw is news for the first firm and a rounding error for a $200B balance sheet.
+        $large = (new Stock())->setCorporateTreasury('20000000000')->setGrossPpe('180000000000');
+        $this->assertTrue(TreasuryEngine::isNewsworthy((new Stock())->setTotalEquity('20000000000'), 600_000_000.0));
+        $this->assertFalse(TreasuryEngine::isNewsworthy($large, 600_000_000.0));
     }
 }

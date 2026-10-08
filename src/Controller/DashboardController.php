@@ -36,7 +36,7 @@ class DashboardController extends AbstractController
         \App\Service\User\CostBasisCalculator $costBasis,
         \App\Service\User\DividendIncomeCalculator $dividendIncome,
         \App\Service\User\CouponIncomeCalculator $couponIncome,
-        \App\Service\Market\MarginEngine $marginEngine,
+        \App\Service\Market\Trading\MarginEngine $marginEngine,
         \App\Service\Macro\MacroStateProvider $macroStateProvider,
         \App\Service\View\PlayerPanelBuilder $playerPanels,
         Request $request,
@@ -400,7 +400,7 @@ class DashboardController extends AbstractController
             'cashShare' => $totalPortfolioValue > 0 ? $cashBalance / $totalPortfolioValue : null,
             // The rates the ticker accrues at, from the same two functions it calls.
             'cashRate' => \App\Service\User\Portfolio::cashSweepRate($macro->policyRateEma),
-            'marginRate' => \App\Service\Market\ForcedLiquidationService::marginLoanRate($macro->policyRate),
+            'marginRate' => \App\Service\Market\Trading\ForcedLiquidationService::marginLoanRate($macro->policyRate),
             'totalDividendIncome' => $totalDividendIncome,
             'dividendPayments' => $dividendIncome->recentPayments($user),
             'couponPayments' => $couponIncome->recentPayments($user),

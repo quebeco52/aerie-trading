@@ -474,7 +474,7 @@ class CreditFiscalSubsystem
         $state->corporateTaxRateTrend += (1.0 - exp(-$dt / self::TAX_RATE_TREND_YEARS)) * ($state->corporateTaxRate - $state->corporateTaxRateTrend);
 
         // The legislated part of that adjustment on its own, and the laws as the trailing year's earnings carry them,
-        // which the market measures what it expects against (App\Service\Market\PolicyCapitalization).
+        // which the market measures what it expects against (App\Service\Market\Pricing\PolicyCapitalization).
         $state->corporateTaxShiftRealized += MacroEngine::FISCAL_ADJUSTMENT_SPEED * ($state->corporateTaxPolicyShift - $state->corporateTaxShiftRealized) * $dt;
         $state->corporateTaxShiftEmbodied += ($state->corporateTaxShiftRealized - $state->corporateTaxShiftEmbodied) * $dt / self::TRAILING_EARNINGS_MEAN_LAG_YEARS;
         $state->bankLevyEmbodied += ($state->bankLevyRate - $state->bankLevyEmbodied) * $dt / self::TRAILING_EARNINGS_MEAN_LAG_YEARS;

@@ -2,7 +2,7 @@
 
 namespace App\Command;
 
-use App\Service\Market\HistoryPruner;
+use App\Service\Market\Ticker\HistoryPruner;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputInterface;

@@ -8,7 +8,7 @@ use App\Data\AnchorHoldings;
 use App\Data\AnchorStake;
 use App\Entity\Stock;
 use App\Repository\StockRepository;
-use App\Service\Market\PriceChangeFeed;
+use App\Service\Market\Chart\PriceChangeFeed;
 
 /**
  * The holdings table on a sphere's page: what it owns, how much of it, and what that is worth today.

@@ -10,6 +10,7 @@ use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use App\Service\Model\Sector\CommercialBankBusinessModel;
 use PHPUnit\Framework\TestCase;
 use App\Data\LifecycleStage;
+use App\Data\Sectors;
 use App\Entity\Stock;
 use App\DTO\EarningsSimulationContext;
 use App\DTO\MacroStateDTO;
@@ -23,7 +24,7 @@ use App\Service\Math\MathUtility;
 use App\Service\Math\CorporateMetrics;
 use App\Service\Event\NarrativeEngine;
 use App\Service\Event\MarketEventPublisher;
-use App\Service\Market\MarketConsensusEngine;
+use App\Service\Market\Pricing\MarketConsensusEngine;
 use App\Service\Corporate\Industry\IndustryShareLedger;
 use App\Service\Math\FinancialConstants;
 use App\Service\Corporate\Industry\InMemoryIndustryShareStore;
@@ -123,14 +124,18 @@ class EarningsEngineTest extends TestCase
         $this->assertGreaterThan($control['revenue'] * (1.0 - FinancialConstants::MAX_INDUSTRY_PRICE_RESPONSE), $overbuilt['revenue'], 'bounded by the per-firm response cap');
     }
 
-    public function testADominantFirmReinvestsAtTrendButNotToTakeShareItWouldHaveToSpoilItsPriceFor(): void
+    /**
+     * Growth plant follows demand, not the reinvestment rate or how small the firm looks next to its market:
+     * a price-taker at half a percent of a $10T market and a firm spanning forty percent of a $125B one, both
+     * set to reinvest far past trend, grow their plant alike. Before the flexible accelerator the price-taker
+     * compounded at its full reinvestment rate, since nothing it built could move a price.
+     */
+    public function testGrowthPlantFollowsDemandNotHowSmallTheFirmLooksInItsMarket(): void
     {
-        // Same firm twice, differing only in how much of its market it already spans. Reinvestment is set
-        // high enough that the planned growth spend runs well past trend for both.
         $capitalGrowth = function (string $samRatio): float {
             mt_srand(5);
             $this->mathUtility = new MathUtility();
-            $engine = $this->buildEngine($this->createStub(EventDispatcherInterface::class));
+            $engine = $this->buildEngine($this->createStub(EventDispatcherInterface::class), new IndustryShareLedger(new InMemoryIndustryShareStore()));
             $stock = $this->buildMatureIndustrial('GROW');
             $stock->setSamRatio($samRatio);
             $stock->setCapexRatio('0.90');
@@ -138,25 +143,69 @@ class EarningsEngineTest extends TestCase
             $ticksPerYear = 252;
 
             $engine->calculate($stock, $macro, EarningsEngine::resolveReportingTick('GROW', $ticksPerYear), $ticksPerYear);
-            $opening = $stock->getInvestedCapital();
+            $opening = $stock->getNetPpe();
+            $this->assertGreaterThan(0.0, $opening, 'the first report seeds the plant ledger');
             for ($quarter = 1; $quarter <= 8; $quarter++) {
                 $engine->calculate($stock, $macro, ($quarter * 63) + EarningsEngine::resolveReportingTick('GROW', $ticksPerYear), $ticksPerYear);
             }
 
-            return $stock->getInvestedCapital() / $opening;
+            return $stock->getNetPpe() / $opening;
         };
 
-        // Half a percent of a $10T market: a price-taker, whose build moves no price.
         $priceTaker = $capitalGrowth('10.0');
-        // Forty-odd percent of a $125B market, under the saturation line: every unit it adds cuts the price
-        // on everything it already sells, and the share-taking return fails the hurdle.
         $dominant = $capitalGrowth('0.125');
 
-        $this->assertGreaterThan(1.0, $dominant, 'the dominant firm still reinvests to grow with its market');
-        $this->assertLessThan($priceTaker, $dominant, 'but it no longer builds past trend to take share');
-        // Two years at trend (the sector\'s secular real growth plus inflation) with working capital riding
-        // revenue: nowhere near the price-taker\'s compounding at the full reinvestment rate.
-        $this->assertLessThan($priceTaker - 0.05, $dominant);
+        // Two years of the sector's nominal demand growth (its secular rate plus 2% inflation), with a point of
+        // slack for replacement-cost maintenance; reinvesting at the full rate instead compounds to ~15%.
+        $demandGrowth = Sectors::strategyFor('Auto Manufacturers')->getFadedSecularGrowthRate(new Stock(), 0.0) + 0.02;
+
+        $this->assertGreaterThan(1.0, $priceTaker, 'the firm still grows with its market');
+        $this->assertLessThan(exp(2.0 * $demandGrowth) + 0.01, $priceTaker, 'plant grows with demand, not at the reinvestment rate');
+        $this->assertEqualsWithDelta($dominant, $priceTaker, 0.01, 'a small share of a large market is no licence to build past demand');
+    }
+
+    /**
+     * The error-correction half of the accelerator: a firm whose installed plant has fallen behind what its share
+     * of trend demand calls for builds faster than the same firm sitting on its anchor, and closes the gap.
+     */
+    public function testAFirmBehindItsShareOfTrendDemandBuildsFasterThanOneOnIt(): void
+    {
+        $capitalGrowth = function (float $anchorOverCapacity): float {
+            mt_srand(5);
+            $this->mathUtility = new MathUtility();
+            $ledger = new IndustryShareLedger(new InMemoryIndustryShareStore());
+            $engine = $this->buildEngine($this->createStub(EventDispatcherInterface::class), $ledger);
+            $stock = $this->buildMatureIndustrial('BHND');
+            $stock->setCapexRatio('0.90');
+            $macro = new MacroStateDTO(corporateTaxRate: 0.21, policyRateEma: 0.04, yield5yEma: 0.045, inflationEma: 0.02);
+            $ticksPerYear = 252;
+
+            // Strike the anchor before the first report, at the plant the firm's share of demand calls for.
+            $ledger->resolveIndustryCapacityRatio(
+                $stock,
+                (float) $stock->getTotalRevenue() * $anchorOverCapacity,
+                0.05,
+                IndustryShareLedger::trendNominalGdp($macro),
+                0.0,
+                0.0,
+                0,
+                $ticksPerYear
+            );
+
+            $engine->calculate($stock, $macro, EarningsEngine::resolveReportingTick('BHND', $ticksPerYear), $ticksPerYear);
+            $opening = $stock->getNetPpe();
+            $this->assertGreaterThan(0.0, $opening, 'the first report seeds the plant ledger');
+            for ($quarter = 1; $quarter <= 8; $quarter++) {
+                $engine->calculate($stock, $macro, ($quarter * 63) + EarningsEngine::resolveReportingTick('BHND', $ticksPerYear), $ticksPerYear);
+            }
+
+            return $stock->getNetPpe() / $opening;
+        };
+
+        $onAnchor = $capitalGrowth(1.0);
+        $behind = $capitalGrowth(3.0);
+
+        $this->assertGreaterThan($onAnchor, $behind, 'a firm short of the plant its demand calls for builds toward it');
     }
 
     public function testASectorWideGoodQuarterIsNotBookedAsShareTakenFromRivals(): void
@@ -406,6 +455,10 @@ class EarningsEngineTest extends TestCase
 
         $stock = $this->buildMatureIndustrial('SAAS');
         $stock->setIndustry('Software - Application');
+        $stock->setSector('Information Technology');
+        // About ten times sales, where software trades: a tenth of revenue in equity is ~1% of the company a
+        // year, inside the sector's burn-rate cap, so all of it is settled in shares.
+        $stock->setPrice('300.00');
         $stock->setOperatingMargin('0.25');
         $stock->setLifecycleStage(LifecycleStage::Mature);
         $macroState = new MacroStateDTO(corporateTaxRate: 0.21, policyRateEma: 0.04, yield5yEma: 0.04);
@@ -413,7 +466,7 @@ class EarningsEngineTest extends TestCase
         $engine->calculate($stock, $macroState, EarningsEngine::resolveReportingTick('SAAS', 252));
 
         $this->assertNotNull($captured);
-        $intensity = \App\Data\Sectors::getBusinessModelStrategy('tech')->getStockCompensationIntensity();
+        $intensity = \App\Data\Sectors::getBusinessModelStrategy('tech')->getStockCompensationIntensity($stock);
         $this->assertGreaterThan(0.05, $intensity, 'software pays a material share of revenue in equity');
         $this->assertEqualsWithDelta($captured->actualRevenue * $intensity, $captured->stockCompensation, 1.0);
 
@@ -429,8 +482,48 @@ class EarningsEngineTest extends TestCase
         $this->assertEqualsWithDelta($expectedOperatingCashFlow, $captured->operatingCashFlow, 1.0);
 
         // Settled in shares: the count ends above whatever the capital allocation left it at, by SBC / price.
-        $expectedShares = ((float) $captured->allocation['new_shares']) + ($captured->stockCompensation / 50.0);
+        $expectedShares = ((float) $captured->allocation['new_shares']) + ($captured->stockCompensation / 300.0);
         $this->assertEqualsWithDelta($expectedShares, (float) $stock->getSharesOutstanding(), 1.0);
+    }
+
+    /**
+     * A board cannot grant past its burn-rate cap (ISS benchmarks): at a fifth of software's usual valuation the
+     * same pay bill would print several percent of the company a year, so only the capped value is settled in
+     * shares and the rest of the expense is paid in cash. The full charge is still reported; the add-back and
+     * the dilution are the share-settled part alone.
+     */
+    public function testStockCompensationPastTheBurnRateCapIsPaidInCash(): void
+    {
+        $captured = null;
+        $dispatcher = new EventDispatcher();
+        $dispatcher->addListener(EarningsReportedEvent::class, function (EarningsReportedEvent $event) use (&$captured): void {
+            $captured = $event->getContext();
+        });
+        $engine = $this->buildEngine($dispatcher);
+
+        $stock = $this->buildMatureIndustrial('CAPD');
+        $stock->setIndustry('Software - Application');
+        $stock->setSector('Information Technology');
+        $stock->setPrice('50.00');
+        $stock->setOperatingMargin('0.25');
+        $stock->setLifecycleStage(LifecycleStage::Mature);
+        $sharesBefore = (float) $stock->getSharesOutstanding();
+
+        $engine->calculate($stock, new MacroStateDTO(corporateTaxRate: 0.21, policyRateEma: 0.04, yield5yEma: 0.04), EarningsEngine::resolveReportingTick('CAPD', 252));
+
+        $this->assertNotNull($captured);
+        $expense = $captured->actualRevenue * \App\Data\Sectors::getBusinessModelStrategy('tech')->getStockCompensationIntensity($stock);
+        $grantable = FinancialConstants::EQUITY_BURN_RATE_CAP_BY_SECTOR['Information Technology'] * 0.25 * $sharesBefore * 50.0;
+
+        $this->assertGreaterThan($grantable, $expense, 'the fixture only means anything while the bill exceeds the cap');
+        $this->assertEqualsWithDelta($expense, $captured->kpis['stock_compensation'], 1.0, 'the full charge is reported');
+        $this->assertEqualsWithDelta($grantable, $captured->stockCompensation, 1.0, 'only the grantable value is settled in shares');
+        $this->assertEqualsWithDelta(
+            ((float) $captured->allocation['new_shares']) + ($grantable / 50.0),
+            (float) $stock->getSharesOutstanding(),
+            1.0,
+            'dilution stops at the burn-rate cap'
+        );
     }
 
     /**
@@ -1555,7 +1648,7 @@ class EarningsEngineTest extends TestCase
         $this->assertEqualsWithDelta($captured->reportedActualNetIncome, (float) $history[3], 1.0);
     }
 
-    public function testSurpriseIsStandardizedByTheFirmsOwnSurpriseHistory(): void
+    public function testTheSurpriseRecordIsARollingWindow(): void
     {
         $engine = $this->buildEngine($this->createStub(EventDispatcherInterface::class));
 
@@ -1572,32 +1665,65 @@ class EarningsEngineTest extends TestCase
             $engine->calculate($stock, $macroState, $reportingTick + (63 * $quarter));
         }
 
-        $history = $stock->getEarningsSurpriseHistory();
-        $this->assertIsArray($history);
+        // The record is a rolling window, so an old regime eventually leaves it.
+        $this->assertCount(EarningsEngine::SUE_HISTORY_QUARTERS, $stock->getEarningsSurpriseHistory() ?? []);
+    }
 
-        // The sample is a rolling window, so an old regime eventually leaves the denominator.
-        $this->assertCount(EarningsEngine::SUE_HISTORY_QUARTERS, $history);
+    /**
+     * A report is a scheduled jump: its move, not its dividend, is booked into the name's announcement variance,
+     * annualized, which the price process then gives back from its diffusion.
+     */
+    public function testAReportBooksItsMoveAsAnnouncementVariance(): void
+    {
+        $captured = null;
+        $dispatcher = new EventDispatcher();
+        $dispatcher->addListener(EarningsReportedEvent::class, function (EarningsReportedEvent $event) use (&$captured): void {
+            $captured = $event->getContext();
+        });
 
-        // A firm whose surprises are chronically large must end up with a correspondingly large denominator,
-        // otherwise every ordinary quarter reads as a multi-sigma event and the volatility shock never stops
-        // firing. Measured over forty quarters the static sector constants understated the realized surprise
-        // scale by between 1.5 and 5.8 times, which pinned most of the district's volatility near its ceiling.
-        $realizedScale = (new MathUtility())->calculateMeanAbsoluteScale(array_map('floatval', $history));
-        $meanAbsoluteSurprise = array_sum(array_map('abs', $history)) / count($history);
+        $stock = $this->buildMatureIndustrial('ANNV');
+        $stock->setLifecycleStage(LifecycleStage::Mature);
+        $this->assertSame(0.0, $stock->getAnnouncementVarianceEma());
 
-        $this->assertGreaterThan(0.0, $realizedScale);
-        $this->assertGreaterThan(
-            $meanAbsoluteSurprise,
-            $realizedScale,
-            'The normal-equivalent scale must exceed the mean absolute surprise it is derived from.'
+        mt_srand(777);
+        $this->buildEngine($dispatcher)->calculate(
+            $stock,
+            new MacroStateDTO(corporateTaxRate: 0.21, policyRateEma: 0.04, yield5yEma: 0.04),
+            EarningsEngine::resolveReportingTick('ANNV', 252)
         );
 
-        // A typical quarter for this firm must not register as a sigma event against its own history.
-        $this->assertLessThan(
-            1.5,
-            $meanAbsoluteSurprise / $realizedScale,
-            'An average quarter must not trip the volatility shock threshold.'
+        $this->assertNotNull($captured);
+        $this->assertNotSame(0.0, $captured->totalShockPct, 'the fixture must report a surprise for this test to have power');
+
+        $weight = 1.0 - exp(-EarningsEngine::REPORT_INTERVAL_YEARS / EarningsEngine::ANNOUNCEMENT_VARIANCE_EMA_YEARS);
+        $this->assertEqualsWithDelta(
+            $weight * (log(1.0 + $captured->totalShockPct) ** 2) / EarningsEngine::REPORT_INTERVAL_YEARS,
+            (float) $stock->getAnnouncementVarianceEma(),
+            1e-12
         );
+    }
+
+    /**
+     * Reports alone settle the estimate on reports per year times the squared move; a warning between reports adds
+     * its own squared move at the same weight without a second decay, so a quarter with a warning counts both.
+     */
+    public function testAnnouncementVarianceSettlesOnTheAnnualRateOfSquaredMoves(): void
+    {
+        $engine = $this->buildEngine($this->createStub(EventDispatcherInterface::class));
+        $record = new \ReflectionMethod($engine, 'recordAnnouncementVariance');
+        $stock = new Stock();
+        $move = 0.05;
+
+        for ($quarter = 0; $quarter < 400; $quarter++) {
+            $record->invoke($engine, $stock, $move, true);
+        }
+        $this->assertEqualsWithDelta(($move ** 2) / EarningsEngine::REPORT_INTERVAL_YEARS, (float) $stock->getAnnouncementVarianceEma(), 1e-12);
+
+        for ($quarter = 0; $quarter < 400; $quarter++) {
+            $record->invoke($engine, $stock, $move, false);
+            $record->invoke($engine, $stock, $move, true);
+        }
+        $this->assertEqualsWithDelta(2.0 * ($move ** 2) / EarningsEngine::REPORT_INTERVAL_YEARS, (float) $stock->getAnnouncementVarianceEma(), 1e-9);
     }
 
     public function testMeanAbsoluteScaleRecoversSigmaAndResistsASingleOutlier(): void
@@ -2253,5 +2379,25 @@ class EarningsEngineTest extends TestCase
         // The share the market prices against covers the committed base as well as the unit costs.
         $share = (float) ($founding->stock->getEarningsMomentumZ()[FinancialConstants::STATE_EXTRACTION_COST_SHARE] ?? 0.0);
         $this->assertGreaterThan($founding->fixedCosts / $founding->actualRevenue, $share);
+    }
+
+    /**
+     * Each report rolls the firm's long-run return toward its trailing return over LONG_RUN_RETURN_EMA_YEARS, so the
+     * valuation's anchor is a measured level, not the lore baseline.
+     */
+    public function testEachReportRollsTheLongRunReturnTowardTheTrailingOne(): void
+    {
+        $stock = $this->buildMatureIndustrial('LRUN');
+        $stock->setLongRunReturn('0.0500');
+        $macroState = new MacroStateDTO(corporateTaxRate: 0.21, policyRateEma: 0.04, yield5yEma: 0.04);
+
+        $this->earningsEngine->calculate($stock, $macroState, EarningsEngine::resolveReportingTick('LRUN', 252));
+
+        $trailing = \App\Data\Sectors::strategyFor($stock->getIndustry())->getTrueReturn($stock);
+        $this->assertEqualsWithDelta(
+            0.05 + ((1.0 - exp(-0.25 / 5.0)) * ($trailing - 0.05)),
+            (float) $stock->getLongRunReturn(),
+            1e-4
+        );
     }
 }

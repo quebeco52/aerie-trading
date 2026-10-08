@@ -40,7 +40,7 @@ class CreditHealthBuilderTest extends TestCase
 
         $this->assertTrue($credit['inDefault']);
         $this->assertSame(FinancialConstants::PAYMENT_DEFAULT_GRACE_QUARTERS, $credit['quartersInDefault']);
-        $this->assertTrue($credit['cureDueNextReport'], 'one more missed report and MarketOperator accelerates');
+        $this->assertTrue($credit['cureDueNextReport'], 'one more missed report and FailureSweep accelerates');
     }
 
     public function testACurrentFirmShowsItsLineCovenantCoverageAndDistanceToDefault(): void

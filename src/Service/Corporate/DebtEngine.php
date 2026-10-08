@@ -6,7 +6,7 @@ use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use App\Service\Event\MarketEventPublisher;
 use App\Service\Macro\MacroEngine;
-use App\Service\Market\CreditRatingAgency;
+use App\Service\Market\Bond\CreditRatingAgency;
 use App\Service\Math\CorporateMetrics;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\MathUtility;
@@ -55,9 +55,9 @@ class DebtEngine
     /** Horizon the structural default model is struck on; 5 years is the standard tenor for corporate credit spreads. */
     private const MERTON_HORIZON_YEARS = 5.0;
     /**
-     * Mean-reversion speed of idiosyncratic equity volatility, in reversions per year. Derived from the rate
-     * the earnings engine itself cools a shock, -ln(1 - VOLATILITY_COOLING_FACTOR) * 4 quarters, so the credit
-     * model and the volatility process agree on how long a surprise is expected to last.
+     * Mean-reversion speed of idiosyncratic equity volatility, in reversions per year: -ln(1 - 0.25) * 4, the
+     * quarterly cooling the earnings engine once applied after a surprise. The price process now reverts
+     * variance at MarketEngine::varianceReversionSpeed(), which is faster; aligning the two is open.
      */
     private const EQUITY_VOL_REVERSION_SPEED = 1.1507;
     /** Floor on the asset volatility the Merton model is struck at; below it a distance to default stops meaning anything. */
@@ -530,9 +530,11 @@ class DebtEngine
         // Cost of Equity (CAPM) on the long government yield: the riskless rate matched to the duration of the cash
         // flows being valued (Damodaran 2008, "What is the riskfree rate?"), which is also the rate the premium is
         // measured over. The policy rate is the return on bills; discounting a perpetuity at it understates the
-        // hurdle by the term spread and swings every valuation with the short end of the monetary cycle.
+        // hurdle by the term spread and swings every valuation with the short end of the monetary cycle. It is today's
+        // yield, the one an investor can lock in now, not an average of past ones: a smoothed rate moves for months after
+        // the yield has, so every valuation built on it could be forecast.
         $equityRiskPremium = $macroState->equityRiskPremium;
-        $costOfEquity = $this->mathUtility->calculateCAPM($macroState->yield10yEma, $leveredBeta, $equityRiskPremium);
+        $costOfEquity = $this->mathUtility->calculateCAPM($macroState->yield10y, $leveredBeta, $equityRiskPremium);
 
         // Absolute priority hurdle: cost of equity floored at marginal market borrowing rate.
         $costOfEquity = max($debtMetrics->currentMarketRate, $costOfEquity);
@@ -839,7 +841,7 @@ class DebtEngine
             return false;
         }
 
-        $ranks = \App\Service\Market\CreditRatingAgency::RATING_RANKS;
+        $ranks = \App\Service\Market\Bond\CreditRatingAgency::RATING_RANKS;
 
         return ($ranks[$stock->getCreditRating()] ?? $ranks['BBB'])
             >= ($ranks[self::REFINANCING_RATING_FLOOR] ?? 1);

@@ -21,8 +21,28 @@ interface ValuationStrategyInterface
      *                                            it; null falls back to a structural approximation from revenue
      *                                            and book value for callers that do not carry a balance sheet.
      */
-    public function calculateStructuralEps(float $bookValuePerShare, float $structuralRoic, float $revenuePerShare, float $riskFreeRate, ?float $investedCapitalPerShare = null): float;
+    public function calculateStructuralEps(float $bookValuePerShare, float $structuralRoic, float $revenuePerShare, float $riskFreeRate, float $afterTaxCostOfDebt, ?float $investedCapitalPerShare = null): float;
+
+    /**
+     * The return the firm earns on its EQUITY, which is what a P/E on levered earnings and a P/B on book
+     * equity are struck against at the cost of equity (Damodaran 2012, Investment Valuation, ch. 18-20).
+     */
+    public function getEquityReturn(float $returnOnCapital, float $investedCapital, float $equity, float $afterTaxCostOfDebt): float;
+
+    /**
+     * The (cost of equity, return on equity) pair a firm's equity multiple is struck on, from its own balance
+     * sheet and debt book: what management values its shares at, the same way the market does.
+     *
+     * @return array{costOfEquity: float, equityReturn: float}
+     */
+    public function getEquityValuationRates(\App\Entity\Stock $stock, float $returnOnCapital, \App\DTO\DebtHealthDTO $health, float $corporateTaxRate): array;
     public function calculateStructuralRoic(float $roicTtm, float $baselineRoic, float $revenuePerShare, float $bookValuePerShare, float $baselineMargin): float;
+
+    /**
+     * The return the firm's equity is valued on, from its trailing return and its measured long-run level, discounted at
+     * the given rate; the market and management both strike their multiple on it.
+     */
+    public function getValuationReturn(float $trailingReturn, ?float $longRunReturn, float $discountRate): float;
 
     /**
      * The intrinsic price-to-book multiple applied to book value per share.
