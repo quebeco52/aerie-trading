@@ -47,7 +47,7 @@ use Symfony\Component\HttpFoundation\RequestStack;
 use Symfony\Contracts\EventDispatcher\EventDispatcherInterface;
 
 /**
- * Renders the government page and every party page from a headless run of the economy and the politics, for a
+ * Renders the government pages and every party page from a headless run of the economy and the politics, for a
  * screenshot. Not in any suite: bin/render-pages runs it. YEARS and SEED pick the run; FORCE_PRESSURE shows a cabinet
  * leaning on the Monetary Authority.
  */
@@ -165,7 +165,14 @@ final class GovernmentRenderTest extends KernelTestCase
         )));
         $builder = new GovernmentPageBuilder($elections, $reports, $stocks, $decisions, $odds);
 
-        $pages = ['government' => ['/government', 'government/index.html.twig', $builder->build($macro, $politics)]];
+        $pages = [
+            'government' => ['/government', 'government/index.html.twig', $builder->buildHub($macro, $politics)],
+            'diet' => ['/government/diet', 'government/diet.html.twig', $builder->buildDiet($macro, $politics)],
+            'election' => ['/government/election', 'government/election.html.twig', $builder->buildElection($macro, $politics)],
+            'budget' => ['/government/budget', 'government/budget.html.twig', $builder->buildBudget($macro, $politics)],
+            'council' => ['/council', 'government/council.html.twig', $builder->buildCouncil($macro, $politics)],
+            'authority' => ['/authority', 'government/authority.html.twig', $builder->buildAuthority($macro, $politics)],
+        ];
         foreach (AerieDiet::PARTIES as $party) {
             $data = $builder->buildParty($macro, $politics, $party);
             $pages['party-' . $party] = ['/government/parties/' . $data['party']['slug'], 'government/party.html.twig', $data];

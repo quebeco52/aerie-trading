@@ -1,0 +1,57 @@
+{# Macros the government pages share. #}
+{% macro lever_value(lever, value) %}{% set unit = lever.unit ?? '' %}{{ unit == 'hhi' ? (value * 10000)|number_format(0) ~ ' HHI' : (unit == 'usd_t' ? '$' ~ value|number_format(2) ~ '/t' : value|pct(2)) }}{% endmacro %}
+
+{# One question's line at one width. #}
+{% macro compass_row(row, compass, layout) %}
+	{% set f = compass.fontSize %}
+	{% set w = layout.halfWidth %}
+	<svg viewBox="{{ row.viewBox|join(' ') }}" class="w-full mt-1" role="img" aria-label="{{ row.summary }}">
+		{% if row.hub is not null %}
+			{# Behind the dots, so it shows above and below whichever party sits on it. #}
+			<line x1="{{ row.hub }}" y1="{{ -compass.hubReach }}" x2="{{ row.hub }}" y2="{{ compass.hubReach }}" class="stroke-primary" stroke-width="1.4" stroke-linecap="round"></line>
+		{% endif %}
+		<line x1="{{ -w }}" y1="0" x2="{{ w }}" y2="0" class="stroke-outline-variant" stroke-opacity="0.8" stroke-width="0.6"></line>
+		<line x1="0" y1="-4" x2="0" y2="4" class="stroke-outline-variant" stroke-opacity="0.8" stroke-width="0.6"></line>
+		{% if layout.endsBeside %}
+			{% for end in row.ends %}
+				<text x="{{ end.x }}" y="{{ end.y }}" text-anchor="{{ end.anchor }}" font-size="{{ f }}" class="fill-on-surface-variant">{{ end.text }}</text>
+			{% endfor %}
+		{% endif %}
+
+		{% for party in row.parties %}
+			{% for p in party.trail %}
+				<circle data-party="{{ party.key }}" cx="{{ p.x }}" cy="0" r="1.2" fill="{{ party.color }}" fill-opacity="{{ p.opacity }}"></circle>
+			{% endfor %}
+		{% endfor %}
+		{% for party in row.parties|filter(party => party.leader) %}
+			<line data-party="{{ party.key }}" x1="{{ party.leader[0] }}" y1="{{ party.leader[1] }}" x2="{{ party.leader[2] }}" y2="{{ party.leader[3] }}" stroke="{{ party.color }}" stroke-opacity="0.7" stroke-width="0.6" stroke-linecap="round"></line>
+		{% endfor %}
+		{# The largest dots first, so a small party sitting on a large one stays in sight. #}
+		{% for party in row.parties|sort((a, b) => b.r <=> a.r) %}
+			<a data-party="{{ party.key }}" href="{{ path('app_government_party', {slug: party.slug}) }}">
+				<title>{{ party.name }}: {{ party.seats }} seats{{ party.governing ? ', in the cabinet' : (party.supporting ? ', supporting it' : '') }}</title>
+				<circle cx="{{ party.x }}" cy="0" r="{{ party.r }}" fill="{{ party.color }}" fill-opacity="{{ party.governing ? 1 : (party.supporting ? 0.85 : 0.65) }}" class="stroke-surface-container-low" stroke-width="1"></circle>
+				{% if party.governing %}
+					<circle cx="{{ party.x }}" cy="0" r="{{ party.r + compass.ringGap }}" fill="none" class="stroke-primary" stroke-width="1"></circle>
+				{% elseif party.supporting %}
+					<circle cx="{{ party.x }}" cy="0" r="{{ party.r + compass.ringGap }}" fill="none" class="stroke-primary" stroke-width="0.8" stroke-dasharray="0.1 2" stroke-linecap="round"></circle>
+				{% endif %}
+			</a>
+		{% endfor %}
+		{% for party in row.parties %}
+			<a data-party="{{ party.key }}" href="{{ path('app_government_party', {slug: party.slug}) }}" class="hover:underline">
+				<text x="{{ party.labelX }}" y="{{ party.labelY }}" text-anchor="middle" font-size="{{ f }}" font-weight="{{ party.governing ? 'bold' : '600' }}" class="{{ party.governing or party.supporting ? 'fill-on-surface' : 'fill-on-surface-variant' }}">{{ party.label }}</text>
+			</a>
+		{% endfor %}
+	</svg>
+	{% if not layout.endsBeside %}
+		<div class="flex justify-between text-2xs text-on-surface-variant" style="padding: 0 {{ layout.endInset }}%" aria-hidden="true">
+			{% for end in row.ends %}<span>{{ end.text }}</span>{% endfor %}
+		</div>
+	{% endif %}
+{% endmacro %}
+
+{# A councillor's stances, in words: on the reserves, on the banks, and on money (hawk, swing vote or dove). #}
+{% macro reserves(stance) %}{{ {cautious: 'Cautious', balanced: 'Balanced', bold: 'Bold'}[stance] ?? '' }}{% endmacro %}
+{% macro banks(stance) %}{{ {light: 'Light-touch', middle: 'Moderate', strict: 'Strict'}[stance] ?? '' }}{% endmacro %}
+{% macro stance(stance, leaning = null) %}{{ {hawk: 'Hawk', swing: 'Swing', dove: 'Dove'}[stance] ?? '' }}{% if leaning %}<span class="text-on-surface-variant">, {{ leaning == 'hawk' ? 'leaning hawkish' : 'leaning dovish' }}</span>{% endif %}{% endmacro %}

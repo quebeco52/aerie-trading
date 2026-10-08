@@ -12,11 +12,7 @@
 {% block body %}
 	<div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-5 w-full space-y-5" id="partyPage">
 
-		<nav class="text-2xs text-on-surface-variant flex items-center gap-1" aria-label="Breadcrumb">
-			<a href="{{ path('app_government') }}" class="hover:text-on-surface hover:underline">The Government</a>
-			<span class="material-symbols-outlined text-sm" aria-hidden="true">chevron_right</span>
-			<span class="text-on-surface" aria-current="page">{{ party.name }}</span>
-		</nav>
+		{% include 'government/_breadcrumb.html.twig' with {current: party.name} %}
 
 		{# Who they are #}
 		<header class="bg-surface-container-low rounded-lg border border-outline-variant/20 overflow-hidden">

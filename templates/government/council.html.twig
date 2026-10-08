@@ -1,0 +1,111 @@
+{% extends 'base.html.twig' %}
+
+{% block title %}Aerie Council - Aerie Exchange{% endblock %}
+
+{% block meta %}
+	<meta name="description" content="The Aerie Council: its thirteen seats, who holds them and where they stand, the departments it appoints to, and its powers over the Diet.">
+	<meta property="og:title" content="Aerie Council | Aerie Exchange">
+	<meta property="og:type" content="website">
+{% endblock %}
+
+{% import 'partials/_ui.html.twig' as ui %}
+{% import 'government/_macros.html.twig' as gov %}
+
+{% block body %}
+	<div class="max-w-400 mx-auto px-4 sm:px-6 lg:px-8 py-5 w-full space-y-5" id="councilPage">
+
+		{% embed 'government/_header.html.twig' with {title: 'Aerie Council'} %}{% block lead %}{{ rules.councilSeats }} leaders who choose their own successors, appoint the heads of the departments, and hold a veto over the Diet they almost never use.{% endblock %}{% endembed %}
+
+		<section class="bg-surface-container-low rounded-lg p-5 border border-outline-variant/20" aria-labelledby="council-heading">
+			<h2 id="council-heading" class="text-sm font-semibold text-on-surface">The seats</h2>
+			<p class="text-2xs text-on-surface-variant mt-0.5">
+				{{ rules.councilSeats }} seats on staggered {{ rules.councilTermYears|number_format(0) }}-year terms. When a term ends, or a councillor dies or resigns, the sitting members elect the successor from the three candidates the Council Appointment Board puts forward; a successor to a councillor who left early serves out the term.
+				Each councillor holds a stance on money: a hawk would rather fight inflation, a dove would rather spare jobs, a swing vote sides with either as the case takes them.
+				Each also holds one on the banks, from light-touch to strict: how much of their own capital a bank should have at stake; and one on the reserves, from cautious to bold: how much of the District's savings belongs in shares. The Council's leans decide whom it appoints.
+			</p>
+			{% if council.lean %}
+				<p class="text-xs text-on-surface mt-3">
+					The Council leans {{ council.lean.median == 'hawk' ? 'hawkish' : (council.lean.median == 'dove' ? 'dovish' : 'to the middle') }}:
+					<span class="font-mono tabular-nums">{{ council.lean.hawk }}</span> {{ council.lean.hawk == 1 ? 'hawk' : 'hawks' }},
+					<span class="font-mono tabular-nums">{{ council.lean.swing }}</span> {{ council.lean.swing == 1 ? 'swing vote' : 'swing votes' }},
+					<span class="font-mono tabular-nums">{{ council.lean.dove }}</span> {{ council.lean.dove == 1 ? 'dove' : 'doves' }}.
+					{% if council.lean.banks is not null %}
+						On the banks its middle councillor would ask for <span class="font-mono tabular-nums">{{ council.lean.banks|pct(1) }}</span> core capital.
+					{% endif %}
+					{% if council.lean.reserves is not null %}
+						On the reserves, <span class="font-mono tabular-nums">{{ council.lean.reserves|pct(0) }}</span> in shares.
+					{% endif %}
+				</p>
+			{% endif %}
+			{% if council.board %}
+				<p class="text-xs text-on-surface mt-2">
+					The Council Appointment Board, whose <span class="font-mono tabular-nums">{{ council.board.seats }}</span> members are named by the District's bar, its judges, its universities and the Aerie Exchange, reads the applications for each seat and puts forward the three closest to its own views.
+					It leans {{ council.board.median == 'hawk' ? 'hawkish' : (council.board.median == 'dove' ? 'dovish' : 'to the middle') }}:
+					<span class="font-mono tabular-nums">{{ council.board.hawk }}</span> {{ council.board.hawk == 1 ? 'hawk' : 'hawks' }},
+					<span class="font-mono tabular-nums">{{ council.board.swing }}</span> {{ council.board.swing == 1 ? 'swing vote' : 'swing votes' }},
+					<span class="font-mono tabular-nums">{{ council.board.dove }}</span> {{ council.board.dove == 1 ? 'dove' : 'doves' }}.
+				</p>
+			{% endif %}
+
+			<div class="grid grid-cols-1 lg:grid-cols-[1fr_22rem] gap-5 mt-4">
+				<div class="overflow-x-auto">
+					<table class="w-full text-xs">
+						<thead>
+							<tr class="table-head">
+								<th scope="col" class="text-right font-semibold pb-2 w-10">Seat</th>
+								<th scope="col" class="text-left font-semibold pb-2 pl-4">Councillor</th>
+								<th scope="col" class="text-right font-semibold pb-2">Age</th>
+								<th scope="col" class="text-left font-semibold pb-2 pl-4 hidden md:table-cell">Seated</th>
+								<th scope="col" class="text-left font-semibold pb-2 pl-4 md:pl-0">Term ends</th>
+								<th scope="col" class="text-left font-semibold pb-2 pl-4">Money</th>
+								<th scope="col" class="text-left font-semibold pb-2 pl-4">Banks</th>
+								<th scope="col" class="text-left font-semibold pb-2 pl-4 hidden md:table-cell">Reserves</th>
+							</tr>
+						</thead>
+						<tbody class="divide-y divide-outline-variant/10">
+							{% for seat in council.roster %}
+								<tr>
+									<td class="py-1.5 text-right font-mono tabular-nums text-on-surface-variant">{{ seat.seat }}</td>
+									<th scope="row" class="py-1.5 pl-4 text-left font-semibold text-on-surface">{{ seat.name }}</th>
+									<td class="py-1.5 text-right font-mono tabular-nums text-on-surface-variant">{{ seat.age ?? '' }}</td>
+									<td class="py-1.5 pl-4 text-on-surface-variant font-mono tabular-nums whitespace-nowrap hidden md:table-cell">{{ seat.sinceLabel }}</td>
+									<td class="py-1.5 pl-4 md:pl-0 text-on-surface-variant font-mono tabular-nums whitespace-nowrap {{ seat.seat == council.nextVacancy.seat ? 'text-primary font-semibold' : '' }}">{{ seat.termEndsLabel }}</td>
+									<td class="py-1.5 pl-4 text-on-surface whitespace-nowrap">{{ gov.stance(seat.stance ?? null, seat.leaning ?? null) }}</td>
+									<td class="py-1.5 pl-4 text-on-surface whitespace-nowrap">{{ gov.banks(seat.banks ?? null) }}</td>
+									<td class="py-1.5 pl-4 text-on-surface whitespace-nowrap hidden md:table-cell">{{ gov.reserves(seat.reserves ?? null) }}</td>
+								</tr>
+							{% endfor %}
+						</tbody>
+					</table>
+				</div>
+
+				<div class="space-y-4">
+					<div>
+						<h3 class="text-xs font-semibold text-on-surface">Departments</h3>
+						<p class="text-2xs text-on-surface-variant mt-0.5">The Council appoints each head; the departments then act on their own mandates.</p>
+						<ul class="mt-2 space-y-2">
+							{% for department in council.departments %}
+								<li class="text-xs">
+									{% if department.href %}
+										<a href="{{ department.href }}" class="font-semibold text-primary hover:underline">{{ department.name }}</a>
+									{% else %}
+										<span class="font-semibold text-on-surface">{{ department.name }}</span>
+									{% endif %}
+									<span class="block text-2xs text-on-surface-variant">{{ department.mandate }}</span>
+								</li>
+							{% endfor %}
+						</ul>
+					</div>
+					<div>
+						<h3 class="text-xs font-semibold text-on-surface">Powers</h3>
+						<ul class="mt-2 space-y-2 text-2xs text-on-surface-variant">
+							<li><span class="font-semibold text-on-surface">Veto.</span> The Council can veto any budget or law the Diet passes. It almost never does: the threat is enough. Its red line is the debt: above {{ rules.debtBrake|pct(0) }} of GDP it would veto any bill that cuts revenue, so the Diet tables none.</li>
+							<li><span class="font-semibold text-on-surface">Removal.</span> The Diet can remove a councillor with {{ rules.supermajority }} of its {{ rules.seats }} seats, three quarters. It never has, and {{ rules.loyalists|join(', ') }} never would.</li>
+							<li><span class="font-semibold text-on-surface">Independence.</span> No party sits on the Council, and no councillor sits in the Diet. What passes between them runs on gentlemen's agreements.</li>
+						</ul>
+					</div>
+				</div>
+			</div>
+		</section>
+	</div>
+{% endblock %}

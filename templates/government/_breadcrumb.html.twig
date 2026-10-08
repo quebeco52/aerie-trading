@@ -1,0 +1,6 @@
+{# The way back to the government's front page from one of its pages. #}
+<nav class="text-2xs text-on-surface-variant flex items-center gap-1" aria-label="Breadcrumb">
+	<a href="{{ path('app_government') }}" class="hover:text-on-surface hover:underline">The Government</a>
+	<span class="material-symbols-outlined text-sm" aria-hidden="true">chevron_right</span>
+	<span class="text-on-surface" aria-current="page">{{ current }}</span>
+</nav>

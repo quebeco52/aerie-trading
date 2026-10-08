@@ -1,5 +1,5 @@
-{# Declared once, rendered twice (desktop bar and mobile panel). The District's pages sit under one
-   menu, the way the footer groups them. #}
+{# Declared once, rendered twice (desktop bar and mobile panel). The District's pages and the government's
+   each sit under one menu. #}
 {% set current_path = app.request.pathInfo %}
 {% set market_links = [
     { href: '/', label: 'Markets', active: current_path == '/' or current_path starts with '/stock' or current_path starts with '/search' },
@@ -10,12 +10,23 @@
 ] %}
 {% set district_links = [
     { href: '/economy', label: 'Economy', active: current_path == '/economy' },
-    { href: '/government', label: 'Government', active: current_path starts with '/government' },
-    { href: '/reserve', label: 'Sovereign Reserve Fund', active: current_path == '/reserve' },
-    { href: '/regulator', label: 'Financial Regulator', active: current_path == '/regulator' },
     { href: '/district/glasswater-row', label: 'Glasswater Row', active: current_path starts with '/district' }
 ] %}
-{% set district_active = district_links|filter(link => link.active)|length > 0 %}
+{# The Diet's side first, then the Council and the departments it appoints, split by a rule. #}
+{% set government_links = [
+    { href: '/government', label: 'Overview', active: current_path == '/government' },
+    { href: '/government/diet', label: 'The Diet', active: current_path == '/government/diet' or current_path starts with '/government/parties' },
+    { href: '/government/election', label: 'The election', active: current_path == '/government/election' },
+    { href: '/government/budget', label: 'The budget', active: current_path == '/government/budget' },
+    { href: '/council', label: 'Aerie Council', active: current_path == '/council', rule: true },
+    { href: '/authority', label: 'Monetary Authority', active: current_path == '/authority' },
+    { href: '/regulator', label: 'Financial Regulator', active: current_path == '/regulator' },
+    { href: '/reserve', label: 'Sovereign Reserve Fund', active: current_path == '/reserve' }
+] %}
+{% set menus = [
+    { label: 'The District', links: district_links },
+    { label: 'Government', links: government_links }
+] %}
 {% set portfolio_active = current_path == '/dashboard' %}
 
 <nav class="sticky top-0 z-50 bg-surface border-b border-outline-variant/20 w-full" aria-label="Primary">
@@ -33,19 +44,23 @@
                            class="text-sm font-medium py-1 border-b-2 transition-colors {{ link.active ? 'text-primary border-primary' : 'text-on-surface-variant hover:text-on-surface border-transparent' }}">{{ link.label }}</a>
                     {% endfor %}
 
-                    <details class="group relative" data-controller="disclosure">
-                        <summary class="list-none cursor-pointer flex items-center gap-0.5 text-sm font-medium py-1 border-b-2 transition-colors {{ district_active ? 'text-primary border-primary' : 'text-on-surface-variant hover:text-on-surface border-transparent' }}">
-                            The District
-                            <span class="material-symbols-outlined text-base leading-none transition-transform group-open:rotate-180" aria-hidden="true">expand_more</span>
-                        </summary>
-                        <div class="absolute left-0 top-full mt-2 w-60 rounded-lg border border-outline-variant/25 bg-surface-container-high shadow-lg shadow-black/40 p-1.5 z-50">
-                            {% for link in district_links %}
-                                <a href="{{ link.href }}"
-                                   {% if link.active %}aria-current="page"{% endif %}
-                                   class="block px-3 py-2 rounded text-sm transition-colors {{ link.active ? 'text-primary bg-primary/10' : 'text-on-surface-variant hover:text-on-surface hover:bg-surface-bright' }}">{{ link.label }}</a>
-                            {% endfor %}
-                        </div>
-                    </details>
+                    {% for menu in menus %}
+                        {% set menu_active = menu.links|filter(link => link.active)|length > 0 %}
+                        <details class="group relative" data-controller="disclosure">
+                            <summary class="list-none cursor-pointer flex items-center gap-0.5 text-sm font-medium py-1 border-b-2 transition-colors {{ menu_active ? 'text-primary border-primary' : 'text-on-surface-variant hover:text-on-surface border-transparent' }}">
+                                {{ menu.label }}
+                                <span class="material-symbols-outlined text-base leading-none transition-transform group-open:rotate-180" aria-hidden="true">expand_more</span>
+                            </summary>
+                            <div class="absolute left-0 top-full mt-2 w-60 rounded-lg border border-outline-variant/25 bg-surface-container-high shadow-lg shadow-black/40 p-1.5 z-50">
+                                {% for link in menu.links %}
+                                    {% if link.rule ?? false %}<div class="my-1.5 border-t border-outline-variant/20" role="separator"></div>{% endif %}
+                                    <a href="{{ link.href }}"
+                                       {% if link.active %}aria-current="page"{% endif %}
+                                       class="block px-3 py-2 rounded text-sm transition-colors {{ link.active ? 'text-primary bg-primary/10' : 'text-on-surface-variant hover:text-on-surface hover:bg-surface-bright' }}">{{ link.label }}</a>
+                                {% endfor %}
+                            </div>
+                        </details>
+                    {% endfor %}
                 </div>
             </div>
 
@@ -103,7 +118,8 @@
                         </form>
                         {% for group in [
                             { heading: null, links: market_links|merge(app.user ? [{ href: '/dashboard', label: 'Portfolio', active: portfolio_active }] : []) },
-                            { heading: 'The District', links: district_links }
+                            { heading: 'The District', links: district_links },
+                            { heading: 'Government', links: government_links }
                         ] %}
                             {% if group.heading %}
                                 <p class="mt-1 px-3 pt-3 pb-1 border-t border-outline-variant/20 text-xs text-on-surface-faint">{{ group.heading }}</p>

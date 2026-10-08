@@ -67,7 +67,7 @@ final class AerieCouncil
      * @var list<array{name: string, mandate: string, href: string|null}>
      */
     public const DEPARTMENTS = [
-        ['name' => Institutions::MONETARY_AUTHORITY, 'mandate' => 'Sets the policy rate by its published rule. Its governor, named for one term, picks the rate committee. Independent of the Diet by charter.', 'href' => '/economy'],
+        ['name' => Institutions::MONETARY_AUTHORITY, 'mandate' => 'Sets the policy rate by its published rule. Its governor, named for one term, picks the rate committee. Independent of the Diet by charter.', 'href' => '/authority'],
         ['name' => Institutions::SOVEREIGN_RESERVE_FUND, 'mandate' => 'Invests the reserves and pays the budget its rule draw. Its head, named for one term, sets how much of the fund is in shares. Holds the second key: no draw on the reserves passes without it.', 'href' => '/reserve'],
         ['name' => Institutions::FINANCIAL_REGULATOR, 'mandate' => 'Sets the core capital banks must hold against their loans and the most a home buyer may borrow against the property. Its head, named for one term, decides both.', 'href' => '/regulator'],
         ['name' => Institutions::EXCHEQUER, 'mandate' => 'Executes the budget the Diet passes and manages the District\'s debt.', 'href' => null],

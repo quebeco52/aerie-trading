@@ -1,0 +1,258 @@
+{% extends 'base.html.twig' %}
+
+{% block title %}The Diet - Aerie Exchange{% endblock %}
+
+{% block meta %}
+	<meta name="description" content="The Aerie District's Diet: its 300 seats by party and bloc, the coalition talks, where the parties stand, and every election on record.">
+	<meta property="og:title" content="The Diet | Aerie Exchange">
+	<meta property="og:type" content="website">
+{% endblock %}
+
+{% import 'partials/_ui.html.twig' as ui %}
+{% import 'government/_macros.html.twig' as gov %}
+
+{% block body %}
+	<div class="max-w-400 mx-auto px-4 sm:px-6 lg:px-8 py-5 w-full space-y-5" id="dietPage">
+
+		{% embed 'government/_header.html.twig' with {title: 'The Diet'} %}{% block lead %}The District's parliament: {{ rules.seats }} seats elected every {{ rules.termYears|number_format(0) }} years. It passes the budget and the laws, and its majority makes the cabinet.{% endblock %}{% endembed %}
+
+		{% if talks %}
+			<section class="bg-surface-container-low rounded-lg p-5 border {{ talks.underWay ? 'border-primary/40' : 'border-outline-variant/15' }}" aria-labelledby="talks-heading">
+				<div class="flex flex-col md:flex-row md:items-start md:justify-between gap-3">
+					<div>
+						<h2 id="talks-heading" class="text-sm font-semibold text-on-surface">{{ talks.underWay ? (talks.afterFall ? 'The cabinet has fallen: talks under way' : 'Coalition talks under way') : 'The last coalition talks' }}</h2>
+						<p class="text-2xs text-on-surface-variant mt-0.5">
+							{% if talks.underWay %}
+								Day {{ talks.day|number_format(0) }}{{ talks.afterFall ? ' since the cabinet fell on ' ~ talks.startedOn : '' }}. The {{ talks.afterFall ? 'cabinet that fell' : 'outgoing cabinet' }} stays on as caretaker and passes no budget until a new government takes office{{ talks.afterFall ? '; no election is called' : '' }}.
+							{% else %}
+								A government took office after {{ ui.days(talks.day) }} and {{ talks.attempts }} {{ talks.attempts == 1 ? 'attempt' : 'attempts' }}.
+							{% endif %}
+						</p>
+					</div>
+					{% if talks.leading %}
+						<div class="shrink-0 rounded border border-primary/30 bg-primary/5 px-3 py-2">
+							<p class="text-xs font-semibold text-primary">Attempt {{ talks.leading.attempt }}</p>
+							<p class="text-xs text-on-surface mt-0.5"><span class="inline-block w-2 h-2 rounded-full mr-1" style="background-color: {{ talks.leading.color }}" aria-hidden="true"></span><span class="font-semibold">{{ talks.leading.name }}</span> is trying to form a government</p>
+						</div>
+					{% endif %}
+				</div>
+				{% if talks.entries is not empty %}
+					<ol class="mt-4 divide-y divide-outline-variant/10">
+						{% for entry in talks.entries %}
+							<li class="py-2 grid grid-cols-[4rem_1fr] gap-3 text-xs">
+								<span class="font-mono tabular-nums text-on-surface-variant">Day {{ entry.day|number_format(0) }}</span>
+								<span>
+									<span class="inline-block w-2 h-2 rounded-full mr-1" style="background-color: {{ entry.color }}" aria-hidden="true"></span><span class="font-semibold text-on-surface">{{ entry.formateur }}</span>
+									{% if entry.formed %}
+										<span class="text-secondary font-semibold">formed a government:</span> {{ entry.cabinet|join(', ') }}{% if entry.support is not empty %}, supported by {{ entry.support|join(', ') }}{% endif %}.
+									{% else %}
+										<span class="text-warning font-semibold">failed</span> to form a cabinet of {{ entry.cabinet|join(', ') }}{% if entry.support is not empty %} with {{ entry.support|join(', ') }} in support{% endif %}.
+									{% endif %}
+								</span>
+							</li>
+						{% endfor %}
+					</ol>
+				{% endif %}
+			</section>
+		{% endif %}
+
+		{# The chamber's seat positions are unit-radius; they are drawn at 100 units so text sizes stay whole. #}
+		<div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
+			<section class="bg-surface-container-low rounded-lg p-5 border border-outline-variant/20" aria-labelledby="diet-heading">
+				<h2 id="diet-heading" class="text-sm font-semibold text-on-surface">The chamber</h2>
+				<p class="text-2xs text-on-surface-variant mt-0.5">{{ rules.seats }} seats, grouped by bloc. Within each bloc, the parties that want the largest state sit on the left. The cabinet's seats are solid, its supporters' half-filled.
+					The blocs: {% for bloc in rules.blocSeats %}<span class="inline-block w-1.5 h-1.5 rounded-full mx-0.5 align-middle" style="background-color: {{ bloc.color }}" aria-hidden="true"></span>{{ bloc.name }}'s {{ bloc.seats }}{{ not loop.last ? ', ' : '.' }}{% endfor %}</p>
+
+				<svg viewBox="-108 -106 216 114" class="w-full mt-4 max-h-72" role="img" aria-label="Diet seats by party: {% for party in parties %}{{ party.name }} {{ party.seats }}{{ not loop.last ? ', ' : '' }}{% endfor %}">
+					{% for seat in hemicycle %}
+						<circle cx="{{ seat.x * 100 }}" cy="{{ -seat.y * 100 }}" r="2.5" fill="{{ seat.color }}" fill-opacity="{{ seat.governing ? 1 : (seat.supporting ? 0.6 : 0.3) }}"{% if seat.supporting %} stroke="{{ seat.color }}" stroke-width="0.6"{% endif %}></circle>
+					{% endfor %}
+					<text x="0" y="-13" text-anchor="middle" class="fill-on-surface font-semibold" font-size="15">{{ government.supportedSeats }}</text>
+					<text x="0" y="-4" text-anchor="middle" class="fill-on-surface-variant" font-size="5.5">of {{ rules.majority }} needed</text>
+				</svg>
+
+				<table class="w-full mt-4 text-xs">
+					<thead>
+						<tr class="table-head">
+							<th scope="col" class="text-left font-semibold pb-2">Party</th>
+							<th scope="col" class="text-right font-semibold pb-2">Seats</th>
+							<th scope="col" class="text-right font-semibold pb-2">Vote</th>
+							<th scope="col" class="text-right font-semibold pb-2">Change</th>
+						</tr>
+					</thead>
+					<tbody class="divide-y divide-outline-variant/10">
+						{% for party in parties %}
+							<tr>
+								<th scope="row" class="py-2 text-left font-normal">
+									<span class="inline-flex items-center gap-2">
+										<span class="w-2.5 h-2.5 rounded-full shrink-0" style="background-color: {{ party.color }}" aria-hidden="true"></span>
+										<a href="{{ path('app_government_party', {slug: party.slug}) }}" class="font-semibold text-on-surface hover:text-primary hover:underline">{{ party.name }}</a>
+										<span class="text-xs text-on-surface-variant" title="{{ party.leadsBloc ? 'Leads its bloc as its largest party' : 'Campaigned in this bloc at the last election' }}"><span class="inline-block w-1.5 h-1.5 rounded-full mr-0.5 align-middle" style="background-color: {{ party.blocColor }}" aria-hidden="true"></span>{{ party.leadsBloc ? 'Leads a bloc' : 'Backs ' ~ party.bloc }}</span>
+										{% if party.governing %}<span class="text-xs font-medium text-primary">{{ government.caretaker ? 'Caretaker' : 'In government' }}</span>{% elseif party.supporting %}<span class="text-xs font-medium text-on-surface-variant">Supports</span>{% endif %}
+									</span>
+									{% if party.partyLeader %}
+										<span class="block text-2xs text-on-surface-variant mt-0.5" style="padding-left: 1.125rem">Led by {{ party.partyLeader.name }}</span>
+									{% endif %}
+								</th>
+								<td class="py-2 text-right font-mono tabular-nums text-on-surface">{{ party.seats }}</td>
+								<td class="py-2 text-right font-mono tabular-nums text-on-surface">{{ party.share|pct(1) }}</td>
+								<td class="py-2 text-right font-mono tabular-nums {{ party.swing|signed_class }}">
+									{{- party.swing is null ? '-' : (party.swing > 0 ? '+' : '') ~ (party.swing * 100)|number_format(1) ~ 'pp' -}}
+								</td>
+							</tr>
+						{% endfor %}
+					</tbody>
+				</table>
+			</section>
+
+			<section class="bg-surface-container-low rounded-lg p-5 border border-outline-variant/20" aria-labelledby="compass-heading">
+				<h2 id="compass-heading" class="text-sm font-semibold text-on-surface">Where the parties stand</h2>
+				<p class="text-2xs text-on-surface-variant mt-0.5">
+					Each party is anchored on the question it was founded on and drifts on the others between elections. Each question sets the laws named beside it. Select a party for its profile.
+				</p>
+
+				{# Pointing at a party anywhere fades the others on every question, so its whole profile reads at once. #}
+				<style>
+					#compass-rows [data-party] { transition: opacity 120ms; }
+					{% for party in parties %}
+						#compass-rows:has([data-party="{{ party.key }}"]:is(:hover, :focus-visible)) [data-party]:not([data-party="{{ party.key }}"]) { opacity: 0.2; }
+					{% endfor %}
+				</style>
+				<div id="compass-rows" class="mt-4 space-y-4">
+					{% for k, row in compass.layouts.wide.rows %}
+						<div>
+							<h3 class="text-xs text-on-surface"><span class="font-semibold">{{ row.name }}</span><span class="text-on-surface-variant"> · {{ row.laws|join(', ') }}</span></h3>
+							<div class="hidden sm:block">{{ gov.compass_row(row, compass, compass.layouts.wide) }}</div>
+							<div class="sm:hidden">{{ gov.compass_row(compass.layouts.narrow.rows[k], compass, compass.layouts.narrow) }}</div>
+						</div>
+					{% endfor %}
+				</div>
+
+				<ul class="mt-3 flex flex-wrap gap-x-5 gap-y-1.5 text-2xs text-on-surface-variant" aria-label="Key">
+					<li class="inline-flex items-center gap-1.5"><span class="inline-block w-2.5 h-2.5 rounded-full border border-primary" aria-hidden="true"></span>In the cabinet</li>
+					{% if compass.coalitionMark %}
+						<li class="inline-flex items-center gap-1.5"><span class="inline-block w-0.5 h-3 rounded-full bg-primary" aria-hidden="true"></span>Where the coalition governs from, its parties weighted by seats</li>
+					{% endif %}
+					<li class="inline-flex items-center gap-1.5"><span class="inline-block w-2.5 h-2.5 rounded-full border border-dotted border-primary" aria-hidden="true"></span>Supports the cabinet from outside</li>
+					<li class="inline-flex items-center gap-1.5"><span class="inline-flex gap-0.5" aria-hidden="true"><span class="w-1 h-1 rounded-full bg-on-surface-variant/20"></span><span class="w-1 h-1 rounded-full bg-on-surface-variant/50"></span></span>Past positions</li>
+				</ul>
+
+				<details class="mt-4 group">
+					<summary class="list-none cursor-pointer text-xs font-medium text-on-surface-variant hover:text-on-surface inline-flex items-center gap-1">
+						<span class="material-symbols-outlined text-sm transition-transform group-open:rotate-90" aria-hidden="true">chevron_right</span>
+						Positions in figures
+					</summary>
+					<table class="w-full mt-2 text-xs">
+						<caption class="sr-only">Party positions, from -1 to +1</caption>
+						<thead>
+							<tr class="table-head">
+								<th scope="col" class="text-left font-semibold pb-2">Party</th>
+								{% for axis in axes %}
+									<th scope="col" class="text-right font-semibold pb-2">{{ axis.name }}</th>
+								{% endfor %}
+							</tr>
+						</thead>
+						<tbody class="divide-y divide-outline-variant/10">
+							{% for party in parties %}
+								<tr>
+									<th scope="row" class="py-1.5 text-left font-normal"><a href="{{ path('app_government_party', {slug: party.slug}) }}" class="text-on-surface hover:text-primary hover:underline">{{ party.name }}</a></th>
+									{% for axis in axes %}
+										<td class="py-1.5 text-right font-mono tabular-nums {{ axis.key in party.fixedAxes ? 'text-on-surface font-semibold' : 'text-on-surface-variant' }}">{{ (attribute(party, axis.key) > 0 ? '+' : '') ~ attribute(party, axis.key)|number_format(2) }}</td>
+									{% endfor %}
+								</tr>
+							{% endfor %}
+							<tr>
+								<th scope="row" class="py-1.5 text-left font-semibold text-on-surface">The cabinet</th>
+								{% for axis in axes %}
+									<td class="py-1.5 text-right font-mono tabular-nums text-on-surface">{{ (attribute(government, axis.key) > 0 ? '+' : '') ~ attribute(government, axis.key)|number_format(2) }}</td>
+								{% endfor %}
+							</tr>
+						</tbody>
+					</table>
+					<p class="text-2xs text-on-surface-variant mt-2">From -1 to +1. Bold marks the question a party was founded on, where it never moves.</p>
+				</details>
+			</section>
+		</div>
+
+		<section class="bg-surface-container-low rounded-lg border border-outline-variant/20 overflow-hidden" aria-labelledby="history-heading">
+			<div class="p-5 pb-3">
+				<h2 id="history-heading" class="text-sm font-semibold text-on-surface">Elections</h2>
+				<p class="text-2xs text-on-surface-variant mt-0.5">Every vote on record, newest first, with the economy it was cast on and the government the talks produced.</p>
+			</div>
+			{% if history is empty %}
+				<p class="px-5 pb-5 text-xs text-on-surface-variant">No election has been held since Year 1. The sitting Diet serves until {{ election.next }}.</p>
+			{% else %}
+				<div class="overflow-x-auto">
+					<table class="w-full text-xs">
+						<thead class="bg-surface-container text-xs text-on-surface-variant">
+							<tr>
+								<th scope="col" class="px-5 py-2.5 text-left font-semibold">Held</th>
+								{% for party in parties %}
+									<th scope="col" class="px-3 py-2.5 text-right font-semibold" title="{{ party.name }}"><a href="{{ path('app_government_party', {slug: party.slug}) }}" class="hover:text-on-surface"><span class="inline-block w-2 h-2 rounded-full mr-1" style="background-color: {{ party.color }}" aria-hidden="true"></span>{{ party.label }}</a></th>
+								{% endfor %}
+								<th scope="col" class="px-3 py-2.5 text-left font-semibold">Government</th>
+								<th scope="col" class="px-3 py-2.5 text-right font-semibold hidden md:table-cell" title="The outgoing government's change in combined vote share">Incumbent swing</th>
+								<th scope="col" class="px-3 py-2.5 text-right font-semibold hidden md:table-cell" title="Growth in the year before the vote against its usual pace, and inflation over the term against the 2% target, in points">Growth / inflation</th>
+								<th scope="col" class="px-5 py-2.5 text-right font-semibold hidden sm:table-cell" title="The share of the vote that changed hands between parties">Volatility</th>
+							</tr>
+						</thead>
+						<tbody class="divide-y divide-outline-variant/10">
+							{% for row in history %}
+								<tr>
+									<th scope="row" class="px-5 py-2 text-left font-mono tabular-nums font-normal text-on-surface">
+										{{ row.date }}
+									</th>
+									{% for cell in row.seats %}
+										<td class="px-3 py-2 text-right font-mono tabular-nums text-on-surface">
+											{{ cell.seats }}
+											<span class="block text-2xs {{ cell.swing|signed_class }}">{{ (cell.swing > 0 ? '+' : '') ~ (cell.swing * 100)|number_format(1) }}</span>
+										</td>
+									{% endfor %}
+									<td class="px-3 py-2">
+										{% if not row.formed %}
+											<span class="text-xs font-medium text-primary">Talks under way</span>
+										{% else %}
+											<span class="flex flex-wrap gap-x-2 gap-y-0.5">
+												{% for member in row.coalition %}
+													<span class="inline-flex items-center gap-1 text-on-surface"><span class="w-2 h-2 rounded-full" style="background-color: {{ member.color }}" aria-hidden="true"></span>{{ member.name }}</span>
+												{% endfor %}
+											</span>
+											{% if row.support is not empty %}
+												<span class="block text-2xs text-on-surface-variant">Supported by {% for member in row.support %}{{ member.name }}{{ not loop.last ? ', ' : '' }}{% endfor %}</span>
+											{% endif %}
+											<span class="block text-2xs font-mono tabular-nums text-on-surface-variant">
+												{%- if row.attempts == 0 %}A majority of its own{% else %}{{ ui.days(row.formationDays) }}, {{ row.attempts }} {{ row.attempts == 1 ? 'attempt' : 'attempts' }}{% endif -%}
+											</span>
+											{% if row.changed %}<span class="text-xs font-medium text-primary">New government</span>{% endif %}
+											{% for fall in row.falls %}
+												<span class="block mt-1 pt-1 border-t border-outline-variant/15">
+													<span class="block text-xs font-medium text-warning">Fell {{ fall.date }}</span>
+													{% if not fall.formed %}
+														<span class="text-xs font-medium text-primary">Talks under way</span>
+													{% else %}
+														<span class="flex flex-wrap gap-x-2 gap-y-0.5">
+															{% for member in fall.coalition %}
+																<span class="inline-flex items-center gap-1 text-on-surface"><span class="w-2 h-2 rounded-full" style="background-color: {{ member.color }}" aria-hidden="true"></span>{{ member.name }}</span>
+															{% endfor %}
+														</span>
+														{% if fall.support is not empty %}
+															<span class="block text-2xs text-on-surface-variant">Supported by {% for member in fall.support %}{{ member.name }}{{ not loop.last ? ', ' : '' }}{% endfor %}</span>
+														{% endif %}
+														<span class="block text-2xs font-mono tabular-nums text-on-surface-variant">{{ ui.days(fall.formationDays) }}, {{ fall.attempts }} {{ fall.attempts == 1 ? 'attempt' : 'attempts' }}</span>
+													{% endif %}
+												</span>
+											{% endfor %}
+										{% endif %}
+									</td>
+									<td class="px-3 py-2 text-right font-mono tabular-nums hidden md:table-cell {{ row.incumbentSwing|signed_class }}">{{ (row.incumbentSwing > 0 ? '+' : '') ~ (row.incumbentSwing * 100)|number_format(1) }}pp</td>
+									<td class="px-3 py-2 text-right font-mono tabular-nums text-on-surface-variant hidden md:table-cell">{{ (row.growthGap > 0 ? '+' : '') ~ (row.growthGap * 100)|number_format(1) }} / {{ (row.inflationGap > 0 ? '+' : '') ~ (row.inflationGap * 100)|number_format(1) }}</td>
+									<td class="px-5 py-2 text-right font-mono tabular-nums text-on-surface-variant hidden sm:table-cell">{{ (row.volatility * 100)|number_format(1) }}</td>
+								</tr>
+							{% endfor %}
+						</tbody>
+					</table>
+				</div>
+			{% endif %}
+		</section>
+	</div>
+{% endblock %}

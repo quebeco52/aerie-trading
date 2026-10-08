@@ -3,13 +3,14 @@
 {% block title %}The Government - Aerie Exchange{% endblock %}
 
 {% block meta %}
-	<meta name="description" content="The Aerie District's government: the Diet and the cabinet that governs it, the parties, the coalition talks, the Council, and every election on record.">
+	<meta name="description" content="The Aerie District's government at a glance: the cabinet, the next election, the budget, the Council and the departments it appoints.">
 	<meta property="og:title" content="The Government | Aerie Exchange">
 	<meta property="og:description" content="Eight parties, a 300-seat Diet elected every four years, and a thirteen-member Council that renews itself.">
 	<meta property="og:type" content="website">
 {% endblock %}
 
 {% import 'partials/_ui.html.twig' as ui %}
+{% import 'government/_macros.html.twig' as gov %}
 
 {% block body %}
 	<div class="max-w-400 mx-auto px-4 sm:px-6 lg:px-8 py-5 w-full space-y-5" id="governmentPage">
@@ -24,11 +25,7 @@
 						The Council is {{ rules.councilSeats }} leaders who choose their own successors, appoint the heads of the departments,
 						and hold a veto they almost never use.
 					</p>
-					<p class="mt-3 text-sm text-on-surface-variant">
-						As of {{ simDate }}
-						<span class="mx-2 text-on-surface-variant/40" aria-hidden="true">&middot;</span>
-						<a href="/economy" class="text-primary hover:underline underline-offset-2">The District Economy</a>
-					</p>
+					<p class="mt-3 text-sm text-on-surface-variant">As of {{ simDate }}</p>
 				</div>
 
 				<dl class="grid grid-cols-2 sm:grid-cols-4 gap-x-8 gap-y-5">
@@ -75,866 +72,139 @@
 			</div>
 		</header>
 
-		{% if talks %}
-			<section class="bg-surface-container-low rounded-lg p-5 border {{ talks.underWay ? 'border-primary/40' : 'border-outline-variant/15' }}" aria-labelledby="talks-heading">
-				<div class="flex flex-col md:flex-row md:items-start md:justify-between gap-3">
-					<div>
-						<h2 id="talks-heading" class="text-sm font-semibold text-on-surface">{{ talks.underWay ? (talks.afterFall ? 'The cabinet has fallen: talks under way' : 'Coalition talks under way') : 'The last coalition talks' }}</h2>
-						<p class="text-2xs text-on-surface-variant mt-0.5">
-							{% if talks.underWay %}
-								Day {{ talks.day|number_format(0) }}{{ talks.afterFall ? ' since the cabinet fell on ' ~ talks.startedOn : '' }}. The {{ talks.afterFall ? 'cabinet that fell' : 'outgoing cabinet' }} stays on as caretaker and passes no budget until a new government takes office{{ talks.afterFall ? '; no election is called' : '' }}.
-							{% else %}
-								A government took office after {{ ui.days(talks.day) }} and {{ talks.attempts }} {{ talks.attempts == 1 ? 'attempt' : 'attempts' }}.
-							{% endif %}
-						</p>
-					</div>
-					{% if talks.leading %}
-						<div class="shrink-0 rounded border border-primary/30 bg-primary/5 px-3 py-2">
-							<p class="text-xs font-semibold text-primary">Attempt {{ talks.leading.attempt }}</p>
-							<p class="text-xs text-on-surface mt-0.5"><span class="inline-block w-2 h-2 rounded-full mr-1" style="background-color: {{ talks.leading.color }}" aria-hidden="true"></span><span class="font-semibold">{{ talks.leading.name }}</span> is trying to form a government</p>
-						</div>
-					{% endif %}
-				</div>
-				{% if talks.entries is not empty %}
-					<ol class="mt-4 divide-y divide-outline-variant/10">
-						{% for entry in talks.entries %}
-							<li class="py-2 grid grid-cols-[4rem_1fr] gap-3 text-xs">
-								<span class="font-mono tabular-nums text-on-surface-variant">Day {{ entry.day|number_format(0) }}</span>
-								<span>
-									<span class="inline-block w-2 h-2 rounded-full mr-1" style="background-color: {{ entry.color }}" aria-hidden="true"></span><span class="font-semibold text-on-surface">{{ entry.formateur }}</span>
-									{% if entry.formed %}
-										<span class="text-secondary font-semibold">formed a government:</span> {{ entry.cabinet|join(', ') }}{% if entry.support is not empty %}, supported by {{ entry.support|join(', ') }}{% endif %}.
-									{% else %}
-										<span class="text-warning font-semibold">failed</span> to form a cabinet of {{ entry.cabinet|join(', ') }}{% if entry.support is not empty %} with {{ entry.support|join(', ') }} in support{% endif %}.
-									{% endif %}
-								</span>
-							</li>
+
+		{# One headline from each institution, with a link to its own page. #}
+		<section aria-labelledby="elected-heading">
+			<h2 id="elected-heading" class="text-sm font-semibold text-on-surface">The Diet and its budget</h2>
+			<div class="grid grid-cols-1 md:grid-cols-3 gap-5 mt-3">
+				<section class="bg-surface-container-low rounded-lg p-5 border {{ talks and talks.underWay ? 'border-primary/40' : 'border-outline-variant/20' }} flex flex-col" aria-labelledby="hub-diet-heading">
+					<h3 id="hub-diet-heading" class="text-sm font-semibold text-on-surface"><a href="{{ path('app_government_diet') }}" class="hover:underline">The Diet</a></h3>
+					<svg viewBox="-108 -106 216 114" class="w-full mt-3 max-h-40" role="img" aria-label="Diet seats by party: {% for party in parties %}{{ party.name }} {{ party.seats }}{{ not loop.last ? ', ' : '' }}{% endfor %}">
+						{% for seat in hemicycle %}
+							<circle cx="{{ seat.x * 100 }}" cy="{{ -seat.y * 100 }}" r="2.5" fill="{{ seat.color }}" fill-opacity="{{ seat.governing ? 1 : (seat.supporting ? 0.6 : 0.3) }}"{% if seat.supporting %} stroke="{{ seat.color }}" stroke-width="0.6"{% endif %}></circle>
 						{% endfor %}
-					</ol>
-				{% endif %}
-			</section>
-		{% endif %}
-
-		{# The chamber's seat positions are unit-radius; they are drawn at 100 units so text sizes stay whole. #}
-		<div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
-			<section class="bg-surface-container-low rounded-lg p-5 border border-outline-variant/20" aria-labelledby="diet-heading">
-				<h2 id="diet-heading" class="text-sm font-semibold text-on-surface">The Diet</h2>
-				<p class="text-2xs text-on-surface-variant mt-0.5">{{ rules.seats }} seats, grouped by bloc. Within each bloc, the parties that want the largest state sit on the left. The cabinet's seats are solid, its supporters' half-filled.
-					The blocs: {% for bloc in rules.blocSeats %}<span class="inline-block w-1.5 h-1.5 rounded-full mx-0.5 align-middle" style="background-color: {{ bloc.color }}" aria-hidden="true"></span>{{ bloc.name }}'s {{ bloc.seats }}{{ not loop.last ? ', ' : '.' }}{% endfor %}</p>
-
-				<svg viewBox="-108 -106 216 114" class="w-full mt-4 max-h-72" role="img" aria-label="Diet seats by party: {% for party in parties %}{{ party.name }} {{ party.seats }}{{ not loop.last ? ', ' : '' }}{% endfor %}">
-					{% for seat in hemicycle %}
-						<circle cx="{{ seat.x * 100 }}" cy="{{ -seat.y * 100 }}" r="2.5" fill="{{ seat.color }}" fill-opacity="{{ seat.governing ? 1 : (seat.supporting ? 0.6 : 0.3) }}"{% if seat.supporting %} stroke="{{ seat.color }}" stroke-width="0.6"{% endif %}></circle>
-					{% endfor %}
-					<text x="0" y="-13" text-anchor="middle" class="fill-on-surface font-semibold" font-size="15">{{ government.supportedSeats }}</text>
-					<text x="0" y="-4" text-anchor="middle" class="fill-on-surface-variant" font-size="5.5">of {{ rules.majority }} needed</text>
-				</svg>
-
-				<table class="w-full mt-4 text-xs">
-					<thead>
-						<tr class="table-head">
-							<th scope="col" class="text-left font-semibold pb-2">Party</th>
-							<th scope="col" class="text-right font-semibold pb-2">Seats</th>
-							<th scope="col" class="text-right font-semibold pb-2">Vote</th>
-							<th scope="col" class="text-right font-semibold pb-2">Change</th>
-						</tr>
-					</thead>
-					<tbody class="divide-y divide-outline-variant/10">
-						{% for party in parties %}
-							<tr>
-								<th scope="row" class="py-2 text-left font-normal">
-									<span class="inline-flex items-center gap-2">
-										<span class="w-2.5 h-2.5 rounded-full shrink-0" style="background-color: {{ party.color }}" aria-hidden="true"></span>
-										<a href="{{ path('app_government_party', {slug: party.slug}) }}" class="font-semibold text-on-surface hover:text-primary hover:underline">{{ party.name }}</a>
-										<span class="text-xs text-on-surface-variant" title="{{ party.leadsBloc ? 'Leads its bloc as its largest party' : 'Campaigned in this bloc at the last election' }}"><span class="inline-block w-1.5 h-1.5 rounded-full mr-0.5 align-middle" style="background-color: {{ party.blocColor }}" aria-hidden="true"></span>{{ party.leadsBloc ? 'Leads a bloc' : 'Backs ' ~ party.bloc }}</span>
-										{% if party.governing %}<span class="text-xs font-medium text-primary">{{ government.caretaker ? 'Caretaker' : 'In government' }}</span>{% elseif party.supporting %}<span class="text-xs font-medium text-on-surface-variant">Supports</span>{% endif %}
-									</span>
-									{% if party.partyLeader %}
-										<span class="block text-2xs text-on-surface-variant mt-0.5" style="padding-left: 1.125rem">Led by {{ party.partyLeader.name }}</span>
-									{% endif %}
-								</th>
-								<td class="py-2 text-right font-mono tabular-nums text-on-surface">{{ party.seats }}</td>
-								<td class="py-2 text-right font-mono tabular-nums text-on-surface">{{ party.share|pct(1) }}</td>
-								<td class="py-2 text-right font-mono tabular-nums {{ party.swing|signed_class }}">
-									{{- party.swing is null ? '-' : (party.swing > 0 ? '+' : '') ~ (party.swing * 100)|number_format(1) ~ 'pp' -}}
-								</td>
-							</tr>
-						{% endfor %}
-					</tbody>
-				</table>
-			</section>
-
-			<section class="bg-surface-container-low rounded-lg p-5 border border-outline-variant/20" aria-labelledby="compass-heading">
-				<h2 id="compass-heading" class="text-sm font-semibold text-on-surface">Where the parties stand</h2>
-				<p class="text-2xs text-on-surface-variant mt-0.5">
-					Each party is anchored on the question it was founded on and drifts on the others between elections. Each question sets the laws named beside it. Select a party for its profile.
-				</p>
-
-				{# Pointing at a party anywhere fades the others on every question, so its whole profile reads at once. #}
-				<style>
-					#compass-rows [data-party] { transition: opacity 120ms; }
-					{% for party in parties %}
-						#compass-rows:has([data-party="{{ party.key }}"]:is(:hover, :focus-visible)) [data-party]:not([data-party="{{ party.key }}"]) { opacity: 0.2; }
-					{% endfor %}
-				</style>
-				<div id="compass-rows" class="mt-4 space-y-4">
-					{% for k, row in compass.layouts.wide.rows %}
-						<div>
-							<h3 class="text-xs text-on-surface"><span class="font-semibold">{{ row.name }}</span><span class="text-on-surface-variant"> · {{ row.laws|join(', ') }}</span></h3>
-							<div class="hidden sm:block">{{ _self.compass_row(row, compass, compass.layouts.wide) }}</div>
-							<div class="sm:hidden">{{ _self.compass_row(compass.layouts.narrow.rows[k], compass, compass.layouts.narrow) }}</div>
-						</div>
-					{% endfor %}
-				</div>
-
-				<ul class="mt-3 flex flex-wrap gap-x-5 gap-y-1.5 text-2xs text-on-surface-variant" aria-label="Key">
-					<li class="inline-flex items-center gap-1.5"><span class="inline-block w-2.5 h-2.5 rounded-full border border-primary" aria-hidden="true"></span>In the cabinet</li>
-					{% if compass.coalitionMark %}
-						<li class="inline-flex items-center gap-1.5"><span class="inline-block w-0.5 h-3 rounded-full bg-primary" aria-hidden="true"></span>Where the coalition governs from, its parties weighted by seats</li>
-					{% endif %}
-					<li class="inline-flex items-center gap-1.5"><span class="inline-block w-2.5 h-2.5 rounded-full border border-dotted border-primary" aria-hidden="true"></span>Supports the cabinet from outside</li>
-					<li class="inline-flex items-center gap-1.5"><span class="inline-flex gap-0.5" aria-hidden="true"><span class="w-1 h-1 rounded-full bg-on-surface-variant/20"></span><span class="w-1 h-1 rounded-full bg-on-surface-variant/50"></span></span>Past positions</li>
-				</ul>
-
-				<details class="mt-4 group">
-					<summary class="list-none cursor-pointer text-xs font-medium text-on-surface-variant hover:text-on-surface inline-flex items-center gap-1">
-						<span class="material-symbols-outlined text-sm transition-transform group-open:rotate-90" aria-hidden="true">chevron_right</span>
-						Positions in figures
-					</summary>
-					<table class="w-full mt-2 text-xs">
-						<caption class="sr-only">Party positions, from -1 to +1</caption>
-						<thead>
-							<tr class="table-head">
-								<th scope="col" class="text-left font-semibold pb-2">Party</th>
-								{% for axis in axes %}
-									<th scope="col" class="text-right font-semibold pb-2">{{ axis.name }}</th>
-								{% endfor %}
-							</tr>
-						</thead>
-						<tbody class="divide-y divide-outline-variant/10">
-							{% for party in parties %}
-								<tr>
-									<th scope="row" class="py-1.5 text-left font-normal"><a href="{{ path('app_government_party', {slug: party.slug}) }}" class="text-on-surface hover:text-primary hover:underline">{{ party.name }}</a></th>
-									{% for axis in axes %}
-										<td class="py-1.5 text-right font-mono tabular-nums {{ axis.key in party.fixedAxes ? 'text-on-surface font-semibold' : 'text-on-surface-variant' }}">{{ (attribute(party, axis.key) > 0 ? '+' : '') ~ attribute(party, axis.key)|number_format(2) }}</td>
-									{% endfor %}
-								</tr>
-							{% endfor %}
-							<tr>
-								<th scope="row" class="py-1.5 text-left font-semibold text-on-surface">The cabinet</th>
-								{% for axis in axes %}
-									<td class="py-1.5 text-right font-mono tabular-nums text-on-surface">{{ (attribute(government, axis.key) > 0 ? '+' : '') ~ attribute(government, axis.key)|number_format(2) }}</td>
-								{% endfor %}
-							</tr>
-						</tbody>
-					</table>
-					<p class="text-2xs text-on-surface-variant mt-2">From -1 to +1. Bold marks the question a party was founded on, where it never moves.</p>
-				</details>
-			</section>
-		</div>
-
-		{% if polls %}
-			<section class="bg-surface-container-low rounded-lg p-5 border border-outline-variant/20" aria-labelledby="polls-heading">
-				<h2 id="polls-heading" class="text-sm font-semibold text-on-surface">The polls</h2>
-				<p class="text-2xs text-on-surface-variant mt-0.5">
-					How the District says it would vote, polled every month since the vote of {{ polls.since }}; the latest poll is from {{ polls.latest }}.
-					Each poll is a sample, a point or two off the truth either way, so the line is the traders' average of them, which weighs each new poll against those before it.
-					The shaded band is where a party's support lies 19 times in 20; the dots are the polls.
-				</p>
-				<div class="grid grid-cols-1 lg:grid-cols-3 gap-5 mt-4">
-					<svg viewBox="0 0 600 210" class="w-full lg:col-span-2" role="img" aria-label="Poll average since the vote of {{ polls.since }}: {% for party in polls.parties %}{{ party.name }} {{ party.average|pct(1) }}{{ not loop.last ? ', ' : '' }}{% endfor %}">
-						{% for line in polls.gridlines %}
-							<line x1="{{ polls.plot[0] }}" y1="{{ line.y }}" x2="{{ polls.plot[1] }}" y2="{{ line.y }}" class="stroke-outline-variant" stroke-opacity="{{ loop.first ? 1 : 0.3 }}" stroke-dasharray="{{ loop.first ? '' : '2 3' }}" stroke-width="{{ loop.first ? 1 : 0.6 }}"></line>
-							<text x="{{ polls.plot[0] - 5 }}" y="{{ line.y + 3 }}" text-anchor="end" font-size="8" class="fill-on-surface-variant">{{ line.label }}</text>
-						{% endfor %}
-						{% for year in polls.years %}
-							<line x1="{{ year.x }}" y1="{{ polls.plot[3] }}" x2="{{ year.x }}" y2="{{ polls.plot[3] + 4 }}" class="stroke-outline-variant" stroke-width="0.8"></line>
-							<text x="{{ year.x }}" y="{{ polls.plot[3] + 15 }}" text-anchor="{{ loop.first ? 'start' : (loop.last ? 'end' : 'middle') }}" font-size="8" class="fill-on-surface-variant">{{ year.label }}</text>
-						{% endfor %}
-						<line x1="{{ polls.today }}" y1="{{ polls.plot[2] }}" x2="{{ polls.today }}" y2="{{ polls.plot[3] }}" class="stroke-outline-variant" stroke-width="0.8" stroke-dasharray="1.5 2"><title>The latest poll</title></line>
-						{% for party in polls.parties|reverse %}
-							<polygon points="{{ party.band }}" fill="{{ party.color }}" fill-opacity="0.12" stroke="none"></polygon>
-						{% endfor %}
-						{% for party in polls.parties|reverse %}
-							{% for dot in party.dots %}
-								<circle cx="{{ dot.x }}" cy="{{ dot.y }}" r="1.3" fill="{{ party.color }}" fill-opacity="0.45"></circle>
-							{% endfor %}
-						{% endfor %}
-						{% for party in polls.parties|reverse %}
-							<polyline points="{{ party.line }}" fill="none" stroke="{{ party.color }}" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"><title>{{ party.name }}</title></polyline>
-							<circle cx="{{ party.last.x }}" cy="{{ party.last.y }}" r="2.4" fill="{{ party.color }}"><title>{{ party.name }}: average {{ party.average|pct(1) }}, latest poll {{ party.poll|pct(1) }}</title></circle>
-						{% endfor %}
+						<text x="0" y="-13" text-anchor="middle" class="fill-on-surface font-semibold" font-size="15">{{ government.supportedSeats }}</text>
+						<text x="0" y="-4" text-anchor="middle" class="fill-on-surface-variant" font-size="5.5">of {{ rules.majority }} needed</text>
 					</svg>
-					<div>
-						<table class="w-full text-xs">
-							<thead>
-								<tr class="table-head">
-									<th scope="col" class="text-left font-semibold pb-2">Party</th>
-									<th scope="col" class="text-right font-semibold pb-2" title="The traders' average of the polls">Average</th>
-									<th scope="col" class="text-right font-semibold pb-2" title="Support lies this close to the average 19 times in 20">Margin</th>
-									<th scope="col" class="text-right font-semibold pb-2" title="The average against the last vote">Change</th>
-									<th scope="col" class="text-right font-semibold pb-2" title="{{ polls.marketSeats ? 'Seats the traders expect each party to win at the vote' : 'Seats the average would win' }}">Seats</th>
-								</tr>
-							</thead>
-							<tbody class="divide-y divide-outline-variant/10">
-								{% for party in polls.parties %}
-									<tr>
-										<th scope="row" class="py-1.5 text-left font-normal"><span class="inline-flex items-center gap-2"><span class="w-2.5 h-2.5 rounded-full shrink-0" style="background-color: {{ party.color }}" aria-hidden="true"></span><span class="font-semibold text-on-surface">{{ party.name }}</span></span></th>
-										<td class="py-1.5 text-right font-mono tabular-nums text-on-surface" title="Latest poll {{ party.poll|pct(1) }}">{{ party.average|pct(1) }}</td>
-										<td class="py-1.5 text-right font-mono tabular-nums text-on-surface-variant">±{{ party.margin|pct(1) }}</td>
-										<td class="py-1.5 text-right font-mono tabular-nums {{ party.change|signed_class }}">{{ (party.change > 0 ? '+' : '') ~ (party.change * 100)|number_format(1) }}pp</td>
-										<td class="py-1.5 text-right font-mono tabular-nums text-on-surface">{{ party.seats }}</td>
-									</tr>
-								{% endfor %}
-							</tbody>
-						</table>
-						<p class="text-2xs text-on-surface-variant mt-3">
-							{{ polls.marketSeats ? 'Traders expect' : 'On the poll average' }} the {{ government.caretaker ? 'caretaker cabinet' : 'cabinet' }}'s parties {{ polls.marketSeats ? 'to win' : 'would win' }} <span class="font-semibold font-mono tabular-nums text-on-surface">{{ polls.cabinet.seats }}</span> of {{ rules.seats }} seats{% if polls.cabinet.hasSupport %}, <span class="font-mono tabular-nums">{{ polls.cabinet.supportedSeats }}</span> with their supporters{% endif %}{{ polls.marketSeats ? ' at the vote' : '' }}. {{ rules.majority }} make a majority.
-						</p>
-					</div>
-				</div>
-			</section>
-		{% endif %}
-
-		{% if market %}
-			<section class="bg-surface-container-low rounded-lg p-5 border border-outline-variant/20" aria-labelledby="market-heading">
-				<h2 id="market-heading" class="text-sm font-semibold text-on-surface">What the market expects</h2>
-				<p class="text-2xs text-on-surface-variant mt-0.5">
-					{% if market.talks %}
-						Traders' odds on the government the talks will produce, and the laws it would pass at its first budget, {{ market.takesEffect }}.
-					{% else %}
-						Traders' odds on the government the vote of {{ market.vote }} will seat, read from the polls, and the laws they expect at its first budget, {{ market.takesEffect }}.
-					{% endif %}
-					Share prices carry them: a firm is valued on the taxes it expects to pay, a bank on the levy it expects to owe, a miner or driller on the extraction rules it expects to work under, a broker on the trading the stamp duty will leave it, and a power producer on what the carbon price will add to the price of power, not only on what each pays or earns today.
-				</p>
-				<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-4">
-					<div>
-						<h3 class="text-xs font-semibold text-on-surface">Leads the next government</h3>
-						<ul class="mt-2 space-y-2">
-							{% for leader in market.leaders %}
-								<li class="text-xs">
-									<div class="flex justify-between gap-3"><span class="inline-flex items-center gap-2 text-on-surface"><span class="w-2.5 h-2.5 rounded-full shrink-0" style="background-color: {{ leader.color }}" aria-hidden="true"></span>{{ leader.name }}</span><span class="font-mono tabular-nums text-on-surface">{{ leader.chance|pct(0) }}</span></div>
-									<div class="h-1.5 rounded-full bg-surface-container-high mt-1" aria-hidden="true"><div class="h-1.5 rounded-full" style="width: {{ (leader.chance * 100)|number_format(1, '.', '') }}%; background-color: {{ leader.color }}"></div></div>
-								</li>
-							{% endfor %}
-						</ul>
-					</div>
-					<div>
-						<h3 class="text-xs font-semibold text-on-surface">Likeliest governments</h3>
-						<ol class="mt-2 divide-y divide-outline-variant/10">
-							{% for option in market.cabinets %}
-								<li class="py-1.5 text-xs flex justify-between gap-3">
-									<span class="text-on-surface">{{ option.cabinet|join(', ') }}{% if option.support is not empty %}<span class="block text-2xs text-on-surface-variant">Supported by {{ option.support|join(', ') }}</span>{% endif %}</span>
-									<span class="font-mono tabular-nums text-on-surface shrink-0">{{ option.chance|pct(0) }}</span>
-								</li>
-							{% endfor %}
-						</ol>
-					</div>
-					<div>
-						<h3 class="text-xs font-semibold text-on-surface">Laws to expect</h3>
-						<table class="w-full text-xs mt-2">
-							<thead>
-								<tr class="table-head">
-									<th scope="col" class="text-left font-semibold pb-2">Law</th>
-									<th scope="col" class="text-right font-semibold pb-2">In force</th>
-									<th scope="col" class="text-right font-semibold pb-2">Expected</th>
-								</tr>
-							</thead>
-							<tbody class="divide-y divide-outline-variant/10">
-								{% for lever in market.levers %}
-									<tr>
-										<th scope="row" class="py-1.5 text-left font-normal text-on-surface">{{ lever.name }}</th>
-										<td class="py-1.5 text-right font-mono tabular-nums text-on-surface-variant">{{ _self.lever_value(lever, lever.enacted) }}</td>
-										<td class="py-1.5 text-right font-mono tabular-nums {{ lever.moves ? 'font-semibold text-on-surface' : 'text-on-surface-variant' }}">{{ _self.lever_value(lever, lever.expected) }}</td>
-									</tr>
-								{% endfor %}
-							</tbody>
-						</table>
-					</div>
-				</div>
-				{% if odds %}
-					<figure class="mt-5">
-						<figcaption>
-							<h3 class="text-xs font-semibold text-on-surface">How the odds have moved</h3>
-							<p class="text-2xs text-on-surface-variant mt-0.5">Each party's chance of leading the next government as traders priced it, poll by poll since {{ odds.since }}{% if odds.vote %}, up to the vote of {{ odds.vote.date }}{% endif %}.</p>
-						</figcaption>
-						<div class="grid grid-cols-1 lg:grid-cols-3 gap-5 mt-2">
-							<svg viewBox="0 0 600 160" class="w-full lg:col-span-2" role="img" aria-label="Chance of leading the next government since {{ odds.since }}: {% for party in odds.parties %}{{ party.name }} {{ party.chance|pct(0) }}{{ not loop.last ? ', ' : '' }}{% endfor %}">
-								{% for line in odds.gridlines %}
-									<line x1="{{ odds.plot[0] }}" y1="{{ line.y }}" x2="{{ odds.plot[1] }}" y2="{{ line.y }}" class="stroke-outline-variant" stroke-opacity="{{ loop.first ? 1 : 0.3 }}" stroke-dasharray="{{ loop.first ? '' : '2 3' }}" stroke-width="{{ loop.first ? 1 : 0.6 }}"></line>
-									<text x="{{ odds.plot[0] - 5 }}" y="{{ line.y + 3 }}" text-anchor="end" font-size="8" class="fill-on-surface-variant">{{ line.label }}</text>
-								{% endfor %}
-								{% for year in odds.years %}
-									<line x1="{{ year.x }}" y1="{{ odds.plot[3] }}" x2="{{ year.x }}" y2="{{ odds.plot[3] + 4 }}" class="stroke-outline-variant" stroke-width="0.8"></line>
-									<text x="{{ year.x }}" y="{{ odds.plot[3] + 15 }}" text-anchor="{{ year.x > odds.plot[1] - 20 ? 'end' : (year.x < odds.plot[0] + 20 ? 'start' : 'middle') }}" font-size="8" class="fill-on-surface-variant">{{ year.label }}</text>
-								{% endfor %}
-								<line x1="{{ odds.today }}" y1="{{ odds.plot[2] }}" x2="{{ odds.today }}" y2="{{ odds.plot[3] }}" class="stroke-outline-variant" stroke-width="0.8" stroke-dasharray="1.5 2"><title>Today</title></line>
-								{% if odds.vote %}
-									<line x1="{{ odds.vote.x }}" y1="{{ odds.plot[2] }}" x2="{{ odds.vote.x }}" y2="{{ odds.plot[3] }}" class="stroke-on-surface-variant" stroke-width="0.8" stroke-dasharray="3 2"><title>The vote, {{ odds.vote.date }}</title></line>
-								{% endif %}
-								{% for party in odds.parties|reverse %}
-									<polyline points="{{ party.line }}" fill="none" stroke="{{ party.color }}" stroke-width="1.6" stroke-linejoin="round"><title>{{ party.name }}</title></polyline>
-									<circle cx="{{ party.last.x }}" cy="{{ party.last.y }}" r="2.4" fill="{{ party.color }}"><title>{{ party.name }}: {{ party.chance|pct(0) }}, from {{ party.first|pct(0) }} at the first forecast</title></circle>
-								{% endfor %}
-							</svg>
-							<table class="w-full text-xs self-start">
-								<thead>
-									<tr class="table-head">
-										<th scope="col" class="text-left font-semibold pb-2">Party</th>
-										<th scope="col" class="text-right font-semibold pb-2" title="At the first forecast of this vote">{{ odds.since }}</th>
-										<th scope="col" class="text-right font-semibold pb-2">Now</th>
-									</tr>
-								</thead>
-								<tbody class="divide-y divide-outline-variant/10">
-									{% for party in odds.parties %}
-										<tr>
-											<th scope="row" class="py-1.5 text-left font-normal"><span class="inline-flex items-center gap-2"><span class="w-2.5 h-2.5 rounded-full shrink-0" style="background-color: {{ party.color }}" aria-hidden="true"></span><span class="text-on-surface">{{ party.name }}</span></span></th>
-											<td class="py-1.5 text-right font-mono tabular-nums text-on-surface-variant">{{ party.first|pct(0) }}</td>
-											<td class="py-1.5 text-right font-mono tabular-nums text-on-surface">{{ party.chance|pct(0) }}</td>
-										</tr>
-									{% endfor %}
-								</tbody>
-							</table>
-						</div>
-					</figure>
-				{% endif %}
-			</section>
-		{% endif %}
-
-		{% if exposure %}
-			{# What each law does to the firms it reaches, on the bases and measures the market prices it with (LawExposureBuilder). #}
-			<section class="bg-surface-container-low rounded-lg p-5 border border-outline-variant/20" aria-labelledby="exposure-heading">
-				<h2 id="exposure-heading" class="text-sm font-semibold text-on-surface">Firms most exposed to each law</h2>
-				<p class="text-2xs text-on-surface-variant mt-0.5">
-					What each law in force adds to or takes from a firm's year after tax, against no such law, as a share of its last four quarters' earnings{% if market %}, and what the law traders expect at the first budget, {{ market.takesEffect }}, would change{% endif %}.
-					{% if exposure.corporateTax %}
-						{% if exposure.corporateTax.moves %}
-							The corporate tax reaches every firm: a rate of <span class="font-mono tabular-nums">{{ exposure.corporateTax.expected|pct(1) }}</span> against <span class="font-mono tabular-nums">{{ exposure.corporateTax.inForce|pct(1) }}</span> in force would change after-tax earnings by <span class="font-mono tabular-nums {{ exposure.corporateTax.earnings|signed_class }}">{{ exposure.corporateTax.earnings|pct(1, true) }}</span> at every firm taxed at the full rate.
+					<p class="text-xs text-on-surface mt-3">
+						{% if talks and talks.underWay %}
+							<span class="font-semibold text-primary">{{ talks.afterFall ? 'The cabinet has fallen' : 'Coalition talks under way' }}</span>, day <span class="font-mono tabular-nums">{{ talks.day|number_format(0) }}</span>{% if talks.leading %}: {{ talks.leading.name }} is trying to form a government{% endif %}.
 						{% else %}
-							The corporate tax reaches every firm alike, and traders expect no change to it.
+							{% set largest = parties|sort((a, b) => b.seats <=> a.seats)|first %}
+							{{ largest.name }} is the largest party with <span class="font-mono tabular-nums">{{ largest.seats }}</span> seats; the cabinet {{ government.minority ? 'governs as a minority' : 'holds a majority' }}.
 						{% endif %}
+					</p>
+					<p class="mt-auto pt-3 text-xs"><a href="{{ path('app_government_diet') }}" class="text-primary hover:underline underline-offset-2">Seats, talks, where the parties stand and past elections</a></p>
+				</section>
+
+				<section class="bg-surface-container-low rounded-lg p-5 border border-outline-variant/20 flex flex-col" aria-labelledby="hub-election-heading">
+					<h3 id="hub-election-heading" class="text-sm font-semibold text-on-surface"><a href="{{ path('app_government_election') }}" class="hover:underline">The election</a></h3>
+					<p class="mt-2 text-2xl font-semibold font-mono tabular-nums text-on-surface">{{ election.next }}</p>
+					<p class="text-xs text-on-surface-variant">{{ election.campaign ? 'Campaign under way, ' : '' }}in {{ election.yearsLeft|number_format(1) }} {{ election.yearsLeft|number_format(1) == '1.0' ? 'year' : 'years' }}</p>
+					{% if polls %}
+						{% set front = polls.parties|first %}
+						<p class="text-xs text-on-surface mt-3">
+							<span class="inline-block w-2 h-2 rounded-full mr-1" style="background-color: {{ front.color }}" aria-hidden="true"></span>{{ front.name }} leads the polls at <span class="font-mono tabular-nums">{{ front.average|pct(1) }}</span>, against <span class="font-mono tabular-nums">{{ front.vote|pct(1) }}</span> at the last vote.
+						</p>
 					{% endif %}
-					The tariff, the merger review line, housing schemes refused, labour force growth and the share of reserve returns spent reach firms through the economy as a whole, not through a charge on their own accounts.
-				</p>
-				<div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-4">
-					{% for law in exposure.laws %}
-						<div>
-							<h3 class="text-xs font-semibold text-on-surface">{{ law.name }}</h3>
-							<p class="text-2xs text-on-surface-variant mt-0.5">
-								{{ law.note }}
-								{% if law.lever == 'bankLevyRate' and law.firms is not empty %}Listed banks owe <span class="font-mono tabular-nums">{{ (-law.total)|format_large('$') }}</span> a year.{% endif %}
-								{% if market and not law.expectedMoves %}Traders expect no change to it.{% endif %}
-							</p>
-							{% if law.firms is empty %}
-								<p class="text-xs text-on-surface-faint mt-2">No listed firm answers to it.</p>
-							{% else %}
-								<div class="overflow-x-auto">
-									<table class="w-full text-xs mt-2">
-										<thead>
-											<tr class="table-head">
-												<th scope="col" class="text-left font-semibold pb-2">Firm</th>
-												<th scope="col" class="text-right font-semibold pb-2">A year</th>
-												<th scope="col" class="text-right font-semibold pb-2">Of earnings</th>
-												{% if law.expectedMoves %}<th scope="col" class="text-right font-semibold pb-2">If passed</th>{% endif %}
-											</tr>
-										</thead>
-										<tbody class="divide-y divide-outline-variant/10">
-											{% for firm in law.firms %}
-												<tr>
-													<th scope="row" class="py-1.5 text-left font-normal">
-														<a href="{{ path('app_stock_view', {ticker: firm.ticker}) }}" class="font-mono text-primary hover:underline">{{ firm.ticker }}</a>
-														<span class="text-on-surface-variant">{{ firm.name }}</span>
-													</th>
-													<td class="py-1.5 text-right font-mono tabular-nums {{ firm.now|signed_class }}">{{ firm.now > 0 ? '+' : '' }}{{ firm.now|format_large('$') }}</td>
-													<td class="py-1.5 text-right font-mono tabular-nums {{ firm.nowShare is null ? 'text-on-surface-faint' : firm.nowShare|signed_class }}">{{ firm.nowShare is null ? '—' : firm.nowShare|pct(1, true) }}</td>
-													{% if law.expectedMoves %}
-														<td class="py-1.5 text-right font-mono tabular-nums {{ firm.changeShare is null ? 'text-on-surface-faint' : firm.changeShare|signed_class }}">{{ firm.changeShare is null ? '—' : firm.changeShare|pct(1, true) }}</td>
-													{% endif %}
-												</tr>
-											{% endfor %}
-										</tbody>
-									</table>
-								</div>
-								{% if law.more > 0 %}<p class="text-2xs text-on-surface-variant mt-1">And {{ law.more }} more {{ law.more == 1 ? 'firm' : 'firms' }} it reaches less.</p>{% endif %}
-							{% endif %}
-						</div>
-					{% endfor %}
-				</div>
-			</section>
-		{% endif %}
+					{% if market and market.leaders is not empty %}
+						{% set favourite = market.leaders|first %}
+						<p class="text-xs text-on-surface mt-1">
+							Traders give {{ favourite.name }} a <span class="font-mono tabular-nums">{{ favourite.chance|pct(0) }}</span> chance of leading {{ market.talks ? 'the government the talks produce' : 'the next government' }}.
+						</p>
+					{% endif %}
+					{% if not polls and not market %}
+						<p class="text-xs text-on-surface-variant mt-3">No poll has been taken since the last vote.</p>
+					{% endif %}
+					<p class="mt-auto pt-3 text-xs"><a href="{{ path('app_government_election') }}" class="text-primary hover:underline underline-offset-2">The polls and the market's odds</a></p>
+				</section>
 
-		<section class="bg-surface-container-low rounded-lg p-5 border border-outline-variant/20" aria-labelledby="budget-heading">
-			<div class="flex flex-col md:flex-row md:items-start md:justify-between gap-3">
-				<div>
-					<h2 id="budget-heading" class="text-sm font-semibold text-on-surface">The budget</h2>
-					<p class="text-2xs text-on-surface-variant mt-0.5">
-						The cabinet legislates its platform at the budget rounds, every {{ rules.budgetRoundMonths|number_format(0) }} months, starting with the round after it takes office.
-						A minority cabinet gets only what its supporters will vote for.
-						Next round: <span class="font-mono tabular-nums">{{ budget.nextRound }}</span>{% if budget.lastBudget %} · last change <span class="font-mono tabular-nums">{{ budget.lastBudget }}</span>{% endif %}.
+				<section class="bg-surface-container-low rounded-lg p-5 border border-outline-variant/20 flex flex-col" aria-labelledby="hub-budget-heading">
+					<h3 id="hub-budget-heading" class="text-sm font-semibold text-on-surface"><a href="{{ path('app_government_budget') }}" class="hover:underline">The budget</a></h3>
+					<p class="mt-2 text-2xl font-semibold font-mono tabular-nums {{ budget.braking ? 'text-warning' : 'text-on-surface' }}">{{ budget.debt|pct(1) }}</p>
+					<p class="text-xs text-on-surface-variant">of GDP in debt; the Council's line is {{ rules.debtBrake|pct(0) }}{{ budget.braking ? ', and its brake is on' : '' }}</p>
+					{% set changing = budget.levers|filter(lever => lever.status in ['pending', 'partial'])|length %}
+					{% set held = budget.levers|filter(lever => lever.status in ['held', 'fund', 'blocked'])|length %}
+					<p class="text-xs text-on-surface mt-3">
+						{% if government.caretaker %}
+							No budget passes until the talks produce a government.
+						{% else %}
+							Next round <span class="font-mono tabular-nums">{{ budget.nextRound }}</span>:
+							{{ changing == 0 ? 'no law changes' : (changing == 1 ? 'one law changes' : changing ~ ' laws change') }}{% if held > 0 %}, and {{ held == 1 ? 'one is' : held ~ ' are' }} held back{% endif %}.
+						{% endif %}
 					</p>
-				</div>
-				<div class="shrink-0 rounded border px-3 py-2 {{ budget.braking ? 'border-warning/40 bg-warning/5' : 'border-outline-variant/20 bg-surface-container-lowest' }}">
-					<p class="text-xs font-semibold {{ budget.braking ? 'text-warning' : 'text-on-surface-variant' }}">Council debt brake {{ budget.braking ? 'on' : 'off' }}</p>
-					<p class="text-2xs font-mono tabular-nums text-on-surface-variant mt-0.5">
-						Debt {{ budget.debt|pct(1) }} of GDP · line {{ rules.debtBrake|pct(0) }}{% if budget.lastBrake %} · last held a bill {{ budget.lastBrake }}{% endif %}
-					</p>
-				</div>
-			</div>
-
-			<div class="overflow-x-auto mt-4">
-				<table class="w-full text-xs">
-					<thead>
-						<tr class="table-head">
-							<th scope="col" class="text-left font-semibold pb-2">Lever</th>
-							<th scope="col" class="text-right font-semibold pb-2">Cabinet's aim</th>
-							<th scope="col" class="text-right font-semibold pb-2">In force</th>
-							<th scope="col" class="text-left font-semibold pb-2 pl-4">Status</th>
-						</tr>
-					</thead>
-					<tbody class="divide-y divide-outline-variant/10">
-						{% for lever in budget.levers %}
-							<tr>
-								<th scope="row" class="py-2 text-left">
-									<span class="font-semibold text-on-surface">{{ lever.name }}</span>
-									<span class="block text-2xs font-normal text-on-surface-variant">{{ lever.note }}</span>
-								</th>
-								<td class="py-2 text-right font-mono tabular-nums text-on-surface-variant">{{ _self.lever_value(lever, lever.platform) }}</td>
-								<td class="py-2 text-right font-mono tabular-nums font-semibold text-on-surface">{{ _self.lever_value(lever, lever.enacted) }}</td>
-								<td class="py-2 pl-4 text-2xs">
-									{% if lever.status == 'caretaker' %}
-										<span class="font-semibold text-on-surface-variant">Waits on the talks</span>
-										<span class="block text-on-surface-variant">A caretaker cabinet passes no budget</span>
-									{% elseif lever.status == 'held' %}
-										<span class="font-semibold text-warning">Held by the Council</span>
-										<span class="block text-on-surface-variant">A cut in revenue while debt is above the line</span>
-									{% elseif lever.status == 'fund' %}
-										<span class="font-semibold text-warning">Held by the Sovereign Reserve Fund</span>
-										<span class="block text-on-surface-variant">More than {{ rules.reserveDrawCeiling|pct(0) }} is spent only with its consent, given only in a recession</span>
-									{% elseif lever.status == 'blocked' %}
-										<span class="font-semibold text-warning">Blocked by its supporters</span>
-										<span class="block text-on-surface-variant">They will not vote to move it further from their own policy</span>
-									{% elseif lever.status == 'partial' %}
-										<span class="font-semibold text-primary">To {{ _self.lever_value(lever, lever.target) }} at the next budget</span>
-										<span class="block text-on-surface-variant">As far as its supporters will go</span>
-									{% elseif lever.status == 'pending' %}
-										<span class="font-semibold text-primary">At the next budget</span>
-									{% else %}
-										<span class="text-on-surface-variant">Enacted</span>
-									{% endif %}
-								</td>
-							</tr>
-						{% endfor %}
-					</tbody>
-				</table>
+					<p class="mt-auto pt-3 text-xs"><a href="{{ path('app_government_budget') }}" class="text-primary hover:underline underline-offset-2">The laws, their history and the firms they reach</a></p>
+				</section>
 			</div>
 		</section>
 
-		{% if laws %}
-			<section class="bg-surface-container-low rounded-lg p-5 border border-outline-variant/20" aria-labelledby="laws-heading">
-				<h2 id="laws-heading" class="text-sm font-semibold text-on-surface">The laws over time</h2>
-				<p class="text-2xs text-on-surface-variant mt-0.5">Each law as it stood at the close of every quarter since {{ laws.since }}, and today. The shading marks the cabinet in office, in the colour of the party that led it.</p>
-				<ul class="flex flex-wrap gap-x-5 gap-y-1 mt-3 text-2xs text-on-surface-variant">
-					{% for cabinet in laws.cabinets %}
-						<li class="inline-flex items-center gap-1.5"><span class="w-3 h-2.5 rounded-sm shrink-0" style="background-color: {{ cabinet.color }}; opacity: 0.3" aria-hidden="true"></span><span class="text-on-surface">{{ cabinet.members|join(', ') }}</span><span class="font-mono tabular-nums">{{ cabinet.fromLabel }} – {{ cabinet.toLabel }}</span></li>
-					{% endfor %}
-				</ul>
-				<div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-x-6 gap-y-5 mt-4">
-					{% for chart in laws.charts %}
-						<figure>
-							<figcaption class="flex justify-between gap-3 text-xs">
-								<span class="font-semibold text-on-surface">{{ chart.name }}</span>
-								<span class="font-mono tabular-nums text-on-surface">{{ _self.lever_value(chart, chart.now) }}</span>
-							</figcaption>
-							<svg viewBox="0 0 300 84" class="w-full mt-1" role="img" aria-label="{{ chart.name }} since {{ laws.since }}: from {{ _self.lever_value(chart, chart.low.value) }} to {{ _self.lever_value(chart, chart.high.value) }}, {{ _self.lever_value(chart, chart.now) }} today">
-								{% for cabinet in laws.cabinets %}
-									<rect x="{{ cabinet.x0 }}" y="{{ laws.plot[2] }}" width="{{ cabinet.x1 - cabinet.x0 }}" height="{{ laws.plot[3] - laws.plot[2] }}" fill="{{ cabinet.color }}" fill-opacity="0.09"><title>{{ cabinet.members|join(', ') }}, {{ cabinet.fromLabel }} – {{ cabinet.toLabel }}</title></rect>
-									{% if not loop.first %}
-										{# A change of cabinet, so two in a row led by one party still read as two. #}
-										<line x1="{{ cabinet.x0 }}" y1="{{ laws.plot[2] }}" x2="{{ cabinet.x0 }}" y2="{{ laws.plot[3] }}" class="stroke-outline-variant" stroke-width="0.6" stroke-dasharray="2 2"></line>
-									{% endif %}
-								{% endfor %}
-								<line x1="{{ laws.plot[0] }}" y1="{{ laws.plot[3] }}" x2="{{ laws.plot[1] }}" y2="{{ laws.plot[3] }}" class="stroke-outline-variant" stroke-width="0.8"></line>
-								<text x="{{ laws.plot[0] - 4 }}" y="{{ chart.high.y + 3 }}" text-anchor="end" font-size="8" class="fill-on-surface-variant">{{ _self.lever_value(chart, chart.high.value) }}</text>
-								{% if not chart.flat %}
-									<text x="{{ laws.plot[0] - 4 }}" y="{{ chart.low.y + 3 }}" text-anchor="end" font-size="8" class="fill-on-surface-variant">{{ _self.lever_value(chart, chart.low.value) }}</text>
-								{% endif %}
-								{% for year in laws.years %}
-									<line x1="{{ year.x }}" y1="{{ laws.plot[3] }}" x2="{{ year.x }}" y2="{{ laws.plot[3] + 3 }}" class="stroke-outline-variant" stroke-width="0.8"></line>
-									<text x="{{ year.x }}" y="{{ laws.plot[3] + 13 }}" text-anchor="middle" font-size="8" class="fill-on-surface-variant">{{ year.label }}</text>
-								{% endfor %}
-								<polyline points="{{ chart.line }}" fill="none" class="stroke-primary" stroke-width="1.5" stroke-linejoin="round"></polyline>
-							</svg>
-							<p class="text-2xs text-on-surface-variant">{{ chart.changes == 0 ? 'Unchanged over the period' : (chart.changes == 1 ? 'Changed once' : 'Changed ' ~ chart.changes ~ ' times') }}</p>
-						</figure>
-					{% endfor %}
-				</div>
-				<p class="source-note mt-4">{{ source_line('exchequer', 'financial-regulator') }}</p>
-			</section>
-		{% endif %}
-
-		<section class="bg-surface-container-low rounded-lg p-5 border border-outline-variant/20" aria-labelledby="council-heading">
-			<h2 id="council-heading" class="text-sm font-semibold text-on-surface">The Aerie Council</h2>
-			<p class="text-2xs text-on-surface-variant mt-0.5">
-				{{ rules.councilSeats }} seats on staggered {{ rules.councilTermYears|number_format(0) }}-year terms. When a term ends, or a councillor dies or resigns, the sitting members elect the successor from the three candidates the Council Appointment Board puts forward; a successor to a councillor who left early serves out the term.
-				Each councillor holds a stance on money: a hawk would rather fight inflation, a dove would rather spare jobs, a swing vote sides with either as the case takes them.
-				Each also holds one on the banks, from light-touch to strict: how much of their own capital a bank should have at stake; and one on the reserves, from cautious to bold: how much of the District's savings belongs in shares. The Council's leans decide whom it appoints.
-			</p>
-			{% if council.lean %}
-				<p class="text-xs text-on-surface mt-3">
-					The Council leans {{ council.lean.median == 'hawk' ? 'hawkish' : (council.lean.median == 'dove' ? 'dovish' : 'to the middle') }}:
-					<span class="font-mono tabular-nums">{{ council.lean.hawk }}</span> {{ council.lean.hawk == 1 ? 'hawk' : 'hawks' }},
-					<span class="font-mono tabular-nums">{{ council.lean.swing }}</span> {{ council.lean.swing == 1 ? 'swing vote' : 'swing votes' }},
-					<span class="font-mono tabular-nums">{{ council.lean.dove }}</span> {{ council.lean.dove == 1 ? 'dove' : 'doves' }}.
-					{% if council.lean.banks is not null %}
-						On the banks its middle councillor would ask for <span class="font-mono tabular-nums">{{ council.lean.banks|pct(1) }}</span> core capital.
-					{% endif %}
-					{% if council.lean.reserves is not null %}
-						On the reserves, <span class="font-mono tabular-nums">{{ council.lean.reserves|pct(0) }}</span> in shares.
-					{% endif %}
-				</p>
-			{% endif %}
-			{% if council.board %}
-				<p class="text-xs text-on-surface mt-2">
-					The Council Appointment Board, whose <span class="font-mono tabular-nums">{{ council.board.seats }}</span> members are named by the District's bar, its judges, its universities and the Aerie Exchange, reads the applications for each seat and puts forward the three closest to its own views.
-					It leans {{ council.board.median == 'hawk' ? 'hawkish' : (council.board.median == 'dove' ? 'dovish' : 'to the middle') }}:
-					<span class="font-mono tabular-nums">{{ council.board.hawk }}</span> {{ council.board.hawk == 1 ? 'hawk' : 'hawks' }},
-					<span class="font-mono tabular-nums">{{ council.board.swing }}</span> {{ council.board.swing == 1 ? 'swing vote' : 'swing votes' }},
-					<span class="font-mono tabular-nums">{{ council.board.dove }}</span> {{ council.board.dove == 1 ? 'dove' : 'doves' }}.
-				</p>
-			{% endif %}
-
-			<div class="grid grid-cols-1 lg:grid-cols-[1fr_22rem] gap-5 mt-4">
-				<div class="overflow-x-auto">
-					<table class="w-full text-xs">
-						<thead>
-							<tr class="table-head">
-								<th scope="col" class="text-right font-semibold pb-2 w-10">Seat</th>
-								<th scope="col" class="text-left font-semibold pb-2 pl-4">Councillor</th>
-								<th scope="col" class="text-right font-semibold pb-2">Age</th>
-								<th scope="col" class="text-left font-semibold pb-2 pl-4 hidden md:table-cell">Seated</th>
-								<th scope="col" class="text-left font-semibold pb-2 pl-4 md:pl-0">Term ends</th>
-								<th scope="col" class="text-left font-semibold pb-2 pl-4">Money</th>
-								<th scope="col" class="text-left font-semibold pb-2 pl-4">Banks</th>
-								<th scope="col" class="text-left font-semibold pb-2 pl-4 hidden md:table-cell">Reserves</th>
-							</tr>
-						</thead>
-						<tbody class="divide-y divide-outline-variant/10">
-							{% for seat in council.roster %}
-								<tr>
-									<td class="py-1.5 text-right font-mono tabular-nums text-on-surface-variant">{{ seat.seat }}</td>
-									<th scope="row" class="py-1.5 pl-4 text-left font-semibold text-on-surface">{{ seat.name }}</th>
-									<td class="py-1.5 text-right font-mono tabular-nums text-on-surface-variant">{{ seat.age ?? '' }}</td>
-									<td class="py-1.5 pl-4 text-on-surface-variant font-mono tabular-nums whitespace-nowrap hidden md:table-cell">{{ seat.sinceLabel }}</td>
-									<td class="py-1.5 pl-4 md:pl-0 text-on-surface-variant font-mono tabular-nums whitespace-nowrap {{ seat.seat == council.nextVacancy.seat ? 'text-primary font-semibold' : '' }}">{{ seat.termEndsLabel }}</td>
-									<td class="py-1.5 pl-4 text-on-surface whitespace-nowrap">{{ _self.stance(seat.stance ?? null, seat.leaning ?? null) }}</td>
-									<td class="py-1.5 pl-4 text-on-surface whitespace-nowrap">{{ _self.banks(seat.banks ?? null) }}</td>
-									<td class="py-1.5 pl-4 text-on-surface whitespace-nowrap hidden md:table-cell">{{ _self.reserves(seat.reserves ?? null) }}</td>
-								</tr>
-							{% endfor %}
-						</tbody>
-					</table>
-				</div>
-
-				<div class="space-y-4">
-					<div>
-						<h3 class="text-xs font-semibold text-on-surface">Departments</h3>
-						<p class="text-2xs text-on-surface-variant mt-0.5">The Council appoints each head; the departments then act on their own mandates.</p>
-						<ul class="mt-2 space-y-2">
-							{% for department in council.departments %}
-								<li class="text-xs">
-									{% if department.href %}
-										<a href="{{ department.href }}" class="font-semibold text-primary hover:underline">{{ department.name }}</a>
-									{% else %}
-										<span class="font-semibold text-on-surface">{{ department.name }}</span>
-									{% endif %}
-									<span class="block text-2xs text-on-surface-variant">{{ department.mandate }}</span>
-								</li>
-							{% endfor %}
-						</ul>
-					</div>
-					<div>
-						<h3 class="text-xs font-semibold text-on-surface">Powers</h3>
-						<ul class="mt-2 space-y-2 text-2xs text-on-surface-variant">
-							<li><span class="font-semibold text-on-surface">Veto.</span> The Council can veto any budget or law the Diet passes. It almost never does: the threat is enough. Its red line is the debt: above {{ rules.debtBrake|pct(0) }} of GDP it would veto any bill that cuts revenue, so the Diet tables none.</li>
-							<li><span class="font-semibold text-on-surface">Removal.</span> The Diet can remove a councillor with {{ rules.supermajority }} of its {{ rules.seats }} seats, three quarters. It never has, and {{ rules.loyalists|join(', ') }} never would.</li>
-							<li><span class="font-semibold text-on-surface">Independence.</span> No party sits on the Council, and no councillor sits in the Diet. What passes between them runs on gentlemen's agreements.</li>
-						</ul>
-					</div>
-				</div>
-			</div>
-		</section>
-
-		{% if authority %}
-			{% set governor = authority.governor %}
-			<section class="bg-surface-container-low rounded-lg p-5 border border-outline-variant/20" aria-labelledby="authority-heading">
-				<h2 id="authority-heading" class="text-sm font-semibold text-on-surface">The Monetary Authority</h2>
-				<p class="text-2xs text-on-surface-variant mt-0.5">
-					The Council names the governor for a single {{ authority.rules.governorTermYears|number_format(0) }}-year term from a shortlist of {{ authority.rules.shortlist }}, and the governor fills the rate committee's {{ authority.rules.memberTermYears|number_format(0) }}-year seats as they fall vacant, picking people of their own stance where the shortlist offers one.
-					The {{ authority.rules.members }} members set the policy rate {{ authority.rules.meetingsPerYear }} times a year by the Authority's published rule. A committee that leans hard one way bends it: a dovish majority answers rising prices less firmly, a hawkish one cuts less into a slowdown.
-					The charter puts the Authority beyond the Diet's reach, but not beyond its voice: a cabinet can lean on it in public for cheaper money, and now and then the Authority gives ground.
-				</p>
-
-				<div class="grid grid-cols-1 lg:grid-cols-[22rem_1fr] gap-5 mt-4">
-					<div class="space-y-4">
-						<div>
-							<p class="text-2xs text-on-surface-variant">Governor</p>
-							<p class="text-sm font-semibold text-on-surface mt-0.5">{{ governor.name }}</p>
-							<p class="text-2xs text-on-surface-variant mt-0.5">Age {{ governor.age }} · seated {{ governor.sinceLabel }} · term ends <span class="font-mono tabular-nums">{{ governor.termEndsLabel }}</span></p>
-							<p class="text-xs text-on-surface mt-1">
-								{{- {hawk: 'A hawk', swing: 'A swing vote', dove: 'A dove'}[governor.stance] -}}{{- governor.leaning ? (governor.leaning == 'hawk' ? ' leaning hawkish' : ' leaning dovish') : '' -}}
-								{%- if governor.passedOver is not empty %}, chosen over {% for candidate in governor.passedOver %}{{ candidate.name }} <span class="text-on-surface-variant">({{ {hawk: 'hawk', swing: 'swing vote', dove: 'dove'}[candidate.stance] }}, {{ candidate.age }})</span>{{ loop.last ? '' : (loop.revindex == 2 ? ' and ' : ', ') }}{% endfor %}{% endif %}.
-							</p>
-						</div>
-						<div>
-							<p class="text-2xs text-on-surface-variant">The committee</p>
-							<p class="text-sm font-semibold text-on-surface mt-0.5">{{ authority.committee.majority == 'hawkish' ? 'A hawkish majority' : (authority.committee.majority == 'dovish' ? 'A dovish majority' : 'No settled majority') }}</p>
-							<p class="text-2xs text-on-surface-variant mt-0.5">
-								<span class="font-mono tabular-nums">{{ authority.committee.hawk }}</span> {{ authority.committee.hawk == 1 ? 'hawk' : 'hawks' }} ·
-								<span class="font-mono tabular-nums">{{ authority.committee.swing }}</span> {{ authority.committee.swing == 1 ? 'swing vote' : 'swing votes' }} ·
-								<span class="font-mono tabular-nums">{{ authority.committee.dove }}</span> {{ authority.committee.dove == 1 ? 'dove' : 'doves' }}
-							</p>
-						</div>
-						{% if authority.pressure %}
-							{% set pressure = authority.pressure %}
-							<div>
-								<p class="text-2xs text-on-surface-variant">The cabinet · since <span class="font-mono tabular-nums">{{ pressure.sinceLabel }}</span></p>
-								<p class="text-xs text-on-surface mt-0.5">{{ pressure.givingIn ? 'Pressing for cheaper money, and the Authority is giving ground' : 'Pressing for cheaper money; the Authority is holding firm' }}</p>
-								<p class="text-2xs text-on-surface-variant mt-0.5">{% for party in pressure.cabinet %}{{ party }}{{ loop.last ? '' : (loop.revindex == 2 ? ' and ' : ', ') }}{% endfor %}</p>
-							</div>
-						{% endif %}
-						{% if authority.meeting %}
-							{% set meeting = authority.meeting %}
-							<div>
-								<p class="text-2xs text-on-surface-variant">Last decision · <span class="font-mono tabular-nums">{{ meeting.date }}</span></p>
-								<p class="text-xs text-on-surface mt-0.5">
-									{%- set bp = meeting.moveBp -%}
-									{%- set points = bp|abs == 1 ? ' basis point to ' : ' basis points to ' -%}
-									{{ bp == 0 ? 'Held at ' : (bp > 0 ? 'Raised ' ~ bp ~ points : 'Cut ' ~ bp|abs ~ points) }}<span class="font-mono tabular-nums">{{ meeting.rate|pct(2) }}</span>, voting <span class="font-mono tabular-nums">{{ meeting.split }}</span>
-								</p>
-								{% if meeting.higher > 0 or meeting.lower > 0 %}
-									<p class="text-2xs text-on-surface-variant mt-0.5">
-										{%- if meeting.higher > 0 %}{{ meeting.higher }} for a higher rate{% endif %}{% if meeting.higher > 0 and meeting.lower > 0 %}, {% endif %}{% if meeting.lower > 0 %}{{ meeting.lower }} for a lower rate{% endif -%}
-									</p>
-								{% endif %}
-							</div>
-						{% endif %}
-						<div>
-							<p class="text-2xs text-on-surface-variant">Next meeting</p>
-							<p class="text-xs font-mono tabular-nums text-on-surface mt-0.5">{{ authority.nextMeeting }}</p>
-						</div>
-					</div>
-
-					<div class="overflow-x-auto">
-						<table class="w-full text-xs">
-							<caption class="sr-only">The rate committee</caption>
-							<thead>
-								<tr class="table-head">
-									<th scope="col" class="text-left font-semibold pb-2">Member</th>
-									<th scope="col" class="text-right font-semibold pb-2">Age</th>
-									<th scope="col" class="text-left font-semibold pb-2 pl-4 hidden md:table-cell">Seated</th>
-									<th scope="col" class="text-left font-semibold pb-2 pl-4 md:pl-0">Term ends</th>
-									<th scope="col" class="text-left font-semibold pb-2 pl-4">Stance</th>
-									<th scope="col" class="text-left font-semibold pb-2 pl-4">Last vote</th>
-								</tr>
-							</thead>
-							<tbody class="divide-y divide-outline-variant/10">
-								{% for member in [governor]|merge(authority.members) %}
-									<tr>
-										<th scope="row" class="py-1.5 text-left font-semibold text-on-surface">{{ member.name }}{% if loop.first %} <span class="font-normal text-on-surface-variant">(governor)</span>{% endif %}</th>
-										<td class="py-1.5 text-right font-mono tabular-nums text-on-surface-variant">{{ member.age }}</td>
-										<td class="py-1.5 pl-4 font-mono tabular-nums text-on-surface-variant whitespace-nowrap hidden md:table-cell">{{ member.sinceLabel }}</td>
-										<td class="py-1.5 pl-4 md:pl-0 font-mono tabular-nums text-on-surface-variant whitespace-nowrap">{{ member.termEndsLabel }}</td>
-										<td class="py-1.5 pl-4 text-on-surface whitespace-nowrap">{{ _self.stance(member.stance, member.leaning) }}</td>
-										<td class="py-1.5 pl-4 text-2xs {{ member.vote is not null and member.vote != 0 ? 'text-on-surface font-semibold' : 'text-on-surface-variant' }}">
-											{{- member.vote is null ? '' : (member.vote > 0 ? 'For a higher rate' : (member.vote < 0 ? 'For a lower rate' : 'With the decision')) -}}
-										</td>
-									</tr>
-								{% endfor %}
-							</tbody>
-						</table>
-					</div>
-				</div>
-				{% if authority.decisions %}
-					{% set chart = authority.decisions %}
-					<figure class="mt-5">
-						<figcaption>
-							<h3 class="text-xs font-semibold text-on-surface">The rate, meeting by meeting</h3>
-							<p class="text-2xs text-on-surface-variant mt-0.5">
-								The rate each meeting has left since {{ chart.since }}: <span class="font-mono tabular-nums">{{ chart.moves }}</span> of <span class="font-mono tabular-nums">{{ chart.meetings|length }}</span> meetings moved it {{ chart.stepBp }} basis points or more, and <span class="font-mono tabular-nums">{{ chart.split }}</span> split the committee.
-								A mark above a meeting is a vote for a higher rate, below it for a lower.{% if chart.governors is not empty %} A dashed line marks a new governor in the chair.{% endif %}
-							</p>
-						</figcaption>
-						<svg viewBox="0 0 600 172" class="w-full mt-2" role="img" aria-label="The policy rate at each meeting since {{ chart.since }}, {{ (chart.meetings|last).rate|pct(2) }} at the last">
-							{% for line in chart.gridlines %}
-								<line x1="{{ chart.plot[0] }}" y1="{{ line.y }}" x2="{{ chart.plot[1] }}" y2="{{ line.y }}" class="stroke-outline-variant" stroke-opacity="{{ loop.first ? 1 : 0.3 }}" stroke-dasharray="{{ loop.first ? '' : '2 3' }}" stroke-width="{{ loop.first ? 1 : 0.6 }}"></line>
-								<text x="{{ chart.plot[0] - 5 }}" y="{{ line.y + 3 }}" text-anchor="end" font-size="8" class="fill-on-surface-variant">{{ line.rate|pct(2) }}</text>
-							{% endfor %}
-							{% for year in chart.years %}
-								<line x1="{{ year.x }}" y1="{{ chart.plot[3] }}" x2="{{ year.x }}" y2="{{ chart.plot[3] + 4 }}" class="stroke-outline-variant" stroke-width="0.8"></line>
-								<text x="{{ year.x }}" y="{{ chart.plot[3] + 15 }}" text-anchor="middle" font-size="8" class="fill-on-surface-variant">{{ year.label }}</text>
-							{% endfor %}
-							{% for governor in chart.governors %}
-								<line x1="{{ governor.x }}" y1="{{ chart.plot[2] }}" x2="{{ governor.x }}" y2="{{ chart.plot[3] }}" class="stroke-outline-variant" stroke-width="0.8" stroke-dasharray="3 2"><title>{{ governor.name }} in the chair from {{ governor.date }}</title></line>
-								<text x="{{ governor.x + 3 }}" y="{{ chart.plot[2] - 4 }}" font-size="7" class="fill-on-surface-variant">{{ governor.name }}</text>
-							{% endfor %}
-							<polyline points="{{ chart.line }}" fill="none" class="stroke-primary" stroke-width="1.5" stroke-linejoin="round"></polyline>
-							{% for meeting in chart.meetings %}
-								{%- set points = meeting.moveBp|abs == 1 ? ' basis point to ' : ' basis points to ' -%}
-								<circle cx="{{ meeting.x }}" cy="{{ meeting.y }}" r="1.8" class="fill-primary"><title>{{ meeting.date }}: {{ meeting.moveBp == 0 ? 'held at ' : (meeting.moveBp > 0 ? 'raised ' ~ meeting.moveBp ~ points : 'cut ' ~ meeting.moveBp|abs ~ points) }}{{ meeting.rate|pct(2) }}, voting {{ meeting.split }}</title></circle>
-								{% if meeting.higher > 0 %}
-									<polygon points="{{ meeting.x - 2.5 }},{{ meeting.y - 4 }} {{ meeting.x + 2.5 }},{{ meeting.y - 4 }} {{ meeting.x }},{{ meeting.y - 8 }}" class="fill-on-surface-variant"><title>{{ meeting.date }}: {{ meeting.higher }} for a higher rate</title></polygon>
-								{% endif %}
-								{% if meeting.lower > 0 %}
-									<polygon points="{{ meeting.x - 2.5 }},{{ meeting.y + 4 }} {{ meeting.x + 2.5 }},{{ meeting.y + 4 }} {{ meeting.x }},{{ meeting.y + 8 }}" class="fill-on-surface-variant"><title>{{ meeting.date }}: {{ meeting.lower }} for a lower rate</title></polygon>
-								{% endif %}
-							{% endfor %}
-						</svg>
-						<p class="source-note mt-2">{{ source_line('monetary-authority') }}</p>
-					</figure>
-				{% endif %}
-			</section>
-		{% endif %}
-
-		{% if regulator %}
-			{% set head = regulator.head %}
-			<section class="bg-surface-container-low rounded-lg p-5 border border-outline-variant/20" aria-labelledby="regulator-heading">
-				<h2 id="regulator-heading" class="text-sm font-semibold text-on-surface"><a href="/regulator" class="hover:underline">The Financial Regulator</a></h2>
-				<p class="text-2xs text-on-surface-variant mt-0.5">
-					The Council names the head for a single {{ regulator.rules.termYears|number_format(0) }}-year term from a shortlist of {{ regulator.rules.shortlist }}, choosing the candidate nearest its own view of the banks.
-					The head sets the core capital every deposit-taking bank must hold against its loans and other risk-weighted assets, anywhere from {{ regulator.rules.lightest|pct(1) }} to {{ regulator.rules.strictest|pct(1) }}, the range the world's largest banks are held to.
-					A rise takes effect over {{ regulator.rules.phaseInMonths }} months, a cut at once. A bank below the requirement, with the countercyclical buffer on top, may pay no dividend and buy back no shares.
-				</p>
-
-				<div class="grid grid-cols-1 sm:grid-cols-2 gap-5 mt-4">
-					<div>
-						<p class="text-2xs text-on-surface-variant">Head</p>
-						<p class="text-sm font-semibold text-on-surface mt-0.5">{{ head.name }}</p>
-						<p class="text-2xs text-on-surface-variant mt-0.5">Age {{ head.age }} · seated {{ head.sinceLabel }} · term ends <span class="font-mono tabular-nums">{{ head.termEndsLabel }}</span></p>
-						<p class="text-xs text-on-surface mt-1">
-							{{- {light: 'A light-touch regulator', middle: 'A moderate', strict: 'A strict regulator'}[head.stance] }} who sets <span class="font-mono tabular-nums">{{ head.requirement|pct(1) }}</span>
-							{%- if head.passedOver is not empty %}, chosen over {% for candidate in head.passedOver %}{{ candidate.name }} <span class="text-on-surface-variant">(<span class="font-mono tabular-nums">{{ candidate.requirement|pct(1) }}</span>, {{ candidate.age }})</span>{{ loop.last ? '' : (loop.revindex == 2 ? ' and ' : ', ') }}{% endfor %}{% endif %}.
+		<section aria-labelledby="appointed-heading">
+			<h2 id="appointed-heading" class="text-sm font-semibold text-on-surface">The Council and the departments it appoints</h2>
+			<div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-5 mt-3">
+				<section class="bg-surface-container-low rounded-lg p-5 border border-outline-variant/20 flex flex-col" aria-labelledby="hub-council-heading">
+					<h3 id="hub-council-heading" class="text-sm font-semibold text-on-surface"><a href="{{ path('app_council') }}" class="hover:underline">Aerie Council</a></h3>
+					{% if council.lean %}
+						<p class="mt-2 text-2xl font-semibold text-on-surface">{{ council.lean.median == 'hawk' ? 'Hawkish' : (council.lean.median == 'dove' ? 'Dovish' : 'Middle') }}</p>
+						<p class="text-xs text-on-surface-variant">
+							<span class="font-mono tabular-nums">{{ council.lean.hawk }}</span> {{ council.lean.hawk == 1 ? 'hawk' : 'hawks' }},
+							<span class="font-mono tabular-nums">{{ council.lean.swing }}</span> {{ council.lean.swing == 1 ? 'swing vote' : 'swing votes' }},
+							<span class="font-mono tabular-nums">{{ council.lean.dove }}</span> {{ council.lean.dove == 1 ? 'dove' : 'doves' }}
 						</p>
-					</div>
-					<div>
-						<p class="text-2xs text-on-surface-variant">Core capital requirement</p>
-						<p class="text-sm font-semibold text-on-surface mt-0.5"><span class="font-mono tabular-nums">{{ regulator.inForce|pct(2) }}</span> of risk-weighted assets</p>
-						{% if regulator.phasing %}
-							<p class="text-2xs text-on-surface-variant mt-0.5">Rising to <span class="font-mono tabular-nums">{{ regulator.phasing.target|pct(1) }}</span> by <span class="font-mono tabular-nums">{{ regulator.phasing.completeLabel }}</span></p>
-						{% endif %}
-						<p class="text-2xs text-on-surface-variant mt-0.5">Countercyclical buffer on top: <span class="font-mono tabular-nums">{{ regulator.buffer|pct(2) }}</span></p>
-					</div>
-				</div>
-			</section>
-		{% endif %}
-
-		{% if fundHead %}
-			<section class="bg-surface-container-low rounded-lg p-5 border border-outline-variant/20" aria-labelledby="fund-head-heading">
-				<h2 id="fund-head-heading" class="text-sm font-semibold text-on-surface"><a href="/reserve" class="hover:underline">The Sovereign Reserve Fund</a></h2>
-				<p class="text-2xs text-on-surface-variant mt-0.5">
-					The Council names the head for a single {{ fundHead.rules.termYears|number_format(0) }}-year term from a shortlist of {{ fundHead.rules.shortlist }}, choosing the candidate nearest its own view of the reserves.
-					The head sets how much of the fund is held in shares, anywhere from {{ fundHead.rules.mostCautious|pct(0) }} to {{ fundHead.rules.boldest|pct(0) }}, the range the world's large reserve funds hold; the District's share of those equities stays as the fund opened.
-				</p>
-				<div class="grid grid-cols-1 sm:grid-cols-2 gap-5 mt-4">
-					<div>
-						<p class="text-2xs text-on-surface-variant">Head</p>
-						<p class="text-sm font-semibold text-on-surface mt-0.5">{{ fundHead.name }}</p>
-						<p class="text-2xs text-on-surface-variant mt-0.5">Age {{ fundHead.age }} · seated {{ fundHead.sinceLabel }} · term ends <span class="font-mono tabular-nums">{{ fundHead.termEndsLabel }}</span></p>
-						<p class="text-xs text-on-surface mt-1">
-							{{- {cautious: 'A cautious investor', balanced: 'A balanced investor', bold: 'A bold investor'}[fundHead.stance] }}
-							{{- fundHead.opening ? ', keeping the mix the fund opened with' : ' who holds ' ~ fundHead.equityShare|pct(0) ~ ' in shares' }}
-							{%- if fundHead.passedOver is not empty %}, chosen over {% for candidate in fundHead.passedOver %}{{ candidate.name }} <span class="text-on-surface-variant">(<span class="font-mono tabular-nums">{{ candidate.equityShare|pct(0) }}</span>, {{ candidate.age }})</span>{{ loop.last ? '' : (loop.revindex == 2 ? ' and ' : ', ') }}{% endfor %}{% endif %}.
-						</p>
-					</div>
-					{% if fundHead.inForce is not null %}
-						<div>
-							<p class="text-2xs text-on-surface-variant">Policy mix</p>
-							<p class="text-sm font-semibold text-on-surface mt-0.5"><span class="font-mono tabular-nums">{{ fundHead.inForce|pct(1) }}</span> in equities</p>
-							<p class="text-2xs text-on-surface-variant mt-0.5"><a href="/reserve" class="text-primary hover:underline">Holdings, weights and bands</a></p>
-						</div>
 					{% endif %}
-				</div>
-			</section>
-		{% endif %}
+					{% if council.lean and council.lean.banks is not null %}
+						<p class="text-xs text-on-surface mt-3">
+							Its middle councillor would ask the banks for <span class="font-mono tabular-nums">{{ council.lean.banks|pct(1) }}</span> core capital{% if council.lean.reserves is not null %} and keep <span class="font-mono tabular-nums">{{ council.lean.reserves|pct(0) }}</span> of the reserves in shares{% endif %}.
+						</p>
+					{% endif %}
+					<p class="mt-auto pt-3 text-xs"><a href="{{ path('app_council') }}" class="text-primary hover:underline underline-offset-2">Councillors, departments and powers</a></p>
+				</section>
 
-		<section class="bg-surface-container-low rounded-lg border border-outline-variant/20 overflow-hidden" aria-labelledby="history-heading">
-			<div class="p-5 pb-3">
-				<h2 id="history-heading" class="text-sm font-semibold text-on-surface">Elections</h2>
-				<p class="text-2xs text-on-surface-variant mt-0.5">Every vote on record, newest first, with the economy it was cast on and the government the talks produced.</p>
+				<section class="bg-surface-container-low rounded-lg p-5 border border-outline-variant/20 flex flex-col" aria-labelledby="hub-authority-heading">
+					<h3 id="hub-authority-heading" class="text-sm font-semibold text-on-surface"><a href="{{ path('app_authority') }}" class="hover:underline">Monetary Authority</a></h3>
+					{% if authority and authority.meeting %}
+						{% set meeting = authority.meeting %}
+						<p class="mt-2 text-2xl font-semibold font-mono tabular-nums text-on-surface">{{ meeting.rate|pct(2) }}</p>
+						<p class="text-xs text-on-surface-variant">policy rate</p>
+						<p class="text-xs text-on-surface mt-3">
+							{%- set bp = meeting.moveBp -%}
+							{%- set points = bp|abs == 1 ? ' basis point' : ' basis points' -%}
+							{{ bp == 0 ? 'Held' : (bp > 0 ? 'Raised ' ~ bp ~ points : 'Cut ' ~ bp|abs ~ points) }} on <span class="font-mono tabular-nums">{{ meeting.date }}</span>, voting <span class="font-mono tabular-nums">{{ meeting.split }}</span>. Next meeting <span class="font-mono tabular-nums">{{ authority.nextMeeting }}</span>.
+						</p>
+					{% elseif authority %}
+						<p class="text-xs text-on-surface mt-2">The committee has not met yet. Its first meeting is <span class="font-mono tabular-nums">{{ authority.nextMeeting }}</span>.</p>
+					{% endif %}
+					{% if authority %}
+						<p class="text-xs text-on-surface-variant mt-1">Governor {{ authority.governor.name }}, {{ {hawk: 'a hawk', swing: 'a swing vote', dove: 'a dove'}[authority.governor.stance] }}</p>
+					{% endif %}
+					<p class="mt-auto pt-3 text-xs"><a href="{{ path('app_authority') }}" class="text-primary hover:underline underline-offset-2">The governor, the committee and every decision</a></p>
+				</section>
+
+				<section class="bg-surface-container-low rounded-lg p-5 border border-outline-variant/20 flex flex-col" aria-labelledby="hub-regulator-heading">
+					<h3 id="hub-regulator-heading" class="text-sm font-semibold text-on-surface"><a href="{{ path('app_regulator') }}" class="hover:underline">Financial Regulator</a></h3>
+					{% if regulator %}
+						<p class="mt-2 text-2xl font-semibold font-mono tabular-nums text-on-surface">{{ regulator.inForce|pct(2) }}</p>
+						<p class="text-xs text-on-surface-variant">core capital, with a <span class="font-mono tabular-nums">{{ regulator.buffer|pct(2) }}</span> buffer on top</p>
+						<p class="text-xs text-on-surface mt-3">
+							{{ mortgageLtvCap is null ? 'No limit on mortgage borrowing.' : 'Mortgages capped at ' ~ mortgageLtvCap|pct(0) ~ ' of a home\'s price.' }}
+							{% if regulator.phasing %}Capital rising to <span class="font-mono tabular-nums">{{ regulator.phasing.target|pct(1) }}</span> by <span class="font-mono tabular-nums">{{ regulator.phasing.completeLabel }}</span>.{% endif %}
+						</p>
+						<p class="text-xs text-on-surface-variant mt-1">Head {{ regulator.head.name }}, {{ {light: 'light-touch', middle: 'moderate', strict: 'strict'}[regulator.head.stance] }}</p>
+					{% endif %}
+					<p class="mt-auto pt-3 text-xs"><a href="{{ path('app_regulator') }}" class="text-primary hover:underline underline-offset-2">Both rules and the banks it supervises</a></p>
+				</section>
+
+				<section class="bg-surface-container-low rounded-lg p-5 border border-outline-variant/20 flex flex-col" aria-labelledby="hub-fund-heading">
+					<h3 id="hub-fund-heading" class="text-sm font-semibold text-on-surface"><a href="{{ path('app_reserve') }}" class="hover:underline">Sovereign Reserve Fund</a></h3>
+					{% if fundHead %}
+						{% if fundHead.inForce is not null %}
+							<p class="mt-2 text-2xl font-semibold font-mono tabular-nums text-on-surface">{{ fundHead.inForce|pct(1) }}</p>
+							<p class="text-xs text-on-surface-variant">of the fund in equities</p>
+						{% endif %}
+						<p class="text-xs text-on-surface mt-3">Head {{ fundHead.name }}, {{ {cautious: 'a cautious investor', balanced: 'a balanced investor', bold: 'a bold investor'}[fundHead.stance] }}{{ fundHead.opening ? ', keeping the mix the fund opened with' : '' }}.</p>
+					{% endif %}
+					<p class="mt-auto pt-3 text-xs"><a href="{{ path('app_reserve') }}" class="text-primary hover:underline underline-offset-2">Holdings, weights and bands</a></p>
+				</section>
 			</div>
-			{% if history is empty %}
-				<p class="px-5 pb-5 text-xs text-on-surface-variant">No election has been held since Year 1. The sitting Diet serves until {{ election.next }}.</p>
-			{% else %}
-				<div class="overflow-x-auto">
-					<table class="w-full text-xs">
-						<thead class="bg-surface-container text-xs text-on-surface-variant">
-							<tr>
-								<th scope="col" class="px-5 py-2.5 text-left font-semibold">Held</th>
-								{% for party in parties %}
-									<th scope="col" class="px-3 py-2.5 text-right font-semibold" title="{{ party.name }}"><a href="{{ path('app_government_party', {slug: party.slug}) }}" class="hover:text-on-surface"><span class="inline-block w-2 h-2 rounded-full mr-1" style="background-color: {{ party.color }}" aria-hidden="true"></span>{{ party.label }}</a></th>
-								{% endfor %}
-								<th scope="col" class="px-3 py-2.5 text-left font-semibold">Government</th>
-								<th scope="col" class="px-3 py-2.5 text-right font-semibold hidden md:table-cell" title="The outgoing government's change in combined vote share">Incumbent swing</th>
-								<th scope="col" class="px-3 py-2.5 text-right font-semibold hidden md:table-cell" title="Growth in the year before the vote against its usual pace, and inflation over the term against the 2% target, in points">Growth / inflation</th>
-								<th scope="col" class="px-5 py-2.5 text-right font-semibold hidden sm:table-cell" title="The share of the vote that changed hands between parties">Volatility</th>
-							</tr>
-						</thead>
-						<tbody class="divide-y divide-outline-variant/10">
-							{% for row in history %}
-								<tr>
-									<th scope="row" class="px-5 py-2 text-left font-mono tabular-nums font-normal text-on-surface">
-										{{ row.date }}
-									</th>
-									{% for cell in row.seats %}
-										<td class="px-3 py-2 text-right font-mono tabular-nums text-on-surface">
-											{{ cell.seats }}
-											<span class="block text-2xs {{ cell.swing|signed_class }}">{{ (cell.swing > 0 ? '+' : '') ~ (cell.swing * 100)|number_format(1) }}</span>
-										</td>
-									{% endfor %}
-									<td class="px-3 py-2">
-										{% if not row.formed %}
-											<span class="text-xs font-medium text-primary">Talks under way</span>
-										{% else %}
-											<span class="flex flex-wrap gap-x-2 gap-y-0.5">
-												{% for member in row.coalition %}
-													<span class="inline-flex items-center gap-1 text-on-surface"><span class="w-2 h-2 rounded-full" style="background-color: {{ member.color }}" aria-hidden="true"></span>{{ member.name }}</span>
-												{% endfor %}
-											</span>
-											{% if row.support is not empty %}
-												<span class="block text-2xs text-on-surface-variant">Supported by {% for member in row.support %}{{ member.name }}{{ not loop.last ? ', ' : '' }}{% endfor %}</span>
-											{% endif %}
-											<span class="block text-2xs font-mono tabular-nums text-on-surface-variant">
-												{%- if row.attempts == 0 %}A majority of its own{% else %}{{ ui.days(row.formationDays) }}, {{ row.attempts }} {{ row.attempts == 1 ? 'attempt' : 'attempts' }}{% endif -%}
-											</span>
-											{% if row.changed %}<span class="text-xs font-medium text-primary">New government</span>{% endif %}
-											{% for fall in row.falls %}
-												<span class="block mt-1 pt-1 border-t border-outline-variant/15">
-													<span class="block text-xs font-medium text-warning">Fell {{ fall.date }}</span>
-													{% if not fall.formed %}
-														<span class="text-xs font-medium text-primary">Talks under way</span>
-													{% else %}
-														<span class="flex flex-wrap gap-x-2 gap-y-0.5">
-															{% for member in fall.coalition %}
-																<span class="inline-flex items-center gap-1 text-on-surface"><span class="w-2 h-2 rounded-full" style="background-color: {{ member.color }}" aria-hidden="true"></span>{{ member.name }}</span>
-															{% endfor %}
-														</span>
-														{% if fall.support is not empty %}
-															<span class="block text-2xs text-on-surface-variant">Supported by {% for member in fall.support %}{{ member.name }}{{ not loop.last ? ', ' : '' }}{% endfor %}</span>
-														{% endif %}
-														<span class="block text-2xs font-mono tabular-nums text-on-surface-variant">{{ ui.days(fall.formationDays) }}, {{ fall.attempts }} {{ fall.attempts == 1 ? 'attempt' : 'attempts' }}</span>
-													{% endif %}
-												</span>
-											{% endfor %}
-										{% endif %}
-									</td>
-									<td class="px-3 py-2 text-right font-mono tabular-nums hidden md:table-cell {{ row.incumbentSwing|signed_class }}">{{ (row.incumbentSwing > 0 ? '+' : '') ~ (row.incumbentSwing * 100)|number_format(1) }}pp</td>
-									<td class="px-3 py-2 text-right font-mono tabular-nums text-on-surface-variant hidden md:table-cell">{{ (row.growthGap > 0 ? '+' : '') ~ (row.growthGap * 100)|number_format(1) }} / {{ (row.inflationGap > 0 ? '+' : '') ~ (row.inflationGap * 100)|number_format(1) }}</td>
-									<td class="px-5 py-2 text-right font-mono tabular-nums text-on-surface-variant hidden sm:table-cell">{{ (row.volatility * 100)|number_format(1) }}</td>
-								</tr>
-							{% endfor %}
-						</tbody>
-					</table>
-				</div>
-			{% endif %}
 		</section>
 
 		<section class="bg-surface-container-low rounded-lg p-5 border border-outline-variant/20" aria-labelledby="how-heading">
@@ -992,59 +262,3 @@
 	</div>
 {% endblock %}
 
-{% macro lever_value(lever, value) %}{% set unit = lever.unit ?? '' %}{{ unit == 'hhi' ? (value * 10000)|number_format(0) ~ ' HHI' : (unit == 'usd_t' ? '$' ~ value|number_format(2) ~ '/t' : value|pct(2)) }}{% endmacro %}
-
-{# One question's line at one width. #}
-{% macro compass_row(row, compass, layout) %}
-	{% set f = compass.fontSize %}
-	{% set w = layout.halfWidth %}
-	<svg viewBox="{{ row.viewBox|join(' ') }}" class="w-full mt-1" role="img" aria-label="{{ row.summary }}">
-		{% if row.hub is not null %}
-			{# Behind the dots, so it shows above and below whichever party sits on it. #}
-			<line x1="{{ row.hub }}" y1="{{ -compass.hubReach }}" x2="{{ row.hub }}" y2="{{ compass.hubReach }}" class="stroke-primary" stroke-width="1.4" stroke-linecap="round"></line>
-		{% endif %}
-		<line x1="{{ -w }}" y1="0" x2="{{ w }}" y2="0" class="stroke-outline-variant" stroke-opacity="0.8" stroke-width="0.6"></line>
-		<line x1="0" y1="-4" x2="0" y2="4" class="stroke-outline-variant" stroke-opacity="0.8" stroke-width="0.6"></line>
-		{% if layout.endsBeside %}
-			{% for end in row.ends %}
-				<text x="{{ end.x }}" y="{{ end.y }}" text-anchor="{{ end.anchor }}" font-size="{{ f }}" class="fill-on-surface-variant">{{ end.text }}</text>
-			{% endfor %}
-		{% endif %}
-
-		{% for party in row.parties %}
-			{% for p in party.trail %}
-				<circle data-party="{{ party.key }}" cx="{{ p.x }}" cy="0" r="1.2" fill="{{ party.color }}" fill-opacity="{{ p.opacity }}"></circle>
-			{% endfor %}
-		{% endfor %}
-		{% for party in row.parties|filter(party => party.leader) %}
-			<line data-party="{{ party.key }}" x1="{{ party.leader[0] }}" y1="{{ party.leader[1] }}" x2="{{ party.leader[2] }}" y2="{{ party.leader[3] }}" stroke="{{ party.color }}" stroke-opacity="0.7" stroke-width="0.6" stroke-linecap="round"></line>
-		{% endfor %}
-		{# The largest dots first, so a small party sitting on a large one stays in sight. #}
-		{% for party in row.parties|sort((a, b) => b.r <=> a.r) %}
-			<a data-party="{{ party.key }}" href="{{ path('app_government_party', {slug: party.slug}) }}">
-				<title>{{ party.name }}: {{ party.seats }} seats{{ party.governing ? ', in the cabinet' : (party.supporting ? ', supporting it' : '') }}</title>
-				<circle cx="{{ party.x }}" cy="0" r="{{ party.r }}" fill="{{ party.color }}" fill-opacity="{{ party.governing ? 1 : (party.supporting ? 0.85 : 0.65) }}" class="stroke-surface-container-low" stroke-width="1"></circle>
-				{% if party.governing %}
-					<circle cx="{{ party.x }}" cy="0" r="{{ party.r + compass.ringGap }}" fill="none" class="stroke-primary" stroke-width="1"></circle>
-				{% elseif party.supporting %}
-					<circle cx="{{ party.x }}" cy="0" r="{{ party.r + compass.ringGap }}" fill="none" class="stroke-primary" stroke-width="0.8" stroke-dasharray="0.1 2" stroke-linecap="round"></circle>
-				{% endif %}
-			</a>
-		{% endfor %}
-		{% for party in row.parties %}
-			<a data-party="{{ party.key }}" href="{{ path('app_government_party', {slug: party.slug}) }}" class="hover:underline">
-				<text x="{{ party.labelX }}" y="{{ party.labelY }}" text-anchor="middle" font-size="{{ f }}" font-weight="{{ party.governing ? 'bold' : '600' }}" class="{{ party.governing or party.supporting ? 'fill-on-surface' : 'fill-on-surface-variant' }}">{{ party.label }}</text>
-			</a>
-		{% endfor %}
-	</svg>
-	{% if not layout.endsBeside %}
-		<div class="flex justify-between text-2xs text-on-surface-variant" style="padding: 0 {{ layout.endInset }}%" aria-hidden="true">
-			{% for end in row.ends %}<span>{{ end.text }}</span>{% endfor %}
-		</div>
-	{% endif %}
-{% endmacro %}
-
-{# A person's stance on money, in words: hawk, swing vote or dove. #}
-{% macro reserves(stance) %}{{ {cautious: 'Cautious', balanced: 'Balanced', bold: 'Bold'}[stance] ?? '' }}{% endmacro %}
-{% macro banks(stance) %}{{ {light: 'Light-touch', middle: 'Moderate', strict: 'Strict'}[stance] ?? '' }}{% endmacro %}
-{% macro stance(stance, leaning = null) %}{{ {hawk: 'Hawk', swing: 'Swing', dove: 'Dove'}[stance] ?? '' }}{% if leaning %}<span class="text-on-surface-variant">, {{ leaning == 'hawk' ? 'leaning hawkish' : 'leaning dovish' }}</span>{% endif %}{% endmacro %}

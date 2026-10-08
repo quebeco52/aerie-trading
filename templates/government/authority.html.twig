@@ -1,0 +1,152 @@
+{% extends 'base.html.twig' %}
+
+{% block title %}Monetary Authority - Aerie Exchange{% endblock %}
+
+{% block meta %}
+	<meta name="description" content="The District's Monetary Authority: its governor and rate committee, the last decision on the policy rate, and every meeting since.">
+	<meta property="og:title" content="Monetary Authority | Aerie Exchange">
+	<meta property="og:type" content="website">
+{% endblock %}
+
+{% import 'partials/_ui.html.twig' as ui %}
+{% import 'government/_macros.html.twig' as gov %}
+
+{% block body %}
+	<div class="max-w-400 mx-auto px-4 sm:px-6 lg:px-8 py-5 w-full space-y-5" id="authorityPage">
+
+		{% embed 'government/_header.html.twig' with {title: 'Monetary Authority'} %}{% block lead %}The District's central bank. It sets the policy rate by its published rule; its governor is named by the Aerie Council and picks the rate committee.{% endblock %}{% endembed %}
+
+		{% if authority %}
+			{% set governor = authority.governor %}
+			<section class="bg-surface-container-low rounded-lg p-5 border border-outline-variant/20" aria-labelledby="authority-heading">
+				<h2 id="authority-heading" class="text-sm font-semibold text-on-surface">The governor and the committee</h2>
+				<p class="text-2xs text-on-surface-variant mt-0.5">
+					The Council names the governor for a single {{ authority.rules.governorTermYears|number_format(0) }}-year term from a shortlist of {{ authority.rules.shortlist }}, and the governor fills the rate committee's {{ authority.rules.memberTermYears|number_format(0) }}-year seats as they fall vacant, picking people of their own stance where the shortlist offers one.
+					The {{ authority.rules.members }} members set the policy rate {{ authority.rules.meetingsPerYear }} times a year by the Authority's published rule. A committee that leans hard one way bends it: a dovish majority answers rising prices less firmly, a hawkish one cuts less into a slowdown.
+					The charter puts the Authority beyond the Diet's reach, but not beyond its voice: a cabinet can lean on it in public for cheaper money, and now and then the Authority gives ground.
+				</p>
+
+				<div class="grid grid-cols-1 lg:grid-cols-[22rem_1fr] gap-5 mt-4">
+					<div class="space-y-4">
+						<div>
+							<p class="text-2xs text-on-surface-variant">Governor</p>
+							<p class="text-sm font-semibold text-on-surface mt-0.5">{{ governor.name }}</p>
+							<p class="text-2xs text-on-surface-variant mt-0.5">Age {{ governor.age }} · seated {{ governor.sinceLabel }} · term ends <span class="font-mono tabular-nums">{{ governor.termEndsLabel }}</span></p>
+							<p class="text-xs text-on-surface mt-1">
+								{{- {hawk: 'A hawk', swing: 'A swing vote', dove: 'A dove'}[governor.stance] -}}{{- governor.leaning ? (governor.leaning == 'hawk' ? ' leaning hawkish' : ' leaning dovish') : '' -}}
+								{%- if governor.passedOver is not empty %}, chosen over {% for candidate in governor.passedOver %}{{ candidate.name }} <span class="text-on-surface-variant">({{ {hawk: 'hawk', swing: 'swing vote', dove: 'dove'}[candidate.stance] }}, {{ candidate.age }})</span>{{ loop.last ? '' : (loop.revindex == 2 ? ' and ' : ', ') }}{% endfor %}{% endif %}.
+							</p>
+						</div>
+						<div>
+							<p class="text-2xs text-on-surface-variant">The committee</p>
+							<p class="text-sm font-semibold text-on-surface mt-0.5">{{ authority.committee.majority == 'hawkish' ? 'A hawkish majority' : (authority.committee.majority == 'dovish' ? 'A dovish majority' : 'No settled majority') }}</p>
+							<p class="text-2xs text-on-surface-variant mt-0.5">
+								<span class="font-mono tabular-nums">{{ authority.committee.hawk }}</span> {{ authority.committee.hawk == 1 ? 'hawk' : 'hawks' }} ·
+								<span class="font-mono tabular-nums">{{ authority.committee.swing }}</span> {{ authority.committee.swing == 1 ? 'swing vote' : 'swing votes' }} ·
+								<span class="font-mono tabular-nums">{{ authority.committee.dove }}</span> {{ authority.committee.dove == 1 ? 'dove' : 'doves' }}
+							</p>
+						</div>
+						{% if authority.pressure %}
+							{% set pressure = authority.pressure %}
+							<div>
+								<p class="text-2xs text-on-surface-variant">The cabinet · since <span class="font-mono tabular-nums">{{ pressure.sinceLabel }}</span></p>
+								<p class="text-xs text-on-surface mt-0.5">{{ pressure.givingIn ? 'Pressing for cheaper money, and the Authority is giving ground' : 'Pressing for cheaper money; the Authority is holding firm' }}</p>
+								<p class="text-2xs text-on-surface-variant mt-0.5">{% for party in pressure.cabinet %}{{ party }}{{ loop.last ? '' : (loop.revindex == 2 ? ' and ' : ', ') }}{% endfor %}</p>
+							</div>
+						{% endif %}
+						{% if authority.meeting %}
+							{% set meeting = authority.meeting %}
+							<div>
+								<p class="text-2xs text-on-surface-variant">Last decision · <span class="font-mono tabular-nums">{{ meeting.date }}</span></p>
+								<p class="text-xs text-on-surface mt-0.5">
+									{%- set bp = meeting.moveBp -%}
+									{%- set points = bp|abs == 1 ? ' basis point to ' : ' basis points to ' -%}
+									{{ bp == 0 ? 'Held at ' : (bp > 0 ? 'Raised ' ~ bp ~ points : 'Cut ' ~ bp|abs ~ points) }}<span class="font-mono tabular-nums">{{ meeting.rate|pct(2) }}</span>, voting <span class="font-mono tabular-nums">{{ meeting.split }}</span>
+								</p>
+								{% if meeting.higher > 0 or meeting.lower > 0 %}
+									<p class="text-2xs text-on-surface-variant mt-0.5">
+										{%- if meeting.higher > 0 %}{{ meeting.higher }} for a higher rate{% endif %}{% if meeting.higher > 0 and meeting.lower > 0 %}, {% endif %}{% if meeting.lower > 0 %}{{ meeting.lower }} for a lower rate{% endif -%}
+									</p>
+								{% endif %}
+							</div>
+						{% endif %}
+						<div>
+							<p class="text-2xs text-on-surface-variant">Next meeting</p>
+							<p class="text-xs font-mono tabular-nums text-on-surface mt-0.5">{{ authority.nextMeeting }}</p>
+						</div>
+					</div>
+
+					<div class="overflow-x-auto">
+						<table class="w-full text-xs">
+							<caption class="sr-only">The rate committee</caption>
+							<thead>
+								<tr class="table-head">
+									<th scope="col" class="text-left font-semibold pb-2">Member</th>
+									<th scope="col" class="text-right font-semibold pb-2">Age</th>
+									<th scope="col" class="text-left font-semibold pb-2 pl-4 hidden md:table-cell">Seated</th>
+									<th scope="col" class="text-left font-semibold pb-2 pl-4 md:pl-0">Term ends</th>
+									<th scope="col" class="text-left font-semibold pb-2 pl-4">Stance</th>
+									<th scope="col" class="text-left font-semibold pb-2 pl-4">Last vote</th>
+								</tr>
+							</thead>
+							<tbody class="divide-y divide-outline-variant/10">
+								{% for member in [governor]|merge(authority.members) %}
+									<tr>
+										<th scope="row" class="py-1.5 text-left font-semibold text-on-surface">{{ member.name }}{% if loop.first %} <span class="font-normal text-on-surface-variant">(governor)</span>{% endif %}</th>
+										<td class="py-1.5 text-right font-mono tabular-nums text-on-surface-variant">{{ member.age }}</td>
+										<td class="py-1.5 pl-4 font-mono tabular-nums text-on-surface-variant whitespace-nowrap hidden md:table-cell">{{ member.sinceLabel }}</td>
+										<td class="py-1.5 pl-4 md:pl-0 font-mono tabular-nums text-on-surface-variant whitespace-nowrap">{{ member.termEndsLabel }}</td>
+										<td class="py-1.5 pl-4 text-on-surface whitespace-nowrap">{{ gov.stance(member.stance, member.leaning) }}</td>
+										<td class="py-1.5 pl-4 text-2xs {{ member.vote is not null and member.vote != 0 ? 'text-on-surface font-semibold' : 'text-on-surface-variant' }}">
+											{{- member.vote is null ? '' : (member.vote > 0 ? 'For a higher rate' : (member.vote < 0 ? 'For a lower rate' : 'With the decision')) -}}
+										</td>
+									</tr>
+								{% endfor %}
+							</tbody>
+						</table>
+					</div>
+				</div>
+				{% if authority.decisions %}
+					{% set chart = authority.decisions %}
+					<figure class="mt-5">
+						<figcaption>
+							<h3 class="text-xs font-semibold text-on-surface">The rate, meeting by meeting</h3>
+							<p class="text-2xs text-on-surface-variant mt-0.5">
+								The rate each meeting has left since {{ chart.since }}: <span class="font-mono tabular-nums">{{ chart.moves }}</span> of <span class="font-mono tabular-nums">{{ chart.meetings|length }}</span> meetings moved it {{ chart.stepBp }} basis points or more, and <span class="font-mono tabular-nums">{{ chart.split }}</span> split the committee.
+								A mark above a meeting is a vote for a higher rate, below it for a lower.{% if chart.governors is not empty %} A dashed line marks a new governor in the chair.{% endif %}
+							</p>
+						</figcaption>
+						<svg viewBox="0 0 600 172" class="w-full mt-2" role="img" aria-label="The policy rate at each meeting since {{ chart.since }}, {{ (chart.meetings|last).rate|pct(2) }} at the last">
+							{% for line in chart.gridlines %}
+								<line x1="{{ chart.plot[0] }}" y1="{{ line.y }}" x2="{{ chart.plot[1] }}" y2="{{ line.y }}" class="stroke-outline-variant" stroke-opacity="{{ loop.first ? 1 : 0.3 }}" stroke-dasharray="{{ loop.first ? '' : '2 3' }}" stroke-width="{{ loop.first ? 1 : 0.6 }}"></line>
+								<text x="{{ chart.plot[0] - 5 }}" y="{{ line.y + 3 }}" text-anchor="end" font-size="8" class="fill-on-surface-variant">{{ line.rate|pct(2) }}</text>
+							{% endfor %}
+							{% for year in chart.years %}
+								<line x1="{{ year.x }}" y1="{{ chart.plot[3] }}" x2="{{ year.x }}" y2="{{ chart.plot[3] + 4 }}" class="stroke-outline-variant" stroke-width="0.8"></line>
+								<text x="{{ year.x }}" y="{{ chart.plot[3] + 15 }}" text-anchor="middle" font-size="8" class="fill-on-surface-variant">{{ year.label }}</text>
+							{% endfor %}
+							{% for governor in chart.governors %}
+								<line x1="{{ governor.x }}" y1="{{ chart.plot[2] }}" x2="{{ governor.x }}" y2="{{ chart.plot[3] }}" class="stroke-outline-variant" stroke-width="0.8" stroke-dasharray="3 2"><title>{{ governor.name }} in the chair from {{ governor.date }}</title></line>
+								<text x="{{ governor.x + 3 }}" y="{{ chart.plot[2] - 4 }}" font-size="7" class="fill-on-surface-variant">{{ governor.name }}</text>
+							{% endfor %}
+							<polyline points="{{ chart.line }}" fill="none" class="stroke-primary" stroke-width="1.5" stroke-linejoin="round"></polyline>
+							{% for meeting in chart.meetings %}
+								{%- set points = meeting.moveBp|abs == 1 ? ' basis point to ' : ' basis points to ' -%}
+								<circle cx="{{ meeting.x }}" cy="{{ meeting.y }}" r="1.8" class="fill-primary"><title>{{ meeting.date }}: {{ meeting.moveBp == 0 ? 'held at ' : (meeting.moveBp > 0 ? 'raised ' ~ meeting.moveBp ~ points : 'cut ' ~ meeting.moveBp|abs ~ points) }}{{ meeting.rate|pct(2) }}, voting {{ meeting.split }}</title></circle>
+								{% if meeting.higher > 0 %}
+									<polygon points="{{ meeting.x - 2.5 }},{{ meeting.y - 4 }} {{ meeting.x + 2.5 }},{{ meeting.y - 4 }} {{ meeting.x }},{{ meeting.y - 8 }}" class="fill-on-surface-variant"><title>{{ meeting.date }}: {{ meeting.higher }} for a higher rate</title></polygon>
+								{% endif %}
+								{% if meeting.lower > 0 %}
+									<polygon points="{{ meeting.x - 2.5 }},{{ meeting.y + 4 }} {{ meeting.x + 2.5 }},{{ meeting.y + 4 }} {{ meeting.x }},{{ meeting.y + 8 }}" class="fill-on-surface-variant"><title>{{ meeting.date }}: {{ meeting.lower }} for a lower rate</title></polygon>
+								{% endif %}
+							{% endfor %}
+						</svg>
+						<p class="source-note mt-2">{{ source_line('monetary-authority') }}</p>
+					</figure>
+				{% endif %}
+			</section>
+		{% else %}
+			<p class="text-sm text-on-surface-variant">The Council has not yet named a governor.</p>
+		{% endif %}
+	</div>
+{% endblock %}

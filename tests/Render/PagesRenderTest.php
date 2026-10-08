@@ -156,6 +156,12 @@ final class PagesRenderTest extends KernelTestCase
         // The company page for a telecom (seven summary tiles, its operating figures charted) and an insurer, from the bank's stub.
         $pages['stock-telecom'] = ['/stock/WIRE', 'stock/index.html.twig', array_replace($pages['stock'][2], [
             'isFinancial' => false, 'businessModel' => 'telecom', 'shortUtilization' => 0.93, 'borrowFee' => 0.081,
+            'creditHealth' => [
+                'inDefault' => false, 'quartersInDefault' => 0, 'cureDueNextReport' => false,
+                'revolverCommitment' => 500000000.0, 'revolverDrawn' => 100000000.0, 'revolverUtilization' => 0.2,
+                'netDebtToEbitda' => 1.8, 'covenantLimit' => 3.5, 'hasCovenantHeadroom' => true,
+                'interestCoverage' => 6.2, 'distanceToDefault' => 3.1, 'coverageState' => 'adequate',
+            ],
             'financialSummary' => [
                 ['label' => 'Operating margin', 'value' => 0.22, 'format' => 'percent'], ['label' => 'ROIC − WACC', 'value' => 0.011, 'format' => 'signed_percent'],
                 ['label' => 'FCF / net income', 'value' => 0.78, 'format' => 'percent'], ['label' => 'Subscriber index', 'value' => 1.041, 'format' => 'index'],

@@ -1,0 +1,6 @@
+{# A government page's header: the way back to the front page, its title, and a lead the page fills in. #}
+{% include 'government/_breadcrumb.html.twig' with {current: title} %}
+<header class="pb-5 border-b border-outline-variant/15">
+	<h1 class="text-2xl md:text-3xl font-semibold text-on-surface tracking-tight leading-tight">{{ title }}</h1>
+	<p class="text-sm text-on-surface-variant mt-2 max-w-3xl leading-relaxed">{% block lead %}{% endblock %}</p>
+</header>

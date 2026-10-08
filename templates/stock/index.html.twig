@@ -642,7 +642,7 @@
 									<div class="py-2 flex justify-between items-center">
 										<dt class="group relative cursor-help text-on-surface-variant" tabindex="0">
 											<span class="term">Distance to default</span>
-											{{ ui.tooltip('How many standard deviations of asset value stand between the firm and its debt over five years. The rating agency grades on it: below ' ~ constant('App\\Service\\Market\\CreditRatingAgency::THRESHOLD_BBB')|number_format(1) ~ ' is speculative grade.', 'left', 'w-72') }}
+											{{ ui.tooltip('How many standard deviations of asset value stand between the firm and its debt over five years. The rating agency grades on it: below ' ~ constant('App\\Service\\Market\\Bond\\CreditRatingAgency::THRESHOLD_BBB')|number_format(1) ~ ' is speculative grade.', 'left', 'w-72') }}
 										</dt>
 										<dd class="font-medium text-on-surface font-mono tabular-nums">{{ credit.distanceToDefault|number_format(2) }}σ</dd>
 									</div>

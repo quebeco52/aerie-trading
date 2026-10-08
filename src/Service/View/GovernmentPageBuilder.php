@@ -36,8 +36,9 @@ use App\Service\Politics\SovereignReserveFund;
 use App\Twig\Extension\NumberFormatExtension;
 
 /**
- * Builds the government page: the Diet as it now sits, the parties in the policy space, the cabinet that governs and
- * the parties that support it, the talks after a vote, the Council, and every vote on record.
+ * Builds the government's pages: the front page with a headline from each institution, the Diet (the chamber, the talks
+ * after a vote, the parties in the policy space, every vote on record), the coming election, the budget and its laws,
+ * the Council, the Monetary Authority, and a page for each party.
  *
  * The talks are settled on the day of the vote; the page shows only the attempts whose day has passed, and no cabinet
  * before it takes office.
@@ -207,9 +208,147 @@ class GovernmentPageBuilder
     ) {}
 
     /**
+     * The government's front page: the cabinet and the next vote, and one headline from each institution with a link to
+     * its own page.
+     *
      * @return array<string, mixed>
      */
-    public function build(MacroStateDTO $macro, PoliticsStateDTO $politics): array
+    public function buildHub(MacroStateDTO $macro, PoliticsStateDTO $politics): array
+    {
+        $frame = $this->frame($macro, $politics);
+        $context = $frame['context'];
+
+        return array_replace($frame['page'], [
+            'talks' => $this->talks($politics, $context['talking']),
+            'parties' => $context['parties'],
+            'hemicycle' => $this->hemicycle($context['seats'], $context['parties']),
+            'budget' => $this->budget($macro, $politics, $context['coalition'], $context['support'], $context['talking']),
+            'polls' => self::polls($politics, $context['nextElection']),
+            'market' => self::market($politics),
+            'council' => $frame['page']['council'] + ['lean' => self::councilLean($politics)],
+            'authority' => $this->authority($politics, false),
+            'regulator' => $this->regulator($politics, $macro),
+            'mortgageLtvCap' => $macro->mortgageLtvCap,
+            'fundHead' => $this->fundHead($politics, $macro),
+        ]);
+    }
+
+    /**
+     * The Diet's page: the chamber as it sits, the talks after a vote, the parties in the policy space, and every vote
+     * on record.
+     *
+     * @return array<string, mixed>
+     */
+    public function buildDiet(MacroStateDTO $macro, PoliticsStateDTO $politics): array
+    {
+        $frame = $this->frame($macro, $politics);
+        $context = $frame['context'];
+
+        return $frame['page'] + [
+            'axes' => array_map(static fn(string $axis): array => ['key' => $axis, 'name' => self::AXIS_COLUMNS[$axis]], AerieDiet::AXES),
+            'talks' => $this->talks($politics, $context['talking']),
+            'parties' => $context['parties'],
+            'hemicycle' => $this->hemicycle($context['seats'], $context['parties']),
+            'compass' => $this->compass($context['parties'], $context['history'], $context['coalitionPosition'], $context['coalition']),
+            'history' => array_map(fn(DietElection $election): array => $this->historyRow($election, $macro->totalTime), array_reverse($context['history'])),
+        ];
+    }
+
+    /**
+     * The coming vote's page: the polls since the last one, the market's odds on the government it seats and the laws
+     * that government would pass, and how those odds have moved.
+     *
+     * @return array<string, mixed>
+     */
+    public function buildElection(MacroStateDTO $macro, PoliticsStateDTO $politics): array
+    {
+        $frame = $this->frame($macro, $politics);
+
+        return $frame['page'] + [
+            'polls' => self::polls($politics, $frame['context']['nextElection']),
+            'market' => self::market($politics),
+            'odds' => $this->oddsHistory($politics),
+        ];
+    }
+
+    /**
+     * The budget's page: the laws the cabinet aims for against those in force and what holds them, each law's path
+     * since Year 1, and the listed firms each moves most.
+     *
+     * @return array<string, mixed>
+     */
+    public function buildBudget(MacroStateDTO $macro, PoliticsStateDTO $politics): array
+    {
+        $frame = $this->frame($macro, $politics);
+        $context = $frame['context'];
+
+        return $frame['page'] + [
+            'budget' => $this->budget($macro, $politics, $context['coalition'], $context['support'], $context['talking']),
+            'laws' => $this->laws($politics, $context['history']),
+            'market' => self::market($politics),
+            'exposure' => $this->exposure($macro, $politics),
+        ];
+    }
+
+    /**
+     * The Aerie Council's page: each seat, who holds it and their stances, the Council's and its Appointment Board's
+     * leans, the departments it appoints to, and its powers.
+     *
+     * @return array<string, mixed>
+     */
+    public function buildCouncil(MacroStateDTO $macro, PoliticsStateDTO $politics): array
+    {
+        $page = $this->frame($macro, $politics)['page'];
+
+        return array_replace($page, ['council' => $page['council'] + [
+            'roster' => array_map(static fn(array $seat): array => $seat + [
+                'name' => self::councillorName($politics, $seat),
+                'sinceLabel' => ($politics->councilSeatedAt[$seat['seat'] - 1] ?? $seat['since']) > $seat['since'] + 1e-9
+                    ? self::simDate($politics->councilSeatedAt[$seat['seat'] - 1])
+                    : ($seat['beforeYearOne'] ? 'Before Year 1' : self::simDate($seat['since'])),
+                'termEndsLabel' => self::simDate($seat['termEnds']),
+            ] + (isset($politics->councilBirths[$seat['seat'] - 1], $politics->councilStances[$seat['seat'] - 1]) ? [
+                'age' => (int) floor($macro->totalTime - $politics->councilBirths[$seat['seat'] - 1]),
+                'stance' => MonetaryAuthority::typeName($politics->councilStances[$seat['seat'] - 1], $politics->councilSwingers[$seat['seat'] - 1] ?? 0.0),
+                'leaning' => self::leaning($politics->councilStances[$seat['seat'] - 1], $politics->councilSwingers[$seat['seat'] - 1] ?? 0.0),
+                'banks' => isset($politics->councilRegulationStances[$seat['seat'] - 1])
+                    ? FinancialRegulator::stanceName(FinancialRegulator::requirement($politics->councilRegulationStances[$seat['seat'] - 1]))
+                    : null,
+                'reserves' => isset($politics->councilFundStances[$seat['seat'] - 1])
+                    ? SovereignReserveFund::stanceName(SovereignReserveFund::equityShare($politics->councilFundStances[$seat['seat'] - 1]))
+                    : null,
+            ] : []), AerieCouncil::roster($macro->totalTime)),
+            'board' => $politics->boardMembers === [] ? null : self::stanceCounts(
+                array_map(static fn(array $member): float => $member['stance'], $politics->boardMembers),
+                array_map(static fn(array $member): float => $member['swing'] ?? 0.0, $politics->boardMembers)
+            ) + ['seats' => count($politics->boardMembers), 'median' => MonetaryAuthority::stanceName(CouncilAppointments::boardMedians($politics)[CouncilAppointments::AXIS_MONEY])],
+            'lean' => self::councilLean($politics),
+            'departments' => AerieCouncil::DEPARTMENTS,
+        ]]);
+    }
+
+    /**
+     * The Monetary Authority's page: the governor and the committee, the last decision and the next meeting, and the
+     * rate meeting by meeting.
+     *
+     * @return array<string, mixed>
+     */
+    public function buildAuthority(MacroStateDTO $macro, PoliticsStateDTO $politics): array
+    {
+        return [
+            'simDate' => self::simDate($macro->totalTime),
+            'authority' => $this->authority($politics, true),
+        ];
+    }
+
+    /**
+     * What every government page shares: the date, the cabinet, the next vote, the next Council vacancy and the rules
+     * the copy quotes (the page part); and the Diet as it sits, the parties and the votes on record, which the pages
+     * build their own sections from (the context part).
+     *
+     * @return array{page: array<string, mixed>, context: array{history: list<DietElection>, seats: array<string, int>, coalition: list<string>, support: list<string>, coalitionPosition: array<string, float>, talking: bool, parties: list<array<string, mixed>>, nextElection: float}}
+     */
+    private function frame(MacroStateDTO $macro, PoliticsStateDTO $politics): array
     {
         $history = $this->elections->findChronological();
         $seats = array_map('intval', $politics->dietSeats + array_fill_keys(AerieDiet::PARTIES, 0.0));
@@ -223,7 +362,6 @@ class GovernmentPageBuilder
 
         $blocs = $politics->dietBlocs;
         $leaders = array_values(array_unique($blocs));
-        $parties = $this->partyRows($politics, $history);
 
         $term = PoliticsEngine::ELECTION_TERM_YEARS;
         $nextElection = (floor($macro->totalTime / $term) + 1.0) * $term;
@@ -234,9 +372,8 @@ class GovernmentPageBuilder
             'seats' => $seats[$party],
         ];
 
-        return [
+        $page = [
             'simDate' => self::simDate($macro->totalTime),
-            'axes' => array_map(static fn(string $axis): array => ['key' => $axis, 'name' => self::AXIS_COLUMNS[$axis]], AerieDiet::AXES),
             'government' => [
                 'members' => array_map($member, $coalition),
                 'support' => array_map($member, $support),
@@ -249,7 +386,6 @@ class GovernmentPageBuilder
                 'caretaker' => $talking,
                 'primeMinister' => self::primeMinister($politics),
             ] + $coalitionPosition,
-            'talks' => $this->talks($politics, $talking),
             'election' => [
                 'next' => self::simDate($nextElection),
                 'yearsLeft' => $nextElection - $macro->totalTime,
@@ -277,51 +413,40 @@ class GovernmentPageBuilder
                 ),
                 'loyalists' => array_map(self::midSentenceName(...), AerieDiet::COUNCIL_LOYALISTS),
             ],
-            'budget' => $this->budget($macro, $politics, $coalition, $support, $talking),
-            'parties' => $parties,
-            'hemicycle' => $this->hemicycle($seats, $parties),
-            'compass' => $this->compass($parties, $history, $coalitionPosition, $coalition),
             'council' => [
-                'roster' => array_map(static fn(array $seat): array => $seat + [
-                    'name' => self::councillorName($politics, $seat),
-                    'sinceLabel' => ($politics->councilSeatedAt[$seat['seat'] - 1] ?? $seat['since']) > $seat['since'] + 1e-9
-                        ? self::simDate($politics->councilSeatedAt[$seat['seat'] - 1])
-                        : ($seat['beforeYearOne'] ? 'Before Year 1' : self::simDate($seat['since'])),
-                    'termEndsLabel' => self::simDate($seat['termEnds']),
-                ] + (isset($politics->councilBirths[$seat['seat'] - 1], $politics->councilStances[$seat['seat'] - 1]) ? [
-                    'age' => (int) floor($macro->totalTime - $politics->councilBirths[$seat['seat'] - 1]),
-                    'stance' => MonetaryAuthority::typeName($politics->councilStances[$seat['seat'] - 1], $politics->councilSwingers[$seat['seat'] - 1] ?? 0.0),
-                    'leaning' => self::leaning($politics->councilStances[$seat['seat'] - 1], $politics->councilSwingers[$seat['seat'] - 1] ?? 0.0),
-                    'banks' => isset($politics->councilRegulationStances[$seat['seat'] - 1])
-                        ? FinancialRegulator::stanceName(FinancialRegulator::requirement($politics->councilRegulationStances[$seat['seat'] - 1]))
-                        : null,
-                    'reserves' => isset($politics->councilFundStances[$seat['seat'] - 1])
-                        ? SovereignReserveFund::stanceName(SovereignReserveFund::equityShare($politics->councilFundStances[$seat['seat'] - 1]))
-                        : null,
-                ] : []), AerieCouncil::roster($macro->totalTime)),
                 'nextVacancy' => (static function (array $seat) use ($politics): array {
                     return $seat + ['name' => self::councillorName($politics, $seat), 'termEndsLabel' => self::simDate($seat['termEnds'])];
                 })(AerieCouncil::nextVacancy($macro->totalTime)),
-                'board' => $politics->boardMembers === [] ? null : self::stanceCounts(
-                    array_map(static fn(array $member): float => $member['stance'], $politics->boardMembers),
-                    array_map(static fn(array $member): float => $member['swing'] ?? 0.0, $politics->boardMembers)
-                ) + ['seats' => count($politics->boardMembers), 'median' => MonetaryAuthority::stanceName(CouncilAppointments::boardMedians($politics)[CouncilAppointments::AXIS_MONEY])],
-                'lean' => $politics->councilStances === [] ? null : self::stanceCounts($politics->councilStances, $politics->councilSwingers) + [
-                    'median' => MonetaryAuthority::stanceName(CouncilAppointments::median($politics->councilStances)),
-                    'banks' => $politics->councilRegulationStances === [] ? null : FinancialRegulator::requirement(CouncilAppointments::median($politics->councilRegulationStances)),
-                    'reserves' => $politics->councilFundStances === [] ? null : SovereignReserveFund::equityShare(CouncilAppointments::median($politics->councilFundStances)),
-                ],
-                'departments' => AerieCouncil::DEPARTMENTS,
             ],
-            'authority' => $this->authority($politics),
-            'regulator' => $this->regulator($politics, $macro),
-            'fundHead' => $this->fundHead($politics, $macro),
-            'history' => array_map(fn(DietElection $election): array => $this->historyRow($election, $macro->totalTime), array_reverse($history)),
-            'polls' => self::polls($politics, $nextElection),
-            'laws' => $this->laws($politics, $history),
-            'market' => self::market($politics),
-            'odds' => $this->oddsHistory($politics),
-            'exposure' => $this->exposure($macro, $politics),
+        ];
+
+        return [
+            'page' => $page,
+            'context' => [
+                'history' => $history,
+                'seats' => $seats,
+                'coalition' => $coalition,
+                'support' => $support,
+                'coalitionPosition' => $coalitionPosition,
+                'talking' => $talking,
+                'parties' => $this->partyRows($politics, $history),
+                'nextElection' => $nextElection,
+            ],
+        ];
+    }
+
+    /**
+     * The Council's lean on each of its three questions: its hawks, swing votes and doves on money, and what its middle
+     * councillor would ask of the banks and the reserves. Null before the Council's stances are drawn.
+     *
+     * @return array<string, mixed>|null
+     */
+    private static function councilLean(PoliticsStateDTO $politics): ?array
+    {
+        return $politics->councilStances === [] ? null : self::stanceCounts($politics->councilStances, $politics->councilSwingers) + [
+            'median' => MonetaryAuthority::stanceName(CouncilAppointments::median($politics->councilStances)),
+            'banks' => $politics->councilRegulationStances === [] ? null : FinancialRegulator::requirement(CouncilAppointments::median($politics->councilRegulationStances)),
+            'reserves' => $politics->councilFundStances === [] ? null : SovereignReserveFund::equityShare(CouncilAppointments::median($politics->councilFundStances)),
         ];
     }
 
@@ -1610,7 +1735,7 @@ class GovernmentPageBuilder
      *
      * @return array<string, mixed>|null
      */
-    private function authority(PoliticsStateDTO $politics): ?array
+    private function authority(PoliticsStateDTO $politics, bool $withChart): ?array
     {
         if ($politics->authoritySalt < 0.0) {
             return null;
@@ -1664,7 +1789,7 @@ class GovernmentPageBuilder
                 'lower' => $lower,
             ],
             'nextMeeting' => DistrictCalendar::dateline(self::nextMeeting($time)),
-            'decisions' => $this->decisions === null ? null : self::rateChart($this->decisions->findSince($time - self::RATE_CHART_YEARS), $time),
+            'decisions' => !$withChart || $this->decisions === null ? null : self::rateChart($this->decisions->findSince($time - self::RATE_CHART_YEARS), $time),
             'rules' => [
                 'governorTermYears' => MonetaryAuthority::GOVERNOR_TERM_YEARS,
                 'memberTermYears' => MonetaryAuthority::MEMBER_TERM_YEARS,

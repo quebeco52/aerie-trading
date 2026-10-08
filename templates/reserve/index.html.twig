@@ -16,6 +16,7 @@
 	{% set sleeve_swatch = { 'district': 'bg-series-blue', 'foreign-equities': 'bg-series-orange', 'foreign-bonds': 'bg-series-aqua' } %}
 	<div class="max-w-400 mx-auto px-4 sm:px-6 lg:px-8 pt-8 pb-12 w-full space-y-6" id="reservePage">
 
+		{% include 'government/_breadcrumb.html.twig' with {current: 'Sovereign Reserve Fund'} %}
 		<header class="flex flex-col gap-6 pb-6 border-b border-outline-variant/15">
 				<div class="min-w-0 max-w-2xl">
 					<h1 class="text-2xl md:text-3xl font-semibold text-on-surface tracking-tight">Sovereign Reserve Fund</h1>
@@ -24,7 +25,6 @@
 						listed company's float beside a foreign portfolio of equities and government bonds, and trades only
 						when a weight leaves its band. It runs on published rules, not on a view of the market.
 					</p>
-					<p class="mt-3 text-sm"><a href="/economy" class="text-primary hover:underline underline-offset-2">The District Economy</a></p>
 				</div>
 
 				{# Repainted in place from the live frame by pages/reserve.js. #}

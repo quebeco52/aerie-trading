@@ -1,0 +1,190 @@
+{% extends 'base.html.twig' %}
+
+{% block title %}The budget - Aerie Exchange{% endblock %}
+
+{% block meta %}
+	<meta name="description" content="The Aerie District's budget: the laws the cabinet aims for and those in force, each law's history, and the listed firms each law reaches.">
+	<meta property="og:title" content="The budget | Aerie Exchange">
+	<meta property="og:type" content="website">
+{% endblock %}
+
+{% import 'partials/_ui.html.twig' as ui %}
+{% import 'government/_macros.html.twig' as gov %}
+
+{% block body %}
+	<div class="max-w-400 mx-auto px-4 sm:px-6 lg:px-8 py-5 w-full space-y-5" id="budgetPage">
+
+		{% embed 'government/_header.html.twig' with {title: 'The budget'} %}{% block lead %}The laws the Diet passes at each budget round, every {{ rules.budgetRoundMonths|number_format(0) }} months: what the cabinet aims for, what stands in its way, and what each law costs or brings the listed firms.{% endblock %}{% endembed %}
+
+		<section class="bg-surface-container-low rounded-lg p-5 border border-outline-variant/20" aria-labelledby="budget-heading">
+			<div class="flex flex-col md:flex-row md:items-start md:justify-between gap-3">
+				<div>
+					<h2 id="budget-heading" class="text-sm font-semibold text-on-surface">The budget</h2>
+					<p class="text-2xs text-on-surface-variant mt-0.5">
+						The cabinet legislates its platform at the budget rounds, every {{ rules.budgetRoundMonths|number_format(0) }} months, starting with the round after it takes office.
+						A minority cabinet gets only what its supporters will vote for.
+						Next round: <span class="font-mono tabular-nums">{{ budget.nextRound }}</span>{% if budget.lastBudget %} · last change <span class="font-mono tabular-nums">{{ budget.lastBudget }}</span>{% endif %}.
+					</p>
+				</div>
+				<div class="shrink-0 rounded border px-3 py-2 {{ budget.braking ? 'border-warning/40 bg-warning/5' : 'border-outline-variant/20 bg-surface-container-lowest' }}">
+					<p class="text-xs font-semibold {{ budget.braking ? 'text-warning' : 'text-on-surface-variant' }}">Council debt brake {{ budget.braking ? 'on' : 'off' }}</p>
+					<p class="text-2xs font-mono tabular-nums text-on-surface-variant mt-0.5">
+						Debt {{ budget.debt|pct(1) }} of GDP · line {{ rules.debtBrake|pct(0) }}{% if budget.lastBrake %} · last held a bill {{ budget.lastBrake }}{% endif %}
+					</p>
+				</div>
+			</div>
+
+			<div class="overflow-x-auto mt-4">
+				<table class="w-full text-xs">
+					<thead>
+						<tr class="table-head">
+							<th scope="col" class="text-left font-semibold pb-2">Lever</th>
+							<th scope="col" class="text-right font-semibold pb-2">Cabinet's aim</th>
+							<th scope="col" class="text-right font-semibold pb-2">In force</th>
+							<th scope="col" class="text-left font-semibold pb-2 pl-4">Status</th>
+						</tr>
+					</thead>
+					<tbody class="divide-y divide-outline-variant/10">
+						{% for lever in budget.levers %}
+							<tr>
+								<th scope="row" class="py-2 text-left">
+									<span class="font-semibold text-on-surface">{{ lever.name }}</span>
+									<span class="block text-2xs font-normal text-on-surface-variant">{{ lever.note }}</span>
+								</th>
+								<td class="py-2 text-right font-mono tabular-nums text-on-surface-variant">{{ gov.lever_value(lever, lever.platform) }}</td>
+								<td class="py-2 text-right font-mono tabular-nums font-semibold text-on-surface">{{ gov.lever_value(lever, lever.enacted) }}</td>
+								<td class="py-2 pl-4 text-2xs">
+									{% if lever.status == 'caretaker' %}
+										<span class="font-semibold text-on-surface-variant">Waits on the talks</span>
+										<span class="block text-on-surface-variant">A caretaker cabinet passes no budget</span>
+									{% elseif lever.status == 'held' %}
+										<span class="font-semibold text-warning">Held by the Council</span>
+										<span class="block text-on-surface-variant">A cut in revenue while debt is above the line</span>
+									{% elseif lever.status == 'fund' %}
+										<span class="font-semibold text-warning">Held by the Sovereign Reserve Fund</span>
+										<span class="block text-on-surface-variant">More than {{ rules.reserveDrawCeiling|pct(0) }} is spent only with its consent, given only in a recession</span>
+									{% elseif lever.status == 'blocked' %}
+										<span class="font-semibold text-warning">Blocked by its supporters</span>
+										<span class="block text-on-surface-variant">They will not vote to move it further from their own policy</span>
+									{% elseif lever.status == 'partial' %}
+										<span class="font-semibold text-primary">To {{ gov.lever_value(lever, lever.target) }} at the next budget</span>
+										<span class="block text-on-surface-variant">As far as its supporters will go</span>
+									{% elseif lever.status == 'pending' %}
+										<span class="font-semibold text-primary">At the next budget</span>
+									{% else %}
+										<span class="text-on-surface-variant">Enacted</span>
+									{% endif %}
+								</td>
+							</tr>
+						{% endfor %}
+					</tbody>
+				</table>
+			</div>
+		</section>
+
+		{% if laws %}
+			<section class="bg-surface-container-low rounded-lg p-5 border border-outline-variant/20" aria-labelledby="laws-heading">
+				<h2 id="laws-heading" class="text-sm font-semibold text-on-surface">The laws over time</h2>
+				<p class="text-2xs text-on-surface-variant mt-0.5">Each law as it stood at the close of every quarter since {{ laws.since }}, and today. The shading marks the cabinet in office, in the colour of the party that led it.</p>
+				<ul class="flex flex-wrap gap-x-5 gap-y-1 mt-3 text-2xs text-on-surface-variant">
+					{% for cabinet in laws.cabinets %}
+						<li class="inline-flex items-center gap-1.5"><span class="w-3 h-2.5 rounded-sm shrink-0" style="background-color: {{ cabinet.color }}; opacity: 0.3" aria-hidden="true"></span><span class="text-on-surface">{{ cabinet.members|join(', ') }}</span><span class="font-mono tabular-nums">{{ cabinet.fromLabel }} – {{ cabinet.toLabel }}</span></li>
+					{% endfor %}
+				</ul>
+				<div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-x-6 gap-y-5 mt-4">
+					{% for chart in laws.charts %}
+						<figure>
+							<figcaption class="flex justify-between gap-3 text-xs">
+								<span class="font-semibold text-on-surface">{{ chart.name }}</span>
+								<span class="font-mono tabular-nums text-on-surface">{{ gov.lever_value(chart, chart.now) }}</span>
+							</figcaption>
+							<svg viewBox="0 0 300 84" class="w-full mt-1" role="img" aria-label="{{ chart.name }} since {{ laws.since }}: from {{ gov.lever_value(chart, chart.low.value) }} to {{ gov.lever_value(chart, chart.high.value) }}, {{ gov.lever_value(chart, chart.now) }} today">
+								{% for cabinet in laws.cabinets %}
+									<rect x="{{ cabinet.x0 }}" y="{{ laws.plot[2] }}" width="{{ cabinet.x1 - cabinet.x0 }}" height="{{ laws.plot[3] - laws.plot[2] }}" fill="{{ cabinet.color }}" fill-opacity="0.09"><title>{{ cabinet.members|join(', ') }}, {{ cabinet.fromLabel }} – {{ cabinet.toLabel }}</title></rect>
+									{% if not loop.first %}
+										{# A change of cabinet, so two in a row led by one party still read as two. #}
+										<line x1="{{ cabinet.x0 }}" y1="{{ laws.plot[2] }}" x2="{{ cabinet.x0 }}" y2="{{ laws.plot[3] }}" class="stroke-outline-variant" stroke-width="0.6" stroke-dasharray="2 2"></line>
+									{% endif %}
+								{% endfor %}
+								<line x1="{{ laws.plot[0] }}" y1="{{ laws.plot[3] }}" x2="{{ laws.plot[1] }}" y2="{{ laws.plot[3] }}" class="stroke-outline-variant" stroke-width="0.8"></line>
+								<text x="{{ laws.plot[0] - 4 }}" y="{{ chart.high.y + 3 }}" text-anchor="end" font-size="8" class="fill-on-surface-variant">{{ gov.lever_value(chart, chart.high.value) }}</text>
+								{% if not chart.flat %}
+									<text x="{{ laws.plot[0] - 4 }}" y="{{ chart.low.y + 3 }}" text-anchor="end" font-size="8" class="fill-on-surface-variant">{{ gov.lever_value(chart, chart.low.value) }}</text>
+								{% endif %}
+								{% for year in laws.years %}
+									<line x1="{{ year.x }}" y1="{{ laws.plot[3] }}" x2="{{ year.x }}" y2="{{ laws.plot[3] + 3 }}" class="stroke-outline-variant" stroke-width="0.8"></line>
+									<text x="{{ year.x }}" y="{{ laws.plot[3] + 13 }}" text-anchor="middle" font-size="8" class="fill-on-surface-variant">{{ year.label }}</text>
+								{% endfor %}
+								<polyline points="{{ chart.line }}" fill="none" class="stroke-primary" stroke-width="1.5" stroke-linejoin="round"></polyline>
+							</svg>
+							<p class="text-2xs text-on-surface-variant">{{ chart.changes == 0 ? 'Unchanged over the period' : (chart.changes == 1 ? 'Changed once' : 'Changed ' ~ chart.changes ~ ' times') }}</p>
+						</figure>
+					{% endfor %}
+				</div>
+				<p class="source-note mt-4">{{ source_line('exchequer', 'financial-regulator') }}</p>
+			</section>
+		{% endif %}
+
+		{% if exposure %}
+			{# What each law does to the firms it reaches, on the bases and measures the market prices it with (LawExposureBuilder). #}
+			<section class="bg-surface-container-low rounded-lg p-5 border border-outline-variant/20" aria-labelledby="exposure-heading">
+				<h2 id="exposure-heading" class="text-sm font-semibold text-on-surface">Firms most exposed to each law</h2>
+				<p class="text-2xs text-on-surface-variant mt-0.5">
+					What each law in force adds to or takes from a firm's year after tax, against no such law, as a share of its last four quarters' earnings{% if market %}, and what the law traders expect at the first budget, {{ market.takesEffect }}, would change{% endif %}.
+					{% if exposure.corporateTax %}
+						{% if exposure.corporateTax.moves %}
+							The corporate tax reaches every firm: a rate of <span class="font-mono tabular-nums">{{ exposure.corporateTax.expected|pct(1) }}</span> against <span class="font-mono tabular-nums">{{ exposure.corporateTax.inForce|pct(1) }}</span> in force would change after-tax earnings by <span class="font-mono tabular-nums {{ exposure.corporateTax.earnings|signed_class }}">{{ exposure.corporateTax.earnings|pct(1, true) }}</span> at every firm taxed at the full rate.
+						{% else %}
+							The corporate tax reaches every firm alike, and traders expect no change to it.
+						{% endif %}
+					{% endif %}
+					The tariff, the merger review line, housing schemes refused, labour force growth and the share of reserve returns spent reach firms through the economy as a whole, not through a charge on their own accounts.
+				</p>
+				<div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-4">
+					{% for law in exposure.laws %}
+						<div>
+							<h3 class="text-xs font-semibold text-on-surface">{{ law.name }}</h3>
+							<p class="text-2xs text-on-surface-variant mt-0.5">
+								{{ law.note }}
+								{% if law.lever == 'bankLevyRate' and law.firms is not empty %}Listed banks owe <span class="font-mono tabular-nums">{{ (-law.total)|format_large('$') }}</span> a year.{% endif %}
+								{% if market and not law.expectedMoves %}Traders expect no change to it.{% endif %}
+							</p>
+							{% if law.firms is empty %}
+								<p class="text-xs text-on-surface-faint mt-2">No listed firm answers to it.</p>
+							{% else %}
+								<div class="overflow-x-auto">
+									<table class="w-full text-xs mt-2">
+										<thead>
+											<tr class="table-head">
+												<th scope="col" class="text-left font-semibold pb-2">Firm</th>
+												<th scope="col" class="text-right font-semibold pb-2">A year</th>
+												<th scope="col" class="text-right font-semibold pb-2">Of earnings</th>
+												{% if law.expectedMoves %}<th scope="col" class="text-right font-semibold pb-2">If passed</th>{% endif %}
+											</tr>
+										</thead>
+										<tbody class="divide-y divide-outline-variant/10">
+											{% for firm in law.firms %}
+												<tr>
+													<th scope="row" class="py-1.5 text-left font-normal">
+														<a href="{{ path('app_stock_view', {ticker: firm.ticker}) }}" class="font-mono text-primary hover:underline">{{ firm.ticker }}</a>
+														<span class="text-on-surface-variant">{{ firm.name }}</span>
+													</th>
+													<td class="py-1.5 text-right font-mono tabular-nums {{ firm.now|signed_class }}">{{ firm.now > 0 ? '+' : '' }}{{ firm.now|format_large('$') }}</td>
+													<td class="py-1.5 text-right font-mono tabular-nums {{ firm.nowShare is null ? 'text-on-surface-faint' : firm.nowShare|signed_class }}">{{ firm.nowShare is null ? '—' : firm.nowShare|pct(1, true) }}</td>
+													{% if law.expectedMoves %}
+														<td class="py-1.5 text-right font-mono tabular-nums {{ firm.changeShare is null ? 'text-on-surface-faint' : firm.changeShare|signed_class }}">{{ firm.changeShare is null ? '—' : firm.changeShare|pct(1, true) }}</td>
+													{% endif %}
+												</tr>
+											{% endfor %}
+										</tbody>
+									</table>
+								</div>
+								{% if law.more > 0 %}<p class="text-2xs text-on-surface-variant mt-1">And {{ law.more }} more {{ law.more == 1 ? 'firm' : 'firms' }} it reaches less.</p>{% endif %}
+							{% endif %}
+						</div>
+					{% endfor %}
+				</div>
+			</section>
+		{% endif %}
+	</div>
+{% endblock %}
