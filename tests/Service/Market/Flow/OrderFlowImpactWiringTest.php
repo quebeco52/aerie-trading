@@ -271,6 +271,29 @@ class OrderFlowImpactWiringTest extends TestCase
         $this->assertEqualsWithDelta($program - $expectedSlice, $stock->getCorporateFlowBacklog(), 1e-6, 'The slice executed comes off the backlog.');
     }
 
+    /**
+     * Executing an announced program supplies liquidity and carries no news (Hillert, Maug & Obernberger 2016), so the
+     * company's own slice moves the price at the peak and then relaxes all the way back: none of it stays.
+     */
+    public function testACompanysOwnProgramLeavesNoPermanentImpact(): void
+    {
+        $stock = $this->stock();
+        $tracker = $this->tracker();
+        $dt = 1.0 / 14400.0;
+        $slice = $this->liquidity->averageDailyVolume($stock) * FinancialConstants::CORPORATE_FLOW_MAX_ADV_SHARE_PER_DAY
+            * $dt * FinancialConstants::TRADING_DAYS_PER_YEAR * 0.5;
+        $stock->setCorporateFlowBacklog($slice);
+
+        $tracker->updateStocks([$stock], $dt, false, new MacroStateDTO());
+        $this->assertEqualsWithDelta(100.0 * exp($this->liquidity->peakImpact($stock, $slice)), (float) $stock->getPrice(), 1e-9);
+
+        $halfLife = FinancialConstants::TRANSIENT_IMPACT_HALF_LIFE_YEARS;
+        for ($tick = 0; $tick < 400; $tick++) {
+            $tracker->updateStocks([$stock], $halfLife / 10.0, false, new MacroStateDTO());
+        }
+        $this->assertEqualsWithDelta(100.0, (float) $stock->getPrice(), 1e-9);
+    }
+
     public function testAnOfferingsFlowbackSellsDownAndASmallProgramFinishesInOneTick(): void
     {
         $stock = $this->stock();
@@ -518,6 +541,45 @@ class OrderFlowImpactWiringTest extends TestCase
 
         $this->assertGreaterThan(100.0, (float) $stock->getPrice(), 'The fund\'s buying moves the price.');
         $this->assertSame(0.0, $stock->getImpactVarianceEma(), 'A flow that hits every name at once is systematic, not this name\'s own variance.');
+    }
+
+    public function testTheMarketVarianceTrendIsMeasuredFromWhereTheMarketSettles(): void
+    {
+        $captured = null;
+        $tracker = $this->tracker($captured);
+        $dt = 1.0 / 252.0;
+
+        $tracker->updateStocks([$this->stock()], $dt, false, new MacroStateDTO(marketVolatility: 0.30));
+
+        $anchor = \App\Service\Macro\MacroEngine::MACRO_VOL_BASE_ANCHOR;
+        $expected = MathUtility::ewmaLevel($anchor * $anchor, 0.09, $dt, MarketEngine::MARKET_VARIANCE_TREND_YEARS);
+        $this->assertNotNull($captured);
+        $this->assertEqualsWithDelta($expected, $captured->marketVarianceTrend, 1e-15);
+        $this->assertGreaterThan($anchor * $anchor, $captured->marketVarianceTrend, 'A turbulent tick lifts the trend, slowly.');
+    }
+
+    public function testTheSovereignFundsImpactIsChargedToTheSystematicBudget(): void
+    {
+        $stock = $this->stock();
+        $boardFloat = 100.0 * 1.0e8 * 0.90;
+        $captured = null;
+        $tracker = $this->tracker($captured);
+        $dt = 1.0 / 14400.0;
+
+        $tracker->updateStocks([$stock], $dt, false, new MacroStateDTO(sovereignFundTrade: 0.002 * $boardFloat, boardFloatCap: $boardFloat));
+        $this->assertNotNull($captured);
+        $this->assertSame(0.0, $captured->fundImpactVariance, 'Nothing measured before the first trade.');
+        // The peak move lands in full on the tick, so the price's move is the fund's whole peak impact.
+        $fundMove = log((float) $stock->getPrice() / 100.0);
+
+        $tracker->updateStocks([$stock], $dt, false, new MacroStateDTO());
+
+        // The permanent share of the fund's move, annualized into the EMA, reaches the next tick's pricing; the
+        // name's own idiosyncratic budget is still untouched.
+        $expected = MathUtility::ewmaAnnualizedVariance(0.0, FinancialConstants::PERMANENT_IMPACT_SHARE * $fundMove, $dt, FinancialConstants::IMPACT_VARIANCE_EMA_YEARS);
+        $this->assertEqualsWithDelta($expected, $captured->fundImpactVariance, 1e-9 * $expected);
+        $this->assertGreaterThan(0.0, $captured->fundImpactVariance);
+        $this->assertSame(0.0, $stock->getImpactVarianceEma());
     }
 
     public function testTheBoardIsReportedAsTheSovereignFundReadsIt(): void

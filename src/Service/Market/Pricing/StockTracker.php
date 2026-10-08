@@ -15,6 +15,7 @@ use App\Service\Market\Flow\OrderFlowStoreInterface;
 use App\Service\Math\CorporateMetrics;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\MathUtility;
+use App\Service\Macro\MacroEngine;
 use App\Service\Market\Index\IndexCommittee;
 
 /**
@@ -35,8 +36,14 @@ class StockTracker
     /** Market vol of the last tick priced, at which every stored variance was built; null before the first. */
     private ?float $priorMarketVol = null;
 
+    /** Measured trend of market variance (an EMA over a business cycle); null before the first tick. */
+    private ?float $marketVarianceTrend = null;
+
     /** @var array<string, float> Each name's transient impact still in its price, as a log displacement; lives as long as the ticker process. */
     private array $transientImpact = [];
+
+    /** @var array<string, float> Annualized variance the sovereign fund's impact has supplied to each name (EMA); the market factor gives it back. */
+    private array $fundImpactVariance = [];
 
     /**
      * Constructor.
@@ -97,6 +104,13 @@ class StockTracker
         // Each name's stored variance was built at last tick's market vol and is stripped at it.
         $priorMarketVol = $this->priorMarketVol;
         $this->priorMarketVol = $marketVol;
+        // The market variance trend the common idiosyncratic factor is read against, seeded where the market settles.
+        $this->marketVarianceTrend = MathUtility::ewmaLevel(
+            $this->marketVarianceTrend ?? (MacroEngine::MACRO_VOL_BASE_ANCHOR ** 2),
+            $marketVol * $marketVol,
+            $dt,
+            MarketEngine::MARKET_VARIANCE_TREND_YEARS
+        );
         // The stamp duty the Diet has in force thins every name's turnover, and so its depth, this tick.
         $this->liquidityEngine->setStampDutyRate($macroDTO->stampDutyRate);
 
@@ -226,7 +240,7 @@ class StockTracker
             $priceAtTickStart = (float) $stock->getPrice();
             $floatCapAtTickStart = IndexCommittee::floatAdjustedCap($stock);
 
-            $pricingCtx = \App\DTO\MarketPricingContext::forStock($stock, $macroDTO, $health, $this->anchorStakes, $dt, $maShock, $priorMarketVol);
+            $pricingCtx = \App\DTO\MarketPricingContext::forStock($stock, $macroDTO, $health, $this->anchorStakes, $dt, $maShock, $priorMarketVol, $this->fundImpactVariance[$stock->getTicker()] ?? 0.0, $this->marketVarianceTrend);
 
             // Calculate new price (GBM + SVJJ)
             $calculation = $this->marketEngine->calculateNextPrice($pricingCtx);
@@ -244,8 +258,9 @@ class StockTracker
 
             // The company's own program — a repurchase still being executed, or issued stock still being
             // distributed — is worked off at the 10b-18 pace and joins the tick's flow here. It is a buyer
-            // or seller like any other and is charged the same impact; the invented per-report shock it
+            // or seller like any other and is charged the same peak impact; the invented per-report shock it
             // replaces charged the price for a quarter's buying in a single tick with no slippage.
+            $corporateSlice = 0.0;
             $corporateBacklog = $stock->getCorporateFlowBacklog();
             if ($corporateBacklog !== 0.0) {
                 $corporateSlice = $this->liquidityEngine->corporateFlowSlice($stock, $corporateBacklog, $dt);
@@ -260,6 +275,8 @@ class StockTracker
 
             $impactLogReturn = 0.0;
             $budgetedImpactLogReturn = 0.0;
+            $budgetedFundLogReturn = 0.0;
+            $corporateLogReturn = 0.0;
             $outstandingTransient = $this->transientImpact[$stock->getTicker()] ?? 0.0;
 
             if ($tickFlow !== 0.0 || $fundShares !== 0.0) {
@@ -276,19 +293,33 @@ class StockTracker
                     min(FinancialConstants::MAX_TICK_IMPACT_LOG_RETURN, $flowImpact + $fundImpact)
                 );
                 // Impact is linear in the quantity, so the fund's part separates exactly. It hits every name at
-                // once, which makes it SYSTEMATIC: the budget below is the name's idiosyncratic one and must not
-                // be charged for it, or every rebalance would quietly shrink single-name volatility.
+                // once, which makes it SYSTEMATIC: it is charged to the market factor's budget, never the name's
+                // idiosyncratic one, or every rebalance would quietly shrink single-name volatility.
                 // Only the share that stays is long-run variance; the transient part washes out within days.
-                $budgetedImpactLogReturn = FinancialConstants::PERMANENT_IMPACT_SHARE * max(
+                // The company's own slice stays only at CORPORATE_FLOW_PERMANENT_IMPACT_SHARE: its part of the clamped
+                // peak is tracked so the rest of it is moved into the transient book below and kept out of the budget.
+                $corporateImpact = $corporateSlice !== 0.0 ? $this->liquidityEngine->peakImpact($stock, $corporateSlice) : 0.0;
+                $peakImpact = $flowImpact + $fundImpact;
+                $corporateLogReturn = $peakImpact !== 0.0 ? $impactLogReturn * ($corporateImpact / $peakImpact) : 0.0;
+                $budgetedImpactLogReturn = (FinancialConstants::PERMANENT_IMPACT_SHARE * max(
                     -FinancialConstants::MAX_TICK_IMPACT_LOG_RETURN,
-                    min(FinancialConstants::MAX_TICK_IMPACT_LOG_RETURN, $flowImpact)
+                    min(FinancialConstants::MAX_TICK_IMPACT_LOG_RETURN, $flowImpact - $corporateImpact)
+                )) + (FinancialConstants::CORPORATE_FLOW_PERMANENT_IMPACT_SHARE * max(
+                    -FinancialConstants::MAX_TICK_IMPACT_LOG_RETURN,
+                    min(FinancialConstants::MAX_TICK_IMPACT_LOG_RETURN, $corporateImpact)
+                ));
+                $budgetedFundLogReturn = FinancialConstants::PERMANENT_IMPACT_SHARE * max(
+                    -FinancialConstants::MAX_TICK_IMPACT_LOG_RETURN,
+                    min(FinancialConstants::MAX_TICK_IMPACT_LOG_RETURN, $fundImpact)
                 );
             }
 
-            // The peak move lands now; its transient share then relaxes back at the resilience rate, every tick.
-            $nextTransient = LiquidityEngine::transientImpactAfter($outstandingTransient, $impactLogReturn, $dt);
+            // The peak move lands now; its transient share then relaxes back at the resilience rate, every tick. The
+            // company's own slice moves from the permanent share to the transient one.
+            $corporateShift = (FinancialConstants::PERMANENT_IMPACT_SHARE - FinancialConstants::CORPORATE_FLOW_PERMANENT_IMPACT_SHARE) * $corporateLogReturn;
+            $nextTransient = LiquidityEngine::transientImpactAfter($outstandingTransient, $impactLogReturn, $dt) + $corporateShift;
             $this->transientImpact[$stock->getTicker()] = $nextTransient;
-            $impactPriceMove = (FinancialConstants::PERMANENT_IMPACT_SHARE * $impactLogReturn) + ($nextTransient - $outstandingTransient);
+            $impactPriceMove = (FinancialConstants::PERMANENT_IMPACT_SHARE * $impactLogReturn) - $corporateShift + ($nextTransient - $outstandingTransient);
             if ($impactPriceMove !== 0.0) {
                 $newPrice = max(0.01, $newPrice * exp($impactPriceMove));
             }
@@ -303,6 +334,12 @@ class StockTracker
                     $dt,
                     FinancialConstants::IMPACT_VARIANCE_EMA_YEARS
                 ));
+                $this->fundImpactVariance[$stock->getTicker()] = MathUtility::ewmaAnnualizedVariance(
+                    $this->fundImpactVariance[$stock->getTicker()] ?? 0.0,
+                    $budgetedFundLogReturn,
+                    $dt,
+                    FinancialConstants::IMPACT_VARIANCE_EMA_YEARS
+                );
             }
 
             $stock->setPrice((string) $newPrice);
@@ -324,6 +361,14 @@ class StockTracker
             }
 
             $currentPriceAfterEarnings = (float) $stock->getPrice();
+
+            // A report or a warning restates the books after the price step struck fair value on the old ones.
+            // Re-strike on what was filed, so the analysts and agents who act on it this tick read the news.
+            if ($generatedEvents !== null || !empty($warning)) {
+                $calculation = array_replace($calculation, $this->marketEngine->strikeFairValue(
+                    \App\DTO\MarketPricingContext::forStock($stock, $macroDTO, $this->debtEngine->analyzeDebtHealth($stock, $macroDTO), $this->anchorStakes, 0.0, 0.0, $priorMarketVol)
+                ));
+            }
 
             // TOTAL RETURN OF THE TICK
             // The report pays the dividend and takes it off the price in the same step. A holder was paid

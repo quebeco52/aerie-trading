@@ -135,10 +135,12 @@ class BiotechBusinessModelTest extends TestCase
 
         // A fully off-patent (generic) manufacturer: no revenue under exclusivity.
         $generic = $this->makeStock([BiotechBusinessModel::STATE_PROTECTED_SHARE => 0.0]);
-        $this->assertSame(BiotechBusinessModel::GENERIC_SECULAR_GROWTH_RATE, $model->getSecularGrowthRate($generic));
+        $this->assertEqualsWithDelta(BiotechBusinessModel::genericSecularGrowthRate(), $model->getSecularGrowthRate($generic), 1e-15);
+        $this->assertEqualsWithDelta(\App\Service\Macro\MacroEngine::TREND_REAL_GROWTH + (log(0.00502 / 0.00518) / 8.0), BiotechBusinessModel::genericSecularGrowthRate(), 1e-15, 'Generic spending lost share of GDP 2010-2018.');
 
         $branded = $this->makeStock([BiotechBusinessModel::STATE_PROTECTED_SHARE => 1.0]);
-        $this->assertSame(BiotechBusinessModel::PATENTED_SECULAR_GROWTH_RATE, $model->getSecularGrowthRate($branded));
+        $this->assertEqualsWithDelta(BiotechBusinessModel::patentedSecularGrowthRate(), $model->getSecularGrowthRate($branded), 1e-15);
+        $this->assertEqualsWithDelta(\App\Service\Macro\MacroEngine::TREND_REAL_GROWTH + (log(0.01729 / 0.01190) / 19.0), BiotechBusinessModel::patentedSecularGrowthRate(), 1e-15, 'Prescription spending gained share of GDP 2000-2019.');
     }
 
     public function testContinuousPipelineProgressImpactsVariableCosts(): void
@@ -572,8 +574,9 @@ class BiotechBusinessModelTest extends TestCase
         $this->assertEquals(0.015, $model->getMoatSpread());
         $this->assertEquals(0.125, $model->getCapExCompletionRate($stock));
 
-        // Default branded book (85% protected): 0.010 + (0.045 - 0.010) * 0.85 = 0.03975
-        $this->assertEqualsWithDelta(0.03975, $model->getSecularGrowthRate($stock), 1e-9);
+        // Default branded book (85% protected): generic + (patented - generic) * 0.85.
+        $generic = BiotechBusinessModel::genericSecularGrowthRate();
+        $this->assertEqualsWithDelta($generic + ((BiotechBusinessModel::patentedSecularGrowthRate() - $generic) * 0.85), $model->getSecularGrowthRate($stock), 1e-12);
 
         $weights = $model->getSurpriseBlendWeights();
         $this->assertEquals(0.20, $weights['eps_weight']);

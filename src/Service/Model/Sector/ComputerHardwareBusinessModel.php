@@ -55,8 +55,8 @@ class ComputerHardwareBusinessModel extends StandardCorporateBusinessModel
     }
 
     // --- Balance Sheet Realism ---
-    /** Stock-based compensation as a fraction of revenue (ASC 718): non-cash, added back to FCF, settled in new shares. Hardware engineering talent paid partly in equity. */
-    public const STOCK_COMPENSATION_INTENSITY = 0.04;
+    /** Stock-based compensation (ASC 718) as a share of revenue: Computers/Peripherals, 2.47% of revenue, 36 firms (Damodaran, Employee data by industry, US, January 2026). */
+    public const STOCK_COMPENSATION_INTENSITY = 0.0247;
 
     // --- Dual-Stream Architecture ---
     /** Baseline fraction of revenue derived from high-margin enterprise B2B sales. */

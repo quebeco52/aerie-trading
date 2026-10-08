@@ -79,6 +79,25 @@ class MathUtilityTest extends TestCase
         $this->assertLessThan(0.0, $compensator);
     }
 
+    public function testKouTruncatedMeanMatchesASimulatedDrawAndTheUncappedMeanFarFromTheCap(): void
+    {
+        $this->assertEqualsWithDelta((0.35 / 400.0) - (0.65 / 280.0), $this->mathUtility->kouTruncatedMean(0.35, 400.0, 280.0, 0.2624, 0.3567), 1.0e-9);
+
+        mt_srand(910);
+        $pUp = 0.40;
+        $etaUp = 1.0 / 0.10;
+        $etaDown = 1.0 / 0.125;
+        $draws = 400000;
+        $sum = 0.0;
+        for ($i = 0; $i < $draws; $i++) {
+            $sum += $this->mathUtility->generateUniform() < $pUp
+                ? min($this->mathUtility->generateExponential($etaUp), 0.2624)
+                : max(-$this->mathUtility->generateExponential($etaDown), -0.3567);
+        }
+
+        $this->assertEqualsWithDelta($this->mathUtility->kouTruncatedMean($pUp, $etaUp, $etaDown, 0.2624, 0.3567), $sum / $draws, 0.001);
+    }
+
     public function testKouTruncatedCompensatorMatchesASimulatedDraw(): void
     {
         mt_srand(909);
@@ -1234,33 +1253,6 @@ class MathUtilityTest extends TestCase
         $this->assertLessThan(1.0, $downJump['price_multiplier']);
         $this->assertLessThan(0.0, $downJump['shock_pct']);
         $this->assertGreaterThan(0.0, $downJump['var_jump']);
-    }
-
-    public function testCalculateKalmanSmoothedEps(): void
-    {
-        // 1. Stable environment: High asset volatility (noisy measurement) + Low macro uncertainty (trust prior)
-        $structuralEps = 5.00;
-        $noisyQuarterlyEps = 8.00;
-        $smoothedStable = $this->mathUtility->calculateKalmanSmoothedEps(
-            structuralEps: $structuralEps,
-            quarterlyEps: $noisyQuarterlyEps,
-            assetVolatility: 0.50, // Measurement variance = 1.0
-            macroUncertainty: 0.01  // Prior variance = 0.01 -> Kalman Gain ~ 0.01 / 1.01 ~ 0.01
-        );
-        // Should heavily weight towards structural EPS (5.00)
-        $this->assertLessThan(5.50, $smoothedStable);
-        $this->assertGreaterThan(5.00, $smoothedStable);
-
-        // 2. Volatile crisis environment: Low asset volatility (trusted measurement) + High macro uncertainty (distrusted prior)
-        $smoothedCrisis = $this->mathUtility->calculateKalmanSmoothedEps(
-            structuralEps: $structuralEps,
-            quarterlyEps: $noisyQuarterlyEps,
-            assetVolatility: 0.01, // Measurement variance = 0.02
-            macroUncertainty: 0.50  // Prior variance = 0.50 -> Kalman Gain ~ 0.50 / 0.52 ~ 0.96
-        );
-        // Should heavily weight towards new measurement (8.00)
-        $this->assertGreaterThan(7.50, $smoothedCrisis);
-        $this->assertLessThanOrEqual(8.00, $smoothedCrisis);
     }
 
     public function testCalculateWACC(): void
@@ -2532,21 +2524,22 @@ class MathUtilityTest extends TestCase
         $this->assertSame(0.20, MathUtility::ewmaLevel(null, 0.20, 0.25, 5.0));
     }
 
-    public function testExpectedNominalGrowthCarriesTheCycleAndCapsOnlyThePerpetualPartAtTrend(): void
+    public function testExpectedNominalGrowthCarriesTheCycleAndPricesTheSecularExcessAsItFades(): void
     {
         $trend = MacroEngine::TREND_REAL_GROWTH;
         // Boom: trend secular growth + half of a 2% gap at beta 1, plus 2% inflation. The cycle is transitory and passes.
-        $this->assertEqualsWithDelta($trend + 0.01 + 0.02, $this->mathUtility->calculateExpectedNominalGrowth($trend, 0.02, 1.0, 0.02, 0.0), 1e-12);
+        $this->assertEqualsWithDelta($trend + 0.01 + 0.02, $this->mathUtility->calculateExpectedNominalGrowth($trend, 0.02, 1.0, 0.02, 0.09), 1e-12);
         // Bust at the same beta takes the same amount off.
-        $this->assertEqualsWithDelta($trend - 0.01 + 0.02, $this->mathUtility->calculateExpectedNominalGrowth($trend, -0.02, 1.0, 0.02, 0.0), 1e-12);
-        // Stagflation drag reaches a firm with no moat and is offset by pricing power.
-        $this->assertLessThan(
-            $this->mathUtility->calculateExpectedNominalGrowth($trend, 0.0, 1.0, 0.06, 1.0),
-            $this->mathUtility->calculateExpectedNominalGrowth($trend, 0.0, 1.0, 0.06, 0.0)
-        );
-        // No sector outgrows the economy forever: a 10% secular rate is priced at trend (Damodaran stable growth).
-        $this->assertEqualsWithDelta($trend + 0.02, $this->mathUtility->calculateExpectedNominalGrowth(0.10, 0.0, 1.0, 0.02, 0.0), 1e-12);
-        $this->assertSame(0.0, $this->mathUtility->calculateExpectedNominalGrowth(-0.10, 0.0, 1.0, 0.0, 0.0));
+        $this->assertEqualsWithDelta($trend - 0.01 + 0.02, $this->mathUtility->calculateExpectedNominalGrowth($trend, -0.02, 1.0, 0.02, 0.09), 1e-12);
+        // No sector outgrows the economy forever: an excess over trend fades at the secular half-life, so a 10% secular
+        // rate is priced at its perpetual equivalent, above trend and well below 10% (Fuller & Hsia 1984).
+        $priced = $this->mathUtility->calculateExpectedNominalGrowth(0.10, 0.0, 1.0, 0.02, 0.09) - 0.02;
+        $spread = 0.09 - 0.02 - $trend;
+        $fade = M_LN2 / FinancialConstants::SECULAR_EXCESS_HALF_LIFE_YEARS;
+        $this->assertEqualsWithDelta($trend + ((0.10 - $trend) * $spread / ($spread + $fade)), $priced, 1e-12);
+        $this->assertGreaterThan($trend, $priced);
+        $this->assertLessThan($trend + (0.5 * (0.10 - $trend)), $priced);
+        $this->assertSame(0.0, $this->mathUtility->calculateExpectedNominalGrowth(-0.10, 0.0, 1.0, 0.0, 0.09));
     }
 
     /**
@@ -2564,13 +2557,13 @@ class MathUtilityTest extends TestCase
 
     public function testManagementAndTheMarketStrikeTheSameFairValueMultiple(): void
     {
-        $growth = $this->mathUtility->calculateFundableGrowth($this->mathUtility->calculateExpectedNominalGrowth(0.03, 0.01, 1.2, 0.025, 0.02), 0.18, 0.40, 0.025);
+        $growth = $this->mathUtility->calculateFundableGrowth($this->mathUtility->calculateExpectedNominalGrowth(0.03, 0.01, 1.2, 0.025, 0.09), 0.18, 0.40, 0.025);
         $market = $this->mathUtility->calculateQualityAdjustedFairValuePE(0.09, 0.18, $growth, 22.0, 0.04);
-        $management = $this->mathUtility->calculateManagementFairValuePE(0.09, 0.18, 0.03, 0.01, 1.2, 0.025, 0.02, 22.0, 0.04, 0.40);
+        $management = $this->mathUtility->calculateManagementFairValuePE(0.09, 0.18, 0.03, 0.01, 1.2, 0.025, 22.0, 0.04, 0.40);
 
         $this->assertSame($market, $management);
         // A payout that leaves too little to fund the outlook lowers management's multiple exactly as the market's.
-        $this->assertLessThan($management, $this->mathUtility->calculateManagementFairValuePE(0.09, 0.18, 0.03, 0.01, 1.2, 0.025, 0.02, 22.0, 0.04, 0.95));
+        $this->assertLessThan($management, $this->mathUtility->calculateManagementFairValuePE(0.09, 0.18, 0.03, 0.01, 1.2, 0.025, 22.0, 0.04, 0.95));
         // The Sloan discount is inside the shared figure, floored at the distressed multiple.
         $clean = $this->mathUtility->calculateQualityAdjustedFairValuePE(0.09, 0.18, $growth, 22.0, 0.0);
         $this->assertEqualsWithDelta($clean - 0.04 * FinancialConstants::ACCRUALS_ANOMALY_PE_PENALTY_SCALE, $market, 1e-12);
@@ -2823,13 +2816,9 @@ class MathUtilityTest extends TestCase
         $math = new MathUtility();
         $target = MacroEngine::TARGET_INFLATION;
 
-        self::assertEqualsWithDelta(0.02 + $target, $math->calculateExpectedNominalGrowth(0.02, 0.0, 1.0, $target, 0.0), 1e-12);
-        // Above target, only the part pricing power cannot offset is lost from real growth.
-        self::assertEqualsWithDelta(
-            0.02 - ((0.04 - $target) * 0.6) + 0.04,
-            $math->calculateExpectedNominalGrowth(0.02, 0.0, 1.0, 0.04, 0.4),
-            1e-12
-        );
+        self::assertEqualsWithDelta(0.02 + $target, $math->calculateExpectedNominalGrowth(0.02, 0.0, 1.0, $target, 0.09), 1e-12);
+        // Above target too: no firm's priced growth loses real growth to inflation its earnings pass through.
+        self::assertEqualsWithDelta(0.02 + 0.04, $math->calculateExpectedNominalGrowth(0.02, 0.0, 1.0, 0.04, 0.09), 1e-12);
     }
 
     /** A sector's demand drift is the annual log change in its GDP share; a share that does not move adds nothing. */

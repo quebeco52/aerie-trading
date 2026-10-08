@@ -52,14 +52,12 @@ final class PriceFactorTransmissionTest extends TestCase
         float $sectorZ = 0.0,
         float $marketJumpMultiplier = 1.0,
         float $beta = 1.0,
-        float $recentPriceTrend = 0.0,
         float $currentPrice = 60.0
     ): float {
         $ctx = new MarketPricingContext(
             currentPrice: $currentPrice,
             currentVolatility: 0.25,
             longTermVolatility: 0.25,
-            earningsPerShare: 5.0,
             dt: 1.0 / 252.0,
             lambda: 0.0,
             jumpVol: 0.10,
@@ -75,7 +73,6 @@ final class PriceFactorTransmissionTest extends TestCase
             liveWacc: 0.08,
             revenuePerShare: 50.0,
             liveCostOfEquity: 0.10,
-            recentPriceTrend: $recentPriceTrend,
             baselineRoic: 0.15
         );
 
@@ -153,77 +150,49 @@ final class PriceFactorTransmissionTest extends TestCase
         );
     }
 
-    public function testMomentumResistsFundamentalReversionInEitherDirection(): void
-    {
-        // Deeply undervalued, so the fair value anchor is pulling the price up hard.
-        $undervalued = 20.0;
-
-        $noTrend = $this->priceOf(recentPriceTrend: 0.0, currentPrice: $undervalued);
-        $rising = $this->priceOf(recentPriceTrend: 0.40, currentPrice: $undervalued);
-        $falling = $this->priceOf(recentPriceTrend: -0.40, currentPrice: $undervalued);
-
-        $this->assertLessThan(
-            $noTrend,
-            $rising,
-            'A trending stock must resist the pull to fair value, so it ends nearer its own path.'
-        );
-
-        // Only the magnitude of the trend matters. Subtracting a signed trend, as the dead code did, would
-        // have made a rising stock revert FASTER than a flat one and a falling stock revert slower.
-        $this->assertEqualsWithDelta($rising, $falling, 1e-9, 'Momentum resistance must be direction neutral.');
-    }
-
     /**
-     * Momentum must slow fundamental reversion, never abolish it, at any tick rate.
-     *
-     * Resistance divides the reversion rate. Adding it to the reversion WEIGHT instead looks equivalent on a
-     * coarse step and is catastrophic on a fine one: at the district's 3600 ticks a year the weight is already
-     * 0.9999, so any constant offset saturates the clamp and cuts the price loose from fair value entirely.
+     * The pull is a plain Ornstein-Uhlenbeck step at ln 2 over the half-life: the share of a log gap it keeps is
+     * exp(-kappa dt) at any tick rate, and it is the same far from fair value as near it. Two prices on the same
+     * inputs move by the same diffusion, so the ratio of their log gaps after the step is the reversion weight.
      */
-    public function testMomentumSlowsReversionByTheSameFractionAtAnyTickRate(): void
+    public function testThePullIsAConstantSpeedOrnsteinUhlenbeckStepAtAnyTickRate(): void
     {
-        $undervalued = 20.0;
-        $maxTrend = 0.50;
+        foreach ([1.0 / 252.0, 1.0 / 3600.0] as $dt) {
+            $fairValue = $this->engine->strikeFairValue($this->pullContext($dt, 60.0))['perceived_fair_value'];
+            $kept = function (float $price) use ($dt, $fairValue): float {
+                $stepped = $this->engine->calculateNextPrice($this->pullContext($dt, $price))['price'];
+                $atFair = $this->engine->calculateNextPrice($this->pullContext($dt, $fairValue))['price'];
 
-        $retainedFraction = function (float $dt) use ($undervalued, $maxTrend): float {
-            $withMomentum = $this->priceOfAtStep($dt, $maxTrend, $undervalued);
-            $without = $this->priceOfAtStep($dt, 0.0, $undervalued);
+                return log($stepped / $atFair) / log($price / $fairValue);
+            };
 
-            // How much of the pull toward fair value survives the momentum resistance.
-            return log($withMomentum / $undervalued) / log($without / $undervalued);
-        };
+            $speed = MarketEngine::FAIR_VALUE_PULL_SPEED;
+            $this->assertEqualsWithDelta(exp(-$speed * $dt), $kept($fairValue * 1.05), 1e-9, 'Near fair value.');
+            $this->assertEqualsWithDelta(exp(-$speed * $dt), $kept($fairValue * 0.40), 1e-9, 'Far below it: no faster arbitrage.');
+        }
 
-        $daily = $retainedFraction(1.0 / 252.0);
-        $live = $retainedFraction(1.0 / 3600.0);
-
-        // Dividing the rate retains 1 / (1 + trend x resistance) of the reversion, independent of the step.
-        $this->assertGreaterThan(0.50, $live, 'Reversion must survive the maximum trend at the live tick rate.');
-        $this->assertLessThan(0.90, $live, 'Momentum must still visibly slow reversion.');
-        $this->assertEqualsWithDelta($daily, $live, 0.05, 'The momentum effect must not depend on the tick rate.');
+        $this->assertEqualsWithDelta(M_LN2 / MarketEngine::FAIR_VALUE_PULL_HALF_LIFE_YEARS, MarketEngine::FAIR_VALUE_PULL_SPEED, 1e-12);
     }
 
-    private function priceOfAtStep(float $dt, float $trend, float $currentPrice): float
+    /** No dividend, no jump and a calm macro, so the funding-stress dampener is one and the pull runs at its base speed. */
+    private function pullContext(float $dt, float $currentPrice): MarketPricingContext
     {
-        $ctx = new MarketPricingContext(
+        return new MarketPricingContext(
             currentPrice: $currentPrice,
             currentVolatility: 0.25,
             longTermVolatility: 0.25,
-            earningsPerShare: 5.0,
             dt: $dt,
             lambda: 0.0,
             beta: 1.0,
-            macroState: new MacroStateDTO(policyRate: 0.04, equityRiskPremium: 0.045),
+            macroState: new MacroStateDTO(policyRate: 0.04, equityRiskPremium: 0.045, outputGap: 0.0, inflation: 0.02),
             bookValuePerShare: 40.0,
             currentRoic: 0.15,
             roicTtm: 0.15,
             liveWacc: 0.08,
             revenuePerShare: 50.0,
             liveCostOfEquity: 0.10,
-            recentPriceTrend: $trend,
             baselineRoic: 0.15
         );
-
-        return $this->engine->calculateNextPrice($ctx)['price'];
     }
 
     /**
@@ -241,7 +210,6 @@ final class PriceFactorTransmissionTest extends TestCase
                 currentPrice: $price,
                 currentVolatility: 0.25,
                 longTermVolatility: 0.25,
-                earningsPerShare: 5.0,
                 dividendPerShare: $dividend,
                 dt: $dt,
                 lambda: 0.0,
@@ -279,11 +247,11 @@ final class PriceFactorTransmissionTest extends TestCase
 
     /**
      * The market-wide jump reaches a name as beta x Y, floored and capped per jump, so its drift must give back
-     * exactly that clamped jump's mean, lambda x E[e^clamp(beta Y) - 1], at every beta and sign; otherwise the
-     * expected return moves with beta and a high-beta name settles away from its fair value. The mean is
+     * exactly that clamped jump's log mean, lambda x E[clamp(beta Y)], at every beta and sign; otherwise the log
+     * price moves with beta and a high-beta name settles away from its fair value under the log pull. The mean is
      * integrated here from the Kou density directly, not taken from the engine's own helper.
      */
-    public function testTheDriftGivesBackTheSystemicJumpMeanAtEveryBeta(): void
+    public function testTheDriftGivesBackTheSystemicJumpsLogMeanAtEveryBeta(): void
     {
         $dt = 1.0 / 252.0;
         $logStep = function (float $beta) use ($dt): float {
@@ -291,7 +259,6 @@ final class PriceFactorTransmissionTest extends TestCase
                 currentPrice: $price,
                 currentVolatility: 0.01,
                 longTermVolatility: 0.01,
-                earningsPerShare: 5.0,
                 dt: $dt,
                 lambda: 0.0,
                 beta: $beta,
@@ -314,13 +281,13 @@ final class PriceFactorTransmissionTest extends TestCase
 
         $unexposed = $logStep(0.0);
         foreach ([0.3, 1.3, 2.4, -0.6] as $beta) {
-            $expected = -MacroEngine::SYSTEMIC_JUMP_INTENSITY * $this->clampedSystemicJumpMean($beta) * $dt;
+            $expected = -MacroEngine::SYSTEMIC_JUMP_INTENSITY * $this->clampedSystemicJumpLogMean($beta) * $dt;
             $this->assertEqualsWithDelta($expected, $logStep($beta) - $unexposed, 1e-3 * abs($expected), "beta {$beta}");
         }
     }
 
     /** E[e^clamp(beta Y) - 1] for the systemic Kou jump Y, by midpoint quadrature over each tail. */
-    private function clampedSystemicJumpMean(float $beta): float
+    private function clampedSystemicJumpLogMean(float $beta): float
     {
         $tail = function (float $eta, float $sign) use ($beta): float {
             $steps = 200_000;
@@ -330,7 +297,7 @@ final class PriceFactorTransmissionTest extends TestCase
             for ($i = 0; $i < $steps; $i++) {
                 $y = ($i + 0.5) * $width;
                 $x = max(FinancialConstants::MIN_JUMP_LOG_RETURN, min(FinancialConstants::MAX_JUMP_LOG_RETURN, $beta * $sign * $y));
-                $sum += $eta * exp(-$eta * $y) * (exp($x) - 1.0) * $width;
+                $sum += $eta * exp(-$eta * $y) * $x * $width;
             }
 
             return $sum;
@@ -354,7 +321,6 @@ final class PriceFactorTransmissionTest extends TestCase
                 currentPrice: 60.0,
                 currentVolatility: $baselineVol,
                 longTermVolatility: $baselineVol,
-                earningsPerShare: 5.0,
                 dt: 0.25,
                 lambda: $lambda,
                 beta: $beta,

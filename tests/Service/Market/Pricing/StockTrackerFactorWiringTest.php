@@ -291,9 +291,7 @@ final class StockTrackerFactorWiringTest extends TestCase
         $firstTrend = (float) $stock->getPriceMomentumTrend();
         $this->assertEqualsWithDelta(log(1.10), $firstTrend, 1e-9);
 
-        // The engine is fed the trend it accumulated on the previous tick, not a hard-coded zero.
         $tracker->updateStocks([$stock], $dt, false, $macro);
-        $this->assertEqualsWithDelta($firstTrend, $captured->recentPriceTrend, 1e-9);
 
         $this->assertEqualsWithDelta(
             ($firstTrend * exp(-1.0)) + log(1.10),

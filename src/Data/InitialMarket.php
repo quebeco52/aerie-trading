@@ -286,7 +286,7 @@ class InitialMarket
             'industry' => 'Insurance - Reinsurance',
             'systemic_importance' => 'titan',
             'shares_outstanding' => 1_000_000_000,
-            'volatility' => 0.10,
+            'volatility' => 0.22, // a reinsurer: RenaissanceRe's 180-day realized vol is 23.2% (AlphaQuery, 2026-10-07)
             'beta' => 0.20,
             'jump_intensity' => 0.15,
             'jump_vol' => 0.06,
@@ -316,7 +316,7 @@ class InitialMarket
             'industry' => 'Insurance - Diversified',
             'systemic_importance' => 'base',
             'shares_outstanding' => 1_000_000_000,
-            'volatility' => 0.12,
+            'volatility' => 0.22, // a diversified insurer: AIG's 180-day realized vol is 21.6% (AlphaQuery, 2026-10-07)
             'beta' => 0.30,
             'jump_intensity' => 0.50,
             'jump_vol' => 0.08,
@@ -357,7 +357,7 @@ class InitialMarket
             'industry' => 'Financial Data & Stock Exchanges',
             'systemic_importance' => 'systemic',
             'shares_outstanding' => 1_000_000_000,
-            'volatility' => 0.10,
+            'volatility' => 0.25, // a ratings house: Moody's 180-day realized vol is 25.6% (AlphaQuery, 2026-10-07)
             'beta' => 0.40,
             'jump_intensity' => 0.40,
             'jump_vol' => 0.08,
@@ -386,7 +386,7 @@ class InitialMarket
             'industry' => 'Utilities - Regulated Electric',
             'systemic_importance' => 'base',
             'shares_outstanding' => 1_000_000_000,
-            'volatility' => 0.10,
+            'volatility' => 0.15, // a regulated electric utility: 15.0% (Damodaran, Utility (General), US, January 2026)
             'beta' => 0.25,
             'jump_intensity' => 0.30,
             'jump_vol' => 0.06,

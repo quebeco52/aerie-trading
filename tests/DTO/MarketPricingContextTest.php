@@ -48,6 +48,24 @@ class MarketPricingContextTest extends TestCase
         $this->assertSame('tech', $context->businessModel);
     }
 
+    /**
+     * A guided shortfall is next quarter's miss, known now: it comes off the trailing return the report will book it
+     * to, scaled by the capital the return is measured on, so fair value hears it through the same persistence weight.
+     */
+    public function testAGuidedShortfallComesOffTheTrailingReturn(): void
+    {
+        $macroState = new MacroStateDTO();
+        $firm = $this->firm('SOFT', 'Software - Infrastructure');
+        $before = MarketPricingContext::forStock($firm, $macroState, $this->health($firm, $macroState), new AnchorStakeLedger())->roicTtm;
+
+        $firm->setPreAnnouncedShortfall(1_000_000_000.0);
+        $after = MarketPricingContext::forStock($firm, $macroState, $this->health($firm, $macroState), new AnchorStakeLedger())->roicTtm;
+
+        $capital = \App\Data\Sectors::strategyFor($firm->getIndustry())->getEvaluationCapital((float) $firm->getTotalEquity(), $firm->getInvestedCapital());
+        $this->assertGreaterThan(0.0, $capital);
+        $this->assertEqualsWithDelta($before - (1_000_000_000.0 / $capital), $after, 1e-12);
+    }
+
     /** A lender's baselineRoic column is a placeholder: it is priced on the return on equity its model measures it by. */
     public function testALenderIsPricedOnItsReturnOnEquity(): void
     {

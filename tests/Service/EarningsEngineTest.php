@@ -8,6 +8,7 @@ use App\Service\Corporate\EarningsEngine;
 use App\Service\Corporate\CapExEngine;
 use App\Service\Corporate\CapitalAllocationEngine;
 use App\Service\Corporate\DebtEngine;
+use App\Service\Market\Pricing\MarketEngine;
 use App\Service\Math\MathUtility;
 use App\Service\Math\CorporateMetrics;
 use App\Service\Event\NarrativeEngine;
@@ -94,9 +95,6 @@ class EarningsEngineTest extends TestCase
         $this->mathUtilityMock = $this->createStub(MathUtility::class);
         $this->mathUtilityMock->method('generatePersistentZ')->willReturnCallback(function($prev, $phi) {
             return $this->mathUtilityMock->generateStandardNormal();
-        });
-        $this->mathUtilityMock->method('calculateKalmanSmoothedEps')->willReturnCallback(function($structuralEps, $actualRaw) {
-            return $actualRaw;
         });
         $this->mathUtilityMock->method('calculateJumpDiffusion')->willReturn(['exponent' => 0.0]);
         $realMath = new MathUtility();
@@ -851,33 +849,53 @@ class EarningsEngineTest extends TestCase
     }
 
     /**
-     * A firm that lands exactly on the consensus the market anticipates publishes a beat of the walked-down
-     * number, and the price does not gap on it: the beat was expected (Bagnoli, Beneish & Watts 1999).
+     * A report gaps the price by the immediate share of its log fair-value revision, with the dividend it paid
+     * added back so the ex-date drop is not counted twice; the rest is left to the pull.
      */
-    public function testAnExpectedBeatOfTheWalkedDownConsensusIsNotPricedAsNews(): void
+    public function testAReportGapsByTheImmediateShareOfItsFairValueRevision(): void
     {
-        $bias = MarketConsensusEngine::ANALYST_WALKDOWN_BIAS;
-        $tax = 0.20;
-        $fixed = 200.0;
+        $share = EarningsEngine::REPORT_IMMEDIATE_RESPONSE_SHARE;
 
-        $ctx = new EarningsSimulationContext(new Stock(), new \App\DTO\MacroStateDTO(), new \App\Service\Model\Sector\StandardCorporateBusinessModel(), 'none');
-        $ctx->sharesOutstanding = 100.0;
-        $ctx->corporateTaxRate = $tax;
+        $quarter = EarningsEngine::REPORT_INTERVAL_YEARS;
 
-        // Published consensus: revenue and variable cost both shaded by the walk-down.
-        $ctx->analystExpectedRevenue = 1000.0 * (1.0 - $bias);
-        $ctx->analystExpectedVariableCosts = 600.0 * (1.0 - $bias);
-        $publishedNetIncome = ($ctx->analystExpectedRevenue - $ctx->analystExpectedVariableCosts - $fixed) * (1.0 - $tax);
-        $ctx->expectedQuarterlyNetIncome = $publishedNetIncome;
-        $ctx->reportedExpectedNetIncome = $publishedNetIncome;
+        $this->assertEqualsWithDelta(exp($share * log(1.10)) - 1.0, EarningsEngine::reportPriceGap(100.0, 110.0, 0.0, 0.0), 1e-12);
+        $this->assertEqualsWithDelta(0.0, EarningsEngine::reportPriceGap(100.0, 98.0, 2.0, 0.0), 1e-12, 'Paying the dividend is no news.');
+        $this->assertEqualsWithDelta(exp($share * log(0.80)) - 1.0, EarningsEngine::reportPriceGap(100.0, 80.0, 0.0, 0.0), 1e-12);
+        $this->assertSame(0.0, EarningsEngine::reportPriceGap(0.0, 80.0, 0.0, 0.10), 'No prior strike, no revision.');
 
-        // Actuals: exactly the unshaded consensus.
-        $ctx->actualRevenue = 1000.0;
-        $ctx->reportedActualNetIncome = (1000.0 - 600.0 - $fixed) * (1.0 - $tax);
+        // A revision that only delivers the quarter's expected return is no news: the drift already earned it.
+        $expected = 100.0 * exp(0.09 * $quarter);
+        $this->assertEqualsWithDelta(0.0, EarningsEngine::reportPriceGap(100.0, $expected - 1.0, 1.0, 0.09), 1e-12);
+        $this->assertEqualsWithDelta(exp($share * (log(1.10) - (0.09 * $quarter))) - 1.0, EarningsEngine::reportPriceGap(100.0, 110.0, 0.0, 0.09), 1e-12);
+    }
 
-        (new \ReflectionMethod($this->engine, 'calculateEPSAndSurprise'))->invoke($this->engine, $ctx);
+    public function testTheAnnouncementReturnIsStruckOnTheFairValueTheReportFiled(): void
+    {
+        $marketEngine = $this->createStub(MarketEngine::class);
+        $marketEngine->method('strikeFairValue')->willReturn(['perceived_fair_value' => 110.0, 'analyst_targets' => []]);
+        $engine = new EarningsEngine(
+            $this->eventDispatcherMock,
+            $this->marketEventMock,
+            $this->capitalAllocationEngineMock,
+            $this->debtEngineMock,
+            $this->capExEngineMock,
+            $this->mathUtilityMock,
+            $this->corporateMetricsMock,
+            $this->narrativeEngineMock,
+            new MarketConsensusEngine(),
+            marketEngine: $marketEngine
+        );
 
-        $this->assertGreaterThan(0.01, $ctx->surprisePct, 'The published number is beaten, as the walk-down intends.');
-        $this->assertEqualsWithDelta(0.0, $ctx->pricedSurprisePct, 1e-12, 'An anticipated beat is not news to the price.');
+        $stock = (new Stock())->setTicker('VANE')->setIndustry('Software - Application')->setPrice('50.00')->setSharesOutstanding('1000');
+        $ctx = new EarningsSimulationContext($stock, new \App\DTO\MacroStateDTO(), new \App\Service\Model\Sector\StandardCorporateBusinessModel(), 'none');
+        $ctx->fairValueBeforeReport = 100.0;
+        $ctx->costOfEquityBeforeReport = 0.09;
+        $ctx->allocation = ['dividend_paid' => 1.0];
+
+        (new \ReflectionMethod($engine, 'executeAnnouncementReturn'))->invoke($engine, $ctx);
+
+        $gap = EarningsEngine::reportPriceGap(100.0, 110.0, 1.0, 0.09);
+        $this->assertEqualsWithDelta($gap, $ctx->priceGapPct, 1e-12);
+        $this->assertEqualsWithDelta((50.0 * (1.0 + $gap)) - 1.0, (float) $stock->getPrice(), 1e-6);
     }
 }

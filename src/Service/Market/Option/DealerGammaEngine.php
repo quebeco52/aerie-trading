@@ -68,24 +68,45 @@ final class DealerGammaEngine
                 * $quote->gamma;
         }
 
-        $this->store->record($stock->getTicker(), $customerGamma, (float) $stock->getPrice());
+        $ticker = $stock->getTicker();
+        $this->store->record($ticker, $customerGamma, self::carriedReference($this->store->read($ticker), $customerGamma, (float) $stock->getPrice()));
 
         return $customerGamma;
+    }
+
+    /**
+     * The reference price that keeps the desk's unhedged delta when its gamma is re-measured.
+     *
+     * The desk still owes old gamma × (P − ref) of hedge; re-marking at the new gamma preserves that residual,
+     * so a re-quote between passes neither drops nor doubles the move not yet hedged.
+     *
+     * @param array{gamma: float, reference_price: float}|null $previous
+     */
+    private static function carriedReference(?array $previous, float $gamma, float $price): float
+    {
+        if ($previous === null || $gamma === 0.0) {
+            return $price;
+        }
+
+        return $price - ($previous['gamma'] / $gamma) * ($price - $previous['reference_price']);
     }
 
     /**
      * The shares the desk must trade in one name to re-hedge the move since it last did.
      *
      * Returns signed shares — positive is a buy — ready to join the tick's net order flow. Marks the name
-     * as hedged, so the same move is never hedged twice.
+     * as hedged by the share it filled, so the same move is never hedged twice and a clipped remainder
+     * carries to the next pass.
+     *
+     * @param float $passYears Time since the previous hedging pass, in years.
      */
-    public function hedgeFlow(Stock $stock): float
+    public function hedgeFlow(Stock $stock, float $passYears): float
     {
         $state = $this->store->read($stock->getTicker());
-        $shares = $this->hedgeShares($stock, $state);
+        [$shares, $reference] = $this->hedge($stock, $state, $passYears);
 
         if ($state !== null && $shares !== 0.0) {
-            $this->store->record($stock->getTicker(), $state['gamma'], (float) $stock->getPrice());
+            $this->store->record($stock->getTicker(), $state['gamma'], $reference);
         }
 
         return $shares;
@@ -99,9 +120,10 @@ final class DealerGammaEngine
      * arithmetic is identical; only the number of times the desk asks for it has changed.
      *
      * @param array<int, Stock> $stocks
+     * @param float             $passYears Time since the previous hedging pass, in years.
      * @return array<string, float> Signed shares to trade, by ticker; names with nothing to do are absent.
      */
-    public function hedgeMarket(array $stocks): array
+    public function hedgeMarket(array $stocks, float $passYears): array
     {
         $state = $this->store->readAll();
 
@@ -115,14 +137,14 @@ final class DealerGammaEngine
 
             $ticker = $stock->getTicker();
             $entry = $state[$ticker] ?? null;
-            $shares = $this->hedgeShares($stock, $entry);
+            [$shares, $reference] = $this->hedge($stock, $entry, $passYears);
 
             if ($shares === 0.0 || $entry === null) {
                 continue;
             }
 
             $flows[$ticker] = $shares;
-            $marks[$ticker] = ['gamma' => $entry['gamma'], 'reference_price' => (float) $stock->getPrice()];
+            $marks[$ticker] = ['gamma' => $entry['gamma'], 'reference_price' => $reference];
         }
 
         $this->store->recordAll($marks);
@@ -131,31 +153,37 @@ final class DealerGammaEngine
     }
 
     /**
-     * The hedge one name's stored exposure implies, without touching the store.
+     * The hedge one name's stored exposure implies, and the reference price it leaves, without touching the
+     * store.
      *
      * @param array{gamma: float, reference_price: float}|null $state
+     * @return array{0: float, 1: float} Signed shares, and the price the filled share of the move hedges to.
      */
-    private function hedgeShares(Stock $stock, ?array $state): float
+    private function hedge(Stock $stock, ?array $state, float $passYears): array
     {
+        $price = (float) $stock->getPrice();
+
         if ($state === null || $state['gamma'] === 0.0) {
-            return 0.0;
+            return [0.0, $price];
         }
 
-        $price = (float) $stock->getPrice();
         $move = $price - $state['reference_price'];
 
         if ($move === 0.0) {
-            return 0.0;
+            return [0.0, $price];
         }
 
-        $shares = $state['gamma'] * $move * FinancialConstants::DEALER_HEDGE_RATIO;
+        $wanted = $state['gamma'] * $move * FinancialConstants::DEALER_HEDGE_RATIO;
 
-        // A desk cannot demand more liquidity in one pass than the name trades in a quarter of a day. Past
-        // that the impact law is extrapolation, and a short-gamma desk chasing a gap would otherwise size
-        // its way into an unbounded spiral against a market that cannot fill it.
-        $ceiling = $this->liquidityEngine->averageDailyVolume($stock) * FinancialConstants::MAX_DEALER_HEDGE_ADV_MULTIPLE;
+        // A short-gamma desk chasing a gap would otherwise size into a spiral the name cannot fill. The cap is
+        // a share of ADV per trading day, pro rata to the pass, so it binds the same at any hedging cadence
+        // (the pacing LiquidityEngine::corporateFlowSlice uses).
+        $passDays = max(0.0, $passYears) * FinancialConstants::TRADING_DAYS_PER_YEAR;
+        $ceiling = $this->liquidityEngine->averageDailyVolume($stock) * FinancialConstants::MAX_DEALER_HEDGE_ADV_MULTIPLE * $passDays;
+        $shares = max(-$ceiling, min($ceiling, $wanted));
 
-        return max(-$ceiling, min($ceiling, $shares));
+        // Only the filled share of the move is hedged; the remainder stays owed for later passes.
+        return [$shares, $state['reference_price'] + ($move * $shares / $wanted)];
     }
 
 }

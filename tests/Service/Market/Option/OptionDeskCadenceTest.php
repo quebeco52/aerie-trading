@@ -24,6 +24,9 @@ use PHPUnit\Framework\TestCase;
  */
 class OptionDeskCadenceTest extends TestCase
 {
+    /** One step of the walked paths, in years: a tick at 14,400 a year. */
+    private const TICK_YEARS = 1.0 / 14400.0;
+
     // --- Slicing ---
 
     public function testEveryNameIsVisitedExactlyOncePerFullRotation(): void
@@ -128,12 +131,14 @@ class OptionDeskCadenceTest extends TestCase
         $engine->refresh($stock, [$contract], $quotes);
 
         $traded = 0.0;
+        $lastHedge = 0;
 
         for ($step = 1; $step < count($path); $step++) {
             $stock->setPrice((string) $path[$step]);
 
             if ($step % $stride === 0 || $step === count($path) - 1) {
-                $traded += array_sum($engine->hedgeMarket([$stock]));
+                $traded += array_sum($engine->hedgeMarket([$stock], ($step - $lastHedge) * self::TICK_YEARS));
+                $lastHedge = $step;
             }
         }
 
@@ -175,7 +180,7 @@ class OptionDeskCadenceTest extends TestCase
         $store->record('DEAD', 5000.0, 90.0);
         $stock->setIsBankrupt(true);
 
-        $this->assertSame([], $engine->hedgeMarket([$stock]));
+        $this->assertSame([], $engine->hedgeMarket([$stock], self::TICK_YEARS));
     }
 
     public function testTheHedgeRatioIsWhatBoundsTheFlowNotTheContractMultiplier(): void
@@ -195,7 +200,7 @@ class OptionDeskCadenceTest extends TestCase
 
         $this->assertEqualsWithDelta(
             10_000.0 * 1.0 * FinancialConstants::DEALER_HEDGE_RATIO,
-            $engine->hedgeMarket([$stock])['VANE'],
+            $engine->hedgeMarket([$stock], self::TICK_YEARS)['VANE'],
             1e-6
         );
     }

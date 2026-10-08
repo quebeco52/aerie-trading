@@ -211,4 +211,48 @@ class StockTrackerTest extends TestCase
         $this->assertCount(1, $result['history']);
         $this->assertEquals(90.0, $result['history'][0]['price']);
     }
+
+    // --- Post-Report Fair Value ---
+
+    /**
+     * @return array{0: array<string, mixed>, 1: int} The tick's update row, and how many times fair value was re-struck.
+     */
+    private function tickWithReport(?array $report): array
+    {
+        $stock = $this->createDummyStock();
+        $this->marketEngineMock->method('calculateNextPrice')->willReturn([
+            'price' => 100.0, 'shock' => null, 'next_volatility' => 0.20,
+            'analyst_targets' => ['growth_analyst' => 100.0], 'perceived_fair_value' => 100.0,
+        ]);
+        $strikes = 0;
+        $this->marketEngineMock->method('strikeFairValue')->willReturnCallback(function () use (&$strikes): array {
+            $strikes++;
+
+            return ['perceived_fair_value' => 130.0, 'analyst_targets' => ['growth_analyst' => 130.0]];
+        });
+        $this->earningsEngineMock->method('calculate')->willReturn($report);
+        $this->corporateActionEngineMock->method('processSplits')->willReturn(['price' => 100.0, 'shares' => 1000, 'event' => null]);
+
+        $result = $this->tracker->updateStocks([$stock], 1.0 / 252.0, false);
+
+        return [$result['updates'][0], $strikes];
+    }
+
+    public function testAReportTickHandsTheAgentsThePostReportFairValue(): void
+    {
+        [$update, $strikes] = $this->tickWithReport([]);
+
+        // The agents and the analysts read the same figure the update carries.
+        $this->assertSame(1, $strikes);
+        $this->assertEqualsWithDelta(130.0, $update['perceived_fair_value'], 1e-9);
+        $this->assertEqualsWithDelta(130.0, $update['analyst_targets']['growth_analyst'], 1e-9);
+    }
+
+    public function testAnOrdinaryTickKeepsThePriceStepsFairValue(): void
+    {
+        [$update, $strikes] = $this->tickWithReport(null);
+
+        $this->assertSame(0, $strikes);
+        $this->assertEqualsWithDelta(100.0, $update['perceived_fair_value'], 1e-9);
+    }
 }

@@ -241,9 +241,10 @@ final class OptionDeskService
      * changes, and it arrives inside the same bar either way.
      *
      * @param array<int, Stock> $stocks
+     * @param float             $passYears Time since the previous pass, in years: sizes the liquidity cap.
      * @return float Total absolute shares hedged, for the tick's diagnostics.
      */
-    public function hedge(array $stocks): float
+    public function hedge(array $stocks, float $passYears): float
     {
         $traded = 0.0;
 
@@ -251,7 +252,7 @@ final class OptionDeskService
         $this->orderFlow->beginBatch();
 
         try {
-            foreach ($this->gammaEngine->hedgeMarket($stocks) as $ticker => $shares) {
+            foreach ($this->gammaEngine->hedgeMarket($stocks, $passYears) as $ticker => $shares) {
                 $this->orderFlow->record($ticker, $shares);
                 $traded += abs($shares);
             }

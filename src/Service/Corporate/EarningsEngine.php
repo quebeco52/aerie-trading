@@ -11,6 +11,8 @@ use App\Service\Math\MathUtility;
 use App\Service\Event\NarrativeEngine;
 use App\Service\Math\FinancialConstants;
 use App\Service\Market\Pricing\MarketConsensusEngine;
+use App\Service\Market\Pricing\MarketEngine;
+use App\DTO\MarketPricingContext;
 use App\DTO\EarningsSimulationContext;
 use App\Service\Corporate\Holdings\AnchorStakeLedger;
 use App\Service\Corporate\Industry\IndustryShareLedger;
@@ -88,6 +90,10 @@ class EarningsEngine
     /** Quarters of past surprises kept on the firm's surprise record, the sample SUE is conventionally scaled over (Foster, Olsen & Shevlin 1984). */
     public const SUE_HISTORY_QUARTERS = 8;
 
+    // --- Report Price Response ---
+    /** Share of a report's fair-value revision priced in the announcement window; the other 40% is the post-announcement drift on a weekday report (DellaVigna & Pollet 2009, J. Finance 64(2), abstract). */
+    public const REPORT_IMMEDIATE_RESPONSE_SHARE = 0.60;
+
     // --- Announcement Variance ---
     /** Years between quarterly reports. */
     public const REPORT_INTERVAL_YEARS = 0.25;
@@ -121,7 +127,9 @@ class EarningsEngine
         /** Listed anchor stakes. Required, not optional: a sphere with no ledger would silently never open a plant ledger either. Holds only a per-tick price map, so a harness builds one free. */
         private AnchorStakeLedger $anchorStakes = new AnchorStakeLedger(),
         /** Investment securities mark. Defaulted so a harness or a unit test builds an engine without wiring the curve. */
-        private SecuritiesBookService $securitiesBook = new SecuritiesBookService(new \App\Service\Market\Bond\BondPricingEngine(new MathUtility()))
+        private SecuritiesBookService $securitiesBook = new SecuritiesBookService(new \App\Service\Market\Bond\BondPricingEngine(new MathUtility())),
+        /** Strikes fair value before and after a report; its revision is the report's price news. It draws nothing, so a default is safe. */
+        private MarketEngine $marketEngine = new MarketEngine(new MathUtility())
     ) {}
 
     public function calculate(Stock $stock, \App\DTO\MacroStateDTO $macroState, int $tickCount = 0, int $ticksPerYear = 252): ?array
@@ -142,6 +150,7 @@ class EarningsEngine
         );
         $ctx->tickCount = $tickCount;
         $ctx->ticksPerYear = $ticksPerYear;
+        [$ctx->fairValueBeforeReport, $ctx->costOfEquityBeforeReport] = $this->strikeFairValue($stock, $macroState);
 
         // Remarked before anything is struck on the balance sheet, because everything downstream is struck
         // ON it: a portfolio worth more carries more invested capital and upstreams more in dividends.
@@ -1264,20 +1273,6 @@ class EarningsEngine
         $stock->setTotalNetIncome((string) $trailingNetIncome);
 
         $ctx->surprisePct = $this->blendedSurprise($ctx, $ctx->expectedQuarterlyEps, $ctx->analystExpectedRevenue);
-
-        // What the price reacts to is the surprise against the consensus the market anticipates. Analysts walk
-        // the published number down (MarketConsensusEngine::ANALYST_WALKDOWN_BIAS) so most firms beat it, and the
-        // market knows it: whisper forecasts sit above the published consensus and price the expected beat
-        // (Bagnoli, Beneish & Watts 1999). The walk-down scales expected revenue and variable cost alike, so the
-        // anticipated consensus adds back that contribution, after tax.
-        $bias = MarketConsensusEngine::ANALYST_WALKDOWN_BIAS;
-        $shadedContribution = ($ctx->analystExpectedRevenue - $ctx->analystExpectedVariableCosts) * ($bias / (1.0 - $bias));
-        $taxOnShade = $ctx->expectedQuarterlyNetIncome > 0.0 ? $ctx->corporateTaxRate : 0.0;
-        $ctx->pricedSurprisePct = $this->blendedSurprise(
-            $ctx,
-            $ctx->expectedQuarterlyEps + (($shadedContribution * (1.0 - $taxOnShade)) / $shares),
-            $ctx->analystExpectedRevenue / (1.0 - $bias)
-        );
     }
 
     /** Revenue and EPS surprise against a consensus, blended by the business model's weights. */
@@ -1984,6 +1979,43 @@ class EarningsEngine
     }
 
     /**
+     * The price gap a report earns: the immediate share of the news in its log fair-value revision (DellaVigna &
+     * Pollet 2009); the rest reaches the price through the pull, which is the post-announcement drift. The news is
+     * the revision less the quarter's expected return at the cost of equity, which the price has already earned
+     * through its drift, as a surprise is struck against consensus. The dividend is added back, because paying it
+     * lowers book just as the ex-date drop lowers the price.
+     *
+     * @param float $fairValueBefore Fair value per share on the books before the report.
+     * @param float $fairValueAfter  Fair value per share on the books it filed.
+     * @param float $dividendPaid    Dividend per share paid on the report.
+     * @param float $costOfEquity    The annual return the fair value was expected to earn over the quarter.
+     */
+    public static function reportPriceGap(float $fairValueBefore, float $fairValueAfter, float $dividendPaid, float $costOfEquity): float
+    {
+        if ($fairValueBefore <= 0.0 || $fairValueAfter + $dividendPaid <= 0.0) {
+            return 0.0;
+        }
+
+        $news = log(($fairValueAfter + $dividendPaid) / $fairValueBefore) - ($costOfEquity * self::REPORT_INTERVAL_YEARS);
+
+        return exp(self::REPORT_IMMEDIATE_RESPONSE_SHARE * $news) - 1.0;
+    }
+
+    /**
+     * Fair value per share on the books as they stand, at this tick's macro: the market's own strike, with the cost
+     * of equity it was discounted at.
+     *
+     * @return array{0: float, 1: float}
+     */
+    private function strikeFairValue(Stock $stock, \App\DTO\MacroStateDTO $macroState): array
+    {
+        $health = $this->debtEngine->analyzeDebtHealth($stock, $macroState);
+        $strike = $this->marketEngine->strikeFairValue(MarketPricingContext::forStock($stock, $macroState, $health, $this->anchorStakes));
+
+        return [$strike['perceived_fair_value'], $health->costOfEquity];
+    }
+
+    /**
      * Growth premium proxy from the valuation multiple: 1.0x the market multiple is no premium, 2.0x is +1.0.
      */
     private function resolveGrowthPremium(float $currentPE): float
@@ -2009,7 +2041,7 @@ class EarningsEngine
     }
 
     /**
-     * The report's price move: the earnings response to the priced surprise plus any announcement with a
+     * The report's price move: the immediate share of its fair-value revision plus any announcement with a
      * measured return, booked as a scheduled jump into the name's announcement variance.
      */
     private function executeAnnouncementReturn(EarningsSimulationContext $ctx): void
@@ -2020,17 +2052,12 @@ class EarningsEngine
 
         $currentPrice = (float) $stock->getPrice();
 
-        if ($ctx->actualAnnualEpsRaw > 0) {
-            $currentPE = $currentPrice / $ctx->actualAnnualEpsRaw;
-        } else {
-            $annualSaarRevenue = MathUtility::calculateSeasonallyAdjustedAnnualRate($ctx->actualRevenue, $ctx->seasonalFactor, 4);
-            $salesPerShare = $ctx->sharesOutstanding > 0 ? $annualSaarRevenue / $ctx->sharesOutstanding : 1.0;
-            $priceToSales = $salesPerShare > 0 ? $currentPrice / $salesPerShare : 1.0;
-            $structuralAfterTaxMargin = max(0.01, (float) $stock->getOperatingMargin() * (1.0 - $ctx->corporateTaxRate));
-            $currentPE = $priceToSales * (1.0 / $structuralAfterTaxMargin);
-        }
-
-        $ctx->priceGapPct = $this->resolveDampedPriceGap($ctx->pricedSurprisePct, (float) $stock->getBeta(), $this->resolveGrowthPremium($currentPE));
+        $ctx->priceGapPct = self::reportPriceGap(
+            $ctx->fairValueBeforeReport,
+            $this->strikeFairValue($stock, $ctx->macroState)[0],
+            (float) ($ctx->allocation['dividend_paid'] ?? 0.0),
+            $ctx->costOfEquityBeforeReport
+        );
         $ctx->totalShockPct = $ctx->priceGapPct;
         $ctx->corporateActionDescriptions = "";
 

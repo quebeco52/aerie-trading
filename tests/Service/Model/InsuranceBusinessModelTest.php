@@ -266,23 +266,25 @@ class InsuranceBusinessModelTest extends TestCase
         $baselineMargin = 0.12; // 12% sustainable operating margin (float yield + benign underwriting)
         $baselineRoic = 0.10;
 
-        // 1. Normal profitable regime (TTM ROE = 15%)
-        // Structural ROE = 1.50 * 0.12 = 0.18
-        // Blended ROE = (0.18 * 0.70) + (0.15 * 0.30) = 0.126 + 0.045 = 0.171
-        $normalStructuralRoic = $model->calculateStructuralRoic(0.15, $baselineRoic, $revenuePerShare, $bookValuePerShare, $baselineMargin);
-        $this->assertEqualsWithDelta(0.171, $normalStructuralRoic, 0.001);
+        // The trailing ROE's gap to capacity (1.50 x 0.12 = 0.18) is kept at its persistent-equivalent share at a 10%
+        // cost of equity (Ohlson 1995; Fama & French 2000).
+        $rate = 0.10;
+        $kept = MathUtility::persistentEquivalentReturn(1.0, 0.0, $rate);
+        $this->assertGreaterThan(0.0, $kept);
+        $this->assertLessThan(0.30, $kept, 'A good or bad year is not capitalized as permanent.');
 
-        // 2. Severe catastrophe collapse (TTM ROE = -50% due to major disaster)
-        // Structural capacity ROE = 1.50 * 0.12 = 0.18
-        // Blended ROE = (0.18 * 0.70) + (-0.50 * 0.30) = 0.126 - 0.150 = -0.024 -> clamped to MIN_STRUCTURAL_ROE_FLOOR (0.03)
-        $catastropheStructuralRoic = $model->calculateStructuralRoic(-0.50, $baselineRoic, $revenuePerShare, $bookValuePerShare, $baselineMargin);
-        $this->assertEqualsWithDelta(InsuranceBusinessModel::MIN_STRUCTURAL_ROE_FLOOR, $catastropheStructuralRoic, 0.001);
+        // 1. Normal profitable regime (TTM ROE = 15%)
+        $normalStructuralRoic = $model->calculateStructuralRoic(0.15, $baselineRoic, $revenuePerShare, $bookValuePerShare, $baselineMargin, $rate);
+        $this->assertEqualsWithDelta(0.18 + ((0.15 - 0.18) * $kept), $normalStructuralRoic, 1e-12);
+
+        // 2. Severe catastrophe collapse (TTM ROE = -50% due to major disaster): still above the floor, only a
+        // fading share of the loss is capitalized.
+        $catastropheStructuralRoic = $model->calculateStructuralRoic(-0.50, $baselineRoic, $revenuePerShare, $bookValuePerShare, $baselineMargin, $rate);
+        $this->assertEqualsWithDelta(max(InsuranceBusinessModel::MIN_STRUCTURAL_ROE_FLOOR, 0.18 + ((-0.50 - 0.18) * $kept)), $catastropheStructuralRoic, 1e-12);
         $this->assertGreaterThan(0.0, $catastropheStructuralRoic);
 
-        // 3. Moderate catastrophe shock (TTM ROE = -10%)
-        // Blended ROE = (0.18 * 0.70) + (-0.10 * 0.30) = 0.126 - 0.030 = 0.096
-        $moderateCatastropheRoic = $model->calculateStructuralRoic(-0.10, $baselineRoic, $revenuePerShare, $bookValuePerShare, $baselineMargin);
-        $this->assertEqualsWithDelta(0.096, $moderateCatastropheRoic, 0.001);
+        // 3. A loss deep enough to cross the floor is held at it.
+        $this->assertSame(InsuranceBusinessModel::MIN_STRUCTURAL_ROE_FLOOR, $model->calculateStructuralRoic(-5.0, $baselineRoic, $revenuePerShare, $bookValuePerShare, $baselineMargin, $rate));
     }
 
     /**
@@ -532,14 +534,14 @@ class InsuranceBusinessModelTest extends TestCase
         $fullCapacityRevenue = $bookValuePerShare * InsuranceBusinessModel::KENNEY_CAPACITY_RATIO;
 
         // The float leg is whatever the anchor carries beyond full-capacity underwriting (0.14 - 0.0675).
-        $atCapacity = $model->calculateStructuralRoic(0.14, $baselineReturn, $fullCapacityRevenue, $bookValuePerShare, $baselineMargin);
+        $atCapacity = $model->calculateStructuralRoic(0.14, $baselineReturn, $fullCapacityRevenue, $bookValuePerShare, $baselineMargin, 0.10);
         $this->assertEqualsWithDelta(0.14, $atCapacity, 0.0001);
 
         // Writing two thirds of the book costs the underwriting third of it, and nothing else: the float is
         // invested either way. Measured on underwriting alone this firm re-rated on every rate cycle.
-        $withdrawn = $model->calculateStructuralRoic(0.14, $baselineReturn, $fullCapacityRevenue * (2.0 / 3.0), $bookValuePerShare, $baselineMargin);
+        $withdrawn = $model->calculateStructuralRoic(0.14, $baselineReturn, $fullCapacityRevenue * (2.0 / 3.0), $bookValuePerShare, $baselineMargin, 0.10);
         $underwritingLost = (InsuranceBusinessModel::KENNEY_CAPACITY_RATIO * (1.0 / 3.0)) * $baselineMargin;
-        $this->assertEqualsWithDelta(0.14 - ($underwritingLost * 0.70), $withdrawn, 0.0001);
+        $this->assertEqualsWithDelta(0.14 - ($underwritingLost * (1.0 - MathUtility::persistentEquivalentReturn(1.0, 0.0, 0.10))), $withdrawn, 1e-12);
     }
 
     /**

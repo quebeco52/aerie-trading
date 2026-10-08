@@ -44,8 +44,8 @@ class InvestmentBankBusinessModel extends BrokerageBusinessModel
     }
 
     // --- Balance Sheet Realism ---
-    /** Stock-based compensation as a fraction of revenue (ASC 718): non-cash, added back to FCF, settled in new shares. Deferred banker compensation is settled in restricted stock. */
-    public const STOCK_COMPENSATION_INTENSITY = 0.06;
+    /** Stock-based compensation (ASC 718) as a share of revenue: Brokerage & Investment Banking, 2.51% of revenue, 32 firms (Damodaran, Employee data by industry, US, January 2026). */
+    public const STOCK_COMPENSATION_INTENSITY = 0.0251;
 
     // --- Labor Intensity ---
     /** Labor share of the fixed cost base exposed to the Beveridge wage squeeze. Banker and trader compensation is the dominant overhead line of an investment bank. */

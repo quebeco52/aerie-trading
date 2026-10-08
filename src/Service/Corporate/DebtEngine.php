@@ -54,12 +54,6 @@ class DebtEngine
     // --- Merton Default Horizon ---
     /** Horizon the structural default model is struck on; 5 years is the standard tenor for corporate credit spreads. */
     private const MERTON_HORIZON_YEARS = 5.0;
-    /**
-     * Mean-reversion speed of idiosyncratic equity volatility, in reversions per year: -ln(1 - 0.25) * 4, the
-     * quarterly cooling the earnings engine once applied after a surprise. The price process now reverts
-     * variance at MarketEngine::varianceReversionSpeed(), which is faster; aligning the two is open.
-     */
-    private const EQUITY_VOL_REVERSION_SPEED = 1.1507;
     /** Floor on the asset volatility the Merton model is struck at; below it a distance to default stops meaning anything. */
     private const MIN_ASSET_VOLATILITY = 0.02;
 
@@ -329,13 +323,14 @@ class DebtEngine
         $metrics = \App\Data\Sectors::metricsFor($industry);
         $strategy = \App\Data\Sectors::strategyFor($industry);
 
-        // Average mean-reverting equity volatility over the Merton horizon.
+        // Average mean-reverting equity volatility over the Merton horizon, reverting at the speed the price
+        // process itself reverts the name's variance at, as the option desk's term structure does.
         $spotVolatility = max(0.05, (float) ($stock->getCurrentVolatility() ?? $stock->getVolatility()));
         $structuralVolatility = max(0.05, (float) ($stock->getVolatility() ?: $spotVolatility));
         $equityVolatility = max(0.05, $this->mathUtility->averageMeanRevertingVolatility(
             $spotVolatility,
             $structuralVolatility,
-            self::EQUITY_VOL_REVERSION_SPEED,
+            \App\Service\Market\Pricing\MarketEngine::varianceReversionSpeed((float) $stock->getJumpIntensity()),
             self::MERTON_HORIZON_YEARS
         ));
 

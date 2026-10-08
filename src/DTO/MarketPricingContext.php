@@ -17,7 +17,6 @@ class MarketPricingContext
         public readonly float $currentPrice,
         public readonly float $currentVolatility,
         public readonly float $longTermVolatility,
-        public readonly float $earningsPerShare,
         public readonly float $dt,
         public float $lambda = 2.0,
         public float $jumpVol = 0.05,
@@ -26,7 +25,7 @@ class MarketPricingContext
         public float $sectorZ = 0.0,
         public float $marketJumpMultiplier = 1.0,
         public float $marketVol = 0.15,
-        public float $reversionSpeed = 0.25,
+        public float $reversionSpeed = \App\Service\Market\Pricing\MarketEngine::FAIR_VALUE_PULL_SPEED,
         public float $kappa = \App\Service\Market\Pricing\MarketEngine::BASE_VARIANCE_REVERSION_SPEED,
         public float $volOfVol = 0.3,
         public ?MacroStateDTO $macroState = null,
@@ -41,7 +40,6 @@ class MarketPricingContext
         public string $businessModel = 'none',
         public float $liveCostOfEquity = 0.10,
         public float $netDebtPerShare = 0.0,
-        public float $recentPriceTrend = 0.0,
         public float $secularGrowth = 0.02,
         public float $baselineRoic = 0.10,
         public float $baselineMargin = 0.20,
@@ -58,6 +56,10 @@ class MarketPricingContext
         public float $orderFlowVariance = 0.0,
         /** Annualized variance this name's announcements (reports and warnings) have been supplying, from the measured EMA; the diffusion gives it back. */
         public float $announcementVariance = 0.0,
+        /** Annualized variance the sovereign fund's trading has been supplying to this name, from the tracker's EMA; systematic, so the market factor gives it back. */
+        public float $fundImpactVariance = 0.0,
+        /** Measured trend of market variance the common idiosyncratic factor is read against; null reads the level the market settles at. */
+        public ?float $marketVarianceTrend = null,
         /** Book equity less goodwill, per share; null when the caller has none, and the P/B leg then reads book. */
         public ?float $tangibleBookValuePerShare = null,
         /** The payout ratio the firm's dividend policy steers to; zero for a firm with no dividend policy. */
@@ -81,6 +83,8 @@ class MarketPricingContext
      * its step and any deal shock struck this tick.
      *
      * @param AnchorStakeLedger $anchorStakes The caller's ledger, primed with the board a sphere's holdings are marked on.
+     * @param float $fundImpactVariance The sovereign fund's measured impact variance in this name, which the ticker holds.
+     * @param float|null $marketVarianceTrend The ticker's measured market variance trend.
      */
     public static function forStock(
         Stock $stock,
@@ -89,7 +93,9 @@ class MarketPricingContext
         AnchorStakeLedger $anchorStakes,
         float $dt = 0.0,
         float $maShock = 0.0,
-        ?float $priorMarketVol = null
+        ?float $priorMarketVol = null,
+        float $fundImpactVariance = 0.0,
+        ?float $marketVarianceTrend = null
     ): self {
         $strategy = Sectors::strategyFor($stock->getIndustry());
         $shares = max(1.0, (float) $stock->getSharesOutstanding());
@@ -99,8 +105,6 @@ class MarketPricingContext
             currentPrice: (float) $stock->getPrice(),
             currentVolatility: (float) ($stock->getCurrentVolatility() ?? $baselineVolatility),
             longTermVolatility: $baselineVolatility,
-            // Fair value EPS basis: deduct guided shortfall from EPS until official quarterly report.
-            earningsPerShare: (float) $stock->getEarningsPerShare() - ($stock->getPreAnnouncedShortfall() / $shares),
             dt: $dt,
             lambda: (float) $stock->getJumpIntensity(),
             jumpVol: (float) $stock->getJumpVol(),
@@ -116,7 +120,9 @@ class MarketPricingContext
             bookValuePerShare: $anchorStakes->resolveMarkedBookValuePerShare($stock) ?? (float) $stock->getBookValuePerShare(),
             maShock: $maShock,
             currentRoic: $strategy->getEffectiveReturn($stock),
-            roicTtm: $strategy->getTrueReturn($stock),
+            // A guided shortfall is next quarter's miss, known now: it comes off the trailing return the report will
+            // book it to, so fair value hears it at the same persistence weight the report gives it.
+            roicTtm: $strategy->getTrueReturn($stock) - ($stock->getPreAnnouncedShortfall() / max(1.0, $strategy->getEvaluationCapital((float) $stock->getTotalEquity(), $stock->getInvestedCapital()))),
             dividendPerShare: (float) $stock->getLastDividend(),
             liveWacc: $health->wacc,
             baselineIndustryPE: Sectors::baselineIndustryPe($stock->getIndustry()),
@@ -126,7 +132,6 @@ class MarketPricingContext
             // The model's own net debt, as DebtEngine reads it: a lender's deposits and a clearinghouse's margin fund
             // its book rather than finance it, so they are no claim ahead of the equity.
             netDebtPerShare: max(0.0, $strategy->getNetDebtCapital((float) $stock->getTotalDebt(), (float) $stock->getWholesaleDebt(), (float) $stock->getCorporateTreasury())) / $shares,
-            recentPriceTrend: (float) ($stock->getPriceMomentumTrend() ?? 0.0),
             secularGrowth: $strategy->getFadedSecularGrowthRate($stock, $macroState->totalTime),
             // The anchor the firm's own model measures it by: a lender or underwriter carries a placeholder in
             // baselineRoic, and its through-the-cycle return is its ROE.
@@ -136,6 +141,8 @@ class MarketPricingContext
             investedCapitalPerShare: $stock->getInvestedCapital() / $shares,
             orderFlowVariance: (float) ($stock->getImpactVarianceEma() ?? 0.0),
             announcementVariance: (float) ($stock->getAnnouncementVarianceEma() ?? 0.0),
+            fundImpactVariance: $fundImpactVariance,
+            marketVarianceTrend: $marketVarianceTrend,
             tangibleBookValuePerShare: $stock->getTangibleEquity() / $shares,
             targetPayoutRatio: $stock->getPolicyPayoutRatio(),
             dividendAdjustmentSpeed: (float) $stock->getDividendSpeed(),

@@ -763,6 +763,31 @@ class MathUtility
     /**
      * E[min(X, c)^2] for X ~ Exp(rate). See kouTruncatedSecondMoment() for the derivation.
      */
+    /**
+     * E[J] of a truncated Kou jump (each tail capped where the draw is clamped). With kouTruncatedCompensator, E[e^J - 1],
+     * it gives a jump's log loss under Merton compensation: E[e^J - 1 - J].
+     */
+    public function kouTruncatedMean(
+        float $pUp,
+        float $etaUp,
+        float $etaDown,
+        float $capUp,
+        float $capDown
+    ): float {
+        return ($pUp * $this->truncatedExponentialMean($etaUp, $capUp))
+            - ((1.0 - $pUp) * $this->truncatedExponentialMean($etaDown, $capDown));
+    }
+
+    /** E[min(X, cap)] for X ~ Exp(rate). */
+    private function truncatedExponentialMean(float $rate, float $cap): float
+    {
+        if ($rate <= 0.0 || $cap <= 0.0) {
+            return 0.0;
+        }
+
+        return (1.0 - exp(-$rate * $cap)) / $rate;
+    }
+
     private function truncatedExponentialSecondMoment(float $rate, float $cap): float
     {
         if ($rate <= 0.0 || $cap <= 0.0) {
@@ -930,41 +955,6 @@ class MathUtility
     }
 
     /**
-     * Applies a 1-Dimensional Kalman Filter to smooth Earnings Per Share (EPS).
-     * Replaces arbitrary exponential decay heuristics with optimal statistical estimation.
-     *
-     * @param float $structuralEps    The prior estimate (Structural EPS derived from Book Value and ROIC).
-     * @param float $quarterlyEps     The measurement (Actual Quarterly EPS print).
-     * @param float $assetVolatility  The volatility of the firm's assets/equity (used to derive measurement noise).
-     * @param float $macroUncertainty The level of macroeconomic stress (increases prior uncertainty).
-     * @return float The posterior (smoothed) EPS estimate.
-     */
-    public function calculateKalmanSmoothedEps(float $structuralEps, float $quarterlyEps, float $assetVolatility, float $macroUncertainty): float
-    {
-        // 1. Process Noise (Uncertainty in our Structural Prior)
-        // In stable times, we trust our structural ROIC. During macro stress (recessions), our prior is less reliable.
-        $priorErrorCovariance = max(0.01, $macroUncertainty);
-
-        // 2. Measurement Noise (Uncertainty in the Quarterly Print)
-        // High-volatility companies (e.g., Tech startups) have very noisy quarterly earnings.
-        // Low-volatility companies (e.g., Utilities) have stable prints.
-        // We scale the variance based on asset volatility.
-        $measurementVariance = max(0.01, $assetVolatility * 2.0);
-
-        // 3. Kalman Gain
-        // How much should we trust the new quarterly print vs our structural prior?
-        // If Measurement Noise is huge, K approaches 0 (we ignore the print).
-        // If Prior Uncertainty is huge, K approaches 1 (we blindly trust the new print).
-        $kalmanGain = $priorErrorCovariance / ($priorErrorCovariance + $measurementVariance);
-
-        // 4. Posterior Estimate
-        // Update the structural prior with the new measurement, weighted by the Kalman Gain.
-        $posteriorEps = $structuralEps + $kalmanGain * ($quarterlyEps - $structuralEps);
-
-        return $posteriorEps;
-    }
-
-    /**
      * Calculates the Intrinsic Fair Value P/E ratio using fundamental drivers (Gordon Growth Model derivation).
      * P/E = (1 - Reinvestment Rate) / (Cost of Equity - Growth Rate)
      * Where Reinvestment Rate = Growth Rate / ROIC.
@@ -989,6 +979,18 @@ class MathUtility
      *                                   prior. Null skips shrinkage and returns the raw Gordon multiple.
      * @return float The intrinsic fair value P/E multiple.
      */
+    /**
+     * The growth rate a perpetuity may be struck on: bounded to [-5%, +6%] and at least 50bp below the cost of equity
+     * (floored at MIN_COST_OF_EQUITY), so no perpetuity divides by a vanishing spread. Every perpetuity struck on the
+     * same expected growth reads it through here, so they cannot disagree about where it is clamped.
+     */
+    public static function perpetualGrowthRate(float $costOfEquity, float $growthRate): float
+    {
+        $clampedGrowth = max(FinancialConstants::MIN_PERPETUAL_GROWTH_RATE, min(FinancialConstants::MAX_PERPETUAL_GROWTH_RATE, $growthRate));
+
+        return min($clampedGrowth, max(FinancialConstants::MIN_COST_OF_EQUITY, $costOfEquity) - FinancialConstants::MIN_PERPETUAL_GROWTH_SPREAD);
+    }
+
     public function calculateIntrinsicFairValuePE(
         float $costOfEquity,
         float $roic,
@@ -998,12 +1000,8 @@ class MathUtility
         // 1. Enforce absolute structural floor on Cost of Equity to prevent divergence under extreme distress
         $effectiveCostOfEquity = max(FinancialConstants::MIN_COST_OF_EQUITY, $costOfEquity);
 
-        // 2. Enforce absolute structural bounds on perpetual growth rate [-5%, +6%]
-        $clampedGrowth = max(FinancialConstants::MIN_PERPETUAL_GROWTH_RATE, min(FinancialConstants::MAX_PERPETUAL_GROWTH_RATE, $growthRate));
-
-        // 3. In perpetual valuation, steady-state growth cannot exceed or equal the hurdle rate.
-        // Constrain perpetual growth to at least 50 bps (0.005) below Cost of Equity to prevent divergence.
-        $effectiveGrowth = min($clampedGrowth, $effectiveCostOfEquity - 0.005);
+        // 2-3. The perpetual growth the multiple is struck on: bounded, and held below the hurdle.
+        $effectiveGrowth = self::perpetualGrowthRate($costOfEquity, $growthRate);
 
         // 4. Prevent division by zero or negative ROIC anomalies in perpetual calculations (floor at 0.01)
         $effectiveRoic = max(0.01, $roic);
@@ -1014,7 +1012,7 @@ class MathUtility
         $payoutRatio = 1.0 - $reinvestmentRate;
 
         // 6. Calculate Damodaran P/E multiple with safe spread denominator
-        $spread = max(0.005, $effectiveCostOfEquity - $effectiveGrowth);
+        $spread = max(FinancialConstants::MIN_PERPETUAL_GROWTH_SPREAD, $effectiveCostOfEquity - $effectiveGrowth);
         $pe = $payoutRatio / $spread;
 
         // 7. Vasicek shrinkage toward the sector's multiple, weighted by the precision of each estimate.
@@ -1083,12 +1081,10 @@ class MathUtility
 
     /**
      * Nominal expected growth used to strike a fair-value multiple, the same transmission for everyone
-     * who strikes one: secular real growth, the cyclical part scaled by beta, a stagflation drag on real
-     * growth that pricing power offsets, then inflation in full for the nominal rate. The perpetual part, the
-     * sector's secular rate, is capped at the economy's trend real growth: no firm outgrows the economy forever
-     * (Damodaran, Investment Valuation, ch. 12, the stable-growth rule). Damodaran proxies that growth with the
-     * long risk-free rate; here the economy's trend is known, and the two need not agree. The cycle is transitory
-     * and passes both ways.
+     * who strikes one: secular real growth, the cyclical part scaled by beta, then inflation in full for the
+     * nominal rate. No firm outgrows the economy forever (Damodaran, Investment Valuation, ch. 12): the sector's
+     * secular excess over trend fades, and is priced at its perpetual equivalent. The cycle is transitory and passes
+     * both ways.
      *
      * Management and the market MUST read the same figure. The corporate engines used to strike their
      * buyback, issuance and M&A multiples on a flat 2% while the pricing engine read the cycle, which made
@@ -1100,17 +1096,16 @@ class MathUtility
         float $outputGap,
         float $beta,
         float $inflation,
-        float $moatSpread
+        float $discountRate
     ): float {
-        $realGrowth = min($secularGrowth, MacroEngine::TREND_REAL_GROWTH) + ($outputGap * FinancialConstants::CYCLICAL_GROWTH_PASS_THROUGH * $beta);
-
-        // Stagflation drag: inflation above target compresses real growth where pricing power is weak.
-        $inflationDrag = max(0.0, ($inflation - MacroEngine::TARGET_INFLATION) * (1.0 - $moatSpread));
-        $realGrowth -= $inflationDrag;
+        // The secular excess over trend keeps fading (SECULAR_EXCESS_HALF_LIFE_YEARS), so it is priced at its
+        // perpetual equivalent rather than as permanent or as nothing.
+        $realGrowth = self::persistentEquivalentGrowth($secularGrowth, MacroEngine::TREND_REAL_GROWTH, $discountRate - $inflation)
+            + ($outputGap * FinancialConstants::CYCLICAL_GROWTH_PASS_THROUGH * $beta);
 
         // Nominal growth is real growth plus inflation (Fisher): the cash flows are discounted at a nominal rate,
-        // so growing them at less than full inflation is the inflation illusion of Modigliani & Cohn (1979). Weak
-        // pricing power is the stagflation drag above, not a haircut on inflation for every firm.
+        // so growing them at less than full inflation is the inflation illusion of Modigliani & Cohn (1979). The
+        // firms' own earnings pass inflation through in full, so no haircut on it is priced either.
         return max(0.0, $realGrowth + $inflation);
     }
 
@@ -1156,6 +1151,20 @@ class MathUtility
      * The excess growth a fading sector accumulates between two times: the integral of the faded excess, so a
      * level that compounds it (an industry's demand over trend GDP) follows the same fade as the rate.
      */
+    /**
+     * The constant growth rate worth the same as a growth rate whose excess over the long-run rate fades at the secular
+     * half-life: the H-model of Fuller & Hsia (1984) with an exponential fade. A dividend growing at g_L plus an excess e
+     * decaying at lambda is worth D/(r-g_L) x (1 + e/(r-g_L+lambda)) to first order, so the perpetual equivalent keeps
+     * (r-g_L)/(r-g_L+lambda) of the excess. Rates are real: the real discount rate against real trend growth.
+     */
+    public static function persistentEquivalentGrowth(float $growth, float $longRunGrowth, float $realDiscountRate): float
+    {
+        $fade = M_LN2 / FinancialConstants::SECULAR_EXCESS_HALF_LIFE_YEARS;
+        $spread = max(FinancialConstants::MIN_PERPETUAL_GROWTH_SPREAD, $realDiscountRate - $longRunGrowth);
+
+        return $longRunGrowth + (($growth - $longRunGrowth) * $spread / ($spread + $fade));
+    }
+
     public static function fadedExcessIntegral(float $openingExcess, float $fromYears, float $toYears, float $halfLifeYears): float
     {
         $decay = M_LN2 / $halfLifeYears;
@@ -1306,13 +1315,12 @@ class MathUtility
         float $outputGap,
         float $beta,
         float $inflation,
-        float $moatSpread,
         ?float $sectorMultiple,
         float $accrualsRatio,
         float $payoutRatio
     ): float {
         $expectedGrowth = $this->calculateFundableGrowth(
-            $this->calculateExpectedNominalGrowth($secularGrowth, $outputGap, $beta, $inflation, $moatSpread),
+            $this->calculateExpectedNominalGrowth($secularGrowth, $outputGap, $beta, $inflation, $hurdleRate),
             $trueReturn,
             $payoutRatio,
             $inflation
@@ -1341,10 +1349,9 @@ class MathUtility
 
         $effectiveDiscountRate = max(FinancialConstants::MIN_COST_OF_EQUITY, $discountRate);
         $clampedGrowthRate = max(FinancialConstants::MIN_PERPETUAL_GROWTH_RATE, min(FinancialConstants::MAX_PERPETUAL_GROWTH_RATE, $growthRate));
-        $effectiveGrowthRate = min($clampedGrowthRate, $effectiveDiscountRate - 0.005);
+        $effectiveGrowthRate = min($clampedGrowthRate, $effectiveDiscountRate - FinancialConstants::MIN_PERPETUAL_GROWTH_SPREAD);
 
-        // Prevent Division by Zero. The denominator must be at least 50 bps (0.005)
-        $denominator = max(0.005, $effectiveDiscountRate - $effectiveGrowthRate);
+        $denominator = max(FinancialConstants::MIN_PERPETUAL_GROWTH_SPREAD, $effectiveDiscountRate - $effectiveGrowthRate);
         $multiplier = (1.0 + $effectiveGrowthRate) / $denominator;
 
         $clampedMultiplier = min(FinancialConstants::MAX_DCF_MULTIPLIER, $multiplier);

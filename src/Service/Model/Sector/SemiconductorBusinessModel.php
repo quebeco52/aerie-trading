@@ -46,8 +46,8 @@ class SemiconductorBusinessModel extends StandardCorporateBusinessModel
     public const INVENTORY_CYCLE_SENSITIVITY = 1.00;
 
     // --- Balance Sheet Realism ---
-    /** Stock-based compensation as a fraction of revenue (ASC 718): non-cash, added back to FCF, settled in new shares. Design and process engineering talent paid partly in equity. */
-    public const STOCK_COMPENSATION_INTENSITY = 0.05;
+    /** Stock-based compensation (ASC 718) as a share of revenue: Semiconductor, 5.04% of revenue, 66 firms (Damodaran, Employee data by industry, US, January 2026). */
+    public const STOCK_COMPENSATION_INTENSITY = 0.0504;
 
     // --- FX Exposure ---
     /** Share of revenue whose competitiveness moves with the trade-weighted exchange rate. Wafers are priced in the trade currency and sold into a global fab and OEM base. */

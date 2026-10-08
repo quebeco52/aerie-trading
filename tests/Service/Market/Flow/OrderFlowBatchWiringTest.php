@@ -57,7 +57,7 @@ class OrderFlowBatchWiringTest extends TestCase
         $this->inject($desk, 'gammaEngine', new DealerGammaEngine($gamma, new LiquidityEngine(new MathUtility())));
         $this->inject($desk, 'orderFlow', $flow);
 
-        $desk->hedge($stocks);
+        $desk->hedge($stocks, 1.0 / 252.0);
 
         $this->assertBracketed($flow->calls, 2);
     }

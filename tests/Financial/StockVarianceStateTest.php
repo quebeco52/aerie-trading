@@ -31,7 +31,6 @@ final class StockVarianceStateTest extends TestCase
             currentPrice: 100.0,
             currentVolatility: $volatility,
             longTermVolatility: self::LONG_TERM_VOLATILITY,
-            earningsPerShare: 5.0,
             dt: $dt,
             lambda: $lambda,
             jumpVol: 0.05,
@@ -91,17 +90,21 @@ final class StockVarianceStateTest extends TestCase
     }
 
     /**
-     * A market-vol spike reaches the name through its beta and nowhere else: with no vol-of-vol and no
-     * jumps, the idiosyncratic state is already at its target and must stay there through the spike and
-     * the decay. Stripping at this tick's market vol instead of last tick's printed 45% for a 40% spike.
+     * A market-vol spike reaches the name through its beta at once, and through the common idiosyncratic factor
+     * only as fast as the residual variance reverts to its moved target: with no vol-of-vol and no jumps the
+     * residual state follows theta_t + (v - theta_t) e^(-kappa dt) exactly. Stripping the systematic part at this
+     * tick's market vol instead of last tick's leaked the spike into the residual state (a 40% spike printed 45%).
      */
-    public function testAMarketVolSpikeDoesNotLeakIntoTheIdiosyncraticState(): void
+    public function testAMarketVolSpikeReachesTheResidualOnlyThroughTheCommonFactor(): void
     {
         mt_srand(20261007);
         $engine = new MarketEngine(new MathUtility());
+        $longRunResidual = MarketEngine::longTermIdiosyncraticVariance(self::LONG_TERM_VOLATILITY, self::BETA);
+        $decay = exp(-MarketEngine::varianceReversionSpeed(0.0) * self::DAILY);
 
         $marketVol = self::CALM_MARKET_VOL;
-        $volatility = sqrt($this->targetVariance($marketVol));
+        $residual = $longRunResidual * MarketEngine::commonIdiosyncraticVarianceScale($marketVol);
+        $volatility = sqrt($residual + ((self::BETA * $marketVol) ** 2));
         $worst = 0.0;
 
         for ($tick = 0; $tick < 252; $tick++) {
@@ -114,10 +117,49 @@ final class StockVarianceStateTest extends TestCase
                 $this->context($volatility, $marketVol, $prior, 0.0, 1.0e-6, self::DAILY)
             )['next_volatility'];
 
-            $worst = max($worst, abs($volatility - sqrt($this->targetVariance($marketVol))));
+            $target = $longRunResidual * MarketEngine::commonIdiosyncraticVarianceScale($marketVol);
+            $residual = $target + (($residual - $target) * $decay);
+            $worst = max($worst, abs($volatility - sqrt($residual + ((self::BETA * $marketVol) ** 2))));
         }
 
-        self::assertLessThan(1.0e-4, $worst, 'Total vol drifted off sqrt(idiosyncratic target + (beta x market vol)^2).');
+        // QE noise at a 1e-6 vol-of-vol is a few 1e-4 at these levels; the leak this guards was five points.
+        self::assertLessThan(1.0e-3, $worst, 'Total vol drifted off the residual path plus (beta x market vol)^2.');
+    }
+
+    /**
+     * The common idiosyncratic factor (Herskovic, Kelly, Lustig & Van Nieuwerburgh 2016): residual variance scales
+     * with market variance over its settle level at the firm loading, and is untouched where the market settles.
+     */
+    public function testResidualVarianceLoadsOnMarketVarianceAroundItsSettleLevel(): void
+    {
+        $anchor = \App\Service\Macro\MacroEngine::MACRO_VOL_BASE_ANCHOR;
+        $loading = MarketEngine::IDIOSYNCRATIC_COMMON_FACTOR_LOADING;
+
+        self::assertEqualsWithDelta(1.0, MarketEngine::commonIdiosyncraticVarianceScale($anchor), 1e-12);
+        self::assertEqualsWithDelta(1.0 + ($loading * 3.0), MarketEngine::commonIdiosyncraticVarianceScale(2.0 * $anchor), 1e-12);
+        self::assertGreaterThanOrEqual(0.0, MarketEngine::commonIdiosyncraticVarianceScale(0.0));
+        // Read against a measured trend, a market at its own trend leaves the residual alone wherever that trend sits.
+        self::assertEqualsWithDelta(1.0, MarketEngine::commonIdiosyncraticVarianceScale(0.18, 0.18 * 0.18), 1e-12);
+        self::assertEqualsWithDelta(1.0 + ($loading * 3.0), MarketEngine::commonIdiosyncraticVarianceScale(0.36, 0.18 * 0.18), 1e-12);
+
+        // Held at a turbulent market vol, the residual settles on the scaled target.
+        mt_srand(20261008);
+        $engine = new MarketEngine(new MathUtility());
+        $turbulent = 2.0 * $anchor;
+        $volatility = sqrt($this->targetVariance($turbulent));
+        for ($tick = 0; $tick < 504; $tick++) {
+            $volatility = $engine->calculateNextPrice($this->context($volatility, $turbulent, $turbulent, 0.0, 1.0e-6, self::DAILY))['next_volatility'];
+        }
+        $residualTarget = MarketEngine::longTermIdiosyncraticVariance(self::LONG_TERM_VOLATILITY, self::BETA) * MarketEngine::commonIdiosyncraticVarianceScale($turbulent);
+        self::assertEqualsWithDelta($residualTarget + ((self::BETA * $turbulent) ** 2), $volatility * $volatility, 1e-3 * $residualTarget);
+
+        // A market that has been this turbulent for a whole cycle is at its trend: the residual is back at its own level.
+        for ($tick = 0; $tick < 504; $tick++) {
+            $context = $this->context($volatility, $turbulent, $turbulent, 0.0, 1.0e-6, self::DAILY);
+            $context->marketVarianceTrend = $turbulent * $turbulent;
+            $volatility = $engine->calculateNextPrice($context)['next_volatility'];
+        }
+        self::assertEqualsWithDelta($this->targetVariance($turbulent), $volatility * $volatility, 1e-3 * $residualTarget);
     }
 
     /**
