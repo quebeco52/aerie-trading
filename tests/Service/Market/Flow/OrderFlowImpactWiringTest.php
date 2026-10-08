@@ -271,6 +271,29 @@ class OrderFlowImpactWiringTest extends TestCase
         $this->assertEqualsWithDelta($program - $expectedSlice, $stock->getCorporateFlowBacklog(), 1e-6, 'The slice executed comes off the backlog.');
     }
 
+    /**
+     * Executing an announced program supplies liquidity and carries no news (Hillert, Maug & Obernberger 2016), so the
+     * company's own slice moves the price at the peak and then relaxes all the way back: none of it stays.
+     */
+    public function testACompanysOwnProgramLeavesNoPermanentImpact(): void
+    {
+        $stock = $this->stock();
+        $tracker = $this->tracker();
+        $dt = 1.0 / 14400.0;
+        $slice = $this->liquidity->averageDailyVolume($stock) * FinancialConstants::CORPORATE_FLOW_MAX_ADV_SHARE_PER_DAY
+            * $dt * FinancialConstants::TRADING_DAYS_PER_YEAR * 0.5;
+        $stock->setCorporateFlowBacklog($slice);
+
+        $tracker->updateStocks([$stock], $dt, false, new MacroStateDTO());
+        $this->assertEqualsWithDelta(100.0 * exp($this->liquidity->peakImpact($stock, $slice)), (float) $stock->getPrice(), 1e-9);
+
+        $halfLife = FinancialConstants::TRANSIENT_IMPACT_HALF_LIFE_YEARS;
+        for ($tick = 0; $tick < 400; $tick++) {
+            $tracker->updateStocks([$stock], $halfLife / 10.0, false, new MacroStateDTO());
+        }
+        $this->assertEqualsWithDelta(100.0, (float) $stock->getPrice(), 1e-9);
+    }
+
     public function testAnOfferingsFlowbackSellsDownAndASmallProgramFinishesInOneTick(): void
     {
         $stock = $this->stock();

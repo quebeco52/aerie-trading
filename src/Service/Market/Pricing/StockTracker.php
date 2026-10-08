@@ -258,8 +258,9 @@ class StockTracker
 
             // The company's own program — a repurchase still being executed, or issued stock still being
             // distributed — is worked off at the 10b-18 pace and joins the tick's flow here. It is a buyer
-            // or seller like any other and is charged the same impact; the invented per-report shock it
+            // or seller like any other and is charged the same peak impact; the invented per-report shock it
             // replaces charged the price for a quarter's buying in a single tick with no slippage.
+            $corporateSlice = 0.0;
             $corporateBacklog = $stock->getCorporateFlowBacklog();
             if ($corporateBacklog !== 0.0) {
                 $corporateSlice = $this->liquidityEngine->corporateFlowSlice($stock, $corporateBacklog, $dt);
@@ -275,6 +276,7 @@ class StockTracker
             $impactLogReturn = 0.0;
             $budgetedImpactLogReturn = 0.0;
             $budgetedFundLogReturn = 0.0;
+            $corporateLogReturn = 0.0;
             $outstandingTransient = $this->transientImpact[$stock->getTicker()] ?? 0.0;
 
             if ($tickFlow !== 0.0 || $fundShares !== 0.0) {
@@ -294,20 +296,30 @@ class StockTracker
                 // once, which makes it SYSTEMATIC: it is charged to the market factor's budget, never the name's
                 // idiosyncratic one, or every rebalance would quietly shrink single-name volatility.
                 // Only the share that stays is long-run variance; the transient part washes out within days.
-                $budgetedImpactLogReturn = FinancialConstants::PERMANENT_IMPACT_SHARE * max(
+                // The company's own slice stays only at CORPORATE_FLOW_PERMANENT_IMPACT_SHARE: its part of the clamped
+                // peak is tracked so the rest of it is moved into the transient book below and kept out of the budget.
+                $corporateImpact = $corporateSlice !== 0.0 ? $this->liquidityEngine->peakImpact($stock, $corporateSlice) : 0.0;
+                $peakImpact = $flowImpact + $fundImpact;
+                $corporateLogReturn = $peakImpact !== 0.0 ? $impactLogReturn * ($corporateImpact / $peakImpact) : 0.0;
+                $budgetedImpactLogReturn = (FinancialConstants::PERMANENT_IMPACT_SHARE * max(
                     -FinancialConstants::MAX_TICK_IMPACT_LOG_RETURN,
-                    min(FinancialConstants::MAX_TICK_IMPACT_LOG_RETURN, $flowImpact)
-                );
+                    min(FinancialConstants::MAX_TICK_IMPACT_LOG_RETURN, $flowImpact - $corporateImpact)
+                )) + (FinancialConstants::CORPORATE_FLOW_PERMANENT_IMPACT_SHARE * max(
+                    -FinancialConstants::MAX_TICK_IMPACT_LOG_RETURN,
+                    min(FinancialConstants::MAX_TICK_IMPACT_LOG_RETURN, $corporateImpact)
+                ));
                 $budgetedFundLogReturn = FinancialConstants::PERMANENT_IMPACT_SHARE * max(
                     -FinancialConstants::MAX_TICK_IMPACT_LOG_RETURN,
                     min(FinancialConstants::MAX_TICK_IMPACT_LOG_RETURN, $fundImpact)
                 );
             }
 
-            // The peak move lands now; its transient share then relaxes back at the resilience rate, every tick.
-            $nextTransient = LiquidityEngine::transientImpactAfter($outstandingTransient, $impactLogReturn, $dt);
+            // The peak move lands now; its transient share then relaxes back at the resilience rate, every tick. The
+            // company's own slice moves from the permanent share to the transient one.
+            $corporateShift = (FinancialConstants::PERMANENT_IMPACT_SHARE - FinancialConstants::CORPORATE_FLOW_PERMANENT_IMPACT_SHARE) * $corporateLogReturn;
+            $nextTransient = LiquidityEngine::transientImpactAfter($outstandingTransient, $impactLogReturn, $dt) + $corporateShift;
             $this->transientImpact[$stock->getTicker()] = $nextTransient;
-            $impactPriceMove = (FinancialConstants::PERMANENT_IMPACT_SHARE * $impactLogReturn) + ($nextTransient - $outstandingTransient);
+            $impactPriceMove = (FinancialConstants::PERMANENT_IMPACT_SHARE * $impactLogReturn) - $corporateShift + ($nextTransient - $outstandingTransient);
             if ($impactPriceMove !== 0.0) {
                 $newPrice = max(0.01, $newPrice * exp($impactPriceMove));
             }

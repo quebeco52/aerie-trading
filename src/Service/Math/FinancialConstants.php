@@ -542,6 +542,8 @@ class FinancialConstants
     public const PEAK_IMPACT_GAMMA = 1.00;
     /** Share of the peak move that stays in the price; the rest relaxes away. Metaorder impact settles at ~2/3 of its peak (Farmer, Gerig, Lillo & Waelbroeck 2013; Bershova & Rakhlin 2013). */
     public const PERMANENT_IMPACT_SHARE = 2.0 / 3.0;
+    /** Share of a company's own open-market repurchase or flowback impact that stays: none. Execution of an announced program supplies liquidity and carries no news (Hillert, Maug & Obernberger 2016; Busch & Obernberger 2017); the program's information is in fair value through its payout. */
+    public const CORPORATE_FLOW_PERMANENT_IMPACT_SHARE = 0.0;
     /** Half-life of the transient part of impact, in years: NYSE price pressures decay with a 0.92-trading-day half-life (Hendershott & Menkveld 2014, JFE). */
     public const TRANSIENT_IMPACT_HALF_LIFE_YEARS = 0.92 / self::TRADING_DAYS_PER_YEAR;
     /** Temporary impact as a share of the peak move. The price walks to its new level while the order fills, so the taker's average fill is the midpoint of that walk: exactly one half. */

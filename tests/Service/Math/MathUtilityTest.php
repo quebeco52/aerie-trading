@@ -79,6 +79,25 @@ class MathUtilityTest extends TestCase
         $this->assertLessThan(0.0, $compensator);
     }
 
+    public function testKouTruncatedMeanMatchesASimulatedDrawAndTheUncappedMeanFarFromTheCap(): void
+    {
+        $this->assertEqualsWithDelta((0.35 / 400.0) - (0.65 / 280.0), $this->mathUtility->kouTruncatedMean(0.35, 400.0, 280.0, 0.2624, 0.3567), 1.0e-9);
+
+        mt_srand(910);
+        $pUp = 0.40;
+        $etaUp = 1.0 / 0.10;
+        $etaDown = 1.0 / 0.125;
+        $draws = 400000;
+        $sum = 0.0;
+        for ($i = 0; $i < $draws; $i++) {
+            $sum += $this->mathUtility->generateUniform() < $pUp
+                ? min($this->mathUtility->generateExponential($etaUp), 0.2624)
+                : max(-$this->mathUtility->generateExponential($etaDown), -0.3567);
+        }
+
+        $this->assertEqualsWithDelta($this->mathUtility->kouTruncatedMean($pUp, $etaUp, $etaDown, 0.2624, 0.3567), $sum / $draws, 0.001);
+    }
+
     public function testKouTruncatedCompensatorMatchesASimulatedDraw(): void
     {
         mt_srand(909);

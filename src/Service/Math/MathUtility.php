@@ -763,6 +763,31 @@ class MathUtility
     /**
      * E[min(X, c)^2] for X ~ Exp(rate). See kouTruncatedSecondMoment() for the derivation.
      */
+    /**
+     * E[J] of a truncated Kou jump (each tail capped where the draw is clamped). With kouTruncatedCompensator, E[e^J - 1],
+     * it gives a jump's log loss under Merton compensation: E[e^J - 1 - J].
+     */
+    public function kouTruncatedMean(
+        float $pUp,
+        float $etaUp,
+        float $etaDown,
+        float $capUp,
+        float $capDown
+    ): float {
+        return ($pUp * $this->truncatedExponentialMean($etaUp, $capUp))
+            - ((1.0 - $pUp) * $this->truncatedExponentialMean($etaDown, $capDown));
+    }
+
+    /** E[min(X, cap)] for X ~ Exp(rate). */
+    private function truncatedExponentialMean(float $rate, float $cap): float
+    {
+        if ($rate <= 0.0 || $cap <= 0.0) {
+            return 0.0;
+        }
+
+        return (1.0 - exp(-$rate * $cap)) / $rate;
+    }
+
     private function truncatedExponentialSecondMoment(float $rate, float $cap): float
     {
         if ($rate <= 0.0 || $cap <= 0.0) {

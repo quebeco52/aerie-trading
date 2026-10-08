@@ -308,8 +308,13 @@ class MarketEngine
         // The sovereign fund trades every name in proportion to its float, so the impact it measurably supplies is
         // systematic variance: the market factor's diffusion gives it back, floored at zero, as the idiosyncratic
         // diffusion gives back the name's own flow.
-        $fundImpactVariance = min(max(0.0, $ctx->fundImpactVariance), $systematicVar);
-        $diffusionMarketVol = $systematicVar > 0.0 ? $marketVol * sqrt(1.0 - ($fundImpactVariance / $systematicVar)) : $marketVol;
+        // The shock is loaded at the market vol known before it arrives: MacroEngine updates marketVolatility with this
+        // tick's own innovation (the leverage effect), so the updated vol is correlated with marketZ and E[vol * z] < 0
+        // would drift every name down by beta times that. An Ito integrand is non-anticipating (Kloeden & Platen 1992).
+        $shockMarketVol = $ctx->priorMarketVol ?? $marketVol;
+        $shockSystematicVar = ($beta * $shockMarketVol) * ($beta * $shockMarketVol);
+        $fundImpactVariance = min(max(0.0, $ctx->fundImpactVariance), $shockSystematicVar);
+        $diffusionMarketVol = $shockSystematicVar > 0.0 ? $shockMarketVol * sqrt(1.0 - ($fundImpactVariance / $shockSystematicVar)) : $shockMarketVol;
         $longTermIdiosyncraticVar = self::longTermIdiosyncraticVariance($longTermVolatility, $beta);
 
         // The floor the same split guarantees, which the variance state is held to when it is stripped back
@@ -335,6 +340,7 @@ class MarketEngine
         // a negative beta swaps the two tails outright — an inverse name gains on the market's crashes.
         $systemicExposure = abs($beta);
         $systemicCompensator = 0.0;
+        $systemicJumpMean = 0.0;
         $systemicJumpVariance = 0.0;
 
         if ($systemicExposure > 0.0) {
@@ -348,6 +354,14 @@ class MarketEngine
             $exposedEtaDown = $beta > 0.0 ? $scaledEtaDown : $scaledEtaUp;
 
             $systemicCompensator = MacroEngine::SYSTEMIC_JUMP_INTENSITY * $this->mathUtility->kouTruncatedCompensator(
+                $exposedPUp,
+                $exposedEtaUp,
+                $exposedEtaDown,
+                $capUp,
+                $capDown
+            );
+
+            $systemicJumpMean = MacroEngine::SYSTEMIC_JUMP_INTENSITY * $this->mathUtility->kouTruncatedMean(
                 $exposedPUp,
                 $exposedEtaUp,
                 $exposedEtaDown,
@@ -485,6 +499,16 @@ class MarketEngine
         // Ornstein-Uhlenbeck mean reversion in log-space at a constant speed: the exact discretization, so the pull
         // per year is the same at any tick rate.
         $reversionWeight = max(0.0, min(1.0, exp(-$dynamicReversion * $dt)));
+
+        // Median-unbiased pull: the drift gives back the log losses the engine's own processes create, Ito on the
+        // diffusion and the convexity of the Merton-compensated jumps, E[e^J - 1 - J]. A fairly priced name's log price
+        // then grows with log fair value and the log pull settles at zero (Summers 1986 log noise), not -var/(2 kappa).
+        $idiosyncraticJumpMean = $lambda > 0.0
+            ? $lambda * $this->mathUtility->kouTruncatedMean(self::SVJJ_P_UP, $dynamicEtaUp, $dynamicEtaDown, $capUp, $capDown)
+            : 0.0;
+        $finalDrift += 0.5 * ((($beta * $diffusionMarketVol) ** 2) + max(0.0, $currentIdiosyncraticVar))
+            + ($jumpCompensator - $idiosyncraticJumpMean)
+            + ($systemicCompensator - $systemicJumpMean);
 
         // Pure Geometric Brownian Motion (GBM) Step
         $idiosyncraticShock = $this->mathUtility->generateStandardNormal();

@@ -247,11 +247,11 @@ final class PriceFactorTransmissionTest extends TestCase
 
     /**
      * The market-wide jump reaches a name as beta x Y, floored and capped per jump, so its drift must give back
-     * exactly that clamped jump's mean, lambda x E[e^clamp(beta Y) - 1], at every beta and sign; otherwise the
-     * expected return moves with beta and a high-beta name settles away from its fair value. The mean is
+     * exactly that clamped jump's log mean, lambda x E[clamp(beta Y)], at every beta and sign; otherwise the log
+     * price moves with beta and a high-beta name settles away from its fair value under the log pull. The mean is
      * integrated here from the Kou density directly, not taken from the engine's own helper.
      */
-    public function testTheDriftGivesBackTheSystemicJumpMeanAtEveryBeta(): void
+    public function testTheDriftGivesBackTheSystemicJumpsLogMeanAtEveryBeta(): void
     {
         $dt = 1.0 / 252.0;
         $logStep = function (float $beta) use ($dt): float {
@@ -281,13 +281,13 @@ final class PriceFactorTransmissionTest extends TestCase
 
         $unexposed = $logStep(0.0);
         foreach ([0.3, 1.3, 2.4, -0.6] as $beta) {
-            $expected = -MacroEngine::SYSTEMIC_JUMP_INTENSITY * $this->clampedSystemicJumpMean($beta) * $dt;
+            $expected = -MacroEngine::SYSTEMIC_JUMP_INTENSITY * $this->clampedSystemicJumpLogMean($beta) * $dt;
             $this->assertEqualsWithDelta($expected, $logStep($beta) - $unexposed, 1e-3 * abs($expected), "beta {$beta}");
         }
     }
 
     /** E[e^clamp(beta Y) - 1] for the systemic Kou jump Y, by midpoint quadrature over each tail. */
-    private function clampedSystemicJumpMean(float $beta): float
+    private function clampedSystemicJumpLogMean(float $beta): float
     {
         $tail = function (float $eta, float $sign) use ($beta): float {
             $steps = 200_000;
@@ -297,7 +297,7 @@ final class PriceFactorTransmissionTest extends TestCase
             for ($i = 0; $i < $steps; $i++) {
                 $y = ($i + 0.5) * $width;
                 $x = max(FinancialConstants::MIN_JUMP_LOG_RETURN, min(FinancialConstants::MAX_JUMP_LOG_RETURN, $beta * $sign * $y));
-                $sum += $eta * exp(-$eta * $y) * (exp($x) - 1.0) * $width;
+                $sum += $eta * exp(-$eta * $y) * $x * $width;
             }
 
             return $sum;

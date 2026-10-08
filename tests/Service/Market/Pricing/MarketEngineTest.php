@@ -3,6 +3,7 @@
 namespace App\Tests\Service\Market\Pricing;
 
 use PHPUnit\Framework\TestCase;
+use App\Service\Macro\MacroEngine;
 use App\Service\Market\Pricing\MarketEngine;
 use App\Service\Market\Pricing\PolicyCapitalization;
 use App\Service\Math\MathUtility;
@@ -323,6 +324,71 @@ class MarketEngineTest extends TestCase
         $systematic = (1.2 * 0.15) ** 2;
         $this->assertEqualsWithDelta(sqrt(1.0 - (0.01 / $systematic)), $spread(0.01) / $spread(0.0), 1e-9);
         $this->assertEqualsWithDelta(0.0, $spread($systematic * 2.0), 1e-12, 'Floored at zero, never negative.');
+    }
+
+    /**
+     * The market shock is loaded at the vol known before it arrives. The macro's vol already carries this tick's own
+     * innovation (leverage), so loading the shock at it made E[vol * z] negative: a beta-0.8 name lost ~5pp a year.
+     */
+    public function testTheMarketShockIsLoadedAtThePriorMarketVol(): void
+    {
+        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
+        $this->mathUtilityMock->method('checkProbability')->willReturn(false);
+        $spread = function (?float $priorVol, float $vol): float {
+            $at = fn (float $z): float => log($this->engine->calculateNextPrice(new MarketPricingContext(
+                currentPrice: 100.0, currentVolatility: 0.25, longTermVolatility: 0.25,
+                dt: 1.0 / 252.0, lambda: 0.0, beta: 1.2, marketZ: $z, marketVol: $vol, bookValuePerShare: 50.0,
+                priorMarketVol: $priorVol
+            ))['price']);
+
+            return $at(1.0) - $at(-1.0);
+        };
+
+        $this->assertEqualsWithDelta(1.0, $spread(0.15, 0.30) / $spread(0.15, 0.15), 1e-9, 'A vol updated this tick must not scale its own shock.');
+        $this->assertEqualsWithDelta(2.0, $spread(null, 0.30) / $spread(0.15, 0.15), 1e-9, 'Without a prior, the current vol stands in.');
+    }
+
+    /**
+     * Median-unbiased pull: at fair value, with no shock and no arrival, the log price grows at the cost of equity less
+     * the jumps' log mean. Ito and the Merton compensator's convexity are given back, so neither the volatility nor the
+     * jump process leaves a standing -var/(2 kappa) gap under the log pull.
+     */
+    public function testAFairlyPricedNamesLogPriceGrowsAtTheCostOfEquityLessTheJumpsLogMean(): void
+    {
+        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
+        $this->mathUtilityMock->method('checkProbability')->willReturn(false);
+        $dt = 1.0 / 252.0;
+        $step = function (float $vol, float $beta, float $lambda) use ($dt): float {
+            $context = fn (float $price): MarketPricingContext => new MarketPricingContext(
+                currentPrice: $price, currentVolatility: $vol, longTermVolatility: $vol, dt: $dt, lambda: $lambda, beta: $beta,
+                marketVol: 0.15, priorMarketVol: 0.15, bookValuePerShare: 50.0, liveCostOfEquity: 0.09
+            );
+            // Fair value reads the price weakly, so strike it where it reproduces itself and the pull is exactly zero.
+            $fair = 100.0;
+            for ($i = 0; $i < 50; $i++) {
+                $fair = $this->engine->strikeFairValue($context($fair))['perceived_fair_value'];
+            }
+
+            return log($this->engine->calculateNextPrice($context($fair))['price'] / $fair) / $dt;
+        };
+
+        $math = new MathUtility();
+        $caps = [FinancialConstants::MAX_JUMP_LOG_RETURN, abs(FinancialConstants::MIN_JUMP_LOG_RETURN)];
+        $systemicLogMean = MacroEngine::SYSTEMIC_JUMP_INTENSITY * $math->kouTruncatedMean(
+            MacroEngine::SYSTEMIC_JUMP_PROBABILITY_UP,
+            MacroEngine::SYSTEMIC_JUMP_ETA_UP / 1.2,
+            MacroEngine::SYSTEMIC_JUMP_ETA_DOWN / 1.2,
+            ...$caps
+        );
+        $eta = MarketEngine::calibratedJumpParameters(0.45, 0.0, 1.0, 0.05);
+        $idiosyncraticLogMean = 1.0 * $math->kouTruncatedMean(0.40, $eta['eta_up'], $eta['eta_down'], ...$caps);
+
+        // The blend keeps w = e^(-kappa dt) of the step's drift: the pull holds the one-tick-stale fair value.
+        $w = exp(-MarketEngine::FAIR_VALUE_PULL_SPEED * (1.0 / 252.0));
+        $this->assertEqualsWithDelta($step(0.20, 0.0, 0.0), $step(0.45, 0.0, 0.0), 1e-9, 'The drift does not depend on volatility: Ito is given back.');
+        $this->assertEqualsWithDelta($w * 0.09, $step(0.20, 0.0, 0.0), 1e-9);
+        $this->assertEqualsWithDelta($w * (0.09 - $systemicLogMean), $step(0.45, 1.2, 0.0), 1e-9, 'Market loading and the systemic jump.');
+        $this->assertEqualsWithDelta($w * (0.09 - $idiosyncraticLogMean), $step(0.45, 0.0, 1.0), 1e-9, 'Between arrivals the drift carries the jumps\' log mean.');
     }
 
     /**
