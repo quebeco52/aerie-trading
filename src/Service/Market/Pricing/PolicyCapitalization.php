@@ -52,6 +52,10 @@ final class PolicyCapitalization
     /** Share of that uplift's distance from its average still there a term later: 0.838 (sd across games 0.12). */
     public const CARBON_POWER_TERM_PERSISTENCE = 0.838;
 
+    // --- Laws Priced per Firm ---
+    /** The laws a firm's own accounts answer to, keyed as PoliticsEngine::LEVER_FIELDS; the corporate tax reaches every firm through its effective rate instead. */
+    public const PER_FIRM_LEVERS = ['bankLevyRate', 'extractionStringency', 'stampDutyRate', 'carbonPrice'];
+
     // --- Discounting ---
     /** Smallest discount rate less growth a firm's value is spread at, the floor the intrinsic multiple puts under its spread (MathUtility::calculateIntrinsicFairValuePE()). */
     public const MIN_CAP_RATE = 0.005;
@@ -92,7 +96,7 @@ final class PolicyCapitalization
      */
     public static function extractionCostGap(MacroStateDTO $macro, float $capRate, bool $previous = false): float
     {
-        return self::expectedOverLife($macro, $capRate, $previous, 'extractionStringency', $macro->extractionStringency, MathUtility::calculateExtractionCostFactor(...), self::LONG_RUN_EXTRACTION_COST_FACTOR, self::EXTRACTION_COST_TERM_PERSISTENCE)
+        return self::expectedOverLife($macro, $capRate, $previous, 'extractionStringency', $macro->extractionStringency, static fn (float $law): float => self::measure('extractionStringency', $law), self::LONG_RUN_EXTRACTION_COST_FACTOR, self::EXTRACTION_COST_TERM_PERSISTENCE)
             - $macro->extractionCostFactorEmbodied;
     }
 
@@ -104,7 +108,7 @@ final class PolicyCapitalization
      */
     public static function stampDutyVolumeGap(MacroStateDTO $macro, float $capRate, bool $previous = false): float
     {
-        return self::expectedOverLife($macro, $capRate, $previous, 'stampDutyRate', $macro->stampDutyRate, MathUtility::calculateStampDutyVolumeFactor(...), self::LONG_RUN_STAMP_DUTY_VOLUME_FACTOR, self::STAMP_DUTY_VOLUME_TERM_PERSISTENCE)
+        return self::expectedOverLife($macro, $capRate, $previous, 'stampDutyRate', $macro->stampDutyRate, static fn (float $law): float => self::measure('stampDutyRate', $law), self::LONG_RUN_STAMP_DUTY_VOLUME_FACTOR, self::STAMP_DUTY_VOLUME_TERM_PERSISTENCE)
             - $macro->stampDutyVolumeFactorEmbodied;
     }
 
@@ -116,7 +120,7 @@ final class PolicyCapitalization
      */
     public static function carbonPowerUpliftGap(MacroStateDTO $macro, float $capRate, bool $previous = false): float
     {
-        return self::expectedOverLife($macro, $capRate, $previous, 'carbonPrice', $macro->carbonPrice, CommodityLogisticsSubsystem::carbonPowerPriceUplift(...), self::LONG_RUN_CARBON_POWER_UPLIFT, self::CARBON_POWER_TERM_PERSISTENCE)
+        return self::expectedOverLife($macro, $capRate, $previous, 'carbonPrice', $macro->carbonPrice, static fn (float $law): float => self::measure('carbonPrice', $law), self::LONG_RUN_CARBON_POWER_UPLIFT, self::CARBON_POWER_TERM_PERSISTENCE)
             - $macro->carbonPowerUpliftEmbodied;
     }
 
@@ -136,19 +140,56 @@ final class PolicyCapitalization
     {
         $gap = 0.0;
         if (($basesPerShare['bankLevyRate'] ?? 0.0) > 0.0) {
-            $gap -= self::bankLevyGap($macro, $capRate, $previous) * $basesPerShare['bankLevyRate'];
+            $gap += self::earningsEffect('bankLevyRate', self::bankLevyGap($macro, $capRate, $previous), $basesPerShare['bankLevyRate'], $effectiveTaxExpected);
         }
         if (($basesPerShare['extractionStringency'] ?? 0.0) > 0.0) {
-            $gap -= (1.0 - $effectiveTaxExpected) * self::extractionCostGap($macro, $capRate, $previous) * $basesPerShare['extractionStringency'];
+            $gap += self::earningsEffect('extractionStringency', self::extractionCostGap($macro, $capRate, $previous), $basesPerShare['extractionStringency'], $effectiveTaxExpected);
         }
         if (($basesPerShare['stampDutyRate'] ?? 0.0) > 0.0) {
-            $gap += (1.0 - $effectiveTaxExpected) * self::stampDutyVolumeGap($macro, $capRate, $previous) * $basesPerShare['stampDutyRate'];
+            $gap += self::earningsEffect('stampDutyRate', self::stampDutyVolumeGap($macro, $capRate, $previous), $basesPerShare['stampDutyRate'], $effectiveTaxExpected);
         }
         if (($basesPerShare['carbonPrice'] ?? 0.0) !== 0.0) {
-            $gap += (1.0 - $effectiveTaxExpected) * self::carbonPowerUpliftGap($macro, $capRate, $previous) * $basesPerShare['carbonPrice'];
+            $gap += self::earningsEffect('carbonPrice', self::carbonPowerUpliftGap($macro, $capRate, $previous), $basesPerShare['carbonPrice'], $effectiveTaxExpected);
         }
 
         return $gap;
+    }
+
+    /**
+     * A law as the earnings feel it: the levy as it stands, the rules on extraction by the cost factor they put on each
+     * unit, the duty by the turnover it leaves, the carbon price by what it adds to the power price.
+     *
+     * @param string $lever One of PER_FIRM_LEVERS.
+     */
+    public static function measure(string $lever, float $law): float
+    {
+        return match ($lever) {
+            'bankLevyRate' => $law,
+            'extractionStringency' => MathUtility::calculateExtractionCostFactor($law),
+            'stampDutyRate' => MathUtility::calculateStampDutyVolumeFactor($law),
+            'carbonPrice' => CommodityLogisticsSubsystem::carbonPowerPriceUplift($law),
+            default => throw new \InvalidArgumentException(sprintf('No firm\'s accounts answer to %s directly.', $lever)),
+        };
+    }
+
+    /**
+     * What a change in a law, as the earnings feel it (measure()), adds to a year's earnings after tax: less the levy,
+     * which is not deductible, less the extraction rules' extra cost, plus the duty's extra turnover and the carbon
+     * price's power uplift, the last three before tax.
+     *
+     * @param string $lever        One of PER_FIRM_LEVERS.
+     * @param float  $measureGap   The change in the law as the earnings feel it.
+     * @param float  $base         What the law is charged on or moves (OperatingStrategyInterface::annual*Base()), per share or in total.
+     * @param float  $effectiveTax The firm's effective tax rate.
+     */
+    public static function earningsEffect(string $lever, float $measureGap, float $base, float $effectiveTax): float
+    {
+        return match ($lever) {
+            'bankLevyRate' => -$measureGap * $base,
+            'extractionStringency' => -(1.0 - $effectiveTax) * $measureGap * $base,
+            'stampDutyRate', 'carbonPrice' => (1.0 - $effectiveTax) * $measureGap * $base,
+            default => throw new \InvalidArgumentException(sprintf('No firm\'s accounts answer to %s directly.', $lever)),
+        };
     }
 
     /**
@@ -162,9 +203,15 @@ final class PolicyCapitalization
      */
     public static function reprice(float $fairValue, float $effectiveTaxCarried, float $effectiveTaxExpected, float $earningsGap, float $capRate): float
     {
-        $afterTax = (1.0 - $effectiveTaxExpected) / max(0.01, 1.0 - $effectiveTaxCarried);
+        return max(0.01, ($fairValue * self::afterTaxScale($effectiveTaxCarried, $effectiveTaxExpected)) + ($earningsGap / $capRate));
+    }
 
-        return max(0.01, ($fairValue * $afterTax) + ($earningsGap / $capRate));
+    /**
+     * What after-tax earnings carried at one effective tax rate are worth at another, as a multiple.
+     */
+    public static function afterTaxScale(float $effectiveTaxCarried, float $effectiveTaxExpected): float
+    {
+        return (1.0 - $effectiveTaxExpected) / max(0.01, 1.0 - $effectiveTaxCarried);
     }
 
     /**

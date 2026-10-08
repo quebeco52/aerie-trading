@@ -61,6 +61,7 @@ class StockPageBuilder
         private readonly OptionChainBuilder $optionChain,
         private readonly CreditHealthBuilder $creditHealth,
         private readonly FinancialSummaryBuilder $financialSummary,
+        private readonly BiotechPipelineBuilder $biotechPipeline,
         private readonly int $ticksPerYear,
         private readonly ?BondRepository $bonds = null,
         private readonly ?\Redis $redis = null,
@@ -130,6 +131,7 @@ class StockPageBuilder
             + $this->industryPosition->build($stock, $macroState)
             + $this->creditHealth->build($stock, $macroState)
             + $this->financialSummary->build($stock)
+            + $this->biotechPipeline->build($stock)
             + [
             'peers' => $this->peerTable->build($stock),
             // What a permanent-capital sphere actually owns; null for every firm that owns no stakes.
@@ -281,6 +283,7 @@ class StockPageBuilder
             'shortInterest' => null,
             'nextReport' => null,
             'kpiSeries' => [],
+            'pipeline' => null,
             'management' => null,
             // The fund carries no class of its own: contracts are written on companies here, not on the
             // index, so the panel stands down rather than rendering an empty ladder.

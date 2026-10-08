@@ -103,7 +103,7 @@ final class PagesRenderTest extends KernelTestCase
             ]],
             'news' => ['/news', 'news/index.html.twig', self::newswire()],
             'login' => ['/login', 'security/login.html.twig', ['error' => null, 'last_username' => '']],
-            'economy' => ['/economy', 'economy/index.html.twig', ['economic_cycle' => 'Expansion', 'macro' => ['inflation' => 0.0241, 'inflationEma' => 0.0238, 'outputGap' => 0.0132, 'policyRate' => 0.0425, 'yield10y' => 0.0461, 'qeActive' => false, 'qeIntensity' => 0.0]]],
+            'economy' => ['/economy', 'economy/index.html.twig', ['economic_cycle' => 'Expansion', 'macro' => ['inflation' => 0.0241, 'inflationEma' => 0.0238, 'outputGap' => 0.0132, 'policyRate' => 0.0425, 'yield10y' => 0.0461, 'qeActive' => false, 'qeIntensity' => 0.0], 'exposures' => [['key' => 'oil', 'title' => 'Oil and fuel', 'intro' => 'Producers sell crude at the world price; transport and heavy industry burn its products.', 'lists' => [['label' => 'Sell crude and liquids', 'unit' => 'of sales', 'format' => 'share', 'detail_unit' => null, 'rows' => [['ticker' => 'SINK', 'name' => 'Sinkhole Petroleum', 'value' => 0.7, 'detail' => null], ['ticker' => 'DRLL', 'name' => 'Drillwell Energy', 'value' => 0.55, 'detail' => null]]], ['label' => 'Buy fuel', 'unit' => 'of costs', 'format' => 'share', 'detail_unit' => null, 'rows' => [['ticker' => 'KEEL', 'name' => 'Keel Line Shipping', 'value' => 0.102, 'detail' => null], ['ticker' => 'RAIL', 'name' => 'Pamlico Rail', 'value' => 0.088, 'detail' => null], ['ticker' => 'HAUL', 'name' => 'Haulwright Logistics', 'value' => 0.069, 'detail' => null]]]]], ['key' => 'rates', 'title' => 'Interest rates', 'intro' => 'Floating-rate debt reprices with the policy rate.', 'lists' => [['label' => 'Most floating-rate debt', 'unit' => 'of market value', 'format' => 'share', 'detail_unit' => 'of its debt floats', 'rows' => [['ticker' => 'GULL', 'name' => 'Gull Resorts', 'value' => 0.42, 'detail' => 0.6], ['ticker' => 'IBHI', 'name' => 'Ibis Heavy Industries', 'value' => 0.18, 'detail' => 0.35]]]]], ['key' => 'property', 'title' => 'Property prices', 'intro' => 'Landlords reset rents toward market as leases roll; lenders lose more on defaults when the collateral is worth less.', 'lists' => [['label' => 'Largest landlords', 'unit' => 'total assets', 'format' => 'money', 'detail_unit' => null, 'rows' => [['ticker' => 'TOWR', 'name' => 'Tower Row Properties', 'value' => 18400000000, 'detail' => null]]], ['label' => 'Lenders with most property loans', 'unit' => 'of loans', 'format' => 'share', 'detail_unit' => null, 'rows' => [['ticker' => 'PLVR', 'name' => 'Plover Bank', 'value' => 0.61, 'detail' => null], ['ticker' => 'LAKE', 'name' => 'Lakeside Bancorp', 'value' => 0.48, 'detail' => null]]]]], ['key' => 'cycle', 'title' => 'The business cycle', 'intro' => 'How far sales swing with the economy, where 1.0× is a typical company.', 'lists' => [['label' => 'Most cyclical sales', 'unit' => 'typical swing', 'format' => 'multiple', 'detail_unit' => null, 'rows' => [['ticker' => 'STRK', 'name' => 'Stark Motors', 'value' => 1.5, 'detail' => null], ['ticker' => 'GULL', 'name' => 'Gull Resorts', 'value' => 1.5, 'detail' => null]]]]]]]],
             'stock' => ['/stock/LAKE', 'stock/index.html.twig', [
                 'asset' => ['ticker' => 'LAKE', 'name' => 'Lakebird Bank', 'sector' => 'Financials', 'industry' => 'Commercial banking', 'price' => 84.21, 'isBankrupt' => false, 'bankrupt' => false, 'sharesOutstanding' => 2400000000, 'earningsPerShare' => 6.12, 'currentRoe' => 0.124, 'baselineRoe' => 0.12, 'currentRoic' => 0.09, 'baselineRoic' => 0.09, 'publicFloatPercentage' => 0.8, 'volatility' => 0.22, 'totalEquity' => 1.6e11, 'debtToEquityRatio' => 1.4, 'creditRating' => 'A', 'creditSpread' => 0.011, 'dynamicCreditSpread' => 0.0134, 'systemicImportance' => 'Systemic'],
                 'isEtf' => false, 'isFinancial' => true, 'changePercent' => 0.0342, 'businessModel' => 'commercial_bank', 'generalInfo' => StockInfo::DESCRIPTIONS['LAKE'],
@@ -167,6 +167,21 @@ final class PagesRenderTest extends KernelTestCase
         $pages['stock-insurer'] = ['/stock/GULL', 'stock/index.html.twig', array_replace($pages['stock'][2], [
             'isInsurer' => true, 'businessModel' => 'insurance',
             'financialSummary' => [['label' => 'Capital ratio', 'value' => 0.25, 'format' => 'percent'], ['label' => 'ROE', 'value' => 0.09, 'format' => 'percent'], ['label' => 'Combined ratio', 'value' => 0.94, 'format' => 'percent']],
+        ])];
+
+        // A drug company: the pipeline card on the company tab, its ladder grouped by the builder itself.
+        $pages['stock-biotech'] = ['/stock/IBIS', 'stock/index.html.twig', array_replace($pages['stock'][2], [
+            'asset' => array_replace($pages['stock'][2]['asset'], ['ticker' => 'IBIS', 'name' => 'Ibis Pharmaceuticals', 'sector' => 'Health Care', 'industry' => 'Drug Manufacturers - General']),
+            'isFinancial' => false, 'businessModel' => 'biotech', 'generalInfo' => StockInfo::DESCRIPTIONS['IBIS'] ?? '',
+            'pipeline' => [
+                'lateStageAssets' => 3.4, 'readoutsPerYear' => 1.34, 'protectedShare' => 0.71, 'franchiseChange' => 0.083, 'rndReplacement' => 0.92, 'ramping' => 2,
+                'ladder' => \App\Service\View\BiotechPipelineBuilder::ladder([
+                    ['share' => 0.27, 'adoption' => 1.0, 'exclusivityQuarters' => 2.0], ['share' => 0.18, 'adoption' => 1.0, 'exclusivityQuarters' => 10.0],
+                    ['share' => 0.13, 'adoption' => 0.95, 'exclusivityQuarters' => 30.0], ['share' => 0.0, 'adoption' => 0.0, 'exclusivityQuarters' => 50.0],
+                    ['share' => 0.03, 'adoption' => 0.4, 'exclusivityQuarters' => 46.0], ['share' => 0.10, 'adoption' => 1.0, 'exclusivityQuarters' => -3.0],
+                ], 0.29),
+                'runway' => ['years' => 6.8, 'quarterlyBurn' => 4.1e8],
+            ],
         ])];
 
         self::bootKernel();

@@ -291,7 +291,6 @@ readonly class MacroStateDTO
         public float $creditToGdpGap = 0.0,
         public float $creditToGdpGapEma = 0.0,
         public float $countercyclicalBufferRate = 0.0,
-        public float $countercyclicalBufferRateEma = 0.0,
         public float $creditCrisisHazard = 0.0,
         public float $creditCrisisDrag = 0.0,
         public float $lastCreditCrisisAt = -1.0,

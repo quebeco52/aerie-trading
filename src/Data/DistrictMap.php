@@ -621,7 +621,7 @@ class DistrictMap
         'credit-registry' => [
             'label' => 'The ' . Institutions::CREDIT_REGISTRY,
             'short_label' => 'CREDIT',
-            'fields' => ['macro_credit_spread', 'macro_credit_spread_ema', 'high_yield_credit_spread_ema', 'interbank_liquidity_spread_ema', 'corporate_default_rate_ema', 'retail_default_rate_ema', 'sloos_tightening_index_ema', 'recession_probability_ema', 'sovereign_risk_spread_ema', 'sovereign_debt_to_gdp_ema', 'household_debt_to_income_ema', 'household_debt_service_ratio_ema', 'household_debt_service_gap', 'credit_to_gdp_gap_ema', 'countercyclical_buffer_rate_ema'],
+            'fields' => ['macro_credit_spread', 'macro_credit_spread_ema', 'high_yield_credit_spread_ema', 'interbank_liquidity_spread_ema', 'corporate_default_rate_ema', 'retail_default_rate_ema', 'sloos_tightening_index_ema', 'recession_probability_ema', 'sovereign_risk_spread_ema', 'sovereign_debt_to_gdp_ema', 'household_debt_to_income_ema', 'household_debt_service_ratio_ema', 'household_debt_service_gap', 'credit_to_gdp_gap_ema', 'countercyclical_buffer_rate'],
             'readouts' => [
                 ['field' => 'macro_credit_spread_ema', 'label' => 'IG', 'unit' => self::UNIT_PERCENT],
                 ['field' => 'high_yield_credit_spread_ema', 'label' => 'HY', 'unit' => self::UNIT_PERCENT],

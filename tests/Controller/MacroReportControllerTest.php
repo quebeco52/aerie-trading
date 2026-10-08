@@ -22,7 +22,7 @@ class MacroReportControllerTest extends WebTestCase
             $this->assertArrayHasKey('sovereign_risk_spread_ema', $first);
             $this->assertArrayHasKey('primary_deficit_to_gdp', $first);
             $this->assertArrayHasKey('household_debt_service_ratio_ema', $first);
-            $this->assertArrayHasKey('countercyclical_buffer_rate_ema', $first);
+            $this->assertArrayHasKey('countercyclical_buffer_rate', $first);
             $this->assertArrayHasKey('foreign_output_gap_ema', $first);
             $this->assertArrayHasKey('system_deposit_beta_ema', $first);
         }

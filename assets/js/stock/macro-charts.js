@@ -457,7 +457,7 @@ export function updateMacroCharts(reports, timeframe = currentMacroTimeframe) {
         let rawCreditGap = report.credit_to_gdp_gap_ema ?? report.credit_to_gdp_gap ?? report.creditToGdpGapEma ?? report.creditToGdpGap ?? 0.0;
         creditToGdpGapData.push(parseFloat(rawCreditGap) * 100);
 
-        let rawCcyb = report.countercyclical_buffer_rate_ema ?? report.countercyclical_buffer_rate ?? report.countercyclicalBufferRateEma ?? report.countercyclicalBufferRate ?? 0.0;
+        let rawCcyb = report.countercyclical_buffer_rate ?? report.countercyclicalBufferRate ?? 0.0;
         ccybRateData.push(parseFloat(rawCcyb) * 100);
 
         let rawForGap = report.foreign_output_gap_ema ?? report.foreign_output_gap ?? report.foreignOutputGapEma ?? report.foreignOutputGap ?? 0.0;

@@ -5,10 +5,23 @@ declare(strict_types=1);
 namespace App\Tests\Render;
 
 use App\Data\AerieDiet;
+use App\Data\InitialMarket;
 use App\DTO\MacroStateDTO;
 use App\DTO\PoliticsStateDTO;
 use App\Entity\DietElection;
+use App\Entity\Stock;
 use App\Repository\MacroReportHistoryRepository;
+use App\Repository\StockRepository;
+use App\Service\Corporate\CapExEngine;
+use App\Service\Corporate\CapitalAllocationEngine;
+use App\Service\Corporate\CorporateLedgerService;
+use App\Service\Corporate\DebtEngine;
+use App\Service\Corporate\EarningsEngine;
+use App\Service\Corporate\TreasuryEngine;
+use App\Service\Event\MarketEventPublisher;
+use App\Service\Event\NarrativeEngine;
+use App\Service\Market\Pricing\MarketConsensusEngine;
+use App\Service\Math\CorporateMetrics;
 use App\Service\Macro\MacroEngine;
 use App\Service\Macro\Recorder\MacroSnapshotRecorder;
 use App\Service\Macro\Subsystem\AssetMarketSubsystem;
@@ -17,6 +30,7 @@ use App\Service\Macro\Subsystem\CreditFiscalSubsystem;
 use App\Service\Macro\Subsystem\LaborMarketSubsystem;
 use App\Service\Macro\Subsystem\MacroAggregateSubsystem;
 use App\Service\Macro\Subsystem\MonetaryPolicySubsystem;
+use App\Service\Market\Pricing\OpeningBoardBuilder;
 use App\Service\Math\MathUtility;
 use App\Service\Politics\ElectionRecorder;
 use App\Service\Politics\PoliticsEngine;
@@ -25,6 +39,7 @@ use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Test\KernelTestCase;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\RequestStack;
+use Symfony\Contracts\EventDispatcher\EventDispatcherInterface;
 
 /**
  * Renders the government page and every party page from a headless run of the economy and the politics, for a
@@ -99,7 +114,33 @@ final class GovernmentRenderTest extends KernelTestCase
         $twig = $container->get('twig');
         $reports = $this->createStub(MacroReportHistoryRepository::class);
         $reports->method('laws')->willReturn($laws);
-        $builder = new GovernmentPageBuilder($elections, $reports);
+        // The opening board, each firm through one quarter's report so its models record what each law reaches.
+        $opening = $container->get(OpeningBoardBuilder::class);
+        $metrics = new CorporateMetrics();
+        $debt = new DebtEngine($math, $metrics);
+        $capex = new CapExEngine();
+        $earnings = new EarningsEngine(
+            $this->createStub(EventDispatcherInterface::class),
+            $this->createStub(MarketEventPublisher::class),
+            new CapitalAllocationEngine($this->createStub(CorporateLedgerService::class), $metrics, $debt, $math, new TreasuryEngine($metrics, $debt, $capex, $math)),
+            $debt,
+            $capex,
+            $math,
+            $metrics,
+            $this->createStub(NarrativeEngine::class),
+            new MarketConsensusEngine()
+        );
+        $board = [];
+        foreach (InitialMarket::STOCKS as $row) {
+            $stock = (new Stock())->setTicker($row['ticker']);
+            $opening->applyListing($stock, $row);
+            $opening->open($stock, $row, $macro);
+            $earnings->calculate($stock, $macro, EarningsEngine::resolveReportingTick($row['ticker'], self::TICKS_PER_YEAR), self::TICKS_PER_YEAR);
+            $board[] = $stock;
+        }
+        $stocks = $this->createStub(StockRepository::class);
+        $stocks->method('findAll')->willReturn($board);
+        $builder = new GovernmentPageBuilder($elections, $reports, $stocks);
 
         $pages = ['government' => ['/government', 'government/index.html.twig', $builder->build($macro, $politics)]];
         foreach (AerieDiet::PARTIES as $party) {

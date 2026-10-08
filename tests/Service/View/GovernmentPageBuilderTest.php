@@ -9,8 +9,10 @@ use App\Data\AeriePartyProfiles;
 use App\DTO\MacroStateDTO;
 use App\DTO\PoliticsStateDTO;
 use App\Entity\DietElection;
+use App\Entity\Stock;
 use App\Repository\DietElectionRepository;
 use App\Repository\MacroReportHistoryRepository;
+use App\Repository\StockRepository;
 use App\Service\Corporate\MergerAndAcquisitionEngine;
 use App\Service\Macro\MacroEngine;
 use App\Service\Math\MathUtility;
@@ -31,6 +33,31 @@ class GovernmentPageBuilderTest extends TestCase
         $elections->method('findChronological')->willReturn($history);
 
         return new GovernmentPageBuilder($elections);
+    }
+
+    public function testTheExposureTablesReadTheBoardAndTheMarketsForecast(): void
+    {
+        $elections = $this->createStub(DietElectionRepository::class);
+        $elections->method('findChronological')->willReturn([]);
+        $bank = (new Stock())->setTicker('BANK')->setName('Bank')->setIndustry('Banks - Regional')->setTotalRevenue('1000000000')
+            ->setTotalNetIncome('100000000')->setWholesaleDebt('5000000000')->setFloatingDebtRatio('0.5')->setCustomerDeposits('8000000000')->setRevolverDrawn('0');
+        $stocks = $this->createStub(StockRepository::class);
+        $stocks->method('findAll')->willReturn([$bank]);
+        $builder = new GovernmentPageBuilder($elections, null, $stocks);
+        $standing = PoliticsEngine::standingLevers(new PoliticsStateDTO(bankLevyRate: 0.001));
+
+        $page = $builder->build(new MacroStateDTO(bankLevyRate: 0.001), new PoliticsStateDTO(bankLevyRate: 0.001));
+        $levy = array_column($page['exposure']['laws'], null, 'lever')['bankLevyRate'];
+        $this->assertSame(['BANK'], array_column($levy['firms'], 'ticker'));
+        $this->assertLessThan(0.0, $levy['firms'][0]['now']);
+        $this->assertNull($levy['firms'][0]['change'], 'Without a forecast nothing is expected.');
+
+        $forecast = $builder->build(new MacroStateDTO(bankLevyRate: 0.001), new PoliticsStateDTO(bankLevyRate: 0.001, forecastAt: 1.0, forecastLevers: ['bankLevyRate' => 0.002] + $standing));
+        $levy = array_column($forecast['exposure']['laws'], null, 'lever')['bankLevyRate'];
+        $this->assertTrue($levy['expectedMoves']);
+        $this->assertEqualsWithDelta($levy['firms'][0]['now'], $levy['firms'][0]['change'], 1e-6, 'Doubling the levy costs the bank as much again.');
+
+        $this->assertNull($this->builder()->build(new MacroStateDTO(), new PoliticsStateDTO())['exposure'], 'No board, no tables.');
     }
 
     public function testTheDietAtYearOneIsDrawnSeatForSeat(): void
@@ -444,7 +471,7 @@ class GovernmentPageBuilderTest extends TestCase
             \App\Service\Politics\SovereignReserveFund::advance($state, $math);
         }
         $politics = PoliticsStateDTO::fromState($state);
-        $page = $this->builder()->build(new MacroStateDTO(totalTime: $state->totalTime, countercyclicalBufferRateEma: 0.005), $politics);
+        $page = $this->builder()->build(new MacroStateDTO(totalTime: $state->totalTime, countercyclicalBufferRate: 0.005), $politics);
         $authority = $page['authority'];
 
         $this->assertSame(\App\Data\AerieCouncil::OPENING_GOVERNOR, $authority['governor']['name']);

@@ -3,6 +3,7 @@ import { formatLarge } from '../utils/formatters.js';
 import { destroyChartInstance } from '../utils/chart-config.js';
 import { renderWhenVisible, resetLazyCharts } from '../utils/lazy-chart.js';
 import { refreshChartGrid } from '../utils/chart-grid.js';
+import { buildIncomeStatement, incomeStatementTableHtml } from './income-statement.js';
 
 let profitEngineChartInstance = null;
 let revenueStreamsChartInstance = null;
@@ -111,6 +112,7 @@ export function updateFundamentalCharts(timeframe, rawReports, context = {}) {
 
     const latest = rawReports[rawReports.length - 1];
     renderFinancialStatements(latest);
+    renderIncomeStatement(rawReports, businessModel);
 
     let labels = [];
 
@@ -2140,6 +2142,24 @@ function renderStatementRows(containerId, rows) {
             <span class="font-mono tabular-nums ${row.total ? 'font-bold' : ''} ${valueColor}">${formatStatementAmount(row.value)}</span>
         </div>`;
     }).join('');
+}
+
+/**
+ * The income statement for the last four quarters and the trailing year (income-statement.js lays out the lines).
+ * Reports filed before EBITDA was stored cannot be laid out; with none left the panel stays hidden.
+ */
+function renderIncomeStatement(reports, businessModel) {
+    const statement = buildIncomeStatement(reports, { isReit: businessModel === 'reit' });
+
+    const panel = document.getElementById('income-statement-panel');
+    if (panel) {
+        panel.toggleAttribute('data-unavailable', !statement);
+        if (!refreshChartGrid('financialChartsGrid')) panel.classList.toggle('hidden', !statement);
+    }
+    const table = document.getElementById('income-statement-table');
+    if (!statement || !table) return;
+
+    table.innerHTML = incomeStatementTableHtml(statement);
 }
 
 /**

@@ -15,6 +15,7 @@ use App\Service\Market\Chart\PriceChangeFeed;
 use App\Service\Market\Trading\SecuritiesLendingDesk;
 use App\Service\Math\MathUtility;
 use App\Service\View\AnchorPortfolioBuilder;
+use App\Service\View\BiotechPipelineBuilder;
 use App\Service\View\CompanySnapshotBuilder;
 use App\Service\View\CreditHealthBuilder;
 use App\Service\View\FinancialSummaryBuilder;
@@ -49,7 +50,7 @@ class StockPageBuilderTest extends TestCase
         'isFinancial', 'isInsurer', 'kpiSeries', 'lifecycleStage', 'lifecycleStages', 'macro', 'management', 'marketCap',
         'marketShare', 'netAssetValue', 'nextReport', 'openOrders', 'optionDealerGamma', 'optionDealerGammaPerPercent',
         'optionExpiries', 'optionMultiplier', 'optionOpenInterest', 'optionsListed', 'optionsReason',
-        'peRatio', 'peers', 'pieData', 'pieLabels', 'sharesMap', 'shortInterest', 'shortUtilization', 'strategicStake',
+        'peRatio', 'peers', 'pieData', 'pieLabels', 'pipeline', 'sharesMap', 'shortInterest', 'shortUtilization', 'strategicStake',
         'ticksPerYear', 'userAvgCost', 'userDividendIncome', 'userQuantity', 'userTrades',
         'userUnrealizedPnL', 'userUnrealizedPnLPercent'
     ];
@@ -125,6 +126,8 @@ class StockPageBuilderTest extends TestCase
         $creditHealth->method('build')->willReturn(['creditHealth' => null]);
         $financialSummary = $this->createMock(FinancialSummaryBuilder::class);
         $financialSummary->method('build')->willReturn(['financialSummary' => [], 'kpiSeries' => []]);
+        $biotechPipeline = $this->createMock(BiotechPipelineBuilder::class);
+        $biotechPipeline->method('build')->willReturn(['pipeline' => null]);
 
         return new StockPageBuilder(
             $macroStateProvider,
@@ -143,6 +146,7 @@ class StockPageBuilderTest extends TestCase
             $optionChain,
             $creditHealth,
             $financialSummary,
+            $biotechPipeline,
             self::TICKS_PER_YEAR,
             $bonds,
             $redis,

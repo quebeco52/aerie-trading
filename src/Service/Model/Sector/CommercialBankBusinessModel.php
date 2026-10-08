@@ -869,6 +869,14 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
         );
     }
 
+    /** Share of the loan book secured on property: residential mortgages plus commercial real estate. */
+    public function resolvePropertyLoanShare(Stock $stock): float
+    {
+        $mix = $this->resolveLoanBookMix($stock);
+
+        return $mix['residential'] + $mix['commercial_real_estate'];
+    }
+
     /**
      * The sector's own mix, for a lender not yet seeded.
      *
@@ -1253,7 +1261,7 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
     public function getRegulatoryDividendCap(Stock $stock, float $currentTreasury, ?\App\DTO\MacroStateDTO $macroState = null): ?float
     {
         $cet1Ratio = $this->calculateCet1Ratio($stock, $currentTreasury);
-        $ccyb = $macroState !== null ? $macroState->countercyclicalBufferRateEma : 0.0;
+        $ccyb = $macroState !== null ? $macroState->countercyclicalBufferRate : 0.0;
         $requiredCet1 = $this->capitalRequirement($macroState) + $ccyb;
 
         if ($cet1Ratio < $requiredCet1) {

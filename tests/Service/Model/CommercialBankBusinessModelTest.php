@@ -574,8 +574,8 @@ class CommercialBankBusinessModelTest extends TestCase
         $this->assertGreaterThan(FinancialConstants::OPENING_BANK_CAPITAL_REQUIREMENT, $cet1);
         $this->assertLessThan(FinancialConstants::OPENING_BANK_CAPITAL_REQUIREMENT + 0.020, $cet1);
 
-        $neutralMacro = new \App\DTO\MacroStateDTO(countercyclicalBufferRateEma: 0.0);
-        $ccybMacro = new \App\DTO\MacroStateDTO(countercyclicalBufferRateEma: 0.020);
+        $neutralMacro = new \App\DTO\MacroStateDTO(countercyclicalBufferRate: 0.0);
+        $ccybMacro = new \App\DTO\MacroStateDTO(countercyclicalBufferRate: 0.020);
 
         // Under neutral macro, bank meets CCB and distributions are permitted
         $this->assertSame(1.0, $this->model->getRegulatoryDividendCap($bank, 5_000_000_000.0, $neutralMacro));

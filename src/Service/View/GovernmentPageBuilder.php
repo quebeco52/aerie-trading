@@ -13,6 +13,7 @@ use App\DTO\PoliticsStateDTO;
 use App\Entity\DietElection;
 use App\Repository\DietElectionRepository;
 use App\Repository\MacroReportHistoryRepository;
+use App\Repository\StockRepository;
 use App\Service\Corporate\MergerAndAcquisitionEngine;
 use App\Service\Macro\MacroEngine;
 use App\Service\Macro\Subsystem\AssetMarketSubsystem;
@@ -178,6 +179,7 @@ class GovernmentPageBuilder
     public function __construct(
         private readonly DietElectionRepository $elections,
         private readonly ?MacroReportHistoryRepository $reports = null,
+        private readonly ?StockRepository $stocks = null,
     ) {}
 
     /**
@@ -294,7 +296,24 @@ class GovernmentPageBuilder
             'polls' => self::polls($politics, $nextElection),
             'laws' => $this->laws($politics, $history),
             'market' => self::market($politics),
+            'exposure' => $this->exposure($macro, $politics),
         ];
+    }
+
+    /**
+     * The listed firms each law moves most, against the laws in force and, once the market has a forecast, the laws it
+     * expects (LawExposureBuilder). Null without a board to read.
+     *
+     * @return array<string, mixed>|null
+     */
+    private function exposure(MacroStateDTO $macro, PoliticsStateDTO $politics): ?array
+    {
+        if ($this->stocks === null) {
+            return null;
+        }
+        $expected = $politics->forecastAt < 0.0 ? [] : $politics->forecastLevers;
+
+        return LawExposureBuilder::build($this->stocks->findAll(), $macro, PoliticsEngine::standingLevers($politics), $expected);
     }
 
     /**
@@ -1543,8 +1562,7 @@ class GovernmentPageBuilder
                 ], $politics->regulatorPassedOver),
             ],
             'inForce' => $politics->bankCapitalRequirement,
-            // The buffer as each bank's payout stop reads it (CommercialBankBusinessModel::getRegulatoryDividendCap()).
-            'buffer' => $macro->countercyclicalBufferRateEma,
+            'buffer' => $macro->countercyclicalBufferRate,
             'phasing' => $target > $politics->bankCapitalRequirement + 1e-9 ? [
                 'target' => $target,
                 'completeLabel' => self::simDate($politics->requirementPhaseStart + FinancialRegulator::PHASE_IN_YEARS),

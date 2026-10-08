@@ -691,6 +691,60 @@
 				<p class="hidden py-12 text-center text-sm text-on-surface-variant" data-chart-empty>No charts match the filter.</p>
 			</div>
 		</section>
+
+		{# Each driver's most exposed listings, read from the per-firm figures their earnings and financing run on (EconomyExposureBuilder). #}
+		{% if exposures is defined and exposures is not empty %}
+			<section class="space-y-5" aria-labelledby="exposure-heading">
+				<div>
+					<h2 id="exposure-heading" class="text-lg font-semibold text-on-surface">Who it moves</h2>
+					<p class="text-sm text-on-surface-variant mt-0.5">The listed companies with the most at stake in each of the readings above, from their filings.</p>
+				</div>
+				<div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+					{% for card in exposures %}
+						<div class="bg-surface-container-low border border-outline-variant/20 rounded-lg p-5 flex flex-col" id="exposure-{{ card.key }}">
+							<h3 class="text-sm font-semibold text-on-surface">{{ card.title }}</h3>
+							<p class="text-xs text-on-surface-variant mt-0.5">{{ card.intro }}</p>
+							{% for list in card.lists %}
+								<table class="w-full mt-4 text-xs">
+									<thead class="table-head">
+										<tr>
+											<th scope="col" class="text-left font-medium pb-1">{{ list.label }}</th>
+											<th scope="col" class="sr-only">Exposure</th>
+										</tr>
+									</thead>
+									<tbody>
+										{% for row in list.rows %}
+											<tr class="border-t border-outline-variant/10 align-baseline">
+												<td class="py-1.5 pr-3 min-w-0">
+													<a href="{{ path('app_stock_view', {ticker: row.ticker}) }}" class="font-mono font-medium text-primary hover:underline">{{ row.ticker }}</a>
+													<span class="text-on-surface-variant">{{ row.name }}</span>
+													{% if row.detail is not null and list.detail_unit %}
+														<span class="block text-2xs text-on-surface-variant"><span class="font-mono tabular-nums">{{ row.detail|pct(0) }}</span> {{ list.detail_unit }}</span>
+													{% endif %}
+												</td>
+												<td class="py-1.5 text-right whitespace-nowrap">
+													<span class="font-mono tabular-nums text-on-surface">
+														{%- if list.format == 'money' -%}
+															{{ row.value|format_large('$') }}
+														{%- elseif list.format == 'multiple' -%}
+															{{ row.value|number_format(1) }}×
+														{%- else -%}
+															{{ row.value|pct(0) }}
+														{%- endif -%}
+													</span>
+													<span class="text-on-surface-variant">{{ list.unit }}</span>
+												</td>
+											</tr>
+										{% endfor %}
+									</tbody>
+								</table>
+							{% endfor %}
+							<p class="source-note mt-auto pt-3">{{ source_line('aerie-exchange') }}</p>
+						</div>
+					{% endfor %}
+				</div>
+			</section>
+		{% endif %}
 	</div>
 {% endblock %}
 
