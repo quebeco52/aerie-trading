@@ -530,9 +530,11 @@ class DebtEngine
         // Cost of Equity (CAPM) on the long government yield: the riskless rate matched to the duration of the cash
         // flows being valued (Damodaran 2008, "What is the riskfree rate?"), which is also the rate the premium is
         // measured over. The policy rate is the return on bills; discounting a perpetuity at it understates the
-        // hurdle by the term spread and swings every valuation with the short end of the monetary cycle.
+        // hurdle by the term spread and swings every valuation with the short end of the monetary cycle. It is today's
+        // yield, the one an investor can lock in now, not an average of past ones: a smoothed rate moves for months after
+        // the yield has, so every valuation built on it could be forecast.
         $equityRiskPremium = $macroState->equityRiskPremium;
-        $costOfEquity = $this->mathUtility->calculateCAPM($macroState->yield10yEma, $leveredBeta, $equityRiskPremium);
+        $costOfEquity = $this->mathUtility->calculateCAPM($macroState->yield10y, $leveredBeta, $equityRiskPremium);
 
         // Absolute priority hurdle: cost of equity floored at marginal market borrowing rate.
         $costOfEquity = max($debtMetrics->currentMarketRate, $costOfEquity);

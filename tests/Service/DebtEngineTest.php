@@ -971,26 +971,29 @@ class DebtEngineTest extends TestCase
      * The cost of equity is struck on the long government yield, the riskless rate matched to the duration of the
      * cash flows it discounts and the rate the equity premium is measured over (Damodaran 2008). The policy rate is
      * the bill rate: striking the hurdle on it understated every hurdle by the term spread and re-rated the whole
-     * board with each hiking cycle while the long yield barely moved.
+     * board with each hiking cycle while the long yield barely moved. It is today's long yield, not its moving
+     * average: a smoothed rate keeps moving for months after the yield has, which made every valuation forecastable.
      */
     public function testCostOfEquityIsStruckOnTheLongYieldNotThePolicyRate(): void
     {
         $engine = $this->costOfCapitalEngine();
-        $macro = static fn (float $policyRate, float $longYield): MacroStateDTO => new MacroStateDTO(
+        $macro = static fn (float $policyRate, float $longYield, float $longYieldAverage = 0.048): MacroStateDTO => new MacroStateDTO(
             inflationEma: 0.02,
             policyRateEma: $policyRate,
             yield5yEma: 0.045,
-            yield10yEma: $longYield,
+            yield10y: $longYield,
+            yield10yEma: $longYieldAverage,
             macroCreditSpreadEma: 0.02,
             corporateTaxRate: 0.21,
             equityRiskPremium: 0.045
         );
-        $costOfEquity = fn (float $policyRate, float $longYield): float => $engine->analyzeDebtHealth($this->leveredFirm('MID', '0.80', '0.006'), $macro($policyRate, $longYield))->costOfEquity;
+        $costOfEquity = fn (float $policyRate, float $longYield, float $longYieldAverage = 0.048): float => $engine->analyzeDebtHealth($this->leveredFirm('MID', '0.80', '0.006'), $macro($policyRate, $longYield, $longYieldAverage))->costOfEquity;
 
         $base = $costOfEquity(0.04, 0.048);
 
         $this->assertEqualsWithDelta($base, $costOfEquity(0.06, 0.048), 1e-12, 'A hike in the policy rate alone must not move the hurdle.');
         $this->assertEqualsWithDelta($base + 0.01, $costOfEquity(0.04, 0.058), 1e-9, 'The hurdle moves one for one with the long yield.');
+        $this->assertEqualsWithDelta($base, $costOfEquity(0.04, 0.048, 0.030), 1e-12, 'The moving average of the long yield must not move the hurdle.');
     }
 
     /**
