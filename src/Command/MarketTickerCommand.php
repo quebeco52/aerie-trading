@@ -471,8 +471,8 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
                 $districtReconstitution = $this->reconstituteDistrict($stocks, $tickCount, $events);
 
                 // The wire carries frames, not ticks: the latest quote per instrument plus the per-tick points the
-                // live chart draws. The scalars are absorbed on frame ticks only: macro alone is ~200 fields, and
-                // a frame carries the last tick's value whichever tick it was read on.
+                // live chart draws. The scalars are absorbed on frame ticks only, and a frame carries the last tick's
+                // value whichever tick it was read on; of the macro state only what the live pages read goes out.
                 $wireFrame->absorb(
                     $tickCount,
                     $published,
@@ -482,7 +482,7 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
                         'market_vol' => $marketVol,
                         'economic_cycle' => $macroState->economicCycleLabel(),
                         'council_rate' => $macroState->policyRate,
-                        'macro' => $macroState->toArray(),
+                        'macro' => WireFrame::liveMacro($macroState->toArray()),
                         'bond_curve' => $bondResult['curve'],
                     ] : []
                 );

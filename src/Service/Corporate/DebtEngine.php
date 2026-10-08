@@ -113,7 +113,6 @@ class DebtEngine
 
         $baselineCreditSpread = max(self::MIN_BASELINE_CREDIT_SPREAD, $rawCreditSpread + $macroCreditAdjustment + $volatilityPremium);
 
-        $floatingRatio = (float) $stock->getFloatingDebtRatio();
         $industry = $stock->getIndustry() ?: 'General';
         $businessModel = \App\Data\Sectors::businessModelFor($industry);
         $strategy = \App\Data\Sectors::getBusinessModelStrategy($businessModel);

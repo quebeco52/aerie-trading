@@ -741,6 +741,23 @@ class DistrictMap
     ];
 
     /**
+     * The macro fields any institution's stress rules read: the live frame must carry them for the map to light up.
+     *
+     * @return list<string>
+     */
+    public static function stressFields(): array
+    {
+        $fields = [];
+        foreach (self::INSTITUTIONS as $institution) {
+            foreach ($institution['stress_rules'] ?? [] as $rule) {
+                $fields[$rule['field']] = true;
+            }
+        }
+
+        return array_keys($fields);
+    }
+
+    /**
      * How many staves a frontage of this many tenants wraps across: one row per
      * ROW_SPLIT_THRESHOLDS step the count has passed, capped at ROW_COUNT.
      */

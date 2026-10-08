@@ -164,18 +164,19 @@ class InsuranceBusinessModelTest extends TestCase
             $mathUtilityMock
         );
 
-        // Loss ratio 0.60 x 0.65 = 0.39, less half an average year's catastrophe load, less the large-loss
+        // Claims 0.60 x 0.834 = 0.5004, less half an average year's catastrophe load, less the large-loss
         // layer's expected payout that the structural margin prices in and this quarter did not use.
-        // Expense ratio 0.60 x 0.35 = 0.21 is untouched by claims.
+        // Commissions and taxes 0.60 x 0.166 = 0.0996 are untouched by claims.
         $expectedLayer = InsuranceBusinessModel::CATASTROPHE_LOSS_SCALAR
             * (new MathUtility())->calculateNormalLowerPartialMoment(InsuranceBusinessModel::CATASTROPHE_Z_THRESHOLD);
-        $lossRatio = 0.39 - (InsuranceBusinessModel::DISTRICT_CATASTROPHE_LOAD * (1.0 - $quietBurden)) - $expectedLayer;
-        $this->assertEqualsWithDelta($lossRatio + 0.21, $result->clampedMargin, 1e-9);
-        $this->assertEqualsWithDelta(($lossRatio + 0.21) * $expectedRevenue, $result->actualVariableCosts, 1_000.0);
+        $claimsRatio = 0.5004 - (InsuranceBusinessModel::DISTRICT_CATASTROPHE_LOAD * (1.0 - $quietBurden)) - $expectedLayer;
+        $this->assertEqualsWithDelta($claimsRatio + 0.0996, $result->clampedMargin, 1e-9);
+        $this->assertEqualsWithDelta(($claimsRatio + 0.0996) * $expectedRevenue, $result->actualVariableCosts, 1_000.0);
 
-        // The report files the split: the claims as the loss ratio, and the expense ratio with the $1B fixed costs on $10B of premium.
-        $this->assertEqualsWithDelta($lossRatio, $result->kpis['loss_ratio'], 1e-9);
-        $this->assertEqualsWithDelta(0.21 + 0.10, $result->kpis['expense_ratio'], 1e-9);
+        // The report files the split over the $1B of fixed costs on $10B of premium: the claims department's 30.9% of
+        // it is loss adjustment expense, the rest underwriting expense.
+        $this->assertEqualsWithDelta($claimsRatio + 0.0309, $result->kpis['loss_ratio'], 1e-9);
+        $this->assertEqualsWithDelta(0.0996 + 0.0691, $result->kpis['expense_ratio'], 1e-9);
     }
 
     /**
@@ -190,7 +191,7 @@ class InsuranceBusinessModelTest extends TestCase
 
             $label = $model::class;
             $this->assertGreaterThan(0.0, $result->kpis['loss_ratio'], $label);
-            $this->assertGreaterThan($fixedCosts / $result->actualRevenue, $result->kpis['expense_ratio'], $label);
+            $this->assertGreaterThan((1.0 - InsuranceBusinessModel::FIXED_COST_LAE_SHARE) * $fixedCosts / $result->actualRevenue, $result->kpis['expense_ratio'], $label);
             $this->assertEqualsWithDelta(
                 $result->clampedMargin + $fixedCosts / $result->actualRevenue,
                 $result->kpis['loss_ratio'] + $result->kpis['expense_ratio'],
@@ -432,7 +433,7 @@ class InsuranceBusinessModelTest extends TestCase
 
         // Softer still, the book loses money float included, and the firm sheds it. A firm whose float already
         // held earns more than its hurdle can afford to keep part of it.
-        $floatRich = $this->underwriterAtShare(0.65, floatToEquity: 6.0);
+        $floatRich = $this->underwriterAtShare(0.65, floatToEquity: 10.0);
         $soft = $writtenCapacity($floatRich);
         $this->assertLessThan(1.0, $soft);
         $this->assertGreaterThan(InsuranceBusinessModel::MIN_WRITTEN_CAPACITY, $soft);
@@ -443,9 +444,9 @@ class InsuranceBusinessModelTest extends TestCase
 
         // The manager's own hurdle decides where that line falls (Jensen's agency cost, in its underwriting
         // form): an empire builder keeps writing a market a fortress has already withdrawn from.
-        $fortress = $this->underwriterAtShare(0.65, floatToEquity: 6.0);
+        $fortress = $this->underwriterAtShare(0.65, floatToEquity: 10.0);
         $fortress->setManagementStyle(\App\Data\ManagementStyle::Fortress);
-        $empireBuilder = $this->underwriterAtShare(0.65, floatToEquity: 6.0);
+        $empireBuilder = $this->underwriterAtShare(0.65, floatToEquity: 10.0);
         $empireBuilder->setManagementStyle(\App\Data\ManagementStyle::EmpireBuilder);
         $this->assertGreaterThan($writtenCapacity($fortress), $writtenCapacity($empireBuilder));
     }

@@ -80,12 +80,16 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
     public const INSURANCE_REVERSION_SPEED = 8.0;
     /** Volatility multiplier for top-line premium revenue shocks in sticky insurance markets. */
     public const REVENUE_VARIANCE_SCALAR  = 0.05;
-    /** Baseline fraction of variable underwriting expenses attributed to operating and policy acquisition expenses (Expense Ratio share). */
-    public const BASE_EXPENSE_RATIO_SHARE = 0.35;
     /** Firm claim z-score below which the large-loss layer starts paying (one quarter in fifteen): fires, liability verdicts, single risks no peer shares. */
     public const CATASTROPHE_Z_THRESHOLD  = -1.50;
     /** Large-loss claims, as a share of the book's premium, per standard deviation of the firm's claim draw below the threshold. */
     public const CATASTROPHE_LOSS_SCALAR  = 0.15;
+
+    // --- Underwriting Cost Split (NAIC Insurance Expense Exhibit, US P&C industry 2024) ---
+    /** Commissions, brokerage and premium taxes in the premium-proportional cost line: (10.7 + 2.3) / (61.5 losses + 3.8 DCC + 10.7 + 2.3), the rest being losses and defence costs. */
+    public const BASE_EXPENSE_RATIO_SHARE = 0.166;
+    /** Adjusting and other expense (claims-department overhead, unallocated LAE) in the sticky overhead: 5.5 / (5.5 A&O + 5.9 other acquisition + 6.4 general). */
+    public const FIXED_COST_LAE_SHARE = 0.309;
 
     // --- Underwriting Cycle (Winter 1994 / Gron 1994 capacity constraint) ---
     /** Regime key for the hard market: the multi-year stretch of rate increases and tightened terms that follows a capital shock. */
@@ -183,13 +187,23 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
     /** Franchise floor multiplier applied to revenue floor value for sticky premium & float franchise. */
     public const PREMIUM_FRANCHISE_FLOOR_MULT   = 0.70;
 
-    // --- Loss Reserves (the float as a stock) ---
-    /** Float per unit of annual net premium earned on a US P&C book: NAIC 2024 loss and LAE reserves $977B on NPE $905B (1.08), plus half a year's written premium unearned on annual policies (0.52). */
-    public const RESERVE_TO_PREMIUM_RATIO = 1.60;
+    // --- Loss Reserves and Unearned Premium (the float as two stocks) ---
+    /** Loss and LAE reserves per unit of annual net premium earned on a US P&C book: NAIC 2024, $977B on NPE $905B. */
+    public const LOSS_RESERVE_TO_PREMIUM_RATIO = 1.08;
+    /** Policy term of a P&C book in years; written premium is earned pro rata over it, so the unearned reserve holds half a term of premium (SSAP 65, ASC 944-605; NAIC 2024 UPR ~0.52 of NPE). */
+    public const POLICY_TERM_YEARS = 1.0;
     /** Years of renewals an underwriter weighs the float a new book brings against its underwriting result: the annual policy term. */
     public const FLOAT_DECISION_HORIZON_YEARS = 1.0;
-    /** State key holding the quarter's net incurred losses and LAE, on which the reserve stock is rolled forward. */
+    /** State key holding the quarter's net incurred losses and LAE (life benefits included), on which the reserve stocks are rolled forward. */
     public const STATE_INCURRED_CLAIMS = 'state:reserves:incurred_claims';
+    /** State key holding the life book's share of the quarter's incurred, rolled into the policy reserve rather than the loss reserve. */
+    public const STATE_INCURRED_LIFE_BENEFITS = 'state:reserves:incurred_life';
+    /** State key holding the quarter's earned premium on policies that carry an unearned premium reserve. */
+    public const STATE_UNEARNED_PREMIUM_BASE = 'state:reserves:unearned_base';
+    /** State key holding the unearned premium reserve at the last quarter end. */
+    public const STATE_UNEARNED_PREMIUM = 'state:reserves:unearned';
+    /** State key holding the life policy reserve at the last quarter end. */
+    public const STATE_LIFE_RESERVES = 'state:reserves:life';
 
     // --- Investment Portfolio Duration ---
     /** Macaulay duration of the long bond tranche of float, matched against liabilities an insurer pays out over decades. */
@@ -329,8 +343,8 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
      * The rule is the same one every other deployment gate in this engine applies: write while the capital
      * that business consumes still earns its hurdle. An insurer's return has two parts. The float it already
      * holds runs off whether or not another treaty is signed; the book it writes brings new float, and over
-     * one policy term a share 1 − e^(−H/τ) of that book's settled reserves (total-return ratemaking, Myers &
-     * Cohn 1987). Over that horizon:
+     * one policy term its unearned premium and a share 1 − e^(−H/τ) of each settled claim reserve (total-return
+     * ratemaking, Myers & Cohn 1987). Over that horizon:
      *
      *     u * (underwritingReturn + bookFloatReturn) + heldFloatReturn >= appliedHurdle
      *
@@ -355,9 +369,9 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
 
         $afterTax = 1.0 - $macroState->corporateTaxRate;
         $floatYield = $this->resolveFloatYield($stock, $macroState);
-        $heldAfterHorizon = exp(-self::FLOAT_DECISION_HORIZON_YEARS / $this->resolveReserveRunoffYears($stock));
+        $heldAfterHorizon = $this->resolveHeldFloatSurvival($stock, self::FLOAT_DECISION_HORIZON_YEARS);
 
-        $bookFloatReturn = $floatYield * $afterTax * $this->resolveReserveToPremiumRatio($stock) * self::KENNEY_CAPACITY_RATIO * (1.0 - $heldAfterHorizon);
+        $bookFloatReturn = $floatYield * $afterTax * $this->resolveBookFloatRatio($stock, self::FLOAT_DECISION_HORIZON_YEARS) * self::KENNEY_CAPACITY_RATIO;
         $bookReturn = $underwritingReturn + $bookFloatReturn;
         if ($bookReturn >= 0.0) {
             return 1.0;
@@ -561,7 +575,7 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
 
         $combinedRatio = $realizedLossRatio + $realizedExpenseRatio + $reinstatementPremium;
         $clampedMargin = $this->clampMargin($combinedRatio);
-        $kpis = $this->bookUnderwritingResult($streams, $actualRevenue, $clampedMargin, $realizedExpenseRatio, $reinstatementPremium, $fixedCosts);
+        $kpis = $this->bookUnderwritingResult($streams, $actualRevenue, $clampedMargin, $realizedExpenseRatio, $reinstatementPremium, $fixedCosts, $actualRevenue);
 
         $eventType = $this->resolveClaimEvent($claims['gross'], 1.0, $recovery > 0.0);
 
@@ -882,23 +896,33 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
     }
 
     /**
-     * The float is the claims the firm has incurred and not yet paid: Δreserves = incurred − paid. The
-     * P&L has already charged the quarter's incurred claims against the cash it booked, so moving cash with
-     * the reserve change leaves the treasury debited when a claim is paid, not when it is incurred.
+     * The float is three stocks, each with its own clock: premium written and not yet earned, claims incurred and
+     * not yet paid, and (for a life book) policy reserves. Δfloat = (written − earned) + (incurred − paid), and
+     * cash moves with it: the P&L booked earned premium and incurred cost, so the treasury is credited when
+     * premium is collected and debited when a claim is paid.
      */
     public function processPassiveLiabilityGrowth(Stock $stock, MacroStateDTO $macroState, array &$state, MathUtility $mathUtility): void
     {
-        $incurred = ($stock->getEarningsMomentumZ() ?? [])[self::STATE_INCURRED_CLAIMS] ?? null;
+        $momentum = $stock->getEarningsMomentumZ() ?? [];
+        $incurred = $momentum[self::STATE_INCURRED_CLAIMS] ?? null;
         if ($incurred === null) {
             return;
         }
 
-        $reserves = max(0.0, (float) $state['customerDeposits']);
-        $roll = $this->rollLossReserves($reserves, (float) $incurred, $this->resolveReserveRunoffYears($stock));
-        $reserveChange = $roll['reserves'] - $reserves;
+        $float = max(0.0, (float) $state['customerDeposits']);
+        $opening = $this->resolveOpeningReserves($stock, $float, $momentum);
+        $lifeIncurred = min(max(0.0, (float) $incurred), (float) ($momentum[self::STATE_INCURRED_LIFE_BENEFITS] ?? 0.0));
 
-        $state['treasury'] += $reserveChange;
-        $state['customerDeposits'] = $roll['reserves'];
+        $unearnedBase = $momentum[self::STATE_UNEARNED_PREMIUM_BASE] ?? null;
+        $unearned = $unearnedBase === null ? $opening['unearned'] : $this->resolveUnearnedPremiumReserve((float) $unearnedBase);
+        $loss = $this->rollLossReserves($opening['loss'], max(0.0, (float) $incurred - $lifeIncurred), $this->resolveReserveRunoffYears($stock))['reserves'];
+        $life = $opening['life'] > 0.0 || $lifeIncurred > 0.0
+            ? $this->rollLossReserves($opening['life'], $lifeIncurred, $this->resolveLifeReserveRunoffYears($stock))['reserves']
+            : 0.0;
+
+        $closing = $unearned + $loss + $life;
+        $state['treasury'] += $closing - $float;
+        $state['customerDeposits'] = $closing;
 
         if ($state['treasury'] < 0.0) {
             $liquidityShortfall = abs($state['treasury']);
@@ -908,7 +932,48 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
             $state['events'][] = ['description' => "Claim payouts exceeded cash reserves. Forced to borrow \${$amtB}B."];
         }
 
-        $stock->setCustomerDeposits((string) $roll['reserves']);
+        $stock->setCustomerDeposits((string) $closing);
+        $momentum[self::STATE_UNEARNED_PREMIUM] = $unearned;
+        $momentum[self::STATE_LIFE_RESERVES] = $life;
+        $stock->setEarningsMomentumZ($momentum);
+    }
+
+    /**
+     * The float at the last quarter end split into its stocks. A book with no recorded split (a fresh seed, or one
+     * carried over from before the split) opens on its steady composition; float that left or joined outside the
+     * roll-forward (a merger, a run) is taken from or given to the loss reserve.
+     *
+     * @param array<string, float> $momentum
+     * @return array{unearned: float, loss: float, life: float}
+     */
+    public function resolveOpeningReserves(Stock $stock, float $float, array $momentum): array
+    {
+        $ratios = $this->resolveReserveRatios($stock);
+        $base = $momentum[self::STATE_UNEARNED_PREMIUM_BASE] ?? null;
+        $unearned = max(0.0, (float) ($momentum[self::STATE_UNEARNED_PREMIUM]
+            ?? ($base === null ? 0.0 : $this->resolveUnearnedPremiumReserve((float) $base))));
+
+        $life = $momentum[self::STATE_LIFE_RESERVES] ?? null;
+        if ($life === null) {
+            $claimReserveRatio = $ratios['loss'] + $ratios['life'];
+            $life = $claimReserveRatio > 0.0 ? max(0.0, $float - $unearned) * $ratios['life'] / $claimReserveRatio : 0.0;
+        }
+        $life = max(0.0, (float) $life);
+
+        $loss = $float - $unearned - $life;
+        if ($loss < 0.0) {
+            $scale = ($unearned + $life) > 0.0 ? $float / ($unearned + $life) : 0.0;
+
+            return ['unearned' => $unearned * $scale, 'loss' => 0.0, 'life' => $life * $scale];
+        }
+
+        return ['unearned' => $unearned, 'loss' => $loss, 'life' => $life];
+    }
+
+    /** Unearned premium on a book written evenly and earned pro rata over its term: half a term of annual premium. */
+    public function resolveUnearnedPremiumReserve(float $quarterlyPremium): float
+    {
+        return max(0.0, $quarterlyPremium / \App\Service\Corporate\EarningsEngine::QUARTERLY_TIME_STEP) * self::POLICY_TERM_YEARS / 2.0;
     }
 
     /**
@@ -930,53 +995,133 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
         return ['reserves' => $settled, 'paid' => $reserves + $incurred - $settled];
     }
 
-    /** Float per unit of annual premium the firm's book carries once its reserves have settled. */
+    /**
+     * Each reserve stock per unit of the firm's annual premium once settled. A P&C book carries the NAIC loss and
+     * LAE reserve and half a term of unearned premium; subclasses weight them by the books that carry them.
+     *
+     * @return array{unearned: float, loss: float, life: float}
+     */
+    public function resolveReserveRatios(Stock $stock): array
+    {
+        return ['unearned' => self::POLICY_TERM_YEARS / 2.0, 'loss' => self::LOSS_RESERVE_TO_PREMIUM_RATIO, 'life' => 0.0];
+    }
+
+    /** Share of the firm's premium written on life policies, whose incurred benefits build the policy reserve. */
+    public function resolveLifePremiumShare(Stock $stock): float
+    {
+        return 0.0;
+    }
+
+    /** Float per unit of annual premium the firm's book carries once its reserves have settled: the sum of its stocks. */
     public function resolveReserveToPremiumRatio(Stock $stock): float
     {
-        return static::RESERVE_TO_PREMIUM_RATIO;
+        return array_sum($this->resolveReserveRatios($stock));
     }
 
     /**
-     * Mean years from incurred to paid. Set so a steady book on its structural loss and LAE ratio (the variable
-     * cost line at neutral rates less its acquisition and underwriting expense share) holds exactly the pinned
-     * reserve ratio: the same base bookUnderwritingResult() reserves on.
+     * Loss and LAE incurred per unit of premium on a steady book at neutral rates: the premium-proportional cost line
+     * less commissions and taxes, plus the claims-department share of the sticky overhead.
      */
+    public function resolveStructuralLossRatio(Stock $stock): float
+    {
+        $fixedCostRatio = (float) $stock->getFixedCostRatio();
+
+        return (1.0 - (float) $stock->getOperatingMargin())
+            * (((1.0 - $fixedCostRatio) * (1.0 - self::BASE_EXPENSE_RATIO_SHARE)) + ($fixedCostRatio * self::FIXED_COST_LAE_SHARE));
+    }
+
+    /** Mean years from incurred to paid on the non-life book, set so a steady book holds its pinned loss reserve ratio. */
     public function resolveReserveRunoffYears(Stock $stock): float
     {
-        $structuralLossRatio = (1.0 - (float) $stock->getOperatingMargin()) * (1.0 - (float) $stock->getFixedCostRatio())
-            * (1.0 - self::BASE_EXPENSE_RATIO_SHARE);
+        $incurred = $this->resolveStructuralLossRatio($stock) * (1.0 - $this->resolveLifePremiumShare($stock));
 
-        return $this->resolveReserveToPremiumRatio($stock) / max(0.01, $structuralLossRatio);
+        return max(0.01, $this->resolveReserveRatios($stock)['loss']) / max(0.01, $incurred);
+    }
+
+    /** Mean years a life book's policy reserve is held, set so a steady book holds its pinned policy reserve ratio. */
+    public function resolveLifeReserveRunoffYears(Stock $stock): float
+    {
+        $incurred = $this->resolveStructuralLossRatio($stock) * $this->resolveLifePremiumShare($stock);
+
+        return max(0.01, $this->resolveReserveRatios($stock)['life']) / max(0.01, $incurred);
     }
 
     /**
-     * The combined ratio split as an insurer files it, each over premium: losses (claims net of the cover's recovery,
-     * with any reinstatement premium) and expenses (acquisition and administration, plus the fixed operating costs).
-     * Losses take whatever the margin clamp removed, so the two add to the quarter's cost base over premium.
+     * Float per unit of annual premium a NEW book brings within the horizon: its unearned premium at once, and a share
+     * 1 − e^(−H/τ) of each claim reserve's settled level.
+     */
+    public function resolveBookFloatRatio(Stock $stock, float $horizonYears): float
+    {
+        $ratios = $this->resolveReserveRatios($stock);
+
+        return $ratios['unearned']
+            + ($ratios['loss'] * (1.0 - exp(-$horizonYears / $this->resolveReserveRunoffYears($stock))))
+            + ($ratios['life'] * (1.0 - exp(-$horizonYears / $this->resolveLifeReserveRunoffYears($stock))));
+    }
+
+    /** Share of the float now held that is still held after the horizon on a book that stops writing: claim reserves run off, unearned premium is all earned. */
+    public function resolveHeldFloatSurvival(Stock $stock, float $horizonYears): float
+    {
+        $ratios = $this->resolveReserveRatios($stock);
+        $total = array_sum($ratios);
+        if ($total <= 0.0) {
+            return 0.0;
+        }
+
+        return (($ratios['loss'] * exp(-$horizonYears / $this->resolveReserveRunoffYears($stock)))
+            + ($ratios['life'] * exp(-$horizonYears / $this->resolveLifeReserveRunoffYears($stock)))) / $total;
+    }
+
+    /**
+     * Loss and LAE per unit of premium on the quarter's baseline cost line, before any excess claims: what a book the
+     * catastrophe draw does not touch (a life book) incurs.
+     */
+    protected function resolveBaselineLossRatio(float $variableCostRatio, float $fixedCosts, float $premium): float
+    {
+        return ($variableCostRatio * (1.0 - self::BASE_EXPENSE_RATIO_SHARE)) + (self::FIXED_COST_LAE_SHARE * $fixedCosts / max(1.0, $premium));
+    }
+
+    /**
+     * The combined ratio split as an insurer files it, each over premium (NAIC Insurance Expense Exhibit lines): loss
+     * and LAE (claims net of the cover's recovery, with any reinstatement premium, plus the adjusting and other share
+     * of the overhead) and underwriting expense (commissions and taxes, plus the rest of the overhead). Losses take
+     * whatever the margin clamp removed, so the two add to the quarter's cost base over premium.
      *
      * @return array{loss_ratio: float, expense_ratio: float}
      */
     protected function underwritingRatioKpis(float $costRatio, float $variableExpenseRatio, float $fixedCosts, float $premium): array
     {
-        $lossRatio = max(0.0, $costRatio - $variableExpenseRatio);
+        $fixedCostRatio = $fixedCosts / max(1.0, $premium);
+        $lossRatio = max(0.0, $costRatio - $variableExpenseRatio) + ($fixedCostRatio * self::FIXED_COST_LAE_SHARE);
 
         return [
             'loss_ratio' => $lossRatio,
-            'expense_ratio' => $costRatio - $lossRatio + $fixedCosts / max(1.0, $premium),
+            'expense_ratio' => $costRatio + $fixedCostRatio - $lossRatio,
         ];
     }
 
     /**
-     * Files the quarter's loss and expense ratios and books its incurred losses for the reserve roll-forward, from
-     * one split. Only losses and LAE are reserved (SSAP 55, ASC 944-40); acquisition and underwriting expenses are
-     * expensed or deferred as incurred (SSAP 71, ASC 944-30), and a reinstatement premium is ceded premium.
+     * Files the quarter's loss and expense ratios and books what the reserve roll-forward needs, from one split. Only
+     * losses and LAE are reserved (SSAP 55, ASC 944-40); acquisition and underwriting expenses are expensed or deferred
+     * as incurred (SSAP 71, ASC 944-30), and a reinstatement premium is ceded premium. The premium on policies with a
+     * term builds the unearned premium reserve (SSAP 65, ASC 944-605); a life book's benefits build its policy reserve.
      *
      * @return array{loss_ratio: float, expense_ratio: float}
      */
-    protected function bookUnderwritingResult(StreamContext $streams, float $premium, float $costRatio, float $variableExpenseRatio, float $reinstatementRatio, float $fixedCosts): array
+    protected function bookUnderwritingResult(StreamContext $streams, float $premium, float $costRatio, float $variableExpenseRatio, float $reinstatementRatio, float $fixedCosts, float $unearnedPremiumBase, float $lifeBenefits = 0.0): array
     {
         $kpis = $this->underwritingRatioKpis($costRatio, $variableExpenseRatio, $fixedCosts, $premium);
         $streams->registerState(self::STATE_INCURRED_CLAIMS, max(0.0, $premium * ($kpis['loss_ratio'] - $reinstatementRatio)));
+        $streams->registerState(self::STATE_INCURRED_LIFE_BENEFITS, max(0.0, $lifeBenefits));
+        $streams->registerState(self::STATE_UNEARNED_PREMIUM_BASE, max(0.0, $unearnedPremiumBase));
+
+        // The reserve split is advanced outside this pass, so it is carried through the stream map explicitly.
+        foreach ([self::STATE_UNEARNED_PREMIUM, self::STATE_LIFE_RESERVES] as $key) {
+            $carried = $streams->getPersistedState($key, -1.0);
+            if ($carried >= 0.0) {
+                $streams->registerState($key, $carried);
+            }
+        }
 
         return $kpis;
     }
