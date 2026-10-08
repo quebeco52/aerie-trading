@@ -68,8 +68,10 @@ class BiotechBusinessModel extends StandardCorporateBusinessModel
     public const PRICING_POWER_INDEX = 0.85;
 
     // --- Balance Sheet Realism ---
-    /** Stock-based compensation as a fraction of revenue (ASC 718): non-cash, added back to FCF, settled in new shares. Clinical-stage science teams are paid heavily in equity. */
-    public const STOCK_COMPENSATION_INTENSITY = 0.10;
+    /** Stock-based compensation (ASC 718) on a marketed book: 1.71% of revenue, US pharmaceutical drugs (Damodaran, Employee data by industry, 228 firms). */
+    public const MARKETED_STOCK_COMPENSATION_INTENSITY = 0.0171;
+    /** Stock-based compensation on pipeline and collaboration revenue, whose science teams are paid in equity: 7.20%, US biotechnology (Damodaran, 496 firms). */
+    public const PIPELINE_STOCK_COMPENSATION_INTENSITY = 0.0720;
 
     // --- Analyst Visibility & Error ---
     /** Base coverage visibility for routine biotech pipeline drug progress. */
@@ -553,6 +555,26 @@ class BiotechBusinessModel extends StandardCorporateBusinessModel
         $streams->registerState(self::STATE_OFF_PATENT_BIOLOGIC, $book['biologic']);
         $streams->registerState(self::STATE_OFF_PATENT_SMALL_MOLECULE, $book['smallMolecule']);
         $streams->registerState(self::STATE_ESTABLISHED_PRODUCTS, $book['established']);
+    }
+
+    /**
+     * Equity pay follows the business the firm runs: a big pharma's sales force and plants are paid like any
+     * manufacturer's, a clinical-stage company's scientists largely in stock. The two industry rates are blended
+     * on the firm's own marketed and pipeline weights.
+     */
+    public function getStockCompensationIntensity(Stock $stock): float
+    {
+        $params = $this->resolveModelParameters($stock, [
+            ModelParam::EstablishedDrugWeight->value => self::ESTABLISHED_DRUG_WEIGHT,
+            ModelParam::PipelineDrugWeight->value    => self::PIPELINE_DRUG_WEIGHT,
+        ]);
+        $marketed = max(0.0, $params[ModelParam::EstablishedDrugWeight]);
+        $pipeline = max(0.0, $params[ModelParam::PipelineDrugWeight]);
+        if ($marketed + $pipeline <= 0.0) {
+            return self::PIPELINE_STOCK_COMPENSATION_INTENSITY;
+        }
+
+        return (($marketed * self::MARKETED_STOCK_COMPENSATION_INTENSITY) + ($pipeline * self::PIPELINE_STOCK_COMPENSATION_INTENSITY)) / ($marketed + $pipeline);
     }
 
     /**

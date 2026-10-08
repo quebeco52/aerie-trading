@@ -462,7 +462,7 @@ class EarningsEngineTest extends TestCase
         $engine->calculate($stock, $macroState, EarningsEngine::resolveReportingTick('SAAS', 252));
 
         $this->assertNotNull($captured);
-        $intensity = \App\Data\Sectors::getBusinessModelStrategy('tech')->getStockCompensationIntensity();
+        $intensity = \App\Data\Sectors::getBusinessModelStrategy('tech')->getStockCompensationIntensity($stock);
         $this->assertGreaterThan(0.05, $intensity, 'software pays a material share of revenue in equity');
         $this->assertEqualsWithDelta($captured->actualRevenue * $intensity, $captured->stockCompensation, 1.0);
 

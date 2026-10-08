@@ -155,9 +155,10 @@ interface OperatingStrategyInterface
     /**
      * Stock-based compensation (ASC 718) as a fraction of revenue. It is already inside the cost base, so it
      * changes no margin; it is a non-cash expense added back to free cash flow and settled in new shares,
-     * which is why software and biotech report FCF above earnings and dilute a few percent a year.
+     * which is why software and biotech report FCF above earnings and dilute a few percent a year. Per firm,
+     * since a model may blend rates by the firm's own business mix.
      */
-    public function getStockCompensationIntensity(): float;
+    public function getStockCompensationIntensity(Stock $stock): float;
     /**
      * Calendar quarter (0 = Jan-Mar .. 3 = Oct-Dec) in which the fiscal year begins. Seasonality stays on the
      * calendar; the fiscal quarter drives annual events such as the goodwill impairment test.

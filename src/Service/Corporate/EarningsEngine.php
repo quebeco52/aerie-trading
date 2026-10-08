@@ -963,7 +963,7 @@ class EarningsEngine
 
         // Stock-based compensation (ASC 718) is already inside the operating cost base: it changes no margin,
         // but it is non-cash (added back to FCF below) and is settled in newly issued shares.
-        $ctx->stockCompensation = max(0.0, $ctx->actualRevenue) * $ctx->strategy->getStockCompensationIntensity();
+        $ctx->stockCompensation = max(0.0, $ctx->actualRevenue) * $ctx->strategy->getStockCompensationIntensity($ctx->stock);
         $ctx->kpis['stock_compensation'] = $ctx->stockCompensation;
 
         // The order book is a disclosed, forward-looking number: analysts read it off the report and carry

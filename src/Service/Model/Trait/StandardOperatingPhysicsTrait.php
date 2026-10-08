@@ -454,7 +454,7 @@ trait StandardOperatingPhysicsTrait
             : FinancialConstants::DEFAULT_LEASE_LIABILITY_INTENSITY;
     }
 
-    public function getStockCompensationIntensity(): float
+    public function getStockCompensationIntensity(Stock $stock): float
     {
         return defined('static::STOCK_COMPENSATION_INTENSITY')
             ? (float) static::STOCK_COMPENSATION_INTENSITY
