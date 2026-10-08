@@ -52,14 +52,9 @@ final class PriceFactorTransmissionTest extends TestCase
         float $sectorZ = 0.0,
         float $marketJumpMultiplier = 1.0,
         float $beta = 1.0,
+        float $recentPriceTrend = 0.0,
         float $currentPrice = 60.0
     ): float {
-        return $this->stepOf($sectorZ, $marketJumpMultiplier, $beta, $currentPrice)['price'];
-    }
-
-    /** @return array{price: float, dynamic_reversion: float, perceived_fair_value: float} */
-    private function stepOf(float $sectorZ, float $marketJumpMultiplier, float $beta, float $currentPrice): array
-    {
         $ctx = new MarketPricingContext(
             currentPrice: $currentPrice,
             currentVolatility: 0.25,
@@ -80,10 +75,11 @@ final class PriceFactorTransmissionTest extends TestCase
             liveWacc: 0.08,
             revenuePerShare: 50.0,
             liveCostOfEquity: 0.10,
+            recentPriceTrend: $recentPriceTrend,
             baselineRoic: 0.15
         );
 
-        return $this->engine->calculateNextPrice($ctx);
+        return $this->engine->calculateNextPrice($ctx)['price'];
     }
 
     public function testSectorShockMovesThePriceAndScalesLinearlyWithTheShock(): void
@@ -157,27 +153,77 @@ final class PriceFactorTransmissionTest extends TestCase
         );
     }
 
-    /**
-     * The pull toward fair value runs at the name's own speed however wide the gap: a gap closes over years
-     * (Balvers, Wu & Gilliland 2000). Arbitrage that steps up as a gap widens and trend-chasing that resists
-     * it are the agent populations' trades; a second, gap-scaled pull here closed a 30% gap in a quarter.
-     */
-    public function testThePullTowardFairValueRunsAtTheSameSpeedWhateverTheGap(): void
+    public function testMomentumResistsFundamentalReversionInEitherDirection(): void
     {
-        $fairValue = $this->stepOf(0.0, 1.0, 1.0, 60.0)['perceived_fair_value'];
-        // The step a fairly valued name takes is the drift alone; what a mispriced one adds is the pull.
-        $drift = log($this->stepOf(0.0, 1.0, 1.0, $fairValue)['price'] / $fairValue);
-        $closed = function (float $priceOverFairValue) use ($fairValue, $drift): float {
-            $price = $fairValue * $priceOverFairValue;
+        // Deeply undervalued, so the fair value anchor is pulling the price up hard.
+        $undervalued = 20.0;
 
-            return (log($this->stepOf(0.0, 1.0, 1.0, $price)['price'] / $price) - $drift) / log($fairValue / $price);
+        $noTrend = $this->priceOf(recentPriceTrend: 0.0, currentPrice: $undervalued);
+        $rising = $this->priceOf(recentPriceTrend: 0.40, currentPrice: $undervalued);
+        $falling = $this->priceOf(recentPriceTrend: -0.40, currentPrice: $undervalued);
+
+        $this->assertLessThan(
+            $noTrend,
+            $rising,
+            'A trending stock must resist the pull to fair value, so it ends nearer its own path.'
+        );
+
+        // Only the magnitude of the trend matters. Subtracting a signed trend, as the dead code did, would
+        // have made a rising stock revert FASTER than a flat one and a falling stock revert slower.
+        $this->assertEqualsWithDelta($rising, $falling, 1e-9, 'Momentum resistance must be direction neutral.');
+    }
+
+    /**
+     * Momentum must slow fundamental reversion, never abolish it, at any tick rate.
+     *
+     * Resistance divides the reversion rate. Adding it to the reversion WEIGHT instead looks equivalent on a
+     * coarse step and is catastrophic on a fine one: at the district's 3600 ticks a year the weight is already
+     * 0.9999, so any constant offset saturates the clamp and cuts the price loose from fair value entirely.
+     */
+    public function testMomentumSlowsReversionByTheSameFractionAtAnyTickRate(): void
+    {
+        $undervalued = 20.0;
+        $maxTrend = 0.50;
+
+        $retainedFraction = function (float $dt) use ($undervalued, $maxTrend): float {
+            $withMomentum = $this->priceOfAtStep($dt, $maxTrend, $undervalued);
+            $without = $this->priceOfAtStep($dt, 0.0, $undervalued);
+
+            // How much of the pull toward fair value survives the momentum resistance.
+            return log($withMomentum / $undervalued) / log($without / $undervalued);
         };
 
-        $narrow = $closed(0.9);
-        $wide = $closed(0.5);
+        $daily = $retainedFraction(1.0 / 252.0);
+        $live = $retainedFraction(1.0 / 3600.0);
 
-        $this->assertGreaterThan(0.0, $narrow, 'a mispriced name is pulled toward fair value');
-        $this->assertEqualsWithDelta($narrow, $wide, 1e-6 * $narrow + 1e-12, 'a deep gap closes the same share per step as a shallow one');
+        // Dividing the rate retains 1 / (1 + trend x resistance) of the reversion, independent of the step.
+        $this->assertGreaterThan(0.50, $live, 'Reversion must survive the maximum trend at the live tick rate.');
+        $this->assertLessThan(0.90, $live, 'Momentum must still visibly slow reversion.');
+        $this->assertEqualsWithDelta($daily, $live, 0.05, 'The momentum effect must not depend on the tick rate.');
+    }
+
+    private function priceOfAtStep(float $dt, float $trend, float $currentPrice): float
+    {
+        $ctx = new MarketPricingContext(
+            currentPrice: $currentPrice,
+            currentVolatility: 0.25,
+            longTermVolatility: 0.25,
+            earningsPerShare: 5.0,
+            dt: $dt,
+            lambda: 0.0,
+            beta: 1.0,
+            macroState: new MacroStateDTO(policyRate: 0.04, equityRiskPremium: 0.045),
+            bookValuePerShare: 40.0,
+            currentRoic: 0.15,
+            roicTtm: 0.15,
+            liveWacc: 0.08,
+            revenuePerShare: 50.0,
+            liveCostOfEquity: 0.10,
+            recentPriceTrend: $trend,
+            baselineRoic: 0.15
+        );
+
+        return $this->engine->calculateNextPrice($ctx)['price'];
     }
 
     /**

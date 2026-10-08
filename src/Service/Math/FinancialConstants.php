@@ -116,6 +116,10 @@ class FinancialConstants
     public const MIN_INTRINSIC_PB = 0.40;
     /** Absolute ceiling on price-to-book valuation multiple. */
     public const MAX_INTRINSIC_PB = 10.0;
+    /** Maximum mean-reversion drift force pulling price toward fundamental fair value. */
+    public const MAX_REVERSION_FORCE_CAP = 15.0;
+    /** Smooth transition autoregressive elasticity parameter scaling mispricing arbitrage speed. */
+    public const ESTAR_ARBITRAGE_ELASTICITY = 2.0;
     /** Multiplier scaling liquidity drag when systemic interbank funding spreads widen. */
     public const FUNDING_LIQUIDITY_STRESS_FACTOR = 2.0;
 
