@@ -10,7 +10,9 @@ use App\DTO\MacroStateDTO;
 use App\DTO\PoliticsStateDTO;
 use App\Entity\DietElection;
 use App\Entity\Stock;
+use App\Repository\ElectionOddsRepository;
 use App\Repository\MacroReportHistoryRepository;
+use App\Repository\RateDecisionRepository;
 use App\Repository\StockRepository;
 use App\Service\Corporate\CapExEngine;
 use App\Service\Corporate\CapitalAllocationEngine;
@@ -35,6 +37,9 @@ use App\Service\Math\MathUtility;
 use App\Service\Politics\ElectionRecorder;
 use App\Service\Politics\PoliticsEngine;
 use App\Service\View\GovernmentPageBuilder;
+use App\Service\Politics\PoliticsHistoryRecorder;
+use App\Entity\ElectionOdds;
+use App\Entity\RateDecision;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Test\KernelTestCase;
 use Symfony\Component\HttpFoundation\Request;
@@ -86,6 +91,13 @@ final class GovernmentRenderTest extends KernelTestCase
             }
         });
         $recorder = new ElectionRecorder($entityManager, $elections);
+        // Each meeting and each forecast, as the ticker writes them.
+        $written = [];
+        $historyManager = $this->createStub(EntityManagerInterface::class);
+        $historyManager->method('persist')->willReturnCallback(static function (object $entity) use (&$written): void {
+            $written[] = $entity;
+        });
+        $history = new PoliticsHistoryRecorder($historyManager);
 
         $policy = $engine->liveState()->policy();
         $macro = new MacroStateDTO();
@@ -96,6 +108,7 @@ final class GovernmentRenderTest extends KernelTestCase
             $politics = $engine->updatePolitics($macro, 1.0 / self::TICKS_PER_YEAR);
             $policy = $politics->policy();
             $recorder->record($politics);
+            $history->record($politics);
             // The quarterly record the law charts read, as macro_report keeps it: the last 25 years.
             if (MathUtility::crossedSimulatedBoundary($macro->totalTime, 1.0 / self::TICKS_PER_YEAR, 0.25)) {
                 $laws[] = ['t' => $macro->totalTime, 'levers' => PoliticsEngine::standingLevers($politics), 'capitalRequirement' => $politics->bankCapitalRequirement];
@@ -140,7 +153,17 @@ final class GovernmentRenderTest extends KernelTestCase
         }
         $stocks = $this->createStub(StockRepository::class);
         $stocks->method('findAll')->willReturn($board);
-        $builder = new GovernmentPageBuilder($elections, $reports, $stocks);
+        $decisions = $this->createStub(RateDecisionRepository::class);
+        $decisions->method('findSince')->willReturnCallback(static fn(float $since): array => array_values(array_filter(
+            $written,
+            static fn(object $row): bool => $row instanceof RateDecision && $row->getSimTime() >= $since
+        )));
+        $odds = $this->createStub(ElectionOddsRepository::class);
+        $odds->method('findForVote')->willReturnCallback(static fn(float $voteAt, float $tolerance): array => array_values(array_filter(
+            $written,
+            static fn(object $row): bool => $row instanceof ElectionOdds && abs($row->getVoteAt() - $voteAt) <= $tolerance
+        )));
+        $builder = new GovernmentPageBuilder($elections, $reports, $stocks, $decisions, $odds);
 
         $pages = ['government' => ['/government', 'government/index.html.twig', $builder->build($macro, $politics)]];
         foreach (AerieDiet::PARTIES as $party) {

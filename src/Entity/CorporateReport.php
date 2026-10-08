@@ -263,6 +263,22 @@ class CorporateReport
     #[ORM\Column(type: Types::DECIMAL, precision: 6, scale: 4, nullable: true)]
     private ?string $assetAge = null;
 
+    /** Quarterly EPS the market's consensus held going into the report: the figure the earnings surprise is struck against. */
+    #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 6, nullable: true)]
+    private ?string $consensusEps = null;
+
+    /** Quarterly EPS as reported, on the share count the surprise was struck on. */
+    #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 6, nullable: true)]
+    private ?string $reportedEps = null;
+
+    /** Quarterly revenue the market's consensus held going into the report. */
+    #[ORM\Column(type: Types::DECIMAL, precision: 30, scale: 4, nullable: true)]
+    private ?string $consensusRevenue = null;
+
+    /** Simulated time the report was filed at, on the clock macro_report keys on (same width, for the same reason). */
+    #[ORM\Column(type: Types::DECIMAL, precision: 14, scale: 6, nullable: true)]
+    private ?string $totalTime = null;
+
     public function __construct()
     {
         $this->recordedAt = new \DateTime();
@@ -1040,6 +1056,50 @@ class CorporateReport
     public function setNetInterestMargin(?string $netInterestMargin): static
     {
         $this->netInterestMargin = $netInterestMargin;
+        return $this;
+    }
+
+    public function getConsensusEps(): ?string
+    {
+        return $this->consensusEps;
+    }
+
+    public function setConsensusEps(?string $consensusEps): static
+    {
+        $this->consensusEps = $consensusEps;
+        return $this;
+    }
+
+    public function getReportedEps(): ?string
+    {
+        return $this->reportedEps;
+    }
+
+    public function setReportedEps(?string $reportedEps): static
+    {
+        $this->reportedEps = $reportedEps;
+        return $this;
+    }
+
+    public function getConsensusRevenue(): ?string
+    {
+        return $this->consensusRevenue;
+    }
+
+    public function setConsensusRevenue(?string $consensusRevenue): static
+    {
+        $this->consensusRevenue = $consensusRevenue;
+        return $this;
+    }
+
+    public function getTotalTime(): ?string
+    {
+        return $this->totalTime;
+    }
+
+    public function setTotalTime(?string $totalTime): static
+    {
+        $this->totalTime = $totalTime;
         return $this;
     }
 }

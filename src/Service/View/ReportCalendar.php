@@ -11,9 +11,9 @@ use App\Service\Corporate\EarningsEngine;
  * When a company reports, as its page dates it: the next results date, and the quarter each filed report covers.
  *
  * The schedule is EarningsEngine's: a ticker files on a fixed tick of every quarter, inside the reporting season
- * that follows the quarter's close. A report therefore covers the quarter before the one it is filed in, and a
- * listed company files every quarter, so the latest report fixes the period of every one before it. Times are
- * placed on the economic clock (where the page's dates come from) by the tick distance the counter gives.
+ * that follows the quarter's close, so a report covers the quarter before the one it is filed in. A report carries
+ * the time it was filed; one filed before reports did is dated by counting back a quarter at a time from the next
+ * dated report, or, with none, from the latest reporting tick on the economic clock.
  */
 final class ReportCalendar
 {
@@ -59,5 +59,41 @@ final class ReportCalendar
         }
 
         return $labels;
+    }
+
+    /** The quarter a report filed at this time covers ("Year 13 Q2"); null before the District's records begin. */
+    public static function coveredQuarter(float $filingTime): ?string
+    {
+        $covered = $filingTime - self::QUARTER_YEARS;
+
+        return $covered < 0.0 ? null : DistrictCalendar::quarter($covered);
+    }
+
+    /**
+     * The quarter each report covers, oldest first: from its own filing time where it carries one, else counted back
+     * a quarter per report from the next report that does, else the schedule's count-back label.
+     *
+     * @param list<float|null>  $filingTimes  Each report's filing time, oldest first; null where it was not recorded.
+     * @param list<string>|null $countedBack  periodLabels() for the same reports, or null where it cannot place them.
+     * @return list<string|null>
+     */
+    public static function reportLabels(array $filingTimes, ?array $countedBack): array
+    {
+        $labels = [];
+        $next = null;
+        for ($index = count($filingTimes) - 1; $index >= 0; $index--) {
+            $time = $filingTimes[$index];
+            if ($time !== null) {
+                $next = [$index, $time];
+                $labels[$index] = self::coveredQuarter($time);
+            } elseif ($next !== null) {
+                $labels[$index] = self::coveredQuarter($next[1] - ($next[0] - $index) * self::QUARTER_YEARS);
+            } else {
+                $labels[$index] = $countedBack[$index] ?? null;
+            }
+        }
+        ksort($labels);
+
+        return array_values($labels);
     }
 }

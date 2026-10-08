@@ -50,6 +50,23 @@ class FinancialSummaryBuilderTest extends TestCase
         $this->assertEqualsWithDelta(0.94, $tiles[2]['value'], 1e-12);
     }
 
+    public function testAnInsurerFilingItsSplitIsReadOnLossesPlusExpenses(): void
+    {
+        $report = new CorporateReport();
+        $report->setCapitalRatio('0.2500');
+        $report->setReturnOnEquity('0.0900');
+        // An operating margin that also carries depreciation and one-off charges: the combined ratio is not read off it.
+        $report->setOperatingMargin('0.0300');
+        $report->setReportedKpis(['loss_ratio' => 0.62, 'expense_ratio' => 0.31]);
+
+        $tiles = $this->tiles($this->stock('Insurance - Diversified'), $report);
+
+        $this->assertSame(['Capital ratio', 'ROE', 'Combined ratio', 'Loss ratio', 'Expense ratio'], array_column($tiles, 'label'));
+        $this->assertEqualsWithDelta(0.93, $tiles[2]['value'], 1e-12);
+        $this->assertEqualsWithDelta(0.62, $tiles[3]['value'], 1e-12);
+        $this->assertEqualsWithDelta(0.31, $tiles[4]['value'], 1e-12);
+    }
+
     public function testAnOperatingCompanyLeadsWithReturnsThenItsOwnKpis(): void
     {
         $report = new CorporateReport();

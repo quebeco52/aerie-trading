@@ -9,6 +9,7 @@ use App\DTO\MacroStateDTO;
 use App\Service\Macro\MacroState;
 use App\Service\Macro\Recorder\MacroSnapshotRecorder;
 use App\Service\Macro\Recorder\QuarterRecord;
+use App\Service\Macro\Subsystem\LaborMarketSubsystem;
 use Doctrine\DBAL\Connection;
 use Doctrine\DBAL\ParameterType;
 use Doctrine\DBAL\Types\Types;
@@ -352,5 +353,27 @@ class MacroSnapshotRecorderTest extends TestCase
         foreach (['gap_channels', 'quarter_diagnostics', 'config_fingerprint', 'ticks_per_year'] as $column) {
             $this->assertNull($byColumn[$column], $column);
         }
+    }
+
+    /** The quarter records the Sahm reading the labour market struck, not one recomputed from the recorded unemployment. */
+    public function testTheSahmReadingIsRecordedAsTheEngineStruckIt(): void
+    {
+        $dt = 1.0 / 360.0;
+        $state = new MacroState();
+        $labour = new LaborMarketSubsystem();
+        foreach (array_merge(array_fill(0, 15, 0.040), [0.043, 0.047, 0.052]) as $month => $rate) {
+            $state->unemploymentRate = $rate;
+            for ($tick = 0; $tick < 30; ++$tick) {
+                $state->totalTime = (($month * 30) + $tick + 1) * $dt;
+                $labour->recordSahmIndicator($state, $dt);
+            }
+        }
+        $this->assertGreaterThan(0.0, $state->sahmRecessionIndicator);
+
+        $captured = $this->capture(MacroStateDTO::fromMacroState($state));
+        $byColumn = array_combine($this->columnsOf($captured['sql']), $captured['params']);
+
+        $this->assertArrayHasKey('sahm_recession_indicator', $byColumn);
+        $this->assertSame($state->sahmRecessionIndicator, $byColumn['sahm_recession_indicator']);
     }
 }

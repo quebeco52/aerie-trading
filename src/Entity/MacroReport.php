@@ -152,6 +152,9 @@ class MacroReport
     #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4)]
     private ?string $unemploymentRateEma = null;
 
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
+    private ?string $sahmRecessionIndicator = null;
+
 
 
     #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4)]

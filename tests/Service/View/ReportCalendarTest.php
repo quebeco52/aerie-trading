@@ -60,4 +60,32 @@ class ReportCalendarTest extends TestCase
         $this->assertSame(['Year 1 Q1'], ReportCalendar::periodLabels('CAL', $tick, self::TICKS_PER_YEAR, $now, 1));
         $this->assertNull(ReportCalendar::periodLabels('CAL', $tick, self::TICKS_PER_YEAR, $now, 2));
     }
+
+    public function testADatedReportIsLabelledFromItsOwnFilingTime(): void
+    {
+        // Filed in Year 4 Q2's reporting season: it covers Year 4 Q1. One filed in Year 1 Q1 covers nothing on record.
+        $this->assertSame('Year 4 Q1', ReportCalendar::coveredQuarter(3.0 + 0.25 + 0.1));
+        $this->assertNull(ReportCalendar::coveredQuarter(0.1));
+    }
+
+    public function testDatedReportsNeedNotBeOneAQuarter(): void
+    {
+        // A firm that skipped Year 4 Q2's filing: each dated report keeps its own quarter, with no count-back across the gap.
+        $labels = ReportCalendar::reportLabels([3.35, 3.85, 4.1], ['wrong', 'wrong', 'wrong']);
+
+        $this->assertSame(['Year 4 Q1', 'Year 4 Q3', 'Year 4 Q4'], $labels);
+    }
+
+    public function testUndatedReportsCountBackFromTheFirstDatedOne(): void
+    {
+        $labels = ReportCalendar::reportLabels([null, null, 3.35, 3.6], null);
+
+        $this->assertSame(['Year 3 Q3', 'Year 3 Q4', 'Year 4 Q1', 'Year 4 Q2'], $labels);
+    }
+
+    public function testWithNoDatedReportTheScheduleLabelsThem(): void
+    {
+        $this->assertSame(['Year 3 Q4', 'Year 4 Q1'], ReportCalendar::reportLabels([null, null], ['Year 3 Q4', 'Year 4 Q1']));
+        $this->assertSame([null, null], ReportCalendar::reportLabels([null, null], null));
+    }
 }

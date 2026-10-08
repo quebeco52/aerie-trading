@@ -48,6 +48,8 @@ class FinancialSummaryBuilder
         'hedge_gain' => ['Hedge gain / revenue', 'signed_percent'],
         'capture_rate' => ['Crack capture', 'percent'],
         'throughput_index' => ['Throughput index', 'index'],
+        'loss_ratio' => ['Loss ratio', 'percent'],
+        'expense_ratio' => ['Expense ratio', 'percent'],
     ];
 
     public function __construct(
@@ -118,11 +120,25 @@ class FinancialSummaryBuilder
         return [
             $this->tile('Capital ratio', $report->getCapitalRatio(), 'percent'),
             $this->tile('ROE', $report->getReturnOnEquity(), 'percent'),
-            // An insurer is read on its combined ratio: claims and expenses per dollar of premium.
             $isInsurer
-                ? ($margin === null ? null : $this->tile('Combined ratio', 1.0 - (float) $margin, 'percent'))
+                ? $this->tile('Combined ratio', self::combinedRatio($report), 'percent')
                 : $this->tile('Operating margin', $margin, 'percent'),
         ];
+    }
+
+    /**
+     * An insurer's combined ratio: losses plus expenses per dollar of premium, as the report files them; a report
+     * filed before the split was carried falls back on one less the operating margin.
+     */
+    public static function combinedRatio(CorporateReport $report): ?float
+    {
+        $kpis = $report->getReportedKpis() ?? [];
+        if (is_numeric($kpis['loss_ratio'] ?? null) && is_numeric($kpis['expense_ratio'] ?? null)) {
+            return (float) $kpis['loss_ratio'] + (float) $kpis['expense_ratio'];
+        }
+        $margin = $report->getOperatingMargin();
+
+        return $margin === null ? null : 1.0 - (float) $margin;
     }
 
     /** @return list<array{label: string, value: float, format: string}|null> */

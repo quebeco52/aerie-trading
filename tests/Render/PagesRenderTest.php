@@ -166,7 +166,8 @@ final class PagesRenderTest extends KernelTestCase
         ])];
         $pages['stock-insurer'] = ['/stock/GULL', 'stock/index.html.twig', array_replace($pages['stock'][2], [
             'isInsurer' => true, 'businessModel' => 'insurance',
-            'financialSummary' => [['label' => 'Capital ratio', 'value' => 0.25, 'format' => 'percent'], ['label' => 'ROE', 'value' => 0.09, 'format' => 'percent'], ['label' => 'Combined ratio', 'value' => 0.94, 'format' => 'percent']],
+            'financialSummary' => [['label' => 'Capital ratio', 'value' => 0.25, 'format' => 'percent'], ['label' => 'ROE', 'value' => 0.09, 'format' => 'percent'], ['label' => 'Combined ratio', 'value' => 0.94, 'format' => 'percent'], ['label' => 'Loss ratio', 'value' => 0.63, 'format' => 'percent'], ['label' => 'Expense ratio', 'value' => 0.31, 'format' => 'percent']],
+            'kpiSeries' => ['loss_ratio' => ['label' => 'Loss ratio', 'format' => 'percent'], 'expense_ratio' => ['label' => 'Expense ratio', 'format' => 'percent']],
         ])];
 
         // A drug company: the pipeline card on the company tab, its ladder grouped by the builder itself.

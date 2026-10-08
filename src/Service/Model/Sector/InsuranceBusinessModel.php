@@ -579,6 +579,7 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
             streamRevenue: [
                 'premium_revenue' => $actualRevenue,
             ],
+            kpis: $this->underwritingRatioKpis($clampedMargin, $realizedExpenseRatio, $fixedCosts, $actualRevenue),
         );
     }
 
@@ -944,6 +945,23 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
         $structuralClaimsRatio = (1.0 - (float) $stock->getOperatingMargin()) * (1.0 - (float) $stock->getFixedCostRatio());
 
         return $this->resolveReserveToPremiumRatio($stock) / max(0.01, $structuralClaimsRatio);
+    }
+
+    /**
+     * The combined ratio split as an insurer files it, each over premium: losses (claims net of the cover's recovery,
+     * with any reinstatement premium) and expenses (acquisition and administration, plus the fixed operating costs).
+     * Losses take whatever the margin clamp removed, so the two add to the quarter's cost base over premium.
+     *
+     * @return array{loss_ratio: float, expense_ratio: float}
+     */
+    protected function underwritingRatioKpis(float $costRatio, float $variableExpenseRatio, float $fixedCosts, float $premium): array
+    {
+        $lossRatio = max(0.0, $costRatio - $variableExpenseRatio);
+
+        return [
+            'loss_ratio' => $lossRatio,
+            'expense_ratio' => $costRatio - $lossRatio + $fixedCosts / max(1.0, $premium),
+        ];
     }
 
     /** Books the quarter's incurred claims, net of the cover's recovery, for the reserve roll-forward. */

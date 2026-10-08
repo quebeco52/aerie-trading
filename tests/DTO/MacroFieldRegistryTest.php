@@ -92,7 +92,6 @@ class MacroFieldRegistryTest extends TestCase
         'sovereignFundDollarsPerGdp' => 'Scale fixed at inception, not a series.',
         'sovereignFundAnnualDraw' => 'Currency amount; sovereign_fund_draw_to_gdp records it.',
         'unemploymentMonthly' => 'Array of the last month-end unemployment rates the Sahm rule reads; unemployment_rate is recorded.',
-        'sahmRecessionIndicator' => 'Derived from the month-end unemployment rates; unemployment_rate is recorded.',
         'sovereignFundDrawShare' => 'The share the year\'s draw was set at; reserve_draw_share records the share in force.',
         'sovereignFundRebalanceBacklog' => 'Currency amount; sovereign_fund_rebalance_share records it against the float.',
         'sovereignFundRebalanceRate' => 'Currency pace of the programme in flight; the share and months left record it.',

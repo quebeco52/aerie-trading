@@ -352,6 +352,52 @@
 						</table>
 					</div>
 				</div>
+				{% if odds %}
+					<figure class="mt-5">
+						<figcaption>
+							<h3 class="text-xs font-semibold text-on-surface">How the odds have moved</h3>
+							<p class="text-2xs text-on-surface-variant mt-0.5">Each party's chance of leading the next government as traders priced it, poll by poll since {{ odds.since }}{% if odds.vote %}, up to the vote of {{ odds.vote.date }}{% endif %}.</p>
+						</figcaption>
+						<div class="grid grid-cols-1 lg:grid-cols-3 gap-5 mt-2">
+							<svg viewBox="0 0 600 160" class="w-full lg:col-span-2" role="img" aria-label="Chance of leading the next government since {{ odds.since }}: {% for party in odds.parties %}{{ party.name }} {{ party.chance|pct(0) }}{{ not loop.last ? ', ' : '' }}{% endfor %}">
+								{% for line in odds.gridlines %}
+									<line x1="{{ odds.plot[0] }}" y1="{{ line.y }}" x2="{{ odds.plot[1] }}" y2="{{ line.y }}" class="stroke-outline-variant" stroke-opacity="{{ loop.first ? 1 : 0.3 }}" stroke-dasharray="{{ loop.first ? '' : '2 3' }}" stroke-width="{{ loop.first ? 1 : 0.6 }}"></line>
+									<text x="{{ odds.plot[0] - 5 }}" y="{{ line.y + 3 }}" text-anchor="end" font-size="8" class="fill-on-surface-variant">{{ line.label }}</text>
+								{% endfor %}
+								{% for year in odds.years %}
+									<line x1="{{ year.x }}" y1="{{ odds.plot[3] }}" x2="{{ year.x }}" y2="{{ odds.plot[3] + 4 }}" class="stroke-outline-variant" stroke-width="0.8"></line>
+									<text x="{{ year.x }}" y="{{ odds.plot[3] + 15 }}" text-anchor="{{ year.x > odds.plot[1] - 20 ? 'end' : (year.x < odds.plot[0] + 20 ? 'start' : 'middle') }}" font-size="8" class="fill-on-surface-variant">{{ year.label }}</text>
+								{% endfor %}
+								<line x1="{{ odds.today }}" y1="{{ odds.plot[2] }}" x2="{{ odds.today }}" y2="{{ odds.plot[3] }}" class="stroke-outline-variant" stroke-width="0.8" stroke-dasharray="1.5 2"><title>Today</title></line>
+								{% if odds.vote %}
+									<line x1="{{ odds.vote.x }}" y1="{{ odds.plot[2] }}" x2="{{ odds.vote.x }}" y2="{{ odds.plot[3] }}" class="stroke-on-surface-variant" stroke-width="0.8" stroke-dasharray="3 2"><title>The vote, {{ odds.vote.date }}</title></line>
+								{% endif %}
+								{% for party in odds.parties|reverse %}
+									<polyline points="{{ party.line }}" fill="none" stroke="{{ party.color }}" stroke-width="1.6" stroke-linejoin="round"><title>{{ party.name }}</title></polyline>
+									<circle cx="{{ party.last.x }}" cy="{{ party.last.y }}" r="2.4" fill="{{ party.color }}"><title>{{ party.name }}: {{ party.chance|pct(0) }}, from {{ party.first|pct(0) }} at the first forecast</title></circle>
+								{% endfor %}
+							</svg>
+							<table class="w-full text-xs self-start">
+								<thead>
+									<tr class="table-head">
+										<th scope="col" class="text-left font-semibold pb-2">Party</th>
+										<th scope="col" class="text-right font-semibold pb-2" title="At the first forecast of this vote">{{ odds.since }}</th>
+										<th scope="col" class="text-right font-semibold pb-2">Now</th>
+									</tr>
+								</thead>
+								<tbody class="divide-y divide-outline-variant/10">
+									{% for party in odds.parties %}
+										<tr>
+											<th scope="row" class="py-1.5 text-left font-normal"><span class="inline-flex items-center gap-2"><span class="w-2.5 h-2.5 rounded-full shrink-0" style="background-color: {{ party.color }}" aria-hidden="true"></span><span class="text-on-surface">{{ party.name }}</span></span></th>
+											<td class="py-1.5 text-right font-mono tabular-nums text-on-surface-variant">{{ party.first|pct(0) }}</td>
+											<td class="py-1.5 text-right font-mono tabular-nums text-on-surface">{{ party.chance|pct(0) }}</td>
+										</tr>
+									{% endfor %}
+								</tbody>
+							</table>
+						</div>
+					</figure>
+				{% endif %}
 			</section>
 		{% endif %}
 
@@ -708,6 +754,44 @@
 						</table>
 					</div>
 				</div>
+				{% if authority.decisions %}
+					{% set chart = authority.decisions %}
+					<figure class="mt-5">
+						<figcaption>
+							<h3 class="text-xs font-semibold text-on-surface">The rate, meeting by meeting</h3>
+							<p class="text-2xs text-on-surface-variant mt-0.5">
+								The rate each meeting has left since {{ chart.since }}: <span class="font-mono tabular-nums">{{ chart.moves }}</span> of <span class="font-mono tabular-nums">{{ chart.meetings|length }}</span> meetings moved it {{ chart.stepBp }} basis points or more, and <span class="font-mono tabular-nums">{{ chart.split }}</span> split the committee.
+								A mark above a meeting is a vote for a higher rate, below it for a lower.{% if chart.governors is not empty %} A dashed line marks a new governor in the chair.{% endif %}
+							</p>
+						</figcaption>
+						<svg viewBox="0 0 600 172" class="w-full mt-2" role="img" aria-label="The policy rate at each meeting since {{ chart.since }}, {{ (chart.meetings|last).rate|pct(2) }} at the last">
+							{% for line in chart.gridlines %}
+								<line x1="{{ chart.plot[0] }}" y1="{{ line.y }}" x2="{{ chart.plot[1] }}" y2="{{ line.y }}" class="stroke-outline-variant" stroke-opacity="{{ loop.first ? 1 : 0.3 }}" stroke-dasharray="{{ loop.first ? '' : '2 3' }}" stroke-width="{{ loop.first ? 1 : 0.6 }}"></line>
+								<text x="{{ chart.plot[0] - 5 }}" y="{{ line.y + 3 }}" text-anchor="end" font-size="8" class="fill-on-surface-variant">{{ line.rate|pct(2) }}</text>
+							{% endfor %}
+							{% for year in chart.years %}
+								<line x1="{{ year.x }}" y1="{{ chart.plot[3] }}" x2="{{ year.x }}" y2="{{ chart.plot[3] + 4 }}" class="stroke-outline-variant" stroke-width="0.8"></line>
+								<text x="{{ year.x }}" y="{{ chart.plot[3] + 15 }}" text-anchor="middle" font-size="8" class="fill-on-surface-variant">{{ year.label }}</text>
+							{% endfor %}
+							{% for governor in chart.governors %}
+								<line x1="{{ governor.x }}" y1="{{ chart.plot[2] }}" x2="{{ governor.x }}" y2="{{ chart.plot[3] }}" class="stroke-outline-variant" stroke-width="0.8" stroke-dasharray="3 2"><title>{{ governor.name }} in the chair from {{ governor.date }}</title></line>
+								<text x="{{ governor.x + 3 }}" y="{{ chart.plot[2] - 4 }}" font-size="7" class="fill-on-surface-variant">{{ governor.name }}</text>
+							{% endfor %}
+							<polyline points="{{ chart.line }}" fill="none" class="stroke-primary" stroke-width="1.5" stroke-linejoin="round"></polyline>
+							{% for meeting in chart.meetings %}
+								{%- set points = meeting.moveBp|abs == 1 ? ' basis point to ' : ' basis points to ' -%}
+								<circle cx="{{ meeting.x }}" cy="{{ meeting.y }}" r="1.8" class="fill-primary"><title>{{ meeting.date }}: {{ meeting.moveBp == 0 ? 'held at ' : (meeting.moveBp > 0 ? 'raised ' ~ meeting.moveBp ~ points : 'cut ' ~ meeting.moveBp|abs ~ points) }}{{ meeting.rate|pct(2) }}, voting {{ meeting.split }}</title></circle>
+								{% if meeting.higher > 0 %}
+									<polygon points="{{ meeting.x - 2.5 }},{{ meeting.y - 4 }} {{ meeting.x + 2.5 }},{{ meeting.y - 4 }} {{ meeting.x }},{{ meeting.y - 8 }}" class="fill-on-surface-variant"><title>{{ meeting.date }}: {{ meeting.higher }} for a higher rate</title></polygon>
+								{% endif %}
+								{% if meeting.lower > 0 %}
+									<polygon points="{{ meeting.x - 2.5 }},{{ meeting.y + 4 }} {{ meeting.x + 2.5 }},{{ meeting.y + 4 }} {{ meeting.x }},{{ meeting.y + 8 }}" class="fill-on-surface-variant"><title>{{ meeting.date }}: {{ meeting.lower }} for a lower rate</title></polygon>
+								{% endif %}
+							{% endfor %}
+						</svg>
+						<p class="source-note mt-2">{{ source_line('monetary-authority') }}</p>
+					</figure>
+				{% endif %}
 			</section>
 		{% endif %}
 

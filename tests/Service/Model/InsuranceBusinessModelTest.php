@@ -172,6 +172,32 @@ class InsuranceBusinessModelTest extends TestCase
         $lossRatio = 0.39 - (InsuranceBusinessModel::DISTRICT_CATASTROPHE_LOAD * (1.0 - $quietBurden)) - $expectedLayer;
         $this->assertEqualsWithDelta($lossRatio + 0.21, $result->clampedMargin, 1e-9);
         $this->assertEqualsWithDelta(($lossRatio + 0.21) * $expectedRevenue, $result->actualVariableCosts, 1_000.0);
+
+        // The report files the split: the claims as the loss ratio, and the expense ratio with the $1B fixed costs on $10B of premium.
+        $this->assertEqualsWithDelta($lossRatio, $result->kpis['loss_ratio'], 1e-9);
+        $this->assertEqualsWithDelta(0.21 + 0.10, $result->kpis['expense_ratio'], 1e-9);
+    }
+
+    /**
+     * Each underwriter files its loss and expense ratios, and the two add to its cost base over premium: the variable
+     * cost ratio plus the fixed costs, which is the combined ratio the page shows.
+     */
+    public function testEveryUnderwriterFilesALossAndExpenseRatioThatAddToItsCostBase(): void
+    {
+        $fixedCosts = 800_000_000.0;
+        foreach ([new InsuranceBusinessModel(), new \App\Service\Model\Sector\RetailInsuranceBusinessModel(), new \App\Service\Model\Sector\ReinsuranceBusinessModel()] as $model) {
+            $result = $model->computeActualFinancials($this->underwriter(26_666_666_667.0), 10_000_000_000.0, 0.60, $fixedCosts, 0.10, new MacroStateDTO(), $this->scriptedMath());
+
+            $label = $model::class;
+            $this->assertGreaterThan(0.0, $result->kpis['loss_ratio'], $label);
+            $this->assertGreaterThan($fixedCosts / $result->actualRevenue, $result->kpis['expense_ratio'], $label);
+            $this->assertEqualsWithDelta(
+                $result->clampedMargin + $fixedCosts / $result->actualRevenue,
+                $result->kpis['loss_ratio'] + $result->kpis['expense_ratio'],
+                1e-9,
+                $label
+            );
+        }
     }
 
     /**

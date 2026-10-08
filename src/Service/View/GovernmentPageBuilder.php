@@ -11,8 +11,12 @@ use App\Data\AeriePartyProfiles;
 use App\DTO\MacroStateDTO;
 use App\DTO\PoliticsStateDTO;
 use App\Entity\DietElection;
+use App\Entity\ElectionOdds;
+use App\Entity\RateDecision;
 use App\Repository\DietElectionRepository;
+use App\Repository\ElectionOddsRepository;
 use App\Repository\MacroReportHistoryRepository;
+use App\Repository\RateDecisionRepository;
 use App\Repository\StockRepository;
 use App\Service\Corporate\MergerAndAcquisitionEngine;
 use App\Service\Macro\MacroEngine;
@@ -100,6 +104,24 @@ class GovernmentPageBuilder
     // --- Rate Meetings ---
     /** Share of a meeting interval within which the clock counts as on a meeting day, for the accumulated rounding of the sim clock. */
     private const MEETING_GRID_TOLERANCE = 1e-6;
+    /** Years of meetings the rate chart covers: 48 meetings, few enough to mark each one. */
+    public const RATE_CHART_YEARS = 6.0;
+    /** The rate chart's plot area in its 600 by 172 drawing: left, right, top and bottom edges. */
+    private const RATE_CHART_PLOT = [40.0, 590.0, 14.0, 150.0];
+    /** Gridline steps the rate chart picks from, smallest first: a quarter point up to two points. */
+    private const RATE_CHART_GRID_STEPS = [0.0025, 0.005, 0.01, 0.02];
+    /** Most gridlines across the rate chart's value axis. */
+    private const RATE_CHART_GRIDLINES = 6;
+
+    // --- Election Odds Chart ---
+    /** The odds chart's plot area in its 600 by 160 drawing: left, right, top and bottom edges. */
+    private const ODDS_CHART_PLOT = [34.0, 590.0, 8.0, 132.0];
+    /** How near a forecast's vote must fall to the coming vote's day to count as a forecast of it, in years: a vote is held within a tick of its day, and the next is a term away. */
+    private const ODDS_VOTE_TOLERANCE = 0.25;
+    /** Least chance of leading the government a party must have reached for the odds chart and the market panel to show it. */
+    private const LISTED_LEADER_CHANCE = 0.01;
+    /** Gridline step on the odds chart's axis. */
+    private const ODDS_CHART_STEP = 0.25;
 
     // --- Hemicycle Geometry ---
     /** Rows of seats in the chamber drawing. */
@@ -180,6 +202,8 @@ class GovernmentPageBuilder
         private readonly DietElectionRepository $elections,
         private readonly ?MacroReportHistoryRepository $reports = null,
         private readonly ?StockRepository $stocks = null,
+        private readonly ?RateDecisionRepository $decisions = null,
+        private readonly ?ElectionOddsRepository $odds = null,
     ) {}
 
     /**
@@ -296,6 +320,7 @@ class GovernmentPageBuilder
             'polls' => self::polls($politics, $nextElection),
             'laws' => $this->laws($politics, $history),
             'market' => self::market($politics),
+            'odds' => $this->oddsHistory($politics),
             'exposure' => $this->exposure($macro, $politics),
         ];
     }
@@ -330,7 +355,7 @@ class GovernmentPageBuilder
 
         $leaders = [];
         foreach ($politics->forecastLeaders as $party => $chance) {
-            if ($chance >= 0.01) {
+            if ($chance >= self::LISTED_LEADER_CHANCE) {
                 $leaders[] = ['name' => AerieDiet::PARTY_NAMES[$party], 'color' => self::PARTY_COLORS[$party], 'chance' => $chance];
             }
         }
@@ -510,6 +535,163 @@ class GovernmentPageBuilder
         }
 
         return $periods;
+    }
+
+    /**
+     * The rate each meeting left, oldest first, on a line from meeting to meeting, each meeting marked with its dissents:
+     * a mark above for votes for a higher rate, below for a lower. A dashed line marks a new governor in the chair.
+     *
+     * @param list<RateDecision> $decisions The meetings on record over the chart's span, oldest first.
+     * @return array<string, mixed>|null Null with fewer than two meetings on record.
+     */
+    public static function rateChart(array $decisions, float $now): ?array
+    {
+        if (count($decisions) < 2) {
+            return null;
+        }
+
+        $from = $decisions[0]->getSimTime();
+        $to = max($now, $decisions[array_key_last($decisions)]->getSimTime());
+        $rates = array_map(static fn(RateDecision $decision): float => $decision->getRate(), $decisions);
+        $step = self::RATE_CHART_GRID_STEPS[array_key_last(self::RATE_CHART_GRID_STEPS)];
+        foreach (self::RATE_CHART_GRID_STEPS as $candidate) {
+            if ((ceil(max($rates) / $candidate) - floor(min($rates) / $candidate)) <= self::RATE_CHART_GRIDLINES - 1) {
+                $step = $candidate;
+                break;
+            }
+        }
+        $low = floor(min($rates) / $step) * $step;
+        $high = max($low + $step, ceil(max($rates) / $step) * $step);
+
+        [$left, $right, $top, $bottom] = self::RATE_CHART_PLOT;
+        $x = static fn(float $time): float => round($left + (($right - $left) * ($time - $from) / max(1e-9, $to - $from)), 1);
+        $y = static fn(float $rate): float => round($bottom - (($bottom - $top) * ($rate - $low) / ($high - $low)), 1);
+
+        $meetings = [];
+        $governors = [];
+        $previous = null;
+        foreach ($decisions as $decision) {
+            $higher = $decision->getVotesHigher();
+            $lower = $decision->getVotesLower();
+            $meetings[] = [
+                'x' => $x($decision->getSimTime()),
+                'y' => $y($decision->getRate()),
+                'date' => self::simDate($decision->getSimTime()),
+                'rate' => $decision->getRate(),
+                // Whole basis points, the precision the rate is printed at, as the last decision reads.
+                'moveBp' => (int) round(10000.0 * $decision->getRateChange()),
+                'split' => (count($decision->getVotes()) - $higher - $lower) . '–' . ($higher + $lower),
+                'higher' => $higher,
+                'lower' => $lower,
+            ];
+            if ($previous !== null && $decision->getGovernor() !== $previous) {
+                $governors[] = ['x' => $x($decision->getSimTime()), 'name' => $decision->getGovernor(), 'date' => self::simDate($decision->getSimTime())];
+            }
+            $previous = $decision->getGovernor();
+        }
+
+        $gridlines = [];
+        for ($rate = $low; $rate <= $high + 1e-9; $rate += $step) {
+            $gridlines[] = ['y' => $y($rate), 'rate' => $rate];
+        }
+        $years = [];
+        for ($year = (int) ceil($from); $year <= $to + 1e-9; ++$year) {
+            $years[] = ['x' => $x((float) $year), 'label' => sprintf('Year %d', $year + 1)];
+        }
+
+        return [
+            'since' => self::simDate($from),
+            'line' => implode(' ', array_map(static fn(array $meeting): string => $meeting['x'] . ',' . $meeting['y'], $meetings)),
+            'meetings' => $meetings,
+            // The rule moves the rate a little at every meeting; a meeting's standard step is what counts as a move.
+            'moves' => count(array_filter($decisions, static fn(RateDecision $decision): bool => abs($decision->getRateChange()) >= MonetaryAuthority::NEWSWORTHY_RATE_MOVE)),
+            'stepBp' => (int) round(10000.0 * MonetaryAuthority::NEWSWORTHY_RATE_MOVE),
+            'split' => count(array_filter($meetings, static fn(array $meeting): bool => $meeting['higher'] + $meeting['lower'] > 0)),
+            'governors' => $governors,
+            'gridlines' => $gridlines,
+            'years' => $years,
+            'plot' => self::RATE_CHART_PLOT,
+        ];
+    }
+
+    /**
+     * The market's odds on who leads the next government, forecast by forecast, for the vote its latest forecast is for.
+     *
+     * @return array<string, mixed>|null Null before two forecasts of that vote are on record.
+     */
+    private function oddsHistory(PoliticsStateDTO $politics): ?array
+    {
+        if ($this->odds === null || $politics->forecastAt < 0.0) {
+            return null;
+        }
+
+        return self::oddsChart($this->odds->findForVote($politics->forecastFor, self::ODDS_VOTE_TOLERANCE), $politics->totalTime, $politics->forecastFor);
+    }
+
+    /**
+     * Each party's chance of leading the next government, held from one forecast to the next as the odds stood and run
+     * on to today, for every party that has reached the listed chance.
+     *
+     * @param list<ElectionOdds> $forecasts The forecasts of one vote, oldest first.
+     * @return array<string, mixed>|null Null with fewer than two.
+     */
+    public static function oddsChart(array $forecasts, float $now, float $voteAt): ?array
+    {
+        if (count($forecasts) < 2) {
+            return null;
+        }
+
+        $from = $forecasts[0]->getSimTime();
+        $to = max($now, $voteAt);
+        [$left, $right, $top, $bottom] = self::ODDS_CHART_PLOT;
+        $x = static fn(float $time): float => round($left + (($right - $left) * ($time - $from) / max(1e-9, $to - $from)), 1);
+        $y = static fn(float $chance): float => round($bottom - (($bottom - $top) * $chance), 1);
+
+        $parties = [];
+        foreach (AerieDiet::PARTIES as $party) {
+            $chances = array_map(static fn(ElectionOdds $forecast): float => (float) ($forecast->getLeaders()[$party] ?? 0.0), $forecasts);
+            if (max($chances) < self::LISTED_LEADER_CHANCE) {
+                continue;
+            }
+            $points = [];
+            foreach ($forecasts as $i => $forecast) {
+                if ($i > 0) {
+                    $points[] = $x($forecast->getSimTime()) . ',' . $y($chances[$i - 1]);
+                }
+                $points[] = $x($forecast->getSimTime()) . ',' . $y($chances[$i]);
+            }
+            $latest = $chances[array_key_last($chances)];
+            $points[] = $x($now) . ',' . $y($latest);
+            $parties[] = [
+                'name' => AerieDiet::PARTY_NAMES[$party],
+                'color' => self::PARTY_COLORS[$party],
+                'chance' => $latest,
+                'first' => $chances[0],
+                'line' => implode(' ', $points),
+                'last' => ['x' => $x($now), 'y' => $y($latest)],
+            ];
+        }
+        usort($parties, static fn(array $a, array $b): int => $b['chance'] <=> $a['chance']);
+
+        $gridlines = [];
+        for ($chance = 0.0; $chance <= 1.0 + 1e-9; $chance += self::ODDS_CHART_STEP) {
+            $gridlines[] = ['y' => $y($chance), 'label' => (string) round($chance * 100) . '%'];
+        }
+        $years = [];
+        for ($year = (int) ceil($from); $year <= $to + 1e-9; ++$year) {
+            $years[] = ['x' => $x((float) $year), 'label' => sprintf('Year %d', $year + 1)];
+        }
+
+        return [
+            'since' => self::simDate($from),
+            'count' => count($forecasts),
+            'parties' => $parties,
+            'gridlines' => $gridlines,
+            'years' => $years,
+            'today' => $x($now),
+            'vote' => $voteAt > $now ? ['x' => $x($voteAt), 'date' => self::simDate($voteAt)] : null,
+            'plot' => self::ODDS_CHART_PLOT,
+        ];
     }
 
     /** When the rate committee next meets: meetings fall on a fixed grid, MonetaryAuthority::MEETINGS_PER_YEAR evenly spaced. */
@@ -1482,6 +1664,7 @@ class GovernmentPageBuilder
                 'lower' => $lower,
             ],
             'nextMeeting' => DistrictCalendar::dateline(self::nextMeeting($time)),
+            'decisions' => $this->decisions === null ? null : self::rateChart($this->decisions->findSince($time - self::RATE_CHART_YEARS), $time),
             'rules' => [
                 'governorTermYears' => MonetaryAuthority::GOVERNOR_TERM_YEARS,
                 'memberTermYears' => MonetaryAuthority::MEMBER_TERM_YEARS,

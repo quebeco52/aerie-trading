@@ -250,15 +250,18 @@ class StockController extends AbstractController
         $priceStmt = $conn->prepare('SELECT price FROM stock_history WHERE stock_id = :id AND recorded_at <= :date ORDER BY recorded_at DESC LIMIT 1');
         $priceStmt->bindValue('id', $stock->getId());
 
-        // The quarter each report covers, read off the reporting schedule; a delisted company stopped filing at some
-        // past quarter the schedule cannot place, so its reports go unlabelled and the charts count back instead.
-        $periods = $stock->isBankrupt() ? null : ReportCalendar::periodLabels(
+        // The quarter each report covers, from the time it was filed. A report filed before that was recorded is read
+        // off the reporting schedule; a delisted company stopped filing at some past quarter the schedule cannot
+        // place, so such reports go unlabelled and the charts count back instead.
+        $filingTimes = array_map(static fn (array $row): ?float => is_numeric($row['total_time'] ?? null) ? (float) $row['total_time'] : null, $results);
+        $countedBack = $stock->isBankrupt() || !in_array(null, $filingTimes, true) ? null : ReportCalendar::periodLabels(
             (string) $stock->getTicker(),
             (int) ($redis->get('simulation_tick_count') ?: 0),
             $ticksPerYear,
             $macroStateProvider->liveState()->totalTime,
             count($results)
         );
+        $periods = ReportCalendar::reportLabels($filingTimes, $countedBack);
 
         foreach ($results as $index => &$row) {
             $row['period'] = $periods[$index] ?? null;

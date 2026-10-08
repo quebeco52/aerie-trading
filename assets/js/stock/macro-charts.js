@@ -39,6 +39,7 @@ let macroGlobalCycleChartInstance = null;
 let macroBankingLiquidityChartInstance = null;
 let macroGapBreakdownChartInstance = null;
 let macroPolicyUncertaintyChartInstance = null;
+let macroSahmChartInstance = null;
 
 let currentMacroReports = [];
 let currentMacroTimeframe = '10Y';
@@ -120,6 +121,8 @@ function updateMacroHud(d) {
         + (lastEbp === undefined ? '' : ` · Excess premium ${signed(lastEbp, 0)} bps`));
     const lastEpu = lastKnown(d.policyUncertaintyData);
     setHud('hud-macroPolicyUncertaintyChart', lastEpu === undefined ? '-' : `Index ${lastEpu.toFixed(0)}`);
+    const lastSahm = lastKnown(d.sahmData);
+    setHud('hud-macroSahmChart', lastSahm === undefined ? '-' : `Rise ${lastSahm.toFixed(2)} pp`);
     const lastGapChange = lastKnown(d.gapChangeData);
     setHud('hud-macroGapBreakdownChart', lastGapChange === undefined ? '-' : `Last quarter ${signed(lastGapChange, 2)} pp`);
     setHud('hud-macroSectoralInflationChart', `CPI ${last(d.inflationData).toFixed(1)}% · PPI ${last(d.ppiData) > 0 ? '+' : ''}${last(d.ppiData).toFixed(1)}% · Core services ${last(d.supercoreInflationData).toFixed(1)}%`);
@@ -168,6 +171,7 @@ export function updateMacroCharts(reports, timeframe = currentMacroTimeframe) {
     let supercoreInflationData = [], coreGoodsInflationData = [];
     let highYieldSpreadBpsData = [], creditCliffRatioData = [], excessBondPremiumBpsData = [];
     let policyUncertaintyData = [], policyUncertaintyEmaData = [];
+    let sahmData = [];
     let inventoryStockGapData = [], energyBufferData = [];
     let policyRuleGapBpsData = [];
     let capacityUtilizationData = [], recessionProbData = [];
@@ -368,6 +372,10 @@ export function updateMacroCharts(reports, timeframe = currentMacroTimeframe) {
         policyUncertaintyData.push(rawEpu === null ? null : parseFloat(rawEpu));
         policyUncertaintyEmaData.push(rawEpuEma === null ? null : parseFloat(rawEpuEma));
 
+        // The Sahm reading, in percentage points; rows recorded before it was kept leave a gap.
+        const rawSahm = report.sahm_recession_indicator ?? null;
+        sahmData.push(rawSahm === null ? null : parseFloat(rawSahm) * 100);
+
         // Metzler (1941) & Working (1949) Inventory & Storage
         let rawInvGap = report.inventory_stock_gap_ema ?? report.inventoryStockGapEma ?? 0.0;
         inventoryStockGapData.push(parseFloat(rawInvGap) * 100);
@@ -488,7 +496,7 @@ export function updateMacroCharts(reports, timeframe = currentMacroTimeframe) {
     const gapChangeData = slicedReports.map((row, i) => row.gap_breakdown ? gapBreakdownData.reduce((sum, series) => sum + (series[i] ?? 0), 0) : null);
 
     updateMacroHud({
-        gapChangeData, foodPushData, energyPushData, excessBondPremiumBpsData, policyUncertaintyData,
+        gapChangeData, foodPushData, energyPushData, excessBondPremiumBpsData, policyUncertaintyData, sahmData,
         balanceSheetHoldingsData, balanceSheetChangeData,
         inflationData, outputGapData, policyRateData, yield10yData,
         mortgageYieldData, spread30yData, volData, erpData, taxData,
@@ -541,6 +549,7 @@ export function updateMacroCharts(reports, timeframe = currentMacroTimeframe) {
     renderWhenVisible('macroCreditCliffChart', () => renderMacroCreditCliffChart(labels, creditSpreadBpsData, highYieldSpreadBpsData, creditCliffRatioData, corporateDefaultBpsData, excessBondPremiumBpsData));
     renderWhenVisible('macroGapBreakdownChart', () => renderMacroGapBreakdownChart(labels, gapGroups, gapBreakdownData, gapChangeData));
     renderWhenVisible('macroPolicyUncertaintyChart', () => renderMacroPolicyUncertaintyChart(labels, policyUncertaintyData, policyUncertaintyEmaData));
+    renderWhenVisible('macroSahmChart', () => renderMacroSahmChart(labels, sahmData));
     renderWhenVisible('macroInventoryCycleChart', () => renderMacroInventoryCycleChart(labels, inventoryStockGapData, outputGapData, energyBufferData, capacityUtilizationData));
     renderWhenVisible('macroPolicyRuleChart', () => renderMacroPolicyRuleChart(labels, policyRuleGapBpsData, policyRateData, targetRateData));
     renderWhenVisible('macroLeadingIndicatorsChart', () => renderMacroLeadingIndicatorsChart(labels, pmiData, housingStartsData, moneySupplyGrowthData, tradeBalanceData, ppiData));
@@ -3178,6 +3187,72 @@ function renderMacroPolicyUncertaintyChart(labels, indexData, averageData) {
     });
 }
 
+function renderMacroSahmChart(labels, sahmData) {
+    const canvas = document.getElementById('macroSahmChart');
+    if (!canvas) return;
+    macroSahmChartInstance = destroyChartInstance(macroSahmChartInstance);
+    const ctx = canvas.getContext('2d');
+
+    // The rise that reads as a recession under way, published on the canvas as a fraction so the page keeps no copy of it.
+    const trigger = parseFloat(canvas.dataset.trigger ?? 'NaN') * 100;
+
+    const datasets = [
+        {
+            label: 'Unemployment rise',
+            data: sahmData,
+            borderColor: SERIES.blue,
+            backgroundColor: withAlpha(SERIES.blue, 0.12),
+            borderWidth: 2,
+            tension: 0.2,
+            fill: true,
+            spanGaps: false,
+            pointRadius: labels.length > 50 ? 0 : 1.5
+        }
+    ];
+    if (!isNaN(trigger)) {
+        datasets.push({
+            label: 'Recession signal',
+            data: labels.map(() => trigger),
+            borderColor: withAlpha(THEME_COLORS.textMuted, 0.7),
+            borderWidth: 1,
+            borderDash: [4, 4],
+            fill: false,
+            pointRadius: 0
+        });
+    }
+
+    macroSahmChartInstance = new Chart(ctx, {
+        type: 'line',
+        data: { labels: labels, datasets: datasets },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            plugins: {
+                legend: { position: 'bottom', labels: { boxWidth: 8, usePointStyle: true } },
+                tooltip: {
+                    callbacks: {
+                        label: (ctx) => `${ctx.dataset.label}: ${ctx.raw === null ? '-' : ctx.raw.toFixed(2) + ' pp'}`
+                    }
+                }
+            },
+            scales: {
+                y: {
+                    type: 'linear',
+                    min: 0,
+                    grid: { color: GRID_COLOR },
+                    ticks: { callback: (val) => val.toFixed(1) },
+                    title: { display: true, text: 'Percentage points' }
+                },
+                x: {
+                    grid: { color: GRID_COLOR },
+                    ticks: { maxTicksLimit: 8 }
+                }
+            }
+        }
+    });
+}
+
 export function resizeMacroCharts() {
     const instances = [
         macroEconomyChartInstance, macroRatesChartInstance, macroMortgageChartInstance,
@@ -3190,7 +3265,7 @@ export function resizeMacroCharts() {
         macroInventoryCycleChartInstance, macroPolicyRuleChartInstance,
         macroLeadingIndicatorsChartInstance,
         macroHouseholdCreditChartInstance, macroGlobalCycleChartInstance, macroBankingLiquidityChartInstance,
-        macroGapBreakdownChartInstance, macroPolicyUncertaintyChartInstance
+        macroGapBreakdownChartInstance, macroPolicyUncertaintyChartInstance, macroSahmChartInstance
     ];
     instances.forEach(c => {
         if (c) {
@@ -3232,4 +3307,5 @@ export function destroyMacroCharts() {
     macroBankingLiquidityChartInstance = destroyChartInstance(macroBankingLiquidityChartInstance);
     macroGapBreakdownChartInstance = destroyChartInstance(macroGapBreakdownChartInstance);
     macroPolicyUncertaintyChartInstance = destroyChartInstance(macroPolicyUncertaintyChartInstance);
+    macroSahmChartInstance = destroyChartInstance(macroSahmChartInstance);
 }
