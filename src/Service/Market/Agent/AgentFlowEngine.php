@@ -206,6 +206,10 @@ final class AgentFlowEngine
         $attention = $this->rollAttention($state['attention'] ?? null, $view);
         $view = $view->withAttention($attention['move'], $attention['volume'], $attention['news']);
 
+        // The last month's move, as a leaky sum over AGENT_MOMENTUM_SKIP_YEARS: the stretch the chartists skip.
+        $recentMonth = ((float) ($state['skip'] ?? 0.0) * exp(-max(0.0, $view->dt) / FinancialConstants::AGENT_MOMENTUM_SKIP_YEARS)) + $view->logReturn;
+        $view = $view->withRecentMonthTrend($recentMonth);
+
         // This name's score feeds the style score the NEXT tick reads. The one read at the open is what
         // every name is judged against this tick, so the order names are visited in cannot matter.
         foreach ($fitness as $identifier => $score) {
@@ -278,6 +282,7 @@ final class AgentFlowEngine
             'exposures' => $updatedExposures,
             'variance' => $variance,
             'attention' => $attention,
+            'skip' => $recentMonth,
         ]);
 
         return ['flow' => $flow, 'shares' => $shares, 'positions' => $updatedPositions];

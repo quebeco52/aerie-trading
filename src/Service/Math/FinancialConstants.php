@@ -751,6 +751,8 @@ class FinancialConstants
     public const AGENT_FUNDAMENTALIST_GAIN = 2.50;
     /** Chartist conviction per unit of accumulated price trend. */
     public const AGENT_MOMENTUM_GAIN = 3.00;
+    /** The most recent month the chartists' formation window skips: last month's winners reverse (Jegadeesh 1990), so momentum is formed on the months before it (Jegadeesh & Titman 1993; the Fama-French UMD factor skips one month). */
+    public const AGENT_MOMENTUM_SKIP_YEARS = 1.0 / 12.0;
     /** Share of the others' flow a market maker takes the other side of in calm conditions (Grossman & Miller 1988 immediacy). The rest reaches the price at once. */
     public const AGENT_MAKER_ABSORPTION = 0.35;
     /** Time a maker takes to work 63% of its inventory back to flat, in years (~1 trading day; Hendershott & Menkveld 2014 find inventories mean-revert on that order). Carrying risk is not what it is paid for. */

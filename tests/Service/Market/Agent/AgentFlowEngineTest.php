@@ -16,6 +16,7 @@ use App\Service\Market\Agent\MomentumStrategy;
 use App\Service\Market\Agent\RelativeValueStrategy;
 use App\Service\Market\Agent\VolatilityTargetStrategy;
 use App\Service\Market\Flow\InMemoryOrderFlowStore;
+use App\Service\Math\FinancialConstants;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -596,5 +597,39 @@ class AgentFlowEngineTest extends TestCase
             self::assertEqualsWithDelta($readings[1][$leg], $readings[60][$leg], 1e-9, "{$leg} remembered per tick.");
         }
         self::assertEqualsWithDelta(-0.06 * exp(-1.0), $readings[60]['move'], 1e-9);
+    }
+
+    /**
+     * The month the chartists skip is a span of simulated time, not a number of ticks: a return taken a month
+     * ago reads the same whether the month was 21 ticks or 1260, and has decayed by e^-1 by then.
+     */
+    public function testTheSkippedMonthIsRememberedInTimeNotTicks(): void
+    {
+        $readings = [];
+        foreach ([21, 1260] as $ticksPerMonth) {
+            $this->stateStore = new InMemoryAgentStateStore();
+            $engine = $this->engine([new MomentumStrategy()], []);
+            $dt = FinancialConstants::AGENT_MOMENTUM_SKIP_YEARS / $ticksPerMonth;
+
+            for ($tick = 0; $tick <= $ticksPerMonth; $tick++) {
+                $engine->trade(new AgentMarketViewDTO(
+                    ticker: 'TEST',
+                    price: 100.0,
+                    perceivedFairValue: 100.0,
+                    momentumTrend: 0.0,
+                    averageDailyVolume: 1000000.0,
+                    logReturn: $tick === 0 ? 0.08 : 0.0,
+                    financialConditions: 0.0,
+                    dt: $dt,
+                    annualizedVolatility: 0.25,
+                ));
+            }
+
+            $readings[$ticksPerMonth] = $this->stateStore->read('TEST')['skip'] ?? null;
+        }
+
+        self::assertNotNull($readings[21]);
+        self::assertEqualsWithDelta($readings[21], $readings[1260], 1e-9);
+        self::assertEqualsWithDelta(0.08 * exp(-1.0), $readings[1260], 1e-9);
     }
 }

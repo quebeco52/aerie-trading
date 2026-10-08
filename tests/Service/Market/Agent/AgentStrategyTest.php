@@ -31,7 +31,8 @@ class AgentStrategyTest extends TestCase
         float $adv = 1000000.0,
         float $volatility = 0.0,
         ?float $marketMispricing = null,
-        float $passiveOwnership = 1.0
+        float $passiveOwnership = 1.0,
+        float $recentMonth = 0.0
     ): AgentMarketViewDTO {
         return new AgentMarketViewDTO(
             ticker: 'TEST',
@@ -45,6 +46,7 @@ class AgentStrategyTest extends TestCase
             annualizedVolatility: $volatility,
             marketLogMispricing: $marketMispricing,
             passiveOwnershipMultiple: $passiveOwnership,
+            recentMonthTrend: $recentMonth,
         );
     }
 
@@ -105,6 +107,23 @@ class AgentStrategyTest extends TestCase
 
         $this->assertLessThan(0.0, (new FundamentalistStrategy())->signal($rallyingAndExpensive, []));
         $this->assertGreaterThan(0.0, (new MomentumStrategy())->signal($rallyingAndExpensive, []));
+    }
+
+    /**
+     * Skip-month formation (Jegadeesh & Titman 1993): a move made entirely in the last month earns the chartist
+     * nothing, since last month's winners reverse (Jegadeesh 1990); the same move made before it is the trend.
+     */
+    public function testTheChartistSkipsTheMostRecentMonth(): void
+    {
+        $strategy = new MomentumStrategy();
+
+        $this->assertSame(0.0, $strategy->signal($this->view(momentum: 0.10, recentMonth: 0.10), []));
+        $this->assertEqualsWithDelta(
+            FinancialConstants::AGENT_MOMENTUM_GAIN * 0.10,
+            $strategy->signal($this->view(momentum: 0.10, recentMonth: 0.0), []),
+            1e-12
+        );
+        $this->assertGreaterThan(0.0, $strategy->signal($this->view(momentum: 0.10, recentMonth: 0.04), []));
     }
 
     public function testTheChartistsConvictionIsAlsoBounded(): void
