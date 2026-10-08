@@ -86,7 +86,8 @@ class AssetManagementBusinessModelTest extends TestCase
 
         $this->assertEquals(0.12, $model->getReversionSpeed());
         $this->assertEquals(0.012, $model->getMoatSpread());
-        $this->assertEquals(0.035, $model->getSecularGrowthRate($stock));
+        // Trend 2% plus securities and investments value added sliding from 1.41% to 1.30% of GDP over 1997-2019.
+        $this->assertEqualsWithDelta(0.0163, $model->getSecularGrowthRate($stock), 1e-4);
 
         $surpriseWeights = $model->getSurpriseBlendWeights();
         $this->assertEquals(0.75, $surpriseWeights['eps_weight']);

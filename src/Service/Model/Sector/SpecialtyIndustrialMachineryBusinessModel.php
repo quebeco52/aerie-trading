@@ -16,6 +16,7 @@ use App\DTO\MacroStateDTO;
 use App\Service\Math\MathUtility;
 use App\Service\Event\ShockEvent;
 use App\Service\Macro\MacroEngine;
+use App\Service\Math\FinancialConstants;
 
 /**
  * Earnings strategy for Specialty Industrial Machinery.
@@ -126,9 +127,17 @@ class SpecialtyIndustrialMachineryBusinessModel extends HeavyManufacturingBusine
         return 2.5;
     }
 
+    // --- Secular Demand ---
+    /** Business investment in industrial equipment as a share of US nominal GDP in 1997 (BEA NIPA Table 5.3.5, private fixed investment). */
+    public const SECULAR_SHARE_1997 = 0.0164;
+    /** The same share in 2019. */
+    public const SECULAR_SHARE_2019 = 0.0122;
+
+    /** Trend real growth plus the sector's measured drift in its share of GDP. */
     public function getSecularGrowthRate(Stock $stock): float
     {
-        return 0.03;
+        return MacroEngine::TREND_REAL_GROWTH
+            + MathUtility::gdpShareDrift(self::SECULAR_SHARE_1997, self::SECULAR_SHARE_2019, FinancialConstants::SECULAR_SHARE_WINDOW_YEARS);
     }
 
     public function getMacroPhysics(Stock $stock, MacroStateDTO $macroState): array

@@ -13,12 +13,24 @@ use App\DTO\StreamContext;
 use App\Entity\Stock;
 use App\Service\Math\MathUtility;
 use App\Service\Math\FinancialConstants;
+use App\Service\Macro\MacroEngine;
 
 trait StandardOperatingPhysicsTrait
 {
+    /** A sector with no measured demand drift grows with the economy. */
     public function getSecularGrowthRate(Stock $stock): float
     {
-        return 0.02; // DEFAULT_SECULAR_GROWTH_RATE
+        return MacroEngine::TREND_REAL_GROWTH;
+    }
+
+    public function getFadedSecularGrowthRate(Stock $stock, float $simYears): float
+    {
+        return MathUtility::fadeTowardTrend(
+            $this->getSecularGrowthRate($stock),
+            MacroEngine::TREND_REAL_GROWTH,
+            $simYears,
+            FinancialConstants::SECULAR_EXCESS_HALF_LIFE_YEARS
+        );
     }
 
     public function getStructuralRevenueMultiplier(Stock $stock): float

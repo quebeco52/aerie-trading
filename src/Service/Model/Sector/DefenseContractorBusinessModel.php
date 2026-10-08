@@ -16,6 +16,7 @@ use App\Service\Event\ShockEvent;
 use App\Service\Macro\MacroEngine;
 use App\Service\Macro\Subsystem\MacroAggregateSubsystem;
 use App\Service\Math\MathUtility;
+use App\Service\Math\FinancialConstants;
 
 /**
  * Earnings strategy for Heavy Defense Contractors & Aerospace Weapons Manufacturers.
@@ -184,9 +185,17 @@ class DefenseContractorBusinessModel extends StandardCorporateBusinessModel
         return ['eps_weight' => 0.70, 'revenue_weight' => 0.30];
     }
 
+    // --- Secular Demand ---
+    /** Other transportation equipment (aerospace and defense) value added as a share of US nominal GDP in 1997 (BEA GDP by Industry, value added). */
+    public const SECULAR_SHARE_1997 = 0.0073;
+    /** The same share in 2019. */
+    public const SECULAR_SHARE_2019 = 0.0077;
+
+    /** Trend real growth plus the sector's measured drift in its share of GDP. */
     public function getSecularGrowthRate(Stock $stock): float
     {
-        return 0.02;
+        return MacroEngine::TREND_REAL_GROWTH
+            + MathUtility::gdpShareDrift(self::SECULAR_SHARE_1997, self::SECULAR_SHARE_2019, FinancialConstants::SECULAR_SHARE_WINDOW_YEARS);
     }
 
     public function getWorkingCapitalIntensity(Stock $stock): float

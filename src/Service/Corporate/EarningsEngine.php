@@ -518,7 +518,7 @@ class EarningsEngine
         $jumpMagnitude = $jumpData['exponent'] ?? 0.0;
 
         $idiosyncraticDemandShock = $revenueVol * sqrt($ctx->dt) * $z1;
-        $secularGrowthRate = $strategy->getSecularGrowthRate($stock);
+        $secularGrowthRate = $strategy->getFadedSecularGrowthRate($stock, $ctx->macroState->totalTime);
         $secularDrift = $secularGrowthRate * $ctx->dt;
 
         $ctx->secularDrift = $secularDrift;
@@ -1925,7 +1925,7 @@ class EarningsEngine
             // Trend is the sector's secular real growth plus the price level. Replacement-cost maintenance
             // has already carried part of the price level onto the plant ledger this quarter (the slice it
             // replaced dearer than it was booked), so only the remainder is growth spend.
-            $trendNominalGrowth = max(0.0, $ctx->strategy->getSecularGrowthRate($stock) + max(0.0, $ctx->macroState->inflationEma));
+            $trendNominalGrowth = max(0.0, $ctx->strategy->getFadedSecularGrowthRate($stock, $ctx->macroState->totalTime) + max(0.0, $ctx->macroState->inflationEma));
             $revaluationAlreadyBooked = max(0.0, $maintenanceCapEx - $ctx->quarterlyDepreciation);
             $plantBase = $stock->getGrossPpe() !== null ? max(0.0, $stock->getNetPpe()) : abs($ctx->investedCapital);
             $trendTranche = max(0.0, $plantBase * $trendNominalGrowth / 4.0 - $revaluationAlreadyBooked);

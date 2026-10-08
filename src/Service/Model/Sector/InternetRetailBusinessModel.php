@@ -14,6 +14,7 @@ use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
 use App\DTO\MacroStateDTO;
 use App\Service\Math\MathUtility;
+use App\Service\Macro\MacroEngine;
 use App\Service\Event\ShockEvent;
 
 /**
@@ -73,10 +74,26 @@ class InternetRetailBusinessModel extends StandardCorporateBusinessModel
         return [0.85, 0.90, 0.90, 1.35]; // Q4 holiday shopping surge
     }
 
+    // --- Secular Demand ---
+    /** E-commerce share of US retail sales, 2000 average (Census Quarterly E-Commerce Report, FRED ECOMPCTSA). */
+    public const ECOMMERCE_SHARE_2000 = 0.00925;
+    /** The same share, 2019 average. */
+    public const ECOMMERCE_SHARE_2019 = 0.10575;
+    /** Years between those two averages. */
+    public const ECOMMERCE_WINDOW_YEARS = 19.0;
+    /** Retail trade value added as a share of US nominal GDP in 1997 (BEA GDP by Industry, value added). */
+    public const RETAIL_SHARE_1997 = 0.0676;
+    /** The same share in 2019. */
+    public const RETAIL_SHARE_2019 = 0.0593;
+
+    /** Trend real growth plus online's drift within retail and retail's drift within GDP; the adoption fades like any drift. */
     public function getSecularGrowthRate(Stock $stock): float
     {
-        return 0.04;
-    } // E-commerce secular adoption
+        return MacroEngine::TREND_REAL_GROWTH
+            + MathUtility::gdpShareDrift(self::ECOMMERCE_SHARE_2000, self::ECOMMERCE_SHARE_2019, self::ECOMMERCE_WINDOW_YEARS)
+            + MathUtility::gdpShareDrift(self::RETAIL_SHARE_1997, self::RETAIL_SHARE_2019, FinancialConstants::SECULAR_SHARE_WINDOW_YEARS);
+    }
+
     public function getCapexCyclicality(): float
     {
         return 1.5;

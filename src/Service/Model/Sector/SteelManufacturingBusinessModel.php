@@ -101,10 +101,6 @@ class SteelManufacturingBusinessModel extends StandardCorporateBusinessModel
         return [0.85, 1.15, 1.15, 0.85]; // Construction & industrial manufacturing weather alignment
     }
 
-    public function getSecularGrowthRate(Stock $stock): float
-    {
-        return 0.01;
-    }
 
     public function getCapexCyclicality(): float
     {

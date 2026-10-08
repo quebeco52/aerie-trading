@@ -13,6 +13,7 @@ use App\Entity\Stock;
 use App\Service\Event\ShockEvent;
 use App\Service\Macro\MacroEngine;
 use App\Service\Math\MathUtility;
+use App\Service\Math\FinancialConstants;
 
 /**
  * Earnings strategy for the Chemical Industry (Petrochemicals, Specialty Chemicals, Agrochemicals).
@@ -162,8 +163,6 @@ class ChemicalBusinessModel extends StandardCorporateBusinessModel
     // --- Valuation, Growth & CapEx Rails ---
     /** Multiplier scaling heavy continuous chemical synthesis and cracking plant capital expenditure cycles. */
     public const CHEMICAL_CAPEX_CYCLICALITY = 3.50;
-    /** Baseline secular growth rate for the diversified chemical sector. */
-    public const CHEMICAL_SECULAR_GROWTH = 0.02;
     /** Weight given to EPS surprise when calculating aggregate earnings surprise. */
     public const SURPRISE_EPS_WEIGHT = 0.45;
     /** Weight given to revenue surprise when calculating aggregate earnings surprise. */
@@ -182,9 +181,17 @@ class ChemicalBusinessModel extends StandardCorporateBusinessModel
     public function getMoatSpread(): float { return 0.01; }
     public function getCapExCompletionRate(Stock $stock): float { return 0.3; }
 
+    // --- Secular Demand ---
+    /** Chemical products value added as a share of US nominal GDP in 1997 (BEA GDP by Industry, value added). */
+    public const SECULAR_SHARE_1997 = 0.0202;
+    /** The same share in 2019. */
+    public const SECULAR_SHARE_2019 = 0.0174;
+
+    /** Trend real growth plus the sector's measured drift in its share of GDP. */
     public function getSecularGrowthRate(Stock $stock): float
     {
-        return self::CHEMICAL_SECULAR_GROWTH;
+        return MacroEngine::TREND_REAL_GROWTH
+            + MathUtility::gdpShareDrift(self::SECULAR_SHARE_1997, self::SECULAR_SHARE_2019, FinancialConstants::SECULAR_SHARE_WINDOW_YEARS);
     }
 
     public function getCapexCyclicality(): float

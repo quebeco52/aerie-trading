@@ -42,7 +42,8 @@ class ChemicalBusinessModelTest extends TestCase
         // Default weights: Base Petro 50% (0.24), Specialty 30% (0.18), Agri 20% (0.28)
         // (0.50*0.24) + (0.30*0.18) + (0.20*0.28) = 0.120 + 0.054 + 0.056 = 0.230
         $this->assertEqualsWithDelta(0.230, $this->model->getWorkingCapitalIntensity($stock), 0.001);
-        $this->assertEquals(0.02, $this->model->getSecularGrowthRate($stock));
+        // Trend 2% plus chemical products value added sliding from 2.02% to 1.74% of GDP over 1997-2019.
+        $this->assertEqualsWithDelta(0.0132, $this->model->getSecularGrowthRate($stock), 1e-4);
         $this->assertEquals(3.50, $this->model->getCapexCyclicality());
 
         $surpriseWeights = $this->model->getSurpriseBlendWeights();

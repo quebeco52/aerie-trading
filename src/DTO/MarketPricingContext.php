@@ -125,7 +125,7 @@ class MarketPricingContext
             // its book rather than finance it, so they are no claim ahead of the equity.
             netDebtPerShare: max(0.0, $strategy->getNetDebtCapital((float) $stock->getTotalDebt(), (float) $stock->getWholesaleDebt(), (float) $stock->getCorporateTreasury())) / $shares,
             recentPriceTrend: (float) ($stock->getPriceMomentumTrend() ?? 0.0),
-            secularGrowth: $strategy->getSecularGrowthRate($stock),
+            secularGrowth: $strategy->getFadedSecularGrowthRate($stock, $macroState->totalTime),
             // The anchor the firm's own model measures it by: a lender or underwriter carries a placeholder in
             // baselineRoic, and its through-the-cycle return is its ROE.
             baselineRoic: $strategy->getBaselineReturn($stock),

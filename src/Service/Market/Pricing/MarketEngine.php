@@ -653,7 +653,8 @@ class MarketEngine
                 $outputGap,
                 $beta,
                 $inflation,
-                $strategy->getMoatSpread()
+                $strategy->getMoatSpread(),
+                $macro->yield10yEma
             ),
             $equityReturn,
             $targetPayoutRatio

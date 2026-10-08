@@ -15,6 +15,7 @@ use App\Entity\Stock;
 use App\Service\Math\MathUtility;
 use App\Service\Macro\MacroEngine;
 use App\Service\Event\ShockEvent;
+use App\Service\Math\FinancialConstants;
 
 /**
  * Earnings strategy for Higher Education, EdTech & Professional Workforce Upskilling.
@@ -77,7 +78,18 @@ class EducationBusinessModel extends StandardCorporateBusinessModel
     public function getWorkingCapitalIntensity(Stock $stock): float { return 0.05; }
     public function getCapExCompletionRate(Stock $stock): float { return 0.2; }
 
-    public function getSecularGrowthRate(Stock $stock): float { return 0.02; }
+    // --- Secular Demand ---
+    /** Educational services value added as a share of US nominal GDP in 1997 (BEA GDP by Industry, value added). */
+    public const SECULAR_SHARE_1997 = 0.0090;
+    /** The same share in 2019. */
+    public const SECULAR_SHARE_2019 = 0.0125;
+
+    /** Trend real growth plus the sector's measured drift in its share of GDP. */
+    public function getSecularGrowthRate(Stock $stock): float
+    {
+        return MacroEngine::TREND_REAL_GROWTH
+            + MathUtility::gdpShareDrift(self::SECULAR_SHARE_1997, self::SECULAR_SHARE_2019, FinancialConstants::SECULAR_SHARE_WINDOW_YEARS);
+    }
     
     public function getCapexCyclicality(): float { return 0.10; }
     

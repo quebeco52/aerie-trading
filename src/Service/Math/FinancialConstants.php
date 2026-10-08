@@ -84,11 +84,15 @@ class FinancialConstants
     public const BASELINE_MARKET_PE = 15.0;
     /** Baseline long-term stable GDP growth rate for Gordon Growth valuation. */
     public const DEFAULT_PERPETUAL_GROWTH_RATE = 0.02;
+    // --- Secular Demand ---
+    /** Years between the BEA benchmark shares a sector's demand drift is measured over, 1997 to 2019. */
+    public const SECULAR_SHARE_WINDOW_YEARS = 22.0;
+    /** Half-life of a sector's demand drift: 8 years, how much of US industries' 1997-2008 GDP-share drift carried into 2008-2019 (BEA GDP by Industry, non-commodity industries). */
+    public const SECULAR_EXCESS_HALF_LIFE_YEARS = 8.0;
+
     // --- Fundamental Growth Transmission ---
     /** Share of the output gap that reaches a firm's real growth rate, before its beta scales the cyclical exposure. */
     public const CYCLICAL_GROWTH_PASS_THROUGH = 0.50;
-    /** Cap on nominal expected growth, held below any plausible hurdle rate so the Gordon Growth denominator cannot diverge. */
-    public const MAX_EXPECTED_GROWTH = 0.05;
 
     /** Absolute floor on intrinsic fundamental P/E multiple. */
     public const MIN_INTRINSIC_PE = 4.0;

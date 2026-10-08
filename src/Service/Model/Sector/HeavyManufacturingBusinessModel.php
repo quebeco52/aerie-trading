@@ -72,10 +72,18 @@ class HeavyManufacturingBusinessModel extends StandardCorporateBusinessModel
     {
         return 4.0;
     } // Much higher than standard 1.5
+    // --- Secular Demand ---
+    /** Business investment in industrial equipment as a share of US nominal GDP in 1997 (BEA NIPA Table 5.3.5, private fixed investment). */
+    public const SECULAR_SHARE_1997 = 0.0164;
+    /** The same share in 2019. */
+    public const SECULAR_SHARE_2019 = 0.0122;
+
+    /** Trend real growth plus the sector's measured drift in its share of GDP. */
     public function getSecularGrowthRate(Stock $stock): float
     {
-        return 0.015;
-    } // Slightly lower secular growth, highly cyclical
+        return MacroEngine::TREND_REAL_GROWTH
+            + MathUtility::gdpShareDrift(self::SECULAR_SHARE_1997, self::SECULAR_SHARE_2019, FinancialConstants::SECULAR_SHARE_WINDOW_YEARS);
+    }
 
     // --- Dual-Stream Architecture ---
     /** Baseline fraction of revenue derived from large-ticket OEM capital equipment manufacturing. */

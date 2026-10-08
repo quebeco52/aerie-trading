@@ -371,14 +371,15 @@ class CapitalAllocationEngine
         $fairValuePE = $this->mathUtility->calculateManagementFairValuePE(
             $equityRates['costOfEquity'],
             $equityRates['equityReturn'],
-            $ctx->strategy->getSecularGrowthRate($stock),
+            $ctx->strategy->getFadedSecularGrowthRate($stock, $ctx->macroState->totalTime),
             $ctx->macroState->outputGap,
             $ctx->health->leveredBeta,
             $ctx->macroState->inflation,
             $ctx->strategy->getMoatSpread(),
             \App\Data\Sectors::baselineIndustryPe($stock->getIndustry()),
             (float) ($stock->getAccrualsRatio() ?? 0.0),
-            $stock->getPolicyPayoutRatio()
+            $stock->getPolicyPayoutRatio(),
+            $ctx->macroState->yield10yEma
         );
 
         $ctx->newShares = $ctx->sharesOutstanding;

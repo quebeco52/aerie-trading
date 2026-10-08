@@ -15,6 +15,7 @@ use App\Entity\Stock;
 use App\Service\Event\ShockEvent;
 use App\Service\Macro\MacroEngine;
 use App\Service\Math\MathUtility;
+use App\Service\Math\FinancialConstants;
 
 /**
  * Earnings strategy for Hospital Networks, Health Systems & Medical Care Facilities.
@@ -132,9 +133,17 @@ class MedicalCareFacilityBusinessModel extends StandardCorporateBusinessModel
     public function getWorkingCapitalIntensity(Stock $stock): float { return 0.08; }
     public function getCapExCompletionRate(Stock $stock): float { return 0.35; }
 
+    // --- Secular Demand ---
+    /** Hospitals value added as a share of US nominal GDP in 1997 (BEA GDP by Industry, value added). */
+    public const SECULAR_SHARE_1997 = 0.0193;
+    /** The same share in 2019. */
+    public const SECULAR_SHARE_2019 = 0.0244;
+
+    /** Trend real growth plus the sector's measured drift in its share of GDP. */
     public function getSecularGrowthRate(Stock $stock): float
     {
-        return 0.025; // Demographic aging secular tailwind
+        return MacroEngine::TREND_REAL_GROWTH
+            + MathUtility::gdpShareDrift(self::SECULAR_SHARE_1997, self::SECULAR_SHARE_2019, FinancialConstants::SECULAR_SHARE_WINDOW_YEARS);
     }
 
     public function getCapexCyclicality(): float

@@ -42,7 +42,8 @@ class ApparelManufacturingBusinessModelTest extends TestCase
         $this->assertEquals(1.0, $this->model->getCapexCyclicality());
 
         $this->assertEqualsWithDelta(0.229, $this->model->getWorkingCapitalIntensity($stock), 0.01);
-        $this->assertEquals(0.025, $this->model->getSecularGrowthRate($stock));
+        // Trend 2% plus clothing and footwear spending sliding from 2.89% to 1.92% of GDP over 1997-2019.
+        $this->assertEqualsWithDelta(0.0014, $this->model->getSecularGrowthRate($stock), 1e-4);
 
         $surpriseWeights = $this->model->getSurpriseBlendWeights();
         $this->assertEquals(0.50, $surpriseWeights['eps_weight']);

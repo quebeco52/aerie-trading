@@ -2498,19 +2498,21 @@ class MathUtilityTest extends TestCase
         $this->assertSame(0.0, MathUtility::excessOverBaseline(0.02, 0.02));
     }
 
-    public function testExpectedNominalGrowthCarriesTheCycleAndIsCapped(): void
+    public function testExpectedNominalGrowthCarriesTheCycleAndIsCappedAtTheRiskFreeRate(): void
     {
-        // Boom: secular 2% + half of a 2% gap at beta 1 = 3% real, plus 2% inflation = 5% nominal, at the cap.
-        $this->assertEqualsWithDelta(0.05, $this->mathUtility->calculateExpectedNominalGrowth(0.02, 0.02, 1.0, 0.02, 0.0), 1e-12);
+        // Boom: secular 2% + half of a 2% gap at beta 1 = 3% real, plus 2% inflation = 5% nominal, under a 6% risk-free rate.
+        $this->assertEqualsWithDelta(0.05, $this->mathUtility->calculateExpectedNominalGrowth(0.02, 0.02, 1.0, 0.02, 0.0, 0.06), 1e-12);
         // Bust at the same beta takes the same amount off: 1% real plus 2% inflation.
-        $this->assertEqualsWithDelta(0.03, $this->mathUtility->calculateExpectedNominalGrowth(0.02, -0.02, 1.0, 0.02, 0.0), 1e-12);
+        $this->assertEqualsWithDelta(0.03, $this->mathUtility->calculateExpectedNominalGrowth(0.02, -0.02, 1.0, 0.02, 0.0, 0.06), 1e-12);
         // Stagflation drag reaches a firm with no moat and is offset by pricing power.
         $this->assertLessThan(
-            $this->mathUtility->calculateExpectedNominalGrowth(0.02, 0.0, 1.0, 0.06, 1.0),
-            $this->mathUtility->calculateExpectedNominalGrowth(0.02, 0.0, 1.0, 0.06, 0.0)
+            $this->mathUtility->calculateExpectedNominalGrowth(0.02, 0.0, 1.0, 0.06, 1.0, 0.06),
+            $this->mathUtility->calculateExpectedNominalGrowth(0.02, 0.0, 1.0, 0.06, 0.0, 0.06)
         );
-        $this->assertSame(FinancialConstants::MAX_EXPECTED_GROWTH, $this->mathUtility->calculateExpectedNominalGrowth(0.10, 0.05, 2.0, 0.02, 0.0));
-        $this->assertSame(0.0, $this->mathUtility->calculateExpectedNominalGrowth(-0.10, 0.0, 1.0, 0.0, 0.0));
+        // Stable growth never exceeds the risk-free rate (Damodaran), so the same boom is capped lower when rates are low.
+        $this->assertSame(0.045, $this->mathUtility->calculateExpectedNominalGrowth(0.10, 0.05, 2.0, 0.02, 0.0, 0.045));
+        $this->assertSame(0.025, $this->mathUtility->calculateExpectedNominalGrowth(0.02, 0.02, 1.0, 0.02, 0.0, 0.025));
+        $this->assertSame(0.0, $this->mathUtility->calculateExpectedNominalGrowth(-0.10, 0.0, 1.0, 0.0, 0.0, 0.06));
     }
 
     /**
@@ -2528,13 +2530,13 @@ class MathUtilityTest extends TestCase
 
     public function testManagementAndTheMarketStrikeTheSameFairValueMultiple(): void
     {
-        $growth = $this->mathUtility->calculateFundableGrowth($this->mathUtility->calculateExpectedNominalGrowth(0.03, 0.01, 1.2, 0.025, 0.02), 0.18, 0.40);
+        $growth = $this->mathUtility->calculateFundableGrowth($this->mathUtility->calculateExpectedNominalGrowth(0.03, 0.01, 1.2, 0.025, 0.02, 0.06), 0.18, 0.40);
         $market = $this->mathUtility->calculateQualityAdjustedFairValuePE(0.09, 0.18, $growth, 22.0, 0.04);
-        $management = $this->mathUtility->calculateManagementFairValuePE(0.09, 0.18, 0.03, 0.01, 1.2, 0.025, 0.02, 22.0, 0.04, 0.40);
+        $management = $this->mathUtility->calculateManagementFairValuePE(0.09, 0.18, 0.03, 0.01, 1.2, 0.025, 0.02, 22.0, 0.04, 0.40, 0.06);
 
         $this->assertSame($market, $management);
         // A payout that leaves too little to fund the outlook lowers management's multiple exactly as the market's.
-        $this->assertLessThan($management, $this->mathUtility->calculateManagementFairValuePE(0.09, 0.18, 0.03, 0.01, 1.2, 0.025, 0.02, 22.0, 0.04, 0.95));
+        $this->assertLessThan($management, $this->mathUtility->calculateManagementFairValuePE(0.09, 0.18, 0.03, 0.01, 1.2, 0.025, 0.02, 22.0, 0.04, 0.95, 0.06));
         // The Sloan discount is inside the shared figure, floored at the distressed multiple.
         $clean = $this->mathUtility->calculateQualityAdjustedFairValuePE(0.09, 0.18, $growth, 22.0, 0.0);
         $this->assertEqualsWithDelta($clean - 0.04 * FinancialConstants::ACCRUALS_ANOMALY_PE_PENALTY_SCALE, $market, 1e-12);
@@ -2788,12 +2790,47 @@ class MathUtilityTest extends TestCase
         $math = new MathUtility();
         $target = MacroEngine::TARGET_INFLATION;
 
-        self::assertEqualsWithDelta(0.02 + $target, $math->calculateExpectedNominalGrowth(0.02, 0.0, 1.0, $target, 0.0), 1e-12);
+        self::assertEqualsWithDelta(0.02 + $target, $math->calculateExpectedNominalGrowth(0.02, 0.0, 1.0, $target, 0.0, 0.06), 1e-12);
         // Above target, only the part pricing power cannot offset is lost from real growth.
         self::assertEqualsWithDelta(
             0.02 - ((0.04 - $target) * 0.6) + 0.04,
-            $math->calculateExpectedNominalGrowth(0.02, 0.0, 1.0, 0.04, 0.4),
+            $math->calculateExpectedNominalGrowth(0.02, 0.0, 1.0, 0.04, 0.4, 0.06),
             1e-12
         );
+    }
+
+    /** A sector's demand drift is the annual log change in its GDP share; a share that does not move adds nothing. */
+    public function testGdpShareDriftIsTheAnnualLogChangeInTheShare(): void
+    {
+        self::assertEqualsWithDelta(log(2.0) / 10.0, MathUtility::gdpShareDrift(0.01, 0.02, 10.0), 1e-12);
+        self::assertSame(0.0, MathUtility::gdpShareDrift(0.03, 0.03, 22.0));
+        self::assertLessThan(0.0, MathUtility::gdpShareDrift(0.03, 0.02, 22.0));
+        self::assertSame(0.0, MathUtility::gdpShareDrift(0.0, 0.02, 22.0));
+    }
+
+    /** The excess over trend halves every half-life and the rate settles on trend; a trend sector never moves. */
+    public function testSecularGrowthFadesTowardTrendAtItsHalfLife(): void
+    {
+        self::assertEqualsWithDelta(0.06, MathUtility::fadeTowardTrend(0.06, 0.02, 0.0, 8.0), 1e-12);
+        self::assertEqualsWithDelta(0.04, MathUtility::fadeTowardTrend(0.06, 0.02, 8.0, 8.0), 1e-12);
+        self::assertEqualsWithDelta(0.00, MathUtility::fadeTowardTrend(-0.02, 0.02, 8.0, 8.0), 1e-12);
+        self::assertEqualsWithDelta(0.02, MathUtility::fadeTowardTrend(0.06, 0.02, 400.0, 8.0), 1e-12);
+        self::assertSame(0.02, MathUtility::fadeTowardTrend(0.02, 0.02, 5.0, 8.0));
+    }
+
+    /** What a level compounds is the integral of the faded rate: the closed form matches a fine Riemann sum. */
+    public function testTheFadedExcessIntegralIsTheSumOfTheFadedRate(): void
+    {
+        $steps = 100000;
+        $from = 3.0;
+        $to = 15.0;
+        $sum = 0.0;
+        for ($i = 0; $i < $steps; $i++) {
+            $t = $from + (($i + 0.5) * ($to - $from) / $steps);
+            $sum += (MathUtility::fadeTowardTrend(0.05, 0.02, $t, 8.0) - 0.02) * ($to - $from) / $steps;
+        }
+
+        self::assertEqualsWithDelta($sum, MathUtility::fadedExcessIntegral(0.03, $from, $to, 8.0), 1e-9);
+        self::assertEqualsWithDelta(0.03 * 8.0 / M_LN2, MathUtility::fadedExcessIntegral(0.03, 0.0, 1.0e6, 8.0), 1e-9, 'a fading excess compounds a bounded amount');
     }
 }

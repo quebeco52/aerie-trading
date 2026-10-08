@@ -13,6 +13,7 @@ use App\Entity\Stock;
 use App\Service\Math\MathUtility;
 use App\Service\Macro\MacroEngine;
 use App\Service\Event\ShockEvent;
+use App\Service\Math\FinancialConstants;
 
 /**
  * Earnings strategy for Integrated Freight & Contract Logistics (3PL).
@@ -67,7 +68,18 @@ class LogisticsBusinessModel extends StandardCorporateBusinessModel
         return [0.85, 0.95, 1.10, 1.10]; // Q3-Q4 peak freight shipping & holiday logistics surge
     }
 
-    public function getSecularGrowthRate(Stock $stock): float { return 0.025; }
+    // --- Secular Demand ---
+    /** Truck transportation plus warehousing and storage value added as a share of US nominal GDP in 1997 (BEA GDP by Industry, value added). */
+    public const SECULAR_SHARE_1997 = 0.0114;
+    /** The same share in 2019. */
+    public const SECULAR_SHARE_2019 = 0.0126;
+
+    /** Trend real growth plus the sector's measured drift in its share of GDP. */
+    public function getSecularGrowthRate(Stock $stock): float
+    {
+        return MacroEngine::TREND_REAL_GROWTH
+            + MathUtility::gdpShareDrift(self::SECULAR_SHARE_1997, self::SECULAR_SHARE_2019, FinancialConstants::SECULAR_SHARE_WINDOW_YEARS);
+    }
     
     public function getCapexCyclicality(): float { return 0.60; } // Fleets, sorting hubs, and automated fulfillment centers
     

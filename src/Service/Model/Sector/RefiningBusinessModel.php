@@ -102,8 +102,6 @@ class RefiningBusinessModel extends StandardCorporateBusinessModel
     public const MIN_OPERATING_MARGIN_FLOOR = 0.01;
     /** Structural maximum operating margin ceiling at the baseline crack: modernization can only cut opex, and the barrel identity leaves about a point of it to cut. */
     public const MAX_OPERATING_MARGIN_CEILING = 0.085;
-    /** Baseline secular growth rate of refining capacity in a mature market. */
-    public const SECULAR_GROWTH = 0.01;
     /** Share of construction in progress completed each quarter. */
     public const CAPEX_COMPLETION_RATE = 0.125;
     /** Annual mean reversion of ROIC toward the cost of capital. */
@@ -127,10 +125,6 @@ class RefiningBusinessModel extends StandardCorporateBusinessModel
         return self::CAPEX_COMPLETION_RATE;
     }
 
-    public function getSecularGrowthRate(Stock $stock): float
-    {
-        return self::SECULAR_GROWTH;
-    }
 
     public function getSurpriseBlendWeights(): array
     {

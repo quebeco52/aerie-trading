@@ -1052,8 +1052,9 @@ class MathUtility
     /**
      * Nominal expected growth used to strike a fair-value multiple, the same transmission for everyone
      * who strikes one: secular real growth, the cyclical part scaled by beta, a stagflation drag on real
-     * growth that pricing power offsets, then inflation in full for the nominal rate.
-     * Capped below any plausible hurdle so the Gordon denominator cannot diverge.
+     * growth that pricing power offsets, then inflation in full for the nominal rate. Capped at the
+     * risk-free rate: no firm outgrows the economy forever, and the long nominal rate is the proxy for the
+     * economy's nominal growth (Damodaran, Investment Valuation, ch. 12, the stable-growth rule).
      *
      * Management and the market MUST read the same figure. The corporate engines used to strike their
      * buyback, issuance and M&A multiples on a flat 2% while the pricing engine read the cycle, which made
@@ -1065,7 +1066,8 @@ class MathUtility
         float $outputGap,
         float $beta,
         float $inflation,
-        float $moatSpread
+        float $moatSpread,
+        float $riskFreeRate
     ): float {
         $realGrowth = $secularGrowth + ($outputGap * FinancialConstants::CYCLICAL_GROWTH_PASS_THROUGH * $beta);
 
@@ -1076,10 +1078,7 @@ class MathUtility
         // Nominal growth is real growth plus inflation (Fisher): the cash flows are discounted at a nominal rate,
         // so growing them at less than full inflation is the inflation illusion of Modigliani & Cohn (1979). Weak
         // pricing power is the stagflation drag above, not a haircut on inflation for every firm.
-        return max(0.0, min(
-            FinancialConstants::MAX_EXPECTED_GROWTH,
-            $realGrowth + $inflation
-        ));
+        return max(0.0, min($riskFreeRate, $realGrowth + $inflation));
     }
 
     /**
@@ -1093,6 +1092,41 @@ class MathUtility
         $retention = 1.0 - max(0.0, min(1.0, $payoutRatio));
 
         return min($expectedGrowth, max(0.0, $returnOnCapital * $retention));
+    }
+
+    /**
+     * A sector's demand drift relative to the economy: the annual log change in its share of nominal GDP between
+     * two benchmark years. Added to trend real growth it is the sector's secular real growth, and shares that sum
+     * to GDP drift to zero on average, so the sectors together grow with the economy.
+     */
+    public static function gdpShareDrift(float $shareStart, float $shareEnd, float $years): float
+    {
+        if ($shareStart <= 0.0 || $shareEnd <= 0.0 || $years <= 0.0) {
+            return 0.0;
+        }
+
+        return log($shareEnd / $shareStart) / $years;
+    }
+
+    /**
+     * Secular growth faded toward the economy's trend: the excess over trend at the open decays at a half-life,
+     * because above-trend growth does not persist (Chan, Karceski & Lakonishok 2003), and a drift held forever
+     * compounds a sector's share without bound.
+     */
+    public static function fadeTowardTrend(float $openingGrowth, float $trendGrowth, float $simYears, float $halfLifeYears): float
+    {
+        return $trendGrowth + (($openingGrowth - $trendGrowth) * exp(-M_LN2 * max(0.0, $simYears) / $halfLifeYears));
+    }
+
+    /**
+     * The excess growth a fading sector accumulates between two times: the integral of the faded excess, so a
+     * level that compounds it (an industry's demand over trend GDP) follows the same fade as the rate.
+     */
+    public static function fadedExcessIntegral(float $openingExcess, float $fromYears, float $toYears, float $halfLifeYears): float
+    {
+        $decay = M_LN2 / $halfLifeYears;
+
+        return $openingExcess * (exp(-$decay * max(0.0, $fromYears)) - exp(-$decay * max(0.0, $toYears))) / $decay;
     }
 
     /**
@@ -1230,10 +1264,11 @@ class MathUtility
         float $moatSpread,
         ?float $sectorMultiple,
         float $accrualsRatio,
-        float $payoutRatio
+        float $payoutRatio,
+        float $riskFreeRate
     ): float {
         $expectedGrowth = $this->calculateFundableGrowth(
-            $this->calculateExpectedNominalGrowth($secularGrowth, $outputGap, $beta, $inflation, $moatSpread),
+            $this->calculateExpectedNominalGrowth($secularGrowth, $outputGap, $beta, $inflation, $moatSpread, $riskFreeRate),
             $trueReturn,
             $payoutRatio
         );

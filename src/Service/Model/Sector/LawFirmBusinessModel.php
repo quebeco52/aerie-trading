@@ -15,6 +15,7 @@ use App\Entity\Stock;
 use App\Service\Event\ShockEvent;
 use App\Service\Macro\MacroEngine;
 use App\Service\Math\MathUtility;
+use App\Service\Math\FinancialConstants;
 
 /**
  * Earnings strategy for Elite Law Firms, White-Shoe Practices & Legal Services.
@@ -137,9 +138,17 @@ class LawFirmBusinessModel extends StandardCorporateBusinessModel
     public function getWorkingCapitalIntensity(Stock $stock): float { return 0.05; }
     public function getCapExCompletionRate(Stock $stock): float { return 0.2; }
 
+    // --- Secular Demand ---
+    /** Legal services value added as a share of US nominal GDP in 1997 (BEA GDP by Industry, value added). */
+    public const SECULAR_SHARE_1997 = 0.0121;
+    /** The same share in 2019. */
+    public const SECULAR_SHARE_2019 = 0.0135;
+
+    /** Trend real growth plus the sector's measured drift in its share of GDP. */
     public function getSecularGrowthRate(Stock $stock): float
     {
-        return 0.02;
+        return MacroEngine::TREND_REAL_GROWTH
+            + MathUtility::gdpShareDrift(self::SECULAR_SHARE_1997, self::SECULAR_SHARE_2019, FinancialConstants::SECULAR_SHARE_WINDOW_YEARS);
     }
 
     public function getCapexCyclicality(): float

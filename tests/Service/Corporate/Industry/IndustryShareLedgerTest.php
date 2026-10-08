@@ -9,6 +9,7 @@ use App\Entity\Stock;
 use App\Service\Corporate\Industry\InMemoryIndustryShareStore;
 use App\Service\Corporate\Industry\IndustryShareLedger;
 use App\Service\Math\FinancialConstants;
+use App\Service\Math\MathUtility;
 use PHPUnit\Framework\TestCase;
 
 class IndustryShareLedgerTest extends TestCase
@@ -153,10 +154,12 @@ class IndustryShareLedgerTest extends TestCase
 
         $ledger->resolveIndustryCapacityRatio($firm, 1_000.0, 0.5, 1.0, 0.0, 0.03, 10, 252);
 
-        // Nominal trend GDP up ten percent and two years of a three-point secular excess: trend plant is
-        // 1,000 * 1.1 * e^0.06 and the market 2,000 times that, against plant that has not moved — so the
-        // firm has fallen BEHIND trend and the industry is short of capacity by its shortfall over the market.
-        $growth = 1.10 * exp(0.03 * 2.0);
+        // Nominal trend GDP up ten percent and two years of a three-point opening secular excess, fading on its
+        // half-life: trend plant is 1,000 * 1.1 * e^(integral of the faded excess) and the market 2,000 times
+        // that, against plant that has not moved — so the firm has fallen BEHIND trend and the industry is short
+        // of capacity by its shortfall over the market.
+        $growth = 1.10 * exp(MathUtility::fadedExcessIntegral(0.03, 0.0, 2.0, FinancialConstants::SECULAR_EXCESS_HALF_LIFE_YEARS));
+        $this->assertLessThan(exp(0.03 * 2.0), $growth / 1.10, 'the excess fades, so two years compound less than twice the opening rate');
         $expected = 1.0 + (1_000.0 - 1_000.0 * $growth) / (2_000.0 * $growth);
         $ratio = $ledger->resolveIndustryCapacityRatio($firm, 1_000.0, 0.5, 1.10, 2.0, 0.03, 514, 252);
 
@@ -315,7 +318,11 @@ class IndustryShareLedgerTest extends TestCase
 
         // The market rides trend nominal GDP and the industry's secular excess, as the anchor's trend demand does.
         $later = $ledger->describeMergerMarket($leader, new MacroStateDTO(potentialGdpIndex: 1.2, gdpDeflator: 1.1, totalTime: 5.0), 0.02, 40, 252);
-        $this->assertEqualsWithDelta(10_000.0 * 1.2 * 1.1 * exp(0.02 * 5.0), $later['market_revenue'], 1e-6);
+        $this->assertEqualsWithDelta(
+            10_000.0 * 1.2 * 1.1 * exp(MathUtility::fadedExcessIntegral(0.02, 0.0, 5.0, FinancialConstants::SECULAR_EXCESS_HALF_LIFE_YEARS)),
+            $later['market_revenue'],
+            1e-6
+        );
 
         // A peer whose record has aged out is off the roster: its share is back in the fringe.
         $stale = $ledger->describeMergerMarket($leader, $macro, 0.0, 20 + 253, 252);

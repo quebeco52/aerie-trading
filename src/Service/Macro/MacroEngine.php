@@ -223,6 +223,8 @@ class MacroEngine
     public const MIN_TFP_GROWTH_RATE = -0.030;
     /** Structural baseline demographic and labor force growth rate. */
     public const STRUCTURAL_LABOR_GROWTH_RATE = 0.005;
+    /** Trend real growth of potential output: labour force plus productivity, the pace a sector with no secular story grows at. */
+    public const TREND_REAL_GROWTH = self::TFP_DRIFT + self::STRUCTURAL_LABOR_GROWTH_RATE;
 
     // --- Sovereign Debt Dynamics (Greenwood-Vayanos 2014) ---
     /** Sovereign debt-to-GDP at simulation start: where the fiscal rule holds it with output at trend (median 0.93, 32 seeds x 100y); the old 0.60 took 40 years to climb out of. */
