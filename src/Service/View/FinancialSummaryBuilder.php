@@ -24,10 +24,6 @@ class FinancialSummaryBuilder
 {
     // --- Summary Strip ---
 
-    /** Tiles on the strip; beyond this the summary stops being a summary. */
-    private const MAX_TILES = 6;
-
-
     /** Operating KPIs the business models report, as label and display format; anything else is not shown. */
     private const KPI_LABELS = [
         'book_to_bill' => ['Book-to-bill', 'multiple'],
@@ -59,13 +55,18 @@ class FinancialSummaryBuilder
     ) {}
 
     /**
-     * @return array{financialSummary: list<array{label: string, value: float, format: string}>}
+     * The strip, and the operating KPIs the last report carries for the page to chart over its reports.
+     *
+     * Every labelled KPI is shown: a model reports only the few its business is read on, and the strip wraps
+     * rather than dropping one.
+     *
+     * @return array{financialSummary: list<array{label: string, value: float, format: string}>, kpiSeries: array<string, array{label: string, format: string}>}
      */
     public function build(Stock $stock): array
     {
         $report = $stock->isBankrupt() ? null : $this->reports->findLatestFor($stock);
         if ($report === null) {
-            return ['financialSummary' => []];
+            return ['financialSummary' => [], 'kpiSeries' => []];
         }
 
         $strategy = Sectors::strategyFor($stock->getIndustry());
@@ -76,13 +77,16 @@ class FinancialSummaryBuilder
             default => $this->operatingTiles($report),
         };
 
+        $kpiSeries = [];
         foreach ($report->getReportedKpis() ?? [] as $key => $value) {
             if (isset(self::KPI_LABELS[$key]) && is_numeric($value)) {
-                $tiles[] = $this->tile(self::KPI_LABELS[$key][0], (float) $value, self::KPI_LABELS[$key][1]);
+                [$label, $format] = self::KPI_LABELS[$key];
+                $tiles[] = $this->tile($label, (float) $value, $format);
+                $kpiSeries[$key] = ['label' => $label, 'format' => $format];
             }
         }
 
-        return ['financialSummary' => array_slice(array_values(array_filter($tiles)), 0, self::MAX_TILES)];
+        return ['financialSummary' => array_values(array_filter($tiles)), 'kpiSeries' => $kpiSeries];
     }
 
     /**

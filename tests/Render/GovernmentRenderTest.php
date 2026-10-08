@@ -8,6 +8,7 @@ use App\Data\AerieDiet;
 use App\DTO\MacroStateDTO;
 use App\DTO\PoliticsStateDTO;
 use App\Entity\DietElection;
+use App\Repository\MacroReportHistoryRepository;
 use App\Service\Macro\MacroEngine;
 use App\Service\Macro\Recorder\MacroSnapshotRecorder;
 use App\Service\Macro\Subsystem\AssetMarketSubsystem;
@@ -74,11 +75,17 @@ final class GovernmentRenderTest extends KernelTestCase
         $policy = $engine->liveState()->policy();
         $macro = new MacroStateDTO();
         $politics = new PoliticsStateDTO();
+        $laws = [];
         for ($tick = 0; $tick < (int) round($years * self::TICKS_PER_YEAR); ++$tick) {
             $macro = $economy->updateMacroState(1.0 / self::TICKS_PER_YEAR, policy: $policy);
             $politics = $engine->updatePolitics($macro, 1.0 / self::TICKS_PER_YEAR);
             $policy = $politics->policy();
             $recorder->record($politics);
+            // The quarterly record the law charts read, as macro_report keeps it: the last 25 years.
+            if (MathUtility::crossedSimulatedBoundary($macro->totalTime, 1.0 / self::TICKS_PER_YEAR, 0.25)) {
+                $laws[] = ['t' => $macro->totalTime, 'levers' => PoliticsEngine::standingLevers($politics), 'capitalRequirement' => $politics->bankCapitalRequirement];
+                $laws = array_slice($laws, -MacroReportHistoryRepository::QUARTERS);
+            }
         }
 
         if (getenv('FORCE_PRESSURE')) {
@@ -90,7 +97,9 @@ final class GovernmentRenderTest extends KernelTestCase
         /** @var RequestStack $stack */
         $stack = $container->get('request_stack');
         $twig = $container->get('twig');
-        $builder = new GovernmentPageBuilder($elections);
+        $reports = $this->createStub(MacroReportHistoryRepository::class);
+        $reports->method('laws')->willReturn($laws);
+        $builder = new GovernmentPageBuilder($elections, $reports);
 
         $pages = ['government' => ['/government', 'government/index.html.twig', $builder->build($macro, $politics)]];
         foreach (AerieDiet::PARTIES as $party) {

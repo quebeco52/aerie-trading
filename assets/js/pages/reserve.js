@@ -159,12 +159,12 @@ function initReservePage() {
     const grid = document.getElementById('reserveChartsGrid');
     if (grid) {
         setupChartDefaults();
-        const bands = {
-            domesticPolicy: parseFloat(grid.dataset.domesticPolicy),
-            domesticBand: parseFloat(grid.dataset.domesticBand),
-            equityPolicy: parseFloat(grid.dataset.equityPolicy),
-            equityBand: parseFloat(grid.dataset.equityBand)
-        };
+        let bands = {};
+        try {
+            bands = JSON.parse(grid.dataset.bandHistory || '{}') || {};
+        } catch (e) {
+            bands = {};
+        }
 
         async function loadReports() {
             showLoading('reserveChartsStatus', 'Loading the fund\'s history…');

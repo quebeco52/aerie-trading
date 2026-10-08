@@ -103,9 +103,9 @@ final class PagesRenderTest extends KernelTestCase
             ]],
             'news' => ['/news', 'news/index.html.twig', self::newswire()],
             'login' => ['/login', 'security/login.html.twig', ['error' => null, 'last_username' => '']],
-            'economy' => ['/economy', 'economy/index.html.twig', ['economic_cycle' => 'Expansion', 'macro' => ['inflation' => 0.0241, 'outputGap' => 0.0132, 'policyRate' => 0.0425, 'yield10y' => 0.0461, 'qeActive' => false, 'qeIntensity' => 0.0]]],
+            'economy' => ['/economy', 'economy/index.html.twig', ['economic_cycle' => 'Expansion', 'macro' => ['inflation' => 0.0241, 'inflationEma' => 0.0238, 'outputGap' => 0.0132, 'policyRate' => 0.0425, 'yield10y' => 0.0461, 'qeActive' => false, 'qeIntensity' => 0.0]]],
             'stock' => ['/stock/LAKE', 'stock/index.html.twig', [
-                'asset' => ['ticker' => 'LAKE', 'name' => 'Lakebird Bank', 'sector' => 'Financials', 'industry' => 'Commercial banking', 'price' => 84.21, 'isBankrupt' => false, 'bankrupt' => false, 'sharesOutstanding' => 2400000000, 'earningsPerShare' => 6.12, 'currentRoe' => 0.124, 'baselineRoe' => 0.12, 'currentRoic' => 0.09, 'baselineRoic' => 0.09, 'publicFloatPercentage' => 0.8, 'volatility' => 0.22, 'totalEquity' => 1.6e11, 'debtToEquityRatio' => 1.4, 'creditRating' => 'A', 'creditSpread' => 0.011, 'systemicImportance' => 'Systemic'],
+                'asset' => ['ticker' => 'LAKE', 'name' => 'Lakebird Bank', 'sector' => 'Financials', 'industry' => 'Commercial banking', 'price' => 84.21, 'isBankrupt' => false, 'bankrupt' => false, 'sharesOutstanding' => 2400000000, 'earningsPerShare' => 6.12, 'currentRoe' => 0.124, 'baselineRoe' => 0.12, 'currentRoic' => 0.09, 'baselineRoic' => 0.09, 'publicFloatPercentage' => 0.8, 'volatility' => 0.22, 'totalEquity' => 1.6e11, 'debtToEquityRatio' => 1.4, 'creditRating' => 'A', 'creditSpread' => 0.011, 'dynamicCreditSpread' => 0.0134, 'systemicImportance' => 'Systemic'],
                 'isEtf' => false, 'isFinancial' => true, 'changePercent' => 0.0342, 'businessModel' => 'commercial_bank', 'generalInfo' => StockInfo::DESCRIPTIONS['LAKE'],
                 'events' => [
                     ['type' => 'MANAGEMENT CHANGE', 'description' => 'Lakebird Bank chief executive was removed by the board after 5.2 years.', 'change_percent' => 0.0, 'recorded_at' => '2026-09-30 12:00'],
@@ -114,6 +114,10 @@ final class PagesRenderTest extends KernelTestCase
                 'userQuantity' => 0, 'userDividendIncome' => 0, 'marketCap' => 2.02e11, 'peRatio' => 13.76, 'dividendYield' => 0.031, 'strategicStake' => 0, 'macro' => ['sovereignFundOwnershipShare' => 0.23, 'stampDutyRate' => 0.001],
                 'analystTargets' => ['rating' => 'Outperform', 'upside_pct' => 8.4, 'consensus' => 91.3, 'growth_analyst' => 95.1, 'value_analyst' => 88.2, 'income_analyst' => 90.4],
                 'openOrders' => [], 'tradeHistory' => [], 'optionsListed' => false, 'optionExpiries' => [], 'lifecycleStage' => null, 'lifecycleStages' => [], 'financialSummary' => [], 'peers' => [], 'industry' => null, 'management' => null, 'anchorPortfolio' => null, 'netAssetValue' => null, 'capital' => null, 'credit' => null, 'ticksPerYear' => 14400, 'halfSpread' => 0.0004, 'advShares' => 3400000, 'borrowFee' => 0.01, 'availableToBorrow' => 1000000, 'shortUtilization' => 0.2,
+                'borrowWarnings' => ['expensiveFee' => 0.05, 'scarceUtilization' => 0.90, 'recallUtilization' => 0.97],
+                'shortInterest' => ['shares' => 21600000, 'floatShare' => 0.01125, 'daysToCover' => 6.35],
+                'nextReport' => ['dateline' => '14 Feb, Year 15', 'quarter' => 'Year 14 Q4'],
+                'kpiSeries' => [],
             ]],
             'dashboard' => ['/dashboard', 'dashboard/index.html.twig', [
                 'portfolioValue' => 1234567.89, 'totalUnrealizedPnL' => -23456.7, 'totalUnrealizedPnLPercent' => -1.9, 'cashBalance' => 200000.0, 'totalInvested' => 1034567.89, 'escrowedCash' => 1200.0, 'totalDividendIncome' => 4321.0,
@@ -148,6 +152,22 @@ final class PagesRenderTest extends KernelTestCase
                 'freshStartBlocker' => null, 'freshStartCapital' => 23456.0,
             ]],
         ];
+
+        // The company page for a telecom (seven summary tiles, its operating figures charted) and an insurer, from the bank's stub.
+        $pages['stock-telecom'] = ['/stock/WIRE', 'stock/index.html.twig', array_replace($pages['stock'][2], [
+            'isFinancial' => false, 'businessModel' => 'telecom', 'shortUtilization' => 0.93, 'borrowFee' => 0.081,
+            'financialSummary' => [
+                ['label' => 'Operating margin', 'value' => 0.22, 'format' => 'percent'], ['label' => 'ROIC − WACC', 'value' => 0.011, 'format' => 'signed_percent'],
+                ['label' => 'FCF / net income', 'value' => 0.78, 'format' => 'percent'], ['label' => 'Subscriber index', 'value' => 1.041, 'format' => 'index'],
+                ['label' => 'Quarterly churn', 'value' => 0.011, 'format' => 'percent'], ['label' => 'Net adds', 'value' => 0.003, 'format' => 'signed_index'],
+                ['label' => 'ARPU index', 'value' => 1.019, 'format' => 'index'],
+            ],
+            'kpiSeries' => ['subscriber_index' => ['label' => 'Subscriber index', 'format' => 'index'], 'quarterly_churn' => ['label' => 'Quarterly churn', 'format' => 'percent'], 'net_adds' => ['label' => 'Net adds', 'format' => 'signed_index'], 'arpu_index' => ['label' => 'ARPU index', 'format' => 'index']],
+        ])];
+        $pages['stock-insurer'] = ['/stock/GULL', 'stock/index.html.twig', array_replace($pages['stock'][2], [
+            'isInsurer' => true, 'businessModel' => 'insurance',
+            'financialSummary' => [['label' => 'Capital ratio', 'value' => 0.25, 'format' => 'percent'], ['label' => 'ROE', 'value' => 0.09, 'format' => 'percent'], ['label' => 'Combined ratio', 'value' => 0.94, 'format' => 'percent']],
+        ])];
 
         self::bootKernel();
         $container = static::getContainer();

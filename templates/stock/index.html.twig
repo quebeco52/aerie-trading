@@ -315,16 +315,16 @@
 										<div class="p-3 rounded bg-surface-container-lowest/80 border border-outline-variant/20 space-y-1.5 text-xs">
 											<div class="flex justify-between items-center">
 												<span class="text-on-surface-variant">Borrow fee</span>
-												<span class="font-mono tabular-nums font-bold {{ borrowFee > 0.05 ? 'text-warning' : 'text-on-surface' }}">{{ borrowFee|pct(2) }}/yr</span>
+												<span class="font-mono tabular-nums font-bold {{ borrowFee > borrowWarnings.expensiveFee ? 'text-warning' : 'text-on-surface' }}">{{ borrowFee|pct(2) }}/yr</span>
 											</div>
 											<div class="flex justify-between items-center">
 												<span class="text-on-surface-variant">Available to borrow</span>
 												<span class="font-mono tabular-nums font-bold text-on-surface">{{ availableToBorrow|format_large }}</span>
 											</div>
-											{% if shortUtilization >= 0.90 %}
-												<p class="text-2xs text-tertiary leading-relaxed pt-1 border-t border-outline-variant/15">
+											{% if shortUtilization >= borrowWarnings.scarceUtilization %}
+												<p class="text-2xs text-warning leading-relaxed pt-1 border-t border-outline-variant/15">
 													{{ shortUtilization|pct(0) }} of lendable stock is out on loan.
-													{{ shortUtilization >= 0.97 ? 'Lenders are recalling: open shorts can be bought in whether or not the account is in good standing.' : 'The borrow is getting expensive.' }}
+													{{ shortUtilization >= borrowWarnings.recallUtilization ? 'Lenders are recalling: open shorts can be bought in whether or not the account is in good standing.' : 'The borrow is getting expensive.' }}
 												</p>
 											{% endif %}
 										</div>
@@ -465,6 +465,24 @@
 										<dt class="text-on-surface-variant">Avg daily volume</dt>
 										<dd class="font-medium text-on-surface font-mono tabular-nums" id="stat-adv">{{ advShares|format_large }}</dd>
 									</div>
+									{% if shortInterest|default(null) %}
+										<div class="py-2 flex justify-between items-center">
+											<dt class="group relative cursor-help text-on-surface-variant" tabindex="0">
+												<span class="term">Short interest</span>
+												{{ ui.tooltip('Shares sold short, as a share of the float, and the days of average volume it would take to buy them back.', 'left', 'w-64') }}
+											</dt>
+											<dd class="font-medium text-on-surface font-mono tabular-nums">
+												{{ shortInterest.floatShare is null ? '—' : shortInterest.floatShare|pct(2) }}
+												<span class="text-on-surface-variant font-normal text-2xs">{{ shortInterest.daysToCover is null ? '' : shortInterest.daysToCover|number_format(1) ~ ' days to cover' }}</span>
+											</dd>
+										</div>
+									{% endif %}
+									{% if nextReport|default(null) %}
+										<div class="py-2 flex justify-between items-center">
+											<dt class="text-on-surface-variant">Next results</dt>
+											<dd class="font-medium text-on-surface font-mono tabular-nums">{{ nextReport.dateline }} <span class="text-on-surface-variant font-normal font-sans text-2xs">{{ nextReport.quarter }}</span></dd>
+										</div>
+									{% endif %}
 									<div class="py-2 flex justify-between items-center">
 										<dt class="text-on-surface-variant">Bid-ask spread</dt>
 										<dd class="font-medium text-on-surface font-mono tabular-nums" id="stat-spread">{{ (halfSpread * 20000)|number_format(1) }} bps</dd>
@@ -544,8 +562,11 @@
 									{% endif %}
 									{% if asset.creditRating is defined %}
 										<div class="py-2 flex justify-between items-center">
-											<dt class="text-on-surface-variant">Credit rating</dt>
-											<dd class="font-medium text-primary font-mono" id="stat-credit-rating">{{ asset.creditRating }} <span class="text-on-surface-variant font-normal text-2xs">+{{ (asset.creditSpread * 10000)|number_format(0) }} bps</span></dd>
+											<dt class="group relative cursor-help text-on-surface-variant" tabindex="0">
+												<span class="term">Credit rating</span>
+												{{ ui.tooltip('The rating, and the spread the company\'s credit trades at today over the District\'s own bond curve. Its listed bonds are priced at this spread.', 'left', 'w-64') }}
+											</dt>
+											<dd class="font-medium font-mono"><span class="text-primary" id="stat-credit-rating">{{ asset.creditRating }}</span> <span class="text-on-surface-variant font-normal text-2xs tabular-nums" id="stat-credit-spread">+{{ (asset.dynamicCreditSpread * 10000)|number_format(0) }} bps</span></dd>
 										</div>
 									{% endif %}
 									<div class="py-2 flex justify-between items-center">
@@ -1198,7 +1219,7 @@
 					<div
 					id="stock-tab-content-financials" class="stock-tab-panel hidden space-y-6" data-tabs-target="panel" data-tab-panel="financials">
 					{# Whether any of the business-model charts in the Industry section below applies to this company. #}
-					{% set has_industry_charts = isFinancial|default(false) or isInsurer|default(false) or businessModel|default('none') in [
+					{% set has_industry_charts = isFinancial|default(false) or isInsurer|default(false) or kpiSeries|default([])|length > 0 or businessModel|default('none') in [
 						'commercial_bank', 'credit_services', 'shadow_bank', 'reit',
 						'tech', 'semiconductor', 'biotech', 'defense_contractor',
 						'mining', 'oil_gas_producer', 'refining', 'shipping'
@@ -1219,7 +1240,7 @@
 
 					{# Summary strip: the numbers an analyst reads first off the last report (FinancialSummaryBuilder). #}
 					{% if financialSummary|default([])|length > 0 %}
-						<div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3" id="financial-summary">
+						<div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-[repeat(auto-fit,minmax(9rem,1fr))] gap-3" id="financial-summary">
 							{% for tile in financialSummary %}
 								{% set v = tile.value %}
 								{% set shown = {
@@ -1551,6 +1572,35 @@
 							<section class="space-y-4" data-chart-section aria-labelledby="financial-section-sector">
 								<h3 id="financial-section-sector" class="text-base font-semibold text-on-surface">Industry</h3>
 								<div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+									{# The operating figures the company reports each quarter (FinancialSummaryBuilder::KPI_LABELS), one at a time. #}
+									{% if kpiSeries|default([])|length > 0 %}
+										<div class="chart-card md:col-span-2 bg-surface-container-low border border-outline-variant/20 rounded-lg p-5 flex flex-col" data-wide data-financial-category="sector">
+											<div class="flex items-start justify-between gap-4 mb-3">
+												<div class="min-w-0">
+													<h4 class="text-sm font-semibold text-on-surface">Operating figures</h4>
+													<p class="text-xs text-on-surface-variant mt-0.5">What the company reports on its business each quarter, as filed</p>
+												</div>
+												<div class="flex items-start gap-3 shrink-0">
+													<div class="hidden sm:flex flex-col items-end text-right max-w-64">
+														<span class="text-2xs text-on-surface-variant">Latest</span>
+														<span class="text-xs font-mono font-bold text-on-surface tabular-nums" id="hud-kpiHistoryChart">-</span>
+													</div>
+													<button type="button" class="expand-chart-btn p-1 -m-1 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors cursor-pointer" title="Expand chart" aria-label="Expand chart">
+														<span class="material-symbols-outlined text-base leading-none expand-icon" aria-hidden="true">open_in_full</span>
+													</button>
+												</div>
+											</div>
+											<div class="inline-flex flex-wrap gap-0.5 self-start rounded-md border border-outline-variant/25 bg-surface-container-lowest p-0.5 mb-3" role="group" aria-label="Operating figure">
+												{% for key, series in kpiSeries %}
+													<button type="button" class="seg-btn" data-kpi-key="{{ key }}" aria-pressed="{{ loop.first ? 'true' : 'false' }}">{{ series.label }}</button>
+												{% endfor %}
+											</div>
+											<div class="chart-canvas-container h-80 md:h-85 w-full relative">
+												<canvas id="kpiHistoryChart"></canvas>
+											</div>
+										</div>
+									{% endif %}
+
 									{# Banking / Credit Services: Net Interest Margin #}
 									{% if businessModel|default('none') in ['commercial_bank', 'credit_services', 'shadow_bank'] %}
 										<div class="chart-card bg-surface-container-low border border-outline-variant/20 rounded-lg p-5 flex flex-col" data-financial-category="sector">
@@ -2261,7 +2311,8 @@
 			pieLabels: pieLabels is defined and pieLabels ? pieLabels : [],
 			pieData: pieData is defined and pieData ? pieData : [],
 			sharesMap: sharesMap is defined and sharesMap ? sharesMap : {},
-			capitalThresholds: capitalThresholds|default(null)
+			capitalThresholds: capitalThresholds|default(null),
+			kpiSeries: kpiSeries|default([]) ?: {}
 		}|json_encode|raw }}
 	</script>
 

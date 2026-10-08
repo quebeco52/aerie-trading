@@ -293,8 +293,7 @@
 			</div>
 
 			<div id="reserveChartsGrid" class="grid grid-cols-1 lg:grid-cols-2 gap-5"
-				data-domestic-policy="{{ bands[0].policy }}" data-domestic-band="{{ bands[0].band }}"
-				data-equity-policy="{{ bands[1].policy }}" data-equity-band="{{ bands[1].band }}">
+				data-band-history="{{ bandHistory|json_encode }}">
 				{% for chart in [
 					{ id: 'reserveSizeChart', title: 'Fund size', note: 'Percent of GDP' },
 					{ id: 'reserveWeightChart', title: 'District equity weight', note: 'Percent of the fund, against policy and band' },

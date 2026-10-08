@@ -8,6 +8,7 @@ use App\Data\StrategicHoldings;
 use App\DTO\MacroStateDTO;
 use App\DTO\PoliticsStateDTO;
 use App\Entity\Stock;
+use App\Repository\MacroReportHistoryRepository;
 use App\Repository\StockRepository;
 use App\Service\Macro\MacroEngine;
 use App\Service\Macro\Subsystem\SovereignFundSubsystem;
@@ -36,6 +37,7 @@ class SovereignReservePageBuilder
     public function __construct(
         private readonly StockRepository $stocks,
         private readonly SovereignFundSubsystem $fund,
+        private readonly ?MacroReportHistoryRepository $reports = null,
     ) {}
 
     /**
@@ -47,6 +49,7 @@ class SovereignReservePageBuilder
      *     programme: array{active: bool, buying: bool, share: float, monthsLeft: float, monthsSinceLast: float|null},
      *     sleeves: list<array{key: string, label: string, weight: float, policy: float, value: float}>,
      *     bands: list<array{key: string, label: string, weight: float, policy: float, band: float, breachingMove: float}>,
+     *     bandHistory: array<string, array{domesticPolicy: float, domesticBand: float, equityPolicy: float, equityBand: float}>,
      *     holdings: list<array{rank: int, ticker: string, name: string, sector: string, stakeValue: float, stakeShares: float, sleeveWeight: float}>,
      *     strategic: list<array{ticker: string, name: string, stake: float, fundStake: float, shares: float, value: float, annualDividend: float}>,
      *     mandate: array<string, float>
@@ -126,6 +129,7 @@ class SovereignReservePageBuilder
                     'breachingMove' => SovereignFundSubsystem::breachingMove(SovereignFundSubsystem::GPIF_GLOBAL_EQUITY_TARGET, SovereignFundSubsystem::GPIF_GLOBAL_EQUITY_DEVIATION_LIMIT),
                 ],
             ] : [],
+            'bandHistory' => $incepted ? $this->bandHistory() : [],
             'holdings' => $this->holdings($board, $macro->sovereignFundOwnershipShare),
             'strategic' => $this->strategicHoldings($board, $macro->sovereignFundOwnershipShare),
             'mandate' => [
@@ -138,10 +142,6 @@ class SovereignReservePageBuilder
                 'openingSize' => SovereignFundSubsystem::OPENING_FUND_TO_GDP,
                 'openingOwnership' => SovereignFundSubsystem::DOMESTIC_OWNERSHIP_OPENING,
                 'ownershipCeiling' => SovereignFundSubsystem::MAX_OWNERSHIP_SHARE,
-                'gpifDomesticTarget' => SovereignFundSubsystem::GPIF_DOMESTIC_EQUITY_TARGET,
-                'gpifDomesticLimit' => SovereignFundSubsystem::GPIF_DOMESTIC_EQUITY_DEVIATION_LIMIT,
-                'gpifEquityTarget' => SovereignFundSubsystem::GPIF_GLOBAL_EQUITY_TARGET,
-                'gpifEquityLimit' => SovereignFundSubsystem::GPIF_GLOBAL_EQUITY_DEVIATION_LIMIT,
                 'checkMonths' => 12.0 * SovereignFundSubsystem::REBALANCE_CHECK_PERIOD_YEARS,
                 'executionMonths' => SovereignFundSubsystem::REBALANCE_EXECUTION_MONTHS,
                 'stampDutyRate' => $macro->stampDutyRate,
@@ -151,10 +151,36 @@ class SovereignReservePageBuilder
                 'stabilisationReversal' => MacroEngine::FUND_STABILISATION_IMPULSE_REVERSAL,
                 'stabilisationPersistence' => MacroEngine::FUND_STABILISATION_PERSISTENCE,
                 'stabilisationTrendYears' => MacroEngine::FUND_STABILISATION_GAP_TREND_YEARS,
-                'marketCapToGdp' => SovereignFundSubsystem::MARKET_CAP_TO_GDP,
                 'clearinghouseStake' => StrategicHoldings::CLEARINGHOUSE_STAKE,
             ],
         ];
+    }
+
+    /**
+     * The policy weights and bands as they stood at each recorded quarter, keyed by the quarter's total_time, so the band
+     * charts hold each quarter to the policy then in force: a new head's mix moves the policy, and a band is a function
+     * of its policy weight alone. A quarter before the fund opened has no policy and is left out.
+     *
+     * @return array<string, array{domesticPolicy: float, domesticBand: float, equityPolicy: float, equityBand: float}>
+     */
+    private function bandHistory(): array
+    {
+        $history = [];
+        foreach ($this->reports?->fundPolicy() ?? [] as $time => $policy) {
+            $target = $policy['target'] ?? 0.0;
+            if ($target <= 0.0) {
+                continue;
+            }
+            $equityPolicy = ($policy['equityPolicy'] ?? 0.0) > 0.0 ? (float) $policy['equityPolicy'] : $this->fund->policyEquityShare($target);
+            $history[$time] = [
+                'domesticPolicy' => $target,
+                'domesticBand' => $this->fund->rebalanceBand($target),
+                'equityPolicy' => $equityPolicy,
+                'equityBand' => $this->fund->equityBand($equityPolicy),
+            ];
+        }
+
+        return $history;
     }
 
     /**

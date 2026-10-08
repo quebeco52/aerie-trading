@@ -530,6 +530,7 @@ class StockTracker
                 'invested_capital' => $stock->getInvestedCapital(),
                 'debt_ratio' => (float) $stock->getDebtToEquityRatio(),
                 'credit_rating' => $stock->getCreditRating(),
+                'credit_spread' => (float) $stock->getDynamicCreditSpread(),
                 'analyst_targets' => array_map(static fn (float $target): float => round($target, 2), $analystTargets),
                 'analyst_price_target' => $stock->getAnalystPriceTarget() !== null ? round((float) $stock->getAnalystPriceTarget(), 2) : null,
                 'analyst_rating' => $stock->getAnalystRating(),

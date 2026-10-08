@@ -38,6 +38,7 @@ final class RegulatorPageBuilder
                 }
             }
         }
+        // What a bank must hold to pay out, as its payout stop reads it (CommercialBankBusinessModel::getRegulatoryDividendCap()).
         $required = $politics->bankCapitalRequirement + $macro->countercyclicalBufferRateEma;
 
         $caps = array_values(array_filter(FinancialRegulator::OBSERVED_LTV_CAPS, static fn(?float $cap): bool => $cap !== null));

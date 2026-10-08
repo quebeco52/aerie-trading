@@ -69,10 +69,37 @@ class FinancialSummaryBuilderTest extends TestCase
 
         $tiles = $this->tiles($this->stock('Tools & Accessories'), $report);
 
-        $this->assertSame(['Operating margin', 'ROIC − WACC', 'FCF / net income', 'Book-to-bill', 'Backlog', 'WALT'], array_column($tiles, 'label'), 'capped at six, unknown and industry keys skipped');
+        $this->assertSame(['Operating margin', 'ROIC − WACC', 'FCF / net income', 'Book-to-bill', 'Backlog', 'WALT', 'Quarterly churn'], array_column($tiles, 'label'), 'unknown and industry keys skipped');
         $this->assertEqualsWithDelta(0.05, $tiles[1]['value'], 1e-12);
         $this->assertSame('signed_percent', $tiles[1]['format']);
         $this->assertEqualsWithDelta(0.75, $tiles[2]['value'], 1e-12);
+    }
+
+    /** A telecom reports four KPIs on top of the three operating tiles; the strip used to stop at six and drop ARPU. */
+    public function testEveryLabelledKpiIsShownAndOfferedForCharting(): void
+    {
+        $report = new CorporateReport();
+        $report->setOperatingMargin('0.2200');
+        $report->setRoic('0.0800');
+        $report->setWacc('0.0700');
+        $report->setNetIncome('900000000');
+        $report->setFreeCashFlow('700000000');
+        $report->setReportedKpis([
+            'subscriber_index' => 1.04,
+            'quarterly_churn' => 0.011,
+            'net_adds' => 0.003,
+            'arpu_index' => 1.02,
+            'rival_share_drain' => 0.01,
+        ]);
+
+        $reports = $this->createStub(CorporateReportRepository::class);
+        $reports->method('findLatestFor')->willReturn($report);
+        $built = (new FinancialSummaryBuilder($reports))->build($this->stock('Telecom Services'));
+
+        $this->assertCount(7, $built['financialSummary']);
+        $this->assertSame('ARPU index', $built['financialSummary'][6]['label']);
+        $this->assertSame(['subscriber_index', 'quarterly_churn', 'net_adds', 'arpu_index'], array_keys($built['kpiSeries']), 'only labelled KPIs are charted');
+        $this->assertSame(['label' => 'Quarterly churn', 'format' => 'percent'], $built['kpiSeries']['quarterly_churn']);
     }
 
     public function testNoReportMeansNoStrip(): void

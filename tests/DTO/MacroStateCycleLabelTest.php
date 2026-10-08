@@ -52,8 +52,8 @@ final class MacroStateCycleLabelTest extends TestCase
     {
         $root = \dirname(__DIR__, 2);
 
-        // The ticker publishes the label on the wire; the page builder renders it server-side.
-        foreach (['/src/Command/MarketTickerCommand.php', '/src/Service/View/StockPageBuilder.php'] as $path) {
+        // The ticker publishes the label on the wire; the economy page renders it server-side.
+        foreach (['/src/Command/MarketTickerCommand.php', '/src/Controller/EconomyController.php'] as $path) {
             $source = file_get_contents($root . $path);
             $this->assertIsString($source);
             $this->assertStringContainsString(
