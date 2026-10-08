@@ -34,7 +34,6 @@ class MarketConsensusEngine
      *   analystExpectedRev  = BayesianUpdate(priorAnchor, freshEstimate) * (1 - walkdownBias)
      *   expectedCostRatio   = blend(expectedVariableMargin, realized cost ratio) by ANALYST_COST_BASE_VISIBILITY
      *   analystExpectedVarC = analystExpectedRev * volumeShare * expectedCostRatio
-     *   estimateDispersion  = coverage.errorStdDev * volatilityScale
      *
      * @param ActualFinancialsDTO    $actuals                What the company actually produced this quarter.
      * @param SectorCoverageProfile  $coverage               Analyst coverage parameters for this sector.
@@ -142,22 +141,10 @@ class MarketConsensusEngine
             : 1.0;
         $analystExpectedVariableCosts = $analystExpectedRevenue * $volumeShare * $expectedCostRatio;
 
-        // Analyst disagreement is regime-dependent: forecasts fan out when the macro outlook is volatile and
-        // converge when it is calm. Holding dispersion at the sector's calm-market constant made the SUE
-        // denominator regime-blind, so an identical percentage miss read as an identical sigma event in a
-        // panic as in a quiet quarter. This mirrors the volatility scaling already applied to the Bayesian
-        // prior variance above, keeping both halves of the consensus on the same uncertainty measure.
-        $volatilityExcess = max(0.0, $marketVolatility - FinancialConstants::DISPERSION_BASELINE_VOLATILITY);
-        $dispersionScale = min(
-            FinancialConstants::DISPERSION_MAX_SCALE,
-            1.0 + ($volatilityExcess * FinancialConstants::DISPERSION_VIX_SENSITIVITY)
-        );
-
         return new ConsensusDTO(
             analystExpectedRevenue: $analystExpectedRevenue,
             analystExpectedVariableCosts: $analystExpectedVariableCosts,
             dynamicVisibility: $dynamicVisibility,
-            estimateDispersion: $coverage->errorStdDev * $dispersionScale,
         );
     }
 }

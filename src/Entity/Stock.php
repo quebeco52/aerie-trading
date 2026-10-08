@@ -532,6 +532,15 @@ class Stock
     private ?float $impactVarianceEma = 0.0;
 
     /**
+     * @var float|null Exponentially weighted variance of the name's announcement returns (reports and warnings), annualized.
+     *
+     * An announcement is a scheduled jump, so the diffusion gives back what the name's own announcements
+     * actually moved it by (Dubinsky, Johannes, Kaeck & Seeger 2019).
+     */
+    #[ORM\Column(type: 'float', nullable: true, options: ['default' => 0.0])]
+    private ?float $announcementVarianceEma = 0.0;
+
+    /**
      * @var float|null Exponentially weighted realized variance of the name's TOTAL return, annualized.
      *
      * What the tape actually printed, as opposed to `currentVolatility`, which is the instantaneous state
@@ -1624,6 +1633,17 @@ class Stock
     public function getImpactVarianceEma(): ?float
     {
         return $this->impactVarianceEma;
+    }
+
+    public function setAnnouncementVarianceEma(?float $announcementVarianceEma): static
+    {
+        $this->announcementVarianceEma = $announcementVarianceEma;
+        return $this;
+    }
+
+    public function getAnnouncementVarianceEma(): ?float
+    {
+        return $this->announcementVarianceEma;
     }
 
     public function setRealizedVarianceEma(?float $realizedVarianceEma): static

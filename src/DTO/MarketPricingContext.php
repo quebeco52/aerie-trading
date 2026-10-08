@@ -56,6 +56,8 @@ class MarketPricingContext
          * calibrated volatility is left alone.
          */
         public float $orderFlowVariance = 0.0,
+        /** Annualized variance this name's announcements (reports and warnings) have been supplying, from the measured EMA; the diffusion gives it back. */
+        public float $announcementVariance = 0.0,
         /** Book equity less goodwill, per share; null when the caller has none, and the P/B leg then reads book. */
         public ?float $tangibleBookValuePerShare = null,
         /** The payout ratio the firm's dividend policy steers to; zero for a firm with no dividend policy. */
@@ -131,6 +133,7 @@ class MarketPricingContext
             accrualsRatio: (float) ($stock->getAccrualsRatio() ?? 0.0),
             investedCapitalPerShare: $stock->getInvestedCapital() / $shares,
             orderFlowVariance: (float) ($stock->getImpactVarianceEma() ?? 0.0),
+            announcementVariance: (float) ($stock->getAnnouncementVarianceEma() ?? 0.0),
             tangibleBookValuePerShare: $stock->getTangibleEquity() / $shares,
             targetPayoutRatio: $stock->getPolicyPayoutRatio(),
             dividendAdjustmentSpeed: (float) $stock->getDividendSpeed(),

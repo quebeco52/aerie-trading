@@ -9,16 +9,6 @@ namespace App\Service\Math;
 class FinancialConstants
 {
     // --- Earnings & Volatility Tuning ---
-    /** Standardized earnings surprise Z-score threshold triggering extreme market reaction. */
-    public const SURPRISE_Z_SCORE_THRESHOLD = 1.5;
-    /** Z-score threshold below which quarterly earnings are considered inline/inconsequential. */
-    public const BORING_Z_SCORE_THRESHOLD = 0.5;
-    /** Additive base volatility shock applied during significant earnings surprises. */
-    public const VOLATILITY_SHOCK_FACTOR = 0.2;
-    /** Decay rate per quarter dissipating elevated idiosyncratic volatility back to baseline. */
-    public const VOLATILITY_COOLING_FACTOR = 0.25;
-    /** Absolute ceiling capping short-term volatility relative to baseline asset volatility. */
-    public const MAX_VOLATILITY_MULTIPLIER = 3.0;
     /** Minimum operating capital floor ($10M) preventing zero-division in asset-light scaling. */
     public const MIN_OPERATING_BASE_CASH = 10000000.0;
 
@@ -39,18 +29,6 @@ class FinancialConstants
     public const BAYESIAN_BASE_PRIOR_VARIANCE = 0.0036;
     /** Multiplier scaling analyst consensus prior uncertainty as VIX rises. */
     public const BAYESIAN_VIX_SCALING_FACTOR = 0.02;
-
-    // --- Analyst Estimate Dispersion ---
-    /** Calm-market volatility at which the per-sector analyst error standard deviations are calibrated. */
-    public const DISPERSION_BASELINE_VOLATILITY = 0.15;
-    /** Sensitivity of analyst estimate dispersion to market volatility above its calibration baseline. */
-    public const DISPERSION_VIX_SENSITIVITY = 3.0;
-    /** Ceiling on dispersion widening, so a volatility spike cannot drive the SUE denominator to infinity. */
-    public const DISPERSION_MAX_SCALE = 2.50;
-
-    // --- Leverage Effect (Black, 1976) ---
-    /** Asymmetric leverage effect scalar magnifying volatility on negative earnings surprises. */
-    public const NEGATIVE_SURPRISE_VOL_MULTIPLIER = 1.4;
 
     // --- Jump Diffusion (Fundamental vs Price) ---
     /** Scale factor for fundamental jump intensity relative to price jumps. */

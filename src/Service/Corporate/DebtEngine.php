@@ -55,9 +55,9 @@ class DebtEngine
     /** Horizon the structural default model is struck on; 5 years is the standard tenor for corporate credit spreads. */
     private const MERTON_HORIZON_YEARS = 5.0;
     /**
-     * Mean-reversion speed of idiosyncratic equity volatility, in reversions per year. Derived from the rate
-     * the earnings engine itself cools a shock, -ln(1 - VOLATILITY_COOLING_FACTOR) * 4 quarters, so the credit
-     * model and the volatility process agree on how long a surprise is expected to last.
+     * Mean-reversion speed of idiosyncratic equity volatility, in reversions per year: -ln(1 - 0.25) * 4, the
+     * quarterly cooling the earnings engine once applied after a surprise. The price process now reverts
+     * variance at MarketEngine::varianceReversionSpeed(), which is faster; aligning the two is open.
      */
     private const EQUITY_VOL_REVERSION_SPEED = 1.1507;
     /** Floor on the asset volatility the Merton model is struck at; below it a distance to default stops meaning anything. */

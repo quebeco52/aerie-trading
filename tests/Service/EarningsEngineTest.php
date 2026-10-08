@@ -218,7 +218,11 @@ class EarningsEngineTest extends TestCase
         $this->assertGreaterThan(10.00, (float) $stock->getEarningsPerShare());
     }
 
-    public function testExtremeEarningsTriggersVolatilityShock(): void
+    /**
+     * An extreme quarter moves the price on the report and is booked as a scheduled jump; it does not bump the
+     * name's volatility state, which only the price process steps (and its variance jumps cluster).
+     */
+    public function testAnExtremeSurpriseIsBookedAsAnnouncementVarianceNotAVolatilityBump(): void
     {
         $stock = new Stock();
         $stock->setTicker('SHOCK');
@@ -234,14 +238,15 @@ class EarningsEngineTest extends TestCase
         $stock->setBaselineRoic('0.10');
         $stock->setOperatingMargin('0.20');
 
-        // Force an extreme blowout quarter (SUE Z > 1.5 triggers the shock)
+        // Force an extreme blowout quarter.
         $this->mathUtilityMock->method('generateStandardNormal')->willReturn(3.5);
 
         $reportingTick = $this->getReportingTick('SHOCK');
         $macroState = new \App\DTO\MacroStateDTO();
         $this->engine->calculate($stock, $macroState, $reportingTick, 252);
 
-        $this->assertGreaterThan(0.20, (float) $stock->getCurrentVolatility(), 'Volatility should have spiked due to the extreme surprise.');
+        $this->assertSame(0.20, (float) $stock->getCurrentVolatility(), 'The report must not write the volatility state.');
+        $this->assertGreaterThan(0.0, (float) $stock->getAnnouncementVarianceEma(), 'The report move must be booked as announcement variance.');
     }
 
     public function testNegativeEpsBenefitsFromRecoveryBoost(): void
@@ -328,31 +333,6 @@ class EarningsEngineTest extends TestCase
             $capturedContext->ebit,
             'A firm that charges depreciation must report EBIT below EBITDA.'
         );
-    }
-
-    public function testVolatilityShockTriggersOnCompositeEarningsMiss(): void
-    {
-        $stock = new Stock();
-        $stock->setTicker('MISS');
-        $stock->setEarningsPerShare('10.00');
-        $stock->setSharesOutstanding('1000000');
-        $stock->setVolatility('0.20');
-        $stock->setCurrentVolatility('0.20');
-        $stock->setBeta('1.0');
-        $stock->setTotalEquity('150000000');
-        $stock->setWholesaleDebt('0');
-        $stock->setCorporateTreasury('10000000');
-        $stock->setBaselineRoic('0.10');
-        $stock->setOperatingMargin('0.20');
-
-        // Negative surprise shock (SUE Z < -1.5) creates a massive miss triggering volatility shock
-        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(-3.5);
-
-        $reportingTick = $this->getReportingTick('MISS');
-        $macroState = new \App\DTO\MacroStateDTO();
-        $this->engine->calculate($stock, $macroState, $reportingTick, 252);
-
-        $this->assertGreaterThan(0.20, (float) $stock->getCurrentVolatility(), 'Volatility should have spiked due to the composite earnings miss.');
     }
 
     public function testWorkingCapitalStrainDrainsFreeCashFlowEvenOnFlatRevenue(): void
@@ -622,28 +602,6 @@ class EarningsEngineTest extends TestCase
             (float) $stockShocked->getEarningsPerShare(),
             'Cyclical margin compression must reduce EPS and produce an earnings miss.'
         );
-    }
-
-    public function testSueNormalizedVolatilityShock(): void
-    {
-        $stock = new Stock();
-        $stock->setTicker('SUE_VOL');
-        $stock->setIndustry('Heavy Manufacturing');
-        $stock->setSharesOutstanding('1000000');
-        $stock->setTotalEquity('100000000');
-        $stock->setBaselineRoic('0.10');
-        $stock->setOperatingMargin('0.20');
-        $stock->setVolatility('0.20');
-        $stock->setCurrentVolatility('0.20');
-
-        $reportingTick = $this->getReportingTick('SUE_VOL');
-        $macro = new \App\DTO\MacroStateDTO();
-
-        // 1. Extreme surprise (Z = 3.5) normalized by SUE dispersion (> 1.5) triggers volatility shock
-        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(3.5);
-        $this->engine->calculate($stock, $macro, $reportingTick, 252);
-
-        $this->assertGreaterThan(0.20, (float) $stock->getCurrentVolatility(), 'High SUE surprise must trigger volatility expansion.');
     }
 
     public function testSeasonalityProducesOperatingLeverageWithoutSpuriousSurprise(): void

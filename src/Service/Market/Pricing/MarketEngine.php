@@ -377,6 +377,14 @@ class MarketEngine
             $longTermIdiosyncraticVar * FinancialConstants::MAX_IMPACT_VARIANCE_DRAG_SHARE
         );
 
+        // Announcement variance budget: a report or a warning is a scheduled jump (Dubinsky, Johannes, Kaeck &
+        // Seeger 2019), so the diffusion gives back what the name's own announcements measurably supplied,
+        // within the same minority bound as its unscheduled jumps.
+        $announcementVariance = min(
+            max(0.0, $ctx->announcementVariance),
+            $longTermIdiosyncraticVar * self::MAX_IDIOSYNCRATIC_JUMP_VARIANCE_SHARE
+        );
+
         // What the idiosyncratic diffusion is left with once every other source of variance has been paid
         // for. Every jump the name is exposed to is charged here, which is the only bucket that can flex:
         // the systematic loading is pinned at beta * marketVol and is not the engine's to spend.
@@ -384,7 +392,7 @@ class MarketEngine
         // process still settles on it: see varianceJumpLoad().
         $adjustedTheta = max(
             0.0001,
-            (($longTermIdiosyncraticVar * $cycleVolModifier) - $systemicJumpVariance - $idiosyncraticJumpVariance - $impactVariance)
+            (($longTermIdiosyncraticVar * $cycleVolModifier) - $systemicJumpVariance - $idiosyncraticJumpVariance - $impactVariance - $announcementVariance)
                 * (1.0 - self::varianceJumpLoad($lambda, $dynamicKappa, $dt))
         );
 

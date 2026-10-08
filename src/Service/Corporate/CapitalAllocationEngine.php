@@ -228,7 +228,7 @@ class CapitalAllocationEngine
             $ctx->wholesaleDebt = (float) $stock->getWholesaleDebt();
             $ctx->newTreasury += $distributionShortfall;
 
-            if ($distributionShortfall > 500_000_000.0) {
+            if (TreasuryEngine::isNewsworthy($ctx->stock, $distributionShortfall)) {
                 $purpose = $requiredDividend >= $heldDividend ? 'its required REIT distribution' : 'its dividend';
                 $ctx->events[] = ['description' => "Borrowed \$" . number_format($distributionShortfall / 1_000_000_000, 2) . "B to fund {$purpose}.", 'shock' => 0.0];
             }
@@ -602,7 +602,7 @@ class CapitalAllocationEngine
             $ctx->debtActionTaken = true;
             $ctx->recapActionTaken = true;
 
-            if ($borrowing > 500_000_000.0) {
+            if (TreasuryEngine::isNewsworthy($ctx->stock, $borrowing)) {
                 $ctx->events[] = ['description' => "Issued \$" . number_format($borrowing / 1_000_000_000, 2) . "B in bonds for recapitalization."];
             }
         }

@@ -78,6 +78,7 @@ class OpeningBoardBuilder
         // depth, its spread, and how far a given order size moves it.
         $stock->setTurnoverRatio(LiquidityEngine::structuralTurnoverRatio((float) $stockData['volatility']));
         $stock->setImpactVarianceEma(0.0);
+        $stock->setAnnouncementVarianceEma(0.0);
         // Opened at the structural variance rather than at zero. The index screens rank on this, and
         // a market whose whole board reads as perfectly quiet on day one would seat its
         // low-volatility index alphabetically and then spend a year unwinding it.

@@ -28,7 +28,6 @@ class EarningsSimulationContext
     public float $baselineVol = 0.0;
     public float $sharesOutstanding = 0.0;
     public float $stableMargin = 0.0;
-    public float $estimateDispersion = 0.06;
     public float $seasonalFactor = 1.0;
     public float $priorSeasonalFactor = 1.0;
     public float $seasonallyAdjustedRevenue = 0.0;

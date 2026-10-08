@@ -1406,4 +1406,26 @@ class TreasuryEngineTest extends TestCase
         $this->assertEqualsWithDelta(2_000_000_000.0, (float) $stock->getEarningAssets(), 1.0);
         $this->assertEqualsWithDelta(500_000_000.0, $ctx->newTreasury, 1.0);
     }
+
+    /** A financing action is news in proportion to the firm: one percent of its total assets, not a fixed dollar line. */
+    public function testFinancingNewsIsMaterialToTheFirmRatherThanAFixedSum(): void
+    {
+        $operating = (new Stock())->setCorporateTreasury('2000000000')->setGrossPpe('18000000000');
+        $totalAssets = $operating->getTotalAssets();
+        $this->assertGreaterThan(0.0, $totalAssets);
+
+        $this->assertTrue(TreasuryEngine::isNewsworthy($operating, $totalAssets * 0.0101));
+        $this->assertFalse(TreasuryEngine::isNewsworthy($operating, $totalAssets * 0.0099));
+
+        // Before its first ledger a firm's total assets are its equity plus its funding.
+        $unreported = (new Stock())->setTotalEquity('3000000000')->setWholesaleDebt('1000000000');
+        $this->assertFalse($unreported->hasBalanceSheetLedger());
+        $this->assertTrue(TreasuryEngine::isNewsworthy($unreported, 41_000_000.0));
+        $this->assertFalse(TreasuryEngine::isNewsworthy($unreported, 39_000_000.0));
+
+        // The same $600M draw is news for the first firm and a rounding error for a $200B balance sheet.
+        $large = (new Stock())->setCorporateTreasury('20000000000')->setGrossPpe('180000000000');
+        $this->assertTrue(TreasuryEngine::isNewsworthy((new Stock())->setTotalEquity('20000000000'), 600_000_000.0));
+        $this->assertFalse(TreasuryEngine::isNewsworthy($large, 600_000_000.0));
+    }
 }

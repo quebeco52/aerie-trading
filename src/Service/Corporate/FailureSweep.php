@@ -70,14 +70,6 @@ class FailureSweep
             $restructureEvents = $this->applyRestructuringRule($stock, $marketCap, $name, $macroState);
             if ($restructureEvents !== null) {
                 $generatedEvents = array_merge($generatedEvents, $restructureEvents);
-                continue;
-            }
-
-            // RULE : Volatility Dampening
-
-            $currentVol = (float) $stock->getCurrentVolatility();
-            if ($currentVol > 1.50) {
-                $stock->setCurrentVolatility((string) ($currentVol * 0.90));
             }
         }
 

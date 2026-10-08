@@ -21,6 +21,10 @@ class TreasuryEngine
     /** Announcement return of a seasoned equity offering, in percent: about -3% over two days for industrial issuers (Asquith & Mullins 1986), the adverse-selection signal (Myers & Majluf 1984). Distress is not added on top: fair value already prices it. */
     public const SEASONED_EQUITY_OFFERING_ANNOUNCEMENT_PCT = -3.0;
 
+    // --- Financing News ---
+    /** A financing action is news at 1% of the firm's total assets, the top of the 0.5-1% of total assets auditors take as materiality (practitioner guidance; second-hand). */
+    public const FINANCING_NEWS_MATERIALITY = 0.01;
+
     // --- CapEx & Deployment Rates ---
     /** Base organic spend rate (15%) for retained cash hoards. */
     private const BASE_ORGANIC_SPEND_RATE = 0.15;
@@ -46,6 +50,20 @@ class TreasuryEngine
      * This must run BEFORE buybacks so that newly issued debt cash can fund Leveraged Buybacks,
      * and Growth CapEx takes priority over share repurchases.
      */
+    /**
+     * Whether a financing action is material enough to the firm to make its news: measured against its total
+     * assets, so a revolver draw that is routine for a bank still reads as news for a mid-size retailer. Before
+     * the first ledger, equity plus funding stands in for total assets by identity.
+     */
+    public static function isNewsworthy(Stock $stock, float $amount): bool
+    {
+        $totalAssets = $stock->hasBalanceSheetLedger()
+            ? $stock->getTotalAssets()
+            : (float) $stock->getTotalEquity() + (float) $stock->getTotalDebt();
+
+        return $amount > self::FINANCING_NEWS_MATERIALITY * max(FinancialConstants::MIN_OPERATING_BASE_CASH, $totalAssets);
+    }
+
     public function executeCorporateStrategy(CapitalAllocationContext $ctx): void
     {
         // SYSTEMIC M2 MONEY SUPPLY GROWTH
@@ -200,7 +218,7 @@ class TreasuryEngine
         $unrecognizedMark = -$realizedMark * FinancialConstants::DEFAULT_HTM_BOOK_SHARE;
         $ctx->assetSaleLoss += ($carryingValueSold * $haircut) + $unrecognizedMark;
 
-        if ($proceeds > 500_000_000.0) {
+        if (self::isNewsworthy($ctx->stock, $proceeds)) {
             $amtB = number_format($proceeds / 1_000_000_000, 2);
             $lossB = number_format(($carryingValueSold - $proceeds) / 1_000_000_000, 2);
             $ctx->events[] = ['description' => "Sold \${$amtB}B of securities and loans below carrying value to meet withdrawals, realizing a \${$lossB}B loss."];
@@ -309,7 +327,7 @@ class TreasuryEngine
                         $ctx->recapActionTaken = true;
                     }
 
-                    if ($newDebtIssued > 500_000_000.0) {
+                    if (self::isNewsworthy($ctx->stock, $newDebtIssued)) {
                         $amtB = number_format($newDebtIssued / 1_000_000_000, 2);
                         $ctx->events[] = ['description' => "Issued \${$amtB}B in bonds for " . ($isUnderLeveragedForDebt ? "recapitalization" : "expansion") . "."];
                     }
@@ -516,7 +534,7 @@ class TreasuryEngine
         $ctx->unfundedMaturity = $roll->unfundedShortfall;
         $ctx->wholesaleDebt = (float) $ctx->stock->getWholesaleDebt();
 
-        if ($roll->principalRepaid > 500_000_000.0) {
+        if (self::isNewsworthy($ctx->stock, $roll->principalRepaid)) {
             $amtB = number_format($roll->principalRepaid / 1_000_000_000, 2);
             $ctx->events[] = [
                 'description' => "Shut out of the bond market and forced to repay \${$amtB}B of maturing notes in cash.",
@@ -746,7 +764,7 @@ class TreasuryEngine
             $this->fundMaturityFromCash($ctx, $uncoveredMaturity);
         }
 
-        if ($drawn > 500_000_000.0) {
+        if (self::isNewsworthy($ctx->stock, $drawn)) {
             $amtB = number_format($drawn / 1_000_000_000, 2);
             $ctx->events[] = [
                 'description' => "Drew \${$amtB}B on its committed revolving credit facility to cover a cash shortfall.",
@@ -756,7 +774,7 @@ class TreasuryEngine
         // News, not a price move of its own: the market prices what the refusal leads to (the emergency
         // paper, the rescue raise or the default), each of which carries its own reaction.
         $refused = min($overdraft + $maturity, $stock->getRevolverUndrawn());
-        if ($drawRefused && $refused > 500_000_000.0) {
+        if ($drawRefused && self::isNewsworthy($ctx->stock, $refused)) {
             $amtB = number_format($refused / 1_000_000_000, 2);
             $ctx->events[] = [
                 'description' => "Lenders refused a \${$amtB}B draw on its revolving credit facility while it is in breach of its leverage covenant.",
@@ -908,7 +926,7 @@ class TreasuryEngine
                     $ctx->newTreasury -= $actualPaydown;
                     $ctx->debtActionTaken = true;
 
-                    if ($actualPaydown > 500_000_000.0) {
+                    if (self::isNewsworthy($ctx->stock, $actualPaydown)) {
                         $amtB = number_format($actualPaydown / 1_000_000_000, 2);
                         $reason = $isLiquidityCrisis ? "survive a liquidity crisis" : "reduce debt burden and escape negative carry";
                         $ctx->events[] = [
@@ -986,7 +1004,7 @@ class TreasuryEngine
                     $stock->setWholesaleDebt((string) $ctx->wholesaleDebt);
                     $ctx->newTreasury -= $debtToPayOff;
 
-                    if ($debtToPayOff > 500_000_000.0) {
+                    if (self::isNewsworthy($ctx->stock, $debtToPayOff)) {
                         $amtB = number_format($debtToPayOff / 1_000_000_000, 2);
                         $ctx->events[] = [
                             'description' => "Swept \${$amtB}B cash to aggressively deleverage.",

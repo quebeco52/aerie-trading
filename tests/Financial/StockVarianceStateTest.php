@@ -25,7 +25,7 @@ final class StockVarianceStateTest extends TestCase
     private const CALM_MARKET_VOL = 0.15;
     private const DAILY = 1.0 / 252.0;
 
-    private function context(float $volatility, float $marketVol, ?float $priorMarketVol, float $lambda, float $volOfVol, float $dt): MarketPricingContext
+    private function context(float $volatility, float $marketVol, ?float $priorMarketVol, float $lambda, float $volOfVol, float $dt, float $announcementVariance = 0.0): MarketPricingContext
     {
         return new MarketPricingContext(
             currentPrice: 100.0,
@@ -45,6 +45,41 @@ final class StockVarianceStateTest extends TestCase
             baselineIndustryPE: 15.0,
             revenuePerShare: 50.0,
             priorMarketVol: $priorMarketVol,
+            announcementVariance: $announcementVariance,
+        );
+    }
+
+    /** Steps the variance state two years from the target with no vol-of-vol and no jumps, and returns where it settles. */
+    private function settledVariance(float $announcementVariance): float
+    {
+        mt_srand(20261008);
+        $engine = new MarketEngine(new MathUtility());
+        $volatility = sqrt($this->targetVariance(self::CALM_MARKET_VOL));
+
+        for ($tick = 0; $tick < 504; $tick++) {
+            $volatility = $engine->calculateNextPrice(
+                $this->context($volatility, self::CALM_MARKET_VOL, self::CALM_MARKET_VOL, 0.0, 1.0e-6, self::DAILY, $announcementVariance)
+            )['next_volatility'];
+        }
+
+        return $volatility * $volatility;
+    }
+
+    /**
+     * A name's announcements are scheduled jumps, so the diffusion gives back the variance they measurably
+     * supplied, and no more than the minority bound its own jumps are held to.
+     */
+    public function testTheDiffusionGivesBackTheMeasuredAnnouncementVariance(): void
+    {
+        $idiosyncraticTarget = MarketEngine::longTermIdiosyncraticVariance(self::LONG_TERM_VOLATILITY, self::BETA);
+
+        self::assertEqualsWithDelta($this->targetVariance(self::CALM_MARKET_VOL), $this->settledVariance(0.0), 1.0e-5);
+        self::assertEqualsWithDelta($this->targetVariance(self::CALM_MARKET_VOL) - 0.004, $this->settledVariance(0.004), 1.0e-5);
+        self::assertEqualsWithDelta(
+            $this->targetVariance(self::CALM_MARKET_VOL) - ($idiosyncraticTarget * 0.25),
+            $this->settledVariance(1.0),
+            1.0e-5,
+            'An outsized announcement record is held to a quarter of the idiosyncratic budget.'
         );
     }
 

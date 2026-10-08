@@ -84,13 +84,15 @@ class EarningsEngine
     /** Fiscal quarter index at which the annual goodwill impairment test runs (fiscal Q4). */
     public const FISCAL_YEAR_END_QUARTER = 3;
 
-    // --- SUE Dispersion ---
-    /** Minimum analyst estimate dispersion floor to avoid division by near-zero in SUE. */
-    public const MIN_ESTIMATE_DISPERSION = 0.02;
-    /** Quarters of past surprises retained as the sample the SUE denominator is estimated from (Foster, Olsen & Shevlin 1984). */
+    // --- Surprise Record ---
+    /** Quarters of past surprises kept on the firm's surprise record, the sample SUE is conventionally scaled over (Foster, Olsen & Shevlin 1984). */
     public const SUE_HISTORY_QUARTERS = 8;
-    /** Reports required before the firm's own surprise history replaces the sector's analyst dispersion in the SUE denominator. */
-    public const SUE_MIN_HISTORY_QUARTERS = 4;
+
+    // --- Announcement Variance ---
+    /** Years between quarterly reports. */
+    public const REPORT_INTERVAL_YEARS = 0.25;
+    /** Years the announcement-variance estimate averages over: the eight reports the surprise record spans. */
+    public const ANNOUNCEMENT_VARIANCE_EMA_YEARS = self::SUE_HISTORY_QUARTERS * self::REPORT_INTERVAL_YEARS;
 
     // --- Trailing Twelve Month Earnings ---
     /** Number of reported quarters summed into the trailing twelve month earnings figure. */
@@ -166,7 +168,7 @@ class EarningsEngine
         $this->manageReportedEarnings($ctx);
         $this->calculateEPSAndSurprise($ctx);
         $this->calculateFreeCashFlow($ctx);
-        $this->executePriceAndVolatilityShocks($ctx);
+        $this->executeAnnouncementReturn($ctx);
 
         return $this->publishEventAndReport($ctx);
     }
@@ -268,6 +270,7 @@ class EarningsEngine
             $this->resolveDampedPriceGap(-min(1.0, $shortfallRatio), (float) $stock->getBeta(), $this->resolveGrowthPremium($currentPE))
         );
         $stock->setPrice(number_format(max(0.01, $currentPrice * (1.0 + $reaction)), 8, '.', ''));
+        $this->recordAnnouncementVariance($stock, log(1.0 + $reaction), false);
 
         return [$this->marketEvent->publish(
             $stock,
@@ -915,7 +918,6 @@ class EarningsEngine
         );
         $ctx->analystExpectedRevenue = $consensus->analystExpectedRevenue;
         $ctx->analystExpectedVariableCosts = $consensus->analystExpectedVariableCosts;
-        $ctx->estimateDispersion = $consensus->estimateDispersion;
 
         // Depreciation is the most forecastable line on the income statement — it follows a schedule the
         // firm has already disclosed — so analysts get it right and it is not a source of surprise. A lender's
@@ -1968,14 +1970,14 @@ class EarningsEngine
         return max(-FinancialConstants::MAX_PRICE_GAP, min(FinancialConstants::MAX_PRICE_GAP, $damped));
     }
 
-    private function executePriceAndVolatilityShocks(EarningsSimulationContext $ctx): void
+    /**
+     * The report's price move: the earnings response to the priced surprise plus any announcement with a
+     * measured return, booked as a scheduled jump into the name's announcement variance.
+     */
+    private function executeAnnouncementReturn(EarningsSimulationContext $ctx): void
     {
         $stock = $ctx->stock;
 
-        // Derive a composite earnings Z-score from the blended surprise percentage.
-        $dispersion = $this->resolveSurpriseDispersion($ctx);
-        $earningsSurpriseZ = $ctx->surprisePct / $dispersion;
-        $this->applyVolatilityShock($stock, $earningsSurpriseZ, $ctx->baselineVol);
         $this->recordSurprise($stock, $ctx->surprisePct);
 
         $currentPrice = (float) $stock->getPrice();
@@ -2028,6 +2030,9 @@ class EarningsEngine
         $exDivPrice = ($currentPrice * (1.0 + $ctx->totalShockPct)) - (float) ($ctx->allocation['dividend_paid'] ?? 0.0);
         $newPrice = max(0.01, $exDivPrice);
         $stock->setPrice(number_format($newPrice, 8, '.', ''));
+
+        // The dividend is not a return: the holder has the cash. The announcement return is the move alone.
+        $this->recordAnnouncementVariance($stock, log(1.0 + $ctx->totalShockPct), true);
     }
 
     private function publishEventAndReport(EarningsSimulationContext $ctx): array
@@ -2073,39 +2078,7 @@ class EarningsEngine
         return [$earningsEvent];
     }
 
-    /**
-     * Resolves the denominator that turns an earnings surprise into a standardized one (SUE).
-     *
-     * Unexpected earnings are standardized by the dispersion of the firm's OWN past unexpected earnings
-     * (Foster, Olsen & Shevlin 1984), not by a static per-sector constant. The sector constants describe how
-     * well analysts cover an industry; they say nothing about how large the surprises this engine actually
-     * generates are, and the two had drifted apart badly. Measured over forty quarters the realized surprise
-     * scale ran from 1.5x the assumed dispersion for a bank to 5.8x for an industrial, so the "sigma event"
-     * threshold was tripped in 42% to 95% of quarters instead of the ~13% a true Z-score implies, and the
-     * volatility shock that rides on it kept half the district permanently elevated.
-     *
-     * The sector's analyst dispersion remains a floor: it carries the coverage quality signal and scales with
-     * market volatility, so forecasts still fan out in a panicked regime. Until the firm has enough reports
-     * to estimate its own scale, that floor is all there is.
-     */
-    private function resolveSurpriseDispersion(EarningsSimulationContext $ctx): float
-    {
-        $analystDispersion = max(self::MIN_ESTIMATE_DISPERSION, $ctx->estimateDispersion);
-
-        $history = $ctx->stock->getEarningsSurpriseHistory() ?? [];
-        if (count($history) < self::SUE_MIN_HISTORY_QUARTERS) {
-            return $analystDispersion;
-        }
-
-        $realizedScale = $this->mathUtility->calculateMeanAbsoluteScale(array_map('floatval', array_values($history)));
-
-        return max($analystDispersion, $realizedScale);
-    }
-
-    /**
-     * Appends this quarter's surprise to the rolling SUE sample, after it has been standardized against the
-     * prior quarters. Standardizing a surprise partly by itself would shrink every outlier toward the mean.
-     */
+    /** Appends this quarter's surprise to the firm's rolling surprise record. */
     private function recordSurprise(Stock $stock, float $surprisePct): void
     {
         $history = $stock->getEarningsSurpriseHistory() ?? [];
@@ -2116,26 +2089,24 @@ class EarningsEngine
         );
     }
 
-    private function applyVolatilityShock(Stock $stock, float $earningsZ, float $baselineVol): void
+    /**
+     * Books an announcement return into the name's annualized announcement variance, which the price process
+     * gives back from its diffusion (MarketEngine). A report closes the quarter and decays the estimate one
+     * report interval. A warning between reports is added at the weight that, once the report has decayed it,
+     * counts it the same as the report's own move, so the estimate settles on reports per year times the
+     * expected sum of a quarter's squared announcement returns.
+     */
+    private function recordAnnouncementVariance(Stock $stock, float $logReturn, bool $closesQuarter): void
     {
-        $currentVol = (float) $stock->getCurrentVolatility();
-        $zScore = abs($earningsZ);
+        $prior = (float) ($stock->getAnnouncementVarianceEma() ?? 0.0);
 
-        if ($zScore > FinancialConstants::SURPRISE_Z_SCORE_THRESHOLD) {
-            $shockFactor = $earningsZ < 0
-                ? FinancialConstants::VOLATILITY_SHOCK_FACTOR * FinancialConstants::NEGATIVE_SURPRISE_VOL_MULTIPLIER
-                : FinancialConstants::VOLATILITY_SHOCK_FACTOR;
-
-            // Measured from the threshold that opened the shock, so volatility rises continuously from the
-            // moment a surprise becomes material. Against a bare 1.0 the multiplier jumped straight to 1.10
-            // the instant the 1.5-sigma line was crossed, which put a step in the volatility path with
-            // nothing behind it.
-            $shockMultiplier = 1.0 + (($zScore - FinancialConstants::SURPRISE_Z_SCORE_THRESHOLD) * $shockFactor);
-            $newVol = min($currentVol * $shockMultiplier, $baselineVol * FinancialConstants::MAX_VOLATILITY_MULTIPLIER);
-            $stock->setCurrentVolatility((string) $newVol);
-        } elseif ($zScore < FinancialConstants::BORING_Z_SCORE_THRESHOLD && $currentVol > $baselineVol) {
-            $newVol = $currentVol - (($currentVol - $baselineVol) * FinancialConstants::VOLATILITY_COOLING_FACTOR);
-            $stock->setCurrentVolatility((string) max($newVol, $baselineVol));
+        if ($closesQuarter) {
+            $next = MathUtility::ewmaAnnualizedVariance($prior, $logReturn, self::REPORT_INTERVAL_YEARS, self::ANNOUNCEMENT_VARIANCE_EMA_YEARS);
+        } else {
+            $weight = exp(self::REPORT_INTERVAL_YEARS / self::ANNOUNCEMENT_VARIANCE_EMA_YEARS) - 1.0;
+            $next = max(0.0, $prior) + ($weight * ($logReturn * $logReturn) / self::REPORT_INTERVAL_YEARS);
         }
+
+        $stock->setAnnouncementVarianceEma($next);
     }
 }

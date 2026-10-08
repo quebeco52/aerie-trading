@@ -1555,7 +1555,7 @@ class EarningsEngineTest extends TestCase
         $this->assertEqualsWithDelta($captured->reportedActualNetIncome, (float) $history[3], 1.0);
     }
 
-    public function testSurpriseIsStandardizedByTheFirmsOwnSurpriseHistory(): void
+    public function testTheSurpriseRecordIsARollingWindow(): void
     {
         $engine = $this->buildEngine($this->createStub(EventDispatcherInterface::class));
 
@@ -1572,32 +1572,65 @@ class EarningsEngineTest extends TestCase
             $engine->calculate($stock, $macroState, $reportingTick + (63 * $quarter));
         }
 
-        $history = $stock->getEarningsSurpriseHistory();
-        $this->assertIsArray($history);
+        // The record is a rolling window, so an old regime eventually leaves it.
+        $this->assertCount(EarningsEngine::SUE_HISTORY_QUARTERS, $stock->getEarningsSurpriseHistory() ?? []);
+    }
 
-        // The sample is a rolling window, so an old regime eventually leaves the denominator.
-        $this->assertCount(EarningsEngine::SUE_HISTORY_QUARTERS, $history);
+    /**
+     * A report is a scheduled jump: its move, not its dividend, is booked into the name's announcement variance,
+     * annualized, which the price process then gives back from its diffusion.
+     */
+    public function testAReportBooksItsMoveAsAnnouncementVariance(): void
+    {
+        $captured = null;
+        $dispatcher = new EventDispatcher();
+        $dispatcher->addListener(EarningsReportedEvent::class, function (EarningsReportedEvent $event) use (&$captured): void {
+            $captured = $event->getContext();
+        });
 
-        // A firm whose surprises are chronically large must end up with a correspondingly large denominator,
-        // otherwise every ordinary quarter reads as a multi-sigma event and the volatility shock never stops
-        // firing. Measured over forty quarters the static sector constants understated the realized surprise
-        // scale by between 1.5 and 5.8 times, which pinned most of the district's volatility near its ceiling.
-        $realizedScale = (new MathUtility())->calculateMeanAbsoluteScale(array_map('floatval', $history));
-        $meanAbsoluteSurprise = array_sum(array_map('abs', $history)) / count($history);
+        $stock = $this->buildMatureIndustrial('ANNV');
+        $stock->setLifecycleStage(LifecycleStage::Mature);
+        $this->assertSame(0.0, $stock->getAnnouncementVarianceEma());
 
-        $this->assertGreaterThan(0.0, $realizedScale);
-        $this->assertGreaterThan(
-            $meanAbsoluteSurprise,
-            $realizedScale,
-            'The normal-equivalent scale must exceed the mean absolute surprise it is derived from.'
+        mt_srand(777);
+        $this->buildEngine($dispatcher)->calculate(
+            $stock,
+            new MacroStateDTO(corporateTaxRate: 0.21, policyRateEma: 0.04, yield5yEma: 0.04),
+            EarningsEngine::resolveReportingTick('ANNV', 252)
         );
 
-        // A typical quarter for this firm must not register as a sigma event against its own history.
-        $this->assertLessThan(
-            1.5,
-            $meanAbsoluteSurprise / $realizedScale,
-            'An average quarter must not trip the volatility shock threshold.'
+        $this->assertNotNull($captured);
+        $this->assertNotSame(0.0, $captured->totalShockPct, 'the fixture must report a surprise for this test to have power');
+
+        $weight = 1.0 - exp(-EarningsEngine::REPORT_INTERVAL_YEARS / EarningsEngine::ANNOUNCEMENT_VARIANCE_EMA_YEARS);
+        $this->assertEqualsWithDelta(
+            $weight * (log(1.0 + $captured->totalShockPct) ** 2) / EarningsEngine::REPORT_INTERVAL_YEARS,
+            (float) $stock->getAnnouncementVarianceEma(),
+            1e-12
         );
+    }
+
+    /**
+     * Reports alone settle the estimate on reports per year times the squared move; a warning between reports adds
+     * its own squared move at the same weight without a second decay, so a quarter with a warning counts both.
+     */
+    public function testAnnouncementVarianceSettlesOnTheAnnualRateOfSquaredMoves(): void
+    {
+        $engine = $this->buildEngine($this->createStub(EventDispatcherInterface::class));
+        $record = new \ReflectionMethod($engine, 'recordAnnouncementVariance');
+        $stock = new Stock();
+        $move = 0.05;
+
+        for ($quarter = 0; $quarter < 400; $quarter++) {
+            $record->invoke($engine, $stock, $move, true);
+        }
+        $this->assertEqualsWithDelta(($move ** 2) / EarningsEngine::REPORT_INTERVAL_YEARS, (float) $stock->getAnnouncementVarianceEma(), 1e-12);
+
+        for ($quarter = 0; $quarter < 400; $quarter++) {
+            $record->invoke($engine, $stock, $move, false);
+            $record->invoke($engine, $stock, $move, true);
+        }
+        $this->assertEqualsWithDelta(2.0 * ($move ** 2) / EarningsEngine::REPORT_INTERVAL_YEARS, (float) $stock->getAnnouncementVarianceEma(), 1e-9);
     }
 
     public function testMeanAbsoluteScaleRecoversSigmaAndResistsASingleOutlier(): void
