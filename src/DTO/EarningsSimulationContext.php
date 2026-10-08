@@ -54,6 +54,8 @@ class EarningsSimulationContext
     public float $replacementCostRatio = 1.0;
     /** Capex spent replacing depreciated plant at today's capital-goods prices this quarter. */
     public float $maintenanceCapex = 0.0;
+    /** Growth plant the flexible accelerator still allows this quarter after the earnings engine's own; null where no plant budget applies (a lender). */
+    public ?float $expansionBudget = null;
     /** Lower-of-cost-or-NRV writedown on unsold inventory this quarter (ASC 330), non-cash. */
     public float $inventoryWriteDown = 0.0;
     /** Expected credit loss provision against trade receivables this quarter (ASC 326), non-cash; negative when released. */

@@ -1390,7 +1390,8 @@ class EarningsEngine
             $ctx->macroState,
             $ctx->actualQuarterlyNetIncome,
             $ctx->stockCompensation,
-            $ctx->openingCapitalRatio
+            $ctx->openingCapitalRatio,
+            $ctx->expansionBudget
         );
 
         $stock->setSharesOutstanding((string) $ctx->allocation['new_shares']);
@@ -1884,9 +1885,11 @@ class EarningsEngine
      * profit. A loss-making growth firm therefore keeps investing from its cash pile while a boom quarter does
      * not trigger a one-off splurge. The stock's capexRatio is its reinvestment rate (g = reinvestment x ROIC).
      *
-     * Two real-world gates apply:
+     * Three real-world gates apply:
      *  1. NPV rule: no growth investment while the structural return fails the model's hurdle rate.
-     *  2. Funding constraint: spend is bounded by internally generated cash plus cash above the operating floor.
+     *  2. Demand: no more plant than the flexible accelerator allows (resolveExpansionBudget()).
+     *  3. Funding constraint: spend is bounded by internally generated cash plus cash above the operating floor.
+     * What the accelerator still allows after this spend is left on the context for the treasury.
      */
     private function calculateGrowthCapEx(EarningsSimulationContext $ctx, float $cycleCapExModifier, float $maintenanceCapEx, float $deltaNwc): float
     {
@@ -1903,33 +1906,17 @@ class EarningsEngine
         // ROIC reversion downstream then prices exactly that value destruction.
         $appliedHurdle = $manager->appliedHurdle($hurdleRate);
 
+        $expansionBudget = $this->resolveExpansionBudget($ctx, $cycleCapExModifier, $maintenanceCapEx);
+        $ctx->expansionBudget = $expansionBudget;
+
         if ($reinvestmentRate <= 0.0 || $ctx->baselineRoic < $appliedHurdle) {
             return 0.0;
         }
 
         $structuralQuarterlyNopat = $ctx->baselineRoic * abs($ctx->investedCapital) / 4.0;
         $plannedGrowthCapEx = $structuralQuarterlyNopat * $reinvestmentRate * $cycleCapExModifier;
-
-        // Marginal return on share-taking capex: structural return less Cournot price haircut and scale diseconomies.
-        $shareTakingReturn = $this->corporateMetrics->applyScaleDiseconomies(
-            $stock,
-            $ctx->baselineRoic - $this->corporateMetrics->calculateCournotPriceHaircut(
-                $stock,
-                $ctx->addressableShare,
-                abs($ctx->investedCapital),
-                $ctx->macroState
-            ),
-            $ctx->addressableShare
-        );
-        if ($shareTakingReturn < $appliedHurdle) {
-            // Trend is the sector's secular real growth plus the price level. Replacement-cost maintenance
-            // has already carried part of the price level onto the plant ledger this quarter (the slice it
-            // replaced dearer than it was booked), so only the remainder is growth spend.
-            $trendNominalGrowth = max(0.0, $ctx->strategy->getFadedSecularGrowthRate($stock, $ctx->macroState->totalTime) + max(0.0, $ctx->macroState->inflationEma));
-            $revaluationAlreadyBooked = max(0.0, $maintenanceCapEx - $ctx->quarterlyDepreciation);
-            $plantBase = $stock->getGrossPpe() !== null ? max(0.0, $stock->getNetPpe()) : abs($ctx->investedCapital);
-            $trendTranche = max(0.0, $plantBase * $trendNominalGrowth / 4.0 - $revaluationAlreadyBooked);
-            $plannedGrowthCapEx = min($plannedGrowthCapEx, $trendTranche);
+        if ($expansionBudget !== null) {
+            $plannedGrowthCapEx = min($plannedGrowthCapEx, $expansionBudget);
         }
         $operatingBase = $this->corporateMetrics->calculateOperatingBase((float) $stock->getTotalRevenue(), (float) $stock->getTotalEquity());
         $minOperatingCash = $ctx->strategy->calculateMinOperatingCash($operatingBase, (float) $stock->getCustomerDeposits(), (float) $stock->getWholesaleDebt());
@@ -1942,7 +1929,44 @@ class EarningsEngine
         $internalCashFlow = $ctx->actualQuarterlyNetIncome + $ctx->quarterlyDepreciation - $deltaNwc - $maintenanceCapEx - $requiredDistribution;
         $fundingCapacity = max(0.0, $internalCashFlow + $deployableCash);
 
-        return min($plannedGrowthCapEx, $fundingCapacity);
+        $growthCapEx = min($plannedGrowthCapEx, $fundingCapacity);
+        if ($expansionBudget !== null) {
+            $ctx->expansionBudget = max(0.0, $expansionBudget - $growthCapEx);
+        }
+
+        return $growthCapEx;
+    }
+
+    /**
+     * Growth plant the quarter's demand calls for, by the flexible accelerator in error-correction form: the
+     * plant grows with the nominal demand its sector sees and closes a share of the gap between the plant the
+     * firm's share of trend demand implies and the plant it runs (Chenery 1952; speed from Bloom, Bond & Van
+     * Reenen 2007). A firm that has built ahead of its market adds nothing until demand catches up; one that
+     * has fallen behind builds faster. The cycle signal scales it as it scales every capex line.
+     *
+     * Replacement-cost maintenance has already carried part of the price level onto the plant ledger this
+     * quarter (the slice it replaced dearer than it was booked), so only the remainder is growth spend. Null
+     * for a lender, whose expansion is a loan book sized by its funding and capital, not plant.
+     */
+    private function resolveExpansionBudget(EarningsSimulationContext $ctx, float $cycleCapExModifier, float $maintenanceCapEx): ?float
+    {
+        if ($ctx->strategy->isFinancial()) {
+            return null;
+        }
+
+        $stock = $ctx->stock;
+        $trendNominalGrowth = max(0.0, $ctx->strategy->getFadedSecularGrowthRate($stock, $ctx->macroState->totalTime) + max(0.0, $ctx->macroState->inflationEma));
+        $capitalGap = $this->industryShareLedger?->resolveTrendCapacityGap(
+            $stock,
+            $ctx->macroState,
+            IndustryShareLedger::secularExcessGrowth($ctx->strategy, $stock)
+        ) ?? 0.0;
+        $plantGrowth = MathUtility::flexibleAcceleratorGrowth($trendNominalGrowth, $capitalGap, FinancialConstants::CAPITAL_ERROR_CORRECTION_SPEED);
+
+        $revaluationAlreadyBooked = max(0.0, $maintenanceCapEx - $ctx->quarterlyDepreciation);
+        $plantBase = $stock->getGrossPpe() !== null ? max(0.0, $stock->getNetPpe()) : abs($ctx->investedCapital);
+
+        return max(0.0, $plantBase * $plantGrowth * $ctx->dt * $cycleCapExModifier - $revaluationAlreadyBooked);
     }
 
     /**

@@ -167,6 +167,31 @@ class IndustryShareLedgerTest extends TestCase
         $this->assertLessThan(1.0, $ratio);
     }
 
+    /**
+     * The accelerator's gap is the log of the plant the firm's anchored share of trend demand calls for over the
+     * plant it has installed: nothing before the anchor, zero on it, positive once trend demand has outgrown the
+     * plant, negative once the firm has built ahead of it.
+     */
+    public function testTheTrendCapacityGapIsTheLogOfTrendPlantOverInstalledPlant(): void
+    {
+        $ledger = new IndustryShareLedger(new InMemoryIndustryShareStore());
+        $firm = $this->stock('GAP', 1_000.0);
+        $atOpen = new MacroStateDTO(totalTime: 0.0, potentialGdpIndex: 1.0, gdpDeflator: 1.0);
+
+        $this->assertNull($ledger->resolveTrendCapacityGap($firm, $atOpen, 0.0), 'no anchor, no gap');
+
+        $ledger->resolveIndustryCapacityRatio($firm, 1_000.0, 0.5, 1.0, 0.0, 0.0, 10, 252);
+        $this->assertEqualsWithDelta(0.0, $ledger->resolveTrendCapacityGap($firm, $atOpen, 0.0), 1e-12, 'on its anchor');
+
+        // Two years on, trend nominal GDP is up 10% and a three-point secular excess has run on its fade.
+        $later = new MacroStateDTO(totalTime: 2.0, potentialGdpIndex: 1.05, gdpDeflator: 1.10 / 1.05);
+        $expected = log(1.10) + MathUtility::fadedExcessIntegral(0.03, 0.0, 2.0, FinancialConstants::SECULAR_EXCESS_HALF_LIFE_YEARS);
+        $this->assertEqualsWithDelta($expected, $ledger->resolveTrendCapacityGap($firm, $later, 0.03), 1e-12, 'demand outgrew the plant');
+
+        $ledger->resolveIndustryCapacityRatio($firm, 1_600.0, 0.5, 1.0, 0.0, 0.0, 73, 252);
+        $this->assertEqualsWithDelta(log(1.0 / 1.6), $ledger->resolveTrendCapacityGap($firm, $atOpen, 0.0), 1e-12, 'built ahead of its market');
+    }
+
     public function testARetiredFirmsPlantLeavesTheBalanceButItsDemandDoesNotUntilItsRecordAgesOut(): void
     {
         $ledger = new IndustryShareLedger(new InMemoryIndustryShareStore());

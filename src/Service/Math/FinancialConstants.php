@@ -90,6 +90,10 @@ class FinancialConstants
     /** Half-life of a sector's demand drift: 8 years, how much of US industries' 1997-2008 GDP-share drift carried into 2008-2019 (BEA GDP by Industry, non-commodity industries). */
     public const SECULAR_EXCESS_HALF_LIFE_YEARS = 8.0;
 
+    // --- Capacity Investment ---
+    /** Share of the log gap between demand-implied and installed capital a firm closes each year: 6.2% (Bloom, Bond & Van Reenen 2007, UK company panel, error-correction term). */
+    public const CAPITAL_ERROR_CORRECTION_SPEED = 0.062;
+
     // --- Fundamental Growth Transmission ---
     /** Share of the output gap that reaches a firm's real growth rate, before its beta scales the cyclical exposure. */
     public const CYCLICAL_GROWTH_PASS_THROUGH = 0.50;

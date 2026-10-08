@@ -2818,6 +2818,15 @@ class MathUtilityTest extends TestCase
         self::assertSame(0.02, MathUtility::fadeTowardTrend(0.02, 0.02, 5.0, 8.0));
     }
 
+    /** The flexible accelerator: demand growth plus a share of the log capital gap, never a negative build. */
+    public function testTheFlexibleAcceleratorGrowsWithDemandAndClosesItsGapWithoutDisinvesting(): void
+    {
+        self::assertEqualsWithDelta(0.04, MathUtility::flexibleAcceleratorGrowth(0.04, 0.0, 0.062), 1e-12);
+        self::assertEqualsWithDelta(0.04 + (0.062 * log(1.5)), MathUtility::flexibleAcceleratorGrowth(0.04, log(1.5), 0.062), 1e-12);
+        self::assertEqualsWithDelta(0.04 - (0.062 * 0.5), MathUtility::flexibleAcceleratorGrowth(0.04, -0.5, 0.062), 1e-12);
+        self::assertSame(0.0, MathUtility::flexibleAcceleratorGrowth(0.04, -1.0, 0.062), 'an overbuilt firm stops building; it does not sell plant');
+    }
+
     /** What a level compounds is the integral of the faded rate: the closed form matches a fine Riemann sum. */
     public function testTheFadedExcessIntegralIsTheSumOfTheFadedRate(): void
     {

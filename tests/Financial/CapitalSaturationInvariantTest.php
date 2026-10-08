@@ -81,9 +81,11 @@ final class CapitalSaturationInvariantTest extends TestCase
         );
     }
 
-    private function macro(float $nominalGdpIndex): MacroStateDTO
+    /** The run's clock moves with the quarters, so a sector's secular excess fades as it does in the simulation. */
+    private function macro(float $nominalGdpIndex, float $years): MacroStateDTO
     {
         return new MacroStateDTO(
+            totalTime: $years,
             outputGapEma: 0.0,
             inflationEma: 0.02,
             policyRate: 0.04,
@@ -175,7 +177,7 @@ final class CapitalSaturationInvariantTest extends TestCase
 
         for ($quarter = 1; $quarter <= self::YEARS * 4; $quarter++) {
             $gdp = pow(1.0 + self::NOMINAL_GDP_GROWTH, ($quarter - 1) / 4.0);
-            $engine->calculate($stock, $this->macro($gdp), (($quarter - 1) * $ticksPerQuarter) + $reportingTick, self::TICKS_PER_YEAR);
+            $engine->calculate($stock, $this->macro($gdp, ($quarter - 1) / 4.0), (($quarter - 1) * $ticksPerQuarter) + $reportingTick, self::TICKS_PER_YEAR);
 
             // Marked to a plain earnings multiple: with no market engine a frozen price reads as a permanent
             // bubble and the secondary-offering path fires every quarter.

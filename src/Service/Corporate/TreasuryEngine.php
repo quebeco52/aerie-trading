@@ -291,6 +291,12 @@ class TreasuryEngine
             // Max 25% of operations per quarter (Quarterly Flow Limit)
             $trueExpansionCapacity = min($trueExpansionCapacity, $liveInvestedCapital * 0.25);
 
+            // Pecking order (Myers & Majluf 1984): a firm borrows to fund plant it has chosen to build, and only
+            // for the part its spare cash cannot meet; headroom on its own is not a reason to build.
+            if ($ctx->expansionBudget !== null && !$isUnderLeveragedForDebt) {
+                $trueExpansionCapacity = min($trueExpansionCapacity, max(0.0, $ctx->expansionBudget - $excessCash));
+            }
+
             if ($trueExpansionCapacity > 0) {
                 $rawSpread = max(0.0, $marginalReturn - $hurdleRate);
                 $spreadMultiplier = min(1.0, $rawSpread * 10.0);
@@ -412,6 +418,13 @@ class TreasuryEngine
 
             if ($marginalReturn <= 0.0 && !$forcedExpansion) {
                 $expansionSpend = 0.0;
+            }
+
+            // No more plant than demand calls for, however it is funded: what the accelerator left after the
+            // earnings engine's own growth spend. Cash it does not need stays for distribution or paydown.
+            if ($ctx->expansionBudget !== null) {
+                $expansionSpend = min($expansionSpend, $ctx->expansionBudget);
+                $ctx->expansionBudget -= max(0.0, $expansionSpend);
             }
 
             if ($expansionSpend > 0) {

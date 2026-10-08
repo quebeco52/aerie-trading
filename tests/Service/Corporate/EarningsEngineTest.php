@@ -10,6 +10,7 @@ use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use App\Service\Model\Sector\CommercialBankBusinessModel;
 use PHPUnit\Framework\TestCase;
 use App\Data\LifecycleStage;
+use App\Data\Sectors;
 use App\Entity\Stock;
 use App\DTO\EarningsSimulationContext;
 use App\DTO\MacroStateDTO;
@@ -123,14 +124,18 @@ class EarningsEngineTest extends TestCase
         $this->assertGreaterThan($control['revenue'] * (1.0 - FinancialConstants::MAX_INDUSTRY_PRICE_RESPONSE), $overbuilt['revenue'], 'bounded by the per-firm response cap');
     }
 
-    public function testADominantFirmReinvestsAtTrendButNotToTakeShareItWouldHaveToSpoilItsPriceFor(): void
+    /**
+     * Growth plant follows demand, not the reinvestment rate or how small the firm looks next to its market:
+     * a price-taker at half a percent of a $10T market and a firm spanning forty percent of a $125B one, both
+     * set to reinvest far past trend, grow their plant alike. Before the flexible accelerator the price-taker
+     * compounded at its full reinvestment rate, since nothing it built could move a price.
+     */
+    public function testGrowthPlantFollowsDemandNotHowSmallTheFirmLooksInItsMarket(): void
     {
-        // Same firm twice, differing only in how much of its market it already spans. Reinvestment is set
-        // high enough that the planned growth spend runs well past trend for both.
         $capitalGrowth = function (string $samRatio): float {
             mt_srand(5);
             $this->mathUtility = new MathUtility();
-            $engine = $this->buildEngine($this->createStub(EventDispatcherInterface::class));
+            $engine = $this->buildEngine($this->createStub(EventDispatcherInterface::class), new IndustryShareLedger(new InMemoryIndustryShareStore()));
             $stock = $this->buildMatureIndustrial('GROW');
             $stock->setSamRatio($samRatio);
             $stock->setCapexRatio('0.90');
@@ -138,25 +143,69 @@ class EarningsEngineTest extends TestCase
             $ticksPerYear = 252;
 
             $engine->calculate($stock, $macro, EarningsEngine::resolveReportingTick('GROW', $ticksPerYear), $ticksPerYear);
-            $opening = $stock->getInvestedCapital();
+            $opening = $stock->getNetPpe();
+            $this->assertGreaterThan(0.0, $opening, 'the first report seeds the plant ledger');
             for ($quarter = 1; $quarter <= 8; $quarter++) {
                 $engine->calculate($stock, $macro, ($quarter * 63) + EarningsEngine::resolveReportingTick('GROW', $ticksPerYear), $ticksPerYear);
             }
 
-            return $stock->getInvestedCapital() / $opening;
+            return $stock->getNetPpe() / $opening;
         };
 
-        // Half a percent of a $10T market: a price-taker, whose build moves no price.
         $priceTaker = $capitalGrowth('10.0');
-        // Forty-odd percent of a $125B market, under the saturation line: every unit it adds cuts the price
-        // on everything it already sells, and the share-taking return fails the hurdle.
         $dominant = $capitalGrowth('0.125');
 
-        $this->assertGreaterThan(1.0, $dominant, 'the dominant firm still reinvests to grow with its market');
-        $this->assertLessThan($priceTaker, $dominant, 'but it no longer builds past trend to take share');
-        // Two years at trend (the sector\'s secular real growth plus inflation) with working capital riding
-        // revenue: nowhere near the price-taker\'s compounding at the full reinvestment rate.
-        $this->assertLessThan($priceTaker - 0.05, $dominant);
+        // Two years of the sector's nominal demand growth (its secular rate plus 2% inflation), with a point of
+        // slack for replacement-cost maintenance; reinvesting at the full rate instead compounds to ~15%.
+        $demandGrowth = Sectors::strategyFor('Auto Manufacturers')->getFadedSecularGrowthRate(new Stock(), 0.0) + 0.02;
+
+        $this->assertGreaterThan(1.0, $priceTaker, 'the firm still grows with its market');
+        $this->assertLessThan(exp(2.0 * $demandGrowth) + 0.01, $priceTaker, 'plant grows with demand, not at the reinvestment rate');
+        $this->assertEqualsWithDelta($dominant, $priceTaker, 0.01, 'a small share of a large market is no licence to build past demand');
+    }
+
+    /**
+     * The error-correction half of the accelerator: a firm whose installed plant has fallen behind what its share
+     * of trend demand calls for builds faster than the same firm sitting on its anchor, and closes the gap.
+     */
+    public function testAFirmBehindItsShareOfTrendDemandBuildsFasterThanOneOnIt(): void
+    {
+        $capitalGrowth = function (float $anchorOverCapacity): float {
+            mt_srand(5);
+            $this->mathUtility = new MathUtility();
+            $ledger = new IndustryShareLedger(new InMemoryIndustryShareStore());
+            $engine = $this->buildEngine($this->createStub(EventDispatcherInterface::class), $ledger);
+            $stock = $this->buildMatureIndustrial('BHND');
+            $stock->setCapexRatio('0.90');
+            $macro = new MacroStateDTO(corporateTaxRate: 0.21, policyRateEma: 0.04, yield5yEma: 0.045, inflationEma: 0.02);
+            $ticksPerYear = 252;
+
+            // Strike the anchor before the first report, at the plant the firm's share of demand calls for.
+            $ledger->resolveIndustryCapacityRatio(
+                $stock,
+                (float) $stock->getTotalRevenue() * $anchorOverCapacity,
+                0.05,
+                IndustryShareLedger::trendNominalGdp($macro),
+                0.0,
+                0.0,
+                0,
+                $ticksPerYear
+            );
+
+            $engine->calculate($stock, $macro, EarningsEngine::resolveReportingTick('BHND', $ticksPerYear), $ticksPerYear);
+            $opening = $stock->getNetPpe();
+            $this->assertGreaterThan(0.0, $opening, 'the first report seeds the plant ledger');
+            for ($quarter = 1; $quarter <= 8; $quarter++) {
+                $engine->calculate($stock, $macro, ($quarter * 63) + EarningsEngine::resolveReportingTick('BHND', $ticksPerYear), $ticksPerYear);
+            }
+
+            return $stock->getNetPpe() / $opening;
+        };
+
+        $onAnchor = $capitalGrowth(1.0);
+        $behind = $capitalGrowth(3.0);
+
+        $this->assertGreaterThan($onAnchor, $behind, 'a firm short of the plant its demand calls for builds toward it');
     }
 
     public function testASectorWideGoodQuarterIsNotBookedAsShareTakenFromRivals(): void

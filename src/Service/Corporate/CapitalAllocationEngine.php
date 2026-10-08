@@ -51,7 +51,8 @@ class CapitalAllocationEngine
         MacroStateDTO $macroState,
         float $actualTotalNetIncome = 0.0,
         float $stockCompensation = 0.0,
-        ?float $openingCapitalRatio = null
+        ?float $openingCapitalRatio = null,
+        ?float $expansionBudget = null
     ): array {
         $ctx = new CapitalAllocationContext(
             $stock,
@@ -61,7 +62,8 @@ class CapitalAllocationEngine
             $currentPrice,
             $sharesOutstanding,
             $actualTotalNetIncome,
-            $stockCompensation
+            $stockCompensation,
+            $expansionBudget
         );
         $ctx->openingCapitalRatio = $openingCapitalRatio;
 

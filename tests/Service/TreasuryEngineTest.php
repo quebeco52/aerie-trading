@@ -1106,6 +1106,86 @@ class TreasuryEngineTest extends TestCase
         return $stock;
     }
 
+    /**
+     * Pecking order (Myers & Majluf 1984): an operating company borrows for plant it has chosen to build, and only
+     * the part its spare cash cannot fund. The same balance sheet with headroom and a return well over its hurdle
+     * borrows when no plant budget applies, and borrows nothing once demand has been met.
+     */
+    public function testAFirmBorrowsForExpansionOnlyWhatItsPlantBudgetLeavesUnfunded(): void
+    {
+        $borrow = function (?float $expansionBudget): float {
+            mt_srand(3);
+            $stock = new Stock();
+            $stock->setTicker('PECK');
+            $stock->setTotalEquity('1000000000.00');
+            $stock->setWholesaleDebt('200000000.00');
+            $stock->setCorporateTreasury('300000000.00');
+
+            $ctx = $this->createAllocationContext($stock, stockCompensation: 0.0);
+            $ctx->debtActionTaken = false;
+            $ctx->expansionBudget = $expansionBudget;
+
+            $this->corporateMetrics->method('calculateLiveInvestedCapital')->willReturn(1_000_000_000.0);
+            $this->corporateMetrics->method('calculateMarketSaturationPenalty')->willReturn(0.0);
+            $this->corporateMetrics->method('calculateMarginalReturn')->willReturn(0.40);
+
+            $issued = 0.0;
+            $debtEngine = $this->createStub(DebtEngine::class);
+            $debtEngine->method('rollMaturities')->willReturn(new MaturityRollDTO());
+            $debtEngine->method('issueDebt')->willReturnCallback(static function (Stock $issuer, float $amount) use (&$issued): void {
+                $issued += $amount;
+            });
+            (new TreasuryEngine($this->corporateMetrics, $debtEngine, $this->createStub(CapExEngine::class), $this->mathUtility))->executeCorporateStrategy($ctx);
+
+            return $issued;
+        };
+
+        $this->assertGreaterThan(0.0, $borrow(null), 'The fixture only means anything while the unbudgeted firm borrows.');
+        $this->assertSame(0.0, $borrow(0.0), 'Headroom alone is not a reason to borrow.');
+    }
+
+    /**
+     * However it is funded, organic plant stops at what the flexible accelerator leaves after the earnings
+     * engine's own growth spend: spare cash above it stays for distribution, and borrowing taken this quarter
+     * no longer forces the proceeds into plant.
+     */
+    public function testOrganicCapexStopsAtThePlantBudgetEvenWhenDebtWasRaised(): void
+    {
+        $deploy = function (?float $expansionBudget, bool $debtRaised): CapitalAllocationContext {
+            mt_srand(7);
+            $stock = new Stock();
+            $stock->setTicker('ACCL');
+            $stock->setTotalEquity('1000000000.00');
+            $stock->setCorporateTreasury('200000000.00');
+
+            $ctx = $this->createAllocationContext($stock, stockCompensation: 0.0);
+            $ctx->newTreasury = 200_000_000.0;
+            $ctx->debtActionTaken = $debtRaised;
+            $ctx->debtIssued = $debtRaised ? 100_000_000.0 : 0.0;
+            $ctx->expansionBudget = $expansionBudget;
+            $ctx->health = new DebtHealthDTO(
+                grossCost: 0.05, effectiveCost: 0.05, cashYield: 0.04, isNegativeCarry: false, isSevereNegativeCarry: false,
+                interestCoverage: 15.0, wantsToPaydownDebt: false, canIssueDebt: false, debtTolerance: 1.0, wacc: 0.30,
+                costOfEquity: 0.32, leveredBeta: 1.0, rawMetrics: $ctx->health->rawMetrics, isLiquidityCrisis: false,
+                isLiquidityWarning: false, isUnderLeveraged: false
+            );
+
+            $this->corporateMetrics->method('calculateLiveInvestedCapital')->willReturn(1_000_000_000.0);
+            $this->corporateMetrics->method('calculateMarketSaturationPenalty')->willReturn(0.0);
+            $this->corporateMetrics->method('calculateMarginalReturn')->willReturn(0.40);
+
+            (new TreasuryEngine($this->corporateMetrics, $this->debtEngine, $this->createStub(CapExEngine::class), $this->mathUtility))->executeCorporateStrategy($ctx);
+
+            return $ctx;
+        };
+
+        $budget = 5_000_000.0;
+        $this->assertGreaterThan($budget, $deploy(null, false)->organicCapex, 'The fixture only means anything while the unbudgeted firm spends past the budget.');
+        $this->assertEqualsWithDelta($budget, $deploy($budget, false)->organicCapex, 1e-6, 'Cash-funded plant stops at the budget.');
+        $this->assertGreaterThan(0.0, $deploy(null, true)->organicCapex, 'Borrowing used to force the proceeds into plant.');
+        $this->assertEqualsWithDelta(0.0, $deploy(0.0, true)->organicCapex, 1e-9, 'With demand met, borrowed cash builds nothing.');
+    }
+
     private function createAllocationContext(Stock $stock, float $stockCompensation, float $currentPrice = 50.0): CapitalAllocationContext
     {
         $macro = MacroStateDTO::fromArray([

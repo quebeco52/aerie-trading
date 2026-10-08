@@ -1130,6 +1130,17 @@ class MathUtility
     }
 
     /**
+     * Growth of the capital stock a firm plans, per year: the growth of the demand its capital serves plus a
+     * share of the log gap between the capital that demand implies and the capital installed (the flexible
+     * accelerator, Chenery 1952 and Koyck 1954, in error-correction form). Never negative: plant is not sold
+     * back to fund a shortfall in demand, it is left to depreciate (Abel & Eberly 1994).
+     */
+    public static function flexibleAcceleratorGrowth(float $demandGrowth, float $logCapitalGap, float $adjustmentSpeed): float
+    {
+        return max(0.0, $demandGrowth + ($adjustmentSpeed * $logCapitalGap));
+    }
+
+    /**
      * Return on equity implied by a return on invested capital and the debt financing the rest of it:
      * ROE = ROIC + (D/E)(ROIC - kd(1 - t)), the leverage identity of Modigliani & Miller (1958, Proposition II
      * in accounting returns). Equity at or below zero has no ratio to lever by and returns ROIC unlevered.

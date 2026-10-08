@@ -225,6 +225,26 @@ class IndustryShareLedger
     }
 
     /**
+     * The log gap between the plant this firm's share of trend demand calls for and the plant it has installed:
+     * positive when it has fallen behind its market, negative when it has built ahead of it. Its anchored share
+     * moves only with the capacity a deal buys or sells, so a firm grows past its market by acquisition and not
+     * by building into demand that is not there. Reads only. Null before the ledger has anchored the firm.
+     */
+    public function resolveTrendCapacityGap(Stock $stock, MacroStateDTO $macroState, float $secularExcessGrowth): ?float
+    {
+        $own = $this->readOwnRecord($stock);
+        $anchorShare = (float) ($own['anchor_capacity_share'] ?? 0.0);
+        $capacity = (float) ($own['capacity'] ?? 0.0);
+        if ($own === null || $anchorShare <= 0.0 || $capacity <= 0.0) {
+            return null;
+        }
+
+        $growth = self::trendNominalGdp($macroState) * exp(MathUtility::fadedExcessIntegral($secularExcessGrowth, (float) $own['anchor_time'], $macroState->totalTime, FinancialConstants::SECULAR_EXCESS_HALF_LIFE_YEARS));
+
+        return log($anchorShare * $growth / $capacity);
+    }
+
+    /**
      * Trend nominal GDP the demand anchor rides on: potential output times the price level, with no output
      * gap. The cycle already reaches a firm's volume through the demand shift and would be counted twice here.
      */
