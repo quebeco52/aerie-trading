@@ -45,17 +45,26 @@ function lineDataset(label, data, color, extra = {}) {
 }
 
 /**
- * A weight against its policy and band: the band is two edges filled between, the policy a dashed reference line.
- * The lower edge is drawn but left out of the legend and the tooltip, which name the band once.
+ * A weight against its policy and band as each stood that quarter: the band is two edges filled between, the policy a
+ * dashed reference line that steps when a new head sets a new mix. The lower edge is drawn but left out of the legend
+ * and the tooltip, which name the band once. A quarter with no recorded policy leaves a gap.
+ *
+ * @param {Array<{policy: number, band: number}|null>} history the policy and band at each quarter drawn
  */
-function bandDatasets(weightLabel, weightData, policy, band, color, fillColor) {
-    const n = weightData.length;
+function bandDatasets(weightLabel, weightData, history, color, fillColor) {
+    const edge = (sign) => history.map(h => (h ? (h.policy + sign * h.band) * 100 : null));
+    const step = { stepped: 'middle', tension: 0 };
     return [
         lineDataset(weightLabel, weightData, color),
-        lineDataset('Policy', Array(n).fill(policy * 100), REFERENCE_COLOR, { borderDash: [5, 4], borderWidth: 1.5, pointRadius: 0, tension: 0 }),
-        lineDataset('Band', Array(n).fill((policy + band) * 100), fillColor, { borderWidth: 0, pointRadius: 0, pointHoverRadius: 0, tension: 0, fill: '+1', backgroundColor: fillColor, isBandEdge: true }),
-        lineDataset('Band lower', Array(n).fill((policy - band) * 100), fillColor, { borderWidth: 0, pointRadius: 0, pointHoverRadius: 0, tension: 0, isBandEdge: true, hideFromLegend: true })
+        lineDataset('Policy', history.map(h => (h ? h.policy * 100 : null)), REFERENCE_COLOR, { borderDash: [5, 4], borderWidth: 1.5, pointRadius: 0, ...step }),
+        lineDataset('Band', edge(1), fillColor, { borderWidth: 0, pointRadius: 0, pointHoverRadius: 0, fill: '+1', backgroundColor: fillColor, isBandEdge: true, ...step }),
+        lineDataset('Band lower', edge(-1), fillColor, { borderWidth: 0, pointRadius: 0, pointHoverRadius: 0, isBandEdge: true, hideFromLegend: true, ...step })
     ];
+}
+
+/** The quarter each row closes, as the server dates it, or how many quarters back it sits. */
+function quarterLabels(rows) {
+    return rows.map((row, i) => row.quarter_label ?? (i === rows.length - 1 ? 'Now' : `-${rows.length - i - 1}Q`));
 }
 
 /** Shared chart options; `index` plots a level (a return index) rather than a percentage. */
@@ -150,10 +159,11 @@ export function annualisedReturn(history, now, key, lookback = null) {
  * Draws the fund's quarterly history from /api/macro-reports.
  *
  * Quarters before the fund opened carry a zero size and are left out, so the history starts at inception. The policy
- * weights and bands are the fund's own, set once at inception, and come from the page rather than being recomputed.
+ * weights and bands at each quarter come from the page, keyed by the quarter's total_time, rather than being
+ * recomputed here.
  *
  * @param {Array<Object>} reports  macro_report rows in chronological order
- * @param {{domesticPolicy: number, domesticBand: number, equityPolicy: number, equityBand: number}} bands
+ * @param {Object<string, {domesticPolicy: number, domesticBand: number, equityPolicy: number, equityBand: number}>} bands
  * @returns {number} the number of quarters drawn
  */
 export function renderReserveCharts(reports, bands) {
@@ -162,10 +172,10 @@ export function renderReserveCharts(reports, bands) {
     const rows = reports.filter(r => parseFloat(r.sovereign_fund_to_gdp ?? 0) > 0);
     if (rows.length === 0) return 0;
 
-    const labels = rows.map((_, i) => {
-        const back = rows.length - i - 1;
-        return back === 0 ? 'Now' : `-${back}Q`;
-    });
+    const labels = quarterLabels(rows);
+    const policyAt = rows.map(r => bands?.[r.total_time] ?? null);
+    const domesticHistory = policyAt.map(p => (p ? { policy: p.domesticPolicy, band: p.domesticBand } : null));
+    const equityHistory = policyAt.map(p => (p ? { policy: p.equityPolicy, band: p.equityBand } : null));
 
     const size = rows.map(r => pct(r, 'sovereign_fund_to_gdp'));
     const weight = rows.map(r => pct(r, 'sovereign_fund_domestic_weight'));
@@ -179,8 +189,8 @@ export function renderReserveCharts(reports, bands) {
     });
 
     draw('reserveSizeChart', [lineDataset('Fund size', size, THEME_COLORS.primary)], labels, chartOptions({ legend: false }));
-    draw('reserveWeightChart', bandDatasets('District weight', weight, bands.domesticPolicy, bands.domesticBand, SLEEVE_COLORS.district, withAlpha(SLEEVE_COLORS.district, 0.15)), labels, chartOptions());
-    draw('reserveEquityChart', bandDatasets('Equity share', equity, bands.equityPolicy, bands.equityBand, SLEEVE_COLORS.equities, withAlpha(SLEEVE_COLORS.equities, 0.15)), labels, chartOptions());
+    draw('reserveWeightChart', bandDatasets('District weight', weight, domesticHistory, SLEEVE_COLORS.district, withAlpha(SLEEVE_COLORS.district, 0.15)), labels, chartOptions());
+    draw('reserveEquityChart', bandDatasets('Equity share', equity, equityHistory, SLEEVE_COLORS.equities, withAlpha(SLEEVE_COLORS.equities, 0.15)), labels, chartOptions());
     draw('reserveFlowsChart', [
         lineDataset('Budget draw', drawToGdp, FLOW_COLORS.draw),
         lineDataset('Stabilisation', stabilisation, FLOW_COLORS.stabilisation),

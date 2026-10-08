@@ -38,7 +38,8 @@ final class RegulatorPageBuilder
                 }
             }
         }
-        $required = $politics->bankCapitalRequirement + $macro->countercyclicalBufferRateEma;
+        // What a bank must hold to pay out: the requirement plus the buffer in force, as the macro and each bank's payout stop read it.
+        $required = $politics->bankCapitalRequirement + $macro->countercyclicalBufferRate;
 
         $caps = array_values(array_filter(FinancialRegulator::OBSERVED_LTV_CAPS, static fn(?float $cap): bool => $cap !== null));
 

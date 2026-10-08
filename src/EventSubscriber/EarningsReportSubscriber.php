@@ -53,6 +53,7 @@ class EarningsReportSubscriber implements EventSubscriberInterface
         $report = new \App\Entity\CorporateReport();
         $report->setStock($stock);
         $report->setRecordedAt(new \DateTime());
+        $report->setTotalTime(\App\Service\Math\MathUtility::formatDecimal($ctx->macroState->totalTime, 6));
 
         $report->setRevenue(\App\Service\Math\MathUtility::formatDecimal($ctx->actualRevenue, 4));
         $report->setNetIncome(\App\Service\Math\MathUtility::formatDecimal($ctx->reportedActualNetIncome, 4));
@@ -62,6 +63,10 @@ class EarningsReportSubscriber implements EventSubscriberInterface
         $report->setEbit(\App\Service\Math\MathUtility::formatDecimal($ctx->ebit, 4));
         $report->setPreTaxIncome(\App\Service\Math\MathUtility::formatDecimal($ctx->preTaxIncome, 4));
         $report->setTaxPaid(\App\Service\Math\MathUtility::formatDecimal($ctx->taxPaid, 4));
+        // The consensus the surprise was struck against, and the EPS it was struck on (EarningsEngine::calculateEPSAndSurprise()).
+        $report->setReportedEps(\App\Service\Math\MathUtility::formatDecimal($ctx->actualQuarterlyEps, 6));
+        $report->setConsensusEps(\App\Service\Math\MathUtility::formatDecimal($ctx->expectedQuarterlyEps, 6));
+        $report->setConsensusRevenue(\App\Service\Math\MathUtility::formatDecimal($ctx->analystExpectedRevenue, 4));
 
         $report->setInterestExpense(\App\Service\Math\MathUtility::formatDecimal($ctx->debtMetrics->interestExpense / 4.0, 4)); // Quarterly report
         $report->setInterestIncome(\App\Service\Math\MathUtility::formatDecimal($ctx->quarterlyInterestIncome, 4));

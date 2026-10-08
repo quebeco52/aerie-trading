@@ -6,6 +6,7 @@ namespace App\Service\Model\Sector;
 
 use App\Data\InputOutputExposures;
 use App\Service\Corporate\EarningsEngine;
+use App\DTO\ModelParameters;
 use App\DTO\StreamContext;
 use App\Service\Model\BusinessModelInterface;
 
@@ -183,12 +184,7 @@ class UtilityBusinessModel extends StandardCorporateBusinessModel
 
     protected function calculateSectorPhysics(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, MacroStateDTO $macroState, MathUtility $mathUtility): SectorPhysicsResult
     {
-        $params = $this->resolveModelParameters($stock, [
-            ModelParam::RegulatedBaseWeight->value       => self::REGULATED_BASE_WEIGHT,
-            ModelParam::UnregulatedMerchantWeight->value => self::UNREGULATED_MERCHANT_WEIGHT,
-            ModelParam::MerchantPowerShare->value        => self::MERCHANT_POWER_SHARE,
-            ModelParam::MerchantGasFleetShare->value     => self::MERCHANT_GAS_FLEET_SHARE,
-        ]);
+        $params = $this->resolveRevenueMixParameters($stock);
 
         $regulatedWeight   = $params[ModelParam::RegulatedBaseWeight];
         $unregulatedWeight = $params[ModelParam::UnregulatedMerchantWeight];
@@ -306,6 +302,30 @@ class UtilityBusinessModel extends StandardCorporateBusinessModel
                 'power_price_index' => $merchantPriceRelative,
             ],
         );
+    }
+
+    /**
+     * Share of revenue at baseline prices sold at the wholesale power price: the merchant stream's target share of the
+     * mix times the share of its output sold into the market.
+     */
+    public function resolveWholesalePowerRevenueShare(Stock $stock): float
+    {
+        $params = $this->resolveRevenueMixParameters($stock);
+        $merchant = max(0.0, $params[ModelParam::UnregulatedMerchantWeight]);
+        $total = max(0.0, $params[ModelParam::RegulatedBaseWeight]) + $merchant;
+
+        return $total > 0.0 ? ($merchant / $total) * max(0.0, min(1.0, $params[ModelParam::MerchantPowerShare])) : 0.0;
+    }
+
+    /** Revenue mix and merchant fleet parameters, ticker override first. */
+    private function resolveRevenueMixParameters(Stock $stock): ModelParameters
+    {
+        return $this->resolveModelParameters($stock, [
+            ModelParam::RegulatedBaseWeight->value       => self::REGULATED_BASE_WEIGHT,
+            ModelParam::UnregulatedMerchantWeight->value => self::UNREGULATED_MERCHANT_WEIGHT,
+            ModelParam::MerchantPowerShare->value        => self::MERCHANT_POWER_SHARE,
+            ModelParam::MerchantGasFleetShare->value     => self::MERCHANT_GAS_FLEET_SHARE,
+        ]);
     }
 
     /**

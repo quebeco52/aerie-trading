@@ -1,7 +1,7 @@
 import { setupChartDefaults } from '../utils/chart-config.js';
 import { showLoading, showError, hideStatus } from '../utils/fetch-status.js';
 import { setupChartGridFilters, setupExpandableCards } from '../utils/chart-grid.js';
-import { updateMacroIndicators } from '../stock/stats-updater.js';
+import { updateEconomyVitals } from '../economy/macro-vitals.js';
 import { updateMacroCharts, resizeMacroCharts, destroyMacroCharts, setMacroTimeframe } from '../stock/macro-charts.js';
 import { onPageLoad } from '../utils/page-init.js';
 
@@ -49,7 +49,7 @@ function initEconomyPage() {
     marketFrameHandler = (event) => {
         const payload = event.detail;
         if (payload && (payload.macro || payload.economic_cycle)) {
-            updateMacroIndicators(payload);
+            updateEconomyVitals(payload);
         }
     };
     document.addEventListener('market:frame', marketFrameHandler);

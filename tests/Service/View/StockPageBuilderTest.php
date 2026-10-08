@@ -15,6 +15,7 @@ use App\Service\Market\Chart\PriceChangeFeed;
 use App\Service\Market\Trading\SecuritiesLendingDesk;
 use App\Service\Math\MathUtility;
 use App\Service\View\AnchorPortfolioBuilder;
+use App\Service\View\BiotechPipelineBuilder;
 use App\Service\View\CompanySnapshotBuilder;
 use App\Service\View\CreditHealthBuilder;
 use App\Service\View\FinancialSummaryBuilder;
@@ -44,12 +45,12 @@ class StockPageBuilderTest extends TestCase
      */
     private const TEMPLATE_KEYS = [
         'advShares', 'allAssets', 'analystTargets', 'anchorPortfolio', 'asset', 'availableToBorrow',
-        'borrowFee', 'businessModel', 'capital', 'capitalThresholds', 'changePercent', 'components', 'corporateBonds', 'creditHealth', 'dividendYield', 'economic_cycle',
-        'events', 'financialSummary', 'generalInfo', 'halfSpread', 'indexFacts', 'industry', 'investedCapital', 'isEtf',
-        'isFinancial', 'isInsurer', 'lifecycleStage', 'lifecycleStages', 'macro', 'management', 'marketCap',
-        'marketShare', 'netAssetValue', 'openOrders', 'optionDealerGamma', 'optionDealerGammaPerPercent',
+        'borrowFee', 'borrowWarnings', 'businessModel', 'capital', 'capitalThresholds', 'changePercent', 'components', 'corporateBonds', 'creditHealth', 'dividendYield',
+        'events', 'financialSummary', 'generalInfo', 'halfSpread', 'indexFacts', 'industry', 'isEtf',
+        'isFinancial', 'isInsurer', 'kpiSeries', 'lifecycleStage', 'lifecycleStages', 'macro', 'management', 'marketCap',
+        'marketShare', 'netAssetValue', 'nextReport', 'openOrders', 'optionDealerGamma', 'optionDealerGammaPerPercent',
         'optionExpiries', 'optionMultiplier', 'optionOpenInterest', 'optionsListed', 'optionsReason',
-        'peRatio', 'peers', 'pieData', 'pieLabels', 'quote', 'sharesMap', 'shortUtilization', 'strategicStake', 'targetPE',
+        'peRatio', 'peers', 'pieData', 'pieLabels', 'pipeline', 'sharesMap', 'shortInterest', 'shortUtilization', 'strategicStake',
         'ticksPerYear', 'userAvgCost', 'userDividendIncome', 'userQuantity', 'userTrades',
         'userUnrealizedPnL', 'userUnrealizedPnLPercent'
     ];
@@ -67,10 +68,10 @@ class StockPageBuilderTest extends TestCase
         'userTrades' => [],
     ];
 
-    private function builder(?\App\Repository\BondRepository $bonds = null): StockPageBuilder
+    private function builder(?\App\Repository\BondRepository $bonds = null, ?\Redis $redis = null, float $totalTime = 0.0): StockPageBuilder
     {
         $macroStateProvider = $this->createMock(MacroStateProvider::class);
-        $macroStateProvider->method('liveState')->willReturn(new MacroStateDTO());
+        $macroStateProvider->method('liveState')->willReturn(new MacroStateDTO(totalTime: $totalTime));
 
         $companySnapshot = $this->createMock(CompanySnapshotBuilder::class);
         $companySnapshot->method('build')->willReturn([
@@ -79,8 +80,6 @@ class StockPageBuilderTest extends TestCase
             'businessModel' => 'standard_corporate',
             'marketCap' => 1000.0,
             'peRatio' => 12.5,
-            'targetPE' => 20.0,
-            'investedCapital' => 500.0,
             'lifecycleStage' => null,
             'dividendYield' => 0.01,
             'analystTargets' => ['consensus' => 110.0],
@@ -126,7 +125,9 @@ class StockPageBuilderTest extends TestCase
         $creditHealth = $this->createMock(CreditHealthBuilder::class);
         $creditHealth->method('build')->willReturn(['creditHealth' => null]);
         $financialSummary = $this->createMock(FinancialSummaryBuilder::class);
-        $financialSummary->method('build')->willReturn(['financialSummary' => []]);
+        $financialSummary->method('build')->willReturn(['financialSummary' => [], 'kpiSeries' => []]);
+        $biotechPipeline = $this->createMock(BiotechPipelineBuilder::class);
+        $biotechPipeline->method('build')->willReturn(['pipeline' => null]);
 
         return new StockPageBuilder(
             $macroStateProvider,
@@ -145,8 +146,10 @@ class StockPageBuilderTest extends TestCase
             $optionChain,
             $creditHealth,
             $financialSummary,
+            $biotechPipeline,
             self::TICKS_PER_YEAR,
             $bonds,
+            $redis,
         );
     }
 
@@ -285,5 +288,37 @@ class StockPageBuilderTest extends TestCase
         $this->assertCount(1, $payload['corporateBonds']);
         $this->assertSame('CB-LAKE-3Y', $payload['corporateBonds'][0]['ticker']);
         $this->assertSame(0.045, $payload['corporateBonds'][0]['couponRate']);
+    }
+
+    /** Short interest is stated as an exchange states it: a share of the float and days of volume to cover. */
+    public function testShortInterestIsReadAgainstTheFloatAndTheDailyVolume(): void
+    {
+        $stock = $this->stock();
+        $stock->setPublicFloatPercentage('0.8000');
+        $stock->setShortInterestShares('20000.00');
+
+        $payload = $this->builder()->build($stock, 'LAKE', null);
+        $adv = (new LiquidityEngine(new MathUtility()))->averageDailyVolume($stock);
+
+        $this->assertEqualsWithDelta(20_000.0 / 800_000.0, $payload['shortInterest']['floatShare'], 1e-12);
+        $this->assertEqualsWithDelta(20_000.0 / $adv, $payload['shortInterest']['daysToCover'], 1e-9);
+        $this->assertSame(\App\Service\Math\FinancialConstants::BUY_IN_UTILIZATION_THRESHOLD, $payload['borrowWarnings']['recallUtilization']);
+    }
+
+    /** The next results date comes off the reporting schedule; with no tick counter to read it is left off. */
+    public function testTheNextResultsAreDatedFromTheReportingSchedule(): void
+    {
+        $this->assertNull($this->builder()->build($this->stock(), 'LAKE', null)['nextReport']);
+
+        // The last tick of Year 2 Q2, on a clock that agrees with the counter: the next report is filed in Q3 and
+        // covers Q2.
+        $tick = self::TICKS_PER_YEAR + intdiv(self::TICKS_PER_YEAR, 2) - 1;
+        $redis = $this->createStub(\Redis::class);
+        $redis->method('get')->willReturn((string) $tick);
+        $next = $this->builder(null, $redis, $tick / self::TICKS_PER_YEAR)->build($this->stock(), 'LAKE', null)['nextReport'];
+
+        $this->assertIsArray($next);
+        $this->assertMatchesRegularExpression('/^\d{1,2} (Jul|Aug|Sep), Year 2$/', $next['dateline']);
+        $this->assertSame('Year 2 Q2', $next['quarter'], 'filed early in the quarter after the one it covers');
     }
 }

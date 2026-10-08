@@ -196,6 +196,16 @@ class EarningsEngine
     }
 
     /**
+     * Ticks since the ticker last reached its reporting tick, in [0, ticks per quarter): zero on the tick it reports.
+     */
+    public static function ticksSinceReportingTick(string $ticker, int $tickCount, int $ticksPerYear): int
+    {
+        $ticksPerQuarter = max(1, (int) ($ticksPerYear / 4));
+
+        return ((($tickCount % $ticksPerQuarter) - self::resolveReportingTick($ticker, $ticksPerYear)) % $ticksPerQuarter + $ticksPerQuarter) % $ticksPerQuarter;
+    }
+
+    /**
      * The tick at which management has closed the books far enough to know the quarter has gone wrong.
      */
     public static function resolvePreAnnouncementTick(string $ticker, int $ticksPerYear): int
@@ -313,11 +323,7 @@ class EarningsEngine
 
     private function checkReportingEligibility(Stock $stock, int $tickCount, int $ticksPerYear): bool
     {
-        $ticksPerQuarter = max(1, (int) ($ticksPerYear / 4));
-        $currentQuarterTick = $tickCount % $ticksPerQuarter;
-        $reportingTick = self::resolveReportingTick($stock->getTicker(), $ticksPerYear);
-
-        return $currentQuarterTick === $reportingTick;
+        return self::ticksSinceReportingTick($stock->getTicker(), $tickCount, $ticksPerYear) === 0;
     }
 
     private function initializeContext(EarningsSimulationContext $ctx): void

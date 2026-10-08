@@ -1464,6 +1464,56 @@ class CreditFiscalSubsystemTest extends TestCase
         $this->assertLessThan(0.01 * CreditFiscalSubsystem::MAX_CCYB, $state->countercyclicalBufferRate, 'A trading day closes under one percent of the decision.');
     }
 
+    public function testABufferCutTakesEffectAtOnce(): void
+    {
+        $subsystem = $this->quietSubsystem();
+        $state = $this->householdStateAtNeutralRates();
+        $state->countercyclicalBufferRate = CreditFiscalSubsystem::MAX_CCYB;
+        $state->creditToGdpGapEma = (CreditFiscalSubsystem::CCYB_GAP_FLOOR + CreditFiscalSubsystem::CCYB_GAP_CEILING) / 2.0;
+
+        $subsystem->calculateHouseholdCredit($state, 1.0 / 252.0);
+
+        $this->assertEqualsWithDelta(CreditFiscalSubsystem::MAX_CCYB / 2.0, $state->countercyclicalBufferRate, 1e-12, 'A rise phases in; a cut is in force the day it is made.');
+    }
+
+    public function testACrisisReleasesTheWholeBufferOnTheDay(): void
+    {
+        $math = new class extends MathUtility {
+            public function generateStandardNormal(): float { return 0.0; }
+            public function checkProbability(float $probability): bool { return true; }
+            public function calculateJumpDiffusion(float $lambda, float $jumpMean, float $jumpVol, float $dt): array
+            {
+                return ['multiplier' => 1.0, 'shock_pct' => null, 'exponent' => null];
+            }
+        };
+        $state = new MacroState();
+        $state->totalTime = 12.5;
+        $state->creditToGdpGapEma = CreditFiscalSubsystem::CCYB_GAP_CEILING + 0.02;
+        $state->countercyclicalBufferRate = CreditFiscalSubsystem::MAX_CCYB;
+
+        (new CreditFiscalSubsystem($math))->calculateCreditCrisisHazard($state, 1.0 / 3600.0);
+
+        $this->assertSame(0.0, $state->countercyclicalBufferRate, 'Banks may lend out of the buffer from the tick the crisis lands.');
+    }
+
+    public function testTheReleasedBufferIsHeldAtZeroForAYearThenRebuilds(): void
+    {
+        $subsystem = $this->quietSubsystem();
+        $state = $this->householdStateAtNeutralRates();
+        $state->totalTime = 20.0;
+        $state->lastCreditCrisisAt = 20.0 - (CreditFiscalSubsystem::CCYB_RELEASE_HOLD_YEARS - 0.01);
+        $state->creditToGdpGapEma = CreditFiscalSubsystem::CCYB_GAP_CEILING + 0.02;
+
+        $subsystem->calculateHouseholdCredit($state, 1.0 / 252.0);
+        $this->assertSame(0.0, $state->countercyclicalBufferRate, 'Inside the hold the boom still standing does not rebuild the buffer.');
+
+        $state->totalTime = $state->lastCreditCrisisAt + CreditFiscalSubsystem::CCYB_RELEASE_HOLD_YEARS + 0.01;
+        $state->creditToGdpGapEma = CreditFiscalSubsystem::CCYB_GAP_CEILING + 0.02;
+        $subsystem->calculateHouseholdCredit($state, 1.0 / 252.0);
+        $this->assertGreaterThan(0.0, $state->countercyclicalBufferRate, 'Past the hold the buffer builds again, phased in.');
+        $this->assertLessThan(0.01 * CreditFiscalSubsystem::MAX_CCYB, $state->countercyclicalBufferRate);
+    }
+
     public function testHouseholdsDeleverageOnlyPastTheWarningLine(): void
     {
         $subsystem = $this->quietSubsystem();

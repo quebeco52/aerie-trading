@@ -23,9 +23,11 @@ final class InsuranceFloatReserveInvariantTest extends TestCase
     private const QUARTERS = 4_000;
     private const QUARTERLY_PREMIUM = 10_000_000_000.0;
     private const MARGIN = 0.10;
-    /** Fixed share that puts the structural claims ratio (1 − margin)(1 − fixed) on the cost ratio the physics is handed. */
+    /** Fixed share that puts the structural variable cost ratio (1 − margin)(1 − fixed) on the cost ratio the physics is handed. */
     private const FIXED_COST_RATIO = 1.0 / 3.0;
     private const STRUCTURAL_COST_RATIO = 0.60;
+    /** The fixed costs that go with it: (1 − margin) × fixed share of a quarter's premium. */
+    private const FIXED_COSTS = 3.0e9;
 
     /** @return iterable<string, array{InsuranceBusinessModel}> */
     public static function carriers(): iterable
@@ -40,21 +42,19 @@ final class InsuranceFloatReserveInvariantTest extends TestCase
     {
         $math = MathUtility::ownStream(20261007);
         $macro = new MacroStateDTO(inflationEma: 0.02, policyRateEma: 0.03, yield10yEma: 0.04);
-        $momentum = [];
-        $stock = $this->carrier($momentum);
+        $stock = $this->carrier();
         $ratio = $model->resolveReserveToPremiumRatio($stock);
-        $runoffYears = $model->resolveReserveRunoffYears($stock);
-        $reserves = $ratio * self::QUARTERLY_PREMIUM * 4.0;
+        $stock->setCustomerDeposits((string) ($ratio * self::QUARTERLY_PREMIUM * 4.0));
 
         $sum = 0.0;
         $lowest = INF;
         for ($i = 0; $i < self::QUARTERS; $i++) {
-            $stock = $this->carrier($momentum);
-            $result = $model->computeActualFinancials($stock, self::QUARTERLY_PREMIUM, self::STRUCTURAL_COST_RATIO, 1.0e9, 0.0, $macro, $math);
-            $momentum = $result->streamZ;
+            $result = $model->computeActualFinancials($stock, self::QUARTERLY_PREMIUM, self::STRUCTURAL_COST_RATIO, self::FIXED_COSTS, 0.0, $macro, $math);
+            $stock->setEarningsMomentumZ($result->streamZ);
 
-            $reserves = $model->rollLossReserves($reserves, (float) $momentum[InsuranceBusinessModel::STATE_INCURRED_CLAIMS], $runoffYears)['reserves'];
-            $floatToPremium = $reserves / (self::QUARTERLY_PREMIUM * 4.0);
+            $state = ['treasury' => 0.0, 'customerDeposits' => (float) $stock->getCustomerDeposits(), 'wholesaleDebt' => 0.0, 'events' => []];
+            $model->processPassiveLiabilityGrowth($stock, $macro, $state, $math);
+            $floatToPremium = $state['customerDeposits'] / (self::QUARTERLY_PREMIUM * 4.0);
             $sum += $floatToPremium;
             $lowest = min($lowest, $floatToPremium);
         }
@@ -64,8 +64,7 @@ final class InsuranceFloatReserveInvariantTest extends TestCase
         $this->assertGreaterThan(0.75 * $ratio, $lowest, 'A benign run of quarters thins the float; it does not drain it.');
     }
 
-    /** @param array<string, float> $momentum */
-    private function carrier(array $momentum): Stock
+    private function carrier(): Stock
     {
         $stock = new Stock();
         $stock->setTicker('MEAN');
@@ -73,7 +72,6 @@ final class InsuranceFloatReserveInvariantTest extends TestCase
         $stock->setOperatingMargin((string) self::MARGIN);
         $stock->setFixedCostRatio(self::FIXED_COST_RATIO);
         $stock->setTotalEquity('200000000000');
-        $stock->setEarningsMomentumZ($momentum);
 
         return $stock;
     }

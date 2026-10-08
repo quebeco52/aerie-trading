@@ -5,6 +5,8 @@ namespace App\Controller;
 use App\Entity\Stock;
 use App\Repository\EtfRepository;
 use App\Repository\StockRepository;
+use App\Service\Macro\MacroStateProvider;
+use App\Service\View\ReportCalendar;
 use App\Service\View\StockPageBuilder;
 use App\Entity\Etf;
 use App\Entity\User;
@@ -223,7 +225,13 @@ class StockController extends AbstractController
      * API endpoint to retrieve sparse, quarterly fundamental data for overlays.
      */
     #[Route('/api/fundamentals', name: 'api_fundamentals')]
-    public function fundamentals(Request $request, EntityManagerInterface $entityManager): JsonResponse
+    public function fundamentals(
+        Request $request,
+        EntityManagerInterface $entityManager,
+        MacroStateProvider $macroStateProvider,
+        \Redis $redis,
+        #[\Symfony\Component\DependencyInjection\Attribute\Autowire('%app.ticks_per_year%')] int $ticksPerYear,
+    ): JsonResponse
     {
         $ticker = $request->query->get('ticker');
         if (!$ticker) return $this->json([]);
@@ -242,7 +250,21 @@ class StockController extends AbstractController
         $priceStmt = $conn->prepare('SELECT price FROM stock_history WHERE stock_id = :id AND recorded_at <= :date ORDER BY recorded_at DESC LIMIT 1');
         $priceStmt->bindValue('id', $stock->getId());
 
-        foreach ($results as &$row) {
+        // The quarter each report covers, from the time it was filed. A report filed before that was recorded is read
+        // off the reporting schedule; a delisted company stopped filing at some past quarter the schedule cannot
+        // place, so such reports go unlabelled and the charts count back instead.
+        $filingTimes = array_map(static fn (array $row): ?float => is_numeric($row['total_time'] ?? null) ? (float) $row['total_time'] : null, $results);
+        $countedBack = $stock->isBankrupt() || !in_array(null, $filingTimes, true) ? null : ReportCalendar::periodLabels(
+            (string) $stock->getTicker(),
+            (int) ($redis->get('simulation_tick_count') ?: 0),
+            $ticksPerYear,
+            $macroStateProvider->liveState()->totalTime,
+            count($results)
+        );
+        $periods = ReportCalendar::reportLabels($filingTimes, $countedBack);
+
+        foreach ($results as $index => &$row) {
+            $row['period'] = $periods[$index] ?? null;
             $row['current_price'] = $currentPrice;
             $priceStmt->bindValue('date', $row['recorded_at']);
             $priceResult = $priceStmt->executeQuery()->fetchOne();

@@ -53,13 +53,6 @@ class CompanySnapshotValuationTest extends TestCase
         return $bank;
     }
 
-    public function testTheTargetMultipleIsTheSectorsOwn(): void
-    {
-        $snapshot = $this->builder()->build($this->lender(), new MacroStateDTO());
-
-        $this->assertSame(11.0, $snapshot['targetPE']);
-    }
-
     /** The page's analyst targets are the market's own, drawn on the same path from the same inputs. */
     public function testThePageMarksTheAnalystsWhereTheMarketDoes(): void
     {

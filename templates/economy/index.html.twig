@@ -27,7 +27,8 @@
 				</p>
 			</div>
 
-			{# The readings the ticker publishes on every frame; stats-updater.js repaints them in place. #}
+			{# The readings the ticker publishes on every frame; economy/macro-vitals.js repaints them in place. Inflation is
+			   the quarter's annual rate, the same reading the charts below plot, not the instant's noisy one. #}
 			<dl class="grid grid-cols-2 sm:grid-cols-3 gap-x-8 gap-y-4 shrink-0">
 				<div>
 					<dt class="text-xs text-on-surface-variant">Economic cycle</dt>
@@ -35,7 +36,7 @@
 				</div>
 				<div>
 					<dt class="text-xs text-on-surface-variant">Inflation (CPI)</dt>
-					<dd class="mt-0.5 text-lg font-semibold font-mono tabular-nums text-on-surface" id="macro-inflation">{{ macro.inflation|pct(2) }}</dd>
+					<dd class="mt-0.5 text-lg font-semibold font-mono tabular-nums text-on-surface" id="macro-inflation">{{ macro.inflationEma|pct(2) }}</dd>
 				</div>
 				<div>
 					<dt class="text-xs text-on-surface-variant">Output gap</dt>
@@ -49,10 +50,10 @@
 					<dt class="text-xs text-on-surface-variant">10Y yield</dt>
 					<dd class="mt-0.5 text-lg font-semibold font-mono tabular-nums text-on-surface" id="macro-yield">{{ macro.yield10y|pct(2) }}</dd>
 				</div>
-				<div class="{{ macro.qeActive and macro.qeIntensity > 0.0005 ? '' : 'hidden' }}" id="qe-status-container">
+				<div class="{{ macro.qeActive ? '' : 'hidden' }}" id="qe-status-container">
 					<dt class="text-xs text-on-surface-variant">Asset purchases</dt>
 					<dd class="mt-0.5 text-lg font-semibold font-mono tabular-nums text-on-surface" id="macro-qe-status">
-						{%- if macro.qeActive and macro.qeIntensity > 0.0005 -%}
+						{%- if macro.qeActive -%}
 							&minus;{{ (macro.qeIntensity * 10000)|number_format(0) }} bps
 						{%- endif -%}
 					</dd>
@@ -75,13 +76,13 @@
 
 			<div class="flex flex-col xl:flex-row justify-between items-stretch xl:items-center gap-3">
 				<div class="flex items-center flex-wrap gap-1" id="macroCategoryPills" role="group" aria-label="Filter by topic">
-					<button type="button" class="macro-cat-btn seg-btn" aria-pressed="true" data-category="all">All <span class="ml-0.5 text-on-surface-faint tabular-nums">(27)</span></button>
+					<button type="button" class="macro-cat-btn seg-btn" aria-pressed="true" data-category="all">All <span class="ml-0.5 text-on-surface-faint tabular-nums">(30)</span></button>
 					<button type="button" class="macro-cat-btn seg-btn" aria-pressed="false" data-category="monetary">Rates and yields <span class="ml-0.5 text-on-surface-faint tabular-nums">(5)</span></button>
-					<button type="button" class="macro-cat-btn seg-btn" aria-pressed="false" data-category="inflation">Inflation and output <span class="ml-0.5 text-on-surface-faint tabular-nums">(4)</span></button>
-					<button type="button" class="macro-cat-btn seg-btn" aria-pressed="false" data-category="growth">Growth and labour <span class="ml-0.5 text-on-surface-faint tabular-nums">(5)</span></button>
+					<button type="button" class="macro-cat-btn seg-btn" aria-pressed="false" data-category="inflation">Inflation and output <span class="ml-0.5 text-on-surface-faint tabular-nums">(5)</span></button>
+					<button type="button" class="macro-cat-btn seg-btn" aria-pressed="false" data-category="growth">Growth and labour <span class="ml-0.5 text-on-surface-faint tabular-nums">(6)</span></button>
 					<button type="button" class="macro-cat-btn seg-btn" aria-pressed="false" data-category="credit">Credit and liquidity <span class="ml-0.5 text-on-surface-faint tabular-nums">(6)</span></button>
 					<button type="button" class="macro-cat-btn seg-btn" aria-pressed="false" data-category="assets">Property and commodities <span class="ml-0.5 text-on-surface-faint tabular-nums">(3)</span></button>
-					<button type="button" class="macro-cat-btn seg-btn" aria-pressed="false" data-category="public">Trade and public finance <span class="ml-0.5 text-on-surface-faint tabular-nums">(4)</span></button>
+					<button type="button" class="macro-cat-btn seg-btn" aria-pressed="false" data-category="public">Trade and public finance <span class="ml-0.5 text-on-surface-faint tabular-nums">(5)</span></button>
 				</div>
 
 				<div class="relative w-full xl:w-64">
@@ -172,7 +173,7 @@
 								</div>
 							</div>
 							<div class="chart-canvas-container h-80 md:h-85 w-full relative">
-								<canvas id="macroMortgageChart"></canvas>
+								<canvas id="macroMortgageChart" data-mortgage-spread="{{ constant('App\\Service\\Macro\\MacroEngine::RESIDENTIAL_MORTGAGE_SPREAD') }}"></canvas>
 							</div>
 							<p class="source-note">{{ source_line('credit-registry') }}</p>
 						</div>
@@ -181,7 +182,7 @@
 							<div class="flex items-start justify-between gap-4 mb-3">
 								<div class="min-w-0">
 									<h4 class="text-sm font-semibold text-on-surface">Central bank balance sheet</h4>
-									<p class="text-xs text-on-surface-variant mt-0.5">Asset holdings, indexed, and the pace of asset purchases (QE) or run-off (QT)</p>
+									<p class="text-xs text-on-surface-variant mt-0.5">The Monetary Authority's bond holdings, as the basis points they hold the 10-year yield down, and each quarter's purchases (QE) or run-off (QT)</p>
 								</div>
 								<div class="flex items-start gap-3 shrink-0">
 									<p class="hidden sm:block max-w-64 text-right text-xs font-mono font-semibold text-on-surface tabular-nums" id="hud-macroBalanceSheetChart">-</p>
@@ -224,7 +225,7 @@
 							<div class="flex items-start justify-between gap-4 mb-3">
 								<div class="min-w-0">
 									<h4 class="text-sm font-semibold text-on-surface">Inflation by component</h4>
-									<p class="text-xs text-on-surface-variant mt-0.5">Headline consumer and producer prices, with services, goods and food</p>
+									<p class="text-xs text-on-surface-variant mt-0.5">Headline consumer and producer prices, with core services and core goods</p>
 								</div>
 								<div class="flex items-start gap-3 shrink-0">
 									<p class="hidden sm:block max-w-64 text-right text-xs font-mono font-semibold text-on-surface tabular-nums" id="hud-macroSectoralInflationChart">-</p>
@@ -243,7 +244,7 @@
 							<div class="flex items-start justify-between gap-4 mb-3">
 								<div class="min-w-0">
 									<h4 class="text-sm font-semibold text-on-surface">Supply-side cost pressures</h4>
-									<p class="text-xs text-on-surface-variant mt-0.5">What food, energy and freight costs add to inflation, in basis points</p>
+									<p class="text-xs text-on-surface-variant mt-0.5">What food and energy prices add to headline inflation each quarter, in basis points a year. A price that stays high adds once, then nothing more</p>
 								</div>
 								<div class="flex items-start gap-3 shrink-0">
 									<p class="hidden sm:block max-w-64 text-right text-xs font-mono font-semibold text-on-surface tabular-nums" id="hud-macroCostPushChart">-</p>
@@ -275,6 +276,25 @@
 								<canvas id="macroInventoryCycleChart"></canvas>
 							</div>
 							<p class="source-note">{{ source_line('manufactory-board') }}</p>
+						</div>
+
+						<div class="chart-card lg:col-span-2 bg-surface-container-low border border-outline-variant/20 rounded-lg p-5 flex flex-col" data-wide data-macro-category="inflation">
+							<div class="flex items-start justify-between gap-4 mb-3">
+								<div class="min-w-0">
+									<h4 class="text-sm font-semibold text-on-surface">What moved the output gap</h4>
+									<p class="text-xs text-on-surface-variant mt-0.5">Each quarter's change in the output gap, split by what drove it: rates, credit, the government and the Fund, wealth, supply, the mainland and spare capacity</p>
+								</div>
+								<div class="flex items-start gap-3 shrink-0">
+									<p class="hidden sm:block max-w-64 text-right text-xs font-mono font-semibold text-on-surface tabular-nums" id="hud-macroGapBreakdownChart">-</p>
+									<button type="button" class="expand-chart-btn p-1 -m-1 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors cursor-pointer" title="Expand chart" aria-label="Expand chart">
+										<span class="material-symbols-outlined text-base leading-none expand-icon" aria-hidden="true">open_in_full</span>
+									</button>
+								</div>
+							</div>
+							<div class="chart-canvas-container h-80 md:h-85 w-full relative">
+								<canvas id="macroGapBreakdownChart" data-groups="{{ constant('App\\Service\\View\\MacroHistoryPresenter::GAP_GROUP_LABELS')|json_encode }}"></canvas>
+							</div>
+							<p class="source-note">{{ source_line('statistical-office') }}</p>
 						</div>
 					</div>
 				</section>
@@ -335,6 +355,25 @@
 							</div>
 							<div class="chart-canvas-container h-80 md:h-85 w-full relative">
 								<canvas id="macroLaborCreditChart"></canvas>
+							</div>
+							<p class="source-note">{{ source_line('statistical-office') }}</p>
+						</div>
+
+						<div class="chart-card bg-surface-container-low border border-outline-variant/20 rounded-lg p-5 flex flex-col" data-macro-category="growth">
+							<div class="flex items-start justify-between gap-4 mb-3">
+								<div class="min-w-0">
+									<h4 class="text-sm font-semibold text-on-surface">Unemployment's recession signal</h4>
+									<p class="text-xs text-on-surface-variant mt-0.5">How far the three-month average jobless rate has risen above its low of the year before, against the rise that has marked each recession in its first months</p>
+								</div>
+								<div class="flex items-start gap-3 shrink-0">
+									<p class="hidden sm:block max-w-64 text-right text-xs font-mono font-semibold text-on-surface tabular-nums" id="hud-macroSahmChart">-</p>
+									<button type="button" class="expand-chart-btn p-1 -m-1 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors cursor-pointer" title="Expand chart" aria-label="Expand chart">
+										<span class="material-symbols-outlined text-base leading-none expand-icon" aria-hidden="true">open_in_full</span>
+									</button>
+								</div>
+							</div>
+							<div class="chart-canvas-container h-80 md:h-85 w-full relative">
+								<canvas id="macroSahmChart" data-trigger="{{ constant('App\\Service\\Macro\\MacroEngine::SAHM_RECESSION_THRESHOLD') }}"></canvas>
 							</div>
 							<p class="source-note">{{ source_line('statistical-office') }}</p>
 						</div>
@@ -405,7 +444,7 @@
 							<div class="flex items-start justify-between gap-4 mb-3">
 								<div class="min-w-0">
 									<h4 class="text-sm font-semibold text-on-surface">Corporate credit spreads and defaults</h4>
-									<p class="text-xs text-on-surface-variant mt-0.5">Investment-grade and high-yield spreads, the ratio between them, and the corporate default rate</p>
+									<p class="text-xs text-on-surface-variant mt-0.5">Investment-grade and high-yield spreads, the ratio between them, the corporate default rate, and the excess bond premium: what lenders charge beyond expected defaults</p>
 								</div>
 								<div class="flex items-start gap-3 shrink-0">
 									<p class="hidden sm:block max-w-64 text-right text-xs font-mono font-semibold text-on-surface tabular-nums" id="hud-macroCreditCliffChart">-</p>
@@ -626,6 +665,25 @@
 						<div class="chart-card bg-surface-container-low border border-outline-variant/20 rounded-lg p-5 flex flex-col" data-macro-category="public">
 							<div class="flex items-start justify-between gap-4 mb-3">
 								<div class="min-w-0">
+									<h4 class="text-sm font-semibold text-on-surface">Policy uncertainty</h4>
+									<p class="text-xs text-on-surface-variant mt-0.5">How unsettled the outlook for taxes, spending and rates is, against its long-run average of {{ constant('App\\Service\\Macro\\MacroEngine::EPU_BASELINE')|number_format(0) }}. It rises into an election and in a downturn, and holds back investment</p>
+								</div>
+								<div class="flex items-start gap-3 shrink-0">
+									<p class="hidden sm:block max-w-64 text-right text-xs font-mono font-semibold text-on-surface tabular-nums" id="hud-macroPolicyUncertaintyChart">-</p>
+									<button type="button" class="expand-chart-btn p-1 -m-1 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors cursor-pointer" title="Expand chart" aria-label="Expand chart">
+										<span class="material-symbols-outlined text-base leading-none expand-icon" aria-hidden="true">open_in_full</span>
+									</button>
+								</div>
+							</div>
+							<div class="chart-canvas-container h-80 md:h-85 w-full relative">
+								<canvas id="macroPolicyUncertaintyChart" data-baseline="{{ constant('App\\Service\\Macro\\MacroEngine::EPU_BASELINE') }}"></canvas>
+							</div>
+							<p class="source-note">{{ source_line('statistical-office') }}</p>
+						</div>
+
+						<div class="chart-card bg-surface-container-low border border-outline-variant/20 rounded-lg p-5 flex flex-col" data-macro-category="public">
+							<div class="flex items-start justify-between gap-4 mb-3">
+								<div class="min-w-0">
 									<h4 class="text-sm font-semibold text-on-surface">Sovereign Reserve Fund</h4>
 									<p class="text-xs text-on-surface-variant mt-0.5">District equity weight against the policy weight, and the fund's share of the listed float</p>
 								</div>
@@ -652,6 +710,60 @@
 				<p class="hidden py-12 text-center text-sm text-on-surface-variant" data-chart-empty>No charts match the filter.</p>
 			</div>
 		</section>
+
+		{# Each driver's most exposed listings, read from the per-firm figures their earnings and financing run on (EconomyExposureBuilder). #}
+		{% if exposures is defined and exposures is not empty %}
+			<section class="space-y-5" aria-labelledby="exposure-heading">
+				<div>
+					<h2 id="exposure-heading" class="text-lg font-semibold text-on-surface">Who it moves</h2>
+					<p class="text-sm text-on-surface-variant mt-0.5">The listed companies with the most at stake in each of the readings above, from their filings.</p>
+				</div>
+				<div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+					{% for card in exposures %}
+						<div class="bg-surface-container-low border border-outline-variant/20 rounded-lg p-5 flex flex-col" id="exposure-{{ card.key }}">
+							<h3 class="text-sm font-semibold text-on-surface">{{ card.title }}</h3>
+							<p class="text-xs text-on-surface-variant mt-0.5">{{ card.intro }}</p>
+							{% for list in card.lists %}
+								<table class="w-full mt-4 text-xs">
+									<thead class="table-head">
+										<tr>
+											<th scope="col" class="text-left font-medium pb-1">{{ list.label }}</th>
+											<th scope="col" class="sr-only">Exposure</th>
+										</tr>
+									</thead>
+									<tbody>
+										{% for row in list.rows %}
+											<tr class="border-t border-outline-variant/10 align-baseline">
+												<td class="py-1.5 pr-3 min-w-0">
+													<a href="{{ path('app_stock_view', {ticker: row.ticker}) }}" class="font-mono font-medium text-primary hover:underline">{{ row.ticker }}</a>
+													<span class="text-on-surface-variant">{{ row.name }}</span>
+													{% if row.detail is not null and list.detail_unit %}
+														<span class="block text-2xs text-on-surface-variant"><span class="font-mono tabular-nums">{{ row.detail|pct(0) }}</span> {{ list.detail_unit }}</span>
+													{% endif %}
+												</td>
+												<td class="py-1.5 text-right whitespace-nowrap">
+													<span class="font-mono tabular-nums text-on-surface">
+														{%- if list.format == 'money' -%}
+															{{ row.value|format_large('$') }}
+														{%- elseif list.format == 'multiple' -%}
+															{{ row.value|number_format(1) }}×
+														{%- else -%}
+															{{ row.value|pct(0) }}
+														{%- endif -%}
+													</span>
+													<span class="text-on-surface-variant">{{ list.unit }}</span>
+												</td>
+											</tr>
+										{% endfor %}
+									</tbody>
+								</table>
+							{% endfor %}
+							<p class="source-note mt-auto pt-3">{{ source_line('aerie-exchange') }}</p>
+						</div>
+					{% endfor %}
+				</div>
+			</section>
+		{% endif %}
 	</div>
 {% endblock %}
 

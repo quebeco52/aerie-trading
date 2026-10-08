@@ -275,8 +275,8 @@ trait FinancialPhysicsTrait
     public function getRegulatoryDividendCap(Stock $stock, float $currentTreasury, ?MacroStateDTO $macroState = null): ?float
     {
         $equityLimit = \App\Data\Sectors::equityLimit($stock->getIndustry());
-        if ($macroState !== null && $macroState->countercyclicalBufferRateEma > 0.0) {
-            $equityLimit = \App\Service\Math\MathUtility::calculateBufferedLeverageLimit($equityLimit, $macroState->countercyclicalBufferRateEma);
+        if ($macroState !== null && $macroState->countercyclicalBufferRate > 0.0) {
+            $equityLimit = \App\Service\Math\MathUtility::calculateBufferedLeverageLimit($equityLimit, $macroState->countercyclicalBufferRate);
         }
         $leverageOvershoot = $this->resolveTangibleLeverage($stock) / $equityLimit;
 
@@ -299,8 +299,8 @@ trait FinancialPhysicsTrait
         }
 
         $equityLimit = \App\Data\Sectors::equityLimit($stock->getIndustry());
-        if ($macroState !== null && $macroState->countercyclicalBufferRateEma > 0.0) {
-            $equityLimit = \App\Service\Math\MathUtility::calculateBufferedLeverageLimit($equityLimit, $macroState->countercyclicalBufferRateEma);
+        if ($macroState !== null && $macroState->countercyclicalBufferRate > 0.0) {
+            $equityLimit = \App\Service\Math\MathUtility::calculateBufferedLeverageLimit($equityLimit, $macroState->countercyclicalBufferRate);
         }
         $buybackLockoutThreshold = max(1.0, $equityLimit - 1.0) + 0.5;
 

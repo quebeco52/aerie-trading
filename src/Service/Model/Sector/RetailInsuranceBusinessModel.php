@@ -100,7 +100,10 @@ class RetailInsuranceBusinessModel extends InsuranceBusinessModel
         $this->advanceUnderwritingCycle($streams, $stock, $macroState, $surplusDeficitRatio, $recovery > 0.0);
 
         $clampedMargin = $this->clampMargin($realizedVariableMargin + $claims['excess'] - $recovery + $reinstatementPremium);
-        $this->registerIncurredClaims($streams, $actualRevenue, $clampedMargin - $reinstatementPremium);
+        // The baseline cost ratio splits as the parent's does; the claims above it are losses.
+        // Life policies carry a policy reserve, not unearned premium, and the catastrophe draw falls on the P&C book alone.
+        $lifeBenefits = $lifeRevenue * $this->resolveBaselineLossRatio($realizedVariableMargin, $fixedCosts, $actualRevenue);
+        $kpis = $this->bookUnderwritingResult($streams, $actualRevenue, $clampedMargin, $realizedVariableMargin * self::BASE_EXPENSE_RATIO_SHARE, $reinstatementPremium, $fixedCosts, $pcRevenue, $lifeBenefits);
 
         $eventType = $this->resolveClaimEvent($claims['gross'], $pcWeight, $recovery > 0.0);
 
@@ -124,22 +127,39 @@ class RetailInsuranceBusinessModel extends InsuranceBusinessModel
             isPublicEvent: $eventType !== null ? true : null,
             streamZ: $streams->getStreamZ(),
             streamRevenue: $streamRevenues,
+            kpis: $kpis,
         );
     }
 
-    /** The P&C and life books' reserve ratios, weighted by the premium each writes. */
-    public function resolveReserveToPremiumRatio(Stock $stock): float
+    /**
+     * The P&C book's unearned premium and loss reserves and the life book's policy reserve, each weighted by the
+     * premium its book writes.
+     *
+     * @return array{unearned: float, loss: float, life: float}
+     */
+    public function resolveReserveRatios(Stock $stock): array
     {
         $params = $this->resolveModelParameters($stock, [
-            ModelParam::PropertyCasualtyWeight->value    => self::PROPERTY_CASUALTY_WEIGHT,
-            ModelParam::LifeAndAnnuityWeight->value      => self::LIFE_INSURANCE_WEIGHT,
             ModelParam::LifeReserveToPremiumRatio->value => self::LIFE_RESERVE_TO_PREMIUM_RATIO,
         ]);
-        $pcWeight = $params[ModelParam::PropertyCasualtyWeight];
+        $lifeShare = $this->resolveLifePremiumShare($stock);
+
+        return [
+            'unearned' => (1.0 - $lifeShare) * self::POLICY_TERM_YEARS / 2.0,
+            'loss' => (1.0 - $lifeShare) * self::LOSS_RESERVE_TO_PREMIUM_RATIO,
+            'life' => $lifeShare * $params[ModelParam::LifeReserveToPremiumRatio],
+        ];
+    }
+
+    public function resolveLifePremiumShare(Stock $stock): float
+    {
+        $params = $this->resolveModelParameters($stock, [
+            ModelParam::PropertyCasualtyWeight->value => self::PROPERTY_CASUALTY_WEIGHT,
+            ModelParam::LifeAndAnnuityWeight->value   => self::LIFE_INSURANCE_WEIGHT,
+        ]);
         $lifeWeight = $params[ModelParam::LifeAndAnnuityWeight];
 
-        return (($pcWeight * static::RESERVE_TO_PREMIUM_RATIO) + ($lifeWeight * $params[ModelParam::LifeReserveToPremiumRatio]))
-            / max(0.01, $pcWeight + $lifeWeight);
+        return $lifeWeight / max(0.01, $params[ModelParam::PropertyCasualtyWeight] + $lifeWeight);
     }
 
     /**

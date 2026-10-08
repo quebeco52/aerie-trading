@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Service\Market\Chart;
 
+use App\Data\DistrictMap;
+
 /**
  * Coalesces ticks into the frames the websocket wire carries.
  *
@@ -19,6 +21,18 @@ final class WireFrame
     // --- Cadence ---
     /** Frames published per real second. The page coalesces DOM writes to 4 Hz; 10 Hz keeps the live chart tail moving smoothly ahead of that. */
     public const FRAMES_PER_SECOND = 10;
+
+    // --- Macro Fields ---
+    /** The macro fields a page repaints from the frame: the home cycle tile, the economy header and the reserve page. The district map's stress fields are added from DistrictMap. */
+    public const LIVE_MACRO_FIELDS = [
+        'total_time', 'output_gap', 'inflation_ema', 'policy_rate', 'yield_10y', 'qe_active', 'qe_intensity',
+        'nominal_gdp_index', 'foreign_bond_yield', 'sovereign_debt_to_gdp', 'sovereign_net_debt_to_gdp',
+        'sovereign_fund_to_gdp', 'sovereign_fund_dollars_per_gdp', 'sovereign_fund_draw_to_gdp', 'sovereign_fund_annual_draw',
+        'sovereign_fund_stabilisation_to_gdp', 'sovereign_fund_stamp_duty_to_gdp', 'sovereign_fund_stamp_duty_year_to_date',
+        'sovereign_fund_ownership_share', 'sovereign_fund_equity_share', 'sovereign_fund_domestic_weight',
+        'sovereign_fund_expected_real_return', 'sovereign_fund_return_index', 'sovereign_fund_real_return_index',
+        'sovereign_fund_rebalance_share', 'sovereign_fund_rebalance_months_left', 'last_sovereign_rebalance_at',
+    ];
 
     /** @var array<string, array<string, mixed>> Latest quote per ticker. */
     private array $quotes = [];
@@ -43,6 +57,22 @@ final class WireFrame
     public static function intervalTicks(int $tickIntervalUs): int
     {
         return max(1, (int) round(1_000_000 / ($tickIntervalUs * self::FRAMES_PER_SECOND)));
+    }
+
+    /**
+     * The part of the macro state the frame carries: the fields the live pages read, not the ~330 the history API
+     * serves, which at ten frames a second was most of every open tab's wire.
+     *
+     * @param array<string, mixed> $macro MacroStateDTO::toArray().
+     *
+     * @return array<string, mixed>
+     */
+    public static function liveMacro(array $macro): array
+    {
+        static $fields = null;
+        $fields ??= array_flip(array_merge(self::LIVE_MACRO_FIELDS, DistrictMap::stressFields()));
+
+        return array_intersect_key($macro, $fields);
     }
 
     /** Whether this tick closes a frame. */

@@ -38,6 +38,7 @@ use App\Service\Market\Trading\ForcedLiquidationService;
 use App\Service\Notification\PlayerNotifier;
 use App\Service\Notification\PriceAlertService;
 use App\Service\Politics\ElectionRecorder;
+use App\Service\Politics\PoliticsHistoryRecorder;
 use App\Service\Politics\PoliticsEngine;
 use App\Service\Season\SeasonService;
 use App\Service\User\Portfolio;
@@ -104,6 +105,8 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
         private PoliticsEngine $politicsEngine,
         /** Writes the Diet's vote on the tick it is held. */
         private ElectionRecorder $electionRecorder,
+        /** Writes each rate meeting and each forecast of the next vote on the tick they happen. */
+        private PoliticsHistoryRecorder $politicsHistory,
         /** Account messages raised inside the tick, sent once it commits. */
         private PlayerNotifier $notifier,
         /** Price alerts: bounds read once a tick, fired on the worker. */
@@ -394,6 +397,7 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
                     $events[] = $headline;
                 }
                 $this->electionRecorder->record($politics);
+                $this->politicsHistory->record($politics);
 
                 if (!empty($operatorEvents)) {
                     $events = array_merge($events, $operatorEvents);
@@ -467,8 +471,8 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
                 $districtReconstitution = $this->reconstituteDistrict($stocks, $tickCount, $events);
 
                 // The wire carries frames, not ticks: the latest quote per instrument plus the per-tick points the
-                // live chart draws. The scalars are absorbed on frame ticks only: macro alone is ~200 fields, and
-                // a frame carries the last tick's value whichever tick it was read on.
+                // live chart draws. The scalars are absorbed on frame ticks only, and a frame carries the last tick's
+                // value whichever tick it was read on; of the macro state only what the live pages read goes out.
                 $wireFrame->absorb(
                     $tickCount,
                     $published,
@@ -478,7 +482,7 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
                         'market_vol' => $marketVol,
                         'economic_cycle' => $macroState->economicCycleLabel(),
                         'council_rate' => $macroState->policyRate,
-                        'macro' => $macroState->toArray(),
+                        'macro' => WireFrame::liveMacro($macroState->toArray()),
                         'bond_curve' => $bondResult['curve'],
                     ] : []
                 );

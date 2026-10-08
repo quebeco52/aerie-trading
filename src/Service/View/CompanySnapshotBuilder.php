@@ -57,8 +57,6 @@ class CompanySnapshotBuilder
             'businessModel' => $businessModel,
             'marketCap' => $isBankrupt ? 0.0 : $price * (float) $stock->getSharesOutstanding(),
             'peRatio' => (!$isBankrupt && $eps > 0.0) ? $price / $eps : null,
-            'targetPE' => Sectors::baselineIndustryPe($stock->getIndustry()),
-            'investedCapital' => $isBankrupt ? 0.0 : (float) $stock->getInvestedCapital(),
             // Dickinson (2011) stage stored by the last quarterly report; null until the first lands.
             'lifecycleStage' => $stock->getLifecycleStage(),
             'dividendYield' => (!$isBankrupt && $price > 0.0 && $lastDividend > 0.0)

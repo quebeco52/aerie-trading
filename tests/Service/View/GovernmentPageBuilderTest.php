@@ -9,9 +9,18 @@ use App\Data\AeriePartyProfiles;
 use App\DTO\MacroStateDTO;
 use App\DTO\PoliticsStateDTO;
 use App\Entity\DietElection;
+use App\Entity\ElectionOdds;
+use App\Entity\RateDecision;
+use App\Entity\Stock;
 use App\Repository\DietElectionRepository;
+use App\Repository\ElectionOddsRepository;
+use App\Repository\MacroReportHistoryRepository;
+use App\Repository\RateDecisionRepository;
+use App\Repository\StockRepository;
+use App\Service\Corporate\MergerAndAcquisitionEngine;
 use App\Service\Macro\MacroEngine;
 use App\Service\Math\MathUtility;
+use App\Service\Politics\ElectionForecast;
 use App\Service\Politics\PartyLeaders;
 use App\Service\Politics\PoliticsEngine;
 use App\Service\Politics\PoliticsState;
@@ -28,6 +37,31 @@ class GovernmentPageBuilderTest extends TestCase
         $elections->method('findChronological')->willReturn($history);
 
         return new GovernmentPageBuilder($elections);
+    }
+
+    public function testTheExposureTablesReadTheBoardAndTheMarketsForecast(): void
+    {
+        $elections = $this->createStub(DietElectionRepository::class);
+        $elections->method('findChronological')->willReturn([]);
+        $bank = (new Stock())->setTicker('BANK')->setName('Bank')->setIndustry('Banks - Regional')->setTotalRevenue('1000000000')
+            ->setTotalNetIncome('100000000')->setWholesaleDebt('5000000000')->setFloatingDebtRatio('0.5')->setCustomerDeposits('8000000000')->setRevolverDrawn('0');
+        $stocks = $this->createStub(StockRepository::class);
+        $stocks->method('findAll')->willReturn([$bank]);
+        $builder = new GovernmentPageBuilder($elections, null, $stocks);
+        $standing = PoliticsEngine::standingLevers(new PoliticsStateDTO(bankLevyRate: 0.001));
+
+        $page = $builder->build(new MacroStateDTO(bankLevyRate: 0.001), new PoliticsStateDTO(bankLevyRate: 0.001));
+        $levy = array_column($page['exposure']['laws'], null, 'lever')['bankLevyRate'];
+        $this->assertSame(['BANK'], array_column($levy['firms'], 'ticker'));
+        $this->assertLessThan(0.0, $levy['firms'][0]['now']);
+        $this->assertNull($levy['firms'][0]['change'], 'Without a forecast nothing is expected.');
+
+        $forecast = $builder->build(new MacroStateDTO(bankLevyRate: 0.001), new PoliticsStateDTO(bankLevyRate: 0.001, forecastAt: 1.0, forecastLevers: ['bankLevyRate' => 0.002] + $standing));
+        $levy = array_column($forecast['exposure']['laws'], null, 'lever')['bankLevyRate'];
+        $this->assertTrue($levy['expectedMoves']);
+        $this->assertEqualsWithDelta($levy['firms'][0]['now'], $levy['firms'][0]['change'], 1e-6, 'Doubling the levy costs the bank as much again.');
+
+        $this->assertNull($this->builder()->build(new MacroStateDTO(), new PoliticsStateDTO())['exposure'], 'No board, no tables.');
     }
 
     public function testTheDietAtYearOneIsDrawnSeatForSeat(): void
@@ -441,7 +475,7 @@ class GovernmentPageBuilderTest extends TestCase
             \App\Service\Politics\SovereignReserveFund::advance($state, $math);
         }
         $politics = PoliticsStateDTO::fromState($state);
-        $page = $this->builder()->build(new MacroStateDTO(totalTime: $state->totalTime, countercyclicalBufferRateEma: 0.005), $politics);
+        $page = $this->builder()->build(new MacroStateDTO(totalTime: $state->totalTime, countercyclicalBufferRate: 0.005), $politics);
         $authority = $page['authority'];
 
         $this->assertSame(\App\Data\AerieCouncil::OPENING_GOVERNOR, $authority['governor']['name']);
@@ -685,11 +719,21 @@ class GovernmentPageBuilderTest extends TestCase
 
         $rows = array_column($polls['parties'], null, 'name');
         $vanguard = $rows[Diet::PARTY_NAMES[Diet::VANGUARD]];
-        $this->assertSame(Diet::PARTY_NAMES[Diet::VANGUARD], $polls['parties'][0]['name'], 'Listed by the latest poll.');
-        $this->assertEqualsWithDelta(0.06, $vanguard['change'], 1e-12);
-        $this->assertCount(3, explode(' ', $vanguard['line']), 'The result, then each poll.');
+        $this->assertSame(Diet::PARTY_NAMES[Diet::VANGUARD], $polls['parties'][0]['name'], 'Listed by the poll average.');
+        $averages = GovernmentPageBuilder::pollAverages($politics);
+        $average = $averages[array_key_last($averages)]['shares'];
+        $this->assertGreaterThan(Diet::SEED_VOTE_SHARES[Diet::VANGUARD], $average[Diet::VANGUARD], 'The polls pull the average up from the result...');
+        $this->assertLessThan($latest[Diet::VANGUARD], $average[Diet::VANGUARD], '...but not all the way to one noisy poll.');
+        $this->assertEqualsWithDelta($average[Diet::VANGUARD], $vanguard['average'], 1e-12);
+        $this->assertEqualsWithDelta($latest[Diet::VANGUARD], $vanguard['poll'], 1e-12);
+        $this->assertEqualsWithDelta($average[Diet::VANGUARD] - Diet::SEED_VOTE_SHARES[Diet::VANGUARD], $vanguard['change'], 1e-12);
+        $this->assertGreaterThan(0.0, $vanguard['margin']);
+        $this->assertCount(3, explode(' ', $vanguard['line']), 'The result, then the average after each poll.');
+        $this->assertCount(6, explode(' ', $vanguard['band']), 'The band\'s upper edge out, its lower edge back.');
+        $this->assertCount(2, $vanguard['dots'], 'One dot a poll.');
         $this->assertStringStartsWith($left . ',', $vanguard['line']);
-        $seats = PoliticsEngine::dHondt($latest, Diet::SEATS);
+        $this->assertFalse($polls['marketSeats'], 'With no forecast for the vote, the seats are the average\'s own.');
+        $seats = PoliticsEngine::dHondt($average, Diet::SEATS);
         $this->assertSame($seats[Diet::VANGUARD], $vanguard['seats']);
         $this->assertSame(Diet::SEATS, array_sum(array_column($polls['parties'], 'seats')));
         $this->assertSame($seats[Diet::VANGUARD], $polls['cabinet']['seats'], 'The founding cabinet is the Vanguard alone.');
@@ -769,6 +813,226 @@ class GovernmentPageBuilderTest extends TestCase
         $this->assertSame(10.0, $carbon['enacted']);
         $this->assertStringContainsString('MWh', $carbon['note']);
         $this->assertContains(Diet::AXIS_ENVIRONMENT, array_column($page['axes'], 'key'));
+    }
+
+    /**
+     * While the market's forecast is for the coming vote, the seats beside the polls are the ones it expects, so they
+     * agree with its odds; the cabinet's tally is their sum.
+     */
+    public function testThePollsShowTheSeatsTheMarketExpects(): void
+    {
+        $expected = [Diet::CIVIC => 101.4, Diet::VANGUARD => 88.6, Diet::IRON_HARBOR => 24.2, Diet::EXCHANGE => 26.0, Diet::CHARTISTS => 19.3, Diet::COMMON_LOT => 9.1, Diet::TIDELINE => 8.4, Diet::NEW_HORIZON => 23.0];
+        $politics = new PoliticsStateDTO(totalTime: 6.0, lastElectionAt: 4.0, polls: [['t' => 6.0, 'shares' => Diet::SEED_VOTE_SHARES]], forecastSeats: $expected, forecastFor: 8.0, forecastAt: 6.0);
+        $polls = $this->builder()->build(new MacroStateDTO(totalTime: 6.0), $politics)['polls'];
+
+        $this->assertTrue($polls['marketSeats']);
+        $rows = array_column($polls['parties'], null, 'name');
+        $this->assertSame(101, $rows[Diet::PARTY_NAMES[Diet::CIVIC]]['seats']);
+        $this->assertSame(89, $rows[Diet::PARTY_NAMES[Diet::VANGUARD]]['seats']);
+        $this->assertSame(89, $polls['cabinet']['seats'], 'The founding cabinet is the Vanguard alone.');
+        $this->assertSame((int) round(88.6 + 26.0 + 19.3 + 23.0), $polls['cabinet']['supportedSeats']);
+    }
+
+    /**
+     * The average the page draws is the one the market keeps: replaying the filter over the term's polls lands on the
+     * average and variance ElectionForecast stored, from the reset to the result on the day of the vote.
+     */
+    public function testThePollAveragePathEndsOnTheMarketsAverage(): void
+    {
+        $state = new PoliticsState();
+        $state->authoritySalt = 5.0;
+        $state->totalTime = 4.0;
+        $state->lastElectionAt = 4.0;
+        $state->polls = [];
+        ElectionForecast::advance($state, 0.6);
+
+        foreach ([1, 2, 4, 5] as $month) {
+            $state->totalTime = 4.0 + ($month / 12.0);
+            $shares = Diet::SEED_VOTE_SHARES;
+            $shares[Diet::CIVIC] += 0.004 * $month;
+            $shares[Diet::VANGUARD] -= 0.004 * $month;
+            $state->polls[] = ['t' => $state->totalTime, 'shares' => $shares];
+            ElectionForecast::advance($state, 0.6);
+        }
+        $politics = PoliticsStateDTO::fromState($state);
+
+        $averages = GovernmentPageBuilder::pollAverages($politics);
+        $last = $averages[array_key_last($averages)];
+        $this->assertCount(5, $averages, 'The result, then the average after each poll.');
+        foreach (Diet::PARTIES as $party) {
+            $this->assertEqualsWithDelta($politics->pollAverage[$party], $last['shares'][$party], 1e-12, "{$party}'s average.");
+            $this->assertEqualsWithDelta($politics->pollAverageVariance[$party], $last['variance'][$party], 1e-15, "{$party}'s variance.");
+        }
+    }
+
+
+    /** The last decision reads as a hold only when it left the printed rate unchanged, and the next meeting is on the grid. */
+    public function testTheRateDecisionAndTheNextMeeting(): void
+    {
+        $politics = static fn(float $change): PoliticsStateDTO => new PoliticsStateDTO(totalTime: 3.30, authoritySalt: 5.0, lastMeetingAt: 3.25, lastMeetingRate: 0.04, lastMeetingChange: $change);
+
+        $this->assertSame(12, $this->builder()->build(new MacroStateDTO(totalTime: 3.30), $politics(0.0012))['authority']['meeting']['moveBp'], 'A 12bp move is a move.');
+        $this->assertSame(-1, $this->builder()->build(new MacroStateDTO(totalTime: 3.30), $politics(-0.00006))['authority']['meeting']['moveBp']);
+        $this->assertSame(0, $this->builder()->build(new MacroStateDTO(totalTime: 3.30), $politics(0.00004))['authority']['meeting']['moveBp'], 'Under half a basis point the printed rate does not move.');
+
+        $this->assertEqualsWithDelta(3.375, GovernmentPageBuilder::nextMeeting(3.30), 1e-12);
+        $this->assertEqualsWithDelta(3.375, GovernmentPageBuilder::nextMeeting(3.25), 1e-12, 'On a meeting day the next is a meeting on.');
+        $this->assertEqualsWithDelta(3.375, GovernmentPageBuilder::nextMeeting(3.25 - 1e-12), 1e-12, 'A clock a hair short of the meeting it just held.');
+        $this->assertEqualsWithDelta(3.25, GovernmentPageBuilder::nextMeeting(3.2), 1e-12);
+        $this->assertSame(\App\Data\DistrictCalendar::dateline(3.375), $this->builder()->build(new MacroStateDTO(totalTime: 3.30), $politics(0.0))['authority']['nextMeeting']);
+    }
+
+    /**
+     * The law charts run from the first quarter recorded to today on one time axis, each a step at the quarter its law
+     * changed, the merger line read as an HHI as the budget reads it; behind them the cabinets that governed, each in
+     * its leading party's colour, the one before the first vote on record from before Year 1.
+     */
+    public function testTheLawsAreChartedQuarterByQuarterBehindTheCabinets(): void
+    {
+        $standing = PoliticsEngine::standingLevers(new PoliticsStateDTO());
+        $rows = [];
+        foreach ([3.0, 3.25, 3.5, 3.75, 4.0, 4.25] as $time) {
+            $levers = $standing;
+            $levers['bankLevyRate'] = $time >= 4.25 ? 0.002 : 0.001;
+            $rows[] = ['t' => $time, 'levers' => $levers, 'capitalRequirement' => 0.0843];
+        }
+        $rows[0]['levers']['carbonPrice'] = null; // A quarter recorded before the column existed.
+        $reports = $this->createStub(MacroReportHistoryRepository::class);
+        $reports->method('laws')->willReturn($rows);
+        $elections = $this->createStub(DietElectionRepository::class);
+        $elections->method('findChronological')->willReturn([$this->election(4.0, [Diet::CIVIC, Diet::IRON_HARBOR], [Diet::VANGUARD])]);
+        $politics = new PoliticsStateDTO(totalTime: 4.4, bankLevyRate: 0.002, governingCoalition: Diet::membership([Diet::CIVIC, Diet::IRON_HARBOR]));
+
+        $laws = (new GovernmentPageBuilder($elections, $reports))->build(new MacroStateDTO(totalTime: 4.4), $politics)['laws'];
+
+        $this->assertSame('Year 4 Q1', $laws['since']);
+        [$left, $right] = $laws['plot'];
+        $charts = array_column($laws['charts'], null, 'name');
+        $levy = $charts['Bank levy'];
+        $this->assertSame(1, $levy['changes']);
+        $this->assertEqualsWithDelta(0.002, $levy['now'], 1e-12);
+        $this->assertEqualsWithDelta(0.001, $levy['low']['value'], 1e-12);
+        $this->assertStringStartsWith($left . ',', $levy['line']);
+        $this->assertStringEndsWith((string) $right . ',' . $levy['high']['y'], $levy['line'], 'The line runs on to today.');
+        $this->assertCount(2 * 7 - 1, explode(' ', $levy['line']), 'Each point after the first is a step: across, then up or down.');
+        $this->assertTrue($charts['Corporate tax rate']['flat']);
+        $this->assertSame(0, $charts['Corporate tax rate']['changes']);
+        $this->assertEqualsWithDelta(MergerAndAcquisitionEngine::reviewScreens($standing['mergerReviewLeniency'])['concentrated'], $charts['Merger review line']['now'], 1e-12);
+        $this->assertArrayHasKey('Core capital requirement', $charts);
+
+        $this->assertCount(2, $laws['cabinets']);
+        [$before, $after] = $laws['cabinets'];
+        $this->assertSame(['Vanguard'], $before['members']);
+        $this->assertSame('Before Year 1', $before['fromLabel']);
+        $this->assertSame(GovernmentPageBuilder::PARTY_COLORS[Diet::VANGUARD], $before['color']);
+        $this->assertSame(['Civic', 'Iron Harbor'], $after['members']);
+        $this->assertSame(GovernmentPageBuilder::PARTY_COLORS[Diet::CIVIC], $after['color'], 'Led by its largest party.');
+        $this->assertSame('now', $after['toLabel']);
+        $this->assertEqualsWithDelta($left, $before['x0'], 1e-9);
+        $this->assertEqualsWithDelta($before['x1'], $after['x0'], 1e-9);
+        $this->assertEqualsWithDelta($right, $after['x1'], 1e-9);
+
+        $this->assertNull($this->builder()->build(new MacroStateDTO(), new PoliticsStateDTO())['laws'], 'Without a record there is nothing to chart.');
+    }
+
+    /**
+     * The rate chart marks every meeting on record at the rate it left, a dissent above or below it by its side, and a
+     * new governor where the chair changed hands; the value axis spans every rate on whole gridline steps.
+     */
+    public function testTheRateChartMarksEachMeetingItsDissentsAndANewGovernor(): void
+    {
+        $this->assertNull(GovernmentPageBuilder::rateChart([$this->decision(1.0, 0.03, 0.0, [0.0, 0.0], 'Ada Marsh')], 1.1), 'One meeting is no line.');
+
+        $decisions = [
+            $this->decision(1.0, 0.0300, 0.0, [0.0, 0.0, 0.0], 'Ada Marsh'),
+            $this->decision(1.125, 0.0325, 0.0025, [0.0, 1.0, 1.0], 'Ada Marsh'),
+            $this->decision(1.25, 0.0326, 0.0001, [0.0, 0.0, -1.0], 'Ben Okafor'),
+            $this->decision(1.375, 0.0350, 0.0025, [0.0, 0.0, 0.0], 'Ben Okafor'),
+        ];
+        $chart = GovernmentPageBuilder::rateChart($decisions, 1.4);
+        $this->assertNotNull($chart);
+
+        $this->assertCount(4, $chart['meetings']);
+        $this->assertSame(2, $chart['moves'], 'Two meetings moved the rate a full step; a basis point is the rule drifting.');
+        $this->assertSame(2, $chart['split'], 'Two meetings split the committee.');
+        $this->assertSame([25, 1], [$chart['meetings'][1]['moveBp'], $chart['meetings'][2]['moveBp']]);
+        $this->assertSame([2, 0], [$chart['meetings'][1]['higher'], $chart['meetings'][1]['lower']]);
+        $this->assertSame([0, 1], [$chart['meetings'][2]['higher'], $chart['meetings'][2]['lower']]);
+        $this->assertSame('1–2', $chart['meetings'][1]['split']);
+        $this->assertSame([['x' => $chart['meetings'][2]['x'], 'name' => 'Ben Okafor', 'date' => self::simDate(1.25)]], $chart['governors']);
+
+        [$left, $right, $top, $bottom] = $chart['plot'];
+        $this->assertSame($left, $chart['meetings'][0]['x']);
+        $this->assertLessThan($right, $chart['meetings'][3]['x'], 'The axis runs on to today, past the last meeting.');
+        $this->assertLessThan($chart['meetings'][0]['y'], $chart['meetings'][3]['y'], 'A higher rate sits higher.');
+        $rates = array_column($chart['gridlines'], 'rate');
+        $this->assertLessThanOrEqual(0.03 + 1e-12, min($rates));
+        $this->assertGreaterThanOrEqual(0.035 - 1e-12, max($rates));
+        foreach ($chart['meetings'] as $meeting) {
+            $this->assertGreaterThanOrEqual($top, $meeting['y']);
+            $this->assertLessThanOrEqual($bottom, $meeting['y']);
+        }
+    }
+
+    /**
+     * The odds chart holds each party's chance from one forecast to the next, as the odds stood between polls, and runs
+     * it on to today; a party that never reached the listed chance is left off, and the vote ahead is marked.
+     */
+    public function testTheOddsChartHoldsEachForecastUntilTheNext(): void
+    {
+        $leaders = static fn(float $civic): array => [Diet::CIVIC => $civic, Diet::VANGUARD => 1.0 - $civic - 0.004, Diet::EXCHANGE => 0.004] + array_fill_keys(Diet::PARTIES, 0.0);
+        $forecasts = [$this->odds(4.1, $leaders(0.5)), $this->odds(4.2, $leaders(0.6)), $this->odds(4.3, $leaders(0.7))];
+        $this->assertNull(GovernmentPageBuilder::oddsChart([$forecasts[0]], 4.35, 8.0));
+
+        $chart = GovernmentPageBuilder::oddsChart($forecasts, 4.35, 8.0);
+        $this->assertNotNull($chart);
+        $this->assertSame([Diet::PARTY_NAMES[Diet::CIVIC], Diet::PARTY_NAMES[Diet::VANGUARD]], array_column($chart['parties'], 'name'), 'Likeliest first; a party under the listed chance throughout is left off.');
+
+        $civic = $chart['parties'][0];
+        $this->assertEqualsWithDelta(0.7, $civic['chance'], 1e-12);
+        $this->assertEqualsWithDelta(0.5, $civic['first'], 1e-12);
+        $points = array_map(static fn(string $point): array => array_map('floatval', explode(',', $point)), explode(' ', $civic['line']));
+        $this->assertCount(6, $points, 'Three forecasts, a step up to each after the first, and a run on to today.');
+        $this->assertSame($points[1][0], $points[2][0], 'The step is vertical, at the second forecast.');
+        $this->assertSame($points[0][1], $points[1][1], 'The odds hold flat until the next forecast.');
+        $this->assertSame($points[4][1], $points[5][1]);
+        $this->assertSame($chart['today'], $points[5][0]);
+        $this->assertNotNull($chart['vote']);
+        $this->assertSame(self::simDate(8.0), $chart['vote']['date']);
+        $this->assertSame($chart['plot'][1], $chart['vote']['x'], 'The axis runs to the vote.');
+    }
+
+    /** The page reads the meetings over the chart's span and the forecasts of the vote the market's latest forecast is for. */
+    public function testThePageChartsTheRecordedMeetingsAndForecasts(): void
+    {
+        $elections = $this->createStub(DietElectionRepository::class);
+        $elections->method('findChronological')->willReturn([]);
+        $decisions = $this->createMock(RateDecisionRepository::class);
+        $decisions->expects($this->once())->method('findSince')->with(5.3 - GovernmentPageBuilder::RATE_CHART_YEARS)
+            ->willReturn([$this->decision(5.0, 0.04, 0.0, [0.0], 'Ada Marsh'), $this->decision(5.125, 0.0425, 0.0025, [0.0], 'Ada Marsh')]);
+        $odds = $this->createMock(ElectionOddsRepository::class);
+        $odds->expects($this->once())->method('findForVote')->with(8.0, $this->greaterThan(0.0))
+            ->willReturn([$this->odds(5.0, [Diet::CIVIC => 0.5]), $this->odds(5.2, [Diet::CIVIC => 0.6])]);
+
+        $politics = new PoliticsStateDTO(totalTime: 5.3, authoritySalt: 5.0, forecastAt: 5.2, forecastFor: 8.0, lastMeetingAt: 5.125, lastMeetingRate: 0.0425);
+        $page = (new GovernmentPageBuilder($elections, null, null, $decisions, $odds))->build(new MacroStateDTO(totalTime: 5.3), $politics);
+
+        $this->assertCount(2, $page['authority']['decisions']['meetings']);
+        $this->assertCount(1, $page['odds']['parties']);
+        $this->assertNull($this->builder()->build(new MacroStateDTO(totalTime: 5.3), $politics)['odds'], 'Without a record there is nothing to chart.');
+        $this->assertNull($this->builder()->build(new MacroStateDTO(totalTime: 5.3), $politics)['authority']['decisions']);
+    }
+
+    /** @param list<float> $votes */
+    private function decision(float $at, float $rate, float $change, array $votes, string $governor): RateDecision
+    {
+        return (new RateDecision())->setSimTime($at)->setRate($rate)->setRateChange($change)->setVotes($votes)->setGovernor($governor);
+    }
+
+    /** @param array<string, float> $leaders */
+    private function odds(float $at, array $leaders): ElectionOdds
+    {
+        return (new ElectionOdds())->setSimTime($at)->setVoteAt(8.0)->setLeaders($leaders);
     }
 
     private function election(float $at, array $coalition, array $outgoing): DietElection

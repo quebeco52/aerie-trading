@@ -1,6 +1,9 @@
 import { THEME_COLORS, SERIES, withAlpha } from '../utils/colors.js';
 import { destroyChartInstance } from '../utils/chart-config.js';
 import { renderWhenVisible, resetLazyCharts } from '../utils/lazy-chart.js';
+import {
+    quarterLabels, trailingGrowth, realGdpLevel, nominalGdpLevel, potentialGdpLevel, costPushContribution, gapBreakdownSeries
+} from '../economy/macro-series.js';
 
 // Series take the categorical slots in legend order (SERIES, app.css --color-series-*), the chart's
 // headline first. Reference lines stay neutral; bars that encode a sign use the up and down colours.
@@ -34,6 +37,9 @@ let macroLeadingIndicatorsChartInstance = null;
 let macroHouseholdCreditChartInstance = null;
 let macroGlobalCycleChartInstance = null;
 let macroBankingLiquidityChartInstance = null;
+let macroGapBreakdownChartInstance = null;
+let macroPolicyUncertaintyChartInstance = null;
+let macroSahmChartInstance = null;
 
 let currentMacroReports = [];
 let currentMacroTimeframe = '10Y';
@@ -50,6 +56,15 @@ function setHud(id, text) {
     if (el) el.textContent = text;
 }
 
+/** The latest reading a series has, or undefined when it has none. */
+function lastKnown(series) {
+    return [...(series ?? [])].reverse().find(v => v !== null && v !== undefined && !isNaN(v));
+}
+
+function signed(value, digits) {
+    return `${value > 0 ? '+' : ''}${value.toFixed(digits)}`;
+}
+
 function updateMacroHud(d) {
     const last = (arr, def = 0) => (arr && arr.length > 0 && arr[arr.length - 1] !== null && !isNaN(arr[arr.length - 1])) ? arr[arr.length - 1] : def;
 
@@ -58,12 +73,12 @@ function updateMacroHud(d) {
     setHud('hud-macroMortgageChart', `30Y ${last(d.mortgageYieldData).toFixed(2)}% · Spread ${last(d.spread30yData).toFixed(2)}%`);
     setHud('hud-macroRiskChart', `Vol ${last(d.volData).toFixed(1)}% · ERP ${last(d.erpData).toFixed(1)}%`);
     const lastRealWageGap = [...(d.realWageGapData ?? [])].reverse().find(v => v !== null && !isNaN(v));
-    setHud('hud-macroLaborCreditChart', `Unemployment ${last(d.unemploymentData).toFixed(1)}% · Wages ${last(d.wageGrowthData).toFixed(1)}% · Real ${(last(d.wageGrowthData) - last(d.tipsBreakevenData)).toFixed(1)}%`
+    // Real wage growth is pay growth less the inflation it is spent at, not less what markets expect inflation to be.
+    setHud('hud-macroLaborCreditChart', `Unemployment ${last(d.unemploymentData).toFixed(1)}% · Wages ${last(d.wageGrowthData).toFixed(1)}% · Real ${(last(d.wageGrowthData) - last(d.inflationData)).toFixed(1)}%`
         + (lastRealWageGap === undefined ? '' : ` · vs productivity ${lastRealWageGap > 0 ? '+' : ''}${lastRealWageGap.toFixed(1)}%`));
     const lastEquityGap = [...d.equityWealthGapData].reverse().find(v => v !== null && !isNaN(v));
-    setHud('hud-macroWealthEffectChart', lastEquityGap === undefined
-        ? `Equity - · Housing ${last(d.housingWealthGapData) > 0 ? '+' : ''}${last(d.housingWealthGapData).toFixed(1)}%`
-        : `Equity ${lastEquityGap > 0 ? '+' : ''}${lastEquityGap.toFixed(1)}% · Housing ${last(d.housingWealthGapData) > 0 ? '+' : ''}${last(d.housingWealthGapData).toFixed(1)}%`);
+    const lastHousingGap = lastKnown(d.housingWealthGapData);
+    setHud('hud-macroWealthEffectChart', `Equity ${lastEquityGap === undefined ? '-' : signed(lastEquityGap, 1) + '%'} · Housing ${lastHousingGap === undefined ? '-' : signed(lastHousingGap, 1) + '%'}`);
     const lastTed = [...d.interbankSpreadBpsData].reverse().find(v => v !== null);
     setHud('hud-macroInterbankLiquidityChart', lastTed !== undefined ? `${lastTed.toFixed(0)} bps` : '-');
     setHud('hud-macroPropertyChart', `Commercial ${last(d.creEmaData).toFixed(1)} · Residential ${last(d.residentialEmaData).toFixed(1)} · Starts ${last(d.housingStartsData).toFixed(1)}`);
@@ -92,11 +107,25 @@ function updateMacroHud(d) {
     setHud('hud-macroGovtSpendingChart', `Tax ${last(d.taxData).toFixed(1)}% · Debt ${last(d.sovereignDebtData).toFixed(1)}% · Spread ${last(d.sovereignRiskSpreadData).toFixed(0)} bps · Deficit ${last(d.primaryDeficitData) > 0 ? '+' : ''}${last(d.primaryDeficitData).toFixed(1)}%`);
     setHud('hud-macroTermPremiumChart', `10Y ${last(d.yield10yData).toFixed(2)}% · Term premium ${last(d.termPremiumData) > 0 ? '+' : ''}${last(d.termPremiumData).toFixed(2)}%`);
     setHud('hud-macroGdpGrowthChart', `Real GDP ${last(d.realGdpGrowthData) > 0 ? '+' : ''}${last(d.realGdpGrowthData).toFixed(1)}% · Recession ${last(d.recessionProbData).toFixed(0)}%`);
-    setHud('hud-macroBalanceSheetChart', `Holdings ${last(d.slicedAssetStock).toFixed(1)} · QE/QT ${last(d.balanceSheetData) > 0 ? '+' : ''}${last(d.balanceSheetData).toFixed(0)} bps`);
+    const lastHoldings = lastKnown(d.balanceSheetHoldingsData);
+    const lastHoldingsChange = lastKnown(d.balanceSheetChangeData);
+    setHud('hud-macroBalanceSheetChart', lastHoldings === undefined
+        ? '-'
+        : `Holdings ${lastHoldings.toFixed(0)} bps` + (lastHoldingsChange === undefined ? '' : ` · Quarter ${signed(lastHoldingsChange, 0)} bps`));
     setHud('hud-macroFciChart', `FCI ${last(d.fciData) > 0 ? '+' : ''}${last(d.fciData).toFixed(2)}σ · Tightening ${last(d.sloosData) > 0 ? '+' : ''}${last(d.sloosData).toFixed(0)}%`);
-    setHud('hud-macroCostPushChart', `Food ${last(d.agriLagData) > 0 ? '+' : ''}${last(d.agriLagData).toFixed(0)} bps`);
+    const lastFoodPush = lastKnown(d.foodPushData);
+    const lastEnergyPush = lastKnown(d.energyPushData);
+    setHud('hud-macroCostPushChart', `Food ${lastFoodPush === undefined ? '-' : signed(lastFoodPush, 0) + ' bps'} · Energy ${lastEnergyPush === undefined ? '-' : signed(lastEnergyPush, 0) + ' bps'}`);
+    const lastEbp = lastKnown(d.excessBondPremiumBpsData);
+    setHud('hud-macroCreditCliffChart', `HY ${last(d.highYieldSpreadBpsData).toFixed(0)} bps · HY/IG ${last(d.creditCliffRatioData).toFixed(2)}x`
+        + (lastEbp === undefined ? '' : ` · Excess premium ${signed(lastEbp, 0)} bps`));
+    const lastEpu = lastKnown(d.policyUncertaintyData);
+    setHud('hud-macroPolicyUncertaintyChart', lastEpu === undefined ? '-' : `Index ${lastEpu.toFixed(0)}`);
+    const lastSahm = lastKnown(d.sahmData);
+    setHud('hud-macroSahmChart', lastSahm === undefined ? '-' : `Rise ${lastSahm.toFixed(2)} pp`);
+    const lastGapChange = lastKnown(d.gapChangeData);
+    setHud('hud-macroGapBreakdownChart', lastGapChange === undefined ? '-' : `Last quarter ${signed(lastGapChange, 2)} pp`);
     setHud('hud-macroSectoralInflationChart', `CPI ${last(d.inflationData).toFixed(1)}% · PPI ${last(d.ppiData) > 0 ? '+' : ''}${last(d.ppiData).toFixed(1)}% · Core services ${last(d.supercoreInflationData).toFixed(1)}%`);
-    setHud('hud-macroCreditCliffChart', `HY ${last(d.highYieldSpreadBpsData).toFixed(0)} bps · HY/IG ${last(d.creditCliffRatioData).toFixed(2)}x`);
     setHud('hud-macroInventoryCycleChart', `Overhang ${last(d.inventoryStockGapData) > 0 ? '+' : ''}${last(d.inventoryStockGapData).toFixed(1)}% · Utilisation ${last(d.capacityUtilizationData).toFixed(1)}%`);
     setHud('hud-macroPolicyRuleChart', `Rate vs rule ${last(d.policyRuleGapBpsData) > 0 ? '+' : ''}${last(d.policyRuleGapBpsData).toFixed(0)} bps`);
     setHud('hud-macroLeadingIndicatorsChart', `PMI ${last(d.pmiData).toFixed(1)} · Starts ${last(d.housingStartsData).toFixed(0)} · M2 ${last(d.moneySupplyGrowthData) > 0 ? '+' : ''}${last(d.moneySupplyGrowthData).toFixed(1)}% · Trade ${last(d.tradeBalanceData) > 0 ? '+' : ''}${last(d.tradeBalanceData).toFixed(1)}%`);
@@ -131,15 +160,18 @@ export function updateMacroCharts(reports, timeframe = currentMacroTimeframe) {
     let interbankSpreadBpsData = [], creditSpreadBpsData = [];
     let jobVacanciesData = [], laborTightnessData = [], wageGrowthData = [], realWageGapData = [];
     let equityWealthRatioData = [], equityWealthTrendData = [], equityWealthGapData = [], housingWealthGapData = [];
-    let naturalRateData = [], termPremiumData = [], riskNeutralData = [], balanceSheetData = [];
-    let balanceSheetAssetsData = [];
-    let nominalGdpGrowthData = [], realGdpGrowthData = [], potentialGdpGrowthData = [], tfpGrowthData = [];
+    let naturalRateData = [], termPremiumData = [], riskNeutralData = [];
+    let balanceSheetHoldingsData = [], balanceSheetChangeData = [];
+    let tfpGrowthData = [];
     // MacroEngine::STRUCTURAL_LABOR_GROWTH_RATE, published on the canvas so the page never keeps its own copy.
     const structuralLaborGrowthPct = parseFloat(document.getElementById('macroGdpGrowthChart')?.dataset.structuralLaborGrowth ?? '0.005') * 100;
+    // MacroEngine::RESIDENTIAL_MORTGAGE_SPREAD, published on the canvas for the same reason.
+    const mortgageSpreadPct = parseFloat(document.getElementById('macroMortgageChart')?.dataset.mortgageSpread ?? 'NaN') * 100;
     let fciData = [], fciEmaData = [];
-    let agriLagData = [], foodLagPctData = [], energySupplyDragData = [], freightSupplyDragData = [];
     let supercoreInflationData = [], coreGoodsInflationData = [];
-    let highYieldSpreadBpsData = [], creditCliffRatioData = [];
+    let highYieldSpreadBpsData = [], creditCliffRatioData = [], excessBondPremiumBpsData = [];
+    let policyUncertaintyData = [], policyUncertaintyEmaData = [];
+    let sahmData = [];
     let inventoryStockGapData = [], energyBufferData = [];
     let policyRuleGapBpsData = [];
     let capacityUtilizationData = [], recessionProbData = [];
@@ -154,25 +186,18 @@ export function updateMacroCharts(reports, timeframe = currentMacroTimeframe) {
     let sovereignFundSizeData = [], sovereignFundWeightData = [], sovereignFundTargetData = [], sovereignFundOwnershipData = [], sovereignFundDrawData = [], sovereignFundEquityData = [], sovereignFundDutyData = [];
 
     const slicedReports = reports.slice(-limit);
-    let qCount = slicedReports.length;
+    const qCount = slicedReports.length;
+    labels = quarterLabels(slicedReports);
 
-    // Cumulative central bank balance sheet asset stock holdings (Base 100)
-    let runningAssetIndex = 100.0;
-    const assetStockHistory = [];
-    const bsMeanReversionSpeed = 0.50; // Annual speed mean-reverting toward structural baseline 100
-    reports.forEach((r) => {
-        let rawBs = r.balance_sheet_intensity ?? r.balanceSheetIntensity ?? (r.qe_intensity ? parseFloat(r.qe_intensity) : 0.0);
-        let bsBps = parseFloat(rawBs) * 10000;
-        runningAssetIndex += ((bsBps / 10.0) + bsMeanReversionSpeed * (100.0 - runningAssetIndex)) * 0.25;
-        runningAssetIndex = Math.max(50.0, Math.min(200.0, runningAssetIndex));
-        assetStockHistory.push(runningAssetIndex);
-    });
-    const slicedAssetStock = assetStockHistory.slice(-slicedReports.length);
+    // Growth off the engine's own levels over the trailing year; a window's first rows look back past its edge.
+    const nominalGdpGrowthData = trailingGrowth(reports, qCount, nominalGdpLevel);
+    const realGdpGrowthData = trailingGrowth(reports, qCount, realGdpLevel);
+    const potentialGdpGrowthData = trailingGrowth(reports, qCount, potentialGdpLevel);
+    // What food and energy add to headline inflation: the change in the share of the price level each has reached.
+    const foodPushData = costPushContribution(reports, qCount, 'agri_cost_push_lag');
+    const energyPushData = costPushContribution(reports, qCount, 'energy_cost_push_lag');
 
     slicedReports.forEach((report, index) => {
-        let labelQ = qCount - index - 1;
-        labels.push(labelQ === 0 ? 'Now' : `-${labelQ}Q`);
-
         inflationData.push(parseFloat(report.inflation_ema) * 100);
         outputGapData.push(parseFloat(report.output_gap_ema) * 100);
 
@@ -182,7 +207,8 @@ export function updateMacroCharts(reports, timeframe = currentMacroTimeframe) {
         let rawCap = report.capital_stock_overhang_ema ?? report.capital_stock_overhang ?? report.capitalStockOverhangEma ?? report.capitalStockOverhang ?? 0.0;
         capitalOverhangData.push(parseFloat(rawCap) * 100);
 
-        let pr = parseFloat(report.policy_rate_ema) * 100;
+        // The rate the Monetary Authority set, as the header prints it, not a smoothed copy of it.
+        let pr = parseFloat(report.policy_rate ?? report.policy_rate_ema) * 100;
         let y10 = parseFloat(report.yield10y_ema) * 100;
 
         let rawY2 = report.yield2y_ema || report.yield2yEma;
@@ -193,8 +219,8 @@ export function updateMacroCharts(reports, timeframe = currentMacroTimeframe) {
 
         let rawY30 = report.yield30y_ema || report.yield30yEma;
         let y30 = rawY30 ? parseFloat(rawY30) * 100 : null;
-        // Mirrors MacroEngine::RESIDENTIAL_MORTGAGE_SPREAD: 30Y fixed mortgages price off the 10Y (prepayment duration) + 170 bps
-        let mortgageRate = y10 !== null && !isNaN(y10) ? y10 + 1.70 : null;
+        // 30Y fixed mortgages price off the 10Y (prepayment duration), as the engine's housing and debt service read them.
+        let mortgageRate = y10 !== null && !isNaN(y10) && !isNaN(mortgageSpreadPct) ? y10 + mortgageSpreadPct : null;
         mortgageYieldData.push(mortgageRate);
 
         let creditSpread = report.macro_credit_spread_ema || report.macroCreditSpreadEma;
@@ -261,7 +287,11 @@ export function updateMacroCharts(reports, timeframe = currentMacroTimeframe) {
             equityWealthGapData.push(((wealthRatio / wealthTrend) - 1.0) * 100.0);
         }
 
-        housingWealthGapData.push((parseFloat(report.residential_property_index_ema || report.residential_property_index || 100.0) / 100.0 - 1.0) * 100.0);
+        // House prices against their own slow trend, as household demand reads them: the index's 100 is where its price
+        // is built, not where it settles, so a gap off 100 would read a standing slump into a quiet market.
+        const rawHouseIndex = parseFloat(report.residential_property_index_ema ?? report.residential_property_index ?? NaN);
+        const rawHouseTrend = parseFloat(report.residential_wealth_trend ?? NaN);
+        housingWealthGapData.push(rawHouseIndex > 0 && rawHouseTrend > 0 ? (rawHouseIndex / rawHouseTrend - 1.0) * 100.0 : null);
 
         // The interbank columns were added to macro_report in Aug 2026 as NOT NULL, so every report written
         // before that reads 0.0000. The CIR process never drops below INTERBANK_MIN_SPREAD (1 bp), so a
@@ -294,10 +324,17 @@ export function updateMacroCharts(reports, timeframe = currentMacroTimeframe) {
         let rawRiskNeutral = report.risk_neutral10y_ema ?? report.risk_neutral10y ?? report.risk_neutral_10y_ema ?? report.risk_neutral_10y ?? report.riskNeutral10yEma ?? report.riskNeutral10y ?? (parseFloat(report.yield10y_ema || 0.035) - parseFloat(rawTermPremium));
         riskNeutralData.push(parseFloat(rawRiskNeutral) * 100);
 
-        let rawBalanceSheet = report.balance_sheet_intensity ?? report.balanceSheetIntensity ?? (report.qe_intensity ? parseFloat(report.qe_intensity) : 0.0);
-        let bsBps = parseFloat(rawBalanceSheet) * 10000;
-        balanceSheetData.push(bsBps);
-        balanceSheetAssetsData.push(slicedAssetStock[index] ?? 100.0);
+        // The Authority's bond holdings, measured as the engine holds them: how far they press the 10-year yield down.
+        // The bars are the quarter's purchases or run-off, the change in that stock.
+        const holdingsBps = (row) => {
+            const raw = row?.balance_sheet_intensity ?? row?.qe_intensity ?? null;
+            return raw === null ? null : parseFloat(raw) * 10000;
+        };
+        const reportIndex = reports.length - qCount + index;
+        const holdingsNow = holdingsBps(report);
+        const holdingsBefore = reportIndex > 0 ? holdingsBps(reports[reportIndex - 1]) : null;
+        balanceSheetHoldingsData.push(holdingsNow);
+        balanceSheetChangeData.push(holdingsNow !== null && holdingsBefore !== null ? holdingsNow - holdingsBefore : null);
 
         // Financial Conditions Index (FCI)
         let rawFci = report.financial_conditions_index ?? report.financialConditionsIndex ?? 0.0;
@@ -305,58 +342,11 @@ export function updateMacroCharts(reports, timeframe = currentMacroTimeframe) {
         fciData.push(parseFloat(rawFci));
         fciEmaData.push(parseFloat(rawFciEma));
 
-        // Supply-Side Cost-Push Shocks & Lags (in basis points and percent)
-        let rawAgriLag = report.agri_cost_push_lag ?? report.agriCostPushLag ?? 0.0;
-        agriLagData.push(parseFloat(rawAgriLag) * 10000);
-        foodLagPctData.push(parseFloat(rawAgriLag) * 100);
-
-        let rawEnergy = parseFloat(report.energy_price_index_ema || report.energy_price_index || 100.0);
-        // Mirrors MacroEngine::ENERGY_COST_PUSH_TRANSMISSION (headline inflation per unit energy shock)
-        let energyDragBps = ((rawEnergy - 100.0) / 100.0) * 0.025 * 10000;
-        energySupplyDragData.push(energyDragBps);
-
-        let rawFreight = parseFloat(report.freight_rate_index_ema || report.freight_rate_index || 100.0);
-        // Mirrors MacroEngine::CORE_GOODS_FREIGHT_SENSITIVITY x INFLATION_WEIGHT_GOODS (headline share of the core-goods freight push)
-        let freightDragBps = ((rawFreight - 100.0) / 100.0) * 0.015 * 0.25 * 10000;
-        freightSupplyDragData.push(freightDragBps);
-
-        // Economic Growth Momentum & Solow-Swan Productivity Decomposition
-        let inf = parseFloat(report.inflation_ema ?? report.inflation ?? 0.02) * 100;
-        let currentGap = parseFloat(report.output_gap_ema ?? report.output_gap ?? 0.0) * 100;
-
         // Potential growth is read off the potential GDP the engine accumulated over a trailing year: labour force
-        // plus trend TFP plus the productivity shocks potential has absorbed so far. The raw TFP index moves first
-        // and potential catches up over years, so growth read off the index shows gains the economy has not yet made.
-        const tfpLookback = Math.min(4, index);
-        const rawPotential = report.potential_gdp_index ?? report.potentialGdpIndex ?? null;
-        const rawPrevPotential = tfpLookback > 0
-            ? (slicedReports[index - tfpLookback].potential_gdp_index ?? slicedReports[index - tfpLookback].potentialGdpIndex ?? null)
-            : null;
-        let prevGap = index > 0
-            ? parseFloat(slicedReports[index - 1].output_gap_ema ?? slicedReports[index - 1].output_gap ?? currentGap) * 100
-            : currentGap;
-
-        // Real Potential GDP Growth (%) and the productivity growth inside it (potential less structural labour-force growth).
-        let potentialGrowth = null;
-        let tfpGrowth = null;
-        if (rawPotential !== null && rawPrevPotential !== null && parseFloat(rawPotential) > 0 && parseFloat(rawPrevPotential) > 0) {
-            potentialGrowth = (Math.log(parseFloat(rawPotential) / parseFloat(rawPrevPotential)) / (tfpLookback * 0.25)) * 100;
-            tfpGrowth = potentialGrowth - structuralLaborGrowthPct;
-        }
-
-        // Realized Cyclical Output Gap Shift Annualized (%): dGap / dt
-        let cyclicalGapShift = (currentGap - prevGap) / 0.25;
-
-        // Real GDP Annualized Growth Rate (%): Potential Growth + Cyclical Gap Momentum
-        let realGrowth = potentialGrowth === null ? null : Math.max(-12.0, Math.min(15.0, potentialGrowth + cyclicalGapShift));
-
-        // Nominal GDP Annualized Growth Rate (%): Real GDP Growth + Inflation
-        let nominalGrowth = realGrowth === null ? null : realGrowth + inf;
-
-        tfpGrowthData.push(tfpGrowth);
-        potentialGdpGrowthData.push(potentialGrowth);
-        realGdpGrowthData.push(realGrowth);
-        nominalGdpGrowthData.push(nominalGrowth);
+        // plus trend TFP plus the productivity shocks potential has absorbed so far. The productivity inside it is
+        // potential less structural labour-force growth.
+        const potentialGrowth = potentialGdpGrowthData[index];
+        tfpGrowthData.push(potentialGrowth === null ? null : potentialGrowth - structuralLaborGrowthPct);
 
         // Shapiro (2022) Sectoral Inflation Components
         let rawSupercore = report.supercore_inflation_ema ?? report.supercoreInflationEma ?? report.inflation_ema;
@@ -366,11 +356,25 @@ export function updateMacroCharts(reports, timeframe = currentMacroTimeframe) {
         coreGoodsInflationData.push(parseFloat(rawCoreGoods) * 100);
 
         // Jarrow-Lando-Turnbull (1997) Dual-Tranche Corporate Credit Spreads
-        let rawHySpread = report.high_yield_credit_spread_ema ?? report.highYieldCreditSpreadEma ?? (parseFloat(rawCreditSpread) * 2.5);
-        let hyBps = parseFloat(rawHySpread) * 10000;
-        let igBps = parseFloat(rawCreditSpread) * 10000;
+        // A quarter recorded before the high-yield spread was kept is a gap, not a guess at it.
+        const rawHySpread = report.high_yield_credit_spread_ema ?? report.highYieldCreditSpreadEma ?? null;
+        const hyBps = rawHySpread === null ? null : parseFloat(rawHySpread) * 10000;
+        const igBps = parseFloat(rawCreditSpread) * 10000;
         highYieldSpreadBpsData.push(hyBps);
-        creditCliffRatioData.push(igBps > 0 ? (hyBps / igBps) : 2.5);
+        creditCliffRatioData.push(hyBps !== null && igBps > 0 ? (hyBps / igBps) : null);
+
+        // The excess bond premium: the part of the spread default risk does not explain, the market's appetite for risk.
+        const rawEbp = report.excess_bond_premium ?? null;
+        excessBondPremiumBpsData.push(rawEbp === null ? null : parseFloat(rawEbp) * 10000);
+
+        const rawEpu = report.policy_uncertainty_index ?? null;
+        const rawEpuEma = report.policy_uncertainty_index_ema ?? null;
+        policyUncertaintyData.push(rawEpu === null ? null : parseFloat(rawEpu));
+        policyUncertaintyEmaData.push(rawEpuEma === null ? null : parseFloat(rawEpuEma));
+
+        // The Sahm reading, in percentage points; rows recorded before it was kept leave a gap.
+        const rawSahm = report.sahm_recession_indicator ?? null;
+        sahmData.push(rawSahm === null ? null : parseFloat(rawSahm) * 100);
 
         // Metzler (1941) & Working (1949) Inventory & Storage
         let rawInvGap = report.inventory_stock_gap_ema ?? report.inventoryStockGapEma ?? 0.0;
@@ -461,7 +465,7 @@ export function updateMacroCharts(reports, timeframe = currentMacroTimeframe) {
         let rawCreditGap = report.credit_to_gdp_gap_ema ?? report.credit_to_gdp_gap ?? report.creditToGdpGapEma ?? report.creditToGdpGap ?? 0.0;
         creditToGdpGapData.push(parseFloat(rawCreditGap) * 100);
 
-        let rawCcyb = report.countercyclical_buffer_rate_ema ?? report.countercyclical_buffer_rate ?? report.countercyclicalBufferRateEma ?? report.countercyclicalBufferRate ?? 0.0;
+        let rawCcyb = report.countercyclical_buffer_rate ?? report.countercyclicalBufferRate ?? 0.0;
         ccybRateData.push(parseFloat(rawCcyb) * 100);
 
         let rawForGap = report.foreign_output_gap_ema ?? report.foreign_output_gap ?? report.foreignOutputGapEma ?? report.foreignOutputGap ?? 0.0;
@@ -480,7 +484,20 @@ export function updateMacroCharts(reports, timeframe = currentMacroTimeframe) {
         mmfShareData.push(parseFloat(rawMmf) * 100);
     });
 
+    // The groups and their labels come from the server, in the order the chart stacks them.
+    let gapGroups = {};
+    try {
+        gapGroups = JSON.parse(document.getElementById('macroGapBreakdownChart')?.dataset.groups ?? '{}');
+    } catch (e) {
+        gapGroups = {};
+    }
+    const gapGroupKeys = Object.keys(gapGroups);
+    const gapBreakdownData = gapBreakdownSeries(slicedReports, gapGroupKeys);
+    const gapChangeData = slicedReports.map((row, i) => row.gap_breakdown ? gapBreakdownData.reduce((sum, series) => sum + (series[i] ?? 0), 0) : null);
+
     updateMacroHud({
+        gapChangeData, foodPushData, energyPushData, excessBondPremiumBpsData, policyUncertaintyData, sahmData,
+        balanceSheetHoldingsData, balanceSheetChangeData,
         inflationData, outputGapData, policyRateData, yield10yData,
         mortgageYieldData, spread30yData, volData, erpData, taxData,
         unemploymentData, wageGrowthData, tipsBreakevenData, realWageGapData, interbankSpreadBpsData,
@@ -488,7 +505,7 @@ export function updateMacroCharts(reports, timeframe = currentMacroTimeframe) {
         creEmaData, residentialEmaData, sentimentData, dealActivityData,
         energyPriceData, crackSpreadData, gscpiData, sovereignDebtData,
         termPremiumData, realGdpGrowthData, tfpGrowthData, recessionProbData,
-        slicedAssetStock, balanceSheetData, fciData, sloosData, agriLagData,
+        fciData, sloosData,
         supercoreInflationData, coreGoodsInflationData,
         highYieldSpreadBpsData, creditCliffRatioData,
         inventoryStockGapData, policyRuleGapBpsData,
@@ -525,11 +542,14 @@ export function updateMacroCharts(reports, timeframe = currentMacroTimeframe) {
     renderWhenVisible('macroInterbankLiquidityChart', () => renderMacroInterbankLiquidityChart(labels, interbankSpreadBpsData, creditSpreadBpsData));
     renderWhenVisible('macroTermPremiumChart', () => renderMacroTermPremiumChart(labels, yield10yData, riskNeutralData, termPremiumData, naturalRateData));
     renderWhenVisible('macroGdpGrowthChart', () => renderMacroGdpGrowthChart(labels, nominalGdpGrowthData, realGdpGrowthData, potentialGdpGrowthData, tfpGrowthData, recessionProbData));
-    renderWhenVisible('macroBalanceSheetChart', () => renderMacroBalanceSheetChart(labels, balanceSheetAssetsData, balanceSheetData));
+    renderWhenVisible('macroBalanceSheetChart', () => renderMacroBalanceSheetChart(labels, balanceSheetHoldingsData, balanceSheetChangeData));
     renderWhenVisible('macroFciChart', () => renderMacroFciChart(labels, fciData, fciEmaData, sloosData));
-    renderWhenVisible('macroCostPushChart', () => renderMacroCostPushChart(labels, agriLagData, energySupplyDragData, freightSupplyDragData));
-    renderWhenVisible('macroSectoralInflationChart', () => renderMacroSectoralInflationChart(labels, inflationData, supercoreInflationData, coreGoodsInflationData, foodLagPctData, ppiData));
-    renderWhenVisible('macroCreditCliffChart', () => renderMacroCreditCliffChart(labels, creditSpreadBpsData, highYieldSpreadBpsData, creditCliffRatioData, corporateDefaultBpsData));
+    renderWhenVisible('macroCostPushChart', () => renderMacroCostPushChart(labels, foodPushData, energyPushData));
+    renderWhenVisible('macroSectoralInflationChart', () => renderMacroSectoralInflationChart(labels, inflationData, supercoreInflationData, coreGoodsInflationData, ppiData));
+    renderWhenVisible('macroCreditCliffChart', () => renderMacroCreditCliffChart(labels, creditSpreadBpsData, highYieldSpreadBpsData, creditCliffRatioData, corporateDefaultBpsData, excessBondPremiumBpsData));
+    renderWhenVisible('macroGapBreakdownChart', () => renderMacroGapBreakdownChart(labels, gapGroups, gapBreakdownData, gapChangeData));
+    renderWhenVisible('macroPolicyUncertaintyChart', () => renderMacroPolicyUncertaintyChart(labels, policyUncertaintyData, policyUncertaintyEmaData));
+    renderWhenVisible('macroSahmChart', () => renderMacroSahmChart(labels, sahmData));
     renderWhenVisible('macroInventoryCycleChart', () => renderMacroInventoryCycleChart(labels, inventoryStockGapData, outputGapData, energyBufferData, capacityUtilizationData));
     renderWhenVisible('macroPolicyRuleChart', () => renderMacroPolicyRuleChart(labels, policyRuleGapBpsData, policyRateData, targetRateData));
     renderWhenVisible('macroLeadingIndicatorsChart', () => renderMacroLeadingIndicatorsChart(labels, pmiData, housingStartsData, moneySupplyGrowthData, tradeBalanceData, ppiData));
@@ -780,7 +800,7 @@ function renderMacroMortgageChart(labels, policyRateData, yield30yData, spread30
         options: {
             responsive: true, maintainAspectRatio: false,
             interaction: { mode: 'index', intersect: false },
-            plugins: { legend: { position: 'bottom', labels: { boxWidth: 8, usePointStyle: true } }, tooltip: { callbacks: { label: (ctx) => `${ctx.dataset.label}: ${ctx.raw.toFixed(2)}%` } } },
+            plugins: { legend: { position: 'bottom', labels: { boxWidth: 8, usePointStyle: true } }, tooltip: { callbacks: { label: (ctx) => `${ctx.dataset.label}: ${ctx.raw === null ? '-' : ctx.raw.toFixed(2) + '%'}` } } },
             scales: {
                 y: {
                     grid: { color: GRID_COLOR },
@@ -1198,11 +1218,17 @@ function renderMacroGdpGrowthChart(labels, nominalGdpGrowthData, realGdpGrowthDa
     });
 }
 
-function renderMacroBalanceSheetChart(labels, balanceSheetAssetsData, balanceSheetIntensityData) {
+function renderMacroBalanceSheetChart(labels, holdingsData, changeData) {
     const canvas = document.getElementById('macroBalanceSheetChart');
     if (!canvas) return;
     macroBalanceSheetChartInstance = destroyChartInstance(macroBalanceSheetChartInstance);
     const ctx = canvas.getContext('2d');
+
+    // Purchases add to the holdings and run-off takes them away; a quarter that moved them less than a basis point holds.
+    const changeColour = (val, alpha) => {
+        if (val === null || Math.abs(val) < 1) return withAlpha(THEME_COLORS.textMuted, alpha);
+        return withAlpha(val > 0 ? THEME_COLORS.positive : THEME_COLORS.negative, alpha);
+    };
 
     macroBalanceSheetChartInstance = new Chart(ctx, {
         data: {
@@ -1210,8 +1236,8 @@ function renderMacroBalanceSheetChart(labels, balanceSheetAssetsData, balanceShe
             datasets: [
                 {
                     type: 'line',
-                    label: 'Asset holdings',
-                    data: balanceSheetAssetsData,
+                    label: 'Holdings',
+                    data: holdingsData,
                     borderColor: SERIES.blue,
                     backgroundColor: withAlpha(SERIES.blue, 0.12),
                     borderWidth: 2.5,
@@ -1222,30 +1248,10 @@ function renderMacroBalanceSheetChart(labels, balanceSheetAssetsData, balanceShe
                 },
                 {
                     type: 'bar',
-                    label: 'Purchases (+) or run-off (−)',
-                    data: balanceSheetIntensityData,
-                    backgroundColor: balanceSheetIntensityData.map((val, idx) => {
-                        const prevVal = idx > 0 ? balanceSheetIntensityData[idx - 1] : val;
-                        const delta = val - prevVal;
-                        if (val > 5) {
-                            if (delta > 2) return withAlpha(THEME_COLORS.positive, 0.5); // QE Expansion (Green)
-                            if (delta < -2) return withAlpha(THEME_COLORS.negative, 0.5); // QT Runoff (Rose)
-                            return withAlpha(THEME_COLORS.warning, 0.55); // Reinvestment Hold (Amber)
-                        }
-                        if (val < -5) return withAlpha(THEME_COLORS.negative, 0.5); // QT Runoff (Rose)
-                        return withAlpha(THEME_COLORS.textMuted, 0.15); // Neutral
-                    }),
-                    borderColor: balanceSheetIntensityData.map((val, idx) => {
-                        const prevVal = idx > 0 ? balanceSheetIntensityData[idx - 1] : val;
-                        const delta = val - prevVal;
-                        if (val > 5) {
-                            if (delta > 2) return THEME_COLORS.positive;
-                            if (delta < -2) return THEME_COLORS.negative;
-                            return THEME_COLORS.warning;
-                        }
-                        if (val < -5) return THEME_COLORS.negative;
-                        return 'transparent';
-                    }),
+                    label: 'Purchases (+) or run-off (−) in the quarter',
+                    data: changeData,
+                    backgroundColor: changeData.map(val => changeColour(val, 0.5)),
+                    borderColor: changeData.map(val => changeColour(val, 1)),
                     borderWidth: 1,
                     borderRadius: 3,
                     yAxisID: 'y1'
@@ -1259,29 +1265,9 @@ function renderMacroBalanceSheetChart(labels, balanceSheetAssetsData, balanceShe
                 legend: { position: 'bottom', labels: { boxWidth: 8, usePointStyle: true } },
                 tooltip: {
                     callbacks: {
-                        label: (ctx) => {
-                            if (ctx.dataset.yAxisID === 'y1') {
-                                const val = ctx.raw;
-                                const idx = ctx.dataIndex;
-                                const prevVal = idx > 0 ? balanceSheetIntensityData[idx - 1] : val;
-                                const delta = val - prevVal;
-
-                                let action = 'Neutral';
-                                if (val > 5) {
-                                    if (delta > 2) {
-                                        action = 'QE Expansion';
-                                    } else if (delta < -2) {
-                                        action = 'QT Runoff';
-                                    } else {
-                                        action = 'Reinvestment Hold';
-                                    }
-                                } else if (val < -5) {
-                                    action = 'QT Runoff';
-                                }
-                                return `${ctx.dataset.label}: ${val > 0 ? '+' : ''}${val.toFixed(0)} bps (${action})`;
-                            }
-                            return `${ctx.dataset.label}: ${ctx.raw.toFixed(1)}`;
-                        }
+                        label: (ctx) => ctx.raw === null
+                            ? `${ctx.dataset.label}: -`
+                            : `${ctx.dataset.label}: ${ctx.dataset.yAxisID === 'y1' ? signed(ctx.raw, 0) : ctx.raw.toFixed(0)} bps`
                     }
                 }
             },
@@ -1290,9 +1276,10 @@ function renderMacroBalanceSheetChart(labels, balanceSheetAssetsData, balanceShe
                     type: 'linear',
                     display: true,
                     position: 'left',
+                    beginAtZero: true,
                     grid: { color: GRID_COLOR },
-                    ticks: { callback: (val) => Math.round(val) },
-                    title: { display: true, text: 'Index' }
+                    ticks: { callback: (val) => Math.round(val) + ' bps' },
+                    title: { display: true, text: '10-year yield held down (bps)' }
                 },
                 y1: {
                     type: 'linear',
@@ -1303,7 +1290,7 @@ function renderMacroBalanceSheetChart(labels, balanceSheetAssetsData, balanceShe
                         maxTicksLimit: 6,
                         callback: (val) => (val > 0 ? '+' : '') + Math.round(val) + ' bps'
                     },
-                    title: { display: true, text: 'Basis points' }
+                    title: { display: true, text: 'Change in the quarter' }
                 },
                 x: {
                     grid: { color: GRID_COLOR },
@@ -2113,46 +2100,30 @@ function renderMacroFciChart(labels, fciData, fciEmaData, sloosData = []) {
     });
 }
 
-function renderMacroCostPushChart(labels, agriLagData, energySupplyDragData, freightSupplyDragData) {
+function renderMacroCostPushChart(labels, foodPushData, energyPushData) {
     const canvas = document.getElementById('macroCostPushChart');
     if (!canvas) return;
     macroCostPushChartInstance = destroyChartInstance(macroCostPushChartInstance);
     const ctx = canvas.getContext('2d');
 
     macroCostPushChartInstance = new Chart(ctx, {
-        type: 'line',
+        type: 'bar',
         data: {
             labels: labels,
             datasets: [
                 {
                     label: 'Food',
-                    data: agriLagData,
-                    borderColor: SERIES.blue,
-                    backgroundColor: withAlpha(SERIES.blue, 0.15),
-                    borderWidth: 2,
-                    tension: 0.25,
-                    fill: true,
-                    pointRadius: labels.length > 50 ? 0 : 2
+                    data: foodPushData,
+                    backgroundColor: withAlpha(SERIES.blue, 0.75),
+                    borderRadius: 2,
+                    stack: 'push'
                 },
                 {
                     label: 'Energy',
-                    data: energySupplyDragData,
-                    borderColor: SERIES.orange,
-                    backgroundColor: withAlpha(SERIES.orange, 0.10),
-                    borderWidth: 2,
-                    tension: 0.25,
-                    fill: false,
-                    pointRadius: labels.length > 50 ? 0 : 1
-                },
-                {
-                    label: 'Freight',
-                    data: freightSupplyDragData,
-                    borderColor: SERIES.aqua,
-                    backgroundColor: withAlpha(SERIES.aqua, 0.10),
-                    borderWidth: 2,
-                    tension: 0.25,
-                    fill: false,
-                    pointRadius: labels.length > 50 ? 0 : 1
+                    data: energyPushData,
+                    backgroundColor: withAlpha(SERIES.orange, 0.75),
+                    borderRadius: 2,
+                    stack: 'push'
                 }
             ]
         },
@@ -2164,7 +2135,7 @@ function renderMacroCostPushChart(labels, agriLagData, energySupplyDragData, fre
                 legend: { position: 'bottom', labels: { boxWidth: 8, usePointStyle: true } },
                 tooltip: {
                     callbacks: {
-                        label: (ctx) => `${ctx.dataset.label}: ${ctx.raw > 0 ? '+' : ''}${ctx.raw.toFixed(1)} bps`
+                        label: (ctx) => ctx.raw === null ? `${ctx.dataset.label}: -` : `${ctx.dataset.label}: ${signed(ctx.raw, 0)} bps`
                     }
                 }
             },
@@ -2172,11 +2143,13 @@ function renderMacroCostPushChart(labels, agriLagData, energySupplyDragData, fre
                 y: {
                     type: 'linear',
                     display: true,
+                    stacked: true,
                     grid: { color: GRID_COLOR },
                     ticks: { callback: (val) => (val > 0 ? '+' : '') + val.toFixed(0) + ' bps' },
-                    title: { display: true, text: 'Basis points' }
+                    title: { display: true, text: 'Basis points a year' }
                 },
                 x: {
+                    stacked: true,
                     grid: { color: GRID_COLOR },
                     ticks: { maxTicksLimit: 8 }
                 }
@@ -2185,7 +2158,7 @@ function renderMacroCostPushChart(labels, agriLagData, energySupplyDragData, fre
     });
 }
 
-function renderMacroSectoralInflationChart(labels, headlineData, supercoreData, coreGoodsData, foodLagData, ppiData = []) {
+function renderMacroSectoralInflationChart(labels, headlineData, supercoreData, coreGoodsData, ppiData = []) {
     const canvas = document.getElementById('macroSectoralInflationChart');
     if (!canvas) return;
     macroSectoralInflationChartInstance = destroyChartInstance(macroSectoralInflationChartInstance);
@@ -2218,16 +2191,6 @@ function renderMacroSectoralInflationChart(labels, headlineData, supercoreData, 
             borderWidth: 2,
             tension: 0.3,
             pointRadius: labels.length > 50 ? 0 : 1.5
-        },
-        {
-            label: 'Food',
-            data: foodLagData,
-            borderColor: SERIES.yellow,
-            backgroundColor: SERIES.yellow,
-            borderWidth: 1.5,
-            borderDash: [4, 4],
-            tension: 0.3,
-            pointRadius: 0
         }
     ];
 
@@ -2235,8 +2198,8 @@ function renderMacroSectoralInflationChart(labels, headlineData, supercoreData, 
         datasets.push({
             label: 'Producer prices',
             data: ppiData,
-            borderColor: SERIES.magenta,
-            backgroundColor: withAlpha(SERIES.magenta, 0.08),
+            borderColor: SERIES.yellow,
+            backgroundColor: withAlpha(SERIES.yellow, 0.08),
             borderWidth: 2,
             tension: 0.3,
             pointRadius: labels.length > 50 ? 0 : 1.5
@@ -2263,7 +2226,7 @@ function renderMacroSectoralInflationChart(labels, headlineData, supercoreData, 
                     display: true,
                     grid: { color: GRID_COLOR },
                     ticks: { callback: (val) => val.toFixed(1) + '%' },
-                    title: { display: true, text: 'Year on year (%)' }
+                    title: { display: true, text: 'Annual rate (%)' }
                 },
                 x: {
                     grid: { color: GRID_COLOR },
@@ -2274,7 +2237,7 @@ function renderMacroSectoralInflationChart(labels, headlineData, supercoreData, 
     });
 }
 
-function renderMacroCreditCliffChart(labels, igBpsData, hyBpsData, cliffRatioData, corporateDefaultBpsData = []) {
+function renderMacroCreditCliffChart(labels, igBpsData, hyBpsData, cliffRatioData, corporateDefaultBpsData = [], excessBondPremiumBpsData = []) {
     const canvas = document.getElementById('macroCreditCliffChart');
     if (!canvas) return;
     macroCreditCliffChartInstance = destroyChartInstance(macroCreditCliffChartInstance);
@@ -2320,11 +2283,26 @@ function renderMacroCreditCliffChart(labels, igBpsData, hyBpsData, cliffRatioDat
         });
     }
 
+    // What bond buyers charge over expected default losses: the appetite for credit risk, which leads the cycle.
+    if (excessBondPremiumBpsData.some(v => v !== null)) {
+        datasets.push({
+            label: 'Excess bond premium',
+            data: excessBondPremiumBpsData,
+            borderColor: SERIES.yellow,
+            backgroundColor: SERIES.yellow,
+            borderWidth: 2,
+            tension: 0.25,
+            fill: false,
+            yAxisID: 'y',
+            pointRadius: 0
+        });
+    }
+
     datasets.push({
         label: 'High-yield / investment-grade',
         data: cliffRatioData,
-        borderColor: SERIES.yellow,
-        backgroundColor: SERIES.yellow,
+        borderColor: SERIES.magenta,
+        backgroundColor: SERIES.magenta,
         borderWidth: 2,
         tension: 0.25,
         yAxisID: 'y1',
@@ -2345,9 +2323,11 @@ function renderMacroCreditCliffChart(labels, igBpsData, hyBpsData, cliffRatioDat
                 legend: { position: 'bottom', labels: { boxWidth: 8, usePointStyle: true } },
                 tooltip: {
                     callbacks: {
-                        label: (ctx) => ctx.dataset.yAxisID === 'y1'
-                            ? `${ctx.dataset.label}: ${ctx.raw.toFixed(2)}x`
-                            : `${ctx.dataset.label}: ${ctx.raw.toFixed(0)} bps`
+                        label: (ctx) => ctx.raw === null
+                            ? `${ctx.dataset.label}: -`
+                            : (ctx.dataset.yAxisID === 'y1'
+                                ? `${ctx.dataset.label}: ${ctx.raw.toFixed(2)}x`
+                                : `${ctx.dataset.label}: ${ctx.raw.toFixed(0)} bps`)
                     }
                 }
             },
@@ -3067,6 +3047,212 @@ function renderMacroBankingLiquidityChart(labels, depositBetaData, mmfShareData,
     });
 }
 
+function renderMacroGapBreakdownChart(labels, groups, breakdownData, changeData) {
+    const canvas = document.getElementById('macroGapBreakdownChart');
+    if (!canvas) return;
+    macroGapBreakdownChartInstance = destroyChartInstance(macroGapBreakdownChartInstance);
+    const ctx = canvas.getContext('2d');
+
+    // The groups take the categorical slots in order; what the drift does not explain stays neutral, since it is not
+    // a story about the economy.
+    const slots = Object.values(SERIES);
+    const datasets = Object.entries(groups).map(([key, label], i) => {
+        const colour = key === 'other' ? THEME_COLORS.textMuted : slots[i % slots.length];
+        return {
+            type: 'bar',
+            label: label,
+            data: breakdownData[i],
+            backgroundColor: withAlpha(colour, key === 'other' ? 0.45 : 0.8),
+            borderWidth: 0,
+            stack: 'gap',
+            order: 2
+        };
+    });
+    datasets.push({
+        type: 'line',
+        label: 'Change in the gap',
+        data: changeData,
+        borderColor: THEME_COLORS.textPrimary,
+        backgroundColor: THEME_COLORS.textPrimary,
+        borderWidth: 1.5,
+        tension: 0.2,
+        pointRadius: labels.length > 50 ? 0 : 2,
+        order: 1
+    });
+
+    macroGapBreakdownChartInstance = new Chart(ctx, {
+        data: { labels: labels, datasets: datasets },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            plugins: {
+                legend: { position: 'bottom', labels: { boxWidth: 8, usePointStyle: true } },
+                tooltip: {
+                    filter: (item) => item.raw !== null && Math.abs(item.raw) >= 0.005,
+                    callbacks: {
+                        label: (ctx) => `${ctx.dataset.label}: ${signed(ctx.raw, 2)} pp`
+                    }
+                }
+            },
+            scales: {
+                y: {
+                    type: 'linear',
+                    stacked: true,
+                    grid: { color: GRID_COLOR },
+                    ticks: { callback: (val) => signed(val, 1) + ' pp' },
+                    title: { display: true, text: 'Points of potential output' }
+                },
+                x: {
+                    stacked: true,
+                    grid: { color: GRID_COLOR },
+                    ticks: { maxTicksLimit: 8 }
+                }
+            }
+        }
+    });
+}
+
+function renderMacroPolicyUncertaintyChart(labels, indexData, averageData) {
+    const canvas = document.getElementById('macroPolicyUncertaintyChart');
+    if (!canvas) return;
+    macroPolicyUncertaintyChartInstance = destroyChartInstance(macroPolicyUncertaintyChartInstance);
+    const ctx = canvas.getContext('2d');
+
+    // The index's long-run average, published on the canvas so the page keeps no copy of it.
+    const baseline = parseFloat(canvas.dataset.baseline ?? 'NaN');
+
+    const datasets = [
+        {
+            label: 'Policy uncertainty',
+            data: indexData,
+            borderColor: SERIES.blue,
+            backgroundColor: withAlpha(SERIES.blue, 0.12),
+            borderWidth: 2,
+            tension: 0.25,
+            fill: true,
+            pointRadius: labels.length > 50 ? 0 : 1.5
+        },
+        {
+            label: 'Quarter average',
+            data: averageData,
+            borderColor: SERIES.orange,
+            backgroundColor: SERIES.orange,
+            borderWidth: 2,
+            tension: 0.25,
+            fill: false,
+            pointRadius: 0
+        }
+    ];
+    if (!isNaN(baseline)) {
+        datasets.push({
+            label: 'Long-run average',
+            data: labels.map(() => baseline),
+            borderColor: withAlpha(THEME_COLORS.textMuted, 0.7),
+            borderWidth: 1,
+            borderDash: [4, 4],
+            fill: false,
+            pointRadius: 0
+        });
+    }
+
+    macroPolicyUncertaintyChartInstance = new Chart(ctx, {
+        type: 'line',
+        data: { labels: labels, datasets: datasets },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            plugins: {
+                legend: { position: 'bottom', labels: { boxWidth: 8, usePointStyle: true } },
+                tooltip: {
+                    callbacks: {
+                        label: (ctx) => `${ctx.dataset.label}: ${ctx.raw === null ? '-' : ctx.raw.toFixed(0)}`
+                    }
+                }
+            },
+            scales: {
+                y: {
+                    type: 'linear',
+                    grid: { color: GRID_COLOR },
+                    ticks: { callback: (val) => Math.round(val) },
+                    title: { display: true, text: 'Index' }
+                },
+                x: {
+                    grid: { color: GRID_COLOR },
+                    ticks: { maxTicksLimit: 8 }
+                }
+            }
+        }
+    });
+}
+
+function renderMacroSahmChart(labels, sahmData) {
+    const canvas = document.getElementById('macroSahmChart');
+    if (!canvas) return;
+    macroSahmChartInstance = destroyChartInstance(macroSahmChartInstance);
+    const ctx = canvas.getContext('2d');
+
+    // The rise that reads as a recession under way, published on the canvas as a fraction so the page keeps no copy of it.
+    const trigger = parseFloat(canvas.dataset.trigger ?? 'NaN') * 100;
+
+    const datasets = [
+        {
+            label: 'Unemployment rise',
+            data: sahmData,
+            borderColor: SERIES.blue,
+            backgroundColor: withAlpha(SERIES.blue, 0.12),
+            borderWidth: 2,
+            tension: 0.2,
+            fill: true,
+            spanGaps: false,
+            pointRadius: labels.length > 50 ? 0 : 1.5
+        }
+    ];
+    if (!isNaN(trigger)) {
+        datasets.push({
+            label: 'Recession signal',
+            data: labels.map(() => trigger),
+            borderColor: withAlpha(THEME_COLORS.textMuted, 0.7),
+            borderWidth: 1,
+            borderDash: [4, 4],
+            fill: false,
+            pointRadius: 0
+        });
+    }
+
+    macroSahmChartInstance = new Chart(ctx, {
+        type: 'line',
+        data: { labels: labels, datasets: datasets },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            plugins: {
+                legend: { position: 'bottom', labels: { boxWidth: 8, usePointStyle: true } },
+                tooltip: {
+                    callbacks: {
+                        label: (ctx) => `${ctx.dataset.label}: ${ctx.raw === null ? '-' : ctx.raw.toFixed(2) + ' pp'}`
+                    }
+                }
+            },
+            scales: {
+                y: {
+                    type: 'linear',
+                    min: 0,
+                    grid: { color: GRID_COLOR },
+                    ticks: { callback: (val) => val.toFixed(1) },
+                    title: { display: true, text: 'Percentage points' }
+                },
+                x: {
+                    grid: { color: GRID_COLOR },
+                    ticks: { maxTicksLimit: 8 }
+                }
+            }
+        }
+    });
+}
+
 export function resizeMacroCharts() {
     const instances = [
         macroEconomyChartInstance, macroRatesChartInstance, macroMortgageChartInstance,
@@ -3078,7 +3264,8 @@ export function resizeMacroCharts() {
         macroSectoralInflationChartInstance, macroCreditCliffChartInstance,
         macroInventoryCycleChartInstance, macroPolicyRuleChartInstance,
         macroLeadingIndicatorsChartInstance,
-        macroHouseholdCreditChartInstance, macroGlobalCycleChartInstance, macroBankingLiquidityChartInstance
+        macroHouseholdCreditChartInstance, macroGlobalCycleChartInstance, macroBankingLiquidityChartInstance,
+        macroGapBreakdownChartInstance, macroPolicyUncertaintyChartInstance, macroSahmChartInstance
     ];
     instances.forEach(c => {
         if (c) {
@@ -3118,4 +3305,7 @@ export function destroyMacroCharts() {
     macroHouseholdCreditChartInstance = destroyChartInstance(macroHouseholdCreditChartInstance);
     macroGlobalCycleChartInstance = destroyChartInstance(macroGlobalCycleChartInstance);
     macroBankingLiquidityChartInstance = destroyChartInstance(macroBankingLiquidityChartInstance);
+    macroGapBreakdownChartInstance = destroyChartInstance(macroGapBreakdownChartInstance);
+    macroPolicyUncertaintyChartInstance = destroyChartInstance(macroPolicyUncertaintyChartInstance);
+    macroSahmChartInstance = destroyChartInstance(macroSahmChartInstance);
 }

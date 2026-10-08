@@ -1,8 +1,10 @@
 import { THEME_COLORS, SERIES, withAlpha } from '../utils/colors.js';
-import { formatLarge } from '../utils/formatters.js';
+import { formatLarge, formatCurrency, formatPercent } from '../utils/formatters.js';
 import { destroyChartInstance } from '../utils/chart-config.js';
 import { renderWhenVisible, resetLazyCharts } from '../utils/lazy-chart.js';
 import { refreshChartGrid } from '../utils/chart-grid.js';
+import { buildIncomeStatement, incomeStatementTableHtml } from './income-statement.js';
+import { earningsAgainstConsensus } from './earnings-surprise.js';
 
 let profitEngineChartInstance = null;
 let revenueStreamsChartInstance = null;
@@ -21,6 +23,11 @@ let insuranceDualEngineChartInstance = null;
 let reitCoverageChartInstance = null;
 let reinvestmentIntensityChartInstance = null;
 let cyclicalDynamicsChartInstance = null;
+let kpiHistoryChartInstance = null;
+let earningsSurpriseChartInstance = null;
+
+// The operating-figures chart redraws on its own picker without refetching: the series of the last draw.
+let kpiHistory = { labels: [], rows: [], series: {}, selected: null };
 
 // A lender's interest income is the spread on its book, which the models report as a revenue stream
 // (net_interest_income for a bank, lending for credit services, direct_lending for a shadow bank; the
@@ -97,7 +104,8 @@ export function updateFundamentalCharts(timeframe, rawReports, context = {}) {
         isInsurer = false,
         sharesOutstanding = 1000000000,
         currentPrice = 0,
-        capitalThresholds = null
+        capitalThresholds = null,
+        kpiSeries = {}
     } = context;
 
     document.querySelectorAll('[data-financial-timeframe]').forEach(btn => {
@@ -106,6 +114,7 @@ export function updateFundamentalCharts(timeframe, rawReports, context = {}) {
 
     const latest = rawReports[rawReports.length - 1];
     renderFinancialStatements(latest);
+    renderIncomeStatement(rawReports, businessModel);
 
     let labels = [];
 
@@ -114,6 +123,7 @@ export function updateFundamentalCharts(timeframe, rawReports, context = {}) {
     let netIncomeData = [];
     let capexData = [];
     let operatingMarginData = [];
+    let combinedRatioData = [];
 
     // Revenue Streams
     let revenueStreamsKeys = new Set();
@@ -178,11 +188,16 @@ export function updateFundamentalCharts(timeframe, rawReports, context = {}) {
     let reitLtvData = [];
     let reitSpreadData = [];
     let capexRevenueRatioData = [];
+    // Each period's reported operating KPIs, as filed (the year-end quarter's in the annual view).
+    let kpiRows = [];
 
     if (timeframe === '12Q') {
         const sliced = rawReports.slice(-12);
         sliced.forEach((report, index) => {
-            labels.push(`Q${(index % 4) + 1}`);
+            // The quarter the report covers, as the API dates it; one it cannot date is counted back from the latest.
+            const age = sliced.length - 1 - index;
+            labels.push(report.period || (age === 0 ? 'Latest' : `-${age}Q`));
+            kpiRows.push(parseKpis(report));
 
             let rev = parseFloat(report.revenue || 0);
             let inc = parseFloat(report.net_income || 0);
@@ -205,6 +220,7 @@ export function updateFundamentalCharts(timeframe, rawReports, context = {}) {
             netIncomeData.push(inc);
             capexData.push(-parseFloat(report.capital_expenditures || 0));
             operatingMarginData.push(parseFloat(report.operating_margin || 0) * 100);
+            combinedRatioData.push(combinedRatioPercent(report));
 
             debtData.push(parseFloat(report.total_debt || 0));
             equityData.push(parseFloat(report.equity || 0));
@@ -271,8 +287,8 @@ export function updateFundamentalCharts(timeframe, rawReports, context = {}) {
             let depOrCashVal = parseFloat(report.deposit_apy || report.depositApy || report.cash_yield || report.cashYield || 0) * 100;
             netInterestSpreadData.push(netInterestMargin(report, bRateVal - depOrCashVal));
 
-            let combRatioVal = (1.0 - opMarginVal);
-            underwritingProfitData.push(rev * combRatioVal);
+            // Premium less claims and expenses: the operating margin on premium. Investment income is charted beside it.
+            underwritingProfitData.push(rev * opMarginVal);
 
             reitPayoutRatioData.push(inc > 0 ? (divPaid / inc) * 100 : (divPaid > 0 ? 100 : 0));
             let totAssetsVal = totDebtVal + eqVal;
@@ -293,6 +309,7 @@ export function updateFundamentalCharts(timeframe, rawReports, context = {}) {
             if (yearCount === 1) labels.unshift("Now");
             else if (yearCount === 2) labels.unshift("-1 Yr");
             else labels.unshift(`-${yearCount - 1} Yrs`);
+            kpiRows.unshift(parseKpis(report));
 
             let sumRev = 0;
             let sumInc = 0;
@@ -347,6 +364,7 @@ export function updateFundamentalCharts(timeframe, rawReports, context = {}) {
             netIncomeData.unshift(sumInc);
             capexData.unshift(-sumCapEx);
             operatingMarginData.unshift(parseFloat(report.operating_margin || 0) * 100);
+            combinedRatioData.unshift(combinedRatioPercent(report));
 
             debtData.unshift(parseFloat(report.total_debt || 0));
             equityData.unshift(parseFloat(report.equity || 0));
@@ -411,8 +429,8 @@ export function updateFundamentalCharts(timeframe, rawReports, context = {}) {
             let depOrCashVal = parseFloat(report.deposit_apy || report.depositApy || report.cash_yield || report.cashYield || 0) * 100;
             netInterestSpreadData.unshift(netInterestMargin(report, bRateVal - depOrCashVal));
 
-            let combRatioVal = (1.0 - opMarginVal);
-            underwritingProfitData.unshift(sumRev * combRatioVal);
+            // Annual underwriting result on the year-end quarter's margin, as the combined ratio beside it is read.
+            underwritingProfitData.unshift(sumRev * opMarginVal);
 
             reitPayoutRatioData.unshift(sumInc > 0 ? (sumDiv / sumInc) * 100 : (sumDiv > 0 ? 100 : 0));
             let totAssetsVal = totDebtVal + eqVal;
@@ -428,9 +446,7 @@ export function updateFundamentalCharts(timeframe, rawReports, context = {}) {
     }
 
     let marginLabel = isInsurer ? 'Combined ratio' : 'Operating margin';
-    let displayMarginData = isInsurer
-        ? operatingMarginData.map(m => 100 - m)
-        : operatingMarginData;
+    let displayMarginData = isInsurer ? combinedRatioData : operatingMarginData;
 
     let ltmDiv = 0;
     let ltmInc = 0;
@@ -470,6 +486,7 @@ export function updateFundamentalCharts(timeframe, rawReports, context = {}) {
     renderWhenVisible('valuationMultiplesChart', () => renderValuationMultiplesChart(labels, peData, pbData, psData));
     renderWhenVisible('navDiscountChart', () => renderNavDiscountChart(labels, bvpsData, navPriceData, navDiscountData));
     renderWhenVisible('shareholderValueChart', () => renderShareholderValueChart(labels, epsData, bvpsData, sharesData));
+    renderWhenVisible('earningsSurpriseChart', () => renderEarningsSurpriseChart(labels, earningsAgainstConsensus(rawReports, timeframe)));
     renderWhenVisible('cashFlowSummaryChart', () => renderCashFlowSummaryChart(labels, fcfData, fcfConversionData, retainedCashData, operatingCashFlowData, investingCashFlowData, financingCashFlowData));
 
     if (['commercial_bank', 'credit_services', 'shadow_bank'].includes(businessModel)) {
@@ -482,6 +499,18 @@ export function updateFundamentalCharts(timeframe, rawReports, context = {}) {
         renderWhenVisible('reinvestmentIntensityChart', () => renderReinvestmentIntensityChart(labels, capexRevenueRatioData, operatingMarginData, roicData));
     } else if (['mining', 'oil_gas_producer', 'refining', 'shipping'].includes(businessModel)) {
         renderWhenVisible('cyclicalDynamicsChart', () => renderCyclicalDynamicsChart(labels, operatingMarginData, debtData, treasuryData));
+    }
+
+    if (Object.keys(kpiSeries).length > 0) {
+        const keys = Object.keys(kpiSeries);
+        kpiHistory = {
+            labels,
+            rows: kpiRows,
+            series: kpiSeries,
+            selected: keys.includes(kpiHistory.selected) ? kpiHistory.selected : keys[0],
+        };
+        setupKpiPicker();
+        renderWhenVisible('kpiHistoryChart', renderKpiHistoryChart);
     }
 
     let payoutRatio = 0;
@@ -1479,6 +1508,68 @@ function renderShareholderValueChart(labels, epsData, bvpsData, sharesData) {
 }
 
 /** The three statement cash-flow lines are parameters: this scope cannot see the caller's locals. */
+function renderEarningsSurpriseChart(labels, { reported, consensus, surprise }) {
+    const canvas = document.getElementById('earningsSurpriseChart');
+    if (!canvas) return;
+    earningsSurpriseChartInstance = destroyChartInstance(earningsSurpriseChartInstance);
+
+    // A beat is a gain against what the market expected, a miss a loss; a period with no consensus is neither.
+    const barColor = surprise.map(s => s === null ? withAlpha(THEME_COLORS.textMuted, 0.35) : (s >= 0 ? THEME_COLORS.positive : THEME_COLORS.negative));
+    const verdict = (s) => s === null ? 'no consensus' : (s > 0 ? `beat by ${formatPercent(s, 1)}` : (s < 0 ? `missed by ${formatPercent(-s, 1)}` : 'in line'));
+
+    earningsSurpriseChartInstance = new Chart(canvas.getContext('2d'), {
+        type: 'bar',
+        data: {
+            labels,
+            datasets: [
+                {
+                    type: 'line',
+                    label: 'Consensus',
+                    data: consensus,
+                    borderColor: SERIES.blue,
+                    backgroundColor: SERIES.blue,
+                    borderWidth: 2,
+                    pointRadius: 4,
+                    showLine: false,
+                    order: 0,
+                },
+                {
+                    label: 'Reported',
+                    data: reported,
+                    backgroundColor: barColor,
+                    borderRadius: 4,
+                    order: 1,
+                },
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            plugins: {
+                legend: { labels: { usePointStyle: true, boxWidth: 8 } },
+                tooltip: {
+                    callbacks: {
+                        label: (ctx) => `${ctx.dataset.label}: ${ctx.raw === null ? '—' : formatCurrency(ctx.raw)}`,
+                        footer: (items) => items.length ? sentenceCaseFirst(verdict(surprise[items[0].dataIndex])) : '',
+                    }
+                }
+            },
+            scales: {
+                x: { grid: { color: GRID_COLOR }, ticks: { maxTicksLimit: 12 } },
+                y: { grid: { color: GRID_COLOR }, ticks: { callback: (val) => formatCurrency(val) } }
+            }
+        }
+    });
+
+    const latest = surprise.length - 1;
+    setHud('hud-earningsSurpriseChart', latest < 0 || reported[latest] === null ? '-' : `${formatCurrency(reported[latest])}, ${verdict(surprise[latest])}`);
+}
+
+function sentenceCaseFirst(text) {
+    return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
 function renderCashFlowSummaryChart(labels, fcfData, fcfConversionData, retainedCashData, operatingCashFlowData, investingCashFlowData, financingCashFlowData) {
     const canvas = document.getElementById('cashFlowSummaryChart');
     if (!canvas) return;
@@ -1894,6 +1985,104 @@ function renderReinvestmentIntensityChart(labels, capexRevenueRatioData, operati
     });
 }
 
+// An insurer's combined ratio in percent: the loss and expense ratios its report files (FinancialSummaryBuilder::combinedRatio()),
+// or one less the operating margin on a report filed before the split was carried.
+function combinedRatioPercent(report) {
+    const kpis = parseKpis(report);
+    if (Number.isFinite(Number(kpis.loss_ratio)) && Number.isFinite(Number(kpis.expense_ratio)) && kpis.loss_ratio !== null && kpis.expense_ratio !== null) {
+        return (Number(kpis.loss_ratio) + Number(kpis.expense_ratio)) * 100;
+    }
+    return 100 - parseFloat(report.operating_margin || 0) * 100;
+}
+
+function parseKpis(report) {
+    try {
+        return typeof report.reported_kpis === 'string' ? (JSON.parse(report.reported_kpis) || {}) : (report.reported_kpis || {});
+    } catch (e) {
+        return {};
+    }
+}
+
+// How each KPI format (FinancialSummaryBuilder::KPI_LABELS) reads on an axis and in the HUD: the same units the
+// summary tile prints, so a figure reads the same in both places.
+const KPI_FORMATS = {
+    percent: { scale: 100, text: (v) => `${v.toFixed(2)}%` },
+    signed_percent: { scale: 100, text: (v) => `${v > 0 ? '+' : ''}${v.toFixed(2)}%` },
+    multiple: { scale: 1, text: (v) => `${v.toFixed(2)}x` },
+    quarters: { scale: 1, text: (v) => `${v.toFixed(1)} qtrs` },
+    years: { scale: 1, text: (v) => `${v.toFixed(1)} yrs` },
+    index: { scale: 1, text: (v) => v.toFixed(3) },
+    signed_index: { scale: 1, text: (v) => `${v > 0 ? '+' : ''}${v.toFixed(3)}` },
+};
+
+// The picker is server-rendered, one button per KPI; a click only re-selects and redraws from the stored series.
+function setupKpiPicker() {
+    document.querySelectorAll('[data-kpi-key]').forEach(btn => {
+        btn.setAttribute('aria-pressed', btn.dataset.kpiKey === kpiHistory.selected ? 'true' : 'false');
+        if (btn.dataset.kpiBound) return;
+        btn.dataset.kpiBound = 'true';
+        btn.addEventListener('click', () => {
+            kpiHistory.selected = btn.dataset.kpiKey;
+            document.querySelectorAll('[data-kpi-key]').forEach(other => {
+                other.setAttribute('aria-pressed', other === btn ? 'true' : 'false');
+            });
+            renderKpiHistoryChart();
+        });
+    });
+}
+
+function renderKpiHistoryChart() {
+    const canvas = document.getElementById('kpiHistoryChart');
+    const series = kpiHistory.series[kpiHistory.selected];
+    if (!canvas || !series) return;
+    kpiHistoryChartInstance = destroyChartInstance(kpiHistoryChartInstance);
+
+    const format = KPI_FORMATS[series.format] ?? KPI_FORMATS.index;
+    // A quarter filed before the company reported this figure plots as a gap, not as zero.
+    const data = kpiHistory.rows.map(row => {
+        const value = parseFloat(row[kpiHistory.selected]);
+        return Number.isFinite(value) ? value * format.scale : null;
+    });
+    const signed = series.format.startsWith('signed');
+
+    kpiHistoryChartInstance = new Chart(canvas.getContext('2d'), {
+        type: signed ? 'bar' : 'line',
+        data: {
+            labels: kpiHistory.labels,
+            datasets: [{
+                label: series.label,
+                data,
+                borderColor: SERIES.blue,
+                backgroundColor: signed
+                    ? data.map(v => v !== null && v < 0 ? THEME_COLORS.negative : THEME_COLORS.positive)
+                    : withAlpha(SERIES.blue, 0.15),
+                borderWidth: 2,
+                borderRadius: signed ? 4 : 0,
+                tension: 0.3,
+                pointRadius: 3,
+                fill: !signed,
+                spanGaps: false,
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            plugins: {
+                legend: { display: false },
+                tooltip: { callbacks: { label: (ctx) => `${series.label}: ${ctx.raw === null ? '—' : format.text(ctx.raw)}` } }
+            },
+            scales: {
+                x: { grid: { color: GRID_COLOR }, ticks: { maxTicksLimit: 12 } },
+                y: { grid: { color: GRID_COLOR }, ticks: { callback: (val) => format.text(val) } }
+            }
+        }
+    });
+
+    const latest = [...data].reverse().find(v => v !== null);
+    setHud('hud-kpiHistoryChart', latest === undefined ? '-' : `${series.label} ${format.text(latest)}`);
+}
+
 function renderCyclicalDynamicsChart(labels, operatingMarginData, debtData, treasuryData) {
     const canvas = document.getElementById('cyclicalDynamicsChart');
     if (!canvas) return;
@@ -1984,7 +2173,7 @@ export function resizeFundamentalCharts() {
         navDiscountChartInstance,
         shareholderValueChartInstance, cashFlowSummaryChartInstance, netInterestEngineChartInstance,
         insuranceDualEngineChartInstance, reitCoverageChartInstance, reinvestmentIntensityChartInstance,
-        cyclicalDynamicsChartInstance
+        cyclicalDynamicsChartInstance, kpiHistoryChartInstance, earningsSurpriseChartInstance
     ];
     instances.forEach(c => {
         if (c) {
@@ -2029,6 +2218,24 @@ function renderStatementRows(containerId, rows) {
             <span class="font-mono tabular-nums ${row.total ? 'font-bold' : ''} ${valueColor}">${formatStatementAmount(row.value)}</span>
         </div>`;
     }).join('');
+}
+
+/**
+ * The income statement for the last four quarters and the trailing year (income-statement.js lays out the lines).
+ * Reports filed before EBITDA was stored cannot be laid out; with none left the panel stays hidden.
+ */
+function renderIncomeStatement(reports, businessModel) {
+    const statement = buildIncomeStatement(reports, { isReit: businessModel === 'reit' });
+
+    const panel = document.getElementById('income-statement-panel');
+    if (panel) {
+        panel.toggleAttribute('data-unavailable', !statement);
+        if (!refreshChartGrid('financialChartsGrid')) panel.classList.toggle('hidden', !statement);
+    }
+    const table = document.getElementById('income-statement-table');
+    if (!statement || !table) return;
+
+    table.innerHTML = incomeStatementTableHtml(statement);
 }
 
 /**
@@ -2169,6 +2376,7 @@ function renderFinancialStatements(latest) {
 export function destroyFundamentalCharts() {
     // Charts that were never scrolled into view must not build themselves after teardown.
     resetLazyCharts();
+    earningsSurpriseChartInstance = destroyChartInstance(earningsSurpriseChartInstance);
     profitEngineChartInstance = destroyChartInstance(profitEngineChartInstance);
     revenueStreamsChartInstance = destroyChartInstance(revenueStreamsChartInstance);
     debtEquityChartInstance = destroyChartInstance(debtEquityChartInstance);
@@ -2186,4 +2394,6 @@ export function destroyFundamentalCharts() {
     reitCoverageChartInstance = destroyChartInstance(reitCoverageChartInstance);
     reinvestmentIntensityChartInstance = destroyChartInstance(reinvestmentIntensityChartInstance);
     cyclicalDynamicsChartInstance = destroyChartInstance(cyclicalDynamicsChartInstance);
+    kpiHistoryChartInstance = destroyChartInstance(kpiHistoryChartInstance);
+    kpiHistory = { labels: [], rows: [], series: {}, selected: null };
 }

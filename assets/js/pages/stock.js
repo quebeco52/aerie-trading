@@ -33,7 +33,8 @@ function getAerieContext() {
         pieLabels: Array.isArray(d.pieLabels) ? d.pieLabels : [],
         pieData: Array.isArray(d.pieData) ? d.pieData : [],
         sharesMap: d.sharesMap || {},
-        capitalThresholds: d.capitalThresholds || null
+        capitalThresholds: d.capitalThresholds || null,
+        kpiSeries: d.kpiSeries && typeof d.kpiSeries === 'object' ? d.kpiSeries : {}
     };
 }
 

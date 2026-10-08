@@ -279,7 +279,7 @@ class ShadowBankBusinessModel extends CommercialBankBusinessModel
         // fees on new deals, which bank credit retreat (SLOOS tightening) and M2 liquidity send to private credit.
         $sloosDirectLendingBoost = max(0.0, $macroState->sloosTighteningIndexEma) * self::SLOOS_PRIVATE_CREDIT_EXPANSION;
         $m2Shift = MathUtility::calculateBroadMoneyLiquidityShift($macroState->moneySupplyGrowthEma, $macroState->moneySupplyGrowthTrend, sensitivity: self::M2_SHADOW_LIQUIDITY_SENSITIVITY);
-        $capitalTightness = max(0.0, $macroState->countercyclicalBufferRateEma) + ($macroState->bankCapitalRequirement - FinancialConstants::OPENING_BANK_CAPITAL_REQUIREMENT);
+        $capitalTightness = max(0.0, $macroState->countercyclicalBufferRate) + ($macroState->bankCapitalRequirement - FinancialConstants::OPENING_BANK_CAPITAL_REQUIREMENT);
         $ccybArbitrageBoost = $capitalTightness * self::CAPITAL_ARBITRAGE_SENSITIVITY;
 
         $mortgageRevenue = max(0.0, $expectedRevenue * $mortgageWeight * (1.0 + ($originationZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR * 1.5)) - $mortgageRateDrag + $propertyOriginationBoost + $housingStartsShift));
@@ -356,7 +356,7 @@ class ShadowBankBusinessModel extends CommercialBankBusinessModel
             'bank_capital_requirement',
             'commercial_property_index_ema',
             'corporate_default_rate_ema',
-            'countercyclical_buffer_rate_ema',
+            'countercyclical_buffer_rate',
             'housing_starts_index_ema',
             'inflation_ema',
             'interbank_liquidity_spread_ema',

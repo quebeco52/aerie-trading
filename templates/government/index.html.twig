@@ -236,9 +236,13 @@
 		{% if polls %}
 			<section class="bg-surface-container-low rounded-lg p-5 border border-outline-variant/20" aria-labelledby="polls-heading">
 				<h2 id="polls-heading" class="text-sm font-semibold text-on-surface">The polls</h2>
-				<p class="text-2xs text-on-surface-variant mt-0.5">How the District says it would vote, polled every month since the vote of {{ polls.since }}. The latest poll, {{ polls.latest }}, is a sample: a party's figure can be a point or two off the truth either way.</p>
+				<p class="text-2xs text-on-surface-variant mt-0.5">
+					How the District says it would vote, polled every month since the vote of {{ polls.since }}; the latest poll is from {{ polls.latest }}.
+					Each poll is a sample, a point or two off the truth either way, so the line is the traders' average of them, which weighs each new poll against those before it.
+					The shaded band is where a party's support lies 19 times in 20; the dots are the polls.
+				</p>
 				<div class="grid grid-cols-1 lg:grid-cols-3 gap-5 mt-4">
-					<svg viewBox="0 0 600 210" class="w-full lg:col-span-2" role="img" aria-label="Polls since the vote of {{ polls.since }}: {% for party in polls.parties %}{{ party.name }} {{ party.poll|pct(1) }}{{ not loop.last ? ', ' : '' }}{% endfor %}">
+					<svg viewBox="0 0 600 210" class="w-full lg:col-span-2" role="img" aria-label="Poll average since the vote of {{ polls.since }}: {% for party in polls.parties %}{{ party.name }} {{ party.average|pct(1) }}{{ not loop.last ? ', ' : '' }}{% endfor %}">
 						{% for line in polls.gridlines %}
 							<line x1="{{ polls.plot[0] }}" y1="{{ line.y }}" x2="{{ polls.plot[1] }}" y2="{{ line.y }}" class="stroke-outline-variant" stroke-opacity="{{ loop.first ? 1 : 0.3 }}" stroke-dasharray="{{ loop.first ? '' : '2 3' }}" stroke-width="{{ loop.first ? 1 : 0.6 }}"></line>
 							<text x="{{ polls.plot[0] - 5 }}" y="{{ line.y + 3 }}" text-anchor="end" font-size="8" class="fill-on-surface-variant">{{ line.label }}</text>
@@ -249,8 +253,16 @@
 						{% endfor %}
 						<line x1="{{ polls.today }}" y1="{{ polls.plot[2] }}" x2="{{ polls.today }}" y2="{{ polls.plot[3] }}" class="stroke-outline-variant" stroke-width="0.8" stroke-dasharray="1.5 2"><title>The latest poll</title></line>
 						{% for party in polls.parties|reverse %}
+							<polygon points="{{ party.band }}" fill="{{ party.color }}" fill-opacity="0.12" stroke="none"></polygon>
+						{% endfor %}
+						{% for party in polls.parties|reverse %}
+							{% for dot in party.dots %}
+								<circle cx="{{ dot.x }}" cy="{{ dot.y }}" r="1.3" fill="{{ party.color }}" fill-opacity="0.45"></circle>
+							{% endfor %}
+						{% endfor %}
+						{% for party in polls.parties|reverse %}
 							<polyline points="{{ party.line }}" fill="none" stroke="{{ party.color }}" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"><title>{{ party.name }}</title></polyline>
-							<circle cx="{{ party.last.x }}" cy="{{ party.last.y }}" r="2.4" fill="{{ party.color }}"><title>{{ party.name }} {{ party.poll|pct(1) }}</title></circle>
+							<circle cx="{{ party.last.x }}" cy="{{ party.last.y }}" r="2.4" fill="{{ party.color }}"><title>{{ party.name }}: average {{ party.average|pct(1) }}, latest poll {{ party.poll|pct(1) }}</title></circle>
 						{% endfor %}
 					</svg>
 					<div>
@@ -258,16 +270,18 @@
 							<thead>
 								<tr class="table-head">
 									<th scope="col" class="text-left font-semibold pb-2">Party</th>
-									<th scope="col" class="text-right font-semibold pb-2">Poll</th>
-									<th scope="col" class="text-right font-semibold pb-2" title="Against the last vote">Change</th>
-									<th scope="col" class="text-right font-semibold pb-2" title="Seats the latest poll would win">Seats</th>
+									<th scope="col" class="text-right font-semibold pb-2" title="The traders' average of the polls">Average</th>
+									<th scope="col" class="text-right font-semibold pb-2" title="Support lies this close to the average 19 times in 20">Margin</th>
+									<th scope="col" class="text-right font-semibold pb-2" title="The average against the last vote">Change</th>
+									<th scope="col" class="text-right font-semibold pb-2" title="{{ polls.marketSeats ? 'Seats the traders expect each party to win at the vote' : 'Seats the average would win' }}">Seats</th>
 								</tr>
 							</thead>
 							<tbody class="divide-y divide-outline-variant/10">
 								{% for party in polls.parties %}
 									<tr>
 										<th scope="row" class="py-1.5 text-left font-normal"><span class="inline-flex items-center gap-2"><span class="w-2.5 h-2.5 rounded-full shrink-0" style="background-color: {{ party.color }}" aria-hidden="true"></span><span class="font-semibold text-on-surface">{{ party.name }}</span></span></th>
-										<td class="py-1.5 text-right font-mono tabular-nums text-on-surface">{{ party.poll|pct(1) }}</td>
+										<td class="py-1.5 text-right font-mono tabular-nums text-on-surface" title="Latest poll {{ party.poll|pct(1) }}">{{ party.average|pct(1) }}</td>
+										<td class="py-1.5 text-right font-mono tabular-nums text-on-surface-variant">±{{ party.margin|pct(1) }}</td>
 										<td class="py-1.5 text-right font-mono tabular-nums {{ party.change|signed_class }}">{{ (party.change > 0 ? '+' : '') ~ (party.change * 100)|number_format(1) }}pp</td>
 										<td class="py-1.5 text-right font-mono tabular-nums text-on-surface">{{ party.seats }}</td>
 									</tr>
@@ -275,7 +289,7 @@
 							</tbody>
 						</table>
 						<p class="text-2xs text-on-surface-variant mt-3">
-							On the latest poll the {{ government.caretaker ? 'caretaker cabinet' : 'cabinet' }}'s parties would win <span class="font-semibold font-mono tabular-nums text-on-surface">{{ polls.cabinet.seats }}</span> of {{ rules.seats }} seats{% if polls.cabinet.hasSupport %}, <span class="font-mono tabular-nums">{{ polls.cabinet.supportedSeats }}</span> with their supporters{% endif %}. {{ rules.majority }} make a majority.
+							{{ polls.marketSeats ? 'Traders expect' : 'On the poll average' }} the {{ government.caretaker ? 'caretaker cabinet' : 'cabinet' }}'s parties {{ polls.marketSeats ? 'to win' : 'would win' }} <span class="font-semibold font-mono tabular-nums text-on-surface">{{ polls.cabinet.seats }}</span> of {{ rules.seats }} seats{% if polls.cabinet.hasSupport %}, <span class="font-mono tabular-nums">{{ polls.cabinet.supportedSeats }}</span> with their supporters{% endif %}{{ polls.marketSeats ? ' at the vote' : '' }}. {{ rules.majority }} make a majority.
 						</p>
 					</div>
 				</div>
@@ -337,6 +351,114 @@
 							</tbody>
 						</table>
 					</div>
+				</div>
+				{% if odds %}
+					<figure class="mt-5">
+						<figcaption>
+							<h3 class="text-xs font-semibold text-on-surface">How the odds have moved</h3>
+							<p class="text-2xs text-on-surface-variant mt-0.5">Each party's chance of leading the next government as traders priced it, poll by poll since {{ odds.since }}{% if odds.vote %}, up to the vote of {{ odds.vote.date }}{% endif %}.</p>
+						</figcaption>
+						<div class="grid grid-cols-1 lg:grid-cols-3 gap-5 mt-2">
+							<svg viewBox="0 0 600 160" class="w-full lg:col-span-2" role="img" aria-label="Chance of leading the next government since {{ odds.since }}: {% for party in odds.parties %}{{ party.name }} {{ party.chance|pct(0) }}{{ not loop.last ? ', ' : '' }}{% endfor %}">
+								{% for line in odds.gridlines %}
+									<line x1="{{ odds.plot[0] }}" y1="{{ line.y }}" x2="{{ odds.plot[1] }}" y2="{{ line.y }}" class="stroke-outline-variant" stroke-opacity="{{ loop.first ? 1 : 0.3 }}" stroke-dasharray="{{ loop.first ? '' : '2 3' }}" stroke-width="{{ loop.first ? 1 : 0.6 }}"></line>
+									<text x="{{ odds.plot[0] - 5 }}" y="{{ line.y + 3 }}" text-anchor="end" font-size="8" class="fill-on-surface-variant">{{ line.label }}</text>
+								{% endfor %}
+								{% for year in odds.years %}
+									<line x1="{{ year.x }}" y1="{{ odds.plot[3] }}" x2="{{ year.x }}" y2="{{ odds.plot[3] + 4 }}" class="stroke-outline-variant" stroke-width="0.8"></line>
+									<text x="{{ year.x }}" y="{{ odds.plot[3] + 15 }}" text-anchor="{{ year.x > odds.plot[1] - 20 ? 'end' : (year.x < odds.plot[0] + 20 ? 'start' : 'middle') }}" font-size="8" class="fill-on-surface-variant">{{ year.label }}</text>
+								{% endfor %}
+								<line x1="{{ odds.today }}" y1="{{ odds.plot[2] }}" x2="{{ odds.today }}" y2="{{ odds.plot[3] }}" class="stroke-outline-variant" stroke-width="0.8" stroke-dasharray="1.5 2"><title>Today</title></line>
+								{% if odds.vote %}
+									<line x1="{{ odds.vote.x }}" y1="{{ odds.plot[2] }}" x2="{{ odds.vote.x }}" y2="{{ odds.plot[3] }}" class="stroke-on-surface-variant" stroke-width="0.8" stroke-dasharray="3 2"><title>The vote, {{ odds.vote.date }}</title></line>
+								{% endif %}
+								{% for party in odds.parties|reverse %}
+									<polyline points="{{ party.line }}" fill="none" stroke="{{ party.color }}" stroke-width="1.6" stroke-linejoin="round"><title>{{ party.name }}</title></polyline>
+									<circle cx="{{ party.last.x }}" cy="{{ party.last.y }}" r="2.4" fill="{{ party.color }}"><title>{{ party.name }}: {{ party.chance|pct(0) }}, from {{ party.first|pct(0) }} at the first forecast</title></circle>
+								{% endfor %}
+							</svg>
+							<table class="w-full text-xs self-start">
+								<thead>
+									<tr class="table-head">
+										<th scope="col" class="text-left font-semibold pb-2">Party</th>
+										<th scope="col" class="text-right font-semibold pb-2" title="At the first forecast of this vote">{{ odds.since }}</th>
+										<th scope="col" class="text-right font-semibold pb-2">Now</th>
+									</tr>
+								</thead>
+								<tbody class="divide-y divide-outline-variant/10">
+									{% for party in odds.parties %}
+										<tr>
+											<th scope="row" class="py-1.5 text-left font-normal"><span class="inline-flex items-center gap-2"><span class="w-2.5 h-2.5 rounded-full shrink-0" style="background-color: {{ party.color }}" aria-hidden="true"></span><span class="text-on-surface">{{ party.name }}</span></span></th>
+											<td class="py-1.5 text-right font-mono tabular-nums text-on-surface-variant">{{ party.first|pct(0) }}</td>
+											<td class="py-1.5 text-right font-mono tabular-nums text-on-surface">{{ party.chance|pct(0) }}</td>
+										</tr>
+									{% endfor %}
+								</tbody>
+							</table>
+						</div>
+					</figure>
+				{% endif %}
+			</section>
+		{% endif %}
+
+		{% if exposure %}
+			{# What each law does to the firms it reaches, on the bases and measures the market prices it with (LawExposureBuilder). #}
+			<section class="bg-surface-container-low rounded-lg p-5 border border-outline-variant/20" aria-labelledby="exposure-heading">
+				<h2 id="exposure-heading" class="text-sm font-semibold text-on-surface">Firms most exposed to each law</h2>
+				<p class="text-2xs text-on-surface-variant mt-0.5">
+					What each law in force adds to or takes from a firm's year after tax, against no such law, as a share of its last four quarters' earnings{% if market %}, and what the law traders expect at the first budget, {{ market.takesEffect }}, would change{% endif %}.
+					{% if exposure.corporateTax %}
+						{% if exposure.corporateTax.moves %}
+							The corporate tax reaches every firm: a rate of <span class="font-mono tabular-nums">{{ exposure.corporateTax.expected|pct(1) }}</span> against <span class="font-mono tabular-nums">{{ exposure.corporateTax.inForce|pct(1) }}</span> in force would change after-tax earnings by <span class="font-mono tabular-nums {{ exposure.corporateTax.earnings|signed_class }}">{{ exposure.corporateTax.earnings|pct(1, true) }}</span> at every firm taxed at the full rate.
+						{% else %}
+							The corporate tax reaches every firm alike, and traders expect no change to it.
+						{% endif %}
+					{% endif %}
+					The tariff, the merger review line, housing schemes refused, labour force growth and the share of reserve returns spent reach firms through the economy as a whole, not through a charge on their own accounts.
+				</p>
+				<div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-4">
+					{% for law in exposure.laws %}
+						<div>
+							<h3 class="text-xs font-semibold text-on-surface">{{ law.name }}</h3>
+							<p class="text-2xs text-on-surface-variant mt-0.5">
+								{{ law.note }}
+								{% if law.lever == 'bankLevyRate' and law.firms is not empty %}Listed banks owe <span class="font-mono tabular-nums">{{ (-law.total)|format_large('$') }}</span> a year.{% endif %}
+								{% if market and not law.expectedMoves %}Traders expect no change to it.{% endif %}
+							</p>
+							{% if law.firms is empty %}
+								<p class="text-xs text-on-surface-faint mt-2">No listed firm answers to it.</p>
+							{% else %}
+								<div class="overflow-x-auto">
+									<table class="w-full text-xs mt-2">
+										<thead>
+											<tr class="table-head">
+												<th scope="col" class="text-left font-semibold pb-2">Firm</th>
+												<th scope="col" class="text-right font-semibold pb-2">A year</th>
+												<th scope="col" class="text-right font-semibold pb-2">Of earnings</th>
+												{% if law.expectedMoves %}<th scope="col" class="text-right font-semibold pb-2">If passed</th>{% endif %}
+											</tr>
+										</thead>
+										<tbody class="divide-y divide-outline-variant/10">
+											{% for firm in law.firms %}
+												<tr>
+													<th scope="row" class="py-1.5 text-left font-normal">
+														<a href="{{ path('app_stock_view', {ticker: firm.ticker}) }}" class="font-mono text-primary hover:underline">{{ firm.ticker }}</a>
+														<span class="text-on-surface-variant">{{ firm.name }}</span>
+													</th>
+													<td class="py-1.5 text-right font-mono tabular-nums {{ firm.now|signed_class }}">{{ firm.now > 0 ? '+' : '' }}{{ firm.now|format_large('$') }}</td>
+													<td class="py-1.5 text-right font-mono tabular-nums {{ firm.nowShare is null ? 'text-on-surface-faint' : firm.nowShare|signed_class }}">{{ firm.nowShare is null ? '—' : firm.nowShare|pct(1, true) }}</td>
+													{% if law.expectedMoves %}
+														<td class="py-1.5 text-right font-mono tabular-nums {{ firm.changeShare is null ? 'text-on-surface-faint' : firm.changeShare|signed_class }}">{{ firm.changeShare is null ? '—' : firm.changeShare|pct(1, true) }}</td>
+													{% endif %}
+												</tr>
+											{% endfor %}
+										</tbody>
+									</table>
+								</div>
+								{% if law.more > 0 %}<p class="text-2xs text-on-surface-variant mt-1">And {{ law.more }} more {{ law.more == 1 ? 'firm' : 'firms' }} it reaches less.</p>{% endif %}
+							{% endif %}
+						</div>
+					{% endfor %}
 				</div>
 			</section>
 		{% endif %}
@@ -406,6 +528,49 @@
 				</table>
 			</div>
 		</section>
+
+		{% if laws %}
+			<section class="bg-surface-container-low rounded-lg p-5 border border-outline-variant/20" aria-labelledby="laws-heading">
+				<h2 id="laws-heading" class="text-sm font-semibold text-on-surface">The laws over time</h2>
+				<p class="text-2xs text-on-surface-variant mt-0.5">Each law as it stood at the close of every quarter since {{ laws.since }}, and today. The shading marks the cabinet in office, in the colour of the party that led it.</p>
+				<ul class="flex flex-wrap gap-x-5 gap-y-1 mt-3 text-2xs text-on-surface-variant">
+					{% for cabinet in laws.cabinets %}
+						<li class="inline-flex items-center gap-1.5"><span class="w-3 h-2.5 rounded-sm shrink-0" style="background-color: {{ cabinet.color }}; opacity: 0.3" aria-hidden="true"></span><span class="text-on-surface">{{ cabinet.members|join(', ') }}</span><span class="font-mono tabular-nums">{{ cabinet.fromLabel }} – {{ cabinet.toLabel }}</span></li>
+					{% endfor %}
+				</ul>
+				<div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-x-6 gap-y-5 mt-4">
+					{% for chart in laws.charts %}
+						<figure>
+							<figcaption class="flex justify-between gap-3 text-xs">
+								<span class="font-semibold text-on-surface">{{ chart.name }}</span>
+								<span class="font-mono tabular-nums text-on-surface">{{ _self.lever_value(chart, chart.now) }}</span>
+							</figcaption>
+							<svg viewBox="0 0 300 84" class="w-full mt-1" role="img" aria-label="{{ chart.name }} since {{ laws.since }}: from {{ _self.lever_value(chart, chart.low.value) }} to {{ _self.lever_value(chart, chart.high.value) }}, {{ _self.lever_value(chart, chart.now) }} today">
+								{% for cabinet in laws.cabinets %}
+									<rect x="{{ cabinet.x0 }}" y="{{ laws.plot[2] }}" width="{{ cabinet.x1 - cabinet.x0 }}" height="{{ laws.plot[3] - laws.plot[2] }}" fill="{{ cabinet.color }}" fill-opacity="0.09"><title>{{ cabinet.members|join(', ') }}, {{ cabinet.fromLabel }} – {{ cabinet.toLabel }}</title></rect>
+									{% if not loop.first %}
+										{# A change of cabinet, so two in a row led by one party still read as two. #}
+										<line x1="{{ cabinet.x0 }}" y1="{{ laws.plot[2] }}" x2="{{ cabinet.x0 }}" y2="{{ laws.plot[3] }}" class="stroke-outline-variant" stroke-width="0.6" stroke-dasharray="2 2"></line>
+									{% endif %}
+								{% endfor %}
+								<line x1="{{ laws.plot[0] }}" y1="{{ laws.plot[3] }}" x2="{{ laws.plot[1] }}" y2="{{ laws.plot[3] }}" class="stroke-outline-variant" stroke-width="0.8"></line>
+								<text x="{{ laws.plot[0] - 4 }}" y="{{ chart.high.y + 3 }}" text-anchor="end" font-size="8" class="fill-on-surface-variant">{{ _self.lever_value(chart, chart.high.value) }}</text>
+								{% if not chart.flat %}
+									<text x="{{ laws.plot[0] - 4 }}" y="{{ chart.low.y + 3 }}" text-anchor="end" font-size="8" class="fill-on-surface-variant">{{ _self.lever_value(chart, chart.low.value) }}</text>
+								{% endif %}
+								{% for year in laws.years %}
+									<line x1="{{ year.x }}" y1="{{ laws.plot[3] }}" x2="{{ year.x }}" y2="{{ laws.plot[3] + 3 }}" class="stroke-outline-variant" stroke-width="0.8"></line>
+									<text x="{{ year.x }}" y="{{ laws.plot[3] + 13 }}" text-anchor="middle" font-size="8" class="fill-on-surface-variant">{{ year.label }}</text>
+								{% endfor %}
+								<polyline points="{{ chart.line }}" fill="none" class="stroke-primary" stroke-width="1.5" stroke-linejoin="round"></polyline>
+							</svg>
+							<p class="text-2xs text-on-surface-variant">{{ chart.changes == 0 ? 'Unchanged over the period' : (chart.changes == 1 ? 'Changed once' : 'Changed ' ~ chart.changes ~ ' times') }}</p>
+						</figure>
+					{% endfor %}
+				</div>
+				<p class="source-note mt-4">{{ source_line('exchequer', 'financial-regulator') }}</p>
+			</section>
+		{% endif %}
 
 		<section class="bg-surface-container-low rounded-lg p-5 border border-outline-variant/20" aria-labelledby="council-heading">
 			<h2 id="council-heading" class="text-sm font-semibold text-on-surface">The Aerie Council</h2>
@@ -542,8 +707,9 @@
 							<div>
 								<p class="text-2xs text-on-surface-variant">Last decision · <span class="font-mono tabular-nums">{{ meeting.date }}</span></p>
 								<p class="text-xs text-on-surface mt-0.5">
-									{%- set bp = (meeting.change * 10000)|round -%}
-									{{ bp|abs < 13 ? 'Held at ' : (bp > 0 ? 'Raised ' ~ bp ~ ' basis points to ' : 'Cut ' ~ bp|abs ~ ' basis points to ') }}<span class="font-mono tabular-nums">{{ meeting.rate|pct(2) }}</span>, voting <span class="font-mono tabular-nums">{{ meeting.split }}</span>
+									{%- set bp = meeting.moveBp -%}
+									{%- set points = bp|abs == 1 ? ' basis point to ' : ' basis points to ' -%}
+									{{ bp == 0 ? 'Held at ' : (bp > 0 ? 'Raised ' ~ bp ~ points : 'Cut ' ~ bp|abs ~ points) }}<span class="font-mono tabular-nums">{{ meeting.rate|pct(2) }}</span>, voting <span class="font-mono tabular-nums">{{ meeting.split }}</span>
 								</p>
 								{% if meeting.higher > 0 or meeting.lower > 0 %}
 									<p class="text-2xs text-on-surface-variant mt-0.5">
@@ -552,6 +718,10 @@
 								{% endif %}
 							</div>
 						{% endif %}
+						<div>
+							<p class="text-2xs text-on-surface-variant">Next meeting</p>
+							<p class="text-xs font-mono tabular-nums text-on-surface mt-0.5">{{ authority.nextMeeting }}</p>
+						</div>
 					</div>
 
 					<div class="overflow-x-auto">
@@ -584,6 +754,44 @@
 						</table>
 					</div>
 				</div>
+				{% if authority.decisions %}
+					{% set chart = authority.decisions %}
+					<figure class="mt-5">
+						<figcaption>
+							<h3 class="text-xs font-semibold text-on-surface">The rate, meeting by meeting</h3>
+							<p class="text-2xs text-on-surface-variant mt-0.5">
+								The rate each meeting has left since {{ chart.since }}: <span class="font-mono tabular-nums">{{ chart.moves }}</span> of <span class="font-mono tabular-nums">{{ chart.meetings|length }}</span> meetings moved it {{ chart.stepBp }} basis points or more, and <span class="font-mono tabular-nums">{{ chart.split }}</span> split the committee.
+								A mark above a meeting is a vote for a higher rate, below it for a lower.{% if chart.governors is not empty %} A dashed line marks a new governor in the chair.{% endif %}
+							</p>
+						</figcaption>
+						<svg viewBox="0 0 600 172" class="w-full mt-2" role="img" aria-label="The policy rate at each meeting since {{ chart.since }}, {{ (chart.meetings|last).rate|pct(2) }} at the last">
+							{% for line in chart.gridlines %}
+								<line x1="{{ chart.plot[0] }}" y1="{{ line.y }}" x2="{{ chart.plot[1] }}" y2="{{ line.y }}" class="stroke-outline-variant" stroke-opacity="{{ loop.first ? 1 : 0.3 }}" stroke-dasharray="{{ loop.first ? '' : '2 3' }}" stroke-width="{{ loop.first ? 1 : 0.6 }}"></line>
+								<text x="{{ chart.plot[0] - 5 }}" y="{{ line.y + 3 }}" text-anchor="end" font-size="8" class="fill-on-surface-variant">{{ line.rate|pct(2) }}</text>
+							{% endfor %}
+							{% for year in chart.years %}
+								<line x1="{{ year.x }}" y1="{{ chart.plot[3] }}" x2="{{ year.x }}" y2="{{ chart.plot[3] + 4 }}" class="stroke-outline-variant" stroke-width="0.8"></line>
+								<text x="{{ year.x }}" y="{{ chart.plot[3] + 15 }}" text-anchor="middle" font-size="8" class="fill-on-surface-variant">{{ year.label }}</text>
+							{% endfor %}
+							{% for governor in chart.governors %}
+								<line x1="{{ governor.x }}" y1="{{ chart.plot[2] }}" x2="{{ governor.x }}" y2="{{ chart.plot[3] }}" class="stroke-outline-variant" stroke-width="0.8" stroke-dasharray="3 2"><title>{{ governor.name }} in the chair from {{ governor.date }}</title></line>
+								<text x="{{ governor.x + 3 }}" y="{{ chart.plot[2] - 4 }}" font-size="7" class="fill-on-surface-variant">{{ governor.name }}</text>
+							{% endfor %}
+							<polyline points="{{ chart.line }}" fill="none" class="stroke-primary" stroke-width="1.5" stroke-linejoin="round"></polyline>
+							{% for meeting in chart.meetings %}
+								{%- set points = meeting.moveBp|abs == 1 ? ' basis point to ' : ' basis points to ' -%}
+								<circle cx="{{ meeting.x }}" cy="{{ meeting.y }}" r="1.8" class="fill-primary"><title>{{ meeting.date }}: {{ meeting.moveBp == 0 ? 'held at ' : (meeting.moveBp > 0 ? 'raised ' ~ meeting.moveBp ~ points : 'cut ' ~ meeting.moveBp|abs ~ points) }}{{ meeting.rate|pct(2) }}, voting {{ meeting.split }}</title></circle>
+								{% if meeting.higher > 0 %}
+									<polygon points="{{ meeting.x - 2.5 }},{{ meeting.y - 4 }} {{ meeting.x + 2.5 }},{{ meeting.y - 4 }} {{ meeting.x }},{{ meeting.y - 8 }}" class="fill-on-surface-variant"><title>{{ meeting.date }}: {{ meeting.higher }} for a higher rate</title></polygon>
+								{% endif %}
+								{% if meeting.lower > 0 %}
+									<polygon points="{{ meeting.x - 2.5 }},{{ meeting.y + 4 }} {{ meeting.x + 2.5 }},{{ meeting.y + 4 }} {{ meeting.x }},{{ meeting.y + 8 }}" class="fill-on-surface-variant"><title>{{ meeting.date }}: {{ meeting.lower }} for a lower rate</title></polygon>
+								{% endif %}
+							{% endfor %}
+						</svg>
+						<p class="source-note mt-2">{{ source_line('monetary-authority') }}</p>
+					</figure>
+				{% endif %}
 			</section>
 		{% endif %}
 

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Service\View;
 
 use App\Data\LifecycleStage;
+use App\Data\DistrictCalendar;
 use App\Data\StockInfo;
 use App\Data\StrategicHoldings;
 use App\Entity\Etf;
@@ -13,6 +14,7 @@ use App\Entity\User;
 use App\Repository\BondRepository;
 use App\Repository\EtfEventRepository;
 use App\Repository\StockEventRepository;
+use App\Service\Corporate\EarningsEngine;
 use App\Service\Macro\MacroStateProvider;
 use App\Service\Market\Index\MarketIndex;
 use App\Service\Market\Pricing\LiquidityEngine;
@@ -35,6 +37,14 @@ class StockPageBuilder
     /** Filings and announcements listed on the page before the history is truncated. */
     private const EVENT_ROWS = 15;
 
+    // --- Borrow Warnings ---
+
+    /** Borrow fee above which the panel flags the name as expensive to short (~5%/yr; general collateral is ~0.3%). */
+    public const EXPENSIVE_BORROW_FEE = 0.05;
+
+    /** Utilization of the lendable supply at which the panel warns that the borrow is running out. */
+    public const SCARCE_BORROW_UTILIZATION = 0.90;
+
     public function __construct(
         private readonly MacroStateProvider $macroStateProvider,
         private readonly CompanySnapshotBuilder $companySnapshot,
@@ -51,8 +61,10 @@ class StockPageBuilder
         private readonly OptionChainBuilder $optionChain,
         private readonly CreditHealthBuilder $creditHealth,
         private readonly FinancialSummaryBuilder $financialSummary,
+        private readonly BiotechPipelineBuilder $biotechPipeline,
         private readonly int $ticksPerYear,
         private readonly ?BondRepository $bonds = null,
+        private readonly ?\Redis $redis = null,
     ) {}
 
     /**
@@ -76,12 +88,10 @@ class StockPageBuilder
             // The lore copy, as the district map reads it, so an edit shows without a reseed; the seeded column covers
             // a listing the lore does not know.
             'generalInfo' => StockInfo::DESCRIPTIONS[$ticker] ?? $asset->getDescription(),
-            'quote' => StockInfo::getQuote($ticker),
             'events' => $isEtf
                 ? $this->etfEvents->findRecentFor($asset, self::EVENT_ROWS)
                 : $this->stockEvents->findRecentFor($asset, self::EVENT_ROWS),
             'ticksPerYear' => $this->ticksPerYear,
-            'economic_cycle' => $macroState->economicCycleLabel(),
             'macro' => $macroState,
             'lifecycleStages' => LifecycleStage::cases(),
         ];
@@ -121,6 +131,7 @@ class StockPageBuilder
             + $this->industryPosition->build($stock, $macroState)
             + $this->creditHealth->build($stock, $macroState)
             + $this->financialSummary->build($stock)
+            + $this->biotechPipeline->build($stock)
             + [
             'peers' => $this->peerTable->build($stock),
             // What a permanent-capital sphere actually owns; null for every firm that owns no stakes.
@@ -142,7 +153,63 @@ class StockPageBuilder
             'borrowFee' => $this->lendingDesk->borrowFee($stock),
             'availableToBorrow' => $this->lendingDesk->availableToBorrow($stock),
             'shortUtilization' => $this->lendingDesk->utilization($stock),
+            'borrowWarnings' => self::borrowWarnings(),
+            'shortInterest' => $stock->isBankrupt() ? null : $this->shortInterest($stock),
+            'nextReport' => $stock->isBankrupt() ? null : $this->nextReport($stock, $macroState),
             'management' => $this->managementBlock($stock),
+        ];
+    }
+
+    /**
+     * Shares sold short, against the float and against what trades in a day (days to cover), the two ways an
+     * exchange's short-interest report states it.
+     *
+     * @return array{shares: float, floatShare: float|null, daysToCover: float|null}
+     */
+    private function shortInterest(Stock $stock): array
+    {
+        $shorted = (float) $stock->getShortInterestShares();
+        $floatShares = (float) $stock->getSharesOutstanding() * max(0.0, min(1.0, (float) $stock->getPublicFloatPercentage()));
+        $adv = $this->liquidityEngine->averageDailyVolume($stock);
+
+        return [
+            'shares' => $shorted,
+            'floatShare' => $floatShares > 0.0 ? $shorted / $floatShares : null,
+            'daysToCover' => $adv > 0.0 ? $shorted / $adv : null,
+        ];
+    }
+
+    /**
+     * The date of the company's next results and the quarter they will cover (ReportCalendar).
+     *
+     * @return array{dateline: string, quarter: string}|null Null where the tick counter cannot be read.
+     */
+    private function nextReport(Stock $stock, \App\DTO\MacroStateDTO $macroState): ?array
+    {
+        if ($this->redis === null) {
+            return null;
+        }
+
+        $time = ReportCalendar::nextReportTime(
+            (string) $stock->getTicker(),
+            (int) ($this->redis->get('simulation_tick_count') ?: 0),
+            $this->ticksPerYear,
+            $macroState->totalTime
+        );
+
+        return [
+            'dateline' => DistrictCalendar::dateline($time),
+            'quarter' => DistrictCalendar::quarter($time - EarningsEngine::REPORT_INTERVAL_YEARS),
+        ];
+    }
+
+    /** @return array{expensiveFee: float, scarceUtilization: float, recallUtilization: float} */
+    private static function borrowWarnings(): array
+    {
+        return [
+            'expensiveFee' => self::EXPENSIVE_BORROW_FEE,
+            'scarceUtilization' => self::SCARCE_BORROW_UTILIZATION,
+            'recallUtilization' => FinancialConstants::BUY_IN_UTILIZATION_THRESHOLD,
         ];
     }
 
@@ -188,8 +255,6 @@ class StockPageBuilder
             'businessModel' => 'none',
             'marketCap' => 0.0,
             'peRatio' => null,
-            'targetPE' => 20.00,
-            'investedCapital' => 0.0,
             'marketShare' => 0.0,
             'industry' => null,
             'lifecycleStage' => null,
@@ -214,6 +279,11 @@ class StockPageBuilder
             'borrowFee' => 0.0,
             'availableToBorrow' => 0.0,
             'shortUtilization' => 0.0,
+            'borrowWarnings' => self::borrowWarnings(),
+            'shortInterest' => null,
+            'nextReport' => null,
+            'kpiSeries' => [],
+            'pipeline' => null,
             'management' => null,
             // The fund carries no class of its own: contracts are written on companies here, not on the
             // index, so the panel stands down rather than rendering an empty ladder.

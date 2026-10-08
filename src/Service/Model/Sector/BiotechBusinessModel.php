@@ -272,6 +272,55 @@ class BiotechBusinessModel extends StandardCorporateBusinessModel
     }
 
     /**
+     * The pipeline and marketed book as the last report left them, read off the persisted ledger without advancing
+     * or drawing anything. Each cohort's level is what measureBook() counts as marketed: a protected cohort at its
+     * launch ramp, an expired one net of its erosion so far.
+     *
+     * @return array{lateStageAssets: float, readoutsPerYear: float, protectedShare: float, franchiseIndex: float, rndReplacement: float, offPatentShare: float, cohorts: list<array{share: float, adoption: float, exclusivityQuarters: float}>}|null
+     *         Null before the firm's first report under the ledger.
+     */
+    public function describePipeline(Stock $stock): ?array
+    {
+        $momentum = $stock->getEarningsMomentumZ() ?? [];
+        if (!isset($momentum[self::STATE_LATE_STAGE_ASSETS])) {
+            return null;
+        }
+        $state = static fn (string $key, float $default): float => isset($momentum[$key]) ? (float) $momentum[$key] : $default;
+        $params = $this->resolveModelParameters($stock, [
+            ModelParam::BiologicRevenueShare->value => self::DEFAULT_BIOLOGIC_REVENUE_SHARE,
+        ]);
+        $biologicShare = max(0.0, min(1.0, $params[ModelParam::BiologicRevenueShare]));
+
+        $levels = [];
+        for ($slot = 0; $slot < self::MAX_COHORTS && isset($momentum[self::cohortKey($slot, 'peak')]); $slot++) {
+            $exclusivity = $state(self::cohortKey($slot, 'exclusivity'), 0.0);
+            $adoption = $state(self::cohortKey($slot, 'adoption'), 1.0);
+            $level = max(0.0, $state(self::cohortKey($slot, 'peak'), 0.0)) * $adoption;
+            if ($exclusivity <= 0.0) {
+                $level *= 1.0 - $this->loeErodedShare($biologicShare, 1.0 - $exclusivity);
+            }
+            $levels[] = ['level' => $level, 'adoption' => $adoption, 'exclusivityQuarters' => $exclusivity];
+        }
+        $offPatent = $state(self::STATE_OFF_PATENT_BIOLOGIC, 0.0) + $state(self::STATE_OFF_PATENT_SMALL_MOLECULE, 0.0) + $state(self::STATE_ESTABLISHED_PRODUCTS, 0.0);
+        $marketed = array_sum(array_column($levels, 'level')) + $offPatent;
+        $assets = max(0.0, $state(self::STATE_LATE_STAGE_ASSETS, 0.0));
+
+        return [
+            'lateStageAssets' => $assets,
+            'readoutsPerYear' => $assets * $this->readoutHazardPerQuarter() * FinancialConstants::QUARTERS_PER_YEAR,
+            'protectedShare' => max(0.0, min(1.0, $state(self::STATE_PROTECTED_SHARE, 0.0))),
+            'franchiseIndex' => $state(self::STATE_FRANCHISE_INDEX, 1.0),
+            'rndReplacement' => $state(self::STATE_RND_REPLACEMENT_RATIO, 1.0),
+            'offPatentShare' => $marketed > 0.0 ? $offPatent / $marketed : 0.0,
+            'cohorts' => array_map(static fn (array $cohort): array => [
+                'share' => $marketed > 0.0 ? $cohort['level'] / $marketed : 0.0,
+                'adoption' => $cohort['adoption'],
+                'exclusivityQuarters' => $cohort['exclusivityQuarters'],
+            ], $levels),
+        ];
+    }
+
+    /**
      * Peak quarterly revenue of one approval, in franchise units, from the replacement identity: at the target
      * pipeline, approvals per quarter x peak x lifetime revenue per unit of peak equals the protected book the lore
      * seeds, so launches replace what expiries take and the book is stationary at replacement R&D.

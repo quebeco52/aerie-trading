@@ -642,4 +642,68 @@ class EarningsReportSubscriberTest extends TestCase
         // Check shock event is attached
         $this->assertEquals('Viral Growth', $streamDetails['first_party_retail']['event']);
     }
+
+    /**
+     * The report files the consensus the surprise was struck against and the EPS it was struck on, so the page's
+     * beat or miss is the one the market priced; and the time it was filed, which dates the quarter it covers.
+     */
+    public function testTheReportFilesTheConsensusTheSurpriseWasStruckAgainst(): void
+    {
+        $stock = new Stock();
+        $stock->setTicker('BEAT');
+        $stock->setIndustry('Auto Manufacturers');
+        $stock->setTotalEquity('50000000.0000');
+        $stock->setCorporateTreasury('5000000.0000');
+        $stock->setSharesOutstanding('10000000');
+        $stock->setTotalRevenue('40000000.0000');
+
+        $strategy = $this->createMock(BusinessModelInterface::class);
+        $strategy->method('getSurpriseBlendWeights')->willReturn(['revenue_weight' => 0.0, 'eps_weight' => 1.0]);
+
+        $ctx = new EarningsSimulationContext(
+            stock: $stock,
+            macroState: new MacroStateDTO(totalTime: 13.4125),
+            strategy: $strategy,
+            businessModel: 'auto_manufacturer'
+        );
+        $ctx->sharesOutstanding = 9_600_000.0;
+        $ctx->actualRevenue = 10_000_000.0;
+        $ctx->analystExpectedRevenue = 9_800_000.0;
+        $ctx->reportedActualNetIncome = 1_500_000.0;
+        $ctx->reportedExpectedNetIncome = 1_380_000.0;
+        $ctx->streamRevenue = ['core_business' => 10_000_000.0];
+        $ctx->debtMetrics = new \App\DTO\DebtMetricsDTO(
+            interestExpense: 0.0,
+            blendedRate: 0.04,
+            historicalFixedRate: 0.04,
+            dynamicSpread: 0.01,
+            currentMarketRate: 0.04,
+            wholesaleRate: 0.04,
+            ebit: 0.0,
+            revenue: 0.0,
+            depreciation: 0.0,
+            ebitda: 0.0
+        );
+
+        $engine = (new \ReflectionClass(\App\Service\Corporate\EarningsEngine::class))->newInstanceWithoutConstructor();
+        (new \ReflectionMethod($engine, 'calculateEPSAndSurprise'))->invoke($engine, $ctx);
+
+        $this->reportRepository->method('findLatestFor')->willReturn(null);
+        $persisted = null;
+        $this->entityManager->expects($this->once())->method('persist')
+            ->willReturnCallback(function ($report) use (&$persisted) {
+                $persisted = $report;
+            });
+        $this->subscriber->onEarningsReported(new EarningsReportedEvent($ctx));
+
+        $this->assertInstanceOf(CorporateReport::class, $persisted);
+        $consensus = (float) $persisted->getConsensusEps();
+        $filedEps = (float) $persisted->getReportedEps();
+        $this->assertEqualsWithDelta($ctx->expectedQuarterlyEps, $consensus, 1e-6);
+        $this->assertEqualsWithDelta($ctx->actualQuarterlyEps, $filedEps, 1e-6);
+        // With the surprise read on EPS alone, the filed pair reproduces it.
+        $this->assertEqualsWithDelta($ctx->surprisePct, ($filedEps - $consensus) / abs($consensus), 1e-5);
+        $this->assertEqualsWithDelta(9_800_000.0, (float) $persisted->getConsensusRevenue(), 0.01);
+        $this->assertEqualsWithDelta(13.4125, (float) $persisted->getTotalTime(), 1e-9);
+    }
 }

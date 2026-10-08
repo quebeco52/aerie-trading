@@ -192,11 +192,8 @@ class MonetaryAuthorityTest extends TestCase
         $this->assertGreaterThan(0, $shifts);
     }
 
-    /**
-     * Members dissent at the chance their type did on the FOMC: on the FOMC's mix of types the chances average exactly
-     * to its 265 and 160 dissents in 6,707 votes, and over many meetings each type dissents at its own.
-     */
-    public function testMembersDissentAtTheirTypesRates(): void
+    /** The dissent targets: on the FOMC's mix of types the chances average exactly to its 265 and 160 dissents in 6,707 votes. */
+    public function testDissentTargetsAverageToTheFomcsShares(): void
     {
         $mix = static fn(bool $higher): float => array_sum(array_map(
             static fn(string $type): float => Authority::dissentChance($type, $higher) * Authority::TYPE_COUNTS[$type] / array_sum(Authority::TYPE_COUNTS),
@@ -206,21 +203,96 @@ class MonetaryAuthorityTest extends TestCase
         $this->assertEqualsWithDelta(160 / 6707, $mix(false), 1e-12);
         $this->assertEqualsWithDelta(0.0613, Authority::dissentChance('hawk', true), 0.0005);
         $this->assertEqualsWithDelta(0.0475, Authority::dissentChance('dove', false), 0.0005);
+        $this->assertEqualsWithDelta(0.386 * sqrt(2 * 2 / (6 - 1)) / 100.0, Authority::DISSENT_THRESHOLD, 0.0001, "The Riksbank's consensus norm.");
+    }
 
-        $stances = [1.0, 1.0, 0.0, 0.0, -1.0, -1.0, 1.0];
-        $higher = $lower = array_fill(0, 7, 0);
-        $meetings = 20000;
-        for ($meeting = 0; $meeting < $meetings; ++$meeting) {
-            foreach (Authority::votes($stances, $meeting, 77) as $member => $vote) {
-                $higher[$member] += $vote > 0.0 ? 1 : 0;
-                $lower[$member] += $vote < 0.0 ? 1 : 0;
+    /**
+     * Every vote follows the member's preferred-rate gap to the decision: a dissent only past the consensus norm and only
+     * in the gap's direction, the governor always with the decision they put. Big hikes and cuts are where a vote
+     * against the move would show.
+     */
+    public function testVotesFollowThePreferredRateGap(): void
+    {
+        $stances = [1.0, 1.0, 1.0, 0.0, 0.0, -1.0, -1.0];
+        $swingers = [0.0, 0.0, 0.0, 1.0, 1.0, 0.0, 0.0];
+        $dissents = 0;
+        foreach ([0.0075, 0.005, 0.0025, 0.0, -0.0025, -0.005, -0.0075] as $move) {
+            for ($meeting = 0; $meeting < 2000; ++$meeting) {
+                $votes = Authority::votes($stances, $move, $meeting, 77, $swingers);
+                $this->assertSame(0.0, $votes[0], 'The governor votes for the decision.');
+                foreach ($votes as $member => $vote) {
+                    if ($member === 0) {
+                        continue;
+                    }
+                    $gap = Authority::preferredRateGap(
+                        Authority::typeName($stances[$member], $swingers[$member]),
+                        $move,
+                        MathUtility::standardNormalQuantile(Appointments::uniform(77, "vote:{$meeting}:{$member}"))
+                    );
+                    $expected = abs($gap) > Authority::DISSENT_THRESHOLD ? ($gap > 0.0 ? 1.0 : -1.0) : 0.0;
+                    $this->assertSame($expected, $vote, "Member {$member} at a {$move} move.");
+                    $dissents += $vote !== 0.0 ? 1 : 0;
+                }
             }
         }
-        foreach ($stances as $member => $stance) {
-            $type = Authority::stanceName($stance);
-            $this->assertEqualsWithDelta(Authority::dissentChance($type, true), $higher[$member] / $meetings, 0.006, "{$type} for higher");
-            $this->assertEqualsWithDelta(Authority::dissentChance($type, false), $lower[$member] / $meetings, 0.006, "{$type} for lower");
+        $this->assertGreaterThan(0, $dissents);
+        $this->assertSame(Authority::votes($stances, 0.0025, 5, 9, $swingers), Authority::votes($stances, 0.0025, 5, 9, $swingers), 'A meeting votes the same whenever it is replayed.');
+    }
+
+    /**
+     * Over meetings whose moves spread as the macro loop's do, each type dissents each way at its FOMC rate, within four
+     * standard errors; a dove dissents for a lower rate far more than for a higher, a hawk the reverse; and dissents at
+     * a move mostly oppose it, as on the FOMC, at about twice the rate of a hold.
+     */
+    public function testEachTypeDissentsAtItsRateAndAgainstTheMove(): void
+    {
+        $stances = [1.0, 1.0, 1.0, 0.0, 0.0, -1.0, -1.0];
+        $swingers = [0.0, 0.0, 0.0, 1.0, 1.0, 0.0, 0.0];
+        $meetings = 20000;
+        $higher = $lower = ['hawk' => 0, 'swing' => 0, 'dove' => 0];
+        $opposing = $with = $atHolds = $atMoves = $holds = 0;
+        for ($meeting = 0; $meeting < $meetings; ++$meeting) {
+            // The moves at evenly spaced quantiles of the normal, the votes' own shocks hashed apart from them.
+            $move = Authority::MEETING_MOVE_SD * MathUtility::standardNormalQuantile(($meeting + 0.5) / $meetings);
+            $hold = abs($move) < Authority::NEWSWORTHY_RATE_MOVE / 2.0;
+            $holds += $hold ? 1 : 0;
+            foreach (Authority::votes($stances, $move, $meeting, 77, $swingers) as $member => $vote) {
+                if ($member === 0 || $vote === 0.0) {
+                    continue;
+                }
+                $type = Authority::typeName($stances[$member], $swingers[$member]);
+                $vote > 0.0 ? ++$higher[$type] : ++$lower[$type];
+                if ($hold) {
+                    ++$atHolds;
+                } else {
+                    ++$atMoves;
+                    $vote * $move < 0.0 ? ++$opposing : ++$with;
+                }
+            }
         }
-        $this->assertSame(Authority::votes($stances, 5, 9), Authority::votes($stances, 5, 9), 'A meeting votes the same whenever it is replayed.');
+
+        $votes = ['hawk' => 2 * $meetings, 'swing' => 2 * $meetings, 'dove' => 2 * $meetings];
+        foreach ($votes as $type => $n) {
+            foreach ([true, false] as $up) {
+                $target = Authority::dissentChance($type, $up);
+                $this->assertEqualsWithDelta($target, ($up ? $higher : $lower)[$type] / $n, 4.0 * sqrt($target * (1.0 - $target) / $n), "{$type} for " . ($up ? 'higher' : 'lower'));
+            }
+        }
+        $this->assertGreaterThan(10 * $higher['dove'], $lower['dove'], 'A dove dissents for a lower rate.');
+        $this->assertGreaterThan(5 * $lower['hawk'], $higher['hawk'], 'A hawk dissents for a higher rate.');
+        $this->assertEqualsWithDelta(0.94, $opposing / ($opposing + $with), 0.03, 'Dissents at a move oppose it.');
+        $this->assertEqualsWithDelta(2.0, ($atMoves / ($meetings - $holds)) / ($atHolds / $holds), 0.3, 'A move draws about twice the dissents of a hold.');
+    }
+
+    /** The move's share of each type's spread fits inside it, so each type keeps a spread of its own. */
+    public function testEachTypeKeepsASpreadOfItsOwn(): void
+    {
+        foreach (array_keys(Authority::TYPE_COUNTS) as $type) {
+            [$bias, $spread] = Authority::preferences($type);
+            $this->assertGreaterThan(0.0, $spread, $type);
+            $this->assertTrue(is_finite($bias), $type);
+        }
+        $this->assertGreaterThan(0.0, Authority::preferences('hawk')[0]);
+        $this->assertLessThan(0.0, Authority::preferences('dove')[0]);
     }
 }

@@ -100,4 +100,19 @@ class BaseFinancialBusinessModelTest extends TestCase
         // (100 * 0.90) + (80 * 0.10) = 90 + 8 = 98.0
         $this->assertEquals(98.0, $fairValue);
     }
+
+    public function testThePayoutGateTightensOnTheBufferInForce(): void
+    {
+        // Leverage at the sector cap: inside it with no buffer, over the first tier once the full buffer lowers the cap.
+        $equityLimit = \App\Data\Sectors::equityLimit(null);
+        $stock = $this->createStub(Stock::class);
+        $stock->method('getIndustry')->willReturn(null);
+        $stock->method('getTangibleEquity')->willReturn(1_000_000.0);
+        $stock->method('getTotalDebt')->willReturn((string) ($equityLimit * 1_000_000.0));
+
+        $this->assertNull($this->model->getRegulatoryDividendCap($stock, 0.0, new \App\DTO\MacroStateDTO()));
+        $buffered = $this->model->getRegulatoryDividendCap($stock, 0.0, new \App\DTO\MacroStateDTO(countercyclicalBufferRate: \App\Service\Macro\Subsystem\CreditFiscalSubsystem::MAX_CCYB));
+        $this->assertNotNull($buffered, 'The buffer banks are held to in the macro must also hold back the payout.');
+        $this->assertLessThanOrEqual(\App\Service\Math\FinancialConstants::REGULATORY_BUFFER_TIER_1_PAYOUT_CAP, $buffered);
+    }
 }

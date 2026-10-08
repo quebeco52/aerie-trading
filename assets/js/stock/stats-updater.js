@@ -67,9 +67,15 @@ export function updatePriceUI(newPrice, stockUpdate, config = {}) {
             debtRatioEl.textContent = stockUpdate.debt_ratio.toFixed(2) + 'x';
         }
 
+        // The rating and the spread its credit trades at are separate nodes, so repainting one leaves the other.
         const creditRatingEl = document.getElementById('stat-credit-rating');
         if (creditRatingEl && stockUpdate.credit_rating !== undefined) {
             creditRatingEl.textContent = stockUpdate.credit_rating;
+        }
+
+        const creditSpreadEl = document.getElementById('stat-credit-spread');
+        if (creditSpreadEl && Number.isFinite(stockUpdate.credit_spread)) {
+            creditSpreadEl.textContent = `+${Math.round(stockUpdate.credit_spread * 10000)} bps`;
         }
 
         const mktShareEl = document.getElementById('stat-market-share');
@@ -180,37 +186,5 @@ function updateAnalystTargets(stockUpdate, newPrice) {
             badgeEl.classList.add('text-on-surface-variant', 'bg-on-surface-variant/10');
         }
         badgeEl.classList.remove('hidden');
-    }
-}
-
-export function updateMacroIndicators(payload) {
-    if (payload.economic_cycle) {
-        const el = document.getElementById('market-economic-cycle');
-        if (el) el.textContent = payload.economic_cycle;
-    }
-    if (payload.macro) {
-        const infEl = document.getElementById('macro-inflation');
-        const gapEl = document.getElementById('macro-output-gap');
-        const rateEl = document.getElementById('macro-policy-rate');
-        const yieldEl = document.getElementById('macro-yield');
-
-        if (infEl) infEl.textContent = (payload.macro.inflation * 100).toFixed(2) + '%';
-        if (rateEl) rateEl.textContent = (payload.macro.policy_rate * 100).toFixed(2) + '%';
-        if (yieldEl) yieldEl.textContent = (payload.macro.yield_10y * 100).toFixed(2) + '%';
-
-        // Only the text and the tone change here; the template owns every other class.
-        const qeOn = payload.macro.qe_active && payload.macro.qe_intensity > 0.0005;
-        const qeStatusEl = document.getElementById('macro-qe-status');
-        if (qeStatusEl) qeStatusEl.textContent = qeOn ? `\u2212${(payload.macro.qe_intensity * 10000).toFixed(0)} bps` : '';
-        document.getElementById('qe-status-container')?.classList.toggle('hidden', !qeOn);
-
-        if (gapEl) {
-            const gapVal = payload.macro.output_gap * 100;
-            gapEl.textContent = gapVal.toFixed(2) + '%';
-            gapEl.classList.toggle('text-tertiary', gapVal < -1.0);
-            gapEl.classList.toggle('text-secondary', gapVal > 1.0);
-            gapEl.classList.toggle('text-on-surface', gapVal >= -1.0 && gapVal <= 1.0);
-        }
-
     }
 }

@@ -19,7 +19,7 @@ use PHPUnit\Framework\TestCase;
 final class MoneyColumnCapacityTest extends TestCase
 {
     /** Wide decimal columns that hold a per-share price or a share count, not a dollar total. */
-    private const PER_UNIT_COLUMNS = [Stock::class => ['price', 'shortInterestShares']];
+    private const PER_UNIT_COLUMNS = [Stock::class => ['price', 'shortInterestShares'], CorporateReport::class => ['consensusEps', 'reportedEps']];
 
     public function testEveryDollarTotalColumnIsThirtyDigitsWide(): void
     {

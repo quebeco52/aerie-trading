@@ -33,6 +33,32 @@ class WireFrameTest extends TestCase
         $this->assertSame([[10, 10.0, 100.0], [11, 10.5, 50.0], [12, 10.2, 25.0]], $wren['points']);
     }
 
+    /**
+     * The frame carries only part of the macro state, so a field a live page starts reading must be added to the list
+     * or its tile silently stops moving. Every macro field these scripts name, and every field a district stress rule
+     * reads, must survive the cut.
+     */
+    public function testTheFrameKeepsEveryMacroFieldALivePageReads(): void
+    {
+        $macro = (new \App\DTO\MacroStateDTO())->toArray();
+        $live = WireFrame::liveMacro($macro);
+        $root = dirname(__DIR__, 4);
+
+        foreach (['assets/js/pages/home.js', 'assets/js/pages/reserve.js', 'assets/js/economy/macro-vitals.js'] as $script) {
+            $source = (string) file_get_contents($root . '/' . $script);
+            foreach (array_keys($macro) as $field) {
+                if (preg_match('/\.' . $field . '\b/', $source) === 1) {
+                    $this->assertArrayHasKey($field, $live, "{$script} reads {$field} off the frame.");
+                }
+            }
+        }
+        foreach (\App\Data\DistrictMap::stressFields() as $field) {
+            $this->assertArrayHasKey($field, $macro, "A stress rule reads {$field}, which the macro state does not have.");
+            $this->assertArrayHasKey($field, $live, "The district map reads {$field} off the frame.");
+        }
+        $this->assertLessThan(count($macro) / 4, count($live), 'Most of the state stays off the wire.');
+    }
+
     public function testBondsChartTheCleanPriceAndFundsCarryNoVolume(): void
     {
         $frame = new WireFrame();

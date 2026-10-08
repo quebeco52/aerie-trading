@@ -183,8 +183,10 @@ class CreditFiscalSubsystem
     public const CCYB_GAP_CEILING = 0.1376;
     /** Maximum countercyclical capital buffer (Basel III: 2.5% of risk-weighted assets). */
     public const MAX_CCYB = 0.025;
-    /** Phase-in time (years) of a buffer decision: Basel gives banks twelve months. */
+    /** Phase-in time (years) of a buffer rise: Basel gives banks twelve months. A cut takes effect at once. */
     public const CCYB_PHASE_IN_YEARS = 1.0;
+    /** Years the buffer stays released after a crisis before a rise is decided: the March 2020 releases, re-raised by Norway in June 2021 and the UK in December 2021 (15 and 21 months). */
+    public const CCYB_RELEASE_HOLD_YEARS = 1.5;
 
     // --- Credit Crisis Hazard (Schularick & Taylor 2012; Jorda, Schularick & Taylor 2013) ---
     /** Logit intercept: -3.77 (se 0.25), crisis starts on the lagged Basel (one-sided HP) household credit gap, JST Macrohistory R6, 17 economies 1950-2020 outside war years and 5-year post-crisis windows; 2.2% a year at trend. */
@@ -733,13 +735,19 @@ class CreditFiscalSubsystem
         }
         $state->creditToGdpGap = $state->householdDebtToIncome - $state->creditToGdpTrend;
 
+        // BCBS (2010) CCyB guidance: a rise is announced up to twelve months ahead and phases in, a cut takes effect at
+        // once, and in a crisis the buffer is released in full so banks lend out of it rather than shrink.
         $bufferPosition = max(0.0, min(1.0, ($state->creditToGdpGapEma - self::CCYB_GAP_FLOOR) / (self::CCYB_GAP_CEILING - self::CCYB_GAP_FLOOR)));
-        $state->countercyclicalBufferRate = $this->mathUtility->calculateDistributedLag(
-            currentLaggedValue: $state->countercyclicalBufferRate,
-            targetValue: self::MAX_CCYB * $bufferPosition,
-            dt: $dt,
-            lagTimeConstant: self::CCYB_PHASE_IN_YEARS
-        );
+        $released = $state->lastCreditCrisisAt >= 0.0 && $state->totalTime - $state->lastCreditCrisisAt < self::CCYB_RELEASE_HOLD_YEARS;
+        $bufferTarget = $released ? 0.0 : self::MAX_CCYB * $bufferPosition;
+        $state->countercyclicalBufferRate = $bufferTarget <= $state->countercyclicalBufferRate
+            ? $bufferTarget
+            : $this->mathUtility->calculateDistributedLag(
+                currentLaggedValue: $state->countercyclicalBufferRate,
+                targetValue: $bufferTarget,
+                dt: $dt,
+                lagTimeConstant: self::CCYB_PHASE_IN_YEARS
+            );
 
         // The capital banks hold follows the requirement and the buffer over the years they take to build to them.
         $state->bankCapitalBuilt = $this->mathUtility->calculateDistributedLag(
@@ -835,6 +843,8 @@ class CreditFiscalSubsystem
         }
 
         $state->lastCreditCrisisAt = $state->totalTime;
+        // The buffer is released on the day (see calculateHouseholdCredit()), not a tick later.
+        $state->countercyclicalBufferRate = 0.0;
         $crisisDrag = self::thinCapitalDragScale($state->bankCapitalRequirement)
             * (self::CREDIT_CRISIS_DRAG_BASE + (self::CREDIT_CRISIS_DRAG_PER_GAP * max(0.0, $state->creditToGdpGapEma)));
         $state->creditCrisisDrag += $crisisDrag;

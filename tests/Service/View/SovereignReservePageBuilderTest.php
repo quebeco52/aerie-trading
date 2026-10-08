@@ -7,6 +7,7 @@ namespace App\Tests\Service\View;
 use App\Data\StrategicHoldings;
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
+use App\Repository\MacroReportHistoryRepository;
 use App\Repository\StockRepository;
 use App\Service\Macro\MacroEngine;
 use App\Service\Macro\Subsystem\SovereignFundSubsystem;
@@ -164,6 +165,37 @@ class SovereignReservePageBuilderTest extends TestCase
         $this->assertSame($fund->rebalanceBand(self::TARGET_WEIGHT), $bands['district']['band']);
         $this->assertSame($equityPolicy, $bands['equity']['policy']);
         $this->assertSame($fund->equityBand($equityPolicy), $bands['equity']['band']);
+    }
+
+    /**
+     * The band charts hold each quarter to the policy then in force: a head who set a bolder mix moves the policy and
+     * its band from that quarter on, each band the fund's own rule on the policy of its day; an equity policy recorded
+     * before the head's mix was kept is the opening split on the board target; a quarter before the fund opened is left out.
+     */
+    public function testBandHistoryFollowsThePolicyOfEachQuarter(): void
+    {
+        $fund = new SovereignFundSubsystem(new MathUtility());
+        $reports = $this->createStub(MacroReportHistoryRepository::class);
+        $reports->method('fundPolicy')->willReturn([
+            '9.750000' => ['target' => 0.0, 'equityPolicy' => 0.0],
+            '10.000000' => ['target' => self::TARGET_WEIGHT, 'equityPolicy' => null],
+            '10.250000' => ['target' => self::TARGET_WEIGHT, 'equityPolicy' => 0.72],
+        ]);
+        $stocks = $this->createStub(StockRepository::class);
+        $stocks->method('findAll')->willReturn([]);
+
+        $history = (new SovereignReservePageBuilder($stocks, $fund, $reports))->build($this->incepted())['bandHistory'];
+
+        $this->assertSame(['10.000000', '10.250000'], array_keys($history));
+        $opening = $fund->policyEquityShare(self::TARGET_WEIGHT);
+        $this->assertSame($opening, $history['10.000000']['equityPolicy']);
+        $this->assertSame($fund->equityBand($opening), $history['10.000000']['equityBand']);
+        $this->assertSame(0.72, $history['10.250000']['equityPolicy']);
+        $this->assertSame($fund->equityBand(0.72), $history['10.250000']['equityBand']);
+        $this->assertNotSame($history['10.000000']['equityBand'], $history['10.250000']['equityBand'], 'A new policy draws a new band.');
+        $this->assertSame($fund->rebalanceBand(self::TARGET_WEIGHT), $history['10.250000']['domesticBand']);
+
+        $this->assertSame([], $this->builder()->build(new MacroStateDTO())['bandHistory'], 'Before inception there is no band to draw.');
     }
 
     /** The quoted move is the one that breaches GPIF's own limit on GPIF's own weight: T - T(1-d)/(1-Td) = L. */

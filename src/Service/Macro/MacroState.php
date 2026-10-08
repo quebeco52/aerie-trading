@@ -324,7 +324,6 @@ class MacroState
     public float $creditToGdpGap;
     public float $creditToGdpGapEma;
     public float $countercyclicalBufferRate;
-    public float $countercyclicalBufferRateEma;
     // The credit cycle's crisis channel: this year's hazard, the deleveraging drag a crisis leaves on demand, and when the last one struck.
     public float $creditCrisisHazard;
     public float $creditCrisisDrag;

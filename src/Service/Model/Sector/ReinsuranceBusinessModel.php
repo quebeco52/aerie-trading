@@ -30,8 +30,8 @@ class ReinsuranceBusinessModel extends InsuranceBusinessModel
     public const DISTRICT_CATASTROPHE_LOAD = 0.08;
 
     // --- Loss Reserves ---
-    /** Float per unit of treaty premium earned: Swiss Re P&C Re 2023 unpaid claims $58.6B on premiums earned $22.9B (2.56), plus an unearned share of ~0.5 (group UPR split by premiums written). */
-    public const TREATY_RESERVE_TO_PREMIUM_RATIO = 3.0;
+    /** Loss and LAE reserves per unit of treaty premium earned: Swiss Re P&C Re 2023 unpaid claims $58.6B on premiums earned $22.9B. */
+    public const TREATY_LOSS_RESERVE_TO_PREMIUM_RATIO = 2.56;
 
     // --- Operating Cyclicality & Demand Structure ---
     /** Elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). Treaty volume follows primary premiums with a lag. */
@@ -123,7 +123,8 @@ class ReinsuranceBusinessModel extends InsuranceBusinessModel
         $streams->recordStreamShares($streamRevenues);
 
         $clampedMargin = $this->clampMargin($realizedVariableMargin + $claims['excess'] - $catBondShield);
-        $this->registerIncurredClaims($streams, $actualRevenue, $clampedMargin);
+        // The baseline cost ratio splits as the parent's does; the claims above it are losses.
+        $kpis = $this->bookUnderwritingResult($streams, $actualRevenue, $clampedMargin, $realizedVariableMargin * self::BASE_EXPENSE_RATIO_SHARE, 0.0, $fixedCosts, $treatyRevenue);
 
         $eventType = $this->resolveClaimEvent($claims['gross'], $treatyWeight, $coverAttached);
 
@@ -145,19 +146,30 @@ class ReinsuranceBusinessModel extends InsuranceBusinessModel
             isPublicEvent: $eventType !== null ? true : null,
             streamZ: $streams->getStreamZ(),
             streamRevenue: $streamRevenues,
+            kpis: $kpis,
         );
     }
 
-    /** Only the treaty book carries reserves: ILS structuring and management fees are earned as they are billed. */
-    public function resolveReserveToPremiumRatio(Stock $stock): float
+    /**
+     * Only the treaty book carries reserves, unearned premium on annual treaties and the claims it has incurred: ILS
+     * structuring and management fees are earned as they are billed.
+     *
+     * @return array{unearned: float, loss: float, life: float}
+     */
+    public function resolveReserveRatios(Stock $stock): array
     {
         $params = $this->resolveModelParameters($stock, [
             ModelParam::TreatyReinsuranceWeight->value => self::TREATY_REINSURANCE_WEIGHT,
             ModelParam::CatBondSpreadWeight->value     => self::CAT_BOND_WEIGHT,
         ]);
         $treatyWeight = $params[ModelParam::TreatyReinsuranceWeight];
+        $treatyShare = $treatyWeight / max(0.01, $treatyWeight + $params[ModelParam::CatBondSpreadWeight]);
 
-        return self::TREATY_RESERVE_TO_PREMIUM_RATIO * $treatyWeight / max(0.01, $treatyWeight + $params[ModelParam::CatBondSpreadWeight]);
+        return [
+            'unearned' => $treatyShare * self::POLICY_TERM_YEARS / 2.0,
+            'loss' => $treatyShare * self::TREATY_LOSS_RESERVE_TO_PREMIUM_RATIO,
+            'life' => 0.0,
+        ];
     }
 
     /**
