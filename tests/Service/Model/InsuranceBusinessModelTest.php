@@ -426,9 +426,9 @@ class InsuranceBusinessModelTest extends TestCase
         // Rates at the level the book was priced at: the whole capacity is worth writing.
         $this->assertEqualsWithDelta(1.0, $writtenCapacity($this->underwriterAtShare(0.40)), 0.001);
 
-        // Rates 6% soft put the combined ratio over 100, but the float the book brings over a renewal year still
+        // Rates 4.8% soft put the combined ratio over 100, but the float the book brings over a renewal year still
         // covers the underwriting loss: cash-flow underwriting, and the whole book is written.
-        $this->assertEqualsWithDelta(1.0, $writtenCapacity($this->underwriterAtShare(0.58)), 0.001);
+        $this->assertEqualsWithDelta(1.0, $writtenCapacity($this->underwriterAtShare(0.56)), 0.001);
 
         // Softer still, the book loses money float included, and the firm sheds it. A firm whose float already
         // held earns more than its hurdle can afford to keep part of it.
@@ -469,7 +469,7 @@ class InsuranceBusinessModelTest extends TestCase
 
         // An underwriting loss the book's float covers: written in full, whatever float the firm already holds.
         foreach ([1.2, 3.0] as $floatToEquity) {
-            $this->assertEqualsWithDelta(1.0, $writtenCapacity($this->underwriterAtShare(0.58, $floatToEquity)), 0.001);
+            $this->assertEqualsWithDelta(1.0, $writtenCapacity($this->underwriterAtShare(0.56, $floatToEquity)), 0.001);
         }
 
         // With no yield on float the same rate is an outright loss, and the book is shed.
@@ -479,7 +479,7 @@ class InsuranceBusinessModelTest extends TestCase
             yield10yEma: 0.0,
             equityRiskPremium: 0.0,
         );
-        $stock = $this->underwriterAtShare(0.58);
+        $stock = $this->underwriterAtShare(0.56);
         $roic = $model->getTargetMetrics($stock, $noYield, $mathUtility)['baseline_roic'];
         $this->assertLessThan(1.0, $roic / (InsuranceBusinessModel::KENNEY_CAPACITY_RATIO * 0.045 * (1.0 - $noYield->corporateTaxRate)));
     }

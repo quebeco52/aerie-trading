@@ -100,7 +100,8 @@ class RetailInsuranceBusinessModel extends InsuranceBusinessModel
         $this->advanceUnderwritingCycle($streams, $stock, $macroState, $surplusDeficitRatio, $recovery > 0.0);
 
         $clampedMargin = $this->clampMargin($realizedVariableMargin + $claims['excess'] - $recovery + $reinstatementPremium);
-        $this->registerIncurredClaims($streams, $actualRevenue, $clampedMargin - $reinstatementPremium);
+        // The baseline cost ratio splits as the parent's does; the claims above it are losses.
+        $kpis = $this->bookUnderwritingResult($streams, $actualRevenue, $clampedMargin, $realizedVariableMargin * self::BASE_EXPENSE_RATIO_SHARE, $reinstatementPremium, $fixedCosts);
 
         $eventType = $this->resolveClaimEvent($claims['gross'], $pcWeight, $recovery > 0.0);
 
@@ -124,8 +125,7 @@ class RetailInsuranceBusinessModel extends InsuranceBusinessModel
             isPublicEvent: $eventType !== null ? true : null,
             streamZ: $streams->getStreamZ(),
             streamRevenue: $streamRevenues,
-            // The baseline cost ratio splits as the parent's does; the claims above it are losses.
-            kpis: $this->underwritingRatioKpis($clampedMargin, $realizedVariableMargin * self::BASE_EXPENSE_RATIO_SHARE, $fixedCosts, $actualRevenue),
+            kpis: $kpis,
         );
     }
 

@@ -40,10 +40,11 @@ final class InsuranceLossReserveTest extends TestCase
         return $stock;
     }
 
-    /** A quarter's incurred claims for a steady book on its structural claims ratio. */
+    /** A quarter's incurred losses and LAE for a steady book on its structural loss ratio: the cost line less its expense share. */
     private function structuralIncurred(float $annualPremium): float
     {
-        return $annualPremium * EarningsEngine::QUARTERLY_TIME_STEP * (1.0 - self::MARGIN) * (1.0 - self::FIXED_COST_RATIO);
+        return $annualPremium * EarningsEngine::QUARTERLY_TIME_STEP * (1.0 - self::MARGIN) * (1.0 - self::FIXED_COST_RATIO)
+            * (1.0 - InsuranceBusinessModel::BASE_EXPENSE_RATIO_SHARE);
     }
 
     /**
@@ -174,14 +175,20 @@ final class InsuranceLossReserveTest extends TestCase
         );
     }
 
-    /** What the physics books as incurred is the P&L's claims line: variable costs less any reinstatement premium. */
-    public function testThePhysicsBooksTheQuartersIncurredClaims(): void
+    /**
+     * Only losses and LAE are reserved (SSAP 55, ASC 944-40): what the physics books as incurred is the filed loss
+     * ratio less any reinstatement premium, so the acquisition and underwriting expense share of the cost line is
+     * paid in the quarter and never enters the float. Loss and expense still add to the quarter's cost base.
+     */
+    public function testThePhysicsReservesTheLossShareOnly(): void
     {
         $macro = new MacroStateDTO(inflationEma: 0.02, policyRateEma: 0.03, yield10yEma: 0.04, catastropheLossIndexEma: 4.0);
+        $fixedCosts = 1.0e9;
 
         foreach ([new InsuranceBusinessModel(), new ReinsuranceBusinessModel(), new RetailInsuranceBusinessModel()] as $model) {
             $math = MathUtility::ownStream(20261006);
             $momentum = [];
+            $breaches = 0;
             for ($quarter = 0; $quarter < 200; $quarter++) {
                 $stock = new Stock();
                 $stock->setTicker('CLMS');
@@ -189,23 +196,51 @@ final class InsuranceLossReserveTest extends TestCase
                 $stock->setTotalEquity('200000000000');
                 $stock->setEarningsMomentumZ($momentum);
 
-                $result = $model->computeActualFinancials($stock, 10_000_000_000.0, 0.60, 1.0e9, 0.2, $macro, $math);
+                $result = $model->computeActualFinancials($stock, 10_000_000_000.0, 0.60, $fixedCosts, 0.2, $macro, $math);
                 $momentum = $result->streamZ;
+                $premium = $result->actualRevenue;
+                $label = $model::class . " quarter {$quarter}";
 
                 $reinstatement = 0.0;
-                if ($result->eventType === ShockEvent::REINSURANCE_ATTACHMENT_BREACH && !$model instanceof ReinsuranceBusinessModel) {
-                    $bookWeight = $model instanceof RetailInsuranceBusinessModel
-                        ? $result->streamRevenue['property_casualty_premiums'] / max(1.0, $result->actualRevenue) : 1.0;
-                    $reinstatement = $result->actualRevenue * InsuranceBusinessModel::REINSTATEMENT_PREMIUM_RATE * $bookWeight;
+                if ($result->eventType === ShockEvent::REINSURANCE_ATTACHMENT_BREACH) {
+                    $breaches++;
+                    if (!$model instanceof ReinsuranceBusinessModel) {
+                        $bookWeight = $model instanceof RetailInsuranceBusinessModel
+                            ? $result->streamRevenue['property_casualty_premiums'] / max(1.0, $premium) : 1.0;
+                        $reinstatement = $premium * InsuranceBusinessModel::REINSTATEMENT_PREMIUM_RATE * $bookWeight;
+                    }
                 }
 
+                $variableExpenses = $result->kpis['expense_ratio'] * $premium - $fixedCosts;
+                $incurred = $momentum[InsuranceBusinessModel::STATE_INCURRED_CLAIMS];
+                // The retail cover is sized on the P&C book's target weight, which the realized stream share only approximates.
+                $tolerance = $model instanceof RetailInsuranceBusinessModel && $reinstatement > 0.0 ? $premium * 1e-3 : $premium * 1e-9;
+
+                $this->assertEqualsWithDelta($result->kpis['loss_ratio'] * $premium - $reinstatement, $incurred, $tolerance, $label);
+                $this->assertEqualsWithDelta($result->actualVariableCosts - $variableExpenses - $reinstatement, $incurred, $tolerance, $label);
+                $this->assertGreaterThan(0.0, $variableExpenses, "{$label}: the expense share is paid, not reserved.");
                 $this->assertEqualsWithDelta(
-                    $result->actualVariableCosts - $reinstatement,
-                    $momentum[InsuranceBusinessModel::STATE_INCURRED_CLAIMS],
-                    $result->actualRevenue * 0.02,
-                    $model::class . ' books the claims line as incurred.'
+                    $result->clampedMargin + $fixedCosts / $premium,
+                    $result->kpis['loss_ratio'] + $result->kpis['expense_ratio'],
+                    1e-9,
+                    "{$label}: loss and expense reconcile to the cost base."
                 );
             }
+            $this->assertGreaterThan(0, $breaches, $model::class . ': the run reaches the cover, so the reinstatement leg is exercised.');
         }
+    }
+
+    /** The runoff lag is struck on the base that is reserved, so a steady book holds the pinned ratio. */
+    public function testTheRunoffLagIsStruckOnTheLossShare(): void
+    {
+        $model = new InsuranceBusinessModel();
+        $stock = $this->carrier(0.0, 0.0);
+        $structuralLossRatio = (1.0 - self::MARGIN) * (1.0 - self::FIXED_COST_RATIO) * (1.0 - InsuranceBusinessModel::BASE_EXPENSE_RATIO_SHARE);
+
+        $this->assertEqualsWithDelta(
+            InsuranceBusinessModel::RESERVE_TO_PREMIUM_RATIO / $structuralLossRatio,
+            $model->resolveReserveRunoffYears($stock),
+            1e-12
+        );
     }
 }

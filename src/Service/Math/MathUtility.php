@@ -1704,6 +1704,12 @@ class MathUtility
      */
     public function calculateInverseNormalCDF(float $p): float
     {
+        return self::standardNormalQuantile($p);
+    }
+
+    /** Standard normal quantile (Acklam's rational approximation), static so model code reads it without the sampler. */
+    public static function standardNormalQuantile(float $p): float
+    {
         $p = max(1e-12, min(1.0 - 1e-12, $p));
 
         // Coefficients in rational approximations

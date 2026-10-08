@@ -188,7 +188,7 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
     public const RESERVE_TO_PREMIUM_RATIO = 1.60;
     /** Years of renewals an underwriter weighs the float a new book brings against its underwriting result: the annual policy term. */
     public const FLOAT_DECISION_HORIZON_YEARS = 1.0;
-    /** State key holding the quarter's net incurred claims, on which the reserve stock is rolled forward. */
+    /** State key holding the quarter's net incurred losses and LAE, on which the reserve stock is rolled forward. */
     public const STATE_INCURRED_CLAIMS = 'state:reserves:incurred_claims';
 
     // --- Investment Portfolio Duration ---
@@ -561,7 +561,7 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
 
         $combinedRatio = $realizedLossRatio + $realizedExpenseRatio + $reinstatementPremium;
         $clampedMargin = $this->clampMargin($combinedRatio);
-        $this->registerIncurredClaims($streams, $actualRevenue, $clampedMargin - $reinstatementPremium);
+        $kpis = $this->bookUnderwritingResult($streams, $actualRevenue, $clampedMargin, $realizedExpenseRatio, $reinstatementPremium, $fixedCosts);
 
         $eventType = $this->resolveClaimEvent($claims['gross'], 1.0, $recovery > 0.0);
 
@@ -579,7 +579,7 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
             streamRevenue: [
                 'premium_revenue' => $actualRevenue,
             ],
-            kpis: $this->underwritingRatioKpis($clampedMargin, $realizedExpenseRatio, $fixedCosts, $actualRevenue),
+            kpis: $kpis,
         );
     }
 
@@ -937,14 +937,16 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
     }
 
     /**
-     * Mean years from incurred to paid. Set so a steady book on its structural claims ratio (the variable
-     * cost line at neutral rates, (1 − margin) × (1 − fixed share)) holds exactly the pinned reserve ratio.
+     * Mean years from incurred to paid. Set so a steady book on its structural loss and LAE ratio (the variable
+     * cost line at neutral rates less its acquisition and underwriting expense share) holds exactly the pinned
+     * reserve ratio: the same base bookUnderwritingResult() reserves on.
      */
     public function resolveReserveRunoffYears(Stock $stock): float
     {
-        $structuralClaimsRatio = (1.0 - (float) $stock->getOperatingMargin()) * (1.0 - (float) $stock->getFixedCostRatio());
+        $structuralLossRatio = (1.0 - (float) $stock->getOperatingMargin()) * (1.0 - (float) $stock->getFixedCostRatio())
+            * (1.0 - self::BASE_EXPENSE_RATIO_SHARE);
 
-        return $this->resolveReserveToPremiumRatio($stock) / max(0.01, $structuralClaimsRatio);
+        return $this->resolveReserveToPremiumRatio($stock) / max(0.01, $structuralLossRatio);
     }
 
     /**
@@ -964,10 +966,19 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
         ];
     }
 
-    /** Books the quarter's incurred claims, net of the cover's recovery, for the reserve roll-forward. */
-    protected function registerIncurredClaims(StreamContext $streams, float $actualRevenue, float $netClaimsRatio): void
+    /**
+     * Files the quarter's loss and expense ratios and books its incurred losses for the reserve roll-forward, from
+     * one split. Only losses and LAE are reserved (SSAP 55, ASC 944-40); acquisition and underwriting expenses are
+     * expensed or deferred as incurred (SSAP 71, ASC 944-30), and a reinstatement premium is ceded premium.
+     *
+     * @return array{loss_ratio: float, expense_ratio: float}
+     */
+    protected function bookUnderwritingResult(StreamContext $streams, float $premium, float $costRatio, float $variableExpenseRatio, float $reinstatementRatio, float $fixedCosts): array
     {
-        $streams->registerState(self::STATE_INCURRED_CLAIMS, max(0.0, $actualRevenue * $netClaimsRatio));
+        $kpis = $this->underwritingRatioKpis($costRatio, $variableExpenseRatio, $fixedCosts, $premium);
+        $streams->registerState(self::STATE_INCURRED_CLAIMS, max(0.0, $premium * ($kpis['loss_ratio'] - $reinstatementRatio)));
+
+        return $kpis;
     }
 
     public function isUnderLeveraged(float $currentDebtRatio, float $targetDebtTolerance, float $interestCoverage, float $minIcr): bool
