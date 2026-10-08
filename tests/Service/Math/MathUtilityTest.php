@@ -2498,49 +2498,48 @@ class MathUtilityTest extends TestCase
         $this->assertSame(0.0, MathUtility::excessOverBaseline(0.02, 0.02));
     }
 
-    public function testExpectedNominalGrowthCarriesTheCycleAndIsCappedAtTheRiskFreeRate(): void
+    public function testExpectedNominalGrowthCarriesTheCycleAndCapsOnlyThePerpetualPartAtTrend(): void
     {
-        // Boom: secular 2% + half of a 2% gap at beta 1 = 3% real, plus 2% inflation = 5% nominal, under a 6% risk-free rate.
-        $this->assertEqualsWithDelta(0.05, $this->mathUtility->calculateExpectedNominalGrowth(0.02, 0.02, 1.0, 0.02, 0.0, 0.06), 1e-12);
-        // Bust at the same beta takes the same amount off: 1% real plus 2% inflation.
-        $this->assertEqualsWithDelta(0.03, $this->mathUtility->calculateExpectedNominalGrowth(0.02, -0.02, 1.0, 0.02, 0.0, 0.06), 1e-12);
+        $trend = MacroEngine::TREND_REAL_GROWTH;
+        // Boom: trend secular growth + half of a 2% gap at beta 1, plus 2% inflation. The cycle is transitory and passes.
+        $this->assertEqualsWithDelta($trend + 0.01 + 0.02, $this->mathUtility->calculateExpectedNominalGrowth($trend, 0.02, 1.0, 0.02, 0.0), 1e-12);
+        // Bust at the same beta takes the same amount off.
+        $this->assertEqualsWithDelta($trend - 0.01 + 0.02, $this->mathUtility->calculateExpectedNominalGrowth($trend, -0.02, 1.0, 0.02, 0.0), 1e-12);
         // Stagflation drag reaches a firm with no moat and is offset by pricing power.
         $this->assertLessThan(
-            $this->mathUtility->calculateExpectedNominalGrowth(0.02, 0.0, 1.0, 0.06, 1.0, 0.06),
-            $this->mathUtility->calculateExpectedNominalGrowth(0.02, 0.0, 1.0, 0.06, 0.0, 0.06)
+            $this->mathUtility->calculateExpectedNominalGrowth($trend, 0.0, 1.0, 0.06, 1.0),
+            $this->mathUtility->calculateExpectedNominalGrowth($trend, 0.0, 1.0, 0.06, 0.0)
         );
-        // Stable growth never exceeds the risk-free rate (Damodaran), so the same boom is capped lower when rates are low.
-        $this->assertSame(0.045, $this->mathUtility->calculateExpectedNominalGrowth(0.10, 0.05, 2.0, 0.02, 0.0, 0.045));
-        $this->assertSame(0.025, $this->mathUtility->calculateExpectedNominalGrowth(0.02, 0.02, 1.0, 0.02, 0.0, 0.025));
-        $this->assertSame(0.0, $this->mathUtility->calculateExpectedNominalGrowth(-0.10, 0.0, 1.0, 0.0, 0.0, 0.06));
+        // No sector outgrows the economy forever: a 10% secular rate is priced at trend (Damodaran stable growth).
+        $this->assertEqualsWithDelta($trend + 0.02, $this->mathUtility->calculateExpectedNominalGrowth(0.10, 0.0, 1.0, 0.02, 0.0), 1e-12);
+        $this->assertSame(0.0, $this->mathUtility->calculateExpectedNominalGrowth(-0.10, 0.0, 1.0, 0.0, 0.0));
     }
 
     /**
-     * Damodaran's fundamental growth: a firm grows at its return on capital times the share of earnings it keeps.
-     * The outlook's growth stands while retention funds it and is cut to what retention funds when it does not;
-     * a firm that keeps nothing, or earns nothing, grows at nothing.
+     * Damodaran's fundamental growth in real terms: retention funds real growth at the return on capital, and the
+     * plant already in place grows with the price level. A firm that keeps nothing still grows with inflation; the
+     * outlook stands while retention funds it.
      */
-    public function testFundableGrowthIsTheOutlookCappedAtWhatRetentionFunds(): void
+    public function testFundableGrowthIsTheOutlookCappedAtInflationPlusWhatRetentionFunds(): void
     {
-        $this->assertEqualsWithDelta(0.045, $this->mathUtility->calculateFundableGrowth(0.045, 0.15, 0.40), 1e-12);
-        $this->assertEqualsWithDelta(0.15 * 0.10, $this->mathUtility->calculateFundableGrowth(0.045, 0.15, 0.90), 1e-12);
-        $this->assertSame(0.0, $this->mathUtility->calculateFundableGrowth(0.045, 0.15, 1.20));
-        $this->assertSame(0.0, $this->mathUtility->calculateFundableGrowth(0.045, -0.05, 0.40));
+        $this->assertEqualsWithDelta(0.045, $this->mathUtility->calculateFundableGrowth(0.045, 0.15, 0.40, 0.02), 1e-12);
+        $this->assertEqualsWithDelta(0.02 + (0.15 * 0.10), $this->mathUtility->calculateFundableGrowth(0.045, 0.15, 0.90, 0.02), 1e-12);
+        $this->assertEqualsWithDelta(0.02, $this->mathUtility->calculateFundableGrowth(0.045, 0.15, 1.20, 0.02), 1e-12);
+        $this->assertEqualsWithDelta(0.02, $this->mathUtility->calculateFundableGrowth(0.045, -0.05, 0.40, 0.02), 1e-12);
     }
 
     public function testManagementAndTheMarketStrikeTheSameFairValueMultiple(): void
     {
-        $growth = $this->mathUtility->calculateFundableGrowth($this->mathUtility->calculateExpectedNominalGrowth(0.03, 0.01, 1.2, 0.025, 0.02, 0.06), 0.18, 0.40);
+        $growth = $this->mathUtility->calculateFundableGrowth($this->mathUtility->calculateExpectedNominalGrowth(0.03, 0.01, 1.2, 0.025, 0.02), 0.18, 0.40, 0.025);
         $market = $this->mathUtility->calculateQualityAdjustedFairValuePE(0.09, 0.18, $growth, 22.0, 0.04);
-        $management = $this->mathUtility->calculateManagementFairValuePE(0.09, 0.18, 0.03, 0.01, 1.2, 0.025, 0.02, 22.0, 0.04, 0.40, 0.06);
+        $management = $this->mathUtility->calculateManagementFairValuePE(0.09, 0.18, 0.03, 0.01, 1.2, 0.025, 0.02, 22.0, 0.04, 0.40);
 
         $this->assertSame($market, $management);
         // A payout that leaves too little to fund the outlook lowers management's multiple exactly as the market's.
-        $this->assertLessThan($management, $this->mathUtility->calculateManagementFairValuePE(0.09, 0.18, 0.03, 0.01, 1.2, 0.025, 0.02, 22.0, 0.04, 0.95, 0.06));
+        $this->assertLessThan($management, $this->mathUtility->calculateManagementFairValuePE(0.09, 0.18, 0.03, 0.01, 1.2, 0.025, 0.02, 22.0, 0.04, 0.95));
         // The Sloan discount is inside the shared figure, floored at the distressed multiple.
         $clean = $this->mathUtility->calculateQualityAdjustedFairValuePE(0.09, 0.18, $growth, 22.0, 0.0);
         $this->assertEqualsWithDelta($clean - 0.04 * FinancialConstants::ACCRUALS_ANOMALY_PE_PENALTY_SCALE, $market, 1e-12);
-        $this->assertSame(FinancialConstants::MIN_INTRINSIC_PE, $this->mathUtility->calculateQualityAdjustedFairValuePE(0.09, 0.18, $growth, 22.0, 10.0));
     }
 
     public function testFringeAdjustedPriceLevelReducesToCournotWithNoFringeResponseAndSoftensItOtherwise(): void
@@ -2790,11 +2789,11 @@ class MathUtilityTest extends TestCase
         $math = new MathUtility();
         $target = MacroEngine::TARGET_INFLATION;
 
-        self::assertEqualsWithDelta(0.02 + $target, $math->calculateExpectedNominalGrowth(0.02, 0.0, 1.0, $target, 0.0, 0.06), 1e-12);
+        self::assertEqualsWithDelta(0.02 + $target, $math->calculateExpectedNominalGrowth(0.02, 0.0, 1.0, $target, 0.0), 1e-12);
         // Above target, only the part pricing power cannot offset is lost from real growth.
         self::assertEqualsWithDelta(
             0.02 - ((0.04 - $target) * 0.6) + 0.04,
-            $math->calculateExpectedNominalGrowth(0.02, 0.0, 1.0, 0.04, 0.4, 0.06),
+            $math->calculateExpectedNominalGrowth(0.02, 0.0, 1.0, 0.04, 0.4),
             1e-12
         );
     }

@@ -366,8 +366,7 @@ class MergerAndAcquisitionEngine
             $ctx->strategy->getMoatSpread(),
             \App\Data\Sectors::baselineIndustryPe($stock->getIndustry()),
             (float) ($stock->getAccrualsRatio() ?? 0.0),
-            $stock->getPolicyPayoutRatio(),
-            $ctx->macroState->yield10yEma
+            $stock->getPolicyPayoutRatio()
         );
         $ctx->bookValuePerShare = max(0.01, $ctx->equity / max(1.0, $ctx->shares));
         $ctx->priceToBook = $ctx->price / $ctx->bookValuePerShare;

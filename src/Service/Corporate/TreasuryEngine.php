@@ -616,8 +616,7 @@ class TreasuryEngine
             $ctx->strategy->getMoatSpread(),
             \App\Data\Sectors::baselineIndustryPe($stock->getIndustry()),
             (float) ($stock->getAccrualsRatio() ?? 0.0),
-            $stock->getPolicyPayoutRatio(),
-            $ctx->macroState->yield10yEma
+            $stock->getPolicyPayoutRatio()
         );
 
         $bookValuePerShare = max(0.01, (float) $stock->getTotalEquity() / max(1, $ctx->sharesOutstanding));

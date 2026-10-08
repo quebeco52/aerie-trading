@@ -380,8 +380,7 @@ class CapitalAllocationEngine
             $ctx->strategy->getMoatSpread(),
             \App\Data\Sectors::baselineIndustryPe($stock->getIndustry()),
             (float) ($stock->getAccrualsRatio() ?? 0.0),
-            $stock->getPolicyPayoutRatio(),
-            $ctx->macroState->yield10yEma
+            $stock->getPolicyPayoutRatio()
         );
 
         $ctx->newShares = $ctx->sharesOutstanding;

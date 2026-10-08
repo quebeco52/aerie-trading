@@ -1052,9 +1052,11 @@ class MathUtility
     /**
      * Nominal expected growth used to strike a fair-value multiple, the same transmission for everyone
      * who strikes one: secular real growth, the cyclical part scaled by beta, a stagflation drag on real
-     * growth that pricing power offsets, then inflation in full for the nominal rate. Capped at the
-     * risk-free rate: no firm outgrows the economy forever, and the long nominal rate is the proxy for the
-     * economy's nominal growth (Damodaran, Investment Valuation, ch. 12, the stable-growth rule).
+     * growth that pricing power offsets, then inflation in full for the nominal rate. The perpetual part, the
+     * sector's secular rate, is capped at the economy's trend real growth: no firm outgrows the economy forever
+     * (Damodaran, Investment Valuation, ch. 12, the stable-growth rule). Damodaran proxies that growth with the
+     * long risk-free rate; here the economy's trend is known, and the two need not agree. The cycle is transitory
+     * and passes both ways.
      *
      * Management and the market MUST read the same figure. The corporate engines used to strike their
      * buyback, issuance and M&A multiples on a flat 2% while the pricing engine read the cycle, which made
@@ -1066,10 +1068,9 @@ class MathUtility
         float $outputGap,
         float $beta,
         float $inflation,
-        float $moatSpread,
-        float $riskFreeRate
+        float $moatSpread
     ): float {
-        $realGrowth = $secularGrowth + ($outputGap * FinancialConstants::CYCLICAL_GROWTH_PASS_THROUGH * $beta);
+        $realGrowth = min($secularGrowth, MacroEngine::TREND_REAL_GROWTH) + ($outputGap * FinancialConstants::CYCLICAL_GROWTH_PASS_THROUGH * $beta);
 
         // Stagflation drag: inflation above target compresses real growth where pricing power is weak.
         $inflationDrag = max(0.0, ($inflation - MacroEngine::TARGET_INFLATION) * (1.0 - $moatSpread));
@@ -1078,20 +1079,21 @@ class MathUtility
         // Nominal growth is real growth plus inflation (Fisher): the cash flows are discounted at a nominal rate,
         // so growing them at less than full inflation is the inflation illusion of Modigliani & Cohn (1979). Weak
         // pricing power is the stagflation drag above, not a haircut on inflation for every firm.
-        return max(0.0, min($riskFreeRate, $realGrowth + $inflation));
+        return max(0.0, $realGrowth + $inflation);
     }
 
     /**
      * The growth a firm can fund from what it keeps (Damodaran: g = return on capital x reinvestment rate; Higgins
-     * 1977): the outlook's growth, capped at what its return earns on the share of earnings its payout policy
-     * retains. The value-driver multiple assumes the firm reinvests g / ROIC of its earnings, so a firm that pays
-     * that out instead cannot be priced as if it grew at the outlook.
+     * 1977): the outlook's growth, capped at inflation plus what its return earns on the share of earnings its
+     * payout policy retains. Reinvestment funds REAL growth (Damodaran: reinvestment rate = real g / real ROC);
+     * the plant already in place sells at the going price level, so a firm that pays out everything still grows
+     * with inflation.
      */
-    public function calculateFundableGrowth(float $expectedGrowth, float $returnOnCapital, float $payoutRatio): float
+    public function calculateFundableGrowth(float $expectedGrowth, float $returnOnCapital, float $payoutRatio, float $inflation): float
     {
         $retention = 1.0 - max(0.0, min(1.0, $payoutRatio));
 
-        return min($expectedGrowth, max(0.0, $returnOnCapital * $retention));
+        return min($expectedGrowth, max(0.0, $inflation) + max(0.0, $returnOnCapital * $retention));
     }
 
     /**
@@ -1275,13 +1277,13 @@ class MathUtility
         float $moatSpread,
         ?float $sectorMultiple,
         float $accrualsRatio,
-        float $payoutRatio,
-        float $riskFreeRate
+        float $payoutRatio
     ): float {
         $expectedGrowth = $this->calculateFundableGrowth(
-            $this->calculateExpectedNominalGrowth($secularGrowth, $outputGap, $beta, $inflation, $moatSpread, $riskFreeRate),
+            $this->calculateExpectedNominalGrowth($secularGrowth, $outputGap, $beta, $inflation, $moatSpread),
             $trueReturn,
-            $payoutRatio
+            $payoutRatio,
+            $inflation
         );
 
         return $this->calculateQualityAdjustedFairValuePE($hurdleRate, $trueReturn, $expectedGrowth, $sectorMultiple, $accrualsRatio);

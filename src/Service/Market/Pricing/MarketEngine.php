@@ -660,11 +660,11 @@ class MarketEngine
                 $outputGap,
                 $beta,
                 $inflation,
-                $strategy->getMoatSpread(),
-                $macro->yield10yEma
+                $strategy->getMoatSpread()
             ),
             $equityReturn,
-            $targetPayoutRatio
+            $targetPayoutRatio,
+            $inflation
         );
 
         $fairValuePE = $this->mathUtility->calculateQualityAdjustedFairValuePE(
