@@ -49,6 +49,7 @@ for ($seed = (int) $seedFrom; $seed <= (int) $seedTo; ++$seed) {
             }
         } elseif ($arm === 'step') {
             $policy = new \App\DTO\GovernmentPolicyDTO(
+                publicSpendingShare: $m->publicSpendingShare,
                 corporateTaxPolicyShift: $m->corporateTaxPolicyShift, importTariffRate: $m->importTariffRate, laborForceGrowthRate: $m->laborForceGrowthRate,
                 mergerReviewLeniency: $m->mergerReviewLeniency, greenBeltStringency: $m->greenBeltStringency, carbonPrice: $m->carbonPrice,
                 extractionStringency: $m->extractionStringency, stampDutyRate: $m->stampDutyRate, bankLevyRate: $m->bankLevyRate, electionPulse: $m->electionPulse,
@@ -68,6 +69,7 @@ for ($seed = (int) $seedFrom; $seed <= (int) $seedTo; ++$seed) {
                 $conceding = false;
             }
             $policy = new \App\DTO\GovernmentPolicyDTO(
+                publicSpendingShare: $m->publicSpendingShare,
                 corporateTaxPolicyShift: $m->corporateTaxPolicyShift, importTariffRate: $m->importTariffRate, laborForceGrowthRate: $m->laborForceGrowthRate,
                 mergerReviewLeniency: $m->mergerReviewLeniency, greenBeltStringency: $m->greenBeltStringency, carbonPrice: $m->carbonPrice,
                 extractionStringency: $m->extractionStringency, stampDutyRate: $m->stampDutyRate, bankLevyRate: $m->bankLevyRate, electionPulse: $m->electionPulse,
@@ -77,6 +79,7 @@ for ($seed = (int) $seedFrom; $seed <= (int) $seedTo; ++$seed) {
             // What the economy read before politics left it: the term's ramp and the vote's own tick, no talks.
             $vote = TimeSeries::crossedSimulatedBoundary($m->totalTime, 1.0 / $tpy, PoliticsEngine::ELECTION_TERM_YEARS);
             $policy = new \App\DTO\GovernmentPolicyDTO(
+                publicSpendingShare: MacroEngine::TARGET_CORPORATE_TAX_RATE,
                 corporateTaxPolicyShift: 0.0,
                 importTariffRate: 0.0,
                 laborForceGrowthRate: MacroEngine::STRUCTURAL_LABOR_GROWTH_RATE,
@@ -100,7 +103,8 @@ for ($seed = (int) $seedFrom; $seed <= (int) $seedTo; ++$seed) {
                 'bal' => $p->committeeBalance, 'maj' => $p->committeeMajority, 'gst' => $p->governorStance, 'cmed' => \App\Service\Politics\CouncilAppointments::median($p->councilStances),
                 'req' => $m->bankCapitalRequirement, 'built' => $m->bankCapitalBuilt, 'sloos' => $m->sloosTighteningIndex, 'ccyb' => $m->countercyclicalBufferRate, 'cdrag' => $m->creditCrisisDrag, 'lastcrisis' => $m->lastCreditCrisisAt, 'hdti' => $m->householdDebtToIncome, 'cgap' => $m->creditToGdpGap,
                 'regst' => $p->regulatorStance, 'creg' => \App\Service\Politics\CouncilAppointments::median($p->councilRegulationStances), 'regstart' => $p->regulatorTermStart, 'regname' => $p->regulatorName, 'seated' => $m->authorityCommitteeSeated, 'mmaj' => $m->authorityMajority,
-                'cc' => \App\Service\Politics\PoliticsEngine::coalitionPosition($p->governingCoalition, $p->dietSeats, $p->partyPositions)[AerieDiet::AXIS_COUNCIL] ?? null, 'press' => $p->pressureSince, 'give' => $p->pressureGivingIn, 'meet' => $p->lastMeetingAt, 'votes' => $p->lastMeetingVotes, 'govstart' => $p->governorTermStart, 'mst' => $p->memberStances,
+                'cc' => \App\Service\Politics\PoliticsEngine::coalitionPosition($p->governingCoalition, $p->dietSeats, $p->partyPositions)[AerieDiet::AXIS_COUNCIL] ?? null,
+                'cs' => \App\Service\Politics\PoliticsEngine::coalitionPosition($p->governingCoalition, $p->dietSeats, $p->partyPositions)[AerieDiet::AXIS_STATE] ?? null, 'g' => $m->governmentSpendingIndex, 'spend' => $m->publicSpendingShare, 'press' => $p->pressureSince, 'give' => $p->pressureGivingIn, 'meet' => $p->lastMeetingAt, 'votes' => $p->lastMeetingVotes, 'govstart' => $p->governorTermStart, 'mst' => $p->memberStances,
             ]) . "\n");
         }
     }

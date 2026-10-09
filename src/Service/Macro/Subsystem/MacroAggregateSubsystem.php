@@ -561,9 +561,9 @@ class MacroAggregateSubsystem
         // Kaldor (1940) non-linear asymmetric capacity ceiling constraint.
         $cubicConstraint = $y > 0.0 ? self::KALDOR_CAPACITY * pow($y, 3) : 0.0;
         // Blanchard & Perotti (2002) DISCRETIONARY fiscal impulse: a statutory rate and an appropriated
-        // outlay both clear a legislative lag, so this leg reaches demand late by construction. The rate is read against
-        // its own decade trend: a stance held that long is in potential (Blanchard 1990 fiscal impulse), not the gap.
-        $spendingShift = ($state->governmentSpendingIndexEma / MacroEngine::GOVT_SPENDING_BASELINE) - 1.0;
+        // outlay both clear a legislative lag, so this leg reaches demand late by construction. Both are read against
+        // their own decade trends: a stance held that long is in potential (Blanchard 1990 fiscal impulse), not the gap.
+        $spendingShift = CreditFiscalSubsystem::discretionarySpendingShift($state);
         $discretionaryFiscal = (self::KALDOR_FISCAL_MULTIPLIER * ($state->corporateTaxRateTrend - $state->corporateTaxRate))
             + (self::KALDOR_GOVT_SPENDING_MULTIPLIER * $spendingShift);
         // The sovereign fund's stabilisation reaches demand through the purchases channel, on purchases that are the target
@@ -1207,6 +1207,7 @@ class MacroAggregateSubsystem
             ? $state->industrialMetalsIndexTrend + ($commodityTrendWeight * ($state->industrialMetalsIndex - $state->industrialMetalsIndexTrend))
             : $state->industrialMetalsIndex;
         $state->governmentSpendingIndexEma += $emaWeight * ($state->governmentSpendingIndex - $state->governmentSpendingIndexEma);
+        $state->governmentSpendingIndexTrend += (1.0 - exp(-$dt / CreditFiscalSubsystem::GOVT_SPENDING_TREND_YEARS)) * ($state->governmentSpendingIndexEma - $state->governmentSpendingIndexTrend);
         $state->alliedDefenseSpendingIndexEma += $emaWeight * ($state->alliedDefenseSpendingIndex - $state->alliedDefenseSpendingIndexEma);
         $state->retailDefaultRateEma += $emaWeight * ($state->retailDefaultRate - $state->retailDefaultRateEma);
         $state->agriculturalCommodityIndexEma += $emaWeight * ($state->agriculturalCommodityIndex - $state->agriculturalCommodityIndexEma);

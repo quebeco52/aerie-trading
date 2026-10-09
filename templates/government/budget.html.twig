@@ -59,7 +59,7 @@
 										<span class="block text-on-surface-variant">A caretaker cabinet passes no budget</span>
 									{% elseif lever.status == 'held' %}
 										<span class="font-semibold text-warning">Held by the Council</span>
-										<span class="block text-on-surface-variant">A cut in revenue while debt is above the line</span>
+										<span class="block text-on-surface-variant">{{ (lever.spending ?? false) ? 'A rise in spending' : 'A cut in revenue' }} while debt is above the line</span>
 									{% elseif lever.status == 'fund' %}
 										<span class="font-semibold text-warning">Held by the Sovereign Reserve Fund</span>
 										<span class="block text-on-surface-variant">More than {{ rules.reserveDrawCeiling|pct(0) }} is spent only with its consent, given only in a recession</span>

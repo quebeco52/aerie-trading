@@ -804,6 +804,7 @@ class MacroEngine
         $state->tfpShockLevel += $productivityLoss;
         $state->totalFactorProductivityIndex *= exp($productivityLoss);
 
+        $state->publicSpendingShare = $policy->publicSpendingShare;
         $state->corporateTaxPolicyShift = $policy->corporateTaxPolicyShift;
         $state->importTariffRate = $policy->importTariffRate;
         $state->laborForceGrowthRate = $policy->laborForceGrowthRate;

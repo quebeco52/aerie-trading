@@ -116,6 +116,7 @@ class PoliticsEngine
     // --- The Budget ---
     /** The levers a budget sets, in platform() order, and whether cutting each costs revenue the Council guards. */
     public const REVENUE_LEVERS = [
+        'publicSpending' => false,
         'corporateTax' => true,
         'tariff' => true,
         'laborGrowth' => false,
@@ -127,8 +128,11 @@ class PoliticsEngine
         'bankLevyRate' => true,
         'reserveDrawShare' => true,
     ];
+    /** The levers whose rise is spending the Council guards: above the debt line it holds a rise as it holds a revenue cut, both widening the deficit, as Switzerland's debt brake caps spending (Federal Constitution art. 126). */
+    public const SPENDING_LEVERS = ['publicSpending'];
     /** The state field each lever is kept in, in the same order. */
     public const LEVER_FIELDS = [
+        'publicSpending' => 'publicSpendingShare',
         'corporateTax' => 'corporateTaxPolicyShift',
         'tariff' => 'importTariffRate',
         'laborGrowth' => 'laborForceGrowthRate',
@@ -142,6 +146,7 @@ class PoliticsEngine
     ];
     /** The question each lever's platform reads, in the same order. */
     public const LEVER_AXES = [
+        'publicSpending' => AerieDiet::AXIS_STATE,
         'corporateTax' => AerieDiet::AXIS_STATE,
         'tariff' => AerieDiet::AXIS_OPENNESS,
         'laborGrowth' => AerieDiet::AXIS_OPENNESS,
@@ -153,6 +158,10 @@ class PoliticsEngine
         'bankLevyRate' => AerieDiet::AXIS_STATE,
         'reserveDrawShare' => AerieDiet::AXIS_STATE,
     ];
+
+    // --- Platforms: Public Spending (IFS General Election Analysis 2019) ---
+    /** Log gap between the day-to-day public service spending the big-state and small-state manifestos plan: ln(1.33/1.11), Labour's 2019 plan 33% above 2019-20 against the Conservatives' 11% (IFS, Farquharson 2019, resource DEL excluding social security), the pair the corporate tax gap is read off. */
+    public const POLICY_MANIFESTO_PUBLIC_SPENDING_LOG_GAP = 0.181;
 
     // --- Platforms: Corporate Tax (Osterloh & Debus 2012) ---
     /** Gap between the corporate rates the big-state and small-state manifestos set, the parties at the ends of the size-of-state axis: 7 points (US: the 2020 Democratic platform's 28% against the 21% of the 2017 Republican act; UK 2019: Labour's 26% against the Conservatives' 19%). Enacted rates follow manifesto ideology (Osterloh & Debus 2012, European panel). */
@@ -368,8 +377,8 @@ class PoliticsEngine
      * protectionists'.
      *
      * @param array<string, float> $position A position by axis (coalitionPosition(), or a party's).
-     * @return array{corporateTax: float, tariff: float, laborGrowth: float, mergerReviewLeniency: float, greenBeltStringency: float, carbonPrice: float, extractionStringency: float, stampDutyRate: float, bankLevyRate: float, reserveDrawShare: float}
-     *         The corporate rate's shift from the neutral rate, the average tariff on imports, labour force growth,
+     * @return array{publicSpending: float, corporateTax: float, tariff: float, laborGrowth: float, mergerReviewLeniency: float, greenBeltStringency: float, carbonPrice: float, extractionStringency: float, stampDutyRate: float, bankLevyRate: float, reserveDrawShare: float}
+     *         Government purchases as a share of GDP, the corporate rate's shift from the neutral rate, the average tariff on imports, labour force growth,
      *         where merger review stands between the 2023 guidelines (0) and the 2010 guidelines (1), how far the green
      *         belt stands between the founding planning regime (0) and the strictest (1), the carbon price in dollars a
      *         tonne, how far the rules on extraction stand between the founding ones (0) and the strictest (1), the
@@ -394,6 +403,8 @@ class PoliticsEngine
         $opennessSpan = $open - $closed;
 
         return [
+            // Purchases move in proportion, the neutral position keeping the founding share (MacroEngine::TARGET_CORPORATE_TAX_RATE).
+            'publicSpending' => MacroEngine::TARGET_CORPORATE_TAX_RATE * exp(self::POLICY_MANIFESTO_PUBLIC_SPENDING_LOG_GAP * $state / $stateSpan),
             'corporateTax' => self::POLICY_MANIFESTO_CORPORATE_TAX_GAP * $state / $stateSpan,
             'tariff' => self::POLICY_PROTECTIONIST_TARIFF * max(0.0, $openness / $closed),
             'laborGrowth' => MacroEngine::STRUCTURAL_LABOR_GROWTH_RATE
@@ -415,7 +426,7 @@ class PoliticsEngine
     /**
      * The levers in force, keyed and ordered as platform() writes them, so a budget that changes nothing compares equal.
      *
-     * @return array{corporateTax: float, tariff: float, laborGrowth: float, mergerReviewLeniency: float, greenBeltStringency: float, carbonPrice: float, extractionStringency: float, stampDutyRate: float, bankLevyRate: float, reserveDrawShare: float}
+     * @return array{publicSpending: float, corporateTax: float, tariff: float, laborGrowth: float, mergerReviewLeniency: float, greenBeltStringency: float, carbonPrice: float, extractionStringency: float, stampDutyRate: float, bankLevyRate: float, reserveDrawShare: float}
      */
     public static function standingLevers(PoliticsState|PoliticsStateDTO $state): array
     {
@@ -424,7 +435,7 @@ class PoliticsEngine
             $standing[$lever] = $state->$field;
         }
 
-        /** @var array{corporateTax: float, tariff: float, laborGrowth: float, mergerReviewLeniency: float, greenBeltStringency: float, carbonPrice: float, extractionStringency: float, stampDutyRate: float, bankLevyRate: float, reserveDrawShare: float} $standing */
+        /** @var array{publicSpending: float, corporateTax: float, tariff: float, laborGrowth: float, mergerReviewLeniency: float, greenBeltStringency: float, carbonPrice: float, extractionStringency: float, stampDutyRate: float, bankLevyRate: float, reserveDrawShare: float} $standing */
         return $standing;
     }
 
@@ -433,8 +444,8 @@ class PoliticsEngine
      *
      * The cabinet proposes and each support party accepts a lever no further from its own policy than the one in force
      * (Romer & Rosenthal 1978), so the proposal is the cabinet's platform held inside every supporter's acceptable
-     * range, which always holds the lever in force. Above the debt line the Council's veto is a red line on revenue,
-     * and the Diet tables nothing it would veto: a lever that would cut revenue stays where it stands. A government
+     * range, which always holds the lever in force. Above the debt line the Council's veto is a red line on the deficit,
+     * and the Diet tables nothing it would veto: a lever that would cut revenue or raise spending stays where it stands. A government
      * whose seats and supporters', less the Council's loyalists, reach the three quarters that could remove
      * councillors is not held. The reserve fund holds the second key on its draw: a budget spends more than half the
      * fund's expected return only with its consent, which it gives while unemployment says a recession is under way
@@ -474,7 +485,8 @@ class PoliticsEngine
             $levers[$lever] = max($low, min($high, $platform[$lever]));
             $supportHeld[$lever] = $levers[$lever] !== $platform[$lever];
 
-            $councilHeld[$lever] = $revenue && $councilGuards && $levers[$lever] < $standing[$lever];
+            $widens = $revenue ? $levers[$lever] < $standing[$lever] : (in_array($lever, self::SPENDING_LEVERS, true) && $levers[$lever] > $standing[$lever]);
+            $councilHeld[$lever] = $councilGuards && $widens;
             if ($councilHeld[$lever]) {
                 $levers[$lever] = $standing[$lever];
             }

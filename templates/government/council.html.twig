@@ -99,7 +99,7 @@
 					<div>
 						<h3 class="text-xs font-semibold text-on-surface">Powers</h3>
 						<ul class="mt-2 space-y-2 text-2xs text-on-surface-variant">
-							<li><span class="font-semibold text-on-surface">Veto.</span> The Council can veto any budget or law the Diet passes. It almost never does: the threat is enough. Its red line is the debt: above {{ rules.debtBrake|pct(0) }} of GDP it would veto any bill that cuts revenue, so the Diet tables none.</li>
+							<li><span class="font-semibold text-on-surface">Veto.</span> The Council can veto any budget or law the Diet passes. It almost never does: the threat is enough. Its red line is the debt: above {{ rules.debtBrake|pct(0) }} of GDP it would veto any bill that cuts revenue or raises spending, so the Diet tables none.</li>
 							<li><span class="font-semibold text-on-surface">Removal.</span> The Diet can remove a councillor with {{ rules.supermajority }} of its {{ rules.seats }} seats, three quarters. It never has, and {{ rules.loyalists|join(', ') }} never would.</li>
 							<li><span class="font-semibold text-on-surface">Independence.</span> No party sits on the Council, and no councillor sits in the Diet. What passes between them runs on gentlemen's agreements.</li>
 						</ul>

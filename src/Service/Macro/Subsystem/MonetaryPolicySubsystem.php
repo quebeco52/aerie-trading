@@ -670,7 +670,7 @@ class MonetaryPolicySubsystem
             + $state->expectedPathShock;
 
         // Debt is priced once, through the Laubach (2009) sovereign spread in the term premium above.
-        $fiscalShift = ($state->governmentSpendingIndexEma / MacroEngine::GOVT_SPENDING_BASELINE) - 1.0;
+        $fiscalShift = CreditFiscalSubsystem::discretionarySpendingShift($state);
         $nsBeta3 = self::SVENSSON_CURVATURE2_FISCAL_SCALE * $fiscalShift;
 
         // Greenwood & Vayanos (2014) preferred-habitat long-end duration demand hurdle.

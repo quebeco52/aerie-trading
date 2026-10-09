@@ -79,6 +79,8 @@ class CreditFiscalSubsystem
     public const GOVT_SPENDING_MEAN_REVERSION = 0.298;
     /** Diffusion of log civilian purchases / potential, the same fit; jumps are not significant (LR 2.1), so the process is Gaussian. */
     public const GOVT_SPENDING_VOLATILITY = 0.0148;
+    /** Time constant (years) of purchases' measured trend: a level the Diet holds for a decade is in potential, not the gap, as the tax rate's is (TAX_RATE_TREND_YEARS). */
+    public const GOVT_SPENDING_TREND_YEARS = self::TAX_RATE_TREND_YEARS;
 
     // --- VASICEK ASRF RETAIL DEFAULT RATE (fitted on US household delinquency 1991-2019, var/harness/retail_default_fit) ---
     /** Basel II/III consumer asset correlation factor for retail exposures. */
@@ -444,9 +446,10 @@ class CreditFiscalSubsystem
     }
 
     /**
-     * Government purchases as an exogenous process: a Schwartz (1997) log-OU fitted to US civilian purchases (federal
-     * non-defence plus state and local) over potential, 1985-2019 (var/harness/gov_fit.py). The District fields no army,
-     * so the wartime surges that fatten the US total are its customers' (AssetMarketSubsystem::calculateAlliedDefenseSpending).
+     * Government purchases: a Schwartz (1997) log-OU fitted to US civilian purchases (federal non-defence plus state and
+     * local) over potential, 1985-2019 (var/harness/gov_fit.py), reverting to the share of GDP the Diet's budget sets, so
+     * an appropriation phases in at the fit's own speed. The District fields no army, so the wartime surges that fatten
+     * the US total are its customers' (AssetMarketSubsystem::calculateAlliedDefenseSpending).
      * Purchases do not lean against the cycle (Auerbach 2002; the fit's lagged-gap term is insignificant), so the
      * countercyclical fiscal leg is the tax rule alone.
      *
@@ -458,11 +461,22 @@ class CreditFiscalSubsystem
         $state->governmentSpendingIndex = max(60.0, min(200.0, StochasticProcesses::calculateSchwartz1Factor(
             currentPrice: $state->governmentSpendingIndex,
             kappa: self::GOVT_SPENDING_MEAN_REVERSION,
-            theta: MacroEngine::GOVT_SPENDING_BASELINE,
+            theta: MacroEngine::GOVT_SPENDING_BASELINE * $state->publicSpendingShare / MacroEngine::TARGET_CORPORATE_TAX_RATE,
             sigma: self::GOVT_SPENDING_VOLATILITY,
             dt: $dt,
             dW: $this->mathUtility->generateStandardNormal()
         )));
+    }
+
+    /**
+     * Purchases against their own decade trend, as a fraction: the discretionary impulse demand and the curve read
+     * (Blanchard 1990 fiscal impulse), a level held for a decade having joined potential.
+     *
+     * @param MacroState $state Current macroeconomic state.
+     */
+    public static function discretionarySpendingShift(MacroState $state): float
+    {
+        return ($state->governmentSpendingIndexEma / $state->governmentSpendingIndexTrend) - 1.0;
     }
 
     /**

@@ -83,9 +83,9 @@ class PoliticsEngineTest extends TestCase
     {
         $position = Politics::coalitionPosition(Diet::membership([Diet::VANGUARD, Diet::EXCHANGE, Diet::CHARTISTS]), Diet::SEED_SEATS, Diet::HOME_POSITIONS);
 
-        // Vanguard 95 at (-0.6, 0, +0.3), Exchange 25 at (-0.1, +0.8, +0.4), Chartists 20 at (-0.4, +0.6, +0.8).
-        $this->assertEqualsWithDelta((95.0 * -0.6 + 25.0 * -0.1 + 20.0 * -0.4) / 140.0, $position[Diet::AXIS_STATE], 1e-12);
-        $this->assertEqualsWithDelta((25.0 * 0.8 + 20.0 * 0.6) / 140.0, $position[Diet::AXIS_OPENNESS], 1e-12);
+        // Vanguard 95 at (-0.65, +0.1, +0.3), Exchange 25 at (-0.2, +0.8, +0.4), Chartists 20 at (-0.4, +0.6, +0.8).
+        $this->assertEqualsWithDelta((95.0 * -0.65 + 25.0 * -0.2 + 20.0 * -0.4) / 140.0, $position[Diet::AXIS_STATE], 1e-12);
+        $this->assertEqualsWithDelta((95.0 * 0.1 + 25.0 * 0.8 + 20.0 * 0.6) / 140.0, $position[Diet::AXIS_OPENNESS], 1e-12);
         $this->assertEqualsWithDelta((95.0 * 0.3 + 25.0 * 0.4 + 20.0 * 0.8) / 140.0, $position[Diet::AXIS_COUNCIL], 1e-12);
     }
 
@@ -862,7 +862,38 @@ class PoliticsEngineTest extends TestCase
         $this->assertGreaterThan(0.0, $platform['tariff']);
         $this->assertSame($platform['corporateTax'], $state->corporateTaxPolicyShift);
         $this->assertSame($platform['tariff'], $state->importTariffRate);
-        $this->assertSame(-1.0, $state->lastCouncilBrakeAt);
+    }
+
+    /** Above the debt line a rise in spending widens the deficit as a revenue cut does, and the Council holds it; a cut passes. */
+    public function testTheCouncilHoldsASpendingRiseAboveTheDebtLine(): void
+    {
+        $civic = $this->governedBy([Diet::CIVIC => 110.0, Diet::IRON_HARBOR => 45.0]);
+        $this->assertGreaterThan(MacroEngine::TARGET_CORPORATE_TAX_RATE, Politics::platform(Politics::coalitionPosition($civic->governingCoalition, $civic->dietSeats, $civic->partyPositions))['publicSpending']);
+
+        Politics::enactBudget($civic, MacroEngine::SOVEREIGN_RISK_DEBT_THRESHOLD + 0.05);
+
+        $this->assertSame(MacroEngine::TARGET_CORPORATE_TAX_RATE, $civic->publicSpendingShare, 'The rise is never tabled.');
+        $this->assertSame($civic->totalTime, $civic->lastCouncilBrakeAt);
+
+        $below = $this->governedBy([Diet::CIVIC => 110.0, Diet::IRON_HARBOR => 45.0]);
+        Politics::enactBudget($below, MacroEngine::SOVEREIGN_RISK_DEBT_THRESHOLD - 0.05);
+        $this->assertGreaterThan(MacroEngine::TARGET_CORPORATE_TAX_RATE, $below->publicSpendingShare, 'Below the line the rise passes.');
+
+        $vanguard = $this->governedBy([Diet::VANGUARD => 110.0, Diet::EXCHANGE => 45.0]);
+        Politics::enactBudget($vanguard, MacroEngine::SOVEREIGN_RISK_DEBT_THRESHOLD + 0.05);
+        $this->assertLessThan(MacroEngine::TARGET_CORPORATE_TAX_RATE, $vanguard->publicSpendingShare, 'A cut narrows the deficit and passes.');
+    }
+
+    /** The two ends of the size-of-state axis plan public spending the 2019 UK manifestos' log gap apart, the neutral position keeping the founding share. */
+    public function testThePublicSpendingPlatformsSpanTheManifestoGap(): void
+    {
+        $civic = Politics::platform(Diet::position(Diet::CIVIC, []))['publicSpending'];
+        $vanguard = Politics::platform(Diet::position(Diet::VANGUARD, []))['publicSpending'];
+
+        $this->assertEqualsWithDelta(Politics::POLICY_MANIFESTO_PUBLIC_SPENDING_LOG_GAP, log($civic / $vanguard), 1e-12);
+        $this->assertEqualsWithDelta(log(1.33 / 1.11), Politics::POLICY_MANIFESTO_PUBLIC_SPENDING_LOG_GAP, 5e-4);
+        $this->assertEqualsWithDelta(MacroEngine::TARGET_CORPORATE_TAX_RATE, Politics::platform([Diet::AXIS_STATE => 0.0])['publicSpending'], 1e-15);
+        $this->assertFalse(Politics::REVENUE_LEVERS['publicSpending']);
     }
 
     public function testAGovernmentThatCouldRemoveTheCouncilIsNotHeld(): void

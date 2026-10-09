@@ -44,8 +44,9 @@ class GovernmentPolicyTest extends TestCase
     {
         $state = new MacroState();
 
-        $this->enact($state, tariff: 0.0, corporateTax: -0.02, laborGrowth: 0.007, leniency: 0.6, pulse: 0.4);
+        $this->enact($state, tariff: 0.0, corporateTax: -0.02, laborGrowth: 0.007, leniency: 0.6, pulse: 0.4, spending: 0.23);
 
+        $this->assertSame(0.23, $state->publicSpendingShare);
         $this->assertSame(-0.02, $state->corporateTaxPolicyShift);
         $this->assertSame(0.007, $state->laborForceGrowthRate);
         $this->assertSame(0.6, $state->mergerReviewLeniency);
@@ -60,6 +61,7 @@ class GovernmentPolicyTest extends TestCase
         $this->assertNull($state->mortgageLtvCap, 'The District opens with no cap, as the US runs none.');
 
         $this->enactPolicyDto($state, new GovernmentPolicyDTO(
+            publicSpendingShare: MacroEngine::TARGET_CORPORATE_TAX_RATE,
             corporateTaxPolicyShift: 0.0,
             importTariffRate: 0.0,
             laborForceGrowthRate: MacroEngine::STRUCTURAL_LABOR_GROWTH_RATE,
@@ -140,6 +142,7 @@ class GovernmentPolicyTest extends TestCase
     {
         $state = new MacroState();
         $forecast = static fn(?array $levers, ?float $from): GovernmentPolicyDTO => new GovernmentPolicyDTO(
+            publicSpendingShare: MacroEngine::TARGET_CORPORATE_TAX_RATE,
             corporateTaxPolicyShift: 0.01,
             importTariffRate: 0.0,
             laborForceGrowthRate: MacroEngine::STRUCTURAL_LABOR_GROWTH_RATE,
@@ -202,6 +205,7 @@ class GovernmentPolicyTest extends TestCase
     private static function policy(?float $concession): GovernmentPolicyDTO
     {
         return new GovernmentPolicyDTO(
+            publicSpendingShare: MacroEngine::TARGET_CORPORATE_TAX_RATE,
             corporateTaxPolicyShift: 0.0,
             importTariffRate: 0.0,
             laborForceGrowthRate: MacroEngine::STRUCTURAL_LABOR_GROWTH_RATE,
@@ -243,9 +247,10 @@ class GovernmentPolicyTest extends TestCase
         };
     }
 
-    private function enact(MacroState $state, float $tariff, float $corporateTax = 0.0, float $laborGrowth = MacroEngine::STRUCTURAL_LABOR_GROWTH_RATE, float $leniency = 0.0, float $pulse = 0.0): void
+    private function enact(MacroState $state, float $tariff, float $corporateTax = 0.0, float $laborGrowth = MacroEngine::STRUCTURAL_LABOR_GROWTH_RATE, float $leniency = 0.0, float $pulse = 0.0, float $spending = MacroEngine::TARGET_CORPORATE_TAX_RATE): void
     {
         $this->enactPolicy->invokeArgs($this->engine, [$state, new GovernmentPolicyDTO(
+            publicSpendingShare: $spending,
             corporateTaxPolicyShift: $corporateTax,
             importTariffRate: $tariff,
             laborForceGrowthRate: $laborGrowth,

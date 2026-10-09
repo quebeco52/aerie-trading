@@ -41,7 +41,8 @@ final class AeriePartyProfiles
                 AerieDiet::AXIS_ENVIRONMENT => 'Greener than any party but the Tideline Accord: a moderate carbon price, and some protection for open land.',
             ],
             'agenda' => [
-                ['title' => 'A higher corporate tax', 'text' => 'Raise the rate on corporate profits to pay for schools, clinics and the crossings.'],
+                ['title' => 'More for public services', 'text' => 'Spend more on the schools, clinics and crossings, a larger share of the District\'s income than the founders allowed.'],
+                ['title' => 'A higher corporate tax', 'text' => 'Raise the rate on corporate profits to pay for them.'],
                 ['title' => 'A levy on the banks', 'text' => 'Charge the largest balance sheets for the public guarantee they enjoy.'],
                 ['title' => 'A duty on share trades', 'text' => 'Raise the stamp duty on share trading, paid into the Sovereign Reserve.'],
                 ['title' => 'A price on carbon', 'text' => 'A moderate carbon price on the District\'s power.'],
@@ -57,7 +58,7 @@ final class AeriePartyProfiles
             'heartland' => 'Glasswater Row and the waterfront wards',
             'about' => [
                 'The Vanguard is the party of the District\'s founding bargain: light regulation, low taxes and a small state, the terms on which the banks and funds agreed to build here. Its founders sat at the Charter convention as delegates of the houses that wrote the Charter\'s economic clauses, and it remains the party of old money and the established houses of Glasswater Row.',
-                'It argues that the District\'s prosperity rests on capital choosing to come here, and that every point of tax is a reason for it to leave. It would cut the corporate tax, keep share trading cheap, leave the banks unlevied, and let the District build.',
+                'It argues that the District\'s prosperity rests on capital choosing to come here, and that every point of tax is a reason for it to leave. It would spend less, cut the corporate tax, keep share trading cheap, leave the banks unlevied, and let the District build.',
                 'Inside the party the old houses and the newer business owners argue about the Council, which the old houses trust and the newer members find slow. The youngest of those members left to found New Horizon, which still votes with the Vanguard more often than against it.',
             ],
             'history' => [
@@ -73,6 +74,7 @@ final class AeriePartyProfiles
                 AerieDiet::AXIS_ENVIRONMENT => 'Growth first, more than any other party: no carbon price, no new rules on drilling, and as few refused housing schemes as the law allows.',
             ],
             'agenda' => [
+                ['title' => 'A smaller state', 'text' => 'Hold public spending to a smaller share of the District\'s income, and contract out what the market can run.'],
                 ['title' => 'A lower corporate tax', 'text' => 'Cut the rate on profits to keep capital in the District.'],
                 ['title' => 'No levy on the banks', 'text' => 'Leave the banks\' balance sheets untaxed, as the Charter\'s founders intended.'],
                 ['title' => 'Cheap share trading', 'text' => 'Hold the stamp duty on share trades at its founding rate.'],
@@ -154,7 +156,7 @@ final class AeriePartyProfiles
             ],
             'history' => [
                 ['title' => 'The first removal motion', 'text' => 'When the Common Lot\'s first deputies moved to remove the councillors who had defended the Merger Wave, the motion won barely a tenth of the Diet. It still frightened the Council\'s friends into founding a party to make sure no such motion ever came close.'],
-                ['title' => 'The debt brake', 'text' => 'The Chartists wrote the convention under which the Council vetoes any budget that cuts revenue once the debt passes its line, and they have defended it in every Diet since.'],
+                ['title' => 'The debt brake', 'text' => 'The Chartists wrote the convention under which the Council vetoes any budget that cuts revenue or raises spending once the debt passes its line, and they have defended it in every Diet since.'],
                 ['title' => 'Year 1', 'text' => 'When the markets opened the Chartists were backing the Vanguard\'s cabinet from outside, as they had backed most cabinets of the right before it.'],
             ],
             'questions' => [
@@ -167,7 +169,7 @@ final class AeriePartyProfiles
                 ['title' => 'The Charter as written', 'text' => 'Never vote to remove a councillor, and give the Diet no new power over the Council.'],
                 ['title' => 'An Authority left alone', 'text' => 'Leave the Monetary Authority to set rates without pressure from the cabinet.'],
                 ['title' => 'Light merger review', 'text' => 'Let the District\'s firms consolidate and compete abroad.'],
-                ['title' => 'The debt brake', 'text' => 'Keep the Council\'s veto on budgets that cut revenue while the debt is high.'],
+                ['title' => 'The debt brake', 'text' => 'Keep the Council\'s veto on budgets that cut revenue or raise spending while the debt is high.'],
             ],
             'relations' => 'The Chartists sit in the right bloc and back its cabinets from outside; they rarely join one. Their natural allies are the Vanguard and the Exchange, who share their trust in the Council. The Common Lot is their opposite in every sense, and the two rarely vote together.',
         ],

@@ -79,6 +79,7 @@ class GovernmentPageBuilder
     // --- Laws and Polls ---
     /** Each law's name and unit on the market's forecast and the law charts, in the budget's order. */
     private const LEVER_DISPLAY = [
+        'publicSpending' => ['Public spending, share of GDP', 'pct'],
         'corporateTax' => ['Corporate tax rate', 'pct'],
         'tariff' => ['Average tariff on imports', 'pct'],
         'laborGrowth' => ['Labour force growth', 'pct'],
@@ -147,6 +148,7 @@ class GovernmentPageBuilder
     /** The levers as a question's heading lists them. */
     private const LEVER_SHORT_NAMES = [
         'corporateTax' => 'corporate tax',
+        'publicSpending' => 'public spending',
         'tariff' => 'tariffs',
         'laborGrowth' => 'immigration',
         'mergerReviewLeniency' => 'merger review',
@@ -1022,6 +1024,7 @@ class GovernmentPageBuilder
             ],
             'axes' => $axes,
             'levers' => [
+                ['name' => 'Public spending, share of GDP', 'unit' => 'pct', 'platform' => $platform['publicSpending'], 'enacted' => $politics->publicSpendingShare],
                 ['name' => 'Corporate tax rate', 'unit' => 'pct', 'platform' => $neutral + $platform['corporateTax'], 'enacted' => $neutral + $politics->corporateTaxPolicyShift],
                 ['name' => 'Average tariff on imports', 'unit' => 'pct', 'platform' => $platform['tariff'], 'enacted' => $politics->importTariffRate],
                 ['name' => 'Labour force growth', 'unit' => 'pct', 'platform' => $platform['laborGrowth'], 'enacted' => $politics->laborForceGrowthRate],
@@ -1176,6 +1179,17 @@ class GovernmentPageBuilder
 
         return [
             'levers' => [
+                [
+                    'name' => 'Public spending, share of GDP',
+                    'axis' => AerieDiet::AXIS_STATE,
+                    'platform' => $budget['platform']['publicSpending'],
+                    'target' => $budget['levers']['publicSpending'],
+                    'enacted' => $standing['publicSpending'],
+                    'status' => $status('publicSpending'),
+                    'spending' => true,
+                    'note' => sprintf('Spending on public services runs %.1f%% of GDP today; a budget\'s change reaches it over two to three years',
+                        100.0 * MacroEngine::TARGET_CORPORATE_TAX_RATE * $macro->governmentSpendingIndex / MacroEngine::GOVT_SPENDING_BASELINE),
+                ],
                 [
                     'name' => 'Corporate tax rate',
                     'axis' => AerieDiet::AXIS_STATE,

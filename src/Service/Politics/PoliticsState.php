@@ -68,6 +68,7 @@ class PoliticsState
 
     // The levers the last budget set, which the economy reads (App\DTO\GovernmentPolicyDTO), and when a budget last
     // changed one and when the Council's debt brake last held one back (-1: never).
+    public float $publicSpendingShare;
     public float $corporateTaxPolicyShift;
     public float $importTariffRate;
     public float $laborForceGrowthRate;

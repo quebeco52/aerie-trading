@@ -182,6 +182,7 @@ final class MacroFieldRegistry
         'sovereignCouponRate' => 'yield10y',
         'macroCreditSpreadTrend' => 'macroCreditSpreadEma',
         'corporateTaxRateTrend' => 'corporateTaxRate',
+        'governmentSpendingIndexTrend' => 'governmentSpendingIndexEma',
         'moneySupplyGrowthTrend' => 'moneySupplyGrowthEma',
         'outputGapLag3m' => 'outputGapEma',
         'outputGapLag6m' => 'outputGapEma',

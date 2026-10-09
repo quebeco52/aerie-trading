@@ -43,6 +43,8 @@ stat('debt p95', lambda r: pct(col('debt')(r), 0.95))
 stat('primary deficit mean', lambda r: mean(col('def')(r)))
 stat('tax rate mean', lambda r: mean(col('tax')(r)))
 stat('tax rate sd', lambda r: sd(col('tax')(r)))
+if 'g' in arms['on'][seeds[0]][0]:
+    stat('purchases log sd', lambda r: sd([math.log(v / 100.0) for v in col('g')(r)]))
 stat('net exports sd', lambda r: sd(col('nx')(r)))
 stat('house index sd (log)', lambda r: sd([math.log(v) for v in col('house')(r)]))
 if 'power' in arms['on'][seeds[0]][0]:
@@ -74,3 +76,39 @@ for s in seeds:
 print(f'  budget rounds the Council brake held: {held} over {len(seeds)} runs ({held / len(seeds) / ((len(arms["on"][seeds[0]])) / 4) :.2f} a year)')
 debt_above = sum(r['debt'] > 0.90 for r in on) / len(on)
 print(f'  quarters with debt above the 90% line: {100 * debt_above:.0f}%')
+
+if 'spend' in on[0]:
+    sp = [r['spend'] for r in on]
+    print(f'  public spending share: mean {mean(sp):.4f} sd {sd(sp):.4f} min {min(sp):.4f} max {max(sp):.4f}')
+    # Partisan purchases, as spend_europe_fit.py estimates them on ParlGov x World Bank: annual s = log(purchases / potential),
+    # s_t = a_seed + rho s_{t-1} + b x_{t-1}, x the cabinet's seat-weighted place on the size-of-state axis; long run b / (1 - rho)
+    # per Diet unit (real: 0.044 se 0.072 for PR democracies 1971-2020; 0.110 se 0.069 for 1971-1989).
+    ys, y1s, xs = [], [], []
+    for s_ in seeds:
+        rows = [r for r in arms['on'][s_] if abs(r['t'] * 4 - round(r['t'] * 4)) < 1e-6 and round(r['t'] * 4) % 4 == 0]
+        yr = [(math.log(r['g'] / 100.0), r['cs'] if r['cs'] is not None else 0.0) for r in rows]
+        y, y1, x = [v[0] for v in yr[1:]], [v[0] for v in yr[:-1]], [v[1] for v in yr[:-1]]
+        if len(y) < 3:
+            continue
+        my, my1, mx = mean(y), mean(y1), mean(x)
+        ys += [v - my for v in y]; y1s += [v - my1 for v in y1]; xs += [v - mx for v in x]
+    a11 = sum(v * v for v in y1s); a12 = sum(a * b for a, b in zip(y1s, xs)); a22 = sum(v * v for v in xs)
+    c1 = sum(a * b for a, b in zip(y1s, ys)); c2 = sum(a * b for a, b in zip(xs, ys))
+    det = a11 * a22 - a12 * a12
+    rho = (c1 * a22 - c2 * a12) / det; b = (a11 * c2 - a12 * c1) / det
+    print(f'  partisan purchases (annual, seed FE): rho {rho:.3f} b {b:+.4f} long run per Diet unit {b / (1 - rho):+.3f} (real 0.044 / pre-1990 0.110), n {len(ys)}')
+    # Per seed, for a paired standard error across seeds.
+    per = []
+    for s_ in seeds:
+        rows = [r for r in arms['on'][s_] if round(r['t'] * 4) % 4 == 0]
+        yr = [(math.log(r['g'] / 100.0), r['cs'] if r['cs'] is not None else 0.0) for r in rows]
+        y, y1, x = [v[0] for v in yr[1:]], [v[0] for v in yr[:-1]], [v[1] for v in yr[:-1]]
+        my, my1, mx = mean(y), mean(y1), mean(x)
+        y = [v - my for v in y]; y1 = [v - my1 for v in y1]; x = [v - mx for v in x]
+        a11 = sum(v * v for v in y1); a12 = sum(p * q for p, q in zip(y1, x)); a22 = sum(v * v for v in x)
+        c1 = sum(p * q for p, q in zip(y1, y)); c2 = sum(p * q for p, q in zip(x, y)); d = a11 * a22 - a12 * a12
+        if d > 0:
+            r_ = (c1 * a22 - c2 * a12) / d; b_ = (a11 * c2 - a12 * c1) / d
+            per.append(b_ / (1 - r_))
+    if len(per) > 1:
+        print(f'  long run per Diet unit across seeds: mean {mean(per):+.3f} se {sd(per) / math.sqrt(len(per)):.3f}')

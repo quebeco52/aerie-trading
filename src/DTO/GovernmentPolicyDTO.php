@@ -11,6 +11,8 @@ namespace App\DTO;
 final readonly class GovernmentPolicyDTO
 {
     public function __construct(
+        /** Government purchases as a share of GDP: the level the purchases process reverts to. */
+        public float $publicSpendingShare,
         /** The corporate rate's shift from the neutral rate. */
         public float $corporateTaxPolicyShift,
         /** Average tariff on imports. */

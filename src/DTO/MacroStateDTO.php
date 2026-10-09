@@ -122,6 +122,8 @@ readonly class MacroStateDTO
         public float $metalsXi = 4.60517,
         public float $governmentSpendingIndex = 100.0,
         public float $governmentSpendingIndexEma = 100.0,
+        /** Purchases' decade trend, which a level the Diet holds that long joins (CreditFiscalSubsystem::discretionarySpendingShift()). */
+        public float $governmentSpendingIndexTrend = 100.0,
         public float $alliedDefenseSpendingIndex = MacroEngine::ALLIED_DEFENSE_BASELINE,
         public float $alliedDefenseSpendingIndexEma = MacroEngine::ALLIED_DEFENSE_BASELINE,
         public float $commercialPropertyIndex = 100.0,
@@ -328,6 +330,8 @@ readonly class MacroStateDTO
         public float $policyUncertaintyIndexEma = MacroEngine::EPU_BASELINE,
         /** The election calendar's pull on policy uncertainty, as the government last handed it (App\DTO\GovernmentPolicyDTO). */
         public float $electionPulse = 0.0,
+        /** Government purchases as a share of GDP, the level the Diet's last budget has them revert to. */
+        public float $publicSpendingShare = MacroEngine::TARGET_CORPORATE_TAX_RATE,
         public float $corporateTaxPolicyShift = 0.0,
         public float $importTariffRate = 0.0,
         public float $tariffTradeLag = 0.0,

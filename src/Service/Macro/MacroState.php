@@ -76,6 +76,7 @@ class MacroState
 
     public float $governmentSpendingIndex;
     public float $governmentSpendingIndexEma;
+    public float $governmentSpendingIndexTrend;
     // Allied defence spending against its trend burden, the demand the District's arms makers export into, and its EMA.
     public float $alliedDefenseSpendingIndex;
     public float $alliedDefenseSpendingIndexEma;
@@ -383,7 +384,8 @@ class MacroState
     // immigration regime in it and the population that regime has added against the structural path (log), where
     // merger review stands between the 2023 guidelines (0) and the 2010 guidelines (1), how far the green belt and the
     // rules on extraction stand between the founding regime (0) and the strictest (1), the carbon price ($/t CO2), and the
-    // stamp duty on each side of a share trade, and the bank levy on short-term funding.
+    // stamp duty on each side of a share trade, and the bank levy on short-term funding; purchases as a share of GDP.
+    public float $publicSpendingShare;
     public float $corporateTaxPolicyShift;
     public float $importTariffRate;
     public float $tariffTradeLag;

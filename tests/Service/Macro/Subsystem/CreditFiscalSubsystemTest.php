@@ -73,6 +73,39 @@ class CreditFiscalSubsystemTest extends TestCase
         $this->assertGreaterThan(0.25, $share($paths[0][4]), 'A quarter is still there after four years.');
     }
 
+    /** Purchases revert to the share of GDP the Diet's budget sets, so a budget's change phases in at the fitted speed rather than at once. */
+    public function testPurchasesRevertToTheShareTheBudgetSets(): void
+    {
+        $subsystem = $this->quietSubsystem();
+        $state = new MacroState();
+        $state->publicSpendingShare = MacroEngine::TARGET_CORPORATE_TAX_RATE * 1.10;
+        $target = MacroEngine::GOVT_SPENDING_BASELINE * 1.10;
+
+        for ($i = 0; $i < 360; $i++) {
+            $subsystem->calculateGovernmentSpending($state, 1.0 / 360.0);
+        }
+        $afterOneYear = $state->governmentSpendingIndex;
+        for ($i = 0; $i < 360 * 30; $i++) {
+            $subsystem->calculateGovernmentSpending($state, 1.0 / 360.0);
+        }
+
+        $this->assertGreaterThan(MacroEngine::GOVT_SPENDING_BASELINE, $afterOneYear);
+        $this->assertLessThan(MacroEngine::GOVT_SPENDING_BASELINE + (($target - MacroEngine::GOVT_SPENDING_BASELINE) / 2.0), $afterOneYear, 'Less than half the rise has come through after a year.');
+        $this->assertEqualsWithDelta($target, $state->governmentSpendingIndex, 0.05, 'Purchases settle at the share the budget set.');
+    }
+
+    /** Demand reads purchases against their decade trend: a level held long enough to join it is no impulse, a fresh rise is. */
+    public function testALevelHeldForADecadeIsNoFiscalImpulse(): void
+    {
+        $state = new MacroState();
+        $state->governmentSpendingIndexEma = 110.0;
+        $state->governmentSpendingIndexTrend = 110.0;
+        $this->assertSame(0.0, CreditFiscalSubsystem::discretionarySpendingShift($state));
+
+        $state->governmentSpendingIndexEma = 121.0;
+        $this->assertEqualsWithDelta(0.10, CreditFiscalSubsystem::discretionarySpendingShift($state), 1e-12);
+    }
+
     public function testBarroFiscalPolicyCutsCorporateTaxInRecession(): void
     {
         $state = new MacroState();
