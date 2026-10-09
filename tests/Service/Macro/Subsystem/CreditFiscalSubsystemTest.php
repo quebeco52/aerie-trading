@@ -161,10 +161,10 @@ class CreditFiscalSubsystemTest extends TestCase
     {
         $state = new MacroState();
         $state->outputGapEma = -0.04;
-        $state->corporateTaxRate = 0.21;
+        $state->corporateTaxRate = MacroEngine::BASE_CORPORATE_TAX_RATE;
 
         $this->subsystem->calculateDynamicFiscalPolicy($state, 0.25);
-        $this->assertLessThan(0.21, $state->corporateTaxRate);
+        $this->assertLessThan(MacroEngine::BASE_CORPORATE_TAX_RATE, $state->corporateTaxRate);
     }
 
     public function testHighYieldWidensAtItsBaseMultipleOfInvestmentGrade(): void
@@ -275,7 +275,7 @@ class CreditFiscalSubsystemTest extends TestCase
             $state = $this->neutralBudget(1.20, 1.3);
             $state->sovereignNetDebtToGdp = 1.20;
             $state->outputGap = -0.02;
-            $state->corporateTaxRate = 0.235;
+            $state->corporateTaxRate = MacroEngine::BASE_CORPORATE_TAX_RATE + 0.025;
             $state->governmentSpendingIndex = 104.0;
             $state->yield10yEma = 0.05;
             $state->yield10y = 0.05;
@@ -294,7 +294,7 @@ class CreditFiscalSubsystemTest extends TestCase
             $output = 1.3;
             $fundPaid = $funded ? 0.025 * $output : 0.0;
             $spending = (104.0 / MacroEngine::GOVT_SPENDING_BASELINE) * MacroEngine::TARGET_CORPORATE_TAX_RATE * ($output / 0.98) + $fundPaid;
-            $revenue = (0.235 * $output) + $fundPaid;
+            $revenue = ((MacroEngine::TARGET_CORPORATE_TAX_RATE + 0.025) * $output) + $fundPaid;
             $deficitToGdp = ($spending - $revenue) / $output;
 
             $this->assertEqualsWithDelta($deficitToGdp, $state->primaryDeficitToGdp, 1e-12, 'The published deficit is spending less revenue.');
@@ -311,7 +311,7 @@ class CreditFiscalSubsystemTest extends TestCase
     {
         $sound = new MacroState();
         $sound->outputGapEma = 0.0;
-        $sound->corporateTaxRate = MacroEngine::TARGET_CORPORATE_TAX_RATE;
+        $sound->corporateTaxRate = MacroEngine::BASE_CORPORATE_TAX_RATE;
         $sound->sovereignDebtToGdp = 0.90;
         $sound->sovereignNetDebtToGdp = 0.90;
         $sound->consolidationTaxShare = 1.0;
@@ -319,8 +319,8 @@ class CreditFiscalSubsystemTest extends TestCase
         $indebted->sovereignDebtToGdp = 1.20;
         $indebted->sovereignNetDebtToGdp = 1.20;
 
-        $sound->corporateTaxRateTrend = MacroEngine::TARGET_CORPORATE_TAX_RATE;
-        $indebted->corporateTaxRateTrend = MacroEngine::TARGET_CORPORATE_TAX_RATE;
+        $sound->corporateTaxRateTrend = MacroEngine::BASE_CORPORATE_TAX_RATE;
+        $indebted->corporateTaxRateTrend = MacroEngine::BASE_CORPORATE_TAX_RATE;
         $impulse = static fn (MacroState $state): float => MacroAggregateSubsystem::KALDOR_FISCAL_MULTIPLIER * ($state->corporateTaxRateTrend - $state->corporateTaxRate);
         $impulseAt = [];
         for ($i = 1; $i <= 4000; ++$i) {
@@ -330,7 +330,7 @@ class CreditFiscalSubsystemTest extends TestCase
         }
 
         // At 90% the reaction exactly pays the 2% structural deficit, so the rate sits at its neutral level.
-        $this->assertEqualsWithDelta(MacroEngine::TARGET_CORPORATE_TAX_RATE, $sound->corporateTaxRate, 1e-6);
+        $this->assertEqualsWithDelta(MacroEngine::BASE_CORPORATE_TAX_RATE, $sound->corporateTaxRate, 1e-6);
         $this->assertEqualsWithDelta(0.30 * CreditFiscalSubsystem::BOHN_FISCAL_REACTION_SENSITIVITY, $indebted->corporateTaxRate - $sound->corporateTaxRate, 1e-6);
         $this->assertLessThan(-0.008, $impulseAt[200], 'The consolidation costs demand while it is enacted.');
         $this->assertGreaterThan(-0.001, $impulseAt[4000], 'Forty years on, the higher rate is in potential, not the gap.');
@@ -773,7 +773,7 @@ class CreditFiscalSubsystemTest extends TestCase
         $withoutFund->nominalGdpIndex = 1.0;
         $withoutFund->outputGap = 0.0;
         $withoutFund->governmentSpendingIndex = 100.0;
-        $withoutFund->corporateTaxRate = MacroEngine::TARGET_CORPORATE_TAX_RATE;
+        $withoutFund->corporateTaxRate = MacroEngine::BASE_CORPORATE_TAX_RATE;
         $withFund = clone $withoutFund;
         $withFund->sovereignFundBondsToGdp = 0.50;
 
@@ -842,7 +842,7 @@ class CreditFiscalSubsystemTest extends TestCase
         $state->outputGap = 0.0;
         $state->governmentSpendingIndex = 100.0;
         $state->sovereignNetDebtToGdp = self::SOUND_DEBT_TO_GDP;
-        $state->corporateTaxRate = MacroEngine::TARGET_CORPORATE_TAX_RATE + CreditFiscalSubsystem::fiscalStance($state);
+        $state->corporateTaxRate = MacroEngine::BASE_CORPORATE_TAX_RATE + CreditFiscalSubsystem::fiscalStance($state);
 
         $this->subsystem->calculateSovereignDebt($state, 0.25);
 
@@ -1096,7 +1096,7 @@ class CreditFiscalSubsystemTest extends TestCase
     {
         $state = new MacroState();
         $state->outputGapEma = 0.0;
-        $state->corporateTaxRate = MacroEngine::TARGET_CORPORATE_TAX_RATE;
+        $state->corporateTaxRate = MacroEngine::BASE_CORPORATE_TAX_RATE;
         $state->corporateTaxPolicyShift = -0.025;
         // At the debt where the Bohn reaction pays the structural deficit, the fiscal stance is neutral.
         $state->sovereignNetDebtToGdp = 0.90;
@@ -1105,7 +1105,7 @@ class CreditFiscalSubsystemTest extends TestCase
             $this->subsystem->calculateDynamicFiscalPolicy($state, 0.01);
         }
 
-        $this->assertEqualsWithDelta(MacroEngine::TARGET_CORPORATE_TAX_RATE - 0.025, $state->corporateTaxRate, 1e-6);
+        $this->assertEqualsWithDelta(MacroEngine::BASE_CORPORATE_TAX_RATE - 0.025, $state->corporateTaxRate, 1e-6);
     }
 
     public function testALegislatedShiftIsLeviedOnCorporateProfitsNotOnGdp(): void
@@ -1239,7 +1239,7 @@ class CreditFiscalSubsystemTest extends TestCase
         $state->nominalGdpIndex = $nominalGdpIndex;
         $state->outputGap = 0.0;
         $state->governmentSpendingIndex = 100.0;
-        $state->corporateTaxRate = MacroEngine::TARGET_CORPORATE_TAX_RATE;
+        $state->corporateTaxRate = MacroEngine::BASE_CORPORATE_TAX_RATE;
 
         return $state;
     }
@@ -1251,7 +1251,7 @@ class CreditFiscalSubsystemTest extends TestCase
     private function surplusBudget(float $debtToGdp, float $surplus): MacroState
     {
         $state = $this->neutralBudget($debtToGdp);
-        $state->corporateTaxRate = MacroEngine::TARGET_CORPORATE_TAX_RATE + $surplus;
+        $state->corporateTaxRate = MacroEngine::BASE_CORPORATE_TAX_RATE + $surplus;
         $state->inflationEma = MacroEngine::TARGET_INFLATION;
         $trendGrowth = MacroEngine::STRUCTURAL_LABOR_GROWTH_RATE + MacroEngine::TFP_DRIFT + MacroEngine::TARGET_INFLATION;
         $state->yield10yEma = $trendGrowth;
@@ -2322,7 +2322,7 @@ class CreditFiscalSubsystemTest extends TestCase
         $free->sovereignDebtToGdp = self::SOUND_DEBT_TO_GDP;
         $free->nominalGdpIndex = 1.0;
         $free->outputGap = 0.0;
-        $free->corporateTaxRate = 0.21;
+        $free->corporateTaxRate = MacroEngine::BASE_CORPORATE_TAX_RATE;
         $free->governmentSpendingIndex = 100.0;
         $priced = clone $free;
         $priced->carbonPrice = 70.37;
@@ -2341,7 +2341,7 @@ class CreditFiscalSubsystemTest extends TestCase
         $free->sovereignDebtToGdp = self::SOUND_DEBT_TO_GDP;
         $free->nominalGdpIndex = 1.0;
         $free->outputGap = 0.0;
-        $free->corporateTaxRate = 0.21;
+        $free->corporateTaxRate = MacroEngine::BASE_CORPORATE_TAX_RATE;
         $free->governmentSpendingIndex = 100.0;
         $free->sovereignFundDollarsPerGdp = 12.0e12;
         $levied = clone $free;
@@ -2471,5 +2471,27 @@ class CreditFiscalSubsystemTest extends TestCase
         $this->subsystem->calculateSovereignDebt($founding, 0.25);
         $this->subsystem->calculateSovereignDebt($taxed, 0.25);
         $this->assertEqualsWithDelta(-$high, $taxed->primaryDeficitToGdp - $founding->primaryDeficitToGdp, 1e-9, 'The budget books it.');
+    }
+
+    /**
+     * The tax on foreign buyers raises what British Columbia's 20% raised on its GDP, about C$37.5 million on C$295
+     * billion; its take peaks where the rate is the inverse of the demand's semi-elasticity and all but vanishes at the
+     * strictest rate; the budget books it.
+     */
+    public function testTheForeignBuyerTaxRaisesWhatBritishColumbiasRaised(): void
+    {
+        $this->assertSame(0.0, AssetMarketSubsystem::foreignBuyerTaxRevenueToGdp(0.0));
+        $this->assertEqualsWithDelta(37.5e6 / 295.0e9, AssetMarketSubsystem::foreignBuyerTaxRevenueToGdp(0.20), 2e-6);
+        $peak = 1.0 / AssetMarketSubsystem::FOREIGN_BUYER_TAX_DEMAND_SEMI_ELASTICITY;
+        $this->assertGreaterThan(AssetMarketSubsystem::foreignBuyerTaxRevenueToGdp($peak * 0.8), AssetMarketSubsystem::foreignBuyerTaxRevenueToGdp($peak));
+        $this->assertGreaterThan(AssetMarketSubsystem::foreignBuyerTaxRevenueToGdp($peak * 1.2), AssetMarketSubsystem::foreignBuyerTaxRevenueToGdp($peak));
+        $this->assertLessThan(1e-5, AssetMarketSubsystem::foreignBuyerTaxRevenueToGdp(0.60), 'The strictest rate keeps the buyers out and raises next to nothing.');
+
+        $none = $this->neutralBudget(1.20);
+        $taxed = $this->neutralBudget(1.20);
+        $taxed->foreignBuyerTaxRate = 0.20;
+        $this->subsystem->calculateSovereignDebt($none, 0.25);
+        $this->subsystem->calculateSovereignDebt($taxed, 0.25);
+        $this->assertEqualsWithDelta(-AssetMarketSubsystem::foreignBuyerTaxRevenueToGdp(0.20), $taxed->primaryDeficitToGdp - $none->primaryDeficitToGdp, 1e-12, 'The budget books it.');
     }
 }

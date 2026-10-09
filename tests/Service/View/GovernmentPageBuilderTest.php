@@ -96,12 +96,12 @@ class GovernmentPageBuilderTest extends TestCase
         $page = $this->builder()->buildDiet(new MacroStateDTO(), new PoliticsStateDTO());
 
         $this->assertSame(['The Vanguard'], array_column($page['government']['members'], 'name'));
-        $this->assertSame(95, $page['government']['seats']);
+        $this->assertSame((int) Diet::SEED_SEATS[Diet::VANGUARD], $page['government']['seats']);
         $this->assertSame(['Exchange Party', 'The Chartists', 'New Horizon'], array_column($page['government']['support'], 'name'));
-        $this->assertSame(165, $page['government']['supportedSeats']);
+        $this->assertSame((int) Diet::SEED_SEATS[Diet::VANGUARD] + (int) Diet::SEED_SEATS[Diet::EXCHANGE] + (int) Diet::SEED_SEATS[Diet::CHARTISTS] + (int) Diet::SEED_SEATS[Diet::NEW_HORIZON], $page['government']['supportedSeats']);
         $this->assertTrue($page['government']['minority']);
         $this->assertSame(
-            [94 + 25 + 8 + 8, 95 + 25 + 20 + 25],
+            [(int) Diet::SEED_SEATS[Diet::CIVIC] + (int) Diet::SEED_SEATS[Diet::IRON_HARBOR] + (int) Diet::SEED_SEATS[Diet::COMMON_LOT] + (int) Diet::SEED_SEATS[Diet::TIDELINE], (int) Diet::SEED_SEATS[Diet::VANGUARD] + (int) Diet::SEED_SEATS[Diet::EXCHANGE] + (int) Diet::SEED_SEATS[Diet::CHARTISTS] + (int) Diet::SEED_SEATS[Diet::NEW_HORIZON]],
             array_column($page['rules']['blocSeats'], 'seats'),
             'The blocs: the Civic Front with the Harbor, the Common Lot and the Accord; the Vanguard with the Exchange, the Chartists and New Horizon.'
         );
@@ -269,11 +269,11 @@ class GovernmentPageBuilderTest extends TestCase
         ));
 
         $this->assertTrue($page['government']['minority']);
-        $this->assertSame(95, $page['government']['seats']);
-        $this->assertSame(140, $page['government']['supportedSeats']);
+        $this->assertSame((int) Diet::SEED_SEATS[Diet::VANGUARD], $page['government']['seats']);
+        $this->assertSame((int) Diet::SEED_SEATS[Diet::VANGUARD] + (int) Diet::SEED_SEATS[Diet::EXCHANGE] + (int) Diet::SEED_SEATS[Diet::CHARTISTS], $page['government']['supportedSeats']);
         $this->assertSame(['Exchange Party', 'The Chartists'], array_column($page['government']['support'], 'name'));
-        $this->assertCount(45, array_filter($page['hemicycle'], static fn(array $seat): bool => $seat['supporting']));
-        $this->assertCount(95, array_filter($page['hemicycle'], static fn(array $seat): bool => $seat['governing']));
+        $this->assertCount((int) Diet::SEED_SEATS[Diet::EXCHANGE] + (int) Diet::SEED_SEATS[Diet::CHARTISTS], array_filter($page['hemicycle'], static fn(array $seat): bool => $seat['supporting']));
+        $this->assertCount((int) Diet::SEED_SEATS[Diet::VANGUARD], array_filter($page['hemicycle'], static fn(array $seat): bool => $seat['governing']));
         $this->assertSame(['wide', 'narrow'], array_keys($page['compass']['layouts']));
         foreach ($page['compass']['layouts'] as $layout) {
             $this->assertSame(Diet::AXES, array_column($layout['rows'], 'axis'), 'One line per question, in the questions\' order.');
@@ -299,8 +299,8 @@ class GovernmentPageBuilderTest extends TestCase
         ));
         $tax = array_column($page['budget']['levers'], null, 'name')['Corporate tax rate'];
 
-        $this->assertLessThan(MacroEngine::TARGET_CORPORATE_TAX_RATE, $tax['platform']);
-        $this->assertSame(MacroEngine::TARGET_CORPORATE_TAX_RATE, $tax['target']);
+        $this->assertLessThan(MacroEngine::BASE_CORPORATE_TAX_RATE, $tax['platform']);
+        $this->assertSame(MacroEngine::BASE_CORPORATE_TAX_RATE, $tax['target']);
         $this->assertSame('blocked', $tax['status']);
         $this->assertFalse($page['budget']['braking']);
     }
@@ -328,8 +328,8 @@ class GovernmentPageBuilderTest extends TestCase
         $this->assertSame('held', $levers['Tax on dividends']['status'], 'Exempting dividends costs revenue too.');
         $this->assertLessThan(Valuation::FOUNDING_DIVIDEND_TAX_RATE, $levers['Tax on dividends']['platform'], 'The right taxes dividends less.');
         $this->assertStringContainsString('at the rate set at Year 1', $levers['Tax on dividends']['note']);
-        $this->assertLessThan(MacroEngine::TARGET_CORPORATE_TAX_RATE, $levers['Corporate tax rate']['platform']);
-        $this->assertSame(MacroEngine::TARGET_CORPORATE_TAX_RATE, $levers['Corporate tax rate']['enacted']);
+        $this->assertLessThan(MacroEngine::BASE_CORPORATE_TAX_RATE, $levers['Corporate tax rate']['platform']);
+        $this->assertSame(MacroEngine::BASE_CORPORATE_TAX_RATE, $levers['Corporate tax rate']['enacted']);
         $this->assertSame('enacted', $levers['Average tariff on imports']['status'], 'An open government has no tariff to levy.');
         $this->assertSame('pending', $levers['Labour force growth']['status']);
         $this->assertSame('Year 1 Q3', $braked['budget']['nextRound']);
@@ -726,7 +726,7 @@ class GovernmentPageBuilderTest extends TestCase
         $this->assertNotEmpty($page['party']['history']);
 
         $this->assertSame(['Year 1', 'Year 5 Q1', 'Year 9 Q1'], array_column($page['record'], 'date'));
-        $this->assertSame(25, $page['record'][0]['seats']);
+        $this->assertSame((int) Diet::SEED_SEATS[Diet::IRON_HARBOR], $page['record'][0]['seats']);
         $this->assertTrue($page['record'][1]['cabinet']);
         $this->assertFalse($page['record'][2]['cabinet'], 'The talks\' outcome is hidden until the cabinet takes office.');
         $this->assertSame(['votes' => 2, 'cabinet' => 1], array_intersect_key($page['recordSummary'], ['votes' => 0, 'cabinet' => 0]));
@@ -839,8 +839,8 @@ class GovernmentPageBuilderTest extends TestCase
         $this->assertSame([Diet::PARTY_NAMES[Diet::COMMON_LOT]], $market['cabinets'][0]['support']);
 
         $levers = array_column($market['levers'], null, 'name');
-        $this->assertEqualsWithDelta(MacroEngine::TARGET_CORPORATE_TAX_RATE, $levers['Corporate tax rate']['enacted'], 1e-12);
-        $this->assertEqualsWithDelta(MacroEngine::TARGET_CORPORATE_TAX_RATE + 0.03, $levers['Corporate tax rate']['expected'], 1e-12);
+        $this->assertEqualsWithDelta(MacroEngine::BASE_CORPORATE_TAX_RATE, $levers['Corporate tax rate']['enacted'], 1e-12);
+        $this->assertEqualsWithDelta(MacroEngine::BASE_CORPORATE_TAX_RATE + 0.03, $levers['Corporate tax rate']['expected'], 1e-12);
         $this->assertTrue($levers['Bank levy']['moves']);
         $this->assertFalse($levers['Average tariff on imports']['moves']);
     }

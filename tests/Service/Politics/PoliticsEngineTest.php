@@ -84,7 +84,8 @@ class PoliticsEngineTest extends TestCase
 
     public function testTheGovernmentsPositionIsItsPartiesWeightedBySeats(): void
     {
-        $position = Politics::coalitionPosition(Diet::membership([Diet::VANGUARD, Diet::EXCHANGE, Diet::CHARTISTS]), Diet::SEED_SEATS, Diet::HOME_POSITIONS);
+        $seats = array_merge(Diet::SEED_SEATS, [Diet::VANGUARD => 95.0, Diet::EXCHANGE => 25.0, Diet::CHARTISTS => 20.0]);
+        $position = Politics::coalitionPosition(Diet::membership([Diet::VANGUARD, Diet::EXCHANGE, Diet::CHARTISTS]), $seats, Diet::HOME_POSITIONS);
 
         // Vanguard 95 at (-0.65, +0.1, +0.3), Exchange 25 at (-0.2, +0.8, +0.4), Chartists 20 at (-0.4, +0.6, +0.8).
         $this->assertEqualsWithDelta((95.0 * -0.65 + 25.0 * -0.2 + 20.0 * -0.4) / 140.0, $position[Diet::AXIS_STATE], 1e-12);
@@ -203,11 +204,11 @@ class PoliticsEngineTest extends TestCase
     /** A party's swings scale with its size as real vote shares' do: the Common Lot, 8 seats to the Civic Front's 94, swings the square root of 94/8, 3.4 times, as far in log share. */
     public function testSmallPartiesSwingFurtherInLogShare(): void
     {
-        $large = Politics::swingSd(Politics::ELECTION_SHORT_TERM_SWING_VARIANCE, Diet::CIVIC);
-        $small = Politics::swingSd(Politics::ELECTION_SHORT_TERM_SWING_VARIANCE, Diet::COMMON_LOT);
+        $large = Politics::swingSd(Politics::ELECTION_SHORT_TERM_SWING_VARIANCE, Diet::SEED_VOTE_SHARES[Diet::CIVIC]);
+        $small = Politics::swingSd(Politics::ELECTION_SHORT_TERM_SWING_VARIANCE, Diet::SEED_VOTE_SHARES[Diet::COMMON_LOT]);
 
-        $this->assertEqualsWithDelta(sqrt(Politics::ELECTION_SHORT_TERM_SWING_VARIANCE / (94.0 / 300.0)), $large, 1e-12);
-        $this->assertEqualsWithDelta(sqrt(94.0 / 8.0), $small / $large, 1e-12);
+        $this->assertEqualsWithDelta(sqrt(Politics::ELECTION_SHORT_TERM_SWING_VARIANCE / Diet::SEED_VOTE_SHARES[Diet::CIVIC]), $large, 1e-12);
+        $this->assertEqualsWithDelta(sqrt(Diet::SEED_VOTE_SHARES[Diet::CIVIC] / Diet::SEED_VOTE_SHARES[Diet::COMMON_LOT]), $small / $large, 1e-12);
     }
 
     /** A boom over the campaign returns the government stronger; inflation over the term costs it. */
@@ -243,7 +244,7 @@ class PoliticsEngineTest extends TestCase
         $seed = Diet::SEED_VOTE_SHARES;
 
         $this->assertEqualsWithDelta(1.0, array_sum($shares), 1e-12);
-        $this->assertEqualsWithDelta(140.0 / 300.0 - 0.04, $shares[Diet::VANGUARD] + $shares[Diet::EXCHANGE] + $shares[Diet::CHARTISTS], 1e-12);
+        $this->assertEqualsWithDelta($seed[Diet::VANGUARD] + $seed[Diet::EXCHANGE] + $seed[Diet::CHARTISTS] - 0.04, $shares[Diet::VANGUARD] + $shares[Diet::EXCHANGE] + $shares[Diet::CHARTISTS], 1e-12);
         $this->assertEqualsWithDelta($seed[Diet::CIVIC] / $seed[Diet::IRON_HARBOR], $shares[Diet::CIVIC] / $shares[Diet::IRON_HARBOR], 1e-12);
         $this->assertEqualsWithDelta($seed[Diet::VANGUARD] / $seed[Diet::EXCHANGE], $shares[Diet::VANGUARD] / $shares[Diet::EXCHANGE], 1e-12);
     }
@@ -791,6 +792,22 @@ class PoliticsEngineTest extends TestCase
         $this->assertSame(0.0, $exchange['tariff']);
         $this->assertEqualsWithDelta(Politics::MIGRATION_OPEN_REGIME - Politics::MIGRATION_CLOSED_REGIME, $exchange['laborGrowth'] - $harbor['laborGrowth'], 1e-12, 'The two immigration regimes are a regime apart.');
         $this->assertEqualsWithDelta(MacroEngine::STRUCTURAL_LABOR_GROWTH_RATE, Politics::platform([Diet::AXIS_STATE => 0.0, Diet::AXIS_OPENNESS => 0.0])['laborGrowth'], 1e-12, 'A neutral government keeps the structural rate.');
+        $this->assertEqualsWithDelta(Politics::MIGRATION_CLOSED_REGIME, $harbor['laborGrowth'], 1e-12, 'The closed end admits Japan\'s regime.');
+        $this->assertEqualsWithDelta(Politics::MIGRATION_OPEN_REGIME, $exchange['laborGrowth'], 1e-12, 'The open end admits Canada\'s and Australia\'s.');
+    }
+
+    /**
+     * The laws the manifestos set either side of the District's average party move half their gap toward each end, each
+     * side scaled to its own end party, so how far an end party stands from the average does not tilt the split.
+     */
+    public function testEachSideOfTheStateAxisIsScaledToItsOwnEnd(): void
+    {
+        $halfway = static fn(string $party): array => Politics::platform([Diet::AXIS_STATE => Diet::FIXED_POSITIONS[$party][Diet::AXIS_STATE] / 2.0]);
+        $this->assertEqualsWithDelta(Politics::POLICY_MANIFESTO_CORPORATE_TAX_GAP / 4.0, $halfway(Diet::CIVIC)['corporateTax'], 1e-12);
+        $this->assertEqualsWithDelta(-Politics::POLICY_MANIFESTO_CORPORATE_TAX_GAP / 4.0, $halfway(Diet::VANGUARD)['corporateTax'], 1e-12);
+        $this->assertEqualsWithDelta(MacroEngine::TARGET_CORPORATE_TAX_RATE * exp(Politics::POLICY_MANIFESTO_PUBLIC_SPENDING_LOG_GAP / 4.0), $halfway(Diet::CIVIC)['publicSpending'], 1e-12);
+        $this->assertEqualsWithDelta(CreditFiscalSubsystem::FOUNDING_CONSOLIDATION_TAX_SHARE - (Politics::POLICY_MANIFESTO_CONSOLIDATION_TAX_SHARE_GAP / 4.0), $halfway(Diet::VANGUARD)['consolidationTaxShare'], 1e-12);
+        $this->assertSame(Politics::platform([Diet::AXIS_STATE => -2.0])['corporateTax'], Politics::platform([Diet::AXIS_STATE => Diet::FIXED_POSITIONS[Diet::VANGUARD][Diet::AXIS_STATE]])['corporateTax'], 'Past its end a government enacts the end party\'s law and no more.');
     }
 
     public function testANeutralOrOpenGovernmentKeepsTheFreePort(): void
@@ -929,14 +946,14 @@ class PoliticsEngineTest extends TestCase
         $this->assertFalse(Politics::REVENUE_LEVERS['utilityRateGrant']);
     }
 
-    /** The big-state end taxes dividends at the top income rate, as the 2013 US budget proposed; the small-state end exempts them, as the 2003 proposal did; the middle keeps the founding 15%. */
-    public function testTheDividendTaxPlatformsRunFromExemptionToIncomeRates(): void
+    /** The big-state end and the middle keep the founding 15%, no financial centre's left proposing more; the small-state end exempts dividends, as Singapore's one-tier system does. */
+    public function testTheDividendTaxPlatformsRunFromExemptionToTheFoundingRate(): void
     {
         $half = Diet::FIXED_POSITIONS[Diet::CIVIC][Diet::AXIS_STATE] / 2.0;
-        $this->assertEqualsWithDelta(0.396, Politics::platform(Diet::position(Diet::CIVIC, []))['dividendTax'], 1e-12);
+        $this->assertEqualsWithDelta(0.15, Politics::platform(Diet::position(Diet::CIVIC, []))['dividendTax'], 1e-12);
         $this->assertEqualsWithDelta(0.0, Politics::platform(Diet::position(Diet::VANGUARD, []))['dividendTax'], 1e-12);
         $this->assertEqualsWithDelta(0.15, Politics::platform([Diet::AXIS_STATE => 0.0])['dividendTax'], 1e-12);
-        $this->assertEqualsWithDelta((0.15 + 0.396) / 2.0, Politics::platform([Diet::AXIS_STATE => $half])['dividendTax'], 1e-12);
+        $this->assertEqualsWithDelta(0.15, Politics::platform([Diet::AXIS_STATE => $half])['dividendTax'], 1e-12, 'Left of the middle the rate stays where it was founded.');
         $this->assertEqualsWithDelta(0.075, Politics::platform([Diet::AXIS_STATE => -$half])['dividendTax'], 1e-12);
         $this->assertSame(Valuation::FOUNDING_DIVIDEND_TAX_RATE, (new PoliticsStateDTO())->dividendTaxRate);
         $this->assertTrue(Politics::REVENUE_LEVERS['dividendTax']);
@@ -954,14 +971,14 @@ class PoliticsEngineTest extends TestCase
         $this->assertSame(Diet::AXIS_OPENNESS, Politics::LEVER_AXES['reserveHomeShare']);
     }
 
-    /** The two ends of the size-of-state axis plan public spending the 2019 UK manifestos' log gap apart, the neutral position keeping the founding share. */
+    /** The two ends of the size-of-state axis plan public spending 0.7% of GDP apart, the budget Singapore's parties argue over, the neutral position keeping the founding share. */
     public function testThePublicSpendingPlatformsSpanTheManifestoGap(): void
     {
         $civic = Politics::platform(Diet::position(Diet::CIVIC, []))['publicSpending'];
         $vanguard = Politics::platform(Diet::position(Diet::VANGUARD, []))['publicSpending'];
 
         $this->assertEqualsWithDelta(Politics::POLICY_MANIFESTO_PUBLIC_SPENDING_LOG_GAP, log($civic / $vanguard), 1e-12);
-        $this->assertEqualsWithDelta(log(1.33 / 1.11), Politics::POLICY_MANIFESTO_PUBLIC_SPENDING_LOG_GAP, 5e-4);
+        $this->assertEqualsWithDelta(0.007, $civic - $vanguard, 3e-5, 'The ends part by 0.7% of GDP.');
         $this->assertEqualsWithDelta(MacroEngine::TARGET_CORPORATE_TAX_RATE, Politics::platform([Diet::AXIS_STATE => 0.0])['publicSpending'], 1e-15);
         $this->assertFalse(Politics::REVENUE_LEVERS['publicSpending']);
     }
@@ -1028,19 +1045,20 @@ class PoliticsEngineTest extends TestCase
         $this->assertTrue($blocked['supportHeld']['corporateTax']);
         $this->assertFalse($blocked['councilHeld']['corporateTax']);
 
-        // The Exchange Party's own rate is just under the neutral one: from 3.5 points above neutral, a cut to the
-        // Vanguard's 3.5 below is no further from the Exchange's rate than the rate in force stands.
+        // The Exchange Party's own rate is just under the neutral one: from half the gap above neutral, a cut to the
+        // Vanguard's half below is no further from the Exchange's rate than the rate in force stands.
         $exchangeIdeal = Politics::platform(Diet::position(Diet::EXCHANGE, $positions))['corporateTax'];
         $through = Politics::budget([Diet::VANGUARD], [Diet::EXCHANGE], $seats, $positions, $standing($gap / 2.0), 0.5, MacroEngine::SOVEREIGN_RISK_DEBT_THRESHOLD);
         $this->assertEqualsWithDelta($vanguardIdeal, $through['levers']['corporateTax'], 1e-12);
         $this->assertFalse($through['supportHeld']['corporateTax']);
 
-        $partial = Politics::budget([Diet::VANGUARD], [Diet::EXCHANGE], $seats, $positions, $standing(0.01), 0.5, MacroEngine::SOVEREIGN_RISK_DEBT_THRESHOLD);
-        $this->assertEqualsWithDelta($exchangeIdeal - (0.01 - $exchangeIdeal), $partial['levers']['corporateTax'], 1e-12, 'A cut goes only as far past the Exchange Party\'s rate as the rate in force stood above it.');
+        $inForce = $gap / 7.0;
+        $partial = Politics::budget([Diet::VANGUARD], [Diet::EXCHANGE], $seats, $positions, $standing($inForce), 0.5, MacroEngine::SOVEREIGN_RISK_DEBT_THRESHOLD);
+        $this->assertEqualsWithDelta($exchangeIdeal - ($inForce - $exchangeIdeal), $partial['levers']['corporateTax'], 1e-12, 'A cut goes only as far past the Exchange Party\'s rate as the rate in force stood above it.');
         $this->assertTrue($partial['supportHeld']['corporateTax']);
 
-        $both = Politics::budget([Diet::VANGUARD], [Diet::EXCHANGE, Diet::CIVIC], $seats, $positions, $standing(0.01), 0.5, MacroEngine::SOVEREIGN_RISK_DEBT_THRESHOLD);
-        $this->assertEqualsWithDelta(0.01, $both['levers']['corporateTax'], 1e-12, 'With the Civic Front also needed, the rate cannot fall at all.');
+        $both = Politics::budget([Diet::VANGUARD], [Diet::EXCHANGE, Diet::CIVIC], $seats, $positions, $standing($inForce), 0.5, MacroEngine::SOVEREIGN_RISK_DEBT_THRESHOLD);
+        $this->assertEqualsWithDelta($inForce, $both['levers']['corporateTax'], 1e-12, 'With the Civic Front also needed, the rate cannot fall at all.');
 
         $majority = Politics::budget([Diet::VANGUARD, Diet::EXCHANGE, Diet::CHARTISTS], [], $seats, $positions, $standing(0.0), 0.5, MacroEngine::SOVEREIGN_RISK_DEBT_THRESHOLD);
         $this->assertSame(array_fill_keys(array_keys(Politics::REVENUE_LEVERS), false), $majority['supportHeld'], 'A majority cabinet answers to no supporter.');
@@ -1279,26 +1297,26 @@ class PoliticsEngineTest extends TestCase
     }
 
     /**
-     * The stamp duty runs along the size-of-state axis from the founding 0.05% a side at the Vanguard's end to France's
-     * 0.4% on purchases, 0.2% a side, at the Civic Front's; it goes to the reserve fund, so the Council does not guard it.
+     * The stamp duty runs along the size-of-state axis from the founding 0.05% a side at the Vanguard's end to Hong Kong's
+     * 2021 duty, 0.13% a side, at the Civic Front's; it goes to the reserve fund, so the Council does not guard it.
      */
-    public function testTheStampDutyRunsFromTheFoundingRateToFrancesTax(): void
+    public function testTheStampDutyRunsFromTheFoundingRateToHongKongsDuty(): void
     {
         $positions = Diet::HOME_POSITIONS;
 
         $this->assertEqualsWithDelta(FinancialConstants::STAMP_DUTY_RATE, Politics::platform(Diet::position(Diet::VANGUARD, $positions))['stampDutyRate'], 1e-15, 'The founding cabinet keeps the founding duty.');
         $this->assertEqualsWithDelta(Politics::POLICY_BIG_STATE_STAMP_DUTY, Politics::platform(Diet::position(Diet::CIVIC, $positions))['stampDutyRate'], 1e-15);
-        $this->assertEqualsWithDelta(0.00125, Politics::platform([Diet::AXIS_STATE => 0.0])['stampDutyRate'], 1e-15);
+        $this->assertEqualsWithDelta((FinancialConstants::STAMP_DUTY_RATE + Politics::POLICY_BIG_STATE_STAMP_DUTY) / 2.0, Politics::platform([Diet::AXIS_STATE => 0.0])['stampDutyRate'], 1e-15);
         $this->assertFalse(Politics::REVENUE_LEVERS['stampDutyRate']);
     }
 
-    /** The bank levy runs from none at the Vanguard's end to the UK's 2015 peak at the Civic Front's, and the Council guards it as revenue. */
+    /** The bank levy runs from none at the Vanguard's end to Ireland's levy at the Civic Front's, and the Council guards it as revenue. */
     public function testTheBankLevyRunsFromNoneToTheUksPeak(): void
     {
         $positions = Diet::HOME_POSITIONS;
 
         $this->assertEqualsWithDelta(0.0, Politics::platform(Diet::position(Diet::VANGUARD, $positions))['bankLevyRate'], 1e-15, 'The founding cabinet levies none.');
-        $this->assertEqualsWithDelta(0.0021, Politics::platform(Diet::position(Diet::CIVIC, $positions))['bankLevyRate'], 1e-15);
+        $this->assertEqualsWithDelta(Politics::POLICY_BIG_STATE_BANK_LEVY, Politics::platform(Diet::position(Diet::CIVIC, $positions))['bankLevyRate'], 1e-15);
         $this->assertTrue(Politics::REVENUE_LEVERS['bankLevyRate']);
     }
 

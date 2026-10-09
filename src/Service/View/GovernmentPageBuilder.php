@@ -862,7 +862,7 @@ class GovernmentPageBuilder
     private static function leverDisplay(string $lever, float $value): float
     {
         return match ($lever) {
-            'corporateTax' => MacroEngine::TARGET_CORPORATE_TAX_RATE + $value,
+            'corporateTax' => MacroEngine::BASE_CORPORATE_TAX_RATE + $value,
             'mergerReviewLeniency' => MergerAndAcquisitionEngine::reviewScreens($value)['concentrated'],
             'greenBeltStringency' => AssetMarketSubsystem::planningRefusalRate($value),
             'extractionStringency' => self::extractionCostUplift($value),
@@ -980,7 +980,7 @@ class GovernmentPageBuilder
         $variance = array_fill_keys(AerieDiet::PARTIES, 0.0);
         $path = [['t' => $since, 'shares' => $average, 'variance' => $variance]];
         foreach ($politics->polls as $poll) {
-            [$average, $variance] = ElectionForecast::pool($average, $variance, $poll['shares'], $poll['t'] - $since);
+            [$average, $variance] = ElectionForecast::pool($average, $variance, $poll['shares'], $poll['t'] - $since, $politics->normalVoteShares);
             $since = $poll['t'];
             $path[] = ['t' => $poll['t'], 'shares' => $average, 'variance' => $variance];
         }
@@ -1001,7 +1001,7 @@ class GovernmentPageBuilder
         $row = $rows[$party];
         $position = AerieDiet::position($party, $politics->partyPositions);
         $platform = PoliticsEngine::platform($position);
-        $neutral = MacroEngine::TARGET_CORPORATE_TAX_RATE;
+        $neutral = MacroEngine::BASE_CORPORATE_TAX_RATE;
         $concentrated = static fn(float $leniency): float => MergerAndAcquisitionEngine::reviewScreens($leniency)['concentrated'];
         $talking = $politics->coalitionTakesOfficeAt > $macro->totalTime;
 
@@ -1075,6 +1075,9 @@ class GovernmentPageBuilder
                 'cabinet' => count(array_filter($votes, static fn(array $vote): bool => $vote['cabinet'])),
                 'support' => count(array_filter($votes, static fn(array $vote): bool => $vote['support'])),
                 'best' => max(array_column($record, 'seats')),
+                // The share its lasting support drifts back toward, and where it stood at the founding.
+                'coreVote' => $politics->normalVoteShares[$party] ?? AerieDiet::SEED_VOTE_SHARES[$party],
+                'coreVoteAtFounding' => AerieDiet::SEED_VOTE_SHARES[$party],
                 'scale' => max(AerieDiet::MAJORITY_SEATS / 2, (int) ceil(max(array_column($record, 'seats')) * 1.15)),
             ],
             'parties' => array_values(array_map(static fn(array $other): array => [
@@ -1199,7 +1202,7 @@ class GovernmentPageBuilder
                 default => 'pending',
             };
         };
-        $neutral = MacroEngine::TARGET_CORPORATE_TAX_RATE;
+        $neutral = MacroEngine::BASE_CORPORATE_TAX_RATE;
         $screens = MergerAndAcquisitionEngine::reviewScreens($politics->mergerReviewLeniency);
         $repair = max(0.0, CreditFiscalSubsystem::bohnSurplus($macro->sovereignNetDebtToGdp) - ($macro->sovereignFundDollarsPerGdp > 0.0 ? 0.0 : CreditFiscalSubsystem::SOVEREIGN_STRUCTURAL_DEFICIT));
 
@@ -2005,6 +2008,7 @@ class GovernmentPageBuilder
             ],
             'foreignBuyers' => $law('foreignBuyerTax', $politics->foreignBuyerTaxRate) + [
                 'priceEffect' => 1.0 - AssetMarketSubsystem::foreignBuyerPriceFactor($politics->foreignBuyerTaxRate),
+                'revenueToGdp' => AssetMarketSubsystem::foreignBuyerTaxRevenueToGdp($politics->foreignBuyerTaxRate),
                 'strictest' => PoliticsEngine::POLICY_PROTECTIONIST_FOREIGN_BUYER_TAX,
             ],
             'expectedFrom' => $politics->forecastLevers === [] ? null : self::simDate(ElectionForecast::takesEffect($politics)),

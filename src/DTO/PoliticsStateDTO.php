@@ -229,6 +229,8 @@ readonly class PoliticsStateDTO
         public string $lastLeaderChangeParty = '',
         /** @var array<string, float> Support between votes (App\Service\Politics\OpinionPolls): each party's lasting share, its short-term swing set aside (empty: read off the last vote). */
         public array $supportLasting = [],
+        /** @var array<string, float> Each party's normal vote, drifting over the decades. */
+        public array $normalVoteShares = AerieDiet::SEED_VOTE_SHARES,
         /** @var array<string, float> Each party's log swing this term for or against the governments it served in, folded into its lasting share at the vote. */
         public array $supportIncumbency = [],
         /** @var array<string, float> Each party's years of lasting drift so far this term (App\Service\Politics\OpinionPolls::driftYears()); empty at a vote. */

@@ -43,7 +43,7 @@ final class AeriePartyProfiles
             'agenda' => [
                 ['title' => 'More for public services', 'text' => 'Spend more on the schools, clinics and crossings, a larger share of the District\'s income than the founders allowed.'],
                 ['title' => 'A higher corporate tax', 'text' => 'Raise the rate on corporate profits to pay for them.'],
-                ['title' => 'Dividends taxed as wages', 'text' => 'Tax the dividends shareholders are paid at the same rate as the highest earnings.'],
+                ['title' => 'Keep the dividend tax', 'text' => 'Hold the tax on the dividends shareholders are paid where the Charter set it, and spend what it raises on the District.'],
                 ['title' => 'A levy on the banks', 'text' => 'Charge the largest balance sheets for the public guarantee they enjoy.'],
                 ['title' => 'A duty on share trades', 'text' => 'Raise the stamp duty on share trading, paid into the Sovereign Reserve.'],
                 ['title' => 'A price on carbon', 'text' => 'A moderate carbon price on the District\'s power.'],

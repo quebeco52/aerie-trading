@@ -224,6 +224,7 @@
 					<div><dt class="text-xs text-on-surface-variant">In cabinet</dt><dd class="font-mono tabular-nums font-semibold text-on-surface">{{ recordSummary.cabinet }} of {{ recordSummary.votes }}</dd></div>
 					<div><dt class="text-xs text-on-surface-variant">In support</dt><dd class="font-mono tabular-nums font-semibold text-on-surface">{{ recordSummary.support }} of {{ recordSummary.votes }}</dd></div>
 					<div><dt class="text-xs text-on-surface-variant">Best result</dt><dd class="font-mono tabular-nums font-semibold text-on-surface">{{ recordSummary.best }} seats</dd></div>
+					<div><dt class="text-xs text-on-surface-variant" title="The share of the vote its support returns to between landslides, and its change in share since Year 1, when it stood at {{ recordSummary.coreVoteAtFounding|pct(1) }}">Core vote</dt><dd class="font-mono tabular-nums font-semibold text-on-surface">{{ recordSummary.coreVote|pct(1) }}{% set coreChange = recordSummary.coreVote - recordSummary.coreVoteAtFounding %}<span class="text-xs font-normal {{ coreChange|signed_class }}"> {{ coreChange|pct(1, true) }}</span></dd></div>
 				</dl>
 			</div>
 

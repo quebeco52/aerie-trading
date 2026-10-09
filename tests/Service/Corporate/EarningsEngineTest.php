@@ -31,6 +31,7 @@ use App\Service\Market\Pricing\MarketConsensusEngine;
 use App\Service\Corporate\Industry\IndustryShareLedger;
 use App\Service\Math\FinancialConstants;
 use App\Service\Corporate\Industry\InMemoryIndustryShareStore;
+use App\Service\Macro\MacroEngine;
 use Symfony\Contracts\EventDispatcher\EventDispatcherInterface;
 
 class EarningsEngineTest extends TestCase
@@ -1958,7 +1959,7 @@ class EarningsEngineTest extends TestCase
     public function testCardLenderEarnsItsTargetRoeAndDoesNotMissEveryQuarterInACalmMacro(): void
     {
         $macroState = new MacroStateDTO(
-            corporateTaxRate: 0.21, policyRate: 0.04, policyRateEma: 0.04, yield2yEma: 0.04, yield5yEma: 0.042,
+            corporateTaxRate: MacroEngine::BASE_CORPORATE_TAX_RATE, policyRate: 0.04, policyRateEma: 0.04, yield2yEma: 0.04, yield5yEma: 0.042,
             yield10yEma: 0.045, equityRiskPremium: 0.05, nominalGdpIndex: 1.0, macroCreditSpreadEma: 0.015
         );
         $engine = $this->buildEngine(new EventDispatcher());

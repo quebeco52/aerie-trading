@@ -113,8 +113,11 @@ class PoliticsEngine
     // --- Vote Shares ---
     /** Smallest vote share a party is carried at, so a collapse leaves it a rump rather than a negative share. */
     public const MIN_VOTE_SHARE = 0.005;
-    /** Each party's own lasting swing each term, as the variance of its log vote share times its normal vote: with the government's swings, it spreads the parties around their normal votes as far as the Nordic parties since 1945, 0.019 (ParlGov, var/harness/politics/vote_fit.py against vote_sim.py). */
-    public const LASTING_SWING_VARIANCE = 0.0118;
+    /** Each party's own lasting swing each term, as the variance of its log vote share times its normal vote: with the government's swings, it spreads the parties around their normal votes as far as the Nordic parties since 1945, 0.019 (ParlGov, var/harness/politics/vote_fit.py against vote_sim.py), less what the normal vote's drift now adds over a term, so the vote moves as far from one election to the next as before. */
+    public const LASTING_SWING_VARIANCE = 0.0118 - (self::ELECTION_TERM_YEARS * self::NORMAL_VOTE_DRIFT_VARIANCE / 2.0
+        * (1.0 - (self::ELECTION_NORMAL_VOTE_PERSISTENCE ** (2.0 * self::ELECTION_TERM_YEARS))) / (1.0 - (self::ELECTION_NORMAL_VOTE_PERSISTENCE ** self::ELECTION_TERM_YEARS)));
+    /** Yearly variance of a party's log normal vote times its normal vote: Western European parties' shares carry a random walk beyond their lasting swing, half of it 0.341e-3 a year (ParlGov 1945-2020, parties averaging 5% or more, the Diet's short and lasting swing held; bootstrap 95% 0.09e-3 to 0.65e-3, var/harness/politics/walk_fit.py), so realignments build over decades as they do in the West rather than levelling off as the Nordic votes do. */
+    public const NORMAL_VOTE_DRIFT_VARIANCE = 2.0 * 0.000341;
 
     // --- The Budget ---
     /** The levers a budget sets, in platform() order, and whether cutting each costs revenue the Council guards. */
@@ -177,13 +180,13 @@ class PoliticsEngine
         'dividendTax' => AerieDiet::AXIS_STATE,
     ];
 
-    // --- Platforms: Public Spending (IFS General Election Analysis 2019) ---
-    /** Log gap between the day-to-day public service spending the big-state and small-state manifestos plan: ln(1.33/1.11), Labour's 2019 plan 33% above 2019-20 against the Conservatives' 11% (IFS, Farquharson 2019, resource DEL excluding social security), the pair the corporate tax gap is read off. */
-    public const POLICY_MANIFESTO_PUBLIC_SPENDING_LOG_GAP = 0.181;
+    // --- Platforms: Public Spending (Singapore, Workers' Party and PAP, 2020-2025) ---
+    /** Log gap between the public spending the big-state and small-state ends plan: the 0.7% of GDP Singapore's opposition would raise from the reserves' returns and land sales in place of the 2023-24 GST rise (Workers' Party manifesto 2025; Ministry of Finance, 21 November 2022), over the founding purchases share, small enough that the share and its log coincide. The opposition costs no extra spending with it, so this is the most the two sides' budgets part by. */
+    public const POLICY_MANIFESTO_PUBLIC_SPENDING_LOG_GAP = 0.007 / MacroEngine::TARGET_CORPORATE_TAX_RATE;
 
-    // --- Platforms: Corporate Tax (Osterloh & Debus 2012) ---
-    /** Gap between the corporate rates the big-state and small-state manifestos set, the parties at the ends of the size-of-state axis: 7 points (US: the 2020 Democratic platform's 28% against the 21% of the 2017 Republican act; UK 2019: Labour's 26% against the Conservatives' 19%). Enacted rates follow manifesto ideology (Osterloh & Debus 2012, European panel). */
-    public const POLICY_MANIFESTO_CORPORATE_TAX_GAP = 0.07;
+    // --- Platforms: Corporate Tax (financial centres: Luxembourg, Singapore, Ireland) ---
+    /** Gap between the corporate rates the big-state and small-state ends set: 1 point, Luxembourg's CSV-DP cut from 17% to 16% in 2025 that the socialists called not urgent (Deloitte; Paperjam); Singapore's and Ireland's parties keep the same rate (Workers' Party manifesto 2025; Sinn Féin, general election 2024). Enacted rates follow manifesto ideology (Osterloh & Debus 2012). */
+    public const POLICY_MANIFESTO_CORPORATE_TAX_GAP = 0.01;
 
     // --- Platforms: Tariffs (Amiti, Redding & Weinstein 2019; Fajgelbaum et al. 2020) ---
     /** Average effective tariff the protectionist end of the openness axis enacts over the District's free port: the US's 2025 rise, 2.5% to 17.9% (Yale Budget Lab, State of U.S. Tariffs, 26 September 2025). Duties pass fully into import prices at the border (Amiti, Redding & Weinstein 2019; Fajgelbaum et al. 2020). */
@@ -192,20 +195,20 @@ class PoliticsEngine
     // --- Platforms: Immigration (UN WPP via World Bank, 2000-2019) ---
     /** Net migration a closed immigration regime admits, a year as a share of population: Japan's 0.11% (World Bank SM.POP.NETM over SP.POP.TOTL, 2000-2019 mean). */
     public const MIGRATION_CLOSED_REGIME = 0.0011;
-    /** Net migration an open immigration regime admits: Canada's 0.73% and Australia's 0.86%, averaged (the same series). Midway between the two regimes sits the US's 0.50%, the structural labour growth the District opens with. */
+    /** Net migration an open immigration regime admits: Canada's 0.73% and Australia's 0.86%, averaged (the same series). Between the two regimes sits the US's 0.50%, the structural labour growth the District's average party keeps. */
     public const MIGRATION_OPEN_REGIME = (0.00728 + 0.00859) / 2.0;
 
     // --- Platforms: Foreign Buyers of Homes (Singapore Additional Buyer's Stamp Duty) ---
     /** Tax on a home bought by a buyer from outside the District the closed end of the openness axis enacts, a share of the price: Singapore's 60% Additional Buyer's Stamp Duty on foreigners (since 27 April 2023), the strictest on record. The open end taxes none, as the District did at its founding. */
     public const POLICY_PROTECTIONIST_FOREIGN_BUYER_TAX = 0.60;
 
-    // --- Platforms: Stamp Duty (Colliard & Hoffmann 2017) ---
-    /** Duty on each side of a share trade the big-state end of the axis enacts: France's 0.4% tax on share purchases (since 1 April 2025), as 0.2% a side, the same cost to a round trip. The small-state end keeps the founding 0.05% a side (FinancialConstants::STAMP_DUTY_RATE); either way it is paid into the reserve fund, not the budget. */
-    public const POLICY_BIG_STATE_STAMP_DUTY = 0.002;
+    // --- Platforms: Stamp Duty (Hong Kong, 2021-2023; Colliard & Hoffmann 2017) ---
+    /** Duty on each side of a share trade the big-state end of the axis enacts: Hong Kong's 0.13% a side from 1 August 2021, cut back to 0.1% from 17 November 2023 (Inland Revenue Department). The small-state end keeps the founding 0.05% a side (FinancialConstants::STAMP_DUTY_RATE); either way it is paid into the reserve fund, not the budget. */
+    public const POLICY_BIG_STATE_STAMP_DUTY = 0.0013;
 
-    // --- Platforms: Bank Levy (UK Finance Act 2011, Schedule 19) ---
-    /** Bank levy on short-term funding the big-state end of the axis enacts, a year: the UK's at its peak, 0.21% from April to December 2015 (half that, 0.105%, on long-term funding). The small-state end levies none, as the District did at its founding. */
-    public const POLICY_BIG_STATE_BANK_LEVY = 0.0021;
+    // --- Platforms: Bank Levy (Ireland, 2024-2025) ---
+    /** Bank levy the big-state end of the axis enacts, a year: Ireland's 0.122% of the banks' eligible deposits (Revenue eBrief 272/23), the only bank levy among the financial centres the District is set against, charged here on the base the levy has always had (short-term funding, half on long-term funding and uninsured deposits). The small-state end levies none, as Singapore, Hong Kong, Luxembourg and Switzerland do not. */
+    public const POLICY_BIG_STATE_BANK_LEVY = 0.00122;
 
     // --- Platforms: The Reserve Draw (Singapore Net Investment Returns Contribution) ---
     /** Share of the reserve fund's expected long-term real return the big-state end of the axis spends: 60%, the Workers' Party of Singapore's proposal to raise the Net Investment Returns Contribution from 50% (manifestos 2020 and 2025). The small-state end keeps the founding half (MacroEngine::RESERVE_DRAW_CEILING), which the fund must consent to any budget exceeding. */
@@ -215,10 +218,10 @@ class PoliticsEngine
     /** Gap between the shares of a deficit cut the big-state and small-state manifestos raise by tax: Labour's 2:1 ratio of spending cuts to tax rises (£24bn of £71bn) against the Conservatives' 4:1 (£14bn of £71bn), IFS, April 2010. Enacted plans show no partisan gap (deficit-cutting plans against ParlGov cabinets, 15 countries, 0.002 ± 0.018 a left-right point), so the gap is the manifestos'. */
     public const POLICY_MANIFESTO_CONSOLIDATION_TAX_SHARE_GAP = (24.0 - 14.0) / 71.0;
 
-    // --- Platforms: The Tax on Dividends (US budget proposals, 2003 and 2012) ---
-    /** Tax on dividends the big-state end of the axis enacts: 39.6%, dividends taxed as ordinary income at the top rate, as the US President's budget for fiscal 2013 proposed for incomes above $250,000. */
-    public const POLICY_BIG_STATE_DIVIDEND_TAX = 0.396;
-    /** Tax on dividends the small-state end enacts: none, the US President's January 2003 proposal to exclude dividends from individual income, so that corporate profits are taxed once. */
+    // --- Platforms: The Tax on Dividends (Singapore's one-tier system) ---
+    /** Tax on dividends the big-state end of the axis enacts: it keeps the founding 15% (Valuation::FOUNDING_DIVIDEND_TAX_RATE), as no financial centre's left proposes a dividend tax (Singapore's Workers' Party taxes wealth instead, manifesto 2025). */
+    public const POLICY_BIG_STATE_DIVIDEND_TAX = Valuation::FOUNDING_DIVIDEND_TAX_RATE;
+    /** Tax on dividends the small-state end enacts: none, as Singapore's one-tier system taxes a company's profits once and its dividends not at all (IRAS). */
     public const POLICY_SMALL_STATE_DIVIDEND_TAX = 0.0;
 
     // --- Platforms: The Reserve Fund's Home Share (GPIF 2014; Norway's GPFG) ---
@@ -439,15 +442,20 @@ class PoliticsEngine
         $openness = max($closed, min($open, $position[AerieDiet::AXIS_OPENNESS] ?? 0.0));
         $council = max($populist, min($technocratic, $position[AerieDiet::AXIS_COUNCIL] ?? 0.0));
         $stateSpan = $bigState - $smallState;
+        // How far toward its own end of the size-of-state axis the position leans, -1 at the small-state end to +1 at the
+        // big-state end, each side scaled to its own end: a law the manifestos set either side of the District's average
+        // party moves half their gap each way, however far from the average each end party stands.
+        $stateLean = $state >= 0.0 ? $state / $bigState : -$state / $smallState;
         $opennessSpan = $open - $closed;
 
         return [
             // Purchases move in proportion, the neutral position keeping the founding share (MacroEngine::TARGET_CORPORATE_TAX_RATE).
-            'publicSpending' => MacroEngine::TARGET_CORPORATE_TAX_RATE * exp(self::POLICY_MANIFESTO_PUBLIC_SPENDING_LOG_GAP * $state / $stateSpan),
-            'corporateTax' => self::POLICY_MANIFESTO_CORPORATE_TAX_GAP * $state / $stateSpan,
+            'publicSpending' => MacroEngine::TARGET_CORPORATE_TAX_RATE * exp(self::POLICY_MANIFESTO_PUBLIC_SPENDING_LOG_GAP / 2.0 * $stateLean),
+            'corporateTax' => self::POLICY_MANIFESTO_CORPORATE_TAX_GAP / 2.0 * $stateLean,
             'tariff' => self::POLICY_PROTECTIONIST_TARIFF * max(0.0, $openness / $closed),
+            // The District's average party keeps the structural rate; each end admits its own regime.
             'laborGrowth' => MacroEngine::STRUCTURAL_LABOR_GROWTH_RATE
-                + ((self::MIGRATION_OPEN_REGIME - self::MIGRATION_CLOSED_REGIME) * $openness / $opennessSpan),
+                + ((($openness >= 0.0 ? self::MIGRATION_OPEN_REGIME : self::MIGRATION_CLOSED_REGIME) - MacroEngine::STRUCTURAL_LABOR_GROWTH_RATE) * ($openness >= 0.0 ? $openness / $open : $openness / $closed)),
             'foreignBuyerTax' => self::POLICY_PROTECTIONIST_FOREIGN_BUYER_TAX * max(0.0, $openness / $closed),
             // The Common Lot's anti-cartel review is the 2023 guidelines, the Chartists' the 2010 ones
             // (App\Service\Corporate\MergerAndAcquisitionEngine::reviewScreens).
@@ -461,7 +469,7 @@ class PoliticsEngine
             'reserveDrawShare' => MacroEngine::RESERVE_DRAW_CEILING
                 + ((self::POLICY_BIG_STATE_RESERVE_DRAW_SHARE - MacroEngine::RESERVE_DRAW_CEILING) * ($state - $smallState) / $stateSpan),
             // The neutral position keeps the average plan's mix (CreditFiscalSubsystem::FOUNDING_CONSOLIDATION_TAX_SHARE).
-            'consolidationTaxShare' => CreditFiscalSubsystem::FOUNDING_CONSOLIDATION_TAX_SHARE + (self::POLICY_MANIFESTO_CONSOLIDATION_TAX_SHARE_GAP * $state / $stateSpan),
+            'consolidationTaxShare' => CreditFiscalSubsystem::FOUNDING_CONSOLIDATION_TAX_SHARE + (self::POLICY_MANIFESTO_CONSOLIDATION_TAX_SHARE_GAP / 2.0 * $stateLean),
             'reserveHomeShare' => self::POLICY_PROTECTIONIST_RESERVE_HOME_SHARE * ($open - $openness) / $opennessSpan,
             // The technocratic half keeps the appointed commission; toward the populist end it grants as an elected one.
             'utilityRateGrant' => UtilityBusinessModel::APPOINTED_COMMISSION_GRANTED_SHARE
@@ -791,10 +799,11 @@ class PoliticsEngine
      * vote shares vary in proportion to their size.
      *
      * @param float $varianceScale Variance of the log share times the normal vote.
+     * @param float $normal        The party's normal vote.
      */
-    public static function swingSd(float $varianceScale, string $party): float
+    public static function swingSd(float $varianceScale, float $normal): float
     {
-        return sqrt($varianceScale / AerieDiet::SEED_VOTE_SHARES[$party]);
+        return sqrt($varianceScale / $normal);
     }
 
     /**

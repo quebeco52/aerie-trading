@@ -24,3 +24,17 @@ Analysis: `python3 gate_an.py runs/<label> [burn]` reads `<label>/{on,off}_*.jso
 
 Outputs: `runs/<stage>/{new,head}/{on,off}_<seed>.jsonl`; tables in `spend_<n>.out`, `spend_<n>_new.out`.
 Evidence: `politics_evidence.md`.
+
+## Normal-vote drift (walk_fit.py, walk_an.py; 2026-10-09)
+- `python3 walk_fit.py`: fits ParlGov's normal-weighted variogram, keeping parties averaging 5% or more.
+  - It fits the walk on top of the Diet's short-run fit, with a party bootstrap.
+  - This produces `PoliticsEngine::NORMAL_VOTE_DRIFT_VARIANCE`.
+- `python3 long_vario.py`: the data variogram out to 75-year gaps, in 5-year bins.
+- Runs: `formation_run.php <seedFrom> <seedTo> 200 180 formation/walk_<arm>_<i>.jsonl`.
+  - Use 6 shards and `bin/php-slot`. One 16-seed arm takes about 25 minutes.
+  - `formation_run.php` requires the main checkout's `tests/bootstrap.php`. A baseline arm has to run before `src/` changes. Its
+    classes load in the first ticks, so editing after about a minute is safe.
+- `python3 walk_an.py 'formation/walk_base_*.jsonl' 'formation/walk_new_*.jsonl' [until-year]` prints a paired table.
+  - It is NEW − BASE at gaps of 4, 8, 20, 40 and 80 years, plus Pedersen volatility.
+  - It uses the same selection as the fit: parties averaging 5% or more, results of 1% or more. Without that selection, rump
+    parties dominate the weighted variogram.

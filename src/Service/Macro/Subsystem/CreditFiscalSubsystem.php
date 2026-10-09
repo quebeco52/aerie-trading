@@ -33,10 +33,10 @@ class CreditFiscalSubsystem
     public const INTERBANK_JUMP_VOL = 0.50;
 
     // --- Corporate Tax Revenue (BEA NIPA) ---
-    /** Corporate profits before tax over GDP, 1985-2019 mean (BEA NIPA via FRED, A053RC1Q027SBEA over GDP: 9.67%): the base a change in the corporate rate is levied on, so a point of rate is a tenth of a point of GDP in revenue. */
-    public const CORPORATE_PROFITS_TO_GDP = 0.0967;
-    /** Net corporate dividends over GDP, 1985-2019 mean (BEA NIPA via FRED, DIVIDEND over GDP: 4.42%): the base the tax on dividends is levied on, before the taxable share of holders. */
-    public const NET_DIVIDENDS_TO_GDP = 0.0442;
+    /** Taxable corporate profits over GDP, the base a change in the corporate rate is levied on: 20%, the District being a financial centre, whose profit bases run 14-34% of GDP against the US's 9.7% (corporate tax revenue over the statutory rate, 2015-19: Switzerland 14%, Singapore 19%, Luxembourg 19%, Ireland 22%, Hong Kong 34%; Eurostat gov_10a_taxag, IRAS, IRD), so a point of rate is a fifth of a point of GDP in revenue. */
+    public const CORPORATE_PROFITS_TO_GDP = 0.20;
+    /** Net corporate dividends over GDP, the base the tax on dividends is levied on before the taxable share of holders: 5.5%, between the financial centres' net distributions, paid less received, 2015-19 (Switzerland 5.9%, Ireland 5% of GNI*; Eurostat nasa_10_nf_tr D42), against the US's 4.4%. */
+    public const NET_DIVIDENDS_TO_GDP = 0.055;
 
     // --- Carbon Revenue (EIA; BEA) ---
     /** Power-sector CO2 per dollar of GDP, in tonnes: 1,425 million tonnes in 2023 (EIA) over $27.36 trillion of GDP (BEA): the base a carbon price on power is levied on, held at today's emissions. */
@@ -81,10 +81,10 @@ class CreditFiscalSubsystem
     public const FISCAL_STABILIZER_SENSITIVITY = 0.35;
     /** Mean lag, in years, of the tax a trailing year's earnings carry behind the tax charged: half the year, as a first-order lag (the convention of MacroAggregateSubsystem::DEMAND_TRANSMISSION_LAGS). */
     public const TRAILING_EARNINGS_MEAN_LAG_YEARS = 0.5;
-    /** Statutory corporate tax rate floor during deep economic recessions. */
-    public const MIN_CORPORATE_TAX_RATE = 0.12;
-    /** Statutory corporate tax rate ceiling during overheating economic booms. */
-    public const MAX_CORPORATE_TAX_RATE = 0.30;
+    /** Corporate tax rate floor during deep economic recessions: the budget's tax take at 12% of GDP, on the rate firms pay. */
+    public const MIN_CORPORATE_TAX_RATE = 0.12 - MacroEngine::TARGET_CORPORATE_TAX_RATE + MacroEngine::BASE_CORPORATE_TAX_RATE;
+    /** Corporate tax rate ceiling during overheating economic booms: the budget's tax take at 30% of GDP, on the rate firms pay. */
+    public const MAX_CORPORATE_TAX_RATE = 0.30 - MacroEngine::TARGET_CORPORATE_TAX_RATE + MacroEngine::BASE_CORPORATE_TAX_RATE;
 
     // --- GOVERNMENT SPENDING & FISCAL APPROPRIATIONS ---
     /** Diffusion of log civilian purchases / potential, the same fit; jumps are not significant (LR 2.1), so the process is Gaussian. */
@@ -498,7 +498,7 @@ class CreditFiscalSubsystem
      */
     public function calculateDynamicFiscalPolicy(MacroState $state, float $dt): void
     {
-        $targetTaxRate = MacroEngine::TARGET_CORPORATE_TAX_RATE + $state->corporateTaxPolicyShift + (self::FISCAL_STABILIZER_SENSITIVITY * $state->outputGapEma)
+        $targetTaxRate = MacroEngine::BASE_CORPORATE_TAX_RATE + $state->corporateTaxPolicyShift + (self::FISCAL_STABILIZER_SENSITIVITY * $state->outputGapEma)
             + self::fiscalStance($state);
         $targetTaxRate = max(self::MIN_CORPORATE_TAX_RATE, min(self::MAX_CORPORATE_TAX_RATE, $targetTaxRate));
 
@@ -639,7 +639,8 @@ class CreditFiscalSubsystem
      * duty raises their price; the carbon price is levied on the power sector's emissions; the bank levy is what the
      * board's banks owe on their balance sheets, in currency, read through the reserve fund's dollars per unit of GDP
      * (none is booked before the fund opens); the tax on dividends, as far as it departs from the founding rate, is
-     * levied on what taxable holders are paid (dividendTaxRevenueShift()).
+     * levied on what taxable holders are paid (dividendTaxRevenueShift()); the tax on foreign buyers on the homes they
+     * still buy (AssetMarketSubsystem::foreignBuyerTaxRevenueToGdp()).
      *
      * With a fund the budget spends the draw: the structural deficit is the draw itself, as Norway's fiscal rule sets the
      * structural non-oil deficit at the fund's expected real return. The draw is sized to the fund and the fund compounds
@@ -659,12 +660,14 @@ class CreditFiscalSubsystem
         // their share of GDP rises in a slump (the denominator half of the automatic stabilisers, Girouard & Andre 2005).
         $output = $state->nominalGdpIndex;
         $trendNominalGdp = $state->nominalGdpIndex / (1.0 + $state->outputGap);
-        $taxRevenue = (($state->corporateTaxRate - $state->corporateTaxShiftRealized) * $output)
+        // The tax take moves with the rate firms pay, founded TARGET_CORPORATE_TAX_RATE of GDP to the rate's BASE_CORPORATE_TAX_RATE.
+        $taxRevenue = (($state->corporateTaxRate + MacroEngine::TARGET_CORPORATE_TAX_RATE - MacroEngine::BASE_CORPORATE_TAX_RATE - $state->corporateTaxShiftRealized) * $output)
             + ($state->corporateTaxShiftRealized * self::CORPORATE_PROFITS_TO_GDP * $output)
             + (MacroAggregateSubsystem::tariffRevenueToGdp($state->importTariffRate) * $output)
             + ($state->carbonPrice * self::POWER_SECTOR_CO2_PER_GDP_DOLLAR * $output)
             + ($state->sovereignFundDollarsPerGdp > 0.0 ? $state->boardBankLevy / $state->sovereignFundDollarsPerGdp : 0.0)
-            + (self::dividendTaxRevenueShift($state->dividendTaxRate) * $output);
+            + (self::dividendTaxRevenueShift($state->dividendTaxRate) * $output)
+            + (AssetMarketSubsystem::foreignBuyerTaxRevenueToGdp($state->foreignBuyerTaxRate) * $output);
         $govtSpendingFlow = ($state->governmentSpendingIndex / MacroEngine::GOVT_SPENDING_BASELINE)
             * MacroEngine::TARGET_CORPORATE_TAX_RATE * $trendNominalGdp;
 

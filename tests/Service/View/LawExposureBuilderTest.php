@@ -137,7 +137,7 @@ final class LawExposureBuilderTest extends TestCase
     {
         $exposure = LawExposureBuilder::build([], new MacroStateDTO(), self::STANDING, ['corporateTax' => 0.02] + self::STANDING);
 
-        $rate = MacroEngine::TARGET_CORPORATE_TAX_RATE;
+        $rate = MacroEngine::BASE_CORPORATE_TAX_RATE;
         $this->assertEqualsWithDelta($rate, $exposure['corporateTax']['inForce'], 1e-12);
         $this->assertEqualsWithDelta($rate + 0.02, $exposure['corporateTax']['expected'], 1e-12);
         $this->assertEqualsWithDelta((1.0 - $rate - 0.02) / (1.0 - $rate) - 1.0, $exposure['corporateTax']['earnings'], 1e-12);

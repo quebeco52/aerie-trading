@@ -95,8 +95,8 @@ final class LawExposureBuilder
         // Every firm taxed at the full rate keeps the same share of its earnings, so the tax gets one figure, not a table.
         $corporateTax = null;
         if (isset($expected['corporateTax'])) {
-            $inForce = MacroEngine::TARGET_CORPORATE_TAX_RATE + $standing['corporateTax'];
-            $law = MacroEngine::TARGET_CORPORATE_TAX_RATE + $expected['corporateTax'];
+            $inForce = MacroEngine::BASE_CORPORATE_TAX_RATE + $standing['corporateTax'];
+            $law = MacroEngine::BASE_CORPORATE_TAX_RATE + $expected['corporateTax'];
             $earnings = PolicyCapitalization::afterTaxScale($inForce, $law) - 1.0;
             $corporateTax = ['inForce' => $inForce, 'expected' => $law, 'earnings' => $earnings, 'moves' => abs($earnings) >= self::PRINTED_SHARE];
         }

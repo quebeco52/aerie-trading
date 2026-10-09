@@ -593,8 +593,8 @@
 							</div>
 							<div class="chart-canvas-container h-80 md:h-85 w-full relative">
 								<canvas id="macroEnergySpreadsChart"
-									data-power-reference="{{ constant('App\\Service\\Macro\\Subsystem\\CommodityLogisticsSubsystem::REFERENCE_POWER_PRICE') }}"
-									data-gas-reference="{{ constant('App\\Service\\Macro\\Subsystem\\CommodityLogisticsSubsystem::REFERENCE_GAS_PRICE') }}"
+									data-power-reference="{{ constant('App\\Service\\Macro\\MacroEngine::REFERENCE_POWER_PRICE') }}"
+									data-gas-reference="{{ constant('App\\Service\\Macro\\MacroEngine::REFERENCE_GAS_PRICE') }}"
 									data-spark-heat-rate="{{ constant('App\\Service\\Macro\\Subsystem\\CommodityLogisticsSubsystem::SPARK_SPREAD_BENCHMARK_HEAT_RATE') }}"></canvas>
 							</div>
 							<p class="source-note">{{ source_line('commodity-exchange') }}</p>

@@ -78,7 +78,8 @@
 			{{ _self.law_line(buyers) }}
 			<p class="text-xs text-on-surface mt-4 max-w-3xl">
 				{% if buyers.inForce > 0 %}
-					It holds home prices <span class="font-mono tabular-nums">{{ buyers.priceEffect|pct(1) }}</span> below where they would stand without it, as most buyers from outside stay away.
+					It holds home prices <span class="font-mono tabular-nums">{{ buyers.priceEffect|pct(1) }}</span> below where they would stand without it, as most buyers from outside stay away,
+					and raises <span class="font-mono tabular-nums">{{ buyers.revenueToGdp|pct(3) }}</span> of GDP a year from the few who still buy.
 				{% else %}
 					Homes are open to buyers from anywhere, as at Year 1.
 				{% endif %}

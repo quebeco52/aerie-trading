@@ -95,18 +95,23 @@ final class OpinionPolls
 
         $lastingDraws = [];
         $shortTermDraws = [];
+        $normalDraws = [];
         foreach (AerieDiet::PARTIES as $party) {
             $lastingDraws[$party] = $math->generateStandardNormal();
         }
         foreach (AerieDiet::PARTIES as $party) {
             $shortTermDraws[$party] = $math->generateStandardNormal();
         }
+        foreach (AerieDiet::PARTIES as $party) {
+            $normalDraws[$party] = $math->generateStandardNormal();
+        }
         $drift = self::driftYears($state, $state->supportUpdatedAt, $state->totalTime);
         foreach ($drift as $party => $partyYears) {
             $state->supportDriftYears[$party] = ($state->supportDriftYears[$party] ?? self::elapsedInTerm($state, $state->supportUpdatedAt)) + $partyYears;
         }
-        $state->supportLasting = self::driftLasting($state->supportLasting, $drift, $lastingDraws, $math);
-        $state->partyShortTermShocks = self::fadeShortTerm($state->partyShortTermShocks, $years, self::campaignOverlap($state->supportUpdatedAt, $state->totalTime), $shortTermDraws, $math);
+        [$state->normalVoteShares, $carried] = self::walkNormals($state->normalVoteShares, $state->supportLasting, $years, $normalDraws);
+        $state->supportLasting = self::driftLasting($carried, $drift, $lastingDraws, $state->normalVoteShares, $math);
+        $state->partyShortTermShocks = self::fadeShortTerm($state->partyShortTermShocks, $years, self::campaignOverlap($state->supportUpdatedAt, $state->totalTime), $shortTermDraws, $state->normalVoteShares, $math);
 
         $growth = self::growthCounted($state, $macro);
         $inflation = self::inflationCounted($state, $macro);
@@ -162,16 +167,17 @@ final class OpinionPolls
      * @param array<string, float> $lasting Lasting shares by party.
      * @param array<string, float> $years   Years of drift by party (driftYears()).
      * @param array<string, float> $draws   Standard normal draw by party.
+     * @param array<string, float> $normals Normal votes by party.
      * @return array<string, float>
      */
-    public static function driftLasting(array $lasting, array $years, array $draws, MathUtility $math): array
+    public static function driftLasting(array $lasting, array $years, array $draws, array $normals, MathUtility $math): array
     {
         $termPersistence = PoliticsEngine::ELECTION_NORMAL_VOTE_PERSISTENCE ** PoliticsEngine::ELECTION_TERM_YEARS;
 
         $moved = [];
         foreach (AerieDiet::PARTIES as $party) {
             $persistence = PoliticsEngine::ELECTION_NORMAL_VOTE_PERSISTENCE ** ($years[$party] ?? 0.0);
-            $normal = AerieDiet::SEED_VOTE_SHARES[$party];
+            $normal = $normals[$party] ?? AerieDiet::SEED_VOTE_SHARES[$party];
             $gap = log(max(PoliticsEngine::MIN_VOTE_SHARE, $lasting[$party] ?? $normal) / $normal);
             // The spread the lasting swing holds a party at, around its normal vote: a term's swing over what a term
             // takes away.
@@ -184,6 +190,42 @@ final class OpinionPolls
     }
 
     /**
+     * Each party's normal vote some years on, and its lasting share carried with it. A normal vote drifts as a share
+     * does under neutral drift (Kimura 1955): a step with no drift of its own whose variance grows with the years and
+     * with the share, so its log moves with the variance over the share the West's votes show
+     * (PoliticsEngine::NORMAL_VOTE_DRIFT_VARIANCE); the normals are then put back on a whole. The lasting share moves
+     * with its normal, so a party's lead or deficit on its normal vote decays as before while the normal shifts under
+     * it: the random walk and the lasting swing add, as fitted.
+     *
+     * @param array<string, float> $normals Normal votes by party.
+     * @param array<string, float> $lasting Lasting shares by party (empty: none to carry).
+     * @param array<string, float> $draws   Standard normal draw by party.
+     * @return array{0: array<string, float>, 1: array<string, float>} The normal votes and the lasting shares carried.
+     */
+    public static function walkNormals(array $normals, array $lasting, float $years, array $draws): array
+    {
+        $walked = [];
+        foreach (AerieDiet::PARTIES as $party) {
+            $normal = $normals[$party] ?? AerieDiet::SEED_VOTE_SHARES[$party];
+            $step = sqrt(PoliticsEngine::NORMAL_VOTE_DRIFT_VARIANCE * max(0.0, $years) * $normal) * ($draws[$party] ?? 0.0);
+            $walked[$party] = max(PoliticsEngine::MIN_VOTE_SHARE, $normal + $step);
+        }
+        $total = array_sum($walked);
+        $walked = array_map(static fn(float $share): float => $share / $total, $walked);
+        if ($lasting === []) {
+            return [$walked, []];
+        }
+
+        $carried = [];
+        foreach (AerieDiet::PARTIES as $party) {
+            $carried[$party] = ($lasting[$party] ?? 0.0) * $walked[$party] / ($normals[$party] ?? AerieDiet::SEED_VOTE_SHARES[$party]);
+        }
+        $total = array_sum($carried);
+
+        return [$walked, array_map(static fn(float $share): float => $share / $total, $carried)];
+    }
+
+    /**
      * Each party's short-term swing some time later: faded at its half-life, and in the campaign's final days built
      * toward the vote's swing, so that spans of the campaign adding to the whole of it give the vote's swing exactly
      * (PoliticsEngine::ELECTION_SHORT_TERM_SWING_VARIANCE), however the campaign is cut.
@@ -191,9 +233,10 @@ final class OpinionPolls
      * @param float                $campaignYears The part of the span inside the campaign's final days.
      * @param array<string, float> $swings        Short-term log swing by party.
      * @param array<string, float> $draws         Standard normal draw by party.
+     * @param array<string, float> $normals       Normal votes by party, which size each party's swing.
      * @return array<string, float>
      */
-    public static function fadeShortTerm(array $swings, float $years, float $campaignYears, array $draws, MathUtility $math): array
+    public static function fadeShortTerm(array $swings, float $years, float $campaignYears, array $draws, array $normals, MathUtility $math): array
     {
         $fade = self::fadeOver($years);
         $build = StochasticProcesses::persistentInnovationScale(self::fadeOver($campaignYears))
@@ -202,7 +245,7 @@ final class OpinionPolls
         $faded = [];
         foreach (AerieDiet::PARTIES as $party) {
             $faded[$party] = ($fade * ($swings[$party] ?? 0.0))
-                + (PoliticsEngine::swingSd(PoliticsEngine::ELECTION_SHORT_TERM_SWING_VARIANCE, $party) * $build * ($draws[$party] ?? 0.0));
+                + (PoliticsEngine::swingSd(PoliticsEngine::ELECTION_SHORT_TERM_SWING_VARIANCE, $normals[$party] ?? AerieDiet::SEED_VOTE_SHARES[$party]) * $build * ($draws[$party] ?? 0.0));
         }
 
         return $faded;

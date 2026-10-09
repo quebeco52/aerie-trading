@@ -148,8 +148,9 @@ class CoalitionFormationTest extends TestCase
 
     /**
      * The last vote's blocs carry over: in a Diet where a split on the size of the state and one on openness both hold
-     * (the Harbor and the Exchange at 35 seats each), whichever the parties declared last stands. At today's founding
-     * seats only the split on the size of the state holds, and a split on openness gives way to it.
+     * (the Harbor and the Exchange at 35 seats each), whichever the parties declared last stands. The founding seats,
+     * with the Harbor at 40, are such a Diet: the District opens split on the size of the state, and a split on
+     * openness, once declared, would hold as well.
      */
     public function testTheLastVotesBlocsCarryOver(): void
     {
@@ -168,7 +169,8 @@ class CoalitionFormationTest extends TestCase
         $this->assertSame($openAgainstClosed, Formation::declareBlocs($seats, Diet::HOME_POSITIONS, $openAgainstClosed));
         $this->assertSame(Diet::SEED_BLOCS, Formation::declareBlocs($seats, Diet::HOME_POSITIONS, Diet::SEED_BLOCS));
         $this->assertNotSame($openAgainstClosed, Diet::SEED_BLOCS);
-        $this->assertSame(Diet::SEED_BLOCS, Formation::declareBlocs(Diet::SEED_SEATS, Diet::HOME_POSITIONS, $openAgainstClosed));
+        $this->assertSame(Diet::SEED_BLOCS, Formation::declareBlocs(Diet::SEED_SEATS, Diet::HOME_POSITIONS, Diet::SEED_BLOCS));
+        $this->assertSame($openAgainstClosed, Formation::declareBlocs(Diet::SEED_SEATS, Diet::HOME_POSITIONS, $openAgainstClosed));
     }
 
     /** However the Diet stands, the declarations settle in two blocs, each party nearer its own bloc's centre and each bloc led by its largest party. */

@@ -34,6 +34,10 @@ class AssetMarketSubsystem
     public const FOREIGN_BUYER_TAX_DEMAND_SEMI_ELASTICITY = 11.47;
     /** Log of house values foreign demand holds up, all of which a tax that prices every foreign buyer out takes off: the 15% tax left prices 6% lower where foreign buyers bought (Pavlov, Somerville & Wetzel; West & Botsch 2020 find 2.4% within five months), ln(1 / 0.94) over the 82% of foreign demand it removed. The District is a financial centre, so its whole market is such a neighbourhood. */
     public const FOREIGN_BUYER_HOUSING_VALUE_SHARE = 0.0754;
+    /** Foreign buyers' share of home purchases with no tax: 9.5% of transactions in the six weeks before British Columbia's 2016 tax (Pavlov, Somerville & Wetzel). */
+    public const FOREIGN_BUYER_PURCHASE_SHARE = 0.095;
+    /** Homes sold a year as a share of GDP, the base the tax on foreign buyers is levied on: British Columbia's 20% tax raised C$35-40 million a year in 2018-20 (budget 2018 projections) on about C$295 billion of GDP, over the 20% and the foreign share it left (9.5% e^(-11.47 x 0.2)), 6.6%. */
+    public const HOME_SALES_TO_GDP = 0.066;
 
     // --- Green Belts (Hilber & Vermeulen 2016, EJ: 353 English planning authorities, 1974-2008) ---
     /** Mean refusal rate of major residential schemes (ten or more homes) across English planning authorities, 1979-2008 (Table 1). */
@@ -985,6 +989,20 @@ class AssetMarketSubsystem
     public static function foreignBuyerPriceFactor(float $taxRate): float
     {
         return exp(-self::FOREIGN_BUYER_HOUSING_VALUE_SHARE * (1.0 - exp(-self::FOREIGN_BUYER_TAX_DEMAND_SEMI_ELASTICITY * max(0.0, $taxRate))));
+    }
+
+    /**
+     * What the tax on foreign buyers raises a year, a share of GDP: the rate on the homes foreign buyers still buy, their
+     * share falling exponentially in the tax (foreignBuyerPriceFactor()), so the take peaks near a tenth and all but
+     * vanishes at the strictest rates, which work by keeping the buyers out.
+     *
+     * @param float $taxRate The tax, a share of the price.
+     */
+    public static function foreignBuyerTaxRevenueToGdp(float $taxRate): float
+    {
+        $rate = max(0.0, $taxRate);
+
+        return $rate * self::FOREIGN_BUYER_PURCHASE_SHARE * exp(-self::FOREIGN_BUYER_TAX_DEMAND_SEMI_ELASTICITY * $rate) * self::HOME_SALES_TO_GDP;
     }
 
     /**

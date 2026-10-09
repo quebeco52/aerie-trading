@@ -68,7 +68,8 @@ final class ElectionForecast
                 $state->pollAverage === [] ? $state->dietVoteShares : $state->pollAverage,
                 $state->pollAverageVariance,
                 end($state->polls)['shares'],
-                $time - $since
+                $time - $since,
+                $state->normalVoteShares
             );
             $state->pollAveragedAt = $time;
         }
@@ -91,9 +92,10 @@ final class ElectionForecast
      * @param array<string, float> $average  The average by party.
      * @param array<string, float> $variance Its variance by party, in shares squared.
      * @param array<string, float> $poll     The poll by party.
+     * @param array<string, float> $normals  Normal votes by party.
      * @return array{0: array<string, float>, 1: array<string, float>}
      */
-    public static function pool(array $average, array $variance, array $poll, float $years): array
+    public static function pool(array $average, array $variance, array $poll, float $years, array $normals): array
     {
         $persistence = PoliticsEngine::ELECTION_NORMAL_VOTE_PERSISTENCE ** max(0.0, $years);
         $termPersistence = PoliticsEngine::ELECTION_NORMAL_VOTE_PERSISTENCE ** PoliticsEngine::ELECTION_TERM_YEARS;
@@ -101,11 +103,13 @@ final class ElectionForecast
         $pooled = [];
         $left = [];
         foreach (AerieDiet::PARTIES as $party) {
-            $normal = AerieDiet::SEED_VOTE_SHARES[$party];
+            $normal = $normals[$party] ?? AerieDiet::SEED_VOTE_SHARES[$party];
             $share = max(PoliticsEngine::MIN_VOTE_SHARE, $average[$party] ?? $normal);
             $predicted = $normal * exp($persistence * log($share / $normal));
-            // The lasting drift's variance over the step (OpinionPolls::driftLasting()), in shares.
-            $drift = ($predicted ** 2) * PoliticsEngine::LASTING_SWING_VARIANCE / $normal / (1.0 - ($termPersistence ** 2)) * (1.0 - ($persistence ** 2));
+            // The lasting drift's variance over the step (OpinionPolls::driftLasting()) and the normal vote's
+            // (OpinionPolls::walkNormals()), in shares.
+            $drift = ($predicted ** 2) * ((PoliticsEngine::LASTING_SWING_VARIANCE / (1.0 - ($termPersistence ** 2)) * (1.0 - ($persistence ** 2)))
+                + (PoliticsEngine::NORMAL_VOTE_DRIFT_VARIANCE * max(0.0, $years))) / $normal;
             $prior = ($variance[$party] ?? 0.0) + $drift;
             $error = $predicted * (1.0 - $predicted) / OpinionPolls::EFFECTIVE_SAMPLE_SIZE;
             $gain = $prior / ($prior + $error);
@@ -137,7 +141,7 @@ final class ElectionForecast
         $outcomes = [];
         for ($pair = 0; $pair < intdiv(self::SCENARIOS, 2); ++$pair) {
             $z = [];
-            for ($i = 0; $i < (4 * count(AerieDiet::PARTIES)) + 1; ++$i) {
+            for ($i = 0; $i < (5 * count(AerieDiet::PARTIES)) + 1; ++$i) {
                 $z[] = $draws->generateStandardNormal();
             }
             foreach ([1.0, -1.0] as $sign) {
@@ -265,7 +269,7 @@ final class ElectionForecast
      * campaign's short-term swings.
      *
      * @param array<string, float> $average The poll average by party.
-     * @param list<float>          $z       Standard normal draws: per party the average's error, the lasting drift and the short-term swing, then the residual.
+     * @param list<float>          $z       Standard normal draws: per party the average's error, the lasting drift and the short-term swing, then the residual, then per party the unsettled misreading and the normal vote's walk.
      * @return array<string, float>
      */
     private static function outcome(PoliticsState $state, array $average, float $years, float $termLeft, float $campaign, array $z, MathUtility $math): array
@@ -290,11 +294,17 @@ final class ElectionForecast
             $unsettled[$party] = OpinionPolls::unsettledMisreading($start[$party], $years, $z[(3 * $count) + 1 + $index]);
         }
         $start = PoliticsEngine::applyShortTermShocks($start, $unsettled);
-        $lasting = OpinionPolls::driftLasting($start, OpinionPolls::driftYears($state, $state->totalTime, $state->totalTime + $years), $lastingDraws, $math);
+        // The normal votes walk on to the day, carrying the parties' support with them.
+        $normalDraws = [];
+        foreach ($parties as $index => $party) {
+            $normalDraws[$party] = $z[(4 * $count) + 1 + $index];
+        }
+        [$normals, $start] = OpinionPolls::walkNormals($state->normalVoteShares, $start, $years, $normalDraws);
+        $lasting = OpinionPolls::driftLasting($start, OpinionPolls::driftYears($state, $state->totalTime, $state->totalTime + $years), $lastingDraws, $normals, $math);
         $swing = PoliticsEngine::economicVote(0.0, 0.0, $z[3 * $count], count(AerieDiet::governingParties($state->governingCoalition)) === 1, $termLeft);
         $moved = PoliticsEngine::applyIncumbentSwing($lasting, $state->governingCoalition, $swing, $state->supportParties);
 
-        return PoliticsEngine::applyShortTermShocks($moved, OpinionPolls::fadeShortTerm([], $years, $campaign, $shortTermDraws, $math));
+        return PoliticsEngine::applyShortTermShocks($moved, OpinionPolls::fadeShortTerm([], $years, $campaign, $shortTermDraws, $normals, $math));
     }
 
     /**

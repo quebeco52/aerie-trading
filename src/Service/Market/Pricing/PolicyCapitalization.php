@@ -36,35 +36,35 @@ use App\Service\Politics\PoliticsEngine;
  */
 final class PolicyCapitalization
 {
-    // --- Past the Next Term (the Diet's own long runs: 16 games of 200 years on the macro loop beside the politics, var/harness/polls/lever_means.php) ---
-    /** The corporate tax shift in force on average over the long run: -0.61 points (se 0.18). */
-    public const LONG_RUN_CORPORATE_TAX_SHIFT = -0.0061;
-    /** Share of the corporate tax shift's distance from that average still there a term later: its four-year autocorrelation, 0.507 (sd across games 0.12). */
-    public const CORPORATE_TAX_TERM_PERSISTENCE = 0.507;
-    /** The bank levy in force on average over the long run: 0.085% (se 0.006%). */
-    public const LONG_RUN_BANK_LEVY_RATE = 0.00085;
-    /** Share of the bank levy's distance from that average still there a term later: 0.507 (sd across games 0.11). */
-    public const BANK_LEVY_TERM_PERSISTENCE = 0.507;
-    /** The cost factor the rules on extraction put on each unit on average over the long run (FirmEconomics::calculateExtractionCostFactor()): 1.0035 (se 0.0004). */
-    public const LONG_RUN_EXTRACTION_COST_FACTOR = 1.0035;
-    /** Share of that factor's distance from its average still there a term later: 0.518 (sd across games 0.19). */
-    public const EXTRACTION_COST_TERM_PERSISTENCE = 0.518;
-    /** The share turnover the stamp duty leaves on average over the long run, against the founding duty's (MacroTransmission::calculateStampDutyVolumeFactor()): 0.947 (se 0.003). */
-    public const LONG_RUN_STAMP_DUTY_VOLUME_FACTOR = 0.947;
-    /** Share of that factor's distance from its average still there a term later: 0.426 (sd across games 0.11), the duty being no revenue the Council guards. */
-    public const STAMP_DUTY_VOLUME_TERM_PERSISTENCE = 0.426;
+    // --- Past the Next Term (the Diet's own long runs: 16 games of 200 years on the macro loop beside the politics, var/harness/polls/lever_means.php, runs_sg; the carbon pair from an earlier run) ---
+    /** The corporate tax shift in force on average over the long run: -0.05 points (se 0.05). */
+    public const LONG_RUN_CORPORATE_TAX_SHIFT = -0.0005;
+    /** Share of the corporate tax shift's distance from that average still there a term later: its four-year autocorrelation, 0.656 (sd across games 0.19). */
+    public const CORPORATE_TAX_TERM_PERSISTENCE = 0.656;
+    /** The bank levy in force on average over the long run: 0.054% (se 0.006%). */
+    public const LONG_RUN_BANK_LEVY_RATE = 0.00054;
+    /** Share of the bank levy's distance from that average still there a term later: 0.643 (sd across games 0.21). */
+    public const BANK_LEVY_TERM_PERSISTENCE = 0.643;
+    /** The cost factor the rules on extraction put on each unit on average over the long run (FirmEconomics::calculateExtractionCostFactor()): 1.0034 (se 0.0009). */
+    public const LONG_RUN_EXTRACTION_COST_FACTOR = 1.0034;
+    /** Share of that factor's distance from its average still there a term later: 0.657 (sd across games 0.27). */
+    public const EXTRACTION_COST_TERM_PERSISTENCE = 0.657;
+    /** The share turnover the stamp duty leaves on average over the long run, against the founding duty's (MacroTransmission::calculateStampDutyVolumeFactor()): 0.967 (se 0.004). */
+    public const LONG_RUN_STAMP_DUTY_VOLUME_FACTOR = 0.967;
+    /** Share of that factor's distance from its average still there a term later: 0.586 (sd across games 0.18), the duty being no revenue the Council guards. */
+    public const STAMP_DUTY_VOLUME_TERM_PERSISTENCE = 0.586;
     /** What the carbon price adds to the power price on average over the long run, as a share of it (CommodityLogisticsSubsystem::carbonPowerPriceUplift()): 4.11% (se 0.43%), a carbon price of $6.1 a tonne. */
     public const LONG_RUN_CARBON_POWER_UPLIFT = 0.0411;
     /** Share of that uplift's distance from its average still there a term later: 0.597 (sd across games 0.19). */
     public const CARBON_POWER_TERM_PERSISTENCE = 0.597;
-    /** Government purchases above the founding level on average over the long run, as a fraction (measure()): -2.55% (se 0.40%), the Council's brake holding rises above the debt line and letting cuts through. */
-    public const LONG_RUN_PUBLIC_SPENDING_SHIFT = -0.0255;
-    /** Share of that shift's distance from its average still there a term later: 0.458 (sd across games 0.14). */
-    public const PUBLIC_SPENDING_TERM_PERSISTENCE = 0.458;
-    /** The tax on dividends in force on average over the long run: 15.5% (se 1.0%), the founding 15% give or take. */
-    public const LONG_RUN_DIVIDEND_TAX_RATE = 0.155;
-    /** Share of the tax on dividends' distance from that average still there a term later: 0.583 (sd across games 0.17). */
-    public const DIVIDEND_TAX_TERM_PERSISTENCE = 0.583;
+    /** Government purchases above the founding level on average over the long run, as a fraction (measure()): -0.54% (se 0.15%), the Council's brake holding rises above the debt line and letting cuts through. */
+    public const LONG_RUN_PUBLIC_SPENDING_SHIFT = -0.0054;
+    /** Share of that shift's distance from its average still there a term later: 0.670 (sd across games 0.24). */
+    public const PUBLIC_SPENDING_TERM_PERSISTENCE = 0.670;
+    /** The tax on dividends in force on average over the long run: 8.8% (se 0.7%), below the founding 15% since the Diet can only cut it. */
+    public const LONG_RUN_DIVIDEND_TAX_RATE = 0.088;
+    /** Share of the tax on dividends' distance from that average still there a term later: 0.697 (sd across games 0.20). */
+    public const DIVIDEND_TAX_TERM_PERSISTENCE = 0.697;
 
     // --- Laws Priced per Firm ---
     /** The laws a firm's own accounts answer to, keyed as PoliticsEngine::LEVER_FIELDS; the corporate tax reaches every firm through its effective rate instead. */

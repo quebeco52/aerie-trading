@@ -24,14 +24,14 @@ class ElectionForecastTest extends TestCase
         $average = Diet::SEED_VOTE_SHARES;
         $poll = array_merge($average, [Diet::CIVIC => $average[Diet::CIVIC] + 0.03, Diet::VANGUARD => $average[Diet::VANGUARD] - 0.03]);
 
-        [$certain] = ElectionForecast::pool($average, array_fill_keys(Diet::PARTIES, 0.0), $poll, 0.0);
+        [$certain] = ElectionForecast::pool($average, array_fill_keys(Diet::PARTIES, 0.0), $poll, 0.0, Diet::SEED_VOTE_SHARES);
         $this->assertEqualsWithDelta($average[Diet::CIVIC], $certain[Diet::CIVIC], 1e-12, 'An average with no uncertainty and no time to drift ignores the poll.');
 
-        [$vague] = ElectionForecast::pool($average, array_fill_keys(Diet::PARTIES, 1.0), $poll, 0.0);
+        [$vague] = ElectionForecast::pool($average, array_fill_keys(Diet::PARTIES, 1.0), $poll, 0.0, Diet::SEED_VOTE_SHARES);
         $this->assertEqualsWithDelta($poll[Diet::CIVIC], $vague[Diet::CIVIC], 1e-3, 'An average with no idea takes the poll.');
 
         $prior = 0.0004;
-        [$pooled, $left] = ElectionForecast::pool($average, array_fill_keys(Diet::PARTIES, $prior), $poll, 0.0);
+        [$pooled, $left] = ElectionForecast::pool($average, array_fill_keys(Diet::PARTIES, $prior), $poll, 0.0, Diet::SEED_VOTE_SHARES);
         $p = $average[Diet::CIVIC];
         $gain = $prior / ($prior + ($p * (1.0 - $p) / OpinionPolls::EFFECTIVE_SAMPLE_SIZE));
         $this->assertEqualsWithDelta((1.0 - $gain) * $prior, $left[Diet::CIVIC], 1e-15);
@@ -39,8 +39,15 @@ class ElectionForecastTest extends TestCase
         $this->assertLessThan($poll[Diet::CIVIC], $pooled[Diet::CIVIC]);
         $this->assertEqualsWithDelta(1.0, array_sum($pooled), 1e-12);
 
-        [, $drifted] = ElectionForecast::pool($average, array_fill_keys(Diet::PARTIES, $prior), $poll, 1.0);
+        [, $drifted] = ElectionForecast::pool($average, array_fill_keys(Diet::PARTIES, $prior), $poll, 1.0, Diet::SEED_VOTE_SHARES);
         $this->assertGreaterThan($left[Diet::CIVIC], $drifted[Diet::CIVIC], 'A year since the last poll leaves more to learn.');
+
+        // The year's drift: the lasting share's and the normal vote's, each over the normal vote.
+        $persistence = Politics::ELECTION_NORMAL_VOTE_PERSISTENCE;
+        $termPersistence = $persistence ** Politics::ELECTION_TERM_YEARS;
+        $stepPrior = $prior + (($p ** 2) * ((Politics::LASTING_SWING_VARIANCE / (1.0 - ($termPersistence ** 2)) * (1.0 - ($persistence ** 2))) + Politics::NORMAL_VOTE_DRIFT_VARIANCE) / $p);
+        $stepGain = $stepPrior / ($stepPrior + ($p * (1.0 - $p) / OpinionPolls::EFFECTIVE_SAMPLE_SIZE));
+        $this->assertEqualsWithDelta((1.0 - $stepGain) * $stepPrior, $drifted[Diet::CIVIC], 1e-15, 'The normal vote\'s walk adds to what a year leaves uncertain.');
     }
 
     /** The odds are the cabinets the talks seat, as often as they seat them; a party with a majority governs alone for certain. */

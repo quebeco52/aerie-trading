@@ -20,6 +20,52 @@ class OpinionPollsTest extends TestCase
     /** The first vote on the calendar. */
     private const ELECTION_AT = Politics::ELECTION_TERM_YEARS;
 
+    /**
+     * The normal votes take a neutral step, a share's variance times the years, and are put back on a whole; with no
+     * draw nothing moves. The lasting shares move with their normals, keeping each party's lead on its normal vote.
+     */
+    public function testTheNormalVotesWalkAndCarryTheLastingShares(): void
+    {
+        $normals = Diet::SEED_VOTE_SHARES;
+        $lasting = array_merge($normals, [Diet::CIVIC => $normals[Diet::CIVIC] + 0.02, Diet::VANGUARD => $normals[Diet::VANGUARD] - 0.02]);
+        [$still, $unmoved] = OpinionPolls::walkNormals($normals, $lasting, 4.0, []);
+        foreach (Diet::PARTIES as $party) {
+            $this->assertEqualsWithDelta($normals[$party], $still[$party], 1e-15, $party);
+            $this->assertEqualsWithDelta($lasting[$party], $unmoved[$party], 1e-15, $party);
+        }
+
+        $n = $normals[Diet::CIVIC];
+        $step = sqrt(Politics::NORMAL_VOTE_DRIFT_VARIANCE * 2.0 * $n);
+        [$walked, $carried] = OpinionPolls::walkNormals($normals, $lasting, 2.0, [Diet::CIVIC => 1.0]);
+        $this->assertEqualsWithDelta(($n + $step) / (1.0 + $step), $walked[Diet::CIVIC], 1e-15, 'The step, then back on a whole.');
+        $this->assertEqualsWithDelta($normals[Diet::VANGUARD] / (1.0 + $step), $walked[Diet::VANGUARD], 1e-15);
+        $this->assertEqualsWithDelta(1.0, array_sum($walked), 1e-12);
+        $this->assertEqualsWithDelta(1.0, array_sum($carried), 1e-12);
+        $lead = static fn(array $shares, array $normal): float => log($shares[Diet::CIVIC] / $normal[Diet::CIVIC]) - log($shares[Diet::VANGUARD] / $normal[Diet::VANGUARD]);
+        $this->assertEqualsWithDelta($lead($lasting, $normals), $lead($carried, $walked), 1e-12, 'The lead on the normal vote is carried, not reset.');
+
+        [$floored] = OpinionPolls::walkNormals($normals, [], 100.0, [Diet::COMMON_LOT => -50.0]);
+        $this->assertGreaterThanOrEqual(Politics::MIN_VOTE_SHARE * 0.99, $floored[Diet::COMMON_LOT], 'A collapsing party is kept a rump.');
+    }
+
+    /** Through a term the normal votes walk with the polls' clock, and the vote is cast against the walked normals. */
+    public function testTheNormalVotesWalkThroughATerm(): void
+    {
+        mt_srand(9);
+        $engine = new Politics(MathUtility::ownStream(9), $this->inMemoryRedis());
+        $state = $this->termStart();
+        for ($tick = 1; $tick <= 4 * 48; ++$tick) {
+            $engine->advance($state, $this->economy($tick / 48.0), 1.0 / 48.0);
+        }
+        $this->assertEqualsWithDelta(1.0, array_sum($state->normalVoteShares), 1e-12);
+        $moved = 0.0;
+        foreach (Diet::PARTIES as $party) {
+            $moved += abs($state->normalVoteShares[$party] - Diet::SEED_VOTE_SHARES[$party]);
+        }
+        $this->assertGreaterThan(0.0, $moved, 'A term on, the normals have moved.');
+        $this->assertLessThan(0.15, $moved, 'But only as far as a term of the walk takes them.');
+    }
+
     /** A lasting lead on the normal vote decays by a term's persistence over a term, a draw moves the party by a term's lasting swing, and the Diet at its normal votes stays there. */
     public function testALastingLeadDriftsBackTowardTheNormalVote(): void
     {
@@ -27,10 +73,10 @@ class OpinionPollsTest extends TestCase
         $persistence = Politics::ELECTION_NORMAL_VOTE_PERSISTENCE ** Politics::ELECTION_TERM_YEARS;
         $lead = static fn(array $shares): float => log($shares[Diet::CIVIC] / $shares[Diet::VANGUARD]) - log(Diet::SEED_VOTE_SHARES[Diet::CIVIC] / Diet::SEED_VOTE_SHARES[Diet::VANGUARD]);
 
-        $atNormal = OpinionPolls::driftLasting(Diet::SEED_VOTE_SHARES, array_fill_keys(Diet::PARTIES, Politics::ELECTION_TERM_YEARS), [], $math);
+        $atNormal = OpinionPolls::driftLasting(Diet::SEED_VOTE_SHARES, array_fill_keys(Diet::PARTIES, Politics::ELECTION_TERM_YEARS), [], Diet::SEED_VOTE_SHARES, $math);
         $ahead = [Diet::CIVIC => Diet::SEED_VOTE_SHARES[Diet::CIVIC] + 0.08, Diet::VANGUARD => Diet::SEED_VOTE_SHARES[Diet::VANGUARD] - 0.08] + Diet::SEED_VOTE_SHARES;
-        $reverted = OpinionPolls::driftLasting($ahead, array_fill_keys(Diet::PARTIES, Politics::ELECTION_TERM_YEARS), [], $math);
-        $swung = OpinionPolls::driftLasting(Diet::SEED_VOTE_SHARES, array_fill_keys(Diet::PARTIES, Politics::ELECTION_TERM_YEARS), [Diet::CIVIC => 1.0], $math);
+        $reverted = OpinionPolls::driftLasting($ahead, array_fill_keys(Diet::PARTIES, Politics::ELECTION_TERM_YEARS), [], Diet::SEED_VOTE_SHARES, $math);
+        $swung = OpinionPolls::driftLasting(Diet::SEED_VOTE_SHARES, array_fill_keys(Diet::PARTIES, Politics::ELECTION_TERM_YEARS), [Diet::CIVIC => 1.0], Diet::SEED_VOTE_SHARES, $math);
 
         foreach (Diet::PARTIES as $party) {
             $this->assertEqualsWithDelta(Diet::SEED_VOTE_SHARES[$party], $atNormal[$party], 1e-12);
@@ -39,7 +85,7 @@ class OpinionPollsTest extends TestCase
         $this->assertEqualsWithDelta($persistence * $lead($ahead), $lead($reverted), 1e-12);
         $this->assertLessThan($ahead[Diet::CIVIC], $reverted[Diet::CIVIC]);
         $this->assertGreaterThan(Diet::SEED_VOTE_SHARES[Diet::CIVIC], $reverted[Diet::CIVIC]);
-        $this->assertEqualsWithDelta(Politics::swingSd(Politics::LASTING_SWING_VARIANCE, Diet::CIVIC), $lead($swung), 1e-12, 'A term in one step takes the vote\'s lasting swing.');
+        $this->assertEqualsWithDelta(Politics::swingSd(Politics::LASTING_SWING_VARIANCE, Diet::SEED_VOTE_SHARES[Diet::CIVIC]), $lead($swung), 1e-12, 'A term in one step takes the vote\'s lasting swing.');
     }
 
     /** A term walked a month at a time drifts back as far, and spreads the parties as far, as a term in one step. */
@@ -50,9 +96,9 @@ class OpinionPollsTest extends TestCase
         $quiet = new MathUtility();
         $stepped = $ahead;
         for ($month = 0; $month < $months; ++$month) {
-            $stepped = OpinionPolls::driftLasting($stepped, array_fill_keys(Diet::PARTIES, 1.0 / 12.0), [], $quiet);
+            $stepped = OpinionPolls::driftLasting($stepped, array_fill_keys(Diet::PARTIES, 1.0 / 12.0), [], Diet::SEED_VOTE_SHARES, $quiet);
         }
-        $whole = OpinionPolls::driftLasting($ahead, array_fill_keys(Diet::PARTIES, Politics::ELECTION_TERM_YEARS), [], $quiet);
+        $whole = OpinionPolls::driftLasting($ahead, array_fill_keys(Diet::PARTIES, Politics::ELECTION_TERM_YEARS), [], Diet::SEED_VOTE_SHARES, $quiet);
         foreach (Diet::PARTIES as $party) {
             $this->assertEqualsWithDelta($whole[$party], $stepped[$party], 1e-12);
         }
@@ -67,7 +113,7 @@ class OpinionPollsTest extends TestCase
                 foreach (Diet::PARTIES as $party) {
                     $draws[$party] = $math->generateStandardNormal();
                 }
-                $shares = OpinionPolls::driftLasting($shares, array_fill_keys(Diet::PARTIES, 1.0 / 12.0), $draws, $math);
+                $shares = OpinionPolls::driftLasting($shares, array_fill_keys(Diet::PARTIES, 1.0 / 12.0), $draws, Diet::SEED_VOTE_SHARES, $math);
             }
             $gaps[] = log($shares[Diet::CIVIC] / $shares[Diet::VANGUARD]) - log(Diet::SEED_VOTE_SHARES[Diet::CIVIC] / Diet::SEED_VOTE_SHARES[Diet::VANGUARD]);
         }
@@ -81,17 +127,17 @@ class OpinionPollsTest extends TestCase
     public function testTheShortTermSwingBuildsInTheCampaignAndFadesAfter(): void
     {
         $math = new MathUtility();
-        $faded = OpinionPolls::fadeShortTerm([Diet::CIVIC => 0.2], OpinionPolls::POST_VOTE_HALF_LIFE_YEARS, 0.0, [Diet::CIVIC => 1.0], $math);
+        $faded = OpinionPolls::fadeShortTerm([Diet::CIVIC => 0.2], OpinionPolls::POST_VOTE_HALF_LIFE_YEARS, 0.0, [Diet::CIVIC => 1.0], Diet::SEED_VOTE_SHARES, $math);
         $this->assertEqualsWithDelta(0.1, $faded[Diet::CIVIC], 1e-12);
         $this->assertSame(0.0, $faded[Diet::VANGUARD]);
 
         $campaign = OpinionPolls::CAMPAIGN_SWING_DAYS / FinancialConstants::DAYS_PER_YEAR;
-        $whole = OpinionPolls::fadeShortTerm([], $campaign, $campaign, [Diet::CIVIC => 1.0], $math)[Diet::CIVIC];
-        $this->assertEqualsWithDelta(Politics::swingSd(Politics::ELECTION_SHORT_TERM_SWING_VARIANCE, Diet::CIVIC), $whole, 1e-12);
+        $whole = OpinionPolls::fadeShortTerm([], $campaign, $campaign, [Diet::CIVIC => 1.0], Diet::SEED_VOTE_SHARES, $math)[Diet::CIVIC];
+        $this->assertEqualsWithDelta(Politics::swingSd(Politics::ELECTION_SHORT_TERM_SWING_VARIANCE, Diet::SEED_VOTE_SHARES[Diet::CIVIC]), $whole, 1e-12);
 
         // Two halves: the first's swing, faded through the second, and the second's add to the whole's variance.
-        $half = OpinionPolls::fadeShortTerm([], $campaign / 2.0, $campaign / 2.0, [Diet::CIVIC => 1.0], $math)[Diet::CIVIC];
-        $carried = OpinionPolls::fadeShortTerm([Diet::CIVIC => $half], $campaign / 2.0, $campaign / 2.0, [], $math)[Diet::CIVIC];
+        $half = OpinionPolls::fadeShortTerm([], $campaign / 2.0, $campaign / 2.0, [Diet::CIVIC => 1.0], Diet::SEED_VOTE_SHARES, $math)[Diet::CIVIC];
+        $carried = OpinionPolls::fadeShortTerm([Diet::CIVIC => $half], $campaign / 2.0, $campaign / 2.0, [], Diet::SEED_VOTE_SHARES, $math)[Diet::CIVIC];
         $this->assertEqualsWithDelta($whole ** 2, ($carried ** 2) + ($half ** 2), 1e-12);
     }
 

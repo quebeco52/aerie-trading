@@ -205,6 +205,8 @@ class PoliticsState
     /** @var array<string, float> */
     public array $supportLasting;
     /** @var array<string, float> */
+    public array $normalVoteShares;
+    /** @var array<string, float> */
     public array $supportIncumbency;
     /** @var array<string, float> */
     public array $supportDriftYears;

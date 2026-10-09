@@ -33,8 +33,8 @@ class MacroEngine
     public const MIN_NATURAL_RATE = 0.005;
     /** Structural upper bound ceiling for natural real rate. */
     public const MAX_NATURAL_RATE = 0.035;
-    /** The baseline corporate tax rate for standard physical companies. */
-    public const BASE_CORPORATE_TAX_RATE = 0.21;
+    /** The corporate tax rate firms pay at the founding: Singapore's 17% (since 2010, IRAS), the financial centre the District's tax laws are set against. The budget's tax take is TARGET_CORPORATE_TAX_RATE. */
+    public const BASE_CORPORATE_TAX_RATE = 0.17;
     /** The baseline historical equity risk premium expected over risk-free assets. */
     public const BASE_EQUITY_RISK_PREMIUM = 0.045;
     /** The discount to the policy rate representing the yield on corporate treasury cash. */
@@ -157,7 +157,7 @@ class MacroEngine
     public const HY_BASE_SPREAD_MULTIPLIER = 3.3;
 
     // --- Barro Tax-Smoothing & Automatic Fiscal Stabilizers (Barro 1979) ---
-    /** Structural baseline statutory corporate tax rate. */
+    /** The budget's founding tax take and the purchases it pays for, each 21% of GDP: the whole budget, whose cyclical and structural parts move as the corporate rate firms pay does (CreditFiscalSubsystem::calculateDynamicFiscalPolicy()), that rate founded BASE_CORPORATE_TAX_RATE below it. */
     public const TARGET_CORPORATE_TAX_RATE = 0.21;
     /** Adjustment speed of the effective tax burden toward its cyclical target (half-life 0.7y), fitted with CreditFiscalSubsystem::FISCAL_STABILIZER_SENSITIVITY; shared, as the market prices how fast a law reaches the rate (App\Service\Market\Pricing\PolicyCapitalization). */
     public const FISCAL_ADJUSTMENT_SPEED = 1.0;

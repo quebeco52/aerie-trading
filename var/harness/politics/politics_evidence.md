@@ -52,3 +52,40 @@ Debt above 90%: 25.7% -> 21.7% of quarters (t -4.1); off arm 68.5% -> 66.7% (t -
 
 Caveats: T1 moved -0.55pp with t -3.0 at 16 (2-se band -0.2 to -0.9pp, small next to 0.86); not taken to 48 per the brief.
 The 8-seed stage had gap sd +0.0003 (t +2.0), which flipped to -0.0002 at 16: noise. A brake line of 0.66 occurs (1.9%).
+
+## Normal-vote drift (2026-10-09)
+
+**Data:** ParlGov, Western Europe from 1945, parties averaging 5% or more of the vote. The normal-weighted half mean squared log
+change keeps rising with the gap:
+
+| Gap (years) | 20 | 40 | 60 | 70 |
+|---|---|---|---|---|
+| Half MSE × normal × 1e3 | 24.6 | 32.5 | 42.1 | 48.4 |
+
+These are 5-year bins (`long_vario.py`). The Nordic series levels off at about 22.
+
+**The walk on top of the Diet's short run** (short 1.2, lasting 19.1, φ 0.905): 0.341e-3 a year, bootstrap se 0.157, 95%
+0.09–0.65. The free three-term fit gives the same walk with lasting 15.0. So `LASTING_SWING_VARIANCE` drops from 0.0118 to 0.0095,
+taking what the walk adds over a term out of the lasting swing.
+
+**Mechanism:** `OpinionPolls::walkNormals`.
+- Neutral share drift (Kimura): step variance V·years·n, then renormalised. The lasting share is carried with its normal.
+- The forecast pools the walk's variance and draws a walk to the vote.
+- Swing sizes read the current normal.
+
+**16 seeds × 200 years, NEW − BASE** (`walk_16.out` is the unselected version; the table below is with the selection):
+
+| Gap | Base | New | Δ (se, t) | West |
+|---|---|---|---|---|
+| 4 years | 7.86 | 9.28 | +1.42 (0.36, 3.9) | 7.3 |
+| 20 years | 17.85 | 22.37 | +4.52 (1.23, 3.7) | 20.3 |
+| 40 years | 20.07 | 28.79 | +8.72 (1.84, 4.7) | 32.0 |
+| 80 years | 19.45 | 38.41 | +18.96 (2.90) | — |
+| Pedersen | 12.72 | 13.43 | +0.71 (0.30) | — |
+
+- Over the first 76 years only, the 4-year change is +0.95 (t 1.5).
+- The walk delivers V·n(1 − n) after renormalising (Wright-Fisher), a little under the fitted V·n for big parties. That is part
+  of why 40 years sits at 28.8 rather than 32.
+
+**Beyond the data:** by year 200 the effective number of parties falls from 4.53 to 4.26. The largest party averages 0.39, and in
+one game of 16 it reaches 0.72. Party entry (deferred) is what refills a real system.

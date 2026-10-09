@@ -94,25 +94,25 @@ final class AerieDiet
     public const SUPERMAJORITY_SEATS = 225;
     /** Seats at the founding. */
     public const SEED_SEATS = [
-        self::CIVIC => 94.0,
-        self::VANGUARD => 95.0,
-        self::IRON_HARBOR => 25.0,
-        self::EXCHANGE => 25.0,
-        self::CHARTISTS => 20.0,
-        self::COMMON_LOT => 8.0,
-        self::TIDELINE => 8.0,
-        self::NEW_HORIZON => 25.0,
+        self::CIVIC => 84.0,
+        self::VANGUARD => 90.0,
+        self::IRON_HARBOR => 40.0,
+        self::EXCHANGE => 20.0,
+        self::CHARTISTS => 25.0,
+        self::COMMON_LOT => 6.0,
+        self::TIDELINE => 5.0,
+        self::NEW_HORIZON => 30.0,
     ];
     /** Vote shares at the founding, the founding seats over the Diet: each party's normal vote, the share its lasting support is pulled back toward (Converse 1966). */
     public const SEED_VOTE_SHARES = [
-        self::CIVIC => 94.0 / 300.0,
-        self::VANGUARD => 95.0 / 300.0,
-        self::IRON_HARBOR => 25.0 / 300.0,
-        self::EXCHANGE => 25.0 / 300.0,
-        self::CHARTISTS => 20.0 / 300.0,
-        self::COMMON_LOT => 8.0 / 300.0,
-        self::TIDELINE => 8.0 / 300.0,
-        self::NEW_HORIZON => 25.0 / 300.0,
+        self::CIVIC => 84.0 / 300.0,
+        self::VANGUARD => 90.0 / 300.0,
+        self::IRON_HARBOR => 40.0 / 300.0,
+        self::EXCHANGE => 20.0 / 300.0,
+        self::CHARTISTS => 25.0 / 300.0,
+        self::COMMON_LOT => 6.0 / 300.0,
+        self::TIDELINE => 5.0 / 300.0,
+        self::NEW_HORIZON => 30.0 / 300.0,
     ];
     /** The blocs the founding Diet votes in, by the leader of each party's bloc: the parties split around the two largest (App\Service\Politics\CoalitionFormation::declareBlocs). */
     public const SEED_BLOCS = [

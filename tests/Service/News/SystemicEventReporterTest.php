@@ -258,7 +258,7 @@ class SystemicEventReporterTest extends TestCase
 
             $headline = $this->reporter(bufferedPrice: null)->report(new MacroStateDTO(totalTime: 4.5), $passed, $this->benchmarkAt('100'));
             $this->assertNotNull($headline);
-            $this->assertStringContainsString('18.4%', $headline['description']);
+            $this->assertStringContainsString('14.4%', $headline['description'], 'The founding 17% less the 2.6-point cut.');
             $this->assertStringNotContainsString('{', $headline['description']);
         }
     }

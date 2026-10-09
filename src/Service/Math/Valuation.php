@@ -52,8 +52,8 @@ final class Valuation
     public const ACCRUALS_ANOMALY_PE_PENALTY_SCALE = 8.0;
 
     // --- Investor Taxes (Brennan 1970; Chetty & Saez 2005) ---
-    /** Share of listed equity held in taxable accounts, the holders a tax on dividends reaches: 24.2% of US corporate stock in 2015 (Rosenthal & Austin 2016); the rest sits in retirement accounts, with foreigners and with nonprofits. */
-    public const TAXABLE_EQUITY_SHARE = 0.242;
+    /** Share of listed equity held by the District's own taxable holders, the holders a tax on dividends reaches: 20%. A financial centre's listed shares are largely foreign-held (identified owners 2017: Singapore 39% foreign against 27% domestic, Hong Kong 62% against 11%, the US 16% against 65%; OECD 2019, Owners of the World's Listed Companies), so below the US's 24.2% in taxable accounts (Rosenthal & Austin 2016). */
+    public const TAXABLE_EQUITY_SHARE = 0.20;
     /** Tax on dividends at the founding: the US 15% on qualified dividends in 2009, the rate the calibrated equity returns were earned under. */
     public const FOUNDING_DIVIDEND_TAX_RATE = 0.15;
     /** Tax on capital gains, the US 15% long-term rate in 2009; the Diet does not set it. */
