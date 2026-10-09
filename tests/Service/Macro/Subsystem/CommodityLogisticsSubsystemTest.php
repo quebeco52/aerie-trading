@@ -50,7 +50,7 @@ class CommodityLogisticsSubsystemTest extends TestCase
         );
 
         // A 2% global boom against unchanged capacity clears at the combined inelasticity.
-        $boomDemand = 1.0 + (0.02 * CommodityLogisticsSubsystem::ENERGY_DEMAND_GAP_SENSITIVITY);
+        $boomDemand = 1.0 + (0.02 * MacroEngine::ENERGY_DEMAND_GAP_SENSITIVITY);
         $this->assertEqualsWithDelta(
             MacroEngine::ENERGY_BASELINE * ($boomDemand ** CommodityLogisticsSubsystem::ENERGY_CAPACITY_INELASTICITY),
             CommodityLogisticsSubsystem::resolveEnergyEquilibriumPrice(0.02, MacroEngine::ENERGY_BASELINE),
@@ -503,7 +503,7 @@ class CommodityLogisticsSubsystemTest extends TestCase
         $boom = $settle(0.04, 100.0);
         $glut = $settle(0.0, 104.0);
 
-        $expectedBoom = $neutral * ((1.0 + 0.04 * CommodityLogisticsSubsystem::ENERGY_DEMAND_GAP_SENSITIVITY) ** CommodityLogisticsSubsystem::ENERGY_CAPACITY_INELASTICITY);
+        $expectedBoom = $neutral * ((1.0 + 0.04 * MacroEngine::ENERGY_DEMAND_GAP_SENSITIVITY) ** CommodityLogisticsSubsystem::ENERGY_CAPACITY_INELASTICITY);
         $this->assertEqualsWithDelta($expectedBoom, $boom, 0.5, 'A 4% boom lifts demand 2% and the clearing price by the inelasticity of that.');
         $expectedGlut = $neutral * ((100.0 / 104.0) ** CommodityLogisticsSubsystem::ENERGY_CAPACITY_INELASTICITY);
         $this->assertEqualsWithDelta($expectedGlut, $glut, 0.5, 'and 4% of spare capacity does the same in reverse.');
@@ -603,7 +603,7 @@ class CommodityLogisticsSubsystemTest extends TestCase
         $path = $this->shockPath($dt, 1.0);
 
         $this->assertEqualsWithDelta(log(1.5), $path[0], 1e-9, 'The shock is in the base price on the tick it lands.');
-        $this->assertEqualsWithDelta(log(1.5) * exp(-CommodityLogisticsSubsystem::ENERGY_MEAN_REVERSION * (count($path) - 1) * $dt), $path[count($path) - 1], 1e-9, 'A year on it has decayed at the reversion speed, not vanished.');
+        $this->assertEqualsWithDelta(log(1.5) * exp(-MacroEngine::ENERGY_MEAN_REVERSION * (count($path) - 1) * $dt), $path[count($path) - 1], 1e-9, 'A year on it has decayed at the reversion speed, not vanished.');
     }
 
     /** A shock's weight on the price over time is the same at every step size (a one-tick shock's weight shrinks with dt). */
@@ -617,7 +617,7 @@ class CommodityLogisticsSubsystemTest extends TestCase
         $fine = $area(1.0 / 3600.0);
 
         $this->assertEqualsWithDelta($coarse, $fine, 0.01 * $coarse);
-        $this->assertEqualsWithDelta(log(1.5) * (1.0 - exp(-2.0 * CommodityLogisticsSubsystem::ENERGY_MEAN_REVERSION)) / CommodityLogisticsSubsystem::ENERGY_MEAN_REVERSION, $fine, 0.01 * $fine);
+        $this->assertEqualsWithDelta(log(1.5) * (1.0 - exp(-2.0 * MacroEngine::ENERGY_MEAN_REVERSION)) / MacroEngine::ENERGY_MEAN_REVERSION, $fine, 0.01 * $fine);
     }
 
     /** A carbon price adds the gas fleet's carbon per MWh to wholesale power, as far as the market passes it through (Fabra & Reguant 2014). */
@@ -635,7 +635,7 @@ class CommodityLogisticsSubsystemTest extends TestCase
         // 53.06 kg of CO2 per MMBtu, 7.74 MMBtu per MWh: 0.41 t a MWh, 80% of which reaches the price.
         $adder = 0.80 * 0.05306 * 7.74 * 70.37;
         $this->assertEqualsWithDelta($adder, CommodityLogisticsSubsystem::carbonPowerPriceAdder(70.37), 1e-12);
-        $this->assertEqualsWithDelta(MacroEngine::WHOLESALE_POWER_BASELINE * $adder / CommodityLogisticsSubsystem::REFERENCE_POWER_PRICE, $priced->wholesalePowerPriceIndex - $free->wholesalePowerPriceIndex, 1e-9);
+        $this->assertEqualsWithDelta(MacroEngine::WHOLESALE_POWER_BASELINE * $adder / MacroEngine::REFERENCE_POWER_PRICE, $priced->wholesalePowerPriceIndex - $free->wholesalePowerPriceIndex, 1e-9);
         $this->assertSame(0.0, CommodityLogisticsSubsystem::carbonPowerPriceAdder(0.0));
         $this->assertEqualsWithDelta(($priced->wholesalePowerPriceIndex - $free->wholesalePowerPriceIndex) / MacroEngine::WHOLESALE_POWER_BASELINE, CommodityLogisticsSubsystem::carbonPowerPriceUplift(70.37), 1e-9, 'The uplift is the carbon part of the power index\'s move off its baseline.');
     }

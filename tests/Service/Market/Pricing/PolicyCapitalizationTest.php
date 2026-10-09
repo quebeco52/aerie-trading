@@ -148,7 +148,7 @@ class PolicyCapitalizationTest extends TestCase
      */
     public function testPublicSpendingIsPricedByThePurchasesItSets(): void
     {
-        $speed = CreditFiscalSubsystem::GOVT_SPENDING_MEAN_REVERSION;
+        $speed = MacroEngine::GOVT_SPENDING_MEAN_REVERSION;
         $longRun = Policy::LONG_RUN_PUBLIC_SPENDING_SHIFT;
         $shareAt = static fn(float $shift): float => MacroEngine::TARGET_CORPORATE_TAX_RATE * (1.0 + $shift);
 

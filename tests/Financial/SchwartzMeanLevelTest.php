@@ -61,8 +61,8 @@ class SchwartzMeanLevelTest extends TestCase
     /** A swap ladder struck on the forward curve must price the long end at the level the spot averages. */
     public function testTheForwardCurveLongEndSitsOnTheMeanPreservingTarget(): void
     {
-        $kappa = CommodityLogisticsSubsystem::ENERGY_MEAN_REVERSION;
-        $sigma = CommodityLogisticsSubsystem::ENERGY_VOLATILITY;
+        $kappa = MacroEngine::ENERGY_MEAN_REVERSION;
+        $sigma = MacroEngine::ENERGY_VOLATILITY;
         $theta = StochasticProcesses::schwartzThetaForMean(100.0, $kappa, $sigma);
 
         $this->assertEqualsWithDelta(100.0, StochasticProcesses::calculateSchwartzForwardPrice(140.0, $kappa, $theta, $sigma, 60.0), 1e-6);

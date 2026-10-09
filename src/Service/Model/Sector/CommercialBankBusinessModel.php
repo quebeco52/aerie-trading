@@ -821,12 +821,12 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
         $householdZ = CreditRisk::calculateVasicekSystematicFactor(
             $macroState->retailDefaultRateEma,
             MacroEngine::RETAIL_DEFAULT_BASELINE,
-            CreditFiscalSubsystem::RETAIL_ASRF_RHO
+            CreditRisk::RETAIL_ASRF_RHO
         );
         $corporateZ = CreditRisk::calculateVasicekSystematicFactor(
             $macroState->corporateDefaultRateEma,
             MacroEngine::CORPORATE_DEFAULT_BASELINE,
-            CreditFiscalSubsystem::CORPORATE_DEFAULT_RHO
+            CreditRisk::CORPORATE_DEFAULT_RHO
         );
 
         $quarter = 1.0 / FinancialConstants::QUARTERS_PER_YEAR;
@@ -840,8 +840,8 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
         $streams->registerState(self::STATE_COMMERCIAL_ORIGINATION_PRICE, TimeSeries::calculateDistributedLag($commercialOrigination, $commercialPrice, $quarter, self::COLLATERAL_ORIGINATION_YEARS));
 
         $pdScale = $this->resolveCreditRiskScale($stock) / self::LGD_BASELINE;
-        $householdRho = CreditFiscalSubsystem::RETAIL_ASRF_RHO;
-        $corporateRho = CreditFiscalSubsystem::CORPORATE_DEFAULT_RHO;
+        $householdRho = CreditRisk::RETAIL_ASRF_RHO;
+        $corporateRho = CreditRisk::CORPORATE_DEFAULT_RHO;
         $lossRate = ($residentialShare * CreditRisk::calculateVasicekExpectedLoss($householdZ, static::RESIDENTIAL_CHARGE_OFF_RATE * $pdScale, $householdRho, $residentialLgd))
             + ($consumerShare * CreditRisk::calculateVasicekExpectedLoss($householdZ, static::CONSUMER_CHARGE_OFF_RATE * $pdScale, $householdRho, self::LGD_BASELINE))
             + ($creShare * CreditRisk::calculateVasicekExpectedLoss($corporateZ, static::COMMERCIAL_REAL_ESTATE_CHARGE_OFF_RATE * $pdScale, $corporateRho, $commercialLgd))

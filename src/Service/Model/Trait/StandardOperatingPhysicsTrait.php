@@ -318,7 +318,7 @@ trait StandardOperatingPhysicsTrait
             'freight' => ($macroState->freightRateIndexEma - 100.0) / 100.0,
             // PPI is a rate. A price level's gap to its H-year EMA trend is H times its growth smoothed over H, so the
             // rate over target times the PPI's own one-year window is the wholesale price level against its trend.
-            'ppi'     => \App\Service\Macro\Subsystem\MacroAggregateSubsystem::COMMODITY_TREND_HORIZON_YEARS
+            'ppi'     => \App\Service\Macro\MacroEngine::COMMODITY_TREND_HORIZON_YEARS
                 * ($macroState->producerPriceInflationEma - \App\Service\Macro\MacroEngine::TARGET_INFLATION),
             'labor'   => $macroState->realWageGap,
         ];

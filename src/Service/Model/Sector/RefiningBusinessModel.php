@@ -33,7 +33,7 @@ class RefiningBusinessModel extends StandardCorporateBusinessModel
 {
     // --- Operating Cyclicality & Demand Structure ---
     /** Elasticity of throughput to the output gap: the income elasticity of oil-product demand the energy market itself clears on (Hamilton 2009). */
-    public const OPERATING_CYCLICALITY = CommodityLogisticsSubsystem::ENERGY_DEMAND_GAP_SENSITIVITY;
+    public const OPERATING_CYCLICALITY = MacroEngine::ENERGY_DEMAND_GAP_SENSITIVITY;
     /** Own-price elasticity of the firm's demand: a small share of a global market faces residual demand far more elastic than the market's (Landes & Posner 1981), so any premium over the benchmark loses the sale. Inert while the price is pinned to the index. */
     public const PRICE_ELASTICITY_OF_DEMAND = 2.50;
     /** Share of an idiosyncratic revenue gain taken from same-industry peers rather than won from a larger market. */

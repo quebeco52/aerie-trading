@@ -245,7 +245,7 @@ final class StandardOperatingPhysicsTraitTest extends TestCase
     public function testThePpiChannelIsTheWholesalePriceLevelAgainstItsTrend(): void
     {
         $excess = 0.03;
-        $horizon = \App\Service\Macro\Subsystem\MacroAggregateSubsystem::COMMODITY_TREND_HORIZON_YEARS;
+        $horizon = \App\Service\Macro\MacroEngine::COMMODITY_TREND_HORIZON_YEARS;
         $dt = 0.01;
         $level = 0.0;
         $trend = 0.0;

@@ -193,7 +193,7 @@ class UtilityBusinessModelTest extends TestCase
         // gas-fired MWh burn 7.74 MMBtu each at spot, recovered only through the power price.
         $calm = $this->merchantQuarter('UTIL', 100.0, 100.0);
         $gas = $this->merchantQuarter('UTIL', 150.0, 100.0);
-        $baselineFuelShare = UtilityBusinessModel::MERCHANT_GAS_HEAT_RATE * CommodityLogisticsSubsystem::REFERENCE_GAS_PRICE / CommodityLogisticsSubsystem::REFERENCE_POWER_PRICE;
+        $baselineFuelShare = UtilityBusinessModel::MERCHANT_GAS_HEAT_RATE * MacroEngine::REFERENCE_GAS_PRICE / MacroEngine::REFERENCE_POWER_PRICE;
         $merchantFuel = 100_000_000.0 * 0.15 * UtilityBusinessModel::MERCHANT_GAS_FLEET_SHARE * $baselineFuelShare * 0.50;
         $regulatedClauseLag = 100_000_000.0 * 0.40 * 0.85 * $clauseLagPerRegulatedCost;
 
@@ -247,9 +247,9 @@ class UtilityBusinessModelTest extends TestCase
      */
     public function testCarbonCostsTheGasFleetWhatThePriceDoesNotPassThroughAndPaysRenewables(): void
     {
-        $adderShare = CommodityLogisticsSubsystem::carbonPowerPriceAdder(70.37) / CommodityLogisticsSubsystem::REFERENCE_POWER_PRICE;
+        $adderShare = CommodityLogisticsSubsystem::carbonPowerPriceAdder(70.37) / MacroEngine::REFERENCE_POWER_PRICE;
         $macro = new MacroStateDTO(carbonPrice: 70.37, wholesalePowerPriceIndexEma: MacroEngine::WHOLESALE_POWER_BASELINE * (1.0 + $adderShare));
-        $carbonShare = UtilityBusinessModel::MERCHANT_GAS_HEAT_RATE * CommodityLogisticsSubsystem::NATURAL_GAS_CO2_TONNES_PER_MMBTU * 70.37 / CommodityLogisticsSubsystem::REFERENCE_POWER_PRICE;
+        $carbonShare = UtilityBusinessModel::MERCHANT_GAS_HEAT_RATE * MacroEngine::NATURAL_GAS_CO2_TONNES_PER_MMBTU * 70.37 / MacroEngine::REFERENCE_POWER_PRICE;
 
         $renewables = new Stock();
         $renewables->setTicker('BIRD');
@@ -287,7 +287,7 @@ class UtilityBusinessModelTest extends TestCase
             $with = $run($ticker, 40.0);
             $share = $with->streamZ[FinancialConstants::STATE_CARBON_POWER_EARNINGS_SHARE];
 
-            $this->assertEqualsWithDelta($without->streamRevenue['unregulated_merchant'] / $without->actualRevenue * (1.0 - ($gasShare / CommodityLogisticsSubsystem::CARBON_POWER_PASS_THROUGH)), $without->streamZ[FinancialConstants::STATE_CARBON_POWER_EARNINGS_SHARE], 1e-12, $ticker);
+            $this->assertEqualsWithDelta($without->streamRevenue['unregulated_merchant'] / $without->actualRevenue * (1.0 - ($gasShare / MacroEngine::CARBON_POWER_PASS_THROUGH)), $without->streamZ[FinancialConstants::STATE_CARBON_POWER_EARNINGS_SHARE], 1e-12, $ticker);
             $this->assertGreaterThan(0.0, $share, $ticker);
             $this->assertEqualsWithDelta($share * $with->actualRevenue * $uplift, $with->ebit - $without->ebit, 1e-6 * $with->actualRevenue, $ticker);
         }

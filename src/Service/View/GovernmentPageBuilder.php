@@ -1989,14 +1989,13 @@ class GovernmentPageBuilder
             'expected' => $politics->forecastLevers[$lever] ?? null,
         ];
         $tariff = $politics->importTariffRate;
-        $imports = MacroAggregateSubsystem::DISTRICT_IMPORT_SHARE * MacroAggregateSubsystem::GOODS_SHARE_OF_IMPORTS;
 
         return [
             'tariff' => $law('tariff', $tariff) + [
                 'retaliation' => MacroEngine::TARIFF_RETALIATION_RATIO * $tariff,
-                'revenueToGdp' => $tariff * $imports * ((1.0 + $tariff) ** -MacroAggregateSubsystem::IMPORT_PRICE_ELASTICITY),
+                'revenueToGdp' => MacroAggregateSubsystem::tariffRevenueToGdp($tariff),
                 'outputCost' => MacroEngine::TARIFF_OUTPUT_LOSS * $tariff,
-                'goodsImportsToGdp' => $imports,
+                'goodsImportsToGdp' => MacroAggregateSubsystem::goodsImportsToGdp(),
             ],
             'migration' => $law('laborGrowth', $politics->laborForceGrowthRate) + [
                 'structural' => MacroEngine::STRUCTURAL_LABOR_GROWTH_RATE,

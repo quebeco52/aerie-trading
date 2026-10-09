@@ -288,15 +288,15 @@ class OilGasProducerBusinessModel extends StandardCorporateBusinessModel
         // The spot averages its equilibrium, so the curve's long end must too: hand the forward the Schwartz theta for that mean.
         $theta = StochasticProcesses::schwartzThetaForMean(
             CommodityLogisticsSubsystem::resolveEnergyEquilibriumPrice($macroState->globalDemandGapEma, $macroState->energySupplyEma),
-            CommodityLogisticsSubsystem::ENERGY_MEAN_REVERSION,
-            CommodityLogisticsSubsystem::ENERGY_VOLATILITY
+            MacroEngine::ENERGY_MEAN_REVERSION,
+            MacroEngine::ENERGY_VOLATILITY
         );
         $math = MathUtility::getInstance();
         $forward = static fn (int $quartersAhead): float => StochasticProcesses::calculateSchwartzForwardPrice(
             $spot,
-            CommodityLogisticsSubsystem::ENERGY_MEAN_REVERSION,
+            MacroEngine::ENERGY_MEAN_REVERSION,
             $theta,
-            CommodityLogisticsSubsystem::ENERGY_VOLATILITY,
+            MacroEngine::ENERGY_VOLATILITY,
             $quartersAhead / 4.0
         );
 

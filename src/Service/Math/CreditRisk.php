@@ -28,6 +28,12 @@ final class CreditRisk
     /** Ceiling on the credit spread a listed issue may be discounted at, matching the cap the Merton spread itself carries. */
     public const MAX_CORPORATE_SPREAD = 1.00;
 
+    // --- Default Correlation (Vasicek 2002 single factor) ---
+    /** Asset correlation of the all-rated default rate: ~0.1 puts the Vasicek median at the post-1983 record's ~1.2% against its 1.6% mean (0.2 gives 0.8%); fits over 1920-2008 reach 0.2 on the 1930s, a tail this macro index already generates itself. */
+    public const CORPORATE_DEFAULT_RHO = 0.10;
+    /** Basel II/III consumer asset correlation factor for retail exposures. */
+    public const RETAIL_ASRF_RHO = 0.12;
+
     /**
      * A leverage (debt-to-equity) limit with a capital buffer added to the equity it implies.
      *
@@ -327,7 +333,7 @@ final class CreditRisk
     public static function calculateCorporateDefaultRate(
         float $macroZ,
         float $baseDefaultRate = MacroEngine::CORPORATE_DEFAULT_BASELINE,
-        float $rho = \App\Service\Macro\Subsystem\CreditFiscalSubsystem::CORPORATE_DEFAULT_RHO
+        float $rho = self::CORPORATE_DEFAULT_RHO
     ): float {
         $invPd = Distributions::calculateInverseNormalCDF($baseDefaultRate);
         $sqrtRho = sqrt($rho);

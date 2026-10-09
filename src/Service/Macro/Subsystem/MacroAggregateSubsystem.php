@@ -319,8 +319,6 @@ class MacroAggregateSubsystem
     public const PPI_DEMAND_SENSITIVITY = 0.35;
     /** Lower bound floor on annual producer price deflation. */
     public const MIN_PPI_INFLATION = -0.06;
-    /** Horizon of the commodity trends the PPI legs measure a growth rate against; one year is the window BLS publishes commodity PPI changes over. */
-    public const COMMODITY_TREND_HORIZON_YEARS = 1.0;
     /** Share of a metals price move reaching factory-gate prices; the fastest of the three. */
     public const PPI_METALS_PASS_THROUGH = 0.50;
     /** Share of an energy price move reaching factory-gate prices, damped by hedging and regulated tariffs. */
@@ -754,6 +752,21 @@ class MacroAggregateSubsystem
         return self::netExportGapAt($state->foreignOutputGapEma, $state->realExchangeRateTradeLag, $state->alliedDefenseDeliveryLag, $state->tariffTradeLag);
     }
 
+    /** Goods the District imports, as a share of GDP, at no tariff: the import share times its goods share. */
+    public static function goodsImportsToGdp(): float
+    {
+        return self::DISTRICT_IMPORT_SHARE * self::GOODS_SHARE_OF_IMPORTS;
+    }
+
+    /**
+     * What a tariff raises, as a share of GDP: the duty on the goods still imported once it has raised their price,
+     * imports falling at their price elasticity (duties pass fully into import prices: Amiti, Redding & Weinstein 2019).
+     */
+    public static function tariffRevenueToGdp(float $tariff): float
+    {
+        return $tariff * self::goodsImportsToGdp() * ((1.0 + $tariff) ** -self::IMPORT_PRICE_ELASTICITY);
+    }
+
     /**
      * The domestic-demand part of the gap, at domestic demand's own scale: the gap less the level parts that ride
      * beside the demand equation (supply, net exports, market-driven finance), over domestic demand's weight.
@@ -1134,7 +1147,7 @@ class MacroAggregateSubsystem
     public function updateExponentialMovingAverages(MacroState $state, float $dt): void
     {
         $emaWeight = 1.0 - exp(-$dt / self::STANDARD_EMA_HORIZON_YEARS);
-        $commodityTrendWeight = 1.0 - exp(-$dt / self::COMMODITY_TREND_HORIZON_YEARS);
+        $commodityTrendWeight = 1.0 - exp(-$dt / MacroEngine::COMMODITY_TREND_HORIZON_YEARS);
 
         $state->outputGapEma += $emaWeight * ($state->outputGap - $state->outputGapEma);
         foreach (self::DEMAND_TRANSMISSION_LAGS as $field => $lagYears) {
@@ -1419,7 +1432,7 @@ class MacroAggregateSubsystem
             return MacroEngine::TARGET_INFLATION;
         }
 
-        $growthRate = (($index - $trend) / $trend) / self::COMMODITY_TREND_HORIZON_YEARS;
+        $growthRate = (($index - $trend) / $trend) / MacroEngine::COMMODITY_TREND_HORIZON_YEARS;
 
         return ($growthRate * $passThrough) + MacroEngine::TARGET_INFLATION;
     }

@@ -109,7 +109,7 @@ class UtilityBusinessModel extends StandardCorporateBusinessModel
     /** Share of merchant generation whose fuel is gas bought at spot: 43.1% of U.S. utility-scale generation in 2023 (EIA). Nuclear, renewables, hydro and contracted coal make up the rest, whose fuel does not move with gas. */
     public const MERCHANT_GAS_FLEET_SHARE = 0.431;
     /** Heat rate of the merchant gas fleet (MMBtu/MWh): the U.S. gas-fired operating average, 2017-2024 (EIA Electric Power Annual, Table 8.1). */
-    public const MERCHANT_GAS_HEAT_RATE = CommodityLogisticsSubsystem::GAS_FLEET_HEAT_RATE;
+    public const MERCHANT_GAS_HEAT_RATE = MacroEngine::GAS_FLEET_HEAT_RATE;
 
     // --- Regulatory Lag & Macro Physics ---
     /** Macroeconomic demand shift sensitivity to output gap (industrial power usage). */
@@ -270,7 +270,7 @@ class UtilityBusinessModel extends StandardCorporateBusinessModel
         $streams->registerState(
             FinancialConstants::STATE_CARBON_POWER_EARNINGS_SHARE,
             $actualRevenue > 0.0
-                ? $merchantVolumeRevenue * $params[ModelParam::MerchantPowerShare] * (1.0 - ($params[ModelParam::MerchantGasFleetShare] / CommodityLogisticsSubsystem::CARBON_POWER_PASS_THROUGH)) / $actualRevenue
+                ? $merchantVolumeRevenue * $params[ModelParam::MerchantPowerShare] * (1.0 - ($params[ModelParam::MerchantGasFleetShare] / MacroEngine::CARBON_POWER_PASS_THROUGH)) / $actualRevenue
                 : 0.0
         );
 
@@ -350,10 +350,10 @@ class UtilityBusinessModel extends StandardCorporateBusinessModel
      */
     private function resolveMerchantFuelCostChange(float $powerShare, float $gasFleetShare, MacroStateDTO $macroState): float
     {
-        $baselineFuelShare = self::MERCHANT_GAS_HEAT_RATE * CommodityLogisticsSubsystem::REFERENCE_GAS_PRICE / CommodityLogisticsSubsystem::REFERENCE_POWER_PRICE;
+        $baselineFuelShare = self::MERCHANT_GAS_HEAT_RATE * MacroEngine::REFERENCE_GAS_PRICE / MacroEngine::REFERENCE_POWER_PRICE;
         $gasRelative = max(0.0, $macroState->naturalGasPriceIndexEma) / MacroEngine::NATURAL_GAS_BASELINE;
-        $carbonShare = self::MERCHANT_GAS_HEAT_RATE * CommodityLogisticsSubsystem::NATURAL_GAS_CO2_TONNES_PER_MMBTU * $macroState->carbonPrice
-            / CommodityLogisticsSubsystem::REFERENCE_POWER_PRICE;
+        $carbonShare = self::MERCHANT_GAS_HEAT_RATE * MacroEngine::NATURAL_GAS_CO2_TONNES_PER_MMBTU * $macroState->carbonPrice
+            / MacroEngine::REFERENCE_POWER_PRICE;
 
         return $powerShare * $gasFleetShare * (($baselineFuelShare * ($gasRelative - 1.0)) + $carbonShare);
     }

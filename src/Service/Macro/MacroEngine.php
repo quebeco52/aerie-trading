@@ -65,6 +65,24 @@ class MacroEngine
     public const ENERGY_BASELINE = 100.0;
     /** CPI level per unit energy-price deviation (~7% CPI weight at ~35% retail pass-through): +60% energy lifts it ~1.5%. */
     public const ENERGY_COST_PUSH_TRANSMISSION = 0.025;
+    /** Mean-reversion speed (kappa) of energy prices reverting to long-run baseline. */
+    public const ENERGY_MEAN_REVERSION = 0.8;
+    /** Schwartz 1-factor log-price diffusion (0.283 per sqrt year), the same fit net of the jumps; total monthly volatility is 36% a year. */
+    public const ENERGY_VOLATILITY = 0.283;
+    /** Income elasticity of energy demand to the output gap (~0.5, Hamilton 2009; Caldara, Cavallo & Iacoviello 2019). */
+    public const ENERGY_DEMAND_GAP_SENSITIVITY = 0.50;
+
+    // --- Wholesale Power and Its Carbon Cost (EIA; EPA; Fabra & Reguant 2014) ---
+    /** Wholesale power in $/MWh at the index baseline: the four-hub on-peak mean, 2017-2025. */
+    public const REFERENCE_POWER_PRICE = 48.91;
+    /** Henry Hub in $/MMBtu at the gas index baseline: its monthly mean over the same years. */
+    public const REFERENCE_GAS_PRICE = 3.26;
+    /** Heat rate (MMBtu/MWh) the US gas-fired fleet actually burns: its operating average, 2017-24 (EIA Electric Power Annual, Table 8.1). */
+    public const GAS_FLEET_HEAT_RATE = 7.74;
+    /** CO2 burning natural gas emits, in tonnes per MMBtu: 53.06 kg (EPA GHG Emission Factors Hub). */
+    public const NATURAL_GAS_CO2_TONNES_PER_MMBTU = 0.05306;
+    /** Share of the marginal plant's carbon cost the wholesale price carries: over 80% (Fabra & Reguant 2014, Spain's power market under the EU ETS). */
+    public const CARBON_POWER_PASS_THROUGH = 0.80;
 
     // --- Physical Catastrophes (Klugman, Panjer & Willmot compound Poisson; Noy 2009) ---
     /** Relative catastrophe frequency by calendar quarter [Q1..Q4], summing to 4.0: Q3 carries the Atlantic wind season, Q1 the winter freeze and storm peak. Read by the loss process and by the insurers' seasonal threshold. */
@@ -189,6 +207,8 @@ class MacroEngine
     // --- GOVERNMENT SPENDING & FISCAL APPROPRIATIONS ---
     /** Baseline government spending index (neutral peacetime budget). */
     public const GOVT_SPENDING_BASELINE = 100.0;
+    /** Reversion speed of log real civilian purchases / potential (half-life 2.3y): US federal non-defence plus state and local, 1985-2019 AR(1) on a trend, corrected for NIPA quarterly averaging (Working 1960); the District fields no army, so its purchases are civilian (var/harness/gov_fit.py). */
+    public const GOVT_SPENDING_MEAN_REVERSION = 0.298;
     /** Allied defence spending against its trend burden, as an index; the mainland and its allies buy the District's arms. */
     public const ALLIED_DEFENSE_BASELINE = 100.0;
     /** Arms makers' orders per unit of allied defence spending: US defence investment (equipment, structures, R&D) moves 1.54 times total defence purchases (BEA NIPA, annual log changes 1949-2019, se 0.07). */
@@ -313,6 +333,8 @@ class MacroEngine
     public const PPI_ENERGY_WEIGHT = 0.25;
     /** Upper bound ceiling on runaway wholesale producer price inflation. */
     public const MAX_PPI_INFLATION = 0.25;
+    /** Horizon of the commodity trends the PPI legs measure a growth rate against; one year is the window BLS publishes commodity PPI changes over. */
+    public const COMMODITY_TREND_HORIZON_YEARS = 1.0;
 
     // --- Mundell-Fleming Trade Balance & Net Exports ---
     /** Baseline structural trade balance as a percentage of GDP (-2.5% neutral deficit). */

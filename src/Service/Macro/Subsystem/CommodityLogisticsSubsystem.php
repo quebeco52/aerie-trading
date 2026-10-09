@@ -19,18 +19,12 @@ class CommodityLogisticsSubsystem
     // --- Energy Shock Jump-Diffusion (Schwartz 1997 Commodity Dynamics) ---
     /** Oil shocks per year (0.87): Merton (1976) jump-diffusion by maximum likelihood on month-end real WTI log returns, 1986-2025 (LR 87.7 over a pure diffusion). */
     public const ENERGY_JUMP_PROBABILITY = 0.87;
-    /** Mean-reversion speed (kappa) of energy prices reverting to long-run baseline. */
-    public const ENERGY_MEAN_REVERSION = 0.8;
-    /** Schwartz 1-factor log-price diffusion (0.283 per sqrt year), the same fit net of the jumps; total monthly volatility is 36% a year. */
-    public const ENERGY_VOLATILITY = 0.283;
     /** Mean log size of an oil shock (-0.021, so none): shocks run both ways, 1986 -39%, 1990 +36%, 2008 -38%, 2020 -78% then +62% in a month. */
     public const ENERGY_JUMP_MEAN = -0.021;
     /** Standard deviation of an oil shock's log size (0.243), the same fit. */
     public const ENERGY_JUMP_VOL = 0.243;
 
     // --- Energy Supply Cobweb (Ezekiel 1938; Anderson, Kellogg & Salant 2018) ---
-    /** Income elasticity of energy demand to the output gap (~0.5, Hamilton 2009; Caldara, Cavallo & Iacoviello 2019). */
-    public const ENERGY_DEMAND_GAP_SENSITIVITY = 0.50;
     /** Long-run supply elasticity of productive capacity to the price level (~0.3: the drilling and investment response, Caldara, Cavallo & Iacoviello 2019). */
     public const ENERGY_SUPPLY_ELASTICITY = 0.30;
     /** Years for capacity to follow price: the drilling, sanctioning and commissioning lag (Anderson, Kellogg & Salant 2018). */
@@ -85,20 +79,10 @@ class CommodityLogisticsSubsystem
     public const POWER_SEASONAL_SEMIANNUAL_AMPLITUDE = 0.246;
     /** Year fraction of the first semi-annual peak (late January); the second falls half a year later. */
     public const POWER_SEASONAL_SEMIANNUAL_PEAK = 0.064;
-    /** Wholesale power in $/MWh at the index baseline: the four-hub on-peak mean, 2017-2025. */
-    public const REFERENCE_POWER_PRICE = 48.91;
-    /** Henry Hub in $/MMBtu at the gas index baseline: its monthly mean over the same years. */
-    public const REFERENCE_GAS_PRICE = 3.26;
     /** Heat rate (MMBtu/MWh) EIA quotes the spark spread at: a new, efficient combined-cycle plant. */
     public const SPARK_SPREAD_BENCHMARK_HEAT_RATE = 7.0;
-    /** Heat rate (MMBtu/MWh) the US gas-fired fleet actually burns: its operating average, 2017-24 (EIA Electric Power Annual, Table 8.1). */
-    public const GAS_FLEET_HEAT_RATE = 7.74;
 
     // --- Carbon in Wholesale Power (EPA emission factors; Fabra & Reguant 2014) ---
-    /** CO2 burning natural gas emits, in tonnes per MMBtu: 53.06 kg (EPA GHG Emission Factors Hub). */
-    public const NATURAL_GAS_CO2_TONNES_PER_MMBTU = 0.05306;
-    /** Share of the marginal plant's carbon cost the wholesale price carries: over 80% (Fabra & Reguant 2014, Spain's power market under the EU ETS). */
-    public const CARBON_POWER_PASS_THROUGH = 0.80;
 
     // --- Gold (Barsky, Epstein, Lafont-Mueller & Yoo 2021, Chicago Fed Letter 464) ---
     /** Log change in the real gold price per unit of real ten-year yield: -0.131 per percentage point (annual levels regression, 1971-2019). */
@@ -222,9 +206,9 @@ class CommodityLogisticsSubsystem
         $currentBase = $state->energyBasePrice > 0.0 ? $state->energyBasePrice : $state->energyPriceIndex;
         $baseProcess = StochasticProcesses::calculateSchwartz1Factor(
             currentPrice: $currentBase,
-            kappa: self::ENERGY_MEAN_REVERSION,
+            kappa: MacroEngine::ENERGY_MEAN_REVERSION,
             theta: self::resolveEnergyProcessTheta($equilibriumPrice),
-            sigma: self::ENERGY_VOLATILITY,
+            sigma: MacroEngine::ENERGY_VOLATILITY,
             dt: $dt,
             dW: $dW
         );
@@ -264,9 +248,9 @@ class CommodityLogisticsSubsystem
      */
     public static function resolveEnergyProcessTheta(float $equilibriumPrice): float
     {
-        $jumpShift = StochasticProcesses::logOuJumpLevelShift(self::ENERGY_JUMP_PROBABILITY, self::ENERGY_MEAN_REVERSION, self::ENERGY_JUMP_MEAN, self::ENERGY_JUMP_VOL);
+        $jumpShift = StochasticProcesses::logOuJumpLevelShift(self::ENERGY_JUMP_PROBABILITY, MacroEngine::ENERGY_MEAN_REVERSION, self::ENERGY_JUMP_MEAN, self::ENERGY_JUMP_VOL);
 
-        return StochasticProcesses::schwartzThetaForMean($equilibriumPrice * exp(-$jumpShift), self::ENERGY_MEAN_REVERSION, self::ENERGY_VOLATILITY);
+        return StochasticProcesses::schwartzThetaForMean($equilibriumPrice * exp(-$jumpShift), MacroEngine::ENERGY_MEAN_REVERSION, MacroEngine::ENERGY_VOLATILITY);
     }
 
     /**
@@ -276,7 +260,7 @@ class CommodityLogisticsSubsystem
      */
     public static function resolveEnergyEquilibriumPrice(float $globalDemandGapEma, float $energySupplyEma): float
     {
-        $demandIndex = MacroEngine::ENERGY_BASELINE * (1.0 + ($globalDemandGapEma * self::ENERGY_DEMAND_GAP_SENSITIVITY));
+        $demandIndex = MacroEngine::ENERGY_BASELINE * (1.0 + ($globalDemandGapEma * MacroEngine::ENERGY_DEMAND_GAP_SENSITIVITY));
         $utilization = max(0.20, $demandIndex) / max(20.0, $energySupplyEma);
 
         return max(self::MIN_ENERGY_EQUILIBRIUM, min(self::MAX_ENERGY_EQUILIBRIUM, MacroEngine::ENERGY_BASELINE * ($utilization ** self::ENERGY_CAPACITY_INELASTICITY)));
@@ -407,7 +391,7 @@ class CommodityLogisticsSubsystem
      */
     public static function carbonPowerPriceAdder(float $carbonPrice): float
     {
-        return self::CARBON_POWER_PASS_THROUGH * self::NATURAL_GAS_CO2_TONNES_PER_MMBTU * self::GAS_FLEET_HEAT_RATE * $carbonPrice;
+        return MacroEngine::CARBON_POWER_PASS_THROUGH * MacroEngine::NATURAL_GAS_CO2_TONNES_PER_MMBTU * MacroEngine::GAS_FLEET_HEAT_RATE * $carbonPrice;
     }
 
     /**
@@ -418,7 +402,7 @@ class CommodityLogisticsSubsystem
      */
     public static function carbonPowerPriceUplift(float $carbonPrice): float
     {
-        return self::carbonPowerPriceAdder($carbonPrice) / self::REFERENCE_POWER_PRICE;
+        return self::carbonPowerPriceAdder($carbonPrice) / MacroEngine::REFERENCE_POWER_PRICE;
     }
 
     /** The load-season multiplier on wholesale power at a point in simulated time (years); it averages one over the year. */

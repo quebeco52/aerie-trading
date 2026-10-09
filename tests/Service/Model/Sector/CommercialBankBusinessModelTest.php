@@ -203,8 +203,8 @@ class CommercialBankBusinessModelTest extends TestCase
         $meanLoss = 0.0;
         for ($z = -7.0; $z <= 7.0 + 1e-9; $z += $step) {
             $macro = new MacroStateDTO(
-                retailDefaultRateEma: CreditRisk::calculateVasicekExpectedLoss($z, MacroEngine::RETAIL_DEFAULT_BASELINE, CreditFiscalSubsystem::RETAIL_ASRF_RHO, 1.0),
-                corporateDefaultRateEma: CreditRisk::calculateVasicekExpectedLoss($z, MacroEngine::CORPORATE_DEFAULT_BASELINE, CreditFiscalSubsystem::CORPORATE_DEFAULT_RHO, 1.0),
+                retailDefaultRateEma: CreditRisk::calculateVasicekExpectedLoss($z, MacroEngine::RETAIL_DEFAULT_BASELINE, CreditRisk::RETAIL_ASRF_RHO, 1.0),
+                corporateDefaultRateEma: CreditRisk::calculateVasicekExpectedLoss($z, MacroEngine::CORPORATE_DEFAULT_BASELINE, CreditRisk::CORPORATE_DEFAULT_RHO, 1.0),
             );
             $stock->setEarningsMomentumZ([]);
             $result = $this->model->computeActualFinancials($stock, 1_000_000_000.0, 0.50, 200_000_000.0, 0.10, $macro, $this->mathUtility);
@@ -237,10 +237,10 @@ class CommercialBankBusinessModelTest extends TestCase
         $z = -2.0;
         $swing = static fn (float $rate, float $rho): float => CreditRisk::calculateVasicekExpectedLoss($z, $rate / CommercialBankBusinessModel::LGD_BASELINE, $rho, 1.0) / ($rate / CommercialBankBusinessModel::LGD_BASELINE);
 
-        $residential = $swing(CommercialBankBusinessModel::RESIDENTIAL_CHARGE_OFF_RATE, CreditFiscalSubsystem::RETAIL_ASRF_RHO);
-        $consumer = $swing(CommercialBankBusinessModel::CONSUMER_CHARGE_OFF_RATE, CreditFiscalSubsystem::RETAIL_ASRF_RHO);
-        $commercialRealEstate = $swing(CommercialBankBusinessModel::COMMERCIAL_REAL_ESTATE_CHARGE_OFF_RATE, CreditFiscalSubsystem::CORPORATE_DEFAULT_RHO);
-        $business = $swing(CommercialBankBusinessModel::BUSINESS_CHARGE_OFF_RATE, CreditFiscalSubsystem::CORPORATE_DEFAULT_RHO);
+        $residential = $swing(CommercialBankBusinessModel::RESIDENTIAL_CHARGE_OFF_RATE, CreditRisk::RETAIL_ASRF_RHO);
+        $consumer = $swing(CommercialBankBusinessModel::CONSUMER_CHARGE_OFF_RATE, CreditRisk::RETAIL_ASRF_RHO);
+        $commercialRealEstate = $swing(CommercialBankBusinessModel::COMMERCIAL_REAL_ESTATE_CHARGE_OFF_RATE, CreditRisk::CORPORATE_DEFAULT_RHO);
+        $business = $swing(CommercialBankBusinessModel::BUSINESS_CHARGE_OFF_RATE, CreditRisk::CORPORATE_DEFAULT_RHO);
 
         $this->assertGreaterThan($consumer, $residential);
         $this->assertGreaterThan($business, $commercialRealEstate);
@@ -274,10 +274,10 @@ class CommercialBankBusinessModelTest extends TestCase
         };
 
         // At long-run default rates each segment defaults at its conditional PD for the factor those rates imply.
-        $householdZ = CreditRisk::calculateVasicekSystematicFactor(MacroEngine::RETAIL_DEFAULT_BASELINE, MacroEngine::RETAIL_DEFAULT_BASELINE, CreditFiscalSubsystem::RETAIL_ASRF_RHO);
-        $corporateZ = CreditRisk::calculateVasicekSystematicFactor(MacroEngine::CORPORATE_DEFAULT_BASELINE, MacroEngine::CORPORATE_DEFAULT_BASELINE, CreditFiscalSubsystem::CORPORATE_DEFAULT_RHO);
-        $mortgageLoss = 0.80 * CreditRisk::calculateVasicekExpectedLoss($householdZ, CommercialBankBusinessModel::RESIDENTIAL_CHARGE_OFF_RATE / 0.45, CreditFiscalSubsystem::RETAIL_ASRF_RHO, 1.0);
-        $businessLoss = 0.20 * CreditRisk::calculateVasicekExpectedLoss($corporateZ, CommercialBankBusinessModel::BUSINESS_CHARGE_OFF_RATE / 0.45, CreditFiscalSubsystem::CORPORATE_DEFAULT_RHO, 1.0) * 0.45;
+        $householdZ = CreditRisk::calculateVasicekSystematicFactor(MacroEngine::RETAIL_DEFAULT_BASELINE, MacroEngine::RETAIL_DEFAULT_BASELINE, CreditRisk::RETAIL_ASRF_RHO);
+        $corporateZ = CreditRisk::calculateVasicekSystematicFactor(MacroEngine::CORPORATE_DEFAULT_BASELINE, MacroEngine::CORPORATE_DEFAULT_BASELINE, CreditRisk::CORPORATE_DEFAULT_RHO);
+        $mortgageLoss = 0.80 * CreditRisk::calculateVasicekExpectedLoss($householdZ, CommercialBankBusinessModel::RESIDENTIAL_CHARGE_OFF_RATE / 0.45, CreditRisk::RETAIL_ASRF_RHO, 1.0);
+        $businessLoss = 0.20 * CreditRisk::calculateVasicekExpectedLoss($corporateZ, CommercialBankBusinessModel::BUSINESS_CHARGE_OFF_RATE / 0.45, CreditRisk::CORPORATE_DEFAULT_RHO, 1.0) * 0.45;
         $this->assertEqualsWithDelta(
             ($mortgageLoss * (1.0 - 0.55 * 0.70) + $businessLoss) / ($mortgageLoss * 0.45 + $businessLoss),
             $lossRate($mortgageLender, 70.0) / $lossRate($mortgageLender, 100.0),

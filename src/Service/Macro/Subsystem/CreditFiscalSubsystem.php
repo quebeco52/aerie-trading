@@ -87,16 +87,12 @@ class CreditFiscalSubsystem
     public const MAX_CORPORATE_TAX_RATE = 0.30;
 
     // --- GOVERNMENT SPENDING & FISCAL APPROPRIATIONS ---
-    /** Reversion speed of log real civilian purchases / potential (half-life 2.3y): US federal non-defence plus state and local, 1985-2019 AR(1) on a trend, corrected for NIPA quarterly averaging (Working 1960); the District fields no army, so its purchases are civilian (var/harness/gov_fit.py). */
-    public const GOVT_SPENDING_MEAN_REVERSION = 0.298;
     /** Diffusion of log civilian purchases / potential, the same fit; jumps are not significant (LR 2.1), so the process is Gaussian. */
     public const GOVT_SPENDING_VOLATILITY = 0.0148;
     /** Time constant (years) of purchases' measured trend: a level the Diet holds for a decade is in potential, not the gap, as the tax rate's is (TAX_RATE_TREND_YEARS). */
     public const GOVT_SPENDING_TREND_YEARS = self::TAX_RATE_TREND_YEARS;
 
     // --- VASICEK ASRF RETAIL DEFAULT RATE (fitted on US household delinquency 1991-2019, var/harness/retail_default_fit) ---
-    /** Basel II/III consumer asset correlation factor for retail exposures. */
-    public const RETAIL_ASRF_RHO = 0.12;
     /** Household credit Z at NAIRU, base spreads and trend house prices: -0.06 (se 0.08), the intercept of the fit below; the US channels average -0.17 on top, which with it puts mean delinquency at the 2.5% the PD is struck at. */
     public const RETAIL_CREDIT_INTERCEPT = -0.06;
     /** Household credit Z per unit of unemployment over NAIRU: 18.3 (se 2.9), the Vasicek-inverted 0.7 mortgage / 0.3 consumer 30-day delinquency rate (FRED DRSFRMACBS, DRCLACBS) on the engine's own channels; R2 0.84. */
@@ -133,8 +129,6 @@ class CreditFiscalSubsystem
     public const TAX_RATE_TREND_YEARS = 10.0;
 
     // --- Corporate Default Dynamics (Moody's all-rated, Vasicek single factor) ---
-    /** Asset correlation of the all-rated default rate: ~0.1 puts the Vasicek median at the post-1983 record's ~1.2% against its 1.6% mean (0.2 gives 0.8%); fits over 1920-2008 reach 0.2 on the 1930s, a tail this macro index already generates itself. */
-    public const CORPORATE_DEFAULT_RHO = 0.10;
     /** Sensitivity of corporate credit Z-score to macroeconomic output gap. */
     public const CORPORATE_DEFAULT_GAP_SENSITIVITY = 25.0;
     /** Corporate credit Z per unit of excess HY spread (~5): a 2,000 bps blowout with a -4% gap and 80% SLOOS, held for a year, gives ~8% (1933's all-rated rate); 2009 averaged 5.4%. */
@@ -450,7 +444,7 @@ class CreditFiscalSubsystem
         $conditionalPd = CreditRisk::calculateVasicekExpectedLoss(
             macroZ: $macroZ,
             pdLra: MacroEngine::RETAIL_DEFAULT_BASELINE,
-            rho: self::RETAIL_ASRF_RHO,
+            rho: CreditRisk::RETAIL_ASRF_RHO,
             lgd: 1.0
         );
 
@@ -472,7 +466,7 @@ class CreditFiscalSubsystem
     {
         $state->governmentSpendingIndex = max(60.0, min(200.0, StochasticProcesses::calculateSchwartz1Factor(
             currentPrice: $state->governmentSpendingIndex,
-            kappa: self::GOVT_SPENDING_MEAN_REVERSION,
+            kappa: MacroEngine::GOVT_SPENDING_MEAN_REVERSION,
             theta: MacroEngine::GOVT_SPENDING_BASELINE * self::purchasesTarget($state->publicSpendingShare, $state->sovereignNetDebtToGdp, $state->sovereignFundDollarsPerGdp > 0.0, $state->consolidationTaxShare) / MacroEngine::TARGET_CORPORATE_TAX_RATE,
             sigma: self::GOVT_SPENDING_VOLATILITY,
             dt: $dt,
@@ -667,8 +661,7 @@ class CreditFiscalSubsystem
         $trendNominalGdp = $state->nominalGdpIndex / (1.0 + $state->outputGap);
         $taxRevenue = (($state->corporateTaxRate - $state->corporateTaxShiftRealized) * $output)
             + ($state->corporateTaxShiftRealized * self::CORPORATE_PROFITS_TO_GDP * $output)
-            + ($state->importTariffRate * MacroAggregateSubsystem::DISTRICT_IMPORT_SHARE * MacroAggregateSubsystem::GOODS_SHARE_OF_IMPORTS
-                * ((1.0 + $state->importTariffRate) ** -MacroAggregateSubsystem::IMPORT_PRICE_ELASTICITY) * $output)
+            + (MacroAggregateSubsystem::tariffRevenueToGdp($state->importTariffRate) * $output)
             + ($state->carbonPrice * self::POWER_SECTOR_CO2_PER_GDP_DOLLAR * $output)
             + ($state->sovereignFundDollarsPerGdp > 0.0 ? $state->boardBankLevy / $state->sovereignFundDollarsPerGdp : 0.0)
             + (self::dividendTaxRevenueShift($state->dividendTaxRate) * $output);
@@ -907,10 +900,10 @@ class CreditFiscalSubsystem
      */
     public function householdChargeOffRate(float $retailDefaultRate): float
     {
-        $householdZ = CreditRisk::calculateVasicekSystematicFactor($retailDefaultRate, MacroEngine::RETAIL_DEFAULT_BASELINE, self::RETAIL_ASRF_RHO);
+        $householdZ = CreditRisk::calculateVasicekSystematicFactor($retailDefaultRate, MacroEngine::RETAIL_DEFAULT_BASELINE, CreditRisk::RETAIL_ASRF_RHO);
 
-        return (self::HOUSEHOLD_MORTGAGE_DEBT_SHARE * CreditRisk::calculateVasicekExpectedLoss($householdZ, self::HOUSEHOLD_MORTGAGE_CHARGE_OFF_RATE, self::RETAIL_ASRF_RHO, 1.0))
-            + ((1.0 - self::HOUSEHOLD_MORTGAGE_DEBT_SHARE) * CreditRisk::calculateVasicekExpectedLoss($householdZ, self::HOUSEHOLD_CONSUMER_CHARGE_OFF_RATE, self::RETAIL_ASRF_RHO, 1.0));
+        return (self::HOUSEHOLD_MORTGAGE_DEBT_SHARE * CreditRisk::calculateVasicekExpectedLoss($householdZ, self::HOUSEHOLD_MORTGAGE_CHARGE_OFF_RATE, CreditRisk::RETAIL_ASRF_RHO, 1.0))
+            + ((1.0 - self::HOUSEHOLD_MORTGAGE_DEBT_SHARE) * CreditRisk::calculateVasicekExpectedLoss($householdZ, self::HOUSEHOLD_CONSUMER_CHARGE_OFF_RATE, CreditRisk::RETAIL_ASRF_RHO, 1.0));
     }
 
     /**
@@ -1183,7 +1176,7 @@ class CreditFiscalSubsystem
         $state->corporateDefaultRate = CreditRisk::calculateCorporateDefaultRate(
             macroZ: $macroZ,
             baseDefaultRate: MacroEngine::CORPORATE_DEFAULT_BASELINE,
-            rho: self::CORPORATE_DEFAULT_RHO
+            rho: CreditRisk::CORPORATE_DEFAULT_RHO
         );
     }
 }

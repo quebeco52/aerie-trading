@@ -158,7 +158,7 @@ final class PolicyCapitalization
      */
     public static function publicSpendingGap(MacroStateDTO $macro, float $capRate, bool $previous = false): float
     {
-        $speed = CreditFiscalSubsystem::GOVT_SPENDING_MEAN_REVERSION;
+        $speed = MacroEngine::GOVT_SPENDING_MEAN_REVERSION;
         $inForce = self::measure('publicSpending', CreditFiscalSubsystem::purchasesTarget($macro->publicSpendingShare, $macro->sovereignNetDebtToGdp, $macro->sovereignFundDollarsPerGdp > 0.0, $macro->consolidationTaxShare));
         $purchases = ($macro->governmentSpendingIndex / MacroEngine::GOVT_SPENDING_BASELINE) - 1.0;
 

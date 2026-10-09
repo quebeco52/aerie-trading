@@ -343,12 +343,12 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
         $householdZ = CreditRisk::calculateVasicekSystematicFactor(
             $macroState->retailDefaultRateEma,
             MacroEngine::RETAIL_DEFAULT_BASELINE,
-            \App\Service\Macro\Subsystem\CreditFiscalSubsystem::RETAIL_ASRF_RHO
+            \App\Service\Math\CreditRisk::RETAIL_ASRF_RHO
         );
         $pd = static::CONSUMER_CHARGE_OFF_RATE * $this->resolveCreditRiskScale($stock) / self::LGD_BASELINE;
 
         return [
-            'loss_rate' => CreditRisk::calculateVasicekExpectedLoss($householdZ, $pd, \App\Service\Macro\Subsystem\CreditFiscalSubsystem::RETAIL_ASRF_RHO, self::LGD_BASELINE)
+            'loss_rate' => CreditRisk::calculateVasicekExpectedLoss($householdZ, $pd, \App\Service\Math\CreditRisk::RETAIL_ASRF_RHO, self::LGD_BASELINE)
                 * $this->getLoanShareOfEarningAssets(),
             'systematic_z' => $householdZ,
         ];

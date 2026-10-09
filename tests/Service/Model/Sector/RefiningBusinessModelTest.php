@@ -157,7 +157,7 @@ final class RefiningBusinessModelTest extends TestCase
         $stock = new Stock();
         $stock->setTicker('GEN_REFINER');
         $physics = $this->model->getMacroPhysics($stock, $this->macro(macro: ['outputGapEma' => 0.02]));
-        $this->assertEqualsWithDelta(0.02 * CommodityLogisticsSubsystem::ENERGY_DEMAND_GAP_SENSITIVITY, $physics['macro_demand_shift'], 1e-12);
+        $this->assertEqualsWithDelta(0.02 * MacroEngine::ENERGY_DEMAND_GAP_SENSITIVITY, $physics['macro_demand_shift'], 1e-12);
         $this->assertSame(1.0, $physics['pricing_power_multiplier']);
         $this->assertSame(1.0, $physics['input_cost_multiplier']);
     }
