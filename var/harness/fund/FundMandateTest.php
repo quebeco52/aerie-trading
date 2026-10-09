@@ -5,8 +5,8 @@ declare(strict_types=1);
 use App\Entity\CorporateReport;
 use App\Entity\Stock;
 use App\Service\Macro\MacroEngine;
-use App\Service\Market\MarketOperator;
-use App\Service\Market\StockTracker;
+use App\Service\Corporate\FailureSweep;
+use App\Service\Market\Pricing\StockTracker;
 use Doctrine\DBAL\Connection;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\EntityRepository;
@@ -65,7 +65,7 @@ final class FundMandateTest extends KernelTestCase
 
         $macro = $c->get(MacroEngine::class);
         $tracker = $c->get(StockTracker::class);
-        $operator = $c->get(MarketOperator::class);
+        $sweep = $c->get(FailureSweep::class);
 
         $dt = 1.0 / $tpy;
         $ticks = (int) round($years * $tpy);
@@ -77,6 +77,8 @@ final class FundMandateTest extends KernelTestCase
         $lastDividends = null;
         $lastIssuance = null;
         $lastDuty = null;
+        $lastStake = null;
+        $lastLevy = null;
         $boardIndex = 1.0;
         $board = [];
         $quarters = [];
@@ -96,11 +98,12 @@ final class FundMandateTest extends KernelTestCase
                     reserveFundEquityShare: (float) getenv('MANDATE'),
                 );
             }
-            $m = $macro->updateMacroState($dt, $lastCap, $lastFloat, $lastReturn, $lastDividends, $lastIssuance, $lastDuty, policy: $policy);
+            $m = $macro->updateMacroState($dt, $lastCap, $lastFloat, $lastReturn, $lastDividends, $lastIssuance, $lastDuty, $lastStake, $policy, boardBankLevy: $lastLevy);
             $lastReturn = null;
             $lastDividends = null;
             $lastIssuance = null;
             $lastDuty = null;
+            $lastStake = null;
 
             if ($m->lastSovereignRebalanceAt > $lastProgramme) {
                 $lastProgramme = $m->lastSovereignRebalanceAt;
@@ -108,7 +111,7 @@ final class FundMandateTest extends KernelTestCase
             }
 
             if ($tick % $operatorInterval === 0) {
-                foreach ($operator->enforceMarketStability($stocks, $m) as $ev) {
+                foreach ($sweep->sweep($stocks, $m) as $ev) {
                     if (($ev['type'] ?? '') === 'BANKRUPTCY') {
                         ++$deaths;
                     }
@@ -122,6 +125,8 @@ final class FundMandateTest extends KernelTestCase
             $lastDividends = (float) $result['board_dividend_cash'];
             $lastIssuance = (float) $result['board_net_issuance'];
             $lastDuty = (float) $result['board_stamp_duty'];
+            $lastStake = (float) $result['strategic_stake_cash'];
+            $lastLevy = (float) $result['board_bank_levy'];
 
             if ($tick === 3 && getenv('SIZEPROBE')) {
                 $gdpDollars = $m->sovereignFundDollarsPerGdp * $m->nominalGdpIndex;

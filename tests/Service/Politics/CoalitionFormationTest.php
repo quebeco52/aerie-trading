@@ -233,7 +233,8 @@ class CoalitionFormationTest extends TestCase
         $positions = Diet::HOME_POSITIONS;
 
         $this->assertEqualsWithDelta(
-            sqrt((0.2 ** 2) + (0.6 ** 2) + (0.5 ** 2) + (0.28 ** 2)),
+            // Vanguard and the Chartists: 0.25 apart on the state, 0.5 on openness, 0.5 on the Council, 0.28 on the environment.
+            sqrt((0.25 ** 2) + (0.5 ** 2) + (0.5 ** 2) + (0.28 ** 2)),
             Formation::ideologicalRange([Diet::VANGUARD, Diet::CHARTISTS], $positions),
             1e-12
         );

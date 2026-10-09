@@ -6,8 +6,9 @@ use App\DTO\MacroStateDTO;
 use App\Entity\CorporateReport;
 use App\Entity\Stock;
 use App\Service\Macro\MacroEngine;
-use App\Service\Market\MarketOperator;
-use App\Service\Market\StockTracker;
+use App\Service\Corporate\FailureSweep;
+use App\Service\Market\Pricing\StockTracker;
+use App\Service\Politics\PoliticsEngine;
 use App\Service\Math\TimeSeries;
 use App\Service\Math\Valuation;
 use Doctrine\DBAL\Connection;
@@ -19,9 +20,12 @@ use App\Service\Corporate\EarningsEngine;
 
 /**
  * Whole-board headless replay on the PRODUCTION service graph: real container, in-memory Redis, stub EM,
- * the live ticker's per-tick order (macro, operator audit every 1/24 year, stock update).
+ * the live ticker's per-tick order (macro, the Diet if POLITICS=1, failure sweep every 1/24 year, stock update),
+ * the macro fed every board input MarketTickerCommand feeds it, one tick behind: capitalisation, float, price return,
+ * dividends, net issuance, stamp duty, strategic-stake cash and the bank levy.
  *
- * Env: YEARS TPY SEED OUT=<jsonl> MACRO_RECORD=<gz> | MACRO_REPLAY=<gz>
+ * Env: YEARS TPY SEED OUT=<jsonl> MACRO_RECORD=<gz> | MACRO_REPLAY=<gz> POLITICS=1 (live macro only: the Diet
+ * votes, budgets and hands its laws over as the ticker does; without it the opening laws stand).
  */
 final class FullMarketHarnessTest extends KernelTestCase
 {
@@ -34,7 +38,7 @@ final class FullMarketHarnessTest extends KernelTestCase
     private float $currentTime = 0.0;
     private ?\App\Service\Corporate\DebtEngine $debtEngine = null;
     private ?StockTracker $fvTracker = null;
-    private ?\App\Service\Market\MarketEngine $fvEngine = null;
+    private ?\App\Service\Market\Pricing\MarketEngine $fvEngine = null;
     /** @var array<string, list<array{t: float, d: string}>> */
     private array $events = [];
 
@@ -95,8 +99,11 @@ final class FullMarketHarnessTest extends KernelTestCase
         $this->debtEngine = $c->get(\App\Service\Corporate\DebtEngine::class);
         $tracker = $c->get(StockTracker::class);
         $this->fvTracker = $tracker;
-        $this->fvEngine = $c->get(\App\Service\Market\MarketEngine::class);
-        $operator = $c->get(MarketOperator::class);
+        $this->fvEngine = $c->get(\App\Service\Market\Pricing\MarketEngine::class);
+        $sweep = $c->get(FailureSweep::class);
+        // The Diet, as the ticker runs it: it reads this tick's economy and the economy reads its laws next tick.
+        $politicsEngine = getenv('POLITICS') && $replayPath === null ? $c->get(PoliticsEngine::class) : null;
+        $policy = $politicsEngine?->liveState()->policy();
 
         $list = array_values($stocks);
         $dt = 1.0 / $tpy;
@@ -105,7 +112,7 @@ final class FullMarketHarnessTest extends KernelTestCase
         $operatorInterval = getenv('SIMCMD') ? 100 : (int) max(1, $tpy / 24);
         $replay = $replayPath !== null ? unserialize((string) gzuncompress((string) file_get_contents($replayPath))) : null;
         $recorded = [];
-        $lastCap = null;
+        $lastCap = $lastFloat = $lastReturn = $lastDividends = $lastIssuance = $lastDuty = $lastStake = $lastLevy = null;
         $dead = [];
         $reorgs = [];
         $defaults = [];
@@ -124,7 +131,11 @@ final class FullMarketHarnessTest extends KernelTestCase
         }
 
         for ($tick = 1; $tick <= $ticks; $tick++) {
-            $m = $replay !== null ? $this->withDemandLags($replay[$tick - 1], $dt) : $macro->updateMacroState($dt, $lastCap);
+            $m = $replay !== null ? $this->withDemandLags($replay[$tick - 1], $dt)
+                : $macro->updateMacroState($dt, $lastCap, $lastFloat, $lastReturn, $lastDividends, $lastIssuance, $lastDuty, $lastStake, $policy, boardBankLevy: $lastLevy);
+            if ($politicsEngine !== null) {
+                $policy = $politicsEngine->updatePolitics($m, $dt)->policy();
+            }
             if ($recordPath !== null) {
                 $recorded[] = $m;
             }
@@ -137,7 +148,7 @@ final class FullMarketHarnessTest extends KernelTestCase
                         $defaults[$s->getTicker()] = ($defaults[$s->getTicker()] ?? 0) + 1;
                     }
                 }
-                foreach ($operator->enforceMarketStability($list, $m) as $ev) {
+                foreach ($sweep->sweep($list, $m) as $ev) {
                     $t = (string) ($ev['ticker'] ?? '');
                     if (!isset($stocks[$t])) {
                         continue;
@@ -174,7 +185,18 @@ final class FullMarketHarnessTest extends KernelTestCase
                 }
                 file_put_contents((string) getenv('OPENING_OUT'), json_encode($opening));
             }
-            $lastCap = getenv('SIMCMD') ? null : (float) $result['total_cap'];
+            // SIMCMD mirrors app:market-simulate, which feeds the macro no board at all. Levels stand when not
+            // reported (as the ticker keeps the last); flows are this tick's.
+            if (!getenv('SIMCMD')) {
+                $lastCap = (float) $result['total_cap'] > 0.0 ? (float) $result['total_cap'] : $lastCap;
+                $lastFloat = (float) $result['board_float_cap'] > 0.0 ? (float) $result['board_float_cap'] : $lastFloat;
+                $lastReturn = (float) $result['board_price_return'];
+                $lastDividends = (float) $result['board_dividend_cash'];
+                $lastIssuance = (float) $result['board_net_issuance'];
+                $lastDuty = (float) $result['board_stamp_duty'];
+                $lastStake = (float) $result['strategic_stake_cash'];
+                $lastLevy = (float) $result['board_bank_levy'];
+            }
             // MACRO_OUT: one macro row a quarter, for the macro-market loop.
             if (getenv('MACRO_OUT') && $tick % max(1, intdiv($tpy, 4)) === 0) {
                 file_put_contents((string) getenv('MACRO_OUT'), json_encode([
@@ -185,6 +207,9 @@ final class FullMarketHarnessTest extends KernelTestCase
                     'fx' => $m->exchangeRateIndex, 'deal' => $m->dealActivityIndex, 'vol' => $m->marketVolatility, 'erp' => $m->equityRiskPremium,
                     'fund' => $m->sovereignFundToGdp, 'fgap' => $m->foreignOutputGap, 'crisis' => $m->creditCrisisDrag,
                     'allied' => $m->alliedDefenseSpendingIndexEma, 'oil' => $m->energyPriceIndexEma,
+                    'float' => $m->boardFloatCap, 'fund_own' => $m->sovereignFundOwnershipShare,
+                    'corp_tax_shift' => $m->corporateTaxPolicyShift, 'div_tax' => $m->dividendTaxRate, 'home_law' => $m->reserveHomeEquityShare,
+                    'debt' => $m->sovereignDebtToGdp, 'spend_law' => $m->publicSpendingShare,
                 ]) . "\n", FILE_APPEND);
             }
         }
@@ -223,7 +248,7 @@ final class FullMarketHarnessTest extends KernelTestCase
 
         // RESET_PROBE: reopen the traded board exactly as app:market-reset does, one row at a time in seed order.
         if (getenv('RESET_PROBE')) {
-            $builder = $c->get(\App\Service\Market\OpeningBoardBuilder::class);
+            $builder = $c->get(\App\Service\Market\Pricing\OpeningBoardBuilder::class);
             $openingMacro = new MacroStateDTO();
             $spheres = [];
             foreach (\App\Data\Company\InitialMarket::STOCKS as $row) {

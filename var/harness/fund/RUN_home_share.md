@@ -27,9 +27,9 @@ per-tick return vol over the transition; mean dlog path by month after the switc
 (checked: max |dlog| before switch is printed).
 
 Gotchas:
-- `var/harness/FullMarketHarnessTest.php` and `fund/FundMandateTest.php` are stale (`MarketOperator` and
-  `App\Service\Market\StockTracker` no longer exist; the failure sweep is `App\Service\Corporate\FailureSweep`).
-  The full-market harness also feeds only total cap, so `boardFloatCap` is 0 and the fund's purchase room is 0.
+- Fixed 2026-10-09: `var/harness/FullMarketHarnessTest.php`, `FundHarnessTest.php` and `fund/FundMandateTest.php` now
+  use `FailureSweep` and `Market\Pricing\StockTracker`, and feed every board input. The full-market harness can also run
+  the Diet (`POLITICS=1`; see `var/harness/full/RUN.md`).
 - `var/harness/cache/test` is compiled with debug off and never refreshed: delete it after `src/` service changes.
 
 Evidence: `fund_evidence.md`, section "Home-share law: board impact".
