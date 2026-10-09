@@ -808,6 +808,7 @@ class MacroEngine
         $state->corporateTaxPolicyShift = $policy->corporateTaxPolicyShift;
         $state->importTariffRate = $policy->importTariffRate;
         $state->laborForceGrowthRate = $policy->laborForceGrowthRate;
+        $state->foreignBuyerTaxRate = $policy->foreignBuyerTaxRate;
         $state->mergerReviewLeniency = $policy->mergerReviewLeniency;
         $state->greenBeltStringency = $policy->greenBeltStringency;
         $state->carbonPrice = $policy->carbonPrice;
@@ -822,6 +823,7 @@ class MacroEngine
         $state->bankCapitalRequirement = $policy->bankCapitalRequirement ?? $state->bankCapitalRequirement;
         $state->mortgageLtvCap = $policy->mortgageLtvCap;
         $state->sovereignFundMandateEquityShare = $policy->reserveFundEquityShare ?? $state->sovereignFundMandateEquityShare;
+        $state->sovereignDebtMaturityTarget = $policy->debtAverageMaturity ?? $state->sovereignDebtMaturityTarget;
 
         $state->previousSittingLevers = $state->sittingLevers;
         $state->previousSittingPolicyFrom = $state->sittingPolicyFrom;

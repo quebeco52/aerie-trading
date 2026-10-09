@@ -16,8 +16,10 @@ use App\Service\Math\MathUtility;
  * Everyone the Council seats or appoints holds a stance on each question a department of the Council answers, on a
  * scale from -1 to +1: on money (App\Service\Politics\MonetaryAuthority), a dove at -1 or a hawk at +1; on the banks
  * (App\Service\Politics\FinancialRegulator), light-touch at -1 or strict at +1; on the reserves
- * (App\Service\Politics\SovereignReserveFund), cautious at -1 or bold at +1. A candidate's stances are drawn from the
- * record of the real office-holders each department is modelled on, and their age from the Federal Reserve Board's.
+ * (App\Service\Politics\SovereignReserveFund), cautious at -1 or bold at +1; on the debt (App\Service\Politics\Exchequer),
+ * short at -1 or long at +1. A candidate's stances are drawn from the record of the real office-holders each department
+ * is modelled on, and their age from the Federal Reserve Board's. Council seats are filled on the first three questions;
+ * the debt weighs only in naming the Exchequer's head.
  * A vacant Council seat goes to the candidate nearest the sitting members' median on every question together (the
  * coordinate-wise median, as a majority vote picks on each), from a shortlist the Council Appointment Board puts
  * forward: the three applicants nearest the board's own median, out of the field that applied. The board's members are
@@ -37,6 +39,8 @@ final class CouncilAppointments
     public const AXIS_REGULATION = 'regulation';
     /** The question of the reserves: the Sovereign Reserve Fund's. */
     public const AXIS_FUND = 'fund';
+    /** The question of the debt: the Exchequer's. */
+    public const AXIS_DEBT = 'debt';
 
     // --- Candidates ---
     /** Candidates on each shortlist: from three, a dovish appointer names a dove 60% of the time (else a swing vote leaning dovish, or no one leaning their way), as the Democratic presidents' nominees to the Federal Reserve Board were 65% doves, 17 of 26 (Bordo & Istrefi 2023, Fig. 4). */
@@ -143,11 +147,12 @@ final class CouncilAppointments
         $state->authoritySalt = floor($math->generateUniform() * (2 ** 31));
         $state->councilTermYears = AerieCouncil::TERM_YEARS;
         $salt = (int) $state->authoritySalt;
-        $state->councilNames = $state->councilBirths = $state->councilSince = $state->councilSeatedAt = $state->councilLeavesAt = $state->councilSwingers = $state->councilStances = $state->councilRegulationStances = $state->councilFundStances = [];
+        $state->councilNames = $state->councilBirths = $state->councilSince = $state->councilSeatedAt = $state->councilLeavesAt = $state->councilSwingers = $state->councilStances = $state->councilRegulationStances = $state->councilFundStances = $state->councilDebtStances = [];
         $state->memberNames = $state->memberBirths = $state->memberSince = $state->memberStances = [];
         $state->governorName = '';
         $state->regulatorName = '';
         $state->fundHeadName = '';
+        $state->exchequerHeadName = '';
         $state->formerNames = [];
         $state->boardMembers = $state->boardSince = [];
         self::seatBoard($state, $salt, $time, $math);
@@ -170,7 +175,7 @@ final class CouncilAppointments
      * @param float                $since  When the term begins.
      * @param array<string, float> $target The appointer's stance on each question it weighs, by axis.
      * @param list<string>         $taken  Names already sitting, which no candidate shares.
-     * @return array{0: array{name: string, birth: float, stance: float, regulation: float, fund: float, swing?: float}, 1: list<array{name: string, birth: float, stance: float, regulation: float, fund: float, swing?: float}>} The one named, and the ones passed over.
+     * @return array{0: array{name: string, birth: float, stance: float, regulation: float, fund: float, debt: float, swing?: float}, 1: list<array{name: string, birth: float, stance: float, regulation: float, fund: float, debt: float, swing?: float}>} The one named, and the ones passed over.
      */
     public static function appoint(int $salt, string $seat, float $since, array $target, array $taken, MathUtility $math): array
     {
@@ -181,9 +186,9 @@ final class CouncilAppointments
      * The appointer's pick from a shortlist: the candidate nearest their stances on the questions the target names, by
      * straight-line distance; the first drawn of any tied.
      *
-     * @param list<array{name: string, birth: float, stance: float, regulation: float, fund: float, swing?: float}> $shortlist
+     * @param list<array{name: string, birth: float, stance: float, regulation: float, fund: float, debt: float, swing?: float}> $shortlist
      * @param array<string, float> $target
-     * @return array{0: array{name: string, birth: float, stance: float, regulation: float, fund: float, swing?: float}, 1: list<array{name: string, birth: float, stance: float, regulation: float, fund: float, swing?: float}>} The one named, and the ones passed over.
+     * @return array{0: array{name: string, birth: float, stance: float, regulation: float, fund: float, debt: float, swing?: float}, 1: list<array{name: string, birth: float, stance: float, regulation: float, fund: float, debt: float, swing?: float}>} The one named, and the ones passed over.
      */
     public static function choose(array $shortlist, array $target): array
     {
@@ -205,7 +210,7 @@ final class CouncilAppointments
      *
      * @param array<string, float> $boardMedians
      * @param list<string>         $taken
-     * @return list<array{name: string, birth: float, stance: float, regulation: float, fund: float, swing?: float}>
+     * @return list<array{name: string, birth: float, stance: float, regulation: float, fund: float, debt: float, swing?: float}>
      */
     public static function boardShortlist(int $salt, string $seat, float $since, array $boardMedians, array $taken, MathUtility $math): array
     {
@@ -236,7 +241,7 @@ final class CouncilAppointments
      * Candidates for a vacancy, drawn one after another with names none of the others or anyone in $taken holds.
      *
      * @param list<string> $taken
-     * @return list<array{name: string, birth: float, stance: float, regulation: float, fund: float, swing?: float}>
+     * @return list<array{name: string, birth: float, stance: float, regulation: float, fund: float, debt: float, swing?: float}>
      */
     private static function field(int $salt, string $vacancy, int $count, float $since, array $taken, MathUtility $math): array
     {
@@ -252,7 +257,7 @@ final class CouncilAppointments
     /**
      * Straight-line distance between a candidate's stances and a target's on the questions the target names.
      *
-     * @param array{name: string, birth: float, stance: float, regulation: float, fund: float, swing?: float} $candidate
+     * @param array{name: string, birth: float, stance: float, regulation: float, fund: float, debt: float, swing?: float} $candidate
      * @param array<string, float> $target
      */
     private static function distance(array $candidate, array $target): float
@@ -305,13 +310,13 @@ final class CouncilAppointments
     /**
      * A candidate for a vacancy: their stance on money (App\Service\Politics\MonetaryAuthority::drawStance(), a swing vote
      * leaning to a camp drawn alike either way, MonetaryAuthority::swingLean()), on the
-     * banks (App\Service\Politics\FinancialRegulator::drawStance()) and on the reserves
-     * (App\Service\Politics\SovereignReserveFund::drawStance()), their age at the term's start from the Board's record
+     * banks (App\Service\Politics\FinancialRegulator::drawStance()), on the reserves
+     * (App\Service\Politics\SovereignReserveFund::drawStance()) and on the debt (App\Service\Politics\Exchequer::drawStance()), their age at the term's start from the Board's record
      * (a normal truncated to the youngest and oldest on it, by inverse transform), and a name for their birth decade
      * (App\Data\Politics\AerieNames) that no one in $taken holds.
      *
      * @param list<string> $taken
-     * @return array{name: string, birth: float, stance: float, regulation: float, fund: float, swing?: float}
+     * @return array{name: string, birth: float, stance: float, regulation: float, fund: float, debt: float, swing?: float}
      */
     public static function candidate(int $salt, string $vacancy, int $slot, float $since, array $taken, MathUtility $math): array
     {
@@ -326,6 +331,7 @@ final class CouncilAppointments
             'stance' => $swing > 0.0 ? MonetaryAuthority::swingLean(self::uniform($salt, "{$vacancy}:{$slot}:lean")) : $type,
             'regulation' => FinancialRegulator::drawStance(self::uniform($salt, "{$vacancy}:{$slot}:regulation")),
             'fund' => SovereignReserveFund::drawStance(self::uniform($salt, "{$vacancy}:{$slot}:fund")),
+            'debt' => Exchequer::drawStance(self::uniform($salt, "{$vacancy}:{$slot}:debt")),
             'swing' => $swing,
         ];
     }
@@ -376,14 +382,14 @@ final class CouncilAppointments
     public static function sittingNames(PoliticsState $state): array
     {
         return array_values(array_filter(
-            array_merge($state->councilNames, [$state->governorName], $state->memberNames, [$state->regulatorName, $state->fundHeadName], array_column($state->boardMembers, 'name')),
+            array_merge($state->councilNames, [$state->governorName], $state->memberNames, [$state->regulatorName, $state->fundHeadName, $state->exchequerHeadName], array_column($state->boardMembers, 'name')),
             static fn(string $name): bool => $name !== ''
         ));
     }
 
     /**
      * Every name a new appointee or party leader may not take: everyone sitting on the Council, at the Monetary
-     * Authority, the Financial Regulator and the Sovereign Reserve Fund or leading a party, everyone who ever did, and
+     * Authority, the Financial Regulator, the Sovereign Reserve Fund and the Exchequer or leading a party, everyone who ever did, and
      * the people seated before Year 1.
      *
      * @return list<string>
@@ -395,7 +401,7 @@ final class CouncilAppointments
             array_values($state->leaderNames),
             $state->formerNames,
             AerieCouncil::OPENING_MEMBERS,
-            [AerieCouncil::OPENING_GOVERNOR, AerieCouncil::OPENING_REGULATOR, AerieCouncil::OPENING_FUND_HEAD]
+            [AerieCouncil::OPENING_GOVERNOR, AerieCouncil::OPENING_REGULATOR, AerieCouncil::OPENING_FUND_HEAD, AerieCouncil::OPENING_EXCHEQUER_HEAD]
         );
         foreach ($state->leaderHistory as $leaders) {
             foreach ($leaders as $leader) {
@@ -462,7 +468,7 @@ final class CouncilAppointments
     }
 
     /**
-     * @param array{name: string, birth: float, stance: float, regulation: float, fund: float, swing?: float} $person
+     * @param array{name: string, birth: float, stance: float, regulation: float, fund: float, debt: float, swing?: float} $person
      * @param float $since    When the seat's term began.
      * @param float $seatedAt When this holder took it.
      * @param float $termEnds When the term ends.
@@ -480,6 +486,7 @@ final class CouncilAppointments
         $state->councilSwingers[$seat] = $person['swing'] ?? 0.0;
         $state->councilRegulationStances[$seat] = $person['regulation'];
         $state->councilFundStances[$seat] = $person['fund'];
+        $state->councilDebtStances[$seat] = $person['debt'];
     }
 
     /**
@@ -514,6 +521,9 @@ final class CouncilAppointments
             if (!isset($state->councilFundStances[$seat])) {
                 $state->councilFundStances[$seat] = SovereignReserveFund::drawStance(self::uniform($salt, "{$vacancy}:{$name}:fund"));
             }
+            if (!isset($state->councilDebtStances[$seat])) {
+                $state->councilDebtStances[$seat] = Exchequer::drawStance(self::uniform($salt, "{$vacancy}:{$name}:debt"));
+            }
             // A councillor held at the middle on money becomes a swing vote leaning to a camp.
             if (!isset($state->councilSwingers[$seat])) {
                 $state->councilSwingers[$seat] = ($state->councilStances[$seat] ?? 0.0) === MonetaryAuthority::STANCES['swing'] ? 1.0 : 0.0;
@@ -525,5 +535,6 @@ final class CouncilAppointments
         ksort($state->councilSwingers);
         ksort($state->councilRegulationStances);
         ksort($state->councilFundStances);
+        ksort($state->councilDebtStances);
     }
 }

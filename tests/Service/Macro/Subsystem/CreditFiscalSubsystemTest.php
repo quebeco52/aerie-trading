@@ -2,6 +2,7 @@
 
 namespace App\Tests\Service\Macro\Subsystem;
 
+use App\DTO\MacroStateDTO;
 use App\Service\Macro\MacroEngine;
 use App\Service\Macro\MacroState;
 use App\Service\Macro\Subsystem\AssetMarketSubsystem;
@@ -104,6 +105,54 @@ class CreditFiscalSubsystemTest extends TestCase
 
         $state->governmentSpendingIndexEma = 121.0;
         $this->assertEqualsWithDelta(0.10, CreditFiscalSubsystem::discretionarySpendingShift($state), 1e-12);
+    }
+
+    /** At the founding maturity the fitted ladder holds; a shorter book reprices more of itself at the bill rate each year and its coupons faster, both as 1 / maturity. */
+    public function testTheDebtLadderScalesWithItsAverageMaturity(): void
+    {
+        $founding = CreditFiscalSubsystem::FOUNDING_DEBT_AVERAGE_MATURITY;
+        $this->assertEqualsWithDelta(CreditFiscalSubsystem::SOVEREIGN_DEBT_BILL_SHARE, CreditFiscalSubsystem::billShare($founding), 1e-12);
+        $this->assertEqualsWithDelta(CreditFiscalSubsystem::SOVEREIGN_DEBT_BILL_SHARE * $founding / 4.0, CreditFiscalSubsystem::billShare(4.0), 1e-12);
+
+        $state = new MacroState();
+        $this->assertEqualsWithDelta(CreditFiscalSubsystem::SOVEREIGN_COUPON_REPRICING_YEARS, CreditFiscalSubsystem::couponRepricingYears($state), 1e-12);
+        $state->sovereignDebtAverageMaturity = 2.0 * $founding;
+        $this->assertEqualsWithDelta(2.0 * CreditFiscalSubsystem::SOVEREIGN_COUPON_REPRICING_YEARS, CreditFiscalSubsystem::couponRepricingYears($state), 1e-12);
+
+        $state->policyRate = 0.05;
+        $state->sovereignCouponRate = 0.03;
+        $long = CreditFiscalSubsystem::sovereignEffectiveRate($state);
+        $state->sovereignDebtAverageMaturity = 4.0;
+        $this->assertGreaterThan($long, CreditFiscalSubsystem::sovereignEffectiveRate($state), 'With bills above coupons, a shorter book costs more.');
+    }
+
+    /** The book reaches a new maturity only as it rolls over: from the Treasury's 48 months toward its 71, eight years bring it to 66 months, against the 69 the 2009-2016 extension reached. */
+    public function testTheBookMovesTowardItsTargetAsItRollsOver(): void
+    {
+        $state = new MacroState();
+        $state->sovereignDebtAverageMaturity = 4.0;
+        $state->sovereignDebtMaturityTarget = 71.0 / 12.0;
+        $dt = 1.0 / 12.0;
+        for ($month = 0; $month < 96; ++$month) {
+            $state->sovereignDebtAverageMaturity += (1.0 - exp(-$dt / $state->sovereignDebtAverageMaturity)) * ($state->sovereignDebtMaturityTarget - $state->sovereignDebtAverageMaturity);
+        }
+        $this->assertEqualsWithDelta(69.0, 12.0 * $state->sovereignDebtAverageMaturity, 3.0);
+    }
+
+    /** The term premium a book's maturity adds is nil at the founding book and reproduces Hamilton and Wu's swap: 14bp for December 2006's $400bn moved from about 0.4 to 17 years on $13.8T of GDP. */
+    public function testMaturitySupplyReproducesHamiltonAndWu(): void
+    {
+        $this->assertSame(0.0, CreditFiscalSubsystem::maturitySupplyTermPremium(0.9, CreditFiscalSubsystem::FOUNDING_DEBT_AVERAGE_MATURITY));
+        $swapGdpYears = (0.4 / 13.8) * (17.0 - 0.4);
+        $this->assertEqualsWithDelta(0.0014, CreditFiscalSubsystem::DEBT_MATURITY_TERM_PREMIUM * $swapGdpYears, 0.00005);
+
+        $extra = CreditFiscalSubsystem::maturitySupplyTermPremium(0.9, CreditFiscalSubsystem::FOUNDING_DEBT_AVERAGE_MATURITY + 1.0);
+        $this->assertEqualsWithDelta(0.9 * CreditFiscalSubsystem::DEBT_MATURITY_TERM_PREMIUM, $extra, 1e-15);
+        $this->assertEqualsWithDelta(0.004 - $extra, CreditFiscalSubsystem::durationExtraction(0.004, 0.9, CreditFiscalSubsystem::FOUNDING_DEBT_AVERAGE_MATURITY + 1.0), 1e-15, 'A longer book puts back duration QE took out.');
+
+        // The bond desk's curve carries the same duration as the macro's.
+        $dto = new MacroStateDTO(balanceSheetIntensity: 0.004, sovereignNetDebtToGdpEma: 0.9, sovereignDebtAverageMaturity: CreditFiscalSubsystem::FOUNDING_DEBT_AVERAGE_MATURITY + 1.0);
+        $this->assertEqualsWithDelta(0.004 - $extra, $dto->sovereignCurve()->balanceSheetIntensity, 1e-15);
     }
 
     public function testBarroFiscalPolicyCutsCorporateTaxInRecession(): void

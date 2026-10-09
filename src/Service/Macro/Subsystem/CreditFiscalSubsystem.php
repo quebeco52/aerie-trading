@@ -9,6 +9,7 @@ use App\Service\Math\CreditRisk;
 use App\Service\Math\Distributions;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\FirmEconomics;
+use App\Service\Math\FixedIncome;
 use App\Service\Math\MacroTransmission;
 use App\Service\Math\MathUtility;
 use App\Service\Math\StochasticProcesses;
@@ -43,6 +44,12 @@ class CreditFiscalSubsystem
     public const SOVEREIGN_DEBT_BILL_SHARE = 0.28;
     /** Time constant (years) of the coupon stock's rate toward the 10-year as it rolls over, same fit. */
     public const SOVEREIGN_COUPON_REPRICING_YEARS = 2.0;
+
+    // --- Debt Maturity (the Exchequer's; Hamilton & Wu 2012, Greenwood & Vayanos 2014) ---
+    /** Average maturity of the debt at the founding, in years: 59.5 months, the midpoint of the Treasury's record over the ladder fit's years (48 in 2008, 71 in 2017), so the bill share and repricing lag above are the founding book's; both scale with 1 / maturity, the share of a steady ladder maturing each year. */
+    public const FOUNDING_DEBT_AVERAGE_MATURITY = 59.5 / 12.0;
+    /** Ten-year term premium per unit of net debt to GDP times years of average maturity: 0.29%. Hamilton & Wu (2012, Table 6): retiring December 2006's debt beyond ten years with $400bn of bills would have taken 14bp off the ten-year; at about 17 years' remaining maturity against 0.4, on $13.8T of GDP, 0.48 GDP-years of supply. */
+    public const DEBT_MATURITY_TERM_PREMIUM = 0.0029;
 
     // --- Sovereign Debt Dynamics (Greenwood-Vayanos 2014) ---
     /** Structural primary fiscal deficit as a fraction of GDP with no sovereign fund, levied as taxes that far below the purchases share; with a fund, the structural deficit is the fund's draw, spent. */
@@ -637,7 +644,10 @@ class CreditFiscalSubsystem
         $state->primaryDeficitToGdp = $primaryDeficit / max(0.1, $state->nominalGdpIndex);
         // The debt pays what it was issued at, not today's 10-year: the coupon stock reprices as it rolls over, the
         // bills at once (Treasury average rate on marketable debt, fitted above).
-        $state->sovereignCouponRate += (1.0 - exp(-$dt / self::SOVEREIGN_COUPON_REPRICING_YEARS)) * ($state->yield10y - $state->sovereignCouponRate);
+        // The book moves toward the Exchequer's maturity only as it rolls over: a steady ladder turns over once per average
+        // maturity, as the US extension from 48 months to the high 60s took eight years.
+        $state->sovereignDebtAverageMaturity += (1.0 - exp(-$dt / $state->sovereignDebtAverageMaturity)) * ($state->sovereignDebtMaturityTarget - $state->sovereignDebtAverageMaturity);
+        $state->sovereignCouponRate += (1.0 - exp(-$dt / self::couponRepricingYears($state))) * ($state->yield10y - $state->sovereignCouponRate);
         $interestCost = self::sovereignEffectiveRate($state) * $state->sovereignDebtToGdp;
 
         // Blanchard (2019) sovereign debt accumulation driven by growth-adjusted real rate (r - g), g being the growth
@@ -813,7 +823,36 @@ class CreditFiscalSubsystem
      */
     public static function sovereignEffectiveRate(MacroState $state): float
     {
-        return (self::SOVEREIGN_DEBT_BILL_SHARE * $state->policyRate) + ((1.0 - self::SOVEREIGN_DEBT_BILL_SHARE) * $state->sovereignCouponRate);
+        $billShare = self::billShare($state->sovereignDebtAverageMaturity);
+
+        return ($billShare * $state->policyRate) + ((1.0 - $billShare) * $state->sovereignCouponRate);
+    }
+
+    /** Share of the debt repricing at the bill rate within the year at an average maturity: the fitted share, scaled by the founding maturity over this one. */
+    public static function billShare(float $averageMaturity): float
+    {
+        return min(1.0, self::SOVEREIGN_DEBT_BILL_SHARE * self::FOUNDING_DEBT_AVERAGE_MATURITY / max(0.25, $averageMaturity));
+    }
+
+    /** Time constant (years) of the coupon stock's rate toward the 10-year at the book's average maturity, scaled from the fitted one. */
+    public static function couponRepricingYears(MacroState $state): float
+    {
+        return self::SOVEREIGN_COUPON_REPRICING_YEARS * $state->sovereignDebtAverageMaturity / self::FOUNDING_DEBT_AVERAGE_MATURITY;
+    }
+
+    /** The ten-year term premium the book's maturity adds against the founding book (FixedIncome::calculateMaturitySupplyTermPremium()). */
+    public static function maturitySupplyTermPremium(float $netDebtToGdp, float $averageMaturity): float
+    {
+        return FixedIncome::calculateMaturitySupplyTermPremium($netDebtToGdp, $averageMaturity, self::FOUNDING_DEBT_AVERAGE_MATURITY, self::DEBT_MATURITY_TERM_PREMIUM);
+    }
+
+    /**
+     * The duration taken out of private hands, in ten-year term premium: the central bank's holdings less the extra the
+     * Exchequer's maturity puts in, both through the same preferred-habitat channel (Vayanos & Vila 2021).
+     */
+    public static function durationExtraction(float $balanceSheetIntensity, float $netDebtToGdp, float $averageMaturity): float
+    {
+        return $balanceSheetIntensity - self::maturitySupplyTermPremium($netDebtToGdp, $averageMaturity);
     }
 
     /**

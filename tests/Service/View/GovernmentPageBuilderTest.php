@@ -64,6 +64,30 @@ class GovernmentPageBuilderTest extends TestCase
         $this->assertNull($this->builder()->buildBudget(new MacroStateDTO(), new PoliticsStateDTO())['exposure'], 'No board, no tables.');
     }
 
+    /** The Exchequer's panel: nothing before it has a head; then the head's maturity, the book moving toward it, what it pays at its repricing share, and what its maturity adds to the ten-year. */
+    public function testTheExchequerPanelReadsTheDebtAndItsHead(): void
+    {
+        $this->assertNull($this->builder()->exchequer(new PoliticsStateDTO(), new MacroStateDTO()));
+
+        $politics = new PoliticsStateDTO(totalTime: 13.0, exchequerHeadName: 'Rosalind Tate', exchequerHeadBirth: -38.0, exchequerHeadTermStart: 13.0,
+            exchequerHeadStance: \App\Service\Politics\Exchequer::stance(4.3), councilDebtStances: [-0.5, 0.0, 0.5]);
+        $macro = new MacroStateDTO(sovereignDebtToGdp: 0.9, sovereignNetDebtToGdp: 0.75, sovereignNetDebtToGdpEma: 0.75, sovereignDebtAverageMaturity: 4.7, sovereignDebtMaturityTarget: 4.3,
+            policyRate: 0.04, sovereignCouponRate: 0.03);
+        $panel = $this->builder()->exchequer($politics, $macro);
+
+        $this->assertNotNull($panel);
+        $this->assertSame('Rosalind Tate', $panel['head']['name']);
+        $this->assertSame(51, $panel['head']['age']);
+        $this->assertSame('short', $panel['head']['stance']);
+        $this->assertEqualsWithDelta(4.3, $panel['movingTo'], 1e-12);
+        $share = \App\Service\Macro\Subsystem\CreditFiscalSubsystem::billShare(4.7);
+        $this->assertEqualsWithDelta($share, $panel['repricingShare'], 1e-12);
+        $this->assertEqualsWithDelta(($share * 0.04) + ((1.0 - $share) * 0.03), $panel['rate'], 1e-12);
+        $this->assertEqualsWithDelta($panel['rate'] * 0.9, $panel['interestToGdp'], 1e-12);
+        $this->assertLessThan(0, $panel['maturityBp'], 'A book shorter than the founding one takes duration off the ten-year.');
+        $this->assertEqualsWithDelta(\App\Service\Politics\Exchequer::averageMaturity(0.0), $panel['councilMaturity'], 1e-12);
+    }
+
     public function testTheDietAtYearOneIsDrawnSeatForSeat(): void
     {
         $page = $this->builder()->buildDiet(new MacroStateDTO(), new PoliticsStateDTO());
@@ -541,7 +565,7 @@ class GovernmentPageBuilderTest extends TestCase
             regulatorBirth: -45.0,
             regulatorTermStart: 7.0,
             regulatorStance: $regime,
-            regulatorPassedOver: [['name' => 'Other One', 'birth' => -50.0, 'stance' => 0.0, 'regulation' => -1.0, 'fund' => 0.0]],
+            regulatorPassedOver: [['name' => 'Other One', 'birth' => -50.0, 'stance' => 0.0, 'regulation' => -1.0, 'fund' => 0.0, 'debt' => 0.0]],
             bankCapitalRequirement: 0.1012,
             requirementPhaseFrom: 0.094,
             requirementPhaseStart: 7.0,
@@ -621,7 +645,7 @@ class GovernmentPageBuilderTest extends TestCase
         $rows = array_column($this->builder()->buildDiet(new MacroStateDTO(), new PoliticsStateDTO())['compass']['layouts']['wide']['rows'], 'laws', 'axis');
 
         $this->assertSame(['public spending', 'corporate tax', 'stamp duty', 'bank levy', 'reserve draw'], $rows[Diet::AXIS_STATE]);
-        $this->assertSame(['tariffs', 'immigration'], $rows[Diet::AXIS_OPENNESS]);
+        $this->assertSame(['tariffs', 'immigration', 'foreign buyers'], $rows[Diet::AXIS_OPENNESS]);
         $this->assertSame(['merger review'], $rows[Diet::AXIS_COUNCIL]);
         $this->assertSame(['green belts', 'carbon price', 'extraction rules'], $rows[Diet::AXIS_ENVIRONMENT]);
         $this->assertCount(count(PoliticsEngine::LEVER_FIELDS), array_merge(...array_values($rows)));
@@ -644,7 +668,7 @@ class GovernmentPageBuilderTest extends TestCase
         $this->assertSame('iron-harbor', $page['party']['slug']);
         $this->assertSame('Iron Harbor Coalition', $page['party']['name']);
         $this->assertNotEmpty($page['party']['about']);
-        $this->assertCount(3, $page['party']['agenda']);
+        $this->assertCount(4, $page['party']['agenda']);
         $this->assertSame(['Openness'], $page['party']['definedBy']);
         $this->assertSame('the Civic Front', $page['party']['blocLeader']);
 

@@ -120,6 +120,7 @@ class PoliticsEngine
         'corporateTax' => true,
         'tariff' => true,
         'laborGrowth' => false,
+        'foreignBuyerTax' => false,
         'mergerReviewLeniency' => false,
         'greenBeltStringency' => false,
         'carbonPrice' => true,
@@ -136,6 +137,7 @@ class PoliticsEngine
         'corporateTax' => 'corporateTaxPolicyShift',
         'tariff' => 'importTariffRate',
         'laborGrowth' => 'laborForceGrowthRate',
+        'foreignBuyerTax' => 'foreignBuyerTaxRate',
         'mergerReviewLeniency' => 'mergerReviewLeniency',
         'greenBeltStringency' => 'greenBeltStringency',
         'carbonPrice' => 'carbonPrice',
@@ -150,6 +152,7 @@ class PoliticsEngine
         'corporateTax' => AerieDiet::AXIS_STATE,
         'tariff' => AerieDiet::AXIS_OPENNESS,
         'laborGrowth' => AerieDiet::AXIS_OPENNESS,
+        'foreignBuyerTax' => AerieDiet::AXIS_OPENNESS,
         'mergerReviewLeniency' => AerieDiet::AXIS_COUNCIL,
         'greenBeltStringency' => AerieDiet::AXIS_ENVIRONMENT,
         'carbonPrice' => AerieDiet::AXIS_ENVIRONMENT,
@@ -176,6 +179,10 @@ class PoliticsEngine
     public const MIGRATION_CLOSED_REGIME = 0.0011;
     /** Net migration an open immigration regime admits: Canada's 0.73% and Australia's 0.86%, averaged (the same series). Midway between the two regimes sits the US's 0.50%, the structural labour growth the District opens with. */
     public const MIGRATION_OPEN_REGIME = (0.00728 + 0.00859) / 2.0;
+
+    // --- Platforms: Foreign Buyers of Homes (Singapore Additional Buyer's Stamp Duty) ---
+    /** Tax on a home bought by a buyer from outside the District the closed end of the openness axis enacts, a share of the price: Singapore's 60% Additional Buyer's Stamp Duty on foreigners (since 27 April 2023), the strictest on record. The open end taxes none, as the District did at its founding. */
+    public const POLICY_PROTECTIONIST_FOREIGN_BUYER_TAX = 0.60;
 
     // --- Platforms: Stamp Duty (Colliard & Hoffmann 2017) ---
     /** Duty on each side of a share trade the big-state end of the axis enacts: France's 0.4% tax on share purchases (since 1 April 2025), as 0.2% a side, the same cost to a round trip. The small-state end keeps the founding 0.05% a side (FinancialConstants::STAMP_DUTY_RATE); either way it is paid into the reserve fund, not the budget. */
@@ -315,6 +322,7 @@ class PoliticsEngine
         MonetaryAuthority::advance($state, $macro, $dt, $this->mathUtility);
         FinancialRegulator::advance($state, $this->mathUtility);
         SovereignReserveFund::advance($state, $this->mathUtility);
+        Exchequer::advance($state, $this->mathUtility);
         PoliticalPressure::advance($state, $dt, $this->mathUtility);
         PartyLeaders::advance($state, $dt, $this->mathUtility);
         ElectionForecast::advance($state, $macro->sovereignDebtToGdp, MacroEngine::inSahmRecession($macro->sahmRecessionIndicator));
@@ -341,6 +349,7 @@ class PoliticsEngine
             $state->lastGovernorAppointedAt === $state->totalTime => ShockEvent::GOVERNOR_APPOINTED,
             $state->lastRegulatorAppointedAt === $state->totalTime => ShockEvent::REGULATOR_APPOINTED,
             $state->lastFundHeadAppointedAt === $state->totalTime => ShockEvent::FUND_HEAD_APPOINTED,
+            $state->lastExchequerHeadAppointedAt === $state->totalTime => ShockEvent::EXCHEQUER_HEAD_APPOINTED,
             $state->lastPressureAt === $state->totalTime => $state->pressureGivingIn > 0.0 ? ShockEvent::AUTHORITY_GIVES_GROUND : ShockEvent::AUTHORITY_PRESSED,
             $state->lastMajorityShiftAt === $state->totalTime => ShockEvent::AUTHORITY_MAJORITY_SHIFT,
             $state->lastCouncillorSeatedAt === $state->totalTime => ShockEvent::COUNCILLOR_SEATED,
@@ -377,8 +386,9 @@ class PoliticsEngine
      * protectionists'.
      *
      * @param array<string, float> $position A position by axis (coalitionPosition(), or a party's).
-     * @return array{publicSpending: float, corporateTax: float, tariff: float, laborGrowth: float, mergerReviewLeniency: float, greenBeltStringency: float, carbonPrice: float, extractionStringency: float, stampDutyRate: float, bankLevyRate: float, reserveDrawShare: float}
+     * @return array{publicSpending: float, corporateTax: float, tariff: float, laborGrowth: float, foreignBuyerTax: float, mergerReviewLeniency: float, greenBeltStringency: float, carbonPrice: float, extractionStringency: float, stampDutyRate: float, bankLevyRate: float, reserveDrawShare: float}
      *         Government purchases as a share of GDP, the corporate rate's shift from the neutral rate, the average tariff on imports, labour force growth,
+     *         the tax on homes bought from outside the District,
      *         where merger review stands between the 2023 guidelines (0) and the 2010 guidelines (1), how far the green
      *         belt stands between the founding planning regime (0) and the strictest (1), the carbon price in dollars a
      *         tonne, how far the rules on extraction stand between the founding ones (0) and the strictest (1), the
@@ -409,6 +419,7 @@ class PoliticsEngine
             'tariff' => self::POLICY_PROTECTIONIST_TARIFF * max(0.0, $openness / $closed),
             'laborGrowth' => MacroEngine::STRUCTURAL_LABOR_GROWTH_RATE
                 + ((self::MIGRATION_OPEN_REGIME - self::MIGRATION_CLOSED_REGIME) * $openness / $opennessSpan),
+            'foreignBuyerTax' => self::POLICY_PROTECTIONIST_FOREIGN_BUYER_TAX * max(0.0, $openness / $closed),
             // The Common Lot's anti-cartel review is the 2023 guidelines, the Chartists' the 2010 ones
             // (App\Service\Corporate\MergerAndAcquisitionEngine::reviewScreens).
             'mergerReviewLeniency' => ($council - $populist) / ($technocratic - $populist),
@@ -426,7 +437,7 @@ class PoliticsEngine
     /**
      * The levers in force, keyed and ordered as platform() writes them, so a budget that changes nothing compares equal.
      *
-     * @return array{publicSpending: float, corporateTax: float, tariff: float, laborGrowth: float, mergerReviewLeniency: float, greenBeltStringency: float, carbonPrice: float, extractionStringency: float, stampDutyRate: float, bankLevyRate: float, reserveDrawShare: float}
+     * @return array{publicSpending: float, corporateTax: float, tariff: float, laborGrowth: float, foreignBuyerTax: float, mergerReviewLeniency: float, greenBeltStringency: float, carbonPrice: float, extractionStringency: float, stampDutyRate: float, bankLevyRate: float, reserveDrawShare: float}
      */
     public static function standingLevers(PoliticsState|PoliticsStateDTO $state): array
     {
@@ -435,7 +446,7 @@ class PoliticsEngine
             $standing[$lever] = $state->$field;
         }
 
-        /** @var array{publicSpending: float, corporateTax: float, tariff: float, laborGrowth: float, mergerReviewLeniency: float, greenBeltStringency: float, carbonPrice: float, extractionStringency: float, stampDutyRate: float, bankLevyRate: float, reserveDrawShare: float} $standing */
+        /** @var array{publicSpending: float, corporateTax: float, tariff: float, laborGrowth: float, foreignBuyerTax: float, mergerReviewLeniency: float, greenBeltStringency: float, carbonPrice: float, extractionStringency: float, stampDutyRate: float, bankLevyRate: float, reserveDrawShare: float} $standing */
         return $standing;
     }
 

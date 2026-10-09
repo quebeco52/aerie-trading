@@ -10,9 +10,11 @@ use App\Entity\DistrictNews;
 use App\Entity\Etf;
 use App\Service\Event\MarketEventPublisher;
 use App\Service\Macro\MacroEngine;
+use App\Service\Macro\Subsystem\CreditFiscalSubsystem;
 use App\Service\Macro\Subsystem\SovereignFundSubsystem;
 use App\Service\Market\Chart\PriceChangeFeed;
 use App\Service\Politics\CoalitionFormation;
+use App\Service\Politics\Exchequer;
 use App\Service\Politics\FinancialRegulator;
 use App\Service\Politics\MonetaryAuthority;
 use App\Service\Politics\PartyLeaders;
@@ -36,6 +38,8 @@ class SystemicEventReporter
     /** How each stance reads counted, one and many. */
     /** A head of the Sovereign Reserve Fund's stance on the reserves, as a headline puts it. */
     private const FUND_PHRASES = ['cautious' => 'a cautious investor', 'balanced' => 'a balanced investor', 'bold' => 'a bold investor'];
+    /** A head of the Exchequer's stance on the debt, as a headline puts it. */
+    private const DEBT_PHRASES = ['short' => 'who favours borrowing short', 'balanced' => 'a middle-of-the-road debt manager', 'long' => 'who favours locking in long-term rates'];
     /** A head of the Financial Regulator's stance on the banks, as a headline puts it. */
     private const REGULATION_PHRASES = ['light' => 'a light-touch regulator', 'middle' => 'a moderate', 'strict' => 'a strict regulator'];
     private const STANCE_PLURALS = ['hawk' => ['hawk', 'hawks'], 'swing' => ['swing vote', 'swing votes'], 'dove' => ['dove', 'doves']];
@@ -81,7 +85,8 @@ class SystemicEventReporter
             + self::authorityContext($politics)
             + self::pressureContext($politics)
             + self::leaderContext($politics)
-            + self::fundHeadContext($macro, $politics);
+            + self::fundHeadContext($macro, $politics)
+            + self::exchequerHeadContext($macro, $politics);
 
         $monthMove = $this->priceChangeFeed->changeForTicker((string) $benchmark->getTicker(), (float) $benchmark->getPrice());
 
@@ -342,6 +347,41 @@ class SystemicEventReporter
             static fn(string $party): string => $names[$party],
             AerieDiet::governingParties($politics->governingCoalition)
         ))];
+    }
+
+    /**
+     * The Exchequer's head for their headline: who they are, their stance on the debt, the average maturity they steer
+     * the book toward against today's, and what that does to the ten-year once the book has turned over. Empty before the
+     * Exchequer has a head.
+     *
+     * @return array<string, string>
+     */
+    private static function exchequerHeadContext(MacroStateDTO $macro, PoliticsStateDTO $politics): array
+    {
+        if ($politics->exchequerHeadName === '') {
+            return [];
+        }
+
+        $years = static fn(float $maturity): string => number_format($maturity, 1) . ' years';
+        $target = Exchequer::averageMaturity($politics->exchequerHeadStance);
+        $current = $macro->sovereignDebtAverageMaturity;
+        $basisPoints = (int) round(10000.0 * (CreditFiscalSubsystem::maturitySupplyTermPremium($macro->sovereignNetDebtToGdpEma, $target) - CreditFiscalSubsystem::maturitySupplyTermPremium($macro->sovereignNetDebtToGdpEma, $current)));
+
+        return [
+            'exchequer_head' => $politics->exchequerHeadName,
+            'exchequer_head_age' => (string) (int) floor($politics->totalTime - $politics->exchequerHeadBirth),
+            'exchequer_head_stance' => self::DEBT_PHRASES[Exchequer::stanceName($target)],
+            'exchequer_head_term_ends' => GovernmentPageBuilder::simDate(Exchequer::headTermEnd($politics->totalTime)),
+            'exchequer_head_passed_over' => self::listNames(array_map(
+                static fn(array $candidate): string => "{$candidate['name']}, who would have borrowed at {$years(Exchequer::averageMaturity($candidate['debt']))} on average",
+                $politics->exchequerHeadPassedOver
+            )),
+            'debt_maturity_change' => match (true) {
+                abs($target - $current) < 0.05 => "keeps the debt's average maturity near {$years($current)}",
+                $target > $current => "lengthens the debt toward an average of {$years($target)} from {$years($current)}, which as the debt rolls over adds about {$basisPoints} basis points to the ten-year",
+                default => "shortens the debt toward an average of {$years($target)} from {$years($current)}, which as the debt rolls over takes about " . abs($basisPoints) . " basis points off the ten-year",
+            },
+        ];
     }
 
     /**

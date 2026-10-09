@@ -326,7 +326,7 @@ final class MonetaryAuthority
         return self::majority($state->committeeBalance);
     }
 
-    /** @param array{name: string, birth: float, stance: float, regulation: float, fund: float, swing?: float} $person */
+    /** @param array{name: string, birth: float, stance: float, regulation: float, fund: float, debt: float, swing?: float} $person */
     private static function seatGovernor(PoliticsState $state, array $person, float $termStart): void
     {
         CouncilAppointments::retire($state, $state->governorName);
@@ -337,7 +337,7 @@ final class MonetaryAuthority
         $state->governorSwinger = $person['swing'] ?? 0.0;
     }
 
-    /** @param array{name: string, birth: float, stance: float, regulation: float, fund: float, swing?: float} $person */
+    /** @param array{name: string, birth: float, stance: float, regulation: float, fund: float, debt: float, swing?: float} $person */
     private static function seatMember(PoliticsState $state, int $member, array $person, float $since): void
     {
         CouncilAppointments::retire($state, $state->memberNames[$member] ?? '');

@@ -50,7 +50,7 @@ for ($seed = (int) $seedFrom; $seed <= (int) $seedTo; ++$seed) {
         } elseif ($arm === 'step') {
             $policy = new \App\DTO\GovernmentPolicyDTO(
                 publicSpendingShare: $m->publicSpendingShare,
-                corporateTaxPolicyShift: $m->corporateTaxPolicyShift, importTariffRate: $m->importTariffRate, laborForceGrowthRate: $m->laborForceGrowthRate,
+                corporateTaxPolicyShift: $m->corporateTaxPolicyShift, importTariffRate: $m->importTariffRate, laborForceGrowthRate: $m->laborForceGrowthRate, foreignBuyerTaxRate: $m->foreignBuyerTaxRate,
                 mergerReviewLeniency: $m->mergerReviewLeniency, greenBeltStringency: $m->greenBeltStringency, carbonPrice: $m->carbonPrice,
                 extractionStringency: $m->extractionStringency, stampDutyRate: $m->stampDutyRate, bankLevyRate: $m->bankLevyRate, electionPulse: $m->electionPulse,
                 bankCapitalRequirement: \App\Service\Math\FinancialConstants::OPENING_BANK_CAPITAL_REQUIREMENT + ((float) (getenv('STEP_SIZE') ?: 0.01)) * ((float) (getenv('STEP_PHASE') ?: 0.0) > 0.0
@@ -70,7 +70,7 @@ for ($seed = (int) $seedFrom; $seed <= (int) $seedTo; ++$seed) {
             }
             $policy = new \App\DTO\GovernmentPolicyDTO(
                 publicSpendingShare: $m->publicSpendingShare,
-                corporateTaxPolicyShift: $m->corporateTaxPolicyShift, importTariffRate: $m->importTariffRate, laborForceGrowthRate: $m->laborForceGrowthRate,
+                corporateTaxPolicyShift: $m->corporateTaxPolicyShift, importTariffRate: $m->importTariffRate, laborForceGrowthRate: $m->laborForceGrowthRate, foreignBuyerTaxRate: $m->foreignBuyerTaxRate,
                 mergerReviewLeniency: $m->mergerReviewLeniency, greenBeltStringency: $m->greenBeltStringency, carbonPrice: $m->carbonPrice,
                 extractionStringency: $m->extractionStringency, stampDutyRate: $m->stampDutyRate, bankLevyRate: $m->bankLevyRate, electionPulse: $m->electionPulse,
                 authorityConcession: ($conceding ?? false) ? 1.0 : 0.0,
@@ -83,6 +83,7 @@ for ($seed = (int) $seedFrom; $seed <= (int) $seedTo; ++$seed) {
                 corporateTaxPolicyShift: 0.0,
                 importTariffRate: 0.0,
                 laborForceGrowthRate: MacroEngine::STRUCTURAL_LABOR_GROWTH_RATE,
+                foreignBuyerTaxRate: 0.0,
                 mergerReviewLeniency: 0.0,
                 greenBeltStringency: 0.0,
                 carbonPrice: 0.0,
@@ -104,7 +105,7 @@ for ($seed = (int) $seedFrom; $seed <= (int) $seedTo; ++$seed) {
                 'req' => $m->bankCapitalRequirement, 'built' => $m->bankCapitalBuilt, 'sloos' => $m->sloosTighteningIndex, 'ccyb' => $m->countercyclicalBufferRate, 'cdrag' => $m->creditCrisisDrag, 'lastcrisis' => $m->lastCreditCrisisAt, 'hdti' => $m->householdDebtToIncome, 'cgap' => $m->creditToGdpGap,
                 'regst' => $p->regulatorStance, 'creg' => \App\Service\Politics\CouncilAppointments::median($p->councilRegulationStances), 'regstart' => $p->regulatorTermStart, 'regname' => $p->regulatorName, 'seated' => $m->authorityCommitteeSeated, 'mmaj' => $m->authorityMajority,
                 'cc' => \App\Service\Politics\PoliticsEngine::coalitionPosition($p->governingCoalition, $p->dietSeats, $p->partyPositions)[AerieDiet::AXIS_COUNCIL] ?? null,
-                'cs' => \App\Service\Politics\PoliticsEngine::coalitionPosition($p->governingCoalition, $p->dietSeats, $p->partyPositions)[AerieDiet::AXIS_STATE] ?? null, 'g' => $m->governmentSpendingIndex, 'spend' => $m->publicSpendingShare, 'press' => $p->pressureSince, 'give' => $p->pressureGivingIn, 'meet' => $p->lastMeetingAt, 'votes' => $p->lastMeetingVotes, 'govstart' => $p->governorTermStart, 'mst' => $p->memberStances,
+                'cs' => \App\Service\Politics\PoliticsEngine::coalitionPosition($p->governingCoalition, $p->dietSeats, $p->partyPositions)[AerieDiet::AXIS_STATE] ?? null, 'g' => $m->governmentSpendingIndex, 'spend' => $m->publicSpendingShare, 'fbt' => $m->foreignBuyerTaxRate, 'wam' => $m->sovereignDebtAverageMaturity, 'ndebt' => $m->sovereignNetDebtToGdpEma, 'eff' => $m->sovereignCouponRate, 'pr' => $m->policyRate, 'press' => $p->pressureSince, 'give' => $p->pressureGivingIn, 'meet' => $p->lastMeetingAt, 'votes' => $p->lastMeetingVotes, 'govstart' => $p->governorTermStart, 'mst' => $p->memberStances,
             ]) . "\n");
         }
     }

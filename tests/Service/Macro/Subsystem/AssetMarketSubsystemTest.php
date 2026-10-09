@@ -398,6 +398,28 @@ class AssetMarketSubsystemTest extends TestCase
     }
 
     /**
+     * A tax on foreign home buyers takes the part of values their demand holds up: British Columbia's 15% leaves the
+     * fundamental 6% lower, foreign buyers' share falling from 9.5% to 1.7% of purchases; the effect saturates once
+     * they have left, and the index closes its reversion's share of the step as it does for immigration.
+     */
+    public function testAForeignBuyerTaxTakesThePartOfValuesTheirDemandHoldsUp(): void
+    {
+        $this->assertSame(1.0, AssetMarketSubsystem::foreignBuyerPriceFactor(0.0));
+        $this->assertEqualsWithDelta(0.94, AssetMarketSubsystem::foreignBuyerPriceFactor(0.15), 5e-4);
+        $this->assertEqualsWithDelta(0.017 / 0.095, exp(-AssetMarketSubsystem::FOREIGN_BUYER_TAX_DEMAND_SEMI_ELASTICITY * 0.15), 5e-4);
+        $this->assertEqualsWithDelta(exp(-AssetMarketSubsystem::FOREIGN_BUYER_HOUSING_VALUE_SHARE), AssetMarketSubsystem::foreignBuyerPriceFactor(0.60), 1e-3, 'At Singapore\'s 60% almost every foreign buyer has gone.');
+        $this->assertGreaterThan(AssetMarketSubsystem::foreignBuyerPriceFactor(0.60) - AssetMarketSubsystem::foreignBuyerPriceFactor(0.30), AssetMarketSubsystem::foreignBuyerPriceFactor(0.0) - AssetMarketSubsystem::foreignBuyerPriceFactor(0.15), 'The first points of tax do the most.');
+
+        $base = $this->neutralHousingState();
+        $taxed = $this->neutralHousingState();
+        $taxed->foreignBuyerTaxRate = 0.15;
+        $this->subsystem->calculateResidentialPropertyIndex($base, MacroEngine::TARGET_INFLATION, 0.25);
+        $this->subsystem->calculateResidentialPropertyIndex($taxed, MacroEngine::TARGET_INFLATION, 0.25);
+        $expected = (1.0 - exp(-AssetMarketSubsystem::RESIDENTIAL_MEAN_REVERSION * 0.25)) * log(AssetMarketSubsystem::foreignBuyerPriceFactor(0.15));
+        $this->assertEqualsWithDelta($expected, log($taxed->residentialPropertyIndex / $base->residentialPropertyIndex), 1e-12);
+    }
+
+    /**
      * The green belt runs from the 10th percentile of English planning authorities' refusal rates (the founding plan)
      * to the 90th, and raises the price elasticity by Hilber & Vermeulen's boom or bust coefficient per standard
      * deviation of refusal rate between them.

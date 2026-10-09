@@ -72,6 +72,7 @@ class PoliticsState
     public float $corporateTaxPolicyShift;
     public float $importTariffRate;
     public float $laborForceGrowthRate;
+    public float $foreignBuyerTaxRate;
     public float $mergerReviewLeniency;
     public float $greenBeltStringency;
     public float $carbonPrice;
@@ -109,9 +110,11 @@ class PoliticsState
     public array $councilRegulationStances;
     /** @var array<int, float> */
     public array $councilFundStances;
-    /** @var list<array{name: string, birth: float, stance: float, regulation: float, fund: float, swing?: float}> */
+    /** @var array<int, float> */
+    public array $councilDebtStances;
+    /** @var list<array{name: string, birth: float, stance: float, regulation: float, fund: float, debt: float, swing?: float}> */
     public array $councillorPassedOver;
-    /** @var array<int, array{name: string, birth: float, stance: float, regulation: float, fund: float, swing?: float}> */
+    /** @var array<int, array{name: string, birth: float, stance: float, regulation: float, fund: float, debt: float, swing?: float}> */
     public array $boardMembers;
     /** @var array<int, float> */
     public array $boardSince;
@@ -120,7 +123,7 @@ class PoliticsState
     public float $governorTermStart;
     public float $governorStance;
     public float $governorSwinger;
-    /** @var list<array{name: string, birth: float, stance: float, regulation: float, fund: float, swing?: float}> */
+    /** @var list<array{name: string, birth: float, stance: float, regulation: float, fund: float, debt: float, swing?: float}> */
     public array $governorPassedOver;
     /** @var list<string> */
     public array $memberNames;
@@ -149,7 +152,7 @@ class PoliticsState
     public float $regulatorBirth;
     public float $regulatorTermStart;
     public float $regulatorStance;
-    /** @var list<array{name: string, birth: float, stance: float, regulation: float, fund: float, swing?: float}> */
+    /** @var list<array{name: string, birth: float, stance: float, regulation: float, fund: float, debt: float, swing?: float}> */
     public array $regulatorPassedOver;
     public float $bankCapitalRequirement;
     public float $requirementPhaseFrom;
@@ -160,9 +163,16 @@ class PoliticsState
     public float $fundHeadBirth;
     public float $fundHeadTermStart;
     public float $fundHeadStance;
-    /** @var list<array{name: string, birth: float, stance: float, regulation: float, fund: float, swing?: float}> */
+    /** @var list<array{name: string, birth: float, stance: float, regulation: float, fund: float, debt: float, swing?: float}> */
     public array $fundHeadPassedOver;
     public float $lastFundHeadAppointedAt;
+    public string $exchequerHeadName;
+    public float $exchequerHeadBirth;
+    public float $exchequerHeadTermStart;
+    public float $exchequerHeadStance;
+    /** @var list<array{name: string, birth: float, stance: float, regulation: float, fund: float, debt: float, swing?: float}> */
+    public array $exchequerHeadPassedOver;
+    public float $lastExchequerHeadAppointedAt;
     /** @var list<string> */
     public array $formerNames;
     public float $pressureSince;
@@ -265,7 +275,7 @@ class PoliticsState
                 $field === 'leaderHistory' => self::hydrateLeaderHistory($value),
                 $field === 'polls' => self::hydratePolls($value),
                 $field === 'forecastCabinets' => self::hydrateCabinets($value),
-                in_array($field, ['councillorPassedOver', 'governorPassedOver', 'regulatorPassedOver', 'fundHeadPassedOver', 'boardMembers'], true) => self::hydrateCandidates($value),
+                in_array($field, ['councillorPassedOver', 'governorPassedOver', 'regulatorPassedOver', 'fundHeadPassedOver', 'exchequerHeadPassedOver', 'boardMembers'], true) => self::hydrateCandidates($value),
                 is_string($opening) => is_scalar($value) ? (string) $value : $opening,
                 is_array($opening) => array_map('floatval', $value),
                 default => is_numeric($value) ? (float) $value : $opening,
@@ -295,7 +305,7 @@ class PoliticsState
      * and on the reserves.
      *
      * @param array<mixed> $candidates Candidates as decoded.
-     * @return list<array{name: string, birth: float, stance: float, regulation: float, fund: float, swing?: float}>
+     * @return list<array{name: string, birth: float, stance: float, regulation: float, fund: float, debt: float, swing?: float}>
      */
     private static function hydrateCandidates(array $candidates): array
     {
@@ -308,6 +318,7 @@ class PoliticsState
                     'stance' => is_numeric($candidate['stance'] ?? null) ? (float) $candidate['stance'] : 0.0,
                     'regulation' => is_numeric($candidate['regulation'] ?? null) ? (float) $candidate['regulation'] : 0.0,
                     'fund' => is_numeric($candidate['fund'] ?? null) ? (float) $candidate['fund'] : 0.0,
+                    'debt' => is_numeric($candidate['debt'] ?? null) ? (float) $candidate['debt'] : 0.0,
                 ] + (is_numeric($candidate['swing'] ?? null) ? ['swing' => (float) $candidate['swing']] : []);
             }
         }

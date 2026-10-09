@@ -61,6 +61,8 @@ final class AerieCouncil
     public const OPENING_REGULATOR = 'Linda Clements';
     /** The Sovereign Reserve Fund's head sitting at Year 1, named before it. */
     public const OPENING_FUND_HEAD = 'Richard Bland';
+    /** The Exchequer's head sitting at Year 1, named before it. */
+    public const OPENING_EXCHEQUER_HEAD = 'Carol Hollis';
 
     // --- Departments ---
     /**
@@ -72,7 +74,7 @@ final class AerieCouncil
         ['name' => Institutions::MONETARY_AUTHORITY, 'mandate' => 'Sets the policy rate by its published rule. Its governor, named for one term, picks the rate committee. Independent of the Diet by charter.', 'href' => '/authority'],
         ['name' => Institutions::SOVEREIGN_RESERVE_FUND, 'mandate' => 'Invests the reserves and pays the budget its rule draw. Its head, named for one term, sets how much of the fund is in shares. Holds the second key: no draw on the reserves passes without it.', 'href' => '/reserve'],
         ['name' => Institutions::FINANCIAL_REGULATOR, 'mandate' => 'Sets the core capital banks must hold against their loans and the most a home buyer may borrow against the property. Its head, named for one term, decides both.', 'href' => '/regulator'],
-        ['name' => Institutions::EXCHEQUER, 'mandate' => 'Executes the budget the Diet passes and manages the District\'s debt.', 'href' => null],
+        ['name' => Institutions::EXCHEQUER, 'mandate' => 'Executes the budget the Diet passes and funds it. Its head, named for one term, decides how long the District borrows for.', 'href' => '/exchequer'],
         ['name' => Institutions::TRADE_MIGRATION_OFFICE, 'mandate' => 'Administers the tariff schedule and the migration quotas the Diet legislates.', 'href' => null],
     ];
 

@@ -884,6 +884,16 @@ class PoliticsEngineTest extends TestCase
         $this->assertLessThan(MacroEngine::TARGET_CORPORATE_TAX_RATE, $vanguard->publicSpendingShare, 'A cut narrows the deficit and passes.');
     }
 
+    /** The closed end of the openness axis taxes foreign home buyers at Singapore's 60%; the open end and the middle tax none. */
+    public function testTheClosedEndTaxesForeignHomeBuyers(): void
+    {
+        $this->assertSame(Politics::POLICY_PROTECTIONIST_FOREIGN_BUYER_TAX, Politics::platform(Diet::position(Diet::IRON_HARBOR, []))['foreignBuyerTax']);
+        $this->assertSame(0.0, Politics::platform(Diet::position(Diet::EXCHANGE, []))['foreignBuyerTax']);
+        $this->assertSame(0.0, Politics::platform([Diet::AXIS_OPENNESS => 0.0])['foreignBuyerTax']);
+        $this->assertEqualsWithDelta(Politics::POLICY_PROTECTIONIST_FOREIGN_BUYER_TAX / 2.0, Politics::platform([Diet::AXIS_OPENNESS => Diet::FIXED_POSITIONS[Diet::IRON_HARBOR][Diet::AXIS_OPENNESS] / 2.0])['foreignBuyerTax'], 1e-15);
+        $this->assertFalse(Politics::REVENUE_LEVERS['foreignBuyerTax']);
+    }
+
     /** The two ends of the size-of-state axis plan public spending the 2019 UK manifestos' log gap apart, the neutral position keeping the founding share. */
     public function testThePublicSpendingPlatformsSpanTheManifestoGap(): void
     {

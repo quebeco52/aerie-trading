@@ -29,6 +29,12 @@ class AssetMarketSubsystem
     /** Rise in rents and house values per unit of population added by immigration (Saiz 2007: an inflow of 1% of a city's population raises rents and values about 1%); the District's land ends at the sounds. */
     public const IMMIGRATION_HOUSING_ELASTICITY = 1.0;
 
+    // --- Foreign Buyers of Homes (British Columbia's 2016 Foreign Buyers Tax) ---
+    /** Fall in foreign buyers' share of home purchases per unit of tax, in logs: BC's 15% tax took it from 9.5% of transactions in the six weeks before to 1.7% in the four months after (Pavlov, Somerville & Wetzel), ln(9.5 / 1.7) / 0.15. */
+    public const FOREIGN_BUYER_TAX_DEMAND_SEMI_ELASTICITY = 11.47;
+    /** Log of house values foreign demand holds up, all of which a tax that prices every foreign buyer out takes off: the 15% tax left prices 6% lower where foreign buyers bought (Pavlov, Somerville & Wetzel; West & Botsch 2020 find 2.4% within five months), ln(1 / 0.94) over the 82% of foreign demand it removed. The District is a financial centre, so its whole market is such a neighbourhood. */
+    public const FOREIGN_BUYER_HOUSING_VALUE_SHARE = 0.0754;
+
     // --- Green Belts (Hilber & Vermeulen 2016, EJ: 353 English planning authorities, 1974-2008) ---
     /** Mean refusal rate of major residential schemes (ten or more homes) across English planning authorities, 1979-2008 (Table 1). */
     public const PLANNING_REFUSAL_RATE_MEAN = 0.254;
@@ -351,7 +357,8 @@ class AssetMarketSubsystem
      * and household real disposable income affordability, with sticky physical mean reversion. Credit conditions
      * enter the fundamental as in Duca, Muellbauer & Murphy (2011): the price a buyer can pay is the price a lender
      * will finance, so net tightening in bank standards lowers it and loosening lifts it. The population an immigration
-     * regime adds over the structural path bids for the same land, one for one (Saiz 2007). A green belt makes prices
+     * regime adds over the structural path bids for the same land, one for one (Saiz 2007); a tax on foreign buyers takes
+     * the part of values their demand holds up (foreignBuyerPriceFactor()). A green belt makes prices
      * answer income and population more strongly, as stricter planning does across English authorities (Hilber &
      * Vermeulen 2016); the index has no trend in real income, so a green belt deepens its booms and slumps and the
      * price of immigration rather than adding a drift of its own.
@@ -381,7 +388,8 @@ class AssetMarketSubsystem
             : 1.0;
         $immigrationLift = self::greenBeltElasticityLift($state->greenBeltStringency, $state->immigrationPopulationShift);
         $immigrationFactor = exp((self::IMMIGRATION_HOUSING_ELASTICITY + $immigrationLift) * $state->immigrationPopulationShift);
-        $fundamentalPrice = self::RESIDENTIAL_BASELINE * max(0.30, min(2.50, $affordabilityFactor * max(0.5, $damageFactor) * max(0.5, $creditConditionsFactor) * max(0.5, $creditSupplyFactor) * $immigrationFactor));
+        $foreignBuyerFactor = self::foreignBuyerPriceFactor($state->foreignBuyerTaxRate);
+        $fundamentalPrice = self::RESIDENTIAL_BASELINE * max(0.30, min(2.50, $affordabilityFactor * max(0.5, $damageFactor) * max(0.5, $creditConditionsFactor) * max(0.5, $creditSupplyFactor) * $immigrationFactor * $foreignBuyerFactor));
 
         $dW = $this->mathUtility->generateStandardNormal();
         $newIndex = StochasticProcesses::calculateSchwartz1Factor(
@@ -417,6 +425,7 @@ class AssetMarketSubsystem
                 'lendingStandards' => log(max(0.5, $creditConditionsFactor)),
                 'creditSupply' => log(max(0.5, $creditSupplyFactor)),
                 'immigration' => self::IMMIGRATION_HOUSING_ELASTICITY * $state->immigrationPopulationShift,
+                'foreignBuyers' => log($foreignBuyerFactor),
                 'greenBelt' => log(max(1e-9, $incomeFactor) / max(1e-9, 1.0 + ($state->outputGapEma * self::RESIDENTIAL_INCOME_ELASTICITY)))
                     + ($immigrationLift * $state->immigrationPopulationShift),
             ];
@@ -964,6 +973,18 @@ class AssetMarketSubsystem
         $mortgageRate = $state->yield10yEma + MacroEngine::RESIDENTIAL_MORTGAGE_SPREAD;
 
         return max(0.015, $mortgageRate + self::RESIDENTIAL_DEPRECIATION_TAX_RATE - $expectedInflation);
+    }
+
+    /**
+     * What a tax on homes bought from outside the District leaves of the fundamental house price: the foreign demand
+     * it prices out, a share falling exponentially in the tax, takes its part of house values with it, so the effect
+     * saturates once foreign buyers have left.
+     *
+     * @param float $taxRate The tax, a share of the price.
+     */
+    public static function foreignBuyerPriceFactor(float $taxRate): float
+    {
+        return exp(-self::FOREIGN_BUYER_HOUSING_VALUE_SHARE * (1.0 - exp(-self::FOREIGN_BUYER_TAX_DEMAND_SEMI_ELASTICITY * max(0.0, $taxRate))));
     }
 
     /**

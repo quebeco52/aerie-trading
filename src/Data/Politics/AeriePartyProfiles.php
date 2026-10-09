@@ -108,6 +108,7 @@ final class AeriePartyProfiles
             'agenda' => [
                 ['title' => 'A protective tariff', 'text' => 'A tariff on imports to protect the District\'s farms, fisheries, yards and workshops.'],
                 ['title' => 'Immigration at the pace of housing', 'text' => 'Admit workers no faster than the District can house and employ them.'],
+                ['title' => 'Homes for those who live here', 'text' => 'A heavy tax on homes bought by buyers from outside the District.'],
                 ['title' => 'Keep the coast working', 'text' => 'No carbon price, and no new rules on drilling and mining.'],
             ],
             'relations' => 'Iron Harbor sits in the left bloc, closer to the Civic Front on the banks than to the Vanguard on anything, and it joins Civic cabinets when the arithmetic needs it. Its natural enemy is the Exchange, the party of the open door. With the Tideline Accord it shares a coast and a dislike of Glasswater Row, and quarrels over what the coast is for. In a bad year for the Civic Front, the Harbor can out-poll it and lead the left itself.',
@@ -138,6 +139,7 @@ final class AeriePartyProfiles
             'agenda' => [
                 ['title' => 'Free trade', 'text' => 'No tariff on imports, so none in return on the District\'s exports.'],
                 ['title' => 'Open migration', 'text' => 'A work permit for anyone with a job offer.'],
+                ['title' => 'Open to every buyer', 'text' => 'No tax on homes bought from outside the District.'],
                 ['title' => 'Steady taxes', 'text' => 'Keep the corporate tax near its long-standing rate: openness, not a low rate, is what brings business here.'],
             ],
             'relations' => 'The Exchange usually sits in the Vanguard\'s bloc and backs its cabinets, inside or out, but it is the party most able to cross over: on the state it is close enough to the Civic Front to make a government of the centre possible. It has rarely sat in a cabinet with Iron Harbor, whose tariffs it exists to oppose.',

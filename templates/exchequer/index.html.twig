@@ -1,0 +1,97 @@
+{% extends 'base.html.twig' %}
+
+{% block title %}Exchequer - Aerie Exchange{% endblock %}
+
+{% block meta %}
+	<meta name="description" content="The District's Exchequer: the debt it manages, how long the District borrows for, and what the debt costs.">
+	<meta property="og:title" content="Exchequer | Aerie Exchange">
+	<meta property="og:type" content="website">
+{% endblock %}
+
+{% block body %}
+<div class="max-w-400 mx-auto px-4 sm:px-6 lg:px-8 pt-8 pb-12 w-full space-y-6">
+
+	{% include 'government/_breadcrumb.html.twig' with {current: 'Exchequer'} %}
+	<header class="pb-5 border-b border-outline-variant/15">
+		<h1 class="text-2xl md:text-3xl font-semibold text-on-surface tracking-tight">Exchequer</h1>
+		<p class="mt-2 text-sm text-on-surface-variant leading-relaxed max-w-3xl">
+			The District's treasury. It carries out the budget the Diet passes and funds it, selling bills repaid within the
+			year and bonds that run for decades. Its head is named by the Aerie Council for a single term and decides how long
+			the District borrows for.
+		</p>
+	</header>
+
+	{% if exchequer %}
+		{% set head = exchequer.head %}
+		<section class="bg-surface-container-low rounded-lg p-5 border border-outline-variant/20" aria-labelledby="head-heading">
+			<h2 id="head-heading" class="text-sm font-semibold text-on-surface">The head</h2>
+			<p class="text-sm font-semibold text-on-surface mt-2">{{ head.name }}</p>
+			<p class="text-xs text-on-surface-variant mt-0.5">Age {{ head.age }} · seated {{ head.sinceLabel }} · term ends <span class="font-mono tabular-nums">{{ head.termEndsLabel }}</span></p>
+			<p class="text-sm text-on-surface mt-2 max-w-3xl">
+				{{- {short: 'Favours borrowing short', balanced: 'Takes a middle course', long: 'Favours locking in long-term rates'}[head.stance] }},
+				{{ head.opening ? 'keeping the debt at the average maturity it had at Year 1' : 'steering the debt toward an average maturity of' }}
+				{%- if not head.opening %} <span class="font-mono tabular-nums">{{ head.maturity|number_format(1) }}</span> years{% endif %}
+				{%- if head.passedOver is not empty %}, chosen over {% for candidate in head.passedOver %}{{ candidate.name }} <span class="text-on-surface-variant">(<span class="font-mono tabular-nums">{{ candidate.maturity|number_format(1) }}</span> years, {{ candidate.age }})</span>{{ loop.last ? '' : (loop.revindex == 2 ? ' and ' : ', ') }}{% endfor %}{% endif %}.
+			</p>
+			<p class="text-xs text-on-surface-variant mt-2 max-w-3xl">
+				The Council names the head for a single {{ exchequer.rules.termYears|number_format(0) }}-year term from a shortlist of {{ exchequer.rules.shortlist }}, choosing the candidate nearest its own view of the debt.
+				{% if exchequer.councilMaturity is not null %}The Council's median member would borrow at <span class="font-mono tabular-nums">{{ exchequer.councilMaturity|number_format(1) }}</span> years on average.{% endif %}
+			</p>
+		</section>
+
+		<div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
+			<section class="bg-surface-container-low rounded-lg p-5 border border-outline-variant/20" aria-labelledby="debt-heading">
+				<h2 id="debt-heading" class="text-sm font-semibold text-on-surface">The debt</h2>
+				<p class="mt-2 text-2xl font-semibold font-mono tabular-nums text-on-surface">{{ exchequer.debt|pct(1) }}</p>
+				<p class="text-xs text-on-surface-variant">of GDP, <span class="font-mono tabular-nums">{{ exchequer.netDebt|pct(1) }}</span> net of the bonds the Sovereign Reserve Fund holds</p>
+				<dl class="grid grid-cols-2 gap-x-6 gap-y-3 mt-4 text-xs">
+					<div>
+						<dt class="text-on-surface-variant">Average maturity</dt>
+						<dd class="text-on-surface mt-0.5"><span class="font-mono tabular-nums">{{ exchequer.maturity|number_format(1) }}</span> years{% if exchequer.movingTo is not null %}, {{ exchequer.movingTo > exchequer.maturity ? 'lengthening' : 'shortening' }} toward <span class="font-mono tabular-nums">{{ exchequer.movingTo|number_format(1) }}</span>{% endif %}</dd>
+					</div>
+					<div>
+						<dt class="text-on-surface-variant">Repriced within the year</dt>
+						<dd class="text-on-surface mt-0.5 font-mono tabular-nums">{{ exchequer.repricingShare|pct(0) }}</dd>
+					</div>
+					<div>
+						<dt class="text-on-surface-variant">Average rate paid</dt>
+						<dd class="text-on-surface mt-0.5 font-mono tabular-nums">{{ exchequer.rate|pct(2) }}</dd>
+					</div>
+					<div>
+						<dt class="text-on-surface-variant">Interest a year</dt>
+						<dd class="text-on-surface mt-0.5"><span class="font-mono tabular-nums">{{ exchequer.interestToGdp|pct(1) }}</span> of GDP</dd>
+					</div>
+				</dl>
+				<p class="text-xs text-on-surface-variant mt-4 leading-relaxed">
+					Bills and maturing bonds are refinanced at the rates of the day, so a shorter debt passes a change in the policy rate into the budget sooner.
+					The debt reaches a new average maturity only as it rolls over, over several years.
+				</p>
+			</section>
+
+			<section class="bg-surface-container-low rounded-lg p-5 border border-outline-variant/20" aria-labelledby="market-heading">
+				<h2 id="market-heading" class="text-sm font-semibold text-on-surface">The bond market</h2>
+				<p class="mt-2 text-2xl font-semibold font-mono tabular-nums text-on-surface">{{ exchequer.tenYear|pct(2) }}</p>
+				<p class="text-xs text-on-surface-variant">ten-year yield</p>
+				<p class="text-xs text-on-surface mt-3">
+					{%- set bp = exchequer.maturityBp -%}
+					{%- set points = bp|abs == 1 ? ' basis point' : ' basis points' -%}
+					{% if bp == 0 %}
+						The debt's maturity adds nothing to the ten-year against a debt of <span class="font-mono tabular-nums">{{ exchequer.rules.founding|number_format(1) }}</span> years.
+					{% else %}
+						The debt's maturity {{ bp > 0 ? 'adds' : 'takes' }} about <span class="font-mono tabular-nums">{{ bp|abs }}</span>{{ points }} {{ bp > 0 ? 'to' : 'off' }} the ten-year against a debt of <span class="font-mono tabular-nums">{{ exchequer.rules.founding|number_format(1) }}</span> years.
+					{% endif %}
+				</p>
+				<p class="text-xs text-on-surface-variant mt-3 leading-relaxed">
+					Long bonds leave pension funds, insurers and banks more interest-rate risk to carry, and they ask to be paid for it.
+					A longer debt locks in today's rates and costs more while long rates sit above short ones; a shorter one is cheaper until rates rise.
+					A head may steer anywhere from {{ exchequer.rules.shortest|number_format(1) }} to {{ exchequer.rules.longest|number_format(1) }} years.
+				</p>
+			</section>
+		</div>
+	{% else %}
+		<p class="text-sm text-on-surface-variant">The Exchequer has no head yet.</p>
+	{% endif %}
+
+	<p class="source-note">{{ source_line('exchequer') }}</p>
+</div>
+{% endblock %}

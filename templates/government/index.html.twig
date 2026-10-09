@@ -140,7 +140,7 @@
 
 		<section aria-labelledby="appointed-heading">
 			<h2 id="appointed-heading" class="text-sm font-semibold text-on-surface">The Council and the departments it appoints</h2>
-			<div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-5 mt-3">
+			<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-5 gap-5 mt-3">
 				<section class="bg-surface-container-low rounded-lg p-5 border border-outline-variant/20 flex flex-col" aria-labelledby="hub-council-heading">
 					<h3 id="hub-council-heading" class="text-sm font-semibold text-on-surface"><a href="{{ path('app_council') }}" class="hover:underline">Aerie Council</a></h3>
 					{% if council.lean %}
@@ -204,6 +204,16 @@
 					{% endif %}
 					<p class="mt-auto pt-3 text-xs"><a href="{{ path('app_reserve') }}" class="text-primary hover:underline underline-offset-2">Holdings, weights and bands</a></p>
 				</section>
+
+				<section class="bg-surface-container-low rounded-lg p-5 border border-outline-variant/20 flex flex-col" aria-labelledby="hub-exchequer-heading">
+					<h3 id="hub-exchequer-heading" class="text-sm font-semibold text-on-surface"><a href="{{ path('app_exchequer') }}" class="hover:underline">Exchequer</a></h3>
+					{% if exchequer %}
+						<p class="mt-2 text-2xl font-semibold font-mono tabular-nums text-on-surface">{{ exchequer.maturity|number_format(1) }} years</p>
+						<p class="text-xs text-on-surface-variant">average maturity of the debt, <span class="font-mono tabular-nums">{{ exchequer.debt|pct(0) }}</span> of GDP</p>
+						<p class="text-xs text-on-surface mt-3">Head {{ exchequer.head.name }}, {{ {short: 'favouring short borrowing', balanced: 'taking a middle course', long: 'favouring long borrowing'}[exchequer.head.stance] }}{{ exchequer.head.opening ? ', keeping the debt as it stood at Year 1' : '' }}.</p>
+					{% endif %}
+					<p class="mt-auto pt-3 text-xs"><a href="{{ path('app_exchequer') }}" class="text-primary hover:underline underline-offset-2">The debt and what it costs</a></p>
+				</section>
 			</div>
 		</section>
 
@@ -236,7 +246,7 @@
 					heading: 'The budget',
 					items: [
 						{name: 'Budget rounds', text: 'The Diet passes a budget every ' ~ rules.budgetRoundMonths|number_format(0) ~ ' months. A new government\'s first budget is the round after it takes office.'},
-						{name: 'What it decides', text: 'The corporate tax rate, the tariff on imports, the immigration regime, how strictly mergers are reviewed, how much housing the planning system lets through, the carbon price on power, the rules on offshore drilling and mining, the stamp duty on share trades, which is paid into the Sovereign Reserve, and the levy on banks\' balance sheets. Public spending follows the Exchequer\'s long-term plan, which no government has rewritten.'},
+						{name: 'What it decides', text: 'How much the District spends on public services, the corporate tax rate, the tariff on imports, the immigration regime, the tax on homes bought from outside the District, how strictly mergers are reviewed, how much housing the planning system lets through, the carbon price on power, the rules on offshore drilling and mining, the stamp duty on share trades, which is paid into the Sovereign Reserve, the levy on banks\' balance sheets, and how much of the reserves\' return the budget spends. How the debt is funded is the Exchequer\'s.'},
 						{name: 'Supporters\' veto', text: 'A minority cabinet needs its supporters\' votes. They will not back a change that moves a policy further from their own, so they can stop a government but not steer it.'},
 						{name: 'The debt brake', text: 'Above ' ~ rules.debtBrake|pct(0) ~ ' of GDP in debt, the Council would veto any budget that cuts revenue or raises spending, so the Diet does not table one.'},
 						{name: 'Removing councillors', text: 'The Diet can remove a councillor with ' ~ rules.supermajority ~ ' of its ' ~ rules.seats ~ ' seats. It never has, and ' ~ rules.loyalists|join(', ') ~ ' never would.'}

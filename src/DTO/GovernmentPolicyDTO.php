@@ -19,6 +19,8 @@ final readonly class GovernmentPolicyDTO
         public float $importTariffRate,
         /** Labour force growth, the immigration regime in it. */
         public float $laborForceGrowthRate,
+        /** Tax on a home bought by a buyer from outside the District, a share of the price. */
+        public float $foreignBuyerTaxRate,
         /** Where merger review stands between the 2023 guidelines (0) and the 2010 guidelines (1). */
         public float $mergerReviewLeniency,
         /** How far the green belt stands between the founding planning regime (0) and the strictest on record (1). */
@@ -43,6 +45,8 @@ final readonly class GovernmentPolicyDTO
         public ?float $mortgageLtvCap = null,
         /** The policy equity share the Sovereign Reserve Fund's head has set; null while the head sitting at Year 1 keeps the mix the fund opened with. */
         public ?float $reserveFundEquityShare = null,
+        /** The average maturity, in years, the Exchequer's head steers the debt toward; null while the head sitting at Year 1 keeps the book the debt opened with. */
+        public ?float $debtAverageMaturity = null,
         /** 1 while the Monetary Authority is giving ground to the cabinet's pressure, else 0; null before the Authority has formed. */
         public ?float $authorityConcession = null,
         /** @var array<string, float>|null The levers the sitting government will pass at its next budget round, keyed as App\Service\Politics\PoliticsEngine::LEVER_FIELDS; null before they have been read. */

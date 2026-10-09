@@ -6,6 +6,7 @@ namespace App\DTO;
 
 use App\Data\Macro\MacroFieldRegistry;
 use App\Service\Macro\MacroEngine;
+use App\Service\Macro\Subsystem\CreditFiscalSubsystem;
 use App\Service\Macro\MacroState;
 use App\Service\Macro\Subsystem\AssetMarketSubsystem;
 use App\Service\Macro\Subsystem\MacroAggregateSubsystem;
@@ -187,6 +188,9 @@ readonly class MacroStateDTO
         public float $sovereignDebtToGdpEma = MacroEngine::INITIAL_DEBT_TO_GDP,
         public float $sovereignNetDebtToGdp = MacroEngine::INITIAL_DEBT_TO_GDP,
         public float $sovereignNetDebtToGdpEma = MacroEngine::INITIAL_DEBT_TO_GDP,
+        /** Average maturity of the debt, in years, and the one the Exchequer's head steers it toward as it rolls over (CreditFiscalSubsystem). */
+        public float $sovereignDebtAverageMaturity = CreditFiscalSubsystem::FOUNDING_DEBT_AVERAGE_MATURITY,
+        public float $sovereignDebtMaturityTarget = CreditFiscalSubsystem::FOUNDING_DEBT_AVERAGE_MATURITY,
         public float $equityRiskPremium = MacroEngine::BASE_EQUITY_RISK_PREMIUM,
         public float $macroCreditSpread = MacroEngine::BASE_CREDIT_SPREAD,
         public float $macroCreditSpreadEma = MacroEngine::BASE_CREDIT_SPREAD,
@@ -336,6 +340,8 @@ readonly class MacroStateDTO
         public float $importTariffRate = 0.0,
         public float $tariffTradeLag = 0.0,
         public float $laborForceGrowthRate = MacroEngine::STRUCTURAL_LABOR_GROWTH_RATE,
+        /** Tax on a home bought by a buyer from outside the District, a share of the price. */
+        public float $foreignBuyerTaxRate = 0.0,
         public float $mergerReviewLeniency = 0.0,
         public float $immigrationPopulationShift = 0.0,
         public float $greenBeltStringency = 0.0,
@@ -591,7 +597,7 @@ readonly class MacroStateDTO
             curvature2: $this->nsCurvature2,
             baseTermPremium: $this->nsBaseTermPremium,
             longEndPremium: $this->nsLongEndPremium,
-            balanceSheetIntensity: $this->balanceSheetIntensity,
+            balanceSheetIntensity: CreditFiscalSubsystem::durationExtraction($this->balanceSheetIntensity, $this->sovereignNetDebtToGdpEma, $this->sovereignDebtAverageMaturity),
         );
     }
 

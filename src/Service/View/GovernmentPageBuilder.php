@@ -22,12 +22,14 @@ use App\Service\Corporate\MergerAndAcquisitionEngine;
 use App\Service\Macro\MacroEngine;
 use App\Service\Macro\Subsystem\AssetMarketSubsystem;
 use App\Service\Macro\Subsystem\CommodityLogisticsSubsystem;
+use App\Service\Macro\Subsystem\CreditFiscalSubsystem;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\FirmEconomics;
 use App\Service\Math\MacroTransmission;
 use App\Service\Politics\CoalitionFormation;
 use App\Service\Politics\CouncilAppointments;
 use App\Service\Politics\ElectionForecast;
+use App\Service\Politics\Exchequer;
 use App\Service\Politics\FinancialRegulator;
 use App\Service\Politics\MonetaryAuthority;
 use App\Service\Politics\PartyLeaders;
@@ -83,6 +85,7 @@ class GovernmentPageBuilder
         'corporateTax' => ['Corporate tax rate', 'pct'],
         'tariff' => ['Average tariff on imports', 'pct'],
         'laborGrowth' => ['Labour force growth', 'pct'],
+        'foreignBuyerTax' => ['Tax on foreign home buyers', 'pct'],
         'mergerReviewLeniency' => ['Merger review line', 'hhi'],
         'greenBeltStringency' => ['Housing schemes refused', 'pct'],
         'carbonPrice' => ['Carbon price', 'usd_t'],
@@ -151,6 +154,7 @@ class GovernmentPageBuilder
         'publicSpending' => 'public spending',
         'tariff' => 'tariffs',
         'laborGrowth' => 'immigration',
+        'foreignBuyerTax' => 'foreign buyers',
         'mergerReviewLeniency' => 'merger review',
         'greenBeltStringency' => 'green belts',
         'carbonPrice' => 'carbon price',
@@ -233,6 +237,7 @@ class GovernmentPageBuilder
             'regulator' => $this->regulator($politics, $macro),
             'mortgageLtvCap' => $macro->mortgageLtvCap,
             'fundHead' => $this->fundHead($politics, $macro),
+            'exchequer' => $this->exchequer($politics, $macro),
         ]);
     }
 
@@ -1028,6 +1033,7 @@ class GovernmentPageBuilder
                 ['name' => 'Corporate tax rate', 'unit' => 'pct', 'platform' => $neutral + $platform['corporateTax'], 'enacted' => $neutral + $politics->corporateTaxPolicyShift],
                 ['name' => 'Average tariff on imports', 'unit' => 'pct', 'platform' => $platform['tariff'], 'enacted' => $politics->importTariffRate],
                 ['name' => 'Labour force growth', 'unit' => 'pct', 'platform' => $platform['laborGrowth'], 'enacted' => $politics->laborForceGrowthRate],
+                ['name' => 'Tax on foreign home buyers', 'unit' => 'pct', 'platform' => $platform['foreignBuyerTax'], 'enacted' => $politics->foreignBuyerTaxRate],
                 ['name' => 'Merger review line', 'unit' => 'hhi', 'platform' => $concentrated($platform['mergerReviewLeniency']), 'enacted' => $concentrated($politics->mergerReviewLeniency)],
                 ['name' => 'Housing schemes refused', 'unit' => 'pct', 'platform' => AssetMarketSubsystem::planningRefusalRate($platform['greenBeltStringency']), 'enacted' => AssetMarketSubsystem::planningRefusalRate($politics->greenBeltStringency)],
                 ['name' => 'Carbon price', 'unit' => 'usd_t', 'platform' => $platform['carbonPrice'], 'enacted' => $politics->carbonPrice],
@@ -1216,6 +1222,17 @@ class GovernmentPageBuilder
                     'enacted' => $standing['laborGrowth'],
                     'status' => $status('laborGrowth'),
                     'note' => sprintf('Immigration has added %+.1f%% to the population over the structural path', 100.0 * $macro->immigrationPopulationShift),
+                ],
+                [
+                    'name' => 'Tax on foreign home buyers',
+                    'axis' => AerieDiet::AXIS_OPENNESS,
+                    'platform' => $budget['platform']['foreignBuyerTax'],
+                    'target' => $budget['levers']['foreignBuyerTax'],
+                    'enacted' => $standing['foreignBuyerTax'],
+                    'status' => $status('foreignBuyerTax'),
+                    'note' => $standing['foreignBuyerTax'] > 0.0
+                        ? sprintf('Of the price of a home bought from outside the District; it holds home prices %.1f%% below where they would stand without it', 100.0 * (1.0 - AssetMarketSubsystem::foreignBuyerPriceFactor($standing['foreignBuyerTax'])))
+                        : 'Homes are open to buyers from anywhere, as at Year 1',
                 ],
                 [
                     'name' => 'Merger review line',
@@ -1850,6 +1867,61 @@ class GovernmentPageBuilder
                 'shortlist' => CouncilAppointments::SHORTLIST,
                 'mostCautious' => SovereignReserveFund::mostCautious(),
                 'boldest' => SovereignReserveFund::boldest(),
+            ],
+        ];
+    }
+
+    /**
+     * The Exchequer: its head, their stance on the debt and whom the Council passed over for them; the debt, the average
+     * maturity it stands at and the one the head steers it toward, the share of it repricing within the year, what it
+     * pays, and what its maturity adds to the ten-year against the founding book. Null before the Exchequer has a head.
+     *
+     * @return array<string, mixed>|null
+     */
+    public function exchequer(PoliticsStateDTO $politics, MacroStateDTO $macro): ?array
+    {
+        if ($politics->exchequerHeadName === '') {
+            return null;
+        }
+
+        $time = $politics->totalTime;
+        $target = Exchequer::averageMaturity($politics->exchequerHeadStance);
+        $maturity = $macro->sovereignDebtAverageMaturity;
+        $billShare = CreditFiscalSubsystem::billShare($maturity);
+        $rate = ($billShare * $macro->policyRate) + ((1.0 - $billShare) * $macro->sovereignCouponRate);
+
+        return [
+            'head' => [
+                'name' => $politics->exchequerHeadName,
+                'age' => (int) floor($time - $politics->exchequerHeadBirth),
+                'sinceLabel' => $politics->exchequerHeadTermStart < 0.0 ? 'Before Year 1' : self::simDate($politics->exchequerHeadTermStart),
+                'termEndsLabel' => self::simDate(Exchequer::headTermEnd($time)),
+                'opening' => $politics->exchequerHeadTermStart < 0.0,
+                'stance' => Exchequer::stanceName($target),
+                'maturity' => $target,
+                'passedOver' => array_map(static fn(array $candidate): array => [
+                    'name' => $candidate['name'],
+                    'age' => (int) floor($politics->exchequerHeadTermStart - $candidate['birth']),
+                    'maturity' => Exchequer::averageMaturity($candidate['debt']),
+                ], $politics->exchequerHeadPassedOver),
+            ],
+            'debt' => $macro->sovereignDebtToGdp,
+            'netDebt' => $macro->sovereignNetDebtToGdp,
+            'maturity' => $maturity,
+            // A book still more than a month from the head's maturity is moving toward it.
+            'movingTo' => abs($macro->sovereignDebtMaturityTarget - $maturity) > 1.0 / 12.0 ? $macro->sovereignDebtMaturityTarget : null,
+            'repricingShare' => $billShare,
+            'rate' => $rate,
+            'interestToGdp' => $rate * $macro->sovereignDebtToGdp,
+            'tenYear' => $macro->yield10y,
+            'maturityBp' => (int) round(10000.0 * CreditFiscalSubsystem::maturitySupplyTermPremium($macro->sovereignNetDebtToGdpEma, $maturity)),
+            'councilMaturity' => $politics->councilDebtStances === [] ? null : Exchequer::averageMaturity(CouncilAppointments::median($politics->councilDebtStances)),
+            'rules' => [
+                'termYears' => Exchequer::HEAD_TERM_YEARS,
+                'shortlist' => CouncilAppointments::SHORTLIST,
+                'shortest' => Exchequer::SHORTEST_AVERAGE_MATURITY,
+                'longest' => Exchequer::LONGEST_AVERAGE_MATURITY,
+                'founding' => CreditFiscalSubsystem::FOUNDING_DEBT_AVERAGE_MATURITY,
             ],
         ];
     }

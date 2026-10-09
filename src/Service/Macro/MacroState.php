@@ -167,6 +167,8 @@ class MacroState
     // default risk on. Equal to the gross ratio in a run with no fund.
     public float $sovereignNetDebtToGdp;
     public float $sovereignNetDebtToGdpEma;
+    public float $sovereignDebtAverageMaturity;
+    public float $sovereignDebtMaturityTarget;
     public ?string $eventType;
     public float $eventCooldownTimer;
     public float $equityRiskPremium;
@@ -390,6 +392,7 @@ class MacroState
     public float $importTariffRate;
     public float $tariffTradeLag;
     public float $laborForceGrowthRate;
+    public float $foreignBuyerTaxRate;
     public float $mergerReviewLeniency;
     public float $immigrationPopulationShift;
     public float $greenBeltStringency;

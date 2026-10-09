@@ -93,6 +93,15 @@ final class PagesRenderTest extends KernelTestCase
                 ],
                 'mortgage' => ['cap' => 0.85, 'heldBelow' => 0.031, 'debtToIncome' => 0.98, 'tightestCap' => 0.70, 'loosestCap' => 1.0, 'regimes' => 17, 'uncapped' => 7],
             ]],
+            'exchequer' => ['/exchequer', 'exchequer/index.html.twig', [
+                'exchequer' => [
+                    'head' => ['name' => 'Rosalind Tate', 'age' => 51, 'sinceLabel' => 'Year 13 Q1', 'termEndsLabel' => 'Year 18 Q1', 'opening' => false, 'stance' => 'short', 'maturity' => 4.3,
+                        'passedOver' => [['name' => 'Hal Brennan', 'age' => 47, 'maturity' => 5.7], ['name' => 'Ines Okafor', 'age' => 56, 'maturity' => 4.9]]],
+                    'debt' => 0.912, 'netDebt' => 0.764, 'maturity' => 4.7, 'movingTo' => 4.3, 'repricingShare' => 0.295, 'rate' => 0.0341,
+                    'interestToGdp' => 0.0311, 'tenYear' => 0.0438, 'maturityBp' => -6, 'councilMaturity' => 4.6,
+                    'rules' => ['termYears' => 5.0, 'shortlist' => 3, 'shortest' => 4.0, 'longest' => 5.92, 'founding' => 4.96],
+                ],
+            ]],
             'notifications' => ['/notifications', 'notifications/index.html.twig', [
                 'page' => 1, 'pages' => 1, 'total' => 3,
                 'notifications' => [
