@@ -131,3 +131,29 @@ Own law alone, percent. "3-seed sd" = sd of the pooled p95 over 400 bootstrap dr
   heavier duty: seed 6, t 8.75, a one-party cabinet falls 5 months after forming, the coming budget read 0.064% -> 0.176%
   from 9.00 (TRACE line in `pricing_probe_seeds.php`). News, about one per 900 game-years; quote it as such, not as a max.
 Caveats: economy held on trend (`pricing_probe.php`'s representative firms, bases as measured above), 12 ticks a year.
+
+# Public spending priced; long-run laws re-measured (2026-10-09)
+
+## Long-run laws (`lever_means.php` 16 seeds x 200y, pooled by `lever_pool.php`, the live measures, numpy-free)
+Runs: `runs_spend/` (code with the spending lever), `runs_base/` (8a6a862, before it). Same seeds.
+| Law (as earnings feel it) | recorded | before lever | now (se) | persistence recorded / before / now |
+|---|---|---|---|---|
+| Tax shift | +0.0047 | -0.0034 | -0.0061 (0.0018) | 0.662 / 0.589 / 0.507 |
+| Bank levy | 0.00118 | 0.00092 | 0.00085 (0.00006) | 0.660 / 0.586 / 0.507 |
+| Extraction factor | 1.0035 | 1.0033 | 1.0035 (0.0004) | 0.567 / 0.552 / 0.518 |
+| Stamp duty factor | 0.949 | 0.946 | 0.947 (0.003) | 0.360 / 0.472 / 0.426 |
+| Carbon uplift | 0.0826 | 0.0409 | 0.0411 (0.0043) | 0.838 / 0.634 / 0.597 |
+| Public spending (purchases/founding - 1) | - | - | -0.0255 (0.0040) | - / - / 0.458 |
+Most drift predates the lever (constants stale since before 8a6a862); the lever adds about -0.003 to the tax mean and
+-0.08 to tax persistence (lower debt, so the brake holds fewer tax cuts). All constants refreshed to "now".
+
+## Pricing (`pricing_probe.php` 3 seeds x 120y; `pricing_probe_spend.out`)
+Contractor: public spending base 6% of fair value per unit of purchases, k - g 5%. |log move| p95 / max:
+| News | contractor, own law | contractor, all laws | bank law | broker law |
+|---|---|---|---|---|
+| Monthly poll | 0.56% / 1.5% | 0.23% / 0.67% | 0.86% / 2.2% | 1.6% / 5.1% |
+| The vote | 1.5% / 3.9% | 0.59% / 1.6% | 2.7% / 4.7% | 5.0% / 9.4% |
+| Government takes office | 0.88% / 2.1% | 0.40% / 1.0% | 1.4% / 2.3% | 2.6% / 5.8% |
+A big-state win raises the contractor's spending and its tax together, so its total move is under half its own law's.
+Levels against no pricing of the own law, now near zero with the refreshed long runs: contractor -0.6% (sd 4.1%),
+bank -0.3% (was -3.5% on the stale levy mean), broker +0.2%, miner -0.0%.
