@@ -4,10 +4,11 @@ declare(strict_types=1);
 
 namespace App\Service\Model\Sector;
 
-use App\Data\InputOutputExposures;
+use App\Data\Macro\InputOutputExposures;
+use App\Service\Math\MacroTransmission;
 use App\Service\Model\BusinessModelInterface;
 
-use App\Data\ModelParam;
+use App\Service\Model\ModelParam;
 use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
 use App\Service\Math\MathUtility;
@@ -70,7 +71,7 @@ class SemiconductorBusinessModel extends StandardCorporateBusinessModel
     public function getSecularGrowthRate(Stock $stock): float
     {
         return MacroEngine::TREND_REAL_GROWTH
-            + MathUtility::gdpShareDrift(self::SECULAR_SHARE_1997, self::SECULAR_SHARE_2019, FinancialConstants::SECULAR_SHARE_WINDOW_YEARS);
+            + MacroTransmission::gdpShareDrift(self::SECULAR_SHARE_1997, self::SECULAR_SHARE_2019, FinancialConstants::SECULAR_SHARE_WINDOW_YEARS);
     }
     public function getCapexCyclicality(): float
     {
@@ -195,12 +196,12 @@ class SemiconductorBusinessModel extends StandardCorporateBusinessModel
         // while fabless IP licensing scales independently with tech demand.
         $outputGap = $macroState->outputGapEma;
         $cuDeviation = $macroState->capacityUtilizationRateEma - MacroEngine::CU_BASELINE;
-        $cuShift = MathUtility::calculateCapacityUtilizationShift(
+        $cuShift = MacroTransmission::calculateCapacityUtilizationShift(
             $macroState->capacityUtilizationRateEma,
             MacroEngine::CU_BASELINE,
             self::CAPACITY_UTILIZATION_SENSITIVITY
         );
-        $pmiShift = MathUtility::calculatePmiDemandShift(
+        $pmiShift = MacroTransmission::calculatePmiDemandShift(
             $macroState->manufacturingPmiEma,
             MacroEngine::PMI_BASELINE,
             self::PMI_CHIP_DEMAND_SENSITIVITY

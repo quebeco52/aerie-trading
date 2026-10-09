@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace App\Service\Corporate;
 
 use App\Entity\Stock;
-use App\Data\Sectors;
+use App\Data\Company\Sectors;
 
 class CapExEngine
 {

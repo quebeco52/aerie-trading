@@ -4,10 +4,11 @@ declare(strict_types=1);
 
 namespace App\Service\Model\Sector;
 
-use App\Data\InputOutputExposures;
+use App\Data\Macro\InputOutputExposures;
+use App\Service\Math\MacroTransmission;
 use App\Service\Model\BusinessModelInterface;
 
-use App\Data\ModelParam;
+use App\Service\Model\ModelParam;
 use App\DTO\MacroStateDTO;
 use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
@@ -128,7 +129,7 @@ class RailroadBusinessModel extends StandardCorporateBusinessModel
     public function getSecularGrowthRate(Stock $stock): float
     {
         return MacroEngine::TREND_REAL_GROWTH
-            + MathUtility::gdpShareDrift(self::SECULAR_SHARE_1997, self::SECULAR_SHARE_2019, FinancialConstants::SECULAR_SHARE_WINDOW_YEARS);
+            + MacroTransmission::gdpShareDrift(self::SECULAR_SHARE_1997, self::SECULAR_SHARE_2019, FinancialConstants::SECULAR_SHARE_WINDOW_YEARS);
     }
     
     public function getCapexCyclicality(): float { return 0.70; } // Heavy rail maintenance CapEx
@@ -285,9 +286,9 @@ class RailroadBusinessModel extends StandardCorporateBusinessModel
         $beta = $this->getOperatingCyclicality($stock);
         $freightShift = ($macroState->freightRateIndexEma - 100.0) / 100.0;
         $agriShift = ($macroState->agriculturalCommodityIndexEma - 100.0) / 100.0;
-        $tradeShift = MathUtility::calculateTradeBalanceShift($macroState->tradeBalanceToGdpEma, sensitivity: self::TRADE_BALANCE_SENSITIVITY)
-            + MathUtility::calculateForeignDemandShift($macroState->foreignOutputGapEma, sensitivity: self::FOREIGN_DEMAND_SENSITIVITY);
-        $pmiShift = MathUtility::calculatePmiDemandShift($macroState->manufacturingPmiEma, sensitivity: self::PMI_CARLOAD_SENSITIVITY);
+        $tradeShift = MacroTransmission::calculateTradeBalanceShift($macroState->tradeBalanceToGdpEma, sensitivity: self::TRADE_BALANCE_SENSITIVITY)
+            + MacroTransmission::calculateForeignDemandShift($macroState->foreignOutputGapEma, sensitivity: self::FOREIGN_DEMAND_SENSITIVITY);
+        $pmiShift = MacroTransmission::calculatePmiDemandShift($macroState->manufacturingPmiEma, sensitivity: self::PMI_CARLOAD_SENSITIVITY);
 
         return [
             'intermodal_freight'    => ($macroState->outputGapEma * 1.6 * $beta) + ($freightShift * 0.20) + $tradeShift,

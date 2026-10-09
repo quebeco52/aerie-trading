@@ -6,9 +6,10 @@ namespace App\Service\Corporate;
 
 use App\Entity\Stock;
 use App\Service\Event\MarketEventPublisher;
-use App\Service\Math\CorporateMetrics;
+use App\Service\Math\Decimal;
+use App\Service\Math\FirmEconomics;
 use App\Service\Math\MathUtility;
-use App\Service\Event\NarrativeEngine;
+use App\Service\News\NarrativeEngine;
 use App\Service\Math\FinancialConstants;
 use App\Service\Market\Pricing\MarketConsensusEngine;
 use App\Service\Market\Pricing\MarketEngine;
@@ -17,6 +18,8 @@ use App\DTO\EarningsSimulationContext;
 use App\Service\Corporate\Holdings\AnchorStakeLedger;
 use App\Service\Corporate\Industry\IndustryShareLedger;
 use App\Service\Event\EarningsReportedEvent;
+use App\Service\Math\TimeSeries;
+use App\Service\Math\Valuation;
 use Symfony\Contracts\EventDispatcher\EventDispatcherInterface;
 
 /**
@@ -127,7 +130,7 @@ class EarningsEngine
         /** Listed anchor stakes. Required, not optional: a sphere with no ledger would silently never open a plant ledger either. Holds only a per-tick price map, so a harness builds one free. */
         private AnchorStakeLedger $anchorStakes = new AnchorStakeLedger(),
         /** Investment securities mark. Defaulted so a harness or a unit test builds an engine without wiring the curve. */
-        private SecuritiesBookService $securitiesBook = new SecuritiesBookService(new \App\Service\Market\Bond\BondPricingEngine(new MathUtility())),
+        private SecuritiesBookService $securitiesBook = new SecuritiesBookService(new \App\Service\Market\Bond\BondPricingEngine()),
         /** Strikes fair value before and after a report; its revision is the report's price news. It draws nothing, so a default is safe. */
         private MarketEngine $marketEngine = new MarketEngine(new MathUtility())
     ) {}
@@ -138,8 +141,8 @@ class EarningsEngine
             return null;
         }
 
-        $businessModel = \App\Data\Sectors::businessModelFor($stock->getIndustry());
-        $strategy = \App\Data\Sectors::getBusinessModelStrategy($businessModel);
+        $businessModel = \App\Data\Company\Sectors::businessModelFor($stock->getIndustry());
+        $strategy = \App\Data\Company\Sectors::getBusinessModelStrategy($businessModel);
 
         $ctx = new EarningsSimulationContext(
             $stock,
@@ -699,7 +702,7 @@ class EarningsEngine
 
         // The roster is priced as dominant firms against a competitive fringe that answers the price: an
         // overbuild is partly absorbed by fringe exit, a hole left by a failed firm partly refilled.
-        $industryPrice = $this->mathUtility->calculateFringeAdjustedPriceLevel(
+        $industryPrice = FirmEconomics::calculateFringeAdjustedPriceLevel(
             $capacityRatio,
             $this->industryShareLedger->resolveRosterTrendShare($ctx->stock, $ctx->tickCount, $ctx->ticksPerYear),
             FinancialConstants::COURNOT_DEMAND_ELASTICITY,
@@ -820,7 +823,7 @@ class EarningsEngine
         $currentDeseasonalized = $ctx->expectedRevenue / max(0.01, $ctx->seasonalFactor);
         $priorDeseasonalized   = $priorRevenue        / max(0.01, $ctx->priorSeasonalFactor);
         $revenueLogChange = max(-0.50, min(0.50, log(max(0.01, $currentDeseasonalized / max(1.0, $priorDeseasonalized)))));
-        $stickyVariableMargin = $this->mathUtility->calculateAsymmetricCostStickiness($realizedVariableMargin, $revenueLogChange);
+        $stickyVariableMargin = FirmEconomics::calculateAsymmetricCostStickiness($realizedVariableMargin, $revenueLogChange);
 
         // Overtime cost penalty: calculated against deseasonalized capacity utilization above threshold.
         $deseasonalizedUtilization = $ctx->capacityUtilization / max(0.01, $ctx->seasonalFactor);
@@ -1024,7 +1027,7 @@ class EarningsEngine
         $operatingHistory[] = ['revenue' => $ctx->actualRevenue, 'ebit' => $ctx->ebit];
         $stock->setQuarterlyOperatingHistory(array_values(array_slice($operatingHistory, -self::TTM_QUARTERS)));
 
-        $annualSaarRevenue = MathUtility::calculateSeasonallyAdjustedAnnualRate($ctx->actualRevenue, $ctx->seasonalFactor, 4);
+        $annualSaarRevenue = TimeSeries::calculateSeasonallyAdjustedAnnualRate($ctx->actualRevenue, $ctx->seasonalFactor, 4);
         $stock->setTotalRevenue((string) $annualSaarRevenue);
 
         $saExpectedRevenue = $ctx->expectedRevenue / max(0.01, $ctx->seasonalFactor);
@@ -1124,7 +1127,7 @@ class EarningsEngine
 
         // The firm's long-run return, the level its profitability reverts to and its valuation anchors on.
         $priorLongRun = $stock->getLongRunReturn();
-        $stock->setLongRunReturn((string) MathUtility::ewmaLevel(
+        $stock->setLongRunReturn((string) TimeSeries::ewmaLevel(
             $priorLongRun !== null ? (float) $priorLongRun : null,
             $ctx->strategy->getTrueReturn($stock),
             self::REPORT_INTERVAL_YEARS,
@@ -1432,7 +1435,7 @@ class EarningsEngine
             + (float) ($ctx->allocation['equity_raised'] ?? 0.0)
             - (float) ($ctx->allocation['total_cash_spent'] ?? 0.0)
             - (float) ($ctx->allocation['total_paid'] ?? 0.0);
-        $ctx->lifecycleStage = \App\Data\LifecycleStage::fromCashFlowSigns(
+        $ctx->lifecycleStage = \App\Data\Company\LifecycleStage::fromCashFlowSigns(
             $ctx->operatingCashFlow > 0.0,
             $ctx->investingCashFlow > 0.0,
             $ctx->financingCashFlow > 0.0
@@ -1539,7 +1542,7 @@ class EarningsEngine
 
         $baseDays = $ctx->strategy->getWorkingCapitalDays($stock);
         $deseasonalizedUtilization = $ctx->capacityUtilization / max(0.01, $ctx->seasonalFactor);
-        $shifts = $this->mathUtility->calculateWorkingCapitalDayShifts(
+        $shifts = FirmEconomics::calculateWorkingCapitalDayShifts(
             creditSpread: $ctx->macroState->macroCreditSpreadEma,
             capacityUtilization: $deseasonalizedUtilization,
             interbankLiquiditySpread: $ctx->macroState->interbankLiquiditySpreadEma
@@ -1668,13 +1671,13 @@ class EarningsEngine
         );
 
         $stock->setSecuritiesCarryingYield($mark->carryingYield);
-        $stock->setUnrealizedSecuritiesMark(MathUtility::formatDecimal($mark->totalMark, 4));
+        $stock->setUnrealizedSecuritiesMark(Decimal::format($mark->totalMark, 4));
 
         if ($mark->afsEquityDelta !== 0.0) {
             // Other comprehensive income is inside total equity and outside retained earnings, which is why
             // this is a bcadd on the balance sheet and not a line in the income statement.
             $stock->setTotalEquity(
-                \bcadd($stock->getTotalEquity(), MathUtility::formatDecimal($mark->afsEquityDelta, 4), 4)
+                \bcadd($stock->getTotalEquity(), Decimal::format($mark->afsEquityDelta, 4), 4)
             );
         }
 
@@ -1976,7 +1979,7 @@ class EarningsEngine
             $ctx->macroState,
             IndustryShareLedger::secularExcessGrowth($ctx->strategy, $stock)
         ) ?? 0.0;
-        $plantGrowth = MathUtility::flexibleAcceleratorGrowth($trendNominalGrowth, $capitalGap, FinancialConstants::CAPITAL_ERROR_CORRECTION_SPEED);
+        $plantGrowth = Valuation::flexibleAcceleratorGrowth($trendNominalGrowth, $capitalGap, FinancialConstants::CAPITAL_ERROR_CORRECTION_SPEED);
 
         $revaluationAlreadyBooked = max(0.0, $maintenanceCapEx - $ctx->quarterlyDepreciation);
         $plantBase = $stock->getGrossPpe() !== null ? max(0.0, $stock->getNetPpe()) : abs($ctx->investedCapital);
@@ -2040,7 +2043,7 @@ class EarningsEngine
      */
     private function resolveDampedPriceGap(float $surprisePct, float $beta, float $growthPremium): float
     {
-        $priceGapPct = $this->mathUtility->calculateEarningsResponseCoefficient($surprisePct, $beta, $growthPremium);
+        $priceGapPct = Valuation::calculateEarningsResponseCoefficient($surprisePct, $beta, $growthPremium);
         $damped = $priceGapPct * FinancialConstants::PRICE_GAP_DAMPENING;
 
         return max(-FinancialConstants::MAX_PRICE_GAP, min(FinancialConstants::MAX_PRICE_GAP, $damped));
@@ -2172,7 +2175,7 @@ class EarningsEngine
         $prior = (float) ($stock->getAnnouncementVarianceEma() ?? 0.0);
 
         if ($closesQuarter) {
-            $next = MathUtility::ewmaAnnualizedVariance($prior, $logReturn, self::REPORT_INTERVAL_YEARS, self::ANNOUNCEMENT_VARIANCE_EMA_YEARS);
+            $next = TimeSeries::ewmaAnnualizedVariance($prior, $logReturn, self::REPORT_INTERVAL_YEARS, self::ANNOUNCEMENT_VARIANCE_EMA_YEARS);
         } else {
             $weight = exp(self::REPORT_INTERVAL_YEARS / self::ANNOUNCEMENT_VARIANCE_EMA_YEARS) - 1.0;
             $next = max(0.0, $prior) + ($weight * ($logReturn * $logReturn) / self::REPORT_INTERVAL_YEARS);

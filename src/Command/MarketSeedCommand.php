@@ -6,7 +6,7 @@ use App\Entity\Etf;
 use App\Entity\Stock;
 use App\DTO\MacroStateDTO;
 use App\Entity\User;
-use App\Data\InitialMarket;
+use App\Data\Company\InitialMarket;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
@@ -48,7 +48,7 @@ class MarketSeedCommand extends Command
                 $etf->setPrice((string) $etfData['price']);
             }
             $etf->setName($etfData['name']);
-            $etf->setDescription(\App\Data\StockInfo::DESCRIPTIONS[$etfData['ticker']] ?? null);
+            $etf->setDescription(\App\Data\Company\StockInfo::DESCRIPTIONS[$etfData['ticker']] ?? null);
             // The fee is a property of the fund, not of a run, so it is re-applied on every seed. Its books
             // — the basket it still owns and the income it is holding — are NOT touched here: those are
             // accumulated history, and a reseed is not a liquidation.

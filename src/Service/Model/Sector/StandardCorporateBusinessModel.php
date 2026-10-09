@@ -6,6 +6,7 @@ namespace App\Service\Model\Sector;
 
 use App\DTO\InterestExpenseDTO;
 
+use App\Service\Math\TimeSeries;
 use App\Service\Model\BusinessModelInterface;
 
 use App\DTO\SectorPhysicsResult;
@@ -108,7 +109,7 @@ class StandardCorporateBusinessModel implements BusinessModelInterface
         }
 
         // Marginal ROIC on next dollar of capital: structural return minus Penrose scale diseconomy.
-        $saturationPenalty = \App\Service\Math\CorporateMetrics::getInstance()->calculateMarketSaturationPenalty($stock, $stock->getInvestedCapital(), $macroState);
+        $saturationPenalty = \App\Service\Corporate\CorporateMetrics::getInstance()->calculateMarketSaturationPenalty($stock, $stock->getInvestedCapital(), $macroState);
         $effectiveRoic = max(0.0, $baselineRoic - $saturationPenalty);
 
         return [
@@ -196,7 +197,7 @@ class StandardCorporateBusinessModel implements BusinessModelInterface
     {
         $targetPassThrough = ($expectedInflation ?? $macroState->tipsBreakevenEma) * $elasticity;
 
-        $laggedPassThrough = MathUtility::getInstance()->calculateDistributedLag(
+        $laggedPassThrough = TimeSeries::calculateDistributedLag(
             currentLaggedValue: $stock->getInflationPassThrough() ?? $targetPassThrough,
             targetValue: $targetPassThrough,
             dt: EarningsEngine::QUARTERLY_TIME_STEP,

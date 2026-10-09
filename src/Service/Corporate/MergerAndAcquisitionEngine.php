@@ -8,7 +8,6 @@ use App\Entity\Stock;
 use App\DTO\MacroStateDTO;
 use App\Service\Event\MarketEventPublisher;
 use App\Service\Math\MathUtility;
-use App\Service\Math\CorporateMetrics;
 use App\DTO\AcquisitionContext;
 use App\DTO\DivestitureContext;
 use App\Service\Model\BusinessModelInterface;
@@ -174,10 +173,10 @@ class MergerAndAcquisitionEngine
         }
 
         $maxBias = 1.0;
-        foreach (\App\Data\ManagementStyle::cases() as $style) {
+        foreach (\App\Data\Company\ManagementStyle::cases() as $style) {
             $maxBias = max(
                 $maxBias,
-                \App\Data\ManagementProfile::forStyle($style, \App\Data\ManagementProfile::MAX_INTENSITY)->acquisitionBias()
+                \App\Data\Company\ManagementProfile::forStyle($style, \App\Data\Company\ManagementProfile::MAX_INTENSITY)->acquisitionBias()
             );
         }
 
@@ -301,8 +300,8 @@ class MergerAndAcquisitionEngine
         $ctx->health = $this->debtEngine->analyzeTrailingDebtHealth($stock, $ctx->macroState);
         
         $ctx->industry = $stock->getIndustry() ?: 'General';
-        $ctx->businessModel = \App\Data\Sectors::businessModelFor($ctx->industry);
-        $ctx->strategy = \App\Data\Sectors::getBusinessModelStrategy($ctx->businessModel);
+        $ctx->businessModel = \App\Data\Company\Sectors::businessModelFor($ctx->industry);
+        $ctx->strategy = \App\Data\Company\Sectors::getBusinessModelStrategy($ctx->businessModel);
     }
 
     private function shouldAbortAcquisition(AcquisitionContext $ctx): bool
@@ -323,7 +322,7 @@ class MergerAndAcquisitionEngine
         $manager = $stock->getManagementProfile();
         $ctx->costOfNewBorrowing = $ctx->health->rawMetrics->currentMarketRate ?? ($ctx->yield5y + (float) $stock->getCreditSpread());
 
-        $equityLimit = \App\Data\Sectors::equityLimit($ctx->industry);
+        $equityLimit = \App\Data\Company\Sectors::equityLimit($ctx->industry);
 
         // A lender sizes acquisition debt the way it sizes any other: the balance sheet AND the interest the
         // firm can cover. Testing only book leverage let a thin-margin acquirer borrow to its equity limit on
@@ -364,7 +363,7 @@ class MergerAndAcquisitionEngine
             $ctx->macroState->outputGap,
             $ctx->health->leveredBeta,
             $ctx->macroState->inflation,
-            \App\Data\Sectors::baselineIndustryPe($stock->getIndustry()),
+            \App\Data\Company\Sectors::baselineIndustryPe($stock->getIndustry()),
             (float) ($stock->getAccrualsRatio() ?? 0.0),
             $stock->getPolicyPayoutRatio()
         );
@@ -373,7 +372,7 @@ class MergerAndAcquisitionEngine
         $ctx->isOvervalued = $ctx->economicSpread > 0.0 && $ctx->currentPE > ($ctx->fairValuePE * 1.5) && $ctx->currentPE > 25.0 && $ctx->priceToBook > 2.0;
         
         $ctx->aggression = 1.0;
-        $ctx->isEmpireBuilder = $style === \App\Data\ManagementStyle::EmpireBuilder;
+        $ctx->isEmpireBuilder = $style === \App\Data\Company\ManagementStyle::EmpireBuilder;
         $ctx->hubrisPremium = $manager->hubrisPremium();
         
         // Discretionary acquisition strategy: empire builders, overvalued stock mergers, and cash hoarders.
@@ -893,8 +892,8 @@ class MergerAndAcquisitionEngine
         $ctx->wacc = $ctx->health->wacc ?? 0.08;
 
         $ctx->industry = $stock->getIndustry() ?: 'General';
-        $ctx->businessModel = \App\Data\Sectors::businessModelFor($ctx->industry);
-        $ctx->strategy = \App\Data\Sectors::getBusinessModelStrategy($ctx->businessModel);
+        $ctx->businessModel = \App\Data\Company\Sectors::businessModelFor($ctx->industry);
+        $ctx->strategy = \App\Data\Company\Sectors::getBusinessModelStrategy($ctx->businessModel);
         
         $ctx->currentReturn = $ctx->strategy->getTrueReturn($stock);
         if ($ctx->currentReturn === 0.0) {
@@ -963,7 +962,7 @@ class MergerAndAcquisitionEngine
             $ctx->annualProbability = self::DIV_DISTRESSED_ANNUAL_PROB;
         } else {
             $ctx->divestedFraction = $this->mathUtility->generateUniformBetween(self::DIV_PREMIUM_FRACTION_MIN, self::DIV_PREMIUM_FRACTION_MAX);
-            $ctx->sectorPE = \App\Data\Sectors::MACRO_SECTORS[$ctx->seller->getSector()] ?? 20.0;
+            $ctx->sectorPE = \App\Data\Company\Sectors::MACRO_SECTORS[$ctx->seller->getSector()] ?? 20.0;
             $blendedMultiple = ($ctx->currentPE + $ctx->sectorPE) / 2.0;
             $ctx->saleMultiple = min(self::DIV_PREMIUM_MAX_MULTIPLE, max(self::DIV_PREMIUM_MIN_MULTIPLE, $blendedMultiple));
             $ctx->annualProbability = self::DIV_PREMIUM_ANNUAL_PROB;

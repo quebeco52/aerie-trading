@@ -7,9 +7,11 @@ use App\Entity\Stock;
 use App\Service\Event\MarketEventPublisher;
 use App\Service\Macro\MacroEngine;
 use App\Service\Market\Bond\CreditRatingAgency;
-use App\Service\Math\CorporateMetrics;
+use App\Service\Math\CreditRisk;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\MathUtility;
+use App\Service\Math\StochasticProcesses;
+use App\Service\Math\Valuation;
 
 class DebtEngine
 {
@@ -114,13 +116,13 @@ class DebtEngine
         $baselineCreditSpread = max(self::MIN_BASELINE_CREDIT_SPREAD, $rawCreditSpread + $macroCreditAdjustment + $volatilityPremium);
 
         $industry = $stock->getIndustry() ?: 'General';
-        $businessModel = \App\Data\Sectors::businessModelFor($industry);
-        $strategy = \App\Data\Sectors::getBusinessModelStrategy($businessModel);
+        $businessModel = \App\Data\Company\Sectors::businessModelFor($industry);
+        $strategy = \App\Data\Company\Sectors::getBusinessModelStrategy($businessModel);
 
         $revenue = $overrideRevenue ?? (float) $stock->getTotalRevenue();
 
         if ($revenue <= 0.0) {
-            $strategy = \App\Data\Sectors::getBusinessModelStrategy($businessModel);
+            $strategy = \App\Data\Company\Sectors::getBusinessModelStrategy($businessModel);
 
             $targetMetrics = $strategy->getTargetMetrics($stock, $macroState, $this->mathUtility);
             $investedCapital = $targetMetrics['invested_capital'];
@@ -179,7 +181,7 @@ class DebtEngine
         $totalEquity = (float) $stock->getTotalEquity();
 
         // Fetch our Dual Constraints
-        $metrics = \App\Data\Sectors::metricsFor($industry);
+        $metrics = \App\Data\Company\Sectors::metricsFor($industry);
         $ebitdaLimit = $metrics['ebitda_limit'];
         $equityLimit = $metrics['equity_limit'];
 
@@ -243,7 +245,7 @@ class DebtEngine
         $floatingInterestRate = $policyRate + $dynamicSpread;
 
         // Customer Deposits & Leverage Physics
-        $strategy = \App\Data\Sectors::getBusinessModelStrategy($businessModel);
+        $strategy = \App\Data\Company\Sectors::getBusinessModelStrategy($businessModel);
         // The strategies are handed the FUNDED book only — term debt and deposits — because the revolver is
         // priced here instead. They do not agree on where they read the balance from: the corporate and the
         // base financial physics charge whatever $debt they are given, while the bank, credit, clearing and
@@ -284,7 +286,7 @@ class DebtEngine
      */
     public function resolveDistanceToDefault(Stock $stock, \App\DTO\MacroStateDTO $macroState): float
     {
-        $strategy = \App\Data\Sectors::strategyFor($stock->getIndustry());
+        $strategy = \App\Data\Company\Sectors::strategyFor($stock->getIndustry());
         $totalDebtObligations = max(0.01, $strategy->getDeleveragingEvaluationDebt((float) $stock->getTotalDebt(), (float) $stock->getWholesaleDebt()));
         $marketCap = max(1.0, (float) $stock->getPrice() * max(1.0, (float) $stock->getSharesOutstanding()));
         $policyRate = $macroState->policyRateEma;
@@ -319,14 +321,14 @@ class DebtEngine
     public function resolveAssetVolatility(Stock $stock, float $equityValue, float $debtValue, float $riskFreeRate): float
     {
         $industry = $stock->getIndustry() ?: 'General';
-        $metrics = \App\Data\Sectors::metricsFor($industry);
-        $strategy = \App\Data\Sectors::strategyFor($industry);
+        $metrics = \App\Data\Company\Sectors::metricsFor($industry);
+        $strategy = \App\Data\Company\Sectors::strategyFor($industry);
 
         // Average mean-reverting equity volatility over the Merton horizon, reverting at the speed the price
         // process itself reverts the name's variance at, as the option desk's term structure does.
         $spotVolatility = max(0.05, (float) ($stock->getCurrentVolatility() ?? $stock->getVolatility()));
         $structuralVolatility = max(0.05, (float) ($stock->getVolatility() ?: $spotVolatility));
-        $equityVolatility = max(0.05, $this->mathUtility->averageMeanRevertingVolatility(
+        $equityVolatility = max(0.05, StochasticProcesses::averageMeanRevertingVolatility(
             $spotVolatility,
             $structuralVolatility,
             \App\Service\Market\Pricing\MarketEngine::varianceReversionSpeed((float) $stock->getJumpIntensity()),
@@ -362,14 +364,14 @@ class DebtEngine
      */
     public function calibrateAssetVolatility(Stock $stock, float $riskFreeRate): ?float
     {
-        $strategy = \App\Data\Sectors::strategyFor($stock->getIndustry());
+        $strategy = \App\Data\Company\Sectors::strategyFor($stock->getIndustry());
         if ($strategy->isFinancial()) {
             return null;
         }
 
         $equityValue = (float) $stock->getPrice() * (float) $stock->getSharesOutstanding();
         $debtValue = $strategy->getDeleveragingEvaluationDebt((float) $stock->getTotalDebt(), (float) $stock->getWholesaleDebt());
-        $assetVolatility = $this->mathUtility->solveMertonAssetVolatility(
+        $assetVolatility = CreditRisk::solveMertonAssetVolatility(
             $equityValue,
             max(0.05, (float) $stock->getVolatility()),
             max(0.0, $debtValue),
@@ -434,12 +436,12 @@ class DebtEngine
     public function assessGoingConcern(Stock $stock, MacroStateDTO $macroState, ?\App\DTO\DebtHealthDTO $health = null): \App\DTO\GoingConcernDTO
     {
         $health ??= $this->analyzeTrailingDebtHealth($stock, $macroState);
-        $strategy = \App\Data\Sectors::strategyFor($stock->getIndustry());
+        $strategy = \App\Data\Company\Sectors::strategyFor($stock->getIndustry());
 
         $equityValue = max(0.0, (float) $stock->getPrice() * (float) $stock->getSharesOutstanding());
         $debtValue = max(0.0, $strategy->getDeleveragingEvaluationDebt((float) $stock->getTotalDebt(), (float) $stock->getWholesaleDebt()));
         $riskFreeRate = $macroState->policyRateEma;
-        $assetValue = $this->mathUtility->solveMertonAssetValue(
+        $assetValue = CreditRisk::solveMertonAssetValue(
             $equityValue,
             $this->resolveAssetVolatility($stock, $equityValue, $debtValue, $riskFreeRate),
             $debtValue,
@@ -477,8 +479,8 @@ class DebtEngine
         $corporateTaxRate = $macroState->corporateTaxRate;
 
         $industry = $stock->getIndustry() ?: 'General';
-        $metrics = \App\Data\Sectors::metricsFor($industry);
-        $strategy = \App\Data\Sectors::strategyFor($industry);
+        $metrics = \App\Data\Company\Sectors::metricsFor($industry);
+        $strategy = \App\Data\Company\Sectors::strategyFor($industry);
 
         $debtMetrics = $this->calculateInterestExpense($stock, $macroState, false, $overrideRevenue, $overrideMargin);
 
@@ -528,7 +530,7 @@ class DebtEngine
         // yield, the one an investor can lock in now, not an average of past ones: a smoothed rate moves for months after
         // the yield has, so every valuation built on it could be forecast.
         $equityRiskPremium = $macroState->equityRiskPremium;
-        $costOfEquity = $this->mathUtility->calculateCAPM($macroState->yield10y, $leveredBeta, $equityRiskPremium);
+        $costOfEquity = Valuation::calculateCAPM($macroState->yield10y, $leveredBeta, $equityRiskPremium);
 
         // Absolute priority hurdle: cost of equity floored at marginal market borrowing rate.
         $costOfEquity = max($debtMetrics->currentMarketRate, $costOfEquity);
@@ -544,7 +546,7 @@ class DebtEngine
         // Myers & Allen). Distress reaches the hurdle through that yield and the levered beta, and as a
         // weighted average it can never exceed the dearer of its two legs.
         $marginalCostOfDebt = $strategy->getMarginalCostOfDebt($debtMetrics) * (1.0 - $impliedTaxShieldRate);
-        $wacc = $this->mathUtility->calculateWACC($weightEquity, $costOfEquity, $weightDebt, $marginalCostOfDebt);
+        $wacc = Valuation::calculateWACC($weightEquity, $costOfEquity, $weightDebt, $marginalCostOfDebt);
 
         $minIcr = $strategy->getMinIcr();
 
@@ -651,7 +653,7 @@ class DebtEngine
      */
     public function resolveTangibleCapitalBase(Stock $stock, float $revenue): array
     {
-        $strategy = \App\Data\Sectors::strategyFor($stock->getIndustry());
+        $strategy = \App\Data\Company\Sectors::strategyFor($stock->getIndustry());
         $leaseLiability = $this->corporateMetrics->calculateLeaseLiability($revenue, $strategy->getLeaseIntensity());
 
         $totalAssets = $stock->hasBalanceSheetLedger()
@@ -683,7 +685,7 @@ class DebtEngine
         $retainedEarnings = (float) $stock->getRetainedEarnings();
         $shares = max(1.0, (float) $stock->getSharesOutstanding());
 
-        $strategy = \App\Data\Sectors::strategyFor($stock->getIndustry());
+        $strategy = \App\Data\Company\Sectors::strategyFor($stock->getIndustry());
 
         // IFRS 16 / ASC 842: the capitalized lease liability sits with debt and the right-of-use asset with assets.
         $leaseLiability = $this->corporateMetrics->calculateLeaseLiability($revenue, $strategy->getLeaseIntensity());
@@ -794,7 +796,7 @@ class DebtEngine
             return new \App\DTO\MaturityRollDTO(0.0, true, 0.0, 0.0);
         }
 
-        $strategy = \App\Data\Sectors::strategyFor($stock->getIndustry());
+        $strategy = \App\Data\Company\Sectors::strategyFor($stock->getIndustry());
 
         $maturing = $wholesaleDebt * max(0.0, $strategy->getDebtMaturityRolloverRate());
         if ($maturing <= 0.0) {
@@ -828,7 +830,7 @@ class DebtEngine
         // Coverage is how a lender underwrites an operating borrower, whose interest is a charge on its cash flow. A
         // lender, or any institution steering to a capital ratio, is underwritten on its capital instead: its interest
         // expense is its cost of goods, and a provisioning quarter is not a missed coupon. Its rating reads the capital.
-        $strategy = \App\Data\Sectors::strategyFor($stock->getIndustry());
+        $strategy = \App\Data\Company\Sectors::strategyFor($stock->getIndustry());
         $underwrittenOnCapital = $strategy instanceof \App\Service\Model\Sector\CommercialBankBusinessModel
             || $strategy->getTargetCapitalRatio($stock) !== null;
         if (!$underwrittenOnCapital && $health->interestCoverage < self::REFINANCING_MIN_COVERAGE) {

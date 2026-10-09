@@ -108,11 +108,11 @@ the scripts you wrote. A staged run should take a few dozen calls.
   in arguments, no `export`. Do not `cd`; run from the working directory with relative paths. No `xargs`,
   `find -exec` or loops that build commands: use `bin/harness-batch`, or put the loop in a script under
   `var/harness/<topic>/` and run that script.
-- **`var/` is not in git.** In a worktree, `var/harness/` starts empty and the topic folders live in the main checkout.
-  Read them there with Read and Grep by absolute path, copy the topic in once with a plain
-  `cp -r <main checkout>/var/harness/<topic> var/harness/`, and run from the copy.
+- **Harness code is in git; its outputs are not.** `var/harness/**/*.{php,py,sh,md}` is tracked; caches, `runs/`,
+  `base/` and data files (CSV, JSON) are ignored. In a worktree the code is there but uncommitted harnesses and all
+  outputs live in the main checkout: read them there by absolute path, copy what you need in once with a plain
+  `cp -r <main checkout>/var/harness/<topic> var/harness/`, and run from the copy. Don't add run outputs to git.
 - No Docker, no database, no network to the app. `make` targets that call `docker compose` fail here.
-- Never write `phpunit.tmp.xml`: that name is tracked in git. Scratch files go in the topic folder.
 - Do not start anything over ~30 minutes without saying so in your report and stopping there; propose it instead.
 
 ## What you may change

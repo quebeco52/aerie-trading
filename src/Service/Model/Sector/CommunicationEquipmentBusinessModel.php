@@ -4,14 +4,15 @@ declare(strict_types=1);
 
 namespace App\Service\Model\Sector;
 
-use App\Data\InputOutputExposures;
-use App\Data\ModelParam;
+use App\Data\Macro\InputOutputExposures;
+use App\Service\Model\ModelParam;
 use App\DTO\MacroStateDTO;
 use App\DTO\SectorCoverageProfile;
 use App\DTO\SectorPhysicsResult;
-use App\DTO\StreamContext;
+use App\Service\Model\StreamContext;
 use App\Entity\Stock;
 use App\Service\Event\ShockEvent;
+use App\Service\Math\MacroTransmission;
 use App\Service\Math\MathUtility;
 use App\Service\Macro\MacroEngine;
 use App\Service\Math\FinancialConstants;
@@ -169,7 +170,7 @@ class CommunicationEquipmentBusinessModel extends StandardCorporateBusinessModel
     public function getSecularGrowthRate(Stock $stock): float
     {
         return MacroEngine::TREND_REAL_GROWTH
-            + MathUtility::gdpShareDrift(self::SECULAR_SHARE_1997, self::SECULAR_SHARE_2019, FinancialConstants::SECULAR_SHARE_WINDOW_YEARS);
+            + MacroTransmission::gdpShareDrift(self::SECULAR_SHARE_1997, self::SECULAR_SHARE_2019, FinancialConstants::SECULAR_SHARE_WINDOW_YEARS);
     }
 
     public function getCapexCyclicality(): float
@@ -275,8 +276,8 @@ class CommunicationEquipmentBusinessModel extends StandardCorporateBusinessModel
         // means operators digest what they built before ordering more. Tenders are global, so the currency and
         // merchandise trade flows move the order book too.
         $overhangDrag = $macroState->capitalStockOverhangEma * self::CAPITAL_OVERHANG_SCALAR;
-        $tradeShift = MathUtility::calculateTradeBalanceShift($macroState->tradeBalanceToGdpEma, sensitivity: self::TRADE_BALANCE_SENSITIVITY)
-            + MathUtility::calculateForeignDemandShift($macroState->foreignOutputGapEma, sensitivity: self::FOREIGN_DEMAND_SENSITIVITY);
+        $tradeShift = MacroTransmission::calculateTradeBalanceShift($macroState->tradeBalanceToGdpEma, sensitivity: self::TRADE_BALANCE_SENSITIVITY)
+            + MacroTransmission::calculateForeignDemandShift($macroState->foreignOutputGapEma, sensitivity: self::FOREIGN_DEMAND_SENSITIVITY);
         $carrierCapexShift = ($this->resolveLaggedOutputGap($macroState) * self::CARRIER_CAPEX_GDP_SENSITIVITY * $beta)
             - $overhangDrag
             + $this->resolveFxDemandShift($macroState)

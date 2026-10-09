@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Tests\Service\View;
 
-use App\Data\AnchorHoldings;
+use App\Data\Company\AnchorHoldings;
 use App\Entity\Stock;
 use App\Repository\StockRepository;
 use App\Service\Market\Chart\PriceChangeFeed;

@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Tests\Service\Politics;
 
-use App\Data\AerieDiet as Diet;
+use App\Data\Politics\AerieDiet as Diet;
 use App\DTO\MacroStateDTO;
 use App\DTO\PoliticsStateDTO;
 use App\Service\Macro\MacroEngine;

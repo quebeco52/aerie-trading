@@ -39,7 +39,7 @@ class ShortSqueezeDynamicsTest extends TestCase
         $this->liquidity = new LiquidityEngine(new MathUtility());
         $this->desk = new SecuritiesLendingDesk();
         $marginEm = $this->createStub(EntityManagerInterface::class);
-        $this->margin = new MarginEngine($marginEm, new OptionMarginCalculator($marginEm, new MathUtility()));
+        $this->margin = new MarginEngine($marginEm, new OptionMarginCalculator($marginEm));
     }
 
     private function stock(float $price = 100.0, float $shortInterest = 0.0): Stock

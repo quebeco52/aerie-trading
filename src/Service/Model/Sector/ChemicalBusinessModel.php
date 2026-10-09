@@ -4,14 +4,15 @@ declare(strict_types=1);
 
 namespace App\Service\Model\Sector;
 
-use App\Data\InputOutputExposures;
-use App\Data\ModelParam;
+use App\Data\Macro\InputOutputExposures;
+use App\Service\Model\ModelParam;
 use App\DTO\MacroStateDTO;
 use App\DTO\SectorPhysicsResult;
-use App\DTO\StreamContext;
+use App\Service\Model\StreamContext;
 use App\Entity\Stock;
 use App\Service\Event\ShockEvent;
 use App\Service\Macro\MacroEngine;
+use App\Service\Math\MacroTransmission;
 use App\Service\Math\MathUtility;
 use App\Service\Math\FinancialConstants;
 
@@ -191,7 +192,7 @@ class ChemicalBusinessModel extends StandardCorporateBusinessModel
     public function getSecularGrowthRate(Stock $stock): float
     {
         return MacroEngine::TREND_REAL_GROWTH
-            + MathUtility::gdpShareDrift(self::SECULAR_SHARE_1997, self::SECULAR_SHARE_2019, FinancialConstants::SECULAR_SHARE_WINDOW_YEARS);
+            + MacroTransmission::gdpShareDrift(self::SECULAR_SHARE_1997, self::SECULAR_SHARE_2019, FinancialConstants::SECULAR_SHARE_WINDOW_YEARS);
     }
 
     public function getCapexCyclicality(): float
@@ -235,7 +236,7 @@ class ChemicalBusinessModel extends StandardCorporateBusinessModel
 
         // Macro demand shift: Driven by industrial demand (output gap + metals + manufacturing PMI) for base chemicals,
         // and agricultural commodities for agrochemicals.
-        $pmiShift = MathUtility::calculatePmiDemandShift($macroState->manufacturingPmi, sensitivity: self::PMI_DEMAND_SENSITIVITY);
+        $pmiShift = MacroTransmission::calculatePmiDemandShift($macroState->manufacturingPmi, sensitivity: self::PMI_DEMAND_SENSITIVITY);
         $industrialDemand = ($outputGap * self::BASE_PETRO_OUTPUT_GAP_SCALAR) + ($metalsShift * self::BASE_PETRO_METALS_SCALAR) + $pmiShift;
         $blendedDemandShift = ($industrialDemand * $beta * self::INDUSTRIAL_DEMAND_WEIGHT) + ($agriShift * self::AGRI_DEMAND_WEIGHT)
             + $this->resolveFxDemandShift($macroState);

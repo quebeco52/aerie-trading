@@ -4,9 +4,10 @@ declare(strict_types=1);
 
 namespace App\Tests\Service\Politics;
 
-use App\Data\AerieCouncil;
+use App\Data\Politics\AerieCouncil;
 use App\DTO\MacroStateDTO;
 use App\DTO\PoliticsStateDTO;
+use App\Service\Math\Distributions;
 use App\Service\Math\MathUtility;
 use App\Service\Politics\CouncilAppointments as Appointments;
 use App\Service\Politics\FinancialRegulator;
@@ -227,7 +228,7 @@ class MonetaryAuthorityTest extends TestCase
                     $gap = Authority::preferredRateGap(
                         Authority::typeName($stances[$member], $swingers[$member]),
                         $move,
-                        MathUtility::standardNormalQuantile(Appointments::uniform(77, "vote:{$meeting}:{$member}"))
+                        Distributions::standardNormalQuantile(Appointments::uniform(77, "vote:{$meeting}:{$member}"))
                     );
                     $expected = abs($gap) > Authority::DISSENT_THRESHOLD ? ($gap > 0.0 ? 1.0 : -1.0) : 0.0;
                     $this->assertSame($expected, $vote, "Member {$member} at a {$move} move.");
@@ -253,7 +254,7 @@ class MonetaryAuthorityTest extends TestCase
         $opposing = $with = $atHolds = $atMoves = $holds = 0;
         for ($meeting = 0; $meeting < $meetings; ++$meeting) {
             // The moves at evenly spaced quantiles of the normal, the votes' own shocks hashed apart from them.
-            $move = Authority::MEETING_MOVE_SD * MathUtility::standardNormalQuantile(($meeting + 0.5) / $meetings);
+            $move = Authority::MEETING_MOVE_SD * Distributions::standardNormalQuantile(($meeting + 0.5) / $meetings);
             $hold = abs($move) < Authority::NEWSWORTHY_RATE_MOVE / 2.0;
             $holds += $hold ? 1 : 0;
             foreach (Authority::votes($stances, $move, $meeting, 77, $swingers) as $member => $vote) {

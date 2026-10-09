@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Tests\Service\Market\Flow;
 
-use App\Data\StrategicHoldings;
+use App\Data\Company\StrategicHoldings;
 use App\DTO\MacroStateDTO;
 use App\DTO\MarketPricingContext;
 use App\Entity\Stock;
@@ -17,9 +17,10 @@ use App\Service\Market\Flow\InMemoryOrderFlowStore;
 use App\Service\Market\Pricing\LiquidityEngine;
 use App\Service\Market\Pricing\MarketEngine;
 use App\Service\Market\Pricing\StockTracker;
-use App\Service\Math\CorporateMetrics;
+use App\Service\Corporate\CorporateMetrics;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\MathUtility;
+use App\Service\Math\TimeSeries;
 use Doctrine\ORM\EntityManagerInterface;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\TestCase;
@@ -353,7 +354,7 @@ class OrderFlowImpactWiringTest extends TestCase
         // Only the two thirds that stay are long-run variance; the transient third washes out within days.
         $stays = (2.0 / 3.0) * $this->liquidity->peakImpact($stock, $this->liquidity->averageDailyVolume($stock) * 0.20);
         $this->assertEqualsWithDelta(
-            MathUtility::ewmaAnnualizedVariance(0.0, $stays, 1.0 / 14400.0, FinancialConstants::IMPACT_VARIANCE_EMA_YEARS),
+            TimeSeries::ewmaAnnualizedVariance(0.0, $stays, 1.0 / 14400.0, FinancialConstants::IMPACT_VARIANCE_EMA_YEARS),
             $measured,
             1e-12
         );
@@ -552,7 +553,7 @@ class OrderFlowImpactWiringTest extends TestCase
         $tracker->updateStocks([$this->stock()], $dt, false, new MacroStateDTO(marketVolatility: 0.30));
 
         $anchor = \App\Service\Macro\MacroEngine::MACRO_VOL_BASE_ANCHOR;
-        $expected = MathUtility::ewmaLevel($anchor * $anchor, 0.09, $dt, MarketEngine::MARKET_VARIANCE_TREND_YEARS);
+        $expected = TimeSeries::ewmaLevel($anchor * $anchor, 0.09, $dt, MarketEngine::MARKET_VARIANCE_TREND_YEARS);
         $this->assertNotNull($captured);
         $this->assertEqualsWithDelta($expected, $captured->marketVarianceTrend, 1e-15);
         $this->assertGreaterThan($anchor * $anchor, $captured->marketVarianceTrend, 'A turbulent tick lifts the trend, slowly.');
@@ -576,7 +577,7 @@ class OrderFlowImpactWiringTest extends TestCase
 
         // The permanent share of the fund's move, annualized into the EMA, reaches the next tick's pricing; the
         // name's own idiosyncratic budget is still untouched.
-        $expected = MathUtility::ewmaAnnualizedVariance(0.0, FinancialConstants::PERMANENT_IMPACT_SHARE * $fundMove, $dt, FinancialConstants::IMPACT_VARIANCE_EMA_YEARS);
+        $expected = TimeSeries::ewmaAnnualizedVariance(0.0, FinancialConstants::PERMANENT_IMPACT_SHARE * $fundMove, $dt, FinancialConstants::IMPACT_VARIANCE_EMA_YEARS);
         $this->assertEqualsWithDelta($expected, $captured->fundImpactVariance, 1e-9 * $expected);
         $this->assertGreaterThan(0.0, $captured->fundImpactVariance);
         $this->assertSame(0.0, $stock->getImpactVarianceEma());

@@ -12,8 +12,8 @@ use App\Entity\UserBond;
 use App\Entity\UserEtf;
 use App\Entity\UserStock;
 use App\Service\Market\Flow\OrderFlowStoreInterface;
+use App\Service\Math\Decimal;
 use App\Service\Math\FinancialConstants;
-use App\Service\Math\MathUtility;
 use App\Service\Notification\PlayerNotifier;
 use App\Service\User\Portfolio;
 use Doctrine\ORM\EntityManagerInterface;
@@ -257,7 +257,7 @@ class TradeExecutionService
                 $livePrice,
                 $asset->entity instanceof \App\Entity\Bond && !$asset->entity->isSovereign()
             );
-            $livePriceStr = MathUtility::formatDecimal($quote->executionPrice, 4);
+            $livePriceStr = Decimal::format($quote->executionPrice, 4);
             $totalValueStr = \bcmul($livePriceStr, $quantityStr, 4);
             $stampDutyStr = $this->stampDuty($stock, $totalValueStr);
 
@@ -476,7 +476,7 @@ class TradeExecutionService
             return '0.0000';
         }
 
-        return \bcmul($consideration, MathUtility::formatDecimal($this->liveStampDutyRate(), 6), 4);
+        return \bcmul($consideration, Decimal::format($this->liveStampDutyRate(), 6), 4);
     }
 
     /** Pays the duty out of the account, borrowing any part the settled balance does not cover like any payment. */
@@ -543,7 +543,7 @@ class TradeExecutionService
     private function adjustShortInterest(Stock $stock, int $delta): void
     {
         $updated = max(0.0, (float) $stock->getShortInterestShares() + $delta);
-        $stock->setShortInterestShares(MathUtility::formatDecimal($updated, 2));
+        $stock->setShortInterestShares(Decimal::format($updated, 2));
     }
 
     /**
@@ -557,9 +557,9 @@ class TradeExecutionService
     private function recordFill(TradeOrder $order, ExecutionQuoteDTO $quote, int $quantity, string $action, string $ticker, string $assetType, string $stampDuty = '0.0000'): void
     {
         $order->setFilledQuantity($quantity);
-        $order->setExecutionPrice(MathUtility::formatDecimal($quote->executionPrice, 4));
-        $order->setSpreadCost(MathUtility::formatDecimal($quote->spreadCost, 4));
-        $order->setImpactCost(MathUtility::formatDecimal($quote->impactCost, 4));
+        $order->setExecutionPrice(Decimal::format($quote->executionPrice, 4));
+        $order->setSpreadCost(Decimal::format($quote->spreadCost, 4));
+        $order->setImpactCost(Decimal::format($quote->impactCost, 4));
         $order->setStampDuty($stampDuty);
         $order->setStatus(TradeOrder::STATUS_FILLED);
         $order->setFilledAt(new \DateTime());
@@ -720,7 +720,7 @@ class TradeExecutionService
             $userAsset = $this->assetResolver->findHolding($user, $asset);
 
             $action = $order->getAction();
-            $considerationStr = \bcmul(MathUtility::formatDecimal($fillPrice, 4), (string) $quantity, 4);
+            $considerationStr = \bcmul(Decimal::format($fillPrice, 4), (string) $quantity, 4);
             $stampDutyStr = $this->stampDuty($stock, $considerationStr);
 
             if ($action === 'COVER') {

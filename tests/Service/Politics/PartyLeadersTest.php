@@ -4,8 +4,9 @@ declare(strict_types=1);
 
 namespace App\Tests\Service\Politics;
 
-use App\Data\AerieDiet;
+use App\Data\Politics\AerieDiet;
 use App\Service\Event\ShockEvent;
+use App\Service\Math\Distributions;
 use App\Service\Math\MathUtility;
 use App\Service\Politics\CouncilAppointments;
 use App\Service\Politics\PartyLeaders as Leaders;
@@ -166,7 +167,7 @@ class PartyLeadersTest extends TestCase
                 $state->lastElectionAt = $state->totalTime;
                 // The record's spread of results: changes of vote with a standard deviation of 4.4 points.
                 foreach (AerieDiet::PARTIES as $k => $party) {
-                    $state->dietVoteSwings[$party] = 0.044 * $math->calculateInverseNormalCDF(CouncilAppointments::uniform(99, "swing:{$month}:{$k}"));
+                    $state->dietVoteSwings[$party] = 0.044 * Distributions::calculateInverseNormalCDF(CouncilAppointments::uniform(99, "swing:{$month}:{$k}"));
                 }
                 $fought = array_filter(AerieDiet::PARTIES, static fn(string $party): bool => $state->leaderSince[$party] < $state->totalTime);
                 $weighed += count($fought);

@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Tests\Service\Politics;
 
-use App\Data\AerieDiet;
+use App\Data\Politics\AerieDiet;
 use App\DTO\PoliticsStateDTO;
 use App\Service\Event\ShockEvent;
 use App\Service\Math\MathUtility;

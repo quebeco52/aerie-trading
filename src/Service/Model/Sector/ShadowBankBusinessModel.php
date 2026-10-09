@@ -4,9 +4,10 @@ declare(strict_types=1);
 
 namespace App\Service\Model\Sector;
 
+use App\Service\Math\MacroTransmission;
 use App\Service\Model\BusinessModelInterface;
 
-use App\Data\ModelParam;
+use App\Service\Model\ModelParam;
 use App\DTO\MacroStateDTO;
 use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
@@ -272,13 +273,13 @@ class ShadowBankBusinessModel extends CommercialBankBusinessModel
         $mortgageRateDrag = max(0.0, ($yield30y - self::DEFAULT_30Y_YIELD_FALLBACK) * 4.0);
         $residentialShift = ($macroState->residentialPropertyIndexEma - 100.0) / 100.0;
         $propertyOriginationBoost = $residentialShift * 0.20;
-        $housingStartsShift = MathUtility::calculateHousingStartsShift($macroState->housingStartsIndexEma, sensitivity: self::HOUSING_STARTS_ORIGINATION_SENSITIVITY);
+        $housingStartsShift = MacroTransmission::calculateHousingStartsShift($macroState->housingStartsIndexEma, sensitivity: self::HOUSING_STARTS_ORIGINATION_SENSITIVITY);
 
         // 2. Direct Lending Origination Channel:
         // The loans' floating coupon is interest income on the book (calculateInterestIncome()); this stream is the
         // fees on new deals, which bank credit retreat (SLOOS tightening) and M2 liquidity send to private credit.
         $sloosDirectLendingBoost = max(0.0, $macroState->sloosTighteningIndexEma) * self::SLOOS_PRIVATE_CREDIT_EXPANSION;
-        $m2Shift = MathUtility::calculateBroadMoneyLiquidityShift($macroState->moneySupplyGrowthEma, $macroState->moneySupplyGrowthTrend, sensitivity: self::M2_SHADOW_LIQUIDITY_SENSITIVITY);
+        $m2Shift = MacroTransmission::calculateBroadMoneyLiquidityShift($macroState->moneySupplyGrowthEma, $macroState->moneySupplyGrowthTrend, sensitivity: self::M2_SHADOW_LIQUIDITY_SENSITIVITY);
         $capitalTightness = max(0.0, $macroState->countercyclicalBufferRate) + ($macroState->bankCapitalRequirement - FinancialConstants::OPENING_BANK_CAPITAL_REQUIREMENT);
         $ccybArbitrageBoost = $capitalTightness * self::CAPITAL_ARBITRAGE_SENSITIVITY;
 

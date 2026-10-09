@@ -4,9 +4,10 @@ declare(strict_types=1);
 
 namespace App\Service\Model\Sector;
 
+use App\Service\Math\MacroTransmission;
 use App\Service\Model\BusinessModelInterface;
 
-use App\Data\ModelParam;
+use App\Service\Model\ModelParam;
 use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
 use App\Service\Math\MathUtility;
@@ -246,7 +247,7 @@ class InvestmentBankBusinessModel extends BrokerageBusinessModel
 
         $blendedWholesaleRate = $this->calculateBlendedWholesaleRate($stock, $macroState);
 
-        $equityLimit = \App\Data\Sectors::equityLimit($stock->getIndustry());
+        $equityLimit = \App\Data\Company\Sectors::equityLimit($stock->getIndustry());
 
         $effectiveEquity = max(1.0, $equity);
 
@@ -472,7 +473,7 @@ class InvestmentBankBusinessModel extends BrokerageBusinessModel
             + ($optionsWeight * $this->resolveOptionsVegaBonus($vixGap))) / $totalWeight;
     }
 
-    private function resolveDeskParameters(Stock $stock): \App\DTO\ModelParameters
+    private function resolveDeskParameters(Stock $stock): \App\Service\Model\ModelParameters
     {
         return $this->resolveModelParameters($stock, [
             ModelParam::AdvisoryRevenueWeight->value      => self::ADVISORY_REVENUE_WEIGHT,
@@ -485,7 +486,7 @@ class InvestmentBankBusinessModel extends BrokerageBusinessModel
     /**
      * The advisory and underwriting fee pool against normal: M&A, ECM and DCM each on its own drivers, weighted by
      * its share of the pool, plus M2. The deal activity index already prices ERP, high-yield spreads, volatility
-     * and policy uncertainty (MathUtility::calculateCapitalMarketsDealIndexStep), so M&A and ECM read it and
+     * and policy uncertainty (MacroTransmission::calculateCapitalMarketsDealIndexStep), so M&A and ECM read it and
      * not ERP directly; DCM reads the investment-grade spread and the curve, which the index does not carry.
      */
     private function resolveAdvisoryMacroFactor(\App\DTO\MacroStateDTO $macroState): float
@@ -509,7 +510,7 @@ class InvestmentBankBusinessModel extends BrokerageBusinessModel
         $curveSlopeGap = ($macroState->yield5yEma - $macroState->policyRateEma) - self::DCM_NEUTRAL_CURVE_SLOPE;
         $dcmStimulus = ($creditSpreadGap * self::DCM_CREDIT_SPREAD_ELASTICITY) + ($curveSlopeGap * self::DCM_CURVE_SLOPE_ELASTICITY);
 
-        $m2SyndicationBoost = MathUtility::calculateBroadMoneyLiquidityShift($macroState->moneySupplyGrowthEma, $macroState->moneySupplyGrowthTrend, sensitivity: self::M2_SYNDICATION_LIQUIDITY_SENSITIVITY);
+        $m2SyndicationBoost = MacroTransmission::calculateBroadMoneyLiquidityShift($macroState->moneySupplyGrowthEma, $macroState->moneySupplyGrowthTrend, sensitivity: self::M2_SYNDICATION_LIQUIDITY_SENSITIVITY);
 
         return (self::MNA_ADVISORY_SHARE * $mnaStimulus)
             + (self::ECM_ADVISORY_SHARE * $ecmStimulus)

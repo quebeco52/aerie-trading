@@ -4,11 +4,11 @@ declare(strict_types=1);
 
 namespace App\Service\Model\Sector;
 
-use App\Data\ModelParam;
+use App\Service\Model\ModelParam;
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use App\Service\Math\FinancialConstants;
-use App\Service\Math\MathUtility;
+use App\Service\Math\MacroTransmission;
 use App\Service\Model\BusinessModelInterface;
 use App\Service\Model\Trait\FinancialPhysicsTrait;
 use App\Service\Model\Trait\StandardBaseModelTrait;
@@ -97,7 +97,7 @@ abstract class BaseFinancialBusinessModel implements BusinessModelInterface
         $floating = max(0.0, min(1.0, (float) ($stock->getFloatingDebtRatio() ?? 0.0)));
         $uninsuredDeposits = (float) ($stock->getCustomerDeposits() ?? 0.0) * (1.0 - FinancialConstants::INSURED_DEPOSIT_SHARE);
 
-        return MathUtility::calculateAnnualBankLevy(
+        return MacroTransmission::calculateAnnualBankLevy(
             shortTermFunding: ($wholesale * $floating) + (float) $stock->getRevolverDrawn(),
             longTermFunding: ($wholesale * (1.0 - $floating)) + $uninsuredDeposits,
             shortTermRate: 1.0,

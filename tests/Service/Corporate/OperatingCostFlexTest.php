@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Tests\Service\Corporate;
 
-use App\Data\Sectors;
+use App\Data\Company\Sectors;
 use App\DTO\EarningsSimulationContext;
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
@@ -15,9 +15,9 @@ use App\Service\Corporate\DebtEngine;
 use App\Service\Corporate\EarningsEngine;
 use App\Service\Corporate\TreasuryEngine;
 use App\Service\Event\MarketEventPublisher;
-use App\Service\Event\NarrativeEngine;
+use App\Service\News\NarrativeEngine;
 use App\Service\Market\Pricing\MarketConsensusEngine;
-use App\Service\Math\CorporateMetrics;
+use App\Service\Corporate\CorporateMetrics;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\MathUtility;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;

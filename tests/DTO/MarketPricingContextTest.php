@@ -4,14 +4,14 @@ declare(strict_types=1);
 
 namespace App\Tests\DTO;
 
-use App\Data\AnchorHoldings;
+use App\Data\Company\AnchorHoldings;
 use App\DTO\DebtHealthDTO;
 use App\DTO\MacroStateDTO;
 use App\DTO\MarketPricingContext;
 use App\Entity\Stock;
 use App\Service\Corporate\DebtEngine;
 use App\Service\Corporate\Holdings\AnchorStakeLedger;
-use App\Service\Math\CorporateMetrics;
+use App\Service\Corporate\CorporateMetrics;
 use App\Service\Math\MathUtility;
 use App\Tests\Support\StockBuilder;
 use PHPUnit\Framework\TestCase;
@@ -61,7 +61,7 @@ class MarketPricingContextTest extends TestCase
         $firm->setPreAnnouncedShortfall(1_000_000_000.0);
         $after = MarketPricingContext::forStock($firm, $macroState, $this->health($firm, $macroState), new AnchorStakeLedger())->roicTtm;
 
-        $capital = \App\Data\Sectors::strategyFor($firm->getIndustry())->getEvaluationCapital((float) $firm->getTotalEquity(), $firm->getInvestedCapital());
+        $capital = \App\Data\Company\Sectors::strategyFor($firm->getIndustry())->getEvaluationCapital((float) $firm->getTotalEquity(), $firm->getInvestedCapital());
         $this->assertGreaterThan(0.0, $capital);
         $this->assertEqualsWithDelta($before - (1_000_000_000.0 / $capital), $after, 1e-12);
     }

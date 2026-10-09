@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace App\Tests\Render;
 
-use App\Data\InitialMarket;
-use App\Data\StockInfo;
+use App\Data\Company\InitialMarket;
+use App\Data\Company\StockInfo;
 use App\Entity\User;
 use Symfony\Bundle\FrameworkBundle\Test\KernelTestCase;
 use Symfony\Component\HttpFoundation\Request;
@@ -121,7 +121,7 @@ final class PagesRenderTest extends KernelTestCase
             ]],
             'profile' => ['/stock/LAKE/profile', 'stock/profile.html.twig', [
                 'asset' => ['ticker' => 'LAKE', 'name' => 'Lakebird Bank', 'sector' => 'Financials', 'industry' => 'Banks - Diversified', 'price' => 84.21, 'isBankrupt' => false],
-                'article' => \App\Data\CompanyResearch::ARTICLES['LAKE'], 'publisher' => 'Tickbird Research',
+                'article' => \App\Data\Company\CompanyResearch::ARTICLES['LAKE'], 'publisher' => 'Tickbird Research',
                 'changePercent' => 0.0342, 'marketCap' => 2.02e11, 'freeFloat' => 0.5,
                 'management' => ['label' => 'Fortress', 'mandate' => 'expected to rebuild the balance sheet and hold cash against the cycle', 'tenureYears' => 6.4],
                 'holders' => [], 'holdings' => [],
@@ -235,7 +235,7 @@ final class PagesRenderTest extends KernelTestCase
     /** A newswire page from the presenter, so each card is the one the page renders live. */
     private static function newswire(): array
     {
-        $presenter = new \App\Service\Event\EventPresenter();
+        $presenter = new \App\Service\News\EventPresenter();
         $stories = [
             ['GOVERNMENT', 'budget_enacted', null, null, 'The Diet passed the Civic-Vanguard budget: corporate tax at 21.0%, tariffs at 2.5%.', -0.8, true],
             ['EARNINGS', null, 'HUMM', 'Hummock Foods', 'Q-Earnings: $1.42 (Beat expectations by $0.11 | +$1.20B EVA).', 6.4, true],
@@ -252,6 +252,6 @@ final class PagesRenderTest extends KernelTestCase
             $items[] = ['card' => $card, 'ticker' => $ticker, 'name' => $name, 'headline' => $headline];
         }
 
-        return ['section' => 'all', 'sections' => \App\Service\Event\NewsDesk::SECTIONS, 'items' => $items];
+        return ['section' => 'all', 'sections' => \App\Service\News\NewsDesk::SECTIONS, 'items' => $items];
     }
 }

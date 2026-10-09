@@ -101,14 +101,13 @@ class TradeExecutionServiceTest extends TestCase
             new AssetResolver($this->emMock),
             new LiquidityEngine(new MathUtility()),
             $this->orderFlow,
-            new MarginEngine($this->emMock, new OptionMarginCalculator($this->emMock, new MathUtility())),
+            new MarginEngine($this->emMock, new OptionMarginCalculator($this->emMock)),
             new SecuritiesLendingDesk(),
             new OptionTradeService(
                 $this->emMock,
-                new OptionPricingEngine(new MathUtility(), new BondPricingEngine(new MathUtility())),
+                new OptionPricingEngine(new BondPricingEngine()),
                 new MacroStateProvider($this->redisStub),
-                new MarginEngine($this->emMock, new OptionMarginCalculator($this->emMock, new MathUtility())),
-                new MathUtility(),
+                new MarginEngine($this->emMock, new OptionMarginCalculator($this->emMock)),
                 new \App\Service\User\CashLedger()
             ),
             new \App\Service\User\CashLedger()

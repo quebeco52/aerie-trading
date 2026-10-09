@@ -9,8 +9,12 @@ use App\Service\Macro\Subsystem\CommodityLogisticsSubsystem;
 use App\Service\Macro\Subsystem\CreditFiscalSubsystem;
 use App\Service\Macro\Subsystem\MacroAggregateSubsystem;
 use App\Service\Macro\Subsystem\MonetaryPolicySubsystem;
+use App\Service\Math\CreditRisk;
 use App\Service\Math\FinancialConstants;
+use App\Service\Math\FirmEconomics;
+use App\Service\Math\MacroTransmission;
 use App\Service\Math\MathUtility;
+use App\Service\Math\TimeSeries;
 use PHPUnit\Framework\TestCase;
 
 class CreditFiscalSubsystemTest extends TestCase
@@ -1390,7 +1394,7 @@ class CreditFiscalSubsystemTest extends TestCase
             $state->householdDebtServiceTrend = 10.0;
             $trend = $state->creditToGdpTrend;
             $slope = $state->creditToGdpTrendSlope;
-            $credit = $this->mathUtility->calculateOneSidedHpStep($trend, $slope, $state->householdDebtToIncome, CreditFiscalSubsystem::CREDIT_GAP_HP_LEVEL_GAIN, CreditFiscalSubsystem::CREDIT_GAP_HP_SLOPE_GAIN);
+            $credit = TimeSeries::calculateOneSidedHpStep($trend, $slope, $state->householdDebtToIncome, CreditFiscalSubsystem::CREDIT_GAP_HP_LEVEL_GAIN, CreditFiscalSubsystem::CREDIT_GAP_HP_SLOPE_GAIN);
             $state->creditToGdpTrend = $credit['level'];
             $state->creditToGdpTrendSlope = $credit['slope'];
         }
@@ -1547,8 +1551,8 @@ class CreditFiscalSubsystemTest extends TestCase
         $subsystem->calculateRetailDefaultRate($underwater, 0.25);
 
         $math = new MathUtility();
-        $this->assertEqualsWithDelta($math->calculateVasicekExpectedLoss(CreditFiscalSubsystem::RETAIL_CREDIT_INTERCEPT, MacroEngine::RETAIL_DEFAULT_BASELINE, CreditFiscalSubsystem::RETAIL_ASRF_RHO, 1.0), $neutral->retailDefaultRate, 1e-12, 'At NAIRU, base spreads and trend prices the systematic factor is the intercept.');
-        $expected = $math->calculateVasicekExpectedLoss(CreditFiscalSubsystem::RETAIL_CREDIT_INTERCEPT + log(0.8) * CreditFiscalSubsystem::RETAIL_HOUSE_PRICE_SENSITIVITY, MacroEngine::RETAIL_DEFAULT_BASELINE, CreditFiscalSubsystem::RETAIL_ASRF_RHO, 1.0);
+        $this->assertEqualsWithDelta(CreditRisk::calculateVasicekExpectedLoss(CreditFiscalSubsystem::RETAIL_CREDIT_INTERCEPT, MacroEngine::RETAIL_DEFAULT_BASELINE, CreditFiscalSubsystem::RETAIL_ASRF_RHO, 1.0), $neutral->retailDefaultRate, 1e-12, 'At NAIRU, base spreads and trend prices the systematic factor is the intercept.');
+        $expected = CreditRisk::calculateVasicekExpectedLoss(CreditFiscalSubsystem::RETAIL_CREDIT_INTERCEPT + log(0.8) * CreditFiscalSubsystem::RETAIL_HOUSE_PRICE_SENSITIVITY, MacroEngine::RETAIL_DEFAULT_BASELINE, CreditFiscalSubsystem::RETAIL_ASRF_RHO, 1.0);
         $this->assertEqualsWithDelta($expected, $underwater->retailDefaultRate, 1e-9, 'Homes 20% below trend default more households at the same unemployment.');
         $this->assertGreaterThan($neutral->retailDefaultRate, $underwater->retailDefaultRate);
     }
@@ -1591,7 +1595,7 @@ class CreditFiscalSubsystemTest extends TestCase
 
         $this->assertLessThan(0.0, $shocked);
         $this->assertEqualsWithDelta($shocked * exp(-CreditFiscalSubsystem::RETAIL_CREDIT_FACTOR_KAPPA * 0.25), $state->retailCreditFactor, 1e-12, 'With no new shock the factor decays at its own rate.');
-        $atRest = (new MathUtility())->calculateVasicekExpectedLoss(CreditFiscalSubsystem::RETAIL_CREDIT_INTERCEPT, MacroEngine::RETAIL_DEFAULT_BASELINE, CreditFiscalSubsystem::RETAIL_ASRF_RHO, 1.0);
+        $atRest = CreditRisk::calculateVasicekExpectedLoss(CreditFiscalSubsystem::RETAIL_CREDIT_INTERCEPT, MacroEngine::RETAIL_DEFAULT_BASELINE, CreditFiscalSubsystem::RETAIL_ASRF_RHO, 1.0);
         $this->assertGreaterThan($atRest, $state->retailDefaultRate, 'A bad factor still defaults more households a quarter later.');
     }
 
@@ -2228,8 +2232,8 @@ class CreditFiscalSubsystemTest extends TestCase
         $this->assertGreaterThan(0.0, $state->corporateTaxShiftEmbodied);
         $carried = 1.0 - exp(-1.0 / CreditFiscalSubsystem::TRAILING_EARNINGS_MEAN_LAG_YEARS);
         $this->assertEqualsWithDelta(0.002 * $carried, $state->bankLevyEmbodied, 2e-5);
-        $this->assertEqualsWithDelta(1.0 + ((MathUtility::calculateExtractionCostFactor(1.0) - 1.0) * $carried), $state->extractionCostFactorEmbodied, 1e-2 * (MathUtility::calculateExtractionCostFactor(1.0) - 1.0));
-        $this->assertEqualsWithDelta(1.0 + ((MathUtility::calculateStampDutyVolumeFactor(0.002) - 1.0) * $carried), $state->stampDutyVolumeFactorEmbodied, 1e-2 * (1.0 - MathUtility::calculateStampDutyVolumeFactor(0.002)));
+        $this->assertEqualsWithDelta(1.0 + ((FirmEconomics::calculateExtractionCostFactor(1.0) - 1.0) * $carried), $state->extractionCostFactorEmbodied, 1e-2 * (FirmEconomics::calculateExtractionCostFactor(1.0) - 1.0));
+        $this->assertEqualsWithDelta(1.0 + ((MacroTransmission::calculateStampDutyVolumeFactor(0.002) - 1.0) * $carried), $state->stampDutyVolumeFactorEmbodied, 1e-2 * (1.0 - MacroTransmission::calculateStampDutyVolumeFactor(0.002)));
         $this->assertEqualsWithDelta(CommodityLogisticsSubsystem::carbonPowerPriceUplift(40.0) * $carried, $state->carbonPowerUpliftEmbodied, 1e-2 * CommodityLogisticsSubsystem::carbonPowerPriceUplift(40.0));
     }
 }

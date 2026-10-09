@@ -4,13 +4,14 @@ declare(strict_types=1);
 
 namespace App\Service\Model\Sector;
 
-use App\Data\InputOutputExposures;
+use App\Data\Macro\InputOutputExposures;
+use App\Service\Math\MacroTransmission;
 use App\Service\Model\BusinessModelInterface;
 
-use App\Data\ModelParam;
+use App\Service\Model\ModelParam;
 use App\DTO\MacroStateDTO;
 use App\DTO\SectorPhysicsResult;
-use App\DTO\StreamContext;
+use App\Service\Model\StreamContext;
 use App\Entity\Stock;
 use App\Service\Event\ShockEvent;
 use App\Service\Macro\MacroEngine;
@@ -143,7 +144,7 @@ class ConstructionBusinessModel extends StandardCorporateBusinessModel
     public function getSecularGrowthRate(Stock $stock): float
     {
         return MacroEngine::TREND_REAL_GROWTH
-            + MathUtility::gdpShareDrift(self::SECULAR_SHARE_1997, self::SECULAR_SHARE_2019, FinancialConstants::SECULAR_SHARE_WINDOW_YEARS);
+            + MacroTransmission::gdpShareDrift(self::SECULAR_SHARE_1997, self::SECULAR_SHARE_2019, FinancialConstants::SECULAR_SHARE_WINDOW_YEARS);
     }
 
     public function getCapexCyclicality(): float
@@ -250,7 +251,7 @@ class ConstructionBusinessModel extends StandardCorporateBusinessModel
         $policyRate = $macroState->policyRateEma;
         $residentialShift = ($macroState->residentialPropertyIndexEma - 100.0) / 100.0;
         $commercialPropertyShift = ($macroState->commercialPropertyIndexEma - 100.0) / 100.0;
-        $housingStartsShift = MathUtility::calculateHousingStartsShift($macroState->housingStartsIndexEma, sensitivity: self::HOUSING_STARTS_SENSITIVITY);
+        $housingStartsShift = MacroTransmission::calculateHousingStartsShift($macroState->housingStartsIndexEma, sensitivity: self::HOUSING_STARTS_SENSITIVITY);
         $sloosDrag = max(0.0, $macroState->sloosTighteningIndexEma) * self::SLOOS_CREDIT_TIGHTENING_SCALAR;
 
         $commercialMacroBoost = ($outputGap * 1.5 * $beta) + ($commercialPropertyShift * 0.30) + ($residentialShift * 0.20) + $housingStartsShift + ($macroState->creditToGdpGapEma * self::CREDIT_GAP_ORDER_SENSITIVITY);

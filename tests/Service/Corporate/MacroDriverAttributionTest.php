@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Tests\Service\Corporate;
 
-use App\Data\Sectors;
+use App\Data\Company\Sectors;
 use App\DTO\MacroStateDTO;
 use App\Service\Corporate\MacroDriverAttribution;
 use App\Service\Math\MathUtility;

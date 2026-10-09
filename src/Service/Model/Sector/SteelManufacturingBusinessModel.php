@@ -4,15 +4,15 @@ declare(strict_types=1);
 
 namespace App\Service\Model\Sector;
 
-use App\Data\InputOutputExposures;
+use App\Data\Macro\InputOutputExposures;
+use App\Service\Math\MacroTransmission;
 use App\Service\Model\BusinessModelInterface;
 
-use App\Data\ModelParam;
+use App\Service\Model\ModelParam;
 use App\DTO\MacroStateDTO;
 use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
 use App\Service\Math\MathUtility;
-use App\Service\Math\FinancialConstants;
 use App\Service\Macro\MacroEngine;
 use App\Service\Event\ShockEvent;
 
@@ -150,7 +150,7 @@ class SteelManufacturingBusinessModel extends StandardCorporateBusinessModel
     private function resolveCycleVolumeShift(Stock $stock, MacroStateDTO $macroState): float
     {
         $beta = $this->getOperatingCyclicality($stock);
-        $pmiShift = MathUtility::calculatePmiDemandShift($macroState->manufacturingPmiEma, MacroEngine::PMI_BASELINE, self::PMI_DEMAND_SENSITIVITY);
+        $pmiShift = MacroTransmission::calculatePmiDemandShift($macroState->manufacturingPmiEma, MacroEngine::PMI_BASELINE, self::PMI_DEMAND_SENSITIVITY);
 
         return ($this->resolveLaggedOutputGap($macroState) * $beta * self::INVESTMENT_ACCELERATOR_MULTIPLIER) + ($pmiShift * $beta);
     }
@@ -161,7 +161,7 @@ class SteelManufacturingBusinessModel extends StandardCorporateBusinessModel
      */
     private function resolveImportDumpingShift(MacroStateDTO $macroState): float
     {
-        return MathUtility::calculateForeignDemandShift($macroState->foreignOutputGapEma, sensitivity: self::FOREIGN_DEMAND_SENSITIVITY)
+        return MacroTransmission::calculateForeignDemandShift($macroState->foreignOutputGapEma, sensitivity: self::FOREIGN_DEMAND_SENSITIVITY)
             + $this->resolveFxDemandShift($macroState, self::FX_REVENUE_EXPOSURE);
     }
 
@@ -212,7 +212,7 @@ class SteelManufacturingBusinessModel extends StandardCorporateBusinessModel
         $inputCostDrag = $this->resolveInputCostDrag($stock, $macroState, $streams, $pricingPower, $realizedVariableMargin);
 
         // Blast furnace fixed overhead absorption via capacity utilization
-        $cuShift = MathUtility::calculateCapacityUtilizationShift($macroState->capacityUtilizationRateEma, MacroEngine::CU_BASELINE, self::CU_MARGIN_ABSORPTION_SENSITIVITY);
+        $cuShift = MacroTransmission::calculateCapacityUtilizationShift($macroState->capacityUtilizationRateEma, MacroEngine::CU_BASELINE, self::CU_MARGIN_ABSORPTION_SENSITIVITY);
         $cuMarginAdjustment = -$cuShift; // Higher CU improves margin
 
         $clampedMargin = $this->clampMargin($realizedVariableMargin + $inputCostDrag + $cuMarginAdjustment);

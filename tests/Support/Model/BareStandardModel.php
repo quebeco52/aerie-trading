@@ -81,7 +81,7 @@ class BareStandardModel
         return $this->getOperatingBase($stock);
     }
 
-    public function exposeInputCostDrag(Stock $stock, MacroStateDTO $macroState, \App\DTO\StreamContext $streams, float $pricingPower, float $realizedVariableMargin): float
+    public function exposeInputCostDrag(Stock $stock, MacroStateDTO $macroState, \App\Service\Model\StreamContext $streams, float $pricingPower, float $realizedVariableMargin): float
     {
         return $this->resolveInputCostDrag($stock, $macroState, $streams, $pricingPower, $realizedVariableMargin);
     }
@@ -91,7 +91,7 @@ class BareStandardModel
         return $this->resolvePricingPower($stock);
     }
 
-    public function exposeStreamContext(array $momentum, MathUtility $mathUtility, ?MacroStateDTO $macroState = null, ?Stock $stock = null): \App\DTO\StreamContext
+    public function exposeStreamContext(array $momentum, MathUtility $mathUtility, ?MacroStateDTO $macroState = null, ?Stock $stock = null): \App\Service\Model\StreamContext
     {
         return $this->createStreamContext($momentum, $mathUtility, $macroState, $stock);
     }

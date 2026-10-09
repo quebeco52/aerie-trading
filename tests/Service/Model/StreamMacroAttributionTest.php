@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Tests\Service\Model;
 
-use App\Data\Sectors;
+use App\Data\Company\Sectors;
 use App\DTO\ActualFinancialsDTO;
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;

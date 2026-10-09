@@ -4,13 +4,15 @@ declare(strict_types=1);
 
 namespace App\Service\Model\Sector;
 
-use App\DTO\StreamContext;
+use App\Service\Model\StreamContext;
 use App\DTO\InterestExpenseDTO;
 use App\DTO\DebtExpansionAppetiteDTO;
 
+use App\Service\Math\Distributions;
+use App\Service\Math\TimeSeries;
 use App\Service\Model\BusinessModelInterface;
 
-use App\Data\ModelParam;
+use App\Service\Model\ModelParam;
 use App\DTO\MacroStateDTO;
 use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
@@ -256,7 +258,7 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
         }
 
         // Saturation measures the firm's size in its market, so it reads the whole book, goodwill included.
-        $saturationPenalty = \App\Service\Math\CorporateMetrics::getInstance()->calculateMarketSaturationPenalty($stock, max(1.0, $stock->getAmortizedCostEquity()), $macroState);
+        $saturationPenalty = \App\Service\Corporate\CorporateMetrics::getInstance()->calculateMarketSaturationPenalty($stock, max(1.0, $stock->getAmortizedCostEquity()), $macroState);
         $waccBase = $macroState->yield10yEma + $macroState->equityRiskPremium;
         // Cap baseline return at capacity ROIC to prevent margin compression from inflating implied turnover.
         $baselineRoic = min($capacityRoic, max($waccBase, $baselineRoic - $saturationPenalty));
@@ -406,7 +408,7 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
 
         $layerScale = $bookWeight * $catScalar;
         $largeLoss = $layerScale * max(0.0, $catThreshold - $claimZ);
-        $expectedLargeLoss = $layerScale * MathUtility::getInstance()->calculateNormalLowerPartialMoment($catThreshold);
+        $expectedLargeLoss = $layerScale * Distributions::calculateNormalLowerPartialMoment($catThreshold);
         $districtLoss = $bookWeight * static::DISTRICT_CATASTROPHE_LOAD * ($macroState->catastropheLossIndexEma - 1.0);
 
         return [
@@ -461,7 +463,7 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
 
         // What the market will have observed of this firm's capital by the time it quotes again.
         $currentShare = $this->resolveCapacityShare($stock, $macroState);
-        $streams->registerState(self::STATE_OBSERVED_CAPACITY, MathUtility::getInstance()->calculateDistributedLag(
+        $streams->registerState(self::STATE_OBSERVED_CAPACITY, TimeSeries::calculateDistributedLag(
             currentLaggedValue: $streams->getPersistedState(self::STATE_OBSERVED_CAPACITY, $currentShare),
             targetValue: $currentShare,
             dt: \App\Service\Corporate\EarningsEngine::QUARTERLY_TIME_STEP,
@@ -472,7 +474,7 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
     /** The firm's capital measured against the market it serves, on the base the saturation physics uses. */
     protected function resolveCapacityShare(Stock $stock, MacroStateDTO $macroState): float
     {
-        return \App\Service\Math\CorporateMetrics::getInstance()->calculateScaleRatio(
+        return \App\Service\Corporate\CorporateMetrics::getInstance()->calculateScaleRatio(
             $this->getEvaluationCapital((float) $stock->getTotalEquity(), $stock->getInvestedCapital()),
             $macroState->nominalGdpIndex,
             (float) $stock->getSamRatio()
@@ -891,8 +893,8 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
         $structuralRoe = ($effectiveTurnover * $baselineMargin) + $investmentLeg;
 
         // The trailing ROE's gap to through-the-cycle capacity is valued at its persistent-equivalent share, the same
-        // Ohlson / Fama-French fade every other firm's trailing return gets (MathUtility::persistentEquivalentReturn).
-        return max(self::MIN_STRUCTURAL_ROE_FLOOR, MathUtility::persistentEquivalentReturn($roicTtm, $structuralRoe, $discountRate));
+        // Ohlson / Fama-French fade every other firm's trailing return gets (TimeSeries::persistentEquivalentReturn).
+        return max(self::MIN_STRUCTURAL_ROE_FLOOR, TimeSeries::persistentEquivalentReturn($roicTtm, $structuralRoe, $discountRate));
     }
 
     /**
@@ -985,7 +987,7 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
     public function rollLossReserves(float $reserves, float $incurred, float $runoffYears): array
     {
         $dt = \App\Service\Corporate\EarningsEngine::QUARTERLY_TIME_STEP;
-        $settled = max(0.0, MathUtility::getInstance()->calculateDistributedLag(
+        $settled = max(0.0, TimeSeries::calculateDistributedLag(
             currentLaggedValue: $reserves,
             targetValue: ($incurred / $dt) * $runoffYears,
             dt: $dt,

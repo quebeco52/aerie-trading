@@ -7,6 +7,8 @@ use App\Entity\Stock;
 use App\Entity\StockEvent;
 use App\Entity\Etf;
 use App\Entity\EtfEvent;
+use App\Service\News\EventPresenter;
+use App\Service\News\NewsDesk;
 use Doctrine\ORM\EntityManagerInterface;
 use Psr\Log\LoggerInterface;
 

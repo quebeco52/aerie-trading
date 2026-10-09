@@ -9,6 +9,8 @@ use App\Service\Macro\Subsystem\CommodityLogisticsSubsystem;
 use App\Service\Macro\Recorder\OutputGapProbe;
 use App\Service\Macro\Subsystem\MacroAggregateSubsystem;
 use App\Service\Macro\Subsystem\SovereignFundSubsystem;
+use App\Service\Math\FixedIncome;
+use App\Service\Math\MacroTransmission;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\SemiconductorBusinessModel;
 use PHPUnit\Framework\TestCase;
@@ -95,14 +97,14 @@ class MacroAggregateSubsystemTest extends TestCase
 
     public function testConvexPhillipsCurveAcceleratesNearCapacity(): void
     {
-        $expansionPressureLow = $this->mathUtility->calculateConvexPhillipsCurve(0.02, MacroAggregateSubsystem::PHILLIPS_MAX_CAPACITY, MacroAggregateSubsystem::PHILLIPS_CONVEX_KAPPA, MacroAggregateSubsystem::PHILLIPS_DOWNWARD_RIGIDITY_FACTOR);
-        $expansionPressureHigh = $this->mathUtility->calculateConvexPhillipsCurve(0.06, MacroAggregateSubsystem::PHILLIPS_MAX_CAPACITY, MacroAggregateSubsystem::PHILLIPS_CONVEX_KAPPA, MacroAggregateSubsystem::PHILLIPS_DOWNWARD_RIGIDITY_FACTOR);
+        $expansionPressureLow = MacroTransmission::calculateConvexPhillipsCurve(0.02, MacroAggregateSubsystem::PHILLIPS_MAX_CAPACITY, MacroAggregateSubsystem::PHILLIPS_CONVEX_KAPPA, MacroAggregateSubsystem::PHILLIPS_DOWNWARD_RIGIDITY_FACTOR);
+        $expansionPressureHigh = MacroTransmission::calculateConvexPhillipsCurve(0.06, MacroAggregateSubsystem::PHILLIPS_MAX_CAPACITY, MacroAggregateSubsystem::PHILLIPS_CONVEX_KAPPA, MacroAggregateSubsystem::PHILLIPS_DOWNWARD_RIGIDITY_FACTOR);
 
         // Near capacity (y=0.06), pressure must be more than 3x higher than at y=0.02 due to non-linear convexity
         $this->assertGreaterThan(3.0 * $expansionPressureLow, $expansionPressureHigh);
 
         // During contractions (y=-0.04), downward nominal rigidity flattens deflation pressure
-        $recessionPressure = $this->mathUtility->calculateConvexPhillipsCurve(-0.04, MacroAggregateSubsystem::PHILLIPS_MAX_CAPACITY, MacroAggregateSubsystem::PHILLIPS_CONVEX_KAPPA, MacroAggregateSubsystem::PHILLIPS_DOWNWARD_RIGIDITY_FACTOR);
+        $recessionPressure = MacroTransmission::calculateConvexPhillipsCurve(-0.04, MacroAggregateSubsystem::PHILLIPS_MAX_CAPACITY, MacroAggregateSubsystem::PHILLIPS_CONVEX_KAPPA, MacroAggregateSubsystem::PHILLIPS_DOWNWARD_RIGIDITY_FACTOR);
         $this->assertLessThan(0.0, $recessionPressure);
         $this->assertGreaterThan(-0.01, $recessionPressure, 'Downward rigidity must prevent runaway deflationary pressure');
     }
@@ -189,7 +191,7 @@ class MacroAggregateSubsystemTest extends TestCase
 
     /**
      * The subsystem publishes utilization as a fraction and the sector models read it through
-     * MathUtility::calculateCapacityUtilizationShift(). Both ends must agree on that scale.
+     * MacroTransmission::calculateCapacityUtilizationShift(). Both ends must agree on that scale.
      *
      * They did not: the helper divided the gap by 100 a second time, which is correct only for a rate
      * quoted in whole points. Fed with the fraction the engine actually publishes, every industrial
@@ -207,7 +209,7 @@ class MacroAggregateSubsystemTest extends TestCase
         $gap = $boom->capacityUtilizationRate - MacroEngine::CU_BASELINE;
         $this->assertEqualsWithDelta(
             $gap,
-            MathUtility::calculateCapacityUtilizationShift($boom->capacityUtilizationRate, MacroEngine::CU_BASELINE, 1.0),
+            MacroTransmission::calculateCapacityUtilizationShift($boom->capacityUtilizationRate, MacroEngine::CU_BASELINE, 1.0),
             0.0001,
             'At unit sensitivity the shift is the utilization gap itself, in the units the subsystem publishes'
         );
@@ -251,23 +253,23 @@ class MacroAggregateSubsystemTest extends TestCase
 
         $mathMock = $this->createStub(MathUtility::class);
         $mathMock->method('generateStandardNormal')->willReturn(0.0);
-        $mathMock->method('calculateConvexPhillipsCurve')->willReturn(0.0);
-        $mathMock->method('calculateDistributedLag')->willReturnCallback(
-            fn(float $curr, float $target, float $dt, float $tau) => $target
-        );
 
         $subsystemWithMock = new MacroAggregateSubsystem($mathMock);
 
+        // The energy lag closes the share 1 - exp(-dt / tau) of its remaining gap each step, so the price level climbs
+        // by T w, then T w (1 - w), and so on: steps that shrink geometrically and sum to the full transmission T.
         $dt = 0.25;
+        $transmission = MacroEngine::ENERGY_COST_PUSH_TRANSMISSION;
+        $closed = 1.0 - exp(-$dt / MacroAggregateSubsystem::ENERGY_COST_PUSH_LAG_YEARS);
         $infNormal = $subsystemWithMock->calculateInflation($stateNormal, MacroEngine::TARGET_INFLATION, MacroEngine::TFP_DRIFT, $dt);
         $infEnergy = $subsystemWithMock->calculateInflation($stateEnergy, MacroEngine::TARGET_INFLATION, MacroEngine::TFP_DRIFT, $dt);
 
-        $this->assertEqualsWithDelta(MacroEngine::ENERGY_COST_PUSH_TRANSMISSION, ($infEnergy - $infNormal) * $dt, 1e-9, 'Energy shock must lift the price level by its full transmission, undiluted by basket weight.');
+        $this->assertEqualsWithDelta($transmission * $closed, ($infEnergy - $infNormal) * $dt, 1e-9, 'Energy shock must lift the price level by its full transmission, undiluted by basket weight.');
 
         $infNormalHeld = $subsystemWithMock->calculateInflation($stateNormal, MacroEngine::TARGET_INFLATION, MacroEngine::TFP_DRIFT, $dt);
         $infEnergyHeld = $subsystemWithMock->calculateInflation($stateEnergy, MacroEngine::TARGET_INFLATION, MacroEngine::TFP_DRIFT, $dt);
 
-        $this->assertEqualsWithDelta(0.0, $infEnergyHeld - $infNormalHeld, 1e-9, 'Energy held high is a price level, not a standing inflation rate.');
+        $this->assertEqualsWithDelta($transmission * $closed * (1.0 - $closed), ($infEnergyHeld - $infNormalHeld) * $dt, 1e-9, 'Energy held high is a price level, not a standing inflation rate.');
     }
 
     public function testCalculateManufacturingPmi(): void
@@ -362,7 +364,7 @@ class MacroAggregateSubsystemTest extends TestCase
         $baseline->outputGapEma = 0.0;
         $baseline->policyRate = MacroEngine::BASE_NATURAL_RATE + MacroEngine::TARGET_INFLATION;
         $baseline->inflation = MacroEngine::TARGET_INFLATION;
-        $scale5y = \App\Service\Math\MathUtility::calculateTermPremiumDurationScale(5.0, MacroEngine::TERM_PREMIUM_DURATION_HORIZON_YEARS);
+        $scale5y = FixedIncome::calculateTermPremiumDurationScale(5.0, MacroEngine::TERM_PREMIUM_DURATION_HORIZON_YEARS);
         $neutral5y = $baseline->policyRate + MacroEngine::NS_BASE_TERM_PREMIUM * $scale5y;
 
         $highEra = clone $baseline;

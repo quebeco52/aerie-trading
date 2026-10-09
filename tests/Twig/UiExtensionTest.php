@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Tests\Twig;
 
-use App\Data\Institutions;
+use App\Data\District\Institutions;
 use App\Twig\Extension\UiExtension;
 use PHPUnit\Framework\TestCase;
 use Twig\Environment;

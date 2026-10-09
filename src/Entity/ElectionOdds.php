@@ -13,7 +13,7 @@ use Doctrine\ORM\Mapping as ORM;
  *
  * Written by App\Service\Politics\PoliticsHistoryRecorder each time App\Service\Politics\ElectionForecast publishes,
  * on every poll, on the day of a vote and when a cabinet takes office; the politics state keeps only the latest, so
- * this is the odds' path. Party-keyed maps are keyed by App\Data\AerieDiet::PARTIES.
+ * this is the odds' path. Party-keyed maps are keyed by App\Data\Politics\AerieDiet::PARTIES.
  */
 #[ORM\Entity(repositoryClass: \App\Repository\ElectionOddsRepository::class)]
 #[ORM\Table(name: 'election_odds')]

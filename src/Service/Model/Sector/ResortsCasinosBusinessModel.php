@@ -4,17 +4,21 @@ declare(strict_types=1);
 
 namespace App\Service\Model\Sector;
 
-use App\Data\InputOutputExposures;
-use App\Data\ModelParam;
+use App\Data\Macro\InputOutputExposures;
+use App\Service\Model\ModelParam;
 use App\DTO\MacroStateDTO;
 use App\DTO\SectorPhysicsResult;
-use App\DTO\StreamContext;
+use App\Service\Model\StreamContext;
 use App\Entity\Stock;
 use App\Service\Corporate\EarningsEngine;
 use App\Service\Event\ShockEvent;
 use App\Service\Macro\MacroEngine;
+use App\Service\Math\Distributions;
+use App\Service\Math\FirmEconomics;
+use App\Service\Math\MacroTransmission;
 use App\Service\Math\MathUtility;
 use App\Service\Math\FinancialConstants;
+use App\Service\Math\ResponseCurves;
 
 /**
  * Earnings strategy for Integrated Resorts & Casinos.
@@ -164,7 +168,7 @@ class ResortsCasinosBusinessModel extends StandardCorporateBusinessModel
     public function getSecularGrowthRate(Stock $stock): float
     {
         return MacroEngine::TREND_REAL_GROWTH
-            + MathUtility::gdpShareDrift(self::SECULAR_SHARE_1997, self::SECULAR_SHARE_2019, FinancialConstants::SECULAR_SHARE_WINDOW_YEARS);
+            + MacroTransmission::gdpShareDrift(self::SECULAR_SHARE_1997, self::SECULAR_SHARE_2019, FinancialConstants::SECULAR_SHARE_WINDOW_YEARS);
     }
 
     public function getCapexCyclicality(): float
@@ -218,7 +222,7 @@ class ResortsCasinosBusinessModel extends StandardCorporateBusinessModel
         $quarter = EarningsEngine::QUARTERLY_TIME_STEP;
         $streams->evolveRegime(self::CRACKDOWN_REGIME, 0.0, 1.0 - exp(-$quarter / self::GAMING_CRACKDOWN_MEAN_YEARS));
         $eventType = null;
-        if ($mathUtility->calculateNormalCDF($eventZ) < 1.0 - exp(-self::GAMING_CRACKDOWN_INTENSITY * $quarter)
+        if (Distributions::calculateNormalCDF($eventZ) < 1.0 - exp(-self::GAMING_CRACKDOWN_INTENSITY * $quarter)
             && $streams->getRegimeElapsed(self::CRACKDOWN_REGIME) === 0) {
             $streams->startRegime(self::CRACKDOWN_REGIME);
             $eventType = ShockEvent::GAMING_CRACKDOWN;
@@ -226,7 +230,7 @@ class ResortsCasinosBusinessModel extends StandardCorporateBusinessModel
 
         // --- Rent roll: only the slice expiring this quarter reprices to market ---
         $inPlaceRent = $streams->getPersistedState(self::STATE_IN_PLACE_RENT, $visitorShift);
-        [$rolledInPlaceRent, $releasingSpread] = MathUtility::rollLeaseLadder(
+        [$rolledInPlaceRent, $releasingSpread] = FirmEconomics::rollLeaseLadder(
             $inPlaceRent,
             $visitorShift,
             self::CRE_LEASE_WALT_YEARS,
@@ -323,7 +327,7 @@ class ResortsCasinosBusinessModel extends StandardCorporateBusinessModel
     {
         return $this->resolveCycleDemandShift($stock, $macroState)
             + ($macroState->sentimentResidual() * $this->getOperatingCyclicality($stock) * self::SENTIMENT_SENSITIVITY_SCALAR)
-            + MathUtility::calculateForeignDemandShift($macroState->foreignOutputGapEma, sensitivity: self::FOREIGN_DEMAND_SENSITIVITY);
+            + MacroTransmission::calculateForeignDemandShift($macroState->foreignOutputGapEma, sensitivity: self::FOREIGN_DEMAND_SENSITIVITY);
     }
 
     /**
@@ -368,7 +372,7 @@ class ResortsCasinosBusinessModel extends StandardCorporateBusinessModel
     /** Rent lost to retail tenant failures, from the excess retail default rate. */
     private function resolveTenantDefaultLoss(MacroStateDTO $macroState): float
     {
-        return MathUtility::excessOverBaseline($macroState->retailDefaultRateEma, MacroEngine::RETAIL_DEFAULT_BASELINE)
+        return ResponseCurves::excessOverBaseline($macroState->retailDefaultRateEma, MacroEngine::RETAIL_DEFAULT_BASELINE)
             * self::RETAIL_TENANT_DEFAULT_RENT_LOSS;
     }
 

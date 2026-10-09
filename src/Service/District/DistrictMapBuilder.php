@@ -4,9 +4,9 @@ declare(strict_types=1);
 
 namespace App\Service\District;
 
-use App\Data\DistrictMap;
-use App\Data\Sectors;
-use App\Data\StockInfo;
+use App\Data\District\DistrictMap;
+use App\Data\Company\Sectors;
+use App\Data\Company\StockInfo;
 use App\DTO\DistrictCanvasDTO;
 use App\DTO\DistrictHeightEnvelope;
 use App\DTO\DistrictInstitutionDTO;
@@ -375,7 +375,7 @@ class DistrictMapBuilder
     /**
      * Derives the institutions rendered on the street: exactly those at least one plot draws a
      * conduit from, laid out evenly between the gutter and the east margin — see
-     * App\Data\DistrictMap::INSTITUTIONS for why an institution carries no geometry of its own.
+     * App\Data\District\DistrictMap::INSTITUTIONS for why an institution carries no geometry of its own.
      * Each takes the conduit lane the canvas reserved for it.
      *
      * @param  list<DistrictPlotDTO> $plots

@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Tests\Service\Model;
 
-use App\Data\Sectors;
+use App\Data\Company\Sectors;
 use App\DTO\DebtHealthDTO;
 use App\DTO\DebtMetricsDTO;
 use App\Entity\Stock;

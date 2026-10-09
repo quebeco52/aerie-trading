@@ -10,7 +10,7 @@ use App\Entity\Stock;
 use App\Repository\CorporateReportRepository;
 use App\Service\Corporate\Industry\IndustryShareLedger;
 use App\Service\Corporate\Industry\InMemoryIndustryShareStore;
-use App\Service\Math\CorporateMetrics;
+use App\Service\Corporate\CorporateMetrics;
 use App\Service\Math\FinancialConstants;
 use App\Service\View\IndustryPositionBuilder;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;

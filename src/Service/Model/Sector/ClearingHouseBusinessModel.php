@@ -6,15 +6,15 @@ namespace App\Service\Model\Sector;
 
 use App\DTO\InterestExpenseDTO;
 
+use App\Service\Math\ResponseCurves;
 use App\Service\Model\BusinessModelInterface;
 
-use App\Data\ModelParam;
+use App\Service\Model\ModelParam;
 use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
 use App\Service\Math\MathUtility;
 use App\Service\Macro\MacroEngine;
 use App\Service\Event\ShockEvent;
-use App\Service\Math\FinancialConstants;
 
 /**
  * Earnings strategy for Central Counterparty Clearing Houses (CCP).
@@ -230,7 +230,7 @@ class ClearingHouseBusinessModel extends BaseFinancialBusinessModel
         // Under the Default Waterfall, routine member defaults ($defaultZ >= CATASTROPHE_Z_THRESHOLD) are fully absorbed
         // by the defaulting member's posted Initial Margin and Guaranty Fund contribution ($0 loss to CCP equity).
         // Only a severe systemic failure pierces the waterfall to hit the CCP's Skin-in-the-Game (SITG) capital tranche.
-        $corporateDefaultShift = MathUtility::excessOverBaseline($macroState->corporateDefaultRateEma, MacroEngine::CORPORATE_DEFAULT_BASELINE);
+        $corporateDefaultShift = ResponseCurves::excessOverBaseline($macroState->corporateDefaultRateEma, MacroEngine::CORPORATE_DEFAULT_BASELINE);
         $macroMemberStress = $corporateDefaultShift * self::MACRO_DEFAULT_STRESS_SCALAR * 0.05;
 
         $catastropheShock = ($defaultZ < self::CATASTROPHE_Z_THRESHOLD

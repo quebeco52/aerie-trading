@@ -6,6 +6,7 @@ use App\Service\Macro\MacroEngine;
 use App\Service\Macro\MacroState;
 use App\Service\Macro\Subsystem\CommodityLogisticsSubsystem;
 use App\Service\Math\MathUtility;
+use App\Service\Math\StochasticProcesses;
 use PHPUnit\Framework\TestCase;
 
 class CommodityLogisticsSubsystemTest extends TestCase
@@ -136,11 +137,11 @@ class CommodityLogisticsSubsystemTest extends TestCase
 
     public function testConvenienceYieldSpikesWhenPhysicalInventoryDrawsDown(): void
     {
-        $ampleYield = $this->mathUtility->calculateConvenienceYield(105.0, 50.0);
+        $ampleYield = StochasticProcesses::calculateConvenienceYield(105.0, 50.0);
         $this->assertEquals(0.0, $ampleYield, 'Ample buffer stocks must have zero convenience yield (contango)');
 
-        $tightYield = $this->mathUtility->calculateConvenienceYield(75.0, 50.0);
-        $criticalYield = $this->mathUtility->calculateConvenienceYield(55.0, 50.0);
+        $tightYield = StochasticProcesses::calculateConvenienceYield(75.0, 50.0);
+        $criticalYield = StochasticProcesses::calculateConvenienceYield(55.0, 50.0);
 
         $this->assertGreaterThan(0.0, $tightYield);
         $this->assertGreaterThan(3.0 * $tightYield, $criticalYield, 'Critical inventory depletion must spike convenience yield non-linearly');

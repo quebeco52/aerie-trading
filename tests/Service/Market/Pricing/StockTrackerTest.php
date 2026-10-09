@@ -13,7 +13,7 @@ use App\Service\Corporate\CorporateActionEngine;
 use App\Service\Corporate\DebtEngine;
 use App\Service\Event\MarketEventPublisher;
 use App\Service\Math\MathUtility;
-use App\Service\Math\CorporateMetrics;
+use App\Service\Corporate\CorporateMetrics;
 use Doctrine\ORM\EntityManagerInterface;
 use App\Entity\Stock;
 use App\Entity\StockEvent;

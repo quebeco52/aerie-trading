@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Service\Model;
 
-use App\Data\Sectors;
+use App\Data\Company\Sectors;
 
 /**
  * The business-model registry as a service, for code that takes its models by injection. It keeps no list of its

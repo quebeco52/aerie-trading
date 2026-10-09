@@ -24,9 +24,6 @@ class MarketConsensusEngineTest extends TestCase
     protected function setUp(): void
     {
         $this->mathUtilityMock = $this->createStub(MathUtility::class);
-        $this->mathUtilityMock->method('calculateBayesianAnalystUpdate')->willReturnCallback(
-            fn(float $pEst, float $pVar, float $sEst, float $sVar) => (new MathUtility())->calculateBayesianAnalystUpdate($pEst, $pVar, $sEst, $sVar)
-        );
         $this->engine = new MarketConsensusEngine();
     }
 

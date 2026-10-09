@@ -8,7 +8,7 @@ namespace App\DTO;
  * Render-ready state for a single macro-publishing institution on a district ward elevation.
  *
  * `x`/`width` are derived per ward by App\Service\District\DistrictMapBuilder from the
- * institutions actually wired to that ward's tenants — see App\Data\DistrictMap::INSTITUTIONS
+ * institutions actually wired to that ward's tenants — see App\Data\District\DistrictMap::INSTITUTIONS
  * for why an institution carries no geometry of its own.
  */
 class DistrictInstitutionDTO

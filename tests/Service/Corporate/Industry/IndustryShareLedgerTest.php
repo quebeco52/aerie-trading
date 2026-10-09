@@ -9,7 +9,7 @@ use App\Entity\Stock;
 use App\Service\Corporate\Industry\InMemoryIndustryShareStore;
 use App\Service\Corporate\Industry\IndustryShareLedger;
 use App\Service\Math\FinancialConstants;
-use App\Service\Math\MathUtility;
+use App\Service\Math\TimeSeries;
 use PHPUnit\Framework\TestCase;
 
 class IndustryShareLedgerTest extends TestCase
@@ -158,7 +158,7 @@ class IndustryShareLedgerTest extends TestCase
         // half-life: trend plant is 1,000 * 1.1 * e^(integral of the faded excess) and the market 2,000 times
         // that, against plant that has not moved — so the firm has fallen BEHIND trend and the industry is short
         // of capacity by its shortfall over the market.
-        $growth = 1.10 * exp(MathUtility::fadedExcessIntegral(0.03, 0.0, 2.0, FinancialConstants::SECULAR_EXCESS_HALF_LIFE_YEARS));
+        $growth = 1.10 * exp(TimeSeries::fadedExcessIntegral(0.03, 0.0, 2.0, FinancialConstants::SECULAR_EXCESS_HALF_LIFE_YEARS));
         $this->assertLessThan(exp(0.03 * 2.0), $growth / 1.10, 'the excess fades, so two years compound less than twice the opening rate');
         $expected = 1.0 + (1_000.0 - 1_000.0 * $growth) / (2_000.0 * $growth);
         $ratio = $ledger->resolveIndustryCapacityRatio($firm, 1_000.0, 0.5, 1.10, 2.0, 0.03, 514, 252);
@@ -185,7 +185,7 @@ class IndustryShareLedgerTest extends TestCase
 
         // Two years on, trend nominal GDP is up 10% and a three-point secular excess has run on its fade.
         $later = new MacroStateDTO(totalTime: 2.0, potentialGdpIndex: 1.05, gdpDeflator: 1.10 / 1.05);
-        $expected = log(1.10) + MathUtility::fadedExcessIntegral(0.03, 0.0, 2.0, FinancialConstants::SECULAR_EXCESS_HALF_LIFE_YEARS);
+        $expected = log(1.10) + TimeSeries::fadedExcessIntegral(0.03, 0.0, 2.0, FinancialConstants::SECULAR_EXCESS_HALF_LIFE_YEARS);
         $this->assertEqualsWithDelta($expected, $ledger->resolveTrendCapacityGap($firm, $later, 0.03), 1e-12, 'demand outgrew the plant');
 
         $ledger->resolveIndustryCapacityRatio($firm, 1_600.0, 0.5, 1.0, 0.0, 0.0, 73, 252);
@@ -344,7 +344,7 @@ class IndustryShareLedgerTest extends TestCase
         // The market rides trend nominal GDP and the industry's secular excess, as the anchor's trend demand does.
         $later = $ledger->describeMergerMarket($leader, new MacroStateDTO(potentialGdpIndex: 1.2, gdpDeflator: 1.1, totalTime: 5.0), 0.02, 40, 252);
         $this->assertEqualsWithDelta(
-            10_000.0 * 1.2 * 1.1 * exp(MathUtility::fadedExcessIntegral(0.02, 0.0, 5.0, FinancialConstants::SECULAR_EXCESS_HALF_LIFE_YEARS)),
+            10_000.0 * 1.2 * 1.1 * exp(TimeSeries::fadedExcessIntegral(0.02, 0.0, 5.0, FinancialConstants::SECULAR_EXCESS_HALF_LIFE_YEARS)),
             $later['market_revenue'],
             1e-6
         );

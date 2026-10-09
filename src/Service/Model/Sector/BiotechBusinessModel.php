@@ -4,16 +4,17 @@ declare(strict_types=1);
 
 namespace App\Service\Model\Sector;
 
-use App\Data\InputOutputExposures;
-use App\Data\ModelParam;
-use App\DTO\ModelParameters;
+use App\Data\Macro\InputOutputExposures;
+use App\Service\Model\ModelParam;
+use App\Service\Model\ModelParameters;
 use App\DTO\SectorCoverageProfile;
 use App\DTO\SectorPhysicsResult;
-use App\DTO\StreamContext;
+use App\Service\Model\StreamContext;
 use App\Entity\Stock;
 use App\Service\Event\ShockEvent;
 use App\Service\Macro\MacroEngine;
 use App\Service\Math\FinancialConstants;
+use App\Service\Math\MacroTransmission;
 use App\Service\Math\MathUtility;
 
 /**
@@ -234,13 +235,13 @@ class BiotechBusinessModel extends StandardCorporateBusinessModel
     /** Secular real growth of a fully patent-protected branded book. */
     public static function patentedSecularGrowthRate(): float
     {
-        return MacroEngine::TREND_REAL_GROWTH + MathUtility::gdpShareDrift(self::PATENTED_SHARE_2000, self::PATENTED_SHARE_2019, self::PATENTED_SHARE_WINDOW_YEARS);
+        return MacroEngine::TREND_REAL_GROWTH + MacroTransmission::gdpShareDrift(self::PATENTED_SHARE_2000, self::PATENTED_SHARE_2019, self::PATENTED_SHARE_WINDOW_YEARS);
     }
 
     /** Secular real growth of an unprotected generic book. */
     public static function genericSecularGrowthRate(): float
     {
-        return MacroEngine::TREND_REAL_GROWTH + MathUtility::gdpShareDrift(self::GENERIC_SHARE_2010, self::GENERIC_SHARE_2018, self::GENERIC_SHARE_WINDOW_YEARS);
+        return MacroEngine::TREND_REAL_GROWTH + MacroTransmission::gdpShareDrift(self::GENERIC_SHARE_2010, self::GENERIC_SHARE_2018, self::GENERIC_SHARE_WINDOW_YEARS);
     }
 
     public function getSurpriseBlendWeights(): array

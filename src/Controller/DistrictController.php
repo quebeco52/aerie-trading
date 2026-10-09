@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Controller;
 
-use App\Data\DistrictMap;
+use App\Data\District\DistrictMap;
 use App\Entity\Stock;
 use App\Service\District\DistrictEventFeed;
 use App\Service\District\DistrictHoldingsFeed;

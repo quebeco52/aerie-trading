@@ -8,7 +8,7 @@ use App\Entity\Stock;
 use App\Entity\StockEvent;
 use App\Repository\StockEventRepository;
 use App\Service\District\DistrictEventFeed;
-use App\Service\Event\EventPresenter;
+use App\Service\News\EventPresenter;
 use Doctrine\ORM\EntityManagerInterface;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
@@ -17,7 +17,7 @@ use Symfony\Component\Clock\MockClock;
 
 /**
  * Pins the district event backfill's job: fetch every tenant's recent history in one query and
- * hand each event to the real App\Service\Event\EventPresenter, never a parallel presentation of
+ * hand each event to the real App\Service\News\EventPresenter, never a parallel presentation of
  * its own — so a district badge and the stock page's own event feed always agree on
  * badge/icon/colour for the same event. One query rather than one per tenant is what
  * StockEvent's (stock_id, recorded_at) index exists to make cheap — see recentEventsByTicker()'s

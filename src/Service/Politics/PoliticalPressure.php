@@ -4,9 +4,11 @@ declare(strict_types=1);
 
 namespace App\Service\Politics;
 
-use App\Data\AerieDiet;
+use App\Data\Politics\AerieDiet;
 use App\DTO\PoliticsStateDTO;
+use App\Service\Math\Distributions;
 use App\Service\Math\MathUtility;
+use App\Service\Math\TimeSeries;
 
 /**
  * The cabinet leaning on the Monetary Authority. The charter puts the Authority beyond the Diet's reach, but the Council
@@ -58,7 +60,7 @@ final class PoliticalPressure
     public static function advance(PoliticsState $state, float $dt, MathUtility $math): void
     {
         $time = $state->totalTime;
-        if ($state->authoritySalt < 0.0 || !MathUtility::crossedSimulatedBoundary($time, $dt, self::QUARTER)) {
+        if ($state->authoritySalt < 0.0 || !TimeSeries::crossedSimulatedBoundary($time, $dt, self::QUARTER)) {
             return;
         }
 
@@ -99,7 +101,7 @@ final class PoliticalPressure
     /** The share of quarters a government this populist spends pressing the central bank (Gavin & Manger's probit). */
     public static function shareOfQuarters(float $populism, MathUtility $math): float
     {
-        return $math->calculateNormalCDF(self::POPULISM_PROBIT_INTERCEPT + (self::POPULISM_PROBIT_SLOPE * $populism));
+        return Distributions::calculateNormalCDF(self::POPULISM_PROBIT_INTERCEPT + (self::POPULISM_PROBIT_SLOPE * $populism));
     }
 
     /**

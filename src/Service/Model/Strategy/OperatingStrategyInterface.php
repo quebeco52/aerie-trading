@@ -45,13 +45,13 @@ interface OperatingStrategyInterface
     public function annualBankLevyBase(Stock $stock): float;
     /**
      * The variable cost the rules on extraction scale, a year, before them, in currency: at a cost factor of one more
-     * (MathUtility::calculateExtractionCostFactor()), the cost rises by this; zero for a firm that extracts nothing.
+     * (FirmEconomics::calculateExtractionCostFactor()), the cost rises by this; zero for a firm that extracts nothing.
      * Deductible, so it comes off earnings before tax.
      */
     public function annualExtractionCostBase(Stock $stock): float;
     /**
      * The revenue less its variable cost that moves with the District's share turnover, a year, at the founding stamp
-     * duty, in currency: at a turnover factor of one more (MathUtility::calculateStampDutyVolumeFactor()), earnings
+     * duty, in currency: at a turnover factor of one more (MacroTransmission::calculateStampDutyVolumeFactor()), earnings
      * before tax rise by this; zero for a firm that earns nothing on trading.
      */
     public function annualStampDutyTurnoverBase(Stock $stock): float;
@@ -72,7 +72,7 @@ interface OperatingStrategyInterface
      * stays a genuine operating-coupling declaration rather than everything a model touches.
      *
      * Consumed by App\Service\District\DistrictConduitResolver to derive which district
-     * institutions draw a conduit to this model — see App\Data\DistrictMap's class docblock.
+     * institutions draw a conduit to this model — see App\Data\District\DistrictMap's class docblock.
      * BusinessModelMacroFieldDeclarationTest enforces that the declaration matches the source.
      *
      * @return list<string>

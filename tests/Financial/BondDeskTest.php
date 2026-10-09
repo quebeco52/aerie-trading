@@ -10,6 +10,7 @@ use App\Service\Macro\MacroEngine;
 use App\Service\Macro\Subsystem\MonetaryPolicySubsystem;
 use App\Service\Market\Bond\BondPricingEngine;
 use App\Service\Math\FinancialConstants;
+use App\Service\Math\FixedIncome;
 use App\Service\Math\MathUtility;
 use App\Tests\Support\MacroStateBuilder;
 use PHPUnit\Framework\TestCase;
@@ -30,7 +31,7 @@ class BondDeskTest extends TestCase
     protected function setUp(): void
     {
         $this->math = new MathUtility();
-        $this->engine = new BondPricingEngine($this->math);
+        $this->engine = new BondPricingEngine();
     }
 
     private function curve(float $level = 0.0425, float $slope = -0.0175, float $curvature1 = 0.0, float $curvature2 = 0.0): SovereignCurveDTO
@@ -134,7 +135,7 @@ class BondDeskTest extends TestCase
         $this->assertSame(
             [],
             $offenders,
-            'Sovereign yields must come from MathUtility::calculateSovereignZeroYield, not a local copy.'
+            'Sovereign yields must come from FixedIncome::calculateSovereignZeroYield, not a local copy.'
         );
     }
 
@@ -173,7 +174,7 @@ class BondDeskTest extends TestCase
                 $before = $this->engine->value($bond, $base, 0.0);
                 $yield = $before->yieldToMaturity;
 
-                $priceAt = fn (float $y): float => $this->math->calculateBondPresentValue(
+                $priceAt = fn (float $y): float => FixedIncome::calculateBondPresentValue(
                     $flows,
                     static fn (float $tau): float => $y
                 );

@@ -4,16 +4,16 @@ declare(strict_types=1);
 
 namespace App\Service\Model\Sector;
 
-use App\Data\InputOutputExposures;
+use App\Data\Macro\InputOutputExposures;
+use App\Service\Math\MacroTransmission;
 use App\Service\Model\BusinessModelInterface;
 
-use App\Data\ModelParam;
+use App\Service\Model\ModelParam;
 use App\DTO\MacroStateDTO;
 use App\DTO\SectorPhysicsResult;
-use App\DTO\StreamContext;
+use App\Service\Model\StreamContext;
 use App\Entity\Stock;
 use App\Service\Math\MathUtility;
-use App\Service\Math\FinancialConstants;
 use App\Service\Event\ShockEvent;
 use App\Service\Macro\MacroEngine;
 
@@ -176,8 +176,8 @@ class ShippingBusinessModel extends StandardCorporateBusinessModel
     /** Cargo volume: the lagged gap through the trade-income elasticity, plus the trade balance and customers abroad. */
     private function resolveCargoVolumeShift(Stock $stock, MacroStateDTO $macroState): float
     {
-        $tradeShift = MathUtility::calculateTradeBalanceShift($macroState->tradeBalanceToGdpEma, sensitivity: self::TRADE_BALANCE_SENSITIVITY)
-            + MathUtility::calculateForeignDemandShift($macroState->foreignOutputGapEma, sensitivity: self::FOREIGN_DEMAND_SENSITIVITY);
+        $tradeShift = MacroTransmission::calculateTradeBalanceShift($macroState->tradeBalanceToGdpEma, sensitivity: self::TRADE_BALANCE_SENSITIVITY)
+            + MacroTransmission::calculateForeignDemandShift($macroState->foreignOutputGapEma, sensitivity: self::FOREIGN_DEMAND_SENSITIVITY);
 
         return ($this->resolveLaggedOutputGap($macroState) * $this->getOperatingCyclicality($stock) * self::MACRO_DEMAND_SCALAR) + $tradeShift;
     }

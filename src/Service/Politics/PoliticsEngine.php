@@ -4,13 +4,14 @@ declare(strict_types=1);
 
 namespace App\Service\Politics;
 
-use App\Data\AerieDiet;
+use App\Data\Politics\AerieDiet;
 use App\DTO\MacroStateDTO;
 use App\DTO\PoliticsStateDTO;
 use App\Service\Event\ShockEvent;
 use App\Service\Macro\MacroEngine;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\MathUtility;
+use App\Service\Math\TimeSeries;
 use Psr\Log\LoggerInterface;
 
 /**
@@ -257,7 +258,7 @@ class PoliticsEngine
         }
         if (
             $state->campaignStartedAt < 0.0
-            || MathUtility::crossedSimulatedBoundary($state->totalTime + self::ELECTION_CAMPAIGN_WINDOW_YEARS, $dt, self::ELECTION_TERM_YEARS)
+            || TimeSeries::crossedSimulatedBoundary($state->totalTime + self::ELECTION_CAMPAIGN_WINDOW_YEARS, $dt, self::ELECTION_TERM_YEARS)
         ) {
             $state->campaignStartedAt = $state->totalTime;
             $state->campaignStartRealGdp = $realGdp;
@@ -265,7 +266,7 @@ class PoliticsEngine
 
         // Snapped to the tick grid, so the vote falls on the same tick as every other boundary of the calendar (a budget
         // round) rather than one tick late when accumulated time lands a hair short of the term.
-        if (MathUtility::crossedSimulatedBoundary($state->totalTime, $dt, self::ELECTION_TERM_YEARS)) {
+        if (TimeSeries::crossedSimulatedBoundary($state->totalTime, $dt, self::ELECTION_TERM_YEARS)) {
             $state->lastElectionAt = $state->totalTime;
             $this->holdElection($state, $macro, $realGdp);
 
@@ -296,7 +297,7 @@ class PoliticsEngine
         if (
             $state->coalitionTakesOfficeAt < 0.0
             && $state->coalitionFormedAt < $state->totalTime
-            && MathUtility::crossedSimulatedBoundary($state->totalTime, $dt, MacroEngine::BUDGET_ROUND_PERIOD_YEARS)
+            && TimeSeries::crossedSimulatedBoundary($state->totalTime, $dt, MacroEngine::BUDGET_ROUND_PERIOD_YEARS)
         ) {
             self::enactBudget($state, $macro->sovereignDebtToGdp, MacroEngine::inSahmRecession($macro->sahmRecessionIndicator));
         }

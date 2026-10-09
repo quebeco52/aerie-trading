@@ -4,9 +4,9 @@ declare(strict_types=1);
 
 namespace App\Tests\Twig;
 
-use App\Data\AerieCouncil;
-use App\Data\DistrictMap;
-use App\Data\Institutions;
+use App\Data\Politics\AerieCouncil;
+use App\Data\District\DistrictMap;
+use App\Data\District\Institutions;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 

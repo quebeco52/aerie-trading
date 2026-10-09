@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Tests\Service\Politics;
 
-use App\Data\AerieCouncil;
+use App\Data\Politics\AerieCouncil;
 use App\DTO\MacroStateDTO;
 use App\DTO\PoliticsStateDTO;
 use App\Service\Event\ShockEvent;

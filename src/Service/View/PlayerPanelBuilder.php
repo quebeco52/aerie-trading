@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Service\View;
 
-use App\Data\DistrictCalendar;
+use App\Data\District\DistrictCalendar;
 use App\Entity\Season;
 use App\Entity\User;
 use App\Repository\SeasonRepository;

@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Tests\Service\District;
 
-use App\Data\DistrictMap;
+use App\Data\District\DistrictMap;
 use App\Service\District\DistrictConduitResolver;
 use App\Service\Model\BusinessModelInterface;
 use App\Service\Model\BusinessModelRegistryInterface;
@@ -12,7 +12,7 @@ use PHPUnit\Framework\TestCase;
 
 /**
  * Pins the derivation rule in isolation, with a stub model whose declared fields are fully
- * controlled — App\Tests\Data\DistrictConduitTopologyTest exercises this same resolver against
+ * controlled — App\Tests\Data\District\DistrictConduitTopologyTest exercises this same resolver against
  * every real business model.
  */
 class DistrictConduitResolverTest extends TestCase

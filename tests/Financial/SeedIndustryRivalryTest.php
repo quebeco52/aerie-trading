@@ -4,10 +4,10 @@ declare(strict_types=1);
 
 namespace App\Tests\Financial;
 
-use App\Data\InitialMarket;
-use App\Data\Sectors;
-use App\Data\StockModelTuning;
-use App\Service\Math\CorporateMetrics;
+use App\Data\Company\InitialMarket;
+use App\Data\Company\Sectors;
+use App\Data\Company\StockModelTuning;
+use App\Service\Corporate\CorporateMetrics;
 use App\Service\Math\FinancialConstants;
 use PHPUnit\Framework\TestCase;
 

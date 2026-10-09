@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Tests\Service\View;
 
-use App\Data\OutputGapChannels;
+use App\Data\Macro\OutputGapChannels;
 use App\Service\Macro\MacroEngine;
 use App\Service\Macro\MacroState;
 use App\Service\Macro\Recorder\OutputGapProbe;

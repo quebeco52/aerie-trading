@@ -7,6 +7,7 @@ use App\Service\Macro\MacroState;
 use App\Service\Macro\Subsystem\AssetMarketSubsystem;
 use App\Service\Macro\Subsystem\MacroAggregateSubsystem;
 use App\Service\Math\MathUtility;
+use App\Service\Math\TimeSeries;
 use PHPUnit\Framework\TestCase;
 
 class AssetMarketSubsystemTest extends TestCase
@@ -46,7 +47,7 @@ class AssetMarketSubsystemTest extends TestCase
         $this->subsystem->calculateEquityRiskPremium($state);
 
         $premium = MacroEngine::BASE_EQUITY_RISK_PREMIUM * exp(AssetMarketSubsystem::HABIT_RISK_AVERSION_COEFF * 0.03);
-        $annualPersistence = MathUtility::calculateAr2Autocorrelation(AssetMarketSubsystem::MAINLAND_GAP_AR1, AssetMarketSubsystem::MAINLAND_GAP_AR2, 4);
+        $annualPersistence = TimeSeries::calculateAr2Autocorrelation(AssetMarketSubsystem::MAINLAND_GAP_AR1, AssetMarketSubsystem::MAINLAND_GAP_AR2, 4);
         $duration = 1.0 / (1.0 - (AssetMarketSubsystem::CAMPBELL_SHILLER_RHO * $annualPersistence));
         $this->assertEqualsWithDelta($premium, $state->foreignEquityRiskPremium, 1e-15);
         $this->assertEqualsWithDelta(MacroEngine::BASE_EQUITY_RISK_PREMIUM, $state->equityRiskPremium, 1e-15);
@@ -93,7 +94,6 @@ class AssetMarketSubsystemTest extends TestCase
     {
         $math = $this->createStub(MathUtility::class);
         $math->method('generateStandardNormal')->willReturn(0.0);
-        $math->method('calculateSchwartz1Factor')->willReturnCallback(fn(float $currentPrice, float $kappa, float $theta) => $theta);
 
         $state = new MacroState();
         $state->yield10yEma = $yield10y;
@@ -682,10 +682,10 @@ class AssetMarketSubsystemTest extends TestCase
         $a2 = AssetMarketSubsystem::MAINLAND_GAP_AR2;
         // Yule-Walker: gamma_0 = sigma^2 / (1 - a1 rho_1 - a2 rho_2).
         $expectedSd = AssetMarketSubsystem::MAINLAND_GAP_SIGMA
-            / sqrt(1.0 - ($a1 * MathUtility::calculateAr2Autocorrelation($a1, $a2, 1)) - ($a2 * MathUtility::calculateAr2Autocorrelation($a1, $a2, 2)));
+            / sqrt(1.0 - ($a1 * TimeSeries::calculateAr2Autocorrelation($a1, $a2, 1)) - ($a2 * TimeSeries::calculateAr2Autocorrelation($a1, $a2, 2)));
         $this->assertEqualsWithDelta(0.0, $mean, 0.002, 'With the district at trend the mainland cycle averages nothing.');
         $this->assertEqualsWithDelta($expectedSd, sqrt($variance / $count), 0.001, 'Its spread is the fitted AR(2)\'s, ~1.37%.');
-        $this->assertEqualsWithDelta(MathUtility::calculateAr2Autocorrelation($a1, $a2, 4), $covariance / $variance, 0.04, 'and a year on it still carries ~0.59 of itself, as the CBO gap does.');
+        $this->assertEqualsWithDelta(TimeSeries::calculateAr2Autocorrelation($a1, $a2, 4), $covariance / $variance, 0.04, 'and a year on it still carries ~0.59 of itself, as the CBO gap does.');
     }
 
     /** The mainland's statistics and its rate decision arrive at the quarter's turn, not between. */

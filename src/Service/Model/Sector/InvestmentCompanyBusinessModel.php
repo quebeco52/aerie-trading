@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace App\Service\Model\Sector;
 
-use App\Data\AnchorHoldings;
-use App\Data\ModelParam;
+use App\Data\Company\AnchorHoldings;
+use App\Service\Model\ModelParam;
 use App\DTO\MacroStateDTO;
 use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;

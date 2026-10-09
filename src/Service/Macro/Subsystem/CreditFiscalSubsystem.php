@@ -5,8 +5,14 @@ namespace App\Service\Macro\Subsystem;
 use App\Service\Macro\MacroEngine;
 use App\Service\Macro\MacroState;
 use App\Service\Macro\Recorder\MacroDiagnosticsProbe;
+use App\Service\Math\CreditRisk;
+use App\Service\Math\Distributions;
 use App\Service\Math\FinancialConstants;
+use App\Service\Math\FirmEconomics;
+use App\Service\Math\MacroTransmission;
 use App\Service\Math\MathUtility;
+use App\Service\Math\StochasticProcesses;
+use App\Service\Math\TimeSeries;
 
 /**
  * Handles corporate and retail credit spreads, interbank liquidity (TED spread),
@@ -282,7 +288,7 @@ class CreditFiscalSubsystem
     {
         $interbankStress = max(0.0, $state->interbankLiquiditySpreadEma - MacroEngine::INTERBANK_BASELINE_SPREAD);
 
-        $trancheSpreads = $this->mathUtility->calculateDualTrancheCreditSpreads(
+        $trancheSpreads = CreditRisk::calculateDualTrancheCreditSpreads(
             baseIgSpread: MacroEngine::BASE_CREDIT_SPREAD,
             outputGapEma: $state->outputGapEma,
             marketVolEma: $state->marketVolatilityEma,
@@ -413,7 +419,7 @@ class CreditFiscalSubsystem
             ? log($state->residentialPropertyIndexEma / $state->residentialWealthTrend)
             : 0.0;
 
-        $state->retailCreditFactor = MathUtility::calculateOrnsteinUhlenbeckStep(
+        $state->retailCreditFactor = StochasticProcesses::calculateOrnsteinUhlenbeckStep(
             $state->retailCreditFactor,
             self::RETAIL_CREDIT_FACTOR_KAPPA,
             self::RETAIL_CREDIT_FACTOR_SD,
@@ -423,7 +429,7 @@ class CreditFiscalSubsystem
 
         $macroZ = self::RETAIL_CREDIT_INTERCEPT + ($housePriceGap * self::RETAIL_HOUSE_PRICE_SENSITIVITY) - $unemploymentShock - $spreadShock + $state->retailCreditFactor;
 
-        $conditionalPd = $this->mathUtility->calculateVasicekExpectedLoss(
+        $conditionalPd = CreditRisk::calculateVasicekExpectedLoss(
             macroZ: $macroZ,
             pdLra: MacroEngine::RETAIL_DEFAULT_BASELINE,
             rho: self::RETAIL_ASRF_RHO,
@@ -445,7 +451,7 @@ class CreditFiscalSubsystem
      */
     public function calculateGovernmentSpending(MacroState $state, float $dt): void
     {
-        $state->governmentSpendingIndex = max(60.0, min(200.0, $this->mathUtility->calculateSchwartz1Factor(
+        $state->governmentSpendingIndex = max(60.0, min(200.0, StochasticProcesses::calculateSchwartz1Factor(
             currentPrice: $state->governmentSpendingIndex,
             kappa: self::GOVT_SPENDING_MEAN_REVERSION,
             theta: MacroEngine::GOVT_SPENDING_BASELINE,
@@ -482,8 +488,8 @@ class CreditFiscalSubsystem
         $state->bankLevyEmbodied += ($state->bankLevyRate - $state->bankLevyEmbodied) * $dt / self::TRAILING_EARNINGS_MEAN_LAG_YEARS;
         // The rules on extraction, the stamp duty and the carbon price reach costs, turnover and the power price at once, so
         // their measures are lagged as the levy is.
-        $state->extractionCostFactorEmbodied += (MathUtility::calculateExtractionCostFactor($state->extractionStringency) - $state->extractionCostFactorEmbodied) * $dt / self::TRAILING_EARNINGS_MEAN_LAG_YEARS;
-        $state->stampDutyVolumeFactorEmbodied += (MathUtility::calculateStampDutyVolumeFactor($state->stampDutyRate) - $state->stampDutyVolumeFactorEmbodied) * $dt / self::TRAILING_EARNINGS_MEAN_LAG_YEARS;
+        $state->extractionCostFactorEmbodied += (FirmEconomics::calculateExtractionCostFactor($state->extractionStringency) - $state->extractionCostFactorEmbodied) * $dt / self::TRAILING_EARNINGS_MEAN_LAG_YEARS;
+        $state->stampDutyVolumeFactorEmbodied += (MacroTransmission::calculateStampDutyVolumeFactor($state->stampDutyRate) - $state->stampDutyVolumeFactorEmbodied) * $dt / self::TRAILING_EARNINGS_MEAN_LAG_YEARS;
         $state->carbonPowerUpliftEmbodied += (CommodityLogisticsSubsystem::carbonPowerPriceUplift($state->carbonPrice) - $state->carbonPowerUpliftEmbodied) * $dt / self::TRAILING_EARNINGS_MEAN_LAG_YEARS;
     }
 
@@ -535,9 +541,9 @@ class CreditFiscalSubsystem
             return;
         }
 
-        if (MathUtility::crossedSimulatedBoundary($state->totalTime, $dt, MacroEngine::BUDGET_ROUND_PERIOD_YEARS)) {
+        if (TimeSeries::crossedSimulatedBoundary($state->totalTime, $dt, MacroEngine::BUDGET_ROUND_PERIOD_YEARS)) {
             // The round that opens a budget year closes the last one: its change is booked and the new year starts from its end.
-            if (MathUtility::crossedSimulatedBoundary($state->totalTime, $dt, 1.0)) {
+            if (TimeSeries::crossedSimulatedBoundary($state->totalTime, $dt, 1.0)) {
                 $state->sovereignFundStabilisationLastChange = $state->sovereignFundStabilisationToGdp - $state->sovereignFundStabilisationYearStart;
                 $state->sovereignFundStabilisationYearStart = $state->sovereignFundStabilisationToGdp;
             }
@@ -669,7 +675,7 @@ class CreditFiscalSubsystem
         $leverageBaseline = MacroEngine::HOUSEHOLD_DEBT_TO_INCOME_BASELINE * exp(-$state->ltvCutBuilt);
         $ltvTarget = self::mortgageLtvCreditCut($state->mortgageLtvCap);
         $ltvBuilt = $ltvTarget > $state->ltvCutBuilt
-            ? $this->mathUtility->calculateDistributedLag($state->ltvCutBuilt, $ltvTarget, $dt, self::MORTGAGE_LTV_CUT_YEARS)
+            ? TimeSeries::calculateDistributedLag($state->ltvCutBuilt, $ltvTarget, $dt, self::MORTGAGE_LTV_CUT_YEARS)
             : $ltvTarget;
         $ltvSqueeze = max(0.0, $ltvBuilt - $state->ltvCutBuilt);
         $state->ltvCutBuilt = $ltvBuilt;
@@ -696,7 +702,7 @@ class CreditFiscalSubsystem
         $state->householdDebtToIncome = max(self::MIN_HOUSEHOLD_DEBT_TO_INCOME, min(self::MAX_HOUSEHOLD_DEBT_TO_INCOME, $state->householdDebtToIncome * exp(($growth * $dt) + $noise - $capitalSqueeze - $ltvSqueeze)));
         // Drehmann, Juselius & Korinek (2018) new borrowing, net of what holds leverage level: the year's average of
         // the change in leverage. It averages zero because leverage reverts, so spending needs no compensator for it.
-        $state->householdNewBorrowing = $this->mathUtility->calculateDistributedLag(
+        $state->householdNewBorrowing = TimeSeries::calculateDistributedLag(
             currentLaggedValue: $state->householdNewBorrowing,
             targetValue: ($state->householdDebtToIncome - $previousLeverage) / $dt,
             dt: $dt,
@@ -713,7 +719,7 @@ class CreditFiscalSubsystem
         if ($state->householdDebtServiceTrend <= 0.0) {
             $state->householdDebtServiceTrend = $state->householdDebtServiceRatio;
         }
-        $state->householdDebtServiceTrend = $this->mathUtility->calculateDistributedLag(
+        $state->householdDebtServiceTrend = TimeSeries::calculateDistributedLag(
             currentLaggedValue: $state->householdDebtServiceTrend,
             targetValue: $state->householdDebtServiceRatio,
             dt: $dt,
@@ -723,7 +729,7 @@ class CreditFiscalSubsystem
 
         // Basel III credit gap: the one-sided HP trend, which is defined on quarterly data, so it steps on the quarter.
         if (floor($state->totalTime * 4.0) > floor(($state->totalTime - $dt) * 4.0)) {
-            $trend = $this->mathUtility->calculateOneSidedHpStep(
+            $trend = TimeSeries::calculateOneSidedHpStep(
                 trendLevel: $state->creditToGdpTrend,
                 trendSlope: $state->creditToGdpTrendSlope,
                 observation: $state->householdDebtToIncome,
@@ -742,7 +748,7 @@ class CreditFiscalSubsystem
         $bufferTarget = $released ? 0.0 : self::MAX_CCYB * $bufferPosition;
         $state->countercyclicalBufferRate = $bufferTarget <= $state->countercyclicalBufferRate
             ? $bufferTarget
-            : $this->mathUtility->calculateDistributedLag(
+            : TimeSeries::calculateDistributedLag(
                 currentLaggedValue: $state->countercyclicalBufferRate,
                 targetValue: $bufferTarget,
                 dt: $dt,
@@ -750,7 +756,7 @@ class CreditFiscalSubsystem
             );
 
         // The capital banks hold follows the requirement and the buffer over the years they take to build to them.
-        $state->bankCapitalBuilt = $this->mathUtility->calculateDistributedLag(
+        $state->bankCapitalBuilt = TimeSeries::calculateDistributedLag(
             currentLaggedValue: $state->bankCapitalBuilt,
             targetValue: $state->bankCapitalRequirement + $state->countercyclicalBufferRate,
             dt: $dt,
@@ -773,8 +779,8 @@ class CreditFiscalSubsystem
             return 0.0;
         }
 
-        $excess = MathUtility::histogramUpperPartialMoment(self::NEW_PURCHASE_CLTV_EDGES, self::NEW_PURCHASE_CLTV_SHARES, $cap);
-        $mean = MathUtility::histogramUpperPartialMoment(self::NEW_PURCHASE_CLTV_EDGES, self::NEW_PURCHASE_CLTV_SHARES, 0.0);
+        $excess = Distributions::histogramUpperPartialMoment(self::NEW_PURCHASE_CLTV_EDGES, self::NEW_PURCHASE_CLTV_SHARES, $cap);
+        $mean = Distributions::histogramUpperPartialMoment(self::NEW_PURCHASE_CLTV_EDGES, self::NEW_PURCHASE_CLTV_SHARES, 0.0);
 
         return -log(1.0 - (self::HOUSEHOLD_MORTGAGE_DEBT_SHARE * $excess / $mean));
     }
@@ -798,10 +804,10 @@ class CreditFiscalSubsystem
      */
     public function householdChargeOffRate(float $retailDefaultRate): float
     {
-        $householdZ = $this->mathUtility->calculateVasicekSystematicFactor($retailDefaultRate, MacroEngine::RETAIL_DEFAULT_BASELINE, self::RETAIL_ASRF_RHO);
+        $householdZ = CreditRisk::calculateVasicekSystematicFactor($retailDefaultRate, MacroEngine::RETAIL_DEFAULT_BASELINE, self::RETAIL_ASRF_RHO);
 
-        return (self::HOUSEHOLD_MORTGAGE_DEBT_SHARE * $this->mathUtility->calculateVasicekExpectedLoss($householdZ, self::HOUSEHOLD_MORTGAGE_CHARGE_OFF_RATE, self::RETAIL_ASRF_RHO, 1.0))
-            + ((1.0 - self::HOUSEHOLD_MORTGAGE_DEBT_SHARE) * $this->mathUtility->calculateVasicekExpectedLoss($householdZ, self::HOUSEHOLD_CONSUMER_CHARGE_OFF_RATE, self::RETAIL_ASRF_RHO, 1.0));
+        return (self::HOUSEHOLD_MORTGAGE_DEBT_SHARE * CreditRisk::calculateVasicekExpectedLoss($householdZ, self::HOUSEHOLD_MORTGAGE_CHARGE_OFF_RATE, self::RETAIL_ASRF_RHO, 1.0))
+            + ((1.0 - self::HOUSEHOLD_MORTGAGE_DEBT_SHARE) * CreditRisk::calculateVasicekExpectedLoss($householdZ, self::HOUSEHOLD_CONSUMER_CHARGE_OFF_RATE, self::RETAIL_ASRF_RHO, 1.0));
     }
 
     /**
@@ -832,7 +838,7 @@ class CreditFiscalSubsystem
             return;
         }
 
-        $state->creditCrisisHazard = $this->mathUtility->calculateSchularickTaylorCrisisHazard(
+        $state->creditCrisisHazard = CreditRisk::calculateSchularickTaylorCrisisHazard(
             creditGap: $state->creditToGdpGapEma,
             beta0: self::CREDIT_CRISIS_LOGIT_INTERCEPT + self::DISTRICT_FUNDING_CRISIS_LOGIT_SHIFT,
             betaGap: self::CREDIT_CRISIS_LOGIT_GAP
@@ -888,7 +894,7 @@ class CreditFiscalSubsystem
     {
         // The Schwartz target carries the Ito correction; handing it this level puts the log mean on EBP_LOG_MEAN.
         $target = exp(self::EBP_LOG_MEAN + ((self::EBP_LOG_VOLATILITY ** 2) / (2.0 * self::EBP_MEAN_REVERSION)));
-        $shifted = $this->mathUtility->calculateSchwartz1Factor(
+        $shifted = StochasticProcesses::calculateSchwartz1Factor(
             currentPrice: $state->excessBondPremium + self::EBP_DISPLACEMENT,
             kappa: self::EBP_MEAN_REVERSION,
             theta: $target,
@@ -931,7 +937,7 @@ class CreditFiscalSubsystem
         $excessDebt = max(0.0, $state->sovereignNetDebtToGdpEma - MacroEngine::SOVEREIGN_RISK_DEBT_THRESHOLD);
         $target = min(self::MAX_SOVEREIGN_RISK_SPREAD, self::LAUBACH_DEBT_YIELD_SENSITIVITY * $excessDebt);
 
-        $state->sovereignRiskSpread = $this->mathUtility->calculateDistributedLag(
+        $state->sovereignRiskSpread = TimeSeries::calculateDistributedLag(
             currentLaggedValue: $state->sovereignRiskSpread,
             targetValue: $target,
             dt: $dt,
@@ -964,10 +970,10 @@ class CreditFiscalSubsystem
         );
 
         // Every reader takes log(EPU / baseline), so it is the log the process centres on the target.
-        $baseProcess = $this->mathUtility->calculateSchwartz1Factor(
+        $baseProcess = StochasticProcesses::calculateSchwartz1Factor(
             currentPrice: max(self::MIN_EPU, $state->policyUncertaintyIndex),
             kappa: self::EPU_MEAN_REVERSION,
-            theta: MathUtility::schwartzThetaForLogMean($target, self::EPU_MEAN_REVERSION, self::EPU_VOLATILITY),
+            theta: StochasticProcesses::schwartzThetaForLogMean($target, self::EPU_MEAN_REVERSION, self::EPU_VOLATILITY),
             sigma: self::EPU_VOLATILITY,
             dt: $dt,
             dW: $this->mathUtility->generateStandardNormal()
@@ -1037,7 +1043,7 @@ class CreditFiscalSubsystem
         $capitalTightening = self::SLOOS_CAPITAL_SHORTFALL_PREMIUM_EQUIVALENT * $capitalShortfall;
         $dW = $this->mathUtility->generateStandardNormal();
 
-        $state->sloosTighteningIndex = $this->mathUtility->calculateSloosCreditStandards(
+        $state->sloosTighteningIndex = CreditRisk::calculateSloosCreditStandards(
             currentSloos: $state->sloosTighteningIndex,
             outputGap: $state->outputGapEma,
             excessCreditSpread: $state->excessBondPremium + $capitalTightening,
@@ -1071,7 +1077,7 @@ class CreditFiscalSubsystem
             - ($excessHySpread * self::CORPORATE_DEFAULT_SPREAD_SENSITIVITY)
             - ($state->sloosTighteningIndexEma * self::CORPORATE_DEFAULT_SLOOS_SENSITIVITY);
 
-        $state->corporateDefaultRate = $this->mathUtility->calculateCorporateDefaultRate(
+        $state->corporateDefaultRate = CreditRisk::calculateCorporateDefaultRate(
             macroZ: $macroZ,
             baseDefaultRate: MacroEngine::CORPORATE_DEFAULT_BASELINE,
             rho: self::CORPORATE_DEFAULT_RHO

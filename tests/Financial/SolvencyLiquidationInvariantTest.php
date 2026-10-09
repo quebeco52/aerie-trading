@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Tests\Financial;
 
-use App\Data\InitialMarket;
+use App\Data\Company\InitialMarket;
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use App\Entity\TradeOrder;
@@ -12,7 +12,7 @@ use App\Repository\TradeOrderRepository;
 use App\Service\Corporate\DebtEngine;
 use App\Service\Event\MarketEventPublisher;
 use App\Service\Corporate\FailureSweep;
-use App\Service\Math\CorporateMetrics;
+use App\Service\Corporate\CorporateMetrics;
 use App\Service\Math\MathUtility;
 use Doctrine\DBAL\Connection;
 use Doctrine\ORM\EntityManagerInterface;

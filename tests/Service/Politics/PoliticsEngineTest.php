@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Tests\Service\Politics;
 
-use App\Data\AerieDiet as Diet;
+use App\Data\Politics\AerieDiet as Diet;
 use App\DTO\GovernmentPolicyDTO;
 use App\DTO\MacroStateDTO;
 use App\DTO\PoliticsStateDTO;
@@ -19,6 +19,7 @@ use App\Service\Macro\Subsystem\MacroAggregateSubsystem;
 use App\Service\Macro\Subsystem\MonetaryPolicySubsystem;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\MathUtility;
+use App\Service\Math\TimeSeries;
 use App\Service\Politics\CoalitionFormation;
 use App\Service\Politics\ElectionForecast;
 use App\Service\Politics\PoliticsEngine as Politics;
@@ -664,7 +665,7 @@ class PoliticsEngineTest extends TestCase
         }
 
         $this->assertSame($time, $state->lastElectionAt);
-        $this->assertTrue(MathUtility::crossedSimulatedBoundary($time, $dt, MacroEngine::BUDGET_ROUND_PERIOD_YEARS), 'The budget round falls on the same tick.');
+        $this->assertTrue(TimeSeries::crossedSimulatedBoundary($time, $dt, MacroEngine::BUDGET_ROUND_PERIOD_YEARS), 'The budget round falls on the same tick.');
     }
 
     // --- Headlines ---

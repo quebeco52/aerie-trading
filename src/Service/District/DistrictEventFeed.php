@@ -4,10 +4,10 @@ declare(strict_types=1);
 
 namespace App\Service\District;
 
-use App\Data\DistrictMap;
+use App\Data\District\DistrictMap;
 use App\Entity\Stock;
 use App\Entity\StockEvent;
-use App\Service\Event\EventPresenter;
+use App\Service\News\EventPresenter;
 use Doctrine\ORM\EntityManagerInterface;
 use Psr\Clock\ClockInterface;
 use Symfony\Component\Clock\NativeClock;
@@ -16,7 +16,7 @@ use Symfony\Component\Clock\NativeClock;
  * Backfills the district event badges from persisted history so a facade's count is correct on
  * first paint, before any live tick has arrived.
  *
- * Presentation is delegated entirely to App\Service\Event\EventPresenter — the same service that
+ * Presentation is delegated entirely to App\Service\News\EventPresenter — the same service that
  * renders the stock page's event feed — so a district badge and a stock-page event card always
  * agree on badge text, colour, and icon for the same event. This service never re-derives that
  * vocabulary itself.

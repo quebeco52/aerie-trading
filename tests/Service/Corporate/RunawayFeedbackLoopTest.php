@@ -14,7 +14,7 @@ use App\DTO\MaturityRollDTO;
 use App\Service\Corporate\DebtEngine;
 use App\Service\Corporate\EarningsEngine;
 use App\Service\Corporate\TreasuryEngine;
-use App\Service\Math\CorporateMetrics;
+use App\Service\Corporate\CorporateMetrics;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\LogisticsBusinessModel;
@@ -181,7 +181,7 @@ class RunawayFeedbackLoopTest extends TestCase
         ));
 
         $marketEventPublisher = $this->createStub(\App\Service\Event\MarketEventPublisher::class);
-        $narrativeEngine = $this->createStub(\App\Service\Event\NarrativeEngine::class);
+        $narrativeEngine = $this->createStub(\App\Service\News\NarrativeEngine::class);
         $eventDispatcher = $this->createMock(\Symfony\Contracts\EventDispatcher\EventDispatcherInterface::class);
         $consensusEngine = new \App\Service\Market\Pricing\MarketConsensusEngine();
 
@@ -284,7 +284,7 @@ class RunawayFeedbackLoopTest extends TestCase
         ));
 
         $marketEventPublisher = $this->createStub(\App\Service\Event\MarketEventPublisher::class);
-        $narrativeEngine = $this->createStub(\App\Service\Event\NarrativeEngine::class);
+        $narrativeEngine = $this->createStub(\App\Service\News\NarrativeEngine::class);
         $eventDispatcher = $this->createMock(\Symfony\Contracts\EventDispatcher\EventDispatcherInterface::class);
         $consensusEngine = new \App\Service\Market\Pricing\MarketConsensusEngine();
 

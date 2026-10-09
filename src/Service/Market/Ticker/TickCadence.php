@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace App\Service\Market\Ticker;
 
-use App\Service\Math\MathUtility;
 use App\Service\Market\Chart\ChartRange;
+use App\Service\Math\TimeSeries;
 
 /**
  * The ticker's calendar: which ticks close a history bar, and which bars reload the working set, mark the bond
@@ -221,7 +221,7 @@ final class TickCadence
      */
     public static function crossedSimulatedBoundary(float $totalTime, float $dt, float $periodYears): bool
     {
-        return MathUtility::crossedSimulatedBoundary($totalTime, $dt, $periodYears);
+        return TimeSeries::crossedSimulatedBoundary($totalTime, $dt, $periodYears);
     }
 
     /** Whether a tick closes a history bar: the tick the bar count rolls over on. */

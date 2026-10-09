@@ -12,7 +12,9 @@ use App\Service\Macro\Subsystem\CreditFiscalSubsystem;
 use App\Service\Macro\Subsystem\LaborMarketSubsystem;
 use App\Service\Macro\Subsystem\MacroAggregateSubsystem;
 use App\Service\Macro\Subsystem\MonetaryPolicySubsystem;
+use App\Service\Math\MacroTransmission;
 use App\Service\Math\MathUtility;
+use App\Service\Math\StochasticProcesses;
 use App\Tests\Support\MacroStateBuilder;
 use App\Tests\Support\StockBuilder;
 use PHPUnit\Framework\TestCase;
@@ -45,7 +47,7 @@ class FinancialInvariantTest extends TestCase
 
         // Sweep output gap from deep contraction (-10%) to severe expansion (+7.5%)
         for ($gap = -0.10; $gap <= 0.075; $gap += 0.005) {
-            $pressure = $this->math->calculateConvexPhillipsCurve($gap, $yMax, $kappa, $rigidity);
+            $pressure = MacroTransmission::calculateConvexPhillipsCurve($gap, $yMax, $kappa, $rigidity);
 
             $this->assertFalse(is_nan($pressure), "Phillips curve produced NaN at gap={$gap}");
             $this->assertFalse(is_infinite($pressure), "Phillips curve produced INF at gap={$gap}");
@@ -68,10 +70,10 @@ class FinancialInvariantTest extends TestCase
         // Compare incremental slopes on the approach to the ceiling: (f(y2)-f(y1)) vs (f(y3)-f(y2)). The probes
         // are placed relative to the ceiling because beyond it the formula's floor makes the curve linear.
         $step = 0.2 * $yMax;
-        $p1 = $this->math->calculateConvexPhillipsCurve(0.2 * $yMax, $yMax, $kappa, $rigidity);
-        $p2 = $this->math->calculateConvexPhillipsCurve(0.4 * $yMax, $yMax, $kappa, $rigidity);
-        $p3 = $this->math->calculateConvexPhillipsCurve(0.6 * $yMax, $yMax, $kappa, $rigidity);
-        $p4 = $this->math->calculateConvexPhillipsCurve(0.8 * $yMax, $yMax, $kappa, $rigidity);
+        $p1 = MacroTransmission::calculateConvexPhillipsCurve(0.2 * $yMax, $yMax, $kappa, $rigidity);
+        $p2 = MacroTransmission::calculateConvexPhillipsCurve(0.4 * $yMax, $yMax, $kappa, $rigidity);
+        $p3 = MacroTransmission::calculateConvexPhillipsCurve(0.6 * $yMax, $yMax, $kappa, $rigidity);
+        $p4 = MacroTransmission::calculateConvexPhillipsCurve(0.8 * $yMax, $yMax, $kappa, $rigidity);
 
         $slope1 = ($p2 - $p1) / $step;
         $slope2 = ($p3 - $p2) / $step;
@@ -87,8 +89,8 @@ class FinancialInvariantTest extends TestCase
         $yMax = MacroAggregateSubsystem::PHILLIPS_MAX_CAPACITY;
         $rigidity = MacroAggregateSubsystem::PHILLIPS_DOWNWARD_RIGIDITY_FACTOR;
 
-        $deepRecessionPressure = $this->math->calculateConvexPhillipsCurve(-0.08, $yMax, $kappa, $rigidity);
-        $depressionPressure = $this->math->calculateConvexPhillipsCurve(-0.15, $yMax, $kappa, $rigidity);
+        $deepRecessionPressure = MacroTransmission::calculateConvexPhillipsCurve(-0.08, $yMax, $kappa, $rigidity);
+        $depressionPressure = MacroTransmission::calculateConvexPhillipsCurve(-0.15, $yMax, $kappa, $rigidity);
 
         // Even in a -15% depression, downward wage rigidity prevents deflation pressure from collapsing unbounded
         $this->assertGreaterThan(-0.05, $deepRecessionPressure, 'Downward rigidity must bound deflationary pressure');
@@ -287,7 +289,7 @@ class FinancialInvariantTest extends TestCase
         $previousYield = -1.0;
 
         foreach ($inventoryLevels as $level) {
-            $convenienceYield = $this->math->calculateConvenienceYield($level, 50.0, 0.10, 1.8);
+            $convenienceYield = StochasticProcesses::calculateConvenienceYield($level, 50.0, 0.10, 1.8);
 
             $this->assertFalse(is_nan($convenienceYield), "Convenience yield was NaN at level={$level}");
             $this->assertGreaterThanOrEqual(0.0, $convenienceYield, "Convenience yield must be non-negative at level={$level}");

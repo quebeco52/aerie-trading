@@ -6,7 +6,7 @@ namespace App\Tests\Twig;
 
 use App\Entity\StockEvent;
 use App\Entity\User;
-use App\Service\Event\EventPresenter;
+use App\Service\News\EventPresenter;
 use App\Twig\Extension\EventExtension;
 use App\Twig\Extension\NumberFormatExtension;
 use App\Twig\Extension\SimDateExtension;

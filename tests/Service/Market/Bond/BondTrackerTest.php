@@ -9,7 +9,6 @@ use App\Service\Market\Bond\BondLedgerService;
 use App\Service\Market\Bond\BondPricingEngine;
 use App\Service\Market\Bond\BondTracker;
 use App\Service\Math\FinancialConstants;
-use App\Service\Math\MathUtility;
 use App\Tests\Support\MacroStateBuilder;
 use Doctrine\DBAL\Connection;
 use Doctrine\ORM\EntityManagerInterface;
@@ -31,7 +30,7 @@ class BondTrackerTest extends TestCase
         // EntityManager is a stub: nothing here has an expectation to place on it.
         return new BondTracker(
             $this->createStub(EntityManagerInterface::class),
-            new BondPricingEngine(new MathUtility()),
+            new BondPricingEngine(),
             $ledger
         );
     }
@@ -173,7 +172,7 @@ class BondTrackerTest extends TestCase
 
         $this->assertCount(count(FinancialConstants::BOND_CURVE_SAMPLE_TENORS), $result['curve']);
 
-        $engine = new BondPricingEngine(new MathUtility());
+        $engine = new BondPricingEngine();
         foreach ($result['curve'] as $index => $point) {
             $tenor = (float) FinancialConstants::BOND_CURVE_SAMPLE_TENORS[$index];
 
@@ -237,7 +236,7 @@ class BondTrackerTest extends TestCase
         $em = $this->createStub(EntityManagerInterface::class);
         $em->method('getConnection')->willReturn($connection);
 
-        return new BondTracker($em, new BondPricingEngine(new MathUtility()), $ledger);
+        return new BondTracker($em, new BondPricingEngine(), $ledger);
     }
 
     private function persisted(Bond $bond, int $id): Bond

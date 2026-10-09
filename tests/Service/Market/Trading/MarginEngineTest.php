@@ -6,7 +6,6 @@ namespace App\Tests\Service\Market\Trading;
 
 use App\Service\Market\Trading\MarginEngine;
 use App\Service\Market\Option\OptionMarginCalculator;
-use App\Service\Math\MathUtility;
 use App\Service\Math\FinancialConstants;
 use Doctrine\ORM\EntityManagerInterface;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
@@ -27,7 +26,7 @@ class MarginEngineTest extends TestCase
     protected function setUp(): void
     {
         $em = $this->createStub(EntityManagerInterface::class);
-        $this->engine = new MarginEngine($em, new OptionMarginCalculator($em, new MathUtility()));
+        $this->engine = new MarginEngine($em, new OptionMarginCalculator($em));
     }
 
     public function testAnUnleveredCashAccountIsAllEquity(): void

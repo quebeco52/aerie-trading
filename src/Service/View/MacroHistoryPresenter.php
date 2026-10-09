@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace App\Service\View;
 
-use App\Data\DistrictCalendar;
-use App\Data\OutputGapChannels;
+use App\Data\District\DistrictCalendar;
+use App\Data\Macro\OutputGapChannels;
 
 /**
  * The macro_report rows as the economy page's history charts read them: every observable column, each row dated by the
@@ -28,7 +28,7 @@ final class MacroHistoryPresenter
 
     // --- Output Gap Groups ---
     /**
-     * Family key (App\Data\OutputGapChannels, whose test keeps the channels current) => the label the page prints, in
+     * Family key (App\Data\Macro\OutputGapChannels, whose test keeps the channels current) => the label the page prints, in
      * the families' palette order, then 'other' for what the drift does not explain.
      */
     public const GAP_GROUP_LABELS = [

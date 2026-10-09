@@ -203,6 +203,6 @@ class Notification
 
     public function getDateline(): ?string
     {
-        return $this->simTime === null ? null : \App\Data\DistrictCalendar::dateline($this->simTime);
+        return $this->simTime === null ? null : \App\Data\District\DistrictCalendar::dateline($this->simTime);
     }
 }

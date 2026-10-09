@@ -4,9 +4,9 @@ declare(strict_types=1);
 
 namespace App\Tests\Service\Model\Trait;
 
-use App\Data\ModelParam;
+use App\Service\Model\ModelParam;
 use App\DTO\MacroStateDTO;
-use App\DTO\ModelParameters;
+use App\Service\Model\ModelParameters;
 use App\Entity\Stock;
 use App\Service\Corporate\EarningsEngine;
 use App\Service\Macro\MacroEngine;

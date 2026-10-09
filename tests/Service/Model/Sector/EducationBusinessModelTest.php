@@ -1,0 +1,124 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Tests\Service\Model\Sector;
+
+use App\DTO\MacroStateDTO;
+use App\Service\Model\StreamContext;
+use App\Entity\Stock;
+use App\Service\Math\MathUtility;
+use App\Service\Model\Sector\EducationBusinessModel;
+use PHPUnit\Framework\TestCase;
+
+class EducationBusinessModelTest extends TestCase
+{
+    private EducationBusinessModel $model;
+    private MathUtility $mathUtility;
+
+    protected function setUp(): void
+    {
+        $this->model = new EducationBusinessModel();
+        $this->mathUtility = new MathUtility();
+    }
+
+    public function testCounterCyclicalTuitionAndLmsStreams(): void
+    {
+        $stock = new Stock();
+        $stock->setTicker('STRA');
+        $stock->setBeta('0.9');
+
+        $recessionMacro = new MacroStateDTO(outputGapEma: -0.03);
+
+        $result = $this->model->computeActualFinancials(
+            $stock,
+            expectedRevenue: 200_000_000.0,
+            realizedVariableMargin: 0.30,
+            fixedCosts: 40_000_000.0,
+            baselineVol: 0.08,
+            macroState: $recessionMacro,
+            mathUtility: $this->mathUtility
+        );
+
+        $this->assertArrayHasKey('degree_tuition_enrollment', $result->streamRevenue);
+        $this->assertArrayHasKey('enterprise_b2b_training', $result->streamRevenue);
+        $this->assertArrayHasKey('digital_lms_licensing', $result->streamRevenue);
+
+        $this->assertArrayHasKey('degree_tuition_enrollment', $result->streamZ);
+        $this->assertArrayHasKey('enterprise_b2b_training', $result->streamZ);
+        $this->assertArrayHasKey('digital_lms_licensing', $result->streamZ);
+
+        $this->assertGreaterThan(0.0, $result->streamRevenue['degree_tuition_enrollment']);
+        $this->assertGreaterThan(0.0, $result->streamRevenue['enterprise_b2b_training']);
+        $this->assertGreaterThan(0.0, $result->streamRevenue['digital_lms_licensing']);
+        $this->assertEqualsWithDelta(
+            $result->actualRevenue,
+            $result->streamRevenue['degree_tuition_enrollment'] + $result->streamRevenue['enterprise_b2b_training'] + $result->streamRevenue['digital_lms_licensing'],
+            1.0
+        );
+    }
+
+    public function testGovernmentSpendingGrantsBoostEnrollment(): void
+    {
+        $stock = new Stock();
+        $stock->setTicker('STRA');
+        $stock->setBeta('1.0');
+
+        $baseMacro = new MacroStateDTO(governmentSpendingIndexEma: 100.0);
+        $expansionMacro = new MacroStateDTO(governmentSpendingIndexEma: 130.0);
+
+        $mathMock = $this->createStub(MathUtility::class);
+        $baseResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.30, 20_000_000.0, 0.0, $baseMacro, $mathMock);
+        $expansionResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.30, 20_000_000.0, 0.0, $expansionMacro, $mathMock);
+
+        $this->assertGreaterThan($baseResult->streamRevenue['degree_tuition_enrollment'], $expansionResult->streamRevenue['degree_tuition_enrollment']);
+    }
+
+    public function testUnemploymentSpikeBoostsDegreeEnrollment(): void
+    {
+        $stock = new Stock();
+        $stock->setTicker('STRA');
+        $stock->setBeta('1.0');
+
+        $lowUnemploymentMacro = new MacroStateDTO(unemploymentRateEma: 0.040);
+        $highUnemploymentMacro = new MacroStateDTO(unemploymentRateEma: 0.080);
+
+        $mathMock = $this->createStub(MathUtility::class);
+        $mathMock->method('generatePersistentZ')->willReturn(0.0);
+
+        $baseResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.30, 20_000_000.0, 0.0, $lowUnemploymentMacro, $mathMock);
+        $surgeResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.30, 20_000_000.0, 0.0, $highUnemploymentMacro, $mathMock);
+
+        $this->assertGreaterThan(
+            $baseResult->streamRevenue['degree_tuition_enrollment'],
+            $surgeResult->streamRevenue['degree_tuition_enrollment'],
+            'Elevated unemployment must drive countercyclical workforce retraining and boost degree tuition enrollment.'
+        );
+    }
+
+
+    /**
+     * This model applies the cycle per stream in calculateSectorPhysics, so the parent's generic demand shift
+     * must be zeroed or the output gap reaches revenue twice: once in the expectation and again in the streams.
+     */
+    public function testTheGenericDemandShiftIsZeroedSoTheOutputGapIsNotCountedTwice(): void
+    {
+        $physics = $this->model->getMacroPhysics((new Stock())->setTicker('STAR_GAP'), new MacroStateDTO(outputGapEma: 0.03));
+
+        $this->assertSame(0.0, $physics['macro_demand_shift']);
+        $this->assertArrayHasKey('pricing_power_multiplier', $physics, 'Only the demand shift is nullified; pricing physics still flow from the parent.');
+    }
+
+    public function testTheCostBaseStaffsToTheTuitionBookAndCorporateTraining(): void
+    {
+        $stock = (new Stock())->setTicker('STAR_GAP');
+        $recession = new MacroStateDTO(outputGapEma: -0.03, exchangeRateIndexEma: 100.0);
+
+        // Fresh tuition book: only training moves, 0.30 x (-0.03 x 1.50 x 0.70) = -0.00945.
+        $this->assertEqualsWithDelta(-0.00945, $this->model->resolveSectorActivityShift($stock, $recession), 1e-9);
+
+        // A recession-filled tuition book at 1.4 quarters: 0.50 x 2.4 = 1.20 of normal, 0.50 x 0.20 - 0.00945 = 0.09055.
+        $stock->setEarningsMomentumZ([StreamContext::BACKLOG_STATE_PREFIX . 'degree_tuition_enrollment' => 1.4]);
+        $this->assertEqualsWithDelta(0.09055, $this->model->resolveSectorActivityShift($stock, $recession), 1e-9);
+    }
+}

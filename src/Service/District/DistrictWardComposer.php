@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace App\Service\District;
 
-use App\Data\DistrictMap;
-use App\Data\Sectors;
+use App\Data\District\DistrictMap;
+use App\Data\Company\Sectors;
 use App\Entity\Stock;
 
 /**

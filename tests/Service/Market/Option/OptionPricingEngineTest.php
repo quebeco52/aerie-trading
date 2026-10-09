@@ -10,7 +10,7 @@ use App\Service\Market\Bond\BondPricingEngine;
 use App\Service\Market\Pricing\MarketEngine;
 use App\Service\Market\Option\OptionPricingEngine;
 use App\Service\Math\FinancialConstants;
-use App\Service\Math\MathUtility;
+use App\Service\Math\OptionPricing;
 use App\Tests\Support\StockBuilder;
 use PHPUnit\Framework\TestCase;
 
@@ -21,13 +21,11 @@ use PHPUnit\Framework\TestCase;
  */
 class OptionPricingEngineTest extends TestCase
 {
-    private MathUtility $math;
     private OptionPricingEngine $engine;
 
     protected function setUp(): void
     {
-        $this->math = new MathUtility();
-        $this->engine = new OptionPricingEngine($this->math, new BondPricingEngine($this->math));
+        $this->engine = new OptionPricingEngine(new BondPricingEngine());
     }
 
     private function curve(): SovereignCurveDTO
@@ -109,9 +107,9 @@ class OptionPricingEngineTest extends TestCase
 
         $surface = $this->engine->surface($longRunVol, $longRunVol, 1.0, $lambda, $configuredJumpVol, 0.25);
 
-        $expected = $this->math->calculateJumpDiffusionShape(
+        $expected = OptionPricing::calculateJumpDiffusionShape(
             max(0.0, (($longRunVol * FinancialConstants::OPTION_VARIANCE_RISK_PREMIUM) ** 2)
-                - ($lambda * $this->math->calculateKouJumpMoment(2, MarketEngine::jumpProbabilityUp(), $calibrated['eta_up'], $calibrated['eta_down']))),
+                - ($lambda * OptionPricing::calculateKouJumpMoment(2, MarketEngine::jumpProbabilityUp(), $calibrated['eta_up'], $calibrated['eta_down']))),
             $lambda,
             MarketEngine::jumpProbabilityUp(),
             $calibrated['eta_up'],
@@ -136,9 +134,9 @@ class OptionPricingEngineTest extends TestCase
 
         // And the two components the shape is built from add back to exactly that variance.
         $calibrated = MarketEngine::calibratedJumpParameters(0.30, 1.0, 3.0, 0.10);
-        $shape = $this->math->calculateJumpDiffusionShape(
+        $shape = OptionPricing::calculateJumpDiffusionShape(
             max(0.0, ($jumpy['atm_volatility'] ** 2)
-                - (3.0 * $this->math->calculateKouJumpMoment(2, MarketEngine::jumpProbabilityUp(), $calibrated['eta_up'], $calibrated['eta_down']))),
+                - (3.0 * OptionPricing::calculateKouJumpMoment(2, MarketEngine::jumpProbabilityUp(), $calibrated['eta_up'], $calibrated['eta_down']))),
             3.0,
             MarketEngine::jumpProbabilityUp(),
             $calibrated['eta_up'],

@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Tests\Service\Model;
 
-use App\Data\ModelParam;
+use App\Service\Model\ModelParam;
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use App\Service\Model\Sector\RailroadBusinessModel;
@@ -136,7 +136,7 @@ final class BusinessModelPricingPowerResolutionTest extends TestCase
         $this->assertSame(RailroadBusinessModel::PRICING_POWER_INDEX, $resolve->invoke($model, $stock));
         $this->assertArrayNotHasKey(
             ModelParam::PricingPowerIndex->value,
-            \App\Data\StockModelTuning::OVERRIDES[self::UNTUNED_TICKER] ?? [],
+            \App\Data\Company\StockModelTuning::OVERRIDES[self::UNTUNED_TICKER] ?? [],
             'The fixture ticker must stay untuned for this test to prove sector-constant fallthrough.'
         );
     }

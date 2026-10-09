@@ -8,7 +8,7 @@ use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use App\Service\Macro\MacroEngine;
 use App\Service\Math\FinancialConstants;
-use App\Service\Math\MathUtility;
+use App\Service\Math\TimeSeries;
 use App\Service\Model\Strategy\OperatingStrategyInterface;
 
 /**
@@ -239,7 +239,7 @@ class IndustryShareLedger
             return null;
         }
 
-        $growth = self::trendNominalGdp($macroState) * exp(MathUtility::fadedExcessIntegral($secularExcessGrowth, (float) $own['anchor_time'], $macroState->totalTime, FinancialConstants::SECULAR_EXCESS_HALF_LIFE_YEARS));
+        $growth = self::trendNominalGdp($macroState) * exp(TimeSeries::fadedExcessIntegral($secularExcessGrowth, (float) $own['anchor_time'], $macroState->totalTime, FinancialConstants::SECULAR_EXCESS_HALF_LIFE_YEARS));
 
         return log($anchorShare * $growth / $capacity);
     }
@@ -256,7 +256,7 @@ class IndustryShareLedger
     /**
      * What an industry grows at beyond the economy at the open: the sector's secular real growth over trend
      * potential growth (labour plus productivity). The ledger fades it from there on the same half-life as the
-     * rate (MathUtility::fadedExcessIntegral()); the default sector grows with the economy exactly.
+     * rate (TimeSeries::fadedExcessIntegral()); the default sector grows with the economy exactly.
      */
     public static function secularExcessGrowth(OperatingStrategyInterface $strategy, Stock $stock): float
     {
@@ -374,7 +374,7 @@ class IndustryShareLedger
                 continue;
             }
 
-            $growth = $trendNominalGdp * exp(MathUtility::fadedExcessIntegral($secularExcessGrowth, (float) $record['anchor_time'], $totalTime, FinancialConstants::SECULAR_EXCESS_HALF_LIFE_YEARS));
+            $growth = $trendNominalGdp * exp(TimeSeries::fadedExcessIntegral($secularExcessGrowth, (float) $record['anchor_time'], $totalTime, FinancialConstants::SECULAR_EXCESS_HALF_LIFE_YEARS));
             $trendPlant = (float) $record['anchor_capacity_share'] * $growth;
             $trendDemand = (float) $record['anchor_demand_share'] * $growth;
             $capacity = max(0.0, (float) $record['capacity']);
@@ -434,7 +434,7 @@ class IndustryShareLedger
             return $this->describeRevenueMarket($stock, $own, $tick, $ticksPerYear);
         }
 
-        $growth = self::trendNominalGdp($macroState) * exp(MathUtility::fadedExcessIntegral($secularExcessGrowth, (float) $own['anchor_time'], $macroState->totalTime, FinancialConstants::SECULAR_EXCESS_HALF_LIFE_YEARS));
+        $growth = self::trendNominalGdp($macroState) * exp(TimeSeries::fadedExcessIntegral($secularExcessGrowth, (float) $own['anchor_time'], $macroState->totalTime, FinancialConstants::SECULAR_EXCESS_HALF_LIFE_YEARS));
         $shares = $this->rosterTrendShares((string) $stock->getIndustry(), $stock->getTicker(), $tick, $ticksPerYear);
 
         return [
@@ -590,7 +590,7 @@ class IndustryShareLedger
             return;
         }
 
-        $growth = $trendNominalGdp * exp(MathUtility::fadedExcessIntegral($secularExcessGrowth, (float) $own['anchor_time'], $macroState->totalTime, FinancialConstants::SECULAR_EXCESS_HALF_LIFE_YEARS));
+        $growth = $trendNominalGdp * exp(TimeSeries::fadedExcessIntegral($secularExcessGrowth, (float) $own['anchor_time'], $macroState->totalTime, FinancialConstants::SECULAR_EXCESS_HALF_LIFE_YEARS));
         $own['anchor_capacity_share'] = max(0.0, (float) $own['anchor_capacity_share'] + ($capacityDelta / $growth));
         $own['capacity'] = max(0.0, (float) $own['capacity'] + $capacityDelta);
 

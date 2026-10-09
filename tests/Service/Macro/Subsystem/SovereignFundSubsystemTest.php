@@ -7,7 +7,9 @@ namespace App\Tests\Service\Macro\Subsystem;
 use App\Service\Macro\MacroEngine;
 use App\Service\Macro\MacroState;
 use App\Service\Macro\Subsystem\SovereignFundSubsystem;
+use App\Service\Math\FixedIncome;
 use App\Service\Math\MathUtility;
+use App\Service\Math\TimeSeries;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -109,7 +111,7 @@ class SovereignFundSubsystemTest extends TestCase
     {
         $tpy = 360;
         $dt = 1.0 / $tpy;
-        $fund = new SovereignFundSubsystem($this->stillMarket());
+        $fund = $this->stillFund();
         $state = $this->openFund($fund, $tpy);
         $openingDraw = $state->sovereignFundAnnualDraw;
         $grown = 2.0 - $state->sovereignFundTargetWeight;
@@ -173,7 +175,7 @@ class SovereignFundSubsystemTest extends TestCase
     {
         $tpy = 360;
         $dt = 1.0 / $tpy;
-        $fund = new SovereignFundSubsystem($this->stillMarket());
+        $fund = $this->stillFund();
         $state = $this->openFund($fund, $tpy);
         $targetEquity = $fund->policyEquityShare($state->sovereignFundTargetWeight);
 
@@ -207,14 +209,14 @@ class SovereignFundSubsystemTest extends TestCase
         $tpy = 360;
         $dt = 1.0 / $tpy;
 
-        $fund = new SovereignFundSubsystem($this->stillMarket());
+        $fund = $this->stillFund();
         $state = $this->openFund($fund, $tpy);
         $this->crashDomestic($state, 0.27);
         $this->runToMonthEnd($fund, $state, $dt);
         $this->assertSame(0.0, $state->sovereignFundRebalanceMonthsLeft, 'A 27% fall stays inside the band.');
         $this->assertSame(0.0, $state->sovereignFundTrade);
 
-        $fund = new SovereignFundSubsystem($this->stillMarket());
+        $fund = $this->stillFund();
         $state = $this->openFund($fund, $tpy);
         $this->crashDomestic($state, 0.31);
         $this->runToMonthEnd($fund, $state, $dt);
@@ -227,7 +229,7 @@ class SovereignFundSubsystemTest extends TestCase
     {
         foreach ([72, 720, 7200] as $tpy) {
             $dt = 1.0 / $tpy;
-            $fund = new SovereignFundSubsystem($this->stillMarket());
+            $fund = $this->stillFund();
             $state = $this->openFund($fund, $tpy);
             $this->crashDomestic($state, 0.35);
 
@@ -248,7 +250,7 @@ class SovereignFundSubsystemTest extends TestCase
     {
         $tpy = 360;
         $dt = 1.0 / $tpy;
-        $fund = new SovereignFundSubsystem($this->stillMarket());
+        $fund = $this->stillFund();
         $state = $this->openFund($fund, $tpy);
         $this->crashDomestic($state, 0.40);
 
@@ -269,7 +271,7 @@ class SovereignFundSubsystemTest extends TestCase
     {
         $tpy = 360;
         $dt = 1.0 / $tpy;
-        $fund = new SovereignFundSubsystem($this->stillMarket());
+        $fund = $this->stillFund();
         $state = $this->openFund($fund, $tpy);
 
         // The board collapses against everything else the fund holds: restoring the weight would mean owning most of it.
@@ -292,7 +294,7 @@ class SovereignFundSubsystemTest extends TestCase
     {
         $tpy = 720;
         $dt = 1.0 / $tpy;
-        $fund = new SovereignFundSubsystem($this->stillMarket());
+        $fund = $this->stillFund();
         $state = $this->openFund($fund, $tpy);
         $state->sovereignFundAnnualDraw = 0.0;
         $equity = $fund->foreignEquityHomeValue($state);
@@ -311,7 +313,7 @@ class SovereignFundSubsystemTest extends TestCase
     {
         $tpy = 360;
         $dt = 1.0 / $tpy;
-        $fund = new SovereignFundSubsystem($this->stillMarket());
+        $fund = $this->stillFund();
         $state = $this->openFund($fund, $tpy);
         $state->sovereignFundAnnualDraw = 0.0;
         $before = $fund->fundValue($state);
@@ -340,7 +342,7 @@ class SovereignFundSubsystemTest extends TestCase
     {
         $tpy = 720;
         $dt = 1.0 / $tpy;
-        $fund = new SovereignFundSubsystem($this->stillMarket());
+        $fund = $this->stillFund();
         $state = $this->openFund($fund, $tpy);
         $state->sovereignFundAnnualDraw = 0.0;
         $ownership = $state->sovereignFundOwnershipShare;
@@ -360,7 +362,7 @@ class SovereignFundSubsystemTest extends TestCase
     {
         $tpy = 720;
         $dt = 1.0 / $tpy;
-        $fund = new SovereignFundSubsystem($this->stillMarket());
+        $fund = $this->stillFund();
         $state = $this->openFund($fund, $tpy);
         $state->sovereignFundAnnualDraw = 0.0;
         $ownership = $state->sovereignFundOwnershipShare;
@@ -379,7 +381,7 @@ class SovereignFundSubsystemTest extends TestCase
     {
         $tpy = 360;
         $dt = 1.0 / $tpy;
-        $fund = new SovereignFundSubsystem($this->stillMarket());
+        $fund = $this->stillFund();
         $state = $this->openFund($fund, $tpy);
         $this->crashDomestic($state, 0.35);
         $this->runToMonthEnd($fund, $state, $dt);
@@ -409,7 +411,7 @@ class SovereignFundSubsystemTest extends TestCase
     {
         $tpy = 720;
         $dt = 1.0 / $tpy;
-        $fund = new SovereignFundSubsystem($this->stillMarket());
+        $fund = $this->stillFund();
         $state = $this->openFund($fund, $tpy);
         $state->sovereignFundAnnualDraw = 0.0;
 
@@ -425,7 +427,7 @@ class SovereignFundSubsystemTest extends TestCase
     {
         $tpy = 720;
         $dt = 1.0 / $tpy;
-        $fund = new SovereignFundSubsystem($this->stillMarket());
+        $fund = $this->stillFund();
         $state = $this->openFund($fund, $tpy);
         $state->sovereignFundAnnualDraw = 0.0;
 
@@ -445,7 +447,7 @@ class SovereignFundSubsystemTest extends TestCase
     {
         $tpy = 720;
         $dt = 1.0 / $tpy;
-        $fund = new SovereignFundSubsystem($this->stillMarket());
+        $fund = $this->stillFund();
         $state = $this->openFund($fund, $tpy);
         $state->sovereignFundAnnualDraw = 0.0;
 
@@ -467,7 +469,7 @@ class SovereignFundSubsystemTest extends TestCase
         $tpy = 720;
         $dt = 1.0 / $tpy;
         foreach ([0.01, -0.01] as $stabilisation) {
-            $fund = new SovereignFundSubsystem($this->stillMarket());
+            $fund = $this->stillFund();
             $state = $this->openFund($fund, $tpy);
             $state->sovereignFundAnnualDraw = 0.0;
             $state->sovereignFundStabilisationToGdp = $stabilisation;
@@ -483,7 +485,7 @@ class SovereignFundSubsystemTest extends TestCase
 
     public function testTheDomesticSleeveEarnsTheBoardsPriceReturn(): void
     {
-        $fund = new SovereignFundSubsystem($this->stillMarket());
+        $fund = $this->stillFund();
         $state = $this->openFund($fund, 720);
         $before = $state->sovereignFundDomesticEquity;
 
@@ -498,7 +500,7 @@ class SovereignFundSubsystemTest extends TestCase
     {
         $tpy = 720;
         $dt = 1.0 / $tpy;
-        $fund = new SovereignFundSubsystem($this->stillMarket());
+        $fund = $this->stillFund();
         $state = $this->openFund($fund, $tpy);
         $state->inflation = 0.03;
         $before = $fund->fundValue($state);
@@ -522,7 +524,7 @@ class SovereignFundSubsystemTest extends TestCase
 
     public function testTheReturnIndexEarnsTheSleevesReturnAtTheirWeights(): void
     {
-        $fund = new SovereignFundSubsystem($this->stillMarket());
+        $fund = $this->stillFund();
         $state = $this->openFund($fund, 720);
         $domesticWeight = $state->sovereignFundDomesticWeight;
 
@@ -540,7 +542,7 @@ class SovereignFundSubsystemTest extends TestCase
     {
         $tpy = 360;
         $dt = 1.0 / $tpy;
-        $fund = new SovereignFundSubsystem($this->stillMarket());
+        $fund = $this->stillFund();
         $state = $this->openFund($fund, $tpy);
         $this->crashDomestic($state, 0.35);
         $this->runToMonthEnd($fund, $state, $dt);
@@ -559,7 +561,7 @@ class SovereignFundSubsystemTest extends TestCase
     public function testAFundWithNoIndexOpensItAtTheBase(): void
     {
         $dt = 1.0 / 720.0;
-        $fund = new SovereignFundSubsystem($this->stillMarket());
+        $fund = $this->stillFund();
         $state = $this->openFund($fund, 720);
         $state->sovereignFundReturnIndex = 0.0;
         $state->sovereignFundRealReturnIndex = 0.0;
@@ -581,7 +583,7 @@ class SovereignFundSubsystemTest extends TestCase
         $state = new MacroState();
         $tau = SovereignFundSubsystem::FOREIGN_BOND_DURATION;
         $neutral = MacroEngine::MAINLAND_NEUTRAL_RATE;
-        $premium = MacroEngine::NS_BASE_TERM_PREMIUM * MathUtility::calculateTermPremiumDurationScale($tau, MacroEngine::TERM_PREMIUM_DURATION_HORIZON_YEARS);
+        $premium = MacroEngine::NS_BASE_TERM_PREMIUM * FixedIncome::calculateTermPremiumDurationScale($tau, MacroEngine::TERM_PREMIUM_DURATION_HORIZON_YEARS);
 
         $state->foreignPolicyRate = $neutral;
         $this->assertEqualsWithDelta($neutral + $premium, $fund->foreignZeroYield($state, $tau), 1e-14, 'At neutral the curve is the level plus the premium.');
@@ -597,7 +599,7 @@ class SovereignFundSubsystemTest extends TestCase
     public function testARiseInTheForeignRateMarksThePaperDownByItsDuration(): void
     {
         $dt = 1.0 / 720.0;
-        $fund = new SovereignFundSubsystem($this->stillMarket(flatCurve: false));
+        $fund = $this->stillFund(flatCurve: false);
         $state = $this->openFund($fund, 720, MacroEngine::MAINLAND_NEUTRAL_RATE);
         $state->sovereignFundAnnualDraw = 0.0;
         $yieldBefore = $state->foreignBondYield;
@@ -656,7 +658,7 @@ class SovereignFundSubsystemTest extends TestCase
     private function paperLogGrowthOverAYear(int $tpy, callable $foreignRate): float
     {
         $dt = 1.0 / $tpy;
-        $fund = new SovereignFundSubsystem($this->stillMarket(flatCurve: false));
+        $fund = $this->stillFund(flatCurve: false);
         $state = $this->openFund($fund, $tpy, $foreignRate(0.0));
         $paper = $state->sovereignFundForeignBonds;
         $equity = $state->sovereignFundForeignEquity;
@@ -683,7 +685,7 @@ class SovereignFundSubsystemTest extends TestCase
     {
         $tpy = 360;
         $dt = 1.0 / $tpy;
-        $fund = new SovereignFundSubsystem($this->stillMarket());
+        $fund = $this->stillFund();
         $state = $this->openFund($fund, $tpy);
         $openingWeight = $state->sovereignFundTargetWeight;
         $openingEquity = $state->sovereignFundPolicyEquityShare;
@@ -720,7 +722,7 @@ class SovereignFundSubsystemTest extends TestCase
     {
         $tpy = 360;
         $dt = 1.0 / $tpy;
-        $fund = new SovereignFundSubsystem($this->stillMarket());
+        $fund = $this->stillFund();
         $state = $this->openFund($fund, $tpy);
         $opening = $state->sovereignFundPolicyEquityShare;
         for ($i = 0; $i < $tpy; ++$i) {
@@ -793,43 +795,39 @@ class SovereignFundSubsystemTest extends TestCase
     {
         do {
             $this->step($fund, $state, $dt);
-        } while (!MathUtility::crossedSimulatedBoundary($state->totalTime, $dt, SovereignFundSubsystem::REBALANCE_CHECK_PERIOD_YEARS));
+        } while (!TimeSeries::crossedSimulatedBoundary($state->totalTime, $dt, SovereignFundSubsystem::REBALANCE_CHECK_PERIOD_YEARS));
     }
 
     /**
-     * A foreign market that stands still, so the rules can be read without a random walk under them: the equity index
-     * does not move, and the foreign curve is flat at zero (the expectations leg cancels the term premium the fund adds
-     * on top), so the paper neither carries nor reprices. With $flatCurve off the equities still stand still but the
-     * paper is marked on the real foreign curve.
+     * A fund in a foreign market that stands still, so the rules can be read without a random walk under them: the
+     * equity index does not move, and the foreign curve is flat at zero (the expectations leg cancels the term premium
+     * the fund adds on top), so the paper neither carries nor reprices. With $flatCurve off the equities still stand
+     * still but the paper is marked on the real foreign curve.
      */
-    private function stillMarket(bool $flatCurve = true): MathUtility
+    private function stillFund(bool $flatCurve = true): SovereignFundSubsystem
     {
-        return new class($flatCurve) extends MathUtility {
-            public function __construct(private readonly bool $flatCurve)
-            {
-            }
+        if (!$flatCurve) {
+            return new SovereignFundSubsystem($this->stillMarket());
+        }
 
+        return new class($this->stillMarket()) extends SovereignFundSubsystem {
+            public function foreignZeroYield(MacroState $state, float $maturity): float
+            {
+                $scale = FixedIncome::calculateTermPremiumDurationScale($maturity, MacroEngine::TERM_PREMIUM_DURATION_HORIZON_YEARS);
+
+                return (-MacroEngine::NS_BASE_TERM_PREMIUM * $scale)
+                    + (($state->foreignTermPremiumRegime + $state->foreignTermPremiumShock) * $scale);
+            }
+        };
+    }
+
+    /** Draws that leave the foreign equity index where it stands. */
+    private function stillMarket(): MathUtility
+    {
+        return new class() extends MathUtility {
             public function generateStandardNormal(): float
             {
                 return 0.0;
-            }
-
-            public function calculateSvenssonYield(
-                float $level,
-                float $slope,
-                float $curvature1,
-                float $curvature2,
-                float $tau,
-                float $lambda1 = 0.5,
-                float $lambda2 = 0.15,
-                ?float $slopeLambda = null
-            ): float {
-                if (!$this->flatCurve) {
-                    return parent::calculateSvenssonYield($level, $slope, $curvature1, $curvature2, $tau, $lambda1, $lambda2, $slopeLambda);
-                }
-
-                return -MacroEngine::NS_BASE_TERM_PREMIUM
-                    * self::calculateTermPremiumDurationScale($tau, MacroEngine::TERM_PREMIUM_DURATION_HORIZON_YEARS);
             }
 
             public function calculateCorrelatedGBM(

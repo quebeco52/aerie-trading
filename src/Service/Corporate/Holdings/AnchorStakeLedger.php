@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Service\Corporate\Holdings;
 
-use App\Data\AnchorHoldings;
+use App\Data\Company\AnchorHoldings;
 use App\Entity\Stock;
 
 /**

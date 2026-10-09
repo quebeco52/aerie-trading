@@ -4,23 +4,23 @@ declare(strict_types=1);
 
 namespace App\Service\Market\Pricing;
 
-use App\Data\AnchorHoldings;
-use App\Data\ManagementProfile;
-use App\Data\ManagementStyle;
-use App\Data\Sectors;
-use App\Data\StockInfo;
+use App\Data\Company\AnchorHoldings;
+use App\Data\Company\ManagementProfile;
+use App\Data\Company\ManagementStyle;
+use App\Data\Company\Sectors;
+use App\Data\Company\StockInfo;
 use App\DTO\MacroStateDTO;
 use App\DTO\MarketPricingContext;
 use App\Entity\Stock;
 use App\Service\Corporate\DebtEngine;
 use App\Service\Corporate\Holdings\AnchorStakeLedger;
 use App\Service\Corporate\ManagementSuccessionEngine;
-use App\Service\Math\CorporateMetrics;
+use App\Service\Corporate\CorporateMetrics;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\MathUtility;
 
 /**
- * Opens listed companies on their seed rows (App\Data\InitialMarket): the balance sheet, the ledgers the first
+ * Opens listed companies on their seed rows (App\Data\Company\InitialMarket): the balance sheet, the ledgers the first
  * report rolls forward, and the price the market opens each one at. The seed and the reset both open the board
  * here, so a reset market is the market a fresh seed would have opened.
  */

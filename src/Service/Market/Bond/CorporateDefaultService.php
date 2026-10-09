@@ -7,8 +7,9 @@ namespace App\Service\Market\Bond;
 use App\DTO\MacroStateDTO;
 use App\Entity\Bond;
 use App\Entity\Stock;
+use App\Service\Math\CreditRisk;
+use App\Service\Math\Decimal;
 use App\Service\Math\FinancialConstants;
-use App\Service\Math\MathUtility;
 use Doctrine\ORM\EntityManagerInterface;
 
 /**
@@ -34,7 +35,6 @@ final class CorporateDefaultService
     public function __construct(
         private readonly EntityManagerInterface $em,
         private readonly BondLedgerService $ledger,
-        private readonly MathUtility $mathUtility,
     ) {}
 
     /**
@@ -75,7 +75,7 @@ final class CorporateDefaultService
         $settled = [];
 
         foreach ($bonds as $bond) {
-            $recovery = $this->mathUtility->calculateRecoveryGivenDefault(
+            $recovery = CreditRisk::calculateRecoveryGivenDefault(
                 self::baseRecoveryFor($bond->getSeniority()),
                 $defaultRate
             );
@@ -86,10 +86,10 @@ final class CorporateDefaultService
             $this->ledger->processDefaultSettlement($bond, $recoveredPerBond, $macroState->totalTime, $settledAt);
 
             $bond->setStatus(Bond::STATUS_DEFAULTED)
-                ->setRecoveryRate(MathUtility::formatDecimal($recovery, 4))
+                ->setRecoveryRate(Decimal::format($recovery, 4))
                 ->setIsOnTheRun(false)
-                ->setPrice(MathUtility::formatDecimal($recoveredPerBond, 8))
-                ->setCleanPrice(MathUtility::formatDecimal($recoveredPerBond, 8))
+                ->setPrice(Decimal::format($recoveredPerBond, 8))
+                ->setCleanPrice(Decimal::format($recoveredPerBond, 8))
                 ->setAccruedInterest('0.00000000')
                 // A settled claim has no yield, no duration and no convexity: there is nothing left to
                 // discount. Leaving the last live figures on the row would have the ladder quoting a

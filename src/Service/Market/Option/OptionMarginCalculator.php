@@ -6,7 +6,7 @@ namespace App\Service\Market\Option;
 
 use App\Entity\User;
 use App\Service\Math\FinancialConstants;
-use App\Service\Math\MathUtility;
+use App\Service\Math\OptionPricing;
 use Doctrine\ORM\EntityManagerInterface;
 
 /**
@@ -23,7 +23,6 @@ final class OptionMarginCalculator
 {
     public function __construct(
         private readonly EntityManagerInterface $em,
-        private readonly MathUtility $mathUtility,
     ) {}
 
     /**
@@ -82,7 +81,7 @@ final class OptionMarginCalculator
                 continue;
             }
 
-            $requirement += $this->mathUtility->calculateShortOptionRequirement(
+            $requirement += OptionPricing::calculateShortOptionRequirement(
                 (float) $row['underlying'],
                 (float) $row['strike'],
                 $premium,

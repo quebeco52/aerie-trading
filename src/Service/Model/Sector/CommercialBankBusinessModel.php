@@ -7,12 +7,15 @@ namespace App\Service\Model\Sector;
 use App\DTO\InterestExpenseDTO;
 use App\DTO\DebtExpansionAppetiteDTO;
 
+use App\Service\Math\CreditRisk;
+use App\Service\Math\MacroTransmission;
+use App\Service\Math\TimeSeries;
 use App\Service\Model\BusinessModelInterface;
 
-use App\Data\ModelParam;
+use App\Service\Model\ModelParam;
 use App\DTO\MacroStateDTO;
 use App\DTO\SectorPhysicsResult;
-use App\DTO\StreamContext;
+use App\Service\Model\StreamContext;
 use App\Entity\Stock;
 use App\Service\Math\MathUtility;
 use App\Service\Macro\MacroEngine;
@@ -598,7 +601,7 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
      */
     private function resolveSaturationYield(Stock $stock, MacroStateDTO $macroState): float
     {
-        $penalty = \App\Service\Math\CorporateMetrics::getInstance()->calculateMarketSaturationPenalty($stock, max(1.0, (float) $stock->getTotalEquity()), $macroState);
+        $penalty = \App\Service\Corporate\CorporateMetrics::getInstance()->calculateMarketSaturationPenalty($stock, max(1.0, (float) $stock->getTotalEquity()), $macroState);
         $headroom = max(0.0, max(0.01, (float) $stock->getBaselineRoe()) - ($macroState->yield10yEma + $macroState->equityRiskPremium));
 
         return min($penalty, $headroom) * max(1.0, $stock->getTangibleEquity())
@@ -621,10 +624,10 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
             self::STATE_BOOK_YIELD_SECURITIES => [$rates['securities'], static::SECURITIES_REPRICING_YEARS],
         ];
         foreach ($parts as $key => [$marketYield, $repricingYears]) {
-            $streams->registerState($key, $mathUtility->calculateDistributedLag($streams->getPersistedState($key, $marketYield), $marketYield, $quarter, $repricingYears));
+            $streams->registerState($key, TimeSeries::calculateDistributedLag($streams->getPersistedState($key, $marketYield), $marketYield, $quarter, $repricingYears));
         }
         $longRunDepositRate = $this->resolveDepositRate($macroState->policyRateEma, $macroState->systemDepositBetaEma);
-        $streams->registerState(self::STATE_DEPOSIT_RATE, $mathUtility->calculateDistributedLag($streams->getPersistedState(self::STATE_DEPOSIT_RATE, $longRunDepositRate), $longRunDepositRate, $quarter, self::DEPOSIT_REPRICING_YEARS));
+        $streams->registerState(self::STATE_DEPOSIT_RATE, TimeSeries::calculateDistributedLag($streams->getPersistedState(self::STATE_DEPOSIT_RATE, $longRunDepositRate), $longRunDepositRate, $quarter, self::DEPOSIT_REPRICING_YEARS));
         $streams->registerState(self::STATE_FLOATING_LOAN_SHARE, $pricing['floating_share']);
         $streams->registerState(self::STATE_LOAN_SPREAD, $pricing['loan_spread']);
         $streams->registerState(self::STATE_FEE_YIELD, $pricing['fee_yield']);
@@ -678,8 +681,8 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
         // Credit standards tightening (SLOOS > 0) dampens loan origination volume; easing (SLOOS < 0) expands it.
         // Residential housing starts drive mortgage purchase origination, and broad money (M2) growth expands deposit lending capacity.
         $sloosOriginationDrag = $macroState->sloosTighteningIndexEma * self::SLOOS_NII_ORIGINATION_SENSITIVITY;
-        $housingMortgageBoost = MathUtility::calculateHousingStartsShift($macroState->housingStartsIndexEma, sensitivity: self::HOUSING_MORTGAGE_ORIGINATION_SENSITIVITY);
-        $m2LiquidityBoost = MathUtility::calculateBroadMoneyLiquidityShift($macroState->moneySupplyGrowthEma, $macroState->moneySupplyGrowthTrend, sensitivity: self::M2_DEPOSIT_GROWTH_SENSITIVITY);
+        $housingMortgageBoost = MacroTransmission::calculateHousingStartsShift($macroState->housingStartsIndexEma, sensitivity: self::HOUSING_MORTGAGE_ORIGINATION_SENSITIVITY);
+        $m2LiquidityBoost = MacroTransmission::calculateBroadMoneyLiquidityShift($macroState->moneySupplyGrowthEma, $macroState->moneySupplyGrowthTrend, sensitivity: self::M2_DEPOSIT_GROWTH_SENSITIVITY);
         $creditBoomBoost = $macroState->creditToGdpGapEma * self::CREDIT_GAP_ORIGINATION_SENSITIVITY;
 
         $niiRevenue = max(0.0, $expectedRevenue * $niiWeight
@@ -811,12 +814,12 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
     {
         ['residential' => $residentialShare, 'consumer' => $consumerShare, 'commercial_real_estate' => $creShare, 'business' => $businessShare] = $this->resolveLoanBookMix($stock);
 
-        $householdZ = $mathUtility->calculateVasicekSystematicFactor(
+        $householdZ = CreditRisk::calculateVasicekSystematicFactor(
             $macroState->retailDefaultRateEma,
             MacroEngine::RETAIL_DEFAULT_BASELINE,
             CreditFiscalSubsystem::RETAIL_ASRF_RHO
         );
-        $corporateZ = $mathUtility->calculateVasicekSystematicFactor(
+        $corporateZ = CreditRisk::calculateVasicekSystematicFactor(
             $macroState->corporateDefaultRateEma,
             MacroEngine::CORPORATE_DEFAULT_BASELINE,
             CreditFiscalSubsystem::CORPORATE_DEFAULT_RHO
@@ -827,18 +830,18 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
         $commercialPrice = $macroState->commercialPropertyIndexEma;
         $residentialOrigination = $streams->getPersistedState(self::STATE_RESIDENTIAL_ORIGINATION_PRICE, $residentialPrice);
         $commercialOrigination = $streams->getPersistedState(self::STATE_COMMERCIAL_ORIGINATION_PRICE, $commercialPrice);
-        $residentialLgd = MathUtility::calculateCollateralLgd(self::LGD_BASELINE, $residentialPrice, $residentialOrigination);
-        $commercialLgd = MathUtility::calculateCollateralLgd(self::LGD_BASELINE, $commercialPrice, $commercialOrigination);
-        $streams->registerState(self::STATE_RESIDENTIAL_ORIGINATION_PRICE, $mathUtility->calculateDistributedLag($residentialOrigination, $residentialPrice, $quarter, self::COLLATERAL_ORIGINATION_YEARS));
-        $streams->registerState(self::STATE_COMMERCIAL_ORIGINATION_PRICE, $mathUtility->calculateDistributedLag($commercialOrigination, $commercialPrice, $quarter, self::COLLATERAL_ORIGINATION_YEARS));
+        $residentialLgd = CreditRisk::calculateCollateralLgd(self::LGD_BASELINE, $residentialPrice, $residentialOrigination);
+        $commercialLgd = CreditRisk::calculateCollateralLgd(self::LGD_BASELINE, $commercialPrice, $commercialOrigination);
+        $streams->registerState(self::STATE_RESIDENTIAL_ORIGINATION_PRICE, TimeSeries::calculateDistributedLag($residentialOrigination, $residentialPrice, $quarter, self::COLLATERAL_ORIGINATION_YEARS));
+        $streams->registerState(self::STATE_COMMERCIAL_ORIGINATION_PRICE, TimeSeries::calculateDistributedLag($commercialOrigination, $commercialPrice, $quarter, self::COLLATERAL_ORIGINATION_YEARS));
 
         $pdScale = $this->resolveCreditRiskScale($stock) / self::LGD_BASELINE;
         $householdRho = CreditFiscalSubsystem::RETAIL_ASRF_RHO;
         $corporateRho = CreditFiscalSubsystem::CORPORATE_DEFAULT_RHO;
-        $lossRate = ($residentialShare * $mathUtility->calculateVasicekExpectedLoss($householdZ, static::RESIDENTIAL_CHARGE_OFF_RATE * $pdScale, $householdRho, $residentialLgd))
-            + ($consumerShare * $mathUtility->calculateVasicekExpectedLoss($householdZ, static::CONSUMER_CHARGE_OFF_RATE * $pdScale, $householdRho, self::LGD_BASELINE))
-            + ($creShare * $mathUtility->calculateVasicekExpectedLoss($corporateZ, static::COMMERCIAL_REAL_ESTATE_CHARGE_OFF_RATE * $pdScale, $corporateRho, $commercialLgd))
-            + ($businessShare * $mathUtility->calculateVasicekExpectedLoss($corporateZ, static::BUSINESS_CHARGE_OFF_RATE * $pdScale, $corporateRho, self::LGD_BASELINE));
+        $lossRate = ($residentialShare * CreditRisk::calculateVasicekExpectedLoss($householdZ, static::RESIDENTIAL_CHARGE_OFF_RATE * $pdScale, $householdRho, $residentialLgd))
+            + ($consumerShare * CreditRisk::calculateVasicekExpectedLoss($householdZ, static::CONSUMER_CHARGE_OFF_RATE * $pdScale, $householdRho, self::LGD_BASELINE))
+            + ($creShare * CreditRisk::calculateVasicekExpectedLoss($corporateZ, static::COMMERCIAL_REAL_ESTATE_CHARGE_OFF_RATE * $pdScale, $corporateRho, $commercialLgd))
+            + ($businessShare * CreditRisk::calculateVasicekExpectedLoss($corporateZ, static::BUSINESS_CHARGE_OFF_RATE * $pdScale, $corporateRho, self::LGD_BASELINE));
 
         $householdWeight = $residentialShare + $consumerShare;
 

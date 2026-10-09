@@ -7,7 +7,9 @@ namespace App\Service\Market\Pricing;
 use App\DTO\MacroStateDTO;
 use App\Service\Macro\MacroEngine;
 use App\Service\Macro\Subsystem\CommodityLogisticsSubsystem;
-use App\Service\Math\MathUtility;
+use App\Service\Math\FirmEconomics;
+use App\Service\Math\MacroTransmission;
+use App\Service\Math\Valuation;
 use App\Service\Politics\PoliticsEngine;
 
 /**
@@ -21,7 +23,7 @@ use App\Service\Politics\PoliticsEngine;
  * and the next government's first budget as the market's forecast has it (App\Service\Politics\ElectionForecast), and
  * from the end of that government's term back toward the laws the District has in force on average, as far each term
  * as the Diet's own laws have drifted back from one term to the next. Each part counts for the share of the firm's
- * value accruing while it holds (MathUtility::perpetuityShareAfter()), the tax phasing in at the speed the tax rate
+ * value accruing while it holds (Valuation::perpetuityShareAfter()), the tax phasing in at the speed the tax rate
  * follows the law. A law is measured as the earnings feel it: the levy and the tax shift as they stand, the rules on
  * extraction by the cost factor they put on each unit, the duty by the turnover it leaves, the carbon price by what it
  * adds to the power price. What the trailing earnings
@@ -39,11 +41,11 @@ final class PolicyCapitalization
     public const LONG_RUN_BANK_LEVY_RATE = 0.00118;
     /** Share of the bank levy's distance from that average still there a term later: 0.660 (sd across games 0.14). */
     public const BANK_LEVY_TERM_PERSISTENCE = 0.660;
-    /** The cost factor the rules on extraction put on each unit on average over the long run (MathUtility::calculateExtractionCostFactor()): 1.0035 (se 0.0006). */
+    /** The cost factor the rules on extraction put on each unit on average over the long run (FirmEconomics::calculateExtractionCostFactor()): 1.0035 (se 0.0006). */
     public const LONG_RUN_EXTRACTION_COST_FACTOR = 1.0035;
     /** Share of that factor's distance from its average still there a term later: 0.567 (sd across games 0.17). */
     public const EXTRACTION_COST_TERM_PERSISTENCE = 0.567;
-    /** The share turnover the stamp duty leaves on average over the long run, against the founding duty's (MathUtility::calculateStampDutyVolumeFactor()): 0.949 (se 0.004). */
+    /** The share turnover the stamp duty leaves on average over the long run, against the founding duty's (MacroTransmission::calculateStampDutyVolumeFactor()): 0.949 (se 0.004). */
     public const LONG_RUN_STAMP_DUTY_VOLUME_FACTOR = 0.949;
     /** Share of that factor's distance from its average still there a term later: 0.360 (sd across games 0.13), the duty being no revenue the Council guards. */
     public const STAMP_DUTY_VOLUME_TERM_PERSISTENCE = 0.360;
@@ -57,7 +59,7 @@ final class PolicyCapitalization
     public const PER_FIRM_LEVERS = ['bankLevyRate', 'extractionStringency', 'stampDutyRate', 'carbonPrice'];
 
     // --- Discounting ---
-    /** Smallest discount rate less growth a firm's value is spread at, the floor the intrinsic multiple puts under its spread (MathUtility::calculateIntrinsicFairValuePE()). */
+    /** Smallest discount rate less growth a firm's value is spread at, the floor the intrinsic multiple puts under its spread (Valuation::calculateIntrinsicFairValuePE()). */
     public const MIN_CAP_RATE = 0.005;
 
     /**
@@ -73,7 +75,7 @@ final class PolicyCapitalization
         return self::expectedOverLife($macro, $capRate, $previous, 'corporateTax', $macro->corporateTaxPolicyShift, static fn (float $law): float => $law, self::LONG_RUN_CORPORATE_TAX_SHIFT, self::CORPORATE_TAX_TERM_PERSISTENCE, $speed)
             - $macro->corporateTaxShiftEmbodied
             // The rate still closing on the law in force.
-            + (($macro->corporateTaxShiftRealized - $macro->corporateTaxPolicyShift) * (1.0 - MathUtility::perpetuityShareAfter($capRate, 0.0, $speed)));
+            + (($macro->corporateTaxShiftRealized - $macro->corporateTaxPolicyShift) * (1.0 - Valuation::perpetuityShareAfter($capRate, 0.0, $speed)));
     }
 
     /**
@@ -165,8 +167,8 @@ final class PolicyCapitalization
     {
         return match ($lever) {
             'bankLevyRate' => $law,
-            'extractionStringency' => MathUtility::calculateExtractionCostFactor($law),
-            'stampDutyRate' => MathUtility::calculateStampDutyVolumeFactor($law),
+            'extractionStringency' => FirmEconomics::calculateExtractionCostFactor($law),
+            'stampDutyRate' => MacroTransmission::calculateStampDutyVolumeFactor($law),
             'carbonPrice' => CommodityLogisticsSubsystem::carbonPowerPriceUplift($law),
             default => throw new \InvalidArgumentException(sprintf('No firm\'s accounts answer to %s directly.', $lever)),
         };
@@ -231,10 +233,10 @@ final class PolicyCapitalization
     {
         $inForce = $measure($law);
         [$sitting, $sittingFrom, $next, $nextFrom] = self::path($macro, $previous, $lever, $inForce, $measure);
-        $fromNext = MathUtility::perpetuityShareAfter($capRate, $nextFrom - $macro->totalTime, $speed);
+        $fromNext = Valuation::perpetuityShareAfter($capRate, $nextFrom - $macro->totalTime, $speed);
 
         return $inForce
-            + (($sitting - $inForce) * MathUtility::perpetuityShareAfter($capRate, $sittingFrom - $macro->totalTime, $speed))
+            + (($sitting - $inForce) * Valuation::perpetuityShareAfter($capRate, $sittingFrom - $macro->totalTime, $speed))
             + (($next - $sitting) * $fromNext)
             - (($next - $longRun) * $fromNext * self::undoneLater($capRate, $persistence));
     }

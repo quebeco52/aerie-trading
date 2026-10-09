@@ -48,7 +48,7 @@ class OptionChainBuilderTest extends TestCase
             $em,
             $repository,
             new OptionChainService($em, new LiquidityEngine($math)),
-            new OptionPricingEngine($math, new BondPricingEngine($math)),
+            new OptionPricingEngine(new BondPricingEngine()),
             $this->gammaStore,
         );
     }
@@ -203,7 +203,7 @@ class OptionChainBuilderTest extends TestCase
         $near = $this->contract($stock, 13, true, 105.0);
 
         $math = new MathUtility();
-        $quotes = (new OptionPricingEngine($math, new BondPricingEngine($math)))
+        $quotes = (new OptionPricingEngine(new BondPricingEngine()))
             ->quoteChain([$far, $near], $this->macro(1.0)->sovereignCurve(), 1.0);
 
         $this->assertNotEqualsWithDelta(

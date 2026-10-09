@@ -11,8 +11,9 @@ use App\Entity\User;
 use App\Entity\UserOption;
 use App\Entity\UserStock;
 use App\Service\Macro\MacroStateProvider;
+use App\Service\Math\Decimal;
 use App\Service\Math\FinancialConstants;
-use App\Service\Math\MathUtility;
+use App\Service\Math\OptionPricing;
 use Doctrine\ORM\EntityManagerInterface;
 use App\Service\Market\Trading\MarginEngine;
 
@@ -46,7 +47,6 @@ final class OptionTradeService
         private readonly OptionPricingEngine $pricingEngine,
         private readonly MacroStateProvider $macroStateProvider,
         private readonly MarginEngine $marginEngine,
-        private readonly MathUtility $mathUtility,
         private readonly \App\Service\User\CashLedger $cashLedger,
     ) {}
 
@@ -81,7 +81,7 @@ final class OptionTradeService
             $macroState->totalTime
         );
 
-        if ($quote->timeToExpiry < MathUtility::MIN_OPTION_TIME_TO_EXPIRY) {
+        if ($quote->timeToExpiry < OptionPricing::MIN_OPTION_TIME_TO_EXPIRY) {
             throw new \Exception("{$contract->getTicker()} has expired and is awaiting settlement.");
         }
 
@@ -96,7 +96,7 @@ final class OptionTradeService
         $this->requireDirection($action, $held, $contracts, $contract);
 
         $premium = self::isBuySide($action) ? $quote->ask : $quote->bid;
-        $consideration = MathUtility::formatDecimal(
+        $consideration = Decimal::format(
             $premium * (float) FinancialConstants::OPTION_CONTRACT_MULTIPLIER * $contracts,
             4
         );
@@ -127,8 +127,8 @@ final class OptionTradeService
             ->setOrderType('MARKET')
             ->setQuantity($contracts)
             ->setFilledQuantity($contracts)
-            ->setExecutionPrice(MathUtility::formatDecimal($premium, 4))
-            ->setSpreadCost(MathUtility::formatDecimal(abs($premium - $quote->mark) * (float) FinancialConstants::OPTION_CONTRACT_MULTIPLIER * $contracts, 4))
+            ->setExecutionPrice(Decimal::format($premium, 4))
+            ->setSpreadCost(Decimal::format(abs($premium - $quote->mark) * (float) FinancialConstants::OPTION_CONTRACT_MULTIPLIER * $contracts, 4))
             ->setImpactCost('0.0000')
             ->setStatus(TradeOrder::STATUS_FILLED)
             ->setFilledAt(new \DateTime());
@@ -184,7 +184,7 @@ final class OptionTradeService
             return;
         }
 
-        $requirement = $this->mathUtility->calculateShortOptionRequirement(
+        $requirement = OptionPricing::calculateShortOptionRequirement(
             (float) $contract->getStock()->getPrice(),
             (float) $contract->getStrike(),
             $quote->mark,
@@ -318,7 +318,7 @@ final class OptionTradeService
             $existingCost = (float) $position->getAveragePremium() * abs($held);
             $basis = ($existingCost + ($premium * $addedContracts)) / max(1, abs($updated));
 
-            $position->setAveragePremium(MathUtility::formatDecimal($basis, 8));
+            $position->setAveragePremium(Decimal::format($basis, 8));
         }
 
         $position->setQuantity($updated);

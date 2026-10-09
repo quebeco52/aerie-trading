@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Tests\Service\Corporate\Holdings;
 
-use App\Data\AnchorHoldings;
+use App\Data\Company\AnchorHoldings;
 use App\Entity\Stock;
 use App\Service\Corporate\Holdings\AnchorStakeLedger;
 use App\Tests\Support\StockBuilder;

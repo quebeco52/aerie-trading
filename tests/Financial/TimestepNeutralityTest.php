@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Tests\Financial;
 
 use App\Service\Math\MathUtility;
+use App\Service\Math\TimeSeries;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -161,7 +162,7 @@ class TimestepNeutralityTest extends TestCase
             $value = 0.0;
 
             for ($step = 0; $step < $ticksPerYear; $step++) {
-                $value = $this->math->calculateDistributedLag(
+                $value = TimeSeries::calculateDistributedLag(
                     currentLaggedValue: $value,
                     targetValue: 1.0,
                     dt: $dt,

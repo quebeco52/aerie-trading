@@ -46,8 +46,8 @@ class ScreenerController extends AbstractController
             $equity = (float) $stock->getTotalEquity();
             $debtToEquity = $equity > 0 ? ((float) $stock->getTotalDebt() / $equity) : null;
 
-            $businessModel = \App\Data\Sectors::businessModelFor($stock->getIndustry());
-            $isFinancial = \App\Data\Sectors::isFinancial($businessModel);
+            $businessModel = \App\Data\Company\Sectors::businessModelFor($stock->getIndustry());
+            $isFinancial = \App\Data\Company\Sectors::isFinancial($businessModel);
             $effectiveRoic = $isFinancial 
                 ? ((float) $stock->getCurrentRoe() ?: (float) $stock->getBaselineRoe()) 
                 : ((float) $stock->getCurrentRoic() ?: (float) $stock->getBaselineRoic());

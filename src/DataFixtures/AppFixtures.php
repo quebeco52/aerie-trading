@@ -5,8 +5,8 @@ namespace App\DataFixtures;
 use App\Entity\Etf;
 use App\Entity\Stock;
 use App\Entity\User;
-use App\Data\InitialMarket;
-use App\Data\Sectors;
+use App\Data\Company\InitialMarket;
+use App\Data\Company\Sectors;
 use Doctrine\Bundle\FixturesBundle\Fixture;
 use Doctrine\Persistence\ObjectManager;
 use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
@@ -49,7 +49,7 @@ class AppFixtures extends Fixture
             $etf->setName($etfData['name']);
             $etf->setPrice((string) $etfData['price']);
 
-            $etf->setDescription(\App\Data\StockInfo::DESCRIPTIONS[$etfData['ticker']] ?? null);
+            $etf->setDescription(\App\Data\Company\StockInfo::DESCRIPTIONS[$etfData['ticker']] ?? null);
             $etf->setExpenseRatio((float) ($etfData['expense_ratio'] ?? 0.0));
             // Only on a fund that has never had a share count. Creations and redemptions move it after
             // that, and a reseed is not a liquidation — see the note on its other books above.
@@ -118,7 +118,7 @@ class AppFixtures extends Fixture
             $stock->setCreditSpread((string) ($stockData['credit_spread'] ?? 0.0100));
             $stock->setHistoricalFixedRate((string) ($stockData['historical_fixed_rate'] ?? 0.04));
 
-            $stock->setDescription(\App\Data\StockInfo::DESCRIPTIONS[$stockData['ticker']] ?? null);
+            $stock->setDescription(\App\Data\Company\StockInfo::DESCRIPTIONS[$stockData['ticker']] ?? null);
 
             $manager->persist($stock);
         }

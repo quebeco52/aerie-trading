@@ -4,12 +4,14 @@ declare(strict_types=1);
 
 namespace App\Service\Politics;
 
-use App\Data\AerieDiet;
+use App\Data\Politics\AerieDiet;
 use App\DTO\MacroStateDTO;
 use App\DTO\PoliticsStateDTO;
 use App\Service\Macro\MacroEngine;
+use App\Service\Math\Distributions;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\MathUtility;
+use App\Service\Math\TimeSeries;
 
 /**
  * How the District would vote if the vote were held today, and the polls that measure it.
@@ -54,7 +56,7 @@ final class OpinionPolls
      */
     public static function advance(PoliticsState $state, MacroStateDTO $macro, float $dt, MathUtility $math): void
     {
-        if ($state->lastElectionAt === $state->totalTime || !MathUtility::crossedSimulatedBoundary($state->totalTime, $dt, 1.0 / self::POLLS_PER_YEAR)) {
+        if ($state->lastElectionAt === $state->totalTime || !TimeSeries::crossedSimulatedBoundary($state->totalTime, $dt, 1.0 / self::POLLS_PER_YEAR)) {
             return;
         }
 
@@ -278,7 +280,7 @@ final class OpinionPolls
         $key = CouncilAppointments::vacancyKey('poll', $state->totalTime);
         $draws = [];
         foreach (AerieDiet::PARTIES as $party) {
-            $draws[$party] = $math->calculateInverseNormalCDF(CouncilAppointments::uniform($salt, "{$key}:{$party}"));
+            $draws[$party] = Distributions::calculateInverseNormalCDF(CouncilAppointments::uniform($salt, "{$key}:{$party}"));
         }
 
         // Kept to a hundredth of a point, finer than any poll is reported, so a term of them stays small in the state.

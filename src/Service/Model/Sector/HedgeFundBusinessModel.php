@@ -6,15 +6,16 @@ namespace App\Service\Model\Sector;
 
 use App\DTO\DebtExpansionAppetiteDTO;
 
-use App\Data\ModelParam;
+use App\Service\Model\ModelParam;
 use App\DTO\DebtHealthDTO;
 use App\DTO\MacroStateDTO;
 use App\DTO\SectorCoverageProfile;
 use App\DTO\SectorPhysicsResult;
-use App\DTO\StreamContext;
+use App\Service\Model\StreamContext;
 use App\Entity\Stock;
 use App\Service\Event\ShockEvent;
 use App\Service\Macro\MacroEngine;
+use App\Service\Math\MacroTransmission;
 use App\Service\Math\MathUtility;
 
 /**
@@ -205,7 +206,7 @@ class HedgeFundBusinessModel extends AssetManagementBusinessModel
 
         $blendedWholesaleRate = ($floatingRatio * $policyRate) + ((1.0 - $floatingRatio) * $yield5y) + $structuralSpread;
 
-        $equityLimit = \App\Data\Sectors::equityLimit($stock->getIndustry());
+        $equityLimit = \App\Data\Company\Sectors::equityLimit($stock->getIndustry());
 
         $effectiveEquity = max(1.0, $equity);
         $actualLeverage = $effectiveEquity > 0 ? ($wholesaleDebt / $effectiveEquity) : 0.0;
@@ -281,7 +282,7 @@ class HedgeFundBusinessModel extends AssetManagementBusinessModel
         $vixEma = $macroState->marketVolatilityEma;
 
         $managementShift = ($outputGap * abs($beta) * self::AUM_MARKET_BETA_SCALAR)
-            + MathUtility::calculateBroadMoneyLiquidityShift($macroState->moneySupplyGrowthEma, $macroState->moneySupplyGrowthTrend, sensitivity: self::M2_HEDGE_FUND_LIQUIDITY_SENSITIVITY);
+            + MacroTransmission::calculateBroadMoneyLiquidityShift($macroState->moneySupplyGrowthEma, $macroState->moneySupplyGrowthTrend, sensitivity: self::M2_HEDGE_FUND_LIQUIDITY_SENSITIVITY);
         $directionalShift = $outputGap * $beta * self::DIRECTIONAL_MACRO_SCALAR;
         $quantShift = ((1.0 + max(0.0, ($vixEma - self::VIX_ALPHA_BASELINE) * self::VIX_ALPHA_SCALAR))
             * (1.0 + min(0.0, ($vixEma - self::VIX_ALPHA_BASELINE) * self::VIX_CALM_DRAG_SCALAR))) - 1.0;
@@ -344,7 +345,7 @@ class HedgeFundBusinessModel extends AssetManagementBusinessModel
         }
 
         $aumMarketBeta = $outputGap * abs($beta) * self::AUM_MARKET_BETA_SCALAR;
-        $m2Shift = MathUtility::calculateBroadMoneyLiquidityShift($macroState->moneySupplyGrowthEma, $macroState->moneySupplyGrowthTrend, sensitivity: self::M2_HEDGE_FUND_LIQUIDITY_SENSITIVITY);
+        $m2Shift = MacroTransmission::calculateBroadMoneyLiquidityShift($macroState->moneySupplyGrowthEma, $macroState->moneySupplyGrowthTrend, sensitivity: self::M2_HEDGE_FUND_LIQUIDITY_SENSITIVITY);
         $mgmtExpectedRevenue = $structuralRevenue * $mgmtWeight * (1.0 - $redemptionDrag);
 
         $mgmtRevenue = max(0.0, $mgmtExpectedRevenue

@@ -6,10 +6,11 @@ namespace App\Service\Model\Sector;
 
 use App\DTO\DebtExpansionAppetiteDTO;
 
+use App\Service\Math\MacroTransmission;
 use App\Service\Model\BusinessModelInterface;
 
-use App\Data\ModelParam;
-use App\DTO\ModelParameters;
+use App\Service\Model\ModelParam;
+use App\Service\Model\ModelParameters;
 use App\DTO\SectorCoverageProfile;
 use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
@@ -73,7 +74,7 @@ class AssetManagementBusinessModel extends BaseFinancialBusinessModel
     public function getSecularGrowthRate(Stock $stock): float
     {
         return MacroEngine::TREND_REAL_GROWTH
-            + MathUtility::gdpShareDrift(self::SECULAR_SHARE_1997, self::SECULAR_SHARE_2019, FinancialConstants::SECULAR_SHARE_WINDOW_YEARS);
+            + MacroTransmission::gdpShareDrift(self::SECULAR_SHARE_1997, self::SECULAR_SHARE_2019, FinancialConstants::SECULAR_SHARE_WINDOW_YEARS);
     }
 
     public function getSurpriseBlendWeights(): array
@@ -214,7 +215,7 @@ class AssetManagementBusinessModel extends BaseFinancialBusinessModel
         // --- THE CLEAR BALANCE SHEET MATH ---
         // Asset managers scale EBIT from their active operating equity (AUM/Platform capacity).
         // Excess cash beyond target operating cash is considered idle and stripped from the ROE target.
-        $equityLimit = \App\Data\Sectors::equityLimit($stock->getIndustry());
+        $equityLimit = \App\Data\Company\Sectors::equityLimit($stock->getIndustry());
 
         $effectiveEquity = max(1.0, $equity);
 
@@ -310,7 +311,7 @@ class AssetManagementBusinessModel extends BaseFinancialBusinessModel
     private function resolveClientFlowShift(Stock $stock, \App\DTO\MacroStateDTO $macroState, float $aumBetaScalar): float
     {
         $aumMarketBeta = $this->resolveAumCycleFlow($stock, $macroState, $aumBetaScalar);
-        $m2InflowBoost = MathUtility::calculateBroadMoneyLiquidityShift($macroState->moneySupplyGrowthEma, $macroState->moneySupplyGrowthTrend, sensitivity: self::M2_AUM_INFLOW_SENSITIVITY);
+        $m2InflowBoost = MacroTransmission::calculateBroadMoneyLiquidityShift($macroState->moneySupplyGrowthEma, $macroState->moneySupplyGrowthTrend, sensitivity: self::M2_AUM_INFLOW_SENSITIVITY);
         $mmfInflowBoost = max(0.0, $macroState->moneyMarketFundShare - $macroState->moneyMarketFundShareEma) * self::MMF_AUM_INFLOW_SENSITIVITY;
 
         return $aumMarketBeta + $m2InflowBoost + $mmfInflowBoost;

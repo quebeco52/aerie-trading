@@ -6,7 +6,7 @@ namespace App\Tests\Service\Corporate;
 
 use App\Entity\Stock;
 use App\Service\Corporate\DebtEngine;
-use App\Service\Math\CorporateMetrics;
+use App\Service\Corporate\CorporateMetrics;
 use App\Service\Math\MathUtility;
 use PHPUnit\Framework\TestCase;
 

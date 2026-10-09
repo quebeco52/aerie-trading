@@ -622,7 +622,7 @@ class Stock
     #[ORM\Column(length: 255, nullable: true)]
     private ?string $industry = null;
 
-    /** Dickinson (2011) life-cycle stage classified from last quarter's cash-flow signs (App\Data\LifecycleStage value). */
+    /** Dickinson (2011) life-cycle stage classified from last quarter's cash-flow signs (App\Data\Company\LifecycleStage value). */
     #[ORM\Column(length: 16, nullable: true)]
     private ?string $lifecycleStage = null;
 
@@ -936,12 +936,12 @@ class Stock
     {
         return $this->systemicImportance;
     }
-    public function getLifecycleStage(): ?\App\Data\LifecycleStage
+    public function getLifecycleStage(): ?\App\Data\Company\LifecycleStage
     {
-        return $this->lifecycleStage !== null ? \App\Data\LifecycleStage::tryFrom($this->lifecycleStage) : null;
+        return $this->lifecycleStage !== null ? \App\Data\Company\LifecycleStage::tryFrom($this->lifecycleStage) : null;
     }
 
-    public function setLifecycleStage(?\App\Data\LifecycleStage $stage): static
+    public function setLifecycleStage(?\App\Data\Company\LifecycleStage $stage): static
     {
         $this->lifecycleStage = $stage?->value;
 
@@ -1536,12 +1536,12 @@ class Stock
         return $this;
     }
 
-    public function getManagementStyle(): \App\Data\ManagementStyle
+    public function getManagementStyle(): \App\Data\Company\ManagementStyle
     {
-        return \App\Data\ManagementStyle::tryFromNullable($this->managementStyle);
+        return \App\Data\Company\ManagementStyle::tryFromNullable($this->managementStyle);
     }
 
-    public function setManagementStyle(?\App\Data\ManagementStyle $style): static
+    public function setManagementStyle(?\App\Data\Company\ManagementStyle $style): static
     {
         $this->managementStyle = $style?->value;
 
@@ -1552,9 +1552,9 @@ class Stock
      * The individual running the firm: the archetype plus how firmly they hold it. Every engine reads its
      * dials through here, so a style and its strength can never be picked up separately by accident.
      */
-    public function getManagementProfile(): \App\Data\ManagementProfile
+    public function getManagementProfile(): \App\Data\Company\ManagementProfile
     {
-        return \App\Data\ManagementProfile::forStyle($this->getManagementStyle(), $this->managementIntensity);
+        return \App\Data\Company\ManagementProfile::forStyle($this->getManagementStyle(), $this->managementIntensity);
     }
 
     public function getManagementIntensity(): ?float

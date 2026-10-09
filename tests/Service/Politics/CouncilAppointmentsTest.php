@@ -4,7 +4,8 @@ declare(strict_types=1);
 
 namespace App\Tests\Service\Politics;
 
-use App\Data\AerieCouncil;
+use App\Data\Politics\AerieCouncil;
+use App\Service\Math\Distributions;
 use App\Service\Math\MathUtility;
 use App\Service\Politics\CouncilAppointments as Appointments;
 use App\Service\Politics\FinancialRegulator;
@@ -74,9 +75,9 @@ class CouncilAppointmentsTest extends TestCase
         $a = (Appointments::APPOINTMENT_AGE_MIN - Appointments::APPOINTMENT_AGE_MEAN) / Appointments::APPOINTMENT_AGE_SD;
         $b = (Appointments::APPOINTMENT_AGE_MAX - Appointments::APPOINTMENT_AGE_MEAN) / Appointments::APPOINTMENT_AGE_SD;
         $pdf = static fn(float $z): float => exp(-0.5 * $z * $z) / sqrt(2.0 * M_PI);
-        $mass = $math->calculateNormalCDF($b) - $math->calculateNormalCDF($a);
+        $mass = Distributions::calculateNormalCDF($b) - Distributions::calculateNormalCDF($a);
         $mean = Appointments::APPOINTMENT_AGE_MEAN + (Appointments::APPOINTMENT_AGE_SD * ($pdf($a) - $pdf($b)) / $mass);
-        $median = Appointments::APPOINTMENT_AGE_MEAN + (Appointments::APPOINTMENT_AGE_SD * $math->calculateInverseNormalCDF($math->calculateNormalCDF($a) + (0.5 * $mass)));
+        $median = Appointments::APPOINTMENT_AGE_MEAN + (Appointments::APPOINTMENT_AGE_SD * Distributions::calculateInverseNormalCDF(Distributions::calculateNormalCDF($a) + (0.5 * $mass)));
         $this->assertEqualsWithDelta(51.2, $mean, 0.05, 'Cutting at 40 and 60 takes about a year and a half off the Board\'s mean.');
         $this->assertEqualsWithDelta($mean, array_sum($ages) / $draws, 0.2);
         $this->assertEqualsWithDelta($median, $ages[intdiv($draws, 2)], 0.3);

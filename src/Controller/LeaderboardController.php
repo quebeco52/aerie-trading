@@ -2,7 +2,7 @@
 
 namespace App\Controller;
 
-use App\Data\DistrictCalendar;
+use App\Data\District\DistrictCalendar;
 use App\Entity\User;
 use App\Repository\SeasonEntryRepository;
 use App\Repository\SeasonRepository;

@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Controller;
 
-use App\Data\AeriePartyProfiles;
+use App\Data\Politics\AeriePartyProfiles;
 use App\Service\Macro\MacroStateProvider;
 use App\Service\Politics\PoliticsStateProvider;
 use App\Service\View\GovernmentPageBuilder;

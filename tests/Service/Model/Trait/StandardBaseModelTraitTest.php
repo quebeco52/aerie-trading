@@ -64,15 +64,15 @@ final class StandardBaseModelTraitTest extends TestCase
         $stock->setSector('Technology');
 
         $withFactor = new MacroStateDTO(sectorDemandZ: ['Technology' => 1.5]);
-        $this->assertInstanceOf(\App\DTO\StreamContext::class, $model->exposeStreamContext([], $this->math, $withFactor, $stock));
+        $this->assertInstanceOf(\App\Service\Model\StreamContext::class, $model->exposeStreamContext([], $this->math, $withFactor, $stock));
 
         // A sector with no published factor, a macro state carrying none, and a call with no stock at all
         // must each degrade to the firm-only draw rather than erroring or inventing an innovation.
         $otherSector = (new Stock())->setTicker('OTH');
         $otherSector->setSector('Utilities');
-        $this->assertInstanceOf(\App\DTO\StreamContext::class, $model->exposeStreamContext([], $this->math, $withFactor, $otherSector));
-        $this->assertInstanceOf(\App\DTO\StreamContext::class, $model->exposeStreamContext([], $this->math, new MacroStateDTO(), $stock));
-        $this->assertInstanceOf(\App\DTO\StreamContext::class, $model->exposeStreamContext([], $this->math, null, null));
+        $this->assertInstanceOf(\App\Service\Model\StreamContext::class, $model->exposeStreamContext([], $this->math, $withFactor, $otherSector));
+        $this->assertInstanceOf(\App\Service\Model\StreamContext::class, $model->exposeStreamContext([], $this->math, new MacroStateDTO(), $stock));
+        $this->assertInstanceOf(\App\Service\Model\StreamContext::class, $model->exposeStreamContext([], $this->math, null, null));
     }
 
     /**

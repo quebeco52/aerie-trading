@@ -52,7 +52,7 @@ class WireFrameTest extends TestCase
                 }
             }
         }
-        foreach (\App\Data\DistrictMap::stressFields() as $field) {
+        foreach (\App\Data\District\DistrictMap::stressFields() as $field) {
             $this->assertArrayHasKey($field, $macro, "A stress rule reads {$field}, which the macro state does not have.");
             $this->assertArrayHasKey($field, $live, "The district map reads {$field} off the frame.");
         }

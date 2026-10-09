@@ -5,12 +5,14 @@ declare(strict_types=1);
 namespace App\Tests\Service\Market\Pricing;
 
 use App\DTO\MacroStateDTO;
-use App\Data\Sectors;
+use App\Data\Company\Sectors;
 use App\Service\Macro\MacroEngine;
 use App\Service\Macro\Subsystem\CommodityLogisticsSubsystem;
 use App\Service\Market\Pricing\PolicyCapitalization as Policy;
 use App\Service\Math\FinancialConstants;
-use App\Service\Math\MathUtility;
+use App\Service\Math\FirmEconomics;
+use App\Service\Math\MacroTransmission;
+use App\Service\Math\Valuation;
 use App\Service\Politics\PoliticsEngine;
 use PHPUnit\Framework\TestCase;
 
@@ -22,8 +24,8 @@ class PolicyCapitalizationTest extends TestCase
     /** The share of a growing perpetuity's value after a date is its discounted tail, and a change phasing in keeps lambda / (lambda + k - g) of it, as the integral has it. */
     public function testThePerpetuityShareIsTheDiscountedTail(): void
     {
-        $this->assertSame(1.0, MathUtility::perpetuityShareAfter(self::CAP_RATE, 0.0));
-        $this->assertEqualsWithDelta(exp(-self::CAP_RATE * 3.0), MathUtility::perpetuityShareAfter(self::CAP_RATE, 3.0), 1e-15);
+        $this->assertSame(1.0, Valuation::perpetuityShareAfter(self::CAP_RATE, 0.0));
+        $this->assertEqualsWithDelta(exp(-self::CAP_RATE * 3.0), Valuation::perpetuityShareAfter(self::CAP_RATE, 3.0), 1e-15);
 
         // Midpoint sum of c e^{-ct} (1 - e^{-lambda (t - t0)}) from t0 = 2 on.
         $speed = MacroEngine::FISCAL_ADJUSTMENT_SPEED;
@@ -32,7 +34,7 @@ class PolicyCapitalizationTest extends TestCase
         for ($t = 2.0 + ($step / 2.0); $t < 400.0; $t += $step) {
             $sum += self::CAP_RATE * exp(-self::CAP_RATE * $t) * (1.0 - exp(-$speed * ($t - 2.0))) * $step;
         }
-        $this->assertEqualsWithDelta($sum, MathUtility::perpetuityShareAfter(self::CAP_RATE, 2.0, $speed), 1e-6);
+        $this->assertEqualsWithDelta($sum, Valuation::perpetuityShareAfter(self::CAP_RATE, 2.0, $speed), 1e-6);
     }
 
     /** With the laws carried in the earnings expected to hold for good, nothing is repriced. */
@@ -69,7 +71,7 @@ class PolicyCapitalizationTest extends TestCase
     {
         $longRun = $this->stringencyAt(Policy::LONG_RUN_EXTRACTION_COST_FACTOR);
         $macro = $this->macro(['extractionStringency' => $longRun], expected: ['extractionStringency' => 1.0], from: 12.5, time: 10.0);
-        $rise = MathUtility::calculateExtractionCostFactor(1.0) - Policy::LONG_RUN_EXTRACTION_COST_FACTOR;
+        $rise = FirmEconomics::calculateExtractionCostFactor(1.0) - Policy::LONG_RUN_EXTRACTION_COST_FACTOR;
 
         $this->assertEqualsWithDelta($this->path($rise, 0.0, 2.5, Policy::EXTRACTION_COST_TERM_PERSISTENCE), Policy::extractionCostGap($macro, self::CAP_RATE), 1e-12);
         $this->assertGreaterThan(0.0, Policy::extractionCostGap($macro, self::CAP_RATE));
@@ -223,9 +225,9 @@ class PolicyCapitalizationTest extends TestCase
     {
         $term = PoliticsEngine::ELECTION_TERM_YEARS;
         $departure = $change + $alreadyAway;
-        $gap = $change * MathUtility::perpetuityShareAfter(self::CAP_RATE, $untilNext, $speed);
+        $gap = $change * Valuation::perpetuityShareAfter(self::CAP_RATE, $untilNext, $speed);
         for ($k = 1; $k < 400; ++$k) {
-            $gap += $departure * (($persistence ** $k) - ($persistence ** ($k - 1))) * MathUtility::perpetuityShareAfter(self::CAP_RATE, $untilNext + ($k * $term), $speed);
+            $gap += $departure * (($persistence ** $k) - ($persistence ** ($k - 1))) * Valuation::perpetuityShareAfter(self::CAP_RATE, $untilNext + ($k * $term), $speed);
         }
 
         return $gap;
@@ -273,8 +275,8 @@ class PolicyCapitalizationTest extends TestCase
             corporateTaxShiftRealized: $realized ?? $law['corporateTax'],
             corporateTaxShiftEmbodied: $embodied['corporateTax'],
             bankLevyEmbodied: $embodied['bankLevyRate'],
-            extractionCostFactorEmbodied: MathUtility::calculateExtractionCostFactor($embodied['extractionStringency']),
-            stampDutyVolumeFactorEmbodied: MathUtility::calculateStampDutyVolumeFactor($embodied['stampDutyRate']),
+            extractionCostFactorEmbodied: FirmEconomics::calculateExtractionCostFactor($embodied['extractionStringency']),
+            stampDutyVolumeFactorEmbodied: MacroTransmission::calculateStampDutyVolumeFactor($embodied['stampDutyRate']),
             carbonPowerUpliftEmbodied: CommodityLogisticsSubsystem::carbonPowerPriceUplift($embodied['carbonPrice']),
             expectedLevers: $expected,
             expectedPolicyFrom: $from,

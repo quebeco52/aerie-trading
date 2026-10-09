@@ -76,9 +76,11 @@ class BusinessModelStreamContractTest extends TestCase
         $q2 = $model->computeActualFinancials($stock, 100000000.0, 0.40, 20000000.0, 0.05, $this->macro, $this->mathUtility);
         $z2 = $q2->streamZ;
 
+        // A launch adds a cohort to a pipeline model's state, so launch-cohort keys may grow between quarters.
+        $keys = static fn (array $z): array => array_values(array_filter(array_keys($z), static fn (string $k): bool => !str_starts_with($k, 'state:cohort:')));
         $this->assertSame(
-            array_keys($z1),
-            array_keys($z2),
+            $keys($z1),
+            $keys($z2),
             "Stream keys in {$modelClass} must be identical between quarter 1 and quarter 2 (no key mismatches)"
         );
 

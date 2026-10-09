@@ -1,7 +1,7 @@
 {# One news row, from EventPresenter's card. The stock page and the newswire both render it, and
    assets/js/stock/events-feed.js buildCard() builds the same row for live events.
    `event`: the presented card. `source` (optional): { ticker, name } for a company or fund story on the wire.
-   `headline` (optional): the story is a headline (App\Service\Event\NewsDesk), set in a heavier weight. #}
+   `headline` (optional): the story is a headline (App\Service\News\NewsDesk), set in a heavier weight. #}
 <article class="py-3 space-y-1.5">
 	<div class="flex items-start justify-between gap-3">
 		<div class="flex items-center flex-wrap gap-x-2 gap-y-1 min-w-0">

@@ -4,10 +4,10 @@ declare(strict_types=1);
 
 namespace App\Service\View;
 
-use App\Data\AerieCouncil;
-use App\Data\AerieDiet;
-use App\Data\DistrictCalendar;
-use App\Data\AeriePartyProfiles;
+use App\Data\Politics\AerieCouncil;
+use App\Data\Politics\AerieDiet;
+use App\Data\District\DistrictCalendar;
+use App\Data\Politics\AeriePartyProfiles;
 use App\DTO\MacroStateDTO;
 use App\DTO\PoliticsStateDTO;
 use App\Entity\DietElection;
@@ -23,7 +23,8 @@ use App\Service\Macro\MacroEngine;
 use App\Service\Macro\Subsystem\AssetMarketSubsystem;
 use App\Service\Macro\Subsystem\CommodityLogisticsSubsystem;
 use App\Service\Math\FinancialConstants;
-use App\Service\Math\MathUtility;
+use App\Service\Math\FirmEconomics;
+use App\Service\Math\MacroTransmission;
 use App\Service\Politics\CoalitionFormation;
 use App\Service\Politics\CouncilAppointments;
 use App\Service\Politics\ElectionForecast;
@@ -1254,8 +1255,8 @@ class GovernmentPageBuilder
                     'enacted' => $standing['stampDutyRate'],
                     'status' => $status('stampDutyRate'),
                     'note' => sprintf('Paid by buyer and seller each, into the Sovereign Reserve Fund; turnover runs %.0f%% %s its level at the rate in force at Year 1',
-                        abs(100.0 * (MathUtility::calculateStampDutyVolumeFactor($standing['stampDutyRate']) - 1.0)),
-                        MathUtility::calculateStampDutyVolumeFactor($standing['stampDutyRate']) < 1.0 ? 'below' : 'above'),
+                        abs(100.0 * (MacroTransmission::calculateStampDutyVolumeFactor($standing['stampDutyRate']) - 1.0)),
+                        MacroTransmission::calculateStampDutyVolumeFactor($standing['stampDutyRate']) < 1.0 ? 'below' : 'above'),
                 ],
                 [
                     'name' => 'Bank levy',
@@ -1296,7 +1297,7 @@ class GovernmentPageBuilder
      */
     private static function extractionCostUplift(float $stringency): float
     {
-        return MathUtility::getInstance()->calculateProductivityLossCostFactor(FinancialConstants::ENVIRONMENTAL_REGULATION_TFP_LOSS * $stringency) - 1.0;
+        return FirmEconomics::calculateProductivityLossCostFactor(FinancialConstants::ENVIRONMENTAL_REGULATION_TFP_LOSS * $stringency) - 1.0;
     }
 
     /**

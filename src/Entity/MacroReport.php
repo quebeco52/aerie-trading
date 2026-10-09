@@ -9,14 +9,14 @@ use Doctrine\ORM\Mapping as ORM;
  * Schema declaration for the macro_report table of quarterly macroeconomic snapshots.
  *
  * Nothing loads this entity through the ORM. It exists so Doctrine can diff the table into a
- * migration, and so App\Data\MacroFieldRegistry can read the persisted column list off it — the
+ * migration, and so App\Data\Macro\MacroFieldRegistry can read the persisted column list off it — the
  * registry matches each column to the App\DTO\MacroStateDTO field of the same property name, and
  * App\Service\Macro\Recorder\MacroSnapshotRecorder builds its INSERT from that mapping.
  *
  * The table is written by that recorder and read by App\Controller\MacroReportController, both in
  * raw SQL, because a snapshot is an append-only row of scalars rather than an object graph. So
  * this class carries mapped properties and no accessors: a getter here would have no caller, and a
- * column here with no matching DTO field fails App\Tests\DTO\MacroFieldRegistryTest rather than
+ * column here with no matching DTO field fails App\Tests\Data\Macro\MacroFieldRegistryTest rather than
  * quietly recording NULL on every snapshot for the life of the table. The few columns the recorder
  * fills from outside the vector — the surrogate key, the timestamp, the probes' accounts, the run identity — are named
  * in that test's RECORDER_OWNED_COLUMNS, so the exception is declared rather than assumed.

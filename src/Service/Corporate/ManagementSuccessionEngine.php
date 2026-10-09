@@ -4,10 +4,11 @@ declare(strict_types=1);
 
 namespace App\Service\Corporate;
 
-use App\Data\ManagementProfile;
-use App\Data\ManagementStyle;
+use App\Data\Company\ManagementProfile;
+use App\Data\Company\ManagementStyle;
 use App\Entity\Stock;
 use App\Service\Event\MarketEventPublisher;
+use App\Service\Math\Distributions;
 use App\Service\Math\MathUtility;
 
 /**
@@ -117,7 +118,7 @@ class ManagementSuccessionEngine
      */
     public static function drawSeedTenure(MathUtility $mathUtility): float
     {
-        $unconditionalHazard = self::BASE_DEPARTURE_HAZARD + $mathUtility->calculateNormalCDF(self::FORCED_TURNOVER_INTERCEPT);
+        $unconditionalHazard = self::BASE_DEPARTURE_HAZARD + Distributions::calculateNormalCDF(self::FORCED_TURNOVER_INTERCEPT);
 
         return min(self::RETIREMENT_TENURE_YEARS, $mathUtility->generateExponential($unconditionalHazard));
     }
@@ -144,7 +145,7 @@ class ManagementSuccessionEngine
             return 0.0;
         }
 
-        return $this->mathUtility->calculateNormalCDF(
+        return Distributions::calculateNormalCDF(
             self::FORCED_TURNOVER_INTERCEPT - (self::FORCED_TURNOVER_EVA_LOADING * $evaSpread)
         );
     }

@@ -9,7 +9,7 @@ use App\Entity\Bond;
 use App\Service\Macro\MacroEngine;
 use App\Service\Market\Bond\BondPricingEngine;
 use App\Service\Math\FinancialConstants;
-use App\Service\Math\MathUtility;
+use App\Service\Math\FixedIncome;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -28,12 +28,10 @@ class BondDiscountGridTest extends TestCase
     private const TOLERANCE_BPS = 1.0;
 
     private BondPricingEngine $engine;
-    private MathUtility $math;
 
     protected function setUp(): void
     {
-        $this->math = new MathUtility();
-        $this->engine = new BondPricingEngine($this->math);
+        $this->engine = new BondPricingEngine();
     }
 
     /**
@@ -121,11 +119,11 @@ class BondDiscountGridTest extends TestCase
 
         $flows = $this->engine->remainingCashFlows($bond, 0.3);
 
-        $gridPrice = $this->math->calculateBondPresentValue(
+        $gridPrice = FixedIncome::calculateBondPresentValue(
             $flows,
             fn (float $tau): float => $this->engine->discountZeroYield($curve, $tau)
         );
-        $exactPrice = $this->math->calculateBondPresentValue(
+        $exactPrice = FixedIncome::calculateBondPresentValue(
             $flows,
             fn (float $tau): float => $this->engine->zeroYield($curve, $tau)
         );

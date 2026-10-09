@@ -2,6 +2,9 @@
 
 namespace App\Tests\Service\Market\Pricing;
 
+use App\Service\Math\StochasticProcesses;
+use App\Service\Math\TimeSeries;
+use App\Service\Math\Valuation;
 use PHPUnit\Framework\TestCase;
 use App\Service\Macro\MacroEngine;
 use App\Service\Market\Pricing\MarketEngine;
@@ -194,8 +197,8 @@ class MarketEngineTest extends TestCase
         ))['perceived_fair_value'];
 
         // The outlook here (12% inflation plus a boom at beta 2) is above the hurdle; the multiple holds it at +6%.
-        $this->assertEqualsWithDelta(0.06, MathUtility::perpetualGrowthRate(0.10, 0.20), 1e-12);
-        $this->assertEqualsWithDelta(max(FinancialConstants::MIN_COST_OF_EQUITY, 0.05) - FinancialConstants::MIN_PERPETUAL_GROWTH_SPREAD, MathUtility::perpetualGrowthRate(0.05, 0.20), 1e-12);
+        $this->assertEqualsWithDelta(0.06, Valuation::perpetualGrowthRate(0.10, 0.20), 1e-12);
+        $this->assertEqualsWithDelta(max(FinancialConstants::MIN_COST_OF_EQUITY, 0.05) - FinancialConstants::MIN_PERPETUAL_GROWTH_SPREAD, Valuation::perpetualGrowthRate(0.05, 0.20), 1e-12);
 
         $ratio = $value($levy + 0.002) / $value($levy);
         $this->assertLessThan(1.0, $ratio, 'A higher expected levy still costs the bank.');
@@ -374,14 +377,14 @@ class MarketEngineTest extends TestCase
 
         $math = new MathUtility();
         $caps = [FinancialConstants::MAX_JUMP_LOG_RETURN, abs(FinancialConstants::MIN_JUMP_LOG_RETURN)];
-        $systemicLogMean = MacroEngine::SYSTEMIC_JUMP_INTENSITY * $math->kouTruncatedMean(
+        $systemicLogMean = MacroEngine::SYSTEMIC_JUMP_INTENSITY * StochasticProcesses::kouTruncatedMean(
             MacroEngine::SYSTEMIC_JUMP_PROBABILITY_UP,
             MacroEngine::SYSTEMIC_JUMP_ETA_UP / 1.2,
             MacroEngine::SYSTEMIC_JUMP_ETA_DOWN / 1.2,
             ...$caps
         );
         $eta = MarketEngine::calibratedJumpParameters(0.45, 0.0, 1.0, 0.05);
-        $idiosyncraticLogMean = 1.0 * $math->kouTruncatedMean(0.40, $eta['eta_up'], $eta['eta_down'], ...$caps);
+        $idiosyncraticLogMean = 1.0 * StochasticProcesses::kouTruncatedMean(0.40, $eta['eta_up'], $eta['eta_down'], ...$caps);
 
         // The blend keeps w = e^(-kappa dt) of the step's drift: the pull holds the one-tick-stale fair value.
         $w = exp(-MarketEngine::FAIR_VALUE_PULL_SPEED * (1.0 / 252.0));
@@ -607,7 +610,7 @@ class MarketEngineTest extends TestCase
         $this->assertEqualsWithDelta($fairValue(0.20, null), $fairValue(0.20, 0.20), 1e-9);
         $this->assertLessThan($fairValue(0.20, null), $fairValue(0.20, 0.12), 'A good year was capitalized as permanent.');
         $this->assertEqualsWithDelta(
-            $fairValue(MathUtility::persistentEquivalentReturn(0.20, 0.12, 0.10), null),
+            $fairValue(TimeSeries::persistentEquivalentReturn(0.20, 0.12, 0.10), null),
             $fairValue(0.20, 0.12),
             1e-9
         );

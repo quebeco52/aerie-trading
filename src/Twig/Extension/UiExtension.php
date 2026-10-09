@@ -2,7 +2,7 @@
 
 namespace App\Twig\Extension;
 
-use App\Data\Institutions;
+use App\Data\District\Institutions;
 use Twig\Error\RuntimeError;
 use Twig\Extension\AbstractExtension;
 use Twig\TwigFilter;

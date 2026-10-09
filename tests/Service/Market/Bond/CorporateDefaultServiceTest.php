@@ -6,8 +6,8 @@ namespace App\Tests\Service\Market\Bond;
 
 use App\Entity\Bond;
 use App\Service\Market\Bond\CorporateDefaultService;
+use App\Service\Math\CreditRisk;
 use App\Service\Math\FinancialConstants;
-use App\Service\Math\MathUtility;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -20,17 +20,10 @@ use PHPUnit\Framework\TestCase;
  */
 class CorporateDefaultServiceTest extends TestCase
 {
-    private MathUtility $math;
-
-    protected function setUp(): void
-    {
-        $this->math = new MathUtility();
-    }
-
     /** Recovery for a claim, as the service computes it. */
     private function recovery(?string $seniority, float $defaultRate): float
     {
-        return $this->math->calculateRecoveryGivenDefault(
+        return CreditRisk::calculateRecoveryGivenDefault(
             CorporateDefaultService::baseRecoveryFor($seniority),
             $defaultRate
         );

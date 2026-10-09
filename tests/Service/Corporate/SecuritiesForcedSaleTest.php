@@ -11,7 +11,6 @@ use App\Service\Corporate\SecuritiesBookService;
 use App\Service\Corporate\TreasuryEngine;
 use App\Service\Market\Bond\BondPricingEngine;
 use App\Service\Math\FinancialConstants;
-use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\CommercialBankBusinessModel;
 use PHPUnit\Framework\TestCase;
 use ReflectionClass;
@@ -41,7 +40,7 @@ final class SecuritiesForcedSaleTest extends TestCase
     {
         $this->engine = (new ReflectionClass(TreasuryEngine::class))->newInstanceWithoutConstructor();
         $securities = new ReflectionProperty(TreasuryEngine::class, 'securitiesBook');
-        $securities->setValue($this->engine, new SecuritiesBookService(new BondPricingEngine(new MathUtility())));
+        $securities->setValue($this->engine, new SecuritiesBookService(new BondPricingEngine()));
 
         $this->liquidate = new ReflectionMethod(TreasuryEngine::class, 'liquidateEarningAssetsForCash');
     }

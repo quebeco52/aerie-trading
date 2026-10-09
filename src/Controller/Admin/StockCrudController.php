@@ -3,7 +3,7 @@
 namespace App\Controller\Admin;
 
 use App\Entity\Stock;
-use App\Data\Sectors;
+use App\Data\Company\Sectors;
 use EasyCorp\Bundle\EasyAdminBundle\Config\Crud;
 use EasyCorp\Bundle\EasyAdminBundle\Controller\AbstractCrudController;
 use EasyCorp\Bundle\EasyAdminBundle\Field\BooleanField;

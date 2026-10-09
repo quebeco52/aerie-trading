@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Tests\Service\Politics;
 
-use App\Data\AerieDiet as Diet;
+use App\Data\Politics\AerieDiet as Diet;
 use App\Service\Math\MathUtility;
 use App\Service\Politics\CoalitionFormation as Formation;
 use App\Service\Politics\PoliticsEngine as Politics;

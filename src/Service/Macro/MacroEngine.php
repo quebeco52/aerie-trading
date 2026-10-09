@@ -694,7 +694,7 @@ class MacroEngine
         $decay = exp(-$dt / self::SECTOR_DEMAND_PERSISTENCE_YEARS);
         $innovationScale = sqrt(max(0.0, 1.0 - ($decay * $decay)));
 
-        foreach (array_keys(\App\Data\Sectors::MACRO_SECTORS) as $sector) {
+        foreach (array_keys(\App\Data\Company\Sectors::MACRO_SECTORS) as $sector) {
             $state->sectorZ[$sector] = $this->mathUtility->generateStandardNormal();
             $previous = (float) ($state->sectorDemandZ[$sector] ?? 0.0);
             $state->sectorDemandZ[$sector] = ($decay * $previous) + ($innovationScale * $this->mathUtility->generateStandardNormal());

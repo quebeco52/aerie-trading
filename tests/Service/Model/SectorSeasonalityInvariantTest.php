@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Tests\Service\Model;
 
-use App\Data\Sectors;
+use App\Data\Company\Sectors;
 use PHPUnit\Framework\TestCase;
 
 /**

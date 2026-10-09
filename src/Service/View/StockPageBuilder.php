@@ -4,11 +4,11 @@ declare(strict_types=1);
 
 namespace App\Service\View;
 
-use App\Data\CompanyResearch;
-use App\Data\LifecycleStage;
-use App\Data\DistrictCalendar;
-use App\Data\StockInfo;
-use App\Data\StrategicHoldings;
+use App\Data\Company\CompanyResearch;
+use App\Data\Company\LifecycleStage;
+use App\Data\District\DistrictCalendar;
+use App\Data\Company\StockInfo;
+use App\Data\Company\StrategicHoldings;
 use App\Entity\Etf;
 use App\Entity\Stock;
 use App\Entity\User;

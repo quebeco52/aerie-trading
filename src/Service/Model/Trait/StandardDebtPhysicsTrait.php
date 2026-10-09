@@ -12,6 +12,7 @@ use App\Service\Math\FinancialConstants;
 use App\Service\Math\MathUtility;
 use App\DTO\DebtHealthDTO;
 use App\DTO\DebtMetricsDTO;
+use App\Service\Math\Valuation;
 
 trait StandardDebtPhysicsTrait
 {
@@ -123,7 +124,7 @@ trait StandardDebtPhysicsTrait
     }
     
     public function calculateLeveredBeta(float $baseBeta, float $impliedTaxShieldRate, float $effectiveDebtToEquity, MathUtility $mathUtility): float {
-        return $mathUtility->calculateLeveredBeta($baseBeta, $impliedTaxShieldRate, $effectiveDebtToEquity, FinancialConstants::HAMADA_DAMPENING_FACTOR);
+        return Valuation::calculateLeveredBeta($baseBeta, $impliedTaxShieldRate, $effectiveDebtToEquity, FinancialConstants::HAMADA_DAMPENING_FACTOR);
     }
     
     public function requiresAlternativeZScore(): bool {

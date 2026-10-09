@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Service\Market\Chart;
 
-use App\Data\DistrictMap;
+use App\Data\District\DistrictMap;
 
 /**
  * Coalesces ticks into the frames the websocket wire carries.

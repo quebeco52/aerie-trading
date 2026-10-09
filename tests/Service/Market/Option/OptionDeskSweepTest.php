@@ -66,7 +66,7 @@ class OptionDeskSweepTest extends TestCase
         return new OptionDeskService(
             $em,
             new OptionChainService($em, $liquidity),
-            new OptionPricingEngine($math, new BondPricingEngine($math)),
+            new OptionPricingEngine(new BondPricingEngine()),
             new OptionSettlementEngine($em, new CashLedger()),
             new OptionDemandEngine($liquidity),
             new DealerGammaEngine($this->gammaStore = new InMemoryDealerGammaStore(), $liquidity),

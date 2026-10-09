@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Tests\Service\Corporate;
 
-use App\Data\ManagementStyle;
+use App\Data\Company\ManagementStyle;
 use App\Entity\Stock;
 use App\Service\Corporate\ManagementSuccessionEngine;
 use App\Service\Event\MarketEventPublisher;
@@ -262,9 +262,6 @@ final class ManagementSuccessionEngineTest extends TestCase
             static function (float $probability) use (&$sequence): bool {
                 return (array_shift($sequence) ?? 0.999) < $probability;
             }
-        );
-        $mathUtility->method('calculateNormalCDF')->willReturnCallback(
-            static fn (float $z): float => (new MathUtility())->calculateNormalCDF($z)
         );
 
         return $mathUtility;

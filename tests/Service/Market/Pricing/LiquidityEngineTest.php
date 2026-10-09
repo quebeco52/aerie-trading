@@ -7,6 +7,7 @@ namespace App\Tests\Service\Market\Pricing;
 use App\Entity\Stock;
 use App\Service\Market\Pricing\LiquidityEngine;
 use App\Service\Math\FinancialConstants;
+use App\Service\Math\MacroTransmission;
 use App\Service\Math\MathUtility;
 use PHPUnit\Framework\TestCase;
 
@@ -442,6 +443,6 @@ class LiquidityEngineTest extends TestCase
 
         $engine->setStampDutyRate(FinancialConstants::STAMP_DUTY_RATE + 0.001);
         $this->assertEqualsWithDelta(0.9, $engine->structuralDailyVolume($stock) / $founding, 1e-3);
-        $this->assertEqualsWithDelta(1.0, MathUtility::calculateStampDutyVolumeFactor(FinancialConstants::STAMP_DUTY_RATE), 1e-15);
+        $this->assertEqualsWithDelta(1.0, MacroTransmission::calculateStampDutyVolumeFactor(FinancialConstants::STAMP_DUTY_RATE), 1e-15);
     }
 }

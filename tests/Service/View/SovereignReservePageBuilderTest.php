@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Tests\Service\View;
 
-use App\Data\StrategicHoldings;
+use App\Data\Company\StrategicHoldings;
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use App\Repository\MacroReportHistoryRepository;

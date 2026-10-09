@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Service\View;
 
-use App\Data\StrategicHoldings;
+use App\Data\Company\StrategicHoldings;
 use App\DTO\MacroStateDTO;
 use App\DTO\PoliticsStateDTO;
 use App\Entity\Stock;
@@ -13,7 +13,6 @@ use App\Repository\StockRepository;
 use App\Service\Macro\MacroEngine;
 use App\Service\Macro\Subsystem\SovereignFundSubsystem;
 use App\Service\Market\Index\IndexCommittee;
-use App\Service\Math\FinancialConstants;
 use App\Service\Politics\SovereignReserveFund;
 
 /**

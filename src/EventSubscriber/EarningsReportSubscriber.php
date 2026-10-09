@@ -5,10 +5,11 @@ declare(strict_types=1);
 namespace App\EventSubscriber;
 
 use App\Service\Event\EarningsReportedEvent;
+use App\Service\Math\Decimal;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Component\EventDispatcher\EventSubscriberInterface;
-use App\Data\MacroFieldCatalog;
-use App\Data\Sectors;
+use App\Data\Macro\MacroFieldCatalog;
+use App\Data\Company\Sectors;
 use App\Service\Corporate\DebtEngine;
 
 class EarningsReportSubscriber implements EventSubscriberInterface
@@ -53,79 +54,79 @@ class EarningsReportSubscriber implements EventSubscriberInterface
         $report = new \App\Entity\CorporateReport();
         $report->setStock($stock);
         $report->setRecordedAt(new \DateTime());
-        $report->setTotalTime(\App\Service\Math\MathUtility::formatDecimal($ctx->macroState->totalTime, 6));
+        $report->setTotalTime(Decimal::format($ctx->macroState->totalTime, 6));
 
-        $report->setRevenue(\App\Service\Math\MathUtility::formatDecimal($ctx->actualRevenue, 4));
-        $report->setNetIncome(\App\Service\Math\MathUtility::formatDecimal($ctx->reportedActualNetIncome, 4));
-        $report->setOperatingMargin(\App\Service\Math\MathUtility::formatDecimal($ctx->trueOperatingMargin, 4));
+        $report->setRevenue(Decimal::format($ctx->actualRevenue, 4));
+        $report->setNetIncome(Decimal::format($ctx->reportedActualNetIncome, 4));
+        $report->setOperatingMargin(Decimal::format($ctx->trueOperatingMargin, 4));
         $report->setRevenueStreams($ctx->streamRevenue);
-        $report->setOperatingCosts(\App\Service\Math\MathUtility::formatDecimal($ctx->operatingCosts, 4));
-        $report->setEbit(\App\Service\Math\MathUtility::formatDecimal($ctx->ebit, 4));
-        $report->setPreTaxIncome(\App\Service\Math\MathUtility::formatDecimal($ctx->preTaxIncome, 4));
-        $report->setTaxPaid(\App\Service\Math\MathUtility::formatDecimal($ctx->taxPaid, 4));
+        $report->setOperatingCosts(Decimal::format($ctx->operatingCosts, 4));
+        $report->setEbit(Decimal::format($ctx->ebit, 4));
+        $report->setPreTaxIncome(Decimal::format($ctx->preTaxIncome, 4));
+        $report->setTaxPaid(Decimal::format($ctx->taxPaid, 4));
         // The consensus the surprise was struck against, and the EPS it was struck on (EarningsEngine::calculateEPSAndSurprise()).
-        $report->setReportedEps(\App\Service\Math\MathUtility::formatDecimal($ctx->actualQuarterlyEps, 6));
-        $report->setConsensusEps(\App\Service\Math\MathUtility::formatDecimal($ctx->expectedQuarterlyEps, 6));
-        $report->setConsensusRevenue(\App\Service\Math\MathUtility::formatDecimal($ctx->analystExpectedRevenue, 4));
+        $report->setReportedEps(Decimal::format($ctx->actualQuarterlyEps, 6));
+        $report->setConsensusEps(Decimal::format($ctx->expectedQuarterlyEps, 6));
+        $report->setConsensusRevenue(Decimal::format($ctx->analystExpectedRevenue, 4));
 
-        $report->setInterestExpense(\App\Service\Math\MathUtility::formatDecimal($ctx->debtMetrics->interestExpense / 4.0, 4)); // Quarterly report
-        $report->setInterestIncome(\App\Service\Math\MathUtility::formatDecimal($ctx->quarterlyInterestIncome, 4));
-        $report->setBlendedRate(\App\Service\Math\MathUtility::formatDecimal($ctx->debtMetrics->blendedRate, 4));
-        $report->setDynamicSpread(\App\Service\Math\MathUtility::formatDecimal($ctx->debtMetrics->dynamicSpread, 4));
+        $report->setInterestExpense(Decimal::format($ctx->debtMetrics->interestExpense / 4.0, 4)); // Quarterly report
+        $report->setInterestIncome(Decimal::format($ctx->quarterlyInterestIncome, 4));
+        $report->setBlendedRate(Decimal::format($ctx->debtMetrics->blendedRate, 4));
+        $report->setDynamicSpread(Decimal::format($ctx->debtMetrics->dynamicSpread, 4));
 
-        $report->setCapitalExpenditures(\App\Service\Math\MathUtility::formatDecimal($ctx->totalReportedCapex, 4));
-        $report->setDepreciation(\App\Service\Math\MathUtility::formatDecimal($ctx->quarterlyDepreciation, 4));
-        $report->setEbitda(\App\Service\Math\MathUtility::formatDecimal($ctx->ebitda, 4));
+        $report->setCapitalExpenditures(Decimal::format($ctx->totalReportedCapex, 4));
+        $report->setDepreciation(Decimal::format($ctx->quarterlyDepreciation, 4));
+        $report->setEbitda(Decimal::format($ctx->ebitda, 4));
         $report->setGrossPpe($stock->getGrossPpe());
-        $report->setNetPpe(\App\Service\Math\MathUtility::formatDecimal($stock->getNetPpe(), 4));
-        $report->setReceivables(\App\Service\Math\MathUtility::formatDecimal($stock->getNetReceivables(), 4));
+        $report->setNetPpe(Decimal::format($stock->getNetPpe(), 4));
+        $report->setReceivables(Decimal::format($stock->getNetReceivables(), 4));
         // Carrying value: cost less the write-downs still held against it, the figure a balance sheet shows.
-        $report->setInventory($stock->getInventory() === null ? null : \App\Service\Math\MathUtility::formatDecimal($stock->getNetInventory(), 4));
+        $report->setInventory($stock->getInventory() === null ? null : Decimal::format($stock->getNetInventory(), 4));
         $report->setPayables($stock->getPayables());
-        $report->setInventoryWriteDown(\App\Service\Math\MathUtility::formatDecimal($ctx->inventoryWriteDown, 4));
-        $report->setReceivablesProvision(\App\Service\Math\MathUtility::formatDecimal($ctx->receivablesProvision, 4));
-        $report->setDeferredTaxExpense(\App\Service\Math\MathUtility::formatDecimal($ctx->deferredTaxExpense, 4));
+        $report->setInventoryWriteDown(Decimal::format($ctx->inventoryWriteDown, 4));
+        $report->setReceivablesProvision(Decimal::format($ctx->receivablesProvision, 4));
+        $report->setDeferredTaxExpense(Decimal::format($ctx->deferredTaxExpense, 4));
         $report->setDeferredTaxLiability($stock->getDeferredTaxLiability());
-        $report->setCashTaxPaid(\App\Service\Math\MathUtility::formatDecimal($ctx->cashTaxPaid, 4));
+        $report->setCashTaxPaid(Decimal::format($ctx->cashTaxPaid, 4));
 
         // Balance sheet. The lease is computed the same way the leverage and solvency tests compute it, so
         // the statement agrees with the ratios rather than quietly using a second definition.
-        $leaseLiability = \App\Service\Math\CorporateMetrics::getInstance()->calculateLeaseLiability(
+        $leaseLiability = \App\Service\Corporate\CorporateMetrics::getInstance()->calculateLeaseLiability(
             (float) $stock->getTotalRevenue(),
             $ctx->strategy->getLeaseIntensity()
         );
         $report->setCip($stock->getCipBalance());
         $report->setGoodwill($stock->getGoodwill());
-        $report->setLeaseLiability(\App\Service\Math\MathUtility::formatDecimal($leaseLiability, 4));
+        $report->setLeaseLiability(Decimal::format($leaseLiability, 4));
         // The asset side exists once a ledger is open: the plant and trade cycle of an operating company, or
         // the loans and securities of a balance-sheet business. A firm that has never reported has neither,
         // and its report leaves the total unstated rather than publishing a proxy.
         $hasAssetSide = $stock->hasBalanceSheetLedger();
-        $report->setTotalAssets($hasAssetSide ? \App\Service\Math\MathUtility::formatDecimal($stock->getTotalAssets($leaseLiability), 4) : null);
-        $report->setTotalLiabilities(\App\Service\Math\MathUtility::formatDecimal($stock->getTotalLiabilities($leaseLiability), 4));
-        $report->setAssetAge($stock->getGrossPpe() !== null ? \App\Service\Math\MathUtility::formatDecimal($stock->getAssetAge(), 4) : null);
+        $report->setTotalAssets($hasAssetSide ? Decimal::format($stock->getTotalAssets($leaseLiability), 4) : null);
+        $report->setTotalLiabilities(Decimal::format($stock->getTotalLiabilities($leaseLiability), 4));
+        $report->setAssetAge($stock->getGrossPpe() !== null ? Decimal::format($stock->getAssetAge(), 4) : null);
 
         // The lender's side of the sheet: the book, the losses expected on it, what went bad, what was
         // written and what was sold, plus the two ratios a bank is actually judged on.
         $hasEarningAssets = $stock->hasEarningAssetLedger();
         $report->setEarningAssets($stock->getEarningAssets());
         $report->setCreditLossAllowance($hasEarningAssets ? $stock->getCreditLossAllowance() : null);
-        $report->setCreditLossProvision($hasEarningAssets ? \App\Service\Math\MathUtility::formatDecimal($ctx->creditLossProvision, 4) : null);
-        $report->setBankLevy($ctx->bankLevy > 0.0 ? \App\Service\Math\MathUtility::formatDecimal($ctx->bankLevy, 4) : null);
-        $report->setNetChargeOffs($hasEarningAssets ? \App\Service\Math\MathUtility::formatDecimal($ctx->netChargeOffs, 4) : null);
-        $report->setNetLoanOriginations($hasEarningAssets ? \App\Service\Math\MathUtility::formatDecimal($ctx->netLoanOriginations, 4) : null);
-        $report->setAssetSaleLoss($hasEarningAssets ? \App\Service\Math\MathUtility::formatDecimal($ctx->assetSaleLoss, 4) : null);
+        $report->setCreditLossProvision($hasEarningAssets ? Decimal::format($ctx->creditLossProvision, 4) : null);
+        $report->setBankLevy($ctx->bankLevy > 0.0 ? Decimal::format($ctx->bankLevy, 4) : null);
+        $report->setNetChargeOffs($hasEarningAssets ? Decimal::format($ctx->netChargeOffs, 4) : null);
+        $report->setNetLoanOriginations($hasEarningAssets ? Decimal::format($ctx->netLoanOriginations, 4) : null);
+        $report->setAssetSaleLoss($hasEarningAssets ? Decimal::format($ctx->assetSaleLoss, 4) : null);
         // Disclosed whenever the firm carries a book, including the quarter the mark returns to zero: a
         // disclosure that vanishes when the loss heals reads as a filing that stopped mentioning it.
         $report->setUnrealizedSecuritiesMark(
             $ctx->strategy->resolveSecuritiesBook($stock) > 0.0 || $ctx->unrealizedSecuritiesMark !== 0.0
-                ? \App\Service\Math\MathUtility::formatDecimal($ctx->unrealizedSecuritiesMark, 4)
+                ? Decimal::format($ctx->unrealizedSecuritiesMark, 4)
                 : null
         );
         $report->setCustomerDeposits($ctx->strategy->isFinancial() ? $stock->getCustomerDeposits() : null);
         $report->setCet1Ratio(
             $ctx->strategy instanceof \App\Service\Model\Sector\CommercialBankBusinessModel
-                ? \App\Service\Math\MathUtility::formatDecimal($ctx->strategy->calculateCet1Ratio($stock), 4)
+                ? Decimal::format($ctx->strategy->calculateCet1Ratio($stock), 4)
                 : null
         );
         $netInterestMargin = null;
@@ -135,51 +136,51 @@ class EarningsReportSubscriber implements EventSubscriberInterface
             $quarterlyInterestExpense = $ctx->debtMetrics instanceof \App\DTO\DebtMetricsDTO ? $ctx->debtMetrics->interestExpense / 4.0 : 0.0;
             $netInterestMargin = (((float) $ctx->streamRevenue['net_interest_income'] - $quarterlyInterestExpense - $ctx->netInterestSqueeze) / $stock->getNetEarningAssets()) * 4.0;
         }
-        $report->setNetInterestMargin($netInterestMargin === null ? null : \App\Service\Math\MathUtility::formatDecimal($netInterestMargin, 4));
+        $report->setNetInterestMargin($netInterestMargin === null ? null : Decimal::format($netInterestMargin, 4));
 
         // Cash flow statement, in the three sections whose signs classify the life-cycle stage.
-        $report->setOperatingCashFlow(\App\Service\Math\MathUtility::formatDecimal($ctx->operatingCashFlow, 4));
-        $report->setInvestingCashFlow(\App\Service\Math\MathUtility::formatDecimal($ctx->investingCashFlow, 4));
-        $report->setFinancingCashFlow(\App\Service\Math\MathUtility::formatDecimal($ctx->financingCashFlow, 4));
-        $report->setStockCompensation(\App\Service\Math\MathUtility::formatDecimal($ctx->stockCompensation, 4));
-        $report->setGoodwillImpairment(\App\Service\Math\MathUtility::formatDecimal($ctx->goodwillImpairment, 4));
+        $report->setOperatingCashFlow(Decimal::format($ctx->operatingCashFlow, 4));
+        $report->setInvestingCashFlow(Decimal::format($ctx->investingCashFlow, 4));
+        $report->setFinancingCashFlow(Decimal::format($ctx->financingCashFlow, 4));
+        $report->setStockCompensation(Decimal::format($ctx->stockCompensation, 4));
+        $report->setGoodwillImpairment(Decimal::format($ctx->goodwillImpairment, 4));
         $report->setLifecycleStage($ctx->lifecycleStage?->value);
-        $report->setFreeCashFlow(\App\Service\Math\MathUtility::formatDecimal($ctx->trueQuarterlyFcf, 4));
+        $report->setFreeCashFlow(Decimal::format($ctx->trueQuarterlyFcf, 4));
         $report->setEquity($stock->getTotalEquity());
         $report->setTotalDebt($stock->getTotalDebt());
         $report->setTreasury($stock->getCorporateTreasury());
 
-        $report->setRoic(\App\Service\Math\MathUtility::formatDecimal($ctx->truePostTaxReturn, 4));
+        $report->setRoic(Decimal::format($ctx->truePostTaxReturn, 4));
         $report->setShares((string) $stock->getSharesOutstanding());
-        $report->setWacc(\App\Service\Math\MathUtility::formatDecimal($ctx->wacc, 4));
-        $report->setEva(\App\Service\Math\MathUtility::formatDecimal($ctx->quarterlyEconomicProfit, 4));
-        $report->setDividendPaid(\App\Service\Math\MathUtility::formatDecimal((float) ($ctx->allocation['total_paid'] ?? 0.0), 4));
-        $report->setStockBuybacks(\App\Service\Math\MathUtility::formatDecimal((float) ($ctx->allocation['total_cash_spent'] ?? 0.0), 4));
+        $report->setWacc(Decimal::format($ctx->wacc, 4));
+        $report->setEva(Decimal::format($ctx->quarterlyEconomicProfit, 4));
+        $report->setDividendPaid(Decimal::format((float) ($ctx->allocation['total_paid'] ?? 0.0), 4));
+        $report->setStockBuybacks(Decimal::format((float) ($ctx->allocation['total_cash_spent'] ?? 0.0), 4));
         
         if ($ctx->health) {
-            $report->setCashYield(\App\Service\Math\MathUtility::formatDecimal($ctx->health->cashYield, 4));
-            $report->setCostOfEquity(\App\Service\Math\MathUtility::formatDecimal((float) ($ctx->health->costOfEquity ?? 0.10), 4));
+            $report->setCashYield(Decimal::format($ctx->health->cashYield, 4));
+            $report->setCostOfEquity(Decimal::format((float) ($ctx->health->costOfEquity ?? 0.10), 4));
         }
         
-        $report->setDepositApy(isset($ctx->allocation['bank_apy']) ? \App\Service\Math\MathUtility::formatDecimal((float) $ctx->allocation['bank_apy'], 4) : null);
+        $report->setDepositApy(isset($ctx->allocation['bank_apy']) ? Decimal::format((float) $ctx->allocation['bank_apy'], 4) : null);
 
         $finalEquity = (float) $stock->getTotalEquity();
         $finalTotalDebt = (float) $stock->getTotalDebt();
 
         $roe = $finalEquity > 0 ? ($ctx->reportedActualNetIncome / $finalEquity) * 4.0 : 0.0;
-        $report->setReturnOnEquity(\App\Service\Math\MathUtility::formatDecimal($roe, 4));
+        $report->setReturnOnEquity(Decimal::format($roe, 4));
 
         // The ratio the regulator closes the firm on (FailureSweep via DebtEngine::calculateAltmanZScore):
         // tangible equity over tangible assets. A firm the capital ratio does not govern discloses none.
         if ($ctx->strategy->requiresAlternativeZScore()) {
             $capitalBase = $this->debtEngine->resolveTangibleCapitalBase($stock, (float) $stock->getTotalRevenue());
-            $report->setCapitalRatio(\App\Service\Math\MathUtility::formatDecimal($capitalBase['capital'] / $capitalBase['assets'], 4));
+            $report->setCapitalRatio(Decimal::format($capitalBase['capital'] / $capitalBase['assets'], 4));
         }
 
         if (Sectors::isFinancial($ctx->businessModel) || (float) $stock->getCustomerDeposits() > 0) {
             $customerDeposits = (float) $stock->getCustomerDeposits();
             $depositRatio = $finalTotalDebt > 0 ? ($customerDeposits / $finalTotalDebt) : 0.0;
-            $report->setCustomerDepositRatio(\App\Service\Math\MathUtility::formatDecimal($depositRatio, 4));
+            $report->setCustomerDepositRatio(Decimal::format($depositRatio, 4));
         }
 
         $streamDetails = $this->buildStreamDetails($ctx, $stock);
@@ -254,7 +255,7 @@ class EarningsReportSubscriber implements EventSubscriberInterface
      *
      * Each effect is the stream's revenue over what it would have been with that one input at its neutral reading,
      * less one (EarningsEngine::attributeMacroDrivers), so it is a real share of the stream and is printed as one,
-     * beside the input's actual reading resolved through App\Data\MacroFieldCatalog.
+     * beside the input's actual reading resolved through App\Data\Macro\MacroFieldCatalog.
      *
      * @param  array<string, float>        $effects       Field => measured effect on the stream.
      * @param  array<string, mixed>        $macroSnapshot MacroStateDTO::toArray()

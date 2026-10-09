@@ -5,10 +5,6 @@ declare(strict_types=1);
 namespace App\Service\Market\Index;
 
 use App\Entity\Stock;
-use App\Service\Market\Index\IndexMembershipStoreInterface;
-use App\Service\Market\Index\IndexRanking;
-use App\Service\Market\Index\IndexWeighting;
-use App\Service\Market\Index\MarketIndex;
 use App\Service\Math\FinancialConstants;
 use App\Service\Market\Pricing\LiquidityEngine;
 

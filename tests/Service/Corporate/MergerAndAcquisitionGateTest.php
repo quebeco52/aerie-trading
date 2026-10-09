@@ -4,14 +4,14 @@ declare(strict_types=1);
 
 namespace App\Tests\Service\Corporate;
 
-use App\Data\ManagementProfile;
-use App\Data\ManagementStyle;
+use App\Data\Company\ManagementProfile;
+use App\Data\Company\ManagementStyle;
 use App\DTO\DebtHealthDTO;
 use App\DTO\DebtMetricsDTO;
 use App\Service\Corporate\DebtEngine;
 use App\Service\Corporate\MergerAndAcquisitionEngine;
 use App\Service\Event\MarketEventPublisher;
-use App\Service\Math\CorporateMetrics;
+use App\Service\Corporate\CorporateMetrics;
 use App\Service\Math\MathUtility;
 use App\Tests\Support\MacroStateBuilder;
 use App\Tests\Support\StockBuilder;

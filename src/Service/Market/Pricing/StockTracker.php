@@ -2,8 +2,9 @@
 
 namespace App\Service\Market\Pricing;
 
-use App\Service\Event\EventPresenter;
-use App\Data\StrategicHoldings;
+use App\Service\Math\Decimal;
+use App\Service\News\EventPresenter;
+use App\Data\Company\StrategicHoldings;
 use App\Entity\Stock;
 use App\DTO\MacroStateDTO;
 use App\Service\Corporate\CorporateActionEngine;
@@ -12,11 +13,11 @@ use App\Service\Corporate\EarningsEngine;
 use App\Service\Corporate\MergerAndAcquisitionEngine;
 use App\Service\Event\MarketEventPublisher;
 use App\Service\Market\Flow\OrderFlowStoreInterface;
-use App\Service\Math\CorporateMetrics;
+use App\Service\Corporate\CorporateMetrics;
 use App\Service\Math\FinancialConstants;
-use App\Service\Math\MathUtility;
 use App\Service\Macro\MacroEngine;
 use App\Service\Market\Index\IndexCommittee;
+use App\Service\Math\TimeSeries;
 
 /**
  * Service responsible for tracking and updating stock prices.
@@ -105,7 +106,7 @@ class StockTracker
         $priorMarketVol = $this->priorMarketVol;
         $this->priorMarketVol = $marketVol;
         // The market variance trend the common idiosyncratic factor is read against, seeded where the market settles.
-        $this->marketVarianceTrend = MathUtility::ewmaLevel(
+        $this->marketVarianceTrend = TimeSeries::ewmaLevel(
             $this->marketVarianceTrend ?? (MacroEngine::MACRO_VOL_BASE_ANCHOR ** 2),
             $marketVol * $marketVol,
             $dt,
@@ -213,11 +214,11 @@ class StockTracker
             // Computed here rather than there so there is one authority on it: the same figure the firm
             // borrows at is the one its bonds are priced off.
             $stock->setDynamicCreditSpread(
-                \App\Service\Math\MathUtility::formatDecimal($health->rawMetrics->dynamicSpread, 6)
+                Decimal::format($health->rawMetrics->dynamicSpread, 6)
             );
 
             $sharesOutstanding = (float) $stock->getSharesOutstanding();
-            $strategy = \App\Data\Sectors::strategyFor($stock->getIndustry());
+            $strategy = \App\Data\Company\Sectors::strategyFor($stock->getIndustry());
             $effectiveRoic = $strategy->getEffectiveReturn($stock);
             $roicTtm = $strategy->getTrueReturn($stock);
 
@@ -328,13 +329,13 @@ class StockTracker
             // budget draws on, so it has to decay: a name that was heavily traded a year ago must not keep
             // reclaiming variance it no longer supplies.
             if ($dt > 0.0) {
-                $stock->setImpactVarianceEma(MathUtility::ewmaAnnualizedVariance(
+                $stock->setImpactVarianceEma(TimeSeries::ewmaAnnualizedVariance(
                     $stock->getImpactVarianceEma() ?? 0.0,
                     $budgetedImpactLogReturn,
                     $dt,
                     FinancialConstants::IMPACT_VARIANCE_EMA_YEARS
                 ));
-                $this->fundImpactVariance[$stock->getTicker()] = MathUtility::ewmaAnnualizedVariance(
+                $this->fundImpactVariance[$stock->getTicker()] = TimeSeries::ewmaAnnualizedVariance(
                     $this->fundImpactVariance[$stock->getTicker()] ?? 0.0,
                     $budgetedFundLogReturn,
                     $dt,
@@ -351,7 +352,7 @@ class StockTracker
                 $events = array_merge($events, $warning);
             }
 
-            $boardBankLevy += \App\Data\Sectors::getBusinessModelStrategy(\App\Data\Sectors::businessModelFor($stock->getIndustry()))
+            $boardBankLevy += \App\Data\Company\Sectors::getBusinessModelStrategy(\App\Data\Company\Sectors::businessModelFor($stock->getIndustry()))
                 ->calculateAnnualBankLevy($stock, $macroDTO);
 
             // Earnings Engine
@@ -415,7 +416,7 @@ class StockTracker
 
             // Realized variance EMA: annualized trailing window variance tracked for index and screener selection.
             if ($dt > 0.0 && $priceAtTickStart > 0.0 && $currentPriceAfterEarnings > 0.0) {
-                $stock->setRealizedVarianceEma(MathUtility::ewmaAnnualizedVariance(
+                $stock->setRealizedVarianceEma(TimeSeries::ewmaAnnualizedVariance(
                     $stock->getRealizedVarianceEma() ?? 0.0,
                     $tickLogReturn,
                     $dt,

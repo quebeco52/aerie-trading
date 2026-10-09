@@ -6,7 +6,6 @@ use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use Doctrine\ORM\EntityManagerInterface;
 use Psr\Log\LoggerInterface;
-use App\Service\Corporate\DebtEngine;
 use App\Service\Event\MarketEventPublisher;
 use App\Service\Market\Bond\CorporateDefaultService;
 use App\Service\Market\Option\OptionSettlementEngine;
@@ -92,7 +91,7 @@ class FailureSweep
      */
     private function applyRestructuringRule(Stock $stock, float $marketCap, string $name, MacroStateDTO $macroState): ?array
     {
-        $strategy = \App\Data\Sectors::strategyFor($stock->getIndustry());
+        $strategy = \App\Data\Company\Sectors::strategyFor($stock->getIndustry());
         $isAccelerated = $stock->isPaymentDefault()
             && $stock->getQuartersInDefault() > \App\Service\Math\FinancialConstants::PAYMENT_DEFAULT_GRACE_QUARTERS;
 

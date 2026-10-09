@@ -6,9 +6,10 @@ namespace App\Service\Model\Sector;
 
 use App\DTO\DebtExpansionAppetiteDTO;
 
+use App\Service\Math\Distributions;
 use App\Service\Model\BusinessModelInterface;
 
-use App\Data\ModelParam;
+use App\Service\Model\ModelParam;
 use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
 use App\Service\Math\MathUtility;
@@ -156,7 +157,7 @@ class PrivateEquityBusinessModel extends AssetManagementBusinessModel
         }
 
         $actualLeverage = $debt / $equity;
-        $equityLimit = \App\Data\Sectors::equityLimit($stock->getIndustry());
+        $equityLimit = \App\Data\Company\Sectors::equityLimit($stock->getIndustry());
         $rawAggression = $actualLeverage / max(0.01, $equityLimit);
 
         return max(self::MIN_LEVERAGE_AGGRESSION, min(self::MAX_LEVERAGE_AGGRESSION, $rawAggression));
@@ -182,7 +183,7 @@ class PrivateEquityBusinessModel extends AssetManagementBusinessModel
 
         $blendedWholesaleRate = ($floatingRatio * $policyRate) + ((1.0 - $floatingRatio) * $yield5y) + $structuralSpread;
 
-        $baseEquityLimit = \App\Data\Sectors::equityLimit($stock->getIndustry());
+        $baseEquityLimit = \App\Data\Company\Sectors::equityLimit($stock->getIndustry());
 
         $effectiveEquityLimit = $baseEquityLimit * (0.5 + ($aggression * 0.5));
         $effectiveEquity = max(1.0, $equity);
@@ -304,7 +305,7 @@ class PrivateEquityBusinessModel extends AssetManagementBusinessModel
     {
         $cliff = self::HURDLE_RATE_Z_CLIFF;
 
-        return (1.0 - MathUtility::standardNormalCdf($cliff)) + ($carryShockScale * MathUtility::standardNormalPdf($cliff));
+        return (1.0 - Distributions::standardNormalCdf($cliff)) + ($carryShockScale * Distributions::standardNormalPdf($cliff));
     }
 
     /** Revenue per unit of carry economic condition: the stream's volatility, amplified by the sponsor's own leverage. */

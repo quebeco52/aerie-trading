@@ -6,6 +6,7 @@ namespace App\Tests\Financial;
 
 use App\Service\Macro\MacroEngine;
 use App\Service\Math\MathUtility;
+use App\Service\Math\StochasticProcesses;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -24,7 +25,6 @@ class MarketStatisticalInvariantTest extends TestCase
     private const TICKS_PER_YEAR = 1200;
     private const YEARS = 25;
     private const MARKET_VOL = 0.15;
-    private const STOCK_VOL = 0.25;
     /** The residual a beta-1 name carries once its market loading is accounted for: sqrt(0.25^2 - 0.15^2). */
     private const STOCK_IDIOSYNCRATIC_VOL = 0.20;
 
@@ -42,7 +42,7 @@ class MarketStatisticalInvariantTest extends TestCase
         $this->math = new MathUtility();
         $this->dt = 1.0 / self::TICKS_PER_YEAR;
         $this->regimePhi = exp(-$this->dt / MacroEngine::MARKET_FACTOR_DECAY_TAU_YEARS);
-        $this->regimeScale = $this->math->calculatePersistenceVarianceScale($this->regimePhi);
+        $this->regimeScale = StochasticProcesses::calculatePersistenceVarianceScale($this->regimePhi);
         $this->regimeWeight = sqrt(MacroEngine::MARKET_FACTOR_REGIME_VARIANCE_SHARE);
         $this->tailWeight = sqrt(1.0 - MacroEngine::MARKET_FACTOR_REGIME_VARIANCE_SHARE);
     }

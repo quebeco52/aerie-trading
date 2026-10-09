@@ -4,8 +4,9 @@ declare(strict_types=1);
 
 namespace App\Service\Politics;
 
-use App\Data\AerieCouncil;
-use App\Data\AerieNames;
+use App\Data\Politics\AerieCouncil;
+use App\Data\Politics\AerieNames;
+use App\Service\Math\Distributions;
 use App\Service\Math\MathUtility;
 
 /**
@@ -307,14 +308,14 @@ final class CouncilAppointments
      * banks (App\Service\Politics\FinancialRegulator::drawStance()) and on the reserves
      * (App\Service\Politics\SovereignReserveFund::drawStance()), their age at the term's start from the Board's record
      * (a normal truncated to the youngest and oldest on it, by inverse transform), and a name for their birth decade
-     * (App\Data\AerieNames) that no one in $taken holds.
+     * (App\Data\Politics\AerieNames) that no one in $taken holds.
      *
      * @param list<string> $taken
      * @return array{name: string, birth: float, stance: float, regulation: float, fund: float, swing?: float}
      */
     public static function candidate(int $salt, string $vacancy, int $slot, float $since, array $taken, MathUtility $math): array
     {
-        $age = $math->truncatedNormalInverse(self::uniform($salt, "{$vacancy}:{$slot}:age"), self::APPOINTMENT_AGE_MEAN, self::APPOINTMENT_AGE_SD, self::APPOINTMENT_AGE_MIN, self::APPOINTMENT_AGE_MAX);
+        $age = Distributions::truncatedNormalInverse(self::uniform($salt, "{$vacancy}:{$slot}:age"), self::APPOINTMENT_AGE_MEAN, self::APPOINTMENT_AGE_SD, self::APPOINTMENT_AGE_MIN, self::APPOINTMENT_AGE_MAX);
         $birth = $since - $age;
         $type = MonetaryAuthority::drawStance(self::uniform($salt, "{$vacancy}:{$slot}:stance"));
         $swing = $type === MonetaryAuthority::STANCES['swing'] ? 1.0 : 0.0;
@@ -433,12 +434,12 @@ final class CouncilAppointments
 
     /**
      * When someone seated at $seatedAt leaves before $termEnds, by death or resignation, or -1 if they serve the term out:
-     * one hashed draw of the wait under a Gompertz-Makeham hazard (MathUtility::gompertzMakehamWait()), age-related
+     * one hashed draw of the wait under a Gompertz-Makeham hazard (Distributions::gompertzMakehamWait()), age-related
      * mortality plus a resignation rate that does not rise with age, counted from $aliveAt, when they are known to sit.
      */
     public static function departure(int $salt, int $seat, float $seatedAt, float $birth, float $aliveAt, float $termEnds): float
     {
-        $leaves = $aliveAt + MathUtility::gompertzMakehamWait(
+        $leaves = $aliveAt + Distributions::gompertzMakehamWait(
             self::uniform($salt, self::vacancyKey("council:{$seat}", $seatedAt) . ':leaves'),
             $aliveAt - $birth,
             self::MORTALITY_LEVEL,

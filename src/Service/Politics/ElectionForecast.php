@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Service\Politics;
 
-use App\Data\AerieDiet;
+use App\Data\Politics\AerieDiet;
 use App\DTO\PoliticsStateDTO;
 use App\Service\Macro\MacroEngine;
 use App\Service\Math\FinancialConstants;

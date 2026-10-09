@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\DTO;
 
-use App\Data\MacroFieldRegistry;
+use App\Data\Macro\MacroFieldRegistry;
 use App\Service\Macro\MacroEngine;
 use App\Service\Macro\MacroState;
 use App\Service\Macro\Subsystem\AssetMarketSubsystem;
@@ -33,7 +33,7 @@ readonly class MacroStateDTO
     /**
      * Seeds this snapshot adds to the shared set, for openings only a snapshot needs.
      *
-     * App\Data\MacroFieldRegistry::seeds() already carries the seeds both readers share — every
+     * App\Data\Macro\MacroFieldRegistry::seeds() already carries the seeds both readers share — every
      * `*Ema` pair, plus the pairs declared in its SEED_OVERRIDES that the naming convention does not
      * describe. These
      * two are on top of those, and are not seeded when the engine's own state is hydrated: a
@@ -353,9 +353,9 @@ readonly class MacroStateDTO
         public float $corporateTaxShiftEmbodied = 0.0,
         /** The bank levy as the trailing year's earnings carry it, the same lag. */
         public float $bankLevyEmbodied = 0.0,
-        /** The extraction rules' cost factor as the trailing year's earnings carry it, the same lag (MathUtility::calculateExtractionCostFactor()). */
+        /** The extraction rules' cost factor as the trailing year's earnings carry it, the same lag (FirmEconomics::calculateExtractionCostFactor()). */
         public float $extractionCostFactorEmbodied = 1.0,
-        /** The stamp duty's share turnover factor as the trailing year's earnings carry it, the same lag (MathUtility::calculateStampDutyVolumeFactor()). */
+        /** The stamp duty's share turnover factor as the trailing year's earnings carry it, the same lag (MacroTransmission::calculateStampDutyVolumeFactor()). */
         public float $stampDutyVolumeFactorEmbodied = 1.0,
         /** The carbon price's uplift on the power price as the trailing year's earnings carry it, the same lag (CommodityLogisticsSubsystem::carbonPowerPriceUplift()). */
         public float $carbonPowerUpliftEmbodied = 0.0,
@@ -452,7 +452,7 @@ readonly class MacroStateDTO
     /**
      * Constructs a MacroStateDTO from the snake_case payload Redis carries.
      *
-     * The field list comes from App\Data\MacroFieldRegistry rather than being named here a second
+     * The field list comes from App\Data\Macro\MacroFieldRegistry rather than being named here a second
      * time, so an observable added to the constructor is read back off the wire immediately. A field
      * this method forgot used to hydrate its opening value on every load with nothing failing — the
      * caller still got a plausible number, just not the recorded one.
@@ -673,9 +673,9 @@ readonly class MacroStateDTO
      * Snapshots the engine's mutable state vector into this immutable DTO.
      *
      * Every field is carried across by name, so the field list comes from
-     * App\Data\MacroFieldRegistry rather than being spelled out a second time; MacroState declares
+     * App\Data\Macro\MacroFieldRegistry rather than being spelled out a second time; MacroState declares
      * an identically named property for each of this constructor's parameters, and
-     * App\Tests\DTO\MacroFieldRegistryTest fails if that ever stops being true.
+     * App\Tests\Data\Macro\MacroFieldRegistryTest fails if that ever stops being true.
      */
     public static function fromMacroState(MacroState $state): self
     {

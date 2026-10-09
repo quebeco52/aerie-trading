@@ -10,9 +10,9 @@ use App\Entity\StockEvent;
 use App\Repository\DistrictNewsRepository;
 use App\Repository\EtfEventRepository;
 use App\Repository\StockEventRepository;
-use App\Service\Event\EventCategory;
-use App\Service\Event\EventPresenter;
-use App\Service\Event\NewsDesk;
+use App\Service\News\EventCategory;
+use App\Service\News\EventPresenter;
+use App\Service\News\NewsDesk;
 
 /**
  * Assembles the newswire: district stories, company news and fund announcements in one feed, newest first, and

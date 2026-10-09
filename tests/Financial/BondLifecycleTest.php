@@ -14,7 +14,6 @@ use App\Service\Market\Bond\BondPricingEngine;
 use App\Service\Market\Bond\BondTracker;
 use App\Service\Market\Bond\TreasuryAuctionService;
 use App\Service\Math\FinancialConstants;
-use App\Service\Math\MathUtility;
 use Doctrine\DBAL\Connection;
 use Doctrine\ORM\EntityManagerInterface;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
@@ -117,7 +116,7 @@ class BondLifecycleTest extends TestCase
         $em = $this->createMock(EntityManagerInterface::class);
         $em->method('getConnection')->willReturn($connection);
 
-        $pricing = new BondPricingEngine(new MathUtility());
+        $pricing = new BondPricingEngine();
         $auction = new TreasuryAuctionService($em, $pricing);
         $tracker = new BondTracker($em, $pricing, $ledger);
 

@@ -2,7 +2,7 @@
 
 namespace App\Tests\Controller;
 
-use App\Data\DistrictMap;
+use App\Data\District\DistrictMap;
 use Symfony\Bundle\FrameworkBundle\Test\WebTestCase;
 
 class DistrictControllerTest extends WebTestCase

@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Service\Politics;
 
-use App\Data\AerieCouncil;
+use App\Data\Politics\AerieCouncil;
 use App\Service\Macro\Subsystem\SovereignFundSubsystem;
 use App\Service\Math\MathUtility;
 

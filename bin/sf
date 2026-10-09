@@ -1,0 +1,10 @@
+#!/bin/bash
+
+cd "$(dirname "$0")/.." || exit 1
+
+# Get the current host user's ID and Group ID
+USER_ID=$(id -u)
+GROUP_ID=$(id -g)
+
+# Execute the command inside the container AS your local user
+docker compose -f docker-compose.dev.yml exec --user "$USER_ID:$GROUP_ID" aerie-app php bin/console "$@"

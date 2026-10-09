@@ -4,15 +4,16 @@ declare(strict_types=1);
 
 namespace App\Service\Model\Trait;
 
-use App\Data\ModelParam;
-use App\Data\StockModelTuning;
+use App\Service\Model\ModelParam;
+use App\Data\Company\StockModelTuning;
 use App\DTO\MacroStateDTO;
-use App\DTO\ModelParameters;
-use App\DTO\StreamContext;
+use App\Service\Model\ModelParameters;
+use App\Service\Model\StreamContext;
 use App\Entity\Stock;
-use App\Service\Math\CorporateMetrics;
+use App\Service\Corporate\CorporateMetrics;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\MathUtility;
+use App\Service\Math\TimeSeries;
 
 trait StandardBaseModelTrait
 {
@@ -132,7 +133,7 @@ trait StandardBaseModelTrait
             : 0.0;
         // Saturation erodes the excess return above the required one, never the required return itself.
         $effectiveMoat = max(0.0, $this->getMoatSpread() - $saturationPenalty);
-        $blended += MathUtility::getInstance()->calculateReversionPull($blended, $requiredReturn, $this->getReversionSpeed() / $trailingBlendWeight, $effectiveMoat);
+        $blended += TimeSeries::calculateReversionPull($blended, $requiredReturn, $this->getReversionSpeed() / $trailingBlendWeight, $effectiveMoat);
 
         return max(FinancialConstants::MIN_REPORTED_RETURN, min(FinancialConstants::MAX_REPORTED_RETURN, $blended));
     }

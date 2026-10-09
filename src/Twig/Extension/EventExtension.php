@@ -5,7 +5,7 @@ namespace App\Twig\Extension;
 use App\Entity\DistrictNews;
 use App\Entity\EtfEvent;
 use App\Entity\StockEvent;
-use App\Service\Event\EventPresenter;
+use App\Service\News\EventPresenter;
 use Twig\Extension\AbstractExtension;
 use Twig\TwigFilter;
 use Twig\TwigFunction;

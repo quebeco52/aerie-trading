@@ -2,17 +2,18 @@
 
 namespace App\Service\Macro;
 
-use App\Data\MacroFieldRegistry;
+use App\Data\Macro\MacroFieldRegistry;
 use App\Service\Macro\Subsystem\AssetMarketSubsystem;
 use App\Service\Macro\Subsystem\CommodityLogisticsSubsystem;
 use App\Service\Macro\Subsystem\MacroAggregateSubsystem;
-use App\Service\Math\MathUtility;
+use App\Service\Math\FirmEconomics;
+use App\Service\Math\MacroTransmission;
 
 /**
  * The macro engine's mutable working copy of the state vector, advanced in place every tick.
  *
  * Its fields and their openings are declared once, on App\DTO\MacroStateDTO's constructor: this class
- * mirrors the names (App\Tests\DTO\MacroFieldRegistryTest fails on a mismatch) and takes its opening
+ * mirrors the names (App\Tests\Data\Macro\MacroFieldRegistryTest fails on a mismatch) and takes its opening
  * values from there, so a fresh engine and every reader of a snapshot start from the same economy.
  */
 class MacroState
@@ -500,7 +501,7 @@ class MacroState
     public float $boardStampDuty;
     // The bank levy the board's banks owe a year at the rate in force, in currency; kept until the board is priced again.
     public float $boardBankLevy;
-    // Cash the District's strategic stakes (App\Data\StrategicHoldings) paid it on the previous tick, a flow like the
+    // Cash the District's strategic stakes (App\Data\Company\StrategicHoldings) paid it on the previous tick, a flow like the
     // board's: dividends, plus its share of buybacks less its share of issues. Held outside the fund, paid into it.
     public float $strategicStakeCash;
     // Currency the budget paid into the fund on the last tick: the surplus below the sovereign debt floor, with no debt
@@ -517,7 +518,7 @@ class MacroState
     /**
      * Initializes the MacroState from a decoded JSON array payload.
      *
-     * The field list comes from App\Data\MacroFieldRegistry, so a newly declared observable is read
+     * The field list comes from App\Data\Macro\MacroFieldRegistry, so a newly declared observable is read
      * back off the wire the moment it exists. It used to be named here a second time, and a field
      * left out of this method was reset to its opening value on every load without anything failing
      * — the caller still received a plausible number.
@@ -561,10 +562,10 @@ class MacroState
             $state->bankLevyEmbodied = $state->bankLevyRate;
         }
         if (!isset($carried['extractionCostFactorEmbodied'])) {
-            $state->extractionCostFactorEmbodied = MathUtility::calculateExtractionCostFactor($state->extractionStringency);
+            $state->extractionCostFactorEmbodied = FirmEconomics::calculateExtractionCostFactor($state->extractionStringency);
         }
         if (!isset($carried['stampDutyVolumeFactorEmbodied'])) {
-            $state->stampDutyVolumeFactorEmbodied = MathUtility::calculateStampDutyVolumeFactor($state->stampDutyRate);
+            $state->stampDutyVolumeFactorEmbodied = MacroTransmission::calculateStampDutyVolumeFactor($state->stampDutyRate);
         }
         if (!isset($carried['carbonPowerUpliftEmbodied'])) {
             $state->carbonPowerUpliftEmbodied = CommodityLogisticsSubsystem::carbonPowerPriceUplift($state->carbonPrice);
@@ -652,7 +653,7 @@ class MacroState
     /**
      * Converts the MacroState to the snake_case payload persisted to Redis.
      *
-     * The key list comes from App\Data\MacroFieldRegistry, which reads it off
+     * The key list comes from App\Data\Macro\MacroFieldRegistry, which reads it off
      * App\DTO\MacroStateDTO's constructor, so the writer on this end of the wire and the
      * MacroStateDTO::fromArray() reader on the other end cannot drift apart over a key name.
      *

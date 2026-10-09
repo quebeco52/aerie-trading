@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Tests\Service\Macro\Recorder;
 
-use App\Data\MacroFieldRegistry;
+use App\Data\Macro\MacroFieldRegistry;
 use App\DTO\MacroStateDTO;
 use App\Service\Macro\MacroState;
 use App\Service\Macro\Recorder\MacroSnapshotRecorder;

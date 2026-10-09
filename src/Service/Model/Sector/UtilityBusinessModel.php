@@ -4,13 +4,15 @@ declare(strict_types=1);
 
 namespace App\Service\Model\Sector;
 
-use App\Data\InputOutputExposures;
+use App\Data\Macro\InputOutputExposures;
 use App\Service\Corporate\EarningsEngine;
-use App\DTO\ModelParameters;
-use App\DTO\StreamContext;
+use App\Service\Model\ModelParameters;
+use App\Service\Model\StreamContext;
+use App\Service\Math\FirmEconomics;
+use App\Service\Math\MacroTransmission;
 use App\Service\Model\BusinessModelInterface;
 
-use App\Data\ModelParam;
+use App\Service\Model\ModelParam;
 use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
 use App\DTO\MacroStateDTO;
@@ -84,7 +86,7 @@ class UtilityBusinessModel extends StandardCorporateBusinessModel
     public function getSecularGrowthRate(Stock $stock): float
     {
         return MacroEngine::TREND_REAL_GROWTH
-            + MathUtility::gdpShareDrift(self::SECULAR_SHARE_1997, self::SECULAR_SHARE_2019, FinancialConstants::SECULAR_SHARE_WINDOW_YEARS);
+            + MacroTransmission::gdpShareDrift(self::SECULAR_SHARE_1997, self::SECULAR_SHARE_2019, FinancialConstants::SECULAR_SHARE_WINDOW_YEARS);
     }
     public function getCapexCyclicality(): float
     {
@@ -275,7 +277,7 @@ class UtilityBusinessModel extends StandardCorporateBusinessModel
         // wholesale price rises. The rate-base debt load reaches earnings through DebtEngine's maturity wall
         // (getDebtMaturityRolloverRate), below EBIT.
         $perUnitCostRatio = $realizedVariableMargin + $inputCostDrag + $merchantFuelDrag + $disasterPenalty;
-        $clampedMargin = $this->clampMargin(MathUtility::getInstance()->calculatePerUnitCostRatio($perUnitCostRatio, $priceRelative));
+        $clampedMargin = $this->clampMargin(FirmEconomics::calculatePerUnitCostRatio($perUnitCostRatio, $priceRelative));
 
         // Primary shock is whichever stream deviated the most, overridden by tail events
         $primaryShockZ = $streams->resolveDominantShockZ([$unregulatedZ, $weatherZ], $eventZ);

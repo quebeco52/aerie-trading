@@ -15,7 +15,7 @@ parts on `templates/` (admin excluded) and `assets/js`, `assets/controllers`.
 - British spelling, as the rest of the site: capitalisation, programme, licence, centre.
 
 ## Names
-One name per body, from `App\Data\Institutions`. Source lines use `{{ source_line('id', ...) }}`, which refuses an id
+One name per body, from `App\Data\District\Institutions`. Source lines use `{{ source_line('id', ...) }}`, which refuses an id
 the glossary does not have.
 
 | Body | What it does |

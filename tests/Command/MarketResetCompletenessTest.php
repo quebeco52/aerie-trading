@@ -4,14 +4,14 @@ declare(strict_types=1);
 
 namespace App\Tests\Command;
 
-use App\Data\InitialMarket;
+use App\Data\Company\InitialMarket;
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use App\Service\Corporate\DebtEngine;
 use App\Service\Corporate\Holdings\AnchorStakeLedger;
 use App\Service\Market\Pricing\MarketEngine;
 use App\Service\Market\Pricing\OpeningBoardBuilder;
-use App\Service\Math\CorporateMetrics;
+use App\Service\Corporate\CorporateMetrics;
 use App\Service\Math\MathUtility;
 use Doctrine\ORM\Mapping\Column;
 use PHPUnit\Framework\TestCase;

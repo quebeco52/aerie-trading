@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Service\Politics;
 
-use App\Service\Math\MathUtility;
+use App\Service\Math\TimeSeries;
 
 /**
  * Changes of mind on money. The Fed watchers' swing votes are not members who sit between the camps but members seen
@@ -32,7 +32,7 @@ final class StanceRevision
      */
     public static function revise(PoliticsState $state, float $dt): bool
     {
-        if (!MathUtility::crossedSimulatedBoundary($state->totalTime, $dt, 1.0)) {
+        if (!TimeSeries::crossedSimulatedBoundary($state->totalTime, $dt, 1.0)) {
             return false;
         }
 

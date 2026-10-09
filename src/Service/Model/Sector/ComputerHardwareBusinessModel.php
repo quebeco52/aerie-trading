@@ -4,10 +4,11 @@ declare(strict_types=1);
 
 namespace App\Service\Model\Sector;
 
-use App\Data\InputOutputExposures;
+use App\Data\Macro\InputOutputExposures;
+use App\Service\Math\MacroTransmission;
 use App\Service\Model\BusinessModelInterface;
 
-use App\Data\ModelParam;
+use App\Service\Model\ModelParam;
 use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
 use App\DTO\MacroStateDTO;
@@ -127,7 +128,7 @@ class ComputerHardwareBusinessModel extends StandardCorporateBusinessModel
     public function getSecularGrowthRate(Stock $stock): float
     {
         return MacroEngine::TREND_REAL_GROWTH
-            + MathUtility::gdpShareDrift(self::SECULAR_SHARE_1997, self::SECULAR_SHARE_2019, FinancialConstants::SECULAR_SHARE_WINDOW_YEARS);
+            + MacroTransmission::gdpShareDrift(self::SECULAR_SHARE_1997, self::SECULAR_SHARE_2019, FinancialConstants::SECULAR_SHARE_WINDOW_YEARS);
     }
 
     public function getMacroPhysics(Stock $stock, MacroStateDTO $macroState): array
@@ -173,8 +174,8 @@ class ComputerHardwareBusinessModel extends StandardCorporateBusinessModel
     private function resolveStreamVolumeShifts(Stock $stock, MacroStateDTO $macroState): array
     {
         $cycleSensitivity = (self::MIN_BETA_PRICING_POWER_FLOOR + $this->resolvePricingPower($stock)) * $this->getOperatingCyclicality($stock);
-        $tradeShift = MathUtility::calculateTradeBalanceShift($macroState->tradeBalanceToGdpEma, sensitivity: self::TRADE_BALANCE_SENSITIVITY)
-            + MathUtility::calculateForeignDemandShift($macroState->foreignOutputGapEma, sensitivity: self::FOREIGN_DEMAND_SENSITIVITY);
+        $tradeShift = MacroTransmission::calculateTradeBalanceShift($macroState->tradeBalanceToGdpEma, sensitivity: self::TRADE_BALANCE_SENSITIVITY)
+            + MacroTransmission::calculateForeignDemandShift($macroState->foreignOutputGapEma, sensitivity: self::FOREIGN_DEMAND_SENSITIVITY);
         // Metzler inventory cycle: a channel overhang (positive gap) means distributors destock before reordering.
         $commonShift = ($tradeShift * self::TRADE_FLOW_STREAM_SHARE) - ($macroState->inventoryStockGapEma * self::INVENTORY_CYCLE_SENSITIVITY);
 

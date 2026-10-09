@@ -4,15 +4,18 @@ declare(strict_types=1);
 
 namespace App\Service\Model\Sector;
 
-use App\Data\InputOutputExposures;
-use App\Data\ModelParam;
+use App\Data\Macro\InputOutputExposures;
+use App\Service\Model\ModelParam;
 use App\DTO\MacroStateDTO;
-use App\DTO\ModelParameters;
+use App\Service\Model\ModelParameters;
 use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
 use App\Service\Event\ShockEvent;
 use App\Service\Macro\MacroEngine;
+use App\Service\Math\CreditRisk;
+use App\Service\Math\MacroTransmission;
 use App\Service\Math\MathUtility;
+use App\Service\Math\ResponseCurves;
 
 /**
  * Earnings strategy for Multi-Industry Conglomerates & Industrial Holding Trusts.
@@ -220,7 +223,7 @@ class ConglomerateBusinessModel extends StandardCorporateBusinessModel
     private function resolveIndustrialVolumeShift(Stock $stock, MacroStateDTO $macroState): float
     {
         $beta = max(self::MIN_CYCLICAL_BETA_FLOOR, $this->getOperatingCyclicality($stock));
-        $pmiShift = MathUtility::calculatePmiDemandShift(
+        $pmiShift = MacroTransmission::calculatePmiDemandShift(
             $macroState->manufacturingPmiEma,
             MacroEngine::PMI_BASELINE,
             self::PMI_INDUSTRIAL_SENSITIVITY
@@ -388,18 +391,18 @@ class ConglomerateBusinessModel extends StandardCorporateBusinessModel
             + ($recessionDepth * self::FLOAT_RECESSION_ALPHA_SCALAR)
             + $divestitureAlpha;
 
-        $deploymentAlpha = $mathUtility->calculateDiminishingDistressMultiplier(
+        $deploymentAlpha = CreditRisk::calculateDiminishingDistressMultiplier(
             $rawDeploymentSignal,
             self::MAX_CONTRARIAN_FLOAT_EXPANSION,
             self::CONTRARIAN_HALF_SATURATION_POINT
         );
 
         // Credit losses: spreads compensate for defaults, they are not free yield. Net carry = spread - expected loss.
-        $corporateDefaultShift = MathUtility::excessOverBaseline($macroState->corporateDefaultRateEma, MacroEngine::CORPORATE_DEFAULT_BASELINE);
+        $corporateDefaultShift = ResponseCurves::excessOverBaseline($macroState->corporateDefaultRateEma, MacroEngine::CORPORATE_DEFAULT_BASELINE);
         $creditLossDrag = $corporateDefaultShift * self::FLOAT_CREDIT_LOSS_SCALAR;
 
         // Mark-to-market: spreads gapping wider reprice the held book downward this quarter (dP/P ~ -D_s * ds).
-        $floatMarkToMarket = MathUtility::calculateCreditSpreadMarkToMarket($spreadImpulse, self::FLOAT_SPREAD_DURATION);
+        $floatMarkToMarket = CreditRisk::calculateCreditSpreadMarkToMarket($spreadImpulse, self::FLOAT_SPREAD_DURATION);
 
         return $rateCarry + $deploymentAlpha - $creditLossDrag + $floatMarkToMarket;
     }

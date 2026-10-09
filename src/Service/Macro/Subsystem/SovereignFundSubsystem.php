@@ -4,7 +4,9 @@ namespace App\Service\Macro\Subsystem;
 
 use App\Service\Macro\MacroEngine;
 use App\Service\Macro\MacroState;
+use App\Service\Math\FixedIncome;
 use App\Service\Math\MathUtility;
+use App\Service\Math\TimeSeries;
 
 /**
  * The district's sovereign reserve fund: a rule-bound investor that sits beside the central bank, not in place of it.
@@ -33,7 +35,7 @@ use App\Service\Math\MathUtility;
  *
  * It holds the float as an index holder does: it tenders its share into buybacks and takes up its share of issues, so
  * a company's own flow never moves its ownership. Its inflows are the District's stamp duty on share trading, paid
- * to the fund rather than the budget, the cash from the District's strategic stakes (App\Data\StrategicHoldings),
+ * to the fund rather than the budget, the cash from the District's strategic stakes (App\Data\Company\StrategicHoldings),
  * which the fund does not hold but is paid, and any budget surplus the sovereign debt floor leaves no debt to retire.
  * The budget spends the draw (CreditFiscalSubsystem::calculateSovereignDebt), so that last one is rare. Its performance is a time-weighted return index, nominal and real, that
  * none of that money moves. The fund incepts on the first tick that carries a board and books no
@@ -135,7 +137,7 @@ class SovereignFundSubsystem
         $this->chainReturnIndices($state, $dt);
         $this->receiveInflows($state);
 
-        if (MathUtility::crossedSimulatedBoundary($state->totalTime, $dt, self::DRAW_RESET_PERIOD_YEARS)) {
+        if (TimeSeries::crossedSimulatedBoundary($state->totalTime, $dt, self::DRAW_RESET_PERIOD_YEARS)) {
             $this->setAnnualDraw($state);
             $this->closeStampDutyYear($state);
         } elseif ($state->reserveDrawShare !== $state->sovereignFundDrawShare) {
@@ -144,7 +146,7 @@ class SovereignFundSubsystem
         $this->payDraw($state, $dt);
 
         $this->adoptMandate($state);
-        if (MathUtility::crossedSimulatedBoundary($state->totalTime, $dt, self::REBALANCE_CHECK_PERIOD_YEARS)) {
+        if (TimeSeries::crossedSimulatedBoundary($state->totalTime, $dt, self::REBALANCE_CHECK_PERIOD_YEARS)) {
             $this->reviewRebalance($state);
         }
         $state->sovereignFundTrade = $this->executeRebalance($state, $dt);
@@ -271,7 +273,7 @@ class SovereignFundSubsystem
     public function foreignZeroYield(MacroState $state, float $maturity): float
     {
         $neutral = MacroEngine::MAINLAND_NEUTRAL_RATE;
-        $expectationsYield = $this->mathUtility->calculateSvenssonYield(
+        $expectationsYield = FixedIncome::calculateSvenssonYield(
             level: $neutral,
             slope: $state->foreignPolicyRate - $neutral,
             curvature1: 0.0,
@@ -281,7 +283,7 @@ class SovereignFundSubsystem
         );
 
         return $expectationsYield
-            + (($state->foreignTermPremiumRegime + $state->foreignTermPremiumShock) * MathUtility::calculateTermPremiumDurationScale($maturity, MacroEngine::TERM_PREMIUM_DURATION_HORIZON_YEARS));
+            + (($state->foreignTermPremiumRegime + $state->foreignTermPremiumShock) * FixedIncome::calculateTermPremiumDurationScale($maturity, MacroEngine::TERM_PREMIUM_DURATION_HORIZON_YEARS));
     }
 
     /**
@@ -291,7 +293,7 @@ class SovereignFundSubsystem
     public static function foreignBondExpectedPremium(): float
     {
         return MacroEngine::NS_BASE_TERM_PREMIUM
-            * MathUtility::calculateTermPremiumForwardScale(self::FOREIGN_BOND_DURATION, MacroEngine::TERM_PREMIUM_DURATION_HORIZON_YEARS);
+            * FixedIncome::calculateTermPremiumForwardScale(self::FOREIGN_BOND_DURATION, MacroEngine::TERM_PREMIUM_DURATION_HORIZON_YEARS);
     }
 
     /**

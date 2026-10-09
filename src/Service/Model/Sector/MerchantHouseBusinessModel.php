@@ -8,8 +8,10 @@ use App\DTO\MacroStateDTO;
 use App\DTO\SectorPhysicsResult;
 use App\Service\Event\ShockEvent;
 use App\Service\Macro\MacroEngine;
+use App\Service\Math\MacroTransmission;
 use App\Service\Math\MathUtility;
 use App\Entity\Stock;
+use App\Service\Math\StochasticProcesses;
 
 /**
  * Earnings strategy for Physical Merchant Houses & Mercantile Trading Groups.
@@ -121,15 +123,15 @@ class MerchantHouseBusinessModel extends ConglomerateBusinessModel
     /** Physical throughput: bulk inputs on manufacturing PMI, imports on the trade balance, and the foreign end of the corridors. */
     private function resolveMerchantVolumeShift(MacroStateDTO $macroState): float
     {
-        return MathUtility::calculatePmiDemandShift(
+        return MacroTransmission::calculatePmiDemandShift(
             $macroState->manufacturingPmiEma,
             MacroEngine::PMI_BASELINE,
             self::MERCHANT_PMI_SENSITIVITY
-        ) + MathUtility::calculateTradeBalanceShift(
+        ) + MacroTransmission::calculateTradeBalanceShift(
             $macroState->tradeBalanceToGdpEma,
             MacroEngine::TRADE_BALANCE_BASELINE,
             self::MERCHANT_TRADE_SENSITIVITY
-        ) + MathUtility::calculateForeignDemandShift($macroState->foreignOutputGapEma, self::MERCHANT_FOREIGN_SENSITIVITY);
+        ) + MacroTransmission::calculateForeignDemandShift($macroState->foreignOutputGapEma, self::MERCHANT_FOREIGN_SENSITIVITY);
     }
 
     protected function calculateSectorPhysics(
@@ -274,7 +276,7 @@ class MerchantHouseBusinessModel extends ConglomerateBusinessModel
         $costRatio = max(0.0, min(1.0, $realizedVariableMargin));
         $spreadDilution = ($priceLift * (1.0 - $costRatio)) / (1.0 + $priceLift);
 
-        $convenienceYield = $mathUtility->calculateConvenienceYield($macroState->energyInventoryIndexEma);
+        $convenienceYield = StochasticProcesses::calculateConvenienceYield($macroState->energyInventoryIndexEma);
         $dislocationRent = ($convenienceYield * self::MERCHANT_BACKWARDATION_SCALAR)
             + (max(0.0, $macroState->supplyChainPressureIndexEma) * self::MERCHANT_DISRUPTION_SCALAR);
 

@@ -8,7 +8,6 @@ use App\Entity\CorporateReport;
 use App\Entity\Stock;
 use App\Repository\CorporateReportRepository;
 use App\Service\District\DistrictRevenueFeed;
-use App\Service\Math\MathUtility;
 use Doctrine\ORM\EntityManagerInterface;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
@@ -34,7 +33,7 @@ class DistrictRevenueFeedTest extends TestCase
         $this->repository = $this->createMock(CorporateReportRepository::class);
         $this->entityManager->method('getRepository')->willReturn($this->repository);
 
-        $this->feed = new DistrictRevenueFeed($this->entityManager, new MathUtility());
+        $this->feed = new DistrictRevenueFeed($this->entityManager);
     }
 
     private function makeStock(string $ticker): Stock

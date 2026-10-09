@@ -1,0 +1,650 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Tests\Service\Model\Sector;
+
+use App\Service\Model\ModelParam;
+use App\DTO\DebtHealthDTO;
+use App\DTO\DebtMetricsDTO;
+use App\DTO\MacroStateDTO;
+use App\Entity\Stock;
+use App\Service\Event\ShockEvent;
+use App\Service\Macro\MacroEngine;
+use App\Service\Math\MathUtility;
+use App\Service\Model\Sector\ReitBusinessModel;
+use App\Service\Model\Sector\StandardCorporateBusinessModel;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
+use PHPUnit\Framework\TestCase;
+
+#[AllowMockObjectsWithoutExpectations]
+class ReitBusinessModelTest extends TestCase
+{
+    private function createMacroState(
+        float $inflation = 0.02,
+        float $outputGap = 0.0,
+        float $yield10y = 0.04,
+        float $equityRiskPremium = 0.05,
+        float $policyRate = 0.04
+    ): MacroStateDTO {
+        return new MacroStateDTO(
+            outputGap: $outputGap,
+            outputGapEma: $outputGap,
+            unemploymentRate: 0.04,
+            unemploymentRateEma: 0.04,
+            energyPriceIndex: 100.0,
+            energyPriceIndexEma: 100.0,
+            energyPriceShock: 0.0,
+            consumerSentimentIndex: 100.0,
+            consumerSentimentIndexEma: 100.0,
+            inflation: $inflation,
+            inflationEma: $inflation,
+            policyRate: $policyRate,
+            policyRateEma: $policyRate,
+            targetRate: $policyRate,
+            yield2y: 0.04,
+            yield2yEma: 0.04,
+            yield5y: 0.04,
+            yield5yEma: 0.04,
+            yield10y: $yield10y,
+            yield10yEma: $yield10y,
+            yield30y: 0.04,
+            yield30yEma: 0.04,
+            marketVolatility: 0.15,
+            marketVolatilityEma: 0.15,
+            marketZ: 0.0,
+            corporateTaxRate: 0.21,
+            equityRiskPremium: $equityRiskPremium,
+            macroCreditSpread: 0.015,
+            macroCreditSpreadEma: 0.015,
+            qeActive: false,
+            qeIntensity: 0.0,
+            inversionDuration: 0.0,
+            nsLevel: 0.04,
+            nsSlope: 0.0,
+            nsSlopeEma: 0.0,
+            nsCurvature: 0.0,
+            potentialGdpIndex: 1.0,
+            nominalGdpIndex: 1.0,
+        );
+    }
+
+    private function createMathUtilityMock(array $persistentZCalls = []): MathUtility
+    {
+        $mock = $this->getMockBuilder(MathUtility::class)
+            ->onlyMethods(['generatePersistentZ'])
+            ->getMock();
+
+        if (!empty($persistentZCalls)) {
+            $mock->method('generatePersistentZ')
+                ->willReturnOnConsecutiveCalls(...array_values($persistentZCalls));
+        }
+
+        return $mock;
+    }
+
+    public function testEffectiveTaxRateIsPassThroughZero(): void
+    {
+        $model = new ReitBusinessModel();
+        $this->assertEquals(0.00, $model->getEffectiveTaxRate(0.21));
+        $this->assertEquals(0.00, $model->getEffectiveTaxRate(0.35));
+    }
+
+    public function testFundsFromOperationsInterestCoverage(): void
+    {
+        $model = new ReitBusinessModel();
+
+        // FFO ICR (NAREIT): (EBIT + Depreciation + Interest Income) / Interest Expense. EBIT is struck
+        // after depreciation like every other model, so property depreciation is added back to recover FFO.
+        // ebit = 100, depreciation = 50, interest income = 10, interest expense = 80 => 160 / 80 = 2.0
+        $icr = $model->getInterestCoverage(ebit: 100.0, interestExpense: 80.0, depreciation: 50.0, interestIncome: 10.0);
+        $this->assertEqualsWithDelta(2.0, $icr, 0.0001);
+
+        // The add-back is what distinguishes FFO coverage from ordinary EBIT coverage.
+        $withoutAddBack = $model->getInterestCoverage(ebit: 100.0, interestExpense: 80.0, depreciation: 0.0, interestIncome: 10.0);
+        $this->assertEqualsWithDelta(1.375, $withoutAddBack, 0.0001);
+
+        // Zero interest expense with positive FFO -> Infinite positive fallback
+        $posIcr = $model->getInterestCoverage(ebit: 100.0, interestExpense: 0.0, depreciation: 50.0);
+        $this->assertEquals(ReitBusinessModel::INFINITE_ICR_POS_FALLBACK, $posIcr);
+
+        // Zero interest expense with negative FFO -> Infinite negative fallback (the add-back cannot save it)
+        $negIcr = $model->getInterestCoverage(ebit: -200.0, interestExpense: 0.0, depreciation: 50.0);
+        $this->assertEquals(ReitBusinessModel::INFINITE_ICR_NEG_FALLBACK, $negIcr);
+    }
+
+    public function testCapRateTetheringToMacroRates(): void
+    {
+        $model = new ReitBusinessModel();
+        $stock = new Stock();
+        $stock->setTicker('REIT_PROP');
+        $stock->setTotalEquity('500000000');
+        $stock->setWholesaleDebt('500000000');
+        $stock->setCorporateTreasury('0');
+        $stock->setBaselineRoic('0.07');
+
+        // Macro: 10y yield = 4.5%, ERP = 5.5%, Credit spread = 1.5% (sensitivity = 1.20 => 1.8% spread drag)
+        // Target Cap Rate = 4.5% + 5.5% + 1.8% = 11.8%
+        $macro = $this->createMacroState(yield10y: 0.045, equityRiskPremium: 0.055);
+        $math = new MathUtility();
+
+        $metrics = $model->getTargetMetrics($stock, $macro, $math);
+
+        $this->assertArrayHasKey('baseline_roic', $metrics);
+        $this->assertArrayHasKey('invested_capital', $metrics);
+        $this->assertEquals(1000000000.0, $metrics['invested_capital']);
+
+        // Blended Cap Rate = (0.07 * 0.975) + (0.118 * 0.025) = 0.06825 + 0.00295 = 0.0712
+        // Baseline ROIC is updated in stock
+        $this->assertEqualsWithDelta(0.0712, (float) $stock->getBaselineRoic(), 0.0001);
+    }
+
+    public function testRevenueAndRentEscalatorPhysics(): void
+    {
+        $model = new ReitBusinessModel();
+
+        // 1. Default stock mix (85% lease, 15% hospitality)
+        $defaultStock = new Stock();
+        $defaultStock->setTicker('DEFAULT_REIT');
+
+        // High inflation: 5% vs 2% target => 3% excess inflation
+        // Rent escalator = 0.03 * 0.80 = 0.024 (+2.4% lease revenue boost)
+        $macroState = $this->createMacroState(inflation: 0.05);
+
+        // Z-scores: lease = 1.0, hospitality = 0.5, tenantDefault = 0.0
+        $mathMock = $this->createMathUtilityMock([1.0, 0.5, 0.0]);
+
+        $defaultResult = $model->computeActualFinancials(
+            $defaultStock,
+            expectedRevenue: 1000000.0,
+            realizedVariableMargin: 0.30,
+            fixedCosts: 100000.0,
+            baselineVol: 0.20,
+            macroState: $macroState,
+            mathUtility: $mathMock
+        );
+
+        // Defaults: 85% lease, 15% hospitality
+        // leaseShock = 1.0 * (0.20 * 0.05) = 0.01
+        // rentEscalator = 0.024
+        // leaseRevenue = 1,000,000 * 0.85 * (1 + 0.01 + 0.024) = 850,000 * 1.034 = 878,900
+        // hospitalityShock = 0.5 * (0.20 * 1.50) = 0.15
+        // hospitalityRevenue = 1,000,000 * 0.15 * (1 + 0.15) = 150,000 * 1.15 = 172,500
+        // totalRevenue = 878,900 + 172,500 = 1,051,400
+        $this->assertEqualsWithDelta(1051400.0, $defaultResult->actualRevenue, 1.0);
+
+        // Observable shock Z: ((leaseShock + rentEscalator) * leaseWeight) + (hospitalityShock * hospitalityWeight)
+        // = (0.034 * 0.85) + (0.15 * 0.15) = 0.0289 + 0.0225 = 0.0514
+        $this->assertEqualsWithDelta(0.0514, $defaultResult->observableShockZ, 0.0001);
+
+        // 2. PLZA archetype tuning (80% lease, 20% hospitality)
+        $plzaStock = new Stock();
+        $plzaStock->setTicker('PLZA');
+
+        $mathMockPlza = $this->createMathUtilityMock([1.0, 0.5, 0.0]);
+        $plzaResult = $model->computeActualFinancials(
+            $plzaStock,
+            expectedRevenue: 1000000.0,
+            realizedVariableMargin: 0.30,
+            fixedCosts: 100000.0,
+            baselineVol: 0.20,
+            macroState: $macroState,
+            mathUtility: $mathMockPlza
+        );
+
+        // leaseRevenue = 800,000 * 1.034 = 827,200
+        // hospitalityRevenue = 200,000 * 1.15 = 230,000
+        // totalRevenue = 1,057,200
+        $this->assertEqualsWithDelta(1057200.0, $plzaResult->actualRevenue, 1.0);
+        // observableShockZ = (0.034 * 0.80) + (0.15 * 0.20) = 0.0272 + 0.0300 = 0.0572
+        $this->assertEqualsWithDelta(0.0572, $plzaResult->observableShockZ, 0.0001);
+    }
+
+    public function testSecuritizationArchetypeShockInclusion(): void
+    {
+        $model = new ReitBusinessModel();
+        $stock = new Stock();
+        $stock->setTicker('SHOR'); // Lakeshore Living: 75% lease, 10% hospitality, 15% securitization
+
+        $macroState = $this->createMacroState(inflation: 0.02); // 0% excess inflation
+
+        // Z-scores: lease = 0.0, hospitality = 0.0, securitization = 2.0, tenantDefault = 0.0
+        $mathMock = $this->createMathUtilityMock([0.0, 0.0, 2.0, 0.0]);
+
+        $result = $model->computeActualFinancials(
+            $stock,
+            expectedRevenue: 1000000.0,
+            realizedVariableMargin: 0.30,
+            fixedCosts: 100000.0,
+            baselineVol: 0.10,
+            macroState: $macroState,
+            mathUtility: $mathMock
+        );
+
+        // Securitization shock = 2.0 * 0.10 * 2.00 = 0.40
+        // Securitization revenue = 1,000,000 * 0.15 * 1.40 = 210,000
+        $this->assertEqualsWithDelta(210000.0, $result->streamRevenue['securitization_income'], 1.0);
+
+        // Observable shock Z = 0.40 * 0.15 = 0.060
+        $this->assertEqualsWithDelta(0.060, $result->observableShockZ, 0.0001);
+    }
+
+    public function testLongevityArchetypeShockInclusion(): void
+    {
+        $model = new ReitBusinessModel();
+        $stock = new Stock();
+        $stock->setTicker('ELDE'); // Elderbird: 80% lease, 5% hospitality, 15% longevity
+
+        $macroState = $this->createMacroState(inflation: 0.02);
+
+        // Z-scores: lease = 0.0, hospitality = 0.0, longevity = -2.0, tenantDefault = 0.0
+        $mathMock = $this->createMathUtilityMock([0.0, 0.0, -2.0, 0.0]);
+
+        $result = $model->computeActualFinancials(
+            $stock,
+            expectedRevenue: 1000000.0,
+            realizedVariableMargin: 0.30,
+            fixedCosts: 100000.0,
+            baselineVol: 0.10,
+            macroState: $macroState,
+            mathUtility: $mathMock
+        );
+
+        // Longevity shock = -2.0 * 0.10 * 0.25 = -0.05
+        // Longevity revenue = 1,000,000 * 0.15 * 0.95 = 142,500
+        $this->assertEqualsWithDelta(142500.0, $result->streamRevenue['longevity_bond_yield'], 1.0);
+
+        // Observable shock Z = -0.05 * 0.15 = -0.0075
+        $this->assertEqualsWithDelta(-0.0075, $result->observableShockZ, 0.0001);
+    }
+
+    public function testTenantDefaultAndVacancyMarginPenalties(): void
+    {
+        $model = new ReitBusinessModel();
+        $stock = new Stock();
+        $stock->setTicker('REIT_VACANCY');
+
+        $macroState = $this->createMacroState(yield10y: 0.04); // Default 10y yield -> no refinancing drag
+
+        // 1. Severe tenant bankruptcies (tenantDefaultZ = -2.50)
+        $bankruptcyMock = $this->createMathUtilityMock([0.0, 0.0, -2.50]);
+        $bankruptcyResult = $model->computeActualFinancials(
+            $stock,
+            expectedRevenue: 1000000.0,
+            realizedVariableMargin: 0.30,
+            fixedCosts: 100000.0,
+            baselineVol: 0.10,
+            macroState: $macroState,
+            mathUtility: $bankruptcyMock
+        );
+
+        // Penalty = 2.50 * 0.08 = +0.20 margin penalty (cost increase)
+        // Variable margin = 0.30 + 0.20 = 0.50
+        $this->assertEqualsWithDelta(0.50, $bankruptcyResult->clampedMargin, 0.001);
+        $this->assertEquals(ShockEvent::REIT_TENANT_BANKRUPTCIES, $bankruptcyResult->eventType);
+        $this->assertTrue($bankruptcyResult->isPublicEvent);
+
+        // 2. Moderate vacancies (tenantDefaultZ = -1.60)
+        $vacancyMock = $this->createMathUtilityMock([0.0, 0.0, -1.60]);
+        $vacancyResult = $model->computeActualFinancials(
+            $stock,
+            expectedRevenue: 1000000.0,
+            realizedVariableMargin: 0.30,
+            fixedCosts: 100000.0,
+            baselineVol: 0.10,
+            macroState: $macroState,
+            mathUtility: $vacancyMock
+        );
+
+        $this->assertEquals(ShockEvent::REIT_ELEVATED_VACANCIES, $vacancyResult->eventType);
+
+        // 3. Benign leasing boom (tenantDefaultZ = +2.00)
+        $leasingBonusMock = $this->createMathUtilityMock([0.0, 0.0, 2.00]);
+        $leasingBonusResult = $model->computeActualFinancials(
+            $stock,
+            expectedRevenue: 1000000.0,
+            realizedVariableMargin: 0.30,
+            fixedCosts: 100000.0,
+            baselineVol: 0.10,
+            macroState: $macroState,
+            mathUtility: $leasingBonusMock
+        );
+
+        // Bonus = - (2.00 - 1.00) * 0.015 = -0.015 margin cost reduction
+        // Clamped margin = 0.30 - 0.015 = 0.285
+        $this->assertEqualsWithDelta(0.285, $leasingBonusResult->clampedMargin, 0.001);
+    }
+
+    public function testTenYearYieldDoesNotTouchPropertyOperatingMargin(): void
+    {
+        $model = new ReitBusinessModel();
+        $stock = new Stock();
+        $stock->setTicker('REIT_REFI');
+
+        // A 200bps 10Y move reprices the mortgage book through DebtEngine's maturity wall (below NOI).
+        // The property-level operating cost ratio must be identical in both regimes.
+        $lowYield  = $this->createMacroState(yield10y: 0.04);
+        $highYield = $this->createMacroState(yield10y: 0.06);
+
+        $resultLow = $model->computeActualFinancials(
+            $stock,
+            expectedRevenue: 1000000.0,
+            realizedVariableMargin: 0.30,
+            fixedCosts: 100000.0,
+            baselineVol: 0.10,
+            macroState: $lowYield,
+            mathUtility: $this->createMathUtilityMock([0.0, 0.0, 0.0])
+        );
+        $resultHigh = $model->computeActualFinancials(
+            $stock,
+            expectedRevenue: 1000000.0,
+            realizedVariableMargin: 0.30,
+            fixedCosts: 100000.0,
+            baselineVol: 0.10,
+            macroState: $highYield,
+            mathUtility: $this->createMathUtilityMock([0.0, 0.0, 0.0])
+        );
+
+        $this->assertEqualsWithDelta(0.30, $resultLow->clampedMargin, 0.001);
+        $this->assertEqualsWithDelta($resultLow->clampedMargin, $resultHigh->clampedMargin, 1e-9);
+        $this->assertLessThan(
+            (new StandardCorporateBusinessModel())->getDebtMaturityRolloverRate(),
+            $model->getDebtMaturityRolloverRate()
+        );
+    }
+
+    public function testAssetDepreciationDecayAndModernization(): void
+    {
+        $model = new ReitBusinessModel();
+        $stock = new Stock();
+        $stock->setOperatingMargin('0.25');
+
+        // Under-reinvestment (reinvestmentRatio = 0.50, dt = 0.25 => 1 quarter)
+        // decayRate = 0.015 * (1.0 - 0.50) * 1.0 = 0.0075
+        // updatedMargin = 0.25 - (0.25 * 0.0075) = 0.248125
+        $model->applyAssetDepreciationDecay($stock, reinvestmentRatio: 0.50, dt: 0.25);
+        $this->assertEqualsWithDelta(0.248125, (float) $stock->getOperatingMargin(), 0.0001);
+
+        // Over-reinvestment / modernization (reinvestmentRatio = 2.0, dt = 0.25)
+        $stock->setOperatingMargin('0.25');
+        // modGain = 0.008 * ln(2.0) * 1.0 = 0.008 * 0.693147 = 0.005545
+        // updatedMargin = 0.25 + ((0.75 - 0.25) * 0.005545) = 0.25 + (0.50 * 0.005545) = 0.252773
+        $model->applyAssetDepreciationDecay($stock, reinvestmentRatio: 2.0, dt: 0.25);
+        $this->assertEqualsWithDelta(0.252773, (float) $stock->getOperatingMargin(), 0.0001);
+    }
+
+    public function testSustainableDividendBaseAndFairValue(): void
+    {
+        $model = new ReitBusinessModel();
+        $stock = new Stock();
+        $stock->setSharesOutstanding('10000000'); // 10M shares
+
+        // In EarningsEngine, quarterlyEps for a REIT is already reported as FFO per share (Net Income + Depreciation).
+        // Therefore, the sustainable dividend base is exactly quarterlyEps without double-adding depreciation.
+        $sustainableBase = $model->getSustainableDividendBase(
+            $stock,
+            quarterlyEps: 1.50,
+            investedCapital: 800000000.0,
+            depRate: 0.05
+        );
+        $this->assertEqualsWithDelta(1.50, $sustainableBase, 0.0001);
+
+        // Fair value with DDM support:
+        // Dividend support = 70.0 (50% weight) -> 35.0
+        // P/B fair value = 50.0 (35% weight) -> 17.5
+        // Earnings value = 60.0 (15% weight) -> 9.0
+        // Total fair value = 35.0 + 17.5 + 9.0 = 61.5
+        $fairValue = $model->calculateFairValue(
+            earningsValue: 60.0,
+            pbFairValue: 50.0,
+            normalizedEps: 2.0,
+            dividendSupportValue: 70.0
+        );
+        $this->assertEqualsWithDelta(61.5, $fairValue, 0.0001);
+    }
+
+    public function testDynamicRoicDoesNotDoubleCountDepreciation(): void
+    {
+        $model = new ReitBusinessModel();
+        $stock = new Stock();
+        $stock->setTicker('PLZA');
+        $stock->setTotalEquity('500000000');
+        $stock->setWholesaleDebt('500000000');
+        $stock->setCorporateTreasury('0');
+
+        // ebit = 20M quarterly on 1B invested capital => 8% annualized NOI return
+        $ebit = 20_000_000.0;
+        $investedCapital = 1_000_000_000.0;
+        $taxRate = 0.00;
+
+        $return = $model->updateDynamicRoic($stock, $ebit, $investedCapital, $ebit, $taxRate);
+
+        // truePostTaxReturn must be exactly 8% (0.08), NOT 8% + 4% dep = 12%
+        $this->assertEqualsWithDelta(0.08, $return, 0.0001);
+        $this->assertEqualsWithDelta(0.08, (float) $stock->getCurrentRoic(), 0.0001);
+
+        $econReturn = $model->calculateEconomicReturn($stock, $ebit, $investedCapital);
+        $this->assertEqualsWithDelta(0.08, $econReturn, 0.0001);
+    }
+
+    public function testSaturationPenaltyEffectivelyReducesEffectiveRoic(): void
+    {
+        $model = new ReitBusinessModel();
+        $stock = new Stock();
+        $stock->setTicker('PLZA');
+        $stock->setBaselineRoic('0.08');
+        // Scaled invested capital: 600 Billion
+        $stock->setTotalEquity('350000000000');
+        $stock->setWholesaleDebt('250000000000');
+        $stock->setCorporateTreasury('0');
+
+        $macro = $this->createMacroState(yield10y: 0.04, equityRiskPremium: 0.045);
+        $math = new MathUtility();
+
+        $metrics = $model->getTargetMetrics($stock, $macro, $math);
+
+        // Baseline Cap Rate ~ 8.5%, but with scale saturation penalty, effectiveRoic must be reduced
+        $this->assertLessThan(0.085, $metrics['baseline_roic']);
+        $this->assertGreaterThan(0.01, $metrics['baseline_roic']);
+    }
+
+    public function testMultiQuarterReitCapitalAllocationRemainsStable(): void
+    {
+        $ledgerService = $this->createMock(\App\Service\Corporate\CorporateLedgerService::class);
+        $metrics = new \App\Service\Corporate\CorporateMetrics();
+        $math = new MathUtility();
+        $debtEngine = new \App\Service\Corporate\DebtEngine($math, $metrics);
+        $capExEngine = new \App\Service\Corporate\CapExEngine();
+        $treasuryEngine = new \App\Service\Corporate\TreasuryEngine($metrics, $debtEngine, $capExEngine, $math);
+        $allocEngine = new \App\Service\Corporate\CapitalAllocationEngine(
+            $ledgerService,
+            $metrics,
+            $debtEngine,
+            $math,
+            $treasuryEngine
+        );
+
+        $stock = new Stock();
+        $stock->setTicker('PLZA');
+        $stock->setIndustry('REIT - Office');
+        $stock->setTotalEquity('450000000000.00');
+        $stock->setWholesaleDebt('350000000000.00');
+        $stock->setCorporateTreasury('50000000000.00');
+        $stock->setRetainedEarnings('50000000000.00');
+        $stock->setSharesOutstanding('1000000000');
+        $stock->setPrice('100.00');
+        $stock->setTargetPayoutRatio('0.85');
+        $stock->setDividendSpeed('0.02');
+        $stock->setDepreciationRate('0.04');
+        $stock->setBaselineRoic('0.08');
+        $stock->setOperatingMargin('0.55');
+
+        $macro = $this->createMacroState();
+
+        $initialEquity = (float) $stock->getTotalEquity();
+
+        // Simulate 20 quarters (5 years) of capital allocation cycles
+        for ($q = 0; $q < 20; $q++) {
+            $quarterlyNopat = 10_000_000_000.0; // $10B quarterly NOI
+            $quarterlyEps = $quarterlyNopat / 1_000_000_000; // $10/share
+            $annualEps = $quarterlyEps * 4.0;
+            $fcfPerShare = $quarterlyEps * 0.80; // $8/share FCF
+
+            $allocEngine->allocateCapital(
+                $stock,
+                $annualEps,
+                $fcfPerShare,
+                (float) $stock->getPrice(),
+                (float) $stock->getSharesOutstanding(),
+                $macro,
+                $quarterlyNopat
+            );
+        }
+
+        $finalEquity = (float) $stock->getTotalEquity();
+        $finalDebt = (float) $stock->getWholesaleDebt();
+
+        // Equity should grow organically with inflation and retained earnings, but NOT explode 5x-10x
+        $this->assertLessThan($initialEquity * 2.5, $finalEquity, 'REIT equity must not explode exponentially.');
+        $this->assertGreaterThan($initialEquity * 0.5, $finalEquity, 'REIT equity should remain solvent.');
+
+        // Debt should stay within reasonable bounds relative to equity
+        $deRatio = $finalDebt / max(1.0, $finalEquity);
+        $this->assertLessThan(3.0, $deRatio, 'Debt to equity ratio must remain within healthy industry limits.');
+    }
+
+    public function testLossGivenDefaultIsThirtyPercent(): void
+    {
+        $model = new ReitBusinessModel();
+        $this->assertEquals(0.30, $model->getLossGivenDefault());
+    }
+
+    public function testMacroPhysicsRemovesFxDrag(): void
+    {
+        $model = new ReitBusinessModel();
+        $stock = new Stock();
+        $stock->setTicker('REIT_FX');
+        $stock->setBeta('1.2');
+
+        $macro = new MacroStateDTO(
+            outputGapEma: 0.02,
+            exchangeRateIndexEma: 120.0,
+        );
+
+        $physics = $model->getMacroPhysics($stock, $macro);
+
+        // Pricing power multiplier is fixed at 1.0
+        $this->assertEquals(1.0, $physics['pricing_power_multiplier']);
+
+        // Macro demand shift = outputGap * 0.25 * cyclicality (no FX drag)
+        $this->assertEqualsWithDelta(0.02 * 0.25 * ReitBusinessModel::OPERATING_CYCLICALITY, $physics['macro_demand_shift'], 0.0001);
+    }
+
+    private function createDebtHealth(float $debtTolerance, float $interestExpense = 0.0): DebtHealthDTO
+    {
+        return new DebtHealthDTO(
+            grossCost: 0.05,
+            effectiveCost: 0.05,
+            cashYield: 0.03,
+            isNegativeCarry: false,
+            isSevereNegativeCarry: false,
+            interestCoverage: 5.0,
+            wantsToPaydownDebt: false,
+            canIssueDebt: true,
+            debtTolerance: $debtTolerance,
+            wacc: 0.06,
+            costOfEquity: 0.08,
+            leveredBeta: 1.0,
+            rawMetrics: new DebtMetricsDTO(
+                interestExpense: $interestExpense,
+                blendedRate: 0.05,
+                historicalFixedRate: 0.05,
+                dynamicSpread: 0.02,
+                currentMarketRate: 0.05,
+                wholesaleRate: 0.05,
+                ebit: 30.0,
+                revenue: 100.0,
+                depreciation: 5.0,
+                ebitda: 35.0
+            ),
+            isLiquidityCrisis: false,
+            isLiquidityWarning: false,
+            isUnderLeveraged: false
+        );
+    }
+
+    public function testDebtExpansionCapacityUsesEbitDirectly(): void
+    {
+        $model = new ReitBusinessModel();
+        $health = $this->createDebtHealth(debtTolerance: 1.5, interestExpense: 0.0);
+
+        $equity = 1000.0;
+        $totalDebt = 500.0;
+        $wholesaleDebt = 500.0;
+        $newBorrowingRate = 0.05;
+        $ebit = 100.0;
+        $depreciation = 50.0;
+
+        // Balance sheet capacity = (1000 * 1.5) - 500 = 1000
+        $capacity = $model->calculateDebtExpansionCapacity($equity, $totalDebt, $wholesaleDebt, $health, $newBorrowingRate, $ebit, $depreciation);
+        $this->assertEqualsWithDelta(1000.0, $capacity, 0.001);
+
+        // When income statement is the binding constraint:
+        $lowEbit = 20.0;
+        // minimumIcr = 1.15 + 0.5 = 1.65
+        // maxTolerableInterest = 20.0 / 1.65 = 12.1212
+        // availableCapacity = 12.1212 / 0.05 = 242.424
+        $incomeBoundCapacity = $model->calculateDebtExpansionCapacity($equity, $totalDebt, $wholesaleDebt, $health, $newBorrowingRate, $lowEbit, $depreciation);
+        $this->assertEqualsWithDelta(242.424, $incomeBoundCapacity, 0.01);
+    }
+
+    public function testCapRateFloorTetheredTo10YearYield(): void
+    {
+        $model = new ReitBusinessModel();
+        $stock = new Stock();
+        $stock->setTicker('REIT_FLOOR');
+        $stock->setTotalEquity('100000000');
+        $stock->setWholesaleDebt('100000000');
+        $stock->setCorporateTreasury('0');
+        $stock->setBaselineRoic('0.02'); // Depressed historical baseline
+
+        // Macro: 10y yield = 4.5%, negative/flat risk premiums
+        $macro = $this->createMacroState(yield10y: 0.045, equityRiskPremium: -0.01);
+        $math = new MathUtility();
+
+        $metrics = $model->getTargetMetrics($stock, $macro, $math);
+
+        // Baseline ROIC and target Cap Rate must be floored at least at 10Y yield (0.045)
+        $this->assertGreaterThanOrEqual(0.045, (float) $stock->getBaselineRoic());
+        $this->assertGreaterThanOrEqual(0.045, $metrics['baseline_roic']);
+    }
+
+    public function testDynamicRoicRevertsToMarketCapRateWhenMacroStatePresent(): void
+    {
+        $model = new ReitBusinessModel();
+        $stock = new Stock();
+        $stock->setTicker('REIT_REVERT');
+        $stock->setRoicTtm('0.02');
+
+        // High corporate WACC = 15% (e.g. distressed debt cost), but market cap rate = 4% + 5% + 1.8% = 10.8%
+        $macro = $this->createMacroState(yield10y: 0.04, equityRiskPremium: 0.05);
+        $ebit = 20_000_000.0;
+        $investedCapital = 1_000_000_000.0; // 8% current NOI return
+
+        $model->updateDynamicRoic(
+            $stock,
+            actualTotalNetIncome: $ebit,
+            investedCapital: $investedCapital,
+            ebit: $ebit,
+            corporateTaxRate: 0.0,
+            wacc: 0.15,
+            costOfEquity: 0.18,
+            macroState: $macro
+        );
+
+        $newTtm = (float) $stock->getRoicTtm();
+        // The return should have blended with current return and pulled towards market cap rate (10.8%), not WACC (15%)
+        $this->assertGreaterThan(0.02, $newTtm);
+        $this->assertLessThan(0.15, $newTtm);
+    }
+}

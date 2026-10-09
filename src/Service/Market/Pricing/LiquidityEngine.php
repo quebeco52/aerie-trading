@@ -8,6 +8,7 @@ use App\DTO\ExecutionQuoteDTO;
 use App\Entity\Etf;
 use App\Entity\Stock;
 use App\Service\Math\FinancialConstants;
+use App\Service\Math\MacroTransmission;
 use App\Service\Math\MathUtility;
 
 /**
@@ -109,7 +110,7 @@ final class LiquidityEngine
     }
 
     /**
-     * Float times turnover, thinned by a stamp duty above the founding rate (MathUtility::calculateStampDutyVolumeFactor):
+     * Float times turnover, thinned by a stamp duty above the founding rate (MacroTransmission::calculateStampDutyVolumeFactor):
      * spreads, impact and every order cap read volume, so a dearer round trip leaves a less liquid market, as France's
      * 2012 tax did (Colliard & Hoffmann 2017).
      */
@@ -119,7 +120,7 @@ final class LiquidityEngine
         $float = max(0.0, min(1.0, (float) $stock->getPublicFloatPercentage()));
         $turnover = $stock->getTurnoverRatio() ?? FinancialConstants::BASELINE_ANNUAL_TURNOVER;
 
-        return ($shares * $float * max(0.0, $turnover)) * MathUtility::calculateStampDutyVolumeFactor($this->stampDutyRate) / FinancialConstants::TRADING_DAYS_PER_YEAR;
+        return ($shares * $float * max(0.0, $turnover)) * MacroTransmission::calculateStampDutyVolumeFactor($this->stampDutyRate) / FinancialConstants::TRADING_DAYS_PER_YEAR;
     }
 
     /**

@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Tests\Service\View;
 
-use App\Data\Sectors;
+use App\Data\Company\Sectors;
 use App\Entity\Stock;
 use App\Repository\StockRepository;
 use App\Service\Corporate\DebtEngine;

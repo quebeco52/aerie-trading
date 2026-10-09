@@ -68,9 +68,9 @@
             <directory>tests/Twig</directory>
             <directory>tests/Service/Model</directory>
             <directory>tests/Service/Math</directory>
-            <file>tests/Service/CapExEngineTest.php</file>
+            <file>tests/Service/Corporate/CapExEngineTest.php</file>
             <file>tests/Service/Market/Pricing/MarketEngineTest.php</file>
-            <file>tests/Service/PortfolioCalculationTest.php</file>
+            <file>tests/Service/User/PortfolioCalculationTest.php</file>
             <file>tests/Service/Market/Option/OptionPricingEngineTest.php</file>
             <file>tests/Service/Market/Option/OptionChainServiceTest.php</file>
             <file>tests/Service/Market/Option/DealerGammaEngineTest.php</file>
@@ -129,10 +129,10 @@
             <directory>tests/Security</directory>
             <exclude>tests/Service/Model</exclude>
             <exclude>tests/Service/Math</exclude>
-            <!-- Collaborator-free; owned by the Unit suite. -->
-            <exclude>tests/Service/CapExEngineTest.php</exclude>
+            <!-- Collaborator-free; owned by the Unit suite. Keep in step with its <file> list. -->
+            <exclude>tests/Service/Corporate/CapExEngineTest.php</exclude>
             <exclude>tests/Service/Market/Pricing/MarketEngineTest.php</exclude>
-            <exclude>tests/Service/PortfolioCalculationTest.php</exclude>
+            <exclude>tests/Service/User/PortfolioCalculationTest.php</exclude>
             <exclude>tests/Service/Market/Option/OptionPricingEngineTest.php</exclude>
             <exclude>tests/Service/Market/Option/OptionChainServiceTest.php</exclude>
             <exclude>tests/Service/Market/Option/DealerGammaEngineTest.php</exclude>
@@ -145,13 +145,38 @@
             <exclude>tests/Service/Market/Bond/CorporateDefaultServiceTest.php</exclude>
             <exclude>tests/Service/Market/Index/IndexCommitteeTest.php</exclude>
             <exclude>tests/Service/Market/Index/IndexFundAccountantTest.php</exclude>
-            <exclude>tests/Service/View/CompanySnapshotValuationTest.php</exclude>
-            <exclude>tests/Service/Market/Pricing/OpeningBoardBuilderTest.php</exclude>
+            <exclude>tests/Service/Market/Ticker/BulkRowUpdateTest.php</exclude>
+            <exclude>tests/Service/Market/Ticker/StockTickColumnsTest.php</exclude>
             <exclude>tests/Service/Market/Ticker/TickCadenceTest.php</exclude>
-            <exclude>tests/Service/Market/Chart/ChartBufferWritesTest.php</exclude>
             <exclude>tests/Service/Season/SeasonStatisticsTest.php</exclude>
             <exclude>tests/Service/Notification/PlayerNotificationTest.php</exclude>
+            <exclude>tests/Service/Market/Option/OptionDeskSweepTest.php</exclude>
+            <exclude>tests/Service/Market/Option/OptionSettlementBatchTest.php</exclude>
+            <exclude>tests/Service/Market/Option/OptionChainListingTest.php</exclude>
+            <exclude>tests/Service/Market/Ticker/SimulationClockTest.php</exclude>
+            <exclude>tests/Service/Market/Ticker/HistorySimTimeTest.php</exclude>
+            <exclude>tests/Service/Corporate/MergerAndAcquisitionGateTest.php</exclude>
+            <exclude>tests/Service/Corporate/Holdings/AnchorStakeLedgerTest.php</exclude>
+            <exclude>tests/Service/Corporate/SecuritiesBookServiceTest.php</exclude>
+            <exclude>tests/Service/Corporate/SecuritiesEquityDisclosureTest.php</exclude>
+            <exclude>tests/Service/Corporate/SecuritiesMarkIsNotIncomeTest.php</exclude>
+            <exclude>tests/Service/Corporate/SecuritiesForcedSaleTest.php</exclude>
+            <exclude>tests/Service/Market/Agent/AttentionRetailStrategyTest.php</exclude>
+            <exclude>tests/Service/Market/Trading/StopOrderTriggerTest.php</exclude>
+            <exclude>tests/Service/Market/Pricing/AnalystPriceTargetTest.php</exclude>
+            <exclude>tests/Service/Market/Index/AuthorizedParticipantTest.php</exclude>
+            <exclude>tests/Service/View/CompanySnapshotNavTest.php</exclude>
+            <exclude>tests/Service/View/CompanySnapshotValuationTest.php</exclude>
+            <exclude>tests/Service/Market/Pricing/OpeningBoardBuilderTest.php</exclude>
             <exclude>tests/Service/Corporate/MacroDriverAttributionTest.php</exclude>
+            <exclude>tests/Service/View/AnchorPortfolioBuilderTest.php</exclude>
+            <exclude>tests/Service/View/CompanyProfilePageBuilderTest.php</exclude>
+            <exclude>tests/Service/Market/Chart/ChartRangeTest.php</exclude>
+            <exclude>tests/Service/Market/Chart/ChartBufferWritesTest.php</exclude>
+            <exclude>tests/Service/Market/Ticker/IndexFundPhaseTest.php</exclude>
+            <exclude>tests/Service/Market/Ticker/StockBarBookTest.php</exclude>
+            <exclude>tests/Service/Market/Ticker/TickProfilerTest.php</exclude>
+            <exclude>tests/Service/Market/Ticker/RestingOrderWatchTest.php</exclude>
         </testsuite>
 
         <testsuite name="Functional">
@@ -160,6 +185,11 @@
 
         <testsuite name="Financial">
             <directory>tests/Financial</directory>
+        </testsuite>
+
+        <!-- Render: player pages rendered offline; bin/render-pages runs these and screenshots the output. -->
+        <testsuite name="Render">
+            <directory>tests/Render</directory>
         </testsuite>
 
         <testsuite name="E2E">

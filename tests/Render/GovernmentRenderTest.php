@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace App\Tests\Render;
 
-use App\Data\AerieDiet;
-use App\Data\InitialMarket;
+use App\Data\Politics\AerieDiet;
+use App\Data\Company\InitialMarket;
 use App\DTO\MacroStateDTO;
 use App\DTO\PoliticsStateDTO;
 use App\Entity\DietElection;
@@ -21,9 +21,9 @@ use App\Service\Corporate\DebtEngine;
 use App\Service\Corporate\EarningsEngine;
 use App\Service\Corporate\TreasuryEngine;
 use App\Service\Event\MarketEventPublisher;
-use App\Service\Event\NarrativeEngine;
+use App\Service\News\NarrativeEngine;
 use App\Service\Market\Pricing\MarketConsensusEngine;
-use App\Service\Math\CorporateMetrics;
+use App\Service\Corporate\CorporateMetrics;
 use App\Service\Macro\MacroEngine;
 use App\Service\Macro\Recorder\MacroSnapshotRecorder;
 use App\Service\Macro\Subsystem\AssetMarketSubsystem;
@@ -34,6 +34,7 @@ use App\Service\Macro\Subsystem\MacroAggregateSubsystem;
 use App\Service\Macro\Subsystem\MonetaryPolicySubsystem;
 use App\Service\Market\Pricing\OpeningBoardBuilder;
 use App\Service\Math\MathUtility;
+use App\Service\Math\TimeSeries;
 use App\Service\Politics\ElectionRecorder;
 use App\Service\Politics\PoliticsEngine;
 use App\Service\View\GovernmentPageBuilder;
@@ -110,7 +111,7 @@ final class GovernmentRenderTest extends KernelTestCase
             $recorder->record($politics);
             $history->record($politics);
             // The quarterly record the law charts read, as macro_report keeps it: the last 25 years.
-            if (MathUtility::crossedSimulatedBoundary($macro->totalTime, 1.0 / self::TICKS_PER_YEAR, 0.25)) {
+            if (TimeSeries::crossedSimulatedBoundary($macro->totalTime, 1.0 / self::TICKS_PER_YEAR, 0.25)) {
                 $laws[] = ['t' => $macro->totalTime, 'levers' => PoliticsEngine::standingLevers($politics), 'capitalRequirement' => $politics->bankCapitalRequirement];
                 $laws = array_slice($laws, -MacroReportHistoryRepository::QUARTERS);
             }

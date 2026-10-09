@@ -4,12 +4,15 @@ declare(strict_types=1);
 
 namespace App\Service\Model\Sector;
 
-use App\Data\InputOutputExposures;
+use App\Data\Macro\InputOutputExposures;
 use App\DTO\DebtExpansionAppetiteDTO;
 
+use App\Service\Math\FirmEconomics;
+use App\Service\Math\MacroTransmission;
+use App\Service\Math\ResponseCurves;
 use App\Service\Model\BusinessModelInterface;
 
-use App\Data\ModelParam;
+use App\Service\Model\ModelParam;
 use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
 use App\Service\Corporate\EarningsEngine;
@@ -205,7 +208,7 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
             $targetEbitYield = ($targetEbitYield * self::TARGET_EBIT_WEIGHT) + ($ttmRoic * self::TTM_ROIC_WEIGHT);
         }
 
-        $saturationPenalty = \App\Service\Math\CorporateMetrics::getInstance()->calculateMarketSaturationPenalty($stock, $investedCapital, $macroState);
+        $saturationPenalty = \App\Service\Corporate\CorporateMetrics::getInstance()->calculateMarketSaturationPenalty($stock, $investedCapital, $macroState);
         $effectiveRoic = max(0.01, $targetEbitYield - $saturationPenalty);
 
         return [
@@ -275,10 +278,10 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
         $creShift = ($macroState->commercialPropertyIndexEma - 100.0) / 100.0;
         $resShift = ($macroState->residentialPropertyIndexEma - 100.0) / 100.0;
         $blendedPropertyShift = ($creShift * self::CRE_INDEX_WEIGHT) + ($resShift * self::RES_INDEX_WEIGHT);
-        $housingSupplyShift = MathUtility::calculateHousingStartsShift($macroState->housingStartsIndexEma, sensitivity: self::HOUSING_SUPPLY_COMPETITION_SENSITIVITY);
+        $housingSupplyShift = MacroTransmission::calculateHousingStartsShift($macroState->housingStartsIndexEma, sensitivity: self::HOUSING_SUPPLY_COMPETITION_SENSITIVITY);
         // Lease ladder: roll in-place rents toward market at the quarterly rollover rate implied by WALT.
         $inPlaceRent = $streams->getPersistedState(self::STATE_IN_PLACE_RENT, $blendedPropertyShift);
-        [$rolledInPlaceRent, $releasingSpread] = MathUtility::rollLeaseLadder($inPlaceRent, $blendedPropertyShift, self::LEASE_WALT_YEARS, self::MAX_RELEASING_SPREAD, EarningsEngine::QUARTERLY_TIME_STEP);
+        [$rolledInPlaceRent, $releasingSpread] = FirmEconomics::rollLeaseLadder($inPlaceRent, $blendedPropertyShift, self::LEASE_WALT_YEARS, self::MAX_RELEASING_SPREAD, EarningsEngine::QUARTERLY_TIME_STEP);
         $streams->registerState(self::STATE_IN_PLACE_RENT, $rolledInPlaceRent);
 
         // Only the mark-to-market captured on the expiring slice reaches revenue this quarter.
@@ -328,8 +331,8 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
                 ? - ($tenantDefaultZ - self::BENIGN_LEASING_Z_FLOOR) * self::LEASING_BONUS_SCALE
                 : 0.0);
 
-        $corpDefaultShift = MathUtility::excessOverBaseline($macroState->corporateDefaultRateEma, MacroEngine::CORPORATE_DEFAULT_BASELINE);
-        $retailDefaultShift = MathUtility::excessOverBaseline($macroState->retailDefaultRateEma, MacroEngine::RETAIL_DEFAULT_BASELINE);
+        $corpDefaultShift = ResponseCurves::excessOverBaseline($macroState->corporateDefaultRateEma, MacroEngine::CORPORATE_DEFAULT_BASELINE);
+        $retailDefaultShift = ResponseCurves::excessOverBaseline($macroState->retailDefaultRateEma, MacroEngine::RETAIL_DEFAULT_BASELINE);
         $dsrShift = max(0.0, $macroState->householdDebtServiceGap) / MacroEngine::HOUSEHOLD_DSR_NEUTRAL;
         $macroTenantDefaultDrag = ($corpDefaultShift * self::CORP_DEFAULT_VACANCY_SCALAR)
             + ($retailDefaultShift * self::RETAIL_DEFAULT_VACANCY_SCALAR)

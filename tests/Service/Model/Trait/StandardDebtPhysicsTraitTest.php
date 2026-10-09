@@ -8,6 +8,7 @@ use App\DTO\DebtHealthDTO;
 use App\DTO\DebtMetricsDTO;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\MathUtility;
+use App\Service\Math\Valuation;
 use App\Tests\Support\Model\BareStandardModel;
 use App\Tests\Support\Model\ConfiguredStandardModel;
 use PHPUnit\Framework\TestCase;
@@ -170,8 +171,8 @@ final class StandardDebtPhysicsTraitTest extends TestCase
         $math = new MathUtility();
         $levered = $this->model->calculateLeveredBeta(1.0, 0.21, 2.0, $math);
 
-        $this->assertEqualsWithDelta($math->calculateLeveredBeta(1.0, 0.21, 2.0, 0.25), $levered, 0.0000001, 'The trait must pass its dampening through.');
-        $this->assertLessThan($math->calculateLeveredBeta(1.0, 0.21, 2.0), $levered, 'The dampened beta must sit below the undampened Hamada value.');
+        $this->assertEqualsWithDelta(Valuation::calculateLeveredBeta(1.0, 0.21, 2.0, 0.25), $levered, 0.0000001, 'The trait must pass its dampening through.');
+        $this->assertLessThan(Valuation::calculateLeveredBeta(1.0, 0.21, 2.0), $levered, 'The dampened beta must sit below the undampened Hamada value.');
         $this->assertGreaterThan(1.0, $levered, 'Leverage still raises beta above the unlevered base.');
         $this->assertSame(1.0, $this->model->calculateLeveredBeta(1.0, 0.21, 0.0, $math), 'With no debt the levered beta is the unlevered beta.');
     }

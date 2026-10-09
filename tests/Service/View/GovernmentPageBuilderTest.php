@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace App\Tests\Service\View;
 
-use App\Data\AerieDiet as Diet;
-use App\Data\AeriePartyProfiles;
+use App\Data\Politics\AerieDiet as Diet;
+use App\Data\Politics\AeriePartyProfiles;
 use App\DTO\MacroStateDTO;
 use App\DTO\PoliticsStateDTO;
 use App\Entity\DietElection;
@@ -479,7 +479,7 @@ class GovernmentPageBuilderTest extends TestCase
         $council = $this->builder()->buildCouncil(new MacroStateDTO(totalTime: $state->totalTime), $politics)['council'];
         $this->assertSame($page['council']['lean'], $council['lean'], 'The front page carries the Council page\'s lean.');
 
-        $this->assertSame(\App\Data\AerieCouncil::OPENING_GOVERNOR, $authority['governor']['name']);
+        $this->assertSame(\App\Data\Politics\AerieCouncil::OPENING_GOVERNOR, $authority['governor']['name']);
         $this->assertSame('Before Year 1', $authority['governor']['sinceLabel']);
         $this->assertCount(\App\Service\Politics\CouncilAppointments::SHORTLIST - 1, $authority['governor']['passedOver']);
         $this->assertCount(\App\Service\Politics\MonetaryAuthority::COMMITTEE_MEMBERS, $authority['members']);
@@ -491,7 +491,7 @@ class GovernmentPageBuilderTest extends TestCase
         $this->assertNull($authority['pressure'], 'No cabinet is leaning on the Authority.');
         $state->pressureSince = 0.5;
         $state->pressureGivingIn = 1.0;
-        $state->governingCoalition = \App\Data\AerieDiet::membership([\App\Data\AerieDiet::COMMON_LOT, \App\Data\AerieDiet::CIVIC]);
+        $state->governingCoalition = \App\Data\Politics\AerieDiet::membership([\App\Data\Politics\AerieDiet::COMMON_LOT, \App\Data\Politics\AerieDiet::CIVIC]);
         $pressed = $this->builder()->buildAuthority(new MacroStateDTO(totalTime: $state->totalTime), PoliticsStateDTO::fromState($state))['authority']['pressure'];
         $this->assertTrue($pressed['givingIn']);
         $this->assertSame(['Civic Front', 'The Common Lot'], $pressed['cabinet']);
@@ -506,7 +506,7 @@ class GovernmentPageBuilderTest extends TestCase
         }
 
         $regulator = $page['regulator'];
-        $this->assertSame(\App\Data\AerieCouncil::OPENING_REGULATOR, $regulator['head']['name']);
+        $this->assertSame(\App\Data\Politics\AerieCouncil::OPENING_REGULATOR, $regulator['head']['name']);
         $this->assertSame('Before Year 1', $regulator['head']['sinceLabel']);
         $this->assertSame('light', $regulator['head']['stance']);
         $this->assertSame([], $regulator['head']['passedOver']);
@@ -517,7 +517,7 @@ class GovernmentPageBuilderTest extends TestCase
         $this->assertNull($this->builder()->buildHub(new MacroStateDTO(), new PoliticsStateDTO())['regulator']);
 
         $fundHead = $page['fundHead'];
-        $this->assertSame(\App\Data\AerieCouncil::OPENING_FUND_HEAD, $fundHead['name']);
+        $this->assertSame(\App\Data\Politics\AerieCouncil::OPENING_FUND_HEAD, $fundHead['name']);
         $this->assertTrue($fundHead['opening']);
         $this->assertSame('bold', $fundHead['stance'], 'The fund opens bolder than the median reserve fund.');
         $this->assertEqualsWithDelta(\App\Service\Politics\SovereignReserveFund::equityShare(\App\Service\Politics\CouncilAppointments::median($politics->councilFundStances)), $page['council']['lean']['reserves'], 1e-12);
@@ -880,7 +880,7 @@ class GovernmentPageBuilderTest extends TestCase
         $this->assertEqualsWithDelta(3.375, GovernmentPageBuilder::nextMeeting(3.25), 1e-12, 'On a meeting day the next is a meeting on.');
         $this->assertEqualsWithDelta(3.375, GovernmentPageBuilder::nextMeeting(3.25 - 1e-12), 1e-12, 'A clock a hair short of the meeting it just held.');
         $this->assertEqualsWithDelta(3.25, GovernmentPageBuilder::nextMeeting(3.2), 1e-12);
-        $this->assertSame(\App\Data\DistrictCalendar::dateline(3.375), $this->builder()->buildAuthority(new MacroStateDTO(totalTime: 3.30), $politics(0.0))['authority']['nextMeeting']);
+        $this->assertSame(\App\Data\District\DistrictCalendar::dateline(3.375), $this->builder()->buildAuthority(new MacroStateDTO(totalTime: 3.30), $politics(0.0))['authority']['nextMeeting']);
     }
 
     /**

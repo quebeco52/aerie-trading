@@ -1,2 +1,3 @@
 workerman.log
 workerman.websocket-server.php.pid
+*.pid

@@ -4,16 +4,18 @@ declare(strict_types=1);
 
 namespace App\Service\Model\Trait;
 
-use App\Data\ModelParam;
+use App\Service\Model\ModelParam;
 use App\DTO\ActualFinancialsDTO;
 use App\DTO\MacroStateDTO;
 use App\DTO\SectorCoverageProfile;
 use App\DTO\SectorPhysicsResult;
-use App\DTO\StreamContext;
+use App\Service\Model\StreamContext;
 use App\Entity\Stock;
+use App\Service\Math\FirmEconomics;
 use App\Service\Math\MathUtility;
 use App\Service\Math\FinancialConstants;
 use App\Service\Macro\MacroEngine;
+use App\Service\Math\TimeSeries;
 
 trait StandardOperatingPhysicsTrait
 {
@@ -25,7 +27,7 @@ trait StandardOperatingPhysicsTrait
 
     public function getFadedSecularGrowthRate(Stock $stock, float $simYears): float
     {
-        return MathUtility::fadeTowardTrend(
+        return TimeSeries::fadeTowardTrend(
             $this->getSecularGrowthRate($stock),
             MacroEngine::TREND_REAL_GROWTH,
             $simYears,
@@ -181,10 +183,10 @@ trait StandardOperatingPhysicsTrait
      */
     protected function underExtractionRules(StreamContext $streams, MacroStateDTO $macroState, float $perUnitCostRatio, float $priceRelative, float $fixedCosts, float $actualRevenue): float
     {
-        $factor = MathUtility::calculateExtractionCostFactor($macroState->extractionStringency);
+        $factor = FirmEconomics::calculateExtractionCostFactor($macroState->extractionStringency);
         $streams->registerState(
             FinancialConstants::STATE_EXTRACTION_COST_SHARE,
-            MathUtility::getInstance()->calculatePerUnitCostRatio($perUnitCostRatio, $priceRelative) + ($actualRevenue > 0.0 ? $fixedCosts / $factor / $actualRevenue : 0.0)
+            FirmEconomics::calculatePerUnitCostRatio($perUnitCostRatio, $priceRelative) + ($actualRevenue > 0.0 ? $fixedCosts / $factor / $actualRevenue : 0.0)
         );
 
         return $perUnitCostRatio * $factor;
@@ -201,7 +203,7 @@ trait StandardOperatingPhysicsTrait
      * gas, electricity (industrial tariffs off the wholesale power index), metals, agri, freight, ppi (wholesale
      * intermediate goods) and labor (payroll, priced by the real wage's gap to trend productivity). Shares need not
      * sum to one; the remainder is bought at prices no macro index tracks. Sector models declare
-     * INPUT_COST_EXPOSURES, measured in App\Data\InputOutputExposures.
+     * INPUT_COST_EXPOSURES, measured in App\Data\Macro\InputOutputExposures.
      *
      * @return array<string, float>
      */
@@ -332,14 +334,14 @@ trait StandardOperatingPhysicsTrait
 
         // A firm with no cost history starts at baseline prices, so a shock already in the market reaches it
         // through the lags like any other.
-        $costLevel = $math->calculateDistributedLag(
+        $costLevel = TimeSeries::calculateDistributedLag(
             currentLaggedValue: $streams->getPersistedState(FinancialConstants::STATE_INPUT_COST_LEVEL, 0.0),
             targetValue: $deviation,
             dt: $dt,
             lagTimeConstant: $this->getInputCostLagYears()
         );
         $recoveredShare = max(0.0, min(1.0, $pricingPower)) * self::MAX_INPUT_COST_PASS_THROUGH;
-        $recovery = $math->calculateDistributedLag(
+        $recovery = TimeSeries::calculateDistributedLag(
             currentLaggedValue: $streams->getPersistedState(FinancialConstants::STATE_INPUT_COST_RECOVERY, 0.0),
             targetValue: $costLevel * $recoveredShare,
             dt: $dt,

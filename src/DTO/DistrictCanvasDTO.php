@@ -10,7 +10,7 @@ namespace App\DTO;
  *
  * Derived by App\Service\District\DistrictMapBuilder::resolveCanvas() from the facades actually on
  * the street, so a row is given the sky it needs rather than the sky the tallest conceivable
- * facade would — see App\Data\DistrictMap::ROW_GAP for the rule. Presentation only.
+ * facade would — see App\Data\District\DistrictMap::ROW_GAP for the rule. Presentation only.
  */
 final class DistrictCanvasDTO
 {

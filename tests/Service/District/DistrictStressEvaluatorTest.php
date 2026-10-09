@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Tests\Service\District;
 
-use App\Data\DistrictMap;
+use App\Data\District\DistrictMap;
 use App\DTO\MacroStateDTO;
 use App\Service\District\DistrictStressEvaluator;
 use App\Service\Macro\MacroEngine;

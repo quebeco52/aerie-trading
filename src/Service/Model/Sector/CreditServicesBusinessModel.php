@@ -6,9 +6,10 @@ namespace App\Service\Model\Sector;
 
 use App\DTO\InterestExpenseDTO;
 
+use App\Service\Math\CreditRisk;
 use App\Service\Model\BusinessModelInterface;
 
-use App\Data\ModelParam;
+use App\Service\Model\ModelParam;
 use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
 use App\Service\Math\MathUtility;
@@ -245,7 +246,7 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
         $structuralSpread = (float) $stock->getCreditSpread();
         $floatingRatio = (float) $stock->getFloatingDebtRatio();
 
-        $equityLimit = \App\Data\Sectors::equityLimit($stock->getIndustry());
+        $equityLimit = \App\Data\Company\Sectors::equityLimit($stock->getIndustry());
 
         $customerDeposits = (float) $stock->getCustomerDeposits();
         $depositRatio = $totalDebt > 0 ? ($customerDeposits / $totalDebt) : 0.0;
@@ -337,9 +338,9 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
      *
      * @return array{loss_rate: float, systematic_z: float}
      */
-    protected function resolveConditionalCreditLossRate(Stock $stock, \App\DTO\MacroStateDTO $macroState, \App\DTO\StreamContext $streams, MathUtility $mathUtility): array
+    protected function resolveConditionalCreditLossRate(Stock $stock, \App\DTO\MacroStateDTO $macroState, \App\Service\Model\StreamContext $streams, MathUtility $mathUtility): array
     {
-        $householdZ = $mathUtility->calculateVasicekSystematicFactor(
+        $householdZ = CreditRisk::calculateVasicekSystematicFactor(
             $macroState->retailDefaultRateEma,
             MacroEngine::RETAIL_DEFAULT_BASELINE,
             \App\Service\Macro\Subsystem\CreditFiscalSubsystem::RETAIL_ASRF_RHO
@@ -347,7 +348,7 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
         $pd = static::CONSUMER_CHARGE_OFF_RATE * $this->resolveCreditRiskScale($stock) / self::LGD_BASELINE;
 
         return [
-            'loss_rate' => $mathUtility->calculateVasicekExpectedLoss($householdZ, $pd, \App\Service\Macro\Subsystem\CreditFiscalSubsystem::RETAIL_ASRF_RHO, self::LGD_BASELINE)
+            'loss_rate' => CreditRisk::calculateVasicekExpectedLoss($householdZ, $pd, \App\Service\Macro\Subsystem\CreditFiscalSubsystem::RETAIL_ASRF_RHO, self::LGD_BASELINE)
                 * $this->getLoanShareOfEarningAssets(),
             'systematic_z' => $householdZ,
         ];

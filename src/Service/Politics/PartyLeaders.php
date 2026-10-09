@@ -4,10 +4,12 @@ declare(strict_types=1);
 
 namespace App\Service\Politics;
 
-use App\Data\AerieDiet;
-use App\Data\AerieNames;
+use App\Data\Politics\AerieDiet;
+use App\Data\Politics\AerieNames;
 use App\DTO\PoliticsStateDTO;
+use App\Service\Math\Distributions;
 use App\Service\Math\MathUtility;
+use App\Service\Math\ResponseCurves;
 
 /**
  * The parties' leaders, and with them the prime minister: the leader of the largest party in the cabinet.
@@ -114,7 +116,7 @@ final class PartyLeaders
             + (self::ELECTION_EXIT_PER_POINT_GAINED * max(0.0, $voteChangePoints))
             + ($primeMinister ? self::ELECTION_EXIT_PRIME_MINISTER : 0.0);
 
-        return MathUtility::logisticUnitInterval($logOdds, 0.0, 1.0);
+        return ResponseCurves::logisticUnitInterval($logOdds, 0.0, 1.0);
     }
 
     /**
@@ -220,7 +222,7 @@ final class PartyLeaders
     private static function draw(int $salt, string $party, float $since, PoliticsState $state, MathUtility $math): array
     {
         $key = CouncilAppointments::vacancyKey("leader:{$party}", $since);
-        $age = $math->truncatedNormalInverse(CouncilAppointments::uniform($salt, "{$key}:age"), self::SELECTION_AGE_MEAN, self::SELECTION_AGE_SD, self::SELECTION_AGE_MIN, self::SELECTION_AGE_MAX);
+        $age = Distributions::truncatedNormalInverse(CouncilAppointments::uniform($salt, "{$key}:age"), self::SELECTION_AGE_MEAN, self::SELECTION_AGE_SD, self::SELECTION_AGE_MIN, self::SELECTION_AGE_MAX);
         $birth = $since - $age;
 
         return [

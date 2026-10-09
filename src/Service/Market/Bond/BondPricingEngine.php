@@ -9,7 +9,7 @@ use App\DTO\SovereignCurveDTO;
 use App\Entity\Bond;
 use App\Service\Macro\MacroEngine;
 use App\Service\Math\FinancialConstants;
-use App\Service\Math\MathUtility;
+use App\Service\Math\FixedIncome;
 
 /**
  * Marks sovereign bonds against the live term structure.
@@ -19,7 +19,7 @@ use App\Service\Math\MathUtility;
  * ten-year untouched still reprices a two-year and a thirty-year in opposite directions, which is the whole
  * point of having a curve rather than a rate.
  *
- * The zero rates come from MathUtility::calculateSovereignZeroYield, which is the same function
+ * The zero rates come from FixedIncome::calculateSovereignZeroYield, which is the same function
  * MonetaryPolicySubsystem publishes the benchmark points with. That is deliberate: a bond priced off a
  * second curve implementation would disagree with the quoted 10y by however much the two drifted apart, and
  * a disagreement between a quoted rate and the instrument that pays it is a risk-free trade.
@@ -59,10 +59,6 @@ final class BondPricingEngine
 
     private ?SovereignCurveDTO $pillarCurve = null;
 
-    public function __construct(
-        private readonly MathUtility $mathUtility,
-    ) {}
-
     /**
      * Zero-coupon yield at an arbitrary tenor off a fitted curve.
      *
@@ -71,7 +67,7 @@ final class BondPricingEngine
      */
     public function zeroYield(SovereignCurveDTO $curve, float $tau): float
     {
-        return $this->mathUtility->calculateSovereignZeroYield(
+        return FixedIncome::calculateSovereignZeroYield(
             tau: $tau,
             level: $curve->level,
             slope: $curve->slope,
@@ -135,7 +131,7 @@ final class BondPricingEngine
      */
     private function pillarAt(SovereignCurveDTO $curve, int $index): float
     {
-        return $this->mathUtility->calculateSovereignZeroYieldUnbounded(
+        return FixedIncome::calculateSovereignZeroYieldUnbounded(
             tau: $index * self::PILLAR_SPACING_YEARS,
             level: $curve->level,
             slope: $curve->slope,
@@ -215,7 +211,7 @@ final class BondPricingEngine
         $periodsElapsed = $elapsedSinceIssue / $period;
         $fractionOfPeriod = ($periodsElapsed - floor($periodsElapsed)) * $period;
 
-        return $this->mathUtility->calculateAccruedInterest($bond->couponAmount(), $fractionOfPeriod, $period);
+        return FixedIncome::calculateAccruedInterest($bond->couponAmount(), $fractionOfPeriod, $period);
     }
 
     /**
@@ -244,7 +240,7 @@ final class BondPricingEngine
         $spread = max(0.0, $creditSpread);
         $discount = fn (float $tau): float => $this->discountZeroYield($curve, $tau) + $spread;
 
-        $dirtyPrice = $this->mathUtility->calculateBondPresentValue($flows, $discount);
+        $dirtyPrice = FixedIncome::calculateBondPresentValue($flows, $discount);
 
         $accrued = $this->accruedInterest($bond, $currentTime);
 
@@ -252,17 +248,17 @@ final class BondPricingEngine
         // are measured at the bond's own yield. Seeding the solver with the zero rate at the bond's maturity
         // puts it within a few basis points of the answer for anything but a deeply off-market coupon.
         $guess = $discount($bond->yearsToMaturity($currentTime));
-        $ytm = $this->mathUtility->calculateYieldToMaturity($flows, $dirtyPrice, $guess);
+        $ytm = FixedIncome::calculateYieldToMaturity($flows, $dirtyPrice, $guess);
 
-        $macaulay = $this->mathUtility->calculateMacaulayDuration($flows, $ytm);
+        $macaulay = FixedIncome::calculateMacaulayDuration($flows, $ytm);
 
         return new BondValuationDTO(
             dirtyPrice: $dirtyPrice,
             cleanPrice: $dirtyPrice - $accrued,
             accruedInterest: $accrued,
             yieldToMaturity: $ytm,
-            modifiedDuration: $this->mathUtility->calculateModifiedDuration($macaulay),
-            convexity: $this->mathUtility->calculateConvexity($flows, $ytm),
+            modifiedDuration: FixedIncome::calculateModifiedDuration($macaulay),
+            convexity: FixedIncome::calculateConvexity($flows, $ytm),
         );
     }
 

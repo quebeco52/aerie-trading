@@ -4,10 +4,10 @@ declare(strict_types=1);
 
 namespace App\Tests\Service\Model;
 
-use App\Data\Sectors;
+use App\Data\Company\Sectors;
 use App\Entity\Stock;
 use App\Service\Math\FinancialConstants;
-use App\Service\Math\MathUtility;
+use App\Service\Math\TimeSeries;
 use App\Service\Model\Sector\BaseFinancialBusinessModel;
 use App\Service\Model\Sector\CommercialBankBusinessModel;
 use App\Service\Model\Sector\PrivateEquityBusinessModel;
@@ -47,7 +47,7 @@ class ReturnReversionTest extends TestCase
         $model->updateDynamicRoic($stock, 750_000_000.0, 0.0, 0.0, 0.21, 0.08, $costOfEquity);
 
         $blended = (0.30 * $quarterWeight) + (0.10 * (1.0 - $quarterWeight));
-        $expected = $blended + MathUtility::getInstance()->calculateReversionPull($blended, $costOfEquity, $model->getReversionSpeed() / $model::TTM_ROE_WEIGHT, $model->getMoatSpread());
+        $expected = $blended + TimeSeries::calculateReversionPull($blended, $costOfEquity, $model->getReversionSpeed() / $model::TTM_ROE_WEIGHT, $model->getMoatSpread());
 
         $this->assertEqualsWithDelta($expected, (float) $stock->getRoeTtm(), 1e-9);
     }

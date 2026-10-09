@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\DTO;
 
-use App\Data\AerieDiet;
+use App\Data\Politics\AerieDiet;
 use App\Service\Macro\MacroEngine;
 use App\Service\Math\FinancialConstants;
 use App\Service\Politics\ElectionForecast;
@@ -90,7 +90,7 @@ readonly class PoliticsStateDTO
         public array $councilNames = [],
         /** @var list<float> Each holder's birth date, in years (negative before Year 1). */
         public array $councilBirths = [],
-        /** @var list<float> When each seat's term in progress began, on the Council's schedule (App\Data\AerieCouncil::roster()). */
+        /** @var list<float> When each seat's term in progress began, on the Council's schedule (App\Data\Politics\AerieCouncil::roster()). */
         public array $councilSince = [],
         /** @var array<int, float> When each holder took the seat: the term's start, or the day a successor filled a seat left vacant mid-term. */
         public array $councilSeatedAt = [],

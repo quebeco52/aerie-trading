@@ -62,7 +62,7 @@
 						<span class="text-on-surface-variant/40" aria-hidden="true">&middot;</span>
 						<span class="group relative cursor-help focus-visible:outline-none" tabindex="0">
 							<span class="term">{{ isEtf ? indexFacts.indexName : asset.industry|default('General') }}</span>
-							{% set bmMap = constant('App\\Data\\Sectors::BUSINESS_MODEL_DESCRIPTIONS') %}
+							{% set bmMap = constant('App\\Data\\Company\\Sectors::BUSINESS_MODEL_DESCRIPTIONS') %}
 							{% set bmDesc = isEtf ? indexFacts.mandate : (bmMap[businessModel|default('none')] ?? bmMap['none']) %}
 							{{ ui.tooltip(bmDesc, 'left', 'w-72', 'bottom') }}
 						</span>

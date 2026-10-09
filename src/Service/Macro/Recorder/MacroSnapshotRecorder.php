@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Service\Macro\Recorder;
 
-use App\Data\MacroFieldRegistry;
+use App\Data\Macro\MacroFieldRegistry;
 use App\DTO\MacroStateDTO;
 use Doctrine\DBAL\Connection;
 use Doctrine\DBAL\ParameterType;
@@ -41,7 +41,7 @@ class MacroSnapshotRecorder
      * Persists an immutable historical econometric snapshot to the database.
      *
      * The column list and the value list are generated from the same
-     * App\Data\MacroFieldRegistry mapping, so a field cannot land in the wrong column. The
+     * App\Data\Macro\MacroFieldRegistry mapping, so a field cannot land in the wrong column. The
      * previous hand-written statement named 107 columns, 107 placeholders and 106 property reads in
      * three separate lists that only a careful eye kept aligned; one insertion in the wrong place
      * silently shifted every following value into its neighbour's column.

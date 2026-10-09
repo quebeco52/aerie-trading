@@ -4,9 +4,11 @@ declare(strict_types=1);
 
 namespace App\Service\Politics;
 
-use App\Data\AerieCouncil;
+use App\Data\Politics\AerieCouncil;
 use App\DTO\MacroStateDTO;
+use App\Service\Math\Distributions;
 use App\Service\Math\MathUtility;
+use App\Service\Math\TimeSeries;
 
 /**
  * The Monetary Authority: a governor the Council appoints for one fixed term, and the rate committee the governor
@@ -126,7 +128,7 @@ final class MonetaryAuthority
             $state->committeeMajority = $majority;
         }
 
-        if (MathUtility::crossedSimulatedBoundary($time, $dt, 1.0 / self::MEETINGS_PER_YEAR)) {
+        if (TimeSeries::crossedSimulatedBoundary($time, $dt, 1.0 / self::MEETINGS_PER_YEAR)) {
             self::meet($state, $macro->policyRate);
         }
     }
@@ -219,7 +221,7 @@ final class MonetaryAuthority
                 $votes[] = 0.0;
                 continue;
             }
-            $shock = MathUtility::standardNormalQuantile(CouncilAppointments::uniform($salt, "vote:{$meeting}:{$member}"));
+            $shock = Distributions::standardNormalQuantile(CouncilAppointments::uniform($salt, "vote:{$meeting}:{$member}"));
             $votes[] = self::vote(self::preferredRateGap(self::typeName($stance, $swingers[$member] ?? 0.0), $move, $shock));
         }
 
@@ -255,8 +257,8 @@ final class MonetaryAuthority
      */
     public static function preferences(string $type): array
     {
-        $higher = MathUtility::standardNormalQuantile(self::dissentChance($type, true));
-        $lower = MathUtility::standardNormalQuantile(self::dissentChance($type, false));
+        $higher = Distributions::standardNormalQuantile(self::dissentChance($type, true));
+        $lower = Distributions::standardNormalQuantile(self::dissentChance($type, false));
         $spread = 2.0 * self::DISSENT_THRESHOLD / -($higher + $lower);
 
         return [$spread * ($higher - $lower) / 2.0, sqrt(($spread ** 2) - ((self::MOVE_RESISTANCE * self::MEETING_MOVE_SD) ** 2))];

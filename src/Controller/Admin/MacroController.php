@@ -3,7 +3,7 @@
 namespace App\Controller\Admin;
 
 use App\Service\Market\Ticker\HistoryPruner;
-use App\Data\OutputGapChannels;
+use App\Data\Macro\OutputGapChannels;
 use App\Service\Macro\Recorder\MacroDiagnosticsProbe;
 use App\Service\Macro\Recorder\OutputGapProbe;
 use Doctrine\DBAL\Connection;

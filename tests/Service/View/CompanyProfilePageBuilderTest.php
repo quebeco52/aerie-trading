@@ -4,10 +4,10 @@ declare(strict_types=1);
 
 namespace App\Tests\Service\View;
 
-use App\Data\AnchorHoldings;
-use App\Data\CompanyResearch;
-use App\Data\Institutions;
-use App\Data\StrategicHoldings;
+use App\Data\Company\AnchorHoldings;
+use App\Data\Company\CompanyResearch;
+use App\Data\District\Institutions;
+use App\Data\Company\StrategicHoldings;
 use App\Entity\Stock;
 use App\Repository\StockEventRepository;
 use App\Repository\StockRepository;

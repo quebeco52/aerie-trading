@@ -13,7 +13,7 @@ use Doctrine\ORM\Mapping as ORM;
  * Written by App\Service\Politics\ElectionRecorder on the tick the vote is held, when the talks are already
  * settled; the government takes office formationDays later, and nothing shown before then may give it away. A cabinet
  * that falls before the next vote is added to the vote's record on the day it falls, with the talks that follow. Party-keyed
- * maps are stored whole, keyed by App\Data\AerieDiet::PARTIES.
+ * maps are stored whole, keyed by App\Data\Politics\AerieDiet::PARTIES.
  */
 #[ORM\Entity(repositoryClass: \App\Repository\DietElectionRepository::class)]
 #[ORM\Table(name: 'diet_election')]

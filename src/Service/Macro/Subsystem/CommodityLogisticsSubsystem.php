@@ -5,7 +5,10 @@ namespace App\Service\Macro\Subsystem;
 use App\Service\Macro\MacroEngine;
 use App\Service\Macro\MacroState;
 use App\Service\Macro\Recorder\MacroDiagnosticsProbe;
+use App\Service\Math\FirmEconomics;
+use App\Service\Math\MacroTransmission;
 use App\Service\Math\MathUtility;
+use App\Service\Math\StochasticProcesses;
 
 /**
  * Handles commodity price dynamics and global logistics.
@@ -217,7 +220,7 @@ class CommodityLogisticsSubsystem
 
         $dW = $this->mathUtility->generateStandardNormal();
         $currentBase = $state->energyBasePrice > 0.0 ? $state->energyBasePrice : $state->energyPriceIndex;
-        $baseProcess = $this->mathUtility->calculateSchwartz1Factor(
+        $baseProcess = StochasticProcesses::calculateSchwartz1Factor(
             currentPrice: $currentBase,
             kappa: self::ENERGY_MEAN_REVERSION,
             theta: self::resolveEnergyProcessTheta($equilibriumPrice),
@@ -245,7 +248,7 @@ class CommodityLogisticsSubsystem
         $state->energyInventoryIndex = max(self::COMMODITY_MIN_BUFFER_STOCK, min(160.0, $state->energyInventoryIndex + $dInventory));
 
         // Working (1949) theory of storage non-linear convenience yield backwardation.
-        $convenienceYield = $this->mathUtility->calculateConvenienceYield(
+        $convenienceYield = StochasticProcesses::calculateConvenienceYield(
             inventoryLevel: $state->energyInventoryIndex,
             minBufferStock: self::COMMODITY_MIN_BUFFER_STOCK
         );
@@ -261,9 +264,9 @@ class CommodityLogisticsSubsystem
      */
     public static function resolveEnergyProcessTheta(float $equilibriumPrice): float
     {
-        $jumpShift = MathUtility::logOuJumpLevelShift(self::ENERGY_JUMP_PROBABILITY, self::ENERGY_MEAN_REVERSION, self::ENERGY_JUMP_MEAN, self::ENERGY_JUMP_VOL);
+        $jumpShift = StochasticProcesses::logOuJumpLevelShift(self::ENERGY_JUMP_PROBABILITY, self::ENERGY_MEAN_REVERSION, self::ENERGY_JUMP_MEAN, self::ENERGY_JUMP_VOL);
 
-        return MathUtility::schwartzThetaForMean($equilibriumPrice * exp(-$jumpShift), self::ENERGY_MEAN_REVERSION, self::ENERGY_VOLATILITY);
+        return StochasticProcesses::schwartzThetaForMean($equilibriumPrice * exp(-$jumpShift), self::ENERGY_MEAN_REVERSION, self::ENERGY_VOLATILITY);
     }
 
     /**
@@ -335,9 +338,9 @@ class CommodityLogisticsSubsystem
     public function calculateNaturalGasIndex(MacroState $state, float $dt): void
     {
         // Schwartz (1997) log-OU whose level averages one: the squeezes' Merton level drift netted out, the Jensen lift added.
-        $jumpShift = MathUtility::logOuJumpLevelShift(self::GAS_JUMP_PROBABILITY, self::GAS_OIL_RATIO_KAPPA, self::GAS_JUMP_MEAN, self::GAS_JUMP_VOL);
-        $ratioTarget = MathUtility::schwartzThetaForMean(exp(-$jumpShift), self::GAS_OIL_RATIO_KAPPA, self::GAS_OIL_RATIO_SIGMA);
-        $ratio = $this->mathUtility->calculateSchwartz1Factor(
+        $jumpShift = StochasticProcesses::logOuJumpLevelShift(self::GAS_JUMP_PROBABILITY, self::GAS_OIL_RATIO_KAPPA, self::GAS_JUMP_MEAN, self::GAS_JUMP_VOL);
+        $ratioTarget = StochasticProcesses::schwartzThetaForMean(exp(-$jumpShift), self::GAS_OIL_RATIO_KAPPA, self::GAS_OIL_RATIO_SIGMA);
+        $ratio = StochasticProcesses::calculateSchwartz1Factor(
             currentPrice: exp($state->gasOilRatioLog),
             kappa: self::GAS_OIL_RATIO_KAPPA,
             theta: $ratioTarget,
@@ -379,10 +382,10 @@ class CommodityLogisticsSubsystem
      */
     public function calculateWholesalePowerIndex(MacroState $state, float $dt): void
     {
-        $heatRate = $this->mathUtility->calculateSchwartz1Factor(
+        $heatRate = StochasticProcesses::calculateSchwartz1Factor(
             currentPrice: exp($state->powerHeatRateLog),
             kappa: self::POWER_HEAT_RATE_KAPPA,
-            theta: MathUtility::schwartzThetaForMean(1.0, self::POWER_HEAT_RATE_KAPPA, self::POWER_HEAT_RATE_SIGMA),
+            theta: StochasticProcesses::schwartzThetaForMean(1.0, self::POWER_HEAT_RATE_KAPPA, self::POWER_HEAT_RATE_SIGMA),
             sigma: self::POWER_HEAT_RATE_SIGMA,
             dt: $dt,
             dW: $this->mathUtility->generateStandardNormal()
@@ -462,10 +465,10 @@ class CommodityLogisticsSubsystem
             $state->consumerSentimentIndexEma
         );
 
-        $gold = $this->mathUtility->calculateSchwartz1Factor(
+        $gold = StochasticProcesses::calculateSchwartz1Factor(
             currentPrice: $state->goldPriceIndex > 0.0 ? $state->goldPriceIndex : MacroEngine::GOLD_BASELINE,
             kappa: self::GOLD_MEAN_REVERSION,
-            theta: MathUtility::schwartzThetaForMean($equilibrium, self::GOLD_MEAN_REVERSION, self::GOLD_VOLATILITY),
+            theta: StochasticProcesses::schwartzThetaForMean($equilibrium, self::GOLD_MEAN_REVERSION, self::GOLD_VOLATILITY),
             sigma: self::GOLD_VOLATILITY,
             dt: $dt,
             dW: $this->mathUtility->generateStandardNormal()
@@ -582,10 +585,10 @@ class CommodityLogisticsSubsystem
         $equilibriumRate = MacroEngine::FREIGHT_BASELINE * pow($utilization, self::FREIGHT_CAPACITY_INELASTICITY);
 
         $dW = $this->mathUtility->generateStandardNormal();
-        $newFreight = $this->mathUtility->calculateSchwartz1Factor(
+        $newFreight = StochasticProcesses::calculateSchwartz1Factor(
             currentPrice: $state->freightRateIndex,
             kappa: self::FREIGHT_MEAN_REVERSION,
-            theta: MathUtility::schwartzThetaForMean($equilibriumRate, self::FREIGHT_MEAN_REVERSION, self::FREIGHT_VOLATILITY),
+            theta: StochasticProcesses::schwartzThetaForMean($equilibriumRate, self::FREIGHT_MEAN_REVERSION, self::FREIGHT_VOLATILITY),
             sigma: self::FREIGHT_VOLATILITY,
             dt: $dt,
             dW: $dW
@@ -610,7 +613,7 @@ class CommodityLogisticsSubsystem
         $currentCrack = $state->refiningCrackSpread > 0.0 ? $state->refiningCrackSpread : MacroEngine::CRACK_SPREAD_BASELINE;
         $baseCrack = $currentCrack / self::resolveCrackSeasonalFactor($state->totalTime - $dt);
 
-        $nextBase = $this->mathUtility->calculateRefiningCrackSpreadStep(
+        $nextBase = FirmEconomics::calculateRefiningCrackSpreadStep(
             currentCrack: $baseCrack,
             outputGap: $state->globalDemandGapEma,
             energyInventoryIndex: $state->energyInventoryIndexEma,
@@ -640,7 +643,7 @@ class CommodityLogisticsSubsystem
      */
     public function calculateSupplyChainPressureIndex(MacroState $state): void
     {
-        $state->supplyChainPressureIndex = $this->mathUtility->calculateGscpiComposite(
+        $state->supplyChainPressureIndex = MacroTransmission::calculateGscpiComposite(
             freightRateIndex: $state->freightRateIndexEma,
             inventoryStockGap: $state->inventoryStockGapEma,
             industrialMetalsIndex: $state->industrialMetalsIndexEma,

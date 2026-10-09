@@ -4,16 +4,18 @@ declare(strict_types=1);
 
 namespace App\Service\Model\Sector;
 
-use App\Data\InputOutputExposures;
-use App\Data\ModelParam;
+use App\Data\Macro\InputOutputExposures;
+use App\Service\Model\ModelParam;
 use App\DTO\MacroStateDTO;
 use App\DTO\SectorPhysicsResult;
-use App\DTO\StreamContext;
+use App\Service\Model\StreamContext;
 use App\Entity\Stock;
 use App\Service\Event\ShockEvent;
 use App\Service\Macro\MacroEngine;
 use App\Service\Macro\Subsystem\CommodityLogisticsSubsystem;
+use App\Service\Math\FirmEconomics;
 use App\Service\Math\MathUtility;
+use App\Service\Math\StochasticProcesses;
 
 /**
  * Earnings strategy for upstream oil and gas producers (exploration & production).
@@ -246,7 +248,7 @@ class OilGasProducerBusinessModel extends StandardCorporateBusinessModel
         // and every barrel costs that much more to lift.
         $inputCostDrag = $this->resolveInputCostDrag($stock, $macroState, $streams, $this->resolvePricingPower($stock), $realizedVariableMargin);
         $perBarrelCostRatio = $this->underExtractionRules($streams, $macroState, $realizedVariableMargin + $inputCostDrag, $priceRelative, $fixedCosts, $actualRevenue) + $disasterPenalty;
-        $clampedMargin = $this->clampMargin(MathUtility::getInstance()->calculatePerUnitCostRatio($perBarrelCostRatio, $priceRelative));
+        $clampedMargin = $this->clampMargin(FirmEconomics::calculatePerUnitCostRatio($perBarrelCostRatio, $priceRelative));
 
         $hedgeGain = $expectedRevenue * $liquidsShare * $oilVolume * $hedgeRatio * ($hedgedStrike - $oilSpot) * (1.0 + $basisShift);
 
@@ -284,13 +286,13 @@ class OilGasProducerBusinessModel extends StandardCorporateBusinessModel
         $tranches = self::HEDGE_LADDER_TRANCHES;
         $spot = $macroState->energyBasePrice > 0.0 ? $macroState->energyBasePrice : $macroState->energyPriceIndexEma;
         // The spot averages its equilibrium, so the curve's long end must too: hand the forward the Schwartz theta for that mean.
-        $theta = MathUtility::schwartzThetaForMean(
+        $theta = StochasticProcesses::schwartzThetaForMean(
             CommodityLogisticsSubsystem::resolveEnergyEquilibriumPrice($macroState->globalDemandGapEma, $macroState->energySupplyEma),
             CommodityLogisticsSubsystem::ENERGY_MEAN_REVERSION,
             CommodityLogisticsSubsystem::ENERGY_VOLATILITY
         );
         $math = MathUtility::getInstance();
-        $forward = static fn (int $quartersAhead): float => $math->calculateSchwartzForwardPrice(
+        $forward = static fn (int $quartersAhead): float => StochasticProcesses::calculateSchwartzForwardPrice(
             $spot,
             CommodityLogisticsSubsystem::ENERGY_MEAN_REVERSION,
             $theta,
@@ -327,7 +329,7 @@ class OilGasProducerBusinessModel extends StandardCorporateBusinessModel
     /** Stricter rules on extraction cost the whole operation productivity, so the committed base costs that much more per unit of capacity too (Greenstone, List & Syverson 2012 measure the loss on all inputs). */
     public function getFixedCostFactor(MacroStateDTO $macroState): float
     {
-        return MathUtility::calculateExtractionCostFactor($macroState->extractionStringency);
+        return FirmEconomics::calculateExtractionCostFactor($macroState->extractionStringency);
     }
 
     /**

@@ -6,7 +6,14 @@ use App\Service\Macro\MacroEngine;
 use App\Service\Macro\MacroState;
 use App\Service\Macro\Recorder\MacroDiagnosticsProbe;
 use App\Service\Macro\Recorder\OutputGapProbe;
+use App\Service\Math\FirmEconomics;
+use App\Service\Math\FixedIncome;
+use App\Service\Math\MacroTransmission;
 use App\Service\Math\MathUtility;
+use App\Service\Math\OptionPricing;
+use App\Service\Math\ResponseCurves;
+use App\Service\Math\StochasticProcesses;
+use App\Service\Math\TimeSeries;
 
 /**
  * Models the core macroeconomic aggregate feedback loop:
@@ -268,7 +275,7 @@ class MacroAggregateSubsystem
     // --- Supply-Chain Costs in Core Goods (Carriere-Swallow, Deb, Furceri, Jimenez & Ostry 2023) ---
     /** Headline price level a year after container freight rates double: ~0.7pp, peaking at twelve months (IMF blog, March 2022, on the paper's local projections). */
     public const FREIGHT_DOUBLING_HEADLINE_EFFECT = 0.007;
-    /** Supply-chain pressure points a doubling of freight adds to the composite: half its weight on freight, 25 index points to a point (MathUtility::calculateGscpiComposite). */
+    /** Supply-chain pressure points a doubling of freight adds to the composite: half its weight on freight, 25 index points to a point (MacroTransmission::calculateGscpiComposite). */
     public const SUPPLY_CHAIN_POINTS_PER_FREIGHT_DOUBLING = 2.0;
     /** Log core goods price level per point of smoothed supply-chain pressure (1.4%): the freight effect carried wholly by the goods basket. */
     public const CORE_GOODS_SUPPLY_CHAIN_LEVEL_LOADING = self::FREIGHT_DOUBLING_HEADLINE_EFFECT / self::INFLATION_WEIGHT_GOODS / self::SUPPLY_CHAIN_POINTS_PER_FREIGHT_DOUBLING;
@@ -382,12 +389,12 @@ class MacroAggregateSubsystem
      */
     public function absorbProductivityShocks(MacroState $state, float $trendRate, float $dt): float
     {
-        $state->tfpOutputStage1 = $this->mathUtility->calculateDistributedLag($state->tfpOutputStage1, $state->tfpShockLevel, $dt, 1.0 / self::TFP_OUTPUT_ABSORPTION_SPEED);
-        $state->tfpOutputStage2 = $this->mathUtility->calculateDistributedLag($state->tfpOutputStage2, $state->tfpOutputStage1, $dt, 1.0 / self::TFP_OUTPUT_ABSORPTION_SPEED);
+        $state->tfpOutputStage1 = TimeSeries::calculateDistributedLag($state->tfpOutputStage1, $state->tfpShockLevel, $dt, 1.0 / self::TFP_OUTPUT_ABSORPTION_SPEED);
+        $state->tfpOutputStage2 = TimeSeries::calculateDistributedLag($state->tfpOutputStage2, $state->tfpOutputStage1, $dt, 1.0 / self::TFP_OUTPUT_ABSORPTION_SPEED);
 
         $priorPotential = $state->tfpPotentialAbsorbed;
-        $state->tfpPotentialStage1 = $this->mathUtility->calculateDistributedLag($state->tfpPotentialStage1, $state->tfpShockLevel, $dt, 1.0 / self::TFP_POTENTIAL_ABSORPTION_SPEED);
-        $state->tfpPotentialAbsorbed = $this->mathUtility->calculateDistributedLag($priorPotential, $state->tfpPotentialStage1, $dt, 1.0 / self::TFP_POTENTIAL_ABSORPTION_SPEED);
+        $state->tfpPotentialStage1 = TimeSeries::calculateDistributedLag($state->tfpPotentialStage1, $state->tfpShockLevel, $dt, 1.0 / self::TFP_POTENTIAL_ABSORPTION_SPEED);
+        $state->tfpPotentialAbsorbed = TimeSeries::calculateDistributedLag($priorPotential, $state->tfpPotentialStage1, $dt, 1.0 / self::TFP_POTENTIAL_ABSORPTION_SPEED);
 
         return $trendRate + (($state->tfpPotentialAbsorbed - $priorPotential) / $dt);
     }
@@ -444,7 +451,7 @@ class MacroAggregateSubsystem
         }
         $logVariance = $this->stationaryPremiumLogVariance();
 
-        return $this->adversePremiumMean = $this->mathUtility->calculateBlackScholesPrice(
+        return $this->adversePremiumMean = OptionPricing::calculateBlackScholesPrice(
             spot: exp(CreditFiscalSubsystem::EBP_LOG_MEAN + ($logVariance / 2.0)),
             strike: CreditFiscalSubsystem::EBP_DISPLACEMENT,
             volatility: sqrt($logVariance),
@@ -521,7 +528,7 @@ class MacroAggregateSubsystem
         $realRate = (self::BORROWING_POLICY_WEIGHT * ($state->policyRate - $expectedInflation))
             + (self::BORROWING_YIELD5Y_WEIGHT * ($yield5y - $expectedInflation5y));
 
-        $neutral5yDurationScale = MathUtility::calculateTermPremiumDurationScale(5.0, MacroEngine::TERM_PREMIUM_DURATION_HORIZON_YEARS);
+        $neutral5yDurationScale = FixedIncome::calculateTermPremiumDurationScale(5.0, MacroEngine::TERM_PREMIUM_DURATION_HORIZON_YEARS);
         // Bernanke (2006) neutral borrowing benchmark incorporating structural term premium.
         $neutral5yYield = $naturalRate + MacroEngine::TARGET_INFLATION + (MacroEngine::NS_BASE_TERM_PREMIUM * $neutral5yDurationScale);
 
@@ -532,9 +539,9 @@ class MacroAggregateSubsystem
 
         // Curdia & Woodford (2010) risk-free real stance, reaching spending through a Pascal lag (Solow 1960;
         // Rudebusch & Svensson 1999 lag the real rate a year): investment is planned, ordered and built.
-        $state->monetaryStanceStage1 = $this->mathUtility->calculateDistributedLag($state->monetaryStanceStage1, $realRate - $neutralRealRate, $dt, self::MONETARY_TRANSMISSION_LAG_YEARS);
-        $state->monetaryStanceTransmitted = $this->mathUtility->calculateDistributedLag($state->monetaryStanceTransmitted, $state->monetaryStanceStage1, $dt, self::MONETARY_TRANSMISSION_LAG_YEARS);
-        $monetaryDrag = $this->mathUtility->calculateAsymmetricResponse($state->monetaryStanceTransmitted, self::KALDOR_MONETARY_DRAG_RESTRICTIVE, self::KALDOR_MONETARY_DRAG_ACCOMMODATIVE);
+        $state->monetaryStanceStage1 = TimeSeries::calculateDistributedLag($state->monetaryStanceStage1, $realRate - $neutralRealRate, $dt, self::MONETARY_TRANSMISSION_LAG_YEARS);
+        $state->monetaryStanceTransmitted = TimeSeries::calculateDistributedLag($state->monetaryStanceTransmitted, $state->monetaryStanceStage1, $dt, self::MONETARY_TRANSMISSION_LAG_YEARS);
+        $monetaryDrag = ResponseCurves::calculateAsymmetricResponse($state->monetaryStanceTransmitted, self::KALDOR_MONETARY_DRAG_RESTRICTIVE, self::KALDOR_MONETARY_DRAG_ACCOMMODATIVE);
 
         // Bernanke, Gertler & Gilchrist (1999) financial accelerator wholesale credit frictions.
         $excessCreditSpread = max(-MacroEngine::BASE_CREDIT_SPREAD * 0.5, $state->macroCreditSpreadEma - MacroEngine::BASE_CREDIT_SPREAD);
@@ -546,7 +553,7 @@ class MacroAggregateSubsystem
         // it bends the cycle without shifting its average, whose cost belongs in potential, not the gap. The
         // compensator is its own channel, so a calm quarter does not read as credit stimulus.
         $adversePremiumMean = $this->stationaryAdversePremium();
-        $premiumDrag = $this->mathUtility->calculateAsymmetricResponse($state->excessBondPremium, self::KALDOR_EXCESS_BOND_PREMIUM_DRAG_ADVERSE, self::KALDOR_EXCESS_BOND_PREMIUM_DRAG_FAVORABLE);
+        $premiumDrag = ResponseCurves::calculateAsymmetricResponse($state->excessBondPremium, self::KALDOR_EXCESS_BOND_PREMIUM_DRAG_ADVERSE, self::KALDOR_EXCESS_BOND_PREMIUM_DRAG_FAVORABLE);
         $premiumCompensator = (self::KALDOR_EXCESS_BOND_PREMIUM_DRAG_ADVERSE * $adversePremiumMean)
             + (self::KALDOR_EXCESS_BOND_PREMIUM_DRAG_FAVORABLE * ($this->stationaryPremiumMean() - $adversePremiumMean));
 
@@ -573,7 +580,7 @@ class MacroAggregateSubsystem
         $automaticStabiliser = -self::KALDOR_AUTOMATIC_STABILISER * $y;
 
         // Bertola & Caballero (1994) asymmetric capital overhang drag reflecting investment irreversibility.
-        $capitalDrag = $this->mathUtility->calculateAsymmetricResponse($state->capitalStockOverhang, self::KALDOR_CAPITAL_DRAG, self::KALDOR_CAPITAL_REBOUND_DRAG);
+        $capitalDrag = ResponseCurves::calculateAsymmetricResponse($state->capitalStockOverhang, self::KALDOR_CAPITAL_DRAG, self::KALDOR_CAPITAL_REBOUND_DRAG);
 
         // Case, Quigley & Shiller (2005) housing wealth effect relative to persistent trend.
         $housingWealthEffect = $state->residentialWealthTrend > 0.0
@@ -614,7 +621,7 @@ class MacroAggregateSubsystem
 
         // Metzler (1941) & Blinder (1982) inventory investment cycle step, on domestic demand against its own average:
         // like with like, so the level parts riding beside the demand equation set off no surprise.
-        $state->inventoryStockGap = $this->mathUtility->calculateInventoryCycleStep(
+        $state->inventoryStockGap = FirmEconomics::calculateInventoryCycleStep(
             currentInventoryGap: $state->inventoryStockGap,
             outputGap: $y,
             outputGapEma: $state->domesticDemandGapEma,
@@ -645,7 +652,7 @@ class MacroAggregateSubsystem
         // The disasters' share of that level and their compensator's, each reverting as the whole does: the level is
         // linear, so noise, disasters and compensation are three processes summing to it exactly, and each can be
         // attributed without changing it.
-        $disasterCompensator = $this->mathUtility->calculateKouCompensator(
+        $disasterCompensator = StochasticProcesses::calculateKouCompensator(
             lambda: self::DEMAND_DISASTER_INTENSITY,
             pUp: self::DEMAND_DISASTER_UP_PROBABILITY,
             etaUp: self::DEMAND_DISASTER_UP_RATE,
@@ -729,20 +736,20 @@ class MacroAggregateSubsystem
      */
     private function updateNetExportGap(MacroState $state, float $dt): float
     {
-        $state->realExchangeRateTradeLag = $this->mathUtility->calculateDistributedLag(
+        $state->realExchangeRateTradeLag = TimeSeries::calculateDistributedLag(
             $state->realExchangeRateTradeLag,
             self::realExchangeRateGap($state->exchangeRateIndexEma, $state->exchangeRateTrend),
             $dt,
             self::TRADE_VOLUME_ADJUSTMENT_YEARS
         );
-        $state->alliedDefenseDeliveryLag = $this->mathUtility->calculateDistributedLag(
+        $state->alliedDefenseDeliveryLag = TimeSeries::calculateDistributedLag(
             $state->alliedDefenseDeliveryLag,
             self::alliedDefenseGap($state->alliedDefenseSpendingIndexEma),
             $dt,
             self::DEFENSE_DELIVERY_LAG_YEARS
         );
         // A duty reaches volumes as a price does, over the same year.
-        $state->tariffTradeLag = $this->mathUtility->calculateDistributedLag($state->tariffTradeLag, log(1.0 + $state->importTariffRate), $dt, self::TRADE_VOLUME_ADJUSTMENT_YEARS);
+        $state->tariffTradeLag = TimeSeries::calculateDistributedLag($state->tariffTradeLag, log(1.0 + $state->importTariffRate), $dt, self::TRADE_VOLUME_ADJUSTMENT_YEARS);
 
         return self::netExportGapAt($state->foreignOutputGapEma, $state->realExchangeRateTradeLag, $state->alliedDefenseDeliveryLag, $state->tariffTradeLag);
     }
@@ -927,7 +934,7 @@ class MacroAggregateSubsystem
 
         // Benigno & Eggertsson (2023) non-linear convex demand-pull Phillips curve, on the demand part of the gap: output
         // a technology gain lifts is not excess demand, and the gain is disinflationary (Gali 1999; Basu, Fernald & Kimball 2006).
-        $convexDemandPressure = $this->mathUtility->calculateConvexPhillipsCurve(
+        $convexDemandPressure = MacroTransmission::calculateConvexPhillipsCurve(
             outputGap: $state->outputGap - $state->productivitySupplyGap,
             maxCapacity: self::PHILLIPS_MAX_CAPACITY,
             kappa: self::PHILLIPS_CONVEX_KAPPA,
@@ -944,7 +951,7 @@ class MacroAggregateSubsystem
         // domestic ones within about a year. The peninsula makes no goods, so every good, fuel and food in the basket is
         // imported, and all of its retail price but the local distribution margin reprices.
         $priorImportPriceLevel = $state->importPriceLevel;
-        $state->importPriceLevel = $this->mathUtility->calculateDistributedLag($priorImportPriceLevel, self::importPriceLevelTarget($state->exchangeRateIndexEma, $state->importTariffRate), $dt, self::IMPORT_PRICE_ADJUSTMENT_YEARS);
+        $state->importPriceLevel = TimeSeries::calculateDistributedLag($priorImportPriceLevel, self::importPriceLevelTarget($state->exchangeRateIndexEma, $state->importTariffRate), $dt, self::IMPORT_PRICE_ADJUSTMENT_YEARS);
         $importPriceInflation = (1.0 - self::IMPORT_DISTRIBUTION_SHARE) * ($state->importPriceLevel - $priorImportPriceLevel) / $dt;
 
         // Shapiro (2022) Sector 2: core goods. Supply-chain pressure (Benigno et al. 2022: freight, metals, inventories) sets
@@ -968,7 +975,7 @@ class MacroAggregateSubsystem
         $priorEnergyCostPushLag = $state->energyCostPushLag;
         $priorAgriCostPushLag = $state->agriCostPushLag;
         $rawEnergyCostPush = ($state->energyPriceShock / MacroEngine::ENERGY_BASELINE) * MacroEngine::ENERGY_COST_PUSH_TRANSMISSION;
-        $state->energyCostPushLag = $this->mathUtility->calculateDistributedLag(
+        $state->energyCostPushLag = TimeSeries::calculateDistributedLag(
             currentLaggedValue: $state->energyCostPushLag,
             targetValue: $rawEnergyCostPush,
             dt: $dt,
@@ -977,7 +984,7 @@ class MacroAggregateSubsystem
 
         // Gelos & Ustyugova (2017) distributed lag agricultural pass-through to food CPI.
         $rawAgriCostPush = (($state->agriculturalCommodityIndex / MacroEngine::AGRI_BASELINE) - 1.0) * self::AGRI_COST_PUSH_TRANSMISSION;
-        $state->agriCostPushLag = $this->mathUtility->calculateDistributedLag(
+        $state->agriCostPushLag = TimeSeries::calculateDistributedLag(
             currentLaggedValue: $state->agriCostPushLag,
             targetValue: $rawAgriCostPush,
             dt: $dt,
@@ -987,7 +994,7 @@ class MacroAggregateSubsystem
         // A carbon price reaches the electricity bill as the wholesale price it adds, at the energy lag: a step in the
         // price level, its electricity weight's worth, not a lasting rate.
         $priorCarbonLevel = $state->electricityCarbonPriceLevel;
-        $state->electricityCarbonPriceLevel = $this->mathUtility->calculateDistributedLag(
+        $state->electricityCarbonPriceLevel = TimeSeries::calculateDistributedLag(
             currentLaggedValue: $priorCarbonLevel,
             targetValue: log(1.0 + (CommodityLogisticsSubsystem::carbonPowerPriceAdder($state->carbonPrice) / self::RESIDENTIAL_ELECTRICITY_PRICE)),
             dt: $dt,
@@ -1131,7 +1138,7 @@ class MacroAggregateSubsystem
 
         $state->outputGapEma += $emaWeight * ($state->outputGap - $state->outputGapEma);
         foreach (self::DEMAND_TRANSMISSION_LAGS as $field => $lagYears) {
-            $state->$field = $this->mathUtility->calculateDistributedLag($state->$field, $state->outputGapEma, $dt, $lagYears);
+            $state->$field = TimeSeries::calculateDistributedLag($state->$field, $state->outputGapEma, $dt, $lagYears);
         }
         $state->domesticDemandGapEma += $emaWeight * (self::domesticDemandGap($state) - $state->domesticDemandGapEma);
         $state->policyRateEma += $emaWeight * ($state->policyRate - $state->policyRateEma);
@@ -1159,7 +1166,7 @@ class MacroAggregateSubsystem
                 $state->financeMarketTrend = $state->equityWealthRatio;
                 $state->financeMarketTrendSlope = 0.0;
             } elseif (floor($state->totalTime * 4.0) > floor(($state->totalTime - $dt) * 4.0)) {
-                $trend = $this->mathUtility->calculateOneSidedHpStep(
+                $trend = TimeSeries::calculateOneSidedHpStep(
                     trendLevel: log($state->financeMarketTrend),
                     trendSlope: $state->financeMarketTrendSlope,
                     observation: log($state->equityWealthRatio),
@@ -1300,7 +1307,7 @@ class MacroAggregateSubsystem
      */
     public function calculateCapacityUtilization(MacroState $state): void
     {
-        $state->capacityUtilizationRate = $this->mathUtility->calculateCapacityUtilization(
+        $state->capacityUtilizationRate = FirmEconomics::calculateCapacityUtilization(
             outputGap: $state->outputGap,
             capitalStockOverhang: $state->capitalStockOverhang,
             baselineCu: MacroEngine::CU_BASELINE,
@@ -1337,7 +1344,7 @@ class MacroAggregateSubsystem
             ['deviation' => -$sloosStress, 'sensitivity' => self::PMI_SLOOS_SENSITIVITY],
         ];
 
-        $targetPmi = $this->mathUtility->calculateDiffusionIndex(
+        $targetPmi = MacroTransmission::calculateDiffusionIndex(
             baseline: MacroEngine::PMI_BASELINE,
             drivers: $drivers,
             min: MacroEngine::MIN_PMI,
@@ -1378,7 +1385,7 @@ class MacroAggregateSubsystem
             'demand' => self::PPI_DEMAND_SENSITIVITY,
         ];
 
-        $targetPpi = $this->mathUtility->calculateStageOfProcessingPpi(
+        $targetPpi = MacroTransmission::calculateStageOfProcessingPpi(
             metalsInflation: $this->commodityInflation($state->industrialMetalsIndex, $state->industrialMetalsIndexTrend, self::PPI_METALS_PASS_THROUGH),
             energyInflation: $this->commodityInflation($state->energyPriceIndex, $state->energyPriceIndexTrend, self::PPI_ENERGY_PASS_THROUGH),
             agriInflation: $this->commodityInflation($state->agriculturalCommodityIndex, $state->agriculturalCommodityIndexTrend, self::PPI_AGRI_PASS_THROUGH),

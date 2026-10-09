@@ -7,7 +7,6 @@ namespace App\Service\Corporate;
 use App\Entity\Stock;
 use Doctrine\ORM\EntityManagerInterface;
 use App\Service\Macro\MacroEngine;
-use App\Service\Math\CorporateMetrics;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\MathUtility;
 use App\DTO\CapitalAllocationContext;
@@ -104,9 +103,9 @@ class CapitalAllocationEngine
         $ctx->investedCapital = $stock->getInvestedCapital();
         
         $ctx->industry = $stock->getIndustry() ?: 'General';
-        $ctx->businessModel = \App\Data\Sectors::businessModelFor($ctx->industry);
-        $ctx->isFinancial = \App\Data\Sectors::isFinancial($ctx->businessModel);
-        $ctx->strategy = \App\Data\Sectors::getBusinessModelStrategy($ctx->businessModel);
+        $ctx->businessModel = \App\Data\Company\Sectors::businessModelFor($ctx->industry);
+        $ctx->isFinancial = \App\Data\Company\Sectors::isFinancial($ctx->businessModel);
+        $ctx->strategy = \App\Data\Company\Sectors::getBusinessModelStrategy($ctx->businessModel);
         
         // Coverage, cost of capital and the hurdle that gate distributions and borrowing are read off what the
         // firm actually earned over the last twelve months, as its lenders measure it. The structural margin
@@ -378,7 +377,7 @@ class CapitalAllocationEngine
             $ctx->macroState->outputGap,
             $ctx->health->leveredBeta,
             $ctx->macroState->inflation,
-            \App\Data\Sectors::baselineIndustryPe($stock->getIndustry()),
+            \App\Data\Company\Sectors::baselineIndustryPe($stock->getIndustry()),
             (float) ($stock->getAccrualsRatio() ?? 0.0),
             $stock->getPolicyPayoutRatio()
         );

@@ -31,7 +31,7 @@ class CorporateBondDeskTest extends TestCase
 
         return new CorporateBondDesk(
             $this->createStub(EntityManagerInterface::class),
-            new BondPricingEngine($math),
+            new BondPricingEngine(),
         );
     }
 
@@ -148,7 +148,7 @@ class CorporateBondDeskTest extends TestCase
     public function testACorporateCouponSitsAboveTheSovereignOfTheSameTenor(): void
     {
         $math = new MathUtility();
-        $engine = new BondPricingEngine($math);
+        $engine = new BondPricingEngine();
 
         $sovereign = $engine->parCouponRate($this->curve(), 5.0, FinancialConstants::BOND_FACE_VALUE);
         $corporate = (float) $this->desk()->issue($this->issuer(), $this->curve(), 1.0, 5.0, 5.0e8)->getCouponRate();

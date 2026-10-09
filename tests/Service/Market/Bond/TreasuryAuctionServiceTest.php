@@ -10,7 +10,6 @@ use App\Service\Macro\MacroEngine;
 use App\Service\Market\Bond\BondPricingEngine;
 use App\Service\Market\Bond\TreasuryAuctionService;
 use App\Service\Math\FinancialConstants;
-use App\Service\Math\MathUtility;
 use Doctrine\DBAL\Connection;
 use Doctrine\ORM\EntityManagerInterface;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
@@ -54,7 +53,7 @@ class TreasuryAuctionServiceTest extends TestCase
             }
         });
 
-        return new TreasuryAuctionService($em, new BondPricingEngine(new MathUtility()));
+        return new TreasuryAuctionService($em, new BondPricingEngine());
     }
 
     private function curve(): SovereignCurveDTO

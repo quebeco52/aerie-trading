@@ -7,12 +7,13 @@
 /.env.*.local
 /config/secrets/prod/prod.decrypt.private.php
 /public/bundles/
-/var/
+/var/*
 /vendor/
 ###< symfony/framework-bundle ###
 
 ###> phpunit/phpunit ###
 /phpunit.xml
+/phpunit.tmp.xml
 /.phpunit.cache/
 ###< phpunit/phpunit ###
 
@@ -30,3 +31,16 @@
 ###> phpstan/phpstan ###
 phpstan.neon
 ###< phpstan/phpstan ###
+
+### harness code is tracked; its caches, runs and data are not
+!/var/harness/
+/var/harness/**
+!/var/harness/**/
+!/var/harness/**/*.php
+!/var/harness/**/*.py
+!/var/harness/**/*.sh
+!/var/harness/**/*.md
+/var/harness/**/cache*/
+/var/harness/**/runs/
+/var/harness/**/base/
+/var/harness/**/vendor/

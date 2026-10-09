@@ -11,7 +11,7 @@ use App\EventListener\FlushProfiler;
 use App\Service\Corporate\FailureSweep;
 use App\Service\District\DistrictRoster;
 use App\Service\Event\MarketEventPublisher;
-use App\Service\Event\SystemicEventReporter;
+use App\Service\News\SystemicEventReporter;
 use App\Service\Macro\MacroConfigFingerprint;
 use App\Service\Macro\MacroEngine;
 use App\Service\Macro\Recorder\MacroDiagnosticsProbe;

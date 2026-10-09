@@ -16,6 +16,8 @@ use App\Service\Macro\Subsystem\LaborMarketSubsystem;
 use App\Service\Macro\Subsystem\MacroAggregateSubsystem;
 use App\Service\Macro\Subsystem\MonetaryPolicySubsystem;
 use App\Service\Math\FinancialConstants;
+use App\Service\Math\FirmEconomics;
+use App\Service\Math\MacroTransmission;
 use App\Service\Math\MathUtility;
 use PHPUnit\Framework\TestCase;
 use ReflectionClass;
@@ -193,8 +195,8 @@ class GovernmentPolicyTest extends TestCase
         $this->assertSame(0.03, $state->corporateTaxShiftRealized);
         $this->assertSame(0.03, $state->corporateTaxShiftEmbodied);
         $this->assertSame(0.001, $state->bankLevyEmbodied);
-        $this->assertSame(MathUtility::calculateExtractionCostFactor(0.5), $state->extractionCostFactorEmbodied);
-        $this->assertSame(MathUtility::calculateStampDutyVolumeFactor(0.002), $state->stampDutyVolumeFactorEmbodied);
+        $this->assertSame(FirmEconomics::calculateExtractionCostFactor(0.5), $state->extractionCostFactorEmbodied);
+        $this->assertSame(MacroTransmission::calculateStampDutyVolumeFactor(0.002), $state->stampDutyVolumeFactorEmbodied);
     }
 
     private static function policy(?float $concession): GovernmentPolicyDTO

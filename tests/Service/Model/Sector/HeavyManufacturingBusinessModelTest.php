@@ -1,0 +1,139 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Tests\Service\Model\Sector;
+
+use App\DTO\MacroStateDTO;
+use App\Entity\Stock;
+use App\Service\Math\MathUtility;
+use App\Service\Model\Sector\HeavyManufacturingBusinessModel;
+use PHPUnit\Framework\TestCase;
+
+class HeavyManufacturingBusinessModelTest extends TestCase
+{
+    private HeavyManufacturingBusinessModel $model;
+    private MathUtility $mathUtility;
+
+    protected function setUp(): void
+    {
+        $this->model = new HeavyManufacturingBusinessModel();
+        $this->mathUtility = new MathUtility();
+    }
+
+    public function testDualStreamEmissionAndBacklogDamping(): void
+    {
+        $stock = new Stock();
+        $stock->setTicker('CATP');
+        $stock->setBeta('1.2');
+
+        $macro = new MacroStateDTO(outputGapEma: 0.02, energyPriceIndexEma: 100.0);
+
+        $result = $this->model->computeActualFinancials(
+            $stock,
+            expectedRevenue: 100_000_000.0,
+            realizedVariableMargin: 0.35,
+            fixedCosts: 20_000_000.0,
+            baselineVol: 0.10,
+            macroState: $macro,
+            mathUtility: $this->mathUtility
+        );
+
+        $this->assertArrayHasKey('oem_equipment', $result->streamRevenue);
+        $this->assertArrayHasKey('aftermarket_mro', $result->streamRevenue);
+        $this->assertArrayHasKey('oem_equipment', $result->streamZ);
+        $this->assertArrayHasKey('aftermarket_mro', $result->streamZ);
+
+        $this->assertGreaterThan(0.0, $result->streamRevenue['oem_equipment']);
+        $this->assertGreaterThan(0.0, $result->streamRevenue['aftermarket_mro']);
+        $this->assertEqualsWithDelta(
+            $result->actualRevenue,
+            $result->streamRevenue['oem_equipment'] + $result->streamRevenue['aftermarket_mro'],
+            1.0
+        );
+    }
+
+    public function testExchangeRateExportDragAndMetalsCostPenalty(): void
+    {
+        $stock = new Stock();
+        $stock->setTicker('CATP');
+        $stock->setBeta('1.2');
+        $mathMock = $this->createStub(MathUtility::class);
+        $mathMock->method('generatePersistentZ')->willReturn(0.0);
+        $run = fn (MacroStateDTO $macro) => $this->model->computeActualFinancials($stock, 100_000_000.0, 0.35, 20_000_000.0, 0.0, $macro, $mathMock);
+
+        $baseResult = $run(new MacroStateDTO(exchangeRateIndexEma: 100.0, industrialMetalsIndexEma: 100.0));
+        $strongCurrency = $run(new MacroStateDTO(exchangeRateIndexEma: 120.0, industrialMetalsIndexEma: 100.0));
+        $metalsSpike = $run(new MacroStateDTO(exchangeRateIndexEma: 100.0, industrialMetalsIndexEma: 140.0));
+
+        $this->assertLessThan($baseResult->streamRevenue['oem_equipment'], $strongCurrency->streamRevenue['oem_equipment']);
+        // BEA 2017: steel and other metals are 19% of the variable cost base of HVAC, machinery and electrical-equipment makers.
+        $this->assertGreaterThan($baseResult->clampedMargin, $metalsSpike->clampedMargin);
+    }
+
+    public function testCapitalStockOverhangDampensOemEquipmentDemand(): void
+    {
+        $stock = new Stock();
+        $stock->setTicker('CATP');
+        $stock->setBeta('1.0');
+
+        $scarcityMacro = new MacroStateDTO(capitalStockOverhangEma: -0.10);
+        $overhangMacro = new MacroStateDTO(capitalStockOverhangEma: 0.10);
+
+        $mathMock = $this->createStub(MathUtility::class);
+        $mathMock->method('generatePersistentZ')->willReturn(0.0);
+
+        $scarcityResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.35, 20_000_000.0, 0.0, $scarcityMacro, $mathMock);
+        $overhangResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.35, 20_000_000.0, 0.0, $overhangMacro, $mathMock);
+
+        $this->assertGreaterThan(
+            $overhangResult->streamRevenue['oem_equipment'],
+            $scarcityResult->streamRevenue['oem_equipment'],
+            'Industrial capital capacity overhang must dampen OEM equipment demand relative to capital scarcity.'
+        );
+    }
+
+    public function testCapacityUtilizationOverheadAbsorptionExpandsMargins(): void
+    {
+        $stock = new Stock();
+        $stock->setTicker('CATP');
+        $stock->setBeta('1.0');
+
+        $lowCuMacro = new MacroStateDTO(capacityUtilizationRateEma: 0.70); // 70% low utilization
+        $highCuMacro = new MacroStateDTO(capacityUtilizationRateEma: 0.85); // 85% high utilization
+
+        $mathMock = $this->createStub(MathUtility::class);
+        $mathMock->method('generatePersistentZ')->willReturn(0.0);
+
+        $lowCuResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.35, 20_000_000.0, 0.0, $lowCuMacro, $mathMock);
+        $highCuResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.35, 20_000_000.0, 0.0, $highCuMacro, $mathMock);
+
+        $this->assertLessThan(
+            $lowCuResult->clampedMargin,
+            $highCuResult->clampedMargin,
+            'High industrial capacity utilization improves factory fixed overhead absorption, reducing variable cost margin.'
+        );
+    }
+
+    public function testGscpiBottlenecksIncreaseVariableCostDrag(): void
+    {
+        $stock = new Stock();
+        $stock->setTicker('CATP');
+        $stock->setBeta('1.2');
+
+        $normalMacro = new MacroStateDTO(supplyChainPressureIndexEma: 0.0);
+        $chokedMacro = new MacroStateDTO(supplyChainPressureIndexEma: 2.5);
+
+        $mathMock = $this->createStub(MathUtility::class);
+        $mathMock->method('generatePersistentZ')->willReturn(0.0);
+
+        $normalResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.35, 20_000_000.0, 0.0, $normalMacro, $mathMock);
+        $chokedResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.35, 20_000_000.0, 0.0, $chokedMacro, $mathMock);
+
+        $this->assertGreaterThan(
+            $normalResult->clampedMargin,
+            $chokedResult->clampedMargin,
+            'Global supply chain bottlenecks (GSCPI) must increase component procurement costs and variable margin drag.'
+        );
+    }
+}

@@ -4,10 +4,10 @@ declare(strict_types=1);
 
 namespace App\Tests\Service\Model;
 
-use App\Data\ModelParam;
-use App\Data\StockModelTuning;
+use App\Service\Model\ModelParam;
+use App\Data\Company\StockModelTuning;
 use App\DTO\MacroStateDTO;
-use App\DTO\ModelParameters;
+use App\Service\Model\ModelParameters;
 use App\Entity\Stock;
 use App\Service\Model\Sector\ConsumerStaplesBusinessModel;
 use App\Service\Model\Sector\HeavyManufacturingBusinessModel;

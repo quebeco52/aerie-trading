@@ -9,10 +9,11 @@ use App\Service\Macro\MacroState;
 use App\Service\Macro\Subsystem\CreditFiscalSubsystem;
 use App\Service\Macro\Subsystem\CommodityLogisticsSubsystem;
 use App\Service\Math\MathUtility;
+use App\Service\Math\StochasticProcesses;
 use PHPUnit\Framework\TestCase;
 
 /**
- * A log-OU price stepped with MathUtility::calculateSchwartz1Factor() averages theta x e^(-sigma^2 / 4 kappa) in
+ * A log-OU price stepped with StochasticProcesses::calculateSchwartz1Factor() averages theta x e^(-sigma^2 / 4 kappa) in
  * Schwartz's (1997) own parameterisation, so a caller whose target is the level the price should average goes through
  * schwartzThetaForMean(), and one with Merton jumps also nets out logOuJumpLevelShift(). These pin both on long runs.
  */
@@ -29,7 +30,7 @@ class SchwartzMeanLevelTest extends TestCase
         $sum = 0.0;
         $burnIn = (int) (5.0 / ($kappa * $dt));
         for ($i = 0; $i < $burnIn + $steps; $i++) {
-            $price = $math->calculateSchwartz1Factor($price, $kappa, $theta, $sigma, $dt, $math->generateStandardNormal());
+            $price = StochasticProcesses::calculateSchwartz1Factor($price, $kappa, $theta, $sigma, $dt, $math->generateStandardNormal());
             if ($i >= $burnIn) {
                 $sum += $price;
             }
@@ -42,7 +43,7 @@ class SchwartzMeanLevelTest extends TestCase
     {
         $kappa = 1.0;
         $sigma = 0.5;
-        $mean = self::sampleMean(MathUtility::schwartzThetaForMean(100.0, $kappa, $sigma), $kappa, $sigma, 0.25, 80000);
+        $mean = self::sampleMean(StochasticProcesses::schwartzThetaForMean(100.0, $kappa, $sigma), $kappa, $sigma, 0.25, 80000);
 
         // Standard error ~0.4% here; the uncorrected theta sits 6.1% low.
         $this->assertEqualsWithDelta(100.0, $mean, 1.5, 'The mean-preserving theta must put the long-run average on the target.');
@@ -63,10 +64,10 @@ class SchwartzMeanLevelTest extends TestCase
         $math = new MathUtility();
         $kappa = CommodityLogisticsSubsystem::ENERGY_MEAN_REVERSION;
         $sigma = CommodityLogisticsSubsystem::ENERGY_VOLATILITY;
-        $theta = MathUtility::schwartzThetaForMean(100.0, $kappa, $sigma);
+        $theta = StochasticProcesses::schwartzThetaForMean(100.0, $kappa, $sigma);
 
-        $this->assertEqualsWithDelta(100.0, $math->calculateSchwartzForwardPrice(140.0, $kappa, $theta, $sigma, 60.0), 1e-6);
-        $this->assertLessThan(100.0, $math->calculateSchwartzForwardPrice(140.0, $kappa, 100.0, $sigma, 60.0), 'The raw theta prices the long end below the spot mean.');
+        $this->assertEqualsWithDelta(100.0, StochasticProcesses::calculateSchwartzForwardPrice(140.0, $kappa, $theta, $sigma, 60.0), 1e-6);
+        $this->assertLessThan(100.0, StochasticProcesses::calculateSchwartzForwardPrice(140.0, $kappa, 100.0, $sigma, 60.0), 'The raw theta prices the long end below the spot mean.');
     }
 
     /** The Simpson integral against the closed series of the two one-parameter cases. */
@@ -88,8 +89,8 @@ class SchwartzMeanLevelTest extends TestCase
             $sizeOnly += ((($s ** 2) / 2.0) ** $n) / (2.0 * $n * $factorial);
         }
 
-        $this->assertEqualsWithDelta(($lambda / $kappa) * $meanOnly, MathUtility::logOuJumpLevelShift($lambda, $kappa, $mu, 0.0), 1e-9);
-        $this->assertEqualsWithDelta(($lambda / $kappa) * $sizeOnly, MathUtility::logOuJumpLevelShift($lambda, $kappa, 0.0, $s), 1e-9);
+        $this->assertEqualsWithDelta(($lambda / $kappa) * $meanOnly, StochasticProcesses::logOuJumpLevelShift($lambda, $kappa, $mu, 0.0), 1e-9);
+        $this->assertEqualsWithDelta(($lambda / $kappa) * $sizeOnly, StochasticProcesses::logOuJumpLevelShift($lambda, $kappa, 0.0, $s), 1e-9);
     }
 
     /**
@@ -131,12 +132,12 @@ class SchwartzMeanLevelTest extends TestCase
         $math = new MathUtility();
         $kappa = 1.0;
         $sigma = 0.5;
-        $theta = MathUtility::schwartzThetaForLogMean(100.0, $kappa, $sigma);
+        $theta = StochasticProcesses::schwartzThetaForLogMean(100.0, $kappa, $sigma);
         $price = 100.0;
         $sum = 0.0;
         $steps = 80000;
         for ($i = 0; $i < 20 + $steps; $i++) {
-            $price = $math->calculateSchwartz1Factor($price, $kappa, $theta, $sigma, 0.25, $math->generateStandardNormal());
+            $price = StochasticProcesses::calculateSchwartz1Factor($price, $kappa, $theta, $sigma, 0.25, $math->generateStandardNormal());
             if ($i >= 20) {
                 $sum += log($price / 100.0);
             }

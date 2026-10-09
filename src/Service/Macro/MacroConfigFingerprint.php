@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Service\Macro;
 
-use App\Data\AerieDiet;
+use App\Data\Politics\AerieDiet;
 use App\Service\Macro\Subsystem\AssetMarketSubsystem;
 use App\Service\Macro\Subsystem\CommodityLogisticsSubsystem;
 use App\Service\Macro\Subsystem\CreditFiscalSubsystem;

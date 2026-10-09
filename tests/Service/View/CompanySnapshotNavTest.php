@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Tests\Service\View;
 
-use App\Data\AnchorHoldings;
+use App\Data\Company\AnchorHoldings;
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use App\Repository\StockRepository;
@@ -12,7 +12,7 @@ use App\Service\Corporate\DebtEngine;
 use App\Service\Corporate\Holdings\AnchorStakeLedger;
 use App\Service\Macro\MacroEngine;
 use App\Service\Market\Pricing\MarketEngine;
-use App\Service\Math\CorporateMetrics;
+use App\Service\Corporate\CorporateMetrics;
 use App\Service\Math\MathUtility;
 use App\Service\View\CompanySnapshotBuilder;
 use App\Tests\Support\StockBuilder;

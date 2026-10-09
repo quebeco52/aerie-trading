@@ -34,7 +34,7 @@ class EarningsReportSubscriberTest extends TestCase
             ->method('getRepository')
             ->willReturn($this->reportRepository);
 
-        $this->subscriber = new EarningsReportSubscriber($this->entityManager, new \App\Service\Corporate\DebtEngine(new \App\Service\Math\MathUtility(), new \App\Service\Math\CorporateMetrics()));
+        $this->subscriber = new EarningsReportSubscriber($this->entityManager, new \App\Service\Corporate\DebtEngine(new \App\Service\Math\MathUtility(), new \App\Service\Corporate\CorporateMetrics()));
     }
 
     public function testBuildsStreamDetailsForFirstQuarterReport(): void
@@ -202,7 +202,7 @@ class EarningsReportSubscriberTest extends TestCase
         $ctx->operatingCashFlow = 2100000.0;
         $ctx->investingCashFlow = -900000.0;
         $ctx->financingCashFlow = -400000.0;
-        $ctx->lifecycleStage = \App\Data\LifecycleStage::Mature;
+        $ctx->lifecycleStage = \App\Data\Company\LifecycleStage::Mature;
         $ctx->debtMetrics = new \App\DTO\DebtMetricsDTO(
             interestExpense: 400000.0,
             blendedRate: 0.04,
@@ -404,7 +404,7 @@ class EarningsReportSubscriberTest extends TestCase
      */
     public function testTheCapitalRatioIsTheOneTheRegulatorClosesTheFirmOn(): void
     {
-        $debtEngine = new \App\Service\Corporate\DebtEngine(new \App\Service\Math\MathUtility(), new \App\Service\Math\CorporateMetrics());
+        $debtEngine = new \App\Service\Corporate\DebtEngine(new \App\Service\Math\MathUtility(), new \App\Service\Corporate\CorporateMetrics());
         $governed = $this->createStub(BusinessModelInterface::class);
         $governed->method('requiresAlternativeZScore')->willReturn(true);
 
@@ -452,7 +452,7 @@ class EarningsReportSubscriberTest extends TestCase
         $persisted = null;
         $entityManager->method('persist')->willReturnCallback(function ($r) use (&$persisted): void { $persisted = $r; });
 
-        (new EarningsReportSubscriber($entityManager, new \App\Service\Corporate\DebtEngine(new \App\Service\Math\MathUtility(), new \App\Service\Math\CorporateMetrics())))
+        (new EarningsReportSubscriber($entityManager, new \App\Service\Corporate\DebtEngine(new \App\Service\Math\MathUtility(), new \App\Service\Corporate\CorporateMetrics())))
             ->onEarningsReported(new EarningsReportedEvent($ctx));
 
         return $persisted->getCapitalRatio() === null ? null : (float) $persisted->getCapitalRatio();

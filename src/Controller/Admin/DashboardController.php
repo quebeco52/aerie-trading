@@ -2,9 +2,6 @@
 
 namespace App\Controller\Admin;
 
-use App\Controller\Admin\StockCrudController;
-use App\Controller\Admin\EtfCrudController;
-use App\Controller\Admin\UserCrudController;
 
 use EasyCorp\Bundle\EasyAdminBundle\Attribute\AdminDashboard;
 use EasyCorp\Bundle\EasyAdminBundle\Config\Dashboard;

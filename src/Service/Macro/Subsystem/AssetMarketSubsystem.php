@@ -5,7 +5,10 @@ namespace App\Service\Macro\Subsystem;
 use App\Service\Macro\MacroEngine;
 use App\Service\Macro\MacroState;
 use App\Service\Macro\Recorder\MacroDiagnosticsProbe;
+use App\Service\Math\MacroTransmission;
 use App\Service\Math\MathUtility;
+use App\Service\Math\StochasticProcesses;
+use App\Service\Math\TimeSeries;
 
 /**
  * Models asset pricing, commercial and residential real estate, equity volatility,
@@ -329,10 +332,10 @@ class AssetMarketSubsystem
         $fundamentalValue = self::CRE_BASELINE * $occupancyFactor * $rentFactor * (self::CRE_NEUTRAL_CAP_RATE / $capRate);
 
         $dW = $this->mathUtility->generateStandardNormal();
-        $newIndex = $this->mathUtility->calculateSchwartz1Factor(
+        $newIndex = StochasticProcesses::calculateSchwartz1Factor(
             currentPrice: $state->commercialPropertyIndex,
             kappa: self::CRE_MEAN_REVERSION,
-            theta: MathUtility::schwartzThetaForMean($fundamentalValue, self::CRE_MEAN_REVERSION, self::CRE_VOLATILITY),
+            theta: StochasticProcesses::schwartzThetaForMean($fundamentalValue, self::CRE_MEAN_REVERSION, self::CRE_VOLATILITY),
             sigma: self::CRE_VOLATILITY,
             dt: $dt,
             dW: $dW
@@ -381,10 +384,10 @@ class AssetMarketSubsystem
         $fundamentalPrice = self::RESIDENTIAL_BASELINE * max(0.30, min(2.50, $affordabilityFactor * max(0.5, $damageFactor) * max(0.5, $creditConditionsFactor) * max(0.5, $creditSupplyFactor) * $immigrationFactor));
 
         $dW = $this->mathUtility->generateStandardNormal();
-        $newIndex = $this->mathUtility->calculateSchwartz1Factor(
+        $newIndex = StochasticProcesses::calculateSchwartz1Factor(
             currentPrice: $state->residentialPropertyIndex,
             kappa: self::RESIDENTIAL_MEAN_REVERSION,
-            theta: MathUtility::schwartzThetaForMean($fundamentalPrice, self::RESIDENTIAL_MEAN_REVERSION, self::RESIDENTIAL_VOLATILITY),
+            theta: StochasticProcesses::schwartzThetaForMean($fundamentalPrice, self::RESIDENTIAL_MEAN_REVERSION, self::RESIDENTIAL_VOLATILITY),
             sigma: self::RESIDENTIAL_VOLATILITY,
             dt: $dt,
             dW: $dW
@@ -395,7 +398,7 @@ class AssetMarketSubsystem
 
         $previousIndex = $state->residentialPropertyIndex;
         $state->residentialPropertyIndex = max(self::RESIDENTIAL_MIN_INDEX, min(self::RESIDENTIAL_MAX_INDEX, $newIndex));
-        $state->residentialPriceMomentum = $this->mathUtility->calculateDistributedLag(
+        $state->residentialPriceMomentum = TimeSeries::calculateDistributedLag(
             currentLaggedValue: $state->residentialPriceMomentum,
             targetValue: log($state->residentialPropertyIndex / $previousIndex) / $dt,
             dt: $dt,
@@ -453,7 +456,7 @@ class AssetMarketSubsystem
      */
     public static function foreignValuationDuration(): float
     {
-        $annualPersistence = MathUtility::calculateAr2Autocorrelation(self::MAINLAND_GAP_AR1, self::MAINLAND_GAP_AR2, self::MAINLAND_QUARTERS_PER_YEAR);
+        $annualPersistence = TimeSeries::calculateAr2Autocorrelation(self::MAINLAND_GAP_AR1, self::MAINLAND_GAP_AR2, self::MAINLAND_QUARTERS_PER_YEAR);
 
         return 1.0 / (1.0 - (self::CAMPBELL_SHILLER_RHO * $annualPersistence));
     }
@@ -543,7 +546,7 @@ class AssetMarketSubsystem
      */
     public static function jumpVarianceDrag(): float
     {
-        $meanVarianceJump = MathUtility::meanVarianceJump(
+        $meanVarianceJump = StochasticProcesses::meanVarianceJump(
             MacroEngine::SYSTEMIC_JUMP_PROBABILITY_UP,
             MacroEngine::SYSTEMIC_JUMP_VARIANCE_MEAN
         );
@@ -564,7 +567,7 @@ class AssetMarketSubsystem
         $marketFactorPhi = exp(-$dt / MacroEngine::MARKET_FACTOR_DECAY_TAU_YEARS);
         $state->marketZLatent = $this->mathUtility->generatePersistentZ($state->marketZLatent, $marketFactorPhi);
 
-        $regimeShock = $state->marketZLatent * $this->mathUtility->calculatePersistenceVarianceScale($marketFactorPhi);
+        $regimeShock = $state->marketZLatent * StochasticProcesses::calculatePersistenceVarianceScale($marketFactorPhi);
         $tailShock = $this->mathUtility->generateStudentsT(MacroEngine::MARKET_FACTOR_TAIL_DF);
 
         $state->marketZ = (sqrt(MacroEngine::MARKET_FACTOR_REGIME_VARIANCE_SHARE) * $regimeShock)
@@ -608,10 +611,10 @@ class AssetMarketSubsystem
      */
     public function calculateExchangeRate(MacroState $state, float $dt): void
     {
-        $state->exchangeRateDeviation = $this->mathUtility->calculateSchwartz1Factor(
+        $state->exchangeRateDeviation = StochasticProcesses::calculateSchwartz1Factor(
             currentPrice: $state->exchangeRateDeviation,
             kappa: self::EXCHANGE_RATE_MEAN_REVERSION,
-            theta: MathUtility::schwartzThetaForMean(1.0, self::EXCHANGE_RATE_MEAN_REVERSION, MacroEngine::EXCHANGE_RATE_VOLATILITY),
+            theta: StochasticProcesses::schwartzThetaForMean(1.0, self::EXCHANGE_RATE_MEAN_REVERSION, MacroEngine::EXCHANGE_RATE_VOLATILITY),
             sigma: MacroEngine::EXCHANGE_RATE_VOLATILITY,
             dt: $dt,
             dW: $this->mathUtility->generateStandardNormal()
@@ -806,7 +809,7 @@ class AssetMarketSubsystem
         $dW = $this->mathUtility->generateStandardNormal();
         $currentDealIndex = $state->dealActivityIndex > 0.0 ? $state->dealActivityIndex : MacroEngine::DEAL_ACTIVITY_BASELINE;
 
-        $state->dealActivityIndex = $this->mathUtility->calculateCapitalMarketsDealIndexStep(
+        $state->dealActivityIndex = MacroTransmission::calculateCapitalMarketsDealIndexStep(
             currentDealIndex: $currentDealIndex,
             equityRiskPremium: $state->equityRiskPremium,
             hyCreditSpread: $state->highYieldCreditSpread,
@@ -859,10 +862,10 @@ class AssetMarketSubsystem
         // Its reader takes log(index / baseline) (MacroAggregateSubsystem::alliedDefenseGap()), so the log centres on the
         // baseline: the mobilisations' log drift lambda mu / kappa is netted out (Merton 1976), then Schwartz's alpha.
         $jumpLogShift = self::ALLIED_MOBILISATION_PROBABILITY * self::ALLIED_MOBILISATION_MEAN / self::ALLIED_DEFENSE_MEAN_REVERSION;
-        $baseProcess = $this->mathUtility->calculateSchwartz1Factor(
+        $baseProcess = StochasticProcesses::calculateSchwartz1Factor(
             currentPrice: $state->alliedDefenseSpendingIndex,
             kappa: self::ALLIED_DEFENSE_MEAN_REVERSION,
-            theta: MathUtility::schwartzThetaForLogMean(MacroEngine::ALLIED_DEFENSE_BASELINE * exp(-$jumpLogShift), self::ALLIED_DEFENSE_MEAN_REVERSION, self::ALLIED_DEFENSE_VOLATILITY),
+            theta: StochasticProcesses::schwartzThetaForLogMean(MacroEngine::ALLIED_DEFENSE_BASELINE * exp(-$jumpLogShift), self::ALLIED_DEFENSE_MEAN_REVERSION, self::ALLIED_DEFENSE_VOLATILITY),
             sigma: self::ALLIED_DEFENSE_VOLATILITY,
             dt: $dt,
             dW: $this->mathUtility->generateStandardNormal()
@@ -1039,7 +1042,7 @@ class AssetMarketSubsystem
             'max' => self::MAX_HOUSING_STARTS,
         ];
 
-        $state->housingStartsIndex = $this->mathUtility->calculateTobinsQHousingStarts(
+        $state->housingStartsIndex = MacroTransmission::calculateTobinsQHousingStarts(
             currentStarts: $state->housingStartsIndex,
             residentialPriceRatio: $residentialPriceRatio,
             replacementCostRatio: $replacementCostRatio,

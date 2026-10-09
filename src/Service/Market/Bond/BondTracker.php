@@ -227,7 +227,7 @@ class BondTracker
      *
      * Sent down with the quotes rather than recomputed in the browser. A JavaScript reimplementation of
      * the Svensson evaluation would be a second authority on the curve — the exact thing
-     * MathUtility::calculateSovereignZeroYield exists to prevent — and its copied lambda constants would
+     * FixedIncome::calculateSovereignZeroYield exists to prevent — and its copied lambda constants would
      * drift silently from MacroEngine's the first time those were retuned.
      *
      * @param SovereignCurveDTO $curve The fitted term structure.

@@ -6,7 +6,7 @@ namespace App\Service\District;
 
 use App\Entity\CorporateReport;
 use App\Entity\Stock;
-use App\Service\Math\MathUtility;
+use App\Service\Math\FirmEconomics;
 use Doctrine\ORM\EntityManagerInterface;
 
 /**
@@ -23,7 +23,7 @@ use Doctrine\ORM\EntityManagerInterface;
  *    not exist — a stream with no prior period has no growth rate, and printing 0.0% there said
  *    "flat" about something brand new.
  *  - Segment growth is separated from segment importance. `contribution` is the stream's share of
- *    the *firm's* growth (MathUtility::calculateGrowthContributions()), and those contributions
+ *    the *firm's* growth (FirmEconomics::calculateGrowthContributions()), and those contributions
  *    sum to `totalQoq`; a small stream doubling moves the header far less than its own rate reads.
  *  - Mix movement is quoted in basis points of share (`shareShiftBps`), the unit segment
  *    reporting actually uses for it.
@@ -54,7 +54,6 @@ class DistrictRevenueFeed
 
     public function __construct(
         private readonly EntityManagerInterface $entityManager,
-        private readonly MathUtility $mathUtility,
     ) {}
 
     /**
@@ -130,7 +129,7 @@ class DistrictRevenueFeed
         $previousTotal = $previous !== null ? (float) ($previous->getRevenue() ?? 0.0) : 0.0;
         $yearAgoTotal = $yearAgo !== null ? (float) ($yearAgo->getRevenue() ?? 0.0) : 0.0;
 
-        $contributions = $this->mathUtility->calculateGrowthContributions($currentStreams, $previousStreams);
+        $contributions = FirmEconomics::calculateGrowthContributions($currentStreams, $previousStreams);
         $previousTotalStreams = array_sum($previousStreams);
 
         $streams = [];
@@ -166,7 +165,7 @@ class DistrictRevenueFeed
         // computed in.
         usort($streams, static fn (array $a, array $b): int => $b['share'] <=> $a['share']);
 
-        $hhi = $this->mathUtility->calculateHerfindahlIndex($shares);
+        $hhi = FirmEconomics::calculateHerfindahlIndex($shares);
 
         return [
             'totalRevenue' => $totalRevenue,
@@ -179,7 +178,7 @@ class DistrictRevenueFeed
             'quartersOnFile' => count($history),
             'concentration' => $shares === [] ? null : [
                 'hhi' => round($hhi, 4),
-                'effectiveStreams' => round($this->mathUtility->calculateEffectiveSegmentCount($hhi), 2),
+                'effectiveStreams' => round(FirmEconomics::calculateEffectiveSegmentCount($hhi), 2),
             ],
         ];
     }

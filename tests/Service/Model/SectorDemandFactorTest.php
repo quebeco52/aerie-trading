@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace App\Tests\Service\Model;
 
 use App\DTO\MacroStateDTO;
-use App\DTO\StreamContext;
+use App\Service\Model\StreamContext;
 use App\Entity\Stock;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\BaseFinancialBusinessModel;

@@ -3,7 +3,7 @@
 namespace App\Command;
 
 use App\Entity\User;
-use App\Data\InitialMarket;
+use App\Data\Company\InitialMarket;
 use App\Entity\Stock;
 use App\DTO\MacroStateDTO;
 use Doctrine\ORM\EntityManagerInterface;
@@ -153,7 +153,7 @@ class MarketResetCommand extends Command
             $params = [
                 'name' => $etfData['name'],
                 'price' => $etfData['price'],
-                'description' => \App\Data\StockInfo::DESCRIPTIONS[$etfData['ticker']] ?? null,
+                'description' => \App\Data\Company\StockInfo::DESCRIPTIONS[$etfData['ticker']] ?? null,
                 'expense_ratio' => $etfData['expense_ratio'] ?? 0.0,
                 'seed_shares' => FinancialConstants::ETF_SEED_SHARES_OUTSTANDING,
                 'ticker' => $etfData['ticker']

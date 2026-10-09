@@ -10,8 +10,8 @@ use App\Entity\TradeOrder;
 use App\Entity\User;
 use App\Entity\UserOption;
 use App\Entity\UserStock;
+use App\Service\Math\Decimal;
 use App\Service\Math\FinancialConstants;
-use App\Service\Math\MathUtility;
 use Doctrine\DBAL\Connection;
 use Doctrine\ORM\EntityManagerInterface;
 
@@ -122,7 +122,7 @@ final class OptionSettlementEngine
                 $this->em->remove($position);
             }
 
-            $expiryRows[$id] = MathUtility::formatDecimal($intrinsic, 8);
+            $expiryRows[$id] = Decimal::format($intrinsic, 8);
 
             $settled[] = [
                 'ticker' => $contract->getTicker(),
@@ -181,7 +181,7 @@ final class OptionSettlementEngine
                 $value = abs((float) $contracts) * FinancialConstants::OPTION_CONTRACT_MULTIPLIER * $intrinsic;
 
                 if ($value > 0.0) {
-                    $amount = MathUtility::formatDecimal($value, 4);
+                    $amount = Decimal::format($value, 4);
                     if ($contracts > 0) {
                         $this->cashLedger->credit($position->getUser(), $amount);
                     } else {
@@ -193,7 +193,7 @@ final class OptionSettlementEngine
                 $this->em->remove($position);
             }
 
-            $expiryRows[$id] = MathUtility::formatDecimal($intrinsic, 8);
+            $expiryRows[$id] = Decimal::format($intrinsic, 8);
         }
 
         $this->writeExpiry($connection, $expiryRows, (new \DateTime())->format('Y-m-d H:i:s'));
@@ -348,7 +348,7 @@ final class OptionSettlementEngine
 
         $shareDelta = self::shareDelta($contracts, $contract->isCall());
 
-        $consideration = MathUtility::formatDecimal(abs((float) $shareDelta) * $strike, 4);
+        $consideration = Decimal::format(abs((float) $shareDelta) * $strike, 4);
 
         if ($shareDelta > 0) {
             $this->cashLedger->debit($user, $consideration);
@@ -366,7 +366,7 @@ final class OptionSettlementEngine
             ->setOrderType('EXERCISE')
             ->setQuantity(abs($shareDelta))
             ->setFilledQuantity(abs($shareDelta))
-            ->setExecutionPrice(MathUtility::formatDecimal($strike, 4))
+            ->setExecutionPrice(Decimal::format($strike, 4))
             ->setSpreadCost('0.0000')
             ->setImpactCost('0.0000')
             ->setStatus(TradeOrder::STATUS_FILLED)
@@ -409,7 +409,7 @@ final class OptionSettlementEngine
 
         if ($shortBefore !== $shortAfter) {
             $updated = max(0.0, (float) $stock->getShortInterestShares() + ($shortAfter - $shortBefore));
-            $stock->setShortInterestShares(MathUtility::formatDecimal($updated, 2));
+            $stock->setShortInterestShares(Decimal::format($updated, 2));
         }
     }
 }

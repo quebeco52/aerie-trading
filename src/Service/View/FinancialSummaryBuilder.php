@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Service\View;
 
-use App\Data\Sectors;
+use App\Data\Company\Sectors;
 use App\Entity\CorporateReport;
 use App\Entity\Stock;
 use App\Repository\CorporateReportRepository;

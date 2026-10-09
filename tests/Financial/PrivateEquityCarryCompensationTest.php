@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Tests\Financial;
 
+use App\Service\Math\Distributions;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\PrivateEquityBusinessModel;
 use PHPUnit\Framework\TestCase;
@@ -38,6 +39,6 @@ class PrivateEquityCarryCompensationTest extends TestCase
     {
         // With no shock scale the expectation is just P(Z ≥ −1) = Φ(1).
         $this->assertEqualsWithDelta(0.841345, PrivateEquityBusinessModel::expectedHurdleClearedCarry(0.0), 1e-5);
-        $this->assertEqualsWithDelta(0.241971, MathUtility::standardNormalPdf(-1.0), 1e-6);
+        $this->assertEqualsWithDelta(0.241971, Distributions::standardNormalPdf(-1.0), 1e-6);
     }
 }

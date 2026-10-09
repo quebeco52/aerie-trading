@@ -10,6 +10,7 @@ use App\DTO\DebtCostDTO;
 
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
+use App\Service\Math\CreditRisk;
 use App\Service\Math\FinancialConstants;
 
 /**
@@ -45,7 +46,7 @@ trait FinancialPhysicsTrait
      */
     protected function resolveStructuralTargetRoe(Stock $stock, MacroStateDTO $macroState): float
     {
-        $saturationPenalty = \App\Service\Math\CorporateMetrics::getInstance()->calculateMarketSaturationPenalty($stock, max(1.0, (float) $stock->getTotalEquity()), $macroState);
+        $saturationPenalty = \App\Service\Corporate\CorporateMetrics::getInstance()->calculateMarketSaturationPenalty($stock, max(1.0, (float) $stock->getTotalEquity()), $macroState);
 
         return max($macroState->yield10yEma + $macroState->equityRiskPremium, max(0.01, (float) $stock->getBaselineRoe()) - $saturationPenalty);
     }
@@ -274,9 +275,9 @@ trait FinancialPhysicsTrait
 
     public function getRegulatoryDividendCap(Stock $stock, float $currentTreasury, ?MacroStateDTO $macroState = null): ?float
     {
-        $equityLimit = \App\Data\Sectors::equityLimit($stock->getIndustry());
+        $equityLimit = \App\Data\Company\Sectors::equityLimit($stock->getIndustry());
         if ($macroState !== null && $macroState->countercyclicalBufferRate > 0.0) {
-            $equityLimit = \App\Service\Math\MathUtility::calculateBufferedLeverageLimit($equityLimit, $macroState->countercyclicalBufferRate);
+            $equityLimit = CreditRisk::calculateBufferedLeverageLimit($equityLimit, $macroState->countercyclicalBufferRate);
         }
         $leverageOvershoot = $this->resolveTangibleLeverage($stock) / $equityLimit;
 
@@ -298,9 +299,9 @@ trait FinancialPhysicsTrait
             return true;
         }
 
-        $equityLimit = \App\Data\Sectors::equityLimit($stock->getIndustry());
+        $equityLimit = \App\Data\Company\Sectors::equityLimit($stock->getIndustry());
         if ($macroState !== null && $macroState->countercyclicalBufferRate > 0.0) {
-            $equityLimit = \App\Service\Math\MathUtility::calculateBufferedLeverageLimit($equityLimit, $macroState->countercyclicalBufferRate);
+            $equityLimit = CreditRisk::calculateBufferedLeverageLimit($equityLimit, $macroState->countercyclicalBufferRate);
         }
         $buybackLockoutThreshold = max(1.0, $equityLimit - 1.0) + 0.5;
 

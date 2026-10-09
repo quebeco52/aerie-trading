@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Service\Notification;
 
-use App\Data\DistrictCalendar;
+use App\Data\District\DistrictCalendar;
 use App\Entity\Notification;
 use Doctrine\DBAL\ArrayParameterType;
 use Doctrine\ORM\EntityManagerInterface;

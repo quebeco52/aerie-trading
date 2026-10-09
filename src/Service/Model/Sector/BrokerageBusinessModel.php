@@ -6,9 +6,10 @@ namespace App\Service\Model\Sector;
 
 use App\DTO\InterestExpenseDTO;
 
+use App\Service\Math\MacroTransmission;
 use App\Service\Model\BusinessModelInterface;
 
-use App\Data\ModelParam;
+use App\Service\Model\ModelParam;
 use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
 use App\Service\Math\MathUtility;
@@ -141,7 +142,7 @@ class BrokerageBusinessModel extends BaseFinancialBusinessModel
         $advisoryDealBonus = $this->resolveAdvisoryDealShift($macroState);
 
         // Commissions are paid per trade, so a stamp duty that thins the District's turnover thins them with it.
-        $dutyVolumeFactor = MathUtility::calculateStampDutyVolumeFactor($macroState->stampDutyRate);
+        $dutyVolumeFactor = MacroTransmission::calculateStampDutyVolumeFactor($macroState->stampDutyRate);
         $tradingRevenue  = max(0.0, $expectedRevenue * $tradingWeight * $dutyVolumeFactor * (1.0 + ($tradingZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)) + $volatilityBonus + $m2Shift));
         $advisoryRevenue = max(0.0, $expectedRevenue * $advisoryWeight * (1.0 + ($advisoryZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)) + $advisoryDealBonus));
         
@@ -197,7 +198,7 @@ class BrokerageBusinessModel extends BaseFinancialBusinessModel
     /** Retail trading and margin borrowing against normal: M2 growth over its trend. */
     protected function resolveRetailLiquidityShift(\App\DTO\MacroStateDTO $macroState): float
     {
-        return MathUtility::calculateBroadMoneyLiquidityShift($macroState->moneySupplyGrowthEma, $macroState->moneySupplyGrowthTrend, sensitivity: self::M2_RETAIL_TRADING_SENSITIVITY);
+        return MacroTransmission::calculateBroadMoneyLiquidityShift($macroState->moneySupplyGrowthEma, $macroState->moneySupplyGrowthTrend, sensitivity: self::M2_RETAIL_TRADING_SENSITIVITY);
     }
 
     /** Placement and advisory mandates against normal: the capital-markets deal activity index over its baseline. */
@@ -222,7 +223,7 @@ class BrokerageBusinessModel extends BaseFinancialBusinessModel
 
         $blendedWholesaleRate = $this->calculateBlendedWholesaleRate($stock, $macroState);
 
-        $equityLimit = \App\Data\Sectors::equityLimit($stock->getIndustry());
+        $equityLimit = \App\Data\Company\Sectors::equityLimit($stock->getIndustry());
 
         $effectiveEquity = max(1.0, $equity);
 

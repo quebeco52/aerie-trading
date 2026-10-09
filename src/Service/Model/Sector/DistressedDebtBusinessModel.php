@@ -4,9 +4,11 @@ declare(strict_types=1);
 
 namespace App\Service\Model\Sector;
 
+use App\Service\Math\CreditRisk;
+use App\Service\Math\ResponseCurves;
 use App\Service\Model\BusinessModelInterface;
 
-use App\Data\ModelParam;
+use App\Service\Model\ModelParam;
 use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
 use App\Service\Math\MathUtility;
@@ -135,7 +137,7 @@ class DistressedDebtBusinessModel extends AssetManagementBusinessModel
         $outputGap = $macroState->outputGapEma;
 
         $hySpreadSurge = max(0.0, $macroState->highYieldCreditSpreadEma - self::HY_SPREAD_BLOWOUT_BASELINE) * self::HY_SPREAD_SURGE_SCALAR;
-        $corporateDefaultShift = MathUtility::excessOverBaseline($macroState->corporateDefaultRateEma, MacroEngine::CORPORATE_DEFAULT_BASELINE);
+        $corporateDefaultShift = ResponseCurves::excessOverBaseline($macroState->corporateDefaultRateEma, MacroEngine::CORPORATE_DEFAULT_BASELINE);
         $defaultRateSurge = $corporateDefaultShift * self::DEFAULT_RATE_SURGE_SCALAR;
 
         if ($creditSpread > self::SPREAD_BLOWOUT_THRESHOLD || $outputGap < self::RECESSION_GAP_THRESHOLD || $hySpreadSurge > 0.0 || $defaultRateSurge > 0.0) {
@@ -144,7 +146,7 @@ class DistressedDebtBusinessModel extends AssetManagementBusinessModel
                 + $hySpreadSurge
                 + $defaultRateSurge;
 
-            return $mathUtility->calculateDiminishingDistressMultiplier(
+            return CreditRisk::calculateDiminishingDistressMultiplier(
                 $rawDistressSurge,
                 self::MAX_DISTRESS_REVENUE_EXPANSION,
                 self::DISTRESS_HALF_SATURATION_POINT

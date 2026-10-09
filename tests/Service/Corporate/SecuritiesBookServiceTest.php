@@ -9,7 +9,6 @@ use App\DTO\SecuritiesMarkDTO;
 use App\Service\Corporate\SecuritiesBookService;
 use App\Service\Market\Bond\BondPricingEngine;
 use App\Service\Math\FinancialConstants;
-use App\Service\Math\MathUtility;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -29,7 +28,7 @@ class SecuritiesBookServiceTest extends TestCase
 
     protected function setUp(): void
     {
-        $this->pricing = new BondPricingEngine(new MathUtility());
+        $this->pricing = new BondPricingEngine();
         $this->service = new SecuritiesBookService($this->pricing);
     }
 

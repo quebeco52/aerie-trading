@@ -5,7 +5,7 @@ namespace App\Service\Macro\Subsystem;
 use App\Service\Macro\MacroEngine;
 use App\Service\Macro\MacroState;
 use App\Service\Macro\Recorder\MacroDiagnosticsProbe;
-use App\Service\Math\MathUtility;
+use App\Service\Math\TimeSeries;
 
 /**
  * Handles labor market dynamics, unemployment frictional adjustments,
@@ -112,7 +112,7 @@ class LaborMarketSubsystem
      */
     public function recordSahmIndicator(MacroState $state, float $dt): void
     {
-        if (!MathUtility::crossedSimulatedBoundary($state->totalTime, $dt, 1.0 / 12.0)) {
+        if (!TimeSeries::crossedSimulatedBoundary($state->totalTime, $dt, 1.0 / 12.0)) {
             return;
         }
         $months = $state->unemploymentMonthly;

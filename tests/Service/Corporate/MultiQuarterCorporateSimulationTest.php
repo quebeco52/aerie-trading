@@ -16,11 +16,11 @@ use App\Service\Corporate\DebtEngine;
 use App\Service\Corporate\CapExEngine;
 use App\Service\Corporate\CorporateLedgerService;
 use App\Service\Math\MathUtility;
-use App\Service\Math\CorporateMetrics;
-use App\Service\Event\NarrativeEngine;
+use App\Service\Corporate\CorporateMetrics;
+use App\Service\News\NarrativeEngine;
 use App\Service\Event\MarketEventPublisher;
 use App\Service\Market\Pricing\MarketConsensusEngine;
-use App\Data\Sectors;
+use App\Data\Company\Sectors;
 use Symfony\Contracts\EventDispatcher\EventDispatcherInterface;
 
 /**

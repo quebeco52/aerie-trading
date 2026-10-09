@@ -9,6 +9,7 @@ use App\DTO\ConsensusDTO;
 use App\DTO\SectorCoverageProfile;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\MathUtility;
+use App\Service\Math\Valuation;
 
 /**
  * Generates Wall Street analyst consensus estimates from physical financial outcomes.
@@ -111,7 +112,7 @@ class MarketConsensusEngine
             $priorEstimate = $discountedExpectedRevenue;
         }
         
-        $analystExpectedRevenue = $mathUtility->calculateBayesianAnalystUpdate(
+        $analystExpectedRevenue = Valuation::calculateBayesianAnalystUpdate(
             $priorEstimate,
             $priorVariance,
             $freshEstimate,

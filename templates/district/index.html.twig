@@ -681,7 +681,7 @@
 					</g>
 
 					{# Conduits: institution outlet down to its lane, along the lane, and down onto the
-					   tenant's roofline — see App\Data\DistrictMap::CONDUIT_LANE_PITCH. Drawn behind the
+					   tenant's roofline — see App\Data\District\DistrictMap::CONDUIT_LANE_PITCH. Drawn behind the
 					   skyline, so a lower-row drop passes through the gaps of the rows above and behind their
 					   kerb, which is the one depth cue the elevation allows itself. #}
 					<g id="conduits">
@@ -779,7 +779,7 @@
 
 										{% if cols > 0 %}
 											{# Roof furniture by business model, right-anchored clear of the badge —
-											   see App\Data\DistrictMap::ROOF_FURNITURE_EAST_MARGIN. #}
+											   see App\Data\District\DistrictMap::ROOF_FURNITURE_EAST_MARGIN. #}
 											{% set furnitureX = plot.x + plot.width - roofFurniture.eastMargin - roofFurniture.width %}
 											<use class="roof-furniture" href="#roof-{{ plot.roofFurniture }}"
 												x="{{ furnitureX }}" y="{{ plot.y - 7 - roofFurniture.height }}"
@@ -801,7 +801,7 @@
 												x="{{ plot.x + 4 }}" y="{{ plot.y - 14 }}">#{{ plot.rank }}</text>
 
 											{# Position pennant on the roof of a building the player holds. Geometry is
-											   App\Data\DistrictMap::POSITION_PENNANT_*; it rides the roof kit, so a live
+											   App\Data\District\DistrictMap::POSITION_PENNANT_*; it rides the roof kit, so a live
 											   resize needs no second copy of these figures client-side. #}
 											{% if isOwned %}
 												{% set poleX = plot.x + positionPennant.inset %}
@@ -862,7 +862,7 @@
 					{% endif %}
 
 					{# Kerb lights: a pool in the sector colour on the pavement under each plate,
-					   clipped to the kerb band — see App\Data\DistrictMap::KERB_LIGHT_DEPTH. #}
+					   clipped to the kerb band — see App\Data\District\DistrictMap::KERB_LIGHT_DEPTH. #}
 					<g id="kerb-lights" aria-hidden="true">
 						{% for rowIndex, rowGroundLine in rowGroundLines %}
 							{# One clip per row, not per pool: every clip reference is a separate paint effect. #}

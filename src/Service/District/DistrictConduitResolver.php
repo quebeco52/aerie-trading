@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Service\District;
 
-use App\Data\DistrictMap;
+use App\Data\District\DistrictMap;
 use App\Service\Model\BusinessModelRegistryInterface;
 
 /**
@@ -12,7 +12,7 @@ use App\Service\Model\BusinessModelRegistryInterface;
  *
  * A conduit exists only where the model's own declared operating-macro fields
  * (App\Service\Model\Strategy\OperatingStrategyInterface::getOperatingMacroFields()) genuinely
- * intersect one of the institution's published fields — see App\Data\DistrictMap's class
+ * intersect one of the institution's published fields — see App\Data\District\DistrictMap's class
  * docblock for the rule this enforces, and DistrictMap::UBIQUITOUS_MACRO_FIELDS for why a
  * handful of near-universal fields are excluded from the intersection.
  */

@@ -9,6 +9,7 @@ use App\Service\Macro\Subsystem\CreditFiscalSubsystem;
 use App\Service\Macro\Subsystem\MacroAggregateSubsystem;
 use App\Service\Macro\Subsystem\MonetaryPolicySubsystem;
 use App\Service\Macro\Subsystem\SovereignFundSubsystem;
+use App\Service\Math\FixedIncome;
 use App\Service\Math\MathUtility;
 use PHPUnit\Framework\TestCase;
 
@@ -416,9 +417,9 @@ class MonetaryPolicySubsystemTest extends TestCase
 
     public function testPreferredHabitatDurationExtraction(): void
     {
-        $shift2y = $this->mathUtility->calculatePreferredHabitatTermPremiumShift(0.02, 2.0, MacroEngine::PREFERRED_HABITAT_DURATION_SENSITIVITY);
-        $shift10y = $this->mathUtility->calculatePreferredHabitatTermPremiumShift(0.02, 10.0, MacroEngine::PREFERRED_HABITAT_DURATION_SENSITIVITY);
-        $shift30y = $this->mathUtility->calculatePreferredHabitatTermPremiumShift(0.02, 30.0, MacroEngine::PREFERRED_HABITAT_DURATION_SENSITIVITY);
+        $shift2y = FixedIncome::calculatePreferredHabitatTermPremiumShift(0.02, 2.0, MacroEngine::PREFERRED_HABITAT_DURATION_SENSITIVITY);
+        $shift10y = FixedIncome::calculatePreferredHabitatTermPremiumShift(0.02, 10.0, MacroEngine::PREFERRED_HABITAT_DURATION_SENSITIVITY);
+        $shift30y = FixedIncome::calculatePreferredHabitatTermPremiumShift(0.02, 30.0, MacroEngine::PREFERRED_HABITAT_DURATION_SENSITIVITY);
 
         // QE extracts duration, so term premium shifts must be negative (suppression)
         $this->assertLessThan(0.0, $shift2y);
@@ -427,8 +428,8 @@ class MonetaryPolicySubsystemTest extends TestCase
 
         // The shift follows the ACM duration scale the premium itself uses: the 30Y carries half again the
         // 10Y's extraction (Gagnon et al. 2011), the 2Y under a third of it.
-        $this->assertEqualsWithDelta(MathUtility::calculateTermPremiumDurationScale(30.0) * $shift10y, $shift30y, 0.0001);
-        $this->assertEqualsWithDelta(MathUtility::calculateTermPremiumDurationScale(2.0) * $shift10y, $shift2y, 0.0001);
+        $this->assertEqualsWithDelta(FixedIncome::calculateTermPremiumDurationScale(30.0) * $shift10y, $shift30y, 0.0001);
+        $this->assertEqualsWithDelta(FixedIncome::calculateTermPremiumDurationScale(2.0) * $shift10y, $shift2y, 0.0001);
         $this->assertGreaterThan(0.35 * $shift10y, $shift2y, 'Shifts are negative: the two-year suppression is the smaller magnitude.');
         $this->assertEqualsWithDelta(-0.020, $shift10y, 0.0001, '10Y yield suppression under 200bps QE intensity must be exactly -200bps');
     }
@@ -633,8 +634,8 @@ class MonetaryPolicySubsystemTest extends TestCase
 
         $curve = $this->subsystem->calculateYieldCurve($state, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE);
 
-        $scale2y = MathUtility::calculateTermPremiumDurationScale(2.0, MacroEngine::TERM_PREMIUM_DURATION_HORIZON_YEARS);
-        $scale30y = MathUtility::calculateTermPremiumDurationScale(30.0, MacroEngine::TERM_PREMIUM_DURATION_HORIZON_YEARS);
+        $scale2y = FixedIncome::calculateTermPremiumDurationScale(2.0, MacroEngine::TERM_PREMIUM_DURATION_HORIZON_YEARS);
+        $scale30y = FixedIncome::calculateTermPremiumDurationScale(30.0, MacroEngine::TERM_PREMIUM_DURATION_HORIZON_YEARS);
         $this->assertLessThan(0.35, $scale2y, 'the two-year note carries under a third of the ten-year premium');
         $this->assertGreaterThan(1.0, $scale30y, 'the thirty-year bond carries more than the ten-year');
 
@@ -1228,7 +1229,7 @@ class MonetaryPolicySubsystemTest extends TestCase
      */
     public function testLiabilityDrivenDemandCompressesTheLongEndOnlyAboveItsHurdle(): void
     {
-        $scale30y = MathUtility::calculateTermPremiumDurationScale(30.0, MacroEngine::TERM_PREMIUM_DURATION_HORIZON_YEARS);
+        $scale30y = FixedIncome::calculateTermPremiumDurationScale(30.0, MacroEngine::TERM_PREMIUM_DURATION_HORIZON_YEARS);
         $hurdle = MacroEngine::BASE_NATURAL_RATE + MacroEngine::TARGET_INFLATION + (MacroEngine::NS_BASE_TERM_PREMIUM * $scale30y);
 
         $build = static function (float $yield30yEma): MacroState {
@@ -1273,7 +1274,7 @@ class MonetaryPolicySubsystemTest extends TestCase
         $curveSound = $this->subsystem->calculateYieldCurve($sound, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE);
         $curveStressed = $this->subsystem->calculateYieldCurve($stressed, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE);
 
-        $scale2y = MathUtility::calculateTermPremiumDurationScale(2.0, MacroEngine::TERM_PREMIUM_DURATION_HORIZON_YEARS);
+        $scale2y = FixedIncome::calculateTermPremiumDurationScale(2.0, MacroEngine::TERM_PREMIUM_DURATION_HORIZON_YEARS);
         $this->assertEqualsWithDelta(0.01, $curveStressed['yield_10y'] - $curveSound['yield_10y'], 0.0002, 'The ten-year carries the whole premium.');
         $this->assertEqualsWithDelta(0.01 * $scale2y, $curveStressed['yield_2y'] - $curveSound['yield_2y'], 0.0002, 'The two-year carries its duration share of it.');
         $this->assertEqualsWithDelta(0.01, $curveStressed['term_premium_10y'] - $curveSound['term_premium_10y'], 0.0002, 'and it is booked as term premium');

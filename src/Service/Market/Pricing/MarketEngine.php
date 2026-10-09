@@ -6,6 +6,9 @@ use App\Service\Macro\MacroEngine;
 use App\DTO\MacroStateDTO;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\MathUtility;
+use App\Service\Math\OptionPricing;
+use App\Service\Math\StochasticProcesses;
+use App\Service\Math\Valuation;
 use App\Service\Model\BusinessModelInterface;
 
 /**
@@ -146,7 +149,7 @@ class MarketEngine
             // Untruncated second moment of the Kou jump, 2 * scale^2 * (pUp + pDown * ratio^2), which is
             // monotone in the scale and therefore invertible for the budget. Truncation only removes mass,
             // so solving on it and deducting the truncated figure at the budget can never over-reclaim.
-            $rawSecondMomentPerUnit = MathUtility::getInstance()->calculateKouJumpMoment(
+            $rawSecondMomentPerUnit = OptionPricing::calculateKouJumpMoment(
                 2,
                 self::SVJJ_P_UP,
                 1.0,
@@ -219,7 +222,7 @@ class MarketEngine
             return 0.0;
         }
 
-        $meanJumpShare = MathUtility::meanVarianceJump(self::SVJJ_P_UP, self::VARIANCE_JUMP_MEAN_SHARE);
+        $meanJumpShare = StochasticProcesses::meanVarianceJump(self::SVJJ_P_UP, self::VARIANCE_JUMP_MEAN_SHARE);
 
         return ($lambda * $dt * $meanJumpShare) / (1.0 - exp(-$kappa * $dt));
     }
@@ -327,7 +330,7 @@ class MarketEngine
         $dynamicEtaDown = $jumpParameters['eta_down'];
 
         // Merton jump compensation: adjust CAPM drift by the jump arrival compensator to preserve expected return.
-        $jumpCompensator = $lambda * $this->mathUtility->kouTruncatedCompensator(
+        $jumpCompensator = $lambda * StochasticProcesses::kouTruncatedCompensator(
             self::SVJJ_P_UP,
             $dynamicEtaUp,
             $dynamicEtaDown,
@@ -353,7 +356,7 @@ class MarketEngine
             $exposedEtaUp = $beta > 0.0 ? $scaledEtaUp : $scaledEtaDown;
             $exposedEtaDown = $beta > 0.0 ? $scaledEtaDown : $scaledEtaUp;
 
-            $systemicCompensator = MacroEngine::SYSTEMIC_JUMP_INTENSITY * $this->mathUtility->kouTruncatedCompensator(
+            $systemicCompensator = MacroEngine::SYSTEMIC_JUMP_INTENSITY * StochasticProcesses::kouTruncatedCompensator(
                 $exposedPUp,
                 $exposedEtaUp,
                 $exposedEtaDown,
@@ -361,7 +364,7 @@ class MarketEngine
                 $capDown
             );
 
-            $systemicJumpMean = MacroEngine::SYSTEMIC_JUMP_INTENSITY * $this->mathUtility->kouTruncatedMean(
+            $systemicJumpMean = MacroEngine::SYSTEMIC_JUMP_INTENSITY * StochasticProcesses::kouTruncatedMean(
                 $exposedPUp,
                 $exposedEtaUp,
                 $exposedEtaDown,
@@ -369,7 +372,7 @@ class MarketEngine
                 $capDown
             );
 
-            $systemicJumpVariance = MacroEngine::SYSTEMIC_JUMP_INTENSITY * $this->mathUtility->kouTruncatedSecondMoment(
+            $systemicJumpVariance = MacroEngine::SYSTEMIC_JUMP_INTENSITY * StochasticProcesses::kouTruncatedSecondMoment(
                 $exposedPUp,
                 $exposedEtaUp,
                 $exposedEtaDown,
@@ -400,7 +403,7 @@ class MarketEngine
         // Idiosyncratic jump variance budget: deduct stock jump variance at truncated second moment.
         $idiosyncraticJumpVariance = $lambda > 0.0
             ? min(
-                $lambda * $this->mathUtility->kouTruncatedSecondMoment(
+                $lambda * StochasticProcesses::kouTruncatedSecondMoment(
                     self::SVJJ_P_UP,
                     $dynamicEtaUp,
                     $dynamicEtaDown,
@@ -504,7 +507,7 @@ class MarketEngine
         // diffusion and the convexity of the Merton-compensated jumps, E[e^J - 1 - J]. A fairly priced name's log price
         // then grows with log fair value and the log pull settles at zero (Summers 1986 log noise), not -var/(2 kappa).
         $idiosyncraticJumpMean = $lambda > 0.0
-            ? $lambda * $this->mathUtility->kouTruncatedMean(self::SVJJ_P_UP, $dynamicEtaUp, $dynamicEtaDown, $capUp, $capDown)
+            ? $lambda * StochasticProcesses::kouTruncatedMean(self::SVJJ_P_UP, $dynamicEtaUp, $dynamicEtaDown, $capUp, $capDown)
             : 0.0;
         $finalDrift += 0.5 * ((($beta * $diffusionMarketVol) ** 2) + max(0.0, $currentIdiosyncraticVar))
             + ($jumpCompensator - $idiosyncraticJumpMean)
@@ -691,7 +694,7 @@ class MarketEngine
         ?float $longRunReturn = null
     ): array {
 
-        $strategy = \App\Data\Sectors::getBusinessModelStrategy($businessModel);
+        $strategy = \App\Data\Company\Sectors::getBusinessModelStrategy($businessModel);
         $macro = $macroState ?? new MacroStateDTO();
 
         // Every leg below values EQUITY: levered earnings on a P/E, book equity on a P/B, equity earnings on the
@@ -725,8 +728,8 @@ class MarketEngine
         // 1. MACRO FORWARD GUIDANCE & FUNDAMENTAL P/E
         // The growth transmission and the Sloan accruals discount live in MathUtility because the corporate
         // engines strike the same multiple when management decides on a buyback, an offering or a deal.
-        $expectedGrowth = $this->mathUtility->calculateFundableGrowth(
-            $this->mathUtility->calculateExpectedNominalGrowth(
+        $expectedGrowth = Valuation::calculateFundableGrowth(
+            Valuation::calculateExpectedNominalGrowth(
                 $secularGrowth,
                 $outputGap,
                 $beta,
@@ -738,7 +741,7 @@ class MarketEngine
             $inflation
         );
 
-        $fairValuePE = $this->mathUtility->calculateQualityAdjustedFairValuePE(
+        $fairValuePE = Valuation::calculateQualityAdjustedFairValuePE(
             $hurdleRate,
             $equityReturn,
             $expectedGrowth,
@@ -795,8 +798,8 @@ class MarketEngine
 
             $dividendSupportValue = max(
                 0.0,
-                $this->mathUtility->calculateDividendDiscountModel($targetDividend, $requiredYield, $sustainableGrowth)
-                    + $this->mathUtility->calculateDividendAdjustmentValue(($dividendPerShare * 4.0) - $targetDividend, $requiredYield, $dividendAdjustmentSpeed)
+                Valuation::calculateDividendDiscountModel($targetDividend, $requiredYield, $sustainableGrowth)
+                    + Valuation::calculateDividendAdjustmentValue(($dividendPerShare * 4.0) - $targetDividend, $requiredYield, $dividendAdjustmentSpeed)
             );
         }
 
@@ -829,7 +832,7 @@ class MarketEngine
         if ($macroState !== null) {
             // Capitalized on the same perpetual growth the multiple is struck on: the raw outlook can sit within a few
             // basis points of the hurdle in an inflationary boom, and a policy gap spread over that would wipe out value.
-            $capRate = max(PolicyCapitalization::MIN_CAP_RATE, $hurdleRate - MathUtility::perpetualGrowthRate($hurdleRate, $expectedGrowth));
+            $capRate = max(PolicyCapitalization::MIN_CAP_RATE, $hurdleRate - Valuation::perpetualGrowthRate($hurdleRate, $expectedGrowth));
             $repriced = $this->repriceForPolicy($fairValue, $macroState, $strategy, $policyBasesPerShare, $capRate, false);
             $policyRepricing = $repriced / $this->repriceForPolicy($fairValue, $macroState, $strategy, $policyBasesPerShare, $capRate, true);
             $fairValue = $repriced;

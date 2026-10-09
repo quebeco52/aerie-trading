@@ -6,7 +6,7 @@ namespace App\Service\Corporate;
 
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
-use App\Service\Math\CorporateMetrics;
+use App\Service\Math\Decimal;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\MathUtility;
 use App\DTO\CapitalAllocationContext;
@@ -41,7 +41,7 @@ class TreasuryEngine
         private CapExEngine $capExEngine,
         private MathUtility $mathUtility,
         /** Investment securities mark. Defaulted so a harness or a unit test builds an engine without wiring the curve. */
-        private SecuritiesBookService $securitiesBook = new SecuritiesBookService(new \App\Service\Market\Bond\BondPricingEngine(new MathUtility()))
+        private SecuritiesBookService $securitiesBook = new SecuritiesBookService(new \App\Service\Market\Bond\BondPricingEngine())
     ) {}
 
     /**
@@ -207,7 +207,7 @@ class TreasuryEngine
 
         if ($realizedMark !== 0.0) {
             $stock->setUnrealizedSecuritiesMark(
-                \App\Service\Math\MathUtility::formatDecimal($carriedMark - $realizedMark, 4)
+                Decimal::format($carriedMark - $realizedMark, 4)
             );
         }
 
@@ -614,7 +614,7 @@ class TreasuryEngine
             $ctx->macroState->outputGap,
             $ctx->health->leveredBeta,
             $ctx->macroState->inflation,
-            \App\Data\Sectors::baselineIndustryPe($stock->getIndustry()),
+            \App\Data\Company\Sectors::baselineIndustryPe($stock->getIndustry()),
             (float) ($stock->getAccrualsRatio() ?? 0.0),
             $stock->getPolicyPayoutRatio()
         );

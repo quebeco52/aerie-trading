@@ -4,14 +4,14 @@ declare(strict_types=1);
 
 namespace App\Service\View;
 
-use App\Data\Sectors;
+use App\Data\Company\Sectors;
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use App\Repository\CorporateReportRepository;
 use App\Service\Corporate\Industry\IndustryShareLedger;
 use App\Service\Corporate\MergerAndAcquisitionEngine;
 use App\Service\Model\BusinessModelInterface;
-use App\Service\Math\CorporateMetrics;
+use App\Service\Corporate\CorporateMetrics;
 use App\Service\Math\FinancialConstants;
 
 /**

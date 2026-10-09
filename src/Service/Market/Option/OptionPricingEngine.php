@@ -8,10 +8,12 @@ use App\DTO\OptionQuoteDTO;
 use App\DTO\SovereignCurveDTO;
 use App\Entity\OptionContract;
 use App\Entity\Stock;
+use App\Service\Math\Decimal;
 use App\Service\Math\FinancialConstants;
-use App\Service\Math\MathUtility;
 use App\Service\Market\Bond\BondPricingEngine;
 use App\Service\Market\Pricing\MarketEngine;
+use App\Service\Math\OptionPricing;
+use App\Service\Math\StochasticProcesses;
 
 /**
  * Quotes listed options off the same process the price engine simulates.
@@ -43,7 +45,6 @@ use App\Service\Market\Pricing\MarketEngine;
 final class OptionPricingEngine
 {
     public function __construct(
-        private readonly MathUtility $mathUtility,
         private readonly BondPricingEngine $bondPricingEngine,
     ) {}
 
@@ -69,12 +70,12 @@ final class OptionPricingEngine
         float $jumpVol,
         float $timeToExpiry
     ): array {
-        if ($timeToExpiry < MathUtility::MIN_OPTION_TIME_TO_EXPIRY) {
-            return ['atm_volatility' => MathUtility::MIN_OPTION_VOLATILITY, 'skewness' => 0.0, 'excess_kurtosis' => 0.0];
+        if ($timeToExpiry < OptionPricing::MIN_OPTION_TIME_TO_EXPIRY) {
+            return ['atm_volatility' => OptionPricing::MIN_OPTION_VOLATILITY, 'skewness' => 0.0, 'excess_kurtosis' => 0.0];
         }
 
         // The variance expected between now and expiry, marked up by what the desk charges for carrying it.
-        $expectedVolatility = $this->mathUtility->averageMeanRevertingVolatility(
+        $expectedVolatility = StochasticProcesses::averageMeanRevertingVolatility(
             $spotVolatility,
             $longRunVolatility,
             MarketEngine::varianceReversionSpeed($lambda),
@@ -90,10 +91,10 @@ final class OptionPricingEngine
         // The jump's share of that variance, so the diffusion is handed the REMAINDER and the shape function
         // adds the two back to exactly the variance the contract is being struck on. Charging the jump on
         // top instead would quote a name at more volatility than its own tape realizes.
-        $jumpVariance = max(0.0, $lambda) * $this->mathUtility->calculateKouJumpMoment(2, $pUp, $jump['eta_up'], $jump['eta_down']);
+        $jumpVariance = max(0.0, $lambda) * OptionPricing::calculateKouJumpMoment(2, $pUp, $jump['eta_up'], $jump['eta_down']);
         $diffusionVariance = max(0.0, $totalVariance - $jumpVariance);
 
-        $shape = $this->mathUtility->calculateJumpDiffusionShape(
+        $shape = OptionPricing::calculateJumpDiffusionShape(
             $diffusionVariance,
             $lambda,
             $pUp,
@@ -156,7 +157,7 @@ final class OptionPricingEngine
      */
     public function riskFreeRate(SovereignCurveDTO $curve, float $timeToExpiry): float
     {
-        return $this->bondPricingEngine->zeroYield($curve, max(MathUtility::MIN_OPTION_TIME_TO_EXPIRY, $timeToExpiry));
+        return $this->bondPricingEngine->zeroYield($curve, max(OptionPricing::MIN_OPTION_TIME_TO_EXPIRY, $timeToExpiry));
     }
 
     /**
@@ -178,7 +179,7 @@ final class OptionPricingEngine
         // d1 has to be evaluated at the AT-THE-MONEY volatility: the expansion is a function of where the
         // strike sits on the reference distribution, so feeding it a volatility that already depends on the
         // strike would be solving for the answer with the answer.
-        $deviates = $this->mathUtility->calculateBlackScholesDeviates(
+        $deviates = OptionPricing::calculateBlackScholesDeviates(
             $spot,
             $strike,
             $atmVolatility,
@@ -189,14 +190,14 @@ final class OptionPricingEngine
 
         $volatility = $deviates === null
             ? $atmVolatility
-            : $this->mathUtility->calculateGramCharlierImpliedVolatility(
+            : OptionPricing::calculateGramCharlierImpliedVolatility(
                 $atmVolatility,
                 $deviates['d1'],
                 $surface['skewness'],
                 $surface['excess_kurtosis']
             );
 
-        $mark = $this->mathUtility->calculateBlackScholesPrice(
+        $mark = OptionPricing::calculateBlackScholesPrice(
             $spot,
             $strike,
             $volatility,
@@ -206,7 +207,7 @@ final class OptionPricingEngine
             $isCall
         );
 
-        $greeks = $this->mathUtility->calculateBlackScholesGreeks(
+        $greeks = OptionPricing::calculateBlackScholesGreeks(
             $spot,
             $strike,
             $volatility,
@@ -309,12 +310,12 @@ final class OptionPricingEngine
      */
     public function applyMark(OptionContract $contract, OptionQuoteDTO $quote): void
     {
-        $contract->setPrice(MathUtility::formatDecimal($quote->mark, 8))
-            ->setImpliedVolatility(MathUtility::formatDecimal($quote->impliedVolatility, 6))
-            ->setDelta(MathUtility::formatDecimal($quote->delta, 8))
-            ->setGamma(MathUtility::formatDecimal($quote->gamma, 12))
-            ->setVega(MathUtility::formatDecimal($quote->vega, 8))
-            ->setTheta(MathUtility::formatDecimal($quote->theta, 8))
+        $contract->setPrice(Decimal::format($quote->mark, 8))
+            ->setImpliedVolatility(Decimal::format($quote->impliedVolatility, 6))
+            ->setDelta(Decimal::format($quote->delta, 8))
+            ->setGamma(Decimal::format($quote->gamma, 12))
+            ->setVega(Decimal::format($quote->vega, 8))
+            ->setTheta(Decimal::format($quote->theta, 8))
             ->setUpdatedAt(new \DateTime());
     }
 

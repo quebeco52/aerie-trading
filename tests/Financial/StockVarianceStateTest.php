@@ -8,6 +8,7 @@ use App\DTO\MacroStateDTO;
 use App\DTO\MarketPricingContext;
 use App\Service\Market\Pricing\MarketEngine;
 use App\Service\Math\MathUtility;
+use App\Service\Math\StochasticProcesses;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -225,7 +226,7 @@ final class StockVarianceStateTest extends TestCase
     {
         $lambda = 1.0;
         $kappa = MarketEngine::varianceReversionSpeed($lambda);
-        $perUnitJump = MathUtility::meanVarianceJump(MarketEngine::jumpProbabilityUp(), 0.50);
+        $perUnitJump = StochasticProcesses::meanVarianceJump(MarketEngine::jumpProbabilityUp(), 0.50);
 
         self::assertEqualsWithDelta(
             $lambda * $perUnitJump / $kappa,

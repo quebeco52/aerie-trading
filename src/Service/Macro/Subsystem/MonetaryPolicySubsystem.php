@@ -2,11 +2,15 @@
 
 namespace App\Service\Macro\Subsystem;
 
-use App\Data\MacroFieldRegistry;
+use App\Data\Macro\MacroFieldRegistry;
 use App\Service\Macro\Recorder\MacroDiagnosticsProbe;
 use App\Service\Macro\MacroEngine;
 use App\Service\Macro\MacroState;
+use App\Service\Math\CreditRisk;
+use App\Service\Math\FixedIncome;
+use App\Service\Math\MacroTransmission;
 use App\Service\Math\MathUtility;
+use App\Service\Math\TimeSeries;
 
 /**
  * Handles central bank monetary policy targeting, policy rate smoothing,
@@ -329,7 +333,7 @@ class MonetaryPolicySubsystem
      */
     public function updateInflationAnchor(MacroState $state, float $dt): void
     {
-        $state->inflationAnchorDrift = $this->mathUtility->calculateDistributedLag(
+        $state->inflationAnchorDrift = TimeSeries::calculateDistributedLag(
             currentLaggedValue: $state->inflationAnchorDrift,
             targetValue: self::PRESSURE_ANCHOR_DRIFT_RATE * $state->authorityConcession / self::KOZICKI_TINSLEY_ADAPTATION_SPEED,
             dt: $dt,
@@ -376,7 +380,7 @@ class MonetaryPolicySubsystem
      */
     public function calculateLongRateGap(MacroState $state, float $naturalRate): float
     {
-        $habitatShiftAtTenYears = $this->mathUtility->calculatePreferredHabitatTermPremiumShift(
+        $habitatShiftAtTenYears = FixedIncome::calculatePreferredHabitatTermPremiumShift(
             balanceSheetIntensity: $state->balanceSheetIntensity,
             tau: 10.0,
             habitatSensitivity: MacroEngine::PREFERRED_HABITAT_DURATION_SENSITIVITY
@@ -429,7 +433,7 @@ class MonetaryPolicySubsystem
         }
 
         $maxSpeed = $effectiveTarget > $currentPolicyRate ? self::CB_MAX_HIKE_VELOCITY : INF;
-        $newPolicyRate = $this->mathUtility->calculateSpeedLimitedDistributedLag($currentPolicyRate, $effectiveTarget, $dt, 1.0 / $cbSpeed, $maxSpeed);
+        $newPolicyRate = TimeSeries::calculateSpeedLimitedDistributedLag($currentPolicyRate, $effectiveTarget, $dt, 1.0 / $cbSpeed, $maxSpeed);
 
         if ($this->diagnostics?->isEnabled()) {
             $this->diagnostics->recordPolicyRate($newPolicyRate, [
@@ -670,7 +674,7 @@ class MonetaryPolicySubsystem
         $nsBeta3 = self::SVENSSON_CURVATURE2_FISCAL_SCALE * $fiscalShift;
 
         // Greenwood & Vayanos (2014) preferred-habitat long-end duration demand hurdle.
-        $scale30y = MathUtility::calculateTermPremiumDurationScale(30.0, MacroEngine::TERM_PREMIUM_DURATION_HORIZON_YEARS);
+        $scale30y = FixedIncome::calculateTermPremiumDurationScale(30.0, MacroEngine::TERM_PREMIUM_DURATION_HORIZON_YEARS);
         $longEndHurdle = $naturalRate + $targetInflation + (MacroEngine::NS_BASE_TERM_PREMIUM * $scale30y);
         $habitatDemandShift = self::HABITAT_LONG_END_DEMAND_SENSITIVITY * max(0.0, $state->yield30yEma - $longEndHurdle);
         $longEndPremium = max(0.0, $termPremiumFactors['regime'] - $habitatDemandShift);
@@ -817,7 +821,7 @@ class MonetaryPolicySubsystem
     public function calculateSvenssonTenor(float $t, float $level, float $nsBeta1, float $nsBeta2, float $nsBeta3, MacroState $state, float $termPremium10y = 0.0, float $longEndPremium = 0.0): float
     {
         // Vayanos & Vila (2021) Preferred-Habitat Model: duration extraction under QE/QT compresses term premium by tenor duration
-        return $this->mathUtility->calculateSovereignZeroYield(
+        return FixedIncome::calculateSovereignZeroYield(
             tau: $t,
             level: $level,
             slope: $nsBeta1,
@@ -855,7 +859,7 @@ class MonetaryPolicySubsystem
         $neutralSpread = $neutralRate * (1.0 - MacroEngine::SYSTEM_DEPOSIT_BETA_BASE);
         $targetShare = MacroEngine::MMF_SHARE_BASE + (self::MMF_SPREAD_SENSITIVITY * ($depositSpread - $neutralSpread));
         $targetShare = max(self::MIN_MMF_SHARE, min(self::MAX_MMF_SHARE, $targetShare));
-        $state->moneyMarketFundShare = $this->mathUtility->calculateDistributedLag(
+        $state->moneyMarketFundShare = TimeSeries::calculateDistributedLag(
             currentLaggedValue: $state->moneyMarketFundShare,
             targetValue: $targetShare,
             dt: $dt,
@@ -875,7 +879,7 @@ class MonetaryPolicySubsystem
     public function calculateRecessionProbability(MacroState $state): void
     {
         $slope = $state->yield10y - $state->policyRate;
-        $state->recessionProbability = $this->mathUtility->calculateEstrellaMishkinProbability(
+        $state->recessionProbability = CreditRisk::calculateEstrellaMishkinProbability(
             slope: $slope,
             termPremium: $state->termPremium10y,
             fci: $state->financialConditionsIndex,
@@ -914,7 +918,7 @@ class MonetaryPolicySubsystem
             'max' => self::MAX_M2_GROWTH,
         ];
 
-        $state->moneySupplyGrowth = $this->mathUtility->calculateBroadMoneyGrowth(
+        $state->moneySupplyGrowth = MacroTransmission::calculateBroadMoneyGrowth(
             currentM2Growth: $state->moneySupplyGrowth,
             baseGrowth: $baseGrowth,
             balanceSheetIntensity: $state->balanceSheetIntensity,

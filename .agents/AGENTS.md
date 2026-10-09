@@ -5,13 +5,15 @@ real world data (mostly US data) drives about 60 listed firms through sector bus
 flow. Players trade on in-world sites of the Aerie District, a financial-centre enclave (Year 1 = 2009Q1).
 
 ## Map
-src/Service/Math/       MathUtility (shared formulas), FinancialConstants (shared constants)
+src/Service/Math/       shared formulas by domain (FixedIncome, OptionPricing, CreditRisk, Valuation, TimeSeries, ...),
+                        MathUtility (the random source), FinancialConstants (shared constants)
 src/Service/Macro/      MacroEngine and its six subsystems
 src/Service/Politics/   Diet, cabinets, polls, elections, policy levers
 src/Service/Corporate/  earnings, debt, treasury, capital allocation, M&A
 src/Service/Model/      business models: Standard*Trait defaults, Sector/ overrides
 src/Service/Market/     price formation, order flow, bonds, options, margin
-src/Data/               seed data and lore (InitialMarket, DistrictMap, AerieDiet, ...)
+src/Data/               seed data and lore by subject: Company (InitialMarket, StockModelTuning), District,
+                        Macro (field registry, IO exposures), Politics (AerieDiet, AerieCouncil)
 
 ## Push back
 You are an architect, not an order-taker. If a request introduces a bug, breaks an accounting identity, double-counts
@@ -20,7 +22,8 @@ measurement where you can. The user can override anything, but you must point ou
 
 ## Models and math
 - Every formula is a named, published model you can cite. No ad-hoc clamps or "feels right" scalars.
-- Formulas used in more than one place live in `App\Service\Math\MathUtility`. Grep it before writing a new one.
+- Formulas used in more than one place live in `src/Service/Math/`, one class per domain, as pure static functions.
+  `MathUtility` is the random source: a formula goes there only if it draws. Grep the directory before writing one.
 - Calibrate to public data (FRED, BEA, EIA, filings). The macro core targets US moments. Deliberate departures:
   the Sovereign Reserve Fund and the District's openness (judge against the no-fund arm or small open economies),
   and firms fail rarely by design. Do not tune failure rates toward US default rates.
@@ -56,11 +59,11 @@ spend them where the answer is emergent.
   the rate is sane.
 - **Tuning toward a measured moment, or a claim that a change moves one:** arms on the same seeds, reporting n, mean
   and standard error of the paired difference (t = Δ / SE_Δ) for 1-3 target quantities named before the run.
-  Harnesses live in `var/harness/<topic>/` (read `<topic>/RUN.md` first; do not scan the whole directory). Run in stages
-  of 8, 16, then 48 seeds per arm; stop early once every target has |t| ≥ 4 or is negligible. 48 is the ceiling, and
-  variances need it. Iterate on 3-4 seeds and run the stages once, on the final version. Run only the arms the question
-  needs (no-fund only for a fund-driven moment), reuse a cached baseline arm when `src/` is unchanged, and ask before a
-  sweep over 100 runs.
+  Harnesses live in `var/harness/<topic>/`; their code is tracked, their runs are not (read `<topic>/RUN.md` first;
+  do not scan the whole directory). Run in stages of 8, 16, then 48 seeds per arm; stop early once every target has
+  |t| ≥ 4 or is negligible. 48 is the ceiling, and variances need it. Iterate on 3-4 seeds and run the stages once, on
+  the final version. Run only the arms the question needs (no-fund only for a fund-driven moment), reuse a cached
+  baseline arm when `src/` is unchanged, and ask before a sweep over 100 runs.
 - **What the live game is doing:** tell the user to run `make macro-dump` first; a harness only for the counterfactual.
 
 One seed proves nothing about a moment. All PHP processes on the machine share 12 slots through `bin/php-slot`, at most 8 per session.
@@ -98,7 +101,6 @@ in the commit message, not the code.
   With Docker: `make test-unit` (~0.2 s), `make test` (Fast suite, ~1 min), `make test-realism` (five multi-seed
   long-run tests, ~3 min serial), `make phpstan FILE=<path>`. Before committing: `bin/verify --full` (~1 min).
 - A realism test that runs over ~5 s belongs in the Realism suite in `phpunit.dist.xml`, not Fast.
-- Never create a file named `phpunit.tmp.xml`; it is tracked.
 
 ## Database
 Change entities only. Never write or generate migrations; the user generates them with Doctrine. Say in your report
@@ -109,7 +111,7 @@ Commit only when the user asks.
 
 ## Pages
 Player pages are the District's own sites: no model names, citations, coefficients or file paths in templates.
-Sentence-case labels, mono type only for figures, institution names from `App\Data\Institutions`. Format figures
+Sentence-case labels, mono type only for figures, institution names from `App\Data\District\Institutions`. Format figures
 with `|signed_class`, `|pct`, `|money` and `source_line()`, not by hand. Read `.agents/FRONTEND.md` before any template,
 page script or company profile change; `tests/Twig/TemplateStyleTest.php` enforces it, and `bin/render-pages`
 screenshots the result.
