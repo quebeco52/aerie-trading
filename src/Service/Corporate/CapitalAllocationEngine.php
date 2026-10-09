@@ -154,6 +154,8 @@ class CapitalAllocationEngine
         // As a firm approaches market saturation, internal reinvestment slows and target payout scales toward cash cow levels.
         $saturationSeverity = $this->resolveRedeploymentSeverity($ctx, $trueReturn);
         $effectiveTargetPayout = $this->corporateMetrics->calculateLifeCyclePayoutRatio($targetPayout, $saturationSeverity);
+        // A tax on dividends shifts payout toward buybacks, a cut back toward dividends (Chetty & Saez 2005).
+        $effectiveTargetPayout *= Valuation::dividendTaxPayoutScale($ctx->macroState->dividendTaxRate);
 
         // Life-cycle gate (Dickinson 2011): a pre-profit firm funding itself with outside capital does not
         // initiate distributions; every dollar goes back into the business until operations turn cash positive.

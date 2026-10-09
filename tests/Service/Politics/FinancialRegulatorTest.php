@@ -125,6 +125,27 @@ class FinancialRegulatorTest extends TestCase
         }
     }
 
+    /**
+     * Each regime carries its jurisdiction's positive neutral countercyclical buffer, none where it holds none: the UK's,
+     * the Netherlands' and Sweden's 2% the highest set, the US among those without; a stance reads its own regime's.
+     */
+    public function testEachRegimeCarriesItsNeutralBuffer(): void
+    {
+        $this->assertCount(count(Regulator::OBSERVED_REQUIREMENTS), Regulator::OBSERVED_NEUTRAL_BUFFERS);
+        $this->assertSame(0.0, Regulator::OBSERVED_NEUTRAL_BUFFERS[array_search(0.1230, Regulator::OBSERVED_REQUIREMENTS, true)], 'The US holds none.');
+        $this->assertSame(0.020, Regulator::OBSERVED_NEUTRAL_BUFFERS[array_search(0.1046, Regulator::OBSERVED_REQUIREMENTS, true)], 'The UK holds 2%.');
+        $this->assertCount(7, array_filter(Regulator::OBSERVED_NEUTRAL_BUFFERS, static fn (float $buffer): bool => $buffer > 0.0));
+        foreach (Regulator::OBSERVED_REQUIREMENTS as $index => $requirement) {
+            $this->assertSame(Regulator::OBSERVED_NEUTRAL_BUFFERS[$index], Regulator::neutralBufferForStance(Regulator::stance($requirement)), "regime {$index}");
+        }
+
+        $state = self::opened();
+        $this->assertSame(0.0, $state->regulatorNeutralBuffer, 'The head at Year 1 holds none, as the US does.');
+        $this->assertSame(0.0, PoliticsStateDTO::fromState($state)->policy()->neutralCountercyclicalBuffer);
+        $handed = new PoliticsStateDTO(regulatorNeutralBuffer: 0.015);
+        $this->assertSame(0.015, $handed->policy()->neutralCountercyclicalBuffer);
+    }
+
     /** The head sitting at Year 1 runs no mortgage cap, and the economy is handed none. */
     public function testTheHeadAtYearOneRunsNoMortgageCap(): void
     {
@@ -158,6 +179,7 @@ class FinancialRegulatorTest extends TestCase
 
             $this->assertSame(Regulator::ltvCapForStance($state->regulatorStance), Regulator::ltvCap($state), 'The head runs their regime\'s cap.');
             $this->assertSame(Regulator::ltvCap($state), PoliticsStateDTO::fromState($state)->policy()->mortgageLtvCap, 'In force from the seating, with no phase-in.');
+            $this->assertSame(Regulator::neutralBufferForStance($state->regulatorStance), PoliticsStateDTO::fromState($state)->policy()->neutralCountercyclicalBuffer, 'And their regime\'s neutral buffer.');
 
             $target = Regulator::requirement($state->regulatorStance);
             $this->assertEqualsWithDelta(Regulator::requirementInForce($target, FinancialConstants::OPENING_BANK_CAPITAL_REQUIREMENT, $state->totalTime - $appointedAt), $state->bankCapitalRequirement, 1e-12);

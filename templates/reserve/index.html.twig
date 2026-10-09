@@ -396,7 +396,7 @@
 				},
 				{
 					name: 'District equity band',
-					text: 'Policy weight ' ~ (bands[0].policy * 100)|number_format(2) ~ '%, band ±' ~ (bands[0].band * 100)|number_format(2) ~ 'pp, so it trips on a relative move of about ' ~ (bands[0].breachingMove * 100)|number_format(0) ~ '%.'
+					text: 'The Diet sets how much of the fund\'s equities are held in the District: ' ~ mandate.homeShare|pct(0) ~ ' under the law in force. Policy weight ' ~ (bands[0].policy * 100)|number_format(2) ~ '%, band ±' ~ (bands[0].band * 100)|number_format(2) ~ 'pp, so it trips on a relative move of about ' ~ (bands[0].breachingMove * 100)|number_format(0) ~ '%.'
 				},
 				{
 					name: 'Equity band',

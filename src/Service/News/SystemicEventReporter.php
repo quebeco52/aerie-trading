@@ -14,6 +14,7 @@ use App\Service\Macro\Subsystem\CreditFiscalSubsystem;
 use App\Service\Macro\Subsystem\SovereignFundSubsystem;
 use App\Service\Market\Chart\PriceChangeFeed;
 use App\Service\Politics\CoalitionFormation;
+use App\Service\Politics\DebtBrake;
 use App\Service\Politics\Exchequer;
 use App\Service\Politics\FinancialRegulator;
 use App\Service\Politics\MonetaryAuthority;
@@ -262,6 +263,10 @@ class SystemicEventReporter
             $context['councillor_stance'] = $stance($politics->councilStances[$seat] ?? 0.0, $politics->councilSwingers[$seat] ?? 0.0);
             $context['councillor_passed_over'] = $passedOver($politics->councillorPassedOver);
             $context['councillor_term_ends'] = GovernmentPageBuilder::simDate(($politics->councilSince[$seat] ?? $time) + AerieCouncil::TERM_YEARS);
+            $line = DebtBrake::councilLine($politics);
+            $context['debt_line_change'] = $politics->debtLineBeforeSeating >= 0.0 && abs($line - $politics->debtLineBeforeSeating) > 1e-9
+                ? sprintf(' The Council\'s debt line moves from %s%% to %s%% of GDP.', rtrim(rtrim(number_format(100.0 * $politics->debtLineBeforeSeating, 1), '0'), '.'), rtrim(rtrim(number_format(100.0 * $line, 1), '0'), '.'))
+                : '';
             if ($politics->lastCouncilVacancyAt === $politics->lastCouncillorSeatedAt && $politics->lastVacancyName !== '') {
                 $context['predecessor'] = $politics->lastVacancyName;
                 $context['vacancy_cause'] = $politics->lastVacancyCause;

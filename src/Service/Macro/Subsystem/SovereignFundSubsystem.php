@@ -21,10 +21,10 @@ use App\Service\Math\TimeSeries;
  *  - It holds three sleeves at policy weights: a cap-weighted slice of the whole board, and foreign equities and
  *    foreign sovereign paper, opening on GIC's 65/35 reference mix. Each drifts with its own market between rebalances;
  *    the paper is a constant-duration index on the foreign curve, so it carries, rolls down and reprices with the
- *    foreign rate. The policy equity share is the head's to set (App\Service\Politics\SovereignReserveFund): a new
- *    share keeps the board's part of the fund's equities as it opened, the way GPIF doubled its home and its foreign
- *    equities together in 2014, puts the foreign sleeves on their new split at once and moves the board to its new weight
- *    over a transition programme.
+ *    foreign rate. The policy equity share is the head's to set (App\Service\Politics\SovereignReserveFund), and the
+ *    board's part of the fund's equities the Diet's (Norway's fund holds none at home, GPIF half since 2014): either
+ *    change puts the foreign sleeves on their new split at once and moves the board to its new weight over a transition
+ *    programme.
  *  - At a month end it checks two deviation limits the way GPIF does: the domestic equity weight against its band,
  *    and the whole fund's equity share against its band. A breach of either trades every sleeve back to its policy
  *    weight, the board over the following months (Norges Bank's rebalancing rule) and the foreign sleeves at once,
@@ -76,6 +76,8 @@ class SovereignFundSubsystem
     // --- The Opening Mix ---
     /** Policy equity share the fund opens at, measured on the fund harness (var/harness/FundHarnessTest.php, seeds 1-3): a 16.25% board weight (5.8% of the $14.5T opening float in a $5.2T fund) plus GIC's 65% on the rest. */
     public const OPENING_POLICY_EQUITY_SHARE = 0.7069;
+    /** Share of the fund's equities held on the board at its opening, the home share the Diet founds it with: the same harness's 16.25% board weight over that equity share. */
+    public const OPENING_HOME_EQUITY_SHARE = 0.1625 / self::OPENING_POLICY_EQUITY_SHARE;
 
     // --- A New Policy Mix (Norway's Ministry of Finance, 2017) ---
     /** Months over which the board is traded to the weight a new policy mix sets: the published phase-in of the Norwegian fund's 62.5% to 70%, September 2017 to April 2019. Its 40% to 60% took 24 months, GPIF's 2014 move closed three quarters of its gap in eight. */
@@ -183,6 +185,7 @@ class SovereignFundSubsystem
         $state->sovereignFundDomesticEquity = $domestic;
         $state->sovereignFundTargetWeight = $domestic / ($domestic + $foreign);
         $state->sovereignFundPolicyEquityShare = $this->policyEquityShare($state->sovereignFundTargetWeight);
+        $state->sovereignFundHomeEquityShare = $state->reserveHomeEquityShare;
         $this->resetForeignSplit($state, $foreign);
         $state->foreignBondYield = $this->foreignZeroYield($state, self::FOREIGN_BOND_DURATION);
         $state->sovereignFundReturnIndex = self::RETURN_INDEX_BASE;
@@ -442,23 +445,27 @@ class SovereignFundSubsystem
     }
 
     /**
-     * A new mandate from the fund's head: the board keeps its share of the policy equities, so its weight moves with the
-     * equity share; the foreign sleeves go onto the split that makes up the rest at once; and the board is traded to its
-     * new weight over the transition, re-measured at each month end as any programme is. The ownership ceiling caps what
-     * the fund may buy.
+     * A new mandate from the fund's head, or a new home share from the Diet: the board's weight is the home share of the
+     * policy equities (until the Diet first moves it, the share the fund opened with); the foreign sleeves go onto the
+     * split that makes up the rest at once; and the board is traded to its new weight over the transition, re-measured
+     * at each month end as any programme is. The ownership ceiling caps what the fund may buy.
      */
     private function adoptMandate(MacroState $state): void
     {
         $mandate = $state->sovereignFundMandateEquityShare;
         $current = $state->sovereignFundPolicyEquityShare;
         $fund = $this->fundValue($state);
-        if ($mandate <= 0.0 || $current <= 0.0 || $fund <= 0.0 || abs($mandate - $current) < 1e-9) {
+        $newMandate = $mandate > 0.0 && abs($mandate - $current) >= 1e-9;
+        $newHomeShare = abs($state->reserveHomeEquityShare - $state->sovereignFundHomeEquityShare) >= 1e-9;
+        if ($current <= 0.0 || $fund <= 0.0 || (!$newMandate && !$newHomeShare)) {
             return;
         }
 
-        $homeShare = $state->sovereignFundTargetWeight / $current;
-        $state->sovereignFundPolicyEquityShare = $mandate;
-        $state->sovereignFundTargetWeight = $homeShare * $mandate;
+        $equityShare = $newMandate ? $mandate : $current;
+        $homeShare = $newHomeShare ? $state->reserveHomeEquityShare : $state->sovereignFundTargetWeight / $current;
+        $state->sovereignFundHomeEquityShare = $state->reserveHomeEquityShare;
+        $state->sovereignFundPolicyEquityShare = $equityShare;
+        $state->sovereignFundTargetWeight = $homeShare * $equityShare;
         $this->resetForeignSplit($state, $this->foreignHomeValue($state));
 
         $gap = min(($state->sovereignFundTargetWeight * $fund) - $state->sovereignFundDomesticEquity, $this->purchaseRoom($state));

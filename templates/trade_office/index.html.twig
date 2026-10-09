@@ -1,0 +1,92 @@
+{% extends 'base.html.twig' %}
+
+{% block title %}Trade & Migration Office - Aerie Exchange{% endblock %}
+
+{% block meta %}
+	<meta name="description" content="The District's Trade & Migration Office: the tariff on imports, the migration regime and the tax on homes bought from outside the District.">
+	<meta property="og:title" content="Trade & Migration Office | Aerie Exchange">
+	<meta property="og:type" content="website">
+{% endblock %}
+
+{% macro law_line(law) %}
+	<dl class="grid grid-cols-3 gap-x-6 gap-y-1 mt-4 text-xs">
+		<div>
+			<dt class="text-on-surface-variant">In force</dt>
+			<dd class="text-on-surface mt-0.5 font-mono tabular-nums">{{ law.inForce|pct(2) }}</dd>
+		</div>
+		<div>
+			<dt class="text-on-surface-variant">Next budget</dt>
+			<dd class="text-on-surface mt-0.5 font-mono tabular-nums">{{ law.next is null ? '–' : law.next|pct(2) }}</dd>
+		</div>
+		<div>
+			<dt class="text-on-surface-variant">After the vote</dt>
+			<dd class="text-on-surface mt-0.5 font-mono tabular-nums">{{ law.expected is null ? '–' : law.expected|pct(2) }}</dd>
+		</div>
+	</dl>
+{% endmacro %}
+
+{% block body %}
+<div class="max-w-400 mx-auto px-4 sm:px-6 lg:px-8 pt-8 pb-12 w-full space-y-6">
+
+	{% include 'government/_breadcrumb.html.twig' with {current: 'Trade & Migration Office'} %}
+	<header class="pb-5 border-b border-outline-variant/15">
+		<h1 class="text-2xl md:text-3xl font-semibold text-on-surface tracking-tight">Trade &amp; Migration Office</h1>
+		<p class="mt-2 text-sm text-on-surface-variant leading-relaxed max-w-3xl">
+			The office that collects the District's tariff, issues its work and residence permits and levies the tax on homes
+			bought from outside the District. It sets none of them: each is a law the Diet passes in its budget, and the office
+			carries out what the budget says.{% if office.expectedFrom %} Traders expect the laws the next government passes
+			to take effect from {{ office.expectedFrom }}.{% endif %}
+		</p>
+	</header>
+
+	{% set tariff = office.tariff %}
+	<section class="bg-surface-container-low rounded-lg p-5 border border-outline-variant/20" aria-labelledby="tariff-heading">
+		<h2 id="tariff-heading" class="text-sm font-semibold text-on-surface">The tariff on imports</h2>
+		{{ _self.law_line(tariff) }}
+		<p class="text-xs text-on-surface mt-4 max-w-3xl">
+			{% if tariff.inForce > 0 %}
+				Goods worth <span class="font-mono tabular-nums">{{ tariff.goodsImportsToGdp|pct(0) }}</span> of GDP come in each year, and the tariff raises
+				<span class="font-mono tabular-nums">{{ tariff.revenueToGdp|pct(2) }}</span> of GDP from them. The District's partners answer with
+				<span class="font-mono tabular-nums">{{ tariff.retaliation|pct(1) }}</span> on its exports, and sheltered firms cost the economy
+				<span class="font-mono tabular-nums">{{ tariff.outputCost|pct(2) }}</span> of its output for as long as the tariff stands.
+			{% else %}
+				The District is a free port: goods worth <span class="font-mono tabular-nums">{{ tariff.goodsImportsToGdp|pct(0) }}</span> of GDP come in each year without duty, and its exports meet none in return.
+			{% endif %}
+		</p>
+	</section>
+
+	<div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
+		{% set migration = office.migration %}
+		<section class="bg-surface-container-low rounded-lg p-5 border border-outline-variant/20" aria-labelledby="migration-heading">
+			<h2 id="migration-heading" class="text-sm font-semibold text-on-surface">Migration</h2>
+			<p class="text-xs text-on-surface-variant mt-0.5">Labour force growth a year, the newcomers the permits admit in it</p>
+			{{ _self.law_line(migration) }}
+			<p class="text-xs text-on-surface mt-4 max-w-3xl">
+				The District opened admitting enough newcomers for its labour force to grow <span class="font-mono tabular-nums">{{ migration.structural|pct(2) }}</span> a year.
+				The permits have added <span class="font-mono tabular-nums">{{ migration.populationShift|pct(1, true) }}</span> to the population since, against that path.
+			</p>
+			<p class="text-xs text-on-surface-variant mt-3 leading-relaxed">
+				The tightest regime the Diet can pass admits <span class="font-mono tabular-nums">{{ migration.closed|pct(2) }}</span> of the population a year, the most open
+				<span class="font-mono tabular-nums">{{ migration.open|pct(2) }}</span>. Newcomers need homes before they need jobs, so a rise in migration reaches house prices first.
+			</p>
+		</section>
+
+		{% set buyers = office.foreignBuyers %}
+		<section class="bg-surface-container-low rounded-lg p-5 border border-outline-variant/20" aria-labelledby="buyers-heading">
+			<h2 id="buyers-heading" class="text-sm font-semibold text-on-surface">Homes bought from outside the District</h2>
+			<p class="text-xs text-on-surface-variant mt-0.5">Tax on the price, paid by a buyer who lives outside the District</p>
+			{{ _self.law_line(buyers) }}
+			<p class="text-xs text-on-surface mt-4 max-w-3xl">
+				{% if buyers.inForce > 0 %}
+					It holds home prices <span class="font-mono tabular-nums">{{ buyers.priceEffect|pct(1) }}</span> below where they would stand without it, as most buyers from outside stay away.
+				{% else %}
+					Homes are open to buyers from anywhere, as at Year 1.
+				{% endif %}
+				The highest rate the Diet can pass is <span class="font-mono tabular-nums">{{ buyers.strictest|pct(0) }}</span>.
+			</p>
+		</section>
+	</div>
+
+	<p class="source-note">{{ source_line('trade-migration-office') }}</p>
+</div>
+{% endblock %}

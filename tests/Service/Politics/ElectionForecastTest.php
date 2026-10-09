@@ -9,6 +9,7 @@ use App\DTO\MacroStateDTO;
 use App\Service\Macro\MacroEngine;
 use App\Service\Math\MathUtility;
 use App\Service\Politics\CoalitionFormation;
+use App\Service\Politics\DebtBrake;
 use App\Service\Politics\ElectionForecast;
 use App\Service\Politics\OpinionPolls;
 use App\Service\Politics\PoliticsEngine as Politics;
@@ -106,7 +107,7 @@ class ElectionForecastTest extends TestCase
         $standing = Politics::standingLevers($state);
         $expected = 0.0;
         foreach ($odds as $option) {
-            $expected += $option['chance'] * Politics::budget($option['cabinet'], $option['support'], $seats, $state->partyPositions, $standing, 0.6)['levers']['corporateTax'];
+            $expected += $option['chance'] * Politics::budget($option['cabinet'], $option['support'], $seats, $state->partyPositions, $standing, 0.6, DebtBrake::councilLine($state))['levers']['corporateTax'];
         }
         // Within the weight of the cabinets too unlikely to work out, which the read leaves out.
         $this->assertEqualsWithDelta($expected, ElectionForecast::sittingBudget($state, 0.6)['corporateTax'], 1e-4);
@@ -176,7 +177,7 @@ class ElectionForecastTest extends TestCase
         }
         // Once a government takes office its first budget is the sitting one, and the forecast turns to the next vote.
         $cabinet = Diet::governingParties($state->governingCoalition);
-        $budget = Politics::budget($cabinet, Diet::governingParties($state->supportParties), $state->dietSeats, $state->partyPositions, Politics::standingLevers($state), 0.6);
+        $budget = Politics::budget($cabinet, Diet::governingParties($state->supportParties), $state->dietSeats, $state->partyPositions, Politics::standingLevers($state), 0.6, DebtBrake::councilLine($state));
         $this->assertEqualsWithDelta($budget['levers']['corporateTax'], $state->sittingLevers['corporateTax'], 1e-12);
         $this->assertSame(8.0, $state->forecastFor);
         $this->assertSame($state->totalTime, $state->forecastAt, 'Forecast on the day it takes office, before any poll.');

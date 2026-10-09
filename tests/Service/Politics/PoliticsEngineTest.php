@@ -17,9 +17,12 @@ use App\Service\Macro\Subsystem\CreditFiscalSubsystem;
 use App\Service\Macro\Subsystem\LaborMarketSubsystem;
 use App\Service\Macro\Subsystem\MacroAggregateSubsystem;
 use App\Service\Macro\Subsystem\MonetaryPolicySubsystem;
+use App\Service\Macro\Subsystem\SovereignFundSubsystem;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Math\TimeSeries;
+use App\Service\Math\Valuation;
+use App\Service\Model\Sector\UtilityBusinessModel;
 use App\Service\Politics\CoalitionFormation;
 use App\Service\Politics\ElectionForecast;
 use App\Service\Politics\PoliticsEngine as Politics;
@@ -847,6 +850,7 @@ class PoliticsEngineTest extends TestCase
 
         $this->assertSame(0.0, $state->corporateTaxPolicyShift, 'The tax cut is never tabled.');
         $this->assertSame(0.08, $state->importTariffRate, 'Nor is the end of the tariff, which is revenue too.');
+        $this->assertSame(Valuation::FOUNDING_DIVIDEND_TAX_RATE, $state->dividendTaxRate, 'Nor the end of the tax on dividends.');
         $this->assertGreaterThan(MacroEngine::STRUCTURAL_LABOR_GROWTH_RATE, $state->laborForceGrowthRate, 'The immigration regime costs no revenue and passes.');
         $this->assertSame($state->totalTime, $state->lastCouncilBrakeAt);
     }
@@ -892,6 +896,62 @@ class PoliticsEngineTest extends TestCase
         $this->assertSame(0.0, Politics::platform([Diet::AXIS_OPENNESS => 0.0])['foreignBuyerTax']);
         $this->assertEqualsWithDelta(Politics::POLICY_PROTECTIONIST_FOREIGN_BUYER_TAX / 2.0, Politics::platform([Diet::AXIS_OPENNESS => Diet::FIXED_POSITIONS[Diet::IRON_HARBOR][Diet::AXIS_OPENNESS] / 2.0])['foreignBuyerTax'], 1e-15);
         $this->assertFalse(Politics::REVENUE_LEVERS['foreignBuyerTax']);
+    }
+
+    /** The ends of the size-of-state axis raise a debt repair's share by tax the 2010 UK manifestos apart, the neutral position keeping the average plan's mix; no revenue the brake guards. */
+    public function testTheConsolidationMixPlatformsSpanTheManifestoGap(): void
+    {
+        $civic = Politics::platform(Diet::position(Diet::CIVIC, []))['consolidationTaxShare'];
+        $vanguard = Politics::platform(Diet::position(Diet::VANGUARD, []))['consolidationTaxShare'];
+        $this->assertEqualsWithDelta(10.0 / 71.0, $civic - $vanguard, 1e-12, 'Labour\'s 2:1 against the Conservatives\' 4:1.');
+        $this->assertEqualsWithDelta(CreditFiscalSubsystem::FOUNDING_CONSOLIDATION_TAX_SHARE, Politics::platform([Diet::AXIS_STATE => 0.0])['consolidationTaxShare'], 1e-12);
+        $this->assertEqualsWithDelta(CreditFiscalSubsystem::FOUNDING_CONSOLIDATION_TAX_SHARE, (new PoliticsStateDTO())->consolidationTaxShare, 1e-12);
+        $this->assertFalse(Politics::REVENUE_LEVERS['consolidationTaxShare']);
+        $this->assertSame(Diet::AXIS_STATE, Politics::LEVER_AXES['consolidationTaxShare']);
+    }
+
+    /**
+     * The technocratic half of the Council axis keeps the appointed commission, which grants two thirds of a request; the
+     * populist end grants as an elected one, about a third of that, so that ten elected commissions among fifty hold the
+     * US average of 58%.
+     */
+    public function testTheUtilityCommissionGrantsLessTowardThePopulistEnd(): void
+    {
+        $appointed = UtilityBusinessModel::APPOINTED_COMMISSION_GRANTED_SHARE;
+        $elected = $appointed * UtilityBusinessModel::ELECTED_COMMISSION_GRANT_RATIO;
+        $this->assertEqualsWithDelta(0.58, (0.8 * $appointed) + (0.2 * $elected), 1e-12);
+        $this->assertEqualsWithDelta(0.666, $appointed, 0.001);
+        $this->assertEqualsWithDelta($elected, Politics::platform(Diet::position(Diet::COMMON_LOT, []))['utilityRateGrant'], 1e-12);
+        $this->assertEqualsWithDelta($appointed, Politics::platform(Diet::position(Diet::CHARTISTS, []))['utilityRateGrant'], 1e-12);
+        $this->assertEqualsWithDelta($appointed, Politics::platform([Diet::AXIS_COUNCIL => 0.0])['utilityRateGrant'], 1e-12);
+        $this->assertEqualsWithDelta(($appointed + $elected) / 2.0, Politics::platform([Diet::AXIS_COUNCIL => Diet::FIXED_POSITIONS[Diet::COMMON_LOT][Diet::AXIS_COUNCIL] / 2.0])['utilityRateGrant'], 1e-12);
+        $this->assertSame($appointed, (new PoliticsStateDTO())->utilityRateCaseGrantShare);
+        $this->assertFalse(Politics::REVENUE_LEVERS['utilityRateGrant']);
+    }
+
+    /** The big-state end taxes dividends at the top income rate, as the 2013 US budget proposed; the small-state end exempts them, as the 2003 proposal did; the middle keeps the founding 15%. */
+    public function testTheDividendTaxPlatformsRunFromExemptionToIncomeRates(): void
+    {
+        $half = Diet::FIXED_POSITIONS[Diet::CIVIC][Diet::AXIS_STATE] / 2.0;
+        $this->assertEqualsWithDelta(0.396, Politics::platform(Diet::position(Diet::CIVIC, []))['dividendTax'], 1e-12);
+        $this->assertEqualsWithDelta(0.0, Politics::platform(Diet::position(Diet::VANGUARD, []))['dividendTax'], 1e-12);
+        $this->assertEqualsWithDelta(0.15, Politics::platform([Diet::AXIS_STATE => 0.0])['dividendTax'], 1e-12);
+        $this->assertEqualsWithDelta((0.15 + 0.396) / 2.0, Politics::platform([Diet::AXIS_STATE => $half])['dividendTax'], 1e-12);
+        $this->assertEqualsWithDelta(0.075, Politics::platform([Diet::AXIS_STATE => -$half])['dividendTax'], 1e-12);
+        $this->assertSame(Valuation::FOUNDING_DIVIDEND_TAX_RATE, (new PoliticsStateDTO())->dividendTaxRate);
+        $this->assertTrue(Politics::REVENUE_LEVERS['dividendTax']);
+        $this->assertSame(Diet::AXIS_STATE, Politics::LEVER_AXES['dividendTax']);
+    }
+
+    /** The closed end keeps half the reserve fund's shares at home, as GPIF has since 2014; the open end none, as Norway's fund; the middle a quarter. */
+    public function testTheReserveHomeSharePlatformsRunFromNorwayToGpif(): void
+    {
+        $this->assertEqualsWithDelta(0.5, Politics::platform(Diet::position(Diet::IRON_HARBOR, []))['reserveHomeShare'], 1e-12);
+        $this->assertEqualsWithDelta(0.0, Politics::platform(Diet::position(Diet::EXCHANGE, []))['reserveHomeShare'], 1e-12);
+        $this->assertEqualsWithDelta(0.25, Politics::platform([Diet::AXIS_OPENNESS => 0.0])['reserveHomeShare'], 1e-12);
+        $this->assertEqualsWithDelta(SovereignFundSubsystem::OPENING_HOME_EQUITY_SHARE, (new PoliticsStateDTO())->reserveHomeEquityShare, 1e-12);
+        $this->assertFalse(Politics::REVENUE_LEVERS['reserveHomeShare']);
+        $this->assertSame(Diet::AXIS_OPENNESS, Politics::LEVER_AXES['reserveHomeShare']);
     }
 
     /** The two ends of the size-of-state axis plan public spending the 2019 UK manifestos' log gap apart, the neutral position keeping the founding share. */
@@ -963,7 +1023,7 @@ class PoliticsEngineTest extends TestCase
         $this->assertEqualsWithDelta($gap / 2.0, $civicIdeal, 1e-12);
         $this->assertEqualsWithDelta(-$gap / 2.0, $vanguardIdeal, 1e-12);
 
-        $blocked = Politics::budget([Diet::VANGUARD], [Diet::CIVIC], $seats, $positions, $standing(0.0), 0.5);
+        $blocked = Politics::budget([Diet::VANGUARD], [Diet::CIVIC], $seats, $positions, $standing(0.0), 0.5, MacroEngine::SOVEREIGN_RISK_DEBT_THRESHOLD);
         $this->assertSame(0.0, $blocked['levers']['corporateTax'], 'The Civic Front will not vote the rate further from its own.');
         $this->assertTrue($blocked['supportHeld']['corporateTax']);
         $this->assertFalse($blocked['councilHeld']['corporateTax']);
@@ -971,18 +1031,18 @@ class PoliticsEngineTest extends TestCase
         // The Exchange Party's own rate is just under the neutral one: from 3.5 points above neutral, a cut to the
         // Vanguard's 3.5 below is no further from the Exchange's rate than the rate in force stands.
         $exchangeIdeal = Politics::platform(Diet::position(Diet::EXCHANGE, $positions))['corporateTax'];
-        $through = Politics::budget([Diet::VANGUARD], [Diet::EXCHANGE], $seats, $positions, $standing($gap / 2.0), 0.5);
+        $through = Politics::budget([Diet::VANGUARD], [Diet::EXCHANGE], $seats, $positions, $standing($gap / 2.0), 0.5, MacroEngine::SOVEREIGN_RISK_DEBT_THRESHOLD);
         $this->assertEqualsWithDelta($vanguardIdeal, $through['levers']['corporateTax'], 1e-12);
         $this->assertFalse($through['supportHeld']['corporateTax']);
 
-        $partial = Politics::budget([Diet::VANGUARD], [Diet::EXCHANGE], $seats, $positions, $standing(0.01), 0.5);
+        $partial = Politics::budget([Diet::VANGUARD], [Diet::EXCHANGE], $seats, $positions, $standing(0.01), 0.5, MacroEngine::SOVEREIGN_RISK_DEBT_THRESHOLD);
         $this->assertEqualsWithDelta($exchangeIdeal - (0.01 - $exchangeIdeal), $partial['levers']['corporateTax'], 1e-12, 'A cut goes only as far past the Exchange Party\'s rate as the rate in force stood above it.');
         $this->assertTrue($partial['supportHeld']['corporateTax']);
 
-        $both = Politics::budget([Diet::VANGUARD], [Diet::EXCHANGE, Diet::CIVIC], $seats, $positions, $standing(0.01), 0.5);
+        $both = Politics::budget([Diet::VANGUARD], [Diet::EXCHANGE, Diet::CIVIC], $seats, $positions, $standing(0.01), 0.5, MacroEngine::SOVEREIGN_RISK_DEBT_THRESHOLD);
         $this->assertEqualsWithDelta(0.01, $both['levers']['corporateTax'], 1e-12, 'With the Civic Front also needed, the rate cannot fall at all.');
 
-        $majority = Politics::budget([Diet::VANGUARD, Diet::EXCHANGE, Diet::CHARTISTS], [], $seats, $positions, $standing(0.0), 0.5);
+        $majority = Politics::budget([Diet::VANGUARD, Diet::EXCHANGE, Diet::CHARTISTS], [], $seats, $positions, $standing(0.0), 0.5, MacroEngine::SOVEREIGN_RISK_DEBT_THRESHOLD);
         $this->assertSame(array_fill_keys(array_keys(Politics::REVENUE_LEVERS), false), $majority['supportHeld'], 'A majority cabinet answers to no supporter.');
     }
 
@@ -1003,12 +1063,12 @@ class PoliticsEngineTest extends TestCase
         $this->assertEqualsWithDelta((0.3 + 0.8) / 1.6, Politics::platform(Diet::position(Diet::VANGUARD, $positions))['mergerReviewLeniency'], 1e-12);
 
         $standing = Politics::standingLevers(new PoliticsStateDTO());
-        $held = Politics::budget([Diet::VANGUARD], [Diet::COMMON_LOT], Diet::SEED_SEATS, $positions, $standing, MacroEngine::SOVEREIGN_RISK_DEBT_THRESHOLD + 0.1);
+        $held = Politics::budget([Diet::VANGUARD], [Diet::COMMON_LOT], Diet::SEED_SEATS, $positions, $standing, MacroEngine::SOVEREIGN_RISK_DEBT_THRESHOLD + 0.1, MacroEngine::SOVEREIGN_RISK_DEBT_THRESHOLD);
         $this->assertSame(0.0, $held['levers']['mergerReviewLeniency'], 'The Common Lot will not vote review looser than its own.');
         $this->assertTrue($held['supportHeld']['mergerReviewLeniency']);
         $this->assertFalse($held['councilHeld']['mergerReviewLeniency']);
 
-        $loosened = Politics::budget([Diet::VANGUARD], [Diet::EXCHANGE], Diet::SEED_SEATS, $positions, $standing, MacroEngine::SOVEREIGN_RISK_DEBT_THRESHOLD + 0.1);
+        $loosened = Politics::budget([Diet::VANGUARD], [Diet::EXCHANGE], Diet::SEED_SEATS, $positions, $standing, MacroEngine::SOVEREIGN_RISK_DEBT_THRESHOLD + 0.1, MacroEngine::SOVEREIGN_RISK_DEBT_THRESHOLD);
         $this->assertGreaterThan(0.0, $loosened['levers']['mergerReviewLeniency']);
         $this->assertFalse($loosened['councilHeld']['mergerReviewLeniency']);
     }
@@ -1207,11 +1267,11 @@ class PoliticsEngineTest extends TestCase
         $civicCarbon = Politics::platform(Diet::position(Diet::CIVIC, $positions))['carbonPrice'];
         $this->assertLessThan(50.0, $civicCarbon);
 
-        $propped = Politics::budget([Diet::CIVIC], [Diet::TIDELINE], $seats, $positions, $standing, 0.5);
+        $propped = Politics::budget([Diet::CIVIC], [Diet::TIDELINE], $seats, $positions, $standing, 0.5, MacroEngine::SOVEREIGN_RISK_DEBT_THRESHOLD);
         $this->assertSame(50.0, $propped['levers']['carbonPrice'], 'The Accord accepts nothing further from its own price.');
         $this->assertTrue($propped['supportHeld']['carbonPrice']);
 
-        $braked = Politics::budget([Diet::VANGUARD, Diet::EXCHANGE, Diet::CHARTISTS, Diet::NEW_HORIZON], [], $seats, $positions, $standing, MacroEngine::SOVEREIGN_RISK_DEBT_THRESHOLD + 0.05);
+        $braked = Politics::budget([Diet::VANGUARD, Diet::EXCHANGE, Diet::CHARTISTS, Diet::NEW_HORIZON], [], $seats, $positions, $standing, MacroEngine::SOVEREIGN_RISK_DEBT_THRESHOLD + 0.05, MacroEngine::SOVEREIGN_RISK_DEBT_THRESHOLD);
         $this->assertTrue($braked['councilHeld']['carbonPrice']);
         $this->assertSame(50.0, $braked['levers']['carbonPrice']);
         $this->assertFalse($braked['councilHeld']['greenBeltStringency']);
@@ -1255,25 +1315,25 @@ class PoliticsEngineTest extends TestCase
         $this->assertTrue(Politics::REVENUE_LEVERS['reserveDrawShare']);
 
         $founding = Politics::standingLevers(new PoliticsStateDTO());
-        $refused = Politics::budget([Diet::CIVIC], [], Diet::SEED_SEATS, $positions, $founding, 0.5);
+        $refused = Politics::budget([Diet::CIVIC], [], Diet::SEED_SEATS, $positions, $founding, 0.5, MacroEngine::SOVEREIGN_RISK_DEBT_THRESHOLD);
         $this->assertSame(MacroEngine::RESERVE_DRAW_CEILING, $refused['levers']['reserveDrawShare'], 'Out of a recession the fund refuses a draw above half.');
         $this->assertTrue($refused['fundHeld']);
         $this->assertEqualsWithDelta(Politics::POLICY_BIG_STATE_RESERVE_DRAW_SHARE, $refused['platform']['reserveDrawShare'], 1e-15);
 
-        $consented = Politics::budget([Diet::CIVIC], [], Diet::SEED_SEATS, $positions, $founding, 0.5, recession: true);
+        $consented = Politics::budget([Diet::CIVIC], [], Diet::SEED_SEATS, $positions, $founding, 0.5, MacroEngine::SOVEREIGN_RISK_DEBT_THRESHOLD, recession: true);
         $this->assertEqualsWithDelta(Politics::POLICY_BIG_STATE_RESERVE_DRAW_SHARE, $consented['levers']['reserveDrawShare'], 1e-15, 'In a declared recession it consents.');
         $this->assertFalse($consented['fundHeld']);
 
         // The slump over, the draw goes back to half even above the debt line, where the Council holds any other cut in revenue.
         $drawn = Politics::standingLevers(new PoliticsStateDTO(reserveDrawShare: Politics::POLICY_BIG_STATE_RESERVE_DRAW_SHARE));
-        $lapsed = Politics::budget([Diet::VANGUARD], [], Diet::SEED_SEATS, $positions, $drawn, MacroEngine::SOVEREIGN_RISK_DEBT_THRESHOLD + 0.1);
+        $lapsed = Politics::budget([Diet::VANGUARD], [], Diet::SEED_SEATS, $positions, $drawn, MacroEngine::SOVEREIGN_RISK_DEBT_THRESHOLD + 0.1, MacroEngine::SOVEREIGN_RISK_DEBT_THRESHOLD);
         $this->assertTrue($lapsed['councilGuards']);
         $this->assertSame(MacroEngine::RESERVE_DRAW_CEILING, $lapsed['levers']['reserveDrawShare']);
         $this->assertFalse($lapsed['councilHeld']['reserveDrawShare']);
         $this->assertTrue($lapsed['fundHeld']);
 
         // Spending less than half needs no consent, and the brake holds it as any revenue.
-        $kept = Politics::budget([Diet::VANGUARD], [], Diet::SEED_SEATS, $positions, $founding, MacroEngine::SOVEREIGN_RISK_DEBT_THRESHOLD + 0.1);
+        $kept = Politics::budget([Diet::VANGUARD], [], Diet::SEED_SEATS, $positions, $founding, MacroEngine::SOVEREIGN_RISK_DEBT_THRESHOLD + 0.1, MacroEngine::SOVEREIGN_RISK_DEBT_THRESHOLD);
         $this->assertSame(MacroEngine::RESERVE_DRAW_CEILING, $kept['levers']['reserveDrawShare']);
         $this->assertFalse($kept['fundHeld']);
     }

@@ -23,11 +23,15 @@ use App\Service\Macro\MacroEngine;
 use App\Service\Macro\Subsystem\AssetMarketSubsystem;
 use App\Service\Macro\Subsystem\CommodityLogisticsSubsystem;
 use App\Service\Macro\Subsystem\CreditFiscalSubsystem;
+use App\Service\Macro\Subsystem\MacroAggregateSubsystem;
+use App\Service\Macro\Subsystem\SovereignFundSubsystem;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\FirmEconomics;
 use App\Service\Math\MacroTransmission;
+use App\Service\Math\Valuation;
 use App\Service\Politics\CoalitionFormation;
 use App\Service\Politics\CouncilAppointments;
+use App\Service\Politics\DebtBrake;
 use App\Service\Politics\ElectionForecast;
 use App\Service\Politics\Exchequer;
 use App\Service\Politics\FinancialRegulator;
@@ -83,6 +87,7 @@ class GovernmentPageBuilder
     private const LEVER_DISPLAY = [
         'publicSpending' => ['Public spending, share of GDP', 'pct'],
         'corporateTax' => ['Corporate tax rate', 'pct'],
+        'dividendTax' => ['Tax on dividends', 'pct'],
         'tariff' => ['Average tariff on imports', 'pct'],
         'laborGrowth' => ['Labour force growth', 'pct'],
         'foreignBuyerTax' => ['Tax on foreign home buyers', 'pct'],
@@ -93,6 +98,9 @@ class GovernmentPageBuilder
         'stampDutyRate' => ['Stamp duty on share trades', 'pct'],
         'bankLevyRate' => ['Bank levy', 'pct'],
         'reserveDrawShare' => ['Share of reserve returns spent', 'pct'],
+        'consolidationTaxShare' => ['Debt repair raised by tax', 'pct'],
+        'reserveHomeShare' => ['Reserve fund shares held at home', 'pct'],
+        'utilityRateGrant' => ['Utility rate requests granted', 'pct'],
     ];
     /** The polls chart's plot area in its 600 by 210 drawing: left, right, top and bottom edges. */
     private const POLL_CHART_PLOT = [34.0, 590.0, 8.0, 182.0];
@@ -162,6 +170,10 @@ class GovernmentPageBuilder
         'stampDutyRate' => 'stamp duty',
         'bankLevyRate' => 'bank levy',
         'reserveDrawShare' => 'reserve draw',
+        'consolidationTaxShare' => 'tax or cuts',
+        'reserveHomeShare' => 'reserves at home',
+        'utilityRateGrant' => 'utility rates',
+        'dividendTax' => 'dividend tax',
     ];
     /** Font size of the end words and party labels, in SVG units. */
     private const COMPASS_FONT_SIZE = 7.0;
@@ -238,6 +250,7 @@ class GovernmentPageBuilder
             'mortgageLtvCap' => $macro->mortgageLtvCap,
             'fundHead' => $this->fundHead($politics, $macro),
             'exchequer' => $this->exchequer($politics, $macro),
+            'tradeOffice' => $this->tradeOffice($politics, $macro),
         ]);
     }
 
@@ -325,6 +338,7 @@ class GovernmentPageBuilder
                 'reserves' => isset($politics->councilFundStances[$seat['seat'] - 1])
                     ? SovereignReserveFund::stanceName(SovereignReserveFund::equityShare($politics->councilFundStances[$seat['seat'] - 1]))
                     : null,
+                'debtLine' => $politics->councilDebtLines[$seat['seat'] - 1] ?? null,
             ] : []), AerieCouncil::roster($macro->totalTime)),
             'board' => $politics->boardMembers === [] ? null : self::stanceCounts(
                 array_map(static fn(array $member): float => $member['stance'], $politics->boardMembers),
@@ -407,7 +421,7 @@ class GovernmentPageBuilder
                 'termYears' => $term,
                 'councilSeats' => AerieCouncil::SEATS,
                 'councilTermYears' => AerieCouncil::TERM_YEARS,
-                'debtBrake' => MacroEngine::SOVEREIGN_RISK_DEBT_THRESHOLD,
+                'debtBrake' => DebtBrake::councilLine($politics),
                 'reserveDrawCeiling' => MacroEngine::RESERVE_DRAW_CEILING,
                 'budgetRoundMonths' => 12.0 * MacroEngine::BUDGET_ROUND_PERIOD_YEARS,
                 'blocLeaders' => array_map(self::midSentenceName(...), $leaders),
@@ -444,8 +458,8 @@ class GovernmentPageBuilder
     }
 
     /**
-     * The Council's lean on each of its three questions: its hawks, swing votes and doves on money, and what its middle
-     * councillor would ask of the banks and the reserves. Null before the Council's stances are drawn.
+     * The Council's lean on each of its questions: its hawks, swing votes and doves on money, and what its middle
+     * councillor would ask of the banks and the reserves, and where it would hold the debt. Null before the Council's stances are drawn.
      *
      * @return array<string, mixed>|null
      */
@@ -455,6 +469,7 @@ class GovernmentPageBuilder
             'median' => MonetaryAuthority::stanceName(CouncilAppointments::median($politics->councilStances)),
             'banks' => $politics->councilRegulationStances === [] ? null : FinancialRegulator::requirement(CouncilAppointments::median($politics->councilRegulationStances)),
             'reserves' => $politics->councilFundStances === [] ? null : SovereignReserveFund::equityShare(CouncilAppointments::median($politics->councilFundStances)),
+            'debtLine' => $politics->councilDebtLines === [] ? null : DebtBrake::councilLine($politics),
         ];
     }
 
@@ -1031,6 +1046,7 @@ class GovernmentPageBuilder
             'levers' => [
                 ['name' => 'Public spending, share of GDP', 'unit' => 'pct', 'platform' => $platform['publicSpending'], 'enacted' => $politics->publicSpendingShare],
                 ['name' => 'Corporate tax rate', 'unit' => 'pct', 'platform' => $neutral + $platform['corporateTax'], 'enacted' => $neutral + $politics->corporateTaxPolicyShift],
+                ['name' => 'Tax on dividends', 'unit' => 'pct', 'platform' => $platform['dividendTax'], 'enacted' => $politics->dividendTaxRate],
                 ['name' => 'Average tariff on imports', 'unit' => 'pct', 'platform' => $platform['tariff'], 'enacted' => $politics->importTariffRate],
                 ['name' => 'Labour force growth', 'unit' => 'pct', 'platform' => $platform['laborGrowth'], 'enacted' => $politics->laborForceGrowthRate],
                 ['name' => 'Tax on foreign home buyers', 'unit' => 'pct', 'platform' => $platform['foreignBuyerTax'], 'enacted' => $politics->foreignBuyerTaxRate],
@@ -1041,6 +1057,9 @@ class GovernmentPageBuilder
                 ['name' => 'Stamp duty on share trades', 'unit' => 'pct', 'platform' => $platform['stampDutyRate'], 'enacted' => $politics->stampDutyRate],
                 ['name' => 'Bank levy', 'unit' => 'pct', 'platform' => $platform['bankLevyRate'], 'enacted' => $politics->bankLevyRate],
                 ['name' => 'Share of reserve returns spent', 'unit' => 'pct', 'platform' => $platform['reserveDrawShare'], 'enacted' => $politics->reserveDrawShare],
+                ['name' => 'Debt repair raised by tax', 'unit' => 'pct', 'platform' => $platform['consolidationTaxShare'], 'enacted' => $politics->consolidationTaxShare],
+                ['name' => 'Reserve fund shares held at home', 'unit' => 'pct', 'platform' => $platform['reserveHomeShare'], 'enacted' => $politics->reserveHomeEquityShare],
+                ['name' => 'Utility rate requests granted', 'unit' => 'pct', 'platform' => $platform['utilityRateGrant'], 'enacted' => $politics->utilityRateCaseGrantShare],
             ],
             'leaders' => self::leaders($politics, $party),
             'polling' => $politics->polls === [] ? null : (static function (array $poll) use ($politics, $party): array {
@@ -1165,7 +1184,7 @@ class GovernmentPageBuilder
     private function budget(MacroStateDTO $macro, PoliticsStateDTO $politics, array $coalition, array $support, bool $talking): array
     {
         $standing = PoliticsEngine::standingLevers($politics);
-        $budget = PoliticsEngine::budget($coalition, $support, $politics->dietSeats, $politics->partyPositions, $standing, $macro->sovereignDebtToGdp, MacroEngine::inSahmRecession($macro->sahmRecessionIndicator));
+        $budget = PoliticsEngine::budget($coalition, $support, $politics->dietSeats, $politics->partyPositions, $standing, $macro->sovereignDebtToGdp, DebtBrake::councilLine($politics), MacroEngine::inSahmRecession($macro->sahmRecessionIndicator));
         $round = MacroEngine::BUDGET_ROUND_PERIOD_YEARS;
         $nextRound = self::simDate((floor($macro->totalTime / $round) + 1.0) * $round);
 
@@ -1182,6 +1201,7 @@ class GovernmentPageBuilder
         };
         $neutral = MacroEngine::TARGET_CORPORATE_TAX_RATE;
         $screens = MergerAndAcquisitionEngine::reviewScreens($politics->mergerReviewLeniency);
+        $repair = max(0.0, CreditFiscalSubsystem::bohnSurplus($macro->sovereignNetDebtToGdp) - ($macro->sovereignFundDollarsPerGdp > 0.0 ? 0.0 : CreditFiscalSubsystem::SOVEREIGN_STRUCTURAL_DEFICIT));
 
         return [
             'levers' => [
@@ -1204,6 +1224,15 @@ class GovernmentPageBuilder
                     'enacted' => $neutral + $standing['corporateTax'],
                     'status' => $status('corporateTax'),
                     'note' => sprintf('Firms pay %.1f%% today, with the cyclical adjustment', 100.0 * $macro->corporateTaxRate),
+                ],
+                [
+                    'name' => 'Tax on dividends',
+                    'axis' => AerieDiet::AXIS_STATE,
+                    'platform' => $budget['platform']['dividendTax'],
+                    'target' => $budget['levers']['dividendTax'],
+                    'enacted' => $standing['dividendTax'],
+                    'status' => $status('dividendTax'),
+                    'note' => self::dividendTaxNote($standing['dividendTax']),
                 ],
                 [
                     'name' => 'Average tariff on imports',
@@ -1311,8 +1340,38 @@ class GovernmentPageBuilder
                         ? sprintf('Of the Sovereign Reserve Fund\'s expected return; it pays the budget %.1f%% of GDP this year', 100.0 * $macro->sovereignFundDrawToGdp)
                         : 'Of the Sovereign Reserve Fund\'s expected return, paid to the budget each year',
                 ],
+                [
+                    'name' => 'Debt repair raised by tax',
+                    'axis' => AerieDiet::AXIS_STATE,
+                    'platform' => $budget['platform']['consolidationTaxShare'],
+                    'target' => $budget['levers']['consolidationTaxShare'],
+                    'enacted' => $standing['consolidationTaxShare'],
+                    'status' => $status('consolidationTaxShare'),
+                    'note' => $repair > 0.0
+                        ? sprintf('Of the surplus the debt calls for, %.1f%% of GDP at %.0f%% net debt; the rest comes from spending cuts', 100.0 * $repair, 100.0 * $macro->sovereignNetDebtToGdp)
+                        : 'Of any surplus the debt calls for; the rest comes from spending cuts. Net debt calls for none today',
+                ],
+                [
+                    'name' => 'Reserve fund shares held at home',
+                    'axis' => AerieDiet::AXIS_OPENNESS,
+                    'platform' => $budget['platform']['reserveHomeShare'],
+                    'target' => $budget['levers']['reserveHomeShare'],
+                    'enacted' => $standing['reserveHomeShare'],
+                    'status' => $status('reserveHomeShare'),
+                    'note' => $this->reserveHomeShareNote($macro),
+                ],
+                [
+                    'name' => 'Utility rate requests granted',
+                    'axis' => AerieDiet::AXIS_COUNCIL,
+                    'platform' => $budget['platform']['utilityRateGrant'],
+                    'target' => $budget['levers']['utilityRateGrant'],
+                    'enacted' => $standing['utilityRateGrant'],
+                    'status' => $status('utilityRateGrant'),
+                    'note' => 'Of the rise in power and water bills a utility asks the commission for when its costs outrun its tariff; the rest it carries into its next request',
+                ],
             ],
             'debt' => $macro->sovereignDebtToGdp,
+            'debtLine' => DebtBrake::councilLine($politics),
             'braking' => $budget['councilGuards'],
             'caretaker' => $talking,
             'lastBrake' => $politics->lastCouncilBrakeAt >= 0.0 ? self::simDate($politics->lastCouncilBrakeAt) : null,
@@ -1878,6 +1937,81 @@ class GovernmentPageBuilder
      *
      * @return array<string, mixed>|null
      */
+    /**
+     * Who pays the tax on dividends, and what the rate in force does against the founding one: how much more or less
+     * companies pay out as dividends, the rest going to buybacks, and what it adds to the budget.
+     */
+    private static function dividendTaxNote(float $rate): string
+    {
+        $note = 'Paid by shareholders outside retirement accounts on what companies pay them';
+        if (abs($rate - Valuation::FOUNDING_DIVIDEND_TAX_RATE) < 1e-9) {
+            return $note . ', at the rate set at Year 1';
+        }
+
+        return $note . sprintf('; dividends run %+.0f%% against Year 1, buybacks making up the difference, and the budget\'s revenue %+.2f%% of GDP',
+            100.0 * (Valuation::dividendTaxPayoutScale($rate) - 1.0), 100.0 * CreditFiscalSubsystem::dividendTaxRevenueShift($rate));
+    }
+
+    /**
+     * What the home share buys: the fund's slice of the board, and when the share the law asks for would need more of
+     * the float than the fund may own, that the ceiling holds it there. Its holding scales with its weight on the board,
+     * so the ownership the law asks for is the ownership now times the target weight over the weight now.
+     */
+    private function reserveHomeShareNote(MacroStateDTO $macro): string
+    {
+        $note = 'Of the Sovereign Reserve Fund\'s shares, the rest held abroad';
+        $owned = $macro->sovereignFundOwnershipShare;
+        if ($owned <= 0.0) {
+            return $note;
+        }
+
+        $note .= sprintf('; it owns %.1f%% of the shares listed in the District', 100.0 * $owned);
+        $asked = $macro->sovereignFundDomesticWeight > 0.0 ? $owned * $macro->sovereignFundTargetWeight / $macro->sovereignFundDomesticWeight : 0.0;
+        if ($asked > SovereignFundSubsystem::MAX_OWNERSHIP_SHARE) {
+            $note .= sprintf(', and the law would need %.0f%%, more than the %.0f%% it may hold, so a higher share buys no more', 100.0 * $asked, 100.0 * SovereignFundSubsystem::MAX_OWNERSHIP_SHARE);
+        }
+
+        return $note;
+    }
+
+    /**
+     * The Trade & Migration Office's page: the tariff, the migration regime and the tax on foreign home buyers it
+     * administers, each as in force, as the sitting government's next budget would set it and as the market expects
+     * after the vote, with what each does to the District.
+     *
+     * @return array<string, mixed>
+     */
+    public function tradeOffice(PoliticsStateDTO $politics, MacroStateDTO $macro): array
+    {
+        $law = static fn(string $lever, float $inForce): array => [
+            'inForce' => $inForce,
+            'next' => $politics->sittingLevers[$lever] ?? null,
+            'expected' => $politics->forecastLevers[$lever] ?? null,
+        ];
+        $tariff = $politics->importTariffRate;
+        $imports = MacroAggregateSubsystem::DISTRICT_IMPORT_SHARE * MacroAggregateSubsystem::GOODS_SHARE_OF_IMPORTS;
+
+        return [
+            'tariff' => $law('tariff', $tariff) + [
+                'retaliation' => MacroEngine::TARIFF_RETALIATION_RATIO * $tariff,
+                'revenueToGdp' => $tariff * $imports * ((1.0 + $tariff) ** -MacroAggregateSubsystem::IMPORT_PRICE_ELASTICITY),
+                'outputCost' => MacroEngine::TARIFF_OUTPUT_LOSS * $tariff,
+                'goodsImportsToGdp' => $imports,
+            ],
+            'migration' => $law('laborGrowth', $politics->laborForceGrowthRate) + [
+                'structural' => MacroEngine::STRUCTURAL_LABOR_GROWTH_RATE,
+                'closed' => PoliticsEngine::MIGRATION_CLOSED_REGIME,
+                'open' => PoliticsEngine::MIGRATION_OPEN_REGIME,
+                'populationShift' => $macro->immigrationPopulationShift,
+            ],
+            'foreignBuyers' => $law('foreignBuyerTax', $politics->foreignBuyerTaxRate) + [
+                'priceEffect' => 1.0 - AssetMarketSubsystem::foreignBuyerPriceFactor($politics->foreignBuyerTaxRate),
+                'strictest' => PoliticsEngine::POLICY_PROTECTIONIST_FOREIGN_BUYER_TAX,
+            ],
+            'expectedFrom' => $politics->forecastLevers === [] ? null : self::simDate(ElectionForecast::takesEffect($politics)),
+        ];
+    }
+
     public function exchequer(PoliticsStateDTO $politics, MacroStateDTO $macro): ?array
     {
         if ($politics->exchequerHeadName === '') {

@@ -81,6 +81,7 @@ final class MacroFieldCatalog
         'carbon_price' => ['label' => 'Carbon Price ($/t)', 'unit' => self::UNIT_INDEX],
         'extraction_stringency' => ['label' => 'Extraction Rules', 'unit' => self::UNIT_PERCENT],
         'stamp_duty_rate' => ['label' => 'Stamp Duty (each side)', 'unit' => self::UNIT_PERCENT],
+        'utility_rate_case_grant_share' => ['label' => 'Utility Rate Requests Granted', 'unit' => self::UNIT_PERCENT],
         'catastrophe_loss_index_ema' => ['label' => 'Catastrophe Losses', 'unit' => self::UNIT_INDEX],
         'freight_rate_index_ema' => ['label' => 'Freight Rates', 'unit' => self::UNIT_INDEX],
         'exchange_rate_index_ema' => ['label' => 'Trade-Weighted FX', 'unit' => self::UNIT_INDEX],

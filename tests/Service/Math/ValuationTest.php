@@ -335,4 +335,32 @@ class ValuationTest extends TestCase
         self::assertEqualsWithDelta(0.04 - (0.062 * 0.5), Valuation::flexibleAcceleratorGrowth(0.04, -0.5, 0.062), 1e-12);
         self::assertSame(0.0, Valuation::flexibleAcceleratorGrowth(0.04, -1.0, 0.062), 'an overbuilt firm stops building; it does not sell plant');
     }
+
+    /**
+     * A dividend tax at the founding rate prices nothing; a change is charged on the taxable holders' share of the yield,
+     * net of the gains tax at its accrual equivalent (Brennan 1970), and a stock's value is spread at its cap rate plus
+     * that premium.
+     */
+    public function testADividendTaxIsChargedOnTheTaxableHoldersYield(): void
+    {
+        $this->assertSame(0.0, Valuation::dividendTaxReturnPremium(0.03, Valuation::FOUNDING_DIVIDEND_TAX_RATE));
+        $gainsTax = Valuation::CAPITAL_GAINS_TAX_RATE * Valuation::CAPITAL_GAINS_ACCRUAL_EQUIVALENT_RATIO;
+        $this->assertEqualsWithDelta(0.242 * 0.10 * 0.03 / (1.0 - (0.242 * $gainsTax)), Valuation::dividendTaxReturnPremium(0.03, Valuation::FOUNDING_DIVIDEND_TAX_RATE + 0.10), 1e-15);
+
+        $this->assertSame(1.0, Valuation::dividendTaxValueScale(0.0, 0.04, 0.396), 'A stock paying nothing is untouched.');
+        $allDividends = Valuation::dividendTaxValueScale(0.04, 0.04, 0.396);
+        $this->assertEqualsWithDelta(0.04 / (0.04 + Valuation::dividendTaxReturnPremium(0.04, 0.396)), $allDividends, 1e-15);
+        $this->assertEqualsWithDelta(1.0 - (0.242 * 0.246), $allDividends, 0.003, 'A stock returning all its cash as dividends loses about the taxable share of the rise.');
+        $this->assertSame($allDividends, Valuation::dividendTaxValueScale(0.06, 0.04, 0.396), 'A yield above the cap rate is all of the cash return, and no more.');
+        $this->assertGreaterThan(1.0, Valuation::dividendTaxValueScale(0.02, 0.04, 0.0), 'A cut raises the value.');
+    }
+
+    /** The payout response reproduces the 2003 cut: the holders' average rate from 29% to 17% raised regular dividends 20% (Chetty & Saez 2005). */
+    public function testThePayoutResponseReproducesTheTwoThousandThreeCut(): void
+    {
+        $this->assertEqualsWithDelta(1.20, ((1.0 - 0.17) / (1.0 - 0.29)) ** Valuation::DIVIDEND_NET_OF_TAX_ELASTICITY, 0.001);
+        $this->assertSame(1.0, Valuation::dividendTaxPayoutScale(Valuation::FOUNDING_DIVIDEND_TAX_RATE));
+        $this->assertLessThan(1.0, Valuation::dividendTaxPayoutScale(0.396));
+        $this->assertGreaterThan(1.0, Valuation::dividendTaxPayoutScale(0.0));
+    }
 }

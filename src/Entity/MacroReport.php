@@ -564,6 +564,22 @@ class MacroReport
     #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 6, nullable: true)]
     private ?string $reserveDrawShare = null;
 
+    // Share of the debt reaction's surplus raised by tax rather than by cutting purchases.
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 6, nullable: true)]
+    private ?string $consolidationTaxShare = null;
+
+    // Share of the reserve fund's equities held on the board, as the Diet has set it.
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 6, nullable: true)]
+    private ?string $reserveHomeEquityShare = null;
+
+    // Share of a utility's rate request the commission grants.
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 6, nullable: true)]
+    private ?string $utilityRateCaseGrantShare = null;
+
+    // Tax on the dividends the District's own shareholders are paid.
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 6, nullable: true)]
+    private ?string $dividendTaxRate = null;
+
     // The rate committee's supermajority: 1 hawkish, -1 dovish, 0 neither.
     #[ORM\Column(type: Types::DECIMAL, precision: 3, scale: 0, nullable: true)]
     private ?string $authorityMajority = null;

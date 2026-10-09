@@ -63,6 +63,23 @@ class PolicyCapitalizationTest extends TestCase
         $this->assertLessThan(Policy::corporateTaxShiftGap($nearer, self::CAP_RATE), Policy::corporateTaxShiftGap($macro, self::CAP_RATE), 'Nearer, it counts for more.');
     }
 
+    /** The tax on dividends is priced on its path the same way, in full from the day it passes; with nothing ahead, the law in force drifts back to the long-run rate. */
+    public function testTheDividendTaxIsPricedOnItsExpectedPath(): void
+    {
+        $longRun = Policy::LONG_RUN_DIVIDEND_TAX_RATE;
+        $this->assertEqualsWithDelta($longRun, Policy::expectedDividendTaxRate(new MacroStateDTO(dividendTaxRate: $longRun), self::CAP_RATE), 1e-15);
+        $rise = new MacroStateDTO(
+            totalTime: 10.0,
+            dividendTaxRate: $longRun,
+            expectedLevers: ['dividendTax' => $longRun + 0.10],
+            expectedPolicyFrom: 12.5,
+            previousExpectedLevers: ['dividendTax' => $longRun],
+            previousExpectedPolicyFrom: 12.5,
+        );
+        $this->assertEqualsWithDelta($longRun + $this->path(0.10, 0.0, 2.5, Policy::DIVIDEND_TAX_TERM_PERSISTENCE), Policy::expectedDividendTaxRate($rise, self::CAP_RATE), 1e-15);
+        $this->assertEqualsWithDelta($longRun, Policy::expectedDividendTaxRate($rise, self::CAP_RATE, true), 1e-15, 'The forecast before the revision expected none.');
+    }
+
     /**
      * The rules on extraction are priced the same way, measured as the unit costs feel them: the strictest rules the next
      * government is expected to pass count by their cost factor's rise from its first budget, charged in full at once,
@@ -148,6 +165,18 @@ class PolicyCapitalizationTest extends TestCase
 
         $this->assertEqualsWithDelta(0.79 * Policy::publicSpendingGap($expected, self::CAP_RATE) * 40.0, Policy::earningsGap($expected, ['publicSpending' => 40.0], 0.21, self::CAP_RATE), 1e-12);
         $this->assertSame(0.0, Policy::measure('publicSpending', MacroEngine::TARGET_CORPORATE_TAX_RATE), 'The founding share is no shift.');
+
+        // Purchases the debt has cut below the law are where they are headed, not still closing on it.
+        $netDebt = MacroEngine::SOVEREIGN_RISK_DEBT_THRESHOLD + 0.2;
+        $cut = CreditFiscalSubsystem::consolidationSpendingCut($netDebt, false, CreditFiscalSubsystem::FOUNDING_CONSOLIDATION_TAX_SHARE);
+        $this->assertGreaterThan(0.0, $cut);
+        $settled = Policy::measure('publicSpending', $shareAt($longRun) - $cut);
+        $this->assertEqualsWithDelta(
+            Policy::publicSpendingGap($carried, self::CAP_RATE),
+            Policy::publicSpendingGap($this->spending($shareAt($longRun), $settled, $longRun, netDebt: $netDebt), self::CAP_RATE),
+            1e-12,
+            'At the law less the cut, nothing more is closing.'
+        );
     }
 
     /** The sitting government's coming budget is priced before it passes, so the round that passes it moves nothing. */
@@ -265,10 +294,11 @@ class PolicyCapitalizationTest extends TestCase
      * An economy with public spending in force at $share, purchases at $purchases above the founding level, the trailing
      * earnings carrying $embodied, and the next government expected to set $expected (the law in force if not given).
      */
-    private function spending(float $share, float $purchases, float $embodied, ?float $expected = null, float $from = -1.0): MacroStateDTO
+    private function spending(float $share, float $purchases, float $embodied, ?float $expected = null, float $from = -1.0, float $netDebt = CreditFiscalSubsystem::SOVEREIGN_DEBT_NEUTRAL_THRESHOLD): MacroStateDTO
     {
         return new MacroStateDTO(
             totalTime: 10.0,
+            sovereignNetDebtToGdp: $netDebt,
             governmentSpendingIndex: MacroEngine::GOVT_SPENDING_BASELINE * (1.0 + $purchases),
             publicSpendingShare: $share,
             governmentSpendingShiftEmbodied: $embodied,

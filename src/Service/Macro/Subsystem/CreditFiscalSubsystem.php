@@ -14,6 +14,7 @@ use App\Service\Math\MacroTransmission;
 use App\Service\Math\MathUtility;
 use App\Service\Math\StochasticProcesses;
 use App\Service\Math\TimeSeries;
+use App\Service\Math\Valuation;
 
 /**
  * Handles corporate and retail credit spreads, interbank liquidity (TED spread),
@@ -34,6 +35,8 @@ class CreditFiscalSubsystem
     // --- Corporate Tax Revenue (BEA NIPA) ---
     /** Corporate profits before tax over GDP, 1985-2019 mean (BEA NIPA via FRED, A053RC1Q027SBEA over GDP: 9.67%): the base a change in the corporate rate is levied on, so a point of rate is a tenth of a point of GDP in revenue. */
     public const CORPORATE_PROFITS_TO_GDP = 0.0967;
+    /** Net corporate dividends over GDP, 1985-2019 mean (BEA NIPA via FRED, DIVIDEND over GDP: 4.42%): the base the tax on dividends is levied on, before the taxable share of holders. */
+    public const NET_DIVIDENDS_TO_GDP = 0.0442;
 
     // --- Carbon Revenue (EIA; BEA) ---
     /** Power-sector CO2 per dollar of GDP, in tonnes: 1,425 million tonnes in 2023 (EIA) over $27.36 trillion of GDP (BEA): the base a carbon price on power is levied on, held at today's emissions. */
@@ -58,6 +61,8 @@ class CreditFiscalSubsystem
     public const SOVEREIGN_DEBT_NEUTRAL_THRESHOLD = 0.70;
     /** Bohn (1998, 2008) fiscal reaction: primary surplus response per unit of net debt above the neutral threshold (~0.10, the upper end of advanced-economy estimates), which stabilizes debt near 90% against a 2% structural deficit, and just above the 70% threshold once a sovereign fund's draw pays that deficit. */
     public const BOHN_FISCAL_REACTION_SENSITIVITY = 0.10;
+    /** Share of the Bohn surplus the budget raises by tax at the District's founding, the rest by cutting purchases: the average OECD deficit-cutting plan's, 0.69 of 1.83% of GDP (Alesina, Azzalini, Favero, Giavazzi & Miano 2018, Table 8; 16 countries, 1981-2014). */
+    public const FOUNDING_CONSOLIDATION_TAX_SHARE = 0.69 / 1.83;
     /** Runaway guard on gross debt, about Japan's postwar peak (~2.6x GDP, IMF WEO 2020); the Bohn reaction holds debt far below it. */
     public const SOVEREIGN_DEBT_CEILING = 2.50;
 
@@ -454,8 +459,8 @@ class CreditFiscalSubsystem
 
     /**
      * Government purchases: a Schwartz (1997) log-OU fitted to US civilian purchases (federal non-defence plus state and
-     * local) over potential, 1985-2019 (var/harness/gov_fit.py), reverting to the share of GDP the Diet's budget sets, so
-     * an appropriation phases in at the fit's own speed. The District fields no army, so the wartime surges that fatten
+     * local) over potential, 1985-2019 (var/harness/gov_fit.py), reverting to the share of GDP the Diet's budget sets
+     * less the cuts the debt calls for (purchasesTarget()), so an appropriation phases in at the fit's own speed. The District fields no army, so the wartime surges that fatten
      * the US total are its customers' (AssetMarketSubsystem::calculateAlliedDefenseSpending).
      * Purchases do not lean against the cycle (Auerbach 2002; the fit's lagged-gap term is insignificant), so the
      * countercyclical fiscal leg is the tax rule alone.
@@ -468,7 +473,7 @@ class CreditFiscalSubsystem
         $state->governmentSpendingIndex = max(60.0, min(200.0, StochasticProcesses::calculateSchwartz1Factor(
             currentPrice: $state->governmentSpendingIndex,
             kappa: self::GOVT_SPENDING_MEAN_REVERSION,
-            theta: MacroEngine::GOVT_SPENDING_BASELINE * $state->publicSpendingShare / MacroEngine::TARGET_CORPORATE_TAX_RATE,
+            theta: MacroEngine::GOVT_SPENDING_BASELINE * self::purchasesTarget($state->publicSpendingShare, $state->sovereignNetDebtToGdp, $state->sovereignFundDollarsPerGdp > 0.0, $state->consolidationTaxShare) / MacroEngine::TARGET_CORPORATE_TAX_RATE,
             sigma: self::GOVT_SPENDING_VOLATILITY,
             dt: $dt,
             dW: $this->mathUtility->generateStandardNormal()
@@ -523,16 +528,40 @@ class CreditFiscalSubsystem
     /**
      * The structural part of the tax take over the purchases share, as a share of GDP: the Bohn (1998) reaction to net
      * debt above its threshold, less the structural deficit a budget with no fund runs (with one, the draw pays that
-     * deficit as spending). Debt is net of the fund's bonds, the position the market prices (Hadzi-Vaskov & Ricci 2016);
-     * equal to gross with no fund. Zero at the debt the reaction holds against the structural deficit (90%).
+     * deficit as spending), less the part of any consolidation the Diet finds by cutting purchases (purchasesTarget()). Debt is net
+     * of the fund's bonds, the position the market prices (Hadzi-Vaskov & Ricci 2016); equal to gross with no fund.
      *
      * @param MacroState $state Current macroeconomic state.
      */
     public static function fiscalStance(MacroState $state): float
     {
-        $bohnSurplus = self::BOHN_FISCAL_REACTION_SENSITIVITY * max(0.0, $state->sovereignNetDebtToGdp - self::SOVEREIGN_DEBT_NEUTRAL_THRESHOLD);
+        $funded = $state->sovereignFundDollarsPerGdp > 0.0;
+        $stance = self::bohnSurplus($state->sovereignNetDebtToGdp) - ($funded ? 0.0 : self::SOVEREIGN_STRUCTURAL_DEFICIT);
 
-        return $state->sovereignFundDollarsPerGdp > 0.0 ? $bohnSurplus : $bohnSurplus - self::SOVEREIGN_STRUCTURAL_DEFICIT;
+        return $stance - self::consolidationSpendingCut($state->sovereignNetDebtToGdp, $funded, $state->consolidationTaxShare);
+    }
+
+    /** The primary surplus the Bohn (1998) reaction calls for, a share of GDP: its sensitivity on net debt above the threshold. */
+    public static function bohnSurplus(float $netDebtToGdp): float
+    {
+        return self::BOHN_FISCAL_REACTION_SENSITIVITY * max(0.0, $netDebtToGdp - self::SOVEREIGN_DEBT_NEUTRAL_THRESHOLD);
+    }
+
+    /**
+     * The part of the consolidation the budget finds by cutting purchases rather than raising tax, a share of GDP. A
+     * consolidation is the surplus beyond what pays the structural deficit, a cut from the budget as it stands, as the
+     * plans the tax share is measured on are (Alesina et al. 2018); with no fund, the reaction that only pays that deficit
+     * is no consolidation.
+     */
+    public static function consolidationSpendingCut(float $netDebtToGdp, bool $funded, float $taxShare): float
+    {
+        return (1.0 - $taxShare) * max(0.0, self::bohnSurplus($netDebtToGdp) - ($funded ? 0.0 : self::SOVEREIGN_STRUCTURAL_DEFICIT));
+    }
+
+    /** The purchases share of GDP the purchases process reverts to: the Diet's appropriation, less the cuts the debt calls for. */
+    public static function purchasesTarget(float $publicSpendingShare, float $netDebtToGdp, bool $funded, float $taxShare): float
+    {
+        return $publicSpendingShare - self::consolidationSpendingCut($netDebtToGdp, $funded, $taxShare);
     }
 
     /**
@@ -588,6 +617,18 @@ class CreditFiscalSubsystem
     }
 
     /**
+     * What the tax on dividends raises over the founding rate's take, a share of GDP: the taxable holders' share of the
+     * dividends paid, those dividends falling as the rate rises (Valuation::dividendTaxPayoutScale()). The founding
+     * rate's take is already in the revenue the tax ratio was calibrated on.
+     */
+    public static function dividendTaxRevenueShift(float $dividendTaxRate): float
+    {
+        $taxedDividends = Valuation::TAXABLE_EQUITY_SHARE * self::NET_DIVIDENDS_TO_GDP;
+
+        return (($dividendTaxRate * Valuation::dividendTaxPayoutScale($dividendTaxRate)) - Valuation::FOUNDING_DIVIDEND_TAX_RATE) * $taxedDividends;
+    }
+
+    /**
      * Sovereign Debt-to-GDP Stock Accumulation (Blanchard 2019, Greenwood-Vayanos 2014).
      *
      * Accumulates sovereign debt-to-GDP ratio from primary deficit flow, net interest expenses,
@@ -596,14 +637,15 @@ class CreditFiscalSubsystem
      * where G is purchases plus the outlays the sovereign fund pays for, and T is taxes plus the fund's draw on its
      * expected returns (NIRC), revenue like a tax, and r_eff is the rate the debt pays (sovereignEffectiveRate()).
      * Every term is a flow: the Bohn surplus and, with no fund, the structural deficit are in the tax rate
-     * (fiscalStance()), which demand reads, not a ledger beside it.
+     * (fiscalStance()) and in purchases (purchasesTarget()), which demand reads, not a ledger beside it.
      *
      * The tax rate's cyclical and structural parts are the whole budget's response, so T books them on GDP as fitted.
      * The shift the Diet legislates, as far as it has reached the rate, is a change in the corporate rate alone and is
      * levied on corporate profits; the tariff is levied on imported goods, which shrink by their price elasticity as the
      * duty raises their price; the carbon price is levied on the power sector's emissions; the bank levy is what the
      * board's banks owe on their balance sheets, in currency, read through the reserve fund's dollars per unit of GDP
-     * (none is booked before the fund opens).
+     * (none is booked before the fund opens); the tax on dividends, as far as it departs from the founding rate, is
+     * levied on what taxable holders are paid (dividendTaxRevenueShift()).
      *
      * With a fund the budget spends the draw: the structural deficit is the draw itself, as Norway's fiscal rule sets the
      * structural non-oil deficit at the fund's expected real return. The draw is sized to the fund and the fund compounds
@@ -628,7 +670,8 @@ class CreditFiscalSubsystem
             + ($state->importTariffRate * MacroAggregateSubsystem::DISTRICT_IMPORT_SHARE * MacroAggregateSubsystem::GOODS_SHARE_OF_IMPORTS
                 * ((1.0 + $state->importTariffRate) ** -MacroAggregateSubsystem::IMPORT_PRICE_ELASTICITY) * $output)
             + ($state->carbonPrice * self::POWER_SECTOR_CO2_PER_GDP_DOLLAR * $output)
-            + ($state->sovereignFundDollarsPerGdp > 0.0 ? $state->boardBankLevy / $state->sovereignFundDollarsPerGdp : 0.0);
+            + ($state->sovereignFundDollarsPerGdp > 0.0 ? $state->boardBankLevy / $state->sovereignFundDollarsPerGdp : 0.0)
+            + (self::dividendTaxRevenueShift($state->dividendTaxRate) * $output);
         $govtSpendingFlow = ($state->governmentSpendingIndex / MacroEngine::GOVT_SPENDING_BASELINE)
             * MacroEngine::TARGET_CORPORATE_TAX_RATE * $trendNominalGdp;
 
@@ -772,10 +815,11 @@ class CreditFiscalSubsystem
         $state->creditToGdpGap = $state->householdDebtToIncome - $state->creditToGdpTrend;
 
         // BCBS (2010) CCyB guidance: a rise is announced up to twelve months ahead and phases in, a cut takes effect at
-        // once, and in a crisis the buffer is released in full so banks lend out of it rather than shrink.
+        // once, and in a crisis the buffer is released in full so banks lend out of it rather than shrink. A regulator
+        // with a positive neutral rate holds that much while credit is not running ahead (BCBS 2024).
         $bufferPosition = max(0.0, min(1.0, ($state->creditToGdpGapEma - self::CCYB_GAP_FLOOR) / (self::CCYB_GAP_CEILING - self::CCYB_GAP_FLOOR)));
         $released = $state->lastCreditCrisisAt >= 0.0 && $state->totalTime - $state->lastCreditCrisisAt < self::CCYB_RELEASE_HOLD_YEARS;
-        $bufferTarget = $released ? 0.0 : self::MAX_CCYB * $bufferPosition;
+        $bufferTarget = $released ? 0.0 : max($state->neutralCountercyclicalBuffer, self::MAX_CCYB * $bufferPosition);
         $state->countercyclicalBufferRate = $bufferTarget <= $state->countercyclicalBufferRate
             ? $bufferTarget
             : TimeSeries::calculateDistributedLag(

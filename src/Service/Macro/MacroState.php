@@ -401,6 +401,10 @@ class MacroState
     public float $stampDutyRate;
     public float $bankLevyRate;
     public float $reserveDrawShare;
+    public float $consolidationTaxShare;
+    public float $reserveHomeEquityShare;
+    public float $utilityRateCaseGrantShare;
+    public float $dividendTaxRate;
     // The Monetary Authority's rate committee: its supermajority, and whether politics hands one over at all.
     public float $authorityMajority;
     public float $authorityCommitteeSeated;
@@ -437,6 +441,7 @@ class MacroState
     // The mortgage loan-to-value cap the Financial Regulator has in force (null: none), and how far it has so far held
     // household debt below where it would stand without it, in logs.
     public ?float $mortgageLtvCap;
+    public float $neutralCountercyclicalBuffer;
     public float $ltvCutBuilt;
     // How far the carbon price has lifted the household electricity bill so far (log), at the energy pass-through lag.
     public float $electricityCarbonPriceLevel;
@@ -451,6 +456,7 @@ class MacroState
     public float $sovereignFundTargetWeight;
     public float $sovereignFundPolicyEquityShare;
     public float $sovereignFundMandateEquityShare;
+    public float $sovereignFundHomeEquityShare;
     public float $sovereignFundDollarsPerGdp;
     // Flows: this budget year's draw (currency per year), the rebalance still to trade, its pace, the months left
     // on it, its size against the board's float, this tick's trade, and when the last programme started.

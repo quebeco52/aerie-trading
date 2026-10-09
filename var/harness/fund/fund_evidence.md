@@ -217,3 +217,61 @@ Actual tenures (customary terms):
 - Statutes: GPIF Act https://laws.e-gov.go.jp/api/1/lawdata/416AC0000000105 · General Rules Act https://laws.e-gov.go.jp/api/1/lawdata/411AC0000000103 · Norges Bank Act https://www.norges-bank.no/en/topics/about/Mission-core-responsibilities/Legislation/Central-Bank-Act/ · Singapore Constitution https://sso.agc.gov.sg/Act/CONS1963?ProvIds=pr22C- and ?ProvIds=pr142- · CPPIB Act https://laws-lois.justice.gc.ca/eng/acts/C-8.3/FullText.html · Future Fund Act https://www.legislation.gov.au/C2006A00012/2023-11-01/2023-11-01/text/original/pdf · NTMA Act https://revisedacts.lawreform.ie/eli/2014/act/23/revised/en/html · Alaska AS 37.13.140 https://www.akleg.gov/basis/statutes.asp?media=print&secStart=37.13.140&secEnd=37.13.145 · SB 26 https://www.akleg.gov/basis/Bill/Text/30?Hsid=SB0026Z · Norway 2001 https://www.stortinget.no/no/Saker-og-publikasjoner/Saker/Sak/?p=22076
 
 **Blocked from the sandbox** (facts from them are [S]): regjeringen.no, temasek.com.sg, pif.gov.sa, legislation.govt.nz, china-inv.cn; cppinvestments.com was blocked for the governance pages only.
+
+
+---
+
+## 2026-10-09 Home-share law: board impact
+
+**Question.** When the Diet moves `reserveHomeEquityShare` (uncommitted work on main), the fund trades the board over
+`POLICY_TRANSITION_MONTHS` (20) under `MAX_OWNERSHIP_SHARE` (10% of float). How much does it move board prices?
+**Harness.** `HomeShareImpactTest.php` + `home_share.sh` + `home_share_an.py` (see `RUN_home_share.md`). Live macro,
+FailureSweep, StockTracker; every ticker board input fed back one tick behind; no politics. At year 3.0 the Redis macro
+state's `reserveHomeEquityShare` is set: `closed` 0.50 (`PoliticsEngine::POLICY_PROTECTIONIST_RESERVE_HOME_SHARE`),
+`open` 0.0; `base` stays at 0.2299. Seeds 1-16 per arm, 8 years, TPY 360. Stage 8 (t 1.8 on T1), then 16; stopped at
+16 as the brief capped it. Pre-switch paths are bit-identical across arms. "Gross push" is the float-weighted
+permanent share (2/3) of `LiquidityEngine::peakImpact` on each tick's fund slice, before anything leans against it.
+
+```
+== closed - base, n=16 seeds 1-16; max |dlog| before switch 0.00e+00
+quantity                                base    closed      diff       se      t  range
+T1 dlog board idx, end transition     0.2890    0.3365    0.0475   0.0463    1.0  [-0.2399, 0.4021]
+T1 dlog board idx, year 8             0.5093    0.5628    0.0535   0.0589    0.9  [-0.1961, 0.6998]
+T2 ownership of float, switch         0.0585    0.0586    0.0001   0.0000   32.5  [0.0000, 0.0001]
+T2 ownership of float, end trans      0.0584    0.0985    0.0401   0.0013   31.2  [0.0242, 0.0442]
+T2 bought / float, transition        -0.0001    0.0400    0.0401   0.0013   31.2  [0.0242, 0.0442]
+   gross permanent push (log), trans   -0.0002    0.0677    0.0678   0.0022   30.2  [0.0402, 0.0742]
+T3 daily-ret vol (ann.), trans        0.1400    0.1458    0.0058   0.0051    1.1  [-0.0324, 0.0361]
+   fund / GDP, end transition         0.4379    0.4281   -0.0099   0.0171   -0.6  [-0.1545, 0.1609]
+   target weight after switch         0.1745    0.3555    0.1811   0.0000 7450.3  [0.1809, 0.1813]
+multiplier dlog/dbought: ratio of means 1.18; per-seed mean 0.93 (sd 4.63)
+gross-push multiplier: 1.69
+mean dlog path (months after switch): 0:+0.0002 3:+0.0083 6:-0.0004 10:-0.0097 15:+0.0254 20:+0.0475 26:-0.0064 32:-0.0439 40:-0.0012 50:-0.0518 60:+0.0535
+
+== open - base, n=16 seeds 1-16; max |dlog| before switch 0.00e+00
+quantity                                base      open      diff       se      t  range
+T1 dlog board idx, end transition     0.2890    0.2584   -0.0306   0.0387   -0.8  [-0.3170, 0.1991]
+T1 dlog board idx, year 8             0.5093    0.4450   -0.0643   0.0613   -1.0  [-0.6184, 0.3634]
+T2 ownership of float, switch         0.0585    0.0584   -0.0001   0.0000  -44.3  [-0.0001, -0.0001]
+T2 ownership of float, end trans      0.0584    0.0000   -0.0584   0.0016  -35.6  [-0.0758, -0.0478]
+T2 bought / float, transition        -0.0001   -0.0585   -0.0584   0.0016  -35.6  [-0.0758, -0.0478]
+   gross permanent push (log), trans   -0.0002   -0.0989   -0.0987   0.0031  -31.7  [-0.1314, -0.0757]
+T3 daily-ret vol (ann.), trans        0.1400    0.1420    0.0020   0.0049    0.4  [-0.0426, 0.0318]
+   fund / GDP, end transition         0.4379    0.4407    0.0027   0.0119    0.2  [-0.0697, 0.1255]
+   target weight after switch         0.1745    0.0000   -0.1745   0.0000 -5922.8  [-0.1747, -0.1742]
+multiplier dlog/dbought: ratio of means 0.52; per-seed mean 0.50 (sd 2.62)
+gross-push multiplier: 1.69
+mean dlog path (months after switch): 0:-0.0003 3:-0.0207 6:-0.0448 10:-0.0632 15:-0.0722 20:-0.0306 26:+0.0210 32:+0.0196 40:+0.0589 50:-0.0059 60:-0.0643
+```
+
+**Read.** The ownership ceiling binds at once in `closed`: target weight 0.3555 needs ~12% of float, the fund buys
+4.0% (5.85% to 10%); any law above ~0.42 is the same trade. Gross push is precise (+6.8% closed, -9.9% open; multiplier
+1.69, demand elasticity ~0.6, linear and symmetric). Realised board move (paired, after fair-value pull, agents and
+macro feedback) is +4.8% (se 4.6%) at end of transition, +5.4% (se 5.9%) at year 8: inside noise, because the paths
+decorrelate after the switch (per-seed sd ~18%). The realised multiplier 1.18 has 2-se range about [-1.1, 3.5]:
+Gabaix-Koijen's 5 is rejected (3.3 se), Barbon-Gianinazzi's ~1 is not. Volatility over the window: no change.
+48 seeds would give se ~2.7% on T1; t = 4 on the net move would need ~100+ seeds per arm.
+
+**Caveats.** No politics (the law never moves back). One seed (16) ended at 8.65% ownership: the fund shrank against
+the board, so the target, not the ceiling, bound. `FullMarketHarnessTest.php` and `FundMandateTest.php` are stale
+(`MarketOperator`, `App\Service\Market\StockTracker` gone); the stale `var/harness/cache/test` container was deleted.

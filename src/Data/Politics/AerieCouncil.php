@@ -75,7 +75,7 @@ final class AerieCouncil
         ['name' => Institutions::SOVEREIGN_RESERVE_FUND, 'mandate' => 'Invests the reserves and pays the budget its rule draw. Its head, named for one term, sets how much of the fund is in shares. Holds the second key: no draw on the reserves passes without it.', 'href' => '/reserve'],
         ['name' => Institutions::FINANCIAL_REGULATOR, 'mandate' => 'Sets the core capital banks must hold against their loans and the most a home buyer may borrow against the property. Its head, named for one term, decides both.', 'href' => '/regulator'],
         ['name' => Institutions::EXCHEQUER, 'mandate' => 'Executes the budget the Diet passes and funds it. Its head, named for one term, decides how long the District borrows for.', 'href' => '/exchequer'],
-        ['name' => Institutions::TRADE_MIGRATION_OFFICE, 'mandate' => 'Administers the tariff schedule and the migration quotas the Diet legislates.', 'href' => null],
+        ['name' => Institutions::TRADE_MIGRATION_OFFICE, 'mandate' => 'Administers the tariff schedule, the migration quotas and the tax on foreign home buyers the Diet legislates.', 'href' => '/trade-office'],
     ];
 
     /**

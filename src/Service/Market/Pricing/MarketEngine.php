@@ -849,8 +849,12 @@ class MarketEngine
             // Capitalized on the same perpetual growth the multiple is struck on: the raw outlook can sit within a few
             // basis points of the hurdle in an inflationary boom, and a policy gap spread over that would wipe out value.
             $capRate = max(PolicyCapitalization::MIN_CAP_RATE, $hurdleRate - Valuation::perpetualGrowthRate($hurdleRate, $expectedGrowth));
-            $repriced = $this->repriceForPolicy($fairValue, $macroState, $strategy, $policyBasesPerShare, $capRate, false);
-            $policyRepricing = $repriced / $this->repriceForPolicy($fairValue, $macroState, $strategy, $policyBasesPerShare, $capRate, true);
+            // The dividend its policy pays, as the income leg strikes it, over the value before the laws: the yield its
+            // holders' tax is charged on. A dividend omitted for a quarter is still the policy's, and still taxed.
+            $policyDividend = max(0.0, $normalizedEps) * min(1.0, $targetPayoutRatio * Valuation::dividendTaxPayoutScale($macroState->dividendTaxRate));
+            $dividendYield = $policyDividend / max(0.01, $fairValue);
+            $repriced = $this->repriceForPolicy($fairValue, $macroState, $strategy, $policyBasesPerShare, $capRate, $dividendYield, false);
+            $policyRepricing = $repriced / $this->repriceForPolicy($fairValue, $macroState, $strategy, $policyBasesPerShare, $capRate, $dividendYield, true);
             $fairValue = $repriced;
         }
 
@@ -879,8 +883,9 @@ class MarketEngine
      * tick or as it stood the tick before.
      *
      * @param array<string, float> $policyBasesPerShare What each law the firm's accounts answer to is charged on or moves, per share, keyed by lever.
+     * @param float                $dividendYield       The firm's dividend yield, a year, which the tax on dividends is priced on.
      */
-    private function repriceForPolicy(float $fairValue, MacroStateDTO $macroState, BusinessModelInterface $strategy, array $policyBasesPerShare, float $capRate, bool $previous): float
+    private function repriceForPolicy(float $fairValue, MacroStateDTO $macroState, BusinessModelInterface $strategy, array $policyBasesPerShare, float $capRate, float $dividendYield, bool $previous): float
     {
         $taxExpected = $strategy->getEffectiveTaxRate($macroState->corporateTaxRate + PolicyCapitalization::corporateTaxShiftGap($macroState, $capRate, $previous));
 
@@ -890,6 +895,6 @@ class MarketEngine
             $taxExpected,
             PolicyCapitalization::earningsGap($macroState, $policyBasesPerShare, $taxExpected, $capRate, $previous),
             $capRate
-        );
+        ) * Valuation::dividendTaxValueScale($dividendYield, $capRate, PolicyCapitalization::expectedDividendTaxRate($macroState, $capRate, $previous));
     }
 }

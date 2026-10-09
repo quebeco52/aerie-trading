@@ -205,7 +205,30 @@ class MarketEngineTest extends TestCase
         $this->assertGreaterThan(0.5, $ratio, 'Spread over the clamped growth, it does not wipe the bank out.');
     }
 
-    public function testARevisedForecastMovesThePriceWithTheTarget(): void
+    /** An expected rise in the tax on dividends costs a payer the taxable holders' share of it on its dividends, and a firm paying none nothing. */
+    public function testAnExpectedDividendTaxCostsPayersOnly(): void
+    {
+        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
+        $this->mathUtilityMock->method('checkProbability')->willReturn(false);
+        $longRun = PolicyCapitalization::LONG_RUN_DIVIDEND_TAX_RATE;
+        $value = fn (float $expectedRate, float $payout): float => $this->engine->calculateNextPrice(new MarketPricingContext(
+            currentPrice: 100.0, currentVolatility: 0.2, longTermVolatility: 0.2, dt: 1.0 / 252.0, lambda: 0.0,
+            macroState: new MacroStateDTO(
+                totalTime: 6.0, dividendTaxRate: $longRun,
+                expectedLevers: ['dividendTax' => $expectedRate], expectedPolicyFrom: 8.5,
+                previousExpectedLevers: ['dividendTax' => $expectedRate], previousExpectedPolicyFrom: 8.5,
+            ),
+            bookValuePerShare: 60.0, currentRoic: 0.12, roicTtm: 0.12, businessModel: 'tech', liveCostOfEquity: 0.10,
+            targetPayoutRatio: $payout,
+        ))['perceived_fair_value'];
+
+        $payer = $value(0.396, 0.5) / $value($longRun, 0.5);
+        $this->assertLessThan(1.0, $payer, 'A payer\'s holders require more for the dividends the next government will tax.');
+        $this->assertGreaterThan(1.0 - (Valuation::TAXABLE_EQUITY_SHARE * (0.396 - $longRun)), $payer, 'No more than the taxable share of the rise, even were every dollar a dividend and the rise for good.');
+        $this->assertSame($value($longRun, 0.0), $value(0.396, 0.0), 'A firm paying none prices none.');
+    }
+
+        public function testARevisedForecastMovesThePriceWithTheTarget(): void
     {
         $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
         $this->mathUtilityMock->method('checkProbability')->willReturn(false);

@@ -157,3 +157,30 @@ Contractor: public spending base 6% of fair value per unit of purchases, k - g 5
 A big-state win raises the contractor's spending and its tax together, so its total move is under half its own law's.
 Levels against no pricing of the own law, now near zero with the refreshed long runs: contractor -0.6% (sd 4.1%),
 bank -0.3% (was -3.5% on the stale levy mean), broker +0.2%, miner -0.0%.
+
+## Front-loaded drift + unsettled poll misreading (2026-10-09; `poll_profile_new.out`, `form_8.out`, see RUN.md)
+Change: governing parties' lasting drift runs on the term clock (`OpinionPolls::driftYears`); polls carry an OU
+misreading (UNSETTLED_VARIANCE 37e-4 of p(1-p), half-life 28 months) the vote does not.
+1. `poll_profile_shard.php` x 20 seeds x 400y, monthly ticks, merged (old = `poll_profile.out`, from an earlier tree, not rerun at HEAD).
+
+| months out | z2 old | z2 new | J&W | | month | share old | share new | German |
+|---|---|---|---|---|---|---|---|---|
+| 1 | 41.5 | 74.2 | ~78 | | 1 | 0.02 | 0.24 | 0.09 |
+| 6 | 62.7 | 91.9 | ~112 | | 6 | 0.23 | 0.38 | 0.35 |
+| 9 | 72.3 | 99.3 | ~136 | | 12 | 0.39 | 0.56 | 0.63 (raw 0.88) |
+| 36 | 172.4 | 196.0 | ~210 | | 24 | 0.73 | 0.81 | |
+
+Month-36 cabinet gap -1.84 -> -2.06 points. z2 now sits 3-27% under J&W, the shortfall widest at 6-9 months.
+2. Vote moments, `formation_run.php` (full macro, no fund), HEAD 5e4ea84 vs working tree, 8 seeds x 200y, 180 ticks/yr, paired:
+
+| quantity | HEAD | NEW | diff | se | t |
+|---|---|---|---|---|---|
+| Pedersen volatility | 12.640 | 12.485 | -0.155 | 0.263 | -0.59 |
+| cabinet loss at vote (pp) | 2.529 | 2.627 | +0.098 | 0.258 | +0.38 |
+| minority cabinet share | 0.714 | 0.726 | +0.012 | 0.043 | +0.29 |
+
+Stopped at 8: all |t| < 1. Caveat: HEAD lacks the uncommitted debt-line work, so the NEW arm also carries it; no
+difference shows at this n, but the 2-se bounds (volatility +-0.53, loss +-0.52pp, minority +-0.09) are not tight.
+
+Mean-zero unsettled misreading (2026-10-09; `poll_profile_new2.out`, 20 seeds x 400y, shards): cabinet month-1 fall -0.49 -> -0.21pp (share 0.24 -> 0.11, German 0.09); month-36 fall -2.06 -> -1.81pp.
+z2 unchanged within ~1% at every horizon (1m 74.2 -> 73.4, 36m 196.0 -> 197.3); still well above the old 41.5/172.4 at short horizons.

@@ -816,12 +816,17 @@ class MacroEngine
         $state->stampDutyRate = $policy->stampDutyRate;
         $state->bankLevyRate = $policy->bankLevyRate;
         $state->reserveDrawShare = $policy->reserveDrawShare;
+        $state->consolidationTaxShare = $policy->consolidationTaxShare;
+        $state->reserveHomeEquityShare = $policy->reserveHomeEquityShare;
+        $state->utilityRateCaseGrantShare = $policy->utilityRateCaseGrantShare;
+        $state->dividendTaxRate = $policy->dividendTaxRate;
         $state->electionPulse = $policy->electionPulse;
         $state->authorityMajority = $policy->authorityMajority ?? 0.0;
         $state->authorityCommitteeSeated = $policy->authorityMajority === null ? 0.0 : 1.0;
         $state->authorityConcession = $policy->authorityConcession ?? 0.0;
         $state->bankCapitalRequirement = $policy->bankCapitalRequirement ?? $state->bankCapitalRequirement;
         $state->mortgageLtvCap = $policy->mortgageLtvCap;
+        $state->neutralCountercyclicalBuffer = $policy->neutralCountercyclicalBuffer;
         $state->sovereignFundMandateEquityShare = $policy->reserveFundEquityShare ?? $state->sovereignFundMandateEquityShare;
         $state->sovereignDebtMaturityTarget = $policy->debtAverageMaturity ?? $state->sovereignDebtMaturityTarget;
 

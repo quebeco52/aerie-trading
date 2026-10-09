@@ -80,7 +80,7 @@ final class PagesRenderTest extends KernelTestCase
             ]],
             'regulator' => ['/regulator', 'regulator/index.html.twig', [
                 'regulator' => [
-                    'head' => ['name' => 'Leontine Ashby', 'age' => 54, 'sinceLabel' => 'Year 12 Q3', 'termEndsLabel' => 'Year 17 Q3', 'stance' => 'middle', 'requirement' => 0.1046, 'ltvCap' => 0.85,
+                    'head' => ['name' => 'Leontine Ashby', 'age' => 54, 'sinceLabel' => 'Year 12 Q3', 'termEndsLabel' => 'Year 17 Q3', 'stance' => 'middle', 'requirement' => 0.1046, 'ltvCap' => 0.85, 'neutralBuffer' => 0.02,
                         'passedOver' => [['name' => 'Osric Vane', 'age' => 49, 'requirement' => 0.0843, 'ltvCap' => 1.0], ['name' => 'Maren Holt', 'age' => 58, 'requirement' => 0.1255, 'ltvCap' => null]]],
                     'inForce' => 0.1012, 'buffer' => 0.005, 'phasing' => ['target' => 0.1046, 'completeLabel' => 'Year 13 Q3'],
                     'rules' => ['termYears' => 5.0, 'shortlist' => 3, 'lightest' => 0.0843, 'strictest' => 0.1315, 'phaseInMonths' => 12],
@@ -100,6 +100,14 @@ final class PagesRenderTest extends KernelTestCase
                     'debt' => 0.912, 'netDebt' => 0.764, 'maturity' => 4.7, 'movingTo' => 4.3, 'repricingShare' => 0.295, 'rate' => 0.0341,
                     'interestToGdp' => 0.0311, 'tenYear' => 0.0438, 'maturityBp' => -6, 'councilMaturity' => 4.6,
                     'rules' => ['termYears' => 5.0, 'shortlist' => 3, 'shortest' => 4.0, 'longest' => 5.92, 'founding' => 4.96],
+                ],
+            ]],
+            'trade_office' => ['/trade-office', 'trade_office/index.html.twig', [
+                'office' => [
+                    'tariff' => ['inForce' => 0.04, 'next' => 0.06, 'expected' => 0.03, 'retaliation' => 0.025, 'revenueToGdp' => 0.0072, 'outputCost' => 0.0044, 'goodsImportsToGdp' => 0.19],
+                    'migration' => ['inForce' => 0.0062, 'next' => 0.0062, 'expected' => 0.0048, 'structural' => 0.005, 'closed' => 0.0011, 'open' => 0.0079, 'populationShift' => 0.012],
+                    'foreignBuyers' => ['inForce' => 0.15, 'next' => 0.15, 'expected' => null, 'priceEffect' => 0.06, 'strictest' => 0.60],
+                    'expectedFrom' => 'Year 17 Q2',
                 ],
             ]],
             'notifications' => ['/notifications', 'notifications/index.html.twig', [

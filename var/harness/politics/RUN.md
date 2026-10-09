@@ -19,6 +19,7 @@ Analysis: `python3 gate_an.py runs/<label> [burn]` reads `<label>/{on,off}_*.jso
    (YEARS default 100, TPY default 180; ~100 s per seed-century; 32 runs take ~3.5 min wall on 8 slots).
 4. `python3 var/harness/politics/spend_an.py var/harness/politics/runs/spend_16` (paired NEW - HEAD table) and
    `python3 var/harness/politics/gate_an.py var/harness/politics/runs/spend_16/new` (lever stats on the new tree).
+   `python3 var/harness/politics/mix_an.py var/harness/politics/runs/<stage>` (Council line distribution, spend, cts; new tree).
 5. `git worktree remove --force var/harness/politics/head_tree`.
 
 Outputs: `runs/<stage>/{new,head}/{on,off}_<seed>.jsonl`; tables in `spend_<n>.out`, `spend_<n>_new.out`.

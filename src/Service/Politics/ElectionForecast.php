@@ -137,7 +137,7 @@ final class ElectionForecast
         $outcomes = [];
         for ($pair = 0; $pair < intdiv(self::SCENARIOS, 2); ++$pair) {
             $z = [];
-            for ($i = 0; $i < (3 * count(AerieDiet::PARTIES)) + 1; ++$i) {
+            for ($i = 0; $i < (4 * count(AerieDiet::PARTIES)) + 1; ++$i) {
                 $z[] = $draws->generateStandardNormal();
             }
             foreach ([1.0, -1.0] as $sign) {
@@ -151,7 +151,7 @@ final class ElectionForecast
             $weighed[] = ['seats' => $seats, 'shares' => $shares, 'odds' => self::cabinetOdds($seats, $shares, $positions, $cabinet, $blocs)];
         }
 
-        return self::tally($weighed, 1.0 / count($weighed), $positions, PoliticsEngine::standingLevers($state), $debtToGdp);
+        return self::tally($weighed, 1.0 / count($weighed), $positions, PoliticsEngine::standingLevers($state), $debtToGdp, DebtBrake::councilLine($state));
     }
 
     /**
@@ -206,7 +206,7 @@ final class ElectionForecast
             $seats = array_map('intval', $state->dietSeats);
             $odds = self::cabinetOdds($seats, $state->dietVoteShares, $state->partyPositions, [], $state->dietBlocs);
 
-            return self::tally([['seats' => $seats, 'shares' => $state->dietVoteShares, 'odds' => $odds]], 1.0, $state->partyPositions, $standing, $debtToGdp, $recession)['levers'];
+            return self::tally([['seats' => $seats, 'shares' => $state->dietVoteShares, 'odds' => $odds]], 1.0, $state->partyPositions, $standing, $debtToGdp, DebtBrake::councilLine($state), $recession)['levers'];
         }
 
         return PoliticsEngine::budget(
@@ -216,6 +216,7 @@ final class ElectionForecast
             $state->partyPositions,
             $standing,
             $debtToGdp,
+            DebtBrake::councilLine($state),
             $recession
         )['levers'];
     }
@@ -282,7 +283,14 @@ final class ElectionForecast
         $total = array_sum($start);
         $start = array_map(static fn(float $share): float => $share / $total, $start);
 
-        $lasting = OpinionPolls::driftLasting($start, $years, $lastingDraws, $math);
+        // The polls misread opinion yet to settle, which the vote will not carry; and each party drifts what its term has
+        // left (OpinionPolls::driftYears()).
+        $unsettled = [];
+        foreach ($parties as $index => $party) {
+            $unsettled[$party] = OpinionPolls::unsettledMisreading($start[$party], $years, $z[(3 * $count) + 1 + $index]);
+        }
+        $start = PoliticsEngine::applyShortTermShocks($start, $unsettled);
+        $lasting = OpinionPolls::driftLasting($start, OpinionPolls::driftYears($state, $state->totalTime, $state->totalTime + $years), $lastingDraws, $math);
         $swing = PoliticsEngine::economicVote(0.0, 0.0, $z[3 * $count], count(AerieDiet::governingParties($state->governingCoalition)) === 1, $termLeft);
         $moved = PoliticsEngine::applyIncumbentSwing($lasting, $state->governingCoalition, $swing, $state->supportParties);
 
@@ -299,7 +307,7 @@ final class ElectionForecast
         $seats = array_map('intval', $state->dietSeats);
         $odds = self::cabinetOdds($seats, $state->dietVoteShares, $state->partyPositions, AerieDiet::governingParties($state->electionOutgoingCabinet), $state->dietBlocs);
 
-        return self::tally([['seats' => $seats, 'shares' => $state->dietVoteShares, 'odds' => $odds]], 1.0, $state->partyPositions, PoliticsEngine::standingLevers($state), $debtToGdp);
+        return self::tally([['seats' => $seats, 'shares' => $state->dietVoteShares, 'odds' => $odds]], 1.0, $state->partyPositions, PoliticsEngine::standingLevers($state), $debtToGdp, DebtBrake::councilLine($state));
     }
 
     /**
@@ -312,7 +320,7 @@ final class ElectionForecast
      * @param bool                                $recession Whether the fund consents to a draw above its ceiling.
      * @return array{cabinets: array<string, array{cabinet: list<string>, support: list<string>, chance: float}>, leaders: array<string, float>, seats: array<string, float>, levers: array<string, float>}
      */
-    private static function tally(array $outcomes, float $weight, array $positions, array $standing, float $debtToGdp, bool $recession = false): array
+    private static function tally(array $outcomes, float $weight, array $positions, array $standing, float $debtToGdp, float $debtLine, bool $recession = false): array
     {
         $cabinets = [];
         $leaders = array_fill_keys(AerieDiet::PARTIES, 0.0);
@@ -331,7 +339,7 @@ final class ElectionForecast
                 $cabinets[$key] ??= ['cabinet' => $option['cabinet'], 'support' => $option['support'], 'chance' => 0.0];
                 $cabinets[$key]['chance'] += $chance;
                 $leaders[CoalitionFormation::leader($option['cabinet'], $order)] += $chance;
-                $enacted = PoliticsEngine::budget($option['cabinet'], $option['support'], $outcome['seats'], $positions, $standing, $debtToGdp, $recession)['levers'];
+                $enacted = PoliticsEngine::budget($option['cabinet'], $option['support'], $outcome['seats'], $positions, $standing, $debtToGdp, $debtLine, $recession)['levers'];
                 foreach ($enacted as $lever => $value) {
                     $levers[$lever] += $chance * $value;
                 }

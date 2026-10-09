@@ -32,6 +32,7 @@ final class RegulatorPageBuilder
         if ($panel !== null) {
             // The mortgage limit each regime brings, beside the capital rule the panel already carries.
             $panel['head']['ltvCap'] = $politics->regulatorLtvCap;
+            $panel['head']['neutralBuffer'] = $politics->regulatorNeutralBuffer;
             foreach ($politics->regulatorPassedOver as $i => $candidate) {
                 if (isset($panel['head']['passedOver'][$i])) {
                     $panel['head']['passedOver'][$i]['ltvCap'] = FinancialRegulator::ltvCapForStance((float) $candidate['regulation']);

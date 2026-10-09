@@ -146,8 +146,10 @@ class UtilityBusinessModel extends StandardCorporateBusinessModel
     public const RATE_CASE_FILING_THRESHOLD = 0.02;
     /** Quarterly probability a pending case is decided (~5 quarters, the 12 to 18 month regulatory lag). */
     public const RATE_CASE_EXIT_HAZARD = 0.20;
-    /** Share of the request a commission grants; the disallowed remainder is still a real cost, so it rolls into the next filing. */
-    public const RATE_CASE_GRANTED_SHARE = 0.70;
+    /** What an elected commission grants of a request, as a share of what an appointed one grants: their pass-through of fuel-cost increases into residential prices, 0.22 against 0.62 (Besley & Coate 2003, Table 4, with controls, 1960-97), read across from cost pass-through to rate requests. */
+    public const ELECTED_COMMISSION_GRANT_RATIO = 0.22 / 0.62;
+    /** Share of a request an appointed commission grants, the District's at its founding; the disallowed remainder is still a real cost, so it rolls into the next filing. The US average, 58% of the net electric increases requested January 2023 to August 2024 (S&P Global data via EIA, Today in Energy, August 2024), is held by 40 appointed commissions and 10 elected ones. */
+    public const APPOINTED_COMMISSION_GRANTED_SHARE = 0.58 / (0.8 + (0.2 * self::ELECTED_COMMISSION_GRANT_RATIO));
     /** Lag at which interim relief is granted rather than leave the utility earning below its cost of service. */
     public const MAX_TARIFF_SHORTFALL = 0.10;
 
@@ -422,7 +424,7 @@ class UtilityBusinessModel extends StandardCorporateBusinessModel
             // permanently costs a utility is the revenue it went without while the case ran, not the price
             // level forever. Clearing the whole request on every order instead let the tariff catch its cost
             // base completely, which is the one thing a lagging regulated tariff never does.
-            $shortfall -= $shortfall * self::RATE_CASE_GRANTED_SHARE;
+            $shortfall -= $shortfall * $macroState->utilityRateCaseGrantShare;
         } elseif ($pending === 0 && $shortfall >= self::RATE_CASE_FILING_THRESHOLD) {
             $streams->startRegime(self::REGIME_RATE_CASE);
         }
@@ -452,6 +454,7 @@ class UtilityBusinessModel extends StandardCorporateBusinessModel
             'output_gap_ema',
             'tips_breakeven_ema',
             'real_wage_gap',
+            'utility_rate_case_grant_share',
             'wholesale_power_price_index_ema',
         ];
     }

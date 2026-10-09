@@ -26,7 +26,8 @@ use App\Service\Math\MathUtility;
  * (App\DTO\GovernmentPolicyDTO::$bankCapitalRequirement).
  *
  * A head drawn as one of the 17 regimes also runs that jurisdiction's loan-to-value cap on a first-time buyer's home,
- * or none, from the day they are seated; the head sitting at Year 1 runs none, as the US does. The cap reaches
+ * or none, and its positive neutral countercyclical buffer, the one it holds when credit is not running ahead, or none,
+ * from the day they are seated; the head sitting at Year 1 runs neither, as the US does. The cap reaches
  * household credit through App\DTO\GovernmentPolicyDTO::$mortgageLtvCap
  * (App\Service\Macro\Subsystem\CreditFiscalSubsystem::mortgageLtvCreditCut()).
  */
@@ -37,6 +38,8 @@ final class FinancialRegulator
     public const OBSERVED_REQUIREMENTS = [0.0843, 0.0850, 0.0900, 0.0925, 0.0950, 0.0966, 0.0982, 0.0993, 0.1000, 0.1046, 0.1071, 0.1150, 0.1230, 0.1255, 0.1260, 0.1290, 0.1315];
     /** Loan-to-value cap on a first-time buyer's home in each of those 17 jurisdictions at end-2024, in the same order, null where there is none: Luxembourg 100% (90% for other buyers; ESRB notification, Dec 2020), Japan none [S], Singapore 75% (first housing loan; MAS) [S], Australia none [S], Hong Kong 70% (HKMA, 16 Oct 2024) [S], France none (the HCSF caps debt service instead) [S], Ireland 90% (ESRB notification, Jan 2022, from Jan 2023), the Netherlands 100% (Tijdelijke regeling hypothecair krediet, from 2018) [S], Switzerland 90% (SBA minimum requirements recognised by FINMA, 10% own funds) [S], the UK none (a flow limit on income multiples instead) [S], Germany none [S], Canada 95% (insured; above 80% insurance is mandatory) [S], the US none, Denmark 95% (Finanstilsynet's 5% down-payment rule, 2015) [S], Sweden 85% (ESRB notification, Mar 2026: 90% from 1 Apr 2026), Iceland 85% (80% for other buyers; ESRB notification, Oct 2022), Norway 85% (Ministry of Finance, Dec 2024: 90% from 31 Dec 2024) [S]. */
     public const OBSERVED_LTV_CAPS = [1.00, null, 0.75, null, 0.70, null, 0.90, 1.00, 0.90, null, null, 0.95, null, 0.95, 0.85, 0.85, 0.85];
+    /** Countercyclical buffer each of those 17 jurisdictions holds in a standard risk environment, its positive neutral rate, in the same order, 0 where it has none: Australia 1% (APRA, from 2023), Hong Kong 1% (HKMA, from April 2024), Ireland 1.5% (Central Bank, from June 2024), the Netherlands 2% (DNB, from May 2024), the UK 2% (FPC, from July 2023), Sweden 2% (Finansinspektionen, from 2022), Iceland 2-2.5% (Financial Stability Committee) [S]; Denmark and Norway activate early but set no neutral rate (BCBS, Range of practices in implementing a positive neutral CCyB, November 2024, Table 1 and fn. 7). */
+    public const OBSERVED_NEUTRAL_BUFFERS = [0.0, 0.0, 0.0, 0.010, 0.010, 0.0, 0.015, 0.020, 0.0, 0.020, 0.0, 0.0, 0.0, 0.0, 0.020, 0.0225, 0.0];
     /** Requirement below which a regime reads as light-touch: midway across the gap between the financial centres of Asia and Luxembourg (8.43-9.50%) and the large euro-area banks (9.66% and up). */
     public const LIGHT_TOUCH_BELOW = 0.0958;
     /** Requirement above which a regime reads as strict: midway across the widest gap on record, between Canada's 11.50% and the US's 12.30%, past which only the US and the Nordic regimes stand. */
@@ -111,6 +114,7 @@ final class FinancialRegulator
         self::seatHead($state, $chosen, $term);
         if ($term < 0.0) {
             $state->regulatorLtvCap = null;
+            $state->regulatorNeutralBuffer = 0.0;
         }
 
         $state->requirementPhaseFrom = self::requirement($state->regulatorStance);
@@ -140,6 +144,18 @@ final class FinancialRegulator
     /** The cap of the regime a stance stands for: the one on record whose requirement is nearest the stance's. */
     public static function ltvCapForStance(float $stance): ?float
     {
+        return self::OBSERVED_LTV_CAPS[self::regime($stance)];
+    }
+
+    /** The positive neutral countercyclical buffer of the regime a stance stands for, as a share of risk-weighted assets. */
+    public static function neutralBufferForStance(float $stance): float
+    {
+        return self::OBSERVED_NEUTRAL_BUFFERS[self::regime($stance)];
+    }
+
+    /** The regime on record a stance stands for: the one whose requirement is nearest the stance's. */
+    private static function regime(float $stance): int
+    {
         $requirement = self::requirement($stance);
         $nearest = 0;
         foreach (self::OBSERVED_REQUIREMENTS as $index => $observed) {
@@ -148,7 +164,7 @@ final class FinancialRegulator
             }
         }
 
-        return self::OBSERVED_LTV_CAPS[$nearest];
+        return $nearest;
     }
 
     /** The requirement a stance stands for. */
@@ -203,5 +219,6 @@ final class FinancialRegulator
         $state->regulatorTermStart = $termStart;
         $state->regulatorStance = $person['regulation'];
         $state->regulatorLtvCap = self::ltvCapForStance($person['regulation']);
+        $state->regulatorNeutralBuffer = self::neutralBufferForStance($person['regulation']);
     }
 }

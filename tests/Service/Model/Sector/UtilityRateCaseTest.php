@@ -39,7 +39,7 @@ final class UtilityRateCaseTest extends TestCase
      * @param list<int> $decideOn
      * @return array<string, float> the final persisted stream state
      */
-    private function runQuarters(int $quarters, array $decideOn = [], float $inflation = 0.03): array
+    private function runQuarters(int $quarters, array $decideOn = [], float $inflation = 0.03, float $grantShare = UtilityBusinessModel::APPOINTED_COMMISSION_GRANTED_SHARE): array
     {
         $model = new UtilityBusinessModel();
         $stock = new Stock();
@@ -58,7 +58,7 @@ final class UtilityRateCaseTest extends TestCase
             }
         );
 
-        $macro = new MacroStateDTO(inflationEma: $inflation);
+        $macro = new MacroStateDTO(inflationEma: $inflation, utilityRateCaseGrantShare: $grantShare);
         $state = [];
 
         for ($q = 1; $q <= $quarters; $q++) {
@@ -136,6 +136,17 @@ final class UtilityRateCaseTest extends TestCase
 
         $this->assertLessThan($requested, $granted, 'A granted increase must be smaller than the amount asked for.');
         $this->assertGreaterThan(0.0, $granted);
+    }
+
+    /** An order grants the share of the request the commission the Diet runs grants: an elected-style commission leaves more of the gap outstanding. */
+    public function testTheOrderGrantsTheCommissionsShare(): void
+    {
+        $requested = $this->runQuarters(8)[self::LAG_KEY];
+        $appointed = UtilityBusinessModel::APPOINTED_COMMISSION_GRANTED_SHARE;
+        $elected = $appointed * UtilityBusinessModel::ELECTED_COMMISSION_GRANT_RATIO;
+
+        $this->assertEqualsWithDelta($requested * (1.0 - $appointed), $this->runQuarters(8, [8])[self::LAG_KEY], 1e-12);
+        $this->assertEqualsWithDelta($requested * (1.0 - $elected), $this->runQuarters(8, [8], grantShare: $elected)[self::LAG_KEY], 1e-12);
     }
 
     /** The tariff the market prices is the one the orders actually granted: a wider lag is a lower price. */

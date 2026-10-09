@@ -15,10 +15,13 @@ use App\Service\Macro\Subsystem\CreditFiscalSubsystem;
 use App\Service\Macro\Subsystem\LaborMarketSubsystem;
 use App\Service\Macro\Subsystem\MacroAggregateSubsystem;
 use App\Service\Macro\Subsystem\MonetaryPolicySubsystem;
+use App\Service\Macro\Subsystem\SovereignFundSubsystem;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\FirmEconomics;
 use App\Service\Math\MacroTransmission;
 use App\Service\Math\MathUtility;
+use App\Service\Math\Valuation;
+use App\Service\Model\Sector\UtilityBusinessModel;
 use PHPUnit\Framework\TestCase;
 use ReflectionClass;
 use ReflectionMethod;
@@ -73,6 +76,10 @@ class GovernmentPolicyTest extends TestCase
             stampDutyRate: FinancialConstants::STAMP_DUTY_RATE,
             bankLevyRate: 0.0,
             reserveDrawShare: MacroEngine::RESERVE_DRAW_CEILING,
+            consolidationTaxShare: CreditFiscalSubsystem::FOUNDING_CONSOLIDATION_TAX_SHARE,
+            reserveHomeEquityShare: SovereignFundSubsystem::OPENING_HOME_EQUITY_SHARE,
+            utilityRateCaseGrantShare: UtilityBusinessModel::APPOINTED_COMMISSION_GRANTED_SHARE,
+            dividendTaxRate: Valuation::FOUNDING_DIVIDEND_TAX_RATE,
             electionPulse: 0.0,
             mortgageLtvCap: 0.85,
         ));
@@ -155,6 +162,10 @@ class GovernmentPolicyTest extends TestCase
             stampDutyRate: FinancialConstants::STAMP_DUTY_RATE,
             bankLevyRate: 0.0005,
             reserveDrawShare: 0.55,
+            consolidationTaxShare: 0.30,
+            reserveHomeEquityShare: 0.10,
+            utilityRateCaseGrantShare: 0.40,
+            dividendTaxRate: 0.30,
             electionPulse: 0.0,
             expectedLevers: $levers,
             expectedPolicyFrom: $from,
@@ -162,6 +173,10 @@ class GovernmentPolicyTest extends TestCase
 
         $this->enactPolicyDto($state, $forecast(null, null));
         $this->assertSame(0.55, $state->reserveDrawShare, 'The share of the fund\'s return spent goes in as passed.');
+        $this->assertSame(0.30, $state->consolidationTaxShare, 'So does the share of a deficit cut raised by tax.');
+        $this->assertSame(0.10, $state->reserveHomeEquityShare, 'And the fund\'s home share.');
+        $this->assertSame(0.40, $state->utilityRateCaseGrantShare, 'And what the utility commission grants.');
+        $this->assertSame(0.30, $state->dividendTaxRate, 'And the tax on dividends.');
         $this->assertSame([], $state->expectedLevers);
         $this->assertSame(-1.0, $state->expectedPolicyFrom);
 
@@ -219,6 +234,10 @@ class GovernmentPolicyTest extends TestCase
             stampDutyRate: FinancialConstants::STAMP_DUTY_RATE,
             bankLevyRate: 0.0,
             reserveDrawShare: MacroEngine::RESERVE_DRAW_CEILING,
+            consolidationTaxShare: CreditFiscalSubsystem::FOUNDING_CONSOLIDATION_TAX_SHARE,
+            reserveHomeEquityShare: SovereignFundSubsystem::OPENING_HOME_EQUITY_SHARE,
+            utilityRateCaseGrantShare: UtilityBusinessModel::APPOINTED_COMMISSION_GRANTED_SHARE,
+            dividendTaxRate: Valuation::FOUNDING_DIVIDEND_TAX_RATE,
             electionPulse: 0.0,
             authorityConcession: $concession,
         );
@@ -265,6 +284,10 @@ class GovernmentPolicyTest extends TestCase
             stampDutyRate: FinancialConstants::STAMP_DUTY_RATE,
             bankLevyRate: 0.0,
             reserveDrawShare: MacroEngine::RESERVE_DRAW_CEILING,
+            consolidationTaxShare: CreditFiscalSubsystem::FOUNDING_CONSOLIDATION_TAX_SHARE,
+            reserveHomeEquityShare: SovereignFundSubsystem::OPENING_HOME_EQUITY_SHARE,
+            utilityRateCaseGrantShare: UtilityBusinessModel::APPOINTED_COMMISSION_GRANTED_SHARE,
+            dividendTaxRate: Valuation::FOUNDING_DIVIDEND_TAX_RATE,
             electionPulse: $pulse,
         )]);
     }

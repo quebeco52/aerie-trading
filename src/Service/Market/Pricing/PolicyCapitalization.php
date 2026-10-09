@@ -19,7 +19,8 @@ use App\Service\Politics\PoliticsEngine;
  * they favoured as the odds moved; Snowberg, Wolfers & Zitzewitz 2007). Priced are the laws a firm's own accounts
  * answer to: the corporate tax, the bank levy, the rules on extraction a mine or field pays for in its unit costs, the
  * stamp duty a broker's commissions thin with, the carbon price a generator sells its power with, and the public
- * spending a contractor, hospital, college or guard firm sells to.
+ * spending a contractor, hospital, college or guard firm sells to; and the tax on dividends, which no account carries
+ * but every payer's holders price in the return they require.
  *
  * The expected path runs from the laws in force, through the budget the sitting government will pass at its next round
  * and the next government's first budget as the market's forecast has it (App\Service\Politics\ElectionForecast), and
@@ -60,6 +61,10 @@ final class PolicyCapitalization
     public const LONG_RUN_PUBLIC_SPENDING_SHIFT = -0.0255;
     /** Share of that shift's distance from its average still there a term later: 0.458 (sd across games 0.14). */
     public const PUBLIC_SPENDING_TERM_PERSISTENCE = 0.458;
+    /** The tax on dividends in force on average over the long run: 15.5% (se 1.0%), the founding 15% give or take. */
+    public const LONG_RUN_DIVIDEND_TAX_RATE = 0.155;
+    /** Share of the tax on dividends' distance from that average still there a term later: 0.583 (sd across games 0.17). */
+    public const DIVIDEND_TAX_TERM_PERSISTENCE = 0.583;
 
     // --- Laws Priced per Firm ---
     /** The laws a firm's own accounts answer to, keyed as PoliticsEngine::LEVER_FIELDS; the corporate tax reaches every firm through its effective rate instead. */
@@ -83,6 +88,17 @@ final class PolicyCapitalization
             - $macro->corporateTaxShiftEmbodied
             // The rate still closing on the law in force.
             + (($macro->corporateTaxShiftRealized - $macro->corporateTaxPolicyShift) * (1.0 - Valuation::perpetuityShareAfter($capRate, 0.0, $speed)));
+    }
+
+    /**
+     * The tax on dividends the market expects over a firm's life, weighted the same way. No earnings carry it: it is
+     * priced in the return holders require (Valuation::dividendTaxValueScale()), from the day it is passed.
+     *
+     * @param bool $previous Whether to read the forecast as it stood the tick before.
+     */
+    public static function expectedDividendTaxRate(MacroStateDTO $macro, float $capRate, bool $previous = false): float
+    {
+        return self::expectedOverLife($macro, $capRate, $previous, 'dividendTax', $macro->dividendTaxRate, static fn (float $law): float => $law, self::LONG_RUN_DIVIDEND_TAX_RATE, self::DIVIDEND_TAX_TERM_PERSISTENCE);
     }
 
     /**
@@ -135,15 +151,15 @@ final class PolicyCapitalization
 
     /**
      * Government purchases above the founding level the market expects over a firm's life, weighted the same way, less
-     * what its trailing earnings carry. Purchases close on a budget at the speed they revert to it, and those still
-     * closing on the law in force count for the part of the firm's value accruing before they arrive.
+     * what its trailing earnings carry. Purchases close on a budget, less the cuts the debt calls for, at the speed they
+     * revert to it, and those still closing count for the part of the firm's value accruing before they arrive.
      *
      * @param bool $previous Whether to read the forecast as it stood the tick before.
      */
     public static function publicSpendingGap(MacroStateDTO $macro, float $capRate, bool $previous = false): float
     {
         $speed = CreditFiscalSubsystem::GOVT_SPENDING_MEAN_REVERSION;
-        $inForce = self::measure('publicSpending', $macro->publicSpendingShare);
+        $inForce = self::measure('publicSpending', CreditFiscalSubsystem::purchasesTarget($macro->publicSpendingShare, $macro->sovereignNetDebtToGdp, $macro->sovereignFundDollarsPerGdp > 0.0, $macro->consolidationTaxShare));
         $purchases = ($macro->governmentSpendingIndex / MacroEngine::GOVT_SPENDING_BASELINE) - 1.0;
 
         return self::expectedOverLife($macro, $capRate, $previous, 'publicSpending', $macro->publicSpendingShare, static fn (float $law): float => self::measure('publicSpending', $law), self::LONG_RUN_PUBLIC_SPENDING_SHIFT, self::PUBLIC_SPENDING_TERM_PERSISTENCE, $speed)

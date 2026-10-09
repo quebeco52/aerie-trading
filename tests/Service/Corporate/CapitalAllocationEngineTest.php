@@ -21,6 +21,7 @@ use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 use App\Data\Company\InitialMarket;
+use App\Service\Math\Valuation;
 
 #[AllowMockObjectsWithoutExpectations]
 class CapitalAllocationEngineTest extends TestCase
@@ -604,6 +605,26 @@ class CapitalAllocationEngineTest extends TestCase
         $this->assertGreaterThan(0.0, $steady);
         $this->assertEqualsWithDelta($steady, $pay('4000000.00', 12.00), 1e-9, 'A strong quarter in an unchanged year is not a raise.');
         $this->assertGreaterThan($steady, $pay('6000000.00', 4.00), 'A year that has grown raises the dividend.');
+    }
+
+    /** A tax on dividends moves the payout a firm steers to by the measured response, the rest of its cash left to buybacks (Chetty & Saez 2005). */
+    public function testTheDividendTaxMovesThePayoutTarget(): void
+    {
+        $pay = function (float $dividendTaxRate): float {
+            $stock = $this->buildDistributor('TAXD');
+            $stock->setTargetPayoutRatio('0.50');
+            $stock->setDividendSpeed('1.00');
+            $stock->setLastDividend('0.00');
+            $stock->setTotalNetIncome('4000000.00');
+
+            return $this->buildEngineWith($this->debtEngineReturning($this->buildHealth()))
+                ->allocateCapital($stock, 4.00, 2.00, 10.00, 1000000.0, new MacroStateDTO(corporateTaxRate: 0.21, dividendTaxRate: $dividendTaxRate))['dividend_paid'];
+        };
+
+        $founding = $pay(Valuation::FOUNDING_DIVIDEND_TAX_RATE);
+        $this->assertGreaterThan(0.0, $founding);
+        $this->assertEqualsWithDelta($founding * Valuation::dividendTaxPayoutScale(0.396), $pay(0.396), 1e-6);
+        $this->assertEqualsWithDelta($founding * Valuation::dividendTaxPayoutScale(0.0), $pay(0.0), 1e-6);
     }
 
     /**

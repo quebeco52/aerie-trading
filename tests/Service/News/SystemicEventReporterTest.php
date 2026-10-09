@@ -388,6 +388,29 @@ class SystemicEventReporterTest extends TestCase
         }
     }
 
+    /** A councillor's headline says when the newcomer moves the Council's debt line, and says nothing of it when the line stays. */
+    public function testTheCouncillorsHeadlineSaysWhenTheDebtLineMoves(): void
+    {
+        $seated = static fn(array $lines, float $before): PoliticsStateDTO => new PoliticsStateDTO(
+            totalTime: 6.0, authoritySalt: 5.0, eventType: ShockEvent::COUNCILLOR_SEATED, lastCouncillorSeatedAt: 6.0,
+            councilNames: ['Ada Moss', 'Ben Ruiz', 'Cy Hart'], councilBirths: [-50.0, -45.0, -40.0], councilSince: [-10.0, -4.0, 6.0],
+            councilStances: [1.0, -1.0, 1.0], councilDebtLines: $lines, debtLineBeforeSeating: $before,
+            councillorPassedOver: [['name' => 'Dee Holt', 'birth' => -44.0, 'stance' => -1.0, 'regulation' => 0.0, 'fund' => 0.0, 'debt' => 0.0]],
+        );
+
+        for ($i = 0; $i < 20; ++$i) {
+            $moved = $this->reporter(bufferedPrice: null)->report(new MacroStateDTO(totalTime: 6.0), $seated([0.90, 0.85, 0.87], 0.90), $this->benchmarkAt('100'));
+            $this->assertNotNull($moved);
+            $this->assertStringContainsString('Cy Hart', $moved['description']);
+            $this->assertStringContainsString('The Council\'s debt line moves from 90% to 87% of GDP.', $moved['description']);
+
+            $kept = $this->reporter(bufferedPrice: null)->report(new MacroStateDTO(totalTime: 6.0), $seated([0.90, 0.85, 0.87], 0.87), $this->benchmarkAt('100'));
+            $this->assertNotNull($kept);
+            $this->assertStringNotContainsString('debt line', $kept['description']);
+            $this->assertStringNotContainsString('{', $kept['description']);
+        }
+    }
+
     /**
      * A party's new leader is named with their age, the leader they succeed and how long that one led; when the party
      * leads the cabinet, the news is of a new prime minister.

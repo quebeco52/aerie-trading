@@ -29,12 +29,14 @@
 			<p class="text-xs text-on-surface-variant mt-0.5">Age {{ head.age }} · seated {{ head.sinceLabel }} · term ends <span class="font-mono tabular-nums">{{ head.termEndsLabel }}</span></p>
 			<p class="text-sm text-on-surface mt-2 max-w-3xl">
 				{{- {light: 'A light-touch regulator', middle: 'A moderate regulator', strict: 'A strict regulator'}[head.stance] }}, setting core capital at <span class="font-mono tabular-nums">{{ head.requirement|pct(1) }}</span>
+				{{- head.neutralBuffer is defined and head.neutralBuffer > 0 ? ', a countercyclical buffer of ' ~ head.neutralBuffer|pct(1) ~ ' even when credit is calm,' : '' }}
 				and {{ head.ltvCap is null ? 'no limit on mortgage borrowing' : 'mortgages at ' ~ head.ltvCap|pct(0) ~ ' of a home\'s price' }}
 				{%- if head.passedOver is not empty %}, chosen over {% for candidate in head.passedOver %}{{ candidate.name }} <span class="text-on-surface-variant">(<span class="font-mono tabular-nums">{{ candidate.requirement|pct(1) }}</span>{% if candidate.ltvCap is defined %}, {{ candidate.ltvCap is null ? 'no limit' : candidate.ltvCap|pct(0) ~ ' limit' }}{% endif %}, {{ candidate.age }})</span>{{ loop.last ? '' : (loop.revindex == 2 ? ' and ' : ', ') }}{% endfor %}{% endif %}.
 			</p>
 			<p class="text-xs text-on-surface-variant mt-2 max-w-3xl">
 				The Council names the head for a single {{ regulator.rules.termYears|number_format(0) }}-year term from a shortlist of {{ regulator.rules.shortlist }}, choosing the candidate nearest its own view of the banks.
-				A head brings a whole regime with them, the rules of a supervisor they know, and both rules change when the head does.
+				A head brings a whole regime with them, the rules of a supervisor they know, and the rules change when the head does.
+				Some regimes keep part of the countercyclical buffer on in calm years, so there is capital to release when a crisis comes.
 			</p>
 		</section>
 

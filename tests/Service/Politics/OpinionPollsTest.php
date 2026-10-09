@@ -27,10 +27,10 @@ class OpinionPollsTest extends TestCase
         $persistence = Politics::ELECTION_NORMAL_VOTE_PERSISTENCE ** Politics::ELECTION_TERM_YEARS;
         $lead = static fn(array $shares): float => log($shares[Diet::CIVIC] / $shares[Diet::VANGUARD]) - log(Diet::SEED_VOTE_SHARES[Diet::CIVIC] / Diet::SEED_VOTE_SHARES[Diet::VANGUARD]);
 
-        $atNormal = OpinionPolls::driftLasting(Diet::SEED_VOTE_SHARES, Politics::ELECTION_TERM_YEARS, [], $math);
+        $atNormal = OpinionPolls::driftLasting(Diet::SEED_VOTE_SHARES, array_fill_keys(Diet::PARTIES, Politics::ELECTION_TERM_YEARS), [], $math);
         $ahead = [Diet::CIVIC => Diet::SEED_VOTE_SHARES[Diet::CIVIC] + 0.08, Diet::VANGUARD => Diet::SEED_VOTE_SHARES[Diet::VANGUARD] - 0.08] + Diet::SEED_VOTE_SHARES;
-        $reverted = OpinionPolls::driftLasting($ahead, Politics::ELECTION_TERM_YEARS, [], $math);
-        $swung = OpinionPolls::driftLasting(Diet::SEED_VOTE_SHARES, Politics::ELECTION_TERM_YEARS, [Diet::CIVIC => 1.0], $math);
+        $reverted = OpinionPolls::driftLasting($ahead, array_fill_keys(Diet::PARTIES, Politics::ELECTION_TERM_YEARS), [], $math);
+        $swung = OpinionPolls::driftLasting(Diet::SEED_VOTE_SHARES, array_fill_keys(Diet::PARTIES, Politics::ELECTION_TERM_YEARS), [Diet::CIVIC => 1.0], $math);
 
         foreach (Diet::PARTIES as $party) {
             $this->assertEqualsWithDelta(Diet::SEED_VOTE_SHARES[$party], $atNormal[$party], 1e-12);
@@ -50,9 +50,9 @@ class OpinionPollsTest extends TestCase
         $quiet = new MathUtility();
         $stepped = $ahead;
         for ($month = 0; $month < $months; ++$month) {
-            $stepped = OpinionPolls::driftLasting($stepped, 1.0 / 12.0, [], $quiet);
+            $stepped = OpinionPolls::driftLasting($stepped, array_fill_keys(Diet::PARTIES, 1.0 / 12.0), [], $quiet);
         }
-        $whole = OpinionPolls::driftLasting($ahead, Politics::ELECTION_TERM_YEARS, [], $quiet);
+        $whole = OpinionPolls::driftLasting($ahead, array_fill_keys(Diet::PARTIES, Politics::ELECTION_TERM_YEARS), [], $quiet);
         foreach (Diet::PARTIES as $party) {
             $this->assertEqualsWithDelta($whole[$party], $stepped[$party], 1e-12);
         }
@@ -67,7 +67,7 @@ class OpinionPollsTest extends TestCase
                 foreach (Diet::PARTIES as $party) {
                     $draws[$party] = $math->generateStandardNormal();
                 }
-                $shares = OpinionPolls::driftLasting($shares, 1.0 / 12.0, $draws, $math);
+                $shares = OpinionPolls::driftLasting($shares, array_fill_keys(Diet::PARTIES, 1.0 / 12.0), $draws, $math);
             }
             $gaps[] = log($shares[Diet::CIVIC] / $shares[Diet::VANGUARD]) - log(Diet::SEED_VOTE_SHARES[Diet::CIVIC] / Diet::SEED_VOTE_SHARES[Diet::VANGUARD]);
         }
@@ -115,6 +115,70 @@ class OpinionPollsTest extends TestCase
         $this->assertEqualsWithDelta(0.5 / (1.0 - (0.5 ** (Politics::ELECTION_TERM_YEARS / $half))), OpinionPolls::termClock($half), 1e-12);
         $this->assertGreaterThan(0.5, OpinionPolls::termClock(1.0), 'Most of it in the first year.');
         $this->assertSame(1.0, OpinionPolls::termClock(Politics::ELECTION_TERM_YEARS + 1.0));
+    }
+
+    /**
+     * A party governing from vote to vote drifts toward its normal vote on the term clock, mostly in the first year; any
+     * other on the calendar; and every party has drifted exactly a term by the vote, a party that joins the cabinet
+     * mid-term included.
+     */
+    public function testTheGovernmentsDriftComesEarlyAndEveryPartyDriftsATerm(): void
+    {
+        $state = $this->termStart();
+        $state->supportDriftYears = [];
+        $total = array_fill_keys(Diet::PARTIES, 0.0);
+        $atTwelve = [];
+        for ($month = 1; $month <= 48; ++$month) {
+            if ($month === 25) {
+                $state->governingCoalition = Diet::membership([Diet::VANGUARD, Diet::EXCHANGE, Diet::CIVIC]);
+            }
+            $years = OpinionPolls::driftYears($state, ($month - 1) / 12.0, $month / 12.0);
+            foreach ($years as $party => $partyYears) {
+                $total[$party] += $partyYears;
+                $state->supportDriftYears[$party] = $total[$party];
+            }
+            if ($month === 12) {
+                $atTwelve = $total;
+            }
+        }
+
+        $this->assertEqualsWithDelta(Politics::ELECTION_TERM_YEARS * OpinionPolls::termClock(1.0), $atTwelve[Diet::VANGUARD], 1e-9, 'The cabinet takes the term clock\'s first year.');
+        $this->assertEqualsWithDelta(1.0, $atTwelve[Diet::IRON_HARBOR], 1e-9, 'The opposition drifts on the calendar.');
+        foreach (Diet::PARTIES as $party) {
+            $this->assertEqualsWithDelta(Politics::ELECTION_TERM_YEARS, $total[$party], 1e-9, $party);
+        }
+    }
+
+    /**
+     * The polls misread opinion yet to settle: the whole misreading until the campaign's final days, nothing on the day;
+     * across many polls a poll's error on support is its sampling error and that misreading together, and the vote never
+     * carries it.
+     */
+    public function testThePollsMisreadUnsettledOpinion(): void
+    {
+        $this->assertSame(0.0, OpinionPolls::unsettledSd(0.25, 0.0));
+        $this->assertEqualsWithDelta(sqrt(OpinionPolls::UNSETTLED_VARIANCE * 3.0), OpinionPolls::unsettledSd(0.25, 1.0 / 12.0), 1e-12);
+        $this->assertEqualsWithDelta(OpinionPolls::unsettledSd(0.25, 1.0 / 12.0) / sqrt(2.0), OpinionPolls::unsettledSd(0.25, (OpinionPolls::CAMPAIGN_SWING_DAYS / 2.0) / FinancialConstants::DAYS_PER_YEAR), 1e-12);
+
+        $publish = new \ReflectionMethod(OpinionPolls::class, 'publish');
+        $state = $this->termStart();
+        $state->dietVoteShares = Diet::SEED_VOTE_SHARES;
+        $party = Diet::CIVIC;
+        $z2 = [];
+        $misread = [];
+        for ($month = 1; $month <= 12 * 400; ++$month) {
+            $state->totalTime = $month / 12.0 + 1e-6;
+            $publish->invoke(null, $state, 7, new MathUtility());
+            $share = OpinionPolls::support($state)[$party];
+            $poll = $state->polls[array_key_last($state->polls)] ?? null;
+            $this->assertNotNull($poll);
+            $z2[] = (($poll['shares'][$party] - $share) ** 2) / ($share * (1.0 - $share));
+            $misread[] = $poll['shares'][Diet::VANGUARD] - OpinionPolls::support($state)[Diet::VANGUARD];
+        }
+        $expected = (1.0 / OpinionPolls::EFFECTIVE_SAMPLE_SIZE) + OpinionPolls::UNSETTLED_VARIANCE;
+        $this->assertEqualsWithDelta($expected, array_sum($z2) / count($z2), 0.25 * $expected);
+        $this->assertGreaterThan(1.6 / OpinionPolls::EFFECTIVE_SAMPLE_SIZE, array_sum($z2) / count($z2), 'More than sampling alone.');
+        $this->assertEqualsWithDelta(0.0, array_sum($misread) / count($misread), 0.003, 'The misreading favours no party: a large one is not read low on average.');
     }
 
     /** The voters count none of the campaign's growth before it opens, and on the day count the growth and inflation the vote weighs. */
@@ -173,7 +237,7 @@ class OpinionPollsTest extends TestCase
                 $support = OpinionPolls::support($state);
                 $this->assertEqualsWithDelta(1.0, array_sum($poll), 5e-4);
                 foreach (Diet::PARTIES as $party) {
-                    $this->assertLessThan(5.0 * sqrt($support[$party] / OpinionPolls::EFFECTIVE_SAMPLE_SIZE), abs($poll[$party] - $support[$party]), $party);
+                    $this->assertLessThan(5.0 * sqrt(($support[$party] / OpinionPolls::EFFECTIVE_SAMPLE_SIZE) + (OpinionPolls::UNSETTLED_VARIANCE * $support[$party])), abs($poll[$party] - $support[$party]), $party);
                 }
             }
         }

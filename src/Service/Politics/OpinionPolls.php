@@ -26,6 +26,12 @@ use App\Service\Math\TimeSeries;
  *   parties governing that month;
  * - each party's short-term swing builds in the final weeks of the campaign, when the polls close in on the result, and
  *   fades after the vote at the same pace.
+ * The governing parties' drift toward their normal votes runs on the same front-loaded clock as their cost of ruling,
+ * so their fall from the result comes mostly in the first year, as governing parties' polls do; every party drifts a
+ * whole term's worth by the vote (driftYears()).
+ *
+ * The polls also read opinion that is not yet settled: each party's share is misread by an error every poll shares,
+ * which drifts slowly and is gone by the vote, as undecided voters decide over the campaign (Jennings & Wlezien 2018).
  *
  * Within a term, support so built moves in the polls as real parties' do: German monthly polls since 1998 spread over
  * one to four years as the lasting drift does (var/harness/polls).
@@ -42,6 +48,12 @@ final class OpinionPolls
     // --- The Campaign (Jennings & Wlezien 2018 data, PR legislative elections, single polls; var/harness/polls/fit_campaign.py) ---
     /** Days before the vote in which the short-term swing builds: a poll's error on the result falls fastest over the final 20 days (30 fits nearly as well). */
     public const CAMPAIGN_SWING_DAYS = 20.0;
+
+    // --- Unsettled Opinion (Jennings & Wlezien 2018 data; Germany 1998-2026) ---
+    /** Error in a poll's read of the result, beyond its sampling error and the vote's short-term swing, that settles over the campaign as undecided voters decide: the 52 units (poll - vote)^2 / p(1 - p) x 1e4 a poll's error falls by over the final 20 days, less the 15 the short-term swing moves (same fit), so 37e-4 of p(1 - p). Opinion the vote never shows, so it enters the polls alone. */
+    public const UNSETTLED_VARIANCE = (52.0 - 15.0) * 1.0e-4;
+    /** Half-life of that unsettled opinion, in years: the 28 months of a single Ornstein-Uhlenbeck fitted to German monthly poll averages, 1998-2026, which show no faster component of any size (var/harness/polls/de_poll_dynamics.out). */
+    public const UNSETTLED_HALF_LIFE_YEARS = 28.0 / 12.0;
 
     // --- Published Polls ---
     /** Polls published a year: one a month. */
@@ -89,7 +101,11 @@ final class OpinionPolls
         foreach (AerieDiet::PARTIES as $party) {
             $shortTermDraws[$party] = $math->generateStandardNormal();
         }
-        $state->supportLasting = self::driftLasting($state->supportLasting, $years, $lastingDraws, $math);
+        $drift = self::driftYears($state, $state->supportUpdatedAt, $state->totalTime);
+        foreach ($drift as $party => $partyYears) {
+            $state->supportDriftYears[$party] = ($state->supportDriftYears[$party] ?? self::elapsedInTerm($state, $state->supportUpdatedAt)) + $partyYears;
+        }
+        $state->supportLasting = self::driftLasting($state->supportLasting, $drift, $lastingDraws, $math);
         $state->partyShortTermShocks = self::fadeShortTerm($state->partyShortTermShocks, $years, self::campaignOverlap($state->supportUpdatedAt, $state->totalTime), $shortTermDraws, $math);
 
         $growth = self::growthCounted($state, $macro);
@@ -120,6 +136,7 @@ final class OpinionPolls
     {
         $state->supportLasting = self::lastingSupport($state);
         $state->supportIncumbency = [];
+        $state->supportDriftYears = [];
         $state->supportGrowthCounted = 0.0;
         $state->supportInflationCounted = 0.0;
         $state->polls = [];
@@ -143,16 +160,17 @@ final class OpinionPolls
      * swing exactly (PoliticsEngine::LASTING_SWING_VARIANCE).
      *
      * @param array<string, float> $lasting Lasting shares by party.
+     * @param array<string, float> $years   Years of drift by party (driftYears()).
      * @param array<string, float> $draws   Standard normal draw by party.
      * @return array<string, float>
      */
-    public static function driftLasting(array $lasting, float $years, array $draws, MathUtility $math): array
+    public static function driftLasting(array $lasting, array $years, array $draws, MathUtility $math): array
     {
-        $persistence = PoliticsEngine::ELECTION_NORMAL_VOTE_PERSISTENCE ** $years;
         $termPersistence = PoliticsEngine::ELECTION_NORMAL_VOTE_PERSISTENCE ** PoliticsEngine::ELECTION_TERM_YEARS;
 
         $moved = [];
         foreach (AerieDiet::PARTIES as $party) {
+            $persistence = PoliticsEngine::ELECTION_NORMAL_VOTE_PERSISTENCE ** ($years[$party] ?? 0.0);
             $normal = AerieDiet::SEED_VOTE_SHARES[$party];
             $gap = log(max(PoliticsEngine::MIN_VOTE_SHARE, $lasting[$party] ?? $normal) / $normal);
             // The spread the lasting swing holds a party at, around its normal vote: a term's swing over what a term
@@ -199,6 +217,43 @@ final class OpinionPolls
         $years = max(0.0, min(PoliticsEngine::ELECTION_TERM_YEARS, $yearsIntoTerm));
 
         return (1.0 - self::fadeOver($years)) / (1.0 - self::fadeOver(PoliticsEngine::ELECTION_TERM_YEARS));
+    }
+
+    /**
+     * Each party's years of lasting drift over a span: of the drift its term has left, a governing party takes the part
+     * of the term clock the span covers (termClock()), any other the part of the calendar, so a party governing from vote
+     * to vote falls from its result mostly in the first year, and every party has drifted exactly a term's worth by the
+     * vote however its standing changed.
+     *
+     * @return array<string, float>
+     */
+    public static function driftYears(PoliticsState|PoliticsStateDTO $state, float $from, float $to): array
+    {
+        $term = PoliticsEngine::ELECTION_TERM_YEARS;
+        $start = max(0.0, $from - $state->termStartedAt);
+        $end = $to - $state->termStartedAt;
+        if ($state->termStartedAt < 0.0 || $start >= $term || $end <= $start) {
+            return array_fill_keys(AerieDiet::PARTIES, max(0.0, $to - $from));
+        }
+
+        $governing = AerieDiet::governingParties($state->governingCoalition);
+        $clockLeft = 1.0 - self::termClock($start);
+        $governingShare = $clockLeft > 0.0 ? (self::termClock($end) - self::termClock($start)) / $clockLeft : 1.0;
+        $calendarShare = (min($end, $term) - $start) / ($term - $start);
+
+        $years = [];
+        foreach (AerieDiet::PARTIES as $party) {
+            $left = max(0.0, $term - ($state->supportDriftYears[$party] ?? $start));
+            $years[$party] = ($left * (in_array($party, $governing, true) ? $governingShare : $calendarShare)) + max(0.0, $end - $term);
+        }
+
+        return $years;
+    }
+
+    /** Years into the term at a moment, as the drift counted them before parties kept their own (a state saved earlier). */
+    private static function elapsedInTerm(PoliticsState $state, float $at): float
+    {
+        return $state->termStartedAt < 0.0 ? 0.0 : max(0.0, min(PoliticsEngine::ELECTION_TERM_YEARS, $at - $state->termStartedAt));
     }
 
     /**
@@ -279,13 +334,45 @@ final class OpinionPolls
     private static function publish(PoliticsState $state, int $salt, MathUtility $math): void
     {
         $key = CouncilAppointments::vacancyKey('poll', $state->totalTime);
+        $persistence = 0.5 ** (1.0 / self::POLLS_PER_YEAR / self::UNSETTLED_HALF_LIFE_YEARS);
+        $support = self::support($state);
+        $yearsToVote = ElectionForecast::nextVote($state->totalTime) - $state->totalTime;
         $draws = [];
+        $misread = [];
         foreach (AerieDiet::PARTIES as $party) {
             $draws[$party] = Distributions::calculateInverseNormalCDF(CouncilAppointments::uniform($salt, "{$key}:{$party}"));
+            $innovation = Distributions::calculateInverseNormalCDF(CouncilAppointments::uniform($salt, "{$key}:{$party}:unsettled"));
+            $state->pollUnsettled[$party] = isset($state->pollUnsettled[$party])
+                ? ($persistence * $state->pollUnsettled[$party]) + (sqrt(1.0 - ($persistence ** 2)) * $innovation)
+                : $innovation;
+            $misread[$party] = self::unsettledMisreading($support[$party] ?? 0.0, $yearsToVote, $state->pollUnsettled[$party]);
         }
 
         // Kept to a hundredth of a point, finer than any poll is reported, so a term of them stays small in the state.
-        $state->polls[] = ['t' => $state->totalTime, 'shares' => array_map(static fn(float $share): float => round($share, 4), self::sample(self::support($state), $draws, self::EFFECTIVE_SAMPLE_SIZE))];
+        $state->polls[] = ['t' => $state->totalTime, 'shares' => array_map(static fn(float $share): float => round($share, 4), self::sample(PoliticsEngine::applyShortTermShocks($support, $misread), $draws, self::EFFECTIVE_SAMPLE_SIZE))];
+    }
+
+    /**
+     * Unsettled opinion's misreading of a party's log share for a standard normal draw: its spread times the draw, less
+     * half its variance, so the misread share is the share on average and no party is read high or low by it.
+     */
+    public static function unsettledMisreading(float $share, float $yearsToVote, float $draw): float
+    {
+        $sd = self::unsettledSd($share, $yearsToVote);
+
+        return ($sd * $draw) - (0.5 * $sd * $sd);
+    }
+
+    /**
+     * How far unsettled opinion misreads a party's log share this long before the vote: the whole of it until the final
+     * days, closing over them to nothing on the day, as a poll's error on the result does (Jennings & Wlezien 2018).
+     */
+    public static function unsettledSd(float $share, float $yearsToVote): float
+    {
+        $share = max(PoliticsEngine::MIN_VOTE_SHARE, $share);
+        $settling = min(1.0, max(0.0, $yearsToVote) / (self::CAMPAIGN_SWING_DAYS / FinancialConstants::DAYS_PER_YEAR));
+
+        return sqrt(self::UNSETTLED_VARIANCE * (1.0 - $share) / $share * $settling);
     }
 
     /**

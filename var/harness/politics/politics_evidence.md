@@ -29,3 +29,26 @@ on vs 0.0188 (se 0.0007) off; partisan purchases long run per Diet unit +0.115 p
 
 Caveats: brake rounds counted as distinct `lastCouncilBrakeAt` values on quarterly rows. Gap moments are negligible on
 both arms (2-se bands within +-0.0008 sd, +-0.015 ACF4). The trend-read change alone (off arms) moves nothing measurable.
+
+## 2026-10-09 Consolidation mix (tax 37.7% / purchases 62.3%) + Council median debt-brake line vs HEAD 5e4ea84
+
+Question: does splitting the Bohn surplus between tax and purchases (Diet lever `consolidationTaxShare`) and drawing the
+Council's brake line as the median of per-councillor lines move debt, brake rounds or the gap? Harness `gate.php` via
+`spend.sh` (RUN.md "Working tree vs a baseline commit"), arms newon/newoff/headon/headoff, seeds 1-16, 100 y, 180 tpy,
+burn 10 y. `spend_an.py` + `mix_an.py` (new). Stage 8: debt t -4.1, brakes t +3.2, gap negligible -> ran 16; stopped.
+Tables: `mix_8.out`, `mix_16.out`. Targets named before the run (on arm, NEW - HEAD, n 16):
+
+| target | HEAD | NEW | diff (se) | t |
+|---|---|---|---|---|
+| T1 debt mean | 0.8556 | 0.8501 | -0.0055 (0.0018) | -3.0 |
+| T2 brake rounds/yr | 0.2715 | 0.3312 | +0.0597 (0.0112) | +5.3 |
+| T3 gap sd | 0.0214 | 0.0212 | -0.0002 (0.0003) | -0.5 |
+| off: debt mean | 0.9521 | 0.9515 | -0.0006 (0.0004) | -1.7 |
+| off: gap sd | 0.0195 | 0.0197 | +0.0002 (0.0001) | +1.9 |
+
+New tree, on arm: Council line share of quarters 0.66 1.9%, 0.85 7.2%, 0.865 22.6%, 0.87 27.3%, 0.90 38.9%, 0.95 2.0%;
+mean 0.877 (se 0.003, seed range 0.856-0.900). Purchases share 0.2032 (se 0.0011). cts 0.355 (se 0.004, quarter sd 0.055).
+Debt above 90%: 25.7% -> 21.7% of quarters (t -4.1); off arm 68.5% -> 66.7% (t -5.8).
+
+Caveats: T1 moved -0.55pp with t -3.0 at 16 (2-se band -0.2 to -0.9pp, small next to 0.86); not taken to 48 per the brief.
+The 8-seed stage had gap sd +0.0003 (t +2.0), which flipped to -0.0002 at 16: noise. A brake line of 0.66 occurs (1.9%).

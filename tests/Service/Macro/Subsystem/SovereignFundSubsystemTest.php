@@ -717,6 +717,45 @@ class SovereignFundSubsystemTest extends TestCase
         $this->assertLessThan(0.0, $state->sovereignFundRebalanceBacklog, 'A more cautious mix sells it.');
     }
 
+    /**
+     * The Diet's home share sets the board's part of the policy equities: the fund opens on its own holding with no trade,
+     * a new law moves the board's weight to the share times the equity share over the transition, and a head's later
+     * mandate keeps the Diet's share. A share of none sells the board, as far as Norway's fund holds none at home.
+     */
+    public function testTheDietsHomeShareSetsTheBoardsPartOfTheEquities(): void
+    {
+        $tpy = 360;
+        $dt = 1.0 / $tpy;
+        $fund = $this->stillFund();
+        $state = $this->openFund($fund, $tpy);
+        $openingWeight = $state->sovereignFundTargetWeight;
+        $equity = $state->sovereignFundPolicyEquityShare;
+        $this->assertSame($state->reserveHomeEquityShare, $state->sovereignFundHomeEquityShare, 'It opens on the law in force.');
+        $this->assertEqualsWithDelta(0.0, $state->sovereignFundRebalanceBacklog, 1e-12, 'And books no trade doing so.');
+
+        $state->reserveHomeEquityShare = 0.40;
+        $this->step($fund, $state, $dt);
+        $this->assertEqualsWithDelta(0.40 * $equity, $state->sovereignFundTargetWeight, 1e-12);
+        $this->assertEqualsWithDelta($equity, $state->sovereignFundPolicyEquityShare, 1e-12, 'The equity share is the head\'s and stays.');
+        $this->assertEqualsWithDelta(SovereignFundSubsystem::POLICY_TRANSITION_MONTHS, $state->sovereignFundRebalanceMonthsLeft, 1e-12);
+        $this->assertGreaterThan(0.0, $state->sovereignFundRebalanceBacklog, 'More at home buys the board.');
+        $this->assertGreaterThan($openingWeight, $state->sovereignFundTargetWeight);
+
+        $state->sovereignFundMandateEquityShare = $equity + 0.10;
+        $this->step($fund, $state, $dt);
+        $this->assertEqualsWithDelta(0.40 * ($equity + 0.10), $state->sovereignFundTargetWeight, 1e-12, 'A head\'s mandate keeps the Diet\'s share.');
+
+        $state->reserveHomeEquityShare = 0.0;
+        $this->step($fund, $state, $dt);
+        $this->assertSame(0.0, $state->sovereignFundTargetWeight);
+        $this->assertLessThan(0.0, $state->sovereignFundRebalanceBacklog, 'None at home sells the board.');
+        $end = $state->totalTime + (SovereignFundSubsystem::POLICY_TRANSITION_MONTHS + 1.0) / 12.0;
+        while ($state->totalTime < $end) {
+            $this->step($fund, $state, $dt);
+        }
+        $this->assertEqualsWithDelta(0.0, $state->sovereignFundOwnershipShare, 1e-6, 'It ends holding none of the board.');
+    }
+
     /** Without a mandate the fund keeps the mix it opened with, and a fund saved before it published one reads it back. */
     public function testWithoutAMandateTheFundKeepsItsOpeningMix(): void
     {

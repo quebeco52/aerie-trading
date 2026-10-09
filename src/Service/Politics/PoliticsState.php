@@ -80,6 +80,10 @@ class PoliticsState
     public float $stampDutyRate;
     public float $bankLevyRate;
     public float $reserveDrawShare;
+    public float $consolidationTaxShare;
+    public float $reserveHomeEquityShare;
+    public float $utilityRateCaseGrantShare;
+    public float $dividendTaxRate;
     public float $lastBudgetEnactedAt;
     public float $lastCouncilBrakeAt;
 
@@ -112,6 +116,8 @@ class PoliticsState
     public array $councilFundStances;
     /** @var array<int, float> */
     public array $councilDebtStances;
+    /** @var array<int, float> */
+    public array $councilDebtLines;
     /** @var list<array{name: string, birth: float, stance: float, regulation: float, fund: float, debt: float, swing?: float}> */
     public array $councillorPassedOver;
     /** @var array<int, array{name: string, birth: float, stance: float, regulation: float, fund: float, debt: float, swing?: float}> */
@@ -144,6 +150,7 @@ class PoliticsState
     public array $lastMeetingVotes;
     public float $lastGovernorAppointedAt;
     public float $lastCouncillorSeatedAt;
+    public float $debtLineBeforeSeating;
     public float $lastCouncilVacancyAt;
     public string $lastVacancyName;
     public string $lastVacancyCause;
@@ -159,6 +166,7 @@ class PoliticsState
     public float $requirementPhaseStart;
     public float $lastRegulatorAppointedAt;
     public ?float $regulatorLtvCap;
+    public float $regulatorNeutralBuffer;
     public string $fundHeadName;
     public float $fundHeadBirth;
     public float $fundHeadTermStart;
@@ -198,6 +206,10 @@ class PoliticsState
     public array $supportLasting;
     /** @var array<string, float> */
     public array $supportIncumbency;
+    /** @var array<string, float> */
+    public array $supportDriftYears;
+    /** @var array<string, float> */
+    public array $pollUnsettled;
     public float $supportUpdatedAt;
     public float $supportGrowthCounted;
     public float $supportInflationCounted;

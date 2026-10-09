@@ -122,7 +122,7 @@
 				<section class="bg-surface-container-low rounded-lg p-5 border border-outline-variant/20 flex flex-col" aria-labelledby="hub-budget-heading">
 					<h3 id="hub-budget-heading" class="text-sm font-semibold text-on-surface"><a href="{{ path('app_government_budget') }}" class="hover:underline">The budget</a></h3>
 					<p class="mt-2 text-2xl font-semibold font-mono tabular-nums {{ budget.braking ? 'text-warning' : 'text-on-surface' }}">{{ budget.debt|pct(1) }}</p>
-					<p class="text-xs text-on-surface-variant">of GDP in debt; the Council's line is {{ rules.debtBrake|pct(0) }}{{ budget.braking ? ', and its brake is on' : '' }}</p>
+					<p class="text-xs text-on-surface-variant">of GDP in debt; the Council's line is {{ rules.debtBrake|pct(1) }}{{ budget.braking ? ', and its brake is on' : '' }}</p>
 					{% set changing = budget.levers|filter(lever => lever.status in ['pending', 'partial'])|length %}
 					{% set held = budget.levers|filter(lever => lever.status in ['held', 'fund', 'blocked'])|length %}
 					<p class="text-xs text-on-surface mt-3">
@@ -140,7 +140,7 @@
 
 		<section aria-labelledby="appointed-heading">
 			<h2 id="appointed-heading" class="text-sm font-semibold text-on-surface">The Council and the departments it appoints</h2>
-			<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-5 gap-5 mt-3">
+			<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6 gap-5 mt-3">
 				<section class="bg-surface-container-low rounded-lg p-5 border border-outline-variant/20 flex flex-col" aria-labelledby="hub-council-heading">
 					<h3 id="hub-council-heading" class="text-sm font-semibold text-on-surface"><a href="{{ path('app_council') }}" class="hover:underline">Aerie Council</a></h3>
 					{% if council.lean %}
@@ -214,6 +214,16 @@
 					{% endif %}
 					<p class="mt-auto pt-3 text-xs"><a href="{{ path('app_exchequer') }}" class="text-primary hover:underline underline-offset-2">The debt and what it costs</a></p>
 				</section>
+
+				<section class="bg-surface-container-low rounded-lg p-5 border border-outline-variant/20 flex flex-col" aria-labelledby="hub-trade-heading">
+					<h3 id="hub-trade-heading" class="text-sm font-semibold text-on-surface"><a href="{{ path('app_trade_office') }}" class="hover:underline">Trade &amp; Migration Office</a></h3>
+					{% if tradeOffice is defined %}
+						<p class="mt-2 text-2xl font-semibold font-mono tabular-nums text-on-surface">{{ tradeOffice.tariff.inForce|pct(1) }}</p>
+						<p class="text-xs text-on-surface-variant">average tariff on imports</p>
+						<p class="text-xs text-on-surface mt-3">Labour force growing <span class="font-mono tabular-nums">{{ tradeOffice.migration.inForce|pct(2) }}</span> a year{{ tradeOffice.foreignBuyers.inForce > 0 ? ', with a tax of ' ~ tradeOffice.foreignBuyers.inForce|pct(0) ~ ' on homes bought from outside' : '' }}.</p>
+					{% endif %}
+					<p class="mt-auto pt-3 text-xs"><a href="{{ path('app_trade_office') }}" class="text-primary hover:underline underline-offset-2">Tariffs, migration and foreign buyers</a></p>
+				</section>
 			</div>
 		</section>
 
@@ -246,9 +256,9 @@
 					heading: 'The budget',
 					items: [
 						{name: 'Budget rounds', text: 'The Diet passes a budget every ' ~ rules.budgetRoundMonths|number_format(0) ~ ' months. A new government\'s first budget is the round after it takes office.'},
-						{name: 'What it decides', text: 'How much the District spends on public services, the corporate tax rate, the tariff on imports, the immigration regime, the tax on homes bought from outside the District, how strictly mergers are reviewed, how much housing the planning system lets through, the carbon price on power, the rules on offshore drilling and mining, the stamp duty on share trades, which is paid into the Sovereign Reserve, the levy on banks\' balance sheets, and how much of the reserves\' return the budget spends. How the debt is funded is the Exchequer\'s.'},
+						{name: 'What it decides', text: 'How much the District spends on public services, the corporate tax rate, the tax on dividends, the tariff on imports, the immigration regime, the tax on homes bought from outside the District, how strictly mergers are reviewed, how much housing the planning system lets through, the carbon price on power, the rules on offshore drilling and mining, the stamp duty on share trades, which is paid into the Sovereign Reserve, the levy on banks\' balance sheets, how much of the reserves\' return the budget spends and how much of them is invested at home, whether a debt that has run too high is brought down by raising taxes or by cutting spending, and how much of a rise in power and water bills the utility commission grants. How the debt is funded is the Exchequer\'s.'},
 						{name: 'Supporters\' veto', text: 'A minority cabinet needs its supporters\' votes. They will not back a change that moves a policy further from their own, so they can stop a government but not steer it.'},
-						{name: 'The debt brake', text: 'Above ' ~ rules.debtBrake|pct(0) ~ ' of GDP in debt, the Council would veto any budget that cuts revenue or raises spending, so the Diet does not table one.'},
+						{name: 'The debt brake', text: 'Above ' ~ rules.debtBrake|pct(1) ~ ' of GDP in debt, the line its middle councillor holds, the Council would veto any budget that cuts revenue or raises spending, so the Diet does not table one.'},
 						{name: 'Removing councillors', text: 'The Diet can remove a councillor with ' ~ rules.supermajority ~ ' of its ' ~ rules.seats ~ ' seats. It never has, and ' ~ rules.loyalists|join(', ') ~ ' never would.'}
 					]
 				}

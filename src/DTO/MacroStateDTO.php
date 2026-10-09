@@ -10,7 +10,10 @@ use App\Service\Macro\Subsystem\CreditFiscalSubsystem;
 use App\Service\Macro\MacroState;
 use App\Service\Macro\Subsystem\AssetMarketSubsystem;
 use App\Service\Macro\Subsystem\MacroAggregateSubsystem;
+use App\Service\Macro\Subsystem\SovereignFundSubsystem;
 use App\Service\Math\FinancialConstants;
+use App\Service\Math\Valuation;
+use App\Service\Model\Sector\UtilityBusinessModel;
 
 /**
  * Immutable Data Transfer Object representing a snapshot of the macroeconomic state.
@@ -351,6 +354,14 @@ readonly class MacroStateDTO
         public float $bankLevyRate = 0.0,
         /** Share of the reserve fund's expected long-term real return the budget spends, as the Diet passed it with the fund's consent above the ceiling. */
         public float $reserveDrawShare = MacroEngine::RESERVE_DRAW_CEILING,
+        /** Share of the Bohn reaction's surplus the Diet raises by tax rather than by cutting purchases. */
+        public float $consolidationTaxShare = CreditFiscalSubsystem::FOUNDING_CONSOLIDATION_TAX_SHARE,
+        /** Share of the reserve fund's equities the Diet has it hold on the board. */
+        public float $reserveHomeEquityShare = SovereignFundSubsystem::OPENING_HOME_EQUITY_SHARE,
+        /** Share of a utility's rate request the commission grants, as the Diet has it run. */
+        public float $utilityRateCaseGrantShare = UtilityBusinessModel::APPOINTED_COMMISSION_GRANTED_SHARE,
+        /** Tax on the dividends the District's own shareholders are paid, as the Diet has it set. */
+        public float $dividendTaxRate = Valuation::FOUNDING_DIVIDEND_TAX_RATE,
         /** The rate committee's supermajority, 1 hawkish, -1 dovish, 0 neither (App\Service\Politics\MonetaryAuthority). */
         public float $authorityMajority = 0.0,
         /** 1 while politics hands the macro a rate committee, else 0: the policy rule reads the supermajority only then. */
@@ -397,6 +408,8 @@ readonly class MacroStateDTO
         public float $bankCapitalRequiredLast = FinancialConstants::OPENING_BANK_CAPITAL_REQUIREMENT,
         /** The mortgage loan-to-value cap on the District's lenders in force, as a share of the property's value; null for none (App\Service\Politics\FinancialRegulator). */
         public ?float $mortgageLtvCap = null,
+        /** The countercyclical buffer the regulator holds when credit is not running ahead (App\DTO\GovernmentPolicyDTO). */
+        public float $neutralCountercyclicalBuffer = 0.0,
         /** How far the cap has so far held household debt below where it would stand without one, in logs (App\Service\Macro\Subsystem\CreditFiscalSubsystem::mortgageLtvCreditCut()). */
         public float $ltvCutBuilt = 0.0,
         public float $electricityCarbonPriceLevel = 0.0,
@@ -412,6 +425,8 @@ readonly class MacroStateDTO
         public float $sovereignFundPolicyEquityShare = 0.0,
         /** The policy equity share the fund's head has handed the fund, 0 while the head sitting at Year 1 keeps the opening mix. */
         public float $sovereignFundMandateEquityShare = 0.0,
+        /** The share of its equities the fund's policy mix keeps on the board, as last adopted from the Diet's law. */
+        public float $sovereignFundHomeEquityShare = SovereignFundSubsystem::OPENING_HOME_EQUITY_SHARE,
         public float $sovereignFundDollarsPerGdp = 0.0,
         public float $sovereignFundAnnualDraw = 0.0,
         /** The share of the expected return this budget year's draw was set at; a budget that moves the share rescales the draw from its round. */

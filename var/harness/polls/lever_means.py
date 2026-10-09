@@ -17,6 +17,7 @@ MEASURES = {
     'extractionStringency': (None, lambda s: 1.0 / np.maximum(0.01, 1.0 - TFP_LOSS * s)),
     'stampDutyRate': (None, lambda t: np.exp(-SEMI_ELASTICITY * 2.0 * (t - FOUNDING_DUTY))),
     'publicSpending': (None, lambda g: g / FOUNDING_PURCHASES - 1.0),
+    'dividendTax': (None, lambda x: x),
 }
 
 rows = [json.loads(l) for f in sys.argv[1:] for l in open(f)]

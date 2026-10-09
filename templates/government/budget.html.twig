@@ -29,7 +29,7 @@
 				<div class="shrink-0 rounded border px-3 py-2 {{ budget.braking ? 'border-warning/40 bg-warning/5' : 'border-outline-variant/20 bg-surface-container-lowest' }}">
 					<p class="text-xs font-semibold {{ budget.braking ? 'text-warning' : 'text-on-surface-variant' }}">Council debt brake {{ budget.braking ? 'on' : 'off' }}</p>
 					<p class="text-2xs font-mono tabular-nums text-on-surface-variant mt-0.5">
-						Debt {{ budget.debt|pct(1) }} of GDP · line {{ rules.debtBrake|pct(0) }}{% if budget.lastBrake %} · last held a bill {{ budget.lastBrake }}{% endif %}
+						Debt {{ budget.debt|pct(1) }} of GDP · line {{ rules.debtBrake|pct(1) }}{% if budget.lastBrake %} · last held a bill {{ budget.lastBrake }}{% endif %}
 					</p>
 				</div>
 			</div>

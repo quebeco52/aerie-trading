@@ -17,6 +17,7 @@ use App\Service\Math\MacroTransmission;
 use App\Service\Math\MathUtility;
 use App\Service\Math\StochasticProcesses;
 use App\Service\Math\TimeSeries;
+use App\Service\Math\Valuation;
 use PHPUnit\Framework\TestCase;
 
 class CreditFiscalSubsystemTest extends TestCase
@@ -79,6 +80,7 @@ class CreditFiscalSubsystemTest extends TestCase
     {
         $subsystem = $this->quietSubsystem();
         $state = new MacroState();
+        $state->sovereignNetDebtToGdp = CreditFiscalSubsystem::SOVEREIGN_DEBT_NEUTRAL_THRESHOLD;
         $state->publicSpendingShare = MacroEngine::TARGET_CORPORATE_TAX_RATE * 1.10;
         $target = MacroEngine::GOVT_SPENDING_BASELINE * 1.10;
 
@@ -301,8 +303,9 @@ class CreditFiscalSubsystemTest extends TestCase
     }
 
     /**
-     * Bohn (1998) acts through the tax rate: debt above the line raises the rate the budget levies, which is the rate the
-     * demand equation reads (MacroAggregateSubsystem's discretionary fiscal leg), and the higher take shows in revenue.
+     * Bohn (1998) acts through the tax rate, as far as the Diet raises it by tax: debt above the line raises the rate the
+     * budget levies, which is the rate the demand equation reads (MacroAggregateSubsystem's discretionary fiscal leg), and
+     * the higher take shows in revenue.
      */
     public function testDebtAboveTheLineRaisesTheTaxRateDemandReads(): void
     {
@@ -311,6 +314,7 @@ class CreditFiscalSubsystemTest extends TestCase
         $sound->corporateTaxRate = MacroEngine::TARGET_CORPORATE_TAX_RATE;
         $sound->sovereignDebtToGdp = 0.90;
         $sound->sovereignNetDebtToGdp = 0.90;
+        $sound->consolidationTaxShare = 1.0;
         $indebted = clone $sound;
         $indebted->sovereignDebtToGdp = 1.20;
         $indebted->sovereignNetDebtToGdp = 1.20;
@@ -340,6 +344,42 @@ class CreditFiscalSubsystemTest extends TestCase
         $this->assertEqualsWithDelta(-0.03, $indebtedBudget->primaryDeficitToGdp - $soundBudget->primaryDeficitToGdp, 1e-6, 'The surplus is the revenue the higher rate raises.');
     }
 
+    /**
+     * The Diet splits a consolidation between tax and purchases; the surplus is the same either way. With no fund the
+     * reaction that only pays the structural deficit is no consolidation, so the budget as calibrated is untouched there.
+     */
+    public function testTheDietSplitsAConsolidationBetweenTaxAndPurchases(): void
+    {
+        $share = CreditFiscalSubsystem::FOUNDING_CONSOLIDATION_TAX_SHARE;
+        $this->assertEqualsWithDelta(0.377, $share, 0.001, 'The average OECD plan raises 38% by tax.');
+
+        $state = new MacroState();
+        $state->sovereignFundDollarsPerGdp = 0.0;
+        $state->consolidationTaxShare = $share;
+        $state->publicSpendingShare = MacroEngine::TARGET_CORPORATE_TAX_RATE;
+
+        $state->sovereignNetDebtToGdp = 0.90;
+        $this->assertEqualsWithDelta(0.0, CreditFiscalSubsystem::fiscalStance($state), 1e-12);
+        $this->assertEqualsWithDelta(0.0, CreditFiscalSubsystem::consolidationSpendingCut(0.90, false, $share), 1e-12);
+
+        $state->sovereignNetDebtToGdp = 1.20;
+        $consolidation = CreditFiscalSubsystem::bohnSurplus(1.20) - CreditFiscalSubsystem::SOVEREIGN_STRUCTURAL_DEFICIT;
+        $cut = CreditFiscalSubsystem::consolidationSpendingCut(1.20, false, $share);
+        $this->assertEqualsWithDelta($share * $consolidation, CreditFiscalSubsystem::fiscalStance($state), 1e-12);
+        $this->assertEqualsWithDelta((1.0 - $share) * $consolidation, $cut, 1e-12);
+        $this->assertEqualsWithDelta(MacroEngine::TARGET_CORPORATE_TAX_RATE - $cut, CreditFiscalSubsystem::purchasesTarget($state->publicSpendingShare, 1.20, false, $share), 1e-12);
+
+        // With a fund the draw pays the structural deficit, so the whole reaction is a consolidation.
+        $this->assertEqualsWithDelta((1.0 - $share) * CreditFiscalSubsystem::bohnSurplus(0.80), CreditFiscalSubsystem::consolidationSpendingCut(0.80, true, $share), 1e-12);
+
+        // Purchases settle on the appropriation less the cut.
+        $subsystem = $this->quietSubsystem();
+        for ($i = 0; $i < 360 * 30; $i++) {
+            $subsystem->calculateGovernmentSpending($state, 1.0 / 360.0);
+        }
+        $this->assertEqualsWithDelta(MacroEngine::GOVT_SPENDING_BASELINE * ($state->publicSpendingShare - $cut) / MacroEngine::TARGET_CORPORATE_TAX_RATE, $state->governmentSpendingIndex, 0.05);
+    }
+
     /** With a fund the reaction answers to debt net of the fund's bonds, as the market prices it: gross debt it holds bonds against is no call for a surplus. */
     public function testWithAFundTheReactionKeysToNetDebt(): void
     {
@@ -354,7 +394,12 @@ class CreditFiscalSubsystemTest extends TestCase
 
         $this->assertEqualsWithDelta(0.0, CreditFiscalSubsystem::fiscalStance($unfunded), 1e-12, 'No fund: the reaction at 90% pays the structural deficit.');
         $this->assertSame(0.0, CreditFiscalSubsystem::fiscalStance($funded), 'Net of its bonds the funded sovereign sits under the line.');
-        $this->assertEqualsWithDelta(0.20 * CreditFiscalSubsystem::BOHN_FISCAL_REACTION_SENSITIVITY, CreditFiscalSubsystem::fiscalStance($fundedAtLine), 1e-12, 'The draw pays the structural deficit, so the whole reaction is surplus.');
+        $this->assertEqualsWithDelta(
+            0.20 * CreditFiscalSubsystem::BOHN_FISCAL_REACTION_SENSITIVITY,
+            CreditFiscalSubsystem::fiscalStance($fundedAtLine) + CreditFiscalSubsystem::consolidationSpendingCut(0.90, true, $fundedAtLine->consolidationTaxShare),
+            1e-12,
+            'The draw pays the structural deficit, so the whole reaction is surplus, in tax and in cuts.'
+        );
     }
 
     public function testRetailDefaultRateCoupledToCreditSpreadStress(): void
@@ -1538,6 +1583,30 @@ class CreditFiscalSubsystemTest extends TestCase
         $this->assertEqualsWithDelta(CreditFiscalSubsystem::MAX_CCYB, $settle(CreditFiscalSubsystem::CCYB_GAP_CEILING + 0.02), 1e-5, 'Past a ten-point gap the full 2.5% is held.');
     }
 
+    /** A regulator with a positive neutral rate holds it while credit is calm, the Basel schedule above it, and releases all of it in a crisis. */
+    public function testANeutralBufferIsHeldUntilTheScheduleRisesAboveIt(): void
+    {
+        $subsystem = $this->quietSubsystem();
+        $settle = function (float $creditGapEma, float $neutral, float $crisisAt = -1.0) use ($subsystem): float {
+            $state = $this->householdStateAtNeutralRates();
+            $state->neutralCountercyclicalBuffer = $neutral;
+            $state->creditToGdpGapEma = $creditGapEma;
+            $state->lastCreditCrisisAt = $crisisAt;
+            for ($i = 0; $i < 40; $i++) {
+                $subsystem->calculateHouseholdCredit($state, 0.25);
+                $state->creditToGdpGapEma = $creditGapEma;
+                $state->lastCreditCrisisAt = $crisisAt < 0.0 ? -1.0 : $state->totalTime;
+            }
+
+            return $state->countercyclicalBufferRate;
+        };
+
+        $this->assertEqualsWithDelta(0.02, $settle(0.0, 0.02), 1e-5, 'Calm credit, the neutral 2%.');
+        $this->assertEqualsWithDelta(CreditFiscalSubsystem::MAX_CCYB, $settle(CreditFiscalSubsystem::CCYB_GAP_CEILING + 0.02, 0.02), 1e-5, 'A boom takes it to the full 2.5%.');
+        $this->assertEqualsWithDelta(CreditFiscalSubsystem::MAX_CCYB / 2.0, $settle((CreditFiscalSubsystem::CCYB_GAP_FLOOR + CreditFiscalSubsystem::CCYB_GAP_CEILING) / 2.0, 0.01), 1e-5, 'The schedule above a 1% neutral rate.');
+        $this->assertSame(0.0, $settle(0.0, 0.02, 0.0), 'Released in full while a crisis runs.');
+    }
+
     public function testTheBufferPhasesInOverAYearRatherThanOnTheTick(): void
     {
         $subsystem = $this->quietSubsystem();
@@ -2381,5 +2450,26 @@ class CreditFiscalSubsystemTest extends TestCase
         $base = $spreadAfter(1.0);
         $this->assertEqualsWithDelta(MacroEngine::INTERBANK_BASELINE_SPREAD, $base, 0.0005, 'Without the jump the spread stays near its baseline.');
         $this->assertEqualsWithDelta(5.0 * $base, $spreadAfter(5.0), 1e-15, 'Interbank spread must blow out on Poisson jump.');
+    }
+
+    /**
+     * The tax on dividends adds revenue only as far as it departs from the founding rate, levied on taxable holders'
+     * dividends, which shrink as it rises; the budget books it.
+     */
+    public function testTheDividendTaxRaisesOnTaxableHoldersDividends(): void
+    {
+        $this->assertSame(0.0, CreditFiscalSubsystem::dividendTaxRevenueShift(Valuation::FOUNDING_DIVIDEND_TAX_RATE));
+        $base = Valuation::TAXABLE_EQUITY_SHARE * CreditFiscalSubsystem::NET_DIVIDENDS_TO_GDP;
+        $high = CreditFiscalSubsystem::dividendTaxRevenueShift(0.396);
+        $this->assertGreaterThan(0.0, $high);
+        $this->assertLessThan((0.396 - 0.15) * $base, $high, 'Dividends fall as the rate rises, so it raises less than the static sum.');
+        $this->assertEqualsWithDelta(-0.15 * $base, CreditFiscalSubsystem::dividendTaxRevenueShift(0.0), 1e-15, 'Exempting dividends gives up the founding take.');
+
+        $founding = $this->neutralBudget(1.20);
+        $taxed = $this->neutralBudget(1.20);
+        $taxed->dividendTaxRate = 0.396;
+        $this->subsystem->calculateSovereignDebt($founding, 0.25);
+        $this->subsystem->calculateSovereignDebt($taxed, 0.25);
+        $this->assertEqualsWithDelta(-$high, $taxed->primaryDeficitToGdp - $founding->primaryDeficitToGdp, 1e-9, 'The budget books it.');
     }
 }

@@ -51,6 +51,18 @@ final class Valuation
     /** Valuation multiple discount scalar penalizing stocks with high non-cash accounting accruals. */
     public const ACCRUALS_ANOMALY_PE_PENALTY_SCALE = 8.0;
 
+    // --- Investor Taxes (Brennan 1970; Chetty & Saez 2005) ---
+    /** Share of listed equity held in taxable accounts, the holders a tax on dividends reaches: 24.2% of US corporate stock in 2015 (Rosenthal & Austin 2016); the rest sits in retirement accounts, with foreigners and with nonprofits. */
+    public const TAXABLE_EQUITY_SHARE = 0.242;
+    /** Tax on dividends at the founding: the US 15% on qualified dividends in 2009, the rate the calibrated equity returns were earned under. */
+    public const FOUNDING_DIVIDEND_TAX_RATE = 0.15;
+    /** Tax on capital gains, the US 15% long-term rate in 2009; the Diet does not set it. */
+    public const CAPITAL_GAINS_TAX_RATE = 0.15;
+    /** Accrual-equivalent capital gains tax as a share of the statutory rate, deferral and step-up at death lowering it: 3.4-6.6% against 18.1-27.1%, 1960-78 (Protopapadakis 1983), the midpoints' ratio. */
+    public const CAPITAL_GAINS_ACCRUAL_EQUIVALENT_RATIO = 5.0 / 22.6;
+    /** Elasticity of regular dividends to the holders' average net-of-tax rate: the 2003 cut took that rate from 29% to 17% (Poterba 2004) and raised regular dividends 20% (Chetty & Saez 2005), ln 1.20 / ln(0.83 / 0.71). */
+    public const DIVIDEND_NET_OF_TAX_ELASTICITY = 1.168;
+
     /**
      * The growth rate a perpetuity may be struck on: bounded to [-5%, +6%] and at least 50bp below the cost of equity
      * (floored at MIN_COST_OF_EQUITY), so no perpetuity divides by a vanishing spread. Every perpetuity struck on the
@@ -326,6 +338,52 @@ final class Valuation
         $atStart = exp(-$capRate * max(0.0, $years));
 
         return is_infinite($phaseInSpeed) ? $atStart : $atStart * $phaseInSpeed / ($phaseInSpeed + $capRate);
+    }
+
+    /**
+     * The return a dividend tax adds to a stock's required return over the founding rate's, on the after-tax CAPM
+     * (Brennan 1970): holders price after tax, so with the taxable share w of them the stock must earn
+     * w (t_d - t_g) y / (1 - w t_g) more on a dividend yield y, the gains tax at its accrual equivalent. The founding
+     * rate's premium is already in the returns the market was calibrated on, so only the change is added.
+     *
+     * @param float $dividendYield   The stock's dividend yield, a year.
+     * @param float $dividendTaxRate The tax on dividends.
+     */
+    public static function dividendTaxReturnPremium(float $dividendYield, float $dividendTaxRate): float
+    {
+        $taxable = self::TAXABLE_EQUITY_SHARE;
+        $gainsTax = self::CAPITAL_GAINS_TAX_RATE * self::CAPITAL_GAINS_ACCRUAL_EQUIVALENT_RATIO;
+
+        return $taxable * ($dividendTaxRate - self::FOUNDING_DIVIDEND_TAX_RATE) * max(0.0, $dividendYield) / (1.0 - ($taxable * $gainsTax));
+    }
+
+    /**
+     * What a stock is worth under a dividend tax against the founding rate, as a multiple: the value spread at its
+     * cap rate, k - g, is spread at k - g plus the tax's premium instead (dividendTaxReturnPremium()). A stock paying
+     * none is untouched; one whose whole cash return is dividends loses w (t_d - t_0) / (1 - w t_g) of its value.
+     *
+     * @param float $dividendYield   The stock's dividend yield, a year.
+     * @param float $capRate         The discount rate less growth its value is spread at.
+     * @param float $dividendTaxRate The tax on dividends.
+     */
+    public static function dividendTaxValueScale(float $dividendYield, float $capRate, float $dividendTaxRate): float
+    {
+        return $capRate / ($capRate + self::dividendTaxReturnPremium(min($dividendYield, $capRate), $dividendTaxRate));
+    }
+
+    /**
+     * How far firms' regular dividends sit from their founding level under a dividend tax: the holders' average
+     * net-of-tax rate, 1 - w t_d, against the founding rate's, to the measured elasticity (Chetty & Saez 2005). Buybacks
+     * take up the cash a lower dividend leaves.
+     *
+     * @param float $dividendTaxRate The tax on dividends.
+     */
+    public static function dividendTaxPayoutScale(float $dividendTaxRate): float
+    {
+        $netOfTax = 1.0 - (self::TAXABLE_EQUITY_SHARE * $dividendTaxRate);
+        $foundingNetOfTax = 1.0 - (self::TAXABLE_EQUITY_SHARE * self::FOUNDING_DIVIDEND_TAX_RATE);
+
+        return ($netOfTax / $foundingNetOfTax) ** self::DIVIDEND_NET_OF_TAX_ELASTICITY;
     }
 
     /**

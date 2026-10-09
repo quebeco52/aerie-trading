@@ -6,7 +6,11 @@ namespace App\DTO;
 
 use App\Data\Politics\AerieDiet;
 use App\Service\Macro\MacroEngine;
+use App\Service\Macro\Subsystem\CreditFiscalSubsystem;
+use App\Service\Macro\Subsystem\SovereignFundSubsystem;
 use App\Service\Math\FinancialConstants;
+use App\Service\Math\Valuation;
+use App\Service\Model\Sector\UtilityBusinessModel;
 use App\Service\Politics\ElectionForecast;
 use App\Service\Politics\Exchequer;
 use App\Service\Politics\PoliticsEngine;
@@ -87,6 +91,14 @@ readonly class PoliticsStateDTO
         public float $bankLevyRate = 0.0,
         /** Share of the reserve fund's expected long-term real return the budget spends. */
         public float $reserveDrawShare = MacroEngine::RESERVE_DRAW_CEILING,
+        /** Share of the surplus the debt calls for that the budget raises by tax rather than by cutting purchases. */
+        public float $consolidationTaxShare = CreditFiscalSubsystem::FOUNDING_CONSOLIDATION_TAX_SHARE,
+        /** Share of the reserve fund's equities held on the District's own board. */
+        public float $reserveHomeEquityShare = SovereignFundSubsystem::OPENING_HOME_EQUITY_SHARE,
+        /** Share of a utility's rate request the utility commission grants. */
+        public float $utilityRateCaseGrantShare = UtilityBusinessModel::APPOINTED_COMMISSION_GRANTED_SHARE,
+        /** Tax on the dividends the District's own shareholders are paid. */
+        public float $dividendTaxRate = Valuation::FOUNDING_DIVIDEND_TAX_RATE,
         public float $lastBudgetEnactedAt = -1.0,
         public float $lastCouncilBrakeAt = -1.0,
         /** Salt the Council's hashed draws are taken from, drawn once when it forms (-1: not yet formed; App\Service\Politics\CouncilAppointments). */
@@ -113,6 +125,8 @@ readonly class PoliticsStateDTO
         public array $councilFundStances = [],
         /** @var array<int, float> Each councillor's stance on the debt: -1 the shortest average maturity on record, 1 the longest (App\Service\Politics\Exchequer). */
         public array $councilDebtStances = [],
+        /** @var array<int, float> The debt to GDP each councillor believes starts to cost growth, one published estimate each (App\Service\Politics\DebtBrake). */
+        public array $councilDebtLines = [],
         /** @var list<array{name: string, birth: float, stance: float, regulation: float, fund: float, debt: float, swing?: float}> The candidates the Council passed over when it last filled a seat of its own. */
         public array $councillorPassedOver = [],
         /** @var array<int, array{name: string, birth: float, stance: float, regulation: float, fund: float, debt: float, swing?: float}> The Council Appointment Board's members, by seat (App\Service\Politics\CouncilAppointments::boardShortlist()). */
@@ -149,6 +163,8 @@ readonly class PoliticsStateDTO
         public array $lastMeetingVotes = [],
         public float $lastGovernorAppointedAt = -1.0,
         public float $lastCouncillorSeatedAt = -1.0,
+        /** The Council's debt line before the councillors seated last took their seats (App\Service\Politics\DebtBrake); -1 before any. */
+        public float $debtLineBeforeSeating = -1.0,
         /** When a councillor last left before their term ended (-1: never), who, and why: 'died' or 'resigned'. */
         public float $lastCouncilVacancyAt = -1.0,
         public string $lastVacancyName = '',
@@ -169,6 +185,8 @@ readonly class PoliticsStateDTO
         public float $lastRegulatorAppointedAt = -1.0,
         /** The mortgage loan-to-value cap the head runs, as a share of the property's value, in force from their seating; null for none. */
         public ?float $regulatorLtvCap = null,
+        /** The countercyclical buffer the head holds when credit is not running ahead, as a share of risk-weighted assets; 0 for none. */
+        public float $regulatorNeutralBuffer = 0.0,
         /** The Sovereign Reserve Fund's head in office: name, birth date, when their term began, and stance on the reserves. */
         public string $fundHeadName = '',
         public float $fundHeadBirth = 0.0,
@@ -213,6 +231,10 @@ readonly class PoliticsStateDTO
         public array $supportLasting = [],
         /** @var array<string, float> Each party's log swing this term for or against the governments it served in, folded into its lasting share at the vote. */
         public array $supportIncumbency = [],
+        /** @var array<string, float> Each party's years of lasting drift so far this term (App\Service\Politics\OpinionPolls::driftYears()); empty at a vote. */
+        public array $supportDriftYears = [],
+        /** @var array<string, float> Each party's unsettled opinion the polls misread, in standard deviations (App\Service\Politics\OpinionPolls::unsettledSd()). */
+        public array $pollUnsettled = [],
         /** When support was last brought up to date (-1: never), and the growth and the inflation the voters had counted by then this term. */
         public float $supportUpdatedAt = -1.0,
         public float $supportGrowthCounted = 0.0,
@@ -279,10 +301,15 @@ readonly class PoliticsStateDTO
             stampDutyRate: $this->stampDutyRate,
             bankLevyRate: $this->bankLevyRate,
             reserveDrawShare: $this->reserveDrawShare,
+            consolidationTaxShare: $this->consolidationTaxShare,
+            reserveHomeEquityShare: $this->reserveHomeEquityShare,
+            utilityRateCaseGrantShare: $this->utilityRateCaseGrantShare,
+            dividendTaxRate: $this->dividendTaxRate,
             electionPulse: PoliticsEngine::electionPulse($this->totalTime, $this->lastElectionAt, $this->coalitionTakesOfficeAt),
             authorityMajority: $this->authoritySalt < 0.0 ? null : $this->committeeMajority,
             bankCapitalRequirement: $this->regulatorName === '' ? null : $this->bankCapitalRequirement,
             mortgageLtvCap: $this->regulatorLtvCap,
+            neutralCountercyclicalBuffer: $this->regulatorNeutralBuffer,
             reserveFundEquityShare: $this->fundHeadName === '' || $this->fundHeadTermStart < 0.0 ? null : SovereignReserveFund::equityShare($this->fundHeadStance),
             debtAverageMaturity: $this->exchequerHeadName === '' || $this->exchequerHeadTermStart < 0.0 ? null : Exchequer::averageMaturity($this->exchequerHeadStance),
             authorityConcession: $this->authoritySalt < 0.0 ? null : PoliticalPressure::concession($this),

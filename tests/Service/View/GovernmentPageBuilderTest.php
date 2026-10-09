@@ -19,7 +19,10 @@ use App\Repository\RateDecisionRepository;
 use App\Repository\StockRepository;
 use App\Service\Corporate\MergerAndAcquisitionEngine;
 use App\Service\Macro\MacroEngine;
+use App\Service\Macro\Subsystem\CreditFiscalSubsystem;
+use App\Service\Macro\Subsystem\SovereignFundSubsystem;
 use App\Service\Math\MathUtility;
+use App\Service\Math\Valuation;
 use App\Service\Politics\ElectionForecast;
 use App\Service\Politics\PartyLeaders;
 use App\Service\Politics\PoliticsEngine;
@@ -302,6 +305,17 @@ class GovernmentPageBuilderTest extends TestCase
         $this->assertFalse($page['budget']['braking']);
     }
 
+    /** The home share's row says when the law asks for more of the board than the fund may own. */
+    public function testTheHomeShareSaysWhenTheCeilingHoldsIt(): void
+    {
+        $politics = new PoliticsStateDTO(totalTime: 0.2);
+        $note = fn(float $targetWeight): string => array_column($this->builder()->buildBudget(new MacroStateDTO(totalTime: 0.2, sovereignFundOwnershipShare: 0.06, sovereignFundDomesticWeight: 0.20, sovereignFundTargetWeight: $targetWeight), $politics)['budget']['levers'], null, 'name')['Reserve fund shares held at home']['note'];
+
+        $this->assertStringContainsString('it owns 6.0% of the shares listed', $note(0.30));
+        $this->assertStringNotContainsString('buys no more', $note(0.30), 'At 9% of the float the law fits under the ceiling.');
+        $this->assertStringContainsString('the law would need 12%, more than the 10% it may hold', $note(0.40));
+    }
+
     /** A majority government's cut waits on the Council while debt is over the line; a lever that costs no revenue waits only on the next round. */
     public function testTheBudgetShowsWhatTheCouncilHolds(): void
     {
@@ -311,11 +325,17 @@ class GovernmentPageBuilderTest extends TestCase
 
         $this->assertTrue($braked['budget']['braking']);
         $this->assertSame('held', $levers['Corporate tax rate']['status']);
+        $this->assertSame('held', $levers['Tax on dividends']['status'], 'Exempting dividends costs revenue too.');
+        $this->assertLessThan(Valuation::FOUNDING_DIVIDEND_TAX_RATE, $levers['Tax on dividends']['platform'], 'The right taxes dividends less.');
+        $this->assertStringContainsString('at the rate set at Year 1', $levers['Tax on dividends']['note']);
         $this->assertLessThan(MacroEngine::TARGET_CORPORATE_TAX_RATE, $levers['Corporate tax rate']['platform']);
         $this->assertSame(MacroEngine::TARGET_CORPORATE_TAX_RATE, $levers['Corporate tax rate']['enacted']);
         $this->assertSame('enacted', $levers['Average tariff on imports']['status'], 'An open government has no tariff to levy.');
         $this->assertSame('pending', $levers['Labour force growth']['status']);
         $this->assertSame('Year 1 Q3', $braked['budget']['nextRound']);
+        $this->assertSame('pending', $levers['Debt repair raised by tax']['status'], 'Who pays for a repair widens no deficit.');
+        $this->assertLessThan(CreditFiscalSubsystem::FOUNDING_CONSOLIDATION_TAX_SHARE, $levers['Debt repair raised by tax']['platform'], 'The right raises less of it by tax.');
+        $this->assertLessThan(SovereignFundSubsystem::OPENING_HOME_EQUITY_SHARE, $levers['Reserve fund shares held at home']['platform'], 'An open government sends the reserves abroad.');
 
         $free = $this->builder()->buildBudget(new MacroStateDTO(totalTime: 0.2, sovereignDebtToGdp: 0.5), new PoliticsStateDTO(totalTime: 0.2, governingCoalition: $rightBloc, supportParties: Diet::membership([])));
         $this->assertFalse($free['budget']['braking']);
@@ -547,7 +567,10 @@ class GovernmentPageBuilderTest extends TestCase
         $this->assertEqualsWithDelta(\App\Service\Politics\SovereignReserveFund::equityShare(\App\Service\Politics\CouncilAppointments::median($politics->councilFundStances)), $page['council']['lean']['reserves'], 1e-12);
         foreach ($council['roster'] as $seat) {
             $this->assertContains($seat['reserves'], ['cautious', 'balanced', 'bold']);
+            $this->assertContains($seat['debtLine'], \App\Service\Politics\DebtBrake::PUBLISHED_THRESHOLDS);
         }
+        $this->assertSame(\App\Service\Politics\DebtBrake::councilLine($politics), $page['council']['lean']['debtLine']);
+        $this->assertSame(\App\Service\Politics\DebtBrake::councilLine($politics), $page['rules']['debtBrake'], 'The brake shown is the Council\'s line.');
         $this->assertNull($this->builder()->buildHub(new MacroStateDTO(), new PoliticsStateDTO())['fundHead']);
     }
 
@@ -639,14 +662,32 @@ class GovernmentPageBuilderTest extends TestCase
         }
     }
 
+    /** The Trade & Migration Office shows its three laws as in force, as the next budget sets them and as the market expects them, with what each does. */
+    public function testTheTradeOfficeShowsItsThreeLaws(): void
+    {
+        $politics = new PoliticsStateDTO(importTariffRate: 0.05, foreignBuyerTaxRate: 0.15, sittingLevers: ['tariff' => 0.08], forecastLevers: ['tariff' => 0.02, 'foreignBuyerTax' => 0.0]);
+        $office = $this->builder()->tradeOffice($politics, new MacroStateDTO(immigrationPopulationShift: 0.01));
+
+        $this->assertSame(0.05, $office['tariff']['inForce']);
+        $this->assertSame(0.08, $office['tariff']['next']);
+        $this->assertSame(0.02, $office['tariff']['expected']);
+        $this->assertEqualsWithDelta(MacroEngine::TARIFF_RETALIATION_RATIO * 0.05, $office['tariff']['retaliation'], 1e-12);
+        $this->assertGreaterThan(0.0, $office['tariff']['revenueToGdp']);
+        $this->assertNull($office['migration']['next']);
+        $this->assertSame(0.01, $office['migration']['populationShift']);
+        $this->assertEqualsWithDelta(1.0 - \App\Service\Macro\Subsystem\AssetMarketSubsystem::foreignBuyerPriceFactor(0.15), $office['foreignBuyers']['priceEffect'], 1e-12);
+        $this->assertSame(0.0, $office['foreignBuyers']['expected']);
+        $this->assertNotNull($office['expectedFrom']);
+    }
+
     /** Each line names the laws its question sets, and every law is named on exactly one line. */
     public function testEachQuestionNamesTheLawsItSets(): void
     {
         $rows = array_column($this->builder()->buildDiet(new MacroStateDTO(), new PoliticsStateDTO())['compass']['layouts']['wide']['rows'], 'laws', 'axis');
 
-        $this->assertSame(['public spending', 'corporate tax', 'stamp duty', 'bank levy', 'reserve draw'], $rows[Diet::AXIS_STATE]);
-        $this->assertSame(['tariffs', 'immigration', 'foreign buyers'], $rows[Diet::AXIS_OPENNESS]);
-        $this->assertSame(['merger review'], $rows[Diet::AXIS_COUNCIL]);
+        $this->assertSame(['public spending', 'corporate tax', 'stamp duty', 'bank levy', 'reserve draw', 'tax or cuts', 'dividend tax'], $rows[Diet::AXIS_STATE]);
+        $this->assertSame(['tariffs', 'immigration', 'foreign buyers', 'reserves at home'], $rows[Diet::AXIS_OPENNESS]);
+        $this->assertSame(['merger review', 'utility rates'], $rows[Diet::AXIS_COUNCIL]);
         $this->assertSame(['green belts', 'carbon price', 'extraction rules'], $rows[Diet::AXIS_ENVIRONMENT]);
         $this->assertCount(count(PoliticsEngine::LEVER_FIELDS), array_merge(...array_values($rows)));
     }
@@ -668,7 +709,7 @@ class GovernmentPageBuilderTest extends TestCase
         $this->assertSame('iron-harbor', $page['party']['slug']);
         $this->assertSame('Iron Harbor Coalition', $page['party']['name']);
         $this->assertNotEmpty($page['party']['about']);
-        $this->assertCount(4, $page['party']['agenda']);
+        $this->assertCount(5, $page['party']['agenda']);
         $this->assertSame(['Openness'], $page['party']['definedBy']);
         $this->assertSame('the Civic Front', $page['party']['blocLeader']);
 
