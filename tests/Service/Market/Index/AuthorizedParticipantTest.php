@@ -32,7 +32,7 @@ final class AuthorizedParticipantTest extends TestCase
         $spread = 0.002;
 
         self::assertEqualsWithDelta(
-            FinancialConstants::ETF_CREATION_FEE + ($spread * FinancialConstants::ETF_BASKET_ROUND_TRIP_MULTIPLE),
+            AuthorizedParticipant::ETF_CREATION_FEE + ($spread * AuthorizedParticipant::ETF_BASKET_ROUND_TRIP_MULTIPLE),
             $this->ap->band($spread),
             1e-9
         );
@@ -51,14 +51,14 @@ final class AuthorizedParticipantTest extends TestCase
     public function testTheBandIsBoundedAtBothEnds(): void
     {
         self::assertGreaterThanOrEqual(FinancialConstants::ETF_HALF_SPREAD, $this->ap->band(0.0));
-        self::assertSame(FinancialConstants::ETF_MAX_ARBITRAGE_BAND, $this->ap->band(10.0));
+        self::assertSame(AuthorizedParticipant::ETF_MAX_ARBITRAGE_BAND, $this->ap->band(10.0));
     }
 
     /** Inside the band the arbitrage does not pay, so the fund wanders on its own order flow. */
     public function testDemandInsideTheBandMovesThePriceAndCallsNobody(): void
     {
         $band = $this->ap->band(0.002);
-        $flow = self::NET_ASSETS * ($band / FinancialConstants::ETF_FLOW_PRESSURE) * 0.5;
+        $flow = self::NET_ASSETS * ($band / AuthorizedParticipant::ETF_FLOW_PRESSURE) * 0.5;
 
         $settled = $this->ap->settle(0.0, $flow, self::NET_ASSETS, $band, self::ONE_DAY);
 
@@ -71,7 +71,7 @@ final class AuthorizedParticipantTest extends TestCase
     public function testDemandPastTheBandIsAbsorbedBackToTheEdge(): void
     {
         $band = $this->ap->band(0.002);
-        $flow = self::NET_ASSETS * ($band / FinancialConstants::ETF_FLOW_PRESSURE) * 4.0;
+        $flow = self::NET_ASSETS * ($band / AuthorizedParticipant::ETF_FLOW_PRESSURE) * 4.0;
 
         $settled = $this->ap->settle(0.0, $flow, self::NET_ASSETS, $band, self::ONE_DAY);
 
@@ -84,7 +84,7 @@ final class AuthorizedParticipantTest extends TestCase
     public function testSellingPressureRedeemsRatherThanCreates(): void
     {
         $band = $this->ap->band(0.002);
-        $flow = -self::NET_ASSETS * ($band / FinancialConstants::ETF_FLOW_PRESSURE) * 4.0;
+        $flow = -self::NET_ASSETS * ($band / AuthorizedParticipant::ETF_FLOW_PRESSURE) * 4.0;
 
         $settled = $this->ap->settle(0.0, $flow, self::NET_ASSETS, $band, self::ONE_DAY);
 

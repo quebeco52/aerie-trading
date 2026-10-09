@@ -8,7 +8,6 @@ use App\Service\Event\MarketEventPublisher;
 use App\Service\Macro\MacroEngine;
 use App\Service\Market\Bond\CreditRatingAgency;
 use App\Service\Math\CreditRisk;
-use App\Service\Math\FinancialConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Math\StochasticProcesses;
 use App\Service\Math\Valuation;
@@ -66,6 +65,10 @@ class DebtEngine
     public const REFINANCING_RATING_FLOOR = 'CCC';
     /** Interest coverage below which lenders will not roll a maturity: the firm cannot service what it already owes. */
     private const REFINANCING_MIN_COVERAGE = 1.0;
+
+    // --- Committed Revolving Credit Facility ---
+    /** Drawn-revolver spread (+100 bps) over the issuer's market rate; a pre-negotiated facility prices inside emergency paper. */
+    public const REVOLVER_DRAW_SPREAD_PENALTY = 0.01;
 
     public function __construct(
         private MathUtility $mathUtility,
@@ -211,7 +214,7 @@ class DebtEngine
             }
         }
 
-        $mertonSpread = $this->mathUtility->calculateMertonCreditSpread(
+        $mertonSpread = CreditRisk::calculateMertonCreditSpread(
             $distanceToDefault,
             $lossGivenDefault,
             $timeToMaturity
@@ -260,7 +263,7 @@ class DebtEngine
         // A revolving credit facility is floating by construction — a reference rate plus a contracted
         // margin — so it is never part of the blended fixed coupon the term book carries.
         if ($revolverDrawn > 0.0) {
-            $interestExpense += $revolverDrawn * ($floatingInterestRate + FinancialConstants::REVOLVER_DRAW_SPREAD_PENALTY);
+            $interestExpense += $revolverDrawn * ($floatingInterestRate + self::REVOLVER_DRAW_SPREAD_PENALTY);
         }
 
         $trueBlendedRate = $debt > 1.0 ? ($interestExpense / $debt) : 0.0;
@@ -291,7 +294,7 @@ class DebtEngine
         $marketCap = max(1.0, (float) $stock->getPrice() * max(1.0, (float) $stock->getSharesOutstanding()));
         $policyRate = $macroState->policyRateEma;
 
-        return $this->mathUtility->calculateDistanceToDefault(
+        return CreditRisk::calculateDistanceToDefault(
             $marketCap + $totalDebtObligations,
             $totalDebtObligations,
             $this->resolveAssetVolatility($stock, $marketCap, $totalDebtObligations, $policyRate),

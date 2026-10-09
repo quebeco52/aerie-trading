@@ -39,6 +39,14 @@ use Doctrine\ORM\EntityManagerInterface;
  */
 final class CorporateBondDesk
 {
+    // --- Corporate Bond Issuance ---
+    /** Original maturities a firm issues at, cycled so a ladder ends up spread across the curve instead of stacked on one point. */
+    public const CORPORATE_ISSUE_TENORS = [3.0, 5.0, 7.0, 10.0];
+    /** Wholesale debt a firm must carry before the public market is worth tapping. DERIVED, not chosen: it is exactly the debt at which a full ladder of minimum-size issues fits inside the public tranche. Set independently, the two rules disagree — a firm passes the debt gate, then every deal it tries to bring prices below the minimum size and it silently never issues at all. */
+    public const CORPORATE_MIN_PUBLIC_DEBT = (FinancialConstants::CORPORATE_LADDER_ISSUES * FinancialConstants::CORPORATE_MIN_ISSUE_FACE) / FinancialConstants::CORPORATE_PUBLIC_DEBT_SHARE;
+    /** Reconciliations of the public tranche per year. A firm comes to market when it has room, not continuously. */
+    public const CORPORATE_ISSUANCE_PER_YEAR = 4;
+
     public function __construct(
         private readonly EntityManagerInterface $em,
         private readonly BondPricingEngine $pricingEngine,
@@ -47,7 +55,7 @@ final class CorporateBondDesk
     /** Ticks between reconciliations, given a tick rate. */
     public static function issuanceIntervalTicks(int $ticksPerYear): int
     {
-        return max(1, (int) ($ticksPerYear / FinancialConstants::CORPORATE_ISSUANCE_PER_YEAR));
+        return max(1, (int) ($ticksPerYear / self::CORPORATE_ISSUANCE_PER_YEAR));
     }
 
     /**
@@ -115,7 +123,7 @@ final class CorporateBondDesk
             return false;
         }
 
-        if ((float) $stock->getWholesaleDebt() < FinancialConstants::CORPORATE_MIN_PUBLIC_DEBT) {
+        if ((float) $stock->getWholesaleDebt() < self::CORPORATE_MIN_PUBLIC_DEBT) {
             return false;
         }
 
@@ -171,7 +179,7 @@ final class CorporateBondDesk
      */
     private function nextTenor(int $existingIssues): float
     {
-        $tenors = FinancialConstants::CORPORATE_ISSUE_TENORS;
+        $tenors = self::CORPORATE_ISSUE_TENORS;
 
         return (float) $tenors[$existingIssues % count($tenors)];
     }

@@ -9,7 +9,6 @@ use App\Entity\Bond;
 use App\Entity\Stock;
 use App\Service\Math\CreditRisk;
 use App\Service\Math\Decimal;
-use App\Service\Math\FinancialConstants;
 use Doctrine\ORM\EntityManagerInterface;
 
 /**
@@ -32,6 +31,14 @@ use Doctrine\ORM\EntityManagerInterface;
  */
 final class CorporateDefaultService
 {
+    // --- Corporate Credit: Recovery Given Default (Altman, Brady, Resti & Sironi 2005) ---
+    /** Recovery on a senior SECURED claim in an average default year, as a share of face; collateral is what puts this claim ahead of the rest. */
+    public const RECOVERY_SENIOR_SECURED = 0.62;
+    /** Recovery on a senior UNSECURED claim, the ordinary public corporate bond. */
+    public const RECOVERY_SENIOR_UNSECURED = 0.48;
+    /** Recovery on a SUBORDINATED claim, which is paid only once everything above it is whole. */
+    public const RECOVERY_SUBORDINATED = 0.28;
+
     public function __construct(
         private readonly EntityManagerInterface $em,
         private readonly BondLedgerService $ledger,
@@ -46,9 +53,9 @@ final class CorporateDefaultService
     public static function baseRecoveryFor(?string $seniority): float
     {
         return match ($seniority) {
-            Bond::SENIORITY_SENIOR_SECURED => FinancialConstants::RECOVERY_SENIOR_SECURED,
-            Bond::SENIORITY_SUBORDINATED => FinancialConstants::RECOVERY_SUBORDINATED,
-            default => FinancialConstants::RECOVERY_SENIOR_UNSECURED,
+            Bond::SENIORITY_SENIOR_SECURED => self::RECOVERY_SENIOR_SECURED,
+            Bond::SENIORITY_SUBORDINATED => self::RECOVERY_SUBORDINATED,
+            default => self::RECOVERY_SENIOR_UNSECURED,
         };
     }
 

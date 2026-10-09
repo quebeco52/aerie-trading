@@ -14,6 +14,7 @@ use App\Service\Math\FixedIncome;
 use App\Service\Math\MathUtility;
 use App\Tests\Support\MacroStateBuilder;
 use PHPUnit\Framework\TestCase;
+use App\Service\Market\Bond\TreasuryAuctionService;
 
 /**
  * Financial invariants of the sovereign bond desk.
@@ -166,7 +167,7 @@ class BondDeskTest extends TestCase
         $base = $this->curve();
 
         foreach ([0.0025, -0.0025, 0.0100, -0.0100] as $shift) {
-            foreach (FinancialConstants::BOND_AUCTION_TENORS as $tenor) {
+            foreach (TreasuryAuctionService::BOND_AUCTION_TENORS as $tenor) {
                 $coupon = $this->engine->parCouponRate($base, (float) $tenor, FinancialConstants::BOND_FACE_VALUE);
                 $bond = $this->bond((float) $tenor, $coupon);
 
@@ -216,7 +217,7 @@ class BondDeskTest extends TestCase
 
         $previousRelativeError = 0.0;
 
-        foreach (FinancialConstants::BOND_AUCTION_TENORS as $tenor) {
+        foreach (TreasuryAuctionService::BOND_AUCTION_TENORS as $tenor) {
             $coupon = $this->engine->parCouponRate($base, (float) $tenor, FinancialConstants::BOND_FACE_VALUE);
             $bond = $this->bond((float) $tenor, $coupon);
 
@@ -252,7 +253,7 @@ class BondDeskTest extends TestCase
         $previousDuration = 0.0;
         $previousConvexity = 0.0;
 
-        foreach (FinancialConstants::BOND_AUCTION_TENORS as $tenor) {
+        foreach (TreasuryAuctionService::BOND_AUCTION_TENORS as $tenor) {
             $coupon = $this->engine->parCouponRate($curve, (float) $tenor, FinancialConstants::BOND_FACE_VALUE);
             $valuation = $this->engine->value($this->bond((float) $tenor, $coupon), $curve, 0.0);
 
@@ -272,14 +273,14 @@ class BondDeskTest extends TestCase
         $curve = $this->curve();
         $face = FinancialConstants::BOND_FACE_VALUE;
 
-        foreach (FinancialConstants::BOND_AUCTION_TENORS as $tenor) {
+        foreach (TreasuryAuctionService::BOND_AUCTION_TENORS as $tenor) {
             $coupon = $this->engine->parCouponRate($curve, (float) $tenor, $face);
             $valuation = $this->engine->value($this->bond((float) $tenor, $coupon), $curve, 0.0);
 
             // Not exactly par: the coupon is struck in eighths of a percent, so the issue prices with the
             // small premium or discount that rounding leaves. The gap is bounded by half an increment of
             // coupon across the bond's duration.
-            $maxDeviation = 0.5 * FinancialConstants::BOND_COUPON_RATE_INCREMENT * $valuation->modifiedDuration * $face;
+            $maxDeviation = 0.5 * BondPricingEngine::BOND_COUPON_RATE_INCREMENT * $valuation->modifiedDuration * $face;
 
             $this->assertEqualsWithDelta($face, $valuation->cleanPrice, max(1.0, $maxDeviation));
         }
@@ -288,13 +289,13 @@ class BondDeskTest extends TestCase
     public function testStruckCouponsLandOnTheAuctionsEighthOfAPercent(): void
     {
         $curve = $this->curve();
-        $increment = FinancialConstants::BOND_COUPON_RATE_INCREMENT;
+        $increment = BondPricingEngine::BOND_COUPON_RATE_INCREMENT;
 
-        foreach (FinancialConstants::BOND_AUCTION_TENORS as $tenor) {
+        foreach (TreasuryAuctionService::BOND_AUCTION_TENORS as $tenor) {
             $coupon = $this->engine->parCouponRate($curve, (float) $tenor, FinancialConstants::BOND_FACE_VALUE);
 
             $this->assertEqualsWithDelta(0.0, fmod($coupon + ($increment / 2.0), $increment) - ($increment / 2.0), 1e-9);
-            $this->assertGreaterThanOrEqual(FinancialConstants::BOND_MIN_COUPON_RATE, $coupon);
+            $this->assertGreaterThanOrEqual(BondPricingEngine::BOND_MIN_COUPON_RATE, $coupon);
         }
     }
 
@@ -411,7 +412,7 @@ class BondDeskTest extends TestCase
 
         $previousLoss = 0.0;
 
-        foreach (FinancialConstants::BOND_AUCTION_TENORS as $tenor) {
+        foreach (TreasuryAuctionService::BOND_AUCTION_TENORS as $tenor) {
             $bond = $this->bond((float) $tenor, $this->engine->parCouponRate($base, (float) $tenor, $face));
 
             $loss = $this->engine->value($bond, $base, 0.0)->dirtyPrice

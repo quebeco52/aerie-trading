@@ -15,6 +15,7 @@ use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\EntityRepository;
 use Symfony\Bundle\FrameworkBundle\Test\KernelTestCase;
 use Symfony\Component\Console\Tester\CommandTester;
+use App\Service\Corporate\EarningsEngine;
 
 /**
  * Whole-board headless replay on the PRODUCTION service graph: real container, in-memory Redis, stub EM,
@@ -315,7 +316,7 @@ final class BiotechHarnessTest extends KernelTestCase
         $this->quarters[$report->getStock()->getTicker()][] = [
             't' => round($this->currentTime, 3),
             'rev' => (float) $report->getRevenue(),
-            'exp' => (float) (($report->getStock()->getEarningsMomentumZ() ?? [])[\App\Service\Math\FinancialConstants::STATE_LAST_EXPECTED_REVENUE] ?? 0.0),
+            'exp' => (float) (($report->getStock()->getEarningsMomentumZ() ?? [])[EarningsEngine::STATE_LAST_EXPECTED_REVENUE] ?? 0.0),
             'ni' => (float) $report->getNetIncome(),
             'om' => (float) $report->getOperatingMargin(),
             'ebit' => (float) $report->getEbit(),

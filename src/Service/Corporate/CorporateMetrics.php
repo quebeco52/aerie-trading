@@ -13,6 +13,26 @@ use App\Service\Math\FirmEconomics;
  */
 class CorporateMetrics
 {
+    // --- Market Saturation & Bureaucratic Bloat ---
+    /** Baseline total addressable market size ($1T) for standard corporate sectors. */
+    public const BASELINE_SECTOR_TAM = 1_000_000_000_000.00;
+    /** Penrose bureaucratic friction coefficient penalizing margins at extreme scale. */
+    public const DISECONOMY_FRICTION_COEFF = 0.20;
+    /** Cobb-Douglas capital output elasticity determining marginal returns on reinvestment. */
+    public const CAPITAL_MARGINAL_ELASTICITY = 0.50;
+
+    // --- Capital Allocation & Life-Cycle Physics ---
+    /** Maximum effective dividend payout ratio (85%) for fully saturated mature cash cows. */
+    public const LIFE_CYCLE_MAX_PAYOUT_RATIO = 0.85;
+
+    // --- CapEx & Construction in Progress (CIP) ---
+    /** Maximum fraction of physical/invested capital that can be deferred as unplaced Construction in Progress (25%). */
+    public const MAX_CIP_CAPITAL_DEDUCTION_RATIO = 0.25;
+
+    // --- Fixed Asset Ledger (PP&E) ---
+    /** Viability floor on net PP&E as a share of invested capital. Kept minimal on purpose: a distributor's or staffing firm's capital genuinely IS its working capital, and a larger floor would invent plant the balance sheet cannot fund. */
+    public const MIN_PPE_SHARE_OF_CAPITAL = 0.02;
+
     private static ?self $instance = null;
 
     public static function getInstance(): self
@@ -31,7 +51,7 @@ class CorporateMetrics
      * (Penrose bloat, diminishing marginal return, the TAM cap), private to the firm and non-rival — it is
      * not a share of the industry's sales. That figure lives in the industry ledger's revenue share.
      */
-    public function calculateScaleRatio(float $investedCapital, float $nominalGdpIndex, float $samRatio, float $baselineSectorTam = FinancialConstants::BASELINE_SECTOR_TAM): float
+    public function calculateScaleRatio(float $investedCapital, float $nominalGdpIndex, float $samRatio, float $baselineSectorTam = self::BASELINE_SECTOR_TAM): float
     {
         $dynamicSam = $baselineSectorTam * $nominalGdpIndex * $samRatio;
         return $investedCapital / max(1.0, $dynamicSam);
@@ -55,7 +75,7 @@ class CorporateMetrics
     public static function revenueGeneratingCapital(float $investedCapital, float $constructionInProgress, float $goodwill): float
     {
         $capital = abs($investedCapital);
-        $cipDeduction = min($capital * FinancialConstants::MAX_CIP_CAPITAL_DEDUCTION_RATIO, max(0.0, $constructionInProgress));
+        $cipDeduction = min($capital * self::MAX_CIP_CAPITAL_DEDUCTION_RATIO, max(0.0, $constructionInProgress));
 
         return max(0.0, $capital - $cipDeduction - max(0.0, $goodwill));
     }
@@ -79,7 +99,7 @@ class CorporateMetrics
         // Penrose Effect / Hayashi Quadratic Adjustment Costs: C(I) ∝ I^2
         $optimalThreshold = FinancialConstants::DISECONOMY_OPTIMAL_SHARE_THRESHOLD;
         $excessRatio = max(0.0, ($marketShare - $optimalThreshold) / max(0.01, 1.0 - $optimalThreshold));
-        $convexBloat = ($excessRatio * $excessRatio) * FinancialConstants::DISECONOMY_FRICTION_COEFF;
+        $convexBloat = ($excessRatio * $excessRatio) * self::DISECONOMY_FRICTION_COEFF;
 
         $saturationPenalty = $convexBloat * $moatFactor;
 
@@ -132,7 +152,7 @@ class CorporateMetrics
             ?? FinancialConstants::SYSTEMIC_MOAT_FACTORS['default'];
 
         $capitalScale = $marketShare / max(0.01, $optimalThreshold);
-        $effectiveElasticity = FinancialConstants::CAPITAL_MARGINAL_ELASTICITY * $moatFactor;
+        $effectiveElasticity = self::CAPITAL_MARGINAL_ELASTICITY * $moatFactor;
 
         return max(0.0, $return * pow($capitalScale, -$effectiveElasticity));
     }
@@ -239,7 +259,7 @@ class CorporateMetrics
     ): void {
         $capital = abs($investedCapital);
         $netPpe = max(
-            $capital * FinancialConstants::MIN_PPE_SHARE_OF_CAPITAL,
+            $capital * self::MIN_PPE_SHARE_OF_CAPITAL,
             $capital - $netWorkingCapital - max(0.0, $goodwill) - max(0.0, $constructionInProgress)
         );
 
@@ -311,7 +331,7 @@ class CorporateMetrics
      */
     public function calculateLifeCyclePayoutRatio(float $baselinePayoutRatio, float $saturationSeverity): float
     {
-        $maxPayout = FinancialConstants::LIFE_CYCLE_MAX_PAYOUT_RATIO;
+        $maxPayout = self::LIFE_CYCLE_MAX_PAYOUT_RATIO;
         return min($maxPayout, max($baselinePayoutRatio, $baselinePayoutRatio + (($maxPayout - $baselinePayoutRatio) * $saturationSeverity)));
     }
 }

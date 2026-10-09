@@ -81,8 +81,8 @@ final class SecuritiesForcedSaleTest extends TestCase
 
         self::assertGreaterThan(0.0, $ctx->assetSaleProceeds);
         self::assertEqualsWithDelta(
-            $ctx->assetSaleProceeds / (1.0 - FinancialConstants::EARNING_ASSET_FIRE_SALE_HAIRCUT)
-                * FinancialConstants::EARNING_ASSET_FIRE_SALE_HAIRCUT,
+            $ctx->assetSaleProceeds / (1.0 - TreasuryEngine::EARNING_ASSET_FIRE_SALE_HAIRCUT)
+                * TreasuryEngine::EARNING_ASSET_FIRE_SALE_HAIRCUT,
             $ctx->assetSaleLoss,
             1.0
         );
@@ -122,7 +122,7 @@ final class SecuritiesForcedSaleTest extends TestCase
 
         $sold = self::GROSS_BOOK - (float) $stock->getEarningAssets();
         $realized = $mark - (float) $stock->getUnrealizedSecuritiesMark();
-        $haircutLoss = $sold * FinancialConstants::EARNING_ASSET_FIRE_SALE_HAIRCUT;
+        $haircutLoss = $sold * TreasuryEngine::EARNING_ASSET_FIRE_SALE_HAIRCUT;
         $htmLoss = abs($realized) * FinancialConstants::DEFAULT_HTM_BOOK_SHARE;
 
         self::assertLessThan(0.0, $realized, 'The sale crystallized part of the loss.');
@@ -192,7 +192,7 @@ final class SecuritiesForcedSaleTest extends TestCase
 
         $sold = self::GROSS_BOOK - (float) $stock->getEarningAssets();
         $realized = $mark - (float) $stock->getUnrealizedSecuritiesMark();
-        $haircutLoss = $sold * FinancialConstants::EARNING_ASSET_FIRE_SALE_HAIRCUT;
+        $haircutLoss = $sold * TreasuryEngine::EARNING_ASSET_FIRE_SALE_HAIRCUT;
         $htmGain = $realized * FinancialConstants::DEFAULT_HTM_BOOK_SHARE;
 
         self::assertGreaterThan(0.0, $realized, 'The sale crystallized part of the gain.');

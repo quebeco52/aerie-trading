@@ -13,6 +13,28 @@ use App\Service\Macro\MacroEngine;
  */
 final class FirmEconomics
 {
+    // --- Margin Bounds ---
+    /** Maximum allowable operating gross margin ceiling (150%) to prevent runaway loops. */
+    public const MAX_VARIABLE_MARGIN_CLAMP = 1.50;
+    /** Minimum operating variable margin floor (1%) ensuring operational viability bounds. */
+    public const MIN_VARIABLE_MARGIN_CLAMP = 0.01;
+
+    // --- Dynamic Cash Conversion Cycle & Working Capital (CCC) ---
+    /** Sensitivity of Days Sales Outstanding (DSO) to corporate credit spread widening. */
+    public const CCC_DSO_CREDIT_SPREAD_SENSITIVITY = 250.0;
+    /** Sensitivity of Days Inventory Outstanding (DIO) to stranded capacity / inventory overhang. */
+    public const CCC_DIO_CAPACITY_SENSITIVITY = 20.0;
+    /** Sensitivity of Days Payable Outstanding (DPO) contraction to interbank funding liquidity stress. */
+    public const CCC_DPO_LIQUIDITY_SENSITIVITY = 500.0;
+    /** Minimum working capital intensity floor for positive working capital models. */
+    public const MIN_POSITIVE_NWC_INTENSITY = 0.01;
+    /** Maximum working capital intensity ceiling for positive working capital models. */
+    public const MAX_POSITIVE_NWC_INTENSITY = 1.00;
+    /** Minimum working capital intensity floor for negative working capital float models. */
+    public const MIN_NEGATIVE_NWC_INTENSITY = -0.50;
+    /** Maximum working capital intensity ceiling for negative working capital float models. */
+    public const MAX_NEGATIVE_NWC_INTENSITY = -0.001;
+
     /**
      * One step of a staggered lease roll: the slice of the rent roll expiring over dt (dt / WALT) reprices to
      * market, the rest stays contracted. The mark-to-market gap is bounded, past which tenants renegotiate or
@@ -353,7 +375,7 @@ final class FirmEconomics
         $logMarginMultiplier = ($costElasticity - 1.0) * $revenueLogChange;
         $adjustedMargin = $currentVariableMargin * exp($logMarginMultiplier);
 
-        return max(FinancialConstants::MIN_VARIABLE_MARGIN_CLAMP, min(FinancialConstants::MAX_VARIABLE_MARGIN_CLAMP, $adjustedMargin));
+        return max(self::MIN_VARIABLE_MARGIN_CLAMP, min(self::MAX_VARIABLE_MARGIN_CLAMP, $adjustedMargin));
     }
 
     /**
@@ -392,10 +414,10 @@ final class FirmEconomics
         if ($baselineIntensity < 0.0) {
             // Negative working capital (float): Under CCC expansion / liquidity stress, vendors tighten terms,
             // compressing the negative float toward zero (clamped between MIN_NEGATIVE_NWC_INTENSITY and MAX_NEGATIVE_NWC_INTENSITY).
-            return min(FinancialConstants::MAX_NEGATIVE_NWC_INTENSITY, max(FinancialConstants::MIN_NEGATIVE_NWC_INTENSITY, $dynamicIntensity));
+            return min(self::MAX_NEGATIVE_NWC_INTENSITY, max(self::MIN_NEGATIVE_NWC_INTENSITY, $dynamicIntensity));
         }
 
-        return max(FinancialConstants::MIN_POSITIVE_NWC_INTENSITY, min(FinancialConstants::MAX_POSITIVE_NWC_INTENSITY, $dynamicIntensity));
+        return max(self::MIN_POSITIVE_NWC_INTENSITY, min(self::MAX_POSITIVE_NWC_INTENSITY, $dynamicIntensity));
     }
 
     /**
@@ -414,11 +436,11 @@ final class FirmEconomics
     ): array {
         return [
             // Customers stretch payment when credit is dear.
-            'dso' => ($creditSpread - MacroEngine::BASE_CREDIT_SPREAD) * FinancialConstants::CCC_DSO_CREDIT_SPREAD_SENSITIVITY,
+            'dso' => ($creditSpread - MacroEngine::BASE_CREDIT_SPREAD) * self::CCC_DSO_CREDIT_SPREAD_SENSITIVITY,
             // Unsold goods pile up when the plant runs below capacity.
-            'dio' => (1.0 - $capacityUtilization) * FinancialConstants::CCC_DIO_CAPACITY_SENSITIVITY,
+            'dio' => (1.0 - $capacityUtilization) * self::CCC_DIO_CAPACITY_SENSITIVITY,
             // Under interbank liquidity stress, vendors demand faster payment (DPO contracts).
-            'dpo' => - ($interbankLiquiditySpread - MacroEngine::INTERBANK_BASELINE_SPREAD) * FinancialConstants::CCC_DPO_LIQUIDITY_SENSITIVITY,
+            'dpo' => - ($interbankLiquiditySpread - MacroEngine::INTERBANK_BASELINE_SPREAD) * self::CCC_DPO_LIQUIDITY_SENSITIVITY,
         ];
     }
 }

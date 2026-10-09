@@ -10,6 +10,7 @@ use App\Service\Math\Decimal;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\MathUtility;
 use App\DTO\CapitalAllocationContext;
+use App\Service\Math\Valuation;
 
 /**
  * Service responsible for managing the internal corporate balance sheet.
@@ -34,6 +35,32 @@ class TreasuryEngine
     // --- Lender Funding Deployment ---
     /** Cash held above the operating target before a lender treats the rest as deployable funding (same buffer the expansion path uses). */
     private const LIQUIDITY_BUFFER_MULTIPLIER = 1.20;
+
+    // --- Institutional & Market Architecture ---
+    /** Penalty credit spread (+200 bps) incurred when issuing emergency liquidity debt. */
+    public const EMERGENCY_DEBT_SPREAD_PENALTY = 0.02;
+
+    // --- Committed Revolving Credit Facility ---
+    /**
+     * Committed revolver sized as a multiple of the firm's minimum operating cash. That base is what each
+     * business model already scales its liquidity needs on, so a lender's facility is struck on its funding
+     * book rather than on net interest income, which is a small number attached to an enormous balance sheet.
+     */
+    public const REVOLVER_COMMITMENT_OPERATING_CASH_MULTIPLE = 5.0;
+
+    // --- CapEx & Construction in Progress (CIP) ---
+    /** Maximum CIP balance relative to invested capital allowed before new growth CapEx deployment is paused (25%). */
+    public const MAX_CIP_EXPANSION_THRESHOLD_RATIO = 0.25;
+
+    // --- Earning Asset Ledger (Financials) ---
+    /** Haircut taken when earning assets are sold in a hurry to meet withdrawals or a maturity: securities marked below par, loans sold at a discount. */
+    public const EARNING_ASSET_FIRE_SALE_HAIRCUT = 0.05;
+    /** Largest share of the earning-asset book that can be sold in one quarter; the rest is illiquid loans nobody bids for on the day. */
+    public const MAX_QUARTERLY_ASSET_LIQUIDATION_RATIO = 0.25;
+
+    // --- Equity Issuance & TAM Scaling Limits ---
+    /** Maximum fraction of market capitalization that can be raised in a distressed emergency equity offering (25%). */
+    public const MAX_EMERGENCY_EQUITY_RAISE_RATIO = 0.25;
 
     public function __construct(
         private CorporateMetrics $corporateMetrics,
@@ -174,7 +201,7 @@ class TreasuryEngine
             return;
         }
 
-        $haircut = FinancialConstants::EARNING_ASSET_FIRE_SALE_HAIRCUT;
+        $haircut = self::EARNING_ASSET_FIRE_SALE_HAIRCUT;
         $shortfall = $cashFloor - $ctx->newTreasury;
 
         // Crystallize unrealized mark-to-market loss/gain on securities sold to meet liquidity shortfall.
@@ -184,7 +211,7 @@ class TreasuryEngine
 
         // Liquidate liquid securities first before unmarketable amortized loans to cover cash deficit.
         $securitiesRecovery = max(0.05, (1.0 - $haircut) + $markRatio);
-        $ceiling = $netBook * FinancialConstants::MAX_QUARTERLY_ASSET_LIQUIDATION_RATIO;
+        $ceiling = $netBook * self::MAX_QUARTERLY_ASSET_LIQUIDATION_RATIO;
 
         $securitiesSold = min($markedBook, $ceiling, $shortfall / $securitiesRecovery);
         $raisedOnSecurities = $securitiesSold * $securitiesRecovery;
@@ -411,7 +438,7 @@ class TreasuryEngine
             $expansionSpend = min($expansionSpend, max($maxOrganicCapacity, $ctx->debtIssued));
 
             $currentCip = $stock->getTotalCipAmount();
-            $maxCipAllowed = abs($liveInvestedCapital) * FinancialConstants::MAX_CIP_EXPANSION_THRESHOLD_RATIO;
+            $maxCipAllowed = abs($liveInvestedCapital) * self::MAX_CIP_EXPANSION_THRESHOLD_RATIO;
             if ($currentCip >= $maxCipAllowed && !$forcedExpansion) {
                 $expansionSpend = 0.0;
             }
@@ -567,7 +594,7 @@ class TreasuryEngine
             // same closed market, however willing its own coverage ratios look.
             if ($ctx->health->canIssueDebt && !$ctx->refinancingRefused) {
                 $currentMarketRate = $ctx->health->rawMetrics->currentMarketRate ?? ($ctx->macroState->yield5yEma + (float) $stock->getCreditSpread());
-                $costOfEmergencyDebt = $currentMarketRate + FinancialConstants::EMERGENCY_DEBT_SPREAD_PENALTY;
+                $costOfEmergencyDebt = $currentMarketRate + self::EMERGENCY_DEBT_SPREAD_PENALTY;
 
                 $this->debtEngine->issueDebt($stock, $cashShortfall, $costOfEmergencyDebt);
 
@@ -607,7 +634,7 @@ class TreasuryEngine
         // Struck as the market strikes it: cost of equity on the return on equity (MarketEngine).
         $valuationReturn = $ctx->strategy->getValuationReturn($trueReturn, $stock->getLongRunReturn() !== null ? (float) $stock->getLongRunReturn() : null, $ctx->health->costOfEquity);
         $equityRates = $ctx->strategy->getEquityValuationRates($stock, $valuationReturn, $ctx->health, $ctx->macroState->corporateTaxRate);
-        $fairValuePE = $this->mathUtility->calculateManagementFairValuePE(
+        $fairValuePE = Valuation::calculateManagementFairValuePE(
             $equityRates['costOfEquity'],
             $equityRates['equityReturn'],
             $ctx->strategy->getFadedSecularGrowthRate($stock, $ctx->macroState->totalTime),
@@ -652,7 +679,7 @@ class TreasuryEngine
             if ($isDeathSpiral) {
                 $shortfall = max(0.0, $minOperatingCash - $ctx->newTreasury) + max(0.0, $ctx->unfundedMaturity);
                 $marketCap = max(1.0, $ctx->sharesOutstanding * $ctx->currentPrice);
-                $maxEmergencyRaise = max(FinancialConstants::MIN_OPERATING_BASE_CASH, $marketCap * FinancialConstants::MAX_EMERGENCY_EQUITY_RAISE_RATIO);
+                $maxEmergencyRaise = max(FinancialConstants::MIN_OPERATING_BASE_CASH, $marketCap * self::MAX_EMERGENCY_EQUITY_RAISE_RATIO);
                 $targetRaise = min($shortfall * 1.5, $maxEmergencyRaise);
                 $reason = "execute a highly dilutive emergency stock offering to stave off bankruptcy";
             } elseif ($isBubble) {
@@ -758,7 +785,7 @@ class TreasuryEngine
         // so a firm whose coverage has already shut that door is left with a genuine, curable payment default.
         $currentMarketRate = $ctx->health->rawMetrics->currentMarketRate
             ?? ($ctx->macroState->yield5yEma + (float) $stock->getCreditSpread());
-        $emergencyRate = $currentMarketRate + FinancialConstants::EMERGENCY_DEBT_SPREAD_PENALTY;
+        $emergencyRate = $currentMarketRate + self::EMERGENCY_DEBT_SPREAD_PENALTY;
 
         $uncoveredOverdraft = max(0.0, -$ctx->newTreasury);
         if ($uncoveredOverdraft > 0.0) {
@@ -821,7 +848,7 @@ class TreasuryEngine
         $sized = max(
             FinancialConstants::MIN_OPERATING_BASE_CASH,
             $ctx->strategy->calculateMinOperatingCash($ctx->operatingBase, $ctx->customerDeposits, $ctx->wholesaleDebt)
-                * FinancialConstants::REVOLVER_COMMITMENT_OPERATING_CASH_MULTIPLE
+                * self::REVOLVER_COMMITMENT_OPERATING_CASH_MULTIPLE
         );
 
         if ($sized > (float) $ctx->stock->getRevolverCommitment()) {

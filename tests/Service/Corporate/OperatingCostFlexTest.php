@@ -266,7 +266,7 @@ final class OperatingCostFlexTest extends TestCase
         $expected = $ctx->committedCostCut
             * $structuralFixedCosts
             * $ctx->strategy->getLaborCostShare()
-            * FinancialConstants::RESTRUCTURING_SEVERANCE_QUARTERS;
+            * EarningsEngine::RESTRUCTURING_SEVERANCE_QUARTERS;
 
         $this->assertGreaterThan(0.0, $expected);
         $this->assertEqualsWithDelta($expected, $ctx->restructuringCharge, 1e-6);
@@ -379,7 +379,7 @@ final class OperatingCostFlexTest extends TestCase
             $ctx->expectedRevenue = 20_000_000_000.0;
             $ctx->previousQuarterlyRevenue = $priorActualRevenue;
             if ($priorExpectedRevenue !== null) {
-                $ctx->stock->setEarningsMomentumZ([FinancialConstants::STATE_LAST_EXPECTED_REVENUE => $priorExpectedRevenue]);
+                $ctx->stock->setEarningsMomentumZ([EarningsEngine::STATE_LAST_EXPECTED_REVENUE => $priorExpectedRevenue]);
             }
             $process->invoke($engine, $ctx);
 

@@ -6,7 +6,7 @@ namespace App\Tests\Command;
 
 use App\Service\Market\Ticker\HistoryPruner;
 use App\Command\PruneHistoryCommand;
-use App\Schedule;
+use App\Scheduler\Schedule;
 use Doctrine\ORM\EntityManagerInterface;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\TestCase;

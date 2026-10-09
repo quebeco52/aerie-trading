@@ -6,6 +6,7 @@ namespace App\Service\Model\Sector;
 
 use App\Data\Macro\InputOutputExposures;
 
+use App\Service\Math\ResponseCurves;
 use App\Service\Model\ModelParam;
 use App\DTO\MacroStateDTO;
 use App\DTO\SectorCoverageProfile;
@@ -308,7 +309,7 @@ class ApparelManufacturingBusinessModel extends StandardCorporateBusinessModel
         $outputGapContraction = $outputGap < 0.0 ? abs($outputGap) : 0.0;
 
         // 1. Forrester Bullwhip Effect: Wholesale retailers panic and freeze orders non-linearly under negative output gaps
-        $bullwhipPenalty = $mathUtility->calculateConvexPenalty($outputGapContraction, self::BULLWHIP_CONVEXITY, self::BULLWHIP_PENALTY_SCALAR);
+        $bullwhipPenalty = ResponseCurves::calculateConvexPenalty($outputGapContraction, self::BULLWHIP_CONVEXITY, self::BULLWHIP_PENALTY_SCALAR);
 
         $dtcShock       = $dtcZ * ($baselineVol * self::DTC_RETAIL_VARIANCE);
         // Metzler inventory cycle: retailers with elevated inventory-to-sales ratios cut wholesale reorders.
@@ -333,7 +334,7 @@ class ApparelManufacturingBusinessModel extends StandardCorporateBusinessModel
         // DTC retail captures premium margins (lower variable costs), wholesale operates at baseline,
         // and contract textile supply operates at volume pricing (higher variable costs).
         // 2. Fast Fashion Markdown Squeeze: During negative output gaps, unsold perishable inventory forces aggressive markdowns, raising variable cost ratios.
-        $markdownPenalty = $mathUtility->calculateConvexPenalty($outputGapContraction, self::MARKDOWN_CONVEXITY, self::MARKDOWN_SQUEEZE_SCALAR);
+        $markdownPenalty = ResponseCurves::calculateConvexPenalty($outputGapContraction, self::MARKDOWN_CONVEXITY, self::MARKDOWN_SQUEEZE_SCALAR);
 
         $dtcCostRatio       = ($realizedVariableMargin * self::DTC_VARIABLE_COST_MULTIPLIER) + $markdownPenalty;
         $wholesaleCostRatio = ($realizedVariableMargin * self::WHOLESALE_VARIABLE_COST_MULTIPLIER) + $markdownPenalty;

@@ -34,6 +34,26 @@ class StockTracker
     /** Absolute cap on the accumulated trend, bounding how far momentum can delay fundamental mean reversion. */
     private const MAX_MOMENTUM_TREND = 0.50;
 
+    // --- Market Microstructure: Impact (Almgren, Thum, Hauptmann & Li 2005) ---
+    /** Share of a company's own open-market repurchase or flowback impact that stays: none. Execution of an announced program supplies liquidity and carries no news (Hillert, Maug & Obernberger 2016; Busch & Obernberger 2017); the program's information is in fair value through its payout. */
+    public const CORPORATE_FLOW_PERMANENT_IMPACT_SHARE = 0.0;
+    /** Ceiling on the peak price move of one tick's net order flow, as a log return; the impact law is a per-order measurement and a tick's aggregate is not bounded by the per-order size cap. */
+    public const MAX_TICK_IMPACT_LOG_RETURN = 0.2624;
+
+    // --- Market Index Membership (Shleifer 1986) ---
+    /** Window the realized volatility an index ranks and weights on is measured over, as the mean life of its exponential weighting. A year, which is what S&P's low-volatility index uses; ranking on the instantaneous variance state instead turned every volatility spike into a reconstitution. */
+    public const INDEX_TRAILING_VOLATILITY_YEARS = 1.0;
+
+    // --- Market Microstructure: Order Flow Variance Budget ---
+    /** Half-life in years of the realized impact-variance estimate the budget is drawn from. */
+    public const IMPACT_VARIANCE_EMA_YEARS = 0.25;
+
+    // --- Sell-Side Price Targets (Brav & Lehavy 2003) ---
+    /** How far above fair value the published twelve-month target is set. Targets are systematically optimistic; Brav & Lehavy measure them around 28% above price, and with price near fair value on average this lands in the same place. */
+    public const ANALYST_TARGET_OPTIMISM = 0.25;
+    /** How far the case has to move before the published target is restated. Targets are sticky and revised in steps; without a band the target would track the price continuously and a revision would never be news. */
+    public const ANALYST_TARGET_REVISION_THRESHOLD = 0.10;
+
     /** Market vol of the last tick priced, at which every stored variance was built; null before the first. */
     private ?float $priorMarketVol = null;
 
@@ -290,8 +310,8 @@ class StockTracker
                 $fundImpact = $fundShares !== 0.0 ? $this->liquidityEngine->peakImpact($stock, $fundShares) : 0.0;
 
                 $impactLogReturn = max(
-                    -FinancialConstants::MAX_TICK_IMPACT_LOG_RETURN,
-                    min(FinancialConstants::MAX_TICK_IMPACT_LOG_RETURN, $flowImpact + $fundImpact)
+                    -self::MAX_TICK_IMPACT_LOG_RETURN,
+                    min(self::MAX_TICK_IMPACT_LOG_RETURN, $flowImpact + $fundImpact)
                 );
                 // Impact is linear in the quantity, so the fund's part separates exactly. It hits every name at
                 // once, which makes it SYSTEMATIC: it is charged to the market factor's budget, never the name's
@@ -303,21 +323,21 @@ class StockTracker
                 $peakImpact = $flowImpact + $fundImpact;
                 $corporateLogReturn = $peakImpact !== 0.0 ? $impactLogReturn * ($corporateImpact / $peakImpact) : 0.0;
                 $budgetedImpactLogReturn = (FinancialConstants::PERMANENT_IMPACT_SHARE * max(
-                    -FinancialConstants::MAX_TICK_IMPACT_LOG_RETURN,
-                    min(FinancialConstants::MAX_TICK_IMPACT_LOG_RETURN, $flowImpact - $corporateImpact)
-                )) + (FinancialConstants::CORPORATE_FLOW_PERMANENT_IMPACT_SHARE * max(
-                    -FinancialConstants::MAX_TICK_IMPACT_LOG_RETURN,
-                    min(FinancialConstants::MAX_TICK_IMPACT_LOG_RETURN, $corporateImpact)
+                    -self::MAX_TICK_IMPACT_LOG_RETURN,
+                    min(self::MAX_TICK_IMPACT_LOG_RETURN, $flowImpact - $corporateImpact)
+                )) + (self::CORPORATE_FLOW_PERMANENT_IMPACT_SHARE * max(
+                    -self::MAX_TICK_IMPACT_LOG_RETURN,
+                    min(self::MAX_TICK_IMPACT_LOG_RETURN, $corporateImpact)
                 ));
                 $budgetedFundLogReturn = FinancialConstants::PERMANENT_IMPACT_SHARE * max(
-                    -FinancialConstants::MAX_TICK_IMPACT_LOG_RETURN,
-                    min(FinancialConstants::MAX_TICK_IMPACT_LOG_RETURN, $fundImpact)
+                    -self::MAX_TICK_IMPACT_LOG_RETURN,
+                    min(self::MAX_TICK_IMPACT_LOG_RETURN, $fundImpact)
                 );
             }
 
             // The peak move lands now; its transient share then relaxes back at the resilience rate, every tick. The
             // company's own slice moves from the permanent share to the transient one.
-            $corporateShift = (FinancialConstants::PERMANENT_IMPACT_SHARE - FinancialConstants::CORPORATE_FLOW_PERMANENT_IMPACT_SHARE) * $corporateLogReturn;
+            $corporateShift = (FinancialConstants::PERMANENT_IMPACT_SHARE - self::CORPORATE_FLOW_PERMANENT_IMPACT_SHARE) * $corporateLogReturn;
             $nextTransient = LiquidityEngine::transientImpactAfter($outstandingTransient, $impactLogReturn, $dt) + $corporateShift;
             $this->transientImpact[$stock->getTicker()] = $nextTransient;
             $impactPriceMove = (FinancialConstants::PERMANENT_IMPACT_SHARE * $impactLogReturn) - $corporateShift + ($nextTransient - $outstandingTransient);
@@ -333,13 +353,13 @@ class StockTracker
                     $stock->getImpactVarianceEma() ?? 0.0,
                     $budgetedImpactLogReturn,
                     $dt,
-                    FinancialConstants::IMPACT_VARIANCE_EMA_YEARS
+                    self::IMPACT_VARIANCE_EMA_YEARS
                 ));
                 $this->fundImpactVariance[$stock->getTicker()] = TimeSeries::ewmaAnnualizedVariance(
                     $this->fundImpactVariance[$stock->getTicker()] ?? 0.0,
                     $budgetedFundLogReturn,
                     $dt,
-                    FinancialConstants::IMPACT_VARIANCE_EMA_YEARS
+                    self::IMPACT_VARIANCE_EMA_YEARS
                 );
             }
 
@@ -420,7 +440,7 @@ class StockTracker
                     $stock->getRealizedVarianceEma() ?? 0.0,
                     $tickLogReturn,
                     $dt,
-                    FinancialConstants::INDEX_TRAILING_VOLATILITY_YEARS
+                    self::INDEX_TRAILING_VOLATILITY_YEARS
                 ));
             }
 
@@ -637,7 +657,7 @@ class StockTracker
             $stock->setAnalystPriceTarget((string) $standing);
         }
 
-        $fresh = $perceivedFairValue * (1.0 + FinancialConstants::ANALYST_TARGET_OPTIMISM);
+        $fresh = $perceivedFairValue * (1.0 + self::ANALYST_TARGET_OPTIMISM);
 
         // Nobody has covered this name before. Initiating coverage is not a revision of anything.
         if ($standing === null || $standing <= 0.0) {
@@ -648,7 +668,7 @@ class StockTracker
 
         $drift = ($fresh - $standing) / $standing;
 
-        if (abs($drift) < FinancialConstants::ANALYST_TARGET_REVISION_THRESHOLD) {
+        if (abs($drift) < self::ANALYST_TARGET_REVISION_THRESHOLD) {
             return null;
         }
 

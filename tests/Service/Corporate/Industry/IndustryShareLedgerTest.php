@@ -381,8 +381,8 @@ class IndustryShareLedgerTest extends TestCase
         // A firm that IS its whole market: the closed-loop case, so its build is the industry's.
         $ledger->resolveIndustryCapacityRatio($firm, 1_000.0, 1.0, 1.0, 0.0, 0.0, 10, 252);
 
-        $this->assertSame(FinancialConstants::MAX_INDUSTRY_CAPACITY_RATIO, $ledger->resolveIndustryCapacityRatio($firm, 10_000.0, 1.0, 1.0, 0.0, 0.0, 73, 252));
-        $this->assertSame(FinancialConstants::MIN_INDUSTRY_CAPACITY_RATIO, $ledger->resolveIndustryCapacityRatio($firm, 10.0, 1.0, 1.0, 0.0, 0.0, 136, 252));
+        $this->assertSame(IndustryShareLedger::MAX_INDUSTRY_CAPACITY_RATIO, $ledger->resolveIndustryCapacityRatio($firm, 10_000.0, 1.0, 1.0, 0.0, 0.0, 73, 252));
+        $this->assertSame(IndustryShareLedger::MIN_INDUSTRY_CAPACITY_RATIO, $ledger->resolveIndustryCapacityRatio($firm, 10.0, 1.0, 1.0, 0.0, 0.0, 136, 252));
     }
 
     public function testAShareAboveOneIsAClosedLoopAndAShareOfZeroIsNotPriced(): void

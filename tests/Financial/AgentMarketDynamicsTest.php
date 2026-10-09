@@ -20,9 +20,9 @@ use App\Service\Market\Agent\VolatilityTargetStrategy;
 use App\Service\Market\Flow\InMemoryOrderFlowStore;
 use App\Service\Market\Pricing\LiquidityEngine;
 use App\Service\Market\Pricing\MarketEngine;
-use App\Service\Math\FinancialConstants;
 use App\Service\Math\MathUtility;
 use PHPUnit\Framework\TestCase;
+use App\Service\Market\Pricing\StockTracker;
 
 /**
  * The agent population driven against the real price process.
@@ -100,7 +100,7 @@ class AgentMarketDynamicsTest extends TestCase
         $macro = new MacroStateDTO(policyRate: 0.04, equityRiskPremium: 0.045);
 
         $dt = 1.0 / self::TICKS_PER_YEAR;
-        $impactPhi = exp(-$dt / FinancialConstants::IMPACT_VARIANCE_EMA_YEARS);
+        $impactPhi = exp(-$dt / StockTracker::IMPACT_VARIANCE_EMA_YEARS);
         $momentumPhi = exp(-$dt / 0.50);
 
         $price = 100.0;
@@ -262,8 +262,8 @@ class AgentMarketDynamicsTest extends TestCase
         foreach ([11, 22, 33] as $seed) {
             $run = $this->simulate(true, $seed);
 
-            $this->assertGreaterThanOrEqual(FinancialConstants::AGENT_MIN_POPULATION_SHARE, $run['minShare']);
-            $this->assertLessThanOrEqual(1.0 - FinancialConstants::AGENT_MIN_POPULATION_SHARE, $run['maxShare']);
+            $this->assertGreaterThanOrEqual(AgentPopulation::AGENT_MIN_POPULATION_SHARE, $run['minShare']);
+            $this->assertLessThanOrEqual(1.0 - AgentPopulation::AGENT_MIN_POPULATION_SHARE, $run['maxShare']);
         }
     }
 }

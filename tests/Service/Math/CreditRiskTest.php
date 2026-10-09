@@ -7,9 +7,8 @@ namespace App\Tests\Service\Math;
 use App\Service\Macro\MacroEngine;
 use App\Service\Math\CreditRisk;
 use App\Service\Math\Distributions;
-use App\Service\Math\FinancialConstants;
-use App\Service\Math\MathUtility;
 use PHPUnit\Framework\TestCase;
+use App\Service\Market\Bond\CorporateDefaultService;
 
 /**
  * Corporate credit primitives. Both of these exist to stop the same mistake — pricing a risky claim as if
@@ -18,23 +17,16 @@ use PHPUnit\Framework\TestCase;
  */
 class CreditRiskTest extends TestCase
 {
-    private MathUtility $math;
-
-    protected function setUp(): void
-    {
-        $this->math = new MathUtility();
-    }
-
     // --- Recovery ---
 
     public function testAnAverageDefaultYearRecoversTheBaseRate(): void
     {
         $recovery = CreditRisk::calculateRecoveryGivenDefault(
-            FinancialConstants::RECOVERY_SENIOR_UNSECURED,
-            FinancialConstants::RECOVERY_BASELINE_DEFAULT_RATE
+            CorporateDefaultService::RECOVERY_SENIOR_UNSECURED,
+            CreditRisk::RECOVERY_BASELINE_DEFAULT_RATE
         );
 
-        $this->assertEqualsWithDelta(FinancialConstants::RECOVERY_SENIOR_UNSECURED, $recovery, 1e-12);
+        $this->assertEqualsWithDelta(CorporateDefaultService::RECOVERY_SENIOR_UNSECURED, $recovery, 1e-12);
     }
 
     public function testRecoveryFallsAsDefaultsCluster(): void
@@ -55,15 +47,15 @@ class CreditRiskTest extends TestCase
         $second = CreditRisk::calculateRecoveryGivenDefault(0.60, 0.036) - CreditRisk::calculateRecoveryGivenDefault(0.60, 0.072);
 
         $this->assertEqualsWithDelta($first, $second, 1e-12);
-        $this->assertEqualsWithDelta(FinancialConstants::RECOVERY_DEFAULT_RATE_ELASTICITY * log(2.0), $first, 1e-12);
+        $this->assertEqualsWithDelta(CreditRisk::RECOVERY_DEFAULT_RATE_ELASTICITY * log(2.0), $first, 1e-12);
     }
 
     public function testSeniorityOrdersRecoveryAtAnyPointInTheCycle(): void
     {
         foreach ([0.005, 0.018, 0.10] as $defaultRate) {
-            $secured = CreditRisk::calculateRecoveryGivenDefault(FinancialConstants::RECOVERY_SENIOR_SECURED, $defaultRate);
-            $unsecured = CreditRisk::calculateRecoveryGivenDefault(FinancialConstants::RECOVERY_SENIOR_UNSECURED, $defaultRate);
-            $subordinated = CreditRisk::calculateRecoveryGivenDefault(FinancialConstants::RECOVERY_SUBORDINATED, $defaultRate);
+            $secured = CreditRisk::calculateRecoveryGivenDefault(CorporateDefaultService::RECOVERY_SENIOR_SECURED, $defaultRate);
+            $unsecured = CreditRisk::calculateRecoveryGivenDefault(CorporateDefaultService::RECOVERY_SENIOR_UNSECURED, $defaultRate);
+            $subordinated = CreditRisk::calculateRecoveryGivenDefault(CorporateDefaultService::RECOVERY_SUBORDINATED, $defaultRate);
 
             $this->assertGreaterThan($unsecured, $secured, "at a default rate of {$defaultRate}");
             $this->assertGreaterThan($subordinated, $unsecured, "at a default rate of {$defaultRate}");
@@ -74,11 +66,11 @@ class CreditRiskTest extends TestCase
     {
         // A catastrophic default year, and an implausibly quiet one.
         $this->assertGreaterThanOrEqual(
-            FinancialConstants::MIN_RECOVERY_RATE,
+            CreditRisk::MIN_RECOVERY_RATE,
             CreditRisk::calculateRecoveryGivenDefault(0.28, 0.99)
         );
         $this->assertLessThanOrEqual(
-            FinancialConstants::MAX_RECOVERY_RATE,
+            CreditRisk::MAX_RECOVERY_RATE,
             CreditRisk::calculateRecoveryGivenDefault(0.62, 1.0e-9)
         );
     }
@@ -95,24 +87,24 @@ class CreditRiskTest extends TestCase
     {
         // A bond priced on default risk alone quotes through the market, and worst exactly here: at the safe
         // end the default component is almost nothing and the residual is almost all of the spread.
-        $spread = $this->math->calculateCorporateSpread(8.0, 0.52, 5.0);
+        $spread = CreditRisk::calculateCorporateSpread(8.0, 0.52, 5.0);
 
-        $this->assertGreaterThanOrEqual(FinancialConstants::CORPORATE_ILLIQUIDITY_SPREAD, $spread);
+        $this->assertGreaterThanOrEqual(CreditRisk::CORPORATE_ILLIQUIDITY_SPREAD, $spread);
         $this->assertLessThan(0.01, $spread);
     }
 
     public function testAWeakerIssuerPaysMore(): void
     {
-        $strong = $this->math->calculateCorporateSpread(5.0, 0.52, 5.0);
-        $weak = $this->math->calculateCorporateSpread(1.0, 0.52, 5.0);
+        $strong = CreditRisk::calculateCorporateSpread(5.0, 0.52, 5.0);
+        $weak = CreditRisk::calculateCorporateSpread(1.0, 0.52, 5.0);
 
         $this->assertGreaterThan($strong, $weak);
     }
 
     public function testALowerRecoveryClaimPaysMoreOnTheSameIssuer(): void
     {
-        $senior = $this->math->calculateCorporateSpread(2.0, 1.0 - FinancialConstants::RECOVERY_SENIOR_SECURED, 5.0);
-        $subordinated = $this->math->calculateCorporateSpread(2.0, 1.0 - FinancialConstants::RECOVERY_SUBORDINATED, 5.0);
+        $senior = CreditRisk::calculateCorporateSpread(2.0, 1.0 - CorporateDefaultService::RECOVERY_SENIOR_SECURED, 5.0);
+        $subordinated = CreditRisk::calculateCorporateSpread(2.0, 1.0 - CorporateDefaultService::RECOVERY_SUBORDINATED, 5.0);
 
         // Same probability of default, different amount lost when it happens.
         $this->assertGreaterThan($senior, $subordinated);
@@ -122,21 +114,21 @@ class CreditRiskTest extends TestCase
     {
         // A distressed name is riskier over one year than over ten: it either survives the year or it does
         // not, and the annualized cost of that is highest at the front.
-        $oneYear = $this->math->calculateCorporateSpread(0.5, 0.52, 1.0);
-        $tenYear = $this->math->calculateCorporateSpread(0.5, 0.52, 10.0);
+        $oneYear = CreditRisk::calculateCorporateSpread(0.5, 0.52, 1.0);
+        $tenYear = CreditRisk::calculateCorporateSpread(0.5, 0.52, 10.0);
 
         $this->assertGreaterThan($tenYear, $oneYear);
     }
 
     public function testTheSpreadIsBoundedAndNeverNegative(): void
     {
-        $this->assertLessThanOrEqual(FinancialConstants::MAX_CORPORATE_SPREAD, $this->math->calculateCorporateSpread(-10.0, 0.95, 0.1));
-        $this->assertGreaterThanOrEqual(0.0, $this->math->calculateCorporateSpread(50.0, 0.0, 30.0, 0.0));
+        $this->assertLessThanOrEqual(CreditRisk::MAX_CORPORATE_SPREAD, CreditRisk::calculateCorporateSpread(-10.0, 0.95, 0.1));
+        $this->assertGreaterThanOrEqual(0.0, CreditRisk::calculateCorporateSpread(50.0, 0.0, 30.0, 0.0));
     }
 
     public function testAZeroMaturityDoesNotDivideByItself(): void
     {
-        $spread = $this->math->calculateCorporateSpread(2.0, 0.52, 0.0);
+        $spread = CreditRisk::calculateCorporateSpread(2.0, 0.52, 0.0);
 
         $this->assertTrue(is_finite($spread));
         $this->assertGreaterThanOrEqual(0.0, $spread);

@@ -97,13 +97,6 @@ class EarningsEngineReportTest extends TestCase
             return $this->mathUtilityMock->generateStandardNormal();
         });
         $this->mathUtilityMock->method('calculateJumpDiffusion')->willReturn(['exponent' => 0.0]);
-        $realMath = new MathUtility();
-        $this->mathUtilityMock->method('calculateConvexPenalty')->willReturnCallback(
-            fn($s, $c = 1.5, $sc = 1.0) => $realMath->calculateConvexPenalty($s, $c, $sc)
-        );
-        $this->mathUtilityMock->method('calculateCIR')->willReturnCallback(
-            fn($cv, $k, $th, $s, $dt, $dw) => $realMath->calculateCIR($cv, $k, $th, $s, $dt, $dw)
-        );
 
         $this->corporateMetricsMock = $this->createStub(CorporateMetrics::class);
         $this->corporateMetricsMock->method('calculateOperatingBase')->willReturn(10000000.0);

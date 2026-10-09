@@ -1142,7 +1142,7 @@
 									</div>
 									<div>
 										<dt class="font-semibold text-on-surface">Review</dt>
-										<dd class="text-on-surface-variant leading-relaxed">{{ indexFacts.reconstitutionsPerYear }} times a year. {% if indexFacts.isSelective %}Membership is banded: a &plusmn;{{ (constant('App\\Service\\Math\\FinancialConstants::INDEX_MEMBERSHIP_BUFFER') * 100)|number_format(0) }}% buffer around the cut, so a marginal overtake buys nothing and a clear one gets in.{% else %}Every name in the universe is a member; the review only removes what has been delisted or has left it.{% endif %} A bankrupt shell leaves at the first review after it dies.</dd>
+										<dd class="text-on-surface-variant leading-relaxed">{{ indexFacts.reconstitutionsPerYear }} times a year. {% if indexFacts.isSelective %}Membership is banded: a &plusmn;{{ (constant('App\\Service\\Market\\Index\\IndexCommittee::INDEX_MEMBERSHIP_BUFFER') * 100)|number_format(0) }}% buffer around the cut, so a marginal overtake buys nothing and a clear one gets in.{% else %}Every name in the universe is a member; the review only removes what has been delisted or has left it.{% endif %} A bankrupt shell leaves at the first review after it dies.</dd>
 									</div>
 									{% if indexFacts.expenseRatio is not null %}
 										<div>

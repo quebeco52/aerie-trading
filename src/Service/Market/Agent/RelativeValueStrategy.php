@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace App\Service\Market\Agent;
 
 use App\DTO\AgentMarketViewDTO;
-use App\Service\Math\FinancialConstants;
 
 /**
  * Long what is cheap against the rest of the market, short what is dear against it.
@@ -21,6 +20,12 @@ use App\Service\Math\FinancialConstants;
  */
 final class RelativeValueStrategy implements AgentStrategyInterface
 {
+    // --- Relative-Value Funds (Barberis & Shleifer 2003 cross-sectional style) ---
+    /** Share of agent capital a market-neutral book can put long or short in one name against the rest of the market. */
+    public const AGENT_RELATIVE_VALUE_SHARE = 0.15;
+    /** Conviction per unit of log mispricing RELATIVE to the market's average mispricing; on the fundamentalist's scale, fully committed at roughly a 40% gap to the average name. */
+    public const AGENT_RELATIVE_VALUE_GAIN = 2.50;
+
     public function identifier(): string
     {
         return 'relative_value';
@@ -28,9 +33,9 @@ final class RelativeValueStrategy implements AgentStrategyInterface
 
     public function signal(AgentMarketViewDTO $view, array $positions): float
     {
-        $conviction = max(-1.0, min(1.0, FinancialConstants::AGENT_RELATIVE_VALUE_GAIN * $view->relativeLogMispricing()));
+        $conviction = max(-1.0, min(1.0, self::AGENT_RELATIVE_VALUE_GAIN * $view->relativeLogMispricing()));
 
-        return FinancialConstants::AGENT_RELATIVE_VALUE_SHARE * $conviction;
+        return self::AGENT_RELATIVE_VALUE_SHARE * $conviction;
     }
 
     public function competesForCapital(): bool

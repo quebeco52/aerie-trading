@@ -15,7 +15,6 @@ use App\Service\Corporate\DebtEngine;
 use App\Service\Corporate\EarningsEngine;
 use App\Service\Corporate\TreasuryEngine;
 use App\Service\Corporate\CorporateMetrics;
-use App\Service\Math\FinancialConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\LogisticsBusinessModel;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
@@ -122,7 +121,7 @@ class RunawayFeedbackLoopTest extends TestCase
         $this->treasuryEngine->finalizeLiquidity($ctx);
 
         // Max allowable emergency raise is 25% of Market Cap ($100B * 0.25 = $25B)
-        $expectedMaxRaise = 100_000_000_000.0 * FinancialConstants::MAX_EMERGENCY_EQUITY_RAISE_RATIO;
+        $expectedMaxRaise = 100_000_000_000.0 * TreasuryEngine::MAX_EMERGENCY_EQUITY_RAISE_RATIO;
         $actualEquity = (float) $stock->getTotalEquity();
         $equityIncrease = $actualEquity - 80_000_000_000.0;
 
@@ -336,7 +335,7 @@ class RunawayFeedbackLoopTest extends TestCase
         // The cap is struck in REVENUE at a full addressable share, on the financial ratio: a bank ten
         // times its market earns on 2.5 markets' worth of book, not on 1.5 (the corporate ratio) and not
         // on all ten. Same seed, so the two draws match and the ratio is the cap itself.
-        $this->assertEqualsWithDelta(FinancialConstants::MAX_FINANCIAL_SECTOR_TAM_CAPACITY_RATIO, $tenTimesMarket / $atMarket, 0.05);
-        $this->assertGreaterThan(FinancialConstants::MAX_SECTOR_TAM_CAPACITY_RATIO, $tenTimesMarket / $atMarket, 'financials are bounded by the looser ratio');
+        $this->assertEqualsWithDelta(EarningsEngine::MAX_FINANCIAL_SECTOR_TAM_CAPACITY_RATIO, $tenTimesMarket / $atMarket, 0.05);
+        $this->assertGreaterThan(EarningsEngine::MAX_SECTOR_TAM_CAPACITY_RATIO, $tenTimesMarket / $atMarket, 'financials are bounded by the looser ratio');
     }
 }

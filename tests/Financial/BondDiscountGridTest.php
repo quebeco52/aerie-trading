@@ -11,6 +11,7 @@ use App\Service\Market\Bond\BondPricingEngine;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\FixedIncome;
 use PHPUnit\Framework\TestCase;
+use App\Service\Market\Bond\TreasuryAuctionService;
 
 /**
  * The sampled discount curve has to BE the curve.
@@ -92,7 +93,7 @@ class BondDiscountGridTest extends TestCase
     public function testTheQuotedBenchmarkTenorsAreExact(): void
     {
         foreach ($this->curves() as $name => $curve) {
-            foreach (FinancialConstants::BOND_AUCTION_TENORS as $tenor) {
+            foreach (TreasuryAuctionService::BOND_AUCTION_TENORS as $tenor) {
                 $this->assertEqualsWithDelta(
                     $this->engine->zeroYield($curve, $tenor),
                     $this->engine->discountZeroYield($curve, $tenor),

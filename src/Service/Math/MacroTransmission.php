@@ -13,6 +13,14 @@ use App\Service\Macro\MacroEngine;
  */
 final class MacroTransmission
 {
+    // --- Stamp Duty (Colliard & Hoffmann 2017) ---
+    /** Log fall in share turnover per unit of round-trip duty above the founding rate: France's 0.2% tax on purchases in August 2012 cut trading volume by about 10% (Colliard & Hoffmann 2017, JF), ln(1 / 0.9) / 0.002. */
+    public const STAMP_DUTY_VOLUME_SEMI_ELASTICITY = 52.68;
+
+    // --- Bank Levy (UK Finance Act 2011, Schedule 19; FDIC) ---
+    /** The levy on long-term funding and on deposits from customers outside finance, as a share of the rate on short-term funding: half (the UK's long-term rate, 0.105% against 0.21% in 2015). */
+    public const BANK_LEVY_LONG_TERM_RATE_SHARE = 0.5;
+
     /**
      * A sector's demand drift relative to the economy: the annual log change in its share of nominal GDP between
      * two benchmark years. Added to trend real growth it is the sector's secular real growth, and shares that sum
@@ -38,7 +46,7 @@ final class MacroTransmission
      */
     public static function calculateAnnualBankLevy(float $shortTermFunding, float $longTermFunding, float $shortTermRate): float
     {
-        return $shortTermRate * (max(0.0, $shortTermFunding) + (FinancialConstants::BANK_LEVY_LONG_TERM_RATE_SHARE * max(0.0, $longTermFunding)));
+        return $shortTermRate * (max(0.0, $shortTermFunding) + (self::BANK_LEVY_LONG_TERM_RATE_SHARE * max(0.0, $longTermFunding)));
     }
 
     /**
@@ -50,7 +58,7 @@ final class MacroTransmission
      */
     public static function calculateStampDutyVolumeFactor(float $stampDutyRate): float
     {
-        return exp(-FinancialConstants::STAMP_DUTY_VOLUME_SEMI_ELASTICITY * 2.0 * ($stampDutyRate - FinancialConstants::STAMP_DUTY_RATE));
+        return exp(-self::STAMP_DUTY_VOLUME_SEMI_ELASTICITY * 2.0 * ($stampDutyRate - FinancialConstants::STAMP_DUTY_RATE));
     }
 
     /**

@@ -8,7 +8,6 @@ use App\DTO\EarningsSimulationContext;
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use App\Service\Corporate\EarningsEngine;
-use App\Service\Math\FinancialConstants;
 use App\Service\Model\Sector\StandardCorporateBusinessModel;
 use PHPUnit\Framework\TestCase;
 use App\Service\Math\MathUtility;
@@ -144,7 +143,7 @@ final class EarningsManagementTest extends TestCase
 
         $this->manage->invoke($this->engine, $ctx);
 
-        $expectedReversal = $bank * FinancialConstants::EARNINGS_MANAGEMENT_REVERSAL_RATE;
+        $expectedReversal = $bank * EarningsEngine::EARNINGS_MANAGEMENT_REVERSAL_RATE;
         $this->assertEqualsWithDelta(-$expectedReversal, $ctx->managedAccrual, 0.01, 'The reversal must reduce reported earnings.');
         $this->assertEqualsWithDelta(80_000_000.0 - $expectedReversal, $ctx->reportedActualNetIncome, 0.01);
         $this->assertEqualsWithDelta($bank - $expectedReversal, $ctx->stock->getManagedAccrualBank(), 0.01, 'The balance owed shrinks by what was repaid.');
@@ -188,7 +187,7 @@ final class EarningsManagementTest extends TestCase
     {
         $consensus = 100_000_000.0;
         // Total assets are 2bn here, so the cap is 2bn * EARNINGS_MANAGEMENT_MAX_BANK_RATIO.
-        $cap = 2_000_000_000.0 * FinancialConstants::EARNINGS_MANAGEMENT_MAX_BANK_RATIO;
+        $cap = 2_000_000_000.0 * EarningsEngine::EARNINGS_MANAGEMENT_MAX_BANK_RATIO;
         $ctx = $this->makeContext($consensus, $consensus * 0.98, $cap);
 
         $this->manage->invoke($this->engine, $ctx);

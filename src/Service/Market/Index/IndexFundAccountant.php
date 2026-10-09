@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace App\Service\Market\Index;
 
 use App\Entity\Etf;
-use App\Service\Math\FinancialConstants;
 use Doctrine\ORM\EntityManagerInterface;
 
 /**
@@ -41,6 +40,10 @@ use Doctrine\ORM\EntityManagerInterface;
  */
 final class IndexFundAccountant
 {
+    // --- Index Fund Accounting ---
+    /** Smallest distribution worth paying, per share. Below this the income stays accrued into the next quarter rather than writing a ledger row per holder that rounds to nothing. */
+    public const FUND_MINIMUM_DISTRIBUTION = 0.005;
+
     public function __construct(
         private readonly EntityManagerInterface $entityManager,
     ) {}
@@ -148,7 +151,7 @@ final class IndexFundAccountant
 
         // Below the threshold the cash stays accrued rather than writing a ledger row per holder for an
         // amount that rounds to nothing. It is not forfeited; it is paid next quarter.
-        if ($perShare < FinancialConstants::FUND_MINIMUM_DISTRIBUTION) {
+        if ($perShare < self::FUND_MINIMUM_DISTRIBUTION) {
             return 0.0;
         }
 

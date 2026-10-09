@@ -346,6 +346,10 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
     /** Quarterly excess over trend nominal income growth that triggers a captured new deposits event. */
     public const LIABILITY_CAPTURE_THRESHOLD = 0.005;
 
+    // --- Investment Securities & AOCI (ASC 320 / Basel III) ---
+    /** Share of a lender's earning assets held as investment securities rather than loans. Only this part is marked: ASC 320 remarks securities, while ASC 310 carries loans at amortized cost, and the loan book's own rate risk is already charged as the NIM squeeze. */
+    public const SECURITIES_SHARE_OF_EARNING_ASSETS = 0.22;
+
     /**
      * The book's gross yield: interest earned on loans and securities as they have repriced, plus fee income. The
      * return on equity is what that yield leaves after funding, operating cost and credit losses, so it moves with the
@@ -940,7 +944,7 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
      */
     public function getLoanShareOfEarningAssets(): float
     {
-        return 1.0 - FinancialConstants::SECURITIES_SHARE_OF_EARNING_ASSETS;
+        return 1.0 - self::SECURITIES_SHARE_OF_EARNING_ASSETS;
     }
 
     public function getCreditLossHorizonYears(): float

@@ -9,7 +9,6 @@ use App\Entity\OptionContract;
 use App\Service\Market\Bond\BondPricingEngine;
 use App\Service\Market\Pricing\MarketEngine;
 use App\Service\Market\Option\OptionPricingEngine;
-use App\Service\Math\FinancialConstants;
 use App\Service\Math\OptionPricing;
 use App\Tests\Support\StockBuilder;
 use PHPUnit\Framework\TestCase;
@@ -71,7 +70,7 @@ class OptionPricingEngineTest extends TestCase
         // so what is left over the top of it is the variance risk premium and nothing else.
         $surface = $this->engine->surface(0.30, 0.30, 1.0, 0.0, 0.0, 0.5);
 
-        $this->assertEqualsWithDelta(0.30 * FinancialConstants::OPTION_VARIANCE_RISK_PREMIUM, $surface['atm_volatility'], 1e-9);
+        $this->assertEqualsWithDelta(0.30 * OptionPricingEngine::OPTION_VARIANCE_RISK_PREMIUM, $surface['atm_volatility'], 1e-9);
     }
 
     public function testTheSurfaceCarriesNoShapeWhenTheNameDoesNotJump(): void
@@ -108,7 +107,7 @@ class OptionPricingEngineTest extends TestCase
         $surface = $this->engine->surface($longRunVol, $longRunVol, 1.0, $lambda, $configuredJumpVol, 0.25);
 
         $expected = OptionPricing::calculateJumpDiffusionShape(
-            max(0.0, (($longRunVol * FinancialConstants::OPTION_VARIANCE_RISK_PREMIUM) ** 2)
+            max(0.0, (($longRunVol * OptionPricingEngine::OPTION_VARIANCE_RISK_PREMIUM) ** 2)
                 - ($lambda * OptionPricing::calculateKouJumpMoment(2, MarketEngine::jumpProbabilityUp(), $calibrated['eta_up'], $calibrated['eta_down']))),
             $lambda,
             MarketEngine::jumpProbabilityUp(),
@@ -165,7 +164,7 @@ class OptionPricingEngineTest extends TestCase
         $surface = $this->engine->surface(0.25, 0.25, 1.0, 1.0, 0.08, 0.25);
 
         $miles = $this->engine->quote(100.0, 400.0, true, $surface, 0.04, 0.0, 0.01);
-        $this->assertGreaterThanOrEqual(FinancialConstants::OPTION_MIN_PREMIUM, $miles->mark);
+        $this->assertGreaterThanOrEqual(OptionPricingEngine::OPTION_MIN_PREMIUM, $miles->mark);
 
         $deep = $this->engine->quote(100.0, 50.0, true, $surface, 0.04, 0.0, 0.25);
         $this->assertGreaterThan(100.0 - 50.0 - 0.001, $deep->mark);
@@ -196,7 +195,7 @@ class OptionPricingEngineTest extends TestCase
         $surface = $this->engine->surface(0.30, 0.30, 1.0, 0.0, 0.0, 0.5);
         $quote = $this->engine->quote(100.0, 100.0, true, $surface, 0.04, 0.0, 0.5);
 
-        $expectedHalfSpread = $quote->vega * FinancialConstants::OPTION_HALF_SPREAD_VOLATILITY;
+        $expectedHalfSpread = $quote->vega * OptionPricingEngine::OPTION_HALF_SPREAD_VOLATILITY;
 
         $this->assertEqualsWithDelta($expectedHalfSpread, ($quote->ask - $quote->bid) / 2.0, 1e-9);
         $this->assertEqualsWithDelta($quote->mark, ($quote->ask + $quote->bid) / 2.0, 1e-9);
@@ -211,7 +210,7 @@ class OptionPricingEngineTest extends TestCase
 
         $this->assertGreaterThan(0.0, $quote->ask - $quote->bid);
         $this->assertEqualsWithDelta(
-            $quote->mark * FinancialConstants::OPTION_MIN_HALF_SPREAD_FRACTION,
+            $quote->mark * OptionPricingEngine::OPTION_MIN_HALF_SPREAD_FRACTION,
             ($quote->ask - $quote->bid) / 2.0,
             1e-9
         );
@@ -224,7 +223,7 @@ class OptionPricingEngineTest extends TestCase
 
         $this->assertGreaterThanOrEqual(0.0, $quote->bid);
         $this->assertLessThanOrEqual(
-            $quote->mark * FinancialConstants::OPTION_MAX_HALF_SPREAD_FRACTION,
+            $quote->mark * OptionPricingEngine::OPTION_MAX_HALF_SPREAD_FRACTION,
             ($quote->ask - $quote->bid) / 2.0
         );
     }

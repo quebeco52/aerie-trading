@@ -8,9 +8,9 @@ use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\ShadowBankBusinessModel;
-use App\Service\Math\FinancialConstants;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\TestCase;
+use App\Service\Model\Sector\CommercialBankBusinessModel;
 
 class ShadowBankBusinessModelTest extends TestCase
 {
@@ -129,7 +129,7 @@ class ShadowBankBusinessModelTest extends TestCase
         $after = $this->model->computeActualFinancials($stock, 1_000_000_000.0, 0.50, 200_000_000.0, 0.0, $raised, $mathMock);
         $stock->setEarningsMomentumZ($after->streamZ);
 
-        $directLendingShare = (1.0 - FinancialConstants::SECURITIES_SHARE_OF_EARNING_ASSETS) * 0.40;
+        $directLendingShare = (1.0 - CommercialBankBusinessModel::SECURITIES_SHARE_OF_EARNING_ASSETS) * 0.40;
         $this->assertEqualsWithDelta($directLendingShare * 0.01, $this->model->resolveInterestYield($stock, $raised) - $before, 1e-9);
         $this->assertEqualsWithDelta($base->streamRevenue['origination_fees'], $after->streamRevenue['origination_fees'], 1e-3);
         $this->assertEqualsWithDelta($base->streamRevenue['direct_lending'], $after->streamRevenue['direct_lending'], 1e-3, 'deal fees do not reprice');
@@ -218,7 +218,7 @@ class ShadowBankBusinessModelTest extends TestCase
         $pool = (new Stock())->setTicker('POOL');
 
         $this->assertEqualsWithDelta(
-            (1.0 - FinancialConstants::SECURITIES_SHARE_OF_EARNING_ASSETS) * (0.60 * ShadowBankBusinessModel::RESIDENTIAL_CHARGE_OFF_RATE + 0.40 * ShadowBankBusinessModel::BUSINESS_CHARGE_OFF_RATE),
+            (1.0 - CommercialBankBusinessModel::SECURITIES_SHARE_OF_EARNING_ASSETS) * (0.60 * ShadowBankBusinessModel::RESIDENTIAL_CHARGE_OFF_RATE + 0.40 * ShadowBankBusinessModel::BUSINESS_CHARGE_OFF_RATE),
             $this->model->getThroughTheCycleCreditLossRate($pool),
             1e-12
         );

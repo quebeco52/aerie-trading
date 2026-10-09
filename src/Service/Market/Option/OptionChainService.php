@@ -42,6 +42,20 @@ final class OptionChainService
     /** Contracts written per INSERT. A slice's first pass opens its whole chain, so the batch is sized for that rather than for the quiet case. */
     public const LISTINGS_PER_STATEMENT = 500;
 
+    // --- Listed Equity Options ---
+    /** Months to expiry of the expiries listed at any one time: two near months, a quarterly and a two-quarter, which is the front of a standard listed cycle. */
+    public const OPTION_EXPIRY_MONTHS = [1, 2, 3, 6];
+    /** Strike ladder spacing as a fraction of spot, before it is snapped to a round increment. */
+    public const OPTION_STRIKE_SPACING_FRACTION = 0.05;
+    /** Widest strike listed either side of spot, as a fraction of it. Wide enough to carry the tails the smile prices, short of the strikes nobody quotes. */
+    public const OPTION_STRIKE_LADDER_WIDTH = 0.30;
+    /** Round increments a strike ladder may be struck on; the ladder snaps to the smallest one at or above the spacing fraction, which is how a real ladder ends up on whole and half numbers at every price level. */
+    public const OPTION_STRIKE_INCREMENTS = [0.50, 1.00, 2.50, 5.00, 10.00, 25.00, 50.00, 100.00, 250.00];
+    /** Half-width around spot listed on every increment. A real chain is dense at the money and thins as it goes out, because that is where the strikes anyone asks for are. */
+    public const OPTION_STRIKE_DENSE_BAND = 0.10;
+    /** Increments between strikes outside the dense band, the ends of the ladder always listed. Three: measured across a $8-$1400 price range at 30% fewer rows for 1.2% of dealer gamma, against 19% fewer for 0.1% at two. */
+    public const OPTION_STRIKE_WING_INCREMENT_MULTIPLE = 3;
+
     public function __construct(
         private readonly EntityManagerInterface $em,
         private readonly LiquidityEngine $liquidityEngine,
@@ -74,7 +88,7 @@ final class OptionChainService
      */
     public static function earliestTimeFor(int $serial): float
     {
-        return self::expiryTime($serial - max(FinancialConstants::OPTION_EXPIRY_MONTHS));
+        return self::expiryTime($serial - max(self::OPTION_EXPIRY_MONTHS));
     }
 
     /** The furthest serial ever listed, or null if no chain has been opened yet. */
@@ -96,7 +110,7 @@ final class OptionChainService
 
         return array_map(
             static fn (int $months): int => $current + $months,
-            FinancialConstants::OPTION_EXPIRY_MONTHS
+            self::OPTION_EXPIRY_MONTHS
         );
     }
 
@@ -109,8 +123,8 @@ final class OptionChainService
      */
     public static function strikeIncrement(float $spot): float
     {
-        $target = $spot * FinancialConstants::OPTION_STRIKE_SPACING_FRACTION;
-        $increments = FinancialConstants::OPTION_STRIKE_INCREMENTS;
+        $target = $spot * self::OPTION_STRIKE_SPACING_FRACTION;
+        $increments = self::OPTION_STRIKE_INCREMENTS;
 
         foreach ($increments as $increment) {
             if ($increment >= $target) {
@@ -147,9 +161,9 @@ final class OptionChainService
         }
 
         $increment = self::strikeIncrement($spot);
-        $width = FinancialConstants::OPTION_STRIKE_LADDER_WIDTH;
-        $band = $spot * FinancialConstants::OPTION_STRIKE_DENSE_BAND;
-        $wing = max(1, FinancialConstants::OPTION_STRIKE_WING_INCREMENT_MULTIPLE);
+        $width = self::OPTION_STRIKE_LADDER_WIDTH;
+        $band = $spot * self::OPTION_STRIKE_DENSE_BAND;
+        $wing = max(1, self::OPTION_STRIKE_WING_INCREMENT_MULTIPLE);
 
         $lowest = max($increment, ceil(($spot * (1.0 - $width)) / $increment) * $increment);
         $highest = floor(($spot * (1.0 + $width)) / $increment) * $increment;

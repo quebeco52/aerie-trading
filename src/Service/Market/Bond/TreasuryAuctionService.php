@@ -23,6 +23,14 @@ use Doctrine\ORM\EntityManagerInterface;
  */
 class TreasuryAuctionService
 {
+    // --- Sovereign Bond Desk ---
+    /** Auctions per year: each one rotates a fresh on-the-run issue into every tenor and retires the previous one to off-the-run. */
+    public const BOND_AUCTIONS_PER_YEAR = 4;
+    /** Original maturities offered at auction, in years; the same benchmark points the macro engine publishes. */
+    public const BOND_AUCTION_TENORS = [2.0, 5.0, 10.0, 30.0];
+    /** Face amount issued per tenor per auction, in currency units, at the District's $12T scale. Sets the size of the tradable float. */
+    public const BOND_ISSUE_SIZE = 2.5e9;
+
     public function __construct(
         private readonly EntityManagerInterface $entityManager,
         private readonly BondPricingEngine $pricingEngine,
@@ -36,7 +44,7 @@ class TreasuryAuctionService
      */
     public static function auctionIntervalTicks(int $ticksPerYear): int
     {
-        return (int) max(1, $ticksPerYear / FinancialConstants::BOND_AUCTIONS_PER_YEAR);
+        return (int) max(1, $ticksPerYear / self::BOND_AUCTIONS_PER_YEAR);
     }
 
     /**
@@ -51,7 +59,7 @@ class TreasuryAuctionService
     {
         $issued = [];
 
-        foreach (FinancialConstants::BOND_AUCTION_TENORS as $tenor) {
+        foreach (self::BOND_AUCTION_TENORS as $tenor) {
             $this->demoteOnTheRun((float) $tenor, $outstanding);
             $issued[] = $this->issue($curve, (float) $tenor, $currentTime);
         }
@@ -82,7 +90,7 @@ class TreasuryAuctionService
             ->setLastCouponTime($currentTime)
             ->setIsOnTheRun(true)
             ->setStatus(Bond::STATUS_ACTIVE)
-            ->setOutstandingFace((string) FinancialConstants::BOND_ISSUE_SIZE);
+            ->setOutstandingFace((string) self::BOND_ISSUE_SIZE);
 
         $valuation = $this->pricingEngine->value($bond, $curve, $currentTime);
         $bond->setPrice((string) $valuation->dirtyPrice)

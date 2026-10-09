@@ -7,9 +7,11 @@ namespace App\Service\Corporate;
 use App\Entity\Stock;
 use App\DTO\MacroStateDTO;
 use App\Service\Event\MarketEventPublisher;
+use App\Service\Math\CreditRisk;
 use App\Service\Math\MathUtility;
 use App\DTO\AcquisitionContext;
 use App\DTO\DivestitureContext;
+use App\Service\Math\Valuation;
 use App\Service\Model\BusinessModelInterface;
 use App\Service\Corporate\Industry\IndustryShareLedger;
 
@@ -356,7 +358,7 @@ class MergerAndAcquisitionEngine
         // Struck as the market strikes it: cost of equity on the return on equity (MarketEngine).
         $valuationReturn = $ctx->strategy->getValuationReturn($ctx->trueReturn, $stock->getLongRunReturn() !== null ? (float) $stock->getLongRunReturn() : null, $ctx->health->costOfEquity);
         $equityRates = $ctx->strategy->getEquityValuationRates($stock, $valuationReturn, $ctx->health, $ctx->macroState->corporateTaxRate);
-        $ctx->fairValuePE = $this->mathUtility->calculateManagementFairValuePE(
+        $ctx->fairValuePE = Valuation::calculateManagementFairValuePE(
             $equityRates['costOfEquity'],
             $equityRates['equityReturn'],
             $ctx->strategy->getFadedSecularGrowthRate($stock, $ctx->macroState->totalTime),
@@ -613,7 +615,7 @@ class MergerAndAcquisitionEngine
 
             $lossGivenDefault = $ctx->strategy->getLossGivenDefault();
             
-            $distanceToDefault = $this->mathUtility->calculateDistanceToDefault(
+            $distanceToDefault = CreditRisk::calculateDistanceToDefault(
                 $newAssetValue,
                 max(0.01, $newNetDebt),
                 $newAssetVolatility,
@@ -621,7 +623,7 @@ class MergerAndAcquisitionEngine
                 self::MA_MERTON_MATURITY
             );
             
-            $projectedSpread = $this->mathUtility->calculateMertonCreditSpread($distanceToDefault, $lossGivenDefault, self::MA_MERTON_MATURITY);
+            $projectedSpread = CreditRisk::calculateMertonCreditSpread($distanceToDefault, $lossGivenDefault, self::MA_MERTON_MATURITY);
             
             $baselineCreditSpread = (float) $stock->getCreditSpread();
             $dynamicSpread = $baselineCreditSpread + $projectedSpread;

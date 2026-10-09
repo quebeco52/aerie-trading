@@ -37,6 +37,22 @@ use App\Service\Market\Pricing\LiquidityEngine;
  */
 final class OptionDemandEngine
 {
+    // --- Public Option Demand (Bollen & Whaley 2004 net buying pressure) ---
+    /** The public's net long position across a name's whole chain, in contracts, as a multiple of its average daily volume converted to contract-equivalents. The public is a persistent NET BUYER of options, which is the whole reason a dealer is structurally short them. */
+    public const OPTION_PUBLIC_OPEN_INTEREST_ADV_MULTIPLE = 0.50;
+    /** Absolute delta the public's demand is centred on. Open interest concentrates out of the money rather than at it: the buyer is paying for convexity, not for the underlying. */
+    public const OPTION_PUBLIC_TARGET_DELTA = 0.30;
+    /** Width of that concentration, in delta. Wide enough that the whole listed ladder carries some interest, narrow enough that the wings do not dominate it. */
+    public const OPTION_PUBLIC_DELTA_DISPERSION = 0.18;
+    /** Share of single-name public demand that goes to calls in calm conditions. Bollen & Whaley find net buying pressure in INDIVIDUAL equity options is call-driven — the lottery preference of Bali, Cakici & Whitelaw (2011) — where in index options it is puts. */
+    public const OPTION_PUBLIC_CALL_SHARE = 0.60;
+    /** Shift of that share toward puts per unit of market volatility above its baseline: hedging demand displaces lottery demand as the market becomes frightening, which is what steepens a skew in a selloff. */
+    public const OPTION_PUBLIC_FEAR_PUT_SENSITIVITY = 1.50;
+    /** Decay of demand with time to expiry, per year. Listed open interest is concentrated in the front months; the back months are quoted more than they are held. */
+    public const OPTION_PUBLIC_EXPIRY_DECAY = 2.00;
+    /** Years for public open interest to close 63% of the gap to its target. Positions are opened and rolled over weeks; a book that rebuilt itself every tick would be a flow, not a position. */
+    public const OPTION_PUBLIC_DEMAND_HORIZON_YEARS = 0.08;
+
     public function __construct(
         private readonly LiquidityEngine $liquidityEngine,
     ) {}
@@ -99,7 +115,7 @@ final class OptionDemandEngine
 
         // Exponential approach to target over the demand horizon, in time rather than in ticks so the book
         // is rebuilt at the same speed whatever the tick rate.
-        $approach = 1.0 - exp(-$dt / FinancialConstants::OPTION_PUBLIC_DEMAND_HORIZON_YEARS);
+        $approach = 1.0 - exp(-$dt / self::OPTION_PUBLIC_DEMAND_HORIZON_YEARS);
 
         foreach ($contracts as $contract) {
             $side = $contract->isCall() ? 'CALL' : 'PUT';
@@ -211,7 +227,7 @@ final class OptionDemandEngine
         $dailyVolumeInContracts = $this->liquidityEngine->structuralDailyVolume($stock)
             / (float) FinancialConstants::OPTION_CONTRACT_MULTIPLIER;
 
-        return $dailyVolumeInContracts * FinancialConstants::OPTION_PUBLIC_OPEN_INTEREST_ADV_MULTIPLE;
+        return $dailyVolumeInContracts * self::OPTION_PUBLIC_OPEN_INTEREST_ADV_MULTIPLE;
     }
 
     /**
@@ -226,8 +242,8 @@ final class OptionDemandEngine
             ? ($marketVolatility - $baselineVolatility) / $baselineVolatility
             : 0.0;
 
-        $share = FinancialConstants::OPTION_PUBLIC_CALL_SHARE
-            - (max(0.0, $fear) * FinancialConstants::OPTION_PUBLIC_FEAR_PUT_SENSITIVITY * FinancialConstants::OPTION_PUBLIC_CALL_SHARE);
+        $share = self::OPTION_PUBLIC_CALL_SHARE
+            - (max(0.0, $fear) * self::OPTION_PUBLIC_FEAR_PUT_SENSITIVITY * self::OPTION_PUBLIC_CALL_SHARE);
 
         return max(0.0, min(1.0, $share));
     }
@@ -242,11 +258,11 @@ final class OptionDemandEngine
      */
     public function demandWeight(OptionQuoteDTO $quote): float
     {
-        $moneyness = abs($quote->delta) - FinancialConstants::OPTION_PUBLIC_TARGET_DELTA;
-        $dispersion = FinancialConstants::OPTION_PUBLIC_DELTA_DISPERSION;
+        $moneyness = abs($quote->delta) - self::OPTION_PUBLIC_TARGET_DELTA;
+        $dispersion = self::OPTION_PUBLIC_DELTA_DISPERSION;
 
         $deltaWeight = exp(-($moneyness * $moneyness) / (2.0 * $dispersion * $dispersion));
-        $expiryWeight = exp(-FinancialConstants::OPTION_PUBLIC_EXPIRY_DECAY * $quote->timeToExpiry);
+        $expiryWeight = exp(-self::OPTION_PUBLIC_EXPIRY_DECAY * $quote->timeToExpiry);
 
         return $deltaWeight * $expiryWeight;
     }

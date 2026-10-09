@@ -3,7 +3,9 @@
 namespace App\Tests\Service\Math;
 
 use App\Service\Macro\MacroEngine;
+use App\Service\Math\CreditRisk;
 use App\Service\Math\MathUtility;
+use App\Service\Math\ResponseCurves;
 use App\Service\Math\StochasticProcesses;
 use PHPUnit\Framework\TestCase;
 
@@ -177,7 +179,7 @@ class MathUtilityTest extends TestCase
         // If there is no drift, no volatility, and no shocks, the price should remain exactly the same.
         // Beta is zero as well: a name with a beta carries the market's volatility through it, and would
         // owe the Ito correction on it even with no idiosyncratic volatility of its own.
-        $price = $this->mathUtility->calculateCorrelatedGBM(
+        $price = StochasticProcesses::calculateCorrelatedGBM(
             currentPrice: 100.0,
             idiosyncraticVolatility: 0.0,
             drift: 0.0,
@@ -197,7 +199,7 @@ class MathUtilityTest extends TestCase
         // With exactly 10% drift over 1 year (dt = 1.0) and no volatility,
         // the geometric expectation is CurrentPrice * exp(Drift).
         // 100 * exp(0.10) ≈ 110.517
-        $price = $this->mathUtility->calculateCorrelatedGBM(
+        $price = StochasticProcesses::calculateCorrelatedGBM(
             currentPrice: 100.0,
             idiosyncraticVolatility: 0.0,
             drift: 0.10,
@@ -215,7 +217,7 @@ class MathUtilityTest extends TestCase
     public function testCalculateCorrelatedGBMSystematicMarketShock(): void
     {
         // A positive market shock (marketZ = 1.0) with a 1.0 beta should push the price up.
-        $price = $this->mathUtility->calculateCorrelatedGBM(
+        $price = StochasticProcesses::calculateCorrelatedGBM(
             currentPrice: 100.0,
             idiosyncraticVolatility: 0.20,
             drift: 0.0,
@@ -234,7 +236,7 @@ class MathUtilityTest extends TestCase
     {
         // A negative idiosyncratic shock (w1 = -1.0) on a 0 beta stock should push the price down
         // independently of the broader market.
-        $price = $this->mathUtility->calculateCorrelatedGBM(
+        $price = StochasticProcesses::calculateCorrelatedGBM(
             currentPrice: 100.0,
             idiosyncraticVolatility: 0.20,
             drift: 0.0,
@@ -258,7 +260,7 @@ class MathUtilityTest extends TestCase
         $beta = 5.0;
         $marketVol = 0.80;
 
-        $up = $this->mathUtility->calculateCorrelatedGBM(
+        $up = StochasticProcesses::calculateCorrelatedGBM(
             currentPrice: 100.0,
             idiosyncraticVolatility: 0.05,
             drift: 0.0,
@@ -270,7 +272,7 @@ class MathUtilityTest extends TestCase
             w1: 0.0
         );
 
-        $flat = $this->mathUtility->calculateCorrelatedGBM(
+        $flat = StochasticProcesses::calculateCorrelatedGBM(
             currentPrice: 100.0,
             idiosyncraticVolatility: 0.05,
             drift: 0.0,
@@ -298,7 +300,7 @@ class MathUtilityTest extends TestCase
         $share = 0.20;
         $idiosyncraticVol = 0.30;
 
-        $sectorOnly = log($this->mathUtility->calculateCorrelatedGBM(
+        $sectorOnly = log(StochasticProcesses::calculateCorrelatedGBM(
             currentPrice: 100.0,
             idiosyncraticVolatility: $idiosyncraticVol,
             drift: 0.0,
@@ -312,7 +314,7 @@ class MathUtilityTest extends TestCase
             sectorVarianceShare: $share
         ) / 100.0) + (0.5 * $idiosyncraticVol * $idiosyncraticVol);
 
-        $idioOnly = log($this->mathUtility->calculateCorrelatedGBM(
+        $idioOnly = log(StochasticProcesses::calculateCorrelatedGBM(
             currentPrice: 100.0,
             idiosyncraticVolatility: $idiosyncraticVol,
             drift: 0.0,
@@ -444,16 +446,16 @@ class MathUtilityTest extends TestCase
     public function testCalculateConvexPenalty(): void
     {
         // Zero or negative shock yields 0 penalty
-        $this->assertEquals(0.0, $this->mathUtility->calculateConvexPenalty(0.0, 2.0, 1.5));
-        $this->assertEquals(0.0, $this->mathUtility->calculateConvexPenalty(-0.05, 2.0, 1.5));
+        $this->assertEquals(0.0, ResponseCurves::calculateConvexPenalty(0.0, 2.0, 1.5));
+        $this->assertEquals(0.0, ResponseCurves::calculateConvexPenalty(-0.05, 2.0, 1.5));
 
         // 5% shock (0.05) with quadratic convexity (2.0) and scalar 2.0
         // (0.05)^2 * 2.0 = 0.0025 * 2.0 = 0.005
-        $this->assertEqualsWithDelta(0.005, $this->mathUtility->calculateConvexPenalty(0.05, 2.0, 2.0), 0.00001);
+        $this->assertEqualsWithDelta(0.005, ResponseCurves::calculateConvexPenalty(0.05, 2.0, 2.0), 0.00001);
 
         // 10% shock (0.10) with convexity 2.0 and scalar 2.0 -> (0.10)^2 * 2.0 = 0.02
         // Quadruples penalty for doubling shock (convex property)
-        $this->assertEqualsWithDelta(0.02, $this->mathUtility->calculateConvexPenalty(0.10, 2.0, 2.0), 0.00001);
+        $this->assertEqualsWithDelta(0.02, ResponseCurves::calculateConvexPenalty(0.10, 2.0, 2.0), 0.00001);
     }
 
     public function testGenerateUniformAndUniformBetween(): void
@@ -529,7 +531,7 @@ class MathUtilityTest extends TestCase
     public function testCalculateCIR(): void
     {
         // Exact mean reversion without diffusion (dW = 0)
-        $val = $this->mathUtility->calculateCIR(
+        $val = StochasticProcesses::calculateCIR(
             currentValue: 0.02,
             kappa: 2.0,
             theta: 0.05,
@@ -541,7 +543,7 @@ class MathUtilityTest extends TestCase
         $this->assertLessThanOrEqual(0.05, $val, 'Value must not overshoot theta without noise.');
 
         // Negative diffusion shock with low value must be floored at 0.0001 failsafe
-        $floored = $this->mathUtility->calculateCIR(
+        $floored = StochasticProcesses::calculateCIR(
             currentValue: 0.0001,
             kappa: 2.0,
             theta: 0.01,
@@ -609,30 +611,30 @@ class MathUtilityTest extends TestCase
     public function testCalculateDistanceToDefault(): void
     {
         // Zero debt -> safe 10.0 SD default
-        $this->assertSame(10.0, $this->mathUtility->calculateDistanceToDefault(100.0, 0.0, 0.20, 0.04));
+        $this->assertSame(10.0, CreditRisk::calculateDistanceToDefault(100.0, 0.0, 0.20, 0.04));
 
         // Healthy balance sheet: Assets = $200M, Debt = $50M, Vol = 20%, Rf = 4%, T = 1yr
-        $ddHealthy = $this->mathUtility->calculateDistanceToDefault(200.0, 50.0, 0.20, 0.04, 1.0);
+        $ddHealthy = CreditRisk::calculateDistanceToDefault(200.0, 50.0, 0.20, 0.04, 1.0);
         $this->assertGreaterThan(5.0, $ddHealthy, 'Healthy firm should have high distance to default (> 5 SD).');
 
         // Distressed balance sheet: Assets = $100M, Debt = $120M, Vol = 40%, Rf = 4%, T = 1yr
-        $ddDistressed = $this->mathUtility->calculateDistanceToDefault(100.0, 120.0, 0.40, 0.04, 1.0);
+        $ddDistressed = CreditRisk::calculateDistanceToDefault(100.0, 120.0, 0.40, 0.04, 1.0);
         $this->assertLessThan(0.0, $ddDistressed, 'Insolvent firm should have negative distance to default (< 0 SD).');
     }
 
     public function testCalculateMertonCreditSpread(): void
     {
         // Safe firm (DD = 5.0) -> Spread near 0 bps
-        $spreadSafe = $this->mathUtility->calculateMertonCreditSpread(5.0, 0.40, 1.0);
+        $spreadSafe = CreditRisk::calculateMertonCreditSpread(5.0, 0.40, 1.0);
         $this->assertLessThan(0.0001, $spreadSafe, 'High DD must produce negligible credit spread.');
 
         // Borderline firm (DD = 2.0) -> Moderate spread (~50-150 bps)
-        $spreadModerate = $this->mathUtility->calculateMertonCreditSpread(2.0, 0.40, 1.0);
+        $spreadModerate = CreditRisk::calculateMertonCreditSpread(2.0, 0.40, 1.0);
         $this->assertGreaterThan(0.005, $spreadModerate);
         $this->assertLessThan(0.050, $spreadModerate);
 
         // Distressed firm (DD = -1.0) -> Blown-out spread
-        $spreadDistressed = $this->mathUtility->calculateMertonCreditSpread(-1.0, 0.40, 1.0);
+        $spreadDistressed = CreditRisk::calculateMertonCreditSpread(-1.0, 0.40, 1.0);
         $this->assertGreaterThan(0.20, $spreadDistressed, 'Distressed firm must have high credit spread.');
         $this->assertLessThanOrEqual(1.0, $spreadDistressed, 'Credit spread must be capped at 1.0 (10,000 bps).');
     }

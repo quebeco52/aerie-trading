@@ -26,6 +26,12 @@ use App\Service\Market\Option\OptionMarginCalculator;
  */
 final class MarginEngine
 {
+    // --- Margin Accounts (Regulation T) ---
+    /** Extra equity a forced liquidation restores beyond the bare minimum, so the account is not called again on the next tick. */
+    public const LIQUIDATION_EQUITY_BUFFER = 0.05;
+    /** Ceiling on the fraction of a position that one margin call may liquidate. */
+    public const MAX_LIQUIDATION_FRACTION = 1.00;
+
     public function __construct(
         private readonly EntityManagerInterface $entityManager,
         private readonly OptionMarginCalculator $optionMarginCalculator,
@@ -173,11 +179,11 @@ final class MarginEngine
             return 0.0;
         }
 
-        $targetRate = FinancialConstants::MAINTENANCE_MARGIN_LONG + FinancialConstants::LIQUIDATION_EQUITY_BUFFER;
+        $targetRate = FinancialConstants::MAINTENANCE_MARGIN_LONG + self::LIQUIDATION_EQUITY_BUFFER;
         $required = $status->longMarketValue - ($status->equity / max(0.01, $targetRate));
 
         return min(
-            $status->longMarketValue * FinancialConstants::MAX_LIQUIDATION_FRACTION,
+            $status->longMarketValue * self::MAX_LIQUIDATION_FRACTION,
             max(0.0, $required)
         );
     }

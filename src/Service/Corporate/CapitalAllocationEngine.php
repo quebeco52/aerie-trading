@@ -5,9 +5,9 @@ declare(strict_types=1);
 namespace App\Service\Corporate;
 
 use App\Entity\Stock;
+use App\Service\Math\Valuation;
 use Doctrine\ORM\EntityManagerInterface;
 use App\Service\Macro\MacroEngine;
-use App\Service\Math\FinancialConstants;
 use App\Service\Math\MathUtility;
 use App\DTO\CapitalAllocationContext;
 use App\DTO\MacroStateDTO;
@@ -29,6 +29,16 @@ class CapitalAllocationEngine
     // --- Leverage Targeting ---
     /** Share of the gap to its target leverage a firm closes each year: about a third (Flannery & Rangan 2006). */
     public const LEVERAGE_TARGET_ADJUSTMENT_SPEED = 0.34;
+
+    // --- Capital Allocation & Life-Cycle Physics ---
+    /** Discount to intrinsic book at which a board starts repurchasing for the accretion itself. Below this the gap is inside the noise a board would act on. */
+    public const MIN_ACCRETIVE_REPURCHASE_DISCOUNT = 0.05;
+    /** Fraction of excess cash allocated to quarterly buybacks for saturated firms (50%). */
+    public const BUYBACK_SPEND_SATURATED_RATIO = 0.50;
+    /** Fraction of excess cash allocated to quarterly buybacks for mega-hoarder saturated firms (70%). */
+    public const BUYBACK_SPEND_MEGA_SATURATED_RATIO = 0.70;
+    /** Maximum market cap percentage (15%) a fully saturated firm can repurchase in a single quarter. */
+    public const MAX_REGULATORY_SPEND_SATURATED = 0.15;
 
     public function __construct(
         private CorporateLedgerService $corporateLedgerService,
@@ -370,7 +380,7 @@ class CapitalAllocationEngine
         // market strikes it (MarketEngine); the spread above stays ROIC against the hurdle, an EVA test.
         $valuationReturn = $ctx->strategy->getValuationReturn($trueReturn, $stock->getLongRunReturn() !== null ? (float) $stock->getLongRunReturn() : null, $ctx->health->costOfEquity);
         $equityRates = $ctx->strategy->getEquityValuationRates($stock, $valuationReturn, $ctx->health, $ctx->macroState->corporateTaxRate);
-        $fairValuePE = $this->mathUtility->calculateManagementFairValuePE(
+        $fairValuePE = Valuation::calculateManagementFairValuePE(
             $equityRates['costOfEquity'],
             $equityRates['equityReturn'],
             $ctx->strategy->getFadedSecularGrowthRate($stock, $ctx->macroState->totalTime),
@@ -389,7 +399,7 @@ class CapitalAllocationEngine
         // closed-end structure that test can never find it, because a trust's economic spread sits at zero
         // and the discount inflates the very P/E being compared.
         $repurchaseAccretion = $ctx->strategy->resolveRepurchaseAccretion($stock, $ctx->currentPrice);
-        $isTradingBelowBook = $repurchaseAccretion >= FinancialConstants::MIN_ACCRETIVE_REPURCHASE_DISCOUNT;
+        $isTradingBelowBook = $repurchaseAccretion >= self::MIN_ACCRETIVE_REPURCHASE_DISCOUNT;
 
         if (($economicSpread > 0.02 && $ctx->currentPE < ($fairValuePE + 3.0)) || $isHoarder || $isUnderLeveraged || $capitalSurplusReturn > 0.0 || $saturationSeverity > 0.20 || $isTradingBelowBook) {
             $maxWillingSpend = $ctx->strategy->calculateMaxBuybackSpend($excessCash, $ctx->retainedEarningsThisQuarter, $isMegaHoarder);
@@ -397,8 +407,8 @@ class CapitalAllocationEngine
             // Saturation Buyback Unlock: Mature firms distribute non-reinvestable excess cash
             if ($saturationSeverity > 0.05) {
                 $saturationSpendRatio = $isMegaHoarder
-                    ? FinancialConstants::BUYBACK_SPEND_MEGA_SATURATED_RATIO
-                    : FinancialConstants::BUYBACK_SPEND_SATURATED_RATIO;
+                    ? self::BUYBACK_SPEND_MEGA_SATURATED_RATIO
+                    : self::BUYBACK_SPEND_SATURATED_RATIO;
                 $saturationWillingSpend = $excessCash * $saturationSpendRatio * $saturationSeverity;
                 $maxWillingSpend = max($maxWillingSpend, $saturationWillingSpend);
             }
@@ -412,7 +422,7 @@ class CapitalAllocationEngine
 
             $marketCap = $ctx->sharesOutstanding * max($ctx->currentPrice, 0.01);
             $baseRegulatoryPct = $isMegaHoarder ? 0.075 : ($isHoarder ? 0.05 : 0.015);
-            $effectiveRegulatoryPct = $baseRegulatoryPct + (FinancialConstants::MAX_REGULATORY_SPEND_SATURATED - $baseRegulatoryPct) * $saturationSeverity;
+            $effectiveRegulatoryPct = $baseRegulatoryPct + (self::MAX_REGULATORY_SPEND_SATURATED - $baseRegulatoryPct) * $saturationSeverity;
             $maxRegulatorySpend = $marketCap * $effectiveRegulatoryPct;
 
             if ($isUnderLeveraged || $capitalSurplusReturn > 0.0) {

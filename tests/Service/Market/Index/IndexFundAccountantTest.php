@@ -254,7 +254,7 @@ class IndexFundAccountantTest extends TestCase
         $em->expects($this->never())->method('getConnection');
 
         $fund = $this->fund();
-        $tiny = FinancialConstants::FUND_MINIMUM_DISTRIBUTION / 2.0;
+        $tiny = IndexFundAccountant::FUND_MINIMUM_DISTRIBUTION / 2.0;
         $fund->setAccruedIncome($tiny);
 
         $paid = $this->accountant($em)->distribute($fund, new \DateTime());

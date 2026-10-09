@@ -8,7 +8,6 @@ use App\DTO\ActualFinancialsDTO;
 use App\DTO\SectorCoverageProfile;
 use App\Entity\Stock;
 use App\Service\Market\Pricing\MarketConsensusEngine;
-use App\Service\Math\FinancialConstants;
 use App\Service\Math\MathUtility;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\TestCase;
@@ -94,7 +93,7 @@ final class ReportedKpiConsensusTest extends TestCase
         $extreme = $this->consensusRevenue(50.0);
 
         $this->assertLessThanOrEqual(
-            $neutral * (1.0 + FinancialConstants::MAX_BOOK_TO_BILL_CONSENSUS_TILT) + 1.0,
+            $neutral * (1.0 + MarketConsensusEngine::MAX_BOOK_TO_BILL_CONSENSUS_TILT) + 1.0,
             $extreme,
             'The forward tilt must stay inside its cap however large the disclosed order book.'
         );

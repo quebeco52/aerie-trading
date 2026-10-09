@@ -1290,7 +1290,7 @@ class TreasuryEngineTest extends TestCase
         $this->assertGreaterThan(0.0, $ctx->assetSaleProceeds, 'the book was sold down');
         $this->assertEqualsWithDelta($minOperatingCash, (float) $stock->getCorporateTreasury(), 1.0, 'cash is restored to the operating floor');
 
-        $haircut = \App\Service\Math\FinancialConstants::EARNING_ASSET_FIRE_SALE_HAIRCUT;
+        $haircut = TreasuryEngine::EARNING_ASSET_FIRE_SALE_HAIRCUT;
         $this->assertEqualsWithDelta($ctx->assetSaleProceeds * $haircut / (1.0 - $haircut), $ctx->assetSaleLoss, 1.0, 'the loss is the haircut on what was sold');
         $this->assertLessThan(5_000_000_000.0, (float) $stock->getEarningAssets());
         $this->assertLessThan(100_000_000.0, (float) $stock->getCreditLossAllowance(), 'the allowance on the slice sold leaves with it');

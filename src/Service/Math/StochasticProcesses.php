@@ -416,4 +416,86 @@ final class StochasticProcesses
         $tightnessRatio = $neutralSlack / $bufferSlack;
         return $yieldScale * (pow($tightnessRatio, $exponent) - 1.0);
     }
+
+    /**
+     * Calculates a step in the Cox-Ingersoll-Ross (CIR) process.
+     * Used to model mean-reverting, strictly positive continuous processes (like operating margins).
+     *
+     * @param float $currentValue The current state variable.
+     * @param float $kappa        The speed of mean reversion.
+     * @param float $theta        The long-term structural target.
+     * @param float $sigma        The volatility of the process.
+     * @param float $dt           The time step delta.
+     * @param float $dW           The Brownian motion Z-score.
+     * @return float The next value in the process.
+     */
+    public static function calculateCIR(float $currentValue, float $kappa, float $theta, float $sigma, float $dt, float $dW): float
+    {
+        $currentValue = max(0.0001, $currentValue);
+        // Exact exponential discretization for mean-reversion drift prevents Euler overshooting when kappa * dt > 1.0
+        $drift = ($theta - $currentValue) * (1.0 - exp(-$kappa * $dt));
+        $diffusion = $sigma * sqrt($currentValue) * sqrt($dt) * $dW;
+
+        return max(0.0001, $currentValue + $drift + $diffusion);
+    }
+
+    /**
+     * Weight on a fresh innovation that keeps an AR(1) series at unit variance: sqrt(1 - phi^2). Shared by
+     * the draw itself and by anyone attributing a realized Z back to the factors that entered it.
+     */
+    public static function persistentInnovationScale(float $phi): float
+    {
+        return sqrt(max(0.0, 1.0 - ($phi * $phi)));
+    }
+
+    /**
+     * Calculates the next price using Geometric Brownian Motion (GBM) with correlated market drift.
+     *
+     * @param float $currentPrice             The current price of the stock.
+     * @param float $idiosyncraticVolatility  The current instantaneous IDIOSYNCRATIC volatility. The market
+     *                                        loading is supplied outright by beta and marketVol, so total
+     *                                        volatility is sqrt((beta * marketVol)^2 + this^2).
+     * @param float $drift             The expected return (drift) of the stock.
+     * @param float $gravityDrift      The mean reversion drift pulling to fair value.
+     * @param float $dt                The time step in years.
+     * @param float $beta              The stock's beta (sensitivity to market movements).
+     * @param float $marketVol         The volatility of the broader market.
+     * @param float $marketZ           The systemic market shock Z-score.
+     * @param float $w1                The idiosyncratic shock Z-score.
+     * @param float $sectorZ           The shock Z-score common to this stock's macro sector.
+     * @param float $sectorVarianceShare Fraction of NON-market variance loaded onto the sector factor.
+     * @return float The new price calculated via GBM.
+     */
+    public static function calculateCorrelatedGBM(
+        float $currentPrice,
+        float $idiosyncraticVolatility,
+        float $drift,
+        float $gravityDrift,
+        float $dt,
+        float $beta,
+        float $marketVol,
+        float $marketZ,
+        float $w1,
+        float $sectorZ = 0.0,
+        float $sectorVarianceShare = 0.0
+    ): float {
+        // Three-way orthogonal variance decomposition: systematic market factor, sector factor, and idiosyncratic residual.
+        $boundedShare = max(0.0, min(1.0, $sectorVarianceShare));
+        $residualVol = max(0.0, $idiosyncraticVolatility);
+        $sectorLoading = $residualVol * sqrt($boundedShare);
+        $idiosyncraticLoading = $residualVol * sqrt(1.0 - $boundedShare);
+
+        $sqrtDt = sqrt($dt);
+        $systematicDrift = $beta * $marketVol * $marketZ * $sqrtDt;
+        $sectorDrift = $sectorLoading * $sectorZ * $sqrtDt;
+        $idiosyncraticDrift = $idiosyncraticLoading * $w1 * $sqrtDt;
+
+        // Apply Ito correction to total variance (systematic plus idiosyncratic).
+        $totalVariance = ($beta * $marketVol * $beta * $marketVol) + ($residualVol * $residualVol);
+
+        $gbmExponent = ($drift + $gravityDrift - 0.5 * $totalVariance) * $dt
+            + $systematicDrift + $sectorDrift + $idiosyncraticDrift;
+
+        return $currentPrice * exp($gbmExponent);
+    }
 }

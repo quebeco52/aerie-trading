@@ -67,6 +67,18 @@ final class AgentFlowEngine
     /** Key of the average log mispricing in the cross-section record. */
     private const CROSS_SECTION_MISPRICING = 'log_mispricing';
 
+    // --- Agent Capital & Positioning ---
+    /** Unit of agent capital per name, as a multiple of its STRUCTURAL average daily volume. A fully committed belief or structural holder is sized against it; the competing beliefs share one unit between them and each structural holder carries its own share of one. */
+    public const AGENT_CAPITAL_ADV_MULTIPLE = 3.00;
+    /** Time an agent takes to work its book 63% of the way to target, in years (~1 trading day; ~95% done in three). In time rather than per tick so the same book is worked the same way at any tick rate. */
+    public const AGENT_POSITION_HORIZON_YEARS = 0.004;
+    /** Overall scale on the agent books. Multiplies the capital unit, so flow scales with it and the variance the agents supply to the price with its square: the single number to turn when handing more of the market's variance from the diffusion to the agents. Zero winds every book down over the position horizon and leaves no agents. */
+    public const AGENT_FLOW_INTENSITY = 1.00;
+
+    // --- Agent Signals ---
+    /** The most recent month the chartists' formation window skips: last month's winners reverse (Jegadeesh 1990), so momentum is formed on the months before it (Jegadeesh & Titman 1993; the Fama-French UMD factor skips one month). */
+    public const AGENT_MOMENTUM_SKIP_YEARS = 1.0 / 12.0;
+
     /**
      * @param iterable<AgentStrategyInterface>     $strategies
      * @param iterable<LiquidityProviderInterface> $providers
@@ -170,8 +182,8 @@ final class AgentFlowEngine
         // the first version did, changed only how fast the same book was reached — and past 1/adjustment
         // it overshot the target, at a threshold that moved with the tick rate.
         $capacity = $view->averageDailyVolume
-            * FinancialConstants::AGENT_CAPITAL_ADV_MULTIPLE
-            * FinancialConstants::AGENT_FLOW_INTENSITY;
+            * self::AGENT_CAPITAL_ADV_MULTIPLE
+            * self::AGENT_FLOW_INTENSITY;
 
         $state = $this->stateStore->read($view->ticker);
         // A book opened this tick is built on today's capacity, which is already in post-split shares, so
@@ -207,7 +219,7 @@ final class AgentFlowEngine
         $view = $view->withAttention($attention['move'], $attention['volume'], $attention['news']);
 
         // The last month's move, as a leaky sum over AGENT_MOMENTUM_SKIP_YEARS: the stretch the chartists skip.
-        $recentMonth = ((float) ($state['skip'] ?? 0.0) * exp(-max(0.0, $view->dt) / FinancialConstants::AGENT_MOMENTUM_SKIP_YEARS)) + $view->logReturn;
+        $recentMonth = ((float) ($state['skip'] ?? 0.0) * exp(-max(0.0, $view->dt) / self::AGENT_MOMENTUM_SKIP_YEARS)) + $view->logReturn;
         $view = $view->withRecentMonthTrend($recentMonth);
 
         // This name's score feeds the style score the NEXT tick reads. The one read at the open is what
@@ -226,7 +238,7 @@ final class AgentFlowEngine
 
         // Worked over a horizon in simulated time, not a fixed slice per tick: a per-tick fraction would
         // make the same book fire in half a day at one tick rate and take a week at another.
-        $adjustment = 1.0 - exp(-$view->dt / FinancialConstants::AGENT_POSITION_HORIZON_YEARS);
+        $adjustment = 1.0 - exp(-$view->dt / self::AGENT_POSITION_HORIZON_YEARS);
 
         $flow = 0.0;
         $updatedPositions = $positions;

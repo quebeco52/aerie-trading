@@ -80,6 +80,22 @@ class MarketEngine
     /** Cap on the fundamental growth a retained-earnings calculation may imply for the dividend stream. */
     private const MAX_DIVIDEND_IMPLIED_GROWTH = 0.04;
 
+    // --- Relative Valuation Shrinkage (Vasicek 1973) ---
+    /** Minimum price-to-sales multiple clamp during valuation stress. */
+    public const MIN_PS_FALLBACK_MULT = 0.2;
+    /** Maximum price-to-sales multiple clamp during valuation expansion. */
+    public const MAX_PS_FALLBACK_MULT = 5.0;
+    /** Multiplier scaling liquidity drag when systemic interbank funding spreads widen. */
+    public const FUNDING_LIQUIDITY_STRESS_FACTOR = 2.0;
+
+    // --- Institutional & Market Architecture ---
+    /** Circuit breaker on the continuous diffusion, as the largest move of a single trading DAY; scaled by the square root of the step actually taken. */
+    public const MAX_DAILY_PRICE_CIRCUIT_BREAKER = 0.40;
+
+    // --- Market Microstructure: Order Flow Variance Budget ---
+    /** Ceiling on the share of long-run variance order flow may reclaim from the diffusion. */
+    public const MAX_IMPACT_VARIANCE_DRAG_SHARE = 0.25;
+
     public function __construct(
         private MathUtility $mathUtility
     ) {}
@@ -417,7 +433,7 @@ class MarketEngine
         // Order-flow variance budget: deduct measured impact variance from diffusion variance.
         $impactVariance = min(
             max(0.0, $orderFlowVariance),
-            $longTermIdiosyncraticVar * FinancialConstants::MAX_IMPACT_VARIANCE_DRAG_SHARE
+            $longTermIdiosyncraticVar * self::MAX_IMPACT_VARIANCE_DRAG_SHARE
         );
 
         // Announcement variance budget: a report or a warning is a scheduled jump (Dubinsky, Johannes, Kaeck &
@@ -520,7 +536,7 @@ class MarketEngine
         // The sector factor is the second common driver: without it two banks co-move only through their
         // betas, so a sector rotation is invisible in prices between reporting dates. The loading is a
         // share of the NON-market residual, so total step variance is unchanged either way.
-        $gbmPrice = $this->mathUtility->calculateCorrelatedGBM(
+        $gbmPrice = StochasticProcesses::calculateCorrelatedGBM(
             currentPrice: $currentPrice,
             idiosyncraticVolatility: sqrt(max(0.0, $currentIdiosyncraticVar)),
             drift: $finalDrift,
@@ -545,7 +561,7 @@ class MarketEngine
 
         // Circuit breaker: clamp single-step move symmetrically in log space scaled by sqrt(dt).
         $stepDays = max(0.0, $dt) * FinancialConstants::TRADING_DAYS_PER_YEAR;
-        $maxLogMove = log(1.0 + FinancialConstants::MAX_DAILY_PRICE_CIRCUIT_BREAKER) * sqrt($stepDays);
+        $maxLogMove = log(1.0 + self::MAX_DAILY_PRICE_CIRCUIT_BREAKER) * sqrt($stepDays);
 
         $minPriceFloor = max(0.01, $currentPrice * exp(-$maxLogMove));
         $maxPriceCeiling = $currentPrice * exp($maxLogMove);
@@ -774,8 +790,8 @@ class MarketEngine
         $impliedMargin = max(self::MIN_IMPLIED_NET_MARGIN, min(self::MAX_IMPLIED_NET_MARGIN, $trueMargin));
         
         $psMultiple = max(
-            FinancialConstants::MIN_PS_FALLBACK_MULT,
-            min(FinancialConstants::MAX_PS_FALLBACK_MULT, max(self::MIN_PS_ANCHOR_PE, $fairValuePE) * $impliedMargin)
+            self::MIN_PS_FALLBACK_MULT,
+            min(self::MAX_PS_FALLBACK_MULT, max(self::MIN_PS_ANCHOR_PE, $fairValuePE) * $impliedMargin)
         );
         $revenueFloorValue = $revenuePerShare * $psMultiple;
         $revenueFloorEquityValue = max(0.01, $revenueFloorValue - $netDebtPerShare);
@@ -843,7 +859,7 @@ class MarketEngine
         // Brunnermeier-Pedersen Funding Liquidity Dampener (2009)
         // During macroeconomic stress and systemic crises, funding liquidity dries up and capital-constrained 
         // arbitrageurs pull back, slowing down market efficiency and price correction speed.
-        $liquidityDampener = 1.0 / (1.0 + ($systemicStressIndex * FinancialConstants::FUNDING_LIQUIDITY_STRESS_FACTOR));
+        $liquidityDampener = 1.0 / (1.0 + ($systemicStressIndex * self::FUNDING_LIQUIDITY_STRESS_FACTOR));
         $dynamicReversion = $reversionSpeed * $liquidityDampener;
 
         return [

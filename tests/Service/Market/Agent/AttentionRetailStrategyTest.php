@@ -63,7 +63,7 @@ final class AttentionRetailStrategyTest extends TestCase
     public function testAQuietNameIsHeldAtTheBaseShare(): void
     {
         self::assertEqualsWithDelta(
-            FinancialConstants::AGENT_RETAIL_BASE_SHARE,
+            AttentionRetailStrategy::AGENT_RETAIL_BASE_SHARE,
             $this->strategy->signal($this->view(), []),
             1e-9
         );
@@ -75,25 +75,25 @@ final class AttentionRetailStrategyTest extends TestCase
      */
     public function testAttentionIsOnTheSizeOfTheMoveAndNotItsSign(): void
     {
-        $move = $this->tickSigma() * FinancialConstants::AGENT_RETAIL_RETURN_SIGMA;
+        $move = $this->tickSigma() * AttentionRetailStrategy::AGENT_RETAIL_RETURN_SIGMA;
 
         $up = $this->strategy->signal($this->view(logReturn: $move), []);
         $down = $this->strategy->signal($this->view(logReturn: -$move), []);
 
         self::assertEqualsWithDelta($up, $down, 1e-9);
-        self::assertGreaterThan(FinancialConstants::AGENT_RETAIL_BASE_SHARE, $down, 'A crash is attention too.');
+        self::assertGreaterThan(AttentionRetailStrategy::AGENT_RETAIL_BASE_SHARE, $down, 'A crash is attention too.');
     }
 
     public function testTheReturnLegSaturatesAtTheConfiguredSigma(): void
     {
-        $saturating = $this->tickSigma() * FinancialConstants::AGENT_RETAIL_RETURN_SIGMA;
+        $saturating = $this->tickSigma() * AttentionRetailStrategy::AGENT_RETAIL_RETURN_SIGMA;
 
         $atSaturation = $this->strategy->signal($this->view(logReturn: $saturating), []);
         $beyond = $this->strategy->signal($this->view(logReturn: $saturating * 4.0), []);
 
         self::assertEqualsWithDelta($atSaturation, $beyond, 1e-9, 'Attention is bounded; a ten-sigma move is not ten times the story.');
         self::assertEqualsWithDelta(
-            FinancialConstants::AGENT_RETAIL_BASE_SHARE + FinancialConstants::AGENT_RETAIL_MAX_ATTENTION_TILT,
+            AttentionRetailStrategy::AGENT_RETAIL_BASE_SHARE + AttentionRetailStrategy::AGENT_RETAIL_MAX_ATTENTION_TILT,
             $atSaturation,
             1e-9
         );
@@ -116,11 +116,11 @@ final class AttentionRetailStrategyTest extends TestCase
     public function testAbnormalVolumeRaisesAttentionOnItsOwn(): void
     {
         $quiet = $this->strategy->signal($this->view(), []);
-        $busy = $this->strategy->signal($this->view(abnormalVolume: FinancialConstants::AGENT_RETAIL_VOLUME_MULTIPLE), []);
+        $busy = $this->strategy->signal($this->view(abnormalVolume: AttentionRetailStrategy::AGENT_RETAIL_VOLUME_MULTIPLE), []);
 
         self::assertGreaterThan($quiet, $busy);
         self::assertEqualsWithDelta(
-            FinancialConstants::AGENT_RETAIL_BASE_SHARE + FinancialConstants::AGENT_RETAIL_MAX_ATTENTION_TILT,
+            AttentionRetailStrategy::AGENT_RETAIL_BASE_SHARE + AttentionRetailStrategy::AGENT_RETAIL_MAX_ATTENTION_TILT,
             $busy,
             1e-9
         );
@@ -129,7 +129,7 @@ final class AttentionRetailStrategyTest extends TestCase
     public function testVolumeBelowNormalIsNotNegativeAttention(): void
     {
         self::assertEqualsWithDelta(
-            FinancialConstants::AGENT_RETAIL_BASE_SHARE,
+            AttentionRetailStrategy::AGENT_RETAIL_BASE_SHARE,
             $this->strategy->signal($this->view(abnormalVolume: 0.1), []),
             1e-9
         );
@@ -180,13 +180,13 @@ final class AttentionRetailStrategyTest extends TestCase
     public function testADegenerateViewIsNotAnAttentionEpisode(): void
     {
         self::assertEqualsWithDelta(
-            FinancialConstants::AGENT_RETAIL_BASE_SHARE,
+            AttentionRetailStrategy::AGENT_RETAIL_BASE_SHARE,
             $this->strategy->signal($this->view(logReturn: 0.5, annualizedVolatility: 0.0), []),
             1e-9,
             'A name with no volatility measure yet has no scale to call a move extreme against.'
         );
         self::assertEqualsWithDelta(
-            FinancialConstants::AGENT_RETAIL_BASE_SHARE,
+            AttentionRetailStrategy::AGENT_RETAIL_BASE_SHARE,
             $this->strategy->signal($this->view(logReturn: 0.5, dt: 0.0), []),
             1e-9
         );

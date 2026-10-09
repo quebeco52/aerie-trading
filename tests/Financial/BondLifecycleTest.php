@@ -249,18 +249,18 @@ class BondLifecycleTest extends TestCase
             $byTenor[(string) (float) $bond->getTenorYears()][] = $bond;
         }
 
-        foreach (FinancialConstants::BOND_AUCTION_TENORS as $tenor) {
+        foreach (TreasuryAuctionService::BOND_AUCTION_TENORS as $tenor) {
             $key = (string) (float) $tenor;
             $this->assertArrayHasKey($key, $byTenor, "The {$tenor}y bucket emptied out.");
 
             // Outstanding issues at a tenor converge on tenor * auctions-per-year, because that is how many
             // are sold before the oldest one redeems. The thirty-year has not started retiring yet.
-            $expected = min($tenor, self::YEARS) * FinancialConstants::BOND_AUCTIONS_PER_YEAR;
+            $expected = min($tenor, self::YEARS) * TreasuryAuctionService::BOND_AUCTIONS_PER_YEAR;
 
             $this->assertEqualsWithDelta(
                 $expected,
                 count($byTenor[$key]),
-                FinancialConstants::BOND_AUCTIONS_PER_YEAR,
+                TreasuryAuctionService::BOND_AUCTIONS_PER_YEAR,
                 "The {$tenor}y bucket is not at its steady-state size."
             );
 

@@ -157,7 +157,7 @@ class MarketStatisticalInvariantTest extends TestCase
 
             $indexBefore = array_sum($prices);
             foreach ($prices as $ticker => $price) {
-                $diffused = $this->math->calculateCorrelatedGBM(
+                $diffused = StochasticProcesses::calculateCorrelatedGBM(
                     currentPrice: $price,
                     // The state carries idiosyncratic variance only; the market loading is beta * marketVol,
                     // supplied outright by the diffusion, so the name's total volatility is the two combined.

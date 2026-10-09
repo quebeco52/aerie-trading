@@ -7,7 +7,6 @@ namespace App\Tests\Service\Market\Ticker;
 use App\Entity\SimulationClock;
 use App\Service\Market\Option\OptionChainService;
 use App\Service\Market\Ticker\SimulationClockService;
-use App\Service\Math\FinancialConstants;
 use Doctrine\DBAL\Connection;
 use Doctrine\ORM\EntityManagerInterface;
 use PHPUnit\Framework\TestCase;
@@ -158,7 +157,7 @@ class SimulationClockTest extends TestCase
 
     public function testAListedSerialProvesTheClockStoodAtLeastThatFarBack(): void
     {
-        $furthest = max(FinancialConstants::OPTION_EXPIRY_MONTHS);
+        $furthest = max(OptionChainService::OPTION_EXPIRY_MONTHS);
 
         // A serial is only ever opened at most that many months ahead, so its own expiry minus that span is
         // the earliest the clock can have been when it was written.

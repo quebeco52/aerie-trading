@@ -102,7 +102,6 @@ class MergerAndAcquisitionEngineTest extends TestCase
         $this->debtEngineMock->method('analyzeDebtHealth')->willReturn($debtHealthMock);
         $this->debtEngineMock->method('analyzeTrailingDebtHealth')->willReturn($debtHealthMock);
         $this->corporateMetricsMock->method('calculateOperatingBase')->willReturn(15000000000.0);
-        $this->mathUtilityMock->method('calculateManagementFairValuePE')->willReturn(15.0);
         $this->mathUtilityMock->method('calculateLogNormalSynergy')->willReturn(1.10);
         $this->mathUtilityMock->method('checkProbability')->willReturn(true);
         $this->mathUtilityMock->method('generateUniformBetween')->willReturn(0.80);
@@ -180,7 +179,6 @@ class MergerAndAcquisitionEngineTest extends TestCase
         $this->debtEngineMock->method('analyzeDebtHealth')->willReturn($debtHealthMock);
         $this->debtEngineMock->method('analyzeTrailingDebtHealth')->willReturn($debtHealthMock);
         $this->corporateMetricsMock->method('calculateOperatingBase')->willReturn(15000000000.0);
-        $this->mathUtilityMock->method('calculateManagementFairValuePE')->willReturn(15.0);
         $this->mathUtilityMock->method('calculateLogNormalSynergy')->willReturn(1.10);
         $this->mathUtilityMock->method('checkProbability')->willReturn(true);
         $this->mathUtilityMock->method('generateUniformBetween')->willReturn(0.80);
@@ -327,7 +325,6 @@ class MergerAndAcquisitionEngineTest extends TestCase
         $this->debtEngineMock->method('analyzeDebtHealth')->willReturn($debtHealthMock);
         $this->debtEngineMock->method('analyzeTrailingDebtHealth')->willReturn($debtHealthMock);
         $this->corporateMetricsMock->method('calculateOperatingBase')->willReturn(15000000000.0);
-        $this->mathUtilityMock->method('calculateManagementFairValuePE')->willReturn(15.0);
         $this->mathUtilityMock->method('calculateLogNormalSynergy')->willReturn(1.10);
         $this->mathUtilityMock->method('checkProbability')->willReturn(true);
         $this->mathUtilityMock->method('generateUniformBetween')->willReturn(0.80);
@@ -555,25 +552,37 @@ class MergerAndAcquisitionEngineTest extends TestCase
      */
     public function testALeveragedDealIsUnderwrittenAtTheAcquirersAssetRisk(): void
     {
-        $stock = $this->buildLedgeredAcquirer('LEVR', treasury: 1_000_000_000.0, debt: 1_000_000_000.0, shares: 100_000_000.0);
         $macroState = new MacroStateDTO(policyRateEma: 0.03, corporateTaxRate: 0.21, yield5yEma: 0.035);
         $this->primeHealthyDeal(operatingBase: 20_000_000_000.0);
-        $this->bookIssuedDebt();
-        $this->debtEngineMock->method('resolveAssetVolatility')->willReturn(0.27);
-        $struckAt = [];
-        $this->mathUtilityMock->method('calculateDistanceToDefault')->willReturnCallback(
-            static function (float $assets, float $debt, float $assetVolatility) use (&$struckAt): float {
-                $struckAt[] = $assetVolatility;
+        $assetVolatility = 0.27;
+        $consulted = 0;
+        $this->debtEngineMock->method('resolveAssetVolatility')->willReturnCallback(
+            static function () use (&$assetVolatility, &$consulted): float {
+                ++$consulted;
 
-                return 2.0;
+                return $assetVolatility;
             }
         );
+        $borrowed = new \ArrayObject();
+        $this->debtEngineMock->method('issueDebt')->willReturnCallback(
+            static function (Stock $borrower, float $amount, float $cost) use ($borrowed): void {
+                $borrower->setWholesaleDebt((string) ((float) $borrower->getWholesaleDebt() + $amount));
+                $borrowed->append($cost);
+            }
+        );
+        $dealPricedAt = function (float $volatility) use (&$assetVolatility, $borrowed, $macroState): float {
+            $assetVolatility = $volatility;
+            $borrowed->exchangeArray([]);
+            $stock = $this->buildLedgeredAcquirer('LEVR', treasury: 1_000_000_000.0, debt: 1_000_000_000.0, shares: 100_000_000.0);
+            $this->assertIsArray($this->engine->evaluatePrivateAcquisition($stock, $macroState, 1.0), 'the levered control deal must execute');
+            $this->assertCount(1, $borrowed, 'the deal must borrow');
 
-        $result = $this->engine->evaluatePrivateAcquisition($stock, $macroState, 1.0);
+            return (float) $borrowed[0];
+        };
 
-        $this->assertIsArray($result, 'the levered control deal must execute');
-        $this->assertNotEmpty($struckAt, 'a debt-funded deal is credit-checked');
-        $this->assertSame([0.27], array_values(array_unique($struckAt)));
+        $calm = $dealPricedAt(0.27);
+        $this->assertGreaterThan(0, $consulted, 'a debt-funded deal is credit-checked at the acquirer\'s asset risk');
+        $this->assertGreaterThan($calm, $dealPricedAt(0.40), 'the asset risk the engine resolves is the one that prices the new debt');
     }
 
     /**
@@ -1381,7 +1390,6 @@ class MergerAndAcquisitionEngineTest extends TestCase
             static fn (Stock $stock, float $revenue): array => $capitalBase->resolveTangibleCapitalBase($stock, $revenue)
         );
         $this->corporateMetricsMock->method('calculateOperatingBase')->willReturn($operatingBase);
-        $this->mathUtilityMock->method('calculateManagementFairValuePE')->willReturn(15.0);
         $this->mathUtilityMock->method('calculateLogNormalSynergy')->willReturn(1.10);
         $this->mathUtilityMock->method('checkProbability')->willReturn(true);
         $this->mathUtilityMock->method('generateUniformBetween')->willReturn(0.80);

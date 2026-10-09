@@ -41,7 +41,7 @@ class CorporateMetricsTest extends TestCase
         $this->assertLessThan(0.18, $mild);
         $this->assertLessThan($mild, $severe);
         $this->assertEqualsWithDelta(
-            0.18 * pow(3.0, -FinancialConstants::CAPITAL_MARGINAL_ELASTICITY),
+            0.18 * pow(3.0, -CorporateMetrics::CAPITAL_MARGINAL_ELASTICITY),
             $severe,
             1e-12,
             'ROIC_marginal = ROIC_base x (K / K_optimal)^(-alpha) at the default moat factor.'
@@ -75,7 +75,7 @@ class CorporateMetricsTest extends TestCase
 
         foreach ([0.20, 0.50, 0.90, 1.40] as $targetShare) {
             $stock = $this->scaledFirm('GATE');
-            $investedCapital = $targetShare * FinancialConstants::BASELINE_SECTOR_TAM * (float) $stock->getSamRatio();
+            $investedCapital = $targetShare * CorporateMetrics::BASELINE_SECTOR_TAM * (float) $stock->getSamRatio();
             $share = $this->metrics->calculateScaleRatio($investedCapital, $macroState->nominalGdpIndex, (float) $stock->getSamRatio());
 
             // How EarningsEngine::calculateGrowthCapEx builds its share-taking return.
@@ -110,7 +110,7 @@ class CorporateMetricsTest extends TestCase
         $utility->setIndustry('Utilities - Regulated Electric');
 
         $macroState = new MacroStateDTO(nominalGdpIndex: 1.0);
-        $investedCapital = 1.4 * FinancialConstants::BASELINE_SECTOR_TAM * (float) $utility->getSamRatio();
+        $investedCapital = 1.4 * CorporateMetrics::BASELINE_SECTOR_TAM * (float) $utility->getSamRatio();
         $share = $this->metrics->calculateScaleRatio($investedCapital, $macroState->nominalGdpIndex, (float) $utility->getSamRatio());
 
         $this->assertSame(
@@ -282,7 +282,7 @@ class CorporateMetricsTest extends TestCase
 
         // Payout expands towards 85% ceiling
         $expandedPayout = $this->metrics->calculateLifeCyclePayoutRatio(0.30, 1.0);
-        $this->assertSame(FinancialConstants::LIFE_CYCLE_MAX_PAYOUT_RATIO, $expandedPayout);
+        $this->assertSame(CorporateMetrics::LIFE_CYCLE_MAX_PAYOUT_RATIO, $expandedPayout);
     }
     public function testLeaseLiabilityScalesWithRevenueAndSectorIntensity(): void
     {

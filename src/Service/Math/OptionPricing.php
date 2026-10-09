@@ -29,6 +29,12 @@ final class OptionPricing
     /** Widest fractional departure from the at-the-money volatility the skewness and kurtosis terms may produce; the expansion is local and turns negative in the far wings. */
     public const MAX_GRAM_CHARLIER_VOL_DEVIATION = 0.60;
 
+    // --- Short Option Margin (FINRA Rule 4210 / CBOE minimums) ---
+    /** Share of the underlying a naked short option is collateralized at, before the out-of-the-money amount is credited back against it. */
+    public const SHORT_OPTION_UNDERLYING_REQUIREMENT = 0.20;
+    /** Floor on that requirement, struck on the underlying for a call and on the STRIKE for a put, so a far out-of-the-money short is never collateralized at nothing. */
+    public const SHORT_OPTION_MINIMUM_REQUIREMENT = 0.10;
+
     /**
      * The two Black-Scholes moneyness deviates, d1 and d2.
      *
@@ -442,8 +448,8 @@ final class OptionPricing
         $floorBase = $isCall ? $underlyingPrice : $strike;
 
         $charge = max(
-            (FinancialConstants::SHORT_OPTION_UNDERLYING_REQUIREMENT * $underlyingPrice) - $outOfTheMoney,
-            FinancialConstants::SHORT_OPTION_MINIMUM_REQUIREMENT * $floorBase
+            (self::SHORT_OPTION_UNDERLYING_REQUIREMENT * $underlyingPrice) - $outOfTheMoney,
+            self::SHORT_OPTION_MINIMUM_REQUIREMENT * $floorBase
         );
 
         return max(0.0, $premium) + max(0.0, $charge);

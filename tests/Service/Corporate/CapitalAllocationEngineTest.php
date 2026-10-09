@@ -20,6 +20,7 @@ use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
+use App\Data\Company\InitialMarket;
 
 #[AllowMockObjectsWithoutExpectations]
 class CapitalAllocationEngineTest extends TestCase
@@ -86,7 +87,6 @@ class CapitalAllocationEngineTest extends TestCase
         $this->debtEngineMock->method('analyzeTrailingDebtHealth')->willReturn($debtHealthMock);
 
         $this->mathUtilityMock = $this->createStub(MathUtility::class);
-        $this->mathUtilityMock->method('calculateManagementFairValuePE')->willReturn(15.0);
 
         $this->treasuryEngineMock = $this->createStub(TreasuryEngine::class);
 
@@ -561,7 +561,7 @@ class CapitalAllocationEngineTest extends TestCase
         $stock->setTotalEquity('100000000');
         $stock->setCorporateTreasury('50000000');
         $stock->setTargetPayoutRatio('0.30');
-        $stock->setDividendSpeed((string) FinancialConstants::LINTNER_QUARTERLY_ADJUSTMENT_SPEED);
+        $stock->setDividendSpeed((string) InitialMarket::LINTNER_QUARTERLY_ADJUSTMENT_SPEED);
         $stock->setLastDividend('0.10');
         $stock->setRetainedEarnings('50000000.00');
         $stock->setTotalRevenue('10000000.00');

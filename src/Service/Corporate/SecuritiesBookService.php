@@ -26,6 +26,14 @@ use App\Service\Math\FinancialConstants;
  */
 final class SecuritiesBookService
 {
+    // --- Investment Securities & AOCI (ASC 320 / Basel III) ---
+    /** Convexity of a plain fixed-coupon book at the durations financials run; the second-order term that makes a rally worth more than the selloff cost. */
+    public const SECURITIES_BOOK_CONVEXITY = 0.45;
+    /** Floor on the carrying yield, so a book struck at the zero bound still discounts rather than dividing by nothing. */
+    public const MIN_SECURITIES_CARRYING_YIELD = 0.001;
+    /** Cap on the mark as a share of the book. Past this the duration approximation is extrapolation, not a price. */
+    public const MAX_SECURITIES_MARK_RATIO = 0.35;
+
     public function __construct(
         private readonly BondPricingEngine $bondPricingEngine,
     ) {}
@@ -75,7 +83,7 @@ final class SecuritiesBookService
         // A level of zero is not a zero-rate world, it is a curve nobody fitted — a bare DTO in a harness or
         // a test. Evaluating it would put the whole market's paper at a yield of nothing.
         $marketYield = max(
-            FinancialConstants::MIN_SECURITIES_CARRYING_YIELD,
+            self::MIN_SECURITIES_CARRYING_YIELD,
             $curve->level > 0.0
                 ? $this->bondPricingEngine->zeroYield($curve, max(0.25, $effectiveDuration))
                 : $fallbackYield
@@ -103,16 +111,16 @@ final class SecuritiesBookService
         // Portfolio rolldown: roll maturing paper into prevailing market yield paced by effective duration.
         $rolldown = 1.0 / (4.0 * max(1.0, $effectiveDuration));
         $rolled = ($opening * (1.0 - $rolldown)) + ($marketYield * $rolldown);
-        $newCarryingYield = max(FinancialConstants::MIN_SECURITIES_CARRYING_YIELD, $rolled);
+        $newCarryingYield = max(self::MIN_SECURITIES_CARRYING_YIELD, $rolled);
 
         $deltaYield = $marketYield - $newCarryingYield;
         $markRatio = (-$effectiveDuration * $deltaYield)
-            + (0.5 * FinancialConstants::SECURITIES_BOOK_CONVEXITY * $deltaYield * $deltaYield);
+            + (0.5 * self::SECURITIES_BOOK_CONVEXITY * $deltaYield * $deltaYield);
 
         // Past this the duration expansion stops being a price and starts being extrapolation.
         $markRatio = max(
-            -FinancialConstants::MAX_SECURITIES_MARK_RATIO,
-            min(FinancialConstants::MAX_SECURITIES_MARK_RATIO, $markRatio)
+            -self::MAX_SECURITIES_MARK_RATIO,
+            min(self::MAX_SECURITIES_MARK_RATIO, $markRatio)
         );
 
         $totalMark = $book * $markRatio;

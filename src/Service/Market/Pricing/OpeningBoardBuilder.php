@@ -32,6 +32,10 @@ class OpeningBoardBuilder
     /** Most passes of the joint price and asset-volatility solve before the opening price is taken as it stands. */
     public const MAX_OPENING_PRICE_PASSES = 6;
 
+    // --- Investment Securities & AOCI (ASC 320 / Basel III) ---
+    /** Balance-sheet size above which an institution loses the AOCI filter and marks its capital to the curve. The advanced-approaches rule in form, set to this district's scale rather than a US figure: it takes the systemically important lenders and leaves the mid-tier the election. */
+    public const AOCI_FILTER_SIZE_THRESHOLD = 750_000_000_000.0;
+
     public function __construct(
         private readonly MathUtility $mathUtility,
         private readonly DebtEngine $debtEngine,
@@ -165,7 +169,7 @@ class OpeningBoardBuilder
             ((float) ($stockData['total_equity'] ?? 0.0)
                 + (float) ($stockData['wholesale_debt'] ?? 0.0)
                 + (float) ($stockData['customer_deposits'] ?? 0.0))
-            < FinancialConstants::AOCI_FILTER_SIZE_THRESHOLD
+            < self::AOCI_FILTER_SIZE_THRESHOLD
         )));
 
         if ($isFinancial) {

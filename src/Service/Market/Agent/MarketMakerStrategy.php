@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace App\Service\Market\Agent;
 
 use App\DTO\AgentMarketViewDTO;
-use App\Service\Math\FinancialConstants;
 
 /**
  * Takes the other side of the flow the market generates, and works the inventory off afterwards.
@@ -25,6 +24,14 @@ use App\Service\Math\FinancialConstants;
  */
 final class MarketMakerStrategy implements LiquidityProviderInterface
 {
+    // --- Agent Signals ---
+    /** Share of the others' flow a market maker takes the other side of in calm conditions (Grossman & Miller 1988 immediacy). The rest reaches the price at once. */
+    public const AGENT_MAKER_ABSORPTION = 0.35;
+    /** Time a maker takes to work 63% of its inventory back to flat, in years (~1 trading day; Hendershott & Menkveld 2014 find inventories mean-revert on that order). Carrying risk is not what it is paid for. */
+    public const AGENT_MAKER_INVENTORY_HORIZON_YEARS = 0.004;
+    /** Volatility at which the base absorption applies. Above it, absorption falls with 1/variance (Ho & Stoll 1981: the cost of immediacy is proportional to variance), so makers step back in a stressed market. */
+    public const AGENT_MAKER_REFERENCE_VOLATILITY = 0.25;
+
     public function identifier(): string
     {
         return 'market_maker';
@@ -34,11 +41,11 @@ final class MarketMakerStrategy implements LiquidityProviderInterface
     {
         $capacity = max(1.0, $capacity);
 
-        $absorbed = -FinancialConstants::AGENT_MAKER_ABSORPTION * $this->riskScale($view->annualizedVolatility) * $othersFlow;
+        $absorbed = -self::AGENT_MAKER_ABSORPTION * $this->riskScale($view->annualizedVolatility) * $othersFlow;
 
         // Inventory decays toward flat over a horizon in time, so the same book is worked off at the same
         // pace whatever the simulation is stepping at.
-        $unwind = -$inventory * (1.0 - exp(-$view->dt / FinancialConstants::AGENT_MAKER_INVENTORY_HORIZON_YEARS));
+        $unwind = -$inventory * (1.0 - exp(-$view->dt / self::AGENT_MAKER_INVENTORY_HORIZON_YEARS));
 
         $next = max(-$capacity, min($capacity, $inventory + $absorbed + $unwind));
 
@@ -51,7 +58,7 @@ final class MarketMakerStrategy implements LiquidityProviderInterface
      */
     private function riskScale(float $annualizedVolatility): float
     {
-        $reference = FinancialConstants::AGENT_MAKER_REFERENCE_VOLATILITY ** 2;
+        $reference = self::AGENT_MAKER_REFERENCE_VOLATILITY ** 2;
         $variance = $annualizedVolatility * $annualizedVolatility;
 
         if ($variance <= $reference) {

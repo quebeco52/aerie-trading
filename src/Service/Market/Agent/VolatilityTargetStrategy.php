@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace App\Service\Market\Agent;
 
 use App\DTO\AgentMarketViewDTO;
-use App\Service\Math\FinancialConstants;
 
 /**
  * Holds exposure in inverse proportion to realized volatility.
@@ -20,6 +19,14 @@ use App\Service\Math\FinancialConstants;
  */
 final class VolatilityTargetStrategy implements AgentStrategyInterface
 {
+    // --- Volatility-Targeting Funds (Moreira & Muir 2017; Harvey et al. 2018) ---
+    /** Annualized volatility a vol-control book is run to. Exposure scales as target / realized, so a name at this volatility is held at the base share; set at the market's reference name so an ordinary name sits near 1x. */
+    public const AGENT_VOL_TARGET_VOLATILITY = 0.25;
+    /** Share of agent capital the vol-targeting books hold in a name running at target volatility. */
+    public const AGENT_VOL_TARGET_BASE_SHARE = 0.15;
+    /** Most a vol-targeting book levers up when realized volatility falls below target. Harvey et al. cap leverage at 2x; without a cap a quiet tape would be bought without limit. */
+    public const AGENT_VOL_TARGET_MAX_LEVERAGE = 2.00;
+
     public function identifier(): string
     {
         return 'vol_target';
@@ -31,15 +38,15 @@ final class VolatilityTargetStrategy implements AgentStrategyInterface
 
         // No volatility to run to yet: the book is held at the size it would have at target.
         if ($realized <= 0.0 || !is_finite($realized)) {
-            return FinancialConstants::AGENT_VOL_TARGET_BASE_SHARE;
+            return self::AGENT_VOL_TARGET_BASE_SHARE;
         }
 
         $leverage = min(
-            FinancialConstants::AGENT_VOL_TARGET_MAX_LEVERAGE,
-            FinancialConstants::AGENT_VOL_TARGET_VOLATILITY / $realized
+            self::AGENT_VOL_TARGET_MAX_LEVERAGE,
+            self::AGENT_VOL_TARGET_VOLATILITY / $realized
         );
 
-        return max(0.0, min(1.0, FinancialConstants::AGENT_VOL_TARGET_BASE_SHARE * $leverage));
+        return max(0.0, min(1.0, self::AGENT_VOL_TARGET_BASE_SHARE * $leverage));
     }
 
     public function competesForCapital(): bool

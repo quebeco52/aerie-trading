@@ -953,71 +953,6 @@ class MacroEngineTest extends TestCase
         $this->assertEqualsWithDelta($gapNeutral - $gapCrash, $gapBoom - $gapNeutral, 1e-12, 'A crash and a boom of the same size move demand by the same amount.');
     }
 
-    public function testInterbankLiquiditySpreadMeanRevertsViaCIR(): void
-    {
-        $mathUtility = $this->createMock(MathUtility::class);
-
-        // Suppress jump diffusion and noise to test pure structural drift
-        $mathUtility->method('generateStandardNormal')->willReturn(0.0);
-        $mathUtility->method('calculateJumpDiffusion')->willReturn([
-            'multiplier' => 1.0,
-            'shock_pct' => null,
-            'exponent' => null,
-        ]);
-
-        // Expect the CIR method to be called with the engine's constants, its reversion stiffened by the panic jumps'
-        // Merton compensator c: kappa + c towards kappa theta / (kappa + c), the same pull towards theta net of the jumps.
-        $cir = null;
-        $mathUtility->expects($this->once())
-            ->method('calculateCIR')
-            ->willReturnCallback(function (float ...$args) use (&$cir): float {
-                $cir = $args;
-
-                return 0.035; // Mock a reversion down to 350 bps
-            });
-
-        $creditFiscalSubsystem = new CreditFiscalSubsystem($mathUtility);
-
-        $state = new \App\Service\Macro\MacroState();
-        $state->interbankLiquiditySpread = 0.05;
-        $state->marketVolatilityEma = 0.15; // Neutral VIX
-
-        $creditFiscalSubsystem->calculateInterbankLiquiditySpread($state, 0.25);
-
-        $this->assertNotNull($cir);
-        [$current, $kappa, $theta, $sigma, $dt, $dW] = $cir;
-        $this->assertSame([0.05, MacroEngine::INTERBANK_SPREAD_SIGMA, 0.25, 0.0], [$current, $sigma, $dt, $dW]);
-        $this->assertGreaterThan(MacroEngine::INTERBANK_SPREAD_KAPPA, $kappa, 'The jumps are compensated in the drift.');
-        $this->assertEqualsWithDelta(MacroEngine::INTERBANK_SPREAD_KAPPA * MacroEngine::INTERBANK_BASELINE_SPREAD, $kappa * $theta, 1e-15);
-        $this->assertEquals(0.035, $state->interbankLiquiditySpread, 'Interbank spread must mean-revert using CIR.');
-    }
-
-    public function testInterbankLiquiditySpreadBlowsOutDuringMarketPanicJump(): void
-    {
-        $mathUtility = $this->createMock(MathUtility::class);
-
-        $mathUtility->method('generateStandardNormal')->willReturn(0.0);
-        // Mock CIR base process staying at 15 bps baseline
-        $mathUtility->method('calculateCIR')->willReturn(MacroEngine::INTERBANK_BASELINE_SPREAD);
-        // Simulate a 5x blowout jump
-        $mathUtility->method('calculateJumpDiffusion')->willReturn([
-            'multiplier' => 5.0,
-            'shock_pct' => 400.0,
-            'exponent' => 1.60,
-        ]);
-
-        $creditFiscalSubsystem = new CreditFiscalSubsystem($mathUtility);
-
-        $state = new \App\Service\Macro\MacroState();
-        $state->interbankLiquiditySpread = MacroEngine::INTERBANK_BASELINE_SPREAD;
-        $state->marketVolatilityEma = 0.35; // Panicked VIX
-
-        $creditFiscalSubsystem->calculateInterbankLiquiditySpread($state, 0.25);
-
-        // Expected: 0.0015 + (0.0015 * (5.0 - 1.0)) = 0.0015 * 5.0 = 0.0075 (75 bps)
-        $this->assertEqualsWithDelta(0.0075, $state->interbankLiquiditySpread, 0.0001, 'Interbank spread must blow out on Poisson jump.');
-    }
-
     public function testCapitalStockOverhangAccumulatesDuringBoomAndDecaysDuringRecession(): void
     {
         $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
@@ -2169,6 +2104,5 @@ class MacroEngineTest extends TestCase
         $this->assertEquals(0.15, MacroEngine::CAPITAL_OVERHANG_MAX);
         $this->assertEquals(10.0, MacroEngine::STRESS_MULTIPLIER_GAP_SENSITIVITY);
     }
-
 
 }

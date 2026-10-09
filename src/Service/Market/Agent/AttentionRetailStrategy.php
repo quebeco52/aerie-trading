@@ -31,6 +31,18 @@ use App\Service\Math\FinancialConstants;
  */
 final class AttentionRetailStrategy implements AgentStrategyInterface
 {
+    // --- Attention-Driven Retail (Barber & Odean 2008, "All That Glitters") ---
+    /** Share of agent capital retail holds in a name nobody is talking about; the book it sits on between episodes. */
+    public const AGENT_RETAIL_BASE_SHARE = 0.10;
+    /** Most retail adds to a name on top of the base share when its attention score saturates. Bounded because attention buying is an episode, not a regime. */
+    public const AGENT_RETAIL_MAX_ATTENTION_TILT = 0.35;
+    /** Standard deviations of one tick's move at which the extreme-return leg of attention saturates. Barber & Odean rank on the previous day's return, at either sign. */
+    public const AGENT_RETAIL_RETURN_SIGMA = 2.50;
+    /** Multiple of expected volume at which the abnormal-volume leg saturates; the paper's own sort is on volume far above a name's normal. Must stay above one: at or below it, every ordinary tick would read as an attention episode. */
+    public const AGENT_RETAIL_VOLUME_MULTIPLE = 3.00;
+    /** Attention contributed by a name being in the news at all, before any move or volume. News is the third of the paper's three sorts and the only one that is not a market statistic. */
+    public const AGENT_RETAIL_NEWS_ATTENTION = 0.50;
+
     public function identifier(): string
     {
         return 'attention_retail';
@@ -40,8 +52,8 @@ final class AttentionRetailStrategy implements AgentStrategyInterface
     {
         return max(0.0, min(
             1.0,
-            FinancialConstants::AGENT_RETAIL_BASE_SHARE
-                + (FinancialConstants::AGENT_RETAIL_MAX_ATTENTION_TILT * $this->attention($view))
+            self::AGENT_RETAIL_BASE_SHARE
+                + (self::AGENT_RETAIL_MAX_ATTENTION_TILT * $this->attention($view))
         ));
     }
 
@@ -56,7 +68,7 @@ final class AttentionRetailStrategy implements AgentStrategyInterface
     private function attention(AgentMarketViewDTO $view): float
     {
         $market = max($this->extremeReturnLeg($view), $this->abnormalVolumeLeg($view));
-        $news = $view->recentNews * FinancialConstants::AGENT_RETAIL_NEWS_ATTENTION;
+        $news = $view->recentNews * self::AGENT_RETAIL_NEWS_ATTENTION;
 
         return min(1.0, $market + $news);
     }
@@ -74,7 +86,7 @@ final class AttentionRetailStrategy implements AgentStrategyInterface
         // a fine tick, about a day's variance at a daily one.
         $phi = exp(-$view->dt / FinancialConstants::AGENT_RETAIL_ATTENTION_HORIZON_YEARS);
         $daySigma = $view->annualizedVolatility * sqrt($view->dt / (1.0 - ($phi * $phi)));
-        $saturation = $daySigma * FinancialConstants::AGENT_RETAIL_RETURN_SIGMA;
+        $saturation = $daySigma * self::AGENT_RETAIL_RETURN_SIGMA;
 
         if ($saturation <= 0.0) {
             return 0.0;
@@ -92,7 +104,7 @@ final class AttentionRetailStrategy implements AgentStrategyInterface
      */
     private function abnormalVolumeLeg(AgentMarketViewDTO $view): float
     {
-        $headroom = FinancialConstants::AGENT_RETAIL_VOLUME_MULTIPLE - 1.0;
+        $headroom = self::AGENT_RETAIL_VOLUME_MULTIPLE - 1.0;
 
         return max(0.0, min(1.0, ($view->recentAbnormalVolume - 1.0) / $headroom));
     }

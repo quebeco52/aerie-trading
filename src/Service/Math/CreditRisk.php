@@ -13,6 +13,21 @@ use App\Service\Macro\MacroEngine;
  */
 final class CreditRisk
 {
+    // --- Corporate Credit: Recovery Given Default (Altman, Brady, Resti & Sironi 2005) ---
+    /** Aggregate corporate default rate the base recoveries above are quoted at: the long-run average year of the series the macro publishes. */
+    public const RECOVERY_BASELINE_DEFAULT_RATE = MacroEngine::CORPORATE_DEFAULT_BASELINE;
+    /** Fall in recovery per unit of log excess in the aggregate default rate. Recovery and default are NEGATIVELY correlated: defaults cluster in bad years, distressed assets are sold into a market with no buyers, and the same claim is worth less precisely when more of them are being settled. Ignoring it prices the tail of a credit portfolio far too kindly. */
+    public const RECOVERY_DEFAULT_RATE_ELASTICITY = 0.12;
+    /** Bounds on recovery. Nothing recovers everything once it has defaulted, and even a wiped-out claim usually salvages something. */
+    public const MIN_RECOVERY_RATE = 0.05;
+    public const MAX_RECOVERY_RATE = 0.90;
+
+    // --- Corporate Credit: Spread Composition (Longstaff, Mithal & Neis 2005) ---
+    /** Non-default component of a corporate spread: what a buyer charges for holding a claim they cannot sell as readily as a sovereign. Measured to be a material minority of an investment-grade spread, so a bond priced on default risk alone quotes through the market. */
+    public const CORPORATE_ILLIQUIDITY_SPREAD = 0.0040;
+    /** Ceiling on the credit spread a listed issue may be discounted at, matching the cap the Merton spread itself carries. */
+    public const MAX_CORPORATE_SPREAD = 1.00;
+
     /**
      * A leverage (debt-to-equity) limit with a capital buffer added to the equity it implies.
      *
@@ -430,18 +445,104 @@ final class CreditRisk
     public static function calculateRecoveryGivenDefault(
         float $baseRecovery,
         float $defaultRate,
-        float $baselineDefaultRate = FinancialConstants::RECOVERY_BASELINE_DEFAULT_RATE
+        float $baselineDefaultRate = self::RECOVERY_BASELINE_DEFAULT_RATE
     ): float {
         if ($defaultRate <= 0.0 || $baselineDefaultRate <= 0.0) {
-            return max(FinancialConstants::MIN_RECOVERY_RATE, min(FinancialConstants::MAX_RECOVERY_RATE, $baseRecovery));
+            return max(self::MIN_RECOVERY_RATE, min(self::MAX_RECOVERY_RATE, $baseRecovery));
         }
 
-        $cyclical = FinancialConstants::RECOVERY_DEFAULT_RATE_ELASTICITY
+        $cyclical = self::RECOVERY_DEFAULT_RATE_ELASTICITY
             * log($baselineDefaultRate / $defaultRate);
 
         return max(
-            FinancialConstants::MIN_RECOVERY_RATE,
-            min(FinancialConstants::MAX_RECOVERY_RATE, $baseRecovery + $cyclical)
+            self::MIN_RECOVERY_RATE,
+            min(self::MAX_RECOVERY_RATE, $baseRecovery + $cyclical)
         );
+    }
+
+    /**
+     * Calculates the Distance to Default (DD) using Merton's Structural Model.
+     *
+     * @param float $assetValue      The total value of the firm's assets (V).
+     * @param float $debtFaceValue   The face value of the firm's debt (D).
+     * @param float $assetVolatility The volatility of the firm's assets (sigma_V).
+     * @param float $riskFreeRate    The risk-free rate (r).
+     * @param float $timeToMaturity  The time to maturity of the debt in years (T).
+     * @return float The Distance to Default in standard deviations.
+     */
+    public static function calculateDistanceToDefault(float $assetValue, float $debtFaceValue, float $assetVolatility, float $riskFreeRate, float $timeToMaturity = 1.0): float
+    {
+        if ($debtFaceValue <= 0.0 || $assetValue <= 0.0 || $assetVolatility <= 0.0 || $timeToMaturity <= 0.0) {
+            return 10.0; // Effectively no default risk
+        }
+
+        $d1 = (log($assetValue / $debtFaceValue) + ($riskFreeRate + 0.5 * pow($assetVolatility, 2.0)) * $timeToMaturity)
+            / ($assetVolatility * sqrt($timeToMaturity));
+
+        // In the Merton model, the actual Distance to Default is d2
+        $d2 = $d1 - ($assetVolatility * sqrt($timeToMaturity));
+
+        return $d2;
+    }
+
+    /**
+     * Calculates the theoretical credit spread based on Merton's Structural Model.
+     *
+     * @param float $distanceToDefault The distance to default (d2).
+     * @param float $lossGivenDefault  The expected loss percentage if default occurs (LGD).
+     * @param float $timeToMaturity    The time to maturity of the debt in years (T).
+     * @return float The theoretical credit spread in decimal (e.g. 0.02 for 2%).
+     */
+    public static function calculateMertonCreditSpread(float $distanceToDefault, float $lossGivenDefault = 0.40, float $timeToMaturity = 1.0): float
+    {
+        // Probability of Default (PD) is N(-DD)
+        $probabilityOfDefault = Distributions::calculateNormalCDF(-$distanceToDefault);
+
+        // Failsafe: Cap PD slightly below 1.0 to prevent log(0) in the spread formula
+        $probabilityOfDefault = min(0.9999, $probabilityOfDefault);
+
+        $spread = - (1.0 / $timeToMaturity) * log(1.0 - ($probabilityOfDefault * $lossGivenDefault));
+
+        // Failsafe: Prevent negative spreads or astronomical blowout
+        return max(0.0, min(1.0, $spread)); // Max spread capped at 10,000 bps
+    }
+
+    /**
+     * The spread a corporate issue is discounted at, over the sovereign curve.
+     *
+     * Two components, because a corporate spread is not all compensation for default. Longstaff, Mithal &
+     * Neis (2005) separate the two by comparing bond spreads with credit default swap premia and find a
+     * material non-default residual: a buyer charges for holding a claim they cannot sell as readily as a
+     * sovereign, whether or not the issuer is ever going to miss a payment. A bond priced on default risk
+     * alone quotes through the market at every rating, and worst at the safe end, where the default
+     * component is nearly nothing and the residual is nearly all of it.
+     *
+     * The default component is the issuer's own Merton spread at the claim's horizon, so it carries the
+     * term structure of default risk rather than a flat number: a firm close to the barrier is far riskier
+     * over ten years than over one, and a distressed one is riskier over one year than over ten because it
+     * either survives that year or does not.
+     *
+     * @param float $distanceToDefault The issuer's Merton d2.
+     * @param float $lossGivenDefault  One minus the recovery on this claim.
+     * @param float $timeToMaturity    Years to maturity.
+     * @param float $illiquidityPremium Non-default component.
+     * @return float Continuously compounded spread over the sovereign curve.
+     */
+    public static function calculateCorporateSpread(
+        float $distanceToDefault,
+        float $lossGivenDefault,
+        float $timeToMaturity,
+        float $illiquidityPremium = self::CORPORATE_ILLIQUIDITY_SPREAD
+    ): float {
+        $defaultComponent = self::calculateMertonCreditSpread(
+            $distanceToDefault,
+            $lossGivenDefault,
+            max(1.0e-6, $timeToMaturity)
+        );
+
+        return max(0.0, min(
+            self::MAX_CORPORATE_SPREAD,
+            $defaultComponent + max(0.0, $illiquidityPremium)
+        ));
     }
 }

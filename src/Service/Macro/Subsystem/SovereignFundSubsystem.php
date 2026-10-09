@@ -6,6 +6,7 @@ use App\Service\Macro\MacroEngine;
 use App\Service\Macro\MacroState;
 use App\Service\Math\FixedIncome;
 use App\Service\Math\MathUtility;
+use App\Service\Math\StochasticProcesses;
 use App\Service\Math\TimeSeries;
 
 /**
@@ -208,20 +209,8 @@ class SovereignFundSubsystem
     {
         $state->sovereignFundDomesticEquity = max(0.0, $state->sovereignFundDomesticEquity * (1.0 + $state->boardPriceReturn));
 
-        $idiosyncraticVolatility = self::FOREIGN_EQUITY_VOLATILITY
-            * sqrt(1.0 - (self::FOREIGN_EQUITY_MARKET_CORRELATION * self::FOREIGN_EQUITY_MARKET_CORRELATION));
         $previousIndex = $state->foreignEquityIndex;
-        $state->foreignEquityIndex = $this->mathUtility->calculateCorrelatedGBM(
-            currentPrice: $previousIndex,
-            idiosyncraticVolatility: $idiosyncraticVolatility,
-            drift: $state->foreignPolicyRate + MacroEngine::BASE_EQUITY_RISK_PREMIUM,
-            gravityDrift: 0.0,
-            dt: $dt,
-            beta: self::FOREIGN_EQUITY_MARKET_CORRELATION,
-            marketVol: self::FOREIGN_EQUITY_VOLATILITY,
-            marketZ: $state->marketZ,
-            w1: $this->mathUtility->generateStandardNormal()
-        );
+        $state->foreignEquityIndex = $this->foreignEquityIndexStep($state, $dt);
         $state->foreignEquityIndex *= exp($state->foreignEquityValuationChange);
         if ($previousIndex > 0.0) {
             $state->sovereignFundForeignEquity *= $state->foreignEquityIndex / $previousIndex;
@@ -238,6 +227,28 @@ class SovereignFundSubsystem
             $state->sovereignFundDomesticEquity = max(0.0, $state->sovereignFundDomesticEquity + $participation);
             $state->sovereignFundForeignBonds += ($dividends - $participation) * $state->exchangeRateIndex;
         }
+    }
+
+    /**
+     * The foreign equity index a tick on: a GBM drifting at the foreign policy rate plus the equity risk premium,
+     * loading on the global market factor at the foreign correlation, with its own residual draw.
+     */
+    protected function foreignEquityIndexStep(MacroState $state, float $dt): float
+    {
+        $idiosyncraticVolatility = self::FOREIGN_EQUITY_VOLATILITY
+            * sqrt(1.0 - (self::FOREIGN_EQUITY_MARKET_CORRELATION * self::FOREIGN_EQUITY_MARKET_CORRELATION));
+
+        return StochasticProcesses::calculateCorrelatedGBM(
+            currentPrice: $state->foreignEquityIndex,
+            idiosyncraticVolatility: $idiosyncraticVolatility,
+            drift: $state->foreignPolicyRate + MacroEngine::BASE_EQUITY_RISK_PREMIUM,
+            gravityDrift: 0.0,
+            dt: $dt,
+            beta: self::FOREIGN_EQUITY_MARKET_CORRELATION,
+            marketVol: self::FOREIGN_EQUITY_VOLATILITY,
+            marketZ: $state->marketZ,
+            w1: $this->mathUtility->generateStandardNormal()
+        );
     }
 
     /**

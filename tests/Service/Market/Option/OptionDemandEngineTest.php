@@ -59,7 +59,7 @@ class OptionDemandEngineTest extends TestCase
 
     public function testDemandPeaksAtTheDeltaThePublicActuallyBuys(): void
     {
-        $atTarget = $this->engine->demandWeight($this->quote(FinancialConstants::OPTION_PUBLIC_TARGET_DELTA));
+        $atTarget = $this->engine->demandWeight($this->quote(OptionDemandEngine::OPTION_PUBLIC_TARGET_DELTA));
         $atTheMoney = $this->engine->demandWeight($this->quote(0.50));
         $farWing = $this->engine->demandWeight($this->quote(0.02));
 
@@ -91,7 +91,7 @@ class OptionDemandEngineTest extends TestCase
     {
         $share = $this->engine->callShare(0.13, 0.13);
 
-        $this->assertSame(FinancialConstants::OPTION_PUBLIC_CALL_SHARE, $share);
+        $this->assertSame(OptionDemandEngine::OPTION_PUBLIC_CALL_SHARE, $share);
         $this->assertGreaterThan(0.5, $share);
     }
 
@@ -114,7 +114,7 @@ class OptionDemandEngineTest extends TestCase
     {
         // Only fear moves the tilt; a quiet tape leaves it at its base rather than pushing past it.
         $this->assertSame(
-            FinancialConstants::OPTION_PUBLIC_CALL_SHARE,
+            OptionDemandEngine::OPTION_PUBLIC_CALL_SHARE,
             $this->engine->callShare(0.05, 0.13)
         );
     }

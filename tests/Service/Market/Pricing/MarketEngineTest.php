@@ -198,7 +198,7 @@ class MarketEngineTest extends TestCase
 
         // The outlook here (12% inflation plus a boom at beta 2) is above the hurdle; the multiple holds it at +6%.
         $this->assertEqualsWithDelta(0.06, Valuation::perpetualGrowthRate(0.10, 0.20), 1e-12);
-        $this->assertEqualsWithDelta(max(FinancialConstants::MIN_COST_OF_EQUITY, 0.05) - FinancialConstants::MIN_PERPETUAL_GROWTH_SPREAD, Valuation::perpetualGrowthRate(0.05, 0.20), 1e-12);
+        $this->assertEqualsWithDelta(max(Valuation::MIN_COST_OF_EQUITY, 0.05) - FinancialConstants::MIN_PERPETUAL_GROWTH_SPREAD, Valuation::perpetualGrowthRate(0.05, 0.20), 1e-12);
 
         $ratio = $value($levy + 0.002) / $value($levy);
         $this->assertLessThan(1.0, $ratio, 'A higher expected levy still costs the bank.');
@@ -375,7 +375,6 @@ class MarketEngineTest extends TestCase
             return log($this->engine->calculateNextPrice($context($fair))['price'] / $fair) / $dt;
         };
 
-        $math = new MathUtility();
         $caps = [FinancialConstants::MAX_JUMP_LOG_RETURN, abs(FinancialConstants::MIN_JUMP_LOG_RETURN)];
         $systemicLogMean = MacroEngine::SYSTEMIC_JUMP_INTENSITY * StochasticProcesses::kouTruncatedMean(
             MacroEngine::SYSTEMIC_JUMP_PROBABILITY_UP,

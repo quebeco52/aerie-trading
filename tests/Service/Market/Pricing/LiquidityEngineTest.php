@@ -76,7 +76,7 @@ class LiquidityEngineTest extends TestCase
         // sqrt(Q/ADV) diverges as ADV approaches zero, which would price any order at infinity.
         $stock = $this->stock(shares: 100.0, float: 0.01, turnover: 0.01);
 
-        $this->assertSame(FinancialConstants::MIN_ADV_SHARES, $this->engine->averageDailyVolume($stock));
+        $this->assertSame(LiquidityEngine::MIN_ADV_SHARES, $this->engine->averageDailyVolume($stock));
     }
 
     public function testABusyTapeCarriesMoreVolumeThanAQuietOne(): void
@@ -101,7 +101,7 @@ class LiquidityEngineTest extends TestCase
 
     public function testTheStructuralVolumeHasTheSameFloorAsTheTradedOne(): void
     {
-        $this->assertSame(FinancialConstants::MIN_ADV_SHARES, $this->engine->structuralDailyVolume($this->stock(shares: 10.0)));
+        $this->assertSame(LiquidityEngine::MIN_ADV_SHARES, $this->engine->structuralDailyVolume($this->stock(shares: 10.0)));
     }
 
     public function testTheActivityMultiplierIsBoundedInBothDirections(): void
@@ -111,8 +111,8 @@ class LiquidityEngineTest extends TestCase
         $collapsed = $this->engine->activityMultiplier($this->stock(volatility: 0.28, currentVolatility: 0.001));
         $exploded = $this->engine->activityMultiplier($this->stock(volatility: 0.28, currentVolatility: 5.0));
 
-        $this->assertSame(FinancialConstants::MIN_ADV_ACTIVITY_MULTIPLIER, $collapsed);
-        $this->assertSame(FinancialConstants::MAX_ADV_ACTIVITY_MULTIPLIER, $exploded);
+        $this->assertSame(LiquidityEngine::MIN_ADV_ACTIVITY_MULTIPLIER, $collapsed);
+        $this->assertSame(LiquidityEngine::MAX_ADV_ACTIVITY_MULTIPLIER, $exploded);
     }
 
     // --- Spread ---
@@ -137,7 +137,7 @@ class LiquidityEngineTest extends TestCase
     {
         $halfSpread = $this->engine->halfSpreadFraction($this->stock(shares: 1.0e5, float: 0.10, turnover: 0.05, volatility: 3.0));
 
-        $this->assertSame(FinancialConstants::MAX_HALF_SPREAD, $halfSpread);
+        $this->assertSame(LiquidityEngine::MAX_HALF_SPREAD, $halfSpread);
     }
 
     // --- Impact ---
@@ -195,7 +195,7 @@ class LiquidityEngineTest extends TestCase
      */
     public function testTheTransientImpactHalvesOverItsHalfLifeAtAnyTickRate(): void
     {
-        $halfLife = FinancialConstants::TRANSIENT_IMPACT_HALF_LIFE_YEARS;
+        $halfLife = LiquidityEngine::TRANSIENT_IMPACT_HALF_LIFE_YEARS;
 
         $this->assertEqualsWithDelta(0.005, LiquidityEngine::transientImpactAfter(0.01, 0.0, $halfLife), 1e-15);
 
@@ -271,7 +271,7 @@ class LiquidityEngineTest extends TestCase
         $quote = $this->engine->quote($stock, 'BUY', $quantity, 100.0);
 
         $expectedFraction = $this->engine->halfSpreadFraction($stock)
-            + (FinancialConstants::TEMPORARY_IMPACT_ETA * abs($quote->peakImpact));
+            + (LiquidityEngine::TEMPORARY_IMPACT_ETA * abs($quote->peakImpact));
 
         $this->assertEqualsWithDelta(100.0 * (1.0 + $expectedFraction), $quote->executionPrice, 1e-9);
         $this->assertEqualsWithDelta(100.0 * $expectedFraction * $quantity, $quote->totalCost(), 1e-6);
@@ -328,7 +328,7 @@ class LiquidityEngineTest extends TestCase
         $stock = $this->stock();
 
         $this->assertEqualsWithDelta(
-            $this->engine->averageDailyVolume($stock) * FinancialConstants::MAX_ORDER_ADV_MULTIPLE,
+            $this->engine->averageDailyVolume($stock) * LiquidityEngine::MAX_ORDER_ADV_MULTIPLE,
             $this->engine->maximumOrderSize($stock),
             1e-9
         );
@@ -373,12 +373,12 @@ class LiquidityEngineTest extends TestCase
     public function testVolatileNamesAreSeededWithHigherTurnoverThanQuietOnes(): void
     {
         $quiet = LiquidityEngine::structuralTurnoverRatio(0.10);
-        $typical = LiquidityEngine::structuralTurnoverRatio(FinancialConstants::TURNOVER_REFERENCE_VOLATILITY);
+        $typical = LiquidityEngine::structuralTurnoverRatio(LiquidityEngine::TURNOVER_REFERENCE_VOLATILITY);
         $wild = LiquidityEngine::structuralTurnoverRatio(0.90);
 
         $this->assertLessThan($typical, $quiet);
         $this->assertGreaterThan($typical, $wild);
-        $this->assertEqualsWithDelta(FinancialConstants::BASELINE_ANNUAL_TURNOVER, $typical, 1e-9);
+        $this->assertEqualsWithDelta(LiquidityEngine::BASELINE_ANNUAL_TURNOVER, $typical, 1e-9);
     }
 
     public function testSeededTurnoverStaysInsideAPlausibleRange(): void
@@ -386,8 +386,8 @@ class LiquidityEngineTest extends TestCase
         foreach ([0.0, 0.001, 0.05, 0.30, 2.0, 10.0] as $volatility) {
             $turnover = LiquidityEngine::structuralTurnoverRatio($volatility);
 
-            $this->assertGreaterThanOrEqual(FinancialConstants::MIN_ANNUAL_TURNOVER, $turnover);
-            $this->assertLessThanOrEqual(FinancialConstants::MAX_ANNUAL_TURNOVER, $turnover);
+            $this->assertGreaterThanOrEqual(LiquidityEngine::MIN_ANNUAL_TURNOVER, $turnover);
+            $this->assertLessThanOrEqual(LiquidityEngine::MAX_ANNUAL_TURNOVER, $turnover);
         }
     }
 

@@ -37,6 +37,12 @@ use App\Service\Market\Pricing\LiquidityEngine;
  */
 final class DealerGammaEngine
 {
+    // --- Dealer Gamma Hedging (Barbon & Buraschi 2020; Baltussen, Da, Lammers & Radeva 2021) ---
+    /** Share of the desk's delta exposure that actually reaches the market as a hedge. A desk nets customer flow against itself first and only hedges the residual, so the whole of its book never trades. */
+    public const DEALER_HEDGE_RATIO = 0.80;
+    /** Ceiling on the desk's hedging flow per trading day as a share of the name's average daily volume, the Rule 10b-18 pacing corporate flow uses. Past it the impact law is extrapolation; the clipped remainder carries to the next pass. */
+    public const MAX_DEALER_HEDGE_ADV_MULTIPLE = 0.25;
+
     public function __construct(
         private readonly DealerGammaStoreInterface $store,
         private readonly LiquidityEngine $liquidityEngine,
@@ -173,13 +179,13 @@ final class DealerGammaEngine
             return [0.0, $price];
         }
 
-        $wanted = $state['gamma'] * $move * FinancialConstants::DEALER_HEDGE_RATIO;
+        $wanted = $state['gamma'] * $move * self::DEALER_HEDGE_RATIO;
 
         // A short-gamma desk chasing a gap would otherwise size into a spiral the name cannot fill. The cap is
         // a share of ADV per trading day, pro rata to the pass, so it binds the same at any hedging cadence
         // (the pacing LiquidityEngine::corporateFlowSlice uses).
         $passDays = max(0.0, $passYears) * FinancialConstants::TRADING_DAYS_PER_YEAR;
-        $ceiling = $this->liquidityEngine->averageDailyVolume($stock) * FinancialConstants::MAX_DEALER_HEDGE_ADV_MULTIPLE * $passDays;
+        $ceiling = $this->liquidityEngine->averageDailyVolume($stock) * self::MAX_DEALER_HEDGE_ADV_MULTIPLE * $passDays;
         $shares = max(-$ceiling, min($ceiling, $wanted));
 
         // Only the filled share of the move is hedged; the remainder stays owed for later passes.

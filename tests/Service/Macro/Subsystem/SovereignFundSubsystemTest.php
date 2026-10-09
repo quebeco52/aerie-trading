@@ -807,10 +807,20 @@ class SovereignFundSubsystemTest extends TestCase
     private function stillFund(bool $flatCurve = true): SovereignFundSubsystem
     {
         if (!$flatCurve) {
-            return new SovereignFundSubsystem($this->stillMarket());
+            return new class($this->stillMarket()) extends SovereignFundSubsystem {
+                protected function foreignEquityIndexStep(MacroState $state, float $dt): float
+                {
+                    return $state->foreignEquityIndex;
+                }
+            };
         }
 
         return new class($this->stillMarket()) extends SovereignFundSubsystem {
+            protected function foreignEquityIndexStep(MacroState $state, float $dt): float
+            {
+                return $state->foreignEquityIndex;
+            }
+
             public function foreignZeroYield(MacroState $state, float $maturity): float
             {
                 $scale = FixedIncome::calculateTermPremiumDurationScale($maturity, MacroEngine::TERM_PREMIUM_DURATION_HORIZON_YEARS);
@@ -821,29 +831,13 @@ class SovereignFundSubsystemTest extends TestCase
         };
     }
 
-    /** Draws that leave the foreign equity index where it stands. */
+    /** Every normal draw at zero. */
     private function stillMarket(): MathUtility
     {
         return new class() extends MathUtility {
             public function generateStandardNormal(): float
             {
                 return 0.0;
-            }
-
-            public function calculateCorrelatedGBM(
-                float $currentPrice,
-                float $idiosyncraticVolatility,
-                float $drift,
-                float $gravityDrift,
-                float $dt,
-                float $beta,
-                float $marketVol,
-                float $marketZ,
-                float $w1,
-                float $sectorZ = 0.0,
-                float $sectorVarianceShare = 0.0
-            ): float {
-                return $currentPrice;
             }
         };
     }

@@ -9,6 +9,8 @@ use App\Service\Event\MarketEventPublisher;
 use App\Service\Math\Decimal;
 use App\Service\Math\FirmEconomics;
 use App\Service\Math\MathUtility;
+use App\Service\Math\ResponseCurves;
+use App\Service\Math\StochasticProcesses;
 use App\Service\News\NarrativeEngine;
 use App\Service\Math\FinancialConstants;
 use App\Service\Market\Pricing\MarketConsensusEngine;
@@ -108,6 +110,126 @@ class EarningsEngine
     public const TTM_QUARTERS = 4;
     /** Absolute clamp on stored trailing net income, just inside the DECIMAL(30, 4) money column the EPS bridge also guards (Stock::MAX_MONEY_AMOUNT). */
     public const MAX_ABSOLUTE_NET_INCOME = 9.9e25;
+
+    // --- Bayesian Analyst Consensus ---
+    /** Stream-state key: the structural expected revenue the last consensus was formed against, so the analyst anchor can be carried forward with the base rather than frozen at last quarter's size. */
+    public const STATE_LAST_EXPECTED_REVENUE = 'state:last_expected_revenue';
+
+    // --- Jump Diffusion (Fundamental vs Price) ---
+    /** Scale factor for fundamental jump intensity relative to price jumps. */
+    public const FUNDAMENTAL_JUMP_INTENSITY_SCALE = 0.25;
+    /** Scale factor for fundamental jump mean size relative to price jumps. */
+    public const FUNDAMENTAL_JUMP_MEAN_SCALE = 0.50;
+    /** Scale factor for fundamental jump volatility relative to price jumps. */
+    public const FUNDAMENTAL_JUMP_VOL_SCALE = 0.50;
+
+    // --- Price Gap Dampening ---
+    /** Liquidity dampener slowing instantaneous price convergence to fundamental fair value. */
+    public const PRICE_GAP_DAMPENING = 0.20;
+    /** Maximum allowable single-quarter fundamental price gap adjustment. */
+    public const MAX_PRICE_GAP = 0.25;
+
+    // --- Valuation & Multiples ---
+    /** Baseline long-run market equilibrium price-to-earnings multiple. */
+    public const BASELINE_MARKET_PE = 15.0;
+
+    // --- Capacity Investment ---
+    /** Share of the log gap between demand-implied and installed capital a firm closes each year: 6.2% (Bloom, Bond & Van Reenen 2007, UK company panel, error-correction term). */
+    public const CAPITAL_ERROR_CORRECTION_SPEED = 0.062;
+
+    // --- Institutional & Market Architecture ---
+    /** Circuit breaker limiting the price move of a single quarterly earnings report to +/-40%. */
+    public const MAX_QUARTERLY_PRICE_CIRCUIT_BREAKER = 0.40;
+
+    // --- Input Cost Basket ---
+    /** Stream-state key: unrecovered input cost ratio as it stood at the PREVIOUS report, so guidance can warn on the change rather than the standing level. */
+    public const STATE_PRIOR_UNRECOVERED_COST = 'state:prior_unrecovered_cost';
+
+    // --- Earnings Pre-Announcements (Kasznik & Lev 1995) ---
+    /** Share of a quarter before the scheduled report at which management closes the books far enough to know it will miss. */
+    public const PREANNOUNCEMENT_LEAD_RATIO = 0.10;
+    /** Known shortfall, as a fraction of structural quarterly earnings, at which management warns rather than let the market find out on the day. */
+    public const PREANNOUNCEMENT_WARNING_THRESHOLD = 0.20;
+    /** Share of the warned shortfall analysts take out of their estimate, so the report itself lands as a smaller surprise. */
+    public const PREANNOUNCEMENT_CONSENSUS_ABSORPTION = 0.80;
+    /** Ceiling on the single-tick repricing a warning may cause. Warning-day abnormal returns average high single digits (Kasznik & Lev 1995; Skinner 1994); the old 25% cap was hit routinely and, with fair value unmoved, produced a V that fully reverted before the report. */
+    public const MAX_PREANNOUNCEMENT_PRICE_REACTION = 0.10;
+    /** Floor on the operating margin that sizes structural earnings for a warning, so a break-even firm is scaled by its revenue rather than by a near-zero print. */
+    public const PREANNOUNCEMENT_MIN_MARGIN_SCALE = 0.05;
+
+    // --- Industry Capacity & Cournot Pricing ---
+    /** Long-run supply elasticity of the competitive fringe (Forchheimer): fringe output ~ P^eta, so it cedes share when dominant firms overbuild and refills a hole when one exits; unit elasticity is the textbook constant-cost long run. */
+    public const FRINGE_SUPPLY_ELASTICITY = 1.0;
+
+    // --- Equity Grant Burn Rate ---
+    /** Most shares a large company grants in a year, as a share of shares outstanding, by GICS sector: ISS 2026 S&P 500 value-adjusted burn-rate benchmarks (86th percentile). */
+    public const EQUITY_BURN_RATE_CAP_BY_SECTOR = [
+        'Information Technology' => 0.0215,
+        'Communication Services' => 0.0172,
+        'Consumer Discretionary' => 0.0133,
+        'Financials'             => 0.0103,
+        'Health Care'            => 0.0088,
+    ];
+    /** ISS 2026 S&P 500 burn-rate benchmark for every other sector (energy, materials, industrials, staples, utilities, real estate): 0.77% a year. */
+    public const DEFAULT_EQUITY_BURN_RATE_CAP = 0.0077;
+    /** Goodwill impairment smaller than this fraction of the goodwill balance is immaterial and not booked. */
+    public const MIN_GOODWILL_IMPAIRMENT_FRACTION = 0.01;
+
+    // --- Debt Physics ---
+    /** Fallback weighted average cost of capital used as the investment hurdle when no live debt health exists. */
+    public const DEFAULT_WACC_FALLBACK = 0.08;
+
+    // --- Corporate Taxation ---
+    /** Max % of taxable income that can be shielded by NOLs (e.g. 80% post-TCJA). */
+    public const NOL_MAX_SHIELD_RATIO = 0.80;
+
+    // --- Asymmetric Cost Stickiness (Anderson, Banker, & Janakiraman 2003) ---
+    /** Quarters of eliminated payroll recognised as one-time termination benefits when the committed base is cut (ASC 420-10). */
+    public const RESTRUCTURING_SEVERANCE_QUARTERS = 2.0;
+
+    // --- Earnings Management (Burgstahler & Dichev 1997) ---
+    /** Largest shortfall against consensus, as a fraction of the consensus figure, that management will close with accruals; a wider miss is taken rather than papered over. */
+    public const EARNINGS_MANAGEMENT_MAX_GAP = 0.05;
+    /** Cap on the accumulated managed-accrual balance as a fraction of total assets: past this the reversal is too large to keep hiding. */
+    public const EARNINGS_MANAGEMENT_MAX_BANK_RATIO = 0.02;
+    /** Quarterly fraction of the borrowed balance that unwinds back into reported earnings (Dechow & Dichev 2002 accrual reversal). */
+    public const EARNINGS_MANAGEMENT_REVERSAL_RATE = 0.25;
+    /** Cushion above consensus a managed quarter aims for, so it prints as a small beat rather than an implausibly exact match. */
+    public const EARNINGS_MANAGEMENT_BEAT_CUSHION = 0.002;
+
+    // --- Deferred Taxes (ASC 740) ---
+    /** Declining-balance rate multiple for tax depreciation: the 200% method of the MACRS general depreciation system. */
+    public const TAX_DEPRECIATION_ACCELERATION = 2.0;
+
+    // --- Inventory & Receivable Impairment ---
+    /** Capacity utilization below which unsold inventory starts failing the lower-of-cost-or-net-realizable-value test (ASC 330). Calibrated to this engine's utilization scale, which centres on 1.0 rather than the ~80% of the published manufacturing series. */
+    public const INVENTORY_NRV_UTILIZATION_TRIGGER = 0.95;
+    /** Fraction of inventory written off at total demand collapse; scaled by how far utilization has fallen. */
+    public const INVENTORY_NRV_LOSS_RATE = 0.25;
+    /** Maximum share of the existing allowance that can be released in one quarter, so a recovery cannot be booked as instant profit. */
+    public const MAX_ALLOWANCE_RELEASE_RATIO = 0.25;
+
+    // --- Fixed Asset Ledger (PP&E) ---
+    /** Floor on the cash share of the structural cost base once depreciation is carved out as its own expense line. */
+    public const MIN_CASH_COST_SHARE = 0.40;
+
+    // --- Earning Asset Ledger (Financials) ---
+    /** Share of the gap between the credit-loss allowance and its lifetime target closed each quarter, in either direction, so a build or release is a path and not a cliff. */
+    public const CREDIT_ALLOWANCE_CONVERGENCE_RATIO = 0.25;
+
+    // --- Investment Securities & AOCI (ASC 320 / Basel III) ---
+    /** Default portfolio duration in years for a financial with no seeded figure; the middle of the range large lenders run. */
+    public const DEFAULT_SECURITIES_DURATION_YEARS = 4.5;
+
+    // --- Equity Issuance & TAM Scaling Limits ---
+    /** Ceiling on structural revenue capacity, as a multiple of the firm's revenue at a full addressable share (150%). */
+    public const MAX_SECTOR_TAM_CAPACITY_RATIO = 1.50;
+    /** The same ceiling for financial intermediaries, whose share is read on equity while revenue comes off the leveraged book (250%). */
+    public const MAX_FINANCIAL_SECTOR_TAM_CAPACITY_RATIO = 2.50;
+
+    // --- Profitability Persistence (Fama & French 2000; Ohlson 1995) ---
+    /** Time constant in years of each firm's measured long-run return, the level its profitability reverts to: five years, the span Damodaran normalizes earnings over. */
+    public const LONG_RUN_RETURN_EMA_YEARS = 5.0;
 
     /**
      * Constructor.
@@ -214,7 +336,7 @@ class EarningsEngine
     public static function resolvePreAnnouncementTick(string $ticker, int $ticksPerYear): int
     {
         $ticksPerQuarter = max(1, (int) ($ticksPerYear / 4));
-        $lead = max(1, (int) round($ticksPerQuarter * FinancialConstants::PREANNOUNCEMENT_LEAD_RATIO));
+        $lead = max(1, (int) round($ticksPerQuarter * self::PREANNOUNCEMENT_LEAD_RATIO));
 
         return max(0, self::resolveReportingTick($ticker, $ticksPerYear) - $lead);
     }
@@ -242,7 +364,7 @@ class EarningsEngine
 
         // Owed back to earlier quarters that were papered over. Accruals are firm-private, so the whole
         // reversal is news: nothing on the street can have anticipated it.
-        $reversalDue = $stock->getManagedAccrualBank() * FinancialConstants::EARNINGS_MANAGEMENT_REVERSAL_RATE;
+        $reversalDue = $stock->getManagedAccrualBank() * self::EARNINGS_MANAGEMENT_REVERSAL_RATE;
 
         // Guidance warns on unrecovered cost increases carried into the quarter relative to prior period.
         $streamState = $stock->getEarningsMomentumZ() ?? [];
@@ -250,7 +372,7 @@ class EarningsEngine
             (float) ($streamState[FinancialConstants::STATE_INPUT_COST_LEVEL] ?? 0.0)
             - (float) ($streamState[FinancialConstants::STATE_INPUT_COST_RECOVERY] ?? 0.0)
         );
-        $priorUnrecovered = max(0.0, (float) ($streamState[FinancialConstants::STATE_PRIOR_UNRECOVERED_COST] ?? 0.0));
+        $priorUnrecovered = max(0.0, (float) ($streamState[self::STATE_PRIOR_UNRECOVERED_COST] ?? 0.0));
         $deterioration = max(0.0, $unrecovered - $priorUnrecovered);
 
         // The squeeze reaches earnings through the VARIABLE COST BASE: the drag is a shift in the cost ratio
@@ -271,24 +393,24 @@ class EarningsEngine
         }
 
         // Shortfall sized against structural quarterly earnings power rather than volatile trailing earnings.
-        $structuralMargin = max(FinancialConstants::PREANNOUNCEMENT_MIN_MARGIN_SCALE, (float) $stock->getOperatingMargin());
+        $structuralMargin = max(self::PREANNOUNCEMENT_MIN_MARGIN_SCALE, (float) $stock->getOperatingMargin());
         $structuralQuarterlyEarnings = max(1.0, $quarterlyRevenue * $structuralMargin);
         $shortfallRatio = $knownShortfall / $structuralQuarterlyEarnings;
 
-        if ($shortfallRatio < FinancialConstants::PREANNOUNCEMENT_WARNING_THRESHOLD) {
+        if ($shortfallRatio < self::PREANNOUNCEMENT_WARNING_THRESHOLD) {
             return [];
         }
 
         // Analysts cut their number on the warning, so the report that follows is a smaller surprise —
         // which is exactly why managements warn.
-        $stock->setPreAnnouncedShortfall($knownShortfall * FinancialConstants::PREANNOUNCEMENT_CONSENSUS_ABSORPTION);
+        $stock->setPreAnnouncedShortfall($knownShortfall * self::PREANNOUNCEMENT_CONSENSUS_ABSORPTION);
 
         // Pre-announcement repricing: price reacts on guidance issuance date via earnings response coefficient.
         $currentPrice = (float) $stock->getPrice();
         $annualEps = (float) $stock->getEarningsPerShare();
-        $currentPE = $annualEps > 0.0 ? $currentPrice / $annualEps : FinancialConstants::BASELINE_MARKET_PE;
+        $currentPE = $annualEps > 0.0 ? $currentPrice / $annualEps : self::BASELINE_MARKET_PE;
         $reaction = max(
-            -FinancialConstants::MAX_PREANNOUNCEMENT_PRICE_REACTION,
+            -self::MAX_PREANNOUNCEMENT_PRICE_REACTION,
             $this->resolveDampedPriceGap(-min(1.0, $shortfallRatio), (float) $stock->getBeta(), $this->resolveGrowthPremium($currentPE))
         );
         $stock->setPrice(number_format(max(0.01, $currentPrice * (1.0 + $reaction)), 8, '.', ''));
@@ -528,9 +650,9 @@ class EarningsEngine
         $priceJumpIntensity = (float) ($stock->getJumpIntensity() ?? 2.00);
         $priceJumpVol = (float) ($stock->getJumpVol() ?? 0.10);
 
-        $jumpIntensity = $priceJumpIntensity * FinancialConstants::FUNDAMENTAL_JUMP_INTENSITY_SCALE;
-        $jumpVol = $priceJumpVol * FinancialConstants::FUNDAMENTAL_JUMP_VOL_SCALE;
-        $jumpMean = -$priceJumpVol * FinancialConstants::FUNDAMENTAL_JUMP_MEAN_SCALE;
+        $jumpIntensity = $priceJumpIntensity * self::FUNDAMENTAL_JUMP_INTENSITY_SCALE;
+        $jumpVol = $priceJumpVol * self::FUNDAMENTAL_JUMP_VOL_SCALE;
+        $jumpMean = -$priceJumpVol * self::FUNDAMENTAL_JUMP_MEAN_SCALE;
 
         $jumpData = $this->mathUtility->calculateJumpDiffusion($jumpIntensity, $jumpMean, $jumpVol, $ctx->dt);
         $jumpMagnitude = $jumpData['exponent'] ?? 0.0;
@@ -579,7 +701,7 @@ class EarningsEngine
         // Carve structural depreciation out of cash operating costs so EBITDA sits above depreciation and EBIT below.
         $ctx->structuralDepreciation = $this->resolveStructuralDepreciation($ctx);
         $cashStructuralCosts = max(
-            $structuralCosts * FinancialConstants::MIN_CASH_COST_SHARE,
+            $structuralCosts * self::MIN_CASH_COST_SHARE,
             $structuralCosts - $ctx->structuralDepreciation
         );
 
@@ -624,8 +746,8 @@ class EarningsEngine
         // compare quarterly revenue against the CAPITAL figure of the market, six times too loose to bind.
         $fullMarketRevenue = $ctx->addressableShare > 0.0 ? $structuralRevenue / $ctx->addressableShare : INF;
         $maxCapacity = $fullMarketRevenue * ($ctx->strategy->isFinancial()
-            ? FinancialConstants::MAX_FINANCIAL_SECTOR_TAM_CAPACITY_RATIO
-            : FinancialConstants::MAX_SECTOR_TAM_CAPACITY_RATIO);
+            ? self::MAX_FINANCIAL_SECTOR_TAM_CAPACITY_RATIO
+            : self::MAX_SECTOR_TAM_CAPACITY_RATIO);
 
         $cappedStructuralRevenue = min($maxCapacity, $structuralRevenue);
 
@@ -706,7 +828,7 @@ class EarningsEngine
             $capacityRatio,
             $this->industryShareLedger->resolveRosterTrendShare($ctx->stock, $ctx->tickCount, $ctx->ticksPerYear),
             FinancialConstants::COURNOT_DEMAND_ELASTICITY,
-            FinancialConstants::FRINGE_SUPPLY_ELASTICITY
+            self::FRINGE_SUPPLY_ELASTICITY
         );
         $firmResponse = $substitutability * ($industryPrice - 1.0);
 
@@ -806,7 +928,7 @@ class EarningsEngine
             $currentVariableMargin = max(0.01, min(0.99, $ctx->baselineVariableMargin));
         }
 
-        $realizedVariableMargin = $this->mathUtility->calculateCIR($currentVariableMargin, $kappa, $dynamicVariableTheta, $marginVol, $ctx->dt, $z2);
+        $realizedVariableMargin = StochasticProcesses::calculateCIR($currentVariableMargin, $kappa, $dynamicVariableTheta, $marginVol, $ctx->dt, $z2);
 
         $stock->setStructuralVariableMargin($realizedVariableMargin); // Save true state before asymmetric stickiness noise
 
@@ -814,7 +936,7 @@ class EarningsEngine
         // Operating costs contract sluggishly when revenue drops, squeezing variable margins during contractions.
         // Both quarters are read on expected revenue, the activity the cost base was resourced for: last
         // quarter's actual also carries its market price and one-off shocks, which are not activity.
-        $priorExpectedRevenue = (float) (($stock->getEarningsMomentumZ() ?? [])[FinancialConstants::STATE_LAST_EXPECTED_REVENUE] ?? 0.0);
+        $priorExpectedRevenue = (float) (($stock->getEarningsMomentumZ() ?? [])[self::STATE_LAST_EXPECTED_REVENUE] ?? 0.0);
         $priorRevenue = match (true) {
             $priorExpectedRevenue > 0.0 => $priorExpectedRevenue,
             $ctx->previousQuarterlyRevenue > 0.0 => $ctx->previousQuarterlyRevenue,
@@ -825,15 +947,21 @@ class EarningsEngine
         $revenueLogChange = max(-0.50, min(0.50, log(max(0.01, $currentDeseasonalized / max(1.0, $priorDeseasonalized)))));
         $stickyVariableMargin = FirmEconomics::calculateAsymmetricCostStickiness($realizedVariableMargin, $revenueLogChange);
 
-        // Overtime cost penalty: calculated against deseasonalized capacity utilization above threshold.
-        $deseasonalizedUtilization = $ctx->capacityUtilization / max(0.01, $ctx->seasonalFactor);
-        $overtimePremium = $this->mathUtility->calculateConvexPenalty(
-            $deseasonalizedUtilization - self::CAPACITY_OVERTIME_THRESHOLD,
+        $ctx->realizedVariableMargin = min(0.99, max(0.01, $stickyVariableMargin + self::overtimePremium($ctx->capacityUtilization, $ctx->seasonalFactor)));
+    }
+
+    /**
+     * Overtime cost: the convex penalty on deseasonalized capacity utilization above the overtime threshold. A firm
+     * keeps capacity for its calendar's own peak, so a retailer at 1.35x in its holiday quarter is at structural
+     * demand and pays nothing.
+     */
+    public static function overtimePremium(float $capacityUtilization, float $seasonalFactor): float
+    {
+        return ResponseCurves::calculateConvexPenalty(
+            ($capacityUtilization / max(0.01, $seasonalFactor)) - self::CAPACITY_OVERTIME_THRESHOLD,
             self::CAPACITY_OVERTIME_CONVEXITY,
             self::CAPACITY_OVERTIME_SCALAR
         );
-
-        $ctx->realizedVariableMargin = min(0.99, max(0.01, $stickyVariableMargin + $overtimePremium));
     }
 
     /**
@@ -922,7 +1050,7 @@ class EarningsEngine
         $seasonalRatio = $ctx->seasonalFactor / max(0.01, $ctx->priorSeasonalFactor);
         // The base the LAST consensus was struck against, still the opening state here: the stream map on
         // the stock is only replaced once the report is booked below.
-        $priorExpectedRevenue = (float) (($ctx->stock->getEarningsMomentumZ() ?? [])[FinancialConstants::STATE_LAST_EXPECTED_REVENUE] ?? 0.0);
+        $priorExpectedRevenue = (float) (($ctx->stock->getEarningsMomentumZ() ?? [])[self::STATE_LAST_EXPECTED_REVENUE] ?? 0.0);
         $consensus = $this->marketConsensusEngine->generateConsensus(
             $actuals,
             $coverage,
@@ -960,13 +1088,13 @@ class EarningsEngine
         // explicitly rather than left to survive on its own.
         $openingState = $ctx->stock->getEarningsMomentumZ() ?? [];
         $streamState = $actuals->streamZ;
-        $streamState[FinancialConstants::STATE_PRIOR_UNRECOVERED_COST] = max(0.0,
+        $streamState[self::STATE_PRIOR_UNRECOVERED_COST] = max(0.0,
             (float) ($openingState[FinancialConstants::STATE_INPUT_COST_LEVEL] ?? 0.0)
             - (float) ($openingState[FinancialConstants::STATE_INPUT_COST_RECOVERY] ?? 0.0)
         );
         // The base this quarter's consensus was struck against, so the next one can roll its anchor
         // forward with the firm's growth instead of freezing it at today's dollar size.
-        $streamState[FinancialConstants::STATE_LAST_EXPECTED_REVENUE] = $ctx->expectedRevenue;
+        $streamState[self::STATE_LAST_EXPECTED_REVENUE] = $ctx->expectedRevenue;
         $ctx->stock->setEarningsMomentumZ($streamState);
         $ctx->streamRevenue = $actuals->streamRevenue;
         $ctx->scheduledCapex = max(0.0, $actuals->scheduledCapex);
@@ -984,7 +1112,7 @@ class EarningsEngine
         // board can grant: shareholders and proxy advisers cap the annual burn rate (ISS benchmarks), so a
         // firm whose price has fallen pays the rest of the same pay bill in cash rather than printing stock.
         $stockCompensationExpense = max(0.0, $ctx->actualRevenue) * $ctx->strategy->getStockCompensationIntensity($ctx->stock);
-        $burnRateCap = FinancialConstants::EQUITY_BURN_RATE_CAP_BY_SECTOR[(string) $ctx->stock->getSector()] ?? FinancialConstants::DEFAULT_EQUITY_BURN_RATE_CAP;
+        $burnRateCap = self::EQUITY_BURN_RATE_CAP_BY_SECTOR[(string) $ctx->stock->getSector()] ?? self::DEFAULT_EQUITY_BURN_RATE_CAP;
         $grantableValue = $burnRateCap * $ctx->dt * max(0.0, $ctx->sharesOutstanding) * max(0.0, (float) $ctx->stock->getPrice());
         $ctx->stockCompensation = min($stockCompensationExpense, $grantableValue);
         $ctx->kpis['stock_compensation'] = $stockCompensationExpense;
@@ -1063,7 +1191,7 @@ class EarningsEngine
         $nol = (float) $stock->getNetOperatingLoss();
 
         if ($actualEbt > 0 && $nol > 0) {
-            $maxShield = $actualEbt * FinancialConstants::NOL_MAX_SHIELD_RATIO;
+            $maxShield = $actualEbt * self::NOL_MAX_SHIELD_RATIO;
             $shielded = min($maxShield, $nol);
             $taxableIncome = $actualEbt - $shielded;
             $stock->setNetOperatingLoss((string) ($nol - $shielded));
@@ -1078,7 +1206,7 @@ class EarningsEngine
         $this->splitTaxExpenseIntoCurrentAndDeferred($ctx, $actualEbt - $ctx->actualQuarterlyNetIncome);
 
         if ($expectedEbt > 0 && $nol > 0) {
-            $expectedMaxShield = $expectedEbt * FinancialConstants::NOL_MAX_SHIELD_RATIO;
+            $expectedMaxShield = $expectedEbt * self::NOL_MAX_SHIELD_RATIO;
             $expectedShielded = min($expectedMaxShield, $nol);
             $expectedTaxable = $expectedEbt - $expectedShielded;
             $ctx->expectedQuarterlyNetIncome = $expectedEbt - ($expectedTaxable * $ctx->corporateTaxRate);
@@ -1131,7 +1259,7 @@ class EarningsEngine
             $priorLongRun !== null ? (float) $priorLongRun : null,
             $ctx->strategy->getTrueReturn($stock),
             self::REPORT_INTERVAL_YEARS,
-            FinancialConstants::LONG_RUN_RETURN_EMA_YEARS
+            self::LONG_RUN_RETURN_EMA_YEARS
         ));
 
         $this->testGoodwillForImpairment($ctx);
@@ -1161,7 +1289,7 @@ class EarningsEngine
         $carryingCapital = $ctx->strategy->getEvaluationCapital((float) $stock->getTotalEquity(), $ctx->investedCapital);
         $valueShortfall = max(0.0, $carryingCapital) * (1.0 - (max(0.0, $trailingReturn) / $hurdleRate));
         $impairment = min($goodwill, max(0.0, $valueShortfall));
-        if ($impairment < $goodwill * FinancialConstants::MIN_GOODWILL_IMPAIRMENT_FRACTION) {
+        if ($impairment < $goodwill * self::MIN_GOODWILL_IMPAIRMENT_FRACTION) {
             return;
         }
 
@@ -1201,7 +1329,7 @@ class EarningsEngine
 
         // Last quarter's borrowing comes due first: the reversal is booked before management looks at the
         // gap, so a firm that papered over one quarter starts the next one in a hole.
-        $reversal = $bank * FinancialConstants::EARNINGS_MANAGEMENT_REVERSAL_RATE;
+        $reversal = $bank * self::EARNINGS_MANAGEMENT_REVERSAL_RATE;
         $bank -= $reversal;
         $ctx->managedAccrual = -$reversal;
 
@@ -1211,14 +1339,14 @@ class EarningsEngine
         if ($propensity > 0.0 && $shortfall > 0.0 && abs($consensus) > 0.0) {
             // Only a near miss is worth closing: past this the accrual needed is too large to book and
             // too large to unwind, so the quarter is reported as it happened.
-            $reachableGap = abs($consensus) * FinancialConstants::EARNINGS_MANAGEMENT_MAX_GAP;
+            $reachableGap = abs($consensus) * self::EARNINGS_MANAGEMENT_MAX_GAP;
 
             // Earnings management: probabilistic accrual borrowed to close small reachable consensus gaps.
             if ($shortfall <= $reachableGap && $this->mathUtility->checkProbability($propensity)) {
                 // Land just above the line rather than exactly on it: an exact match is the one outcome
                 // that never occurs in real reported distributions.
-                $target = $shortfall + (abs($consensus) * FinancialConstants::EARNINGS_MANAGEMENT_BEAT_CUSHION);
-                $headroom = max(0.0, ($this->resolveTotalAssets($ctx) * FinancialConstants::EARNINGS_MANAGEMENT_MAX_BANK_RATIO) - $bank);
+                $target = $shortfall + (abs($consensus) * self::EARNINGS_MANAGEMENT_BEAT_CUSHION);
+                $headroom = max(0.0, ($this->resolveTotalAssets($ctx) * self::EARNINGS_MANAGEMENT_MAX_BANK_RATIO) - $bank);
                 $borrowed = min($target, $headroom);
 
                 $ctx->managedAccrual += $borrowed;
@@ -1516,7 +1644,7 @@ class EarningsEngine
         // Opening basis equals book value: no deferred tax is inherited from before the firm existed.
         $basis = (float) ($stock->getPpeTaxBasis() ?? (string) $stock->getNetPpe());
 
-        $taxRate = $this->resolveDepreciationRate($ctx) * FinancialConstants::TAX_DEPRECIATION_ACCELERATION;
+        $taxRate = $this->resolveDepreciationRate($ctx) * self::TAX_DEPRECIATION_ACCELERATION;
         $taxDepreciation = min($basis, max(0.0, $basis) * $taxRate / 4.0);
 
         // Additions join the basis in the ledger roll-forward, alongside the book ledger they also enter.
@@ -1608,7 +1736,7 @@ class EarningsEngine
         $charge = $ctx->committedCostCut
             * $structuralFixedCosts
             * $ctx->strategy->getLaborCostShare()
-            * FinancialConstants::RESTRUCTURING_SEVERANCE_QUARTERS;
+            * self::RESTRUCTURING_SEVERANCE_QUARTERS;
 
         if ($charge <= 0.0) {
             return;
@@ -1665,7 +1793,7 @@ class EarningsEngine
             openingMark: $opening,
             carryingYield: $stock->getSecuritiesCarryingYield(),
             curve: $ctx->macroState->sovereignCurve(),
-            duration: $stock->getSecuritiesDuration() ?? FinancialConstants::DEFAULT_SECURITIES_DURATION_YEARS,
+            duration: $stock->getSecuritiesDuration() ?? self::DEFAULT_SECURITIES_DURATION_YEARS,
             floatingShare: $ctx->strategy->getSecuritiesFloatingShare($stock),
             fallbackYield: $ctx->macroState->yield10yEma,
         );
@@ -1742,7 +1870,7 @@ class EarningsEngine
         $allowance += $replenishment;
 
         $target = $grossBook * $this->resolveLifetimeCreditLossRate($ctx, $currentLossRate);
-        $convergence = ($target - max(0.0, $allowance)) * FinancialConstants::CREDIT_ALLOWANCE_CONVERGENCE_RATIO;
+        $convergence = ($target - max(0.0, $allowance)) * self::CREDIT_ALLOWANCE_CONVERGENCE_RATIO;
         $allowance += $convergence;
 
         $levelCharge = $replenishment + $convergence;
@@ -1779,14 +1907,14 @@ class EarningsEngine
             return 0.0;
         }
 
-        $trigger = FinancialConstants::INVENTORY_NRV_UTILIZATION_TRIGGER;
+        $trigger = self::INVENTORY_NRV_UTILIZATION_TRIGGER;
         $utilization = $ctx->capacityUtilization / max(0.01, $ctx->seasonalFactor);
         if ($utilization >= $trigger) {
             return 0.0;
         }
 
         $severity = min(1.0, ($trigger - $utilization) / $trigger);
-        $charge = $inventory * FinancialConstants::INVENTORY_NRV_LOSS_RATE * $severity;
+        $charge = $inventory * self::INVENTORY_NRV_LOSS_RATE * $severity;
 
         $ctx->stock->setInventoryAllowance((string) ((float) $ctx->stock->getInventoryAllowance() + $charge));
 
@@ -1808,7 +1936,7 @@ class EarningsEngine
         $provision = $targetAllowance - $currentAllowance;
         if ($provision < 0.0) {
             // A recovery is released gradually: an improving outlook is not instant profit.
-            $provision = -min(abs($provision), $currentAllowance * FinancialConstants::MAX_ALLOWANCE_RELEASE_RATIO);
+            $provision = -min(abs($provision), $currentAllowance * self::MAX_ALLOWANCE_RELEASE_RATIO);
         }
 
         $ctx->stock->setReceivablesAllowance((string) max(0.0, $currentAllowance + $provision));
@@ -1916,7 +2044,7 @@ class EarningsEngine
         $reinvestmentRate = max(0.0, (float) $stock->getCapexRatio()) * $manager->reinvestmentBias();
         $hurdleRate = $ctx->health instanceof \App\DTO\DebtHealthDTO
             ? $ctx->strategy->getHurdleRate($ctx->health)
-            : FinancialConstants::DEFAULT_WACC_FALLBACK;
+            : self::DEFAULT_WACC_FALLBACK;
 
         // Jensen (1986): the agency cost of free cash flow is not spending more, it is accepting projects
         // that do not clear the cost of capital. The style bends the hurdle management applies, so an
@@ -1979,7 +2107,7 @@ class EarningsEngine
             $ctx->macroState,
             IndustryShareLedger::secularExcessGrowth($ctx->strategy, $stock)
         ) ?? 0.0;
-        $plantGrowth = Valuation::flexibleAcceleratorGrowth($trendNominalGrowth, $capitalGap, FinancialConstants::CAPITAL_ERROR_CORRECTION_SPEED);
+        $plantGrowth = Valuation::flexibleAcceleratorGrowth($trendNominalGrowth, $capitalGap, self::CAPITAL_ERROR_CORRECTION_SPEED);
 
         $revaluationAlreadyBooked = max(0.0, $maintenanceCapEx - $ctx->quarterlyDepreciation);
         $plantBase = $stock->getGrossPpe() !== null ? max(0.0, $stock->getNetPpe()) : abs($ctx->investedCapital);
@@ -2029,7 +2157,7 @@ class EarningsEngine
      */
     private function resolveGrowthPremium(float $currentPE): float
     {
-        $valuationPremium = max(self::VALUATION_PREMIUM_MIN, min(self::VALUATION_PREMIUM_MAX, $currentPE / FinancialConstants::BASELINE_MARKET_PE));
+        $valuationPremium = max(self::VALUATION_PREMIUM_MIN, min(self::VALUATION_PREMIUM_MAX, $currentPE / self::BASELINE_MARKET_PE));
 
         return max(0.0, $valuationPremium - 1.0);
     }
@@ -2044,9 +2172,9 @@ class EarningsEngine
     private function resolveDampedPriceGap(float $surprisePct, float $beta, float $growthPremium): float
     {
         $priceGapPct = Valuation::calculateEarningsResponseCoefficient($surprisePct, $beta, $growthPremium);
-        $damped = $priceGapPct * FinancialConstants::PRICE_GAP_DAMPENING;
+        $damped = $priceGapPct * self::PRICE_GAP_DAMPENING;
 
-        return max(-FinancialConstants::MAX_PRICE_GAP, min(FinancialConstants::MAX_PRICE_GAP, $damped));
+        return max(-self::MAX_PRICE_GAP, min(self::MAX_PRICE_GAP, $damped));
     }
 
     /**
@@ -2097,7 +2225,7 @@ class EarningsEngine
             }
         }
 
-        $ctx->totalShockPct = max(-FinancialConstants::MAX_QUARTERLY_PRICE_CIRCUIT_BREAKER, min(FinancialConstants::MAX_QUARTERLY_PRICE_CIRCUIT_BREAKER, $ctx->totalShockPct));
+        $ctx->totalShockPct = max(-self::MAX_QUARTERLY_PRICE_CIRCUIT_BREAKER, min(self::MAX_QUARTERLY_PRICE_CIRCUIT_BREAKER, $ctx->totalShockPct));
 
         // A firm with no shares outstanding never reaches the capital allocator, so the allocation array can
         // legitimately be empty here — every other read of it is already guarded, and this one was not.

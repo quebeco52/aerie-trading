@@ -6,7 +6,6 @@ namespace App\Tests\Service\Market\Pricing;
 
 use App\Entity\Stock;
 use App\Service\Market\Pricing\StockTracker;
-use App\Service\Math\FinancialConstants;
 use App\Tests\Support\StockBuilder;
 use PHPUnit\Framework\TestCase;
 use ReflectionClass;
@@ -75,7 +74,7 @@ final class AnalystPriceTargetTest extends TestCase
         $this->revise($stock, 100.0);
 
         self::assertEqualsWithDelta(
-            100.0 * (1.0 + FinancialConstants::ANALYST_TARGET_OPTIMISM),
+            100.0 * (1.0 + StockTracker::ANALYST_TARGET_OPTIMISM),
             (float) $stock->getAnalystPriceTarget(),
             1e-6
         );
@@ -91,7 +90,7 @@ final class AnalystPriceTargetTest extends TestCase
         $this->revise($stock, 100.0);
         $struck = $stock->getAnalystPriceTarget();
 
-        $inside = 1.0 + (FinancialConstants::ANALYST_TARGET_REVISION_THRESHOLD * 0.9);
+        $inside = 1.0 + (StockTracker::ANALYST_TARGET_REVISION_THRESHOLD * 0.9);
 
         self::assertNull($this->revise($stock, 100.0 * $inside));
         self::assertSame($struck, $stock->getAnalystPriceTarget());
@@ -104,7 +103,7 @@ final class AnalystPriceTargetTest extends TestCase
         $this->revise($stock, 100.0);
         $struck = (float) $stock->getAnalystPriceTarget();
 
-        $outside = 1.0 + (FinancialConstants::ANALYST_TARGET_REVISION_THRESHOLD * 2.0);
+        $outside = 1.0 + (StockTracker::ANALYST_TARGET_REVISION_THRESHOLD * 2.0);
         $event = $this->revise($stock, 100.0 * $outside);
 
         self::assertNotNull($event);
@@ -119,7 +118,7 @@ final class AnalystPriceTargetTest extends TestCase
         $stock = $this->stock();
         $this->revise($stock, 100.0);
 
-        $this->revise($stock, 100.0 * (1.0 - (FinancialConstants::ANALYST_TARGET_REVISION_THRESHOLD * 2.0)));
+        $this->revise($stock, 100.0 * (1.0 - (StockTracker::ANALYST_TARGET_REVISION_THRESHOLD * 2.0)));
 
         self::assertCount(1, $this->published);
         self::assertStringContainsString('cut', $this->published[0][1]);
@@ -202,8 +201,8 @@ final class AnalystPriceTargetTest extends TestCase
     public function testTheRatingBandsAreAsymmetric(): void
     {
         self::assertGreaterThan(
-            1.0 - FinancialConstants::ANALYST_RATING_UNDERPERFORM,
-            FinancialConstants::ANALYST_RATING_OUTPERFORM - 1.0,
+            1.0 - Stock::ANALYST_RATING_UNDERPERFORM,
+            Stock::ANALYST_RATING_OUTPERFORM - 1.0,
             'It takes more upside to say buy than downside to say sell.'
         );
     }

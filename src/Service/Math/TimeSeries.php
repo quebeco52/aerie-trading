@@ -12,6 +12,18 @@ namespace App\Service\Math;
  */
 final class TimeSeries
 {
+    // --- Operating Physics ---
+    /** Speed of competitive return erosion toward cost of capital for high-ROIC firms. */
+    public const REVERSION_COMPETITIVE_EROSION_ALPHA = 0.50;
+    /** Autoregressive persistence parameter maintaining margin drag during financial distress. */
+    public const REVERSION_DISTRESS_PERSISTENCE = 0.60;
+    /** Non-linear distress acceleration exponent penalizing sub-par economic returns. */
+    public const REVERSION_DISTRESS_GAMMA = 1.00;
+
+    // --- Profitability Persistence (Fama & French 2000; Ohlson 1995) ---
+    /** Share of a firm's gap between its return on capital and its own long-run level that closes each year: about 38% (Fama & French 2000, J. Business, partial-adjustment model). */
+    public const PROFITABILITY_MEAN_REVERSION_RATE = 0.38;
+
     /**
      * One step of an exponentially weighted estimate of annualized variance (RiskMetrics 1996):
      * sigma^2_t = phi sigma^2_{t-1} + (1 - phi) r_t^2 / dt, phi = exp(-dt / tau), with the memory set in
@@ -59,7 +71,7 @@ final class TimeSeries
      */
     public static function persistentEquivalentReturn(float $trailingReturn, float $longRunReturn, float $discountRate): float
     {
-        $persistence = 1.0 - FinancialConstants::PROFITABILITY_MEAN_REVERSION_RATE;
+        $persistence = 1.0 - self::PROFITABILITY_MEAN_REVERSION_RATE;
         $rate = max(0.0, $discountRate);
 
         return $longRunReturn + (($trailingReturn - $longRunReturn) * $rate * $persistence / (1.0 + $rate - $persistence));
@@ -222,9 +234,9 @@ final class TimeSeries
         float $baseKappa,
         float $moatSpread,
         float $dt = 0.25,
-        float $erosionAlpha = FinancialConstants::REVERSION_COMPETITIVE_EROSION_ALPHA,
-        float $distressPersistence = FinancialConstants::REVERSION_DISTRESS_PERSISTENCE,
-        float $distressGamma = FinancialConstants::REVERSION_DISTRESS_GAMMA
+        float $erosionAlpha = self::REVERSION_COMPETITIVE_EROSION_ALPHA,
+        float $distressPersistence = self::REVERSION_DISTRESS_PERSISTENCE,
+        float $distressGamma = self::REVERSION_DISTRESS_GAMMA
     ): float {
         $equilibrium = $wacc + $moatSpread;
 

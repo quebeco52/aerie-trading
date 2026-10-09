@@ -110,13 +110,13 @@ class OptionSettlementTest extends TestCase
 
         // Exercise by exception: the clearing house does not ask, it delivers anything worth a cent.
         $this->assertGreaterThanOrEqual(
-            FinancialConstants::OPTION_EXERCISE_THRESHOLD,
-            $call->intrinsicValue(100.0 + FinancialConstants::OPTION_EXERCISE_THRESHOLD)
+            OptionSettlementEngine::OPTION_EXERCISE_THRESHOLD,
+            $call->intrinsicValue(100.0 + OptionSettlementEngine::OPTION_EXERCISE_THRESHOLD)
         );
 
         $this->assertLessThan(
-            FinancialConstants::OPTION_EXERCISE_THRESHOLD,
-            $call->intrinsicValue(100.0 + (FinancialConstants::OPTION_EXERCISE_THRESHOLD / 2.0))
+            OptionSettlementEngine::OPTION_EXERCISE_THRESHOLD,
+            $call->intrinsicValue(100.0 + (OptionSettlementEngine::OPTION_EXERCISE_THRESHOLD / 2.0))
         );
     }
 

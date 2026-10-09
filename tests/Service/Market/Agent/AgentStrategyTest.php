@@ -11,7 +11,6 @@ use App\Service\Market\Agent\MarketMakerStrategy;
 use App\Service\Market\Agent\MomentumStrategy;
 use App\Service\Market\Agent\RelativeValueStrategy;
 use App\Service\Market\Agent\VolatilityTargetStrategy;
-use App\Service\Math\FinancialConstants;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -119,7 +118,7 @@ class AgentStrategyTest extends TestCase
 
         $this->assertSame(0.0, $strategy->signal($this->view(momentum: 0.10, recentMonth: 0.10), []));
         $this->assertEqualsWithDelta(
-            FinancialConstants::AGENT_MOMENTUM_GAIN * 0.10,
+            MomentumStrategy::AGENT_MOMENTUM_GAIN * 0.10,
             $strategy->signal($this->view(momentum: 0.10, recentMonth: 0.0), []),
             1e-12
         );
@@ -165,8 +164,8 @@ class AgentStrategyTest extends TestCase
         // A z-score index reads two in a crisis and minus two in a boom. The passive book moves a bounded
         // fraction from its base at either extreme: it is never liquidated and never tripled.
         $strategy = new IndexFundStrategy();
-        $base = FinancialConstants::AGENT_INDEX_BASE_SHARE;
-        $bound = FinancialConstants::AGENT_INDEX_MAX_FLOW_TILT;
+        $base = IndexFundStrategy::AGENT_INDEX_BASE_SHARE;
+        $bound = IndexFundStrategy::AGENT_INDEX_MAX_FLOW_TILT;
 
         $this->assertEqualsWithDelta($base * (1.0 - $bound), $strategy->signal($this->view(conditions: 5.0), []), 1e-12);
         $this->assertEqualsWithDelta($base * (1.0 + $bound), $strategy->signal($this->view(conditions: -5.0), []), 1e-12);
@@ -174,7 +173,7 @@ class AgentStrategyTest extends TestCase
 
         // Inside the bound the tilt is a fraction of the base, not an absolute share.
         $this->assertEqualsWithDelta(
-            $base * (1.0 - FinancialConstants::AGENT_INDEX_FLOW_SENSITIVITY),
+            $base * (1.0 - IndexFundStrategy::AGENT_INDEX_FLOW_SENSITIVITY),
             $strategy->signal($this->view(conditions: 1.0), []),
             1e-12
         );
@@ -263,8 +262,8 @@ class AgentStrategyTest extends TestCase
         $againstBuying = $strategy->trade($this->makerView(), 0.0, 10000.0, $capacity);
         $againstSelling = $strategy->trade($this->makerView(), 0.0, -10000.0, $capacity);
 
-        $this->assertEqualsWithDelta(-FinancialConstants::AGENT_MAKER_ABSORPTION * 10000.0, $againstBuying, 1e-9);
-        $this->assertEqualsWithDelta(FinancialConstants::AGENT_MAKER_ABSORPTION * 10000.0, $againstSelling, 1e-9);
+        $this->assertEqualsWithDelta(-MarketMakerStrategy::AGENT_MAKER_ABSORPTION * 10000.0, $againstBuying, 1e-9);
+        $this->assertEqualsWithDelta(MarketMakerStrategy::AGENT_MAKER_ABSORPTION * 10000.0, $againstSelling, 1e-9);
     }
 
     public function testTheMakerWorksItsInventoryOffOverTimeNotOverTicks(): void
@@ -295,7 +294,7 @@ class AgentStrategyTest extends TestCase
         // above the reference quarters what the maker will absorb; below the reference it absorbs in full.
         $strategy = new MarketMakerStrategy();
         $capacity = 3000000.0;
-        $reference = FinancialConstants::AGENT_MAKER_REFERENCE_VOLATILITY;
+        $reference = MarketMakerStrategy::AGENT_MAKER_REFERENCE_VOLATILITY;
 
         $calm = $strategy->trade($this->makerView(volatility: $reference * 0.5), 0.0, 10000.0, $capacity);
         $atReference = $strategy->trade($this->makerView(volatility: $reference), 0.0, 10000.0, $capacity);
@@ -347,8 +346,8 @@ class AgentStrategyTest extends TestCase
         // Moreira & Muir: exposure = target / realized. At target, the base share; at twice target, half
         // of it; at half target, twice it.
         $strategy = new VolatilityTargetStrategy();
-        $target = FinancialConstants::AGENT_VOL_TARGET_VOLATILITY;
-        $base = FinancialConstants::AGENT_VOL_TARGET_BASE_SHARE;
+        $target = VolatilityTargetStrategy::AGENT_VOL_TARGET_VOLATILITY;
+        $base = VolatilityTargetStrategy::AGENT_VOL_TARGET_BASE_SHARE;
 
         $this->assertEqualsWithDelta($base, $strategy->signal($this->view(volatility: $target), []), 1e-12);
         $this->assertEqualsWithDelta($base / 2.0, $strategy->signal($this->view(volatility: 2.0 * $target), []), 1e-12);
@@ -372,7 +371,7 @@ class AgentStrategyTest extends TestCase
     public function testTheVolTargetingBookCannotLeverUpWithoutLimitOnAQuietTape(): void
     {
         $strategy = new VolatilityTargetStrategy();
-        $capped = FinancialConstants::AGENT_VOL_TARGET_BASE_SHARE * FinancialConstants::AGENT_VOL_TARGET_MAX_LEVERAGE;
+        $capped = VolatilityTargetStrategy::AGENT_VOL_TARGET_BASE_SHARE * VolatilityTargetStrategy::AGENT_VOL_TARGET_MAX_LEVERAGE;
 
         $this->assertEqualsWithDelta($capped, $strategy->signal($this->view(volatility: 0.01), []), 1e-12);
         $this->assertEqualsWithDelta($capped, $strategy->signal($this->view(volatility: 0.001), []), 1e-12);
@@ -382,8 +381,8 @@ class AgentStrategyTest extends TestCase
     {
         $strategy = new VolatilityTargetStrategy();
 
-        $this->assertSame(FinancialConstants::AGENT_VOL_TARGET_BASE_SHARE, $strategy->signal($this->view(volatility: 0.0), []));
-        $this->assertSame(FinancialConstants::AGENT_VOL_TARGET_BASE_SHARE, $strategy->signal($this->view(volatility: -1.0), []));
+        $this->assertSame(VolatilityTargetStrategy::AGENT_VOL_TARGET_BASE_SHARE, $strategy->signal($this->view(volatility: 0.0), []));
+        $this->assertSame(VolatilityTargetStrategy::AGENT_VOL_TARGET_BASE_SHARE, $strategy->signal($this->view(volatility: -1.0), []));
         $this->assertFalse($strategy->competesForCapital());
     }
 
@@ -431,7 +430,7 @@ class AgentStrategyTest extends TestCase
     public function testRelativeValueConvictionIsBoundedByItsShareOfCapital(): void
     {
         $strategy = new RelativeValueStrategy();
-        $share = FinancialConstants::AGENT_RELATIVE_VALUE_SHARE;
+        $share = RelativeValueStrategy::AGENT_RELATIVE_VALUE_SHARE;
 
         $this->assertEqualsWithDelta($share, $strategy->signal($this->view(price: 10.0, fairValue: 100.0, marketMispricing: 0.0), []), 1e-12);
         $this->assertEqualsWithDelta(-$share, $strategy->signal($this->view(price: 1000.0, fairValue: 100.0, marketMispricing: 0.0), []), 1e-12);

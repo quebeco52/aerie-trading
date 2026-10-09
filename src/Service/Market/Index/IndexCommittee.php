@@ -57,6 +57,20 @@ final class IndexCommittee
     /** Passes the diversification cap is worked over. Each pass is a fixed point of one rule that may break the other; it converges in two or three. */
     private const CAP_ITERATIONS = 12;
 
+    // --- Market Index Membership (Shleifer 1986) ---
+    /** Banding around the cut, as a fraction of the constituent count. A sitting member is not evicted the first time a marginal name edges past it: real indices band precisely because ranking noise at the boundary would otherwise churn the whole passive book twice a year for nothing. */
+    public const INDEX_MEMBERSHIP_BUFFER = 0.20;
+    /** Floor on the trailing volatility an inverse-volatility weighting divides by. A name that has gone quiet enough to divide by nothing would otherwise take the whole fund. */
+    public const INDEX_MINIMUM_WEIGHT_VOLATILITY = 0.04;
+
+    // --- Passive Assets by Index (share of the indexed book each published index carries) ---
+    /** Ceiling on how much passive ownership a single name can carry relative to its weight in the market. A name held by every fund at once is still only so much of anyone's book. */
+    public const INDEX_MAX_PASSIVE_OWNERSHIP_MULTIPLE = 4.0;
+
+    // --- Index Fund Accounting ---
+    /** Smallest rebalance worth charging for, as a fraction of the fund. Below this the trade is the rounding on a weight that barely moved, and charging it would write a cost row every quarter for nothing. */
+    public const FUND_MINIMUM_REBALANCE_TURNOVER = 0.0005;
+
     public function __construct(
         private readonly IndexMembershipStoreInterface $store,
         private readonly EtfTracker $etfTracker,
@@ -112,7 +126,7 @@ final class IndexCommittee
         $vol = $stock->getRealizedVolatility()
             ?? (float) ($stock->getCurrentVolatility() ?? $stock->getVolatility());
 
-        return max(FinancialConstants::INDEX_MINIMUM_WEIGHT_VOLATILITY, $vol);
+        return max(self::INDEX_MINIMUM_WEIGHT_VOLATILITY, $vol);
     }
 
     /**
@@ -152,7 +166,7 @@ final class IndexCommittee
      */
     public static function bands(int $constituentCount): array
     {
-        $buffer = FinancialConstants::INDEX_MEMBERSHIP_BUFFER;
+        $buffer = self::INDEX_MEMBERSHIP_BUFFER;
 
         return [
             'inner' => (int) round($constituentCount * (1.0 - $buffer)),
@@ -360,7 +374,7 @@ final class IndexCommittee
             }
 
             $multiples[$ticker] = min(
-                FinancialConstants::INDEX_MAX_PASSIVE_OWNERSHIP_MULTIPLE,
+                self::INDEX_MAX_PASSIVE_OWNERSHIP_MULTIPLE,
                 ($held[$ticker] ?? 0.0) / $marketWeight
             );
         }
@@ -618,7 +632,7 @@ final class IndexCommittee
 
         // Below the threshold the "trade" is the rounding on a weight that barely moved. Charging it would
         // write a cost against the fund every quarter for a rebalance nobody would have bothered placing.
-        return $turnover < FinancialConstants::FUND_MINIMUM_REBALANCE_TURNOVER
+        return $turnover < self::FUND_MINIMUM_REBALANCE_TURNOVER
             ? $nothing
             : ['turnover' => $turnover, 'cost' => $cost];
     }
@@ -752,8 +766,8 @@ final class IndexCommittee
                 // The reciprocal of risk, so the quietest names carry the most. Floored upstream, because
                 // an unfloored estimate lets one briefly-still name take the whole fund.
                 IndexWeighting::InverseVolatility => 1.0 / max(
-                    FinancialConstants::INDEX_MINIMUM_WEIGHT_VOLATILITY,
-                    $volByTicker[$ticker] ?? FinancialConstants::INDEX_MINIMUM_WEIGHT_VOLATILITY
+                    self::INDEX_MINIMUM_WEIGHT_VOLATILITY,
+                    $volByTicker[$ticker] ?? self::INDEX_MINIMUM_WEIGHT_VOLATILITY
                 ),
             };
         }

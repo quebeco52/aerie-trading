@@ -1,6 +1,6 @@
 <?php
 
-namespace App;
+namespace App\Scheduler;
 
 use App\Service\Market\Ticker\HistoryPruner;
 use Symfony\Component\Console\Messenger\RunCommandMessage;

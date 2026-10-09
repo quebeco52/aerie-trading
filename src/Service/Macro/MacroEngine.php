@@ -209,10 +209,6 @@ class MacroEngine
     // --- INTERBANK LIQUIDITY SPREAD (CIR PROCESS & JUMPS) ---
     /** Baseline interbank liquidity spread (FRA-OIS / TED Spread proxy) under normal conditions. */
     public const INTERBANK_BASELINE_SPREAD = 0.0015;
-    /** Speed of mean reversion (kappa) for the interbank liquidity spread toward baseline. */
-    public const INTERBANK_SPREAD_KAPPA = 2.50;
-    /** Volatility (sigma) of the continuous interbank liquidity spread diffusion. */
-    public const INTERBANK_SPREAD_SIGMA = 0.02;
 
     // --- SOLOW-SWAN TOTAL FACTOR PRODUCTIVITY (TFP) ---
     /** Baseline index value for Total Factor Productivity (neutral technology baseline). */

@@ -10,7 +10,6 @@ use App\Entity\Stock;
 use App\Service\Market\Bond\BondPricingEngine;
 use App\Service\Market\Bond\CorporateBondDesk;
 use App\Service\Math\FinancialConstants;
-use App\Service\Math\MathUtility;
 use App\Tests\Support\StockBuilder;
 use Doctrine\ORM\EntityManagerInterface;
 use PHPUnit\Framework\TestCase;
@@ -27,7 +26,6 @@ class CorporateBondDeskTest extends TestCase
 {
     private function desk(): CorporateBondDesk
     {
-        $math = new MathUtility();
 
         return new CorporateBondDesk(
             $this->createStub(EntityManagerInterface::class),
@@ -109,7 +107,7 @@ class CorporateBondDeskTest extends TestCase
 
     public function testAFirmWithTooLittleDebtDoesNotBotherWithThePublicMarket(): void
     {
-        $tooSmall = FinancialConstants::CORPORATE_MIN_PUBLIC_DEBT - 1.0;
+        $tooSmall = CorporateBondDesk::CORPORATE_MIN_PUBLIC_DEBT - 1.0;
 
         $this->assertFalse($this->desk()->canIssue($this->issuer($tooSmall)));
     }
@@ -147,7 +145,6 @@ class CorporateBondDeskTest extends TestCase
 
     public function testACorporateCouponSitsAboveTheSovereignOfTheSameTenor(): void
     {
-        $math = new MathUtility();
         $engine = new BondPricingEngine();
 
         $sovereign = $engine->parCouponRate($this->curve(), 5.0, FinancialConstants::BOND_FACE_VALUE);
@@ -186,7 +183,7 @@ class CorporateBondDeskTest extends TestCase
     {
         $interval = CorporateBondDesk::issuanceIntervalTicks(14400);
 
-        $this->assertSame((int) (14400 / FinancialConstants::CORPORATE_ISSUANCE_PER_YEAR), $interval);
+        $this->assertSame((int) (14400 / CorporateBondDesk::CORPORATE_ISSUANCE_PER_YEAR), $interval);
         $this->assertGreaterThan(1, $interval);
     }
 
@@ -204,7 +201,7 @@ class CorporateBondDeskTest extends TestCase
         // The gate and the issue sizing have to agree. Chosen independently they do not: a firm passes the
         // debt test, every slice of its ladder then prices below the minimum issue size, and it silently
         // never comes to market at all. Deriving the gate from the sizing is what closes that.
-        $smallestAdmitted = FinancialConstants::CORPORATE_MIN_PUBLIC_DEBT;
+        $smallestAdmitted = CorporateBondDesk::CORPORATE_MIN_PUBLIC_DEBT;
         $trancheSlice = ($smallestAdmitted * FinancialConstants::CORPORATE_PUBLIC_DEBT_SHARE)
             / FinancialConstants::CORPORATE_LADDER_ISSUES;
 

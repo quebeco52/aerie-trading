@@ -47,6 +47,10 @@ final class OptionSettlementEngine
     /** What an expired contract's greeks are worth, ordered as the expiry statement sets them: delta, gamma, vega, theta. */
     private const EXPIRY_GREEKS = ['0.00000000', '0.000000000000', '0.00000000', '0.00000000'];
 
+    // --- Option Exercise & Settlement ---
+    /** Intrinsic value per share at which a contract is exercised by exception at expiry. The clearing house exercises anything in the money by a tick unless the holder says otherwise, so a contract a cent in the money is delivered, not abandoned. */
+    public const OPTION_EXERCISE_THRESHOLD = 0.01;
+
     public function __construct(
         private readonly EntityManagerInterface $em,
         private readonly \App\Service\User\CashLedger $cashLedger,
@@ -110,7 +114,7 @@ final class OptionSettlementEngine
             // zero and every put at the full strike, which is the correct answer rather than a special case.
             $settlementPrice = (float) $row['settlement'];
             $intrinsic = $contract->intrinsicValue($settlementPrice);
-            $exercised = $intrinsic >= FinancialConstants::OPTION_EXERCISE_THRESHOLD;
+            $exercised = $intrinsic >= self::OPTION_EXERCISE_THRESHOLD;
             $held = $positions[$id] ?? [];
 
             foreach ($held as $position) {

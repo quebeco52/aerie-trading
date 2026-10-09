@@ -16,7 +16,6 @@ use App\Service\Market\Agent\MomentumStrategy;
 use App\Service\Market\Agent\RelativeValueStrategy;
 use App\Service\Market\Agent\VolatilityTargetStrategy;
 use App\Service\Market\Flow\InMemoryOrderFlowStore;
-use App\Service\Math\FinancialConstants;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -100,8 +99,8 @@ class AgentFlowEngineTest extends TestCase
         // A fresh book starts a belief at zero and takes its first adjustment step. Seeding it at a full
         // target allocation would put a large one-off order on the first tick a name is seen — an artefact
         // of the engine starting, not of anything anyone decided.
-        $capacity = 1000000.0 * \App\Service\Math\FinancialConstants::AGENT_CAPITAL_ADV_MULTIPLE;
-        $step = 1.0 - exp(-(1.0 / 14400.0) / \App\Service\Math\FinancialConstants::AGENT_POSITION_HORIZON_YEARS);
+        $capacity = 1000000.0 * AgentFlowEngine::AGENT_CAPITAL_ADV_MULTIPLE;
+        $step = 1.0 - exp(-(1.0 / 14400.0) / AgentFlowEngine::AGENT_POSITION_HORIZON_YEARS);
 
         $result = $this->engine([new FundamentalistStrategy(), new MomentumStrategy()], [])->trade($this->view(price: 60.0, fairValue: 100.0));
 
@@ -122,7 +121,7 @@ class AgentFlowEngineTest extends TestCase
         // The index has held the name all along; the engine is only now keeping track. Opening it flat and
         // working in toward its weight was a one-off buy of about a day's volume on every name, every time
         // the engine or its cache restarted.
-        $capacity = 1000000.0 * \App\Service\Math\FinancialConstants::AGENT_CAPITAL_ADV_MULTIPLE;
+        $capacity = 1000000.0 * AgentFlowEngine::AGENT_CAPITAL_ADV_MULTIPLE;
         $index = new IndexFundStrategy();
         $view = $this->view();
 
@@ -236,7 +235,7 @@ class AgentFlowEngineTest extends TestCase
         $engine->endTick();
 
         $style = $this->stateStore->readStyle();
-        $decay = exp(-(1.0 / 14400.0) / \App\Service\Math\FinancialConstants::AGENT_FITNESS_HORIZON_YEARS);
+        $decay = exp(-(1.0 / 14400.0) / AgentPopulation::AGENT_FITNESS_HORIZON_YEARS);
 
         $this->assertEqualsWithDelta(0.2 * $decay, $style['fundamentalist'], 1e-9);
         $this->assertEqualsWithDelta(0.2 * $decay, $style['momentum'], 1e-9);
@@ -276,7 +275,7 @@ class AgentFlowEngineTest extends TestCase
     {
         // A fresh book is built on today's capacity, already in post-split shares. Restating it as well
         // quadrupled the index holding and then sold three quarters of it back in one order.
-        $capacity = 4000000.0 * \App\Service\Math\FinancialConstants::AGENT_CAPITAL_ADV_MULTIPLE;
+        $capacity = 4000000.0 * AgentFlowEngine::AGENT_CAPITAL_ADV_MULTIPLE;
         $index = new IndexFundStrategy();
         $view = $this->view(adv: 4000000.0, splitRatio: 4.0);
 
@@ -450,7 +449,7 @@ class AgentFlowEngineTest extends TestCase
         // What one agent holds lags its conviction by the same horizon the book is worked over, so a belief
         // is scored on the exposure its money actually had rather than on the signal it would have liked.
         $engine = $this->engine([new FundamentalistStrategy()], []);
-        $adjustment = 1.0 - exp(-(1.0 / 14400.0) / \App\Service\Math\FinancialConstants::AGENT_POSITION_HORIZON_YEARS);
+        $adjustment = 1.0 - exp(-(1.0 / 14400.0) / AgentFlowEngine::AGENT_POSITION_HORIZON_YEARS);
 
         $engine->trade($this->view(price: 50.0, fairValue: 100.0));
         $first = $this->stateStore->read('TEST')['exposures']['fundamentalist'];
@@ -472,7 +471,7 @@ class AgentFlowEngineTest extends TestCase
         $engine->trade($this->view(price: 50.0, fairValue: 100.0, logReturn: 0.02));
 
         $book = $this->stateStore->read('TEST');
-        $decay = exp(-(1.0 / 14400.0) / \App\Service\Math\FinancialConstants::AGENT_FITNESS_HORIZON_YEARS);
+        $decay = exp(-(1.0 / 14400.0) / AgentPopulation::AGENT_FITNESS_HORIZON_YEARS);
 
         $this->assertEqualsWithDelta(0.3 * $decay, $book['fitness']['fundamentalist'], 1e-12, 'No exposure on record, nothing to score.');
         $this->assertArrayHasKey('exposures', $book);
@@ -609,7 +608,7 @@ class AgentFlowEngineTest extends TestCase
         foreach ([21, 1260] as $ticksPerMonth) {
             $this->stateStore = new InMemoryAgentStateStore();
             $engine = $this->engine([new MomentumStrategy()], []);
-            $dt = FinancialConstants::AGENT_MOMENTUM_SKIP_YEARS / $ticksPerMonth;
+            $dt = AgentFlowEngine::AGENT_MOMENTUM_SKIP_YEARS / $ticksPerMonth;
 
             for ($tick = 0; $tick <= $ticksPerMonth; $tick++) {
                 $engine->trade(new AgentMarketViewDTO(

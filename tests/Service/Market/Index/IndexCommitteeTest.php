@@ -155,7 +155,7 @@ class IndexCommitteeTest extends TestCase
     {
         $result = $this->committee()->reconstitute(MarketIndex::Headline, $this->rankedUniverse(60), 0);
 
-        $this->assertCount(FinancialConstants::INDEX_CONSTITUENT_COUNT, $result['tickers']);
+        $this->assertCount(MarketIndex::INDEX_CONSTITUENT_COUNT, $result['tickers']);
     }
 
     public function testASmallerMarketThanTheIndexJustTakesEverythingListed(): void
@@ -216,7 +216,7 @@ class IndexCommitteeTest extends TestCase
         }
         $stocks = $this->universe($caps);
 
-        $count = FinancialConstants::INDEX_CONSTITUENT_COUNT;
+        $count = MarketIndex::INDEX_CONSTITUENT_COUNT;
         $first = $committee->reconstitute(MarketIndex::Headline, $stocks, 0);
 
         $weakestIn = sprintf('T%03d', $count - 1);
@@ -268,7 +268,7 @@ class IndexCommitteeTest extends TestCase
 
         $members = $committee->currentMembers(MarketIndex::Headline);
 
-        $this->assertCount(FinancialConstants::INDEX_CONSTITUENT_COUNT, $members);
+        $this->assertCount(MarketIndex::INDEX_CONSTITUENT_COUNT, $members);
         $this->assertTrue($members['T000'] ?? false);
         $this->assertArrayNotHasKey('T059', $members);
     }
@@ -289,7 +289,7 @@ class IndexCommitteeTest extends TestCase
         }
 
         $this->assertEqualsWithDelta(
-            FinancialConstants::INDEX_CONSTITUENT_COUNT * 100.0,
+            MarketIndex::INDEX_CONSTITUENT_COUNT * 100.0,
             $committee->memberCapitalisation(MarketIndex::Headline, $caps),
             1e-9
         );
@@ -307,7 +307,7 @@ class IndexCommitteeTest extends TestCase
     public function testTheHeadlineIndexIsATopThirty(): void
     {
         $this->assertSame(30, MarketIndex::Headline->constituentCount());
-        $this->assertSame(FinancialConstants::INDEX_CONSTITUENT_COUNT, MarketIndex::Headline->constituentCount());
+        $this->assertSame(MarketIndex::INDEX_CONSTITUENT_COUNT, MarketIndex::Headline->constituentCount());
     }
 
     public function testTheCompositeCarriesEveryLiveNameBestRankedFirst(): void
@@ -434,14 +434,14 @@ class IndexCommitteeTest extends TestCase
     public function testTheHeadlineIndexNameCarriesItsActualSeatCount(): void
     {
         $this->assertSame(
-            'Lakebird ' . FinancialConstants::INDEX_CONSTITUENT_COUNT,
+            'Lakebird ' . MarketIndex::INDEX_CONSTITUENT_COUNT,
             MarketIndex::benchmark()->indexName()
         );
 
         $committee = $this->committee();
         $result = $committee->reconstitute(MarketIndex::benchmark(), $this->rankedUniverse(60), 0);
 
-        $this->assertCount(FinancialConstants::INDEX_CONSTITUENT_COUNT, $result['tickers']);
+        $this->assertCount(MarketIndex::INDEX_CONSTITUENT_COUNT, $result['tickers']);
         $this->assertStringContainsString(
             (string) count($result['tickers']),
             MarketIndex::benchmark()->indexName(),
@@ -650,7 +650,7 @@ class IndexCommitteeTest extends TestCase
         $this->assertGreaterThan(0.7, $uncapped, 'the fixture should be concentrated enough to bind');
 
         $this->assertEqualsWithDelta(
-            FinancialConstants::INDEX_MAX_CONSTITUENT_WEIGHT,
+            MarketIndex::INDEX_MAX_CONSTITUENT_WEIGHT,
             $result['weights']['GIANT'],
             1e-6
         );
@@ -703,7 +703,7 @@ class IndexCommitteeTest extends TestCase
         $result = $this->committee()->reconstitute(MarketIndex::Headline, $stocks, 0);
 
         $this->assertNotContains('BURN', $result['tickers']);
-        $this->assertCount(FinancialConstants::INDEX_CONSTITUENT_COUNT, $result['tickers'], 'the seat it could not take is filled by someone else');
+        $this->assertCount(MarketIndex::INDEX_CONSTITUENT_COUNT, $result['tickers'], 'the seat it could not take is filled by someone else');
     }
 
     /**
@@ -808,7 +808,7 @@ class IndexCommitteeTest extends TestCase
         }
 
         $result = $this->committee()->reconstitute(MarketIndex::Staples, $stocks, 0);
-        $cap = FinancialConstants::INDEX_MAX_CONSTITUENT_WEIGHT;
+        $cap = MarketIndex::INDEX_MAX_CONSTITUENT_WEIGHT;
 
         $this->assertEqualsWithDelta(1.0, array_sum($result['weights']), 1e-9);
 
@@ -1095,7 +1095,7 @@ class IndexCommitteeTest extends TestCase
 
         // Both sides are real and each crosses its own name's half-spread, so the cost is the sum over the
         // weight changes rather than half of it.
-        $this->assertLessThan(2.0 * $again['turnover'] * FinancialConstants::MAX_HALF_SPREAD, $again['trading_cost']);
+        $this->assertLessThan(2.0 * $again['turnover'] * LiquidityEngine::MAX_HALF_SPREAD, $again['trading_cost']);
         $this->assertGreaterThanOrEqual(2.0 * $again['turnover'] * FinancialConstants::MIN_HALF_SPREAD, $again['trading_cost']);
     }
 

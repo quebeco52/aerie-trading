@@ -75,7 +75,7 @@ class OptionChainServiceTest extends TestCase
     public function testAnExtremePriceStillGetsTheWidestListedIncrement(): void
     {
         $this->assertSame(
-            (float) FinancialConstants::OPTION_STRIKE_INCREMENTS[count(FinancialConstants::OPTION_STRIKE_INCREMENTS) - 1],
+            (float) OptionChainService::OPTION_STRIKE_INCREMENTS[count(OptionChainService::OPTION_STRIKE_INCREMENTS) - 1],
             OptionChainService::strikeIncrement(1.0e6)
         );
     }
@@ -90,8 +90,8 @@ class OptionChainServiceTest extends TestCase
 
         foreach ($strikes as $strike) {
             $this->assertEqualsWithDelta(0.0, fmod($strike, $increment), 1e-6, "strike {$strike} is off the ladder");
-            $this->assertGreaterThanOrEqual($spot * (1.0 - FinancialConstants::OPTION_STRIKE_LADDER_WIDTH), $strike);
-            $this->assertLessThanOrEqual($spot * (1.0 + FinancialConstants::OPTION_STRIKE_LADDER_WIDTH), $strike);
+            $this->assertGreaterThanOrEqual($spot * (1.0 - OptionChainService::OPTION_STRIKE_LADDER_WIDTH), $strike);
+            $this->assertLessThanOrEqual($spot * (1.0 + OptionChainService::OPTION_STRIKE_LADDER_WIDTH), $strike);
         }
     }
 
@@ -126,7 +126,7 @@ class OptionChainServiceTest extends TestCase
         $spot = 100.0;
         $increment = OptionChainService::strikeIncrement($spot);
         $strikes = OptionChainService::strikeLadder($spot);
-        $band = $spot * FinancialConstants::OPTION_STRIKE_DENSE_BAND;
+        $band = $spot * OptionChainService::OPTION_STRIKE_DENSE_BAND;
 
         // Every increment inside the band is listed.
         for ($strike = $spot - $band; $strike <= $spot + $band + 1e-9; $strike += $increment) {
@@ -145,12 +145,12 @@ class OptionChainServiceTest extends TestCase
 
         // And the ladder still reaches as far as it ever did.
         $this->assertEqualsWithDelta(
-            floor(($spot * (1.0 + FinancialConstants::OPTION_STRIKE_LADDER_WIDTH)) / $increment) * $increment,
+            floor(($spot * (1.0 + OptionChainService::OPTION_STRIKE_LADDER_WIDTH)) / $increment) * $increment,
             max($strikes),
             1e-9
         );
         $this->assertEqualsWithDelta(
-            ceil(($spot * (1.0 - FinancialConstants::OPTION_STRIKE_LADDER_WIDTH)) / $increment) * $increment,
+            ceil(($spot * (1.0 - OptionChainService::OPTION_STRIKE_LADDER_WIDTH)) / $increment) * $increment,
             min($strikes),
             1e-9
         );

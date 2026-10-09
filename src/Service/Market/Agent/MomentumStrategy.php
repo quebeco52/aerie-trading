@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace App\Service\Market\Agent;
 
 use App\DTO\AgentMarketViewDTO;
-use App\Service\Math\FinancialConstants;
 
 /**
  * Buys what has been going up.
@@ -22,6 +21,10 @@ use App\Service\Math\FinancialConstants;
  */
 final class MomentumStrategy implements AgentStrategyInterface
 {
+    // --- Agent Signals ---
+    /** Chartist conviction per unit of accumulated price trend. */
+    public const AGENT_MOMENTUM_GAIN = 3.00;
+
     public function identifier(): string
     {
         return 'momentum';
@@ -29,7 +32,7 @@ final class MomentumStrategy implements AgentStrategyInterface
 
     public function signal(AgentMarketViewDTO $view, array $positions): float
     {
-        return max(-1.0, min(1.0, FinancialConstants::AGENT_MOMENTUM_GAIN * ($view->momentumTrend - $view->recentMonthTrend)));
+        return max(-1.0, min(1.0, self::AGENT_MOMENTUM_GAIN * ($view->momentumTrend - $view->recentMonthTrend)));
     }
 
     public function competesForCapital(): bool

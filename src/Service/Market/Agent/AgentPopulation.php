@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace App\Service\Market\Agent;
 
-use App\Service\Math\FinancialConstants;
 use App\Service\Math\TimeSeries;
 
 /**
@@ -26,6 +25,20 @@ use App\Service\Math\TimeSeries;
  */
 final class AgentPopulation
 {
+    // --- Agent Population (Brock & Hommes 1997, 1998 Adaptive Belief System) ---
+    /** Intensity of choice: how sharply capital chases whichever belief has been paying. At zero the population never moves; raising it is what tips the market from anchored to trending. */
+    public const AGENT_INTENSITY_OF_CHOICE = 3.00;
+    /** Memory in the fitness estimate, in years. Capital chases performance over months, not over the last print, and a horizon in time rather than in ticks keeps that true at any tick rate. */
+    public const AGENT_FITNESS_HORIZON_YEARS = 0.50;
+    /** Floor on any belief's population share, so a strategy that has been wrong for a long time can still come back when conditions turn. */
+    public const AGENT_MIN_POPULATION_SHARE = 0.05;
+    /** Risk aversion in the mean-variance fitness U = pi - (a/2) sigma^2 z^2 (Brock & Hommes 1998). Standard relative risk aversion; without it raw profit rewards whichever belief simply carries more exposure. */
+    public const AGENT_RISK_AVERSION = 2.00;
+    /** Share of switching capital that chooses at the STYLE level, on how a belief has paid across the whole market, rather than name by name (Barberis & Shleifer 2003). Zero is a market of unrelated single-name populations; one is a single market-wide population. */
+    public const AGENT_STYLE_CROWDING_WEIGHT = 0.50;
+    /** Memory of the realized-variance estimate the agents see, in years (~1 month). RiskMetrics-style EWMA of observed returns; vol-control mandates (Harvey et al. 2018) and maker risk desks size on a window of that order. */
+    public const AGENT_REALIZED_VOLATILITY_HORIZON_YEARS = 0.083;
+
     /**
      * Population shares from accumulated fitness.
      *
@@ -42,7 +55,7 @@ final class AgentPopulation
             return [];
         }
 
-        $beta = FinancialConstants::AGENT_INTENSITY_OF_CHOICE;
+        $beta = self::AGENT_INTENSITY_OF_CHOICE;
         $best = max($fitness);
 
         $weights = [];
@@ -92,7 +105,7 @@ final class AgentPopulation
             return $local;
         }
 
-        $weight = max(0.0, min(1.0, FinancialConstants::AGENT_STYLE_CROWDING_WEIGHT));
+        $weight = max(0.0, min(1.0, self::AGENT_STYLE_CROWDING_WEIGHT));
 
         $crowded = [];
         foreach ($local as $identifier => $score) {
@@ -116,7 +129,7 @@ final class AgentPopulation
      */
     private function applyFloor(array $shares): array
     {
-        $floor = FinancialConstants::AGENT_MIN_POPULATION_SHARE;
+        $floor = self::AGENT_MIN_POPULATION_SHARE;
 
         // A floor that leaves no room to allocate would make every share identical and the switching
         // meaningless, so it is skipped rather than applied.
@@ -185,8 +198,8 @@ final class AgentPopulation
 
         // Continuous-time exponential weighting, so the memory is a length of simulated time rather than a
         // number of ticks. Capital chases performance, but over months, not over the last print.
-        $phi = exp(-$dt / FinancialConstants::AGENT_FITNESS_HORIZON_YEARS);
-        $riskCharge = 0.5 * FinancialConstants::AGENT_RISK_AVERSION * max(0.0, $variance);
+        $phi = exp(-$dt / self::AGENT_FITNESS_HORIZON_YEARS);
+        $riskCharge = 0.5 * self::AGENT_RISK_AVERSION * max(0.0, $variance);
 
         $updated = [];
         foreach ($fitness as $identifier => $score) {
@@ -220,7 +233,7 @@ final class AgentPopulation
             $variance,
             $logReturn,
             $dt,
-            FinancialConstants::AGENT_REALIZED_VOLATILITY_HORIZON_YEARS
+            self::AGENT_REALIZED_VOLATILITY_HORIZON_YEARS
         );
     }
 }

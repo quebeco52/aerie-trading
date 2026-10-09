@@ -40,6 +40,12 @@ final class BondPricingEngine
     /** Longest tenor the grid covers; beyond it the curve is evaluated directly, which almost never happens. */
     public const PILLAR_MAX_TENOR_YEARS = 31.0;
 
+    // --- Sovereign Bond Desk ---
+    /** Coupons are struck in eighths of a percent, the auction convention, so the issue prices near par rather than exactly at it. */
+    public const BOND_COUPON_RATE_INCREMENT = 0.00125;
+    /** Floor on a struck coupon. A zero-coupon issue is legitimate at the lower bound; a negative one is not. */
+    public const BOND_MIN_COUPON_RATE = 0.0;
+
     /**
      * The sovereign curve sampled onto a tenor grid, BEFORE the effective lower bound, for $pillarCurve.
      *
@@ -292,15 +298,15 @@ final class BondPricingEngine
         $redemptionFactor = exp(-($this->discountZeroYield($curve, $tenorYears) + $spread) * $tenorYears);
 
         if ($annuityFactor <= 0.0) {
-            return FinancialConstants::BOND_MIN_COUPON_RATE;
+            return self::BOND_MIN_COUPON_RATE;
         }
 
         $couponPerPeriod = ($faceValue * (1.0 - $redemptionFactor)) / $annuityFactor;
         $annualRate = ($couponPerPeriod * FinancialConstants::BOND_COUPON_FREQUENCY) / $faceValue;
 
-        $increment = FinancialConstants::BOND_COUPON_RATE_INCREMENT;
+        $increment = self::BOND_COUPON_RATE_INCREMENT;
         $struck = round($annualRate / $increment) * $increment;
 
-        return max(FinancialConstants::BOND_MIN_COUPON_RATE, $struck);
+        return max(self::BOND_MIN_COUPON_RATE, $struck);
     }
 }

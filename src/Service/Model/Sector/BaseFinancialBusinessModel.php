@@ -7,7 +7,6 @@ namespace App\Service\Model\Sector;
 use App\Service\Model\ModelParam;
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
-use App\Service\Math\FinancialConstants;
 use App\Service\Math\MacroTransmission;
 use App\Service\Model\BusinessModelInterface;
 use App\Service\Model\Trait\FinancialPhysicsTrait;
@@ -59,14 +58,20 @@ abstract class BaseFinancialBusinessModel implements BusinessModelInterface
     public const PAYS_BANK_LEVY = false;
 
     // --- Industry Share Dynamics ---
+    /** Share of a financial institution's idiosyncratic gain taken from peers: deposits, mandates and AUM move between houses, but much of the swing is market volume. */
+    public const DEFAULT_FINANCIAL_INDUSTRY_SUBSTITUTABILITY = 0.35;
     /** Share of an idiosyncratic gain taken from same-industry peers; funds, mandates and deposits move between houses only in part. */
-    public const INDUSTRY_SUBSTITUTABILITY = FinancialConstants::DEFAULT_FINANCIAL_INDUSTRY_SUBSTITUTABILITY;
+    public const INDUSTRY_SUBSTITUTABILITY = self::DEFAULT_FINANCIAL_INDUSTRY_SUBSTITUTABILITY;
 
     // --- Firm-Level Common Factor ---
     /** One-factor loading of fee and spread streams on the institution-wide franchise innovation (rho^2 = 16% shared variance). */
     public const FIRM_FACTOR_LOADING = 0.40;
     /** Two-factor loading of fee and spread streams on the persistent macro-sector demand factor (rho_s^2 = 12% variance shared with sector peers). */
     public const SECTOR_FACTOR_LOADING = 0.35;
+
+    // --- Bank Levy (UK Finance Act 2011, Schedule 19; FDIC) ---
+    /** Share of deposits a deposit-insurance scheme covers, which the levy leaves out: 60.4% of US domestic deposits in 2024 (FDIC, estimated insured deposits). */
+    public const INSURED_DEPOSIT_SHARE = 0.604;
 
     public function getFirmFactorLoading(): float
     {
@@ -95,7 +100,7 @@ abstract class BaseFinancialBusinessModel implements BusinessModelInterface
 
         $wholesale = (float) $stock->getWholesaleDebt();
         $floating = max(0.0, min(1.0, (float) ($stock->getFloatingDebtRatio() ?? 0.0)));
-        $uninsuredDeposits = (float) ($stock->getCustomerDeposits() ?? 0.0) * (1.0 - FinancialConstants::INSURED_DEPOSIT_SHARE);
+        $uninsuredDeposits = (float) ($stock->getCustomerDeposits() ?? 0.0) * (1.0 - self::INSURED_DEPOSIT_SHARE);
 
         return MacroTransmission::calculateAnnualBankLevy(
             shortTermFunding: ($wholesale * $floating) + (float) $stock->getRevolverDrawn(),

@@ -18,6 +18,12 @@ class Stock
     /** Largest dollar amount a DECIMAL(30, 4) money column holds; totals rebuilt from a per-share figure clamp here. */
     public const MAX_MONEY_AMOUNT = '99999999999999999999999999.9999';
 
+    // --- Sell-Side Price Targets (Brav & Lehavy 2003) ---
+    /** Target-over-price above which the published rating reads Outperform. */
+    public const ANALYST_RATING_OUTPERFORM = 1.15;
+    /** Target-over-price below which it reads Underperform. Asymmetric against the threshold above on purpose: the sell side downgrades late and reluctantly. */
+    public const ANALYST_RATING_UNDERPERFORM = 0.98;
+
     #[ORM\Id]
     #[ORM\GeneratedValue]
     #[ORM\Column]
@@ -1236,8 +1242,8 @@ class Stock
         }
 
         return match (true) {
-            $target > $price * \App\Service\Math\FinancialConstants::ANALYST_RATING_OUTPERFORM => 'Outperform',
-            $target < $price * \App\Service\Math\FinancialConstants::ANALYST_RATING_UNDERPERFORM => 'Underperform',
+            $target > $price * self::ANALYST_RATING_OUTPERFORM => 'Outperform',
+            $target < $price * self::ANALYST_RATING_UNDERPERFORM => 'Underperform',
             default => 'Neutral',
         };
     }

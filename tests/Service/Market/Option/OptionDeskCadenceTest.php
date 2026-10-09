@@ -9,7 +9,6 @@ use App\Service\Market\Option\DealerGammaEngine;
 use App\Service\Market\Option\InMemoryDealerGammaStore;
 use App\Service\Market\Pricing\LiquidityEngine;
 use App\Service\Market\Option\OptionDeskService;
-use App\Service\Math\FinancialConstants;
 use App\Service\Math\MathUtility;
 use App\Tests\Support\StockBuilder;
 use PHPUnit\Framework\TestCase;
@@ -199,7 +198,7 @@ class OptionDeskCadenceTest extends TestCase
         $store->record('VANE', 10_000.0, 100.0);
 
         $this->assertEqualsWithDelta(
-            10_000.0 * 1.0 * FinancialConstants::DEALER_HEDGE_RATIO,
+            10_000.0 * 1.0 * DealerGammaEngine::DEALER_HEDGE_RATIO,
             $engine->hedgeMarket([$stock], self::TICK_YEARS)['VANE'],
             1e-6
         );

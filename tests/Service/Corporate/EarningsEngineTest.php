@@ -23,6 +23,7 @@ use App\Service\Corporate\DebtEngine;
 use App\Service\Corporate\CapExEngine;
 use App\Service\Corporate\CorporateLedgerService;
 use App\Service\Math\MathUtility;
+use App\Service\Math\ResponseCurves;
 use App\Service\Corporate\CorporateMetrics;
 use App\Service\News\NarrativeEngine;
 use App\Service\Event\MarketEventPublisher;
@@ -515,7 +516,7 @@ class EarningsEngineTest extends TestCase
 
         $this->assertNotNull($captured);
         $expense = $captured->actualRevenue * \App\Data\Company\Sectors::getBusinessModelStrategy('tech')->getStockCompensationIntensity($stock);
-        $grantable = FinancialConstants::EQUITY_BURN_RATE_CAP_BY_SECTOR['Information Technology'] * 0.25 * $sharesBefore * 50.0;
+        $grantable = EarningsEngine::EQUITY_BURN_RATE_CAP_BY_SECTOR['Information Technology'] * 0.25 * $sharesBefore * 50.0;
 
         $this->assertGreaterThan($grantable, $expense, 'the fixture only means anything while the bill exceeds the cap');
         $this->assertEqualsWithDelta($expense, $captured->kpis['stock_compensation'], 1.0, 'the full charge is reported');
@@ -950,7 +951,7 @@ class EarningsEngineTest extends TestCase
         $engine->calculate($stock, $macroState, EarningsEngine::resolveReportingTick('INVD', 252), 252);
 
         $this->assertLessThan(
-            \App\Service\Math\FinancialConstants::INVENTORY_NRV_UTILIZATION_TRIGGER,
+            EarningsEngine::INVENTORY_NRV_UTILIZATION_TRIGGER,
             $captured->capacityUtilization,
             'fixture must be running below the writedown trigger for this test to mean anything'
         );
@@ -991,7 +992,7 @@ class EarningsEngineTest extends TestCase
         $engine->calculate($stock, new MacroStateDTO(outputGapEma: 0.02, corporateTaxRate: 0.21, policyRateEma: 0.04, yield5yEma: 0.04), EarningsEngine::resolveReportingTick('INVH', 252), 252);
 
         $this->assertGreaterThanOrEqual(
-            \App\Service\Math\FinancialConstants::INVENTORY_NRV_UTILIZATION_TRIGGER,
+            EarningsEngine::INVENTORY_NRV_UTILIZATION_TRIGGER,
             $captured->capacityUtilization / max(0.01, $captured->seasonalFactor)
         );
         $this->assertEquals(0.0, $captured->inventoryWriteDown);
@@ -2267,43 +2268,18 @@ class EarningsEngineTest extends TestCase
      * Measured against raw utilization, which carries the seasonal factor, every fourth quarter of a retailer
      * running at 1.35x paid a twelve-point convex penalty at exactly structural demand.
      */
-    #[AllowMockObjectsWithoutExpectations]
     public function testOvertimePenaltyIsMeasuredAgainstDeseasonalizedUtilization(): void
     {
-        $shocks = [];
-        $mathUtility = $this->getMockBuilder(MathUtility::class)->onlyMethods(['calculateConvexPenalty'])->getMock();
-        $mathUtility->method('calculateConvexPenalty')->willReturnCallback(
-            function (float $shock, float $convexity = 1.5, float $scalar = 1.0) use (&$shocks): float {
-                $shocks[] = $shock;
+        $holiday = 1.35;
+        $threshold = EarningsEngine::CAPACITY_OVERTIME_THRESHOLD;
 
-                return $shock <= 0.0 ? 0.0 : pow($shock, $convexity) * $scalar;
-            }
-        );
-        $this->mathUtility = $mathUtility;
-
-        $captured = null;
-        $dispatcher = new EventDispatcher();
-        $dispatcher->addListener(EarningsReportedEvent::class, function (EarningsReportedEvent $event) use (&$captured): void {
-            $captured = $event->getContext();
-        });
-        $engine = $this->buildEngine($dispatcher);
-
-        mt_srand(7);
-        $stock = $this->buildMatureIndustrial('XMAS');
-        $stock->setIndustry('Internet Retail'); // Q4 seasonal factor 1.35
-        $macroState = new MacroStateDTO(corporateTaxRate: 0.21, policyRateEma: 0.04, yield5yEma: 0.04);
-
-        $engine->calculate($stock, $macroState, (3 * 63) + EarningsEngine::resolveReportingTick('XMAS', 252), 252);
-
-        $this->assertNotNull($captured);
-        $this->assertGreaterThan(1.2, $captured->seasonalFactor, 'the report has to land in the holiday quarter for this to test anything');
-        $this->assertNotEmpty($shocks);
-        // The engine's overtime call is the first convex penalty struck in a report (the margin process runs
-        // before the sector physics), and it must see the run rate with the calendar taken out.
+        $this->assertSame(0.0, EarningsEngine::overtimePremium($threshold * $holiday, $holiday), 'structural demand at the seasonal peak is not overtime');
+        $this->assertSame(0.0, EarningsEngine::overtimePremium($threshold, 1.0));
+        $this->assertGreaterThan(0.0, EarningsEngine::overtimePremium($threshold * $holiday, 1.0), 'the same run rate off-season is overtime');
         $this->assertEqualsWithDelta(
-            ($captured->capacityUtilization / $captured->seasonalFactor) - EarningsEngine::CAPACITY_OVERTIME_THRESHOLD,
-            $shocks[0],
-            1e-9,
+            ResponseCurves::calculateConvexPenalty(0.10, EarningsEngine::CAPACITY_OVERTIME_CONVEXITY, EarningsEngine::CAPACITY_OVERTIME_SCALAR),
+            EarningsEngine::overtimePremium(($threshold + 0.10) * $holiday, $holiday),
+            1e-12,
             'overtime is the overshoot of the deseasonalized run rate, not of the seasonal peak'
         );
     }

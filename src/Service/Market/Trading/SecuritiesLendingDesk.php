@@ -19,6 +19,16 @@ use App\Service\Math\FinancialConstants;
  */
 final class SecuritiesLendingDesk
 {
+    // --- Securities Lending ---
+    /** General collateral borrow fee: what an easy-to-borrow name costs to short, annualized. */
+    public const GENERAL_COLLATERAL_BORROW_FEE = 0.0030;
+    /** Borrow fee on a name whose lendable supply is fully consumed. Hard-to-borrow specials really do reach these levels. */
+    public const MAX_BORROW_FEE = 1.00;
+    /** Convexity of the fee curve in utilization. Flat while supply is ample, then steepening sharply as the last of it is taken: general collateral holds past half utilization, and a name only turns special above roughly eighty-five percent. */
+    public const BORROW_FEE_CONVEXITY = 8.00;
+    /** Share of an outstanding short position recalled per buy-in. */
+    public const BUY_IN_FRACTION = 0.20;
+
     /**
      * Shares available to borrow.
      *
@@ -63,10 +73,10 @@ final class SecuritiesLendingDesk
     public function borrowFee(Stock $stock): float
     {
         $utilization = $this->utilization($stock);
-        $range = FinancialConstants::MAX_BORROW_FEE - FinancialConstants::GENERAL_COLLATERAL_BORROW_FEE;
+        $range = self::MAX_BORROW_FEE - self::GENERAL_COLLATERAL_BORROW_FEE;
 
-        return FinancialConstants::GENERAL_COLLATERAL_BORROW_FEE
-            + ($range * ($utilization ** FinancialConstants::BORROW_FEE_CONVEXITY));
+        return self::GENERAL_COLLATERAL_BORROW_FEE
+            + ($range * ($utilization ** self::BORROW_FEE_CONVEXITY));
     }
 
     /**
@@ -106,6 +116,6 @@ final class SecuritiesLendingDesk
             return 0.0;
         }
 
-        return min($shortShares, max(1.0, floor($shortShares * FinancialConstants::BUY_IN_FRACTION)));
+        return min($shortShares, max(1.0, floor($shortShares * self::BUY_IN_FRACTION)));
     }
 }

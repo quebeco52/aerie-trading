@@ -269,7 +269,7 @@ class EtfCompositionBuilderTest extends TestCase
         $this->assertSame('LBI', $facts['ticker']);
         $this->assertTrue($facts['isSelective']);
         $this->assertTrue($facts['carriesPassiveBook']);
-        $this->assertSame(FinancialConstants::INDEX_CONSTITUENT_COUNT, $facts['constituentCount']);
+        $this->assertSame(MarketIndex::INDEX_CONSTITUENT_COUNT, $facts['constituentCount']);
         $this->assertSame(12345.0, $facts['divisor']);
         $this->assertSame(FinancialConstants::INDEX_RECONSTITUTIONS_PER_YEAR, $facts['reconstitutionsPerYear']);
         $this->assertNotSame('', $facts['mandate']);
@@ -303,7 +303,7 @@ class EtfCompositionBuilderTest extends TestCase
 
     public function testTheWatchListDrawsTheCommitteesOwnBands(): void
     {
-        $count = FinancialConstants::INDEX_CONSTITUENT_COUNT;
+        $count = MarketIndex::INDEX_CONSTITUENT_COUNT;
         $bands = IndexCommittee::bands($count);
         $board = $this->rankedBoard(50);
 
@@ -351,7 +351,7 @@ class EtfCompositionBuilderTest extends TestCase
         // A full membership at ranks 1..count with the rest of the board below it. The weakest members past
         // the inner band are exposed but not leaving; the outsiders inside the outer band are close but do
         // not qualify. That is what a quiet quarter looks like, and the page must not dress it up as a change.
-        $count = FinancialConstants::INDEX_CONSTITUENT_COUNT;
+        $count = MarketIndex::INDEX_CONSTITUENT_COUNT;
         $bands = IndexCommittee::bands($count);
         $board = $this->rankedBoard($bands['outer'] + 10);
 

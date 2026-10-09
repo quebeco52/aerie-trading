@@ -202,7 +202,6 @@ class OptionChainBuilderTest extends TestCase
         $far = $this->contract($stock, 13, true, 60.0);
         $near = $this->contract($stock, 13, true, 105.0);
 
-        $math = new MathUtility();
         $quotes = (new OptionPricingEngine(new BondPricingEngine()))
             ->quoteChain([$far, $near], $this->macro(1.0)->sovereignCurve(), 1.0);
 

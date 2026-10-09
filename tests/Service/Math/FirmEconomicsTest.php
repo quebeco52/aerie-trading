@@ -3,7 +3,6 @@
 namespace App\Tests\Service\Math;
 
 use App\Service\Macro\MacroEngine;
-use App\Service\Math\FinancialConstants;
 use App\Service\Math\FirmEconomics;
 use PHPUnit\Framework\TestCase;
 
@@ -197,7 +196,7 @@ class FirmEconomicsTest extends TestCase
             1.0,
             MacroEngine::INTERBANK_BASELINE_SPREAD
         );
-        $this->assertEqualsWithDelta(0.010 * FinancialConstants::CCC_DSO_CREDIT_SPREAD_SENSITIVITY, $creditStress['dso'], 0.0000001, 'DSO must track the credit spread.');
+        $this->assertEqualsWithDelta(0.010 * FirmEconomics::CCC_DSO_CREDIT_SPREAD_SENSITIVITY, $creditStress['dso'], 0.0000001, 'DSO must track the credit spread.');
         $this->assertEqualsWithDelta(0.0, $creditStress['dio'], 0.0000001, 'A credit shock must not move inventory days.');
         $this->assertEqualsWithDelta(0.0, $creditStress['dpo'], 0.0000001, 'A credit shock must not move payable days.');
 
@@ -207,7 +206,7 @@ class FirmEconomicsTest extends TestCase
             0.80,
             MacroEngine::INTERBANK_BASELINE_SPREAD
         );
-        $this->assertEqualsWithDelta(0.20 * FinancialConstants::CCC_DIO_CAPACITY_SENSITIVITY, $slack['dio'], 0.0000001, 'DIO must track idle capacity.');
+        $this->assertEqualsWithDelta(0.20 * FirmEconomics::CCC_DIO_CAPACITY_SENSITIVITY, $slack['dio'], 0.0000001, 'DIO must track idle capacity.');
         $this->assertEqualsWithDelta(0.0, $slack['dso'], 0.0000001, 'Idle capacity must not move receivable days.');
 
         // Interbank stress makes vendors demand cash sooner, so DPO contracts (negative shift).
@@ -216,7 +215,7 @@ class FirmEconomicsTest extends TestCase
             1.0,
             MacroEngine::INTERBANK_BASELINE_SPREAD + 0.004
         );
-        $this->assertEqualsWithDelta(-0.004 * FinancialConstants::CCC_DPO_LIQUIDITY_SENSITIVITY, $liquidityStress['dpo'], 0.0000001, 'DPO must contract under interbank stress.');
+        $this->assertEqualsWithDelta(-0.004 * FirmEconomics::CCC_DPO_LIQUIDITY_SENSITIVITY, $liquidityStress['dpo'], 0.0000001, 'DPO must contract under interbank stress.');
         $this->assertLessThan(0.0, $liquidityStress['dpo'], 'Vendors demanding faster payment shortens the payable cycle.');
     }
 

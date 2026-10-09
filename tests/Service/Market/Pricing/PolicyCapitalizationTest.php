@@ -248,7 +248,7 @@ class PolicyCapitalizationTest extends TestCase
     /** The duty whose turnover factor is the given one. */
     private function dutyAt(float $factor): float
     {
-        return FinancialConstants::STAMP_DUTY_RATE - (log($factor) / (2.0 * FinancialConstants::STAMP_DUTY_VOLUME_SEMI_ELASTICITY));
+        return FinancialConstants::STAMP_DUTY_RATE - (log($factor) / (2.0 * MacroTransmission::STAMP_DUTY_VOLUME_SEMI_ELASTICITY));
     }
 
     /**

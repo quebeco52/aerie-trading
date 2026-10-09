@@ -14,6 +14,7 @@ use App\Service\Math\FinancialConstants;
 use App\Service\Math\FirmEconomics;
 use App\Service\Math\MacroTransmission;
 use App\Service\Math\MathUtility;
+use App\Service\Math\StochasticProcesses;
 use App\Service\Math\TimeSeries;
 use PHPUnit\Framework\TestCase;
 
@@ -154,7 +155,6 @@ class CreditFiscalSubsystemTest extends TestCase
     {
         $mathMock = $this->createStub(MathUtility::class);
         $mathMock->method('generateStandardNormal')->willReturn(0.0);
-        $mathMock->method('calculateCIR')->willReturn(0.03); // 300 bps already stressed
         $mathMock->method('calculateJumpDiffusion')->willReturn(['multiplier' => 10.0, 'shock_pct' => 900.0, 'exponent' => log(10.0)]);
 
         $subsystem = new CreditFiscalSubsystem($mathMock);
@@ -422,7 +422,7 @@ class CreditFiscalSubsystemTest extends TestCase
 
         $theta = MacroEngine::INTERBANK_BASELINE_SPREAD + (0.034 * CreditFiscalSubsystem::INTERBANK_PREMIUM_COUPLING);
         $compensator = $subsystem->interbankJumpCompensator(CreditFiscalSubsystem::INTERBANK_MAX_JUMP_PROBABILITY, 0.0);
-        $betweenJumps = MacroEngine::INTERBANK_SPREAD_KAPPA * $theta / (MacroEngine::INTERBANK_SPREAD_KAPPA + $compensator);
+        $betweenJumps = CreditFiscalSubsystem::INTERBANK_SPREAD_KAPPA * $theta / (CreditFiscalSubsystem::INTERBANK_SPREAD_KAPPA + $compensator);
         $this->assertEqualsWithDelta($betweenJumps, $state->interbankLiquiditySpread, 0.0001);
         $this->assertGreaterThan(0.010, $state->interbankLiquiditySpread, "2008's 340 bps premium must lift TED past 100 bps.");
     }
@@ -1550,7 +1550,6 @@ class CreditFiscalSubsystemTest extends TestCase
         $underwater->residentialWealthTrend = 100.0;
         $subsystem->calculateRetailDefaultRate($underwater, 0.25);
 
-        $math = new MathUtility();
         $this->assertEqualsWithDelta(CreditRisk::calculateVasicekExpectedLoss(CreditFiscalSubsystem::RETAIL_CREDIT_INTERCEPT, MacroEngine::RETAIL_DEFAULT_BASELINE, CreditFiscalSubsystem::RETAIL_ASRF_RHO, 1.0), $neutral->retailDefaultRate, 1e-12, 'At NAIRU, base spreads and trend prices the systematic factor is the intercept.');
         $expected = CreditRisk::calculateVasicekExpectedLoss(CreditFiscalSubsystem::RETAIL_CREDIT_INTERCEPT + log(0.8) * CreditFiscalSubsystem::RETAIL_HOUSE_PRICE_SENSITIVITY, MacroEngine::RETAIL_DEFAULT_BASELINE, CreditFiscalSubsystem::RETAIL_ASRF_RHO, 1.0);
         $this->assertEqualsWithDelta($expected, $underwater->retailDefaultRate, 1e-9, 'Homes 20% below trend default more households at the same unemployment.');
@@ -2235,5 +2234,70 @@ class CreditFiscalSubsystemTest extends TestCase
         $this->assertEqualsWithDelta(1.0 + ((FirmEconomics::calculateExtractionCostFactor(1.0) - 1.0) * $carried), $state->extractionCostFactorEmbodied, 1e-2 * (FirmEconomics::calculateExtractionCostFactor(1.0) - 1.0));
         $this->assertEqualsWithDelta(1.0 + ((MacroTransmission::calculateStampDutyVolumeFactor(0.002) - 1.0) * $carried), $state->stampDutyVolumeFactorEmbodied, 1e-2 * (1.0 - MacroTransmission::calculateStampDutyVolumeFactor(0.002)));
         $this->assertEqualsWithDelta(CommodityLogisticsSubsystem::carbonPowerPriceUplift(40.0) * $carried, $state->carbonPowerUpliftEmbodied, 1e-2 * CommodityLogisticsSubsystem::carbonPowerPriceUplift(40.0));
+    }
+
+    public function testInterbankLiquiditySpreadMeanRevertsViaCIR(): void
+    {
+        $mathUtility = $this->createStub(MathUtility::class);
+
+        // Suppress jump diffusion; a fixed diffusion draw keeps sigma in the step.
+        $dW = 0.5;
+        $mathUtility->method('generateStandardNormal')->willReturn($dW);
+        $mathUtility->method('calculateJumpDiffusion')->willReturn([
+            'multiplier' => 1.0,
+            'shock_pct' => null,
+            'exponent' => null,
+        ]);
+
+        $creditFiscalSubsystem = new CreditFiscalSubsystem($mathUtility);
+
+        $state = new \App\Service\Macro\MacroState();
+        $state->interbankLiquiditySpread = 0.05;
+        $state->marketVolatilityEma = 0.15; // Neutral VIX
+        $state->excessBondPremium = 0.0;
+
+        $creditFiscalSubsystem->calculateInterbankLiquiditySpread($state, 0.25);
+
+        // The CIR step runs on the engine's constants, its reversion stiffened by the panic jumps' Merton compensator
+        // c: kappa + c towards kappa theta / (kappa + c), the same pull towards theta net of the jumps.
+        $compensator = $creditFiscalSubsystem->interbankJumpCompensator(CreditFiscalSubsystem::INTERBANK_JUMP_PROBABILITY, $state->creditCrisisHazard);
+        $kappa = CreditFiscalSubsystem::INTERBANK_SPREAD_KAPPA + $compensator;
+        $expected = StochasticProcesses::calculateCIR(
+            0.05,
+            $kappa,
+            CreditFiscalSubsystem::INTERBANK_SPREAD_KAPPA * MacroEngine::INTERBANK_BASELINE_SPREAD / $kappa,
+            CreditFiscalSubsystem::INTERBANK_SPREAD_SIGMA,
+            0.25,
+            $dW
+        );
+
+        $this->assertGreaterThan(0.0, $compensator, 'The jumps are compensated in the drift.');
+        $this->assertEqualsWithDelta($expected, $state->interbankLiquiditySpread, 1e-15, 'Interbank spread must mean-revert using CIR.');
+        $this->assertLessThan(0.05, $state->interbankLiquiditySpread);
+    }
+
+    public function testInterbankLiquiditySpreadBlowsOutDuringMarketPanicJump(): void
+    {
+        // The same panicked quarter twice, with and without a 5x blowout jump: the jump multiplies the CIR step.
+        $spreadAfter = function (float $multiplier): float {
+            $mathUtility = $this->createStub(MathUtility::class);
+            $mathUtility->method('generateStandardNormal')->willReturn(0.0);
+            $mathUtility->method('calculateJumpDiffusion')->willReturn([
+                'multiplier' => $multiplier,
+                'shock_pct' => ($multiplier - 1.0) * 100.0,
+                'exponent' => log($multiplier),
+            ]);
+
+            $state = new \App\Service\Macro\MacroState();
+            $state->interbankLiquiditySpread = MacroEngine::INTERBANK_BASELINE_SPREAD;
+            $state->marketVolatilityEma = 0.35; // Panicked VIX
+            (new CreditFiscalSubsystem($mathUtility))->calculateInterbankLiquiditySpread($state, 0.25);
+
+            return $state->interbankLiquiditySpread;
+        };
+
+        $base = $spreadAfter(1.0);
+        $this->assertEqualsWithDelta(MacroEngine::INTERBANK_BASELINE_SPREAD, $base, 0.0005, 'Without the jump the spread stays near its baseline.');
+        $this->assertEqualsWithDelta(5.0 * $base, $spreadAfter(5.0), 1e-15, 'Interbank spread must blow out on Poisson jump.');
     }
 }

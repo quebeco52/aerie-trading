@@ -229,7 +229,7 @@ class SecuritiesBookServiceTest extends TestCase
         );
 
         self::assertLessThan(
-            FinancialConstants::MAX_SECURITIES_MARK_RATIO * self::BOOK,
+            SecuritiesBookService::MAX_SECURITIES_MARK_RATIO * self::BOOK,
             abs($mark->totalMark),
             'A book discounted at a yield of nothing would pin straight to the clamp.'
         );
@@ -241,7 +241,7 @@ class SecuritiesBookServiceTest extends TestCase
         $mark = $this->roll($this->macro(0.30, 0.32), 30.0, carryingYield: 0.001);
 
         self::assertEqualsWithDelta(
-            -FinancialConstants::MAX_SECURITIES_MARK_RATIO * self::BOOK,
+            -SecuritiesBookService::MAX_SECURITIES_MARK_RATIO * self::BOOK,
             $mark->totalMark,
             1.0
         );

@@ -66,7 +66,7 @@ class SecuritiesLendingDeskTest extends TestCase
     public function testAnEasyToBorrowNameCostsGeneralCollateral(): void
     {
         $this->assertEqualsWithDelta(
-            FinancialConstants::GENERAL_COLLATERAL_BORROW_FEE,
+            SecuritiesLendingDesk::GENERAL_COLLATERAL_BORROW_FEE,
             $this->desk->borrowFee($this->stock()),
             1e-9
         );
@@ -99,8 +99,8 @@ class SecuritiesLendingDeskTest extends TestCase
             $fee = $this->desk->borrowFee($this->stock($supply * ($step / 20.0)));
 
             $this->assertGreaterThan($previous, $fee);
-            $this->assertGreaterThanOrEqual(FinancialConstants::GENERAL_COLLATERAL_BORROW_FEE, $fee);
-            $this->assertLessThanOrEqual(FinancialConstants::MAX_BORROW_FEE, $fee);
+            $this->assertGreaterThanOrEqual(SecuritiesLendingDesk::GENERAL_COLLATERAL_BORROW_FEE, $fee);
+            $this->assertLessThanOrEqual(SecuritiesLendingDesk::MAX_BORROW_FEE, $fee);
 
             $previous = $fee;
         }
@@ -112,7 +112,7 @@ class SecuritiesLendingDeskTest extends TestCase
 
         $oneYear = $this->desk->accruedFee($stock, 1000.0, 100.0, 1.0);
 
-        $this->assertEqualsWithDelta(1000.0 * 100.0 * FinancialConstants::GENERAL_COLLATERAL_BORROW_FEE, $oneYear, 1e-9);
+        $this->assertEqualsWithDelta(1000.0 * 100.0 * SecuritiesLendingDesk::GENERAL_COLLATERAL_BORROW_FEE, $oneYear, 1e-9);
         $this->assertEqualsWithDelta($oneYear / 2.0, $this->desk->accruedFee($stock, 1000.0, 100.0, 0.5), 1e-9);
         $this->assertEqualsWithDelta($oneYear * 2.0, $this->desk->accruedFee($stock, 2000.0, 100.0, 1.0), 1e-9);
     }
@@ -144,7 +144,7 @@ class SecuritiesLendingDeskTest extends TestCase
 
         $this->assertGreaterThan(0.0, $quantity);
         $this->assertLessThan(10000.0, $quantity, 'A buy-in takes a slice, not the whole position.');
-        $this->assertEqualsWithDelta(10000.0 * FinancialConstants::BUY_IN_FRACTION, $quantity, 1.0);
+        $this->assertEqualsWithDelta(10000.0 * SecuritiesLendingDesk::BUY_IN_FRACTION, $quantity, 1.0);
     }
 
     public function testNoBuyInWhileBorrowIsStillAvailable(): void
@@ -168,6 +168,6 @@ class SecuritiesLendingDeskTest extends TestCase
 
         $this->assertSame(1.0, $this->desk->utilization($stock));
         $this->assertSame(0.0, $this->desk->availableToBorrow($stock));
-        $this->assertEqualsWithDelta(FinancialConstants::MAX_BORROW_FEE, $this->desk->borrowFee($stock), 1e-9);
+        $this->assertEqualsWithDelta(SecuritiesLendingDesk::MAX_BORROW_FEE, $this->desk->borrowFee($stock), 1e-9);
     }
 }

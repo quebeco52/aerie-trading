@@ -199,7 +199,6 @@ class CommercialBankBusinessModelTest extends TestCase
     public function testOverTheCycleTheBookLosesItsThroughTheCycleRate(): void
     {
         $stock = $this->creditTestBank('NEUTRAL');
-        $math = new MathUtility();
         $step = 0.05;
         $meanLoss = 0.0;
         for ($z = -7.0; $z <= 7.0 + 1e-9; $z += $step) {
@@ -214,7 +213,7 @@ class CommercialBankBusinessModelTest extends TestCase
 
         $ttc = $this->model->getThroughTheCycleCreditLossRate($stock);
         $this->assertEqualsWithDelta($ttc, $meanLoss, 0.002 * $ttc);
-        $loanShare = 1.0 - FinancialConstants::SECURITIES_SHARE_OF_EARNING_ASSETS;
+        $loanShare = 1.0 - CommercialBankBusinessModel::SECURITIES_SHARE_OF_EARNING_ASSETS;
         $this->assertEqualsWithDelta($loanShare, $this->model->getLoanShareOfEarningAssets(), 1e-12);
         $this->assertEqualsWithDelta(
             $loanShare * (CommercialBankBusinessModel::RESIDENTIAL_MORTGAGE_SHARE * CommercialBankBusinessModel::RESIDENTIAL_CHARGE_OFF_RATE
@@ -235,7 +234,6 @@ class CommercialBankBusinessModelTest extends TestCase
      */
     public function testInABustTheLowPdSegmentsSwingFurthest(): void
     {
-        $math = new MathUtility();
         $z = -2.0;
         $swing = static fn (float $rate, float $rho): float => CreditRisk::calculateVasicekExpectedLoss($z, $rate / CommercialBankBusinessModel::LGD_BASELINE, $rho, 1.0) / ($rate / CommercialBankBusinessModel::LGD_BASELINE);
 
@@ -276,7 +274,6 @@ class CommercialBankBusinessModelTest extends TestCase
         };
 
         // At long-run default rates each segment defaults at its conditional PD for the factor those rates imply.
-        $math = new MathUtility();
         $householdZ = CreditRisk::calculateVasicekSystematicFactor(MacroEngine::RETAIL_DEFAULT_BASELINE, MacroEngine::RETAIL_DEFAULT_BASELINE, CreditFiscalSubsystem::RETAIL_ASRF_RHO);
         $corporateZ = CreditRisk::calculateVasicekSystematicFactor(MacroEngine::CORPORATE_DEFAULT_BASELINE, MacroEngine::CORPORATE_DEFAULT_BASELINE, CreditFiscalSubsystem::CORPORATE_DEFAULT_RHO);
         $mortgageLoss = 0.80 * CreditRisk::calculateVasicekExpectedLoss($householdZ, CommercialBankBusinessModel::RESIDENTIAL_CHARGE_OFF_RATE / 0.45, CreditFiscalSubsystem::RETAIL_ASRF_RHO, 1.0);
@@ -461,7 +458,7 @@ class CommercialBankBusinessModelTest extends TestCase
 
         $tenorMove = (CommercialBankBusinessModel::RESIDENTIAL_REPRICING_YEARS - 5.0) / 5.0;
         $securitiesMove = (CommercialBankBusinessModel::SECURITIES_REPRICING_YEARS - 5.0) / 5.0;
-        $loanShare = 1.0 - FinancialConstants::SECURITIES_SHARE_OF_EARNING_ASSETS;
+        $loanShare = 1.0 - CommercialBankBusinessModel::SECURITIES_SHARE_OF_EARNING_ASSETS;
         $this->assertEqualsWithDelta(
             0.01 * (($loanShare * $tenorMove) + ((1.0 - $loanShare) * $securitiesMove)),
             $mortgageLender->resolveInterestYield($stock, $steeper) - $mortgageLender->resolveInterestYield($stock, $opening),
@@ -529,8 +526,8 @@ class CommercialBankBusinessModelTest extends TestCase
             }
         };
         $stock = $this->creditTestBank('RWA');
-        $loanShare = 1.0 - FinancialConstants::SECURITIES_SHARE_OF_EARNING_ASSETS;
-        $securities = FinancialConstants::SECURITIES_SHARE_OF_EARNING_ASSETS * CommercialBankBusinessModel::BASEL_RISK_WEIGHT_SECURITIES;
+        $loanShare = 1.0 - CommercialBankBusinessModel::SECURITIES_SHARE_OF_EARNING_ASSETS;
+        $securities = CommercialBankBusinessModel::SECURITIES_SHARE_OF_EARNING_ASSETS * CommercialBankBusinessModel::BASEL_RISK_WEIGHT_SECURITIES;
 
         $this->assertEqualsWithDelta(0.72, $this->model->calculateRiskWeightDensity($stock), 0.02, 'US insured banks, end-2024: $14.90T of RWA on $20.69T of non-cash assets');
         $this->assertEqualsWithDelta(($loanShare * 0.50) + $securities, $lender(1.0)->calculateRiskWeightDensity($stock), 1e-12);

@@ -13,6 +13,7 @@ use App\Service\Math\TimeSeries;
 use App\Service\Model\Sector\InsuranceBusinessModel;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\TestCase;
+use App\Service\Corporate\CorporateMetrics;
 
 #[AllowMockObjectsWithoutExpectations]
 class InsuranceBusinessModelTest extends TestCase
@@ -649,7 +650,7 @@ class InsuranceBusinessModelTest extends TestCase
     private function shareStock(float $capitalShareOfMarket): Stock
     {
         $samRatio = 2.0;
-        $equity = $capitalShareOfMarket * \App\Service\Math\FinancialConstants::BASELINE_SECTOR_TAM * $samRatio;
+        $equity = $capitalShareOfMarket * CorporateMetrics::BASELINE_SECTOR_TAM * $samRatio;
 
         $stock = new Stock();
         $stock->setTicker('TEST');

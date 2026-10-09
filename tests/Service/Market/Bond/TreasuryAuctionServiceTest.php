@@ -73,10 +73,10 @@ class TreasuryAuctionServiceTest extends TestCase
     {
         $issued = $this->service()->conductAuction($this->curve(), 4.0);
 
-        $this->assertCount(count(FinancialConstants::BOND_AUCTION_TENORS), $issued);
+        $this->assertCount(count(TreasuryAuctionService::BOND_AUCTION_TENORS), $issued);
         $this->assertSame($issued, $this->persisted, 'Every new issue must be persisted.');
 
-        foreach (FinancialConstants::BOND_AUCTION_TENORS as $index => $tenor) {
+        foreach (TreasuryAuctionService::BOND_AUCTION_TENORS as $index => $tenor) {
             $bond = $issued[$index];
 
             $this->assertEqualsWithDelta((float) $tenor, (float) $bond->getTenorYears(), 1e-9);
@@ -96,9 +96,9 @@ class TreasuryAuctionServiceTest extends TestCase
             static fn (array $statement): bool => str_contains($statement['sql'], 'is_on_the_run = 0')
         ));
 
-        $this->assertCount(count(FinancialConstants::BOND_AUCTION_TENORS), $demotions);
+        $this->assertCount(count(TreasuryAuctionService::BOND_AUCTION_TENORS), $demotions);
 
-        foreach (FinancialConstants::BOND_AUCTION_TENORS as $index => $tenor) {
+        foreach (TreasuryAuctionService::BOND_AUCTION_TENORS as $index => $tenor) {
             $this->assertSame($tenor, $demotions[$index]['params']['tenor']);
         }
     }
@@ -120,7 +120,7 @@ class TreasuryAuctionServiceTest extends TestCase
         $this->assertGreaterThan(0.0, (float) $bond->getCouponRate());
         $this->assertGreaterThan(0.0, (float) $bond->getYieldToMaturity());
         $this->assertGreaterThan(0.0, (float) $bond->getModifiedDuration());
-        $this->assertEqualsWithDelta((string) FinancialConstants::BOND_ISSUE_SIZE, (float) $bond->getOutstandingFace(), 1.0);
+        $this->assertEqualsWithDelta((string) TreasuryAuctionService::BOND_ISSUE_SIZE, (float) $bond->getOutstandingFace(), 1.0);
 
         // Struck at par, so it opens near face rather than at the entity's placeholder price.
         $this->assertEqualsWithDelta(FinancialConstants::BOND_FACE_VALUE, (float) $bond->getCleanPrice(), 15.0);
@@ -191,7 +191,7 @@ class TreasuryAuctionServiceTest extends TestCase
             static fn (array $statement): bool => str_contains($statement['sql'], 'is_on_the_run = 0')
         );
 
-        $this->assertCount(count(FinancialConstants::BOND_AUCTION_TENORS), $demotions);
+        $this->assertCount(count(TreasuryAuctionService::BOND_AUCTION_TENORS), $demotions);
     }
 
     public function testAuctionIntervalDividesTheTickRateIntoTheConfiguredNumberOfAuctions(): void

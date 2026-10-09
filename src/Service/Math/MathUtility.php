@@ -5,10 +5,10 @@ namespace App\Service\Math;
 use App\Service\Macro\MacroEngine;
 
 /**
- * The simulation's random source: uniform and normal draws on the global or a private stream, draw logging and
- * replay, and the stochastic steps that consume draws (jump diffusion, correlated GBM, CIR, QE variance, SVJJ and
- * Kou jumps, two-factor OU, Schwartz). Deterministic formulas live in the other App\Service\Math classes. Tests
- * subclass or mock it to script draws.
+ * The simulation's random source: uniform, normal, Student-t, exponential, Poisson and Pareto draws on the global or a
+ * private stream, draw logging and replay, and the steps that make their own draws (jump diffusion, QE variance, SVJJ
+ * and Kou jumps, two-factor OU and Schwartz, lognormal synergy). A step handed its draws is deterministic and lives in
+ * StochasticProcesses. Tests subclass or mock this class to script draws.
  */
 class MathUtility
 {
@@ -198,16 +198,7 @@ class MathUtility
             $innovation = ($loading * $commonInnovation) + (sqrt(max(0.0, 1.0 - ($loading * $loading))) * $idiosyncratic);
         }
 
-        return ($phi * $previousZ) + ($this->persistentInnovationScale($phi) * $innovation);
-    }
-
-    /**
-     * Weight on a fresh innovation that keeps an AR(1) series at unit variance: sqrt(1 - phi^2). Shared by
-     * the draw itself and by anyone attributing a realized Z back to the factors that entered it.
-     */
-    public function persistentInnovationScale(float $phi): float
-    {
-        return sqrt(max(0.0, 1.0 - ($phi * $phi)));
+        return ($phi * $previousZ) + (StochasticProcesses::persistentInnovationScale($phi) * $innovation);
     }
 
     /**
@@ -285,79 +276,6 @@ class MathUtility
             'shock_pct'  => null,
             'exponent'   => null
         ];
-    }
-
-    /**
-     * Calculates the next price using Geometric Brownian Motion (GBM) with correlated market drift.
-     *
-     * @param float $currentPrice             The current price of the stock.
-     * @param float $idiosyncraticVolatility  The current instantaneous IDIOSYNCRATIC volatility. The market
-     *                                        loading is supplied outright by beta and marketVol, so total
-     *                                        volatility is sqrt((beta * marketVol)^2 + this^2).
-     * @param float $drift             The expected return (drift) of the stock.
-     * @param float $gravityDrift      The mean reversion drift pulling to fair value.
-     * @param float $dt                The time step in years.
-     * @param float $beta              The stock's beta (sensitivity to market movements).
-     * @param float $marketVol         The volatility of the broader market.
-     * @param float $marketZ           The systemic market shock Z-score.
-     * @param float $w1                The idiosyncratic shock Z-score.
-     * @param float $sectorZ           The shock Z-score common to this stock's macro sector.
-     * @param float $sectorVarianceShare Fraction of NON-market variance loaded onto the sector factor.
-     * @return float The new price calculated via GBM.
-     */
-    public function calculateCorrelatedGBM(
-        float $currentPrice,
-        float $idiosyncraticVolatility,
-        float $drift,
-        float $gravityDrift,
-        float $dt,
-        float $beta,
-        float $marketVol,
-        float $marketZ,
-        float $w1,
-        float $sectorZ = 0.0,
-        float $sectorVarianceShare = 0.0
-    ): float {
-        // Three-way orthogonal variance decomposition: systematic market factor, sector factor, and idiosyncratic residual.
-        $boundedShare = max(0.0, min(1.0, $sectorVarianceShare));
-        $residualVol = max(0.0, $idiosyncraticVolatility);
-        $sectorLoading = $residualVol * sqrt($boundedShare);
-        $idiosyncraticLoading = $residualVol * sqrt(1.0 - $boundedShare);
-
-        $sqrtDt = sqrt($dt);
-        $systematicDrift = $beta * $marketVol * $marketZ * $sqrtDt;
-        $sectorDrift = $sectorLoading * $sectorZ * $sqrtDt;
-        $idiosyncraticDrift = $idiosyncraticLoading * $w1 * $sqrtDt;
-
-        // Apply Ito correction to total variance (systematic plus idiosyncratic).
-        $totalVariance = ($beta * $marketVol * $beta * $marketVol) + ($residualVol * $residualVol);
-
-        $gbmExponent = ($drift + $gravityDrift - 0.5 * $totalVariance) * $dt
-            + $systematicDrift + $sectorDrift + $idiosyncraticDrift;
-
-        return $currentPrice * exp($gbmExponent);
-    }
-
-    /**
-     * Calculates a step in the Cox-Ingersoll-Ross (CIR) process.
-     * Used to model mean-reverting, strictly positive continuous processes (like operating margins).
-     *
-     * @param float $currentValue The current state variable.
-     * @param float $kappa        The speed of mean reversion.
-     * @param float $theta        The long-term structural target.
-     * @param float $sigma        The volatility of the process.
-     * @param float $dt           The time step delta.
-     * @param float $dW           The Brownian motion Z-score.
-     * @return float The next value in the process.
-     */
-    public function calculateCIR(float $currentValue, float $kappa, float $theta, float $sigma, float $dt, float $dW): float
-    {
-        $currentValue = max(0.0001, $currentValue);
-        // Exact exponential discretization for mean-reversion drift prevents Euler overshooting when kappa * dt > 1.0
-        $drift = ($theta - $currentValue) * (1.0 - exp(-$kappa * $dt));
-        $diffusion = $sigma * sqrt($currentValue) * sqrt($dt) * $dW;
-
-        return max(0.0001, $currentValue + $drift + $diffusion);
     }
 
     /**
@@ -697,142 +615,5 @@ class MathUtility
             'xi'   => $nextXi,
             'spot' => $spot,
         ];
-    }
-
-    // --- Pure Formulas Tests Still Replace ---
-    // Credit, valuation and penalty formulas that DebtEngine, M&A, capital-allocation, credit-fiscal and earnings tests
-    // stub or spy on through this instance; each moves to CreditRisk, Valuation or ResponseCurves once its tests
-    // drive inputs instead.
-
-    /**
-     * The fair-value P/E management strikes its own capital decisions on: the market's anchor, exactly.
-     * Takes the firm's inputs as primitives so every corporate engine can call it through the MathUtility it
-     * already holds; the growth transmission and the accruals discount are the two functions above.
-     */
-    public function calculateManagementFairValuePE(
-        float $hurdleRate,
-        float $trueReturn,
-        float $secularGrowth,
-        float $outputGap,
-        float $beta,
-        float $inflation,
-        ?float $sectorMultiple,
-        float $accrualsRatio,
-        float $payoutRatio
-    ): float {
-        $expectedGrowth = Valuation::calculateFundableGrowth(
-            Valuation::calculateExpectedNominalGrowth($secularGrowth, $outputGap, $beta, $inflation, $hurdleRate),
-            $trueReturn,
-            $payoutRatio,
-            $inflation
-        );
-
-        return Valuation::calculateQualityAdjustedFairValuePE($hurdleRate, $trueReturn, $expectedGrowth, $sectorMultiple, $accrualsRatio);
-    }
-
-    /**
-     * Calculates the Distance to Default (DD) using Merton's Structural Model.
-     *
-     * @param float $assetValue      The total value of the firm's assets (V).
-     * @param float $debtFaceValue   The face value of the firm's debt (D).
-     * @param float $assetVolatility The volatility of the firm's assets (sigma_V).
-     * @param float $riskFreeRate    The risk-free rate (r).
-     * @param float $timeToMaturity  The time to maturity of the debt in years (T).
-     * @return float The Distance to Default in standard deviations.
-     */
-    public function calculateDistanceToDefault(float $assetValue, float $debtFaceValue, float $assetVolatility, float $riskFreeRate, float $timeToMaturity = 1.0): float
-    {
-        if ($debtFaceValue <= 0.0 || $assetValue <= 0.0 || $assetVolatility <= 0.0 || $timeToMaturity <= 0.0) {
-            return 10.0; // Effectively no default risk
-        }
-
-        $d1 = (log($assetValue / $debtFaceValue) + ($riskFreeRate + 0.5 * pow($assetVolatility, 2.0)) * $timeToMaturity)
-            / ($assetVolatility * sqrt($timeToMaturity));
-
-        // In the Merton model, the actual Distance to Default is d2
-        $d2 = $d1 - ($assetVolatility * sqrt($timeToMaturity));
-
-        return $d2;
-    }
-
-    /**
-     * Calculates the theoretical credit spread based on Merton's Structural Model.
-     *
-     * @param float $distanceToDefault The distance to default (d2).
-     * @param float $lossGivenDefault  The expected loss percentage if default occurs (LGD).
-     * @param float $timeToMaturity    The time to maturity of the debt in years (T).
-     * @return float The theoretical credit spread in decimal (e.g. 0.02 for 2%).
-     */
-    public function calculateMertonCreditSpread(float $distanceToDefault, float $lossGivenDefault = 0.40, float $timeToMaturity = 1.0): float
-    {
-        // Probability of Default (PD) is N(-DD)
-        $probabilityOfDefault = Distributions::calculateNormalCDF(-$distanceToDefault);
-
-        // Failsafe: Cap PD slightly below 1.0 to prevent log(0) in the spread formula
-        $probabilityOfDefault = min(0.9999, $probabilityOfDefault);
-
-        $spread = - (1.0 / $timeToMaturity) * log(1.0 - ($probabilityOfDefault * $lossGivenDefault));
-
-        // Failsafe: Prevent negative spreads or astronomical blowout
-        return max(0.0, min(1.0, $spread)); // Max spread capped at 10,000 bps
-    }
-
-    /**
-     * The spread a corporate issue is discounted at, over the sovereign curve.
-     *
-     * Two components, because a corporate spread is not all compensation for default. Longstaff, Mithal &
-     * Neis (2005) separate the two by comparing bond spreads with credit default swap premia and find a
-     * material non-default residual: a buyer charges for holding a claim they cannot sell as readily as a
-     * sovereign, whether or not the issuer is ever going to miss a payment. A bond priced on default risk
-     * alone quotes through the market at every rating, and worst at the safe end, where the default
-     * component is nearly nothing and the residual is nearly all of it.
-     *
-     * The default component is the issuer's own Merton spread at the claim's horizon, so it carries the
-     * term structure of default risk rather than a flat number: a firm close to the barrier is far riskier
-     * over ten years than over one, and a distressed one is riskier over one year than over ten because it
-     * either survives that year or does not.
-     *
-     * @param float $distanceToDefault The issuer's Merton d2.
-     * @param float $lossGivenDefault  One minus the recovery on this claim.
-     * @param float $timeToMaturity    Years to maturity.
-     * @param float $illiquidityPremium Non-default component.
-     * @return float Continuously compounded spread over the sovereign curve.
-     */
-    public function calculateCorporateSpread(
-        float $distanceToDefault,
-        float $lossGivenDefault,
-        float $timeToMaturity,
-        float $illiquidityPremium = FinancialConstants::CORPORATE_ILLIQUIDITY_SPREAD
-    ): float {
-        $defaultComponent = $this->calculateMertonCreditSpread(
-            $distanceToDefault,
-            $lossGivenDefault,
-            max(1.0e-6, $timeToMaturity)
-        );
-
-        return max(0.0, min(
-            FinancialConstants::MAX_CORPORATE_SPREAD,
-            $defaultComponent + max(0.0, $illiquidityPremium)
-        ));
-    }
-
-    /**
-     * Calculates a convex penalty using power-law scaling to model non-linear demand destruction,
-     * bullwhip supply chain freezes, or aggressive promotional inventory markdowns.
-     *
-     * Formula: Penalty = (max(0, Shock))^Convexity * Scalar
-     *
-     * @param float $shock     The magnitude of the shock/contraction (e.g. abs(outputGap)).
-     * @param float $convexity The degree of convexity (e.g. 1.5 or 2.0).
-     * @param float $scalar    The scaling factor.
-     * @return float The non-linear convex penalty.
-     */
-    public function calculateConvexPenalty(float $shock, float $convexity = 1.5, float $scalar = 1.0): float
-    {
-        if ($shock <= 0.0) {
-            return 0.0;
-        }
-
-        return pow($shock, $convexity) * $scalar;
     }
 }

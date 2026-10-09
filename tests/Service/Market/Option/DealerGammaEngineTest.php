@@ -135,7 +135,7 @@ class DealerGammaEngineTest extends TestCase
         $stock->setPrice('102.00000000');
 
         $this->assertEqualsWithDelta(
-            $gamma * 2.0 * FinancialConstants::DEALER_HEDGE_RATIO,
+            $gamma * 2.0 * DealerGammaEngine::DEALER_HEDGE_RATIO,
             $this->engine->hedgeFlow($stock, self::DAY),
             1e-6
         );
@@ -181,7 +181,7 @@ class DealerGammaEngineTest extends TestCase
         $stock->setPrice('140.00000000');
 
         $ceiling = (new LiquidityEngine(new MathUtility()))->averageDailyVolume($stock)
-            * FinancialConstants::MAX_DEALER_HEDGE_ADV_MULTIPLE;
+            * DealerGammaEngine::MAX_DEALER_HEDGE_ADV_MULTIPLE;
 
         $this->assertEqualsWithDelta($ceiling, $this->engine->hedgeFlow($stock, self::DAY), 1e-6);
     }
@@ -202,7 +202,7 @@ class DealerGammaEngineTest extends TestCase
         $gamma = $this->engine->refresh($stock, [$this->contract(10_000_000)], ['VANE-13C100' => $this->quote(0.10)]);
         $stock->setPrice('140.00000000');
 
-        $wanted = $gamma * 40.0 * FinancialConstants::DEALER_HEDGE_RATIO;
+        $wanted = $gamma * 40.0 * DealerGammaEngine::DEALER_HEDGE_RATIO;
         $first = $this->engine->hedgeFlow($stock, self::DAY);
         $this->assertLessThan($wanted, $first);
 
@@ -221,7 +221,7 @@ class DealerGammaEngineTest extends TestCase
         $stock = $this->stock(100.0);
         $this->engine->refresh($stock, [$this->contract(500)], ['VANE-13C100' => $this->quote(0.02)]);
         $stock->setPrice('104.00000000');
-        $owed = 500 * FinancialConstants::OPTION_CONTRACT_MULTIPLIER * 0.02 * 4.0 * FinancialConstants::DEALER_HEDGE_RATIO;
+        $owed = 500 * FinancialConstants::OPTION_CONTRACT_MULTIPLIER * 0.02 * 4.0 * DealerGammaEngine::DEALER_HEDGE_RATIO;
 
         // The chain is re-quoted at double the gamma before the desk has hedged: the delta it owes is unchanged.
         $this->engine->refresh($stock, [$this->contract(500)], ['VANE-13C100' => $this->quote(0.04)]);

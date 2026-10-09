@@ -12,6 +12,7 @@ use App\Service\Market\Pricing\MarketEngine;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\MathUtility;
 use PHPUnit\Framework\TestCase;
+use App\Service\Market\Pricing\StockTracker;
 
 /**
  * The invariant that governs every phase of the market layer: a new source of price movement must draw
@@ -92,7 +93,7 @@ class OrderFlowVarianceBudgetTest extends TestCase
         $macro = new MacroStateDTO(policyRate: 0.04, equityRiskPremium: 0.045);
 
         $dt = 1.0 / self::TICKS_PER_YEAR;
-        $phi = exp(-$dt / FinancialConstants::IMPACT_VARIANCE_EMA_YEARS);
+        $phi = exp(-$dt / StockTracker::IMPACT_VARIANCE_EMA_YEARS);
 
         $price = 100.0;
         $volatility = self::BASELINE_VOLATILITY;

@@ -46,11 +46,11 @@ class CorporateDefaultServiceTest extends TestCase
         // Senior unsecured is what a public corporate bond IS, so it is the right thing to assume about one
         // that did not say — and assuming anything safer would quietly flatter every such claim.
         $this->assertSame(
-            FinancialConstants::RECOVERY_SENIOR_UNSECURED,
+            CorporateDefaultService::RECOVERY_SENIOR_UNSECURED,
             CorporateDefaultService::baseRecoveryFor(null)
         );
         $this->assertSame(
-            FinancialConstants::RECOVERY_SENIOR_UNSECURED,
+            CorporateDefaultService::RECOVERY_SENIOR_UNSECURED,
             CorporateDefaultService::baseRecoveryFor('SOMETHING_UNKNOWN')
         );
     }
@@ -58,11 +58,11 @@ class CorporateDefaultServiceTest extends TestCase
     public function testASovereignSeniorityMapsToNothingExotic(): void
     {
         $this->assertSame(
-            FinancialConstants::RECOVERY_SENIOR_SECURED,
+            CorporateDefaultService::RECOVERY_SENIOR_SECURED,
             CorporateDefaultService::baseRecoveryFor(Bond::SENIORITY_SENIOR_SECURED)
         );
         $this->assertSame(
-            FinancialConstants::RECOVERY_SUBORDINATED,
+            CorporateDefaultService::RECOVERY_SUBORDINATED,
             CorporateDefaultService::baseRecoveryFor(Bond::SENIORITY_SUBORDINATED)
         );
     }
@@ -100,7 +100,7 @@ class CorporateDefaultServiceTest extends TestCase
         // claim settles at something; the shares settle at zero.
         foreach ([Bond::SENIORITY_SENIOR_SECURED, Bond::SENIORITY_SENIOR_UNSECURED, Bond::SENIORITY_SUBORDINATED] as $seniority) {
             $this->assertGreaterThanOrEqual(
-                FinancialConstants::MIN_RECOVERY_RATE,
+                CreditRisk::MIN_RECOVERY_RATE,
                 $this->recovery($seniority, 0.99),
                 $seniority
             );
@@ -119,7 +119,7 @@ class CorporateDefaultServiceTest extends TestCase
         $recovery = $this->recovery(Bond::SENIORITY_SENIOR_UNSECURED, \App\Service\Macro\MacroEngine::CORPORATE_DEFAULT_BASELINE);
         $face = FinancialConstants::BOND_FACE_VALUE;
 
-        $this->assertEqualsWithDelta($face * FinancialConstants::RECOVERY_SENIOR_UNSECURED, $face * $recovery, 1e-6);
+        $this->assertEqualsWithDelta($face * CorporateDefaultService::RECOVERY_SENIOR_UNSECURED, $face * $recovery, 1e-6);
         $this->assertLessThan($face, $face * $recovery);
         $this->assertGreaterThan(0.0, $face * $recovery);
     }

@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace App\Service\Market\Agent;
 
 use App\DTO\AgentMarketViewDTO;
-use App\Service\Math\FinancialConstants;
 
 /**
  * Buys what is cheap against its published fair value, sells what is dear.
@@ -17,6 +16,10 @@ use App\Service\Math\FinancialConstants;
  */
 final class FundamentalistStrategy implements AgentStrategyInterface
 {
+    // --- Agent Signals ---
+    /** Fundamentalist conviction per unit of log mispricing: fully committed at roughly a 40% discount to fair value. */
+    public const AGENT_FUNDAMENTALIST_GAIN = 2.50;
+
     public function identifier(): string
     {
         return 'fundamentalist';
@@ -24,7 +27,7 @@ final class FundamentalistStrategy implements AgentStrategyInterface
 
     public function signal(AgentMarketViewDTO $view, array $positions): float
     {
-        return max(-1.0, min(1.0, FinancialConstants::AGENT_FUNDAMENTALIST_GAIN * $view->logMispricing()));
+        return max(-1.0, min(1.0, self::AGENT_FUNDAMENTALIST_GAIN * $view->logMispricing()));
     }
 
     public function competesForCapital(): bool

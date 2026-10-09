@@ -49,6 +49,12 @@ class IndustryShareLedger
      */
     public const MAX_SHARE_DRAIN_PER_REPORT = 0.25;
 
+    // --- Industry Capacity & Cournot Pricing ---
+    /** Widest capacity-to-demand ratio the industry price responds to; past it the excess is idle plant, not a deeper price cut. */
+    public const MAX_INDUSTRY_CAPACITY_RATIO = 2.0;
+    /** Tightest capacity-to-demand ratio the industry price responds to; past it demand is rationed rather than bid ever higher. */
+    public const MIN_INDUSTRY_CAPACITY_RATIO = 0.5;
+
     public function __construct(
         private readonly IndustryShareStoreInterface $store,
     ) {}
@@ -504,7 +510,7 @@ class IndustryShareLedger
 
     private function boundedCapacityRatio(float $supplyOverDemand): float
     {
-        return max(FinancialConstants::MIN_INDUSTRY_CAPACITY_RATIO, min(FinancialConstants::MAX_INDUSTRY_CAPACITY_RATIO, $supplyOverDemand));
+        return max(self::MIN_INDUSTRY_CAPACITY_RATIO, min(self::MAX_INDUSTRY_CAPACITY_RATIO, $supplyOverDemand));
     }
 
     /**

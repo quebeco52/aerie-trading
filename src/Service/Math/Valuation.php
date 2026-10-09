@@ -13,6 +13,44 @@ use App\Service\Macro\MacroEngine;
  */
 final class Valuation
 {
+    // --- Earnings Response Coefficient (ERC) ---
+    /** Baseline earnings response intercept for unexpected earnings impact on market returns. */
+    public const ERC_BASE_ALPHA = 0.0;
+    /** Sensitivity coefficient dampening ERC as systematic market beta risk increases. */
+    public const ERC_BETA_SENSITIVITY = -0.15;
+    /** Sensitivity coefficient increasing ERC for high-growth premium equities. */
+    public const ERC_GROWTH_SENSITIVITY = 0.25;
+
+    // --- Gordon Growth & Perpetual Valuation Bounds ---
+    /** Absolute minimum hurdle rate (~4% COE) to prevent Gordon Growth divergence under extreme distress. */
+    public const MIN_COST_OF_EQUITY = 0.04;
+    /** Absolute perpetual growth floor (-5%) for contracting or liquidation-stage firms. */
+    public const MIN_PERPETUAL_GROWTH_RATE = -0.05;
+    /** Absolute perpetual growth ceiling (6%) to prevent exceeding long-term nominal GDP growth. */
+    public const MAX_PERPETUAL_GROWTH_RATE = 0.06;
+
+    // --- Valuation & Multiples ---
+    /** Baseline long-term stable GDP growth rate for Gordon Growth valuation. */
+    public const DEFAULT_PERPETUAL_GROWTH_RATE = 0.02;
+
+    // --- Fundamental Growth Transmission ---
+    /** Share of the output gap that reaches a firm's real growth rate, before its beta scales the cyclical exposure. */
+    public const CYCLICAL_GROWTH_PASS_THROUGH = 0.50;
+    /** Absolute floor on intrinsic fundamental P/E multiple. */
+    public const MIN_INTRINSIC_PE = 4.0;
+    /** Absolute ceiling on intrinsic fundamental P/E multiple. */
+    public const MAX_INTRINSIC_PE = 35.0;
+
+    // --- Relative Valuation Shrinkage (Vasicek 1973) ---
+    /** Spread (cost of equity less growth) at which a firm's own Gordon multiple and its sector's carry equal weight. */
+    public const INTRINSIC_PE_SHRINKAGE_SPREAD = 0.03;
+    /** Cap on a Gordon capitalization multiple (~33.3x, a 3% yield). */
+    public const MAX_DCF_MULTIPLIER = 33.33;
+
+    // --- Accruals Quality & Sloan Anomaly (Sloan 1996) ---
+    /** Valuation multiple discount scalar penalizing stocks with high non-cash accounting accruals. */
+    public const ACCRUALS_ANOMALY_PE_PENALTY_SCALE = 8.0;
+
     /**
      * The growth rate a perpetuity may be struck on: bounded to [-5%, +6%] and at least 50bp below the cost of equity
      * (floored at MIN_COST_OF_EQUITY), so no perpetuity divides by a vanishing spread. Every perpetuity struck on the
@@ -20,9 +58,9 @@ final class Valuation
      */
     public static function perpetualGrowthRate(float $costOfEquity, float $growthRate): float
     {
-        $clampedGrowth = max(FinancialConstants::MIN_PERPETUAL_GROWTH_RATE, min(FinancialConstants::MAX_PERPETUAL_GROWTH_RATE, $growthRate));
+        $clampedGrowth = max(self::MIN_PERPETUAL_GROWTH_RATE, min(self::MAX_PERPETUAL_GROWTH_RATE, $growthRate));
 
-        return min($clampedGrowth, max(FinancialConstants::MIN_COST_OF_EQUITY, $costOfEquity) - FinancialConstants::MIN_PERPETUAL_GROWTH_SPREAD);
+        return min($clampedGrowth, max(self::MIN_COST_OF_EQUITY, $costOfEquity) - FinancialConstants::MIN_PERPETUAL_GROWTH_SPREAD);
     }
 
     /**
@@ -53,11 +91,11 @@ final class Valuation
     public static function calculateIntrinsicFairValuePE(
         float $costOfEquity,
         float $roic,
-        float $growthRate = FinancialConstants::DEFAULT_PERPETUAL_GROWTH_RATE,
+        float $growthRate = self::DEFAULT_PERPETUAL_GROWTH_RATE,
         ?float $sectorMultiple = null
     ): float {
         // 1. Enforce absolute structural floor on Cost of Equity to prevent divergence under extreme distress
-        $effectiveCostOfEquity = max(FinancialConstants::MIN_COST_OF_EQUITY, $costOfEquity);
+        $effectiveCostOfEquity = max(self::MIN_COST_OF_EQUITY, $costOfEquity);
 
         // 2-3. The perpetual growth the multiple is struck on: bounded, and held below the hurdle.
         $effectiveGrowth = self::perpetualGrowthRate($costOfEquity, $growthRate);
@@ -78,7 +116,7 @@ final class Valuation
         // Firm precision goes as spread^2 (delta method on a 1/spread ratio); the prior's is the fixed
         // tau^2. A well-conditioned firm keeps its own multiple; an ill-conditioned one inherits its sector's.
         if ($sectorMultiple !== null && $sectorMultiple > 0.0) {
-            $tau = FinancialConstants::INTRINSIC_PE_SHRINKAGE_SPREAD;
+            $tau = self::INTRINSIC_PE_SHRINKAGE_SPREAD;
             $firmPrecision = $spread * $spread;
             $priorPrecision = $tau * $tau;
 
@@ -87,7 +125,7 @@ final class Valuation
         }
 
         // 8. Enforce structural market boundaries for distressed (4x) and superstar (35x) equities
-        return max(FinancialConstants::MIN_INTRINSIC_PE, min(FinancialConstants::MAX_INTRINSIC_PE, $pe));
+        return max(self::MIN_INTRINSIC_PE, min(self::MAX_INTRINSIC_PE, $pe));
     }
 
     /**
@@ -112,7 +150,7 @@ final class Valuation
         // The secular excess over trend keeps fading (SECULAR_EXCESS_HALF_LIFE_YEARS), so it is priced at its
         // perpetual equivalent rather than as permanent or as nothing.
         $realGrowth = TimeSeries::persistentEquivalentGrowth($secularGrowth, MacroEngine::TREND_REAL_GROWTH, $discountRate - $inflation)
-            + ($outputGap * FinancialConstants::CYCLICAL_GROWTH_PASS_THROUGH * $beta);
+            + ($outputGap * self::CYCLICAL_GROWTH_PASS_THROUGH * $beta);
 
         // Nominal growth is real growth plus inflation (Fisher): the cash flows are discounted at a nominal rate,
         // so growing them at less than full inflation is the inflation illusion of Modigliani & Cohn (1979). The
@@ -179,9 +217,9 @@ final class Valuation
         float $accrualsRatio
     ): float {
         $fairValuePE = self::calculateIntrinsicFairValuePE($hurdleRate, $structuralRoic, $expectedGrowth, $sectorMultiple);
-        $accrualsPenalty = max(0.0, $accrualsRatio * FinancialConstants::ACCRUALS_ANOMALY_PE_PENALTY_SCALE);
+        $accrualsPenalty = max(0.0, $accrualsRatio * self::ACCRUALS_ANOMALY_PE_PENALTY_SCALE);
 
-        return max(FinancialConstants::MIN_INTRINSIC_PE, $fairValuePE - $accrualsPenalty);
+        return max(self::MIN_INTRINSIC_PE, $fairValuePE - $accrualsPenalty);
     }
 
     /**
@@ -202,14 +240,14 @@ final class Valuation
             return 0.0;
         }
 
-        $effectiveDiscountRate = max(FinancialConstants::MIN_COST_OF_EQUITY, $discountRate);
-        $clampedGrowthRate = max(FinancialConstants::MIN_PERPETUAL_GROWTH_RATE, min(FinancialConstants::MAX_PERPETUAL_GROWTH_RATE, $growthRate));
+        $effectiveDiscountRate = max(self::MIN_COST_OF_EQUITY, $discountRate);
+        $clampedGrowthRate = max(self::MIN_PERPETUAL_GROWTH_RATE, min(self::MAX_PERPETUAL_GROWTH_RATE, $growthRate));
         $effectiveGrowthRate = min($clampedGrowthRate, $effectiveDiscountRate - FinancialConstants::MIN_PERPETUAL_GROWTH_SPREAD);
 
         $denominator = max(FinancialConstants::MIN_PERPETUAL_GROWTH_SPREAD, $effectiveDiscountRate - $effectiveGrowthRate);
         $multiplier = (1.0 + $effectiveGrowthRate) / $denominator;
 
-        $clampedMultiplier = min(FinancialConstants::MAX_DCF_MULTIPLIER, $multiplier);
+        $clampedMultiplier = min(self::MAX_DCF_MULTIPLIER, $multiplier);
 
         return $annualDividend * $clampedMultiplier;
     }
@@ -226,7 +264,7 @@ final class Valuation
      */
     public static function calculateDividendAdjustmentValue(float $annualGap, float $discountRate, float $quarterlySpeed): float
     {
-        $quarterlyRate = ((1.0 + max(FinancialConstants::MIN_COST_OF_EQUITY, $discountRate)) ** 0.25) - 1.0;
+        $quarterlyRate = ((1.0 + max(self::MIN_COST_OF_EQUITY, $discountRate)) ** 0.25) - 1.0;
         $persistence = (1.0 - max(0.0, min(1.0, $quarterlySpeed))) / (1.0 + $quarterlyRate);
 
         return ($annualGap / 4.0) * $persistence / (1.0 - $persistence);
@@ -303,9 +341,9 @@ final class Valuation
     {
         // High beta (risk) means more noise, reducing the ERC
         // High growth premium implies higher persistence of earnings, increasing the ERC
-        $ercBeta = max(0.1, 1.0 + (FinancialConstants::ERC_BETA_SENSITIVITY * $beta) + (FinancialConstants::ERC_GROWTH_SENSITIVITY * $growthPremium));
+        $ercBeta = max(0.1, 1.0 + (self::ERC_BETA_SENSITIVITY * $beta) + (self::ERC_GROWTH_SENSITIVITY * $growthPremium));
 
-        return FinancialConstants::ERC_BASE_ALPHA + ($ercBeta * $sue);
+        return self::ERC_BASE_ALPHA + ($ercBeta * $sue);
     }
 
     /**
@@ -327,5 +365,31 @@ final class Valuation
         $posteriorEstimate = (($priorEstimate * $priorPrecision) + ($newSignal * $signalPrecision)) / ($priorPrecision + $signalPrecision);
 
         return $posteriorEstimate;
+    }
+
+    /**
+     * The fair-value P/E management strikes its own capital decisions on: the market's anchor, exactly.
+     * Takes the firm's inputs as primitives so every corporate engine can call it through the MathUtility it
+     * already holds; the growth transmission and the accruals discount are the two functions above.
+     */
+    public static function calculateManagementFairValuePE(
+        float $hurdleRate,
+        float $trueReturn,
+        float $secularGrowth,
+        float $outputGap,
+        float $beta,
+        float $inflation,
+        ?float $sectorMultiple,
+        float $accrualsRatio,
+        float $payoutRatio
+    ): float {
+        $expectedGrowth = Valuation::calculateFundableGrowth(
+            Valuation::calculateExpectedNominalGrowth($secularGrowth, $outputGap, $beta, $inflation, $hurdleRate),
+            $trueReturn,
+            $payoutRatio,
+            $inflation
+        );
+
+        return Valuation::calculateQualityAdjustedFairValuePE($hurdleRate, $trueReturn, $expectedGrowth, $sectorMultiple, $accrualsRatio);
     }
 }

@@ -7,7 +7,7 @@ import json, sys
 import numpy as np
 
 TFP_LOSS = 0.048            # FinancialConstants::ENVIRONMENTAL_REGULATION_TFP_LOSS
-SEMI_ELASTICITY = 52.68     # FinancialConstants::STAMP_DUTY_VOLUME_SEMI_ELASTICITY
+SEMI_ELASTICITY = 52.68     # MacroTransmission::STAMP_DUTY_VOLUME_SEMI_ELASTICITY
 FOUNDING_DUTY = 0.0005      # FinancialConstants::STAMP_DUTY_RATE
 
 MEASURES = {

@@ -233,7 +233,7 @@ class OrderFlowImpactWiringTest extends TestCase
         $tracker = $this->tracker();
         $peak = $this->liquidity->peakImpact($stock, $this->liquidity->averageDailyVolume($stock) * 0.35);
         $transient = (1.0 - FinancialConstants::PERMANENT_IMPACT_SHARE) * $peak;
-        $halfLife = FinancialConstants::TRANSIENT_IMPACT_HALF_LIFE_YEARS;
+        $halfLife = LiquidityEngine::TRANSIENT_IMPACT_HALF_LIFE_YEARS;
 
         $this->orderFlow->record('APEX', $this->liquidity->averageDailyVolume($stock) * 0.35);
         $tracker->updateStocks([$stock], 1.0 / 14400.0, false, new MacroStateDTO());
@@ -263,7 +263,7 @@ class OrderFlowImpactWiringTest extends TestCase
         $program = $adv * 3.0; // Three days of volume: far more than one tick may execute.
         $stock->setCorporateFlowBacklog($program);
 
-        $expectedSlice = $adv * FinancialConstants::CORPORATE_FLOW_MAX_ADV_SHARE_PER_DAY * $stepDays;
+        $expectedSlice = $adv * LiquidityEngine::CORPORATE_FLOW_MAX_ADV_SHARE_PER_DAY * $stepDays;
         $expectedPrice = 100.0 * exp($this->liquidity->peakImpact($stock, $expectedSlice));
 
         $this->tracker()->updateStocks([$stock], $dt, false, new MacroStateDTO());
@@ -281,14 +281,14 @@ class OrderFlowImpactWiringTest extends TestCase
         $stock = $this->stock();
         $tracker = $this->tracker();
         $dt = 1.0 / 14400.0;
-        $slice = $this->liquidity->averageDailyVolume($stock) * FinancialConstants::CORPORATE_FLOW_MAX_ADV_SHARE_PER_DAY
+        $slice = $this->liquidity->averageDailyVolume($stock) * LiquidityEngine::CORPORATE_FLOW_MAX_ADV_SHARE_PER_DAY
             * $dt * FinancialConstants::TRADING_DAYS_PER_YEAR * 0.5;
         $stock->setCorporateFlowBacklog($slice);
 
         $tracker->updateStocks([$stock], $dt, false, new MacroStateDTO());
         $this->assertEqualsWithDelta(100.0 * exp($this->liquidity->peakImpact($stock, $slice)), (float) $stock->getPrice(), 1e-9);
 
-        $halfLife = FinancialConstants::TRANSIENT_IMPACT_HALF_LIFE_YEARS;
+        $halfLife = LiquidityEngine::TRANSIENT_IMPACT_HALF_LIFE_YEARS;
         for ($tick = 0; $tick < 400; $tick++) {
             $tracker->updateStocks([$stock], $halfLife / 10.0, false, new MacroStateDTO());
         }
@@ -300,7 +300,7 @@ class OrderFlowImpactWiringTest extends TestCase
         $stock = $this->stock();
         $dt = 1.0 / 14400.0;
         $stepDays = $dt * FinancialConstants::TRADING_DAYS_PER_YEAR;
-        $capacity = $this->liquidity->averageDailyVolume($stock) * FinancialConstants::CORPORATE_FLOW_MAX_ADV_SHARE_PER_DAY * $stepDays;
+        $capacity = $this->liquidity->averageDailyVolume($stock) * LiquidityEngine::CORPORATE_FLOW_MAX_ADV_SHARE_PER_DAY * $stepDays;
 
         // Issued stock is a negative backlog: it is distributed, and the price goes down.
         $stock->setCorporateFlowBacklog(-$capacity * 0.5);
@@ -354,7 +354,7 @@ class OrderFlowImpactWiringTest extends TestCase
         // Only the two thirds that stay are long-run variance; the transient third washes out within days.
         $stays = (2.0 / 3.0) * $this->liquidity->peakImpact($stock, $this->liquidity->averageDailyVolume($stock) * 0.20);
         $this->assertEqualsWithDelta(
-            TimeSeries::ewmaAnnualizedVariance(0.0, $stays, 1.0 / 14400.0, FinancialConstants::IMPACT_VARIANCE_EMA_YEARS),
+            TimeSeries::ewmaAnnualizedVariance(0.0, $stays, 1.0 / 14400.0, StockTracker::IMPACT_VARIANCE_EMA_YEARS),
             $measured,
             1e-12
         );
@@ -409,7 +409,7 @@ class OrderFlowImpactWiringTest extends TestCase
 
         // One tick into an EMA opened at zero: the reading is the tick's annualized variance times the
         // weight a single tick carries in a window a year long.
-        $weight = 1.0 - exp(-$dt / FinancialConstants::INDEX_TRAILING_VOLATILITY_YEARS);
+        $weight = 1.0 - exp(-$dt / StockTracker::INDEX_TRAILING_VOLATILITY_YEARS);
         $this->assertEqualsWithDelta(
             (($realized * $realized) / $dt) * $weight,
             (float) $stock->getRealizedVarianceEma(),
@@ -577,7 +577,7 @@ class OrderFlowImpactWiringTest extends TestCase
 
         // The permanent share of the fund's move, annualized into the EMA, reaches the next tick's pricing; the
         // name's own idiosyncratic budget is still untouched.
-        $expected = TimeSeries::ewmaAnnualizedVariance(0.0, FinancialConstants::PERMANENT_IMPACT_SHARE * $fundMove, $dt, FinancialConstants::IMPACT_VARIANCE_EMA_YEARS);
+        $expected = TimeSeries::ewmaAnnualizedVariance(0.0, FinancialConstants::PERMANENT_IMPACT_SHARE * $fundMove, $dt, StockTracker::IMPACT_VARIANCE_EMA_YEARS);
         $this->assertEqualsWithDelta($expected, $captured->fundImpactVariance, 1e-9 * $expected);
         $this->assertGreaterThan(0.0, $captured->fundImpactVariance);
         $this->assertSame(0.0, $stock->getImpactVarianceEma());

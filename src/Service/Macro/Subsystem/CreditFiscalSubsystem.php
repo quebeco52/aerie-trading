@@ -99,6 +99,10 @@ class CreditFiscalSubsystem
     // --- INTERBANK LIQUIDITY SPREAD (CIR PROCESS & JUMPS) ---
     /** Floor on the interbank spread (1 bp) keeping the CIR process strictly positive. */
     public const INTERBANK_MIN_SPREAD = 0.0001;
+    /** Speed of mean reversion (kappa) for the interbank liquidity spread toward baseline. */
+    public const INTERBANK_SPREAD_KAPPA = 2.50;
+    /** Volatility (sigma) of the continuous interbank liquidity spread diffusion. */
+    public const INTERBANK_SPREAD_SIGMA = 0.02;
     /** Poisson intensity of severe interbank credit freeze/panic events. */
     public const INTERBANK_JUMP_PROBABILITY = 0.05;
     /** Panic intensity lift per unit of excess bond premium relative to the IG base, at half the premium's own ratio. */
@@ -345,14 +349,14 @@ class CreditFiscalSubsystem
         // Proportional jumps add lambda E[J - 1] X a year to the drift; netting it from the reversion, kappa (theta - X)
         // - c X = (kappa + c)(kappa theta / (kappa + c) - X), leaves theta the stationary mean.
         $jumpCompensator = $this->interbankJumpCompensator($jumpProbability, $state->creditCrisisHazard);
-        $compensatedKappa = MacroEngine::INTERBANK_SPREAD_KAPPA + $jumpCompensator;
+        $compensatedKappa = self::INTERBANK_SPREAD_KAPPA + $jumpCompensator;
 
         $dW = $this->mathUtility->generateStandardNormal();
-        $baseProcess = $this->mathUtility->calculateCIR(
+        $baseProcess = StochasticProcesses::calculateCIR(
             currentValue: $currentSpread,
             kappa: $compensatedKappa,
-            theta: MacroEngine::INTERBANK_SPREAD_KAPPA * $premiumCoupledTheta / $compensatedKappa,
-            sigma: MacroEngine::INTERBANK_SPREAD_SIGMA,
+            theta: self::INTERBANK_SPREAD_KAPPA * $premiumCoupledTheta / $compensatedKappa,
+            sigma: self::INTERBANK_SPREAD_SIGMA,
             dt: $dt,
             dW: $dW
         );

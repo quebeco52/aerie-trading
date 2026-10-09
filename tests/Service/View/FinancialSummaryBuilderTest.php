@@ -8,8 +8,8 @@ use App\Entity\CorporateReport;
 use App\Entity\Stock;
 use App\Repository\CorporateReportRepository;
 use App\Service\View\FinancialSummaryBuilder;
-use App\Service\Math\FinancialConstants;
 use PHPUnit\Framework\TestCase;
+use App\Service\Model\Sector\CommercialBankBusinessModel;
 
 /**
  * The strip leads with what the business is read on, from figures the last report already carries, and then
@@ -30,7 +30,7 @@ class FinancialSummaryBuilderTest extends TestCase
 
         $tiles = $this->tiles($this->stock('Banks - Diversified'), $report);
 
-        $loans = 800_000_000_000.0 * (1.0 - FinancialConstants::SECURITIES_SHARE_OF_EARNING_ASSETS);
+        $loans = 800_000_000_000.0 * (1.0 - CommercialBankBusinessModel::SECURITIES_SHARE_OF_EARNING_ASSETS);
 
         $this->assertSame(['Net interest margin', 'CET1 ratio', 'Reserve / loans', 'Net charge-off rate', 'ROE'], array_column($tiles, 'label'));
         $this->assertEqualsWithDelta(12_000_000_000.0 / $loans, $tiles[2]['value'], 1e-12, 'a bank quotes its allowance on loans, not on its securities');

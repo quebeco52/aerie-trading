@@ -4,7 +4,6 @@ namespace App\Tests\Service\Math;
 
 use App\Service\Macro\Subsystem\CreditFiscalSubsystem;
 use App\Service\Math\Distributions;
-use App\Service\Math\MathUtility;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -46,7 +45,6 @@ class DistributionsTest extends TestCase
     /** E[max(0, t - Z)] = tΦ(t) + φ(t): φ(0) at the mean, ~0.0293 at t = -1.5, and the identity f(t) - f(-t) = t. */
     public function testNormalLowerPartialMoment(): void
     {
-        $math = new MathUtility();
 
         $this->assertEqualsWithDelta(1.0 / sqrt(2.0 * M_PI), Distributions::calculateNormalLowerPartialMoment(0.0), 1e-6);
         $this->assertEqualsWithDelta(0.029307, Distributions::calculateNormalLowerPartialMoment(-1.5), 1e-5);

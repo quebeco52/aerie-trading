@@ -18,7 +18,6 @@ use App\Service\Event\MarketEventPublisher;
 use App\Service\News\NarrativeEngine;
 use App\Service\Market\Pricing\MarketConsensusEngine;
 use App\Service\Corporate\CorporateMetrics;
-use App\Service\Math\FinancialConstants;
 use App\Service\Math\MathUtility;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
@@ -192,7 +191,7 @@ final class CapitalSaturationInvariantTest extends TestCase
         }
 
         $terminalCapital = $stock->getInvestedCapital();
-        $serviceableMarket = FinancialConstants::BASELINE_SECTOR_TAM * $gdp * (float) $row['sam_ratio'];
+        $serviceableMarket = CorporateMetrics::BASELINE_SECTOR_TAM * $gdp * (float) $row['sam_ratio'];
 
         return [
             'capital_cagr' => pow($terminalCapital / $capitalAtHalfway, 1.0 / $matureYears) - 1.0,

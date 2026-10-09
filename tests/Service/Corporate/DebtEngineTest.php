@@ -54,7 +54,7 @@ class DebtEngineTest extends TestCase
         $stock->setCreditRating('BBB');
         $stock->setTotalEquity('100000000');
         $stock->setWholesaleDebt('50000000');
-        $stock->setVolatility('0.25');
+        $stock->setVolatility('0.50');
         $stock->setSharesOutstanding('1000000');
         $stock->setPrice('100.00');
 
@@ -64,10 +64,10 @@ class DebtEngineTest extends TestCase
             yield5yEma: 0.04
         );
 
-        // Distance to Default falls to 1.2 -> clamped to BB (downgrade from BBB)
-        $this->mathUtilityMock->method('calculateDistanceToDefault')->willReturn(1.2);
-        $this->mathUtilityMock->method('calculateMertonCreditSpread')->willReturn(0.04);
-
+        // Distance to default about 1.2 sits in the B bracket; one notch at a time takes BBB to BB.
+        $distance = $this->engine->resolveDistanceToDefault($stock, $macroState);
+        $this->assertGreaterThan(CreditRatingAgency::THRESHOLD_B, $distance);
+        $this->assertLessThan(CreditRatingAgency::THRESHOLD_BB, $distance);
         $this->marketEventPublisherMock->expects($this->once())
             ->method('publish')
             ->with(
@@ -99,10 +99,11 @@ class DebtEngineTest extends TestCase
             yield5yEma: 0.04
         );
 
-        // Distance to Default rises to 3.6 -> clamped to A (upgrade from BBB)
-        $this->mathUtilityMock->method('calculateDistanceToDefault')->willReturn(3.6);
-        $this->mathUtilityMock->method('calculateMertonCreditSpread')->willReturn(0.005);
-
+        // Distance to default clears the AAA line with room to spare; one notch at a time takes BBB to A.
+        $this->assertGreaterThan(
+            CreditRatingAgency::THRESHOLD_AAA + CreditRatingAgency::HYSTERESIS_BUFFER,
+            $this->engine->resolveDistanceToDefault($stock, $macroState)
+        );
         $this->marketEventPublisherMock->expects($this->once())
             ->method('publish')
             ->with(
@@ -197,9 +198,6 @@ class DebtEngineTest extends TestCase
             corporateTaxRate: 0.21,
             yield5yEma: 0.06
         );
-
-        $this->mathUtilityMock->method('calculateDistanceToDefault')->willReturn(6.0);
-        $this->mathUtilityMock->method('calculateMertonCreditSpread')->willReturn(0.0);
 
         $buildStock = function (string $industry): Stock {
             $stock = new Stock();

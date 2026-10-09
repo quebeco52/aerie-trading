@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Tests\Financial;
 
 use App\Service\Math\MathUtility;
+use App\Service\Math\StochasticProcesses;
 use App\Service\Math\TimeSeries;
 use PHPUnit\Framework\TestCase;
 
@@ -65,7 +66,7 @@ class TimestepNeutralityTest extends TestCase
                 $price = 100.0;
 
                 for ($step = 0; $step < $ticksPerYear; $step++) {
-                    $price = $this->math->calculateCorrelatedGBM(
+                    $price = StochasticProcesses::calculateCorrelatedGBM(
                         currentPrice: $price,
                         idiosyncraticVolatility: 0.25,
                         drift: 0.0,

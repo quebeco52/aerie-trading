@@ -26,6 +26,18 @@ use App\Service\Math\FinancialConstants;
  */
 final class AuthorizedParticipant
 {
+    // --- ETF Creation, Redemption and the Arbitrage Band (Petajisto 2017; Madhavan 2016) ---
+    /** Fee an authorized participant is charged for one creation or redemption, as a fraction of the basket. Part of the round trip it has to earn back before arbitraging a deviation is worth doing. */
+    public const ETF_CREATION_FEE = 0.0010;
+    /** Multiple of the basket's own half-spread an AP must cover to get in and out of every constituent. Two sides of a round trip plus the impact of doing it in size. */
+    public const ETF_BASKET_ROUND_TRIP_MULTIPLE = 2.50;
+    /** Widest the no-arbitrage band may open, however illiquid the basket becomes. Past this the fund is not tracking anything and quoting one is a fiction. */
+    public const ETF_MAX_ARBITRAGE_BAND = 0.08;
+    /** Premium, as a fraction of net assets, created by net demand equal to the fund's entire net assets in one tick. The linear pressure the fund's own order flow exerts before an AP steps in. */
+    public const ETF_FLOW_PRESSURE = 0.50;
+    /** Decay time of a standing premium or discount absent flow, in years (~2 trading days: 60% survives a day). Deviations are transient and mean-revert within days (Petajisto 2017, FAJ). */
+    public const ETF_PREMIUM_DECAY_TAU_YEARS = 0.0078;
+
     /**
      * Half-width of the no-arbitrage band, as a fraction of net asset value.
      *
@@ -37,10 +49,10 @@ final class AuthorizedParticipant
      */
     public function band(float $basketHalfSpread): float
     {
-        $cost = FinancialConstants::ETF_CREATION_FEE
-            + (max(0.0, $basketHalfSpread) * FinancialConstants::ETF_BASKET_ROUND_TRIP_MULTIPLE);
+        $cost = self::ETF_CREATION_FEE
+            + (max(0.0, $basketHalfSpread) * self::ETF_BASKET_ROUND_TRIP_MULTIPLE);
 
-        return min(FinancialConstants::ETF_MAX_ARBITRAGE_BAND, max(FinancialConstants::ETF_HALF_SPREAD, $cost));
+        return min(self::ETF_MAX_ARBITRAGE_BAND, max(FinancialConstants::ETF_HALF_SPREAD, $cost));
     }
 
     /**
@@ -70,8 +82,8 @@ final class AuthorizedParticipant
             return ['premium' => 0.0, 'creationValue' => 0.0];
         }
 
-        $pressure = FinancialConstants::ETF_FLOW_PRESSURE * ($netFlowValue / $netAssets);
-        $persistence = exp(-max(0.0, $dt) / FinancialConstants::ETF_PREMIUM_DECAY_TAU_YEARS);
+        $pressure = self::ETF_FLOW_PRESSURE * ($netFlowValue / $netAssets);
+        $persistence = exp(-max(0.0, $dt) / self::ETF_PREMIUM_DECAY_TAU_YEARS);
         $raw = ($priorPremium * $persistence) + $pressure;
 
         if (abs($raw) <= $band) {
@@ -83,7 +95,7 @@ final class AuthorizedParticipant
         // basket, so a premium sends demand into the constituents and a discount takes it out of them.
         $edge = $raw > 0.0 ? $band : -$band;
         $excess = $raw - $edge;
-        $creationValue = ($excess / FinancialConstants::ETF_FLOW_PRESSURE) * $netAssets;
+        $creationValue = ($excess / self::ETF_FLOW_PRESSURE) * $netAssets;
 
         return ['premium' => $edge, 'creationValue' => $creationValue];
     }

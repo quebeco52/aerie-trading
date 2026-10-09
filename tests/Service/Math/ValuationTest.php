@@ -4,7 +4,6 @@ namespace App\Tests\Service\Math;
 
 use App\Service\Macro\MacroEngine;
 use App\Service\Math\FinancialConstants;
-use App\Service\Math\MathUtility;
 use App\Service\Math\Valuation;
 use PHPUnit\Framework\TestCase;
 
@@ -13,13 +12,6 @@ use PHPUnit\Framework\TestCase;
  */
 class ValuationTest extends TestCase
 {
-    private MathUtility $mathUtility;
-
-    protected function setUp(): void
-    {
-        $this->mathUtility = new MathUtility();
-    }
-
     public function testCalculateIntrinsicFairValuePEStandardValuation(): void
     {
         // COE = 10%, ROIC = 15%, Growth = 3%
@@ -36,7 +28,7 @@ class ValuationTest extends TestCase
         // ROIC < Growth -> b > 1.0 -> Capped at 1.0 -> Payout Ratio = 0.0 -> PE = 0.0 -> Clamped to MIN_INTRINSIC_PE
         $pe = Valuation::calculateIntrinsicFairValuePE(0.10, 0.02, 0.05);
 
-        $this->assertEqualsWithDelta(FinancialConstants::MIN_INTRINSIC_PE, $pe, 0.0001, 'Value-destroying growth must clamp to MIN_INTRINSIC_PE.');
+        $this->assertEqualsWithDelta(Valuation::MIN_INTRINSIC_PE, $pe, 0.0001, 'Value-destroying growth must clamp to MIN_INTRINSIC_PE.');
     }
 
     public function testCalculateIntrinsicFairValuePEConstrainsGrowthBelowCOE(): void
@@ -46,7 +38,7 @@ class ValuationTest extends TestCase
         // b = 0.075 / 0.20 = 0.375 -> Payout Ratio = 0.625 -> PE = 0.625 / 0.005 = 125.0 -> Clamped to MAX_INTRINSIC_PE
         $pe = Valuation::calculateIntrinsicFairValuePE(0.08, 0.20, 0.15);
 
-        $this->assertEqualsWithDelta(FinancialConstants::MAX_INTRINSIC_PE, $pe, 0.0001, 'Growth >= COE must constrain growth and clamp to MAX_INTRINSIC_PE.');
+        $this->assertEqualsWithDelta(Valuation::MAX_INTRINSIC_PE, $pe, 0.0001, 'Growth >= COE must constrain growth and clamp to MAX_INTRINSIC_PE.');
     }
 
     /**
@@ -75,14 +67,14 @@ class ValuationTest extends TestCase
         $raw = Valuation::calculateIntrinsicFairValuePE(0.045, 0.20, 0.06);
         $shrunk = Valuation::calculateIntrinsicFairValuePE(0.045, 0.20, 0.06, 16.0);
 
-        $this->assertEqualsWithDelta(FinancialConstants::MAX_INTRINSIC_PE, $raw, 0.0001, 'Unshrunk, this diverges to the ceiling.');
+        $this->assertEqualsWithDelta(Valuation::MAX_INTRINSIC_PE, $raw, 0.0001, 'Unshrunk, this diverges to the ceiling.');
         $this->assertEqualsWithDelta(19.89189, $shrunk, 0.001);
-        $this->assertLessThan(FinancialConstants::MAX_INTRINSIC_PE, $shrunk, 'The ceiling must stop being what sets the multiple.');
+        $this->assertLessThan(Valuation::MAX_INTRINSIC_PE, $shrunk, 'The ceiling must stop being what sets the multiple.');
 
         // Two firms that both pinned to the ceiling must now separate by their own spreads rather than
         // sharing a single capped multiple.
         $wider = Valuation::calculateIntrinsicFairValuePE(0.08, 0.20, 0.15, 16.0);
-        $this->assertEqualsWithDelta(FinancialConstants::MAX_INTRINSIC_PE, Valuation::calculateIntrinsicFairValuePE(0.08, 0.20, 0.15), 0.0001);
+        $this->assertEqualsWithDelta(Valuation::MAX_INTRINSIC_PE, Valuation::calculateIntrinsicFairValuePE(0.08, 0.20, 0.15), 0.0001);
         $this->assertGreaterThan($shrunk, $wider, 'The better-conditioned of two ceiling-pinned firms must now price higher.');
     }
 
@@ -171,8 +163,8 @@ class ValuationTest extends TestCase
         // to MIN_COST_OF_EQUITY (0.04) and MIN_PERPETUAL_GROWTH_RATE (-0.05)
         $pe = Valuation::calculateIntrinsicFairValuePE(0.01, 0.10, -0.20);
 
-        $this->assertGreaterThanOrEqual(FinancialConstants::MIN_INTRINSIC_PE, $pe);
-        $this->assertLessThanOrEqual(FinancialConstants::MAX_INTRINSIC_PE, $pe);
+        $this->assertGreaterThanOrEqual(Valuation::MIN_INTRINSIC_PE, $pe);
+        $this->assertLessThanOrEqual(Valuation::MAX_INTRINSIC_PE, $pe);
     }
 
     public function testCalculateWACC(): void
@@ -306,14 +298,14 @@ class ValuationTest extends TestCase
     {
         $growth = Valuation::calculateFundableGrowth(Valuation::calculateExpectedNominalGrowth(0.03, 0.01, 1.2, 0.025, 0.09), 0.18, 0.40, 0.025);
         $market = Valuation::calculateQualityAdjustedFairValuePE(0.09, 0.18, $growth, 22.0, 0.04);
-        $management = $this->mathUtility->calculateManagementFairValuePE(0.09, 0.18, 0.03, 0.01, 1.2, 0.025, 22.0, 0.04, 0.40);
+        $management = Valuation::calculateManagementFairValuePE(0.09, 0.18, 0.03, 0.01, 1.2, 0.025, 22.0, 0.04, 0.40);
 
         $this->assertSame($market, $management);
         // A payout that leaves too little to fund the outlook lowers management's multiple exactly as the market's.
-        $this->assertLessThan($management, $this->mathUtility->calculateManagementFairValuePE(0.09, 0.18, 0.03, 0.01, 1.2, 0.025, 22.0, 0.04, 0.95));
+        $this->assertLessThan($management, Valuation::calculateManagementFairValuePE(0.09, 0.18, 0.03, 0.01, 1.2, 0.025, 22.0, 0.04, 0.95));
         // The Sloan discount is inside the shared figure, floored at the distressed multiple.
         $clean = Valuation::calculateQualityAdjustedFairValuePE(0.09, 0.18, $growth, 22.0, 0.0);
-        $this->assertEqualsWithDelta($clean - 0.04 * FinancialConstants::ACCRUALS_ANOMALY_PE_PENALTY_SCALE, $market, 1e-12);
+        $this->assertEqualsWithDelta($clean - 0.04 * Valuation::ACCRUALS_ANOMALY_PE_PENALTY_SCALE, $market, 1e-12);
     }
 
     /** ROE = ROIC + D/E (ROIC - kd(1-t)), and an equity at or below zero is not levered by. */
@@ -328,7 +320,6 @@ class ValuationTest extends TestCase
     /** Nominal growth is real growth plus all of inflation; at target inflation and a closed gap nothing else enters. */
     public function testExpectedNominalGrowthCarriesInflationInFull(): void
     {
-        $math = new MathUtility();
         $target = MacroEngine::TARGET_INFLATION;
 
         self::assertEqualsWithDelta(0.02 + $target, Valuation::calculateExpectedNominalGrowth(0.02, 0.0, 1.0, $target, 0.09), 1e-12);

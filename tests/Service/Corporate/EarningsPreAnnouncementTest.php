@@ -77,7 +77,7 @@ final class EarningsPreAnnouncementTest extends TestCase
         $stock->setEarningsMomentumZ([
             FinancialConstants::STATE_INPUT_COST_LEVEL => $costLevel,
             FinancialConstants::STATE_INPUT_COST_RECOVERY => $recovered,
-            FinancialConstants::STATE_PRIOR_UNRECOVERED_COST => $priorUnrecovered,
+            EarningsEngine::STATE_PRIOR_UNRECOVERED_COST => $priorUnrecovered,
         ]);
 
         return $stock;
@@ -97,7 +97,7 @@ final class EarningsPreAnnouncementTest extends TestCase
     {
         // A $5m reversal due: 5% of the $100m the business structurally earns in a quarter, so no warning,
         // even though the trailing figure is a rounding error away from zero.
-        $breakEven = $this->makeStock(accrualBank: 5_000_000.0 / FinancialConstants::EARNINGS_MANAGEMENT_REVERSAL_RATE);
+        $breakEven = $this->makeStock(accrualBank: 5_000_000.0 / EarningsEngine::EARNINGS_MANAGEMENT_REVERSAL_RATE);
         $breakEven->setTotalNetIncome('1000');
 
         $this->assertSame([], $this->engine->evaluatePreAnnouncement($breakEven, $this->warningTick($breakEven), self::TICKS_PER_YEAR));
@@ -105,9 +105,9 @@ final class EarningsPreAnnouncementTest extends TestCase
 
         // The same $60m reversal is a 60% miss against the same earnings power whether the firm is deep in
         // loss or not: a bigger loss does not make the warning smaller.
-        $shallowLoss = $this->makeStock(accrualBank: 60_000_000.0 / FinancialConstants::EARNINGS_MANAGEMENT_REVERSAL_RATE);
+        $shallowLoss = $this->makeStock(accrualBank: 60_000_000.0 / EarningsEngine::EARNINGS_MANAGEMENT_REVERSAL_RATE);
         $shallowLoss->setTotalNetIncome('-100000000');
-        $deepLoss = $this->makeStock(accrualBank: 60_000_000.0 / FinancialConstants::EARNINGS_MANAGEMENT_REVERSAL_RATE);
+        $deepLoss = $this->makeStock(accrualBank: 60_000_000.0 / EarningsEngine::EARNINGS_MANAGEMENT_REVERSAL_RATE);
         $deepLoss->setTotalNetIncome('-4000000000');
 
         $this->assertNotEmpty($this->engine->evaluatePreAnnouncement($shallowLoss, $this->warningTick($shallowLoss), self::TICKS_PER_YEAR));
@@ -182,7 +182,7 @@ final class EarningsPreAnnouncementTest extends TestCase
     public function testOwedAccrualReversalAloneCanTriggerAWarning(): void
     {
         // A bank whose quarterly reversal exceeds the warning threshold against $100m of earnings.
-        $bank = 100_000_000.0 / FinancialConstants::EARNINGS_MANAGEMENT_REVERSAL_RATE * 0.5;
+        $bank = 100_000_000.0 / EarningsEngine::EARNINGS_MANAGEMENT_REVERSAL_RATE * 0.5;
         $stock = $this->makeStock(accrualBank: $bank);
 
         $this->assertNotEmpty(
@@ -230,9 +230,9 @@ final class EarningsPreAnnouncementTest extends TestCase
         $move = ((float) $stock->getPrice() / $priceBefore) - 1.0;
 
         $this->assertLessThan(0.0, $move);
-        $this->assertGreaterThanOrEqual(-FinancialConstants::MAX_PREANNOUNCEMENT_PRICE_REACTION - 1e-9, $move);
+        $this->assertGreaterThanOrEqual(-EarningsEngine::MAX_PREANNOUNCEMENT_PRICE_REACTION - 1e-9, $move);
         $this->assertLessThanOrEqual(0.10, abs($move), 'Warning-day reactions are high single digits, not a quarter of the equity.');
-        $this->assertLessThanOrEqual(FinancialConstants::MAX_PRICE_GAP, abs($move), 'A warning never moves more than a report could.');
+        $this->assertLessThanOrEqual(EarningsEngine::MAX_PRICE_GAP, abs($move), 'A warning never moves more than a report could.');
     }
 
     public function testQuietQuarterLeavesThePriceAlone(): void
@@ -285,7 +285,7 @@ final class EarningsPreAnnouncementTest extends TestCase
         $wholeSqueeze = 0.20 * self::VARIABLE_COST_RATIO * 1_000_000_000.0;
         $expected = $wholeSqueeze
             * (1.0 - FinancialConstants::ANALYST_COST_BASE_VISIBILITY)
-            * FinancialConstants::PREANNOUNCEMENT_CONSENSUS_ABSORPTION;
+            * EarningsEngine::PREANNOUNCEMENT_CONSENSUS_ABSORPTION;
 
         $this->assertEqualsWithDelta($expected, $stock->getPreAnnouncedShortfall(), 1.0);
         $this->assertLessThan($wholeSqueeze, $stock->getPreAnnouncedShortfall());
@@ -311,13 +311,13 @@ final class EarningsPreAnnouncementTest extends TestCase
         $variableCostRatio = (1.0 - 0.15) * (1.0 - 0.35);   // MarketResetCommand's construction
         $expected = 0.30 * $variableCostRatio * 1_000_000_000.0
             * (1.0 - FinancialConstants::ANALYST_COST_BASE_VISIBILITY)
-            * FinancialConstants::PREANNOUNCEMENT_CONSENSUS_ABSORPTION;
+            * EarningsEngine::PREANNOUNCEMENT_CONSENSUS_ABSORPTION;
 
         $this->assertEqualsWithDelta($expected, $stock->getPreAnnouncedShortfall(), 1.0);
         $this->assertLessThan(
             0.30 * (1.0 - 0.15) * 1_000_000_000.0
                 * (1.0 - FinancialConstants::ANALYST_COST_BASE_VISIBILITY)
-                * FinancialConstants::PREANNOUNCEMENT_CONSENSUS_ABSORPTION,
+                * EarningsEngine::PREANNOUNCEMENT_CONSENSUS_ABSORPTION,
             $stock->getPreAnnouncedShortfall(),
             'Guiding off the total cost ratio charges fixed costs and depreciation to volume.'
         );

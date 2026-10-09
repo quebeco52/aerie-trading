@@ -11,6 +11,7 @@ use App\Service\Macro\MacroEngine;
 use App\Service\Math\Distributions;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\MathUtility;
+use App\Service\Math\StochasticProcesses;
 use App\Service\Math\TimeSeries;
 
 /**
@@ -157,7 +158,7 @@ final class OpinionPolls
             // The spread the lasting swing holds a party at, around its normal vote: a term's swing over what a term
             // takes away.
             $spread = sqrt(PoliticsEngine::LASTING_SWING_VARIANCE / $normal / (1.0 - ($termPersistence ** 2)));
-            $moved[$party] = $normal * exp(($persistence * $gap) + ($spread * $math->persistentInnovationScale($persistence) * ($draws[$party] ?? 0.0)));
+            $moved[$party] = $normal * exp(($persistence * $gap) + ($spread * StochasticProcesses::persistentInnovationScale($persistence) * ($draws[$party] ?? 0.0)));
         }
         $total = array_sum($moved);
 
@@ -177,8 +178,8 @@ final class OpinionPolls
     public static function fadeShortTerm(array $swings, float $years, float $campaignYears, array $draws, MathUtility $math): array
     {
         $fade = self::fadeOver($years);
-        $build = $math->persistentInnovationScale(self::fadeOver($campaignYears))
-            / $math->persistentInnovationScale(self::fadeOver(self::CAMPAIGN_SWING_DAYS / FinancialConstants::DAYS_PER_YEAR));
+        $build = StochasticProcesses::persistentInnovationScale(self::fadeOver($campaignYears))
+            / StochasticProcesses::persistentInnovationScale(self::fadeOver(self::CAMPAIGN_SWING_DAYS / FinancialConstants::DAYS_PER_YEAR));
 
         $faded = [];
         foreach (AerieDiet::PARTIES as $party) {

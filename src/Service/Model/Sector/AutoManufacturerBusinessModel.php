@@ -17,7 +17,6 @@ use App\Service\Model\StreamContext;
 use App\Entity\Stock;
 use App\Service\Event\ShockEvent;
 use App\Service\Macro\MacroEngine;
-use App\Service\Math\FinancialConstants;
 use App\Service\Math\MathUtility;
 
 /**
@@ -187,6 +186,10 @@ class AutoManufacturerBusinessModel extends HeavyManufacturingBusinessModel
     /** Revenue throughput multiplier applied during factory assembly shutdowns from labor strikes. */
     public const UAW_STRIKE_MULT = 0.80;
 
+    // --- Institutional & Market Architecture ---
+    /** Duration sensitivity scalar converting yield curve inversion into NIM compression. */
+    public const YIELD_CURVE_INVERSION_SENSITIVITY = 15.0;
+
         public function getReversionSpeed(): float { return 0.08; }
     public function getMoatSpread(): float { return 0.015; }
 
@@ -306,7 +309,7 @@ class AutoManufacturerBusinessModel extends HeavyManufacturingBusinessModel
 
         if ($bankSpread < 0) {
             $nimSqueeze = (self::NIM_SPREAD_BUFFER - $bankSpread)
-                + pow(abs($bankSpread) * FinancialConstants::YIELD_CURVE_INVERSION_SENSITIVITY, 2) * self::NIM_QUADRATIC_COEFF;
+                + pow(abs($bankSpread) * self::YIELD_CURVE_INVERSION_SENSITIVITY, 2) * self::NIM_QUADRATIC_COEFF;
         } else {
             $nimSqueeze = (self::NIM_SPREAD_BUFFER - $bankSpread) * self::NIM_LINEAR_SENSITIVITY;
         }

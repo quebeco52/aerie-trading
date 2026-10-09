@@ -7,6 +7,7 @@ namespace App\Service\Model;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Math\ResponseCurves;
+use App\Service\Math\StochasticProcesses;
 use App\Service\Math\TimeSeries;
 
 /**
@@ -32,6 +33,12 @@ class StreamContext
 
     /** Ceiling on a persisted backlog, in quarters of expected stream revenue. */
     public const MAX_BACKLOG_QUARTERS = 8.0;
+
+    // --- Dynamic Revenue Mix Drift & Mean Reversion ---
+    /** Adaptation speed scalar (alpha) at which quarterly realized revenue mix shifts active baseline weights. */
+    public const DEFAULT_MIX_ADAPTATION_RATE = 0.15;
+    /** Strategic mean reversion speed (kappa) pulling dynamic weights back toward long-term franchise target. */
+    public const DEFAULT_MIX_REVERSION_SPEED = 0.08;
 
     /** @var array<string, int> Regime clocks resolved this quarter (quarters active including this one; 0 = inactive). */
     private array $regimes = [];
@@ -89,7 +96,7 @@ class StreamContext
         $this->nextZ[$key] = $newZ;
         // What the sector put into this stream's fresh innovation: every peer in the sector drew it too,
         // so it is not evidence of share taken from anyone. Kept beside the Z for the actuals bridge.
-        $this->sectorZ[$key] = $this->mathUtility->persistentInnovationScale($phi) * $sectorLoading * (float) ($this->sectorInnovation ?? 0.0);
+        $this->sectorZ[$key] = StochasticProcesses::persistentInnovationScale($phi) * $sectorLoading * (float) ($this->sectorInnovation ?? 0.0);
 
         return $newZ;
     }
@@ -273,8 +280,8 @@ class StreamContext
      */
     public function resolveActiveStreamWeights(
         array $targetWeights,
-        float $adaptationRate = FinancialConstants::DEFAULT_MIX_ADAPTATION_RATE,
-        float $reversionSpeed = FinancialConstants::DEFAULT_MIX_REVERSION_SPEED,
+        float $adaptationRate = self::DEFAULT_MIX_ADAPTATION_RATE,
+        float $reversionSpeed = self::DEFAULT_MIX_REVERSION_SPEED,
         float $minFloor = FinancialConstants::DEFAULT_MIN_STREAM_WEIGHT_FLOOR,
         float $maxCeiling = FinancialConstants::DEFAULT_MAX_STREAM_WEIGHT_CEILING
     ): array {

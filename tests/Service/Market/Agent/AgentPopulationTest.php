@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace App\Tests\Service\Market\Agent;
 
 use App\Service\Market\Agent\AgentPopulation;
-use App\Service\Math\FinancialConstants;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -67,7 +66,7 @@ class AgentPopulationTest extends TestCase
         // and would remove the very switching this model exists to produce.
         $shares = $this->population->shares(['fundamentalist' => 100.0, 'momentum' => -100.0]);
 
-        $this->assertGreaterThanOrEqual(FinancialConstants::AGENT_MIN_POPULATION_SHARE, $shares['momentum']);
+        $this->assertGreaterThanOrEqual(AgentPopulation::AGENT_MIN_POPULATION_SHARE, $shares['momentum']);
         $this->assertEqualsWithDelta(1.0, array_sum($shares), 1e-12);
     }
 
@@ -298,7 +297,7 @@ class AgentPopulationTest extends TestCase
 
     public function testTheCrowdedScoreIsTheWeightedBlendOfNameAndMarket(): void
     {
-        $weight = FinancialConstants::AGENT_STYLE_CROWDING_WEIGHT;
+        $weight = AgentPopulation::AGENT_STYLE_CROWDING_WEIGHT;
 
         $crowded = $this->population->crowdedFitness(
             ['fundamentalist' => 0.4, 'momentum' => -0.2],

@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace App\Service\Market\Agent;
 
 use App\DTO\AgentMarketViewDTO;
-use App\Service\Math\FinancialConstants;
 
 /**
  * Holds the market, and buys or sells only because money is arriving or leaving.
@@ -25,6 +24,14 @@ use App\Service\Math\FinancialConstants;
  */
 final class IndexFundStrategy implements AgentStrategyInterface
 {
+    // --- Agent Signals ---
+    /** Fractional change in the passive book per unit of the financial conditions index (a z-score composite): money leaves passive vehicles when conditions tighten. A two-sigma tightening takes 30% of the book, the order of a bad year of equity fund outflows. */
+    public const AGENT_INDEX_FLOW_SENSITIVITY = 0.15;
+    /** Most the passive book moves from its base in either direction, as a fraction. Passive flows are slow money even in a crisis; a tilt that could empty the book turned an index fund into a macro trader. */
+    public const AGENT_INDEX_MAX_FLOW_TILT = 0.30;
+    /** Baseline share of agent capital that indexes rather than picking. */
+    public const AGENT_INDEX_BASE_SHARE = 0.30;
+
     public function identifier(): string
     {
         return 'index_fund';
@@ -42,11 +49,11 @@ final class IndexFundStrategy implements AgentStrategyInterface
         // of the passive book and it is bounded: fund flows are a few percent of assets a year even in a
         // crisis, and passive money was a net buyer through 2008 and 2020. An additive tilt on a z-score
         // index liquidated the whole book at a moderately tight reading and nearly tripled it at an easy one.
-        $tilt = 1.0 - (FinancialConstants::AGENT_INDEX_FLOW_SENSITIVITY * $view->financialConditions);
-        $bound = FinancialConstants::AGENT_INDEX_MAX_FLOW_TILT;
+        $tilt = 1.0 - (self::AGENT_INDEX_FLOW_SENSITIVITY * $view->financialConditions);
+        $bound = self::AGENT_INDEX_MAX_FLOW_TILT;
         $tilt = max(1.0 - $bound, min(1.0 + $bound, $tilt));
 
-        return max(0.0, min(1.0, FinancialConstants::AGENT_INDEX_BASE_SHARE * $tilt * $view->passiveOwnershipMultiple));
+        return max(0.0, min(1.0, self::AGENT_INDEX_BASE_SHARE * $tilt * $view->passiveOwnershipMultiple));
     }
 
     public function competesForCapital(): bool

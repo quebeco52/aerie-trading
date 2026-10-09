@@ -26,6 +26,24 @@ class MarketConsensusEngine
     /** Walk-down bias fraction applied to consensus so beat rate aligns with empirical ~70% (Richardson et al. 2004). */
     public const ANALYST_WALKDOWN_BIAS = 0.015;
 
+    // --- Bayesian Analyst Consensus ---
+    /** Widest one-quarter change in the structural base the analyst anchor is rolled forward by (x0.5 to x2.0). A capacity cap binding or a collapse is not a growth rate analysts extrapolate. */
+    public const ANALYST_ANCHOR_MAX_ROLL_FORWARD = 2.0;
+    /** Baseline prior uncertainty variance in market analyst earnings consensus formation (~0.06^2). */
+    public const BAYESIAN_BASE_PRIOR_VARIANCE = 0.0036;
+    /** Multiplier scaling analyst consensus prior uncertainty as VIX rises. */
+    public const BAYESIAN_VIX_SCALING_FACTOR = 0.02;
+
+    // --- Reported KPIs in Consensus ---
+    /** Share of a disclosed book-to-bill deviation from parity that analysts carry into the next quarter's revenue estimate. Orders convert to revenue, so a disclosed order book is a forecast the market already holds. */
+    public const BOOK_TO_BILL_CONSENSUS_SENSITIVITY = 0.35;
+    /** Bound on the resulting forward revenue tilt, so a single blowout order quarter cannot run the estimate away. */
+    public const MAX_BOOK_TO_BILL_CONSENSUS_TILT = 0.15;
+
+    // --- Accruals Quality & Sloan Anomaly (Sloan 1996) ---
+    /** Analyst EPS growth forecast mean-reversion discount for low-quality non-cash earnings. */
+    public const ACCRUALS_DECAY_EPS_GROWTH_SENSITIVITY = 0.50;
+
     /**
      * Generates the analyst consensus estimate for a given quarter.
      *
@@ -71,7 +89,7 @@ class MarketConsensusEngine
         $dynamicVisibility = min(1.0, max($minVisibility, $baseVisibility + $analystError));
 
         // Sloan (1996) Accruals Quality Anomaly: High non-cash accruals decay future growth expectations
-        $accrualsDiscount = max(0.0, (float) ($stock->getAccrualsRatio() ?? 0.0) * FinancialConstants::ACCRUALS_DECAY_EPS_GROWTH_SENSITIVITY);
+        $accrualsDiscount = max(0.0, (float) ($stock->getAccrualsRatio() ?? 0.0) * self::ACCRUALS_DECAY_EPS_GROWTH_SENSITIVITY);
         $discountedExpectedRevenue = max(1.0, $expectedRevenue * (1.0 - min(0.25, $accrualsDiscount)));
 
         // Reported KPIs feeding consensus: an order-driven firm discloses book-to-bill, and orders above
@@ -82,10 +100,10 @@ class MarketConsensusEngine
         $bookToBill = $stock->getLastBookToBill();
         $orderBookTilt = $bookToBill !== null && $bookToBill > 0.0
             ? max(
-                -FinancialConstants::MAX_BOOK_TO_BILL_CONSENSUS_TILT,
+                -self::MAX_BOOK_TO_BILL_CONSENSUS_TILT,
                 min(
-                    FinancialConstants::MAX_BOOK_TO_BILL_CONSENSUS_TILT,
-                    ($bookToBill - 1.0) * FinancialConstants::BOOK_TO_BILL_CONSENSUS_SENSITIVITY
+                    self::MAX_BOOK_TO_BILL_CONSENSUS_TILT,
+                    ($bookToBill - 1.0) * self::BOOK_TO_BILL_CONSENSUS_SENSITIVITY
                 )
             )
             : 0.0;
@@ -93,8 +111,8 @@ class MarketConsensusEngine
         $freshEstimate = $discountedExpectedRevenue * (1.0 + $orderBookTilt) * (1.0 + $actuals->observableShockZ * $dynamicVisibility);
 
         // Bayesian Updating: Analysts blend structural baseline capacity / anchored prior with noisy channel signals (fresh estimate)
-        $priorVariance = FinancialConstants::BAYESIAN_BASE_PRIOR_VARIANCE 
-            + ($marketVolatility * FinancialConstants::BAYESIAN_VIX_SCALING_FACTOR);
+        $priorVariance = self::BAYESIAN_BASE_PRIOR_VARIANCE 
+            + ($marketVolatility * self::BAYESIAN_VIX_SCALING_FACTOR);
             
         $signalVariance = max(0.0001, pow($coverage->errorStdDev, 2));
 
@@ -102,8 +120,8 @@ class MarketConsensusEngine
         $anchor = (float) $stock->getLastAnalystRevenue();
         if ($anchor > 0.0 && $priorExpectedRevenue > 0.0 && $expectedRevenue > 0.0) {
             $rollForward = max(
-                1.0 / FinancialConstants::ANALYST_ANCHOR_MAX_ROLL_FORWARD,
-                min(FinancialConstants::ANALYST_ANCHOR_MAX_ROLL_FORWARD, $expectedRevenue / $priorExpectedRevenue)
+                1.0 / self::ANALYST_ANCHOR_MAX_ROLL_FORWARD,
+                min(self::ANALYST_ANCHOR_MAX_ROLL_FORWARD, $expectedRevenue / $priorExpectedRevenue)
             );
             $priorEstimate = $anchor * $rollForward;
         } elseif ($anchor > 0.0) {

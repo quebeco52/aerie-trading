@@ -55,6 +55,26 @@ enum MarketIndex: string
     case LowVolatility = 'LBV';
     case Staples = 'LBS';
 
+    // --- Market Index Membership (Shleifer 1986) ---
+    /** Seats in the headline index. Fewer than the listed universe, so membership is a real distinction and joining or leaving it means something; the composite index carries every listed name and has no count. */
+    public const INDEX_CONSTITUENT_COUNT = 30;
+    /** Seats in the low-volatility index, drawn from the whole listed board. S&P's low-volatility index takes the quietest fifth of its parent; the same fraction of this board is about this many names. */
+    public const INDEX_LOW_VOLATILITY_COUNT = 20;
+
+    // --- Index Diversification Caps (RIC / UCITS 5-10-40, as applied by the S&P Select Sector indices) ---
+    /** Most any one constituent may weigh in a capped index. A sector fund that must stay a regulated investment company cannot let one name run away with it. */
+    public const INDEX_MAX_CONSTITUENT_WEIGHT = 0.225;
+
+    // --- Passive Assets by Index (share of the indexed book each published index carries) ---
+    /** Share of passive money tracking the headline index. Broad cap-weighted benchmarks hold the large majority of indexed assets. */
+    public const INDEX_PASSIVE_SHARE_HEADLINE = 0.62;
+    /** Share tracking the whole-board composite: total-market funds, the second-largest passive vehicle. */
+    public const INDEX_PASSIVE_SHARE_COMPOSITE = 0.30;
+    /** Share tracking the low-volatility fund. Smart beta is a low single-digit share of indexed money, and it is spread across the near half of the board that qualifies as quiet. */
+    public const INDEX_PASSIVE_SHARE_LOW_VOLATILITY = 0.05;
+    /** Share tracking the consumer staples sector fund. Deliberately near the sector's own weight in the market: a narrow fund holding far more indexed money than its sector is worth would leave its handful of names with passive ownership no real constituent carries. */
+    public const INDEX_PASSIVE_SHARE_STAPLES = 0.03;
+
     /** The index the passive book benchmarks against and the pages quote as "the market". */
     public static function benchmark(): self
     {
@@ -77,8 +97,8 @@ enum MarketIndex: string
     public function constituentCount(): ?int
     {
         return match ($this) {
-            self::Headline => FinancialConstants::INDEX_CONSTITUENT_COUNT,
-            self::LowVolatility => FinancialConstants::INDEX_LOW_VOLATILITY_COUNT,
+            self::Headline => self::INDEX_CONSTITUENT_COUNT,
+            self::LowVolatility => self::INDEX_LOW_VOLATILITY_COUNT,
             self::Composite, self::Staples => null,
         };
     }
@@ -130,7 +150,7 @@ enum MarketIndex: string
     public function weightCap(): ?float
     {
         return match ($this) {
-            self::Staples => FinancialConstants::INDEX_MAX_CONSTITUENT_WEIGHT,
+            self::Staples => self::INDEX_MAX_CONSTITUENT_WEIGHT,
             self::Headline, self::Composite, self::LowVolatility => null,
         };
     }
@@ -184,10 +204,10 @@ enum MarketIndex: string
     public function passiveShare(): float
     {
         return match ($this) {
-            self::Headline => FinancialConstants::INDEX_PASSIVE_SHARE_HEADLINE,
-            self::Composite => FinancialConstants::INDEX_PASSIVE_SHARE_COMPOSITE,
-            self::Staples => FinancialConstants::INDEX_PASSIVE_SHARE_STAPLES,
-            self::LowVolatility => FinancialConstants::INDEX_PASSIVE_SHARE_LOW_VOLATILITY,
+            self::Headline => self::INDEX_PASSIVE_SHARE_HEADLINE,
+            self::Composite => self::INDEX_PASSIVE_SHARE_COMPOSITE,
+            self::Staples => self::INDEX_PASSIVE_SHARE_STAPLES,
+            self::LowVolatility => self::INDEX_PASSIVE_SHARE_LOW_VOLATILITY,
         };
     }
 
@@ -207,7 +227,7 @@ enum MarketIndex: string
     public function indexName(): string
     {
         return match ($this) {
-            self::Headline => sprintf('Lakebird %d', FinancialConstants::INDEX_CONSTITUENT_COUNT),
+            self::Headline => sprintf('Lakebird %d', self::INDEX_CONSTITUENT_COUNT),
             self::Composite => 'Lakebird Composite',
             self::LowVolatility => 'Lakebird Low Volatility',
             self::Staples => 'Lakebird Consumer Staples',
@@ -231,16 +251,16 @@ enum MarketIndex: string
         return match ($this) {
             self::Headline => sprintf(
                 'The %d largest listed companies by float-adjusted capitalisation, weighted by float with no ceiling on any constituent. Admission additionally requires profitability: trailing twelve-month earnings and the most recent quarter must both be positive, a test that governs joining rather than staying. Membership is reviewed quarterly and banded, so a name is admitted only once it has clearly risen into the index and dropped only once it has clearly fallen out of it.',
-                FinancialConstants::INDEX_CONSTITUENT_COUNT
+                self::INDEX_CONSTITUENT_COUNT
             ),
             self::Composite => 'Every listed company, weighted by float-adjusted capitalisation. The market as a whole rather than a selection from it: nothing is admitted or dropped except by listing or delisting.',
             self::LowVolatility => sprintf(
                 'The %d listed companies with the lowest trailing volatility, each weighted by the reciprocal of that volatility so the quietest names carry the most. Selected and weighted on risk alone, with no view on what anything is worth.',
-                FinancialConstants::INDEX_LOW_VOLATILITY_COUNT
+                self::INDEX_LOW_VOLATILITY_COUNT
             ),
             self::Staples => sprintf(
                 'Every listed consumer staples company, weighted by float-adjusted capitalisation and capped so that no constituent exceeds %s%% and the constituents above %s%% do not exceed %s%% in combination.',
-                number_format(FinancialConstants::INDEX_MAX_CONSTITUENT_WEIGHT * 100, 1),
+                number_format(self::INDEX_MAX_CONSTITUENT_WEIGHT * 100, 1),
                 number_format(FinancialConstants::INDEX_CONCENTRATION_THRESHOLD * 100, 1),
                 number_format(FinancialConstants::INDEX_CONCENTRATION_BUDGET * 100, 0)
             ),

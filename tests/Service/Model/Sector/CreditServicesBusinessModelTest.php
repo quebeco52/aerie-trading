@@ -8,8 +8,8 @@ use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\CreditServicesBusinessModel;
-use App\Service\Math\FinancialConstants;
 use PHPUnit\Framework\TestCase;
+use App\Service\Model\Sector\CommercialBankBusinessModel;
 
 class CreditServicesBusinessModelTest extends TestCase
 {
@@ -132,7 +132,7 @@ class CreditServicesBusinessModelTest extends TestCase
     {
         $prime = (new Stock())->setTicker('TALN');
         $subprime = (new Stock())->setTicker('STRK');
-        $cardRate = CreditServicesBusinessModel::CONSUMER_CHARGE_OFF_RATE * (1.0 - FinancialConstants::SECURITIES_SHARE_OF_EARNING_ASSETS);
+        $cardRate = CreditServicesBusinessModel::CONSUMER_CHARGE_OFF_RATE * (1.0 - CommercialBankBusinessModel::SECURITIES_SHARE_OF_EARNING_ASSETS);
 
         $this->assertEqualsWithDelta($cardRate, $this->model->getThroughTheCycleCreditLossRate(), 1e-12);
         $this->assertEqualsWithDelta(0.75 * $cardRate, $this->model->getThroughTheCycleCreditLossRate($prime), 1e-12);
