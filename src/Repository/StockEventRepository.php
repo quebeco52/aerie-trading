@@ -32,6 +32,16 @@ class StockEventRepository extends ServiceEntityRepository
     }
 
     /**
+     * The company's stories the news desk ran as headlines, newest first.
+     *
+     * @return list<StockEvent>
+     */
+    public function findHeadlinesFor(Stock $stock, int $limit): array
+    {
+        return $this->findBy(['stock' => $stock, 'headline' => true], ['recordedAt' => 'DESC'], $limit);
+    }
+
+    /**
      * The newest events across every company, newest first, optionally only those of the given types, with each
      * event's company loaded in the same query.
      *

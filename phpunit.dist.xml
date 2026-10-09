@@ -110,6 +110,7 @@
             <file>tests/Service/Market/Pricing/OpeningBoardBuilderTest.php</file>
             <file>tests/Service/Corporate/MacroDriverAttributionTest.php</file>
             <file>tests/Service/View/AnchorPortfolioBuilderTest.php</file>
+            <file>tests/Service/View/CompanyProfilePageBuilderTest.php</file>
             <file>tests/Service/Market/Chart/ChartRangeTest.php</file>
             <file>tests/Service/Market/Chart/ChartBufferWritesTest.php</file>
             <file>tests/Service/Market/Ticker/IndexFundPhaseTest.php</file>

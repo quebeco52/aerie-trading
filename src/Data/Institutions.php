@@ -33,6 +33,10 @@ final class Institutions
     public const AERIE_EXCHANGE = 'Aerie Exchange';
     public const COMMODITY_EXCHANGE = 'Commodity Exchange';
 
+    // --- Market data ---
+    /** Tickbird Data Systems' research desk, which writes the long-form company profiles for terminal subscribers. */
+    public const TICKBIRD_RESEARCH = 'Tickbird Research';
+
     /**
      * Every name a page may print as a publisher, keyed by the id templates pass to `source()`.
      *
@@ -53,5 +57,6 @@ final class Institutions
         'works-ministry' => self::WORKS_MINISTRY,
         'aerie-exchange' => self::AERIE_EXCHANGE,
         'commodity-exchange' => self::COMMODITY_EXCHANGE,
+        'tickbird-research' => self::TICKBIRD_RESEARCH,
     ];
 }

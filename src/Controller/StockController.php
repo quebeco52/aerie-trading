@@ -7,6 +7,7 @@ use App\Repository\EtfRepository;
 use App\Repository\StockRepository;
 use App\Service\Macro\MacroStateProvider;
 use App\Service\View\ReportCalendar;
+use App\Service\View\CompanyProfilePageBuilder;
 use App\Service\View\StockPageBuilder;
 use App\Entity\Etf;
 use App\Entity\User;
@@ -55,6 +56,21 @@ class StockController extends AbstractController
         $page['priceAlerts'] = $currentUser !== null ? $priceAlerts->waiting($currentUser, $asset->getTicker()) : [];
 
         return $this->render('stock/index.html.twig', $page);
+    }
+
+    /**
+     * The long-form profile of a listed company, for the companies Tickbird Research has written one for.
+     */
+    #[Route('/stock/{ticker}/profile', name: 'app_stock_profile')]
+    public function profile(string $ticker, StockRepository $stocks, CompanyProfilePageBuilder $pageBuilder): Response
+    {
+        $stock = $stocks->findOneByTicker($ticker);
+        $page = $stock === null ? null : $pageBuilder->build($stock);
+        if ($page === null) {
+            throw $this->createNotFoundException('No profile for this ticker');
+        }
+
+        return $this->render('stock/profile.html.twig', $page);
     }
 
     /**

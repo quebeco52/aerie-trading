@@ -106,7 +106,7 @@ final class PagesRenderTest extends KernelTestCase
             'economy' => ['/economy', 'economy/index.html.twig', ['economic_cycle' => 'Expansion', 'macro' => ['inflation' => 0.0241, 'inflationEma' => 0.0238, 'outputGap' => 0.0132, 'policyRate' => 0.0425, 'yield10y' => 0.0461, 'qeActive' => false, 'qeIntensity' => 0.0], 'exposures' => [['key' => 'oil', 'title' => 'Oil and fuel', 'intro' => 'Producers sell crude at the world price; transport and heavy industry burn its products.', 'lists' => [['label' => 'Sell crude and liquids', 'unit' => 'of sales', 'format' => 'share', 'detail_unit' => null, 'rows' => [['ticker' => 'SINK', 'name' => 'Sinkhole Petroleum', 'value' => 0.7, 'detail' => null], ['ticker' => 'DRLL', 'name' => 'Drillwell Energy', 'value' => 0.55, 'detail' => null]]], ['label' => 'Buy fuel', 'unit' => 'of costs', 'format' => 'share', 'detail_unit' => null, 'rows' => [['ticker' => 'KEEL', 'name' => 'Keel Line Shipping', 'value' => 0.102, 'detail' => null], ['ticker' => 'RAIL', 'name' => 'Pamlico Rail', 'value' => 0.088, 'detail' => null], ['ticker' => 'HAUL', 'name' => 'Haulwright Logistics', 'value' => 0.069, 'detail' => null]]]]], ['key' => 'rates', 'title' => 'Interest rates', 'intro' => 'Floating-rate debt reprices with the policy rate.', 'lists' => [['label' => 'Most floating-rate debt', 'unit' => 'of market value', 'format' => 'share', 'detail_unit' => 'of its debt floats', 'rows' => [['ticker' => 'GULL', 'name' => 'Gull Resorts', 'value' => 0.42, 'detail' => 0.6], ['ticker' => 'IBHI', 'name' => 'Ibis Heavy Industries', 'value' => 0.18, 'detail' => 0.35]]]]], ['key' => 'property', 'title' => 'Property prices', 'intro' => 'Landlords reset rents toward market as leases roll; lenders lose more on defaults when the collateral is worth less.', 'lists' => [['label' => 'Largest landlords', 'unit' => 'total assets', 'format' => 'money', 'detail_unit' => null, 'rows' => [['ticker' => 'TOWR', 'name' => 'Tower Row Properties', 'value' => 18400000000, 'detail' => null]]], ['label' => 'Lenders with most property loans', 'unit' => 'of loans', 'format' => 'share', 'detail_unit' => null, 'rows' => [['ticker' => 'PLVR', 'name' => 'Plover Bank', 'value' => 0.61, 'detail' => null], ['ticker' => 'LAKE', 'name' => 'Lakeside Bancorp', 'value' => 0.48, 'detail' => null]]]]], ['key' => 'cycle', 'title' => 'The business cycle', 'intro' => 'How far sales swing with the economy, where 1.0× is a typical company.', 'lists' => [['label' => 'Most cyclical sales', 'unit' => 'typical swing', 'format' => 'multiple', 'detail_unit' => null, 'rows' => [['ticker' => 'STRK', 'name' => 'Stark Motors', 'value' => 1.5, 'detail' => null], ['ticker' => 'GULL', 'name' => 'Gull Resorts', 'value' => 1.5, 'detail' => null]]]]]]]],
             'stock' => ['/stock/LAKE', 'stock/index.html.twig', [
                 'asset' => ['ticker' => 'LAKE', 'name' => 'Lakebird Bank', 'sector' => 'Financials', 'industry' => 'Commercial banking', 'price' => 84.21, 'isBankrupt' => false, 'bankrupt' => false, 'sharesOutstanding' => 2400000000, 'earningsPerShare' => 6.12, 'currentRoe' => 0.124, 'baselineRoe' => 0.12, 'currentRoic' => 0.09, 'baselineRoic' => 0.09, 'publicFloatPercentage' => 0.8, 'volatility' => 0.22, 'totalEquity' => 1.6e11, 'debtToEquityRatio' => 1.4, 'creditRating' => 'A', 'creditSpread' => 0.011, 'dynamicCreditSpread' => 0.0134, 'systemicImportance' => 'Systemic'],
-                'isEtf' => false, 'isFinancial' => true, 'changePercent' => 0.0342, 'businessModel' => 'commercial_bank', 'generalInfo' => StockInfo::DESCRIPTIONS['LAKE'],
+                'isEtf' => false, 'isFinancial' => true, 'changePercent' => 0.0342, 'businessModel' => 'commercial_bank', 'generalInfo' => StockInfo::DESCRIPTIONS['LAKE'], 'hasProfile' => true,
                 'events' => [
                     ['type' => 'MANAGEMENT CHANGE', 'description' => 'Lakebird Bank chief executive was removed by the board after 5.2 years.', 'change_percent' => 0.0, 'recorded_at' => '2026-09-30 12:00'],
                     ['type' => 'CREDIT DOWNGRADE', 'description' => 'Shrike Standard Ratings cut Lakebird Bank to A-.', 'change_percent' => -1.4, 'recorded_at' => '2026-09-12 12:00'],
@@ -118,6 +118,27 @@ final class PagesRenderTest extends KernelTestCase
                 'shortInterest' => ['shares' => 21600000, 'floatShare' => 0.01125, 'daysToCover' => 6.35],
                 'nextReport' => ['dateline' => '14 Feb, Year 15', 'quarter' => 'Year 14 Q4'],
                 'kpiSeries' => [],
+            ]],
+            'profile' => ['/stock/LAKE/profile', 'stock/profile.html.twig', [
+                'asset' => ['ticker' => 'LAKE', 'name' => 'Lakebird Bank', 'sector' => 'Financials', 'industry' => 'Banks - Diversified', 'price' => 84.21, 'isBankrupt' => false],
+                'article' => \App\Data\CompanyResearch::ARTICLES['LAKE'], 'publisher' => 'Tickbird Research',
+                'changePercent' => 0.0342, 'marketCap' => 2.02e11, 'freeFloat' => 0.5,
+                'management' => ['label' => 'Fortress', 'mandate' => 'expected to rebuild the balance sheet and hold cash against the cycle', 'tenureYears' => 6.4],
+                'holders' => [], 'holdings' => [],
+                'related' => [
+                    ['ticker' => 'SWAN', 'name' => 'Black Swan Capital', 'hasProfile' => true, 'isDelisted' => false],
+                    ['ticker' => 'IBHI', 'name' => 'Iron Beak Heavy Ind', 'hasProfile' => false, 'isDelisted' => false],
+                    ['ticker' => 'PLVR', 'name' => 'Plover Savings Bank', 'hasProfile' => false, 'isDelisted' => true],
+                ],
+                'peers' => [
+                    ['ticker' => 'PLVR', 'name' => 'Plover Savings Bank', 'marketCap' => 0.0, 'isBankrupt' => true],
+                    ['ticker' => 'RIVR', 'name' => 'Riverstone Financial', 'marketCap' => 1.84e10, 'isBankrupt' => false],
+                    ['ticker' => 'KING', 'name' => 'Kingfisher Capital', 'marketCap' => 4.1e10, 'isBankrupt' => false],
+                ],
+                'headlines' => [
+                    ['type' => 'MANAGEMENT CHANGE', 'description' => 'Lakebird Bank chief executive was removed by the board after 5.2 years.', 'change_percent' => 0.0, 'recorded_at' => '2026-09-30 12:00'],
+                    ['type' => 'CREDIT DOWNGRADE', 'description' => 'Shrike Standard Ratings cut Lakebird Bank to A-.', 'change_percent' => -1.4, 'recorded_at' => '2026-09-12 12:00'],
+                ],
             ]],
             'dashboard' => ['/dashboard', 'dashboard/index.html.twig', [
                 'portfolioValue' => 1234567.89, 'totalUnrealizedPnL' => -23456.7, 'totalUnrealizedPnLPercent' => -1.9, 'cashBalance' => 200000.0, 'totalInvested' => 1034567.89, 'escrowedCash' => 1200.0, 'totalDividendIncome' => 4321.0,

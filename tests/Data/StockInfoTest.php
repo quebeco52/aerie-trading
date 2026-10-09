@@ -11,6 +11,9 @@ use PHPUnit\Framework\TestCase;
 
 class StockInfoTest extends TestCase
 {
+    /** Marketing adjectives and stock AI constructions the house style bans from all company copy. */
+    public const AI_TELLS = '/\b(undisputed|apex|fortress|titans?|juggernaut|empires?|ruthless(ly)?|draconian|relentless(ly)?|monolith(ic)?|colossal|unrivall?ed|unparalleled|unyielding|inescapable|insidious|predatory|oligarchs?|iron grip|aggressive(ly)?|premier|elite|supreme|hegemony|weaponi[sz]e[sd]?|lifeblood|ecosystem|tapestry|not merely|operates as|functions as|serves as|stands as|de facto)\b/i';
+
     public static function tickerProvider(): array
     {
         $tickers = [];
@@ -223,7 +226,7 @@ class StockInfoTest extends TestCase
     public function testProfileReadsAsExchangeCopy(string $ticker, string $description): void
     {
         $paragraphs = explode("\n\n", $description);
-        $tells = '/\b(undisputed|apex|fortress|titans?|juggernaut|empires?|ruthless(ly)?|draconian|relentless(ly)?|monolith(ic)?|colossal|unrivall?ed|unparalleled|unyielding|inescapable|insidious|predatory|oligarchs?|iron grip|aggressive(ly)?|premier|elite|supreme|hegemony|weaponi[sz]e[sd]?|lifeblood|ecosystem|tapestry|not merely|operates as|functions as|serves as|stands as|de facto)\b/i';
+        $tells = self::AI_TELLS;
 
         $this->assertLessThanOrEqual(50, str_word_count($paragraphs[0]), "$ticker: the lead is shown alone on the district map; keep it to one or two sentences.");
         $this->assertLessThanOrEqual(200, str_word_count($description), "$ticker: a profile is 120-180 words.");

@@ -190,6 +190,9 @@
 									<p>{{ paragraph }}</p>
 								{% endfor %}
 							</div>
+							{% if hasProfile|default(false) %}
+								<a href="{{ path('app_stock_profile', { ticker: asset.ticker }) }}" class="inline-block mt-3 text-sm text-primary hover:underline">Read the full company profile</a>
+							{% endif %}
 						</div>
 
 						{# Corporate news, one partials/_event_card.html.twig row per story. #}

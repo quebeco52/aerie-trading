@@ -31,6 +31,7 @@ the glossary does not have.
 | Statistical Office, Credit Registry, Land Registry, Freight Authority, Manufactory Board, Works Ministry | Data publishers and the district map's buildings |
 | Aerie Exchange | The securities market this site belongs to (never "Lakebird Exchange") |
 | Commodity Exchange | Commodity prices |
+| Tickbird Research | Tickbird Data Systems' research desk; writes the long-form company profiles |
 
 The place is "the Aerie Autonomous District" once, then "the District"; the financial district is Glasswater Row;
 the US is "the mainland". The District has no army: defence firms sell to the mainland and allies.
@@ -46,6 +47,16 @@ exchange's company profile or an annual report's business section.
   "operates as", "not merely X but Y", "While X, Y" openers or summing-up closers. `StockInfoTest` checks these.
 - Lore sets facts, not tone: a firm can hold a concession from a public body; it is never the central bank,
   regulator or Exchequer itself.
+
+### Long-form profiles
+`CompanyResearch::ARTICLES`, shown at `/stock/{ticker}/profile` and linked under "About". Tickbird Research writes
+them for terminal subscribers: history, people, the firms around it, and what the desk is watching.
+- 400-800 words in three to six titled sections, with a headline and a one- or two-sentence standfirst.
+- Deadpan, with the joke's point intact. The same banned words and constructions as the short profiles.
+- Every figure quoted is pinned to the seed data or `StockModelTuning` in `CompanyResearchTest`. Nothing the model
+  does not do: no immunity, monopoly or behaviour the engine lacks.
+- Name founders and past figures, never the sitting chief executive, whom the board can replace during play.
+- `related` lists every listed company the text names; the page links them.
 
 ## Colour
 Tokens live in `assets/styles/app.css` (`@theme`); charts read them through `THEME_COLORS`, `SERIES` and

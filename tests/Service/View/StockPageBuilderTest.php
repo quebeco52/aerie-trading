@@ -46,7 +46,7 @@ class StockPageBuilderTest extends TestCase
     private const TEMPLATE_KEYS = [
         'advShares', 'allAssets', 'analystTargets', 'anchorPortfolio', 'asset', 'availableToBorrow',
         'borrowFee', 'borrowWarnings', 'businessModel', 'capital', 'capitalThresholds', 'changePercent', 'components', 'corporateBonds', 'creditHealth', 'dividendYield',
-        'events', 'financialSummary', 'generalInfo', 'halfSpread', 'indexFacts', 'industry', 'isEtf',
+        'events', 'financialSummary', 'generalInfo', 'halfSpread', 'hasProfile', 'indexFacts', 'industry', 'isEtf',
         'isFinancial', 'isInsurer', 'kpiSeries', 'lifecycleStage', 'lifecycleStages', 'macro', 'management', 'marketCap',
         'marketShare', 'netAssetValue', 'nextReport', 'openOrders', 'optionDealerGamma', 'optionDealerGammaPerPercent',
         'optionExpiries', 'optionMultiplier', 'optionOpenInterest', 'optionsListed', 'optionsReason',

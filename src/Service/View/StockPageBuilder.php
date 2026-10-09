@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Service\View;
 
+use App\Data\CompanyResearch;
 use App\Data\LifecycleStage;
 use App\Data\DistrictCalendar;
 use App\Data\StockInfo;
@@ -88,6 +89,7 @@ class StockPageBuilder
             // The lore copy, as the district map reads it, so an edit shows without a reseed; the seeded column covers
             // a listing the lore does not know.
             'generalInfo' => StockInfo::DESCRIPTIONS[$ticker] ?? $asset->getDescription(),
+            'hasProfile' => CompanyResearch::for($ticker) !== null,
             'events' => $isEtf
                 ? $this->etfEvents->findRecentFor($asset, self::EVENT_ROWS)
                 : $this->stockEvents->findRecentFor($asset, self::EVENT_ROWS),
@@ -156,7 +158,7 @@ class StockPageBuilder
             'borrowWarnings' => self::borrowWarnings(),
             'shortInterest' => $stock->isBankrupt() ? null : $this->shortInterest($stock),
             'nextReport' => $stock->isBankrupt() ? null : $this->nextReport($stock, $macroState),
-            'management' => $this->managementBlock($stock),
+            'management' => self::managementSummary($stock),
         ];
     }
 
@@ -223,7 +225,7 @@ class StockPageBuilder
      *
      * @return array<string, mixed>
      */
-    private function managementBlock(Stock $stock): array
+    public static function managementSummary(Stock $stock): array
     {
         $profile = $stock->getManagementProfile();
 
