@@ -9,12 +9,14 @@ import numpy as np
 TFP_LOSS = 0.048            # FinancialConstants::ENVIRONMENTAL_REGULATION_TFP_LOSS
 SEMI_ELASTICITY = 52.68     # MacroTransmission::STAMP_DUTY_VOLUME_SEMI_ELASTICITY
 FOUNDING_DUTY = 0.0005      # FinancialConstants::STAMP_DUTY_RATE
+FOUNDING_PURCHASES = 0.21   # MacroEngine::TARGET_CORPORATE_TAX_RATE, the purchases share at the founding
 
 MEASURES = {
     'corporateTax': ('tax', lambda x: x),
     'bankLevyRate': ('levy', lambda x: x),
     'extractionStringency': (None, lambda s: 1.0 / np.maximum(0.01, 1.0 - TFP_LOSS * s)),
     'stampDutyRate': (None, lambda t: np.exp(-SEMI_ELASTICITY * 2.0 * (t - FOUNDING_DUTY))),
+    'publicSpending': (None, lambda g: g / FOUNDING_PURCHASES - 1.0),
 }
 
 rows = [json.loads(l) for f in sys.argv[1:] for l in open(f)]

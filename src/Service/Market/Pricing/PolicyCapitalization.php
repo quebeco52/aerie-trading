@@ -7,6 +7,7 @@ namespace App\Service\Market\Pricing;
 use App\DTO\MacroStateDTO;
 use App\Service\Macro\MacroEngine;
 use App\Service\Macro\Subsystem\CommodityLogisticsSubsystem;
+use App\Service\Macro\Subsystem\CreditFiscalSubsystem;
 use App\Service\Math\FirmEconomics;
 use App\Service\Math\MacroTransmission;
 use App\Service\Math\Valuation;
@@ -17,7 +18,8 @@ use App\Service\Politics\PoliticsEngine;
  * not under the ones its trailing earnings carry (Knight 2006: the Bush and Gore platforms were priced into the firms
  * they favoured as the odds moved; Snowberg, Wolfers & Zitzewitz 2007). Priced are the laws a firm's own accounts
  * answer to: the corporate tax, the bank levy, the rules on extraction a mine or field pays for in its unit costs, the
- * stamp duty a broker's commissions thin with, and the carbon price a generator sells its power with.
+ * stamp duty a broker's commissions thin with, the carbon price a generator sells its power with, and the public
+ * spending a contractor, hospital, college or guard firm sells to.
  *
  * The expected path runs from the laws in force, through the budget the sitting government will pass at its next round
  * and the next government's first budget as the market's forecast has it (App\Service\Politics\ElectionForecast), and
@@ -26,37 +28,42 @@ use App\Service\Politics\PoliticsEngine;
  * value accruing while it holds (Valuation::perpetuityShareAfter()), the tax phasing in at the speed the tax rate
  * follows the law. A law is measured as the earnings feel it: the levy and the tax shift as they stand, the rules on
  * extraction by the cost factor they put on each unit, the duty by the turnover it leaves, the carbon price by what it
- * adds to the power price. What the trailing earnings
+ * adds to the power price, public spending by the purchases it sets against the founding level, phasing in at the
+ * speed purchases follow the budget. What the trailing earnings
  * already carry is not counted again, so a law the market foresaw neither moves the price when it is passed nor when
  * the earnings take it in.
  */
 final class PolicyCapitalization
 {
-    // --- Past the Next Term (the Diet's own long runs: 16 games of 200 years on the full economy, var/harness/polls/lever_means.php) ---
-    /** The corporate tax shift in force on average over the long run: +0.47 points (se 0.23). */
-    public const LONG_RUN_CORPORATE_TAX_SHIFT = 0.0047;
-    /** Share of the corporate tax shift's distance from that average still there a term later: its four-year autocorrelation, 0.662 (sd across games 0.14). */
-    public const CORPORATE_TAX_TERM_PERSISTENCE = 0.662;
-    /** The bank levy in force on average over the long run: 0.118% (se 0.006%). */
-    public const LONG_RUN_BANK_LEVY_RATE = 0.00118;
-    /** Share of the bank levy's distance from that average still there a term later: 0.660 (sd across games 0.14). */
-    public const BANK_LEVY_TERM_PERSISTENCE = 0.660;
-    /** The cost factor the rules on extraction put on each unit on average over the long run (FirmEconomics::calculateExtractionCostFactor()): 1.0035 (se 0.0006). */
+    // --- Past the Next Term (the Diet's own long runs: 16 games of 200 years on the macro loop beside the politics, var/harness/polls/lever_means.php) ---
+    /** The corporate tax shift in force on average over the long run: -0.61 points (se 0.18). */
+    public const LONG_RUN_CORPORATE_TAX_SHIFT = -0.0061;
+    /** Share of the corporate tax shift's distance from that average still there a term later: its four-year autocorrelation, 0.507 (sd across games 0.12). */
+    public const CORPORATE_TAX_TERM_PERSISTENCE = 0.507;
+    /** The bank levy in force on average over the long run: 0.085% (se 0.006%). */
+    public const LONG_RUN_BANK_LEVY_RATE = 0.00085;
+    /** Share of the bank levy's distance from that average still there a term later: 0.507 (sd across games 0.11). */
+    public const BANK_LEVY_TERM_PERSISTENCE = 0.507;
+    /** The cost factor the rules on extraction put on each unit on average over the long run (FirmEconomics::calculateExtractionCostFactor()): 1.0035 (se 0.0004). */
     public const LONG_RUN_EXTRACTION_COST_FACTOR = 1.0035;
-    /** Share of that factor's distance from its average still there a term later: 0.567 (sd across games 0.17). */
-    public const EXTRACTION_COST_TERM_PERSISTENCE = 0.567;
-    /** The share turnover the stamp duty leaves on average over the long run, against the founding duty's (MacroTransmission::calculateStampDutyVolumeFactor()): 0.949 (se 0.004). */
-    public const LONG_RUN_STAMP_DUTY_VOLUME_FACTOR = 0.949;
-    /** Share of that factor's distance from its average still there a term later: 0.360 (sd across games 0.13), the duty being no revenue the Council guards. */
-    public const STAMP_DUTY_VOLUME_TERM_PERSISTENCE = 0.360;
-    /** What the carbon price adds to the power price on average over the long run, as a share of it (CommodityLogisticsSubsystem::carbonPowerPriceUplift()): 8.26% (se 1.12%), a carbon price of $12.3 a tonne. */
-    public const LONG_RUN_CARBON_POWER_UPLIFT = 0.0826;
-    /** Share of that uplift's distance from its average still there a term later: 0.838 (sd across games 0.12). */
-    public const CARBON_POWER_TERM_PERSISTENCE = 0.838;
+    /** Share of that factor's distance from its average still there a term later: 0.518 (sd across games 0.19). */
+    public const EXTRACTION_COST_TERM_PERSISTENCE = 0.518;
+    /** The share turnover the stamp duty leaves on average over the long run, against the founding duty's (MacroTransmission::calculateStampDutyVolumeFactor()): 0.947 (se 0.003). */
+    public const LONG_RUN_STAMP_DUTY_VOLUME_FACTOR = 0.947;
+    /** Share of that factor's distance from its average still there a term later: 0.426 (sd across games 0.11), the duty being no revenue the Council guards. */
+    public const STAMP_DUTY_VOLUME_TERM_PERSISTENCE = 0.426;
+    /** What the carbon price adds to the power price on average over the long run, as a share of it (CommodityLogisticsSubsystem::carbonPowerPriceUplift()): 4.11% (se 0.43%), a carbon price of $6.1 a tonne. */
+    public const LONG_RUN_CARBON_POWER_UPLIFT = 0.0411;
+    /** Share of that uplift's distance from its average still there a term later: 0.597 (sd across games 0.19). */
+    public const CARBON_POWER_TERM_PERSISTENCE = 0.597;
+    /** Government purchases above the founding level on average over the long run, as a fraction (measure()): -2.55% (se 0.40%), the Council's brake holding rises above the debt line and letting cuts through. */
+    public const LONG_RUN_PUBLIC_SPENDING_SHIFT = -0.0255;
+    /** Share of that shift's distance from its average still there a term later: 0.458 (sd across games 0.14). */
+    public const PUBLIC_SPENDING_TERM_PERSISTENCE = 0.458;
 
     // --- Laws Priced per Firm ---
     /** The laws a firm's own accounts answer to, keyed as PoliticsEngine::LEVER_FIELDS; the corporate tax reaches every firm through its effective rate instead. */
-    public const PER_FIRM_LEVERS = ['bankLevyRate', 'extractionStringency', 'stampDutyRate', 'carbonPrice'];
+    public const PER_FIRM_LEVERS = ['bankLevyRate', 'extractionStringency', 'stampDutyRate', 'carbonPrice', 'publicSpending'];
 
     // --- Discounting ---
     /** Smallest discount rate less growth a firm's value is spread at, the floor the intrinsic multiple puts under its spread (Valuation::calculateIntrinsicFairValuePE()). */
@@ -127,6 +134,24 @@ final class PolicyCapitalization
     }
 
     /**
+     * Government purchases above the founding level the market expects over a firm's life, weighted the same way, less
+     * what its trailing earnings carry. Purchases close on a budget at the speed they revert to it, and those still
+     * closing on the law in force count for the part of the firm's value accruing before they arrive.
+     *
+     * @param bool $previous Whether to read the forecast as it stood the tick before.
+     */
+    public static function publicSpendingGap(MacroStateDTO $macro, float $capRate, bool $previous = false): float
+    {
+        $speed = CreditFiscalSubsystem::GOVT_SPENDING_MEAN_REVERSION;
+        $inForce = self::measure('publicSpending', $macro->publicSpendingShare);
+        $purchases = ($macro->governmentSpendingIndex / MacroEngine::GOVT_SPENDING_BASELINE) - 1.0;
+
+        return self::expectedOverLife($macro, $capRate, $previous, 'publicSpending', $macro->publicSpendingShare, static fn (float $law): float => self::measure('publicSpending', $law), self::LONG_RUN_PUBLIC_SPENDING_SHIFT, self::PUBLIC_SPENDING_TERM_PERSISTENCE, $speed)
+            - $macro->governmentSpendingShiftEmbodied
+            + (($purchases - $inForce) * (1.0 - Valuation::perpetuityShareAfter($capRate, 0.0, $speed)));
+    }
+
+    /**
      * What the laws expected beyond the ones the trailing earnings carry add to a year's earnings after tax, per share:
      * less the levy, which is not deductible, and less the extraction rules' extra cost, plus the duty's extra turnover
      * and what the carbon price's power uplift adds, all three before tax.
@@ -153,13 +178,17 @@ final class PolicyCapitalization
         if (($basesPerShare['carbonPrice'] ?? 0.0) !== 0.0) {
             $gap += self::earningsEffect('carbonPrice', self::carbonPowerUpliftGap($macro, $capRate, $previous), $basesPerShare['carbonPrice'], $effectiveTaxExpected);
         }
+        if (($basesPerShare['publicSpending'] ?? 0.0) > 0.0) {
+            $gap += self::earningsEffect('publicSpending', self::publicSpendingGap($macro, $capRate, $previous), $basesPerShare['publicSpending'], $effectiveTaxExpected);
+        }
 
         return $gap;
     }
 
     /**
      * A law as the earnings feel it: the levy as it stands, the rules on extraction by the cost factor they put on each
-     * unit, the duty by the turnover it leaves, the carbon price by what it adds to the power price.
+     * unit, the duty by the turnover it leaves, the carbon price by what it adds to the power price, public spending by
+     * the purchases it sets against the founding level.
      *
      * @param string $lever One of PER_FIRM_LEVERS.
      */
@@ -170,14 +199,15 @@ final class PolicyCapitalization
             'extractionStringency' => FirmEconomics::calculateExtractionCostFactor($law),
             'stampDutyRate' => MacroTransmission::calculateStampDutyVolumeFactor($law),
             'carbonPrice' => CommodityLogisticsSubsystem::carbonPowerPriceUplift($law),
+            'publicSpending' => ($law / MacroEngine::TARGET_CORPORATE_TAX_RATE) - 1.0,
             default => throw new \InvalidArgumentException(sprintf('No firm\'s accounts answer to %s directly.', $lever)),
         };
     }
 
     /**
      * What a change in a law, as the earnings feel it (measure()), adds to a year's earnings after tax: less the levy,
-     * which is not deductible, less the extraction rules' extra cost, plus the duty's extra turnover and the carbon
-     * price's power uplift, the last three before tax.
+     * which is not deductible, less the extraction rules' extra cost, plus the duty's extra turnover, the carbon price's
+     * power uplift and the extra purchases, the last four before tax.
      *
      * @param string $lever        One of PER_FIRM_LEVERS.
      * @param float  $measureGap   The change in the law as the earnings feel it.
@@ -189,7 +219,7 @@ final class PolicyCapitalization
         return match ($lever) {
             'bankLevyRate' => -$measureGap * $base,
             'extractionStringency' => -(1.0 - $effectiveTax) * $measureGap * $base,
-            'stampDutyRate', 'carbonPrice' => (1.0 - $effectiveTax) * $measureGap * $base,
+            'stampDutyRate', 'carbonPrice', 'publicSpending' => (1.0 - $effectiveTax) * $measureGap * $base,
             default => throw new \InvalidArgumentException(sprintf('No firm\'s accounts answer to %s directly.', $lever)),
         };
     }

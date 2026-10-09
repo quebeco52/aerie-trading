@@ -59,6 +59,10 @@ class ConstructionBusinessModel extends StandardCorporateBusinessModel
     /** Base coverage forecasting error for EPC contractors. */
     public const BASE_COVERAGE_ERROR = 0.08;
 
+    // --- Public Works ---
+    /** Civil order intake per unit of government purchases above the founding level, as a fraction: 0.30, a 10% rise in purchases adds 3% to public-works awards. */
+    public const CIVIL_GOVERNMENT_SPENDING_SENSITIVITY = 0.30;
+
     // --- Backlog & Order Book ---
     /** Fraction of the civil infrastructure backlog executed and recognized each quarter (multi-year public works, ~4 quarters of coverage). */
     public const CIVIL_BACKLOG_BURN_RATE = 0.20;
@@ -291,7 +295,7 @@ class ConstructionBusinessModel extends StandardCorporateBusinessModel
         $commercialShock = $commercialZ * ($baselineVol * self::COMMERCIAL_EPC_VARIANCE_SCALAR);
         $maintenanceShock = $maintenanceZ * ($baselineVol * self::FACILITIES_MAINTENANCE_VARIANCE_SCALAR);
 
-        $civilBook = $streams->recognizeBacklog('civil_infrastructure', $expectedRevenue * $civilWeight, max(0.0, (1.0 + $civilShock + ($govSpendShift * 0.30) + $rebuildShift) * $dealMultiplier), self::CIVIL_BACKLOG_BURN_RATE);
+        $civilBook = $streams->recognizeBacklog('civil_infrastructure', $expectedRevenue * $civilWeight, max(0.0, (1.0 + $civilShock + ($govSpendShift * self::CIVIL_GOVERNMENT_SPENDING_SENSITIVITY) + $rebuildShift) * $dealMultiplier), self::CIVIL_BACKLOG_BURN_RATE);
         $commercialBook = $streams->recognizeBacklog('commercial_epc', $expectedRevenue * $commercialWeight, max(0.0, 1.0 + $commercialShock + $commercialMacroBoost - $commercialCreditDrag), self::COMMERCIAL_BACKLOG_BURN_RATE);
 
         $civilRevenue = $civilBook['revenue'];
@@ -318,6 +322,8 @@ class ConstructionBusinessModel extends StandardCorporateBusinessModel
 
         $rawMargin = $realizedVariableMargin + $inputCostDrag + $costOverrunDrag;
         $clampedMargin = $this->clampMargin($rawMargin);
+        // Awards are recognized as the backlog burns, so a steady change in purchases reaches revenue at its full size.
+        $this->registerPublicSpendingExposure($streams, $expectedRevenue * $civilWeight * self::CIVIL_GOVERNMENT_SPENDING_SENSITIVITY * $dealMultiplier, $clampedMargin, $actualRevenue);
 
         // Determine primary shock driver
         $primaryShockZ = $streams->resolveDominantShockZ([$civilZ, $commercialZ, $maintenanceZ], $eventZ);

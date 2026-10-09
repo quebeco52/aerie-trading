@@ -304,6 +304,8 @@ class FinancialConstants
     public const STATE_EXTRACTION_COST_SHARE = 'state:extraction_cost_share';
     /** Stream-state key: the share of a firm's revenue its earnings before tax gain per unit of power price the carbon price adds (CommodityLogisticsSubsystem::carbonPowerPriceUplift()); the market prices a change in the carbon price against it. */
     public const STATE_CARBON_POWER_EARNINGS_SHARE = 'state:carbon_power_earnings_share';
+    /** Stream-state key: the share of a firm's revenue its earnings before tax gain per unit of government purchases above the founding level, as a fraction of it; the market prices a change in public spending against it. */
+    public const STATE_PUBLIC_SPENDING_EARNINGS_SHARE = 'state:public_spending_earnings_share';
 
     // --- ETF Creation, Redemption and the Arbitrage Band (Petajisto 2017; Madhavan 2016) ---
     /** Shares a fund is seeded with, so a creation has a book to be measured against on the first tick. */

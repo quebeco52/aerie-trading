@@ -27,6 +27,7 @@ final class LawExposureBuilderTest extends TestCase
         'stampDutyRate' => FinancialConstants::STAMP_DUTY_RATE,
         'bankLevyRate' => 0.001,
         'reserveDrawShare' => 0.0,
+        'publicSpending' => MacroEngine::TARGET_CORPORATE_TAX_RATE * 1.05,
     ];
 
     public function testEachBankOwesTheLevyItsModelCharges(): void
@@ -94,6 +95,21 @@ final class LawExposureBuilderTest extends TestCase
         $gap = PolicyCapitalization::measure('stampDutyRate', $expected['stampDutyRate']) - PolicyCapitalization::measure('stampDutyRate', self::STANDING['stampDutyRate']);
         $this->assertEqualsWithDelta((1.0 - $tax) * $gap * $base, $duty['change'], 1e-6);
         $this->assertEqualsWithDelta($duty['change'] / (float) $broker->getTotalNetIncome(), $duty['changeShare'], 1e-12);
+    }
+
+    /** Public spending is measured against its Year 1 share, not against none: a contractor gains what purchases above that level add, and a cut expected costs it. */
+    public function testPublicSpendingIsMeasuredAgainstItsYearOneShare(): void
+    {
+        $macro = new MacroStateDTO();
+        $contractor = self::firm('BILD', 'Engineering & Construction', [FinancialConstants::STATE_PUBLIC_SPENDING_EARNINGS_SHARE => 0.2]);
+        $expected = ['publicSpending' => MacroEngine::TARGET_CORPORATE_TAX_RATE * 0.95] + self::STANDING;
+
+        $row = self::row(self::law(LawExposureBuilder::build([$contractor], $macro, self::STANDING, $expected), 'publicSpending'), 'BILD');
+
+        $strategy = Sectors::strategyFor('Engineering & Construction');
+        $afterTax = (1.0 - $strategy->getEffectiveTaxRate($macro->corporateTaxRate)) * $strategy->annualPublicSpendingEarningsBase($contractor);
+        $this->assertEqualsWithDelta(0.05 * $afterTax, $row['now'], 1e-6);
+        $this->assertEqualsWithDelta(-0.10 * $afterTax, $row['change'], 1e-6);
     }
 
     public function testALossMakingFirmHasNoShareOfEarnings(): void

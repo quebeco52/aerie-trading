@@ -413,6 +413,7 @@ class MacroState
     public float $extractionCostFactorEmbodied;
     public float $stampDutyVolumeFactorEmbodied;
     public float $carbonPowerUpliftEmbodied;
+    public float $governmentSpendingShiftEmbodied;
     /** @var array<string, float> */
     public array $sittingLevers;
     public float $sittingPolicyFrom;
@@ -571,6 +572,9 @@ class MacroState
         }
         if (!isset($carried['carbonPowerUpliftEmbodied'])) {
             $state->carbonPowerUpliftEmbodied = CommodityLogisticsSubsystem::carbonPowerPriceUplift($state->carbonPrice);
+        }
+        if (!isset($carried['governmentSpendingShiftEmbodied'])) {
+            $state->governmentSpendingShiftEmbodied = ($state->governmentSpendingIndexEma / MacroEngine::GOVT_SPENDING_BASELINE) - 1.0;
         }
         if (!isset($carried['balanceSheetIntensity'])) {
             // Balance sheet intensity was recorded as a one-sided qe_intensity before QT existed.

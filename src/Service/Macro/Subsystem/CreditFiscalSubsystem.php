@@ -509,6 +509,8 @@ class CreditFiscalSubsystem
         $state->extractionCostFactorEmbodied += (FirmEconomics::calculateExtractionCostFactor($state->extractionStringency) - $state->extractionCostFactorEmbodied) * $dt / self::TRAILING_EARNINGS_MEAN_LAG_YEARS;
         $state->stampDutyVolumeFactorEmbodied += (MacroTransmission::calculateStampDutyVolumeFactor($state->stampDutyRate) - $state->stampDutyVolumeFactorEmbodied) * $dt / self::TRAILING_EARNINGS_MEAN_LAG_YEARS;
         $state->carbonPowerUpliftEmbodied += (CommodityLogisticsSubsystem::carbonPowerPriceUplift($state->carbonPrice) - $state->carbonPowerUpliftEmbodied) * $dt / self::TRAILING_EARNINGS_MEAN_LAG_YEARS;
+        // The firms the budget buys from read purchases through their smoothed level, which the trailing year then lags.
+        $state->governmentSpendingShiftEmbodied += ((($state->governmentSpendingIndexEma / MacroEngine::GOVT_SPENDING_BASELINE) - 1.0) - $state->governmentSpendingShiftEmbodied) * $dt / self::TRAILING_EARNINGS_MEAN_LAG_YEARS;
     }
 
     /**

@@ -154,6 +154,7 @@ class MarketPricingContext
                 'extractionStringency' => $strategy->annualExtractionCostBase($stock) / $shares,
                 'stampDutyRate' => $strategy->annualStampDutyTurnoverBase($stock) / $shares,
                 'carbonPrice' => $strategy->annualCarbonPowerEarningsBase($stock) / $shares,
+                'publicSpending' => $strategy->annualPublicSpendingEarningsBase($stock) / $shares,
             ], static fn (float $base): bool => $base !== 0.0)
         );
     }

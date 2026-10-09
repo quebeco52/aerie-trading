@@ -304,6 +304,7 @@ class MedicalCareFacilityBusinessModel extends StandardCorporateBusinessModel
 
         $rawMargin = $realizedVariableMargin + $inputCostDrag + $auditPenalty;
         $clampedMargin = $this->clampMargin($rawMargin);
+        $this->registerPublicSpendingExposure($streams, $expectedRevenue * $inpatientWeight * self::INPATIENT_GOVERNMENT_SPENDING_SENSITIVITY * $spendingMultiplier, $clampedMargin, $actualRevenue);
 
         $primaryShockZ = $streams->resolveDominantShockZ([$inpatientZ, $outpatientZ, $arbitrageZ], $eventZ);
 

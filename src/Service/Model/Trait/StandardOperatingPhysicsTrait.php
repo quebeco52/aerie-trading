@@ -170,6 +170,27 @@ trait StandardOperatingPhysicsTrait
         return (float) $stock->getTotalRevenue() * (float) (($stock->getEarningsMomentumZ() ?? [])[FinancialConstants::STATE_CARBON_POWER_EARNINGS_SHARE] ?? 0.0);
     }
 
+    /** The annualized revenue times the share of it the model last reported moving with government purchases, less its variable cost; zero for a model that reports none. */
+    public function annualPublicSpendingEarningsBase(Stock $stock): float
+    {
+        return (float) $stock->getTotalRevenue() * (float) (($stock->getEarningsMomentumZ() ?? [])[FinancialConstants::STATE_PUBLIC_SPENDING_EARNINGS_SHARE] ?? 0.0);
+    }
+
+    /**
+     * Keeps what a unit of government purchases above the founding level adds to earnings before tax, as a share of
+     * revenue, for the market to price a change in public spending against (annualPublicSpendingEarningsBase()).
+     *
+     * @param float $revenuePerUnit Revenue a unit of purchases above the founding level adds, at this report's scale.
+     * @param float $variableCostRatio The variable cost the revenue carries, as a share of it.
+     */
+    protected function registerPublicSpendingExposure(StreamContext $streams, float $revenuePerUnit, float $variableCostRatio, float $actualRevenue): void
+    {
+        $streams->registerState(
+            FinancialConstants::STATE_PUBLIC_SPENDING_EARNINGS_SHARE,
+            $actualRevenue > 0.0 ? $revenuePerUnit * (1.0 - $variableCostRatio) / $actualRevenue : 0.0
+        );
+    }
+
     /**
      * A per-unit cost ratio under the rules on extraction in force: stricter rules cost productivity, and every unit
      * costs that much more to produce. The committed base carries the same factor (getFixedCostFactor() of a model that

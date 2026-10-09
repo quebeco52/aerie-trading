@@ -71,6 +71,7 @@ class MacroFieldRegistryTest extends TestCase
         'extractionCostFactorEmbodied' => 'Lag of the extraction rules\' cost factor that trailing earnings carry; extraction_stringency is recorded.',
         'stampDutyVolumeFactorEmbodied' => 'Lag of the stamp duty\'s turnover factor that trailing earnings carry; stamp_duty_rate is recorded.',
         'carbonPowerUpliftEmbodied' => 'Lag of the carbon price\'s power price uplift that trailing earnings carry; carbon_price is recorded.',
+        'governmentSpendingShiftEmbodied' => 'Lag of government purchases above the founding level that trailing earnings carry; government_spending_index_ema is recorded.',
         'sittingLevers' => 'Per-lever array of the sitting government\'s coming budget, handed in by the politics each tick; each lever is recorded once passed.',
         'sittingPolicyFrom' => 'When that budget falls, a date rather than a series.',
         'previousSittingLevers' => 'Last tick\'s reading, kept only to see a revision.',

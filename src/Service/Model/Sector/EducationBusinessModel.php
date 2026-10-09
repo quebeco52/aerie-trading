@@ -112,6 +112,8 @@ class EducationBusinessModel extends StandardCorporateBusinessModel
     public const LMS_VARIANCE_SCALAR        = 0.08; // Highly sticky software ARR
     /** Countercyclical sensitivity of degree enrollment to elevated unemployment rates (workforce retraining). */
     public const UNEMPLOYMENT_RETRAINING_SCALAR = 0.80;
+    /** Degree enrollment per unit of government purchases above the founding level, as a fraction: 0.40, a 10% rise in purchases funds 4% more places. */
+    public const TUITION_GOVERNMENT_SPENDING_SENSITIVITY = 0.40;
     /** Corporate training volume per unit of output gap before cyclicality: training budgets are among the first discretionary cuts. */
     public const ENTERPRISE_TRAINING_GDP_SENSITIVITY = 1.50;
 
@@ -189,7 +191,7 @@ class EducationBusinessModel extends StandardCorporateBusinessModel
         $govShift = ($macroState->governmentSpendingIndexEma - 100.0) / 100.0;
         $unemploymentSurge = max(0.0, $macroState->unemploymentRateEma - MacroEngine::NATURAL_UNEMPLOYMENT);
         $counterCyclicalEnrollmentBoost = ($outputGap < 0.0 ? abs($outputGap) * 1.2 * $beta : -($outputGap * 0.4))
-            + ($govShift * 0.40)
+            + ($govShift * self::TUITION_GOVERNMENT_SPENDING_SENSITIVITY)
             + ($unemploymentSurge * self::UNEMPLOYMENT_RETRAINING_SCALAR * $beta);
         $proCyclicalEnterpriseShift     = $this->resolveEnterpriseTrainingVolumeShift($stock, $macroState);
 
@@ -216,6 +218,7 @@ class EducationBusinessModel extends StandardCorporateBusinessModel
         // Faculty and instructor payroll follows wage growth; tuition and contract rates recover it on annual resets.
         $inputCostDrag = $this->resolveInputCostDrag($stock, $macroState, $streams, $this->resolvePricingPower($stock), $realizedVariableMargin);
         $clampedMargin = $this->clampMargin($realizedVariableMargin + $inputCostDrag);
+        $this->registerPublicSpendingExposure($streams, $expectedRevenue * $tuitionWeight * self::TUITION_GOVERNMENT_SPENDING_SENSITIVITY, $clampedMargin, $actualRevenue);
 
         $primaryShockZ = $streams->resolveDominantShockZ([$enterpriseZ, $tuitionZ, $lmsZ]);
 

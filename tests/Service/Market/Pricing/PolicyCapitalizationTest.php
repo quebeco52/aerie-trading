@@ -8,6 +8,7 @@ use App\DTO\MacroStateDTO;
 use App\Data\Company\Sectors;
 use App\Service\Macro\MacroEngine;
 use App\Service\Macro\Subsystem\CommodityLogisticsSubsystem;
+use App\Service\Macro\Subsystem\CreditFiscalSubsystem;
 use App\Service\Market\Pricing\PolicyCapitalization as Policy;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\FirmEconomics;
@@ -122,6 +123,33 @@ class PolicyCapitalizationTest extends TestCase
         }
     }
 
+    /**
+     * Public spending is priced by the purchases it sets against the founding level, phasing in at the speed purchases
+     * revert to a budget: carried, nothing is repriced; an expected rise counts from its budget as it phases in; a
+     * foreseen budget moves nothing the day it passes, purchases still closing on it counting until they arrive; and a
+     * firm the budget buys from gains the extra purchases on its base, after tax.
+     */
+    public function testPublicSpendingIsPricedByThePurchasesItSets(): void
+    {
+        $speed = CreditFiscalSubsystem::GOVT_SPENDING_MEAN_REVERSION;
+        $longRun = Policy::LONG_RUN_PUBLIC_SPENDING_SHIFT;
+        $shareAt = static fn(float $shift): float => MacroEngine::TARGET_CORPORATE_TAX_RATE * (1.0 + $shift);
+
+        $carried = $this->spending($shareAt($longRun), $longRun, $longRun);
+        $this->assertEqualsWithDelta(0.0, Policy::publicSpendingGap($carried, self::CAP_RATE), 1e-12);
+
+        $expected = $this->spending($shareAt($longRun), $longRun, $longRun, expected: $shareAt($longRun + 0.08), from: 12.5);
+        $this->assertEqualsWithDelta($this->path(0.08, 0.0, 2.5, Policy::PUBLIC_SPENDING_TERM_PERSISTENCE, $speed), Policy::publicSpendingGap($expected, self::CAP_RATE), 1e-12);
+        $this->assertGreaterThan(0.0, Policy::publicSpendingGap($expected, self::CAP_RATE));
+
+        $foreseen = $this->spending($shareAt($longRun), $longRun, $longRun, expected: $shareAt($longRun + 0.08), from: 10.0);
+        $passed = $this->spending($shareAt($longRun + 0.08), $longRun, $longRun, expected: $shareAt($longRun + 0.08), from: 10.0);
+        $this->assertEqualsWithDelta(Policy::publicSpendingGap($foreseen, self::CAP_RATE), Policy::publicSpendingGap($passed, self::CAP_RATE), 1e-12, 'Purchases still closing on the law count until they arrive.');
+
+        $this->assertEqualsWithDelta(0.79 * Policy::publicSpendingGap($expected, self::CAP_RATE) * 40.0, Policy::earningsGap($expected, ['publicSpending' => 40.0], 0.21, self::CAP_RATE), 1e-12);
+        $this->assertSame(0.0, Policy::measure('publicSpending', MacroEngine::TARGET_CORPORATE_TAX_RATE), 'The founding share is no shift.');
+    }
+
     /** The sitting government's coming budget is priced before it passes, so the round that passes it moves nothing. */
     public function testTheSittingGovernmentsBudgetIsPricedBeforeItPasses(): void
     {
@@ -231,6 +259,24 @@ class PolicyCapitalizationTest extends TestCase
         }
 
         return $gap;
+    }
+
+    /**
+     * An economy with public spending in force at $share, purchases at $purchases above the founding level, the trailing
+     * earnings carrying $embodied, and the next government expected to set $expected (the law in force if not given).
+     */
+    private function spending(float $share, float $purchases, float $embodied, ?float $expected = null, float $from = -1.0): MacroStateDTO
+    {
+        return new MacroStateDTO(
+            totalTime: 10.0,
+            governmentSpendingIndex: MacroEngine::GOVT_SPENDING_BASELINE * (1.0 + $purchases),
+            publicSpendingShare: $share,
+            governmentSpendingShiftEmbodied: $embodied,
+            expectedLevers: ['publicSpending' => $expected ?? $share],
+            expectedPolicyFrom: $from,
+            previousExpectedLevers: ['publicSpending' => $expected ?? $share],
+            previousExpectedPolicyFrom: $from,
+        );
     }
 
     /** The stringency whose cost factor is the given one. */

@@ -4,7 +4,8 @@
 // statutory rate as its effective rate), a bank whose levy base is five times its value (k - g 5%), a miner whose
 // extraction cost base is 26% of its fair value at k - g 9% (CNDR 0.29 at 9.7%, SINK 0.22 at 8.5%) and a broker whose
 // turnover base is 25% of its fair value at k - g 10.6% (ROOK), as the real MarketEngine values them on a seeded board
-// after eight quarters (ExtractionMarginTest).
+// after eight quarters (ExtractionMarginTest), and a contractor whose public spending base is 6% of its fair value at
+// k - g 5% (a guard firm 80% on government contracts at 0.30 a unit, a 30% contribution margin, price to sales 1.5).
 // The macro's lags are stepped as CreditFiscalSubsystem steps them. Reports the moves in log value on poll months,
 // on the vote, when the government takes office, and each firm's level against no policy pricing.
 // php pricing_probe.php <seeds> <years>
@@ -13,7 +14,7 @@ require dirname(__DIR__, 3) . '/tests/bootstrap.php';
 use App\DTO\MacroStateDTO;
 use App\Service\Macro\MacroEngine;
 use App\Service\Macro\Subsystem\CreditFiscalSubsystem;
-use App\Service\Market\PolicyCapitalization as Policy;
+use App\Service\Market\Pricing\PolicyCapitalization as Policy;
 use App\Service\Math\FirmEconomics;
 use App\Service\Math\MacroTransmission;
 use App\Service\Math\MathUtility;
@@ -43,6 +44,7 @@ $firms = [
     'bank' => [0.05, ['bankLevyRate' => 5.0]],
     'miner' => [0.09, ['extractionStringency' => 0.26]],
     'broker' => [0.106, ['stampDutyRate' => 0.25]],
+    'contractor' => [0.05, ['publicSpending' => 0.06]],
 ];
 
 $moves = ['poll' => [], 'vote' => [], 'office' => []];
@@ -56,6 +58,8 @@ for ($seed = 1; $seed <= (int) $seeds; ++$seed) {
     $levyEmbodied = 0.0;
     $extractionEmbodied = 1.0;
     $dutyEmbodied = 1.0;
+    $purchases = 0.0;
+    $purchasesEmbodied = 0.0;
     $levers = [[], -1.0, [], -1.0];
     for ($month = 1; $month <= 12 * (int) $years; ++$month) {
         $engine->advance($state, $economy($month * $dt), $dt);
@@ -67,6 +71,9 @@ for ($seed = 1; $seed <= (int) $seeds; ++$seed) {
         $levyEmbodied += ($policy->bankLevyRate - $levyEmbodied) * $dt / CreditFiscalSubsystem::TRAILING_EARNINGS_MEAN_LAG_YEARS;
         $extractionEmbodied += (FirmEconomics::calculateExtractionCostFactor($policy->extractionStringency) - $extractionEmbodied) * $dt / CreditFiscalSubsystem::TRAILING_EARNINGS_MEAN_LAG_YEARS;
         $dutyEmbodied += (MacroTransmission::calculateStampDutyVolumeFactor($policy->stampDutyRate) - $dutyEmbodied) * $dt / CreditFiscalSubsystem::TRAILING_EARNINGS_MEAN_LAG_YEARS;
+        // Purchases revert to the budget's share at the fitted speed, without the process's noise.
+        $purchases += CreditFiscalSubsystem::GOVT_SPENDING_MEAN_REVERSION * (Policy::measure('publicSpending', $policy->publicSpendingShare) - $purchases) * $dt;
+        $purchasesEmbodied += ($purchases - $purchasesEmbodied) * $dt / CreditFiscalSubsystem::TRAILING_EARNINGS_MEAN_LAG_YEARS;
         $m = new MacroStateDTO(
             totalTime: $state->totalTime,
             corporateTaxPolicyShift: $policy->corporateTaxPolicyShift,
@@ -78,6 +85,9 @@ for ($seed = 1; $seed <= (int) $seeds; ++$seed) {
             bankLevyEmbodied: $levyEmbodied,
             extractionCostFactorEmbodied: $extractionEmbodied,
             stampDutyVolumeFactorEmbodied: $dutyEmbodied,
+            governmentSpendingIndex: MacroEngine::GOVT_SPENDING_BASELINE * (1.0 + $purchases),
+            publicSpendingShare: $policy->publicSpendingShare,
+            governmentSpendingShiftEmbodied: $purchasesEmbodied,
             expectedLevers: $levers[0],
             expectedPolicyFrom: $levers[1],
             previousExpectedLevers: $previous[0],

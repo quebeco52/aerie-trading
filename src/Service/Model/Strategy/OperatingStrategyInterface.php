@@ -63,6 +63,12 @@ interface OperatingStrategyInterface
      */
     public function annualCarbonPowerEarningsBase(Stock $stock): float;
     /**
+     * What a year's earnings before tax gain per unit of government purchases above the founding level, as a fraction
+     * of it (purchases at 1.1 times the founding level are 0.1), in currency: the revenue that moves with purchases
+     * less its variable cost; zero for a firm the budget does not buy from.
+     */
+    public function annualPublicSpendingEarningsBase(Stock $stock): float;
+    /**
      * MacroStateDTO field names (snake_case, matching MacroStateDTO::toArray()) this model's own
      * operating code reads: calculateSectorPhysics(), getMacroPhysics(), calculateInterestIncome(),
      * processPassiveLiabilityGrowth(), getForwardCreditLossMultiplier(), getFixedCostFactor() and the helpers they call,

@@ -295,6 +295,7 @@ class SecurityProtectionBusinessModel extends StandardCorporateBusinessModel
         // Apply the tactical failure legal penalty directly to the baseline variable margin
         $rawMargin = $realizedVariableMargin + $inputCostDrag + $tacticalFailurePenalty;
         $clampedMargin = $this->clampMargin($rawMargin);
+        $this->registerPublicSpendingExposure($streams, $expectedRevenue * $govWeight * self::APPROPRIATIONS_VOLUME_SCALAR, $clampedMargin, $actualRevenue);
 
         // Primary shock is whichever stream deviated the most, overridden by tail events
         $primaryShockZ = $streams->resolveDominantShockZ([$expeditionaryZ, $retainerZ, $govZ], $eventZ);

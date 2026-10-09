@@ -30,7 +30,10 @@ final class LawExposureBuilder
         'extractionStringency' => ['Extraction compliance cost', 'Raises the cost of every barrel and tonne the District\'s drillers and miners produce.'],
         'stampDutyRate' => ['Stamp duty on share trades', 'Thins the trading that brokers earn their commissions on.'],
         'carbonPrice' => ['Carbon price', 'Raises the price of power. A generator gains on the power it sells and pays on the gas it burns.'],
+        'publicSpending' => ['Public spending, share of GDP', 'What the budget buys from the District\'s contractors, hospitals, colleges and guard firms. Measured against spending at its Year 1 share.'],
     ];
+    /** The law each is measured against: none, but for public spending, which is measured against its Year 1 share. */
+    private const NO_LAW = ['publicSpending' => MacroEngine::TARGET_CORPORATE_TAX_RATE];
 
     /**
      * @param iterable<Stock>      $stocks   The listed board.
@@ -55,7 +58,7 @@ final class LawExposureBuilder
                 }
 
                 $inForce = $standing[$lever];
-                $now = PolicyCapitalization::earningsEffect($lever, PolicyCapitalization::measure($lever, $inForce) - PolicyCapitalization::measure($lever, 0.0), $base, $effectiveTax);
+                $now = PolicyCapitalization::earningsEffect($lever, PolicyCapitalization::measure($lever, $inForce) - PolicyCapitalization::measure($lever, self::NO_LAW[$lever] ?? 0.0), $base, $effectiveTax);
                 $change = isset($expected[$lever])
                     ? PolicyCapitalization::earningsEffect($lever, PolicyCapitalization::measure($lever, $expected[$lever]) - PolicyCapitalization::measure($lever, $inForce), $base, $effectiveTax)
                     : null;
@@ -109,6 +112,7 @@ final class LawExposureBuilder
             'extractionStringency' => $strategy->annualExtractionCostBase($stock),
             'stampDutyRate' => $strategy->annualStampDutyTurnoverBase($stock),
             'carbonPrice' => $strategy->annualCarbonPowerEarningsBase($stock),
+            'publicSpending' => $strategy->annualPublicSpendingEarningsBase($stock),
             default => 0.0,
         };
     }
