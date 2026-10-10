@@ -303,6 +303,8 @@ readonly class MacroStateDTO
         public float $creditCrisisHazard = 0.0,
         public float $creditCrisisDrag = 0.0,
         public float $lastCreditCrisisAt = -1.0,
+        public float $bankRescueCostToGdp = 0.0,
+        public float $bankRescueAssetsToGdp = 0.0,
         public float $foreignOutputGap = 0.0,
         public float $foreignOutputGapEma = 0.0,
         public float $foreignOutputGapLag = 0.0,
@@ -464,6 +466,7 @@ readonly class MacroStateDTO
         public float $boardNetIssuance = 0.0,
         public float $boardStampDuty = 0.0,
         public float $boardBankLevy = 0.0,
+        public float $boardBankCredit = 0.0,
         public float $strategicStakeCash = 0.0,
         public float $sovereignFundBudgetInflow = 0.0,
     ) {

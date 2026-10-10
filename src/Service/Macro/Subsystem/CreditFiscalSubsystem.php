@@ -218,6 +218,24 @@ class CreditFiscalSubsystem
     /** Excess bond premium a crisis books on the day (216 bps): 2008's jump, EBP 1.24% in August to 3.40% in October, the one systemic crisis in the GZ record. The boom's size scales the drag (JST 2013), not this: nothing in the record says how the premium scales past 2008. */
     public const EBP_CRISIS_JUMP = 0.0216;
 
+    // --- Bank Rescues (Laeven & Valencia 2018; Amaglobeli, End, Jarmuzek & Palomba 2015) ---
+    /** Direct fiscal cost of the US rescue of 2007, gross of recoveries: capital injections, asset purchases and guarantees called, 4.5% of GDP (Laeven & Valencia 2018, IMF WP/18/206, Table 2). */
+    public const US_BANK_RESCUE_COST_TO_GDP = 0.045;
+    /** US deposit money banks' claims on the domestic non-financial sector in 2007, 65.6% of GDP (World Bank GFDD.DI.02), the size the cost is anchored at. */
+    public const US_BANK_CREDIT_TO_GDP = 0.656;
+    /** Log of the direct fiscal cost per unit of bank credit to GDP: 0.00771 a point (se 0.0032), 53 systemic crises (Amaglobeli et al. 2015, IMF WP/15/166, Table A1a col. 2), so 100 points more credit costs 2.2 times as much. */
+    public const BANK_RESCUE_COST_CREDIT_SEMI_ELASTICITY = 0.771;
+    /** Spread of the log cost across crises: the interquartile range of the 20 advanced-economy crises since 2007 over 1.349 (Laeven & Valencia 2018, Table 2); at their median an Ireland, whose blanket guarantee cost 37.6% of GDP, comes about one crisis in sixteen. */
+    public const BANK_RESCUE_COST_LOG_SD = 1.09;
+    /** The largest rescue an advanced economy has paid: Ireland's and Iceland's of 2008, 37.6% of GDP gross (Laeven & Valencia 2018, Table 2). The log-normal is fitted to the record and is not drawn past it. */
+    public const BANK_RESCUE_COST_CEILING = 0.376;
+    /** Share of the gross outlay recovered by asset sales, repayments, fees and dividends: the median of the same 20 crises, 54%. */
+    public const BANK_RESCUE_RECOVERY_SHARE = 0.54;
+    /** Mean years to recover it: the euro area had recovered 41% of its 8% of GDP gross by 2014, six years on (ECB Economic Bulletin 6/2015, article 2), 76% of that median share. */
+    public const BANK_RESCUE_RECOVERY_YEARS = 4.2;
+    /** The District's deposit banks' loans at home over GDP on the opening board, read until the board reports them: 142%, its loan books over the GDP the fund's currency bridge opens on (var/harness/bank_rescue). */
+    public const DISTRICT_OPENING_BANK_CREDIT_TO_GDP = 1.42;
+
     // --- Light-Touch Financial Centre (Jorda, Richter, Schularick & Taylor 2021) ---
     /** Crisis logit shift for the District's wholesale-funded banks: loans at 108% of deposits (UK and Swiss banks 1995-2007, JST R6) against the US 87%, at JRST's post-war probit marginal effect of 0.05pp a year per point (se 0.01); the hazard at trend rises from 2.2% to 3.6%. */
     public const DISTRICT_FUNDING_CRISIS_LOGIT_SHIFT = 0.485;
@@ -689,7 +707,7 @@ class CreditFiscalSubsystem
         $growthErosion = $state->nominalGdpGrowth * $state->sovereignDebtToGdp;
 
         $dDebt = ($primaryDeficit / max(0.1, $state->nominalGdpIndex)) + $interestCost - $growthErosion;
-        $state->sovereignDebtToGdp += $dDebt * $dt;
+        $state->sovereignDebtToGdp += ($dDebt * $dt) + $this->bookBankRescue($state, $dt);
 
         $belowFloor = MacroEngine::SOVEREIGN_DEBT_FLOOR - $state->sovereignDebtToGdp;
         $state->sovereignFundBudgetInflow = ($funded && $belowFloor > 0.0)
@@ -700,6 +718,25 @@ class CreditFiscalSubsystem
         // IMF GFSM 2014 net debt: gross debt less the debt instruments the government holds, which here is the
         // sovereign fund's paper sleeve (its equities are not debt instruments). Equal to gross with no fund.
         $state->sovereignNetDebtToGdp = $state->sovereignDebtToGdp - $state->sovereignFundBondsToGdp;
+    }
+
+    /**
+     * A bank rescue as a stock-flow adjustment to debt (Laeven & Valencia 2018): the outlay is borrowed on the day the
+     * crisis lands, and the share later recovered is held as stakes and bad loans that are sold back as a first-order
+     * lag, each sale retiring debt. Net debt nets only the fund's bonds, so it carries the outlay until they are sold.
+     * Returns the change in debt to GDP this step.
+     *
+     * @param MacroState $state Current macroeconomic state.
+     * @param float      $dt    Time increment in years.
+     */
+    private function bookBankRescue(MacroState $state, float $dt): float
+    {
+        $outlay = $state->lastCreditCrisisAt === $state->totalTime ? $state->bankRescueCostToGdp : 0.0;
+        $sold = $state->bankRescueAssetsToGdp * (1.0 - exp(-$dt / self::BANK_RESCUE_RECOVERY_YEARS));
+        // The holdings are a stock struck in currency, so their ratio to GDP erodes with nominal growth as the debt's does.
+        $state->bankRescueAssetsToGdp += (self::BANK_RESCUE_RECOVERY_SHARE * $outlay) - $sold - ($state->nominalGdpGrowth * $state->bankRescueAssetsToGdp * $dt);
+
+        return $outlay - $sold;
     }
 
     /**
@@ -948,9 +985,56 @@ class CreditFiscalSubsystem
         $crisisDrag = self::thinCapitalDragScale($state->bankCapitalRequirement)
             * (self::CREDIT_CRISIS_DRAG_BASE + (self::CREDIT_CRISIS_DRAG_PER_GAP * max(0.0, $state->creditToGdpGapEma)));
         $state->creditCrisisDrag += $crisisDrag;
+        // The rescue is drawn on the day and booked by calculateSovereignDebt() on the same tick.
+        $state->bankRescueCostToGdp = self::bankRescueCostToGdp(self::bankCreditToGdp($state->boardBankCredit, $state->sovereignFundDollarsPerGdp, $state->nominalGdpIndex), $this->bankRescueShock($state));
         $this->diagnostics?->recordEvent('creditCrisis', $crisisDrag);
         // Gilchrist & Zakrajsek (2012): lenders' capital is hit on the day, so the premium they charge jumps with it.
         $state->excessBondPremium += self::EBP_CRISIS_JUMP;
+    }
+
+    /**
+     * The direct fiscal cost of standing behind the banks in a systemic crisis, as a share of GDP (Laeven & Valencia
+     * 2018): log-normal about the US's 2007 rescue, scaled by how much the banks have lent at home against the US's
+     * (Amaglobeli et al. 2015). What they lent, not what they hold: the cross-border and custody books of Luxembourg
+     * and Switzerland cost far less than their size, no further than the largest rescue on record. The recession and the
+     * revenue it costs are booked elsewhere.
+     *
+     * @param float $bankCreditToGdp Deposit banks' claims on domestic households and firms over GDP.
+     * @param float $z               Standard normal draw.
+     */
+    public static function bankRescueCostToGdp(float $bankCreditToGdp, float $z): float
+    {
+        return min(self::BANK_RESCUE_COST_CEILING, self::US_BANK_RESCUE_COST_TO_GDP
+            * exp((self::BANK_RESCUE_COST_CREDIT_SEMI_ELASTICITY * ($bankCreditToGdp - self::US_BANK_CREDIT_TO_GDP)) + (self::BANK_RESCUE_COST_LOG_SD * $z)));
+    }
+
+    /**
+     * The rescue's standard normal draw, from a stream of its own keyed to the day the crisis lands and the boom behind
+     * it, so sizing a rescue neither takes from nor shifts the draws every other shock in the run makes, and two runs
+     * whose crises fall on the same day do not draw the same rescue.
+     *
+     * @param MacroState $state Current macroeconomic state.
+     */
+    protected function bankRescueShock(MacroState $state): float
+    {
+        return MathUtility::ownStream(crc32(sprintf('bank-rescue:%.9F:%.12F', $state->totalTime, $state->creditToGdpGapEma)))->generateStandardNormal();
+    }
+
+    /**
+     * The board's deposit banks' loans at home over GDP, through the reserve fund's currency bridge as the bank levy is
+     * read; the opening board's until the board reports them.
+     *
+     * @param float $boardBankCredit What the board's deposit banks have lent at home, in currency.
+     * @param float $dollarsPerGdp   The fund's currency per unit of the GDP index.
+     * @param float $nominalGdpIndex Nominal GDP index.
+     */
+    public static function bankCreditToGdp(float $boardBankCredit, float $dollarsPerGdp, float $nominalGdpIndex): float
+    {
+        if ($boardBankCredit <= 0.0 || $dollarsPerGdp <= 0.0) {
+            return self::DISTRICT_OPENING_BANK_CREDIT_TO_GDP;
+        }
+
+        return $boardBankCredit / $dollarsPerGdp / max(0.1, $nominalGdpIndex);
     }
 
     /**

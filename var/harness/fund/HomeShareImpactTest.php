@@ -83,7 +83,7 @@ final class HomeShareImpactTest extends KernelTestCase
         $ticks = (int) round($years * $tpy);
         $operatorInterval = (int) max(1, $tpy / 24);
         $monthEvery = max(1, intdiv($tpy, 12));
-        $lastCap = $lastFloat = $lastReturn = $lastDividends = $lastIssuance = $lastDuty = $lastStake = $lastLevy = null;
+        $lastCap = $lastFloat = $lastReturn = $lastDividends = $lastIssuance = $lastDuty = $lastStake = $lastLevy = $lastCredit = null;
         $ret = [];
         $tradeShare = [];
         $months = [];
@@ -98,7 +98,7 @@ final class HomeShareImpactTest extends KernelTestCase
                 $state->reserveHomeEquityShare = $newShare;
                 $redis->set(MacroEngine::REDIS_MACRO_STATE, json_encode($state->toArray(), JSON_THROW_ON_ERROR | JSON_PRESERVE_ZERO_FRACTION));
             }
-            $m = $macro->updateMacroState($dt, $lastCap, $lastFloat, $lastReturn, $lastDividends, $lastIssuance, $lastDuty, $lastStake, null, boardBankLevy: $lastLevy);
+            $m = $macro->updateMacroState($dt, $lastCap, $lastFloat, $lastReturn, $lastDividends, $lastIssuance, $lastDuty, $lastStake, null, boardBankLevy: $lastLevy, boardBankCredit: $lastCredit);
 
             if ($tick % $operatorInterval === 0) {
                 foreach ($sweep->sweep($stocks, $m) as $ev) {
@@ -133,6 +133,7 @@ final class HomeShareImpactTest extends KernelTestCase
             $lastDuty = (float) $result['board_stamp_duty'];
             $lastStake = (float) $result['strategic_stake_cash'];
             $lastLevy = (float) $result['board_bank_levy'];
+            $lastCredit = (float) $result['board_bank_credit'];
             $floatCaps = $result['float_caps'];
 
             $ret[] = round($lastReturn, 8);

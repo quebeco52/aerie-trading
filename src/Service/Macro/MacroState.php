@@ -332,6 +332,10 @@ class MacroState
     public float $creditCrisisHazard;
     public float $creditCrisisDrag;
     public float $lastCreditCrisisAt;
+    // What the state paid to stand behind the banks in the last crisis, and the stakes and bad loans it still holds
+    // from its rescues, to be sold back; both as shares of GDP.
+    public float $bankRescueCostToGdp;
+    public float $bankRescueAssetsToGdp;
 
     // The mainland: its output gap and the gap a quarter back, annualized core inflation and its three quarterly lags,
     // the funds rate the Fed sets on them, and the global demand composite.
@@ -513,6 +517,8 @@ class MacroState
     public float $boardStampDuty;
     // The bank levy the board's banks owe a year at the rate in force, in currency; kept until the board is priced again.
     public float $boardBankLevy;
+    // What the board's deposit-taking banks have lent at home, in currency; kept until the board is priced again.
+    public float $boardBankCredit;
     // Cash the District's strategic stakes (App\Data\Company\StrategicHoldings) paid it on the previous tick, a flow like the
     // board's: dividends, plus its share of buybacks less its share of issues. Held outside the fund, paid into it.
     public float $strategicStakeCash;

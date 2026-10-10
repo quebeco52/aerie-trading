@@ -100,7 +100,7 @@ final class NewsCountHarnessTest extends KernelTestCase
         $ticks = (int) round($years * $tpy);
         $operatorInterval = (int) max(1, $tpy / 24);
         $policy = $politicsEngine->liveState()->policy();
-        $last = ['cap' => null, 'float' => null, 'ret' => null, 'div' => null, 'iss' => null, 'duty' => null, 'stake' => null, 'levy' => null];
+        $last = ['cap' => null, 'float' => null, 'ret' => null, 'div' => null, 'iss' => null, 'duty' => null, 'stake' => null, 'levy' => null, 'credit' => null];
         $prevCap = [];
         $prevEq = [];
         foreach ($stocks as $t => $s) {
@@ -111,7 +111,7 @@ final class NewsCountHarnessTest extends KernelTestCase
         $t0 = microtime(true);
 
         for ($tick = 1; $tick <= $ticks; $tick++) {
-            $m = $macro->updateMacroState($dt, $last['cap'], $last['float'], $last['ret'], $last['div'], $last['iss'], $last['duty'], $last['stake'], $policy, boardBankLevy: $last['levy']);
+            $m = $macro->updateMacroState($dt, $last['cap'], $last['float'], $last['ret'], $last['div'], $last['iss'], $last['duty'], $last['stake'], $policy, boardBankLevy: $last['levy'], boardBankCredit: $last['credit']);
             $politics = $politicsEngine->updatePolitics($m, $dt);
             $policy = $politics->policy();
 
@@ -124,7 +124,7 @@ final class NewsCountHarnessTest extends KernelTestCase
                 'cap' => (float) $result['total_cap'] > 0.0 ? (float) $result['total_cap'] : $last['cap'],
                 'float' => (float) $result['board_float_cap'] > 0.0 ? (float) $result['board_float_cap'] : $last['float'],
                 'ret' => $result['board_price_return'], 'div' => $result['board_dividend_cash'], 'iss' => $result['board_net_issuance'],
-                'duty' => $result['board_stamp_duty'], 'stake' => $result['strategic_stake_cash'] ?? null, 'levy' => $result['board_bank_levy'],
+                'duty' => $result['board_stamp_duty'], 'stake' => $result['strategic_stake_cash'] ?? null, 'levy' => $result['board_bank_levy'], 'credit' => $result['board_bank_credit'],
             ];
 
             $benchmark = $indexFunds[MarketIndex::benchmark()->value] ?? null;

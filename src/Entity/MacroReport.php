@@ -619,6 +619,13 @@ class MacroReport
     #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
     private ?string $creditCrisisDrag = null;
 
+    // What the state paid to stand behind the banks in the last crisis, and the rescue stakes it still holds, of GDP.
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 6, nullable: true)]
+    private ?string $bankRescueCostToGdp = null;
+
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 6, nullable: true)]
+    private ?string $bankRescueAssetsToGdp = null;
+
     #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
     private ?string $foreignOutputGap = null;
 

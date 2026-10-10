@@ -99,6 +99,7 @@ final class PagesRenderTest extends KernelTestCase
                         'passedOver' => [['name' => 'Hal Brennan', 'age' => 47, 'maturity' => 5.7], ['name' => 'Ines Okafor', 'age' => 56, 'maturity' => 4.9]]],
                     'debt' => 0.912, 'netDebt' => 0.764, 'maturity' => 4.7, 'movingTo' => 4.3, 'repricingShare' => 0.295, 'rate' => 0.0341,
                     'interestToGdp' => 0.0311, 'tenYear' => 0.0438, 'maturityBp' => -6, 'councilMaturity' => 4.6,
+                    'rescue' => ['crisisLabel' => 'Year 9 Q3', 'cost' => 0.083, 'held' => 0.031, 'bankCredit' => 1.44],
                     'rules' => ['termYears' => 5.0, 'shortlist' => 3, 'shortest' => 4.0, 'longest' => 5.92, 'founding' => 4.96],
                 ],
             ]],

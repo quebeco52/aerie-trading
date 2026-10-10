@@ -88,6 +88,24 @@
 				</p>
 			</section>
 		</div>
+
+		{% set rescue = exchequer.rescue %}
+		<section class="bg-surface-container-low rounded-lg p-5 border border-outline-variant/20" aria-labelledby="rescue-heading">
+			<h2 id="rescue-heading" class="text-sm font-semibold text-on-surface">Bank rescues</h2>
+			<p class="text-sm text-on-surface mt-2 max-w-3xl">
+				{% if rescue.crisisLabel is null %}
+					The District has not had to stand behind its banks since Year 1.
+				{% else %}
+					In the banking crisis of <span class="font-mono tabular-nums">{{ rescue.crisisLabel }}</span> the Exchequer borrowed <span class="font-mono tabular-nums">{{ rescue.cost|pct(1) }}</span> of GDP to recapitalise the banks and take over their bad loans.
+				{% endif %}
+				{% if rescue.held > 0.0005 %}
+					It still holds <span class="font-mono tabular-nums">{{ rescue.held|pct(1) }}</span> of GDP in bank shares and loans from its rescues, and each sale retires debt.
+				{% endif %}
+			</p>
+			<p class="text-xs text-on-surface-variant mt-2 max-w-3xl leading-relaxed">
+				The mainland does not rescue the District, so a rescue is borrowed here. What one costs grows with what the banks have lent at home, now <span class="font-mono tabular-nums">{{ rescue.bankCredit|pct(0) }}</span> of GDP, not with the custody and cross-border business booked on Glasswater Row. About half is usually recovered, over several years, as the shares and loans are sold back.
+			</p>
+		</section>
 	{% else %}
 		<p class="text-sm text-on-surface-variant">The Exchequer has no head yet.</p>
 	{% endif %}

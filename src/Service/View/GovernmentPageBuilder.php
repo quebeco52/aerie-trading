@@ -2053,6 +2053,13 @@ class GovernmentPageBuilder
             'tenYear' => $macro->yield10y,
             'maturityBp' => (int) round(10000.0 * CreditFiscalSubsystem::maturitySupplyTermPremium($macro->sovereignNetDebtToGdpEma, $maturity)),
             'councilMaturity' => $politics->councilDebtStances === [] ? null : Exchequer::averageMaturity(CouncilAppointments::median($politics->councilDebtStances)),
+            // The last banking crisis's rescue, borrowed on the day, and what the Exchequer still holds from its rescues.
+            'rescue' => [
+                'crisisLabel' => $macro->lastCreditCrisisAt < 0.0 ? null : self::simDate($macro->lastCreditCrisisAt),
+                'cost' => $macro->bankRescueCostToGdp,
+                'held' => $macro->bankRescueAssetsToGdp,
+                'bankCredit' => CreditFiscalSubsystem::bankCreditToGdp($macro->boardBankCredit, $macro->sovereignFundDollarsPerGdp, $macro->nominalGdpIndex),
+            ],
             'rules' => [
                 'termYears' => Exchequer::HEAD_TERM_YEARS,
                 'shortlist' => CouncilAppointments::SHORTLIST,

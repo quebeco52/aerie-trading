@@ -44,6 +44,12 @@ interface OperatingStrategyInterface
      */
     public function annualBankLevyBase(Stock $stock): float;
     /**
+     * What the firm has lent to the District's households and firms as a deposit-taking bank, in currency: the claims a
+     * rescue stands behind (App\Service\Macro\Subsystem\CreditFiscalSubsystem::bankRescueCostToGdp()); zero for any
+     * other firm.
+     */
+    public function domesticBankCredit(Stock $stock): float;
+    /**
      * The variable cost the rules on extraction scale, a year, before them, in currency: at a cost factor of one more
      * (FirmEconomics::calculateExtractionCostFactor()), the cost rises by this; zero for a firm that extracts nothing.
      * Deductible, so it comes off earnings before tax.

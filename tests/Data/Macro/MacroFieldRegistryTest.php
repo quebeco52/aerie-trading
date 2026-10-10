@@ -108,6 +108,7 @@ class MacroFieldRegistryTest extends TestCase
         'boardStampDuty' => 'One tick of stamp duty; sovereign_fund_stamp_duty_to_gdp records the year.',
         'authorityCommitteeSeated' => 'A flag, 1 while politics hands the macro a rate committee; authority_majority records what the committee is.',
         'boardBankLevy' => 'The banks\' levy bill at the rate in force; bank_levy_rate records the rate and corporate_report.bank_levy what each bank paid.',
+        'boardBankCredit' => 'The banks\' loan books, a board input; the Exchequer page shows it over GDP and corporate_report records each bank\'s balance sheet.',
         'strategicStakeCash' => 'One tick of cash from the District\'s strategic stakes, credited to the fund at once.',
         'sovereignFundStabilisationYearStart' => 'The budget year\'s opening level of sovereign_fund_stabilisation_to_gdp, which is recorded.',
         'sovereignFundStabilisationLastChange' => 'Last budget year\'s change in sovereign_fund_stabilisation_to_gdp, which is recorded.',

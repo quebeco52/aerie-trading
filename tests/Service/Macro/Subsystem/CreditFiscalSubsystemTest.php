@@ -2494,4 +2494,109 @@ class CreditFiscalSubsystemTest extends TestCase
         $this->subsystem->calculateSovereignDebt($taxed, 0.25);
         $this->assertEqualsWithDelta(-AssetMarketSubsystem::foreignBuyerTaxRevenueToGdp(0.20), $taxed->primaryDeficitToGdp - $none->primaryDeficitToGdp, 1e-12, 'The budget books it.');
     }
+    // --- Bank rescues ---
+
+    /** At the US's bank credit the median rescue is the US's 2007 one; more lending at home costs more, log-linearly, and a draw spreads it. */
+    public function testARescueCostsTheUsOutlayAtUsCreditAndMoreWithMoreLending(): void
+    {
+        $us = CreditFiscalSubsystem::US_BANK_CREDIT_TO_GDP;
+
+        $this->assertEqualsWithDelta(CreditFiscalSubsystem::US_BANK_RESCUE_COST_TO_GDP, CreditFiscalSubsystem::bankRescueCostToGdp($us, 0.0), 1e-12);
+        $this->assertEqualsWithDelta(exp(CreditFiscalSubsystem::BANK_RESCUE_COST_CREDIT_SEMI_ELASTICITY), CreditFiscalSubsystem::bankRescueCostToGdp($us + 1.0, 0.0) / CreditFiscalSubsystem::bankRescueCostToGdp($us, 0.0), 1e-12, 'A hundred points more credit costs 2.2 times as much.');
+        $this->assertEqualsWithDelta(exp(CreditFiscalSubsystem::BANK_RESCUE_COST_LOG_SD), CreditFiscalSubsystem::bankRescueCostToGdp($us, 1.0) / CreditFiscalSubsystem::bankRescueCostToGdp($us, 0.0), 1e-12);
+        $this->assertSame(CreditFiscalSubsystem::BANK_RESCUE_COST_CEILING, CreditFiscalSubsystem::bankRescueCostToGdp(1.42, 3.0), 'No rescue past the largest on record.');
+    }
+
+    /** The board's loan books are read through the fund's currency bridge; before the board reports, the opening board's. */
+    public function testBankCreditIsTheBoardsLoanBooksOverGdp(): void
+    {
+        $this->assertEqualsWithDelta(1.5, CreditFiscalSubsystem::bankCreditToGdp(3.0e13 * 1.5 * 1.2, 3.0e13, 1.2), 1e-12);
+        $this->assertSame(CreditFiscalSubsystem::DISTRICT_OPENING_BANK_CREDIT_TO_GDP, CreditFiscalSubsystem::bankCreditToGdp(0.0, 3.0e13, 1.0));
+        $this->assertSame(CreditFiscalSubsystem::DISTRICT_OPENING_BANK_CREDIT_TO_GDP, CreditFiscalSubsystem::bankCreditToGdp(1.0e12, 0.0, 1.0), 'No bridge before the fund opens.');
+    }
+
+    /** A crisis draws its rescue on the day, sized to the banks' lending at home. */
+    public function testACrisisDrawsItsRescueOnTheDay(): void
+    {
+        $math = new class extends MathUtility {
+            public function generateStandardNormal(): float { return 0.0; }
+            public function checkProbability(float $probability): bool { return true; }
+        };
+        $subsystem = new class ($math) extends CreditFiscalSubsystem {
+            protected function bankRescueShock(MacroState $state): float { return 0.5; }
+        };
+        $state = new MacroState();
+        $state->totalTime = 12.5;
+        $state->boardBankCredit = 0.0;
+
+        $subsystem->calculateCreditCrisisHazard($state, 1.0 / 3600.0);
+
+        $this->assertEqualsWithDelta(CreditFiscalSubsystem::bankRescueCostToGdp(CreditFiscalSubsystem::DISTRICT_OPENING_BANK_CREDIT_TO_GDP, 0.5), $state->bankRescueCostToGdp, 1e-12);
+    }
+
+    /** The rescue's draw comes from a stream of its own: the run's other shocks are where they were without it. */
+    public function testTheRescueDrawLeavesTheRunsStreamWhereItWas(): void
+    {
+        $state = new MacroState();
+        $state->totalTime = 12.5;
+        $subsystem = new class (new MathUtility()) extends CreditFiscalSubsystem {
+            public function shock(MacroState $state): float { return $this->bankRescueShock($state); }
+        };
+
+        mt_srand(7);
+        $first = $subsystem->shock($state);
+        $next = mt_rand();
+        mt_srand(7);
+        $this->assertSame($next, mt_rand(), 'The run\'s stream is untouched.');
+        $this->assertSame($first, $subsystem->shock($state), 'The same day draws the same rescue.');
+        $state->creditToGdpGapEma = 0.03;
+        $this->assertNotSame($first, $subsystem->shock($state), 'Another boom on the same day draws another rescue.');
+        $state->totalTime = 13.0;
+        $this->assertNotSame($first, $subsystem->shock($state));
+    }
+
+    /** The outlay is borrowed on the crisis's tick, and the share later recovered is held to be sold, not before or after. */
+    public function testTheRescueIsBorrowedOnTheDayAndItsRecoverableShareHeld(): void
+    {
+        $without = $this->neutralBudget(0.60);
+        $with = $this->neutralBudget(0.60);
+        $later = $this->neutralBudget(0.60);
+        foreach ([$without, $with, $later] as $state) {
+            $state->totalTime = 12.5;
+            $state->lastCreditCrisisAt = 12.0;
+            $state->bankRescueCostToGdp = 0.08;
+            $state->bankRescueAssetsToGdp = 0.0;
+        }
+        $with->lastCreditCrisisAt = 12.5;
+
+        $this->subsystem->calculateSovereignDebt($without, 0.25);
+        $this->subsystem->calculateSovereignDebt($with, 0.25);
+
+        $this->assertEqualsWithDelta(0.08, $with->sovereignDebtToGdp - $without->sovereignDebtToGdp, 1e-12, 'The gross outlay is borrowed at once.');
+        $this->assertEqualsWithDelta(CreditFiscalSubsystem::BANK_RESCUE_RECOVERY_SHARE * 0.08, $with->bankRescueAssetsToGdp, 1e-12);
+        $this->assertSame(0.0, $without->bankRescueAssetsToGdp, 'A rescue past is not booked again.');
+        $this->assertEqualsWithDelta($without->primaryDeficitToGdp, $with->primaryDeficitToGdp, 1e-12, 'A rescue is a stock-flow adjustment, not a deficit.');
+    }
+
+    /** What the state holds from its rescues is sold back as a first-order lag, each sale retiring debt. */
+    public function testRescueHoldingsAreSoldBackAndRetireDebt(): void
+    {
+        $none = $this->neutralBudget(0.60);
+        $held = $this->neutralBudget(0.60);
+        foreach ([$none, $held] as $state) {
+            $state->totalTime = 30.0;
+            $state->lastCreditCrisisAt = 20.0;
+            $state->nominalGdpGrowth = 0.0;
+        }
+        $none->bankRescueAssetsToGdp = 0.0;
+        $held->bankRescueAssetsToGdp = 0.04;
+        $dt = 0.25;
+
+        $this->subsystem->calculateSovereignDebt($none, $dt);
+        $this->subsystem->calculateSovereignDebt($held, $dt);
+
+        $sold = 0.04 * (1.0 - exp(-$dt / CreditFiscalSubsystem::BANK_RESCUE_RECOVERY_YEARS));
+        $this->assertEqualsWithDelta(-$sold, $held->sovereignDebtToGdp - $none->sovereignDebtToGdp, 1e-12);
+        $this->assertEqualsWithDelta(0.04 - $sold, $held->bankRescueAssetsToGdp, 1e-12);
+    }
 }

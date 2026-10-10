@@ -1146,4 +1146,19 @@ class CommercialBankBusinessModelTest extends TestCase
         $this->assertSame(0.0, (new \App\Service\Model\Sector\ClearingHouseBusinessModel())->calculateAnnualBankLevy($bank, $macro));
         $this->assertGreaterThan(0.0, (new \App\Service\Model\Sector\InvestmentBankBusinessModel())->calculateAnnualBankLevy($bank, $macro));
     }
+    /** What a deposit bank has lent at home is its loan book; a non-bank lender, a broker and an investment bank lend none a rescue stands behind. */
+    public function testADepositBanksDomesticCreditIsItsLoanBook(): void
+    {
+        $bank = new Stock();
+        $bank->setTicker('LEND');
+        $bank->setWholesaleDebt('100000000000');
+        $bank->setCustomerDeposits('1000000000000');
+        $model = new CommercialBankBusinessModel();
+
+        $this->assertEqualsWithDelta($model->resolveEarningAssets($bank) * (1.0 - CommercialBankBusinessModel::SECURITIES_SHARE_OF_EARNING_ASSETS), $model->domesticBankCredit($bank), 1.0);
+        $this->assertGreaterThan(0.0, $model->domesticBankCredit($bank));
+        $this->assertSame(0.0, (new \App\Service\Model\Sector\ShadowBankBusinessModel())->domesticBankCredit($bank));
+        $this->assertSame(0.0, (new \App\Service\Model\Sector\BrokerageBusinessModel())->domesticBankCredit($bank));
+        $this->assertSame(0.0, (new \App\Service\Model\Sector\InvestmentBankBusinessModel())->domesticBankCredit($bank));
+    }
 }

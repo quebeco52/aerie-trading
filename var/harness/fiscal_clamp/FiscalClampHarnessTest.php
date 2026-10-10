@@ -112,7 +112,7 @@ final class FiscalClampHarnessTest extends KernelTestCase
         $operatorInterval = getenv('SIMCMD') ? 100 : (int) max(1, $tpy / 24);
         $replay = $replayPath !== null ? unserialize((string) gzuncompress((string) file_get_contents($replayPath))) : null;
         $recorded = [];
-        $lastCap = $lastFloat = $lastReturn = $lastDividends = $lastIssuance = $lastDuty = $lastStake = $lastLevy = null;
+        $lastCap = $lastFloat = $lastReturn = $lastDividends = $lastIssuance = $lastDuty = $lastStake = $lastLevy = $lastCredit = null;
         $dead = [];
         $reorgs = [];
         $defaults = [];
@@ -132,7 +132,7 @@ final class FiscalClampHarnessTest extends KernelTestCase
 
         for ($tick = 1; $tick <= $ticks; $tick++) {
             $m = $replay !== null ? $this->withDemandLags($replay[$tick - 1], $dt)
-                : $macro->updateMacroState($dt, $lastCap, $lastFloat, $lastReturn, $lastDividends, $lastIssuance, $lastDuty, $lastStake, $policy, boardBankLevy: $lastLevy);
+                : $macro->updateMacroState($dt, $lastCap, $lastFloat, $lastReturn, $lastDividends, $lastIssuance, $lastDuty, $lastStake, $policy, boardBankLevy: $lastLevy, boardBankCredit: $lastCredit);
             if ($politicsEngine !== null) {
                 $policy = $politicsEngine->updatePolitics($m, $dt)->policy();
             }
@@ -196,6 +196,7 @@ final class FiscalClampHarnessTest extends KernelTestCase
                 $lastDuty = (float) $result['board_stamp_duty'];
                 $lastStake = (float) $result['strategic_stake_cash'];
                 $lastLevy = (float) $result['board_bank_levy'];
+                $lastCredit = (float) $result['board_bank_credit'];
             }
             // CLAMP_OUT: the unclamped corporate-tax target and its parts, one row a quarter (fiscal_clamp/clamp_row.php).
             if (getenv('CLAMP_OUT') && $tick % max(1, intdiv($tpy, 4)) === 0) {

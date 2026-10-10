@@ -107,7 +107,7 @@ class StockTracker
      * @param bool    $recordHistory Whether to persist the new prices to the stock history table.
      * @param MacroStateDTO|null $macroState    The current state of the macroeconomic cycle.
      * 
-     * @return array{updates: array<mixed>, total_cap: float, float_caps: array<string, float>, half_spreads: array<string, float>, fund_flow: array<string, float>, dividend_points: array<string, float>, board_float_cap: float, board_price_return: float, board_dividend_cash: float, board_net_issuance: float, board_stamp_duty: float, board_bank_levy: float, strategic_stake_cash: float, events: array<mixed>, market_vol: float, history: array<mixed>}
+     * @return array{updates: array<mixed>, total_cap: float, float_caps: array<string, float>, half_spreads: array<string, float>, fund_flow: array<string, float>, dividend_points: array<string, float>, board_float_cap: float, board_price_return: float, board_dividend_cash: float, board_net_issuance: float, board_stamp_duty: float, board_bank_levy: float, board_bank_credit: float, strategic_stake_cash: float, events: array<mixed>, market_vol: float, history: array<mixed>}
      */
     public function updateStocks(array $stocks, float $dt, bool $recordHistory, ?\App\DTO\MacroStateDTO $macroState = null, int $tickCount = 0, int $ticksPerYear = 252): array
     {
@@ -149,6 +149,8 @@ class StockTracker
         $boardTradedValue = 0.0;
         // What the board's banks owe a year in bank levy at the rate in force, which the budget books as revenue.
         $boardBankLevy = 0.0;
+        // What the board's deposit-taking banks have lent at home, the claims a bank rescue stands behind.
+        $boardBankCredit = 0.0;
         // Cash the District's strategic stakes pay it: dividends, and its share of buybacks less its share of issues,
         // since it keeps its percentage by tendering and subscribing pro rata. Off the float; paid into the fund.
         $strategicStakeCash = 0.0;
@@ -372,8 +374,9 @@ class StockTracker
                 $events = array_merge($events, $warning);
             }
 
-            $boardBankLevy += \App\Data\Company\Sectors::getBusinessModelStrategy(\App\Data\Company\Sectors::businessModelFor($stock->getIndustry()))
-                ->calculateAnnualBankLevy($stock, $macroDTO);
+            $operatingStrategy = \App\Data\Company\Sectors::getBusinessModelStrategy(\App\Data\Company\Sectors::businessModelFor($stock->getIndustry()));
+            $boardBankLevy += $operatingStrategy->calculateAnnualBankLevy($stock, $macroDTO);
+            $boardBankCredit += $operatingStrategy->domesticBankCredit($stock);
 
             // Earnings Engine
             $generatedEvents = $this->earningsEngine->calculate($stock, $macroDTO, $tickCount, $ticksPerYear);
@@ -628,6 +631,7 @@ class StockTracker
             'board_net_issuance' => $boardNetIssuance,
             'board_stamp_duty' => 2.0 * $macroDTO->stampDutyRate * $boardTradedValue,
             'board_bank_levy' => $boardBankLevy,
+            'board_bank_credit' => $boardBankCredit,
             'strategic_stake_cash' => $strategicStakeCash,
             'events' => $events,
             'market_vol' => $marketVol

@@ -947,6 +947,12 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
         return 1.0 - self::SECURITIES_SHARE_OF_EARNING_ASSETS;
     }
 
+    /** The loan book, a deposit-taking bank's claims on the District's households and firms; the lenders the bank levy is charged on are those banks. */
+    public function domesticBankCredit(Stock $stock): float
+    {
+        return static::PAYS_BANK_LEVY ? $this->resolveEarningAssets($stock) * $this->getLoanShareOfEarningAssets() : 0.0;
+    }
+
     public function getCreditLossHorizonYears(): float
     {
         return self::CECL_LIFETIME_HORIZON_YEARS;

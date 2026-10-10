@@ -531,6 +531,7 @@ class MacroEngine
      * @param float|null $strategicStakeCash Cash the District's strategic stakes paid it on the previous tick (dividends, buybacks less issues), or null.
      * @param GovernmentPolicyDTO|null $policy The government's levers and election pulse as of the previous tick, or null.
      * @param float|null $boardBankLevy     Bank levy the board's banks owe a year at the rate in force, as of the previous tick, or null to keep the last.
+     * @param float|null $boardBankCredit   What the board's deposit-taking banks have lent at home, as of the previous tick, or null to keep the last.
      */
     public function updateMacroState(
         float $dt,
@@ -543,6 +544,7 @@ class MacroEngine
         ?float $strategicStakeCash = null,
         ?GovernmentPolicyDTO $policy = null,
         ?float $boardBankLevy = null,
+        ?float $boardBankCredit = null,
     ): \App\DTO\MacroStateDTO {
         $state = $this->loadState();
 
@@ -563,6 +565,9 @@ class MacroEngine
         $state->strategicStakeCash = $strategicStakeCash ?? 0.0;
         if ($boardBankLevy !== null) {
             $state->boardBankLevy = $boardBankLevy;
+        }
+        if ($boardBankCredit !== null) {
+            $state->boardBankCredit = $boardBankCredit;
         }
 
         // Advance physical simulation time in years

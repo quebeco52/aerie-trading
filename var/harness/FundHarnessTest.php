@@ -79,6 +79,7 @@ final class FundHarnessTest extends KernelTestCase
         $lastDuty = null;
         $lastStake = null;
         $lastLevy = null;
+        $lastCredit = null;
         $boardIndex = 1.0;
         $board = [];
         $quarters = [];
@@ -88,7 +89,7 @@ final class FundHarnessTest extends KernelTestCase
         $t0 = microtime(true);
 
         for ($tick = 1; $tick <= $ticks; $tick++) {
-            $m = $macro->updateMacroState($dt, $lastCap, $lastFloat, $lastReturn, $lastDividends, $lastIssuance, $lastDuty, $lastStake, null, boardBankLevy: $lastLevy);
+            $m = $macro->updateMacroState($dt, $lastCap, $lastFloat, $lastReturn, $lastDividends, $lastIssuance, $lastDuty, $lastStake, null, boardBankLevy: $lastLevy, boardBankCredit: $lastCredit);
             $lastReturn = null;
             $lastDividends = null;
             $lastIssuance = null;
@@ -117,6 +118,7 @@ final class FundHarnessTest extends KernelTestCase
             $lastDuty = (float) $result['board_stamp_duty'];
             $lastStake = (float) $result['strategic_stake_cash'];
             $lastLevy = (float) $result['board_bank_levy'];
+            $lastCredit = (float) $result['board_bank_credit'];
 
             if ($tick === 3 && getenv('SIZEPROBE')) {
                 $gdpDollars = $m->sovereignFundDollarsPerGdp * $m->nominalGdpIndex;

@@ -79,6 +79,7 @@ final class FundMandateTest extends KernelTestCase
         $lastDuty = null;
         $lastStake = null;
         $lastLevy = null;
+        $lastCredit = null;
         $boardIndex = 1.0;
         $board = [];
         $quarters = [];
@@ -98,7 +99,7 @@ final class FundMandateTest extends KernelTestCase
                     reserveFundEquityShare: (float) getenv('MANDATE'),
                 );
             }
-            $m = $macro->updateMacroState($dt, $lastCap, $lastFloat, $lastReturn, $lastDividends, $lastIssuance, $lastDuty, $lastStake, $policy, boardBankLevy: $lastLevy);
+            $m = $macro->updateMacroState($dt, $lastCap, $lastFloat, $lastReturn, $lastDividends, $lastIssuance, $lastDuty, $lastStake, $policy, boardBankLevy: $lastLevy, boardBankCredit: $lastCredit);
             $lastReturn = null;
             $lastDividends = null;
             $lastIssuance = null;
@@ -127,6 +128,7 @@ final class FundMandateTest extends KernelTestCase
             $lastDuty = (float) $result['board_stamp_duty'];
             $lastStake = (float) $result['strategic_stake_cash'];
             $lastLevy = (float) $result['board_bank_levy'];
+            $lastCredit = (float) $result['board_bank_credit'];
 
             if ($tick === 3 && getenv('SIZEPROBE')) {
                 $gdpDollars = $m->sovereignFundDollarsPerGdp * $m->nominalGdpIndex;

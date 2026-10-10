@@ -146,6 +146,12 @@ trait StandardOperatingPhysicsTrait
         return 0.0;
     }
 
+    /** A firm that is not a bank has lent nothing a bank rescue stands behind. */
+    public function domesticBankCredit(Stock $stock): float
+    {
+        return 0.0;
+    }
+
     /** A firm no rule costs productivity carries its committed base at the inputs and wages it is priced at. */
     public function getFixedCostFactor(MacroStateDTO $macroState): float
     {
