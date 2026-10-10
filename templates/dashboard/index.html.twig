@@ -260,6 +260,7 @@
                                     <th class="py-2.5">Action</th>
                                     <th class="py-2.5">Asset</th>
                                     <th class="py-2.5 text-right">Quantity</th>
+                                    <th class="py-2.5 text-right">Stop price</th>
                                     <th class="py-2.5 text-right">Limit price</th>
                                     <th class="py-2.5 text-right">Current price</th>
                                     <th class="py-2.5 text-right">Cancel</th>
@@ -275,10 +276,12 @@
                                             <a href="{{ order.assetType == 'BOND' ? path('app_bond_view', { ticker: order.ticker }) : '/stock/' ~ order.ticker }}" class="font-bold text-on-surface hover:text-primary transition-colors">{{ order.ticker }}</a>
                                         </td>
                                         <td class="py-2.5 text-right font-mono tabular-nums text-on-surface">{{ order.quantity|number_format }}</td>
-                                        <td class="py-2.5 text-right font-mono tabular-nums text-primary font-bold">{{ order.limitPrice|money(2) }}</td>
+                                        {# A stop wakes at its trigger; a stop-limit then fills no worse than its limit, a plain stop at market. #}
+                                        <td class="py-2.5 text-right font-mono tabular-nums {{ order.stopPrice is null ? 'text-on-surface-faint' : 'text-primary font-bold' }}">{{ order.stopPrice|money(2) }}</td>
+                                        <td class="py-2.5 text-right font-mono tabular-nums {{ order.limitPrice is null ? 'text-on-surface-faint' : 'text-primary font-bold' }}">{{ order.limitPrice|money(2) }}</td>
                                         <td class="py-2.5 text-right font-mono tabular-nums {{ livePrices[order.ticker] is defined ? 'text-on-surface' : 'text-on-surface-faint' }}">{{ (livePrices[order.ticker] ?? null)|money(2) }}</td>
                                         <td class="py-2.5 text-right">
-                                            <form action="{{ path('app_trade_cancel', {'id': order.id}) }}" method="POST" onsubmit="return confirm('Cancel this limit order?');">
+                                            <form action="{{ path('app_trade_cancel', {'id': order.id}) }}" method="POST" onsubmit="return confirm('Cancel this {{ order.orderType|replace({'_': ' '})|lower }} order?');">
                                                 <input type="hidden" name="_token" value="{{ csrf_token('cancel_trade_' ~ order.id) }}">
                                                 <button type="submit" class="cursor-pointer px-2.5 py-1 rounded border border-outline-variant/30 text-on-surface-variant hover:text-tertiary hover:border-tertiary/40 text-xs font-medium transition-colors">
                                                     Cancel

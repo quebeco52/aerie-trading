@@ -174,4 +174,19 @@ final class CostBasisCalculatorTest extends TestCase
 
         $this->assertSame([], $this->calculator->realisedByTicker([$buy, $sell]));
     }
+
+    /** An issuer's settlement closes a position like a sale: shares cancelled at nothing realise their whole cost, a short its proceeds. */
+    public function testASettlementRealisesTheLossOfACancelledPositionAndTheGainOfAShort(): void
+    {
+        $realised = $this->calculator->realisedByTicker([
+            $this->order('BUY', 10, '50.00'),
+            TradeOrder::settlement(null, 'STOCK', 'APEX', 'SELL', 10, '0.0000'),
+            $this->order('SHORT', 4, '20.00', 'DEAD'),
+            TradeOrder::settlement(null, 'STOCK', 'DEAD', 'COVER', 4, '0.0000'),
+        ]);
+
+        $this->assertEqualsWithDelta(-500.0, $realised['APEX'], 1e-9);
+        $this->assertEqualsWithDelta(80.0, $realised['DEAD'], 1e-9);
+        $this->assertSame([], $this->calculator->calculate([$this->order('BUY', 10, '50.00'), TradeOrder::settlement(null, 'STOCK', 'APEX', 'SELL', 10, '0.0000')]));
+    }
 }

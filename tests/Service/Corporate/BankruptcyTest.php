@@ -159,6 +159,57 @@ class BankruptcyTest extends TestCase
         $this->assertEquals('570.0000', (string) $buyer->getCashBalance());
     }
 
+    /** A liquidation closes every position, long or short, on a settlement order and tells its holder, before the wipe. */
+    public function testALiquidationSettlesAndTellsEachHolderBeforeThePositionsAreWiped(): void
+    {
+        $stock = $this->buildDefaulter('DEAD', 'Dead Corp', quartersInDefault: 2);
+        $this->debtEngineMock->method('assessGoingConcern')->willReturn($this->going(ebit: -120_000_000.0, ebitda: -80_000_000.0, assetValue: 0.0, cash: 0.0, claims: 2_000_000_000.0));
+        $this->entityManagerMock->method('getRepository')->willReturn($this->tradeOrderRepoMock);
+        $this->tradeOrderRepoMock->method('findOpenByTicker')->willReturn([]);
+        $this->marketEventMock->method('publish')->willReturn(['type' => 'BANKRUPTCY']);
+
+        $sequence = [];
+        $this->connectionMock->method('fetchAllAssociative')->willReturnCallback(function () use (&$sequence): array {
+            $sequence[] = 'read';
+
+            return [['user_id' => 7, 'quantity' => 10], ['user_id' => 8, 'quantity' => -5]];
+        });
+        $this->connectionMock->method('executeStatement')->willReturnCallback(function () use (&$sequence): int {
+            $sequence[] = 'delete';
+
+            return 1;
+        });
+
+        $notifier = new class($this->entityManagerMock, $this->createStub(\Redis::class), new \Psr\Log\NullLogger()) extends \App\Service\Notification\PlayerNotifier {
+            /** @var list<array{0: int, 1: string, 2: ?string}> */
+            public array $queued = [];
+
+            public function queue(int $userId, string $kind, string $title, ?string $body = null, ?string $ticker = null, ?string $link = null): void
+            {
+                $this->queued[] = [$userId, $title, $body];
+            }
+        };
+        $sweep = new FailureSweep($this->entityManagerMock, $this->loggerMock, $this->marketEventMock, $this->debtEngineMock, null, null, new \App\Service\Corporate\ReorganizationEngine(), null, new \App\Service\User\CashLedger(), $notifier);
+
+        $settlements = [];
+        $this->entityManagerMock->method('persist')->willReturnCallback(function (object $entity) use (&$settlements, &$sequence): void {
+            if ($entity instanceof TradeOrder && $entity->getOrigin() === TradeOrder::ORIGIN_SETTLEMENT) {
+                $sequence[] = 'settle';
+                $settlements[] = [$entity->getAction(), (int) $entity->getQuantity(), $entity->getExecutionPrice(), $entity->getStatus()];
+            }
+        });
+
+        $sweep->sweep([$stock], new MacroStateDTO());
+
+        // Read, then a settlement order closing each position at nothing, then the wipe.
+        $this->assertSame(['read', 'settle', 'settle', 'delete'], $sequence);
+        $this->assertSame([['SELL', 10, '0.0000', 'FILLED'], ['COVER', 5, '0.0000', 'FILLED']], $settlements);
+        $this->assertSame([
+            [7, 'DEAD was liquidated', 'Your 10 shares were cancelled. Shareholders receive nothing from the estate.'],
+            [8, 'DEAD was liquidated', 'Your short position of 5 shares was closed with nothing to return.'],
+        ], $notifier->queued);
+    }
+
     public function testTheFailureSweepSkipsAnAlreadyBankruptStock(): void
     {
         $stock = new Stock();

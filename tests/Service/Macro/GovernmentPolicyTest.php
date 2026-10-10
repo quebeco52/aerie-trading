@@ -142,7 +142,9 @@ class GovernmentPolicyTest extends TestCase
         $this->assertSame(0.0, $firm->inflationAnchorDrift);
         $this->assertEqualsWithDelta(MonetaryPolicySubsystem::PRESSURE_ANCHOR_DRIFT_RATE * 0.25, $giving->inflationAnchorDrift, 0.001);
         $this->assertGreaterThan($firm->tipsBreakeven + (0.8 * $giving->inflationAnchorDrift), $giving->tipsBreakeven);
-        $this->assertLessThan($firm->policyRate - 0.003, $giving->policyRate);
+        // The concession cuts the target; the rate closes its partial-adjustment share of that within the quarter.
+        $quarterClosure = 1.0 - exp(-0.25 * MonetaryPolicySubsystem::CB_SMOOTHING_SPEED);
+        $this->assertLessThan($firm->policyRate - (0.5 * $quarterClosure * MonetaryPolicySubsystem::PRESSURE_RATE_CONCESSION), $giving->policyRate);
     }
 
     /** The market's forecast goes in as handed over, the one before it kept for the tick, so a revision can be seen; with no forecast none is carried. */

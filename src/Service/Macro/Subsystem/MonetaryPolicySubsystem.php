@@ -97,8 +97,8 @@ class MonetaryPolicySubsystem
     public const EVANS_RULE_INFLATION_CAP = 0.025;
     /** Unemployment over the NAIRU above which forward guidance holds the rate at the floor: the FOMC's 6.5% threshold (Dec 2012) sat 0.9pp over the 5.6% midpoint of its longer-run range (5.2-6.0), so the hold ends at the same slack however much the NAIRU has scarred. */
     public const EVANS_RULE_UNEMPLOYMENT_GAP = 0.009;
-    /** Partial-adjustment speed of the policy rate toward its target, the same cutting as hiking (US: 15% vs 13% of the distance closed a quarter, se 4-6%): the rate trails its target by a quarter, and like the funds rate (1985-2008) peaks 2q after the gap. */
-    public const CB_SMOOTHING_SPEED = 4.0;
+    /** Partial-adjustment speed of the policy rate toward its target, the same cutting as hiking: 0.65 a year closes 15% of the distance a quarter (US 15% vs 13%, se 4-6%; Clarida-Gali-Gertler 2000 rho ~0.85). */
+    public const CB_SMOOTHING_SPEED = 0.65;
     /** Inflation panic reaction multiplier accelerating rate hikes during extreme inflation spikes. */
     public const CB_INFLATION_PANIC_SCALE = 50.0;
     /** Most the inflation panic adds to the partial-adjustment speed, per year (Volcker-style acceleration). */

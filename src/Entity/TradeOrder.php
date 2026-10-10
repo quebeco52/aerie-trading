@@ -38,6 +38,10 @@ class TradeOrder
     public const ORIGIN_MARGIN_CALL = 'MARGIN_CALL';
     /** Bought back because the lender recalled the stock. */
     public const ORIGIN_BUY_IN = 'BUY_IN';
+    /** Closed by the issuer: shares cancelled in a failure, a bond repaid at maturity or settled in default. */
+    public const ORIGIN_SETTLEMENT = 'SETTLEMENT';
+    /** The order type of an issuer's closing settlement; never one a player can place. */
+    public const TYPE_SETTLEMENT = 'SETTLEMENT';
 
     #[ORM\Id]
     #[ORM\GeneratedValue]
@@ -116,6 +120,26 @@ class TradeOrder
     public function __construct()
     {
         $this->createdAt = new \DateTime();
+    }
+
+    /** The filled order an issuer's settlement closes a position with, at the price per unit it paid out. */
+    public static function settlement(?User $user, string $assetType, string $ticker, string $action, int $quantity, string $price): self
+    {
+        return (new self())
+            ->setUser($user)
+            ->setAssetType($assetType)
+            ->setTicker($ticker)
+            ->setAction($action)
+            ->setOrderType(self::TYPE_SETTLEMENT)
+            ->setOrigin(self::ORIGIN_SETTLEMENT)
+            ->setQuantity($quantity)
+            ->setFilledQuantity($quantity)
+            ->setExecutionPrice($price)
+            ->setSpreadCost('0.0000')
+            ->setImpactCost('0.0000')
+            ->setStampDuty('0.0000')
+            ->setStatus(self::STATUS_FILLED)
+            ->setFilledAt(new \DateTime());
     }
 
     public function getId(): ?int

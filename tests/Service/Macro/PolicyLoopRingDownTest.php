@@ -41,8 +41,10 @@ class PolicyLoopRingDownTest extends TestCase
         $this->assertLessThan(0.5, $response[3], 'Most of a demand kick is gone within a year.');
         $this->assertGreaterThan(-0.25, $trough, 'The swing past zero stays under a quarter of the kick.');
         $this->assertLessThan(0.05, max(array_slice($response, (int) $troughAt)), 'No second swing: after the trough the gap does not come back above trend.');
-        foreach (array_slice($response, 20) as $quarter => $value) {
-            $this->assertLessThan(0.03, abs($value), sprintf('Settled from year five on (quarter %d).', $quarter + 20));
+        // An inertial rule (15% of the distance a quarter) lengthens the climb back from the single trough without a
+        // second swing, so the tail is within 3% of the kick from year six rather than five.
+        foreach (array_slice($response, 24) as $quarter => $value) {
+            $this->assertLessThan(0.03, abs($value), sprintf('Settled from year six on (quarter %d).', $quarter + 24));
         }
     }
 

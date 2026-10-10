@@ -20,7 +20,9 @@ use PHPUnit\Framework\TestCase;
  * The sovereign fund over a lifetime of the real macro engine, against a board that moves on the engine's own
  * market factor: it has to stay a fund of roughly the size it opened at, keep its footprint on the board bounded,
  * rebalance now and then rather than never or constantly, and carry the fiscal consequence the plan states --
- * a budget that no longer borrows for its structural deficit settles on a lower debt.
+ * a budget that no longer borrows for its structural deficit settles on lower net financial liabilities, which is
+ * what the Bohn rule targets. Gross debt need not fall: with net liabilities under the rule's threshold the surplus
+ * response rests, and on 48 seeds gross debt ends about 8pp higher with the fund (var/harness/cbsmooth, 2026-10-10).
  *
  * The board is synthetic on purpose. The whole-ticker harness measures the fund's effect on prices; this pins the
  * fund's own arithmetic over decades, which that harness is far too slow to run in a suite.
@@ -94,14 +96,19 @@ class SovereignFundDynamicsTest extends TestCase
         $this->assertGreaterThan(0.05, $perDecade, 'A fixed-weight rule has to trade sometimes.');
         $this->assertLessThan(6.0, $perDecade, 'A band a 30% relative move trips is not a daily trade.');
 
+        $netWith = $this->median(array_merge(...array_map(static fn (array $run): array => $run['lateNetLiabilities'], $withFund)));
+        $netWithout = $this->median(array_merge(...array_map(static fn (array $run): array => $run['lateNetLiabilities'], $withoutFund)));
+        $this->assertLessThan(
+            $netWithout - (0.5 * SovereignFundSubsystem::OPENING_FUND_TO_GDP),
+            $netWith,
+            'Funding the structural deficit lowers the net liabilities the fiscal rule settles on by at least half the fund it opened with.'
+        );
         $debtWith = $this->median(array_merge(...array_map(static fn (array $run): array => $run['lateDebt'], $withFund)));
-        $debtWithout = $this->median(array_merge(...array_map(static fn (array $run): array => $run['lateDebt'], $withoutFund)));
-        $this->assertLessThan($debtWithout - 0.10, $debtWith, 'Funding the structural deficit lowers the debt the fiscal rule settles on.');
-        $this->assertGreaterThan(0.55, $debtWith, 'Bohn above 0.70 still holds it well off the floor.');
+        $this->assertGreaterThan(0.55, $debtWith, 'Gross debt stays well off the floor.');
     }
 
     /**
-     * @return array{sizes: list<float>, ownership: list<float>, weights: list<float>, weightOwnership: list<float>, rebalances: int, lateDebt: list<float>}
+     * @return array{sizes: list<float>, ownership: list<float>, weights: list<float>, weightOwnership: list<float>, rebalances: int, lateDebt: list<float>, lateNetLiabilities: list<float>}
      */
     private function simulate(int $seed, bool $withFund): array
     {
@@ -134,6 +141,7 @@ class SovereignFundDynamicsTest extends TestCase
         $weights = [];
         $weightOwnership = [];
         $lateDebt = [];
+        $lateNetLiabilities = [];
         $rebalances = 0;
         $lastRebalance = -1.0;
 
@@ -163,11 +171,12 @@ class SovereignFundDynamicsTest extends TestCase
                 }
                 if ($tick > (self::YEARS - 30) * self::TICKS_PER_YEAR) {
                     $lateDebt[] = $macro->sovereignDebtToGdp;
+                    $lateNetLiabilities[] = $macro->sovereignNetFinancialLiabilitiesToGdp;
                 }
             }
         }
 
-        return ['sizes' => $sizes, 'ownership' => $ownership, 'weights' => $weights, 'weightOwnership' => $weightOwnership, 'rebalances' => $rebalances, 'lateDebt' => $lateDebt];
+        return ['sizes' => $sizes, 'ownership' => $ownership, 'weights' => $weights, 'weightOwnership' => $weightOwnership, 'rebalances' => $rebalances, 'lateDebt' => $lateDebt, 'lateNetLiabilities' => $lateNetLiabilities];
     }
 
     /** @param list<float> $values */

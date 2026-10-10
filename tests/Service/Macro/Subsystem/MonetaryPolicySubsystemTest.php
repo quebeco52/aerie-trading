@@ -263,7 +263,12 @@ class MonetaryPolicySubsystemTest extends TestCase
         $newRate = $this->subsystem->updatePolicyRate($state, $negativeTarget, 1.0);
 
         $this->assertGreaterThanOrEqual(MacroEngine::EFFECTIVE_LOWER_BOUND, $newRate, 'Policy rate must not breach the Effective Lower Bound.');
-        $this->assertEqualsWithDelta(MacroEngine::EFFECTIVE_LOWER_BOUND, $newRate, 0.001);
+        // The year's partial adjustment runs toward the floor, not the shadow rate beneath it.
+        $this->assertEqualsWithDelta(
+            MacroEngine::EFFECTIVE_LOWER_BOUND + ((0.005 - MacroEngine::EFFECTIVE_LOWER_BOUND) * exp(-MonetaryPolicySubsystem::CB_SMOOTHING_SPEED)),
+            $newRate,
+            1e-9
+        );
     }
 
     public function testSvenssonTermStructurePreservesShortRateAnchor(): void
@@ -1389,7 +1394,9 @@ class MonetaryPolicySubsystemTest extends TestCase
         $state->policyRate = 0.02;
         $state->inflation = 0.025;
 
-        $this->assertSame(1.0, $this->constraintsFor($state, 0.09)['hikeCeiling'], 'A 700bp distance is far past the 150bp knee.');
+        // The ceiling binds once the partial adjustment would outrun it: past a distance of velocity / speed.
+        $knee = MonetaryPolicySubsystem::CB_MAX_HIKE_VELOCITY / MonetaryPolicySubsystem::CB_SMOOTHING_SPEED;
+        $this->assertSame(1.0, $this->constraintsFor($state, 0.02 + (1.5 * $knee))['hikeCeiling'], 'Half again past the knee.');
         $this->assertSame(0.0, $this->constraintsFor($state, 0.025)['hikeCeiling'], 'A 50bp distance adjusts freely.');
     }
 

@@ -81,6 +81,20 @@ class PlayerNotifier
         $this->pending[] = ['user' => $userId, 'kind' => $kind, 'title' => $title, 'body' => $body, 'ticker' => $ticker, 'link' => $link];
     }
 
+    /**
+     * Queues one message to each holder of a position an issuer's action changed. The holders are read by the caller,
+     * at the action, because the action that closes a position deletes the rows publish() would otherwise read.
+     *
+     * @param iterable<array{user_id: int|string, quantity: int|string|float}> $holders
+     * @param callable(float): string                                            $body    The message for a holding of that signed size.
+     */
+    public function queueForHolders(iterable $holders, string $ticker, string $title, callable $body, string $link): void
+    {
+        foreach ($holders as $holder) {
+            $this->queue((int) $holder['user_id'], Notification::KIND_CORPORATE_ACTION, $title, $body((float) $holder['quantity']), $ticker, $link);
+        }
+    }
+
     /** Queues a story for every account watching the instrument. */
     public function queueForWatchers(string $ticker, string $title, ?string $body, string $link): void
     {

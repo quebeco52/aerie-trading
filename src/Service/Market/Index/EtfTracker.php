@@ -2,6 +2,7 @@
 
 namespace App\Service\Market\Index;
 
+use App\Service\Notification\PlayerNotifier;
 use App\Service\Notification\PriceAlertService;
 use App\Entity\Etf;
 use App\Service\Math\FinancialConstants;
@@ -32,7 +33,9 @@ class EtfTracker
         private \Redis $redis,
         private IndexFundAccountant $accountant,
         /** The arbitrage that keeps the fund near its basket, and the band inside which it does not bother. */
-        private AuthorizedParticipant $authorizedParticipant = new AuthorizedParticipant()
+        private AuthorizedParticipant $authorizedParticipant = new AuthorizedParticipant(),
+        /** Tells each holder their post-split position; null (unit tests) tells no one. */
+        private ?PlayerNotifier $notifier = null
     ) {
     }
 
@@ -342,6 +345,22 @@ class EtfTracker
         // them from the restated book; alert bounds are only rebuilt when they fire, so they are rescaled in place.
         $this->redis->del("limit_bounds:{$ticker}");
         PriceAlertService::restateBoundsForSplit($this->redis, $ticker, $direction === 'forward' ? 1.0 / $factor : $factor);
+
+        if ($this->notifier !== null && $userEtfsTableExists) {
+            $isReverse = $direction !== 'forward';
+            $whole = (int) round($factor);
+            $this->notifier->queueForHolders(
+                $conn->fetchAllAssociative('SELECT user_id, quantity FROM user_etfs WHERE etf_id = :etf_id AND quantity <> 0', ['etf_id' => $etfId]),
+                $ticker,
+                $isReverse ? sprintf('%s consolidated its units 1-for-%d', $ticker, $whole) : sprintf('%s split its units %d-for-1', $ticker, $whole),
+                static fn (float $quantity): string => sprintf(
+                    'You now hold %s units%s.',
+                    number_format($quantity),
+                    $isReverse ? '; any fraction left over was paid in cash' : ''
+                ),
+                PlayerNotifier::assetLink('ETF', $ticker)
+            );
+        }
     }
 
     /**

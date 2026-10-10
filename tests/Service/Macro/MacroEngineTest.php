@@ -1216,7 +1216,9 @@ class MacroEngineTest extends TestCase
         $hikingState->policyRate = 0.02;
         $hikingState->inflation = 0.025;
         $hikingState->outputGap = 0.04;
-        $hike = $this->monetarySubsystem->updatePolicyRate($hikingState, 0.09, $dt) - $hikingState->policyRate;
+        // A target half again past the knee (velocity / speed), where the partial adjustment alone would outrun the cap.
+        $hikeTarget = 0.02 + (1.5 * MonetaryPolicySubsystem::CB_MAX_HIKE_VELOCITY / MonetaryPolicySubsystem::CB_SMOOTHING_SPEED);
+        $hike = $this->monetarySubsystem->updatePolicyRate($hikingState, $hikeTarget, $dt) - $hikingState->policyRate;
 
         $cuttingState = new \App\Service\Macro\MacroState();
         $cuttingState->policyRate = 0.09;
@@ -1224,7 +1226,7 @@ class MacroEngineTest extends TestCase
         $cuttingState->outputGap = -0.04;
         $cut = $cuttingState->policyRate - $this->monetarySubsystem->updatePolicyRate($cuttingState, 0.02, $dt);
 
-        // A 700bp jump in the target: the partial adjustment alone would hike 440bp in the quarter; the FOMC's fastest is 150bp (2022Q3).
+        // The FOMC's fastest quarter is 150bp (2022Q3); cuts are not capped (a 700bp distance).
         $this->assertEqualsWithDelta(MonetaryPolicySubsystem::CB_MAX_HIKE_VELOCITY * $dt, $hike, 1e-12, 'A hike must not outrun 75bp at each of the quarter\'s two meetings.');
         $this->assertEqualsWithDelta((1.0 - exp(-MonetaryPolicySubsystem::CB_SMOOTHING_SPEED * $dt)) * 0.07, $cut, 1e-12, 'Cuts keep the partial-adjustment pace (the Fed cut 200bp in 2008Q1).');
     }

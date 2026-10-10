@@ -6,6 +6,8 @@ namespace App\Service\Market\Bond;
 
 use App\Entity\Bond;
 use App\Entity\CouponPayment;
+use App\Entity\TradeOrder;
+use App\Service\Notification\PlayerNotifier;
 use Doctrine\ORM\EntityManagerInterface;
 
 /**
@@ -18,7 +20,9 @@ use Doctrine\ORM\EntityManagerInterface;
 class BondLedgerService
 {
     public function __construct(
-        private EntityManagerInterface $entityManager
+        private EntityManagerInterface $entityManager,
+        /** Tells each holder the issue has closed and what it paid; null (unit tests) tells no one. */
+        private ?PlayerNotifier $notifier = null
     ) {}
 
     /**
@@ -101,6 +105,34 @@ class BondLedgerService
         $conn = $this->entityManager->getConnection();
 
         $this->distribute($bond, $amountPerBond, $paymentType, $simulationTime, $paidAt);
+        $this->notifyClosedHoldings($bond, $amountPerBond, $paymentType);
+
+        // Each holding closes on a settlement sale at what the issue paid, so the gain or loss against its cost is
+        // realised like any sale. Written before the resting sells below are cancelled, since their bonds count.
+        $conn->executeStatement(
+            "INSERT INTO trade_orders
+                 (user_id, asset_type, ticker, action, order_type, quantity, filled_quantity, execution_price,
+                  spread_cost, impact_cost, stamp_duty, status, created_at, filled_at, origin)
+             SELECT held.user_id, 'BOND', :ticker, 'SELL', :order_type, SUM(held.qty), SUM(held.qty), :price,
+                    0, 0, 0, 'FILLED', :paid_at, :paid_at, :origin
+             FROM (
+                 SELECT user_id, quantity AS qty FROM user_bonds WHERE bond_id = :bond_id AND quantity > 0
+                 UNION ALL
+                 SELECT user_id, (quantity - filled_quantity) AS qty
+                 FROM trade_orders
+                 WHERE ticker = :ticker AND asset_type = 'BOND' AND status = 'OPEN' AND action = 'SELL'
+             ) held
+             GROUP BY held.user_id
+             HAVING SUM(held.qty) > 0",
+            [
+                'ticker' => $bond->getTicker(),
+                'bond_id' => $bond->getId(),
+                'price' => number_format($amountPerBond, 4, '.', ''),
+                'paid_at' => $paidAt->format('Y-m-d H:i:s'),
+                'order_type' => TradeOrder::TYPE_SETTLEMENT,
+                'origin' => TradeOrder::ORIGIN_SETTLEMENT,
+            ]
+        );
 
         // Refund the cash escrowed behind open BUYs before the orders are dropped, otherwise the escrow is
         // simply destroyed along with the row.
@@ -125,6 +157,41 @@ class BondLedgerService
         $conn->executeStatement(
             'DELETE FROM user_bonds WHERE bond_id = :bond_id',
             ['bond_id' => $bond->getId()]
+        );
+    }
+
+    /** One message per holder of a closed issue, bonds escrowed behind an open sell included, as the payment counts them. */
+    private function notifyClosedHoldings(Bond $bond, float $amountPerBond, string $paymentType): void
+    {
+        if ($this->notifier === null) {
+            return;
+        }
+
+        $rows = $this->entityManager->getConnection()->fetchAllAssociative(
+            "SELECT user_id, SUM(qty) AS quantity
+             FROM (
+                 SELECT user_id, quantity AS qty FROM user_bonds WHERE bond_id = :bond_id AND quantity > 0
+                 UNION ALL
+                 SELECT user_id, (quantity - filled_quantity) AS qty
+                 FROM trade_orders
+                 WHERE ticker = :ticker AND asset_type = 'BOND' AND status = 'OPEN' AND action = 'SELL'
+             ) held
+             GROUP BY user_id",
+            ['bond_id' => $bond->getId(), 'ticker' => $bond->getTicker()]
+        );
+        $ticker = $bond->getTicker();
+        $face = max(0.01, (float) $bond->getFaceValue());
+        $recovered = $paymentType === CouponPayment::TYPE_RECOVERY;
+        $this->notifier->queueForHolders(
+            $rows,
+            $ticker,
+            $recovered ? sprintf('%s defaulted and was settled', $ticker) : sprintf('%s matured', $ticker),
+            static function (float $quantity) use ($recovered, $amountPerBond, $face): string {
+                return $recovered
+                    ? sprintf('Your %s bonds were settled at %.1f%% of face, $%s in all.', number_format($quantity), $amountPerBond / $face * 100.0, number_format($quantity * $amountPerBond, 2))
+                    : sprintf('Your %s bonds were repaid at face, $%s in all.', number_format($quantity), number_format($quantity * $amountPerBond, 2));
+            },
+            PlayerNotifier::assetLink('BOND', $ticker)
         );
     }
 

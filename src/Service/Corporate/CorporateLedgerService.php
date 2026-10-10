@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Service\Corporate;
 
 use App\Entity\Stock;
+use App\Service\Notification\PlayerNotifier;
 use App\Service\Notification\PriceAlertService;
 use Doctrine\DBAL\ParameterType;
 use Doctrine\ORM\EntityManagerInterface;
@@ -16,7 +17,9 @@ use Doctrine\ORM\EntityManagerInterface;
 class CorporateLedgerService
 {
     public function __construct(
-        private EntityManagerInterface $entityManager
+        private EntityManagerInterface $entityManager,
+        /** Tells each holder their post-split position; null (unit tests) tells no one. */
+        private ?PlayerNotifier $notifier = null
     ) {}
 
     /**
@@ -331,6 +334,25 @@ class CorporateLedgerService
         } catch (\Exception $e) {
             $conn->rollBack();
             throw $e;
+        }
+
+        if ($this->notifier !== null) {
+            $ticker = $stock->getTicker();
+            $this->notifier->queueForHolders(
+                $conn->fetchAllAssociative(
+                    'SELECT user_id, quantity FROM user_stocks WHERE stock_id = :stock_id AND quantity <> 0',
+                    ['stock_id' => $stock->getId()]
+                ),
+                $ticker,
+                $isReverse ? sprintf('%s consolidated its shares 1-for-%d', $ticker, $factor) : sprintf('%s split its shares %d-for-1', $ticker, $factor),
+                static fn (float $quantity): string => sprintf(
+                    '%s %s shares%s.',
+                    $quantity < 0.0 ? 'Your short position is now' : 'You now hold',
+                    number_format(abs($quantity)),
+                    $isReverse ? '; any fraction left over was paid in cash' : ''
+                ),
+                PlayerNotifier::assetLink('STOCK', $ticker)
+            );
         }
     }
 

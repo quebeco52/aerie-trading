@@ -33,6 +33,8 @@ class Notification
     public const KIND_NEWS = 'NEWS';
     /** A season opened or closed. */
     public const KIND_SEASON = 'SEASON';
+    /** Something the issuer did changed a held position: a split, a failure, a reorganisation, a bond repaid or defaulted. */
+    public const KIND_CORPORATE_ACTION = 'CORPORATE_ACTION';
 
     /** Badge text and tone for each kind, shared by the page and the live toast. */
     private const PRESENTATION = [
@@ -43,6 +45,7 @@ class Notification
         self::KIND_PRICE_ALERT => ['Price alert', 'badge-accent'],
         self::KIND_NEWS => ['Watchlist', 'badge-neutral'],
         self::KIND_SEASON => ['Season', 'badge-accent'],
+        self::KIND_CORPORATE_ACTION => ['Your holdings', 'badge-warn'],
     ];
 
     /** @return array{label: string, tone: string} */

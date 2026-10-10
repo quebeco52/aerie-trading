@@ -9,6 +9,7 @@ use Psr\Log\LoggerInterface;
 use App\Service\Event\MarketEventPublisher;
 use App\Service\Market\Bond\CorporateDefaultService;
 use App\Service\Market\Option\OptionSettlementEngine;
+use App\Service\Notification\PlayerNotifier;
 use App\Service\User\CashLedger;
 
 /**
@@ -33,7 +34,9 @@ class FailureSweep
         /** Cash-settles the options on shares a plan cancels; null (unit tests without an options layer) leaves them. */
         private ?OptionSettlementEngine $optionSettlement = null,
         /** Refunds buy escrow the way a player's own cancel does: the margin loan is repaid first. */
-        private CashLedger $cashLedger = new CashLedger()
+        private CashLedger $cashLedger = new CashLedger(),
+        /** Tells each holder what happened to the position; null (unit tests) tells no one. */
+        private ?PlayerNotifier $notifier = null
     ) {}
 
     /**
@@ -149,7 +152,16 @@ class FailureSweep
         $stock->setCurrentVolatility('0.0000');
         $stock->setCreditRating('D');
 
-        $this->cancelEquity($stock);
+        $holders = $this->cancelEquity($stock);
+        $this->notifier?->queueForHolders(
+            $holders,
+            $stock->getTicker(),
+            sprintf('%s was liquidated', $stock->getTicker()),
+            static fn (float $quantity): string => $quantity > 0.0
+                ? sprintf('Your %s shares were cancelled. Shareholders receive nothing from the estate.', number_format($quantity))
+                : sprintf('Your short position of %s shares was closed with nothing to return.', number_format(abs($quantity))),
+            PlayerNotifier::assetLink('STOCK', $stock->getTicker())
+        );
 
         // Industry consolidation: the failed firm's plant leaves the capacity balance, its demand does not,
         // and the survivors sell into a tighter market at a better price. A reorganized firm keeps operating
@@ -189,9 +201,12 @@ class FailureSweep
         $plan = $this->reorganizationEngine->planReorganization($stock, $macroState, $going);
         $priceBefore = (float) $stock->getPrice();
 
+        $holders = [];
         if ($plan->oldEquityShare <= 0.0) {
-            $this->cancelEquity($stock);
+            $holders = $this->cancelEquity($stock);
             $this->optionSettlement?->settleCancelledUnderlying($stock);
+        } elseif ($this->notifier !== null) {
+            $holders = array_map(static fn (array $row): array => ['user_id' => (int) $row['user_id'], 'quantity' => (int) $row['quantity']], $this->holdersOf($stock));
         }
 
         $openingPrice = $this->reorganizationEngine->applyPlan($stock, $plan);
@@ -221,6 +236,21 @@ class FailureSweep
         };
         $eventDesc .= $this->describeSettledIssues($settledIssues);
 
+        $retained = $plan->oldEquityShare;
+        $this->notifier?->queueForHolders(
+            $holders,
+            $stock->getTicker(),
+            sprintf('%s was reorganised', $stock->getTicker()),
+            static fn (float $quantity): string => match (true) {
+                $retained <= 0.0 => $quantity > 0.0
+                    ? sprintf('Your %s shares were cancelled and the creditors now own the company.', number_format($quantity))
+                    : sprintf('Your short position of %s shares was closed with nothing to return.', number_format(abs($quantity))),
+                $retained >= 1.0 => sprintf('Your %s shares are unchanged; the creditors were repaid in full.', number_format(abs($quantity))),
+                default => sprintf('You keep your %s shares; the old shareholders now own %.1f%% of the company.', number_format(abs($quantity)), $retained * 100.0),
+            },
+            PlayerNotifier::assetLink('STOCK', $stock->getTicker())
+        );
+
         $changePercent = $plan->oldEquityShare <= 0.0
             ? -100.0
             : (($openingPrice / max(0.01, $priceBefore)) - 1.0) * 100.0;
@@ -230,31 +260,72 @@ class FailureSweep
         ];
     }
 
-    /**
-     * Cancels the old equity: open orders are cancelled with buy escrow refunded, and every position is wiped.
-     */
-    private function cancelEquity(Stock $stock): void
+    /** @return list<array{user_id: int|string, quantity: int|string}> Every open position in the shares, shorts included. */
+    private function holdersOf(Stock $stock): array
     {
+        /** @var list<array{user_id: int|string, quantity: int|string}> */
+        return $this->entityManager->getConnection()->fetchAllAssociative(
+            'SELECT user_id, quantity FROM user_stocks WHERE stock_id = :id AND quantity <> 0',
+            ['id' => $stock->getId()]
+        );
+    }
+
+    /**
+     * Cancels the old equity: open orders are cancelled with buy escrow refunded, and every position is wiped. Each
+     * position closes on a settlement order at nothing, so the loss (or a short's gain) is realised like any sale.
+     *
+     * @return list<array{user_id: int, quantity: int}> The positions wiped, shares escrowed behind a resting sell included.
+     */
+    private function cancelEquity(Stock $stock): array
+    {
+        /** @var array<int, int> $positions */
+        $positions = [];
+        foreach ($this->holdersOf($stock) as $row) {
+            $positions[(int) $row['user_id']] = (int) $row['quantity'];
+        }
+
         $openOrders = $this->entityManager->getRepository(\App\Entity\TradeOrder::class)
             ->findOpenByTicker($stock->getTicker());
 
         foreach ($openOrders as $order) {
+            $user = $order->getUser();
             // A buy stop (plain or stop-limit) escrowed nothing, so only a resting limit buy has cash to return.
             if ($order->getAction() === 'BUY' && !$order->isStop() && $order->getLimitPrice()) {
-                $user = $order->getUser();
                 if ($user) {
                     $this->cashLedger->credit($user, \bcmul((string) $order->getLimitPrice(), (string) $order->getQuantity(), 4));
                     $this->entityManager->persist($user);
                 }
             }
+            // Shares escrowed behind a resting sell are still the seller's, and are cancelled with the rest.
+            if ($order->getAction() === 'SELL' && $user?->getId() !== null) {
+                $positions[$user->getId()] = ($positions[$user->getId()] ?? 0) + (int) $order->getQuantity() - (int) $order->getFilledQuantity();
+            }
             $order->setStatus(\App\Entity\TradeOrder::STATUS_CANCELLED);
             $this->entityManager->persist($order);
+        }
+
+        $holders = [];
+        foreach ($positions as $userId => $quantity) {
+            if ($quantity === 0) {
+                continue;
+            }
+            $holders[] = ['user_id' => $userId, 'quantity' => $quantity];
+            $this->entityManager->persist(\App\Entity\TradeOrder::settlement(
+                $this->entityManager->getReference(\App\Entity\User::class, $userId),
+                'STOCK',
+                $stock->getTicker(),
+                $quantity > 0 ? 'SELL' : 'COVER',
+                abs($quantity),
+                '0.0000'
+            ));
         }
 
         $this->entityManager->getConnection()->executeStatement(
             'DELETE FROM user_stocks WHERE stock_id = :id',
             ['id' => $stock->getId()]
         );
+
+        return $holders;
     }
 
     /**
