@@ -2827,4 +2827,35 @@ class CreditFiscalSubsystemTest extends TestCase
         $this->assertSame(0.0, CreditFiscalSubsystem::purchasesTarget($state->publicSpendingShare, 4.0, true, 0.0));
         $this->assertEqualsWithDelta($surplus - $state->publicSpendingShare, CreditFiscalSubsystem::fiscalStance($state), 1e-12);
     }
+
+    /**
+     * Each revenue line is struck on its stated base (publicAccounts()): the bank levy on the board's banks, read as a
+     * share of GDP, and every other line on the economy, which the board's books do not reach.
+     */
+    public function testEachRevenueLineIsStruckOnItsStatedBase(): void
+    {
+        $state = $this->neutralBudget(0.60);
+        $state->sovereignFundDollarsPerGdp = 2.0e13;
+        $state->boardBankLevy = 3.0e10;
+        $state->boardBankCredit = 2.0e13;
+        $state->importTariffRate = 0.05;
+        $state->carbonPrice = 40.0;
+        $state->foreignBuyerTaxRate = 0.15;
+        $state->dividendTaxRate = 0.20;
+        $base = CreditFiscalSubsystem::publicAccounts($state, 0.25);
+        $lines = static fn (\App\DTO\PublicAccountsDTO $a): array => [$a->netTaxes, $a->corporateTax, $a->tariffs, $a->carbonPrice, $a->dividendTax, $a->foreignBuyerTax, $a->centralBankRemittance];
+
+        $biggerBoard = clone $state;
+        $biggerBoard->boardBankLevy *= 2.0;
+        $biggerBoard->boardBankCredit *= 2.0;
+        $board = CreditFiscalSubsystem::publicAccounts($biggerBoard, 0.25);
+        $this->assertEqualsWithDelta(2.0 * $base->bankLevy, $board->bankLevy, 1e-15, 'The levy is the board\'s banks\' bill.');
+        $this->assertSame($lines($base), $lines($board), 'No other line reads the board.');
+
+        $biggerEconomy = clone $biggerBoard;
+        $biggerEconomy->nominalGdpIndex *= 2.0;
+        $economy = CreditFiscalSubsystem::publicAccounts($biggerEconomy, 0.25);
+        $this->assertEqualsWithDelta($base->bankLevy, $economy->bankLevy, 1e-15, 'Read as a share of the GDP it is set against.');
+        $this->assertSame($lines($base), $lines($economy), 'The economy-wide lines are shares of GDP already.');
+    }
 }

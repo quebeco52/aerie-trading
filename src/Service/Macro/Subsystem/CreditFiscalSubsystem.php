@@ -727,6 +727,13 @@ class CreditFiscalSubsystem
      * first-order lag, each sale retiring debt. The Monetary Authority pays over its net interest income
      * (centralBankRemittance()).
      *
+     * A line is struck on the board's own books where the listed firms are the whole of its base: the bank levy on the
+     * deposit banks' balance sheets (as the rescue's cost is on their loans), and the stamp duty on the exchange's
+     * trades, which is paid to the fund rather than here. Where the board is only a sample of the base, the line is a
+     * share of GDP: net taxes, the corporate rate on the economy's profits, tariffs on imports, the carbon price on the
+     * power sector's emissions, the dividend tax on what all taxable holders are paid, and the tax on foreign buyers on
+     * the homes they buy. The fund's contribution and the remittance are the state's own institutions' accounts.
+     *
      * @param MacroState|MacroStateDTO $state The macro state, live or as published.
      * @param float                    $dt    Time increment in years, for this step's one-off adjustments.
      */
