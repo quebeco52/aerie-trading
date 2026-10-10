@@ -154,9 +154,9 @@ class CorporateLedgerServiceTest extends TestCase
         $this->connectionMock->expects($this->once())->method('commit');
         $this->connectionMock->expects($this->never())->method('rollBack');
 
-        // Forward split executes 5 SQL statements: user_stocks, stock_history, corporate_report, open
-        // trade_orders, and the filled trade_orders the cost basis is derived from.
-        $this->connectionMock->expects($this->exactly(5))
+        // Forward split executes 6 SQL statements: user_stocks, stock_history, corporate_report, open
+        // trade_orders, the filled trade_orders the cost basis is derived from, and the price alerts.
+        $this->connectionMock->expects($this->exactly(6))
             ->method('executeStatement')
             ->with(
                 $this->stringContains('UPDATE'),
@@ -183,12 +183,71 @@ class CorporateLedgerServiceTest extends TestCase
                 ['id' => 2, 'user_id' => 102, 'quantity' => 20],
             ]);
 
-        // 1 holdings cashout + 9 bulk updates (escrow remnant refund, then the eight rewrites, the last
-        // of which restates filled trade_orders) = 10 calls
-        $this->connectionMock->expects($this->exactly(10))
+        // 1 holdings cashout + 10 bulk updates (escrow remnant refund, the eight rewrites, the last of which
+        // restates filled trade_orders, then the price alerts) = 11 calls
+        $this->connectionMock->expects($this->exactly(11))
             ->method('executeStatement');
 
         $this->service->processStockSplit($stock, 10.0, true, 2.50);
+    }
+
+    /**
+     * A split restates every trigger in the new units: a resting stop and a waiting alert keep their distance from
+     * the price instead of firing on the split itself.
+     */
+    public function testAForwardSplitRestatesStopPricesAndAlerts(): void
+    {
+        $stock = new Stock();
+        $stock->setTicker('SPLIT_CORP');
+
+        $statements = [];
+        $this->connectionMock->method('executeStatement')
+            ->willReturnCallback(static function (string $sql, array $params) use (&$statements): int {
+                $statements[] = [$sql, $params];
+
+                return 1;
+            });
+
+        $this->service->processStockSplit($stock, 2.0, false);
+
+        $openOrders = array_values(array_filter($statements, static fn (array $s): bool => str_contains($s[0], "status = 'OPEN'")));
+        $this->assertCount(1, $openOrders);
+        $this->assertStringContainsString('stop_price = ROUND(stop_price / :factor, 4)', $openOrders[0][0]);
+
+        $alerts = array_values(array_filter($statements, static fn (array $s): bool => str_contains($s[0], 'price_alerts')));
+        $this->assertCount(1, $alerts);
+        $this->assertStringContainsString('target_price = ROUND(target_price / :factor, 4)', $alerts[0][0]);
+        $this->assertSame(2, $alerts[0][1]['factor']);
+    }
+
+    /** A buy stop escrowed no cash, so a reverse split's remnant refund pays it nothing; its stop is restated. */
+    public function testAReverseSplitRefundsNoRemnantOnABuyStopAndRestatesItsStop(): void
+    {
+        $stock = new Stock();
+        $stock->setTicker('REV_CORP');
+
+        $this->connectionMock->method('fetchAllAssociative')->willReturn([]);
+        $statements = [];
+        $this->connectionMock->method('executeStatement')
+            ->willReturnCallback(static function (string $sql, array $params) use (&$statements): int {
+                $statements[] = [$sql, $params];
+
+                return 1;
+            });
+
+        $this->service->processStockSplit($stock, 10.0, true, 2.50);
+
+        $refund = array_values(array_filter($statements, static fn (array $s): bool => str_contains($s[0], 'remnant_value')));
+        $this->assertCount(1, $refund);
+        $this->assertStringContainsString("o.action = 'BUY' AND o.order_type NOT IN ('STOP', 'STOP_LIMIT')", $refund[0][0]);
+
+        $restate = array_values(array_filter($statements, static fn (array $s): bool => str_contains($s[0], 'SET limit_price = ROUND(limit_price * :factor, 4)')));
+        $this->assertCount(1, $restate);
+        $this->assertStringContainsString('stop_price = ROUND(stop_price * :factor, 4)', $restate[0][0]);
+
+        $alerts = array_values(array_filter($statements, static fn (array $s): bool => str_contains($s[0], 'price_alerts')));
+        $this->assertStringContainsString('target_price = ROUND(target_price * :factor, 4)', $alerts[0][0]);
+        $this->assertSame(10, $alerts[0][1]['factor']);
     }
 
     public function testProcessStockSplitRollsBackOnException(): void

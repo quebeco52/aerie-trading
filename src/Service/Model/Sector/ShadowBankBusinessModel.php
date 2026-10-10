@@ -356,6 +356,7 @@ class ShadowBankBusinessModel extends CommercialBankBusinessModel
         return [
             'bank_capital_requirement',
             'commercial_property_index_ema',
+            'consumer_price_level',
             'corporate_default_rate_ema',
             'countercyclical_buffer_rate',
             'housing_starts_index_ema',

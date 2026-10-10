@@ -118,6 +118,49 @@ class DebtEngineTest extends TestCase
         $this->assertSame('A', $stock->getCreditRating());
     }
 
+    /**
+     * The rating reads leverage, not just the equity market: an operating firm at 3-4x net debt to EBITDA anchors at
+     * BB however far its distance to default runs. A regulated utility is anchored on the excellent row instead.
+     */
+    public function testLeverageCapsTheRatingAndAUtilityIsAnchoredOnTheExcellentRow(): void
+    {
+        $macroState = new MacroStateDTO(policyRateEma: 0.04, corporateTaxRate: 0.21, yield5yEma: 0.04);
+        $rate = function (?string $industry, string $from) use ($macroState): array {
+            $stock = new Stock();
+            $stock->setTicker('LEV');
+            if ($industry !== null) {
+                $stock->setIndustry($industry);
+            }
+            $stock->setCreditRating($from);
+            $stock->setTotalEquity('200000000');
+            $stock->setWholesaleDebt('80000000');
+            // Retained earnings put the Altman Z'' in the safe zone, so its grey-zone cap does not decide the test.
+            $stock->setRetainedEarnings('100000000');
+            $stock->setTotalRevenue('100000000');
+            $stock->setOperatingMargin('0.10');
+            $stock->setVolatility('0.15');
+            $stock->setSharesOutstanding('1000000');
+            $stock->setPrice('200.00');
+            $this->assertGreaterThan(CreditRatingAgency::THRESHOLD_AAA, $this->engine->resolveDistanceToDefault($stock, $macroState));
+
+            $metrics = $this->engine->calculateInterestExpense($stock, $macroState, true);
+            $this->assertSame('Safe', $this->engine->calculateAltmanZScore($stock, $metrics->ebit, 100_000_000.0, 200.0)['zone']);
+
+            return [$stock->getCreditRating(), $metrics->ebitda];
+        };
+
+        [$rating, $ebitda] = $rate(null, 'A');
+        $this->assertGreaterThanOrEqual(3.0, 80_000_000.0 / $ebitda);
+        $this->assertLessThan(4.0, 80_000_000.0 / $ebitda);
+        $this->assertSame('BBB', $rating, 'one notch toward the BB anchor');
+
+        // The utility's own EBITDA, on the excellent row: from AAA it moves one notch toward that anchor.
+        [$rating, $ebitda] = $rate('Utilities - Regulated Electric', 'AAA');
+        $anchor = CreditRatingAgency::financialRiskAnchor(80_000_000.0, $ebitda, true);
+        $this->assertNotSame($anchor, CreditRatingAgency::financialRiskAnchor(80_000_000.0, $ebitda, false));
+        $this->assertSame('AA', $rating);
+    }
+
     public function testZeroDebtHealthyCompanyUpgradesOnAdvanceMaturity(): void
     {
         $stock = new Stock();

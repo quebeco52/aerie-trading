@@ -97,7 +97,7 @@ class RetailInsuranceBusinessModel extends InsuranceBusinessModel
         // A primary carrier renews its book annually and holds the harder rate well past the loss; the rate
         // reaches the P&L through the pricing-power multiplier, so a capital shortfall is not discounted here.
         $surplusDeficitRatio = $this->resolveSurplusDeficitRatio($expectedRevenue, (float) $stock->getTotalEquity());
-        $this->advanceUnderwritingCycle($streams, $stock, $macroState, $surplusDeficitRatio, $recovery > 0.0);
+        $this->advanceUnderwritingCycle($streams, $stock, $macroState, $mathUtility, $surplusDeficitRatio, $recovery > 0.0);
 
         $clampedMargin = $this->clampMargin($realizedVariableMargin + $claims['excess'] - $recovery + $reinstatementPremium);
         // The baseline cost ratio splits as the parent's does; the claims above it are losses.

@@ -109,7 +109,7 @@ class ReinsuranceBusinessModel extends InsuranceBusinessModel
         // harder rate reaches treaty revenue through the pricing-power multiplier, which the cost base does
         // not follow; a capital shortfall is not added to revenue again here.
         $surplusDeficitRatio = $this->resolveSurplusDeficitRatio($expectedRevenue, (float) $stock->getTotalEquity());
-        $this->advanceUnderwritingCycle($streams, $stock, $macroState, $surplusDeficitRatio, $coverAttached);
+        $this->advanceUnderwritingCycle($streams, $stock, $macroState, $mathUtility, $surplusDeficitRatio, $coverAttached);
 
         $treatyRevenue  = max(0.0, $expectedRevenue * $treatyWeight * (1.0 + ($treatyZ * ($baselineVol * self::TREATY_VARIANCE_SCALAR))));
         $catBondRevenue = max(0.0, $expectedRevenue * $catBondWeight * (1.0 + ($catBondZ * ($baselineVol * self::CAT_BOND_VARIANCE_SCALAR))) * $catBondMultiplier);

@@ -253,8 +253,8 @@ class EtfTrackerTest extends TestCase
         $this->connectionMock->expects($this->once())->method('beginTransaction');
         $this->connectionMock->expects($this->once())->method('commit');
 
-        // user_etfs + etf_history + the two order-book restatements (open orders, executed history)
-        $this->connectionMock->expects($this->exactly(4))
+        // user_etfs + etf_history + the two order-book restatements (open orders, executed history) + price alerts
+        $this->connectionMock->expects($this->exactly(5))
             ->method('executeStatement')
             ->with($this->stringContains('UPDATE'));
 
@@ -279,9 +279,9 @@ class EtfTrackerTest extends TestCase
         $this->connectionMock->expects($this->once())->method('beginTransaction');
         $this->connectionMock->expects($this->once())->method('commit');
 
-        // Order book first (escrow remnant refund, open rescale, cancel the emptied, executed history),
-        // then cashout + user_etfs quantity + delete 0 quantity + history update = 8 statements
-        $this->connectionMock->expects($this->exactly(8))
+        // Order book first (escrow remnant refund, open rescale, cancel the emptied, executed history), price
+        // alerts, then cashout + user_etfs quantity + delete 0 quantity + history update = 9 statements
+        $this->connectionMock->expects($this->exactly(9))
             ->method('executeStatement');
 
         $totalMarketCap = 100_000_000.0;

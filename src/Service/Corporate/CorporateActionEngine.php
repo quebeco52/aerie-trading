@@ -2,6 +2,7 @@
 
 namespace App\Service\Corporate;
 
+use App\Service\Notification\PriceAlertService;
 use App\Entity\Stock;
 use Doctrine\ORM\EntityManagerInterface;
 use App\Service\Macro\MacroEngine;
@@ -151,6 +152,7 @@ class CorporateActionEngine
         $this->corporateLedgerService->processStockSplit($stock, (float) $splitFactor, false);
 
         $this->adjustRedisBuffer($stock->getTicker(), $splitFactor, 'divide');
+        $this->restateTriggerBounds($stock->getTicker(), 1.0 / $splitFactor);
 
         return ['price' => $newPrice, 'shares' => $sharesOutstanding, 'event' => $splitEvent];
     }
@@ -208,10 +210,22 @@ class CorporateActionEngine
         $this->corporateLedgerService->processStockSplit($stock, (float) $splitFactor, true, $oldPrice);
 
         $this->adjustRedisBuffer($stock->getTicker(), $splitFactor, 'multiply');
+        $this->restateTriggerBounds($stock->getTicker(), (float) $splitFactor);
 
         return ['price' => $newPrice, 'shares' => (float) $sharesOutstanding, 'event' => $splitEvent];
     }
 
+
+    /**
+     * Brings the cached trigger levels into post-split units. The resting-order bounds are dropped, which makes the
+     * next tick check the book once and rewrite them from the restated orders; alert bounds are only rebuilt when
+     * they fire, so they are rescaled in place.
+     */
+    private function restateTriggerBounds(string $ticker, float $priceFactor): void
+    {
+        $this->redis->del("limit_bounds:{$ticker}");
+        PriceAlertService::restateBoundsForSplit($this->redis, $ticker, $priceFactor);
+    }
 
     /**
      * Mutates the live Redis chart buffer to prevent massive visual vertical spikes on the UI during a split.

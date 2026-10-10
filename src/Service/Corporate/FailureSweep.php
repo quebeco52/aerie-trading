@@ -9,6 +9,7 @@ use Psr\Log\LoggerInterface;
 use App\Service\Event\MarketEventPublisher;
 use App\Service\Market\Bond\CorporateDefaultService;
 use App\Service\Market\Option\OptionSettlementEngine;
+use App\Service\User\CashLedger;
 
 /**
  * The failure sweep: decides which listed companies fail this pass and carries the failure through —
@@ -30,7 +31,9 @@ class FailureSweep
         /** Puts a confirmed Chapter 11 plan into effect; stateless, so a unit test gets the real one. */
         private \App\Service\Corporate\ReorganizationEngine $reorganizationEngine = new \App\Service\Corporate\ReorganizationEngine(),
         /** Cash-settles the options on shares a plan cancels; null (unit tests without an options layer) leaves them. */
-        private ?OptionSettlementEngine $optionSettlement = null
+        private ?OptionSettlementEngine $optionSettlement = null,
+        /** Refunds buy escrow the way a player's own cancel does: the margin loan is repaid first. */
+        private CashLedger $cashLedger = new CashLedger()
     ) {}
 
     /**
@@ -236,11 +239,11 @@ class FailureSweep
             ->findOpenByTicker($stock->getTicker());
 
         foreach ($openOrders as $order) {
-            if ($order->getAction() === 'BUY' && $order->getLimitPrice()) {
+            // A buy stop (plain or stop-limit) escrowed nothing, so only a resting limit buy has cash to return.
+            if ($order->getAction() === 'BUY' && !$order->isStop() && $order->getLimitPrice()) {
                 $user = $order->getUser();
                 if ($user) {
-                    $escrowCashStr = \bcmul((string) $order->getLimitPrice(), (string) $order->getQuantity(), 4);
-                    $user->setCashBalance(\bcadd((string) $user->getCashBalance(), $escrowCashStr, 4));
+                    $this->cashLedger->credit($user, \bcmul((string) $order->getLimitPrice(), (string) $order->getQuantity(), 4));
                     $this->entityManager->persist($user);
                 }
             }

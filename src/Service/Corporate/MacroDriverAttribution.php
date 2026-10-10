@@ -26,8 +26,8 @@ final class MacroDriverAttribution
         'equity_wealth_ratio' => 'equity_wealth_trend',
     ];
 
-    /** Trend series: the reference other readings are measured against, never a driver of their own. */
-    public const TREND_FIELDS = ['equity_wealth_trend'];
+    /** Trend series and the price level: references other readings are measured against, never a driver of their own. */
+    public const TREND_FIELDS = ['equity_wealth_trend', 'consumer_price_level'];
 
     /** @var array<string, mixed>|null */
     private static ?array $steadyState = null;

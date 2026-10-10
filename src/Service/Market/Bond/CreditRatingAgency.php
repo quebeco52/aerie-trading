@@ -36,6 +36,14 @@ class CreditRatingAgency
     /** Altman Z''-Score threshold below which a firm is in the grey zone (speculative ceiling BB). */
     public const ALTMAN_GREY_THRESHOLD = 2.60;
 
+    // --- Business Risk / Financial Risk Matrix (S&P, "Business Risk/Financial Risk Matrix Expanded", 2009) ---
+    /** Debt/EBITDA upper bounds of the financial risk profiles: minimal <1.5x, modest 1.5-2x, intermediate 2-3x, significant 3-4x, aggressive 4-5x, highly leveraged above. */
+    public const FINANCIAL_RISK_DEBT_TO_EBITDA_BOUNDS = [1.5, 2.0, 3.0, 4.0, 5.0];
+    /** Anchors for an excellent business risk profile, S&P's assessment of rate-regulated utilities: AAA, AA, A, A-, BBB, and BB for the blank highly leveraged cell, at whole-letter grades. */
+    public const EXCELLENT_BUSINESS_RISK_ANCHORS = ['AAA', 'AA', 'A', 'A', 'BBB', 'BB'];
+    /** Anchors for a satisfactory business risk profile, "typical of a low investment-grade industrial issuer": A-, BBB+, BBB, BB+, BB-, B+ at whole-letter grades. */
+    public const SATISFACTORY_BUSINESS_RISK_ANCHORS = ['A', 'BBB', 'BBB', 'BB', 'BB', 'B'];
+
     // --- Rating Hierarchy ---
     /** Discrete numerical ranks for credit rating brackets from highest (AAA=7) to default (D=0). */
     public const RATING_RANKS = [
@@ -57,9 +65,10 @@ class CreditRatingAgency
      * @param float       $distanceToDefault The continuous Distance to Default score (d2) from Merton's model.
      * @param float|null  $altmanZScore      The company's Altman Z''-score for accounting solvency.
      * @param string|null $altmanZone        That score's zone as the firm's OWN model classified it.
+     * @param string|null $leverageAnchor    Ceiling from the firm's leverage (financialRiskAnchor()); null for a firm rated on its capital.
      * @return string|null The new credit rating bracket if a transition occurred, or null if the rating stayed the same.
      */
-    public function evaluateRating(Stock $stock, float $distanceToDefault, ?float $altmanZScore = null, ?string $altmanZone = null): ?string
+    public function evaluateRating(Stock $stock, float $distanceToDefault, ?float $altmanZScore = null, ?string $altmanZone = null, ?string $leverageAnchor = null): ?string
     {
         $oldRating = $stock->getCreditRating();
 
@@ -80,6 +89,12 @@ class CreditRatingAgency
 
         // 2. Fundamental & Balance Sheet Solvency Caps
         $capRank = 7; // AAA default ceiling
+
+        // The agencies rate on leverage against the business, not on the equity market: a Merton distance to default
+        // reads a low-debt, low-volatility firm as near riskless, so the market-implied grade only ever lowers this.
+        if ($leverageAnchor !== null) {
+            $capRank = min($capRank, self::RATING_RANKS[$leverageAnchor] ?? $capRank);
+        }
 
         // A company with negative book equity is balance sheet insolvent
         if ((float) $stock->getTotalEquity() <= 0.0) {
@@ -134,6 +149,31 @@ class CreditRatingAgency
         }
 
         return null;
+    }
+
+    /**
+     * The rating S&P's business risk/financial risk matrix anchors a firm at, from its net debt to EBITDA. A firm
+     * with no debt is minimal financial risk; one with debt and no EBITDA is highly leveraged.
+     */
+    public static function financialRiskAnchor(float $netDebt, float $ebitda, bool $excellentBusinessRisk): string
+    {
+        $bounds = self::FINANCIAL_RISK_DEBT_TO_EBITDA_BOUNDS;
+        if ($netDebt <= 0.0) {
+            $profile = 0;
+        } elseif ($ebitda <= 0.0) {
+            $profile = count($bounds);
+        } else {
+            $leverage = $netDebt / $ebitda;
+            $profile = count($bounds);
+            foreach ($bounds as $i => $bound) {
+                if ($leverage < $bound) {
+                    $profile = $i;
+                    break;
+                }
+            }
+        }
+
+        return ($excellentBusinessRisk ? self::EXCELLENT_BUSINESS_RISK_ANCHORS : self::SATISFACTORY_BUSINESS_RISK_ANCHORS)[$profile];
     }
 
     /**

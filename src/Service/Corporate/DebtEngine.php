@@ -152,7 +152,7 @@ class DebtEngine
             if ($this->creditRatingAgency !== null && $advanceMaturity) {
                 $oldRating = $stock->getCreditRating();
                 $zScoreData = $this->calculateAltmanZScore($stock, $ebit, $revenue, (float) $stock->getPrice());
-                $newRating = $this->creditRatingAgency->evaluateRating($stock, 10.0, $zScoreData['z_score'], $zScoreData['zone']);
+                $newRating = $this->creditRatingAgency->evaluateRating($stock, 10.0, $zScoreData['z_score'], $zScoreData['zone'], self::leverageAnchor($stock, $strategy, 0.0, $ebitda));
                 if ($newRating !== null && $this->marketEventPublisher !== null) {
                     $isDowngrade = $this->creditRatingAgency->isDowngrade($oldRating, $newRating);
                     $eventType = $isDowngrade ? 'CREDIT_DOWNGRADE' : 'CREDIT_UPGRADE';
@@ -202,7 +202,7 @@ class DebtEngine
         if ($this->creditRatingAgency !== null && $advanceMaturity) {
             $oldRating = $stock->getCreditRating();
             $zScoreData = $this->calculateAltmanZScore($stock, $ebit, $revenue, (float) $stock->getPrice());
-            $newRating = $this->creditRatingAgency->evaluateRating($stock, $distanceToDefault, $zScoreData['z_score'], $zScoreData['zone']);
+            $newRating = $this->creditRatingAgency->evaluateRating($stock, $distanceToDefault, $zScoreData['z_score'], $zScoreData['zone'], self::leverageAnchor($stock, $strategy, $netDebt, $ebitda));
             if ($newRating !== null && $this->marketEventPublisher !== null) {
                 $isDowngrade = $this->creditRatingAgency->isDowngrade($oldRating, $newRating);
                 $eventType = $isDowngrade ? 'CREDIT_DOWNGRADE' : 'CREDIT_UPGRADE';
@@ -820,6 +820,31 @@ class DebtEngine
         return new \App\DTO\MaturityRollDTO($maturing, false, $repaid, $shortfall);
     }
 
+    /** A lender, or any institution steering to a capital ratio, is underwritten and rated on its capital, not its cash flow. */
+    private static function isUnderwrittenOnCapital(Stock $stock, \App\Service\Model\BusinessModelInterface $strategy): bool
+    {
+        return $strategy instanceof \App\Service\Model\Sector\CommercialBankBusinessModel
+            || $strategy->getTargetCapitalRatio($stock) !== null;
+    }
+
+    /**
+     * The ceiling an operating firm's leverage puts on its rating (CreditRatingAgency::financialRiskAnchor()); null for
+     * a firm rated on its capital, and for a REIT, which S&P rates on real estate key credit factors rather than the
+     * corporate matrix. A rate-regulated utility carries S&P's excellent business risk profile.
+     */
+    private static function leverageAnchor(Stock $stock, \App\Service\Model\BusinessModelInterface $strategy, float $netDebt, float $ebitda): ?string
+    {
+        if (self::isUnderwrittenOnCapital($stock, $strategy) || $strategy instanceof \App\Service\Model\Sector\ReitBusinessModel) {
+            return null;
+        }
+
+        return \App\Service\Market\Bond\CreditRatingAgency::financialRiskAnchor(
+            $netDebt,
+            $ebitda,
+            $strategy instanceof \App\Service\Model\Sector\UtilityBusinessModel
+        );
+    }
+
     /**
      * Whether the primary market will roll this issuer's maturity at any price.
      */
@@ -834,9 +859,7 @@ class DebtEngine
         // lender, or any institution steering to a capital ratio, is underwritten on its capital instead: its interest
         // expense is its cost of goods, and a provisioning quarter is not a missed coupon. Its rating reads the capital.
         $strategy = \App\Data\Company\Sectors::strategyFor($stock->getIndustry());
-        $underwrittenOnCapital = $strategy instanceof \App\Service\Model\Sector\CommercialBankBusinessModel
-            || $strategy->getTargetCapitalRatio($stock) !== null;
-        if (!$underwrittenOnCapital && $health->interestCoverage < self::REFINANCING_MIN_COVERAGE) {
+        if (!self::isUnderwrittenOnCapital($stock, $strategy) && $health->interestCoverage < self::REFINANCING_MIN_COVERAGE) {
             return false;
         }
 

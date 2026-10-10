@@ -128,6 +128,37 @@ class BankruptcyTest extends TestCase
         $this->assertEquals('600.0000', (string) $buyer->getCashBalance());
     }
 
+    /**
+     * Only a resting limit buy escrowed cash, so only it is refunded, and the refund pays the margin loan down
+     * first, as the player's own cancel does. A buy stop-limit carries a limit price but escrowed nothing.
+     */
+    public function testALiquidationRefundsOnlyEscrowedBuysAndRepaysTheMarginLoanFirst(): void
+    {
+        $stock = $this->buildDefaulter('DEAD', 'Dead Corp', quartersInDefault: 2);
+        $this->debtEngineMock->method('assessGoingConcern')->willReturn($this->going(ebit: -120_000_000.0, ebitda: -80_000_000.0, assetValue: 0.0, cash: 0.0, claims: 2_000_000_000.0));
+
+        $buyer = new User();
+        $buyer->setCashBalance('500.00');
+        $buyer->setMarginDebit('30.00');
+
+        $limitBuy = (new TradeOrder())->setUser($buyer)->setTicker('DEAD')->setAction('BUY')->setOrderType('LIMIT')
+            ->setQuantity(10)->setLimitPrice('10.00')->setStatus('OPEN');
+        $stopLimitBuy = (new TradeOrder())->setUser($buyer)->setTicker('DEAD')->setAction('BUY')->setOrderType('STOP_LIMIT')
+            ->setQuantity(5)->setLimitPrice('11.00')->setStopPrice('10.50')->setStatus('OPEN');
+
+        $this->entityManagerMock->method('getRepository')->willReturn($this->tradeOrderRepoMock);
+        $this->tradeOrderRepoMock->method('findOpenByTicker')->willReturn([$limitBuy, $stopLimitBuy]);
+        $this->marketEventMock->method('publish')->willReturn(['type' => 'BANKRUPTCY']);
+
+        (new FailureSweep($this->entityManagerMock, $this->loggerMock, $this->marketEventMock, $this->debtEngineMock))
+            ->sweep([$stock], new MacroStateDTO());
+
+        $this->assertSame('CANCELLED', $stopLimitBuy->getStatus());
+        // $100 of escrow back: $30 clears the loan, $70 reaches cash. The stop-limit's $55 is not paid out.
+        $this->assertEquals('0.00', (string) $buyer->getMarginDebit());
+        $this->assertEquals('570.0000', (string) $buyer->getCashBalance());
+    }
+
     public function testTheFailureSweepSkipsAnAlreadyBankruptStock(): void
     {
         $stock = new Stock();

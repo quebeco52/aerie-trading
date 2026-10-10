@@ -2,6 +2,7 @@
 
 namespace App\Service\Market\Index;
 
+use App\Service\Notification\PriceAlertService;
 use App\Entity\Etf;
 use App\Service\Math\FinancialConstants;
 use Doctrine\ORM\EntityManagerInterface;
@@ -286,6 +287,7 @@ class EtfTracker
                 );
 
                 $this->restateOrderBook($conn, $ticker, $factor, false, $preSplitPrice);
+                PriceAlertService::restateForSplit($conn, $ticker, (int) round($factor), false);
                 
                 $desc = "{$etf->getName()} has executed a {$factor}-for-1 forward split to maintain liquidity.";
                 $this->marketEvent->publish($etf, 'SPLIT', $desc, 0.0);
@@ -296,6 +298,7 @@ class EtfTracker
                 // Escrow first, on the pre-split book: the restatement below rescales the resting orders and
                 // the remnant has to be paid out at the price it was committed at.
                 $this->restateOrderBook($conn, $ticker, $factor, true, $preSplitPrice);
+                PriceAlertService::restateForSplit($conn, $ticker, (int) round($factor), true);
 
                 if ($userEtfsTableExists) {
                     // Compensate users for fractional shares to prevent wealth destruction
@@ -334,6 +337,11 @@ class EtfTracker
             $conn->rollBack();
             throw $e;
         }
+
+        // Cached trigger levels into post-split units: resting-order bounds are dropped so the next tick rewrites
+        // them from the restated book; alert bounds are only rebuilt when they fire, so they are rescaled in place.
+        $this->redis->del("limit_bounds:{$ticker}");
+        PriceAlertService::restateBoundsForSplit($this->redis, $ticker, $direction === 'forward' ? 1.0 / $factor : $factor);
     }
 
     /**
@@ -355,12 +363,12 @@ class EtfTracker
         float $preSplitPrice
     ): void {
         if ($isReverse) {
-            // Reverse split fractional remnant refund: cash out BUY and SELL escrow remnants before quantity flooring.
+            // Reverse split fractional remnant refund: cash out limit-BUY and SELL escrow remnants before quantity flooring (a buy stop escrowed none).
             $conn->executeStatement(
                 "UPDATE users u
                  INNER JOIN (
                      SELECT o.user_id,
-                            SUM(CASE WHEN o.action = 'BUY'
+                            SUM(CASE WHEN o.action = 'BUY' AND o.order_type NOT IN ('STOP', 'STOP_LIMIT')
                                      THEN COALESCE(o.limit_price, 0) * (o.quantity % :factor)
                                      WHEN o.action = 'SELL'
                                      THEN (o.quantity % :factor) * :pre_split_price
@@ -377,7 +385,8 @@ class EtfTracker
             $conn->executeStatement(
                 "UPDATE trade_orders
                  SET quantity = FLOOR(quantity / :factor),
-                     limit_price = ROUND(limit_price * :factor, 4)
+                     limit_price = ROUND(limit_price * :factor, 4),
+                     stop_price = ROUND(stop_price * :factor, 4)
                  WHERE ticker = :ticker AND status = 'OPEN'",
                 ['factor' => $factor, 'ticker' => $ticker]
             );
@@ -403,7 +412,8 @@ class EtfTracker
         $conn->executeStatement(
             "UPDATE trade_orders
              SET quantity = IF(quantity > 9223372036854775807 / :factor, 9223372036854775807, quantity * :factor),
-                 limit_price = ROUND(limit_price / :factor, 4)
+                 limit_price = ROUND(limit_price / :factor, 4),
+                 stop_price = ROUND(stop_price / :factor, 4)
              WHERE ticker = :ticker AND status = 'OPEN'",
             ['factor' => $factor, 'ticker' => $ticker]
         );

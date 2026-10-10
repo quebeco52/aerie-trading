@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Service\Corporate;
 
 use App\Entity\Stock;
+use App\Service\Notification\PriceAlertService;
 use Doctrine\DBAL\ParameterType;
 use Doctrine\ORM\EntityManagerInterface;
 
@@ -191,12 +192,12 @@ class CorporateLedgerService
                     }
                 }
 
-                // Refund fractional escrow remnants: return uncommitted cash for BUY orders and credit cash for SELL remnants.
+                // Refund fractional escrow remnants: cash behind resting limit BUYs (a buy stop escrowed none) and shares behind SELLs.
                 $conn->executeStatement(
                     "UPDATE users u
                      INNER JOIN (
                          SELECT o.user_id,
-                                SUM(CASE WHEN o.action = 'BUY'
+                                SUM(CASE WHEN o.action = 'BUY' AND o.order_type NOT IN ('STOP', 'STOP_LIMIT')
                                          THEN COALESCE(o.limit_price, 0) * (o.quantity % :factor)
                                          WHEN o.action = 'SELL'
                                          THEN (o.quantity % :factor) * :old_price
@@ -213,7 +214,7 @@ class CorporateLedgerService
 
                 // 4. Perform bulk SQL updates for quantities and prices
                 $conn->executeStatement(
-                    "UPDATE trade_orders SET limit_price = ROUND(limit_price * :factor, 4) WHERE ticker = :ticker AND status = 'OPEN'",
+                    "UPDATE trade_orders SET limit_price = ROUND(limit_price * :factor, 4), stop_price = ROUND(stop_price * :factor, 4) WHERE ticker = :ticker AND status = 'OPEN'",
                     ['factor' => $factor, 'ticker' => $stock->getTicker()],
                     $factorType
                 );
@@ -303,7 +304,7 @@ class CorporateLedgerService
                 );
 
                 $conn->executeStatement(
-                    "UPDATE trade_orders SET quantity = IF(quantity > 9223372036854775807 / :factor, 9223372036854775807, quantity * :factor), limit_price = ROUND(limit_price / :factor, 4) WHERE ticker = :ticker AND status = 'OPEN'",
+                    "UPDATE trade_orders SET quantity = IF(quantity > 9223372036854775807 / :factor, 9223372036854775807, quantity * :factor), limit_price = ROUND(limit_price / :factor, 4), stop_price = ROUND(stop_price / :factor, 4) WHERE ticker = :ticker AND status = 'OPEN'",
                     ['factor' => $factor, 'ticker' => $stock->getTicker()],
                     $factorType
                 );
@@ -320,6 +321,8 @@ class CorporateLedgerService
                     $factorType
                 );
             }
+
+            PriceAlertService::restateForSplit($conn, $stock->getTicker(), $factor, $isReverse);
 
             // Restate historical event descriptions so per-share metrics (EPS, dividends, prices) reflect post-split scale.
             $this->restateEventDescriptions($conn, $stock, $isReverse ? $splitFactor : 1.0 / $splitFactor);

@@ -10,6 +10,8 @@ use App\Entity\PriceAlert;
 use App\Entity\Stock;
 use App\Entity\User;
 use Doctrine\DBAL\ArrayParameterType;
+use Doctrine\DBAL\Connection;
+use Doctrine\DBAL\ParameterType;
 use Doctrine\ORM\EntityManagerInterface;
 
 /**
@@ -177,6 +179,43 @@ class PriceAlertService
         }
 
         $this->redis->hSet(self::REDIS_KEY, $ticker, (string) json_encode(['above' => $above, 'below' => $below]));
+    }
+
+    /**
+     * Restates every alert on a split instrument, inside the caller's split transaction, so a target keeps its
+     * distance from the price instead of firing on the split itself. The factor is bound as an integer, as every
+     * split statement binds it (CorporateLedgerService::processStockSplit()).
+     *
+     * @param bool $pricesMultiply True for a reverse split (prices rise by the factor), false for a forward one.
+     */
+    public static function restateForSplit(Connection $conn, string $ticker, int $factor, bool $pricesMultiply): void
+    {
+        $op = $pricesMultiply ? '*' : '/';
+        $conn->executeStatement(
+            "UPDATE price_alerts
+             SET target_price = ROUND(target_price {$op} :factor, 4),
+                 price_at_creation = ROUND(price_at_creation {$op} :factor, 4),
+                 triggered_price = ROUND(triggered_price {$op} :factor, 4)
+             WHERE ticker = :ticker",
+            ['factor' => $factor, 'ticker' => $ticker],
+            ['factor' => ParameterType::INTEGER]
+        );
+    }
+
+    /** Restates an instrument's cached bounds by the split's price factor, matching restateForSplit() on the rows. */
+    public static function restateBoundsForSplit(\Redis $redis, string $ticker, float $priceFactor): void
+    {
+        $json = $redis->hGet(self::REDIS_KEY, $ticker);
+        $bounds = is_string($json) ? json_decode($json, true) : null;
+        if (!is_array($bounds)) {
+            return;
+        }
+
+        $scale = static fn (mixed $bound): ?float => $bound === null ? null : round((float) $bound * $priceFactor, 4);
+        $redis->hSet(self::REDIS_KEY, $ticker, (string) json_encode([
+            'above' => $scale($bounds['above'] ?? null),
+            'below' => $scale($bounds['below'] ?? null),
+        ]));
     }
 
     /** Rebuilds the whole hash from the table; the ticker calls it at start, so a flushed Redis loses no alert. */

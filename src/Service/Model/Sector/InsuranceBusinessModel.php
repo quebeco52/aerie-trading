@@ -110,6 +110,12 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
     public const SOFT_MARKET_MAX_DISCOUNT = 0.30;
     /** Smallest share of Kenney capacity a going concern still writes at any price: obligatory renewals, treaty shares it cannot walk away from mid-term, and the distribution it must keep alive to have a book to write when rates recover. */
     public const MIN_WRITTEN_CAPACITY = 0.35;
+    /** Standard deviation of the US P&C industry combined ratio about its mean, 2000-2023 (III / AM Best annual results, ~5 points): how far a book's result strays from what was expected of it. */
+    public const UNDERWRITING_RESULT_DISPERSION = 0.05;
+    /** Years for the in-force book to reach a newly chosen written share: each policy is re-underwritten only at its renewal, once a term (the renewal lag of Cummins & Outreville 1987). */
+    public const WRITTEN_SHARE_ADJUSTMENT_YEARS = self::POLICY_TERM_YEARS;
+    /** State key holding the share of Kenney capacity the in-force book is written at. */
+    public const STATE_WRITTEN_SHARE = 'state:capacity:written_share';
     /** State key holding the capital position the market has actually observed, which is what renewal rates are struck against. */
     public const STATE_OBSERVED_CAPACITY = 'state:capacity:observed_share';
     /** Years for a change in an underwriter's capital to reach the rates it is quoted: statutory filings, rating reviews and annual renewal dates all sit between the two, and that delay is what turns the capacity cycle into a cycle rather than a level. */
@@ -222,21 +228,16 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
      */
     public function getTargetMetrics(Stock $stock, MacroStateDTO $macroState, MathUtility $mathUtility): array
     {
-        // Underwriting capacity is rationed against statutory surplus: bonds at amortized cost, goodwill at nil.
-        $equity = $stock->getStatutorySurplus();
         $stableMargin = max(0.01, (float) $stock->getOperatingMargin());
 
         // 1. Capacity Constraint: clamp revenue to physical capital capacity (Kenney ratio = 1.5x).
         $capacityRatio = self::KENNEY_CAPACITY_RATIO;
-        // Prevent zombie state: Regulators allow insolvent insurers to operate in runoff using a fraction of their float as implied equity
-        $impliedRunoffEquity = (float) $stock->getCustomerDeposits() * self::IMPLIED_RUNOFF_EQUITY;
-        $operatingEquity = max(max(1.0, $impliedRunoffEquity), $equity);
+        $operatingEquity = $this->resolveOperatingEquity($stock);
 
         $taxRate = $macroState->corporateTaxRate;
 
         // 2. Structural Revenue anchored to written capacity and solvency limits.
-        $targetRevenue = $operatingEquity * $capacityRatio
-            * $this->resolveWrittenCapacity($stock, $macroState, $mathUtility, $operatingEquity, $capacityRatio * $stableMargin * (1.0 - $taxRate));
+        $targetRevenue = $operatingEquity * $capacityRatio * $this->resolveWrittenCapacity($stock, $macroState, $mathUtility);
         // Hard market floor prevents abrupt revenue collapse following catastrophe-driven surplus drawdown.
         $priorRevenue = (float) $stock->getTotalRevenue();
         $targetSurplusForPriorRevenue = $priorRevenue / $capacityRatio;
@@ -333,58 +334,103 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
     }
 
     /**
-     * Underwriting discipline: the share of its Kenney capacity the firm chooses to write at the rate the
-     * market is offering.
+     * Underwriting discipline: the share of its Kenney capacity the in-force book is written at.
      *
-     * Capacity says how much an underwriter MAY write; it does not say it should. A soft market prices
-     * cover below what the exposure costs, and the answer to that is to write less of it — the capacity
-     * withdrawal that is the other half of Winter's (1994) cycle, and the reason industry premium-to-surplus
-     * is procyclical with rates. Without it a firm is forced to write its whole book into a loss and its
-     * only lever is how much capital it hands back.
-     *
-     * The rule is the same one every other deployment gate in this engine applies: write while the capital
-     * that business consumes still earns its hurdle. An insurer's return has two parts. The float it already
-     * holds runs off whether or not another treaty is signed; the book it writes brings new float, and over
-     * one policy term its unearned premium and a share 1 − e^(−H/τ) of each settled claim reserve (total-return
-     * ratemaking, Myers & Cohn 1987). Over that horizon:
-     *
-     *     u * (underwritingReturn + bookFloatReturn) + heldFloatReturn >= appliedHurdle
-     *
-     * Where the book's own return, float included, is positive the answer is the whole book. Below it the
-     * equality gives the fraction directly, with no free parameter: a firm whose held float covers its hurdle
-     * handsomely can absorb a soft market and keep writing (cash-flow underwriting), one whose float barely
-     * covers it cannot. The manager's own hurdle bias applies, so an empire builder keeps writing into a
-     * market a fortress has already withdrawn from, which is Jensen's agency cost in its underwriting form.
+     * Capacity says how much an underwriter MAY write; it does not say it should. The share is chosen against
+     * the rate on offer (resolveTargetWrittenShare) but reaches the book only as policies come up for renewal
+     * (adjustWrittenShare, advanced once a quarter by advanceUnderwritingCycle). A firm with no recorded
+     * share, a fresh seed, writes at its target.
      */
-    protected function resolveWrittenCapacity(Stock $stock, MacroStateDTO $macroState, MathUtility $mathUtility, float $operatingEquity, float $capacityReturnAtNeutralRates): float
+    protected function resolveWrittenCapacity(Stock $stock, MacroStateDTO $macroState, MathUtility $mathUtility): float
+    {
+        $written = ($stock->getEarningsMomentumZ() ?? [])[self::STATE_WRITTEN_SHARE] ?? null;
+
+        return $written !== null
+            ? (float) $written
+            : $this->resolveTargetWrittenShare($stock, $macroState, $mathUtility, $this->resolveOperatingEquity($stock));
+    }
+
+    /** Surplus the book is rationed against: statutory, so bonds at amortized cost and goodwill at nil; an insolvent carrier runs off on a fraction of its float. */
+    protected function resolveOperatingEquity(Stock $stock): float
+    {
+        $impliedRunoffEquity = (float) $stock->getCustomerDeposits() * self::IMPLIED_RUNOFF_EQUITY;
+
+        return max(max(1.0, $impliedRunoffEquity), $stock->getStatutorySurplus());
+    }
+
+    /**
+     * The written share the firm would choose at the rate the market is offering: the capacity-constrained
+     * supply of Winter (1994) and Gron (1994), in which capital is costly to replace, so it binds when rates
+     * pay for it and is withdrawn when they do not.
+     *
+     * The test is the firm's annual after-tax return on surplus, writing the whole book, against its hurdle.
+     * The float it already holds runs off whether or not another treaty is signed; the book it writes brings
+     * new float, its unearned premium and a share 1 − e^(−H/τ) of each settled claim reserve over one policy
+     * term (total-return ratemaking, Myers & Cohn 1987):
+     *
+     *     excess = underwritingReturn + bookFloatReturn + heldFloatReturn − appliedHurdle
+     *
+     * Each line in the book clears that test or not; summed over lines whose results stray from the book's
+     * by the industry's combined-ratio dispersion, the share that clears it is the normal CDF of the excess
+     * (writtenShareAtExcessReturn). The hurdle carries the manager's bias, so an empire builder keeps
+     * writing into a market a fortress has already withdrawn from (Jensen's agency cost).
+     */
+    public function resolveTargetWrittenShare(Stock $stock, MacroStateDTO $macroState, MathUtility $mathUtility, float $operatingEquity): float
     {
         $pricingPower = $this->resolvePremiumRateLevel($stock, $macroState);
         if ($pricingPower <= 0.0 || $operatingEquity <= 0.0) {
             return 1.0;
         }
 
+        $afterTax = 1.0 - $macroState->corporateTaxRate;
+
         // What the book earns at the offered rate. Premium scales with the rate and claims do not, so the
         // margin on a 95.5% book written 10% below the rate it was priced at is negative, not 4.5% smaller.
         $stableMargin = max(0.01, (float) $stock->getOperatingMargin());
         $marginAtOfferedRate = 1.0 - ((1.0 - $stableMargin) / $pricingPower);
-        $underwritingReturn = $capacityReturnAtNeutralRates * ($marginAtOfferedRate / $stableMargin);
+        $underwritingReturn = self::KENNEY_CAPACITY_RATIO * $marginAtOfferedRate * $afterTax;
 
-        $afterTax = 1.0 - $macroState->corporateTaxRate;
         $floatYield = $this->resolveFloatYield($stock, $macroState);
         $heldAfterHorizon = $this->resolveHeldFloatSurvival($stock, self::FLOAT_DECISION_HORIZON_YEARS);
-
         $bookFloatReturn = $floatYield * $afterTax * $this->resolveBookFloatRatio($stock, self::FLOAT_DECISION_HORIZON_YEARS) * self::KENNEY_CAPACITY_RATIO;
-        $bookReturn = $underwritingReturn + $bookFloatReturn;
-        if ($bookReturn >= 0.0) {
-            return 1.0;
-        }
 
         $floatIncome = min((float) $stock->getCorporateTreasury(), (float) $stock->getCustomerDeposits()) * $floatYield;
         $heldIncome = $this->calculateInterestIncome($stock, $macroState, $mathUtility) - ($floatIncome * (1.0 - $heldAfterHorizon));
         $heldFloatReturn = ($heldIncome * $afterTax) / $operatingEquity;
         $hurdle = $stock->getManagementProfile()->appliedHurdle($macroState->yield10yEma + $macroState->equityRiskPremium);
 
-        return max(self::MIN_WRITTEN_CAPACITY, min(1.0, ($hurdle - $heldFloatReturn) / $bookReturn));
+        return self::writtenShareAtExcessReturn(
+            $underwritingReturn + $bookFloatReturn + $heldFloatReturn - $hurdle,
+            self::UNDERWRITING_RESULT_DISPERSION * self::KENNEY_CAPACITY_RATIO * $afterTax,
+            $this->resolveLifePremiumShare($stock)
+        );
+    }
+
+    /**
+     * Share of Kenney capacity written when the full book's return beats the hurdle by $excessReturn (annual,
+     * on surplus): MIN + (1 − MIN)·Φ(excess / σ) of the discretionary book, σ the dispersion of a line's
+     * result on surplus. The contractual share (in-force life policies, which the insurer cannot decline to
+     * renew) is written whatever the rate.
+     */
+    public static function writtenShareAtExcessReturn(float $excessReturn, float $resultDispersion, float $contractualShare = 0.0): float
+    {
+        $contractual = max(0.0, min(1.0, $contractualShare));
+        $clearing = $resultDispersion > 0.0
+            ? Distributions::standardNormalCdf($excessReturn / $resultDispersion)
+            : ($excessReturn >= 0.0 ? 1.0 : 0.0);
+        $discretionary = self::MIN_WRITTEN_CAPACITY + ((1.0 - self::MIN_WRITTEN_CAPACITY) * $clearing);
+
+        return $contractual + ((1.0 - $contractual) * $discretionary);
+    }
+
+    /**
+     * The in-force written share after $dt years: renewals arrive at rate 1/T over a policy term T and each is
+     * written at the target, so the book closes the gap as e^(−dt/T) (the first-order partial adjustment of
+     * written premium in Cummins & Outreville 1987).
+     */
+    public static function adjustWrittenShare(float $writtenShare, float $targetShare, float $dt): float
+    {
+        return TimeSeries::calculateDistributedLag($writtenShare, $targetShare, $dt, self::WRITTEN_SHARE_ADJUSTMENT_YEARS);
     }
 
     /**
@@ -449,7 +495,7 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
      * Called by every insurance model's own physics, because the subclasses replace calculateSectorPhysics()
      * outright. The regime's rate uplift reaches the P&L only through the pricing-power multiplier.
      */
-    protected function advanceUnderwritingCycle(StreamContext $streams, Stock $stock, MacroStateDTO $macroState, float $surplusDeficitRatio, bool $coverAttached): void
+    protected function advanceUnderwritingCycle(StreamContext $streams, Stock $stock, MacroStateDTO $macroState, MathUtility $mathUtility, float $surplusDeficitRatio, bool $coverAttached): void
     {
         $streams->evolveRegime(self::REGIME_HARD_MARKET, 0.0, self::HARD_MARKET_EXIT_HAZARD);
 
@@ -468,6 +514,14 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
             targetValue: $currentShare,
             dt: \App\Service\Corporate\EarningsEngine::QUARTERLY_TIME_STEP,
             lagTimeConstant: self::CAPACITY_OBSERVATION_LAG_YEARS
+        ));
+
+        // The quarter's renewals are written at the share the rate on offer now justifies.
+        $targetShare = $this->resolveTargetWrittenShare($stock, $macroState, $mathUtility, $this->resolveOperatingEquity($stock));
+        $streams->registerState(self::STATE_WRITTEN_SHARE, self::adjustWrittenShare(
+            $streams->getPersistedState(self::STATE_WRITTEN_SHARE, $targetShare),
+            $targetShare,
+            \App\Service\Corporate\EarningsEngine::QUARTERLY_TIME_STEP
         ));
     }
 
@@ -573,7 +627,7 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
         // A capital shortfall hardens rates through the regime this advances, which reaches revenue and the cost
         // ratio through the pricing-power multiplier; it is not discounted from the combined ratio again here.
         $surplusDeficitRatio = $this->resolveSurplusDeficitRatio($expectedRevenue, (float) $stock->getTotalEquity());
-        $this->advanceUnderwritingCycle($streams, $stock, $macroState, $surplusDeficitRatio, $recovery > 0.0);
+        $this->advanceUnderwritingCycle($streams, $stock, $macroState, $mathUtility, $surplusDeficitRatio, $recovery > 0.0);
 
         $combinedRatio = $realizedLossRatio + $realizedExpenseRatio + $reinstatementPremium;
         $clampedMargin = $this->clampMargin($combinedRatio);
@@ -679,16 +733,12 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
      * capital that comes back is deployed into a book worth writing. A firm that keeps it instead simply
      * accumulates until it is a fund with an insurance licence.
      *
-     * The written share is struck against the same hurdle the writing decision uses, so the two cannot
-     * disagree: whatever fraction of capacity fails that test is the fraction of surplus this returns.
+     * It reads the share the in-force book is actually written at, so the two cannot disagree: whatever
+     * fraction of capacity the book is not using is the fraction of surplus this returns.
      */
     public function getUndeployableCapitalShare(Stock $stock, MacroStateDTO $macroState, MathUtility $mathUtility): float
     {
-        $operatingEquity = max(1.0, (float) $stock->getTotalEquity());
-        $stableMargin = max(0.01, (float) $stock->getOperatingMargin());
-        $capacityReturn = self::KENNEY_CAPACITY_RATIO * $stableMargin * (1.0 - $macroState->corporateTaxRate);
-
-        return max(0.0, min(1.0, 1.0 - $this->resolveWrittenCapacity($stock, $macroState, $mathUtility, $operatingEquity, $capacityReturn)));
+        return max(0.0, min(1.0, 1.0 - $this->resolveWrittenCapacity($stock, $macroState, $mathUtility)));
     }
 
     public function getSustainableDividendBase(Stock $stock, float $quarterlyEps, float $investedCapital, float $depRate): float

@@ -125,10 +125,10 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
     public const COMMERCIAL_REAL_ESTATE_CHARGE_OFF_RATE = 0.0053;
     /** Business (C&I) loans: 0.73% a year (CORBLACBS, peak 2.57%). The H.8 mix of the four gives 0.92%, all loans 0.89% (CORALACBS). */
     public const BUSINESS_CHARGE_OFF_RATE = 0.0073;
-    /** Persisted origination reference for the residential property index. */
-    public const STATE_RESIDENTIAL_ORIGINATION_PRICE = 'state:collateral_origination_residential';
-    /** Persisted origination reference for the commercial property index. */
-    public const STATE_COMMERCIAL_ORIGINATION_PRICE  = 'state:collateral_origination_commercial';
+    /** Persisted origination reference for residential collateral, in money: the real index at that day's price level. */
+    public const STATE_RESIDENTIAL_ORIGINATION_PRICE = 'state:collateral_origination_residential_nominal';
+    /** Persisted origination reference for commercial collateral, in money: the real index at that day's price level. */
+    public const STATE_COMMERCIAL_ORIGINATION_PRICE  = 'state:collateral_origination_commercial_nominal';
 
     // --- Underwriting Risk Appetite ---
     /** Neutral appetite: a bank here loses each segment's US charge-off rate, and its defaults move with the economy's. */
@@ -830,8 +830,10 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
         );
 
         $quarter = 1.0 / FinancialConstants::QUARTERS_PER_YEAR;
-        $residentialPrice = $macroState->residentialPropertyIndexEma;
-        $commercialPrice = $macroState->commercialPropertyIndexEma;
+        // The loans are nominal and the property indices real, so recovery compares collateral in money: inflation
+        // since origination raises the collateral's value against the balance owed.
+        $residentialPrice = $macroState->residentialPropertyIndexEma * $macroState->consumerPriceLevel;
+        $commercialPrice = $macroState->commercialPropertyIndexEma * $macroState->consumerPriceLevel;
         $residentialOrigination = $streams->getPersistedState(self::STATE_RESIDENTIAL_ORIGINATION_PRICE, $residentialPrice);
         $commercialOrigination = $streams->getPersistedState(self::STATE_COMMERCIAL_ORIGINATION_PRICE, $commercialPrice);
         $residentialLgd = CreditRisk::calculateCollateralLgd(self::LGD_BASELINE, $residentialPrice, $residentialOrigination);
@@ -1324,6 +1326,7 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
     {
         return [
             'commercial_property_index_ema',
+            'consumer_price_level',
             'corporate_default_rate_ema',
             'credit_to_gdp_gap_ema',
             'housing_starts_index_ema',

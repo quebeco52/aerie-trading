@@ -294,6 +294,32 @@ class CommercialBankBusinessModelTest extends TestCase
         $this->assertEqualsWithDelta(100.0 - 30.0 * (1.0 - exp(-0.25 / CommercialBankBusinessModel::COLLATERAL_ORIGINATION_YEARS)), $reference, 1e-9);
     }
 
+    /**
+     * The loans are nominal, so collateral is valued at today's price level: a real house price unchanged since
+     * origination, with 25% inflation in between, is collateral worth 25% more against the same balance.
+     */
+    public function testCollateralLgdValuesTheRealIndexAtTodaysPriceLevel(): void
+    {
+        $mortgageLender = new class extends CommercialBankBusinessModel {
+            protected function resolveLoanBookMix(Stock $stock): array
+            {
+                return ['residential' => 1.0, 'consumer' => 0.0, 'commercial_real_estate' => 0.0, 'business' => 0.0];
+            }
+        };
+
+        $lossRate = function (float $priceLevel) use ($mortgageLender): float {
+            $stock = $this->creditTestBank('NOM');
+            $stock->setEarningsMomentumZ([CommercialBankBusinessModel::STATE_RESIDENTIAL_ORIGINATION_PRICE => 100.0]);
+            $macro = new MacroStateDTO(residentialPropertyIndexEma: 100.0, consumerPriceLevel: $priceLevel);
+            $result = $mortgageLender->computeActualFinancials($stock, 1_000_000_000.0, 0.50, 200_000_000.0, 0.0, $macro, $this->mathUtility);
+
+            return $result->netChargeOffs / $mortgageLender->resolveEarningAssets($stock);
+        };
+
+        // LGD 45% at par; at 1.25 the recovery is 55% x 1.25, so LGD = 1 - 0.6875 = 31.25%.
+        $this->assertEqualsWithDelta(0.3125 / 0.45, $lossRate(1.25) / $lossRate(1.0), 1e-6);
+    }
+
     private function creditTestBank(string $ticker): Stock
     {
         $stock = new Stock();

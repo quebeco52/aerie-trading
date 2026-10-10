@@ -241,4 +241,39 @@ class CreditRatingAgencyTest extends TestCase
             );
         }
     }
+
+    /** S&P's matrix: a satisfactory business at minimal to highly leveraged financial risk, by net debt to EBITDA. */
+    public function testTheLeverageAnchorFollowsTheFinancialRiskBands(): void
+    {
+        $cases = [[0.0, 'A'], [1.4, 'A'], [1.5, 'BBB'], [2.9, 'BBB'], [3.0, 'BB'], [4.9, 'BB'], [5.0, 'B'], [9.0, 'B']];
+        foreach ($cases as [$leverage, $expected]) {
+            $this->assertSame($expected, CreditRatingAgency::financialRiskAnchor($leverage * 100.0, 100.0, false), "{$leverage}x");
+        }
+
+        // A rate-regulated utility carries an excellent business risk profile: significant leverage still anchors at A.
+        $this->assertSame('A', CreditRatingAgency::financialRiskAnchor(350.0, 100.0, true));
+        $this->assertSame('BBB', CreditRatingAgency::financialRiskAnchor(450.0, 100.0, true));
+        $this->assertSame('AAA', CreditRatingAgency::financialRiskAnchor(0.0, 100.0, true));
+
+        // Debt with no EBITDA is highly leveraged; no debt is minimal whatever the EBITDA.
+        $this->assertSame('B', CreditRatingAgency::financialRiskAnchor(100.0, -5.0, false));
+        $this->assertSame('A', CreditRatingAgency::financialRiskAnchor(0.0, -5.0, false));
+    }
+
+    /** The anchor caps a high distance to default, and the cap is reached a notch per evaluation like any move. */
+    public function testTheLeverageAnchorCapsAMarketImpliedAaa(): void
+    {
+        $stock = new Stock();
+        $stock->setTicker('LEVR');
+        $stock->setCreditRating('AAA');
+        $stock->setTotalEquity('100000000');
+
+        $this->assertSame('AA', $this->agency->evaluateRating($stock, 8.0, 4.0, 'Safe', 'BBB'));
+        $this->assertSame('A', $this->agency->evaluateRating($stock, 8.0, 4.0, 'Safe', 'BBB'));
+        $this->assertSame('BBB', $this->agency->evaluateRating($stock, 8.0, 4.0, 'Safe', 'BBB'));
+        $this->assertNull($this->agency->evaluateRating($stock, 8.0, 4.0, 'Safe', 'BBB'));
+
+        // The market-implied grade still lowers it below the anchor.
+        $this->assertSame('BB', $this->agency->evaluateRating($stock, 1.7, 4.0, 'Safe', 'BBB'));
+    }
 }
