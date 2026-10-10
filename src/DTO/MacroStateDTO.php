@@ -197,6 +197,9 @@ readonly class MacroStateDTO
         public float $sovereignDebtToGdpEma = MacroEngine::INITIAL_DEBT_TO_GDP,
         public float $sovereignNetDebtToGdp = MacroEngine::INITIAL_DEBT_TO_GDP,
         public float $sovereignNetDebtToGdpEma = MacroEngine::INITIAL_DEBT_TO_GDP,
+        /** Gross debt less the whole fund and the rescue holdings, minus net financial worth: what the fiscal reaction and the spread read (CreditFiscalSubsystem::calculateSovereignDebt()). */
+        public float $sovereignNetFinancialLiabilitiesToGdp = MacroEngine::INITIAL_DEBT_TO_GDP,
+        public float $sovereignNetFinancialLiabilitiesToGdpEma = MacroEngine::INITIAL_DEBT_TO_GDP,
         /** Average maturity of the debt, in years, and the one the Exchequer's head steers it toward as it rolls over (CreditFiscalSubsystem). */
         public float $sovereignDebtAverageMaturity = CreditFiscalSubsystem::FOUNDING_DEBT_AVERAGE_MATURITY,
         public float $sovereignDebtMaturityTarget = CreditFiscalSubsystem::FOUNDING_DEBT_AVERAGE_MATURITY,
@@ -621,7 +624,7 @@ readonly class MacroStateDTO
             curvature2: $this->nsCurvature2,
             baseTermPremium: $this->nsBaseTermPremium,
             longEndPremium: $this->nsLongEndPremium,
-            balanceSheetIntensity: CreditFiscalSubsystem::durationExtraction($this->balanceSheetIntensity, $this->sovereignNetDebtToGdpEma, $this->sovereignDebtAverageMaturity),
+            balanceSheetIntensity: CreditFiscalSubsystem::durationExtraction($this->balanceSheetIntensity, $this->sovereignDebtToGdpEma, $this->sovereignDebtAverageMaturity),
         );
     }
 

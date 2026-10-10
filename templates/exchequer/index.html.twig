@@ -43,7 +43,7 @@
 			<section class="bg-surface-container-low rounded-lg p-5 border border-outline-variant/20" aria-labelledby="debt-heading">
 				<h2 id="debt-heading" class="text-sm font-semibold text-on-surface">The debt</h2>
 				<p class="mt-2 text-2xl font-semibold font-mono tabular-nums text-on-surface">{{ exchequer.debt|pct(1) }}</p>
-				<p class="text-xs text-on-surface-variant">of GDP, <span class="font-mono tabular-nums">{{ exchequer.netDebt|pct(1) }}</span> net of the bonds the Sovereign Reserve Fund holds</p>
+				<p class="text-xs text-on-surface-variant">of GDP, <span class="font-mono tabular-nums">{{ exchequer.netDebt|pct(1) }}</span> net of the bonds the Sovereign Reserve Fund holds. {% if exchequer.netLiabilities >= 0 %}Set against everything the state holds, it owes <span class="font-mono tabular-nums">{{ exchequer.netLiabilities|pct(1) }}</span>{% else %}The state holds <span class="font-mono tabular-nums">{{ (-exchequer.netLiabilities)|pct(1) }}</span> of GDP more than it owes{% endif %}</p>
 				<dl class="grid grid-cols-2 gap-x-6 gap-y-3 mt-4 text-xs">
 					<div>
 						<dt class="text-on-surface-variant">Average maturity</dt>

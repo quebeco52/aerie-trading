@@ -381,7 +381,7 @@ class MonetaryPolicySubsystem
     public function calculateLongRateGap(MacroState $state, float $naturalRate): float
     {
         $habitatShiftAtTenYears = FixedIncome::calculatePreferredHabitatTermPremiumShift(
-            balanceSheetIntensity: CreditFiscalSubsystem::durationExtraction($state->balanceSheetIntensity, $state->sovereignNetDebtToGdpEma, $state->sovereignDebtAverageMaturity),
+            balanceSheetIntensity: CreditFiscalSubsystem::durationExtraction($state->balanceSheetIntensity, $state->sovereignDebtToGdpEma, $state->sovereignDebtAverageMaturity),
             tau: 10.0,
             habitatSensitivity: MacroEngine::PREFERRED_HABITAT_DURATION_SENSITIVITY
         );
@@ -833,7 +833,7 @@ class MonetaryPolicySubsystem
             termPremium10y: $termPremium10y,
             longEndPremium: $longEndPremium,
             termPremiumHorizonYears: MacroEngine::TERM_PREMIUM_DURATION_HORIZON_YEARS,
-            balanceSheetIntensity: CreditFiscalSubsystem::durationExtraction($state->balanceSheetIntensity, $state->sovereignNetDebtToGdpEma, $state->sovereignDebtAverageMaturity),
+            balanceSheetIntensity: CreditFiscalSubsystem::durationExtraction($state->balanceSheetIntensity, $state->sovereignDebtToGdpEma, $state->sovereignDebtAverageMaturity),
             habitatSensitivity: MacroEngine::PREFERRED_HABITAT_DURATION_SENSITIVITY,
             effectiveLowerBound: MacroEngine::EFFECTIVE_LOWER_BOUND
         );

@@ -1204,7 +1204,7 @@ class GovernmentPageBuilder
         };
         $neutral = MacroEngine::BASE_CORPORATE_TAX_RATE;
         $screens = MergerAndAcquisitionEngine::reviewScreens($politics->mergerReviewLeniency);
-        $repair = max(0.0, CreditFiscalSubsystem::bohnSurplus($macro->sovereignNetDebtToGdp) - ($macro->sovereignFundDollarsPerGdp > 0.0 ? 0.0 : CreditFiscalSubsystem::SOVEREIGN_STRUCTURAL_DEFICIT));
+        $repair = max(0.0, CreditFiscalSubsystem::bohnSurplus($macro->sovereignNetFinancialLiabilitiesToGdp) - ($macro->sovereignFundDollarsPerGdp > 0.0 ? 0.0 : CreditFiscalSubsystem::SOVEREIGN_STRUCTURAL_DEFICIT));
 
         return [
             'levers' => [
@@ -1351,8 +1351,8 @@ class GovernmentPageBuilder
                     'enacted' => $standing['consolidationTaxShare'],
                     'status' => $status('consolidationTaxShare'),
                     'note' => $repair > 0.0
-                        ? sprintf('Of the surplus the debt calls for, %.1f%% of GDP at %.0f%% net debt; the rest comes from spending cuts', 100.0 * $repair, 100.0 * $macro->sovereignNetDebtToGdp)
-                        : 'Of any surplus the debt calls for; the rest comes from spending cuts. Net debt calls for none today',
+                        ? sprintf('Of the surplus the debt calls for, %.1f%% of GDP with debts %.0f%% of GDP beyond all the state holds; the rest comes from spending cuts', 100.0 * $repair, 100.0 * $macro->sovereignNetFinancialLiabilitiesToGdp)
+                        : 'Of any surplus the debt calls for; the rest comes from spending cuts. Set against all the state holds, the debt calls for none today',
                 ],
                 [
                     'name' => 'Reserve fund shares held at home',
@@ -2044,6 +2044,8 @@ class GovernmentPageBuilder
             ],
             'debt' => $macro->sovereignDebtToGdp,
             'netDebt' => $macro->sovereignNetDebtToGdp,
+            // What the budget's debt rule and the bond market answer to: the debt less the fund whole and the rescue stakes.
+            'netLiabilities' => $macro->sovereignNetFinancialLiabilitiesToGdp,
             'maturity' => $maturity,
             // A book still more than a month from the head's maturity is moving toward it.
             'movingTo' => abs($macro->sovereignDebtMaturityTarget - $maturity) > 1.0 / 12.0 ? $macro->sovereignDebtMaturityTarget : null,
@@ -2051,7 +2053,7 @@ class GovernmentPageBuilder
             'rate' => $rate,
             'interestToGdp' => CreditFiscalSubsystem::publicAccounts($macro, 0.0)->interest,
             'tenYear' => $macro->yield10y,
-            'maturityBp' => (int) round(10000.0 * CreditFiscalSubsystem::maturitySupplyTermPremium($macro->sovereignNetDebtToGdpEma, $maturity)),
+            'maturityBp' => (int) round(10000.0 * CreditFiscalSubsystem::maturitySupplyTermPremium($macro->sovereignDebtToGdpEma, $maturity)),
             'councilMaturity' => $politics->councilDebtStances === [] ? null : Exchequer::averageMaturity(CouncilAppointments::median($politics->councilDebtStances)),
             // The last banking crisis's rescue, borrowed on the day, and what the Exchequer still holds from its rescues.
             'rescue' => [

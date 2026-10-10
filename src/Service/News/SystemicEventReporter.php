@@ -370,7 +370,7 @@ class SystemicEventReporter
         $years = static fn(float $maturity): string => number_format($maturity, 1) . ' years';
         $target = Exchequer::averageMaturity($politics->exchequerHeadStance);
         $current = $macro->sovereignDebtAverageMaturity;
-        $basisPoints = (int) round(10000.0 * (CreditFiscalSubsystem::maturitySupplyTermPremium($macro->sovereignNetDebtToGdpEma, $target) - CreditFiscalSubsystem::maturitySupplyTermPremium($macro->sovereignNetDebtToGdpEma, $current)));
+        $basisPoints = (int) round(10000.0 * (CreditFiscalSubsystem::maturitySupplyTermPremium($macro->sovereignDebtToGdpEma, $target) - CreditFiscalSubsystem::maturitySupplyTermPremium($macro->sovereignDebtToGdpEma, $current)));
 
         return [
             'exchequer_head' => $politics->exchequerHeadName,

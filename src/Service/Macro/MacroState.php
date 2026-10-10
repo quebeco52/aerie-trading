@@ -172,6 +172,10 @@ class MacroState
     // default risk on. Equal to the gross ratio in a run with no fund.
     public float $sovereignNetDebtToGdp;
     public float $sovereignNetDebtToGdpEma;
+    // Gross debt less everything the government holds, the fund whole and the rescue holdings (OECD net financial
+    // liabilities, minus net financial worth): what the fiscal reaction and the sovereign spread answer to.
+    public float $sovereignNetFinancialLiabilitiesToGdp;
+    public float $sovereignNetFinancialLiabilitiesToGdpEma;
     public float $sovereignDebtAverageMaturity;
     public float $sovereignDebtMaturityTarget;
     public ?string $eventType;

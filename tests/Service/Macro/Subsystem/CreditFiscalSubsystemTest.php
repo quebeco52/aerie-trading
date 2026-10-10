@@ -80,7 +80,7 @@ class CreditFiscalSubsystemTest extends TestCase
     {
         $subsystem = $this->quietSubsystem();
         $state = new MacroState();
-        $state->sovereignNetDebtToGdp = CreditFiscalSubsystem::SOVEREIGN_DEBT_NEUTRAL_THRESHOLD;
+        $state->sovereignNetFinancialLiabilitiesToGdp = CreditFiscalSubsystem::SOVEREIGN_DEBT_NEUTRAL_THRESHOLD;
         $state->publicSpendingShare = MacroEngine::PUBLIC_PURCHASES_TO_GDP * 1.10;
         $target = MacroEngine::GOVT_SPENDING_BASELINE * 1.10;
 
@@ -153,7 +153,7 @@ class CreditFiscalSubsystemTest extends TestCase
         $this->assertEqualsWithDelta(0.004 - $extra, CreditFiscalSubsystem::durationExtraction(0.004, 0.9, CreditFiscalSubsystem::FOUNDING_DEBT_AVERAGE_MATURITY + 1.0), 1e-15, 'A longer book puts back duration QE took out.');
 
         // The bond desk's curve carries the same duration as the macro's.
-        $dto = new MacroStateDTO(balanceSheetIntensity: 0.004, sovereignNetDebtToGdpEma: 0.9, sovereignDebtAverageMaturity: CreditFiscalSubsystem::FOUNDING_DEBT_AVERAGE_MATURITY + 1.0);
+        $dto = new MacroStateDTO(balanceSheetIntensity: 0.004, sovereignDebtToGdpEma: 0.9, sovereignDebtAverageMaturity: CreditFiscalSubsystem::FOUNDING_DEBT_AVERAGE_MATURITY + 1.0);
         $this->assertEqualsWithDelta(0.004 - $extra, $dto->sovereignCurve()->balanceSheetIntensity, 1e-15);
     }
 
@@ -298,7 +298,7 @@ class CreditFiscalSubsystemTest extends TestCase
         $dt = 0.25;
         foreach ([false, true] as $funded) {
             $state = $this->neutralBudget(1.20, 1.3);
-            $state->sovereignNetDebtToGdp = 1.20;
+            $state->sovereignNetFinancialLiabilitiesToGdp = 1.20;
             $state->outputGap = -0.02;
             $state->netTaxRate = CreditFiscalSubsystem::FOUNDING_NET_TAX_RATE + 0.025;
             $state->governmentSpendingIndex = 104.0;
@@ -339,11 +339,11 @@ class CreditFiscalSubsystemTest extends TestCase
         $sound->corporateTaxRate = MacroEngine::BASE_CORPORATE_TAX_RATE;
         $sound->netTaxRate = CreditFiscalSubsystem::FOUNDING_NET_TAX_RATE;
         $sound->sovereignDebtToGdp = 0.90;
-        $sound->sovereignNetDebtToGdp = 0.90;
+        $sound->sovereignNetFinancialLiabilitiesToGdp = 0.90;
         $sound->consolidationTaxShare = 1.0;
         $indebted = clone $sound;
         $indebted->sovereignDebtToGdp = 1.20;
-        $indebted->sovereignNetDebtToGdp = 1.20;
+        $indebted->sovereignNetFinancialLiabilitiesToGdp = 1.20;
 
         foreach ([$sound, $indebted] as $state) {
             $state->corporateTaxRateTrend = MacroEngine::BASE_CORPORATE_TAX_RATE;
@@ -388,11 +388,11 @@ class CreditFiscalSubsystemTest extends TestCase
         $state->consolidationTaxShare = $share;
         $state->publicSpendingShare = MacroEngine::PUBLIC_PURCHASES_TO_GDP;
 
-        $state->sovereignNetDebtToGdp = 0.90;
+        $state->sovereignNetFinancialLiabilitiesToGdp = 0.90;
         $this->assertEqualsWithDelta(0.0, CreditFiscalSubsystem::fiscalStance($state), 1e-12);
         $this->assertEqualsWithDelta(0.0, CreditFiscalSubsystem::consolidationSpendingCut(0.90, false, $share), 1e-12);
 
-        $state->sovereignNetDebtToGdp = 1.20;
+        $state->sovereignNetFinancialLiabilitiesToGdp = 1.20;
         $consolidation = CreditFiscalSubsystem::bohnSurplus(1.20) - CreditFiscalSubsystem::SOVEREIGN_STRUCTURAL_DEFICIT;
         $cut = CreditFiscalSubsystem::consolidationSpendingCut(1.20, false, $share);
         $this->assertEqualsWithDelta($share * $consolidation, CreditFiscalSubsystem::fiscalStance($state), 1e-12);
@@ -410,20 +410,20 @@ class CreditFiscalSubsystemTest extends TestCase
         $this->assertEqualsWithDelta(MacroEngine::GOVT_SPENDING_BASELINE * ($state->publicSpendingShare - $cut) / MacroEngine::PUBLIC_PURCHASES_TO_GDP, $state->governmentSpendingIndex, 0.05);
     }
 
-    /** With a fund the reaction answers to debt net of the fund's bonds, as the market prices it: gross debt it holds bonds against is no call for a surplus. */
-    public function testWithAFundTheReactionKeysToNetDebt(): void
+    /** With a fund the reaction answers to debt net of all the fund holds, as the market prices it: gross debt it holds assets against is no call for a surplus. */
+    public function testWithAFundTheReactionKeysToNetFinancialLiabilities(): void
     {
         $unfunded = new MacroState();
         $unfunded->sovereignDebtToGdp = 0.90;
-        $unfunded->sovereignNetDebtToGdp = 0.90;
+        $unfunded->sovereignNetFinancialLiabilitiesToGdp = 0.90;
         $funded = clone $unfunded;
         $funded->sovereignFundDollarsPerGdp = 2.0e13;
-        $funded->sovereignNetDebtToGdp = 0.60;
+        $funded->sovereignNetFinancialLiabilitiesToGdp = 0.60;
         $fundedAtLine = clone $funded;
-        $fundedAtLine->sovereignNetDebtToGdp = 0.90;
+        $fundedAtLine->sovereignNetFinancialLiabilitiesToGdp = 0.90;
 
         $this->assertEqualsWithDelta(0.0, CreditFiscalSubsystem::fiscalStance($unfunded), 1e-12, 'No fund: the reaction at 90% pays the structural deficit.');
-        $this->assertSame(0.0, CreditFiscalSubsystem::fiscalStance($funded), 'Net of its bonds the funded sovereign sits under the line.');
+        $this->assertSame(0.0, CreditFiscalSubsystem::fiscalStance($funded), 'Net of its holdings the funded sovereign sits under the line.');
         $this->assertEqualsWithDelta(
             0.20 * CreditFiscalSubsystem::BOHN_FISCAL_REACTION_SENSITIVITY,
             CreditFiscalSubsystem::fiscalStance($fundedAtLine) + CreditFiscalSubsystem::consolidationSpendingCut(0.90, true, $fundedAtLine->consolidationTaxShare),
@@ -605,7 +605,7 @@ class CreditFiscalSubsystemTest extends TestCase
         $state = new MacroState();
         $state->totalTime = 4.001; // the tick that crossed the year end
         $state->inflationEma = 0.04;
-        $state->sovereignNetDebtToGdpEma = self::SOUND_DEBT_TO_GDP; // below the neutral threshold: no sequester
+        $state->sovereignNetFinancialLiabilitiesToGdpEma = self::SOUND_DEBT_TO_GDP; // below the neutral threshold: no sequester
 
         $this->subsystem->calculateReimbursementRate($state, 0.01);
 
@@ -618,12 +618,12 @@ class CreditFiscalSubsystemTest extends TestCase
         $solvent = new MacroState();
         $solvent->totalTime = 4.001;
         $solvent->inflationEma = 0.03;
-        $solvent->sovereignNetDebtToGdpEma = MacroEngine::SOVEREIGN_RISK_DEBT_THRESHOLD;
+        $solvent->sovereignNetFinancialLiabilitiesToGdpEma = MacroEngine::SOVEREIGN_RISK_DEBT_THRESHOLD;
 
         $indebted = new MacroState();
         $indebted->totalTime = 4.001;
         $indebted->inflationEma = 0.03;
-        $indebted->sovereignNetDebtToGdpEma = MacroEngine::SOVEREIGN_RISK_DEBT_THRESHOLD + 0.30;
+        $indebted->sovereignNetFinancialLiabilitiesToGdpEma = MacroEngine::SOVEREIGN_RISK_DEBT_THRESHOLD + 0.30;
 
         $this->subsystem->calculateReimbursementRate($solvent, 0.01);
         $this->subsystem->calculateReimbursementRate($indebted, 0.01);
@@ -729,7 +729,7 @@ class CreditFiscalSubsystemTest extends TestCase
     {
         $state = new MacroState();
         $state->sovereignDebtToGdpEma = $debtToGdpEma;
-        $state->sovereignNetDebtToGdpEma = $debtToGdpEma;
+        $state->sovereignNetFinancialLiabilitiesToGdpEma = $debtToGdpEma;
         $state->sovereignRiskSpread = 0.0;
         for ($i = 0; $i < 2000; $i++) {
             $this->subsystem->calculateSovereignRiskSpread($state, 0.01);
@@ -764,7 +764,7 @@ class CreditFiscalSubsystemTest extends TestCase
     {
         $state = new MacroState();
         $state->sovereignDebtToGdpEma = MacroEngine::SOVEREIGN_RISK_DEBT_THRESHOLD + 0.30;
-        $state->sovereignNetDebtToGdpEma = $state->sovereignDebtToGdpEma;
+        $state->sovereignNetFinancialLiabilitiesToGdpEma = $state->sovereignDebtToGdpEma;
         $state->sovereignRiskSpread = 0.0; // from no premium at all
 
         $this->subsystem->calculateSovereignRiskSpread($state, 1.0 / 252.0);
@@ -775,17 +775,17 @@ class CreditFiscalSubsystemTest extends TestCase
     }
 
     /**
-     * Two sovereigns thirty points of gross debt past the risk line; one holds half of GDP in bonds in its reserve fund.
-     * The market prices what is owed net of those bonds (Hadzi-Vaskov & Ricci 2016), so only the other pays for its debt.
+     * Two sovereigns thirty points of gross debt past the risk line; one holds half of GDP in its reserve fund. The
+     * market prices what is owed net of what is held (IMF Fiscal Monitor 2018), so only the other pays for its debt.
      */
-    public function testTheMarketPricesDebtNetOfTheFundsBonds(): void
+    public function testTheMarketPricesDebtNetOfWhatTheStateHolds(): void
     {
         $unfunded = new MacroState();
         $unfunded->sovereignDebtToGdpEma = MacroEngine::SOVEREIGN_RISK_DEBT_THRESHOLD + 0.30;
-        $unfunded->sovereignNetDebtToGdpEma = $unfunded->sovereignDebtToGdpEma;
+        $unfunded->sovereignNetFinancialLiabilitiesToGdpEma = $unfunded->sovereignDebtToGdpEma;
         $unfunded->sovereignRiskSpread = 0.0;
         $funded = clone $unfunded;
-        $funded->sovereignNetDebtToGdpEma = $funded->sovereignDebtToGdpEma - 0.50;
+        $funded->sovereignNetFinancialLiabilitiesToGdpEma = $funded->sovereignDebtToGdpEma - 0.50;
 
         for ($i = 0; $i < 2000; $i++) {
             $this->subsystem->calculateSovereignRiskSpread($unfunded, 0.01);
@@ -793,7 +793,7 @@ class CreditFiscalSubsystemTest extends TestCase
         }
 
         $this->assertEqualsWithDelta(0.30 * CreditFiscalSubsystem::LAUBACH_DEBT_YIELD_SENSITIVITY, $unfunded->sovereignRiskSpread, 1e-6);
-        $this->assertSame(0.0, $funded->sovereignRiskSpread, 'Net of its bonds the funded sovereign sits under the line.');
+        $this->assertSame(0.0, $funded->sovereignRiskSpread, 'Net of its holdings the funded sovereign sits under the line.');
     }
 
     public function testNetDebtIsGrossLessTheFundsBondsAndGrossWithoutAFund(): void
@@ -817,15 +817,40 @@ class CreditFiscalSubsystemTest extends TestCase
         $this->assertSame($withoutFund->sovereignDebtToGdp, $withFund->sovereignDebtToGdp, 'Holding bonds does not change what the budget owes.');
     }
 
-    public function testTheSequesterAnswersToNetDebt(): void
+    /**
+     * Net financial liabilities (OECD) net everything the state holds: the fund's equities as well as its bonds, and the
+     * stakes left from a rescue. A fund all in equities leaves net debt at gross, and still takes the reaction off.
+     */
+    public function testNetFinancialLiabilitiesNetTheFundWholeAndTheRescueStakes(): void
+    {
+        $state = new MacroState();
+        $state->sovereignDebtToGdp = 1.20;
+        $state->nominalGdpIndex = 1.0;
+        $state->outputGap = 0.0;
+        $state->governmentSpendingIndex = 100.0;
+        $state->corporateTaxRate = MacroEngine::BASE_CORPORATE_TAX_RATE;
+        $state->sovereignFundDollarsPerGdp = 2.0e13;
+        $state->sovereignFundToGdp = 0.60;
+        $state->sovereignFundBondsToGdp = 0.0;
+        $state->bankRescueAssetsToGdp = 0.05;
+
+        $this->subsystem->calculateSovereignDebt($state, 0.25);
+
+        $this->assertSame($state->sovereignDebtToGdp, $state->sovereignNetDebtToGdp, 'Equities are not debt instruments: GFSM net debt stays gross.');
+        $this->assertEqualsWithDelta($state->sovereignDebtToGdp - 0.60 - $state->bankRescueAssetsToGdp, $state->sovereignNetFinancialLiabilitiesToGdp, 1e-12);
+        $this->assertLessThan(CreditFiscalSubsystem::SOVEREIGN_DEBT_NEUTRAL_THRESHOLD, $state->sovereignNetFinancialLiabilitiesToGdp);
+        $this->assertSame(0.0, CreditFiscalSubsystem::fiscalStance($state), 'Set against all it holds, the sovereign is under the Bohn line.');
+    }
+
+    public function testTheSequesterAnswersToNetFinancialLiabilities(): void
     {
         $unfunded = new MacroState();
         $unfunded->totalTime = 4.001;
         $unfunded->inflationEma = 0.03;
         $unfunded->sovereignDebtToGdpEma = MacroEngine::SOVEREIGN_RISK_DEBT_THRESHOLD + 0.30;
-        $unfunded->sovereignNetDebtToGdpEma = $unfunded->sovereignDebtToGdpEma;
+        $unfunded->sovereignNetFinancialLiabilitiesToGdpEma = $unfunded->sovereignDebtToGdpEma;
         $funded = clone $unfunded;
-        $funded->sovereignNetDebtToGdpEma = 0.20;
+        $funded->sovereignNetFinancialLiabilitiesToGdpEma = 0.20;
 
         $this->subsystem->calculateReimbursementRate($unfunded, 0.01);
         $this->subsystem->calculateReimbursementRate($funded, 0.01);
@@ -871,7 +896,7 @@ class CreditFiscalSubsystemTest extends TestCase
         $state->nominalGdpIndex = 1.0;
         $state->outputGap = 0.0;
         $state->governmentSpendingIndex = 100.0;
-        $state->sovereignNetDebtToGdp = self::SOUND_DEBT_TO_GDP;
+        $state->sovereignNetFinancialLiabilitiesToGdp = self::SOUND_DEBT_TO_GDP;
         $state->corporateTaxRate = MacroEngine::BASE_CORPORATE_TAX_RATE;
         $state->netTaxRate = CreditFiscalSubsystem::FOUNDING_NET_TAX_RATE + CreditFiscalSubsystem::fiscalStance($state);
 
@@ -892,7 +917,7 @@ class CreditFiscalSubsystemTest extends TestCase
         $large = clone $small;
         $large->sovereignFundDrawToGdp = 0.06;
         $unfunded = $this->neutralBudget(self::SOUND_DEBT_TO_GDP, 1.3);
-        $unfunded->sovereignNetDebtToGdp = self::SOUND_DEBT_TO_GDP;
+        $unfunded->sovereignNetFinancialLiabilitiesToGdp = self::SOUND_DEBT_TO_GDP;
         $unfunded->netTaxRate += CreditFiscalSubsystem::fiscalStance($unfunded);
 
         $this->subsystem->calculateSovereignDebt($small, 0.25);
@@ -1130,7 +1155,7 @@ class CreditFiscalSubsystemTest extends TestCase
         $state->corporateTaxRate = MacroEngine::BASE_CORPORATE_TAX_RATE;
         $state->corporateTaxPolicyShift = -0.025;
         // At the debt where the Bohn reaction pays the structural deficit, the fiscal stance is neutral.
-        $state->sovereignNetDebtToGdp = 0.90;
+        $state->sovereignNetFinancialLiabilitiesToGdp = 0.90;
 
         for ($i = 0; $i < 2000; ++$i) {
             $this->subsystem->calculateDynamicFiscalPolicy($state, 0.01);
@@ -2396,7 +2421,7 @@ class CreditFiscalSubsystemTest extends TestCase
         $state = new MacroState();
         $state->corporateTaxPolicyShift = 0.04;
         // The debt the Bohn reaction holds against the structural deficit: the fiscal stance at rest.
-        $state->sovereignNetDebtToGdp = 0.90;
+        $state->sovereignNetFinancialLiabilitiesToGdp = 0.90;
         $state->bankLevyRate = 0.002;
         $state->extractionStringency = 1.0;
         $state->stampDutyRate = 0.002;
@@ -2678,6 +2703,7 @@ class CreditFiscalSubsystemTest extends TestCase
         $this->assertGreaterThan(0.0, $accounts->bankRescueSales);
         $this->assertEqualsWithDelta($accounts->fundContribution, $accounts->fundFinancedSpending, 1e-15, 'What the fund pays in, the budget spends.');
         $this->assertEqualsWithDelta(0.45 + 0.02 - 1.10, $accounts->netFinancialWorth(), 1e-12);
+        $this->assertEqualsWithDelta($state->sovereignDebtToGdp - 0.45 - $state->bankRescueAssetsToGdp, $state->sovereignNetFinancialLiabilitiesToGdp, 1e-12);
         $this->assertEqualsWithDelta(1.10 - 0.15, $accounts->netDebt(), 1e-12);
         $this->assertEqualsWithDelta(0.02 + (CreditFiscalSubsystem::BANK_RESCUE_RECOVERY_SHARE * 0.06) - $accounts->bankRescueSales - (0.035 * 0.02 * $dt), $state->bankRescueAssetsToGdp, 1e-12, 'The recoverable share is held; what is sold leaves the holdings.');
     }

@@ -375,7 +375,7 @@ class SystemicEventReporterTest extends TestCase
             exchequerHeadStance: \App\Service\Politics\Exchequer::stance(4.0),
             exchequerHeadPassedOver: [['name' => 'Hal Brennan', 'birth' => -47.0, 'stance' => 0.0, 'regulation' => 0.0, 'fund' => 0.0, 'debt' => 1.0]],
         );
-        $macro = new MacroStateDTO(totalTime: 3.0, sovereignNetDebtToGdpEma: 0.9, sovereignDebtAverageMaturity: 5.0);
+        $macro = new MacroStateDTO(totalTime: 3.0, sovereignDebtToGdpEma: 0.9, sovereignDebtAverageMaturity: 5.0);
         $basisPoints = (int) round(10000.0 * 0.0029 * 0.9 * 1.0);
 
         for ($i = 0; $i < 20; ++$i) {

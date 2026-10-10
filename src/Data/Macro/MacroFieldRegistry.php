@@ -179,6 +179,7 @@ final class MacroFieldRegistry
         'domesticInflation' => 'inflation',
         'consumerPriceLevel' => 'gdpDeflator',
         'sovereignNetDebtToGdp' => 'sovereignDebtToGdp',
+        'sovereignNetFinancialLiabilitiesToGdp' => 'sovereignNetDebtToGdp',
         'sovereignCouponRate' => 'yield10y',
         'macroCreditSpreadTrend' => 'macroCreditSpreadEma',
         'corporateTaxRateTrend' => 'corporateTaxRate',

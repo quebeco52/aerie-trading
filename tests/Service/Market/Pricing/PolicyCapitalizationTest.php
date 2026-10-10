@@ -298,7 +298,7 @@ class PolicyCapitalizationTest extends TestCase
     {
         return new MacroStateDTO(
             totalTime: 10.0,
-            sovereignNetDebtToGdp: $netDebt,
+            sovereignNetFinancialLiabilitiesToGdp: $netDebt,
             governmentSpendingIndex: MacroEngine::GOVT_SPENDING_BASELINE * (1.0 + $purchases),
             publicSpendingShare: $share,
             governmentSpendingShiftEmbodied: $embodied,

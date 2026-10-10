@@ -159,7 +159,7 @@ final class PolicyCapitalization
     public static function publicSpendingGap(MacroStateDTO $macro, float $capRate, bool $previous = false): float
     {
         $speed = MacroEngine::GOVT_SPENDING_MEAN_REVERSION;
-        $inForce = self::measure('publicSpending', CreditFiscalSubsystem::purchasesTarget($macro->publicSpendingShare, $macro->sovereignNetDebtToGdp, $macro->sovereignFundDollarsPerGdp > 0.0, $macro->consolidationTaxShare));
+        $inForce = self::measure('publicSpending', CreditFiscalSubsystem::purchasesTarget($macro->publicSpendingShare, $macro->sovereignNetFinancialLiabilitiesToGdp, $macro->sovereignFundDollarsPerGdp > 0.0, $macro->consolidationTaxShare));
         $purchases = ($macro->governmentSpendingIndex / MacroEngine::GOVT_SPENDING_BASELINE) - 1.0;
 
         return self::expectedOverLife($macro, $capRate, $previous, 'publicSpending', $macro->publicSpendingShare, static fn (float $law): float => self::measure('publicSpending', $law), self::LONG_RUN_PUBLIC_SPENDING_SHIFT, self::PUBLIC_SPENDING_TERM_PERSISTENCE, $speed)

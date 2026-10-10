@@ -55,7 +55,7 @@ class CreditFiscalSubsystem
     // --- Debt Maturity (the Exchequer's; Hamilton & Wu 2012, Greenwood & Vayanos 2014) ---
     /** Average maturity of the debt at the founding, in years: 59.5 months, the midpoint of the Treasury's record over the ladder fit's years (48 in 2008, 71 in 2017), so the bill share and repricing lag above are the founding book's; both scale with 1 / maturity, the share of a steady ladder maturing each year. */
     public const FOUNDING_DEBT_AVERAGE_MATURITY = 59.5 / 12.0;
-    /** Ten-year term premium per unit of net debt to GDP times years of average maturity: 0.29%. Hamilton & Wu (2012, Table 6): retiring December 2006's debt beyond ten years with $400bn of bills would have taken 14bp off the ten-year; at about 17 years' remaining maturity against 0.4, on $13.8T of GDP, 0.48 GDP-years of supply. */
+    /** Ten-year term premium per unit of gross debt to GDP times years of average maturity: 0.29%; the fund's paper is foreign, so all the District's debt is in private hands. Hamilton & Wu (2012, Table 6): retiring December 2006's debt beyond ten years with $400bn of bills would have taken 14bp off the ten-year; at about 17 years' remaining maturity against 0.4, on $13.8T of GDP, 0.48 GDP-years of supply. */
     public const DEBT_MATURITY_TERM_PREMIUM = 0.0029;
 
     // --- Sovereign Debt Dynamics (Greenwood-Vayanos 2014) ---
@@ -485,7 +485,7 @@ class CreditFiscalSubsystem
         $state->governmentSpendingIndex = max(60.0, min(200.0, StochasticProcesses::calculateSchwartz1Factor(
             currentPrice: $state->governmentSpendingIndex,
             kappa: MacroEngine::GOVT_SPENDING_MEAN_REVERSION,
-            theta: MacroEngine::GOVT_SPENDING_BASELINE * self::purchasesTarget($state->publicSpendingShare, $state->sovereignNetDebtToGdp, $state->sovereignFundDollarsPerGdp > 0.0, $state->consolidationTaxShare) / MacroEngine::PUBLIC_PURCHASES_TO_GDP,
+            theta: MacroEngine::GOVT_SPENDING_BASELINE * self::purchasesTarget($state->publicSpendingShare, $state->sovereignNetFinancialLiabilitiesToGdp, $state->sovereignFundDollarsPerGdp > 0.0, $state->consolidationTaxShare) / MacroEngine::PUBLIC_PURCHASES_TO_GDP,
             sigma: self::GOVT_SPENDING_VOLATILITY,
             dt: $dt,
             dW: $this->mathUtility->generateStandardNormal()
@@ -545,22 +545,23 @@ class CreditFiscalSubsystem
      * The structural part of the tax take over the purchases share, as a share of GDP: the Bohn (1998) reaction to net
      * debt above its threshold, less the structural deficit a budget with no fund runs (with one, the draw pays that
      * deficit as spending), less the part of any consolidation the Diet finds by cutting purchases (purchasesTarget()). Debt is net
-     * of the fund's bonds, the position the market prices (Hadzi-Vaskov & Ricci 2016); equal to gross with no fund.
+     * financial liabilities, gross less the whole fund and the rescue holdings, the position the market prices (IMF Fiscal
+     * Monitor, October 2018, ch. 2: stronger public balance sheets borrow cheaper); equal to gross with neither.
      *
      * @param MacroState $state Current macroeconomic state.
      */
     public static function fiscalStance(MacroState $state): float
     {
         $funded = $state->sovereignFundDollarsPerGdp > 0.0;
-        $stance = self::bohnSurplus($state->sovereignNetDebtToGdp) - ($funded ? 0.0 : self::SOVEREIGN_STRUCTURAL_DEFICIT);
+        $stance = self::bohnSurplus($state->sovereignNetFinancialLiabilitiesToGdp) - ($funded ? 0.0 : self::SOVEREIGN_STRUCTURAL_DEFICIT);
 
-        return $stance - self::consolidationSpendingCut($state->sovereignNetDebtToGdp, $funded, $state->consolidationTaxShare);
+        return $stance - self::consolidationSpendingCut($state->sovereignNetFinancialLiabilitiesToGdp, $funded, $state->consolidationTaxShare);
     }
 
-    /** The primary surplus the Bohn (1998) reaction calls for, a share of GDP: its sensitivity on net debt above the threshold. */
-    public static function bohnSurplus(float $netDebtToGdp): float
+    /** The primary surplus the Bohn (1998) reaction calls for, a share of GDP: its sensitivity on net financial liabilities above the threshold. */
+    public static function bohnSurplus(float $netLiabilitiesToGdp): float
     {
-        return self::BOHN_FISCAL_REACTION_SENSITIVITY * max(0.0, $netDebtToGdp - self::SOVEREIGN_DEBT_NEUTRAL_THRESHOLD);
+        return self::BOHN_FISCAL_REACTION_SENSITIVITY * max(0.0, $netLiabilitiesToGdp - self::SOVEREIGN_DEBT_NEUTRAL_THRESHOLD);
     }
 
     /**
@@ -569,15 +570,15 @@ class CreditFiscalSubsystem
      * plans the tax share is measured on are (Alesina et al. 2018); with no fund, the reaction that only pays that deficit
      * is no consolidation.
      */
-    public static function consolidationSpendingCut(float $netDebtToGdp, bool $funded, float $taxShare): float
+    public static function consolidationSpendingCut(float $netLiabilitiesToGdp, bool $funded, float $taxShare): float
     {
-        return (1.0 - $taxShare) * max(0.0, self::bohnSurplus($netDebtToGdp) - ($funded ? 0.0 : self::SOVEREIGN_STRUCTURAL_DEFICIT));
+        return (1.0 - $taxShare) * max(0.0, self::bohnSurplus($netLiabilitiesToGdp) - ($funded ? 0.0 : self::SOVEREIGN_STRUCTURAL_DEFICIT));
     }
 
     /** The purchases share of GDP the purchases process reverts to: the Diet's appropriation, less the cuts the debt calls for. */
-    public static function purchasesTarget(float $publicSpendingShare, float $netDebtToGdp, bool $funded, float $taxShare): float
+    public static function purchasesTarget(float $publicSpendingShare, float $netLiabilitiesToGdp, bool $funded, float $taxShare): float
     {
-        return $publicSpendingShare - self::consolidationSpendingCut($netDebtToGdp, $funded, $taxShare);
+        return $publicSpendingShare - self::consolidationSpendingCut($netLiabilitiesToGdp, $funded, $taxShare);
     }
 
     /**
@@ -701,6 +702,9 @@ class CreditFiscalSubsystem
         // IMF GFSM 2014 net debt: gross debt less the debt instruments the government holds, which here is the
         // sovereign fund's paper sleeve (its equities are not debt instruments). Equal to gross with no fund.
         $state->sovereignNetDebtToGdp = $state->sovereignDebtToGdp - $state->sovereignFundBondsToGdp;
+        // Net financial liabilities (OECD; minus the accounts' net financial worth): gross debt less the fund whole,
+        // equities with its bonds, and the rescue stakes still held.
+        $state->sovereignNetFinancialLiabilitiesToGdp = $state->sovereignDebtToGdp - $state->sovereignFundToGdp - $state->bankRescueAssetsToGdp;
     }
 
     /**
@@ -923,18 +927,18 @@ class CreditFiscalSubsystem
     }
 
     /** The ten-year term premium the book's maturity adds against the founding book (FixedIncome::calculateMaturitySupplyTermPremium()). */
-    public static function maturitySupplyTermPremium(float $netDebtToGdp, float $averageMaturity): float
+    public static function maturitySupplyTermPremium(float $grossDebtToGdp, float $averageMaturity): float
     {
-        return FixedIncome::calculateMaturitySupplyTermPremium($netDebtToGdp, $averageMaturity, self::FOUNDING_DEBT_AVERAGE_MATURITY, self::DEBT_MATURITY_TERM_PREMIUM);
+        return FixedIncome::calculateMaturitySupplyTermPremium($grossDebtToGdp, $averageMaturity, self::FOUNDING_DEBT_AVERAGE_MATURITY, self::DEBT_MATURITY_TERM_PREMIUM);
     }
 
     /**
      * The duration taken out of private hands, in ten-year term premium: the central bank's holdings less the extra the
      * Exchequer's maturity puts in, both through the same preferred-habitat channel (Vayanos & Vila 2021).
      */
-    public static function durationExtraction(float $balanceSheetIntensity, float $netDebtToGdp, float $averageMaturity): float
+    public static function durationExtraction(float $balanceSheetIntensity, float $grossDebtToGdp, float $averageMaturity): float
     {
-        return $balanceSheetIntensity - self::maturitySupplyTermPremium($netDebtToGdp, $averageMaturity);
+        return $balanceSheetIntensity - self::maturitySupplyTermPremium($grossDebtToGdp, $averageMaturity);
     }
 
     /**
@@ -1112,17 +1116,18 @@ class CreditFiscalSubsystem
      * sovereign ceiling, and the currency), repriced over budget rounds rather than ticks. It stays zero
      * through the 85-90% the fiscal reaction settles at.
      *
-     * The stock is NET debt, gross less the sovereign fund's bonds: spreads price net rather than gross debt
-     * (Hadzi-Vaskov & Ricci 2016, IMF WP/16/148), which is how Singapore's gross debt of over 150% of GDP
-     * carries no premium at all. What the budget and the bond market's duration supply read stays gross:
-     * the coupons are paid on gross debt, and the fund holds foreign paper, not the District's.
+     * The stock is net financial liabilities, gross debt less the sovereign fund whole and the rescue holdings:
+     * spreads price net rather than gross debt (Hadzi-Vaskov & Ricci 2016, IMF WP/16/148), and the whole public
+     * balance sheet rather than its debt alone (IMF Fiscal Monitor, October 2018, ch. 2), which is how Singapore's
+     * gross debt of over 150% of GDP carries no premium at all. What the budget and the bond market's duration
+     * supply read stays gross: the coupons are paid on gross debt, and the fund holds foreign paper, not the District's.
      *
      * @param MacroState $state Current macroeconomic state.
      * @param float      $dt    Time increment in years.
      */
     public function calculateSovereignRiskSpread(MacroState $state, float $dt): void
     {
-        $excessDebt = max(0.0, $state->sovereignNetDebtToGdpEma - MacroEngine::SOVEREIGN_RISK_DEBT_THRESHOLD);
+        $excessDebt = max(0.0, $state->sovereignNetFinancialLiabilitiesToGdpEma - MacroEngine::SOVEREIGN_RISK_DEBT_THRESHOLD);
         $target = min(self::MAX_SOVEREIGN_RISK_SPREAD, self::LAUBACH_DEBT_YIELD_SENSITIVITY * $excessDebt);
 
         $state->sovereignRiskSpread = TimeSeries::calculateDistributedLag(
@@ -1199,8 +1204,8 @@ class CreditFiscalSubsystem
             return;
         }
 
-        // Keyed to net debt, as the fiscal reaction it belongs to is (fiscalStance()).
-        $excessDebt = max(0.0, $state->sovereignNetDebtToGdpEma - MacroEngine::SOVEREIGN_RISK_DEBT_THRESHOLD);
+        // Keyed to net financial liabilities, as the fiscal reaction it belongs to is (fiscalStance()).
+        $excessDebt = max(0.0, $state->sovereignNetFinancialLiabilitiesToGdpEma - MacroEngine::SOVEREIGN_RISK_DEBT_THRESHOLD);
         $update = $state->inflationEma
             - MacroEngine::REIMBURSEMENT_PRODUCTIVITY_OFFSET
             - (self::REIMBURSEMENT_FISCAL_CUT_SENSITIVITY * $excessDebt);
