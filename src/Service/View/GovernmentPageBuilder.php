@@ -1226,7 +1226,7 @@ class GovernmentPageBuilder
                     'target' => $neutral + $budget['levers']['corporateTax'],
                     'enacted' => $neutral + $standing['corporateTax'],
                     'status' => $status('corporateTax'),
-                    'note' => sprintf('Firms pay %.1f%% today, with the cyclical adjustment', 100.0 * $macro->corporateTaxRate),
+                    'note' => sprintf('Firms pay %.1f%% today. Other taxes, net of benefits, take %.1f%% of GDP and move with the economy', 100.0 * $macro->corporateTaxRate, 100.0 * $macro->netTaxRate),
                 ],
                 [
                     'name' => 'Tax on dividends',

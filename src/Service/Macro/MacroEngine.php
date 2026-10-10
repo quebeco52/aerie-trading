@@ -157,7 +157,7 @@ class MacroEngine
     public const HY_BASE_SPREAD_MULTIPLIER = 3.3;
 
     // --- Barro Tax-Smoothing & Automatic Fiscal Stabilizers (Barro 1979) ---
-    /** The budget's founding tax take and the purchases it pays for, each 21% of GDP: the whole budget, whose cyclical and structural parts move as the corporate rate firms pay does (CreditFiscalSubsystem::calculateDynamicFiscalPolicy()), that rate founded BASE_CORPORATE_TAX_RATE below it. */
+    /** The budget's founding tax take and the purchases it pays for, each 21% of GDP: the whole budget, the corporate rate firms pay on its profits base and net taxes, which carry its cyclical and structural parts (CreditFiscalSubsystem::calculateDynamicFiscalPolicy()). */
     public const TARGET_CORPORATE_TAX_RATE = 0.21;
     /** Adjustment speed of the effective tax burden toward its cyclical target (half-life 0.7y), fitted with CreditFiscalSubsystem::FISCAL_STABILIZER_SENSITIVITY; shared, as the market prices how fast a law reaches the rate (App\Service\Market\Pricing\PolicyCapitalization). */
     public const FISCAL_ADJUSTMENT_SPEED = 1.0;

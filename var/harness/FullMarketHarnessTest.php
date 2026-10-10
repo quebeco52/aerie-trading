@@ -214,7 +214,7 @@ final class FullMarketHarnessTest extends KernelTestCase
                     'net_debt' => $m->sovereignNetDebtToGdp, 'bank_credit' => \App\Service\Macro\Subsystem\CreditFiscalSubsystem::bankCreditToGdp($m->boardBankCredit, $m->sovereignFundDollarsPerGdp, $m->nominalGdpIndex),
                     'rescue_cost' => $m->bankRescueCostToGdp, 'rescue_assets' => $m->bankRescueAssetsToGdp, 'crisis_at' => $m->lastCreditCrisisAt,
                     'spread' => $m->sovereignRiskSpread, 'tax_rate' => $m->corporateTaxRate,
-                ]) . "\n", FILE_APPEND);
+                ] + (getenv('BOARD_NI') ? $this->boardNetIncome($list) + ['gap_ema' => $m->outputGapEma, 'net_tax' => $m->netTaxRate ?? null] : [])) . "\n", FILE_APPEND);
             }
         }
 
@@ -287,6 +287,27 @@ final class FullMarketHarnessTest extends KernelTestCase
         }
 
         return new MacroStateDTO(...array_merge($vars, $this->replayLags));
+    }
+
+    /**
+     * BOARD_NI=1: the board's trailing net income (sum of Stock::totalNetIncome, the TTM figure EarningsEngine sets)
+     * over firms not bankrupt, and how many firms it covers.
+     *
+     * @param list<\App\Entity\Stock> $list
+     * @return array{board_tni: float, board_n: int}
+     */
+    private function boardNetIncome(array $list): array
+    {
+        $sum = 0.0;
+        $n = 0;
+        foreach ($list as $s) {
+            if (!$s->isBankrupt()) {
+                $sum += (float) $s->getTotalNetIncome();
+                $n++;
+            }
+        }
+
+        return ['board_tni' => $sum, 'board_n' => $n];
     }
 
     private function captureReport(CorporateReport $report): void

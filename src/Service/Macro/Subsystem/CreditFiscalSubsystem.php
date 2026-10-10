@@ -35,6 +35,8 @@ class CreditFiscalSubsystem
     // --- Corporate Tax Revenue (BEA NIPA) ---
     /** Taxable corporate profits over GDP, the base a change in the corporate rate is levied on: 20%, the District being a financial centre, whose profit bases run 14-34% of GDP against the US's 9.7% (corporate tax revenue over the statutory rate, 2015-19: Switzerland 14%, Singapore 19%, Luxembourg 19%, Ireland 22%, Hong Kong 34%; Eurostat gov_10a_taxag, IRAS, IRD), so a point of rate is a fifth of a point of GDP in revenue. */
     public const CORPORATE_PROFITS_TO_GDP = 0.20;
+    /** The budget's founding take outside the corporate tax, net of transfers: household and indirect taxes less benefits, 17.6% of GDP, the whole 21% less the founding corporate rate on its base. These carry the automatic stabilisers and the structural stance (Girouard & Andre 2005: income taxes, contributions and unemployment benefits), so the rate firms pay moves only with the law. */
+    public const FOUNDING_NET_TAX_RATE = MacroEngine::TARGET_CORPORATE_TAX_RATE - (MacroEngine::BASE_CORPORATE_TAX_RATE * self::CORPORATE_PROFITS_TO_GDP);
     /** Net corporate dividends over GDP, the base the tax on dividends is levied on before the taxable share of holders: 5.5%, between the financial centres' net distributions, paid less received, 2015-19 (Switzerland 5.9%, Ireland 5% of GNI*; Eurostat nasa_10_nf_tr D42), against the US's 4.4%. */
     public const NET_DIVIDENDS_TO_GDP = 0.055;
 
@@ -121,7 +123,7 @@ class CreditFiscalSubsystem
     public const CREDIT_SPREAD_TREND_YEARS = 10.0;
 
     // --- Structural Tax Level ---
-    /** Time constant (years) of the tax rate's measured trend: demand answers a change in the fiscal stance (Blanchard 1990 fiscal impulse), and a stance held for a decade is in potential, not the gap. */
+    /** Time constant (years) of the tax rates' measured trends: demand answers a change in the fiscal stance (Blanchard 1990 fiscal impulse), and a stance held for a decade is in potential, not the gap. */
     public const TAX_RATE_TREND_YEARS = 10.0;
 
     // --- Corporate Default Dynamics (Moody's all-rated, Vasicek single factor) ---
@@ -502,21 +504,24 @@ class CreditFiscalSubsystem
     /**
      * Barro (1979) Tax-Smoothing Hypothesis & Automatic Fiscal Stabilizers.
      *
-     * Adjusts the corporate tax rate continuously via an Ornstein-Uhlenbeck institutional process:
-     * raises effective tax burden during economic booms to cool demand, and cuts taxes during recessions.
-     * The rate it returns to is the neutral rate plus the shift the Diet has legislated, plus the structural fiscal
-     * stance (fiscalStance()): the rate is the instrument the budget's surplus is raised with, and the one demand reads.
+     * Adjusts the budget's net taxes, the take outside the corporate tax net of transfers, continuously via an
+     * Ornstein-Uhlenbeck institutional process: they rise in a boom and fall in a recession, and return to their
+     * founding share plus the structural fiscal stance (fiscalStance()), the instrument the budget's surplus is raised
+     * with. The corporate rate firms pay follows only the shift the Diet has legislated, at the same speed. Demand reads
+     * both against their decade trends.
      *
      * @param MacroState $state Current macroeconomic state.
      * @param float      $dt    Time increment in years.
      */
     public function calculateDynamicFiscalPolicy(MacroState $state, float $dt): void
     {
-        $targetTaxRate = MacroEngine::BASE_CORPORATE_TAX_RATE + $state->corporateTaxPolicyShift + (self::FISCAL_STABILIZER_SENSITIVITY * $state->outputGapEma)
-            + self::fiscalStance($state);
+        $targetNetTaxRate = self::FOUNDING_NET_TAX_RATE + (self::FISCAL_STABILIZER_SENSITIVITY * $state->outputGapEma) + self::fiscalStance($state);
+        $state->netTaxRate += MacroEngine::FISCAL_ADJUSTMENT_SPEED * ($targetNetTaxRate - $state->netTaxRate) * $dt;
+        $state->corporateTaxRate += MacroEngine::FISCAL_ADJUSTMENT_SPEED * (MacroEngine::BASE_CORPORATE_TAX_RATE + $state->corporateTaxPolicyShift - $state->corporateTaxRate) * $dt;
 
-        $state->corporateTaxRate += MacroEngine::FISCAL_ADJUSTMENT_SPEED * ($targetTaxRate - $state->corporateTaxRate) * $dt;
-        $state->corporateTaxRateTrend += (1.0 - exp(-$dt / self::TAX_RATE_TREND_YEARS)) * ($state->corporateTaxRate - $state->corporateTaxRateTrend);
+        $trendWeight = 1.0 - exp(-$dt / self::TAX_RATE_TREND_YEARS);
+        $state->netTaxRateTrend += $trendWeight * ($state->netTaxRate - $state->netTaxRateTrend);
+        $state->corporateTaxRateTrend += $trendWeight * ($state->corporateTaxRate - $state->corporateTaxRateTrend);
 
         // The legislated part of that adjustment on its own, and the laws as the trailing year's earnings carry them,
         // which the market measures what it expects against (App\Service\Market\Pricing\PolicyCapitalization).
@@ -646,9 +651,8 @@ class CreditFiscalSubsystem
      * Every term is a flow: the Bohn surplus and, with no fund, the structural deficit are in the tax rate
      * (fiscalStance()) and in purchases (purchasesTarget()), which demand reads, not a ledger beside it.
      *
-     * The tax rate's cyclical and structural parts are the whole budget's response, so T books them on GDP as fitted.
-     * The shift the Diet legislates, as far as it has reached the rate, is a change in the corporate rate alone and is
-     * levied on corporate profits; the tariff is levied on imported goods, which shrink by their price elasticity as the
+     * Net taxes carry the whole budget's cyclical and structural response, so T books them on GDP as fitted. The
+     * corporate rate, which moves only with the shift the Diet legislates, is levied on corporate profits; the tariff is levied on imported goods, which shrink by their price elasticity as the
      * duty raises their price; the carbon price is levied on the power sector's emissions; the bank levy is what the
      * board's banks owe on their balance sheets, in currency, read through the reserve fund's dollars per unit of GDP
      * (none is booked before the fund opens); the tax on dividends, as far as it departs from the founding rate, is
@@ -673,9 +677,9 @@ class CreditFiscalSubsystem
         // their share of GDP rises in a slump (the denominator half of the automatic stabilisers, Girouard & Andre 2005).
         $output = $state->nominalGdpIndex;
         $trendNominalGdp = $state->nominalGdpIndex / (1.0 + $state->outputGap);
-        // The tax take moves with the rate firms pay, founded TARGET_CORPORATE_TAX_RATE of GDP to the rate's BASE_CORPORATE_TAX_RATE.
-        $taxRevenue = (($state->corporateTaxRate + MacroEngine::TARGET_CORPORATE_TAX_RATE - MacroEngine::BASE_CORPORATE_TAX_RATE - $state->corporateTaxShiftRealized) * $output)
-            + ($state->corporateTaxShiftRealized * self::CORPORATE_PROFITS_TO_GDP * $output)
+        // Net taxes on GDP and the corporate rate on its profits base, founded TARGET_CORPORATE_TAX_RATE of GDP between them.
+        $taxRevenue = ($state->netTaxRate * $output)
+            + ($state->corporateTaxRate * self::CORPORATE_PROFITS_TO_GDP * $output)
             + (MacroAggregateSubsystem::tariffRevenueToGdp($state->importTariffRate) * $output)
             + ($state->carbonPrice * self::POWER_SECTOR_CO2_PER_GDP_DOLLAR * $output)
             + ($state->sovereignFundDollarsPerGdp > 0.0 ? $state->boardBankLevy / $state->sovereignFundDollarsPerGdp : 0.0)

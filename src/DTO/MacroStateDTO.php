@@ -185,6 +185,10 @@ readonly class MacroStateDTO
         public float $corporateTaxRate = MacroEngine::BASE_CORPORATE_TAX_RATE,
         /** The tax rate's measured structural level, a decade's exponential average (App\Service\Macro\Subsystem\CreditFiscalSubsystem::calculateDynamicFiscalPolicy()). */
         public float $corporateTaxRateTrend = MacroEngine::BASE_CORPORATE_TAX_RATE,
+        /** The budget's take outside the corporate tax, net of transfers, as a share of GDP: what carries the automatic stabilisers and the fiscal stance. */
+        public float $netTaxRate = \App\Service\Macro\Subsystem\CreditFiscalSubsystem::FOUNDING_NET_TAX_RATE,
+        /** Its decade trend, as corporateTaxRateTrend is the corporate rate's. */
+        public float $netTaxRateTrend = \App\Service\Macro\Subsystem\CreditFiscalSubsystem::FOUNDING_NET_TAX_RATE,
         public float $sovereignDebtToGdp = MacroEngine::INITIAL_DEBT_TO_GDP,
         /** Interest rate the coupon stock of the debt pays, repricing toward the 10-year as it rolls (App\Service\Macro\Subsystem\CreditFiscalSubsystem::calculateSovereignDebt()). */
         public float $sovereignCouponRate = self::OPENING_YIELD_10Y,

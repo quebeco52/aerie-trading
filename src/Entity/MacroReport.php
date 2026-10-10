@@ -117,6 +117,10 @@ class MacroReport
     #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4)]
     private ?string $corporateTaxRate = null;
 
+    // The budget's take outside the corporate tax, net of transfers, of GDP.
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 6, nullable: true)]
+    private ?string $netTaxRate = null;
+
     #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4)]
     private ?string $equityRiskPremium = null;
 

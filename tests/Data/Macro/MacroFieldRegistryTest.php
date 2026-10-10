@@ -43,6 +43,7 @@ class MacroFieldRegistryTest extends TestCase
         'retailCreditFactor' => 'Latent OU state behind retailDefaultRate, which is recorded.',
         'macroCreditSpreadTrend' => 'Decade-long average of macro_credit_spread, which is recorded.',
         'corporateTaxRateTrend' => 'Decade-long average of corporate_tax_rate, which is recorded.',
+        'netTaxRateTrend' => 'Decade-long average of net_tax_rate, which is recorded.',
         'sovereignCouponRate' => 'Two-year lag of yield_10y, which is recorded.',
         'foreignTermPremiumShock' => 'Latent OU state behind the mainland bond yield, which the fund\'s foreign bonds carry.',
         'foreignTermPremiumRegime' => 'Latent OU state behind the mainland bond yield, which the fund\'s foreign bonds carry.',
