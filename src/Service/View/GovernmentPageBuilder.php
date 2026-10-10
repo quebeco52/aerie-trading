@@ -2052,6 +2052,9 @@ class GovernmentPageBuilder
             'repricingShare' => $billShare,
             'rate' => $rate,
             'interestToGdp' => CreditFiscalSubsystem::publicAccounts($macro, 0.0)->interest,
+            // What the Monetary Authority pays over a year, and the losses it is still making up first.
+            'remittanceToGdp' => CreditFiscalSubsystem::publicAccounts($macro, 0.0)->centralBankRemittance,
+            'authorityLossesToGdp' => $macro->centralBankDeferredAssetToGdp,
             'tenYear' => $macro->yield10y,
             'maturityBp' => (int) round(10000.0 * CreditFiscalSubsystem::maturitySupplyTermPremium($macro->sovereignDebtToGdpEma, $maturity)),
             'councilMaturity' => $politics->councilDebtStances === [] ? null : Exchequer::averageMaturity(CouncilAppointments::median($politics->councilDebtStances)),

@@ -345,6 +345,9 @@ class MacroState
     // from its rescues, to be sold back; both as shares of GDP.
     public float $bankRescueCostToGdp;
     public float $bankRescueAssetsToGdp;
+    // Losses the Monetary Authority carries as a deferred asset, paid down from its profits before any reach the
+    // Exchequer; a share of GDP.
+    public float $centralBankDeferredAssetToGdp;
 
     // The mainland: its output gap and the gap a quarter back, annualized core inflation and its three quarterly lags,
     // the funds rate the Fed sets on them, and the global demand composite.

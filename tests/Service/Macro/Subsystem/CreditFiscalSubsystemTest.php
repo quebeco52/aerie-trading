@@ -186,10 +186,10 @@ class CreditFiscalSubsystemTest extends TestCase
         $this->assertSame($calm->netTaxStanceRateTrend, $slump->netTaxStanceRateTrend);
     }
 
-    /** At founding the two rates raise the budget's whole take between them. */
+    /** At founding the two rates and the Authority's remittance raise the budget's whole take between them. */
     public function testNetTaxesAndTheCorporateRateFoundTheWholeTake(): void
     {
-        $this->assertEqualsWithDelta(MacroEngine::PUBLIC_PURCHASES_TO_GDP, CreditFiscalSubsystem::FOUNDING_NET_TAX_RATE + (MacroEngine::BASE_CORPORATE_TAX_RATE * CreditFiscalSubsystem::CORPORATE_PROFITS_TO_GDP), 1e-15);
+        $this->assertEqualsWithDelta(MacroEngine::PUBLIC_PURCHASES_TO_GDP, CreditFiscalSubsystem::FOUNDING_NET_TAX_RATE + (MacroEngine::BASE_CORPORATE_TAX_RATE * CreditFiscalSubsystem::CORPORATE_PROFITS_TO_GDP) + CreditFiscalSubsystem::FOUNDING_CENTRAL_BANK_REMITTANCE, 1e-15);
     }
 
     public function testHighYieldWidensAtItsBaseMultipleOfInvestmentGrade(): void
@@ -319,7 +319,9 @@ class CreditFiscalSubsystemTest extends TestCase
             $output = 1.3;
             $fundPaid = $funded ? 0.025 * $output : 0.0;
             $spending = (104.0 / MacroEngine::GOVT_SPENDING_BASELINE) * MacroEngine::PUBLIC_PURCHASES_TO_GDP * ($output / 0.98) + $fundPaid;
-            $revenue = ((MacroEngine::PUBLIC_PURCHASES_TO_GDP + 0.025) * $output) + $fundPaid;
+            // The Authority's paper earns the 5% the whole debt pays, in place of the founding rate the net take leaves room for.
+            $remittance = MonetaryPolicySubsystem::CURRENCY_TO_GDP * 0.05;
+            $revenue = ((MacroEngine::PUBLIC_PURCHASES_TO_GDP - CreditFiscalSubsystem::FOUNDING_CENTRAL_BANK_REMITTANCE + $remittance + 0.025) * $output) + $fundPaid;
             $deficitToGdp = ($spending - $revenue) / $output;
 
             $this->assertEqualsWithDelta($deficitToGdp, $state->primaryDeficitToGdp, 1e-12, 'The published deficit is spending less revenue.');
@@ -1315,6 +1317,8 @@ class CreditFiscalSubsystemTest extends TestCase
         $state->yield10y = $trendGrowth;
         $state->policyRate = $trendGrowth;
         $state->sovereignCouponRate = $trendGrowth;
+        // The Authority's remittance at these rates, not the founding ones, is part of the take: net it out of the surplus.
+        $state->netTaxRate += CreditFiscalSubsystem::FOUNDING_CENTRAL_BANK_REMITTANCE - MonetaryPolicySubsystem::authorityNetIncomeToGdp($state);
 
         return $state;
     }
@@ -1372,8 +1376,9 @@ class CreditFiscalSubsystemTest extends TestCase
         $this->subsystem->calculateSovereignDebt($locked, 0.01);
         $this->subsystem->calculateSovereignDebt($repriced, 0.01);
 
-        // One hundredth of a year: interest 0.0002 of GDP on locked-in debt against 0.0006 had it all repriced.
-        $this->assertEqualsWithDelta(0.04 * 0.01, $repriced->sovereignDebtToGdp - $locked->sovereignDebtToGdp, 2e-5);
+        // One hundredth of a year: interest 0.0002 of GDP on locked-in debt against 0.0006 had it all repriced, less what
+        // the Authority's paper backing the currency earns of it and pays back.
+        $this->assertEqualsWithDelta(0.04 * (1.0 - MonetaryPolicySubsystem::CURRENCY_TO_GDP) * 0.01, $repriced->sovereignDebtToGdp - $locked->sovereignDebtToGdp, 2e-5);
     }
 
 
@@ -2725,5 +2730,101 @@ class CreditFiscalSubsystemTest extends TestCase
 
         $this->assertEqualsWithDelta(0.17 + (MacroEngine::BASE_CORPORATE_TAX_RATE * CreditFiscalSubsystem::CORPORATE_PROFITS_TO_GDP), $accounts->netTaxes + $accounts->corporateTax, 1e-12);
         $this->assertEqualsWithDelta(1.01 * MacroEngine::PUBLIC_PURCHASES_TO_GDP / 1.01, $accounts->purchases, 1e-12);
+    }
+
+    // --- The Authority's Remittance ---
+
+    /**
+     * The Authority's income reproduces the Fed's remittances: in 2007 currency of 5.2% of GDP backed at the 4.7% the
+     * debt paid, 0.24% of GDP; in 2015 7.6% at 2.3% plus a book of 19.5% earning the 2.3% coupon over reserves at 0.25%,
+     * about 0.57% (0.54% paid from earnings).
+     */
+    public function testTheAuthoritysIncomeReproducesTheFedsRemittances(): void
+    {
+        $state = new MacroState();
+        $state->sovereignDebtAverageMaturity = CreditFiscalSubsystem::FOUNDING_DEBT_AVERAGE_MATURITY;
+        $state->policyRate = 0.047;
+        $state->sovereignCouponRate = 0.047;
+        $state->balanceSheetIntensity = 0.0;
+        $this->assertEqualsWithDelta(MonetaryPolicySubsystem::CURRENCY_TO_GDP * 0.047, MonetaryPolicySubsystem::authorityNetIncomeToGdp($state), 1e-12, 'With no purchases it earns the debt\'s rate on the currency.');
+        $this->assertEqualsWithDelta(0.0024, (0.052 / MonetaryPolicySubsystem::CURRENCY_TO_GDP) * MonetaryPolicySubsystem::authorityNetIncomeToGdp($state), 0.0002);
+
+        $state->policyRate = 0.0025;
+        $state->sovereignCouponRate = 0.023;
+        $state->sovereignDebtAverageMaturity = 1.0e9; // the whole book at its coupon, as 2015's average rate was
+        $state->balanceSheetIntensity = MonetaryPolicySubsystem::QE_MAX_SUPPRESSION;
+        $this->assertEqualsWithDelta(0.0057, MonetaryPolicySubsystem::authorityNetIncomeToGdp($state), 0.0005);
+
+        // Rates raised past the coupon on a full book: a loss, as in 2022-23.
+        $state->policyRate = 0.05;
+        $this->assertLessThan(0.0, MonetaryPolicySubsystem::authorityNetIncomeToGdp($state));
+    }
+
+    /** A loss is carried, not charged to the budget; the profits that follow pay it down before any reach the Exchequer. */
+    public function testALossIsCarriedAndPaidDownBeforeTheAuthorityRemits(): void
+    {
+        $this->assertSame(0.003, CreditFiscalSubsystem::centralBankRemittance(0.003, 0.0, 0.25));
+        $this->assertSame(0.0, CreditFiscalSubsystem::centralBankRemittance(-0.004, 0.0, 0.25), 'A loss is not charged to the budget.');
+        $this->assertSame(0.0, CreditFiscalSubsystem::centralBankRemittance(0.003, 0.01, 0.25), 'A quarter\'s profit short of the carried loss pays it down.');
+        $this->assertEqualsWithDelta(0.003 - (0.0005 / 0.25), CreditFiscalSubsystem::centralBankRemittance(0.003, 0.0005, 0.25), 1e-15, 'The rest is paid over once the loss is made up.');
+        $this->assertSame(0.0, CreditFiscalSubsystem::centralBankRemittance(0.003, 0.0005, 0.0), 'A page reads nothing paid while a loss is carried.');
+
+        // Through the budget: a year of losses builds the deferred asset, the debt not carrying them.
+        $state = $this->neutralBudget(0.60);
+        // A book that neither re-matures nor reprices over the year.
+        $state->sovereignDebtAverageMaturity = 1.0e9;
+        $state->sovereignDebtMaturityTarget = 1.0e9;
+        $state->sovereignCouponRate = 0.02;
+        $state->yield10y = 0.02;
+        $state->policyRate = 0.05;
+        $state->balanceSheetIntensity = MonetaryPolicySubsystem::QE_MAX_SUPPRESSION;
+        $state->nominalGdpGrowth = 0.0;
+        $loss = -MonetaryPolicySubsystem::authorityNetIncomeToGdp($state);
+        $this->assertGreaterThan(0.0, $loss);
+        for ($i = 0; $i < 4; ++$i) {
+            $accounts = CreditFiscalSubsystem::publicAccounts($state, 0.25);
+            $this->assertSame(0.0, $accounts->centralBankRemittance);
+            $this->subsystem->calculateSovereignDebt($state, 0.25);
+        }
+        $this->assertEqualsWithDelta($loss, $state->centralBankDeferredAssetToGdp, 1e-12);
+    }
+
+    /** The founding take nets the Authority's founding remittance, so the founding budget still balances. */
+    public function testTheFoundingRemittanceIsInTheFoundingBalance(): void
+    {
+        $accounts = CreditFiscalSubsystem::publicAccounts(new MacroStateDTO(), 0.25);
+
+        $this->assertEqualsWithDelta(CreditFiscalSubsystem::FOUNDING_CENTRAL_BANK_REMITTANCE, $accounts->centralBankRemittance, 1e-12);
+        $this->assertEqualsWithDelta(0.0034, CreditFiscalSubsystem::FOUNDING_CENTRAL_BANK_REMITTANCE, 0.0001);
+    }
+
+    // --- No Clamps on the Budget ---
+
+    /** Gross debt is not capped: past any level the debt still moves by exactly what the accounts book. */
+    public function testDebtHasNoCeiling(): void
+    {
+        $state = $this->neutralBudget(3.0);
+        $state->netTaxRate -= 0.05;
+        $accounts = CreditFiscalSubsystem::publicAccounts($state, 0.25);
+
+        $this->subsystem->calculateSovereignDebt($state, 0.25);
+
+        $this->assertEqualsWithDelta(3.0 + $accounts->debtChange(0.25), $state->sovereignDebtToGdp, 1e-12);
+        $this->assertGreaterThan(3.0, $state->sovereignDebtToGdp);
+    }
+
+    /** No more can be cut than is appropriated: past that the tax rise carries the whole surplus the debt calls for. */
+    public function testCutsStopAtTheAppropriationAndTaxCarriesTheRest(): void
+    {
+        $state = new MacroState();
+        $state->sovereignFundDollarsPerGdp = 2.0e13;
+        $state->consolidationTaxShare = 0.0;
+        $state->publicSpendingShare = MacroEngine::PUBLIC_PURCHASES_TO_GDP;
+        $state->sovereignNetFinancialLiabilitiesToGdp = 4.0;
+
+        $surplus = CreditFiscalSubsystem::bohnSurplus(4.0);
+        $this->assertGreaterThan($state->publicSpendingShare, CreditFiscalSubsystem::consolidationSpendingCut(4.0, true, 0.0));
+        $this->assertSame(0.0, CreditFiscalSubsystem::purchasesTarget($state->publicSpendingShare, 4.0, true, 0.0));
+        $this->assertEqualsWithDelta($surplus - $state->publicSpendingShare, CreditFiscalSubsystem::fiscalStance($state), 1e-12);
     }
 }

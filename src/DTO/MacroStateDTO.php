@@ -29,10 +29,10 @@ readonly class MacroStateDTO
     // --- Openings ---
 
     /** Policy rate at the opening: the Taylor rule's own target with output at trend (3.42%), so the first tick does not move it. */
-    private const OPENING_POLICY_RATE = 0.034;
+    public const OPENING_POLICY_RATE = 0.034;
 
     /** Ten-year at the opening: the engine's curve evaluated at the opening state. */
-    private const OPENING_YIELD_10Y = 0.0472;
+    public const OPENING_YIELD_10Y = 0.0472;
 
     /**
      * Seeds this snapshot adds to the shared set, for openings only a snapshot needs.
@@ -314,6 +314,8 @@ readonly class MacroStateDTO
         public float $lastCreditCrisisAt = -1.0,
         public float $bankRescueCostToGdp = 0.0,
         public float $bankRescueAssetsToGdp = 0.0,
+        /** Losses the Monetary Authority carries, paid down before it remits (CreditFiscalSubsystem::centralBankRemittance()). */
+        public float $centralBankDeferredAssetToGdp = 0.0,
         public float $foreignOutputGap = 0.0,
         public float $foreignOutputGapEma = 0.0,
         public float $foreignOutputGapLag = 0.0,

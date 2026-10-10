@@ -121,6 +121,7 @@ class MacroFieldRegistryTest extends TestCase
         'sovereignNetDebtToGdpEma' => 'Smoothing of sovereign_net_debt_to_gdp, which is recorded.',
         'sovereignNetFinancialLiabilitiesToGdp' => 'sovereign_debt_to_gdp less sovereign_fund_to_gdp and bank_rescue_assets_to_gdp, all recorded.',
         'sovereignNetFinancialLiabilitiesToGdpEma' => 'Smoothing of sovereignNetFinancialLiabilitiesToGdp.',
+        'centralBankDeferredAssetToGdp' => 'Carried losses that only delay the remittance; what reaches the budget is in the recorded sovereign_debt_to_gdp.',
         'boardNetIssuance' => 'One tick of the companies\' own issuance and buybacks; same objection.',
         'residentialPriceMomentum' => 'A year\'s average of the log change in residential_property_index, which is recorded.',
         'householdNewBorrowing' => 'A year\'s average of the change in household_debt_to_income, which is recorded.',

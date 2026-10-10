@@ -37,8 +37,11 @@ class CreditFiscalSubsystem
     // --- Corporate Tax Revenue (BEA NIPA) ---
     /** Taxable corporate profits over GDP, the base a change in the corporate rate is levied on: 20%, the District being a financial centre, whose profit bases run 14-34% of GDP against the US's 9.7% (corporate tax revenue over the statutory rate, 2015-19: Switzerland 14%, Singapore 19%, Luxembourg 19%, Ireland 22%, Hong Kong 34%; Eurostat gov_10a_taxag, IRAS, IRD), so a point of rate is a fifth of a point of GDP in revenue. */
     public const CORPORATE_PROFITS_TO_GDP = 0.20;
-    /** The budget's founding take outside the corporate tax, net of transfers: household and indirect taxes less benefits, 17.6% of GDP, the whole 21% less the founding corporate rate on its base. These carry the automatic stabilisers and the structural stance (Girouard & Andre 2005: income taxes, contributions and unemployment benefits), so the rate firms pay moves only with the law. */
-    public const FOUNDING_NET_TAX_RATE = MacroEngine::PUBLIC_PURCHASES_TO_GDP - (MacroEngine::BASE_CORPORATE_TAX_RATE * self::CORPORATE_PROFITS_TO_GDP);
+    /** The Monetary Authority's founding remittance, a share of GDP: the currency's backing at the founding rate the debt pays, before any purchases (0.34%; MonetaryPolicySubsystem::authorityNetIncomeToGdp()). */
+    public const FOUNDING_CENTRAL_BANK_REMITTANCE = MonetaryPolicySubsystem::CURRENCY_TO_GDP
+        * ((self::SOVEREIGN_DEBT_BILL_SHARE * MacroStateDTO::OPENING_POLICY_RATE) + ((1.0 - self::SOVEREIGN_DEBT_BILL_SHARE) * MacroStateDTO::OPENING_YIELD_10Y));
+    /** The budget's founding take outside the corporate tax, net of transfers: household and indirect taxes less benefits, 11.3% of GDP, the purchases share less the founding corporate rate on its base and the Authority's remittance. These carry the automatic stabilisers and the structural stance (Girouard & Andre 2005: income taxes, contributions and unemployment benefits), so the rate firms pay moves only with the law. */
+    public const FOUNDING_NET_TAX_RATE = MacroEngine::PUBLIC_PURCHASES_TO_GDP - (MacroEngine::BASE_CORPORATE_TAX_RATE * self::CORPORATE_PROFITS_TO_GDP) - self::FOUNDING_CENTRAL_BANK_REMITTANCE;
     /** Net corporate dividends over GDP, the base the tax on dividends is levied on before the taxable share of holders: 5.5%, between the financial centres' net distributions, paid less received, 2015-19 (Switzerland 5.9%, Ireland 5% of GNI*; Eurostat nasa_10_nf_tr D42), against the US's 4.4%. */
     public const NET_DIVIDENDS_TO_GDP = 0.055;
 
@@ -67,8 +70,6 @@ class CreditFiscalSubsystem
     public const BOHN_FISCAL_REACTION_SENSITIVITY = 0.10;
     /** Share of the Bohn surplus the budget raises by tax at the District's founding, the rest by cutting purchases: the average OECD deficit-cutting plan's, 0.69 of 1.83% of GDP (Alesina, Azzalini, Favero, Giavazzi & Miano 2018, Table 8; 16 countries, 1981-2014). */
     public const FOUNDING_CONSOLIDATION_TAX_SHARE = 0.69 / 1.83;
-    /** Runaway guard on gross debt, about Japan's postwar peak (~2.6x GDP, IMF WEO 2020); the Bohn reaction holds debt far below it. */
-    public const SOVEREIGN_DEBT_CEILING = 2.50;
 
     // --- Sovereign Risk Premium (Laubach 2009) ---
     /** Long yield per unit of debt-to-GDP above the risk threshold: 3-4 bps per percentage point (Laubach 2009; Engen & Hubbard 2004), so 0.035 per unit. Laubach's deficit coefficient is for PROJECTED structural deficits; the engine's primary deficit is cyclical, so it is published but not priced. */
@@ -482,14 +483,14 @@ class CreditFiscalSubsystem
      */
     public function calculateGovernmentSpending(MacroState $state, float $dt): void
     {
-        $state->governmentSpendingIndex = max(60.0, min(200.0, StochasticProcesses::calculateSchwartz1Factor(
+        $state->governmentSpendingIndex = StochasticProcesses::calculateSchwartz1Factor(
             currentPrice: $state->governmentSpendingIndex,
             kappa: MacroEngine::GOVT_SPENDING_MEAN_REVERSION,
             theta: MacroEngine::GOVT_SPENDING_BASELINE * self::purchasesTarget($state->publicSpendingShare, $state->sovereignNetFinancialLiabilitiesToGdp, $state->sovereignFundDollarsPerGdp > 0.0, $state->consolidationTaxShare) / MacroEngine::PUBLIC_PURCHASES_TO_GDP,
             sigma: self::GOVT_SPENDING_VOLATILITY,
             dt: $dt,
             dW: $this->mathUtility->generateStandardNormal()
-        )));
+        );
     }
 
     /**
@@ -555,7 +556,7 @@ class CreditFiscalSubsystem
         $funded = $state->sovereignFundDollarsPerGdp > 0.0;
         $stance = self::bohnSurplus($state->sovereignNetFinancialLiabilitiesToGdp) - ($funded ? 0.0 : self::SOVEREIGN_STRUCTURAL_DEFICIT);
 
-        return $stance - self::consolidationSpendingCut($state->sovereignNetFinancialLiabilitiesToGdp, $funded, $state->consolidationTaxShare);
+        return $stance - ($state->publicSpendingShare - self::purchasesTarget($state->publicSpendingShare, $state->sovereignNetFinancialLiabilitiesToGdp, $funded, $state->consolidationTaxShare));
     }
 
     /** The primary surplus the Bohn (1998) reaction calls for, a share of GDP: its sensitivity on net financial liabilities above the threshold. */
@@ -575,10 +576,13 @@ class CreditFiscalSubsystem
         return (1.0 - $taxShare) * max(0.0, self::bohnSurplus($netLiabilitiesToGdp) - ($funded ? 0.0 : self::SOVEREIGN_STRUCTURAL_DEFICIT));
     }
 
-    /** The purchases share of GDP the purchases process reverts to: the Diet's appropriation, less the cuts the debt calls for. */
+    /**
+     * The purchases share of GDP the purchases process reverts to: the Diet's appropriation, less the cuts the debt calls
+     * for. No more can be cut than is appropriated; past that the tax rise carries the rest of the surplus (fiscalStance()).
+     */
     public static function purchasesTarget(float $publicSpendingShare, float $netLiabilitiesToGdp, bool $funded, float $taxShare): float
     {
-        return $publicSpendingShare - self::consolidationSpendingCut($netLiabilitiesToGdp, $funded, $taxShare);
+        return $publicSpendingShare - min($publicSpendingShare, self::consolidationSpendingCut($netLiabilitiesToGdp, $funded, $taxShare));
     }
 
     /**
@@ -692,12 +696,15 @@ class CreditFiscalSubsystem
         // The rescue holdings are a stock struck in currency, so their ratio to GDP erodes with nominal growth as the debt's does.
         $state->bankRescueAssetsToGdp += (self::BANK_RESCUE_RECOVERY_SHARE * $accounts->bankRescueOutlay) - $accounts->bankRescueSales
             - ($state->nominalGdpGrowth * $state->bankRescueAssetsToGdp * $dt);
+        // What the Authority earned and did not pay over goes to, or comes off, the losses it carries; a currency stock too.
+        $state->centralBankDeferredAssetToGdp -= ((MonetaryPolicySubsystem::authorityNetIncomeToGdp($state) - $accounts->centralBankRemittance) * $dt)
+            + ($state->nominalGdpGrowth * $state->centralBankDeferredAssetToGdp * $dt);
 
         $belowFloor = MacroEngine::SOVEREIGN_DEBT_FLOOR - $state->sovereignDebtToGdp;
         $state->sovereignFundBudgetInflow = ($funded && $belowFloor > 0.0)
             ? $belowFloor * $state->sovereignFundDollarsPerGdp * $state->nominalGdpIndex
             : 0.0;
-        $state->sovereignDebtToGdp = max(MacroEngine::SOVEREIGN_DEBT_FLOOR, min(self::SOVEREIGN_DEBT_CEILING, $state->sovereignDebtToGdp));
+        $state->sovereignDebtToGdp = max(MacroEngine::SOVEREIGN_DEBT_FLOOR, $state->sovereignDebtToGdp);
 
         // IMF GFSM 2014 net debt: gross debt less the debt instruments the government holds, which here is the
         // sovereign fund's paper sleeve (its equities are not debt instruments). Equal to gross with no fund.
@@ -717,7 +724,8 @@ class CreditFiscalSubsystem
      * Investment Returns Contribution: the fund's draw is revenue (zero with no fund), spent together with the
      * stabilisation the fund pays for. A bank rescue is a stock-flow adjustment (Laeven & Valencia 2018): the outlay is
      * borrowed on the day the crisis lands, and the share later recovered is held as stakes and bad loans sold back as a
-     * first-order lag, each sale retiring debt.
+     * first-order lag, each sale retiring debt. The Monetary Authority pays over its net interest income
+     * (centralBankRemittance()).
      *
      * @param MacroState|MacroStateDTO $state The macro state, live or as published.
      * @param float                    $dt    Time increment in years, for this step's one-off adjustments.
@@ -738,6 +746,7 @@ class CreditFiscalSubsystem
             dividendTax: self::dividendTaxRevenueShift($state->dividendTaxRate),
             foreignBuyerTax: AssetMarketSubsystem::foreignBuyerTaxRevenueToGdp($state->foreignBuyerTaxRate),
             fundContribution: $fundContribution,
+            centralBankRemittance: self::centralBankRemittance(MonetaryPolicySubsystem::authorityNetIncomeToGdp($state), $state->centralBankDeferredAssetToGdp, $dt),
             purchases: ($state->governmentSpendingIndex / MacroEngine::GOVT_SPENDING_BASELINE) * MacroEngine::PUBLIC_PURCHASES_TO_GDP / (1.0 + $state->outputGap),
             fundFinancedSpending: $fundContribution,
             interest: self::sovereignEffectiveRate($state) * $state->sovereignDebtToGdp,
@@ -751,6 +760,21 @@ class CreditFiscalSubsystem
             fundAssets: $state->sovereignFundToGdp,
             bankRescueHoldings: $state->bankRescueAssetsToGdp,
         );
+    }
+
+    /**
+     * The Authority's profit paid to the Exchequer, a share of GDP a year. A loss is not charged to the budget: it is
+     * carried as a deferred asset and the profits that follow pay it down before any is paid over, as the Federal
+     * Reserve has booked its losses since 2011 (St. Louis Fed, On the Economy, November 2023). On a page ($dt zero), a
+     * carried loss means nothing is being paid.
+     */
+    public static function centralBankRemittance(float $income, float $deferredAsset, float $dt): float
+    {
+        if ($deferredAsset <= 0.0) {
+            return max(0.0, $income);
+        }
+
+        return $dt > 0.0 ? max(0.0, $income - ($deferredAsset / $dt)) : 0.0;
     }
 
     /**

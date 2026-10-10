@@ -23,6 +23,8 @@ final readonly class PublicAccountsDTO
         public float $foreignBuyerTax,
         /** The reserve fund's draw and the stabilisation it pays for, revenue the budget spends. */
         public float $fundContribution,
+        /** The Monetary Authority's profit paid over, nothing while it makes up past losses. */
+        public float $centralBankRemittance,
         // Spending.
         public float $purchases,
         /** What the fund's contribution pays for, the same amount as it. */
@@ -47,7 +49,7 @@ final readonly class PublicAccountsDTO
     public function revenue(): float
     {
         return $this->netTaxes + $this->corporateTax + $this->tariffs + $this->carbonPrice + $this->bankLevy
-            + $this->dividendTax + $this->foreignBuyerTax + $this->fundContribution;
+            + $this->dividendTax + $this->foreignBuyerTax + $this->fundContribution + $this->centralBankRemittance;
     }
 
     public function spending(): float
@@ -60,7 +62,7 @@ final readonly class PublicAccountsDTO
         return $this->spending() - $this->revenue();
     }
 
-    /** The change in gross debt to GDP over a step of $dt years, before the floor and the ceiling. */
+    /** The change in gross debt to GDP over a step of $dt years, before the floor. */
     public function debtChange(float $dt): float
     {
         return (($this->primaryDeficit() + $this->interest - $this->growthErosion) * $dt) + $this->bankRescueOutlay - $this->bankRescueSales;

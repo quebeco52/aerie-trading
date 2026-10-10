@@ -61,6 +61,10 @@
 						<dt class="text-on-surface-variant">Interest a year</dt>
 						<dd class="text-on-surface mt-0.5"><span class="font-mono tabular-nums">{{ exchequer.interestToGdp|pct(1) }}</span> of GDP</dd>
 					</div>
+					<div class="col-span-2">
+						<dt class="text-on-surface-variant">Paid in by the Monetary Authority</dt>
+						<dd class="text-on-surface mt-0.5">{% if exchequer.authorityLossesToGdp > 0 %}Nothing until it has made up <span class="font-mono tabular-nums">{{ exchequer.authorityLossesToGdp|pct(1) }}</span> of GDP in losses{% else %}<span class="font-mono tabular-nums">{{ exchequer.remittanceToGdp|pct(2) }}</span> of GDP a year, its profit on the currency and the bonds it holds{% endif %}</dd>
+					</div>
 				</dl>
 				<p class="text-xs text-on-surface-variant mt-4 leading-relaxed">
 					Bills and maturing bonds are refinanced at the rates of the day, so a shorter debt passes a change in the policy rate into the budget sooner.

@@ -2,6 +2,7 @@
 
 namespace App\Service\Macro\Subsystem;
 
+use App\DTO\MacroStateDTO;
 use App\Data\Macro\MacroFieldRegistry;
 use App\Service\Macro\Recorder\MacroDiagnosticsProbe;
 use App\Service\Macro\MacroEngine;
@@ -140,6 +141,12 @@ class MonetaryPolicySubsystem
     public const QT_SEVERITY_MULTIPLIER = 0.40;
     /** Extra runoff speed at full overheating pressure (Fed 2017-19 then 2022 roughly doubled its monthly caps), on top of the passive BALANCE_SHEET_RAMP_SPEED. */
     public const QT_RUNOFF_ACCELERATION = 1.0;
+
+    // --- The Authority's Income ---
+    /** Currency in circulation over GDP, the Authority's interest-free funding: 7.8%, the US in 2018Q4 (St. Louis Fed, On the Economy, May 2019). */
+    public const CURRENCY_TO_GDP = 0.078;
+    /** Bonds the full programme holds, over GDP: 19.5%, the Fed's securities held outright at QE3's end ($4.21T, H.4.1 22 Oct 2014) less the ~$0.79T held before the crisis, on 2014's $17.5T GDP. */
+    public const QE_HOLDINGS_TO_GDP_AT_FULL_PROGRAM = 0.195;
 
 
     // --- Deposits Channel (Drechsler, Savov & Schnabl 2017) ---
@@ -447,6 +454,21 @@ class MonetaryPolicySubsystem
         }
 
         return $newPolicyRate;
+    }
+
+    /**
+     * The Authority's net interest income, a share of GDP a year: the Exchequer's paper backing the currency earns what
+     * the debt pays (CreditFiscalSubsystem::sovereignEffectiveRate()), and the bonds its purchases hold earn their coupon
+     * less the policy rate paid on the reserves that bought them. It reproduces the Fed's remittances: 0.24% of GDP in
+     * 2007, about 0.57% in 2015 (0.54% paid) and 0.23% in 2019 (0.26%). Negative when the policy rate rises past the
+     * coupon on a large book, as in 2022-23.
+     */
+    public static function authorityNetIncomeToGdp(MacroState|MacroStateDTO $state): float
+    {
+        $holdings = self::QE_HOLDINGS_TO_GDP_AT_FULL_PROGRAM * max(0.0, $state->balanceSheetIntensity) / self::QE_MAX_SUPPRESSION;
+
+        return (self::CURRENCY_TO_GDP * CreditFiscalSubsystem::sovereignEffectiveRate($state))
+            + ($holdings * ($state->sovereignCouponRate - $state->policyRate));
     }
 
     /**
