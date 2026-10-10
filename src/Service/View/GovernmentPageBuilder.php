@@ -1217,7 +1217,7 @@ class GovernmentPageBuilder
                     'status' => $status('publicSpending'),
                     'spending' => true,
                     'note' => sprintf('Spending on public services runs %.1f%% of GDP today; a budget\'s change reaches it over two to three years',
-                        100.0 * MacroEngine::TARGET_CORPORATE_TAX_RATE * $macro->governmentSpendingIndex / MacroEngine::GOVT_SPENDING_BASELINE),
+                        100.0 * CreditFiscalSubsystem::publicAccounts($macro, 0.0)->purchases),
                 ],
                 [
                     'name' => 'Corporate tax rate',
@@ -2049,7 +2049,7 @@ class GovernmentPageBuilder
             'movingTo' => abs($macro->sovereignDebtMaturityTarget - $maturity) > 1.0 / 12.0 ? $macro->sovereignDebtMaturityTarget : null,
             'repricingShare' => $billShare,
             'rate' => $rate,
-            'interestToGdp' => $rate * $macro->sovereignDebtToGdp,
+            'interestToGdp' => CreditFiscalSubsystem::publicAccounts($macro, 0.0)->interest,
             'tenYear' => $macro->yield10y,
             'maturityBp' => (int) round(10000.0 * CreditFiscalSubsystem::maturitySupplyTermPremium($macro->sovereignNetDebtToGdpEma, $maturity)),
             'councilMaturity' => $politics->councilDebtStances === [] ? null : Exchequer::averageMaturity(CouncilAppointments::median($politics->councilDebtStances)),

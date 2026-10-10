@@ -11,7 +11,7 @@ use Symfony\Bundle\FrameworkBundle\Test\KernelTestCase;
  * Blanchard & Perotti (2002) measure it: a shock to purchases themselves, which then decay at the fitted process's
  * own persistence. Macro only (no fund). For each seed, two runs on the same draws, the second with the purchases
  * index scaled by (1 + SHOCK) after the burn-in. The cumulative multiplier at h quarters is the summed gap
- * difference over the summed purchases difference in GDP units (purchases are TARGET_CORPORATE_TAX_RATE of GDP at
+ * difference over the summed purchases difference in GDP units (purchases are PUBLIC_PURCHASES_TO_GDP of GDP at
  * the baseline index). Env: SEEDS BURN HORIZON TPY SHOCK OUT
  */
 final class GovtImpulseProbeTest extends KernelTestCase

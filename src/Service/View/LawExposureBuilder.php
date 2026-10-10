@@ -33,7 +33,7 @@ final class LawExposureBuilder
         'publicSpending' => ['Public spending, share of GDP', 'What the budget buys from the District\'s contractors, hospitals, colleges and guard firms. Measured against spending at its Year 1 share.'],
     ];
     /** The law each is measured against: none, but for public spending, which is measured against its Year 1 share. */
-    private const NO_LAW = ['publicSpending' => MacroEngine::TARGET_CORPORATE_TAX_RATE];
+    private const NO_LAW = ['publicSpending' => MacroEngine::PUBLIC_PURCHASES_TO_GDP];
 
     /**
      * @param iterable<Stock>      $stocks   The listed board.

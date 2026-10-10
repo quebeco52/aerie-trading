@@ -36,7 +36,7 @@ $economy = static fn(float $t): MacroStateDTO => new MacroStateDTO(
     sovereignDebtToGdp: 0.6,
 );
 $value = static function (MacroStateDTO $m, bool $previous, float $capRate, array $bases): float {
-    $tax = MacroEngine::TARGET_CORPORATE_TAX_RATE + $m->corporateTaxShiftRealized;
+    $tax = MacroEngine::PUBLIC_PURCHASES_TO_GDP + $m->corporateTaxShiftRealized;
     $expected = $tax + Policy::corporateTaxShiftGap($m, $capRate, $previous);
 
     return log(Policy::reprice(1.0, $tax, $expected, Policy::earningsGap($m, $bases, $expected, $capRate, $previous), $capRate));

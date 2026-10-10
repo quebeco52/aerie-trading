@@ -150,7 +150,7 @@ class PolicyCapitalizationTest extends TestCase
     {
         $speed = MacroEngine::GOVT_SPENDING_MEAN_REVERSION;
         $longRun = Policy::LONG_RUN_PUBLIC_SPENDING_SHIFT;
-        $shareAt = static fn(float $shift): float => MacroEngine::TARGET_CORPORATE_TAX_RATE * (1.0 + $shift);
+        $shareAt = static fn(float $shift): float => MacroEngine::PUBLIC_PURCHASES_TO_GDP * (1.0 + $shift);
 
         $carried = $this->spending($shareAt($longRun), $longRun, $longRun);
         $this->assertEqualsWithDelta(0.0, Policy::publicSpendingGap($carried, self::CAP_RATE), 1e-12);
@@ -164,7 +164,7 @@ class PolicyCapitalizationTest extends TestCase
         $this->assertEqualsWithDelta(Policy::publicSpendingGap($foreseen, self::CAP_RATE), Policy::publicSpendingGap($passed, self::CAP_RATE), 1e-12, 'Purchases still closing on the law count until they arrive.');
 
         $this->assertEqualsWithDelta(0.79 * Policy::publicSpendingGap($expected, self::CAP_RATE) * 40.0, Policy::earningsGap($expected, ['publicSpending' => 40.0], 0.21, self::CAP_RATE), 1e-12);
-        $this->assertSame(0.0, Policy::measure('publicSpending', MacroEngine::TARGET_CORPORATE_TAX_RATE), 'The founding share is no shift.');
+        $this->assertSame(0.0, Policy::measure('publicSpending', MacroEngine::PUBLIC_PURCHASES_TO_GDP), 'The founding share is no shift.');
 
         // Purchases the debt has cut below the law are where they are headed, not still closing on it.
         $netDebt = MacroEngine::SOVEREIGN_RISK_DEBT_THRESHOLD + 0.2;

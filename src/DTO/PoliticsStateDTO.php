@@ -70,7 +70,7 @@ readonly class PoliticsStateDTO
         public float $electionInflationGap = 0.0,
         public float $electionIncumbentSwing = 0.0,
         /** Government purchases as a share of GDP, as the last budget set the level they revert to. */
-        public float $publicSpendingShare = MacroEngine::TARGET_CORPORATE_TAX_RATE,
+        public float $publicSpendingShare = MacroEngine::PUBLIC_PURCHASES_TO_GDP,
         /** The corporate rate's shift from the neutral rate, as the last budget set it. */
         public float $corporateTaxPolicyShift = 0.0,
         public float $importTariffRate = 0.0,

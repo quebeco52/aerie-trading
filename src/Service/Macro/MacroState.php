@@ -160,9 +160,11 @@ class MacroState
     public float $inversionDuration;
     public float $corporateTaxRate;
     public float $corporateTaxRateTrend;
-    // The budget's take outside the corporate tax, net of transfers, as a share of GDP, and its decade trend.
+    // The budget's take outside the corporate tax, net of transfers, as a share of GDP; its discretionary part, the
+    // founding share plus the structural stance without the automatic stabilisers' swing; and that part's decade trend.
     public float $netTaxRate;
-    public float $netTaxRateTrend;
+    public float $netTaxStanceRate;
+    public float $netTaxStanceRateTrend;
     public float $sovereignDebtToGdp;
     public float $sovereignCouponRate;
     public float $sovereignDebtToGdpEma;

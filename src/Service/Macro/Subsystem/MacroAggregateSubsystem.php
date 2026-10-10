@@ -25,8 +25,10 @@ use App\Service\Math\TimeSeries;
 class MacroAggregateSubsystem
 {
     // --- KALDOR-KALECKI 2D LIMIT CYCLE ---
-    /** Demand drift per unit of purchases above baseline, fitted on the engine's own response to a purchases shock (var/harness/govt_irf.sh) to Ramey & Zubairy's (2018) cumulative multipliers, 2y 0.54-0.76 and 4y 0.78-0.84 (Blanchard-Perotti and news shocks): 0.79 and 0.64 here, Taylor offset included. */
-    public const KALDOR_GOVT_SPENDING_MULTIPLIER = 0.45;
+    /** Purchases' share of GDP the multiplier below was fitted at. */
+    public const GOVT_SPENDING_MULTIPLIER_FIT_SHARE = 0.21;
+    /** Demand drift per unit of purchases above baseline, fitted on the engine's own response to a purchases shock (var/harness/govt_irf.sh) to Ramey & Zubairy's (2018) cumulative multipliers, 2y 0.54-0.76 and 4y 0.78-0.84 (Blanchard-Perotti and news shocks): 0.79 and 0.64 here, Taylor offset included; 0.45 at the share it was fitted at, scaled to the budget's share so a dollar of purchases moves demand as fitted. */
+    public const KALDOR_GOVT_SPENDING_MULTIPLIER = 0.45 * MacroEngine::PUBLIC_PURCHASES_TO_GDP / self::GOVT_SPENDING_MULTIPLIER_FIT_SHARE;
     /** The rate the demand equation settles a sustained drive at, its automatic stabiliser less its momentum: a drive of c a year holds the gap at c over this, so an effect on the level of spending enters the drift times it. */
     public const DEMAND_OWN_PULL = self::KALDOR_AUTOMATIC_STABILISER - self::KALDOR_MOMENTUM;
     /** Marginal propensity to consume out of a dollar of housing wealth, a year (Mian, Rao & Sufi 2013: 5-7 cents; the low end). */
@@ -164,7 +166,7 @@ class MacroAggregateSubsystem
     public const KALDOR_EXCESS_BOND_PREMIUM_DRAG_FAVORABLE = 0.0;
     /** Bank lending channel (Lown & Morgan 2006; Bassett, Chosak, Driscoll & Zakrajsek 2014): demand per unit of net lending tightening, so the ~80% of 2008 costs ~2pp a year while it lasts, the loss they attribute to the credit-supply cut. */
     public const KALDOR_LENDING_STANDARDS_DRAG = 0.025;
-    /** Demand per point a tax rate is cut below its decade trend, net taxes as a share of GDP and the corporate rate alike; on the corporate rate it is near Mertens & Ravn's (2013) 0.4% of output on impact a point. */
+    /** Demand per point a tax rate is cut below its decade trend by decision, the stance in net taxes as a share of GDP and the corporate rate alike; on the corporate rate it is near Mertens & Ravn's (2013) 0.4% of output on impact a point. The stabilisers' swing is not a decision and is not read here. */
     public const KALDOR_FISCAL_MULTIPLIER = 0.50;
     /** The demand gap's own pull back to trend on the CURRENT gap: automatic stabilisers (Blanchard & Perotti 2002) and the permanent-income smoothing of transitory income (Friedman 1957), the level forces no channel here carries; the same fit. At 0.15 the gap had no pull of its own, a rate move integrated into it without limit, and a policy loop acting 3-4 quarters late did all the restoring and rang at 6-7 years. */
     public const KALDOR_AUTOMATIC_STABILISER = 1.5;
@@ -562,7 +564,7 @@ class MacroAggregateSubsystem
         // outlay both clear a legislative lag, so this leg reaches demand late by construction. Both are read against
         // their own decade trends: a stance held that long is in potential (Blanchard 1990 fiscal impulse), not the gap.
         $spendingShift = CreditFiscalSubsystem::discretionarySpendingShift($state);
-        $discretionaryFiscal = (self::KALDOR_FISCAL_MULTIPLIER * (($state->corporateTaxRateTrend - $state->corporateTaxRate) + ($state->netTaxRateTrend - $state->netTaxRate)))
+        $discretionaryFiscal = (self::KALDOR_FISCAL_MULTIPLIER * (($state->corporateTaxRateTrend - $state->corporateTaxRate) + ($state->netTaxStanceRateTrend - $state->netTaxStanceRate)))
             + (self::KALDOR_GOVT_SPENDING_MULTIPLIER * $spendingShift);
         // The sovereign fund's stabilisation reaches demand through the purchases channel, on purchases that are the target
         // tax take of GDP. Its legislative lag is the budget round that sets it, so it flows at the rate the round sets. So
@@ -571,7 +573,7 @@ class MacroAggregateSubsystem
         $drawAboveFounding = $state->sovereignFundDrawShare > 0.0
             ? $state->sovereignFundDrawToGdp * ($state->sovereignFundDrawShare - MacroEngine::RESERVE_DRAW_CEILING) / $state->sovereignFundDrawShare
             : 0.0;
-        $fundStabilisation = self::KALDOR_GOVT_SPENDING_MULTIPLIER * ($state->sovereignFundStabilisationToGdp + $drawAboveFounding) / MacroEngine::TARGET_CORPORATE_TAX_RATE;
+        $fundStabilisation = self::KALDOR_GOVT_SPENDING_MULTIPLIER * ($state->sovereignFundStabilisationToGdp + $drawAboveFounding) / MacroEngine::PUBLIC_PURCHASES_TO_GDP;
 
         // Blanchard & Perotti (2002) AUTOMATIC stabilisers and Friedman (1957) income smoothing, on the
         // contemporaneous gap: nobody decides them, so they carry no lag and act as a spring rather than an anti-damper.

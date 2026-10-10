@@ -182,7 +182,7 @@ class PoliticsEngine
 
     // --- Platforms: Public Spending (Singapore, Workers' Party and PAP, 2020-2025) ---
     /** Log gap between the public spending the big-state and small-state ends plan: the 0.7% of GDP Singapore's opposition would raise from the reserves' returns and land sales in place of the 2023-24 GST rise (Workers' Party manifesto 2025; Ministry of Finance, 21 November 2022), over the founding purchases share, small enough that the share and its log coincide. The opposition costs no extra spending with it, so this is the most the two sides' budgets part by. */
-    public const POLICY_MANIFESTO_PUBLIC_SPENDING_LOG_GAP = 0.007 / MacroEngine::TARGET_CORPORATE_TAX_RATE;
+    public const POLICY_MANIFESTO_PUBLIC_SPENDING_LOG_GAP = 0.007 / MacroEngine::PUBLIC_PURCHASES_TO_GDP;
 
     // --- Platforms: Corporate Tax (financial centres: Singapore, Luxembourg) ---
     /** Gap between the corporate rates the big-state and small-state ends set: 2 points, the financial centres' larger single cuts, Singapore's 20% to 18% (Budget 2008) and Luxembourg's 21% to 19% (2017 tax reform); their parties more often part by a point or keep the same rate (Luxembourg 2025, 17% to 16%; Workers' Party manifesto 2025). Enacted rates follow manifesto ideology (Osterloh & Debus 2012). */
@@ -449,8 +449,8 @@ class PoliticsEngine
         $opennessSpan = $open - $closed;
 
         return [
-            // Purchases move in proportion, the neutral position keeping the founding share (MacroEngine::TARGET_CORPORATE_TAX_RATE).
-            'publicSpending' => MacroEngine::TARGET_CORPORATE_TAX_RATE * exp(self::POLICY_MANIFESTO_PUBLIC_SPENDING_LOG_GAP / 2.0 * $stateLean),
+            // Purchases move in proportion, the neutral position keeping the founding share (MacroEngine::PUBLIC_PURCHASES_TO_GDP).
+            'publicSpending' => MacroEngine::PUBLIC_PURCHASES_TO_GDP * exp(self::POLICY_MANIFESTO_PUBLIC_SPENDING_LOG_GAP / 2.0 * $stateLean),
             'corporateTax' => self::POLICY_MANIFESTO_CORPORATE_TAX_GAP / 2.0 * $stateLean,
             'tariff' => self::POLICY_PROTECTIONIST_TARIFF * max(0.0, $openness / $closed),
             // The District's average party keeps the structural rate; each end admits its own regime.

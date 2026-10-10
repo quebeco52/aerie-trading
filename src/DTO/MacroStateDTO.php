@@ -187,8 +187,10 @@ readonly class MacroStateDTO
         public float $corporateTaxRateTrend = MacroEngine::BASE_CORPORATE_TAX_RATE,
         /** The budget's take outside the corporate tax, net of transfers, as a share of GDP: what carries the automatic stabilisers and the fiscal stance. */
         public float $netTaxRate = \App\Service\Macro\Subsystem\CreditFiscalSubsystem::FOUNDING_NET_TAX_RATE,
+        /** The discretionary part of net taxes: the founding share plus the structural stance, without the automatic stabilisers' swing. */
+        public float $netTaxStanceRate = \App\Service\Macro\Subsystem\CreditFiscalSubsystem::FOUNDING_NET_TAX_RATE,
         /** Its decade trend, as corporateTaxRateTrend is the corporate rate's. */
-        public float $netTaxRateTrend = \App\Service\Macro\Subsystem\CreditFiscalSubsystem::FOUNDING_NET_TAX_RATE,
+        public float $netTaxStanceRateTrend = \App\Service\Macro\Subsystem\CreditFiscalSubsystem::FOUNDING_NET_TAX_RATE,
         public float $sovereignDebtToGdp = MacroEngine::INITIAL_DEBT_TO_GDP,
         /** Interest rate the coupon stock of the debt pays, repricing toward the 10-year as it rolls (App\Service\Macro\Subsystem\CreditFiscalSubsystem::calculateSovereignDebt()). */
         public float $sovereignCouponRate = self::OPENING_YIELD_10Y,
@@ -344,7 +346,7 @@ readonly class MacroStateDTO
         /** The election calendar's pull on policy uncertainty, as the government last handed it (App\DTO\GovernmentPolicyDTO). */
         public float $electionPulse = 0.0,
         /** Government purchases as a share of GDP, the level the Diet's last budget has them revert to. */
-        public float $publicSpendingShare = MacroEngine::TARGET_CORPORATE_TAX_RATE,
+        public float $publicSpendingShare = MacroEngine::PUBLIC_PURCHASES_TO_GDP,
         public float $corporateTaxPolicyShift = 0.0,
         public float $importTariffRate = 0.0,
         public float $tariffTradeLag = 0.0,

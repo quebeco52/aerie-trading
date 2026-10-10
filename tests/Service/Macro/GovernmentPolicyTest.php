@@ -64,7 +64,7 @@ class GovernmentPolicyTest extends TestCase
         $this->assertNull($state->mortgageLtvCap, 'The District opens with no cap, as the US runs none.');
 
         $this->enactPolicyDto($state, new GovernmentPolicyDTO(
-            publicSpendingShare: MacroEngine::TARGET_CORPORATE_TAX_RATE,
+            publicSpendingShare: MacroEngine::PUBLIC_PURCHASES_TO_GDP,
             corporateTaxPolicyShift: 0.0,
             importTariffRate: 0.0,
             laborForceGrowthRate: MacroEngine::STRUCTURAL_LABOR_GROWTH_RATE,
@@ -150,7 +150,7 @@ class GovernmentPolicyTest extends TestCase
     {
         $state = new MacroState();
         $forecast = static fn(?array $levers, ?float $from): GovernmentPolicyDTO => new GovernmentPolicyDTO(
-            publicSpendingShare: MacroEngine::TARGET_CORPORATE_TAX_RATE,
+            publicSpendingShare: MacroEngine::PUBLIC_PURCHASES_TO_GDP,
             corporateTaxPolicyShift: 0.01,
             importTariffRate: 0.0,
             laborForceGrowthRate: MacroEngine::STRUCTURAL_LABOR_GROWTH_RATE,
@@ -222,7 +222,7 @@ class GovernmentPolicyTest extends TestCase
     private static function policy(?float $concession): GovernmentPolicyDTO
     {
         return new GovernmentPolicyDTO(
-            publicSpendingShare: MacroEngine::TARGET_CORPORATE_TAX_RATE,
+            publicSpendingShare: MacroEngine::PUBLIC_PURCHASES_TO_GDP,
             corporateTaxPolicyShift: 0.0,
             importTariffRate: 0.0,
             laborForceGrowthRate: MacroEngine::STRUCTURAL_LABOR_GROWTH_RATE,
@@ -269,7 +269,7 @@ class GovernmentPolicyTest extends TestCase
         };
     }
 
-    private function enact(MacroState $state, float $tariff, float $corporateTax = 0.0, float $laborGrowth = MacroEngine::STRUCTURAL_LABOR_GROWTH_RATE, float $leniency = 0.0, float $pulse = 0.0, float $spending = MacroEngine::TARGET_CORPORATE_TAX_RATE): void
+    private function enact(MacroState $state, float $tariff, float $corporateTax = 0.0, float $laborGrowth = MacroEngine::STRUCTURAL_LABOR_GROWTH_RATE, float $leniency = 0.0, float $pulse = 0.0, float $spending = MacroEngine::PUBLIC_PURCHASES_TO_GDP): void
     {
         $this->enactPolicy->invokeArgs($this->engine, [$state, new GovernmentPolicyDTO(
             publicSpendingShare: $spending,

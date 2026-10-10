@@ -2,6 +2,8 @@
 
 namespace App\Service\Macro\Subsystem;
 
+use App\DTO\MacroStateDTO;
+use App\DTO\PublicAccountsDTO;
 use App\Service\Macro\MacroEngine;
 use App\Service\Macro\MacroState;
 use App\Service\Macro\Recorder\MacroDiagnosticsProbe;
@@ -36,7 +38,7 @@ class CreditFiscalSubsystem
     /** Taxable corporate profits over GDP, the base a change in the corporate rate is levied on: 20%, the District being a financial centre, whose profit bases run 14-34% of GDP against the US's 9.7% (corporate tax revenue over the statutory rate, 2015-19: Switzerland 14%, Singapore 19%, Luxembourg 19%, Ireland 22%, Hong Kong 34%; Eurostat gov_10a_taxag, IRAS, IRD), so a point of rate is a fifth of a point of GDP in revenue. */
     public const CORPORATE_PROFITS_TO_GDP = 0.20;
     /** The budget's founding take outside the corporate tax, net of transfers: household and indirect taxes less benefits, 17.6% of GDP, the whole 21% less the founding corporate rate on its base. These carry the automatic stabilisers and the structural stance (Girouard & Andre 2005: income taxes, contributions and unemployment benefits), so the rate firms pay moves only with the law. */
-    public const FOUNDING_NET_TAX_RATE = MacroEngine::TARGET_CORPORATE_TAX_RATE - (MacroEngine::BASE_CORPORATE_TAX_RATE * self::CORPORATE_PROFITS_TO_GDP);
+    public const FOUNDING_NET_TAX_RATE = MacroEngine::PUBLIC_PURCHASES_TO_GDP - (MacroEngine::BASE_CORPORATE_TAX_RATE * self::CORPORATE_PROFITS_TO_GDP);
     /** Net corporate dividends over GDP, the base the tax on dividends is levied on before the taxable share of holders: 5.5%, between the financial centres' net distributions, paid less received, 2015-19 (Switzerland 5.9%, Ireland 5% of GNI*; Eurostat nasa_10_nf_tr D42), against the US's 4.4%. */
     public const NET_DIVIDENDS_TO_GDP = 0.055;
 
@@ -483,7 +485,7 @@ class CreditFiscalSubsystem
         $state->governmentSpendingIndex = max(60.0, min(200.0, StochasticProcesses::calculateSchwartz1Factor(
             currentPrice: $state->governmentSpendingIndex,
             kappa: MacroEngine::GOVT_SPENDING_MEAN_REVERSION,
-            theta: MacroEngine::GOVT_SPENDING_BASELINE * self::purchasesTarget($state->publicSpendingShare, $state->sovereignNetDebtToGdp, $state->sovereignFundDollarsPerGdp > 0.0, $state->consolidationTaxShare) / MacroEngine::TARGET_CORPORATE_TAX_RATE,
+            theta: MacroEngine::GOVT_SPENDING_BASELINE * self::purchasesTarget($state->publicSpendingShare, $state->sovereignNetDebtToGdp, $state->sovereignFundDollarsPerGdp > 0.0, $state->consolidationTaxShare) / MacroEngine::PUBLIC_PURCHASES_TO_GDP,
             sigma: self::GOVT_SPENDING_VOLATILITY,
             dt: $dt,
             dW: $this->mathUtility->generateStandardNormal()
@@ -508,19 +510,21 @@ class CreditFiscalSubsystem
      * Ornstein-Uhlenbeck institutional process: they rise in a boom and fall in a recession, and return to their
      * founding share plus the structural fiscal stance (fiscalStance()), the instrument the budget's surplus is raised
      * with. The corporate rate firms pay follows only the shift the Diet has legislated, at the same speed. Demand reads
-     * both against their decade trends.
+     * the discretionary parts against their decade trends: the corporate rate and the stance, never the stabilisers'
+     * swing, which reaches it through the gap's own pull (MacroAggregateSubsystem::KALDOR_AUTOMATIC_STABILISER).
      *
      * @param MacroState $state Current macroeconomic state.
      * @param float      $dt    Time increment in years.
      */
     public function calculateDynamicFiscalPolicy(MacroState $state, float $dt): void
     {
-        $targetNetTaxRate = self::FOUNDING_NET_TAX_RATE + (self::FISCAL_STABILIZER_SENSITIVITY * $state->outputGapEma) + self::fiscalStance($state);
-        $state->netTaxRate += MacroEngine::FISCAL_ADJUSTMENT_SPEED * ($targetNetTaxRate - $state->netTaxRate) * $dt;
+        $stanceTarget = self::FOUNDING_NET_TAX_RATE + self::fiscalStance($state);
+        $state->netTaxRate += MacroEngine::FISCAL_ADJUSTMENT_SPEED * ($stanceTarget + (self::FISCAL_STABILIZER_SENSITIVITY * $state->outputGapEma) - $state->netTaxRate) * $dt;
+        $state->netTaxStanceRate += MacroEngine::FISCAL_ADJUSTMENT_SPEED * ($stanceTarget - $state->netTaxStanceRate) * $dt;
         $state->corporateTaxRate += MacroEngine::FISCAL_ADJUSTMENT_SPEED * (MacroEngine::BASE_CORPORATE_TAX_RATE + $state->corporateTaxPolicyShift - $state->corporateTaxRate) * $dt;
 
         $trendWeight = 1.0 - exp(-$dt / self::TAX_RATE_TREND_YEARS);
-        $state->netTaxRateTrend += $trendWeight * ($state->netTaxRate - $state->netTaxRateTrend);
+        $state->netTaxStanceRateTrend += $trendWeight * ($state->netTaxStanceRate - $state->netTaxStanceRateTrend);
         $state->corporateTaxRateTrend += $trendWeight * ($state->corporateTaxRate - $state->corporateTaxRateTrend);
 
         // The legislated part of that adjustment on its own, and the laws as the trailing year's earnings carry them,
@@ -651,13 +655,13 @@ class CreditFiscalSubsystem
      * Every term is a flow: the Bohn surplus and, with no fund, the structural deficit are in the tax rate
      * (fiscalStance()) and in purchases (purchasesTarget()), which demand reads, not a ledger beside it.
      *
-     * Net taxes carry the whole budget's cyclical and structural response, so T books them on GDP as fitted. The
-     * corporate rate, which moves only with the shift the Diet legislates, is levied on corporate profits; the tariff is levied on imported goods, which shrink by their price elasticity as the
-     * duty raises their price; the carbon price is levied on the power sector's emissions; the bank levy is what the
-     * board's banks owe on their balance sheets, in currency, read through the reserve fund's dollars per unit of GDP
-     * (none is booked before the fund opens); the tax on dividends, as far as it departs from the founding rate, is
-     * levied on what taxable holders are paid (dividendTaxRevenueShift()); the tax on foreign buyers on the homes they
-     * still buy (AssetMarketSubsystem::foreignBuyerTaxRevenueToGdp()).
+     * The lines are the Exchequer's accounts (publicAccounts()), which the pages read too. Net taxes carry the whole
+     * budget's cyclical and structural response, so T books them on GDP as fitted. The corporate rate, which moves only
+     * with the shift the Diet legislates, is levied on corporate profits; the tariff on imported goods, which shrink by
+     * their price elasticity as the duty raises their price; the carbon price on the power sector's emissions; the bank
+     * levy is what the board's banks owe on their balance sheets; the tax on dividends, as far as it departs from the
+     * founding rate, on what taxable holders are paid (dividendTaxRevenueShift()); the tax on foreign buyers on the homes
+     * they still buy (AssetMarketSubsystem::foreignBuyerTaxRevenueToGdp()).
      *
      * With a fund the budget spends the draw: the structural deficit is the draw itself, as Norway's fiscal rule sets the
      * structural non-oil deficit at the fund's expected real return. The draw is sized to the fund and the fund compounds
@@ -673,45 +677,20 @@ class CreditFiscalSubsystem
      */
     public function calculateSovereignDebt(MacroState $state, float $dt): void
     {
-        // Taxes are levied on the GDP produced, which already carries the gap; purchases are appropriated on trend, so
-        // their share of GDP rises in a slump (the denominator half of the automatic stabilisers, Girouard & Andre 2005).
-        $output = $state->nominalGdpIndex;
-        $trendNominalGdp = $state->nominalGdpIndex / (1.0 + $state->outputGap);
-        // Net taxes on GDP and the corporate rate on its profits base, founded TARGET_CORPORATE_TAX_RATE of GDP between them.
-        $taxRevenue = ($state->netTaxRate * $output)
-            + ($state->corporateTaxRate * self::CORPORATE_PROFITS_TO_GDP * $output)
-            + (MacroAggregateSubsystem::tariffRevenueToGdp($state->importTariffRate) * $output)
-            + ($state->carbonPrice * self::POWER_SECTOR_CO2_PER_GDP_DOLLAR * $output)
-            + ($state->sovereignFundDollarsPerGdp > 0.0 ? $state->boardBankLevy / $state->sovereignFundDollarsPerGdp : 0.0)
-            + (self::dividendTaxRevenueShift($state->dividendTaxRate) * $output)
-            + (AssetMarketSubsystem::foreignBuyerTaxRevenueToGdp($state->foreignBuyerTaxRate) * $output);
-        $govtSpendingFlow = ($state->governmentSpendingIndex / MacroEngine::GOVT_SPENDING_BASELINE)
-            * MacroEngine::TARGET_CORPORATE_TAX_RATE * $trendNominalGdp;
-
-        // Singapore's Net Investment Returns Contribution: the sovereign fund's draw is budget revenue (zero with no fund),
-        // and with a fund it is spent, together with the stabilisation the fund pays for. The fund's currency bridge is
-        // set only at inception.
-        $funded = $state->sovereignFundDollarsPerGdp > 0.0;
-        $fundContribution = $funded ? ($state->sovereignFundDrawToGdp + $state->sovereignFundStabilisationToGdp) * $output : 0.0;
-
-        $spending = $govtSpendingFlow + $fundContribution;
-        $revenue = $taxRevenue + $fundContribution;
-        $primaryDeficit = $spending - $revenue;
-        $state->primaryDeficitToGdp = $primaryDeficit / max(0.1, $state->nominalGdpIndex);
         // The debt pays what it was issued at, not today's 10-year: the coupon stock reprices as it rolls over, the
         // bills at once (Treasury average rate on marketable debt, fitted above).
         // The book moves toward the Exchequer's maturity only as it rolls over: a steady ladder turns over once per average
         // maturity, as the US extension from 48 months to the high 60s took eight years.
         $state->sovereignDebtAverageMaturity += (1.0 - exp(-$dt / $state->sovereignDebtAverageMaturity)) * ($state->sovereignDebtMaturityTarget - $state->sovereignDebtAverageMaturity);
         $state->sovereignCouponRate += (1.0 - exp(-$dt / self::couponRepricingYears($state))) * ($state->yield10y - $state->sovereignCouponRate);
-        $interestCost = self::sovereignEffectiveRate($state) * $state->sovereignDebtToGdp;
 
-        // Blanchard (2019) sovereign debt accumulation driven by growth-adjusted real rate (r - g), g being the growth
-        // of the nominal GDP the ratio is struck on: a slump lowers it and the recovery hands it back.
-        $growthErosion = $state->nominalGdpGrowth * $state->sovereignDebtToGdp;
-
-        $dDebt = ($primaryDeficit / max(0.1, $state->nominalGdpIndex)) + $interestCost - $growthErosion;
-        $state->sovereignDebtToGdp += ($dDebt * $dt) + $this->bookBankRescue($state, $dt);
+        $accounts = self::publicAccounts($state, $dt);
+        $funded = $state->sovereignFundDollarsPerGdp > 0.0;
+        $state->primaryDeficitToGdp = $accounts->primaryDeficit();
+        $state->sovereignDebtToGdp += $accounts->debtChange($dt);
+        // The rescue holdings are a stock struck in currency, so their ratio to GDP erodes with nominal growth as the debt's does.
+        $state->bankRescueAssetsToGdp += (self::BANK_RESCUE_RECOVERY_SHARE * $accounts->bankRescueOutlay) - $accounts->bankRescueSales
+            - ($state->nominalGdpGrowth * $state->bankRescueAssetsToGdp * $dt);
 
         $belowFloor = MacroEngine::SOVEREIGN_DEBT_FLOOR - $state->sovereignDebtToGdp;
         $state->sovereignFundBudgetInflow = ($funded && $belowFloor > 0.0)
@@ -725,22 +704,49 @@ class CreditFiscalSubsystem
     }
 
     /**
-     * A bank rescue as a stock-flow adjustment to debt (Laeven & Valencia 2018): the outlay is borrowed on the day the
-     * crisis lands, and the share later recovered is held as stakes and bad loans that are sold back as a first-order
-     * lag, each sale retiring debt. Net debt nets only the fund's bonds, so it carries the outlay until they are sold.
-     * Returns the change in debt to GDP this step.
+     * The Exchequer's accounts at this step: revenue by source, spending by use, the debt service and the one-off
+     * adjustments the debt moves by (calculateSovereignDebt() applies them), and the stocks it is measured against.
      *
-     * @param MacroState $state Current macroeconomic state.
-     * @param float      $dt    Time increment in years.
+     * Taxes are levied on the GDP produced, which already carries the gap; purchases are appropriated on trend, so their
+     * share of GDP rises in a slump (the denominator half of the automatic stabilisers, Girouard & Andre 2005). Net taxes
+     * on GDP and the corporate rate on its profits base found PUBLIC_PURCHASES_TO_GDP of GDP between them. Singapore's Net
+     * Investment Returns Contribution: the fund's draw is revenue (zero with no fund), spent together with the
+     * stabilisation the fund pays for. A bank rescue is a stock-flow adjustment (Laeven & Valencia 2018): the outlay is
+     * borrowed on the day the crisis lands, and the share later recovered is held as stakes and bad loans sold back as a
+     * first-order lag, each sale retiring debt.
+     *
+     * @param MacroState|MacroStateDTO $state The macro state, live or as published.
+     * @param float                    $dt    Time increment in years, for this step's one-off adjustments.
      */
-    private function bookBankRescue(MacroState $state, float $dt): float
+    public static function publicAccounts(MacroState|MacroStateDTO $state, float $dt): PublicAccountsDTO
     {
-        $outlay = $state->lastCreditCrisisAt === $state->totalTime ? $state->bankRescueCostToGdp : 0.0;
-        $sold = $state->bankRescueAssetsToGdp * (1.0 - exp(-$dt / self::BANK_RESCUE_RECOVERY_YEARS));
-        // The holdings are a stock struck in currency, so their ratio to GDP erodes with nominal growth as the debt's does.
-        $state->bankRescueAssetsToGdp += (self::BANK_RESCUE_RECOVERY_SHARE * $outlay) - $sold - ($state->nominalGdpGrowth * $state->bankRescueAssetsToGdp * $dt);
+        $output = max(0.1, $state->nominalGdpIndex);
+        $funded = $state->sovereignFundDollarsPerGdp > 0.0;
+        $fundContribution = $funded ? $state->sovereignFundDrawToGdp + $state->sovereignFundStabilisationToGdp : 0.0;
 
-        return $outlay - $sold;
+        return new PublicAccountsDTO(
+            netTaxes: $state->netTaxRate,
+            corporateTax: $state->corporateTaxRate * self::CORPORATE_PROFITS_TO_GDP,
+            tariffs: MacroAggregateSubsystem::tariffRevenueToGdp($state->importTariffRate),
+            carbonPrice: $state->carbonPrice * self::POWER_SECTOR_CO2_PER_GDP_DOLLAR,
+            // The board's banks' bill in currency, read through the fund's currency bridge (none before the fund opens).
+            bankLevy: $funded ? $state->boardBankLevy / $state->sovereignFundDollarsPerGdp / $output : 0.0,
+            dividendTax: self::dividendTaxRevenueShift($state->dividendTaxRate),
+            foreignBuyerTax: AssetMarketSubsystem::foreignBuyerTaxRevenueToGdp($state->foreignBuyerTaxRate),
+            fundContribution: $fundContribution,
+            purchases: ($state->governmentSpendingIndex / MacroEngine::GOVT_SPENDING_BASELINE) * MacroEngine::PUBLIC_PURCHASES_TO_GDP / (1.0 + $state->outputGap),
+            fundFinancedSpending: $fundContribution,
+            interest: self::sovereignEffectiveRate($state) * $state->sovereignDebtToGdp,
+            // Blanchard (2019): g is the growth of the nominal GDP the ratio is struck on, so a slump lowers it and the
+            // recovery hands it back.
+            growthErosion: $state->nominalGdpGrowth * $state->sovereignDebtToGdp,
+            bankRescueOutlay: $state->lastCreditCrisisAt === $state->totalTime ? $state->bankRescueCostToGdp : 0.0,
+            bankRescueSales: $state->bankRescueAssetsToGdp * (1.0 - exp(-$dt / self::BANK_RESCUE_RECOVERY_YEARS)),
+            grossDebt: $state->sovereignDebtToGdp,
+            fundBonds: $state->sovereignFundBondsToGdp,
+            fundAssets: $state->sovereignFundToGdp,
+            bankRescueHoldings: $state->bankRescueAssetsToGdp,
+        );
     }
 
     /**
@@ -895,9 +901,9 @@ class CreditFiscalSubsystem
      * The average interest rate the sovereign debt pays: the bill share at the policy rate, the coupon stock at the rate
      * it was issued at as it has rolled over.
      *
-     * @param MacroState $state Current macroeconomic state.
+     * @param MacroState|MacroStateDTO $state The macro state, live or as published.
      */
-    public static function sovereignEffectiveRate(MacroState $state): float
+    public static function sovereignEffectiveRate(MacroState|MacroStateDTO $state): float
     {
         $billShare = self::billShare($state->sovereignDebtAverageMaturity);
 

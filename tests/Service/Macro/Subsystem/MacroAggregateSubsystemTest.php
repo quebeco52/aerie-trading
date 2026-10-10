@@ -975,10 +975,10 @@ class MacroAggregateSubsystemTest extends TestCase
     {
         $neutral = $this->neutralBorrowingState();
         $heldHigh = $this->neutralBorrowingState();
-        $heldHigh->corporateTaxRate = MacroEngine::TARGET_CORPORATE_TAX_RATE + 0.04;
+        $heldHigh->corporateTaxRate = MacroEngine::PUBLIC_PURCHASES_TO_GDP + 0.04;
         $heldHigh->corporateTaxRateTrend = $heldHigh->corporateTaxRate;
         $freshRise = $this->neutralBorrowingState();
-        $freshRise->corporateTaxRate = MacroEngine::TARGET_CORPORATE_TAX_RATE + 0.04;
+        $freshRise->corporateTaxRate = MacroEngine::PUBLIC_PURCHASES_TO_GDP + 0.04;
 
         $gap = fn (MacroState $state): float => $this->subsystem->calculateOutputGap($state, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, 0.25, 1.0);
         $gapNeutral = $gap($neutral);
@@ -997,8 +997,8 @@ class MacroAggregateSubsystemTest extends TestCase
         $state->tipsBreakeven = MacroEngine::TARGET_INFLATION;
         $state->policyRate = MacroEngine::BASE_NATURAL_RATE + MacroEngine::TARGET_INFLATION;
         $state->naturalRate = MacroEngine::BASE_NATURAL_RATE;
-        $state->corporateTaxRate = MacroEngine::TARGET_CORPORATE_TAX_RATE;
-        $state->corporateTaxRateTrend = MacroEngine::TARGET_CORPORATE_TAX_RATE;
+        $state->corporateTaxRate = MacroEngine::PUBLIC_PURCHASES_TO_GDP;
+        $state->corporateTaxRateTrend = MacroEngine::PUBLIC_PURCHASES_TO_GDP;
         $state->macroCreditSpreadEma = MacroEngine::BASE_CREDIT_SPREAD;
         $state->interbankLiquiditySpreadEma = MacroEngine::INTERBANK_BASELINE_SPREAD;
         $state->governmentSpendingIndexEma = MacroEngine::GOVT_SPENDING_BASELINE;
@@ -1429,7 +1429,7 @@ class MacroAggregateSubsystemTest extends TestCase
 
         $this->assertSame(0.0, $contribution(0.0));
         $this->assertEqualsWithDelta(
-            MacroAggregateSubsystem::DOMESTIC_GAP_WEIGHT * MacroAggregateSubsystem::KALDOR_GOVT_SPENDING_MULTIPLIER * 0.01 / MacroEngine::TARGET_CORPORATE_TAX_RATE,
+            MacroAggregateSubsystem::DOMESTIC_GAP_WEIGHT * MacroAggregateSubsystem::KALDOR_GOVT_SPENDING_MULTIPLIER * 0.01 / MacroEngine::PUBLIC_PURCHASES_TO_GDP,
             $contribution(0.01),
             1e-15,
             'A point of GDP is a purchases shift of one over the purchases share.'
@@ -1457,7 +1457,7 @@ class MacroAggregateSubsystemTest extends TestCase
 
         $this->assertSame(0.0, $contribution(MacroEngine::RESERVE_DRAW_CEILING), 'The founding draw adds nothing to the baseline it is in.');
         $this->assertEqualsWithDelta(
-            MacroAggregateSubsystem::DOMESTIC_GAP_WEIGHT * MacroAggregateSubsystem::KALDOR_GOVT_SPENDING_MULTIPLIER * (0.012 * 0.1 / 0.6) / MacroEngine::TARGET_CORPORATE_TAX_RATE,
+            MacroAggregateSubsystem::DOMESTIC_GAP_WEIGHT * MacroAggregateSubsystem::KALDOR_GOVT_SPENDING_MULTIPLIER * (0.012 * 0.1 / 0.6) / MacroEngine::PUBLIC_PURCHASES_TO_GDP,
             $contribution(0.6),
             1e-15,
             'A sixth of a draw at 60% is the spending above the founding half.'

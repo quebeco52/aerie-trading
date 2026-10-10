@@ -33,7 +33,7 @@ class MacroEngine
     public const MIN_NATURAL_RATE = 0.005;
     /** Structural upper bound ceiling for natural real rate. */
     public const MAX_NATURAL_RATE = 0.035;
-    /** The corporate tax rate firms pay at the founding: Singapore's 17% (since 2010, IRAS), the financial centre the District's tax laws are set against. The budget's tax take is TARGET_CORPORATE_TAX_RATE. */
+    /** The corporate tax rate firms pay at the founding: Singapore's 17% (since 2010, IRAS), the financial centre the District's tax laws are set against. The budget's size is PUBLIC_PURCHASES_TO_GDP. */
     public const BASE_CORPORATE_TAX_RATE = 0.17;
     /** The baseline historical equity risk premium expected over risk-free assets. */
     public const BASE_EQUITY_RISK_PREMIUM = 0.045;
@@ -156,9 +156,11 @@ class MacroEngine
     /** Multiple of HY over IG spread (~3.3x): 130 bps IG pairs with ~430 bps HY through the cycle, and the ~6.5% IG peak of December 2008 with its ~21.8% HY peak. */
     public const HY_BASE_SPREAD_MULTIPLIER = 3.3;
 
+    // --- Size of the Budget ---
+    /** Government purchases, consumption and investment, as a share of trend GDP at the founding, and the tax take net of transfers that pays for them (CreditFiscalSubsystem::FOUNDING_NET_TAX_RATE): 15%, a financial centre's, Switzerland's 14.9% 2015-19 (Eurostat gov_10a_main, P3 + P51G), with Singapore's and Hong Kong's consumption at 10.1% (World Bank NE.CON.GOVT.ZS) and the US's purchases 17.5% (BEA NIPA). */
+    public const PUBLIC_PURCHASES_TO_GDP = 0.15;
+
     // --- Barro Tax-Smoothing & Automatic Fiscal Stabilizers (Barro 1979) ---
-    /** The budget's founding tax take and the purchases it pays for, each 21% of GDP: the whole budget, the corporate rate firms pay on its profits base and net taxes, which carry its cyclical and structural parts (CreditFiscalSubsystem::calculateDynamicFiscalPolicy()). */
-    public const TARGET_CORPORATE_TAX_RATE = 0.21;
     /** Adjustment speed of the effective tax burden toward its cyclical target (half-life 0.7y), fitted with CreditFiscalSubsystem::FISCAL_STABILIZER_SENSITIVITY; shared, as the market prices how fast a law reaches the rate (App\Service\Market\Pricing\PolicyCapitalization). */
     public const FISCAL_ADJUSTMENT_SPEED = 1.0;
 

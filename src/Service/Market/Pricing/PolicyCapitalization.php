@@ -36,7 +36,7 @@ use App\Service\Politics\PoliticsEngine;
  */
 final class PolicyCapitalization
 {
-    // --- Past the Next Term (the Diet's own long runs: 16 games of 200 years on the macro loop beside the politics, var/harness/polls/lever_means.php, runs_sg; the corporate tax pair from runs_gap2, the carbon pair from an earlier run) ---
+    // --- Past the Next Term (the Diet's own long runs: 16 games of 200 years on the macro loop beside the politics, var/harness/polls/lever_means.php, runs_sg; the corporate tax pair from runs_gap2, the public spending pair from runs_size15, the carbon pair from an earlier run) ---
     /** The corporate tax shift in force on average over the long run: -0.10 points (se 0.09). */
     public const LONG_RUN_CORPORATE_TAX_SHIFT = -0.0010;
     /** Share of the corporate tax shift's distance from that average still there a term later: its four-year autocorrelation, 0.654 (sd across games 0.19). */
@@ -57,10 +57,10 @@ final class PolicyCapitalization
     public const LONG_RUN_CARBON_POWER_UPLIFT = 0.0411;
     /** Share of that uplift's distance from its average still there a term later: 0.597 (sd across games 0.19). */
     public const CARBON_POWER_TERM_PERSISTENCE = 0.597;
-    /** Government purchases above the founding level on average over the long run, as a fraction (measure()): -0.54% (se 0.15%), the Council's brake holding rises above the debt line and letting cuts through. */
-    public const LONG_RUN_PUBLIC_SPENDING_SHIFT = -0.0054;
-    /** Share of that shift's distance from its average still there a term later: 0.670 (sd across games 0.24). */
-    public const PUBLIC_SPENDING_TERM_PERSISTENCE = 0.670;
+    /** Government purchases above the founding level on average over the long run, as a fraction (measure()): -0.79% (se 0.21%), the Council's brake holding rises above the debt line and letting cuts through. */
+    public const LONG_RUN_PUBLIC_SPENDING_SHIFT = -0.0079;
+    /** Share of that shift's distance from its average still there a term later: 0.654 (sd across games 0.23). */
+    public const PUBLIC_SPENDING_TERM_PERSISTENCE = 0.654;
     /** The tax on dividends in force on average over the long run: 8.8% (se 0.7%), below the founding 15% since the Diet can only cut it. */
     public const LONG_RUN_DIVIDEND_TAX_RATE = 0.088;
     /** Share of the tax on dividends' distance from that average still there a term later: 0.697 (sd across games 0.20). */
@@ -215,7 +215,7 @@ final class PolicyCapitalization
             'extractionStringency' => FirmEconomics::calculateExtractionCostFactor($law),
             'stampDutyRate' => MacroTransmission::calculateStampDutyVolumeFactor($law),
             'carbonPrice' => CommodityLogisticsSubsystem::carbonPowerPriceUplift($law),
-            'publicSpending' => ($law / MacroEngine::TARGET_CORPORATE_TAX_RATE) - 1.0,
+            'publicSpending' => ($law / MacroEngine::PUBLIC_PURCHASES_TO_GDP) - 1.0,
             default => throw new \InvalidArgumentException(sprintf('No firm\'s accounts answer to %s directly.', $lever)),
         };
     }

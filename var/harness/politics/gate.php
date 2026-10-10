@@ -79,7 +79,7 @@ for ($seed = (int) $seedFrom; $seed <= (int) $seedTo; ++$seed) {
             // What the economy read before politics left it: the term's ramp and the vote's own tick, no talks.
             $vote = TimeSeries::crossedSimulatedBoundary($m->totalTime, 1.0 / $tpy, PoliticsEngine::ELECTION_TERM_YEARS);
             $policy = new \App\DTO\GovernmentPolicyDTO(
-                publicSpendingShare: MacroEngine::TARGET_CORPORATE_TAX_RATE,
+                publicSpendingShare: MacroEngine::PUBLIC_PURCHASES_TO_GDP,
                 corporateTaxPolicyShift: 0.0,
                 importTariffRate: 0.0,
                 laborForceGrowthRate: MacroEngine::STRUCTURAL_LABOR_GROWTH_RATE,

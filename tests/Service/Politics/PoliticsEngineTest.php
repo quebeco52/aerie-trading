@@ -805,7 +805,7 @@ class PoliticsEngineTest extends TestCase
         $halfway = static fn(string $party): array => Politics::platform([Diet::AXIS_STATE => Diet::FIXED_POSITIONS[$party][Diet::AXIS_STATE] / 2.0]);
         $this->assertEqualsWithDelta(Politics::POLICY_MANIFESTO_CORPORATE_TAX_GAP / 4.0, $halfway(Diet::CIVIC)['corporateTax'], 1e-12);
         $this->assertEqualsWithDelta(-Politics::POLICY_MANIFESTO_CORPORATE_TAX_GAP / 4.0, $halfway(Diet::VANGUARD)['corporateTax'], 1e-12);
-        $this->assertEqualsWithDelta(MacroEngine::TARGET_CORPORATE_TAX_RATE * exp(Politics::POLICY_MANIFESTO_PUBLIC_SPENDING_LOG_GAP / 4.0), $halfway(Diet::CIVIC)['publicSpending'], 1e-12);
+        $this->assertEqualsWithDelta(MacroEngine::PUBLIC_PURCHASES_TO_GDP * exp(Politics::POLICY_MANIFESTO_PUBLIC_SPENDING_LOG_GAP / 4.0), $halfway(Diet::CIVIC)['publicSpending'], 1e-12);
         $this->assertEqualsWithDelta(CreditFiscalSubsystem::FOUNDING_CONSOLIDATION_TAX_SHARE - (Politics::POLICY_MANIFESTO_CONSOLIDATION_TAX_SHARE_GAP / 4.0), $halfway(Diet::VANGUARD)['consolidationTaxShare'], 1e-12);
         $this->assertSame(Politics::platform([Diet::AXIS_STATE => -2.0])['corporateTax'], Politics::platform([Diet::AXIS_STATE => Diet::FIXED_POSITIONS[Diet::VANGUARD][Diet::AXIS_STATE]])['corporateTax'], 'Past its end a government enacts the end party\'s law and no more.');
     }
@@ -889,20 +889,20 @@ class PoliticsEngineTest extends TestCase
     public function testTheCouncilHoldsASpendingRiseAboveTheDebtLine(): void
     {
         $civic = $this->governedBy([Diet::CIVIC => 110.0, Diet::IRON_HARBOR => 45.0]);
-        $this->assertGreaterThan(MacroEngine::TARGET_CORPORATE_TAX_RATE, Politics::platform(Politics::coalitionPosition($civic->governingCoalition, $civic->dietSeats, $civic->partyPositions))['publicSpending']);
+        $this->assertGreaterThan(MacroEngine::PUBLIC_PURCHASES_TO_GDP, Politics::platform(Politics::coalitionPosition($civic->governingCoalition, $civic->dietSeats, $civic->partyPositions))['publicSpending']);
 
         Politics::enactBudget($civic, MacroEngine::SOVEREIGN_RISK_DEBT_THRESHOLD + 0.05);
 
-        $this->assertSame(MacroEngine::TARGET_CORPORATE_TAX_RATE, $civic->publicSpendingShare, 'The rise is never tabled.');
+        $this->assertSame(MacroEngine::PUBLIC_PURCHASES_TO_GDP, $civic->publicSpendingShare, 'The rise is never tabled.');
         $this->assertSame($civic->totalTime, $civic->lastCouncilBrakeAt);
 
         $below = $this->governedBy([Diet::CIVIC => 110.0, Diet::IRON_HARBOR => 45.0]);
         Politics::enactBudget($below, MacroEngine::SOVEREIGN_RISK_DEBT_THRESHOLD - 0.05);
-        $this->assertGreaterThan(MacroEngine::TARGET_CORPORATE_TAX_RATE, $below->publicSpendingShare, 'Below the line the rise passes.');
+        $this->assertGreaterThan(MacroEngine::PUBLIC_PURCHASES_TO_GDP, $below->publicSpendingShare, 'Below the line the rise passes.');
 
         $vanguard = $this->governedBy([Diet::VANGUARD => 110.0, Diet::EXCHANGE => 45.0]);
         Politics::enactBudget($vanguard, MacroEngine::SOVEREIGN_RISK_DEBT_THRESHOLD + 0.05);
-        $this->assertLessThan(MacroEngine::TARGET_CORPORATE_TAX_RATE, $vanguard->publicSpendingShare, 'A cut narrows the deficit and passes.');
+        $this->assertLessThan(MacroEngine::PUBLIC_PURCHASES_TO_GDP, $vanguard->publicSpendingShare, 'A cut narrows the deficit and passes.');
     }
 
     /** The closed end of the openness axis taxes foreign home buyers at Singapore's 60%; the open end and the middle tax none. */
@@ -979,7 +979,7 @@ class PoliticsEngineTest extends TestCase
 
         $this->assertEqualsWithDelta(Politics::POLICY_MANIFESTO_PUBLIC_SPENDING_LOG_GAP, log($civic / $vanguard), 1e-12);
         $this->assertEqualsWithDelta(0.007, $civic - $vanguard, 3e-5, 'The ends part by 0.7% of GDP.');
-        $this->assertEqualsWithDelta(MacroEngine::TARGET_CORPORATE_TAX_RATE, Politics::platform([Diet::AXIS_STATE => 0.0])['publicSpending'], 1e-15);
+        $this->assertEqualsWithDelta(MacroEngine::PUBLIC_PURCHASES_TO_GDP, Politics::platform([Diet::AXIS_STATE => 0.0])['publicSpending'], 1e-15);
         $this->assertFalse(Politics::REVENUE_LEVERS['publicSpending']);
     }
 

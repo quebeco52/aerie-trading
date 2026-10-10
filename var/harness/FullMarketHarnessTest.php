@@ -199,7 +199,8 @@ final class FullMarketHarnessTest extends KernelTestCase
                 $lastCredit = (float) $result['board_bank_credit'];
             }
             // MACRO_OUT: one macro row a quarter, for the macro-market loop.
-            if (getenv('MACRO_OUT') && $tick % max(1, intdiv($tpy, 4)) === 0) {
+            // FISCAL=1 adds the primary deficit and the net-tax rate, and a founding row at tick 1.
+            if (getenv('MACRO_OUT') && ($tick % max(1, intdiv($tpy, 4)) === 0 || ($tick === 1 && getenv('FISCAL')))) {
                 file_put_contents((string) getenv('MACRO_OUT'), json_encode([
                     'seed' => $seed, 't' => round($tick / $tpy, 3), 'gap' => $m->outputGap, 'cap' => $lastCap,
                     'nominal_gdp' => $m->nominalGdpIndex, 'ewr' => $m->equityWealthRatio, 'ewt' => $m->equityWealthTrend,
@@ -214,7 +215,8 @@ final class FullMarketHarnessTest extends KernelTestCase
                     'net_debt' => $m->sovereignNetDebtToGdp, 'bank_credit' => \App\Service\Macro\Subsystem\CreditFiscalSubsystem::bankCreditToGdp($m->boardBankCredit, $m->sovereignFundDollarsPerGdp, $m->nominalGdpIndex),
                     'rescue_cost' => $m->bankRescueCostToGdp, 'rescue_assets' => $m->bankRescueAssetsToGdp, 'crisis_at' => $m->lastCreditCrisisAt,
                     'spread' => $m->sovereignRiskSpread, 'tax_rate' => $m->corporateTaxRate,
-                ] + (getenv('BOARD_NI') ? $this->boardNetIncome($list) + ['gap_ema' => $m->outputGapEma, 'net_tax' => $m->netTaxRate ?? null] : [])) . "\n", FILE_APPEND);
+                ] + (getenv('BOARD_NI') ? $this->boardNetIncome($list) + ['gap_ema' => $m->outputGapEma, 'net_tax' => $m->netTaxRate ?? null] : [])
+                    + (getenv('FISCAL') ? ['primary' => $m->primaryDeficitToGdp, 'net_tax' => $m->netTaxRate, 'spend_idx' => $m->governmentSpendingIndex] : [])) . "\n", FILE_APPEND);
             }
         }
 

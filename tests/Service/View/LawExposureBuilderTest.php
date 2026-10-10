@@ -27,7 +27,7 @@ final class LawExposureBuilderTest extends TestCase
         'stampDutyRate' => FinancialConstants::STAMP_DUTY_RATE,
         'bankLevyRate' => 0.001,
         'reserveDrawShare' => 0.0,
-        'publicSpending' => MacroEngine::TARGET_CORPORATE_TAX_RATE * 1.05,
+        'publicSpending' => MacroEngine::PUBLIC_PURCHASES_TO_GDP * 1.05,
     ];
 
     public function testEachBankOwesTheLevyItsModelCharges(): void
@@ -102,7 +102,7 @@ final class LawExposureBuilderTest extends TestCase
     {
         $macro = new MacroStateDTO();
         $contractor = self::firm('BILD', 'Engineering & Construction', [FinancialConstants::STATE_PUBLIC_SPENDING_EARNINGS_SHARE => 0.2]);
-        $expected = ['publicSpending' => MacroEngine::TARGET_CORPORATE_TAX_RATE * 0.95] + self::STANDING;
+        $expected = ['publicSpending' => MacroEngine::PUBLIC_PURCHASES_TO_GDP * 0.95] + self::STANDING;
 
         $row = self::row(self::law(LawExposureBuilder::build([$contractor], $macro, self::STANDING, $expected), 'publicSpending'), 'BILD');
 

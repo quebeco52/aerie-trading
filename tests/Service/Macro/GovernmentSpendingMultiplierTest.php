@@ -43,8 +43,8 @@ class GovernmentSpendingMultiplierTest extends TestCase
             $shocked = $this->quarterlyPath($seed, self::SHOCK);
             foreach ($base as $quarter => $row) {
                 $outputSum += $shocked[$quarter]['gap'] - $row['gap'];
-                // Purchases are TARGET_CORPORATE_TAX_RATE of GDP at the baseline index.
-                $purchasesSum += MacroEngine::TARGET_CORPORATE_TAX_RATE
+                // Purchases are PUBLIC_PURCHASES_TO_GDP of GDP at the baseline index.
+                $purchasesSum += MacroEngine::PUBLIC_PURCHASES_TO_GDP
                     * ($shocked[$quarter]['gov'] - $row['gov']) / MacroEngine::GOVT_SPENDING_BASELINE;
             }
         }
