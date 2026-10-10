@@ -113,14 +113,14 @@ class PoliticsEngineTest extends TestCase
      * Vote after vote at a trend economy, each cabinet taking office after its talks: the outgoing cabinet's parties lose
      * about what the record's governments lose, the Diet is as volatile as the Nordic vote process makes a parliament of
      * eight parties (13; Scandinavia 11 with four or five effective parties, ParlGov), the two big parties hold their
-     * seats across 160 years, no party drifts into a majority of its own, and the talks run close to real ones. In the
+     * seats across the 76 years the record covers, no party drifts into a majority of its own, and the talks run close to real ones. In the
      * full loop about a third need a second attempt (Golder 2010) and they last about a month (Bäck, Hellström, Lindvall
      * & Teorell 2023: 33.7 days, sd 33.9), 32% and 33.5 days (var/harness/politics/formation_report.py); at a trend
-     * economy they come easier, 26% and 30 days. They seat the governments Scandinavia's bloc parliaments have since 1945
-     * (ParlGov, 68 cabinets): minority cabinets 74% (84%), one party alone 48% (47%), and the parties at the Council
+     * economy they come easier, 27% and 32 days. They seat the governments Scandinavia's bloc parliaments have since 1945
+     * (ParlGov, 68 cabinets): minority cabinets 76% (84%), one party alone 46% (47%), and the parties at the Council
      * axis's ends supporting far more often than they govern. A bloc puts its leader in office, so the largest party
-     * sits in 76% of cabinets, above Scandinavia's 63%, where the largest party leads the losing bloc more often; the two
-     * largest govern together in 2% (1.5%).
+     * sits in 77% of cabinets, above Scandinavia's 63%, where the largest party leads the losing bloc more often; the two
+     * largest govern together in 4% (1.5%), as the core votes walk.
      */
     public function testTheDietStaysBalancedAtItsCalibratedVolatility(): void
     {
@@ -138,15 +138,15 @@ class PoliticsEngineTest extends TestCase
         $single = 0;
         $radicalIn = 0;
         $radicalSupports = 0;
-        for ($run = 0; $run < 60; ++$run) {
+        for ($run = 0; $run < 120; ++$run) {
             $state = $this->electionTick();
-            for ($vote = 0; $vote < 40; ++$vote) {
+            for ($vote = 0; $vote < 19; ++$vote) {
                 $outgoing = Diet::governingParties($state->governingCoalition);
                 $before = $state->dietVoteShares;
                 $this->vote($engine, $state);
                 Politics::takeOffice($state);
-                if ($vote < 10 || $vote >= 30) {
-                    $bigTwo[$vote < 10 ? 'early' : 'late'][] = $state->dietSeats[Diet::CIVIC] + $state->dietSeats[Diet::VANGUARD];
+                if ($vote < 5 || $vote >= 14) {
+                    $bigTwo[$vote < 5 ? 'early' : 'late'][] = $state->dietSeats[Diet::CIVIC] + $state->dietSeats[Diet::VANGUARD];
                 }
                 // The first vote has no earlier short-term swing to give back, so it is not yet the steady state.
                 if ($vote > 0) {

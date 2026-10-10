@@ -184,9 +184,9 @@ class PoliticsEngine
     /** Log gap between the public spending the big-state and small-state ends plan: the 0.7% of GDP Singapore's opposition would raise from the reserves' returns and land sales in place of the 2023-24 GST rise (Workers' Party manifesto 2025; Ministry of Finance, 21 November 2022), over the founding purchases share, small enough that the share and its log coincide. The opposition costs no extra spending with it, so this is the most the two sides' budgets part by. */
     public const POLICY_MANIFESTO_PUBLIC_SPENDING_LOG_GAP = 0.007 / MacroEngine::TARGET_CORPORATE_TAX_RATE;
 
-    // --- Platforms: Corporate Tax (financial centres: Luxembourg, Singapore, Ireland) ---
-    /** Gap between the corporate rates the big-state and small-state ends set: 1 point, Luxembourg's CSV-DP cut from 17% to 16% in 2025 that the socialists called not urgent (Deloitte; Paperjam); Singapore's and Ireland's parties keep the same rate (Workers' Party manifesto 2025; Sinn Féin, general election 2024). Enacted rates follow manifesto ideology (Osterloh & Debus 2012). */
-    public const POLICY_MANIFESTO_CORPORATE_TAX_GAP = 0.01;
+    // --- Platforms: Corporate Tax (financial centres: Singapore, Luxembourg) ---
+    /** Gap between the corporate rates the big-state and small-state ends set: 2 points, the financial centres' larger single cuts, Singapore's 20% to 18% (Budget 2008) and Luxembourg's 21% to 19% (2017 tax reform); their parties more often part by a point or keep the same rate (Luxembourg 2025, 17% to 16%; Workers' Party manifesto 2025). Enacted rates follow manifesto ideology (Osterloh & Debus 2012). */
+    public const POLICY_MANIFESTO_CORPORATE_TAX_GAP = 0.02;
 
     // --- Platforms: Tariffs (Amiti, Redding & Weinstein 2019; Fajgelbaum et al. 2020) ---
     /** Average effective tariff the protectionist end of the openness axis enacts over the District's free port: the US's 2025 rise, 2.5% to 17.9% (Yale Budget Lab, State of U.S. Tariffs, 26 September 2025). Duties pass fully into import prices at the border (Amiti, Redding & Weinstein 2019; Fajgelbaum et al. 2020). */

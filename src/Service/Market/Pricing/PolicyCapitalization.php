@@ -36,11 +36,11 @@ use App\Service\Politics\PoliticsEngine;
  */
 final class PolicyCapitalization
 {
-    // --- Past the Next Term (the Diet's own long runs: 16 games of 200 years on the macro loop beside the politics, var/harness/polls/lever_means.php, runs_sg; the carbon pair from an earlier run) ---
-    /** The corporate tax shift in force on average over the long run: -0.05 points (se 0.05). */
-    public const LONG_RUN_CORPORATE_TAX_SHIFT = -0.0005;
-    /** Share of the corporate tax shift's distance from that average still there a term later: its four-year autocorrelation, 0.656 (sd across games 0.19). */
-    public const CORPORATE_TAX_TERM_PERSISTENCE = 0.656;
+    // --- Past the Next Term (the Diet's own long runs: 16 games of 200 years on the macro loop beside the politics, var/harness/polls/lever_means.php, runs_sg; the corporate tax pair from runs_gap2, the carbon pair from an earlier run) ---
+    /** The corporate tax shift in force on average over the long run: -0.10 points (se 0.09). */
+    public const LONG_RUN_CORPORATE_TAX_SHIFT = -0.0010;
+    /** Share of the corporate tax shift's distance from that average still there a term later: its four-year autocorrelation, 0.654 (sd across games 0.19). */
+    public const CORPORATE_TAX_TERM_PERSISTENCE = 0.654;
     /** The bank levy in force on average over the long run: 0.054% (se 0.006%). */
     public const LONG_RUN_BANK_LEVY_RATE = 0.00054;
     /** Share of the bank levy's distance from that average still there a term later: 0.643 (sd across games 0.21). */

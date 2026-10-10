@@ -81,10 +81,6 @@ class CreditFiscalSubsystem
     public const FISCAL_STABILIZER_SENSITIVITY = 0.35;
     /** Mean lag, in years, of the tax a trailing year's earnings carry behind the tax charged: half the year, as a first-order lag (the convention of MacroAggregateSubsystem::DEMAND_TRANSMISSION_LAGS). */
     public const TRAILING_EARNINGS_MEAN_LAG_YEARS = 0.5;
-    /** Corporate tax rate floor during deep economic recessions: the budget's tax take at 12% of GDP, on the rate firms pay. */
-    public const MIN_CORPORATE_TAX_RATE = 0.12 - MacroEngine::TARGET_CORPORATE_TAX_RATE + MacroEngine::BASE_CORPORATE_TAX_RATE;
-    /** Corporate tax rate ceiling during overheating economic booms: the budget's tax take at 30% of GDP, on the rate firms pay. */
-    public const MAX_CORPORATE_TAX_RATE = 0.30 - MacroEngine::TARGET_CORPORATE_TAX_RATE + MacroEngine::BASE_CORPORATE_TAX_RATE;
 
     // --- GOVERNMENT SPENDING & FISCAL APPROPRIATIONS ---
     /** Diffusion of log civilian purchases / potential, the same fit; jumps are not significant (LR 2.1), so the process is Gaussian. */
@@ -500,7 +496,6 @@ class CreditFiscalSubsystem
     {
         $targetTaxRate = MacroEngine::BASE_CORPORATE_TAX_RATE + $state->corporateTaxPolicyShift + (self::FISCAL_STABILIZER_SENSITIVITY * $state->outputGapEma)
             + self::fiscalStance($state);
-        $targetTaxRate = max(self::MIN_CORPORATE_TAX_RATE, min(self::MAX_CORPORATE_TAX_RATE, $targetTaxRate));
 
         $state->corporateTaxRate += MacroEngine::FISCAL_ADJUSTMENT_SPEED * ($targetTaxRate - $state->corporateTaxRate) * $dt;
         $state->corporateTaxRateTrend += (1.0 - exp(-$dt / self::TAX_RATE_TREND_YEARS)) * ($state->corporateTaxRate - $state->corporateTaxRateTrend);
