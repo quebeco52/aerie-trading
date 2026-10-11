@@ -166,3 +166,84 @@ short, less persistent spikes (ACF1q 0.68 vs 0.81) that the exit at 0 then holds
 0.126 vs 0.040). Sahm (0.23 vs 0.16-0.18) over-fires because the sim spends ~2x the US time in recession (0.16 vs 0.08);
 per recession quarter it fires less than the US (1.4x vs 2.0x). Gap ACF4 does not respond to the regime share. Caveat: the
 8- and 16-seed grids pointed at 1.25pp; at 48 the match is ~1.5pp (not run as an arm).
+
+
+## 2026-10-11 Credit-only finance output (market-based finance moved to domestic demand)
+Question: does counting only the banks' credit cycle as finance output cut recession-warning time (Sahm, regime share)
+and restore gap persistence (ACF4, ACF8)? Targets named before the run: sahm_t, regime_t, gap_acf4, gap_acf8. Guards:
+infl_sd, elb_share, y10_mean, gap_sd, gap_gt2 (plus dgap_sd, gap_lt-2 reported).
+Harness: RegimeHarnessTest.php via regime_run.sh, YEARS=37, TPY=360, politics on. Snapshot rgtree = git archive HEAD +
+rsync of working-tree src/config/tests/bin with the three changed files restored to HEAD (diff -rq: only
+MacroAggregateSubsystem.php, MacroState.php, MacroStateDTO.php differ). R1 = rgtree; R4 = OVR ovr4 holding the three
+working-tree files (src-relative). Old R* runs moved to runs/old_regime/.
+Analysis: `YEARS=37 python3 regime_analyse.py R1 R4`; ACFs now on the first WIN=140 quarters after year 1 (env WIN);
+added gap_acf8, dgap_sd%, gap_gt2, gap_lt-2. Stages 8 -> 16 -> 48 (no stop criterion met at 8 or 16). Tables finout_s8/s16/s48.out.
+Stage 48:
+```
+n=48 paired seeds; blown up: R1 [], R4 []
+quantity                     R1                R4                dR4-R1 (se) t  n
+cut4q_rec%       4.461 (0.154)    3.991 (0.158)      -0.470 (0.222)   -2.1  48
+cut4q_all%       4.461 (0.154)    3.991 (0.158)      -0.470 (0.222)   -2.1  48
+elb_share        0.016 (0.004)    0.015 (0.005)      -0.001 (0.007)   -0.1  48
+trough_gap%     -2.230 (0.166)   -2.111 (0.146)      +0.119 (0.203)   +0.6  48
+rec_q            8.479 (0.942)    9.729 (1.333)      +1.250 (1.716)   +0.7  48
+pol_acf4         0.615 (0.015)    0.651 (0.016)      +0.037 (0.023)   +1.6  48
+gap_acf4         0.503 (0.016)    0.553 (0.015)      +0.050 (0.023)   +2.2  48
+gap_acf8         0.123 (0.025)    0.185 (0.025)      +0.061 (0.034)   +1.8  48
+dgap_sd%         0.591 (0.008)    0.519 (0.010)      -0.072 (0.012)   -5.8  48
+gap_gt2          0.114 (0.008)    0.092 (0.009)      -0.022 (0.013)   -1.7  48
+gap_lt-2         0.145 (0.012)    0.152 (0.015)      +0.008 (0.019)   +0.4  48
+gap_sd%          1.744 (0.044)    1.642 (0.057)      -0.102 (0.078)   -1.3  48
+infl_mean%       2.281 (0.031)    2.289 (0.026)      +0.008 (0.039)   +0.2  48
+infl_sd%         1.322 (0.025)    1.314 (0.019)      -0.008 (0.029)   -0.3  48
+y10_mean%        4.764 (0.074)    4.708 (0.070)      -0.056 (0.103)   -0.5  48
+gap_mean%       -0.142 (0.059)   -0.244 (0.065)      -0.101 (0.089)   -1.1  48
+pol_mean%        3.558 (0.077)    3.568 (0.089)      +0.010 (0.121)   +0.1  48
+crisis           0.792 (0.059)    0.750 (0.063)      -0.042 (0.079)   -0.5  48
+evans_t          0.011 (0.003)    0.008 (0.003)      -0.003 (0.004)   -0.7  48
+regime_t         0.326 (0.011)    0.324 (0.011)      -0.002 (0.016)   -0.1  48
+switches/yr      0.464 (0.012)    0.440 (0.011)      -0.024 (0.017)   -1.4  48
+fastcut_t        0.198 (0.007)    0.200 (0.007)      +0.002 (0.009)   +0.2  48
+hike4q%          3.325 (0.149)    3.208 (0.122)      -0.117 (0.202)   -0.6  48
+sahm_t           0.228 (0.005)    0.216 (0.006)      -0.013 (0.008)   -1.7  48
+latch_t          0.155 (0.011)    0.169 (0.012)      +0.014 (0.017)   +0.8  48
+latch_only       0.098 (0.009)    0.108 (0.009)      +0.011 (0.014)   +0.7  48
+sahm_only        0.171 (0.007)    0.155 (0.006)      -0.016 (0.008)   -2.0  48
+both_t           0.058 (0.005)    0.061 (0.006)      +0.003 (0.008)   +0.4  48
+ebp1_t           0.041 (0.004)    0.043 (0.004)      +0.003 (0.005)   +0.5  48
+ebp_sd%          0.443 (0.011)    0.451 (0.011)      +0.008 (0.015)   +0.5  48
+ebp_mean%        0.086 (0.011)    0.088 (0.012)      +0.002 (0.017)   +0.1  48
+recession seeds: R1 48, R4 48
+```
+Verdict: inconclusive-to-small. No target reaches |t| 4. sahm_t -0.013 (t -1.7), regime_t -0.002 (t -0.1), gap ACF4
++0.050 (t +2.2), ACF8 +0.061 (t +1.8): all well below the architect's 4-seed expectation (Sahm -0.056, regime -0.046,
+ACF4 +0.15, ACF8 +0.19). The one clear effect is a smoother gap: quarterly gap-change sd -0.072pp (t -5.8). No guard |t| >= 3.
+Stage 1 (8 seeds) showed regime_t +0.055 and crisis +0.375 that both vanished by 48.
+
+## 2026-10-11 Hike-side panic acceleration removed (R20 vs R21)
+Question: does removing the monetary rule's inflation "panic" hike acceleration change the cycle?
+Harness: `RegimeHarnessTest.php` via `regime_run.sh`, `TREE=pantree`, R20 = pantree (HEAD + credit-only finance output),
+R21 = OVR ovr21 (MonetaryPolicySubsystem.php + MacroEngine.php without the panic hike). Seeds 1-48 paired, 37 years.
+Run: `TREE=pantree YEARS=37 SNAP=<pansnap> bin/harness-batch var/harness/cbsmooth/regime_run.sh 1-48 R20 R21 &&
+YEARS=37 python3 var/harness/cbsmooth/regime_analyse.py R20 R21`. Outputs panic_s8.out, panic_s16.out, panic_s48.out.
+Stages: 8 and 16 not decisive (hike4q t -1.3, -2.8), so ran to 48. No failures, no blow-ups, 48/48 seeds with a recession.
+
+    quantity        R20     R21     dR21-R20 (se)    t     n=48
+    sahm_t   (T1)   0.207   0.206   -0.001 (0.008)  -0.1
+    infl_sd% (T2)   1.356   1.334   -0.022 (0.033)  -0.7
+    gap_acf4 (T3)   0.555   0.552   -0.003 (0.022)  -0.1
+    hike4q%         3.389   2.800   -0.589 (0.167)  -3.5
+    realpol_max%    5.013   4.679   -0.334 (0.198)  -1.7
+    infl_mean%      2.334   2.289   -0.045 (0.045)  -1.0
+    gap_sd%         1.626   1.688   +0.062 (0.076)  +0.8
+    pol_acf4        0.668   0.681   +0.013 (0.017)  +0.7
+    y10_mean%       4.793   4.797   +0.004 (0.116)  +0.0
+    regime_t        0.320   0.313   -0.007 (0.014)  -0.5
+    rec_q           9.94   10.21    +0.27  (1.58)   +0.2
+    crisis          0.812   0.771   -0.042 (0.094)  -0.4
+    panic_t         0.146   0.149   +0.003 (0.010)  +0.3
+
+Verdict: removing the panic hike does not change the cycle. All three targets are null with tight intervals
+(Sahm +-0.016, infl sd +-0.07pp, gap ACF4 +-0.044 at 2 se). The only effect is the mechanical one: the peak 4-quarter
+hike falls 0.59pp (t -3.5, guard tripped by design, 3.39 -> 2.80pp). The architect's 4-seed signals (Sahm +0.053 t 2.1,
+gap sd +0.52, gap ACF4 +0.10, rec_q +10) were noise; they shrink monotonically through 8 and 16 seeds.

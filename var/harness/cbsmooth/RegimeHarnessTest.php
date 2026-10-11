@@ -41,6 +41,8 @@ final class RegimeHarnessTest extends KernelTestCase
     /** @var array<int, bool> */
     private array $gridLatch = [];
     private bool $regimeWas = false;
+    /** Policy rate going into this tick, for the hike-side panic condition. */
+    private float $prevPolicy = NAN;
 
     /** @return array<string, float|int> The per-tick shares since the last row, and resets them. */
     private function drainTickShares(): array
@@ -51,7 +53,7 @@ final class RegimeHarnessTest extends KernelTestCase
 
         return ['elb_t' => ($q['elb_t'] ?? 0) / $n, 'evans_t' => ($q['evans_t'] ?? 0) / $n, 'regime_t' => ($q['regime_t'] ?? 0) / $n,
             'fastcut_t' => ($q['fastcut_t'] ?? 0) / $n, 'switches' => $q['switches'] ?? 0]
-            + array_map(static fn ($v) => $v / $n, array_filter($q, static fn ($k) => in_array($k, ['sahm_t', 'latch_t', 'both_t', 'ebp1_t'], true)
+            + array_map(static fn ($v) => $v / $n, array_filter($q, static fn ($k) => in_array($k, ['sahm_t', 'latch_t', 'both_t', 'ebp1_t', 'panic_t'], true)
                 || str_starts_with((string) $k, 'lat') || str_starts_with((string) $k, 'uni'), ARRAY_FILTER_USE_KEY));
     }
     private ?\App\Service\Corporate\DebtEngine $debtEngine = null;
@@ -180,6 +182,13 @@ final class RegimeHarnessTest extends KernelTestCase
             $q['fastcut_t'] = ($q['fastcut_t'] ?? 0) + ($regimeNow && $m->targetRate < $m->policyRate ? 1 : 0);
             $q['switches'] = ($q['switches'] ?? 0) + ($regimeNow !== $this->regimeWas ? 1 : 0);
             $this->regimeWas = $regimeNow;
+            // Panic-speed question: the condition the pre-2026-10-11 rule accelerated hikes on (target above the rate, not
+            // held by Evans, max(headline, headline EMA) over 3.5%), read on either tree, so the fix arm reports how often
+            // it would have engaged.
+            $evansNow = $this->prevPolicy <= MacroEngine::ZLB_PROXIMITY_THRESHOLD && $m->unemploymentRateEma > $m->nairu + 0.009 && max($m->inflationEma, $m->tipsBreakeven) < 0.025;
+            $q['panic_t'] = ($q['panic_t'] ?? 0) + (is_finite($this->prevPolicy) && !$evansNow && max(MacroEngine::EFFECTIVE_LOWER_BOUND, min(0.20, $m->targetRate)) > $this->prevPolicy
+                && max($m->inflation, $m->inflationEma) > 0.035 ? 1 : 0);
+            $this->prevPolicy = $m->policyRate;
             unset($q);
             if ($recordPath !== null) {
                 $recorded[] = $m;
@@ -264,6 +273,8 @@ final class RegimeHarnessTest extends KernelTestCase
                     'rstar' => $m->naturalRate, 'target' => $m->targetRate,
                     'sahm' => $m->sahmRecessionIndicator, 'ebp' => $m->excessBondPremium, 'u_ema' => $m->unemploymentRateEma, 'nairu' => $m->nairu,
                     'stress' => property_exists($m, 'authorityStressRegime') ? $m->authorityStressRegime : -1.0,
+                    // The rule's inflation measure (MonetaryPolicySubsystem::calculateExpectedInflation), the real rate's deflator.
+                    'pi_rule' => 0.70 * ((0.55 * $m->supercoreInflationEma) + (0.25 * $m->coreGoodsInflationEma)) / 0.80 + (0.30 * $m->tipsBreakeven),
                 ] + $this->drainTickShares() + (getenv('DECOMP') ? [
                     // The ten-year's pieces as calculateYieldCurve() builds them (y10 = level + b1 L1 + b2 L2 + b3 L3 + base TP + habitat, floored).
                     'level' => $m->nsLevel, 'b1' => $m->nsBeta1, 'b2' => $m->nsCurvature, 'b3' => $m->nsCurvature2,

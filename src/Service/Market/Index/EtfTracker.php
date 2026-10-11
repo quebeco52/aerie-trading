@@ -284,8 +284,9 @@ class EtfTracker
                     );
                 }
 
+                // NAV is per share like the price; restating one leaves the archived premium off by the factor.
                 $conn->executeStatement(
-                    'UPDATE etf_history SET price = price / :factor WHERE etf_id = :etf_id',
+                    'UPDATE etf_history SET price = price / :factor, nav = nav / :factor WHERE etf_id = :etf_id',
                     ['factor' => $factor, 'etf_id' => $etfId]
                 );
 
@@ -325,7 +326,7 @@ class EtfTracker
                 }
 
                 $conn->executeStatement(
-                    'UPDATE etf_history SET price = price * :factor WHERE etf_id = :etf_id',
+                    'UPDATE etf_history SET price = price * :factor, nav = nav * :factor WHERE etf_id = :etf_id',
                     ['factor' => $factor, 'etf_id' => $etfId]
                 );
                 

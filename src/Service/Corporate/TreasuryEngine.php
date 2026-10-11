@@ -1017,7 +1017,8 @@ class TreasuryEngine
 
             $hoardStatus = $ctx->strategy->evaluateHoardingStatus($ctx->newTreasury, $targetOperatingCash, $ctx->stock->getManagementProfile()->appliedHoardingBase($ctx->operatingBase), $totalDebt);
 
-            $baselineSpread = (float) $stock->getCreditSpread();
+            // Junk-bond status is the firm's spread widening past its own through-the-cycle spread at its rating.
+            $baselineSpread = $ctx->health->rawMetrics->baselineSpread ?? (float) $stock->getCreditSpread();
             $dynamicSpread = $ctx->health->rawMetrics->dynamicSpread ?? $baselineSpread;
             $isJunkBondStatus = $dynamicSpread > ($baselineSpread + 0.0011);
 

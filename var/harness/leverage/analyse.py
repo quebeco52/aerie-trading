@@ -64,7 +64,9 @@ def row(label, get):
     d = [y - x for x, y in zip(a, b)]
     se = st.stdev(d) / math.sqrt(len(d)) if len(d) > 1 else math.nan
     t = (st.mean(d) / se) if se and se == se and se > 0 else math.nan
-    print(f'{label:<28} {A} {st.mean(a):8.3f}  {B} {st.mean(b):8.3f}  diff {st.mean(d):+8.3f}  se {se:7.3f}  t {t:6.2f}')
+    su = math.sqrt(st.variance(a) / len(a) + st.variance(b) / len(b)) if len(a) > 1 else math.nan
+    tu = (st.mean(b) - st.mean(a)) / su if su and su == su and su > 0 else math.nan
+    print(f'{label:<28} {A} {st.mean(a):8.3f}  {B} {st.mean(b):8.3f}  diff {st.mean(d):+8.3f}  se {se:7.3f}  t {t:6.2f}  welch t {tu:6.2f}')
 
 for y in YEARS:
     print(f'-- year {y} (targets)')

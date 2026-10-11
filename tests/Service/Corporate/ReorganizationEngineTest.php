@@ -15,7 +15,7 @@ use PHPUnit\Framework\TestCase;
  * The plan a Chapter 11 court would confirm, and what confirming it does to the firm's books.
  *
  * The fixture is a 'General' operating firm: minimum coverage 2.0 plus the 1.5 buffer new borrowing needs,
- * a 3.0x net-debt covenant, and exit notes at the 4% five-year plus its 1% spread.
+ * a 3.0x net-debt covenant, and exit notes at the 4% five-year plus a 1% high-yield market spread.
  */
 final class ReorganizationEngineTest extends TestCase
 {
@@ -198,7 +198,7 @@ final class ReorganizationEngineTest extends TestCase
 
     private function macro(): MacroStateDTO
     {
-        return new MacroStateDTO(yield5yEma: 0.04);
+        return new MacroStateDTO(yield5yEma: 0.04, highYieldCreditSpreadEma: 0.01);
     }
 
     private function going(float $ebit, float $ebitda, float $assetValue, float $cash, float $claims): GoingConcernDTO

@@ -77,9 +77,9 @@ class DistrictStressEvaluatorTest extends TestCase
         $this->assertTrue($this->evaluator->evaluate($macro)['exchange-floor']);
     }
 
-    public function testStatisticalOfficeStressedByInflationPanic(): void
+    public function testStatisticalOfficeStressedByInflationWellOverTarget(): void
     {
-        $macro = new MacroStateDTO(inflationEma: MacroEngine::CB_INFLATION_PANIC_THRESHOLD);
+        $macro = new MacroStateDTO(inflationEma: MacroEngine::TARGET_INFLATION + 0.015);
 
         $this->assertTrue($this->evaluator->evaluate($macro)['statistical-office']);
     }

@@ -546,9 +546,10 @@ class MergerAndAcquisitionEngineTest extends TestCase
     }
 
     /**
-     * The pro-forma credit check strikes the acquirer's Merton distance at its business risk. It used to
-     * de-lever equity volatility across the enlarged balance sheet, so the more a deal borrowed the SAFER the
-     * combined assets looked and the cheaper the new debt was priced.
+     * The pro-forma credit check strikes the acquirer's Merton distance at its business risk, and the deal's notes
+     * price at the rating that pro-forma balance sheet carries. It used to de-lever equity volatility across the
+     * enlarged balance sheet, so the more a deal borrowed the SAFER the combined assets looked and the cheaper the
+     * new debt was priced.
      */
     public function testALeveragedDealIsUnderwrittenAtTheAcquirersAssetRisk(): void
     {
@@ -570,6 +571,17 @@ class MergerAndAcquisitionEngineTest extends TestCase
                 $borrowed->append($cost);
             }
         );
+        $graded = [];
+        $this->debtEngineMock->method('resolveProFormaRating')->willReturnCallback(
+            static function (Stock $acquirer, float $distanceToDefault) use (&$graded): string {
+                $graded[] = $distanceToDefault;
+
+                return 'BB';
+            }
+        );
+        $this->debtEngineMock->method('resolveCreditSpread')->willReturnCallback(
+            static fn (Stock $acquirer, MacroStateDTO $macro, ?string $rating = null): float => $rating === 'BB' ? 0.03 : 0.0
+        );
         $dealPricedAt = function (float $volatility) use (&$assetVolatility, $borrowed, $macroState): float {
             $assetVolatility = $volatility;
             $borrowed->exchangeArray([]);
@@ -582,7 +594,10 @@ class MergerAndAcquisitionEngineTest extends TestCase
 
         $calm = $dealPricedAt(0.27);
         $this->assertGreaterThan(0, $consulted, 'a debt-funded deal is credit-checked at the acquirer\'s asset risk');
-        $this->assertGreaterThan($calm, $dealPricedAt(0.40), 'the asset risk the engine resolves is the one that prices the new debt');
+        $this->assertEqualsWithDelta(0.035 + 0.03, $calm, 1e-12, 'the notes price at the pro-forma rating\'s spread');
+        $dealPricedAt(0.40);
+        $this->assertCount(2, $graded);
+        $this->assertLessThan($graded[0], $graded[1], 'the asset risk the engine resolves is the one the pro-forma rating reads');
     }
 
     /**

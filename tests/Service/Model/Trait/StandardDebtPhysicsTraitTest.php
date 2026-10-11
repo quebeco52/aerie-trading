@@ -200,7 +200,7 @@ final class StandardDebtPhysicsTraitTest extends TestCase
         $this->assertSame(0.0, $this->model->getDistressEquityThreshold());
         $this->assertSame(0.0, $this->model->getWarningEquityThreshold());
 
-        $this->assertSame(0.40, $this->model->getLossGivenDefault(), 'Senior unsecured recovery is the standard 60%.');
+        $this->assertEqualsWithDelta(1.0 - \App\Service\Market\Bond\CorporateDefaultService::RECOVERY_SENIOR_UNSECURED, $this->model->getLossGivenDefault(), 1e-12, 'A listed firm\'s notes are senior unsecured.');
         $this->assertSame(0.30, $this->model->getMaxFloatingDebtRatio(), 'A corporate terms out most of its debt.');
         $this->assertSame(FinancialConstants::DEFAULT_QUARTERLY_DEBT_ROLLOVER, $this->model->getDebtMaturityRolloverRate());
         $this->assertFalse($this->model->requiresAlternativeZScore(), 'Altman Z applies to a normal balance sheet.');

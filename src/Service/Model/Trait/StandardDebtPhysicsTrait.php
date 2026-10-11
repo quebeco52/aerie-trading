@@ -86,8 +86,9 @@ trait StandardDebtPhysicsTrait
         return min($incomeStatementCapacity, $balanceSheetCapacity);
     }
     
+    /** A listed firm's notes are senior unsecured: Moody's ultimate recovery 47.4% (1987-2021), CorporateDefaultService::RECOVERY_SENIOR_UNSECURED. */
     public function getLossGivenDefault(): float {
-        return 0.40;
+        return 1.0 - \App\Service\Market\Bond\CorporateDefaultService::RECOVERY_SENIOR_UNSECURED;
     }
     
     public function getRequiredIcrBuffer(): float {

@@ -18,6 +18,9 @@ use App\Service\Math\MacroTransmission;
  */
 class MacroState
 {
+    /** Wire key of the market-value trend finance output was read against before market-based finance joined the domestic economy: a payload carrying it predates that. */
+    public const RETIRED_FINANCE_MARKET_TREND_KEY = 'finance_market_trend';
+
     public float $totalTime;
     public float $inflation;
     public float $inflationEma;
@@ -244,11 +247,8 @@ class MacroState
     public float $netExportGap;
     // Domestic demand's part of the gap, smoothed like the gap: what the inventory cycle's sales surprise is read against.
     public float $domesticDemandGapEma;
-    // The market-driven finance output (a share of GDP, a level part of the gap): loans and managed assets against their trends.
+    // The banks' credit-driven output (a share of GDP, a level part of the gap): loan balances against their trend.
     public float $financeOutputGap;
-    // Potential finance output: the one-sided HP(1600) trend of managed market value over GDP, and its log slope a quarter.
-    public float $financeMarketTrend;
-    public float $financeMarketTrendSlope;
     // The currency index over its fundamental: the purchasing-power deviation that decays while the fundamental jumps.
     public float $exchangeRateDeviation;
     public float $realExchangeRateTradeLag;
@@ -662,15 +662,16 @@ class MacroState
         if (!isset($carried['netExportGap'])) {
             $state->netExportGap = MacroAggregateSubsystem::netExportGapAt($state->foreignOutputGapEma, $state->realExchangeRateTradeLag, $state->alliedDefenseDeliveryLag, $state->tariffTradeLag);
         }
-        // The finance trend a state predating it omits opens on the trend it replaced, so the finance level is unmoved.
-        if (!isset($carried['financeMarketTrend']) && $state->equityWealthTrend > 0.0) {
-            $state->financeMarketTrend = $state->equityWealthTrend;
-        }
-        if (!isset($carried['financeOutputGap'])) {
-            $state->financeOutputGap = MacroAggregateSubsystem::financeOutputGapAt(
-                MacroAggregateSubsystem::creditBalanceGap($state->creditToGdpGap, $state->creditToGdpTrend),
-                MacroAggregateSubsystem::marketBalanceGap($state->equityWealthRatio, $state->financeMarketTrend)
-            );
+        // Finance output opens on the credit balances as they stand. A state that still carries the retired market-value
+        // trend (finance_market_trend) valued fund managers' output at the market: its finance level is rebuilt on credit
+        // alone and domestic demand, smoothed reading included, keeps the part of the carried gap the market leg held, so
+        // the upgrade moves no GDP.
+        if (!isset($carried['financeOutputGap']) || isset($data[self::RETIRED_FINANCE_MARKET_TREND_KEY])) {
+            $carriedFinance = $state->financeOutputGap;
+            $state->financeOutputGap = MacroAggregateSubsystem::financeOutputGapAt(MacroAggregateSubsystem::creditBalanceGap($state->creditToGdpGap, $state->creditToGdpTrend));
+            if (isset($carried['financeOutputGap'], $carried['domesticDemandGapEma'])) {
+                $state->domesticDemandGapEma += ($carriedFinance - $state->financeOutputGap) / MacroAggregateSubsystem::DOMESTIC_GAP_WEIGHT;
+            }
         }
         // The capital built counted the requirement alone in a payload predating the last tick's requirement; the buffer
         // in force was held all the same, so the upgrade finds no shortfall and no rise the banks have not already met.

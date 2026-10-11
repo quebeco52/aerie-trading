@@ -902,47 +902,32 @@ class DebtEngineTest extends TestCase
         $this->assertEqualsWithDelta($expectedBlended, $metrics->historicalFixedRate, 0.001);
     }
 
-    public function testBernankeGertlerGilchristFinancialAccelerator(): void
+    /**
+     * The common credit cycle reaches every issuer through the market's credit indices, in proportion to its class
+     * (Ben Dor et al. 2007): doubling the IG and HY indices doubles a BBB's class spread and a BB's alike. A recession
+     * the indices have not priced moves no one's spread, so leverage in a downturn is not charged a second time.
+     */
+    public function testTheCreditCycleScalesEveryClassInProportionAndTheGapAloneMovesNothing(): void
     {
-        $realMath = new MathUtility();
-        $realMetrics = new CorporateMetrics();
-        $engine = new DebtEngine($realMath, $realMetrics, null, null);
-
-        $stock = new Stock();
-        $stock->setTicker('LEVER');
-        $stock->setIndustry('Industrials');
-        $stock->setPrice('50.00');
-        $stock->setSharesOutstanding('1000000');
-        $stock->setTotalEquity('50000000');
-        $stock->setWholesaleDebt('100000000'); // 2.0x Debt/Equity (leveraged)
-        $stock->setCreditSpread('0.02');
-        $stock->setTotalRevenue('100000000');
-        $stock->setOperatingMargin('0.15');
-        $stock->setVolatility('0.20');
-
-        // 1. Normal economy (output gap = 0)
-        $neutralMacro = new MacroStateDTO(
-            outputGapEma: 0.0,
+        $engine = new DebtEngine(new MathUtility(), new CorporateMetrics(), null, null);
+        $stock = $this->leveredFirm('LEVER', '1.00', '0.0163');
+        $macro = static fn (float $ig, float $gap): MacroStateDTO => new MacroStateDTO(
+            outputGapEma: $gap,
             yield5yEma: 0.03,
-            macroCreditSpreadEma: 0.015
+            macroCreditSpreadEma: $ig,
+            macroCreditSpreadTrend: 0.013,
+            highYieldCreditSpreadEma: $ig * 3.3
         );
-        $neutralResult = $engine->calculateInterestExpense($stock, $neutralMacro, false);
 
-        // 2. Severe Recession (output gap = -4%)
-        $recessionMacro = new MacroStateDTO(
-            outputGapEma: -0.04,
-            yield5yEma: 0.03,
-            macroCreditSpreadEma: 0.015
-        );
-        $recessionResult = $engine->calculateInterestExpense($stock, $recessionMacro, false);
-
-        // BGG External Finance Premium expands during recession for leveraged balance sheets
-        $this->assertGreaterThan(
-            $neutralResult->dynamicSpread,
-            $recessionResult->dynamicSpread,
-            'Credit spreads on leveraged corporate debt must widen non-linearly during economic contractions via the BGG Financial Accelerator.'
-        );
+        foreach (['BBB', 'BB'] as $rating) {
+            $stock->setCreditRating($rating);
+            $calm = $engine->calculateInterestExpense($stock, $macro(0.013, 0.0))->dynamicSpread;
+            $crisis = $engine->calculateInterestExpense($stock, $macro(0.026, 0.0))->dynamicSpread;
+            $this->assertEqualsWithDelta(2.0 * $calm, $crisis, 1e-12, "{$rating}: twice the index is twice the class spread");
+            $this->assertEqualsWithDelta($calm, $engine->calculateInterestExpense($stock, $macro(0.013, -0.04))->dynamicSpread, 1e-12, "{$rating}: an unpriced recession adds nothing");
+        }
     }
+
     public function testCapitalizedLeasesLowerAltmanZForLeaseHeavySectors(): void
     {
         // Identical books: the restaurant franchisor carries a store lease book worth 60% of revenue that
@@ -1117,28 +1102,35 @@ class DebtEngineTest extends TestCase
     }
 
     /**
-     * Borrowing brings the default barrier closer to a business whose risk has not changed, so every step up
-     * in debt must widen the spread. De-levering the configured equity volatility at the current capital
-     * structure did the opposite: it read each dollar of debt as a SAFER asset base, and at 89% debt the
-     * Merton leg added about 2bp.
+     * Borrowing reaches the spread through the rating: each step up in debt on an unchanged business is reviewed by
+     * the agency, which reads the leverage against the business, and the issue then prices at the class it lands in.
+     * The spread never narrows as debt is added and is a junk-bond spread away once the firm is levered into high yield.
      */
-    public function testTheCreditSpreadWidensWithEveryDollarOfDebtOnAnUnchangedBusiness(): void
+    public function testTheCreditSpreadWidensAsDebtPushesTheRatingDown(): void
     {
         $engine = $this->costOfCapitalEngine();
         $macro = $this->neutralMacro();
-        $stock = $this->leveredFirm('LEVR', '1.00', '0.01');
+        $stock = $this->leveredFirm('LEVR', '1.00', '0.0109');
+        $stock->setCreditRating('A');
         $engine->calibrateAssetVolatility($stock, $macro->policyRateEma);
 
         $spreads = [];
-        foreach ([500_000_000, 1_000_000_000, 2_000_000_000, 4_000_000_000, 8_000_000_000] as $debt) {
+        $ratings = [];
+        foreach ([100_000_000, 200_000_000, 400_000_000, 700_000_000, 1_200_000_000] as $debt) {
             $stock->setWholesaleDebt((string) $debt);
+            for ($review = 0; $review < 4; $review++) {
+                $engine->calculateInterestExpense($stock, $macro, true);
+            }
+            $ratings[] = $stock->getCreditRating();
             $spreads[] = $engine->calculateInterestExpense($stock, $macro)->dynamicSpread;
         }
 
         for ($i = 1; $i < count($spreads); $i++) {
-            $this->assertGreaterThan($spreads[$i - 1], $spreads[$i], "step {$i}: more debt on the same business must cost more");
+            $this->assertGreaterThanOrEqual($spreads[$i - 1], $spreads[$i], "step {$i}: more debt on the same business never costs less");
         }
-        $this->assertGreaterThan($spreads[0] + 0.01, $spreads[4], 'at 89% debt the barrier is a junk-bond spread away');
+        $this->assertSame('A', $ratings[0]);
+        $this->assertLessThan(CreditRatingAgency::RATING_RANKS['BBB'], CreditRatingAgency::RATING_RANKS[$ratings[4]], 'levered past 5x EBITDA the firm is high yield');
+        $this->assertGreaterThan($spreads[0] + 0.02, $spreads[4], 'and its debt prices a junk-bond spread wider');
     }
 
     /**
@@ -1605,22 +1597,188 @@ class DebtEngineTest extends TestCase
     }
 
     /**
-     * The firm's spread follows the IG market's deviation from its measured through-the-cycle level, both ways and from
-     * the first basis point: a 40 bps widening that never reached the old fixed 200 bps line still raises the cost of
-     * debt, a tight market lowers it, and the same deviation costs the same whatever level the trend has settled at.
+     * The firm's spread is its class's multiple of the market index today, times its own seeded multiple of the class,
+     * so a wide market raises the cost of new debt and a tight one lowers it from the first basis point. The trend sets
+     * only the through-the-cycle baseline a widening is judged against, never the spread itself.
      */
-    public function testTheCreditCycleReachesTheCostOfDebtAsTheDeviationFromItsTrend(): void
+    public function testTheSpreadIsTheClassMultipleOfTheIndexAndTheTrendSetsOnlyTheBaseline(): void
     {
         $engine = $this->costOfCapitalEngine();
-        $spread = fn (float $ema, float $trend): float => $engine->calculateInterestExpense(
-            $this->leveredFirm('CYCL', '1.20', '0.010'),
+        $stock = $this->leveredFirm('CYCL', '1.20', '0.0163');
+        $stock->setCreditRating('BBB');
+        $metrics = fn (float $ema, float $trend): \App\DTO\DebtMetricsDTO => $engine->calculateInterestExpense(
+            $stock,
             new MacroStateDTO(inflationEma: 0.02, policyRateEma: 0.04, yield5yEma: 0.045, macroCreditSpreadEma: $ema, macroCreditSpreadTrend: $trend, corporateTaxRate: 0.21)
-        )->dynamicSpread;
+        );
 
-        $atTrend = $spread(0.015, 0.015);
+        $multiple = static fn (float $seeded): float => CreditRisk::calculateIssuerSpreadMultiple($seeded, \App\Service\Macro\MacroEngine::BASE_CREDIT_SPREAD, \App\Service\Macro\MacroEngine::BASE_CREDIT_SPREAD * \App\Service\Macro\MacroEngine::HY_BASE_SPREAD_MULTIPLIER);
+        $bbb = CreditRisk::IG_CLASS_SPREAD_MULTIPLES['BBB'] * $multiple(0.0163);
+        $this->assertEqualsWithDelta($bbb * 0.019, $metrics(0.019, 0.015)->dynamicSpread, 1e-12, 'A firm seeded at the BBB spread trades at the BBB multiple of the index.');
+        $this->assertEqualsWithDelta($bbb * 0.012, $metrics(0.012, 0.015)->dynamicSpread, 1e-12, 'A tight market lowers the cost of new debt.');
+        $this->assertEqualsWithDelta($metrics(0.019, 0.015)->dynamicSpread, $metrics(0.019, 0.018)->dynamicSpread, 1e-12, 'The trend does not move the spread.');
+        $this->assertEqualsWithDelta($bbb * 0.015, $metrics(0.019, 0.015)->baselineSpread, 1e-12, 'It sets the through-the-cycle baseline.');
 
-        $this->assertEqualsWithDelta($atTrend + (0.004 * 1.20), $spread(0.019, 0.015), 1e-12, 'A widening under 200 bps reaches the firm at its beta.');
-        $this->assertEqualsWithDelta($atTrend - (0.003 * 1.20), $spread(0.012, 0.015), 1e-12, 'A tight market lowers the cost of new debt.');
-        $this->assertEqualsWithDelta($spread(0.019, 0.015), $spread(0.022, 0.018), 1e-12, 'The deviation is read against the measured trend, not a fixed level.');
+        $stock->setCreditSpread('0.0200');
+        $this->assertEqualsWithDelta(0.0200 / (CreditRisk::IG_CLASS_SPREAD_MULTIPLES['BBB'] * 0.013), $multiple(0.0200), 1e-12, 'A seeded spread nearest the BBB class is read as a multiple of it.');
+        $this->assertEqualsWithDelta(CreditRisk::IG_CLASS_SPREAD_MULTIPLES['BBB'] * $multiple(0.0200) * 0.019, $metrics(0.019, 0.015)->dynamicSpread, 1e-12, 'A firm seeded wide of its class carries that multiple.');
+    }
+
+    /**
+     * An institution rated on its capital is rated as S&P's bank methodology would: from the country anchor plus what
+     * its capital earns it, which tops out at A whatever distance to default its equity reads.
+     */
+    public function testAnInstitutionRatedOnItsCapitalTopsOutAtTheBankCeiling(): void
+    {
+        $engine = new DebtEngine(new MathUtility(), new CorporateMetrics(), $this->creditRatingAgency);
+        $macroState = new MacroStateDTO(policyRateEma: 0.04, corporateTaxRate: 0.21, yield5yEma: 0.04);
+        $bank = new Stock();
+        $bank->setTicker('BNKA');
+        $bank->setIndustry('Banks - Diversified');
+        $bank->setCreditRating('AAA');
+        $bank->setTotalEquity('100000000');
+        $bank->setCustomerDeposits('900000000');
+        $bank->setWholesaleDebt('50000000');
+        $bank->setCorporateTreasury('100000000');
+        $bank->setSharesOutstanding('10000000');
+        $bank->setPrice('40.00');
+        $bank->setVolatility('0.15');
+        $bank->setTotalRevenue('60000000');
+        $bank->setOperatingMargin('0.30');
+        $this->assertGreaterThan(CreditRatingAgency::THRESHOLD_AAA + CreditRatingAgency::HYSTERESIS_BUFFER, $engine->resolveDistanceToDefault($bank, $macroState), 'the equity reads the bank as AAA');
+
+        $engine->calculateInterestExpense($bank, $macroState, true);
+        $this->assertSame('AA', $bank->getCreditRating(), 'one notch a review toward the ceiling');
+        $engine->calculateInterestExpense($bank, $macroState, true);
+        $engine->calculateInterestExpense($bank, $macroState, true);
+        $this->assertSame(CreditRatingAgency::CAPITAL_RATED_RATING_CEILING, $bank->getCreditRating(), 'and no further');
+    }
+
+    /**
+     * A firm opens rated as its balance sheet reads: the agency's review is repeated until it settles, instead of every
+     * firm opening at the placeholder BBB and walking a notch a quarter for its first year.
+     */
+    public function testAnOpeningFirmIsSeededAtTheRatingItsBalanceSheetReads(): void
+    {
+        $engine = $this->costOfCapitalEngine();
+        $macro = $this->neutralMacro();
+
+        $prudent = $this->leveredFirm('SEED', '1.00', '0.0109');
+        $prudent->setRetainedEarnings('300000000');
+        $prudent->setWholesaleDebt('100000000');
+        $this->assertSame('BBB', $prudent->getCreditRating(), 'the placeholder grade');
+        $this->assertTrue($engine->seedCreditRating($prudent, $macro));
+        $this->assertSame('A', $prudent->getCreditRating(), 'low leverage on a satisfactory business anchors at A');
+        $this->assertFalse($engine->seedCreditRating($prudent, $macro), 'a settled rating does not move');
+
+        $levered = $this->leveredFirm('SEEL', '1.00', '0.0109');
+        $levered->setRetainedEarnings('300000000');
+        $levered->setWholesaleDebt('1000000000');
+        $this->assertTrue($engine->seedCreditRating($levered, $macro));
+        $this->assertSame('BB', $levered->getCreditRating(), 'at over 4x EBITDA its leverage anchors it in high yield');
+
+        $levered->setCreditRating('AAA');
+        $this->assertTrue($engine->seedCreditRating($levered, $macro));
+        $this->assertSame('BB', $levered->getCreditRating(), 'from a stale AAA it is reviewed down three notches in one seeding');
+    }
+
+    /**
+     * Acquisition notes are rated on the pro-forma balance sheet: the worse of the issuer's rating, the grade its
+     * pro-forma distance to default reads and the anchor its pro-forma leverage sets. Borrowing never upgrades it.
+     */
+    public function testAProFormaRatingIsTheWorstOfTheRatingTheDistanceAndTheLeverage(): void
+    {
+        $stock = $this->leveredFirm('PROF', '1.00', '0.0109');
+        $stock->setCreditRating('A');
+
+        $this->assertSame('BB', $this->engine->resolveProFormaRating($stock, 8.0, 350.0, 100.0), 'leverage of 3.5x anchors at BB');
+        $this->assertSame('B', $this->engine->resolveProFormaRating($stock, 1.2, 50.0, 100.0), 'a distance of 1.2 reads B');
+        $this->assertSame('A', $this->engine->resolveProFormaRating($stock, 8.0, 50.0, 100.0), 'a modest deal keeps the rating');
+
+        $stock->setCreditRating('BBB');
+        $this->assertSame('BBB', $this->engine->resolveProFormaRating($stock, 10.0, 0.0, 100.0), 'a deal never upgrades the issuer');
+    }
+
+    /**
+     * The primary market shuts to a class when the index it trades off blows out, as high yield did in 2008 and 2020:
+     * a CCC issuer trading at a CCC spread in a calm market still rolls its maturity, the same issuer is shut out once
+     * the HY index reaches crisis levels, and an investment-grade issuer refinances with the IG index at its record.
+     */
+    public function testTheMarketShutsWhenTheClassIndexBlowsOutNotAtAClasssOwnSpread(): void
+    {
+        $engine = new DebtEngine(new MathUtility(), new CorporateMetrics(), null, null);
+        $issuer = function (string $rating): Stock {
+            $stock = $this->buildMaturityIssuer($rating, 0.02);
+            $stock->setTotalRevenue('20000000000');
+            $stock->setOperatingMargin('0.15');
+            $stock->setSharesOutstanding('1000000000');
+            $stock->setPrice('20.00');
+            $stock->setVolatility('0.30');
+
+            return $stock;
+        };
+        $macro = static fn (float $ig, float $hy): MacroStateDTO => new MacroStateDTO(policyRateEma: 0.04, corporateTaxRate: 0.21, yield5yEma: 0.045, macroCreditSpreadEma: $ig, highYieldCreditSpreadEma: $hy);
+
+        $calmCcc = $engine->analyzeDebtHealth($issuer('CCC'), $macro(0.013, 0.043));
+        $this->assertGreaterThan(0.10, $calmCcc->rawMetrics->dynamicSpread, 'a CCC trades at its class spread');
+        $this->assertGreaterThan(1.0, $calmCcc->interestCoverage);
+        $this->assertTrue($engine->rollMaturities($issuer('CCC'), $calmCcc, 0.0)->refinanced, 'and still refinances in a calm market');
+
+        $crisis = $macro(0.035, 0.115);
+        $this->assertFalse($engine->rollMaturities($issuer('BB'), $engine->analyzeDebtHealth($issuer('BB'), $crisis), 0.0)->refinanced, 'high yield at 11.5% is shut');
+        $this->assertTrue($engine->rollMaturities($issuer('A'), $engine->analyzeDebtHealth($issuer('A'), $macro(0.065, 0.215)), 0.0)->refinanced, 'IG at its record is not');
+    }
+
+    /**
+     * Bondholders charge for equity volatility above the firm's norm (Campbell & Taksler 2003), 2 bp a point. A
+     * volatile business's rating class already prices its normal risk, so it pays nothing at its own volatility; a
+     * quiet one pays only above the market's normal 20%.
+     */
+    public function testTheVolatilityPremiumIsChargedOnlyAboveTheFirmsOwnNorm(): void
+    {
+        $engine = $this->costOfCapitalEngine();
+        $macro = $this->neutralMacro();
+        $spread = function (string $structural, string $current) use ($engine, $macro): float {
+            $stock = $this->leveredFirm('VOLP', '1.00', '0.0163');
+            $stock->setCreditRating('BBB');
+            $stock->setVolatility($structural);
+            $stock->setCurrentVolatility($current);
+
+            return $engine->resolveCreditSpread($stock, $macro);
+        };
+
+        $base = $spread('0.45', '0.45');
+        $this->assertEqualsWithDelta($spread('0.15', '0.15'), $base, 1e-12, 'a volatile business pays nothing at its own volatility');
+        $this->assertEqualsWithDelta($base + 0.10 * 0.02, $spread('0.45', '0.55'), 1e-12, 'ten points above its norm cost 20 bp');
+        $this->assertEqualsWithDelta($base + 0.05 * 0.02, $spread('0.15', '0.25'), 1e-12, 'a quiet firm pays only above 20%');
+    }
+
+    /**
+     * The class curves are quoted at senior unsecured recoveries. A hedge fund borrows from its prime broker against its
+     * portfolio, a secured claim. Seeded alike as a top credit and both rated B, the fund pays less than a sponsor
+     * whose notes are unsecured: the default part of its spread is scaled to the secured recovery. A seeded spread is
+     * read against the issuer's own recovery-adjusted curve, so the same seeding at the same class prices the same.
+     */
+    public function testSecuredPrimeBrokerageFundingPaysLessThanUnsecuredNotesAtTheSameRating(): void
+    {
+        $engine = $this->costOfCapitalEngine();
+        $macro = $this->neutralMacro();
+        $spreadFor = function (string $industry) use ($engine, $macro): float {
+            $stock = $this->leveredFirm('LGDF', '1.00', '0.0035');
+            $stock->setIndustry($industry);
+            $stock->setCreditRating('B');
+
+            return $engine->resolveCreditSpread($stock, $macro);
+        };
+
+        $secured = 1.0 - \App\Service\Market\Bond\CorporateDefaultService::RECOVERY_SENIOR_SECURED;
+        $unsecured = 1.0 - \App\Service\Market\Bond\CorporateDefaultService::RECOVERY_SENIOR_UNSECURED;
+        $this->assertEqualsWithDelta($secured, \App\Data\Company\Sectors::strategyFor('Hedge Fund')->getLossGivenDefault(), 1e-12);
+        $this->assertEqualsWithDelta($unsecured, \App\Data\Company\Sectors::strategyFor('Private Equity')->getLossGivenDefault(), 1e-12);
+
+        $unsecuredSpread = $spreadFor('Private Equity');
+        $hy = $macro->highYieldCreditSpreadEma;
+        $classB = CreditRisk::calculateRatingClassSpread('B', $macro->macroCreditSpreadEma, $hy);
+        $this->assertEqualsWithDelta($classB * CreditRisk::calculateIssuerSpreadMultiple(0.0035, 0.013, 0.013 * 3.3), $unsecuredSpread, 1e-12, 'unsecured notes price on the class curve');
+        $this->assertLessThan($unsecuredSpread, $spreadFor('Hedge Fund'), 'secured funding pays less');
     }
 }

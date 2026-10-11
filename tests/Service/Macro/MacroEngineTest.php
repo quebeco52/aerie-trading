@@ -1215,7 +1215,7 @@ class MacroEngineTest extends TestCase
         $cuttingState->outputGap = -0.03;
         $cut = $cuttingState->policyRate - $this->monetarySubsystem->updatePolicyRate($cuttingState, 0.03, 0.25);
 
-        $this->assertEqualsWithDelta($hike, $cut, 1e-12, 'Below the panic threshold and the hike ceiling a 100bp distance must close by the same amount either way.');
+        $this->assertEqualsWithDelta($hike, $cut, 1e-12, 'Below the hike ceiling a 100bp distance must close by the same amount either way.');
     }
 
     public function testPolicyRatePaceIsProportionalToTheDistanceBelowTheHikeCeiling(): void
@@ -1256,25 +1256,26 @@ class MacroEngineTest extends TestCase
         $this->assertEqualsWithDelta((1.0 - exp(-MonetaryPolicySubsystem::CB_SMOOTHING_SPEED * $dt)) * 0.07, $cut, 1e-12, 'Cuts keep the partial-adjustment pace (the Fed cut 200bp in 2008Q1).');
     }
 
-    public function testInflationPanicAcceleratesHikesAboveEmergencyThreshold(): void
+    /**
+     * Aastveit et al. (2024): no estimated regime hikes faster in high inflation, and the rule looks through headline
+     * (Aoki 2001). An 8% headline print with its EMA as hot closes the same share of a 50bp distance as a 2.5% one.
+     */
+    public function testHikesKeepTheSmoothingSpeedHoweverHotHeadlineRuns(): void
     {
         $dt = 0.25;
-        $calmState = new \App\Service\Macro\MacroState();
-        $calmState->policyRate = 0.02;
-        $calmState->inflation = 0.025;
-        $calmState->outputGap = 0.03;
-        $calmHike = $this->monetarySubsystem->updatePolicyRate($calmState, 0.025, $dt) - $calmState->policyRate;
+        $hike = function (float $headline) use ($dt): float {
+            $state = new \App\Service\Macro\MacroState();
+            $state->policyRate = 0.02;
+            $state->inflation = $headline;
+            $state->inflationEma = $headline;
+            $state->outputGap = 0.03;
 
-        // Severe stagflation / runaway inflation shock (8.0% inflation), the same 50bp distance, under the hike ceiling at either speed.
-        $panicState = new \App\Service\Macro\MacroState();
-        $panicState->policyRate = 0.02;
-        $panicState->inflation = 0.080;
-        $panicState->outputGap = 0.03;
-        $panicHike = $this->monetarySubsystem->updatePolicyRate($panicState, 0.025, $dt) - $panicState->policyRate;
+            return $this->monetarySubsystem->updatePolicyRate($state, 0.025, $dt) - $state->policyRate;
+        };
 
-        $this->assertGreaterThan($calmHike, $panicHike, 'Severe runaway inflation must trigger emergency panic rate hiking acceleration.');
-        $maxSpeed = MonetaryPolicySubsystem::CB_SMOOTHING_SPEED + MonetaryPolicySubsystem::CB_MAX_HIKE_PANIC_SPEED;
-        $this->assertLessThanOrEqual((1.0 - exp(-$maxSpeed * $dt)) * 0.005 + 1e-12, $panicHike, 'Panic hiking must stay within the most the panic adds to the speed.');
+        $expected = (1.0 - exp(-MonetaryPolicySubsystem::CB_SMOOTHING_SPEED * $dt)) * 0.005;
+        $this->assertEqualsWithDelta($expected, $hike(0.025), 1e-12);
+        $this->assertEqualsWithDelta($expected, $hike(0.080), 1e-12, 'Runaway headline inflation must not speed the partial adjustment.');
     }
 
     public function testDynamicNaturalRateDriftsWithTfpGrowth(): void

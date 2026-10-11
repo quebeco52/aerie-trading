@@ -516,7 +516,7 @@ class ReitBusinessModelTest extends TestCase
     public function testLossGivenDefaultIsThirtyPercent(): void
     {
         $model = new ReitBusinessModel();
-        $this->assertEquals(0.30, $model->getLossGivenDefault());
+        $this->assertEqualsWithDelta(1.0 - \App\Service\Market\Bond\CorporateDefaultService::RECOVERY_SENIOR_SECURED, $model->getLossGivenDefault(), 1e-12);
     }
 
     public function testMacroPhysicsRemovesFxDrag(): void

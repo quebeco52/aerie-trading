@@ -68,3 +68,12 @@ easing in recessions without moving the cycle's persistence?
 - Snapshot `$SNAP/rgtree` = `git archive HEAD` + `vendor` symlink; arm R1 = tree as is, R<n> = OVR `$SNAP/ovr<n>`.
 - Run: `SNAP=<dir> bin/harness-batch var/harness/cbsmooth/regime_run.sh 1-8 R1 R2 && GRID=1 python3 var/harness/cbsmooth/regime_analyse.py R1 R2`.
 - `regime_diag.py <arm>` splits regime time and EBP moments; `python3 -I regime_us.py ebp.csv sahm.csv usrec.csv` the US shares.
+- Finance-output arms (2026-10-11): rgtree = HEAD + working tree with the changed files restored to HEAD; R4 = OVR ovr4.
+  `YEARS=37 SNAP=<dir> bin/harness-batch var/harness/cbsmooth/regime_run.sh 1-8 R1 R4 && YEARS=37 python3 var/harness/cbsmooth/regime_analyse.py R1 R4`
+  (set YEARS to the run length or every run reads as blown up; ACFs use the first WIN=140 quarters after year 1).
+## Hike-side panic speed removed (2026-10-11, regime_run.sh)
+- Rows add `pi_rule` (the rule's inflation measure) and `panic_t` (share of ticks the old headline panic condition holds,
+  read on either tree); `regime_analyse.py` adds `panic_t` and `realpol_max%` (peak policy less pi_rule).
+- Snapshot `$SNAP/pantree` = `git archive HEAD` + the four verified working-tree files (MacroStateDTO, MacroState,
+  MacroAggregateSubsystem, EtfTracker) + vendor symlink; R20 = empty `$SNAP/ovr20`, R21 = `$SNAP/ovr21` (MonetaryPolicySubsystem.php, MacroEngine.php).
+  `TREE=pantree YEARS=37 SNAP=<dir> bin/harness-batch var/harness/cbsmooth/regime_run.sh 1-8 R20 R21 && YEARS=37 python3 var/harness/cbsmooth/regime_analyse.py R20 R21`

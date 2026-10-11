@@ -222,8 +222,6 @@ readonly class MacroStateDTO
         public float $netExportGap = 0.0,
         public float $domesticDemandGapEma = 0.0,
         public float $financeOutputGap = 0.0,
-        public float $financeMarketTrend = 0.0,
-        public float $financeMarketTrendSlope = 0.0,
         public float $realExchangeRateTradeLag = 0.0,
         public float $alliedDefenseDeliveryLag = 0.0,
         public float $importPriceLevel = 0.0,
@@ -597,14 +595,15 @@ readonly class MacroStateDTO
         $args['realExchangeRateTradeLag'] ??= MacroAggregateSubsystem::realExchangeRateGap($resolve('exchangeRateIndexEma'), $resolve('exchangeRateTrend'));
         $args['alliedDefenseDeliveryLag'] ??= MacroAggregateSubsystem::alliedDefenseGap($resolve('alliedDefenseSpendingIndexEma'));
         $args['netExportGap'] ??= MacroAggregateSubsystem::netExportGapAt($resolve('foreignOutputGapEma'), $resolve('realExchangeRateTradeLag'), $resolve('alliedDefenseDeliveryLag'), $resolve('tariffTradeLag'));
-        // The finance trend a state predating it omits opens on the trend it replaced, so the finance level is unmoved.
-        if (!isset($args['financeMarketTrend']) && $resolve('equityWealthTrend') > 0.0) {
-            $args['financeMarketTrend'] = $resolve('equityWealthTrend');
+        // Finance output opens on the credit balances, and a payload valuing fund managers at the market is rebuilt on
+        // credit alone with domestic demand keeping the difference, as MacroState::fromArray has it.
+        if (!isset($args['financeOutputGap']) || isset($data[MacroState::RETIRED_FINANCE_MARKET_TREND_KEY])) {
+            $carriedFinance = $resolve('financeOutputGap');
+            $args['financeOutputGap'] = MacroAggregateSubsystem::financeOutputGapAt(MacroAggregateSubsystem::creditBalanceGap($resolve('creditToGdpGap'), $resolve('creditToGdpTrend')));
+            if (isset($data[$fields['financeOutputGap']], $args['domesticDemandGapEma'])) {
+                $args['domesticDemandGapEma'] += ($carriedFinance - $args['financeOutputGap']) / MacroAggregateSubsystem::DOMESTIC_GAP_WEIGHT;
+            }
         }
-        $args['financeOutputGap'] ??= MacroAggregateSubsystem::financeOutputGapAt(
-            MacroAggregateSubsystem::creditBalanceGap($resolve('creditToGdpGap'), $resolve('creditToGdpTrend')),
-            MacroAggregateSubsystem::marketBalanceGap($resolve('equityWealthRatio'), $resolve('financeMarketTrend'))
-        );
         $args['domesticDemandGapEma'] ??= MacroAggregateSubsystem::domesticDemandGapAt($resolve('outputGapEma'), $resolve('productivitySupplyGap'), $resolve('netExportGap'), $resolve('financeOutputGap'));
         // The capital built counts the buffer beside the requirement, as MacroState::fromArray has it.
         if (!isset($args['bankCapitalRequiredLast'])) {

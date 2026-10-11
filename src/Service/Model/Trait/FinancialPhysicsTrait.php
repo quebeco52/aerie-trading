@@ -168,9 +168,10 @@ trait FinancialPhysicsTrait
         return min($wholesaleCapacity, $totalCapacity);
     }
 
+    /** A financial's wholesale notes are senior unsecured like anyone's (CorporateDefaultService::RECOVERY_SENIOR_UNSECURED); central bank support is liquidity, not recovery. */
     public function getLossGivenDefault(): float
     {
-        return 0.30; // Financials carry highly leveraged balance sheets but have central bank support
+        return 1.0 - \App\Service\Market\Bond\CorporateDefaultService::RECOVERY_SENIOR_UNSECURED;
     }
 
     public function getRequiredIcrBuffer(): float

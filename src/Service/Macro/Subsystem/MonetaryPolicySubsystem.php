@@ -103,10 +103,6 @@ class MonetaryPolicySubsystem
     public const EVANS_RULE_UNEMPLOYMENT_GAP = 0.009;
     /** Partial-adjustment speed of the policy rate toward its target in normal times, the same cutting as hiking: 0.65 a year closes 15% of the distance a quarter (US 15% vs 13%, se 4-6%; Clarida-Gali-Gertler 2000 rho ~0.85). */
     public const CB_SMOOTHING_SPEED = 0.65;
-    /** Inflation panic reaction multiplier accelerating rate hikes during extreme inflation spikes. */
-    public const CB_INFLATION_PANIC_SCALE = 50.0;
-    /** Most the inflation panic adds to the partial-adjustment speed, per year (Volcker-style acceleration). */
-    public const CB_MAX_HIKE_PANIC_SPEED = 3.0;
     /** Fastest the policy rate rises, per year: the FOMC's largest modern step (75bp) at each of its eight meetings, 2022's pace (+150bp in Q3); cuts are not capped, the fastest US cuts (-200bp in 2008Q1, with intermeeting moves) outran it. */
     public const CB_MAX_HIKE_VELOCITY = 0.06;
 
@@ -477,14 +473,16 @@ class MonetaryPolicySubsystem
      * Clarida, Galí & Gertler (1998) Partial Adjustment Monetary Policy Smoothing.
      *
      * Models inertial interest rate adjustments toward the Taylor target at one speed either way in normal times
-     * (1987-2008: 0.66/yr cutting, 0.57/yr hiking, not distinguishable), as an exact first-order lag, with hikes
-     * accelerating to Volcker speed during runaway inflation spikes. The pace is proportional to the distance up to the
-     * fastest the FOMC has hiked since 1985 (75bp a meeting, 2022). Without that ceiling the partial adjustment turned a
-     * target that jumps -- liftoff after forward guidance, a demand boom -- into +650bp in a quarter at 2.8%
-     * inflation, and 5% of years hiked over 300bp against the Fed's 1% (1985-2008).
+     * (1987-2008: 0.66/yr cutting, 0.57/yr hiking, not distinguishable), as an exact first-order lag. The pace is
+     * proportional to the distance up to the fastest the FOMC has hiked since 1985 (75bp a meeting, 2022). Without that
+     * ceiling the partial adjustment turned a target that jumps -- liftoff after forward guidance, a demand boom -- into
+     * +650bp in a quarter at 2.8% inflation, and 5% of years hiked over 300bp against the Fed's 1% (1985-2008).
      *
      * In the recession regime (inRecessionRegime()) cuts run at the regime's lower smoothing (Aastveit et al. 2024),
      * as the Fed's did: -475bp in 2001, -125bp in eight days in January 2008, -150bp in twelve days in March 2020.
+     * Hikes keep the normal speed however high inflation runs: on 1961-2021 that mixture rule finds no regime that hikes
+     * faster (forced to a third, it answers inflation less). Inflation reaches the rate through the target's core-and-
+     * expectations measure, which looks through import and energy prices (Aoki 2001; Bodenstein, Erceg & Guerrieri 2008).
      *
      * @param MacroState $state      Current macroeconomic state.
      * @param float      $targetRate Target policy rate from the Taylor Rule.
@@ -505,16 +503,8 @@ class MonetaryPolicySubsystem
             $effectiveTarget = $currentPolicyRate;
         }
 
-        $cbSpeed = self::CB_SMOOTHING_SPEED;
-        $recessionCut = false;
-        if ($effectiveTarget > $currentPolicyRate) {
-            $effectiveInflation = max($state->inflation, $state->inflationEma);
-            $inflationPanicExcess = max(0.0, $effectiveInflation - MacroEngine::CB_INFLATION_PANIC_THRESHOLD);
-            $cbSpeed += min(self::CB_MAX_HIKE_PANIC_SPEED, $inflationPanicExcess * self::CB_INFLATION_PANIC_SCALE);
-        } elseif ($effectiveTarget < $currentPolicyRate && self::inRecessionRegime($state)) {
-            $cbSpeed += self::CB_RECESSION_CUT_SPEED;
-            $recessionCut = true;
-        }
+        $recessionCut = $effectiveTarget < $currentPolicyRate && self::inRecessionRegime($state);
+        $cbSpeed = self::CB_SMOOTHING_SPEED + ($recessionCut ? self::CB_RECESSION_CUT_SPEED : 0.0);
 
         $maxSpeed = $effectiveTarget > $currentPolicyRate ? self::CB_MAX_HIKE_VELOCITY : INF;
         $newPolicyRate = TimeSeries::calculateSpeedLimitedDistributedLag($currentPolicyRate, $effectiveTarget, $dt, 1.0 / $cbSpeed, $maxSpeed);
@@ -525,7 +515,6 @@ class MonetaryPolicySubsystem
                 'evansHold' => $evansHold,
                 // Past the knee of the speed-limited lag, where the partial adjustment would outrun the ceiling.
                 'hikeCeiling' => $maxSpeed < INF && ($effectiveTarget - $currentPolicyRate) > ($maxSpeed / $cbSpeed),
-                'panicSpeed' => !$recessionCut && $cbSpeed > self::CB_SMOOTHING_SPEED,
                 'recessionCutSpeed' => $recessionCut,
                 'targetCap' => $targetRate >= MacroEngine::POLICY_RATE_CEILING,
             ], $dt);

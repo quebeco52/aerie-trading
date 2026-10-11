@@ -1451,25 +1451,20 @@ class MonetaryPolicySubsystemTest extends TestCase
 
         $constraints = $this->constraintsFor($state, 0.035);
 
-        $this->assertSame(['lowerBound' => 0.0, 'evansHold' => 0.0, 'hikeCeiling' => 0.0, 'panicSpeed' => 0.0, 'recessionCutSpeed' => 0.0, 'targetCap' => 0.0], $constraints);
+        $this->assertSame(['lowerBound' => 0.0, 'evansHold' => 0.0, 'hikeCeiling' => 0.0, 'recessionCutSpeed' => 0.0, 'targetCap' => 0.0], $constraints);
     }
 
-    public function testTheLowerBoundAndPanicSpeedAreReported(): void
+    public function testTheLowerBoundIsReported(): void
     {
         $atFloor = new MacroState();
         $atFloor->policyRate = 0.0;
         $atFloor->unemploymentRateEma = MacroEngine::NATURAL_UNEMPLOYMENT;
         $this->assertSame(1.0, $this->constraintsFor($atFloor, MacroEngine::EFFECTIVE_LOWER_BOUND)['lowerBound']);
-
-        $panic = new MacroState();
-        $panic->policyRate = 0.04;
-        $panic->inflation = 0.08;
-        $this->assertSame(1.0, $this->constraintsFor($panic, 0.045)['panicSpeed']);
     }
 
     // --- Recession-regime easing (Aastveit, Cross, Furlanetto & Van Dijk 2024) ---
 
-    /** A state clear of the floor and the panic threshold, unemployment at the NAIRU, so only the regime sets the speed. */
+    /** A state clear of the floor, unemployment at the NAIRU, so only the regime sets the speed. */
     private function cuttingState(float $sahm, float $stress): MacroState
     {
         $state = new MacroState();
@@ -1575,7 +1570,7 @@ class MonetaryPolicySubsystemTest extends TestCase
     {
         $constraints = $this->constraintsFor($this->cuttingState(0.01, 0.0), 0.015);
         $this->assertSame(1.0, $constraints['recessionCutSpeed']);
-        $this->assertSame(0.0, $constraints['panicSpeed'], 'The cut speed is not the inflation panic.');
+        $this->assertSame(0.0, $constraints['hikeCeiling'], 'A cut is not rationed by the hike ceiling.');
     }
 
     /** Debt inside the 70% the Bohn reaction defends and no market premium on it: the curve carries no fiscal term. */

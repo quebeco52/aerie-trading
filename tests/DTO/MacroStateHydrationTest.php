@@ -194,12 +194,44 @@ class MacroStateHydrationTest extends TestCase
         $this->assertEqualsWithDelta(MacroAggregateSubsystem::netExportGapAt(0.012, log(0.92), 0.0), $state->netExportGap, 1e-15);
         $this->assertGreaterThan(0.0, $state->netExportGap, 'A cheap currency and a mainland boom both sell exports.');
 
-        // Finance output opens where the credit and market balances stand, so the upgrade reprices no output.
+        // Finance output opens where the credit balances stand, so the upgrade reprices no output.
         $financed = ['credit_to_gdp_gap' => 0.05, 'credit_to_gdp_trend' => 1.0, 'equity_wealth_ratio' => 0.9, 'equity_wealth_trend' => 1.0];
-        $expected = MacroAggregateSubsystem::financeOutputGapAt(log(1.05), log(0.9));
+        $expected = MacroAggregateSubsystem::financeOutputGapAt(log(1.05));
         $this->assertEqualsWithDelta($expected, MacroState::fromArray($financed)->financeOutputGap, 1e-15);
         $this->assertEqualsWithDelta($expected, MacroStateDTO::fromArray($financed)->financeOutputGap, 1e-15);
         $this->assertSame(MacroStateDTO::fromMacroState($state)->toArray(), MacroStateDTO::fromArray($payload)->toArray(), 'The snapshot reader opens them the same way.');
+    }
+
+    /**
+     * A live state saved while fund managers' output was valued at the market carries a finance level holding that leg and
+     * the retired trend keys. It still loads: the retired keys are ignored, finance output is rebuilt on credit alone, and
+     * domestic demand keeps what the market leg held, so GDP does not move. Once saved under the new keys it is carried.
+     */
+    public function testAPayloadValuingFundManagersAtTheMarketLoadsWithoutMovingGdp(): void
+    {
+        $payload = [
+            'output_gap' => 0.02, 'output_gap_ema' => 0.018, 'finance_output_gap' => 0.012, 'domestic_demand_gap_ema' => 0.01,
+            'finance_market_trend' => 1.4, 'finance_market_trend_slope' => 0.005,
+            'credit_to_gdp_gap' => 0.05, 'credit_to_gdp_trend' => 1.0, 'equity_wealth_ratio' => 1.6,
+        ];
+        $credit = MacroAggregateSubsystem::financeOutputGapAt(log(1.05));
+        $kept = 0.01 + ((0.012 - $credit) / MacroAggregateSubsystem::DOMESTIC_GAP_WEIGHT);
+
+        $state = MacroState::fromArray($payload);
+        $this->assertSame(0.02, $state->outputGap, 'GDP is what it was.');
+        $this->assertEqualsWithDelta($credit, $state->financeOutputGap, 1e-15);
+        $this->assertEqualsWithDelta($kept, $state->domesticDemandGapEma, 1e-15);
+        $this->assertEqualsWithDelta(MacroAggregateSubsystem::domesticDemandGap($state), (0.02 - $credit) / MacroAggregateSubsystem::DOMESTIC_GAP_WEIGHT, 1e-15, 'Domestic demand holds the old market leg.');
+        $this->assertArrayNotHasKey('finance_market_trend', $state->toArray());
+
+        $snapshot = MacroStateDTO::fromArray($payload);
+        $this->assertEqualsWithDelta($credit, $snapshot->financeOutputGap, 1e-15, 'The snapshot reader opens it the same way.');
+        $this->assertEqualsWithDelta($kept, $snapshot->domesticDemandGapEma, 1e-15);
+
+        $saved = $state->toArray();
+        $saved['credit_to_gdp_gap'] = 0.08;
+        $this->assertSame($state->financeOutputGap, MacroState::fromArray($saved)->financeOutputGap, 'A payload under the new keys is carried, not rebuilt.');
+        $this->assertSame($state->domesticDemandGapEma, MacroState::fromArray($saved)->domesticDemandGapEma);
     }
 
     /**

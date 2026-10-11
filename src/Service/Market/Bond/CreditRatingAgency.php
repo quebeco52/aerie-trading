@@ -44,6 +44,10 @@ class CreditRatingAgency
     /** Anchors for a satisfactory business risk profile, "typical of a low investment-grade industrial issuer": A-, BBB+, BBB, BB+, BB-, B+ at whole-letter grades. */
     public const SATISFACTORY_BUSINESS_RISK_ANCHORS = ['A', 'BBB', 'BBB', 'BB', 'BB', 'B'];
 
+    // --- Bank Rating Methodology (S&P, "Banks: Rating Methodology And Assumptions", 2021) ---
+    /** Highest rating an institution rated on its capital reaches: the US anchor (bbb+) plus the most a very strong capital and earnings assessment adds (+2 notches), a, at whole-letter grades. */
+    public const CAPITAL_RATED_RATING_CEILING = 'A';
+
     // --- Rating Hierarchy ---
     /** Discrete numerical ranks for credit rating brackets from highest (AAA=7) to default (D=0). */
     public const RATING_RANKS = [
@@ -65,7 +69,7 @@ class CreditRatingAgency
      * @param float       $distanceToDefault The continuous Distance to Default score (d2) from Merton's model.
      * @param float|null  $altmanZScore      The company's Altman Z''-score for accounting solvency.
      * @param string|null $altmanZone        That score's zone as the firm's OWN model classified it.
-     * @param string|null $leverageAnchor    Ceiling from the firm's leverage (financialRiskAnchor()); null for a firm rated on its capital.
+     * @param string|null $leverageAnchor    Ceiling from the firm's leverage (financialRiskAnchor()), or CAPITAL_RATED_RATING_CEILING for a firm rated on its capital; null for none.
      * @return string|null The new credit rating bracket if a transition occurred, or null if the rating stayed the same.
      */
     public function evaluateRating(Stock $stock, float $distanceToDefault, ?float $altmanZScore = null, ?string $altmanZone = null, ?string $leverageAnchor = null): ?string
@@ -90,8 +94,9 @@ class CreditRatingAgency
         // 2. Fundamental & Balance Sheet Solvency Caps
         $capRank = 7; // AAA default ceiling
 
-        // The agencies rate on leverage against the business, not on the equity market: a Merton distance to default
-        // reads a low-debt, low-volatility firm as near riskless, so the market-implied grade only ever lowers this.
+        // The agencies rate on leverage against the business, or a bank on its country anchor and its capital, not on
+        // the equity market: a Merton distance to default reads a low-debt, low-volatility firm as near riskless, so
+        // the market-implied grade only ever lowers this.
         if ($leverageAnchor !== null) {
             $capRank = min($capRank, self::RATING_RANKS[$leverageAnchor] ?? $capRank);
         }

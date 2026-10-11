@@ -5,13 +5,17 @@ declare(strict_types=1);
 namespace App\Tests\Service\Market\Index;
 
 use App\Entity\Etf;
+use App\Entity\EtfHistory;
 use App\Service\Event\MarketEventPublisher;
 use App\Service\Market\Index\EtfTracker;
 use Doctrine\DBAL\Connection;
 use Doctrine\DBAL\Schema\AbstractSchemaManager;
+use Doctrine\DBAL\Types\Types;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\EntityRepository;
+use Doctrine\ORM\Mapping\Column;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
@@ -342,6 +346,60 @@ class EtfTrackerTest extends TestCase
         $filled = $orderBook[1];
         $this->assertStringContainsString("status = 'FILLED'", $filled);
         $this->assertStringContainsString('execution_price = ROUND(execution_price / :factor, 4)', $filled);
+    }
+
+    /**
+     * Every per-share figure archived beside the price is in the units the split just replaced. Restating
+     * only the price left each fund's pre-split NAV four times its price for its whole life before the split.
+     */
+    #[DataProvider('splitDirections')]
+    public function testASplitRestatesEveryPerShareColumnOfTheHistory(string $divisor, string $operator): void
+    {
+        $this->captureSplitStatements($divisor);
+
+        $history = array_values(array_filter(
+            $this->statements,
+            static fn (string $sql): bool => str_contains($sql, 'UPDATE etf_history')
+        ));
+        $this->assertCount(1, $history);
+
+        $columns = self::perShareHistoryColumns();
+        $this->assertContains('nav', $columns);
+
+        foreach ($columns as $column) {
+            $this->assertMatchesRegularExpression(
+                sprintf('/\b%1$s\s*=\s*%1$s\s*%2$s\s*:factor\b/', $column, preg_quote($operator, '/')),
+                $history[0],
+                sprintf('etf_history.%s has to be restated by the split factor, as the price is.', $column)
+            );
+        }
+    }
+
+    /** @return iterable<string, array{string, string}> Divisor that triggers the split, and the operator it restates history with. */
+    public static function splitDirections(): iterable
+    {
+        yield 'forward 4-for-1' => ['1000000', '/'];
+        yield 'reverse 1-for-4' => ['10000000', '*'];
+    }
+
+    /**
+     * The money columns of a history row, read off the entity so a column added later is covered too.
+     *
+     * @return list<string>
+     */
+    private static function perShareHistoryColumns(): array
+    {
+        $columns = [];
+
+        foreach ((new \ReflectionClass(EtfHistory::class))->getProperties() as $property) {
+            foreach ($property->getAttributes(Column::class) as $attribute) {
+                if (($attribute->getArguments()['type'] ?? null) === Types::DECIMAL) {
+                    $columns[] = strtolower((string) preg_replace('/(?<!^)[A-Z]/', '_$0', $property->getName()));
+                }
+            }
+        }
+
+        return $columns;
     }
 
     /**

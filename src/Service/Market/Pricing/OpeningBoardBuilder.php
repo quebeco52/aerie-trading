@@ -246,7 +246,8 @@ class OpeningBoardBuilder
      * The price and the firm's asset volatility are solved together: the configured equity volatility belongs to this
      * capital structure at this price, so the business risk it implies is calibrated on the price just struck, and the
      * cost of debt that risk sets feeds back into the next price. Iterated until the two agree, as the Merton
-     * equity-value and asset-volatility pair is (Vassalou & Xing 2004).
+     * equity-value and asset-volatility pair is (Vassalou & Xing 2004). The firm is rated on each pass, since its
+     * spread prices off its rating: it opens rated as its balance sheet reads, not at a placeholder grade.
      */
     private function strikeOpeningPrice(Stock $stock, MacroStateDTO $openingMacro): void
     {
@@ -257,8 +258,9 @@ class OpeningBoardBuilder
             $price = (float) $this->marketEngine->calculateNextPrice($pricingCtx)['perceived_fair_value'];
             $stock->setPrice((string) $price);
             $this->debtEngine->calibrateAssetVolatility($stock, $openingMacro->policyRateEma);
+            $rerated = $this->debtEngine->seedCreditRating($stock, $openingMacro);
 
-            if ($previous > 0.0 && abs($price / $previous - 1.0) < self::OPENING_PRICE_TOLERANCE) {
+            if (!$rerated && $previous > 0.0 && abs($price / $previous - 1.0) < self::OPENING_PRICE_TOLERANCE) {
                 return;
             }
             $previous = $price;

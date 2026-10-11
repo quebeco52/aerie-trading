@@ -8,8 +8,9 @@ use App\Service\Macro\MacroEngine;
 
 /**
  * Credit risk: Vasicek loss and systematic factor, collateral LGD and recovery, Merton asset-value solves, tranche
- * spreads, leverage limits, default-rate and lending-standards curves, distress multipliers, and the crisis and
- * recession probabilities (Schularick-Taylor, Estrella-Mishkin). Pure functions of their arguments.
+ * spreads, the rating-class spread curve and an issuer's multiple of it, leverage limits, default-rate and
+ * lending-standards curves, distress multipliers, and the crisis and recession probabilities (Schularick-Taylor,
+ * Estrella-Mishkin). Pure functions of their arguments.
  */
 final class CreditRisk
 {
@@ -27,6 +28,12 @@ final class CreditRisk
     public const CORPORATE_ILLIQUIDITY_SPREAD = 0.0040;
     /** Ceiling on the credit spread a listed issue may be discounted at, matching the cap the Merton spread itself carries. */
     public const MAX_CORPORATE_SPREAD = 1.00;
+
+    // --- Corporate Credit: Rating-Class Spread Curve (Jarrow, Lando & Turnbull 1997; Ben Dor et al. 2007) ---
+    /** Investment-grade class spreads as multiples of the IG index: ICE BofA AAA/AA/A/BBB over US Corporate OAS (FRED BAMLC0A1CAAA..BAMLC0A4CBBB on BAMLC0A0CM), median daily ratio Oct 2023-Oct 2026. */
+    public const IG_CLASS_SPREAD_MULTIPLES = ['AAA' => 0.41, 'AA' => 0.57, 'A' => 0.84, 'BBB' => 1.25];
+    /** Speculative-grade class spreads as multiples of the HY index: ICE BofA BB/B/CCC & lower over US High Yield OAS (FRED BAMLH0A1HYBB..BAMLH0A3HYC on BAMLH0A0HYM2), same window. */
+    public const HY_CLASS_SPREAD_MULTIPLES = ['BB' => 0.61, 'B' => 1.03, 'CCC' => 2.87];
 
     // --- Default Correlation (Vasicek 2002 single factor) ---
     /** Asset correlation of the all-rated default rate: ~0.1 puts the Vasicek median at the post-1983 record's ~1.2% against its 1.6% mean (0.2 gives 0.8%); fits over 1920-2008 reach 0.2 on the 1930s, a tail this macro index already generates itself. */
@@ -560,5 +567,85 @@ final class CreditRisk
             self::MAX_CORPORATE_SPREAD,
             $defaultComponent + max(0.0, $illiquidityPremium)
         ));
+    }
+
+    /**
+     * The spread a rating class trades at over the sovereign curve, today.
+     *
+     * Rating-based pricing (Jarrow, Lando & Turnbull 1997): an issuer's risk-neutral default intensity is that of its
+     * rating class, calibrated to the spreads the class actually trades at, so the class curve carries the default
+     * and the non-default parts of the spread together (the credit spread puzzle: Huang & Huang 2012). Each class
+     * moves in proportion to its index (Ben Dor et al. 2007, "DTS"): systematic spread changes are proportional to
+     * the spread level, so a crisis that triples IG triples a BBB and a B alike. A defaulted issuer prices as CCC.
+     *
+     * @param string $rating    Whole-letter rating (AAA..CCC, D).
+     * @param float  $igSpread  Investment-grade index spread.
+     * @param float  $hySpread  High-yield index spread.
+     */
+    public static function calculateRatingClassSpread(string $rating, float $igSpread, float $hySpread): float
+    {
+        if (isset(self::IG_CLASS_SPREAD_MULTIPLES[$rating])) {
+            return self::IG_CLASS_SPREAD_MULTIPLES[$rating] * max(0.0, $igSpread);
+        }
+
+        return (self::HY_CLASS_SPREAD_MULTIPLES[$rating] ?? self::HY_CLASS_SPREAD_MULTIPLES['CCC']) * max(0.0, $hySpread);
+    }
+
+    /**
+     * A class spread restated for an issuer whose debt recovers differently from the class's. The default part of a
+     * spread is the risk-neutral default intensity times the loss given default (Duffie & Singleton 1999), so it scales
+     * with the issuer's LGD over the class's; the non-default part (Longstaff, Mithal & Neis 2005) does not.
+     *
+     * @param float $classSpread              The class spread, at the class's own recovery.
+     * @param float $lossGivenDefault         The issuer's loss given default.
+     * @param float $referenceLossGivenDefault The loss given default the class curve is quoted at.
+     * @param float $nonDefaultSpread         Non-default component, capped at the class spread.
+     */
+    public static function calculateRecoveryAdjustedSpread(
+        float $classSpread,
+        float $lossGivenDefault,
+        float $referenceLossGivenDefault,
+        float $nonDefaultSpread = self::CORPORATE_ILLIQUIDITY_SPREAD
+    ): float {
+        if ($referenceLossGivenDefault <= 0.0) {
+            return $classSpread;
+        }
+
+        $nonDefault = min(max(0.0, $nonDefaultSpread), max(0.0, $classSpread));
+
+        return $nonDefault + (max(0.0, $classSpread) - $nonDefault) * max(0.0, $lossGivenDefault) / $referenceLossGivenDefault;
+    }
+
+    /**
+     * An issuer's own spread as a multiple of its rating class: a seeded through-the-cycle spread split into the class
+     * it sits nearest on the class curve (in log distance, the scale DTS moves spreads on) and the multiple of that
+     * class it trades at. The class part is discarded, since the firm's measured rating replaces it; the multiple is
+     * the firm's own premium, carried to whatever class it is rated into.
+     *
+     * The curve it is read against is restated at the issuer's own recovery, so a seeded spread that is tight because
+     * the debt is secured is not counted again as a premium.
+     *
+     * @param float $seededSpread             Through-the-cycle spread the firm was seeded at.
+     * @param float $igReference              IG index level the seeded spreads are quoted against.
+     * @param float $hyReference              HY index level the seeded spreads are quoted against.
+     * @param float $lossGivenDefault         The issuer's loss given default.
+     * @param float $referenceLossGivenDefault The loss given default the class curve is quoted at.
+     * @return float Multiple of the class spread; 1.0 for a firm seeded with no spread.
+     */
+    public static function calculateIssuerSpreadMultiple(float $seededSpread, float $igReference, float $hyReference, float $lossGivenDefault = 1.0, float $referenceLossGivenDefault = 1.0): float
+    {
+        if ($seededSpread <= 0.0 || $igReference <= 0.0 || $hyReference <= 0.0) {
+            return 1.0;
+        }
+
+        $nearest = null;
+        foreach (array_keys(self::IG_CLASS_SPREAD_MULTIPLES + self::HY_CLASS_SPREAD_MULTIPLES) as $rating) {
+            $classSpread = self::calculateRecoveryAdjustedSpread(self::calculateRatingClassSpread($rating, $igReference, $hyReference), $lossGivenDefault, $referenceLossGivenDefault);
+            if ($nearest === null || abs(log($seededSpread / $classSpread)) < abs(log($seededSpread / $nearest))) {
+                $nearest = $classSpread;
+            }
+        }
+
+        return $seededSpread / $nearest;
     }
 }

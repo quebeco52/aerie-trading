@@ -40,9 +40,9 @@ class ReorganizationEngine
         $metrics = \App\Data\Company\Sectors::metricsFor($industry);
         $strategy = \App\Data\Company\Sectors::strategyFor($industry);
 
-        // The exit notes are fresh paper at the issuer's own spread; the Merton and recession legs reprice
-        // on the reorganized balance sheet from the next tick.
-        $exitRate = max(0.0, $macroState->yield5yEma + (float) $stock->getCreditSpread());
+        // The exit notes are fresh speculative-grade paper and price at the high-yield market's spread; the agency
+        // rates the reorganized balance sheet, and its debt reprices on that rating, from the next review.
+        $exitRate = max(0.0, $macroState->yield5yEma + $macroState->highYieldCreditSpreadEma);
         $requiredCoverage = $strategy->getMinIcr() + $strategy->getRequiredIcrBuffer();
         $coverageCapacity = ($going->trailingEbit > 0.0 && $exitRate > 0.0 && $requiredCoverage > 0.0)
             ? $going->trailingEbit / ($exitRate * $requiredCoverage)

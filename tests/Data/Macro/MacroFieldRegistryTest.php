@@ -142,8 +142,6 @@ class MacroFieldRegistryTest extends TestCase
         'outputGapLag18m' => 'Distributed lag of output_gap_ema, which is recorded.',
         'importPriceLevel' => 'Latent level behind the import-price term of the quarter\'s inflation diagnostics.',
         'exchangeRateDeviation' => 'exchange_rate_index over its fundamental; the index is recorded.',
-        'financeMarketTrend' => 'Latent HP trend behind finance_output_gap, which is recorded with equity_wealth_ratio.',
-        'financeMarketTrendSlope' => 'Slope of that latent trend.',
     ];
 
     /**

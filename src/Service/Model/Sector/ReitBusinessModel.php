@@ -169,8 +169,8 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
     public const MAX_OPERATING_MARGIN_CEILING = 0.75;
 
     // --- Credit Risk & Recovery ---
-    /** Expected loss given default for tangible real estate collateral. */
-    public const REIT_LOSS_GIVEN_DEFAULT = 0.30;
+    /** Loss given default on debt secured by tangible real estate: the senior secured recovery, 62% (CorporateDefaultService; Moody's ultimate recoveries 1987-2021, 61.5%). */
+    public const REIT_LOSS_GIVEN_DEFAULT = 1.0 - \App\Service\Market\Bond\CorporateDefaultService::RECOVERY_SENIOR_SECURED;
 
     // --- Aggressive Property Acquisition Borrowing ---
     /** Base probability of REIT expanding balance sheet debt to fund property acquisitions. */

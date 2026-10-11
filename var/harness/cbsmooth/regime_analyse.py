@@ -13,6 +13,7 @@ import json, math, glob, os, sys, re
 H = os.path.dirname(os.path.abspath(__file__))
 YEARS = float(os.environ.get('YEARS', 21))
 ELB, SAHM = 0.001, 0.005
+WIN = int(os.environ.get('WIN', 140))   # ACF window: first WIN quarters after year 1
 
 def acf(x, k):
     n = len(x); m = sum(x) / n; v = sum((a - m) ** 2 for a in x)
@@ -21,8 +22,8 @@ def sd(x):
     m = sum(x) / len(x); return math.sqrt(sum((a - m) ** 2 for a in x) / (len(x) - 1))
 def mean(x): return sum(x) / len(x)
 
-KEYS = ['cut4q_rec%', 'cut4q_all%', 'elb_share', 'trough_gap%', 'rec_q', 'pol_acf4', 'gap_acf4', 'gap_sd%', 'infl_mean%',
-        'infl_sd%', 'y10_mean%', 'gap_mean%', 'pol_mean%', 'crisis', 'evans_t', 'regime_t', 'switches/yr', 'fastcut_t', 'hike4q%', 'sahm_t', 'latch_t', 'latch_only', 'sahm_only', 'both_t', 'ebp1_t', 'ebp_sd%', 'ebp_mean%']
+KEYS = ['cut4q_rec%', 'cut4q_all%', 'elb_share', 'trough_gap%', 'rec_q', 'pol_acf4', 'gap_acf4', 'gap_acf8', 'dgap_sd%', 'gap_gt2', 'gap_lt-2', 'gap_sd%', 'infl_mean%',
+        'infl_sd%', 'y10_mean%', 'gap_mean%', 'pol_mean%', 'crisis', 'evans_t', 'regime_t', 'switches/yr', 'fastcut_t', 'hike4q%', 'sahm_t', 'latch_t', 'latch_only', 'sahm_only', 'both_t', 'ebp1_t', 'ebp_sd%', 'ebp_mean%', 'panic_t', 'realpol_max%']
 if os.environ.get('GRID'): KEYS += [f'{p}{b}_t' for p in ('lat', 'uni') for b in (100, 125, 150, 175, 200, 250)]
 COND = {'cut4q_rec%', 'trough_gap%', 'rec_q'}   # defined only on seeds with a recession
 def moments(path):
@@ -37,13 +38,15 @@ def moments(path):
     cuts = [p[k] - p[k + 4] for k in range(len(p) - 4)]
     sahm_q = [k for k, r in enumerate(rows) if r['sahm'] >= SAHM]
     m = {'cut4q_all%': 100 * max(cuts), 'hike4q%': 100 * max(-x for x in cuts), 'elb_share': sum(1 for a in p if a <= ELB + 0.0005) / len(p),
-         'pol_acf4': acf(p, 4), 'gap_acf4': acf(g, 4), 'gap_sd%': 100 * sd(g), 'infl_mean%': 100 * mean(i), 'infl_sd%': 100 * sd(i),
+         'pol_acf4': acf(p[:WIN], 4), 'gap_acf4': acf(g[:WIN], 4), 'gap_acf8': acf(g[:WIN], 8),
+         'dgap_sd%': 100 * sd([g[k + 1] - g[k] for k in range(len(g) - 1)]), 'gap_gt2': sum(1 for a in g if a > 0.02) / len(g), 'gap_lt-2': sum(1 for a in g if a < -0.02) / len(g), 'gap_sd%': 100 * sd(g), 'infl_mean%': 100 * mean(i), 'infl_sd%': 100 * sd(i),
          'y10_mean%': 100 * mean(y), 'gap_mean%': 100 * mean(g), 'pol_mean%': 100 * mean(p), 'crisis': 1.0 if any(r['crisis_at'] > 1.0 for r in rows) else 0.0,
          'evans_t': mean(c('evans_t')), 'regime_t': mean(c('regime_t')), 'switches/yr': sum(c('switches')) / (YEARS - 1.0),
          'fastcut_t': mean(c('fastcut_t'))}
     for k in [k for k in rows[0] if k.endswith('_t') and k not in m]: m[k] = mean(c(k))
     if 'sahm_t' in m: m['latch_only'] = m['latch_t'] - m['both_t']; m['sahm_only'] = m['sahm_t'] - m['both_t']
     m['ebp_sd%'] = 100 * sd(c('ebp')); m['ebp_mean%'] = 100 * mean(c('ebp'))
+    if 'pi_rule' in rows[0]: m['realpol_max%'] = 100 * max(r['policy'] - r['pi_rule'] for r in rows)   # policy less the rule's inflation measure
     if sahm_q:
         k0 = sahm_q[0]
         # The largest 4-quarter cut whose window touches a recession quarter (a Sahm quarter, or the four before one).

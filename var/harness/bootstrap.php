@@ -71,6 +71,15 @@ class Redis
     }
 }
 
+// The Diet draws from its own Mt19937 (config/services.yaml app.politics_draws), seeded from entropy unless POLITICS_SEED
+// is set, which made two runs of one seed part at tick 1. Derive it from the run's SEED; hashed, since a stream seeded
+// with the same integer as mt_srand() repeats the economy's draws.
+if (getenv('POLITICS_SEED') === false) {
+    $politicsSeed = (string) crc32('politics:' . (getenv('SEED') ?: '1'));
+    putenv("POLITICS_SEED={$politicsSeed}");
+    $_ENV['POLITICS_SEED'] = $_SERVER['POLITICS_SEED'] = $politicsSeed;
+}
+
 define('HARNESS_PROJECT', getenv('BASE') ?: '/home/quebeco/Projects/Code/Private/aerie-trading');
 require HARNESS_PROJECT . '/tests/bootstrap.php';
 // A baseline tree shares this checkout's vendor through a symlink, and composer resolves that back to THIS src.

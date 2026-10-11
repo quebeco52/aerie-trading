@@ -21,18 +21,14 @@ class DebtEngine
     // --- Leverage Physics ---
     /** Cap extreme D/E or D/EBITDA ratios. */
     private const MAX_LEVERAGE_RATIO = 15.0;
-    /** 25% max Junk Bond penalty spread. */
-    private const MAX_LEVERAGE_PENALTY = 0.25;
-    /** BGG (1999) Financial Accelerator external finance premium sensitivity to leverage during recessions. */
-    private const BGG_ACCELERATOR_SENSITIVITY = 0.050;
 
-    // --- Macro Credit Cycle & Equity Volatility Premium ---
-    /** Smallest market beta a firm's spread follows the IG cycle at: a defensive name still refinances in the same bond market. */
-    private const MIN_CREDIT_CYCLE_BETA = 0.5;
-    /** Equity volatility below which bondholders charge no idiosyncratic premium (20%, about the VIX's long-run mean of 19.5). */
+    // --- Issuer Credit Spread: Equity Volatility Premium ---
+    /** Equity volatility below which bondholders charge no idiosyncratic premium (20%, about the VIX's long-run mean of 19.5); a firm whose own configured volatility is higher is charged only above that, since its rating class already prices its normal risk. */
     private const VOLATILITY_PREMIUM_THRESHOLD = 0.20;
     /** Spread per unit of equity volatility above that threshold, 2 bps per point: Campbell & Taksler (2003) firm volatility channel, magnitude not re-pinned. */
     private const VOLATILITY_PREMIUM_SENSITIVITY = 0.02;
+    /** Loss given default the class curves are quoted at: the ICE BofA indices are senior unsecured notes, recovering 48% (CorporateDefaultService; Moody's ultimate recoveries 1987-2021, 47.4%). */
+    private const CLASS_CURVE_LOSS_GIVEN_DEFAULT = 1.0 - \App\Service\Market\Bond\CorporateDefaultService::RECOVERY_SENIOR_UNSECURED;
     /** Floor on a firm's baseline spread (15 bps), so a tight credit market never prices a cash-rich issuer's debt through the riskless curve. */
     private const MIN_BASELINE_CREDIT_SPREAD = 0.0015;
 
@@ -59,7 +55,7 @@ class DebtEngine
     private const MIN_ASSET_VOLATILITY = 0.02;
 
     // --- Maturity Wall & Primary Market Access ---
-    /** Dynamic credit spread above which the primary market is shut to the issuer; high-yield spreads reached this in 2008 and 2020. */
+    /** Spread of the credit index an issuer's class trades off at which its primary market shuts: the HY index reached it in 2008 and 2020; the IG index never does, so an investment-grade issuer refinances through any recession. */
     private const PRIMARY_MARKET_CLOSURE_SPREAD = 0.10;
     /** Lowest credit rating that can still refinance a maturity at any price. */
     public const REFINANCING_RATING_FLOOR = 'CCC';
@@ -80,8 +76,8 @@ class DebtEngine
     /**
      * Calculates the gross and blended interest expenses for a company's debt structure.
      *
-     * Applies the macro credit cycle, volatility risk premiums, and industry-specific
-     * leverage penalties (Junk Bond blowouts) to determine the true cost of debt.
+     * The debt is priced at the firm's market spread (resolveCreditSpread()), on the rating the agency assigns
+     * here when the maturity wall advances.
      *
      * @param Stock $stock           The stock entity being analyzed.
      * @param MacroStateDTO $macroState      The current macroeconomic state.
@@ -94,29 +90,6 @@ class DebtEngine
         $treasury = (float) $stock->getCorporateTreasury();
         $policyRate = $macroState->policyRateEma;
         $yield5y = $macroState->yield5yEma;
-
-        $rawCreditSpread = (float) $stock->getCreditSpread();
-        $volatility = (float) $stock->getCurrentVolatility() ?: (float) $stock->getVolatility();
-
-        $rawBeta = (float) $stock->getBeta();
-
-        // THE MACROECONOMIC CREDIT CYCLE
-        // Spreads widen during recessions (negative gap) as lenders panic, and tighten during booms.
-        // High-beta (cyclical) stocks see their spreads widen much faster than low-beta (defensive) stocks.
-        $betaSensitivity = $rawBeta >= 0.0 ? max(self::MIN_CREDIT_CYCLE_BETA, $rawBeta) : min(-self::MIN_CREDIT_CYCLE_BETA, $rawBeta);
-
-        // The IG spread's deviation from its measured through-the-cycle level, both ways: a firm's own spread is its
-        // through-the-cycle one, and new issues price at the market's spread, tight in a boom and wide in a bust.
-        $macroCreditDeviation = $macroState->macroCreditSpreadEma - $macroState->macroCreditSpreadTrend;
-
-        // High beta stocks suffer the full brunt (or more) of credit market blowouts
-        $macroCreditAdjustment = $macroCreditDeviation * abs($betaSensitivity);
-
-        // IDIOSYNCRATIC VOLATILITY PREMIUM
-        // Bondholders hate individual uncertainty. High stock volatility pays a risk premium.
-        $volatilityPremium = max(0.0, ($volatility - self::VOLATILITY_PREMIUM_THRESHOLD) * self::VOLATILITY_PREMIUM_SENSITIVITY);
-
-        $baselineCreditSpread = max(self::MIN_BASELINE_CREDIT_SPREAD, $rawCreditSpread + $macroCreditAdjustment + $volatilityPremium);
 
         $industry = $stock->getIndustry() ?: 'General';
         $businessModel = \App\Data\Company\Sectors::businessModelFor($industry);
@@ -139,8 +112,7 @@ class DebtEngine
         $ebit = $revenue * $margin;
 
         // Calculate Depreciation to find true Cash Flow (EBITDA)
-        $customDepreciation = (float) $stock->getDepreciationRate();
-        $depreciationRate = $customDepreciation > 0.0 ? $customDepreciation : $this->corporateMetrics->getIndustryDepreciationRate($industry);
+        $depreciationRate = $this->resolveDepreciationRate($stock);
 
         // Depreciation runs on the same base the earnings engine charges it against (net PP&E for physical
         // businesses, the capital proxy for financial ones), so coverage and EBITDA here agree with the
@@ -164,38 +136,28 @@ class DebtEngine
                 }
             }
 
+            $creditSpread = $this->resolveCreditSpread($stock, $macroState);
+
             return new \App\DTO\DebtMetricsDTO(
                 0.0,
                 0.0,
                 (float) $stock->getHistoricalFixedRate(),
-                $baselineCreditSpread,
-                $yield5y + $baselineCreditSpread,
-                $yield5y + $baselineCreditSpread,
+                $creditSpread,
+                $yield5y + $creditSpread,
+                $yield5y + $creditSpread,
                 $ebit,
                 $revenue,
                 $depreciation,
-                $ebitda
+                $ebitda,
+                $this->resolveCreditSpread($stock, $macroState, null, true),
+                self::resolveMarketIndexSpread($stock->getCreditRating(), $macroState)
             );
         }
 
         $wholesaleDebt = (float) $stock->getWholesaleDebt();
-        $totalDebtObligations = max(0.01, $strategy->getDeleveragingEvaluationDebt($debt, $wholesaleDebt));
         $netDebt = max(0.0, $strategy->getNetDebtCapital($debt, $wholesaleDebt, $treasury));
         $totalEquity = (float) $stock->getTotalEquity();
-
-        // Fetch our Dual Constraints
-        $metrics = \App\Data\Company\Sectors::metricsFor($industry);
-        $ebitdaLimit = $metrics['ebitda_limit'];
-        $equityLimit = $metrics['equity_limit'];
-
-        $marketCap = max(1.0, (float) $stock->getPrice() * max(1.0, (float) $stock->getSharesOutstanding()));
-
-        $policyRate = $macroState->policyRateEma;
-
-        // Debt maturity is approximated at 5 years for standard corporate credit spreads
-        $timeToMaturity = self::MERTON_HORIZON_YEARS;
-
-        $lossGivenDefault = $strategy->getLossGivenDefault();
+        $equityLimit = \App\Data\Company\Sectors::metricsFor($industry)['equity_limit'];
 
         $distanceToDefault = $this->resolveDistanceToDefault($stock, $macroState);
 
@@ -214,20 +176,8 @@ class DebtEngine
             }
         }
 
-        $mertonSpread = CreditRisk::calculateMertonCreditSpread(
-            $distanceToDefault,
-            $lossGivenDefault,
-            $timeToMaturity
-        );
-
-        // BERNANKE-GERTLER-GILCHRIST (1999) FINANCIAL ACCELERATOR
-        // Agency costs between borrowers and lenders amplify credit friction during economic downturns.
-        // Highly leveraged firms face an external finance premium during recessions.
-        $firmLeverage = $marketCap > 0.0 ? ($totalDebtObligations / $marketCap) : self::MAX_LEVERAGE_RATIO;
-        $recessionDepth = max(0.0, -$macroState->outputGapEma);
-        $bggAcceleratorPremium = min(self::MAX_LEVERAGE_PENALTY, self::BGG_ACCELERATOR_SENSITIVITY * $firmLeverage * $recessionDepth);
-
-        $dynamicSpread = $baselineCreditSpread + $mertonSpread + $bggAcceleratorPremium;
+        // Priced after the agency has had its say, on the rating it has just assigned.
+        $dynamicSpread = $this->resolveCreditSpread($stock, $macroState);
 
         // Fixed-rate corporate debt is priced off the 5-Year Yield curve, not the overnight Policy Rate
         $currentMarketFixedRate = $yield5y + $dynamicSpread;
@@ -278,8 +228,115 @@ class DebtEngine
             $ebit,
             $revenue,
             $depreciation,
-            $ebitda
+            $ebitda,
+            $this->resolveCreditSpread($stock, $macroState, null, true),
+            self::resolveMarketIndexSpread($stock->getCreditRating(), $macroState)
         );
+    }
+
+    /** The credit index a rating class trades off: IG for an investment-grade rating, HY below it. */
+    private static function resolveMarketIndexSpread(string $rating, \App\DTO\MacroStateDTO $macroState): float
+    {
+        $ranks = CreditRatingAgency::RATING_RANKS;
+
+        return ($ranks[$rating] ?? $ranks['BBB']) >= $ranks['BBB'] ? $macroState->macroCreditSpreadEma : $macroState->highYieldCreditSpreadEma;
+    }
+
+    /**
+     * The spread the firm borrows at over the sovereign curve, and its listed bonds trade at.
+     *
+     * Its rating class's spread today (CreditRisk::calculateRatingClassSpread: Jarrow, Lando & Turnbull 1997 rating
+     * pricing, each class proportional to the market's IG or HY index, Ben Dor et al. 2007), its default part restated
+     * at the recovery the firm's own debt carries (calculateRecoveryAdjustedSpread), times the firm's own
+     * multiple of its class, read off the spread it was seeded at (calculateIssuerSpreadMultiple), plus the premium
+     * bondholders charge when the firm's equity volatility runs above its norm (Campbell & Taksler 2003). The common credit cycle
+     * arrives through the indices; leverage and default risk through the rating.
+     *
+     * @param string|null $rating          Rating to price at; the firm's own when null (a pro-forma one for a deal).
+     * @param bool        $throughTheCycle The spread with the indices at their measured trend and no volatility premium.
+     */
+    public function resolveCreditSpread(Stock $stock, \App\DTO\MacroStateDTO $macroState, ?string $rating = null, bool $throughTheCycle = false): float
+    {
+        $igSpread = $macroState->macroCreditSpreadEma;
+        $hySpread = $macroState->highYieldCreditSpreadEma;
+        if ($throughTheCycle && $igSpread > 0.0) {
+            $cycle = $macroState->macroCreditSpreadTrend / $igSpread;
+            $igSpread *= $cycle;
+            $hySpread *= $cycle;
+        }
+
+        $lossGivenDefault = \App\Data\Company\Sectors::strategyFor($stock->getIndustry())->getLossGivenDefault();
+        $issuerMultiple = CreditRisk::calculateIssuerSpreadMultiple(
+            (float) $stock->getCreditSpread(),
+            MacroEngine::BASE_CREDIT_SPREAD,
+            MacroEngine::BASE_CREDIT_SPREAD * MacroEngine::HY_BASE_SPREAD_MULTIPLIER,
+            $lossGivenDefault,
+            self::CLASS_CURVE_LOSS_GIVEN_DEFAULT
+        );
+        $classSpread = CreditRisk::calculateRatingClassSpread($rating ?? $stock->getCreditRating(), $igSpread, $hySpread);
+        $spread = CreditRisk::calculateRecoveryAdjustedSpread($classSpread, $lossGivenDefault, self::CLASS_CURVE_LOSS_GIVEN_DEFAULT) * $issuerMultiple;
+
+        if (!$throughTheCycle) {
+            $structuralVolatility = (float) $stock->getVolatility();
+            $volatility = (float) $stock->getCurrentVolatility() ?: $structuralVolatility;
+            $spread += max(0.0, ($volatility - max(self::VOLATILITY_PREMIUM_THRESHOLD, $structuralVolatility)) * self::VOLATILITY_PREMIUM_SENSITIVITY);
+        }
+
+        return max(self::MIN_BASELINE_CREDIT_SPREAD, $spread);
+    }
+
+    /**
+     * Rates a firm as the agency would on its opening balance sheet, before it has a rating history: the evaluation is
+     * repeated until it settles, as the one-notch clamp would bring it there over successive reviews.
+     *
+     * @return bool Whether the rating moved.
+     */
+    public function seedCreditRating(Stock $stock, \App\DTO\MacroStateDTO $macroState): bool
+    {
+        if ($this->creditRatingAgency === null) {
+            return false;
+        }
+
+        $opening = $stock->getCreditRating();
+        $strategy = \App\Data\Company\Sectors::strategyFor($stock->getIndustry());
+        $revenue = (float) $stock->getTotalRevenue();
+        $ebit = $revenue * (float) $stock->getOperatingMargin();
+        $ebitda = $ebit + max(0.0, $strategy->getDepreciableBase($stock)) * $this->resolveDepreciationRate($stock);
+        $debt = (float) $stock->getTotalDebt();
+        $netDebt = max(0.0, $strategy->getNetDebtCapital($debt, (float) $stock->getWholesaleDebt(), (float) $stock->getCorporateTreasury()));
+        $distanceToDefault = $debt > 0.0 ? $this->resolveDistanceToDefault($stock, $macroState) : 10.0;
+        $zScoreData = $this->calculateAltmanZScore($stock, $ebit, $revenue, (float) $stock->getPrice());
+        $anchor = self::leverageAnchor($stock, $strategy, $netDebt, $ebitda);
+
+        for ($review = 0; $review < count(CreditRatingAgency::RATING_RANKS); $review++) {
+            if ($this->creditRatingAgency->evaluateRating($stock, $distanceToDefault, $zScoreData['z_score'], $zScoreData['zone'], $anchor) === null) {
+                break;
+            }
+        }
+
+        return $stock->getCreditRating() !== $opening;
+    }
+
+    /**
+     * The rating a debt-funded deal carries on the pro-forma balance sheet, as an agency rates an acquisition financing:
+     * the worse of the issuer's current rating, the grade its pro-forma distance to default reads, and the anchor its
+     * pro-forma leverage sets. Borrowing never upgrades the issuer.
+     */
+    public function resolveProFormaRating(Stock $stock, float $proFormaDistanceToDefault, float $proFormaNetDebt, float $proFormaEbitda): string
+    {
+        $current = $stock->getCreditRating();
+        if ($this->creditRatingAgency === null) {
+            return $current;
+        }
+
+        $ranks = CreditRatingAgency::RATING_RANKS;
+        $rank = min($ranks[$current] ?? $ranks['BBB'], $ranks[$this->creditRatingAgency->convertDistanceToRating($proFormaDistanceToDefault, $current)]);
+        $anchor = self::leverageAnchor($stock, \App\Data\Company\Sectors::strategyFor($stock->getIndustry()), $proFormaNetDebt, $proFormaEbitda);
+        if ($anchor !== null) {
+            $rank = min($rank, $ranks[$anchor] ?? $rank);
+        }
+
+        return array_flip($ranks)[$rank];
     }
 
     /**
@@ -649,6 +706,14 @@ class DebtEngine
         );
     }
 
+    /** The firm's own depreciation rate, or its industry's when it carries none. */
+    private function resolveDepreciationRate(Stock $stock): float
+    {
+        $customDepreciation = (float) $stock->getDepreciationRate();
+
+        return $customDepreciation > 0.0 ? $customDepreciation : $this->corporateMetrics->getIndustryDepreciationRate($stock->getIndustry() ?: 'General');
+    }
+
     /** The operating balance the firm's manager runs to, as CapitalAllocationEngine measures excess cash against it. */
     private function resolveTargetOperatingCash(Stock $stock, \App\Service\Model\BusinessModelInterface $strategy, float $equity): float
     {
@@ -844,13 +909,17 @@ class DebtEngine
     }
 
     /**
-     * The ceiling an operating firm's leverage puts on its rating (CreditRatingAgency::financialRiskAnchor()); null for
-     * a firm rated on its capital, and for a REIT, which S&P rates on real estate key credit factors rather than the
-     * corporate matrix. A rate-regulated utility carries S&P's excellent business risk profile.
+     * The ceiling on a firm's rating before its market-implied grade: for an operating firm the one its leverage sets
+     * (CreditRatingAgency::financialRiskAnchor()), for an institution rated on its capital the bank methodology's
+     * (CreditRatingAgency::CAPITAL_RATED_RATING_CEILING). Null for a REIT, which S&P rates on real estate key credit
+     * factors rather than the corporate matrix. A rate-regulated utility carries S&P's excellent business risk profile.
      */
     private static function leverageAnchor(Stock $stock, \App\Service\Model\BusinessModelInterface $strategy, float $netDebt, float $ebitda): ?string
     {
-        if (self::isUnderwrittenOnCapital($stock, $strategy) || $strategy instanceof \App\Service\Model\Sector\ReitBusinessModel) {
+        if (self::isUnderwrittenOnCapital($stock, $strategy)) {
+            return \App\Service\Market\Bond\CreditRatingAgency::CAPITAL_RATED_RATING_CEILING;
+        }
+        if ($strategy instanceof \App\Service\Model\Sector\ReitBusinessModel) {
             return null;
         }
 
@@ -866,8 +935,9 @@ class DebtEngine
      */
     private function hasPrimaryMarketAccess(Stock $stock, \App\DTO\DebtHealthDTO $health): bool
     {
-        $dynamicSpread = $health->rawMetrics->dynamicSpread ?? (float) $stock->getCreditSpread();
-        if ($dynamicSpread >= self::PRIMARY_MARKET_CLOSURE_SPREAD) {
+        // The market shuts to a class when the index it trades off blows out, not because a CCC trades at a CCC spread;
+        // an issuer's own distress closes it through its rating and its coverage below.
+        if (($health->rawMetrics->marketIndexSpread ?? $health->rawMetrics->dynamicSpread) >= self::PRIMARY_MARKET_CLOSURE_SPREAD) {
             return false;
         }
 

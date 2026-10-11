@@ -342,6 +342,11 @@ final class LeverageHarnessTest extends KernelTestCase
             'int' => (float) $report->getInterestExpense(),
             'ebitda' => (float) $report->getEbitda(),
             'spread' => (float) $report->getStock()->getCreditSpread(),
+            'dspread' => (float) $report->getStock()->getDynamicCreditSpread(),
+            'rspread' => (float) $report->getDynamicSpread(),
+            'ig' => $m?->macroCreditSpreadEma ?? 0.0,
+            'igT' => $m?->macroCreditSpreadTrend ?? 0.0,
+            'hy' => $m?->highYieldCreditSpread ?? 0.0,
             'rev_drawn' => (float) $report->getStock()->getRevolverDrawn(),
             'rev_commit' => (float) $report->getStock()->getRevolverCommitment(),
             'wd' => (float) $report->getStock()->getWholesaleDebt(),
@@ -363,6 +368,9 @@ final class LeverageHarnessTest extends KernelTestCase
             'agri' => $m?->agriculturalCommodityIndexEma ?? 0.0,
             'freight' => $m?->freightRateIndexEma ?? 0.0,
             'gap' => $m?->outputGapEma ?? 0.0,
+            'y10' => $m?->yield10y ?? 0.0,
+            'erp' => $m?->equityRiskPremium ?? 0.0,
+            'pol' => $m?->policyRateEma ?? 0.0,
             'rwg' => $m?->realWageGap ?? 0.0,
             'wage' => $m?->wageGrowthEma ?? 0.0,
             'hedge' => (float) ($kpis['hedge_gain'] ?? 0.0),
@@ -428,7 +436,9 @@ final class LeverageHarnessTest extends KernelTestCase
         return ['uL' => $h->isUnderLeveraged, 'ndE' => $h->netDebtToEbitda, 'covL' => $h->ebitdaCovenantLimit, 'head' => $h->hasLeverageHeadroom,
             'tol' => $h->debtTolerance, 'icr' => $h->interestCoverage, 'can' => $h->canIssueDebt, 'hEbitda' => $h->rawMetrics->ebitda, 'hEbit' => $h->rawMetrics->ebit,
             'sev' => $h->isSevereNegativeCarry, 'wpd' => $h->wantsToPaydownDebt, 'ec' => $h->effectiveCost, 'cy' => $h->cashYield, 'dte' => $h->debtToEquity, 'lt' => $h->leverageTarget,
-            'lb' => $stock->getManagementProfile()->leverageBias(), 'wacc' => $h->wacc, 'lbeta' => $h->leveredBeta, 'gc' => $h->grossCost];
+            'lb' => $stock->getManagementProfile()->leverageBias(), 'wacc' => $h->wacc, 'lbeta' => $h->leveredBeta, 'gc' => $h->grossCost,
+            'dd' => $this->debtEngine->resolveDistanceToDefault($stock, $this->currentMacro), 'hspread' => $h->rawMetrics->dynamicSpread,
+            'coe' => $h->costOfEquity, 'cmr' => $h->rawMetrics->currentMarketRate];
     }
 
     private function buildEntityManager(): EntityManagerInterface

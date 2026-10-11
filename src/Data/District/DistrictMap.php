@@ -661,7 +661,7 @@ class DistrictMap
                 ['field' => 'inflation_ema', 'label' => 'CPI', 'unit' => self::UNIT_PERCENT],
             ],
             'stress_rules' => [
-                // MacroEngine::CB_INFLATION_PANIC_THRESHOLD — inflation past the central bank's own panic threshold.
+                // 1.5 points over MacroEngine::TARGET_INFLATION — inflation well past the Authority's target.
                 ['field' => 'inflation_ema', 'op' => self::OP_GTE, 'value' => 0.035],
                 // MacroEngine::SYSTEMIC_RECESSION_DECLARE_GAP — a recessionary output gap.
                 ['field' => 'output_gap_ema', 'op' => self::OP_LTE, 'value' => -0.010],

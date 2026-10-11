@@ -613,8 +613,6 @@ class MergerAndAcquisitionEngine
             // across the pro-forma balance sheet instead made a debt-funded deal look SAFER the more it borrowed.
             $newAssetVolatility = $this->debtEngine->resolveAssetVolatility($stock, $marketCap, max(0.01, $newNetDebt), $ctx->policyRate);
 
-            $lossGivenDefault = $ctx->strategy->getLossGivenDefault();
-            
             $distanceToDefault = CreditRisk::calculateDistanceToDefault(
                 $newAssetValue,
                 max(0.01, $newNetDebt),
@@ -622,13 +620,13 @@ class MergerAndAcquisitionEngine
                 $ctx->policyRate,
                 self::MA_MERTON_MATURITY
             );
-            
-            $projectedSpread = CreditRisk::calculateMertonCreditSpread($distanceToDefault, $lossGivenDefault, self::MA_MERTON_MATURITY);
-            
-            $baselineCreditSpread = (float) $stock->getCreditSpread();
-            $dynamicSpread = $baselineCreditSpread + $projectedSpread;
-            
-            $ctx->costOfNewDebt = $ctx->yield5y + $dynamicSpread;
+
+            // The deal's notes price at the rating the pro-forma balance sheet carries: the combined EBITDA is the
+            // acquirer's trailing figure plus the operating income the target is bought for.
+            $proFormaEbitda = ($ctx->health?->rawMetrics->ebitda ?? 0.0) + $this->valueTarget($ctx, $ctx->purchasePrice)['operating_income'];
+            $proFormaRating = $this->debtEngine->resolveProFormaRating($stock, $distanceToDefault, $newNetDebt, $proFormaEbitda);
+
+            $ctx->costOfNewDebt = $ctx->yield5y + $this->debtEngine->resolveCreditSpread($stock, $ctx->macroState, $proFormaRating);
             
             $this->debtEngine->issueDebt($stock, $ctx->debtIssued, $ctx->costOfNewDebt);
         }

@@ -467,6 +467,15 @@ class HedgeFundBusinessModel extends AssetManagementBusinessModel
         return $excessCash * max(0.0, $effectiveYield);
     }
 
+    /**
+     * A fund borrows from its prime broker against its own portfolio, so its lender holds a secured claim: the senior
+     * secured recovery, 62% (CorporateDefaultService; Moody's ultimate recoveries 1987-2021, 61.5%).
+     */
+    public function getLossGivenDefault(): float
+    {
+        return 1.0 - \App\Service\Market\Bond\CorporateDefaultService::RECOVERY_SENIOR_SECURED;
+    }
+
     public function calculateDebtExpansionCapacity(
         float $equity,
         float $totalDebt,

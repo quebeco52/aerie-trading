@@ -341,9 +341,9 @@ class BankruptcyTest extends TestCase
             ->willReturn([]);
 
         $operator = new FailureSweep($this->entityManagerMock, $this->loggerMock, $this->marketEventMock, $this->debtEngineMock, $ledger);
-        $operator->sweep([$stock], new MacroStateDTO(yield5yEma: 0.04));
+        $operator->sweep([$stock], new MacroStateDTO(yield5yEma: 0.04, highYieldCreditSpreadEma: 0.01));
 
-        // Exit debt is the tightest of: coverage 50M / (5% x (2.0 + 1.5)) = 285.7M, the airline 3.5x covenant
+        // Exit notes at the 4% five-year plus a 1% high-yield spread. Exit debt is the tightest of: coverage 50M / (5% x (2.0 + 1.5)) = 285.7M, the airline 3.5x covenant
         // 3.5 x 80M + 20M = 300M, and the 320M the assets are worth. The other 1.71B became the equity.
         $exitDebt = 50_000_000.0 / (0.05 * 3.5);
         $this->assertFalse($stock->isBankrupt());

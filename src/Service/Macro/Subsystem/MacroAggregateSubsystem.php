@@ -105,25 +105,19 @@ class MacroAggregateSubsystem
     /** Goods in the District's exports, the part partners can tariff: the UK's 56.5% (World Bank TX.VAL.MRCH.CD.WT over NE.EXP.GNFS.CD, 2010-2019 mean). */
     public const GOODS_SHARE_OF_EXPORTS = 0.565;
 
-    // --- Financial Centre Output (GDP by industry; ESA 2010 §14.14 and Kornfeld 2021: service volumes as deflated balances) ---
+    // --- Financial Centre Output (GDP by industry; ESA 2010 §14.14: bank service volumes as deflated balances) ---
     /** Finance and insurance value added over GDP: the District was founded as a financial centre, and its finance is over 30% of it. */
     public const DISTRICT_FINANCE_SHARE = 0.30;
     /** US finance and insurance value added over GDP, 2005-2019 average (BEA via FRED VAPGDPFI, 7.18%): the share the US-fitted demand equation already carries. */
     public const US_FINANCE_SHARE = 0.072;
-    /** Credit intermediation's share of the District's finance (banks, credit services, mortgage finance), by the seeded roster's book equity; its volume follows deflated loan balances. */
+    /** Credit intermediation's share of the District's finance (banks, credit services, mortgage finance), by the seeded roster's book equity; its volume follows deflated loan balances, the only finance with a volume cycle of its own here. */
     public const FINANCE_CREDIT_SHARE = 0.391;
-    /** Market-based finance's share (funds, brokerage, exchanges, clearing, investment banking), the same basis; its volume follows the deflated value of the assets it manages. The rest, insurance and holding companies, moves with the domestic economy. */
-    public const FINANCE_MARKET_SHARE = 0.250;
     /** Weight of the finance cycle in the gap: the District's finance share less the US share the fitted equation carries on the District's smaller rest of the economy (0.246). */
     public const FINANCE_GAP_WEIGHT = self::DISTRICT_FINANCE_SHARE - ((1.0 - self::DISTRICT_FINANCE_SHARE) * self::US_FINANCE_SHARE / (1.0 - self::US_FINANCE_SHARE));
     /** Domestic demand the District's imports carry abroad beyond the leak the fitted (US) equation already has: imports move 1.4 times domestic demand (IMF WEO 2015) on the District's import share less the US's (0.231). */
     public const EXCESS_IMPORT_LEAKAGE = self::IMPORT_DEMAND_ELASTICITY * (self::DISTRICT_IMPORT_SHARE - self::US_IMPORT_SHARE);
-    /** Weight of domestic demand in the gap: everything but the market-driven finance, net of the excess imports it draws in (0.648). */
-    public const DOMESTIC_GAP_WEIGHT = (1.0 - (self::FINANCE_GAP_WEIGHT * (self::FINANCE_CREDIT_SHARE + self::FINANCE_MARKET_SHARE))) * (1.0 - self::EXCESS_IMPORT_LEAKAGE);
-    /** Steady-state Kalman level gain of the one-sided HP filter at Hodrick & Prescott's quarterly lambda of 1600, the trend managed market value is measured against: it follows a steady trend without the lag a moving average carries (var/harness/hp_kalman.py). */
-    public const FINANCE_MARKET_TREND_LEVEL_GAIN = 0.200556;
-    /** Steady-state Kalman slope gain of the same filter. */
-    public const FINANCE_MARKET_TREND_SLOPE_GAIN = 0.02235291;
+    /** Weight of domestic demand in the gap: everything but the bank credit cycle, net of the excess imports it draws in (0.695). Market-based finance (funds, brokers, exchanges, investment banks: 0.250 of finance) is in it, as insurance is: national accounts do not count its output at the value of the assets it manages (BEA 2026 annual update: portfolio management volume extrapolated from the industry's employment, replacing a fee PPI that tracks asset values). */
+    public const DOMESTIC_GAP_WEIGHT = (1.0 - (self::FINANCE_GAP_WEIGHT * self::FINANCE_CREDIT_SHARE)) * (1.0 - self::EXCESS_IMPORT_LEAKAGE);
 
     // --- KALDOR-KALECKI 2D LIMIT CYCLE ---
     /** Linear self-reinforcement of demand; at 0.12 zero was an unstable point and the gap swept through it on a clockwork limit cycle, at 0.06 it rests inside ±1% 44% of quarters (Frisch-Slutsky shock-driven cycle) while keeping the left skew. */
@@ -489,7 +483,7 @@ class MacroAggregateSubsystem
      * Kaldor (1940) Non-Linear Business Cycle with Modigliani Wealth Effect & Marshall-Lerner FX Drag.
      *
      * Solves continuous domestic demand dynamics, weighted by its share of GDP, to which the productivity supply part, net
-     * exports and the market-driven finance output are added as levels:
+     * exports and the banks' credit-driven output are added as levels:
      *   dy = [Momentum - CapacityCeiling(y>0) - RealRateDrag + FiscalStimulus + AutomaticStabilisers - CapitalOverhang + WealthEffect + NewBorrowing - DebtService - CrisisDeleveraging - LendingStandards + DemandShock] * dt
      *
      * @param MacroState $state             Current macroeconomic state.
@@ -504,7 +498,7 @@ class MacroAggregateSubsystem
     {
         // The gap is GDP by industry: domestic demand on its share of the economy, plus, as levels each on its own
         // measured path, the supply part a productivity shock opens (absorbProductivityShocks), net exports, and the
-        // market-driven finance output. The demand equation below runs on domestic demand only: momentum,
+        // banks' credit-driven output. The demand equation below runs on domestic demand only: momentum,
         // stabilisers and drags answer spending.
         $openingGap = $state->outputGap;
         $y = self::domesticDemandGap($state);
@@ -514,10 +508,7 @@ class MacroAggregateSubsystem
         $netExportGap = $this->updateNetExportGap($state, $dt);
         $tradeChange = $netExportGap - $state->netExportGap;
         $state->netExportGap = $netExportGap;
-        $financeGap = self::financeOutputGapAt(
-            self::creditBalanceGap($state->creditToGdpGap, $state->creditToGdpTrend),
-            self::marketBalanceGap($state->equityWealthRatio, $state->financeMarketTrend)
-        );
+        $financeGap = self::financeOutputGapAt(self::creditBalanceGap($state->creditToGdpGap, $state->creditToGdpTrend));
         $financeChange = $financeGap - $state->financeOutputGap;
         $state->financeOutputGap = $financeGap;
         // Smets & Wouters (2007) estimate the demand disturbance and the measurement-frequency
@@ -705,7 +696,7 @@ class MacroAggregateSubsystem
             'productivitySupply' => $supplyChange / $dt,
             // Obstfeld & Rogoff (1996): the mainland's demand and the real exchange rate move what the district sells abroad.
             'netExports' => $tradeChange / $dt,
-            // ESA 2010 deflated balances: the finance the District lives on produces as its loans and managed assets do.
+            // ESA 2010 deflated balances: the banks the District lives on produce as their loans do.
             'financeOutput' => $financeChange / $dt,
         ];
 
@@ -773,7 +764,7 @@ class MacroAggregateSubsystem
 
     /**
      * The domestic-demand part of the gap, at domestic demand's own scale: the gap less the level parts that ride
-     * beside the demand equation (supply, net exports, market-driven finance), over domestic demand's weight.
+     * beside the demand equation (supply, net exports, the banks' credit cycle), over domestic demand's weight.
      *
      * @param MacroState $state Current macroeconomic state.
      * @return float Domestic demand gap (fraction).
@@ -789,7 +780,7 @@ class MacroAggregateSubsystem
      * @param float $outputGap        The whole output gap (fraction).
      * @param float $supplyGap        The productivity supply gap riding beside demand.
      * @param float $netExportGap     Net exports away from the structural balance (share of GDP).
-     * @param float $financeOutputGap The market-driven finance output (share of GDP).
+     * @param float $financeOutputGap The banks' credit-driven output (share of GDP).
      * @return float Domestic demand gap (fraction).
      */
     public static function domesticDemandGapAt(float $outputGap, float $supplyGap, float $netExportGap, float $financeOutputGap): float
@@ -874,17 +865,17 @@ class MacroAggregateSubsystem
     }
 
     /**
-     * The market-driven part of the District's finance output, as a share of GDP. Service volumes follow balances
-     * deflated by a general price index (ESA 2010 §14.14; Kornfeld 2021): banks produce as their loans do and fund
-     * managers, brokers and exchanges as the value of the assets they manage and trade does, each against its trend.
+     * The part of the District's finance output with a volume cycle of its own, as a share of GDP: the banks, whose
+     * service volumes follow loan balances deflated by a general price index (ESA 2010 §14.14), against their trend.
+     * Market-based finance is not here: its volume is not the market value of what it manages (BEA's 2026 method reads
+     * fund managers' employment), so it moves with the domestic economy (DOMESTIC_GAP_WEIGHT).
      *
      * @param float $creditBalanceGap Log credit balances against their trend.
-     * @param float $marketBalanceGap Log market value of managed assets against its trend.
      * @return float Finance output gap (fraction of GDP).
      */
-    public static function financeOutputGapAt(float $creditBalanceGap, float $marketBalanceGap): float
+    public static function financeOutputGapAt(float $creditBalanceGap): float
     {
-        return self::FINANCE_GAP_WEIGHT * ((self::FINANCE_CREDIT_SHARE * $creditBalanceGap) + (self::FINANCE_MARKET_SHARE * $marketBalanceGap));
+        return self::FINANCE_GAP_WEIGHT * self::FINANCE_CREDIT_SHARE * $creditBalanceGap;
     }
 
     /**
@@ -897,20 +888,6 @@ class MacroAggregateSubsystem
     public static function creditBalanceGap(float $creditToGdpGap, float $creditToGdpTrend): float
     {
         return $creditToGdpTrend > 0.0 ? log(max(0.01, 1.0 + ($creditToGdpGap / $creditToGdpTrend))) : 0.0;
-    }
-
-    /**
-     * The market value the District's funds and brokers hold against its trend, in logs: the board's capitalisation
-     * over GDP against its one-sided HP trend, so a steady rise in what they manage is potential output, not a boom.
-     * Zero before a market is reported.
-     *
-     * @param float $equityWealthRatio  Board capitalisation over nominal GDP.
-     * @param float $financeMarketTrend The trend of that ratio.
-     * @return float Log market balance gap.
-     */
-    public static function marketBalanceGap(float $equityWealthRatio, float $financeMarketTrend): float
-    {
-        return ($equityWealthRatio > 0.0 && $financeMarketTrend > 0.0) ? log($equityWealthRatio / $financeMarketTrend) : 0.0;
     }
 
     /**
@@ -1179,23 +1156,6 @@ class MacroAggregateSubsystem
             $state->equityWealthTrend = $state->equityWealthTrend > 0.0
                 ? $state->equityWealthTrend + ($trendWeight * ($state->equityWealthRatio - $state->equityWealthTrend))
                 : $state->equityWealthRatio;
-
-            // Potential finance output: the one-sided HP trend of managed market value, defined on quarterly data, so it
-            // steps on the quarter.
-            if ($state->financeMarketTrend <= 0.0) {
-                $state->financeMarketTrend = $state->equityWealthRatio;
-                $state->financeMarketTrendSlope = 0.0;
-            } elseif (floor($state->totalTime * 4.0) > floor(($state->totalTime - $dt) * 4.0)) {
-                $trend = TimeSeries::calculateOneSidedHpStep(
-                    trendLevel: log($state->financeMarketTrend),
-                    trendSlope: $state->financeMarketTrendSlope,
-                    observation: log($state->equityWealthRatio),
-                    levelGain: self::FINANCE_MARKET_TREND_LEVEL_GAIN,
-                    slopeGain: self::FINANCE_MARKET_TREND_SLOPE_GAIN
-                );
-                $state->financeMarketTrend = exp($trend['level']);
-                $state->financeMarketTrendSlope = $trend['slope'];
-            }
         }
 
         $state->naturalRateEma += $emaWeight * ($state->naturalRate - $state->naturalRateEma);

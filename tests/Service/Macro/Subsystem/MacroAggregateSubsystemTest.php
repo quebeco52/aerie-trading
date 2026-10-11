@@ -1873,48 +1873,22 @@ class MacroAggregateSubsystemTest extends TestCase
     }
 
     /**
-     * GDP by industry with ESA 2010 deflated-balance volumes: the District's funds and brokers produce as the value of what
-     * they manage does, so a bear market is a District recession on the day it happens, whatever demand does after.
+     * Market-based finance is counted with the domestic economy: national accounts do not measure fund managers' output at
+     * the value of what they manage (BEA 2026: portfolio management volume follows the industry's employment), so a bear
+     * market is no District recession on the day it happens. It reaches demand through household wealth, a year on.
      */
-    public function testABearMarketIsADistrictRecession(): void
+    public function testABearMarketIsNoFinanceRecessionOnTheDay(): void
     {
         $calm = $this->neutralBorrowingState();
         $calm->equityWealthRatio = 1.0;
-        $calm->financeMarketTrend = 1.0;
         $crash = $this->neutralBorrowingState();
         $crash->equityWealthRatio = 0.60;
-        $crash->financeMarketTrend = 1.0;
 
         $gapCalm = $this->subsystem->calculateOutputGap($calm, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, 0.01, 1.0);
         $gapCrash = $this->subsystem->calculateOutputGap($crash, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, 0.01, 1.0);
 
-        $financeLoss = MacroAggregateSubsystem::FINANCE_GAP_WEIGHT * MacroAggregateSubsystem::FINANCE_MARKET_SHARE * log(0.60);
-        $this->assertEqualsWithDelta($financeLoss, $crash->financeOutputGap, 1e-12);
-        $this->assertEqualsWithDelta($financeLoss - $calm->financeOutputGap, $gapCrash - $gapCalm, 1e-9, 'The lost fees are lost output, at once.');
-        $this->assertLessThan(-0.03, $financeLoss, 'A 40% fall in managed assets costs the District over 3% of GDP.');
-    }
-
-    /**
-     * Potential finance output is the one-sided HP trend of what it manages: a market that climbs steadily is growth, not a
-     * boom. The three-year habituation trend the household wealth effect reads lags that climb by three years of it.
-     */
-    public function testASteadyBullMarketIsPotentialFinanceOutputNotABoom(): void
-    {
-        $state = new MacroState();
-        $state->nominalGdpIndex = 1.0;
-        $cap = 1.0e12;
-        for ($quarter = 0; $quarter < 200; $quarter++) {
-            $cap *= exp(0.032 / 4.0);
-            $state->equityMarketCap = $cap;
-            for ($tick = 0; $tick < 25; $tick++) {
-                $state->totalTime += 0.01;
-                $this->subsystem->updateExponentialMovingAverages($state, 0.01);
-            }
-        }
-
-        // The trend steps on the quarter, so between steps the market can sit up to a quarter's climb above it.
-        $this->assertEqualsWithDelta(0.0, MacroAggregateSubsystem::marketBalanceGap($state->equityWealthRatio, $state->financeMarketTrend), 0.032 / 4.0, 'A steady 3.2% a year is the trend itself.');
-        $this->assertGreaterThan(0.08, log($state->equityWealthRatio / $state->equityWealthTrend), 'The three-year habituation trend sits ~9.6% behind it.');
+        $this->assertSame(0.0, $crash->financeOutputGap, 'Credit at its trend: no finance cycle, whatever the market is worth.');
+        $this->assertEqualsWithDelta($gapCalm, $gapCrash, 1e-12, 'The lost market value is not lost output.');
     }
 
     /** Bank output follows deflated loan balances: a credit boom is bank output, a bust takes it back. */
@@ -1941,7 +1915,7 @@ class MacroAggregateSubsystemTest extends TestCase
         $this->assertEqualsWithDelta(
             1.0,
             (MacroAggregateSubsystem::DOMESTIC_GAP_WEIGHT / (1.0 - MacroAggregateSubsystem::EXCESS_IMPORT_LEAKAGE))
-                + (MacroAggregateSubsystem::FINANCE_GAP_WEIGHT * (MacroAggregateSubsystem::FINANCE_CREDIT_SHARE + MacroAggregateSubsystem::FINANCE_MARKET_SHARE)),
+                + (MacroAggregateSubsystem::FINANCE_GAP_WEIGHT * MacroAggregateSubsystem::FINANCE_CREDIT_SHARE),
             1e-15
         );
         $us = MacroAggregateSubsystem::US_FINANCE_SHARE;

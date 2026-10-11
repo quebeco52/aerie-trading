@@ -107,8 +107,6 @@ class MacroEngine
     public const MACRO_VOL_BASE_ANCHOR            = 0.15;
 
     // --- Taylor Rule & The Evans Rule (Forward Guidance) ---
-    /** Inflation panic threshold above which central bank accelerates hiking to Volcker speed. */
-    public const CB_INFLATION_PANIC_THRESHOLD = 0.035;
     /** Policy rate that counts as at the floor, the top of the 0-0.25% target range the FOMC held from 2008 to 2015 and in 2020-22. */
     public const ZLB_PROXIMITY_THRESHOLD = 0.0025;
 
