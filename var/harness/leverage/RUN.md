@@ -55,3 +55,8 @@ multiples in `CreditRisk::IG_/HY_CLASS_SPREAD_MULTIPLES`, the seeded spread kept
   lists each bankruptcy/reorg with seed, year and last non-D rating. `analyse.py` now prints a Welch t too.
 - Stage command (2026-10-11, C0 vs C7, 48 seeds ~23 min total): `SNAP=<dir> TREE=cstree2 bin/harness-batch
   var/harness/leverage/run.sh 1-8 C0 C7 && python3 var/harness/leverage/analyse_spread.py C0 C7`.
+- `analyse_types.py <arm>...`: rating mix by firm type (operating, REIT, asset manager, insurer, bank/broker, other
+  financial), revolver draws per seed with the top drawers, and TIER/SWAN/SAFE/FALC ratings and median spreads.
+- `cs3_stage.sh <seeds> <N>` (2026-10-11): C10 vs C8 on the cs3 snapshot (SNAP pinned inside; rebuild it per the
+  evidence section if the scratchpad is gone), then writes `cs3_s<N>.out` from all four analysis scripts. One
+  background call per stage; 16 runs take ~7.5 min at 4 slots.

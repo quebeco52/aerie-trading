@@ -39,13 +39,17 @@ class CreditRatingAgency
     // --- Business Risk / Financial Risk Matrix (S&P, "Business Risk/Financial Risk Matrix Expanded", 2009) ---
     /** Debt/EBITDA upper bounds of the financial risk profiles: minimal <1.5x, modest 1.5-2x, intermediate 2-3x, significant 3-4x, aggressive 4-5x, highly leveraged above. */
     public const FINANCIAL_RISK_DEBT_TO_EBITDA_BOUNDS = [1.5, 2.0, 3.0, 4.0, 5.0];
+    /** Debt/EBITDA upper bounds for a real estate company, minimal to aggressive: <2.5x, 2.5-4.5x, 4.5-7.5x, 7.5-9.5x, 9.5-13x, highly leveraged above (S&P, "Key Credit Factors For The Real Estate Industry", 2018, table 1). */
+    public const REAL_ESTATE_DEBT_TO_EBITDA_BOUNDS = [2.5, 4.5, 7.5, 9.5, 13.0];
+    /** Debt to adjusted total equity upper bounds for an asset manager investing its own balance sheet, minimal to aggressive: <0.4x, 0.4-0.8x, 0.8-1.5x, 1.5-2x, 2-3x, highly leveraged above (S&P, "Key Credit Factors For Asset Managers", 2014, table 1). */
+    public const DEBT_TO_ADJUSTED_EQUITY_BOUNDS = [0.4, 0.8, 1.5, 2.0, 3.0];
     /** Anchors for an excellent business risk profile, S&P's assessment of rate-regulated utilities: AAA, AA, A, A-, BBB, and BB for the blank highly leveraged cell, at whole-letter grades. */
     public const EXCELLENT_BUSINESS_RISK_ANCHORS = ['AAA', 'AA', 'A', 'A', 'BBB', 'BB'];
     /** Anchors for a satisfactory business risk profile, "typical of a low investment-grade industrial issuer": A-, BBB+, BBB, BB+, BB-, B+ at whole-letter grades. */
     public const SATISFACTORY_BUSINESS_RISK_ANCHORS = ['A', 'BBB', 'BBB', 'BB', 'BB', 'B'];
 
     // --- Bank Rating Methodology (S&P, "Banks: Rating Methodology And Assumptions", 2021) ---
-    /** Highest rating an institution rated on its capital reaches: the US anchor (bbb+) plus the most a very strong capital and earnings assessment adds (+2 notches), a, at whole-letter grades. */
+    /** Highest rating an institution rated on its capital reaches: the US bank anchor (bbb+) plus the most a very strong capital and earnings assessment adds (+2 notches), a, at whole-letter grades; insurers are held to it too. */
     public const CAPITAL_RATED_RATING_CEILING = 'A';
 
     // --- Rating Hierarchy ---
@@ -69,7 +73,7 @@ class CreditRatingAgency
      * @param float       $distanceToDefault The continuous Distance to Default score (d2) from Merton's model.
      * @param float|null  $altmanZScore      The company's Altman Z''-score for accounting solvency.
      * @param string|null $altmanZone        That score's zone as the firm's OWN model classified it.
-     * @param string|null $leverageAnchor    Ceiling from the firm's leverage (financialRiskAnchor()), or CAPITAL_RATED_RATING_CEILING for a firm rated on its capital; null for none.
+     * @param string|null $leverageAnchor    Ceiling from the firm's leverage (financialRiskAnchor(), adjustedEquityLeverageAnchor()), or CAPITAL_RATED_RATING_CEILING for a firm rated on its capital; null for none.
      * @return string|null The new credit rating bracket if a transition occurred, or null if the rating stayed the same.
      */
     public function evaluateRating(Stock $stock, float $distanceToDefault, ?float $altmanZScore = null, ?string $altmanZone = null, ?string $leverageAnchor = null): ?string
@@ -157,27 +161,49 @@ class CreditRatingAgency
     }
 
     /**
-     * The rating S&P's business risk/financial risk matrix anchors a firm at, from its net debt to EBITDA. A firm
-     * with no debt is minimal financial risk; one with debt and no EBITDA is highly leveraged.
+     * The rating S&P's business risk/financial risk matrix anchors a firm at, from its net debt to EBITDA: the corporate
+     * table, or a sector's own (REAL_ESTATE_DEBT_TO_EBITDA_BOUNDS). A firm with no debt is minimal financial risk; one with
+     * debt and no EBITDA is highly leveraged.
+     *
+     * @param list<float> $bounds Upper bounds of the financial risk profiles, minimal to aggressive.
      */
-    public static function financialRiskAnchor(float $netDebt, float $ebitda, bool $excellentBusinessRisk): string
+    public static function financialRiskAnchor(float $netDebt, float $ebitda, bool $excellentBusinessRisk, array $bounds = self::FINANCIAL_RISK_DEBT_TO_EBITDA_BOUNDS): string
     {
-        $bounds = self::FINANCIAL_RISK_DEBT_TO_EBITDA_BOUNDS;
-        if ($netDebt <= 0.0) {
-            $profile = 0;
-        } elseif ($ebitda <= 0.0) {
-            $profile = count($bounds);
-        } else {
-            $leverage = $netDebt / $ebitda;
-            $profile = count($bounds);
-            foreach ($bounds as $i => $bound) {
-                if ($leverage < $bound) {
-                    $profile = $i;
-                    break;
-                }
+        return self::anchorFor(self::financialRiskProfile($netDebt, $ebitda, $bounds), $excellentBusinessRisk);
+    }
+
+    /**
+     * The anchor for an asset manager that invests its own balance sheet, which S&P rates on debt to adjusted total equity
+     * (reported equity less goodwill and intangibles) rather than on cash flow, at a satisfactory business risk profile.
+     */
+    public static function adjustedEquityLeverageAnchor(float $debt, float $adjustedTotalEquity): string
+    {
+        return self::anchorFor(self::financialRiskProfile($debt, $adjustedTotalEquity, self::DEBT_TO_ADJUSTED_EQUITY_BOUNDS), false);
+    }
+
+    /**
+     * @param list<float> $bounds
+     * @return int Financial risk profile, 0 (minimal) to count($bounds) (highly leveraged).
+     */
+    private static function financialRiskProfile(float $debt, float $base, array $bounds): int
+    {
+        if ($debt <= 0.0) {
+            return 0;
+        }
+        if ($base <= 0.0) {
+            return count($bounds);
+        }
+        foreach ($bounds as $i => $bound) {
+            if ($debt / $base < $bound) {
+                return $i;
             }
         }
 
+        return count($bounds);
+    }
+
+    private static function anchorFor(int $profile, bool $excellentBusinessRisk): string
+    {
         return ($excellentBusinessRisk ? self::EXCELLENT_BUSINESS_RISK_ANCHORS : self::SATISFACTORY_BUSINESS_RISK_ANCHORS)[$profile];
     }
 
@@ -205,14 +231,11 @@ class CreditRatingAgency
         if ($this->qualifiesForBracket($distanceToDefault, self::THRESHOLD_BB, $currentRank, 3)) {
             return 'BB';
         }
-        if ($this->qualifiesForBracket($distanceToDefault, self::THRESHOLD_B, $currentRank, 2)) {
-            return 'B';
-        }
-        // Floored at CCC. This ladder reads a MARKET-IMPLIED distance to default — equity price and
-        // volatility — and a crash is not a missed payment. Letting it fall through to D handed the rating
-        // to the tape, and since DebtEngine::hasPrimaryMarketAccess shuts the primary market on a D, a
-        // drawdown alone could close an otherwise current issuer's access to refinancing.
-        return 'CCC';
+        // Floored at B. This ladder reads a MARKET-IMPLIED distance to default, equity price and volatility, and
+        // S&P assigns CCC only to an unsustainable capital structure or a default foreseeable within a year ("Criteria
+        // For Assigning 'CCC+', 'CCC', 'CCC-', And 'CC' Ratings", 2012): here the Altman distress zone or negative
+        // equity, which cap the rating in evaluateRating(). A crash on its own is neither.
+        return 'B';
     }
 
     /**

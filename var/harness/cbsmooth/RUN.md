@@ -77,3 +77,13 @@ easing in recessions without moving the cycle's persistence?
 - Snapshot `$SNAP/pantree` = `git archive HEAD` + the four verified working-tree files (MacroStateDTO, MacroState,
   MacroAggregateSubsystem, EtfTracker) + vendor symlink; R20 = empty `$SNAP/ovr20`, R21 = `$SNAP/ovr21` (MonetaryPolicySubsystem.php, MacroEngine.php).
   `TREE=pantree YEARS=37 SNAP=<dir> bin/harness-batch var/harness/cbsmooth/regime_run.sh 1-8 R20 R21 && YEARS=37 python3 var/harness/cbsmooth/regime_analyse.py R20 R21`
+## Open-economy block (2026-10-11, regime_run.sh)
+Question: do export partial adjustment (Senhadji-Montenegro 1999, UK: SR 0.48, LR 1.43, lambda 0.66) and an FX deviation
+sigma netted of the fundamental's measured variance (BIS NEER target 2.7% a quarter) cut the boom share, FX and inflation sd?
+- Rows add `fx_fund fx_dev fx_ema tb imp`; `regime_analyse.py` adds `fx_qsd% fxfund_qsd% fxdev_qsd% tb_mean% tb_sd% nx_sd% imp_qsd%`.
+- Snapshot `$SNAP/oetree` = `git archive HEAD` + `rsync -rlpt src config tests bin` of the working tree WITHOUT the change + vendor
+  symlink. R30 = empty `$SNAP/ovr30`; R31 = `$SNAP/ovr31`: Service/Math/StochasticProcesses.php, Service/Macro/MacroEngine.php,
+  Service/Macro/MacroState.php, Service/Macro/Subsystem/AssetMarketSubsystem.php, Service/Macro/Subsystem/MacroAggregateSubsystem.php,
+  DTO/MacroStateDTO.php (src-relative).
+  `TREE=oetree YEARS=37 SNAP=<dir> bin/harness-batch var/harness/cbsmooth/regime_run.sh 1-16 R30 R31 && YEARS=37 SEEDS=1-16 python3 var/harness/cbsmooth/regime_analyse.py R30 R31`
+- Targets: gap_gt2, fx_qsd%, infl_sd%. Guards: gap_sd%, gap_acf4, sahm_t, regime_t, infl_mean%, tb_mean%, tb_sd%, y10_mean%, elb_share.

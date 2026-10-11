@@ -26,11 +26,11 @@ class CreditRatingAgencyTest extends TestCase
         $this->assertSame('BBB', $this->agency->convertDistanceToRating(2.1));
         $this->assertSame('BB', $this->agency->convertDistanceToRating(1.8));
         $this->assertSame('B', $this->agency->convertDistanceToRating(1.2));
-        $this->assertSame('CCC', $this->agency->convertDistanceToRating(0.6));
-        // Floored at CCC. This ladder reads a market-implied distance to default; however far the equity
-        // falls, a price is not a missed payment, and D is reserved for obligors that actually missed one.
-        $this->assertSame('CCC', $this->agency->convertDistanceToRating(0.2));
-        $this->assertSame('CCC', $this->agency->convertDistanceToRating(-1.0));
+        $this->assertSame('B', $this->agency->convertDistanceToRating(0.6), 'the market-implied ladder floors at B: CCC needs the accounts');
+        // Floored at B. This ladder reads a market-implied distance to default; however far the equity falls, a
+        // price is neither a missed payment nor an unsustainable capital structure (S&P's CCC criteria).
+        $this->assertSame('B', $this->agency->convertDistanceToRating(0.2));
+        $this->assertSame('B', $this->agency->convertDistanceToRating(-1.0));
     }
 
     public function testAMarketImpliedCollapseCannotProduceD(): void
@@ -275,5 +275,37 @@ class CreditRatingAgencyTest extends TestCase
 
         // The market-implied grade still lowers it below the anchor.
         $this->assertSame('BB', $this->agency->evaluateRating($stock, 1.7, 4.0, 'Safe', 'BBB'));
+    }
+
+    /**
+     * A crash alone takes a firm no lower than B; CCC is for an unsustainable capital structure, which the Altman
+     * distress zone or negative equity reads (S&P's CCC criteria).
+     */
+    public function testOnlyTheAccountsTakeAFirmToCcc(): void
+    {
+        $stock = new Stock();
+        $stock->setTicker('CRSB');
+        $stock->setCreditRating('B');
+        $stock->setTotalEquity('50000000000');
+
+        $this->assertNull($this->agency->evaluateRating($stock, -2.0, 3.0, 'Safe'));
+        $this->assertSame('B', $stock->getCreditRating());
+        $this->assertSame('CCC', $this->agency->evaluateRating($stock, -2.0, 0.5, 'Distress'));
+    }
+
+    /**
+     * The sector tables: a REIT is read on S&P's real estate debt/EBITDA bands, so 6x is intermediate (BBB) where
+     * the corporate table calls it highly leveraged (B); an asset manager investing its balance sheet on debt to
+     * adjusted total equity.
+     */
+    public function testRealEstateAndBalanceSheetAssetManagersAreReadOnTheirOwnTables(): void
+    {
+        $this->assertSame('B', CreditRatingAgency::financialRiskAnchor(600.0, 100.0, false));
+        $this->assertSame('BBB', CreditRatingAgency::financialRiskAnchor(600.0, 100.0, false, CreditRatingAgency::REAL_ESTATE_DEBT_TO_EBITDA_BOUNDS));
+        $this->assertSame('B', CreditRatingAgency::financialRiskAnchor(1_400.0, 100.0, false, CreditRatingAgency::REAL_ESTATE_DEBT_TO_EBITDA_BOUNDS));
+        $this->assertSame('A', CreditRatingAgency::adjustedEquityLeverageAnchor(30.0, 100.0));
+        $this->assertSame('BBB', CreditRatingAgency::adjustedEquityLeverageAnchor(120.0, 100.0));
+        $this->assertSame('BB', CreditRatingAgency::adjustedEquityLeverageAnchor(240.0, 100.0));
+        $this->assertSame('B', CreditRatingAgency::adjustedEquityLeverageAnchor(240.0, -1.0), 'no tangible equity is highly leveraged');
     }
 }

@@ -61,3 +61,38 @@ years 1.9-19.9) and EIDR (auto) once (seed 23, y3.6, CCC); TIER (private equity)
 years 9-19), rated B in four, CCC in one. No PLZA failure.
 Caveats: fin AAA/AA vanish entirely in C7 (all to A), a rating-side change, not only a spread one. Emergency equity
 raises +3.7/seed (t 2.8). The failure t of 3.1 is below 4 at the 48-seed ceiling, but 10 vs 0 events in the same seeds.
+
+## 2026-10-11: rating-class spreads + sector rating tables (C8 vs C10 pre-work), cs3 snapshot, 48 seeds
+Question: with rating-class spreads plus sector tables (S&P REIT / asset-manager leverage tables, insurers on capital,
+market-implied ratings floored at B), do spreads follow ratings without raising failures or moving valuations?
+Snapshot: `cs3tree` = `git archive HEAD` (530c3ec) with 13 src files at 7cb9efa (CreditRisk, DebtEngine, TreasuryEngine,
+Reorganization, M&A, DebtMetricsDTO, CreditRatingAgency, OpeningBoardBuilder, HedgeFund/Reit models, FinancialPhysics/
+StandardDebtPhysics traits, Stock). C10 = no OVR; C8 = OVR of the working-tree versions of the first 12 (Stock.php
+differs HEAD vs 7cb9efa only in docblocks). Checked: ovr8 = working tree for all 12; cs3tree/src = HEAD except those 13.
+Uncommitted macro WT changes are in neither arm. Run: `var/harness/leverage/cs3_stage.sh <seeds> <N>` (SNAP pinned in
+it), 20 y, 360 ticks/y, POLITICS_SEED pinned. Stages 8 and 16 failed the stop rule (failures 0.25, 0.125 vs 0);
+outputs `cs3_s8.out`, `cs3_s16.out`, `cs3_s48.out`.
+
+| quantity (48 seeds, y2-19) | C10 | C8 | diff (se) | paired t | Welch t |
+|---|---|---|---|---|---|
+| op rank corr rating/spread | 0.074 | 0.629 | +0.555 (0.009) | 59.6 | 57.6 |
+| op median spread A, bp | 100.4 | 113.7 | +13.3 (1.4) | 9.5 | 9.4 |
+| op median spread BBB, bp | 101.6 | 168.4 | +66.8 (1.9) | 34.9 | 32.6 |
+| fin AAA share | 0.386 | 0.000 | -0.386 | -84.9 | -84.9 |
+| failures / seed | 0.000 | 0.229 | +0.229 (0.061) | 3.74 | 3.74 |
+| payment defaults / seed | 0 | 0.021 | +0.021 | 1.0 | 1.0 |
+| revolver draws / seed | 6.71 | 12.44 | +5.73 (1.00) | 5.74 | 5.52 |
+| emergency equity / seed | 12.77 | 15.73 | +2.96 (1.52) | 1.95 | 1.87 |
+| op median P/E | 14.71 | 14.79 | +0.08 (0.25) | 0.32 | 0.32 |
+| op median ICR | 11.20 | 11.11 | -0.09 (0.19) | -0.48 | -0.47 |
+| ND/EBITDA y19 | 1.020 | 1.012 | -0.007 (0.020) | -0.37 | -0.35 |
+| macro HY median bp | 445.8 | 450.4 | +4.6 (6.6) | 0.69 | 0.69 |
+
+C8 failures (11): TIER bankrupt 9x (seeds 6, 8, 22, 25, 27, 29, 37, 44, 48; years 12.4-19.6; last rating BB 3, B 5,
+CCC 1); FALC reorg seed 28 y12.75 B; STRK bankrupt seed 47 y10.4 CCC. C10: none.
+TIER: B 99% / 73 bp in C10 -> BB 97% / 311 bp in C8; revolver draws 1.5 -> 5.6/seed (most of the revolver rise).
+SWAN B 95% / 53 bp -> BB 78% BBB 22% / 144 bp; SAFE B 80% / 36 bp -> A 100% / 67 bp; FALC 307 -> 229 bp.
+Mix C8: insurers 100% A; REIT BBB 46 / BB 52; asset mgr A 46 / BBB 11 / BB 43; bank/broker A 75 / BBB 14 / BB 11;
+fin AAA/AA vanish. Caveat: C10 spreads are flat across ratings (op rank corr 0.07, fin -0.005), so C10 is a weak
+reference for spread levels. Same TIER failure pattern as the C7 run above (10 vs 0): the spread work still does it.
+

@@ -1781,4 +1781,29 @@ class DebtEngineTest extends TestCase
         $this->assertEqualsWithDelta($classB * CreditRisk::calculateIssuerSpreadMultiple(0.0035, 0.013, 0.013 * 3.3), $unsecuredSpread, 1e-12, 'unsecured notes price on the class curve');
         $this->assertLessThan($unsecuredSpread, $spreadFor('Hedge Fund'), 'secured funding pays less');
     }
+
+    /**
+     * Each firm type is anchored on the table S&P rates it with: a REIT on the real estate debt/EBITDA bands, a reinsurer
+     * on its capital (the capital-rated ceiling, not the corporate matrix), private equity and a hedge fund on debt to
+     * adjusted total equity. Read through the pro-forma rating, which takes the worse of the rating, the distance to
+     * default (here AAA) and the anchor.
+     */
+    public function testEachFirmTypeIsAnchoredOnItsOwnTable(): void
+    {
+        $anchorOf = function (string $industry, float $netDebt, float $ebitda, string $equity = '100'): string {
+            $stock = new Stock();
+            $stock->setTicker('ANCH');
+            $stock->setIndustry($industry);
+            $stock->setCreditRating('AAA');
+            $stock->setTotalEquity($equity);
+
+            return $this->engine->resolveProFormaRating($stock, 10.0, $netDebt, $ebitda);
+        };
+
+        $this->assertSame('B', $anchorOf('Specialty Industrial Machinery', 600.0, 100.0), 'the corporate table: 6x is highly leveraged');
+        $this->assertSame('BBB', $anchorOf('REIT - Industrial', 600.0, 100.0), 'the real estate bands: 6x is intermediate');
+        $this->assertSame(CreditRatingAgency::CAPITAL_RATED_RATING_CEILING, $anchorOf('Insurance - Reinsurance', 660.0, 100.0), 'a reinsurer is rated on its capital');
+        $this->assertSame('BB', $anchorOf('Private Equity', 240.0, 10.0), '2.4x adjusted equity is aggressive, whatever the EBITDA');
+        $this->assertSame('BBB', $anchorOf('Hedge Fund', 120.0, 1.0), '1.2x is intermediate');
+    }
 }

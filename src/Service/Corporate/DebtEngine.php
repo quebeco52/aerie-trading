@@ -123,7 +123,7 @@ class DebtEngine
         if ($debt <= 0.0) {
             if ($this->creditRatingAgency !== null && $advanceMaturity) {
                 $oldRating = $stock->getCreditRating();
-                $zScoreData = $this->calculateAltmanZScore($stock, $ebit, $revenue, (float) $stock->getPrice());
+                $zScoreData = $this->resolveRatingZScore($stock, $strategy, $ebit, $revenue);
                 $newRating = $this->creditRatingAgency->evaluateRating($stock, 10.0, $zScoreData['z_score'], $zScoreData['zone'], self::leverageAnchor($stock, $strategy, 0.0, $ebitda));
                 if ($newRating !== null && $this->marketEventPublisher !== null) {
                     $isDowngrade = $this->creditRatingAgency->isDowngrade($oldRating, $newRating);
@@ -163,7 +163,7 @@ class DebtEngine
 
         if ($this->creditRatingAgency !== null && $advanceMaturity) {
             $oldRating = $stock->getCreditRating();
-            $zScoreData = $this->calculateAltmanZScore($stock, $ebit, $revenue, (float) $stock->getPrice());
+            $zScoreData = $this->resolveRatingZScore($stock, $strategy, $ebit, $revenue);
             $newRating = $this->creditRatingAgency->evaluateRating($stock, $distanceToDefault, $zScoreData['z_score'], $zScoreData['zone'], self::leverageAnchor($stock, $strategy, $netDebt, $ebitda));
             if ($newRating !== null && $this->marketEventPublisher !== null) {
                 $isDowngrade = $this->creditRatingAgency->isDowngrade($oldRating, $newRating);
@@ -305,7 +305,7 @@ class DebtEngine
         $debt = (float) $stock->getTotalDebt();
         $netDebt = max(0.0, $strategy->getNetDebtCapital($debt, (float) $stock->getWholesaleDebt(), (float) $stock->getCorporateTreasury()));
         $distanceToDefault = $debt > 0.0 ? $this->resolveDistanceToDefault($stock, $macroState) : 10.0;
-        $zScoreData = $this->calculateAltmanZScore($stock, $ebit, $revenue, (float) $stock->getPrice());
+        $zScoreData = $this->resolveRatingZScore($stock, $strategy, $ebit, $revenue);
         $anchor = self::leverageAnchor($stock, $strategy, $netDebt, $ebitda);
 
         for ($review = 0; $review < count(CreditRatingAgency::RATING_RANKS); $review++) {
@@ -332,9 +332,7 @@ class DebtEngine
         $ranks = CreditRatingAgency::RATING_RANKS;
         $rank = min($ranks[$current] ?? $ranks['BBB'], $ranks[$this->creditRatingAgency->convertDistanceToRating($proFormaDistanceToDefault, $current)]);
         $anchor = self::leverageAnchor($stock, \App\Data\Company\Sectors::strategyFor($stock->getIndustry()), $proFormaNetDebt, $proFormaEbitda);
-        if ($anchor !== null) {
-            $rank = min($rank, $ranks[$anchor] ?? $rank);
-        }
+        $rank = min($rank, $ranks[$anchor] ?? $rank);
 
         return array_flip($ranks)[$rank];
     }
@@ -901,26 +899,55 @@ class DebtEngine
         return new \App\DTO\MaturityRollDTO($maturing, false, $repaid, $shortfall);
     }
 
-    /** A lender, or any institution steering to a capital ratio, is underwritten and rated on its capital, not its cash flow. */
+    /** A lender, an insurer, or any institution steering to a capital ratio, is underwritten and rated on its capital, not its cash flow. */
     private static function isUnderwrittenOnCapital(Stock $stock, \App\Service\Model\BusinessModelInterface $strategy): bool
     {
         return $strategy instanceof \App\Service\Model\Sector\CommercialBankBusinessModel
+            || $strategy instanceof \App\Service\Model\Sector\InsuranceBusinessModel
             || $strategy->getTargetCapitalRatio($stock) !== null;
     }
 
     /**
-     * The ceiling on a firm's rating before its market-implied grade: for an operating firm the one its leverage sets
-     * (CreditRatingAgency::financialRiskAnchor()), for an institution rated on its capital the bank methodology's
-     * (CreditRatingAgency::CAPITAL_RATED_RATING_CEILING). Null for a REIT, which S&P rates on real estate key credit
-     * factors rather than the corporate matrix. A rate-regulated utility carries S&P's excellent business risk profile.
+     * The score the agency's distress caps read: the Altman Z'' (or a financial's capital ratio in its place), except for
+     * an asset manager, which S&P rates on the corporate methodology's business and financial risk alone ("Key Credit
+     * Factors For Asset Managers", 2014); Altman's sample held no financials.
+     *
+     * @return array{z_score: float|null, zone: string|null, is_bankrupt?: bool}
      */
-    private static function leverageAnchor(Stock $stock, \App\Service\Model\BusinessModelInterface $strategy, float $netDebt, float $ebitda): ?string
+    private function resolveRatingZScore(Stock $stock, \App\Service\Model\BusinessModelInterface $strategy, float $ebit, float $revenue): array
+    {
+        if ($strategy instanceof \App\Service\Model\Sector\AssetManagementBusinessModel) {
+            return ['z_score' => null, 'zone' => null];
+        }
+
+        return $this->calculateAltmanZScore($stock, $ebit, $revenue, (float) $stock->getPrice());
+    }
+
+    /** An asset manager investing its own balance sheet (S&P's hybrid model): private equity, a hedge fund, a distressed-debt investor. */
+    private static function investsItsBalanceSheet(\App\Service\Model\BusinessModelInterface $strategy): bool
+    {
+        return $strategy instanceof \App\Service\Model\Sector\PrivateEquityBusinessModel
+            || $strategy instanceof \App\Service\Model\Sector\HedgeFundBusinessModel
+            || $strategy instanceof \App\Service\Model\Sector\DistressedDebtBusinessModel;
+    }
+
+    /**
+     * The ceiling on a firm's rating before its market-implied grade: for an operating firm the one its leverage sets
+     * (CreditRatingAgency::financialRiskAnchor()), on S&P's real estate bands for a REIT; for an asset manager investing
+     * its balance sheet, debt to adjusted total equity (adjustedEquityLeverageAnchor()); for an institution rated on its
+     * capital the bank methodology's (CreditRatingAgency::CAPITAL_RATED_RATING_CEILING). A rate-regulated utility
+     * carries S&P's excellent business risk profile.
+     */
+    private static function leverageAnchor(Stock $stock, \App\Service\Model\BusinessModelInterface $strategy, float $netDebt, float $ebitda): string
     {
         if (self::isUnderwrittenOnCapital($stock, $strategy)) {
             return \App\Service\Market\Bond\CreditRatingAgency::CAPITAL_RATED_RATING_CEILING;
         }
         if ($strategy instanceof \App\Service\Model\Sector\ReitBusinessModel) {
-            return null;
+            return \App\Service\Market\Bond\CreditRatingAgency::financialRiskAnchor($netDebt, $ebitda, false, \App\Service\Market\Bond\CreditRatingAgency::REAL_ESTATE_DEBT_TO_EBITDA_BOUNDS);
+        }
+        if (self::investsItsBalanceSheet($strategy)) {
+            return \App\Service\Market\Bond\CreditRatingAgency::adjustedEquityLeverageAnchor($netDebt, $stock->getTangibleEquity());
         }
 
         return \App\Service\Market\Bond\CreditRatingAgency::financialRiskAnchor(

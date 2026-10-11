@@ -110,10 +110,11 @@ class SolventFirmSurvivalTest extends TestCase
         $stock->setCreditRating('BBB');
         $stock->setTotalEquity('200000000000.00');
 
-        // Distance to default floored, Altman score firmly in the Safe zone.
+        // Distance to default floored, Altman score firmly in the Safe zone: one notch a review, and no further than
+        // B, since a sound balance sheet is not the unsustainable capital structure S&P's CCC criteria require.
         $this->assertSame('BB', $agency->evaluateRating($stock, 0.05, 3.90));
         $this->assertSame('B', $agency->evaluateRating($stock, 0.05, 3.90));
-        $this->assertSame('CCC', $agency->evaluateRating($stock, 0.05, 3.90));
+        $this->assertNull($agency->evaluateRating($stock, 0.05, 3.90));
     }
 
     /**
