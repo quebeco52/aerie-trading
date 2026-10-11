@@ -82,8 +82,10 @@ class MacroAggregateSubsystem
     public const DISTRICT_DEFENSE_EXPORT_SHARE = self::DISTRICT_DEFENSE_EXPORTS_USD / MacroEngine::DISTRICT_GDP_USD;
     /** Mean lag (years) from an allied arms order to its delivery as exports: the makers' cost-plus backlog burns 15% a quarter (DefenseContractorBusinessModel). */
     public const DEFENSE_DELIVERY_LAG_YEARS = 1.0 / (4.0 * 0.15);
-    /** Export volume per unit of trading-partner demand (2.3). */
-    public const EXPORT_DEMAND_ELASTICITY = 2.3;
+    /** Long-run export volume per unit of trading-partner income: the UK's 1.43 (Senhadji & Montenegro 1999, Table 2, fully modified; sample mean 1.47). */
+    public const EXPORT_DEMAND_ELASTICITY = 1.43;
+    /** Partial-adjustment coefficient on last year's exports in the same equation, the UK's 0.66: the year's short-run elasticity is the remaining 0.34 of the long-run one (0.48). */
+    public const EXPORT_DEMAND_PERSISTENCE = 0.66;
     /** Import volume per unit of domestic demand (1.4). */
     public const IMPORT_DEMAND_ELASTICITY = 1.4;
     /** Long-term pass-through of the real exchange rate to export prices in foreign currency (0.552, PPI-based). */
@@ -720,8 +722,10 @@ class MacroAggregateSubsystem
     /**
      * Net exports away from the structural trade balance, as a share of GDP (IMF WEO October 2015, Ch. 3).
      *
-     * Exports follow the mainland's demand. The currency against its own trend moves both volumes through the prices
-     * it passes into, the price response building over about a year toward its long-term size.
+     * Exports follow the mainland's demand by partial adjustment: under half the long-run response arrives within the
+     * year (Senhadji & Montenegro 1999), so a mainland cycle reaches them damped and late. The currency against its own
+     * trend moves both volumes through the prices it passes into, the price response building over about a year toward
+     * its long-term size.
      *
      * @param MacroState $state Current macroeconomic state.
      * @param float      $dt    Time increment in years.
@@ -729,6 +733,12 @@ class MacroAggregateSubsystem
      */
     private function updateNetExportGap(MacroState $state, float $dt): float
     {
+        $state->mainlandDemandExportLag = TimeSeries::calculateDistributedLag(
+            $state->mainlandDemandExportLag,
+            $state->foreignOutputGapEma,
+            $dt,
+            self::exportDemandAdjustmentYears()
+        );
         $state->realExchangeRateTradeLag = TimeSeries::calculateDistributedLag(
             $state->realExchangeRateTradeLag,
             self::realExchangeRateGap($state->exchangeRateIndexEma, $state->exchangeRateTrend),
@@ -744,7 +754,17 @@ class MacroAggregateSubsystem
         // A duty reaches volumes as a price does, over the same year.
         $state->tariffTradeLag = TimeSeries::calculateDistributedLag($state->tariffTradeLag, log(1.0 + $state->importTariffRate), $dt, self::TRADE_VOLUME_ADJUSTMENT_YEARS);
 
-        return self::netExportGapAt($state->foreignOutputGapEma, $state->realExchangeRateTradeLag, $state->alliedDefenseDeliveryLag, $state->tariffTradeLag);
+        return self::netExportGapAt($state->mainlandDemandExportLag, $state->realExchangeRateTradeLag, $state->alliedDefenseDeliveryLag, $state->tariffTradeLag);
+    }
+
+    /**
+     * Time constant (years) of export volumes' partial adjustment to the mainland's demand (Nerlove 1958; the export
+     * equation of Senhadji & Montenegro 1999): a yearly coefficient lambda on last year's exports is a first-order lag
+     * of -1 / ln(lambda) years (2.4y at the UK's 0.66).
+     */
+    public static function exportDemandAdjustmentYears(): float
+    {
+        return -1.0 / log(self::EXPORT_DEMAND_PERSISTENCE);
     }
 
     /** Goods the District imports, as a share of GDP, at no tariff: the import share times its goods share. */
@@ -834,8 +854,8 @@ class MacroAggregateSubsystem
      * Net exports at a mainland gap, a (lagged) real exchange rate gap and the allied defence spending delivered, as a
      * share of GDP.
      *
-     * Civilian export volume moves 2.3 times the mainland's demand; arms exports move with the allied procurement their
-     * makers sell into, at its elasticity to defence spending. A real appreciation raises export prices abroad by the
+     * Civilian export volume moves 1.43 times the mainland's demand as it has reached them; arms exports move with the
+     * allied procurement their makers sell into, at its elasticity to defence spending. A real appreciation raises export prices abroad by the
      * export pass-through and loses their elasticity's worth of volume, and lowers import prices at home by the import
      * pass-through and gains that elasticity's worth of imports, each weighted by its share of GDP (the chapter's
      * footnote 21, which gives 1.5% of GDP per 10% at the sample's 42% and 41% shares).
@@ -844,7 +864,7 @@ class MacroAggregateSubsystem
      * elasticity's worth of volume on the whole duty. Partners answer on the District's goods exports at the 2018
      * retaliation ratio (Fajgelbaum et al. 2020), which lose theirs; allied governments do not tariff the arms they buy.
      *
-     * @param float $mainlandGap         Mainland output gap (fraction).
+     * @param float $mainlandGap         Mainland output gap as export volumes have adjusted to it (fraction).
      * @param float $realExchangeRateGap Log real exchange rate against its trend.
      * @param float $alliedDefenseGap    Log allied defence spending against its trend, as deliveries have reached it.
      * @param float $tariffDuty          Log of one plus the District's average tariff, as it has reached volumes.

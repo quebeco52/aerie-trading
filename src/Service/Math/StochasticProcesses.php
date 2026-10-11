@@ -359,6 +359,25 @@ final class StochasticProcesses
     }
 
     /**
+     * The diffusion of a stationary Ornstein-Uhlenbeck factor whose change over a horizon has a given standard deviation:
+     * the stationary variance is sigma^2 / 2 kappa and the autocovariance at h is that times e^(-kappa h), so
+     *
+     *   Var(x(t + h) - x(t)) = (sigma^2 / kappa) (1 - e^(-kappa h))
+     *
+     * and sigma follows from the measured change. As kappa -> 0 this is the random walk's sigma = sd / sqrt(h).
+     *
+     * @param float $incrementSd  Standard deviation of the factor's change over the horizon.
+     * @param float $kappa        Mean reversion per year.
+     * @param float $horizonYears Horizon of the change, in years.
+     */
+    public static function ouSigmaForIncrementSd(float $incrementSd, float $kappa, float $horizonYears): float
+    {
+        $reversion = max(1e-9, $kappa * $horizonYears);
+
+        return $incrementSd * sqrt($reversion / ((1.0 - exp(-$reversion)) * $horizonYears));
+    }
+
+    /**
      * Schwartz (1997) one-factor futures price with a zero market price of risk: the expected spot at the
      * delivery horizon under the same exact log-OU transition calculateSchwartz1Factor() steps, so a swap
      * struck on this curve is fair against the process the spot actually follows.

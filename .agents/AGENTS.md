@@ -107,7 +107,7 @@ Change entities only. Never write or generate migrations; the user generates the
 when a change needs one, and when it needs a reseed (seed data, opening balances or initial state changed).
 
 ## Git
-Commit only when the user asks.
+Only user commits. When a change is ready to commit, end the report with a commit message of at most 75 characters.
 
 ## Pages
 Player pages are the District's own sites: no model names, citations, coefficients or file paths in templates.

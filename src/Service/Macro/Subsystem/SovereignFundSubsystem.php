@@ -58,6 +58,8 @@ class SovereignFundSubsystem
     public const FOREIGN_EQUITY_MARKET_CORRELATION = 0.885;
     /** Duration of the foreign paper, held as a constant-maturity zero of that term (Bloomberg Global Aggregate effective duration 6.17y, SPDR GLAD factsheet 31 Aug 2026). */
     public const FOREIGN_BOND_DURATION = 6.17;
+    /** Annual volatility of the trade-weighted currency, the quarterly one over four quarters (5.4%); the reserve portfolio carries it in home terms. */
+    public const EXCHANGE_RATE_VOLATILITY = 2.0 * MacroEngine::EXCHANGE_RATE_QUARTERLY_VOLATILITY;
 
     // --- Deviation Limits (GPIF policy asset mix, 5th medium-term period, FY2025) ---
     /** Share of the board's float the fund holds at inception (GPIF owned 5.8% of the Japanese market in 2016). */
@@ -427,7 +429,7 @@ class SovereignFundSubsystem
 
         $boardVol = MacroEngine::MACRO_VOL_BASE_ANCHOR;
         $equityVol = self::FOREIGN_EQUITY_VOLATILITY;
-        $fxVol = MacroEngine::EXCHANGE_RATE_VOLATILITY;
+        $fxVol = self::EXCHANGE_RATE_VOLATILITY;
         $foreignShare = $equity + $paper;
 
         $variance = ($domestic * $domestic * $boardVol * $boardVol)

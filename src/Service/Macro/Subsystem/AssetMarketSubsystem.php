@@ -170,6 +170,10 @@ class AssetMarketSubsystem
     public const UIP_SENSITIVITY = 3.0;
     /** Mean-reversion speed of exchange rate toward purchasing power parity equilibrium. */
     public const EXCHANGE_RATE_MEAN_REVERSION = 0.60;
+    /** Quarterly log-change sd the fundamental itself carries (rate differential, terms of trade, haven bid, fiscal discount), measured on the full board at ~2.0%: the deviation supplies only the rest of the currency's variance. */
+    public const EXCHANGE_RATE_FUNDAMENTAL_QUARTERLY_SD = 0.020;
+    /** Horizon, in years, the currency's volatility is measured over: a quarter, as the BIS series are sampled. */
+    public const EXCHANGE_RATE_VOLATILITY_HORIZON_YEARS = 0.25;
     /** Terms-of-trade FX elasticity (Chen-Rogoff 2003, importer sign): a dearer import basket weakens the currency. */
     public const FX_TERMS_OF_TRADE_SENSITIVITY = 0.30;
     /** Safe-haven FX elasticity (Ranaldo-Soderlind 2010): panic bids the reserve currency ~6% at 50% equity vol. */
@@ -624,16 +628,29 @@ class AssetMarketSubsystem
      */
     public function calculateExchangeRate(MacroState $state, float $dt): void
     {
+        $sigma = self::exchangeRateDeviationVolatility();
         $state->exchangeRateDeviation = StochasticProcesses::calculateSchwartz1Factor(
             currentPrice: $state->exchangeRateDeviation,
             kappa: self::EXCHANGE_RATE_MEAN_REVERSION,
-            theta: StochasticProcesses::schwartzThetaForMean(1.0, self::EXCHANGE_RATE_MEAN_REVERSION, MacroEngine::EXCHANGE_RATE_VOLATILITY),
-            sigma: MacroEngine::EXCHANGE_RATE_VOLATILITY,
+            theta: StochasticProcesses::schwartzThetaForMean(1.0, self::EXCHANGE_RATE_MEAN_REVERSION, $sigma),
+            sigma: $sigma,
             dt: $dt,
             dW: $this->mathUtility->generateStandardNormal()
         );
 
         $state->exchangeRateIndex = max(60.0, min(160.0, self::exchangeRateFundamental($state) * $state->exchangeRateDeviation));
+    }
+
+    /**
+     * The deviation's diffusion: the variance of a small open economy's quarterly currency move left once the
+     * fundamental's own share is taken out, as the log-OU's instantaneous sigma. The two move independently, so the
+     * currency's quarterly variance is their sum.
+     */
+    public static function exchangeRateDeviationVolatility(): float
+    {
+        $residual = sqrt(max(0.0, (MacroEngine::EXCHANGE_RATE_QUARTERLY_VOLATILITY ** 2) - (self::EXCHANGE_RATE_FUNDAMENTAL_QUARTERLY_SD ** 2)));
+
+        return StochasticProcesses::ouSigmaForIncrementSd($residual, self::EXCHANGE_RATE_MEAN_REVERSION, self::EXCHANGE_RATE_VOLATILITY_HORIZON_YEARS);
     }
 
     /**

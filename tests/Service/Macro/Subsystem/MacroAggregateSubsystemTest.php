@@ -1137,8 +1137,12 @@ class MacroAggregateSubsystemTest extends TestCase
     }
 
 
-    /** IMF WEO October 2015, Ch. 3: exports move 2.3 times the mainland's demand, and they are a level part of the gap. */
-    public function testAMainlandBoomLiftsTheGapThroughExportsAtOnce(): void
+    /**
+     * Senhadji & Montenegro (1999): exports follow partner income by partial adjustment, a year bringing the short-run
+     * elasticity (1 - lambda of the long-run one) and a held boom the whole long-run response. They are a level part of
+     * the gap.
+     */
+    public function testAMainlandBoomReachesExportsByPartialAdjustment(): void
     {
         $home = new MacroState();
         $abroad = new MacroState();
@@ -1149,20 +1153,34 @@ class MacroAggregateSubsystemTest extends TestCase
         $gapAbroad = $this->subsystem->calculateOutputGap($abroad, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, $dt, 1.0);
 
         // The mainland's demand buys the civilian exports; the arms makers sell into allied budgets instead.
-        $exports = (MacroAggregateSubsystem::DISTRICT_EXPORT_SHARE - MacroAggregateSubsystem::DISTRICT_DEFENSE_EXPORT_SHARE) * MacroAggregateSubsystem::EXPORT_DEMAND_ELASTICITY * 0.03;
-        $this->assertEqualsWithDelta($exports, $abroad->netExportGap, 1e-12);
-        $this->assertEqualsWithDelta($exports, $gapAbroad - $gapHome, 1e-9, 'The export level reaches the gap whole, not at a rate.');
+        $longRun = (MacroAggregateSubsystem::DISTRICT_EXPORT_SHARE - MacroAggregateSubsystem::DISTRICT_DEFENSE_EXPORT_SHARE) * MacroAggregateSubsystem::EXPORT_DEMAND_ELASTICITY * 0.03;
+        $firstQuarter = 1.0 - exp(-$dt / MacroAggregateSubsystem::exportDemandAdjustmentYears());
+        $this->assertEqualsWithDelta($firstQuarter * $longRun, $abroad->netExportGap, 1e-12, 'A quarter brings the first slice of the response, not all of it.');
+        $this->assertEqualsWithDelta($firstQuarter * $longRun, $gapAbroad - $gapHome, 1e-9, 'The export level reaches the gap whole, not at a rate.');
 
-        // The domestic-demand equation does not pull the export level back: held, it stays in the gap.
         $home->outputGap = $gapHome;
         $abroad->outputGap = $gapAbroad;
-        for ($i = 0; $i < 40; $i++) {
+        for ($i = 1; $i < 4; $i++) {
             $home->outputGap = $gapHome = $this->subsystem->calculateOutputGap($home, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, $dt, 1.0);
             $abroad->outputGap = $gapAbroad = $this->subsystem->calculateOutputGap($abroad, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, $dt, 1.0);
         }
-        $this->assertEqualsWithDelta($exports, $gapAbroad - $gapHome, 1e-6);
+        $this->assertEqualsWithDelta((1.0 - MacroAggregateSubsystem::EXPORT_DEMAND_PERSISTENCE) * $longRun, $abroad->netExportGap, 1e-12, 'A year brings the short-run elasticity.');
+
+        // The domestic-demand equation does not pull the export level back: held, it builds to the long-run size and stays.
+        for ($i = 0; $i < 120; $i++) {
+            $home->outputGap = $gapHome = $this->subsystem->calculateOutputGap($home, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, $dt, 1.0);
+            $abroad->outputGap = $gapAbroad = $this->subsystem->calculateOutputGap($abroad, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, $dt, 1.0);
+        }
+        $this->assertEqualsWithDelta($longRun, $abroad->netExportGap, 1e-6);
+        $this->assertEqualsWithDelta($longRun, $gapAbroad - $gapHome, 1e-6);
     }
 
+    /** The UK equation's own numbers: 0.48 within the year, 1.43 in the long run, lambda 0.66 on last year's exports. */
+    public function testExportPartialAdjustmentIsTheUkEquation(): void
+    {
+        $this->assertEqualsWithDelta(MacroAggregateSubsystem::EXPORT_DEMAND_PERSISTENCE, exp(-1.0 / MacroAggregateSubsystem::exportDemandAdjustmentYears()), 1e-12, 'A year of the lag leaves lambda of the gap to close.');
+        $this->assertEqualsWithDelta(0.48, (1.0 - MacroAggregateSubsystem::EXPORT_DEMAND_PERSISTENCE) * MacroAggregateSubsystem::EXPORT_DEMAND_ELASTICITY, 0.01);
+    }
 
     /**
      * The District fields no army: an allied build-up is its arms makers' order book, and reaches GDP as exports once

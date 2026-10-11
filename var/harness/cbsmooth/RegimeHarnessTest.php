@@ -275,6 +275,9 @@ final class RegimeHarnessTest extends KernelTestCase
                     'stress' => property_exists($m, 'authorityStressRegime') ? $m->authorityStressRegime : -1.0,
                     // The rule's inflation measure (MonetaryPolicySubsystem::calculateExpectedInflation), the real rate's deflator.
                     'pi_rule' => 0.70 * ((0.55 * $m->supercoreInflationEma) + (0.25 * $m->coreGoodsInflationEma)) / 0.80 + (0.30 * $m->tipsBreakeven),
+                    // Open-economy block (2026-10-11): the currency's fundamental and deviation, the trade balance, import prices.
+                    'fx_fund' => $m->exchangeRateIndex / max(1e-9, $m->exchangeRateDeviation), 'fx_dev' => $m->exchangeRateDeviation,
+                    'fx_ema' => $m->exchangeRateIndexEma, 'tb' => $m->tradeBalanceToGdp, 'imp' => $m->importPriceLevel,
                 ] + $this->drainTickShares() + (getenv('DECOMP') ? [
                     // The ten-year's pieces as calculateYieldCurve() builds them (y10 = level + b1 L1 + b2 L2 + b3 L3 + base TP + habitat, floored).
                     'level' => $m->nsLevel, 'b1' => $m->nsBeta1, 'b2' => $m->nsCurvature, 'b3' => $m->nsCurvature2,

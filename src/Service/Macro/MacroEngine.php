@@ -197,8 +197,8 @@ class MacroEngine
     public const GOLD_BASELINE = 100.0;
 
     // --- Exchange Rate ---
-    /** Stochastic volatility of exchange rate fluctuations (FX market noise); the reserve portfolio carries it in home terms. */
-    public const EXCHANGE_RATE_VOLATILITY = 0.08;
+    /** Quarterly log-change sd of a small open economy's trade-weighted currency (BIS broad nominal effective rates via FRED, quarter-end months 1994-2019: CHF 2.4%, GBP 2.9%, SEK 2.7%). */
+    public const EXCHANGE_RATE_QUARTERLY_VOLATILITY = 0.027;
 
     // --- Foreign Equity Market ---
     /** Opening level of the foreign equity index the sovereign reserve portfolio holds. */

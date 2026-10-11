@@ -7,6 +7,7 @@ Targets (named before the run):
   T3 trough_gap% deepest output gap in the seed's first recession window (from its first Sahm quarter to 8 quarters on),
      rec_q       quarters from that trough back to a gap >= 0 (censored at the run's end).
 Guards: pol ACF4 (~0.68), gap ACF4 and sd, inflation mean and sd, 10Y mean, crisis incidence, blow-ups.
+Open economy: fx_qsd% (quarter-end log-change sd of the currency; BIS CHF/GBP/SEK ~2.4-2.9), fxfund/fxdev, tb_mean/sd%, nx_sd%, imp_qsd%.
 Extras: evans_t (share of ticks the Evans hold binds), regime_t (share of ticks in the recession regime), switches/yr,
 fastcut_t (share of ticks in the regime while cutting)."""
 import json, math, glob, os, sys, re
@@ -23,7 +24,8 @@ def sd(x):
 def mean(x): return sum(x) / len(x)
 
 KEYS = ['cut4q_rec%', 'cut4q_all%', 'elb_share', 'trough_gap%', 'rec_q', 'pol_acf4', 'gap_acf4', 'gap_acf8', 'dgap_sd%', 'gap_gt2', 'gap_lt-2', 'gap_sd%', 'infl_mean%',
-        'infl_sd%', 'y10_mean%', 'gap_mean%', 'pol_mean%', 'crisis', 'evans_t', 'regime_t', 'switches/yr', 'fastcut_t', 'hike4q%', 'sahm_t', 'latch_t', 'latch_only', 'sahm_only', 'both_t', 'ebp1_t', 'ebp_sd%', 'ebp_mean%', 'panic_t', 'realpol_max%']
+        'infl_sd%', 'y10_mean%', 'gap_mean%', 'pol_mean%', 'crisis', 'evans_t', 'regime_t', 'switches/yr', 'fastcut_t', 'hike4q%', 'sahm_t', 'latch_t', 'latch_only', 'sahm_only', 'both_t', 'ebp1_t', 'ebp_sd%', 'ebp_mean%', 'panic_t', 'realpol_max%',
+        'fx_qsd%', 'fxfund_qsd%', 'fxdev_qsd%', 'tb_mean%', 'tb_sd%', 'nx_sd%', 'imp_qsd%']
 if os.environ.get('GRID'): KEYS += [f'{p}{b}_t' for p in ('lat', 'uni') for b in (100, 125, 150, 175, 200, 250)]
 COND = {'cut4q_rec%', 'trough_gap%', 'rec_q'}   # defined only on seeds with a recession
 def moments(path):
@@ -46,6 +48,15 @@ def moments(path):
     for k in [k for k in rows[0] if k.endswith('_t') and k not in m]: m[k] = mean(c(k))
     if 'sahm_t' in m: m['latch_only'] = m['latch_t'] - m['both_t']; m['sahm_only'] = m['sahm_t'] - m['both_t']
     m['ebp_sd%'] = 100 * sd(c('ebp')); m['ebp_mean%'] = 100 * mean(c('ebp'))
+    # Open-economy block (2026-10-11): quarter-end log-change sd of the currency (all rows have fx), of its fundamental
+    # and deviation, and of the import price level; the trade balance's level and sd; net exports' sd.
+    dl = lambda x: [math.log(x[k + 1] / x[k]) for k in range(len(x) - 1)]
+    m['fx_qsd%'] = 100 * sd(dl(c('fx')))
+    m['nx_sd%'] = 100 * sd(c('nx'))
+    if 'fx_fund' in rows[0]:
+        m['fxfund_qsd%'] = 100 * sd(dl(c('fx_fund'))); m['fxdev_qsd%'] = 100 * sd(dl(c('fx_dev')))
+        m['tb_mean%'] = 100 * mean(c('tb')); m['tb_sd%'] = 100 * sd(c('tb'))
+        m['imp_qsd%'] = 100 * sd([b - a for a, b in zip(c('imp'), c('imp')[1:])])
     if 'pi_rule' in rows[0]: m['realpol_max%'] = 100 * max(r['policy'] - r['pi_rule'] for r in rows)   # policy less the rule's inflation measure
     if sahm_q:
         k0 = sahm_q[0]

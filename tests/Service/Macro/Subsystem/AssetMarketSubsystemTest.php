@@ -804,8 +804,44 @@ class AssetMarketSubsystemTest extends TestCase
         $this->subsystem->calculateExchangeRate($state, 1.0);
         $decay = exp(-AssetMarketSubsystem::EXCHANGE_RATE_MEAN_REVERSION);
         // The log mean that leaves the level averaging one: -sigma^2 / 4 kappa.
-        $itoMean = -(MacroEngine::EXCHANGE_RATE_VOLATILITY ** 2) / (4.0 * AssetMarketSubsystem::EXCHANGE_RATE_MEAN_REVERSION);
+        $itoMean = -(AssetMarketSubsystem::exchangeRateDeviationVolatility() ** 2) / (4.0 * AssetMarketSubsystem::EXCHANGE_RATE_MEAN_REVERSION);
         $this->assertEqualsWithDelta((log(1.10) * $decay) + ($itoMean * (1.0 - $decay)), log($state->exchangeRateDeviation), 1e-12);
+    }
+
+    /**
+     * BIS effective rates: a small open economy's currency moves about 2.7% a quarter. The fundamental carries its own
+     * share of that, so the deviation's quarterly variance is only the rest, and a unit draw moves it by exactly the
+     * log-OU's conditional sd at that sigma.
+     */
+    public function testTheCurrencyDeviationSuppliesOnlyTheVarianceTheFundamentalLeaves(): void
+    {
+        $kappa = AssetMarketSubsystem::EXCHANGE_RATE_MEAN_REVERSION;
+        $quarter = AssetMarketSubsystem::EXCHANGE_RATE_VOLATILITY_HORIZON_YEARS;
+        $sigma = AssetMarketSubsystem::exchangeRateDeviationVolatility();
+        $deviationQuarterVariance = ($sigma ** 2 / $kappa) * (1.0 - exp(-$kappa * $quarter));
+        $this->assertEqualsWithDelta(
+            MacroEngine::EXCHANGE_RATE_QUARTERLY_VOLATILITY ** 2,
+            $deviationQuarterVariance + (AssetMarketSubsystem::EXCHANGE_RATE_FUNDAMENTAL_QUARTERLY_SD ** 2),
+            1e-12,
+            'Deviation and fundamental together carry the measured quarterly variance, no more.'
+        );
+        $this->assertLessThan(MacroEngine::EXCHANGE_RATE_QUARTERLY_VOLATILITY, sqrt($deviationQuarterVariance));
+
+        // The step draws on that sigma: a unit draw from parity moves the log deviation by its conditional sd.
+        $unitDraw = new AssetMarketSubsystem(new class extends MathUtility {
+            public function generateStandardNormal(): float { return 1.0; }
+        });
+        $flat = new AssetMarketSubsystem(new class extends MathUtility {
+            public function generateStandardNormal(): float { return 0.0; }
+        });
+        $up = new MacroState();
+        $up->exchangeRateDeviation = 1.0;
+        $still = new MacroState();
+        $still->exchangeRateDeviation = 1.0;
+        $unitDraw->calculateExchangeRate($up, $quarter);
+        $flat->calculateExchangeRate($still, $quarter);
+        $conditionalSd = sqrt(($sigma ** 2 / (2.0 * $kappa)) * (1.0 - exp(-2.0 * $kappa * $quarter)));
+        $this->assertEqualsWithDelta($conditionalSd, log($up->exchangeRateDeviation / $still->exchangeRateDeviation), 1e-12);
     }
 
     /** UIP: the district's currency is priced on the differential against the Fed's rate, not a constant. */

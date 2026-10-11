@@ -223,6 +223,7 @@ readonly class MacroStateDTO
         public float $domesticDemandGapEma = 0.0,
         public float $financeOutputGap = 0.0,
         public float $realExchangeRateTradeLag = 0.0,
+        public float $mainlandDemandExportLag = 0.0,
         public float $alliedDefenseDeliveryLag = 0.0,
         public float $importPriceLevel = 0.0,
         public float $monetaryStanceStage1 = 0.0,
@@ -594,14 +595,15 @@ readonly class MacroStateDTO
         $args['importPriceLevel'] ??= MacroAggregateSubsystem::importPriceLevelTarget($resolve('exchangeRateIndexEma'), $resolve('importTariffRate'));
         $args['realExchangeRateTradeLag'] ??= MacroAggregateSubsystem::realExchangeRateGap($resolve('exchangeRateIndexEma'), $resolve('exchangeRateTrend'));
         $args['alliedDefenseDeliveryLag'] ??= MacroAggregateSubsystem::alliedDefenseGap($resolve('alliedDefenseSpendingIndexEma'));
-        $args['netExportGap'] ??= MacroAggregateSubsystem::netExportGapAt($resolve('foreignOutputGapEma'), $resolve('realExchangeRateTradeLag'), $resolve('alliedDefenseDeliveryLag'), $resolve('tariffTradeLag'));
+        $args['mainlandDemandExportLag'] ??= $resolve('foreignOutputGapEma');
+        $args['netExportGap'] ??= MacroAggregateSubsystem::netExportGapAt($resolve('mainlandDemandExportLag'), $resolve('realExchangeRateTradeLag'), $resolve('alliedDefenseDeliveryLag'), $resolve('tariffTradeLag'));
         // Finance output opens on the credit balances, and a payload valuing fund managers at the market is rebuilt on
         // credit alone with domestic demand keeping the difference, as MacroState::fromArray has it.
         if (!isset($args['financeOutputGap']) || isset($data[MacroState::RETIRED_FINANCE_MARKET_TREND_KEY])) {
             $carriedFinance = $resolve('financeOutputGap');
             $args['financeOutputGap'] = MacroAggregateSubsystem::financeOutputGapAt(MacroAggregateSubsystem::creditBalanceGap($resolve('creditToGdpGap'), $resolve('creditToGdpTrend')));
             if (isset($data[$fields['financeOutputGap']], $args['domesticDemandGapEma'])) {
-                $args['domesticDemandGapEma'] += ($carriedFinance - $args['financeOutputGap']) / MacroAggregateSubsystem::DOMESTIC_GAP_WEIGHT;
+                $args['domesticDemandGapEma'] += MacroAggregateSubsystem::domesticDemandGapAt(0.0, 0.0, 0.0, $args['financeOutputGap'] - $carriedFinance);
             }
         }
         $args['domesticDemandGapEma'] ??= MacroAggregateSubsystem::domesticDemandGapAt($resolve('outputGapEma'), $resolve('productivitySupplyGap'), $resolve('netExportGap'), $resolve('financeOutputGap'));

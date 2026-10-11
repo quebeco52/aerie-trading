@@ -247,3 +247,29 @@ Verdict: removing the panic hike does not change the cycle. All three targets ar
 (Sahm +-0.016, infl sd +-0.07pp, gap ACF4 +-0.044 at 2 se). The only effect is the mechanical one: the peak 4-quarter
 hike falls 0.59pp (t -3.5, guard tripped by design, 3.39 -> 2.80pp). The architect's 4-seed signals (Sahm +0.053 t 2.1,
 gap sd +0.52, gap ACF4 +0.10, rec_q +10) were noise; they shrink monotonically through 8 and 16 seeds.
+
+## 2026-10-12 Open-economy block: export partial adjustment + BIS FX sigma (R30 vs R31)
+Question: do export partial adjustment (LR 1.43, lambda 0.66) and FX deviation sigma to BIS 2.7%/q cut FX sd, boom share, inflation sd?
+Harness: RegimeHarnessTest.php via regime_run.sh, TREE=oetree (repaired: DebtEngine.php and CreditRatingAgency.php restored
+to HEAD; src then equals `git archive HEAD src` apart from two empty .claude dirs), R30 = empty ovr30, R31 = ovr31 (6 files).
+`PHP_SESSION_SLOTS=4 TREE=oetree YEARS=37 SNAP=<dir> bin/harness-batch var/harness/cbsmooth/regime_run.sh 1-48 R30 R31 && YEARS=37 SEEDS=1-48 python3 var/harness/cbsmooth/regime_analyse.py R30 R31`
+Seeds 1-48 paired, 37 years, 360 ticks/yr, politics on. Old dirty-base runs in runs/old_oe/. Stage 16 in oe_s16.out (did not stop:
+boom share t -1.7, infl_mean t -3.1). Full table oe_s48.out.
+
+| quantity | R30 | R31 | delta (se) | t |
+|---|---|---|---|---|
+| fx_qsd% (target) | 4.331 | 2.714 | -1.617 (0.046) | -35.5 |
+| gap_gt2 (target) | 0.084 | 0.064 | -0.020 (0.010) | -2.0 |
+| infl_sd% (target) | 1.336 | 1.172 | -0.165 (0.031) | -5.3 |
+| infl_mean% | 2.331 | 2.244 | -0.086 (0.020) | -4.3 |
+| gap_sd% | 1.663 | 1.392 | -0.271 (0.073) | -3.7 |
+| gap_acf4 | 0.519 | 0.547 | +0.029 (0.030) | +0.9 |
+| sahm_t | 0.207 | 0.168 | -0.039 (0.009) | -4.6 |
+| regime_t | 0.305 | 0.289 | -0.016 (0.013) | -1.2 |
+| elb_share | 0.022 | 0.013 | -0.010 (0.007) | -1.5 |
+| y10_mean% | 4.795 | 4.679 | -0.115 (0.078) | -1.5 |
+| tb_mean% | -2.266 | -2.270 | -0.005 (0.097) | -0.1 |
+| tb_sd% | 1.651 | 1.291 | -0.360 (0.066) | -5.5 |
+| rec_q | 8.96 | 10.23 | +1.27 (1.65) | +0.8 |
+No blow-ups. Caveats: gap sd overshoots the US 1.63 (1.66 -> 1.39); inflation mean falls 9bp (|t| 4.3, small in level);
+boom share -2pp is only t -2.0 at the 48-seed ceiling.

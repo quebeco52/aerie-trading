@@ -132,6 +132,7 @@ class MacroFieldRegistryTest extends TestCase
         'foreignCoreInflationLag2' => 'Mainland core inflation two quarters back; same reason.',
         'foreignCoreInflationLag3' => 'Mainland core inflation three quarters back; same reason.',
         'realExchangeRateTradeLag' => 'Latent lag behind net_export_gap, which is recorded with exchange_rate_index_ema and exchange_rate_trend.',
+        'mainlandDemandExportLag' => 'Latent lag behind net_export_gap, which is recorded with foreign_output_gap_ema.',
         'domesticDemandGapEma' => 'Smoothed domestic part of the gap the inventory surprise reads; it opens from output_gap_ema and the recorded level parts.',
         'alliedDefenseDeliveryLag' => 'Latent lag behind net_export_gap, which is recorded with allied_defense_spending_index_ema.',
         'outputGapLag3m' => 'Distributed lag of output_gap_ema, which is recorded.',

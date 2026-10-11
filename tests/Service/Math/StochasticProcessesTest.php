@@ -81,6 +81,22 @@ class StochasticProcessesTest extends TestCase
     }
 
     /** The compensator is the part calculateCompensatedKouJump subtracts, so adding it back recovers the jump drawn. */
+    /** A stationary OU factor stepped over a horizon by its exact transition changes by the sd the sigma was solved for. */
+    public function testOuSigmaForIncrementSdGivesTheHorizonChangeTheExactTransitionDelivers(): void
+    {
+        foreach ([[0.6, 0.25, 0.02], [2.0, 1.0, 0.05], [0.05, 0.25, 0.03]] as [$kappa, $horizon, $incrementSd]) {
+            $sigma = StochasticProcesses::ouSigmaForIncrementSd($incrementSd, $kappa, $horizon);
+            $stationarySd = $sigma / sqrt(2.0 * $kappa);
+            // The transition's own pieces: the decay of a unit factor, and the noise a unit draw adds from zero.
+            $decay = StochasticProcesses::calculateOrnsteinUhlenbeckStep(1.0, $kappa, $stationarySd, $horizon, 0.0);
+            $noise = StochasticProcesses::calculateOrnsteinUhlenbeckStep(0.0, $kappa, $stationarySd, $horizon, 1.0);
+            // x' - x = (decay - 1) x + noise dW, with x at its stationary variance.
+            $changeVariance = ((($decay - 1.0) ** 2) * ($stationarySd ** 2)) + ($noise ** 2);
+            $this->assertEqualsWithDelta($incrementSd ** 2, $changeVariance, 1e-12);
+        }
+        $this->assertEqualsWithDelta(0.03 / sqrt(0.25), StochasticProcesses::ouSigmaForIncrementSd(0.03, 0.0, 0.25), 1e-9, 'Without reversion it is the random walk\'s sigma.');
+    }
+
     public function testKouCompensatorIsWhatTheCompensatedJumpSubtracts(): void
     {
         $jumping = new class extends MathUtility {

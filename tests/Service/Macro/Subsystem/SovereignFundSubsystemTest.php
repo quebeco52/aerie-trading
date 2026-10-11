@@ -72,7 +72,7 @@ class SovereignFundSubsystemTest extends TestCase
             + (SovereignFundSubsystem::FOREIGN_EQUITY_SHARE * MacroEngine::BASE_EQUITY_RISK_PREMIUM)
             + ((1.0 - SovereignFundSubsystem::FOREIGN_EQUITY_SHARE) * SovereignFundSubsystem::foreignBondExpectedPremium());
         $equityLeg = SovereignFundSubsystem::FOREIGN_EQUITY_SHARE * SovereignFundSubsystem::FOREIGN_EQUITY_VOLATILITY;
-        $variance = ($equityLeg * $equityLeg) + (MacroEngine::EXCHANGE_RATE_VOLATILITY * MacroEngine::EXCHANGE_RATE_VOLATILITY);
+        $variance = ($equityLeg * $equityLeg) + (SovereignFundSubsystem::EXCHANGE_RATE_VOLATILITY * SovereignFundSubsystem::EXCHANGE_RATE_VOLATILITY);
 
         $this->assertEqualsWithDelta($arithmetic - (0.5 * $variance), $fund->policyCompoundRealReturn($state, 0.0), 1e-15);
 

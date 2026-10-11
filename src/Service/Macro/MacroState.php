@@ -252,6 +252,8 @@ class MacroState
     // The currency index over its fundamental: the purchasing-power deviation that decays while the fundamental jumps.
     public float $exchangeRateDeviation;
     public float $realExchangeRateTradeLag;
+    // The mainland gap as civilian export volumes have adjusted to it (partial adjustment, Senhadji & Montenegro 1999).
+    public float $mainlandDemandExportLag;
     // The log allied defence shift the District's arms exports have delivered, orders reaching exports through the backlog.
     public float $alliedDefenseDeliveryLag;
     public float $importPriceLevel;
@@ -659,8 +661,11 @@ class MacroState
         if (!isset($carried['alliedDefenseDeliveryLag'])) {
             $state->alliedDefenseDeliveryLag = MacroAggregateSubsystem::alliedDefenseGap($state->alliedDefenseSpendingIndexEma);
         }
+        if (!isset($carried['mainlandDemandExportLag'])) {
+            $state->mainlandDemandExportLag = $state->foreignOutputGapEma;
+        }
         if (!isset($carried['netExportGap'])) {
-            $state->netExportGap = MacroAggregateSubsystem::netExportGapAt($state->foreignOutputGapEma, $state->realExchangeRateTradeLag, $state->alliedDefenseDeliveryLag, $state->tariffTradeLag);
+            $state->netExportGap = MacroAggregateSubsystem::netExportGapAt($state->mainlandDemandExportLag, $state->realExchangeRateTradeLag, $state->alliedDefenseDeliveryLag, $state->tariffTradeLag);
         }
         // Finance output opens on the credit balances as they stand. A state that still carries the retired market-value
         // trend (finance_market_trend) valued fund managers' output at the market: its finance level is rebuilt on credit
@@ -670,7 +675,7 @@ class MacroState
             $carriedFinance = $state->financeOutputGap;
             $state->financeOutputGap = MacroAggregateSubsystem::financeOutputGapAt(MacroAggregateSubsystem::creditBalanceGap($state->creditToGdpGap, $state->creditToGdpTrend));
             if (isset($carried['financeOutputGap'], $carried['domesticDemandGapEma'])) {
-                $state->domesticDemandGapEma += ($carriedFinance - $state->financeOutputGap) / MacroAggregateSubsystem::DOMESTIC_GAP_WEIGHT;
+                $state->domesticDemandGapEma += MacroAggregateSubsystem::domesticDemandGapAt(0.0, 0.0, 0.0, $state->financeOutputGap - $carriedFinance);
             }
         }
         // The capital built counted the requirement alone in a payload predating the last tick's requirement; the buffer
