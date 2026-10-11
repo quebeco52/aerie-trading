@@ -413,6 +413,10 @@ readonly class MacroStateDTO
         public float $previousExpectedPolicyFrom = -1.0,
         /** How far the inflation the public expects the Authority to tolerate has drifted above its target, under pressure it gave ground to (App\Service\Macro\Subsystem\MonetaryPolicySubsystem::updateInflationAnchor()). */
         public float $inflationAnchorDrift = 0.0,
+        /** The long-run inflation the public has learned from realized inflation over that anchor, the Kozicki-Tinsley shifting endpoint the ten-year breakeven prices (App\Service\Macro\Subsystem\MonetaryPolicySubsystem::updateInflationEndpoint()). */
+        public float $inflationEndpointGap = 0.0,
+        /** 1 while financial stress (the excess bond premium) holds the Authority in its recession regime, where it cuts faster, else 0 (App\Service\Macro\Subsystem\MonetaryPolicySubsystem::updateStressRegime()). */
+        public float $authorityStressRegime = 0.0,
         /** The CET1 requirement on the District's banks in force, as a share of risk-weighted assets, countercyclical buffer aside (App\Service\Politics\FinancialRegulator). */
         public float $bankCapitalRequirement = FinancialConstants::OPENING_BANK_CAPITAL_REQUIREMENT,
         /** The capital the banks have built so far against the requirement and the countercyclical buffer together, lagged by the years they take (App\Service\Macro\Subsystem\CreditFiscalSubsystem). */

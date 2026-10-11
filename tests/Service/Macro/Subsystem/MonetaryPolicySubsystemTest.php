@@ -147,6 +147,49 @@ class MonetaryPolicySubsystemTest extends TestCase
         $this->assertEqualsWithDelta(0.5, $released->inflationAnchorDrift / $conceding->inflationAnchorDrift, 0.01, 'Half the drift is relearned in five years.');
     }
 
+    /**
+     * The public learns long-run inflation at Orphanides & Williams' constant gain: an exponential average of what
+     * inflation did over the anchor, exact over any step, halfway to a new level in ln 2 / 0.10 = 6.9 years.
+     */
+    public function testTheInflationEndpointLearnsAtTheConstantGainOverAnyStep(): void
+    {
+        $gain = MonetaryPolicySubsystem::INFLATION_ENDPOINT_LEARNING_GAIN;
+        $hot = new MacroState();
+        $hot->inflationEma = MacroEngine::TARGET_INFLATION + 0.01;
+        $this->subsystem->updateInflationEndpoint($hot, MacroEngine::TARGET_INFLATION, 5.0);
+        $this->assertEqualsWithDelta(0.01 * (1.0 - exp(-$gain * 5.0)), $hot->inflationEndpointGap, 1e-15);
+
+        $stepped = new MacroState();
+        $stepped->inflationEma = MacroEngine::TARGET_INFLATION + 0.01;
+        for ($day = 0; $day < 1800; ++$day) {
+            $this->subsystem->updateInflationEndpoint($stepped, MacroEngine::TARGET_INFLATION, 5.0 / 1800.0);
+        }
+        $this->assertEqualsWithDelta($hot->inflationEndpointGap, $stepped->inflationEndpointGap, 1e-15, 'Daily steps land where one five-year step does.');
+
+        $halfway = new MacroState();
+        $halfway->inflationEma = MacroEngine::TARGET_INFLATION + 0.01;
+        $this->subsystem->updateInflationEndpoint($halfway, MacroEngine::TARGET_INFLATION, log(2.0) / $gain);
+        $this->assertEqualsWithDelta(0.005, $halfway->inflationEndpointGap, 1e-15);
+    }
+
+    /**
+     * Inflation the pressure drift explains is not learned a second time: with inflation running at the drifted anchor
+     * the endpoint stays put, so the drift reaches the breakeven once, through the anchor; inflation past the anchor is learned.
+     */
+    public function testTheEndpointLearnsOnlyInflationTheAnchorDriftDoesNotExplain(): void
+    {
+        $drifted = new MacroState();
+        $drifted->inflationAnchorDrift = 0.01;
+        $drifted->inflationEma = MacroEngine::TARGET_INFLATION + 0.01;
+        $this->subsystem->updateInflationEndpoint($drifted, MacroEngine::TARGET_INFLATION, 5.0);
+        $this->assertSame(0.0, $drifted->inflationEndpointGap);
+
+        $past = clone $drifted;
+        $past->inflationEma += 0.01;
+        $this->subsystem->updateInflationEndpoint($past, MacroEngine::TARGET_INFLATION, 5.0);
+        $this->assertEqualsWithDelta(0.01 * (1.0 - exp(-MonetaryPolicySubsystem::INFLATION_ENDPOINT_LEARNING_GAIN * 5.0)), $past->inflationEndpointGap, 1e-15);
+    }
+
     public function testTaylorRuleBlendsCoreInflationWithTIPSBreakeven(): void
     {
         $state = new MacroState();
@@ -1408,7 +1451,7 @@ class MonetaryPolicySubsystemTest extends TestCase
 
         $constraints = $this->constraintsFor($state, 0.035);
 
-        $this->assertSame(['lowerBound' => 0.0, 'evansHold' => 0.0, 'hikeCeiling' => 0.0, 'panicSpeed' => 0.0, 'targetCap' => 0.0], $constraints);
+        $this->assertSame(['lowerBound' => 0.0, 'evansHold' => 0.0, 'hikeCeiling' => 0.0, 'panicSpeed' => 0.0, 'recessionCutSpeed' => 0.0, 'targetCap' => 0.0], $constraints);
     }
 
     public function testTheLowerBoundAndPanicSpeedAreReported(): void
@@ -1422,6 +1465,117 @@ class MonetaryPolicySubsystemTest extends TestCase
         $panic->policyRate = 0.04;
         $panic->inflation = 0.08;
         $this->assertSame(1.0, $this->constraintsFor($panic, 0.045)['panicSpeed']);
+    }
+
+    // --- Recession-regime easing (Aastveit, Cross, Furlanetto & Van Dijk 2024) ---
+
+    /** A state clear of the floor and the panic threshold, unemployment at the NAIRU, so only the regime sets the speed. */
+    private function cuttingState(float $sahm, float $stress): MacroState
+    {
+        $state = new MacroState();
+        $state->policyRate = 0.045;
+        $state->inflation = 0.02;
+        $state->inflationEma = 0.02;
+        $state->unemploymentRateEma = MacroEngine::NATURAL_UNEMPLOYMENT;
+        $state->nairu = MacroEngine::NATURAL_UNEMPLOYMENT;
+        $state->sahmRecessionIndicator = $sahm;
+        $state->authorityStressRegime = $stress;
+
+        return $state;
+    }
+
+    public function testCutsCloseTheRegimeShareOfTheDistanceInARecession(): void
+    {
+        $dt = 0.25;
+        $speed = MonetaryPolicySubsystem::CB_SMOOTHING_SPEED + MonetaryPolicySubsystem::CB_RECESSION_CUT_SPEED;
+        // Aastveit et al. (2024, Table 8): rho 0.54 a quarter in the recession regime, 46% of the distance closed.
+        $this->assertEqualsWithDelta(0.54, exp(-$speed * $dt), 0.01);
+
+        $recession = $this->cuttingState(MacroEngine::SAHM_RECESSION_THRESHOLD, 0.0);
+        $this->assertEqualsWithDelta(0.015 + (0.03 * exp(-$speed * $dt)), $this->subsystem->updatePolicyRate($recession, 0.015, $dt), 1e-12);
+
+        $normal = $this->cuttingState(MacroEngine::SAHM_RECESSION_THRESHOLD - 0.0001, 0.0);
+        $this->assertEqualsWithDelta(0.015 + (0.03 * exp(-MonetaryPolicySubsystem::CB_SMOOTHING_SPEED * $dt)), $this->subsystem->updatePolicyRate($normal, 0.015, $dt), 1e-12, 'Short of the Sahm threshold the normal speed holds.');
+    }
+
+    public function testTheStressLatchAloneSpeedsCuts(): void
+    {
+        $speed = MonetaryPolicySubsystem::CB_SMOOTHING_SPEED + MonetaryPolicySubsystem::CB_RECESSION_CUT_SPEED;
+        $stressed = $this->cuttingState(0.0, 1.0);
+        $this->assertEqualsWithDelta(0.015 + (0.03 * exp(-$speed * 0.25)), $this->subsystem->updatePolicyRate($stressed, 0.015, 0.25), 1e-12);
+    }
+
+    public function testARecessionDoesNotSpeedHikes(): void
+    {
+        $state = $this->cuttingState(0.02, 1.0);
+        $state->policyRate = 0.02;
+
+        $this->assertEqualsWithDelta(0.02 + (0.01 * (1.0 - exp(-MonetaryPolicySubsystem::CB_SMOOTHING_SPEED * 0.25))), $this->subsystem->updatePolicyRate($state, 0.03, 0.25), 1e-12);
+    }
+
+    /** dt-neutral: the regime speed enters an exact first-order lag, so a quarter in one step or in ticks lands alike. */
+    public function testTheRecessionCutIsTheSameQuarterAtAnyStep(): void
+    {
+        $oneStep = $this->subsystem->updatePolicyRate($this->cuttingState(0.01, 0.0), 0.015, 0.25);
+        foreach ([4, 90] as $steps) {
+            $state = $this->cuttingState(0.01, 0.0);
+            for ($i = 0; $i < $steps; ++$i) {
+                $state->policyRate = $this->subsystem->updatePolicyRate($state, 0.015, 0.25 / $steps);
+            }
+            $this->assertEqualsWithDelta($oneStep, $state->policyRate, 1e-12, "{$steps} steps of a quarter");
+        }
+    }
+
+    public function testRecessionCutsStillStopAtTheFloor(): void
+    {
+        $state = $this->cuttingState(0.02, 1.0);
+        $state->policyRate = 0.01;
+        $speed = MonetaryPolicySubsystem::CB_SMOOTHING_SPEED + MonetaryPolicySubsystem::CB_RECESSION_CUT_SPEED;
+
+        $rate = $this->subsystem->updatePolicyRate($state, -0.05, 1.0);
+
+        $this->assertEqualsWithDelta(MacroEngine::EFFECTIVE_LOWER_BOUND + ((0.01 - MacroEngine::EFFECTIVE_LOWER_BOUND) * exp(-$speed)), $rate, 1e-12);
+    }
+
+    public function testTheEvansHoldStillPinsTheFloorInARecession(): void
+    {
+        $state = $this->cuttingState(0.02, 1.0);
+        $state->policyRate = 0.0;
+        $state->unemploymentRateEma = 0.075;
+        $state->inflationEma = 0.018;
+        $state->tipsBreakeven = 0.018;
+
+        $this->assertSame(0.0, $this->subsystem->updatePolicyRate($state, 0.02, 0.25));
+    }
+
+    public function testTheStressLatchEntersAtOnePointAndLeavesAtTheMean(): void
+    {
+        $entry = MonetaryPolicySubsystem::CB_STRESS_ENTRY_EBP;
+        $this->assertTrue(MonetaryPolicySubsystem::inStressRegime(false, $entry));
+        $this->assertFalse(MonetaryPolicySubsystem::inStressRegime(false, $entry - 0.0001), 'Below the entry level a calm Authority stays calm.');
+        $this->assertTrue(MonetaryPolicySubsystem::inStressRegime(true, 0.0001), 'Once in, it holds until the premium is back to its mean.');
+        $this->assertFalse(MonetaryPolicySubsystem::inStressRegime(true, MonetaryPolicySubsystem::CB_STRESS_EXIT_EBP));
+    }
+
+    /** 2001's premium, monthly (GZ): 1.04, 0.80, 0.79, 1.25, 1.07, -0.09pp. A single 1pp threshold dropped out and back in; the latch holds. */
+    public function testTheStressLatchDoesNotFlickerThroughADip(): void
+    {
+        $state = new MacroState();
+        $latch = [];
+        foreach ([0.0104, 0.0080, 0.0079, 0.0125, 0.0107, -0.0009] as $premium) {
+            $state->excessBondPremium = $premium;
+            $this->subsystem->updateStressRegime($state);
+            $latch[] = $state->authorityStressRegime;
+        }
+
+        $this->assertSame([1.0, 1.0, 1.0, 1.0, 1.0, 0.0], $latch);
+    }
+
+    public function testARecessionCutIsReported(): void
+    {
+        $constraints = $this->constraintsFor($this->cuttingState(0.01, 0.0), 0.015);
+        $this->assertSame(1.0, $constraints['recessionCutSpeed']);
+        $this->assertSame(0.0, $constraints['panicSpeed'], 'The cut speed is not the inflation panic.');
     }
 
     /** Debt inside the 70% the Bohn reaction defends and no market premium on it: the curve carries no fiscal term. */

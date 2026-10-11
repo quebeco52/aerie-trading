@@ -590,14 +590,18 @@ class MacroEngine
         $this->laborSubsystem->calculateLaborMarketAndWages($state, $productivityGrowthRate, $dt);
 
         // 4. Gurkaynak, Sack & Wright (2010) TIPS breakeven inflation expectations, anchored where the public expects the
-        // Authority to hold inflation: its target, plus whatever pressure it gave ground to has added (Drechsel 2024).
+        // Authority to hold inflation: its target, plus whatever pressure it gave ground to has added (Drechsel 2024),
+        // and priced off the long-run inflation the public has learned over that anchor (Kozicki & Tinsley 2001).
         $this->monetarySubsystem->updateInflationAnchor($state, $dt);
-        $inflationAnchor = self::TARGET_INFLATION + $state->inflationAnchorDrift;
+        $inflationAnchor = MonetaryPolicySubsystem::inflationAnchor($state, self::TARGET_INFLATION);
+        $this->monetarySubsystem->updateInflationEndpoint($state, self::TARGET_INFLATION, $dt);
         $state->tipsBreakeven = $this->aggregateSubsystem->calculateTipsBreakeven($state, $inflationAnchor);
 
         // 5. Taylor (1993) monetary policy target and Clarida-Gali-Gertler (2000) rate inertia.
         $state->targetRate = $this->monetarySubsystem->calculateTargetRate($state, self::TARGET_INFLATION, $state->naturalRate, $dt);
         $clampedTarget = max(self::EFFECTIVE_LOWER_BOUND, min(self::POLICY_RATE_CEILING, $state->targetRate));
+        // Aastveit et al. (2024): cuts run faster in the recession regime, read off the Sahm rule and the premium as last observed.
+        $this->monetarySubsystem->updateStressRegime($state);
         $state->policyRate = $this->monetarySubsystem->updatePolicyRate($state, $clampedTarget, $dt);
 
         // 6. Central bank balance sheet unconventional QE/QT operations (Bernanke & Reinhart 2004).

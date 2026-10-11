@@ -88,6 +88,10 @@ class MonetaryPolicySubsystem
     /** Rate (per year) at which the inflation the public expects the Authority to tolerate drifts up while it gives ground, fitted with the cut above so the episode lifts inflation 0.5pp six quarters on (Gavin & Manger 2023, p. 26); the price level then stands 2.8% higher four years on, as Drechsel's (2024, Figure 7) US pressure shock leaves it (2.9%). */
     public const PRESSURE_ANCHOR_DRIFT_RATE = 0.0325;
 
+    // --- Shifting Inflation Endpoint (Kozicki & Tinsley 2001; Orphanides & Williams 2005) ---
+    /** Constant gain, per year, at which the public learns long-run inflation from realized inflation: Orphanides & Williams' baseline 0.05 a half-year period, about twenty years of data (FRB FEDS 2003-41); on US T10YIE 2003-2026 the breakeven fit's R2 peaks at 0.10-0.14. */
+    public const INFLATION_ENDPOINT_LEARNING_GAIN = 0.10;
+
     // --- Forward-Looking Policy Horizon (Clarida, Gali & Gertler 2000; Batini & Haldane 1999) ---
     /** Quarters of gap momentum the rule projects forward. One quarter is what a staff projection actually carries; the longer horizons swept here read as foresight but act as gain, buying a broader spectrum with the left tail (0.75y halves the share of quarters below -3%). */
     public const TAYLOR_GAP_FORECAST_YEARS = 0.25;
@@ -97,7 +101,7 @@ class MonetaryPolicySubsystem
     public const EVANS_RULE_INFLATION_CAP = 0.025;
     /** Unemployment over the NAIRU above which forward guidance holds the rate at the floor: the FOMC's 6.5% threshold (Dec 2012) sat 0.9pp over the 5.6% midpoint of its longer-run range (5.2-6.0), so the hold ends at the same slack however much the NAIRU has scarred. */
     public const EVANS_RULE_UNEMPLOYMENT_GAP = 0.009;
-    /** Partial-adjustment speed of the policy rate toward its target, the same cutting as hiking: 0.65 a year closes 15% of the distance a quarter (US 15% vs 13%, se 4-6%; Clarida-Gali-Gertler 2000 rho ~0.85). */
+    /** Partial-adjustment speed of the policy rate toward its target in normal times, the same cutting as hiking: 0.65 a year closes 15% of the distance a quarter (US 15% vs 13%, se 4-6%; Clarida-Gali-Gertler 2000 rho ~0.85). */
     public const CB_SMOOTHING_SPEED = 0.65;
     /** Inflation panic reaction multiplier accelerating rate hikes during extreme inflation spikes. */
     public const CB_INFLATION_PANIC_SCALE = 50.0;
@@ -105,6 +109,14 @@ class MonetaryPolicySubsystem
     public const CB_MAX_HIKE_PANIC_SPEED = 3.0;
     /** Fastest the policy rate rises, per year: the FOMC's largest modern step (75bp) at each of its eight meetings, 2022's pace (+150bp in Q3); cuts are not capped, the fastest US cuts (-200bp in 2008Q1, with intermeeting moves) outran it. */
     public const CB_MAX_HIKE_VELOCITY = 0.06;
+
+    // --- Recession-Regime Easing (Aastveit, Cross, Furlanetto & Van Dijk 2024; Sahm 2019; Gilchrist & Zakrajsek 2012) ---
+    /** Speed added while the Authority cuts in the recession regime: 0.65 + 1.8 = 2.45 a year closes 46% of the distance a quarter, the Fed's recession-regime smoothing on real-time Greenbook data (rho 0.54, 68% band 0.35-0.73, against 0.92 in normal times; Tinbergen DP 2024-030, Table 8); on Taylor (1999) and final data the 2001 easing closed 53% a quarter. */
+    public const CB_RECESSION_CUT_SPEED = 1.8;
+    /** Excess bond premium at which financial stress puts the Authority in the regime: 1pp, the GZ series' mean plus 1.5 sd (0.11 + 1.5 x 0.59, 1985-2019); every month at or above it in 1985-2021 fell inside the 2001, 2008 or 2020 easing, five months ahead of 2001's first cut. */
+    public const CB_STRESS_ENTRY_EBP = 0.010;
+    /** Excess bond premium at which the stress ends: the GZ series' mean, zero by construction. Leaving at the entry level instead flickered out and back through 2001's spring (0.94, 0.80, 1.04pp). */
+    public const CB_STRESS_EXIT_EBP = 0.0;
 
     // --- Nelson-Siegel-Svensson Term Structure Dynamics (Svensson 1994) ---
     /** Flight-to-safety sensitivity: recessions compress term premium via safe-haven demand (Campbell et al. 2017). */
@@ -349,6 +361,34 @@ class MonetaryPolicySubsystem
     }
 
     /**
+     * Where the public expects the Authority to hold inflation: its target plus the drift pressure it gave ground to has added.
+     */
+    public static function inflationAnchor(MacroState $state, float $targetInflation): float
+    {
+        return $targetInflation + $state->inflationAnchorDrift;
+    }
+
+    /**
+     * The long-run inflation the public has learned from what inflation actually did (Kozicki & Tinsley 2001 shifting
+     * endpoint, learned at Orphanides & Williams' 2005 constant gain), kept as its gap over the anchor: the target plus
+     * the drift pressure has added. Learning from inflation over that anchor leaves the drift to updateInflationAnchor(),
+     * so a pressure episode reaches the breakeven once; the endpoint learns only the inflation the anchor did not explain.
+     *
+     * @param MacroState $state           Current macroeconomic state.
+     * @param float      $targetInflation Statutory central bank target inflation.
+     * @param float      $dt              Time increment in years.
+     */
+    public function updateInflationEndpoint(MacroState $state, float $targetInflation, float $dt): void
+    {
+        $state->inflationEndpointGap = TimeSeries::calculateDistributedLag(
+            currentLaggedValue: $state->inflationEndpointGap,
+            targetValue: $state->inflationEma - self::inflationAnchor($state, $targetInflation),
+            dt: $dt,
+            lagTimeConstant: 1.0 / self::INFLATION_ENDPOINT_LEARNING_GAIN
+        );
+    }
+
+    /**
      * The rate committee's lean on the rule (Bordo & Istrefi 2023, Table 6, col. 4): a dovish supermajority answers each
      * point of inflation DOVISH_MAJORITY_INFLATION_RESPONSE less, a hawkish one each point of output gap
      * HAWKISH_MAJORITY_GAP_RESPONSE less. The rule as fitted is the FOMC's average committee's, so each term is centred on
@@ -404,14 +444,47 @@ class MonetaryPolicySubsystem
     }
 
     /**
+     * Whether financial stress holds the Authority in its recession regime: a latch on the excess bond premium (Gilchrist &
+     * Zakrajsek 2012), entered at CB_STRESS_ENTRY_EBP and left only once the premium is back to its mean, so a premium
+     * hovering at the entry level does not switch the regime tick to tick.
+     *
+     * @param bool  $wasStressed       Whether the latch was set going into this tick.
+     * @param float $excessBondPremium The premium as last observed.
+     */
+    public static function inStressRegime(bool $wasStressed, float $excessBondPremium): bool
+    {
+        return $excessBondPremium >= self::CB_STRESS_ENTRY_EBP
+            || ($wasStressed && $excessBondPremium > self::CB_STRESS_EXIT_EBP);
+    }
+
+    /** Sets the stress latch from the premium the Authority last observed; call once a tick, before updatePolicyRate(). */
+    public function updateStressRegime(MacroState $state): void
+    {
+        $state->authorityStressRegime = self::inStressRegime($state->authorityStressRegime > 0.0, $state->excessBondPremium) ? 1.0 : 0.0;
+    }
+
+    /**
+     * The recession regime of Aastveit, Cross, Furlanetto & Van Dijk's (2024) mixture Taylor rule, read in real time:
+     * unemployment says a recession is under way (the Sahm rule, which reads neither the policy rate nor the curve) or the
+     * stress latch is set. The Sahm rule's own twelve-month low holds it on for a year past the unemployment peak.
+     */
+    public static function inRecessionRegime(MacroState $state): bool
+    {
+        return MacroEngine::inSahmRecession($state->sahmRecessionIndicator) || $state->authorityStressRegime > 0.0;
+    }
+
+    /**
      * Clarida, Galí & Gertler (1998) Partial Adjustment Monetary Policy Smoothing.
      *
-     * Models inertial interest rate adjustments toward the Taylor target at one speed either way (1987-2008:
-     * 0.66/yr cutting, 0.57/yr hiking, not distinguishable), as an exact first-order lag, with hikes accelerating
-     * to Volcker speed during runaway inflation spikes. The pace is proportional to the distance up to the fastest
-     * the FOMC has hiked since 1985 (75bp a meeting, 2022). Without that ceiling the partial adjustment turned a
+     * Models inertial interest rate adjustments toward the Taylor target at one speed either way in normal times
+     * (1987-2008: 0.66/yr cutting, 0.57/yr hiking, not distinguishable), as an exact first-order lag, with hikes
+     * accelerating to Volcker speed during runaway inflation spikes. The pace is proportional to the distance up to the
+     * fastest the FOMC has hiked since 1985 (75bp a meeting, 2022). Without that ceiling the partial adjustment turned a
      * target that jumps -- liftoff after forward guidance, a demand boom -- into +650bp in a quarter at 2.8%
      * inflation, and 5% of years hiked over 300bp against the Fed's 1% (1985-2008).
+     *
+     * In the recession regime (inRecessionRegime()) cuts run at the regime's lower smoothing (Aastveit et al. 2024),
+     * as the Fed's did: -475bp in 2001, -125bp in eight days in January 2008, -150bp in twelve days in March 2020.
      *
      * @param MacroState $state      Current macroeconomic state.
      * @param float      $targetRate Target policy rate from the Taylor Rule.
@@ -433,10 +506,14 @@ class MonetaryPolicySubsystem
         }
 
         $cbSpeed = self::CB_SMOOTHING_SPEED;
+        $recessionCut = false;
         if ($effectiveTarget > $currentPolicyRate) {
             $effectiveInflation = max($state->inflation, $state->inflationEma);
             $inflationPanicExcess = max(0.0, $effectiveInflation - MacroEngine::CB_INFLATION_PANIC_THRESHOLD);
             $cbSpeed += min(self::CB_MAX_HIKE_PANIC_SPEED, $inflationPanicExcess * self::CB_INFLATION_PANIC_SCALE);
+        } elseif ($effectiveTarget < $currentPolicyRate && self::inRecessionRegime($state)) {
+            $cbSpeed += self::CB_RECESSION_CUT_SPEED;
+            $recessionCut = true;
         }
 
         $maxSpeed = $effectiveTarget > $currentPolicyRate ? self::CB_MAX_HIKE_VELOCITY : INF;
@@ -448,7 +525,8 @@ class MonetaryPolicySubsystem
                 'evansHold' => $evansHold,
                 // Past the knee of the speed-limited lag, where the partial adjustment would outrun the ceiling.
                 'hikeCeiling' => $maxSpeed < INF && ($effectiveTarget - $currentPolicyRate) > ($maxSpeed / $cbSpeed),
-                'panicSpeed' => $cbSpeed > self::CB_SMOOTHING_SPEED,
+                'panicSpeed' => !$recessionCut && $cbSpeed > self::CB_SMOOTHING_SPEED,
+                'recessionCutSpeed' => $recessionCut,
                 'targetCap' => $targetRate >= MacroEngine::POLICY_RATE_CEILING,
             ], $dt);
         }

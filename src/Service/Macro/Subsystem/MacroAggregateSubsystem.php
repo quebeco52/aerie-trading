@@ -232,11 +232,13 @@ class MacroAggregateSubsystem
     /** Fixed-rate share (corporate bonds, mortgages, auto and term loans) priced off the 5-year benchmark; measured 2026-09-19 the mix moves only the cycle period, not its shape. */
     public const BORROWING_YIELD5Y_WEIGHT = 0.50;
 
-    // --- Ten-Year Breakeven Inflation (Gurkaynak, Sack & Wright 2010) ---
-    /** Ten-year breakeven per point of core inflation over target: US T10YIE on core CPI, 2003-2026 monthly, 0.080 (Newey-West se 0.024), holding the headline-core wedge and the GZ excess bond premium. */
-    public const BREAKEVEN_CORE_LOADING = 0.080;
-    /** Ten-year breakeven per point of headline over core, the energy and food pass-through: the same regression, 0.137 (se 0.029). */
-    public const BREAKEVEN_NONCORE_LOADING = 0.137;
+    // --- Ten-Year Breakeven Inflation (Gurkaynak, Sack & Wright 2010; Kozicki & Tinsley 2001 endpoint) ---
+    /** Ten-year breakeven per point of learned long-run inflation over the anchor: US T10YIE 2003-2026 monthly on headline CPI learned at a 0.10/yr constant gain, 0.441 (Newey-West se 0.076), holding core over that endpoint, headline over core and the GZ excess bond premium; R2 0.62 to 0.75. */
+    public const BREAKEVEN_ENDPOINT_LOADING = 0.441;
+    /** Ten-year breakeven per point of core inflation over the learned endpoint: the same regression, 0.085 (se 0.018). */
+    public const BREAKEVEN_CORE_LOADING = 0.085;
+    /** Ten-year breakeven per point of headline over core, the energy and food pass-through: the same regression, 0.101 (se 0.016). */
+    public const BREAKEVEN_NONCORE_LOADING = 0.101;
 
     // --- Distributed Lag Transmission Constants ---
     /** Characteristic half-life time constant in years for energy cost-push pass-through into core inflation. */
@@ -1065,23 +1067,26 @@ class MacroAggregateSubsystem
      * Gurkaynak, Sack & Wright (2010) ten-year TIPS breakeven: expected inflation over the bond's life plus its risk
      * premium, less the TIPS liquidity premium, fitted as one reduced form on the inflation the market sees.
      *
-     * The US ten-year moves 0.08 per point of core inflation over target and 0.14 per point of headline over core, so
-     * an energy spike that adds a point to headline adds a seventh of a point here: long expectations are anchored,
-     * and a commodity shock is priced as passing. The output gap adds nothing once inflation is held (CBO gap 0.02,
-     * se 0.02). The fit also holds the excess bond premium, whose liquidity squeeze on TIPS (-0.31 per point, 2008
-     * and March 2020) is not modelled here. Fit: var/harness/breakeven_fit.py.
+     * Expected inflation rests on a shifting endpoint (Kozicki & Tinsley 2001): the long-run inflation the public has
+     * learned from realized inflation (MonetaryPolicySubsystem::updateInflationEndpoint()), which the US ten-year
+     * takes 0.44 of. Around it the ten-year moves 0.085 per point of core over the endpoint and 0.10 per point of
+     * headline over core, so a commodity shock is priced as passing. The output gap adds nothing once inflation is
+     * held (CBO gap 0.02, se 0.02). The fit also holds the excess bond premium, whose liquidity squeeze on TIPS (-0.36 per point, 2008 and
+     * March 2020) is not modelled here. Fit: var/harness/breakeven_fit.py.
      *
      * @param MacroState $state           Current macroeconomic state.
-     * @param float      $targetInflation Central bank inflation target.
+     * @param float      $targetInflation The inflation the public expects the Authority to hold: its target plus any pressure drift.
      * @return float Ten-year breakeven inflation.
      */
     public function calculateTipsBreakeven(MacroState $state, float $targetInflation): float
     {
         // Headline runs over core by the energy, food and carbon pass-through rate the commodity basket adds.
         $headlineOverCore = $state->noncorePassThroughEma;
+        $learnedEndpoint = $targetInflation + $state->inflationEndpointGap;
 
         return $targetInflation
-            + (self::BREAKEVEN_CORE_LOADING * (self::coreInflationEma($state) - $targetInflation))
+            + (self::BREAKEVEN_ENDPOINT_LOADING * $state->inflationEndpointGap)
+            + (self::BREAKEVEN_CORE_LOADING * (self::coreInflationEma($state) - $learnedEndpoint))
             + (self::BREAKEVEN_NONCORE_LOADING * $headlineOverCore);
     }
 

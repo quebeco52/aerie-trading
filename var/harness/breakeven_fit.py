@@ -3,6 +3,8 @@
 Gurkaynak, Sack & Wright (2010): breakeven = expected inflation over the bond's life + inflation risk premium
 - TIPS liquidity premium. Regressed as one reduced form on the state an engine can see:
     BE = a + b_core (core CPI yoy - 2) + b_noncore (headline yoy - core yoy) [+ b_gap CBO gap] [+ b_ebp GZ EBP]
+  endpoint+ebp: BE = a + b_end (E - 2) + b_core (core yoy - E) + b_noncore (headline - core) + b_ebp EBP, where E is
+    headline CPI yoy learned at a constant gain of 0.10/yr (Kozicki-Tinsley endpoint, Orphanides-Williams gain).
 Monthly, Newey-West (12 lags) standard errors. Data: breakeven_data.json (FRED + Gilchrist-Zakrajsek EBP).
 """
 import json, math, os
@@ -70,15 +72,32 @@ def regressors(f, k):
     return row if None not in row else None
 
 
+def endpoint(gain_per_year, series='CPIAUCSL', start='1960-01'):
+    """Kozicki-Tinsley shifting endpoint: headline CPI yoy learned at a constant gain (Orphanides-Williams), monthly."""
+    g = 1 - math.exp(-gain_per_year / 12)
+    level, out = None, {}
+    for k in sorted(D[series]):
+        x = yoy(D[series], k) if k >= start else None
+        if x is None:
+            continue
+        level = x if level is None else level + g * (x - level)
+        out[k] = level
+    return out
+
+
+ENDPOINT = endpoint(0.10)
 CRISIS = lambda k: '2008-07' <= k <= '2009-06' or '2020-02' <= k <= '2020-06'
 SPECS = {
     'core+noncore': lambda k: [1.0, yoy(D['CPILFESL'], k) - 2.0, yoy(D['CPIAUCSL'], k) - yoy(D['CPILFESL'], k)],
     '+gap': lambda k: [1.0, yoy(D['CPILFESL'], k) - 2.0, yoy(D['CPIAUCSL'], k) - yoy(D['CPILFESL'], k), cbo_gap(k)],
     '+ebp': lambda k: [1.0, yoy(D['CPILFESL'], k) - 2.0, yoy(D['CPIAUCSL'], k) - yoy(D['CPILFESL'], k), D['EBP'].get(k)],
     '+gap+ebp': lambda k: [1.0, yoy(D['CPILFESL'], k) - 2.0, yoy(D['CPIAUCSL'], k) - yoy(D['CPILFESL'], k), cbo_gap(k), D['EBP'].get(k)],
+    # MacroAggregateSubsystem::calculateTipsBreakeven(): core measured over the learned endpoint.
+    'endpoint+ebp': lambda k: [1.0, ENDPOINT.get(k, math.nan) - 2.0, yoy(D['CPILFESL'], k) - ENDPOINT.get(k, math.nan), yoy(D['CPIAUCSL'], k) - yoy(D['CPILFESL'], k), D['EBP'].get(k)],
 }
 NAMES = {'core+noncore': ['a', 'core', 'noncore'], '+gap': ['a', 'core', 'noncore', 'gap'],
-         '+ebp': ['a', 'core', 'noncore', 'ebp'], '+gap+ebp': ['a', 'core', 'noncore', 'gap', 'ebp']}
+         '+ebp': ['a', 'core', 'noncore', 'ebp'], '+gap+ebp': ['a', 'core', 'noncore', 'gap', 'ebp'],
+         'endpoint+ebp': ['a', 'endpoint', 'core', 'noncore', 'ebp']}
 results = {}
 for series in ('T10YIE', 'T5YIE'):
     for lo, hi in (('2003-01', '2019-12'), ('2003-01', '2026-12')):

@@ -56,3 +56,85 @@ Mechanism (measured): the Bohn rule reads net financial liabilities (gross less 
   DiD lines: primary deficit +0.036 (0.027), (r-g)d -0.046 (0.019), rescue +0.020 (0.036): they offset. At 0.65
   the fund ends smaller (fund/GDP 0.53 vs 0.64, DiD se 0.031), so Bohn binds more often (+7.9pp of ticks).
 Caveats: no politics, synthetic board, 24 ticks/yr; means not medians as the primary statistic.
+
+## 2026-10-10: does a learned inflation endpoint (gain 0.10/yr) move the breakeven and long end without moving the cycle?
+- Arms: Y0 = `$SNAP/y10tree` (HEAD f187f55); Y1 = OVR `$SNAP/ovr1` (the five changed src files, cmp-identical to the working tree).
+- Board: `y10_run.sh`, 21 y at 360 ticks/yr, politics on, year 1 dropped. Stages 8, 16, 48; stopped at 48 (ceiling).
+  Tables `y10_stage8.out`, `y10_stage16.out`, `y10_stage48.out`. Macro-only: `y10_macro_run.sh` MY0/MY1, 16 seeds,
+  same years/ticks, no board, no fund (`y10_macro16.out`).
+- Board, n=48 (paired d, se, t): y10 ACF4 -0.039 (0.032) -1.2; tp10 ACF4 -0.020 (0.040) -0.5; be10 sd +0.002pp (0.040) +0.0;
+  be10 ACF4 +0.192 (0.051) +3.8. No guard past |t| 1.5 (infl sd -0.061pp, 0.040).
+- Macro-only, n=16: y10 ACF4 +0.009 (0.004) +2.2; tp10 ACF4 -0.001 (0.005); be10 sd +0.001pp (0.005) +0.1;
+  be10 ACF4 +0.188 (0.042) +4.4; guards all |t| <= 1.5, crisis seeds identical.
+- Verdict: the endpoint makes the breakeven more persistent (ACF4 0.24 -> 0.43) but does not raise its sd or move the
+  ten-year/term-premium persistence; cycle untouched. Board be10 sd has a fat right tail (a few seeds), so its se is large.
+
+## 2026-10-11: does a recession-regime cut speed (0.65 + 1.8/yr while cutting in the regime) give US-sized easing without moving persistence?
+Harness: `CbSmoothHarnessTest.php` via `crisis_run.sh` (K0 = crtree with CB_RECESSION_CUT_SPEED 0.0, behaviourally the
+pre-change tree; K1 = ovrK, constant 1.8). Live macro + politics, 21 years (year 1 dropped), 360 ticks/yr, seeds 1-48
+paired. Seeds 1-16 and 18 come from the interrupted run (its K0 used the true pre-change tree); seeds 17 and 19-48 were
+run on the rebuilt snapshot. Sanity: K0 seed 1 rerun (as K9) was clean and inside the cross-seed range of the stored K0-1.
+Targets: cut4q_rec%, elb_share, trough_gap% + rec_q. Analysis: `crisis_analyse.py K0 K1` (`SEEDS=1-16` for the stage).
+
+Stage 16 (seeds 1-16, `crisis_s16.out`):
+```
+n=16 paired seeds; blown up: K0 [], K1 []
+quantity                     K0                K1                dK1-K0 (se) t  n
+cut4q_rec%       2.105 (0.110)    3.885 (0.235)      +1.780 (0.256)   +7.0  16
+cut4q_all%       2.105 (0.110)    3.885 (0.235)      +1.780 (0.256)   +7.0  16
+elb_share        0.000 (0.000)    0.024 (0.012)      +0.024 (0.012)   +2.0  16
+trough_gap%     -2.193 (0.178)   -2.230 (0.243)      -0.037 (0.300)   -0.1  16
+rec_q            8.000 (1.396)    9.938 (1.644)      +1.938 (2.472)   +0.8  16
+pol_acf4         0.661 (0.035)    0.605 (0.019)      -0.055 (0.047)   -1.2  16
+gap_acf4         0.444 (0.027)    0.468 (0.041)      +0.024 (0.055)   +0.4  16
+gap_sd%          1.625 (0.102)    1.569 (0.076)      -0.055 (0.114)   -0.5  16
+infl_mean%       2.320 (0.074)    2.247 (0.086)      -0.073 (0.107)   -0.7  16
+infl_sd%         1.262 (0.048)    1.260 (0.038)      -0.002 (0.064)   -0.0  16
+y10_mean%        4.798 (0.113)    4.801 (0.160)      +0.003 (0.166)   +0.0  16
+gap_mean%       -0.275 (0.103)   -0.252 (0.146)      +0.023 (0.190)   +0.1  16
+pol_mean%        4.020 (0.182)    3.593 (0.144)      -0.427 (0.244)   -1.8  16
+crisis           0.625 (0.125)    0.562 (0.128)      -0.062 (0.170)   -0.4  16
+evans_t          0.000 (0.000)    0.014 (0.009)      +0.014 (0.009)   +1.6  16
+regime_t         0.341 (0.021)    0.349 (0.027)      +0.008 (0.032)   +0.3  16
+switches/yr      0.497 (0.028)    0.412 (0.026)      -0.084 (0.038)   -2.2  16
+fastcut_t        0.255 (0.014)    0.213 (0.015)      -0.041 (0.022)   -1.9  16
+hike4q%          2.556 (0.263)    2.695 (0.203)      +0.138 (0.360)   +0.4  16
+recession seeds: K0 16, K1 16
+```
+Final 48 (`crisis_s48.out`, + `gap_semidev.py` mechanism check):
+```
+n=48 paired seeds; blown up: K0 [], K1 []
+quantity                     K0                K1                dK1-K0 (se) t  n
+cut4q_rec%       2.122 (0.074)    3.729 (0.154)      +1.607 (0.173)   +9.3  48
+cut4q_all%       2.122 (0.074)    3.776 (0.141)      +1.653 (0.160)  +10.4  48
+elb_share        0.000 (0.000)    0.012 (0.005)      +0.012 (0.005)   +2.5  48
+trough_gap%     -2.549 (0.155)   -2.209 (0.144)      +0.339 (0.187)   +1.8  48
+rec_q            9.646 (0.993)    8.875 (0.865)      -0.771 (1.249)   -0.6  48
+pol_acf4         0.654 (0.019)    0.593 (0.014)      -0.061 (0.026)   -2.4  48
+gap_acf4         0.491 (0.020)    0.421 (0.025)      -0.070 (0.034)   -2.1  48
+gap_sd%          1.750 (0.054)    1.558 (0.039)      -0.193 (0.058)   -3.3  48
+infl_mean%       2.326 (0.051)    2.245 (0.036)      -0.081 (0.063)   -1.3  48
+infl_sd%         1.314 (0.029)    1.255 (0.021)      -0.059 (0.037)   -1.6  48
+y10_mean%        4.896 (0.081)    4.767 (0.079)      -0.129 (0.109)   -1.2  48
+gap_mean%       -0.369 (0.074)   -0.133 (0.074)      +0.236 (0.105)   +2.2  48
+pol_mean%        4.000 (0.101)    3.606 (0.094)      -0.394 (0.143)   -2.8  48
+crisis           0.542 (0.073)    0.583 (0.072)      +0.042 (0.089)   +0.5  48
+evans_t          0.000 (0.000)    0.010 (0.004)      +0.010 (0.004)   +2.7  48
+regime_t         0.371 (0.014)    0.347 (0.015)      -0.024 (0.021)   -1.1  48
+switches/yr      0.464 (0.016)    0.450 (0.017)      -0.014 (0.022)   -0.6  48
+fastcut_t        0.279 (0.009)    0.207 (0.009)      -0.072 (0.013)   -5.5  48
+hike4q%          2.796 (0.157)    2.777 (0.108)      -0.019 (0.184)   -0.1  48
+recession seeds: K0 48, K1 48
+n=48
+down_sd%    1.481   1.170  -0.311 (0.089) t -3.5
+up_sd%      1.001   1.053  +0.051 (0.070) t +0.7
+p05%       -3.323  -2.591  +0.732 (0.202) t +3.6
+p95%        2.469   2.618  +0.149 (0.162) t +0.9
+```
+Reading: the cut size moves at t 9 (2.1 -> 3.7pp), still short of the US 4.75-5.0pp. The lower-bound share is 1.2% against the US ~25%,
+which r* sets, not the speed. Trough and recovery length do not move at the 2-se level. Guard flagged: gap sd -0.19pp
+(t -3.3). The whole drop is on the downside (down semi-sd -0.31 t -3.5, p05 +0.73 t +3.6; upside unchanged), so slumps
+are shallower and the cycle is not damped. pol ACF4 -0.06 (t -2.4) and gap ACF4 -0.07 (t -2.1) fall slightly, under 3.
+The 4-seed 10Y +0.67pp is NOT real: -0.13 (0.11) at 48. The mean policy rate FALLS 0.39pp (t -2.8) while the mean gap rises 0.24
+(t 2.2), so the reading that faster cuts lift the mean rule rate and so the 10Y is contradicted. Crisis incidence is unchanged (+0.04, se 0.09).
+Regime share 0.35-0.37 against the US ~0.22 (context).

@@ -1175,6 +1175,31 @@ class MacroEngineTest extends TestCase
         $this->assertGreaterThan($lagQ1, $lagQ2, 'Sticky cost lag should accumulate and rise across successive quarters of elevated energy.');
     }
 
+    /** The latch is set from the premium as last observed, on the tick the rate is set, not a tick later. */
+    public function testAStressedPremiumSpeedsTheSameTicksCut(): void
+    {
+        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
+        $run = function (float $premium): \App\DTO\MacroStateDTO {
+            $this->redisMock = $this->createMock(\Redis::class);
+            $this->redisMock->method('get')->willReturn(json_encode(['policy_rate' => 0.06, 'excess_bond_premium' => $premium]));
+            $engine = new MacroEngine($this->mathUtilityMock, $this->redisMock, $this->snapshotRecorder, $this->monetarySubsystem, $this->laborSubsystem,
+                $this->aggregateSubsystem, $this->commoditySubsystem, $this->assetSubsystem, $this->creditFiscalSubsystem);
+
+            return $engine->updateMacroState(1.0 / 360.0);
+        };
+
+        // Both premiums sit above the stress latch's exit, so only the entry level tells them apart.
+        $calm = $run(MonetaryPolicySubsystem::CB_STRESS_ENTRY_EBP / 2.0);
+        $stressed = $run(MonetaryPolicySubsystem::CB_STRESS_ENTRY_EBP);
+
+        $this->assertSame(0.0, $calm->authorityStressRegime);
+        $this->assertSame(1.0, $stressed->authorityStressRegime);
+        $this->assertEqualsWithDelta($calm->targetRate, $stressed->targetRate, 1e-12, 'The premium does not reach the rule within the tick.');
+        $speed = MonetaryPolicySubsystem::CB_SMOOTHING_SPEED + MonetaryPolicySubsystem::CB_RECESSION_CUT_SPEED;
+        $ratio = log((0.06 - $stressed->targetRate) / ($stressed->policyRate - $stressed->targetRate)) / log((0.06 - $calm->targetRate) / ($calm->policyRate - $calm->targetRate));
+        $this->assertEqualsWithDelta($speed / MonetaryPolicySubsystem::CB_SMOOTHING_SPEED, $ratio, 1e-6, 'The stressed tick cuts at the regime speed.');
+    }
+
     public function testRateSmoothingClosesTheSameShareCuttingAsHiking(): void
     {
         // US 1987-2008: 15% of the distance closed a quarter cutting, 13% hiking, not distinguishable (se 4-6%).

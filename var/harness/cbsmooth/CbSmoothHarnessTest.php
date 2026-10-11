@@ -36,6 +36,21 @@ final class CbSmoothHarnessTest extends KernelTestCase
     private array $quarters = [];
     private ?MacroStateDTO $currentMacro = null;
     private float $currentTime = 0.0;
+    /** @var array<string, int> Per-tick counts since the last MACRO_OUT row (crisis-cut question). */
+    private array $tickShares = [];
+    private bool $ebpLatch = false;
+    private bool $regimeWas = false;
+
+    /** @return array<string, float|int> The per-tick shares since the last row, and resets them. */
+    private function drainTickShares(): array
+    {
+        $q = $this->tickShares;
+        $this->tickShares = [];
+        $n = max(1, $q['n'] ?? 0);
+
+        return ['elb_t' => ($q['elb_t'] ?? 0) / $n, 'evans_t' => ($q['evans_t'] ?? 0) / $n, 'regime_t' => ($q['regime_t'] ?? 0) / $n,
+            'fastcut_t' => ($q['fastcut_t'] ?? 0) / $n, 'switches' => $q['switches'] ?? 0];
+    }
     private ?\App\Service\Corporate\DebtEngine $debtEngine = null;
     private ?StockTracker $fvTracker = null;
     private ?\App\Service\Market\Pricing\MarketEngine $fvEngine = null;
@@ -136,6 +151,21 @@ final class CbSmoothHarnessTest extends KernelTestCase
             if ($politicsEngine !== null) {
                 $policy = $politicsEngine->updatePolitics($m, $dt)->policy();
             }
+            // Per-tick shares for the crisis-cut question, emptied into each MACRO_OUT row: the Evans hold's condition as
+            // updatePolicyRate() reads it, the floor, the recession regime (the stress latch recomputed here, so the
+            // baseline tree without it reports the same regime) and how often the regime switches.
+            $this->ebpLatch = $m->excessBondPremium >= 0.010 || ($this->ebpLatch && $m->excessBondPremium > 0.0);
+            $regimeNow = MacroEngine::inSahmRecession($m->sahmRecessionIndicator) || $this->ebpLatch;
+            $q = &$this->tickShares;
+            $q['n'] = ($q['n'] ?? 0) + 1;
+            $q['elb_t'] = ($q['elb_t'] ?? 0) + ($m->policyRate <= MacroEngine::ZLB_PROXIMITY_THRESHOLD ? 1 : 0);
+            $q['evans_t'] = ($q['evans_t'] ?? 0) + (($m->policyRate <= MacroEngine::ZLB_PROXIMITY_THRESHOLD && max(MacroEngine::EFFECTIVE_LOWER_BOUND, $m->targetRate) > $m->policyRate
+                && $m->unemploymentRateEma > $m->nairu + 0.009 && max($m->inflationEma, $m->tipsBreakeven) < 0.025) ? 1 : 0);
+            $q['regime_t'] = ($q['regime_t'] ?? 0) + ($regimeNow ? 1 : 0);
+            $q['fastcut_t'] = ($q['fastcut_t'] ?? 0) + ($regimeNow && $m->targetRate < $m->policyRate ? 1 : 0);
+            $q['switches'] = ($q['switches'] ?? 0) + ($regimeNow !== $this->regimeWas ? 1 : 0);
+            $this->regimeWas = $regimeNow;
+            unset($q);
             if ($recordPath !== null) {
                 $recorded[] = $m;
             }
@@ -215,7 +245,22 @@ final class CbSmoothHarnessTest extends KernelTestCase
                     'net_debt' => $m->sovereignNetDebtToGdp, 'bank_credit' => \App\Service\Macro\Subsystem\CreditFiscalSubsystem::bankCreditToGdp($m->boardBankCredit, $m->sovereignFundDollarsPerGdp, $m->nominalGdpIndex),
                     'rescue_cost' => $m->bankRescueCostToGdp, 'rescue_assets' => $m->bankRescueAssetsToGdp, 'crisis_at' => $m->lastCreditCrisisAt,
                     'spread' => $m->sovereignRiskSpread, 'tax_rate' => $m->corporateTaxRate,
-                ] + (getenv('BOARD_NI') ? $this->boardNetIncome($list) + ['gap_ema' => $m->outputGapEma, 'net_tax' => $m->netTaxRate ?? null] : [])
+                    'tp10' => $m->termPremium10y, 'rn10' => $m->riskNeutral10y, 'be10' => $m->tipsBreakeven, 'ig' => $m->macroCreditSpread,
+                    'rstar' => $m->naturalRate, 'target' => $m->targetRate,
+                    'sahm' => $m->sahmRecessionIndicator, 'ebp' => $m->excessBondPremium, 'u_ema' => $m->unemploymentRateEma, 'nairu' => $m->nairu,
+                    'stress' => property_exists($m, 'authorityStressRegime') ? $m->authorityStressRegime : -1.0,
+                ] + $this->drainTickShares() + (getenv('DECOMP') ? [
+                    // The ten-year's pieces as calculateYieldCurve() builds them (y10 = level + b1 L1 + b2 L2 + b3 L3 + base TP + habitat, floored).
+                    'level' => $m->nsLevel, 'b1' => $m->nsBeta1, 'b2' => $m->nsCurvature, 'b3' => $m->nsCurvature2,
+                    'base_tp' => $m->nsBaseTermPremium, 'tp_shock' => $m->termPremiumShock, 'tp_regime' => $m->termPremiumRegime,
+                    'ftp_shock' => $m->foreignTermPremiumShock, 'ftp_regime' => $m->foreignTermPremiumRegime,
+                    'sov_ema' => $m->sovereignRiskSpreadEma, 'pnr' => $m->perceivedNeutralRate, 'path' => $m->expectedPathShock,
+                    'vol_ema' => $m->marketVolatilityEma, 'bs' => $m->balanceSheetIntensity, 'debt_ema' => $m->sovereignDebtToGdpEma,
+                    'wam' => $m->sovereignDebtAverageMaturity, 'anchor_drift' => $m->inflationAnchorDrift,
+                    'infl_ema' => $m->inflationEma, 'noncore' => $m->noncorePassThroughEma,
+                    'sc_ema' => $m->supercoreInflationEma, 'cg_ema' => $m->coreGoodsInflationEma,
+                    'endpoint_gap' => property_exists($m, 'inflationEndpointGap') ? $m->inflationEndpointGap : 0.0,
+                ] : []) + (getenv('BOARD_NI') ? $this->boardNetIncome($list) + ['gap_ema' => $m->outputGapEma, 'net_tax' => $m->netTaxRate ?? null] : [])
                     + (getenv('FISCAL') ? ['primary' => $m->primaryDeficitToGdp, 'net_tax' => $m->netTaxRate, 'spend_idx' => $m->governmentSpendingIndex] : [])) . "\n", FILE_APPEND);
             }
         }

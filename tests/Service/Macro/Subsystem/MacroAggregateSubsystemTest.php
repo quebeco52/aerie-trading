@@ -1037,8 +1037,26 @@ class MacroAggregateSubsystemTest extends TestCase
     }
 
     /**
+     * The learned endpoint moves the ten-year by its loading, and core is read over that endpoint: with core on it the
+     * breakeven takes the endpoint's loading alone, with core still on target the core loading comes off it.
+     */
+    public function testTheBreakevenPricesTheLearnedEndpointAndReadsCoreOverIt(): void
+    {
+        $onEndpoint = $this->onTargetInflationState();
+        $onEndpoint->inflationEndpointGap = 0.01;
+        $onEndpoint->supercoreInflationEma += 0.01;
+        $onEndpoint->coreGoodsInflationEma += 0.01;
+        $this->assertEqualsWithDelta(MacroAggregateSubsystem::BREAKEVEN_ENDPOINT_LOADING * 0.01, $this->breakeven($onEndpoint) - MacroEngine::TARGET_INFLATION, 1e-15);
+
+        $coreOnTarget = $this->onTargetInflationState();
+        $coreOnTarget->inflationEndpointGap = 0.01;
+        $this->assertEqualsWithDelta((MacroAggregateSubsystem::BREAKEVEN_ENDPOINT_LOADING - MacroAggregateSubsystem::BREAKEVEN_CORE_LOADING) * 0.01, $this->breakeven($coreOnTarget) - MacroEngine::TARGET_INFLATION, 1e-15);
+    }
+
+    /**
      * A commodity spike is priced as passing. The pass-through adds itself to headline one for one, and the US ten-year
-     * takes 0.14-0.20 of that across samples; the blend this replaced took two thirds, and an oil shock lifted the rule.
+     * takes 0.10-0.12 of that across samples once the learned endpoint is held (0.14-0.20 without it); the blend this
+     * replaced took two thirds, and an oil shock lifted the rule.
      */
     public function testAnEnergySpikeReachesTheTenYearOnlyAsFarAsItDoesInTheUs(): void
     {
@@ -1047,7 +1065,7 @@ class MacroAggregateSubsystemTest extends TestCase
 
         $share = ($this->breakeven($spike) - MacroEngine::TARGET_INFLATION) / $spike->noncorePassThroughEma;
 
-        $this->assertGreaterThan(0.10, $share);
+        $this->assertGreaterThan(0.09, $share);
         $this->assertLessThan(0.20, $share);
     }
 

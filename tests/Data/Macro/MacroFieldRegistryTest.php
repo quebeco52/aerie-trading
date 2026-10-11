@@ -41,6 +41,8 @@ class MacroFieldRegistryTest extends TestCase
 
         'metalsChi' => 'Latent OU state behind industrialMetalsIndex, which is recorded.',
         'retailCreditFactor' => 'Latent OU state behind retailDefaultRate, which is recorded.',
+        'inflationEndpointGap' => 'Learned state behind tipsBreakeven, which is recorded.',
+        'authorityStressRegime' => 'Latch on excess_bond_premium, which is recorded.',
         'macroCreditSpreadTrend' => 'Decade-long average of macro_credit_spread, which is recorded.',
         'corporateTaxRateTrend' => 'Decade-long average of corporate_tax_rate, which is recorded.',
         'netTaxStanceRate' => 'The discretionary part of net_tax_rate, which is recorded; the rest is the stabilisers\' swing on the recorded output gap.',

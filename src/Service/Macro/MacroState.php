@@ -428,6 +428,10 @@ class MacroState
     // tolerate has drifted above its target.
     public float $authorityConcession;
     public float $inflationAnchorDrift;
+    // The long-run inflation the public has learned from what inflation did, over that anchor.
+    public float $inflationEndpointGap;
+    // 1 while the excess bond premium holds the Authority in its recession regime (entered at 1pp, left at its mean), else 0.
+    public float $authorityStressRegime;
     // The laws as the tax rate and the trailing year's earnings carry them, and the laws the sitting government's coming
     // budget and the next government's first will pass, by lever, this tick and the tick before.
     public float $corporateTaxShiftRealized;

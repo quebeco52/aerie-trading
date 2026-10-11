@@ -61,8 +61,10 @@ class PolicyLoopRingDownTest extends TestCase
 
         $this->assertLessThan(0.5, $slump[3], 'Most of a slump is gone within a year.');
         $this->assertGreaterThan(self::SLUMP_OVERSHOOT_RATIO * min($boom), min($slump), 'The climb out of a slump overshoots less than the fall after a boom.');
-        foreach (array_slice($slump, 20) as $quarter => $value) {
-            $this->assertLessThan(0.03, abs($value), sprintf('Settled from year five on (quarter %d).', $quarter + 20));
+        // Cut at the recession regime's speed and climbed back at the normal one (Aastveit et al. 2024), the rate stays low
+        // a little longer, so a slump too settles from year six, as a boom does.
+        foreach (array_slice($slump, 24) as $quarter => $value) {
+            $this->assertLessThan(0.03, abs($value), sprintf('Settled from year six on (quarter %d).', $quarter + 24));
         }
     }
 
