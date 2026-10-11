@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Tests\Data\Company;
 
+use App\Data\Company\IndustryBetas;
 use App\Data\Company\InitialMarket;
 use App\Data\Company\Sectors;
 use App\Service\Market\Index\MarketIndex;
@@ -136,8 +137,9 @@ class InitialMarketTest extends TestCase
         $this->assertGreaterThan(0.0, $stock['volatility'], "Volatility must be positive for {$ticker}");
         $this->assertLessThan(2.0, $stock['volatility'], "Volatility unreasonably high for {$ticker}");
 
-        $this->assertGreaterThanOrEqual(-2.0, $stock['beta'], "Beta below -2.0 for {$ticker}");
-        $this->assertLessThanOrEqual(4.0, $stock['beta'], "Beta above 4.0 for {$ticker}");
+        $this->assertArrayNotHasKey('beta', $stock, "{$ticker}: lore sets a position in the industry's band, not a beta");
+        $this->assertArrayHasKey('beta_tilt', $stock, "Missing beta_tilt for {$ticker}");
+        $this->assertLessThanOrEqual(IndustryBetas::LORE_BAND, abs($stock['beta_tilt']), "{$ticker}: beta_tilt outside the industry band");
 
         $this->assertGreaterThanOrEqual(0.0, $stock['jump_intensity'], "Jump intensity negative for {$ticker}");
         $this->assertGreaterThanOrEqual(0.0, $stock['jump_vol'], "Jump volatility negative for {$ticker}");

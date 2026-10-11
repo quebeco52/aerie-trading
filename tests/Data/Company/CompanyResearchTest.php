@@ -6,6 +6,7 @@ namespace App\Tests\Data\Company;
 
 use App\Data\Company\AnchorHoldings;
 use App\Data\Company\CompanyResearch;
+use App\Data\Company\IndustryBetas;
 use App\Data\Company\InitialMarket;
 use App\Service\Model\ModelParam;
 use App\Data\Company\StockModelTuning;
@@ -19,6 +20,9 @@ use PHPUnit\Framework\TestCase;
  */
 class CompanyResearchTest extends TestCase
 {
+    /** A beta quoted to one decimal is the seeded beta rounded: within half a unit of the last digit. */
+    private const BETA_ROUNDING = 0.05;
+
     /** @return iterable<string, array{string, array{headline: string, standfirst: string, sections: list<array{heading: string, body: string}>, related: list<string>}}> */
     public static function articleProvider(): iterable
     {
@@ -36,6 +40,12 @@ class CompanyResearchTest extends TestCase
             }
         }
         self::fail("$ticker is not on the board.");
+    }
+
+    /** The beta the firm opens with: its industry's anchor plus its lore position. */
+    private static function beta(string $ticker): float
+    {
+        return IndustryBetas::seedBetaFor(self::seed($ticker));
     }
 
     private static function text(array $article): string
@@ -81,7 +91,7 @@ class CompanyResearchTest extends TestCase
         }
     }
 
-    /** @return iterable<string, array{string, string, float, float}> */
+    /** @return iterable<string, array{0: string, 1: string, 2: float, 3: float, 4?: float}> */
     public static function figureProvider(): iterable
     {
         $tuning = static fn (string $ticker, ModelParam $param): float => StockModelTuning::get($ticker, $param, NAN);
@@ -96,7 +106,7 @@ class CompanyResearchTest extends TestCase
         yield 'SAFE mutual' => ['SAFE', 'the mutual kept about 30% of the shares', 1.0 - self::seed('SAFE')['public_float'], 0.30];
         yield 'SAFE treaties' => ['SAFE', 'About 60% of revenue comes from these reinsurance treaties', $tuning('SAFE', ModelParam::TreatyReinsuranceWeight), 0.60];
         yield 'SAFE payout' => ['SAFE', 'pays out about 30% of earnings', self::seed('SAFE')['target_payout_ratio'], 0.30];
-        yield 'SAFE beta' => ['SAFE', 'beta of about 0.2', self::seed('SAFE')['beta'], 0.20];
+        yield 'SAFE beta' => ['SAFE', 'beta of about 0.2', self::beta('SAFE'), 0.20, self::BETA_ROUNDING];
         yield 'BRKW foundation' => ['BRKW', 'holds about a quarter of the shares', 1.0 - self::seed('BRKW')['public_float'], 0.25];
         yield 'BRKW Crossbill' => ['BRKW', 'owns half of Crossbill', AnchorHoldings::forHolder('BRKW')['CBIL'], 0.50];
         yield 'BRKW Alca' => ['BRKW', 'half of Alca', AnchorHoldings::forHolder('BRKW')['ALCA'], 0.50];
@@ -104,58 +114,58 @@ class CompanyResearchTest extends TestCase
             yield "BRKW $held" => ['BRKW', 'just over a third of four more', AnchorHoldings::forHolder('BRKW')[$held], 0.35];
         }
         yield 'BRKW payout' => ['BRKW', 'pays out about 40% of what it earns', self::seed('BRKW')['target_payout_ratio'], 0.40];
-        yield 'BRKW beta' => ['BRKW', 'beta of about 0.9', self::seed('BRKW')['beta'], 0.90];
+        yield 'BRKW beta' => ['BRKW', 'beta of about 0.9', self::beta('BRKW'), 0.90, self::BETA_ROUNDING];
         yield 'IBHI owners' => ['IBHI', 'hold about 55% of the shares between them', 1.0 - self::seed('IBHI')['public_float'], 0.55];
         yield 'IBHI civil' => ['IBHI', 'About 60% of revenue comes from civil infrastructure', $tuning('IBHI', ModelParam::CivilInfrastructureWeight), 0.60];
         yield 'IBHI commercial' => ['IBHI', 'A quarter comes from commercial work', $tuning('IBHI', ModelParam::CommercialEpcWeight), 0.25];
         yield 'IBHI maintenance' => ['IBHI', 'the remaining 15% from maintenance contracts', $tuning('IBHI', ModelParam::FacilitiesMaintenanceWeight), 0.15];
         yield 'IBHI margin' => ['IBHI', 'operating margin is about 9%', self::seed('IBHI')['operating_margin'], 0.09];
-        yield 'IBHI beta' => ['IBHI', 'beta of about 1.8', self::seed('IBHI')['beta'], 1.80];
+        yield 'IBHI beta' => ['IBHI', 'beta of about 1.4', self::beta('IBHI'), 1.40, self::BETA_ROUNDING];
         yield 'PERE options' => ['PERE', 'About 60% of revenue comes from writing options', $tuning('PERE', ModelParam::OptionsPremiumIncomeWeight), 0.60];
         yield 'PERE trading' => ['PERE', 'The other 40% comes from trading', $tuning('PERE', ModelParam::TradingRevenueWeight), 0.40];
         yield 'PERE margin' => ['PERE', 'operating margin is about 35%', self::seed('PERE')['operating_margin'], 0.35];
         yield 'PERE payout' => ['PERE', 'pays out about 40% of earnings', self::seed('PERE')['target_payout_ratio'], 0.40];
-        yield 'PERE beta' => ['PERE', 'beta of about -0.2', self::seed('PERE')['beta'], -0.20];
+        yield 'PERE beta' => ['PERE', 'beta of about 0.9', self::beta('PERE'), 0.90, self::BETA_ROUNDING];
         yield 'CORV partners' => ['CORV', 'still hold about 15% of the shares', 1.0 - self::seed('CORV')['public_float'], 0.15];
         yield 'CORV advisory' => ['CORV', 'those fees are about a quarter of revenue', $tuning('CORV', ModelParam::AdvisoryRevenueWeight), 0.25];
         yield 'CORV trading' => ['CORV', 'The other 75% comes from its own trading desks', $tuning('CORV', ModelParam::TradingRevenueWeight), 0.75];
         yield 'CORV margin' => ['CORV', 'operating margin is about 45%', self::seed('CORV')['operating_margin'], 0.45];
         yield 'CORV payout' => ['CORV', 'pays out about 30% of earnings', self::seed('CORV')['target_payout_ratio'], 0.30];
-        yield 'CORV beta' => ['CORV', 'beta of about -0.1', self::seed('CORV')['beta'], -0.10];
+        yield 'CORV beta' => ['CORV', 'beta of about 0.9', self::beta('CORV'), 0.90, self::BETA_ROUNDING];
         yield 'WATCH concessions' => ['WATCH', 'about 40% of revenue', $tuning('WATCH', ModelParam::GovernmentContractWeight), 0.40];
         yield 'WATCH retainers' => ['WATCH', 'private retainers about half', $tuning('WATCH', ModelParam::RetainerWeight), 0.50];
         yield 'WATCH margin' => ['WATCH', 'operating margin is about 17%', self::seed('WATCH')['operating_margin'], 0.17];
-        yield 'WATCH beta' => ['WATCH', 'about half the market\'s beta', self::seed('WATCH')['beta'], 0.50];
+        yield 'WATCH beta' => ['WATCH', 'beta of about 0.6', self::beta('WATCH'), 0.60, self::BETA_ROUNDING];
         yield 'TRIV industrial' => ['TRIV', 'About 60% of revenue comes from industrial products', $tuning('TRIV', ModelParam::IndustrialConglomerateWeight), 0.60];
         yield 'TRIV household' => ['TRIV', 'about 30% from household goods', $tuning('TRIV', ModelParam::DefensiveStaplesWeight), 0.30];
         yield 'TRIV margin' => ['TRIV', 'operating margin is about 16%', self::seed('TRIV')['operating_margin'], 0.16];
         yield 'TRIV payout' => ['TRIV', 'pays out about half its earnings', self::seed('TRIV')['target_payout_ratio'], 0.50];
-        yield 'TRIV beta' => ['TRIV', 'beta of about 0.6', self::seed('TRIV')['beta'], 0.60];
+        yield 'TRIV beta' => ['TRIV', 'beta of about 0.6', self::beta('TRIV'), 0.60, self::BETA_ROUNDING];
         yield 'TICK subscriptions' => ['TICK', 'About 90% of revenue is subscriptions', $tuning('TICK', ModelParam::SubscriptionRevenueWeight), 0.90];
         yield 'TICK margin' => ['TICK', 'operating margin is about 55%', self::seed('TICK')['operating_margin'], 0.55];
-        yield 'TICK beta' => ['TICK', 'beta of about 1.45', self::seed('TICK')['beta'], 1.45];
+        yield 'TICK beta' => ['TICK', 'beta of about 1.0', self::beta('TICK'), 1.00, self::BETA_ROUNDING];
         yield 'GRIP float' => ['GRIP', 'Almost all of the shares now trade freely', self::seed('GRIP')['public_float'], 0.95];
         yield 'GRIP cost-plus' => ['GRIP', 'About 60% of revenue comes from cost-plus programmes', $tuning('GRIP', ModelParam::CostPlusWeight), 0.60];
         yield 'GRIP development' => ['GRIP', 'A fifth comes from fixed-price development', $tuning('GRIP', ModelParam::FixedPriceDevWeight), 0.20];
         yield 'GRIP exports' => ['GRIP', 'The last fifth is exports', $tuning('GRIP', ModelParam::ForeignMilitarySalesWeight), 0.20];
         yield 'GRIP margin' => ['GRIP', 'operating margin is about 14%', self::seed('GRIP')['operating_margin'], 0.14];
         yield 'GRIP payout' => ['GRIP', 'pays out about 45% of earnings', self::seed('GRIP')['target_payout_ratio'], 0.45];
-        yield 'GRIP beta' => ['GRIP', 'beta of about 0.35', self::seed('GRIP')['beta'], 0.35];
+        yield 'GRIP beta' => ['GRIP', 'beta of about 0.6', self::beta('GRIP'), 0.60, self::BETA_ROUNDING];
         yield 'OSPR insiders' => ['OSPR', 'still hold about a tenth of the company', 1.0 - self::seed('OSPR')['public_float'], 0.10];
         yield 'OSPR deployments' => ['OSPR', 'About 80% of revenue comes from deployments abroad', $tuning('OSPR', ModelParam::ExpeditionaryWeight), 0.80];
         yield 'OSPR government' => ['OSPR', 'Government contracts and standing retainers make up a tenth each', $tuning('OSPR', ModelParam::GovernmentContractWeight), 0.10];
         yield 'OSPR retainers' => ['OSPR', 'Government contracts and standing retainers make up a tenth each', $tuning('OSPR', ModelParam::RetainerWeight), 0.10];
         yield 'OSPR margin' => ['OSPR', 'operating margin is about 22%', self::seed('OSPR')['operating_margin'], 0.22];
         yield 'OSPR payout' => ['OSPR', 'pays out about 45% of earnings', self::seed('OSPR')['target_payout_ratio'], 0.45];
-        yield 'OSPR beta' => ['OSPR', 'beta of about -0.5', self::seed('OSPR')['beta'], -0.50];
+        yield 'OSPR beta' => ['OSPR', 'beta of about 0.55', self::beta('OSPR'), 0.55, self::BETA_ROUNDING];
         yield 'GRIP export ban' => ['GRIP', 'take half the export book', 1.0 - DefenseContractorBusinessModel::EXPORT_BAN_MULT, 0.50];
     }
 
     /** A figure the text quotes is the one the firm is seeded or tuned with, so an edit to either breaks here. */
     #[DataProvider('figureProvider')]
-    public function testQuotedFiguresMatchTheModel(string $ticker, string $phrase, float $actual, float $quoted): void
+    public function testQuotedFiguresMatchTheModel(string $ticker, string $phrase, float $actual, float $quoted, float $tolerance = 0.01): void
     {
         $this->assertStringContainsString($phrase, self::text(CompanyResearch::ARTICLES[$ticker]));
-        $this->assertEqualsWithDelta($quoted, $actual, 0.01, "$ticker: the profile says '$phrase'; the model disagrees.");
+        $this->assertEqualsWithDelta($quoted, $actual, $tolerance, "$ticker: the profile says '$phrase'; the model disagrees.");
     }
 }

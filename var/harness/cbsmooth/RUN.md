@@ -63,3 +63,8 @@ easing in recessions without moving the cycle's persistence?
   to zero (`trough_gap%`, `rec_q`). Guards: pol/gap ACF4, gap sd, inflation mean/sd, 10Y mean, crisis incidence, blow-ups.
 - Clear stale `runs/K*-*` before a staged run. `SEEDS=1-16 python3 ... crisis_analyse.py K0 K1` reports one stage;
   `gap_semidev.py K0 K1` splits a gap-sd shift into downside/upside.
+## Recession-regime trigger split (regime_run.sh)
+- Harness `RegimeHarnessTest.php`: reads the engine's latch; rows add `sahm_t latch_t both_t ebp1_t lat<bp>_t uni<bp>_t`.
+- Snapshot `$SNAP/rgtree` = `git archive HEAD` + `vendor` symlink; arm R1 = tree as is, R<n> = OVR `$SNAP/ovr<n>`.
+- Run: `SNAP=<dir> bin/harness-batch var/harness/cbsmooth/regime_run.sh 1-8 R1 R2 && GRID=1 python3 var/harness/cbsmooth/regime_analyse.py R1 R2`.
+- `regime_diag.py <arm>` splits regime time and EBP moments; `python3 -I regime_us.py ebp.csv sahm.csv usrec.csv` the US shares.

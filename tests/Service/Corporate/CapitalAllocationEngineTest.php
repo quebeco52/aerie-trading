@@ -909,13 +909,40 @@ class CapitalAllocationEngineTest extends TestCase
     }
 
     /**
+     * On net debt the formula holds whichever leg pays: a repurchase out of idle cash raises net debt by what it
+     * spends, as new debt would. A cash-rich firm spends its idle cash first and borrows only once it is gone, and
+     * still closes the cited share of its net gap in a year.
+     */
+    public function testACashFundedRecapitalizationClosesTheNetLeverageGapAtTheCitedSpeed(): void
+    {
+        $equity = 100.0;
+        $debt = 20.0;
+        $idleCash = 10.0;
+        $borrowed = 0.0;
+        for ($quarter = 0; $quarter < 4; $quarter++) {
+            $opening = ($debt - $idleCash) / $equity;
+            $equity += 3.0; // a quarter's retained earnings, held as cash
+            $idleCash += 3.0;
+            $repurchase = CapitalAllocationEngine::leverageTargetRepurchase($equity, $debt - $idleCash, 0.75, $opening);
+            $fromCash = min($idleCash, $repurchase);
+            $idleCash -= $fromCash;
+            $debt += $repurchase - $fromCash;
+            $borrowed += $repurchase - $fromCash;
+            $equity -= $repurchase;
+        }
+        $this->assertEqualsWithDelta(0.75 - (0.65 * (1.0 - CapitalAllocationEngine::LEVERAGE_TARGET_ADJUSTMENT_SPEED)), ($debt - $idleCash) / $equity, 1e-12);
+        $this->assertSame(0.0, $idleCash, 'The idle cash is spent before the firm borrows.');
+        $this->assertGreaterThan(0.0, $borrowed, 'Once it is spent, the rest of the gap is borrowed.');
+    }
+
+    /**
      * A leveraged recapitalization exchanges debt for equity (Denis & Denis 1993): the firm borrows what its excess
      * cash cannot pay of the quarter's repurchase and spends it on that repurchase. Borrowing the cash to hold it
      * left the leverage where it was and the proceeds for the capex gate to spend on plant.
      */
     public function testAnUnderLeveredFirmBorrowsOnlyToRetireTheEquityItsDebtReplaces(): void
     {
-        [$result, $borrowed, $repurchase] = $this->recapitalize(hasLeverageHeadroom: true, excessCashInRepurchases: 0.0);
+        [$result, $borrowed, $repurchase] = $this->recapitalize(hasLeverageHeadroom: true, excessCash: 0.0);
 
         $this->assertCount(1, $borrowed);
         $this->assertEqualsWithDelta($repurchase, $borrowed[0], 1e-6, 'With no excess cash the whole repurchase is borrowed.');
@@ -928,10 +955,45 @@ class CapitalAllocationEngineTest extends TestCase
     /** Excess cash funds the recapitalization first; debt is raised only for what it cannot cover. */
     public function testExcessCashFundsTheRecapitalizationBeforeAnyBorrowing(): void
     {
-        [$result, $borrowed, $repurchase] = $this->recapitalize(hasLeverageHeadroom: true, excessCashInRepurchases: 3.0);
+        [$result, $borrowed, $repurchase] = $this->recapitalize(hasLeverageHeadroom: true, excessCash: 30_000_000.0);
 
+        $this->assertLessThan(30_000_000.0, $repurchase, 'The fixture must hold more idle cash than the repurchase.');
         $this->assertSame([], $borrowed);
         $this->assertGreaterThanOrEqual($repurchase - 50.0, $result['total_cash_spent'], 'The repurchase still happens, out of cash.');
+    }
+
+    /**
+     * The repurchase is sized on net debt, so idle cash counts toward the gap it closes: the firm spends that cash,
+     * borrows the rest, and ends the quarter on the partial adjustment of its NET ratio. Sized on gross debt it
+     * borrowed the whole gross gap on top of the cash it spent.
+     */
+    public function testAPartlyCashFundedRecapitalizationEndsOnTheNetPartialAdjustment(): void
+    {
+        $idle = 2_000_000.0;
+        [$result, $borrowed, $repurchase] = $this->recapitalize(hasLeverageHeadroom: true, excessCash: $idle);
+
+        $this->assertCount(1, $borrowed);
+        $this->assertEqualsWithDelta($repurchase - $idle, $borrowed[0], 1e-6, 'Only what the idle cash cannot pay is borrowed.');
+        $this->assertEqualsWithDelta($repurchase, $result['total_cash_spent'], 50.0, 'Cash and debt together retire the repurchase, to the nearest share.');
+
+        $opening = (20_000_000.0 - $idle) / 100_000_000.0;
+        $endRatio = $opening + ((1.0 - ((1.0 - CapitalAllocationEngine::LEVERAGE_TARGET_ADJUSTMENT_SPEED) ** 0.25)) * (0.75 - $opening));
+        $this->assertEqualsWithDelta($endRatio, (20_000_000.0 + $borrowed[0]) / (100_000_000.0 - $result['total_cash_spent']), 1e-5, 'Net debt over equity ends on its partial adjustment.');
+    }
+
+    /**
+     * Negative carry holds back a firm's buybacks so its idle cash can retire debt. An under-levered firm's
+     * recapitalization spends that idle cash first, so the carry test lets it through; the same balance sheet that
+     * is not under-levered is still held back.
+     */
+    public function testNegativeCarryDoesNotHoldBackAnUnderLeveredFirmsRecapitalization(): void
+    {
+        [$recap, $borrowed] = $this->recapitalize(hasLeverageHeadroom: true, excessCash: 1_000_000.0, negativeCarry: true);
+        $this->assertSame([], $borrowed, 'Severe negative carry still closes the borrowing leg.');
+        $this->assertLessThan(10_000_000.0, $recap['new_shares'], 'The idle cash goes to the recapitalization.');
+
+        [$held] = $this->recapitalize(hasLeverageHeadroom: true, excessCash: 1_000_000.0, negativeCarry: true, underLevered: false);
+        $this->assertSame(10_000_000.0, $held['new_shares'], 'Control: a firm at its target is held back for the paydown.');
     }
 
     /**
@@ -941,7 +1003,7 @@ class CapitalAllocationEngineTest extends TestCase
      */
     public function testACovenantBreachStopsTheRecapitalizationTheEquityRatioWouldWaveThrough(): void
     {
-        [$result, $borrowed] = $this->recapitalize(hasLeverageHeadroom: false, excessCashInRepurchases: 0.0);
+        [$result, $borrowed] = $this->recapitalize(hasLeverageHeadroom: false, excessCash: 0.0);
 
         $this->assertSame([], $borrowed, 'A firm past its leverage covenant must not lever up to recapitalize.');
         $this->assertSame(10_000_000.0, $result['new_shares']);
@@ -953,19 +1015,19 @@ class CapitalAllocationEngineTest extends TestCase
      */
     public function testAFirmShortOfItsOperatingCashDoesNotRecapitalize(): void
     {
-        [$result, $borrowed] = $this->recapitalize(hasLeverageHeadroom: true, excessCashInRepurchases: -0.05);
+        [$result, $borrowed] = $this->recapitalize(hasLeverageHeadroom: true, excessCash: -200_000.0);
 
         $this->assertSame([], $borrowed);
         $this->assertSame(10_000_000.0, $result['new_shares']);
     }
 
     /**
-     * An operating company at 0.2x debt to equity against a 0.75x target, holding its target cash plus the given
-     * multiple of the quarter's recapitalization repurchase.
+     * An operating company with 0.2x gross debt to equity against a 0.75x target, holding its target cash plus the
+     * given idle cash, which nets out of the opening ratio as DebtEngine nets it.
      *
-     * @return array{0: array<string, mixed>, 1: list<float>, 2: float} The allocation, each amount borrowed, and the repurchase the gap calls for.
+     * @return array{0: array<string, mixed>, 1: list<float>, 2: float} The allocation, each amount borrowed, and the repurchase the net gap calls for.
      */
-    private function recapitalize(bool $hasLeverageHeadroom, float $excessCashInRepurchases): array
+    private function recapitalize(bool $hasLeverageHeadroom, float $excessCash, bool $negativeCarry = false, bool $underLevered = true): array
     {
         $stock = new Stock();
         $stock->setTicker('RCAP');
@@ -984,17 +1046,18 @@ class CapitalAllocationEngineTest extends TestCase
 
         $strategy = \App\Data\Company\Sectors::strategyFor('Integrated Freight & Logistics');
         $targetCash = $stock->getManagementProfile()->appliedTargetCash($strategy->calculateTargetOperatingCash(5000000.0, 0.0, 20_000_000.0));
-        $repurchase = CapitalAllocationEngine::leverageTargetRepurchase(100_000_000.0, 20_000_000.0, 0.75, 0.20);
-        $stock->setCorporateTreasury((string) ($targetCash + ($excessCashInRepurchases * $repurchase)));
+        $netDebt = 20_000_000.0 - max(0.0, $excessCash);
+        $repurchase = CapitalAllocationEngine::leverageTargetRepurchase(100_000_000.0, $netDebt, 0.75, $netDebt / 100_000_000.0);
+        $stock->setCorporateTreasury((string) ($targetCash + $excessCash));
 
         $health = new DebtHealthDTO(
             grossCost: 0.05,
             effectiveCost: 0.04,
             cashYield: 0.04,
             isNegativeCarry: false,
-            isSevereNegativeCarry: false,
+            isSevereNegativeCarry: $negativeCarry,
             interestCoverage: 50.0,
-            wantsToPaydownDebt: false,
+            wantsToPaydownDebt: $negativeCarry,
             canIssueDebt: true,
             debtTolerance: 1.5,
             wacc: 0.08,
@@ -1014,11 +1077,11 @@ class CapitalAllocationEngineTest extends TestCase
             ),
             isLiquidityCrisis: false,
             isLiquidityWarning: false,
-            isUnderLeveraged: true,
+            isUnderLeveraged: $underLevered,
             hasLeverageHeadroom: $hasLeverageHeadroom,
             netDebtToEbitda: $hasLeverageHeadroom ? 0.4 : 4.5,
             ebitdaCovenantLimit: 3.5,
-            debtToEquity: 0.20,
+            debtToEquity: $netDebt / 100_000_000.0,
             leverageTarget: 0.75
         );
 

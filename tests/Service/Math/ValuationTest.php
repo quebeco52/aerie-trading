@@ -213,13 +213,14 @@ class ValuationTest extends TestCase
         $betaZeroDebt = Valuation::calculateLeveredBeta($unleveredBeta, $taxRate, 0.0);
         $this->assertEqualsWithDelta(1.0, $betaZeroDebt, 0.0001);
 
-        // D/E = 1.0, dampening = 1.0 -> 1.0 * (1 + 0.8 * 1.0) = 1.80
-        $betaStandard = Valuation::calculateLeveredBeta($unleveredBeta, $taxRate, 1.0, 1.0);
+        // D/E = 1.0 -> 1.0 * (1 + 0.8 * 1.0) = 1.80
+        $betaStandard = Valuation::calculateLeveredBeta($unleveredBeta, $taxRate, 1.0);
         $this->assertEqualsWithDelta(1.80, $betaStandard, 0.0001);
 
-        // D/E = 1.0, dampening = 0.5 -> 1.0 * (1 + 0.8 * 0.5) = 1.40
-        $betaDampened = Valuation::calculateLeveredBeta($unleveredBeta, $taxRate, 1.0, 0.5);
-        $this->assertEqualsWithDelta(1.40, $betaDampened, 0.0001);
+        // Hamada inverts Damodaran's own unlevering: Power, January 2026, 0.31 cash-corrected at D/E 74.15%, 25%
+        // marginal tax and 1.45% cash, re-levers to its 0.48 regression beta.
+        $power = Valuation::calculateLeveredBeta(0.31 * (1.0 - 0.0145), 0.25, 0.7415);
+        $this->assertEqualsWithDelta(0.48, $power, 0.005);
     }
 
     public function testCalculateEarningsResponseCoefficient(): void

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Service\Market\Pricing;
 
 use App\Data\Company\AnchorHoldings;
+use App\Data\Company\IndustryBetas;
 use App\Data\Company\ManagementProfile;
 use App\Data\Company\ManagementStyle;
 use App\Data\Company\Sectors;
@@ -73,7 +74,8 @@ class OpeningBoardBuilder
         $stock->setSharesOutstanding((string) $stockData['shares_outstanding']);
         $stock->setVolatility((string) $stockData['volatility']);
         $stock->setCurrentVolatility((string) $stockData['volatility']);
-        $stock->setBeta((string) $stockData['beta']);
+        // The industry's beta, Hamada-levered by DebtEngine at the firm's own net debt, plus the lore's position in its band.
+        $stock->setBeta((string) IndustryBetas::seedBetaFor($stockData));
         $stock->setJumpIntensity((string) $stockData['jump_intensity']);
         $stock->setJumpVol((string) $stockData['jump_vol']);
         $stock->setSystemicImportance($stockData['systemic_importance'] ?? 'none');

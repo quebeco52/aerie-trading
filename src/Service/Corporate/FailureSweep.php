@@ -223,7 +223,7 @@ class FailureSweep
         $this->logger->info("REORGANIZATION: {$name} ({$stock->getTicker()}) emerged from Chapter 11.");
 
         $eventDesc = sprintf(
-            '%s (%s) failed to cure an event of default and confirmed a prepackaged Chapter 11 plan: $%sB of debt exchanged for the reorganized equity and $%sB reinstated as new notes.',
+            '%s (%s) failed to cure an event of default and confirmed a prepackaged Chapter 11 plan: $%sB of debt exchanged for the reorganised equity and $%sB reinstated as new notes.',
             $name,
             $stock->getTicker(),
             number_format($plan->convertedClaims / 1_000_000_000, 2),
@@ -232,7 +232,7 @@ class FailureSweep
         $eventDesc .= match (true) {
             $plan->oldEquityShare <= 0.0 => ' The old shares were cancelled and the creditors now own the company.',
             $plan->oldEquityShare >= 1.0 => ' The creditors were reinstated in full and the shareholders keep the company.',
-            default => sprintf(' The old shareholders keep %.1f%% of the reorganized company.', $plan->oldEquityShare * 100.0),
+            default => sprintf(' The old shareholders keep %.1f%% of the reorganised company.', $plan->oldEquityShare * 100.0),
         };
         $eventDesc .= $this->describeSettledIssues($settledIssues);
 

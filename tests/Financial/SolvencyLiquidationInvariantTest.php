@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Tests\Financial;
 
+use App\Data\Company\IndustryBetas;
 use App\Data\Company\InitialMarket;
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
@@ -72,7 +73,7 @@ final class SolvencyLiquidationInvariantTest extends TestCase
         $stock->setPrice('50.00');
         $stock->setVolatility((string) $row['volatility']);
         $stock->setCurrentVolatility((string) $row['volatility']);
-        $stock->setBeta((string) $row['beta']);
+        $stock->setBeta((string) IndustryBetas::seedBetaFor($row));
         $stock->setOperatingMargin((string) $row['operating_margin']);
         $stock->setTotalEquity((string) $row['total_equity']);
         $stock->setWholesaleDebt((string) $row['wholesale_debt']);

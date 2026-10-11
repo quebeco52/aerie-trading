@@ -604,7 +604,13 @@ class DebtEngine
         // Capitalized operating leases (IFRS 16 / ASC 842) are debt-like obligations for leverage purposes;
         // their rent is already inside fixed costs, so they add no interest here.
         $leaseLiability = $this->corporateMetrics->calculateLeaseLiability($debtMetrics->revenue, $strategy->getLeaseIntensity());
-        $currentDebtRatio = ($currentDebt + $leaseLiability) / max(1.0, $equity);
+        // An operating company's leverage is struck net of the cash it holds above its manager's operating balance,
+        // so a repurchase paid from idle cash moves it as far as one paid with new debt. A financial's treasury is
+        // its trading and liquidity buffer, not idle cash, and its ratio stays gross.
+        $recapDebt = $strategy->isFinancial()
+            ? $currentDebt + $leaseLiability
+            : CreditRisk::netBookDebt($currentDebt, $leaseLiability, $treasury, $this->resolveTargetOperatingCash($stock, $strategy, $equity));
+        $currentDebtRatio = $recapDebt / max(1.0, $equity);
         // A recapitalisation moves the firm toward the leverage its MANAGER targets (Bertrand & Schoar 2003
         // find the fixed effect in leverage; Graham 2000 the persistently conservative borrower), so the
         // test is struck at the same share of the tolerance the manager draws of its debt capacity. Capped at
@@ -640,6 +646,16 @@ class DebtEngine
             $ebitdaCovenantLimit,
             $currentDebtRatio,
             $strategy->getLeverageTarget($managerDebtTolerance)
+        );
+    }
+
+    /** The operating balance the firm's manager runs to, as CapitalAllocationEngine measures excess cash against it. */
+    private function resolveTargetOperatingCash(Stock $stock, \App\Service\Model\BusinessModelInterface $strategy, float $equity): float
+    {
+        $operatingBase = $this->corporateMetrics->calculateOperatingBase((float) $stock->getTotalRevenue(), $equity);
+
+        return $stock->getManagementProfile()->appliedTargetCash(
+            $strategy->calculateTargetOperatingCash($operatingBase, (float) $stock->getCustomerDeposits(), (float) $stock->getWholesaleDebt())
         );
     }
 

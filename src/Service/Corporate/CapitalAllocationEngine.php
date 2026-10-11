@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Service\Corporate;
 
 use App\Entity\Stock;
+use App\Service\Math\CreditRisk;
 use App\Service\Math\Valuation;
 use Doctrine\ORM\EntityManagerInterface;
 use App\Service\Macro\MacroEngine;
@@ -361,7 +362,11 @@ class CapitalAllocationEngine
         $capitalSurplusReturn = $this->resolveCapitalSurplusReturn($ctx);
         $recapitalization = $this->resolveRecapitalizationRepurchase($ctx);
 
-        if ($isLiquidityCrisis || (!$isHoarder && (($ctx->health->wantsToPaydownDebt && !$canEasilyCoverDebt) || $ctx->health->interestCoverage < $minBuybackIcr))) {
+        // Negative carry asks the firm to stop holding idle cash against its debt. An under-levered firm's
+        // recapitalization spends that cash first, which answers it, so the carry test does not hold it back.
+        $isHeldForPaydown = $ctx->health->wantsToPaydownDebt && !$canEasilyCoverDebt && !$isUnderLeveraged;
+
+        if ($isLiquidityCrisis || (!$isHoarder && ($isHeldForPaydown || $ctx->health->interestCoverage < $minBuybackIcr))) {
             // A balance-sheet lender's distributions answer to its capital ratio, not to interest coverage.
             if (!($ctx->strategy->isFinancial() && ($isUnderLeveraged || $capitalSurplusReturn > 0.0))) {
                 $ctx->newShares = $ctx->sharesOutstanding;
@@ -538,9 +543,9 @@ class CapitalAllocationEngine
 
     /**
      * Partial adjustment toward a target debt-to-equity ratio (Flannery & Rangan 2006): the quarter's change in the
-     * ratio, this quarter's retained earnings included, closes the quarterly share of the gap it opened on. A
-     * repurchase R financed with debt moves the ratio to (D + R) / (E - R), so R = (L E - D) / (1 + L) is the one
-     * that ends the quarter on the ratio L.
+     * ratio, this quarter's retained earnings included, closes the quarterly share of the gap it opened on. D is
+     * net debt: a repurchase R financed with new debt or with cash above the operating balance moves the ratio to
+     * (D + R) / (E - R), so R = (L E - D) / (1 + L) is the one that ends the quarter on the ratio L.
      */
     public static function leverageTargetRepurchase(float $equity, float $debt, float $targetRatio, float $openingRatio): float
     {
@@ -574,9 +579,12 @@ class CapitalAllocationEngine
 
         $leaseLiability = $this->corporateMetrics->calculateLeaseLiability($ctx->health->rawMetrics->revenue, $ctx->strategy->getLeaseIntensity());
 
+        // Net of the cash left above the operating balance once the dividend is paid, as the opening ratio is: a
+        // repurchase from that cash raises net debt by what it spends, so the same R ends the quarter on the ratio
+        // whichever leg fundRecapitalization pays it from.
         return self::leverageTargetRepurchase(
             $this->resolvePreBuybackEquity($ctx),
-            (float) $ctx->stock->getTotalDebt() + $leaseLiability,
+            CreditRisk::netBookDebt((float) $ctx->stock->getTotalDebt(), $leaseLiability, $ctx->newTreasury, $ctx->targetOperatingCash),
             $ctx->health->leverageTarget,
             $ctx->health->debtToEquity
         );

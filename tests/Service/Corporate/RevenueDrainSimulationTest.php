@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Tests\Service\Corporate;
 
+use App\Data\Company\IndustryBetas;
 use App\Data\Company\Sectors;
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
@@ -215,7 +216,7 @@ class RevenueDrainSimulationTest extends TestCase
         $stock->setPrice('50.00');
         $stock->setVolatility((string) ($data['volatility'] ?? 0.15));
         $stock->setCurrentVolatility((string) ($data['volatility'] ?? 0.15));
-        $stock->setBeta((string) ($data['beta'] ?? 1.0));
+        $stock->setBeta((string) ($data === [] ? 1.0 : IndustryBetas::seedBetaFor($data)));
         $stock->setJumpIntensity((string) ($data['jump_intensity'] ?? 1.0));
         $stock->setJumpVol((string) ($data['jump_vol'] ?? 0.10));
         $stock->setTotalEquity((string) ($data['total_equity'] ?? 40000000000.00));

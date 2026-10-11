@@ -138,3 +138,31 @@ are shallower and the cycle is not damped. pol ACF4 -0.06 (t -2.4) and gap ACF4 
 The 4-seed 10Y +0.67pp is NOT real: -0.13 (0.11) at 48. The mean policy rate FALLS 0.39pp (t -2.8) while the mean gap rises 0.24
 (t 2.2), so the reading that faster cuts lift the mean rule rate and so the 10Y is contradicted. Crisis incidence is unchanged (+0.04, se 0.09).
 Regime share 0.35-0.37 against the US ~0.22 (context).
+
+## 2026-10-11: which leg of the recession regime over-fires, and the latch entry matched to the US share
+Harness: `RegimeHarnessTest.php` (fork of CbSmoothHarnessTest: engine's own latch `authorityStressRegime`, per-tick
+`sahm_t latch_t both_t ebp1_t` and counterfactual latches `lat<bp>_t`/`uni<bp>_t` at entry 1.00-2.50pp, exit 0, on the run's
+EBP path) via `regime_run.sh` on a `git archive HEAD` snapshot (rgtree). R1 = HEAD; R2 = CB_STRESS_ENTRY_EBP 0.0125;
+R3 = R2 + SAHM_RECESSION_THRESHOLD 0.0065. 21 years (year 1 dropped), 360 ticks/yr, seeds 1-48 paired, live politics.
+US (regime_us.py on GZ ebp_csv + FRED SAHMREALTIME, USREC; monthly): 1985-2019 EBP mean 0.107 sd 0.595pp, >=1pp 0.067,
+ACF1 quarter-end 0.81; Sahm>=0.5 0.162 (0.180 to 2021); USREC 0.081; latch(1.0/0.0) 0.105, latch-only 0.040, union 0.202 (0.221 to 2021).
+Sim R1 (48): EBP mean 0.115 sd 0.446, >=1pp 0.047 (ticks), ACF1q 0.68; Sahm 0.229, NBER-like (technical recession on
+deflated nominal GDP) 0.160; latch 0.193, latch-only 0.126, both 0.067, union 0.354. Latch counterfactual grid (R1):
+1.00 0.193, 1.25 0.142, 1.50 0.111, 1.75 0.086, 2.00 0.063 -> US 0.105 at ~1.55pp; R2's own grid gives 1.50 -> 0.090.
+Final 48 (`regime_s48.out`), selected rows:
+```
+quantity          R1        R2        R3      dR2-R1 (se) t       dR3-R1 (se) t
+regime_t        0.354     0.297     0.274    -0.057 (0.020) -2.9  -0.080 (0.016) -5.1
+gap_acf4        0.455     0.449     0.442    -0.006 (0.030) -0.2  -0.013 (0.035) -0.4
+cut4q_rec%      3.700     3.817     3.892    +0.117 (0.217) +0.5  +0.192 (0.242) +0.8
+latch_t         0.193     0.123     0.123    -0.070 (0.021) -3.3  -0.070 (0.021) -3.3
+sahm_t          0.229     0.216     0.189    -0.012 (0.011) -1.1  -0.039 (0.011) -3.6
+gap_sd%         1.632     1.661     1.655    +0.028 (0.072) +0.4  +0.022 (0.095) +0.2
+pol_acf4        0.591     0.603     0.551    +0.012 (0.032) +0.4  -0.040 (0.030) -1.3
+```
+Guards (infl mean/sd, 10Y, crisis, ELB, blow-ups) all inside 1.1 se. Reading: both legs over-fire. The latch (0.19 vs 0.105)
+does so although the sim's EBP is LESS volatile than GZ (sd 0.45 vs 0.60, tail >=1pp 0.047 vs 0.067); its entries come from
+short, less persistent spikes (ACF1q 0.68 vs 0.81) that the exit at 0 then holds, mostly outside Sahm recessions (latch-only
+0.126 vs 0.040). Sahm (0.23 vs 0.16-0.18) over-fires because the sim spends ~2x the US time in recession (0.16 vs 0.08);
+per recession quarter it fires less than the US (1.4x vs 2.0x). Gap ACF4 does not respond to the regime share. Caveat: the
+8- and 16-seed grids pointed at 1.25pp; at 48 the match is ~1.5pp (not run as an arm).

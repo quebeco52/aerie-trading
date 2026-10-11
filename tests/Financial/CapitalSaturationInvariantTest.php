@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Tests\Financial;
 
+use App\Data\Company\IndustryBetas;
 use App\Data\Company\InitialMarket;
 use App\Data\Company\Sectors;
 use App\DTO\MacroStateDTO;
@@ -110,7 +111,7 @@ final class CapitalSaturationInvariantTest extends TestCase
         $stock->setSharesOutstanding((string) $row['shares_outstanding']);
         $stock->setVolatility((string) $row['volatility']);
         $stock->setCurrentVolatility((string) $row['volatility']);
-        $stock->setBeta((string) $row['beta']);
+        $stock->setBeta((string) IndustryBetas::seedBetaFor($row));
         $stock->setJumpIntensity((string) $row['jump_intensity']);
         $stock->setJumpVol((string) $row['jump_vol']);
         $stock->setSystemicImportance($row['systemic_importance']);

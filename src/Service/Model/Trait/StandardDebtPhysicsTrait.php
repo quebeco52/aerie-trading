@@ -124,7 +124,7 @@ trait StandardDebtPhysicsTrait
     }
     
     public function calculateLeveredBeta(float $baseBeta, float $impliedTaxShieldRate, float $effectiveDebtToEquity, MathUtility $mathUtility): float {
-        return Valuation::calculateLeveredBeta($baseBeta, $impliedTaxShieldRate, $effectiveDebtToEquity, FinancialConstants::HAMADA_DAMPENING_FACTOR);
+        return Valuation::calculateLeveredBeta($baseBeta, $impliedTaxShieldRate, $effectiveDebtToEquity);
     }
     
     public function requiresAlternativeZScore(): bool {

@@ -53,6 +53,16 @@ final class CreditRisk
     }
 
     /**
+     * Net book debt: funded debt and capitalized leases less the cash held above the operating balance, which could
+     * retire debt tomorrow. Interest earned on it is taxed, so it is negative debt for the tax shield the trade-off
+     * target prices (Kraus & Litzenberger 1973), and the S&P leverage anchor nets it the same way.
+     */
+    public static function netBookDebt(float $debt, float $leaseLiability, float $treasury, float $targetOperatingCash): float
+    {
+        return $debt + $leaseLiability - max(0.0, $treasury - $targetOperatingCash);
+    }
+
+    /**
      * Calculates portfolio Expected Loss using the Basel II/III Asymptotic Single Risk Factor (ASRF) Vasicek model.
      *
      * Formula: PD(Z) = \Phi( (\Phi^{-1}(PD_LRA) - \sqrt{\rho} * Z) / \sqrt{1 - \rho} )

@@ -400,4 +400,13 @@ class CreditRiskTest extends TestCase
         $capped = CreditRisk::calculateSchularickTaylorCrisisHazard(creditGap: 10.0, beta0: 5.0, betaGap: 10.0);
         $this->assertSame(0.99, $capped);
     }
+
+    /** Only cash above the operating balance nets out of debt; a treasury below it nets nothing and adds no debt. */
+    public function testNetBookDebtNetsOnlyTheCashAboveTheOperatingBalance(): void
+    {
+        $this->assertSame(110.0, CreditRisk::netBookDebt(100.0, 20.0, 15.0, 5.0));
+        $this->assertSame(120.0, CreditRisk::netBookDebt(100.0, 20.0, 5.0, 5.0));
+        $this->assertSame(120.0, CreditRisk::netBookDebt(100.0, 20.0, 2.0, 5.0));
+        $this->assertSame(-30.0, CreditRisk::netBookDebt(0.0, 0.0, 35.0, 5.0));
+    }
 }

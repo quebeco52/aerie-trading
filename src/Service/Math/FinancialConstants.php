@@ -170,14 +170,12 @@ class FinancialConstants
     // --- Debt Physics ---
     /** Fraction of fixed-rate debt that matures and reprices at market each quarter (5-year average tenor). */
     public const DEFAULT_QUARTERLY_DEBT_ROLLOVER = 0.05;
-    /** Target leverage as a share of the debt tolerance for a model without its own; below it the firm is under-levered. */
+    /** Target net book D/E as a share of the sector's debt tolerance; at the default tolerance of 1.0 it is 0.75 (debt/capital 43%), against 48% book debt/capital, leases included, for 4,822 US non-financials (Damodaran, Debt fundamentals by sector, January 2026). */
     public const CORPORATE_UNDERLEVERAGED_RATIO = 0.75;
     /** Safety coverage multiplier required above minimum interest coverage ratio. */
     public const REQUIRED_ICR_SAFETY_MULT = 1.50;
     /** Absolute minimum interest coverage ratio buffer required for discretionary debt issuance. */
     public const MIN_ABSOLUTE_ICR_BUFFER = 2.00;
-    /** Dampen double-counting of historical debt when re-levering Beta through the Hamada equation. */
-    public const HAMADA_DAMPENING_FACTOR = 0.25;
 
     // --- Payment Default & Cure Period ---
     /** Consecutive quarters a missed principal payment may stand before the firm is a defaulted issuer rather than a late one (standard 30-day indenture grace, rounded to the reporting period). */

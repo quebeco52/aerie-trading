@@ -540,7 +540,7 @@ class EventPresenter
             'icon' => 'balance',
             'iconClass' => 'bg-warning/20 text-warning',
             'isEarnings' => false,
-            'headline' => !empty($rawDesc) ? $rawDesc : 'Confirmed a Chapter 11 plan of reorganization.',
+            'headline' => !empty($rawDesc) ? $rawDesc : 'Confirmed a Chapter 11 plan of reorganisation.',
             'pills' => [],
             'changePercent' => $changePct,
             'recordedAt' => $recordedAt,

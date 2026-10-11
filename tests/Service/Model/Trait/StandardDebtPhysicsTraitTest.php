@@ -8,7 +8,6 @@ use App\DTO\DebtHealthDTO;
 use App\DTO\DebtMetricsDTO;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\MathUtility;
-use App\Service\Math\Valuation;
 use App\Tests\Support\Model\BareStandardModel;
 use App\Tests\Support\Model\ConfiguredStandardModel;
 use PHPUnit\Framework\TestCase;
@@ -163,17 +162,15 @@ final class StandardDebtPhysicsTraitTest extends TestCase
     }
 
     /**
-     * The standard model dampens the Hamada relevering to a quarter, so a corporate's beta responds to
-     * leverage far less violently than the textbook identity implies.
+     * The stored beta of a corporate is its industry's asset beta, so the model re-levers it by Hamada in full: a
+     * fraction of the identity would leave the equity beta below the asset beta's own risk at any leverage.
      */
-    public function testLeveredBetaAppliesTheStandardDampening(): void
+    public function testLeveredBetaIsHamadaInFull(): void
     {
         $math = new MathUtility();
         $levered = $this->model->calculateLeveredBeta(1.0, 0.21, 2.0, $math);
 
-        $this->assertEqualsWithDelta(Valuation::calculateLeveredBeta(1.0, 0.21, 2.0, 0.25), $levered, 0.0000001, 'The trait must pass its dampening through.');
-        $this->assertLessThan(Valuation::calculateLeveredBeta(1.0, 0.21, 2.0), $levered, 'The dampened beta must sit below the undampened Hamada value.');
-        $this->assertGreaterThan(1.0, $levered, 'Leverage still raises beta above the unlevered base.');
+        $this->assertEqualsWithDelta(1.0 + (0.79 * 2.0), $levered, 0.0000001, 'beta_E = beta_U x (1 + (1 - t) x D/E).');
         $this->assertSame(1.0, $this->model->calculateLeveredBeta(1.0, 0.21, 0.0, $math), 'With no debt the levered beta is the unlevered beta.');
     }
 

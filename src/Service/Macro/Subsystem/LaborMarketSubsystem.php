@@ -43,6 +43,10 @@ class LaborMarketSubsystem
     /** Downward wage adjustment speed as fraction of upward speed (nominal rigidity, Bewley 1999). */
     public const WAGE_DOWNWARD_RIGIDITY_FACTOR = 0.30;
 
+    // --- Nominal Wage Ceiling ---
+    /** Ceiling on the wage-growth target, uncited: it binds once expected inflation passes ~6.5%, below US hourly compensation's 1970s peaks (~10-11%), so it caps how far a wage-price spiral runs. */
+    public const MAX_NOMINAL_WAGE_GROWTH = 0.08;
+
     // --- Wage Error Correction (Blanchard & Katz 1999) ---
     /** Annual pull of wage growth against the real wage's gap to trend productivity: US nonfarm business 1960-1999, wages on the lagged labor share (se 0.10; var/harness/labor_real.py). */
     public const WAGE_ERROR_CORRECTION_SPEED = 0.12;
@@ -174,7 +178,7 @@ class LaborMarketSubsystem
         $errorCorrection = self::WAGE_ERROR_CORRECTION_SPEED * $state->realWageGap;
         $tightnessPush = self::WAGE_TIGHTNESS_SENSITIVITY * ($state->laborTightness - MacroEngine::NATURAL_LABOR_TIGHTNESS);
         $unclampedTarget = $tfpGrowthRate + $state->tipsBreakevenEma + $tightnessPush - $errorCorrection;
-        $targetWageGrowth = max(0.0, min(0.08, $unclampedTarget));
+        $targetWageGrowth = max(0.0, min(self::MAX_NOMINAL_WAGE_GROWTH, $unclampedTarget));
 
         $wageGap = $targetWageGrowth - $state->wageGrowth;
         $adjustmentSpeed = $wageGap > 0

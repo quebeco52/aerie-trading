@@ -252,7 +252,7 @@ class LaborMarketSubsystemTest extends TestCase
     }
 
     /**
-     * The indexation runs into the standing 8% ceiling on nominal wage growth once expected inflation
+     * The indexation runs into the standing ceiling on nominal wage growth (8%) once expected inflation
      * passes 6.5%, and real pay falls from there however tight the labour market is.
      *
      * The ceiling predates the indexation and used to be unreachable, because demands were anchored to a
@@ -261,10 +261,11 @@ class LaborMarketSubsystemTest extends TestCase
      */
     public function testNominalWageGrowthIsCappedOnceExpectedInflationPassesTheCeiling(): void
     {
-        $headroom = 0.08 - \App\Service\Macro\MacroEngine::TFP_DRIFT;
+        $ceiling = LaborMarketSubsystem::MAX_NOMINAL_WAGE_GROWTH;
+        $headroom = $ceiling - \App\Service\Macro\MacroEngine::TFP_DRIFT;
 
-        $this->assertEqualsWithDelta(0.08, $this->convergedWageGrowth($headroom), 1e-6, 'The ceiling is reached exactly at its headroom.');
-        $this->assertEqualsWithDelta(0.08, $this->convergedWageGrowth(0.12), 1e-6, 'Beyond it, nominal wage growth stops rising.');
+        $this->assertEqualsWithDelta($ceiling, $this->convergedWageGrowth($headroom), 1e-6, 'The ceiling is reached exactly at its headroom.');
+        $this->assertEqualsWithDelta($ceiling, $this->convergedWageGrowth(0.12), 1e-6, 'Beyond it, nominal wage growth stops rising.');
         $this->assertLessThan(0.0, $this->convergedWageGrowth(0.12) - 0.12, 'Past the ceiling, real pay falls.');
     }
 

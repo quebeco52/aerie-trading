@@ -165,7 +165,9 @@ class EarningsEngineTest extends TestCase
 
         $this->assertGreaterThan(1.0, $priceTaker, 'the firm still grows with its market');
         $this->assertLessThan(exp(2.0 * $demandGrowth) + 0.01, $priceTaker, 'plant grows with demand, not at the reinvestment rate');
-        $this->assertEqualsWithDelta($dominant, $priceTaker, 0.01, 'a small share of a large market is no licence to build past demand');
+        $this->assertLessThanOrEqual($dominant + 0.01, $priceTaker, 'a small share of a large market is no licence to build past demand');
+        // Alike, not identical: the two trade at different prices, so their market leverage, Hamada beta and hurdle differ.
+        $this->assertEqualsWithDelta($dominant, $priceTaker, 0.02, 'both grow their plant with demand');
     }
 
     /**

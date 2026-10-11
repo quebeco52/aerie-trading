@@ -25,7 +25,7 @@ multi = len({r.get('seed') for r in rows}) > 1
 print(f"{len(rows)} quarters, t {rows[0]['total_time']:.2f}-{rows[-1]['total_time']:.2f}, fingerprints {dict(segs)}, tpy {Counter(r.get('ticks_per_year') for r in rows)}")
 
 def pct(x): return f"{100*x:+6.2f}" if x is not None else "   —  "
-if not multi: print("\n  t     gapAvg  gapEnd  inflAvg polAvg tgtAvg   seen  10yAvg  uAvg   ebpAvg | floor evans ceil panic | events")
+if not multi: print("\n  t     gapAvg  gapEnd  inflAvg polAvg tgtAvg   seen  10yAvg  uAvg   ebpAvg | floor evans ceil panic rcut | events")
 for r in ([] if multi else rows):
     d = r.get('quarter_diagnostics')
     if not d: continue
@@ -35,7 +35,7 @@ for r in ([] if multi else rows):
                    for k, v in sorted(ev.items()) if k not in ('excessBondPremium', 'catastrophe') or v['count'] > 3)
     seen = obj((d.get('policy') or {}).get('terms')).get('productivitySeenThrough')
     print(f"{r['total_time']:5.2f} {pct(a['outputGap'])} {pct(r['output_gap'])} {pct(a['inflation'])} {pct(a['policyRate'])} {pct(a['targetRate'])} {pct(seen)} {pct(a['yield10y'])} {pct(a['unemploymentRate'])} {pct(a['excessBondPremium'])} | "
-          f"{c.get('lowerBound', 0):4.0%} {c.get('evansHold', 0):5.0%} {c.get('hikeCeiling', 0):4.0%} {c.get('panicSpeed', 0):4.0%} | {evs}")
+          f"{c.get('lowerBound', 0):4.0%} {c.get('evansHold', 0):5.0%} {c.get('hikeCeiling', 0):4.0%} {c.get('panicSpeed', 0):4.0%} {c.get('recessionCutSpeed', 0):4.0%} | {evs}")
 
 if not multi: print("\n  t     Δgap  | " + ' '.join(f"{k:>8s}" for k in FAM) + " | resid")
 for r in ([] if multi else rows):
@@ -146,6 +146,7 @@ for seed, rs in by_seed.items():
             if a.get('policyRate', 0) < a.get('targetRate', 0) - 0.015 and cons.get('lowerBound', 0) == 0 and gap > 0: flag('rate >150bp under the rule off the floor in a boom', r, f"rate {100*rate:.2f} rule {100*a['targetRate']:.2f}")
             if cons.get('targetCap', 0) > 0: flag('target above the 20% cap', r)
             if cons.get('panicSpeed', 0) > 0: flag('inflation panic speed engaged', r, f"{cons['panicSpeed']:.0%}")
+            if cons.get('recessionCutSpeed', 0) > 0 and gap > 0.005: flag('recession cut speed engaged in a boom', r, f"gap {100*gap:+.2f}, engaged {cons['recessionCutSpeed']:.0%}")
             if rate > 0.10: flag('policy rate above 10%', r, f"{100*rate:.2f}")
             if infl > 0.05 or infl < 0.0: flag('inflation outside 0-5%', r, f"{100*infl:.2f}")
             if gap > 0.04 or gap < -0.06: flag('gap outside -6..+4%', r, f"{100*gap:+.2f}")

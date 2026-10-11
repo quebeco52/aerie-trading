@@ -2,6 +2,7 @@
 
 namespace App\DataFixtures;
 
+use App\Data\Company\IndustryBetas;
 use App\Entity\Etf;
 use App\Entity\Stock;
 use App\Entity\User;
@@ -84,7 +85,7 @@ class AppFixtures extends Fixture
             $stock->setVolatility((string) $stockData['volatility']);
             $stock->setCurrentVolatility((string) $stockData['volatility']);
             $stock->setRealizedVarianceEma((float) $stockData['volatility'] ** 2);
-            $stock->setBeta((string) $stockData['beta']);
+            $stock->setBeta((string) IndustryBetas::seedBetaFor($stockData));
             $stock->setJumpIntensity((string) $stockData['jump_intensity']);
             $stock->setJumpVol((string) $stockData['jump_vol']);
             $stock->setSystemicImportance($stockData['systemic_importance'] ?? 'none');

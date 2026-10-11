@@ -310,17 +310,17 @@ final class Valuation
     }
 
     /**
-     * Levers a company's Beta using the Hamada equation.
+     * Levers an asset beta to the equity beta of a firm with this capital structure (Hamada 1972, "The Effect of the
+     * Firm's Capital Structure on the Systematic Risk of Common Stocks"): beta_E = beta_U x (1 + (1 - t) x D/E).
      *
-     * @param float $unleveredBeta The baseline asset beta.
-     * @param float $taxRate       The corporate tax rate.
-     * @param float $debtToEquity  The debt-to-equity ratio of the company.
-     * @param float $dampening     A modifier to reduce double-counting if the baseline beta is already partially levered.
+     * @param float $unleveredBeta The asset beta.
+     * @param float $taxRate       The tax rate the interest is shielded at.
+     * @param float $debtToEquity  Debt over the market value of equity.
      * @return float The levered equity beta.
      */
-    public static function calculateLeveredBeta(float $unleveredBeta, float $taxRate, float $debtToEquity, float $dampening = 1.0): float
+    public static function calculateLeveredBeta(float $unleveredBeta, float $taxRate, float $debtToEquity): float
     {
-        return $unleveredBeta * (1.0 + ((1.0 - $taxRate) * ($debtToEquity * $dampening)));
+        return $unleveredBeta * (1.0 + ((1.0 - $taxRate) * $debtToEquity));
     }
 
     /**

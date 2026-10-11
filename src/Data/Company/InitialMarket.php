@@ -16,7 +16,7 @@ class InitialMarket
             'systemic_importance' => 'titan',
             'shares_outstanding' => 1_000_000_000,
             'volatility' => 0.13,
-            'beta' => 1.00,
+            'beta_tilt' => 0.00,
             'jump_intensity' => 0.40,
             'jump_vol' => 0.10,
             'baseline_roe' => 0.21,
@@ -45,7 +45,7 @@ class InitialMarket
             'systemic_importance' => 'titan',
             'shares_outstanding' => 1_000_000_000,
             'volatility' => 0.26,
-            'beta' => 1.50,
+            'beta_tilt' => 0.25, // leveraged long/short books
             'jump_intensity' => 1.25,
             'jump_vol' => 0.13,
             'baseline_roe' => 0.22,
@@ -75,7 +75,7 @@ class InitialMarket
             'systemic_importance' => 'titan',
             'shares_outstanding' => 1_000_000_000,
             'volatility' => 0.20,
-            'beta' => 1.20,
+            'beta_tilt' => -0.25, // steadier cloud contracts, less volatile than smaller software names
             'jump_intensity' => 0.75,
             'jump_vol' => 0.10,
             'baseline_roic' => 0.25,
@@ -105,7 +105,7 @@ class InitialMarket
             'systemic_importance' => 'systemic',
             'shares_outstanding' => 1_000_000_000,
             'volatility' => 0.12,
-            'beta' => 0.20,
+            'beta_tilt' => -0.25, // a contrarian holder that buys when prices fall
             'jump_intensity' => 0.20,
             'jump_vol' => 0.08,
             'baseline_roic' => 0.22,
@@ -134,7 +134,7 @@ class InitialMarket
             'systemic_importance' => 'systemic',
             'shares_outstanding' => 1_000_000_000,
             'volatility' => 0.35,
-            'beta' => 2.20,
+            'beta_tilt' => 0.25, // among the most cyclical deal franchises
             'jump_intensity' => 1.25,
             'jump_vol' => 0.14,
             'baseline_roe' => 0.25,
@@ -163,7 +163,7 @@ class InitialMarket
             'systemic_importance' => 'systemic',
             'shares_outstanding' => 1_000_000_000,
             'volatility' => 0.20,
-            'beta' => -0.20,
+            'beta_tilt' => -0.25, // a delta-neutral market maker that earns on volatility
             'jump_intensity' => 1.25,
             'jump_vol' => 0.12,
             'baseline_roe' => 0.25,
@@ -194,7 +194,7 @@ class InitialMarket
             'systemic_importance' => 'systemic',
             'shares_outstanding' => 1_000_000_000,
             'volatility' => 0.14,
-            'beta' => -0.10,
+            'beta_tilt' => -0.25, // restructuring fees run against the cycle
             'jump_intensity' => 1.25,
             'jump_vol' => 0.11,
             'baseline_roe' => 0.24,
@@ -223,7 +223,7 @@ class InitialMarket
             'systemic_importance' => 'none',
             'shares_outstanding' => 1_000_000_000,
             'volatility' => 0.28,
-            'beta' => 1.40,
+            'beta_tilt' => 0.25, // one region, smaller borrowers, commercial property
             'jump_intensity' => 0.90,
             'jump_vol' => 0.11,
             'baseline_roe' => 0.15,
@@ -256,7 +256,7 @@ class InitialMarket
             'systemic_importance' => 'systemic', // The District's second home lender: a domestic systemically important bank
             'shares_outstanding' => 1_000_000_000,
             'volatility' => 0.20,
-            'beta' => 1.10,
+            'beta_tilt' => 0.15, // long fixed-rate mortgages on short deposits
             'jump_intensity' => 0.60,
             'jump_vol' => 0.10,
             'baseline_roe' => 0.11,
@@ -287,7 +287,7 @@ class InitialMarket
             'systemic_importance' => 'titan',
             'shares_outstanding' => 1_000_000_000,
             'volatility' => 0.22, // a reinsurer: RenaissanceRe's 180-day realized vol is 23.2% (AlphaQuery, 2026-10-07)
-            'beta' => 0.20,
+            'beta_tilt' => -0.25, // losses follow catastrophes, not the business cycle
             'jump_intensity' => 0.15,
             'jump_vol' => 0.06,
             'baseline_roe' => 0.14,
@@ -317,7 +317,7 @@ class InitialMarket
             'systemic_importance' => 'base',
             'shares_outstanding' => 1_000_000_000,
             'volatility' => 0.22, // a diversified insurer: AIG's 180-day realized vol is 21.6% (AlphaQuery, 2026-10-07)
-            'beta' => 0.30,
+            'beta_tilt' => 0.00,
             'jump_intensity' => 0.50,
             'jump_vol' => 0.08,
             'baseline_roe' => 0.15,
@@ -358,7 +358,7 @@ class InitialMarket
             'systemic_importance' => 'systemic',
             'shares_outstanding' => 1_000_000_000,
             'volatility' => 0.25, // a ratings house: Moody's 180-day realized vol is 25.6% (AlphaQuery, 2026-10-07)
-            'beta' => 0.40,
+            'beta_tilt' => 0.00,
             'jump_intensity' => 0.40,
             'jump_vol' => 0.08,
             'baseline_roic' => 0.24,
@@ -387,7 +387,7 @@ class InitialMarket
             'systemic_importance' => 'base',
             'shares_outstanding' => 1_000_000_000,
             'volatility' => 0.15, // a regulated electric utility: 15.0% (Damodaran, Utility (General), US, January 2026)
-            'beta' => 0.25,
+            'beta_tilt' => 0.00,
             'jump_intensity' => 0.30,
             'jump_vol' => 0.06,
             'baseline_roic' => 0.10,
@@ -416,7 +416,7 @@ class InitialMarket
             'systemic_importance' => 'systemic',
             'shares_outstanding' => 1_000_000_000,
             'volatility' => 0.20,
-            'beta' => 0.50,
+            'beta_tilt' => -0.25, // multi-year retainers held through recessions
             'jump_intensity' => 0.60,
             'jump_vol' => 0.09,
             'baseline_roic' => 0.19,
@@ -445,7 +445,7 @@ class InitialMarket
             'systemic_importance' => 'base',
             'shares_outstanding' => 1_000_000_000,
             'volatility' => 0.32,
-            'beta' => 1.30,
+            'beta_tilt' => 0.00,
             'jump_intensity' => 1.00,
             'jump_vol' => 0.12,
             'baseline_roic' => 0.18,
@@ -474,7 +474,7 @@ class InitialMarket
             'systemic_importance' => 'none',
             'shares_outstanding' => 1_000_000_000,
             'volatility' => 0.40,
-            'beta' => 1.55,
+            'beta_tilt' => 0.00,
             'jump_intensity' => 1.25,
             'jump_vol' => 0.13,
             'baseline_roic' => 0.29,
@@ -503,7 +503,7 @@ class InitialMarket
             'systemic_importance' => 'none',
             'shares_outstanding' => 1_000_000_000,
             'volatility' => 0.24,
-            'beta' => 1.20,
+            'beta_tilt' => 0.00,
             'jump_intensity' => 0.75,
             'jump_vol' => 0.10,
             'baseline_roic' => 0.10,
@@ -532,7 +532,7 @@ class InitialMarket
             'systemic_importance' => 'none',
             'shares_outstanding' => 1_000_000_000,
             'volatility' => 0.26,
-            'beta' => 1.30,
+            'beta_tilt' => 0.00,
             'jump_intensity' => 0.90,
             'jump_vol' => 0.11,
             'baseline_roic' => 0.22,
@@ -562,7 +562,7 @@ class InitialMarket
             'systemic_importance' => 'none',
             'shares_outstanding' => 1_000_000_000,
             'volatility' => 0.15,
-            'beta' => 0.35,
+            'beta_tilt' => -0.25, // orders follow mainland and allied budgets, not the District cycle
             'jump_intensity' => 0.75,
             'jump_vol' => 0.10,
             'baseline_roic' => 0.17,
@@ -592,7 +592,7 @@ class InitialMarket
             'systemic_importance' => 'systemic',
             'shares_outstanding' => 1_000_000_000,
             'volatility' => 0.14,
-            'beta' => 0.25,
+            'beta_tilt' => 0.00,
             'jump_intensity' => 0.40,
             'jump_vol' => 0.09,
             'baseline_roic' => 0.12,
@@ -622,7 +622,7 @@ class InitialMarket
             'systemic_importance' => 'none',
             'shares_outstanding' => 1_000_000_000,
             'volatility' => 0.15,
-            'beta' => 0.30,
+            'beta_tilt' => 0.00,
             'jump_intensity' => 0.75,
             'jump_vol' => 0.09,
             'baseline_roic' => 0.23,
@@ -652,7 +652,7 @@ class InitialMarket
             'systemic_importance' => 'none',
             'shares_outstanding' => 1_000_000_000,
             'volatility' => 0.12,
-            'beta' => 0.60,
+            'beta_tilt' => -0.24, // no division large enough to move the group
             'jump_intensity' => 0.75,
             'jump_vol' => 0.09,
             'baseline_roic' => 0.14,
@@ -681,7 +681,7 @@ class InitialMarket
             'systemic_importance' => 'titan',
             'shares_outstanding' => 1_000_000_000,
             'volatility' => 0.35,
-            'beta' => 1.80,
+            'beta_tilt' => 0.25, // heavy fixed costs on a thin margin
             'jump_intensity' => 0.90,
             'jump_vol' => 0.13,
             'baseline_roic' => 0.13,
@@ -717,7 +717,7 @@ class InitialMarket
             'systemic_importance' => 'systemic',
             'shares_outstanding' => 1_000_000_000,
             'volatility' => 0.25,
-            'beta' => 1.45,
+            'beta_tilt' => 0.25, // priced with technology stocks though subscriptions hold
             'jump_intensity' => 1.00,
             'jump_vol' => 0.11,
             'baseline_roic' => 0.30,
@@ -746,7 +746,7 @@ class InitialMarket
             'systemic_importance' => 'systemic',
             'shares_outstanding' => 1_000_000_000,
             'volatility' => 0.35,
-            'beta' => 1.40,
+            'beta_tilt' => 0.10, // deepwater cost base, partly hedged
             'jump_intensity' => 0.75,
             'jump_vol' => 0.13,
             'baseline_roic' => 0.16,
@@ -775,7 +775,7 @@ class InitialMarket
             'systemic_importance' => 'base',
             'shares_outstanding' => 1_000_000_000,
             'volatility' => 0.15,
-            'beta' => 1.10,
+            'beta_tilt' => 0.25, // crack-spread earnings swing from losses to records
             'jump_intensity' => 0.75,
             'jump_vol' => 0.11,
             'baseline_roic' => 0.12,
@@ -807,7 +807,7 @@ class InitialMarket
             'systemic_importance' => 'none',
             'shares_outstanding' => 1_000_000_000,
             'volatility' => 0.22,
-            'beta' => 1.25,
+            'beta_tilt' => -0.15, // fixed lease income steadies the casino book
             'jump_intensity' => 0.75,
             'jump_vol' => 0.11,
             'baseline_roic' => 0.16,
@@ -837,7 +837,7 @@ class InitialMarket
             'systemic_importance' => 'base',
             'shares_outstanding' => 1_000_000_000,
             'volatility' => 0.10,
-            'beta' => 0.15,
+            'beta_tilt' => 0.00,
             'jump_intensity' => 0.10,
             'jump_vol' => 0.06,
             'baseline_roic' => 0.09,
@@ -867,7 +867,7 @@ class InitialMarket
             'systemic_importance' => 'none',
             'shares_outstanding' => 1_000_000_000,
             'volatility' => 0.10,
-            'beta' => 0.15,
+            'beta_tilt' => -0.25, // waste volumes barely move in a recession
             'jump_intensity' => 0.20,
             'jump_vol' => 0.07,
             'baseline_roic' => 0.10,
@@ -896,7 +896,7 @@ class InitialMarket
             'systemic_importance' => 'base',
             'shares_outstanding' => 1_000_000_000,
             'volatility' => 0.12,
-            'beta' => 0.10,
+            'beta_tilt' => -0.10, // volumes follow health programmes, not the cycle
             'jump_intensity' => 0.75,
             'jump_vol' => 0.08,
             'baseline_roic' => 0.18,
@@ -925,7 +925,7 @@ class InitialMarket
             'systemic_importance' => 'systemic',
             'shares_outstanding' => 1_000_000_000,
             'volatility' => 0.28,
-            'beta' => 1.80,
+            'beta_tilt' => 0.25, // unsecured consumer credit, strongly cyclical
             'jump_intensity' => 1.00,
             'jump_vol' => 0.12,
             'baseline_roe' => 0.25,
@@ -954,7 +954,7 @@ class InitialMarket
             'systemic_importance' => 'systemic',
             'shares_outstanding' => 1_000_000_000,
             'volatility' => 0.22,
-            'beta' => 1.00,
+            'beta_tilt' => 0.15, // surge-priced volumes on a fixed network
             'jump_intensity' => 0.60,
             'jump_vol' => 0.09,
             'baseline_roic' => 0.12,
@@ -984,7 +984,7 @@ class InitialMarket
             'systemic_importance' => 'none',
             'shares_outstanding' => 1_000_000_000,
             'volatility' => 0.16,
-            'beta' => 0.25,
+            'beta_tilt' => 0.00,
             'jump_intensity' => 0.40,
             'jump_vol' => 0.08,
             'baseline_roic' => 0.22,
@@ -1014,7 +1014,7 @@ class InitialMarket
             'systemic_importance' => 'none',
             'shares_outstanding' => 1_000_000_000,
             'volatility' => 0.36,
-            'beta' => 1.90,
+            'beta_tilt' => 0.25, // unsecured lending, sharp on labour data
             'jump_intensity' => 1.00,
             'jump_vol' => 0.13,
             'baseline_roe' => 0.25,
@@ -1043,7 +1043,7 @@ class InitialMarket
             'systemic_importance' => 'none',
             'shares_outstanding' => 1_000_000_000,
             'volatility' => 0.16,
-            'beta' => 0.30,
+            'beta_tilt' => -0.15, // steadier than most restaurants
             'jump_intensity' => 0.75,
             'jump_vol' => 0.09,
             'baseline_roic' => 0.23,
@@ -1073,7 +1073,7 @@ class InitialMarket
             'systemic_importance' => 'none',
             'shares_outstanding' => 1_000_000_000,
             'volatility' => 0.18,
-            'beta' => 0.30,
+            'beta_tilt' => -0.15, // retainer income holds through the cycle
             'jump_intensity' => 1.00,
             'jump_vol' => 0.10,
             'baseline_roic' => 0.25,
@@ -1102,7 +1102,7 @@ class InitialMarket
             'systemic_importance' => 'none',
             'shares_outstanding' => 1_000_000_000,
             'volatility' => 0.38,
-            'beta' => 1.95,
+            'beta_tilt' => 0.15, // leveraged trading, partly offset by volatility income
             'jump_intensity' => 1.25,
             'jump_vol' => 0.13,
             'baseline_roe' => 0.20,
@@ -1132,7 +1132,7 @@ class InitialMarket
             'systemic_importance' => 'systemic',
             'shares_outstanding' => 1_000_000_000,
             'volatility' => 0.10,
-            'beta' => 0.10,
+            'beta_tilt' => -0.10, // rent paid from public budgets
             'jump_intensity' => 0.20,
             'jump_vol' => 0.07,
             'baseline_roic' => 0.11,
@@ -1161,7 +1161,7 @@ class InitialMarket
             'systemic_importance' => 'none',
             'shares_outstanding' => 1_000_000_000,
             'volatility' => 0.22,
-            'beta' => 0.30,
+            'beta_tilt' => -0.25, // retainers and crisis work steady a recession
             'jump_intensity' => 0.90,
             'jump_vol' => 0.10,
             'baseline_roic' => 0.30,
@@ -1190,7 +1190,7 @@ class InitialMarket
             'systemic_importance' => 'base',
             'shares_outstanding' => 1_000_000_000,
             'volatility' => 0.14,
-            'beta' => 0.25,
+            'beta_tilt' => 0.00,
             'jump_intensity' => 0.30,
             'jump_vol' => 0.08,
             'baseline_roic' => 0.15,
@@ -1220,7 +1220,7 @@ class InitialMarket
             'systemic_importance' => 'base',
             'shares_outstanding' => 1_000_000_000,
             'volatility' => 0.30,
-            'beta' => 1.70,
+            'beta_tilt' => 0.25, // thin margin on fixed fulfilment costs
             'jump_intensity' => 0.75,
             'jump_vol' => 0.12,
             'baseline_roic' => 0.22,
@@ -1249,7 +1249,7 @@ class InitialMarket
             'systemic_importance' => 'base',
             'shares_outstanding' => 1_000_000_000,
             'volatility' => 0.16,
-            'beta' => 0.25,
+            'beta_tilt' => -0.15, // volumes hold in a downturn
             'jump_intensity' => 0.50,
             'jump_vol' => 0.08,
             'baseline_roic' => 0.10,
@@ -1292,7 +1292,7 @@ class InitialMarket
             'systemic_importance' => 'titan',
             'shares_outstanding' => 1_000_000_000,
             'volatility' => 0.18,
-            'beta' => 0.90,
+            'beta_tilt' => 0.06, // follows the District economy through its holdings
             'jump_intensity' => 0.30,
             'jump_vol' => 0.08,
             // The INCOME return alone: appreciation arrives as OCI through AnchorStakeLedger, so pricing
@@ -1333,7 +1333,7 @@ class InitialMarket
             'systemic_importance' => 'none',
             'shares_outstanding' => 1_000_000_000,
             'volatility' => 0.12,
-            'beta' => 0.20,
+            'beta_tilt' => -0.10, // ageing-population rents trade like a long bond
             'jump_intensity' => 0.10,
             'jump_vol' => 0.10,
             'baseline_roic' => 0.07,
@@ -1370,7 +1370,7 @@ class InitialMarket
             'systemic_importance' => 'none',
             'shares_outstanding' => 1_000_000_000,
             'volatility' => 0.14,
-            'beta' => 0.15,
+            'beta_tilt' => -0.25, // diners trade down to it in a recession
             'jump_intensity' => 0.05,
             'jump_vol' => 0.09,
             'baseline_roic' => 0.25,
@@ -1401,7 +1401,7 @@ class InitialMarket
             'systemic_importance' => 'systemic',
             'shares_outstanding' => 1_000_000_000,
             'volatility' => 0.24,
-            'beta' => -0.60,
+            'beta_tilt' => -0.25, // deploys into distress, but is still long credit
             'jump_intensity' => 1.25,
             'jump_vol' => 0.13,
             'baseline_roe' => 0.23,
@@ -1431,7 +1431,7 @@ class InitialMarket
             'systemic_importance' => 'base',
             'shares_outstanding' => 1_000_000_000,
             'volatility' => 0.35,
-            'beta' => 1.35,
+            'beta_tilt' => -0.15, // luxury buyers ride out an ordinary slowdown
             'jump_intensity' => 1.40,
             'jump_vol' => 0.11,
             'baseline_roic' => 0.11,
@@ -1462,7 +1462,7 @@ class InitialMarket
             'systemic_importance' => 'systemic',
             'shares_outstanding' => 1_000_000_000,
             'volatility' => 0.28,
-            'beta' => -0.50,
+            'beta_tilt' => -0.25, // deployments rise with tension abroad
             'jump_intensity' => 1.10,
             'jump_vol' => 0.11,
             'baseline_roic' => 0.15,
@@ -1495,7 +1495,7 @@ class InitialMarket
             // still assets under management: it swells through a bull run and shrinks on redemptions after
             // one. Its performance fees are idiosyncratic campaign wins with no link to the cycle at all.
             // At -0.50 the price claimed a hedge the earnings never delivered; 0.20 is what they support.
-            'beta' => 0.20,
+            'beta_tilt' => -0.15, // short books offset part of a market that sets its assets
             'jump_intensity' => 1.25,
             'jump_vol' => 0.11,
             'baseline_roe' => 0.20,
@@ -1525,7 +1525,7 @@ class InitialMarket
             'systemic_importance' => 'systemic',
             'shares_outstanding' => 1_000_000_000,
             'volatility' => 0.40,
-            'beta' => 1.80,
+            'beta_tilt' => 0.10, // heavy capital spending against a metal price
             'jump_intensity' => 0.60,
             'jump_vol' => 0.11,
             'baseline_roic' => 0.14,
@@ -1559,7 +1559,7 @@ class InitialMarket
             'systemic_importance' => 'systemic',
             'shares_outstanding' => 1_000_000_000,
             'volatility' => 0.35,
-            'beta' => 1.90,
+            'beta_tilt' => 0.00,
             'jump_intensity' => 1.25,
             'jump_vol' => 0.14,
             'baseline_roic' => 0.22,
@@ -1588,7 +1588,7 @@ class InitialMarket
             'systemic_importance' => 'systemic',
             'shares_outstanding' => 1_000_000_000,
             'volatility' => 0.12,
-            'beta' => 0.20,
+            'beta_tilt' => -0.25, // half its revenue is commuter subscriptions
             'jump_intensity' => 0.15,
             'jump_vol' => 0.08,
             'baseline_roic' => 0.12,
@@ -1617,7 +1617,7 @@ class InitialMarket
             'systemic_importance' => 'systemic',
             'shares_outstanding' => 1_000_000_000,
             'volatility' => 0.30,
-            'beta' => 1.60,
+            'beta_tilt' => 0.25, // wholesale-funded, falls steeply in credit crises
             'jump_intensity' => 1.50,
             'jump_vol' => 0.13,
             'baseline_roe' => 0.29,
@@ -1647,7 +1647,7 @@ class InitialMarket
             'systemic_importance' => 'titan',
             'shares_outstanding' => 1_000_000_000,
             'volatility' => 0.12,
-            'beta' => -0.10,
+            'beta_tilt' => -0.25, // clearing volume rises in sell-offs
             'jump_intensity' => 0.40,
             'jump_vol' => 0.10,
             'baseline_roe' => 0.26,
@@ -1676,7 +1676,7 @@ class InitialMarket
             'systemic_importance' => 'systemic',
             'shares_outstanding' => 1_000_000_000,
             'volatility' => 0.38,
-            'beta' => 1.75,
+            'beta_tilt' => 0.25, // spot freight on a fixed fleet
             'jump_intensity' => 0.70,
             'jump_vol' => 0.11,
             'baseline_roic' => 0.15,
@@ -1705,7 +1705,7 @@ class InitialMarket
             'systemic_importance' => 'systemic',
             'shares_outstanding' => 1_000_000_000,
             'volatility' => 0.28,
-            'beta' => 0.35,
+            'beta_tilt' => -0.15, // prescription demand ignores the cycle
             'jump_intensity' => 0.80,
             'jump_vol' => 0.13,
             'baseline_roic' => 0.16,
@@ -1735,7 +1735,7 @@ class InitialMarket
             'systemic_importance' => 'systemic',
             'shares_outstanding' => 1_000_000_000,
             'volatility' => 0.18,
-            'beta' => 0.65,
+            'beta_tilt' => 0.00,
             'jump_intensity' => 0.50,
             'jump_vol' => 0.10,
             'baseline_roic' => 0.17,
@@ -1765,7 +1765,7 @@ class InitialMarket
             'systemic_importance' => 'systemic',
             'shares_outstanding' => 1_000_000_000,
             'volatility' => 0.12,
-            'beta' => 0.25,
+            'beta_tilt' => -0.10, // among the least volatile on the exchange
             'jump_intensity' => 0.30,
             'jump_vol' => 0.08,
             'baseline_roic' => 0.22,
@@ -1798,7 +1798,7 @@ class InitialMarket
             // A tollbooth that "completely bypasses the traditional boom-and-bust cycles of standard
             // manufacturing" cannot carry a cyclical beta. At 1.10 the CAPM charged it a cyclical cost of
             // equity and priced its 37% return on equity below the tools sector multiple.
-            'beta' => 0.60,
+            'beta_tilt' => -0.15, // falls by less than most equipment makers
             'jump_intensity' => 0.50,
             'jump_vol' => 0.09,
             'baseline_roic' => 0.28,
@@ -1828,7 +1828,7 @@ class InitialMarket
             'systemic_importance' => 'none',
             'shares_outstanding' => 1_000_000_000,
             'volatility' => 0.16,
-            'beta' => 0.50,
+            'beta_tilt' => -0.10, // demand barely moves with the cycle
             'jump_intensity' => 0.30,
             'jump_vol' => 0.09,
             'baseline_roic' => 0.20,
@@ -1859,7 +1859,7 @@ class InitialMarket
             'systemic_importance' => 'base',
             'shares_outstanding' => 1_000_000_000,
             'volatility' => 0.14,
-            'beta' => 0.50,
+            'beta_tilt' => 0.00,
             'jump_intensity' => 0.25,
             'jump_vol' => 0.08,
             'baseline_roic' => 0.11,
@@ -1888,7 +1888,7 @@ class InitialMarket
             'systemic_importance' => 'base',
             'shares_outstanding' => 1_000_000_000,
             'volatility' => 0.18,
-            'beta' => 0.85,
+            'beta_tilt' => -0.10, // trade-down softens a downturn
             'jump_intensity' => 0.45,
             'jump_vol' => 0.09,
             'baseline_roic' => 0.22,
@@ -1917,7 +1917,7 @@ class InitialMarket
             'systemic_importance' => 'base',
             'shares_outstanding' => 1_000_000_000,
             'volatility' => 0.26,
-            'beta' => 1.20,
+            'beta_tilt' => 0.00,
             'jump_intensity' => 0.60,
             'jump_vol' => 0.12,
             'baseline_roic' => 0.18,
@@ -1947,7 +1947,7 @@ class InitialMarket
             'systemic_importance' => 'systemic',
             'shares_outstanding' => 1_000_000_000,
             'volatility' => 0.22,
-            'beta' => 0.95,
+            'beta_tilt' => -0.25, // fleet replacement, parts and subscriptions
             'jump_intensity' => 0.65,
             'jump_vol' => 0.09,
             'baseline_roic' => 0.14,
@@ -1977,7 +1977,7 @@ class InitialMarket
             'systemic_importance' => 'systemic',
             'shares_outstanding' => 1_000_000_000,
             'volatility' => 0.20,
-            'beta' => 0.85,
+            'beta_tilt' => -0.10, // royalties steady the equipment cycle
             'jump_intensity' => 0.50,
             'jump_vol' => 0.09,
             'baseline_roic' => 0.18,
@@ -2007,7 +2007,7 @@ class InitialMarket
             'systemic_importance' => 'systemic',
             'shares_outstanding' => 1_000_000_000,
             'volatility' => 0.22,
-            'beta' => 1.05,
+            'beta_tilt' => 0.00,
             'jump_intensity' => 0.60,
             'jump_vol' => 0.09,
             'baseline_roic' => 0.20,
@@ -2037,7 +2037,7 @@ class InitialMarket
             'systemic_importance' => 'base',
             'shares_outstanding' => 1_000_000_000,
             'volatility' => 0.24,
-            'beta' => 1.15,
+            'beta_tilt' => 0.00,
             'jump_intensity' => 0.50,
             'jump_vol' => 0.09,
             'baseline_roic' => 0.17,
@@ -2067,7 +2067,7 @@ class InitialMarket
             'systemic_importance' => 'systemic',
             'shares_outstanding' => 1_000_000_000,
             'volatility' => 0.21,
-            'beta' => 1.00,
+            'beta_tilt' => -0.10, // service income carries a downturn
             'jump_intensity' => 0.55,
             'jump_vol' => 0.08,
             'baseline_roic' => 0.26,
@@ -2098,7 +2098,7 @@ class InitialMarket
             'systemic_importance' => 'titan',
             'shares_outstanding' => 1_000_000_000,
             'volatility' => 0.14,
-            'beta' => 0.75,
+            'beta_tilt' => -0.15, // staples volumes hold in recessions
             'jump_intensity' => 0.40,
             'jump_vol' => 0.08,
             'baseline_roic' => 0.13,
@@ -2128,7 +2128,7 @@ class InitialMarket
             'systemic_importance' => 'systemic',
             'shares_outstanding' => 1_000_000_000,
             'volatility' => 0.13,
-            'beta' => 0.65,
+            'beta_tilt' => -0.10, // pricing power, little capital
             'jump_intensity' => 0.25,
             'jump_vol' => 0.07,
             'baseline_roic' => 0.21,
@@ -2158,7 +2158,7 @@ class InitialMarket
             'systemic_importance' => 'systemic',
             'shares_outstanding' => 1_000_000_000,
             'volatility' => 0.24,
-            'beta' => 1.40,
+            'beta_tilt' => 0.25, // leveraged buyouts whose exits need open credit
             'jump_intensity' => 0.90,
             'jump_vol' => 0.12,
             'baseline_roe' => 0.24,
@@ -2188,7 +2188,7 @@ class InitialMarket
             'systemic_importance' => 'base',
             'shares_outstanding' => 1_000_000_000,
             'volatility' => 0.18,
-            'beta' => 1.15,
+            'beta_tilt' => 0.00,
             'jump_intensity' => 0.50,
             'jump_vol' => 0.09,
             'baseline_roic' => 0.155,
@@ -2218,7 +2218,7 @@ class InitialMarket
             'systemic_importance' => 'systemic',
             'shares_outstanding' => 1_000_000_000,
             'volatility' => 0.15,
-            'beta' => 0.90,
+            'beta_tilt' => -0.25, // backlog and substation replacement, not the cycle
             'jump_intensity' => 0.35,
             'jump_vol' => 0.08,
             'baseline_roic' => 0.17,
@@ -2248,7 +2248,7 @@ class InitialMarket
             'systemic_importance' => 'base',
             'shares_outstanding' => 1_000_000_000,
             'volatility' => 0.13,
-            'beta' => 0.70,
+            'beta_tilt' => -0.10, // repair parts when capex is deferred
             'jump_intensity' => 0.20,
             'jump_vol' => 0.06,
             'baseline_roic' => 0.23,
@@ -2279,7 +2279,7 @@ class InitialMarket
             'systemic_importance' => 'base',
             'shares_outstanding' => 1_000_000_000,
             'volatility' => 0.17,
-            'beta' => 0.45,
+            'beta_tilt' => -0.25, // orders follow defence budgets, not the District cycle
             'jump_intensity' => 0.85,
             'jump_vol' => 0.11,
             'baseline_roic' => 0.18,
@@ -2309,7 +2309,7 @@ class InitialMarket
             'systemic_importance' => 'base',
             'shares_outstanding' => 1_000_000_000,
             'volatility' => 0.16,
-            'beta' => 0.80,
+            'beta_tilt' => -0.15, // less cyclical than the building trade
             'jump_intensity' => 0.40,
             'jump_vol' => 0.08,
             'baseline_roic' => 0.20,
@@ -2339,7 +2339,7 @@ class InitialMarket
             'systemic_importance' => 'base',
             'shares_outstanding' => 1_000_000_000,
             'volatility' => 0.20,
-            'beta' => 1.00,
+            'beta_tilt' => -0.10, // parts demand runs while mines produce
             'jump_intensity' => 0.50,
             'jump_vol' => 0.09,
             'baseline_roic' => 0.22,
@@ -2369,7 +2369,7 @@ class InitialMarket
             'systemic_importance' => 'base',
             'shares_outstanding' => 1_000_000_000,
             'volatility' => 0.26,
-            'beta' => 1.15,
+            'beta_tilt' => 0.00,
             'jump_intensity' => 0.55,
             'jump_vol' => 0.10,
             'baseline_roic' => 0.13,
@@ -2399,7 +2399,7 @@ class InitialMarket
             'systemic_importance' => 'base',
             'shares_outstanding' => 1_000_000_000,
             'volatility' => 0.22,
-            'beta' => 0.85,
+            'beta_tilt' => 0.10, // volumes follow the mining cycle
             'jump_intensity' => 0.35,
             'jump_vol' => 0.09,
             'baseline_roic' => 0.13,

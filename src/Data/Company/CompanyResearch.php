@@ -147,7 +147,7 @@ final class CompanyResearch
                 ],
                 [
                     'heading' => 'What the desk is watching',
-                    'body' => "Orders follow construction and public works budgets and stop quickly when budgets are cut, which gives the shares a beta of about 1.8, among the highest on the board. Traders who want a quick view of the economy look at Iron Beak before they look at the Statistical Office.\n\nThe owners are the other question. As long as Lakebird is lending and Black Swan is redeveloping, the order book refills. In a downturn both stop at once, and the company that built the District finds out how many of its customers were the same two firms.",
+                    'body' => "Orders follow construction and public works budgets and stop quickly when budgets are cut, which gives the shares a beta of about 1.4, among the highest on the board. Traders who want a quick view of the economy look at Iron Beak before they look at the Statistical Office.\n\nThe owners are the other question. As long as Lakebird is lending and Black Swan is redeveloping, the order book refills. In a downturn both stop at once, and the company that built the District finds out how many of its customers were the same two firms.",
                 ],
             ],
             'related' => ['LAKE', 'SWAN', 'BRKW', 'PLZA'],
@@ -167,7 +167,7 @@ final class CompanyResearch
                 ],
                 [
                     'heading' => 'The hedge that pays twice',
-                    'body' => "Peregrine is one of very few listed companies in the District with a beta of about -0.2: its shares tend to rise when the market falls. Calm bull markets bring modest, steady results. Sell-offs lift volumes, widen spreads and raise the price of protection, and the firm has reported its best quarters during market stress. Fund managers hold the shares as a hedge, which means some of them are paying Peregrine for protection twice.\n\nIts rival for the tape is Rook Proprietary Trading, which trades the same names with its own capital. The two firms hire from the same universities and do not otherwise speak. Peregrine is also one of the few large desks in the District that does not use a Tickbird terminal, which this desk records without comment.",
+                    'body' => "Peregrine's shares have a beta of about 0.9, low for a trading house, because its results run against the market's. Calm bull markets bring modest, steady results. Sell-offs lift volumes, widen spreads and raise the price of protection, and the firm has reported its best quarters during market stress. Some fund managers hold the shares as a partial hedge, which means they are paying Peregrine for protection twice.\n\nIts rival for the tape is Rook Proprietary Trading, which trades the same names with its own capital. The two firms hire from the same universities and do not otherwise speak. Peregrine is also one of the few large desks in the District that does not use a Tickbird terminal, which this desk records without comment.",
                 ],
                 [
                     'heading' => 'What the desk is watching',
@@ -199,7 +199,7 @@ final class CompanyResearch
                 ],
                 [
                     'heading' => 'What the desk is watching',
-                    'body' => "The shares have low volatility and a beta of about -0.1, and they are usually quiet. Glasswater Row has a long-standing belief that unusual volume in Corvid comes before the failure of another listed company. Whether it works is debated, and this desk has looked at the question and decided not to publish the answer.\n\nThe risk is the silence in the rules. Every few years a member of the Diet proposes extending them to former officers and outside staff. No such bill has yet reached a vote. Corvid has never been asked to comment, though it is generally believed to know how each member intends to vote.",
+                    'body' => "The shares have low volatility and a beta of about 0.9, low for an investment bank, and they are usually quiet. Glasswater Row has a long-standing belief that unusual volume in Corvid comes before the failure of another listed company. Whether it works is debated, and this desk has looked at the question and decided not to publish the answer.\n\nThe risk is the silence in the rules. Every few years a member of the Diet proposes extending them to former officers and outside staff. No such bill has yet reached a vote. Corvid has never been asked to comment, though it is generally believed to know how each member intends to vote.",
                 ],
             ],
             'related' => ['SWAN'],
@@ -227,7 +227,7 @@ final class CompanyResearch
                 ],
                 [
                     'heading' => 'What the desk is watching',
-                    'body' => "Demand barely moves with the economy, and the shares have about half the market's beta. The risk is a single failure: a breach at a protected site or an attack on a Black Label client. Bird Watch's prices rest on a record of not failing, and a visible lapse could send clients back to contracts they have not read in years.\n\nThe concessions are granted by the District's public bodies, so a government that wanted policing back in public hands could take a large part of the book with it. No cabinet has yet tried.",
+                    'body' => "Demand barely moves with the economy, and the shares have a beta of about 0.6. The risk is a single failure: a breach at a protected site or an attack on a Black Label client. Bird Watch's prices rest on a record of not failing, and a visible lapse could send clients back to contracts they have not read in years.\n\nThe concessions are granted by the District's public bodies, so a government that wanted policing back in public hands could take a large part of the book with it. No cabinet has yet tried.",
                 ],
             ],
             'related' => ['OSPR', 'GRIP'],
@@ -283,7 +283,7 @@ final class CompanyResearch
                 ],
                 [
                     'heading' => 'What the desk is watching',
-                    'body' => "Revenue changes little whether markets rise or fall. The shares are another matter: they trade at technology multiples, with a beta of about 1.45, and fall with the technology sector even when subscriptions hold. A profile of Tickbird written by Tickbird is not a recommendation, and subscribers are reminded that this one is not either.",
+                    'body' => "Revenue changes little whether markets rise or fall. The shares are another matter: they trade at technology multiples, with a beta of about 1.0, and fall with the technology sector even when subscriptions hold. A profile of Tickbird written by Tickbird is not a recommendation, and subscribers are reminded that this one is not either.",
                 ],
             ],
             'related' => ['LAKE', 'SWAN', 'ACC', 'SHRK', 'PENG'],
@@ -311,7 +311,7 @@ final class CompanyResearch
                 ],
                 [
                     'heading' => 'What the desk is watching',
-                    'body' => "Orders follow mainland and allied defence budgets rather than the District economy, and a multi-year backlog carries earnings through District recessions. The shares have a beta of about 0.35. They tend to rise when international tensions do, since a crisis abroad brings export orders forward, and to drift lower on talk of a settlement that would let allied governments cut their budgets.\n\nThe nearer risks are procedural. A stopgap budget on the mainland freezes new programme starts until the legislature agrees a full one. A refused export licence can take half the export book with it. A programme that runs over can have its progress payments withheld until the fault is fixed, which ties up cash at the worst moment, and a grounded aircraft type puts a whole line of spares and service revenue at risk. Gryphon's connections have softened each of these in the past. Its shareholders are paying for the assumption that they will again.",
+                    'body' => "Orders follow mainland and allied defence budgets rather than the District economy, and a multi-year backlog carries earnings through District recessions. The shares have a beta of about 0.6. They tend to rise when international tensions do, since a crisis abroad brings export orders forward, and to drift lower on talk of a settlement that would let allied governments cut their budgets.\n\nThe nearer risks are procedural. A stopgap budget on the mainland freezes new programme starts until the legislature agrees a full one. A refused export licence can take half the export book with it. A programme that runs over can have its progress payments withheld until the fault is fixed, which ties up cash at the worst moment, and a grounded aircraft type puts a whole line of spares and service revenue at risk. Gryphon's connections have softened each of these in the past. Its shareholders are paying for the assumption that they will again.",
                 ],
             ],
             'related' => ['WATCH', 'OSPR', 'PTAR'],
@@ -339,7 +339,7 @@ final class CompanyResearch
                 ],
                 [
                     'heading' => 'What the desk is watching',
-                    'body' => "Osprey's demand comes from fear: of conflict abroad, of a credit crisis that pushes indebted governments towards seizing foreign assets, of a market panic that makes owners check what their overseas sites are worth. When those rise, so do deployments, which gives the shares a beta of about -0.5. They have often risen while the rest of the board fell, and drift in long calm years as deployments wind down.\n\nThe risk is the field. A deployment that goes wrong in public, with civilians hurt or a client's staff killed, brings cancellations, legal claims and a diplomatic problem the District would rather not have. The spin-off was designed to keep that risk away from Bird Watch. It was not designed to keep it away from Osprey's shareholders.",
+                    'body' => "Osprey's demand comes from fear: of conflict abroad, of a credit crisis that pushes indebted governments towards seizing foreign assets, of a market panic that makes owners check what their overseas sites are worth. When those rise, so do deployments, which gives the shares a beta of about 0.55, low for a services company. They have often held up while the rest of the board fell, and drift in long calm years as deployments wind down.\n\nThe risk is the field. A deployment that goes wrong in public, with civilians hurt or a client's staff killed, brings cancellations, legal claims and a diplomatic problem the District would rather not have. The spin-off was designed to keep that risk away from Bird Watch. It was not designed to keep it away from Osprey's shareholders.",
                 ],
             ],
             'related' => ['LAKE', 'SWAN', 'WATCH', 'CNDR', 'ALBT', 'GRIP'],

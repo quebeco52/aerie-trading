@@ -1484,6 +1484,42 @@ class DebtEngineTest extends TestCase
     }
 
     /**
+     * Cash above the operating balance could retire debt tomorrow, so an operating company's recap leverage is net
+     * of it. The same 1.25x of gross debt is past the conglomerate target with only the operating balance in the
+     * treasury and well under it with a cash pile beside it.
+     */
+    public function testIdleCashNetsOutOfTheRecapitalizationLeverage(): void
+    {
+        $engine = new DebtEngine(new MathUtility(), new CorporateMetrics(), $this->creditRatingAgency, $this->marketEventPublisherMock);
+        $macro = $this->leverageMacro();
+        $strategy = \App\Data\Company\Sectors::strategyFor('Conglomerates');
+        $lease = (new CorporateMetrics())->calculateLeaseLiability(100000000.0, $strategy->getLeaseIntensity());
+
+        $lean = $this->leverageFixture('Conglomerates', '100000000', '0');
+        $targetCash = $lean->getManagementProfile()->appliedTargetCash($strategy->calculateTargetOperatingCash(100000000.0, 0.0, 100000000.0));
+        $lean->setCorporateTreasury((string) $targetCash);
+        $leanHealth = $engine->analyzeDebtHealth($lean, $macro);
+        $this->assertEqualsWithDelta((100000000.0 + $lease) / 80000000.0, $leanHealth->debtToEquity, 1e-9, 'At the operating balance nothing nets.');
+        $this->assertFalse($leanHealth->isUnderLeveraged);
+
+        $rich = $this->leverageFixture('Conglomerates', '100000000', (string) ($targetCash + 40000000.0));
+        $richHealth = $engine->analyzeDebtHealth($rich, $macro);
+        $this->assertEqualsWithDelta((60000000.0 + $lease) / 80000000.0, $richHealth->debtToEquity, 1e-9);
+        $this->assertTrue($richHealth->isUnderLeveraged);
+    }
+
+    /** A financial's treasury is its liquidity buffer, not idle cash: its recap leverage stays gross. */
+    public function testAFinancialsRecapitalizationLeverageStaysGross(): void
+    {
+        $engine = new DebtEngine(new MathUtility(), new CorporateMetrics(), $this->creditRatingAgency, $this->marketEventPublisherMock);
+        $strategy = \App\Data\Company\Sectors::strategyFor('Investment Banking');
+        $lease = (new CorporateMetrics())->calculateLeaseLiability(100000000.0, $strategy->getLeaseIntensity());
+
+        $health = $engine->analyzeDebtHealth($this->leverageFixture('Investment Banking', '240000000', '90000000'), $this->leverageMacro());
+        $this->assertEqualsWithDelta((240000000.0 + $lease) / 80000000.0, $health->debtToEquity, 1e-9);
+    }
+
+    /**
      * The whole reason the covenant has to exist: interest coverage is rate-sensitive and this is not, so
      * cheap debt keeps the ICR gate open while cash-flow leverage runs past the sector limit.
      */
