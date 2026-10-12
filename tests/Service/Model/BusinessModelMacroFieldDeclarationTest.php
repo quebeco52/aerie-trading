@@ -48,7 +48,7 @@ final class BusinessModelMacroFieldDeclarationTest extends TestCase
      */
     private const DERIVED_READING_FIELDS = [
         'sentiment_deviation' => ['consumer_sentiment_index_ema'],
-        'sentiment_residual'  => ['consumer_sentiment_index_ema', 'output_gap_ema'],
+        'sentiment_residual'  => ['consumer_sentiment_index_ema'],
         'deal_activity_deviation' => ['deal_activity_index_ema'],
         'exchange_rate_gap' => ['exchange_rate_index_ema'],
         'unemployment_gap' => ['unemployment_rate_ema', 'nairu_ema'],

@@ -2222,4 +2222,20 @@ class MacroAggregateSubsystemTest extends TestCase
 
         $this->assertEqualsWithDelta(MacroEngine::TARGET_INFLATION, $state->producerPriceInflation, 1e-12);
     }
+
+    /** The price level is recorded at each month end, and a year of record gives the year-on-year rate in logs. */
+    public function testConsumerPriceInflationIsReadYearOnYearOffTheMonthEnds(): void
+    {
+        $state = new MacroState();
+        $state->inflation = 0.03;
+        $dt = 1.0 / 360.0;
+        for ($tick = 0; $tick < 400; $tick++) {
+            $state->totalTime += $dt;
+            $this->subsystem->calculatePotentialAndNominalGdp($state, $dt, 0.0);
+        }
+
+        $this->assertCount(MacroAggregateSubsystem::CPI_MONTHS_KEPT, $state->consumerPriceMonthly);
+        $this->assertEqualsWithDelta(0.03, MacroAggregateSubsystem::consumerPriceInflationYearOnYear($state->consumerPriceMonthly), 1e-9);
+        $this->assertNull(MacroAggregateSubsystem::consumerPriceInflationYearOnYear(array_slice($state->consumerPriceMonthly, 1)), 'Less than a year on record has no year-on-year rate.');
+    }
 }

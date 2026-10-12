@@ -330,6 +330,10 @@ class MacroAggregateSubsystem
     /** Standard quarterly macro indicator EMA smoothing horizon. */
     public const STANDARD_EMA_HORIZON_YEARS = 0.25;
 
+    // --- Consumer Price Index, Year on Year ---
+    /** Month-end price levels kept: this month's and the twelve before, for the year-on-year rate the CPI release reports. */
+    public const CPI_MONTHS_KEPT = 13;
+
     /** The premium's stationary means depend on constants only; computed once. */
     private ?float $adversePremiumMean = null;
     private ?float $premiumMean = null;
@@ -1133,10 +1137,30 @@ class MacroAggregateSubsystem
         $currentDeflator = $state->gdpDeflator > 0.0 ? $state->gdpDeflator : 1.0;
         $state->gdpDeflator = max(0.01, $currentDeflator * exp($state->domesticInflation * $dt));
         $state->consumerPriceLevel = max(0.01, ($state->consumerPriceLevel > 0.0 ? $state->consumerPriceLevel : $currentDeflator) * exp($state->inflation * $dt));
+        if (TimeSeries::crossedSimulatedBoundary($state->totalTime, $dt, 1.0 / 12.0)) {
+            $state->consumerPriceMonthly = array_slice([...$state->consumerPriceMonthly, $state->consumerPriceLevel], -self::CPI_MONTHS_KEPT);
+        }
 
         $priorNominalGdp = $state->nominalGdpIndex;
         $state->nominalGdpIndex = max(0.10, $state->potentialGdpIndex * (1.0 + $state->outputGap) * $state->gdpDeflator);
         $state->nominalGdpGrowth = $priorNominalGdp > 0.0 ? log($state->nominalGdpIndex / $priorNominalGdp) / $dt : $state->nominalGdpGrowth;
+    }
+
+    /**
+     * Consumer price inflation over the twelve months to the last month end, in logs: the year-on-year rate the CPI
+     * release reports and households answer surveys on.
+     *
+     * @param list<float> $consumerPriceMonthly Month-end consumer price levels, oldest first.
+     * @return float|null Null until a year of month ends is on record.
+     */
+    public static function consumerPriceInflationYearOnYear(array $consumerPriceMonthly): ?float
+    {
+        $count = count($consumerPriceMonthly);
+        if ($count < self::CPI_MONTHS_KEPT || $consumerPriceMonthly[$count - self::CPI_MONTHS_KEPT] <= 0.0) {
+            return null;
+        }
+
+        return log($consumerPriceMonthly[$count - 1] / $consumerPriceMonthly[$count - self::CPI_MONTHS_KEPT]);
     }
 
     /**

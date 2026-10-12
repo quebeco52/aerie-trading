@@ -94,7 +94,7 @@ class ToolsAndAccessoriesBusinessModelTest extends TestCase
     /**
      * The gap reaches each stream once, at the firm's cyclicality. It used to arrive three times: a root shift at
      * half cyclicality, the commercial stream at (0.90 + pricing power) x cyclicality, and the consumer stream again
-     * through confidence, which carries SENTIMENT_GAP_LOADING points of gap: ~1.4x the gap for Crossbill, whose
+     * through confidence, which carries SentimentOnTheCycle::POINTS_PER_GAP points of gap: ~1.4x the gap for Crossbill, whose
      * tuning means 0.55x.
      */
     #[DataProvider('cyclicalities')]
@@ -109,7 +109,7 @@ class ToolsAndAccessoriesBusinessModelTest extends TestCase
         // Each gap comes with the confidence it implies, so the sentiment residual is nil and only the gap moves.
         $stateAt = fn (float $gap): MacroStateDTO => new MacroStateDTO(
             outputGapEma: $gap,
-            consumerSentimentIndexEma: MacroEngine::SENTIMENT_TREND_LEVEL + (MacroEngine::SENTIMENT_GAP_LOADING * $gap),
+            consumerSentimentIndexEma: MacroEngine::SENTIMENT_TREND_LEVEL + (\App\Tests\Support\SentimentOnTheCycle::POINTS_PER_GAP * $gap),
             exchangeRateIndexEma: 100.0,
         );
         $response = function (float $gap) use ($stock, $quiet, $expectedRevenue, $stateAt): float {
@@ -145,7 +145,7 @@ class ToolsAndAccessoriesBusinessModelTest extends TestCase
             0.35,
             20_000_000.0,
             0.10,
-            new MacroStateDTO(outputGapEma: 0.0, consumerSentimentIndexEma: $sentiment, exchangeRateIndexEma: 100.0),
+            new MacroStateDTO(outputGapEma: 0.0, consumerSentimentIndexEma: $sentiment, consumerSentimentMood: $sentiment - MacroEngine::SENTIMENT_TREND_LEVEL, exchangeRateIndexEma: 100.0),
             $quiet
         );
         $trend = $run(MacroEngine::SENTIMENT_TREND_LEVEL);

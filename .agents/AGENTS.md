@@ -44,7 +44,8 @@ Known traps, each shipped as a bug before:
 - Order-flow impact is linear (Huberman-Stanzl); square-root impact blew bubbles.
 - Brock-Hommes fitness is annualized before strategies are compared.
 - `roicTtm` is a trailing average; gates on it saturate.
-- The sentiment index sits near 88 at trend: read `sentimentDeviation()`, not the level.
+- The sentiment index sits near 93 with its fundamentals neutral: read `sentimentDeviation()`, not the level, and
+  `sentimentResidual()` (the mood) where the cycle is priced beside it.
 - Silent integration: a computed field nobody reads, or an input read the tick before its driver updates. Trace the
   call path with grep before calling a model wired in.
 - dt-neutrality tests on emergent quantities have no power; test each primitive.

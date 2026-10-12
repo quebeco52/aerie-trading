@@ -678,20 +678,12 @@ class AssetMarketSubsystemTest extends TestCase
         $this->assertGreaterThan(1.7, $war->alliedDefenseSpendingIndex / $peace->alliedDefenseSpendingIndex, 'A Korea-scale mobilisation: allied budgets up by three quarters.');
     }
 
-    public function testAStormSeasonDentsConfidenceAndTheHousingStock(): void
+    public function testAStormSeasonDentsTheHousingStock(): void
     {
         $quiet = new class extends MathUtility {
             public function generateStandardNormal(): float { return 0.0; }
         };
         $subsystem = new AssetMarketSubsystem($quiet);
-
-        $average = new MacroState();
-        $stormy = new MacroState();
-        $stormy->catastropheLossIndexEma = 3.0;
-
-        $subsystem->calculateConsumerSentiment($average, 0.25);
-        $subsystem->calculateConsumerSentiment($stormy, 0.25);
-        $this->assertLessThan($average->consumerSentimentIndex, $stormy->consumerSentimentIndex);
 
         $averageHousing = new MacroState();
         $stormyHousing = new MacroState();

@@ -263,7 +263,7 @@ class AutoManufacturerBusinessModelTest extends TestCase
      * of its depth. The drop from neutral is what was calibrated here, and it is unchanged by that fix.
      *
      * Each scenario pairs its gap with the confidence that gap actually comes with (SENTIMENT_TREND_LEVEL
-     * less SENTIMENT_GAP_LOADING per unit of gap): 82 is a mild slowdown, 55 at a -6% gap is a panic.
+     * less SentimentOnTheCycle::POINTS_PER_GAP per unit of gap): 82 is a mild slowdown, 55 at a -6% gap is a panic.
      */
     public function testMildSlowdownCutsVolumeByAnEleventhNotAQuarterAndPmiDoesNotStack(): void
     {
@@ -297,7 +297,7 @@ class AutoManufacturerBusinessModelTest extends TestCase
 
     /**
      * The gap reaches vehicle demand once, through the stock-adjustment multiplier. Confidence used to be read whole
-     * beside the gap, and it carries SENTIMENT_GAP_LOADING points of gap, so a second ~2.3x the gap rode in on it
+     * beside the gap, and it carries SentimentOnTheCycle::POINTS_PER_GAP points of gap, so a second ~2.3x the gap rode in on it
      * unpriced. With confidence at the level its gap implies, sentiment adds nothing and nothing else moves.
      */
     public function testTheGapReachesVehicleDemandOnceThroughTheDurableMultiplier(): void
@@ -310,7 +310,7 @@ class AutoManufacturerBusinessModelTest extends TestCase
 
         $stateAt = fn (float $gap): MacroStateDTO => new MacroStateDTO(
             outputGapEma: $gap,
-            consumerSentimentIndexEma: MacroEngine::SENTIMENT_TREND_LEVEL + (MacroEngine::SENTIMENT_GAP_LOADING * $gap),
+            consumerSentimentIndexEma: MacroEngine::SENTIMENT_TREND_LEVEL + (\App\Tests\Support\SentimentOnTheCycle::POINTS_PER_GAP * $gap),
             exchangeRateIndexEma: 100.0,
         );
         $response = function (float $gap) use ($stock, $quiet, $expectedRevenue, $stateAt): float {

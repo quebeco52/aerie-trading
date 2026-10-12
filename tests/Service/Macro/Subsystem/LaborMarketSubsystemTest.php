@@ -395,4 +395,13 @@ class LaborMarketSubsystemTest extends TestCase
         }
         $this->assertTrue(MacroEngine::inSahmRecession($state->sahmRecessionIndicator), 'Half a point and more is a recession under way.');
     }
+
+    /** The change over the year reads the month end twelve before the last off the Sahm record. */
+    public function testUnemploymentChangeIsReadOverTheYear(): void
+    {
+        $months = [0.050, 0.049, 0.040, 0.041, 0.042, 0.043, 0.044, 0.045, 0.046, 0.047, 0.048, 0.049, 0.050, 0.051, 0.055];
+
+        $this->assertEqualsWithDelta(0.055 - 0.040, LaborMarketSubsystem::unemploymentChangeYearOnYear($months), 1e-12);
+        $this->assertNull(LaborMarketSubsystem::unemploymentChangeYearOnYear([0.041, 0.042, 0.043, 0.044, 0.045, 0.046, 0.047, 0.048, 0.049, 0.050, 0.051, 0.055]), 'Less than a year on record has no change over the year.');
+    }
 }

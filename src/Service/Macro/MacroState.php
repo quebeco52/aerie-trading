@@ -66,6 +66,7 @@ class MacroState
     public float $energySupplyEma;
     public float $consumerSentimentIndex;
     public float $consumerSentimentIndexEma;
+    public float $consumerSentimentMood;
 
     public float $exchangeRateIndex;
     public float $exchangeRateIndexEma;
@@ -185,6 +186,7 @@ class MacroState
     public float $eventCooldownTimer;
     /** @var array<string, float> */
     public array $systemicAlarmLatches;
+    public float $recessionPeakUnemployment;
     public float $equityRiskPremium;
 
     public float $potentialGdpIndex;
@@ -213,6 +215,8 @@ class MacroState
     public float $equityWealthTrend;
     public float $gdpDeflator;
     public float $consumerPriceLevel;
+    /** @var list<float> */
+    public array $consumerPriceMonthly;
 
     public float $marketVolatility;
     public float $marketVolatilityEma;
@@ -582,7 +586,7 @@ class MacroState
             $carried[$field] = true;
             $state->$field = match ($field) {
                 'sectorZ', 'sectorDemandZ', 'sittingLevers', 'previousSittingLevers', 'expectedLevers', 'previousExpectedLevers', 'systemicAlarmLatches' => is_array($data[$key]) ? array_map('floatval', $data[$key]) : [],
-                'unemploymentMonthly' => is_array($data[$key]) ? array_values(array_map('floatval', $data[$key])) : [],
+                'unemploymentMonthly', 'consumerPriceMonthly' => is_array($data[$key]) ? array_values(array_map('floatval', $data[$key])) : [],
                 'qeActive', 'qtActive' => (bool) $data[$key],
                 'eventType' => (string) $data[$key],
                 default => (float) $data[$key],

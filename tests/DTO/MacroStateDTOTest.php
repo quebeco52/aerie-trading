@@ -219,4 +219,13 @@ class MacroStateDTOTest extends TestCase
         $this->assertEqualsWithDelta(-0.10, $moved->housePriceDeviation(), 1e-12);
         $this->assertEqualsWithDelta(0.01, $moved->unemploymentGap(), 1e-12, 'A point of slack over the scarred natural rate, not over the founding one.');
     }
+
+    /** The residual is the mood the fundamentals leave unexplained, whatever level the cycle has put the index at. */
+    public function testSentimentResidualIsTheMood(): void
+    {
+        $slump = new MacroStateDTO(outputGapEma: -0.04, consumerSentimentIndexEma: 70.0, consumerSentimentMood: -6.0);
+
+        $this->assertEqualsWithDelta(-0.06, $slump->sentimentResidual(), 1e-12);
+        $this->assertEqualsWithDelta((70.0 - \App\Service\Macro\MacroEngine::SENTIMENT_TREND_LEVEL) / 100.0, $slump->sentimentDeviation(), 1e-12);
+    }
 }

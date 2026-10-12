@@ -66,6 +66,7 @@ class MacroFieldRegistryTest extends TestCase
 
         'eventType' => 'Label of the event in flight, not a series.',
         'systemicAlarmLatches' => 'Which level alarms have reported this episode; a news-desk latch, not a series.',
+        'recessionPeakUnemployment' => 'The recession latch\'s exit reference; unemployment_rate is recorded.',
         'electionPulse' => 'Input the government hands the economy each tick; policy_uncertainty_index records its effect.',
         'tariffTradeLag' => 'Net-export response building toward the tariff, which import_tariff_rate records.',
         'immigrationPopulationShift' => 'Integral of labor_force_growth_rate over the structural rate, which is recorded.',
@@ -101,6 +102,8 @@ class MacroFieldRegistryTest extends TestCase
         'sovereignFundDollarsPerGdp' => 'Scale fixed at inception, not a series.',
         'sovereignFundAnnualDraw' => 'Currency amount; sovereign_fund_draw_to_gdp records it.',
         'unemploymentMonthly' => 'Array of the last month-end unemployment rates the Sahm rule reads; unemployment_rate is recorded.',
+        'consumerPriceMonthly' => 'Array of the last month-end price levels the year-on-year CPI reads; inflation is recorded.',
+        'consumerSentimentMood' => 'Internal to the sentiment process; consumer_sentiment_index is recorded.',
         'sovereignFundDrawShare' => 'The share the year\'s draw was set at; reserve_draw_share records the share in force.',
         'sovereignFundRebalanceBacklog' => 'Currency amount; sovereign_fund_rebalance_share records it against the float.',
         'sovereignFundRebalanceRate' => 'Currency pace of the programme in flight; the share and months left record it.',

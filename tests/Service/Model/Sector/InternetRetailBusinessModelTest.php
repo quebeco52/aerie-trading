@@ -172,11 +172,10 @@ class InternetRetailBusinessModelTest extends TestCase
         $run = function (float $sentiment) use ($math): array {
             $stock = (new Stock())->setTicker('WEAV_SENT')->setBeta('1.0');
 
-            return $this->model->computeActualFinancials($stock, 1000.0, 0.60, 50.0, 0.0, new MacroStateDTO(outputGapEma: 0.0, consumerSentimentIndexEma: $sentiment), $math)->streamRevenue;
+            return $this->model->computeActualFinancials($stock, 1000.0, 0.60, 50.0, 0.0, new MacroStateDTO(outputGapEma: 0.0, consumerSentimentIndexEma: $sentiment, consumerSentimentMood: $sentiment - MacroEngine::SENTIMENT_TREND_LEVEL), $math)->streamRevenue;
         };
 
-        // Calm is the level the index sits at with output at trend, so the slump is a clean twenty points
-        // off a state the model reads as neutral rather than off one it already reads as upbeat.
+        // With output at trend the slump is twenty points of mood: confidence the cycle does not explain.
         $calm = $run(MacroEngine::SENTIMENT_TREND_LEVEL);
         $slump = $run(MacroEngine::SENTIMENT_TREND_LEVEL - 20.0);
 
@@ -189,7 +188,7 @@ class InternetRetailBusinessModelTest extends TestCase
     {
         $stock = (new Stock())->setTicker('LOON_ACTIVITY')->setBeta('1.0');
         // Confidence falls by its gap loading with the gap, so the residual over the gap is zero.
-        $sentiment = MacroEngine::SENTIMENT_TREND_LEVEL + (-0.03 * MacroEngine::SENTIMENT_GAP_LOADING);
+        $sentiment = MacroEngine::SENTIMENT_TREND_LEVEL + (-0.03 * \App\Tests\Support\SentimentOnTheCycle::POINTS_PER_GAP);
         $recession = new MacroStateDTO(outputGapEma: -0.03, exchangeRateIndexEma: 100.0, consumerSentimentIndexEma: $sentiment);
 
         $this->assertEqualsWithDelta(0.0, $this->model->getMacroPhysics($stock, $recession)['macro_demand_shift'], 1e-12);

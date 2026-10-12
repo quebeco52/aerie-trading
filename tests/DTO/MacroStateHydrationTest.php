@@ -333,23 +333,15 @@ class MacroStateHydrationTest extends TestCase
         ];
     }
 
-    /**
-     * Sentiment is constructed by subtracting one-sided penalties from SENTIMENT_BASELINE, so that constant
-     * is the series' ceiling, not its mean, and an opening taken from it describes a boom. Both readers
-     * open on the measured resting level instead.
-     */
+    /** Both readers open where the index sits with its fundamentals neutral, and with no mood in it. */
     #[\PHPUnit\Framework\Attributes\DataProvider('curveReaderProvider')]
-    public function testSentimentOpensAtItsTrendLevelAndNotAtTheCeilingItIsBuiltFrom(callable $open): void
+    public function testSentimentOpensAtItsTrendLevel(callable $open): void
     {
         $reader = $open();
 
         $this->assertSame(MacroEngine::SENTIMENT_TREND_LEVEL, $reader->consumerSentimentIndex);
         $this->assertSame(MacroEngine::SENTIMENT_TREND_LEVEL, $reader->consumerSentimentIndexEma);
-        $this->assertLessThan(
-            MacroEngine::SENTIMENT_BASELINE,
-            $reader->consumerSentimentIndex,
-            'The baseline is what the index is built down from, so no neutral opening may sit at or above it.'
-        );
+        $this->assertSame(0.0, $reader->consumerSentimentMood);
     }
 
     #[\PHPUnit\Framework\Attributes\DataProvider('curveReaderProvider')]

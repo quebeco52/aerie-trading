@@ -103,14 +103,15 @@ class ApparelManufacturingBusinessModelTest extends TestCase
         $recessionMacro = new MacroStateDTO(
             outputGapEma: -0.05,
             consumerSentimentIndexEma: \App\Service\Macro\MacroEngine::SENTIMENT_TREND_LEVEL
-                + (\App\Service\Macro\MacroEngine::SENTIMENT_GAP_LOADING * -0.05) - 8.0,
+                + (\App\Tests\Support\SentimentOnTheCycle::POINTS_PER_GAP * -0.05) - 8.0,
+            consumerSentimentMood: -8.0,
             inflationEma: 0.02
         );
 
         $genericPhysics = $this->model->getMacroPhysics($genericStock, $recessionMacro);
 
         // The gap is priced beside confidence, so confidence enters as its residual over the gap: only the
-        // eight points of fear the gap does not explain, not the ~19 points the gap itself puts into the index.
+        // eight points of fear the gap does not explain, not the ~14 points the gap itself puts into the index.
         // Pro-cyclical drag = ((-0.05 * 0.70) + (-0.08 * 0.40)) * cyclicality = -0.067 * cyclicality
         // Generic trade-down bonus = 0.05 * 0.60 * (1.5 - 0.5) = +0.030
         $cyclicality = ApparelManufacturingBusinessModel::OPERATING_CYCLICALITY;

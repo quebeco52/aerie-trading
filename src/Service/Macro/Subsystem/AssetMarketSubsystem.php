@@ -85,25 +85,21 @@ class AssetMarketSubsystem
     /** Correlation of the variance innovation with the market return, the Heston rho: -0.77 on bias-corrected high-frequency S&P 500 data (Ait-Sahalia, Fan & Li 2013). */
     public const MACRO_VOL_LEVERAGE_RHO = -0.77;
 
-    // --- Consumer Sentiment Index & Animal Spirits ---
-    /** Sensitivity of consumer misery index (unemployment and inflation) on sentiment. */
-    public const SENTIMENT_MISERY_MULTIPLIER = 500.0;
-    /** Sensitivity of financial market volatility on consumer sentiment confidence. */
-    public const SENTIMENT_VOLATILITY_MULTIPLIER = 80.0;
-    /** Momentum sensitivity of worsening inflation and unemployment shifts on consumer confidence. */
-    public const SENTIMENT_MOMENTUM_MULTIPLIER = 300.0;
-    /** Sensitivity of interest rate environment on consumer sentiment borrowing costs. */
-    public const SENTIMENT_RATE_MULTIPLIER = 300.0;
-    /** Sensitivity of consumer sentiment expansion boost during positive GDP output gaps. */
-    public const SENTIMENT_EXPANSION_MULTIPLIER = 400.0;
-    /** Sensitivity penalty on consumer sentiment during GDP output contractions. */
-    public const SENTIMENT_CONTRACTION_MULTIPLIER = 500.0;
-    /** Sensitivity coefficient penalizing consumer sentiment during retail energy price shocks. */
-    public const SENTIMENT_ENERGY_PANIC_SCALE = 0.25;
-    /** Mean-reversion speed (theta) of psychological animal spirits returning to fundamentals. */
-    public const ANIMAL_SPIRITS_MEAN_REVERSION = 2.0;
-    /** Stochastic diffusion volatility (sigma) of consumer animal spirits. */
-    public const ANIMAL_SPIRITS_VOLATILITY = 2.5;
+    // --- Consumer Sentiment (Michigan index on FRED, monthly 1978-2019: UMCSENT on UNRATE - NROU, CPI yoy, UNRATE yoy) ---
+    /** Index points per unit of unemployment above NAIRU: -4.56 a point (Newey-West t -5.7). */
+    public const SENTIMENT_SLACK_LOADING = -456.0;
+    /** Index points per unit of year-on-year CPI inflation above target: -2.27 a point (t -6.5). Real gasoline against its trend adds nothing once CPI is in (t -0.8), nor does the VIX (t -1.4). */
+    public const SENTIMENT_INFLATION_LOADING = -227.0;
+    /** Index points per unit of rise in unemployment over the year: -3.06 a point (t -2.6). */
+    public const SENTIMENT_UNEMPLOYMENT_CHANGE_LOADING = -306.0;
+    /** Mean reversion of the mood the fundamentals leave unexplained: the residual's 0.859 monthly autocorrelation. */
+    public const SENTIMENT_MOOD_MEAN_REVERSION = 1.83;
+    /** Stationary standard deviation of that mood, in index points (the fit's residual, 7.6; R^2 0.64). */
+    public const SENTIMENT_MOOD_SD = 7.56;
+    /** Lowest the index can read (the survey's record low is 50.0, June 2022). */
+    public const SENTIMENT_FLOOR = 40.0;
+    /** Highest the index can read (the survey's record high is 112.0, January 2000). */
+    public const SENTIMENT_CEILING = 120.0;
 
     // --- The Mainland (Rudebusch & Svensson 1999, re-estimated on US data 1985-2019: var/harness/mainland_fit.py) ---
     /** The mainland's statistics and its central bank's decisions arrive once a quarter, the frequency its equations are estimated at. */
@@ -182,8 +178,6 @@ class AssetMarketSubsystem
     public const FX_FISCAL_RISK_SENSITIVITY = 2.0;
 
     // --- Physical Catastrophes ---
-    /** Sentiment index points lost per unit of catastrophe burden above an average year (a season of storms is a few points of confidence, not a recession). */
-    public const SENTIMENT_CATASTROPHE_MULTIPLIER = 3.0;
     /** Share of the housing stock's fundamental value destroyed per unit of excess catastrophe burden; rebuilt through the housing-starts channel. */
     public const CATASTROPHE_PROPERTY_DAMAGE_SHARE = 0.01;
 
@@ -741,58 +735,44 @@ class AssetMarketSubsystem
     }
 
     /**
-     * University of Michigan Sentiment & Okun Misery Index with Animal Spirits OU Diffusion (Akerlof-Shiller 2009).
+     * Consumer sentiment as the Michigan index answers it: a level set by what households see -- unemployment above its
+     * natural rate, the year's CPI inflation and whether joblessness is rising -- plus a persistent mood the fundamentals
+     * do not explain (Barsky & Sims 2012 find it carries news; Akerlof & Shiller 2009 call it animal spirits).
      *
-     * Derives rational consumer confidence from inflation, unemployment, interest rates, and energy costs,
-     * compounded with an Ornstein-Uhlenbeck stochastic diffusion simulating psychological animal spirits.
+     * Coefficients are a Newey-West regression of UMCSENT on FRED data, monthly 1978-2019, and the mood is that fit's
+     * residual as an Ornstein-Uhlenbeck process. Every term is two-sided, so with unemployment at NAIRU, inflation on
+     * target and joblessness flat the index sits at SENTIMENT_TREND_LEVEL.
      *
      * @param MacroState $state Current macroeconomic state.
      * @param float      $dt    Time increment in years.
      */
     public function calculateConsumerSentiment(MacroState $state, float $dt): void
     {
-        $excessInflation = max(0.0, $state->inflation - MacroEngine::TARGET_INFLATION);
-        $excessUnemployment = max(0.0, $state->unemploymentRate - $state->nairu);
-        $miseryPenalty = ($excessInflation + $excessUnemployment) * self::SENTIMENT_MISERY_MULTIPLIER;
+        $inflationYearOnYear = MacroAggregateSubsystem::consumerPriceInflationYearOnYear($state->consumerPriceMonthly) ?? $state->inflationEma;
+        $unemploymentChange = LaborMarketSubsystem::unemploymentChangeYearOnYear($state->unemploymentMonthly) ?? 0.0;
 
-        $inflationMomentum = max(0.0, $state->inflation - $state->inflationEma);
-        $unemploymentMomentum = max(0.0, $state->unemploymentRate - $state->unemploymentRateEma);
-        $momentumPenalty = ($inflationMomentum + $unemploymentMomentum) * self::SENTIMENT_MOMENTUM_MULTIPLIER;
-
-        $excessVolatility = max(0.0, $state->marketVolatility - MacroEngine::MACRO_VOL_BASE_ANCHOR);
-        $fearPenalty = $excessVolatility * self::SENTIMENT_VOLATILITY_MULTIPLIER;
-
-        $neutral10yYield = $state->naturalRate + MacroEngine::TARGET_INFLATION + MacroEngine::NS_BASE_TERM_PREMIUM;
-        $excessYield = max(0.0, $state->yield10y - $neutral10yYield);
-        $ratePenalty = $excessYield * self::SENTIMENT_RATE_MULTIPLIER;
-
-        $gasPanic = max(0.0, $state->energyPriceShock) * self::SENTIMENT_ENERGY_PANIC_SCALE;
-        $disasterPenalty = max(0.0, $state->catastropheLossIndexEma - 1.0) * self::SENTIMENT_CATASTROPHE_MULTIPLIER;
-
-        $gapTerm = $state->outputGap * ($state->outputGap > 0.0 ? self::SENTIMENT_EXPANSION_MULTIPLIER : self::SENTIMENT_CONTRACTION_MULTIPLIER);
-        $fundamentalSentiment = MacroEngine::SENTIMENT_BASELINE - $miseryPenalty - $momentumPenalty - $fearPenalty - $ratePenalty - $gasPanic - $disasterPenalty + $gapTerm;
+        $slack = self::SENTIMENT_SLACK_LOADING * ($state->unemploymentRate - $state->nairu);
+        $inflation = self::SENTIMENT_INFLATION_LOADING * ($inflationYearOnYear - MacroEngine::TARGET_INFLATION);
+        $joblessness = self::SENTIMENT_UNEMPLOYMENT_CHANGE_LOADING * $unemploymentChange;
+        $fundamentalSentiment = MacroEngine::SENTIMENT_TREND_LEVEL + $slack + $inflation + $joblessness;
 
         if ($this->diagnostics?->isEnabled()) {
             $this->diagnostics->recordLevel('households', 'sentimentFundamental', [
-                'baseline' => MacroEngine::SENTIMENT_BASELINE,
-                'misery' => -$miseryPenalty,
-                'momentum' => -$momentumPenalty,
-                'fear' => -$fearPenalty,
-                'rates' => -$ratePenalty,
-                'energy' => -$gasPanic,
-                'catastrophe' => -$disasterPenalty,
-                'outputGap' => $gapTerm,
+                'trend' => MacroEngine::SENTIMENT_TREND_LEVEL,
+                'slack' => $slack,
+                'inflation' => $inflation,
+                'unemploymentChange' => $joblessness,
             ], $fundamentalSentiment, $dt);
         }
 
-        $currentSentiment = $state->consumerSentimentIndex ?? MacroEngine::SENTIMENT_BASELINE;
-        $dW = $this->mathUtility->generateStandardNormal();
-
-        $drift = self::ANIMAL_SPIRITS_MEAN_REVERSION * ($fundamentalSentiment - $currentSentiment) * $dt;
-        $diffusion = self::ANIMAL_SPIRITS_VOLATILITY * sqrt($dt) * $dW;
-
-        $newSentiment = $currentSentiment + $drift + $diffusion;
-        $state->consumerSentimentIndex = max(40.0, min(120.0, $newSentiment));
+        $state->consumerSentimentMood = StochasticProcesses::calculateOrnsteinUhlenbeckStep(
+            current: $state->consumerSentimentMood,
+            kappa: self::SENTIMENT_MOOD_MEAN_REVERSION,
+            stationarySd: self::SENTIMENT_MOOD_SD,
+            dt: $dt,
+            dW: $this->mathUtility->generateStandardNormal()
+        );
+        $state->consumerSentimentIndex = max(self::SENTIMENT_FLOOR, min(self::SENTIMENT_CEILING, $fundamentalSentiment + $state->consumerSentimentMood));
     }
 
     /**

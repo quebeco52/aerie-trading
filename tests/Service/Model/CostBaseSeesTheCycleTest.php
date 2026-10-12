@@ -70,7 +70,7 @@ class CostBaseSeesTheCycleTest extends TestCase
             macroCreditSpreadEma: 2.0 * MacroEngine::BASE_CREDIT_SPREAD,
             domesticDemandGapEma: self::GAP,
             foreignOutputGap: self::GAP,
-            consumerSentimentIndexEma: MacroEngine::SENTIMENT_TREND_LEVEL + (MacroEngine::SENTIMENT_GAP_LOADING * self::GAP),
+            consumerSentimentIndexEma: MacroEngine::SENTIMENT_TREND_LEVEL + (\App\Tests\Support\SentimentOnTheCycle::POINTS_PER_GAP * self::GAP),
             corporateDefaultRate: 2.0 * MacroEngine::CORPORATE_DEFAULT_BASELINE,
             corporateDefaultRateEma: 2.0 * MacroEngine::CORPORATE_DEFAULT_BASELINE,
             manufacturingPmi: MacroEngine::PMI_BASELINE - 5.0,
