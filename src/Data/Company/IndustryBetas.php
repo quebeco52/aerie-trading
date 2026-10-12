@@ -154,6 +154,7 @@ final class IndustryBetas
         'Consulting Services' => 'Business & Consumer Services',
         'Copper' => 'Metals & Mining',
         'Credit Services' => 'Financial Svcs. (Non-bank & Insurance)',
+        'Custody Banks' => 'Bank (Money Center)',
         'Diagnostics & Research' => 'Healthcare Support Services',
         'Discount Stores' => 'Retail (General)',
         'Distressed Debt' => 'Investments & Asset Management',

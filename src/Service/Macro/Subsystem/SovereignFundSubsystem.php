@@ -99,10 +99,6 @@ class SovereignFundSubsystem
     /** Room under the ownership ceiling smaller than this share of the float is rounding, not capacity. */
     private const ROOM_TOLERANCE = 1.0e-9;
 
-    // --- Opening Size (GPIF, FY2024) ---
-    /** Fund over GDP at inception: GPIF's scale, ¥250T of assets on ¥609T of FY2024 nominal GDP (GPIF annual report FY2024; Cabinet Office). */
-    public const OPENING_FUND_TO_GDP = 0.41;
-
     // --- Currency Bridge (World Bank) ---
     /** The seeded board's value at the opening: its first-quarter mean on the full-market harness, $21.2T (se 0.17T) over seeds 1-16 (var/harness/opening_cap). */
     public const BOARD_OPENING_CAP_USD = 21.2e12;
@@ -181,7 +177,7 @@ class SovereignFundSubsystem
         $dollarsPerGdp = $state->equityMarketCap / (self::MARKET_CAP_TO_GDP * $state->nominalGdpIndex);
         $gdpDollars = $dollarsPerGdp * $state->nominalGdpIndex;
         $domestic = self::DOMESTIC_OWNERSHIP_OPENING * $state->boardFloatCap;
-        $foreign = max(0.0, (self::OPENING_FUND_TO_GDP * $gdpDollars) - $domestic);
+        $foreign = max(0.0, (MacroEngine::OPENING_FUND_TO_GDP * $gdpDollars) - $domestic);
 
         $state->sovereignFundDollarsPerGdp = $dollarsPerGdp;
         $state->sovereignFundDomesticEquity = $domestic;

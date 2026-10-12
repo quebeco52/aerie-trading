@@ -36,3 +36,19 @@ Harness and commands: see RUN.md. Table: `sanity_3seed_20y.out`. Tree: worktree-
   - FNCH op margin -1/21/45%; loss quarters 10%; corr(YoY rev, gold) 0.55 vs metals 0.18; board corr 0.23 (CNDR 0.33);
     price y20/seed 15.4/0.31/3.8. Seed 2: gold 70-79 from y4, buybacks 2.5-3.5x NI while cheap, revenue 0.27x by y19.
   - Board failures 0/0/0.
+
+## 2026-10-12 round 2: PELI (health plan) + EGRT (custody bank), 3 seeds x 20y, live macro
+
+`ARM=<arm> python3 var/harness/new_firms/analyse_round2.py 1 2 3` (rows gained mcr, reb, ugap, reimb, ewr, fund).
+
+- r2v1: PELI medical cost ratio median 77.7%, rebates in 80/80 quarters (3.9% of premium). Two causes: the engine strikes
+  the variable/fixed split on cash costs net of depreciation (1.6% of revenue), and the standard plant modernization lifted
+  the margin on 0.4x revenue of systems and goodwill. Fixed: decay/gain 0 for the plan, fixed_cost_ratio 0.127 -> 0.112.
+  Board: TIER died in seed 3 at y17.5 (the known PE leverage defect).
+- r2v2 (final):
+  - PELI medical cost ratio 77.3/82.7/91.1% min/median/max (UNH 79.1-89.1%, 82.5% in 2019); rebates in 26/80 quarters,
+    0.2% of premium; op margin 0/5.3/8.6% p5/p50/p95; loss quarters 7.5%; corr(reimbursement update, MCR) +0.18;
+    board corr 0.54; price y20/seed 2.8-3.7.
+  - EGRT ROE 8.7/13.7/19.7% (STT ~10-12%); no loss quarters; corr(YoY log revenue, YoY log equity/trend) 0.27; board
+    corr 0.60 (LAKE 0.78); price y20/seed 3.4-8.3.
+  - Board failures 0/0/0.

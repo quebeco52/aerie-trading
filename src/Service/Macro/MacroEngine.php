@@ -242,6 +242,10 @@ class MacroEngine
     /** Trend real growth of potential output: labour force plus productivity, the pace a sector with no secular story grows at. */
     public const TREND_REAL_GROWTH = self::TFP_DRIFT + self::STRUCTURAL_LABOR_GROWTH_RATE;
 
+    // --- Sovereign Reserve Fund: Opening Size (GPIF, FY2024) ---
+    /** Fund over GDP at inception: GPIF's scale, ¥250T of assets on ¥609T of FY2024 nominal GDP (GPIF annual report FY2024; Cabinet Office). The fund subsystem opens at it and its custodian marks the fund's book against it. */
+    public const OPENING_FUND_TO_GDP = 0.41;
+
     // --- Sovereign Debt Dynamics (Greenwood-Vayanos 2014) ---
     /** Sovereign debt-to-GDP at simulation start: where the fiscal rule holds it with output at trend (median 0.93, 32 seeds x 100y); the old 0.60 took 40 years to climb out of. */
     public const INITIAL_DEBT_TO_GDP = 0.93;

@@ -331,6 +331,9 @@ class StockModelTuningTest extends TestCase
         $this->assertSame(0.95, StockModelTuning::get('FNCH', ModelParam::PreciousMetalsWeight, 0.0));
         $this->assertSame(0.05, StockModelTuning::get('FNCH', ModelParam::BaseMetalsWeight, 0.0));
 
+        // Egret Trust (EGRT): custodian of the Sovereign Reserve Fund.
+        $this->assertSame(0.20, StockModelTuning::get('EGRT', ModelParam::FundCustodyShare, 0.0));
+
         // Bowerbird Homes (BOWR): three years of owned lots.
         $this->assertSame(3.0, StockModelTuning::get('BOWR', ModelParam::LandBankYears, 0.0));
 

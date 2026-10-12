@@ -39,6 +39,8 @@ class Sectors
         'financial_data'  => 'Asset-light data monopolies. Characterized by incredibly sticky recurring subscription revenue, ultra-high margins, and complete immunity to physical supply chain inflation. Features exceptionally low idiosyncratic variance.',
         'tech'            => 'Asset-light platform businesses with near-zero marginal costs. Immune to physical supply chains but exposed to high wage inflation. Features higher baseline volatility and fat-tail risks like massive regulatory anti-trust fines or data breaches.',
         'consumer_staples' => 'Produces essential goods and non-cyclical services (Food, Tobacco, Household, Discount Stores). Features inelastic demand (very low volatility) and high pricing power, allowing them to completely ignore supply chain inflation penalties.',
+        'health_insurer'  => 'Managed-care health plans collect premiums from employers and pay their members\' medical bills. Membership follows employment. Premiums are set a year at a time on claims experience about two years old, so when medical costs speed up the plan pays more than it priced for until its policies renew, and when they slow down the floor on the share of premium spent on care hands the gain back to members. Claims are paid weeks after care, and the plan invests the cash meanwhile.',
+        'custody_bank'    => 'Custody banks hold and service other institutions\' securities and keep their cash. Most revenue is fees charged on the value of the assets in custody, so it rises and falls with the markets. The balance sheet is the clients\' cash, invested mostly in securities with little lending, and that cash is quick to demand a higher rate when rates rise.',
         'medical_care_facility' => 'Hospital networks and healthcare systems operating a tri-stream engine: inelastic inpatient care, high-margin elective outpatient surgeries, and algorithmic insurance billing arbitrage. Immune to recessions, but exposed to clinical wage inflation during high inflation regimes.',
         'defense_contractor' => 'Operates on sovereign government "Cost-Plus" procurement contracts (Aerospace & Defense). Highly immune to recessions with guaranteed margin cost escalators.',
         'security_protection' => 'Private military contractors and executive protection. Tri-stream revenue engine: sovereign cost-plus contracts, sticky corporate campus retainers, and counter-cyclical expeditionary black-ops that thrive on market panic (high VIX) and credit distress. Carries asymmetric tail risk from publicized tactical breaches.',
@@ -105,6 +107,7 @@ class Sectors
         'Conglomerates' => ['pe' => 16.00, 'depreciation' => 0.05, 'ebitda_limit' => 3.5, 'equity_limit' => 1.5, 'business_model' => 'conglomerate'],
         'Consulting Services' => ['pe' => 22.00, 'depreciation' => 0.03, 'ebitda_limit' => 2.5, 'equity_limit' => 0.5, 'business_model' => 'law_firm'], // Almost entirely human capital
         'Copper' => ['pe' => 12.00, 'depreciation' => 0.08, 'ebitda_limit' => 2.5, 'equity_limit' => 0.44, 'business_model' => 'mining'], // Asset heavy, cyclical mining. Book D/E of US metals & mining (Damodaran, Jan 2026: 30.7% book debt/capital, 73 firms).
+        'Custody Banks' => ['pe' => 12.00, 'depreciation' => 0.03, 'ebitda_limit' => 999.0, 'equity_limit' => 12.0, 'business_model' => 'custody_bank'], // State Street: assets about ten times equity
         'Credit Services' => ['pe' => 15.00, 'depreciation' => 0.05, 'ebitda_limit' => 999.0, 'equity_limit' => 7.0, 'business_model' => 'credit_services'], // Amex, Discover. Unsecured lending & swipe fees.
         'Diagnostics & Research' => ['pe' => 24.00, 'depreciation' => 0.08, 'ebitda_limit' => 3.5, 'equity_limit' => 1.5, 'business_model' => 'none'],
         'Discount Stores' => ['pe' => 20.00, 'depreciation' => 0.05, 'ebitda_limit' => 3.5, 'equity_limit' => 1.5, 'business_model' => 'consumer_staples'], // Very safe, steady cash flows
@@ -129,7 +132,7 @@ class Sectors
         'Gold' => ['pe' => 15.00, 'depreciation' => 0.10, 'ebitda_limit' => 2.5, 'equity_limit' => 0.18, 'business_model' => 'mining'], // Mines deplete, highly cyclical. Book D/E of US precious metals (Damodaran, Jan 2026: 15.4% book debt/capital, 56 firms).
         'Grocery Stores' => ['pe' => 15.00, 'depreciation' => 0.06, 'ebitda_limit' => 4.0, 'equity_limit' => 1.5, 'business_model' => 'consumer_staples'], // Very safe debt profile
         'Hedge Fund' => ['pe' => 14.00, 'depreciation' => 0.02, 'ebitda_limit' => 999.0, 'equity_limit' => 3.0, 'business_model' => 'hedge_fund'], // Quantitative alpha, leveraged directional trading
-        'Healthcare Plans' => ['pe' => 16.00, 'depreciation' => 0.04, 'ebitda_limit' => 2.5, 'equity_limit' => 1.0, 'business_model' => 'none'], // Managed care
+        'Healthcare Plans' => ['pe' => 16.00, 'depreciation' => 0.04, 'ebitda_limit' => 2.5, 'equity_limit' => 1.0, 'business_model' => 'health_insurer'], // Managed care
         'Health Information Services' => ['pe' => 24.00, 'depreciation' => 0.08, 'ebitda_limit' => 2.5, 'equity_limit' => 0.5, 'business_model' => 'tech'],
         'Home Improvement Retail' => ['pe' => 20.00, 'depreciation' => 0.06, 'ebitda_limit' => 3.0, 'equity_limit' => 1.0, 'business_model' => 'tools_and_accessories'],
         'Household & Personal Products' => ['pe' => 22.00, 'depreciation' => 0.05, 'ebitda_limit' => 3.5, 'equity_limit' => 1.0, 'business_model' => 'consumer_staples'], // P&G, Colgate. Premium P/E.
@@ -239,12 +242,14 @@ class Sectors
         'reit'                           => Sector\ReitBusinessModel::class,
         'homebuilder'                    => Sector\HomebuilderBusinessModel::class,
         'clearing_house'                 => Sector\ClearingHouseBusinessModel::class,
+        'custody_bank'                   => Sector\CustodyBankBusinessModel::class,
         'utility'                        => Sector\UtilityBusinessModel::class,
         'mining'                         => Sector\MiningBusinessModel::class,
         'oil_gas_producer'               => Sector\OilGasProducerBusinessModel::class,
         'refining'                       => Sector\RefiningBusinessModel::class,
         'financial_data'                 => Sector\FinancialDataBusinessModel::class,
         'medical_care_facility'          => Sector\MedicalCareFacilityBusinessModel::class,
+        'health_insurer'                 => Sector\HealthInsurerBusinessModel::class,
         'tech'                           => Sector\TechBusinessModel::class,
         'consumer_staples'               => Sector\ConsumerStaplesBusinessModel::class,
         'defense_contractor'             => Sector\DefenseContractorBusinessModel::class,

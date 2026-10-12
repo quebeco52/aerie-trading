@@ -21,3 +21,6 @@ Arms are only labels: `bin/harness-batch var/harness/new_firms/run.sh 1-3 <arm>`
 `ARM=<arm> python3 -I var/harness/new_firms/paths.py 1 2 3` prints year-by-year revenue, capacity, margin and share
 paths for BOWR, FNCH and CNDR, plus the board's spread of share count and capacity growth.
 The land write-down is plant (ASC 360), read from the `land_write_down` KPI as `lwd`, not from the inventory column.
+
+Round 2 (PELI, EGRT): `bin/harness-batch var/harness/new_firms/run.sh 1-3 <arm>`, then
+`ARM=<arm> python3 var/harness/new_firms/analyse_round2.py 1 2 3`.

@@ -139,7 +139,7 @@ class SovereignReservePageBuilder
                 'transitionMonths' => SovereignFundSubsystem::POLICY_TRANSITION_MONTHS,
                 'foreignBondDuration' => SovereignFundSubsystem::FOREIGN_BOND_DURATION,
                 'returnIndexBase' => SovereignFundSubsystem::RETURN_INDEX_BASE,
-                'openingSize' => SovereignFundSubsystem::OPENING_FUND_TO_GDP,
+                'openingSize' => MacroEngine::OPENING_FUND_TO_GDP,
                 'openingOwnership' => SovereignFundSubsystem::DOMESTIC_OWNERSHIP_OPENING,
                 'ownershipCeiling' => SovereignFundSubsystem::MAX_OWNERSHIP_SHARE,
                 'checkMonths' => 12.0 * SovereignFundSubsystem::REBALANCE_CHECK_PERIOD_YEARS,

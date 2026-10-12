@@ -161,7 +161,7 @@ class SectorsTest extends TestCase
         sort($financial);
 
         $this->assertSame([
-            'asset_manager', 'brokerage', 'clearing_house', 'commercial_bank', 'credit_services', 'distressed_debt',
+            'asset_manager', 'brokerage', 'clearing_house', 'commercial_bank', 'credit_services', 'custody_bank', 'distressed_debt',
             'hedge_fund', 'insurance', 'investment_bank', 'private_equity', 'reinsurance', 'retail_insurance', 'shadow_bank',
         ], $financial);
     }

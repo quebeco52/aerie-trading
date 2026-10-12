@@ -23,6 +23,8 @@ enum ModelParam: string
     case CeclSpreadSensitivity = 'cecl_spread_sensitivity';
     /** A lender's annual non-interest income as a share of earning assets. */
     case NonInterestIncomeToEarningAssets = 'non_interest_income_to_earning_assets';
+    /** A custody bank's share of servicing fees earned on the Sovereign Reserve Fund's book. */
+    case FundCustodyShare = 'fund_custody_share';
     case CreditRiskAppetite = 'credit_risk_appetite';
     case ResidentialMortgageShare = 'residential_mortgage_share';
     case ConsumerLoanShare = 'consumer_loan_share';

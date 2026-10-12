@@ -31,7 +31,7 @@ class SovereignFundSubsystemTest extends TestCase
         $state = $this->openFund($fund, 720);
 
         $this->assertTrue($fund->isIncepted($state));
-        $this->assertEqualsWithDelta(SovereignFundSubsystem::OPENING_FUND_TO_GDP, $state->sovereignFundToGdp, 1e-12, 'It opens at its declared size against the economy.');
+        $this->assertEqualsWithDelta(MacroEngine::OPENING_FUND_TO_GDP, $state->sovereignFundToGdp, 1e-12, 'It opens at its declared size against the economy.');
         $this->assertEqualsWithDelta(SovereignFundSubsystem::DOMESTIC_OWNERSHIP_OPENING, $state->sovereignFundOwnershipShare, 1e-12);
         $this->assertEqualsWithDelta($state->sovereignFundTargetWeight, $state->sovereignFundDomesticWeight, 1e-12, 'It opens at its policy weight.');
         $this->assertSame(0.0, $state->sovereignFundTrade, 'A structural holder opens at its holding, with no order.');

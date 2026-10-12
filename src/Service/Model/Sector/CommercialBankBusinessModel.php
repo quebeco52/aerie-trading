@@ -680,19 +680,11 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
 
         $outputGap = $macroState->outputGapEma;
 
-        // Blended dual-stream revenue (NII vs. Non-Interest Fee Income)
-        // Fed SLOOS, Housing Starts, and M2 channels:
-        // Credit standards tightening (SLOOS > 0) dampens loan origination volume; easing (SLOOS < 0) expands it.
-        // Residential housing starts drive mortgage purchase origination, and broad money (M2) growth expands deposit lending capacity.
-        $sloosOriginationDrag = $macroState->sloosTighteningIndexEma * self::SLOOS_NII_ORIGINATION_SENSITIVITY;
-        $housingMortgageBoost = MacroTransmission::calculateHousingStartsShift($macroState->housingStartsIndexEma, sensitivity: self::HOUSING_MORTGAGE_ORIGINATION_SENSITIVITY);
-        $m2LiquidityBoost = MacroTransmission::calculateBroadMoneyLiquidityShift($macroState->moneySupplyGrowthEma, $macroState->moneySupplyGrowthTrend, sensitivity: self::M2_DEPOSIT_GROWTH_SENSITIVITY);
-        $creditBoomBoost = $macroState->creditToGdpGapEma * self::CREDIT_GAP_ORIGINATION_SENSITIVITY;
-
+        // Blended dual-stream revenue (NII vs. Non-Interest Fee Income), each moved by its own channel.
         $niiRevenue = max(0.0, $expectedRevenue * $niiWeight
-            * (1.0 + ($revenueZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)) - $sloosOriginationDrag + $housingMortgageBoost + $m2LiquidityBoost + $creditBoomBoost));
+            * (1.0 + ($revenueZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)) + $this->resolveInterestVolumeShift($macroState)));
         $feeRevenue = max(0.0, $expectedRevenue * $feeWeight
-            * (1.0 + ($feeZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)) + ($outputGap * self::SECTOR_SHOCK_FEE_OUTPUT_GAP_MULT)));
+            * (1.0 + ($feeZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)) + $this->resolveFeeVolumeShift($stock, $macroState)));
 
         $streamRevenues = [
             'net_interest_income' => $niiRevenue,
@@ -755,6 +747,28 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
             creditLossProvision: 0.0,
             netChargeOffs: $netChargeOffs,
         );
+    }
+
+    /**
+     * Loan origination volume against the credit cycle, as a fraction of interest income. Fed SLOOS, housing starts
+     * and M2 channels: tightening standards (SLOOS > 0) dampen origination and easing expands it; housing starts
+     * drive mortgage purchase origination; broad money growth expands deposit lending capacity; a credit boom adds
+     * to all of it.
+     */
+    protected function resolveInterestVolumeShift(MacroStateDTO $macroState): float
+    {
+        $sloosOriginationDrag = $macroState->sloosTighteningIndexEma * self::SLOOS_NII_ORIGINATION_SENSITIVITY;
+        $housingMortgageBoost = MacroTransmission::calculateHousingStartsShift($macroState->housingStartsIndexEma, sensitivity: self::HOUSING_MORTGAGE_ORIGINATION_SENSITIVITY);
+        $m2LiquidityBoost = MacroTransmission::calculateBroadMoneyLiquidityShift($macroState->moneySupplyGrowthEma, $macroState->moneySupplyGrowthTrend, sensitivity: self::M2_DEPOSIT_GROWTH_SENSITIVITY);
+        $creditBoomBoost = $macroState->creditToGdpGapEma * self::CREDIT_GAP_ORIGINATION_SENSITIVITY;
+
+        return -$sloosOriginationDrag + $housingMortgageBoost + $m2LiquidityBoost + $creditBoomBoost;
+    }
+
+    /** Fee volume against the cycle, as a fraction of fee income: payments, cards and accounts follow activity. */
+    protected function resolveFeeVolumeShift(Stock $stock, MacroStateDTO $macroState): float
+    {
+        return $macroState->outputGapEma * self::SECTOR_SHOCK_FEE_OUTPUT_GAP_MULT;
     }
 
     /**
