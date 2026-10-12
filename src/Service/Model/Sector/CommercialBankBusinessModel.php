@@ -1285,7 +1285,8 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
 
     /**
      * The payout stop: no dividend or buyback while CET1 sits below the requirement plus the countercyclical buffer, as
-     * Basel III's maximum distributable amount bars them below the combined buffer.
+     * Basel III's maximum distributable amount bars them below the combined buffer. Above it the regulator restricts
+     * nothing (null), which is not a cap at 100% of earnings.
      */
     public function getRegulatoryDividendCap(Stock $stock, float $currentTreasury, ?\App\DTO\MacroStateDTO $macroState = null): ?float
     {
@@ -1297,7 +1298,7 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
             return 0.0;
         }
 
-        return 1.0;
+        return null;
     }
 
     /**

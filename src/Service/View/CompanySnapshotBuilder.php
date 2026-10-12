@@ -90,7 +90,7 @@ class CompanySnapshotBuilder
         // Trailing twelve months, as EarningsEngine keeps it: the last four reported quarters.
         $history = $stock->getQuarterlyNetIncomeHistory() ?? [];
         $revenue = (float) $stock->getTotalRevenue();
-        $closure = $this->debtEngine->calculateAltmanZScore($stock, $revenue * (float) $stock->getOperatingMargin(), $revenue, $price);
+        $closure = $this->debtEngine->calculateAltmanZScore($stock, $revenue * (float) $stock->getOperatingMargin(), $revenue);
 
         return [
             'tangibleEquity' => $tangibleEquity,

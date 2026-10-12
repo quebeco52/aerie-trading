@@ -92,10 +92,6 @@ class TechBusinessModel extends StandardCorporateBusinessModel
     {
         return 1.0;
     }
-    public function getSurpriseBlendWeights(): array
-    {
-        return ['eps_weight' => 0.25, 'revenue_weight' => 0.75];
-    }
 
     // --- Dual-Stream Tech & Software Architecture ---
     /** Baseline fraction of revenue derived from recurring SaaS subscription & cloud infrastructure. */

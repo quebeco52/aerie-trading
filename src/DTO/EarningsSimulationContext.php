@@ -44,6 +44,10 @@ class EarningsSimulationContext
     public float $capacityUtilization = 0.0;
     public float $structuralRevenue = 0.0;
     public float $expectedRevenue = 0.0;
+    /** Expected revenue without the firm's own demand shock and jump this quarter: the base the consensus is formed on. */
+    public float $expectedRevenueBeforeShocks = 0.0;
+    /** Log gap between the price level and the one the plant book carries at its planned nominal growth. */
+    public float $priceLevelSurprise = 0.0;
     public float $fixedCosts = 0.0;
     public float $baselineVariableMargin = 0.0;
     /** Depreciation the firm would charge running its plant at exactly structural capacity, carved out of the cost base. */
@@ -74,10 +78,15 @@ class EarningsSimulationContext
     public float $impairmentCharges = 0.0;
     /**
      * One-time termination benefits recognised this quarter for the committed cost base the firm cut
-     * (ASC 420-10). Like the impairments above it sits in operating expense and has to be told to the
-     * seasonally adjusted run-rate, and like them no analyst forecasts it.
+     * (ASC 420-10). Like the impairments above it sits in operating expense, and no analyst forecasts it.
      */
     public float $restructuringCharge = 0.0;
+    /** The quarter's special items before tax (restructuring and plant write-downs): in GAAP EBIT, kept out of the run rate and the Street figure. */
+    public float $specialCharges = 0.0;
+    /** Special items after tax plus any goodwill impairment: what GAAP net income carries that Street earnings exclude. */
+    public float $specialItems = 0.0;
+    /** Opening deferred-tax balances booked straight to retained earnings on a row's first report under ASC 740 (ASC 250 cumulative effect): not income. */
+    public float $cumulativeEffectAdjustment = 0.0;
     /** The committed cost base this quarter, as a fraction of the base structural capacity implies. */
     public float $committedCostScale = 1.0;
     /** How far that base was cut this quarter; zero when the firm held or rebuilt it. */
@@ -97,7 +106,6 @@ class EarningsSimulationContext
     
     // Actuals
     public float $actualRevenue = 0.0;
-    public float $previousQuarterlyRevenue = 0.0;
     public float $actualVariableCosts = 0.0;
     public float $ebitda = 0.0;
     public float $ebit = 0.0;
@@ -189,9 +197,10 @@ class EarningsSimulationContext
     // EPS & Gap
     public float $actualAnnualEpsRaw = 0.0;
     public float $actualQuarterlyEps = 0.0;
+    /** EPS before special items (Bradshaw & Sloan 2002 "Street" earnings): the figure consensus is struck against. */
+    public float $streetQuarterlyEps = 0.0;
     public float $expectedQuarterlyEps = 0.0;
     public float $surpriseAmountQuarterly = 0.0;
-    public float $surprisePct = 0.0;
     /** Fair value per share struck on the books before the report; its revision is what the price gaps on. */
     public float $fairValueBeforeReport = 0.0;
     /** The cost of equity that fair value was struck at: the return it was expected to earn by this report. */

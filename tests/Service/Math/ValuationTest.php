@@ -223,17 +223,6 @@ class ValuationTest extends TestCase
         $this->assertEqualsWithDelta(0.48, $power, 0.005);
     }
 
-    public function testCalculateEarningsResponseCoefficient(): void
-    {
-        // Moderate SUE (+5% surprise)
-        $erc = Valuation::calculateEarningsResponseCoefficient(0.05, 1.0, 0.0);
-        $this->assertGreaterThan(0.0, $erc, 'Positive SUE should yield positive ERC price reaction.');
-
-        // High growth premium amplifies the reaction
-        $ercHighGrowth = Valuation::calculateEarningsResponseCoefficient(0.05, 1.0, 2.0);
-        $this->assertGreaterThan($erc, $ercHighGrowth, 'High growth premium must amplify ERC.');
-    }
-
     public function testCalculateBayesianAnalystUpdate(): void
     {
         // Equal uncertainty -> straight average

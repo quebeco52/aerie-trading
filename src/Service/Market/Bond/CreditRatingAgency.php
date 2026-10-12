@@ -36,6 +36,8 @@ class CreditRatingAgency
     public const ALTMAN_DISTRESS_THRESHOLD = 1.10;
     /** Altman Z''-Score threshold below which a firm is in the grey zone (speculative ceiling BB). */
     public const ALTMAN_GREY_THRESHOLD = 2.60;
+    /** Z'' past a zone edge before the cap it sets binds or lifts: the same 0.9 notch as HYSTERESIS_BUFFER, at ~0.3 of Z'' per notch between A- and B on Altman, Hartzell & Peck's (1995) EM-score rating equivalents (second-hand, not re-pinned). */
+    public const ALTMAN_ZONE_HYSTERESIS = 0.25;
 
     // --- Business Risk / Financial Risk Matrix (S&P, "Business Risk/Financial Risk Matrix Expanded", 2009) ---
     /** Debt/EBITDA upper bounds of the financial risk profiles: minimal <1.5x, modest 1.5-2x, intermediate 2-3x, significant 3-4x, aggressive 4-5x, highly leveraged above. */
@@ -73,6 +75,25 @@ class CreditRatingAgency
         'CCC' => 1,
         'D'   => 0,
     ];
+
+    /**
+     * The Altman zone the rating caps read, with the same hysteresis the grade brackets carry: a firm the zone's cap
+     * does not yet bind has to fall past the edge by ALTMAN_ZONE_HYSTERESIS before it does, and one already held at or
+     * below the cap has to clear the edge by as much before it lifts. Without it a score sitting on 2.60 capped the
+     * rating at BB one quarter and released it the next.
+     */
+    public static function altmanZoneWithHysteresis(float $zScore, string $currentRating): string
+    {
+        $rank = self::RATING_RANKS[$currentRating] ?? self::RATING_RANKS['BBB'];
+        $distressEdge = self::ALTMAN_DISTRESS_THRESHOLD + ($rank > self::RATING_RANKS['CCC'] ? -self::ALTMAN_ZONE_HYSTERESIS : self::ALTMAN_ZONE_HYSTERESIS);
+        $greyEdge = self::ALTMAN_GREY_THRESHOLD + ($rank > self::RATING_RANKS['BB'] ? -self::ALTMAN_ZONE_HYSTERESIS : self::ALTMAN_ZONE_HYSTERESIS);
+
+        return match (true) {
+            $zScore < $distressEdge => 'Distress',
+            $zScore < $greyEdge => 'Grey',
+            default => 'Safe',
+        };
+    }
 
     /**
      * Evaluates the company's Distance to Default, Altman Z''-score, and balance sheet solvency

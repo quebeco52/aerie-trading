@@ -248,6 +248,34 @@ class Stock
     private string $deferredTaxLiability = '0.0000';
 
     /**
+     * @var string Deferred tax asset on the loss carryforward (ASC 740): the tax the carried loss will save, net of
+     *             the valuation allowance a run of cumulative losses calls for.
+     */
+    #[ORM\Column(type: Types::DECIMAL, precision: 30, scale: 4, options: ['default' => '0.0000'])]
+    private string $deferredTaxAsset = '0.0000';
+
+    /**
+     * @var string Deferred tax on the available-for-sale securities mark (ASC 320 / ASC 740-20-45-11), signed: a
+     *             liability on an unrealized gain, an asset on an unrealized loss. The mark reaches equity net of it.
+     */
+    #[ORM\Column(type: Types::DECIMAL, precision: 30, scale: 4, options: ['default' => '0.0000'])]
+    private string $securitiesDeferredTax = '0.0000';
+
+    /**
+     * @var array<int, float>|null Pre-tax income of the last twelve reported quarters, the three years the valuation
+     *                             allowance test reads (ASC 740-10-30-21).
+     */
+    #[ORM\Column(type: Types::JSON, nullable: true)]
+    private ?array $pretaxIncomeHistory = null;
+
+    /**
+     * @var string|null Operating lease liability (ASC 842), carried as a ledger: signed for the capacity the firm runs
+     *                  and run off as leases expire. Null until the first report strikes it.
+     */
+    #[ORM\Column(type: Types::DECIMAL, precision: 30, scale: 4, nullable: true)]
+    private ?string $leaseLiability = null;
+
+    /**
      * @var string|null CapEx-weighted price level at which the current plant was bought. Replacing a worn
      *                  asset costs today's price, not the vintage one, so the ratio of the two is what a
      *                  maintenance dollar has to stretch to cover.
@@ -614,12 +642,6 @@ class Stock
      */
     #[ORM\Column(type: Types::JSON, nullable: true)]
     private ?array $quarterlyOperatingHistory = null;
-
-    /**
-     * @var array<int, float>|null Blended earnings surprises of recent quarters, the sample the SUE denominator is estimated from.
-     */
-    #[ORM\Column(type: Types::JSON, nullable: true)]
-    private ?array $earningsSurpriseHistory = [];
 
     #[ORM\Column(type: Types::JSON, nullable: true)]
     private ?array $earningsMomentumZ = [];
@@ -1162,6 +1184,53 @@ class Stock
     public function setDeferredTaxLiability(string $deferredTaxLiability): self
     {
         $this->deferredTaxLiability = self::cleanBcStr($deferredTaxLiability, 4);
+        return $this;
+    }
+
+    public function getDeferredTaxAsset(): float
+    {
+        return (float) $this->deferredTaxAsset;
+    }
+
+    public function setDeferredTaxAsset(float $deferredTaxAsset): self
+    {
+        $this->deferredTaxAsset = self::cleanBcStr(max(0.0, $deferredTaxAsset), 4);
+        return $this;
+    }
+
+    /** Signed: positive is a liability on an unrealized gain, negative an asset on an unrealized loss. */
+    public function getSecuritiesDeferredTax(): float
+    {
+        return (float) $this->securitiesDeferredTax;
+    }
+
+    public function setSecuritiesDeferredTax(float $securitiesDeferredTax): self
+    {
+        $this->securitiesDeferredTax = self::cleanBcStr($securitiesDeferredTax, 4);
+        return $this;
+    }
+
+    public function getLeaseLiability(): ?float
+    {
+        return $this->leaseLiability === null ? null : (float) $this->leaseLiability;
+    }
+
+    public function setLeaseLiability(?float $leaseLiability): self
+    {
+        $this->leaseLiability = $leaseLiability === null ? null : self::cleanBcStr(max(0.0, $leaseLiability), 4);
+        return $this;
+    }
+
+    /** @return array<int, float>|null */
+    public function getPretaxIncomeHistory(): ?array
+    {
+        return $this->pretaxIncomeHistory;
+    }
+
+    /** @param array<int, float>|null $pretaxIncomeHistory */
+    public function setPretaxIncomeHistory(?array $pretaxIncomeHistory): self
+    {
+        $this->pretaxIncomeHistory = $pretaxIncomeHistory;
         return $this;
     }
 
@@ -1776,23 +1845,6 @@ class Stock
         return $this;
     }
 
-    /**
-     * @param array<int, float>|null $earningsSurpriseHistory
-     */
-    public function setEarningsSurpriseHistory(?array $earningsSurpriseHistory): static
-    {
-        $this->earningsSurpriseHistory = $earningsSurpriseHistory;
-        return $this;
-    }
-
-    /**
-     * @return array<int, float>|null
-     */
-    public function getEarningsSurpriseHistory(): ?array
-    {
-        return $this->earningsSurpriseHistory;
-    }
-
     public function setEarningsMomentumZ(?array $earningsMomentumZ): static
     {
         $this->earningsMomentumZ = $earningsMomentumZ;
@@ -2026,6 +2078,9 @@ class Stock
             // as well as in equity. Held-to-maturity is at amortized cost and is deliberately absent here:
             // that omission IS the unrecognised hole, and getEconomicEquity() is where it surfaces.
             + $this->getRecognizedSecuritiesMark()
+            // Deferred tax assets: the loss carryforward's, and the securities book's when it carries a loss.
+            + (float) $this->deferredTaxAsset
+            + max(0.0, -(float) $this->securitiesDeferredTax)
             + max(0.0, $leaseLiability);
     }
 
@@ -2038,6 +2093,7 @@ class Stock
         return (float) $this->getTotalDebt()
             + (float) ($this->payables ?? 0.0)
             + (float) $this->deferredTaxLiability
+            + max(0.0, (float) $this->securitiesDeferredTax)
             + max(0.0, $leaseLiability);
     }
 
@@ -2097,7 +2153,9 @@ class Stock
         $equity = (float) $this->totalEquity;
         $debt = (float) $this->getTotalDebt();
         $cash = (float) $this->corporateTreasury;
-        $deferredTax = (float) $this->deferredTaxLiability;
+        // Net deferred tax: the liability is capital employed, the loss carryforward's asset is not operating
+        // capital (it is a claim on future tax, not plant), so it comes out like cash.
+        $deferredTax = (float) $this->deferredTaxLiability - (float) $this->deferredTaxAsset;
 
         return max(1.0, max($equity * 0.50, ($equity + $debt + $deferredTax - $cash)));
     }

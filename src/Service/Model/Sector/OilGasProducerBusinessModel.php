@@ -146,11 +146,6 @@ class OilGasProducerBusinessModel extends StandardCorporateBusinessModel
         return log($macroState->energyPriceIndexEma / MacroEngine::ENERGY_BASELINE);
     }
 
-    public function getSurpriseBlendWeights(): array
-    {
-        return ['eps_weight' => 0.30, 'revenue_weight' => 0.70];
-    }
-
     public function getWorkingCapitalIntensity(Stock $stock): float
     {
         return self::WORKING_CAPITAL_INTENSITY;

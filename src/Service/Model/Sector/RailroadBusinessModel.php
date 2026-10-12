@@ -133,8 +133,6 @@ class RailroadBusinessModel extends StandardCorporateBusinessModel
     }
     
     public function getCapexCyclicality(): float { return 0.70; } // Heavy rail maintenance CapEx
-    
-    public function getSurpriseBlendWeights(): array { return ['eps_weight' => 0.60, 'revenue_weight' => 0.40]; }
 
     protected function calculateSectorPhysics(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, \App\DTO\MacroStateDTO $macroState, MathUtility $mathUtility): SectorPhysicsResult
     {

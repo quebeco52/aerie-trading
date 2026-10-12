@@ -224,11 +224,6 @@ class ApparelManufacturingBusinessModel extends StandardCorporateBusinessModel
         return [0.85, 0.95, 1.05, 1.15]; // Back-to-school Q3 and winter/holiday Q4 apparel cycles
     }
 
-    public function getSurpriseBlendWeights(): array
-    {
-        return ['eps_weight' => 0.50, 'revenue_weight' => 0.50];
-    }
-
     public function getMacroPhysics(Stock $stock, MacroStateDTO $macroState): array
     {
         $params = $this->resolveModelParameters($stock, [

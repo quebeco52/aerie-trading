@@ -578,10 +578,6 @@ class BiotechBusinessModelTest extends TestCase
         $generic = BiotechBusinessModel::genericSecularGrowthRate();
         $this->assertEqualsWithDelta($generic + ((BiotechBusinessModel::patentedSecularGrowthRate() - $generic) * 0.85), $model->getSecularGrowthRate($stock), 1e-12);
 
-        $weights = $model->getSurpriseBlendWeights();
-        $this->assertEquals(0.20, $weights['eps_weight']);
-        $this->assertEquals(0.80, $weights['revenue_weight']);
-
         $coverage = $model->getCoverageProfile($stock);
         $this->assertEquals(BiotechBusinessModel::BASE_COVERAGE_VISIBILITY, $coverage->baseVisibility);
         $this->assertEquals(BiotechBusinessModel::BASE_COVERAGE_ERROR, $coverage->errorStdDev);

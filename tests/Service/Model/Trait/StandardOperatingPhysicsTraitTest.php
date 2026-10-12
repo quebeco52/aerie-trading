@@ -524,19 +524,6 @@ final class StandardOperatingPhysicsTraitTest extends TestCase
     }
 
     /**
-     * The surprise blend must be a partition, or the earnings surprise the market reacts to is scaled by
-     * something other than one.
-     */
-    public function testSurpriseBlendWeightsPartitionTheSurprise(): void
-    {
-        $weights = $this->model->getSurpriseBlendWeights();
-
-        $this->assertArrayHasKey('eps_weight', $weights);
-        $this->assertArrayHasKey('revenue_weight', $weights);
-        $this->assertEqualsWithDelta(1.0, $weights['eps_weight'] + $weights['revenue_weight'], 0.0000001, 'The blend must sum to one.');
-    }
-
-    /**
      * An operating company's assets are plant and a trade cycle, not credit: there is nothing to charge off,
      * and that zero is what keeps the CECL machinery off a non-financial balance sheet.
      */

@@ -110,12 +110,19 @@ final class SecuritiesMarkIsNotIncomeTest extends TestCase
         $mark = (float) $stock->getUnrealizedSecuritiesMark();
         self::assertLessThan(0.0, $mark, 'The curve went against the book.');
 
-        // The balance sheet moved, by exactly the recognised tranche and nothing else.
+        // The balance sheet moved, by exactly the recognised tranche net of the tax it defers (ASC 740-20-45-11): the
+        // loss carries a deferred tax asset at the firm's rate, and equity takes the rest.
+        self::assertLessThan(0.0, $stock->getSecuritiesDeferredTax(), 'An unrealized loss defers a tax asset.');
         self::assertEqualsWithDelta(
-            $equityAfterOpen + $stock->getRecognizedSecuritiesMark(),
+            $strategy->getEffectiveTaxRate($hiked->corporateTaxRate) * $stock->getRecognizedSecuritiesMark(),
+            $stock->getSecuritiesDeferredTax(),
+            1.0
+        );
+        self::assertEqualsWithDelta(
+            $equityAfterOpen + $stock->getRecognizedSecuritiesMark() - $stock->getSecuritiesDeferredTax(),
             (float) $stock->getTotalEquity(),
             1.0,
-            'Equity carries the available-for-sale mark and only that.'
+            'Equity carries the available-for-sale mark net of tax and only that.'
         );
         self::assertLessThan($equityAfterOpen, (float) $stock->getTotalEquity());
 

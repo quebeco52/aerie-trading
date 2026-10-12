@@ -68,10 +68,6 @@ class LuxuryBusinessModel extends StandardCorporateBusinessModel
         return MacroEngine::TREND_REAL_GROWTH
             + MacroTransmission::gdpShareDrift(self::SECULAR_SHARE_1997, self::SECULAR_SHARE_2019, FinancialConstants::SECULAR_SHARE_WINDOW_YEARS);
     }
-    public function getSurpriseBlendWeights(): array
-    {
-        return ['eps_weight' => 0.55, 'revenue_weight' => 0.45];
-    }
 
     // --- Dual-Stream Luxury Brand Architecture ---
     /** Baseline fraction of revenue derived from ultra-high-net-worth Maison leather goods and haute couture. */

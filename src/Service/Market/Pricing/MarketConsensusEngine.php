@@ -23,8 +23,10 @@ use App\Service\Math\Valuation;
 class MarketConsensusEngine
 {
     // --- Analyst Bias & Noise ---
-    /** Walk-down bias fraction applied to consensus so beat rate aligns with empirical ~70% (Richardson et al. 2004). */
+    /** Walk-down of the published revenue consensus below the unbiased estimate: 1.5%, the average S&P 500 revenue surprise (FactSet Earnings Insight, 10-year average; Richardson, Teoh & Wysocki 2004). */
     public const ANALYST_WALKDOWN_BIAS = 0.015;
+    /** Walk-down of the published EPS consensus below the unbiased estimate, set so the share of reports beating it lands on the 75% S&P 500 beat rate (FactSet Earnings Insight, 10-year average). */
+    public const ANALYST_EPS_WALKDOWN_BIAS = 0.077;
 
     // --- Bayesian Analyst Consensus ---
     /** Widest one-quarter change in the structural base the analyst anchor is rolled forward by (x0.5 to x2.0). A capacity cap binding or a collapse is not a growth rate analysts extrapolate. */
@@ -39,10 +41,6 @@ class MarketConsensusEngine
     public const BOOK_TO_BILL_CONSENSUS_SENSITIVITY = 0.35;
     /** Bound on the resulting forward revenue tilt, so a single blowout order quarter cannot run the estimate away. */
     public const MAX_BOOK_TO_BILL_CONSENSUS_TILT = 0.15;
-
-    // --- Accruals Quality & Sloan Anomaly (Sloan 1996) ---
-    /** Analyst EPS growth forecast mean-reversion discount for low-quality non-cash earnings. */
-    public const ACCRUALS_DECAY_EPS_GROWTH_SENSITIVITY = 0.50;
 
     /**
      * Generates the analyst consensus estimate for a given quarter.
@@ -62,7 +60,9 @@ class MarketConsensusEngine
      * @param float                  $marketVolatility       Prevailing market volatility (VIX proxy).
      * @param float|null             $expectedVariableMargin Ex-ante variable cost ratio before the sector physics move it.
      * @param float                  $seasonalRatio          Seasonality adjustment ratio (Factor_t / Factor_{t-1}).
-     * @param float                  $priorExpectedRevenue   Structural expected revenue the anchor was formed against; 0 when unknown.
+     * @param float                  $priorExpectedRevenue   Pre-shock expected revenue the anchor was formed against; 0 when unknown.
+     * @param float|null             $expectedRevenueBeforeShocks The quarter's expected revenue without the firm's own demand
+     *                                                     shock and jump; null when the caller has none to separate.
      */
     public function generateConsensus(
         ActualFinancialsDTO $actuals,
@@ -73,7 +73,8 @@ class MarketConsensusEngine
         float $marketVolatility = 0.15,
         ?float $expectedVariableMargin = null,
         float $seasonalRatio = 1.0,
-        float $priorExpectedRevenue = 0.0
+        float $priorExpectedRevenue = 0.0,
+        ?float $expectedRevenueBeforeShocks = null
     ): ConsensusDTO {
         $analystError = $mathUtility->generateStandardNormal() * $coverage->errorStdDev;
 
@@ -88,9 +89,12 @@ class MarketConsensusEngine
 
         $dynamicVisibility = min(1.0, max($minVisibility, $baseVisibility + $analystError));
 
-        // Sloan (1996) Accruals Quality Anomaly: High non-cash accruals decay future growth expectations
-        $accrualsDiscount = max(0.0, (float) ($stock->getAccrualsRatio() ?? 0.0) * self::ACCRUALS_DECAY_EPS_GROWTH_SENSITIVITY);
-        $discountedExpectedRevenue = max(1.0, $expectedRevenue * (1.0 - min(0.25, $accrualsDiscount)));
+        // Analysts do not discount accruals (Bradshaw, Richardson & Sloan 2001): the Sloan (1996) anomaly is that
+        // the estimate fixates on reported earnings, and the market's fair value penalty is where it is priced.
+        // The firm's own demand shock and jump this quarter are news: the estimate starts from the demand the firm
+        // was expected to see and hears the shock only at the share public data reveals, as it hears stream noise.
+        $baseExpectedRevenue = max(1.0, $expectedRevenueBeforeShocks ?? $expectedRevenue);
+        $ownShock = ($expectedRevenue / $baseExpectedRevenue) - 1.0;
 
         // Reported KPIs feeding consensus: an order-driven firm discloses book-to-bill, and orders above
         // parity are revenue that has already been won and not yet billed. Analysts do not ignore that —
@@ -108,7 +112,9 @@ class MarketConsensusEngine
             )
             : 0.0;
 
-        $freshEstimate = $discountedExpectedRevenue * (1.0 + $orderBookTilt) * (1.0 + $actuals->observableShockZ * $dynamicVisibility);
+        $freshEstimate = $baseExpectedRevenue * (1.0 + $orderBookTilt)
+            * (1.0 + $ownShock * $dynamicVisibility)
+            * (1.0 + $actuals->observableShockZ * $dynamicVisibility);
 
         // Bayesian Updating: Analysts blend structural baseline capacity / anchored prior with noisy channel signals (fresh estimate)
         $priorVariance = self::BAYESIAN_BASE_PRIOR_VARIANCE 
@@ -116,18 +122,19 @@ class MarketConsensusEngine
             
         $signalVariance = max(0.0001, pow($coverage->errorStdDev, 2));
 
-        // Roll prior analyst revenue estimate forward with growth in structural capacity.
+        // Roll prior analyst revenue estimate forward with growth in structural capacity: the pre-shock base on both
+        // quarters, so the roll carries no more of this quarter's shock than the fresh signal does.
         $anchor = (float) $stock->getLastAnalystRevenue();
-        if ($anchor > 0.0 && $priorExpectedRevenue > 0.0 && $expectedRevenue > 0.0) {
+        if ($anchor > 0.0 && $priorExpectedRevenue > 0.0) {
             $rollForward = max(
                 1.0 / self::ANALYST_ANCHOR_MAX_ROLL_FORWARD,
-                min(self::ANALYST_ANCHOR_MAX_ROLL_FORWARD, $expectedRevenue / $priorExpectedRevenue)
+                min(self::ANALYST_ANCHOR_MAX_ROLL_FORWARD, $baseExpectedRevenue / $priorExpectedRevenue)
             );
             $priorEstimate = $anchor * $rollForward;
         } elseif ($anchor > 0.0) {
             $priorEstimate = $anchor * $seasonalRatio;
         } else {
-            $priorEstimate = $discountedExpectedRevenue;
+            $priorEstimate = $baseExpectedRevenue;
         }
         
         $analystExpectedRevenue = Valuation::calculateBayesianAnalystUpdate(
@@ -140,6 +147,7 @@ class MarketConsensusEngine
         // Store pre-walkdown posterior as anchor so walkdown shading does not compound across quarters.
         $stock->setLastAnalystRevenue((string) $analystExpectedRevenue);
 
+        $analystUnbiasedRevenue = $analystExpectedRevenue;
         $analystExpectedRevenue *= (1.0 - self::ANALYST_WALKDOWN_BIAS);
 
         // Analyst cost ratio expectation: anchor on last reported ratio and incorporate visible systematic cost shifts.
@@ -158,12 +166,15 @@ class MarketConsensusEngine
         $volumeShare = $actuals->actualRevenue > 0.0
             ? max(0.0, min(1.0, ($actuals->actualRevenue - $actuals->priceRevenue) / $actuals->actualRevenue))
             : 1.0;
-        $analystExpectedVariableCosts = $analystExpectedRevenue * $volumeShare * $expectedCostRatio;
+        // On the unshaded revenue: the walk-down is a shading of the published figures (Richardson, Teoh & Wysocki
+        // 2004), not a view that the firm will sell less and so spend less.
+        $analystExpectedVariableCosts = $analystUnbiasedRevenue * $volumeShare * $expectedCostRatio;
 
         return new ConsensusDTO(
             analystExpectedRevenue: $analystExpectedRevenue,
             analystExpectedVariableCosts: $analystExpectedVariableCosts,
             dynamicVisibility: $dynamicVisibility,
+            analystUnbiasedRevenue: $analystUnbiasedRevenue,
         );
     }
 }

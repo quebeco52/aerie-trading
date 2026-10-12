@@ -54,8 +54,8 @@ final class SegregatedCustodySolvencyTest extends TestCase
         $withPool = $this->buildFirm('ACC', 'Financial Clearinghouses', '1300000000000');
         $withoutPool = $this->buildFirm('ACC0', 'Financial Clearinghouses', '0');
 
-        $pooled = $this->engine->calculateAltmanZScore($withPool, 4_000_000_000.0, 8_000_000_000.0, 60.0);
-        $bare = $this->engine->calculateAltmanZScore($withoutPool, 4_000_000_000.0, 8_000_000_000.0, 60.0);
+        $pooled = $this->engine->calculateAltmanZScore($withPool, 4_000_000_000.0, 8_000_000_000.0);
+        $bare = $this->engine->calculateAltmanZScore($withoutPool, 4_000_000_000.0, 8_000_000_000.0);
 
         $this->assertEqualsWithDelta(
             $bare['z_score'],
@@ -77,8 +77,8 @@ final class SegregatedCustodySolvencyTest extends TestCase
         $calm = $this->buildFirm('ACC', 'Financial Clearinghouses', '1300000000000');
         $panic = $this->buildFirm('ACC', 'Financial Clearinghouses', '2600000000000');
 
-        $calmScore = $this->engine->calculateAltmanZScore($calm, 4_000_000_000.0, 8_000_000_000.0, 60.0);
-        $panicScore = $this->engine->calculateAltmanZScore($panic, 4_000_000_000.0, 8_000_000_000.0, 60.0);
+        $calmScore = $this->engine->calculateAltmanZScore($calm, 4_000_000_000.0, 8_000_000_000.0);
+        $panicScore = $this->engine->calculateAltmanZScore($panic, 4_000_000_000.0, 8_000_000_000.0);
 
         $this->assertEqualsWithDelta($calmScore['z_score'], $panicScore['z_score'], 0.0001);
         $this->assertFalse($panicScore['is_bankrupt'], 'a bigger margin pool is not a solvency event');
@@ -93,8 +93,8 @@ final class SegregatedCustodySolvencyTest extends TestCase
         $funded = $this->buildFirm('BNK', 'Banks - Diversified', '1300000000000');
         $unfunded = $this->buildFirm('BNK0', 'Banks - Diversified', '0');
 
-        $fundedScore = $this->engine->calculateAltmanZScore($funded, 4_000_000_000.0, 8_000_000_000.0, 60.0);
-        $unfundedScore = $this->engine->calculateAltmanZScore($unfunded, 4_000_000_000.0, 8_000_000_000.0, 60.0);
+        $fundedScore = $this->engine->calculateAltmanZScore($funded, 4_000_000_000.0, 8_000_000_000.0);
+        $unfundedScore = $this->engine->calculateAltmanZScore($unfunded, 4_000_000_000.0, 8_000_000_000.0);
 
         $this->assertLessThan(
             $unfundedScore['z_score'],

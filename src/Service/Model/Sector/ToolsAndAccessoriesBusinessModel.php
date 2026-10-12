@@ -105,11 +105,6 @@ class ToolsAndAccessoriesBusinessModel extends StandardCorporateBusinessModel
         public function getReversionSpeed(): float { return 0.08; }
     public function getMoatSpread(): float { return 0.03; }
 
-    public function getSurpriseBlendWeights(): array
-    {
-        return ['eps_weight' => 0.70, 'revenue_weight' => 0.30];
-    }
-
     /**
      * The cycle reaches each stream once inside the sector physics (commercial on the gap and the PMI, consumer on
      * the gap, confidence and housing), so the root shift carries no demand term.

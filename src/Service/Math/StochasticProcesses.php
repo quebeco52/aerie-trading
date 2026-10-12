@@ -161,6 +161,16 @@ final class StochasticProcesses
     }
 
     /**
+     * Merton's (1976) compensator for a lognormal jump, E[e^J - 1] with J ~ N(mean, vol^2): what lambda times it
+     * per year must be subtracted from a jump-diffusion's drift so the jump changes the shape of the outcome and
+     * not its mean.
+     */
+    public static function lognormalJumpCompensator(float $jumpMean, float $jumpVol): float
+    {
+        return exp($jumpMean + (0.5 * $jumpVol * $jumpVol)) - 1.0;
+    }
+
+    /**
      * Expected size of one calculateSVJJJumps() variance jump: mean muV on a down jump and
      * VARIANCE_JUMP_UPSIDE_MEAN_SHARE x muV on an up jump, each an exponential capped at
      * MAX_VARIANCE_JUMP_MEAN_MULTIPLE of its mean, so E[min(X, K m)] = m (1 - e^-K). Intensity times this,

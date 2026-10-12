@@ -105,7 +105,7 @@ class FailureSweep
             // The alternative score is a capital ratio; operating income does not enter it.
             $revenue = (float) $stock->getTotalRevenue();
             $margin = $stock->getReportedOperatingMargin() ?? (float) $stock->getOperatingMargin();
-            $zScoreData = $this->debtEngine->calculateAltmanZScore($stock, $revenue * $margin, $revenue, (float) $stock->getPrice());
+            $zScoreData = $this->debtEngine->calculateAltmanZScore($stock, $revenue * $margin, $revenue);
             if (!$zScoreData['is_bankrupt']) {
                 return null;
             }

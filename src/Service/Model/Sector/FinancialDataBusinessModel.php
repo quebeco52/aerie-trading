@@ -69,10 +69,6 @@ class FinancialDataBusinessModel extends StandardCorporateBusinessModel
     {
         return 0.5;
     }
-    public function getSurpriseBlendWeights(): array
-    {
-        return ['eps_weight' => 0.60, 'revenue_weight' => 0.40];
-    }
 
     // --- Dual-Stream Financial Data Architecture ---
     /** Baseline fraction of revenue derived from recurring multi-year terminal & rating subscriptions. */

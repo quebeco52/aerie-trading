@@ -66,6 +66,10 @@ class DebtEngine
     /** Key on the newest operating-history quarter holding the net debt and EBITDA each rating review read, newest first (CreditRatingAgency::timeWeightedLeverage()). */
     public const RATED_LEVERAGE_KEY = 'rated_leverage';
 
+    // --- Altman Z'' (Altman 1995) ---
+    /** Equity over total liabilities for a firm that owes nothing: the 10x cap Altman applies to the ratio, a firm with no claims ahead of its equity. */
+    private const ALTMAN_X4_UNLEVERED_CAP = 10.0;
+
     // --- Committed Revolving Credit Facility ---
     /** Drawn-revolver spread (+100 bps) over the issuer's market rate; a pre-negotiated facility prices inside emergency paper. */
     public const REVOLVER_DRAW_SPREAD_PENALTY = 0.01;
@@ -191,9 +195,15 @@ class DebtEngine
         $historicalRate = (float) $stock->getHistoricalFixedRate();
 
         if ($advanceMaturity) {
-            // Maturity wall: the business model sets how fast the fixed-rate book rolls to market.
+            // Maturity wall: the business model sets how fast the fixed-rate book rolls to market. Refinancing ahead
+            // of maturity when rates fall pays only for a speculative-grade issuer, whose bonds turn callable at a
+            // fixed premium after their non-call period; investment-grade bonds carry make-whole calls, which price
+            // the call at the Treasury curve plus a small spread, so retiring them early saves nothing (Powers &
+            // Tsyplakov 2008). Letting every issuer refinance down gave coupons a free option on falling rates.
             $turnover = $strategy->getDebtMaturityRolloverRate();
-            if ($currentMarketFixedRate < ($historicalRate - self::RATE_REFINANCE_THRESHOLD)) {
+            $isSpeculativeGrade = (\App\Service\Market\Bond\CreditRatingAgency::RATING_RANKS[(string) $stock->getCreditRating()] ?? \App\Service\Market\Bond\CreditRatingAgency::RATING_RANKS['BBB'])
+                < \App\Service\Market\Bond\CreditRatingAgency::RATING_RANKS['BBB'];
+            if ($isSpeculativeGrade && $currentMarketFixedRate < ($historicalRate - self::RATE_REFINANCE_THRESHOLD)) {
                 $turnover = self::ACCELERATED_DEBT_TURNOVER;
             }
             $blendedFixedRate = ($historicalRate * (1.0 - $turnover)) + ($currentMarketFixedRate * $turnover);
@@ -664,7 +674,7 @@ class DebtEngine
 
         // Capitalized operating leases (IFRS 16 / ASC 842) are debt-like obligations for leverage purposes;
         // their rent is already inside fixed costs, so they add no interest here.
-        $leaseLiability = $this->corporateMetrics->calculateLeaseLiability($debtMetrics->revenue, $strategy->getLeaseIntensity());
+        $leaseLiability = $this->corporateMetrics->resolveLeaseLiability($stock, $debtMetrics->revenue, $strategy->getLeaseIntensity());
         // An operating company's leverage is struck net of the cash it holds above its manager's operating balance,
         // so a repurchase paid from idle cash moves it as far as one paid with new debt. A financial's treasury is
         // its trading and liquidity buffer, not idle cash, and its ratio stays gross.
@@ -706,7 +716,8 @@ class DebtEngine
             $netDebtToEbitda,
             $ebitdaCovenantLimit,
             $currentDebtRatio,
-            $strategy->getLeverageTarget($managerDebtTolerance)
+            $strategy->getLeverageTarget($managerDebtTolerance),
+            $this->hasPrimaryMarketAccess($stock, $debtMetrics, $interestCoverage)
         );
     }
 
@@ -742,7 +753,7 @@ class DebtEngine
     public function resolveTangibleCapitalBase(Stock $stock, float $revenue): array
     {
         $strategy = \App\Data\Company\Sectors::strategyFor($stock->getIndustry());
-        $leaseLiability = $this->corporateMetrics->calculateLeaseLiability($revenue, $strategy->getLeaseIntensity());
+        $leaseLiability = $this->corporateMetrics->resolveLeaseLiability($stock, $revenue, $strategy->getLeaseIntensity());
 
         $totalAssets = $stock->hasBalanceSheetLedger()
             ? $stock->getTotalAssets($leaseLiability)
@@ -757,31 +768,28 @@ class DebtEngine
     /**
      * Calculates the Altman Z''-Score (Double Prime) for modern, non-manufacturing corporate bankruptcy prediction.
      * 
-     * Evaluates working capital, retained earnings, operating income, and equity to 
+     * Evaluates working capital, retained earnings, operating income, and book equity to
      * determine if the company is at imminent risk of insolvency.
-     * 
+     *
      * @param Stock $stock        The stock entity being evaluated.
      * @param float $ebit         Earnings Before Interest and Taxes.
      * @param float $revenue      Total Revenue.
-     * @param float $currentPrice Current share price.
      * @return array{z_score: float, zone: string, is_bankrupt: bool}
      */
-    public function calculateAltmanZScore(Stock $stock, float $ebit, float $revenue, float $currentPrice): array
+    public function calculateAltmanZScore(Stock $stock, float $ebit, float $revenue): array
     {
         $equity = (float) $stock->getTotalEquity();
         $treasury = (float) $stock->getCorporateTreasury();
         $retainedEarnings = (float) $stock->getRetainedEarnings();
-        $shares = max(1.0, (float) $stock->getSharesOutstanding());
 
         $strategy = \App\Data\Company\Sectors::strategyFor($stock->getIndustry());
 
         // IFRS 16 / ASC 842: the capitalized lease liability sits with debt and the right-of-use asset with assets.
-        $leaseLiability = $this->corporateMetrics->calculateLeaseLiability($revenue, $strategy->getLeaseIntensity());
+        $leaseLiability = $this->corporateMetrics->resolveLeaseLiability($stock, $revenue, $strategy->getLeaseIntensity());
         $debt = (float) $stock->getTotalDebt() + $leaseLiability;
 
         // Accounting Proxy: Assets = Liabilities + Equity
         $totalAssets = max(1.0, $equity + $debt);
-        $marketCap = $currentPrice * $shares;
 
         if ($strategy->requiresAlternativeZScore()) {
             $capitalBase = $this->resolveTangibleCapitalBase($stock, $revenue);
@@ -823,11 +831,15 @@ class DebtEngine
             $workingCapital = $treasury - $currentLiabilities;
         }
 
-        // The 4 Z''-Score Ratios (X5 Revenue/Assets is removed for non-manufacturing)
+        // The 4 Z''-Score Ratios (X5 Revenue/Assets is removed for non-manufacturing). Z'' (Altman 1995) replaced
+        // the 1968 model's market equity with BOOK equity over total liabilities, which is what its 6.56/3.26/
+        // 6.72/1.05 weights and 1.10/2.60 cut-offs were fitted on; the equity market is already read through the
+        // Merton distance to default.
+        $totalLiabilities = max(0.0, $totalAssets - $equity);
         $x1 = $workingCapital / $totalAssets;
         $x2 = $retainedEarnings / $totalAssets;
         $x3 = $ebit / $totalAssets;
-        $x4 = $debt > 0 ? ($marketCap / $debt) : 10.0; // Cap at 10
+        $x4 = $totalLiabilities > 0.0 ? ($equity / $totalLiabilities) : self::ALTMAN_X4_UNLEVERED_CAP;
 
         // The Z''-Score Formula (Modern Service/Tech/Financial Weights)
         $zScore = (6.56 * $x1) + (3.26 * $x2) + (6.72 * $x3) + (1.05 * $x4);
@@ -891,7 +903,7 @@ class DebtEngine
             return new \App\DTO\MaturityRollDTO(0.0, true, 0.0, 0.0);
         }
 
-        if ($this->hasPrimaryMarketAccess($stock, $health)) {
+        if ($this->hasPrimaryMarketAccess($stock, $health->rawMetrics, $health->interestCoverage)) {
             // Refinanced in the primary market: the principal survives and only its coupon reprices, which
             // calculateInterestExpense() has already done through the blended fixed rate.
             return new \App\DTO\MaturityRollDTO($maturing, true, 0.0, 0.0);
@@ -926,7 +938,16 @@ class DebtEngine
             return ['z_score' => null, 'zone' => null];
         }
 
-        return $this->calculateAltmanZScore($stock, $ebit, $revenue, (float) $stock->getPrice());
+        $scored = $this->calculateAltmanZScore($stock, $ebit, $revenue);
+        if ($strategy->requiresAlternativeZScore()) {
+            return $scored;
+        }
+
+        // An operating firm's Z'' is read against its zones with the agency's hysteresis, so a score on an edge does
+        // not cap and release the rating on alternate quarters.
+        $scored['zone'] = \App\Service\Market\Bond\CreditRatingAgency::altmanZoneWithHysteresis($scored['z_score'], (string) $stock->getCreditRating());
+
+        return $scored;
     }
 
     /** An asset manager investing its own balance sheet (S&P's hybrid model): private equity, a hedge fund, a distressed-debt investor. */
@@ -1012,13 +1033,13 @@ class DebtEngine
     }
 
     /**
-     * Whether the primary market will roll this issuer's maturity at any price.
+     * Whether the primary market will lend to this issuer at any price: roll its maturity or fund a cash shortfall.
      */
-    private function hasPrimaryMarketAccess(Stock $stock, \App\DTO\DebtHealthDTO $health): bool
+    private function hasPrimaryMarketAccess(Stock $stock, \App\DTO\DebtMetricsDTO $metrics, float $interestCoverage): bool
     {
         // The market shuts to a class when the index it trades off blows out, not because a CCC trades at a CCC spread;
         // an issuer's own distress closes it through its rating and its coverage below.
-        if (($health->rawMetrics->marketIndexSpread ?? $health->rawMetrics->dynamicSpread) >= self::PRIMARY_MARKET_CLOSURE_SPREAD) {
+        if (($metrics->marketIndexSpread ?? $metrics->dynamicSpread) >= self::PRIMARY_MARKET_CLOSURE_SPREAD) {
             return false;
         }
 
@@ -1026,7 +1047,7 @@ class DebtEngine
         // lender, or any institution steering to a capital ratio, is underwritten on its capital instead: its interest
         // expense is its cost of goods, and a provisioning quarter is not a missed coupon. Its rating reads the capital.
         $strategy = \App\Data\Company\Sectors::strategyFor($stock->getIndustry());
-        if (!self::isUnderwrittenOnCapital($stock, $strategy) && $health->interestCoverage < self::REFINANCING_MIN_COVERAGE) {
+        if (!self::isUnderwrittenOnCapital($stock, $strategy) && $interestCoverage < self::REFINANCING_MIN_COVERAGE) {
             return false;
         }
 

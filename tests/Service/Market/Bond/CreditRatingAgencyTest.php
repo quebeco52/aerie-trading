@@ -17,6 +17,26 @@ class CreditRatingAgencyTest extends TestCase
         $this->agency = new CreditRatingAgency();
     }
 
+    /**
+     * The zone caps carry the grade brackets' hysteresis: a BBB firm is not capped at BB until its Z'' is past the 2.60
+     * edge by the buffer, and a firm held at BB is not released until it clears the edge by as much, so a score
+     * sitting on the line no longer caps and releases the rating on alternate quarters.
+     */
+    public function testAltmanZoneCapsBindAndLiftPastABuffer(): void
+    {
+        $edge = CreditRatingAgency::ALTMAN_GREY_THRESHOLD;
+        $buffer = CreditRatingAgency::ALTMAN_ZONE_HYSTERESIS;
+
+        $this->assertSame('Safe', CreditRatingAgency::altmanZoneWithHysteresis($edge - (0.5 * $buffer), 'BBB'), 'just under the edge does not yet cap a BBB');
+        $this->assertSame('Grey', CreditRatingAgency::altmanZoneWithHysteresis($edge - (1.5 * $buffer), 'BBB'));
+        $this->assertSame('Grey', CreditRatingAgency::altmanZoneWithHysteresis($edge + (0.5 * $buffer), 'BB'), 'just over the edge does not yet release a BB');
+        $this->assertSame('Safe', CreditRatingAgency::altmanZoneWithHysteresis($edge + (1.5 * $buffer), 'BB'));
+
+        $distress = CreditRatingAgency::ALTMAN_DISTRESS_THRESHOLD;
+        $this->assertSame('Grey', CreditRatingAgency::altmanZoneWithHysteresis($distress - (0.5 * $buffer), 'BB'));
+        $this->assertSame('Distress', CreditRatingAgency::altmanZoneWithHysteresis($distress + (0.5 * $buffer), 'CCC'));
+    }
+
     public function testConvertDistanceToRatingBrackets(): void
     {
         $this->assertSame('AAA', $this->agency->convertDistanceToRating(4.0));

@@ -99,10 +99,6 @@ class InternetRetailBusinessModel extends StandardCorporateBusinessModel
     {
         return 1.5;
     } // Massive warehouse and server farm buildouts
-    public function getSurpriseBlendWeights(): array
-    {
-        return ['eps_weight' => 0.40, 'revenue_weight' => 0.60];
-    }
 
     // --- Tri-Stream Architecture Weights ---
     public const FIRST_PARTY_WEIGHT  = 0.45;

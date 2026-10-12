@@ -107,11 +107,6 @@ class SteelManufacturingBusinessModel extends StandardCorporateBusinessModel
         return 0.80; // Massive fixed blast furnace infrastructure
     }
 
-    public function getSurpriseBlendWeights(): array
-    {
-        return ['eps_weight' => 0.40, 'revenue_weight' => 0.60];
-    }
-
     /**
      * The cycle reaches tonnage once, inside each stream's physics; the root shift carries no demand term
      * (the exchange rate is the spot stream's import-dumping term).

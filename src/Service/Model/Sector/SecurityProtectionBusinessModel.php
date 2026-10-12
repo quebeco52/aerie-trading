@@ -91,10 +91,6 @@ class SecurityProtectionBusinessModel extends StandardCorporateBusinessModel
     {
         return 0.8;
     } // Fleet, armor, and tactical hardware
-    public function getSurpriseBlendWeights(): array
-    {
-        return ['eps_weight' => 0.60, 'revenue_weight' => 0.40];
-    }
 
     // --- Tri-Stream Architecture Weights ---
     /** Baseline fraction of revenue from rock-solid sovereign government defense contracts. */

@@ -156,11 +156,6 @@ class ConstructionBusinessModel extends StandardCorporateBusinessModel
         return 0.75;
     }
 
-    public function getSurpriseBlendWeights(): array
-    {
-        return ['eps_weight' => 0.50, 'revenue_weight' => 0.50];
-    }
-
     public function getMacroPhysics(Stock $stock, MacroStateDTO $macroState): array
     {
         $physics = parent::getMacroPhysics($stock, $macroState);

@@ -604,7 +604,7 @@ class TreasuryEngineTest extends TestCase
         $engine->finalizeLiquidity($ctx);
 
         $this->assertGreaterThan(0.0, $ctx->equityRaised, 'the bubble offering must execute for this to test anything');
-        $sharesIssued = $ctx->equityRaised / (300.0 * 0.90); // shares go out at the offering discount
+        $sharesIssued = $ctx->equityRaised / (300.0 * (1.0 - TreasuryEngine::SEASONED_EQUITY_OFFER_DISCOUNT)); // shares go out at the offering discount
         $this->assertEqualsWithDelta(-$sharesIssued, $stock->getCorporateFlowBacklog(), 1.0, 'the placed stock is queued to flow back onto the tape');
         $this->assertEqualsWithDelta(100_000_000.0 + $sharesIssued, (float) $stock->getSharesOutstanding(), 1.0);
         $this->assertEqualsWithDelta(
@@ -1031,13 +1031,18 @@ class TreasuryEngineTest extends TestCase
 
         $engine->finalizeLiquidity($ctx);
 
-        $this->assertTrue($ctx->failedEmergencyBorrow);
         $this->assertCount(0, $ratesIssuedAt, 'the committed line funded it, and a draw is not an issuance');
-        $this->assertEqualsWithDelta(95_000_000.0, (float) $stock->getRevolverDrawn(), 1.0, 'the facility carried the whole maturity');
+        $this->assertEqualsWithDelta(125_000_000.0, (float) $stock->getRevolverDrawn(), 1.0, 'the facility carried the whole maturity and restored the $30M floor');
+        $this->assertFalse($ctx->failedEmergencyBorrow, 'with the floor restored by the line, nothing was left to borrow');
     }
 
     /** The same health reading, with every lending door shut: no market will underwrite this credit. */
     private function healthThatCannotIssue(\App\DTO\DebtHealthDTO $health): \App\DTO\DebtHealthDTO
+    {
+        return $this->healthWithAccess($health, canIssueDebt: false, hasMarketAccess: false);
+    }
+
+    private function healthWithAccess(\App\DTO\DebtHealthDTO $health, bool $canIssueDebt, bool $hasMarketAccess): \App\DTO\DebtHealthDTO
     {
         return new \App\DTO\DebtHealthDTO(
             grossCost: $health->grossCost,
@@ -1047,7 +1052,7 @@ class TreasuryEngineTest extends TestCase
             isSevereNegativeCarry: $health->isSevereNegativeCarry,
             interestCoverage: $health->interestCoverage,
             wantsToPaydownDebt: $health->wantsToPaydownDebt,
-            canIssueDebt: false,
+            canIssueDebt: $canIssueDebt,
             debtTolerance: $health->debtTolerance,
             wacc: $health->wacc,
             costOfEquity: $health->costOfEquity,
@@ -1055,8 +1060,72 @@ class TreasuryEngineTest extends TestCase
             rawMetrics: $health->rawMetrics,
             isLiquidityCrisis: $health->isLiquidityCrisis,
             isLiquidityWarning: $health->isLiquidityWarning,
-            isUnderLeveraged: $health->isUnderLeveraged
+            isUnderLeveraged: $health->isUnderLeveraged,
+            hasMarketAccess: $hasMarketAccess
         );
+    }
+
+    /**
+     * The pecking order for a cash shortfall: the committed line, then the bond market, then equity (Myers & Majluf
+     * 1984; Sufi 2009). A BBB issuer at 2.5x coverage, short of its $30M floor, used to fail the 3.5x coverage gate and
+     * sell discounted stock while its revolver sat undrawn; it draws the line.
+     *
+     * @return array{0: CapitalAllocationContext, 1: Stock, 2: float} The context, the stock and the debt issued.
+     */
+    private function fundAShortfall(bool $hasMarketAccess, float $revolverDrawn): array
+    {
+        $mathUtility = $this->getMockBuilder(MathUtility::class)->onlyMethods(['generateUniform'])->getMock();
+        $mathUtility->method('generateUniform')->willReturn(0.0); // any rescue raise reached is certain to execute
+        $issued = 0.0;
+        $this->debtEngine->method('issueDebt')->willReturnCallback(static function (Stock $target, float $amount) use (&$issued): void {
+            $issued += $amount;
+            $target->setWholesaleDebt((string) ((float) $target->getWholesaleDebt() + $amount));
+        });
+        $this->debtEngine->method('assessGoingConcern')->willReturn($this->goingConcern(assetValue: 3_000_000_000.0, claims: 300_000_000.0));
+        $engine = new TreasuryEngine($this->corporateMetrics, $this->debtEngine, $this->capExEngine, $mathUtility);
+
+        $stock = $this->createSolventCorporate();
+        $stock->setRevolverCommitment('150000000.00');
+        $stock->setRevolverDrawn((string) $revolverDrawn);
+        $stock->setSharesOutstanding('100000000');
+        $ctx = $this->createAllocationContext($stock, stockCompensation: 0.0);
+        $ctx->newTreasury = 10_000_000.0;
+        $ctx->newShares = 100_000_000.0;
+        $ctx->health = $this->healthWithAccess($ctx->health, canIssueDebt: false, hasMarketAccess: $hasMarketAccess);
+
+        $engine->finalizeLiquidity($ctx);
+
+        return [$ctx, $stock, $issued];
+    }
+
+    public function testAShortfallBelowTheFloorDrawsTheLineBeforeSellingStock(): void
+    {
+        [$ctx, $stock, $issued] = $this->fundAShortfall(hasMarketAccess: true, revolverDrawn: 0.0);
+
+        $this->assertEqualsWithDelta(20_000_000.0, (float) $stock->getRevolverDrawn(), 1.0, 'the line restores the $30M floor');
+        $this->assertEqualsWithDelta(30_000_000.0, (float) $stock->getCorporateTreasury(), 1.0);
+        $this->assertSame(0.0, $ctx->equityRaised, 'no stock is sold while the line is undrawn');
+        $this->assertSame(0.0, $issued);
+    }
+
+    public function testPastTheLineAnIssuerTheMarketLendsToBorrowsRatherThanSellsStock(): void
+    {
+        [$ctx, $stock, $issued] = $this->fundAShortfall(hasMarketAccess: true, revolverDrawn: 150_000_000.0);
+
+        $this->assertEqualsWithDelta(20_000_000.0, $issued, 1.0, 'the bond market funds what the exhausted line cannot');
+        $this->assertSame(0.0, $ctx->equityRaised);
+        $this->assertFalse($ctx->failedEmergencyBorrow);
+    }
+
+    /** Only a firm no lender will fund goes to the equity market, and it places stock at the cited 2.2% discount. */
+    public function testOnlyAFirmNoLenderWillFundSellsStockAtTheOfferDiscount(): void
+    {
+        [$ctx, $stock, $issued] = $this->fundAShortfall(hasMarketAccess: false, revolverDrawn: 150_000_000.0);
+
+        $this->assertSame(0.0, $issued);
+        $this->assertGreaterThan(0.0, $ctx->equityRaised, 'the rescue raise is the last resort, and it is reached');
+        $sharesIssued = $ctx->equityRaised / (50.0 * (1.0 - TreasuryEngine::SEASONED_EQUITY_OFFER_DISCOUNT));
+        $this->assertEqualsWithDelta(100_000_000.0 + $sharesIssued, (float) $stock->getSharesOutstanding(), 1.0);
     }
 
     private function goingConcern(float $assetValue, float $claims): \App\DTO\GoingConcernDTO

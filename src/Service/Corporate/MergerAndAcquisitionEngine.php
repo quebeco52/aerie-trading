@@ -1091,6 +1091,11 @@ class MergerAndAcquisitionEngine
         $stock->setCipBalance((string) ((float) $stock->getCipBalance() * $retained));
         $stock->setGoodwill((string) ((float) $stock->getGoodwill() * $retained));
         $stock->setDeferredTaxLiability((string) ((float) $stock->getDeferredTaxLiability() * $retained));
+        // The unit's leases go with it (the ledger would otherwise run them off over years of no use); the loss
+        // carryforward and its asset stay with the seller, whose losses they were.
+        if ($stock->getLeaseLiability() !== null) {
+            $stock->setLeaseLiability($stock->getLeaseLiability() * $retained);
+        }
 
         if ($stock->hasWorkingCapitalLedger()) {
             $stock->setReceivables((string) ((float) $stock->getReceivables() * $retained));

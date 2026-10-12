@@ -7,6 +7,7 @@ namespace App\Service\Corporate;
 use App\Entity\Stock;
 use App\Service\Math\CreditRisk;
 use App\Service\Math\Valuation;
+use App\Service\Math\TimeSeries;
 use Doctrine\ORM\EntityManagerInterface;
 use App\Service\Macro\MacroEngine;
 use App\Service\Math\MathUtility;
@@ -40,6 +41,8 @@ class CapitalAllocationEngine
     public const BUYBACK_SPEND_MEGA_SATURATED_RATIO = 0.70;
     /** Maximum market cap percentage (15%) a fully saturated firm can repurchase in a single quarter. */
     public const MAX_REGULATORY_SPEND_SATURATED = 0.15;
+    /** Least share of its buyback capacity a non-hoarding board spends in a quarter, drawn uniformly up to all of it (no published calibration). */
+    public const BUYBACK_APPETITE_MIN_SHARE = 0.50;
 
     public function __construct(
         private CorporateLedgerService $corporateLedgerService,
@@ -187,7 +190,10 @@ class CapitalAllocationEngine
             if ($regulatoryCap <= 0.0) {
                 $isRegulatoryDividendHalt = true;
             } else {
-                $targetDividend = min($targetDividend, $sustainableBase * min($effectiveTargetPayout, $regulatoryCap));
+                // A buffer tier caps the payout RATIO (Basel III maximum distributable amount): the dividend may not
+                // pass that share of earnings, and a cap above what the board would pay leaves its choice, and the
+                // hold above, untouched.
+                $targetDividend = min($targetDividend, $sustainableBase * $regulatoryCap);
             }
         }
 
@@ -237,7 +243,7 @@ class CapitalAllocationEngine
         // Measured from the operating floor itself, so a treasury below it borrows enough to pay: the cash cap
         // below reads the same floor.
         $distributionShortfall = ($fundedDividend * $ctx->sharesOutstanding) - ($ctx->newTreasury - $minOperatingCash);
-        if ($fundedDividend > 0.0 && $distributionShortfall > 0.0 && $ctx->health->canIssueDebt && $ctx->health->hasLeverageHeadroom) {
+        if ($fundedDividend > 0.0 && $distributionShortfall > 0.0 && $ctx->health->hasMarketAccess && $ctx->health->hasLeverageHeadroom) {
             $this->debtEngine->issueDebt($stock, $distributionShortfall, $ctx->health->rawMetrics->currentMarketRate ?? ($ctx->macroState->yield5yEma + (float) $stock->getCreditSpread()));
             $ctx->wholesaleDebt = (float) $stock->getWholesaleDebt();
             $ctx->newTreasury += $distributionShortfall;
@@ -466,7 +472,7 @@ class CapitalAllocationEngine
             );
             $aggression = $isMegaHoarder ? 1.0 : min(1.0, 0.50 + $valuationDiscount);
 
-            $actualSpend = $absoluteMaxSpend * $aggression * ($isHoarder ? 1.0 : (mt_rand(50, 100) / 100.0));
+            $actualSpend = $absoluteMaxSpend * $aggression * ($isHoarder ? 1.0 : $this->mathUtility->generateUniformBetween(self::BUYBACK_APPETITE_MIN_SHARE, 1.0));
             // The capital return and the recapitalization are plans, not opportunistic purchases: price and
             // appetite do not scale them.
             $actualSpend = max($actualSpend, min(max($capitalSurplusReturn, $recapitalization), $absoluteMaxSpend));
@@ -533,7 +539,7 @@ class CapitalAllocationEngine
             return 0.0;
         }
 
-        $endRatio = $openingRatio - (self::quarterlyAdjustmentSpeed(self::CAPITAL_TARGET_ADJUSTMENT_SPEED) * ($openingRatio - $targetRatio));
+        $endRatio = $openingRatio - (TimeSeries::periodAdjustmentSpeed(self::CAPITAL_TARGET_ADJUSTMENT_SPEED, EarningsEngine::QUARTERLY_TIME_STEP) * ($openingRatio - $targetRatio));
         if ($equity / $assets <= $endRatio) {
             return 0.0;
         }
@@ -553,15 +559,9 @@ class CapitalAllocationEngine
             return 0.0;
         }
 
-        $endRatio = $openingRatio + (self::quarterlyAdjustmentSpeed(self::LEVERAGE_TARGET_ADJUSTMENT_SPEED) * ($targetRatio - $openingRatio));
+        $endRatio = $openingRatio + (TimeSeries::periodAdjustmentSpeed(self::LEVERAGE_TARGET_ADJUSTMENT_SPEED, EarningsEngine::QUARTERLY_TIME_STEP) * ($targetRatio - $openingRatio));
 
         return max(0.0, (($endRatio * $equity) - $debt) / (1.0 + $endRatio));
-    }
-
-    /** The quarterly share of a gap that compounds to closing the annual share of it in a year. */
-    private static function quarterlyAdjustmentSpeed(float $annualSpeed): float
-    {
-        return 1.0 - ((1.0 - $annualSpeed) ** 0.25);
     }
 
     /**
@@ -577,7 +577,7 @@ class CapitalAllocationEngine
             return 0.0;
         }
 
-        $leaseLiability = $this->corporateMetrics->calculateLeaseLiability($ctx->health->rawMetrics->revenue, $ctx->strategy->getLeaseIntensity());
+        $leaseLiability = $this->corporateMetrics->resolveLeaseLiability($ctx->stock, $ctx->health->rawMetrics->revenue, $ctx->strategy->getLeaseIntensity());
 
         // Net of the cash left above the operating balance once the dividend is paid, as the opening ratio is: a
         // repurchase from that cash raises net debt by what it spends, so the same R ends the quarter on the ratio

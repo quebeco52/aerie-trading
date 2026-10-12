@@ -194,6 +194,16 @@ final class TimeSeries
     }
 
     /**
+     * The share of a gap a partial adjustment closes over dt years when it closes the annual share of it in a year:
+     * 1 - (1 - annual)^dt, so a speed estimated on annual data (Lintner payout, Flannery-Rangan leverage, ABJ cost
+     * stickiness) compounds to the same yearly response at any step.
+     */
+    public static function periodAdjustmentSpeed(float $annualSpeed, float $dt): float
+    {
+        return 1.0 - ((1.0 - max(0.0, min(1.0, $annualSpeed))) ** $dt);
+    }
+
+    /**
      * Exponential distributed lag whose speed is capped (a slew-rate-limited first-order lag).
      *
      * Exact step of dx/dt = sign(d) * min(|d| / tau, maxSpeed), d = target - x: the value moves at the ceiling

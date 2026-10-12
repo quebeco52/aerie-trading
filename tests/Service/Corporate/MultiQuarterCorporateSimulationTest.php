@@ -262,7 +262,7 @@ class MultiQuarterCorporateSimulationTest extends TestCase
             $this->earningsEngine->calculate($stock, $neutralMacro, (($quarter - 1) * $ticksPerQuarter) + $reportingTick, 252);
 
             $strategy = Sectors::getBusinessModelStrategy($businessModel);
-            $lease = (new CorporateMetrics())->calculateLeaseLiability((float) $stock->getTotalRevenue(), $strategy->getLeaseIntensity());
+            $lease = (new CorporateMetrics())->resolveLeaseLiability($stock, (float) $stock->getTotalRevenue(), $strategy->getLeaseIntensity());
 
             if (Sectors::isFinancial($businessModel)) {
                 // A balance-sheet business keeps no plant ledger; its asset side is the earning-asset book,

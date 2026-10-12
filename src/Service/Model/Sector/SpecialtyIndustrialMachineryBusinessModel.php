@@ -118,11 +118,6 @@ class SpecialtyIndustrialMachineryBusinessModel extends HeavyManufacturingBusine
     public function getMoatSpread(): float { return 0.025; }
     public function getWorkingCapitalIntensity(Stock $stock): float { return 0.18; }
 
-    public function getSurpriseBlendWeights(): array
-    {
-        return ['eps_weight' => 0.70, 'revenue_weight' => 0.30];
-    }
-
     public function getCapexCyclicality(): float
     {
         return 2.5;

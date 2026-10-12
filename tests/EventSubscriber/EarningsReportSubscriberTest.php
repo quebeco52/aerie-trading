@@ -411,7 +411,7 @@ class EarningsReportSubscriberTest extends TestCase
         $carrying = $this->reportCapitalRatio($this->bankWithGoodwill(40000000.0), $governed);
         $writtenOff = $this->reportCapitalRatio($this->bankWithGoodwill(0.0), $governed);
         $bank = $this->bankWithGoodwill(40000000.0);
-        $closureScore = $debtEngine->calculateAltmanZScore($bank, 0.0, (float) $bank->getTotalRevenue(), 10.0)['z_score'] / 100.0;
+        $closureScore = $debtEngine->calculateAltmanZScore($bank, 0.0, (float) $bank->getTotalRevenue())['z_score'] / 100.0;
 
         $this->assertEqualsWithDelta($closureScore, $carrying, 1e-4, 'the report shows the ratio the closure reads');
         $this->assertEqualsWithDelta($writtenOff, $carrying, 1e-4, 'a write-off moves neither side');
@@ -657,8 +657,7 @@ class EarningsReportSubscriberTest extends TestCase
         $stock->setSharesOutstanding('10000000');
         $stock->setTotalRevenue('40000000.0000');
 
-        $strategy = $this->createMock(BusinessModelInterface::class);
-        $strategy->method('getSurpriseBlendWeights')->willReturn(['revenue_weight' => 0.0, 'eps_weight' => 1.0]);
+        $strategy = $this->createStub(BusinessModelInterface::class);
 
         $ctx = new EarningsSimulationContext(
             stock: $stock,
@@ -700,9 +699,7 @@ class EarningsReportSubscriberTest extends TestCase
         $consensus = (float) $persisted->getConsensusEps();
         $filedEps = (float) $persisted->getReportedEps();
         $this->assertEqualsWithDelta($ctx->expectedQuarterlyEps, $consensus, 1e-6);
-        $this->assertEqualsWithDelta($ctx->actualQuarterlyEps, $filedEps, 1e-6);
-        // With the surprise read on EPS alone, the filed pair reproduces it.
-        $this->assertEqualsWithDelta($ctx->surprisePct, ($filedEps - $consensus) / abs($consensus), 1e-5);
+        $this->assertEqualsWithDelta($ctx->streetQuarterlyEps, $filedEps, 1e-6);
         $this->assertEqualsWithDelta(9_800_000.0, (float) $persisted->getConsensusRevenue(), 0.01);
         $this->assertEqualsWithDelta(13.4125, (float) $persisted->getTotalTime(), 1e-9);
     }

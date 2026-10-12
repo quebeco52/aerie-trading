@@ -13,14 +13,6 @@ use App\Service\Macro\MacroEngine;
  */
 final class Valuation
 {
-    // --- Earnings Response Coefficient (ERC) ---
-    /** Baseline earnings response intercept for unexpected earnings impact on market returns. */
-    public const ERC_BASE_ALPHA = 0.0;
-    /** Sensitivity coefficient dampening ERC as systematic market beta risk increases. */
-    public const ERC_BETA_SENSITIVITY = -0.15;
-    /** Sensitivity coefficient increasing ERC for high-growth premium equities. */
-    public const ERC_GROWTH_SENSITIVITY = 0.25;
-
     // --- Gordon Growth & Perpetual Valuation Bounds ---
     /** Absolute minimum hurdle rate (~4% COE) to prevent Gordon Growth divergence under extreme distress. */
     public const MIN_COST_OF_EQUITY = 0.04;
@@ -384,24 +376,6 @@ final class Valuation
         $foundingNetOfTax = 1.0 - (self::TAXABLE_EQUITY_SHARE * self::FOUNDING_DIVIDEND_TAX_RATE);
 
         return ($netOfTax / $foundingNetOfTax) ** self::DIVIDEND_NET_OF_TAX_ELASTICITY;
-    }
-
-    /**
-     * Calculates the Earnings Response Coefficient (ERC) based on empirical models.
-     * The ERC determines how strongly a stock price reacts to an earnings surprise.
-     * 
-     * @param float $sue           Standardized Unexpected Earnings (Surprise %).
-     * @param float $beta          The stock's levered beta (risk).
-     * @param float $growthPremium The valuation premium or growth expectations.
-     * @return float The price drift percentage resulting from the earnings surprise.
-     */
-    public static function calculateEarningsResponseCoefficient(float $sue, float $beta, float $growthPremium): float
-    {
-        // High beta (risk) means more noise, reducing the ERC
-        // High growth premium implies higher persistence of earnings, increasing the ERC
-        $ercBeta = max(0.1, 1.0 + (self::ERC_BETA_SENSITIVITY * $beta) + (self::ERC_GROWTH_SENSITIVITY * $growthPremium));
-
-        return self::ERC_BASE_ALPHA + ($ercBeta * $sue);
     }
 
     /**

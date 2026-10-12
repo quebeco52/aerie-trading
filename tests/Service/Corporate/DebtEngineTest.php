@@ -144,7 +144,7 @@ class DebtEngineTest extends TestCase
             $this->assertGreaterThan(CreditRatingAgency::THRESHOLD_AAA, $this->engine->resolveDistanceToDefault($stock, $macroState));
 
             $metrics = $this->engine->calculateInterestExpense($stock, $macroState, true);
-            $this->assertSame('Safe', $this->engine->calculateAltmanZScore($stock, $metrics->ebit, 100_000_000.0, 200.0)['zone']);
+            $this->assertSame('Safe', $this->engine->calculateAltmanZScore($stock, $metrics->ebit, 100_000_000.0)['zone']);
 
             return [$stock->getCreditRating(), $metrics->ebitda];
         };
@@ -385,14 +385,56 @@ class DebtEngineTest extends TestCase
         $utilityMetrics = $this->engine->calculateInterestExpense($utility, $macroState, true);
         $corporateMetrics = $this->engine->calculateInterestExpense($corporate, $macroState, true);
 
-        $marketRate = $utilityMetrics->currentMarketRate;
         $utilityRollover = \App\Data\Company\Sectors::getBusinessModelStrategy('utility')->getDebtMaturityRolloverRate();
         $corporateRollover = \App\Data\Company\Sectors::getBusinessModelStrategy('none')->getDebtMaturityRolloverRate();
 
+        // Each firm reprices toward its own market rate: the two can sit in different rating brackets.
         $this->assertLessThan($corporateRollover, $utilityRollover);
-        $this->assertEqualsWithDelta((0.02 * (1.0 - $utilityRollover)) + ($marketRate * $utilityRollover), $utilityMetrics->historicalFixedRate, 1e-9);
-        $this->assertEqualsWithDelta((0.02 * (1.0 - $corporateRollover)) + ($marketRate * $corporateRollover), $corporateMetrics->historicalFixedRate, 1e-9);
+        $this->assertEqualsWithDelta((0.02 * (1.0 - $utilityRollover)) + ($utilityMetrics->currentMarketRate * $utilityRollover), $utilityMetrics->historicalFixedRate, 1e-9);
+        $this->assertEqualsWithDelta((0.02 * (1.0 - $corporateRollover)) + ($corporateMetrics->currentMarketRate * $corporateRollover), $corporateMetrics->historicalFixedRate, 1e-9);
         $this->assertLessThan($corporateMetrics->historicalFixedRate, $utilityMetrics->historicalFixedRate);
+    }
+
+    /**
+     * Falling rates buy a speculative-grade issuer an early refinancing (its bonds are callable at a fixed premium
+     * after the non-call period) and buy an investment-grade one nothing: a make-whole call prices the bond at the
+     * Treasury curve plus a small spread (Powers & Tsyplakov 2008), so its coupons roll down only as the notes mature.
+     */
+    public function testOnlySpeculativeGradeIssuersRefinanceEarlyWhenRatesFall(): void
+    {
+        $macroState = new MacroStateDTO(policyRateEma: 0.01, corporateTaxRate: 0.21, yield5yEma: 0.01);
+        $build = function (string $equity, string $debt, string $margin, string $coupon): Stock {
+            $stock = new Stock();
+            $stock->setTicker('RFIN');
+            $stock->setIndustry('General');
+            $stock->setTotalEquity($equity);
+            $stock->setWholesaleDebt($debt);
+            $stock->setTotalRevenue('800000000');
+            $stock->setOperatingMargin($margin);
+            $stock->setHistoricalFixedRate($coupon);
+            $stock->setFloatingDebtRatio('0.0');
+            $stock->setCreditSpread('0.0');
+            $stock->setVolatility('0.15');
+            $stock->setSharesOutstanding('10000000');
+            $stock->setPrice('100.00');
+
+            return $stock;
+        };
+        $rollover = \App\Data\Company\Sectors::getBusinessModelStrategy('none')->getDebtMaturityRolloverRate();
+
+        $fixtures = [
+            [$build('2000000000', '200000000', '0.30', '0.08'), false, 0.08],
+            [$build('100000000', '2400000000', '0.06', '0.20'), true, 0.20],
+        ];
+        foreach ($fixtures as [$stock, $speculative, $coupon]) {
+            $metrics = $this->engine->calculateInterestExpense($stock, $macroState, true);
+            $isSpeculative = CreditRatingAgency::RATING_RANKS[$stock->getCreditRating()] < CreditRatingAgency::RATING_RANKS['BBB'];
+            $this->assertSame($speculative, $isSpeculative, 'control: the fixture lands on the intended side of investment grade');
+            $this->assertLessThan($coupon - 0.015, $metrics->currentMarketRate, 'control: the market sits well below the book coupon');
+
+            $turnover = $speculative ? 0.15 : $rollover;
+            $this->assertEqualsWithDelta(($coupon * (1.0 - $turnover)) + ($metrics->currentMarketRate * $turnover), $metrics->historicalFixedRate, 1e-9);
+        }
     }
 
     public function testAnalyzeDebtHealthHealthySolventCompany(): void
@@ -513,6 +555,38 @@ class DebtEngineTest extends TestCase
         $this->assertTrue($healthWarning->isLiquidityWarning);
     }
 
+    /**
+     * Z'' (Altman 1995) reads BOOK equity over total liabilities in X4; the 1968 market-value term overstated the
+     * score by a median four points on the live board and left the grey and distress zones out of reach. The share
+     * price is not an input any more, and a dollar of book equity moves the score by its 1.05 weight.
+     */
+    public function testAltmanZDoublePrimeReadsBookEquityOverTotalLiabilities(): void
+    {
+        $engine = new DebtEngine(new MathUtility(), new CorporateMetrics(), $this->creditRatingAgency, $this->marketEventPublisherMock);
+        $build = static function (string $equity): Stock {
+            $stock = new Stock();
+            $stock->setTicker('ZBOOK');
+            $stock->setIndustry('Technology');
+            $stock->setTotalEquity($equity);
+            $stock->setWholesaleDebt('50000000');
+            $stock->setCorporateTreasury('0');
+            $stock->setRetainedEarnings('0');
+            $stock->setSharesOutstanding('1000000');
+            $stock->setPrice('150.00');
+
+            return $stock;
+        };
+
+        $base = $build('50000000');
+        $score = $engine->calculateAltmanZScore($base, 0.0, 0.0)['z_score'];
+        $base->setPrice('1.00');
+        $this->assertEqualsWithDelta($score, $engine->calculateAltmanZScore($base, 0.0, 0.0)['z_score'], 1e-12, 'the share price is not in Z\'\'');
+
+        // Assets 100 = liabilities 50 + equity 50; no working capital, retained earnings or EBIT, so Z'' = 1.05 x 50/50
+        // less the proxy's current liabilities (20% of debt) over assets in X1.
+        $this->assertEqualsWithDelta((1.05 * (50.0 / 50.0)) - (6.56 * (10.0 / 100.0)), $score, 1e-9);
+    }
+
     public function testCalculateAltmanZScoreNonManufacturingZones(): void
     {
         $realMath = new MathUtility();
@@ -529,7 +603,7 @@ class DebtEngineTest extends TestCase
         $stockSafe->setRetainedEarnings('60000000');
         $stockSafe->setSharesOutstanding('1000000');
 
-        $resultSafe = $engine->calculateAltmanZScore($stockSafe, 20000000.0, 80000000.0, 150.0);
+        $resultSafe = $engine->calculateAltmanZScore($stockSafe, 20000000.0, 80000000.0);
         $this->assertSame('Safe', $resultSafe['zone']);
         $this->assertFalse($resultSafe['is_bankrupt']);
         $this->assertGreaterThan(2.60, $resultSafe['z_score']);
@@ -544,7 +618,7 @@ class DebtEngineTest extends TestCase
         $stockBankrupt->setRetainedEarnings('-80000000');
         $stockBankrupt->setSharesOutstanding('1000000');
 
-        $resultBankrupt = $engine->calculateAltmanZScore($stockBankrupt, -15000000.0, 10000000.0, 0.05);
+        $resultBankrupt = $engine->calculateAltmanZScore($stockBankrupt, -15000000.0, 10000000.0);
         $this->assertSame('Distress', $resultBankrupt['zone']);
         $this->assertTrue($resultBankrupt['is_bankrupt']);
         $this->assertLessThan(0.00, $resultBankrupt['z_score']);
@@ -566,7 +640,7 @@ class DebtEngineTest extends TestCase
         $bankSafe->setCorporateTreasury('100000000');
         $bankSafe->setSharesOutstanding('10000000');
 
-        $resultBankSafe = $engine->calculateAltmanZScore($bankSafe, 30000000.0, 100000000.0, 20.0);
+        $resultBankSafe = $engine->calculateAltmanZScore($bankSafe, 30000000.0, 100000000.0);
         $this->assertSame('Safe', $resultBankSafe['zone']);
         $this->assertFalse($resultBankSafe['is_bankrupt']);
         $this->assertEqualsWithDelta(10.0, $resultBankSafe['z_score'], 0.1);
@@ -581,7 +655,7 @@ class DebtEngineTest extends TestCase
         $bankInsolvent->setCorporateTreasury('10000000');
         $bankInsolvent->setSharesOutstanding('10000000');
 
-        $resultBankInsolvent = $engine->calculateAltmanZScore($bankInsolvent, -20000000.0, 50000000.0, 1.0);
+        $resultBankInsolvent = $engine->calculateAltmanZScore($bankInsolvent, -20000000.0, 50000000.0);
         $this->assertSame('Distress', $resultBankInsolvent['zone']);
         $this->assertTrue($resultBankInsolvent['is_bankrupt']);
     }
@@ -603,7 +677,7 @@ class DebtEngineTest extends TestCase
         $reinsurerDistressed->setCorporateTreasury('46000000000');
         $reinsurerDistressed->setSharesOutstanding('1000000000');
 
-        $resultDistressed = $engine->calculateAltmanZScore($reinsurerDistressed, -26000000000.0, 63000000000.0, 10.0);
+        $resultDistressed = $engine->calculateAltmanZScore($reinsurerDistressed, -26000000000.0, 63000000000.0);
         $this->assertSame('Distress', $resultDistressed['zone']);
         $this->assertFalse($resultDistressed['is_bankrupt'], 'Insurer with positive equity and cash must not be marked bankrupt.');
         $this->assertGreaterThan(0.0, $resultDistressed['z_score']);
@@ -619,7 +693,7 @@ class DebtEngineTest extends TestCase
         $reinsurerInsolvent->setCorporateTreasury('5000000');
         $reinsurerInsolvent->setSharesOutstanding('10000000');
 
-        $resultInsolvent = $engine->calculateAltmanZScore($reinsurerInsolvent, -50000000.0, 100000000.0, 0.01);
+        $resultInsolvent = $engine->calculateAltmanZScore($reinsurerInsolvent, -50000000.0, 100000000.0);
         $this->assertSame('Distress', $resultInsolvent['zone']);
         $this->assertTrue($resultInsolvent['is_bankrupt'], 'Insurer with negative equity is insolvent and bankrupt.');
     }
@@ -934,8 +1008,8 @@ class DebtEngineTest extends TestCase
             return $stock;
         };
 
-        $lean = $engine->calculateAltmanZScore($build('1000000000.00'), 3_000_000_000.0, 40_000_000_000.0, 30.0);
-        $stretched = $engine->calculateAltmanZScore($build('6000000000.00'), 3_000_000_000.0, 40_000_000_000.0, 30.0);
+        $lean = $engine->calculateAltmanZScore($build('1000000000.00'), 3_000_000_000.0, 40_000_000_000.0);
+        $stretched = $engine->calculateAltmanZScore($build('6000000000.00'), 3_000_000_000.0, 40_000_000_000.0);
 
         $this->assertLessThan($lean['z_score'], $stretched['z_score'], 'more payables must mean less working capital and a lower score');
     }
@@ -959,7 +1033,7 @@ class DebtEngineTest extends TestCase
         $stock->setTotalRevenue('40000000000.00');
 
         $this->assertFalse($stock->hasWorkingCapitalLedger());
-        $result = $engine->calculateAltmanZScore($stock, 3_000_000_000.0, 40_000_000_000.0, 30.0);
+        $result = $engine->calculateAltmanZScore($stock, 3_000_000_000.0, 40_000_000_000.0);
         $this->assertIsFloat($result['z_score']);
         $this->assertContains($result['zone'], ['Safe', 'Grey', 'Distress']);
     }
@@ -984,42 +1058,6 @@ class DebtEngineTest extends TestCase
         $engine->issueDebt($stock, 0.0, 0.10);
         $this->assertEquals('200000000', $stock->getWholesaleDebt());
         $this->assertEqualsWithDelta(0.05, (float) $stock->getHistoricalFixedRate(), 0.0001);
-    }
-
-    public function testCalculateInterestExpenseAcceleratesRefinancingWhenRatesDrop(): void
-    {
-        $realMath = new MathUtility();
-        $realMetrics = new CorporateMetrics();
-        $engine = new DebtEngine($realMath, $realMetrics, null, null);
-
-        $stock = new Stock();
-        $stock->setTicker('REFIN');
-        $stock->setIndustry('Technology');
-        $stock->setPrice('100.00');
-        $stock->setSharesOutstanding('1000000');
-        $stock->setTotalEquity('100000000');
-        $stock->setWholesaleDebt('50000000');
-        $stock->setHistoricalFixedRate('0.08'); // High legacy rate (8%)
-        $stock->setCreditSpread('0.01');
-        $stock->setTotalRevenue('50000000');
-        $stock->setOperatingMargin('0.20');
-        $stock->setVolatility('0.15');
-
-        // Macro: 5y Yield = 2.0%, Credit Spread ~ 1.0% -> Market Fixed Rate ~ 3.0% (8% - 3% = 500bps drop > 150bps hurdle)
-        $macro = new MacroStateDTO(
-            policyRateEma: 0.02,
-            corporateTaxRate: 0.20,
-            yield5yEma: 0.02,
-            macroCreditSpreadEma: 0.015
-        );
-
-        // With advanceMaturity = true, turnover should accelerate to 15% (0.15)
-        $metrics = $engine->calculateInterestExpense($stock, $macro, true);
-
-        // Expected blended fixed rate: (0.08 * 0.85) + (marketRate * 0.15)
-        $marketRate = $metrics->currentMarketRate;
-        $expectedBlended = (0.08 * 0.85) + ($marketRate * 0.15);
-        $this->assertEqualsWithDelta($expectedBlended, $metrics->historicalFixedRate, 0.001);
     }
 
     /**
@@ -1067,8 +1105,8 @@ class DebtEngineTest extends TestCase
 
         // Real metrics: the lease capitalization must actually run, not the test class's stub.
         $engine = new DebtEngine($this->mathUtilityMock, new CorporateMetrics(), $this->creditRatingAgency, $this->marketEventPublisherMock);
-        $restaurant = $engine->calculateAltmanZScore($build('Restaurants'), 120_000_000.0, 2_000_000_000.0, 40.0);
-        $plain = $engine->calculateAltmanZScore($build('General'), 120_000_000.0, 2_000_000_000.0, 40.0);
+        $restaurant = $engine->calculateAltmanZScore($build('Restaurants'), 120_000_000.0, 2_000_000_000.0);
+        $plain = $engine->calculateAltmanZScore($build('General'), 120_000_000.0, 2_000_000_000.0);
 
         $this->assertGreaterThan(
             \App\Data\Company\Sectors::getBusinessModelStrategy('none')->getLeaseIntensity(),
@@ -1523,13 +1561,13 @@ class DebtEngineTest extends TestCase
             return $stock;
         };
 
-        $carried = $engine->calculateAltmanZScore($bank(60e9, 20e9), 5e9, 40e9, 10.0);
-        $writtenOff = $engine->calculateAltmanZScore($bank(40e9, 0.0), 5e9, 40e9, 10.0);
+        $carried = $engine->calculateAltmanZScore($bank(60e9, 20e9), 5e9, 40e9);
+        $writtenOff = $engine->calculateAltmanZScore($bank(40e9, 0.0), 5e9, 40e9);
         $this->assertEqualsWithDelta($writtenOff['z_score'], $carried['z_score'], 1e-9);
 
         // Book equity 5% of assets, tangible equity 1.5%.
-        $this->assertTrue($engine->calculateAltmanZScore($bank(50e9, 35e9), 5e9, 40e9, 10.0)['is_bankrupt']);
-        $this->assertFalse($engine->calculateAltmanZScore($bank(50e9, 0.0), 5e9, 40e9, 10.0)['is_bankrupt']);
+        $this->assertTrue($engine->calculateAltmanZScore($bank(50e9, 35e9), 5e9, 40e9)['is_bankrupt']);
+        $this->assertFalse($engine->calculateAltmanZScore($bank(50e9, 0.0), 5e9, 40e9)['is_bankrupt']);
     }
 
     /**

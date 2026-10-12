@@ -181,11 +181,6 @@ class DefenseContractorBusinessModel extends StandardCorporateBusinessModel
         return MacroEngine::ALLIED_PROCUREMENT_ELASTICITY * MacroAggregateSubsystem::alliedDefenseGap($macroState->alliedDefenseSpendingIndexEma);
     }
 
-    public function getSurpriseBlendWeights(): array
-    {
-        return ['eps_weight' => 0.70, 'revenue_weight' => 0.30];
-    }
-
     // --- Secular Demand ---
     /** Other transportation equipment (aerospace and defense) value added as a share of US nominal GDP in 1997 (BEA GDP by Industry, value added). */
     public const SECULAR_SHARE_1997 = 0.0073;

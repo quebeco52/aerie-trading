@@ -89,10 +89,6 @@ class AssetManagementBusinessModelTest extends TestCase
         // Trend 2% plus securities and investments value added sliding from 1.41% to 1.30% of GDP over 1997-2019.
         $this->assertEqualsWithDelta(0.0163, $model->getSecularGrowthRate($stock), 1e-4);
 
-        $surpriseWeights = $model->getSurpriseBlendWeights();
-        $this->assertEquals(0.75, $surpriseWeights['eps_weight']);
-        $this->assertEquals(0.25, $surpriseWeights['revenue_weight']);
-
         $coverage = $model->getCoverageProfile($stock);
         $this->assertEquals(AssetManagementBusinessModel::BASE_COVERAGE_VISIBILITY, $coverage->baseVisibility);
         $this->assertEquals(AssetManagementBusinessModel::BASE_COVERAGE_ERROR, $coverage->errorStdDev);

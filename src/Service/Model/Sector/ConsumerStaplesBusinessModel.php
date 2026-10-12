@@ -67,10 +67,6 @@ class ConsumerStaplesBusinessModel extends StandardCorporateBusinessModel
     // --- Core Sector Structural Constants ---
     /** Mild CapEx cyclicality; staples upgrade facilities but avoid heavy industrial boom/bust cycles. */
     public const STAPLES_CAPEX_CYCLICALITY = 0.80;
-    /** Weight assigned to EPS surprises (Staples trade on reliable bottom-line earnings). */
-    public const SURPRISE_EPS_WEIGHT = 0.75;
-    /** Weight assigned to Revenue surprises. */
-    public const SURPRISE_REVENUE_WEIGHT = 0.25;
     /** Operating margin mean reversion speed: fast speed reflects intense retail shelf-space price competition. */
     public const STAPLES_REVERSION_SPEED = 5.0;
 
@@ -149,11 +145,6 @@ class ConsumerStaplesBusinessModel extends StandardCorporateBusinessModel
     public function getCapexCyclicality(): float
     {
         return self::STAPLES_CAPEX_CYCLICALITY;
-    }
-
-    public function getSurpriseBlendWeights(): array
-    {
-        return ['eps_weight' => self::SURPRISE_EPS_WEIGHT, 'revenue_weight' => self::SURPRISE_REVENUE_WEIGHT];
     }
 
     public function getSeasonalityFactors(): array

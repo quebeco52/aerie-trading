@@ -45,10 +45,6 @@ class ApparelManufacturingBusinessModelTest extends TestCase
         // Trend 2% plus clothing and footwear spending sliding from 2.89% to 1.92% of GDP over 1997-2019.
         $this->assertEqualsWithDelta(0.0014, $this->model->getSecularGrowthRate($stock), 1e-4);
 
-        $surpriseWeights = $this->model->getSurpriseBlendWeights();
-        $this->assertEquals(0.50, $surpriseWeights['eps_weight']);
-        $this->assertEquals(0.50, $surpriseWeights['revenue_weight']);
-
         $coverage = $this->model->getCoverageProfile($stock);
         $this->assertEquals(ApparelManufacturingBusinessModel::BASE_COVERAGE_VISIBILITY, $coverage->baseVisibility);
         $this->assertEquals(ApparelManufacturingBusinessModel::BASE_COVERAGE_ERROR, $coverage->errorStdDev);

@@ -64,8 +64,9 @@ class EarningsReportSubscriber implements EventSubscriberInterface
         $report->setEbit(Decimal::format($ctx->ebit, 4));
         $report->setPreTaxIncome(Decimal::format($ctx->preTaxIncome, 4));
         $report->setTaxPaid(Decimal::format($ctx->taxPaid, 4));
-        // The consensus the surprise was struck against, and the EPS it was struck on (EarningsEngine::calculateEPSAndSurprise()).
-        $report->setReportedEps(Decimal::format($ctx->actualQuarterlyEps, 6));
+        // The consensus the surprise was struck against, and the EPS it was struck on (EarningsEngine::calculateEPSAndSurprise()):
+        // adjusted for special items. GAAP EPS is the filed net income over the share count.
+        $report->setReportedEps(Decimal::format($ctx->streetQuarterlyEps, 6));
         $report->setConsensusEps(Decimal::format($ctx->expectedQuarterlyEps, 6));
         $report->setConsensusRevenue(Decimal::format($ctx->analystExpectedRevenue, 4));
 
@@ -91,7 +92,8 @@ class EarningsReportSubscriber implements EventSubscriberInterface
 
         // Balance sheet. The lease is computed the same way the leverage and solvency tests compute it, so
         // the statement agrees with the ratios rather than quietly using a second definition.
-        $leaseLiability = \App\Service\Corporate\CorporateMetrics::getInstance()->calculateLeaseLiability(
+        $leaseLiability = \App\Service\Corporate\CorporateMetrics::getInstance()->resolveLeaseLiability(
+            $stock,
             (float) $stock->getTotalRevenue(),
             $ctx->strategy->getLeaseIntensity()
         );

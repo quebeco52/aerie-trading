@@ -35,11 +35,6 @@ class BaseFinancialBusinessModelTest extends TestCase
                 return 0.0;
             }
 
-            public function getSurpriseBlendWeights(): array
-            {
-                return ['vol' => 0.5, 'perf' => 0.5];
-            }
-
             protected function calculateSectorPhysics(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, \App\DTO\MacroStateDTO $macroState, \App\Service\Math\MathUtility $mathUtility): \App\DTO\SectorPhysicsResult
             {
                 return new \App\DTO\SectorPhysicsResult($expectedRevenue, $realizedVariableMargin, $fixedCosts, $baselineVol);

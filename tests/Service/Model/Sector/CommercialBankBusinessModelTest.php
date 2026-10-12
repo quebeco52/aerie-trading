@@ -531,9 +531,9 @@ class CommercialBankBusinessModelTest extends TestCase
         $this->assertEqualsWithDelta(10.0 / (95.0 * $density), $cet1, 0.0001);
         $this->assertGreaterThan(FinancialConstants::OPENING_BANK_CAPITAL_REQUIREMENT, $cet1);
 
-        // Dividend cap for healthy bank is 1.0
+        // A healthy bank sits outside the maximum distributable amount: nothing is restricted.
         $divCap = $this->model->getRegulatoryDividendCap($bank, 5_000_000_000.0);
-        $this->assertSame(1.0, $divCap);
+        $this->assertNull($divCap);
     }
 
     /**
@@ -601,8 +601,8 @@ class CommercialBankBusinessModelTest extends TestCase
         $neutralMacro = new \App\DTO\MacroStateDTO(countercyclicalBufferRate: 0.0);
         $ccybMacro = new \App\DTO\MacroStateDTO(countercyclicalBufferRate: 0.020);
 
-        // Under neutral macro, bank meets CCB and distributions are permitted
-        $this->assertSame(1.0, $this->model->getRegulatoryDividendCap($bank, 5_000_000_000.0, $neutralMacro));
+        // Under neutral macro, bank meets CCB and distributions are unrestricted
+        $this->assertNull($this->model->getRegulatoryDividendCap($bank, 5_000_000_000.0, $neutralMacro));
 
         // When macro countercyclical buffer activates (+200bps), required CET1 rises to 11.4% and halts dividends
         $this->assertSame(0.0, $this->model->getRegulatoryDividendCap($bank, 5_000_000_000.0, $ccybMacro));
@@ -623,7 +623,7 @@ class CommercialBankBusinessModelTest extends TestCase
 
         $light = new MacroStateDTO(bankCapitalRequirement: 0.0843);
         $strict = new MacroStateDTO(bankCapitalRequirement: 0.1315);
-        $this->assertSame(1.0, $this->model->getRegulatoryDividendCap($bank, 5_000_000_000.0, $light));
+        $this->assertNull($this->model->getRegulatoryDividendCap($bank, 5_000_000_000.0, $light));
         $this->assertSame(0.0, $this->model->getRegulatoryDividendCap($bank, 5_000_000_000.0, $strict));
         $this->assertTrue($this->model->checkBuybackRegulatoryLockout($bank, 5_000_000_000.0, $strict));
 

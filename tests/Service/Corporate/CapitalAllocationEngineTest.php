@@ -88,6 +88,8 @@ class CapitalAllocationEngineTest extends TestCase
         $this->debtEngineMock->method('analyzeTrailingDebtHealth')->willReturn($debtHealthMock);
 
         $this->mathUtilityMock = $this->createStub(MathUtility::class);
+        // The board's buyback appetite is a uniform draw; the stub draws the middle of whatever range it is asked for.
+        $this->mathUtilityMock->method('generateUniformBetween')->willReturnCallback(static fn (float $min, float $max): float => 0.5 * ($min + $max));
 
         $this->treasuryEngineMock = $this->createStub(TreasuryEngine::class);
 
@@ -244,7 +246,7 @@ class CapitalAllocationEngineTest extends TestCase
             grossCost: 0.05, effectiveCost: 0.05, cashYield: 0.04, isNegativeCarry: false, isSevereNegativeCarry: false,
             interestCoverage: 5.0, wantsToPaydownDebt: false, canIssueDebt: false, debtTolerance: 1.5, wacc: 0.06,
             costOfEquity: 0.08, leveredBeta: 1.0, rawMetrics: $this->debtHealth->rawMetrics, isLiquidityCrisis: false,
-            isLiquidityWarning: false, isUnderLeveraged: false
+            isLiquidityWarning: false, isUnderLeveraged: false, hasMarketAccess: false
         ));
         $refused->expects($this->never())->method('issueDebt');
         $unfunded = (new CapitalAllocationEngine($this->corporateLedgerServiceMock, $this->corporateMetricsMock, $refused, $this->mathUtilityMock, $this->treasuryEngineMock))
@@ -658,6 +660,75 @@ class CapitalAllocationEngineTest extends TestCase
             ->allocateCapital($stock, 4.00, 1.00, 100.00, 1000000.0, new MacroStateDTO(corporateTaxRate: 0.21));
 
         return [$result, $stock];
+    }
+
+    /**
+     * A bank above its capital requirement is outside the maximum distributable amount (Basel III, RBC30.13): the
+     * regulator restricts nothing, so it holds its dividend through a profitable year of falling earnings like any
+     * other payer (Lintner 1956). A cap of one used to stand for "unrestricted" and pulled the dividend down to the
+     * target payout instead.
+     */
+    public function testACompliantBankHoldsItsDividendWhileEarningsFall(): void
+    {
+        $bank = new Stock();
+        $bank->setTicker('HOLD_BANK');
+        $bank->setIndustry('Banks - Regional');
+        $bank->setSharesOutstanding('100000000');
+        $bank->setPrice('50.00');
+        $bank->setTotalEquity('10000000000');
+        $bank->setCustomerDeposits('80000000000');
+        $bank->setWholesaleDebt('10000000000');
+        $bank->setCorporateTreasury('5000000000');
+        $bank->setTargetPayoutRatio('0.30');
+        $bank->setDividendSpeed('0.10');
+        $bank->setLastDividend('1.00');
+        $bank->setRetainedEarnings('6000000000.00');
+        $bank->setTotalRevenue('5000000000.00');
+        $bank->setOperatingMargin('0.30');
+        $bank->setRoeTtm('0.10');
+        $bank->setTotalNetIncome('400000000.00');
+
+        $model = new \App\Service\Model\Sector\CommercialBankBusinessModel();
+        $this->assertNull($model->getRegulatoryDividendCap($bank, 5_000_000_000.0, new MacroStateDTO()), 'Above the requirement nothing is restricted.');
+
+        $result = $this->buildEngineWith($this->debtEngineReturning($this->buildHealth()))
+            ->allocateCapital($bank, 4.00, 1.00, 50.00, 100000000.0, new MacroStateDTO(corporateTaxRate: 0.21));
+
+        $this->assertSame(1.00, $result['dividend_paid'], 'A profitable year is not a cut, for a bank as for anyone.');
+    }
+
+    /**
+     * A buffer tier caps the payout ratio, not the board's policy: a broker in the first tier (60% of earnings) whose
+     * own target is 30% holds its dividend through falling earnings as any payer would; only a ceiling below what it
+     * pays out cuts it.
+     */
+    public function testABufferTierAboveTheTargetPayoutLeavesTheDividendHoldStanding(): void
+    {
+        $broker = new Stock();
+        $broker->setTicker('TIER_BRKR');
+        $broker->setIndustry('Brokerages');
+        $broker->setSharesOutstanding('1000000');
+        $broker->setPrice('100.00');
+        $broker->setTotalEquity('100000000');
+        $broker->setWholesaleDebt('880000000');
+        $broker->setCustomerDeposits('0.00');
+        $broker->setCorporateTreasury('50000000');
+        $broker->setTargetPayoutRatio('0.30');
+        $broker->setDividendSpeed('0.10');
+        $broker->setLastDividend('0.50');
+        $broker->setRetainedEarnings('50000000.00');
+        $broker->setTotalRevenue('10000000.00');
+        $broker->setOperatingMargin('0.20');
+        $broker->setRoeTtm('0.12');
+        $broker->setTotalNetIncome('4000000.00');
+
+        $model = new \App\Service\Model\Sector\BrokerageBusinessModel();
+        $this->assertSame(FinancialConstants::REGULATORY_BUFFER_TIER_1_PAYOUT_CAP, $model->getRegulatoryDividendCap($broker, 50_000_000.0), 'Control: the broker sits in the first buffer tier.');
+
+        $result = $this->buildEngineWith($this->debtEngineReturning($this->buildHealth()))
+            ->allocateCapital($broker, 4.00, 1.00, 100.00, 1000000.0, new MacroStateDTO(corporateTaxRate: 0.21));
+
+        $this->assertSame(0.50, $result['dividend_paid'], 'A 60% ceiling does not bind a dividend at half the quarter\'s earnings; the hold keeps it above the 30% target.');
     }
 
     public function testCommercialBankCapitalConservationBufferHaltsDividends(): void

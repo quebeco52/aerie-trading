@@ -369,7 +369,7 @@ class StockTracker
             $stock->setCurrentVolatility((string) $nextVolatility);
 
             // Guidance: management warns ahead of a quarter it already knows has gone wrong.
-            $warning = $this->earningsEngine->evaluatePreAnnouncement($stock, $tickCount, $ticksPerYear);
+            $warning = $this->earningsEngine->evaluatePreAnnouncement($stock, $macroDTO, $tickCount, $ticksPerYear);
             if (!empty($warning)) {
                 $events = array_merge($events, $warning);
             }

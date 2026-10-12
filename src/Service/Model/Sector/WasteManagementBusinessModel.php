@@ -90,10 +90,6 @@ class WasteManagementBusinessModel extends StandardCorporateBusinessModel
     {
         return 1.0;
     } // Constant need for fleet upgrades and landfill cells
-    public function getSurpriseBlendWeights(): array
-    {
-        return ['eps_weight' => 0.75, 'revenue_weight' => 0.25];
-    }
 
     // --- Tri-Stream Architecture ---
     /** Baseline fraction of revenue from defensive residential collection & municipal contracts. */

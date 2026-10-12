@@ -146,11 +146,6 @@ class MiningBusinessModel extends StandardCorporateBusinessModel
         return $deck > 0.0 ? log($deck) : 0.0;
     }
 
-    public function getSurpriseBlendWeights(): array
-    {
-        return ['eps_weight' => 0.30, 'revenue_weight' => 0.70];
-    }
-
     public function getWorkingCapitalIntensity(Stock $stock): float
     {
         return self::WORKING_CAPITAL_INTENSITY;

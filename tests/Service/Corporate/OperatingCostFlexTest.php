@@ -165,7 +165,7 @@ final class OperatingCostFlexTest extends TestCase
         };
 
         $this->assertEqualsWithDelta(1.0, $scaleAfterAQuarter(0.0, \App\Service\Macro\MacroEngine::DEAL_ACTIVITY_BASELINE), 1e-6, 'Normal deal flow keeps the whole base.');
-        $this->assertLessThan(0.97, $scaleAfterAQuarter(-0.045, 0.70 * \App\Service\Macro\MacroEngine::DEAL_ACTIVITY_BASELINE), 'A deal drought starts trimming the base the quarter it arrives.');
+        $this->assertLessThan(0.995, $scaleAfterAQuarter(-0.045, 0.70 * \App\Service\Macro\MacroEngine::DEAL_ACTIVITY_BASELINE), 'A deal drought starts trimming the base the quarter it arrives.');
     }
 
     /**
@@ -185,14 +185,15 @@ final class OperatingCostFlexTest extends TestCase
             'costs are sticky DOWNWARD: the rebuild elasticity must exceed the contraction one'
         );
 
-        // Pinned to the coefficients rather than only their ordering, so a silent recalibration is visible.
-        $contraction = FinancialConstants::STICKY_COST_BETA_EXPANSION + FinancialConstants::STICKY_COST_BETA_CONTRACTION_PENALTY;
-        $this->assertEqualsWithDelta(1.0 - exp($contraction * log(0.90)), $cut, 1e-9);
-        $this->assertEqualsWithDelta(
-            (0.90 * exp(FinancialConstants::STICKY_COST_BETA_EXPANSION * log(1.0 / 0.90))) - 0.90,
-            $rebuild,
-            1e-9
+        // Pinned to the coefficients rather than only their ordering, so a silent recalibration is visible: each
+        // annual ABJ elasticity closes its quarterly compounding share of the gap.
+        $contraction = \App\Service\Math\TimeSeries::periodAdjustmentSpeed(
+            FinancialConstants::STICKY_COST_BETA_EXPANSION + FinancialConstants::STICKY_COST_BETA_CONTRACTION_PENALTY,
+            EarningsEngine::QUARTERLY_TIME_STEP
         );
+        $expansion = \App\Service\Math\TimeSeries::periodAdjustmentSpeed(FinancialConstants::STICKY_COST_BETA_EXPANSION, EarningsEngine::QUARTERLY_TIME_STEP);
+        $this->assertEqualsWithDelta(1.0 - exp($contraction * log(0.90)), $cut, 1e-9);
+        $this->assertEqualsWithDelta((0.90 * exp($expansion * log(1.0 / 0.90))) - 0.90, $rebuild, 1e-9);
     }
 
     /**
@@ -211,7 +212,8 @@ final class OperatingCostFlexTest extends TestCase
 
         $this->assertLessThan($firstQuarter, $scale, 'each quarter of the slump cuts further into the base');
         $this->assertGreaterThan(0.85, $scale, 'and never overshoots the activity it is adjusting toward');
-        $this->assertEqualsWithDelta(0.85, $scale, 0.02, 'five quarters is most of the way there');
+        $annual = FinancialConstants::STICKY_COST_BETA_EXPANSION + FinancialConstants::STICKY_COST_BETA_CONTRACTION_PENALTY;
+        $this->assertEqualsWithDelta(1.0 - ((1.0 - $annual) ** 1.25), log($scale) / log(0.85), 1e-5, 'five quarters closes the ABJ share of the gap that compounds over a year and a quarter');
     }
 
     /**
@@ -344,9 +346,9 @@ final class OperatingCostFlexTest extends TestCase
         $mean = static fn (array $series): float => array_sum($series) / count($series);
 
         $this->assertLessThan(
-            $mean($neutral) - 0.03,
+            $mean($neutral) - 0.02,
             $mean($slump),
-            'a six-point output gap held for four years has to show up as a smaller committed cost base'
+            'a six-point output gap held for four years has to show up as a smaller committed cost base (ABJ closes ~83% of the gap in four years)'
         );
         $this->assertGreaterThan(
             FinancialConstants::MIN_COMMITTED_COST_SCALE,
@@ -357,11 +359,11 @@ final class OperatingCostFlexTest extends TestCase
     }
 
     /**
-     * Stickiness reads activity. Last quarter's actual revenue also carries its market price and one-off shocks:
-     * a refiner whose revenue rose with crude, or any firm that beat its plan, has not grown its operations, so
-     * neither may be read as a contraction this quarter. A genuine fall in planned activity still is.
+     * Stickiness is the committed base's alone. Variable cost is per unit, so a fall in planned activity leaves the
+     * variable cost RATIO where it was: charging the same contraction to the ratio as well counted Anderson, Banker
+     * & Janakiraman's asymmetry twice, once on each half of the cost structure.
      */
-    public function testStickyCostsReadLastQuartersPlannedActivityNotItsPrice(): void
+    public function testVariableCostIsPerUnitSoAContractionLeavesItsRatioAlone(): void
     {
         $quiet = new class extends MathUtility {
             public function generateStandardNormal(): float
@@ -372,28 +374,33 @@ final class OperatingCostFlexTest extends TestCase
         $engine = $this->buildEngine($quiet);
         $process = new ReflectionMethod(EarningsEngine::class, 'processVariableMargins');
 
-        $realizedRatio = function (?float $priorExpectedRevenue, float $priorActualRevenue) use ($engine, $process): float {
+        $realizedRatio = function (float $priorExpectedRevenue) use ($engine, $process): float {
             $ctx = $this->buildContext(1.0, 1.0);
             $ctx->baselineVariableMargin = 0.60;
             $ctx->baselineVol = 0.15;
             $ctx->expectedRevenue = 20_000_000_000.0;
-            $ctx->previousQuarterlyRevenue = $priorActualRevenue;
-            if ($priorExpectedRevenue !== null) {
-                $ctx->stock->setEarningsMomentumZ([EarningsEngine::STATE_LAST_EXPECTED_REVENUE => $priorExpectedRevenue]);
-            }
+            $ctx->stock->setEarningsMomentumZ([EarningsEngine::STATE_LAST_EXPECTED_REVENUE => $priorExpectedRevenue]);
             $process->invoke($engine, $ctx);
 
             return $ctx->realizedVariableMargin;
         };
 
-        $steady = $realizedRatio(20_000_000_000.0, 20_000_000_000.0);
-        $priceRally = $realizedRatio(20_000_000_000.0, 24_000_000_000.0);
-        $activityFell = $realizedRatio(24_000_000_000.0, 24_000_000_000.0);
+        $this->assertEqualsWithDelta($realizedRatio(20_000_000_000.0), $realizedRatio(24_000_000_000.0), 1e-12, 'a fall in planned activity is not a rise in unit cost');
+    }
 
-        $this->assertEqualsWithDelta($steady, $priceRally, 1e-12, 'a quarter that out-earned its plan is not a contraction');
-        $this->assertGreaterThan($steady * 1.05, $activityFell, 'a fall in planned activity still leaves the costs behind');
+    /**
+     * ABJ's coefficients are annual, so the quarterly step closes the share of a gap that compounds to them: after
+     * four quarters of a 10% shortfall the base has closed 36% of the log gap, not the 91% the annual coefficient
+     * applied every quarter gave.
+     */
+    public function testAYearOfShortfallClosesTheAnnualAbjShareOfTheGap(): void
+    {
+        $scale = 1.0;
+        for ($quarter = 1; $quarter <= 4; $quarter++) {
+            $scale = $this->resolveScale($this->buildContext($scale, 0.90));
+        }
 
-        // A firm reporting for the first time has no plan on record and falls back to what it last reported.
-        $this->assertEqualsWithDelta($activityFell, $realizedRatio(null, 24_000_000_000.0), 1e-12);
+        $annual = FinancialConstants::STICKY_COST_BETA_EXPANSION + FinancialConstants::STICKY_COST_BETA_CONTRACTION_PENALTY;
+        $this->assertEqualsWithDelta($annual, log($scale) / log(0.90), 1e-5);
     }
 }

@@ -292,4 +292,22 @@ class CorporateMetricsTest extends TestCase
         $this->assertSame(0.0, $metrics->calculateLeaseLiability(-5.0, 0.60), 'negative revenue carries no lease book');
     }
 
+    /**
+     * The lease book is contracted (ASC 842-20-30-1): a firm that adds capacity signs its leases at once, and one that
+     * needs less capacity keeps paying until the leases expire, running off at dt / term. A revenue multiple deleted
+     * a restaurant chain's lease debt the quarter its sales fell, while the rent behind it stayed in fixed costs.
+     */
+    public function testTheLeaseBookIsSignedForCapacityAndRunsOffAtTheTerm(): void
+    {
+        $opened = CorporateMetrics::rollLeaseLiability(null, 1_000_000_000.0, 0.60, 0.25);
+        $this->assertEqualsWithDelta(600_000_000.0, $opened, 1e-6, 'the first report opens the book at the capacity it runs');
+
+        $grown = CorporateMetrics::rollLeaseLiability($opened, 1_200_000_000.0, 0.60, 0.25);
+        $this->assertEqualsWithDelta(720_000_000.0, $grown, 1e-6, 'new capacity is leased at once');
+
+        $slumped = CorporateMetrics::rollLeaseLiability($grown, 800_000_000.0, 0.60, 0.25);
+        $this->assertEqualsWithDelta(720_000_000.0 * (1.0 - (0.25 / FinancialConstants::LEASE_TERM_YEARS)), $slumped, 1e-6, 'a quarter of the term runs off, not the fall in need');
+        $this->assertEqualsWithDelta(480_000_000.0, CorporateMetrics::rollLeaseLiability(490_000_000.0, 800_000_000.0, 0.60, 0.25), 1e-6, 'and no further than the capacity still in use');
+    }
+
 }

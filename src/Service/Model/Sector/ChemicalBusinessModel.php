@@ -164,10 +164,6 @@ class ChemicalBusinessModel extends StandardCorporateBusinessModel
     // --- Valuation, Growth & CapEx Rails ---
     /** Multiplier scaling heavy continuous chemical synthesis and cracking plant capital expenditure cycles. */
     public const CHEMICAL_CAPEX_CYCLICALITY = 3.50;
-    /** Weight given to EPS surprise when calculating aggregate earnings surprise. */
-    public const SURPRISE_EPS_WEIGHT = 0.45;
-    /** Weight given to revenue surprise when calculating aggregate earnings surprise. */
-    public const SURPRISE_REVENUE_WEIGHT = 0.55;
 
     // --- Working Capital Intensities ---
     /** High inventory and hydrocarbon feedstock storage working capital intensity for base petrochemicals. */
@@ -198,14 +194,6 @@ class ChemicalBusinessModel extends StandardCorporateBusinessModel
     public function getCapexCyclicality(): float
     {
         return self::CHEMICAL_CAPEX_CYCLICALITY;
-    }
-
-    public function getSurpriseBlendWeights(): array
-    {
-        return [
-            'eps_weight' => self::SURPRISE_EPS_WEIGHT,
-            'revenue_weight' => self::SURPRISE_REVENUE_WEIGHT,
-        ];
     }
 
     public function getWorkingCapitalIntensity(Stock $stock): float
