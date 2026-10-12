@@ -66,6 +66,12 @@ trait StandardOperatingPhysicsTrait
         return [1.0, 1.0, 1.0, 1.0];
     }
 
+    /** @return array<int, float> */
+    public function resolveSeasonalityFactors(Stock $stock): array
+    {
+        return $this->getSeasonalityFactors();
+    }
+
     public function getEffectiveTaxRate(float $macroTaxRate): float
     {
         return $macroTaxRate;

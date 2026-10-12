@@ -330,6 +330,14 @@ class EarningsEngine
         return ((($tickCount % $ticksPerQuarter) - self::resolveReportingTick($ticker, $ticksPerYear)) % $ticksPerQuarter + $ticksPerQuarter) % $ticksPerQuarter;
     }
 
+    /** Calendar quarter (0 = Jan-Mar .. 3 = Oct-Dec) a report filed on this tick covers: the one before the quarter it is filed in. */
+    public static function coveredCalendarQuarter(int $tickCount, int $ticksPerYear): int
+    {
+        $ticksPerQuarter = max(1, (int) ($ticksPerYear / 4));
+
+        return ((intdiv($tickCount, $ticksPerQuarter) - 1) % 4 + 4) % 4;
+    }
+
     /**
      * The tick at which management has closed the books far enough to know the quarter has gone wrong.
      */
@@ -639,11 +647,12 @@ class EarningsEngine
         $revenueVol = $ctx->baselineVol * self::IDIOSYNCRATIC_REV_VOL_RATIO;
         $z1 = $this->mathUtility->generateStandardNormal();
 
-        $ticksPerQuarter = max(1, (int) ($ctx->ticksPerYear / 4));
-        $ctx->calendarQuarter = intdiv($ctx->tickCount, $ticksPerQuarter) % 4;
+        // A report is filed in the season after its quarter closes, so it covers the calendar quarter before
+        // the one it is filed in (as ReportCalendar labels it).
+        $ctx->calendarQuarter = self::coveredCalendarQuarter($ctx->tickCount, $ctx->ticksPerYear);
         // Seasonality follows the calendar; the fiscal quarter only shifts annual events (impairment tests).
         $ctx->fiscalQuarter = (($ctx->calendarQuarter - $strategy->getFiscalYearStartQuarter($stock)) % 4 + 4) % 4;
-        $factors = $strategy->getSeasonalityFactors();
+        $factors = $strategy->resolveSeasonalityFactors($stock);
         $ctx->seasonalFactor = $factors[$ctx->calendarQuarter] ?? 1.0;
         $ctx->priorSeasonalFactor = $factors[($ctx->calendarQuarter + 3) % 4] ?? 1.0;
 

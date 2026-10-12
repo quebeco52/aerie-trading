@@ -202,6 +202,13 @@ interface OperatingStrategyInterface
      */
     public function getSeasonalityFactors(): array;
     /**
+     * The seasonality the earnings engine applies to this firm: the sector's factors, unless one business model
+     * covers industries with different calendars (electric and water utilities).
+     *
+     * @return array<int, float> Calendar-quarter revenue multipliers [Q1, Q2, Q3, Q4] summing to 4.0.
+     */
+    public function resolveSeasonalityFactors(Stock $stock): array;
+    /**
      * Annual through-the-cycle expected credit loss on gross earning assets: the charge-off rate the
      * stable cost base already carries. Zero for any business whose assets are not credit.
      *

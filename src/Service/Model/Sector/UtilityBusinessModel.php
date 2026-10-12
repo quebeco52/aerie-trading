@@ -71,9 +71,23 @@ class UtilityBusinessModel extends StandardCorporateBusinessModel
     public function getWorkingCapitalIntensity(Stock $stock): float { return 0.12; }
     public function getCapExCompletionRate(Stock $stock): float { return 0.125; }
 
+    // --- Seasonality (calendar-quarter revenue over its annual mean, ratio to a centred 4-quarter moving average) ---
+    /** Electric: US retail electricity revenue, all sectors, 2015-2019 (EIA-861M, the data behind Electric Power Monthly Table 5.3); summer cooling load at summer tariffs, Q3 +18%. */
+    public const ELECTRIC_SEASONALITY = [0.953, 0.938, 1.183, 0.926];
+    /** Water: American Water Works operating revenues, 2015-2019 (10-K/10-Q via SEC XBRL); outdoor irrigation lifts Q2-Q3 with no winter heating load, Q3 +12%, Q1 -9%. */
+    public const WATER_SEASONALITY = [0.908, 0.998, 1.121, 0.973];
+    /** Industries on this model whose calendar is not the electric one. */
+    public const SEASONALITY_BY_INDUSTRY = ['Utilities - Regulated Water' => self::WATER_SEASONALITY];
+
     public function getSeasonalityFactors(): array
     {
-        return [1.15, 0.85, 1.15, 0.85]; // Twin peaks: Q1 winter heating and Q3 summer air conditioning
+        return self::ELECTRIC_SEASONALITY;
+    }
+
+    /** Water and electric utilities share the rate-base physics but not the weather that drives their volumes. */
+    public function resolveSeasonalityFactors(Stock $stock): array
+    {
+        return self::SEASONALITY_BY_INDUSTRY[$stock->getIndustry() ?? ''] ?? $this->getSeasonalityFactors();
     }
 
     // --- Secular Demand ---

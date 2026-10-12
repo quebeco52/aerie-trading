@@ -652,8 +652,8 @@ readonly class MacroStateDTO
 
     /**
      * Calendar quarter index [0..3] implied by elapsed simulation time. Derived rather than published:
-     * it is not a macro series any institution reports, so it draws no district conduit. Matches the
-     * quarter EarningsEngine derives from the tick counter, both being elapsed time over a quarter.
+     * it is not a macro series any institution reports, so it draws no district conduit. This is the quarter
+     * now; an earnings report filed now covers the one before (EarningsEngine::coveredCalendarQuarter).
      */
     public function calendarQuarter(): int
     {
