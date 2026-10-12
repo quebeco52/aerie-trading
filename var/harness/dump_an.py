@@ -58,13 +58,13 @@ if lab_rows and not multi:
               f"{100*na.get('change', 0):+6.3f} {100*nt.get('scarring', 0):5.3f} {100*nt.get('healing', 0):+6.3f} | {100*w.get('average', 0):4.2f} {100*wt.get('productivity', 0):5.2f} {100*wt.get('expectations', 0):6.2f} {100*wt.get('tightness', 0):+5.2f} {100*wt.get('errorCorrection', 0):+5.2f} {100*wt.get('stickyLag', 0):+5.2f} {100*L.get('downwardRigidShare', 0):4.0f}%")
 hh_rows = [r for r in rows if obj(r.get('quarter_diagnostics')).get('households')]
 if hh_rows and not multi:
-    print("\n  t   houseFund = userCost unemp income  cat  lending credit clamp | px/fund | sentFund = misery moment fear rates energy cat   gap | index")
+    print("\n  t   houseFund = userCost unemp income  cat  lending credit clamp | px/fund | sentFund = trend  slack infl  dU  | index")
     for r in hh_rows:
         H_ = r['quarter_diagnostics']['households']
         hf, sf = obj(H_.get('houseFundamental')), obj(H_.get('sentimentFundamental'))
         ht, st_ = obj(hf.get('terms')), obj(sf.get('terms'))
         print(f"{r['total_time']:5.2f} {100*hf.get('average', 0):+7.2f}   {100*ht.get('userCost', 0):+6.2f} {100*ht.get('unemployment', 0):+5.2f} {100*ht.get('income', 0):+5.2f} {100*ht.get('catastropheDamage', 0):+5.2f} {100*ht.get('lendingStandards', 0):+6.2f} {100*ht.get('creditSupply', 0):+6.2f} {100*ht.get('clamp', 0):+5.2f} | {100*H_.get('housePriceToFundamental', 0):+6.2f} | "
-              f"{sf.get('average', 0):6.1f}  {st_.get('misery', 0):+6.1f} {st_.get('momentum', 0):+6.1f} {st_.get('fear', 0):+5.1f} {st_.get('rates', 0):+5.1f} {st_.get('energy', 0):+6.1f} {st_.get('catastrophe', 0):+5.1f} {st_.get('outputGap', 0):+5.1f} | {r['consumer_sentiment_index']:5.1f}")
+              f"{sf.get('average', 0):6.1f}  {st_.get('trend', 0):5.1f} {st_.get('slack', 0):+6.1f} {st_.get('inflation', 0):+5.1f} {st_.get('unemploymentChange', 0):+5.1f} | {r['consumer_sentiment_index']:5.1f}")
 
 D = [r['quarter_diagnostics'] for r in rows if r.get('quarter_diagnostics')]
 gaps = [d['averages']['outputGap'] for d in D]

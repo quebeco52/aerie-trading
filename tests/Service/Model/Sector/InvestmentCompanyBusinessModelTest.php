@@ -121,6 +121,8 @@ class InvestmentCompanyBusinessModelTest extends TestCase
         return new MacroStateDTO(
             outputGapEma: $outputGapEma,
             consumerSentimentIndexEma: $sentiment ?? MacroEngine::SENTIMENT_TREND_LEVEL,
+            // With output at trend, whatever moves confidence is mood.
+            consumerSentimentMood: ($sentiment ?? MacroEngine::SENTIMENT_TREND_LEVEL) - MacroEngine::SENTIMENT_TREND_LEVEL,
             macroCreditSpread: MacroEngine::BASE_CREDIT_SPREAD,
             macroCreditSpreadEma: MacroEngine::BASE_CREDIT_SPREAD,
             policyRateEma: MacroEngine::BASE_NATURAL_RATE + MacroEngine::TARGET_INFLATION,

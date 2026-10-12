@@ -112,7 +112,7 @@ class AdvertisingAgencyBusinessModelTest extends TestCase
     {
         $stock = (new Stock())->setTicker('LYRE_ACTIVITY')->setBeta('1.0');
         // Confidence falls by its gap loading with the gap, so the residual over the gap is zero.
-        $sentiment = MacroEngine::SENTIMENT_TREND_LEVEL + (-0.03 * MacroEngine::SENTIMENT_GAP_LOADING);
+        $sentiment = MacroEngine::SENTIMENT_TREND_LEVEL + (-0.03 * \App\Tests\Support\SentimentOnTheCycle::POINTS_PER_GAP);
         $recession = new MacroStateDTO(outputGapEma: -0.03, exchangeRateIndexEma: 100.0, consumerSentimentIndexEma: $sentiment);
 
         $this->assertEqualsWithDelta(0.0, $this->model->getMacroPhysics($stock, $recession)['macro_demand_shift'], 1e-12);

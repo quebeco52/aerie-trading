@@ -235,6 +235,40 @@ class SystemicEventTest extends TestCase
         $this->assertSame([ShockEvent::RECESSION_DECLARED], $headlines, 'The recession the freeze outranked is reported once the cooldown lets it through, and only once.');
     }
 
+    /**
+     * On a plateau the Sahm reading falls as its trailing low catches up, while unemployment is still high: that is the
+     * same recession. It ends once the jobless rate is back the recovery margin below its peak, and only a rise after that
+     * is a new one.
+     */
+    public function testARecessionEndsOnRecoveryNotOnAPlateau(): void
+    {
+        $state = new MacroState();
+        $atRate = static function (MacroState $state, float $rate, float $sahm): void {
+            $state->unemploymentMonthly = [$rate, $rate, $rate];
+            $state->sahmRecessionIndicator = $sahm;
+            $state->eventCooldownTimer = 0.0;
+            $state->totalTime += 0.25;
+        };
+
+        $atRate($state, 0.050, MacroEngine::SAHM_RECESSION_THRESHOLD + 0.001);
+        $this->assertSame(ShockEvent::RECESSION_DECLARED, $this->fire($state));
+
+        $atRate($state, 0.058, 0.002);
+        $this->assertNull($this->fire($state), 'A plateau high above the low is no recovery.');
+        $atRate($state, 0.064, MacroEngine::SAHM_RECESSION_THRESHOLD + 0.001);
+        $this->assertNull($this->fire($state), 'so the next leg up is the same recession, not a second one.');
+
+        $atRate($state, 0.064 - MacroEngine::RECESSION_RECOVERY_MARGIN + 0.0005, 0.0);
+        $this->assertNull($this->fire($state), 'Short of the recovery margin off the peak, it is still on.');
+        $atRate($state, 0.065, MacroEngine::SAHM_RECESSION_THRESHOLD + 0.001);
+        $this->assertNull($this->fire($state), 'so a rise from there is the same recession.');
+
+        $atRate($state, 0.065 - MacroEngine::RECESSION_RECOVERY_MARGIN, 0.0);
+        $this->assertNull($this->fire($state), 'Back the recovery margin off the peak, the recession is over.');
+        $atRate($state, 0.066, MacroEngine::SAHM_RECESSION_THRESHOLD + 0.001);
+        $this->assertSame(ShockEvent::RECESSION_DECLARED, $this->fire($state), 'and a fresh rise is a fresh recession.');
+    }
+
     public function testTheAlarmLatchSurvivesSerializationRoundTrip(): void
     {
         $state = new MacroState();

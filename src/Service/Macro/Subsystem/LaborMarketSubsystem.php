@@ -133,6 +133,38 @@ class LaborMarketSubsystem
     }
 
     /**
+     * The change in the unemployment rate over the twelve months to the last month end, read off the Sahm rule's
+     * month-end record.
+     *
+     * @param list<float> $unemploymentMonthly Month-end unemployment rates, oldest first.
+     * @return float|null Null until a year of month ends is on record.
+     */
+    public static function unemploymentChangeYearOnYear(array $unemploymentMonthly): ?float
+    {
+        $count = count($unemploymentMonthly);
+        if ($count <= self::SAHM_LOOKBACK_MONTHS) {
+            return null;
+        }
+
+        return $unemploymentMonthly[$count - 1] - $unemploymentMonthly[$count - 1 - self::SAHM_LOOKBACK_MONTHS];
+    }
+
+    /**
+     * The three-month average unemployment rate the Sahm rule reads, as of the last month end.
+     *
+     * @param list<float> $unemploymentMonthly Month-end unemployment rates, oldest first.
+     * @return float|null Null until three month ends are on record.
+     */
+    public static function sahmThreeMonthAverage(array $unemploymentMonthly): ?float
+    {
+        if (count($unemploymentMonthly) < self::SAHM_AVERAGE_MONTHS) {
+            return null;
+        }
+
+        return array_sum(array_slice($unemploymentMonthly, -self::SAHM_AVERAGE_MONTHS)) / self::SAHM_AVERAGE_MONTHS;
+    }
+
+    /**
      * Diamond-Mortensen-Pissarides (DMP) Beveridge Curve & Expectations-Augmented Wage Phillips Curve.
      *
      * Derives job vacancies (V) and labor market tightness (theta = V/U) along the hyperbolic

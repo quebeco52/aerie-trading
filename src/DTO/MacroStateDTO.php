@@ -116,6 +116,8 @@ readonly class MacroStateDTO
         public float $domesticInflation = MacroEngine::TARGET_INFLATION,
         public float $consumerSentimentIndex = MacroEngine::SENTIMENT_TREND_LEVEL,
         public float $consumerSentimentIndexEma = MacroEngine::SENTIMENT_TREND_LEVEL,
+        /** The part of confidence its fundamentals do not explain, in index points (AssetMarketSubsystem::calculateConsumerSentiment()). */
+        public float $consumerSentimentMood = 0.0,
         public float $exchangeRateIndex = 100.0,
         public float $exchangeRateIndexEma = 100.0,
         public float $exchangeRateTrend = 100.0,
@@ -257,10 +259,14 @@ readonly class MacroStateDTO
         public float $equityWealthTrend = 0.0,
         public float $gdpDeflator = 1.0,
         public float $consumerPriceLevel = 1.0,
+        /** @var list<float> Month-end consumer price levels, oldest first, a year's worth for the year-on-year rate. */
+        public array $consumerPriceMonthly = [],
         public ?string $eventType = null,
         public float $eventCooldownTimer = 0.0,
         /** @var array<string, float> Level alarms reported this episode, ShockEvent => the time each fired; one clears once its condition does (MacroEngine::evaluateSystemicEvent()). */
         public array $systemicAlarmLatches = [],
+        /** Highest three-month average unemployment rate since the recession headline last reported; the episode ends RECESSION_RECOVERY_MARGIN below it (MacroEngine::evaluateSystemicEvent()). */
+        public float $recessionPeakUnemployment = 0.0,
         public float $supercoreInflation = MacroEngine::TARGET_INFLATION,
         public float $supercoreInflationEma = MacroEngine::TARGET_INFLATION,
         public float $coreGoodsInflation = MacroEngine::TARGET_INFLATION,
@@ -525,7 +531,7 @@ readonly class MacroStateDTO
 
             $args[$field] = match ($field) {
                 'sectorZ', 'sectorDemandZ', 'sittingLevers', 'previousSittingLevers', 'expectedLevers', 'previousExpectedLevers', 'systemicAlarmLatches' => is_array($data[$key]) ? array_map('floatval', $data[$key]) : [],
-                'unemploymentMonthly' => is_array($data[$key]) ? array_values(array_map('floatval', $data[$key])) : [],
+                'unemploymentMonthly', 'consumerPriceMonthly' => is_array($data[$key]) ? array_values(array_map('floatval', $data[$key])) : [],
                 'qeActive', 'qtActive' => (bool) $data[$key],
                 'eventType' => (string) $data[$key],
                 default => (float) $data[$key],
@@ -689,13 +695,8 @@ readonly class MacroStateDTO
     }
 
     /**
-     * Consumer confidence as a fraction, against where the index sits with output at trend.
-     *
-     * SENTIMENT_BASELINE is the constant the index is BUILT from — one hundred, less a stack of one-sided
-     * penalties for misery, momentum, fear, rates and fuel — so it is a ceiling and cannot be a mean. Read
-     * as a deviation from it, confidence comes out negative 83% of the time and ten points light on
-     * average: a permanent demand haircut every consumer-facing model was charging, and a standing
-     * negative driver every earnings report was attributing to a consumer who had not changed their mind.
+     * Consumer confidence as a fraction, against where the index sits with unemployment at NAIRU, inflation on
+     * target and joblessness flat.
      *
      * Use this where confidence is the only channel through which a stream sees the cycle.
      */
@@ -771,17 +772,16 @@ readonly class MacroStateDTO
     /**
      * The same reading with the output gap that is already inside it taken back out.
      *
-     * Confidence is built from the cycle — the gap enters it directly, and again through the unemployment
-     * Okun's law hands it — so a reader that prices the gap AND reads confidence prices the cycle twice.
-     * Measured on this engine, the index carries SENTIMENT_GAP_LOADING points of gap (r = 0.78), which is
-     * what the second helping is worth. Lemmon & Portniaguina (2006) orthogonalise confidence against
+     * Confidence is built from the cycle — unemployment above NAIRU, its rise and inflation — so a reader that
+     * prices the gap AND reads confidence prices the cycle twice. The mood the index carries beside its
+     * fundamentals is the part that is not the cycle. Lemmon & Portniaguina (2006) orthogonalise confidence against
      * fundamentals for exactly this reason: what predicts anything beyond the macro data is the residual.
      *
      * Use this where the cycle is priced beside it.
      */
     public function sentimentResidual(): float
     {
-        return $this->sentimentDeviation() - (($this->outputGapEma * MacroEngine::SENTIMENT_GAP_LOADING) / self::INDEX_SCALE);
+        return $this->consumerSentimentMood / self::INDEX_SCALE;
     }
 
     /**

@@ -17,8 +17,8 @@ use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
 /**
- * The consumer sentiment index already carries 3.85x the output gap (sentEma = 88 + 385 x gap). A model that
- * prices the gap beside confidence must read the residual, so when confidence sits exactly where the gap puts
+ * The consumer sentiment index already carries the cycle through its fundamentals. A model that prices the gap beside
+ * confidence must read the residual, the mood, so when confidence sits exactly where the gap puts it with no mood in
  * it, demand moves through the gap channel alone.
  */
 class SentimentResidualTest extends TestCase
@@ -29,7 +29,7 @@ class SentimentResidualTest extends TestCase
     {
         return new MacroStateDTO(
             outputGapEma: $gap,
-            consumerSentimentIndexEma: MacroEngine::SENTIMENT_TREND_LEVEL + (MacroEngine::SENTIMENT_GAP_LOADING * $gap),
+            consumerSentimentIndexEma: MacroEngine::SENTIMENT_TREND_LEVEL + (\App\Tests\Support\SentimentOnTheCycle::POINTS_PER_GAP * $gap),
             exchangeRateIndexEma: 100.0,
         );
     }

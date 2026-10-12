@@ -399,7 +399,6 @@ class AutoManufacturerBusinessModel extends HeavyManufacturingBusinessModel
             'macro_credit_spread_ema',
             'manufacturing_pmi_ema',
             'natural_rate_ema',
-            'output_gap_ema',
             'output_gap_lag_3m',
             'policy_rate_ema',
             'qe_active',

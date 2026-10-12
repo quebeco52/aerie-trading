@@ -823,7 +823,7 @@ class MacroEngineTest extends TestCase
         );
     }
 
-    public function testConsumerSentimentAnchorsAtBaselineInNeutralMacro(): void
+    public function testConsumerSentimentAnchorsAtItsTrendLevelInNeutralMacro(): void
     {
         $neutralState = [
             'inflation' => MacroEngine::TARGET_INFLATION,
@@ -853,14 +853,14 @@ class MacroEngineTest extends TestCase
         $result = $this->engine->updateMacroState(0.25);
 
         $this->assertEqualsWithDelta(
-            MacroEngine::SENTIMENT_BASELINE,
+            MacroEngine::SENTIMENT_TREND_LEVEL,
             $result->consumerSentimentIndex,
             1.0,
-            'Consumer sentiment index must remain near 100 in neutral macroeconomic equilibrium.'
+            'Consumer sentiment must sit at its trend level in a neutral economy.'
         );
     }
 
-    public function testConsumerSentimentDepressedDuringStagflationAndVolatility(): void
+    public function testConsumerSentimentDepressedDuringStagflation(): void
     {
         $crisisState = [
             'inflation' => 0.07,
@@ -892,7 +892,7 @@ class MacroEngineTest extends TestCase
         $this->assertLessThan(
             85.0,
             $result->consumerSentimentIndex,
-            'Stagflation, surging energy costs, and high market volatility should heavily depress consumer sentiment.'
+            'Unemployment three points over NAIRU and inflation well over target should heavily depress consumer sentiment.'
         );
     }
 
@@ -2009,40 +2009,51 @@ class MacroEngineTest extends TestCase
         );
     }
 
-    public function testConsumerSentimentDropsRealisticallyDuringRecession(): void
+    /**
+     * With no mood in it, the index is the Michigan fit: the trend level at NAIRU, on-target inflation and flat
+     * joblessness, less 4.56 a point of slack, 2.27 a point of year-on-year inflation over target and 3.06 a point of
+     * rise in unemployment over the year -- each read off the month-end records, two-sided.
+     */
+    public function testConsumerSentimentIsTheMichiganFit(): void
     {
         $assetSubsystem = new \App\Service\Macro\Subsystem\AssetMarketSubsystem($this->mathUtilityMock);
         $dt = 0.25;
+        $months = static fn (float $from, float $to): array => array_map(static fn (int $i): float => $from + (($to - $from) * $i / 12), range(0, 12));
 
-        $stateNormal = new \App\Service\Macro\MacroState();
-        $stateNormal->outputGap = 0.0;
-        $stateNormal->inflation = MacroEngine::TARGET_INFLATION;
-        $stateNormal->inflationEma = MacroEngine::TARGET_INFLATION;
-        $stateNormal->unemploymentRate = MacroEngine::NATURAL_UNEMPLOYMENT;
-        $stateNormal->unemploymentRateEma = MacroEngine::NATURAL_UNEMPLOYMENT;
-        $stateNormal->consumerSentimentIndex = MacroEngine::SENTIMENT_BASELINE;
+        $neutral = new \App\Service\Macro\MacroState();
+        $neutral->nairu = 0.045;
+        $neutral->unemploymentRate = 0.045;
+        $neutral->unemploymentMonthly = $months(0.045, 0.045);
+        $neutral->consumerPriceMonthly = $months(1.0, exp(MacroEngine::TARGET_INFLATION));
 
-        $stateCrisis = new \App\Service\Macro\MacroState();
-        $stateCrisis->outputGap = -0.025; // -2.5% contraction
-        $stateCrisis->inflation = 0.040; // 4% inflation (stagflation shock)
-        $stateCrisis->inflationEma = 0.030;
-        $stateCrisis->unemploymentRate = 0.055;
-        $stateCrisis->unemploymentRateEma = 0.045;
-        $stateCrisis->consumerSentimentIndex = MacroEngine::SENTIMENT_BASELINE;
+        $stagflation = new \App\Service\Macro\MacroState();
+        $stagflation->nairu = 0.045;
+        $stagflation->unemploymentRate = 0.060;
+        $stagflation->unemploymentMonthly = $months(0.045, 0.060);
+        $stagflation->consumerPriceMonthly = $months(1.0, exp(0.04));
 
-        $assetSubsystem->calculateConsumerSentiment($stateNormal, $dt);
-        $assetSubsystem->calculateConsumerSentiment($stateCrisis, $dt);
+        $assetSubsystem->calculateConsumerSentiment($neutral, $dt);
+        $assetSubsystem->calculateConsumerSentiment($stagflation, $dt);
 
-        $this->assertLessThan(
-            $stateNormal->consumerSentimentIndex,
-            $stateCrisis->consumerSentimentIndex,
-            'Consumer sentiment must decline during economic contractions and inflation surges.'
-        );
-        $this->assertLessThan(
-            90.0,
-            $stateCrisis->consumerSentimentIndex,
-            'Consumer sentiment must reflect meaningful distress (< 90 pts) during a stagflation contraction.'
-        );
+        $this->assertEqualsWithDelta(MacroEngine::SENTIMENT_TREND_LEVEL, $neutral->consumerSentimentIndex, 1e-9);
+        $this->assertEqualsWithDelta(MacroEngine::SENTIMENT_TREND_LEVEL - 6.84 - 4.54 - 4.59, $stagflation->consumerSentimentIndex, 1e-9);
+    }
+
+    /** The terms are two-sided: a tight labour market, low inflation and falling joblessness lift the index above trend. */
+    public function testConsumerSentimentRisesAboveTrendInABoom(): void
+    {
+        $assetSubsystem = new \App\Service\Macro\Subsystem\AssetMarketSubsystem($this->mathUtilityMock);
+        $months = static fn (float $from, float $to): array => array_map(static fn (int $i): float => $from + (($to - $from) * $i / 12), range(0, 12));
+
+        $boom = new \App\Service\Macro\MacroState();
+        $boom->nairu = 0.045;
+        $boom->unemploymentRate = 0.035;
+        $boom->unemploymentMonthly = $months(0.040, 0.035);
+        $boom->consumerPriceMonthly = $months(1.0, exp(0.015));
+
+        $assetSubsystem->calculateConsumerSentiment($boom, 0.25);
+
+        $this->assertEqualsWithDelta(MacroEngine::SENTIMENT_TREND_LEVEL + 4.56 + 1.135 + 1.53, $boom->consumerSentimentIndex, 1e-9);
     }
 
     public function testTaylorRuleTargetRateIncorporatesDynamicNaturalRate(): void

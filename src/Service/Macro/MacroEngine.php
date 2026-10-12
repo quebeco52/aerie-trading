@@ -163,12 +163,8 @@ class MacroEngine
     public const FISCAL_ADJUSTMENT_SPEED = 1.0;
 
     // --- Consumer Sentiment Index & Animal Spirits ---
-    /** Baseline consumer sentiment index value (neutral consumer confidence). */
-    public const SENTIMENT_BASELINE = 100.0;
-    /** Where the index actually sits with output at trend. The baseline is the ceiling the one-sided penalties below hang off, never a mean: measured 88.0 over 600 simulated quarters. */
-    public const SENTIMENT_TREND_LEVEL = 88.0;
-    /** Index points of sentiment per unit of output gap. The fundamental half of confidence, which a reader already pricing the cycle must take back out. */
-    public const SENTIMENT_GAP_LOADING = 385.0;
+    /** Where the index sits with unemployment at NAIRU, inflation on target and joblessness flat: the intercept of the Michigan fit (UMCSENT, FRED, monthly 1978-2019), 86.3 on average at that sample's slack and inflation. */
+    public const SENTIMENT_TREND_LEVEL = 93.1;
 
     // --- Central Bank Balance Sheet (QE & QT) ---
     /** Minimum threshold for balance sheet intervention intensity to be considered active. */
@@ -265,6 +261,8 @@ class MacroEngine
     // --- Sahm Rule (Sahm 2019, Hamilton Project) ---
     /** Rise of the three-month average unemployment rate above its low of the twelve months before that signals a recession under way: half a point, which has signalled each US recession since 1970 in its first months. */
     public const SAHM_RECESSION_THRESHOLD = 0.005;
+    /** Fall of that average from its peak that ends a declared recession: on US UNRATE 1948-2019, 0.2-0.3 points keeps NBER's 1980 and 1981 recessions apart and drops the 2003 jobless-recovery re-trigger; half a point merges 1981 into 1980. */
+    public const RECESSION_RECOVERY_MARGIN = 0.003;
     /** Fund-financed rise in the structural balance per unit of output gap a budget round: fitted by indirect inference so the engine's whole discretionary balance, tax leg included, answers the annual gap at Norway's 0.450 (se 0.194); 0.43 with the round reading the gap as it stands (var/harness/stab_cycle.sh). */
     public const FUND_STABILISATION_GAP_RESPONSE = 0.47;
     /** Share of last year's fund-financed impulse reversed this year: Norway's lagged-change coefficient, -0.452 (se 0.093). */
@@ -755,12 +753,21 @@ class MacroEngine
         // Pulse trigger: resets instantaneous systemic event classification before evaluation.
         $state->eventType = null;
 
+        // A declared recession lasts until unemployment is back the recovery margin below its peak: on a plateau the
+        // Sahm reading falls as its trailing low catches up, which ends no recession.
+        $unemployment = LaborMarketSubsystem::sahmThreeMonthAverage($state->unemploymentMonthly) ?? $state->unemploymentRate;
+        $inRecession = self::inSahmRecession($state->sahmRecessionIndicator);
+        if (isset($state->systemicAlarmLatches[ShockEvent::RECESSION_DECLARED])) {
+            $state->recessionPeakUnemployment = max($state->recessionPeakUnemployment, $unemployment);
+            $inRecession = $inRecession || $unemployment > $state->recessionPeakUnemployment - self::RECESSION_RECOVERY_MARGIN;
+        }
+
         // The episode each level alarm reports once in. Deleveraging reports when debt starts to fall inside one.
         $episodes = [
             ShockEvent::SYSTEMIC_LIQUIDITY_FREEZE => $state->interbankLiquiditySpread >= self::SYSTEMIC_LIQUIDITY_FREEZE_SPREAD,
             ShockEvent::CREDIT_MARKET_SEIZURE => $state->highYieldCreditSpread >= self::SYSTEMIC_CREDIT_SEIZURE_SPREAD,
             ShockEvent::SOVEREIGN_DOWNGRADE => $state->sovereignRiskSpread >= self::SYSTEMIC_SOVEREIGN_STRESS_SPREAD,
-            ShockEvent::RECESSION_DECLARED => self::inSahmRecession($state->sahmRecessionIndicator),
+            ShockEvent::RECESSION_DECLARED => $inRecession,
             ShockEvent::HOUSEHOLD_DELEVERAGING => $state->householdDebtServiceGap >= self::HOUSEHOLD_DSR_STRESS_MARGIN,
             ShockEvent::YIELD_CURVE_INVERSION_ALARM => $state->inversionDuration >= self::SYSTEMIC_INVERSION_ALARM_YEARS,
         ];
@@ -834,6 +841,9 @@ class MacroEngine
             $state->eventType = $eventType;
             if (isset($episodes[$eventType])) {
                 $state->systemicAlarmLatches[$eventType] = $state->totalTime;
+            }
+            if ($eventType === ShockEvent::RECESSION_DECLARED) {
+                $state->recessionPeakUnemployment = $unemployment;
             }
             // District-wide systemic crisis refractory cooldown timer arming.
             $state->eventCooldownTimer = self::SYSTEMIC_EVENT_COOLDOWN_YEARS;
