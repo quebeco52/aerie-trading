@@ -76,13 +76,13 @@
 
 			<div class="flex flex-col xl:flex-row justify-between items-stretch xl:items-center gap-3">
 				<div class="flex items-center flex-wrap gap-1" id="macroCategoryPills" role="group" aria-label="Filter by topic">
-					<button type="button" class="macro-cat-btn seg-btn" aria-pressed="true" data-category="all">All <span class="ml-0.5 text-on-surface-faint tabular-nums">(30)</span></button>
+					<button type="button" class="macro-cat-btn seg-btn" aria-pressed="true" data-category="all">All <span class="ml-0.5 text-on-surface-faint tabular-nums">(31)</span></button>
 					<button type="button" class="macro-cat-btn seg-btn" aria-pressed="false" data-category="monetary">Rates and yields <span class="ml-0.5 text-on-surface-faint tabular-nums">(5)</span></button>
 					<button type="button" class="macro-cat-btn seg-btn" aria-pressed="false" data-category="inflation">Inflation and output <span class="ml-0.5 text-on-surface-faint tabular-nums">(5)</span></button>
 					<button type="button" class="macro-cat-btn seg-btn" aria-pressed="false" data-category="growth">Growth and labour <span class="ml-0.5 text-on-surface-faint tabular-nums">(6)</span></button>
 					<button type="button" class="macro-cat-btn seg-btn" aria-pressed="false" data-category="credit">Credit and liquidity <span class="ml-0.5 text-on-surface-faint tabular-nums">(6)</span></button>
 					<button type="button" class="macro-cat-btn seg-btn" aria-pressed="false" data-category="assets">Property and commodities <span class="ml-0.5 text-on-surface-faint tabular-nums">(3)</span></button>
-					<button type="button" class="macro-cat-btn seg-btn" aria-pressed="false" data-category="public">Trade and public finance <span class="ml-0.5 text-on-surface-faint tabular-nums">(5)</span></button>
+					<button type="button" class="macro-cat-btn seg-btn" aria-pressed="false" data-category="public">Trade and public finance <span class="ml-0.5 text-on-surface-faint tabular-nums">(6)</span></button>
 				</div>
 
 				<div class="relative w-full xl:w-64">
@@ -193,6 +193,7 @@
 							</div>
 							<div class="chart-canvas-container h-80 md:h-85 w-full relative">
 								<canvas id="macroBalanceSheetChart"></canvas>
+								<p id="macroBalanceSheetEmpty" class="absolute inset-0 grid place-items-center text-sm text-on-surface-variant" hidden>The Monetary Authority has held no bonds over this period.</p>
 							</div>
 							<p class="source-note">{{ source_line('monetary-authority') }}</p>
 						</div>
@@ -520,7 +521,7 @@
 							<div class="flex items-start justify-between gap-4 mb-3">
 								<div class="min-w-0">
 									<h4 class="text-sm font-semibold text-on-surface">Deposits and money-market funds</h4>
-									<p class="text-xs text-on-surface-variant mt-0.5">How much of a rate change banks pass on to depositors, money-market funds' share of deposits, and the interbank spread</p>
+									<p class="text-xs text-on-surface-variant mt-0.5">Money-market funds' share of deposits and the interbank spread. Banks pass on {{ constant('App\\Service\\Macro\\MacroEngine::SYSTEM_DEPOSIT_BETA_BASE')|pct(0) }} of a rate change to depositors, so funds gain share as rates rise</p>
 								</div>
 								<div class="flex items-start gap-3 shrink-0">
 									<p class="hidden sm:block max-w-64 text-right text-xs font-mono font-semibold text-on-surface tabular-nums" id="hud-macroBankingLiquidityChart">-</p>
@@ -646,8 +647,27 @@
 						<div class="chart-card bg-surface-container-low border border-outline-variant/20 rounded-lg p-5 flex flex-col" data-macro-category="public">
 							<div class="flex items-start justify-between gap-4 mb-3">
 								<div class="min-w-0">
-									<h4 class="text-sm font-semibold text-on-surface">Public finances</h4>
-									<p class="text-xs text-on-surface-variant mt-0.5">Government spending, the corporate tax rate, public debt, the primary deficit and the sovereign risk spread</p>
+									<h4 class="text-sm font-semibold text-on-surface">Public debt</h4>
+									<p class="text-xs text-on-surface-variant mt-0.5">Public debt as a share of GDP, and the risk premium lenders add to the District's bond yields for holding it</p>
+								</div>
+								<div class="flex items-start gap-3 shrink-0">
+									<p class="hidden sm:block max-w-64 text-right text-xs font-mono font-semibold text-on-surface tabular-nums" id="hud-macroPublicDebtChart">-</p>
+									<button type="button" class="expand-chart-btn p-1 -m-1 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors cursor-pointer" title="Expand chart" aria-label="Expand chart">
+										<span class="material-symbols-outlined text-base leading-none expand-icon" aria-hidden="true">open_in_full</span>
+									</button>
+								</div>
+							</div>
+							<div class="chart-canvas-container h-80 md:h-85 w-full relative">
+								<canvas id="macroPublicDebtChart"></canvas>
+							</div>
+							<p class="source-note">{{ source_line('exchequer') }}</p>
+						</div>
+
+						<div class="chart-card bg-surface-container-low border border-outline-variant/20 rounded-lg p-5 flex flex-col" data-macro-category="public">
+							<div class="flex items-start justify-between gap-4 mb-3">
+								<div class="min-w-0">
+									<h4 class="text-sm font-semibold text-on-surface">The budget</h4>
+									<p class="text-xs text-on-surface-variant mt-0.5">Government spending, the corporate tax rate, and the primary deficit: the budget before interest, as a share of GDP</p>
 								</div>
 								<div class="flex items-start gap-3 shrink-0">
 									<p class="hidden sm:block max-w-64 text-right text-xs font-mono font-semibold text-on-surface tabular-nums" id="hud-macroGovtSpendingChart">-</p>

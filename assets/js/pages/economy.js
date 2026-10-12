@@ -8,6 +8,13 @@ import { onPageLoad } from '../utils/page-init.js';
 let rawReports = [];
 let marketFrameHandler = null;
 let resizeHandler = null;
+let refreshTimer = null;
+
+/**
+ * Wait after the live clock enters a new quarter before refetching the history, so the ticker has written the
+ * closed quarter's report row by the time the request reaches the database.
+ */
+const QUARTER_CLOSE_REFRESH_DELAY_MS = 2000;
 
 function initEconomyPage() {
     const grid = document.getElementById('macroChartsGrid');
@@ -43,7 +50,31 @@ function initEconomyPage() {
         }
     }
 
+    /**
+     * Redraws the history with the quarter that just closed. Quiet on purpose: the charts already on the page
+     * stay up while it loads, and a failed refresh keeps them rather than replacing them with an error.
+     */
+    async function refreshReports() {
+        refreshTimer = null;
+        try {
+            const res = await fetch('/api/macro-reports');
+            if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+            const data = await res.json();
+            if (isAborted) return;
+
+            rawReports = data;
+            hideStatus('macroChartsStatus');
+            updateMacroCharts(rawReports);
+        } catch (err) {
+            if (!isAborted) console.error('Failed to refresh macro series:', err);
+        }
+    }
+
     loadReports();
+
+    // The quarter the live clock was in at the last frame; a change (a close, or a reset rewinding the clock)
+    // means the history has a row the charts lack.
+    let liveQuarter = null;
 
     // The vitals read the coalesced frame (market-stream.js), never the raw tick.
     marketFrameHandler = (event) => {
@@ -51,6 +82,14 @@ function initEconomyPage() {
         if (payload && (payload.macro || payload.economic_cycle)) {
             updateEconomyVitals(payload);
         }
+
+        const simYears = payload?.macro?.total_time;
+        if (!Number.isFinite(simYears)) return;
+        const quarter = Math.floor(simYears * 4);
+        if (liveQuarter !== null && quarter !== liveQuarter && refreshTimer === null) {
+            refreshTimer = setTimeout(refreshReports, QUARTER_CLOSE_REFRESH_DELAY_MS);
+        }
+        liveQuarter = quarter;
     };
     document.addEventListener('market:frame', marketFrameHandler);
 
@@ -81,6 +120,11 @@ function initEconomyPage() {
 
 function cleanupPageResources() {
     destroyMacroCharts();
+
+    if (refreshTimer !== null) {
+        clearTimeout(refreshTimer);
+        refreshTimer = null;
+    }
 
     if (marketFrameHandler) {
         document.removeEventListener('market:frame', marketFrameHandler);
