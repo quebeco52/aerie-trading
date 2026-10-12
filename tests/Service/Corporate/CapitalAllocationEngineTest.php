@@ -790,6 +790,47 @@ class CapitalAllocationEngineTest extends TestCase
         $this->buildEngineWith($debtEngine)->allocateCapital($stock, 4.00, 2.00, 10.00, 1000000.0, $macroState);
     }
 
+    /**
+     * NAIC Model Act #440 binds an insurer's board however it would hold its dividend: with the year's income nearly
+     * gone, a quarter's distributions are held to a quarter of a tenth of surplus, dividends and repurchases
+     * together. In a strong year the income is the limit and the held dividend passes.
+     */
+    public function testAnInsurerHoldingItsDividendIsHeldToTheNaicLimit(): void
+    {
+        $pay = function (string $annualEps): array {
+            $insurer = new Stock();
+            $insurer->setTicker('NAIC');
+            $insurer->setIndustry('Insurance - Reinsurance');
+            $insurer->setSharesOutstanding('1000000');
+            $insurer->setPrice('40.00');
+            $insurer->setTotalEquity('20000000');
+            $insurer->setCustomerDeposits('30000000');
+            $insurer->setWholesaleDebt('0.00');
+            $insurer->setCorporateTreasury('60000000');
+            $insurer->setTargetPayoutRatio('0.30');
+            $insurer->setDividendSpeed('0.10');
+            $insurer->setLastDividend('1.00');
+            $insurer->setRetainedEarnings('15000000.00');
+            $insurer->setTotalRevenue('10000000.00');
+            $insurer->setOperatingMargin('0.05');
+            $insurer->setRoeTtm('0.05');
+            $insurer->setEarningsPerShare($annualEps);
+            $insurer->setTotalNetIncome((string) ((float) $annualEps * 1_000_000));
+
+            $result = $this->buildEngineWith($this->debtEngineReturning($this->buildHealth()))
+                ->allocateCapital($insurer, (float) $annualEps, 0.10, 40.00, 1000000.0, new MacroStateDTO(corporateTaxRate: 0.21));
+
+            return [$result, 0.10 * $insurer->getStatutorySurplus() / 4.0];
+        };
+
+        [$thin, $quarterLimit] = $pay('0.10');
+        $this->assertEqualsWithDelta($quarterLimit / 1_000_000.0, $thin['dividend_paid'], 1e-6, 'The held $1.00 is cut to the limit.');
+        $this->assertEqualsWithDelta(0.0, (float) ($thin['total_cash_spent'] ?? 0.0), 1e-6, 'and nothing is left for repurchases.');
+
+        [$strong] = $pay('8.00');
+        $this->assertSame(1.00, $strong['dividend_paid'], 'A strong year\'s income covers the held dividend.');
+    }
+
     private function buildEngineWith(DebtEngine $debtEngine): CapitalAllocationEngine
     {
         return new CapitalAllocationEngine(

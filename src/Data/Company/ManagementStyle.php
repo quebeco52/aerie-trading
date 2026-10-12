@@ -170,10 +170,12 @@ enum ManagementStyle: string
         return $trueHurdleRate * $this->hurdleBias();
     }
 
-    /** The discretionary cash balance this manager runs the firm at, given the model's own target. */
-    public function appliedTargetCash(float $targetOperatingCash): float
+    /** The cash balance this manager runs the firm at, given the model's own target: the liability backing inside it as it stands, the buffer above it biased. */
+    public function appliedTargetCash(float $targetOperatingCash, float $liabilityBacking = 0.0): float
     {
-        return $targetOperatingCash * $this->cashTargetBias();
+        $backing = max(0.0, min($liabilityBacking, $targetOperatingCash));
+
+        return $backing + (($targetOperatingCash - $backing) * $this->cashTargetBias());
     }
 
     /**

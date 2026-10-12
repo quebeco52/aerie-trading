@@ -734,9 +734,7 @@ class DebtEngine
     {
         $operatingBase = $this->corporateMetrics->calculateOperatingBase((float) $stock->getTotalRevenue(), $equity);
 
-        return $stock->getManagementProfile()->appliedTargetCash(
-            $strategy->calculateTargetOperatingCash($operatingBase, (float) $stock->getCustomerDeposits(), (float) $stock->getWholesaleDebt())
-        );
+        return $stock->getManagementProfile()->managedTargetCash($strategy, $operatingBase, (float) $stock->getCustomerDeposits(), (float) $stock->getWholesaleDebt());
     }
 
     /**

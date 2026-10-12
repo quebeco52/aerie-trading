@@ -11,6 +11,13 @@ use App\Service\Math\MathUtility;
 interface TreasuryStrategyInterface
 {
     public function calculateTargetOperatingCash(float $operatingBase, float $currentLiability, float $wholesaleDebt): float;
+
+    /**
+     * The part of that target held one for one against a liability the firm owes, an insurer's float: no manager
+     * chooses it, so the manager's buffer bias does not scale it (ManagementProfile::appliedTargetCash()). Zero for a
+     * firm whose target is all discretionary buffer.
+     */
+    public function calculateLiabilityBackingCash(float $currentLiability, float $wholesaleDebt): float;
     public function calculateMinOperatingCash(float $operatingBase, float $currentLiability, float $wholesaleDebt): float;
     public function evaluateHoardingStatus(float $treasury, float $targetCashReserves, float $operatingBase, float $totalDebt): array;
     public function calculateDepositBeta(float $totalDebt, float $equity, float $equityLimit, float $customerDeposits): float;

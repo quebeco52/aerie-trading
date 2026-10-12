@@ -340,7 +340,7 @@ class MergerAndAcquisitionEngine
         ));
         $ctx->totalBuyingPower = $ctx->treasury + $ctx->borrowingCapacity;
 
-        $ctx->targetCash = $stock->getManagementProfile()->appliedTargetCash($ctx->strategy->calculateTargetOperatingCash($ctx->operatingBase, (float) $stock->getCustomerDeposits(), (float) $stock->getWholesaleDebt()));
+        $ctx->targetCash = $stock->getManagementProfile()->managedTargetCash($ctx->strategy, $ctx->operatingBase, (float) $stock->getCustomerDeposits(), (float) $stock->getWholesaleDebt());
         $hoardStatus = $ctx->strategy->evaluateHoardingStatus($ctx->treasury, $ctx->targetCash, $manager->appliedHoardingBase($ctx->operatingBase), $ctx->currentDebt);
         $ctx->excessCash = $hoardStatus['excess_cash'];
         $ctx->isHoarder = $hoardStatus['is_hoarder'];
@@ -924,7 +924,7 @@ class MergerAndAcquisitionEngine
         $ctx->normalizedEps = $ctx->normalizedNetIncome / $ctx->shares;
         $ctx->currentPE = $ctx->normalizedEps > 0 ? $ctx->price / $ctx->normalizedEps : 0.0;
         
-        $ctx->targetCash = $stock->getManagementProfile()->appliedTargetCash($ctx->strategy->calculateTargetOperatingCash($ctx->operatingBase, (float) $stock->getCustomerDeposits(), (float) $stock->getWholesaleDebt()));
+        $ctx->targetCash = $stock->getManagementProfile()->managedTargetCash($ctx->strategy, $ctx->operatingBase, (float) $stock->getCustomerDeposits(), (float) $stock->getWholesaleDebt());
         $ctx->hoardStatus = $ctx->strategy->evaluateHoardingStatus($ctx->treasury, $ctx->targetCash, $stock->getManagementProfile()->appliedHoardingBase($ctx->operatingBase), (float) $stock->getTotalDebt());
         
         $ctx->nominalGdpIndex = $ctx->macroState->nominalGdpIndex;
@@ -1027,14 +1027,26 @@ class MergerAndAcquisitionEngine
             $this->retireDivestedLedgers($stock, $ctx->divestedFraction);
         }
 
-        // Equity moves by the gain or loss on sale and nothing else: proceeds in, book value out. No floor,
-        // because a floor would invent equity with no asset behind it and unbalance the sheet.
-        $newEquity = $ctx->currentEquity - $ctx->lostEquity + $ctx->salePrice;
-        $stock->setTotalEquity((string) $newEquity);
-        
+        // A gain on selling a business is taxable income (ASC 740), struck under the same carryforward rules as a
+        // quarter's (EarningsEngine::resolveIncomeTax()): it uses the carried loss up to its cap, and a loss adds to
+        // the carryforward. The current tax is paid from the proceeds.
         $ctx->gainOnSale = $ctx->salePrice - $ctx->lostEquity;
+        $openingDta = $stock->getDeferredTaxAsset();
+        $nol = (float) $stock->getNetOperatingLoss();
+        // A loss carries no asset while the firm's recent pre-tax income, the sale's included, is a cumulative loss.
+        $allowanceRequired = array_sum($stock->getPretaxIncomeHistory() ?? []) + $ctx->gainOnSale < 0.0;
+        $tax = EarningsEngine::resolveIncomeTax($ctx->gainOnSale, $nol, $openingDta, $allowanceRequired, $ctx->strategy?->getEffectiveTaxRate($ctx->macroState->corporateTaxRate) ?? $ctx->macroState->corporateTaxRate);
+        $ctx->taxOnSale = $tax['current'] + $tax['deferred'];
+        $stock->setNetOperatingLoss((string) $tax['nol']);
+        $stock->setDeferredTaxAsset($tax['dta']);
+        $stock->setCorporateTreasury((string) ((float) $stock->getCorporateTreasury() - $tax['current']));
+
+        // Equity moves by the gain or loss on sale after its tax and nothing else: proceeds in, book value and tax out.
+        // No floor, because a floor would invent equity with no asset behind it and unbalance the sheet.
+        $afterTaxGain = $ctx->gainOnSale - $ctx->taxOnSale;
+        $stock->setTotalEquity((string) ($ctx->currentEquity + $afterTaxGain));
         $currentRetained = (float) $stock->getRetainedEarnings();
-        $stock->setRetainedEarnings((string) ($currentRetained + $ctx->gainOnSale));
+        $stock->setRetainedEarnings((string) ($currentRetained + $afterTaxGain));
         // The division sold is a pro rata slice of the firm, so the business kept earns the same margin and
         // return it did before. Distress does not make it more efficient.
     }
@@ -1111,16 +1123,19 @@ class MergerAndAcquisitionEngine
         $salePriceB = number_format($ctx->salePrice / 1_000_000_000, 1);
         $resultB = number_format(abs($ctx->gainOnSale) / 1_000_000_000, 1);
         $result = $ctx->gainOnSale >= 0.0 ? "generating a \${$resultB}B gain on sale" : "booking a \${$resultB}B loss on sale";
+        if ($ctx->taxOnSale !== 0.0) {
+            $result .= ' ($' . number_format(abs($ctx->gainOnSale - $ctx->taxOnSale) / 1_000_000_000, 1) . 'B after tax)';
+        }
         $target = $this->generateProceduralTarget();
         $desc = "{$ctx->seller->getName()} sold its {$target['name']} division for \${$salePriceB}B in cash, {$result}.";
 
         // The seller's announcement return is what the sale is worth to its shareholders over their stake. The
         // market already values the division pro rata inside the firm, and the buyer takes its share of the
-        // debt with it, so the seller gives up that fraction of its market value and receives the price:
+        // debt with it, so the seller gives up that fraction of its market value and receives the price, less the tax:
         // selling above its own valuation creates value (Hite, Owers & Rogers 1987), a fire sale below it
         // destroys some. Limited liability is the only bound.
         $marketCap = max(1.0, $ctx->price * $ctx->shares);
-        $ctx->eventShock = max(-100.0, (($ctx->salePrice - ($ctx->divestedFraction * $marketCap)) / $marketCap) * 100.0);
+        $ctx->eventShock = max(-100.0, (($ctx->salePrice - $ctx->taxOnSale - ($ctx->divestedFraction * $marketCap)) / $marketCap) * 100.0);
 
         $event = $this->marketEvent->publish($ctx->seller, 'DIVESTITURE', $desc, $ctx->eventShock, $ctx->salePrice / $marketCap);
 

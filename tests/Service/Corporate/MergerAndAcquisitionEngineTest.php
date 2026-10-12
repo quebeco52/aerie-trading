@@ -1307,25 +1307,71 @@ class MergerAndAcquisitionEngineTest extends TestCase
     /**
      * A forced seller with nothing to sell on earnings fetches the market's value of the slice less the fire-sale
      * discount, whatever its book says: a firm written down far below book gains nothing from the sale, and its
-     * shareholders lose the discount on the slice sold.
+     * shareholders lose the discount on the slice sold. One valued far above book books a gain on the sale, and
+     * loses the tax on it besides.
      */
     public function testAFireSaleLosesTheDiscountOnTheSliceWhateverTheSellersBook(): void
     {
         $this->primeDistressedDivestiture(operatingBase: 10_000_000_000.0, fraction: 0.25);
-        $shock = function (float $price): float {
+        $sell = function (float $price): array {
             $stock = $this->buildLedgeredAcquirer('SELL', treasury: 1_000_000_000.0, debt: 4_000_000_000.0, shares: 10_000_000.0);
             $stock->setPrice((string) $price);
             $stock->setOperatingMargin('-0.05');
             $stock->setEarningsPerShare('-0.10');
             $stock->setTotalNetIncome('-1000000000');
             $stock->setRoicTtm('0.00');
+            $cashBefore = (float) $stock->getCorporateTreasury();
+            $shock = $this->engine->evaluateCorporateDivestiture($stock, new MacroStateDTO(policyRateEma: 0.04, corporateTaxRate: 0.20, yield5yEma: 0.04, nominalGdpIndex: 1.0), 1.0)['shock'];
+            $salePrice = 0.25 * $price * 10_000_000.0 * (1.0 - MergerAndAcquisitionEngine::DIV_FIRE_SALE_DISCOUNT);
 
-            return $this->engine->evaluateCorporateDivestiture($stock, new MacroStateDTO(policyRateEma: 0.04, corporateTaxRate: 0.20, yield5yEma: 0.04, nominalGdpIndex: 1.0), 1.0)['shock'];
+            return ['shock' => $shock, 'tax' => $salePrice - ((float) $stock->getCorporateTreasury() - $cashBefore), 'marketCap' => $price * 10_000_000.0];
         };
 
         $expected = -0.25 * MergerAndAcquisitionEngine::DIV_FIRE_SALE_DISCOUNT;
-        $this->assertEqualsWithDelta($expected, $shock(5.0), 1e-9, 'written down far below book');
-        $this->assertEqualsWithDelta($expected, $shock(2_000.0), 1e-9, 'valued far above book');
+        $below = $sell(5.0);
+        $this->assertEqualsWithDelta(0.0, $below['tax'], 1e-3, 'a loss on sale pays no tax');
+        $this->assertEqualsWithDelta($expected, $below['shock'], 1e-9, 'written down far below book');
+        $above = $sell(2_000.0);
+        $this->assertGreaterThan(0.0, $above['tax']);
+        $this->assertEqualsWithDelta($expected - ($above['tax'] / $above['marketCap']), $above['shock'], 1e-9, 'valued far above book, less the tax on the gain');
+    }
+
+    /**
+     * A gain on selling a business is taxable income (ASC 740): the seller pays the tax from the proceeds and keeps
+     * the gain after it. A loss is carried forward against the income to come, with no asset booked while the
+     * firm's losses run.
+     */
+    public function testAGainOnSaleIsTaxedAndALossIsCarriedForward(): void
+    {
+        $this->primeDistressedDivestiture(operatingBase: 10_000_000_000.0, fraction: 0.25);
+        $sell = function (float $price): array {
+            $stock = $this->buildLedgeredAcquirer('SELL', treasury: 1_000_000_000.0, debt: 4_000_000_000.0, shares: 10_000_000.0);
+            $stock->setPrice((string) $price);
+            $stock->setOperatingMargin('-0.05');
+            $stock->setEarningsPerShare('-0.10');
+            $stock->setTotalNetIncome('-1000000000');
+            $stock->setRoicTtm('0.00');
+            $before = ['equity' => (float) $stock->getTotalEquity(), 'cash' => (float) $stock->getCorporateTreasury(), 'retained' => (float) $stock->getRetainedEarnings()];
+            $this->engine->evaluateCorporateDivestiture($stock, new MacroStateDTO(policyRateEma: 0.04, corporateTaxRate: 0.20, yield5yEma: 0.04, nominalGdpIndex: 1.0), 1.0);
+            $salePrice = 0.25 * $price * 10_000_000.0 * (1.0 - MergerAndAcquisitionEngine::DIV_FIRE_SALE_DISCOUNT);
+
+            return [$stock, $before, $salePrice];
+        };
+        $rate = \App\Data\Company\Sectors::getBusinessModelStrategy(\App\Data\Company\Sectors::businessModelFor('Technology'))->getEffectiveTaxRate(0.20);
+
+        [$gainer, $before, $salePrice] = $sell(2_000.0);
+        $tax = $salePrice - ((float) $gainer->getCorporateTreasury() - $before['cash']);
+        $afterTaxGain = (float) $gainer->getTotalEquity() - $before['equity'];
+        $this->assertGreaterThan(0.0, $afterTaxGain);
+        $this->assertEqualsWithDelta($rate * ($afterTaxGain + $tax), $tax, 1.0, 'the gain is taxed at the rate, paid from the proceeds');
+        $this->assertEqualsWithDelta($afterTaxGain, (float) $gainer->getRetainedEarnings() - $before['retained'], 1.0);
+
+        [$loser, $before, $salePrice] = $sell(5.0);
+        $loss = $before['equity'] - (float) $loser->getTotalEquity();
+        $this->assertGreaterThan(0.0, $loss);
+        $this->assertEqualsWithDelta($salePrice, (float) $loser->getCorporateTreasury() - $before['cash'], 1.0, 'no tax on a loss');
+        $this->assertEqualsWithDelta($loss, (float) $loser->getNetOperatingLoss(), 1.0, 'the loss is carried forward');
+        $this->assertSame(0.0, $loser->getDeferredTaxAsset(), 'and books no asset while the firm is losing money');
     }
 
     private function buildLedgeredAcquirer(string $ticker, float $treasury, float $debt, float $shares): Stock

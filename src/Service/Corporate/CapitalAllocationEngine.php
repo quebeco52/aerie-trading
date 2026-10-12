@@ -262,6 +262,16 @@ class CapitalAllocationEngine
 
         $ctx->newDividend = min($ctx->newDividend, $maxCashDividendPerShare, $maxLegalDividendPerShare);
 
+        // A regulator's ceiling on what may leave in twelve months, dividends and repurchases together: each quarter
+        // takes a quarter of it, so no twelve-month window exceeds it, and it binds a payer holding its dividend as
+        // the cash and legal caps do. What the dividend leaves is the repurchase's room.
+        $ceiling = $ctx->strategy->getDistributionCeiling($stock, $ctx->trailingQuarterlyEps * 4.0 * $ctx->sharesOutstanding);
+        if ($ceiling !== null) {
+            $quarterCeiling = max(0.0, $ceiling) / 4.0;
+            $ctx->newDividend = min($ctx->newDividend, $ctx->sharesOutstanding > 0 ? $quarterCeiling / $ctx->sharesOutstanding : 0.0);
+            $ctx->distributionRoom = max(0.0, $quarterCeiling - ($ctx->newDividend * $ctx->sharesOutstanding));
+        }
+
         // Any cut ends the record the aristocrat was known for, whatever forced it. Read at the four decimals a
         // dividend is declared and stored in, so float dust from a funded shortfall is not a cut.
         if ($isAristocrat && round($ctx->newDividend, 4) < $lastDividend) {
@@ -293,12 +303,10 @@ class CapitalAllocationEngine
     {
         $this->treasuryEngine->executeCorporateStrategy($ctx);
         
-        // The DISCRETIONARY cash target — the buffer a manager chooses to run, not the solvency floor, which
-        // stays exactly where the model puts it. Every hoarding test downstream measures against this, so
-        // the fortress is no longer detected as defective for holding the reserves that define it.
-        $ctx->targetOperatingCash = $ctx->stock->getManagementProfile()->appliedTargetCash(
-            $ctx->strategy->calculateTargetOperatingCash($ctx->operatingBase, (float) $ctx->stock->getCustomerDeposits(), (float) $ctx->stock->getWholesaleDebt())
-        );
+        // The cash target the manager runs to: the buffer it chooses, biased, above the liability backing and the
+        // solvency floor, which stay where the model puts them. Every hoarding test downstream measures against
+        // this, so the fortress is not detected as defective for holding the reserves that define it.
+        $ctx->targetOperatingCash = $ctx->stock->getManagementProfile()->managedTargetCash($ctx->strategy, $ctx->operatingBase, (float) $ctx->stock->getCustomerDeposits(), (float) $ctx->stock->getWholesaleDebt());
         $ctx->excessCash = max(0.0, $ctx->newTreasury - $ctx->targetOperatingCash);
         
         if ($ctx->actualAnnualEps > 0) {
@@ -452,6 +460,9 @@ class CapitalAllocationEngine
             $currentEquity = (float) $stock->getTotalEquity();
             $maxEquitySpend = max(0.0, $currentEquity * 0.50);
             $absoluteMaxSpend = min($absoluteMaxSpend, $maxEquitySpend);
+            if ($ctx->distributionRoom !== null) {
+                $absoluteMaxSpend = min($absoluteMaxSpend, $ctx->distributionRoom);
+            }
 
             $minOperatingCash = $ctx->strategy->calculateMinOperatingCash($ctx->operatingBase, (float) $stock->getCustomerDeposits(), (float) $stock->getWholesaleDebt());
 

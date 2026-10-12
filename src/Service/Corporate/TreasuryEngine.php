@@ -314,7 +314,7 @@ class TreasuryEngine
             }
 
             // Subtract excess cash from the TOTAL balance sheet capacity first
-            $targetCashReserves = $manager->appliedTargetCash($ctx->strategy->calculateTargetOperatingCash($ctx->operatingBase, $ctx->customerDeposits, $ctx->wholesaleDebt)) * 1.20;
+            $targetCashReserves = $manager->managedTargetCash($ctx->strategy, $ctx->operatingBase, $ctx->customerDeposits, $ctx->wholesaleDebt) * 1.20;
             $excessCash = max(0.0, $ctx->newTreasury - $targetCashReserves);
 
             $trueExpansionCapacity = $ctx->strategy->getUnfundedExpansionCapacity($trueExpansionCapacity, $excessCash);
@@ -418,7 +418,7 @@ class TreasuryEngine
             return;
         }
 
-        $targetCashReserves = $manager->appliedTargetCash($ctx->strategy->calculateTargetOperatingCash($ctx->operatingBase, $ctx->customerDeposits, $ctx->wholesaleDebt)) * 1.20;
+        $targetCashReserves = $manager->managedTargetCash($ctx->strategy, $ctx->operatingBase, $ctx->customerDeposits, $ctx->wholesaleDebt) * 1.20;
         $hoardStatus = $ctx->strategy->evaluateHoardingStatus($ctx->newTreasury, $targetCashReserves, $manager->appliedHoardingBase($ctx->operatingBase), $totalDebt);
         $excessCash = $hoardStatus['excess_cash'];
         $isHoarder = $hoardStatus['is_hoarder'];
@@ -1012,9 +1012,7 @@ class TreasuryEngine
 
         // The hoarding test below asks whether this manager is sitting on too much cash, which is the very
         // question the style answers, so it has to be measured against the balance the manager runs to.
-        $targetOperatingCash = $ctx->stock->getManagementProfile()->appliedTargetCash(
-            $ctx->strategy->calculateTargetOperatingCash($ctx->operatingBase, $ctx->customerDeposits, $ctx->wholesaleDebt)
-        );
+        $targetOperatingCash = $ctx->stock->getManagementProfile()->managedTargetCash($ctx->strategy, $ctx->operatingBase, $ctx->customerDeposits, $ctx->wholesaleDebt);
 
         if (!$ctx->debtActionTaken && $ctx->wholesaleDebt > 0.0 && $ctx->newTreasury > $targetOperatingCash) {
             $excessCash = $ctx->newTreasury - $targetOperatingCash;

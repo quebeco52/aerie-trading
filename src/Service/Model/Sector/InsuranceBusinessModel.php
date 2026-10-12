@@ -155,6 +155,10 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
     /** Threshold ratio of excess cash over total debt triggering mega-hoarder status. */
     public const MEGA_HOARDER_THRESHOLD   = 0.50;
 
+    // --- Ordinary Dividend Limit (NAIC Model Act #440) ---
+    /** Share of policyholder surplus an insurer may distribute in twelve months without prior approval when the year's net income is less: 10%, NAIC Insurance Holding Company System Regulatory Act section 5. */
+    public const NAIC_ORDINARY_DIVIDEND_SURPLUS_SHARE = 0.10;
+
     // --- Buybacks & Capital Deployment ---
     /** Fraction of excess cash allocated to buybacks for mega-hoarder insurers. */
     public const MEGA_BUYBACK_CASH_SHARE  = 0.30;
@@ -778,9 +782,14 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
 
     public function calculateTargetOperatingCash(float $operatingBase, float $currentLiability, float $wholesaleDebt): float
     {
-        // Target 100% of Customer Deposits to maintain a strict regulatory surplus buffer.
-        // This prevents the company from buying back shares until they have a solid safety net against catastrophes.
-        return max($operatingBase * self::TARGET_OPERATING_BUFFER, $currentLiability * self::TARGET_FLOAT_BUFFER);
+        // The float backed in full, the claims it owes policyholders, plus the operating buffer a manager chooses
+        // above it; only the buffer is the manager's to set (calculateLiabilityBackingCash()).
+        return $this->calculateLiabilityBackingCash($currentLiability, $wholesaleDebt) + ($operatingBase * self::TARGET_OPERATING_BUFFER);
+    }
+
+    public function calculateLiabilityBackingCash(float $currentLiability, float $wholesaleDebt): float
+    {
+        return $currentLiability * self::TARGET_FLOAT_BUFFER;
     }
 
     public function calculateMinOperatingCash(float $operatingBase, float $currentLiability, float $wholesaleDebt): float
@@ -1190,6 +1199,16 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
     public function getBankruptEquityThreshold(): float { return self::BANKRUPT_EQUITY_THRESHOLD; }
     public function getDistressEquityThreshold(): float { return self::DISTRESS_EQUITY_THRESHOLD; }
     public function getWarningEquityThreshold(): float { return self::WARNING_EQUITY_THRESHOLD; }
+
+    /**
+     * NAIC Model Act #440, section 5: without the commissioner's prior approval an insurer may pay out in any twelve
+     * months the greater of 10% of its policyholder surplus or its net income for the year. A carrier whose earnings
+     * have gone holds its distributions to a tenth of its surplus, however long its board would hold the dividend.
+     */
+    public function getDistributionCeiling(Stock $stock, float $trailingNetIncome): ?float
+    {
+        return max(self::NAIC_ORDINARY_DIVIDEND_SURPLUS_SHARE * max(0.0, $stock->getStatutorySurplus()), max(0.0, $trailingNetIncome));
+    }
 
     public function getRegulatoryDividendCap(Stock $stock, float $currentTreasury, ?MacroStateDTO $macroState = null): ?float
     {

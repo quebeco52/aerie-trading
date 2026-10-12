@@ -18,6 +18,12 @@ interface CapitalAllocationStrategyInterface
     public function checkBuybackRegulatoryLockout(Stock $stock, float $currentTreasury, ?MacroStateDTO $macroState = null): ?bool;
 
     /**
+     * The most the firm may distribute over twelve months, dividends and repurchases together, without a regulator's
+     * prior approval, in currency; null for a firm no such rule reaches. $trailingNetIncome is the last four quarters'.
+     */
+    public function getDistributionCeiling(Stock $stock, float $trailingNetIncome): ?float;
+
+    /**
      * The share of the firm's capital it currently has no way to put to work at its hurdle, which the
      * life-cycle payout expansion reads as a reason to hand that capital back (DeAngelo & DeAngelo 2006,
      * Jensen 1986). Zero for a firm whose capital is all deployed: the general case is the saturation

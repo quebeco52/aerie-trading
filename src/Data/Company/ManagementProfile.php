@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Data\Company;
 
 use App\Service\Math\MathUtility;
+use App\Service\Model\Strategy\TreasuryStrategyInterface;
 
 /**
  * An individual manager: an archetype from [[ManagementStyle]] plus how strongly they hold it.
@@ -107,10 +108,26 @@ final readonly class ManagementProfile
         return $trueHurdleRate * $this->hurdleBias();
     }
 
-    /** The discretionary cash balance this manager runs the firm at. */
-    public function appliedTargetCash(float $targetOperatingCash): float
+    /**
+     * The cash balance this manager runs the firm at: the liability backing as it stands and the discretionary buffer
+     * above it scaled by the manager's bias. Bertrand & Schoar's manager effect is on the buffer a manager chooses; a
+     * fortress that scaled an insurer's float backing too held 175% of what it owed policyholders and never had a
+     * dollar of excess cash to return.
+     */
+    public function appliedTargetCash(float $targetOperatingCash, float $liabilityBacking = 0.0): float
     {
-        return $targetOperatingCash * $this->cashTargetBias();
+        $backing = max(0.0, min($liabilityBacking, $targetOperatingCash));
+
+        return $backing + (($targetOperatingCash - $backing) * $this->cashTargetBias());
+    }
+
+    /** The cash balance this manager runs the firm at, from the strategy's own target and the liability backing inside it. */
+    public function managedTargetCash(TreasuryStrategyInterface $strategy, float $operatingBase, float $customerDeposits, float $wholesaleDebt): float
+    {
+        return $this->appliedTargetCash(
+            $strategy->calculateTargetOperatingCash($operatingBase, $customerDeposits, $wholesaleDebt),
+            $strategy->calculateLiabilityBackingCash($customerDeposits, $wholesaleDebt)
+        );
     }
 
     /** The base the hoarding thresholds are measured against, scaled the same way as the target. */

@@ -74,6 +74,8 @@ class DivestitureContext
     public float $salePrice = 0.0;
     public float $newTreasury = 0.0;
     public float $gainOnSale = 0.0;
+    /** Tax the gain on sale costs, current tax paid from the proceeds plus the carryforward asset it uses; a loss's benefit is negative. */
+    public float $taxOnSale = 0.0;
     
     // Results
     public float $eventShock = 0.0;

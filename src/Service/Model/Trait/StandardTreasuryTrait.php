@@ -21,6 +21,11 @@ trait StandardTreasuryTrait
         return $operatingBase * FinancialConstants::MIN_OPERATING_CASH_RATIO;
     }
 
+    public function calculateLiabilityBackingCash(float $currentLiability, float $wholesaleDebt): float
+    {
+        return 0.0;
+    }
+
     public function evaluateHoardingStatus(float $treasury, float $targetCashReserves, float $operatingBase, float $totalDebt): array
     {
         $excessCash = max(0.0, $treasury - $targetCashReserves);

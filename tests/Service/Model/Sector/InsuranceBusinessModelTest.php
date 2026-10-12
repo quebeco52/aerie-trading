@@ -30,7 +30,37 @@ class InsuranceBusinessModelTest extends TestCase
         $this->assertEquals(600_000_000_000.0, $minCash);
 
         $targetCash = $model->calculateTargetOperatingCash($operatingBase, $customerDeposits, $wholesaleDebt);
-        $this->assertEquals(4_000_000_000_000.0, $targetCash);
+        $this->assertEquals(4_005_000_000_000.0, $targetCash, 'The float backed in full plus the 5% operating buffer above it.');
+        $this->assertEquals(4_000_000_000_000.0, $model->calculateLiabilityBackingCash($customerDeposits, $wholesaleDebt));
+    }
+
+    /**
+     * A fortress manager runs a bigger buffer, not a bigger float backing: the backing is what policyholders are
+     * owed. Scaling it too had a fortress reinsurer hold 175% of its float in cash and never return a dollar.
+     */
+    public function testAFortressInsurerBiasesItsBufferNotItsFloatBacking(): void
+    {
+        $model = new InsuranceBusinessModel();
+        $float = 3_000_000_000_000.0;
+        $target = $model->calculateTargetOperatingCash(2_000_000_000_000.0, $float, 0.0);
+        $backing = $model->calculateLiabilityBackingCash($float, 0.0);
+
+        $fortress = \App\Data\Company\ManagementStyle::Fortress;
+        $this->assertEqualsWithDelta($backing + ($fortress->cashTargetBias() * ($target - $backing)), $fortress->appliedTargetCash($target, $backing), 1.0);
+        $this->assertLessThan(1.1 * $float, $fortress->appliedTargetCash($target, $backing));
+        $this->assertSame($target, \App\Data\Company\ManagementStyle::Operator->appliedTargetCash($target, $backing));
+    }
+
+    /** NAIC Model Act #440: twelve months' distributions without approval are the greater of a tenth of surplus and the year's income. */
+    public function testTheNaicLimitIsTheGreaterOfATenthOfSurplusAndTheYearsIncome(): void
+    {
+        $model = new InsuranceBusinessModel();
+        $stock = new Stock();
+        $stock->setTotalEquity('100000000000');
+
+        $this->assertEqualsWithDelta(0.10 * $stock->getStatutorySurplus(), $model->getDistributionCeiling($stock, 1_000_000_000.0), 1.0, 'A thin year leaves a tenth of surplus.');
+        $this->assertSame(25_000_000_000.0, $model->getDistributionCeiling($stock, 25_000_000_000.0), 'A strong year may pay out its income.');
+        $this->assertEqualsWithDelta(0.10 * $stock->getStatutorySurplus(), $model->getDistributionCeiling($stock, -5_000_000_000.0), 1.0, 'A loss year still allows the tenth.');
     }
 
     public function testGetInterestCoverage(): void
