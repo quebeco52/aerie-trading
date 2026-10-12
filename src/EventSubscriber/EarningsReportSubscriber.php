@@ -60,10 +60,14 @@ class EarningsReportSubscriber implements EventSubscriberInterface
         $report->setNetIncome(Decimal::format($ctx->reportedActualNetIncome, 4));
         $report->setOperatingMargin(Decimal::format($ctx->trueOperatingMargin, 4));
         $report->setRevenueStreams($ctx->streamRevenue);
-        $report->setOperatingCosts(Decimal::format($ctx->operatingCosts, 4));
-        $report->setEbit(Decimal::format($ctx->ebit, 4));
-        $report->setPreTaxIncome(Decimal::format($ctx->preTaxIncome, 4));
-        $report->setTaxPaid(Decimal::format($ctx->taxPaid, 4));
+        // The managed accrual sits in the operating lines with its tax deferred (EarningsEngine::manageReportedEarnings()),
+        // so the filed statement steps down to the net income it files.
+        $accrual = $ctx->managedAccrualPretax;
+        $accrualTax = $accrual - $ctx->managedAccrual;
+        $report->setOperatingCosts(Decimal::format($ctx->operatingCosts - $accrual, 4));
+        $report->setEbit(Decimal::format($ctx->ebit + $accrual, 4));
+        $report->setPreTaxIncome(Decimal::format($ctx->preTaxIncome + $accrual, 4));
+        $report->setTaxPaid(Decimal::format($ctx->taxPaid + $accrualTax, 4));
         // The consensus the surprise was struck against, and the EPS it was struck on (EarningsEngine::calculateEPSAndSurprise()):
         // adjusted for special items. GAAP EPS is the filed net income over the share count.
         $report->setReportedEps(Decimal::format($ctx->streetQuarterlyEps, 6));
@@ -77,7 +81,7 @@ class EarningsReportSubscriber implements EventSubscriberInterface
 
         $report->setCapitalExpenditures(Decimal::format($ctx->totalReportedCapex, 4));
         $report->setDepreciation(Decimal::format($ctx->quarterlyDepreciation, 4));
-        $report->setEbitda(Decimal::format($ctx->ebitda, 4));
+        $report->setEbitda(Decimal::format($ctx->ebitda + $accrual, 4));
         $report->setGrossPpe($stock->getGrossPpe());
         $report->setNetPpe(Decimal::format($stock->getNetPpe(), 4));
         $report->setReceivables(Decimal::format($stock->getNetReceivables(), 4));
@@ -86,7 +90,7 @@ class EarningsReportSubscriber implements EventSubscriberInterface
         $report->setPayables($stock->getPayables());
         $report->setInventoryWriteDown(Decimal::format($ctx->inventoryWriteDown, 4));
         $report->setReceivablesProvision(Decimal::format($ctx->receivablesProvision, 4));
-        $report->setDeferredTaxExpense(Decimal::format($ctx->deferredTaxExpense, 4));
+        $report->setDeferredTaxExpense(Decimal::format($ctx->deferredTaxExpense + $accrualTax, 4));
         $report->setDeferredTaxLiability($stock->getDeferredTaxLiability());
         $report->setCashTaxPaid(Decimal::format($ctx->cashTaxPaid, 4));
 

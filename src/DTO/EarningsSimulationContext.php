@@ -173,6 +173,8 @@ class EarningsSimulationContext
     /** @var array<string, float> Reported operating KPIs emitted by the sector physics. */
     /** Net accrual booked this quarter to steer reported earnings toward consensus; negative when a prior quarter's borrowing unwinds. */
     public float $managedAccrual = 0.0;
+    /** That accrual before tax, as the filed statement carries it in the operating lines; the tax on it is deferred, since no cash moved. */
+    public float $managedAccrualPretax = 0.0;
 
     public array $kpis = [];
 

@@ -1414,6 +1414,9 @@ class EarningsEngine
 
         $stock->setManagedAccrualBank(max(0.0, $bank));
         $ctx->reportedActualNetIncome += $ctx->managedAccrual;
+        // A managed accrual hides in an operating line (a light provision, revenue booked early), so the filed statement
+        // carries it before tax, with the tax it bears deferred (ASC 740): pretax income less tax still files this net income.
+        $ctx->managedAccrualPretax = $ctx->managedAccrual / (1.0 - $ctx->corporateTaxRate);
     }
 
     /**
