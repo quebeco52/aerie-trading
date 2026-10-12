@@ -92,14 +92,6 @@ class MiningBusinessModel extends StandardCorporateBusinessModel
     public const DISASTER_OUTPUT_MULT = 0.85;
 
     // --- Capital Reinvestment & Asset Depreciation Physics ---
-    /** Quarterly efficiency decay rate per unit of underinvestment below replacement CapEx (grades decline and haul distances lengthen). */
-    public const DEPRECIATION_DECAY_RATE = 0.025;
-    /** Quarterly efficiency gain scalar per unit of logarithmic overinvestment above replacement CapEx. */
-    public const MODERNIZATION_GAIN_RATE = 0.012;
-    /** Structural minimum operating margin floor for a depleted, low-grade operation. */
-    public const MIN_OPERATING_MARGIN_FLOOR = 0.02;
-    /** Structural maximum operating margin ceiling at mid-cycle prices, set by the cost of the marginal tonne. */
-    public const MAX_OPERATING_MARGIN_CEILING = 0.32;
     /** Mine CapEx follows the price deck: US mining structures investment (BEA B320RA3A086NBEA) on the real IMF metals cycle (PMETAINDEXM/CPIAUCSL), HP(6.25) annual 1992-2024, elasticity 0.60. */
     public const CAPEX_CYCLICALITY = 0.60;
     /** Share of construction in progress completed each quarter (about two years for a brownfield expansion). */
@@ -124,7 +116,6 @@ class MiningBusinessModel extends StandardCorporateBusinessModel
     {
         return self::CAPEX_COMPLETION_RATE;
     }
-
 
     public function getCapexCyclicality(): float
     {

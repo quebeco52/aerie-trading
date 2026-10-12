@@ -140,12 +140,6 @@ class TelecomBusinessModel extends StandardCorporateBusinessModel
     /** Quarterly share of the fixed-rate bond stock that matures and reprices (~8-year average tenor). */
     public const DEBT_MATURITY_ROLLOVER_RATE = 0.03;
 
-    // --- Asset Depreciation & Reinvestment ---
-    public const NETWORK_DECAY_RATE           = 0.025; // 3G/4G becomes obsolete without continuous fiber/5G upgrades
-    public const NETWORK_MODERNIZATION_RATE   = 0.010;
-    public const MIN_OPERATING_MARGIN_FLOOR   = 0.05;
-    public const MAX_OPERATING_MARGIN_CEILING = 0.35;
-
     public function getMacroPhysics(Stock $stock, MacroStateDTO $macroState): array
     {
         $physics = parent::getMacroPhysics($stock, $macroState);
@@ -153,7 +147,6 @@ class TelecomBusinessModel extends StandardCorporateBusinessModel
         // Nullify global demand shift. We will apply macro deviations discretely per-stream.
         // People don't cancel their phone plans during a recession, but they do stop buying $1,200 iPhones.
         $physics['macro_demand_shift'] = 0.0;
-
 
         return $physics;
     }
@@ -310,18 +303,6 @@ class TelecomBusinessModel extends StandardCorporateBusinessModel
     public function getDebtMaturityRolloverRate(): float
     {
         return self::DEBT_MATURITY_ROLLOVER_RATE;
-    }
-
-    /** Network aging (e.g., failing to keep up with 5G/fiber deployment) leads to higher churn and margin decay */
-    public function getDepreciationDecayRate(): float
-    {
-        return self::NETWORK_DECAY_RATE;
-    }
-
-    /** Fiber-to-the-home and 5G modernization expands pricing power and capacity ceilings */
-    public function getModernizationGainRate(): float
-    {
-        return self::NETWORK_MODERNIZATION_RATE;
     }
 
     /**

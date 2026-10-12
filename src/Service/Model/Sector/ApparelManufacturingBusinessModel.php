@@ -138,16 +138,6 @@ class ApparelManufacturingBusinessModel extends StandardCorporateBusinessModel
     /** Revenue multiplier applied to DTC and Wholesale streams during a viral product sensation. */
     public const VIRAL_PRODUCT_MULT = 1.12;
 
-    // --- Plant Modernization & Asset Depreciation Physics ---
-    /** Quarterly efficiency decay rate per unit of underinvestment below replacement CapEx for specialized manufacturing plant and equipment. */
-    public const PLANT_DECAY_RATE = 0.025;
-    /** Quarterly efficiency gain scalar per unit of logarithmic overinvestment into automated cutting, sewing, and weaving infrastructure. */
-    public const PLANT_MODERNIZATION_GAIN = 0.012;
-    /** Structural minimum operating margin floor under severe industrial equipment mechanical degradation. */
-    public const MIN_OPERATING_MARGIN_FLOOR = 0.08;
-    /** Structural maximum operating margin ceiling for fully modernized, automated apparel manufacturing facilities. */
-    public const MAX_OPERATING_MARGIN_CEILING = 0.32;
-
     public function getReversionSpeed(): float
     {
         return 0.15;
@@ -365,18 +355,6 @@ class ApparelManufacturingBusinessModel extends StandardCorporateBusinessModel
             streamZ: $streams->getStreamZ(),
             streamRevenue: $streamRevenues,
         );
-    }
-
-    /** Rapid obsolescence of specialized cutting, sewing, and weaving equipment */
-    public function getDepreciationDecayRate(): float
-    {
-        return self::PLANT_DECAY_RATE;
-    }
-
-    /** Modernization and automated weaving/cutting infrastructure expand unit cost advantage */
-    public function getModernizationGainRate(): float
-    {
-        return self::PLANT_MODERNIZATION_GAIN;
     }
 
     /**

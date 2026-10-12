@@ -68,14 +68,4 @@ final class ConfiguredStandardModel extends BareStandardModel
     public const STOCK_COMPENSATION_INTENSITY = 0.08;
     /** How hard management leans on accruals to land the quarter on consensus. */
     public const EARNINGS_MANAGEMENT_PROPENSITY = 0.90;
-
-    // --- Operating Physics: Asset Decay ---
-    /** Quarterly margin decay per unit of under-investment below replacement CapEx. */
-    public const DEPRECIATION_DECAY_RATE = 0.10;
-    /** Quarterly margin gain scalar per unit of logarithmic over-investment. */
-    public const MODERNIZATION_GAIN_RATE = 0.20;
-    /** Structural operating margin floor under sustained under-investment. */
-    public const MIN_OPERATING_MARGIN_FLOOR = 0.05;
-    /** Structural operating margin ceiling modernization converges toward. */
-    public const MAX_OPERATING_MARGIN_CEILING = 0.40;
 }

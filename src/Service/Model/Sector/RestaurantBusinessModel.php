@@ -93,12 +93,6 @@ class RestaurantBusinessModel extends StandardCorporateBusinessModel
     // --- Continuous Elasticity ---
     public const FRANCHISE_SCALE_ELASTICITY = 0.015;
 
-    // --- Asset Depreciation & Reinvestment ---
-    public const STORE_AGING_DECAY_RATE      = 0.020;
-    public const DIGITAL_KIOSK_GAIN_RATE     = 0.012;
-    public const MIN_OPERATING_MARGIN_FLOOR  = 0.08;
-    public const MAX_OPERATING_MARGIN_CEILING = 0.32;
-
         public function getMoatSpread(): float { return 0.015; }
     public function getWorkingCapitalIntensity(Stock $stock): float { return -0.05; }
 
@@ -281,18 +275,6 @@ class RestaurantBusinessModel extends StandardCorporateBusinessModel
             eventBaseVisibility: 0.90,
             eventMinVisibility: 0.50
         );
-    }
-
-    /** Under-investment below replacement CapEx erodes operating margin toward the sector floor. */
-    public function getDepreciationDecayRate(): float
-    {
-        return self::STORE_AGING_DECAY_RATE;
-    }
-
-    /** Over-investment above replacement CapEx compounds margin toward the sector ceiling. */
-    public function getModernizationGainRate(): float
-    {
-        return self::DIGITAL_KIOSK_GAIN_RATE;
     }
 
     /**

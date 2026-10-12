@@ -92,24 +92,6 @@ class SteelManufacturingBusinessModelTest extends TestCase
         $this->assertGreaterThan($base->clampedMargin, $metals->clampedMargin, 'dearer scrap and ore raise the cost ratio');
     }
 
-    public function testBlastFurnaceAgingAndEafModernization(): void
-    {
-        // Underinvestment (R = 0.5) -> Blast furnace thermal wear
-        $stock = new Stock();
-        $stock->setOperatingMargin('0.20');
-        $this->model->applyAssetDepreciationDecay($stock, 0.5, 0.25);
-        $decayed = (float) $stock->getOperatingMargin();
-        $this->assertLessThan(0.20, $decayed);
-        $this->assertGreaterThanOrEqual(SteelManufacturingBusinessModel::MIN_OPERATING_MARGIN_FLOOR, $decayed);
-
-        // Modernization (R = 1.5) -> Electric arc furnace efficiency
-        $stock->setOperatingMargin('0.20');
-        $this->model->applyAssetDepreciationDecay($stock, 1.5, 0.25);
-        $expanded = (float) $stock->getOperatingMargin();
-        $this->assertGreaterThan(0.20, $expanded);
-        $this->assertLessThanOrEqual(SteelManufacturingBusinessModel::MAX_OPERATING_MARGIN_CEILING, $expanded);
-    }
-
     public function testCyclicalSteelBookValueAnchoring(): void
     {
         $earningsValue = 10.0;

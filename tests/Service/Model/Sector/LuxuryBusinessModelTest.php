@@ -44,26 +44,6 @@ class LuxuryBusinessModelTest extends TestCase
         $this->assertLessThan(1000.0 * 0.35, $result->actualVariableCosts);
     }
 
-    public function testBoutiqueCraftsmanshipAndHeritageExclusivityReinvestment(): void
-    {
-        $model = new LuxuryBusinessModel();
-
-        // R = 0.5 -> Boutique craftsmanship decay
-        $stock = new Stock();
-        $stock->setOperatingMargin('0.28');
-        $model->applyAssetDepreciationDecay($stock, 0.5, 0.25);
-        $decayed = (float) $stock->getOperatingMargin();
-        $this->assertLessThan(0.28, $decayed);
-        $this->assertGreaterThanOrEqual(LuxuryBusinessModel::MIN_OPERATING_MARGIN_FLOOR, $decayed);
-
-        // R = 1.5 -> Heritage exclusivity overinvestment
-        $stock->setOperatingMargin('0.28');
-        $model->applyAssetDepreciationDecay($stock, 1.5, 0.25);
-        $expanded = (float) $stock->getOperatingMargin();
-        $this->assertGreaterThan(0.28, $expanded);
-        $this->assertLessThanOrEqual(LuxuryBusinessModel::MAX_OPERATING_MARGIN_CEILING, $expanded);
-    }
-
     public function testCulturalDominanceShockEventIsAssigned(): void
     {
         $model = new LuxuryBusinessModel();

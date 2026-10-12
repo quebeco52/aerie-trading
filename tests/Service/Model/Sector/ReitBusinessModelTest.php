@@ -353,26 +353,6 @@ class ReitBusinessModelTest extends TestCase
         );
     }
 
-    public function testAssetDepreciationDecayAndModernization(): void
-    {
-        $model = new ReitBusinessModel();
-        $stock = new Stock();
-        $stock->setOperatingMargin('0.25');
-
-        // Under-reinvestment (reinvestmentRatio = 0.50, dt = 0.25 => 1 quarter)
-        // decayRate = 0.015 * (1.0 - 0.50) * 1.0 = 0.0075
-        // updatedMargin = 0.25 - (0.25 * 0.0075) = 0.248125
-        $model->applyAssetDepreciationDecay($stock, reinvestmentRatio: 0.50, dt: 0.25);
-        $this->assertEqualsWithDelta(0.248125, (float) $stock->getOperatingMargin(), 0.0001);
-
-        // Over-reinvestment / modernization (reinvestmentRatio = 2.0, dt = 0.25)
-        $stock->setOperatingMargin('0.25');
-        // modGain = 0.008 * ln(2.0) * 1.0 = 0.008 * 0.693147 = 0.005545
-        // updatedMargin = 0.25 + ((0.75 - 0.25) * 0.005545) = 0.25 + (0.50 * 0.005545) = 0.252773
-        $model->applyAssetDepreciationDecay($stock, reinvestmentRatio: 2.0, dt: 0.25);
-        $this->assertEqualsWithDelta(0.252773, (float) $stock->getOperatingMargin(), 0.0001);
-    }
-
     public function testSustainableDividendBaseAndFairValue(): void
     {
         $model = new ReitBusinessModel();

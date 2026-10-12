@@ -1559,11 +1559,10 @@ class EarningsEngine
         $actualAnnualCapEx = $fcfData['capex'] / max(0.001, $ctx->dt);
 
         // Replacement CapEx is the bar the firm has to clear to stand still, so the reinvestment ratio is
-        // measured against the depreciation charge restated at today's prices. Comparing spend to the
-        // historical-cost charge would read pure inflation as modernization and hand out margin for it.
+        // measured against the depreciation charge restated at today's prices, not the historical-cost charge.
         $replacementDepreciation = $ctx->quarterlyDepreciation * $ctx->replacementCostRatio;
         $reinvestmentRatio = $replacementDepreciation > 0 ? ($fcfData['capex'] / $replacementDepreciation) : 1.0;
-        $ctx->strategy->applyAssetDepreciationDecay($stock, $reinvestmentRatio, $ctx->dt);
+        $ctx->strategy->recordReinvestmentRatio($stock, $reinvestmentRatio, $ctx->dt);
 
         $this->rollForwardFixedAssetLedger($ctx, $fcfData['direct_capex']);
 

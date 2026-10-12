@@ -180,7 +180,8 @@ interface OperatingStrategyInterface
     /** The change in the variable cost ratio the closing quarter's input costs add over what the last report booked, on the model's own drag base; null when the model books no drag or has not yet recorded its base. */
     public function projectInputCostDragChange(Stock $stock, MacroStateDTO $macroState): ?float;
     public function getCapExCompletionRate(Stock $stock): float;
-    public function applyAssetDepreciationDecay(Stock $stock, float $reinvestmentRatio, float $dt): void;
+    /** The quarter's capex over replacement depreciation, for a model whose spend buys more than plant capacity. */
+    public function recordReinvestmentRatio(Stock $stock, float $reinvestmentRatio, float $dt): void;
     public function getMarginReversionSpeed(): float;
     public function getReversionSpeed(): float;
     public function getMoatSpread(): float;

@@ -219,26 +219,6 @@ class ConsumerStaplesBusinessModelTest extends TestCase
         $this->assertTrue($fineResult->isPublicEvent);
     }
 
-    public function testBrandEquityAmortizationAndMarketingSuperCycle(): void
-    {
-        $model = new ConsumerStaplesBusinessModel();
-
-        // R = 0.5 -> Brand equity erosion
-        $stock = new Stock();
-        $stock->setOperatingMargin('0.22');
-        $model->applyAssetDepreciationDecay($stock, 0.5, 0.25);
-        $decayed = (float) $stock->getOperatingMargin();
-        $this->assertLessThan(0.22, $decayed);
-        $this->assertGreaterThanOrEqual(ConsumerStaplesBusinessModel::MIN_OPERATING_MARGIN_FLOOR, $decayed);
-
-        // R = 1.5 -> Marketing super-cycle expands pricing power
-        $stock->setOperatingMargin('0.22');
-        $model->applyAssetDepreciationDecay($stock, 1.5, 0.25);
-        $expanded = (float) $stock->getOperatingMargin();
-        $this->assertGreaterThan(0.22, $expanded);
-        $this->assertLessThanOrEqual(ConsumerStaplesBusinessModel::MAX_OPERATING_MARGIN_CEILING, $expanded);
-    }
-
     public function testWeaponizedProofDeskCommodityArbitrage(): void
     {
         $model = new ConsumerStaplesBusinessModel();

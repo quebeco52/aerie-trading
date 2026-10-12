@@ -90,7 +90,6 @@ class ShippingBusinessModel extends StandardCorporateBusinessModel
     /** Export volume per unit of the foreign bloc's output gap: the customers-abroad half of the trade term. */
     public const FOREIGN_DEMAND_SENSITIVITY = 3.00;
 
-
     // --- Event Lore Thresholds ---
     /** Positive z-score threshold required during trade booms to trigger port congestion lore. */
     public const LORE_CONGESTION_Z_SCORE   = 1.50;
@@ -117,16 +116,6 @@ class ShippingBusinessModel extends StandardCorporateBusinessModel
     // --- Spot Rate Cycle & Output Gap Physics ---
     /** Operating margin mean reversion speed: fast speed reflects rapid shipbuilding order responses. */
     public const SPOT_REVERSION_SPEED      = 4.0;
-
-    // --- Vessel Fleet Aging & Eco-Fleet Reinvestment Physics ---
-    /** Quarterly efficiency decay rate per unit of underinvestment below fleet replacement CapEx. */
-    public const VESSEL_AGING_DECAY_RATE      = 0.025;
-    /** Quarterly efficiency gain scalar per unit of eco-fleet modernization above replacement CapEx. */
-    public const ECO_FLEET_MODERNIZATION_RATE = 0.012;
-    /** Structural minimum operating margin floor under severe vessel aging and bunker fuel drag. */
-    public const MIN_OPERATING_MARGIN_FLOOR   = 0.05;
-    /** Structural maximum operating margin ceiling for state-of-the-art eco-fuel vessel fleets. */
-    public const MAX_OPERATING_MARGIN_CEILING = 0.38;
 
     // --- Valuation ---
     /** Book (fleet replacement value) weight in fair value through a freight trough, when normalised EPS is not positive. */
@@ -279,18 +268,6 @@ class ShippingBusinessModel extends StandardCorporateBusinessModel
     {
         // Spot rate booms attract new shipbuilding orders, causing margins to mean-revert aggressively once new vessels launch
         return self::SPOT_REVERSION_SPEED;
-    }
-
-    /** Vessel aging & bunker fuel drag toward floor */
-    public function getDepreciationDecayRate(): float
-    {
-        return self::VESSEL_AGING_DECAY_RATE;
-    }
-
-    /** Eco-fleet modernization expands margin ceiling */
-    public function getModernizationGainRate(): float
-    {
-        return self::ECO_FLEET_MODERNIZATION_RATE;
     }
 
     /** A fleet trades on its net asset value (replacement cost) through a freight trough and on earnings otherwise. */

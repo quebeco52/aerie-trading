@@ -103,16 +103,6 @@ class FinancialDataBusinessModel extends StandardCorporateBusinessModel
     /** Market-data feed revenue per unit of volatility over MacroEngine::MACRO_VOL_BASE_ANCHOR, both ways (+0.5% per vol point). */
     public const MARKET_DATA_VOLATILITY_SENSITIVITY = 0.50;
 
-    // --- Data Platform Reinvestment & Monopoly Moat Physics ---
-    /** Quarterly margin decay rate per unit of software/platform underinvestment below replacement. */
-    public const PLATFORM_DECAY_RATE          = 0.015;
-    /** Quarterly margin gain scalar per unit of logarithmic data platform modernization. */
-    public const DATA_MONOPOLY_GAIN_RATE      = 0.008;
-    /** Structural minimum operating margin floor under severe platform tech debt. */
-    public const MIN_OPERATING_MARGIN_FLOOR   = 0.20;
-    /** Structural maximum operating margin ceiling for proprietary financial data monopolies. */
-    public const MAX_OPERATING_MARGIN_CEILING = 0.65;
-
     // --- Asset-Light Subscription Capital Structure Rails ---
     /** Minimum interest coverage ratio required to permit recapitalization for subscription monopolies. */
     public const MIN_RECAP_ICR_FLOOR          = 6.0;
@@ -230,18 +220,6 @@ class FinancialDataBusinessModel extends StandardCorporateBusinessModel
     public function getMarginReversionSpeed(): float
     {
         return self::MONOPOLY_REVERSION_SPEED; // High switching costs and data monopoly moat
-    }
-
-    /** Tech debt & feed latency decay toward software baseline */
-    public function getDepreciationDecayRate(): float
-    {
-        return self::PLATFORM_DECAY_RATE;
-    }
-
-    /** Platform modernization expands data monopoly margin ceiling */
-    public function getModernizationGainRate(): float
-    {
-        return self::DATA_MONOPOLY_GAIN_RATE;
     }
 
     /**

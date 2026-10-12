@@ -142,16 +142,6 @@ class DefenseContractorBusinessModel extends StandardCorporateBusinessModel
     /** Revenue multiplier applied to cost-plus stream upon securing prime contractor status. */
     public const MEGA_CONTRACT_WIN_MULT = 1.18;
 
-    // --- Program Execution & Classified Tooling Physics ---
-    /** Margin decay rate per unit of underinvestment in classified tooling and secure facilities. */
-    public const DEFENSE_TOOLING_DECAY_RATE = 0.018;
-    /** Margin gain rate per unit of logarithmic overinvestment in next-gen platforms. */
-    public const CLASSIFIED_PLATFORM_GAIN_RATE = 0.009;
-    /** Structural minimum operating margin floor under severe tooling tech debt. */
-    public const MIN_OPERATING_MARGIN_FLOOR = 0.06;
-    /** Structural maximum operating margin ceiling for next-gen platform franchises. */
-    public const MAX_OPERATING_MARGIN_CEILING = 0.22;
-
     // --- Capital Budget ---
     /** Investment's elasticity to its own demand cycle: US private nonresidential investment on real GDP (FRED PNFI/GDPDEF, GDPC1), HP(1600) cycles 1953-2019, peak 2.52 at a one-quarter lag. */
     public const CAPEX_CYCLICALITY = 2.52;
@@ -408,18 +398,6 @@ class DefenseContractorBusinessModel extends StandardCorporateBusinessModel
             streamRevenue: $streamRevenues,
                     kpis: ['book_to_bill' => $backlogRevenue > 0.0 ? $backlogOrders / $backlogRevenue : 1.0, 'backlog_quarters' => $backlogQuarters],
         );
-    }
-
-    /** Under-investment below replacement CapEx erodes operating margin toward the sector floor. */
-    public function getDepreciationDecayRate(): float
-    {
-        return self::DEFENSE_TOOLING_DECAY_RATE;
-    }
-
-    /** Over-investment above replacement CapEx compounds margin toward the sector ceiling. */
-    public function getModernizationGainRate(): float
-    {
-        return self::CLASSIFIED_PLATFORM_GAIN_RATE;
     }
 
     /**

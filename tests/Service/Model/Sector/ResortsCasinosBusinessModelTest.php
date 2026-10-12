@@ -315,26 +315,6 @@ class ResortsCasinosBusinessModelTest extends TestCase
         $this->assertSame(0, array_search(min($factors), $factors, true));
     }
 
-    public function testResortAgingAndModernizationCapEx(): void
-    {
-        $model = new ResortsCasinosBusinessModel();
-
-        // R = 0.5 -> Resort aging, room fatigue
-        $stock = new Stock();
-        $stock->setOperatingMargin('0.25');
-        $model->applyAssetDepreciationDecay($stock, 0.5, 0.25);
-        $decayed = (float) $stock->getOperatingMargin();
-        $this->assertLessThan(0.25, $decayed);
-        $this->assertGreaterThanOrEqual(ResortsCasinosBusinessModel::MIN_OPERATING_MARGIN_FLOOR, $decayed);
-
-        // R = 1.5 -> Modernization, new flagship attractions
-        $stock->setOperatingMargin('0.25');
-        $model->applyAssetDepreciationDecay($stock, 1.5, 0.25);
-        $expanded = (float) $stock->getOperatingMargin();
-        $this->assertGreaterThan(0.25, $expanded);
-        $this->assertLessThanOrEqual(ResortsCasinosBusinessModel::MAX_OPERATING_MARGIN_CEILING, $expanded);
-    }
-
     public function testDynamicRevenueMixDriftsAcrossStreams(): void
     {
         $model = new ResortsCasinosBusinessModel();

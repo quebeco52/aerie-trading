@@ -218,32 +218,6 @@ class ChemicalBusinessModelTest extends TestCase
         );
     }
 
-    public function testPlantCorrosionAndTurnaroundCompoundingDecay(): void
-    {
-        $stock = new Stock();
-        $stock->setOperatingMargin('0.20');
-
-        // Under-investment (reinvestmentRatio = 0.50, dt = 0.25 => 1 quarter)
-        // underinvestment = 0.50
-        // decay = 0.020 * 0.50 * 1.0 = 0.010
-        // updatedMargin = 0.20 - (0.20 * 0.010) = 0.20 - 0.002 = 0.198
-        $this->model->applyAssetDepreciationDecay($stock, reinvestmentRatio: 0.50, dt: 0.25);
-        $this->assertEqualsWithDelta(0.198, (float) $stock->getOperatingMargin(), 0.0001);
-
-        // Extreme under-investment (reinvestmentRatio = 0.0, full maintenance deferral)
-        // underinvestment = 1.0
-        // decay = 0.020 * 1.0 * 1.0 = 0.020
-        // updatedMargin = 0.198 - (0.198 * 0.020) = 0.19404
-        $this->model->applyAssetDepreciationDecay($stock, reinvestmentRatio: 0.0, dt: 0.25);
-        $this->assertEqualsWithDelta(0.19404, (float) $stock->getOperatingMargin(), 0.0001);
-
-        // Over-investment / modernization (reinvestmentRatio = 2.0, dt = 0.25)
-        // modGain = 0.010 * ln(2.0) = 0.010 * 0.693147 = 0.00693147
-        // updatedMargin = 0.19404 + ((0.30 - 0.19404) * 0.00693147) = 0.19404 + (0.10596 * 0.00693147) = 0.194774
-        $this->model->applyAssetDepreciationDecay($stock, reinvestmentRatio: 2.0, dt: 0.25);
-        $this->assertEqualsWithDelta(0.194774, (float) $stock->getOperatingMargin(), 0.0001);
-    }
-
     public function testCrackSpreadSqueezeTailRiskEvent(): void
     {
         $stock = new Stock();

@@ -94,7 +94,6 @@ class RailroadBusinessModel extends StandardCorporateBusinessModel
      */
     public const TRANSIT_EMPLOYMENT_ELASTICITY = 0.25;
 
-
     // --- Manufacturing PMI & Trade Transmission ---
     /** Sensitivity of industrial carload volumes to manufacturing PMI shifts. */
     public const PMI_CARLOAD_SENSITIVITY = 0.50;
@@ -102,16 +101,6 @@ class RailroadBusinessModel extends StandardCorporateBusinessModel
     public const TRADE_BALANCE_SENSITIVITY = 1.20;
     /** Export volume per unit of the foreign bloc's output gap: the customers-abroad half of the trade term. */
     public const FOREIGN_DEMAND_SENSITIVITY = 0.80;
-
-    // --- Rolling Stock & Track Infrastructure Reinvestment Physics ---
-    /** Quarterly margin decay rate per unit of underinvestment below track and locomotive replacement CapEx. */
-    public const TRACK_AGING_DECAY_RATE = 0.015;
-    /** Quarterly margin gain scalar per unit of precision scheduled railroading (PSR) and automated yard overinvestment. */
-    public const PSR_EFFICIENCY_GAIN_RATE = 0.008;
-    /** Structural minimum operating margin floor under severe track slow orders and derailment risk. */
-    public const MIN_OPERATING_MARGIN_FLOOR = 0.15;
-    /** Structural maximum operating margin ceiling for optimized precision freight rail duopolies. */
-    public const MAX_OPERATING_MARGIN_CEILING = 0.45;
 
     public function getWholesaleLeverageLimit(): float { return 2.5; }
     public function getReversionSpeed(): float { return 0.15; }
@@ -294,18 +283,6 @@ class RailroadBusinessModel extends StandardCorporateBusinessModel
             'industrial_carloads'   => ($macroState->outputGapEma * 1.2 * $beta) + $pmiShift,
             'transit_subscriptions' => $macroState->outputGapEma * self::TRANSIT_EMPLOYMENT_ELASTICITY * $beta,
         ];
-    }
-
-    /** Track slow orders & locomotive breakdown drag toward floor */
-    public function getDepreciationDecayRate(): float
-    {
-        return self::TRACK_AGING_DECAY_RATE;
-    }
-
-    /** Precision Scheduled Railroading (PSR) efficiency expands margin ceiling */
-    public function getModernizationGainRate(): float
-    {
-        return self::PSR_EFFICIENCY_GAIN_RATE;
     }
 
     /**

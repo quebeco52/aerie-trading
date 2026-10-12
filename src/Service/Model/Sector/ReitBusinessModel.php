@@ -158,16 +158,6 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
     /** Fallback negative interest coverage ratio when operating income and interest expense are zero/negative. */
     public const INFINITE_ICR_NEG_FALLBACK  = -999.0;
 
-    // --- Capital Reinvestment & Asset Depreciation Physics ---
-    /** Annual margin decay rate when capital reinvestment falls below depreciation maintenance. */
-    public const DEPRECIATION_DECAY_RATE      = 0.015;
-    /** Annual margin gain rate from property modernization when reinvestment exceeds depreciation. */
-    public const MODERNIZATION_GAIN_RATE      = 0.008;
-    /** Minimum structural operating margin floor after extended asset degradation. */
-    public const MIN_OPERATING_MARGIN_FLOOR   = 0.05;
-    /** Maximum structural operating margin ceiling achievable through property modernization. */
-    public const MAX_OPERATING_MARGIN_CEILING = 0.75;
-
     // --- Credit Risk & Recovery ---
     /** Loss given default on debt secured by tangible real estate: the senior secured recovery, 62% (CorporateDefaultService; Moody's ultimate recoveries 1987-2021, 61.5%). */
     public const REIT_LOSS_GIVEN_DEFAULT = 1.0 - \App\Service\Market\Bond\CorporateDefaultService::RECOVERY_SENIOR_SECURED;

@@ -13,6 +13,7 @@ use App\Service\Macro\MacroEngine;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\MathUtility;
 use App\Tests\Support\Model\BareStandardModel;
+use App\Service\Model\Sector\StandardCorporateBusinessModel;
 use App\Tests\Support\Model\ConfiguredStandardModel;
 use PHPUnit\Framework\TestCase;
 
@@ -391,91 +392,24 @@ final class StandardOperatingPhysicsTraitTest extends TestCase
         );
     }
 
-    // --- Asset decay ---
+    // --- Reinvestment ---
 
     /**
-     * The decay physics is opt-in. A model declaring neither rate must not touch the margin at all, which is
-     * what lets a financial balance sheet compose this trait without acquiring plant depreciation.
+     * Capex reaches an operating firm's earnings through the plant it buys, so the stable margin holds at any
+     * reinvestment ratio: a growing firm's spend above replacement must not also read as modernization.
      */
-    public function testAssetDecayIsANoOpForAModelDeclaringNoRates(): void
+    public function testReinvestmentRatioLeavesTheStableMarginAlone(): void
     {
-        $stock = (new Stock())->setTicker('NODECAY');
-        $stock->setOperatingMargin('0.20');
-
-        $this->model->applyAssetDepreciationDecay($stock, 0.10, EarningsEngine::QUARTERLY_TIME_STEP);
-        $this->assertSame('0.20', $stock->getOperatingMargin(), 'Starving a model with no decay physics must change nothing.');
-
-        $this->model->applyAssetDepreciationDecay($stock, 5.00, EarningsEngine::QUARTERLY_TIME_STEP);
-        $this->assertSame('0.20', $stock->getOperatingMargin(), 'Nor must over-investing in it.');
-    }
-
-    /**
-     * Under-investment decays margin toward the sector floor and never through it; over-investment climbs
-     * toward the ceiling with diminishing returns and never past it.
-     */
-    public function testUnderInvestmentDecaysToTheFloorAndOverInvestmentConvergesToTheCeiling(): void
-    {
-        $model = new ConfiguredStandardModel();
-
-        $starved = (new Stock())->setTicker('STARVE');
-        $starved->setOperatingMargin('0.30');
-        $model->applyAssetDepreciationDecay($starved, 0.0, EarningsEngine::QUARTERLY_TIME_STEP);
-        $this->assertLessThan(0.30, (float) $starved->getOperatingMargin(), 'Under-investment must cost margin.');
-
-        for ($quarter = 0; $quarter < 200; $quarter++) {
-            $model->applyAssetDepreciationDecay($starved, 0.0, EarningsEngine::QUARTERLY_TIME_STEP);
+        foreach ([$this->model, new ConfiguredStandardModel(), new StandardCorporateBusinessModel()] as $model) {
+            $stock = (new Stock())->setTicker('REINV');
+            $stock->setOperatingMargin('0.20');
+            foreach ([0.0, 0.5, 1.0, 1.4, 3.0] as $ratio) {
+                for ($quarter = 0; $quarter < 40; $quarter++) {
+                    $model->recordReinvestmentRatio($stock, $ratio, EarningsEngine::QUARTERLY_TIME_STEP);
+                }
+                $this->assertSame('0.20', $stock->getOperatingMargin(), sprintf('%s moved the margin at a reinvestment ratio of %.1f.', $model::class, $ratio));
+            }
         }
-        $this->assertEqualsWithDelta(
-            ConfiguredStandardModel::MIN_OPERATING_MARGIN_FLOOR,
-            (float) $starved->getOperatingMargin(),
-            0.0001,
-            'Sustained starvation converges on the structural floor.'
-        );
-        $this->assertGreaterThanOrEqual(ConfiguredStandardModel::MIN_OPERATING_MARGIN_FLOOR, (float) $starved->getOperatingMargin(), 'It must never fall through it.');
-
-        $invested = (new Stock())->setTicker('MODERN');
-        $invested->setOperatingMargin('0.10');
-        for ($quarter = 0; $quarter < 200; $quarter++) {
-            $model->applyAssetDepreciationDecay($invested, 3.0, EarningsEngine::QUARTERLY_TIME_STEP);
-        }
-        $this->assertEqualsWithDelta(
-            ConfiguredStandardModel::MAX_OPERATING_MARGIN_CEILING,
-            (float) $invested->getOperatingMargin(),
-            0.0001,
-            'Sustained modernization converges on the structural ceiling.'
-        );
-        $this->assertLessThanOrEqual(ConfiguredStandardModel::MAX_OPERATING_MARGIN_CEILING, (float) $invested->getOperatingMargin(), 'It must never exceed it.');
-
-        // Replacement-rate investment is the neutral point: neither decay nor gain.
-        $held = (new Stock())->setTicker('HOLD');
-        $held->setOperatingMargin('0.22');
-        $model->applyAssetDepreciationDecay($held, 1.0, EarningsEngine::QUARTERLY_TIME_STEP);
-        $this->assertSame('0.22', $held->getOperatingMargin(), 'Investing exactly at replacement holds the margin.');
-
-        // A firm already above its ceiling is left alone rather than dragged down to it.
-        $exceptional = (new Stock())->setTicker('ABOVE');
-        $exceptional->setOperatingMargin('0.55');
-        $model->applyAssetDepreciationDecay($exceptional, 3.0, EarningsEngine::QUARTERLY_TIME_STEP);
-        $this->assertSame('0.55', $exceptional->getOperatingMargin(), 'Modernization cannot add margin above the ceiling, but must not remove any either.');
-    }
-
-    /**
-     * The decay is a rate per quarter, so a longer step must move the margin further: the physics has to be
-     * expressed in time, not in calls.
-     */
-    public function testAssetDecayScalesWithTheTimeStep(): void
-    {
-        $model = new ConfiguredStandardModel();
-
-        $quarter = (new Stock())->setTicker('Q');
-        $quarter->setOperatingMargin('0.30');
-        $model->applyAssetDepreciationDecay($quarter, 0.0, EarningsEngine::QUARTERLY_TIME_STEP);
-
-        $year = (new Stock())->setTicker('Y');
-        $year->setOperatingMargin('0.30');
-        $model->applyAssetDepreciationDecay($year, 0.0, EarningsEngine::QUARTERLY_TIME_STEP * 4.0);
-
-        $this->assertLessThan((float) $quarter->getOperatingMargin(), (float) $year->getOperatingMargin(), 'A year of starvation must cost more than a quarter of it.');
     }
 
     // --- Reporting calendar and inherited scalars ---

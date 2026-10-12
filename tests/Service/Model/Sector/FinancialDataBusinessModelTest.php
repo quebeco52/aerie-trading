@@ -46,26 +46,6 @@ class FinancialDataBusinessModelTest extends TestCase
         $this->assertLessThan(1000.0 * 0.35, $result->actualVariableCosts);
     }
 
-    public function testDataPlatformReinvestmentAndMonopolyMoat(): void
-    {
-        $model = new FinancialDataBusinessModel();
-
-        // Underinvestment (R = 0.5): Margin erodes toward software floor (0.20)
-        $stock = new Stock();
-        $stock->setOperatingMargin('0.50');
-        $model->applyAssetDepreciationDecay($stock, 0.5, 0.25);
-        $decayed = (float) $stock->getOperatingMargin();
-        $this->assertLessThan(0.50, $decayed);
-        $this->assertGreaterThanOrEqual(FinancialDataBusinessModel::MIN_OPERATING_MARGIN_FLOOR, $decayed);
-
-        // Modernization Overinvestment (R = 1.5): Margin expands toward data monopoly ceiling (0.65)
-        $stock->setOperatingMargin('0.50');
-        $model->applyAssetDepreciationDecay($stock, 1.5, 0.25);
-        $expanded = (float) $stock->getOperatingMargin();
-        $this->assertGreaterThan(0.50, $expanded);
-        $this->assertLessThanOrEqual(FinancialDataBusinessModel::MAX_OPERATING_MARGIN_CEILING, $expanded);
-    }
-
     public function testSubscriptionMonopolyIsUnderLeveraged(): void
     {
         $model = new FinancialDataBusinessModel();

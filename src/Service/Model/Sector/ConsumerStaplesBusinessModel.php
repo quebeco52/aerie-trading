@@ -116,16 +116,6 @@ class ConsumerStaplesBusinessModel extends StandardCorporateBusinessModel
     /** Variable cost penalty applied during moderate regulatory fines and legal fees. */
     public const RECALL_MODERATE_PENALTY = 0.03;
 
-    // --- Brand Equity Amortization & Marketing Reinvestment Physics ---
-    /** Quarterly margin decay rate per unit of underinvestment below brand maintenance CapEx. */
-    public const BRAND_EQUITY_DECAY_RATE = 0.020;
-    /** Quarterly margin gain scalar per unit of logarithmic brand marketing super-cycle investment. */
-    public const BRAND_MARKETING_GAIN_RATE = 0.010;
-    /** Structural minimum operating margin floor under private-label generic retail competition. */
-    public const MIN_OPERATING_MARGIN_FLOOR = 0.10;
-    /** Structural maximum operating margin ceiling for dominant global consumer staple brands. */
-    public const MAX_OPERATING_MARGIN_CEILING = 0.35;
-
     public function getReversionSpeed(): float { return 0.15; }
     public function getMoatSpread(): float { return 0.015; }
 
@@ -313,18 +303,6 @@ class ConsumerStaplesBusinessModel extends StandardCorporateBusinessModel
             streamZ: $streams->getStreamZ(),
             streamRevenue: $streamRevenues,
         );
-    }
-
-    /** Brand equity erosion toward private-label floor */
-    public function getDepreciationDecayRate(): float
-    {
-        return self::BRAND_EQUITY_DECAY_RATE;
-    }
-
-    /** Brand marketing super-cycle expands pricing power */
-    public function getModernizationGainRate(): float
-    {
-        return self::BRAND_MARKETING_GAIN_RATE;
     }
 
     /**

@@ -151,16 +151,6 @@ class ChemicalBusinessModel extends StandardCorporateBusinessModel
     /** Minimum weather jump multiplier threshold required to trigger agricultural boom event. */
     public const WEATHER_BOOM_MULTIPLIER_THRESHOLD = 1.15;
 
-    // --- Plant Corrosion, Turnaround & Asset Depreciation Physics ---
-    /** Compounding quarterly margin decay rate under deferred maintenance and corrosion. */
-    public const PLANT_DECAY_RATE = 0.020;
-    /** Quarterly efficiency gain scalar per unit of logarithmic overinvestment into advanced chemical synthesis. */
-    public const PLANT_MODERNIZATION_GAIN = 0.010;
-    /** Structural minimum operating margin floor under severe plant corrosion and downtime. */
-    public const MIN_OPERATING_MARGIN_FLOOR = 0.05;
-    /** Structural maximum operating margin ceiling for optimized chemical manufacturing plants. */
-    public const MAX_OPERATING_MARGIN_CEILING = 0.30;
-
     // --- Valuation, Growth & CapEx Rails ---
     /** Multiplier scaling heavy continuous chemical synthesis and cracking plant capital expenditure cycles. */
     public const CHEMICAL_CAPEX_CYCLICALITY = 3.50;
@@ -350,18 +340,6 @@ class ChemicalBusinessModel extends StandardCorporateBusinessModel
             streamZ: $streams->getStreamZ(),
             streamRevenue: $streamRevenues,
         );
-    }
-
-    /** Physical corrosion and deferred maintenance downtime create margin decay */
-    public function getDepreciationDecayRate(): float
-    {
-        return self::PLANT_DECAY_RATE;
-    }
-
-    /** Modernization and continuous flow chemical synthesis expansion */
-    public function getModernizationGainRate(): float
-    {
-        return self::PLANT_MODERNIZATION_GAIN;
     }
 
     /**

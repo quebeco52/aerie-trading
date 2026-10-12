@@ -141,14 +141,6 @@ class TechBusinessModel extends StandardCorporateBusinessModel
     // --- SaaS ARR Operating Leverage & Software Platform Reinvestment Physics ---
     /** Variable margin sensitivity to SaaS ARR expansion (zero marginal cost of software delivery). */
     public const SAAS_OPERATING_LEVERAGE      = 0.022;
-    /** Quarterly margin decay rate per unit of underinvestment below software maintenance CapEx. */
-    public const TECH_DEBT_DECAY_RATE         = 0.020;
-    /** Quarterly margin gain scalar per unit of logarithmic cloud platform modernization. */
-    public const PLATFORM_MODERNIZATION_GAIN_RATE = 0.012;
-    /** Structural minimum operating margin floor under severe software tech debt and customer churn. */
-    public const MIN_OPERATING_MARGIN_FLOOR   = 0.15;
-    /** Structural maximum operating margin ceiling for cloud software monopolies. */
-    public const MAX_OPERATING_MARGIN_CEILING = 0.55;
 
     protected function calculateSectorPhysics(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, \App\DTO\MacroStateDTO $macroState, MathUtility $mathUtility): SectorPhysicsResult
     {
@@ -281,18 +273,6 @@ class TechBusinessModel extends StandardCorporateBusinessModel
     public function getMarginReversionSpeed(): float
     {
         return self::TECH_REVERSION_SPEED; // Rapid innovation cycles and intense technological competition erode excess margins quickly
-    }
-
-    /** Software tech debt & customer churn decay toward floor */
-    public function getDepreciationDecayRate(): float
-    {
-        return self::TECH_DEBT_DECAY_RATE;
-    }
-
-    /** Cloud ARR platform modernization expands SaaS margin ceiling */
-    public function getModernizationGainRate(): float
-    {
-        return self::PLATFORM_MODERNIZATION_GAIN_RATE;
     }
 
     /** Asset-light platforms trade on cash earnings, DCF and recurring revenue power, not on book value. */

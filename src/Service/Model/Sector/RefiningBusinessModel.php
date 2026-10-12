@@ -94,14 +94,6 @@ class RefiningBusinessModel extends StandardCorporateBusinessModel
     public const OUTAGE_COST_PENALTY = 0.08;
 
     // --- Capital Reinvestment & Asset Depreciation Physics ---
-    /** Quarterly efficiency decay rate per unit of underinvestment below replacement CapEx. */
-    public const DEPRECIATION_DECAY_RATE = 0.025;
-    /** Quarterly efficiency gain scalar per unit of logarithmic overinvestment above replacement CapEx. */
-    public const MODERNIZATION_GAIN_RATE = 0.012;
-    /** Structural minimum operating margin floor for an aging, low-complexity plant. */
-    public const MIN_OPERATING_MARGIN_FLOOR = 0.01;
-    /** Structural maximum operating margin ceiling at the baseline crack: modernization can only cut opex, and the barrel identity leaves about a point of it to cut. */
-    public const MAX_OPERATING_MARGIN_CEILING = 0.085;
     /** Share of construction in progress completed each quarter. */
     public const CAPEX_COMPLETION_RATE = 0.125;
     /** Annual mean reversion of ROIC toward the cost of capital. */

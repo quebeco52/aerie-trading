@@ -120,8 +120,6 @@ class SemiconductorBusinessModel extends StandardCorporateBusinessModel
     /** Variable margin penalty applied when underinvestment degrades silicon wafer yields. */
     public const WAFER_SCRAP_PENALTY       = 0.08;
 
-
-
     // --- Geopolitical & Export Ban Physics ---
     /** Negative z-score threshold triggering geopolitical export restrictions (`Z < -2.20`). */
     public const EXPORT_BAN_Z_THRESHOLD = -2.20;
@@ -140,16 +138,6 @@ class SemiconductorBusinessModel extends StandardCorporateBusinessModel
     public const MIN_RECAP_ICR_FLOOR       = 15.0;
     /** Target leverage as a share of the debt tolerance; below it the firm is under-levered. */
     public const UNDERLEVERAGED_DEBT_RATIO = 0.50;
-
-    // --- Capital Reinvestment & Asset Depreciation Physics ---
-    /** Quarterly efficiency decay rate per unit of underinvestment below replacement CapEx. */
-    public const DEPRECIATION_DECAY_RATE      = 0.030;
-    /** Quarterly efficiency gain scalar per unit of logarithmic overinvestment above replacement CapEx. */
-    public const MODERNIZATION_GAIN_RATE      = 0.015;
-    /** Structural minimum operating margin floor under extreme fab obsolescence. */
-    public const MIN_OPERATING_MARGIN_FLOOR   = 0.02;
-    /** Structural maximum operating margin ceiling for state-of-the-art modernized fabs. */
-    public const MAX_OPERATING_MARGIN_CEILING = 0.38;
 
     public function getMacroPhysics(Stock $stock, \App\DTO\MacroStateDTO $macroState): array
     {

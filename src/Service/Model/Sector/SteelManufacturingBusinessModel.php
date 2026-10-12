@@ -74,16 +74,6 @@ class SteelManufacturingBusinessModel extends StandardCorporateBusinessModel
     /** Sensitivity of blast furnace fixed cost absorption to industrial capacity utilization. */
     public const CU_MARGIN_ABSORPTION_SENSITIVITY = 0.12;
 
-    // --- Blast Furnace Aging & EAF Reinvestment Physics ---
-    /** Quarterly margin decay rate per unit of underinvestment below blast furnace relining replacement CapEx. */
-    public const BLAST_FURNACE_DECAY_RATE = 0.020;
-    /** Quarterly margin gain scalar per unit of electric arc furnace (EAF) and automation overinvestment. */
-    public const EAF_MODERNIZATION_GAIN_RATE = 0.010;
-    /** Structural minimum operating margin floor under severe blast furnace wear and high scrap costs. */
-    public const MIN_OPERATING_MARGIN_FLOOR = 0.04;
-    /** Structural maximum operating margin ceiling for optimized modern electric arc furnace steelmakers. */
-    public const MAX_OPERATING_MARGIN_CEILING = 0.28;
-
     // --- Valuation ---
     /** Book (replacement cost) weight in fair value when normalised EPS is negative: trough cyclicals trade on assets. */
     public const TROUGH_BOOK_WEIGHT = 0.70;
@@ -100,7 +90,6 @@ class SteelManufacturingBusinessModel extends StandardCorporateBusinessModel
     {
         return [0.85, 1.15, 1.15, 0.85]; // Construction & industrial manufacturing weather alignment
     }
-
 
     public function getCapexCyclicality(): float
     {
@@ -234,18 +223,6 @@ class SteelManufacturingBusinessModel extends StandardCorporateBusinessModel
     protected function getFairValueBookWeight(float $normalizedEps): float
     {
         return $normalizedEps < 0 ? self::TROUGH_BOOK_WEIGHT : self::MID_CYCLE_BOOK_WEIGHT;
-    }
-
-    /** Blast furnace wear & refractory thermal degradation toward floor */
-    public function getDepreciationDecayRate(): float
-    {
-        return self::BLAST_FURNACE_DECAY_RATE;
-    }
-
-    /** EAF efficiency & automated rolling mill modernization expands margin ceiling */
-    public function getModernizationGainRate(): float
-    {
-        return self::EAF_MODERNIZATION_GAIN_RATE;
     }
 
     /**

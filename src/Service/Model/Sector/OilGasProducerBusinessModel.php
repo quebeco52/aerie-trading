@@ -93,14 +93,6 @@ class OilGasProducerBusinessModel extends StandardCorporateBusinessModel
     public const DISASTER_PRODUCTION_MULT = 0.85;
 
     // --- Capital Reinvestment & Asset Depreciation Physics ---
-    /** Quarterly efficiency decay rate per unit of underinvestment below replacement CapEx. */
-    public const DEPRECIATION_DECAY_RATE = 0.025;
-    /** Quarterly efficiency gain scalar per unit of logarithmic overinvestment above replacement CapEx. */
-    public const MODERNIZATION_GAIN_RATE = 0.012;
-    /** Structural minimum operating margin floor under a depleted, under-invested field base. */
-    public const MIN_OPERATING_MARGIN_FLOOR = 0.02;
-    /** Structural maximum operating margin ceiling at mid-cycle prices, set by the lifting cost of the marginal barrel. */
-    public const MAX_OPERATING_MARGIN_CEILING = 0.32;
     /** Upstream CapEx follows the price deck: US oil & gas drilling (FRED IPN213111S) on the real WTI cycle (WTISPLC/CPIAUCSL), HP(1600) quarterly 1972-2024, peak elasticity 0.58 at a 1-2 quarter lag. */
     public const CAPEX_CYCLICALITY = 0.58;
     /** Share of construction in progress completed each quarter (about two years from sanction to first production). */
@@ -125,7 +117,6 @@ class OilGasProducerBusinessModel extends StandardCorporateBusinessModel
     {
         return self::CAPEX_COMPLETION_RATE;
     }
-
 
     public function getCapexCyclicality(): float
     {

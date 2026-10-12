@@ -85,16 +85,6 @@ class StandardCorporateBusinessModel implements BusinessModelInterface
     public const BASE_COVERAGE_VISIBILITY = 0.20;
     public const BASE_COVERAGE_ERROR = 0.06;
 
-    // --- Capital Reinvestment & Asset Depreciation Physics ---
-    /** Quarterly efficiency decay rate per unit of underinvestment below replacement CapEx. */
-    public const DEPRECIATION_DECAY_RATE      = 0.020;
-    /** Quarterly efficiency gain scalar per unit of logarithmic overinvestment above replacement CapEx. */
-    public const MODERNIZATION_GAIN_RATE      = 0.010;
-    /** Structural minimum operating margin floor under severe physical plant aging. */
-    public const MIN_OPERATING_MARGIN_FLOOR   = 0.015;
-    /** Structural maximum operating margin ceiling for modernized industrial plants. */
-    public const MAX_OPERATING_MARGIN_CEILING = 0.28;
-
     /**
      * Physical businesses evaluate their true structural scale based on Invested Capital 
      * (Total Equity + Debt - Cash), requiring physical assets to turn a profit.

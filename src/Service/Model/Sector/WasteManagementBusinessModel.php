@@ -118,12 +118,6 @@ class WasteManagementBusinessModel extends StandardCorporateBusinessModel
     /** Variable cost penalty applied to fund massive environmental cleanup liabilities. */
     public const ENVIRONMENTAL_CLEANUP_PENALTY  = 0.12;
 
-    // --- Asset Depreciation & Reinvestment ---
-    public const FLEET_AGING_DECAY_RATE       = 0.020;
-    public const AUTOMATION_RNG_GAIN_RATE     = 0.012; // Routing automation and RNG capture
-    public const MIN_OPERATING_MARGIN_FLOOR   = 0.08;
-    public const MAX_OPERATING_MARGIN_CEILING = 0.32;
-
     public function getMacroPhysics(Stock $stock, MacroStateDTO $macroState): array
     {
         $physics = parent::getMacroPhysics($stock, $macroState);
@@ -131,7 +125,6 @@ class WasteManagementBusinessModel extends StandardCorporateBusinessModel
         // Nullify global demand shift to avoid double-dipping, as macro volume shocks 
         // are handled discretely per-stream (Commercial vs. Residential) below.
         $physics['macro_demand_shift'] = 0.0;
-
 
         return $physics;
     }
@@ -259,18 +252,6 @@ class WasteManagementBusinessModel extends StandardCorporateBusinessModel
             streamRevenue: $streamRevenues,
             priceRevenue: $priceRevenue,
         );
-    }
-
-    /** Fleet aging (maintenance costs spike) and landfill airspace depletion */
-    public function getDepreciationDecayRate(): float
-    {
-        return self::FLEET_AGING_DECAY_RATE;
-    }
-
-    /** Fleet automation, transition to cheaper CNG/EV trucks, and RNG gas capture facility builds */
-    public function getModernizationGainRate(): float
-    {
-        return self::AUTOMATION_RNG_GAIN_RATE;
     }
 
     /**

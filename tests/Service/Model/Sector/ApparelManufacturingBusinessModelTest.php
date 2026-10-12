@@ -253,25 +253,6 @@ class ApparelManufacturingBusinessModelTest extends TestCase
         $this->assertEqualsWithDelta($expectedContract, $result->streamRevenue['contract_textile_supply'], 1.0);
     }
 
-    public function testAssetDepreciationDecayAndLoomModernization(): void
-    {
-        $stock = new Stock();
-        $stock->setOperatingMargin('0.22');
-
-        // Under-investment (reinvestmentRatio = 0.50, dt = 0.25 => 1 quarter)
-        // decayRate = 0.025 * (1.0 - 0.50) * 1.0 = 0.0125
-        // updatedMargin = 0.22 - (0.22 * 0.0125) = 0.21725
-        $this->model->applyAssetDepreciationDecay($stock, reinvestmentRatio: 0.50, dt: 0.25);
-        $this->assertEqualsWithDelta(0.21725, (float) $stock->getOperatingMargin(), 0.0001);
-
-        // Over-investment / modernization (reinvestmentRatio = 2.0, dt = 0.25)
-        $stock->setOperatingMargin('0.22');
-        // modGain = 0.012 * ln(2.0) * 1.0 = 0.012 * 0.693147 = 0.00831776
-        // updatedMargin = 0.22 + ((0.32 - 0.22) * 0.00831776) = 0.22 + (0.10 * 0.00831776) = 0.22083178
-        $this->model->applyAssetDepreciationDecay($stock, reinvestmentRatio: 2.0, dt: 0.25);
-        $this->assertEqualsWithDelta(0.220832, (float) $stock->getOperatingMargin(), 0.0001);
-    }
-
     public function testForresterBullwhipEffectNonLinearWholesaleContraction(): void
     {
         mt_srand(12345);

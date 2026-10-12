@@ -104,16 +104,6 @@ class SpecialtyIndustrialMachineryBusinessModel extends HeavyManufacturingBusine
     /** Top-line equipment revenue multiplier for a mega infrastructure deal win. */
     public const MEGA_INFRASTRUCTURE_DEAL_MULT    = 1.20;
 
-    // --- Asset Depreciation & Reinvestment ---
-    /** Quarterly margin decay rate per unit of underinvestment in precision manufacturing IP. */
-    public const PRECISION_TOOLING_DECAY_RATE = 0.020;
-    /** Quarterly margin gain scalar per unit of next-gen CNC and R&D automation overinvestment. */
-    public const AUTOMATION_RND_GAIN_RATE     = 0.010;
-    /** Structural minimum operating margin floor under severe manufacturing tech debt. */
-    public const MIN_OPERATING_MARGIN_FLOOR   = 0.10;
-    /** Structural maximum operating margin ceiling for automated precision monopolies. */
-    public const MAX_OPERATING_MARGIN_CEILING = 0.28;
-
         public function getReversionSpeed(): float { return 0.1; }
     public function getMoatSpread(): float { return 0.025; }
     public function getWorkingCapitalIntensity(Stock $stock): float { return 0.18; }
@@ -287,18 +277,6 @@ class SpecialtyIndustrialMachineryBusinessModel extends HeavyManufacturingBusine
             eventBaseVisibility: 0.60,
             eventMinVisibility: 0.30
         );
-    }
-
-    /** Under-investment below replacement CapEx erodes operating margin toward the sector floor. */
-    public function getDepreciationDecayRate(): float
-    {
-        return self::PRECISION_TOOLING_DECAY_RATE;
-    }
-
-    /** Over-investment above replacement CapEx compounds margin toward the sector ceiling. */
-    public function getModernizationGainRate(): float
-    {
-        return self::AUTOMATION_RND_GAIN_RATE;
     }
 
     /**

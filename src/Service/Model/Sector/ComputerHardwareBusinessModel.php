@@ -89,16 +89,6 @@ class ComputerHardwareBusinessModel extends StandardCorporateBusinessModel
     /** Variable margin sensitivity to enterprise hardware sales pulling in high-margin software/support attach rates. */
     public const ENTERPRISE_SOFTWARE_ATTACH_ELASTICITY = 0.015;
 
-    // --- Asset Depreciation & Reinvestment ---
-    /** Quarterly margin decay rate per unit of underinvestment in hardware architecture R&D. */
-    public const HARDWARE_RND_DECAY_RATE = 0.025;
-    /** Quarterly margin gain scalar per unit of next-gen silicon design overinvestment. */
-    public const SILICON_MODERNIZATION_GAIN_RATE = 0.012;
-    /** Structural minimum operating margin floor under severe engineering tech debt. */
-    public const MIN_OPERATING_MARGIN_FLOOR = 0.08;
-    /** Structural maximum operating margin ceiling for advanced silicon monopolies. */
-    public const MAX_OPERATING_MARGIN_CEILING = 0.30;
-
     // --- Trade Balance & PPI Transmission ---
     /** Sensitivity of global IT hardware trade flows to merchandise trade balance shifts. */
     public const TRADE_BALANCE_SENSITIVITY = 1.20;
@@ -297,18 +287,6 @@ class ComputerHardwareBusinessModel extends StandardCorporateBusinessModel
             eventBaseVisibility: 0.90,
             eventMinVisibility: 0.50
         );
-    }
-
-    /** R&D tech debt and architecture lag */
-    public function getDepreciationDecayRate(): float
-    {
-        return self::HARDWARE_RND_DECAY_RATE;
-    }
-
-    /** Next-gen silicon design modernization */
-    public function getModernizationGainRate(): float
-    {
-        return self::SILICON_MODERNIZATION_GAIN_RATE;
     }
 
     /**

@@ -376,26 +376,6 @@ class DefenseContractorBusinessModelTest extends TestCase
         );
     }
 
-    public function testClassifiedToolingAndNextGenPlatformReinvestment(): void
-    {
-        $model = new DefenseContractorBusinessModel();
-
-        // R = 0.5 -> Classified tooling tech debt
-        $stock = new Stock();
-        $stock->setOperatingMargin('0.14');
-        $model->applyAssetDepreciationDecay($stock, 0.5, 0.25);
-        $decayed = (float) $stock->getOperatingMargin();
-        $this->assertLessThan(0.14, $decayed);
-        $this->assertGreaterThanOrEqual(DefenseContractorBusinessModel::MIN_OPERATING_MARGIN_FLOOR, $decayed);
-
-        // R = 1.5 -> Next-gen defense platform modernization
-        $stock->setOperatingMargin('0.14');
-        $model->applyAssetDepreciationDecay($stock, 1.5, 0.25);
-        $expanded = (float) $stock->getOperatingMargin();
-        $this->assertGreaterThan(0.14, $expanded);
-        $this->assertLessThanOrEqual(DefenseContractorBusinessModel::MAX_OPERATING_MARGIN_CEILING, $expanded);
-    }
-
     public function testRoicSmoothingUnderLumpyContractAwards(): void
     {
         $model = new DefenseContractorBusinessModel();

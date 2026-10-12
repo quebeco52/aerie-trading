@@ -78,16 +78,6 @@ class ToolsAndAccessoriesBusinessModel extends StandardCorporateBusinessModel
     /** Variable margin sensitivity to commercial precision tooling scale economies. */
     public const PRECISION_SCALE_ELASTICITY = 0.012;
 
-    // --- Asset Depreciation & Reinvestment ---
-    /** Quarterly margin decay rate per unit of underinvestment in precision manufacturing IP. */
-    public const PRECISION_TOOLING_DECAY_RATE = 0.020;
-    /** Quarterly margin gain scalar per unit of next-gen CNC and R&D automation overinvestment. */
-    public const AUTOMATION_RND_GAIN_RATE = 0.010;
-    /** Structural minimum operating margin floor under severe manufacturing tech debt. */
-    public const MIN_OPERATING_MARGIN_FLOOR = 0.12;
-    /** Structural maximum operating margin ceiling for automated precision monopolies. */
-    public const MAX_OPERATING_MARGIN_CEILING = 0.34;
-
     // --- Manufacturing PMI, Housing & PPI Transmission ---
     /** Sensitivity of commercial B2B precision tooling demand to manufacturing PMI shifts. */
     public const PMI_COMMERCIAL_SENSITIVITY = 0.40;
@@ -268,18 +258,6 @@ class ToolsAndAccessoriesBusinessModel extends StandardCorporateBusinessModel
             eventBaseVisibility: 0.50,
             eventMinVisibility: 0.20
         );
-    }
-
-    /** Precision tooling tech debt and loss of manufacturing edge */
-    public function getDepreciationDecayRate(): float
-    {
-        return self::PRECISION_TOOLING_DECAY_RATE;
-    }
-
-    /** Investment in next-gen CNC and R&D automation expands margin */
-    public function getModernizationGainRate(): float
-    {
-        return self::AUTOMATION_RND_GAIN_RATE;
     }
 
     /**

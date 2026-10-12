@@ -43,25 +43,6 @@ class TechBusinessModelTest extends TestCase
         $this->assertLessThan(1000.0 * 0.30, $result->actualVariableCosts);
     }
 
-    public function testSoftwareTechDebtAndCloudPlatformModernization(): void
-    {
-        $model = new TechBusinessModel();
-
-        // R = 0.5 -> Software tech debt decay
-        $stock = new Stock();
-        $stock->setOperatingMargin('0.35');
-        $model->applyAssetDepreciationDecay($stock, 0.5, 0.25);
-        $decayed = (float) $stock->getOperatingMargin();
-        $this->assertLessThan(0.35, $decayed);
-        $this->assertGreaterThanOrEqual(TechBusinessModel::MIN_OPERATING_MARGIN_FLOOR, $decayed);
-
-        // R = 1.5 -> Cloud ARR platform modernization
-        $stock->setOperatingMargin('0.35');
-        $model->applyAssetDepreciationDecay($stock, 1.5, 0.25);
-        $expanded = (float) $stock->getOperatingMargin();
-        $this->assertGreaterThan(0.35, $expanded);
-        $this->assertLessThanOrEqual(TechBusinessModel::MAX_OPERATING_MARGIN_CEILING, $expanded);
-    }
     public function testTailEventPersistsAsAMarkovRegimeWithRandomExit(): void
     {
         $model = new TechBusinessModel();

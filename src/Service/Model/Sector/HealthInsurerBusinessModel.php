@@ -42,12 +42,6 @@ class HealthInsurerBusinessModel extends StandardCorporateBusinessModel
     /** Labor share of the fixed cost base: claims, underwriting and distribution payroll, as for any insurer. */
     public const FIXED_COST_LABOR_SHARE = InsuranceBusinessModel::FIXED_COST_LABOR_SHARE;
 
-    // --- Capital Reinvestment & Asset Depreciation Physics ---
-    /** A plan's margin is the premium it filed against the claims it pays, capped by the loss ratio floor; under-investing in its systems does not erode it. */
-    public const DEPRECIATION_DECAY_RATE = 0.0;
-    /** Nor does investing in them lift it. */
-    public const MODERNIZATION_GAIN_RATE = 0.0;
-
     // --- Underwriting Cycle ---
     /** Years from the midpoint of the claims experience a premium is priced on to the midpoint of the period it is charged for: 24 months (Medica 2022 individual filing; UnitedHealthcare 2018 small-group filing). */
     public const RATING_LAG_YEARS = 2.0;

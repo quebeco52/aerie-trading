@@ -96,7 +96,7 @@ class BiotechBusinessModelTest extends TestCase
         foreach ([0.5, 1.0, 1.5] as $ratio) {
             $stock = $this->makeStock();
             $stock->setOperatingMargin('0.30');
-            $model->applyAssetDepreciationDecay($stock, $ratio, 0.25);
+            $model->recordReinvestmentRatio($stock, $ratio, 0.25);
             $this->assertSame('0.30', $stock->getOperatingMargin());
         }
     }
@@ -107,7 +107,7 @@ class BiotechBusinessModelTest extends TestCase
         $stock = $this->makeStock();
         $stock->setOperatingMargin('0.30');
 
-        $model->applyAssetDepreciationDecay($stock, 0.40, 0.25);
+        $model->recordReinvestmentRatio($stock, 0.40, 0.25);
 
         $state = $stock->getEarningsMomentumZ() ?? [];
         $trend = 1.0 + ($model->getSecularGrowthRate($stock) / (float) $stock->getDepreciationRate());
@@ -122,10 +122,10 @@ class BiotechBusinessModelTest extends TestCase
         $stock->setDepreciationRate('0.10');
         $trend = 1.0 + ($model->getSecularGrowthRate($stock) / 0.10);
 
-        $model->applyAssetDepreciationDecay($stock, $trend, 0.25);
+        $model->recordReinvestmentRatio($stock, $trend, 0.25);
         $this->assertEqualsWithDelta(1.0, ($stock->getEarningsMomentumZ() ?? [])[BiotechBusinessModel::STATE_RND_REPLACEMENT_RATIO], 1e-12);
 
-        $model->applyAssetDepreciationDecay($stock, 1.42, 0.25);
+        $model->recordReinvestmentRatio($stock, 1.42, 0.25);
         $this->assertEqualsWithDelta(1.42 / $trend, ($stock->getEarningsMomentumZ() ?? [])[BiotechBusinessModel::STATE_RND_REPLACEMENT_RATIO], 1e-12);
     }
 

@@ -237,8 +237,6 @@ class CommunicationEquipmentBusinessModelTest extends TestCase
         $this->assertEqualsWithDelta(1.0, CommunicationEquipmentBusinessModel::ENTERPRISE_WEIGHT + CommunicationEquipmentBusinessModel::PATENT_LICENSING_WEIGHT + CommunicationEquipmentBusinessModel::CONSUMER_WEIGHT, 1e-9);
         $this->assertEqualsWithDelta(4.0, array_sum($this->model->getSeasonalityFactors()), 1e-9);
         $this->assertLessThan(CommunicationEquipmentBusinessModel::CONSUMER_VARIABLE_COST_RATIO, CommunicationEquipmentBusinessModel::LICENSING_VARIABLE_COST_RATIO, 'Royalties carry almost no unit cost; gateways are commodity hardware.');
-        $this->assertSame(CommunicationEquipmentBusinessModel::RADIO_RND_DECAY_RATE, $this->model->getDepreciationDecayRate());
-        $this->assertSame(CommunicationEquipmentBusinessModel::GENERATIONAL_PLATFORM_GAIN_RATE, $this->model->getModernizationGainRate());
     }
 
     public function testTheCostBaseStaffsToTheNetworkBacklogAndTerminalVolumeButNotRoyalties(): void

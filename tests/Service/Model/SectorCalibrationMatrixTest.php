@@ -7,17 +7,14 @@ namespace App\Tests\Service\Model;
 use App\Service\Model\Sector\ConsumerStaplesBusinessModel;
 use App\Service\Model\Sector\ConstructionBusinessModel;
 use App\Service\Model\Sector\DefenseContractorBusinessModel;
-use App\Service\Model\Sector\FinancialDataBusinessModel;
 use App\Service\Model\Sector\LawFirmBusinessModel;
 use App\Service\Model\Sector\LuxuryBusinessModel;
-use App\Service\Model\Sector\MiningBusinessModel;
 use App\Service\Model\Sector\OilGasProducerBusinessModel;
 use App\Service\Model\Sector\RefiningBusinessModel;
 use App\Service\Model\Sector\ReitBusinessModel;
 use App\Service\Model\Sector\RestaurantBusinessModel;
 use App\Service\Model\Sector\SemiconductorBusinessModel;
 use App\Service\Model\Sector\ShippingBusinessModel;
-use App\Service\Model\Sector\TechBusinessModel;
 use App\Service\Model\Sector\TelecomBusinessModel;
 use App\Service\Model\Sector\UtilityBusinessModel;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -56,10 +53,6 @@ final class SectorCalibrationMatrixTest extends TestCase
         'FX_REVENUE_EXPOSURE' => [0.00, 1.00, 'share of revenue exposed to the trade-weighted rate'],
         // A spot business feels the cycle immediately; the longest order books run a few years.
         'DEMAND_LAG_YEARS' => [0.00, 5.00, 'years for the output gap to reach the order book'],
-        // Structural margin ceiling: a distributor is a few points, property NOI and index data are most of revenue.
-        'MAX_OPERATING_MARGIN_CEILING' => [0.05, 0.85, 'operating margin a modernized plant converges toward'],
-        // Structural floor under sustained under-investment; a going concern still clears zero.
-        'MIN_OPERATING_MARGIN_FLOOR' => [0.00, 0.25, 'operating margin a starved plant decays toward'],
         // Payroll share of the fixed cost base: capital-intensive property at the bottom, professional services at the top.
         'FIXED_COST_LABOR_SHARE' => [0.10, 0.95, 'payroll share of the fixed cost base'],
         // Capitalised operating leases: an owner-operator carries none, a franchised restaurant estate carries a lot.
@@ -91,18 +84,6 @@ final class SectorCalibrationMatrixTest extends TestCase
         return $models;
     }
 
-    /**
-     * Models that declare both decay rails, so the bracket test has something real to check.
-     *
-     * @return array<string, array{class-string}>
-     */
-    public static function marginRailModelProvider(): array
-    {
-        return array_filter(
-            self::sectorModelProvider(),
-            static fn (array $row): bool => defined($row[0] . '::MIN_OPERATING_MARGIN_FLOOR') && defined($row[0] . '::MAX_OPERATING_MARGIN_CEILING')
-        );
-    }
 
     /**
      * The financial models, whose earnings are a spread on a balance sheet rather than a price on a product.
@@ -145,19 +126,6 @@ final class SectorCalibrationMatrixTest extends TestCase
         $this->assertGreaterThan(0, $declared, "{$modelClass} declares no calibration constants at all, so nothing pins its sector identity.");
     }
 
-    /**
-     * The margin rails must bracket a real range: a floor at or above the ceiling makes the decay physics
-     * either a no-op or a one-way ratchet, depending on which branch the reinvestment ratio takes.
-     */
-    #[DataProvider('marginRailModelProvider')]
-    public function testMarginRailsBracketARealRange(string $modelClass): void
-    {
-        $floor = (float) constant("{$modelClass}::MIN_OPERATING_MARGIN_FLOOR");
-        $ceiling = (float) constant("{$modelClass}::MAX_OPERATING_MARGIN_CEILING");
-
-        $this->assertLessThan($ceiling, $floor, "{$modelClass} declares a margin floor at or above its ceiling.");
-        $this->assertGreaterThan(0.05, $ceiling - $floor, "{$modelClass} leaves the decay physics almost no room to move the margin.");
-    }
 
     /**
      * Financial models are excluded from the operating-physics constants by design: a bank's earnings come
@@ -167,7 +135,7 @@ final class SectorCalibrationMatrixTest extends TestCase
     #[DataProvider('financialModelProvider')]
     public function testFinancialModelsDeclareNoOperatingPriceConstants(string $modelClass): void
     {
-        foreach (['PRICING_POWER_INDEX', 'PRICE_ELASTICITY_OF_DEMAND', 'MAX_OPERATING_MARGIN_CEILING', 'MIN_OPERATING_MARGIN_FLOOR'] as $constant) {
+        foreach (['PRICING_POWER_INDEX', 'PRICE_ELASTICITY_OF_DEMAND'] as $constant) {
             $this->assertFalse(
                 defined("{$modelClass}::{$constant}"),
                 "{$modelClass} is a financial model and must not declare {$constant}: its earnings are a spread, not a price."
@@ -259,41 +227,6 @@ final class SectorCalibrationMatrixTest extends TestCase
         $this->assertLessThan(1.30, $mean, 'The market as a whole cannot be systematically more cyclical than the cycle.');
     }
 
-    /**
-     * Structural margin ceilings have to reproduce where operating margin actually lives by industry.
-     */
-    public function testStructuralMarginCeilingsMatchRealSectorEconomics(): void
-    {
-        // Property NOI and index/data licensing are most of revenue; a defence programme is cost-plus.
-        $this->assertGreaterThan(
-            DefenseContractorBusinessModel::MAX_OPERATING_MARGIN_CEILING,
-            ReitBusinessModel::MAX_OPERATING_MARGIN_CEILING,
-            'Property net operating income must clear a cost-plus defence margin comfortably.'
-        );
-        $this->assertGreaterThan(
-            TelecomBusinessModel::MAX_OPERATING_MARGIN_CEILING,
-            FinancialDataBusinessModel::MAX_OPERATING_MARGIN_CEILING,
-            'A data and index licensing business must out-earn a capital-intensive network.'
-        );
-        // Software has no unit cost; a restaurant buys food for every cover it serves.
-        $this->assertGreaterThan(
-            RestaurantBusinessModel::MAX_OPERATING_MARGIN_CEILING,
-            TechBusinessModel::MAX_OPERATING_MARGIN_CEILING,
-            'Zero marginal cost must beat a food cost line.'
-        );
-        // A spot producer's ceiling is set by the marginal cost of the last tonne it sells.
-        $this->assertLessThan(
-            LuxuryBusinessModel::MAX_OPERATING_MARGIN_CEILING,
-            MiningBusinessModel::MAX_OPERATING_MARGIN_CEILING,
-            'A price taker cannot hold a luxury house margin.'
-        );
-        // A producer owns the barrel; a refiner earns a spread on a barrel someone else sold it.
-        $this->assertLessThan(
-            OilGasProducerBusinessModel::MAX_OPERATING_MARGIN_CEILING,
-            RefiningBusinessModel::MAX_OPERATING_MARGIN_CEILING,
-            'A refining spread cannot hold a producer\'s margin on the whole barrel.'
-        );
-    }
 
     /**
      * Substitutability, lease intensity and labour share each encode a structural fact about the sector,

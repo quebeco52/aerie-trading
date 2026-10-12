@@ -124,16 +124,6 @@ class ResortsCasinosBusinessModel extends StandardCorporateBusinessModel
     /** Persisted state key: in-place rent relative to trend, carried across quarters as the roll turns over. */
     public const STATE_IN_PLACE_RENT = 'state:in_place_rent';
 
-    // --- Property Reinvestment & Asset Decay ---
-    /** Quarterly margin decay rate per unit of underinvestment in resort remodels and attractions. */
-    public const RESORT_AGING_DECAY_RATE = 0.008;
-    /** Quarterly margin gain scalar per unit of mega-resort expansion and modernization. */
-    public const RESORT_MODERNIZATION_GAIN_RATE = 0.005;
-    /** Structural minimum operating margin floor under severe property aging. */
-    public const MIN_OPERATING_MARGIN_FLOOR = 0.10;
-    /** Structural maximum operating margin ceiling for flagship premier Strip resorts. */
-    public const MAX_OPERATING_MARGIN_CEILING = 0.36;
-
     // --- Structural Rates ---
     /** Speed at which operating margin reverts to its structural level. */
     public const MARGIN_REVERSION_SPEED = 0.15;
@@ -395,18 +385,6 @@ class ResortsCasinosBusinessModel extends StandardCorporateBusinessModel
         }
 
         return $weights;
-    }
-
-    /** Under-investment below replacement CapEx erodes operating margin toward the sector floor. */
-    public function getDepreciationDecayRate(): float
-    {
-        return self::RESORT_AGING_DECAY_RATE;
-    }
-
-    /** Over-investment above replacement CapEx compounds margin toward the sector ceiling. */
-    public function getModernizationGainRate(): float
-    {
-        return self::RESORT_MODERNIZATION_GAIN_RATE;
     }
 
     /**

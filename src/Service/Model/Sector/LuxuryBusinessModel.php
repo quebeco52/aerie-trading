@@ -107,14 +107,6 @@ class LuxuryBusinessModel extends StandardCorporateBusinessModel
     // --- Veblen Brand Cachet & Boutique Reinvestment Physics ---
     /** Variable margin sensitivity to haute couture brand desirability and Veblen pricing cachet. */
     public const BRAND_CACHET_ELASTICITY   = 0.018;
-    /** Quarterly margin decay rate per unit of underinvestment below boutique craftsmanship replacement. */
-    public const BOUTIQUE_CRAFT_DECAY_RATE    = 0.018;
-    /** Quarterly margin gain scalar per unit of heritage exclusivity overinvestment. */
-    public const HERITAGE_EXCLUSIVITY_GAIN_RATE = 0.009;
-    /** Structural minimum operating margin floor under accessible apparel dilution. */
-    public const MIN_OPERATING_MARGIN_FLOOR   = 0.15;
-    /** Structural maximum operating margin ceiling for ultra-exclusive Veblen leather monopolies. */
-    public const MAX_OPERATING_MARGIN_CEILING = 0.45;
 
     public function getMacroPhysics(Stock $stock, \App\DTO\MacroStateDTO $macroState): array
     {
@@ -231,18 +223,6 @@ class LuxuryBusinessModel extends StandardCorporateBusinessModel
     public function getSeasonalityFactors(): array
     {
         return [0.85, 0.90, 0.95, 1.30]; // Q4 holiday gift & festive collection surge
-    }
-
-    /** Boutique craftsmanship decay toward accessible apparel floor */
-    public function getDepreciationDecayRate(): float
-    {
-        return self::BOUTIQUE_CRAFT_DECAY_RATE;
-    }
-
-    /** Heritage exclusivity overinvestment expands Veblen pricing cachet */
-    public function getModernizationGainRate(): float
-    {
-        return self::HERITAGE_EXCLUSIVITY_GAIN_RATE;
     }
 
     /**

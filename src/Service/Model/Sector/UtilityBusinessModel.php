@@ -167,12 +167,8 @@ class UtilityBusinessModel extends StandardCorporateBusinessModel
     /** Quarterly share of the fixed-rate bond stock that matures and reprices (~12-year average tenor of first mortgage bonds). */
     public const DEBT_MATURITY_ROLLOVER_RATE = 0.02;
 
-    // --- Capital Reinvestment & Asset Depreciation Physics ---
+    // --- Margin Reversion ---
     public const REGULATED_REVERSION_SPEED    = 2.0;
-    public const DEPRECIATION_DECAY_RATE      = 0.020;
-    public const MODERNIZATION_GAIN_RATE      = 0.010;
-    public const MIN_OPERATING_MARGIN_FLOOR   = 0.02;
-    public const MAX_OPERATING_MARGIN_CEILING = 0.30;
 
     // --- Rate-Base CapEx & Capital Structure Rails ---
     /** Interest coverage a regulated utility needs before it recapitalizes: rate-base cash flows carry thin coverage. */

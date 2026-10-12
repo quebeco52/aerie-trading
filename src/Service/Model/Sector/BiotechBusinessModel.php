@@ -859,7 +859,7 @@ class BiotechBusinessModel extends StandardCorporateBusinessModel
      * (g + delta) / delta of it by perpetual inventory, and capital x turnover already turns that growth into revenue.
      * Only spend above that trend refills the pipeline faster than the book needs.
      */
-    public function applyAssetDepreciationDecay(Stock $stock, float $reinvestmentRatio, float $dt): void
+    public function recordReinvestmentRatio(Stock $stock, float $reinvestmentRatio, float $dt): void
     {
         $depreciationRate = (float) $stock->getDepreciationRate();
         $trendRatio = $depreciationRate > 0.0 ? 1.0 + ($this->getSecularGrowthRate($stock) / $depreciationRate) : 1.0;

@@ -67,12 +67,6 @@ class HomebuilderBusinessModel extends StandardCorporateBusinessModel
     /** Stream-state key: the carrying cost of the owned lots per home, as a share of the price at trend. */
     public const STATE_LAND_COST = 'state:land_cost';
 
-    // --- Capital Reinvestment & Asset Depreciation Physics ---
-    /** A builder's plant is its offices and equipment; its margin is the land against the house price, so under-investing in plant does not erode it. */
-    public const DEPRECIATION_DECAY_RATE = 0.0;
-    /** Nor does investing in plant lift it. */
-    public const MODERNIZATION_GAIN_RATE = 0.0;
-
     // --- Analyst Visibility & Error ---
     /** Share of a quarter's closings already in the backlog reported as it opens, 1 - b at steady state. */
     public const BASE_COVERAGE_VISIBILITY = 1.0 - self::BACKLOG_BURN_RATE;

@@ -146,16 +146,6 @@ class CommunicationEquipmentBusinessModel extends StandardCorporateBusinessModel
     /** Variable margin sensitivity to network deployments pulling in high-margin optimization software and support attach. */
     public const SOFTWARE_ATTACH_ELASTICITY = 0.010;
 
-    // --- Asset Depreciation & Reinvestment ---
-    /** Quarterly margin decay rate per unit of underinvestment in radio and baseband R&D: missing a generation is fatal. */
-    public const RADIO_RND_DECAY_RATE = 0.025;
-    /** Quarterly margin gain scalar per unit of next-generation platform overinvestment. */
-    public const GENERATIONAL_PLATFORM_GAIN_RATE = 0.012;
-    /** Structural minimum operating margin floor for a vendor a generation behind. */
-    public const MIN_OPERATING_MARGIN_FLOOR = 0.05;
-    /** Structural maximum operating margin ceiling for a patent-backed network incumbent. */
-    public const MAX_OPERATING_MARGIN_CEILING = 0.30;
-
     public function getReversionSpeed(): float { return 0.20; }
     public function getMoatSpread(): float { return 0.025; }
     public function getWorkingCapitalIntensity(Stock $stock): float { return 0.15; }
@@ -411,18 +401,6 @@ class CommunicationEquipmentBusinessModel extends StandardCorporateBusinessModel
             eventBaseVisibility: 0.85,
             eventMinVisibility: 0.50
         );
-    }
-
-    /** Falling a wireless generation behind erodes margin toward the sector floor. */
-    public function getDepreciationDecayRate(): float
-    {
-        return self::RADIO_RND_DECAY_RATE;
-    }
-
-    /** Leading the next generational platform compounds margin toward the sector ceiling. */
-    public function getModernizationGainRate(): float
-    {
-        return self::GENERATIONAL_PLATFORM_GAIN_RATE;
     }
 
     /**
