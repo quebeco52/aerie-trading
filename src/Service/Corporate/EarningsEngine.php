@@ -296,6 +296,7 @@ class EarningsEngine
         $this->calculateExpectedVsActualFinancials($ctx);
         $this->applyRestructuringCharge($ctx);
         $this->applyWorkingCapitalCharges($ctx);
+        $this->applyPlantImpairment($ctx);
         $this->rollForwardCreditLossAllowance($ctx);
         $this->calculateInterestAndRunRates($ctx);
         $this->reconcileTaxesAndNetIncome($ctx);
@@ -1115,6 +1116,7 @@ class EarningsEngine
         $ctx->creditLossProvision = $actuals->creditLossProvision;
         $ctx->netChargeOffs = max(0.0, $actuals->netChargeOffs);
         $ctx->netInterestSqueeze = $actuals->netInterestSqueeze;
+        $ctx->plantImpairment = $actuals->plantImpairment;
 
         // Stock-based compensation (ASC 718) is already inside the operating cost base: it changes no margin.
         // What is settled in new shares is non-cash (added back to FCF below), but only up to the shares a
@@ -1506,7 +1508,7 @@ class EarningsEngine
             // Inventory writedowns and credit-loss provisions are non-cash, exactly like depreciation and
             // equity compensation: they hit reported earnings but no money moves, so they come back here.
             $fcff = $ctx->actualQuarterlyNetIncome + $ctx->quarterlyDepreciation + $ctx->stockCompensation
-                + $ctx->inventoryWriteDown + $ctx->receivablesProvision + $ctx->creditLossProvision + $ctx->deferredTaxExpense
+                + $ctx->inventoryWriteDown + $ctx->plantImpairment + $ctx->receivablesProvision + $ctx->creditLossProvision + $ctx->deferredTaxExpense
                 - $deltaNwc - $actualCapEx;
             $ctx->operatingCashFlow = $fcff + $actualCapEx;
             $ctx->investingCashFlow = -$actualCapEx;
@@ -1780,6 +1782,27 @@ class EarningsEngine
     }
 
     /**
+     * Writes down the long-lived assets the business model's own impairment test found impaired (ASC 360-10): a
+     * builder's land the homes on it can no longer pay for. Like the inventory write-down it sits in operating
+     * expense, is non-cash and is not in the analyst forecast. It is held in accumulated depreciation and
+     * impairment, so the carrying value and the depreciation struck on it both fall.
+     */
+    private function applyPlantImpairment(EarningsSimulationContext $ctx): void
+    {
+        $stock = $ctx->stock;
+        $charge = $stock->getGrossPpe() === null ? 0.0 : min($stock->getNetPpe(), max(0.0, $ctx->plantImpairment));
+        $ctx->plantImpairment = $charge;
+        if ($charge <= 0.0) {
+            return;
+        }
+
+        $stock->setAccumulatedDepreciation((string) ((float) $stock->getAccumulatedDepreciation() + $charge));
+        $ctx->ebitda -= $charge;
+        $ctx->ebit -= $charge;
+        $ctx->impairmentCharges += $charge;
+    }
+
+    /**
      * Remarks the investment securities book against the curve (ASC 320).
      *
      * Available-for-sale moves total equity now; held-to-maturity is disclosed on the report and stays out
@@ -1915,6 +1938,7 @@ class EarningsEngine
         if ($inventory <= 0.0) {
             return 0.0;
         }
+
 
         $trigger = self::INVENTORY_NRV_UTILIZATION_TRIGGER;
         $utilization = $ctx->capacityUtilization / max(0.01, $ctx->seasonalFactor);

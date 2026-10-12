@@ -10,6 +10,7 @@ use App\Service\Math\FirmEconomics;
 use Symfony\Component\EventDispatcher\EventDispatcher;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use App\Service\Model\Sector\CommercialBankBusinessModel;
+use App\Service\Model\Sector\HomebuilderBusinessModel;
 use PHPUnit\Framework\TestCase;
 use App\Data\Company\LifecycleStage;
 use App\Data\Company\Sectors;
@@ -999,6 +1000,65 @@ class EarningsEngineTest extends TestCase
             $captured->capacityUtilization / max(0.01, $captured->seasonalFactor)
         );
         $this->assertEquals(0.0, $captured->inventoryWriteDown);
+    }
+
+    /**
+     * A homebuilder tests its own land (ASC 360-10 recoverability), and the land is its plant: the charge its model
+     * reports comes off the carrying value of the plant, non-cash, and land at its normal share books nothing.
+     */
+    public function testABuildersLandWriteDownComesOffItsPlant(): void
+    {
+        $captured = null;
+        $dispatcher = new EventDispatcher();
+        $dispatcher->addListener(EarningsReportedEvent::class, function (EarningsReportedEvent $event) use (&$captured): void {
+            $captured = $event->getContext();
+        });
+        $engine = $this->buildEngine($dispatcher);
+        $builder = function (string $ticker): Stock {
+            $stock = $this->buildMatureIndustrial($ticker);
+            $stock->setIndustry('Residential Construction');
+            $stock->setOperatingMargin('0.13');
+            $stock->setFixedCostRatio(0.10);
+            $stock->setGrossPpe('120000000000');
+            $stock->setAccumulatedDepreciation('5000000000');
+            $stock->setReceivables('0');
+            $stock->setInventory('15000000000');
+            $stock->setPayables('0');
+
+            return $stock;
+        };
+        $macro = new MacroStateDTO(corporateTaxRate: 0.21, policyRateEma: 0.04, yield5yEma: 0.04);
+
+        // Land carried at 55% of the price, against the 42% a home recovers after the 58% it costs to build.
+        mt_srand(5566);
+        $impaired = $builder('LNDA');
+        $impaired->setEarningsMomentumZ([HomebuilderBusinessModel::STATE_LAND_COST => 0.55]);
+        $openingNetPpe = $impaired->getNetPpe();
+        $engine->calculate($impaired, $macro, EarningsEngine::resolveReportingTick('LNDA', 252), 252);
+
+        // At trend prices and input costs the lots are worth their normal share, so the bank of three years of
+        // closings is written down from 0.55 to 0.20 of the price.
+        $landBank = HomebuilderBusinessModel::LAND_BANK_YEARS * 4.0 * $captured->expectedRevenue;
+        $this->assertEqualsWithDelta((0.55 - HomebuilderBusinessModel::LAND_SHARE_OF_PRICE) * $landBank, $captured->plantImpairment, 1.0, 'the model\'s charge is the write-down');
+        $this->assertEqualsWithDelta(
+            $openingNetPpe + $captured->totalReportedCapex + $captured->completedCip - $captured->quarterlyDepreciation - $captured->plantImpairment,
+            $impaired->getNetPpe(),
+            1.0,
+            'the plant carries the land at its written-down value'
+        );
+        $this->assertEqualsWithDelta(
+            $captured->actualQuarterlyNetIncome + $captured->quarterlyDepreciation + $captured->stockCompensation
+                + $captured->inventoryWriteDown + $captured->plantImpairment + $captured->receivablesProvision - $captured->deltaWorkingCapital,
+            $captured->operatingCashFlow,
+            1.0,
+            'the write-down is non-cash'
+        );
+
+        // Land at its normal share recovers its cost and is not written down.
+        mt_srand(5566);
+        $sound = $builder('LNDB');
+        $engine->calculate($sound, $macro, EarningsEngine::resolveReportingTick('LNDB', 252), 252);
+        $this->assertSame(0.0, $captured->plantImpairment);
     }
 
     /**

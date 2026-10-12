@@ -91,7 +91,7 @@ class DistrictMap
         // bracket reading ENERGY is the same kind of lie this pass set out to remove.
         'Extraction & Power' => ['oil_gas_producer', 'refining', 'mining', 'utility'],
         'Technology & Telecoms' => ['tech', 'computer_hardware', 'semiconductor', 'communication_equipment', 'telecom'],
-        'Property & Health' => ['reit', 'medical_care_facility', 'biotech'],
+        'Property & Health' => ['reit', 'homebuilder', 'medical_care_facility', 'biotech'],
     ];
 
     /**
@@ -339,7 +339,7 @@ class DistrictMap
         'semiconductor' => 'chip', 'communication_equipment' => 'signal', 'telecom' => 'signal',
         // Care, cures, property and the conglomerates. A merchant house takes the anchor rather than the
         // blocks: it is known by the wharves it owns, not by the businesses it has bolted together.
-        'medical_care_facility' => 'cross', 'biotech' => 'pill', 'reit' => 'house',
+        'medical_care_facility' => 'cross', 'biotech' => 'pill', 'reit' => 'house', 'homebuilder' => 'house',
         'conglomerate' => 'blocks', 'merchant_house' => 'anchor',
         // A trust keeps the conglomerate's blocks on purpose: it owns the others' roofs and operates none
         // of them, so from the street it IS a holding company and dressing it otherwise would claim a

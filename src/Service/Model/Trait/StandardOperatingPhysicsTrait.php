@@ -676,6 +676,7 @@ trait StandardOperatingPhysicsTrait
             priceRevenue: $priceRevenue,
             demandShockZ: $demandShockZ,
             sectorShockZ: $sectorShockZ,
+            plantImpairment: $physics->plantImpairment,
         );
     }
 

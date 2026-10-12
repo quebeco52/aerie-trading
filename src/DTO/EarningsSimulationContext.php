@@ -58,6 +58,8 @@ class EarningsSimulationContext
     public ?float $expansionBudget = null;
     /** Lower-of-cost-or-NRV writedown on unsold inventory this quarter (ASC 330), non-cash. */
     public float $inventoryWriteDown = 0.0;
+    /** Long-lived assets written down this quarter by the business model's own impairment test (ASC 360-10), non-cash. */
+    public float $plantImpairment = 0.0;
     /** Expected credit loss provision against trade receivables this quarter (ASC 326), non-cash; negative when released. */
     public float $receivablesProvision = 0.0;
     /** Change in net working capital this quarter; a build consumes cash, a release frees it. */

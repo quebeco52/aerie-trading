@@ -51,5 +51,7 @@ readonly class ActualFinancialsDTO
         public float $demandShockZ = 0.0,
         /** The sector factor's part of demandShockZ: what every sector peer drew too, so not a gain taken from anyone. */
         public float $sectorShockZ = 0.0,
+        /** Dollar write-down of long-lived assets from the model's own impairment test (ASC 360-10). */
+        public float $plantImpairment = 0.0,
     ) {}
 }

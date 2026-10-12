@@ -46,6 +46,8 @@ readonly class SectorPhysicsResult
         public float $netInterestSqueeze = 0.0,
         /** Dollars of actual revenue that are pure price above the expected level (escalators, Veblen hikes, spot rates on a fixed fleet). Price carries no variable cost, so the template method applies the cost ratio to volume revenue only. */
         public float $priceRevenue = 0.0,
+        /** Dollar write-down of long-lived assets the model's own impairment test found this quarter (a builder's land, ASC 360-10). */
+        public float $plantImpairment = 0.0,
     ) {
     }
 }

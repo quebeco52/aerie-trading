@@ -95,7 +95,7 @@ class SectorsTest extends TestCase
         yield 'footwear shares the apparel channel mix' => ['Footwear & Accessories', 'apparel_manufacturing'];
         yield 'lodging is hospitality' => ['Lodging', 'resorts_casinos'];
         yield 'hotel REITs carry the variable hospitality lease' => ['REIT - Hotel & Motel', 'reit'];
-        yield 'homebuilders are construction' => ['Residential Construction', 'construction'];
+        yield 'homebuilders run on their own land bank' => ['Residential Construction', 'homebuilder'];
         yield 'components ride the hardware cycle' => ['Electronic Components', 'computer_hardware'];
         yield 'pollution controls are waste management' => ['Pollution & Treatment Controls', 'waste_management'];
         yield 'consulting is a professional-services partnership' => ['Consulting Services', 'law_firm'];
