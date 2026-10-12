@@ -41,6 +41,8 @@ final class PriceFormationHarnessTest extends KernelTestCase
     private array $events = [];
     /** @var array<string, float> PF: dividend per share of a report filed this tick */
     private array $reportedThisTick = [];
+    /** @var array<string, bool> PF: whether a report filed this tick beat consensus EPS */
+    private array $beatThisTick = [];
     /** @var array<string, list<array<string, float>>> PF_G: per-report flows */
     private array $pfFlows = [];
     /** @var array<string, array<int, array<string, float>>> PF_B: equity-bridge accumulators per ticker-year */
@@ -174,6 +176,7 @@ final class PriceFormationHarnessTest extends KernelTestCase
 
         for ($tick = 1; $tick <= $ticks; $tick++) {
             $this->reportedThisTick = [];
+            $this->beatThisTick = [];
             $m = $replay !== null ? $this->withDemandLags($replay[$tick - 1], $dt) : $macro->updateMacroState($dt, $lastCap);
             if ($recordPath !== null) {
                 $recorded[] = $m;
@@ -260,10 +263,9 @@ final class PriceFormationHarnessTest extends KernelTestCase
                 $a['s2'] += $r * $r;
                 if (isset($this->reportedThisTick[$t])) {
                     $a['ne']++;
-                    $sueHist = $s->getEarningsSurpriseHistory() ?? [];
-                    if ($pfYear >= 2 && $sueHist !== []) {
+                    if ($pfYear >= 2 && isset($this->beatThisTick[$t])) {
                         $pfRep++;
-                        $pfBeat += ((float) end($sueHist)) > 0.0 ? 1 : 0;
+                        $pfBeat += $this->beatThisTick[$t] ? 1 : 0;
                     }
                     $a['se'] += $r;
                     $a['se2'] += $r * $r;
@@ -421,6 +423,7 @@ final class PriceFormationHarnessTest extends KernelTestCase
     private function captureReport(CorporateReport $report): void
     {
         $this->reportedThisTick[$report->getStock()->getTicker()] = max(0.0, (float) $report->getDividendPaid()) / max(1.0, (float) $report->getStock()->getSharesOutstanding());
+        $this->beatThisTick[$report->getStock()->getTicker()] = (float) $report->getReportedEps() > (float) $report->getConsensusEps();
         if (getenv('PF_B')) {
             $k = $report->getReportedKpis() ?? [];
             $st = $report->getStock();

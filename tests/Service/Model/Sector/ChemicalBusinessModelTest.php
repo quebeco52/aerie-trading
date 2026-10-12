@@ -45,10 +45,6 @@ class ChemicalBusinessModelTest extends TestCase
         // Trend 2% plus chemical products value added sliding from 2.02% to 1.74% of GDP over 1997-2019.
         $this->assertEqualsWithDelta(0.0132, $this->model->getSecularGrowthRate($stock), 1e-4);
         $this->assertEquals(3.50, $this->model->getCapexCyclicality());
-
-        $surpriseWeights = $this->model->getSurpriseBlendWeights();
-        $this->assertEquals(0.45, $surpriseWeights['eps_weight']);
-        $this->assertEquals(0.55, $surpriseWeights['revenue_weight']);
     }
 
     public function testTriStreamRevenueBlendingWithNeutralShocks(): void

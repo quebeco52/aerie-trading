@@ -172,11 +172,6 @@ class ConglomerateBusinessModel extends StandardCorporateBusinessModel
         return 0.50; // Blended across heavy industrial CapEx and asset-light investment float
     }
 
-    public function getSurpriseBlendWeights(): array
-    {
-        return ['eps_weight' => 0.55, 'revenue_weight' => 0.45];
-    }
-
     public function getMacroPhysics(Stock $stock, MacroStateDTO $macroState): array
     {
         $physics = parent::getMacroPhysics($stock, $macroState);

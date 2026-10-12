@@ -11,29 +11,6 @@ use PHPUnit\Framework\TestCase;
  */
 class FirmEconomicsTest extends TestCase
 {
-    public function testCalculateAsymmetricCostStickinessCompressesMarginsOnRevenueDecline(): void
-    {
-        $baselineVariableCostRatio = 0.70; // 70% variable cost ratio (30% gross margin)
-
-        // Case 1: Revenue grows by 20% (log change = ln(1.20) ≈ +0.1823)
-        $growthLogChange = log(1.20);
-        $marginOnGrowth = FirmEconomics::calculateAsymmetricCostStickiness($baselineVariableCostRatio, $growthLogChange);
-        // On growth, variable costs expand with beta = 0.85, so cost ratio drops (margin expands)
-        $this->assertLessThan($baselineVariableCostRatio, $marginOnGrowth, 'Variable cost ratio should drop slightly on revenue growth.');
-
-        // Case 2: Revenue contracts by 20% (log change = ln(0.80) ≈ -0.2231)
-        $contractionLogChange = log(0.80);
-        $marginOnContraction = FirmEconomics::calculateAsymmetricCostStickiness($baselineVariableCostRatio, $contractionLogChange);
-        // On contraction, costs drop sluggishly due to stickiness penalty (beta1 + beta2 = 0.85 - 0.40 = 0.45 < 1.0),
-        // causing cost ratio to increase (margin compresses sharply).
-        $this->assertGreaterThan($baselineVariableCostRatio, $marginOnContraction, 'Variable cost ratio should increase sharply on revenue contraction.');
-        
-        // Contraction margin shift magnitude should be significantly larger than growth shift due to asymmetry
-        $growthDelta = abs($baselineVariableCostRatio - $marginOnGrowth);
-        $contractionDelta = abs($marginOnContraction - $baselineVariableCostRatio);
-        $this->assertGreaterThan($growthDelta, $contractionDelta, 'Downward cost stickiness should create larger margin squeeze than upward expansion.');
-    }
-
     public function testCalculateDynamicWorkingCapitalIntensityExpandsUnderStress(): void
     {
         $baseIntensity = 0.15; // 15% NWC / Revenue

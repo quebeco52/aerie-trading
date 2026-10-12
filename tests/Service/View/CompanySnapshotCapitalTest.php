@@ -45,7 +45,7 @@ class CompanySnapshotCapitalTest extends TestCase
         $this->assertEqualsWithDelta(0.30, $capital['goodwillShare'], 1e-9);
         $this->assertNotNull($capital['cet1']);
 
-        $closure = $this->debtEngine->calculateAltmanZScore($bank, 0.0, (float) $bank->getTotalRevenue(), 50.0);
+        $closure = $this->debtEngine->calculateAltmanZScore($bank, 0.0, (float) $bank->getTotalRevenue());
         $this->assertEqualsWithDelta($closure['z_score'] / 100.0, $capital['ratio'], 1e-12, 'the ratio FailureSweep closes the firm on');
         $this->assertSame($closure['zone'], $capital['zone']);
     }

@@ -110,7 +110,6 @@ interface OperatingStrategyInterface
     public function getCapexCyclicality(): float;
     /** The cycle the capital budget answers to, as a log deviation; getCapexCyclicality() is its elasticity. */
     public function getCapexCycleSignal(Stock $stock, MacroStateDTO $macroState): float;
-    public function getSurpriseBlendWeights(): array;
     public function getEffectiveReturn(Stock $stock): float;
     public function getTrueReturn(Stock $stock): float;
     /**
@@ -176,6 +175,10 @@ interface OperatingStrategyInterface
      * calendar; the fiscal quarter drives annual events such as the goodwill impairment test.
      */
     public function getFiscalYearStartQuarter(Stock $stock): int;
+    /** The unrecovered input-cost gap the quarter now closing will book, projected from persisted lag state and today's input prices; null for a model that books no input-cost drag. */
+    public function projectInputCostGap(Stock $stock, MacroStateDTO $macroState): ?float;
+    /** The change in the variable cost ratio the closing quarter's input costs add over what the last report booked, on the model's own drag base; null when the model books no drag or has not yet recorded its base. */
+    public function projectInputCostDragChange(Stock $stock, MacroStateDTO $macroState): ?float;
     public function getCapExCompletionRate(Stock $stock): float;
     public function applyAssetDepreciationDecay(Stock $stock, float $reinvestmentRatio, float $dt): void;
     public function getMarginReversionSpeed(): float;

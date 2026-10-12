@@ -106,10 +106,6 @@ class UtilityBusinessModel extends StandardCorporateBusinessModel
     {
         return 0.5;
     }
-    public function getSurpriseBlendWeights(): array
-    {
-        return ['eps_weight' => 0.85, 'revenue_weight' => 0.15];
-    }
 
     // --- Dual-Stream Utility Rate Architecture ---
     /** Baseline fraction of revenue derived from regulated rate-base monopoly tariff distribution. */

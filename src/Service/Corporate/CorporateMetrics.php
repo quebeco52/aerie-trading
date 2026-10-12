@@ -200,6 +200,33 @@ class CorporateMetrics
     }
 
     /**
+     * The lease liability the firm carries: its ledger once its first report has struck one, the revenue multiple
+     * before. The ledger follows contracted payments (ASC 842-20-30-1), not the quarter's sales, so a slump that cuts
+     * revenue leaves the rent and the debt-like obligation behind it standing.
+     */
+    public function resolveLeaseLiability(Stock $stock, float $annualRevenue, float $leaseIntensity): float
+    {
+        $carried = $stock->getLeaseLiability();
+
+        return $carried !== null ? max(0.0, $carried) : $this->calculateLeaseLiability($annualRevenue, $leaseIntensity);
+    }
+
+    /**
+     * The lease ledger rolled one step (ASC 842): leases are signed for the capacity the firm runs, so a firm that has
+     * grown its plant carries the obligation at once, and the balance runs off only as leases expire, a share dt/term a
+     * year, when the capacity behind them is no longer needed.
+     */
+    public static function rollLeaseLiability(?float $openingLiability, float $capacityRevenue, float $leaseIntensity, float $dt): float
+    {
+        $required = max(0.0, $capacityRevenue) * max(0.0, $leaseIntensity);
+        if ($openingLiability === null || $required >= $openingLiability) {
+            return $required;
+        }
+
+        return max($required, $openingLiability * (1.0 - min(1.0, $dt / FinancialConstants::LEASE_TERM_YEARS)));
+    }
+
+    /**
      * Writes the three trade balances implied by a set of day counts and returns the resulting net figure.
      *
      * Receivables scale with revenue (they are billed sales); inventory and payables scale with the cost

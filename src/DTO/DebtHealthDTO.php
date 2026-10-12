@@ -35,6 +35,8 @@ class DebtHealthDTO
         /** Book debt, capitalized leases included, over book equity, net of cash above the operating balance for an operating company: the leverage the recapitalization test reads. */
         public readonly float $debtToEquity = 0.0,
         /** The debt-to-equity ratio the firm recapitalizes toward. */
-        public readonly float $leverageTarget = 0.0
+        public readonly float $leverageTarget = 0.0,
+        /** Whether the primary market will lend to the issuer at any price (open market, rating above the floor, coverage of one): the gate for funding a shortfall, as canIssueDebt is the gate for borrowing by choice. */
+        public readonly bool $hasMarketAccess = true
     ) {}
 }

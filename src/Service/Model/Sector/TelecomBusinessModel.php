@@ -88,10 +88,6 @@ class TelecomBusinessModel extends StandardCorporateBusinessModel
     {
         return 1.8;
     } // Lumpy spectrum and fiber rollout cycles
-    public function getSurpriseBlendWeights(): array
-    {
-        return ['eps_weight' => 0.70, 'revenue_weight' => 0.30];
-    }
 
     // --- Dual-Stream Architecture ---
     /** Baseline fraction of revenue derived from recurring network subscriptions (Wireless, Broadband). */

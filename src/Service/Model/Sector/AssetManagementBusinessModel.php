@@ -77,11 +77,6 @@ class AssetManagementBusinessModel extends BaseFinancialBusinessModel
             + MacroTransmission::gdpShareDrift(self::SECULAR_SHARE_1997, self::SECULAR_SHARE_2019, FinancialConstants::SECULAR_SHARE_WINDOW_YEARS);
     }
 
-    public function getSurpriseBlendWeights(): array
-    {
-        return ['eps_weight' => 0.75, 'revenue_weight' => 0.25];
-    }
-
     public function getCoverageProfile(Stock $stock): SectorCoverageProfile
     {
         return new SectorCoverageProfile(

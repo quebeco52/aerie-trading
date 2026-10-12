@@ -125,12 +125,6 @@ class RefiningBusinessModel extends StandardCorporateBusinessModel
         return self::CAPEX_COMPLETION_RATE;
     }
 
-
-    public function getSurpriseBlendWeights(): array
-    {
-        return ['eps_weight' => 0.30, 'revenue_weight' => 0.70];
-    }
-
     public function getWorkingCapitalIntensity(Stock $stock): float
     {
         return self::WORKING_CAPITAL_INTENSITY;

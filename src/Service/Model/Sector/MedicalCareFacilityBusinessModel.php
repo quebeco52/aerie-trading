@@ -152,11 +152,6 @@ class MedicalCareFacilityBusinessModel extends StandardCorporateBusinessModel
         return 0.60; // Specialized medical equipment & facility upgrades
     }
 
-    public function getSurpriseBlendWeights(): array
-    {
-        return ['eps_weight' => 0.65, 'revenue_weight' => 0.35];
-    }
-
     public function getMacroPhysics(Stock $stock, MacroStateDTO $macroState): array
     {
         $physics = parent::getMacroPhysics($stock, $macroState);

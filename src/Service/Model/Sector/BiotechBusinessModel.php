@@ -244,11 +244,6 @@ class BiotechBusinessModel extends StandardCorporateBusinessModel
         return MacroEngine::TREND_REAL_GROWTH + MacroTransmission::gdpShareDrift(self::GENERIC_SHARE_2010, self::GENERIC_SHARE_2018, self::GENERIC_SHARE_WINDOW_YEARS);
     }
 
-    public function getSurpriseBlendWeights(): array
-    {
-        return ['eps_weight' => 0.20, 'revenue_weight' => 0.80];
-    }
-
     public function getMacroPhysics(Stock $stock, \App\DTO\MacroStateDTO $macroState): array
     {
         // Biotechs are structural secular growth stories driven by R&D and demographics, making them

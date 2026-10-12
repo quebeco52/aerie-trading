@@ -93,8 +93,6 @@ class EducationBusinessModel extends StandardCorporateBusinessModel
     }
     
     public function getCapexCyclicality(): float { return 0.10; }
-    
-    public function getSurpriseBlendWeights(): array { return ['eps_weight' => 0.60, 'revenue_weight' => 0.40]; }
 
     // --- Stream Weights ---
     /** Baseline fraction of revenue derived from degree programs and student tuition. */

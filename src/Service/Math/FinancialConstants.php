@@ -128,6 +128,10 @@ class FinancialConstants
     public const STATE_INPUT_COST_LEVEL = 'state:input_cost_level';
     /** Stream-state key: lagged share of the input cost level already recovered in selling prices. */
     public const STATE_INPUT_COST_RECOVERY = 'state:input_cost_recovery';
+    /** Stream-state key: share of the input cost level the model recovers in selling prices, as its last report struck it. */
+    public const STATE_INPUT_COST_RECOVERED_SHARE = 'state:input_cost_recovered_share';
+    /** Stream-state key: the cost ratio the model charged the unrecovered gap on at its last report (a refiner's opex share, not its crude). */
+    public const STATE_INPUT_COST_DRAG_BASE = 'state:input_cost_drag_base';
 
     // --- FX Exposure ---
     /** Base level of the trade-weighted exchange rate index, against which a move is measured as a relative deviation. */
@@ -186,10 +190,10 @@ class FinancialConstants
     public const FAIR_VALUE_BOOK_WEIGHT = 0.10;
 
     // --- Asymmetric Cost Stickiness (Anderson, Banker, & Janakiraman 2003) ---
-    /** Elasticity of operational variable expenses to revenue growth (beta 1). */
-    public const STICKY_COST_BETA_EXPANSION = 0.85;
-    /** Downward stickiness penalty reducing expense contraction during revenue declines (beta 2 < 0). */
-    public const STICKY_COST_BETA_CONTRACTION_PENALTY = -0.40;
+    /** Annual elasticity of the committed (SG&A) cost base to activity on the way up: 0.55 (ABJ 2003 Table 2, beta 1, 7,629 firms 1979-1998). */
+    public const STICKY_COST_BETA_EXPANSION = 0.55;
+    /** Penalty on that elasticity when activity falls: -0.19, so the base follows a decline at 0.36 (ABJ 2003 Table 2, beta 2). */
+    public const STICKY_COST_BETA_CONTRACTION_PENALTY = -0.19;
     /** Floor on the committed cost base: property, insurance, minimum maintenance and core staffing survive any restructuring short of liquidation. */
     public const MIN_COMMITTED_COST_SCALE = 0.50;
 
@@ -204,6 +208,10 @@ class FinancialConstants
     public const WORKING_CAPITAL_PAYABLE_SHARE = 0.35;
     /** Days in the accounting year used to convert day counts into balances. */
     public const DAYS_PER_YEAR = 365.0;
+
+    // --- Lease Ledger (ASC 842) ---
+    /** Weighted-average remaining operating lease term, in years: about 8 for US public companies under ASC 842-20-50-4 disclosure (second-hand, not re-pinned). The balance runs off at the inverse of it. */
+    public const LEASE_TERM_YEARS = 8.0;
 
     // --- Inventory & Receivable Impairment ---
     /** Loss given default on a trade receivable: unsecured, but with real recovery in liquidation. */

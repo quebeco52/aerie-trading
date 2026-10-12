@@ -51,11 +51,6 @@ trait StandardOperatingPhysicsTrait
         return $macroState->outputGapEma;
     }
 
-    public function getSurpriseBlendWeights(): array
-    {
-        return ['eps_weight' => 0.50, 'revenue_weight' => 0.50];
-    }
-
     /**
      * Returns quarterly revenue seasonality multipliers [Q1, Q2, Q3, Q4] summing strictly to 4.0.
      *
@@ -361,32 +356,94 @@ trait StandardOperatingPhysicsTrait
      */
     protected function resolveInputCostDrag(Stock $stock, MacroStateDTO $macroState, StreamContext $streams, float $pricingPower, float $realizedVariableMargin): float
     {
-        $deviation = $this->resolveInputCostDeviation($macroState);
-        $dt = \App\Service\Corporate\EarningsEngine::QUARTERLY_TIME_STEP;
-        $math = MathUtility::getInstance();
-
         // A firm with no cost history starts at baseline prices, so a shock already in the market reaches it
         // through the lags like any other.
-        $costLevel = TimeSeries::calculateDistributedLag(
-            currentLaggedValue: $streams->getPersistedState(FinancialConstants::STATE_INPUT_COST_LEVEL, 0.0),
-            targetValue: $deviation,
-            dt: $dt,
-            lagTimeConstant: $this->getInputCostLagYears()
-        );
         $recoveredShare = max(0.0, min(1.0, $pricingPower)) * self::MAX_INPUT_COST_PASS_THROUGH;
-        $recovery = TimeSeries::calculateDistributedLag(
-            currentLaggedValue: $streams->getPersistedState(FinancialConstants::STATE_INPUT_COST_RECOVERY, 0.0),
-            targetValue: $costLevel * $recoveredShare,
-            dt: $dt,
-            lagTimeConstant: $this->getInputPassThroughLagYears()
+        [$costLevel, $recovery] = $this->advanceInputCostState(
+            $streams->getPersistedState(FinancialConstants::STATE_INPUT_COST_LEVEL, 0.0),
+            $streams->getPersistedState(FinancialConstants::STATE_INPUT_COST_RECOVERY, 0.0),
+            $this->resolveInputCostDeviation($macroState),
+            $recoveredShare
         );
 
         $streams->registerState(FinancialConstants::STATE_INPUT_COST_LEVEL, $costLevel);
         $streams->registerState(FinancialConstants::STATE_INPUT_COST_RECOVERY, $recovery);
+        // The share this model recovers, which differs by caller (a defence book's cost-plus share, a retailer's
+        // pricing power), and the cost base the gap is charged on (a refiner's opex, never its crude), kept so
+        // management can project the next quarter on the same terms.
+        $dragBase = max(0.01, $realizedVariableMargin);
+        $streams->registerState(FinancialConstants::STATE_INPUT_COST_RECOVERED_SHARE, $recoveredShare);
+        $streams->registerState(FinancialConstants::STATE_INPUT_COST_DRAG_BASE, $dragBase);
 
-        $drag = max(0.01, $realizedVariableMargin) * ($costLevel - $recovery);
+        $drag = $dragBase * ($costLevel - $recovery);
 
         return max(-self::MAX_INPUT_COST_DRAG, min(self::MAX_INPUT_COST_DRAG, $drag));
+    }
+
+    /**
+     * The unrecovered input-cost gap (cost level less recovery) the quarter now closing will book, projected from
+     * the lag state the last report persisted and today's input prices: what management knows before the close
+     * without drawing anything. Null for a model that books no input-cost drag.
+     */
+    public function projectInputCostGap(Stock $stock, MacroStateDTO $macroState): ?float
+    {
+        $state = $stock->getEarningsMomentumZ() ?? [];
+        if (!isset($state[FinancialConstants::STATE_INPUT_COST_LEVEL])) {
+            return null;
+        }
+
+        [$costLevel, $recovery] = $this->advanceInputCostState(
+            (float) $state[FinancialConstants::STATE_INPUT_COST_LEVEL],
+            (float) ($state[FinancialConstants::STATE_INPUT_COST_RECOVERY] ?? 0.0),
+            $this->resolveInputCostDeviation($macroState),
+            (float) ($state[FinancialConstants::STATE_INPUT_COST_RECOVERED_SHARE]
+                ?? max(0.0, min(1.0, $this->resolvePricingPower($stock))) * self::MAX_INPUT_COST_PASS_THROUGH)
+        );
+
+        return $costLevel - $recovery;
+    }
+
+    /**
+     * The change in the variable cost ratio the closing quarter's input costs will add over what the last report
+     * booked: the projected gap less the booked one, on the cost base the model charges the gap to. Null for a
+     * model that books no input-cost drag, or one whose last report has not yet recorded its cost base.
+     */
+    public function projectInputCostDragChange(Stock $stock, MacroStateDTO $macroState): ?float
+    {
+        $state = $stock->getEarningsMomentumZ() ?? [];
+        $projectedGap = $this->projectInputCostGap($stock, $macroState);
+        if ($projectedGap === null || !isset($state[FinancialConstants::STATE_INPUT_COST_DRAG_BASE])) {
+            return null;
+        }
+
+        $bookedGap = (float) $state[FinancialConstants::STATE_INPUT_COST_LEVEL] - (float) ($state[FinancialConstants::STATE_INPUT_COST_RECOVERY] ?? 0.0);
+
+        return (float) $state[FinancialConstants::STATE_INPUT_COST_DRAG_BASE] * ($projectedGap - $bookedGap);
+    }
+
+    /**
+     * One quarter of the two input-cost lags: costs follow the input markets with the buying lag, recovery
+     * follows the cost level with the repricing lag.
+     *
+     * @return array{0: float, 1: float} Cost level, recovery.
+     */
+    private function advanceInputCostState(float $costLevel, float $recovery, float $deviation, float $recoveredShare): array
+    {
+        $dt = \App\Service\Corporate\EarningsEngine::QUARTERLY_TIME_STEP;
+        $nextLevel = TimeSeries::calculateDistributedLag(
+            currentLaggedValue: $costLevel,
+            targetValue: $deviation,
+            dt: $dt,
+            lagTimeConstant: $this->getInputCostLagYears()
+        );
+        $nextRecovery = TimeSeries::calculateDistributedLag(
+            currentLaggedValue: $recovery,
+            targetValue: $nextLevel * $recoveredShare,
+            dt: $dt,
+            lagTimeConstant: $this->getInputPassThroughLagYears()
+        );
+
+        return [$nextLevel, $nextRecovery];
     }
 
     /**

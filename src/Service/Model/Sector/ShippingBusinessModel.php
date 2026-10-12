@@ -67,10 +67,6 @@ class ShippingBusinessModel extends StandardCorporateBusinessModel
     {
         return 3.0;
     }
-    public function getSurpriseBlendWeights(): array
-    {
-        return ['eps_weight' => 0.20, 'revenue_weight' => 0.80];
-    }
 
     // --- Dual-Stream Maritime Charter Architecture ---
     /** Baseline fraction of revenue derived from volatile spot market freight and short-term voyage charters. */

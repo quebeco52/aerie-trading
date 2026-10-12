@@ -112,12 +112,8 @@ final class ConsensusCostBaseVisibilityTest extends TestCase
         $expectedRatio = $anchor + (FinancialConstants::ANALYST_COST_BASE_VISIBILITY * ($realized - $anchor));
         $costs = $this->expectedCosts($this->actuals($realized), $stock);
 
-        // Revenue is walked down by the analyst bias, so compare the implied ratio rather than the dollars.
-        $this->assertEqualsWithDelta(
-            $expectedRatio,
-            $costs / (self::REVENUE * (1.0 - MarketConsensusEngine::ANALYST_WALKDOWN_BIAS)),
-            1e-6
-        );
+        // The cost estimate is struck on the unbiased revenue: the walk-down shades the published figure only.
+        $this->assertEqualsWithDelta($expectedRatio, $costs / self::REVENUE, 1e-6);
     }
 
     /**
@@ -141,7 +137,7 @@ final class ConsensusCostBaseVisibilityTest extends TestCase
             'The cost miss must shrink once the shock has been reported.',
         );
         $this->assertEqualsWithDelta(
-            $actualCosts * (1.0 - MarketConsensusEngine::ANALYST_WALKDOWN_BIAS),
+            $actualCosts,
             $secondQuarter,
             1.0,
             'With the anchor at the realized ratio, an unchanged cost base is fully in the estimate.'
@@ -179,10 +175,6 @@ final class ConsensusCostBaseVisibilityTest extends TestCase
         $costs = $this->expectedCosts($this->actuals(self::EX_ANTE_RATIO), $this->makeStock(null));
 
         $this->assertGreaterThan(0.0, $costs);
-        $this->assertEqualsWithDelta(
-            self::EX_ANTE_RATIO,
-            $costs / (self::REVENUE * (1.0 - MarketConsensusEngine::ANALYST_WALKDOWN_BIAS)),
-            1e-6
-        );
+        $this->assertEqualsWithDelta(self::EX_ANTE_RATIO, $costs / self::REVENUE, 1e-6);
     }
 }

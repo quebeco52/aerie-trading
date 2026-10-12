@@ -567,7 +567,8 @@ class EarningsEngineTest extends TestCase
 
             $ctx = end($captured);
             $totalSbc += $ctx->stockCompensation;
-            $totalNetIncome += $ctx->actualQuarterlyNetIncome;
+            // The first report opens the plant's deferred tax against retained earnings: a restatement, not income.
+            $totalNetIncome += $ctx->actualQuarterlyNetIncome + $ctx->cumulativeEffectAdjustment;
             $totalDistributions += (float) $ctx->allocation['total_paid'] + (float) $ctx->allocation['total_cash_spent'];
             $this->assertGreaterThan(0.0, $ctx->stockCompensation, 'software must be granting equity every quarter');
             unset($equityOpening);
@@ -968,6 +969,7 @@ class EarningsEngineTest extends TestCase
             + $captured->stockCompensation
             + $captured->inventoryWriteDown
             + $captured->receivablesProvision
+            + $captured->deferredTaxExpense
             - $captured->deltaWorkingCapital;
 
         $this->assertEqualsWithDelta($expectedOperatingCashFlow, $captured->operatingCashFlow, 1.0);
@@ -1048,10 +1050,11 @@ class EarningsEngineTest extends TestCase
         );
         $this->assertEqualsWithDelta(
             $captured->actualQuarterlyNetIncome + $captured->quarterlyDepreciation + $captured->stockCompensation
-                + $captured->inventoryWriteDown + $captured->plantImpairment + $captured->receivablesProvision - $captured->deltaWorkingCapital,
+                + $captured->inventoryWriteDown + $captured->plantImpairment + $captured->receivablesProvision
+                + $captured->deferredTaxExpense - $captured->deltaWorkingCapital,
             $captured->operatingCashFlow,
             1.0,
-            'the write-down is non-cash'
+            'the write-down is non-cash, and so is the tax benefit the loss it causes books'
         );
 
         // Land at its normal share recovers its cost and is not written down.
@@ -1256,34 +1259,154 @@ class EarningsEngineTest extends TestCase
      */
     public function testDeferredTaxMovesCashWithoutMovingReportedEarnings(): void
     {
-        $run = function (bool $withTimingDifference): \App\DTO\EarningsSimulationContext {
-            $captured = null;
-            $dispatcher = new EventDispatcher();
-            $dispatcher->addListener(EarningsReportedEvent::class, function (EarningsReportedEvent $event) use (&$captured): void {
-                $captured = $event->getContext();
-            });
-            $engine = $this->buildEngine($dispatcher);
+        $captured = null;
+        $dispatcher = new EventDispatcher();
+        $dispatcher->addListener(EarningsReportedEvent::class, function (EarningsReportedEvent $event) use (&$captured): void {
+            $captured = $event->getContext();
+        });
+        $engine = $this->buildEngine($dispatcher);
 
-            mt_srand(2468);
-            $stock = $this->buildProfitableIndustrial('TIMD');
-            // Setting the tax basis equal to book value with a zero rate would be artificial; instead the
-            // no-difference case is a plant whose tax basis is already exhausted, so tax depreciation is nil.
-            $stock->setPpeTaxBasis($withTimingDifference ? '30000000000' : '0');
+        mt_srand(2468);
+        $stock = $this->buildProfitableIndustrial('TIMD');
+        // A plant whose tax basis still equals its book value: tax depreciation runs at twice the book rate.
+        $stock->setPpeTaxBasis('30000000000');
 
-            $engine->calculate($stock, new MacroStateDTO(corporateTaxRate: 0.21, policyRateEma: 0.04, yield5yEma: 0.04), EarningsEngine::resolveReportingTick('TIMD', 252), 252);
+        $engine->calculate($stock, new MacroStateDTO(corporateTaxRate: 0.21, policyRateEma: 0.04, yield5yEma: 0.04), EarningsEngine::resolveReportingTick('TIMD', 252), 252);
 
-            return $captured;
-        };
+        // Reported tax is the statutory rate on book income, whatever the schedule.
+        $this->assertGreaterThan(0.0, $captured->preTaxIncome);
+        $this->assertEqualsWithDelta($captured->preTaxIncome * 0.79, $captured->actualQuarterlyNetIncome, 1.0);
 
-        $accelerated = $run(true);
-        $exhausted = $run(false);
+        // Cash tax is lower by the rate on the timing difference, and the difference is the liability.
+        $this->assertGreaterThan(0.0, $captured->deferredTaxExpense);
+        $this->assertEqualsWithDelta($captured->taxPaid - $captured->deferredTaxExpense, $captured->cashTaxPaid, 1.0);
+        $this->assertEqualsWithDelta($captured->deferredTaxExpense, (float) $stock->getDeferredTaxLiability(), 1.0);
+    }
 
-        // Same earnings either way.
-        $this->assertEqualsWithDelta($exhausted->actualQuarterlyNetIncome, $accelerated->actualQuarterlyNetIncome, 1.0);
-        $this->assertEqualsWithDelta($exhausted->actualQuarterlyEps, $accelerated->actualQuarterlyEps, 0.0001);
+    /**
+     * A going concern's plant opens mid-life on the tax books too: at the steady-state basis (g + d)/(g + 2d) of book,
+     * with the deferred tax on the gap booked against retained earnings. Opening at book value started every listing
+     * with no deferral and a cash tax rate far below its steady state for a decade.
+     */
+    public function testAPlantLedgerOpensAtItsSteadyStateTaxBasis(): void
+    {
+        $captured = null;
+        $dispatcher = new EventDispatcher();
+        $dispatcher->addListener(EarningsReportedEvent::class, function (EarningsReportedEvent $event) use (&$captured): void {
+            $captured = $event->getContext();
+        });
+        mt_srand(9753);
+        $stock = $this->buildProfitableIndustrial('TXBS');
+        $this->assertNull($stock->getPpeTaxBasis(), 'control: the ledger has no tax basis yet');
 
-        // Different cash.
-        $this->assertLessThan($exhausted->cashTaxPaid, $accelerated->cashTaxPaid);
+        $this->buildEngine($dispatcher)->calculate($stock, new MacroStateDTO(corporateTaxRate: 0.21, policyRateEma: 0.04, yield5yEma: 0.04, inflationEma: 0.02), EarningsEngine::resolveReportingTick('TXBS', 252), 252);
+
+        $ratio = (float) $stock->getPpeTaxBasis() / $stock->getNetPpe();
+        $this->assertGreaterThan(0.5, $ratio);
+        $this->assertLessThan(0.95, $ratio, 'the tax books run ahead of the book ones');
+        $this->assertLessThan(0.0, $captured->cumulativeEffectAdjustment, 'the opening deferral is charged to retained earnings');
+        $this->assertGreaterThan(0.21 * ($stock->getNetPpe() - (float) $stock->getPpeTaxBasis()) * 0.9, (float) $stock->getDeferredTaxLiability());
+    }
+
+    /**
+     * A row carrying a loss from before the rule recognizes the asset that loss already was against retained earnings
+     * on its first report (ASC 250 cumulative effect), not as that quarter's income, and the sheet balances.
+     */
+    public function testACarriedLossOpensItsAssetAgainstRetainedEarnings(): void
+    {
+        $captured = null;
+        $dispatcher = new EventDispatcher();
+        $dispatcher->addListener(EarningsReportedEvent::class, function (EarningsReportedEvent $event) use (&$captured): void {
+            $captured = $event->getContext();
+        });
+        $engine = $this->buildEngine($dispatcher);
+
+        mt_srand(8643);
+        $stock = $this->buildMatureIndustrial('ODTA');
+        $stock->setNetOperatingLoss('1000000000');
+        $this->assertNull($stock->getPretaxIncomeHistory(), 'control: the row predates the rule');
+        $retainedBefore = (float) $stock->getRetainedEarnings();
+
+        $engine->calculate($stock, new MacroStateDTO(corporateTaxRate: 0.21, policyRateEma: 0.04, yield5yEma: 0.04), EarningsEngine::resolveReportingTick('ODTA', 252), 252);
+
+        $this->assertCount(EarningsEngine::VALUATION_ALLOWANCE_LOOKBACK_QUARTERS, $stock->getPretaxIncomeHistory() ?? []);
+        $this->assertEqualsWithDelta(0.21 * (float) $stock->getNetOperatingLoss(), $stock->getDeferredTaxAsset(), 1.0);
+        $this->assertEqualsWithDelta($captured->preTaxIncome * 0.79, $captured->actualQuarterlyNetIncome, 1.0, 'the quarter is taxed at the rate; the opening asset is not income');
+        // Retained earnings move by the quarter's income less its dividend plus the opening balances, and nothing else.
+        $this->assertEqualsWithDelta(
+            $retainedBefore + $captured->actualQuarterlyNetIncome - (float) ($captured->allocation['total_paid'] ?? 0.0) + $captured->cumulativeEffectAdjustment,
+            (float) $stock->getRetainedEarnings(),
+            1.0
+        );
+    }
+
+    /**
+     * Through the engine: a loss quarter prints at (1 - t) of its pre-tax loss with the benefit on the asset, and the
+     * asset and the equity it backs move together.
+     */
+    public function testALossQuarterBooksItsBenefitAsAnAssetAndTheSheetBalances(): void
+    {
+        $captured = null;
+        $dispatcher = new EventDispatcher();
+        $dispatcher->addListener(EarningsReportedEvent::class, function (EarningsReportedEvent $event) use (&$captured): void {
+            $captured = $event->getContext();
+        });
+        $engine = $this->buildEngine($dispatcher);
+
+        mt_srand(8642);
+        $stock = $this->buildMatureIndustrial('LDTA');
+        $stock->setOperatingMargin('0.01');
+        $stock->setNetOperatingLoss('1000000000');
+        // Three profitable years on record, so this loss is not a cumulative one and no allowance applies.
+        $stock->setPretaxIncomeHistory(array_fill(0, 11, 2_000_000_000.0));
+        $stock->setDeferredTaxAsset(0.21 * 1_000_000_000.0);
+        $equityBefore = (float) $stock->getTotalEquity();
+        $macroState = new MacroStateDTO(outputGapEma: -0.08, corporateTaxRate: 0.21, policyRateEma: 0.04, yield5yEma: 0.04);
+
+        $engine->calculate($stock, $macroState, EarningsEngine::resolveReportingTick('LDTA', 252), 252);
+
+        $this->assertLessThan(0.0, $captured->preTaxIncome, 'fixture must report a loss');
+        $this->assertEqualsWithDelta($captured->preTaxIncome * 0.79, $captured->actualQuarterlyNetIncome, 1.0, 'the loss prints net of its tax benefit');
+        $this->assertEqualsWithDelta(0.21 * (float) $stock->getNetOperatingLoss(), $stock->getDeferredTaxAsset(), 1.0, 'the carryforward is carried at the rate');
+        $this->assertGreaterThan(0.21 * 1_000_000_000.0, $stock->getDeferredTaxAsset());
+
+        $strategy = \App\Data\Company\Sectors::getBusinessModelStrategy(\App\Data\Company\Sectors::businessModelFor('Auto Manufacturers'));
+        $lease = (new CorporateMetrics())->resolveLeaseLiability($stock, (float) $stock->getTotalRevenue(), $strategy->getLeaseIntensity());
+        $this->assertEqualsWithDelta(
+            $stock->getTotalAssets($lease),
+            $stock->getTotalLiabilities($lease) + (float) $stock->getTotalEquity(),
+            max(1.0, $stock->getTotalAssets($lease) * 1e-6),
+            'the asset and the equity it backs moved together'
+        );
+        $this->assertNotEquals($equityBefore, (float) $stock->getTotalEquity());
+    }
+
+    /**
+     * ASC 740: a loss prints at (1 - t) of itself, its tax benefit carried as a deferred tax asset on the carryforward,
+     * and a profit that uses the carryforward is still taxed at the statutory rate on the books, with only the cash
+     * tax falling. Without the asset a loss quarter printed t/(1 - t) deeper and the recovery quarters that used it
+     * printed above the statutory rate, both on earnings that were only timing.
+     */
+    public function testALossBooksADeferredTaxAssetAndItsRecoveryIsTaxedAtTheStatutoryRate(): void
+    {
+        $loss = EarningsEngine::resolveIncomeTax(-100.0, 0.0, 0.0, false, 0.21);
+        $this->assertSame(0.0, $loss['current']);
+        $this->assertEqualsWithDelta(-21.0, $loss['deferred'], 1e-12, 'the loss is a tax benefit');
+        $this->assertEqualsWithDelta(21.0, $loss['dta'], 1e-12);
+        $this->assertEqualsWithDelta(100.0, $loss['nol'], 1e-12);
+
+        $recovery = EarningsEngine::resolveIncomeTax(50.0, $loss['nol'], $loss['dta'], false, 0.21);
+        $this->assertEqualsWithDelta(0.21 * 50.0 * (1.0 - EarningsEngine::NOL_MAX_SHIELD_RATIO), $recovery['current'], 1e-12, 'cash tax falls by the shield');
+        $this->assertEqualsWithDelta(0.21 * 50.0, $recovery['current'] + $recovery['deferred'], 1e-12, 'book tax stays at the statutory rate');
+
+        // A run of losses (the valuation allowance) gets no benefit, and the asset already on the books is written off.
+        $allowance = EarningsEngine::resolveIncomeTax(-100.0, 100.0, 21.0, true, 0.21);
+        $this->assertSame(0.0, $allowance['dta']);
+        $this->assertEqualsWithDelta(21.0, $allowance['current'] + $allowance['deferred'], 1e-12, 'the allowance is a charge, not a benefit');
+
+        // A rate cut remeasures the asset at the new rate (ASC 740-10-35-4).
+        $remeasured = EarningsEngine::resolveIncomeTax(0.0, 100.0, 21.0, false, 0.15);
+        $this->assertEqualsWithDelta(6.0, $remeasured['deferred'], 1e-12);
     }
 
     /**
@@ -1387,6 +1510,39 @@ class EarningsEngineTest extends TestCase
     }
 
     /**
+     * Repaying the committed line is a financing outflow like retiring a note (ASC 230-10-45-15). A firm that opens
+     * the quarter with its revolver drawn and cash above its floor sweeps the line, and the statement still has to
+     * reconcile to the cash that left.
+     */
+    public function testARevolverSweepIsAFinancingOutflowAndTheStatementStillReconciles(): void
+    {
+        $captured = null;
+        $dispatcher = new EventDispatcher();
+        $dispatcher->addListener(EarningsReportedEvent::class, function (EarningsReportedEvent $event) use (&$captured): void {
+            $captured = $event->getContext();
+        });
+        $engine = $this->buildEngine($dispatcher);
+
+        mt_srand(4242);
+        $stock = $this->buildMatureIndustrial('RVSW');
+        $stock->setRevolverCommitment('10000000000');
+        $stock->setRevolverDrawn('5000000000');
+        $macroState = new MacroStateDTO(corporateTaxRate: 0.21, policyRateEma: 0.04, yield5yEma: 0.04, inflationEma: 0.02, gdpDeflator: 1.0);
+
+        $cashBefore = (float) $stock->getCorporateTreasury();
+        $engine->calculate($stock, $macroState, EarningsEngine::resolveReportingTick('RVSW', 252), 252);
+
+        $swept = 5_000_000_000.0 - (float) $stock->getRevolverDrawn();
+        $this->assertGreaterThan(0.0, $swept, 'cash above the floor repays the drawn line');
+        $this->assertEqualsWithDelta(
+            (float) $stock->getCorporateTreasury() - $cashBefore,
+            $captured->operatingCashFlow + $captured->investingCashFlow + $captured->financingCashFlow,
+            1.0,
+            'the sweep is cash that left through financing'
+        );
+    }
+
+    /**
      * Sloan (1996): accruals are the gap between reported profit and cash from OPERATIONS. Measuring them
      * against free cash flow after capex penalized every firm that built plant, which is the opposite of
      * what the anomaly describes.
@@ -1405,7 +1561,7 @@ class EarningsEngineTest extends TestCase
         $engine->calculate($stock, new MacroStateDTO(corporateTaxRate: 0.21, policyRateEma: 0.04, yield5yEma: 0.04), EarningsEngine::resolveReportingTick('SLOA', 252), 252);
 
         $this->assertNotNull($captured);
-        $lease = (new CorporateMetrics())->calculateLeaseLiability((float) $stock->getTotalRevenue(), $captured->strategy->getLeaseIntensity());
+        $lease = (new CorporateMetrics())->resolveLeaseLiability($stock, (float) $stock->getTotalRevenue(), $captured->strategy->getLeaseIntensity());
         // Sloan measures REPORTED earnings against operating cash, so the managed entry belongs in the
         // numerator alongside net income — steering the headline with accruals is precisely the low-quality
         // earnings the anomaly detects. It is only ever zero on a quarter the firm had no reason to steer.
@@ -1451,11 +1607,12 @@ class EarningsEngineTest extends TestCase
     }
 
     /**
-     * The charge is not floored: goodwill leaves the asset side, so the equity that carried it has to leave
-     * the other side by the same amount, even when that takes book equity below zero. A floor would have
-     * kept equity positive and left the balance sheet out by the difference.
+     * The single-step test (ASU 2017-04) writes book equity down to the reporting unit's fair value and no further:
+     * the charge is the carrying amount over fair value, capped at goodwill, so a thin-equity acquirer loses the
+     * excess and keeps a book equal to what it is worth. Goodwill leaves the asset side and the equity that carried
+     * it leaves the other, so the sheet still balances.
      */
-    public function testGoodwillImpairmentCanTakeBookEquityBelowZeroAndTheSheetStillBalances(): void
+    public function testGoodwillImpairmentWritesBookDownToFairValueAndTheSheetStillBalances(): void
     {
         $macroState = new MacroStateDTO(corporateTaxRate: 0.21, policyRateEma: 0.04, yield5yEma: 0.04, equityRiskPremium: 0.05);
         $ticksPerQuarter = 63;
@@ -1476,15 +1633,111 @@ class EarningsEngineTest extends TestCase
         $this->earningsEngine->calculate($stock, $macroState, $q4Tick);
 
         $impairment = 5_000_000_000.0 - (float) $stock->getGoodwill();
-        $this->assertGreaterThan(3_000_000_000.0, $impairment, 'the fixture must impair more than its book equity');
-        $this->assertLessThan(0.0, (float) $stock->getTotalEquity(), 'book equity goes negative rather than being floored');
+        $this->assertGreaterThan(0.0, $impairment, 'a reporting unit carried above its fair value is impaired');
+        $this->assertLessThan(3_000_000_000.0, $impairment, 'the charge stops at fair value: it cannot write equity off below what the unit is worth');
 
         $businessModel = \App\Data\Company\Sectors::INDUSTRY_METRICS['Auto Manufacturers']['business_model'] ?? 'none';
         $strategy = \App\Data\Company\Sectors::getBusinessModelStrategy($businessModel);
-        $lease = (new CorporateMetrics())->calculateLeaseLiability((float) $stock->getTotalRevenue(), $strategy->getLeaseIntensity());
+        $lease = (new CorporateMetrics())->resolveLeaseLiability($stock, (float) $stock->getTotalRevenue(), $strategy->getLeaseIntensity());
         $assets = $stock->getTotalAssets($lease);
         $claims = $stock->getTotalLiabilities($lease) + (float) $stock->getTotalEquity();
         $this->assertEqualsWithDelta($assets, $claims, max(1.0, $assets * 1e-6), 'the balance sheet still balances after the write-off');
+    }
+
+    /**
+     * A write-down is reported, not missed: the surprise is struck on Street earnings, before special items (Bradshaw &
+     * Sloan 2002), since consensus never forecasts them. GAAP EPS carries the impairment; the beat or miss does not.
+     */
+    public function testAGoodwillWriteDownLeavesTheStreetFigureAndTheSurpriseAlone(): void
+    {
+        $captured = null;
+        $dispatcher = new EventDispatcher();
+        $dispatcher->addListener(EarningsReportedEvent::class, function (EarningsReportedEvent $event) use (&$captured): void {
+            $captured = $event->getContext();
+        });
+        $stock = $this->buildMatureIndustrial('STRT');
+        $stock->setTotalEquity('3000000000');
+        $stock->setWholesaleDebt('40000000000');
+        $stock->setCorporateTreasury('5000000000');
+        $stock->setGoodwill('5000000000');
+        $stock->setOperatingMargin('0.03');
+        $stock->setBaselineRoic('0.02');
+        $stock->setRoicTtm('0.02');
+        $stock->setLifecycleStage(LifecycleStage::Mature);
+
+        $q4Tick = ((EarningsEngine::FISCAL_YEAR_END_QUARTER + 1) * 63) + EarningsEngine::resolveReportingTick('STRT', 252);
+        $this->buildEngine($dispatcher)->calculate($stock, new MacroStateDTO(corporateTaxRate: 0.21, policyRateEma: 0.04, yield5yEma: 0.04, equityRiskPremium: 0.05), $q4Tick);
+
+        $this->assertGreaterThan(0.0, $captured->goodwillImpairment, 'control: the annual test wrote goodwill down');
+        $shares = max(1.0, $captured->sharesOutstanding);
+        $this->assertEqualsWithDelta($captured->actualQuarterlyEps + ($captured->specialItems / $shares), $captured->streetQuarterlyEps, 1e-9);
+        $this->assertGreaterThanOrEqual($captured->goodwillImpairment, $captured->specialItems);
+        $this->assertEqualsWithDelta($captured->streetQuarterlyEps - $captured->expectedQuarterlyEps, $captured->surpriseAmountQuarterly, 1e-9);
+    }
+
+    /**
+     * The test is fair value against carrying amount, not trailing return against the hurdle: a reporting unit the
+     * market values above its book keeps its goodwill. The old value-in-use capitalized one trailing year's return at
+     * the hurdle forever, so a firm earning a little under its cost of capital wrote its acquisitions off whatever the
+     * market thought the business was worth.
+     */
+    public function testAUnitValuedAboveItsBookKeepsItsGoodwill(): void
+    {
+        $macroState = new MacroStateDTO(corporateTaxRate: 0.21, policyRateEma: 0.04, yield5yEma: 0.04, equityRiskPremium: 0.05);
+        $stock = $this->buildMatureIndustrial('GDCY');
+        $stock->setGoodwill('5000000000');
+        $stock->setTotalEquity('10000000000');
+        // A business the market prices on its long-run return, in a trailing year under the hurdle: the old rule
+        // impaired exactly this.
+        $stock->setBaselineRoic('0.15');
+        $stock->setLongRunReturn('0.15');
+        $stock->setRoicTtm('0.06');
+        $stock->setLifecycleStage(LifecycleStage::Mature);
+
+        $captured = null;
+        $dispatcher = new EventDispatcher();
+        $dispatcher->addListener(EarningsReportedEvent::class, function (EarningsReportedEvent $event) use (&$captured): void {
+            $captured = $event->getContext();
+        });
+        $q4Tick = ((EarningsEngine::FISCAL_YEAR_END_QUARTER + 1) * 63) + EarningsEngine::resolveReportingTick('GDCY', 252);
+        $equityBefore = (float) $stock->getTotalEquity();
+        $this->buildEngine($dispatcher)->calculate($stock, $macroState, $q4Tick);
+
+        $this->assertGreaterThan($equityBefore, $captured->fairValueBeforeReport * $captured->sharesOutstanding, 'control: the market values the firm above its book');
+        $this->assertSame(0.0, $captured->goodwillImpairment);
+        $this->assertEqualsWithDelta(5_000_000_000.0, (float) $stock->getGoodwill(), 1.0);
+    }
+
+    /**
+     * The price level reaches revenue the quarter it moves: plant booked at historical cost sells at today's prices,
+     * so its capacity is struck on current cost (the replacement-cost ratio). Before this a 10% jump in the price
+     * level left nominal revenue where it was, and real revenue fell one for one until years of capex restated the
+     * book. Working capital is already at current prices, so only the plant's share of capital is revalued.
+     */
+    public function testAJumpInThePriceLevelReachesRevenueCapacityThroughThePlant(): void
+    {
+        $run = function (float $deflator): \App\DTO\EarningsSimulationContext {
+            $captured = null;
+            $dispatcher = new EventDispatcher();
+            $dispatcher->addListener(EarningsReportedEvent::class, function (EarningsReportedEvent $event) use (&$captured): void {
+                $captured = $event->getContext();
+            });
+            mt_srand(7531);
+            $stock = $this->buildProfitableIndustrial('PLVL');
+            // The last report saw a price level of 1.0, and no inflation was expected: the whole move is a surprise.
+            $stock->setEarningsMomentumZ([EarningsEngine::STATE_LAST_DEFLATOR => 1.0]);
+            $this->buildEngine($dispatcher)->calculate($stock, new MacroStateDTO(corporateTaxRate: 0.21, policyRateEma: 0.04, yield5yEma: 0.04, gdpDeflator: $deflator, inflationEma: 0.0), EarningsEngine::resolveReportingTick('PLVL', 252), 252);
+
+            return $captured;
+        };
+
+        $flat = $run(1.0);
+        $jumped = $run(1.10);
+        $plantShare = $flat->stock->getNetPpe() / $flat->revenueGeneratingCapital;
+
+        $this->assertGreaterThan(0.5, $plantShare, 'control: the fixture is mostly plant');
+        $this->assertEqualsWithDelta(1.0 + (0.10 * $plantShare), $jumped->revenueGeneratingCapital / $flat->revenueGeneratingCapital, 0.01);
+        $this->assertGreaterThan($flat->structuralRevenue * 1.05, $jumped->structuralRevenue);
     }
 
     public function testRevenueCapacityIsAnchoredToStructuralTurnoverNotTrailingRoic(): void
@@ -1597,7 +1850,7 @@ class EarningsEngineTest extends TestCase
         $this->assertNotNull($captured);
 
         $strategy = \App\Data\Company\Sectors::getBusinessModelStrategy(\App\Data\Company\Sectors::INDUSTRY_METRICS['Auto Manufacturers']['business_model']);
-        $lease = (new CorporateMetrics())->calculateLeaseLiability((float) $stock->getTotalRevenue(), $strategy->getLeaseIntensity());
+        $lease = (new CorporateMetrics())->resolveLeaseLiability($stock, (float) $stock->getTotalRevenue(), $strategy->getLeaseIntensity());
         $assets = $stock->getTotalAssets($lease);
         $claims = $stock->getTotalLiabilities($lease) + (float) $stock->getTotalEquity();
         $this->assertEqualsWithDelta($assets, $claims, max(1.0, $assets * 1e-9), 'the released working capital must land in cash');
@@ -1712,27 +1965,6 @@ class EarningsEngineTest extends TestCase
 
         // The newest slot is the quarter actually reported, seasonality and all.
         $this->assertEqualsWithDelta($captured->reportedActualNetIncome, (float) $history[3], 1.0);
-    }
-
-    public function testTheSurpriseRecordIsARollingWindow(): void
-    {
-        $engine = $this->buildEngine($this->createStub(EventDispatcherInterface::class));
-
-        $stock = $this->buildMatureIndustrial('SUEX');
-        $stock->setLifecycleStage(LifecycleStage::Mature);
-        $macroState = new MacroStateDTO(corporateTaxRate: 0.21, policyRateEma: 0.04, yield5yEma: 0.04);
-
-        mt_srand(555);
-        $reportingTick = EarningsEngine::resolveReportingTick('SUEX', 252);
-
-        $this->assertSame([], $stock->getEarningsSurpriseHistory());
-
-        for ($quarter = 0; $quarter < 12; $quarter++) {
-            $engine->calculate($stock, $macroState, $reportingTick + (63 * $quarter));
-        }
-
-        // The record is a rolling window, so an old regime eventually leaves it.
-        $this->assertCount(EarningsEngine::SUE_HISTORY_QUARTERS, $stock->getEarningsSurpriseHistory() ?? []);
     }
 
     /**
@@ -1887,7 +2119,7 @@ class EarningsEngineTest extends TestCase
         $this->assertLessThan($book, $captured->netChargeOffs);
         $this->assertTrue(is_finite($captured->netLoanOriginations));
 
-        $lease = (new CorporateMetrics())->calculateLeaseLiability((float) $stock->getTotalRevenue(), $strategy->getLeaseIntensity());
+        $lease = (new CorporateMetrics())->resolveLeaseLiability($stock, (float) $stock->getTotalRevenue(), $strategy->getLeaseIntensity());
         $assets = $stock->getTotalAssets($lease);
         $claims = $stock->getTotalLiabilities($lease) + (float) $stock->getTotalEquity();
         $this->assertEqualsWithDelta($assets, $claims, max(1.0, $assets * 1e-6), 'a bank balance sheet balances');
@@ -2024,7 +2256,13 @@ class EarningsEngineTest extends TestCase
             corporateTaxRate: MacroEngine::BASE_CORPORATE_TAX_RATE, policyRate: 0.04, policyRateEma: 0.04, yield2yEma: 0.04, yield5yEma: 0.042,
             yield10yEma: 0.045, equityRiskPremium: 0.05, nominalGdpIndex: 1.0, macroCreditSpreadEma: 0.015
         );
-        $engine = $this->buildEngine(new EventDispatcher());
+        $surprises = [];
+        $dispatcher = new EventDispatcher();
+        $dispatcher->addListener(EarningsReportedEvent::class, function (EarningsReportedEvent $event) use (&$surprises): void {
+            $ctx = $event->getContext();
+            $surprises[] = ($ctx->actualQuarterlyEps - $ctx->expectedQuarterlyEps) / max(0.01, abs($ctx->expectedQuarterlyEps));
+        });
+        $engine = $this->buildEngine($dispatcher);
         $stock = $this->buildCardLender('CARD');
         $targetRoe = (float) $stock->getBaselineRoe();
 
@@ -2033,7 +2271,6 @@ class EarningsEngineTest extends TestCase
             $engine->calculate($stock, $macroState, (($quarter - 1) * 63) + EarningsEngine::resolveReportingTick('CARD', 252));
         }
 
-        $surprises = $stock->getEarningsSurpriseHistory() ?? [];
         $this->assertCount(8, $surprises);
         $meanSurprise = array_sum($surprises) / count($surprises);
         $this->assertGreaterThan(-0.10, $meanSurprise, 'a lender in a calm macro must not miss consensus chronically');
@@ -2229,20 +2466,19 @@ class EarningsEngineTest extends TestCase
             $sawACharge = true;
 
             // Rebuild the run-rate the way the engine does — from the deseasonalized revenue and the
-            // realized cost ratio — and assert the impairments came off it. Drop the subtraction and this
-            // is the figure the solvency tests would read instead. Severance is charged the same way and
-            // for the same reason: both sit in operating expense after the cost base was struck, so the
-            // run-rate has to be told about them rather than deseasonalized out of EBIT.
+            // realized cost ratio — and assert the recurring impairments came off it. Drop the subtraction and
+            // this is the figure the solvency tests would read instead. Severance and plant write-downs are
+            // special items, charged once to equity: they stay out of the run rate, as they stay out of the
+            // Street figure and the lenders' EBITDA.
             $costRatio = $captured->actualRevenue > 0.0
                 ? $captured->actualVariableCosts / $captured->actualRevenue
                 : $captured->realizedVariableMargin;
             $beforeCharges = ($captured->seasonallyAdjustedRevenue * (1.0 - $costRatio))
                 - $captured->fixedCosts
-                - $captured->quarterlyDepreciation
-                - $captured->restructuringCharge;
+                - $captured->quarterlyDepreciation;
 
             $this->assertEqualsWithDelta(
-                $beforeCharges - $captured->impairmentCharges,
+                $beforeCharges - ($captured->impairmentCharges - $captured->plantImpairment),
                 $captured->seasonallyAdjustedEbit,
                 max(1.0, abs($beforeCharges) * 1e-9),
                 "Q{$quarter}: the seasonally adjusted run-rate must be struck after impairments."
@@ -2380,7 +2616,8 @@ class EarningsEngineTest extends TestCase
         // At least the uninsured deposits' share at the long-term rate, a quarter's worth.
         $this->assertGreaterThan(300.0e9 * (1.0 - 0.604) * 0.00105 / 4.0, $levied->bankLevy);
         $this->assertEqualsWithDelta($free->actualQuarterlyNetIncome - $levied->bankLevy, $levied->actualQuarterlyNetIncome, 1.0);
-        $this->assertEqualsWithDelta($free->expectedQuarterlyNetIncome - $levied->bankLevy, $levied->expectedQuarterlyNetIncome, 1.0);
+        // The unbiased estimate carries the whole levy; the published figure is the walked-down share of it.
+        $this->assertEqualsWithDelta($free->expectedQuarterlyNetIncome - ($levied->bankLevy * (1.0 - \App\Service\Market\Pricing\MarketConsensusEngine::ANALYST_EPS_WALKDOWN_BIAS)), $levied->expectedQuarterlyNetIncome, 1.0);
         $this->assertEqualsWithDelta($free->taxPaid, $levied->taxPaid, 1.0, 'The levy is not deductible.');
         $this->assertEqualsWithDelta($cashChange, $levied->operatingCashFlow + $levied->investingCashFlow + $levied->financingCashFlow, 1.0);
     }

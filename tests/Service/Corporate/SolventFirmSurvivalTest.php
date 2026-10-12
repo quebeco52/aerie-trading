@@ -382,7 +382,8 @@ class SolventFirmSurvivalTest extends TestCase
             rawMetrics: $metrics,
             isLiquidityCrisis: true,
             isLiquidityWarning: true,
-            isUnderLeveraged: false
+            isUnderLeveraged: false,
+            hasMarketAccess: false
         );
     }
 

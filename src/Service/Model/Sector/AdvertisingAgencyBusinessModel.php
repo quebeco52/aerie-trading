@@ -92,8 +92,6 @@ class AdvertisingAgencyBusinessModel extends StandardCorporateBusinessModel
     }
     
     public function getCapexCyclicality(): float { return 0.10; }
-    
-    public function getSurpriseBlendWeights(): array { return ['eps_weight' => 0.70, 'revenue_weight' => 0.30]; }
 
     // --- Stream Weights ---
     /** Baseline fraction of revenue derived from programmatic media buying commissions. */

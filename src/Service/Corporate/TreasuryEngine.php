@@ -21,6 +21,8 @@ class TreasuryEngine
     // --- Seasoned Equity Offering ---
     /** Announcement return of a seasoned equity offering, in percent: about -3% over two days for industrial issuers (Asquith & Mullins 1986), the adverse-selection signal (Myers & Majluf 1984). Distress is not added on top: fair value already prices it. */
     public const SEASONED_EQUITY_OFFERING_ANNOUNCEMENT_PCT = -3.0;
+    /** Offer price discount to the last close on a seasoned equity offering: 2.2% on average (Corwin 2003, US SEOs 1980-1998). */
+    public const SEASONED_EQUITY_OFFER_DISCOUNT = 0.022;
 
     // --- Financing News ---
     /** A financing action is news at 1% of the firm's total assets, the top of the 0.5-1% of total assets auditors take as materiality (practitioner guidance; second-hand). */
@@ -143,11 +145,13 @@ class TreasuryEngine
             $ctx->strategy->calculateMinOperatingCash($ctx->operatingBase, $ctx->customerDeposits, $ctx->wholesaleDebt)
         );
 
+        // COMMITTED REVOLVER (the facility a bank contracted to fund whatever the bond market is doing). The
+        // pecking order runs line first (Sufi 2009: credit lines are the corporate liquidity buffer), then the
+        // bond market, then equity (Myers & Majluf 1984; Shyam-Sunder & Myers 1999).
+        $this->processRevolverDraw($ctx);
+
         // THE DEBT TRAP (Liquidity Crisis)
         $this->processEmergencyBorrowing($ctx);
-
-        // COMMITTED REVOLVER (the facility a bank contracted to fund whatever the bond market is doing)
-        $this->processRevolverDraw($ctx);
 
         // EQUITY ISSUANCE (Secondary Offerings / Death Spirals)
         $this->processEquityIssuance($ctx);
@@ -347,7 +351,7 @@ class TreasuryEngine
                     $borrowProbability = max($borrowProbability, 0.90);
                 }
 
-                if ((mt_rand() / mt_getrandmax()) < $borrowProbability) {
+                if ($this->mathUtility->checkProbability($borrowProbability)) {
                     $newDebtIssued = $trueExpansionCapacity * $aggressiveness;
 
                     $this->debtEngine->issueDebt($stock, $newDebtIssued, $newBorrowingRate);
@@ -410,7 +414,7 @@ class TreasuryEngine
             return;
         }
 
-        if (!$forcedExpansion && (mt_rand(1, 1000) / 1000.0) > $investmentProbability) {
+        if (!$forcedExpansion && !$this->mathUtility->checkProbability($investmentProbability)) {
             return;
         }
 
@@ -590,9 +594,10 @@ class TreasuryEngine
         if ($ctx->newTreasury < $minOperatingCash) {
             $cashShortfall = $minOperatingCash - $ctx->newTreasury;
 
-            // A firm the primary market just refused cannot turn around and issue emergency paper into the
-            // same closed market, however willing its own coverage ratios look.
-            if ($ctx->health->canIssueDebt && !$ctx->refinancingRefused) {
+            // Past the committed line, a shortfall is funded in the bond market by anyone the market will lend to:
+            // a BBB issuer at 2.5x coverage refinances, it does not sell stock (Damodaran's coverage-rating table).
+            // A firm the primary market just refused cannot turn around and issue into the same closed market.
+            if ($ctx->health->hasMarketAccess && !$ctx->refinancingRefused) {
                 $currentMarketRate = $ctx->health->rawMetrics->currentMarketRate ?? ($ctx->macroState->yield5yEma + (float) $stock->getCreditSpread());
                 $costOfEmergencyDebt = $currentMarketRate + self::EMERGENCY_DEBT_SPREAD_PENALTY;
 
@@ -691,7 +696,7 @@ class TreasuryEngine
             }
 
             if ($targetRaise > 10_000_000.0) {
-                $offeringPrice = $ctx->currentPrice * 0.90;
+                $offeringPrice = $ctx->currentPrice * (1.0 - self::SEASONED_EQUITY_OFFER_DISCOUNT);
                 $sharesIssued = $targetRaise / max(0.01, $offeringPrice);
 
                 $stock->setSharesOutstanding((string) ($ctx->sharesOutstanding + $sharesIssued));
@@ -719,7 +724,11 @@ class TreasuryEngine
     }
 
     /**
-     * Draws on the committed revolving credit facility to close a negative cash balance or a maturity.
+     * Draws on the committed revolving credit facility to fund a maturity and restore the operating cash floor.
+     *
+     * The line is the first call on liquidity, ahead of the bond market and far ahead of equity: firms hold
+     * credit lines for exactly the cash shortfall their operations throw up (Sufi 2009), so a treasury below
+     * its floor draws the line before it issues paper or sells stock at a discount.
      *
      * A revolver is contractually committed: the bank must fund a draw whatever the primary market is doing,
      * which is exactly why firms drew their facilities in March 2020 when commercial paper shut. So this runs
@@ -749,9 +758,10 @@ class TreasuryEngine
         // have committed to, and so the commitment is on the books the quarter before the trouble arrives.
         $this->sizeRevolverCommitment($ctx);
 
-        $overdraft = max(0.0, -$ctx->newTreasury);
+        // The cash floor the treasury runs to; an overdraft is the deepest part of the same shortfall.
+        $floorShortfall = max(0.0, $ctx->strategy->calculateMinOperatingCash($ctx->operatingBase, $ctx->customerDeposits, $ctx->wholesaleDebt) - $ctx->newTreasury);
         $maturity = max(0.0, $ctx->unfundedMaturity);
-        if (($overdraft + $maturity) <= 0.0) {
+        if (($floorShortfall + $maturity) <= 0.0) {
             return;
         }
 
@@ -768,7 +778,7 @@ class TreasuryEngine
 
         $drawRefused = $this->isInCovenantBreach($ctx)
             && !$this->debtEngine->assessGoingConcern($stock, $ctx->macroState, $ctx->health)->isSolvent();
-        $drawn = $drawRefused ? 0.0 : min($overdraft + $maturity, $stock->getRevolverUndrawn());
+        $drawn = $drawRefused ? 0.0 : min($floorShortfall + $maturity, $stock->getRevolverUndrawn());
         if ($drawn > 0.0) {
             $stock->setRevolverDrawn((string) ((float) $stock->getRevolverDrawn() + $drawn));
             $ctx->newTreasury += $drawn;
@@ -813,7 +823,7 @@ class TreasuryEngine
 
         // News, not a price move of its own: the market prices what the refusal leads to (the emergency
         // paper, the rescue raise or the default), each of which carries its own reaction.
-        $refused = min($overdraft + $maturity, $stock->getRevolverUndrawn());
+        $refused = min($floorShortfall + $maturity, $stock->getRevolverUndrawn());
         if ($drawRefused && self::isNewsworthy($ctx->stock, $refused)) {
             $amtB = number_format($refused / 1_000_000_000, 2);
             $ctx->events[] = [
@@ -954,7 +964,7 @@ class TreasuryEngine
             $isDistressed = $ctx->health->interestCoverage < $distressThreshold;
             $paydownProbability = $isLiquidityCrisis ? 1.0 : ($isDistressed ? 0.50 : 0.15);
 
-            if ((mt_rand() / mt_getrandmax()) < $paydownProbability) {
+            if ($this->mathUtility->checkProbability($paydownProbability)) {
                 $sweepPercentage = $isLiquidityCrisis ? 0.50 : 0.10;
                 $arbitragePaydown = ($ctx->newTreasury - $targetOperatingCash) * $sweepPercentage;
                 $maxRetireableDebt = $ctx->wholesaleDebt * ($isLiquidityCrisis ? 0.15 : 0.05);

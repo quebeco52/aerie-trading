@@ -158,11 +158,6 @@ class LawFirmBusinessModel extends StandardCorporateBusinessModel
         return 0.10; // Virtually no physical capex
     }
 
-    public function getSurpriseBlendWeights(): array
-    {
-        return ['eps_weight' => 0.70, 'revenue_weight' => 0.30];
-    }
-
     public function getMacroPhysics(Stock $stock, MacroStateDTO $macroState): array
     {
         $physics = parent::getMacroPhysics($stock, $macroState);

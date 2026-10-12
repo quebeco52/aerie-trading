@@ -13,12 +13,6 @@ use App\Service\Macro\MacroEngine;
  */
 final class FirmEconomics
 {
-    // --- Margin Bounds ---
-    /** Maximum allowable operating gross margin ceiling (150%) to prevent runaway loops. */
-    public const MAX_VARIABLE_MARGIN_CLAMP = 1.50;
-    /** Minimum operating variable margin floor (1%) ensuring operational viability bounds. */
-    public const MIN_VARIABLE_MARGIN_CLAMP = 0.01;
-
     // --- Dynamic Cash Conversion Cycle & Working Capital (CCC) ---
     /** Sensitivity of Days Sales Outstanding (DSO) to corporate credit spread widening. */
     public const CCC_DSO_CREDIT_SPREAD_SENSITIVITY = 250.0;
@@ -346,36 +340,6 @@ final class FirmEconomics
         $newCrack = StochasticProcesses::calculateSchwartz1Factor(max(0.01, $currentCrack), $kappa, StochasticProcesses::schwartzThetaForMean($targetCrack, $kappa, $sigma), $sigma, $dt, $dW);
 
         return max(4.0, min(80.0, $newCrack));
-    }
-
-    /**
-     * Models Asymmetric Cost Stickiness (Anderson, Banker, & Janakiraman 2003).
-     *
-     * Operating costs drop sluggishly when revenue contracts due to fixed commitments,
-     * employee retention frictions, and severance liabilities, causing operating margins
-     * to compress sharply during revenue declines.
-     *
-     * @param float $currentVariableMargin The baseline variable cost ratio (Costs / Revenue).
-     * @param float $revenueLogChange       Quarter-over-quarter log change in revenue: ln(Rev_t / Rev_{t-1}).
-     * @param float $betaExpansion          Cost elasticity on revenue growth (beta 1).
-     * @param float $betaContractionPenalty Downward stickiness penalty parameter (beta 2 < 0).
-     * @return float The adjusted realized variable cost ratio (Costs / Revenue).
-     */
-    public static function calculateAsymmetricCostStickiness(
-        float $currentVariableMargin,
-        float $revenueLogChange,
-        float $betaExpansion = FinancialConstants::STICKY_COST_BETA_EXPANSION,
-        float $betaContractionPenalty = FinancialConstants::STICKY_COST_BETA_CONTRACTION_PENALTY
-    ): float {
-        // Delta ln(Cost) = beta1 * Delta ln(Rev) + beta2 * I(Delta ln(Rev) < 0) * Delta ln(Rev)
-        $isContraction = $revenueLogChange < 0.0 ? 1.0 : 0.0;
-        $costElasticity = $betaExpansion + ($betaContractionPenalty * $isContraction);
-
-        // Margin shift: ln(Cost_t / Rev_t) - ln(Cost_{t-1} / Rev_{t-1}) = (costElasticity - 1.0) * Delta ln(Rev)
-        $logMarginMultiplier = ($costElasticity - 1.0) * $revenueLogChange;
-        $adjustedMargin = $currentVariableMargin * exp($logMarginMultiplier);
-
-        return max(self::MIN_VARIABLE_MARGIN_CLAMP, min(self::MAX_VARIABLE_MARGIN_CLAMP, $adjustedMargin));
     }
 
     /**

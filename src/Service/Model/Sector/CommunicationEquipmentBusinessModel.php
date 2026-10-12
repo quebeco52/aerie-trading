@@ -178,11 +178,6 @@ class CommunicationEquipmentBusinessModel extends StandardCorporateBusinessModel
         return 1.20;
     }
 
-    public function getSurpriseBlendWeights(): array
-    {
-        return ['eps_weight' => 0.60, 'revenue_weight' => 0.40];
-    }
-
     /**
      * Calendar-quarter revenue seasonality [Q1, Q2, Q3, Q4] summing to 4.0: carrier capex budget flush in Q4.
      *

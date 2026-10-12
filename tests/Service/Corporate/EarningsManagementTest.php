@@ -28,18 +28,33 @@ final class EarningsManagementTest extends TestCase
     private EarningsEngine $engine;
     private ReflectionMethod $manage;
 
+    /** Consensus of $100m over 100m shares: a dollar a share, so a cent is 1% of it. */
+    private const SHARES = 100_000_000.0;
+
     protected function setUp(): void
     {
         mt_srand(20260910);
 
-        // manageReportedEarnings touches only the context's stock and strategy, plus the propensity draw;
-        // the rest of the collaborators are reached solely through resolveTotalAssets, and only once a
-        // balance-sheet ledger is open. MathUtility is the one that has to be real.
-        $this->engine = (new ReflectionClass(EarningsEngine::class))->newInstanceWithoutConstructor();
-        $mathUtility = new ReflectionProperty(EarningsEngine::class, 'mathUtility');
-        $mathUtility->setValue($this->engine, new MathUtility());
+        // manageReportedEarnings touches only the context's stock and strategy, plus the propensity and cushion
+        // draws; the rest of the collaborators are reached solely through resolveTotalAssets, and only once a
+        // balance-sheet ledger is open. The draws are pinned at a quarter of the unit interval, so a gap whose odds
+        // exceed 25% is closed and the cushion is a quarter of a cent.
+        $this->engine = $this->engineDrawing(new class extends MathUtility {
+            public function generateUniform(): float
+            {
+                return 0.25;
+            }
+        });
 
         $this->manage = new ReflectionMethod(EarningsEngine::class, 'manageReportedEarnings');
+    }
+
+    private function engineDrawing(MathUtility $math): EarningsEngine
+    {
+        $engine = (new ReflectionClass(EarningsEngine::class))->newInstanceWithoutConstructor();
+        (new ReflectionProperty(EarningsEngine::class, 'mathUtility'))->setValue($engine, $math);
+
+        return $engine;
     }
 
     /**
@@ -65,36 +80,56 @@ final class EarningsManagementTest extends TestCase
         $ctx = new EarningsSimulationContext($stock, new MacroStateDTO(), $this->certainManager(), 'none');
         $ctx->reportedExpectedNetIncome = $consensus;
         $ctx->reportedActualNetIncome = $actual;
+        $ctx->sharesOutstanding = self::SHARES;
 
         return $ctx;
     }
 
-    /** A near miss is closed, and lands just above consensus rather than exactly on it. */
-    public function testSmallShortfallIsClosedAndPrintsASmallBeat(): void
+    /** A near miss is closed, and lands on the line or within a cent above it, where the excess mass sits. */
+    public function testSmallShortfallIsClosedAndPrintsAMeetOrACentBeat(): void
     {
         $consensus = 100_000_000.0;
-        // 2% short: inside EARNINGS_MANAGEMENT_MAX_GAP.
-        $ctx = $this->makeContext($consensus, $consensus * 0.98);
+        // Half a cent short: well inside the two-cent reachable gap.
+        $ctx = $this->makeContext($consensus, $consensus * 0.995);
 
         $this->manage->invoke($this->engine, $ctx);
 
         $this->assertGreaterThan(0.0, $ctx->managedAccrual, 'A reachable shortfall must be closed with an accrual.');
-        $this->assertGreaterThan(
-            $consensus * 0.98,
+        $this->assertGreaterThanOrEqual($consensus, $ctx->reportedActualNetIncome, 'A managed quarter does not print a miss.');
+        $this->assertLessThanOrEqual(
+            $consensus + (EarningsEngine::EARNINGS_MANAGEMENT_BEAT_CUSHION_PER_SHARE * self::SHARES),
             $ctx->reportedActualNetIncome,
-            'Managing the quarter must raise the reported figure above what the business produced.'
-        );
-        $this->assertNotEqualsWithDelta(
-            $consensus,
-            $ctx->reportedActualNetIncome,
-            1.0,
-            'Landing exactly on consensus is the one outcome real reported distributions never show.'
+            'It lands within a cent of the line, not comfortably past it.'
         );
         $this->assertSame(
             $ctx->managedAccrual,
             $ctx->stock->getManagedAccrualBank(),
             'Everything borrowed has to be owed back.'
         );
+    }
+
+    /**
+     * The odds fall with the gap (Degeorge, Patel & Zeckhauser 1999: the cost of manipulation rises with the shortfall),
+     * so the hole in the reported distribution is just below zero and not across the whole reachable band.
+     */
+    public function testTheOddsOfClosingFallWithTheGapAndVanishAtItsEdge(): void
+    {
+        $engine = $this->engineDrawing(new MathUtility());
+        $closed = function (float $centsShort) use ($engine): float {
+            $hits = 0;
+            for ($trial = 0; $trial < 4000; $trial++) {
+                $ctx = $this->makeContext(100_000_000.0, 100_000_000.0 - ($centsShort * 0.01 * self::SHARES));
+                $this->manage->invoke($engine, $ctx);
+                $hits += $ctx->managedAccrual > 0.0 ? 1 : 0;
+            }
+
+            return $hits / 4000;
+        };
+
+        $edge = EarningsEngine::EARNINGS_MANAGEMENT_MAX_GAP_PER_SHARE * 100.0;
+        $this->assertEqualsWithDelta(1.0 - (0.5 / $edge), $closed(0.5), 0.03);
+        $this->assertEqualsWithDelta(1.0 - (1.5 / $edge), $closed(1.5), 0.03);
+        $this->assertSame(0.0, $closed($edge + 0.5), 'past the reachable gap the miss is reported');
     }
 
     /**
@@ -107,7 +142,8 @@ final class EarningsManagementTest extends TestCase
     {
         $consensus = 100_000_000.0;
 
-        foreach ([0.995, 0.99, 0.98, 0.97, 0.96] as $shortfallFraction) {
+        // Shortfalls of 0.2 to 1.4 cents, every one with odds above the pinned draw.
+        foreach ([0.998, 0.996, 0.994, 0.99, 0.986] as $shortfallFraction) {
             $ctx = $this->makeContext($consensus, $consensus * $shortfallFraction);
 
             $this->manage->invoke($this->engine, $ctx);
@@ -115,7 +151,7 @@ final class EarningsManagementTest extends TestCase
             $this->assertGreaterThan(
                 $consensus,
                 $ctx->reportedActualNetIncome,
-                sprintf('A quarter %.1f%% short is inside the reachable gap and must print a beat, not a smaller miss.', (1.0 - $shortfallFraction) * 100)
+                sprintf('A quarter %.1f cents short that management closes must print at or above the line, not a smaller miss.', (1.0 - $shortfallFraction) * 100)
             );
         }
     }
@@ -167,19 +203,20 @@ final class EarningsManagementTest extends TestCase
     public function testZeroPropensityManagementNeverBooksAnAccrual(): void
     {
         $consensus = 100_000_000.0;
-        $ctx = $this->makeContext($consensus, $consensus * 0.98);
+        $ctx = $this->makeContext($consensus, $consensus * 0.995);
 
         $strategy = new class extends StandardCorporateBusinessModel {
             public const EARNINGS_MANAGEMENT_PROPENSITY = 0.00;
         };
         $ctx = new EarningsSimulationContext($ctx->stock, new MacroStateDTO(), $strategy, 'none');
         $ctx->reportedExpectedNetIncome = $consensus;
-        $ctx->reportedActualNetIncome = $consensus * 0.98;
+        $ctx->reportedActualNetIncome = $consensus * 0.995;
+        $ctx->sharesOutstanding = self::SHARES;
 
         $this->manage->invoke($this->engine, $ctx);
 
         $this->assertSame(0.0, $ctx->managedAccrual);
-        $this->assertEqualsWithDelta($consensus * 0.98, $ctx->reportedActualNetIncome, 0.01);
+        $this->assertEqualsWithDelta($consensus * 0.995, $ctx->reportedActualNetIncome, 0.01);
     }
 
     /** The balance cannot grow without limit: past the cap there is nothing left to borrow. */
@@ -188,7 +225,7 @@ final class EarningsManagementTest extends TestCase
         $consensus = 100_000_000.0;
         // Total assets are 2bn here, so the cap is 2bn * EARNINGS_MANAGEMENT_MAX_BANK_RATIO.
         $cap = 2_000_000_000.0 * EarningsEngine::EARNINGS_MANAGEMENT_MAX_BANK_RATIO;
-        $ctx = $this->makeContext($consensus, $consensus * 0.98, $cap);
+        $ctx = $this->makeContext($consensus, $consensus * 0.995, $cap);
 
         $this->manage->invoke($this->engine, $ctx);
 
