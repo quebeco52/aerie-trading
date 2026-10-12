@@ -99,7 +99,7 @@ class SovereignFundDynamicsTest extends TestCase
         $netWith = $this->median(array_merge(...array_map(static fn (array $run): array => $run['lateNetLiabilities'], $withFund)));
         $netWithout = $this->median(array_merge(...array_map(static fn (array $run): array => $run['lateNetLiabilities'], $withoutFund)));
         $this->assertLessThan(
-            $netWithout - (0.5 * SovereignFundSubsystem::OPENING_FUND_TO_GDP),
+            $netWithout - (0.5 * MacroEngine::OPENING_FUND_TO_GDP),
             $netWith,
             'Funding the structural deficit lowers the net liabilities the fiscal rule settles on by at least half the fund it opened with.'
         );

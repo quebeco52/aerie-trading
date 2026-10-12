@@ -358,6 +358,17 @@ class StockModelTuning
             ModelParam::BaseMetalsWeight->value     => 0.05, // Copper concentrate from its porphyry mine
         ],
 
+        // --- Egret Trust (EGRT) ---
+        // Custodian of the Sovereign Reserve Fund. Its loans are lines to funds secured on their investors' commitments.
+        'EGRT' => [
+            ModelParam::FundCustodyShare->value          => 0.20, // A fifth of servicing fees come from the Fund's book
+            ModelParam::CreditRiskAppetite->value        => 0.25, // Fund finance: half the neutral segment loss rate
+            ModelParam::ResidentialMortgageShare->value  => 0.15, // Private-client mortgages
+            ModelParam::ConsumerLoanShare->value         => 0.00,
+            ModelParam::CommercialRealEstateShare->value => 0.05, // Business lending to funds takes the last 80%
+            ModelParam::TargetCapitalRatio->value        => 0.1143, // Its seeded book equity/assets
+        ],
+
         // --- Bowerbird Homes (BOWR) ---
         // Owns three years of lots, as D.R. Horton did in FY2005 before the industry moved to optioned land.
         'BOWR' => [

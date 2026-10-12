@@ -52,6 +52,8 @@ class FinancialSummaryBuilder
         'capture_rate' => ['Crack capture', 'percent'],
         'throughput_index' => ['Throughput index', 'index'],
         'loss_ratio' => ['Loss ratio', 'percent'],
+        'medical_cost_ratio' => ['Medical cost ratio', 'percent'],
+        'premium_rebate' => ['Premium rebates', 'percent'],
         'expense_ratio' => ['Expense ratio', 'percent'],
     ];
 

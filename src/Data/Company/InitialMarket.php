@@ -2482,6 +2482,72 @@ class InitialMarket
             'wholesale_debt' => 4_300_000_000.00, // Book D/E 0.18: the US precious metals average.
             'retained_earnings' => 14_000_000_000.00,
         ],
+        [
+            'ticker' => 'PELI',
+            'management_style' => 'operator', // Prices its book to the loss ratio it can earn and pays out what it cannot grow
+            'name' => 'Pelican Health Plans',
+            'sector' => 'Health Care',
+            'industry' => 'Healthcare Plans',
+            'systemic_importance' => 'base',
+            'shares_outstanding' => 1_000_000_000,
+            'volatility' => 0.25,
+            'beta_tilt' => 0.00,
+            'jump_intensity' => 0.50,
+            'jump_vol' => 0.10,
+            'baseline_roic' => 0.16,
+            'capex_ratio' => 0.30,
+            'target_payout_ratio' => 0.30,
+            'dividendSpeed' => self::LINTNER_QUARTERLY_ADJUSTMENT_SPEED,
+            // Claims are 82.5% of premium, UnitedHealth's 2019 medical care ratio: the engine strikes the split on cash
+            // costs net of depreciation (1.6% of revenue on its acquired systems), and administration takes 10% and
+            // leaves a 5.5% operating margin, about its insurance segment's.
+            'fixed_cost_ratio' => 0.112,
+            'operating_margin' => 0.055,
+            'public_float' => 0.90,
+            'sam_ratio' => 0.15,
+            'floating_debt_ratio' => 0.15,
+            'historical_fixed_rate' => 0.050,
+            'credit_spread' => 0.0120,
+            'depreciation_rate' => 0.04,
+            // Operating cash plus the claims float: about seven weeks of claims owed, invested until paid.
+            'corporate_treasury' => 13_000_000_000.00,
+            'total_equity' => 26_000_000_000.00,
+            'customer_deposits' => 0.00,
+            'wholesale_debt' => 10_000_000_000.00,
+            'retained_earnings' => 16_000_000_000.00,
+        ],
+        [
+            'ticker' => 'EGRT',
+            'management_style' => 'steward', // A custodian's clients want it dull: steady dividends, no acquisitions
+            'name' => 'Egret Trust',
+            'sector' => 'Financials',
+            'industry' => 'Custody Banks',
+            'systemic_importance' => 'systemic', // Custodian of the Sovereign Reserve Fund and of most assets on Glasswater Row
+            'shares_outstanding' => 1_000_000_000,
+            'volatility' => 0.24,
+            'beta_tilt' => 0.25, // its fees are struck on market values
+            'jump_intensity' => 0.50,
+            'jump_vol' => 0.10,
+            'baseline_roe' => 0.11,
+            'capex_ratio' => 0.10,
+            'target_payout_ratio' => 0.35,
+            'dividendSpeed' => self::LINTNER_QUARTERLY_ADJUSTMENT_SPEED,
+            'fixed_cost_ratio' => 0.60,
+            'operating_margin' => 0.25,
+            'public_float' => 0.90,
+            'sam_ratio' => 0.35,
+            'floating_debt_ratio' => 0.30,
+            'historical_fixed_rate' => 0.030,
+            'credit_spread' => 0.0060,
+            'depreciation_rate' => 0.03,
+            // 10% of deposits, the commercial-bank target cash reserve. Deposits are 83% of liabilities, as State Street's
+            // 72% of assets on a tenth of them in equity.
+            'corporate_treasury' => 87_000_000_000.00,
+            'total_equity'      => 120_000_000_000.00,
+            'customer_deposits' => 870_000_000_000.00,
+            'wholesale_debt'    => 60_000_000_000.00,
+            'retained_earnings' => 60_000_000_000.00,
+        ],
     ];
 
     /**

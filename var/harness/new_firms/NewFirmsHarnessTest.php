@@ -374,6 +374,13 @@ final class NewFirmsHarnessTest extends KernelTestCase
             // Land write-down (plant, ASC 360) in currency: the KPI is a share of the quarter's revenue.
             'lwd' => (float) ($kpis['land_write_down'] ?? 0.0) * (float) $report->getRevenue(),
             'hpt' => $m !== null ? $m->residentialPropertyIndexEma / max(1.0, $m->residentialWealthTrend) : 0.0,
+            // Round 2 (PELI, EGRT): the plan's KPIs and the readings each firm answers to.
+            'mcr' => isset($kpis['medical_cost_ratio']) ? (float) $kpis['medical_cost_ratio'] : null,
+            'reb' => (float) ($kpis['premium_rebate'] ?? 0.0),
+            'ugap' => $m !== null ? $m->unemploymentRateEma - $m->nairuEma : 0.0,
+            'reimb' => $m?->reimbursementRateGrowth ?? 0.0,
+            'ewr' => $m !== null && $m->equityWealthTrend > 0.0 ? $m->equityWealthRatio / $m->equityWealthTrend : 0.0,
+            'fund' => $m?->sovereignFundToGdp ?? 0.0,
         ];
     }
 

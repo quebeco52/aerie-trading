@@ -69,7 +69,7 @@ class DistrictMap
         'Capital Markets' => [
             'credit_services', 'commercial_bank', 'insurance', 'retail_insurance', 'reinsurance', 'shadow_bank',
             'investment_bank', 'clearing_house', 'financial_data', 'asset_manager', 'hedge_fund',
-            'brokerage', 'distressed_debt', 'private_equity', 'investment_company',
+            'brokerage', 'distressed_debt', 'private_equity', 'investment_company', 'custody_bank',
         ],
         // The diversified groups open the works: a conglomerate and a merchant house OPERATE what
         // they own and trade what they carry, which is this block's trade and not the trust's, so
@@ -91,7 +91,7 @@ class DistrictMap
         // bracket reading ENERGY is the same kind of lie this pass set out to remove.
         'Extraction & Power' => ['oil_gas_producer', 'refining', 'mining', 'utility'],
         'Technology & Telecoms' => ['tech', 'computer_hardware', 'semiconductor', 'communication_equipment', 'telecom'],
-        'Property & Health' => ['reit', 'homebuilder', 'medical_care_facility', 'biotech'],
+        'Property & Health' => ['reit', 'homebuilder', 'medical_care_facility', 'health_insurer', 'biotech'],
     ];
 
     /**
@@ -315,10 +315,10 @@ class DistrictMap
     public const ROOF_FURNITURE = [
         // Capital houses: a coin.
         'credit_services' => 'coin', 'commercial_bank' => 'coin', 'shadow_bank' => 'coin',
-        'investment_bank' => 'coin', 'clearing_house' => 'coin', 'asset_manager' => 'coin',
+        'investment_bank' => 'coin', 'clearing_house' => 'coin', 'custody_bank' => 'coin', 'asset_manager' => 'coin',
         'hedge_fund' => 'coin', 'brokerage' => 'coin', 'distressed_debt' => 'coin', 'private_equity' => 'coin',
         // Underwriters: an umbrella. Market data: a bar chart.
-        'insurance' => 'umbrella', 'reinsurance' => 'umbrella', 'retail_insurance' => 'umbrella',
+        'insurance' => 'umbrella', 'reinsurance' => 'umbrella', 'retail_insurance' => 'umbrella', 'health_insurer' => 'umbrella',
         'financial_data' => 'chart',
         // Process industry: a factory; wells: a derrick; mines: an ingot; refineries: a flare stack; chemistry: a flask.
         'steel_manufacturing' => 'factory', 'specialty_industrial_machinery' => 'factory',

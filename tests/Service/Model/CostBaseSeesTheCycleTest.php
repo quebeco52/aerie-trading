@@ -64,6 +64,7 @@ class CostBaseSeesTheCycleTest extends TestCase
             outputGap: self::GAP,
             outputGapEma: self::GAP,
             unemploymentRate: MacroEngine::NATURAL_UNEMPLOYMENT - (0.5 * self::GAP),
+            unemploymentRateEma: MacroEngine::NATURAL_UNEMPLOYMENT - (0.5 * self::GAP),
             marketVolatilityEma: 0.25,
             macroCreditSpread: 2.0 * MacroEngine::BASE_CREDIT_SPREAD,
             macroCreditSpreadEma: 2.0 * MacroEngine::BASE_CREDIT_SPREAD,
