@@ -120,24 +120,24 @@ class PoliticsEngine
     public const NORMAL_VOTE_DRIFT_VARIANCE = 2.0 * 0.000341;
 
     // --- The Budget ---
-    /** The levers a budget sets, in platform() order, and whether cutting each costs revenue the Council guards. */
+    /** The levers a budget sets, in platform() order, and whether cutting each costs revenue the Council guards; the levies net taxes give back (PublicAccountsDTO::policyLevies()) cost none. */
     public const REVENUE_LEVERS = [
         'publicSpending' => false,
         'corporateTax' => true,
-        'tariff' => true,
+        'tariff' => false,
         'laborGrowth' => false,
         'foreignBuyerTax' => false,
         'mergerReviewLeniency' => false,
         'greenBeltStringency' => false,
-        'carbonPrice' => true,
+        'carbonPrice' => false,
         'extractionStringency' => false,
         'stampDutyRate' => false,
-        'bankLevyRate' => true,
+        'bankLevyRate' => false,
         'reserveDrawShare' => true,
         'consolidationTaxShare' => false,
         'reserveHomeShare' => false,
         'utilityRateGrant' => false,
-        'dividendTax' => true,
+        'dividendTax' => false,
     ];
     /** The levers whose rise is spending the Council guards: above the debt line it holds a rise as it holds a revenue cut, both widening the deficit, as Switzerland's debt brake caps spending (Federal Constitution art. 126). */
     public const SPENDING_LEVERS = ['publicSpending'];

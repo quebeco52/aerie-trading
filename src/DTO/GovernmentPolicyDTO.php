@@ -35,7 +35,7 @@ final readonly class GovernmentPolicyDTO
         public float $bankLevyRate,
         /** Share of the reserve fund's expected long-term real return the budget spends (MacroEngine::RESERVE_DRAW_CEILING without the fund's consent). */
         public float $reserveDrawShare,
-        /** Share of the surplus the debt calls for (App\Service\Macro\Subsystem\CreditFiscalSubsystem::fiscalStance()) raised by tax rather than by cutting purchases. */
+        /** Share of the surplus the debt calls for (App\Service\Macro\Subsystem\CreditFiscalSubsystem::fiscalStance()) raised by tax rather than by cutting purchases, and of the room under the line spent on purchases rather than tax cuts. */
         public float $consolidationTaxShare,
         /** Share of the reserve fund's equities held on the District's own board. */
         public float $reserveHomeEquityShare,

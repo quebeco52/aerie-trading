@@ -48,8 +48,13 @@ final readonly class PublicAccountsDTO
 
     public function revenue(): float
     {
-        return $this->netTaxes + $this->corporateTax + $this->tariffs + $this->carbonPrice + $this->bankLevy
-            + $this->dividendTax + $this->foreignBuyerTax + $this->fundContribution + $this->centralBankRemittance;
+        return $this->netTaxes + $this->corporateTax + $this->policyLevies() + $this->fundContribution + $this->centralBankRemittance;
+    }
+
+    /** What the Diet's policy levies raise beyond the founding budget: the tariff, carbon price, bank levy, dividend tax shift and foreign buyer tax. */
+    public function policyLevies(): float
+    {
+        return $this->tariffs + $this->carbonPrice + $this->bankLevy + $this->dividendTax + $this->foreignBuyerTax;
     }
 
     public function spending(): float

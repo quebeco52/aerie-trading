@@ -865,9 +865,10 @@ class PoliticsEngineTest extends TestCase
 
         Politics::enactBudget($state, MacroEngine::SOVEREIGN_RISK_DEBT_THRESHOLD + 0.05);
 
+        $platform = Politics::platform(Politics::coalitionPosition($state->governingCoalition, $state->dietSeats, $state->partyPositions));
         $this->assertSame(0.0, $state->corporateTaxPolicyShift, 'The tax cut is never tabled.');
-        $this->assertSame(0.08, $state->importTariffRate, 'Nor is the end of the tariff, which is revenue too.');
-        $this->assertSame(Valuation::FOUNDING_DIVIDEND_TAX_RATE, $state->dividendTaxRate, 'Nor the end of the tax on dividends.');
+        $this->assertSame($platform['tariff'], $state->importTariffRate, 'The end of the tariff passes: net taxes rise by what it raised, so no deficit widens.');
+        $this->assertLessThan(Valuation::FOUNDING_DIVIDEND_TAX_RATE, $state->dividendTaxRate, 'So does the cut to the tax on dividends.');
         $this->assertGreaterThan(MacroEngine::STRUCTURAL_LABOR_GROWTH_RATE, $state->laborForceGrowthRate, 'The immigration regime costs no revenue and passes.');
         $this->assertSame($state->totalTime, $state->lastCouncilBrakeAt);
     }
@@ -956,7 +957,7 @@ class PoliticsEngineTest extends TestCase
         $this->assertEqualsWithDelta(0.15, Politics::platform([Diet::AXIS_STATE => $half])['dividendTax'], 1e-12, 'Left of the middle the rate stays where it was founded.');
         $this->assertEqualsWithDelta(0.075, Politics::platform([Diet::AXIS_STATE => -$half])['dividendTax'], 1e-12);
         $this->assertSame(Valuation::FOUNDING_DIVIDEND_TAX_RATE, (new PoliticsStateDTO())->dividendTaxRate);
-        $this->assertTrue(Politics::REVENUE_LEVERS['dividendTax']);
+        $this->assertFalse(Politics::REVENUE_LEVERS['dividendTax'], 'What it raises is given back through net taxes.');
         $this->assertSame(Diet::AXIS_STATE, Politics::LEVER_AXES['dividendTax']);
     }
 
@@ -1274,10 +1275,11 @@ class PoliticsEngineTest extends TestCase
     }
 
     /**
-     * The Tideline Accord, propping up a Civic cabinet, will not vote the carbon price down toward the Front's own; and
-     * above the debt line the Council holds a carbon cut, which costs revenue, but never a green belt, which does not.
+     * The Tideline Accord, propping up a Civic cabinet, will not vote the carbon price down toward the Front's own. Above
+     * the debt line the Council holds neither a carbon cut nor a green belt: net taxes give back what the carbon price
+     * raises, so cutting it widens no deficit, while a corporate tax cut still does.
      */
-    public function testTheAccordAndTheCouncilEachHoldTheCarbonPrice(): void
+    public function testTheAccordHoldsTheCarbonPriceAndTheCouncilDoesNot(): void
     {
         $seats = Diet::SEED_SEATS;
         $positions = Diet::HOME_POSITIONS;
@@ -1290,8 +1292,12 @@ class PoliticsEngineTest extends TestCase
         $this->assertTrue($propped['supportHeld']['carbonPrice']);
 
         $braked = Politics::budget([Diet::VANGUARD, Diet::EXCHANGE, Diet::CHARTISTS, Diet::NEW_HORIZON], [], $seats, $positions, $standing, MacroEngine::SOVEREIGN_RISK_DEBT_THRESHOLD + 0.05, MacroEngine::SOVEREIGN_RISK_DEBT_THRESHOLD);
-        $this->assertTrue($braked['councilHeld']['carbonPrice']);
-        $this->assertSame(50.0, $braked['levers']['carbonPrice']);
+        $this->assertFalse($braked['councilHeld']['carbonPrice']);
+        $this->assertSame($braked['platform']['carbonPrice'], $braked['levers']['carbonPrice']);
+        $this->assertLessThan(50.0, $braked['levers']['carbonPrice']);
+        $this->assertTrue(Politics::REVENUE_LEVERS['corporateTax']);
+        $this->assertTrue(Politics::REVENUE_LEVERS['reserveDrawShare']);
+        $this->assertFalse(Politics::REVENUE_LEVERS['tariff']);
         $this->assertFalse($braked['councilHeld']['greenBeltStringency']);
         $this->assertSame(0.0, $braked['levers']['greenBeltStringency'], 'A growth-first majority lifts the green belt whatever the debt.');
     }
@@ -1310,14 +1316,14 @@ class PoliticsEngineTest extends TestCase
         $this->assertFalse(Politics::REVENUE_LEVERS['stampDutyRate']);
     }
 
-    /** The bank levy runs from none at the Vanguard's end to Ireland's levy at the Civic Front's, and the Council guards it as revenue. */
+    /** The bank levy runs from none at the Vanguard's end to Ireland's levy at the Civic Front's; net taxes give back what it raises, so the Council does not guard it. */
     public function testTheBankLevyRunsFromNoneToTheUksPeak(): void
     {
         $positions = Diet::HOME_POSITIONS;
 
         $this->assertEqualsWithDelta(0.0, Politics::platform(Diet::position(Diet::VANGUARD, $positions))['bankLevyRate'], 1e-15, 'The founding cabinet levies none.');
         $this->assertEqualsWithDelta(Politics::POLICY_BIG_STATE_BANK_LEVY, Politics::platform(Diet::position(Diet::CIVIC, $positions))['bankLevyRate'], 1e-15);
-        $this->assertTrue(Politics::REVENUE_LEVERS['bankLevyRate']);
+        $this->assertFalse(Politics::REVENUE_LEVERS['bankLevyRate']);
     }
 
     /**

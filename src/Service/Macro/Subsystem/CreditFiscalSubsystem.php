@@ -64,9 +64,9 @@ class CreditFiscalSubsystem
     // --- Sovereign Debt Dynamics (Greenwood-Vayanos 2014) ---
     /** Structural primary fiscal deficit as a fraction of GDP with no sovereign fund, levied as taxes that far below the purchases share; with a fund, the structural deficit is the fund's draw, spent. */
     public const SOVEREIGN_STRUCTURAL_DEFICIT = 0.020;
-    /** Net debt-to-GDP above which the Bohn (1998) fiscal reaction starts running primary surpluses. */
+    /** Gross debt-to-GDP the Bohn (1998) fiscal reaction holds the Diet's budget to: a surplus above it, a deficit below it. 70%, below every Council debt line but the lowest (Politics\DebtBrake), so the brake binds after a shock, not as a rule. */
     public const SOVEREIGN_DEBT_NEUTRAL_THRESHOLD = 0.70;
-    /** Bohn (1998, 2008) fiscal reaction: primary surplus response per unit of net debt above the neutral threshold (~0.10, the upper end of advanced-economy estimates), which stabilizes debt near 90% against a 2% structural deficit, and just above the 70% threshold once a sovereign fund's draw pays that deficit. */
+    /** Bohn (1998, 2008) linear fiscal reaction: primary surplus per unit of gross debt off the threshold, on either side (~0.10, the upper end of advanced-economy estimates). It holds debt near 90% against a 2% structural deficit, and just above 70% once a sovereign fund's draw pays that deficit. */
     public const BOHN_FISCAL_REACTION_SENSITIVITY = 0.10;
     /** Share of the Bohn surplus the budget raises by tax at the District's founding, the rest by cutting purchases: the average OECD deficit-cutting plan's, 0.69 of 1.83% of GDP (Alesina, Azzalini, Favero, Giavazzi & Miano 2018, Table 8; 16 countries, 1981-2014). */
     public const FOUNDING_CONSOLIDATION_TAX_SHARE = 0.69 / 1.83;
@@ -158,7 +158,7 @@ class CreditFiscalSubsystem
     public const MAX_EPU = 400.0;
 
     // --- Administered Healthcare Prices (CMS market-basket update) ---
-    /** Reimbursement update cut per unit of net sovereign debt above the risk threshold (90%): the sequester that a fiscal correction imposes on administered prices. */
+    /** Reimbursement update cut per unit of gross sovereign debt above the risk threshold (90%): the sequester that a fiscal correction imposes on administered prices. */
     public const REIMBURSEMENT_FISCAL_CUT_SENSITIVITY = 0.02;
     /** Floor on the annual update: administered prices are held, not cut, in a deflationary year. */
     public const REIMBURSEMENT_MIN_UPDATE = 0.0;
@@ -484,7 +484,7 @@ class CreditFiscalSubsystem
         $state->governmentSpendingIndex = StochasticProcesses::calculateSchwartz1Factor(
             currentPrice: $state->governmentSpendingIndex,
             kappa: MacroEngine::GOVT_SPENDING_MEAN_REVERSION,
-            theta: MacroEngine::GOVT_SPENDING_BASELINE * self::purchasesTarget($state->publicSpendingShare, $state->sovereignNetFinancialLiabilitiesToGdp, $state->sovereignFundDollarsPerGdp > 0.0, $state->consolidationTaxShare) / MacroEngine::PUBLIC_PURCHASES_TO_GDP,
+            theta: MacroEngine::GOVT_SPENDING_BASELINE * self::purchasesTarget($state->publicSpendingShare, $state->sovereignDebtToGdp, $state->sovereignFundDollarsPerGdp > 0.0, $state->consolidationTaxShare) / MacroEngine::PUBLIC_PURCHASES_TO_GDP,
             sigma: self::GOVT_SPENDING_VOLATILITY,
             dt: $dt,
             dW: $this->mathUtility->generateStandardNormal()
@@ -508,9 +508,13 @@ class CreditFiscalSubsystem
      * Adjusts the budget's net taxes, the take outside the corporate tax net of transfers, continuously via an
      * Ornstein-Uhlenbeck institutional process: they rise in a boom and fall in a recession, and return to their
      * founding share plus the structural fiscal stance (fiscalStance()), the instrument the budget's surplus is raised
-     * with. The corporate rate firms pay follows only the shift the Diet has legislated, at the same speed. Demand reads
+     * with, less what the policy levies raise (PublicAccountsDTO::policyLevies()). The budget targets its balance, as
+     * Norway's fiscal rule sets the structural deficit and lets every revenue line inside it (Report No. 29 to the
+     * Storting, 2000-2001), so a tariff or a carbon price lowers the other taxes rather than running a surplus nobody
+     * set. The corporate rate firms pay follows only the shift the Diet has legislated, at the same speed. Demand reads
      * the discretionary parts against their decade trends: the corporate rate and the stance, never the stabilisers'
-     * swing, which reaches it through the gap's own pull (MacroAggregateSubsystem::KALDOR_AUTOMATIC_STABILISER).
+     * swing, which reaches it through the gap's own pull (MacroAggregateSubsystem::KALDOR_AUTOMATIC_STABILISER), nor the
+     * levies' give-back, which leaves the take as a whole where it was.
      *
      * @param MacroState $state Current macroeconomic state.
      * @param float      $dt    Time increment in years.
@@ -518,7 +522,8 @@ class CreditFiscalSubsystem
     public function calculateDynamicFiscalPolicy(MacroState $state, float $dt): void
     {
         $stanceTarget = self::FOUNDING_NET_TAX_RATE + self::fiscalStance($state);
-        $state->netTaxRate += MacroEngine::FISCAL_ADJUSTMENT_SPEED * ($stanceTarget + (self::FISCAL_STABILIZER_SENSITIVITY * $state->outputGapEma) - $state->netTaxRate) * $dt;
+        $levies = self::publicAccounts($state, $dt)->policyLevies();
+        $state->netTaxRate += MacroEngine::FISCAL_ADJUSTMENT_SPEED * ($stanceTarget - $levies + (self::FISCAL_STABILIZER_SENSITIVITY * $state->outputGapEma) - $state->netTaxRate) * $dt;
         $state->netTaxStanceRate += MacroEngine::FISCAL_ADJUSTMENT_SPEED * ($stanceTarget - $state->netTaxStanceRate) * $dt;
         $state->corporateTaxRate += MacroEngine::FISCAL_ADJUSTMENT_SPEED * (MacroEngine::BASE_CORPORATE_TAX_RATE + $state->corporateTaxPolicyShift - $state->corporateTaxRate) * $dt;
 
@@ -541,46 +546,55 @@ class CreditFiscalSubsystem
     }
 
     /**
-     * The structural part of the tax take over the purchases share, as a share of GDP: the Bohn (1998) reaction to net
-     * debt above its threshold, less the structural deficit a budget with no fund runs (with one, the draw pays that
-     * deficit as spending), less the part of any consolidation the Diet finds by cutting purchases (purchasesTarget()). Debt is net
-     * financial liabilities, gross less the whole fund and the rescue holdings, the position the market prices (IMF Fiscal
-     * Monitor, October 2018, ch. 2: stronger public balance sheets borrow cheaper); equal to gross with neither.
+     * The structural part of the tax take over the purchases share, as a share of GDP: the Bohn (1998) reaction to gross
+     * debt off its threshold, less the structural deficit a budget with no fund runs (with one, the draw pays that
+     * deficit as spending), less the part of any consolidation the Diet finds by cutting purchases, or of any loosening it
+     * spends on them (purchasesTarget()). Debt is gross: it is what the Diet's budget borrows and what the Council's brake reads
+     * (Politics\DebtBrake), while the fund is the Council's; the market still prices net financial liabilities
+     * (calculateSovereignRiskSpread()).
      *
      * @param MacroState $state Current macroeconomic state.
      */
     public static function fiscalStance(MacroState $state): float
     {
         $funded = $state->sovereignFundDollarsPerGdp > 0.0;
-        $stance = self::bohnSurplus($state->sovereignNetFinancialLiabilitiesToGdp) - ($funded ? 0.0 : self::SOVEREIGN_STRUCTURAL_DEFICIT);
+        $stance = self::bohnSurplus($state->sovereignDebtToGdp) - ($funded ? 0.0 : self::SOVEREIGN_STRUCTURAL_DEFICIT);
 
-        return $stance - ($state->publicSpendingShare - self::purchasesTarget($state->publicSpendingShare, $state->sovereignNetFinancialLiabilitiesToGdp, $funded, $state->consolidationTaxShare));
+        return $stance - ($state->publicSpendingShare - self::purchasesTarget($state->publicSpendingShare, $state->sovereignDebtToGdp, $funded, $state->consolidationTaxShare));
     }
 
-    /** The primary surplus the Bohn (1998) reaction calls for, a share of GDP: its sensitivity on net financial liabilities above the threshold. */
-    public static function bohnSurplus(float $netLiabilitiesToGdp): float
+    /**
+     * The primary surplus the Bohn (1998) reaction calls for, a share of GDP: its sensitivity on gross debt off the
+     * threshold. The reaction is linear, as Bohn estimates it, so debt below the line is a deficit the budget may run; a
+     * one-sided rule leaves debt to drift wherever the other revenue lines push it.
+     */
+    public static function bohnSurplus(float $debtToGdp): float
     {
-        return self::BOHN_FISCAL_REACTION_SENSITIVITY * max(0.0, $netLiabilitiesToGdp - self::SOVEREIGN_DEBT_NEUTRAL_THRESHOLD);
+        return self::BOHN_FISCAL_REACTION_SENSITIVITY * ($debtToGdp - self::SOVEREIGN_DEBT_NEUTRAL_THRESHOLD);
     }
 
     /**
      * The part of the consolidation the budget finds by cutting purchases rather than raising tax, a share of GDP. A
      * consolidation is the surplus beyond what pays the structural deficit, a cut from the budget as it stands, as the
      * plans the tax share is measured on are (Alesina et al. 2018); with no fund, the reaction that only pays that deficit
-     * is no consolidation.
+     * is no consolidation. Debt under the line loosens the budget the other way round, so this turns negative: a Diet
+     * that repairs debt by tax spends the room, one that repairs it by cuts gives it back as tax cuts, as the manifestos
+     * the share is set from split the two (PoliticsEngine::POLICY_MANIFESTO_CONSOLIDATION_TAX_SHARE_GAP).
      */
-    public static function consolidationSpendingCut(float $netLiabilitiesToGdp, bool $funded, float $taxShare): float
+    public static function consolidationSpendingCut(float $debtToGdp, bool $funded, float $taxShare): float
     {
-        return (1.0 - $taxShare) * max(0.0, self::bohnSurplus($netLiabilitiesToGdp) - ($funded ? 0.0 : self::SOVEREIGN_STRUCTURAL_DEFICIT));
+        $reaction = self::bohnSurplus($debtToGdp);
+
+        return ((1.0 - $taxShare) * max(0.0, $reaction - ($funded ? 0.0 : self::SOVEREIGN_STRUCTURAL_DEFICIT))) + ($taxShare * min(0.0, $reaction));
     }
 
     /**
      * The purchases share of GDP the purchases process reverts to: the Diet's appropriation, less the cuts the debt calls
      * for. No more can be cut than is appropriated; past that the tax rise carries the rest of the surplus (fiscalStance()).
      */
-    public static function purchasesTarget(float $publicSpendingShare, float $netLiabilitiesToGdp, bool $funded, float $taxShare): float
+    public static function purchasesTarget(float $publicSpendingShare, float $debtToGdp, bool $funded, float $taxShare): float
     {
-        return $publicSpendingShare - min($publicSpendingShare, self::consolidationSpendingCut($netLiabilitiesToGdp, $funded, $taxShare));
+        return $publicSpendingShare - min($publicSpendingShare, self::consolidationSpendingCut($debtToGdp, $funded, $taxShare));
     }
 
     /**
@@ -1142,8 +1156,8 @@ class CreditFiscalSubsystem
      *
      * One-sided on the debt stock above the level at which an advanced sovereign is re-rated. The premium is
      * a level the whole curve carries (it enters the term premium, the corporate IG base through the
-     * sovereign ceiling, and the currency), repriced over budget rounds rather than ticks. It stays zero
-     * through the 85-90% the fiscal reaction settles at.
+     * sovereign ceiling, and the currency), repriced over budget rounds rather than ticks. It stays zero at the
+     * debt the fiscal reaction settles at.
      *
      * The stock is net financial liabilities, gross debt less the sovereign fund whole and the rescue holdings:
      * spreads price net rather than gross debt (Hadzi-Vaskov & Ricci 2016, IMF WP/16/148), and the whole public
@@ -1232,8 +1246,8 @@ class CreditFiscalSubsystem
             return;
         }
 
-        // Keyed to net financial liabilities, as the fiscal reaction it belongs to is (fiscalStance()).
-        $excessDebt = max(0.0, $state->sovereignNetFinancialLiabilitiesToGdpEma - MacroEngine::SOVEREIGN_RISK_DEBT_THRESHOLD);
+        // Keyed to gross debt, as the fiscal reaction it belongs to is (fiscalStance()).
+        $excessDebt = max(0.0, $state->sovereignDebtToGdpEma - MacroEngine::SOVEREIGN_RISK_DEBT_THRESHOLD);
         $update = $state->inflationEma
             - MacroEngine::REIMBURSEMENT_PRODUCTIVITY_OFFSET
             - (self::REIMBURSEMENT_FISCAL_CUT_SENSITIVITY * $excessDebt);

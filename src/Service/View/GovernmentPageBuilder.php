@@ -1204,7 +1204,7 @@ class GovernmentPageBuilder
         };
         $neutral = MacroEngine::BASE_CORPORATE_TAX_RATE;
         $screens = MergerAndAcquisitionEngine::reviewScreens($politics->mergerReviewLeniency);
-        $repair = max(0.0, CreditFiscalSubsystem::bohnSurplus($macro->sovereignNetFinancialLiabilitiesToGdp) - ($macro->sovereignFundDollarsPerGdp > 0.0 ? 0.0 : CreditFiscalSubsystem::SOVEREIGN_STRUCTURAL_DEFICIT));
+        $repair = max(0.0, CreditFiscalSubsystem::bohnSurplus($macro->sovereignDebtToGdp) - ($macro->sovereignFundDollarsPerGdp > 0.0 ? 0.0 : CreditFiscalSubsystem::SOVEREIGN_STRUCTURAL_DEFICIT));
 
         return [
             'levers' => [
@@ -1351,8 +1351,8 @@ class GovernmentPageBuilder
                     'enacted' => $standing['consolidationTaxShare'],
                     'status' => $status('consolidationTaxShare'),
                     'note' => $repair > 0.0
-                        ? sprintf('Of the surplus the debt calls for, %.1f%% of GDP with debts %.0f%% of GDP beyond all the state holds; the rest comes from spending cuts', 100.0 * $repair, 100.0 * $macro->sovereignNetFinancialLiabilitiesToGdp)
-                        : 'Of any surplus the debt calls for; the rest comes from spending cuts. Set against all the state holds, the debt calls for none today',
+                        ? sprintf('Of the surplus the debt calls for, %.1f%% of GDP with debt at %.0f%% of GDP; the rest comes from spending cuts', 100.0 * $repair, 100.0 * $macro->sovereignDebtToGdp)
+                        : 'Of any surplus the debt calls for; the rest comes from spending cuts. Debt is under the line today, so the budget has room: this share goes to spending and the rest to tax cuts',
                 ],
                 [
                     'name' => 'Reserve fund shares held at home',

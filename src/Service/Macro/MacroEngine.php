@@ -243,11 +243,11 @@ class MacroEngine
     public const OPENING_FUND_TO_GDP = 0.41;
 
     // --- Sovereign Debt Dynamics (Greenwood-Vayanos 2014) ---
-    /** Sovereign debt-to-GDP at simulation start: where the fiscal rule holds it with output at trend (median 0.93, 32 seeds x 100y); the old 0.60 took 40 years to climb out of. */
-    public const INITIAL_DEBT_TO_GDP = 0.93;
+    /** Sovereign debt-to-GDP at simulation start: where the fiscal rule holds gross debt (median 0.726 over years 30-100, 4 seeds x 100y, var/harness/debt_anchor), so the opening budget runs no consolidation it did not choose. */
+    public const INITIAL_DEBT_TO_GDP = 0.72;
     /** Gross debt kept outstanding with no borrowing need, for the benchmark curve to price (Singapore and Hong Kong issue for market development through surpluses); below it a surplus buys the fund's paper instead. */
     public const SOVEREIGN_DEBT_FLOOR = 0.20;
-    /** Debt-to-GDP above which the market prices fiscal risk and the Council holds its veto over the budget (Reinhart & Rogoff 2010's 90% line). Deliberately above the 70% the Bohn reaction defends: the engine's own steady state runs 85-90%, and a premium charged for that normal state was measured to lift IG 30 bps and 2s10s 45 bps everywhere. */
+    /** Debt-to-GDP above which the market prices fiscal risk and the Council holds its veto over the budget (Reinhart & Rogoff 2010's 90% line). Deliberately above the 70% the Bohn reaction holds gross debt to: a premium charged for the engine's normal state was measured to lift IG 30 bps and 2s10s 45 bps everywhere. */
     public const SOVEREIGN_RISK_DEBT_THRESHOLD = 0.90;
 
     // --- Fund-Financed Fiscal Stabilisation (IMF Norway Selected Issues 2025, Table 5) ---

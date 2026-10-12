@@ -167,13 +167,13 @@ class PolicyCapitalizationTest extends TestCase
         $this->assertSame(0.0, Policy::measure('publicSpending', MacroEngine::PUBLIC_PURCHASES_TO_GDP), 'The founding share is no shift.');
 
         // Purchases the debt has cut below the law are where they are headed, not still closing on it.
-        $netDebt = MacroEngine::SOVEREIGN_RISK_DEBT_THRESHOLD + 0.2;
-        $cut = CreditFiscalSubsystem::consolidationSpendingCut($netDebt, false, CreditFiscalSubsystem::FOUNDING_CONSOLIDATION_TAX_SHARE);
+        $debt = MacroEngine::SOVEREIGN_RISK_DEBT_THRESHOLD + 0.2;
+        $cut = CreditFiscalSubsystem::consolidationSpendingCut($debt, false, CreditFiscalSubsystem::FOUNDING_CONSOLIDATION_TAX_SHARE);
         $this->assertGreaterThan(0.0, $cut);
         $settled = Policy::measure('publicSpending', $shareAt($longRun) - $cut);
         $this->assertEqualsWithDelta(
             Policy::publicSpendingGap($carried, self::CAP_RATE),
-            Policy::publicSpendingGap($this->spending($shareAt($longRun), $settled, $longRun, netDebt: $netDebt), self::CAP_RATE),
+            Policy::publicSpendingGap($this->spending($shareAt($longRun), $settled, $longRun, debt: $debt), self::CAP_RATE),
             1e-12,
             'At the law less the cut, nothing more is closing.'
         );
@@ -294,11 +294,11 @@ class PolicyCapitalizationTest extends TestCase
      * An economy with public spending in force at $share, purchases at $purchases above the founding level, the trailing
      * earnings carrying $embodied, and the next government expected to set $expected (the law in force if not given).
      */
-    private function spending(float $share, float $purchases, float $embodied, ?float $expected = null, float $from = -1.0, float $netDebt = CreditFiscalSubsystem::SOVEREIGN_DEBT_NEUTRAL_THRESHOLD): MacroStateDTO
+    private function spending(float $share, float $purchases, float $embodied, ?float $expected = null, float $from = -1.0, float $debt = CreditFiscalSubsystem::SOVEREIGN_DEBT_NEUTRAL_THRESHOLD): MacroStateDTO
     {
         return new MacroStateDTO(
             totalTime: 10.0,
-            sovereignNetFinancialLiabilitiesToGdp: $netDebt,
+            sovereignDebtToGdp: $debt,
             governmentSpendingIndex: MacroEngine::GOVT_SPENDING_BASELINE * (1.0 + $purchases),
             publicSpendingShare: $share,
             governmentSpendingShiftEmbodied: $embodied,

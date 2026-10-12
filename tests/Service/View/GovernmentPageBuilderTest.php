@@ -325,7 +325,7 @@ class GovernmentPageBuilderTest extends TestCase
 
         $this->assertTrue($braked['budget']['braking']);
         $this->assertSame('held', $levers['Corporate tax rate']['status']);
-        $this->assertSame('held', $levers['Tax on dividends']['status'], 'Exempting dividends costs revenue too.');
+        $this->assertSame('pending', $levers['Tax on dividends']['status'], 'Net taxes give back what the tax on dividends raises, so exempting them widens no deficit.');
         $this->assertLessThan(Valuation::FOUNDING_DIVIDEND_TAX_RATE, $levers['Tax on dividends']['platform'], 'The right taxes dividends less.');
         $this->assertStringContainsString('at the rate set at Year 1', $levers['Tax on dividends']['note']);
         $this->assertLessThan(MacroEngine::BASE_CORPORATE_TAX_RATE, $levers['Corporate tax rate']['platform']);
