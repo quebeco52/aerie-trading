@@ -688,27 +688,34 @@ class CreditFiscalSubsystemTest extends TestCase
         $this->assertLessThan(MacroEngine::EPU_BASELINE * exp(CreditFiscalSubsystem::EPU_ELECTION_LIFT), $peak->policyUncertaintyIndex, 'and no higher than the full election lift.');
     }
 
-    public function testADownturnLiftsPolicyUncertainty(): void
+    /**
+     * Slack moves the index both ways, by the BBD fit's 0.105 log points per point of unemployment above NAIRU: a
+     * downturn puts the policy response in question, a tight labour market quiets it.
+     */
+    public function testPolicyUncertaintyMovesWithUnemploymentAboveNairu(): void
     {
         $subsystem = $this->quietSubsystem();
 
-        $calm = new MacroState();
-        $calm->totalTime = 1.5;
-        $calm->recessionProbabilityEma = CreditFiscalSubsystem::EPU_STRESS_PROBABILITY_FLOOR;
-        $stressed = new MacroState();
-        $stressed->totalTime = 1.5;
-        $stressed->recessionProbabilityEma = CreditFiscalSubsystem::EPU_STRESS_PROBABILITY_FLOOR + 0.50;
+        $states = [];
+        foreach (['tight' => -0.01, 'atNairu' => 0.0, 'slack' => 0.02] as $name => $gap) {
+            $state = new MacroState();
+            $state->totalTime = 1.5;
+            $state->nairu = 0.045;
+            $state->unemploymentRate = 0.045 + $gap;
+            $states[$name] = $state;
+        }
 
         // Four years of steps: the log-OU has closed all but a fraction of a percent of its gap to the target.
         for ($i = 0; $i < 400; $i++) {
-            $subsystem->calculatePolicyUncertainty($calm, 0.01);
-            $subsystem->calculatePolicyUncertainty($stressed, 0.01);
-            $calm->totalTime = 1.5;
-            $stressed->totalTime = 1.5;
+            foreach ($states as $state) {
+                $subsystem->calculatePolicyUncertainty($state, 0.01);
+                $state->totalTime = 1.5;
+            }
         }
 
-        $expectedRatio = exp(CreditFiscalSubsystem::EPU_STRESS_LIFT * 0.50);
-        $this->assertEqualsWithDelta($expectedRatio, $stressed->policyUncertaintyIndex / $calm->policyUncertaintyIndex, 0.02, 'A fifty-point rise in recession odds puts the policy response itself in question.');
+        $atNairu = $states['atNairu']->policyUncertaintyIndex;
+        $this->assertEqualsWithDelta(CreditFiscalSubsystem::EPU_SLACK_LIFT * 0.02, log($states['slack']->policyUncertaintyIndex / $atNairu), 0.005, 'Two points of slack lift the index ~21 log points.');
+        $this->assertEqualsWithDelta(-CreditFiscalSubsystem::EPU_SLACK_LIFT * 0.01, log($states['tight']->policyUncertaintyIndex / $atNairu), 0.005, 'A point below NAIRU lowers it, so the lift averages out over the cycle.');
     }
 
     public function testPolicyUncertaintyStaysInsideItsRecordedRange(): void

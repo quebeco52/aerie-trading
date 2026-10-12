@@ -87,9 +87,7 @@ class ShadowBankBusinessModel extends CommercialBankBusinessModel
     // --- Private Credit & Corporate Default Physics ---
     /** Expansion sensitivity of direct lending origination when commercial banks tighten credit standards (SLOOS). */
     public const SLOOS_PRIVATE_CREDIT_EXPANSION = 0.30;
-    /** Baseline 12-month forward recession probability; the lifetime loss estimate is struck at 1.0x here. */
-    public const CECL_BASELINE_RECESSION_PROB   = 0.15;
-    /** Lifetime-loss multiplier per unit of recession probability above baseline: a near-certain recession lifts the reserve target ~0.85x. */
+    /** Lifetime-loss multiplier per unit of recession probability away from the base rate: a near-certain recession lifts the reserve target ~0.85x. */
     public const CECL_RESERVE_RECESSION_SENSITIVITY = 1.00;
 
     // --- Housing Starts & M2 Liquidity Transmission ---

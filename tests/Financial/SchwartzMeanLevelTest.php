@@ -154,7 +154,7 @@ class SchwartzMeanLevelTest extends TestCase
         $state = new MacroState();
         $state->policyUncertaintyIndex = MacroEngine::EPU_BASELINE;
         $state->electionPulse = 0.0;
-        $state->recessionProbabilityEma = 0.0;
+        $state->unemploymentRate = $state->nairu;
 
         $dt = 0.05;
         $burnIn = 200;

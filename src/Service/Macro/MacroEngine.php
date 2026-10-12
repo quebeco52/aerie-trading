@@ -289,8 +289,10 @@ class MacroEngine
     public const CU_OVERHANG_SENSITIVITY = 0.40;
 
     // --- Estrella & Mishkin (1998) Yield Curve Recession Probit ---
-    /** Probit intercept parameter anchoring baseline recession probability around 15%. */
-    public const RECESSION_PROBIT_BETA_0 = -0.55;
+    /** Share of months the US spent in recession, 1945Q4-2019 (FRED USREC): what a calibrated 12-month recession forecast averages, and the outlook readers measure from. */
+    public const RECESSION_BASE_RATE = 0.138;
+    /** Probit intercept, set so the forecast averages RECESSION_BASE_RATE over this engine's cycle (a probit with an intercept reproduces its sample frequency). */
+    public const RECESSION_PROBIT_BETA_0 = -0.92;
     /** Probit sensitivity to sovereign yield curve slope (10Y minus policy rate). */
     public const RECESSION_PROBIT_BETA_SLOPE = -80.0;
     /** Adds back half the term premium so the probit reads the expectations component (slope minus premium), not premium-driven steepness (Rosenberg & Maurer 2008). */
