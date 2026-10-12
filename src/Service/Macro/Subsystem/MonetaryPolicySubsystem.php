@@ -83,10 +83,10 @@ class MonetaryPolicySubsystem
     public const HAWKISH_MAJORITY_SHARE = 0.25;
 
     // --- Giving Ground to Political Pressure (Gavin & Manger 2023; Drechsel 2024) ---
-    /** Cut in the rule's rate while the Authority gives ground to the cabinet, fitted with the drift below (var/harness/pressure/irf.sh, 256 paired games) so an episode it gives in to leaves the policy rate 0.3pp lower three quarters on, as a pressure event under a highly populist government does (Gavin & Manger 2023, p. 26). */
-    public const PRESSURE_RATE_CONCESSION = 0.0074;
-    /** Rate (per year) at which the inflation the public expects the Authority to tolerate drifts up while it gives ground, fitted with the cut above so the episode lifts inflation 0.5pp six quarters on (Gavin & Manger 2023, p. 26); the price level then stands 2.8% higher four years on, as Drechsel's (2024, Figure 7) US pressure shock leaves it (2.9%). */
-    public const PRESSURE_ANCHOR_DRIFT_RATE = 0.0325;
+    /** Cut in the rule's rate while the Authority gives ground to the cabinet, fitted with the drift below (var/harness/pressure, 48 paired games) so an episode it gives in to leaves the policy rate 0.3pp lower three quarters on, as a pressure event under a highly populist government does (Gavin & Manger 2023, p. 26). */
+    public const PRESSURE_RATE_CONCESSION = 0.0138;
+    /** Rate (per year) at which the inflation the public expects the Authority to tolerate drifts up while it gives ground, fitted with the cut above so the episode lifts inflation 0.5pp six quarters on (Gavin & Manger 2023, p. 26); the price level then stands 1.7% higher four years on and 4.3% ten years on, under Drechsel's (2024, Figure 7) US pressure shock (2.9% and 5%). */
+    public const PRESSURE_ANCHOR_DRIFT_RATE = 0.0172;
 
     // --- Shifting Inflation Endpoint (Kozicki & Tinsley 2001; Orphanides & Williams 2005) ---
     /** Constant gain, per year, at which the public learns long-run inflation from realized inflation: Orphanides & Williams' baseline 0.05 a half-year period, about twenty years of data (FRB FEDS 2003-41); on US T10YIE 2003-2026 the breakeven fit's R2 peaks at 0.10-0.14. */
@@ -332,6 +332,7 @@ class MonetaryPolicySubsystem
                 'longRateOffset' => -$longRateOffset,
                 'committeeMajority' => $committee,
                 'pressureConcession' => -$concession,
+                'pressureTolerance' => -self::TAYLOR_INFLATION_WEIGHT * ($toleratedInflation - $targetInflation),
             ], $target, $dt);
         }
 

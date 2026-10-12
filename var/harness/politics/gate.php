@@ -6,7 +6,7 @@
 // noregulator: everything on, but the Financial Regulator's requirement withheld (the opening one stays in force);
 // step: no politics, the levers held where they stand, the bank capital requirement raised 1pp at year STEP_AT (default 10),
 // at once or, with STEP_PHASE years, linearly over them)
-require '/home/quebeco/Projects/Code/Private/aerie-trading/tests/bootstrap.php';
+require __DIR__ . '/../../../tests/bootstrap.php';
 use App\Service\Macro\MacroEngine;
 use App\Service\Macro\Recorder\MacroSnapshotRecorder;
 use App\Service\Macro\Subsystem\{AssetMarketSubsystem, CommodityLogisticsSubsystem, CreditFiscalSubsystem, LaborMarketSubsystem, MacroAggregateSubsystem, MonetaryPolicySubsystem};
@@ -53,16 +53,22 @@ for ($seed = (int) $seedFrom; $seed <= (int) $seedTo; ++$seed) {
                 corporateTaxPolicyShift: $m->corporateTaxPolicyShift, importTariffRate: $m->importTariffRate, laborForceGrowthRate: $m->laborForceGrowthRate, foreignBuyerTaxRate: $m->foreignBuyerTaxRate,
                 mergerReviewLeniency: $m->mergerReviewLeniency, greenBeltStringency: $m->greenBeltStringency, carbonPrice: $m->carbonPrice,
                 extractionStringency: $m->extractionStringency, stampDutyRate: $m->stampDutyRate, bankLevyRate: $m->bankLevyRate, electionPulse: $m->electionPulse,
+                reserveDrawShare: $m->reserveDrawShare, consolidationTaxShare: $m->consolidationTaxShare, reserveHomeEquityShare: $m->reserveHomeEquityShare,
+                utilityRateCaseGrantShare: $m->utilityRateCaseGrantShare, dividendTaxRate: $m->dividendTaxRate,
                 bankCapitalRequirement: \App\Service\Math\FinancialConstants::OPENING_BANK_CAPITAL_REQUIREMENT + ((float) (getenv('STEP_SIZE') ?: 0.01)) * ((float) (getenv('STEP_PHASE') ?: 0.0) > 0.0
                     ? max(0.0, min(1.0, ($m->totalTime - (float) (getenv('STEP_AT') ?: 10.0)) / (float) getenv('STEP_PHASE')))
                     : ($m->totalTime >= (float) (getenv('STEP_AT') ?: 10.0) ? 1.0 : 0.0)),
             );
         } elseif ($arm === 'concede') {
             // One episode of pressure the Authority gives ground to, from year STEP_AT, running on each quarter with
-            // PoliticalPressure::CONTINUATION, drawn per seed off the same hash the politics uses.
+            // PoliticalPressure::CONTINUATION, drawn per seed off the same hash the politics uses; with CONCEDE_QUARTERS
+            // set, exactly that many quarters (0: never, the paired baseline on the same code path).
             $at = (float) (getenv('STEP_AT') ?: 10.0);
+            $fixed = getenv('CONCEDE_QUARTERS');
             $quarter = (int) round($m->totalTime * 4.0);
-            if ($m->totalTime >= $at && !isset($conceding)) {
+            if ($fixed !== false) {
+                $conceding = $m->totalTime >= $at && $m->totalTime < $at + ((int) $fixed) / 4.0;
+            } elseif ($m->totalTime >= $at && !isset($conceding)) {
                 $conceding = true;
             } elseif (($conceding ?? false) && TimeSeries::crossedSimulatedBoundary($m->totalTime, 1.0 / $tpy, 0.25)
                 && \App\Service\Politics\CouncilAppointments::uniform($seed, "concede:{$quarter}") >= \App\Service\Politics\PoliticalPressure::CONTINUATION) {
@@ -73,6 +79,8 @@ for ($seed = (int) $seedFrom; $seed <= (int) $seedTo; ++$seed) {
                 corporateTaxPolicyShift: $m->corporateTaxPolicyShift, importTariffRate: $m->importTariffRate, laborForceGrowthRate: $m->laborForceGrowthRate, foreignBuyerTaxRate: $m->foreignBuyerTaxRate,
                 mergerReviewLeniency: $m->mergerReviewLeniency, greenBeltStringency: $m->greenBeltStringency, carbonPrice: $m->carbonPrice,
                 extractionStringency: $m->extractionStringency, stampDutyRate: $m->stampDutyRate, bankLevyRate: $m->bankLevyRate, electionPulse: $m->electionPulse,
+                reserveDrawShare: $m->reserveDrawShare, consolidationTaxShare: $m->consolidationTaxShare, reserveHomeEquityShare: $m->reserveHomeEquityShare,
+                utilityRateCaseGrantShare: $m->utilityRateCaseGrantShare, dividendTaxRate: $m->dividendTaxRate,
                 authorityConcession: ($conceding ?? false) ? 1.0 : 0.0,
             );
         } elseif ($arm === 'calendar') {
@@ -90,6 +98,11 @@ for ($seed = (int) $seedFrom; $seed <= (int) $seedTo; ++$seed) {
                 extractionStringency: 0.0,
                 stampDutyRate: \App\Service\Math\FinancialConstants::STAMP_DUTY_RATE,
                 bankLevyRate: 0.0,
+                reserveDrawShare: MacroEngine::RESERVE_DRAW_CEILING,
+                consolidationTaxShare: CreditFiscalSubsystem::FOUNDING_CONSOLIDATION_TAX_SHARE,
+                reserveHomeEquityShare: \App\Service\Macro\Subsystem\SovereignFundSubsystem::OPENING_HOME_EQUITY_SHARE,
+                utilityRateCaseGrantShare: \App\Service\Model\Sector\UtilityBusinessModel::APPOINTED_COMMISSION_GRANTED_SHARE,
+                dividendTaxRate: \App\Service\Math\Valuation::FOUNDING_DIVIDEND_TAX_RATE,
                 electionPulse: PoliticsEngine::electionPulse($m->totalTime, $vote ? $m->totalTime : -1.0, -1.0),
             );
         }
@@ -106,6 +119,7 @@ for ($seed = (int) $seedFrom; $seed <= (int) $seedTo; ++$seed) {
                 'regst' => $p->regulatorStance, 'creg' => \App\Service\Politics\CouncilAppointments::median($p->councilRegulationStances), 'regstart' => $p->regulatorTermStart, 'regname' => $p->regulatorName, 'seated' => $m->authorityCommitteeSeated, 'mmaj' => $m->authorityMajority,
                 'cc' => \App\Service\Politics\PoliticsEngine::coalitionPosition($p->governingCoalition, $p->dietSeats, $p->partyPositions)[AerieDiet::AXIS_COUNCIL] ?? null,
                 'cs' => \App\Service\Politics\PoliticsEngine::coalitionPosition($p->governingCoalition, $p->dietSeats, $p->partyPositions)[AerieDiet::AXIS_STATE] ?? null, 'g' => $m->governmentSpendingIndex, 'spend' => $m->publicSpendingShare, 'fbt' => $m->foreignBuyerTaxRate, 'cts' => $m->consolidationTaxShare ?? null, 'line' => class_exists(\App\Service\Politics\DebtBrake::class) ? \App\Service\Politics\DebtBrake::councilLine($p) : 0.90, 'wam' => $m->sovereignDebtAverageMaturity, 'ndebt' => $m->sovereignNetDebtToGdpEma, 'eff' => $m->sovereignCouponRate, 'pr' => $m->policyRate, 'press' => $p->pressureSince, 'give' => $p->pressureGivingIn, 'meet' => $p->lastMeetingAt, 'votes' => $p->lastMeetingVotes, 'govstart' => $p->governorTermStart, 'mst' => $p->memberStances,
+                'conc' => $m->authorityConcession, 'nairu' => $m->nairu, 'psg' => $m->productivitySupplyGap, 'pn' => $m->perceivedNeutralRate, 'tr' => $m->targetRate,
             ]) . "\n");
         }
     }

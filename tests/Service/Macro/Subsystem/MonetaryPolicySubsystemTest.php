@@ -41,6 +41,24 @@ class MonetaryPolicySubsystemTest extends TestCase
         $this->assertEqualsWithDelta($expected, $target, 0.001);
     }
 
+    /** While the Authority gives ground, the target's recorded terms still add up to the target the rule set. */
+    public function testTheTargetTermsSumToTheTargetWhileTheAuthorityGivesGround(): void
+    {
+        $probe = new MacroDiagnosticsProbe();
+        $probe->enable();
+        $subsystem = new MonetaryPolicySubsystem($this->mathUtility, $probe);
+        $state = new MacroState();
+        $state->inflationAnchorDrift = 0.03;
+        $state->tipsBreakeven = MacroEngine::TARGET_INFLATION + 0.03;
+        $state->authorityConcession = 1.0;
+
+        $target = $subsystem->calculateTargetRate($state, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE, 0.25);
+        $policy = $probe->snapshot()['current']['policy'];
+
+        $this->assertEqualsWithDelta($target, $policy['averageTarget'], 1e-15);
+        $this->assertEqualsWithDelta($target, array_sum($policy['terms']), 1e-12);
+    }
+
     /**
      * The rule answers demand and sees through the part of the gap a productivity gain opens (Blinder & Yellen
      * 2001): an economy running 1% above potential because output caught up with new technology first sets the
