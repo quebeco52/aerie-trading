@@ -28,6 +28,7 @@ class CostBaseSeesTheCycleTest extends TestCase
      */
     private const BACKLOG_DRIVEN = [
         'defense_contractor',
+        'homebuilder',
         'specialty_industrial_machinery',
     ];
 

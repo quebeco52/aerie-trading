@@ -117,6 +117,8 @@ enum ModelParam: string
     case CivilInfrastructureWeight = 'civil_infrastructure_weight';
     case CommercialEpcWeight = 'commercial_epc_weight';
     case FacilitiesMaintenanceWeight = 'facilities_maintenance_weight';
+    /** A homebuilder's owned lots in years of closings: how long land bought today waits to be built on. */
+    case LandBankYears = 'land_bank_years';
 
     // --- Technology, Hardware & Telecom ---
     case SubscriptionRevenueWeight = 'subscription_revenue_weight';

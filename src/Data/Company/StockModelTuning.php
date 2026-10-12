@@ -351,6 +351,19 @@ class StockModelTuning
             ModelParam::FertilizerMineralsWeight->value => 0.08, // A potash leg, the way BHP is building Jansen
         ],
 
+        // --- Goldfinch Mining (FNCH) ---
+        // A gold major with a copper by-product: Barrick's 2019 sales were 95% gold and silver, 4% copper (40-F).
+        'FNCH' => [
+            ModelParam::PreciousMetalsWeight->value => 0.95, // Gold, and the silver recovered with it
+            ModelParam::BaseMetalsWeight->value     => 0.05, // Copper concentrate from its porphyry mine
+        ],
+
+        // --- Bowerbird Homes (BOWR) ---
+        // Owns three years of lots, as D.R. Horton did in FY2005 before the industry moved to optioned land.
+        'BOWR' => [
+            ModelParam::LandBankYears->value => 3.0,
+        ],
+
         // =====================================================================
         // HEAVY INDUSTRY & MANUFACTURING ARCHETYPES
         // =====================================================================

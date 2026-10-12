@@ -327,6 +327,13 @@ class StockModelTuningTest extends TestCase
         $this->assertSame(0.12, StockModelTuning::get('CNDR', ModelParam::EnergyMineralsWeight, 0.0));
         $this->assertSame(0.08, StockModelTuning::get('CNDR', ModelParam::FertilizerMineralsWeight, 0.0));
 
+        // Goldfinch Mining (FNCH): a gold major with a copper by-product.
+        $this->assertSame(0.95, StockModelTuning::get('FNCH', ModelParam::PreciousMetalsWeight, 0.0));
+        $this->assertSame(0.05, StockModelTuning::get('FNCH', ModelParam::BaseMetalsWeight, 0.0));
+
+        // Bowerbird Homes (BOWR): three years of owned lots.
+        $this->assertSame(3.0, StockModelTuning::get('BOWR', ModelParam::LandBankYears, 0.0));
+
         // Safe Harbor Reinsurance (SAFE)
         $this->assertSame(0.60, StockModelTuning::get('SAFE', ModelParam::TreatyReinsuranceWeight, 0.0));
         $this->assertSame(0.40, StockModelTuning::get('SAFE', ModelParam::CatBondSpreadWeight, 0.0));

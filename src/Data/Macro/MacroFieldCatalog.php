@@ -121,6 +121,7 @@ final class MacroFieldCatalog
         'deal_activity_index_ema' => ['label' => 'Deal Activity', 'unit' => self::UNIT_INDEX],
         'housing_starts_index_ema' => ['label' => 'Housing Starts', 'unit' => self::UNIT_INDEX],
         'residential_property_index_ema' => ['label' => 'House Prices', 'unit' => self::UNIT_INDEX],
+        'residential_wealth_trend' => ['label' => 'House Price Trend', 'unit' => self::UNIT_INDEX],
         'nominal_gdp_index' => ['label' => 'Nominal GDP (opening = 1)', 'unit' => self::UNIT_INDEX],
         'equity_wealth_ratio' => ['label' => 'Equity Market Wealth', 'unit' => self::UNIT_LEVEL],
         'energy_base_price' => ['label' => 'Energy Base Price', 'unit' => self::UNIT_INDEX],

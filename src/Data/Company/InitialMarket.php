@@ -2420,6 +2420,68 @@ class InitialMarket
             'wholesale_debt' => 27_000_000_000.00,
             'retained_earnings' => 19_000_000_000.00,
         ],
+        [
+            'ticker' => 'BOWR',
+            'management_style' => 'operator', // Buys land at what the homes on it will bear and pays out what it cannot build on
+            'name' => 'Bowerbird Homes',
+            'sector' => 'Consumer Discretionary',
+            'industry' => 'Residential Construction',
+            'systemic_importance' => 'base',
+            'shares_outstanding' => 1_000_000_000,
+            'volatility' => 0.35,
+            'beta_tilt' => 0.10, // a land bank bought on the housing cycle
+            'jump_intensity' => 0.50,
+            'jump_vol' => 0.10,
+            'baseline_roic' => 0.13,
+            'capex_ratio' => 0.45, // a builder grows by buying land, which its capital budget funds
+            'target_payout_ratio' => 0.15,
+            'dividendSpeed' => self::LINTNER_QUARTERLY_ADJUSTMENT_SPEED,
+            // Selling and overhead are about a tenth of costs; land and construction are the rest. At a 13% operating
+            // margin that leaves a home sales margin near 22%, D.R. Horton's 23% in FY2004.
+            'fixed_cost_ratio' => 0.10,
+            'operating_margin' => 0.13,
+            'public_float' => 0.80,
+            'sam_ratio' => 0.15,
+            'floating_debt_ratio' => 0.20,
+            'historical_fixed_rate' => 0.060,
+            'credit_spread' => 0.0300,
+            'depreciation_rate' => 0.02,
+            'corporate_treasury' => 3_000_000_000.00,
+            'total_equity' => 20_000_000_000.00,
+            'customer_deposits' => 0.00,
+            'wholesale_debt' => 8_000_000_000.00,
+            'retained_earnings' => 12_000_000_000.00,
+        ],
+        [
+            'ticker' => 'FNCH',
+            'management_style' => 'operator', // Develops a mine when the deck clears its cost of capital and pays out the rest
+            'name' => 'Goldfinch Mining',
+            'sector' => 'Materials',
+            'industry' => 'Gold',
+            'systemic_importance' => 'base',
+            'shares_outstanding' => 1_000_000_000,
+            'volatility' => 0.38,
+            'beta_tilt' => 0.00,
+            'jump_intensity' => 0.60,
+            'jump_vol' => 0.11,
+            'baseline_roic' => 0.12,
+            'capex_ratio' => 0.70,
+            'target_payout_ratio' => 0.30,
+            'dividendSpeed' => 0.50,
+            'fixed_cost_ratio' => 0.80,
+            'operating_margin' => 0.28,
+            'public_float' => 0.85,
+            'sam_ratio' => 0.15,
+            'floating_debt_ratio' => 0.20,
+            'historical_fixed_rate' => 0.055,
+            'credit_spread' => 0.0200,
+            'depreciation_rate' => 0.10,
+            'corporate_treasury' => 3_000_000_000.00,
+            'total_equity' => 24_000_000_000.00,
+            'customer_deposits' => 0.00,
+            'wholesale_debt' => 4_300_000_000.00, // Book D/E 0.18: the US precious metals average.
+            'retained_earnings' => 14_000_000_000.00,
+        ],
     ];
 
     /**

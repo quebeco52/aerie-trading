@@ -62,6 +62,8 @@ final class InputOutputExposures
     public const FINANCIAL_DATA = ['labor' => 0.443];
     /** HVAC equipment, farm and construction machinery, motors and switchgear (NUTH, WREN, BUZT, CHUF, BOBY): BEA 333111, 333120, 333415, 335312, 335313. */
     public const HEAVY_MANUFACTURING = ['metals' => 0.191, 'labor' => 0.266];
+    /** Single-family, multifamily and other residential structures (BOWR): BEA 233411, 233412, 2334A0. */
+    public const HOMEBUILDER = ['energy' => 0.025, 'metals' => 0.028, 'labor' => 0.383];
     /** Nonstore retailers: BEA 454000. */
     public const INTERNET_RETAIL = ['labor' => 0.271];
     /** Legal services (CLAW): BEA 541100. */

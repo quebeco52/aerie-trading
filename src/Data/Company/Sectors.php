@@ -30,6 +30,7 @@ class Sectors
         'private_equity'  => 'Alternative asset managers operating with leverage. Base revenue is AUM fees, but massive performance fees (Carried Interest) are earned during economic expansions. Highly dependent on cheap credit and M&A volume. Evaluated on ROE.',
         'hedge_fund'      => 'Active investment funds deploying leveraged long/short strategies and quantitative models. Revenue blends recurring management fees with volatile performance fees and market-making alpha. Thrives on market volatility (high VIX) to capture arbitrage spreads, but highly vulnerable to prime brokerage margin calls and forced liquidations during credit freezes. Evaluated on ROE.',
         'shadow_bank'     => 'Non-depository financial institutions (Mortgage Finance, Mortgage REITs). They fund massive loan books entirely through short-term wholesale debt. Hyper-vulnerable to yield curve inversions and mortgage default spikes during housing crashes. Evaluated on ROE.',
+        'homebuilder'     => 'Homebuilders buy land, build houses on it and sell them at the going price. Closings follow the housing starts the market supports, a season or two behind the order. Land is carried at what it cost years earlier, so a rise in house prices lands on margin at once and a fall the same way, and a deep enough fall forces the land bank to be written down.',
         'reit'            => 'Real Estate Investment Trusts hold physical property. Evaluated on Funds From Operations (FFO). Pays 0% corporate tax but must issue heavy debt to expand due to high dividend payouts. Features CPI rent escalators (inflation hedge) and tenant vacancy risks.',
         'utility'         => 'Regulated monopolies and essential infrastructure (Power, Water, Telecom, Waste Management) with heavily regulated Return on Invested Capital (ROIC). They grow absolute earnings by deploying massive CapEx. Revenues are hyper-stable, but rate hikes lag behind inflation, causing temporary margin compression during inflationary spikes.',
         'mining'          => 'Metals miners selling every tonne into a global market at the going price. Revenue is payable metal times the benchmark, sold unhedged; haulage, milling and power are paid per tonne, so a metals rally lands on margin in full and a slump leaves the whole cost base standing. Output does not follow the domestic cycle, and grades decline unless reinvestment keeps the mine modern.',
@@ -194,7 +195,7 @@ class Sectors
         'REIT - Retail' => ['pe' => 14.00, 'depreciation' => 0.03, 'ebitda_limit' => 6.0, 'equity_limit' => 2.0, 'business_model' => 'reit'], // Malls, e-commerce risk
         'REIT - Specialty' => ['pe' => 16.00, 'depreciation' => 0.03, 'ebitda_limit' => 6.5, 'equity_limit' => 2.5, 'business_model' => 'reit'], // Data centers, cell towers
         'Rental & Leasing Services' => ['pe' => 15.00, 'depreciation' => 0.10, 'ebitda_limit' => 3.5, 'equity_limit' => 1.5, 'business_model' => 'none'], // Rental cars depreciate fast
-        'Residential Construction' => ['pe' => 10.00, 'depreciation' => 0.02, 'ebitda_limit' => 3.0, 'equity_limit' => 1.0, 'business_model' => 'construction'], // Homebuilders. Highly cyclical.
+        'Residential Construction' => ['pe' => 10.00, 'depreciation' => 0.02, 'ebitda_limit' => 3.0, 'equity_limit' => 1.0, 'business_model' => 'homebuilder'], // Homebuilders: land bank at cost, sold at the market price.
         'Resorts & Casinos' => ['pe' => 18.00, 'depreciation' => 0.06, 'ebitda_limit' => 4.5, 'equity_limit' => 2.0, 'business_model' => 'resorts_casinos'], // Collateralized by prime real estate
         'Restaurants' => ['pe' => 20.00, 'depreciation' => 0.06, 'ebitda_limit' => 3.5, 'equity_limit' => 1.5, 'business_model' => 'restaurant'], // Mix of corporate and franchise
         'Scientific & Technical Instruments' => ['pe' => 26.00, 'depreciation' => 0.08, 'ebitda_limit' => 2.5, 'equity_limit' => 1.0, 'business_model' => 'none'], // High margin, IP heavy
@@ -236,6 +237,7 @@ class Sectors
         'hedge_fund'                     => Sector\HedgeFundBusinessModel::class,
         'shadow_bank'                    => Sector\ShadowBankBusinessModel::class,
         'reit'                           => Sector\ReitBusinessModel::class,
+        'homebuilder'                    => Sector\HomebuilderBusinessModel::class,
         'clearing_house'                 => Sector\ClearingHouseBusinessModel::class,
         'utility'                        => Sector\UtilityBusinessModel::class,
         'mining'                         => Sector\MiningBusinessModel::class,
