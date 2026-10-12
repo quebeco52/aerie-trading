@@ -1039,8 +1039,9 @@ class MonetaryPolicySubsystemTest extends TestCase
     }
 
     /**
-     * Debt is priced once, through the Laubach (2009) sovereign spread, and the rule does not ease against it: a central
-     * bank cutting as the debt premium rises is fiscal dominance, not the Bernanke (2006) term-premium offset.
+     * Debt is priced once through each channel, the Laubach (2009) sovereign spread and the duration it puts in private
+     * hands (Greenwood & Vayanos 2014), and the rule eases against neither: a central bank cutting as the debt premium
+     * rises is fiscal dominance, not the Bernanke (2006) term-premium offset.
      */
     public function testSovereignCreditRiskIsPricedOnceAndNotEasedAgainst(): void
     {
@@ -1050,8 +1051,14 @@ class MonetaryPolicySubsystemTest extends TestCase
 
         $indebted = clone $sound;
         $indebted->sovereignRiskSpreadEma = 0.005;
-        $indebted->termPremium10yEma = MacroEngine::NS_BASE_TERM_PREMIUM + 0.005;
         $indebted->sovereignDebtToGdpEma = 1.30;
+        $supplyShift = FixedIncome::calculatePreferredHabitatTermPremiumShift(
+            balanceSheetIntensity: CreditFiscalSubsystem::durationExtraction(0.0, 1.30, $indebted->sovereignDebtAverageMaturity),
+            tau: 10.0,
+            habitatSensitivity: MacroEngine::PREFERRED_HABITAT_DURATION_SENSITIVITY
+        );
+        $this->assertGreaterThan(0.0, $supplyShift, 'More debt is more duration in private hands.');
+        $indebted->termPremium10yEma = MacroEngine::NS_BASE_TERM_PREMIUM + 0.005 + $supplyShift;
 
         $this->assertEqualsWithDelta(
             $this->subsystem->calculateLongRateGap($sound, MacroEngine::BASE_NATURAL_RATE),
@@ -1064,8 +1071,37 @@ class MonetaryPolicySubsystemTest extends TestCase
         $this->assertSame(
             $this->subsystem->calculateYieldCurve($sound, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE)['curvature2'],
             $this->subsystem->calculateYieldCurve($debtOnly, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE)['curvature2'],
-            'Debt reaches the curve through the sovereign spread alone.'
+            'Debt reaches the curve through the level of the premium, not its shape.'
         );
+    }
+
+    /**
+     * Greenwood & Vayanos (2014): a bigger book at the same maturity is more duration in private hands, so the ten-year
+     * yields more, by the preferred-habitat shift the extra supply makes; the two-year, which carries little duration,
+     * moves less, and the curve steepens.
+     */
+    public function testMoreDebtRaisesTheTenYearByItsSupplyPremium(): void
+    {
+        $opening = new MacroState();
+        $opening->policyRate = MacroEngine::BASE_NATURAL_RATE + MacroEngine::TARGET_INFLATION;
+        $opening->targetRate = $opening->policyRate;
+        $opening->tipsBreakeven = MacroEngine::TARGET_INFLATION;
+        $opening->marketVolatilityEma = 0.15;
+        $this->holdSoundFiscalPosition($opening);
+        $heavy = clone $opening;
+        $heavy->sovereignDebtToGdpEma = 0.90;
+
+        $base = $this->subsystem->calculateYieldCurve($opening, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE);
+        $more = $this->subsystem->calculateYieldCurve($heavy, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE);
+        $shift = FixedIncome::calculatePreferredHabitatTermPremiumShift(
+            balanceSheetIntensity: CreditFiscalSubsystem::durationExtraction(0.0, 0.90, $heavy->sovereignDebtAverageMaturity),
+            tau: 10.0,
+            habitatSensitivity: MacroEngine::PREFERRED_HABITAT_DURATION_SENSITIVITY
+        );
+
+        $this->assertGreaterThan(0.002, $shift, 'Thirty points of debt at the founding maturity is tens of basis points.');
+        $this->assertEqualsWithDelta($shift, $more['yield_10y'] - $base['yield_10y'], 0.0005);
+        $this->assertGreaterThan($more['yield_2y'] - $base['yield_2y'], $more['yield_10y'] - $base['yield_10y'], 'The long end carries more of it.');
     }
 
     public function testTaylorRuleLeansAgainstAMarketThatHasRepricedNeutralUpward(): void
@@ -1594,7 +1630,8 @@ class MonetaryPolicySubsystemTest extends TestCase
     /** Debt inside the 70% the Bohn reaction defends and no market premium on it: the curve carries no fiscal term. */
     private function holdSoundFiscalPosition(MacroState $state): void
     {
-        $state->sovereignDebtToGdpEma = CreditFiscalSubsystem::SOVEREIGN_DEBT_NEUTRAL_THRESHOLD;
+        // The opening book, where the term premium is calibrated: its size adds no supply premium.
+        $state->sovereignDebtToGdpEma = MacroEngine::INITIAL_DEBT_TO_GDP;
         $state->sovereignRiskSpreadEma = 0.0;
     }
 }

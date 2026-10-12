@@ -324,6 +324,45 @@ final class FullMarketHarnessTest extends KernelTestCase
         return ['board_tni' => $sum, 'board_n' => $n];
     }
 
+    /** @return array<string, float>|null */
+    private function writtenShareProbe(\App\Entity\Stock $stock, MacroStateDTO $m): ?array
+    {
+        $model = match ($stock->getTicker()) {
+            'SAFE' => new \App\Service\Model\Sector\ReinsuranceBusinessModel(),
+            'DOVE' => new \App\Service\Model\Sector\RetailInsuranceBusinessModel(),
+            default => null,
+        };
+        if ($model === null || !method_exists($model, 'resolvePremiumDemand')) {
+            return null;
+        }
+        $call = static fn(string $method, mixed ...$args): mixed => (new \ReflectionMethod($model, $method))->invoke($model, ...$args);
+        $math = new \App\Service\Math\MathUtility();
+        $opEq = (float) $call('resolveOperatingEquity', $stock);
+        $t = $m->corporateTaxRate;
+        $margin = max(0.01, (float) $stock->getOperatingMargin());
+        $p = (float) $call('resolvePremiumRateLevel', $stock, $m);
+        $fy = (float) $call('resolveFloatYield', $stock, $m);
+        $held = (float) $model->resolveHeldFloatSurvival($stock, 1.0);
+        $floatIncome = min((float) $stock->getCorporateTreasury(), (float) $stock->getCustomerDeposits()) * $fy;
+        $heldIncome = $model->calculateInterestIncome($stock, $m, $math) - ($floatIncome * (1.0 - $held));
+
+        return [
+            'p' => $p,
+            'glut' => (float) $call('resolveSoftMarketCapacityDiscount', $stock, $m),
+            'rate' => ($m->policyRateEma - $m->perceivedNeutralRate) * 1.5,
+            'uw' => 1.5 * (1.0 - ((1.0 - $margin) / max(1e-9, $p))) * (1.0 - $t),
+            'book' => $fy * (1.0 - $t) * $model->resolveBookFloatRatio($stock, 1.0) * 1.5,
+            'heldr' => $opEq > 0.0 ? ($heldIncome * (1.0 - $t)) / $opEq : 0.0,
+            'hurdle' => $stock->getManagementProfile()->appliedHurdle($m->marketCostOfEquity()),
+            'coe' => $m->marketCostOfEquity(),
+            'fy' => $fy,
+            'tax' => $t,
+            'target' => (float) $model->resolveTargetWrittenShare($stock, $m, $math, $opEq),
+            'ratio' => (float) $model->resolveCapacityToDemandRatio($stock, $m),
+            'flt_eq' => $opEq > 0.0 ? (float) $stock->getCustomerDeposits() / $opEq : 0.0,
+        ];
+    }
+
     private function captureReport(CorporateReport $report): void
     {
         if (getenv('DRIVERS_OUT')) {
@@ -358,6 +397,15 @@ final class FullMarketHarnessTest extends KernelTestCase
             'ss' => $report->getStock()->getCustomerDeposits() !== null ? $report->getStock()->getStatutorySurplus() : null,
             'ws' => ($report->getStock()->getEarningsMomentumZ() ?? [])['state:capacity:written_share'] ?? null,
             'os' => ($report->getStock()->getEarningsMomentumZ() ?? [])['state:capacity:observed_share'] ?? null,
+            // fix C (Winter 1994 capacity): franchise share, observed capacity/demand ratio, hard-market clock, trend NGDP, SAM
+            'fr' => ($report->getStock()->getEarningsMomentumZ() ?? [])['state:capacity:franchise_share'] ?? null,
+            'or' => ($report->getStock()->getEarningsMomentumZ() ?? [])['state:capacity:observed_ratio'] ?? null,
+            'hm' => ($report->getStock()->getEarningsMomentumZ() ?? [])['state:regime:hard_market'] ?? null,
+            'tngdp' => $m !== null ? \App\Service\Corporate\Industry\IndustryShareLedger::trendNominalGdp($m) : null,
+            'sam' => (float) $report->getStock()->getSamRatio(),
+            'tps' => ($report->getStock()->getEarningsMomentumZ() ?? [])['state:capacity:target_premium_to_surplus'] ?? null,
+            // Written-share probe: the pieces of resolveTargetWrittenShare() for the two underwriters.
+            'wp' => $m !== null ? $this->writtenShareProbe($report->getStock(), $m) : null,
             'int' => (float) $report->getInterestExpense(),
             'ebitda' => (float) $report->getEbitda(),
             'spread' => (float) $report->getStock()->getCreditSpread(),

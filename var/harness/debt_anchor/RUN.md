@@ -38,5 +38,9 @@ Paired follow-up: does the change move debt, fund/GDP and the primary balance in
   `target.py <a-b>`: sd of debt y20-100, OLS slope of debt on the trailing 8y coalition state position (pp/unit),
   share above the Council line, side checks, capped-anchor share. Earlier runs (rule change) in `runs_v1/`; after arm at
   opening 0.72 in `runs_after072/`. Stage 16 (after opening 0.60): `target_s16_y100.out`.
+- 2026-10-12 debt-supply term premium: both arms are snapshots. `AFTER_TREE=<scratch>/ds-after BEFORE_TREE=<scratch>/ds-before
+  bin/harness-batch var/harness/debt_anchor/run.sh 1-8 before after && python3 var/harness/debt_anchor/tp.py 1-8`
+  (run.sh `after` uses AFTER_TREE when set, else the main tree). `tp.py`: slope of y10 on debt, mean y10, gap,
+  tp10, 2s10s, inversion share, house, IG/HY, debt on coalition position. Debt-target runs in `runs_debttarget/`.
 - `runs_old0.93/`: the first 4 after runs, opened at debt 0.93 (before INITIAL_DEBT_TO_GDP = 0.72).
 - Evidence: `debt_anchor_evidence.md`.

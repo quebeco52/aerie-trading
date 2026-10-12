@@ -108,7 +108,7 @@ class ReinsuranceBusinessModel extends InsuranceBusinessModel
         // Rates on a renewed treaty stay hard for years after the capital that withdrew has come back. The
         // harder rate reaches treaty revenue through the pricing-power multiplier, which the cost base does
         // not follow; a capital shortfall is not added to revenue again here.
-        $surplusDeficitRatio = $this->resolveSurplusDeficitRatio($expectedRevenue, (float) $stock->getTotalEquity());
+        $surplusDeficitRatio = $this->resolveSurplusDeficitRatio($stock, $macroState, $mathUtility);
         $this->advanceUnderwritingCycle($streams, $stock, $macroState, $mathUtility, $surplusDeficitRatio, $coverAttached);
 
         $treatyRevenue  = max(0.0, $expectedRevenue * $treatyWeight * (1.0 + ($treatyZ * ($baselineVol * self::TREATY_VARIANCE_SCALAR))));
@@ -184,12 +184,13 @@ class ReinsuranceBusinessModel extends InsuranceBusinessModel
     {
         return [
             'catastrophe_loss_index_ema',
+            'gdp_deflator',
             'market_volatility_ema',
-            'nominal_gdp_index',
             'output_gap_ema',
             'output_gap_lag_6m',
             'perceived_neutral_rate',
             'policy_rate_ema',
+            'potential_gdp_index',
             'yield_10y_ema',
         ];
     }

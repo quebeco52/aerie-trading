@@ -57,7 +57,7 @@ final class InsuranceWrittenCapacityTest extends TestCase
         $this->assertEqualsWithDelta(1.0, InsuranceBusinessModel::writtenShareAtExcessReturn(-1.0, self::DISPERSION, 1.0), 1e-12);
 
         $retail = new RetailInsuranceBusinessModel();
-        $stock = $this->underwriterAtShare(4.0);
+        $stock = $this->underwriterAtCapacity(8.0);
         $this->assertGreaterThanOrEqual(
             $retail->resolveLifePremiumShare($stock) + ((1.0 - $retail->resolveLifePremiumShare($stock)) * $floor) - 1e-9,
             $retail->resolveTargetWrittenShare($stock, $this->neutralMacro(), new MathUtility(), (float) $stock->getTotalEquity())
@@ -95,8 +95,8 @@ final class InsuranceWrittenCapacityTest extends TestCase
         $macro = $this->neutralMacro();
         $math = $this->scriptedMath();
 
-        $stock = $this->underwriterAtShare(0.65);
-        $stock->setEarningsMomentumZ([InsuranceBusinessModel::STATE_WRITTEN_SHARE => 1.0]);
+        $stock = $this->underwriterAtCapacity(1.30);
+        $stock->setEarningsMomentumZ(array_merge($stock->getEarningsMomentumZ() ?? [], [InsuranceBusinessModel::STATE_WRITTEN_SHARE => 1.0]));
         $target = $model->resolveTargetWrittenShare($stock, $macro, $math, max(1.0, $stock->getStatutorySurplus()));
         $this->assertLessThan(0.9, $target, 'A soft market: the target is well below the book in force.');
 
@@ -105,10 +105,11 @@ final class InsuranceWrittenCapacityTest extends TestCase
         $this->assertNotNull($advanced);
         $this->assertEqualsWithDelta(InsuranceBusinessModel::adjustWrittenShare(1.0, $target, EarningsEngine::QUARTERLY_TIME_STEP), $advanced, 1e-9);
 
-        $stock->setEarningsMomentumZ([InsuranceBusinessModel::STATE_WRITTEN_SHARE => $advanced]);
+        $stock->setEarningsMomentumZ(array_merge($stock->getEarningsMomentumZ() ?? [], [InsuranceBusinessModel::STATE_WRITTEN_SHARE => $advanced]));
         $turnover = $model->getTargetMetrics($stock, $macro, $math)['baseline_roic']
             / ((float) $stock->getOperatingMargin() * (1.0 - $macro->corporateTaxRate));
-        $this->assertEqualsWithDelta(InsuranceBusinessModel::KENNEY_CAPACITY_RATIO * $advanced, $turnover, 1e-6);
+        // The book is demand times the share in force, and demand is capacity over 1.3.
+        $this->assertEqualsWithDelta(InsuranceBusinessModel::KENNEY_CAPACITY_RATIO * $advanced / 1.30, $turnover, 1e-6);
     }
 
     private function neutralMacro(): MacroStateDTO
@@ -130,11 +131,11 @@ final class InsuranceWrittenCapacityTest extends TestCase
         return $math;
     }
 
-    /** An underwriter with three times its surplus in float, whose capital is the given multiple of the market it serves. */
-    private function underwriterAtShare(float $capitalShareOfMarket): Stock
+    /** An underwriter with three times its surplus in float, whose Kenney capacity is the given multiple of its premium demand. */
+    private function underwriterAtCapacity(float $capacityToDemand): Stock
     {
         $samRatio = 2.0;
-        $equity = $capitalShareOfMarket * CorporateMetrics::BASELINE_SECTOR_TAM * $samRatio;
+        $equity = 1_000_000_000_000.0;
 
         $stock = new Stock();
         $stock->setTicker('TEST');
@@ -148,6 +149,9 @@ final class InsuranceWrittenCapacityTest extends TestCase
         $stock->setCorporateTreasury((string) ($equity * 3.0));
         $stock->setTotalRevenue((string) ($equity * 0.50));
         $stock->setRoeTtm('0.10');
+        $stock->setEarningsMomentumZ([
+            InsuranceBusinessModel::STATE_PREMIUM_FRANCHISE_SHARE => InsuranceBusinessModel::KENNEY_CAPACITY_RATIO * $equity / $capacityToDemand / (CorporateMetrics::BASELINE_SECTOR_TAM * $samRatio),
+        ]);
 
         return $stock;
     }

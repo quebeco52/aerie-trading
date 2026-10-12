@@ -150,11 +150,32 @@ class CreditFiscalSubsystemTest extends TestCase
 
         $extra = CreditFiscalSubsystem::maturitySupplyTermPremium(0.9, CreditFiscalSubsystem::FOUNDING_DEBT_AVERAGE_MATURITY + 1.0);
         $this->assertEqualsWithDelta(0.9 * CreditFiscalSubsystem::DEBT_MATURITY_TERM_PREMIUM, $extra, 1e-15);
-        $this->assertEqualsWithDelta(0.004 - $extra, CreditFiscalSubsystem::durationExtraction(0.004, 0.9, CreditFiscalSubsystem::FOUNDING_DEBT_AVERAGE_MATURITY + 1.0), 1e-15, 'A longer book puts back duration QE took out.');
+        $atOpeningDebt = CreditFiscalSubsystem::maturitySupplyTermPremium(MacroEngine::INITIAL_DEBT_TO_GDP, CreditFiscalSubsystem::FOUNDING_DEBT_AVERAGE_MATURITY + 1.0);
+        $this->assertEqualsWithDelta(0.004 - $atOpeningDebt, CreditFiscalSubsystem::durationExtraction(0.004, MacroEngine::INITIAL_DEBT_TO_GDP, CreditFiscalSubsystem::FOUNDING_DEBT_AVERAGE_MATURITY + 1.0), 1e-15, 'A longer book puts back duration QE took out.');
 
         // The bond desk's curve carries the same duration as the macro's.
         $dto = new MacroStateDTO(balanceSheetIntensity: 0.004, sovereignDebtToGdpEma: 0.9, sovereignDebtAverageMaturity: CreditFiscalSubsystem::FOUNDING_DEBT_AVERAGE_MATURITY + 1.0);
-        $this->assertEqualsWithDelta(0.004 - $extra, $dto->sovereignCurve()->balanceSheetIntensity, 1e-15);
+        $this->assertEqualsWithDelta(CreditFiscalSubsystem::durationExtraction(0.004, 0.9, CreditFiscalSubsystem::FOUNDING_DEBT_AVERAGE_MATURITY + 1.0), $dto->sovereignCurve()->balanceSheetIntensity, 1e-15);
+    }
+
+    /**
+     * Greenwood & Vayanos (2014): the premium moves with maturity-weighted debt, so the size of the book prices as its
+     * maturity does. The two terms together are the whole book against the opening one, D·M − D0·M0, nil at the opening
+     * book, and more debt at the founding maturity raises the long end: 60% to 90% adds 0.29% x 4.96 x 0.30 ≈ 43bp.
+     */
+    public function testTheSizeOfTheBookPricesAsItsMaturityDoes(): void
+    {
+        $m0 = CreditFiscalSubsystem::FOUNDING_DEBT_AVERAGE_MATURITY;
+        $d0 = MacroEngine::INITIAL_DEBT_TO_GDP;
+        $this->assertSame(0.0, CreditFiscalSubsystem::debtSupplyTermPremium($d0) + CreditFiscalSubsystem::maturitySupplyTermPremium($d0, $m0));
+
+        foreach ([[0.35, 4.0], [0.90, $m0], [0.75, 6.5]] as [$debt, $maturity]) {
+            $whole = CreditFiscalSubsystem::DEBT_MATURITY_TERM_PREMIUM * (($debt * $maturity) - ($d0 * $m0));
+            $this->assertEqualsWithDelta($whole, CreditFiscalSubsystem::debtSupplyTermPremium($debt) + CreditFiscalSubsystem::maturitySupplyTermPremium($debt, $maturity), 1e-15);
+        }
+        $this->assertGreaterThan(0.0, CreditFiscalSubsystem::debtSupplyTermPremium(0.90), 'More debt is more duration in private hands.');
+        $this->assertLessThan(0.0, CreditFiscalSubsystem::debtSupplyTermPremium(0.35));
+        $this->assertEqualsWithDelta(-CreditFiscalSubsystem::debtSupplyTermPremium(0.90), CreditFiscalSubsystem::durationExtraction(0.0, 0.90, $m0), 1e-15, 'It reaches the curve through the duration private hands hold.');
     }
 
     /** A recession cuts the budget's net taxes; the rate firms pay moves only with the law. */

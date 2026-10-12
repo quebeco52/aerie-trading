@@ -124,6 +124,8 @@ final class MacroFieldCatalog
         'residential_property_index_ema' => ['label' => 'House Prices', 'unit' => self::UNIT_INDEX],
         'residential_wealth_trend' => ['label' => 'House Price Trend', 'unit' => self::UNIT_INDEX],
         'nominal_gdp_index' => ['label' => 'Nominal GDP (opening = 1)', 'unit' => self::UNIT_INDEX],
+        'potential_gdp_index' => ['label' => 'Potential Output (opening = 1)', 'unit' => self::UNIT_INDEX],
+        'gdp_deflator' => ['label' => 'GDP Deflator (opening = 1)', 'unit' => self::UNIT_INDEX],
         'equity_wealth_ratio' => ['label' => 'Equity Market Wealth', 'unit' => self::UNIT_LEVEL],
         'sovereign_fund_to_gdp' => ['label' => 'Reserve Fund / GDP', 'unit' => self::UNIT_PERCENT],
         'energy_base_price' => ['label' => 'Energy Base Price', 'unit' => self::UNIT_INDEX],

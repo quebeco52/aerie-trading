@@ -27,3 +27,22 @@ Analysis: `analyse.py [runs dir] [--styles]`. Targets (SAFE): (1) log change of 
 treasury/float, failures, divestitures, median ex-fin EBIT-margin drift, flag counts (NaN, negative equity,
 buyback > 10% of equity in a quarter). `--styles` prints SAFE's manager style mix per seed.
 Delete `cache*/` after a service/constructor change. `smoke/` holds a 1-year check run.
+
+## 2026-10-12 fix C (Winter 1994 capacity-constrained supply): two frozen snapshots
+`run_c.sh <arm> <seed>`: `before` = scratchpad `ds-after` (HEAD 28a82bc + debt-supply), `after` = scratchpad `c-after`
+(+ fix C); `SNAPS=<dir>` overrides the parent. Each runs its own vendor/phpunit and tests/bootstrap.php (bootstrap.php
+now requires `HARNESS_PROJECT/tests/bootstrap.php`), cache in `cache-<snapshot>/`, outputs in `fixc/runs/`.
+Extra per-quarter keys: `fr` franchise share, `or` observed capacity/demand ratio, `hm` hard-market clock, `tngdp`
+trend NGDP (IndustryShareLedger::trendNominalGdp), `sam`. Premium demand D = fr x 1e12 x tngdp x sam.
+
+    bin/harness-batch var/harness/insurer_capital/run_c.sh 1-8 before after && \
+      python3 var/harness/insurer_capital/analyse_c.py > var/harness/insurer_capital/fixc_stage8.out
+
+## 2026-10-12 fix C + insurer capital target (c2)
+Arm `c2` in `run_c.sh` = scratchpad `c2-after` (fix C + target premium-to-surplus via capitalTargetRepurchase). New
+per-quarter key `tps` (state:capacity:target_premium_to_surplus). `before` runs in fixc/runs reused (same harness
+simulation, same seeds). Analysis takes arms: `analyse_c.py --a=c2 --ctx=after` (ctx column = fix C alone); it also
+reports NAIC-ceiling binding share and seeds with hard-market share > 25%.
+
+    bin/harness-batch var/harness/insurer_capital/run_c.sh 1-8 c2 && \
+      python3 var/harness/insurer_capital/analyse_c.py --a=c2 --ctx=after > var/harness/insurer_capital/fixc2_stage8.out

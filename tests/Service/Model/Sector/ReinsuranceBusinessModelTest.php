@@ -61,7 +61,7 @@ class ReinsuranceBusinessModelTest extends TestCase
     }
 
     /**
-     * A capital shortfall reaches treaty revenue once, through the hard-market rate on the pricing-power
+     * A capital shortfall against premium demand reaches treaty revenue once, through the hard-market rate on the pricing-power
      * multiplier. Adding it to this quarter's treaty revenue as well booked a price rise as volume, which the
      * engine then costs at the full claims ratio.
      */
@@ -70,8 +70,12 @@ class ReinsuranceBusinessModelTest extends TestCase
         $stock = new Stock();
         $stock->setTicker('REIN');
         $stock->setBeta('0.9');
-        // Very low equity relative to expected revenue creates high surplus deficit
-        $stock->setTotalEquity('1000000000'); // $1B vs $10B expected revenue (target surplus = $6.67B)
+        // $1B of surplus against $40B of annual premium demand, which needs $26.7B at the Kenney ratio.
+        $stock->setTotalEquity('1000000000');
+        $stock->setSamRatio('1.0');
+        $stock->setEarningsMomentumZ([
+            ReinsuranceBusinessModel::STATE_PREMIUM_FRANCHISE_SHARE => 40_000_000_000.0 / \App\Service\Corporate\CorporateMetrics::BASELINE_SECTOR_TAM,
+        ]);
 
         $mathMock = $this->createStub(MathUtility::class);
         $mathMock->method('generatePersistentZ')->willReturn(0.0);

@@ -59,8 +59,9 @@ class RetailInsuranceBusinessModelTest extends TestCase
     }
 
     /**
-     * A carrier short of capital hardens its renewal rates through the regime, which reaches the P&L via the
-     * pricing-power multiplier. Its claims this quarter cost the same as a well-capitalised peer's.
+     * A carrier short of the capital its premium demand requires hardens its renewal rates through the regime,
+     * which reaches the P&L via the pricing-power multiplier. Its claims this quarter cost the same as a
+     * well-capitalised peer's.
      */
     public function testCapitalShortfallDoesNotDiscountThisQuartersClaims(): void
     {
@@ -69,6 +70,11 @@ class RetailInsuranceBusinessModelTest extends TestCase
             $stock->setTicker('DOVE');
             $stock->setBeta('0.8');
             $stock->setTotalEquity($equity);
+            // 40B of annual premium demand on a unit serviceable market: 26.7B of surplus covers it.
+            $stock->setSamRatio('1.0');
+            $stock->setEarningsMomentumZ([
+                RetailInsuranceBusinessModel::STATE_PREMIUM_FRANCHISE_SHARE => 40_000_000_000.0 / \App\Service\Corporate\CorporateMetrics::BASELINE_SECTOR_TAM,
+            ]);
             $mathMock = $this->createStub(MathUtility::class);
             $mathMock->method('generatePersistentZ')->willReturn(0.0);
             $mathMock->method('generateStandardNormal')->willReturn(0.0);

@@ -200,3 +200,36 @@ before = HEAD 1ba3a94 snapshot, seeds 1-8 reused, 9-16 added. Run: `bin/harness-
 
 Seed 5 slope is an outlier in LEVEL in both arms (-122/-132) but not in the paired difference (-9). T1 and T2 past |t| 4;
 T3 negligible. Opening 0.60 still drifts slightly: y0-10 mean 0.594, y10 0.571, y20-100 0.580 (mean target 0.546).
+
+## 2026-10-12: debt-supply term premium (durationExtraction - 0.0029 x 4.96 x (debt - 0.60)), stage 8
+
+before = HEAD 28a82bc snapshot `<scratchpad>/ds-before`; after = frozen snapshot `<scratchpad>/ds-after` (the change only:
+CreditFiscalSubsystem + FixedIncome differ). Both arms run with BASE=<tree> (caches cache-ds-before/-after created at launch;
+main cache/test untouched, so no run used the main tree). Rows add tp10, y2, ig, hy, house, house_dev. Debt-target runs moved
+to runs_debttarget/. Run: `AFTER_TREE=<scratch>/ds-after BEFORE_TREE=<scratch>/ds-before bin/harness-batch
+var/harness/debt_anchor/run.sh 1-8 before after && python3 var/harness/debt_anchor/tp.py 1-8` (~20 min). Table `tp_s8_y100.out`:
+
+    debt-supply term premium, paired before vs after, seeds 1-8, y20-100, 360 tpy, POLITICS=1
+    quantity        unit   before    after     diff      se      t  n
+    y10_on_debt  pp/unit   -1.966   -0.187   +1.780   1.340  +1.33  8
+    y10                %    4.587    4.484   -0.103   0.199  -0.52  8
+    gap                %   -0.395   -0.196   +0.199   0.216  +0.92  8
+    -- side checks --
+    tp10               %    1.094    1.172   +0.079   0.062  +1.26  8
+    s2s10             pp    0.829    0.937   +0.107   0.048  +2.22  8
+    inverted         % q   18.808   18.419   -0.389   2.141  -0.18  8
+    debt           x GDP    0.566    0.598   +0.032   0.031  +1.03  8
+    debt_sd        x GDP    0.114    0.114   -0.000   0.012  -0.00  8
+    house          index   99.672   97.587   -2.085   1.637  -1.27  8
+    house_dev          %    0.677    0.229   -0.448   0.180  -2.50  8
+    ig                bp  144.589  144.451   -0.138   2.535  -0.05  8
+    hy                bp  477.145  476.689   -0.455   8.365  -0.05  8
+    u                  %    4.791    4.735   -0.056   0.208  -0.27  8
+    net_tax        % GDP   10.884   10.708   -0.175   0.175  -1.00  8
+    debt_on_pos  pp/unit   -6.544   16.148  +22.692  16.799  +1.35  8
+    policy             %    3.325    3.084   -0.240   0.224  -1.07  8
+    per seed y10_on_debt (before/after): 1: -3.25/+3.13, 2: -2.56/-1.14, 3: +1.42/-3.60, 4: -2.63/-4.09, 5: +0.40/+1.75, 6: -1.52/-0.16, 7: -4.55/+0.54, 8: -3.03/+2.07
+    NaN cells: before 0, after 0
+
+Extra (not a named target): OLS slope of tp10 on debt y20-100: before +0.08, after +0.97 pp/unit, diff +0.89 (se 0.45, t 2.0);
+the formula alone gives +1.44. No target past |t| 4 and none negligible: the yield-on-debt slope has se 1.34 at n=8.

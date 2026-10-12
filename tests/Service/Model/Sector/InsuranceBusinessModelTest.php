@@ -408,29 +408,27 @@ class InsuranceBusinessModelTest extends TestCase
         );
         $pricingPower = static fn(Stock $s): float => (float) $model->getMacroPhysics($s, $macroState)['pricing_power_multiplier'];
 
-        // Capital inside the market's optimal scale: no glut, no discount.
-        $this->assertEqualsWithDelta(1.0, $pricingPower($this->shareStock(0.40)), 0.0001);
+        // Capacity short of demand: no glut, no discount.
+        $this->assertEqualsWithDelta(1.0, $pricingPower($this->capacityStock(0.80)), 0.0001);
 
-        // Half again the optimal share: rates soften in proportion to the excess capital.
-        $excess = (0.75 - \App\Service\Math\FinancialConstants::DISECONOMY_OPTIMAL_SHARE_THRESHOLD)
-            / (1.0 - \App\Service\Math\FinancialConstants::DISECONOMY_OPTIMAL_SHARE_THRESHOLD);
+        // Capacity half again its demand: rates soften in proportion to the glut, 1.5·S/D − 1.
         $this->assertEqualsWithDelta(
-            1.0 - ($excess * InsuranceBusinessModel::SOFT_MARKET_CAPACITY_BETA),
-            $pricingPower($this->shareStock(0.75)),
+            1.0 - (0.50 * InsuranceBusinessModel::SOFT_MARKET_CAPACITY_BETA),
+            $pricingPower($this->capacityStock(1.50)),
             0.0001
         );
 
         // Price competition has a floor: however overcapitalized, the market does not give cover away.
         $this->assertEqualsWithDelta(
             1.0 - InsuranceBusinessModel::SOFT_MARKET_MAX_DISCOUNT,
-            $pricingPower($this->shareStock(4.00)),
+            $pricingPower($this->capacityStock(8.00)),
             0.0001
         );
 
         // A rate cut has to reach the combined ratio, which it only does if the cost base is declared
         // separately: the engine deflates costs by input_cost_multiplier / pricing_power_multiplier, so a
         // model leaving the cost level to default holds its margin whatever it charges.
-        $physics = $model->getMacroPhysics($this->shareStock(0.75), $macroState);
+        $physics = $model->getMacroPhysics($this->capacityStock(1.50), $macroState);
         $this->assertSame(1.0, $physics['input_cost_multiplier']);
         $this->assertLessThan($physics['input_cost_multiplier'], $physics['pricing_power_multiplier']);
     }
@@ -454,34 +452,34 @@ class InsuranceBusinessModelTest extends TestCase
         $target = static fn(Stock $s): float => $model->resolveTargetWrittenShare($s, $macroState, $mathUtility, (float) $s->getTotalEquity());
 
         // Rates at the level the book was priced at, with a float that covers the hurdle: nearly the whole book.
-        $this->assertGreaterThan(0.99, $target($this->underwriterAtShare(0.40, floatToEquity: 10.0)));
+        $this->assertGreaterThan(0.99, $target($this->underwriterAtCapacity(0.80, floatToEquity: 10.0)));
 
         // Rates softening across the point where the book's own return, float included, turns negative: the
         // written share falls with them and never jumps. The old switch moved 0.65 of capacity in one step here.
         $previous = null;
         $largestStep = 0.0;
-        for ($share = 0.40; $share <= 0.90; $share += 0.002) {
-            $written = $target($this->underwriterAtShare($share));
+        for ($ratio = 0.80; $ratio <= 1.80; $ratio += 0.004) {
+            $written = $target($this->underwriterAtCapacity($ratio));
             if ($previous !== null) {
-                $this->assertLessThanOrEqual($previous + 1e-12, $written, sprintf('Softer rates never buy more book (share %.3f).', $share));
+                $this->assertLessThanOrEqual($previous + 1e-12, $written, sprintf('Softer rates never buy more book (capacity/demand %.3f).', $ratio));
                 $largestStep = max($largestStep, $previous - $written);
             }
             $previous = $written;
         }
         $this->assertLessThan(0.02, $largestStep);
-        $this->assertGreaterThan(0.85, $target($this->underwriterAtShare(0.40)));
+        $this->assertGreaterThan(0.85, $target($this->underwriterAtCapacity(0.80)));
         $this->assertEqualsWithDelta(InsuranceBusinessModel::MIN_WRITTEN_CAPACITY, $previous, 0.001);
 
         // However inadequate the rate, a going concern still writes its obligatory renewals.
-        $collapsed = $target($this->underwriterAtShare(1.50));
+        $collapsed = $target($this->underwriterAtCapacity(3.00));
         $this->assertGreaterThanOrEqual(InsuranceBusinessModel::MIN_WRITTEN_CAPACITY, $collapsed);
         $this->assertEqualsWithDelta(InsuranceBusinessModel::MIN_WRITTEN_CAPACITY, $collapsed, 0.001);
 
         // The manager's own hurdle decides where that line falls (Jensen's agency cost, in its underwriting
         // form): an empire builder keeps writing a market a fortress has already withdrawn from.
-        $fortress = $this->underwriterAtShare(0.65, floatToEquity: 10.0);
+        $fortress = $this->underwriterAtCapacity(1.30, floatToEquity: 10.0);
         $fortress->setManagementStyle(\App\Data\Company\ManagementStyle::Fortress);
-        $empireBuilder = $this->underwriterAtShare(0.65, floatToEquity: 10.0);
+        $empireBuilder = $this->underwriterAtCapacity(1.30, floatToEquity: 10.0);
         $empireBuilder->setManagementStyle(\App\Data\Company\ManagementStyle::EmpireBuilder);
         $this->assertGreaterThan($target($fortress), $target($empireBuilder));
     }
@@ -504,24 +502,24 @@ class InsuranceBusinessModelTest extends TestCase
 
         // At a rate 4.8% soft the combined ratio is over 100. A firm whose float carries it keeps writing; one
         // with little float sheds more of the same book.
-        $floatRich = $target($this->underwriterAtShare(0.56, floatToEquity: 10.0), $macroState);
-        $floatPoor = $target($this->underwriterAtShare(0.56, floatToEquity: 1.2), $macroState);
+        $floatRich = $target($this->underwriterAtCapacity(1.12, floatToEquity: 10.0), $macroState);
+        $floatPoor = $target($this->underwriterAtCapacity(1.12, floatToEquity: 1.2), $macroState);
         $this->assertGreaterThan(0.95, $floatRich);
         $this->assertGreaterThan($floatPoor, $floatRich);
 
         // A bond book struck at no yield makes the same rate an outright loss against the same hurdle, and more
         // of the book is shed.
-        $yielding = $this->underwriterAtShare(0.56);
+        $yielding = $this->underwriterAtCapacity(1.12);
         $yielding->setSecuritiesCarryingYield(0.04);
-        $noYield = $this->underwriterAtShare(0.56);
+        $noYield = $this->underwriterAtCapacity(1.12);
         $noYield->setSecuritiesCarryingYield(0.0);
         $this->assertLessThan($target($yielding, $macroState), $target($noYield, $macroState));
     }
 
     /**
-     * Capital behind a book the firm is declining to write is redundant, and the life-cycle payout
-     * expansion reads that as a reason to hand it back. Without the return leg the capacity cycle has no
-     * way down: capital only ever accumulates, and the firm grinds into a fund with an insurance licence.
+     * Capital behind a book the firm is declining to write is redundant, and so is capital its demand has
+     * outgrown: the life-cycle payout expansion reads both as a reason to hand it back. Without the return leg
+     * the capacity cycle has no way down, and the firm grinds into a fund with an insurance licence.
      */
     public function testSurplusBehindUnwrittenBusinessIsReportedAsUndeployable(): void
     {
@@ -532,23 +530,23 @@ class InsuranceBusinessModelTest extends TestCase
             policyRateEma: InsuranceBusinessModel::DEFAULT_POLICY_RATE_FALLBACK,
         );
 
-        // Writing nearly the whole book: almost every dollar of surplus is doing something.
-        $this->assertLessThan(0.01, $model->getUndeployableCapitalShare($this->underwriterAtShare(0.40, floatToEquity: 10.0), $macroState, $mathUtility));
+        // Capacity short of demand and nearly the whole book written: every dollar of surplus is writing.
+        $this->assertLessThan(0.01, $model->getUndeployableCapitalShare($this->underwriterAtCapacity(0.80, floatToEquity: 10.0), $macroState, $mathUtility));
 
-        // Withdrawing from a soft market: the surplus behind the business it declines is not.
-        $soft = $this->underwriterAtShare(0.65);
+        // Capital a third past its demand: idle behind the lines it declines AND behind demand it has outgrown.
+        $soft = $this->underwriterAtCapacity(1.30);
         $undeployable = $model->getUndeployableCapitalShare($soft, $macroState, $mathUtility);
-        $this->assertGreaterThan(0.0, $undeployable);
-        $this->assertLessThanOrEqual(1.0 - InsuranceBusinessModel::MIN_WRITTEN_CAPACITY, $undeployable);
+        $targetShare = $model->resolveTargetWrittenShare($soft, $macroState, $mathUtility, (float) $soft->getTotalEquity());
+        $this->assertGreaterThan(1.0 - $targetShare, $undeployable);
 
-        // It is the exact complement of what the firm writes, so the two decisions cannot disagree.
+        // It is the exact complement of the book getTargetMetrics() writes, so the two cannot disagree.
         $written = $model->getTargetMetrics($soft, $macroState, $mathUtility)['baseline_roic']
             / (InsuranceBusinessModel::KENNEY_CAPACITY_RATIO * (float) $soft->getOperatingMargin() * (1.0 - $macroState->corporateTaxRate));
         $this->assertEqualsWithDelta(1.0 - $written, $undeployable, 0.0001);
 
         // And what it writes is the book in force, not the target it is still renewing toward.
-        $soft->setEarningsMomentumZ([InsuranceBusinessModel::STATE_WRITTEN_SHARE => 0.80]);
-        $this->assertEqualsWithDelta(0.20, $model->getUndeployableCapitalShare($soft, $macroState, $mathUtility), 1e-12);
+        $this->mergeState($soft, [InsuranceBusinessModel::STATE_WRITTEN_SHARE => 0.80]);
+        $this->assertEqualsWithDelta(1.0 - (0.80 / 1.30), $model->getUndeployableCapitalShare($soft, $macroState, $mathUtility), 1e-9);
     }
 
     /**
@@ -564,23 +562,23 @@ class InsuranceBusinessModelTest extends TestCase
             perceivedNeutralRate: InsuranceBusinessModel::DEFAULT_POLICY_RATE_FALLBACK,
         );
 
-        // Capital already well past the market's optimal scale, but nothing has been filed or rated yet.
-        $stock = $this->underwriterAtShare(1.00);
-        $stock->setEarningsMomentumZ([InsuranceBusinessModel::STATE_OBSERVED_CAPACITY => 0.40]);
+        // Capacity already twice its demand, but nothing has been filed or rated yet.
+        $stock = $this->underwriterAtCapacity(2.00);
+        $this->mergeState($stock, [InsuranceBusinessModel::STATE_OBSERVED_CAPACITY => 0.80]);
         $this->assertEqualsWithDelta(1.0, (float) $model->getMacroPhysics($stock, $macroState)['pricing_power_multiplier'], 0.0001);
 
         // Each quarter of physics moves the observed position toward the real one, and once the market has
         // caught up with the capital that was built, the rate follows it down.
-        $observed = 0.40;
+        $observed = 0.80;
         foreach (range(1, 2) as $quarter) {
             $result = $model->computeActualFinancials($stock, 50_000_000_000.0, 0.90, 1.0e9, 0.10, $macroState, $this->scriptedMath());
             $next = $result->streamZ[InsuranceBusinessModel::STATE_OBSERVED_CAPACITY] ?? 0.0;
 
             $this->assertGreaterThan($observed, $next);
-            $this->assertLessThan(1.00, $next);
+            $this->assertLessThan(2.00, $next);
 
             $observed = $next;
-            $stock->setEarningsMomentumZ([InsuranceBusinessModel::STATE_OBSERVED_CAPACITY => $observed]);
+            $this->mergeState($stock, [InsuranceBusinessModel::STATE_OBSERVED_CAPACITY => $observed]);
         }
 
         $this->assertLessThan(1.0, (float) $model->getMacroPhysics($stock, $macroState)['pricing_power_multiplier']);
@@ -609,32 +607,191 @@ class InsuranceBusinessModelTest extends TestCase
     }
 
     /**
-     * The Kenney ratio is annual premium to surplus, and sector physics is handed one quarter of it: the
-     * capacity trigger used to ask whether three quarters of the firm's capital had gone.
+     * A capital shortage is measured against the Kenney capital for the book the firm wants to write, demand times
+     * its target share over 1.5. Measured against the firm's own written book it could never open, because that
+     * book is sized from the same surplus.
      */
-    public function testHardMarketCapitalTriggerIsMeasuredOnTheAnnualBook(): void
+    public function testHardMarketCapitalTriggerIsMeasuredAgainstTheDesiredBook(): void
     {
         $model = new InsuranceBusinessModel();
+        $regimeKey = \App\Service\Model\StreamContext::REGIME_STATE_PREFIX . InsuranceBusinessModel::REGIME_HARD_MARKET;
         $quarterlyPremium = 100_000_000_000.0;
-        $annualTargetSurplus = ($quarterlyPremium * InsuranceBusinessModel::KENNEY_PREMIUM_QUARTERS)
-            / InsuranceBusinessModel::KENNEY_CAPACITY_RATIO;
+        $macro = new \App\DTO\MacroStateDTO();
 
-        // Surplus 20% short of the capital the annual book requires — a real capital shock, and under the
-        // old quarterly base it did not register as a deficit at all.
-        $impaired = $this->underwriter($annualTargetSurplus * 0.80);
-        $adequate = $this->underwriter($annualTargetSurplus);
+        // Surplus 30% short of what demand needs, and its book sized from that surplus all the same.
+        $impaired = $this->underwriterAtCapacity(0.70);
+        $adequate = $this->underwriterAtCapacity(1.00);
+        $impaired->setTotalRevenue((string) ((float) $impaired->getTotalEquity() * InsuranceBusinessModel::KENNEY_CAPACITY_RATIO));
+        $desiredShare = $model->resolveTargetWrittenShare($impaired, $macro, new MathUtility(), (float) $impaired->getTotalEquity());
+        $this->assertGreaterThan(InsuranceBusinessModel::HARD_MARKET_ONSET_SURPLUS_DEFICIT, 1.0 - (0.70 / $desiredShare));
 
-        $impairedMargin = $model->computeActualFinancials($impaired, $quarterlyPremium, 0.90, 1.0e9, 0.10, new \App\DTO\MacroStateDTO(), $this->scriptedMath())->clampedMargin;
-        $adequateMargin = $model->computeActualFinancials($adequate, $quarterlyPremium, 0.90, 1.0e9, 0.10, new \App\DTO\MacroStateDTO(), $this->scriptedMath())->clampedMargin;
+        $impairedResult = $model->computeActualFinancials($impaired, $quarterlyPremium, 0.90, 1.0e9, 0.10, $macro, $this->scriptedMath());
+        $adequateResult = $model->computeActualFinancials($adequate, $quarterlyPremium, 0.90, 1.0e9, 0.10, $macro, $this->scriptedMath());
+
+        $this->assertSame(1.0, $impairedResult->streamZ[$regimeKey] ?? 0.0);
+        $this->assertSame(0.0, $adequateResult->streamZ[$regimeKey] ?? 0.0);
 
         // The harder rate reaches the combined ratio through the pricing-power multiplier at renewal; the
         // shortfall itself must not discount this quarter's claims a second time.
-        $this->assertEqualsWithDelta($adequateMargin, $impairedMargin, 1e-12);
+        $this->assertEqualsWithDelta($adequateResult->clampedMargin, $impairedResult->clampedMargin, 1e-12);
+    }
 
-        // And the capital shock puts it into the regime, which persists past the quarter that caused it.
+    /**
+     * A firm that writes less because the rate does not pay, and holds only the capital that smaller book needs, is
+     * not short of capital: Winter's (1994) constraint binds on the quantity it would supply at the price, not on
+     * the whole of demand. Measured against all of demand, every capital return in a soft market opened a hard one.
+     */
+    public function testASoftMarketWithCapitalReturnedIsNotAShortage(): void
+    {
+        $model = new InsuranceBusinessModel();
         $regimeKey = \App\Service\Model\StreamContext::REGIME_STATE_PREFIX . InsuranceBusinessModel::REGIME_HARD_MARKET;
-        $impairedResult = $model->computeActualFinancials($impaired, $quarterlyPremium, 0.90, 1.0e9, 0.10, new \App\DTO\MacroStateDTO(), $this->scriptedMath());
-        $this->assertSame(1.0, $impairedResult->streamZ[$regimeKey] ?? 0.0);
+        $macro = new \App\DTO\MacroStateDTO();
+
+        // A thin float and a demanding hurdle: the firm wants well under the whole book at par rates, and holds 80%
+        // of the capital all of demand would need, more than its desired book needs.
+        $withdrawn = $this->underwriterAtCapacity(0.80, floatToEquity: 0.5);
+        $withdrawn->setManagementStyle(\App\Data\Company\ManagementStyle::Steward);
+        $desiredShare = $model->resolveTargetWrittenShare($withdrawn, $macro, new MathUtility(), (float) $withdrawn->getTotalEquity());
+        $this->assertLessThan(0.80, $desiredShare);
+        $this->assertGreaterThanOrEqual(InsuranceBusinessModel::HARD_MARKET_ONSET_SURPLUS_DEFICIT, 1.0 - 0.80, 'Against all of demand this would be a shortage.');
+
+        $result = $model->computeActualFinancials($withdrawn, 100_000_000_000.0, 0.90, 1.0e9, 0.10, $macro, $this->scriptedMath());
+        $this->assertSame(0.0, $result->streamZ[$regimeKey] ?? 0.0);
+    }
+
+    /**
+     * An underwriter steers to its own premium-to-surplus (Gropp & Heider 2010; Cheng & Weiss 2012), struck on its
+     * opening book, and the engine returns the surplus above it. The ratio handed to the engine is the book capital
+     * ratio at which the statutory surplus carries the premium at that target; marks and goodwill pass through.
+     */
+    public function testAnUnderwriterSteersToItsOpeningPremiumToSurplus(): void
+    {
+        $model = new InsuranceBusinessModel();
+        $stock = $this->underwriter(1_500_000_000_000.0);
+        $stock->setCorporateTreasury('4500000000000');
+        $stock->setGoodwill('100000000000');
+        $stock->setTotalEquity('1600000000000');
+        $stock->setTotalRevenue('1200000000000');
+
+        // Before the first report has struck a target there is none, and the engine runs no capital target.
+        $unstruck = clone $stock;
+        $this->assertNull($model->getTargetCapitalRatio($unstruck));
+
+        $stock->setEarningsMomentumZ([InsuranceBusinessModel::STATE_TARGET_PREMIUM_TO_SURPLUS => 1.20]);
+        $target = $model->getTargetCapitalRatio($stock);
+        $this->assertNotNull($target);
+
+        // 1.2T of premium at 1.2x needs 1.0T of surplus; goodwill rides on top. Retiring the excess E - E* takes
+        // equity and assets down together and lands exactly on the target ratio.
+        $equity = 1_600_000_000_000.0;
+        $targetEquity = 1_000_000_000_000.0 + 100_000_000_000.0;
+        $assets = $stock->getTotalAssets();
+        $this->assertEqualsWithDelta($targetEquity / ($assets - ($equity - $targetEquity)), $target, 1e-12);
+
+        // The engine's partial adjustment hands back a share of that excess, and nothing once the firm is at target.
+        $repurchase = \App\Service\Corporate\CapitalAllocationEngine::capitalTargetRepurchase($equity, $assets, $target, $equity / $assets);
+        $this->assertGreaterThan(0.0, $repurchase);
+        $this->assertLessThan($equity - $targetEquity, $repurchase);
+        $this->assertSame(0.0, \App\Service\Corporate\CapitalAllocationEngine::capitalTargetRepurchase($targetEquity, $assets - ($equity - $targetEquity), $target, $target));
+    }
+
+    /** The first report strikes the target premium-to-surplus on the opening book, 1.5 x its written share, and carries it. */
+    public function testTheFirstReportStrikesTheTargetPremiumToSurplus(): void
+    {
+        $model = new InsuranceBusinessModel();
+        $macro = new \App\DTO\MacroStateDTO();
+        $stock = $this->underwriter(1_000_000_000_000.0);
+        $stock->setEarningsMomentumZ([InsuranceBusinessModel::STATE_WRITTEN_SHARE => 0.90]);
+
+        $result = $model->computeActualFinancials($stock, 250_000_000_000.0, 0.90, 1.0e9, 0.10, $macro, $this->scriptedMath());
+        $struck = $result->streamZ[InsuranceBusinessModel::STATE_TARGET_PREMIUM_TO_SURPLUS] ?? null;
+        $this->assertEqualsWithDelta(InsuranceBusinessModel::KENNEY_CAPACITY_RATIO * 0.90, $struck, 1e-12);
+
+        $stock->setEarningsMomentumZ(array_merge($result->streamZ, [InsuranceBusinessModel::STATE_WRITTEN_SHARE => 0.50]));
+        $next = $model->computeActualFinancials($stock, 250_000_000_000.0, 0.90, 1.0e9, 0.10, $macro, $this->scriptedMath());
+        $this->assertSame($struck, $next->streamZ[InsuranceBusinessModel::STATE_TARGET_PREMIUM_TO_SURPLUS] ?? null);
+    }
+
+    /**
+     * Winter (1994): premium is min(demand x written share, Kenney capacity). Capital beyond demand writes
+     * nothing; capital short of it rations the book at the Kenney ratio.
+     */
+    public function testPremiumIsDemandTimesWrittenShareCappedByKenneyCapacity(): void
+    {
+        $model = new InsuranceBusinessModel();
+        $math = new MathUtility();
+        $macro = new \App\DTO\MacroStateDTO(
+            policyRate: InsuranceBusinessModel::DEFAULT_POLICY_RATE_FALLBACK,
+            policyRateEma: InsuranceBusinessModel::DEFAULT_POLICY_RATE_FALLBACK,
+            perceivedNeutralRate: InsuranceBusinessModel::DEFAULT_POLICY_RATE_FALLBACK,
+        );
+        $premium = static function (Stock $s) use ($model, $macro, $math): float {
+            $metrics = $model->getTargetMetrics($s, $macro, $math);
+
+            return $metrics['invested_capital'] * $metrics['baseline_roic'] / ((float) $s->getOperatingMargin() * (1.0 - $macro->corporateTaxRate));
+        };
+
+        // Twice the capital its demand can use, writing every line: the book is demand, half its capacity.
+        $glutted = $this->underwriterAtCapacity(2.00);
+        $this->mergeState($glutted, [InsuranceBusinessModel::STATE_WRITTEN_SHARE => 1.0]);
+        $demand = $model->resolvePremiumDemand($glutted, $macro);
+        $this->assertEqualsWithDelta($demand, $premium($glutted), $demand * 1e-9);
+        $this->assertEqualsWithDelta(0.5 * InsuranceBusinessModel::KENNEY_CAPACITY_RATIO * (float) $glutted->getTotalEquity(), $premium($glutted), $demand * 1e-9);
+
+        // Half the capital its demand needs: the book is rationed at the Kenney ratio to surplus.
+        $short = $this->underwriterAtCapacity(0.50);
+        $this->mergeState($short, [InsuranceBusinessModel::STATE_WRITTEN_SHARE => 1.0]);
+        $capacity = InsuranceBusinessModel::KENNEY_CAPACITY_RATIO * (float) $short->getTotalEquity();
+        $this->assertEqualsWithDelta($capacity, $premium($short), $capacity * 1e-9);
+    }
+
+    /**
+     * Demand rides trend nominal GDP and the franchise struck at the first report, never the capital the firm
+     * retains; the output gap reaches volume through the lagged demand shift, so it is not in the anchor too.
+     */
+    public function testDemandGrowsWithTrendNominalGdpNotWithRetainedCapital(): void
+    {
+        $model = new InsuranceBusinessModel();
+        $base = new \App\DTO\MacroStateDTO();
+        $stock = $this->underwriterAtCapacity(1.00);
+        $demand = $model->resolvePremiumDemand($stock, $base);
+
+        $retained = $this->underwriterAtCapacity(1.00);
+        $retained->setTotalEquity((string) ((float) $retained->getTotalEquity() * 2.0));
+        $this->assertEqualsWithDelta($demand, $model->resolvePremiumDemand($retained, $base), $demand * 1e-12);
+        $this->assertEqualsWithDelta(2.0, $model->resolveCapacityToDemandRatio($retained, $base), 1e-9);
+
+        $grown = new \App\DTO\MacroStateDTO(potentialGdpIndex: 1.5, gdpDeflator: 1.2);
+        $this->assertEqualsWithDelta($demand * 1.8, $model->resolvePremiumDemand($stock, $grown), $demand * 1e-9);
+
+        $boom = new \App\DTO\MacroStateDTO(outputGap: 0.04);
+        $this->assertEqualsWithDelta($demand, $model->resolvePremiumDemand($stock, $boom), $demand * 1e-12);
+    }
+
+    /**
+     * A fresh book has no franchise yet: it opens with demand at its capacity, so the seeded premium is the one
+     * its surplus wrote before, and its first quarter records the franchise that keeps it there.
+     */
+    public function testAFreshBookOpensInBalanceAndRecordsItsFranchise(): void
+    {
+        $model = new InsuranceBusinessModel();
+        $macro = new \App\DTO\MacroStateDTO();
+        $stock = $this->underwriter(1_000_000_000_000.0);
+        $capacity = InsuranceBusinessModel::KENNEY_CAPACITY_RATIO * 1_000_000_000_000.0;
+
+        $this->assertEqualsWithDelta($capacity, $model->resolvePremiumDemand($stock, $macro), 1.0);
+        $this->assertEqualsWithDelta(1.0, $model->resolveCapacityToDemandRatio($stock, $macro), 1e-12);
+
+        $result = $model->computeActualFinancials($stock, 250_000_000_000.0, 0.90, 1.0e9, 0.10, $macro, $this->scriptedMath());
+        $franchise = $result->streamZ[InsuranceBusinessModel::STATE_PREMIUM_FRANCHISE_SHARE] ?? null;
+        $this->assertNotNull($franchise);
+        $this->assertEqualsWithDelta($capacity / (CorporateMetrics::BASELINE_SECTOR_TAM * (float) $stock->getSamRatio()), $franchise, 1e-12);
+
+        // Carried, not re-struck: a quarter later on doubled capital the franchise is the one recorded.
+        $stock->setEarningsMomentumZ($result->streamZ);
+        $stock->setTotalEquity('2000000000000');
+        $next = $model->computeActualFinancials($stock, 250_000_000_000.0, 0.90, 1.0e9, 0.10, $macro, $this->scriptedMath());
+        $this->assertSame($franchise, $next->streamZ[InsuranceBusinessModel::STATE_PREMIUM_FRANCHISE_SHARE] ?? null);
     }
 
     /** Draws pinned so the claim Z carries no catastrophe: the capital channel is what is under test. */
@@ -665,12 +822,12 @@ class InsuranceBusinessModelTest extends TestCase
     }
 
     /**
-     * An underwriter carrying a real float, at the given multiple of the market it serves, whose prior book
-     * is small enough that the hard-market revenue floor does not hold its written premium up.
+     * An underwriter carrying a real float, whose Kenney capacity is the given multiple of its premium demand,
+     * and whose prior book is small enough that the hard-market revenue floor does not hold its premium up.
      */
-    private function underwriterAtShare(float $capitalShareOfMarket, float $floatToEquity = 3.0): Stock
+    private function underwriterAtCapacity(float $capacityToDemand, float $floatToEquity = 3.0): Stock
     {
-        $stock = $this->shareStock($capitalShareOfMarket);
+        $stock = $this->capacityStock($capacityToDemand);
         $equity = (float) $stock->getTotalEquity();
         $stock->setOperatingMargin('0.045');
         $stock->setCustomerDeposits((string) ($equity * $floatToEquity));
@@ -680,11 +837,11 @@ class InsuranceBusinessModelTest extends TestCase
         return $stock;
     }
 
-    /** An underwriter whose capital is the given multiple of the market it serves. */
-    private function shareStock(float $capitalShareOfMarket): Stock
+    /** An underwriter whose Kenney capacity is the given multiple of its premium demand, at trend nominal GDP of one. */
+    private function capacityStock(float $capacityToDemand): Stock
     {
         $samRatio = 2.0;
-        $equity = $capitalShareOfMarket * CorporateMetrics::BASELINE_SECTOR_TAM * $samRatio;
+        $equity = 1_000_000_000_000.0;
 
         $stock = new Stock();
         $stock->setTicker('TEST');
@@ -698,8 +855,18 @@ class InsuranceBusinessModelTest extends TestCase
         $stock->setOperatingMargin('0.10');
         $stock->setTotalRevenue((string) ($equity * InsuranceBusinessModel::KENNEY_CAPACITY_RATIO));
         $stock->setRoeTtm('0.10');
+        $demand = InsuranceBusinessModel::KENNEY_CAPACITY_RATIO * $equity / $capacityToDemand;
+        $stock->setEarningsMomentumZ([
+            InsuranceBusinessModel::STATE_PREMIUM_FRANCHISE_SHARE => $demand / (CorporateMetrics::BASELINE_SECTOR_TAM * $samRatio),
+        ]);
 
         return $stock;
+    }
+
+    /** @param array<string, float> $state */
+    private function mergeState(Stock $stock, array $state): void
+    {
+        $stock->setEarningsMomentumZ(array_merge($stock->getEarningsMomentumZ() ?? [], $state));
     }
 
     /** An unsaturated insurer carrying a float too small to imply runoff equity, opened at exactly Kenney capacity. */

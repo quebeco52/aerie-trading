@@ -19,6 +19,8 @@ use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
 use App\Service\Math\MathUtility;
 use App\Service\Event\ShockEvent;
+use App\Service\Corporate\CorporateMetrics;
+use App\Service\Corporate\Industry\IndustryShareLedger;
 
 /**
  * Earnings strategy for Insurance companies.
@@ -52,8 +54,6 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
     // --- The Kenney Rule & Capacity Limits ---
     /** Standard Premium-to-Surplus capacity ratio required to maintain strong credit ratings. */
     public const KENNEY_CAPACITY_RATIO    = 1.50;
-    /** Quarters of premium in the ANNUAL written book the Kenney ratio is defined over; sector physics is handed one quarter of it. */
-    public const KENNEY_PREMIUM_QUARTERS  = 4.0;
     /** Implied runoff equity fraction of customer deposit float allowed for insolvent insurers. */
     public const IMPLIED_RUNOFF_EQUITY    = 0.10;
     /** Minimum fraction of prior revenue retained during hard market pricing (post-catastrophe capacity support). */
@@ -104,20 +104,24 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
     public const HARD_MARKET_PRICING_UPLIFT = 0.25;
     /** Quarters over which the rate uplift decays as capital rebuilds, even while the regime itself persists. */
     public const HARD_MARKET_UPLIFT_DECAY_QUARTERS = 8.0;
-    /** Premium rate cut per unit of capital held beyond what the market it serves can absorb (the soft half of the same capacity cycle). */
+    /** Premium rate cut per unit of Kenney capacity held beyond premium demand (soft-side price-to-capacity elasticity). UNCITED: Gron (1994) and Weiss & Chung (2004) find the sign; Froot & O'Connell (1999) measure only the hard side (+19-40% after a $10B loss). */
     public const SOFT_MARKET_CAPACITY_BETA = 0.40;
     /** Deepest rate cut price competition inflicts, however overcapitalized the industry becomes. */
     public const SOFT_MARKET_MAX_DISCOUNT = 0.30;
-    /** Smallest share of Kenney capacity a going concern still writes at any price: obligatory renewals, treaty shares it cannot walk away from mid-term, and the distribution it must keep alive to have a book to write when rates recover. */
+    /** Smallest share of its premium demand a going concern still writes at any price: obligatory renewals, treaty shares it cannot walk away from mid-term, and the distribution it must keep alive to have a book to write when rates recover. */
     public const MIN_WRITTEN_CAPACITY = 0.35;
     /** Standard deviation of the US P&C industry combined ratio about its mean, 2000-2023 (III / AM Best annual results, ~5 points): how far a book's result strays from what was expected of it. */
     public const UNDERWRITING_RESULT_DISPERSION = 0.05;
     /** Years for the in-force book to reach a newly chosen written share: each policy is re-underwritten only at its renewal, once a term (the renewal lag of Cummins & Outreville 1987). */
     public const WRITTEN_SHARE_ADJUSTMENT_YEARS = self::POLICY_TERM_YEARS;
-    /** State key holding the share of Kenney capacity the in-force book is written at. */
+    /** State key holding the share of its premium demand the in-force book is written at. */
     public const STATE_WRITTEN_SHARE = 'state:capacity:written_share';
-    /** State key holding the capital position the market has actually observed, which is what renewal rates are struck against. */
-    public const STATE_OBSERVED_CAPACITY = 'state:capacity:observed_share';
+    /** State key holding Kenney capacity over premium demand as the market has observed it, which is what renewal rates are struck against. */
+    public const STATE_OBSERVED_CAPACITY = 'state:capacity:observed_ratio';
+    /** State key holding the firm's franchise share of its serviceable market, fixed at its first report so its opening capital exactly meets its demand. */
+    public const STATE_PREMIUM_FRANCHISE_SHARE = 'state:capacity:franchise_share';
+    /** State key holding the premium-to-surplus ratio the firm steers to, its opening book over its opening surplus (Gropp & Heider 2010 time-invariant target; Cheng & Weiss 2012 find insurers adjust NPW/surplus toward one). */
+    public const STATE_TARGET_PREMIUM_TO_SURPLUS = 'state:capacity:target_premium_to_surplus';
     /** Years for a change in an underwriter's capital to reach the rates it is quoted: statutory filings, rating reviews and annual renewal dates all sit between the two, and that delay is what turns the capacity cycle into a cycle rather than a level. */
     public const CAPACITY_OBSERVATION_LAG_YEARS = 1.50;
 
@@ -222,8 +226,9 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
     public const DEFAULT_FLOAT_BOND_DURATION_YEARS = 7.0;
 
     /**
-     * Reverse engineers the required operating metrics based on Balance Sheet Capacity.
-     * Insurance revenue (Premiums) is strictly constrained by Surplus Equity (The Kenney Rule).
+     * Reverse engineers the required operating metrics from the premium book. The book is the capacity-constrained
+     * supply of Winter (1994): the share of premium demand the firm chooses to write, capped by the Kenney ratio to
+     * its surplus. Capital beyond what demand can use writes nothing; capital short of it rations the book.
      *
      * @param Stock       $stock       The insurance stock entity being evaluated.
      * @param MacroStateDTO $macroState  The current macroeconomic state.
@@ -234,14 +239,16 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
     {
         $stableMargin = max(0.01, (float) $stock->getOperatingMargin());
 
-        // 1. Capacity Constraint: clamp revenue to physical capital capacity (Kenney ratio = 1.5x).
         $capacityRatio = self::KENNEY_CAPACITY_RATIO;
         $operatingEquity = $this->resolveOperatingEquity($stock);
 
         $taxRate = $macroState->corporateTaxRate;
 
-        // 2. Structural Revenue anchored to written capacity and solvency limits.
-        $targetRevenue = $operatingEquity * $capacityRatio * $this->resolveWrittenCapacity($stock, $macroState, $mathUtility);
+        // Premium = min(demand x written share, Kenney capacity).
+        $targetRevenue = min(
+            $this->resolvePremiumDemand($stock, $macroState) * $this->resolveWrittenCapacity($stock, $macroState, $mathUtility),
+            $this->resolveKenneyCapacity($stock)
+        );
         // Hard market floor prevents abrupt revenue collapse following catastrophe-driven surplus drawdown.
         $priorRevenue = (float) $stock->getTotalRevenue();
         $targetSurplusForPriorRevenue = $priorRevenue / $capacityRatio;
@@ -310,35 +317,68 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
     }
 
     /**
-     * Winter (1994) / Gron (1994): the underwriting cycle is a CAPACITY cycle, and it runs in both
-     * directions. Capital destroyed by a catastrophe withdraws capacity and hardens rates — the half
-     * resolveHardMarketUplift() carries. Capital ACCUMULATED past what the market can absorb does the
-     * opposite: it competes for the same premium and rates soften until the industry's return falls back
-     * to its cost of capital. Without this half an insurer that retains its earnings simply keeps them,
-     * because nothing prices the glut it is creating, and book value compounds at ROE x retention forever.
-     *
-     * The glut is measured as capital against the market it serves rather than against the firm's own
-     * book: premium is pinned at the Kenney ratio to surplus, so an insurer's own premium-to-surplus can
-     * never show a surplus of capital — only its share of serviceable demand can. That is the same scale
-     * ratio the saturation physics reads, against the same optimal-share threshold.
+     * Winter (1994) / Gron (1994): the underwriting cycle is a CAPACITY cycle, and it runs in both directions.
+     * Capital destroyed by a catastrophe withdraws capacity and hardens rates, the half resolveHardMarketUplift()
+     * carries. Kenney capacity built past what premium demand can use competes for the same premium, and rates
+     * soften in proportion to the glut, 1.5·S/D − 1, until the capital that earns nothing has been handed back.
      */
     protected function resolveSoftMarketCapacityDiscount(Stock $stock, MacroStateDTO $macroState): float
     {
-        $capacityShare = $this->resolveCapacityShare($stock, $macroState);
-
         // Rates are quoted against the capital the market has SEEN, which is where the cycle comes from:
         // capital built through a soft market is not priced until it has been filed, rated and renewed
         // against, so the industry overshoots in both directions instead of settling at a level.
-        $observedShare = (float) ($stock->getEarningsMomentumZ()[self::STATE_OBSERVED_CAPACITY] ?? $capacityShare);
+        $observedRatio = (float) ($stock->getEarningsMomentumZ()[self::STATE_OBSERVED_CAPACITY] ?? $this->resolveCapacityToDemandRatio($stock, $macroState));
 
-        $optimalShare = \App\Service\Math\FinancialConstants::DISECONOMY_OPTIMAL_SHARE_THRESHOLD;
-        $excessCapacity = max(0.0, ($observedShare - $optimalShare) / max(0.01, 1.0 - $optimalShare));
-
-        return min(self::SOFT_MARKET_MAX_DISCOUNT, $excessCapacity * self::SOFT_MARKET_CAPACITY_BETA);
+        return min(self::SOFT_MARKET_MAX_DISCOUNT, max(0.0, $observedRatio - 1.0) * self::SOFT_MARKET_CAPACITY_BETA);
     }
 
     /**
-     * Underwriting discipline: the share of its Kenney capacity the in-force book is written at.
+     * Premium the firm's market would buy at the rate its margin was struck at: its franchise share of the
+     * serviceable market, which rides trend nominal GDP. The demand side of Winter (1994); the cycle reaches
+     * volume through the lagged demand shift in getMacroPhysics(), so it is not in the anchor as well. A firm
+     * with no recorded franchise (a fresh seed's first report) has demand equal to its capacity, which is the
+     * franchise advanceUnderwritingCycle() then records.
+     */
+    public function resolvePremiumDemand(Stock $stock, MacroStateDTO $macroState): float
+    {
+        $franchise = ($stock->getEarningsMomentumZ() ?? [])[self::STATE_PREMIUM_FRANCHISE_SHARE] ?? null;
+        $market = $this->resolveServiceableMarket($stock, $macroState);
+
+        return $franchise !== null && $market > 0.0
+            ? (float) $franchise * $market
+            : $this->resolveKenneyCapacity($stock);
+    }
+
+    /** The franchise share at which demand equals Kenney capacity: the opening book, in balance with its capital. */
+    protected function resolveBalancedFranchiseShare(Stock $stock, MacroStateDTO $macroState): float
+    {
+        $market = $this->resolveServiceableMarket($stock, $macroState);
+
+        return $market > 0.0 ? $this->resolveKenneyCapacity($stock) / $market : 0.0;
+    }
+
+    /** The serviceable market on the base every share reading uses: sector TAM x trend nominal GDP x the firm's SAM ratio. */
+    private function resolveServiceableMarket(Stock $stock, MacroStateDTO $macroState): float
+    {
+        return CorporateMetrics::BASELINE_SECTOR_TAM * IndustryShareLedger::trendNominalGdp($macroState) * max(0.0, (float) $stock->getSamRatio());
+    }
+
+    /** Annual premium the surplus supports at the Kenney ratio. */
+    protected function resolveKenneyCapacity(Stock $stock): float
+    {
+        return self::KENNEY_CAPACITY_RATIO * $this->resolveOperatingEquity($stock);
+    }
+
+    /** Kenney capacity over premium demand: above one the firm holds capital its market cannot use, below one it rations. */
+    public function resolveCapacityToDemandRatio(Stock $stock, MacroStateDTO $macroState): float
+    {
+        $demand = $this->resolvePremiumDemand($stock, $macroState);
+
+        return $demand > 0.0 ? $this->resolveKenneyCapacity($stock) / $demand : 1.0;
+    }
+
+    /**
+     * Underwriting discipline: the share of its premium demand the in-force book is written at.
      *
      * Capacity says how much an underwriter MAY write; it does not say it should. The share is chosen against
      * the rate on offer (resolveTargetWrittenShare) but reaches the book only as policies come up for renewal
@@ -411,7 +451,7 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
     }
 
     /**
-     * Share of Kenney capacity written when the full book's return beats the hurdle by $excessReturn (annual,
+     * Share of premium demand written when the full book's return beats the hurdle by $excessReturn (annual,
      * on surplus): MIN + (1 − MIN)·Φ(excess / σ) of the discretionary book, σ the dispersion of a line's
      * result on surplus. The contractual share (in-force life policies, which the insurer cannot decline to
      * renew) is written whatever the rate.
@@ -511,11 +551,28 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
             $streams->startRegime(self::REGIME_HARD_MARKET);
         }
 
-        // What the market will have observed of this firm's capital by the time it quotes again.
-        $currentShare = $this->resolveCapacityShare($stock, $macroState);
+        // The franchise is struck once, at the first report, and carried: demand then grows with the economy,
+        // not with the capital the firm retains.
+        $franchise = $streams->getPersistedState(self::STATE_PREMIUM_FRANCHISE_SHARE, $this->resolveBalancedFranchiseShare($stock, $macroState));
+        if ($franchise > 0.0) {
+            $streams->registerState(self::STATE_PREMIUM_FRANCHISE_SHARE, $franchise);
+        }
+
+        // The premium-to-surplus the firm steers to, struck on the same opening book: the share it writes of
+        // Kenney capacity when demand meets capacity.
+        $targetPremiumToSurplus = $streams->getPersistedState(
+            self::STATE_TARGET_PREMIUM_TO_SURPLUS,
+            self::KENNEY_CAPACITY_RATIO * $this->resolveWrittenCapacity($stock, $macroState, $mathUtility)
+        );
+        if ($targetPremiumToSurplus > 0.0) {
+            $streams->registerState(self::STATE_TARGET_PREMIUM_TO_SURPLUS, $targetPremiumToSurplus);
+        }
+
+        // What the market will have observed of this firm's capacity against its demand by the time it quotes again.
+        $currentRatio = $this->resolveCapacityToDemandRatio($stock, $macroState);
         $streams->registerState(self::STATE_OBSERVED_CAPACITY, TimeSeries::calculateDistributedLag(
-            currentLaggedValue: $streams->getPersistedState(self::STATE_OBSERVED_CAPACITY, $currentShare),
-            targetValue: $currentShare,
+            currentLaggedValue: $streams->getPersistedState(self::STATE_OBSERVED_CAPACITY, $currentRatio),
+            targetValue: $currentRatio,
             dt: \App\Service\Corporate\EarningsEngine::QUARTERLY_TIME_STEP,
             lagTimeConstant: self::CAPACITY_OBSERVATION_LAG_YEARS
         ));
@@ -529,30 +586,20 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
         ));
     }
 
-    /** The firm's capital measured against the market it serves, on the base the saturation physics uses. */
-    protected function resolveCapacityShare(Stock $stock, MacroStateDTO $macroState): float
-    {
-        return \App\Service\Corporate\CorporateMetrics::getInstance()->calculateScaleRatio(
-            $this->getEvaluationCapital((float) $stock->getTotalEquity(), $stock->getInvestedCapital()),
-            $macroState->nominalGdpIndex,
-            (float) $stock->getSamRatio()
-        );
-    }
-
     /**
-     * How far an underwriter's surplus has fallen below the capital the book it is writing requires.
-     *
-     * The Kenney ratio is premium to surplus over a YEAR, and sector physics is handed one QUARTER's
-     * premium: comparing equity against a quarter of the book asked whether the firm had lost three
-     * quarters of its capital, so the capacity trigger only ever fired on the edge of insolvency. Measured
-     * on the reinsurance book it fired in 0 of 240 quarters — the hard market could be reached by
-     * catastrophe alone, and the capital channel this ratio exists to carry was dead.
+     * How far an underwriter's surplus has fallen below the Kenney capital for the book it wants to write: demand
+     * times the share the rate on offer justifies, over 1.5. The capacity constraint of Winter (1994) binds when
+     * capital cannot carry the quantity the firm would supply at the price, so a soft market in which it chooses
+     * to write less, and hands the surplus back, is not a shortage; a capital loss against an unchanged book is.
      */
-    protected function resolveSurplusDeficitRatio(float $quarterlyExpectedRevenue, float $equity): float
+    protected function resolveSurplusDeficitRatio(Stock $stock, MacroStateDTO $macroState, MathUtility $mathUtility): float
     {
-        $targetSurplus = ($quarterlyExpectedRevenue * self::KENNEY_PREMIUM_QUARTERS) / self::KENNEY_CAPACITY_RATIO;
+        $operatingEquity = $this->resolveOperatingEquity($stock);
+        $desiredBook = $this->resolvePremiumDemand($stock, $macroState)
+            * $this->resolveTargetWrittenShare($stock, $macroState, $mathUtility, $operatingEquity);
+        $requiredSurplus = $desiredBook / self::KENNEY_CAPACITY_RATIO;
 
-        return $targetSurplus > 0.0 ? max(0.0, ($targetSurplus - $equity) / $targetSurplus) : 0.0;
+        return $requiredSurplus > 0.0 ? max(0.0, ($requiredSurplus - $operatingEquity) / $requiredSurplus) : 0.0;
     }
 
     /**
@@ -630,7 +677,7 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
 
         // A capital shortfall hardens rates through the regime this advances, which reaches revenue and the cost
         // ratio through the pricing-power multiplier; it is not discounted from the combined ratio again here.
-        $surplusDeficitRatio = $this->resolveSurplusDeficitRatio($expectedRevenue, (float) $stock->getTotalEquity());
+        $surplusDeficitRatio = $this->resolveSurplusDeficitRatio($stock, $macroState, $mathUtility);
         $this->advanceUnderwritingCycle($streams, $stock, $macroState, $mathUtility, $surplusDeficitRatio, $recovery > 0.0);
 
         $combinedRatio = $realizedLossRatio + $realizedExpenseRatio + $reinstatementPremium;
@@ -731,18 +778,48 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
     }
 
     /**
+     * The book capital ratio at which the firm's statutory surplus carries its written premium at its own target
+     * premium-to-surplus: an underwriter converges to its own leverage target (Gropp & Heider 2010; for insurers'
+     * NPW/surplus, Cheng & Weiss 2012), and the engine returns the surplus above it by partial adjustment (Berger
+     * et al. 2008, CapitalAllocationEngine::capitalTargetRepurchase()). Unrealised marks and goodwill sit outside
+     * statutory surplus and pass through. None before the first report has struck the target.
+     */
+    public function getTargetCapitalRatio(Stock $stock, ?MacroStateDTO $macroState = null): ?float
+    {
+        $targetPremiumToSurplus = (float) (($stock->getEarningsMomentumZ() ?? [])[self::STATE_TARGET_PREMIUM_TO_SURPLUS] ?? 0.0);
+        $premium = (float) $stock->getTotalRevenue();
+        if ($targetPremiumToSurplus <= 0.0 || $premium <= 0.0) {
+            return null;
+        }
+
+        $equity = (float) $stock->getTotalEquity();
+        $targetEquity = ($premium / $targetPremiumToSurplus) + ($equity - $stock->getStatutorySurplus());
+        $targetAssets = $stock->getTotalAssets() - $equity + $targetEquity;
+
+        return $targetEquity > 0.0 && $targetAssets > $targetEquity ? $targetEquity / $targetAssets : null;
+    }
+
+    /**
      * An underwriter that declines to write at the rate on offer is holding surplus behind a book it is not
      * writing, and that surplus is redundant until rates recover. Handing it back is what closes the
      * capacity cycle: the industry's capital falls, the glut it was pricing clears, rates harden, and the
      * capital that comes back is deployed into a book worth writing. A firm that keeps it instead simply
      * accumulates until it is a fund with an insurance licence.
      *
-     * It reads the share the in-force book is actually written at, so the two cannot disagree: whatever
-     * fraction of capacity the book is not using is the fraction of surplus this returns.
+     * It reads the book getTargetMetrics() writes, min(D·w, 1.5·S), so the two cannot disagree: whatever fraction
+     * of Kenney capacity that book leaves unused, through declined lines or demand the capital has outgrown, is
+     * the fraction of surplus this returns.
      */
     public function getUndeployableCapitalShare(Stock $stock, MacroStateDTO $macroState, MathUtility $mathUtility): float
     {
-        return max(0.0, min(1.0, 1.0 - $this->resolveWrittenCapacity($stock, $macroState, $mathUtility)));
+        $capacity = $this->resolveKenneyCapacity($stock);
+        if ($capacity <= 0.0) {
+            return 0.0;
+        }
+
+        $written = min($capacity, $this->resolvePremiumDemand($stock, $macroState) * $this->resolveWrittenCapacity($stock, $macroState, $mathUtility));
+
+        return max(0.0, min(1.0, 1.0 - ($written / $capacity)));
     }
 
     public function getSustainableDividendBase(Stock $stock, float $quarterlyEps, float $investedCapital, float $depRate): float
@@ -1239,12 +1316,13 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
     {
         return [
             'catastrophe_loss_index_ema',
+            'gdp_deflator',
             'market_volatility_ema',
-            'nominal_gdp_index',
             'output_gap_ema',
             'output_gap_lag_6m',
             'perceived_neutral_rate',
             'policy_rate_ema',
+            'potential_gdp_index',
             'yield_10y_ema',
         ];
     }

@@ -986,12 +986,23 @@ class CreditFiscalSubsystem
     }
 
     /**
+     * The ten-year term premium the stock of debt adds against the opening stock at the founding maturity
+     * (FixedIncome::calculateDebtSupplyTermPremium()): the fund's paper is foreign, so all of it is in private hands, and
+     * a government that carries more debt raises every long rate the curve sets, whatever its default risk.
+     */
+    public static function debtSupplyTermPremium(float $grossDebtToGdp): float
+    {
+        return FixedIncome::calculateDebtSupplyTermPremium($grossDebtToGdp, MacroEngine::INITIAL_DEBT_TO_GDP, self::FOUNDING_DEBT_AVERAGE_MATURITY, self::DEBT_MATURITY_TERM_PREMIUM);
+    }
+
+    /**
      * The duration taken out of private hands, in ten-year term premium: the central bank's holdings less the extra the
-     * Exchequer's maturity puts in, both through the same preferred-habitat channel (Vayanos & Vila 2021).
+     * Exchequer's book puts in against the opening one, its maturity and its size, all through the same preferred-habitat
+     * channel (Vayanos & Vila 2021).
      */
     public static function durationExtraction(float $balanceSheetIntensity, float $grossDebtToGdp, float $averageMaturity): float
     {
-        return $balanceSheetIntensity - self::maturitySupplyTermPremium($grossDebtToGdp, $averageMaturity);
+        return $balanceSheetIntensity - self::maturitySupplyTermPremium($grossDebtToGdp, $averageMaturity) - self::debtSupplyTermPremium($grossDebtToGdp);
     }
 
     /**

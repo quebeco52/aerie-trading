@@ -125,6 +125,13 @@ final class BusinessModelMacroFieldDeclarationTest extends TestCase
             $actual = array_values(array_unique($actual));
         }
 
+        // A demand anchor on trend nominal GDP reads potential output and the price level through the shared helper.
+        if ($this->invokesHelper($modelClass, 'IndustryShareLedger::trendNominalGdp(')) {
+            $actual[] = MacroFieldRegistry::wireKeys()['potentialGdpIndex'];
+            $actual[] = MacroFieldRegistry::wireKeys()['gdpDeflator'];
+            $actual = array_values(array_unique($actual));
+        }
+
         // The rules on extraction are trait code as well, applied only by the models that extract.
         if ($this->invokesHelper($modelClass, 'underExtractionRules(')) {
             $actual[] = 'extraction_stringency';

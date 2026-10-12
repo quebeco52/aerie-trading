@@ -140,6 +140,21 @@ final class FixedIncome
     }
 
     /**
+     * The ten-year term premium the stock of debt adds against a reference stock at the reference maturity: more debt at
+     * an unchanged maturity is more duration for private holders to absorb (Greenwood & Vayanos 2014). With
+     * calculateMaturitySupplyTermPremium() it prices the whole book against the reference one, D·M − D0·M0.
+     *
+     * @param float $debtToGdp           Debt held by the public, over GDP.
+     * @param float $referenceDebtToGdp  The debt the term premium is calibrated at, over GDP.
+     * @param float $referenceMaturity   The average maturity the term premium is calibrated at, in years.
+     * @param float $premiumPerGdpYear   Ten-year term premium per unit of debt to GDP times years of maturity.
+     */
+    public static function calculateDebtSupplyTermPremium(float $debtToGdp, float $referenceDebtToGdp, float $referenceMaturity, float $premiumPerGdpYear): float
+    {
+        return $premiumPerGdpYear * $referenceMaturity * (max(0.0, $debtToGdp) - $referenceDebtToGdp);
+    }
+
+    /**
      * Calculates the duration-weighted preferred-habitat term premium shift under QE/QT (Vayanos & Vila 2021).
      *
      * When the central bank expands its balance sheet via Quantitative Easing (QE), it extracts net duration

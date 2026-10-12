@@ -81,7 +81,7 @@ if (getenv('POLITICS_SEED') === false) {
 }
 
 define('HARNESS_PROJECT', getenv('BASE') ?: '/home/quebeco/Projects/Code/Private/aerie-trading');
-require '/home/quebeco/Projects/Code/Private/aerie-trading/tests/bootstrap.php';
+require HARNESS_PROJECT . '/tests/bootstrap.php';
 // A baseline tree shares this checkout's vendor through a symlink, and composer resolves that back to THIS src.
 // Put the tree's own App\ classes in front of it.
 if (getenv('BASE')) {
