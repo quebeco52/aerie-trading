@@ -584,6 +584,10 @@ class MacroReport
     #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 6, nullable: true)]
     private ?string $dividendTaxRate = null;
 
+    // Gross debt to GDP the Diet's budget steers toward, before the Council's line caps it.
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 6, nullable: true)]
+    private ?string $debtTarget = null;
+
     // The rate committee's supermajority: 1 hawkish, -1 dovish, 0 neither.
     #[ORM\Column(type: Types::DECIMAL, precision: 3, scale: 0, nullable: true)]
     private ?string $authorityMajority = null;

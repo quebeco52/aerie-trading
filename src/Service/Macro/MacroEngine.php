@@ -243,8 +243,8 @@ class MacroEngine
     public const OPENING_FUND_TO_GDP = 0.41;
 
     // --- Sovereign Debt Dynamics (Greenwood-Vayanos 2014) ---
-    /** Sovereign debt-to-GDP at simulation start: where the fiscal rule holds gross debt (median 0.726 over years 30-100, 4 seeds x 100y, var/harness/debt_anchor), so the opening budget runs no consolidation it did not choose. */
-    public const INITIAL_DEBT_TO_GDP = 0.72;
+    /** Sovereign debt-to-GDP at simulation start: where gross debt settles under the targets the Diet's governments set (mean 0.598 over years 20-100, 8 seeds x 100y with politics, var/harness/debt_anchor), so the game opens near its long-run level. */
+    public const INITIAL_DEBT_TO_GDP = 0.60;
     /** Gross debt kept outstanding with no borrowing need, for the benchmark curve to price (Singapore and Hong Kong issue for market development through surpluses); below it a surplus buys the fund's paper instead. */
     public const SOVEREIGN_DEBT_FLOOR = 0.20;
     /** Debt-to-GDP above which the market prices fiscal risk and the Council holds its veto over the budget (Reinhart & Rogoff 2010's 90% line). Deliberately above the 70% the Bohn reaction holds gross debt to: a premium charged for the engine's normal state was measured to lift IG 30 bps and 2s10s 45 bps everywhere. */
@@ -886,6 +886,8 @@ class MacroEngine
         $state->reserveHomeEquityShare = $policy->reserveHomeEquityShare;
         $state->utilityRateCaseGrantShare = $policy->utilityRateCaseGrantShare;
         $state->dividendTaxRate = $policy->dividendTaxRate;
+        $state->debtTarget = $policy->debtTarget;
+        $state->councilDebtLine = $policy->councilDebtLine;
         $state->electionPulse = $policy->electionPulse;
         $state->authorityMajority = $policy->authorityMajority ?? 0.0;
         $state->authorityCommitteeSeated = $policy->authorityMajority === null ? 0.0 : 1.0;

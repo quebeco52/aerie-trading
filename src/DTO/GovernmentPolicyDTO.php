@@ -67,5 +67,9 @@ final readonly class GovernmentPolicyDTO
         public ?array $expectedLevers = null,
         /** When the market expects that budget: the first round after the next government takes office; null before it has a forecast. */
         public ?float $expectedPolicyFrom = null,
+        /** Gross debt to GDP the Diet's budget steers toward. */
+        public float $debtTarget = \App\Service\Macro\Subsystem\CreditFiscalSubsystem::SOVEREIGN_DEBT_NEUTRAL_THRESHOLD,
+        /** The Council's debt line, which caps that target (App\Service\Politics\DebtBrake::councilLine()). */
+        public float $councilDebtLine = \App\Service\Macro\MacroEngine::SOVEREIGN_RISK_DEBT_THRESHOLD,
     ) {}
 }

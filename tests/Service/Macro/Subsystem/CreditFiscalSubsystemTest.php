@@ -432,6 +432,32 @@ class CreditFiscalSubsystemTest extends TestCase
     }
 
     /**
+     * The reaction steers to the Diet's own target, capped at the Council's line: a big-state target under a dovish
+     * Council runs no surplus at 75% debt, and the same target under a hawkish Council is pulled back to its line, so
+     * the reaction's own loosening cannot carry debt past the brake.
+     */
+    public function testTheReactionSteersToTheDietsTargetCappedAtTheCouncilsLine(): void
+    {
+        $state = new MacroState();
+        $state->sovereignFundDollarsPerGdp = 2.0e13;
+        $state->consolidationTaxShare = 1.0;
+        $state->publicSpendingShare = MacroEngine::PUBLIC_PURCHASES_TO_GDP;
+        $state->sovereignDebtToGdp = 0.75;
+        $state->debtTarget = 0.75;
+
+        $state->councilDebtLine = 0.95;
+        $this->assertSame(0.75, CreditFiscalSubsystem::debtAnchor($state));
+        $this->assertEqualsWithDelta(0.0, CreditFiscalSubsystem::fiscalStance($state), 1e-12, 'At its own target the budget is neutral.');
+
+        $state->councilDebtLine = 0.66;
+        $this->assertSame(0.66, CreditFiscalSubsystem::debtAnchor($state));
+        $this->assertEqualsWithDelta(0.09 * CreditFiscalSubsystem::BOHN_FISCAL_REACTION_SENSITIVITY, CreditFiscalSubsystem::fiscalStance($state), 1e-12, 'A hawkish Council pulls it back to its line.');
+
+        $state->debtTarget = 0.35;
+        $this->assertEqualsWithDelta(0.40 * CreditFiscalSubsystem::BOHN_FISCAL_REACTION_SENSITIVITY, CreditFiscalSubsystem::fiscalStance($state), 1e-12, 'A small-state target under the line is its own.');
+    }
+
+    /**
      * Bohn's reaction is linear: debt under the line is room the budget spends, so debt is pulled back to the line from
      * below as well as from above. The room splits the other way round from a consolidation: a Diet that repairs debt
      * by tax spends it, one that repairs it by cuts gives it back as tax cuts.

@@ -138,6 +138,7 @@ class PoliticsEngine
         'reserveHomeShare' => false,
         'utilityRateGrant' => false,
         'dividendTax' => false,
+        'debtTarget' => false,
     ];
     /** The levers whose rise is spending the Council guards: above the debt line it holds a rise as it holds a revenue cut, both widening the deficit, as Switzerland's debt brake caps spending (Federal Constitution art. 126). */
     public const SPENDING_LEVERS = ['publicSpending'];
@@ -159,6 +160,7 @@ class PoliticsEngine
         'reserveHomeShare' => 'reserveHomeEquityShare',
         'utilityRateGrant' => 'utilityRateCaseGrantShare',
         'dividendTax' => 'dividendTaxRate',
+        'debtTarget' => 'debtTarget',
     ];
     /** The question each lever's platform reads, in the same order. */
     public const LEVER_AXES = [
@@ -178,6 +180,7 @@ class PoliticsEngine
         'reserveHomeShare' => AerieDiet::AXIS_OPENNESS,
         'utilityRateGrant' => AerieDiet::AXIS_COUNCIL,
         'dividendTax' => AerieDiet::AXIS_STATE,
+        'debtTarget' => AerieDiet::AXIS_STATE,
     ];
 
     // --- Platforms: Public Spending (Singapore, Workers' Party and PAP, 2020-2025) ---
@@ -213,6 +216,12 @@ class PoliticsEngine
     // --- Platforms: The Reserve Draw (Singapore Net Investment Returns Contribution) ---
     /** Share of the reserve fund's expected long-term real return the big-state end of the axis spends: 60%, the Workers' Party of Singapore's proposal to raise the Net Investment Returns Contribution from 50% (manifestos 2020 and 2025). The small-state end keeps the founding half (MacroEngine::RESERVE_DRAW_CEILING), which the fund must consent to any budget exceeding. */
     public const POLICY_BIG_STATE_RESERVE_DRAW_SHARE = 0.60;
+
+    // --- Platforms: The Debt Target (Sweden's debt anchor; the EU's excessive deficit procedure) ---
+    /** Gross debt the small-state end of the axis steers the budget to: 35% of GDP, Sweden's debt anchor (the framework the Surplus Target Committee set out, SOU 2016:67, in force from 2019). */
+    public const POLICY_SMALL_STATE_DEBT_TARGET = 0.35;
+    /** Gross debt the big-state end steers to: the 3% of GDP deficit ceiling of the EU's excessive deficit procedure (TFEU Protocol No 12) held at the District's trend nominal growth, debt = deficit / growth, the arithmetic that took the protocol's 3% to its 60% at the 5% nominal growth it assumed. */
+    public const POLICY_BIG_STATE_DEBT_TARGET = 0.03 / (MacroEngine::TREND_REAL_GROWTH + MacroEngine::TARGET_INFLATION);
 
     // --- Platforms: Who Pays to Cut the Debt (IFS 2010 General Election briefing) ---
     /** Gap between the shares of a deficit cut the big-state and small-state manifestos raise by tax: Labour's 2:1 ratio of spending cuts to tax rises (£24bn of £71bn) against the Conservatives' 4:1 (£14bn of £71bn), IFS, April 2010. Enacted plans show no partisan gap (deficit-cutting plans against ParlGov cabinets, 15 countries, 0.002 ± 0.018 a left-right point), so the gap is the manifestos'. */
@@ -418,7 +427,7 @@ class PoliticsEngine
      * protectionists'.
      *
      * @param array<string, float> $position A position by axis (coalitionPosition(), or a party's).
-     * @return array{publicSpending: float, corporateTax: float, tariff: float, laborGrowth: float, foreignBuyerTax: float, mergerReviewLeniency: float, greenBeltStringency: float, carbonPrice: float, extractionStringency: float, stampDutyRate: float, bankLevyRate: float, reserveDrawShare: float, consolidationTaxShare: float, reserveHomeShare: float, utilityRateGrant: float, dividendTax: float}
+     * @return array{publicSpending: float, corporateTax: float, tariff: float, laborGrowth: float, foreignBuyerTax: float, mergerReviewLeniency: float, greenBeltStringency: float, carbonPrice: float, extractionStringency: float, stampDutyRate: float, bankLevyRate: float, reserveDrawShare: float, consolidationTaxShare: float, reserveHomeShare: float, utilityRateGrant: float, dividendTax: float, debtTarget: float}
      *         Government purchases as a share of GDP, the corporate rate's shift from the neutral rate, the average tariff on imports, labour force growth,
      *         the tax on homes bought from outside the District,
      *         where merger review stands between the 2023 guidelines (0) and the 2010 guidelines (1), how far the green
@@ -478,13 +487,17 @@ class PoliticsEngine
             'dividendTax' => Valuation::FOUNDING_DIVIDEND_TAX_RATE
                 + ((self::POLICY_BIG_STATE_DIVIDEND_TAX - Valuation::FOUNDING_DIVIDEND_TAX_RATE) * max(0.0, $state / $bigState))
                 + ((self::POLICY_SMALL_STATE_DIVIDEND_TAX - Valuation::FOUNDING_DIVIDEND_TAX_RATE) * max(0.0, $state / $smallState)),
+            // The neutral position keeps the founding anchor; each end steers to its own side's rule.
+            'debtTarget' => CreditFiscalSubsystem::SOVEREIGN_DEBT_NEUTRAL_THRESHOLD
+                + ((self::POLICY_BIG_STATE_DEBT_TARGET - CreditFiscalSubsystem::SOVEREIGN_DEBT_NEUTRAL_THRESHOLD) * max(0.0, $state / $bigState))
+                + ((self::POLICY_SMALL_STATE_DEBT_TARGET - CreditFiscalSubsystem::SOVEREIGN_DEBT_NEUTRAL_THRESHOLD) * max(0.0, $state / $smallState)),
         ];
     }
 
     /**
      * The levers in force, keyed and ordered as platform() writes them, so a budget that changes nothing compares equal.
      *
-     * @return array{publicSpending: float, corporateTax: float, tariff: float, laborGrowth: float, foreignBuyerTax: float, mergerReviewLeniency: float, greenBeltStringency: float, carbonPrice: float, extractionStringency: float, stampDutyRate: float, bankLevyRate: float, reserveDrawShare: float, consolidationTaxShare: float, reserveHomeShare: float, utilityRateGrant: float, dividendTax: float}
+     * @return array{publicSpending: float, corporateTax: float, tariff: float, laborGrowth: float, foreignBuyerTax: float, mergerReviewLeniency: float, greenBeltStringency: float, carbonPrice: float, extractionStringency: float, stampDutyRate: float, bankLevyRate: float, reserveDrawShare: float, consolidationTaxShare: float, reserveHomeShare: float, utilityRateGrant: float, dividendTax: float, debtTarget: float}
      */
     public static function standingLevers(PoliticsState|PoliticsStateDTO $state): array
     {
@@ -493,7 +506,7 @@ class PoliticsEngine
             $standing[$lever] = $state->$field;
         }
 
-        /** @var array{publicSpending: float, corporateTax: float, tariff: float, laborGrowth: float, foreignBuyerTax: float, mergerReviewLeniency: float, greenBeltStringency: float, carbonPrice: float, extractionStringency: float, stampDutyRate: float, bankLevyRate: float, reserveDrawShare: float, consolidationTaxShare: float, reserveHomeShare: float, utilityRateGrant: float, dividendTax: float} $standing */
+        /** @var array{publicSpending: float, corporateTax: float, tariff: float, laborGrowth: float, foreignBuyerTax: float, mergerReviewLeniency: float, greenBeltStringency: float, carbonPrice: float, extractionStringency: float, stampDutyRate: float, bankLevyRate: float, reserveDrawShare: float, consolidationTaxShare: float, reserveHomeShare: float, utilityRateGrant: float, dividendTax: float, debtTarget: float} $standing */
         return $standing;
     }
 

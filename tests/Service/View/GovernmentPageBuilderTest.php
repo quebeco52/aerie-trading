@@ -685,7 +685,7 @@ class GovernmentPageBuilderTest extends TestCase
     {
         $rows = array_column($this->builder()->buildDiet(new MacroStateDTO(), new PoliticsStateDTO())['compass']['layouts']['wide']['rows'], 'laws', 'axis');
 
-        $this->assertSame(['public spending', 'corporate tax', 'stamp duty', 'bank levy', 'reserve draw', 'tax or cuts', 'dividend tax'], $rows[Diet::AXIS_STATE]);
+        $this->assertSame(['public spending', 'corporate tax', 'stamp duty', 'bank levy', 'reserve draw', 'tax or cuts', 'dividend tax', 'debt target'], $rows[Diet::AXIS_STATE]);
         $this->assertSame(['tariffs', 'immigration', 'foreign buyers', 'reserves at home'], $rows[Diet::AXIS_OPENNESS]);
         $this->assertSame(['merger review', 'utility rates'], $rows[Diet::AXIS_COUNCIL]);
         $this->assertSame(['green belts', 'carbon price', 'extraction rules'], $rows[Diet::AXIS_ENVIRONMENT]);

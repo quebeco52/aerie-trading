@@ -1246,6 +1246,24 @@ class PoliticsEngineTest extends TestCase
         $this->assertSame(0.0, $founding['extractionStringency']);
     }
 
+    /**
+     * Each government steers debt to its own side's rule: the small-state end to Sweden's 35% anchor, the big-state end
+     * to the EU's 3% deficit ceiling held at trend nominal growth, the District's average party to the founding 70%. It
+     * is no revenue the Council guards: its line caps the target the economy is handed instead.
+     */
+    public function testTheDebtTargetRunsFromSwedensAnchorToTheEuDeficitCeiling(): void
+    {
+        $this->assertEqualsWithDelta(0.35, Politics::platform(Diet::position(Diet::VANGUARD, []))['debtTarget'], 1e-12);
+        $this->assertEqualsWithDelta(0.75, Politics::platform(Diet::position(Diet::CIVIC, []))['debtTarget'], 1e-12, '3% over 4% trend nominal growth.');
+        $this->assertEqualsWithDelta(CreditFiscalSubsystem::SOVEREIGN_DEBT_NEUTRAL_THRESHOLD, Politics::platform([Diet::AXIS_STATE => 0.0])['debtTarget'], 1e-12);
+        $this->assertFalse(Politics::REVENUE_LEVERS['debtTarget']);
+        $this->assertSame(Diet::AXIS_STATE, Politics::LEVER_AXES['debtTarget']);
+
+        $policy = (new PoliticsStateDTO(debtTarget: 0.75, councilDebtLines: [0.66, 0.66, 0.66]))->policy();
+        $this->assertSame(0.75, $policy->debtTarget);
+        $this->assertSame(0.66, $policy->councilDebtLine, 'The economy is handed the Council\'s line with the target it caps.');
+    }
+
     /** The standing levers, the platform, the revenue flags and the state fields all list the levers in one order, so a budget that changes nothing compares equal. */
     public function testEveryLeverListIsInPlatformOrder(): void
     {

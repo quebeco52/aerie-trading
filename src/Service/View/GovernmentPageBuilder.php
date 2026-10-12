@@ -101,6 +101,7 @@ class GovernmentPageBuilder
         'consolidationTaxShare' => ['Debt repair raised by tax', 'pct'],
         'reserveHomeShare' => ['Reserve fund shares held at home', 'pct'],
         'utilityRateGrant' => ['Utility rate requests granted', 'pct'],
+        'debtTarget' => ['Debt target', 'pct'],
     ];
     /** The polls chart's plot area in its 600 by 210 drawing: left, right, top and bottom edges. */
     private const POLL_CHART_PLOT = [34.0, 590.0, 8.0, 182.0];
@@ -174,6 +175,7 @@ class GovernmentPageBuilder
         'reserveHomeShare' => 'reserves at home',
         'utilityRateGrant' => 'utility rates',
         'dividendTax' => 'dividend tax',
+        'debtTarget' => 'debt target',
     ];
     /** Font size of the end words and party labels, in SVG units. */
     private const COMPASS_FONT_SIZE = 7.0;
@@ -1060,6 +1062,7 @@ class GovernmentPageBuilder
                 ['name' => 'Debt repair raised by tax', 'unit' => 'pct', 'platform' => $platform['consolidationTaxShare'], 'enacted' => $politics->consolidationTaxShare],
                 ['name' => 'Reserve fund shares held at home', 'unit' => 'pct', 'platform' => $platform['reserveHomeShare'], 'enacted' => $politics->reserveHomeEquityShare],
                 ['name' => 'Utility rate requests granted', 'unit' => 'pct', 'platform' => $platform['utilityRateGrant'], 'enacted' => $politics->utilityRateCaseGrantShare],
+                ['name' => 'Debt target', 'unit' => 'pct', 'platform' => $platform['debtTarget'], 'enacted' => $politics->debtTarget],
             ],
             'leaders' => self::leaders($politics, $party),
             'polling' => $politics->polls === [] ? null : (static function (array $poll) use ($politics, $party): array {
@@ -1204,7 +1207,7 @@ class GovernmentPageBuilder
         };
         $neutral = MacroEngine::BASE_CORPORATE_TAX_RATE;
         $screens = MergerAndAcquisitionEngine::reviewScreens($politics->mergerReviewLeniency);
-        $repair = max(0.0, CreditFiscalSubsystem::bohnSurplus($macro->sovereignDebtToGdp) - ($macro->sovereignFundDollarsPerGdp > 0.0 ? 0.0 : CreditFiscalSubsystem::SOVEREIGN_STRUCTURAL_DEFICIT));
+        $repair = max(0.0, CreditFiscalSubsystem::bohnSurplus($macro->sovereignDebtToGdp, CreditFiscalSubsystem::debtAnchor($macro)) - ($macro->sovereignFundDollarsPerGdp > 0.0 ? 0.0 : CreditFiscalSubsystem::SOVEREIGN_STRUCTURAL_DEFICIT));
 
         return [
             'levers' => [
@@ -1353,6 +1356,17 @@ class GovernmentPageBuilder
                     'note' => $repair > 0.0
                         ? sprintf('Of the surplus the debt calls for, %.1f%% of GDP with debt at %.0f%% of GDP; the rest comes from spending cuts', 100.0 * $repair, 100.0 * $macro->sovereignDebtToGdp)
                         : 'Of any surplus the debt calls for; the rest comes from spending cuts. Debt is under the line today, so the budget has room: this share goes to spending and the rest to tax cuts',
+                ],
+                [
+                    'name' => 'Debt target',
+                    'axis' => AerieDiet::AXIS_STATE,
+                    'platform' => $budget['platform']['debtTarget'],
+                    'target' => $budget['levers']['debtTarget'],
+                    'enacted' => $standing['debtTarget'],
+                    'status' => $status('debtTarget'),
+                    'note' => $standing['debtTarget'] > DebtBrake::councilLine($politics)
+                        ? sprintf('Of GDP in public debt; it is above the Council\'s line, so the budget steers to the line, %.0f%% of GDP, instead', 100.0 * DebtBrake::councilLine($politics))
+                        : 'Of GDP in public debt, which the budget steers toward over the years: a surplus above it, room to spend or cut taxes below it. The Council\'s line caps it',
                 ],
                 [
                     'name' => 'Reserve fund shares held at home',

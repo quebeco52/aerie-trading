@@ -385,6 +385,10 @@ readonly class MacroStateDTO
         public float $utilityRateCaseGrantShare = UtilityBusinessModel::APPOINTED_COMMISSION_GRANTED_SHARE,
         /** Tax on the dividends the District's own shareholders are paid, as the Diet has it set. */
         public float $dividendTaxRate = Valuation::FOUNDING_DIVIDEND_TAX_RATE,
+        /** Gross debt to GDP the Diet's budget steers toward, as the Diet has it set. */
+        public float $debtTarget = CreditFiscalSubsystem::SOVEREIGN_DEBT_NEUTRAL_THRESHOLD,
+        /** The Council's debt line, which caps the Diet's target. */
+        public float $councilDebtLine = MacroEngine::SOVEREIGN_RISK_DEBT_THRESHOLD,
         /** The rate committee's supermajority, 1 hawkish, -1 dovish, 0 neither (App\Service\Politics\MonetaryAuthority). */
         public float $authorityMajority = 0.0,
         /** 1 while politics hands the macro a rate committee, else 0: the policy rule reads the supermajority only then. */

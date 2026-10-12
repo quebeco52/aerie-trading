@@ -13,6 +13,7 @@ use App\Service\Math\Valuation;
 use App\Service\Model\Sector\UtilityBusinessModel;
 use App\Service\Politics\ElectionForecast;
 use App\Service\Politics\Exchequer;
+use App\Service\Politics\DebtBrake;
 use App\Service\Politics\PoliticsEngine;
 use App\Service\Politics\PoliticsState;
 use App\Service\Politics\PoliticalPressure;
@@ -99,6 +100,8 @@ readonly class PoliticsStateDTO
         public float $utilityRateCaseGrantShare = UtilityBusinessModel::APPOINTED_COMMISSION_GRANTED_SHARE,
         /** Tax on the dividends the District's own shareholders are paid. */
         public float $dividendTaxRate = Valuation::FOUNDING_DIVIDEND_TAX_RATE,
+        /** Gross debt to GDP the Diet's budget steers toward, before the Council's line caps it. */
+        public float $debtTarget = CreditFiscalSubsystem::SOVEREIGN_DEBT_NEUTRAL_THRESHOLD,
         public float $lastBudgetEnactedAt = -1.0,
         public float $lastCouncilBrakeAt = -1.0,
         /** Salt the Council's hashed draws are taken from, drawn once when it forms (-1: not yet formed; App\Service\Politics\CouncilAppointments). */
@@ -307,6 +310,8 @@ readonly class PoliticsStateDTO
             reserveHomeEquityShare: $this->reserveHomeEquityShare,
             utilityRateCaseGrantShare: $this->utilityRateCaseGrantShare,
             dividendTaxRate: $this->dividendTaxRate,
+            debtTarget: $this->debtTarget,
+            councilDebtLine: DebtBrake::councilLine($this),
             electionPulse: PoliticsEngine::electionPulse($this->totalTime, $this->lastElectionAt, $this->coalitionTakesOfficeAt),
             authorityMajority: $this->authoritySalt < 0.0 ? null : $this->committeeMajority,
             bankCapitalRequirement: $this->regulatorName === '' ? null : $this->bankCapitalRequirement,

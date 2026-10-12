@@ -430,6 +430,8 @@ class MacroState
     public float $reserveHomeEquityShare;
     public float $utilityRateCaseGrantShare;
     public float $dividendTaxRate;
+    public float $debtTarget;
+    public float $councilDebtLine;
     // The Monetary Authority's rate committee: its supermajority, and whether politics hands one over at all.
     public float $authorityMajority;
     public float $authorityCommitteeSeated;

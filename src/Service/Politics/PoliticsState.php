@@ -84,6 +84,7 @@ class PoliticsState
     public float $reserveHomeEquityShare;
     public float $utilityRateCaseGrantShare;
     public float $dividendTaxRate;
+    public float $debtTarget;
     public float $lastBudgetEnactedAt;
     public float $lastCouncilBrakeAt;
 

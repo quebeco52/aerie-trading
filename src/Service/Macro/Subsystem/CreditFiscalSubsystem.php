@@ -64,7 +64,7 @@ class CreditFiscalSubsystem
     // --- Sovereign Debt Dynamics (Greenwood-Vayanos 2014) ---
     /** Structural primary fiscal deficit as a fraction of GDP with no sovereign fund, levied as taxes that far below the purchases share; with a fund, the structural deficit is the fund's draw, spent. */
     public const SOVEREIGN_STRUCTURAL_DEFICIT = 0.020;
-    /** Gross debt-to-GDP the Bohn (1998) fiscal reaction holds the Diet's budget to: a surplus above it, a deficit below it. 70%, below every Council debt line but the lowest (Politics\DebtBrake), so the brake binds after a shock, not as a rule. */
+    /** Gross debt-to-GDP the Bohn (1998) fiscal reaction holds the Diet's budget to at the neutral platform (each government sets its own, PoliticsEngine::platform()): a surplus above it, a deficit below it. 70%, below every Council debt line but the lowest (Politics\DebtBrake), so the brake binds after a shock, not as a rule. */
     public const SOVEREIGN_DEBT_NEUTRAL_THRESHOLD = 0.70;
     /** Bohn (1998, 2008) linear fiscal reaction: primary surplus per unit of gross debt off the threshold, on either side (~0.10, the upper end of advanced-economy estimates). It holds debt near 90% against a 2% structural deficit, and just above 70% once a sovereign fund's draw pays that deficit. */
     public const BOHN_FISCAL_REACTION_SENSITIVITY = 0.10;
@@ -484,7 +484,7 @@ class CreditFiscalSubsystem
         $state->governmentSpendingIndex = StochasticProcesses::calculateSchwartz1Factor(
             currentPrice: $state->governmentSpendingIndex,
             kappa: MacroEngine::GOVT_SPENDING_MEAN_REVERSION,
-            theta: MacroEngine::GOVT_SPENDING_BASELINE * self::purchasesTarget($state->publicSpendingShare, $state->sovereignDebtToGdp, $state->sovereignFundDollarsPerGdp > 0.0, $state->consolidationTaxShare) / MacroEngine::PUBLIC_PURCHASES_TO_GDP,
+            theta: MacroEngine::GOVT_SPENDING_BASELINE * self::purchasesTarget($state->publicSpendingShare, $state->sovereignDebtToGdp, $state->sovereignFundDollarsPerGdp > 0.0, $state->consolidationTaxShare, self::debtAnchor($state)) / MacroEngine::PUBLIC_PURCHASES_TO_GDP,
             sigma: self::GOVT_SPENDING_VOLATILITY,
             dt: $dt,
             dW: $this->mathUtility->generateStandardNormal()
@@ -558,9 +558,19 @@ class CreditFiscalSubsystem
     public static function fiscalStance(MacroState $state): float
     {
         $funded = $state->sovereignFundDollarsPerGdp > 0.0;
-        $stance = self::bohnSurplus($state->sovereignDebtToGdp) - ($funded ? 0.0 : self::SOVEREIGN_STRUCTURAL_DEFICIT);
+        $anchor = self::debtAnchor($state);
+        $stance = self::bohnSurplus($state->sovereignDebtToGdp, $anchor) - ($funded ? 0.0 : self::SOVEREIGN_STRUCTURAL_DEFICIT);
 
-        return $stance - ($state->publicSpendingShare - self::purchasesTarget($state->publicSpendingShare, $state->sovereignDebtToGdp, $funded, $state->consolidationTaxShare));
+        return $stance - ($state->publicSpendingShare - self::purchasesTarget($state->publicSpendingShare, $state->sovereignDebtToGdp, $funded, $state->consolidationTaxShare, $anchor));
+    }
+
+    /**
+     * The gross debt the reaction steers to: the Diet's target, capped at the Council's line. The brake holds a budget
+     * that widens the deficit but not the reaction's own loosening, so a target above the line would carry debt past it.
+     */
+    public static function debtAnchor(MacroState|MacroStateDTO $state): float
+    {
+        return min($state->debtTarget, $state->councilDebtLine);
     }
 
     /**
@@ -568,9 +578,9 @@ class CreditFiscalSubsystem
      * threshold. The reaction is linear, as Bohn estimates it, so debt below the line is a deficit the budget may run; a
      * one-sided rule leaves debt to drift wherever the other revenue lines push it.
      */
-    public static function bohnSurplus(float $debtToGdp): float
+    public static function bohnSurplus(float $debtToGdp, float $anchor = self::SOVEREIGN_DEBT_NEUTRAL_THRESHOLD): float
     {
-        return self::BOHN_FISCAL_REACTION_SENSITIVITY * ($debtToGdp - self::SOVEREIGN_DEBT_NEUTRAL_THRESHOLD);
+        return self::BOHN_FISCAL_REACTION_SENSITIVITY * ($debtToGdp - $anchor);
     }
 
     /**
@@ -581,9 +591,9 @@ class CreditFiscalSubsystem
      * that repairs debt by tax spends the room, one that repairs it by cuts gives it back as tax cuts, as the manifestos
      * the share is set from split the two (PoliticsEngine::POLICY_MANIFESTO_CONSOLIDATION_TAX_SHARE_GAP).
      */
-    public static function consolidationSpendingCut(float $debtToGdp, bool $funded, float $taxShare): float
+    public static function consolidationSpendingCut(float $debtToGdp, bool $funded, float $taxShare, float $anchor = self::SOVEREIGN_DEBT_NEUTRAL_THRESHOLD): float
     {
-        $reaction = self::bohnSurplus($debtToGdp);
+        $reaction = self::bohnSurplus($debtToGdp, $anchor);
 
         return ((1.0 - $taxShare) * max(0.0, $reaction - ($funded ? 0.0 : self::SOVEREIGN_STRUCTURAL_DEFICIT))) + ($taxShare * min(0.0, $reaction));
     }
@@ -592,9 +602,9 @@ class CreditFiscalSubsystem
      * The purchases share of GDP the purchases process reverts to: the Diet's appropriation, less the cuts the debt calls
      * for. No more can be cut than is appropriated; past that the tax rise carries the rest of the surplus (fiscalStance()).
      */
-    public static function purchasesTarget(float $publicSpendingShare, float $debtToGdp, bool $funded, float $taxShare): float
+    public static function purchasesTarget(float $publicSpendingShare, float $debtToGdp, bool $funded, float $taxShare, float $anchor = self::SOVEREIGN_DEBT_NEUTRAL_THRESHOLD): float
     {
-        return $publicSpendingShare - min($publicSpendingShare, self::consolidationSpendingCut($debtToGdp, $funded, $taxShare));
+        return $publicSpendingShare - min($publicSpendingShare, self::consolidationSpendingCut($debtToGdp, $funded, $taxShare, $anchor));
     }
 
     /**

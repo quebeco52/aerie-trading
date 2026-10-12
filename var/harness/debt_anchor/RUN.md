@@ -33,5 +33,10 @@ Paired follow-up: does the change move debt, fund/GDP and the primary balance in
   (the harness is not deterministic run to run).
 - `payout.py <a-b>`: draw/fund, stabilisation/fund and /GDP, draw share (law, applied, distribution), share of
   quarters above the Council line (rows from 2026-10-12 stage 16 on; seeds 1-8 lack draw_law/draw_share/council_line).
+- 2026-10-12 debt-target lever: `before` = HEAD 1ba3a94 snapshot (rebuild with make_before_tree.sh when HEAD moves),
+  `after` = working tree. Rows add debt_target, council_debt_line, anchor (after only), coal_state.
+  `target.py <a-b>`: sd of debt y20-100, OLS slope of debt on the trailing 8y coalition state position (pp/unit),
+  share above the Council line, side checks, capped-anchor share. Earlier runs (rule change) in `runs_v1/`; after arm at
+  opening 0.72 in `runs_after072/`. Stage 16 (after opening 0.60): `target_s16_y100.out`.
 - `runs_old0.93/`: the first 4 after runs, opened at debt 0.93 (before INITIAL_DEBT_TO_GDP = 0.72).
 - Evidence: `debt_anchor_evidence.md`.

@@ -118,3 +118,85 @@ Stage 8 payout gap (3.07 vs 2.23%/y) did not hold: total draw+stab over the run 
 (2.14%/y), stabilisation noise only. Fund grows in BOTH arms because fund return less nominal growth (~3pp/y) exceeds
 the ~2.1%/y draw at the 0.50 share. That is pre-existing, not caused by the change. Fund y100 difference t +1.1, inside noise.
 Stopped at 16 as instructed: T1 |t| 4.1, T2 |t| 11.7, T3 inconclusive (t 1.1).
+
+## 2026-10-12: debt-target lever (Diet debtTarget, anchor = min(target, Council line)), stage 8
+
+before = HEAD 1ba3a94 snapshot (rebuilt; 11 src files differ), after = working tree. Columns added: debt_target,
+council_debt_line, anchor (after only), coal_state (coalition state-axis position, both arms). Old runs moved to runs_v1/.
+Run: `bin/harness-batch var/harness/debt_anchor/run.sh 1-8 before after && python3 var/harness/debt_anchor/target.py 1-8`
+(~20 min wall). Table `target_s8_y100.out`:
+
+    debt-target lever, paired before vs after, seeds 1-8, 100y, 360 tpy, POLITICS=1
+    quantity        unit   before    after     diff      se      t  n
+    sd20           x GDP    0.066    0.101   +0.035   0.009  +3.99  8
+    slope_pos    pp/unit  -14.828    6.770  +21.598   8.425  +2.56  8
+    above_line       % q    4.281    4.312   +0.031   2.339  +0.01  8
+    -- side checks --
+    debt20         x GDP    0.730    0.598   -0.132   0.047  -2.81  8
+    y10                %    4.562    4.638   +0.076   0.211  +0.36  8
+    gap                %   -0.217   -0.365   -0.148   0.161  -0.92  8
+    u                  %    4.654    4.740   +0.086   0.137  +0.63  8
+    net_tax        % GDP   10.985   10.932   -0.053   0.151  -0.35  8
+    spread            bp    0.039    0.039   +0.000   0.000   +nan  8
+    floor            % q    0.000    0.000   +0.000   0.000   +nan  8
+    pos_sd          unit    0.347    0.330   -0.016   0.045  -0.36  8
+    after only: anchor capped by the line 0.2% q; mean target y20-100 0.533, anchor 0.533; NaN 0
+    per seed (before / after): sd20 | slope_pos | above_line | debt20
+      1: 0.062/0.122 |    -6.6/  +14.0 |   1.0/ 10.5 | 0.711/0.775
+      2: 0.056/0.083 |    -1.6/   +3.7 |   3.0/  2.2 | 0.695/0.486
+      3: 0.069/0.105 |    +3.6/  +18.3 |   1.8/  8.8 | 0.729/0.715
+      4: 0.056/0.121 |    +2.5/  +13.3 |   1.0/  1.2 | 0.752/0.543
+      5: 0.072/0.094 |  -122.4/  -44.3 |  10.0/  4.5 | 0.700/0.502
+      6: 0.106/0.108 |    +7.2/  +15.6 |   6.8/  0.0 | 0.771/0.613
+      7: 0.059/0.120 |    +1.7/  +10.6 |   2.5/  7.2 | 0.704/0.699
+      8: 0.047/0.054 |    -3.0/  +23.0 |   8.2/  0.0 | 0.775/0.448
+
+slope_pos: seed 5 is an outlier in both arms (-122/-44); medians before +0.1, after +13.7 pp/unit; without seed 5 diff +13.5
+(se 2.8, t 4.8, n=7). above_line is negligible (diff +0.03pp, 2se 4.7pp of quarters at a 4% base).
+sd20 t 3.99 and slope t 2.56 (all seeds) are not past 4. Anchor capped by the line in 0.2% of quarters.
+
+## 2026-10-12: debt-target lever, stage 16, after arm opening 0.60
+
+after = working tree with INITIAL_DEBT_TO_GDP 0.60, seeds 1-16 rerun (the 0.72-opening after runs are in runs_after072/).
+before = HEAD 1ba3a94 snapshot, seeds 1-8 reused, 9-16 added. Run: `bin/harness-batch var/harness/debt_anchor/run.sh 9-16 before after
+&& bin/harness-batch var/harness/debt_anchor/run.sh 1-8 after && python3 var/harness/debt_anchor/target.py 1-16`. Table `target_s16_y100.out`:
+
+    debt-target lever, paired before vs after, seeds 1-16, 100y, 360 tpy, POLITICS=1
+    quantity        unit   before    after     diff      se      t  n
+    sd20           x GDP    0.064    0.118   +0.054   0.009  +6.03 16
+    slope_pos    pp/unit   -5.813    6.831  +12.644   2.596  +4.87 16
+    above_line       % q    4.047    3.375   -0.672   1.534  -0.44 16
+    -- side checks --
+    debt20         x GDP    0.728    0.580   -0.147   0.024  -6.12 16
+    debt0_10       x GDP    0.723    0.594   -0.129   0.012 -10.61 16
+    debt10         x GDP    0.710    0.571   -0.138   0.026  -5.31 16
+    primary0_10   pp GDP    0.275    0.568   +0.293   0.127  +2.31 16
+    y10                %    4.671    4.707   +0.036   0.108  +0.33 16
+    gap                %   -0.156   -0.237   -0.081   0.129  -0.63 16
+    u                  %    4.562    4.641   +0.079   0.117  +0.68 16
+    net_tax        % GDP   10.887   10.755   -0.133   0.109  -1.22 16
+    spread            bp    0.039    0.039   +0.000   0.000   +nan 16
+    floor            % q    0.000    0.000   +0.000   0.000   +nan 16
+    pos_sd          unit    0.337    0.367   +0.030   0.029  +1.02 16
+    slope_pos medians: before +0.7, after +12.8, diff +12.0; outlier seeds (|d-med|>5 MAD): []
+    after only: anchor capped by the line 1.0% q; mean target y20-100 0.546, anchor 0.546; NaN 0
+    per seed (before / after): sd20 | slope_pos | above_line | debt20
+      1: 0.062/0.092 |    -6.6/  +11.1 |   1.0/  0.0 | 0.711/0.558
+      2: 0.056/0.100 |    -1.6/   -1.5 |   3.0/  2.0 | 0.695/0.538
+      3: 0.069/0.173 |    +3.6/  +17.2 |   1.8/ 11.8 | 0.729/0.686
+      4: 0.056/0.121 |    +2.5/  +13.0 |   1.0/  0.0 | 0.752/0.611
+      5: 0.072/0.078 |  -122.4/ -131.6 |  10.0/  0.0 | 0.700/0.387
+      6: 0.106/0.173 |    +7.2/  +27.3 |   6.8/  4.2 | 0.771/0.609
+      7: 0.059/0.104 |    +1.7/   +3.9 |   2.5/  4.5 | 0.704/0.667
+      8: 0.047/0.076 |    -3.0/   +8.3 |   8.2/  0.0 | 0.775/0.469
+      9: 0.084/0.084 |    -1.0/   +9.1 |   2.5/  0.0 | 0.729/0.602
+      10: 0.050/0.141 |    -1.5/  +25.2 |   0.8/ 15.2 | 0.747/0.760
+      11: 0.043/0.098 |    +6.9/  +12.7 |   0.0/  0.8 | 0.700/0.643
+      12: 0.046/0.091 |    +4.7/  +17.0 |   0.0/  0.0 | 0.709/0.492
+      13: 0.060/0.194 |    +1.6/  +33.3 |   0.0/  1.5 | 0.736/0.561
+      14: 0.080/0.142 |   +21.0/  +32.6 |   8.2/  2.0 | 0.757/0.545
+      15: 0.082/0.151 |    -0.2/  +25.2 |   5.5/  0.0 | 0.730/0.495
+      16: 0.053/0.069 |    -5.8/   +6.5 |  13.5/ 12.0 | 0.703/0.664
+
+Seed 5 slope is an outlier in LEVEL in both arms (-122/-132) but not in the paired difference (-9). T1 and T2 past |t| 4;
+T3 negligible. Opening 0.60 still drifts slightly: y0-10 mean 0.594, y10 0.571, y20-100 0.580 (mean target 0.546).

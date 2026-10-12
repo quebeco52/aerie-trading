@@ -233,7 +233,11 @@ final class FullMarketHarnessTest extends KernelTestCase
                         'f_ret_idx' => $m->sovereignFundReturnIndex, 'f_draw' => $fq['draw'] ?? 0.0, 'f_stab' => $fq['stab'] ?? 0.0,
                         'f_inflow' => $fq['inflow'] ?? 0.0, 'f_stamp' => $fq['stamp'] ?? 0.0,
                         'draw_law' => $m->reserveDrawShare, 'draw_share' => $m->sovereignFundDrawShare,
-                        'council_line' => isset($pstate) ? \App\Service\Politics\DebtBrake::councilLine($pstate) : null] : [])) . "\n", FILE_APPEND);
+                        'council_line' => isset($pstate) ? \App\Service\Politics\DebtBrake::councilLine($pstate) : null,
+                        'debt_target' => property_exists($m, 'debtTarget') ? $m->debtTarget : null,
+                        'council_debt_line' => property_exists($m, 'councilDebtLine') ? $m->councilDebtLine : null,
+                        'anchor' => property_exists($m, 'debtTarget') ? min($m->debtTarget, $m->councilDebtLine) : null,
+                        'coal_state' => isset($pstate) ? \App\Service\Politics\PoliticsEngine::coalitionPosition($pstate->governingCoalition, $pstate->dietSeats, $pstate->partyPositions)[\App\Data\Politics\AerieDiet::AXIS_STATE] : null] : [])) . "\n", FILE_APPEND);
                 $fq = [];
             }
         }
