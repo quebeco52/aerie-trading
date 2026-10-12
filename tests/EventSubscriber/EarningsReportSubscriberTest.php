@@ -703,4 +703,98 @@ class EarningsReportSubscriberTest extends TestCase
         $this->assertEqualsWithDelta(9_800_000.0, (float) $persisted->getConsensusRevenue(), 0.01);
         $this->assertEqualsWithDelta(13.4125, (float) $persisted->getTotalTime(), 1e-9);
     }
+
+    /**
+     * A managed accrual hides in the operating lines with its tax deferred, so the filed statement still steps down from
+     * revenue to the net income it files, through pretax income less tax and the goodwill written off. No cash moved, so
+     * cash tax stays where it was.
+     */
+    public function testTheFiledStatementStepsDownToTheManagedNetIncome(): void
+    {
+        $stock = new Stock();
+        $stock->setTicker('MGMT');
+        $stock->setIndustry('Auto Manufacturers');
+        $stock->setTotalEquity('1000000000.0000');
+        $stock->setWholesaleDebt('1000000000.0000');
+        $stock->setSharesOutstanding('100000000');
+        $stock->setTotalRevenue('400000000.0000');
+
+        $ctx = new EarningsSimulationContext(
+            stock: $stock,
+            macroState: new MacroStateDTO(),
+            strategy: new class extends \App\Service\Model\Sector\StandardCorporateBusinessModel {
+                public const EARNINGS_MANAGEMENT_PROPENSITY = 1.00;
+            },
+            businessModel: 'auto_manufacturer'
+        );
+        $ctx->sharesOutstanding = 100_000_000.0;
+        $ctx->corporateTaxRate = 0.21;
+        $ctx->actualRevenue = 100_000_000.0;
+        $ctx->streamRevenue = ['core_business' => 100_000_000.0];
+        $ctx->operatingCosts = 70_000_000.0;
+        $ctx->ebitda = 30_000_000.0;
+        $ctx->quarterlyDepreciation = 5_000_000.0;
+        $ctx->ebit = 25_000_000.0;
+        $ctx->preTaxIncome = 24_000_000.0;
+        $ctx->taxPaid = 5_040_000.0;
+        $ctx->cashTaxPaid = 4_000_000.0;
+        $ctx->deferredTaxExpense = 1_040_000.0;
+        // GAAP net income after a $2m goodwill write-down, a tenth of a cent a share short of a $19m consensus on Street earnings.
+        $ctx->goodwillImpairment = 2_000_000.0;
+        $ctx->specialItems = 2_000_000.0;
+        $ctx->reportedActualNetIncome = 24_000_000.0 - 5_040_000.0 - 2_000_000.0;
+        $ctx->reportedExpectedNetIncome = 19_000_000.0;
+        $ctx->debtMetrics = new \App\DTO\DebtMetricsDTO(
+            interestExpense: 4_000_000.0,
+            blendedRate: 0.04,
+            historicalFixedRate: 0.04,
+            dynamicSpread: 0.01,
+            currentMarketRate: 0.04,
+            wholesaleRate: 0.04,
+            ebit: 100_000_000.0,
+            revenue: 400_000_000.0,
+            depreciation: 20_000_000.0,
+            ebitda: 120_000_000.0
+        );
+
+        // Draws pinned at a quarter of the unit interval: the near miss is closed with a quarter-cent cushion.
+        $engine = (new \ReflectionClass(\App\Service\Corporate\EarningsEngine::class))->newInstanceWithoutConstructor();
+        (new \ReflectionProperty(\App\Service\Corporate\EarningsEngine::class, 'mathUtility'))->setValue($engine, new class extends \App\Service\Math\MathUtility {
+            public function generateUniform(): float
+            {
+                return 0.25;
+            }
+        });
+        (new \ReflectionMethod($engine, 'manageReportedEarnings'))->invoke($engine, $ctx);
+        $this->assertGreaterThan(0.0, $ctx->managedAccrual, 'The near miss must be managed for this test to mean anything.');
+
+        $this->reportRepository->method('findLatestFor')->willReturn(null);
+        $persisted = null;
+        $this->entityManager->expects($this->once())->method('persist')
+            ->willReturnCallback(function ($report) use (&$persisted) {
+                $persisted = $report;
+            });
+        $this->subscriber->onEarningsReported(new EarningsReportedEvent($ctx));
+
+        $this->assertInstanceOf(CorporateReport::class, $persisted);
+        $revenue = (float) $persisted->getRevenue();
+        $ebitda = (float) $persisted->getEbitda();
+        $ebit = (float) $persisted->getEbit();
+        $preTax = (float) $persisted->getPreTaxIncome();
+        $tax = (float) $persisted->getTaxPaid();
+        $this->assertEqualsWithDelta($revenue - (float) $persisted->getOperatingCosts(), $ebitda, 0.01);
+        $this->assertEqualsWithDelta($ebitda - (float) $persisted->getDepreciation(), $ebit, 0.01);
+        $this->assertEqualsWithDelta($ebit - $preTax, $ctx->ebit - $ctx->preTaxIncome, 0.01, 'The accrual is operating, not financing.');
+        $accrualPretax = $preTax - $ctx->preTaxIncome;
+        $this->assertGreaterThan(0.0, $accrualPretax);
+        $this->assertEqualsWithDelta(0.21 * $accrualPretax, $tax - $ctx->taxPaid, 0.01, 'The accrual bears tax at the statutory rate.');
+        $this->assertEqualsWithDelta(
+            (float) $persisted->getNetIncome(),
+            $preTax - $tax - (float) $persisted->getGoodwillImpairment() - (float) ($persisted->getBankLevy() ?? 0.0),
+            0.01,
+            'Pretax income less tax and the charges below it is the net income filed.'
+        );
+        $this->assertEqualsWithDelta(4_000_000.0, (float) $persisted->getCashTaxPaid(), 0.01, 'An accrual moves no cash.');
+        $this->assertEqualsWithDelta($tax - (float) $persisted->getCashTaxPaid(), (float) $persisted->getDeferredTaxExpense(), 0.01);
+    }
 }
