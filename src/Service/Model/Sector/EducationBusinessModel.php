@@ -189,7 +189,7 @@ class EducationBusinessModel extends StandardCorporateBusinessModel
         // Counter-cyclical student enrollment boost during recessions, unemployment spikes, and government subsidies
         $outputGap = $macroState->outputGapEma;
         $govShift = ($macroState->governmentSpendingIndexEma - 100.0) / 100.0;
-        $unemploymentSurge = max(0.0, $macroState->unemploymentRateEma - MacroEngine::NATURAL_UNEMPLOYMENT);
+        $unemploymentSurge = max(0.0, $macroState->unemploymentGap());
         $counterCyclicalEnrollmentBoost = ($outputGap < 0.0 ? abs($outputGap) * 1.2 * $beta : -($outputGap * 0.4))
             + ($govShift * self::TUITION_GOVERNMENT_SPENDING_SENSITIVITY)
             + ($unemploymentSurge * self::UNEMPLOYMENT_RETRAINING_SCALAR * $beta);
@@ -251,6 +251,7 @@ class EducationBusinessModel extends StandardCorporateBusinessModel
         return [
             'exchange_rate_index_ema',
             'government_spending_index_ema',
+            'nairu_ema',
             'output_gap_ema',
             'supercore_inflation_ema',
             'tips_breakeven_ema',

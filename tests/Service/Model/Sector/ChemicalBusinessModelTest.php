@@ -319,7 +319,8 @@ class ChemicalBusinessModelTest extends TestCase
     {
         $shift = fn (float $fxIndex): float => $this->model->getMacroPhysics((new Stock())->setTicker('FULM_FX'), new MacroStateDTO(outputGapEma: 0.0, exchangeRateIndexEma: $fxIndex))['macro_demand_shift'];
 
-        $strong = $shift(110.0);
+        // Ten log points over the trend (DTO default 100).
+        $strong = $shift(100.0 * exp(0.10));
         $flat = $shift(100.0);
 
         $this->assertEqualsWithDelta(-0.10 * ChemicalBusinessModel::FX_REVENUE_EXPOSURE, $strong - $flat, 1e-9);

@@ -44,6 +44,7 @@ class MacroFieldRegistryTest extends TestCase
         'inflationEndpointGap' => 'Learned state behind tipsBreakeven, which is recorded.',
         'authorityStressRegime' => 'Latch on excess_bond_premium, which is recorded.',
         'macroCreditSpreadTrend' => 'Decade-long average of macro_credit_spread, which is recorded.',
+        'dealActivityIndexTrend' => 'Decade-long average of deal_activity_index, which is recorded.',
         'corporateTaxRateTrend' => 'Decade-long average of corporate_tax_rate, which is recorded.',
         'netTaxStanceRate' => 'The discretionary part of net_tax_rate, which is recorded; the rest is the stabilisers\' swing on the recorded output gap.',
         'netTaxStanceRateTrend' => 'Decade-long average of netTaxStanceRate.',
@@ -64,6 +65,7 @@ class MacroFieldRegistryTest extends TestCase
         'freightSupplyEma' => 'Internal to the freight process; freightRateIndex is recorded.',
 
         'eventType' => 'Label of the event in flight, not a series.',
+        'systemicAlarmLatches' => 'Which level alarms have reported this episode; a news-desk latch, not a series.',
         'electionPulse' => 'Input the government hands the economy each tick; policy_uncertainty_index records its effect.',
         'tariffTradeLag' => 'Net-export response building toward the tariff, which import_tariff_rate records.',
         'immigrationPopulationShift' => 'Integral of labor_force_growth_rate over the structural rate, which is recorded.',

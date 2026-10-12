@@ -183,6 +183,8 @@ class MacroState
     public float $sovereignDebtMaturityTarget;
     public ?string $eventType;
     public float $eventCooldownTimer;
+    /** @var array<string, float> */
+    public array $systemicAlarmLatches;
     public float $equityRiskPremium;
 
     public float $potentialGdpIndex;
@@ -301,6 +303,7 @@ class MacroState
 
     public float $dealActivityIndex;
     public float $dealActivityIndexEma;
+    public float $dealActivityIndexTrend;
 
     public float $manufacturingPmi;
     public float $manufacturingPmiEma;
@@ -578,7 +581,7 @@ class MacroState
 
             $carried[$field] = true;
             $state->$field = match ($field) {
-                'sectorZ', 'sectorDemandZ', 'sittingLevers', 'previousSittingLevers', 'expectedLevers', 'previousExpectedLevers' => is_array($data[$key]) ? array_map('floatval', $data[$key]) : [],
+                'sectorZ', 'sectorDemandZ', 'sittingLevers', 'previousSittingLevers', 'expectedLevers', 'previousExpectedLevers', 'systemicAlarmLatches' => is_array($data[$key]) ? array_map('floatval', $data[$key]) : [],
                 'unemploymentMonthly' => is_array($data[$key]) ? array_values(array_map('floatval', $data[$key])) : [],
                 'qeActive', 'qtActive' => (bool) $data[$key],
                 'eventType' => (string) $data[$key],

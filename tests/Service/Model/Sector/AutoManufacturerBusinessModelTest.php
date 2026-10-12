@@ -218,9 +218,9 @@ class AutoManufacturerBusinessModelTest extends TestCase
         };
 
         $baseMacro = new MacroStateDTO(exchangeRateIndexEma: 100.0);
-        $strongDollarMacro = new MacroStateDTO(exchangeRateIndexEma: 120.0);
+        $strongDollarMacro = new MacroStateDTO(exchangeRateIndexEma: 100.0 * exp(0.20));
 
-        // A 20% stronger currency takes the declared exposure off every stream through the root shift...
+        // A currency twenty log points over its trend takes the declared exposure off every stream through the root shift...
         $rootDrag = $this->model->getMacroPhysics($stock(), $strongDollarMacro)['macro_demand_shift']
             - $this->model->getMacroPhysics($stock(), $baseMacro)['macro_demand_shift'];
         $this->assertEqualsWithDelta(-0.20 * AutoManufacturerBusinessModel::FX_REVENUE_EXPOSURE, $rootDrag, 1e-9);

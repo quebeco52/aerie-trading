@@ -635,7 +635,7 @@ class DistrictMap
                 ['field' => 'sovereign_risk_spread_ema', 'op' => self::OP_GTE, 'value' => 0.0150],
                 // MacroEngine::HOUSEHOLD_DSR_STRESS_MARGIN — debt service past the deleveraging line over its own average.
                 ['field' => 'household_debt_service_gap', 'op' => self::OP_GTE, 'value' => 0.020],
-                // MacroEngine::SYSTEMIC_RECESSION_DECLARE_PROBABILITY — a declared recession probability.
+                // The yield-curve probit at even odds of a recession within the year — the Authority's forecast warning.
                 ['field' => 'recession_probability_ema', 'op' => self::OP_GTE, 'value' => 0.50],
             ],
         ],
@@ -663,7 +663,7 @@ class DistrictMap
             'stress_rules' => [
                 // 1.5 points over MacroEngine::TARGET_INFLATION — inflation well past the Authority's target.
                 ['field' => 'inflation_ema', 'op' => self::OP_GTE, 'value' => 0.035],
-                // MacroEngine::SYSTEMIC_RECESSION_DECLARE_GAP — a recessionary output gap.
+                // Output a point below potential — a recessionary output gap.
                 ['field' => 'output_gap_ema', 'op' => self::OP_LTE, 'value' => -0.010],
                 // A point of unemployment over MacroEngine::NATURAL_UNEMPLOYMENT: labour-market slack.
                 ['field' => 'unemployment_rate_ema', 'op' => self::OP_GTE, 'value' => 0.050],

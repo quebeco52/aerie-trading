@@ -170,15 +170,17 @@ final class MacroTransmission
      *
      * Evaluates intermediate wholesale inflation as a cost-push transmission of raw commodity inputs
      * (energy, metals, agriculture), freight/logistics bottlenecks (GSCPI), Unit Labor Costs (ULC),
-     * and aggregate cyclical output gap demand pressure.
+     * the rest of the cost base (purchased services, rents, margins) and aggregate cyclical output gap
+     * demand pressure. The cost shares sum to one, so with every cost at trend the index runs at trend.
      *
      * @param float $metalsInflation   Annualized industrial metals price inflation.
      * @param float $energyInflation   Annualized energy price inflation.
      * @param float $agriInflation     Annualized agricultural commodity price inflation.
      * @param float $gscpiZ            Global supply chain pressure index (Z-score).
      * @param float $unitLaborCost     Unit labor cost growth (Wage Growth - TFP Trend Growth).
+     * @param float $otherCostInflation Inflation of the rest of the cost base.
      * @param float $outputGap         Macroeconomic cyclical output gap.
-     * @param array{metals: float, energy: float, agri: float, gscpi: float, ulc: float, demand: float} $weights Parameter weights.
+     * @param array{metals: float, energy: float, agri: float, gscpi: float, ulc: float, other: float, demand: float} $weights Parameter weights.
      * @param float $min               Minimum annual PPI rate.
      * @param float $max               Maximum annual PPI rate.
      * @return float Producer price index inflation rate.
@@ -189,6 +191,7 @@ final class MacroTransmission
         float $agriInflation,
         float $gscpiZ,
         float $unitLaborCost,
+        float $otherCostInflation,
         float $outputGap,
         array $weights,
         float $min = -0.06,
@@ -200,9 +203,10 @@ final class MacroTransmission
 
         $supplyChainComponent = $weights['gscpi'] * $gscpiZ;
         $laborComponent = $weights['ulc'] * $unitLaborCost;
+        $otherCostComponent = $weights['other'] * $otherCostInflation;
         $demandComponent = $weights['demand'] * $outputGap;
 
-        $ppi = $commodityComponent + $supplyChainComponent + $laborComponent + $demandComponent;
+        $ppi = $commodityComponent + $supplyChainComponent + $laborComponent + $otherCostComponent + $demandComponent;
         return max($min, min($max, $ppi));
     }
 

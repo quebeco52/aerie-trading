@@ -5,6 +5,7 @@ namespace App\Service\Macro\Subsystem;
 use App\Service\Macro\MacroEngine;
 use App\Service\Macro\MacroState;
 use App\Service\Macro\Recorder\MacroDiagnosticsProbe;
+use App\Service\Math\FixedIncome;
 use App\Service\Math\MacroTransmission;
 use App\Service\Math\MathUtility;
 use App\Service\Math\StochasticProcesses;
@@ -22,8 +23,7 @@ class AssetMarketSubsystem
 
     // --- JORGENSON USER COST RESIDENTIAL REAL ESTATE ---
     /** Equilibrium user cost of housing: neutral 10Y (r* + target + base premium) + mortgage spread + carry costs - target inflation. */
-    public const RESIDENTIAL_NEUTRAL_USER_COST = MacroEngine::BASE_NATURAL_RATE + MacroEngine::TARGET_INFLATION + MacroEngine::NS_BASE_TERM_PREMIUM
-        + MacroEngine::RESIDENTIAL_MORTGAGE_SPREAD + self::RESIDENTIAL_DEPRECIATION_TAX_RATE - MacroEngine::TARGET_INFLATION;
+    public const RESIDENTIAL_NEUTRAL_USER_COST = MacroEngine::NEUTRAL_MORTGAGE_RATE + self::RESIDENTIAL_DEPRECIATION_TAX_RATE - MacroEngine::TARGET_INFLATION;
 
     // --- Immigration and Housing (Saiz 2007) ---
     /** Rise in rents and house values per unit of population added by immigration (Saiz 2007: an inflow of 1% of a city's population raises rents and values about 1%); the District's land ends at the sounds. */
@@ -188,14 +188,12 @@ class AssetMarketSubsystem
     public const CATASTROPHE_PROPERTY_DAMAGE_SHARE = 0.01;
 
     // --- DIPASQUALE-WHEATON COMMERCIAL REAL ESTATE (2-QUADRANT) ---
-    /** Baseline commercial property index (neutral valuation). */
-    public const CRE_BASELINE = 100.0;
     /** Sensitivity of occupancy/rent demand factor to excess unemployment (DiPasquale-Wheaton spatial market). */
     public const CRE_OCCUPANCY_UNEMPLOYMENT_SENSITIVITY = 3.0;
     /** Structural risk premium spread above 10Y yield for CRE cap rate derivation. */
     public const CRE_CAP_RATE_RISK_PREMIUM = 0.02;
-    /** Cap rate at the engine's own equilibrium, net of expected rent inflation (mean real 10Y plus spread and premium, 48 seeds): 6.4%, inside the US NCREIF/ACLI 1990-2019 range of ~6-8%. */
-    public const CRE_NEUTRAL_CAP_RATE = 0.064;
+    /** Cap rate at the engine's own equilibrium, net of expected rent inflation: the neutral real 10Y (r* plus the base term premium), the base IG spread and the premium, built from the constants the cap rate reads as RESIDENTIAL_NEUTRAL_USER_COST is (5.95%, the low end of the US NCREIF/ACLI 1990-2019 range of ~6-8%). */
+    public const CRE_NEUTRAL_CAP_RATE = MacroEngine::BASE_NATURAL_RATE + MacroEngine::NS_BASE_TERM_PREMIUM + MacroEngine::BASE_CREDIT_SPREAD + self::CRE_CAP_RATE_RISK_PREMIUM;
     /** Mean-reversion speed of commercial property values toward fundamental equilibrium. */
     public const CRE_MEAN_REVERSION = 0.25;
     /** Stochastic volatility of commercial property valuations (stationary noise ~7% so cap rates, not noise, drive the cycle). */
@@ -215,7 +213,7 @@ class AssetMarketSubsystem
      *
      * The NOMINAL anchor the fundamental price is built on, not the level the index settles at: the
      * affordability, damage and credit factors multiplying it average below 1, so a run at rest sits near
-     * 94. A consumer wanting "have prices moved" reads MacroState::residentialWealthTrend instead — reading
+     * 98. A consumer wanting "have prices moved" reads MacroState::residentialWealthTrend instead — reading
      * this constant for that cost App\Service\Macro\Subsystem\CreditFiscalSubsystem 0.56%/yr of standing
      * deleveraging until 2026-09-21.
      */
@@ -289,6 +287,8 @@ class AssetMarketSubsystem
     public const DEAL_ACTIVITY_KAPPA = 1.60;
     /** Stochastic volatility of deal activity volume. */
     public const DEAL_ACTIVITY_SIGMA = 0.15;
+    /** Time constant (years) of deal flow's measured trend: a decade spans a full deal cycle, as it does the credit cycle the IG spread's trend averages over. */
+    public const DEAL_ACTIVITY_TREND_YEARS = CreditFiscalSubsystem::CREDIT_SPREAD_TREND_YEARS;
 
     // --- Mundell-Fleming Trade Balance & Net Exports ---
     /** Lower bound floor for trade balance deficit as a percentage of GDP (-8.0%). */
@@ -343,7 +343,7 @@ class AssetMarketSubsystem
         $rentFactor = 1.0 + ($state->outputGapEma * self::CRE_RENT_OUTPUT_GAP_ELASTICITY);
 
         $capRate = max(self::CRE_MIN_CAP_RATE, $state->yield10yEma - $state->tipsBreakevenEma + $state->macroCreditSpreadEma + self::CRE_CAP_RATE_RISK_PREMIUM);
-        $fundamentalValue = self::CRE_BASELINE * $occupancyFactor * $rentFactor * (self::CRE_NEUTRAL_CAP_RATE / $capRate);
+        $fundamentalValue = MacroEngine::CRE_BASELINE * $occupancyFactor * $rentFactor * (self::CRE_NEUTRAL_CAP_RATE / $capRate);
 
         $dW = $this->mathUtility->generateStandardNormal();
         $newIndex = StochasticProcesses::calculateSchwartz1Factor(
@@ -850,6 +850,7 @@ class AssetMarketSubsystem
             sigma: self::DEAL_ACTIVITY_SIGMA,
             policyUncertaintyIndex: $state->policyUncertaintyIndexEma
         );
+        $state->dealActivityIndexTrend += (1.0 - exp(-$dt / self::DEAL_ACTIVITY_TREND_YEARS)) * ($state->dealActivityIndex - $state->dealActivityIndexTrend);
     }
 
     /**
@@ -991,7 +992,7 @@ class AssetMarketSubsystem
      */
     private function housingUserCost(MacroState $state, float $expectedInflation): float
     {
-        $mortgageRate = $state->yield10yEma + MacroEngine::RESIDENTIAL_MORTGAGE_SPREAD;
+        $mortgageRate = FixedIncome::mortgageRate($state->yield10yEma);
 
         return max(0.015, $mortgageRate + self::RESIDENTIAL_DEPRECIATION_TAX_RATE - $expectedInflation);
     }

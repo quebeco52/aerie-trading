@@ -176,7 +176,7 @@ class CreditServicesBusinessModelTest extends TestCase
         $prime = new Stock();
         $prime->setTicker('TALN'); // CeclSpreadSensitivity 1.40
 
-        $widened = new MacroStateDTO(macroCreditSpreadEma: CreditServicesBusinessModel::CECL_BASELINE_CREDIT_SPREAD + 0.02);
+        $widened = new MacroStateDTO(macroCreditSpreadEma: \App\Service\Macro\MacroEngine::BASE_CREDIT_SPREAD + 0.02);
 
         $subprimeBuild = $this->model->getForwardCreditLossMultiplier($subprime, $widened) - 1.0;
         $primeBuild = $this->model->getForwardCreditLossMultiplier($prime, $widened) - 1.0;

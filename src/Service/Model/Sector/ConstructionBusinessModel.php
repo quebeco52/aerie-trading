@@ -253,8 +253,8 @@ class ConstructionBusinessModel extends StandardCorporateBusinessModel
         // --- Macro Sensitivities (hit ORDERS in full; the backlog below cushions recognized revenue) ---
         $outputGap = $this->resolveLaggedOutputGap($macroState);
         $policyRate = $macroState->policyRateEma;
-        $residentialShift = ($macroState->residentialPropertyIndexEma - 100.0) / 100.0;
-        $commercialPropertyShift = ($macroState->commercialPropertyIndexEma - 100.0) / 100.0;
+        $residentialShift = $macroState->housePriceDeviation();
+        $commercialPropertyShift = ($macroState->commercialPropertyIndexEma - MacroEngine::CRE_BASELINE) / MacroEngine::CRE_BASELINE;
         $housingStartsShift = MacroTransmission::calculateHousingStartsShift($macroState->housingStartsIndexEma, sensitivity: self::HOUSING_STARTS_SENSITIVITY);
         $sloosDrag = max(0.0, $macroState->sloosTighteningIndexEma) * self::SLOOS_CREDIT_TIGHTENING_SCALAR;
 
@@ -368,6 +368,7 @@ class ConstructionBusinessModel extends StandardCorporateBusinessModel
             'output_gap_lag_18m',
             'policy_rate_ema',
             'residential_property_index_ema',
+            'residential_wealth_trend',
             'sloos_tightening_index_ema',
             'tips_breakeven_ema',
             'real_wage_gap',

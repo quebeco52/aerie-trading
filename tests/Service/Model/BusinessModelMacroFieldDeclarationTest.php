@@ -40,15 +40,23 @@ final class BusinessModelMacroFieldDeclarationTest extends TestCase
     private const DERIVED_ACCESSORS = ['calendar_quarter'];
 
     /**
-     * Derived sentiment readings, and the published series each one resolves from. Unlike the accessors
-     * above these ARE macro observations — a model reading confidence against its trend level is coupled to
-     * the confidence series, and one reading the residual is coupled to the output gap it nets out too.
+     * Derived readings and measured trends, and the published series each one resolves from. Unlike the accessors
+     * above these ARE macro observations — a model reading confidence or deal flow against its trend level is
+     * coupled to that series, and one reading the sentiment residual is coupled to the output gap it nets out too.
      *
      * @var array<string, list<string>>
      */
-    private const SENTIMENT_ACCESSOR_FIELDS = [
+    private const DERIVED_READING_FIELDS = [
         'sentiment_deviation' => ['consumer_sentiment_index_ema'],
         'sentiment_residual'  => ['consumer_sentiment_index_ema', 'output_gap_ema'],
+        'deal_activity_deviation' => ['deal_activity_index_ema'],
+        'exchange_rate_gap' => ['exchange_rate_index_ema'],
+        'unemployment_gap' => ['unemployment_rate_ema', 'nairu_ema'],
+        'macro_credit_spread_trend' => ['macro_credit_spread_ema'],
+        'house_price_deviation' => ['residential_property_index_ema', 'residential_wealth_trend'],
+        'mortgage_rate' => ['yield_10y_ema'],
+        'money_market_yield' => ['policy_rate_ema'],
+        'market_cost_of_equity' => ['yield_10y_ema', 'equity_risk_premium'],
     ];
 
     /** Macro field each input-cost basket channel reads (StandardOperatingPhysicsTrait::resolveInputPriceDeviations). */
@@ -202,7 +210,7 @@ final class BusinessModelMacroFieldDeclarationTest extends TestCase
 
         $snake = [];
         foreach (array_map([$this, 'canonicalKey'], $fields) as $key) {
-            foreach (self::SENTIMENT_ACCESSOR_FIELDS[$key] ?? [$key] as $resolved) {
+            foreach (self::DERIVED_READING_FIELDS[$key] ?? [$key] as $resolved) {
                 $snake[] = $resolved;
             }
         }

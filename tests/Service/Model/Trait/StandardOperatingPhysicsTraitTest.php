@@ -156,14 +156,17 @@ final class StandardOperatingPhysicsTraitTest extends TestCase
     /**
      * A stronger domestic currency prices exports out and cheapens the importer's shelf, so the shift is
      * negative on the way up, positive on the way down, and scaled by how much revenue is actually exposed.
+     * The move is measured against the currency's trend: it settles off its nominal base, and at its trend
+     * there is nothing for competitiveness to answer.
      */
     public function testFxDemandShiftIsSignedAgainstTheCurrencyAndScaledByExposure(): void
     {
-        $atBase = new MacroStateDTO(exchangeRateIndexEma: FinancialConstants::FX_INDEX_BASE);
-        $this->assertSame(-0.0, $this->model->resolveFxDemandShift($atBase), 'At the base index there is no FX effect.');
+        $trend = 103.0;
+        $atTrend = new MacroStateDTO(exchangeRateIndexEma: $trend, exchangeRateTrend: $trend);
+        $this->assertSame(-0.0, $this->model->resolveFxDemandShift($atTrend), 'At its trend the currency has no FX effect, wherever the trend sits.');
 
-        $strong = new MacroStateDTO(exchangeRateIndexEma: 110.0);
-        $weak = new MacroStateDTO(exchangeRateIndexEma: 90.0);
+        $strong = new MacroStateDTO(exchangeRateIndexEma: $trend * exp(0.10), exchangeRateTrend: $trend);
+        $weak = new MacroStateDTO(exchangeRateIndexEma: $trend * exp(-0.10), exchangeRateTrend: $trend);
 
         $this->assertLessThan(0.0, $this->model->resolveFxDemandShift($strong), 'A stronger currency must hurt demand.');
         $this->assertGreaterThan(0.0, $this->model->resolveFxDemandShift($weak), 'A weaker currency must help it.');

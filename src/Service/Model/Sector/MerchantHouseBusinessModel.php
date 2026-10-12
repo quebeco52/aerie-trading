@@ -176,7 +176,7 @@ class MerchantHouseBusinessModel extends ConglomerateBusinessModel
         // --- Tollbooth & Float: the parent's physics, unchanged ---
         $tollboothMacroBoost = $this->resolveDefensiveVolumeShift($macroState);
 
-        $dealActivityShift = ($macroState->dealActivityIndexEma - MacroEngine::DEAL_ACTIVITY_BASELINE) / MacroEngine::DEAL_ACTIVITY_BASELINE;
+        $dealActivityShift = $macroState->dealActivityDeviation();
         $contrarianSurge = $this->resolveContrarianFloatSurge(
             $macroState,
             $mathUtility,
@@ -281,7 +281,7 @@ class MerchantHouseBusinessModel extends ConglomerateBusinessModel
             + (max(0.0, $macroState->supplyChainPressureIndexEma) * self::MERCHANT_DISRUPTION_SCALAR);
 
         $fundingGap = ($macroState->policyRateEma + $macroState->macroCreditSpreadEma)
-            - ($macroState->perceivedNeutralRate + MacroEngine::BASE_CREDIT_SPREAD);
+            - ($macroState->perceivedNeutralRate + $macroState->macroCreditSpreadTrend);
         $carryCost = $fundingGap * self::MERCHANT_INVENTORY_HOLDING_YEARS;
 
         $shift = $spreadDilution + $carryCost - $dislocationRent;

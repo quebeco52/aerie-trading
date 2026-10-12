@@ -803,7 +803,7 @@ class CreditFiscalSubsystem
      */
     public function calculateHouseholdCredit(MacroState $state, float $dt): void
     {
-        $mortgageRate = $state->yield10yEma + MacroEngine::RESIDENTIAL_MORTGAGE_SPREAD;
+        $mortgageRate = FixedIncome::mortgageRate($state->yield10yEma);
         $revolvingRate = max(0.0, $state->policyRateEma) + self::CONSUMER_CREDIT_SPREAD;
         $effectiveRate = (self::HOUSEHOLD_MORTGAGE_DEBT_SHARE * $mortgageRate) + ((1.0 - self::HOUSEHOLD_MORTGAGE_DEBT_SHARE) * $revolvingRate);
 

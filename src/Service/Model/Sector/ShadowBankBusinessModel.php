@@ -85,8 +85,6 @@ class ShadowBankBusinessModel extends CommercialBankBusinessModel
     public const MIN_EFFICIENCY_RATIO      = 0.45;
 
     // --- Private Credit & Corporate Default Physics ---
-    /** Baseline investment-grade credit spread for normal shadow bank portfolio lending, the macro through-the-cycle IG spread. */
-    public const CECL_BASELINE_CREDIT_SPREAD    = MacroEngine::BASE_CREDIT_SPREAD;
     /** Expansion sensitivity of direct lending origination when commercial banks tighten credit standards (SLOOS). */
     public const SLOOS_PRIVATE_CREDIT_EXPANSION = 0.30;
     /** Baseline 12-month forward recession probability; the lifetime loss estimate is struck at 1.0x here. */
@@ -101,8 +99,8 @@ class ShadowBankBusinessModel extends CommercialBankBusinessModel
     public const M2_SHADOW_LIQUIDITY_SENSITIVITY = 0.30;
 
     // --- Mortgage Origination ---
-    /** 30Y Treasury yield above which refinancing and purchase origination volume falls. */
-    public const DEFAULT_30Y_YIELD_FALLBACK = 0.045;
+    /** Origination revenue per unit of the mortgage rate off its neutral (4% a point): a rise prices buyers out and ends refinancing, a fall brings both back. */
+    public const MORTGAGE_RATE_ORIGINATION_SENSITIVITY = 4.0;
 
     // --- Analyst Visibility & Error ---
     // Moved to getCoverageProfile() — see MarketConsensusEngine.
@@ -267,11 +265,10 @@ class ShadowBankBusinessModel extends CommercialBankBusinessModel
         $lendingZ     = $streams->generateZ('direct_lending', 0.45);
 
         // 1. Mortgage Origination Volume Channel:
-        // Spiking 30Y mortgage rates destroy refinancing demand and freeze home purchases.
+        // Mortgage rates over their neutral destroy refinancing demand and freeze home purchases; under it, both return.
         // Strong residential property values and housing starts stimulate new mortgage purchase originations.
-        $yield30y = $macroState->yield30yEma;
-        $mortgageRateDrag = max(0.0, ($yield30y - self::DEFAULT_30Y_YIELD_FALLBACK) * 4.0);
-        $residentialShift = ($macroState->residentialPropertyIndexEma - 100.0) / 100.0;
+        $mortgageRateDrag = ($macroState->mortgageRate() - MacroEngine::NEUTRAL_MORTGAGE_RATE) * self::MORTGAGE_RATE_ORIGINATION_SENSITIVITY;
+        $residentialShift = $macroState->housePriceDeviation();
         $propertyOriginationBoost = $residentialShift * 0.20;
         $housingStartsShift = MacroTransmission::calculateHousingStartsShift($macroState->housingStartsIndexEma, sensitivity: self::HOUSING_STARTS_ORIGINATION_SENSITIVITY);
 
@@ -371,6 +368,7 @@ class ShadowBankBusinessModel extends CommercialBankBusinessModel
             'policy_rate_ema',
             'recession_probability_ema',
             'residential_property_index_ema',
+            'residential_wealth_trend',
             'retail_default_rate_ema',
             'sloos_tightening_index_ema',
             'system_deposit_beta_ema',

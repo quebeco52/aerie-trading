@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Service\Model\Sector;
 
+use App\Service\Math\FixedIncome;
 use App\Service\Model\StreamContext;
 use App\DTO\InterestExpenseDTO;
 use App\DTO\DebtExpansionAppetiteDTO;
@@ -18,7 +19,6 @@ use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
 use App\Service\Math\MathUtility;
 use App\Service\Event\ShockEvent;
-use App\Service\Macro\MacroEngine;
 
 /**
  * Earnings strategy for Insurance companies.
@@ -260,7 +260,7 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
 
         // Saturation measures the firm's size in its market, so it reads the whole book, goodwill included.
         $saturationPenalty = \App\Service\Corporate\CorporateMetrics::getInstance()->calculateMarketSaturationPenalty($stock, max(1.0, $stock->getAmortizedCostEquity()), $macroState);
-        $waccBase = $macroState->yield10yEma + $macroState->equityRiskPremium;
+        $waccBase = $macroState->marketCostOfEquity();
         // Cap baseline return at capacity ROIC to prevent margin compression from inflating implied turnover.
         $baselineRoic = min($capacityRoic, max($waccBase, $baselineRoic - $saturationPenalty));
 
@@ -397,7 +397,7 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
         $floatIncome = min((float) $stock->getCorporateTreasury(), (float) $stock->getCustomerDeposits()) * $floatYield;
         $heldIncome = $this->calculateInterestIncome($stock, $macroState, $mathUtility) - ($floatIncome * (1.0 - $heldAfterHorizon));
         $heldFloatReturn = ($heldIncome * $afterTax) / $operatingEquity;
-        $hurdle = $stock->getManagementProfile()->appliedHurdle($macroState->yield10yEma + $macroState->equityRiskPremium);
+        $hurdle = $stock->getManagementProfile()->appliedHurdle($macroState->marketCostOfEquity());
 
         return self::writtenShareAtExcessReturn(
             $underwritingReturn + $bookFloatReturn + $heldFloatReturn - $hurdle,
@@ -679,7 +679,7 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
         $investableFloat = min($cash, $policyholderFloat);
         $excessCash = max(0.0, $cash - $investableFloat);
 
-        $moneyMarketYield = max(0.0, $policyRate - MacroEngine::CASH_YIELD_SPREAD);
+        $moneyMarketYield = FixedIncome::moneyMarketYield($policyRate);
 
         return ($investableFloat * $floatYield) + ($excessCash * $moneyMarketYield);
     }
@@ -702,7 +702,7 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
         $liquidityShare    = self::FLOAT_LIQUIDITY_WEIGHT / $totalFixedWeight;
         $bondShare         = self::FLOAT_BOND_WEIGHT / $totalFixedWeight;
 
-        $liquidityReturn   = $policyRate - MacroEngine::CASH_YIELD_SPREAD;
+        $liquidityReturn   = FixedIncome::moneyMarketYield($policyRate);
         // Net investment income accrues at book yield (SAP/GAAP amortized cost); the rate move is the AOCI mark
         // on the same tranche (resolveSecuritiesBook), so earning the live 10y here would count it twice.
         $bondReturn        = $stock->getSecuritiesCarryingYield() ?? $yield10y;
@@ -838,7 +838,7 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
         $yield10y = $macroState->yield10yEma;
 
         // 1. Liquidity Reserve (15% T-Bills/Cash)
-        $liquidityReturn = $policyRate - MacroEngine::CASH_YIELD_SPREAD;
+        $liquidityReturn = FixedIncome::moneyMarketYield($policyRate);
 
         // 2. Core Fixed Income (75% Long-Duration Bonds)
         $bondReturn = $yield10y;

@@ -126,7 +126,7 @@ class LuxuryBusinessModel extends StandardCorporateBusinessModel
         $sentimentShift = $macroState->sentimentDeviation();
         $beta = $this->getOperatingCyclicality($stock);
 
-        $resShift = ($macroState->residentialPropertyIndexEma - 100.0) / 100.0; // Wealth effect from property
+        $resShift = $macroState->housePriceDeviation(); // Wealth effect from property
         $m2Shift = MacroTransmission::calculateBroadMoneyLiquidityShift($macroState->moneySupplyGrowthEma, $macroState->moneySupplyGrowthTrend, self::M2_LIQUIDITY_SENSITIVITY);
 
         // The ultra-wealthy buyer is as often abroad as at home: the foreign bloc's cycle is half the client book.
@@ -266,6 +266,7 @@ class LuxuryBusinessModel extends StandardCorporateBusinessModel
             'money_supply_growth_trend',
             'output_gap_ema',
             'residential_property_index_ema',
+            'residential_wealth_trend',
             'tips_breakeven_ema',
             'real_wage_gap',
         ];

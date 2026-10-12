@@ -772,10 +772,10 @@ class CommercialBankBusinessModelTest extends TestCase
         );
 
         // Spreads: widening lifts the target, a benign market releases part of it, never past the floor.
-        $wide = $this->model->getForwardCreditLossMultiplier($bank, new MacroStateDTO(macroCreditSpreadEma: CommercialBankBusinessModel::CECL_BASELINE_CREDIT_SPREAD + 0.03));
+        $wide = $this->model->getForwardCreditLossMultiplier($bank, new MacroStateDTO(macroCreditSpreadEma: \App\Service\Macro\MacroEngine::BASE_CREDIT_SPREAD + 0.03));
         $this->assertEqualsWithDelta(1.0 + 0.03 * CommercialBankBusinessModel::CECL_RESERVE_SPREAD_SENSITIVITY, $wide, 1e-9);
         $benign = $this->model->getForwardCreditLossMultiplier($bank, new MacroStateDTO(macroCreditSpreadEma: 0.0));
-        $this->assertEqualsWithDelta(1.0 - CommercialBankBusinessModel::CECL_BASELINE_CREDIT_SPREAD * CommercialBankBusinessModel::CECL_RESERVE_SPREAD_SENSITIVITY, $benign, 1e-9);
+        $this->assertEqualsWithDelta(1.0 - \App\Service\Macro\MacroEngine::BASE_CREDIT_SPREAD * CommercialBankBusinessModel::CECL_RESERVE_SPREAD_SENSITIVITY, $benign, 1e-9);
         $this->assertGreaterThanOrEqual(CommercialBankBusinessModel::CECL_RESERVE_MULTIPLIER_FLOOR, $benign);
     }
 

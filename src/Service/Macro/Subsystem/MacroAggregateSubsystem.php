@@ -301,8 +301,6 @@ class MacroAggregateSubsystem
     public const PMI_GROWTH_SENSITIVITY = 330.0;
     /** Sensitivity of manufacturing PMI to Metzler inventory restocking demand (shortfall stimulates new orders). */
     public const PMI_INVENTORY_SENSITIVITY = 20.0;
-    /** Sensitivity of manufacturing PMI to commercial banking credit standards tightening (SLOOS). */
-    public const PMI_SLOOS_SENSITIVITY = 12.0;
     /** Mean-reversion speed (kappa) of manufacturing PMI toward fundamental business conditions (half-life ~6 weeks): a monthly survey reprices within a month or two, so the index is coincident with quarterly growth; at a four-month half-life it trailed growth by two quarters. */
     public const PMI_KAPPA = 6.0;
     /** Stochastic diffusion volatility of manufacturing PMI survey sentiment. */
@@ -315,6 +313,8 @@ class MacroAggregateSubsystem
     public const PPI_GSCPI_SENSITIVITY = 0.006;
     /** Weight of Unit Labor Cost (ULC = Wage Growth - TFP Growth) in wholesale producer processing costs. */
     public const PPI_ULC_WEIGHT = 0.25;
+    /** Weight of the rest of the cost base (purchased services, rents, margins), repricing with expected inflation: what the named shares leave, so the stage weights sum to one. */
+    public const PPI_OTHER_COST_WEIGHT = 1.0 - MacroEngine::PPI_METALS_WEIGHT - MacroEngine::PPI_ENERGY_WEIGHT - self::PPI_AGRI_WEIGHT - self::PPI_ULC_WEIGHT;
     /** Sensitivity of wholesale producer price margins to cyclical GDP output gap demand. */
     public const PPI_DEMAND_SENSITIVITY = 0.35;
     /** Lower bound floor on annual producer price deflation. */
@@ -1324,9 +1324,11 @@ class MacroAggregateSubsystem
      * Evaluates the headline diffusion index centered at 50.0. A diffusion index counts the share of firms
      * reporting improvement, so it tracks the rate of change of activity, not its level: ISM maps the headline
      * to annualized real GDP growth at ~0.3pp per index point. Real growth over potential is the annualized
-     * output gap momentum, read off the gap's distance from its quarter-horizon EMA; capacity utilization,
-     * Metzler inventory restocking demand and SLOOS bank credit standards are secondary level channels:
-     *   Target = 50 + beta_g * (d(OutputGap)/dt) + beta_CU * (CU - CU*) + beta_inv * (-InventoryGap) - beta_sloos * SLOOS
+     * output gap momentum, read off the gap's distance from its quarter-horizon EMA; capacity utilization and
+     * Metzler inventory restocking demand are secondary level channels:
+     *   Target = 50 + beta_g * (d(OutputGap)/dt) + beta_CU * (CU - CU*) + beta_inv * (-InventoryGap)
+     * Bank credit standards are not among ISM's components; they reach factories through the demand the growth and
+     * utilization legs already carry.
      *
      * @param MacroState $state Current macroeconomic state.
      * @param float      $dt    Time step in years.
@@ -1337,13 +1339,11 @@ class MacroAggregateSubsystem
         // Brown (1963) real GDP growth momentum derived from EMA output gap time-derivative.
         $excessGrowth = ($state->outputGap - $state->outputGapEma) / self::STANDARD_EMA_HORIZON_YEARS;
         $inventoryDemand = -$state->inventoryStockGap; // Shortfall stimulates orders
-        $sloosStress = max(0.0, $state->sloosTighteningIndexEma);
 
         $drivers = [
             ['deviation' => $excessGrowth, 'sensitivity' => self::PMI_GROWTH_SENSITIVITY],
             ['deviation' => $cuDeviation, 'sensitivity' => self::PMI_CU_SENSITIVITY],
             ['deviation' => $inventoryDemand, 'sensitivity' => self::PMI_INVENTORY_SENSITIVITY],
-            ['deviation' => -$sloosStress, 'sensitivity' => self::PMI_SLOOS_SENSITIVITY],
         ];
 
         $targetPmi = MacroTransmission::calculateDiffusionIndex(
@@ -1384,6 +1384,7 @@ class MacroAggregateSubsystem
             'agri' => self::PPI_AGRI_WEIGHT,
             'gscpi' => self::PPI_GSCPI_SENSITIVITY,
             'ulc' => self::PPI_ULC_WEIGHT,
+            'other' => self::PPI_OTHER_COST_WEIGHT,
             'demand' => self::PPI_DEMAND_SENSITIVITY,
         ];
 
@@ -1393,6 +1394,7 @@ class MacroAggregateSubsystem
             agriInflation: $this->commodityInflation($state->agriculturalCommodityIndex, $state->agriculturalCommodityIndexTrend, self::PPI_AGRI_PASS_THROUGH),
             gscpiZ: $state->supplyChainPressureIndex,
             unitLaborCost: $unitLaborCost,
+            otherCostInflation: $state->tipsBreakeven,
             outputGap: $state->outputGap,
             weights: $weights,
             min: self::MIN_PPI_INFLATION,

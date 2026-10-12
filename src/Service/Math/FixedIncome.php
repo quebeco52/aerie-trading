@@ -4,9 +4,12 @@ declare(strict_types=1);
 
 namespace App\Service\Math;
 
+use App\Service\Macro\MacroEngine;
+
 /**
  * Fixed income: the Nelson-Siegel and Svensson curves, term-premium scaling, the single evaluation of the sovereign
- * zero curve, and bond price, yield, duration, convexity and accrued interest. Pure functions of their arguments.
+ * zero curve, bond price, yield, duration, convexity and accrued interest, and the retail rates priced off the curve.
+ * Pure functions of their arguments.
  */
 final class FixedIncome
 {
@@ -15,6 +18,21 @@ final class FixedIncome
     public const YTM_MAX_ITERATIONS = 64;
     /** Price convergence tolerance, in currency units on a 100-face bond (0.01 = one cent). */
     public const YTM_PRICE_TOLERANCE = 1.0e-9;
+
+    /**
+     * The yield on cash and money-market paper: the policy rate less the funds' running spread, floored at zero, where
+     * US money-market funds held it at the lower bound by waiving their fees.
+     */
+    public static function moneyMarketYield(float $policyRate): float
+    {
+        return max(0.0, $policyRate - MacroEngine::CASH_YIELD_SPREAD);
+    }
+
+    /** The 30-year fixed mortgage rate, priced off the ten-year: prepayment shortens its effective duration to ~7 years. */
+    public static function mortgageRate(float $tenYearYield): float
+    {
+        return $tenYearYield + MacroEngine::RESIDENTIAL_MORTGAGE_SPREAD;
+    }
 
     /**
      * Calculates the yield for a given maturity using the Nelson-Siegel curve model.

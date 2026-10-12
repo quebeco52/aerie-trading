@@ -130,8 +130,6 @@ class AutoManufacturerBusinessModel extends HeavyManufacturingBusinessModel
     /** Credit provision loss weight for elevated household debt service ratio stress on auto financing. */
     public const SHOCK_WEIGHT_DSR_DEFAULT = 0.08;
 
-    /** Baseline credit spread above which CECL forward provisioning accelerates, the macro through-the-cycle IG spread. */
-    public const CECL_BASELINE_CREDIT_SPREAD = MacroEngine::BASE_CREDIT_SPREAD;
 
     // --- Demand Transmission Lag ---
     /** Years for a move in the output gap to reach the assembly line: dealer stock runs about two to three months of sales, so build schedules follow showroom demand within a quarter. */
@@ -299,8 +297,8 @@ class AutoManufacturerBusinessModel extends HeavyManufacturingBusinessModel
             + ($dsrShift * self::SHOCK_WEIGHT_DSR_DEFAULT);
 
         $creditSpread = $macroState->macroCreditSpread;
-        $ceclDrag = $creditSpread > self::CECL_BASELINE_CREDIT_SPREAD
-            ? ($creditSpread - self::CECL_BASELINE_CREDIT_SPREAD) * 0.50
+        $ceclDrag = $creditSpread > $macroState->macroCreditSpreadTrend
+            ? ($creditSpread - $macroState->macroCreditSpreadTrend) * 0.50
             : 0.0;
 
         $yield10y = $macroState->yield10yEma;
@@ -398,6 +396,7 @@ class AutoManufacturerBusinessModel extends HeavyManufacturingBusinessModel
             'industrial_metals_index_ema',
             'inflation_ema',
             'macro_credit_spread',
+            'macro_credit_spread_ema',
             'manufacturing_pmi_ema',
             'natural_rate_ema',
             'output_gap_ema',

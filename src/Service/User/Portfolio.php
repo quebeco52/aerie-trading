@@ -2,10 +2,10 @@
 
 namespace App\Service\User;
 
+use App\Service\Math\FixedIncome;
 use App\Entity\User;
 use App\Entity\UserStock;
 use App\Entity\PortfolioHistory;
-use App\Service\Macro\MacroEngine;
 use App\Service\Math\FinancialConstants;
 use Doctrine\ORM\EntityManagerInterface;
 
@@ -153,7 +153,7 @@ class Portfolio
     /** The annual rate idle brokerage cash earns: the smoothed policy rate less the sweep spread, floored at zero. */
     public static function cashSweepRate(float $policyRateEma): float
     {
-        return max(0.0, $policyRateEma - MacroEngine::CASH_YIELD_SPREAD);
+        return FixedIncome::moneyMarketYield($policyRateEma);
     }
 
     /**

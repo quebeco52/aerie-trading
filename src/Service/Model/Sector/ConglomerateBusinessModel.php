@@ -288,7 +288,7 @@ class ConglomerateBusinessModel extends StandardCorporateBusinessModel
         $defensiveMacroBoost = $this->resolveDefensiveVolumeShift($macroState);
 
         // Capital markets deal activity expands strategic acquisition & divestiture opportunities
-        $dealActivityShift = ($macroState->dealActivityIndexEma - MacroEngine::DEAL_ACTIVITY_BASELINE) / MacroEngine::DEAL_ACTIVITY_BASELINE;
+        $dealActivityShift = $macroState->dealActivityDeviation();
         $divestitureAlpha = max(0.0, $dealActivityShift) * self::DEAL_ACTIVITY_DIVESTITURE_SCALAR;
 
         $contrarianSurge = $this->resolveContrarianFloatSurge($macroState, $mathUtility, $outputGap, $spreadLevel, $spreadImpulse, $divestitureAlpha);
@@ -385,7 +385,7 @@ class ConglomerateBusinessModel extends StandardCorporateBusinessModel
         // Deployment alpha: dry powder committed at a distressed spread level earns an elevated risk premium,
         // saturating as the opportunity set outgrows the balance sheet available to fund it.
         $recessionDepth = max(0.0, -$outputGap);
-        $excessSpread   = max(0.0, $spreadLevel - MacroEngine::BASE_CREDIT_SPREAD);
+        $excessSpread   = max(0.0, $spreadLevel - $macroState->macroCreditSpreadTrend);
 
         $rawDeploymentSignal = ($excessSpread * self::FLOAT_SPREAD_BLOWOUT_SCALAR)
             + ($recessionDepth * self::FLOAT_RECESSION_ALPHA_SCALAR)

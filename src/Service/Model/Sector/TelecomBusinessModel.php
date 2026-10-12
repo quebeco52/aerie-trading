@@ -242,7 +242,7 @@ class TelecomBusinessModel extends StandardCorporateBusinessModel
         // quarter's net adds forward. Demand shocks move gross adds; the cycle moves ARPU (plan downgrades,
         // not cancellations); a price war lifts churn, forces promotional gross adds and discounts ARPU.
         $openingSubscribers = $streams->getPersistedState(self::STATE_SUBSCRIBER_INDEX, 1.0);
-        $unemploymentGap = max(0.0, $macroState->unemploymentRateEma - MacroEngine::NATURAL_UNEMPLOYMENT);
+        $unemploymentGap = max(0.0, $macroState->unemploymentGap());
         $churnRate = self::BASE_QUARTERLY_CHURN
             + ($inPriceWar ? self::PRICE_WAR_CHURN_UPLIFT : 0.0)
             + ($unemploymentGap * self::UNEMPLOYMENT_CHURN_SENSITIVITY);
@@ -338,6 +338,7 @@ class TelecomBusinessModel extends StandardCorporateBusinessModel
     {
         return [
             'exchange_rate_index_ema',
+            'nairu_ema',
             'output_gap_ema',
             'tips_breakeven_ema',
             'unemployment_rate_ema',

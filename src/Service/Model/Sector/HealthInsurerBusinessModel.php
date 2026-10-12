@@ -89,7 +89,7 @@ class HealthInsurerBusinessModel extends StandardCorporateBusinessModel
     /** Members lost to unemployment above its natural rate, as a share of the book. */
     public function resolveEnrollmentShift(MacroStateDTO $macroState): float
     {
-        return -self::ENROLLMENT_UNEMPLOYMENT_ELASTICITY * ($macroState->unemploymentRateEma - $macroState->nairuEma);
+        return -self::ENROLLMENT_UNEMPLOYMENT_ELASTICITY * $macroState->unemploymentGap();
     }
 
     /** The reported medical cost ratio below which the floor rebates premium. */

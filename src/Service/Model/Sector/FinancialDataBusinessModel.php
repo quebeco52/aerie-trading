@@ -222,11 +222,11 @@ class FinancialDataBusinessModel extends StandardCorporateBusinessModel
      */
     private function resolveTransactionMacroShift(Stock $stock, \App\DTO\MacroStateDTO $macroState): float
     {
-        $creditSpreadGap = MacroEngine::BASE_CREDIT_SPREAD - $macroState->macroCreditSpreadEma;
+        $creditSpreadGap = $macroState->macroCreditSpreadTrend - $macroState->macroCreditSpreadEma;
         $dcmIssuanceBoost = ($creditSpreadGap * self::DCM_SPREAD_ISSUANCE_SENSITIVITY)
             + ($macroState->outputGapEma * self::DCM_OUTPUT_GAP_ISSUANCE_SENSITIVITY * $this->getOperatingCyclicality($stock));
         $vixVolBoost = ($macroState->marketVolatilityEma - MacroEngine::MACRO_VOL_BASE_ANCHOR) * self::MARKET_DATA_VOLATILITY_SENSITIVITY;
-        $dealActivityShift = ($macroState->dealActivityIndexEma - MacroEngine::DEAL_ACTIVITY_BASELINE) / MacroEngine::DEAL_ACTIVITY_BASELINE;
+        $dealActivityShift = $macroState->dealActivityDeviation();
 
         return $dcmIssuanceBoost + $vixVolBoost + ($dealActivityShift * self::DEAL_ACTIVITY_RATING_SENSITIVITY);
     }

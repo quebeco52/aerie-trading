@@ -139,8 +139,6 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
     public const MAX_CREDIT_RISK_APPETITE      = 1.00;
 
     // --- CECL Forward Reserve (ASC 326 lifetime allowance conditioned on the macro forecast) ---
-    /** Baseline investment-grade corporate credit spread (macro through-the-cycle IG); the lifetime loss estimate is struck at 1.0x here. */
-    public const CECL_BASELINE_CREDIT_SPREAD   = MacroEngine::BASE_CREDIT_SPREAD;
     /** Lifetime-loss multiplier per unit of IG spread widening: +300bps lifts the reserve target ~0.36x. */
     public const CECL_RESERVE_SPREAD_SENSITIVITY = 12.0;
     /** Baseline 12-month forward recession probability (~15%); the lifetime loss estimate is struck at 1.0x here. */
@@ -417,7 +415,7 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
     /** The return the franchise is calibrated to: the lender's structural ROE, never below the cost-of-equity proxy. */
     protected function resolveCalibrationRoe(Stock $stock, MacroStateDTO $macroState): float
     {
-        return max($macroState->yield10yEma + $macroState->equityRiskPremium, max(0.01, (float) $stock->getBaselineRoe()));
+        return max($macroState->marketCostOfEquity(), max(0.01, (float) $stock->getBaselineRoe()));
     }
 
     /**
@@ -606,7 +604,7 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
     private function resolveSaturationYield(Stock $stock, MacroStateDTO $macroState): float
     {
         $penalty = \App\Service\Corporate\CorporateMetrics::getInstance()->calculateMarketSaturationPenalty($stock, max(1.0, (float) $stock->getTotalEquity()), $macroState);
-        $headroom = max(0.0, max(0.01, (float) $stock->getBaselineRoe()) - ($macroState->yield10yEma + $macroState->equityRiskPremium));
+        $headroom = max(0.0, max(0.01, (float) $stock->getBaselineRoe()) - $macroState->marketCostOfEquity());
 
         return min($penalty, $headroom) * max(1.0, $stock->getTangibleEquity())
             / ((1.0 - $macroState->corporateTaxRate) * max(1.0, $this->resolveEarningAssets($stock)));
@@ -779,7 +777,7 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
      */
     public function getForwardCreditLossMultiplier(?Stock $stock, MacroStateDTO $macroState): float
     {
-        $spreadGap = $macroState->macroCreditSpreadEma - static::CECL_BASELINE_CREDIT_SPREAD;
+        $spreadGap = $macroState->macroCreditSpreadEma - $macroState->macroCreditSpreadTrend;
         $recessionGap = max(0.0, $macroState->recessionProbabilityEma - static::CECL_BASELINE_RECESSION_PROB);
 
         $multiplier = 1.0

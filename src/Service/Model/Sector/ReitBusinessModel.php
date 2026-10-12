@@ -275,8 +275,8 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
         $inflation = $macroState->inflationEma;
         $excessInflation = max(0.0, $inflation - MacroEngine::TARGET_INFLATION);
         $rentEscalator = $excessInflation * self::RENT_ESCALATOR_CAPTURE;
-        $creShift = ($macroState->commercialPropertyIndexEma - 100.0) / 100.0;
-        $resShift = ($macroState->residentialPropertyIndexEma - 100.0) / 100.0;
+        $creShift = ($macroState->commercialPropertyIndexEma - MacroEngine::CRE_BASELINE) / MacroEngine::CRE_BASELINE;
+        $resShift = $macroState->housePriceDeviation();
         $blendedPropertyShift = ($creShift * self::CRE_INDEX_WEIGHT) + ($resShift * self::RES_INDEX_WEIGHT);
         $housingSupplyShift = MacroTransmission::calculateHousingStartsShift($macroState->housingStartsIndexEma, sensitivity: self::HOUSING_SUPPLY_COMPETITION_SENSITIVITY);
         // Lease ladder: roll in-place rents toward market at the quarterly rollover rate implied by WALT.
@@ -523,6 +523,7 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
             'inflation_ema',
             'output_gap_lag_18m',
             'residential_property_index_ema',
+            'residential_wealth_trend',
             'retail_default_rate_ema',
             'tips_breakeven_ema',
             'real_wage_gap',

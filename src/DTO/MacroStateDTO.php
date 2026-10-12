@@ -12,6 +12,7 @@ use App\Service\Macro\Subsystem\AssetMarketSubsystem;
 use App\Service\Macro\Subsystem\MacroAggregateSubsystem;
 use App\Service\Macro\Subsystem\SovereignFundSubsystem;
 use App\Service\Math\FinancialConstants;
+use App\Service\Math\FixedIncome;
 use App\Service\Math\Valuation;
 use App\Service\Model\Sector\UtilityBusinessModel;
 
@@ -258,6 +259,8 @@ readonly class MacroStateDTO
         public float $consumerPriceLevel = 1.0,
         public ?string $eventType = null,
         public float $eventCooldownTimer = 0.0,
+        /** @var array<string, float> Level alarms reported this episode, ShockEvent => the time each fired; one clears once its condition does (MacroEngine::evaluateSystemicEvent()). */
+        public array $systemicAlarmLatches = [],
         public float $supercoreInflation = MacroEngine::TARGET_INFLATION,
         public float $supercoreInflationEma = MacroEngine::TARGET_INFLATION,
         public float $coreGoodsInflation = MacroEngine::TARGET_INFLATION,
@@ -285,6 +288,8 @@ readonly class MacroStateDTO
         public float $refiningCrackSpreadEma = MacroEngine::CRACK_SPREAD_BASELINE,
         public float $dealActivityIndex = MacroEngine::DEAL_ACTIVITY_BASELINE,
         public float $dealActivityIndexEma = MacroEngine::DEAL_ACTIVITY_BASELINE,
+        /** Deal flow's measured through-the-cycle level, a decade's exponential average (App\Service\Macro\Subsystem\AssetMarketSubsystem::calculateCapitalMarketsDealIndex()). */
+        public float $dealActivityIndexTrend = MacroEngine::DEAL_ACTIVITY_BASELINE,
         public float $manufacturingPmi = MacroEngine::PMI_BASELINE,
         public float $manufacturingPmiEma = MacroEngine::PMI_BASELINE,
         public float $producerPriceInflation = MacroEngine::TARGET_INFLATION,
@@ -519,7 +524,7 @@ readonly class MacroStateDTO
             }
 
             $args[$field] = match ($field) {
-                'sectorZ', 'sectorDemandZ', 'sittingLevers', 'previousSittingLevers', 'expectedLevers', 'previousExpectedLevers' => is_array($data[$key]) ? array_map('floatval', $data[$key]) : [],
+                'sectorZ', 'sectorDemandZ', 'sittingLevers', 'previousSittingLevers', 'expectedLevers', 'previousExpectedLevers', 'systemicAlarmLatches' => is_array($data[$key]) ? array_map('floatval', $data[$key]) : [],
                 'unemploymentMonthly' => is_array($data[$key]) ? array_values(array_map('floatval', $data[$key])) : [],
                 'qeActive', 'qtActive' => (bool) $data[$key],
                 'eventType' => (string) $data[$key],
@@ -697,6 +702,70 @@ readonly class MacroStateDTO
     public function sentimentDeviation(): float
     {
         return ($this->consumerSentimentIndexEma - MacroEngine::SENTIMENT_TREND_LEVEL) / self::INDEX_SCALE;
+    }
+
+    /**
+     * The currency against its own trend, in logs; positive is an appreciation.
+     *
+     * EXCHANGE_RATE_BASELINE is the nominal anchor the index is built on, and it settles away from it on either side
+     * depending on the fund and the safe-haven bid, so a reader of it against the anchor books a standing competitiveness
+     * gain or loss no move produced. The macro's own net exports read this same gap.
+     */
+    public function exchangeRateGap(): float
+    {
+        return MacroAggregateSubsystem::realExchangeRateGap($this->exchangeRateIndexEma, $this->exchangeRateTrend);
+    }
+
+    /**
+     * House prices against the level they have measurably settled at, as a fraction: the reading the engine's own
+     * housing wealth effect and household credit take. RESIDENTIAL_BASELINE is the nominal anchor the fundamental is
+     * built on, and the index settles below it, so a reader of it against a hundred books a standing slump.
+     */
+    public function housePriceDeviation(): float
+    {
+        return $this->residentialWealthTrend > 0.0 ? ($this->residentialPropertyIndexEma / $this->residentialWealthTrend) - 1.0 : 0.0;
+    }
+
+    /**
+     * Unemployment over its natural rate, in points as a fraction.
+     *
+     * The natural rate scars after a slump and heals over the years that follow (LaborMarketSubsystem), so unemployment
+     * read against MacroEngine::NATURAL_UNEMPLOYMENT shows slack long after the labour market has none.
+     */
+    public function unemploymentGap(): float
+    {
+        return $this->unemploymentRateEma - $this->nairuEma;
+    }
+
+    /** The 30-year fixed mortgage rate on the smoothed ten-year (FixedIncome::mortgageRate()). */
+    public function mortgageRate(): float
+    {
+        return FixedIncome::mortgageRate($this->yield10yEma);
+    }
+
+    /** The yield on cash and money-market paper at the smoothed policy rate (FixedIncome::moneyMarketYield()). */
+    public function moneyMarketYield(): float
+    {
+        return FixedIncome::moneyMarketYield($this->policyRateEma);
+    }
+
+    /** The cost of equity at a beta of one: the smoothed ten-year plus the equity risk premium (Sharpe-Lintner CAPM). */
+    public function marketCostOfEquity(): float
+    {
+        return $this->yield10yEma + $this->equityRiskPremium;
+    }
+
+    /**
+     * Deal flow against its own through-the-cycle level, as a fraction.
+     *
+     * DEAL_ACTIVITY_BASELINE is where the index is BUILT: a hundred, less the stress its premium, spread, volatility
+     * and uncertainty legs read against their bases. Those legs settle above their bases, so the index settles
+     * near 95, and a reader of it against the baseline books a standing twentieth less advisory, underwriting and
+     * exit revenue than any cycle produced.
+     */
+    public function dealActivityDeviation(): float
+    {
+        return ($this->dealActivityIndexEma - $this->dealActivityIndexTrend) / $this->dealActivityIndexTrend;
     }
 
     /**

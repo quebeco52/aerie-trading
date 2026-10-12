@@ -210,7 +210,7 @@ class LawFirmBusinessModel extends StandardCorporateBusinessModel
             ? $macroState->macroCreditSpread
             : $macroState->macroCreditSpreadEma;
 
-        $dealActivityShift = ($macroState->dealActivityIndexEma - MacroEngine::DEAL_ACTIVITY_BASELINE) / MacroEngine::DEAL_ACTIVITY_BASELINE;
+        $dealActivityShift = $macroState->dealActivityDeviation();
         $excessSpread = max(0.0, $creditSpread - self::DEFAULT_CREDIT_SPREAD_BASELINE);
         $corporateDefaultShift = ResponseCurves::excessOverBaseline($macroState->corporateDefaultRateEma, MacroEngine::CORPORATE_DEFAULT_BASELINE);
 
