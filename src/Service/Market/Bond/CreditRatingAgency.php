@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Service\Market\Bond;
 
 use App\Entity\Stock;
+use App\Service\Corporate\EarningsEngine;
 
 /**
  * Service responsible for evaluating a company's Distance to Default (from Merton's model)
@@ -27,7 +28,7 @@ class CreditRatingAgency
     public const THRESHOLD_B   = 1.0;
 
     // --- Hysteresis Buffer ---
-    /** Hysteresis buffer requiring d2 to exceed threshold +/- buffer to prevent border oscillation. */
+    /** d2 past a bracket edge before the grade moves (0.9 notch at 6 notches per d2 unit): Altman & Rijken's (2004) migration threshold of 1.25-1.5 notches from a class's centre, 0.75-1.0 notch past its edge. */
     public const HYSTERESIS_BUFFER = 0.15;
 
     // --- Altman Z''-Score Distress Bounds ---
@@ -39,6 +40,8 @@ class CreditRatingAgency
     // --- Business Risk / Financial Risk Matrix (S&P, "Business Risk/Financial Risk Matrix Expanded", 2009) ---
     /** Debt/EBITDA upper bounds of the financial risk profiles: minimal <1.5x, modest 1.5-2x, intermediate 2-3x, significant 3-4x, aggressive 4-5x, highly leveraged above. */
     public const FINANCIAL_RISK_DEBT_TO_EBITDA_BOUNDS = [1.5, 2.0, 3.0, 4.0, 5.0];
+    /** Debt/EBITDA upper bounds on S&P's medial volatility table, minimal to aggressive: <1.75x, 1.75-2.5x, 2.5-3.5x, 3.5-4.5x, 4.5-5.5x ("Corporate Methodology", 2013), the table S&P assessed a regulated electric utility with generation on (Louisville Gas & Electric, 2016). */
+    public const MEDIAL_VOLATILITY_DEBT_TO_EBITDA_BOUNDS = [1.75, 2.5, 3.5, 4.5, 5.5];
     /** Debt/EBITDA upper bounds for a real estate company, minimal to aggressive: <2.5x, 2.5-4.5x, 4.5-7.5x, 7.5-9.5x, 9.5-13x, highly leveraged above (S&P, "Key Credit Factors For The Real Estate Industry", 2018, table 1). */
     public const REAL_ESTATE_DEBT_TO_EBITDA_BOUNDS = [2.5, 4.5, 7.5, 9.5, 13.0];
     /** Debt to adjusted total equity upper bounds for an asset manager investing its own balance sheet, minimal to aggressive: <0.4x, 0.4-0.8x, 0.8-1.5x, 1.5-2x, 2-3x, highly leveraged above (S&P, "Key Credit Factors For Asset Managers", 2014, table 1). */
@@ -47,6 +50,12 @@ class CreditRatingAgency
     public const EXCELLENT_BUSINESS_RISK_ANCHORS = ['AAA', 'AA', 'A', 'A', 'BBB', 'BB'];
     /** Anchors for a satisfactory business risk profile, "typical of a low investment-grade industrial issuer": A-, BBB+, BBB, BB+, BB-, B+ at whole-letter grades. */
     public const SATISFACTORY_BUSINESS_RISK_ANCHORS = ['A', 'BBB', 'BBB', 'BB', 'BB', 'B'];
+
+    // --- Time-Weighted Core Ratios (S&P, "Corporate Methodology", 2013) ---
+    /** Weights of the current year, the year before and the year before that in a core ratio: S&P's 25%, 15% and 10%. */
+    public const CORE_RATIO_YEAR_WEIGHTS = [0.25, 0.15, 0.10];
+    /** Weight of S&P's two forecast years, 25% each, read on the issuer's base case. */
+    public const CORE_RATIO_FORECAST_WEIGHT = 0.50;
 
     // --- Bank Rating Methodology (S&P, "Banks: Rating Methodology And Assumptions", 2021) ---
     /** Highest rating an institution rated on its capital reaches: the US bank anchor (bbb+) plus the most a very strong capital and earnings assessment adds (+2 notches), a, at whole-letter grades; insurers are held to it too. */
@@ -170,6 +179,42 @@ class CreditRatingAgency
     public static function financialRiskAnchor(float $netDebt, float $ebitda, bool $excellentBusinessRisk, array $bounds = self::FINANCIAL_RISK_DEBT_TO_EBITDA_BOUNDS): string
     {
         return self::anchorFor(self::financialRiskProfile($netDebt, $ebitda, $bounds), $excellentBusinessRisk);
+    }
+
+    /**
+     * Net debt and EBITDA on S&P's time-weighted basis: the current year and the two before it at CORE_RATIO_YEAR_WEIGHTS
+     * and the base case for the two forecast years at CORE_RATIO_FORECAST_WEIGHT, the weights of years not yet observed
+     * spread over those that are. Numerator and denominator are weighted apart (a pooled ratio), which matches S&P's
+     * weighted ratio while debt is steady and stays defined through a loss year.
+     *
+     * @param list<array{net_debt: float, ebitda: float}> $quarters Rated quarters, newest first, each on its trailing twelve months.
+     * @param array{net_debt: float, ebitda: float}|null $forecast The base case for the forecast years; none weighs the observed years alone.
+     * @return array{net_debt: float, ebitda: float}
+     */
+    public static function timeWeightedLeverage(array $quarters, ?array $forecast = null): array
+    {
+        $netDebt = $forecast !== null ? self::CORE_RATIO_FORECAST_WEIGHT * $forecast['net_debt'] : 0.0;
+        $ebitda = $forecast !== null ? self::CORE_RATIO_FORECAST_WEIGHT * $forecast['ebitda'] : 0.0;
+        $weight = $forecast !== null ? self::CORE_RATIO_FORECAST_WEIGHT : 0.0;
+        foreach (self::CORE_RATIO_YEAR_WEIGHTS as $year => $yearWeight) {
+            $quarter = $quarters[$year * EarningsEngine::TTM_QUARTERS] ?? null;
+            if ($quarter === null) {
+                break;
+            }
+            $netDebt += $yearWeight * $quarter['net_debt'];
+            $ebitda += $yearWeight * $quarter['ebitda'];
+            $weight += $yearWeight;
+        }
+
+        return $weight > 0.0
+            ? ['net_debt' => $netDebt / $weight, 'ebitda' => $ebitda / $weight]
+            : ['net_debt' => 0.0, 'ebitda' => 0.0];
+    }
+
+    /** How many rated quarters timeWeightedLeverage() reads: the current one and one a year back for each earlier year. */
+    public static function timeWeightedLeverageQuarters(): int
+    {
+        return (count(self::CORE_RATIO_YEAR_WEIGHTS) - 1) * EarningsEngine::TTM_QUARTERS + 1;
     }
 
     /**

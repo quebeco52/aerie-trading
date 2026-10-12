@@ -591,14 +591,14 @@ class EarningsEngineReportTest extends TestCase
         $ticksPerQuarter = 63;
         $reportingTick = $this->getReportingTick('RETAIL_SEAS');
 
-        // Q1 (fiscal quarter 0, seasonal factor 0.85)
-        $q1Tick = $reportingTick;
+        // Q1 results (seasonal factor 0.85), filed in the Q2 reporting season
+        $q1Tick = $ticksPerQuarter + $reportingTick;
         $this->engine->calculate($stock, $macro, $q1Tick, 252);
         $q1Revenue = (float) $stock->getPreviousRevenue(); // reported quarterly revenue, annualized
         $q1RunRate = (float) $stock->getTotalRevenue();    // seasonally adjusted annual rate
 
-        // Q4 (fiscal quarter 3, seasonal factor 1.35)
-        $q4Tick = (3 * $ticksPerQuarter) + $reportingTick;
+        // Q4 holiday results (seasonal factor 1.35), filed in the next year's first season
+        $q4Tick = (4 * $ticksPerQuarter) + $reportingTick;
         $this->engine->calculate($stock, $macro, $q4Tick, 252);
         $q4Revenue = (float) $stock->getPreviousRevenue();
         $q4RunRate = (float) $stock->getTotalRevenue();
@@ -790,7 +790,8 @@ class EarningsEngineReportTest extends TestCase
 
         $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
         $macro = new \App\DTO\MacroStateDTO();
-        $reportingTick = $this->getReportingTick('IBHI_SEAS');
+        // The Q1 report is filed in the season that follows, inside Q2.
+        $reportingTick = intdiv(252, 4) + $this->getReportingTick('IBHI_SEAS');
 
         $dispatchedContext = null;
         $this->eventDispatcherMock->method('dispatch')->willReturnCallback(function ($event) use (&$dispatchedContext) {
@@ -800,7 +801,7 @@ class EarningsEngineReportTest extends TestCase
             return $event;
         });
 
-        // Q1 (fiscal quarter 0, factor 0.88)
+        // Q1 report (calendar and fiscal quarter 0, factor 0.88)
         $result = $this->engine->calculate($stock, $macro, $reportingTick, 252);
         $this->assertNotNull($result, 'Engine calculate() must return a valid earnings event.');
 
@@ -818,6 +819,41 @@ class EarningsEngineReportTest extends TestCase
 
         // Annualized EPS must remain positive despite winter seasonal trough
         $this->assertGreaterThan(0.0, (float) $stock->getEarningsPerShare());
+    }
+
+    /** The engine reads the firm's own calendar: a water utility's Q1 results are seasoned as water, not as power. */
+    public function testTheEngineSeasonsAWaterUtilityOnTheWaterCalendar(): void
+    {
+        $stock = new Stock();
+        $stock->setTicker('WADE');
+        $stock->setIndustry('Utilities - Regulated Water');
+        $stock->setSharesOutstanding('1000000');
+        $stock->setTotalEquity('100000000');
+        $stock->setFixedCostRatio(0.80);
+        $stock->setOperatingMargin('0.20');
+        $stock->setBaselineRoic('0.09');
+        $stock->setVolatility('0.10');
+        $stock->setCurrentVolatility('0.10');
+        $stock->setBeta('0.5');
+        $stock->setWholesaleDebt('50000000');
+        $stock->setCustomerDeposits('0');
+        $stock->setCorporateTreasury('5000000');
+
+        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
+        $dispatchedContext = null;
+        $this->eventDispatcherMock->method('dispatch')->willReturnCallback(function ($event) use (&$dispatchedContext) {
+            if ($event instanceof \App\Service\Event\EarningsReportedEvent) {
+                $dispatchedContext = $event->getContext();
+            }
+            return $event;
+        });
+
+        $this->engine->calculate($stock, new \App\DTO\MacroStateDTO(), intdiv(252, 4) + $this->getReportingTick('WADE'), 252);
+
+        $this->assertNotNull($dispatchedContext);
+        $this->assertSame(0, $dispatchedContext->calendarQuarter);
+        $this->assertSame(\App\Service\Model\Sector\UtilityBusinessModel::WATER_SEASONALITY[0], $dispatchedContext->seasonalFactor);
+        $this->assertSame(\App\Service\Model\Sector\UtilityBusinessModel::WATER_SEASONALITY[3], $dispatchedContext->priorSeasonalFactor);
     }
 
     /**

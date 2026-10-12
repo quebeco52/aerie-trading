@@ -97,6 +97,9 @@ final class LeverageHarnessTest extends KernelTestCase
 
         $macro = $c->get(MacroEngine::class);
         $this->debtEngine = $c->get(\App\Service\Corporate\DebtEngine::class);
+        if (getenv('RATING_OUT')) {
+            $this->installRatingProbe((string) getenv('RATING_OUT'));
+        }
         $tracker = $c->get(StockTracker::class);
         $this->fvTracker = $tracker;
         $this->fvEngine = $c->get(\App\Service\Market\Pricing\MarketEngine::class);
@@ -273,6 +276,52 @@ final class LeverageHarnessTest extends KernelTestCase
             file_put_contents((string) getenv('RESET_PROBE'), json_encode($probe));
         }
         $this->assertTrue(true);
+    }
+
+    /**
+     * RATING_OUT=<jsonl>: every rating review after the seed, one row each, with the terms evaluateRating() takes the
+     * minimum of, so a change can be attributed (rating_decompose.py): the old and new rating, the distance to default
+     * and the grade it alone reads at the old rating (hysteresis included), the leverage anchor, the Altman zone, book
+     * equity, the default flags and the spot equity volatility. Swapped into the live DebtEngine; the variadic tail
+     * takes whatever trailing arguments the tree under test passes and hands them on unchanged.
+     */
+    private function installRatingProbe(string $path): void
+    {
+        @unlink($path);
+        $clock = fn (): float => $this->currentTime;
+        $probe = new class ($path, $clock) extends \App\Service\Market\Bond\CreditRatingAgency {
+            public function __construct(private string $probePath, private \Closure $probeClock) {}
+
+            public function evaluateRating(Stock $stock, float $distanceToDefault, mixed ...$rest): ?string
+            {
+                $old = $stock->getCreditRating();
+                $row = [
+                    't' => round(($this->probeClock)(), 3), 'k' => $stock->getTicker(), 'o' => $old,
+                    'dd' => round($distanceToDefault, 4), 'ddr' => $this->convertDistanceToRating($distanceToDefault, $old),
+                    'z' => isset($rest[0]) ? round((float) $rest[0], 3) : null, 'zn' => $rest[1] ?? null, 'an' => $rest[2] ?? null,
+                    'eq' => (float) $stock->getTotalEquity(), 'def' => $stock->isBankrupt() || $stock->isPaymentDefault(),
+                    'cvol' => (float) $stock->getCurrentVolatility(), 'vol' => (float) $stock->getVolatility(),
+                ];
+                // Structural margin against the trailing twelve months' realized one (the forecast-year bias check).
+                $ttm = $stock->getQuarterlyOperatingHistory() ?? [];
+                $ttmRevenue = array_sum(array_column($ttm, 'revenue'));
+                $row['som'] = round((float) $stock->getOperatingMargin(), 4);
+                $row['tom'] = $ttmRevenue > 0.0 ? round(array_sum(array_column($ttm, 'ebit')) / $ttmRevenue, 4) : null;
+                // The rated-leverage window the review just recorded (trees with DebtEngine::RATED_LEVERAGE_KEY).
+                $history = $stock->getQuarterlyOperatingHistory() ?? [];
+                $rated = $history === [] ? [] : (end($history)['rated_leverage'] ?? []);
+                if ($rated !== []) {
+                    $row['rl'] = count($rated);
+                    $row['lev'] = array_map(static fn (array $q): array => [round($q['net_debt'] / 1e6, 1), round($q['ebitda'] / 1e6, 1)], array_values(array_filter($rated, static fn (int $i): bool => $i % 4 === 0, ARRAY_FILTER_USE_KEY)));
+                }
+                $new = parent::evaluateRating($stock, $distanceToDefault, ...$rest);
+                $row['n'] = $stock->getCreditRating();
+                file_put_contents($this->probePath, json_encode($row) . "\n", FILE_APPEND);
+
+                return $new;
+            }
+        };
+        (new \ReflectionProperty(\App\Service\Corporate\DebtEngine::class, 'creditRatingAgency'))->setValue($this->debtEngine, $probe);
     }
 
     /** One quarterly report as a named row, with the macro readings it was filed under. */

@@ -60,3 +60,47 @@ multiples in `CreditRisk::IG_/HY_CLASS_SPREAD_MULTIPLES`, the seeded spread kept
 - `cs3_stage.sh <seeds> <N>` (2026-10-11): C10 vs C8 on the cs3 snapshot (SNAP pinned inside; rebuild it per the
   evidence section if the scratchpad is gone), then writes `cs3_s<N>.out` from all four analysis scripts. One
   background call per stage; 16 runs take ~7.5 min at 4 slots.
+
+# Credit rating stability (S&P time-weighted leverage anchor)
+
+Question: do ratings change about as often as agency ratings (S&P one-year letter-level moves of investment grade,
+~0.08-0.10 a year excluding NR; 2008, a crisis year, 7.6-7.7% for A and BBB), and which term of
+`CreditRatingAgency::evaluateRating()` moves them?
+
+- Probe: `RATING_OUT=<jsonl>` swaps a logging subclass into the live DebtEngine and writes every review after the seed:
+  old/new rating, `dd` and its grade at the old rating (`ddr`), the leverage anchor `an`, Altman zone `zn`, book
+  equity, default flags, spot/structural volatility, and on trees with `DebtEngine::RATED_LEVERAGE_KEY` the window
+  length `rl`, its yearly points `lev` (net debt, EBITDA in millions) and the structural vs trailing margin `som`/`tom`.
+  `run.sh` R arms set it to `runs/<arm>-<seed>.rating.jsonl`; TREE defaults to `rttree` for them.
+- Snapshot `SNAP=$PWD/var/harness/leverage/base` (git-ignored): `rttree` = `git archive` of 4c1b794 + `rsync -rlpt src
+  config tests bin` of the working tree taken BEFORE the rating change; its src is exactly 4b6bb2e's (the seasonality
+  commit: EarningsEngine coveredCalendarQuarter, UtilityBusinessModel EIA factors), so both arms carry it, + `vendor`.
+  Arms: `R0` = rttree as is; `R2` = OVR `base/ovrR2`: `Service/Corporate/DebtEngine.php` and
+  `Service/Market/Bond/CreditRatingAgency.php` (src-relative; the Stock.php change is docblock only). `R1` (the observed
+  years only, no forecast years) is superseded; `RH` = the same four seeds on pure 4c1b794 (before the seasonality edits).
+  Rebuild for a new session:
+
+      git archive HEAD | tar -x -C base/rttree; rsync -rlpt src config tests bin base/rttree/
+      ln -s <repo>/vendor base/rttree/vendor; rm -rf var/harness/cache-rttree
+      # rttree must hold the PRE-change DebtEngine/CreditRatingAgency (git show HEAD:<f> while the change is uncommitted,
+      # HEAD~1:<f> once it is) and ovrR2 the changed ones; diff -rq src base/rttree/src should list only those + Stock.php
+
+- Stage (R0 and R2 seeds 1-4 are already in runs/, same snapshot; ~100 s per 4 runs at 4 slots, 20 y at TPY 360):
+
+      SNAP=$PWD/var/harness/leverage/base bin/harness-batch var/harness/leverage/run.sh 5-8 R0 R2 \
+          && python3 var/harness/leverage/rating_stability.py R0 R2 > var/harness/leverage/rating_s8.out
+      SNAP=$PWD/var/harness/leverage/base bin/harness-batch var/harness/leverage/run.sh 9-16 R0 R2 \
+          && python3 var/harness/leverage/rating_stability.py R0 R2 > var/harness/leverage/rating_s16.out
+      SNAP=$PWD/var/harness/leverage/base bin/harness-batch var/harness/leverage/run.sh 17-48 R0 R2 \
+          && python3 var/harness/leverage/rating_stability.py R0 R2 > var/harness/leverage/rating_s48.out
+
+  Targets (named before the run): changes / firm-yr, reversals <=1y / firm-yr, op rating-spread Spearman (must not
+  fall). Guards: fin Spearman, failures / seed, op rating mix. `rating_guards.py R0 R2` prints the same metrics with paired and Welch t plus payment
+  defaults and revolver draws per seed (the stage commands above can call it instead). `rating_decompose.py R0 R2` splits the changes by cause
+  (anchor / dd / altman / neg_equity / catch-up) and lists the worst firms. Clear stale `runs/R*-*` of another snapshot
+  first: both scripts glob every seed of an arm.
+- 4 seeds, 2026-10-12 (R0 vs R2, paired): changes/firm-yr 0.173 -> 0.121 (SE 0.005, t -9.7); reversals <=1y 0.066 ->
+  0.042 (t -7.1); op Spearman 0.577 -> 0.606 (t 1.5); fin 0.616 -> 0.631; failures 0 -> 0; mix A/BBB/BB/B unchanged.
+  On HEAD (RH) the anchor drove 69% of changes, the DD bracket 24%, Altman 3%; after R2 the DD is 41%.
+- 16 seeds, 2026-10-12 (`rating_guards.py`, rating_s16.out): changes 0.179 -> 0.119 (t -10.8); reversals <=1y 0.069 ->
+  0.042 (t -10.7); op Spearman -0.006 (t -0.5); op share A +3.0pp, BBB -2.3pp (t 4.4/-3.9); failures 1 vs 1.

@@ -607,8 +607,10 @@ class Stock
     private ?array $quarterlyNetIncomeHistory = [];
 
     /**
-     * @var list<array{revenue: float, ebit: float}>|null Revenue and operating income of the last four quarters,
-     *      oldest first: the last-twelve-month basis lenders underwrite coverage and leverage on.
+     * @var list<array{revenue: float, ebit: float, rated_leverage?: list<array{net_debt: float, ebitda: float}>}>|null
+     *      Revenue and operating income of the last four quarters, oldest first: the last-twelve-month basis lenders
+     *      underwrite coverage and leverage on. A quarter the rating agency has reviewed also carries the net debt and
+     *      EBITDA its reviews read, newest first (DebtEngine::RATED_LEVERAGE_KEY).
      */
     #[ORM\Column(type: Types::JSON, nullable: true)]
     private ?array $quarterlyOperatingHistory = null;
@@ -1758,7 +1760,7 @@ class Stock
     }
 
     /**
-     * @return list<array{revenue: float, ebit: float}>|null
+     * @return list<array{revenue: float, ebit: float, rated_leverage?: list<array{net_debt: float, ebitda: float}>}>|null
      */
     public function getQuarterlyOperatingHistory(): ?array
     {
@@ -1766,7 +1768,7 @@ class Stock
     }
 
     /**
-     * @param list<array{revenue: float, ebit: float}>|null $quarterlyOperatingHistory
+     * @param list<array{revenue: float, ebit: float, rated_leverage?: list<array{net_debt: float, ebitda: float}>}>|null $quarterlyOperatingHistory
      */
     public function setQuarterlyOperatingHistory(?array $quarterlyOperatingHistory): static
     {

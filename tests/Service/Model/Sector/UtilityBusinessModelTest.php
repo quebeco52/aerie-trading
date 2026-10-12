@@ -60,6 +60,55 @@ class UtilityBusinessModelTest extends TestCase
         $this->assertSame(100.0, (new UtilityBusinessModel())->calculateEarningsValue(80.0, 100.0));
     }
 
+    /**
+     * US retail electricity revenue (EIA-861M, 2015-2019) has one summer peak, not twin winter and summer
+     * peaks: Q1 sits below the mean and the autumn shoulder is the trough.
+     */
+    public function testElectricSeasonalityIsOneSummerPeak(): void
+    {
+        $factors = $this->seasonalityOf('Utilities - Regulated Electric');
+
+        $this->assertSame([0.953, 0.938, 1.183, 0.926], $factors);
+        $this->assertEqualsWithDelta(4.0, array_sum($factors), 1e-9);
+        $this->assertSame(2, array_search(max($factors), $factors, true), 'Q3 cooling load is the peak');
+        $this->assertSame(3, array_search(min($factors), $factors, true), 'the autumn shoulder is the trough');
+        $this->assertLessThan(1.0, $factors[0], 'winter heating does not lift Q1 above the mean');
+    }
+
+    /** American Water Works revenue (2015-2019): irrigation lifts summer, and winter has no heating load to sell. */
+    public function testWaterSeasonalityPeaksInSummerAndBottomsInWinter(): void
+    {
+        $factors = $this->seasonalityOf('Utilities - Regulated Water');
+
+        $this->assertSame([0.908, 0.998, 1.121, 0.973], $factors);
+        $this->assertEqualsWithDelta(4.0, array_sum($factors), 1e-9);
+        $this->assertSame(2, array_search(max($factors), $factors, true), 'Q3 outdoor watering is the peak');
+        $this->assertSame(0, array_search(min($factors), $factors, true), 'Q1 is the trough');
+    }
+
+    /** Every seeded utility gets its own industry's calendar; any other industry on the model reads the electric one. */
+    public function testEachSeededUtilityResolvesItsIndustrysCalendar(): void
+    {
+        $seen = [];
+        foreach (\App\Data\Company\InitialMarket::STOCKS as $row) {
+            if (\App\Data\Company\Sectors::businessModelFor($row['industry']) !== 'utility') {
+                continue;
+            }
+            $seen[$row['ticker']] = $this->seasonalityOf($row['industry']);
+            $this->assertEqualsWithDelta(4.0, array_sum($seen[$row['ticker']]), 1e-9, $row['ticker']);
+        }
+
+        $this->assertSame(UtilityBusinessModel::ELECTRIC_SEASONALITY, $seen['BIRD'] ?? null);
+        $this->assertSame(UtilityBusinessModel::WATER_SEASONALITY, $seen['WADE'] ?? null);
+        $this->assertSame(UtilityBusinessModel::ELECTRIC_SEASONALITY, $this->seasonalityOf('Utilities - Diversified'));
+    }
+
+    /** @return array<int, float> */
+    private function seasonalityOf(string $industry): array
+    {
+        return (new UtilityBusinessModel())->resolveSeasonalityFactors((new Stock())->setIndustry($industry));
+    }
+
     public function testUtilityIsUnderLeveraged(): void
     {
         $model = new UtilityBusinessModel();

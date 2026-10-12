@@ -88,4 +88,28 @@ class ReportCalendarTest extends TestCase
         $this->assertSame(['Year 3 Q4', 'Year 4 Q1'], ReportCalendar::reportLabels([null, null], ['Year 3 Q4', 'Year 4 Q1']));
         $this->assertSame([null, null], ReportCalendar::reportLabels([null, null], null));
     }
+
+    /**
+     * The engine seasons a report with the quarter the page says it covers: a utility's summer peak lands on the
+     * Q3 results, filed in the autumn, not on the Q2 results filed in the summer.
+     */
+    public function testTheEngineSeasonsEachReportWithTheQuarterItCovers(): void
+    {
+        foreach ([252, self::TICKS_PER_YEAR] as $ticksPerYear) {
+            $ticksPerQuarter = intdiv($ticksPerYear, 4);
+            foreach (['CAL', 'BIRD', 'WADE'] as $ticker) {
+                for ($quarter = 1; $quarter <= 9; $quarter++) {
+                    $tick = $quarter * $ticksPerQuarter + EarningsEngine::resolveReportingTick($ticker, $ticksPerYear);
+                    $label = ReportCalendar::coveredQuarter($tick / $ticksPerYear);
+                    $this->assertNotNull($label);
+
+                    $this->assertSame(
+                        (int) substr($label, -1) - 1,
+                        EarningsEngine::coveredCalendarQuarter($tick, $ticksPerYear),
+                        sprintf('%s filing on tick %d at %d ticks a year covers %s', $ticker, $tick, $ticksPerYear, $label)
+                    );
+                }
+            }
+        }
+    }
 }

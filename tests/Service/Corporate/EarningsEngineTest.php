@@ -1373,15 +1373,15 @@ class EarningsEngineTest extends TestCase
             return $stock;
         };
 
-        // Fiscal Q1: no test, goodwill untouched even though returns trail the hurdle.
+        // Fiscal Q1 (filed in the Q2 season): no test, goodwill untouched even though returns trail the hurdle.
         $q1 = $build('GDWL');
-        $this->earningsEngine->calculate($q1, $macroState, EarningsEngine::resolveReportingTick('GDWL', 252));
+        $this->earningsEngine->calculate($q1, $macroState, $ticksPerQuarter + EarningsEngine::resolveReportingTick('GDWL', 252));
         $this->assertEqualsWithDelta(5_000_000_000.0, (float) $q1->getGoodwill(), 1.0);
 
-        // Fiscal Q4: the annual test writes the shortfall off against goodwill and equity.
+        // Fiscal Q4 (filed in the next year's first season): the annual test writes the shortfall off against goodwill and equity.
         $q4 = $build('GDWL');
         $equityBefore = (float) $q4->getTotalEquity();
-        $q4Tick = (EarningsEngine::FISCAL_YEAR_END_QUARTER * $ticksPerQuarter) + EarningsEngine::resolveReportingTick('GDWL', 252);
+        $q4Tick = ((EarningsEngine::FISCAL_YEAR_END_QUARTER + 1) * $ticksPerQuarter) + EarningsEngine::resolveReportingTick('GDWL', 252);
         $this->earningsEngine->calculate($q4, $macroState, $q4Tick);
 
         $impairment = 5_000_000_000.0 - (float) $q4->getGoodwill();
@@ -1412,7 +1412,7 @@ class EarningsEngineTest extends TestCase
         $stock->setRoicTtm('0.02');
         $stock->setLifecycleStage(LifecycleStage::Mature);
 
-        $q4Tick = (EarningsEngine::FISCAL_YEAR_END_QUARTER * $ticksPerQuarter) + EarningsEngine::resolveReportingTick('NEGQ', 252);
+        $q4Tick = ((EarningsEngine::FISCAL_YEAR_END_QUARTER + 1) * $ticksPerQuarter) + EarningsEngine::resolveReportingTick('NEGQ', 252);
         $this->earningsEngine->calculate($stock, $macroState, $q4Tick);
 
         $impairment = 5_000_000_000.0 - (float) $stock->getGoodwill();

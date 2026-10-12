@@ -96,3 +96,25 @@ Mix C8: insurers 100% A; REIT BBB 46 / BB 52; asset mgr A 46 / BBB 11 / BB 43; b
 fin AAA/AA vanish. Caveat: C10 spreads are flat across ratings (op rank corr 0.07, fin -0.005), so C10 is a weak
 reference for spread levels. Same TIER failure pattern as the C7 run above (10 vs 0): the spread work still does it.
 
+
+## 2026-10-12: credit rating stability, time-weighted leverage anchor (R0 HEAD 4b6bb2e vs R2 working tree), 16 seeds
+
+Question: does the time-weighted leverage anchor (+ utilities on the medial table) cut letter-grade rating changes and
+one-year reversals without moving spreads' rank fit, failures or the rating mix? Harness: LeverageHarnessTest via
+`run.sh R0|R2`, SNAP=base (rttree verified = HEAD for DebtEngine, CreditRatingAgency, EarningsEngine; ovrR2 = working
+tree), 20 y at TPY 360, seeds 1-16 paired (1-4 cached). Analysis `rating_guards.py R0 R2`. Wall: 145 s (5-8), 230 s (9-16).
+Stopped at 16: both targets |t| > 10; failures 1 vs 1 (R0 FALC y7.9, R2 TIER y18.8), revolver draws 11.0 vs 11.7/seed.
+
+| metric (n=16) | R0 | R2 | diff | se paired | t paired | t Welch |
+|---|---|---|---|---|---|---|
+| changes / firm-yr | 0.1790 | 0.1194 | -0.0596 | 0.0055 | -10.76 | -10.14 |
+| reversals <=1y / firm-yr | 0.0686 | 0.0416 | -0.0270 | 0.0025 | -10.74 | -10.62 |
+| op rating-spread Spearman | 0.6136 | 0.6080 | -0.0056 | 0.0119 | -0.47 | -0.31 |
+| fin rating-spread Spearman | 0.6181 | 0.6246 | +0.0065 | 0.0109 | 0.59 | 0.57 |
+| op share A / BBB / BB / B | .632/.295/.065/.007 | .662/.272/.059/.006 | +.030/-.023/-.006/-.001 | | 4.36/-3.93/-1.94/-0.49 | 3.82/-3.54/-2.17/-0.43 |
+| failures / seed | 0.0625 | 0.0625 | 0 | 0.091 | 0 | 0 |
+| payment defaults / seed | 0.0625 | 0 | -0.0625 | 0.0625 | -1.0 | -1.0 |
+| revolver draws / seed | 11.00 | 11.69 | +0.69 | 2.87 | 0.24 | 0.26 |
+
+Caveat: the op mix moves ~3pp from BBB to A (|t| ~4), a real but small upgrade tilt. Revolver draws counted from
+"Drew ... revolving credit facility" event lines. Tables: rating_s8.out, rating_s16.out.

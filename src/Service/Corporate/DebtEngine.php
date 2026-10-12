@@ -62,6 +62,10 @@ class DebtEngine
     /** Interest coverage below which lenders will not roll a maturity: the firm cannot service what it already owes. */
     private const REFINANCING_MIN_COVERAGE = 1.0;
 
+    // --- Through-the-Cycle Leverage ---
+    /** Key on the newest operating-history quarter holding the net debt and EBITDA each rating review read, newest first (CreditRatingAgency::timeWeightedLeverage()). */
+    public const RATED_LEVERAGE_KEY = 'rated_leverage';
+
     // --- Committed Revolving Credit Facility ---
     /** Drawn-revolver spread (+100 bps) over the issuer's market rate; a pre-negotiated facility prices inside emergency paper. */
     public const REVOLVER_DRAW_SPREAD_PENALTY = 0.01;
@@ -124,7 +128,8 @@ class DebtEngine
             if ($this->creditRatingAgency !== null && $advanceMaturity) {
                 $oldRating = $stock->getCreditRating();
                 $zScoreData = $this->resolveRatingZScore($stock, $strategy, $ebit, $revenue);
-                $newRating = $this->creditRatingAgency->evaluateRating($stock, 10.0, $zScoreData['z_score'], $zScoreData['zone'], self::leverageAnchor($stock, $strategy, 0.0, $ebitda));
+                $anchor = self::leverageAnchor($stock, $strategy, 0.0, $ebitda, $this->recordRatedLeverage($stock, 0.0, $ebitda), self::baseCaseLeverage($stock, 0.0, $revenue, $depreciation));
+                $newRating = $this->creditRatingAgency->evaluateRating($stock, 10.0, $zScoreData['z_score'], $zScoreData['zone'], $anchor);
                 if ($newRating !== null && $this->marketEventPublisher !== null) {
                     $isDowngrade = $this->creditRatingAgency->isDowngrade($oldRating, $newRating);
                     $eventType = $isDowngrade ? 'CREDIT_DOWNGRADE' : 'CREDIT_UPGRADE';
@@ -164,7 +169,8 @@ class DebtEngine
         if ($this->creditRatingAgency !== null && $advanceMaturity) {
             $oldRating = $stock->getCreditRating();
             $zScoreData = $this->resolveRatingZScore($stock, $strategy, $ebit, $revenue);
-            $newRating = $this->creditRatingAgency->evaluateRating($stock, $distanceToDefault, $zScoreData['z_score'], $zScoreData['zone'], self::leverageAnchor($stock, $strategy, $netDebt, $ebitda));
+            $anchor = self::leverageAnchor($stock, $strategy, $netDebt, $ebitda, $this->recordRatedLeverage($stock, $netDebt, $ebitda), self::baseCaseLeverage($stock, $netDebt, $revenue, $depreciation));
+            $newRating = $this->creditRatingAgency->evaluateRating($stock, $distanceToDefault, $zScoreData['z_score'], $zScoreData['zone'], $anchor);
             if ($newRating !== null && $this->marketEventPublisher !== null) {
                 $isDowngrade = $this->creditRatingAgency->isDowngrade($oldRating, $newRating);
                 $eventType = $isDowngrade ? 'CREDIT_DOWNGRADE' : 'CREDIT_UPGRADE';
@@ -936,25 +942,73 @@ class DebtEngine
      * (CreditRatingAgency::financialRiskAnchor()), on S&P's real estate bands for a REIT; for an asset manager investing
      * its balance sheet, debt to adjusted total equity (adjustedEquityLeverageAnchor()); for an institution rated on its
      * capital the bank methodology's (CreditRatingAgency::CAPITAL_RATED_RATING_CEILING). A rate-regulated utility
-     * carries S&P's excellent business risk profile.
+     * carries S&P's excellent business risk profile, read on the medial volatility table. Debt to EBITDA is rated on
+     * S&P's time-weighted years (CreditRatingAgency::timeWeightedLeverage()) when the review has them, $ratedQuarters
+     * and the $baseCase forecast, else on the figures given; a pro-forma deal is rated on its own year, as S&P weights a
+     * transformational event.
+     *
+     * @param list<array{net_debt: float, ebitda: float}> $ratedQuarters Reviews' net debt and EBITDA, newest first.
+     * @param array{net_debt: float, ebitda: float}|null $baseCase The forecast years (baseCaseLeverage()).
      */
-    private static function leverageAnchor(Stock $stock, \App\Service\Model\BusinessModelInterface $strategy, float $netDebt, float $ebitda): string
+    private static function leverageAnchor(Stock $stock, \App\Service\Model\BusinessModelInterface $strategy, float $netDebt, float $ebitda, array $ratedQuarters = [], ?array $baseCase = null): string
     {
         if (self::isUnderwrittenOnCapital($stock, $strategy)) {
-            return \App\Service\Market\Bond\CreditRatingAgency::CAPITAL_RATED_RATING_CEILING;
-        }
-        if ($strategy instanceof \App\Service\Model\Sector\ReitBusinessModel) {
-            return \App\Service\Market\Bond\CreditRatingAgency::financialRiskAnchor($netDebt, $ebitda, false, \App\Service\Market\Bond\CreditRatingAgency::REAL_ESTATE_DEBT_TO_EBITDA_BOUNDS);
+            return CreditRatingAgency::CAPITAL_RATED_RATING_CEILING;
         }
         if (self::investsItsBalanceSheet($strategy)) {
-            return \App\Service\Market\Bond\CreditRatingAgency::adjustedEquityLeverageAnchor($netDebt, $stock->getTangibleEquity());
+            return CreditRatingAgency::adjustedEquityLeverageAnchor($netDebt, $stock->getTangibleEquity());
         }
 
-        return \App\Service\Market\Bond\CreditRatingAgency::financialRiskAnchor(
-            $netDebt,
-            $ebitda,
-            $strategy instanceof \App\Service\Model\Sector\UtilityBusinessModel
+        $basis = $ratedQuarters !== []
+            ? CreditRatingAgency::timeWeightedLeverage($ratedQuarters, $baseCase)
+            : ['net_debt' => $netDebt, 'ebitda' => $ebitda];
+        if ($strategy instanceof \App\Service\Model\Sector\ReitBusinessModel) {
+            return CreditRatingAgency::financialRiskAnchor($basis['net_debt'], $basis['ebitda'], false, CreditRatingAgency::REAL_ESTATE_DEBT_TO_EBITDA_BOUNDS);
+        }
+        $isUtility = $strategy instanceof \App\Service\Model\Sector\UtilityBusinessModel;
+
+        return CreditRatingAgency::financialRiskAnchor(
+            $basis['net_debt'],
+            $basis['ebitda'],
+            $isUtility,
+            $isUtility ? CreditRatingAgency::MEDIAL_VOLATILITY_DEBT_TO_EBITDA_BOUNDS : CreditRatingAgency::FINANCIAL_RISK_DEBT_TO_EBITDA_BOUNDS
         );
+    }
+
+    /**
+     * The base case S&P's forecast years are rated on: net debt where it stands and EBITDA at the firm's structural
+     * operating margin on its trailing revenue, the margin the consensus is struck on, with this year's depreciation.
+     *
+     * @return array{net_debt: float, ebitda: float}
+     */
+    private static function baseCaseLeverage(Stock $stock, float $netDebt, float $revenue, float $depreciation): array
+    {
+        return ['net_debt' => $netDebt, 'ebitda' => $revenue * (float) $stock->getOperatingMargin() + $depreciation];
+    }
+
+    /**
+     * Records the net debt and trailing EBITDA this review rates on against the quarter the report has just added to the
+     * operating history, after those the previous quarter's review recorded, and returns them newest first, as many as
+     * CreditRatingAgency::timeWeightedLeverage() reads. The record travels with the history, so a deal that restates it
+     * pro forma (MergerAndAcquisitionEngine) starts the window over; a quarter reviewed twice rewrites its own entry.
+     *
+     * @return list<array{net_debt: float, ebitda: float}>
+     */
+    private function recordRatedLeverage(Stock $stock, float $netDebt, float $ebitda): array
+    {
+        $current = ['net_debt' => $netDebt, 'ebitda' => $ebitda];
+        $history = array_values($stock->getQuarterlyOperatingHistory() ?? []);
+        if ($history === []) {
+            return [$current];
+        }
+
+        $last = count($history) - 1;
+        $earlier = $last > 0 ? ($history[$last - 1][self::RATED_LEVERAGE_KEY] ?? []) : [];
+        $rated = array_slice([$current, ...$earlier], 0, CreditRatingAgency::timeWeightedLeverageQuarters());
+        $history[$last][self::RATED_LEVERAGE_KEY] = $rated;
+        $stock->setQuarterlyOperatingHistory($history);
+
+        return $rated;
     }
 
     /**

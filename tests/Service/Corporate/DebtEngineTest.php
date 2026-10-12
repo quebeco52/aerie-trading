@@ -161,6 +161,126 @@ class DebtEngineTest extends TestCase
         $this->assertSame('AA', $rating);
     }
 
+    /** An operating firm at 3-4x net debt to EBITDA with an Altman Z'' in the safe zone and a distance to default above AAA. */
+    private function leveredOperatingFirm(string $rating): Stock
+    {
+        $stock = new Stock();
+        $stock->setTicker('TTC');
+        $stock->setCreditRating($rating);
+        $stock->setTotalEquity('200000000');
+        $stock->setWholesaleDebt('80000000');
+        $stock->setRetainedEarnings('100000000');
+        $stock->setTotalRevenue('100000000');
+        $stock->setOperatingMargin('0.10');
+        $stock->setVolatility('0.15');
+        $stock->setSharesOutstanding('1000000');
+        $stock->setPrice('200.00');
+        $stock->setQuarterlyOperatingHistory(array_fill(0, 4, ['revenue' => 25_000_000.0, 'ebit' => 2_500_000.0]));
+
+        return $stock;
+    }
+
+    /**
+     * Each rating review records the net debt and EBITDA it read on the quarter the report added, after the earlier
+     * reviews', newest first and as many as the time-weighting reads; reviewing a quarter twice rewrites its own entry.
+     */
+    public function testTheRatingReviewRecordsItsLeverageOnTheOperatingHistory(): void
+    {
+        $macroState = new MacroStateDTO(policyRateEma: 0.04, corporateTaxRate: 0.21, yield5yEma: 0.04);
+        $stock = $this->leveredOperatingFirm('BB');
+
+        $metrics = $this->engine->calculateInterestExpense($stock, $macroState, true);
+        $rated = ($stock->getQuarterlyOperatingHistory() ?? [])[3][DebtEngine::RATED_LEVERAGE_KEY] ?? [];
+        $this->assertCount(1, $rated);
+        $this->assertSame($metrics->ebitda, $rated[0]['ebitda']);
+        $this->assertGreaterThan(0.0, $rated[0]['net_debt']);
+
+        $this->engine->calculateInterestExpense($stock, $macroState, true);
+        $this->assertCount(1, ($stock->getQuarterlyOperatingHistory() ?? [])[3][DebtEngine::RATED_LEVERAGE_KEY] ?? [], 'the same quarter reviewed again');
+
+        for ($quarter = 1; $quarter <= 11; $quarter++) {
+            // The next report, as EarningsEngine files it: one quarter in, the window trimmed to the trailing four.
+            $history = $stock->getQuarterlyOperatingHistory() ?? [];
+            $history[] = ['revenue' => 25_000_000.0, 'ebit' => 2_500_000.0];
+            $stock->setQuarterlyOperatingHistory(array_values(array_slice($history, -4)));
+            $stock->setWholesaleDebt((string) (80_000_000 + $quarter * 1_000_000));
+            $this->engine->calculateInterestExpense($stock, $macroState, true);
+
+            $rated = ($stock->getQuarterlyOperatingHistory() ?? [])[3][DebtEngine::RATED_LEVERAGE_KEY] ?? [];
+            $this->assertCount(min($quarter + 1, CreditRatingAgency::timeWeightedLeverageQuarters()), $rated, "quarter {$quarter}");
+            $this->assertSame(max(array_column($rated, 'net_debt')), $rated[0]['net_debt'], 'newest first: the debt has grown every quarter');
+        }
+    }
+
+    /**
+     * The leverage anchor reads S&P's time-weighted years, not this quarter alone: a firm at 3-4x today (BB on its own)
+     * whose two earlier years ran at 1x keeps a modest weighted ratio and its BBB.
+     */
+    public function testTheLeverageAnchorReadsTheTimeWeightedYears(): void
+    {
+        $macroState = new MacroStateDTO(policyRateEma: 0.04, corporateTaxRate: 0.21, yield5yEma: 0.04);
+
+        $today = $this->leveredOperatingFirm('BBB');
+        $metrics = $this->engine->calculateInterestExpense($today, $macroState, true);
+        $this->assertGreaterThanOrEqual(3.0, 80_000_000.0 / $metrics->ebitda);
+        $this->assertLessThan(4.0, 80_000_000.0 / $metrics->ebitda);
+        $this->assertSame('BB', $today->getCreditRating(), 'on this quarter alone the anchor is BB');
+
+        $through = $this->leveredOperatingFirm('BBB');
+        $history = $through->getQuarterlyOperatingHistory() ?? [];
+        $history[2][DebtEngine::RATED_LEVERAGE_KEY] = array_fill(0, 8, ['net_debt' => 80_000_000.0, 'ebitda' => 80_000_000.0]);
+        $through->setQuarterlyOperatingHistory($history);
+        $this->engine->calculateInterestExpense($through, $macroState, true);
+        $this->assertSame('BBB', $through->getCreditRating(), 'the two earlier years at 1x keep the weighted ratio modest');
+    }
+
+    /**
+     * S&P's forecast years read the base case, the structural margin on trailing revenue: a firm whose trailing margin
+     * has collapsed to 2% is anchored on the weighted basis, not on this year alone.
+     */
+    public function testTheForecastYearsReadTheStructuralMargin(): void
+    {
+        $macroState = new MacroStateDTO(policyRateEma: 0.04, corporateTaxRate: 0.21, yield5yEma: 0.04);
+        $stock = $this->leveredOperatingFirm('BB');
+
+        $metrics = $this->engine->calculateInterestExpense($stock, $macroState, true, 100_000_000.0, 0.02);
+        $baseCaseEbitda = $metrics->ebitda + 100_000_000.0 * (0.10 - 0.02);
+        $weighted = (CreditRatingAgency::CORE_RATIO_FORECAST_WEIGHT * $baseCaseEbitda + 0.25 * $metrics->ebitda) / (CreditRatingAgency::CORE_RATIO_FORECAST_WEIGHT + 0.25);
+        $pointInTime = CreditRatingAgency::financialRiskAnchor(80_000_000.0, $metrics->ebitda, false);
+        $throughTheCycle = CreditRatingAgency::financialRiskAnchor(80_000_000.0, $weighted, false);
+
+        $this->assertSame('B', $pointInTime, 'this year alone is highly leveraged');
+        $this->assertSame('BB', $throughTheCycle);
+        $this->assertSame('BB', $stock->getCreditRating(), 'held at the weighted anchor; this year alone would take it to B');
+        $rated = ($stock->getQuarterlyOperatingHistory() ?? [])[3][DebtEngine::RATED_LEVERAGE_KEY] ?? [];
+        $this->assertSame($metrics->ebitda, $rated[0]['ebitda'], 'the record keeps the year as it was, not the base case');
+    }
+
+    /** A regulated utility is read on S&P's medial volatility table: 4.0-4.5x is significant there and keeps its A, where the standard table's aggressive band would anchor it at BBB. */
+    public function testAUtilityIsReadOnTheMedialVolatilityTable(): void
+    {
+        $macroState = new MacroStateDTO(policyRateEma: 0.04, corporateTaxRate: 0.21, yield5yEma: 0.04);
+        $stock = new Stock();
+        $stock->setTicker('UTIL');
+        $stock->setIndustry('Utilities - Regulated Electric');
+        $stock->setCreditRating('A');
+        $stock->setTotalEquity('200000000');
+        $stock->setWholesaleDebt('110000000');
+        $stock->setRetainedEarnings('100000000');
+        $stock->setTotalRevenue('100000000');
+        $stock->setOperatingMargin('0.10');
+        $stock->setVolatility('0.15');
+        $stock->setSharesOutstanding('1000000');
+        $stock->setPrice('200.00');
+
+        $metrics = $this->engine->calculateInterestExpense($stock, $macroState, true);
+        $leverage = 110_000_000.0 / $metrics->ebitda;
+        $this->assertGreaterThanOrEqual(4.0, $leverage);
+        $this->assertLessThan(4.5, $leverage);
+        $this->assertSame('BBB', CreditRatingAgency::financialRiskAnchor(110_000_000.0, $metrics->ebitda, true), 'the standard table');
+        $this->assertSame('A', $stock->getCreditRating());
+    }
+
     public function testZeroDebtHealthyCompanyUpgradesOnAdvanceMaturity(): void
     {
         $stock = new Stock();

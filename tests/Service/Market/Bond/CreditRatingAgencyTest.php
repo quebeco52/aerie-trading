@@ -260,6 +260,88 @@ class CreditRatingAgencyTest extends TestCase
         $this->assertSame('A', CreditRatingAgency::financialRiskAnchor(0.0, -5.0, false));
     }
 
+    /**
+     * S&P's time-weighted core ratio: the current year, the year before and the one before that at 25/15/10, read a
+     * year (four quarterly reviews) apart; the quarters between do not enter, and with fewer years observed the weights
+     * of those that are keep their proportions.
+     */
+    public function testTimeWeightedLeverageWeighsTheObservedYearsAtSAndPWeights(): void
+    {
+        $quarters = [];
+        for ($q = 0; $q < CreditRatingAgency::timeWeightedLeverageQuarters(); $q++) {
+            $quarters[] = ['net_debt' => 100.0 + $q, 'ebitda' => 10.0 * ($q + 1)];
+        }
+        $this->assertCount(9, $quarters);
+
+        $full = CreditRatingAgency::timeWeightedLeverage($quarters);
+        $this->assertEqualsWithDelta((0.25 * 100.0 + 0.15 * 104.0 + 0.10 * 108.0) / 0.50, $full['net_debt'], 1e-9);
+        $this->assertEqualsWithDelta((0.25 * 10.0 + 0.15 * 50.0 + 0.10 * 90.0) / 0.50, $full['ebitda'], 1e-9);
+
+        $twoYears = CreditRatingAgency::timeWeightedLeverage(array_slice($quarters, 0, 8));
+        $this->assertEqualsWithDelta((0.25 * 10.0 + 0.15 * 50.0) / 0.40, $twoYears['ebitda'], 1e-9, 'the third year is not observed yet');
+
+        $this->assertSame(['net_debt' => 100.0, 'ebitda' => 10.0], CreditRatingAgency::timeWeightedLeverage(array_slice($quarters, 0, 4)), 'one year: its own figures');
+        $this->assertSame(['net_debt' => 0.0, 'ebitda' => 0.0], CreditRatingAgency::timeWeightedLeverage([]));
+    }
+
+    /** The base case for S&P's two forecast years weighs 50%, against 25/15/10 for the observed years, and keeps its share when fewer years are observed. */
+    public function testTheForecastYearsWeighHalfOfTheTimeWeightedBasis(): void
+    {
+        $year = static fn (float $netDebt, float $ebitda): array => ['net_debt' => $netDebt, 'ebitda' => $ebitda];
+        $quarters = [$year(300.0, 60.0), $year(0.0, 0.0), $year(0.0, 0.0), $year(0.0, 0.0), $year(200.0, 80.0), $year(0.0, 0.0), $year(0.0, 0.0), $year(0.0, 0.0), $year(100.0, 100.0)];
+        $baseCase = $year(300.0, 120.0);
+
+        $full = CreditRatingAgency::timeWeightedLeverage($quarters, $baseCase);
+        $this->assertEqualsWithDelta(0.50 * 300.0 + 0.25 * 300.0 + 0.15 * 200.0 + 0.10 * 100.0, $full['net_debt'], 1e-9);
+        $this->assertEqualsWithDelta(0.50 * 120.0 + 0.25 * 60.0 + 0.15 * 80.0 + 0.10 * 100.0, $full['ebitda'], 1e-9);
+
+        $firstYear = CreditRatingAgency::timeWeightedLeverage([$year(300.0, 60.0)], $baseCase);
+        $this->assertEqualsWithDelta((0.50 * 120.0 + 0.25 * 60.0) / 0.75, $firstYear['ebitda'], 1e-9, 'two thirds base case, one third this year');
+        $this->assertSame($baseCase, CreditRatingAgency::timeWeightedLeverage([], $baseCase));
+    }
+
+    /** A loss year leaves the weighted basis defined: two good years outweigh one with no EBITDA, which alone reads highly leveraged. */
+    public function testATimeWeightedLossYearIsNotHighlyLeveragedOnItsOwn(): void
+    {
+        $good = ['net_debt' => 200.0, 'ebitda' => 100.0];
+        $quarters = [['net_debt' => 200.0, 'ebitda' => -10.0], $good, $good, $good, $good, $good, $good, $good, $good];
+
+        $this->assertSame('B', CreditRatingAgency::financialRiskAnchor(200.0, -10.0, false));
+        $basis = CreditRatingAgency::timeWeightedLeverage($quarters);
+        $this->assertEqualsWithDelta(200.0 / 45.0, $basis['net_debt'] / $basis['ebitda'], 1e-9);
+        $this->assertSame('BB', CreditRatingAgency::financialRiskAnchor($basis['net_debt'], $basis['ebitda'], false));
+    }
+
+    /**
+     * S&P's medial volatility table, on which a regulated utility is read: its bands sit 0.25x-0.5x wider than the
+     * standard table's, so 4.2x is still significant (A on the excellent row) where the standard table calls it aggressive.
+     */
+    public function testTheMedialVolatilityTableWidensTheBands(): void
+    {
+        $medial = CreditRatingAgency::MEDIAL_VOLATILITY_DEBT_TO_EBITDA_BOUNDS;
+        $cases = [[1.7, 'AAA'], [1.8, 'AA'], [2.4, 'AA'], [2.5, 'A'], [3.4, 'A'], [4.4, 'A'], [4.5, 'BBB'], [5.4, 'BBB'], [5.5, 'BB'], [8.0, 'BB']];
+        foreach ($cases as [$leverage, $expected]) {
+            $this->assertSame($expected, CreditRatingAgency::financialRiskAnchor($leverage * 100.0, 100.0, true, $medial), "{$leverage}x");
+        }
+        $this->assertSame('BBB', CreditRatingAgency::financialRiskAnchor(420.0, 100.0, true));
+        $this->assertSame('A', CreditRatingAgency::financialRiskAnchor(420.0, 100.0, true, $medial));
+    }
+
+    /**
+     * The market-implied grade moves only past the bracket edge by the buffer, either way: Altman & Rijken's (2004)
+     * prudent-migration threshold. A d2 inside the buffer holds the grade from both sides.
+     */
+    public function testTheDistanceToDefaultHysteresisHoldsInsideTheBuffer(): void
+    {
+        $edge = CreditRatingAgency::THRESHOLD_A;
+        $inside = CreditRatingAgency::HYSTERESIS_BUFFER * 0.5;
+
+        $this->assertSame('A', $this->agency->convertDistanceToRating($edge - $inside, 'A'), 'an A holds just under its edge');
+        $this->assertSame('BBB', $this->agency->convertDistanceToRating($edge + $inside, 'BBB'), 'a BBB is not upgraded just over it');
+        $this->assertSame('BBB', $this->agency->convertDistanceToRating($edge - CreditRatingAgency::HYSTERESIS_BUFFER - 0.01, 'A'));
+        $this->assertSame('A', $this->agency->convertDistanceToRating($edge + CreditRatingAgency::HYSTERESIS_BUFFER + 0.01, 'BBB'));
+    }
+
     /** The anchor caps a high distance to default, and the cap is reached a notch per evaluation like any move. */
     public function testTheLeverageAnchorCapsAMarketImpliedAaa(): void
     {
