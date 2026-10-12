@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Service\Model\Sector;
 
+use App\Service\Math\FixedIncome;
 use App\DTO\DebtExpansionAppetiteDTO;
 
 use App\Service\Math\Distributions;
@@ -201,7 +202,7 @@ class PrivateEquityBusinessModel extends AssetManagementBusinessModel
         $optimalOperatingCash = $this->calculateTargetOperatingCash($operatingBase, 0.0, $optimalDebt);
         $minOperatingCash = $this->calculateMinOperatingCash($operatingBase, 0.0, $optimalDebt);
         $optimalYieldingCash = max(0.0, $optimalOperatingCash - $minOperatingCash);
-        $optimalInterestIncome = $optimalYieldingCash * max(0.0, $policyRate - \App\Service\Macro\MacroEngine::CASH_YIELD_SPREAD);
+        $optimalInterestIncome = $optimalYieldingCash * FixedIncome::moneyMarketYield($policyRate);
 
         $optimalEbit = $optimalEbt + $optimalInterestExpense - $optimalInterestIncome;
         $optimalEarningAssets = $effectiveEquity + $optimalDebt - $optimalOperatingCash;
@@ -291,7 +292,7 @@ class PrivateEquityBusinessModel extends AssetManagementBusinessModel
     private function resolveDealFlowMultiplier(\App\DTO\MacroStateDTO $macroState): float
     {
         $outputGap = $macroState->outputGapEma;
-        $dealActivityShift = ($macroState->dealActivityIndexEma - MacroEngine::DEAL_ACTIVITY_BASELINE) / MacroEngine::DEAL_ACTIVITY_BASELINE;
+        $dealActivityShift = $macroState->dealActivityDeviation();
 
         return ($outputGap > 0.0 ? ($outputGap * self::DEAL_FLOW_BOOM_MULT) : ($outputGap * self::DEAL_FLOW_BUST_MULT))
             + ($dealActivityShift * self::DEAL_ACTIVITY_EXIT_SCALAR);

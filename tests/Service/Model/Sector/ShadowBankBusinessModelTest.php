@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Tests\Service\Model\Sector;
 
 use App\DTO\MacroStateDTO;
+use App\Service\Macro\MacroEngine;
 use App\Entity\Stock;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\ShadowBankBusinessModel;
@@ -258,6 +259,28 @@ class ShadowBankBusinessModelTest extends TestCase
         );
 
         $this->assertGreaterThan($boomRate, $depressedRate, 'Homes below the price they were lent against lose more on each mortgage default (Frye 2000).');
+    }
+
+    /**
+     * Origination fees answer the mortgage rate around the engine's neutral, both ways: a rise prices buyers out and
+     * ends refinancing, a fall brings both back. Read one-sided off a 30-year threshold of 4.5% against a 30-year that
+     * averages nearer 5%, the stream carried a standing drag at rest.
+     */
+    public function testOriginationAnswersTheMortgageRateSymmetricallyAroundItsNeutral(): void
+    {
+        $stock = $this->pool();
+        $mathMock = $this->createStub(MathUtility::class);
+        $mathMock->method('generatePersistentZ')->willReturn(0.0);
+        $origination = fn (float $tenYear): float => $this->model->computeActualFinancials(
+            $stock, 100_000_000.0, 0.50, 20_000_000.0, 0.0, new MacroStateDTO(yield10yEma: $tenYear), $mathMock
+        )->streamRevenue['origination_fees'];
+
+        $neutral = $origination(MacroEngine::NEUTRAL_TEN_YEAR_YIELD);
+        $higher = $origination(MacroEngine::NEUTRAL_TEN_YEAR_YIELD + 0.01);
+        $lower = $origination(MacroEngine::NEUTRAL_TEN_YEAR_YIELD - 0.01);
+
+        $this->assertLessThan($neutral, $higher);
+        $this->assertEqualsWithDelta($neutral - $higher, $lower - $neutral, 1e-6, 'A point down gives back what a point up takes.');
     }
 
     /**

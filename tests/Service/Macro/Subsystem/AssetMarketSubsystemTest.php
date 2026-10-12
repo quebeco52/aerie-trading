@@ -2,6 +2,7 @@
 
 namespace App\Tests\Service\Macro\Subsystem;
 
+use App\DTO\MacroStateDTO;
 use App\Service\Macro\MacroEngine;
 use App\Service\Macro\MacroState;
 use App\Service\Macro\Subsystem\AssetMarketSubsystem;
@@ -90,6 +91,27 @@ class AssetMarketSubsystemTest extends TestCase
         $this->assertLessThan($anchored, $this->creFundamentalTick(0.065, 0.02), 'A higher real yield must lower values.');
     }
 
+    /**
+     * Construction and the REITs read the index against CRE_BASELINE, so the fundamental must sit there when every input
+     * the cap rate reads is at the value the engine is built on. A neutral cap rate measured off an older engine (6.4%)
+     * held the index near 110 and handed both a standing tenth of property values that no cycle had produced.
+     */
+    public function testCommercialPropertyHoldsItsBaselineAtTheEnginesNeutral(): void
+    {
+        $state = new MacroState();
+        $state->yield10yEma = MacroEngine::BASE_NATURAL_RATE + MacroEngine::TARGET_INFLATION + MacroEngine::NS_BASE_TERM_PREMIUM;
+        $state->tipsBreakevenEma = MacroEngine::TARGET_INFLATION;
+        $state->macroCreditSpreadEma = MacroEngine::BASE_CREDIT_SPREAD;
+        $state->unemploymentRateEma = $state->nairu;
+        $state->outputGapEma = 0.0;
+        $state->commercialPropertyIndex = MacroEngine::CRE_BASELINE;
+
+        // A quarter's pull toward a fundamental 7% off moves the index ~0.4 points; the log-mean correction alone, ~0.015.
+        $this->subsystem->calculateCommercialPropertyIndex($state, 0.25);
+
+        $this->assertEqualsWithDelta(MacroEngine::CRE_BASELINE, $state->commercialPropertyIndex, 0.05);
+    }
+
     private function creFundamentalTick(float $yield10y, float $expectedInflation): float
     {
         $math = $this->createStub(MathUtility::class);
@@ -119,6 +141,28 @@ class AssetMarketSubsystemTest extends TestCase
         $this->subsystem->calculateCapitalMarketsDealIndex($state, 0.25);
         $this->assertGreaterThan(50.0, $state->dealActivityIndex);
         $this->assertLessThan(250.0, $state->dealActivityIndex);
+    }
+
+    /**
+     * The index settles where its stress legs put it, not at the hundred it is built from; the trend measures that level
+     * over a deal cycle, and a firm reading deal flow at its trend reads no deviation at all.
+     */
+    public function testDealFlowIsReadAgainstItsOwnDecadeLongLevel(): void
+    {
+        $state = new MacroState();
+        $state->dealActivityIndexTrend = 95.0;
+        $dt = 0.25;
+
+        $this->subsystem->calculateCapitalMarketsDealIndex($state, $dt);
+
+        $pull = 1.0 - exp(-$dt / AssetMarketSubsystem::DEAL_ACTIVITY_TREND_YEARS);
+        $this->assertEqualsWithDelta(95.0 + ($pull * ($state->dealActivityIndex - 95.0)), $state->dealActivityIndexTrend, 1e-9);
+
+        $atTrend = new MacroStateDTO(dealActivityIndexEma: 95.0, dealActivityIndexTrend: 95.0);
+        $this->assertSame(0.0, $atTrend->dealActivityDeviation());
+
+        $busy = new MacroStateDTO(dealActivityIndexEma: 104.5, dealActivityIndexTrend: 95.0);
+        $this->assertEqualsWithDelta(0.10, $busy->dealActivityDeviation(), 1e-12);
     }
 
     public function testCalculateTradeBalance(): void

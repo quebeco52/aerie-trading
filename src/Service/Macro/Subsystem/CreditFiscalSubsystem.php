@@ -140,14 +140,12 @@ class CreditFiscalSubsystem
     // --- Economic Policy Uncertainty (Baker, Bloom & Davis 2016) ---
     /** Log lift of the index per unit of the election pulse, the full lift on the eve of a vote (Julio & Yook 2012 locate the investment cut in the election year; the BBD index rises a quarter or so into a presidential vote). */
     public const EPU_ELECTION_LIFT = 0.25;
-    /** Log lift per unit of recession probability above its unconditional level: the index roughly doubled through 2008-2011 as policy responses were debated. */
-    public const EPU_STRESS_LIFT = 1.0;
-    /** Unconditional recession probability the stress lift measures from (the probit intercept's ~15%). */
-    public const EPU_STRESS_PROBABILITY_FLOOR = 0.15;
+    /** Log lift per unit of unemployment above NAIRU: 0.105 a point, quarterly OLS of log USEPUINDXM on UNRATE - NROU, 1985-2019 (r = 0.60). */
+    public const EPU_SLACK_LIFT = 10.5;
     /** Mean reversion of the log index (half-life ~5 months, the ~0.88 monthly autocorrelation of the BBD series). */
     public const EPU_MEAN_REVERSION = 1.5;
-    /** Annual log volatility, giving a stationary log spread of ~0.32 around the level the calendar and the cycle set. */
-    public const EPU_VOLATILITY = 0.55;
+    /** Annual log volatility: with the jumps, a log spread of ~0.22 around the slack fit (US residual 0.21 on quarterly averages, 1985-2019). */
+    public const EPU_VOLATILITY = 0.35;
     /** Arrivals per year of unscheduled policy shocks (debt-ceiling standoffs, referendums, trade rulings). */
     public const EPU_JUMP_PROBABILITY = 0.50;
     /** Mean log size of an unscheduled policy shock. */
@@ -803,7 +801,7 @@ class CreditFiscalSubsystem
      */
     public function calculateHouseholdCredit(MacroState $state, float $dt): void
     {
-        $mortgageRate = $state->yield10yEma + MacroEngine::RESIDENTIAL_MORTGAGE_SPREAD;
+        $mortgageRate = FixedIncome::mortgageRate($state->yield10yEma);
         $revolvingRate = max(0.0, $state->policyRateEma) + self::CONSUMER_CREDIT_SPREAD;
         $effectiveRate = (self::HOUSEHOLD_MORTGAGE_DEBT_SHARE * $mortgageRate) + ((1.0 - self::HOUSEHOLD_MORTGAGE_DEBT_SHARE) * $revolvingRate);
 
@@ -1174,22 +1172,21 @@ class CreditFiscalSubsystem
      *
      * A log mean-reverting index whose level is set by two things the record ties it to: the election calendar, since
      * uncertainty about the policy regime builds into a scheduled vote and resolves once a government takes office (Julio
-     * & Yook 2012; Bernhard & Leblang 2006), and the cycle, since a downturn brings the policy response itself into
-     * question. The calendar arrives as the election pulse the government hands the economy, centred on its long-run
-     * mean, so it moves the index through the term and leaves its average where it was. Unscheduled shocks arrive as
-     * jumps.
+     * & Yook 2012; Bernhard & Leblang 2006), and the slack the economy is running, since a downturn brings the policy
+     * response itself into question (BBD's index is countercyclical, moving with unemployment above its natural rate).
+     * The calendar arrives as the election pulse the government hands the economy, centred on its long-run mean, so it
+     * moves the index through the term and leaves its average where it was. Unscheduled shocks arrive as jumps.
      *
      * @param MacroState $state Current macroeconomic state.
      * @param float      $dt    Time increment in years.
      */
     public function calculatePolicyUncertainty(MacroState $state, float $dt): void
     {
-        $recessionExcess = max(0.0, $state->recessionProbabilityEma - self::EPU_STRESS_PROBABILITY_FLOOR);
         $jumpLogCompensator = self::EPU_JUMP_PROBABILITY * self::EPU_JUMP_MEAN / self::EPU_MEAN_REVERSION;
 
         $target = MacroEngine::EPU_BASELINE * exp(
             (self::EPU_ELECTION_LIFT * $state->electionPulse)
-                + (self::EPU_STRESS_LIFT * $recessionExcess)
+                + (self::EPU_SLACK_LIFT * ($state->unemploymentRate - $state->nairu))
                 - $jumpLogCompensator
         );
 

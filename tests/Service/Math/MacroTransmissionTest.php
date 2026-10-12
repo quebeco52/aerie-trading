@@ -154,21 +154,22 @@ class MacroTransmissionTest extends TestCase
             'agri' => 0.15,
             'gscpi' => 0.005,
             'ulc' => 0.35,
+            'other' => 0.15,
             'demand' => 0.15,
         ];
 
-        // Neutral wholesale pricing
+        // Neutral wholesale pricing: every cost at trend and shares summing to one put the index at trend.
         $neutralPpi = MacroTransmission::calculateStageOfProcessingPpi(
             metalsInflation: 0.02,
             energyInflation: 0.02,
             agriInflation: 0.02,
             gscpiZ: 0.0,
             unitLaborCost: 0.02,
+            otherCostInflation: 0.02,
             outputGap: 0.0,
             weights: $weights
         );
-        // (0.15*0.02) + (0.20*0.02) + (0.15*0.02) + 0 + (0.35*0.02) + 0 = 0.003 + 0.004 + 0.003 + 0.007 = 0.017
-        $this->assertEqualsWithDelta(0.017, $neutralPpi, 0.0001);
+        $this->assertEqualsWithDelta(0.02, $neutralPpi, 1e-12);
 
         // Commodity & supply chain shock
         $shockPpi = MacroTransmission::calculateStageOfProcessingPpi(
@@ -177,6 +178,7 @@ class MacroTransmissionTest extends TestCase
             agriInflation: 0.10,   // +10%
             gscpiZ: 2.5,           // Supply bottleneck
             unitLaborCost: 0.05,   // Elevated ULC
+            otherCostInflation: 0.03,
             outputGap: 0.02,
             weights: $weights
         );
@@ -190,6 +192,7 @@ class MacroTransmissionTest extends TestCase
             agriInflation: 2.0,
             gscpiZ: 10.0,
             unitLaborCost: 1.0,
+            otherCostInflation: 1.0,
             outputGap: 1.0,
             weights: $weights,
             min: -0.06,

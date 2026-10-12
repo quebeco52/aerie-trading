@@ -134,8 +134,6 @@ class FinancialConstants
     public const STATE_INPUT_COST_DRAG_BASE = 'state:input_cost_drag_base';
 
     // --- FX Exposure ---
-    /** Base level of the trade-weighted exchange rate index, against which a move is measured as a relative deviation. */
-    public const FX_INDEX_BASE = 100.0;
     /** Default share of revenue exposed to the exchange rate: a mostly domestic firm meeting a little imported competition. */
     public const DEFAULT_FX_REVENUE_EXPOSURE = 0.05;
 

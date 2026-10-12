@@ -48,7 +48,7 @@ trait FinancialPhysicsTrait
     {
         $saturationPenalty = \App\Service\Corporate\CorporateMetrics::getInstance()->calculateMarketSaturationPenalty($stock, max(1.0, (float) $stock->getTotalEquity()), $macroState);
 
-        return max($macroState->yield10yEma + $macroState->equityRiskPremium, max(0.01, (float) $stock->getBaselineRoe()) - $saturationPenalty);
+        return max($macroState->marketCostOfEquity(), max(0.01, (float) $stock->getBaselineRoe()) - $saturationPenalty);
     }
 
     public function calculateEconomicReturn(Stock $stock, float $quarterlyNopatOrIncome, float $investedCapital): float

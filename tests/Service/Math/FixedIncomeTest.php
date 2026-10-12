@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Tests\Service\Math;
 
+use App\Service\Macro\MacroEngine;
 use App\Service\Math\FixedIncome;
 use PHPUnit\Framework\TestCase;
 
@@ -309,5 +310,18 @@ class FixedIncomeTest extends TestCase
         }
 
         $this->assertSame(0.0, FixedIncome::calculateTermPremiumForwardScale(0.0), 'Overnight money earns no term premium.');
+    }
+
+    /** Nine treasuries price idle cash off this one rate; two of them used to earn a negative yield at the lower bound. */
+    public function testMoneyMarketCashEarnsThePolicyRateLessTheSpreadAndNeverBelowZero(): void
+    {
+        $this->assertEqualsWithDelta(0.04 - MacroEngine::CASH_YIELD_SPREAD, FixedIncome::moneyMarketYield(0.04), 1e-15);
+        $this->assertSame(0.0, FixedIncome::moneyMarketYield(0.0), 'At the lower bound the funds waive fees rather than charge for holding cash.');
+    }
+
+    public function testTheMortgageRateIsTheTenYearPlusTheMortgageSpread(): void
+    {
+        $this->assertEqualsWithDelta(0.045 + MacroEngine::RESIDENTIAL_MORTGAGE_SPREAD, FixedIncome::mortgageRate(0.045), 1e-15);
+        $this->assertEqualsWithDelta(MacroEngine::NEUTRAL_MORTGAGE_RATE, FixedIncome::mortgageRate(MacroEngine::NEUTRAL_TEN_YEAR_YIELD), 1e-15);
     }
 }

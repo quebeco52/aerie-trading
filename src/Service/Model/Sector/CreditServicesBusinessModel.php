@@ -97,15 +97,11 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
     public const BASE_COVERAGE_ERROR = 0.10;
 
     // --- CECL Forward Reserve (ASC 326 lifetime allowance conditioned on the macro forecast) ---
-    /** Baseline investment-grade credit spread (macro through-the-cycle IG); the lifetime loss estimate is struck at 1.0x here. */
-    public const CECL_BASELINE_CREDIT_SPREAD = MacroEngine::BASE_CREDIT_SPREAD;
     /** Sector reserve sensitivity to spreads a per-ticker CeclSpreadSensitivity is expressed against (a 2.2 issuer moves 2.2/1.5 = 1.47x the sector). */
     public const CECL_SPREAD_SENSITIVITY     = 1.50;
     /** Lifetime-loss multiplier per unit of IG spread widening: unsecured books reprice faster than collateralized bank loans, +300bps lifts the target ~0.45x. */
     public const CECL_RESERVE_SPREAD_SENSITIVITY = 15.0;
-    /** Baseline 12-month forward recession probability; the lifetime loss estimate is struck at 1.0x here. */
-    public const CECL_BASELINE_RECESSION_PROB   = 0.15;
-    /** Lifetime-loss multiplier per unit of recession probability above baseline: card allowances went ~4.9% -> 7.9% of receivables in 2020 (~0.6x) on a near-certain recession. */
+    /** Lifetime-loss multiplier per unit of recession probability away from the base rate: card allowances went ~4.9% -> 7.9% of receivables in 2020 (~0.6x) on a near-certain recession. */
     public const CECL_RESERVE_RECESSION_SENSITIVITY = 0.75;
     /** Sensitivity of revolving credit loan origination volume drag to commercial bank credit tightening (SLOOS). */
     public const SLOOS_LENDING_DRAG_SENSITIVITY = 0.15;

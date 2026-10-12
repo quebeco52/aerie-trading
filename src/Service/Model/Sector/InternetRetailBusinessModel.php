@@ -266,7 +266,7 @@ class InternetRetailBusinessModel extends StandardCorporateBusinessModel
         $fpBaselineCosts = max(0.0, $targetTotalCosts - $plannedTpAdsCosts);
         $fpVariableMargin = $expectedRevenue * $fpWeight > 0 ? $fpBaselineCosts / ($expectedRevenue * $fpWeight) : $realizedVariableMargin;
         
-        $fxShift = ($macroState->exchangeRateIndexEma - FinancialConstants::FX_INDEX_BASE) / FinancialConstants::FX_INDEX_BASE;
+        $fxShift = $macroState->exchangeRateGap();
         $fpCostSavings = $fpRevenue * $fxShift * self::IMPORT_SOURCING_FX_SCALAR;
 
         // Re-blend actual costs based on shocked revenue

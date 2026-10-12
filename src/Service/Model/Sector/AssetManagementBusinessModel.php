@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Service\Model\Sector;
 
+use App\Service\Math\FixedIncome;
 use App\DTO\DebtExpansionAppetiteDTO;
 
 use App\Service\Math\MacroTransmission;
@@ -229,7 +230,7 @@ class AssetManagementBusinessModel extends BaseFinancialBusinessModel
         $optimalOperatingCash = $this->calculateTargetOperatingCash($operatingBase, 0.0, $optimalDebt);
         $minOperatingCash = $this->calculateMinOperatingCash($operatingBase, 0.0, $optimalDebt);
         $optimalYieldingCash = max(0.0, $optimalOperatingCash - $minOperatingCash);
-        $optimalInterestIncome = $optimalYieldingCash * max(0.0, $policyRate - MacroEngine::CASH_YIELD_SPREAD);
+        $optimalInterestIncome = $optimalYieldingCash * FixedIncome::moneyMarketYield($policyRate);
 
         $optimalEbit = $optimalEbt + $optimalInterestExpense - $optimalInterestIncome;
         $optimalEarningAssets = $effectiveEquity + $optimalDebt - $optimalOperatingCash;

@@ -204,7 +204,7 @@ class BrokerageBusinessModel extends BaseFinancialBusinessModel
     /** Placement and advisory mandates against normal: the capital-markets deal activity index over its baseline. */
     protected function resolveAdvisoryDealShift(\App\DTO\MacroStateDTO $macroState): float
     {
-        $dealActivityShift = ($macroState->dealActivityIndexEma - MacroEngine::DEAL_ACTIVITY_BASELINE) / MacroEngine::DEAL_ACTIVITY_BASELINE;
+        $dealActivityShift = $macroState->dealActivityDeviation();
 
         return $dealActivityShift * self::DEAL_ACTIVITY_ADVISORY_SCALAR;
     }
@@ -349,8 +349,7 @@ class BrokerageBusinessModel extends BaseFinancialBusinessModel
      */
     public function calculateCashYield(\App\DTO\MacroStateDTO $macroState): float
     {
-        $policyRate = $macroState->policyRateEma;
-        return max(0.0, $policyRate - MacroEngine::CASH_YIELD_SPREAD);
+        return $macroState->moneyMarketYield();
     }
 
     /**

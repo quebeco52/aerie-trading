@@ -284,13 +284,15 @@ trait StandardOperatingPhysicsTrait
     }
 
     /**
-     * Signed demand shift from the exchange rate. A stronger domestic currency (index above base) prices
+     * Signed demand shift from the exchange rate. A stronger domestic currency (index above its trend) prices
      * exports out of foreign markets and cheapens the importer's shelf price at home, so the shift is
      * negative on the way up and positive on the way down, scaled by how much revenue is actually exposed.
+     * The currency settles away from its nominal base by construction, so the move is read against its trend,
+     * as the macro's own net exports read it (MacroStateDTO::exchangeRateGap()).
      */
     public function resolveFxDemandShift(MacroStateDTO $macroState, ?float $exposure = null): float
     {
-        $fxShift = ($macroState->exchangeRateIndexEma - FinancialConstants::FX_INDEX_BASE) / FinancialConstants::FX_INDEX_BASE;
+        $fxShift = $macroState->exchangeRateGap();
 
         return -$fxShift * ($exposure ?? $this->getFxRevenueExposure());
     }

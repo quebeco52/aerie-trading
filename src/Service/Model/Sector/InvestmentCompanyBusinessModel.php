@@ -196,7 +196,7 @@ class InvestmentCompanyBusinessModel extends ConglomerateBusinessModel
         $listedMacroBoost = $laggedGap * self::LISTED_DIVIDEND_MACRO_SCALAR;
 
         // --- Treasury: the parent's contrarian float book, unchanged ---
-        $dealActivityShift = ($macroState->dealActivityIndexEma - MacroEngine::DEAL_ACTIVITY_BASELINE) / MacroEngine::DEAL_ACTIVITY_BASELINE;
+        $dealActivityShift = $macroState->dealActivityDeviation();
         $contrarianSurge = $this->resolveContrarianFloatSurge(
             $macroState,
             $mathUtility,

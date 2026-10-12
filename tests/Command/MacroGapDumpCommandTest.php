@@ -27,7 +27,7 @@ class MacroGapDumpCommandTest extends TestCase
      */
     private function record(array $row, int $quarter = 1): array
     {
-        $command = new MacroGapDumpCommand($this->createMock(EntityManagerInterface::class), '/tmp');
+        $command = new MacroGapDumpCommand($this->createStub(EntityManagerInterface::class), '/tmp');
 
         $method = (new \ReflectionClass($command))->getMethod('toRecord');
 

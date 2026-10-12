@@ -339,6 +339,7 @@ class PrivateEquityBusinessModelTest extends TestCase
             'policy_rate_ema' => 0.03,
             'high_yield_credit_spread_ema' => PrivateEquityBusinessModel::LBO_CREDIT_SPREAD_BASELINE,
             'deal_activity_index_ema' => MacroEngine::DEAL_ACTIVITY_BASELINE,
+            'deal_activity_index_trend' => \App\Service\Macro\MacroEngine::DEAL_ACTIVITY_BASELINE,
         ]);
         $result = $this->model->computeActualFinancials($stock, 100.0, 0.35, 10.0, 0.10, $trend, $mathMock);
 
@@ -367,6 +368,7 @@ class PrivateEquityBusinessModelTest extends TestCase
             'policy_rate_ema' => 0.03,
             'high_yield_credit_spread_ema' => PrivateEquityBusinessModel::LBO_CREDIT_SPREAD_BASELINE,
             'deal_activity_index_ema' => MacroEngine::DEAL_ACTIVITY_BASELINE,
+            'deal_activity_index_trend' => \App\Service\Macro\MacroEngine::DEAL_ACTIVITY_BASELINE,
         ]);
 
         $hotDealMacro = MacroStateDTO::fromArray([
@@ -374,6 +376,7 @@ class PrivateEquityBusinessModelTest extends TestCase
             'policy_rate_ema' => 0.03,
             'high_yield_credit_spread_ema' => PrivateEquityBusinessModel::LBO_CREDIT_SPREAD_BASELINE,
             'deal_activity_index_ema' => MacroEngine::DEAL_ACTIVITY_BASELINE * 1.5,
+            'deal_activity_index_trend' => \App\Service\Macro\MacroEngine::DEAL_ACTIVITY_BASELINE,
         ]);
 
         $baselineResult = $this->model->computeActualFinancials(
@@ -414,6 +417,7 @@ class PrivateEquityBusinessModelTest extends TestCase
         $recession = MacroStateDTO::fromArray([
             'output_gap_ema' => -0.03,
             'deal_activity_index_ema' => MacroEngine::DEAL_ACTIVITY_BASELINE,
+            'deal_activity_index_trend' => \App\Service\Macro\MacroEngine::DEAL_ACTIVITY_BASELINE,
             'policy_rate_ema' => 0.03,
             'high_yield_credit_spread_ema' => PrivateEquityBusinessModel::LBO_CREDIT_SPREAD_BASELINE,
         ]);

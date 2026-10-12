@@ -762,20 +762,27 @@ class CommercialBankBusinessModelTest extends TestCase
 
         $this->assertEqualsWithDelta($resultLowRisk->clampedMargin, $resultHighRisk->clampedMargin, 1e-12, 'the forecast reserve is not a running cost');
 
+        $atBaseRate = $this->model->getForwardCreditLossMultiplier($bank, new MacroStateDTO(recessionProbabilityEma: \App\Service\Macro\MacroEngine::RECESSION_BASE_RATE));
         $calm = $this->model->getForwardCreditLossMultiplier($bank, $macroLowRisk);
         $stressed = $this->model->getForwardCreditLossMultiplier($bank, $macroHighRisk);
-        $this->assertEqualsWithDelta(1.0, $calm, 1e-9, 'at or below the baseline outlook the estimate is the through-the-cycle one');
+        $this->assertEqualsWithDelta(1.0, $atBaseRate, 1e-9, 'at the base-rate outlook the estimate is the through-the-cycle one');
         $this->assertEqualsWithDelta(
-            1.0 + (0.70 - CommercialBankBusinessModel::CECL_BASELINE_RECESSION_PROB) * CommercialBankBusinessModel::CECL_RESERVE_RECESSION_SENSITIVITY,
+            1.0 - (\App\Service\Macro\MacroEngine::RECESSION_BASE_RATE - 0.10) * CommercialBankBusinessModel::CECL_RESERVE_RECESSION_SENSITIVITY,
+            $calm,
+            1e-9,
+            'a better-than-average outlook releases, as the spread term does, so the average outlook carries no standing build'
+        );
+        $this->assertEqualsWithDelta(
+            1.0 + (0.70 - \App\Service\Macro\MacroEngine::RECESSION_BASE_RATE) * CommercialBankBusinessModel::CECL_RESERVE_RECESSION_SENSITIVITY,
             $stressed,
             1e-9
         );
 
         // Spreads: widening lifts the target, a benign market releases part of it, never past the floor.
-        $wide = $this->model->getForwardCreditLossMultiplier($bank, new MacroStateDTO(macroCreditSpreadEma: CommercialBankBusinessModel::CECL_BASELINE_CREDIT_SPREAD + 0.03));
+        $wide = $this->model->getForwardCreditLossMultiplier($bank, new MacroStateDTO(macroCreditSpreadEma: \App\Service\Macro\MacroEngine::BASE_CREDIT_SPREAD + 0.03));
         $this->assertEqualsWithDelta(1.0 + 0.03 * CommercialBankBusinessModel::CECL_RESERVE_SPREAD_SENSITIVITY, $wide, 1e-9);
         $benign = $this->model->getForwardCreditLossMultiplier($bank, new MacroStateDTO(macroCreditSpreadEma: 0.0));
-        $this->assertEqualsWithDelta(1.0 - CommercialBankBusinessModel::CECL_BASELINE_CREDIT_SPREAD * CommercialBankBusinessModel::CECL_RESERVE_SPREAD_SENSITIVITY, $benign, 1e-9);
+        $this->assertEqualsWithDelta(1.0 - \App\Service\Macro\MacroEngine::BASE_CREDIT_SPREAD * CommercialBankBusinessModel::CECL_RESERVE_SPREAD_SENSITIVITY, $benign, 1e-9);
         $this->assertGreaterThanOrEqual(CommercialBankBusinessModel::CECL_RESERVE_MULTIPLIER_FLOOR, $benign);
     }
 

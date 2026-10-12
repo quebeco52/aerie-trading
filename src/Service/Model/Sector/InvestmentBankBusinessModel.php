@@ -61,8 +61,6 @@ class InvestmentBankBusinessModel extends BrokerageBusinessModel
     public const TRADING_VARIANCE_SCALAR    = 0.35;
 
     // --- Deal Flow Cost of Capital & Macro Elasticity ---
-    /** Baseline macro credit spread (through-the-cycle IG). Spreads below this stimulate DCM debt syndication. */
-    public const DEAL_BASELINE_CREDIT_SPREAD = MacroEngine::BASE_CREDIT_SPREAD;
     /** Neutral 5Y-over-policy term structure slope (~80bps: the five-year share of the term premium plus the usual policy discount). DCM stimulus is measured as deviation from this. */
     public const DCM_NEUTRAL_CURVE_SLOPE     = 0.008;
     /** Sensitivity of M&A deal flow to corporate expansion (output gap). */
@@ -324,7 +322,7 @@ class InvestmentBankBusinessModel extends BrokerageBusinessModel
 
         // --- M&A, DCM, and ECM Elasticity (Cost of Capital & Macro Channel) ---
         $advisoryMacroFactor = $this->resolveAdvisoryMacroFactor($macroState);
-        $creditSpreadGap = self::DEAL_BASELINE_CREDIT_SPREAD - $macroState->macroCreditSpreadEma;
+        $creditSpreadGap = $macroState->macroCreditSpreadTrend - $macroState->macroCreditSpreadEma;
         $vixEma = $macroState->marketVolatilityEma;
 
         // --- S&T Volatility Arbitrage, FICC Flow & Basel FRTB VaR Limits ---
@@ -491,7 +489,7 @@ class InvestmentBankBusinessModel extends BrokerageBusinessModel
      */
     private function resolveAdvisoryMacroFactor(\App\DTO\MacroStateDTO $macroState): float
     {
-        $dealActivityShift = ($macroState->dealActivityIndexEma - MacroEngine::DEAL_ACTIVITY_BASELINE) / MacroEngine::DEAL_ACTIVITY_BASELINE;
+        $dealActivityShift = $macroState->dealActivityDeviation();
         $dealActivity = $dealActivityShift * self::DEAL_ACTIVITY_INDEX_ELASTICITY;
 
         // 1. M&A: corporate expansion (output gap) and the deal cycle.
@@ -506,7 +504,7 @@ class InvestmentBankBusinessModel extends BrokerageBusinessModel
         $ecmStimulus = ($macroState->outputGapEma * self::ECM_OUTPUT_GAP_ELASTICITY) + $dealActivity - $freezeDiscount;
 
         // 3. DCM: credit spread tightness and the 5Y-over-policy slope against its neutral.
-        $creditSpreadGap = self::DEAL_BASELINE_CREDIT_SPREAD - $macroState->macroCreditSpreadEma;
+        $creditSpreadGap = $macroState->macroCreditSpreadTrend - $macroState->macroCreditSpreadEma;
         $curveSlopeGap = ($macroState->yield5yEma - $macroState->policyRateEma) - self::DCM_NEUTRAL_CURVE_SLOPE;
         $dcmStimulus = ($creditSpreadGap * self::DCM_CREDIT_SPREAD_ELASTICITY) + ($curveSlopeGap * self::DCM_CURVE_SLOPE_ELASTICITY);
 

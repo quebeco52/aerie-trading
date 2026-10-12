@@ -66,6 +66,8 @@ class SystemicEventReporter
             'interbank_spread_bps' => number_format($macro->interbankLiquiditySpread * 10000.0, 0),
             'hy_spread_pct' => number_format($macro->highYieldCreditSpread * 100.0, 2),
             'recession_prob_pct' => number_format($macro->recessionProbability * 100.0, 1),
+            'unemployment_pct' => number_format($macro->unemploymentRate * 100.0, 1),
+            'unemployment_rise_pts' => number_format($macro->sahmRecessionIndicator * 100.0, 1),
             'output_gap_pct' => number_format($macro->outputGap * 100.0, 2),
             'inversion_months' => number_format($macro->inversionDuration * 12.0, 1),
             'erp_pct' => number_format($macro->equityRiskPremium * 100.0, 2),

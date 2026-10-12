@@ -289,8 +289,10 @@ class MacroEngine
     public const CU_OVERHANG_SENSITIVITY = 0.40;
 
     // --- Estrella & Mishkin (1998) Yield Curve Recession Probit ---
-    /** Probit intercept parameter anchoring baseline recession probability around 15%. */
-    public const RECESSION_PROBIT_BETA_0 = -0.55;
+    /** Share of months the US spent in recession, 1945Q4-2019 (FRED USREC): what a calibrated 12-month recession forecast averages, and the outlook readers measure from. */
+    public const RECESSION_BASE_RATE = 0.138;
+    /** Probit intercept, set so the forecast averages RECESSION_BASE_RATE over this engine's cycle (a probit with an intercept reproduces its sample frequency). */
+    public const RECESSION_PROBIT_BETA_0 = -0.92;
     /** Probit sensitivity to sovereign yield curve slope (10Y minus policy rate). */
     public const RECESSION_PROBIT_BETA_SLOPE = -80.0;
     /** Adds back half the term premium so the probit reads the expectations component (slope minus premium), not premium-driven steepness (Rosenberg & Maurer 2008). */
@@ -344,6 +346,10 @@ class MacroEngine
     /** Baseline structural trade balance as a percentage of GDP (-2.5% neutral deficit). */
     public const TRADE_BALANCE_BASELINE = -0.025;
 
+    // --- DiPasquale-Wheaton Commercial Real Estate ---
+    /** Commercial property index at the engine's neutral (100.0): where the fundamental sits with every cap-rate input at its base, which AssetMarketSubsystem::CRE_NEUTRAL_CAP_RATE is built from. */
+    public const CRE_BASELINE = 100.0;
+
     // --- Tobin's Q Housing Investment Dynamics (Poterba 1984, Topel-Rosen 1988) ---
     /** Baseline housing starts activity index (100.0 = neutral construction equilibrium). */
     public const HOUSING_STARTS_BASELINE = 100.0;
@@ -383,6 +389,10 @@ class MacroEngine
     public const HOUSEHOLD_DSR_STRESS_MARGIN = 0.02;
     /** Spread of the 30-year mortgage over the ten-year (~170 bps), read by the housing user cost and the household debt service. */
     public const RESIDENTIAL_MORTGAGE_SPREAD = 0.017;
+    /** The ten-year at the engine's neutral: r* and the inflation target, plus the base term premium (4.65%). */
+    public const NEUTRAL_TEN_YEAR_YIELD = self::BASE_NATURAL_RATE + self::TARGET_INFLATION + self::NS_BASE_TERM_PREMIUM;
+    /** The 30-year mortgage rate at the engine's neutral, the neutral ten-year plus the mortgage spread (6.35%). */
+    public const NEUTRAL_MORTGAGE_RATE = self::NEUTRAL_TEN_YEAR_YIELD + self::RESIDENTIAL_MORTGAGE_SPREAD;
 
     // --- Deposits Channel (Drechsler, Savov & Schnabl 2017) ---
     /** System deposit rate per unit of policy rate: 0.46, US banks 1986-2013 (aggregate deposit spread beta 0.54; Drechsler, Savov & Schnabl 2017). The spread banks keep scales with the rate. */
@@ -404,7 +414,7 @@ class MacroEngine
 
 
     // --- District-Wide Systemic Event Triggers ---
-    /** Minimum simulated years between district-wide events, so a sustained crisis reports once rather than every tick. */
+    /** Minimum simulated years between district-wide events, so distinct crises arriving together report a quarter apart rather than on one tick. */
     public const SYSTEMIC_EVENT_COOLDOWN_YEARS = 0.25;
     /** Interbank spread (100 bps) marking a genuine wholesale funding freeze rather than routine tightness. */
     public const SYSTEMIC_LIQUIDITY_FREEZE_SPREAD = 0.0100;
@@ -412,10 +422,6 @@ class MacroEngine
     public const SYSTEMIC_CREDIT_SEIZURE_SPREAD = 0.1000;
     /** Sovereign risk spread (150 bps) at which the fiscal position is formally re-rated: the level at which an advanced sovereign loses its top rating. */
     public const SYSTEMIC_SOVEREIGN_STRESS_SPREAD = 0.015;
-    /** Recession probability above which the downturn is formally declared. */
-    public const SYSTEMIC_RECESSION_DECLARE_PROBABILITY = 0.50;
-    /** Output gap that must accompany the probability trigger, confirming output is genuinely contracting. */
-    public const SYSTEMIC_RECESSION_DECLARE_GAP = -0.010;
     /** Sustained inversion duration (years) that historically precedes a downturn and trips the curve alarm. */
     public const SYSTEMIC_INVERSION_ALARM_YEARS = 0.75;
 
@@ -735,11 +741,11 @@ class MacroEngine
     /**
      * Selects at most one district-wide systemic event per tick from the macro state just computed.
      *
-     * Edge-triggered with a refractory cooldown rather than level-triggered: a crisis satisfies its threshold
-     * for many consecutive ticks, so a level trigger would republish the same headline thousands of times per
-     * simulated year and bury the news feed. The event is a single-tick pulse -- consumers read it on the tick
-     * it fires and it is cleared on the next -- and the cooldown then suppresses further events until the
-     * regime has had time to develop.
+     * A crisis satisfies its threshold for many consecutive ticks, so each level alarm latches when it reports and
+     * re-arms only once its condition has cleared: one headline per episode, not one per cooldown for as long as
+     * the episode lasts. The event is a single-tick pulse -- consumers read it on the tick it fires and it is cleared
+     * on the next -- and the cooldown then holds further events back until the regime has had time to develop; an
+     * alarm held back stays armed and reports when the cooldown ends.
      *
      * Conditions are evaluated most-severe-first so a funding freeze outranks a recession declaration that
      * would inevitably accompany it.
@@ -748,6 +754,22 @@ class MacroEngine
     {
         // Pulse trigger: resets instantaneous systemic event classification before evaluation.
         $state->eventType = null;
+
+        // The episode each level alarm reports once in. Deleveraging reports when debt starts to fall inside one.
+        $episodes = [
+            ShockEvent::SYSTEMIC_LIQUIDITY_FREEZE => $state->interbankLiquiditySpread >= self::SYSTEMIC_LIQUIDITY_FREEZE_SPREAD,
+            ShockEvent::CREDIT_MARKET_SEIZURE => $state->highYieldCreditSpread >= self::SYSTEMIC_CREDIT_SEIZURE_SPREAD,
+            ShockEvent::SOVEREIGN_DOWNGRADE => $state->sovereignRiskSpread >= self::SYSTEMIC_SOVEREIGN_STRESS_SPREAD,
+            ShockEvent::RECESSION_DECLARED => self::inSahmRecession($state->sahmRecessionIndicator),
+            ShockEvent::HOUSEHOLD_DELEVERAGING => $state->householdDebtServiceGap >= self::HOUSEHOLD_DSR_STRESS_MARGIN,
+            ShockEvent::YIELD_CURVE_INVERSION_ALARM => $state->inversionDuration >= self::SYSTEMIC_INVERSION_ALARM_YEARS,
+        ];
+        foreach ($episodes as $alarm => $inEpisode) {
+            if (!$inEpisode) {
+                unset($state->systemicAlarmLatches[$alarm]);
+            }
+        }
+        $armed = static fn (string $alarm): bool => $episodes[$alarm] && !isset($state->systemicAlarmLatches[$alarm]);
 
         // Inside the cooldown only an edge-triggered event lands: the level conditions it suppresses must not outrank it.
         $edgeOnly = false;
@@ -779,16 +801,17 @@ class MacroEngine
             $state->lastSovereignRebalanceAt === $state->totalTime && $state->sovereignFundRebalanceBacklog < 0.0
             => ShockEvent::SOVEREIGN_WEALTH_TRIM,
 
-            !$edgeOnly && $state->interbankLiquiditySpread >= self::SYSTEMIC_LIQUIDITY_FREEZE_SPREAD
+            !$edgeOnly && $armed(ShockEvent::SYSTEMIC_LIQUIDITY_FREEZE)
             => ShockEvent::SYSTEMIC_LIQUIDITY_FREEZE,
 
-            !$edgeOnly && $state->highYieldCreditSpread >= self::SYSTEMIC_CREDIT_SEIZURE_SPREAD
+            !$edgeOnly && $armed(ShockEvent::CREDIT_MARKET_SEIZURE)
             => ShockEvent::CREDIT_MARKET_SEIZURE,
 
-            !$edgeOnly && $state->sovereignRiskSpread >= self::SYSTEMIC_SOVEREIGN_STRESS_SPREAD
+            !$edgeOnly && $armed(ShockEvent::SOVEREIGN_DOWNGRADE)
             => ShockEvent::SOVEREIGN_DOWNGRADE,
 
-            !$edgeOnly && self::isRecession($state->recessionProbability, $state->outputGap)
+            // Sahm (2019): the jobless rate's three-month average half a point over its low of the year before.
+            !$edgeOnly && $armed(ShockEvent::RECESSION_DECLARED)
             => ShockEvent::RECESSION_DECLARED,
 
             // Natural catastrophe physical damage shock event (Hallegatte et al. 2007).
@@ -797,11 +820,11 @@ class MacroEngine
 
             // Drehmann & Juselius (2012) household balance sheet debt-service deleveraging shock.
             !$edgeOnly
-                && $state->householdDebtServiceGap >= self::HOUSEHOLD_DSR_STRESS_MARGIN
+                && $armed(ShockEvent::HOUSEHOLD_DELEVERAGING)
                 && $state->householdDebtToIncome < $state->householdDebtToIncomeEma
             => ShockEvent::HOUSEHOLD_DELEVERAGING,
 
-            !$edgeOnly && $state->inversionDuration >= self::SYSTEMIC_INVERSION_ALARM_YEARS
+            !$edgeOnly && $armed(ShockEvent::YIELD_CURVE_INVERSION_ALARM)
             => ShockEvent::YIELD_CURVE_INVERSION_ALARM,
 
             default => null,
@@ -809,21 +832,19 @@ class MacroEngine
 
         if ($eventType !== null) {
             $state->eventType = $eventType;
+            if (isset($episodes[$eventType])) {
+                $state->systemicAlarmLatches[$eventType] = $state->totalTime;
+            }
             // District-wide systemic crisis refractory cooldown timer arming.
             $state->eventCooldownTimer = self::SYSTEMIC_EVENT_COOLDOWN_YEARS;
         }
     }
 
     /**
-     * Whether the District is in a recession it has formally declared: the probit's odds of one above even, with output
-     * a point below potential to confirm it. The downturn the RECESSION_DECLARED headline names.
+     * Whether unemployment says a recession is under way: the Sahm rule's reading at its threshold or above. The downturn
+     * the RECESSION_DECLARED headline names, the Diet's budget treats as a recession and the rate committee cuts into.
+     * The yield-curve probit forecasts one a year out and falls once the Authority cuts, so it cannot confirm one.
      */
-    public static function isRecession(float $recessionProbability, float $outputGap): bool
-    {
-        return $recessionProbability >= self::SYSTEMIC_RECESSION_DECLARE_PROBABILITY && $outputGap <= self::SYSTEMIC_RECESSION_DECLARE_GAP;
-    }
-
-    /** Whether unemployment says a recession is under way: the Sahm rule's reading at its threshold or above. */
     public static function inSahmRecession(float $sahmIndicator): bool
     {
         return $sahmIndicator >= self::SAHM_RECESSION_THRESHOLD;

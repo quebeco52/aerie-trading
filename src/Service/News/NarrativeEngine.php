@@ -334,10 +334,10 @@ class NarrativeEngine
                 ]
             ),
             ShockEvent::RECESSION_DECLARED => $this->getRandomPhrase(
-                isset($context['recession_prob_pct']) || isset($context['output_gap_pct']) ? [
-                    "Recession confirmed: Macroeconomic indicators signaled a " . ($context['recession_prob_pct'] ?? '50+') . "% recession probability as real GDP output contracted to " . ($context['output_gap_pct'] ?? 'negative') . "%.",
-                    "Technical recession confirmed: Consecutive quarters of output contraction (" . ($context['output_gap_pct'] ?? 'negative') . "% output gap) and softening labor conditions met statutory recession criteria (" . ($context['recession_prob_pct'] ?? '50+') . "% probability).",
-                    "Macroeconomic downturn confirmed: Econometric models signaled recession probability reached " . ($context['recession_prob_pct'] ?? 'elevated') . "% amid broad output contraction (" . ($context['output_gap_pct'] ?? 'negative') . "% output gap).",
+                isset($context['unemployment_rise_pts']) || isset($context['output_gap_pct']) ? [
+                    "Recession confirmed: Unemployment has climbed " . ($context['unemployment_rise_pts'] ?? 'half a point or more') . " points off its low of the past year to " . ($context['unemployment_pct'] ?? 'a higher') . "%, with output " . ($context['output_gap_pct'] ?? 'below') . "% against potential.",
+                    "Downturn under way: Job losses have lifted the jobless rate to " . ($context['unemployment_pct'] ?? 'a higher') . "%, " . ($context['unemployment_rise_pts'] ?? 'half a point or more') . " points above its low of the past year, the mark every past recession has crossed in its first months.",
+                    "Recession confirmed: Layoffs spread as the jobless rate rose " . ($context['unemployment_rise_pts'] ?? 'half a point or more') . " points in under a year; output stands " . ($context['output_gap_pct'] ?? 'below') . "% against potential.",
                 ] : [
                     "Recession confirmed: Macroeconomic indicators signaled sustained output contraction and rising economic slack.",
                     "Technical recession confirmed: Contracting aggregate output and deteriorating labor conditions met formal recession criteria.",

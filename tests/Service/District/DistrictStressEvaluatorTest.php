@@ -63,9 +63,9 @@ class DistrictStressEvaluatorTest extends TestCase
         $this->assertTrue($this->evaluator->evaluate($macro)['credit-registry']);
     }
 
-    public function testCreditRegistryStressedByDeclaredRecessionProbability(): void
+    public function testCreditRegistryStressedByEvenOddsOfRecession(): void
     {
-        $macro = new MacroStateDTO(recessionProbabilityEma: MacroEngine::SYSTEMIC_RECESSION_DECLARE_PROBABILITY);
+        $macro = new MacroStateDTO(recessionProbabilityEma: 0.50);
 
         $this->assertTrue($this->evaluator->evaluate($macro)['credit-registry']);
     }
@@ -86,7 +86,7 @@ class DistrictStressEvaluatorTest extends TestCase
 
     public function testStatisticalOfficeStressedByRecessionaryOutputGap(): void
     {
-        $macro = new MacroStateDTO(outputGapEma: MacroEngine::SYSTEMIC_RECESSION_DECLARE_GAP);
+        $macro = new MacroStateDTO(outputGapEma: -0.010);
 
         $this->assertTrue($this->evaluator->evaluate($macro)['statistical-office']);
     }

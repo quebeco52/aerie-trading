@@ -26,13 +26,10 @@ use PHPUnit\Framework\TestCase;
  * force at both ends of the cycle. The ceiling is now one-sided (Friedman 1993 plucking; Dupraz, Nakamura &
  * Steinsson 2019) and the stabilisers act within the year.
  *
- * The shape is still not there. Measured over 200 seeds -- 25 independent 8-seed groups at this class's own
- * settings -- the pooled skew averages -0.075 with a standard deviation of 0.117 ACROSS groups, so the skew
- * bound below holds on only 40% of 8-seed draws and the -3% floor on 68%. An earlier single reading of -0.20
- * was one draw from that distribution, not the engine's level. Separating -0.075 from a symmetric +0.02 needs
- * the pooled standard error under 0.03, about 128 seeds; at eight the statistic cannot carry a bound at all.
- * The two claims that depend on it are therefore marked incomplete, and the bounds that hold on every seed
- * set stay live -- they exist to catch the return of a symmetric cycle, not to pin any particular constant.
+ * The left tail is now there: over 48 seeds at this class's own settings (six 8-seed groups) the skew averages
+ * -0.42 with a standard deviation of 0.24 ACROSS groups (CBO -0.32), and every group puts at least 5% of quarters
+ * below -3% (CBO 10%). The descent is not: busts still fall no faster than booms climb. The bounds exist to catch
+ * the return of a symmetric cycle, not to pin any particular constant.
  */
 class BusinessCycleRealismTest extends TestCase
 {
@@ -70,29 +67,26 @@ class BusinessCycleRealismTest extends TestCase
         $belowThree = count(array_filter($gaps, static fn (float $g): bool => $g < -0.03)) / $count;
         $aboveTwo = count(array_filter($gaps, static fn (float $g): bool => $g > 0.02)) / $count;
 
-        // Live on every one of the 25 measured seed sets, so a regression here is a real one.
+        // Live on every measured seed set, so a regression here is a real one.
         $this->assertLessThan(0.16, $belowThree, 'A recession must stay an episode rather than the usual state of the world.');
         $this->assertLessThan(0.20, $aboveTwo, 'The economy must not spend a fifth of its life running two percent hot.');
         $this->assertEqualsWithDelta(0.0, $mean, 0.008, 'A cyclical gap averages near zero over four decades.');
         $this->assertGreaterThan(0.010, $stdDev, 'The cycle has to actually move.');
         $this->assertLessThan(0.030, $stdDev, 'And stay inside business-cycle amplitude.');
 
-        // NOT YET MET. CBO: skew -0.32 since 1949 (-1.20 since 1985), with 10.0% of post-war quarters below
-        // -3% (7.8% since 1985). Both targets need a bust with an amplifier of its own; the Schularick-Taylor
-        // hazard is in but is not reaching the gap, so the engine's left tail is still policy-lag alone.
-        $this->markTestIncomplete(sprintf(
-            'The cycle is not reliably left-skewed: skew %+.3f against a target below -0.10, and %.1f%% of quarters below -3%% against a 2%% floor.',
-            $skew,
-            $belowThree * 100.0
-        ));
+        // CBO: skew -0.32 since 1949 (-1.20 since 1985), with 10.0% of post-war quarters below -3% (7.8% since 1985).
+        // The symmetric engine read +0.02 and 0.4%. The tail floor is what catches that: the lowest of six groups puts
+        // 5.0% below -3%. The skew is only held below zero, since an 8-seed group at -0.42 +- 0.24 would cross a
+        // tighter bound on one change in ten that reshuffles the paths without changing the shape.
+        $this->assertLessThan(0.0, $skew, 'The cycle must be left-skewed: contractions are deeper than expansions are high.');
+        $this->assertGreaterThan(0.02, $belowThree, 'A real left tail: some quarters must fall three points below potential.');
     }
 
     public function testContractionsDescendFasterThanExpansionsClimb(): void
     {
-        // NOT YET MET. With the one-sided ceiling busts reach their trough at 1.7-1.9pp a year against booms at
-        // 1.8-2.0 (8 seeds x 60y, production tick rate): the depth is there but the descent is not, because a
-        // bust still has no amplifier of its own -- credit is a function of the gap and cannot turn on its own.
-        // A credit-cycle crisis hazard (Schularick & Taylor 2012) on the credit-to-GDP gap is the candidate.
+        // NOT YET MET. Busts reach their trough at 1.55pp a year against booms at 1.51 (48 seeds x 35y, six 8-seed
+        // groups: +0.04 +- 0.57pp, faster in three of six): the depth is there but the descent is not. The credit-cycle
+        // crisis hazard (Schularick & Taylor 2012) once named here as the candidate is in, and has not supplied it.
         $this->markTestIncomplete('Contractions do not yet descend faster than expansions climb: a bust has no amplifier of its own.');
 
         // @phpstan-ignore deadCode.unreachable

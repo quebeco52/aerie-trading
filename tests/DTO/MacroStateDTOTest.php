@@ -187,4 +187,36 @@ class MacroStateDTOTest extends TestCase
         $this->assertTrue($dto->qeActive);
         $this->assertEquals('STIMULUS', $dto->eventType);
     }
+
+    /**
+     * Each series settles away from the constant it is built on (the currency on either side, house prices below,
+     * unemployment above after a slump), so a firm reads it against the level the engine measures it settling at:
+     * at that level there is nothing to read, whatever the constant says.
+     */
+    public function testCyclicalReadingsAreTakenAgainstTheMeasuredLevelNotTheBuildConstant(): void
+    {
+        $atTrend = new MacroStateDTO(
+            exchangeRateIndexEma: 103.2,
+            exchangeRateTrend: 103.2,
+            residentialPropertyIndexEma: 98.6,
+            residentialWealthTrend: 98.6,
+            unemploymentRateEma: 0.0475,
+            nairuEma: 0.0475,
+        );
+        $this->assertSame(0.0, $atTrend->exchangeRateGap());
+        $this->assertSame(0.0, $atTrend->housePriceDeviation());
+        $this->assertSame(0.0, $atTrend->unemploymentGap());
+
+        $moved = new MacroStateDTO(
+            exchangeRateIndexEma: 103.2 * exp(0.05),
+            exchangeRateTrend: 103.2,
+            residentialPropertyIndexEma: 98.6 * 0.9,
+            residentialWealthTrend: 98.6,
+            unemploymentRateEma: 0.0575,
+            nairuEma: 0.0475,
+        );
+        $this->assertEqualsWithDelta(0.05, $moved->exchangeRateGap(), 1e-12, 'An appreciation is positive, in logs.');
+        $this->assertEqualsWithDelta(-0.10, $moved->housePriceDeviation(), 1e-12);
+        $this->assertEqualsWithDelta(0.01, $moved->unemploymentGap(), 1e-12, 'A point of slack over the scarred natural rate, not over the founding one.');
+    }
 }

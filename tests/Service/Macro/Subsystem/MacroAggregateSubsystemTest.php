@@ -288,7 +288,7 @@ class MacroAggregateSubsystemTest extends TestCase
         $this->subsystem->calculateManufacturingPmi($stateBoom, $dt);
         $this->assertGreaterThan(50.0, $stateBoom->manufacturingPmi, 'Expansionary signals must push PMI above neutral 50');
 
-        // Contraction: low capacity, deceleration, inventory overhang, bank credit tightening
+        // Contraction: low capacity, deceleration, inventory overhang
         $stateBust = new MacroState();
         $stateBust->capacityUtilizationRate = 0.74;
         $stateBust->outputGap = -0.02;
@@ -299,6 +299,25 @@ class MacroAggregateSubsystemTest extends TestCase
 
         $this->subsystem->calculateManufacturingPmi($stateBust, $dt);
         $this->assertLessThan(50.0, $stateBust->manufacturingPmi, 'Contractionary signals must depress PMI below neutral 50');
+    }
+
+    /**
+     * Nine industrial models read the index against 50. A one-sided bank-standards leg, which is no ISM component, took
+     * ~0.9 points off it at rest, so it settled near 49 and every one of them booked a standing contraction.
+     */
+    public function testPmiRestsAtFiftyWhenActivityDoesWhateverBanksAreDoing(): void
+    {
+        $state = new MacroState();
+        $state->capacityUtilizationRate = MacroEngine::CU_BASELINE;
+        $state->outputGap = 0.0;
+        $state->outputGapEma = 0.0;
+        $state->inventoryStockGap = 0.0;
+        $state->sloosTighteningIndexEma = 0.25;
+        $state->manufacturingPmi = MacroEngine::PMI_BASELINE;
+
+        $this->subsystem->calculateManufacturingPmi($state, 0.25);
+
+        $this->assertEqualsWithDelta(MacroEngine::PMI_BASELINE, $state->manufacturingPmi, 1e-12);
     }
 
     /**
@@ -2174,5 +2193,33 @@ class MacroAggregateSubsystemTest extends TestCase
         $carbonPush = MacroAggregateSubsystem::CPI_ELECTRICITY_WEIGHT * ($taxed->electricityCarbonPriceLevel - $priorCarbon) / 0.25;
         $this->assertGreaterThan(0.0, $carbonPush);
         $this->assertEqualsWithDelta($taxed->supercoreInflation + ($carbonPush / MacroAggregateSubsystem::domesticDeflatorWeight()), $taxed->domesticInflation, 1e-15);
+    }
+
+    /**
+     * Firms price their wholesale input cost as the PPI against the inflation target, so an index whose cost shares
+     * summed to 0.85 settled 0.3pp under it and handed every PPI-exposed firm a standing input-cost discount.
+     */
+    public function testProducerPricesRunAtTheTargetWhenEveryCostIsAtTrend(): void
+    {
+        $this->assertEqualsWithDelta(
+            1.0,
+            MacroEngine::PPI_METALS_WEIGHT + MacroEngine::PPI_ENERGY_WEIGHT + MacroAggregateSubsystem::PPI_AGRI_WEIGHT
+                + MacroAggregateSubsystem::PPI_ULC_WEIGHT + MacroAggregateSubsystem::PPI_OTHER_COST_WEIGHT,
+            1e-12
+        );
+
+        $tfpGrowth = 0.012;
+        $state = new MacroState();
+        $state->industrialMetalsIndexTrend = $state->industrialMetalsIndex;
+        $state->energyPriceIndexTrend = $state->energyPriceIndex;
+        $state->agriculturalCommodityIndexTrend = $state->agriculturalCommodityIndex;
+        $state->supplyChainPressureIndex = 0.0;
+        $state->outputGap = 0.0;
+        $state->wageGrowth = MacroEngine::TARGET_INFLATION + $tfpGrowth;
+        $state->tipsBreakeven = MacroEngine::TARGET_INFLATION;
+
+        $this->subsystem->calculateProducerPriceInflation($state, $tfpGrowth, 1.0 / 3600.0);
+
+        $this->assertEqualsWithDelta(MacroEngine::TARGET_INFLATION, $state->producerPriceInflation, 1e-12);
     }
 }

@@ -17,7 +17,7 @@ use ReflectionMethod;
  * MacroState::$eventType is consumed by MarketTickerCommand to publish an
  * index-level headline against the LBI ETF. These tests pin the two properties that make that channel
  * usable: the right regime produces the right event, and a crisis that persists for thousands of ticks
- * reports a handful of times rather than flooding the 50-item news feed.
+ * reports once rather than flooding the 50-item news feed.
  */
 class SystemicEventTest extends TestCase
 {
@@ -61,19 +61,24 @@ class SystemicEventTest extends TestCase
         $this->assertSame(ShockEvent::CREDIT_MARKET_SEIZURE, $this->fire($state));
     }
 
-    public function testRecessionIsDeclaredOnlyWhenOutputIsAlsoContracting(): void
+    /**
+     * The yield-curve probit forecasts a recession a year out and falls once the Authority cuts, so in the depth of one it
+     * reads a few percent; the jobless rate is what says one is under way, and what the Diet and the committee act on.
+     */
+    public function testRecessionIsDeclaredOnTheJoblessRateNotTheForecast(): void
     {
-        $probabilityOnly = new MacroState();
-        $probabilityOnly->recessionProbability = MacroEngine::SYSTEMIC_RECESSION_DECLARE_PROBABILITY + 0.2;
-        $probabilityOnly->outputGap = 0.01; // Elevated probability, but output is still expanding.
+        $forecastOnly = new MacroState();
+        $forecastOnly->recessionProbability = 0.9;
+        $forecastOnly->outputGap = -0.02;
 
-        $this->assertNull($this->fire($probabilityOnly), 'A recession forecast alone must not declare a recession.');
+        $this->assertNull($this->fire($forecastOnly), 'A recession forecast alone must not declare a recession.');
 
-        $confirmed = new MacroState();
-        $confirmed->recessionProbability = MacroEngine::SYSTEMIC_RECESSION_DECLARE_PROBABILITY + 0.2;
-        $confirmed->outputGap = MacroEngine::SYSTEMIC_RECESSION_DECLARE_GAP - 0.01;
+        $underWay = new MacroState();
+        $underWay->recessionProbability = 0.03;
+        $underWay->outputGap = -0.03;
+        $underWay->sahmRecessionIndicator = MacroEngine::SAHM_RECESSION_THRESHOLD;
 
-        $this->assertSame(ShockEvent::RECESSION_DECLARED, $this->fire($confirmed));
+        $this->assertSame(ShockEvent::RECESSION_DECLARED, $this->fire($underWay), 'Unemployment half a point off its low declares one, whatever the curve says.');
     }
 
     public function testSustainedCurveInversionTripsTheAlarm(): void
@@ -172,8 +177,7 @@ class SystemicEventTest extends TestCase
         $state = new MacroState();
         $state->interbankLiquiditySpread = MacroEngine::SYSTEMIC_LIQUIDITY_FREEZE_SPREAD + 0.005;
         $state->highYieldCreditSpread = MacroEngine::SYSTEMIC_CREDIT_SEIZURE_SPREAD + 0.02;
-        $state->recessionProbability = 0.9;
-        $state->outputGap = -0.05;
+        $state->sahmRecessionIndicator = 0.01;
 
         $this->assertSame(
             ShockEvent::SYSTEMIC_LIQUIDITY_FREEZE,
@@ -191,7 +195,7 @@ class SystemicEventTest extends TestCase
         $this->assertNull($this->fire($state), 'The event must clear on the next tick rather than latching on.');
     }
 
-    public function testSustainedCrisisDoesNotFloodTheNewsFeed(): void
+    public function testSustainedCrisisReportsOncePerEpisode(): void
     {
         $state = new MacroState();
         $state->highYieldCreditSpread = MacroEngine::SYSTEMIC_CREDIT_SEIZURE_SPREAD + 0.02;
@@ -203,17 +207,44 @@ class SystemicEventTest extends TestCase
             }
         }
 
-        $expected = (int) round(1.0 / MacroEngine::SYSTEMIC_EVENT_COOLDOWN_YEARS);
+        $this->assertSame(1, $fired, 'A year-long crisis is one headline, not one per cooldown window.');
 
-        $this->assertSame(
-            $expected,
-            $fired,
-            sprintf(
-                'A year-long crisis must report once per cooldown window (%d), not once per tick (%d).',
-                $expected,
-                self::TICKS_PER_YEAR
-            )
-        );
+        $state->highYieldCreditSpread = MacroEngine::SYSTEMIC_CREDIT_SEIZURE_SPREAD - 0.02;
+        $this->assertNull($this->fire($state), 'The seizure eases.');
+
+        $state->highYieldCreditSpread = MacroEngine::SYSTEMIC_CREDIT_SEIZURE_SPREAD + 0.02;
+        $this->assertSame(ShockEvent::CREDIT_MARKET_SEIZURE, $this->fire($state), 'A fresh seizure is fresh news.');
+    }
+
+    public function testAnAlarmHeldBackByTheCooldownReportsWhenItEnds(): void
+    {
+        $state = new MacroState();
+        $state->interbankLiquiditySpread = MacroEngine::SYSTEMIC_LIQUIDITY_FREEZE_SPREAD + 0.005;
+        $state->sahmRecessionIndicator = MacroEngine::SAHM_RECESSION_THRESHOLD + 0.002;
+        $first = $this->fire($state);
+        $this->assertSame(ShockEvent::SYSTEMIC_LIQUIDITY_FREEZE, $first);
+
+        $headlines = [];
+        for ($tick = 0; $tick < self::TICKS_PER_YEAR; $tick++) {
+            $event = $this->fire($state);
+            if ($event !== null) {
+                $headlines[] = $event;
+            }
+        }
+
+        $this->assertSame([ShockEvent::RECESSION_DECLARED], $headlines, 'The recession the freeze outranked is reported once the cooldown lets it through, and only once.');
+    }
+
+    public function testTheAlarmLatchSurvivesSerializationRoundTrip(): void
+    {
+        $state = new MacroState();
+        $state->sahmRecessionIndicator = MacroEngine::SAHM_RECESSION_THRESHOLD + 0.002;
+        $this->assertSame(ShockEvent::RECESSION_DECLARED, $this->fire($state));
+
+        $restored = MacroState::fromArray(\App\DTO\MacroStateDTO::fromMacroState($state)->toArray());
+        $restored->eventCooldownTimer = 0.0;
+
+        $this->assertNull($this->fire($restored), 'A reload mid-recession must not declare it a second time.');
     }
 
     public function testCooldownSurvivesSerializationRoundTrip(): void
@@ -249,8 +280,7 @@ class SystemicEventTest extends TestCase
     {
         $state = new MacroState();
         $state->sovereignRiskSpread = MacroEngine::SYSTEMIC_SOVEREIGN_STRESS_SPREAD + 0.005;
-        $state->recessionProbability = 0.9;
-        $state->outputGap = -0.05;
+        $state->sahmRecessionIndicator = 0.01;
         $this->assertSame(ShockEvent::SOVEREIGN_DOWNGRADE, $this->fire($state));
 
         $state->eventCooldownTimer = 0.0;
@@ -268,13 +298,11 @@ class SystemicEventTest extends TestCase
         $this->assertSame(ShockEvent::NATURAL_CATASTROPHE, $this->fire($state));
 
         $state->eventCooldownTimer = 0.0;
-        $state->recessionProbability = 0.9;
-        $state->outputGap = -0.05;
+        $state->sahmRecessionIndicator = 0.01;
         $this->assertSame(ShockEvent::RECESSION_DECLARED, $this->fire($state), 'A declared recession outranks a storm.');
 
         $state->eventCooldownTimer = 0.0;
-        $state->recessionProbability = 0.1;
-        $state->outputGap = 0.0;
+        $state->sahmRecessionIndicator = 0.0;
         $state->totalTime += 1.0 / self::TICKS_PER_YEAR;
         $this->assertNull($this->fire($state), 'Yesterday\'s storm is not today\'s news.');
     }
@@ -326,8 +354,7 @@ class SystemicEventTest extends TestCase
         $state->eventCooldownTimer = 0.15;
         $state->interbankLiquiditySpread = MacroEngine::SYSTEMIC_LIQUIDITY_FREEZE_SPREAD + 0.005;
         $state->highYieldCreditSpread = MacroEngine::SYSTEMIC_CREDIT_SEIZURE_SPREAD + 0.02;
-        $state->recessionProbability = 0.9;
-        $state->outputGap = -0.05;
+        $state->sahmRecessionIndicator = 0.01;
         $state->lastCatastropheAt = 3.0;
         $state->lastCatastropheSeverity = 2.0;
 

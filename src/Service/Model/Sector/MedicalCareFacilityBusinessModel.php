@@ -196,7 +196,7 @@ class MedicalCareFacilityBusinessModel extends StandardCorporateBusinessModel
     private function resolvePatientVolumeShifts(Stock $stock, MacroStateDTO $macroState): array
     {
         $govShift = ($macroState->governmentSpendingIndexEma - 100.0) / 100.0;
-        $unemploymentGap = max(0.0, $macroState->unemploymentRateEma - MacroEngine::NATURAL_UNEMPLOYMENT);
+        $unemploymentGap = max(0.0, $macroState->unemploymentGap());
 
         return [
             'inpatient_care'      => $govShift * self::INPATIENT_GOVERNMENT_SPENDING_SENSITIVITY,
@@ -334,6 +334,7 @@ class MedicalCareFacilityBusinessModel extends StandardCorporateBusinessModel
             'exchange_rate_index_ema',
             'government_spending_index_ema',
             'inflation_ema',
+            'nairu_ema',
             'output_gap_ema',
             'reimbursement_rate_growth',
             'supercore_inflation_ema',

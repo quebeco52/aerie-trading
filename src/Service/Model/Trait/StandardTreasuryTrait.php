@@ -8,7 +8,6 @@ use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use App\Service\Math\MathUtility;
 use App\Service\Math\FinancialConstants;
-use App\Service\Macro\MacroEngine;
 
 trait StandardTreasuryTrait
 {
@@ -50,7 +49,7 @@ trait StandardTreasuryTrait
 
     public function calculateCashYield(MacroStateDTO $macroState): float
     {
-        return max(0.0, $macroState->policyRateEma - MacroEngine::CASH_YIELD_SPREAD);
+        return $macroState->moneyMarketYield();
     }
 
     /** An operating company's treasury is cash and money-market paper. Nothing in it has duration to mark. */

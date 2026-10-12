@@ -139,13 +139,9 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
     public const MAX_CREDIT_RISK_APPETITE      = 1.00;
 
     // --- CECL Forward Reserve (ASC 326 lifetime allowance conditioned on the macro forecast) ---
-    /** Baseline investment-grade corporate credit spread (macro through-the-cycle IG); the lifetime loss estimate is struck at 1.0x here. */
-    public const CECL_BASELINE_CREDIT_SPREAD   = MacroEngine::BASE_CREDIT_SPREAD;
     /** Lifetime-loss multiplier per unit of IG spread widening: +300bps lifts the reserve target ~0.36x. */
     public const CECL_RESERVE_SPREAD_SENSITIVITY = 12.0;
-    /** Baseline 12-month forward recession probability (~15%); the lifetime loss estimate is struck at 1.0x here. */
-    public const CECL_BASELINE_RECESSION_PROB  = 0.15;
-    /** Lifetime-loss multiplier per unit of recession probability above baseline: a near-certain recession lifts the target ~0.85x (large-bank allowances went 1.4% -> 3.3% of loans in 2020 with spreads). */
+    /** Lifetime-loss multiplier per unit of recession probability away from the base rate: a near-certain recession lifts the target ~0.85x (large-bank allowances went 1.4% -> 3.3% of loans in 2020 with spreads). */
     public const CECL_RESERVE_RECESSION_SENSITIVITY = 1.00;
     /** Floor on the forecast multiplier: a benign outlook releases part of the through-the-cycle reserve, never most of it. */
     public const CECL_RESERVE_MULTIPLIER_FLOOR = 0.75;
@@ -417,7 +413,7 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
     /** The return the franchise is calibrated to: the lender's structural ROE, never below the cost-of-equity proxy. */
     protected function resolveCalibrationRoe(Stock $stock, MacroStateDTO $macroState): float
     {
-        return max($macroState->yield10yEma + $macroState->equityRiskPremium, max(0.01, (float) $stock->getBaselineRoe()));
+        return max($macroState->marketCostOfEquity(), max(0.01, (float) $stock->getBaselineRoe()));
     }
 
     /**
@@ -606,7 +602,7 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
     private function resolveSaturationYield(Stock $stock, MacroStateDTO $macroState): float
     {
         $penalty = \App\Service\Corporate\CorporateMetrics::getInstance()->calculateMarketSaturationPenalty($stock, max(1.0, (float) $stock->getTotalEquity()), $macroState);
-        $headroom = max(0.0, max(0.01, (float) $stock->getBaselineRoe()) - ($macroState->yield10yEma + $macroState->equityRiskPremium));
+        $headroom = max(0.0, max(0.01, (float) $stock->getBaselineRoe()) - $macroState->marketCostOfEquity());
 
         return min($penalty, $headroom) * max(1.0, $stock->getTangibleEquity())
             / ((1.0 - $macroState->corporateTaxRate) * max(1.0, $this->resolveEarningAssets($stock)));
@@ -774,13 +770,13 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
     /**
      * ASC 326 reasonable-and-supportable forecast: the lifetime loss estimate scales with how much worse than
      * through-the-cycle the outlook is, read off the two forward indicators a reserving committee watches,
-     * IG credit spreads and the 12-month recession probability. Widening and rising risk lift the target
-     * (a build, booked once by the roll-forward); a benign outlook releases down to the floor.
+     * IG credit spreads and the 12-month recession probability, each against its own average. Widening and rising
+     * risk lift the target (a build, booked once by the roll-forward); a benign outlook releases down to the floor.
      */
     public function getForwardCreditLossMultiplier(?Stock $stock, MacroStateDTO $macroState): float
     {
-        $spreadGap = $macroState->macroCreditSpreadEma - static::CECL_BASELINE_CREDIT_SPREAD;
-        $recessionGap = max(0.0, $macroState->recessionProbabilityEma - static::CECL_BASELINE_RECESSION_PROB);
+        $spreadGap = $macroState->macroCreditSpreadEma - $macroState->macroCreditSpreadTrend;
+        $recessionGap = $macroState->recessionProbabilityEma - MacroEngine::RECESSION_BASE_RATE;
 
         $multiplier = 1.0
             + ($spreadGap * static::CECL_RESERVE_SPREAD_SENSITIVITY * $this->resolveSpreadReserveBeta($stock))
