@@ -123,12 +123,12 @@ class MacroAggregateSubsystem
     /** US finance and insurance value added over GDP, 2005-2019 average (BEA via FRED VAPGDPFI, 7.18%): the share the US-fitted demand equation already carries. */
     public const US_FINANCE_SHARE = 0.072;
     /** Credit intermediation's share of the District's finance (banks, credit services, mortgage finance), by the seeded roster's book equity; its volume follows deflated loan balances, the only finance with a volume cycle of its own here. */
-    public const FINANCE_CREDIT_SHARE = 0.391;
+    public const FINANCE_CREDIT_SHARE = 0.331;
     /** Weight of the finance cycle in the gap: the District's finance share less the US share the fitted equation carries on the District's smaller rest of the economy (0.246). */
     public const FINANCE_GAP_WEIGHT = self::DISTRICT_FINANCE_SHARE - ((1.0 - self::DISTRICT_FINANCE_SHARE) * self::US_FINANCE_SHARE / (1.0 - self::US_FINANCE_SHARE));
     /** Domestic demand the District's imports carry abroad beyond the leak the fitted (US) equation already has: imports move 1.4 times domestic demand (IMF WEO 2015) on the District's imports for home use less the US's. */
     public const EXCESS_IMPORT_LEAKAGE = self::IMPORT_DEMAND_ELASTICITY * (self::DISTRICT_DOMESTIC_IMPORT_SHARE - self::US_DOMESTIC_IMPORT_SHARE);
-    /** Weight of domestic demand in the gap: everything but the bank credit cycle, net of the excess imports it draws in (0.577). Market-based finance (funds, brokers, exchanges, investment banks: 0.250 of finance) is in it, as insurance is: national accounts do not count its output at the value of the assets it manages (BEA 2026 annual update: portfolio management volume extrapolated from the industry's employment, replacing a fee PPI that tracks asset values). */
+    /** Weight of domestic demand in the gap: everything but the bank credit cycle, net of the excess imports it draws in (0.586). Market-based finance (funds, brokers, exchanges, investment banks: 0.226 of finance) is in it, as insurance is: national accounts do not count its output at the value of the assets it manages (BEA 2026 annual update: portfolio management volume extrapolated from the industry's employment, replacing a fee PPI that tracks asset values). */
     public const DOMESTIC_GAP_WEIGHT = (1.0 - (self::FINANCE_GAP_WEIGHT * self::FINANCE_CREDIT_SHARE)) * (1.0 - self::EXCESS_IMPORT_LEAKAGE);
 
     // --- KALDOR-KALECKI 2D LIMIT CYCLE ---

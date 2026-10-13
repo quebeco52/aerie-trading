@@ -5,8 +5,7 @@ declare(strict_types=1);
 use App\Entity\CorporateReport;
 use App\Entity\Stock;
 use App\Service\Macro\MacroEngine;
-use App\Service\Market\MarketOperator;
-use App\Service\Market\StockTracker;
+use App\Service\Market\Pricing\StockTracker;
 use Doctrine\DBAL\Connection;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\EntityRepository;
@@ -15,7 +14,7 @@ use Symfony\Component\Console\Tester\CommandTester;
 
 /**
  * The board's total market value over the first quarter, exactly as var/harness/FullMarketHarnessTest.php runs it
- * (production container, in-memory Redis, real seed, live macro fed the board cap, operator every tpy/24).
+ * (production container, in-memory Redis, real seed, live macro fed the board cap).
  * Records StockTracker::updateStocks()['total_cap'] every tick, plus each firm's price x shares at tick 1 and at
  * the end of the quarter.
  *
@@ -70,11 +69,9 @@ final class OpeningCapTest extends KernelTestCase
 
         $macro = $c->get(MacroEngine::class);
         $tracker = $c->get(StockTracker::class);
-        $operator = $c->get(MarketOperator::class);
         $list = array_values($stocks);
         $dt = 1.0 / $tpy;
         $ticks = (int) round($tpy / 4);
-        $operatorInterval = (int) max(1, $tpy / 24);
         $lastCap = null;
         $caps = [];
         $firm1 = [];
@@ -82,9 +79,6 @@ final class OpeningCapTest extends KernelTestCase
 
         for ($tick = 1; $tick <= $ticks; $tick++) {
             $m = $macro->updateMacroState($dt, $lastCap);
-            if ($tick % $operatorInterval === 0) {
-                $operator->enforceMarketStability($list, $m);
-            }
             $result = $tracker->updateStocks($list, $dt, false, $m, $tick, $tpy);
             $lastCap = (float) $result['total_cap'];
             $caps[] = $lastCap;

@@ -31,3 +31,18 @@ Table: `opening_cap.out`. Headline (USD T):
 Caveats: the Q1 mean has a seed sd of ~0.7T, so two seeds cannot resolve a 0.24T firm; the tick-1 value is the
 steadiest reading (sd 0.12T). Both arms sit above 19.9 by about 1T even without PLVR, so the board has grown since
 the constant was set (other working-tree and committed changes), not only by PLVR.
+
+## 2026-10-13: titan cut (LAKE ×0.55, SWAN ×0.5, SAFE ×0.6)
+
+The harness had rotted: StockTracker moved to `App\Service\Market\Pricing` and MarketOperator is gone. Fixed the
+import and dropped the operator call (FullMarketHarnessTest runs without it too); cleared `cache/test`.
+Arms `base1013` (tree before the cut) and `cut1013`, seeds 1-16, same 83 firms, so the seeds pair.
+
+| quantity (USD T) | base | cut | paired diff (se) |
+|---|---|---|---|
+| tick 1 | 23.656 (0.048) | 18.871 (0.033) | -4.785 (0.019) |
+| Q1 mean | 23.628 (0.261) | 18.844 (0.187) | -4.784 (0.093) |
+
+Q1 end, mean of 16: LAKE 5.549 -> 3.073 (x0.554), SWAN 3.139 -> 1.606 (x0.511), SAFE 1.726 -> 1.040 (x0.602);
+BRKW and WEAV move <1.5%. The constant was 21.2 before the cut, already 2.4T stale (EGRT, PELI and others added
+since 10-05). Set to 18.8e12.
