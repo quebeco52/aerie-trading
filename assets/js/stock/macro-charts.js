@@ -227,7 +227,7 @@ export function updateMacroCharts(reports, timeframe = currentMacroTimeframe) {
         inflationData.push(parseFloat(report.inflation_ema) * 100);
         outputGapData.push(parseFloat(report.output_gap_ema) * 100);
 
-        let rawTips = report.tips_breakeven_ema ?? report.tips_breakeven ?? report.tipsBreakevenEma ?? report.tipsBreakeven ?? report.inflation_ema ?? 0.02;
+        let rawTips = report.tips_breakeven_quoted_ema ?? report.tips_breakeven_ema ?? report.tips_breakeven ?? report.tipsBreakevenEma ?? report.tipsBreakeven ?? report.inflation_ema ?? 0.02;
         tipsBreakevenData.push(parseFloat(rawTips) * 100);
 
         let rawCap = report.capital_stock_overhang_ema ?? report.capital_stock_overhang ?? report.capitalStockOverhangEma ?? report.capitalStockOverhang ?? 0.0;

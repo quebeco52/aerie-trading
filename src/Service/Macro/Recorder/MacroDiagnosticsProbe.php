@@ -42,6 +42,7 @@ final class MacroDiagnosticsProbe
         'supercoreInflation',
         'coreGoodsInflation',
         'tipsBreakeven',
+        'tipsBreakevenQuoted',
         'policyRate',
         'targetRate',
         'yield2y',

@@ -168,6 +168,19 @@ class MacroEngineTest extends TestCase
         $this->assertSame($withoutShock->naturalRate, $withShock->naturalRate);
     }
 
+    /** The tick quotes the breakeven off the premium it ends on, and the quote rides beside the expectation, never into it. */
+    public function testTheTickQuotesTheBreakevenNetOfTheBondPremium(): void
+    {
+        $this->redisMock->method('get')->willReturn(json_encode(['excess_bond_premium' => 0.02]));
+        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
+
+        $result = $this->engine->updateMacroState(0.25);
+
+        $this->assertGreaterThan(0.0, $result->excessBondPremium);
+        $this->assertSame(MacroAggregateSubsystem::quotedTipsBreakeven($result->tipsBreakeven, $result->excessBondPremium), $result->tipsBreakevenQuoted);
+        $this->assertLessThan($result->tipsBreakeven, $result->tipsBreakevenQuoted);
+    }
+
     /** The tick a purchase programme starts is stamped, and that is the tick its one headline goes out. */
     public function testTheTickAPurchaseProgrammeStartsIsStampedAndReported(): void
     {

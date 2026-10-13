@@ -1101,6 +1101,21 @@ class MacroAggregateSubsystemTest extends TestCase
         $this->assertSame($this->breakeven($this->onTargetInflationState()), $this->breakeven($hot));
     }
 
+    /**
+     * The quote dips with the excess bond premium by the fitted -0.356 a point, the TIPS liquidity squeeze; the expected
+     * inflation the economy reads does not move with it.
+     */
+    public function testTheQuotedBreakevenDipsWithTheBondPremiumButExpectationsDoNot(): void
+    {
+        $squeezed = $this->onTargetInflationState();
+        $squeezed->excessBondPremium = 0.02;
+
+        $this->assertSame($this->breakeven($this->onTargetInflationState()), $this->breakeven($squeezed));
+        $this->assertEqualsWithDelta(0.02 - 0.00712, MacroAggregateSubsystem::quotedTipsBreakeven(0.02, 0.02), 1e-15);
+        $this->assertSame(0.021, MacroAggregateSubsystem::quotedTipsBreakeven(0.021, 0.0), 'with no premium the quote is the expectation');
+        $this->assertGreaterThan(0.02, MacroAggregateSubsystem::quotedTipsBreakeven(0.02, -0.005), 'a calm credit market prices TIPS rich');
+    }
+
     private function breakeven(MacroState $state): float
     {
         return $this->subsystem->calculateTipsBreakeven($state, MacroEngine::TARGET_INFLATION);

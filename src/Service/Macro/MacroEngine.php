@@ -655,6 +655,7 @@ class MacroEngine
         $this->creditFiscalSubsystem->calculateCreditCrisisHazard($state, $dt);
         // Gilchrist & Zakrajsek (2012): the premium moves before volatility and the spreads that load on it.
         $this->creditFiscalSubsystem->updateExcessBondPremium($state, $state->outputGap - $openingGap, $dt);
+        $state->tipsBreakevenQuoted = MacroAggregateSubsystem::quotedTipsBreakeven($state->tipsBreakeven, $state->excessBondPremium);
         $this->creditFiscalSubsystem->calculateRetailDefaultRate($state, $dt);
         $this->commoditySubsystem->calculateAgriculturalCommodityIndex($state, $dt);
         $this->commoditySubsystem->calculateCatastropheLosses($state, $dt);

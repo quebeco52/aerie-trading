@@ -49,6 +49,7 @@ readonly class MacroStateDTO
      */
     private const HYDRATION_SEEDS = [
         'tipsBreakeven' => 'inflation',
+        'tipsBreakevenQuoted' => 'tipsBreakeven',
         'structuralSlope' => 'nsSlope',
     ];
 
@@ -154,6 +155,9 @@ readonly class MacroStateDTO
         public float $inflationEma = MacroEngine::TARGET_INFLATION,
         public float $tipsBreakeven = MacroEngine::TARGET_INFLATION,
         public float $tipsBreakevenEma = MacroEngine::TARGET_INFLATION,
+        /** The breakeven the market quotes, net of the TIPS liquidity premium (MacroAggregateSubsystem::quotedTipsBreakeven()); for display. */
+        public float $tipsBreakevenQuoted = MacroEngine::TARGET_INFLATION,
+        public float $tipsBreakevenQuotedEma = MacroEngine::TARGET_INFLATION,
         public float $policyRate = self::OPENING_POLICY_RATE,
         public float $policyRateEma = self::OPENING_POLICY_RATE,
         public float $targetRate = self::OPENING_POLICY_RATE,

@@ -117,6 +117,9 @@ class MacroState
 
     public float $tipsBreakeven;
     public float $tipsBreakevenEma;
+    // The breakeven the market quotes, expected inflation less the TIPS liquidity premium; pages read it, the economy does not.
+    public float $tipsBreakevenQuoted;
+    public float $tipsBreakevenQuotedEma;
     public float $energyCostPushLag;
     public float $agriCostPushLag;
     public float $noncorePassThroughEma;

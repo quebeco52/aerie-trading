@@ -247,6 +247,8 @@ class MacroAggregateSubsystem
     public const BREAKEVEN_CORE_LOADING = 0.085;
     /** Ten-year breakeven per point of headline over core, the energy and food pass-through: the same regression, 0.101 (se 0.016). */
     public const BREAKEVEN_NONCORE_LOADING = 0.101;
+    /** Quoted ten-year breakeven per point of the GZ excess bond premium, the TIPS liquidity squeeze of 2008 and March 2020: the same regression, -0.356 (se 0.034). */
+    public const BREAKEVEN_EBP_LOADING = -0.356;
 
     // --- Distributed Lag Transmission Constants ---
     /** Characteristic half-life time constant in years for energy cost-push pass-through into core inflation. */
@@ -1098,11 +1100,12 @@ class MacroAggregateSubsystem
      * learned from realized inflation (MonetaryPolicySubsystem::updateInflationEndpoint()), which the US ten-year
      * takes 0.44 of. Around it the ten-year moves 0.085 per point of core over the endpoint and 0.10 per point of
      * headline over core, so a commodity shock is priced as passing. The output gap adds nothing once inflation is
-     * held (CBO gap 0.02, se 0.02). The fit also holds the excess bond premium, whose liquidity squeeze on TIPS (-0.36 per point, 2008 and
-     * March 2020) is not modelled here. Fit: var/harness/breakeven_fit.py.
+     * held (CBO gap 0.02, se 0.02). The fit also holds the excess bond premium, whose liquidity squeeze on TIPS moves the
+     * quote but not the inflation the market expects (D'Amico, Kim & Wei 2018); quotedTipsBreakeven() adds it for the
+     * quote alone, so the rule, wages and yields read expected inflation. Fit: var/harness/breakeven_fit.py.
      *
      * @param MacroState $state           Current macroeconomic state.
-     * @param float      $targetInflation The inflation the public expects the Authority to hold: its target plus any pressure drift.
+     * @param float      $targetInflation The Authority's inflation target.
      * @return float Ten-year breakeven inflation.
      */
     public function calculateTipsBreakeven(MacroState $state, float $targetInflation): float
@@ -1115,6 +1118,15 @@ class MacroAggregateSubsystem
             + (self::BREAKEVEN_ENDPOINT_LOADING * $state->inflationEndpointGap)
             + (self::BREAKEVEN_CORE_LOADING * (self::coreInflationEma($state) - $learnedEndpoint))
             + (self::BREAKEVEN_NONCORE_LOADING * $headlineOverCore);
+    }
+
+    /**
+     * The ten-year breakeven the market quotes: expected inflation less the TIPS liquidity premium, which widens with the
+     * excess bond premium as lenders' balance sheets tighten (Gilchrist & Zakrajsek 2012; D'Amico, Kim & Wei 2018).
+     */
+    public static function quotedTipsBreakeven(float $breakeven, float $excessBondPremium): float
+    {
+        return $breakeven + (self::BREAKEVEN_EBP_LOADING * $excessBondPremium);
     }
 
     /**
@@ -1214,6 +1226,7 @@ class MacroAggregateSubsystem
         $state->policyRateEma += $emaWeight * ($state->policyRate - $state->policyRateEma);
         $state->inflationEma += $emaWeight * ($state->inflation - $state->inflationEma);
         $state->tipsBreakevenEma += $emaWeight * ($state->tipsBreakeven - $state->tipsBreakevenEma);
+        $state->tipsBreakevenQuotedEma += $emaWeight * ($state->tipsBreakevenQuoted - $state->tipsBreakevenQuotedEma);
         $state->nsSlopeEma += $emaWeight * ($state->nsSlope - $state->nsSlopeEma);
         // Lucas (1978) asset pricing: initialises equity market cap EMA on first reported observation.
         if ($state->equityMarketCap > 0.0) {

@@ -308,6 +308,13 @@ class MacroReport
     #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
     private ?string $tipsBreakevenEma = null;
 
+    // The breakeven the market quotes, net of the TIPS liquidity premium.
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
+    private ?string $tipsBreakevenQuoted = null;
+
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
+    private ?string $tipsBreakevenQuotedEma = null;
+
     #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
     private ?string $nsCurvature2 = null;
 

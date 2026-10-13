@@ -91,7 +91,7 @@ final class MacroFieldCatalog
         'primary_deficit_to_gdp' => ['label' => 'Primary deficit', 'unit' => self::UNIT_PERCENT],
         'yield_5y_ema' => ['label' => '5Y yield', 'unit' => self::UNIT_PERCENT],
         'yield_30y_ema' => ['label' => '30Y yield', 'unit' => self::UNIT_PERCENT],
-        'tips_breakeven_ema' => ['label' => 'Breakeven inflation', 'unit' => self::UNIT_PERCENT],
+        'tips_breakeven_ema' => ['label' => 'Expected inflation (10-year)', 'unit' => self::UNIT_PERCENT],
         'supercore_inflation_ema' => ['label' => 'Supercore inflation', 'unit' => self::UNIT_PERCENT],
         'producer_price_inflation_ema' => ['label' => 'Producer price inflation', 'unit' => self::UNIT_PERCENT],
         'perceived_neutral_rate' => ['label' => 'Perceived neutral rate', 'unit' => self::UNIT_PERCENT],
