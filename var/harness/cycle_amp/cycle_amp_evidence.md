@@ -164,3 +164,29 @@ Caveats: at 8 seeds beta was +0.198 (t 2.36) and corr +0.191 (t 2.10); both halv
 unreliable). All three targets inside noise at 16; every point estimate points to a slightly larger, more mainland-loaded
 cycle. Trade balance sits at +9.8% mean (baseline 9.3%), never at a clamp in either arm. nx sd +0.37pp (t 3.2) is the
 expected mechanical effect of the larger shares. Clamp share uses R3 bounds -0.08/+0.03 and R4 bounds 0.038/0.148.
+
+## 2026-10-13 Household DTI drift, full game (DA politics on vs DB off; DT = TPY 3600)
+
+Question: does householdDebtToIncome drift down in the full game (live dump 1.00 -> 0.70 over 16.75 y) when the
+macro-only probe (fc_crisis_drag) holds ~0.96? Harness: CycleAmpHarnessTest.php + dtiProbe (per-tick exact terms),
+dti_run.sh, dti.py; HEAD ac41afe snapshot; 16 seeds x 20 y at TPY 360 per arm; DT 8 seeds x 15 y at TPY 3600.
+
+| DTI | DA (politics) | DB (no politics) |
+| y5  | 0.961 / 0.045 / 0.876 | 1.020 / 0.042 / 0.959 |
+| y10 | 0.895 / 0.083 / 0.766 | 1.011 / 0.072 / 0.854 |
+| y15 | 0.911 / 0.108 / 0.700 | 0.991 / 0.110 / 0.788 |
+| y20 | 0.897 / 0.072 / 0.787 | 0.967 / 0.062 / 0.850 |
+Paired DA-DB at y15: -0.080 (se 0.032, t -2.50, n 16). Stopped at 16 (caller's stage; 48 = ~1 h).
+
+Log decomposition y0-15, DA | DB | paired DA-DB (se): house price -0.070 | -0.025 | -0.044 (0.034);
+reversion +0.052 | -0.010 | +0.062 (0.012); DSR 0 | -0.005; charge-off +0.016 | +0.018 | -0.002 (0.007);
+capital squeeze -0.032 | -0.004 | -0.028 (0.003); LTV squeeze -0.046 | 0 | -0.046 (0.013);
+residual -0.020 | +0.012 | -0.032 (0.026); total -0.101 | -0.016 | -0.085 (0.035).
+TPY 3600 (DT vs DA, 8 seeds): y15 0.930 vs 0.917; squeezes equal; residual -0.066 (0.025) vs -0.010 (0.032).
+Quarterly-sampled reconstruction of hp/rev/dsr matches the per-tick sums within 0.004 log per seed.
+
+Live dump 18 (q0-67) reconstructed with baseline 1.0: hp -0.094, rev +0.189, dsr 0, total -0.358, residual -0.453
+before charge-off/capital/LTV. Reversion is overstated if the LTV cut was built (baseline exp(-cut)); the dump lacks
+ltv_cut / mortgage_ltv_cap / bank_capital_required_last, so the live split cannot be closed.
+Caveats: residual t -1.2 (DA-DB) and -2.7 (DT) are inside 1-2.7 se of noise; DA seeds 1 and 9 (0.70 at y15) fall on
+house prices (hp -0.31, -0.36), not on the levers.

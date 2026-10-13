@@ -37,3 +37,14 @@ unemployment, floor share), and which gap channels carry the gap's quarterly mov
   fall (gap the quarter before a new crisis_at minus min gap over the next 8 quarters, seed mean; crisis-free seeds drop),
   then guards; B-A with se, t, n.
 - Cost: ~6 s per simulated year at TPY 360; 16 x 45 y with 8 slots took ~11 min.
+
+## Household DTI drift (2026-10-13)
+- Probe in `CycleAmpHarnessTest.php`: `dtiProbe()` sums each tick's terms of `calculateHouseholdCredit`'s log DTI change
+  (d_hp, d_rev, d_dsr, d_co from the previous tick's inputs; d_cap, d_ltv exact from bankCapitalRequiredLast /
+  ltvCutBuilt deltas; d_tot actual; cap_up/cap_dn) into each MACRO_OUT row, plus columns dti, ltv_cap, ltv_cut,
+  resi_ema, resi_trend, dsr_gap, retail_def, cap_req, ccyb.
+- Run script `dti_run.sh DA|DB|DT <seed>` on `$SNAP/catree` (git archive HEAD ac41afe + vendor symlink):
+  DA = POLITICS=1, DB = POLITICS=0 (TPY 360), DT = POLITICS=1 at TPY 3600 (the live rate; ~100 s per simulated year).
+- `YEARS=20 SNAP=<dir> bin/harness-batch var/harness/cycle_amp/dti_run.sh 1-16 DA DB && SEEDS=1-16 python3 var/harness/cycle_amp/dti.py DA DB`
+- Analysis `dti.py A [B]` (env SEEDS, H=15): levels at 5/10/15/20, decomposition 0..H, context, paired A-B at H.
+- Outputs: dti_s16.out (DA vs DB, 16 x 20 y), dti_tpy3600_s8.out (DT vs DA, 8 x 15 y).

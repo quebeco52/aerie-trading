@@ -43,6 +43,57 @@ final class CycleAmpHarnessTest extends KernelTestCase
     private bool $regimeWas = false;
     /** Policy rate going into this tick, for the hike-side panic condition. */
     private float $prevPolicy = NAN;
+    /** @var array<string, float>|null DTI-law inputs after the previous tick (household-credit decomposition). */
+    private ?array $dtiPrev = null;
+    /** @var array<string, float> Per-tick DTI-law log terms since the last MACRO_OUT row. */
+    private array $dtiTerms = [];
+    private ?object $creditSub = null;
+
+    /**
+     * Per-tick terms of CreditFiscalSubsystem::calculateHouseholdCredit's log DTI change, from the previous tick's state
+     * (the inputs it reads) and this tick's (the squeezes are exact deltas of ltvCutBuilt and bankCapitalRequiredLast).
+     * The residual (tot - terms) holds the noise and any within-tick input change.
+     */
+    private function dtiProbe(object $m, float $dt): void
+    {
+        $cfs = \App\Service\Macro\Subsystem\CreditFiscalSubsystem::class;
+        $this->creditSub ??= (new \ReflectionClass($cfs))->newInstanceWithoutConstructor();
+        $now = ['dti' => $m->householdDebtToIncome, 'ema' => $m->residentialPropertyIndexEma, 'trend' => $m->residentialWealthTrend,
+            'cut' => $m->ltvCutBuilt, 'gap' => $m->householdDebtServiceGap, 'def' => $m->retailDefaultRate, 'last' => $m->bankCapitalRequiredLast];
+        $p = $this->dtiPrev;
+        $this->dtiPrev = $now;
+        if ($p === null) {
+            return;
+        }
+        $lift = $p['trend'] > 0.0 ? ($p['ema'] / $p['trend']) - 1.0 : 0.0;
+        $base = MacroEngine::HOUSEHOLD_DEBT_TO_INCOME_BASELINE * exp(-$p['cut']);
+        $cut = ($cfs::HOUSEHOLD_MORTGAGE_DEBT_SHARE * $cfs::SECURED_LENDING_CUT_PER_CAPITAL_RISE) + ((1.0 - $cfs::HOUSEHOLD_MORTGAGE_DEBT_SHARE) * $cfs::UNSECURED_LENDING_CUT_PER_CAPITAL_RISE);
+        $t = [
+            'd_hp' => $cfs::CREDIT_GROWTH_HOUSE_PRICE * $lift * $dt,
+            'd_rev' => -$cfs::CREDIT_MEAN_REVERSION * (($p['dti'] - $base) / $base) * $dt,
+            'd_dsr' => -$cfs::DELEVERAGING_SPEED * max(0.0, $p['gap'] - MacroEngine::HOUSEHOLD_DSR_STRESS_MARGIN) * $dt,
+            'd_co' => -($this->creditSub->householdChargeOffRate($p['def']) - $this->creditSub->householdChargeOffRate(MacroEngine::RETAIL_DEFAULT_BASELINE)) * $dt,
+            'd_cap' => -$cut * max(0.0, $now['last'] - $p['last']),
+            'd_ltv' => -max(0.0, $now['cut'] - $p['cut']),
+            'd_tot' => log($now['dti'] / $p['dti']),
+            // Upward and downward moves of the capital requirement, to see whether the ratchet rides tick noise.
+            'cap_up' => max(0.0, $now['last'] - $p['last']), 'cap_dn' => min(0.0, $now['last'] - $p['last']),
+        ];
+        foreach ($t as $k => $v) {
+            $this->dtiTerms[$k] = ($this->dtiTerms[$k] ?? 0.0) + $v;
+        }
+    }
+
+    /** @return array<string, float> DTI-law columns for the row, and resets the term sums. */
+    private function drainDti(object $m): array
+    {
+        $t = $this->dtiTerms;
+        $this->dtiTerms = [];
+
+        return ['dti' => $m->householdDebtToIncome, 'ltv_cap' => $m->mortgageLtvCap, 'ltv_cut' => $m->ltvCutBuilt,
+            'resi_ema' => $m->residentialPropertyIndexEma, 'resi_trend' => $m->residentialWealthTrend, 'dsr_gap' => $m->householdDebtServiceGap,
+            'retail_def' => $m->retailDefaultRate, 'cap_req' => $m->bankCapitalRequirement, 'ccyb' => $m->countercyclicalBufferRate] + $t;
+    }
 
     /** @return array<string, float|int> The per-tick shares since the last row, and resets them. */
     private function drainTickShares(): array
@@ -157,6 +208,9 @@ final class CycleAmpHarnessTest extends KernelTestCase
                 : $macro->updateMacroState($dt, $lastCap, $lastFloat, $lastReturn, $lastDividends, $lastIssuance, $lastDuty, $lastStake, $policy, boardBankLevy: $lastLevy, boardBankCredit: $lastCredit);
             if ($politicsEngine !== null) {
                 $policy = $politicsEngine->updatePolitics($m, $dt)->policy();
+            }
+            if ($replay === null) {
+                $this->dtiProbe($m, $dt);
             }
             // Per-tick shares for the crisis-cut question, emptied into each MACRO_OUT row: the Evans hold's condition as
             // updatePolicyRate() reads it, the floor, the recession regime (the stress latch recomputed here, so the
@@ -280,7 +334,7 @@ final class CycleAmpHarnessTest extends KernelTestCase
                     // Open-economy block (2026-10-11): the currency's fundamental and deviation, the trade balance, import prices.
                     'fx_fund' => $m->exchangeRateIndex / max(1e-9, $m->exchangeRateDeviation), 'fx_dev' => $m->exchangeRateDeviation,
                     'fx_ema' => $m->exchangeRateIndexEma, 'tb' => $m->tradeBalanceToGdp, 'imp' => $m->importPriceLevel,
-                ] + (function () use ($gapProbe, $m): array { $gapProbe->rollWindow(); $w = $gapProbe->snapshot()["previous"]; return ["pot" => $m->potentialGdpIndex, "bs_i" => $m->balanceSheetIntensity, "gc" => $w["contributions"], "gc_diff" => $w["diffusion"], "gc_clamp" => $w["clamp"], "gc_unexp" => $w["unexplained"]]; })() + $this->drainTickShares() + (getenv("DECOMP") ? [
+                ] + (function () use ($gapProbe, $m): array { $gapProbe->rollWindow(); $w = $gapProbe->snapshot()["previous"]; return ["pot" => $m->potentialGdpIndex, "bs_i" => $m->balanceSheetIntensity, "gc" => $w["contributions"], "gc_diff" => $w["diffusion"], "gc_clamp" => $w["clamp"], "gc_unexp" => $w["unexplained"]]; })() + $this->drainTickShares() + $this->drainDti($m) + (getenv("DECOMP") ? [
                     // The ten-year's pieces as calculateYieldCurve() builds them (y10 = level + b1 L1 + b2 L2 + b3 L3 + base TP + habitat, floored).
                     'level' => $m->nsLevel, 'b1' => $m->nsBeta1, 'b2' => $m->nsCurvature, 'b3' => $m->nsCurvature2,
                     'base_tp' => $m->nsBaseTermPremium, 'tp_shock' => $m->termPremiumShock, 'tp_regime' => $m->termPremiumRegime,
