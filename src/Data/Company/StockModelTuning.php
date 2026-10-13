@@ -39,6 +39,15 @@ class StockModelTuning
             ModelParam::TargetCapitalRatio->value          => 0.2105, // Its seeded book equity/assets
         ],
 
+        // --- Storm Petrel Securities (PTRL) ---
+        // Lead primary dealer in Exchequer debt: a bond, swap and repo house with a small debt underwriting desk.
+        'PTRL' => [
+            ModelParam::AdvisoryRevenueWeight->value => 0.15,
+            ModelParam::TradingRevenueWeight->value  => 0.85,
+            ModelParam::FiccTradingShare->value      => 0.85,
+            ModelParam::TargetCapitalRatio->value    => 0.1111, // Its seeded book equity/assets
+        ],
+
         // --- Kingfisher Capital (KING) ---
         // Pure-play M&A advisory syndicate and capital markets boutique (Lazard / Evercore archetype).
         // Hyper-sensitive to corporate deal pipelines and GDP booms.
@@ -356,6 +365,16 @@ class StockModelTuning
         'FNCH' => [
             ModelParam::PreciousMetalsWeight->value => 0.95, // Gold, and the silver recovered with it
             ModelParam::BaseMetalsWeight->value     => 0.05, // Copper concentrate from its porphyry mine
+        ],
+
+        // --- Benthos Fiduciary & Trust (BNTH) ---
+        // Private bank for foreign wealth. Its loans are Lombard credit against client portfolios, plus mortgages.
+        'BNTH' => [
+            ModelParam::CreditRiskAppetite->value        => 0.15, // Margin-called Lombard lending: under a third of the neutral segment loss rate
+            ModelParam::ResidentialMortgageShare->value  => 0.18, // Julius Baer 2019: CHF 8.9B of CHF 48.4B of loans
+            ModelParam::ConsumerLoanShare->value         => 0.00,
+            ModelParam::CommercialRealEstateShare->value => 0.00, // Lombard loans take the other 82%
+            ModelParam::TargetCapitalRatio->value        => 0.06, // Its seeded book equity/assets
         ],
 
         // --- Egret Trust (EGRT) ---

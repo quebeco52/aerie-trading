@@ -70,6 +70,7 @@ class DistrictMap
             'credit_services', 'commercial_bank', 'insurance', 'retail_insurance', 'reinsurance', 'shadow_bank',
             'investment_bank', 'clearing_house', 'financial_data', 'asset_manager', 'hedge_fund',
             'brokerage', 'distressed_debt', 'private_equity', 'investment_company', 'custody_bank',
+            'private_bank',
         ],
         // The diversified groups open the works: a conglomerate and a merchant house OPERATE what
         // they own and trade what they carry, which is this block's trade and not the trust's, so
@@ -315,7 +316,7 @@ class DistrictMap
     public const ROOF_FURNITURE = [
         // Capital houses: a coin.
         'credit_services' => 'coin', 'commercial_bank' => 'coin', 'shadow_bank' => 'coin',
-        'investment_bank' => 'coin', 'clearing_house' => 'coin', 'custody_bank' => 'coin', 'asset_manager' => 'coin',
+        'investment_bank' => 'coin', 'clearing_house' => 'coin', 'custody_bank' => 'coin', 'private_bank' => 'coin', 'asset_manager' => 'coin',
         'hedge_fund' => 'coin', 'brokerage' => 'coin', 'distressed_debt' => 'coin', 'private_equity' => 'coin',
         // Underwriters: an umbrella. Market data: a bar chart.
         'insurance' => 'umbrella', 'reinsurance' => 'umbrella', 'retail_insurance' => 'umbrella', 'health_insurer' => 'umbrella',

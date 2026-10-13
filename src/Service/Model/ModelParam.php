@@ -59,6 +59,8 @@ enum ModelParam: string
     case AdvisoryRevenueWeight = 'advisory_revenue_weight';
     case TradingRevenueWeight = 'trading_revenue_weight';
     case OptionsPremiumIncomeWeight = 'options_premium_income_weight';
+    /** Fixed income, currencies and commodities' share of a bank's sales and trading; the rest is the equities desk. */
+    case FiccTradingShare = 'ficc_trading_share';
 
     // --- Asset Management & Private Equity ---
     case BaseFeeWeight = 'base_fee_weight';

@@ -105,6 +105,8 @@ class InvestmentBankBusinessModel extends BrokerageBusinessModel
     public const FICC_RATES_INVENTORY_SHOCK_THRESHOLD = 0.02;
     /** Variable inventory markdown scalar penalizing trading revenue for violent policy rate dislocations. */
     public const FICC_INVENTORY_MARKDOWN_SCALAR = 2.00;
+    /** FICC's share of sales and trading, the desk mix the volatility and FICC terms are struck at: Goldman Sachs 2019, FICC $7,388M of $14,779M (10-K). */
+    public const FICC_TRADING_SHARE = 0.50;
 
     // --- Institutional Prime Financing & Matched-Book Repo ---
     /** Net financing spread (~150bps) earned by prime brokers on institutional hedge fund margin debits. */
@@ -328,7 +330,7 @@ class InvestmentBankBusinessModel extends BrokerageBusinessModel
         // --- S&T Volatility Arbitrage, FICC Flow & Basel FRTB VaR Limits ---
         $vixGap = $vixEma - self::VIX_ARBITRAGE_FLOOR;
         $varDeleverageFactor = $this->resolveVarDeleverageFactor($vixEma);
-        $tradingMacroShift = $this->resolveTradingMacroShift($macroState, $vixScalar);
+        $tradingMacroShift = $this->resolveTradingMacroShift($macroState, $vixScalar, $params[ModelParam::FiccTradingShare]);
 
         // Forced deleveraging into a falling market creates inventory liquidation markdowns and execution slippage.
         $tradingInventoryMarkdownCost = $vixEma > self::BASEL_VAR_VOL_TARGET
@@ -467,7 +469,7 @@ class InvestmentBankBusinessModel extends BrokerageBusinessModel
         $vixGap = $macroState->marketVolatilityEma - self::VIX_ARBITRAGE_FLOOR;
 
         return (($advisoryWeight * $this->resolveAdvisoryMacroFactor($macroState))
-            + ($tradingWeight * $this->resolveTradingMacroShift($macroState, $params[ModelParam::VixArbitrageScalar]))
+            + ($tradingWeight * $this->resolveTradingMacroShift($macroState, $params[ModelParam::VixArbitrageScalar], $params[ModelParam::FiccTradingShare]))
             + ($optionsWeight * $this->resolveOptionsVegaBonus($vixGap))) / $totalWeight;
     }
 
@@ -478,6 +480,7 @@ class InvestmentBankBusinessModel extends BrokerageBusinessModel
             ModelParam::TradingRevenueWeight->value       => self::TRADING_REVENUE_WEIGHT,
             ModelParam::OptionsPremiumIncomeWeight->value => 0.00,
             ModelParam::VixArbitrageScalar->value         => self::VIX_ARBITRAGE_SCALAR,
+            ModelParam::FiccTradingShare->value           => self::FICC_TRADING_SHARE,
         ]);
     }
 
@@ -516,9 +519,15 @@ class InvestmentBankBusinessModel extends BrokerageBusinessModel
             + $m2SyndicationBoost;
     }
 
-    /** Sales and trading revenue against normal: volatility captured inside VaR limits plus FICC client flow. */
-    private function resolveTradingMacroShift(\App\DTO\MacroStateDTO $macroState, float $vixScalar): float
+    /**
+     * Sales and trading revenue against normal: volatility captured inside VaR limits on the equities desk plus FICC
+     * client flow. Each term is struck at the FICC_TRADING_SHARE desk mix, so a bank's own mix reweights them by its
+     * desk's share against that one; at the default the line is the two terms' sum.
+     */
+    private function resolveTradingMacroShift(\App\DTO\MacroStateDTO $macroState, float $vixScalar, float $ficcShare = self::FICC_TRADING_SHARE): float
     {
+        $ficcShare = max(0.0, min(1.0, $ficcShare));
+
         $vixEma = $macroState->marketVolatilityEma;
         $vixGap = $vixEma - self::VIX_ARBITRAGE_FLOOR;
 
@@ -540,7 +549,8 @@ class InvestmentBankBusinessModel extends BrokerageBusinessModel
         $ratesInventoryMarkdown = max(0.0, $rateShock - self::FICC_RATES_INVENTORY_SHOCK_THRESHOLD) * self::FICC_INVENTORY_MARKDOWN_SCALAR;
         $ficcArbitrage = max(-0.10, min(self::FICC_ARBITRAGE_CAP, $grossFicc) - $ratesInventoryMarkdown);
 
-        return $volatilityArbitrage + $ficcArbitrage;
+        return ($volatilityArbitrage * (1.0 - $ficcShare) / (1.0 - self::FICC_TRADING_SHARE))
+            + ($ficcArbitrage * $ficcShare / self::FICC_TRADING_SHARE);
     }
 
     /** Standard Basel VaR volatility targeting: position limits scale down when volatility exceeds target. */

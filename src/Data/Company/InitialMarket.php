@@ -241,9 +241,9 @@ class InitialMarket
             // 10% of deposits, the commercial-bank target cash reserve. The old 8bn was a quarter of the
             // model's MINIMUM, which opened the bank in permanent critical-cash distress: no dividend, no
             // growth lending, from the first quarter.
-            'corporate_treasury' => 32_500_000_000.00,
-            'total_equity'      => 42_500_000_000.00,
-            'customer_deposits' => 325_000_000_000.00,
+            'corporate_treasury' => 122_500_000_000.00,
+            'total_equity'      => 142_500_000_000.00,
+            'customer_deposits' => 1_225_000_000_000.00,
             'wholesale_debt'    => 15_000_000_000.00,
             'retained_earnings' => 10_000_000_000.00,
         ],
@@ -2547,6 +2547,67 @@ class InitialMarket
             'customer_deposits' => 870_000_000_000.00,
             'wholesale_debt'    => 60_000_000_000.00,
             'retained_earnings' => 60_000_000_000.00,
+        ],
+        [
+            'ticker' => 'PTRL',
+            'name' => 'Storm Petrel Securities',
+            'sector' => 'Financials',
+            'industry' => 'Investment Banking',
+            'systemic_importance' => 'systemic', // Lead primary dealer in Exchequer debt and the repo market
+            'shares_outstanding' => 1_000_000_000,
+            'volatility' => 0.32,
+            'beta_tilt' => 0.00,
+            'jump_intensity' => 1.00,
+            'jump_vol' => 0.14,
+            'baseline_roe' => 0.20,
+            'capex_ratio' => 0.05,
+            'target_payout_ratio' => 0.30,
+            'dividendSpeed' => 0.15,
+            'fixed_cost_ratio' => 0.45,
+            'operating_margin' => 0.35,
+            'public_float' => 0.92,
+            'sam_ratio' => 0.30,
+            'floating_debt_ratio' => 0.80, // Inventory funded overnight in repo
+            'historical_fixed_rate' => 0.035,
+            'credit_spread' => 0.0120,
+            'depreciation_rate' => 0.02,
+            // Wholesale funding at the industry's 8x equity limit, twice the other dealers' leverage.
+            'corporate_treasury' => 120_000_000_000.00,
+            'total_equity'      => 80_000_000_000.00,
+            'customer_deposits' => 0.00,
+            'wholesale_debt'    => 640_000_000_000.00,
+            'retained_earnings' => 30_000_000_000.00,
+        ],
+        [
+            'ticker' => 'BNTH',
+            'management_style' => 'steward', // Discretion first: steady dividends, no acquisitions that draw attention
+            'name' => 'Benthos Fiduciary & Trust',
+            'sector' => 'Financials',
+            'industry' => 'Private Banks',
+            'systemic_importance' => 'base',
+            'shares_outstanding' => 1_000_000_000,
+            'volatility' => 0.28,
+            'beta_tilt' => 0.25, // its fees are struck on market values
+            'jump_intensity' => 0.60,
+            'jump_vol' => 0.12,
+            'baseline_roe' => 0.12, // Julius Baer 2019: fees and NII less adjusted costs, 0.9% of assets after tax, at 16.5x leverage
+            'capex_ratio' => 0.08,
+            'target_payout_ratio' => 0.45,
+            'dividendSpeed' => self::LINTNER_QUARTERLY_ADJUSTMENT_SPEED,
+            'fixed_cost_ratio' => 0.65,
+            'operating_margin' => 0.27, // Julius Baer 2019: CHF 917M pre-tax on CHF 3,383M of operating income (adjusted)
+            'public_float' => 0.85,
+            'sam_ratio' => 0.10,
+            'floating_debt_ratio' => 0.40,
+            'historical_fixed_rate' => 0.030,
+            'credit_spread' => 0.0070,
+            'depreciation_rate' => 0.03,
+            // Julius Baer's balance sheet at 2019: deposits 71% of assets, equity 6.1%; cash 10% of deposits.
+            'corporate_treasury' => 43_000_000_000.00,
+            'total_equity'      => 36_000_000_000.00,
+            'customer_deposits' => 428_000_000_000.00,
+            'wholesale_debt'    => 136_000_000_000.00,
+            'retained_earnings' => 21_000_000_000.00,
         ],
     ];
 

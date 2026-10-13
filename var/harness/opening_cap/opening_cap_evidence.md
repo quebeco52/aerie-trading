@@ -46,3 +46,17 @@ Arms `base1013` (tree before the cut) and `cut1013`, seeds 1-16, same 83 firms, 
 Q1 end, mean of 16: LAKE 5.549 -> 3.073 (x0.554), SWAN 3.139 -> 1.606 (x0.511), SAFE 1.726 -> 1.040 (x0.602);
 BRKW and WEAV move <1.5%. The constant was 21.2 before the cut, already 2.4T stale (EGRT, PELI and others added
 since 10-05). Set to 18.8e12.
+
+## 2026-10-13: Storm Petrel (PTRL) and Nightjar Private Bank (NJAR) added
+
+Arm `newfirms1013` (85 firms), seeds 1-16, OVR=`ovr_newfirms`: the working tree's roster with RIVR held at its
+committed size (an uncommitted RIVR resize was in the tree and is not part of this change). Not paired with
+`cut1013`: two more firms shift every firm's draws from tick 2.
+
+| quantity (USD T) | cut1013 (83) | newfirms1013 (85) |
+|---|---|---|
+| tick 1 | 18.871 (0.033) | 19.153 (0.042) |
+| Q1 mean | 18.844 (0.187) | 19.631 (0.196) |
+
+Q1 end, mean of 16 ($B): PTRL 215.2 (6.9), NJAR 52.2 (1.6). Tick 1 moves +0.28T, the two firms' value; the Q1-mean
+gap (+0.79T) is that plus unpaired board noise (~2 se). Constant set to 19.6e12.

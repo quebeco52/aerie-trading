@@ -1252,4 +1252,44 @@ class InvestmentBankBusinessModelTest extends TestCase
         // Total = 0.8125B ($812,500,000.0)
         $this->assertEqualsWithDelta(812_500_000.0, $income, 1000.0);
     }
+
+    public function testTheDefaultDeskMixIsTheSumOfBothTradingTerms(): void
+    {
+        $shift = new \ReflectionMethod($this->model, 'resolveTradingMacroShift');
+        $rateShock = \App\DTO\MacroStateDTO::fromArray([
+            'market_volatility_ema' => InvestmentBankBusinessModel::VIX_ARBITRAGE_FLOOR,
+            'policy_rate'           => 0.03,
+            'policy_rate_ema'       => 0.02,
+        ]);
+        $ficc = 0.01 * InvestmentBankBusinessModel::FICC_RATE_VOLATILITY_SCALAR;
+
+        // At the Goldman 50/50 mix the line is unchanged; a bank's own mix reweights each desk against it.
+        $this->assertEqualsWithDelta($ficc, $shift->invoke($this->model, $rateShock, 1.20), 1e-12);
+        $this->assertEqualsWithDelta($ficc, $shift->invoke($this->model, $rateShock, 1.20, 0.50), 1e-12);
+        $this->assertEqualsWithDelta($ficc * 0.85 / 0.50, $shift->invoke($this->model, $rateShock, 1.20, 0.85), 1e-12);
+        $this->assertEqualsWithDelta(0.0, $shift->invoke($this->model, $rateShock, 1.20, 0.0), 1e-12, 'an equities-only desk does not trade the rate shock');
+
+        $volatile = \App\DTO\MacroStateDTO::fromArray(['market_volatility_ema' => InvestmentBankBusinessModel::VIX_ARBITRAGE_FLOOR + 0.05]);
+        $equities = (float) $shift->invoke($this->model, $volatile, 1.20);
+        $this->assertGreaterThan(0.0, $equities);
+        $this->assertEqualsWithDelta($equities * 0.15 / 0.50, $shift->invoke($this->model, $volatile, 1.20, 0.85), 1e-12, 'a bond house keeps 15% of the equities desk');
+    }
+
+    public function testStormPetrelIsABondHouse(): void
+    {
+        $this->assertSame(0.85, StockModelTuning::get('PTRL', \App\Service\Model\ModelParam::FiccTradingShare, InvestmentBankBusinessModel::FICC_TRADING_SHARE));
+        $this->assertSame(InvestmentBankBusinessModel::FICC_TRADING_SHARE, StockModelTuning::get('KING', \App\Service\Model\ModelParam::FiccTradingShare, InvestmentBankBusinessModel::FICC_TRADING_SHARE));
+
+        $rateShock = \App\DTO\MacroStateDTO::fromArray([
+            'market_volatility_ema' => InvestmentBankBusinessModel::VIX_ARBITRAGE_FLOOR,
+            'policy_rate'           => 0.03,
+            'policy_rate_ema'       => 0.02,
+        ]);
+        $petrel = new Stock();
+        $petrel->setTicker('PTRL');
+        $generic = new Stock();
+        $generic->setTicker('IBX');
+
+        $this->assertGreaterThan($this->model->resolveSectorActivityShift($generic, $rateShock), $this->model->resolveSectorActivityShift($petrel, $rateShock));
+    }
 }

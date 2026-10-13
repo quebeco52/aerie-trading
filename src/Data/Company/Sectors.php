@@ -40,6 +40,7 @@ class Sectors
         'tech'            => 'Asset-light platform businesses with near-zero marginal costs. Immune to physical supply chains but exposed to high wage inflation. Features higher baseline volatility and fat-tail risks like massive regulatory anti-trust fines or data breaches.',
         'consumer_staples' => 'Produces essential goods and non-cyclical services (Food, Tobacco, Household, Discount Stores). Features inelastic demand (very low volatility) and high pricing power, allowing them to completely ignore supply chain inflation penalties.',
         'health_insurer'  => 'Managed-care health plans collect premiums from employers and pay their members\' medical bills. Membership follows employment. Premiums are set a year at a time on claims experience about two years old, so when medical costs speed up the plan pays more than it priced for until its policies renew, and when they slow down the floor on the share of premium spent on care hands the gain back to members. Claims are paid weeks after care, and the plan invests the cash meanwhile.',
+        'private_bank'    => 'Private banks manage the money of wealthy families, most of them abroad, keep their cash and lend against their portfolios. Most revenue is fees charged on the value of the assets they manage, so it rises and falls with the markets clients invest in, and falls when a strong currency shrinks what foreign clients\' assets are worth at home. About half the balance sheet is loans secured on client portfolios.',
         'custody_bank'    => 'Custody banks hold and service other institutions\' securities and keep their cash. Most revenue is fees charged on the value of the assets in custody, so it rises and falls with the markets. The balance sheet is the clients\' cash, invested mostly in securities with little lending, and that cash is quick to demand a higher rate when rates rise.',
         'medical_care_facility' => 'Hospital networks and healthcare systems operating a tri-stream engine: inelastic inpatient care, high-margin elective outpatient surgeries, and algorithmic insurance billing arbitrage. Immune to recessions, but exposed to clinical wage inflation during high inflation regimes.',
         'defense_contractor' => 'Operates on sovereign government "Cost-Plus" procurement contracts (Aerospace & Defense). Highly immune to recessions with guaranteed margin cost escalators.',
@@ -182,6 +183,7 @@ class Sectors
         'Packaging & Containers' => ['pe' => 15.00, 'depreciation' => 0.06, 'ebitda_limit' => 3.5, 'equity_limit' => 1.5, 'business_model' => 'heavy_manufacturing'],
         'Personal Services' => ['pe' => 18.00, 'depreciation' => 0.05, 'ebitda_limit' => 3.0, 'equity_limit' => 1.0, 'business_model' => 'none'],
         'Pollution & Treatment Controls' => ['pe' => 22.00, 'depreciation' => 0.05, 'ebitda_limit' => 3.5, 'equity_limit' => 1.5, 'business_model' => 'waste_management'], // ESG premium, stable.
+        'Private Banks' => ['pe' => 12.00, 'depreciation' => 0.03, 'ebitda_limit' => 999.0, 'equity_limit' => 16.0, 'business_model' => 'private_bank'], // Julius Baer: assets 16.5 times equity
         'Private Equity' => ['pe' => 14.00, 'depreciation' => 0.02, 'ebitda_limit' => 999.0, 'equity_limit' => 3.0, 'business_model' => 'private_equity'], // Hostile takeovers, leveraged buyouts
         'Publishing' => ['pe' => 12.00, 'depreciation' => 0.05, 'ebitda_limit' => 2.5, 'equity_limit' => 1.0, 'business_model' => 'none'], // Secular decline.
         'Railroads' => ['pe' => 19.00, 'depreciation' => 0.06, 'ebitda_limit' => 3.5, 'equity_limit' => 1.5, 'business_model' => 'railroad'], // Wide moat monopoly pricing.
@@ -243,6 +245,7 @@ class Sectors
         'homebuilder'                    => Sector\HomebuilderBusinessModel::class,
         'clearing_house'                 => Sector\ClearingHouseBusinessModel::class,
         'custody_bank'                   => Sector\CustodyBankBusinessModel::class,
+        'private_bank'                   => Sector\PrivateBankBusinessModel::class,
         'utility'                        => Sector\UtilityBusinessModel::class,
         'mining'                         => Sector\MiningBusinessModel::class,
         'oil_gas_producer'               => Sector\OilGasProducerBusinessModel::class,
