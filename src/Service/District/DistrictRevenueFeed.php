@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Service\District;
 
+use App\Data\Company\RevenueStreams;
 use App\Entity\CorporateReport;
 use App\Entity\Stock;
 use App\Service\Math\FirmEconomics;
@@ -146,7 +147,7 @@ class DistrictRevenueFeed
 
             $streams[] = [
                 'key' => $streamKey,
-                'label' => $this->prettifyStreamKey((string) $streamKey),
+                'label' => RevenueStreams::label((string) $streamKey),
                 'revenue' => $revenue,
                 'share' => round($share, 4),
                 // Share movement in basis points is the unit a segment note quotes mix shift in.
@@ -257,11 +258,5 @@ class DistrictRevenueFeed
         $quarter = (int) ceil(((int) $recordedAt->format('n')) / 3);
 
         return sprintf('Q%d %s', $quarter, $recordedAt->format('Y'));
-    }
-
-    /** Matches the "Foo Bar" formatting StockController::earningsFlow() already gives stream nodes. */
-    private function prettifyStreamKey(string $streamKey): string
-    {
-        return ucwords(str_replace('_', ' ', $streamKey));
     }
 }

@@ -494,6 +494,39 @@ class EarningsEngineTest extends TestCase
     }
 
     /**
+     * The cost side of the quarter is filed with the KPIs, for the company page's business map: the variable cost
+     * ratio the quarter ran at, the fixed cost base, the price gap of each input in the model's basket at the macro
+     * the quarter was struck under, and the input-cost gap the firm has not yet passed on.
+     */
+    public function testTheQuarterFilesItsCostSide(): void
+    {
+        $captured = null;
+        $dispatcher = new EventDispatcher();
+        $dispatcher->addListener(EarningsReportedEvent::class, function (EarningsReportedEvent $event) use (&$captured): void {
+            $captured = $event->getContext();
+        });
+        $engine = $this->buildEngine($dispatcher);
+        $stock = $this->buildMatureIndustrial('COST');
+        $macroState = new MacroStateDTO(corporateTaxRate: 0.21, policyRateEma: 0.04, yield5yEma: 0.04, industrialMetalsIndexEma: 130.0, realWageGap: -0.02);
+
+        $engine->calculate($stock, $macroState, EarningsEngine::resolveReportingTick('COST', 252));
+
+        $this->assertNotNull($captured);
+        $kpis = $captured->kpis;
+        $this->assertEqualsWithDelta($captured->actualVariableCosts / $captured->actualRevenue, $kpis['variable_cost_ratio'], 1e-12);
+        $this->assertSame($captured->fixedCosts, $kpis['fixed_costs']);
+        $this->assertEqualsWithDelta(0.30, $kpis['input_gap_metals'], 1e-12, 'metals at 130 against a base of 100');
+        $this->assertEqualsWithDelta(-0.02, $kpis['input_gap_labor'], 1e-12);
+        $this->assertArrayNotHasKey('input_gap_agri', $kpis, 'only inputs the basket buys are filed');
+        $state = $stock->getEarningsMomentumZ() ?? [];
+        $this->assertEqualsWithDelta(
+            $state[FinancialConstants::STATE_INPUT_COST_DRAG_BASE] * ($kpis['input_cost_level'] - $kpis['input_cost_recovery']),
+            $kpis['input_cost_drag'],
+            1e-12
+        );
+    }
+
+    /**
      * A board cannot grant past its burn-rate cap (ISS benchmarks): at a fifth of software's usual valuation the
      * same pay bill would print several percent of the company a year, so only the capped value is settled in
      * shares and the rest of the expense is paid in cash. The full charge is still reported; the add-back and

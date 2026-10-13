@@ -24,6 +24,7 @@ final readonly class EarningsFlowStatement
     private function __construct(
         public float $totalRevenue,
         public float $operatingCosts,
+        public float $provisionsAndCharges,
         public float $ebitda,
         public float $depreciation,
         public float $operatingProfit,
@@ -46,7 +47,12 @@ final readonly class EarningsFlowStatement
      */
     public static function fromReport(array $report): self
     {
-        $totalRevenue = (float) ($report['revenue'] ?? 0) + (float) ($report['interest_income'] ?? 0);
+        // Interest earned on cash joins revenue at the top, so the interest line below is the gross expense. The stored
+        // EBITDA, EBIT and pre-tax lines leave it out until pre-tax (pre-tax = EBIT - expense + income); netting it from
+        // the expense as well counted it twice and pushed the same sum into operating costs.
+        $sales = (float) ($report['revenue'] ?? 0);
+        $interestIncome = max(0.0, (float) ($report['interest_income'] ?? 0));
+        $totalRevenue = $sales + $interestIncome;
 
         $capex              = max(0.0, (float) ($report['capital_expenditures'] ?? 0));
         $taxPaidRaw         = max(0.0, (float) ($report['tax_paid'] ?? 0));
@@ -56,20 +62,25 @@ final readonly class EarningsFlowStatement
         $buybacks           = max(0.0, (float) ($report['stock_buybacks'] ?? 0));
 
         // Income statement waterfall: reconstruct EBITDA, EBIT, and pre-tax income directly from published report lines.
-        $ebitdaStored = (float) ($report['ebitda'] ?? ($totalRevenue - (float) ($report['operating_costs'] ?? 0)));
+        $operatingCostsStored = (float) ($report['operating_costs'] ?? 0);
+        $ebitdaStored = (float) ($report['ebitda'] ?? ($sales - $operatingCostsStored));
         $ebitStored   = (float) ($report['ebit'] ?? ($ebitdaStored - (float) ($report['depreciation'] ?? 0)));
-        $preTaxStored = (float) ($report['pre_tax_income'] ?? ($ebitStored - (float) ($report['interest_expense'] ?? 0)));
+        $preTaxStored = (float) ($report['pre_tax_income']
+            ?? ($ebitStored - (float) ($report['interest_expense'] ?? 0) + $interestIncome));
 
         // Clamp intermediate income metrics to prevent negative waterfall flows.
-        $ebitda = max(0.0, min($totalRevenue, $ebitdaStored));
-        $operatingCosts = $totalRevenue - $ebitda;
+        $ebitda = max(0.0, min($totalRevenue, $ebitdaStored + $interestIncome));
+        $costsAboveEbitda = $totalRevenue - $ebitda;
+        // The charges struck against EBITDA after the cost base is set (credit-loss provisions, inventory and
+        // receivable write-downs, severance, plant impairment) are the gap between sales less operating costs and
+        // EBITDA; folded into operating costs they hid a bank's credit losses inside its running costs.
+        $provisionsAndCharges = max(0.0, min($costsAboveEbitda, $sales - $operatingCostsStored - $ebitdaStored));
+        $operatingCosts = $costsAboveEbitda - $provisionsAndCharges;
 
         $depreciation = max(0.0, min($ebitda, $ebitdaStored - $ebitStored));
         $operatingProfit = $ebitda - $depreciation;
 
-        // Interest expense net of whatever interest income joined revenue at the top, which is how the two
-        // stored lines already differ.
-        $interestExpense = max(0.0, min($operatingProfit, $ebitStored - $preTaxStored));
+        $interestExpense = max(0.0, min($operatingProfit, $ebitStored + $interestIncome - $preTaxStored));
         $preTaxIncome = $operatingProfit - $interestExpense;
 
         $taxes = min($preTaxIncome, $taxPaidRaw);
@@ -93,6 +104,7 @@ final readonly class EarningsFlowStatement
         return new self(
             totalRevenue: $totalRevenue,
             operatingCosts: $operatingCosts,
+            provisionsAndCharges: $provisionsAndCharges,
             ebitda: $ebitda,
             depreciation: $depreciation,
             operatingProfit: $operatingProfit,

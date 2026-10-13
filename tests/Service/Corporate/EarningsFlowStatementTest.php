@@ -52,6 +52,38 @@ final class EarningsFlowStatementTest extends TestCase
     }
 
     /**
+     * Interest earned on cash is counted once. The stored lines carry it only into pre-tax income
+     * (pre-tax = EBIT - interest expense + interest income), so the interest line is the gross expense and
+     * operating costs are the stored cost base, not inflated by the interest the top line already holds.
+     */
+    public function testInterestIncomeIsCountedOnce(): void
+    {
+        $flow = $this->report([
+            'interest_income' => 50.0,
+            'ebitda' => 300.0, 'ebit' => 200.0, 'pre_tax_income' => 210.0,
+        ]);
+
+        $this->assertSame(1050.0, $flow->totalRevenue);
+        $this->assertSame(700.0, $flow->operatingCosts);
+        $this->assertSame(40.0, $flow->interestExpense, 'the gross expense, not netted against the income at the top');
+        $this->assertSame(210.0, $flow->preTaxIncome);
+    }
+
+    /**
+     * Charges struck against EBITDA outside the cost base (a bank's credit-loss provision, write-downs) get
+     * their own flow instead of hiding inside operating costs.
+     */
+    public function testChargesBelowTheCostBaseAreDrawnApart(): void
+    {
+        $flow = $this->report(['ebitda' => 250.0, 'ebit' => 150.0, 'pre_tax_income' => 110.0]);
+
+        $this->assertSame(700.0, $flow->operatingCosts);
+        $this->assertSame(50.0, $flow->provisionsAndCharges);
+        $this->assertSame(250.0, $flow->ebitda);
+        $this->assertEqualsWithDelta($flow->totalRevenue, $flow->operatingCosts + $flow->provisionsAndCharges + $flow->ebitda, 1e-9, 'The revenue node conserves.');
+    }
+
+    /**
      * The regression: capex above earnings is reported in full and funded, not truncated.
      */
     public function testCapexAboveEarningsIsFundedRatherThanTruncated(): void

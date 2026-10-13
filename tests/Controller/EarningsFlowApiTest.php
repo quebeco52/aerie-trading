@@ -34,7 +34,7 @@ final class EarningsFlowApiTest extends KernelTestCase
             self::assertContains($link['source'], $names);
             self::assertContains($link['target'], $names);
         }
-        self::assertContains('Equipment revenue', $names);
+        self::assertContains('Equipment', $names);
         self::assertContains('Other and interest income', $names, 'the 500 the segments do not cover balances the revenue node');
     }
 

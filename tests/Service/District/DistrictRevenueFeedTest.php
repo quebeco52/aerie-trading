@@ -154,7 +154,8 @@ class DistrictRevenueFeedTest extends TestCase
         $this->assertSame('fee_income', $streams[1]['key']);
     }
 
-    public function testPrettifiesStreamKeysIntoTitleCaseLabels(): void
+    /** Labels are sentence case, and the bank's stream is named for what it holds: gross interest earned. */
+    public function testLabelsStreamKeysInSentenceCase(): void
     {
         $stock = $this->makeStock('LAKE');
         $report = $this->makeReport(
@@ -167,7 +168,7 @@ class DistrictRevenueFeedTest extends TestCase
 
         $stream = $this->feed->latestRevenueMixByTicker([$stock])['LAKE']['streams'][0];
 
-        $this->assertSame('Net Interest Income', $stream['label']);
+        $this->assertSame('Interest income', $stream['label']);
     }
 
     public function testCarriesDriversAndEventThrough(): void

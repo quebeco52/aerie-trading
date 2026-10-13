@@ -66,6 +66,7 @@ class StockPageBuilder
         private readonly int $ticksPerYear,
         private readonly ?BondRepository $bonds = null,
         private readonly ?\Redis $redis = null,
+        private readonly ?BusinessMapBuilder $businessMap = null,
     ) {}
 
     /**
@@ -134,6 +135,7 @@ class StockPageBuilder
             + $this->creditHealth->build($stock, $macroState)
             + $this->financialSummary->build($stock)
             + $this->biotechPipeline->build($stock)
+            + ($this->businessMap?->build($stock) ?? ['businessMap' => null])
             + [
             'peers' => $this->peerTable->build($stock),
             // What a permanent-capital sphere actually owns; null for every firm that owns no stakes.
@@ -285,6 +287,7 @@ class StockPageBuilder
             'shortInterest' => null,
             'nextReport' => null,
             'kpiSeries' => [],
+            'businessMap' => null,
             'pipeline' => null,
             'management' => null,
             // The fund carries no class of its own: contracts are written on companies here, not on the

@@ -1233,6 +1233,9 @@
 							<p class="text-sm text-on-surface-variant mt-0.5">Reported results, balance sheet, cash flow and valuation.</p>
 						</div>
 						<div class="flex items-center gap-3">
+							{% if businessMap|default(null) %}
+								<button type="button" onclick="document.dispatchEvent(new CustomEvent('business-map:open'))" class="px-3 py-1.5 text-xs font-medium rounded border border-outline-variant/30 text-on-surface hover:bg-surface-container-high transition-colors cursor-pointer">How the business works</button>
+							{% endif %}
 							<button type="button" onclick="document.dispatchEvent(new CustomEvent('sankey:open'))" class="px-3 py-1.5 text-xs font-medium rounded border border-outline-variant/30 text-on-surface hover:bg-surface-container-high transition-colors cursor-pointer">Earnings flow</button>
 							<div class="inline-flex gap-0.5 rounded-md border border-outline-variant/25 bg-surface-container-lowest p-0.5" role="group" aria-label="Reporting period">
 								<button type="button" data-financial-timeframe="12Q" id="btn-global-12Q" class="seg-btn" aria-pressed="false">Quarterly</button>
@@ -2364,6 +2367,10 @@
 		</div>
 
 	</div>
+
+	{% if businessMap|default(null) %}
+		{% include 'stock/_business_map.html.twig' with { map: businessMap, name: asset.name } only %}
+	{% endif %}
 
 	{# Earnings-flow modal (assets/controllers/sankey_controller.js). #}
 	<div id="sankey-modal" data-controller="sankey" data-sankey-ticker-value="{{ asset.ticker }}" data-sankey-url-value="/api/earnings-flow" data-action="click->sankey#backdropClick" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/70 p-4">

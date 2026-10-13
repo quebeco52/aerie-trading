@@ -1047,6 +1047,50 @@ class EarningsEngine
         );
     }
 
+    /**
+     * The cost side of the quarter, filed with the KPIs for the company page's business map: the variable cost ratio
+     * the quarter ran at, the fixed cost base, and for a model that buys inputs at market prices the price gap of each
+     * input it bought at and the input-cost gap it has not yet passed on (StandardOperatingPhysicsTrait). Filed rather
+     * than read off the live state so the map shows the macro the quarter was struck under.
+     *
+     * @param array<string, float> $streamState
+     */
+    private function recordCostKpis(EarningsSimulationContext $ctx, array $streamState): void
+    {
+        if ($ctx->actualRevenue > 0.0) {
+            $ctx->kpis['variable_cost_ratio'] = $ctx->actualVariableCosts / $ctx->actualRevenue;
+        }
+        $ctx->kpis['fixed_costs'] = $ctx->fixedCosts;
+
+        if (!isset($streamState[FinancialConstants::STATE_INPUT_COST_LEVEL])) {
+            return;
+        }
+        $level = (float) $streamState[FinancialConstants::STATE_INPUT_COST_LEVEL];
+        $recovery = (float) ($streamState[FinancialConstants::STATE_INPUT_COST_RECOVERY] ?? 0.0);
+        $ctx->kpis['input_cost_level'] = $level;
+        $ctx->kpis['input_cost_recovery'] = $recovery;
+        if (isset($streamState[FinancialConstants::STATE_INPUT_COST_RECOVERED_SHARE])) {
+            $ctx->kpis['input_cost_recovered_share'] = (float) $streamState[FinancialConstants::STATE_INPUT_COST_RECOVERED_SHARE];
+        }
+        $model = $ctx->strategy;
+        if (isset($streamState[FinancialConstants::STATE_INPUT_COST_DRAG_BASE])) {
+            // The drag the cost ratio carried, inside the same bound resolveInputCostDrag() puts on it.
+            $drag = (float) $streamState[FinancialConstants::STATE_INPUT_COST_DRAG_BASE] * ($level - $recovery);
+            $bound = $model::class . '::MAX_INPUT_COST_DRAG';
+            $ctx->kpis['input_cost_drag'] = defined($bound) ? max(-(float) constant($bound), min((float) constant($bound), $drag)) : $drag;
+        }
+
+        if (!method_exists($model, 'getInputCostExposures') || !method_exists($model, 'resolveInputPriceDeviations')) {
+            return;
+        }
+        $gaps = $model->resolveInputPriceDeviations($ctx->macroState);
+        foreach ($model->getInputCostExposures() as $channel => $share) {
+            if ((float) $share > 0.0 && isset($gaps[$channel])) {
+                $ctx->kpis['input_gap_' . $channel] = (float) $gaps[$channel];
+            }
+        }
+    }
+
     private function calculateExpectedVsActualFinancials(EarningsSimulationContext $ctx): void
     {
         // The firm and the draws the stream physics runs on, kept so its macro drivers can be measured on them.
@@ -1128,6 +1172,7 @@ class EarningsEngine
         $ctx->kpis['own_price_volume_shift'] = $ctx->ownPriceVolumeShift;
         $ctx->kpis['industry_price_level'] = $ctx->industryPriceLevel;
         $ctx->kpis['price_revenue'] = $actuals->priceRevenue;
+        $this->recordCostKpis($ctx, $streamState);
         $ctx->creditLossProvision = $actuals->creditLossProvision;
         $ctx->netChargeOffs = max(0.0, $actuals->netChargeOffs);
         $ctx->netInterestSqueeze = $actuals->netInterestSqueeze;

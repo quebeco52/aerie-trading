@@ -1,0 +1,117 @@
+{# "How the business works" modal: what moved the firm last quarter, from the economy outside to the revenue and
+   cost of sale that the earnings flow takes over (BusinessMapBuilder; lines drawn by business_map_controller.js). #}
+
+{% macro figure(value, format) -%}
+	{%- if value is null -%}
+		—
+	{%- elseif format == 'pct' -%}
+		{{ value|pct(1) }}
+	{%- elseif format == 'signed_pct' -%}
+		{{ value|pct(2, true) }}
+	{%- elseif format == 'bps' -%}
+		{{ (value * 10000)|round }} bps
+	{%- elseif format == 'money' -%}
+		{{ value|format_large('$') }}
+	{%- elseif format == 'multiple' -%}
+		{{ value|number_format(2) }}x
+	{%- elseif format == 'signed_points' -%}
+		{{ value > 0 ? '+' }}{{ value|number_format(2) }} pt
+	{%- else -%}
+		{{ value|number_format(1) }}
+	{%- endif -%}
+{%- endmacro %}
+
+{% macro chip(chip) %}
+	{% set tone = {
+		up: 'text-secondary bg-secondary/10',
+		down: 'text-tertiary bg-tertiary/10',
+		warn: 'text-warning bg-warning/10'
+	}[chip.tone] ?? 'text-on-surface-variant bg-surface-container-high' %}
+	<span class="inline-flex items-baseline gap-1 rounded px-1.5 py-px text-2xs {{ tone }}">
+		{%- if chip.figure is not null -%}
+			<span class="font-mono tabular-nums">{{ _self.figure(chip.figure, chip.format) }}</span>
+		{%- endif -%}
+		<span>{{ chip.text }}</span>
+	</span>
+{% endmacro %}
+
+{% macro card(card) %}
+	{% if card.group is defined %}
+		<p class="text-xs text-on-surface-faint mt-2 first:mt-0">{{ card.group }}</p>
+	{% else %}
+		<div tabindex="0" data-map-node="{{ card.id }}" class="relative z-10 flex flex-col gap-0.5 rounded-md border border-outline-variant/40 bg-surface-container px-3 py-2.5 transition-opacity focus:outline-none focus-visible:ring-2 focus-visible:ring-primary">
+			<span class="text-xs text-on-surface-variant">{{ card.label }}</span>
+			{% if card.value is not null %}
+				<span class="font-mono tabular-nums text-sm text-on-surface">
+					{{- _self.figure(card.value, card.format) -}}
+					{%- if card.unit|default(null) %} <span class="font-sans text-xs text-on-surface-variant">{{ card.unit }}</span>{% endif -%}
+				</span>
+			{% endif %}
+			{% if card.share is defined %}
+				<span class="mt-1 block h-1 rounded-full bg-surface-container-high overflow-hidden" aria-hidden="true">
+					<span class="block h-full bg-primary/70" style="width: {{ (card.share * 100)|round(1) }}%"></span>
+				</span>
+				<span class="text-xs text-on-surface-faint">
+					{{ card.share|pct(0) }} of revenue{% if card.change is not null %}, <span class="font-mono tabular-nums {{ card.change|signed_class }}">{{ card.change|pct(1, true) }}</span> on the quarter{% endif %}
+				</span>
+			{% endif %}
+			{% if card.note %}
+				<span class="text-xs text-on-surface-faint">{{ card.note }}</span>
+			{% endif %}
+			{% if card.chips|length > 0 %}
+				<span class="mt-1 flex flex-wrap gap-1">
+					{% for chip in card.chips %}{{ _self.chip(chip) }}{% endfor %}
+				</span>
+			{% endif %}
+			{% if card.feeds|default([])|length > 0 %}
+				<span class="lg:hidden text-2xs text-on-surface-faint">Feeds {{ card.feeds|join(', ') }}</span>
+			{% endif %}
+		</div>
+	{% endif %}
+{% endmacro %}
+
+<div id="business-map-modal" data-controller="business-map" data-business-map-edges-value="{{ map.edges|json_encode }}" data-action="click->business-map#backdropClick" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/70 p-4">
+	<div class="bg-surface-container-low border border-outline-variant/20 rounded-lg w-full max-w-6xl max-h-[90vh] flex flex-col overflow-hidden shadow-2xl" role="dialog" aria-modal="true" aria-labelledby="business-map-title">
+		<div class="flex justify-between items-start gap-4 p-6 border-b border-outline-variant/10">
+			<div>
+				<h2 id="business-map-title" class="text-lg font-semibold text-on-surface">How the business works</h2>
+				<p class="text-sm text-on-surface-variant mt-0.5">What moved {{ name }} last quarter, from the economy outside to the revenue and costs it reported.</p>
+			</div>
+			<button type="button" data-action="business-map#close" class="text-on-surface-variant hover:text-on-surface transition-colors cursor-pointer" aria-label="Close">
+				<span class="material-symbols-outlined text-2xl" aria-hidden="true">close</span>
+			</button>
+		</div>
+
+		<div class="flex-1 overflow-y-auto p-6 space-y-5">
+			<ul class="flex flex-wrap gap-x-5 gap-y-1.5 text-xs text-on-surface-variant" aria-label="Line key">
+				<li class="inline-flex items-center gap-1.5"><span class="w-4 h-0.5 rounded bg-secondary" aria-hidden="true"></span>Helped this quarter</li>
+				<li class="inline-flex items-center gap-1.5"><span class="w-4 h-0.5 rounded bg-tertiary" aria-hidden="true"></span>Hurt this quarter</li>
+				<li class="inline-flex items-center gap-1.5"><span class="w-4 h-0.5 rounded bg-outline-variant" aria-hidden="true"></span>Carries revenue or cost</li>
+				<li>Thicker line, larger effect or share</li>
+			</ul>
+
+			<div class="relative grid grid-cols-1 lg:grid-cols-3 gap-y-6 lg:gap-x-16 items-start" data-business-map-target="map">
+				<svg data-business-map-target="lines" class="hidden lg:block absolute inset-0 w-full h-full pointer-events-none overflow-visible" aria-hidden="true"></svg>
+				{% for column in [
+					{ title: 'Outside the company', cards: map.outside },
+					{ title: 'Inside the company', cards: map.inside },
+					{ title: 'What the quarter produced', cards: map.produced }
+				] %}
+					<div class="flex flex-col gap-2 min-w-0">
+						<p class="text-xs text-on-surface-faint">{{ column.title }}</p>
+						{% for card in column.cards %}{{ _self.card(card) }}{% else %}
+							<p class="text-xs text-on-surface-faint">No outside input moved revenue by a quarter of a percent or more.</p>
+						{% endfor %}
+						{% if loop.last %}
+							<button type="button" data-action="business-map#handoff" class="self-start mt-1 px-3 py-1.5 text-xs rounded border border-outline-variant/40 text-primary hover:bg-surface-container-high transition-colors cursor-pointer">
+								Revenue <span class="font-mono tabular-nums">{{ map.handoff.revenue|format_large('$') }}</span>{% if map.handoff.change is not null %}, <span class="font-mono tabular-nums">{{ map.handoff.change|pct(1, true) }}</span>{% endif %}. See where it went
+							</button>
+						{% endif %}
+					</div>
+				{% endfor %}
+			</div>
+
+			<p class="source-note">{{ source_line('aerie-exchange', 'statistical-office', 'commodity-exchange') }}</p>
+		</div>
+	</div>
+</div>

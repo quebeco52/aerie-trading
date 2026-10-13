@@ -2,6 +2,7 @@
 
 namespace App\Controller;
 
+use App\Data\Company\RevenueStreams;
 use App\Entity\Stock;
 use App\Repository\EtfRepository;
 use App\Repository\StockRepository;
@@ -326,6 +327,7 @@ class StockController extends AbstractController
         $nodes = [
             ['name' => 'Total revenue', 'role' => 'income'],
             ['name' => 'Operating costs', 'role' => 'cost'],
+            ['name' => 'Provisions and charges', 'role' => 'cost'],
             ['name' => 'EBITDA', 'role' => 'profit'],
             ['name' => 'Depreciation', 'role' => 'noncash'],
             ['name' => 'Operating profit', 'role' => 'profit'],
@@ -357,7 +359,12 @@ class StockController extends AbstractController
             foreach ($revenueStreams as $streamName => $streamValue) {
                 $value = (float) $streamValue;
                 if ($value > 0) {
-                    $formattedName = ucfirst(str_replace('_', ' ', $streamName)) . ' revenue';
+                    // A segment is named plainly, as filings name them; only a clash with a line of the statement
+                    // ("Dividends") takes a suffix.
+                    $formattedName = RevenueStreams::label((string) $streamName);
+                    if (in_array($formattedName, array_column($nodes, 'name'), true)) {
+                        $formattedName .= ' revenue';
+                    }
                     $nodeData = ['name' => $formattedName, 'role' => 'income'];
                     if (is_array($streamDetails) && isset($streamDetails[$streamName])) {
                         $nodeData['streamKey'] = $streamName;
@@ -385,6 +392,7 @@ class StockController extends AbstractController
 
 
         $addLink('Total revenue', 'Operating costs', $flow->operatingCosts);
+        $addLink('Total revenue', 'Provisions and charges', $flow->provisionsAndCharges);
         $addLink('Total revenue', 'EBITDA', $flow->ebitda);
         $addLink('EBITDA', 'Depreciation', $flow->depreciation);
         $addLink('EBITDA', 'Operating profit', $flow->operatingProfit);
