@@ -457,8 +457,8 @@ class DistrictMap
     public const SECTOR_PALETTE_FALLBACK = ['facade' => '#1b2439', 'stroke' => '#424754', 'window' => '#adc6ff'];
 
     // --- Condition Thresholds ---
-    /** Credit rating rank at or above which a facade renders as sound (BBB and better). */
-    public const INVESTMENT_GRADE_RANK = 4;
+    /** Credit rating rank at or below which a facade renders as distressed (CCC and D): the grade S&P describes as currently vulnerable to default. */
+    public const DISTRESSED_RANK = 1;
 
     // --- Event Badges ---
     /**

@@ -2,7 +2,7 @@
 # Renders the player pages from stub data and a headless politics run, with no Docker, database or network, and
 # screenshots them in headless Firefox when it is installed. Chromium cannot run in the agent sandbox.
 #
-#   bin/render-pages                 every page: landing, home, screener, leaderboard, login, economy, stock,
+#   bin/render-pages                 every page: landing, home, screener, leaderboard, login, economy, stock, district,
 #                                    dashboard, government and the party pages; PNGs beside the HTML
 #   bin/render-pages stock economy   only the screenshots named (all pages are still rendered)
 #
@@ -17,7 +17,7 @@ mkdir -p "$out"
 export OUT=$out
 
 php bin/console tailwind:build --env=test >/dev/null 2>&1 || { echo "tailwind:build failed"; exit 1; }
-for test in PagesRenderTest GovernmentRenderTest EarningsFlowRenderTest; do
+for test in PagesRenderTest GovernmentRenderTest EarningsFlowRenderTest DistrictRenderTest; do
     if ! php vendor/bin/phpunit --do-not-cache-result "tests/Render/$test.php" >"$out/$test.log" 2>&1; then
         echo "$test failed; see $out/$test.log"
         exit 1

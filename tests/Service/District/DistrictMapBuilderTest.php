@@ -769,11 +769,19 @@ class DistrictMapBuilderTest extends TestCase
         $this->assertSame('sound', $plot->condition);
     }
 
-    public function testJunkRatedTenantsRenderAsDistressed(): void
+    public function testCccRatedTenantsRenderAsDistressed(): void
     {
         $plot = $this->findPlot('LAKE', [$this->makeStock('LAKE', rating: 'CCC')]);
 
         $this->assertSame('distressed', $plot->condition);
+    }
+
+    public function testSpeculativeGradeAboveCccStaysSound(): void
+    {
+        foreach (['BB', 'B'] as $rating) {
+            $plot = $this->findPlot('LAKE', [$this->makeStock('LAKE', rating: $rating)]);
+            $this->assertSame('sound', $plot->condition, "{$rating} is speculative grade, not distressed");
+        }
     }
 
     public function testBankruptTenantsRenderAsRuins(): void

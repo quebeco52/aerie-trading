@@ -125,7 +125,7 @@ function conditionFor(isBankrupt, rating, condition) {
     if (isBankrupt) return 'ruin';
     const ranks = condition.ratingRanks || {};
     const rank = ranks[rating] !== undefined ? ranks[rating] : ranks.BBB;
-    return rank < condition.investmentGradeRank ? 'distressed' : 'sound';
+    return rank <= condition.distressedRank ? 'distressed' : 'sound';
 }
 
 /** The `points` of a sparkline for a series, scaled into a box; a flat series runs along its middle. */
@@ -198,7 +198,7 @@ export default class extends Controller {
         shares: Object, envelope: Object, events: Object, revenueMix: Object, institutions: Array,
         /** Lit-share floor and at-baseline share — DistrictMap::WINDOW_LIT_SHARE_FLOOR / _AT_BASELINE. */
         lighting: Object,
-        /** Credit rating ladder and the investment-grade cut — CreditRatingAgency::RATING_RANKS, DistrictMap::INVESTMENT_GRADE_RANK. */
+        /** Credit rating ladder and the distressed cut — CreditRatingAgency::RATING_RANKS, DistrictMap::DISTRESSED_RANK. */
         condition: Object,
         /** Wall-clock seconds one simulated month lasts — App\Service\District\DistrictEventFeed::badgeWindowSeconds(). */
         eventBadgeWindowSeconds: Number,
@@ -303,6 +303,7 @@ export default class extends Controller {
         this.windowsByTicker = new Map();
         this.facadesByTicker = new Map();
         this.plotWindowsByTicker = new Map();
+        this.conditionHatchByTicker = new Map();
         this.rankPlatesByTicker = new Map();
         this.plotTargets.forEach(plot => {
             const ticker = plot.dataset.ticker;
@@ -310,6 +311,7 @@ export default class extends Controller {
                 this.plotsByTicker.set(ticker, plot);
                 this.facadesByTicker.set(ticker, plot.querySelector('.facade'));
                 this.plotWindowsByTicker.set(ticker, plot.querySelector('.plot-windows'));
+                this.conditionHatchByTicker.set(ticker, plot.querySelector('.condition-hatch'));
                 this.rankPlatesByTicker.set(ticker, plot.querySelector('.plot-rank'));
                 this.windowsByTicker.set(ticker, Array.from(plot.querySelectorAll('.window')).map(el => ({
                     el,
@@ -1801,6 +1803,11 @@ export default class extends Controller {
 
         facade.setAttribute('y', String(y));
         facade.setAttribute('height', String(height));
+        const hatch = this.conditionHatchByTicker.get(ticker);
+        if (hatch) {
+            hatch.setAttribute('y', String(y));
+            hatch.setAttribute('height', String(height));
+        }
 
         // The window grid and the roof kit (roofline, furniture, rank, badge, flare, beacon,
         // pennant) each move as one transform, which the .plot-windows/.roof-kit rules glide.

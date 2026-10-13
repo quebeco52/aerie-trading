@@ -124,7 +124,7 @@ class DistrictController extends AbstractController
             ],
             'condition' => [
                 'ratingRanks' => CreditRatingAgency::RATING_RANKS,
-                'investmentGradeRank' => DistrictMap::INVESTMENT_GRADE_RANK,
+                'distressedRank' => DistrictMap::DISTRESSED_RANK,
             ],
             'roofFurniture' => [
                 'width' => DistrictMap::ROOF_FURNITURE_WIDTH,

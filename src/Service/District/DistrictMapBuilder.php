@@ -658,7 +658,7 @@ class DistrictMapBuilder
 
         $rank = CreditRatingAgency::RATING_RANKS[$stock->getCreditRating()] ?? CreditRatingAgency::RATING_RANKS['BBB'];
 
-        return $rank < DistrictMap::INVESTMENT_GRADE_RANK ? 'distressed' : 'sound';
+        return $rank <= DistrictMap::DISTRESSED_RANK ? 'distressed' : 'sound';
     }
 
     private function marketCapOf(Stock $stock): float

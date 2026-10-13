@@ -34,18 +34,17 @@
 	.window[data-lit="true"][data-twinkle="true"] { fill-opacity: 0.72; }
 	.roofline { fill: #4a4f58; }
 
-	/* Condition outranks the sector hue — solvency is the more urgent fact. */
-	/* Condition recolours the windows but leaves the lit pattern alone — a distressed tenant
-	   that still earns its baseline keeps its lights on, in the condition's hue. */
-	.plot[data-condition="distressed"] .facade { fill: #37291d !important; stroke: #a37b3d !important; }
-	.plot[data-condition="distressed"] .window { fill: #ffd9a0 !important; }
-	.plot[data-condition="distressed"] .window[data-lit="true"] { fill-opacity: 0.30; }
-	.plot[data-condition="distressed"] .roofline { fill: #6b5a3d; }
+	/* Condition is drawn in texture, not hue: hue already carries the sector, and a brown
+	   distressed bank read as an energy house. A distressed house (CCC and below) is hatched in
+	   amber over the sector's own colours; a failed house is greyed and its windows boarded. */
+	.condition-hatch { display: none; pointer-events: none; fill: url(#hatch-distressed); }
+	.plot[data-condition="distressed"] .condition-hatch { display: inline; }
+	.plot[data-condition="distressed"] .facade { stroke: var(--color-warning) !important; }
 
-	.plot[data-condition="ruin"] .facade { fill: #241a24 !important; stroke: #8c4b4b !important; stroke-dasharray: 10 7; }
-	.plot[data-condition="ruin"] .window { fill: var(--color-tertiary) !important; fill-opacity: 0.04; }
-	.plot[data-condition="ruin"] .window[data-lit="true"] { fill-opacity: 0.10; }
-	.plot[data-condition="ruin"] .roofline { fill: #5c3030; }
+	.plot[data-condition="ruin"] .facade { fill: #1c1d21 !important; stroke: #5a5f68 !important; stroke-dasharray: 10 7; }
+	.plot[data-condition="ruin"] .window,
+	.plot[data-condition="ruin"] .window[data-lit="true"] { fill: #6e6152 !important; fill-opacity: 0.55; }
+	.plot[data-condition="ruin"] .roofline { fill: #3a3d44; }
 
 	.plot:hover .facade { fill: #2c313a !important; transition: fill 150ms ease-out; }
 	.plot:hover .window[data-lit="true"] { fill-opacity: 0.85; }
@@ -86,8 +85,7 @@
 	   sector's window colour so it is legible at the street's scale; condition recolours it the
 	   way it recolours the windows. */
 	.roof-furniture { fill-opacity: 0.85; stroke-opacity: 0.85; }
-	.plot[data-condition="distressed"] .roof-furniture { color: #ffd9a0 !important; }
-	.plot[data-condition="ruin"] .roof-furniture { color: var(--color-tertiary) !important; fill-opacity: 0.3; stroke-opacity: 0.3; }
+	.plot[data-condition="ruin"] .roof-furniture { color: #5a5f68 !important; fill-opacity: 0.5; stroke-opacity: 0.5; }
 
 	/* Titan marker: rendered with static illumination rather than continuous animation loop
 	   to avoid continuous 60fps CPU SVG rasterization. */
@@ -269,8 +267,8 @@
 			<div class="flex flex-col gap-2 text-xs text-on-surface-variant shrink-0">
 				<div class="flex items-center gap-4 flex-wrap">
 					<span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-sm" style="background:var(--color-secondary)"></span>Position held</span>
-					<span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-sm" style="background:#37291d;border:1px solid #a37b3d"></span>Distressed</span>
-					<span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-sm" style="background:#241a24;border:1px dashed #8c4b4b"></span>Defunct</span>
+					<span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-sm" style="border:1px solid var(--color-warning);background:repeating-linear-gradient(45deg,var(--color-warning) 0 2px,transparent 2px 5px)"></span>Distressed credit</span>
+					<span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-sm" style="background:#1c1d21;border:1px dashed #5a5f68"></span>Defunct</span>
 					<span class="flex items-center gap-1.5"><span class="w-3 h-0.5" style="background:var(--color-tertiary)"></span>Conduit stressed</span>
 				</div>
 			</div>
@@ -430,6 +428,11 @@
 							<stop offset="0%" stop-color="{{ sectorPaletteFallback.window }}" stop-opacity="{{ kerbLight.opacity }}"/>
 							<stop offset="100%" stop-color="{{ sectorPaletteFallback.window }}" stop-opacity="0"/>
 						</radialGradient>
+						{# Distressed masonry: amber diagonals at a 14-unit pitch, 4 wide, so
+						   they stay above a device pixel at the street's ~0.45px per unit. #}
+						<pattern id="hatch-distressed" patternUnits="userSpaceOnUse" width="14" height="14" patternTransform="rotate(45)">
+							<rect x="0" y="0" width="4" height="14" style="fill: var(--color-warning)" fill-opacity="0.35"/>
+						</pattern>
 						<linearGradient id="terrace-wall-grad" x1="0" y1="0" x2="0" y2="1">
 							<stop offset="0%" stop-color="#1d2129"/>
 							<stop offset="40%" stop-color="#14171d"/>
@@ -769,6 +772,10 @@
 											</g>
 										{% endif %}
 
+										<rect class="condition-hatch"
+											x="{{ plot.x }}" y="{{ plot.y }}"
+											width="{{ plot.width }}" height="{{ plot.height }}"/>
+
 										{# Everything that rides the roofline, in one group: a live resize moves the kit
 										   by a single transform (data-roof-y is where it was drawn) rather than
 										   rewriting seven elements' coordinates — see resizeFacade(). #}
@@ -944,9 +951,10 @@
 				<h2 class="text-sm font-semibold text-on-surface mb-2">Select a building or institution</h2>
 				<p class="text-xs text-on-surface-variant leading-relaxed">
 					{{ plots|length }} listed houses hold frontage on {{ wardName }}, ranked by market
-					capitalisation and reshuffled as it moves. Facade height tracks that capitalisation;
-					the windows carry the sector's colour, and how many are lit tracks the return on capital
-					against the house's own baseline; masonry condition tracks credit standing. The
+					capitalisation and reshuffled as it moves. Facade height tracks that capitalisation; the
+					windows carry the sector's colour, and how many are lit tracks the return on capital
+					against the house's own baseline. Hatched masonry marks a house whose credit is rated CCC
+					or below; grey walls and boarded windows, one that has failed. The
 					structures along the top are the institutions publishing the macro conditions this
 					street trades on &mdash; hover one to see everyone it feeds, hover a building to see
 					what it draws, and a conduit reddens on its own once the variable it carries turns

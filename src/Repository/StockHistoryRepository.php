@@ -23,7 +23,9 @@ class StockHistoryRepository extends ServiceEntityRepository
      * A listing's most recently persisted prices, newest first.
      *
      * Selects the price column alone: a change calculation reads one number per row, and hydrating
-     * whole history entities to reach it would load the entire tick series into memory.
+     * whole history entities to reach it would load the entire tick series into memory. Ordered by
+     * simulated time: recorded_at is wall clock to the second, and a fast clock writes dozens of
+     * rows a second, so ties left the oldest row of the window arbitrary.
      *
      * @return list<float>
      */
@@ -34,7 +36,7 @@ class StockHistoryRepository extends ServiceEntityRepository
             ->select('h.price')
             ->andWhere('h.stock = :stock')
             ->setParameter('stock', $stock)
-            ->orderBy('h.recordedAt', 'DESC')
+            ->orderBy('h.simTime', 'DESC')
             ->setMaxResults($limit)
             ->getQuery()
             ->getScalarResult();
