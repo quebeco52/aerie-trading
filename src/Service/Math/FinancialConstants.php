@@ -132,6 +132,10 @@ class FinancialConstants
     public const STATE_INPUT_COST_RECOVERED_SHARE = 'state:input_cost_recovered_share';
     /** Stream-state key: the cost ratio the model charged the unrecovered gap on at its last report (a refiner's opex share, not its crude). */
     public const STATE_INPUT_COST_DRAG_BASE = 'state:input_cost_drag_base';
+    /** Stream-state key prefix: one input market's own part of the lagged cost level ("state:input_cost_level:metals"). */
+    public const STATE_INPUT_COST_LEVEL_PREFIX = 'state:input_cost_level:';
+    /** Stream-state key prefix: one input market's own part of the lagged recovery in selling prices. */
+    public const STATE_INPUT_COST_RECOVERY_PREFIX = 'state:input_cost_recovery:';
 
     // --- FX Exposure ---
     /** Default share of revenue exposed to the exchange rate: a mostly domestic firm meeting a little imported competition. */

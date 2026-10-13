@@ -65,6 +65,30 @@ final class BusinessMapBuilderTest extends TestCase
         $this->assertEqualsWithDelta(-0.94, $this->card($map['inside'], 'recover')['chips'][0]['figure'], 1e-9);
     }
 
+    /**
+     * With the drag split by input filed, each input's line and chip carry its own measured part: metals still
+     * hurting, pay helping, and the state from before the split shown only when it is big enough to print.
+     */
+    public function testInputLinesCarryTheirMeasuredPartOfTheDrag(): void
+    {
+        $kpis = [
+            'variable_cost_ratio' => 0.427, 'fixed_costs' => 300.0,
+            'input_cost_level' => 0.037, 'input_cost_recovery' => 0.015, 'input_cost_recovered_share' => 0.68,
+            'input_cost_drag' => 0.0094, 'input_gap_metals' => 0.378, 'input_gap_labor' => -0.024,
+            'input_drag_metals' => 0.0120, 'input_drag_labor' => -0.0026, 'input_drag_earlier' => 0.0,
+        ];
+        $map = $this->map(kpis: $kpis);
+
+        $this->assertSame(['input:metals', 'recover', -1, 0.012], $this->edge($map, 'input:metals', 'recover'));
+        $this->assertSame(['input:labor', 'recover', 1, 0.0026], $this->edge($map, 'input:labor', 'recover'));
+        $this->assertEqualsWithDelta(-1.2, $this->card($map['outside'], 'input:metals')['chips'][0]['figure'], 1e-9);
+        $this->assertEqualsWithDelta(0.26, $this->card($map['outside'], 'input:labor')['chips'][0]['figure'], 1e-9);
+        $this->assertNull($this->find($map['outside'], 'input:earlier'), 'nothing earlier to show');
+
+        $map = $this->map(kpis: ['input_drag_earlier' => 0.002] + $kpis);
+        $this->assertSame(-1, $this->edge($map, 'input:earlier', 'recover')[2]);
+    }
+
     public function testTheMarginCarriesItsChangeOnTheQuarter(): void
     {
         $map = $this->map();

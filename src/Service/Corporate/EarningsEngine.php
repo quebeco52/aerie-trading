@@ -1083,6 +1083,11 @@ class EarningsEngine
         if (!method_exists($model, 'getInputCostExposures') || !method_exists($model, 'resolveInputPriceDeviations')) {
             return;
         }
+        if (method_exists($model, 'attributeInputCostDrag')) {
+            foreach ($model->attributeInputCostDrag($streamState) as $channel => $part) {
+                $ctx->kpis['input_drag_' . $channel] = $part;
+            }
+        }
         $gaps = $model->resolveInputPriceDeviations($ctx->macroState);
         foreach ($model->getInputCostExposures() as $channel => $share) {
             if ((float) $share > 0.0 && isset($gaps[$channel])) {

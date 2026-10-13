@@ -370,6 +370,7 @@ trait StandardOperatingPhysicsTrait
 
         $streams->registerState(FinancialConstants::STATE_INPUT_COST_LEVEL, $costLevel);
         $streams->registerState(FinancialConstants::STATE_INPUT_COST_RECOVERY, $recovery);
+        $this->advanceInputCostChannels($macroState, $streams, $recoveredShare);
         // The share this model recovers, which differs by caller (a defence book's cost-plus share, a retailer's
         // pricing power), and the cost base the gap is charged on (a refiner's opex, never its crude), kept so
         // management can project the next quarter on the same terms.
@@ -380,6 +381,65 @@ trait StandardOperatingPhysicsTrait
         $drag = $dragBase * ($costLevel - $recovery);
 
         return max(-self::MAX_INPUT_COST_DRAG, min(self::MAX_INPUT_COST_DRAG, $drag));
+    }
+
+    /**
+     * Each input market's own part of the two lags: the same recursion run on that input's term of the basket. The
+     * lags are linear and every input shares their time constants and the recovered share, so the inputs' parts sum
+     * to the basket's level and recovery; what they leave over is state the basket carried before they were tracked.
+     * Bookkeeping only: the drag is still struck on the basket.
+     */
+    private function advanceInputCostChannels(MacroStateDTO $macroState, StreamContext $streams, float $recoveredShare): void
+    {
+        $gaps = $this->resolveInputPriceDeviations($macroState);
+        foreach ($this->getInputCostExposures() as $channel => $share) {
+            if ((float) $share <= 0.0) {
+                continue;
+            }
+            [$level, $recovery] = $this->advanceInputCostState(
+                $streams->getPersistedState(FinancialConstants::STATE_INPUT_COST_LEVEL_PREFIX . $channel, 0.0),
+                $streams->getPersistedState(FinancialConstants::STATE_INPUT_COST_RECOVERY_PREFIX . $channel, 0.0),
+                (float) $share * ($gaps[$channel] ?? 0.0),
+                $recoveredShare
+            );
+            $streams->registerState(FinancialConstants::STATE_INPUT_COST_LEVEL_PREFIX . $channel, $level);
+            $streams->registerState(FinancialConstants::STATE_INPUT_COST_RECOVERY_PREFIX . $channel, $recovery);
+        }
+    }
+
+    /**
+     * The quarter's input-cost drag on the cost ratio split by input market, from the lag state it closed with: each
+     * input's part, and "earlier" for the basket state no input accounts for (the firm's history before the split
+     * was kept), which fades at the lag rates. The parts sum to the drag resolveInputCostDrag() booked, its bound
+     * included: when the bound binds every part is scaled down alike. Empty for a model that books no drag.
+     *
+     * @param array<string, float> $state The stream state map the quarter closed with.
+     * @return array<string, float>
+     */
+    public function attributeInputCostDrag(array $state): array
+    {
+        if (!isset($state[FinancialConstants::STATE_INPUT_COST_LEVEL], $state[FinancialConstants::STATE_INPUT_COST_DRAG_BASE])) {
+            return [];
+        }
+        $base = (float) $state[FinancialConstants::STATE_INPUT_COST_DRAG_BASE];
+        $total = $base * ((float) $state[FinancialConstants::STATE_INPUT_COST_LEVEL] - (float) ($state[FinancialConstants::STATE_INPUT_COST_RECOVERY] ?? 0.0));
+
+        $parts = [];
+        foreach ($this->getInputCostExposures() as $channel => $share) {
+            $level = $state[FinancialConstants::STATE_INPUT_COST_LEVEL_PREFIX . $channel] ?? null;
+            if ((float) $share > 0.0 && $level !== null) {
+                $parts[$channel] = $base * ((float) $level - (float) ($state[FinancialConstants::STATE_INPUT_COST_RECOVERY_PREFIX . $channel] ?? 0.0));
+            }
+        }
+        $parts['earlier'] = $total - array_sum($parts);
+
+        $booked = max(-self::MAX_INPUT_COST_DRAG, min(self::MAX_INPUT_COST_DRAG, $total));
+        if ($total !== 0.0 && $booked !== $total) {
+            $scale = $booked / $total;
+            $parts = array_map(static fn (float $part): float => $part * $scale, $parts);
+        }
+
+        return $parts;
     }
 
     /**

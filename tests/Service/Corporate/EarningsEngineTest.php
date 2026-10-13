@@ -523,6 +523,11 @@ class EarningsEngineTest extends TestCase
             $state[FinancialConstants::STATE_INPUT_COST_DRAG_BASE] * ($kpis['input_cost_level'] - $kpis['input_cost_recovery']),
             $kpis['input_cost_drag'],
             1e-12
+        );        $this->assertEqualsWithDelta(
+            $kpis['input_cost_drag'],
+            $kpis['input_drag_metals'] + $kpis['input_drag_labor'] + $kpis['input_drag_earlier'],
+            1e-12,
+            'the drag split by input sums to the drag filed'
         );
     }
 

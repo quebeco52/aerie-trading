@@ -281,6 +281,7 @@ final class BusinessMapBuilder
         if ($inputs !== [] && $hasRecovery) {
             $map['outside'][] = ['group' => 'Input markets'];
             foreach ($inputs as [$channel, $label, $gap, $exposure]) {
+                $measured = $kpis['input_drag_' . $channel] ?? null;
                 $map['outside'][] = [
                     'id' => 'input:' . $channel,
                     'label' => $label,
@@ -288,12 +289,26 @@ final class BusinessMapBuilder
                     'format' => 'signed_pct',
                     'unit' => 'against normal',
                     'note' => sprintf('%s%% of production costs.', number_format($exposure * 100.0, 1)),
-                    'chips' => [$gap > 0.0
-                        ? ['text' => 'Costs up', 'figure' => null, 'format' => null, 'tone' => 'down']
-                        : ['text' => 'Costs down', 'figure' => null, 'format' => null, 'tone' => 'up']],
+                    'chips' => [is_numeric($measured) ? self::dragChip((float) $measured) : self::chip($gap > 0.0 ? 'Costs up' : 'Costs down', $gap > 0.0 ? 'down' : 'up')],
                 ];
-                // Sized at the full move on the cost ratio, before the buying lag and what is passed on.
-                $map['edges'][] = ['input:' . $channel, 'recover', -($gap <=> 0.0), $exposure * abs($gap) * $costRatio];
+                // The input's own part of the quarter's drag, lags and what is passed on included; a report filed before
+                // the split is sized at the full move on the cost ratio instead.
+                $map['edges'][] = is_numeric($measured)
+                    ? self::dragEdge('input:' . $channel, (float) $measured)
+                    : ['input:' . $channel, 'recover', -($gap <=> 0.0), $exposure * abs($gap) * $costRatio];
+            }
+            $earlier = $kpis['input_drag_earlier'] ?? null;
+            if (is_numeric($earlier) && abs((float) $earlier) >= self::DRAG_NOTE_FLOOR) {
+                $map['outside'][] = [
+                    'id' => 'input:earlier',
+                    'label' => 'Earlier input price moves',
+                    'value' => null,
+                    'format' => 'text',
+                    'unit' => null,
+                    'note' => 'Cost changes from past quarters still working through.',
+                    'chips' => [self::dragChip((float) $earlier)],
+                ];
+                $map['edges'][] = self::dragEdge('input:earlier', (float) $earlier);
             }
         }
 
@@ -635,6 +650,20 @@ final class BusinessMapBuilder
         $good = $invert ? $points <= 0.0 : $points >= 0.0;
 
         return ['text' => $text, 'figure' => $points, 'format' => 'signed_points', 'tone' => $good ? 'up' : 'down'];
+    }
+
+    /** The margin effect of one input's part of the drag: a drag on the cost ratio is a loss of margin. */
+    private static function dragChip(float $drag): array
+    {
+        return abs($drag) < self::DRAG_NOTE_FLOOR
+            ? self::chip('Under 0.05 pt on margin', 'neutral')
+            : self::pointsChip(-$drag * 100.0, 'on margin');
+    }
+
+    /** @return array{0: string, 1: string, 2: int, 3: float} */
+    private static function dragEdge(string $from, float $drag): array
+    {
+        return [$from, 'recover', abs($drag) < self::DRAG_NOTE_FLOOR ? 0 : -($drag <=> 0.0), abs($drag)];
     }
 
     /** A compact dollar figure for a note ("$1.54T"), as the template's format_large prints a card value. */
