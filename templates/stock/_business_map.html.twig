@@ -76,6 +76,9 @@
 			<div>
 				<h2 id="business-map-title" class="text-lg font-semibold text-on-surface">How the business works</h2>
 				<p class="text-sm text-on-surface-variant mt-0.5">What moved {{ name }} last quarter, from the economy outside to the revenue and costs it reported.</p>
+				{% if map.event is defined %}
+					<p class="mt-2 flex items-center gap-1.5 text-xs text-on-surface-variant">This quarter {{ _self.chip(map.event) }}</p>
+				{% endif %}
 			</div>
 			<button type="button" data-action="business-map#close" class="text-on-surface-variant hover:text-on-surface transition-colors cursor-pointer" aria-label="Close">
 				<span class="material-symbols-outlined text-2xl" aria-hidden="true">close</span>
@@ -90,7 +93,7 @@
 				<li>Thicker line, larger effect or share</li>
 			</ul>
 
-			<div class="relative grid grid-cols-1 lg:grid-cols-3 gap-y-6 lg:gap-x-16 items-start" data-business-map-target="map">
+			<div class="relative grid grid-cols-1 lg:grid-cols-3 gap-y-6 lg:gap-x-24 items-start" data-business-map-target="map">
 				<svg data-business-map-target="lines" class="hidden lg:block absolute inset-0 w-full h-full pointer-events-none overflow-visible" aria-hidden="true"></svg>
 				{% for column in [
 					{ title: 'Outside the company', cards: map.outside },

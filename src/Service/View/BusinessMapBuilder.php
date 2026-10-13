@@ -10,6 +10,7 @@ use App\Data\Macro\MacroFieldCatalog;
 use App\Entity\CorporateReport;
 use App\Entity\Stock;
 use App\Repository\CorporateReportRepository;
+use App\Service\Event\ShockEvent;
 use App\Service\Model\BusinessModelInterface;
 use App\Service\Model\Sector\CommercialBankBusinessModel;
 use App\Service\Model\Sector\HealthInsurerBusinessModel;
@@ -55,6 +56,18 @@ final class BusinessMapBuilder
         'labor' => 'Pay against productivity',
     ];
 
+    /** A lender's events by the card they concern (ShockEvent names); any other event goes under the map's title. */
+    private const LENDER_EVENT_CARDS = [
+        ShockEvent::RESERVE_RELEASE => 'reserve',
+        ShockEvent::MASSIVE_CREDIT_PROVISION => 'reserve',
+        ShockEvent::ELEVATED_LOAN_DEFAULTS => 'reserve',
+        ShockEvent::CREDIT_UNSECURED_PROVISIONS => 'reserve',
+        ShockEvent::BANK_RUN => 'funding',
+        ShockEvent::CUSTOMER_DEPOSIT_FLIGHT => 'funding',
+        ShockEvent::CAPTURED_NEW_DEPOSITS => 'funding',
+        ShockEvent::CAPITAL_BELOW_MINIMUM => 'capital',
+    ];
+
     public function __construct(private readonly CorporateReportRepository $reports) {}
 
     /**
@@ -89,8 +102,13 @@ final class BusinessMapBuilder
         $kpis = $report->getReportedKpis() ?? [];
         $state = $stock->getEarningsMomentumZ() ?? [];
 
+        // The total the earnings-flow chart opens with: sales plus interest earned on cash (EarningsFlowStatement).
+        // Every share on the map is of this total, so the cards add up to the figure the hand-off names.
+        $interest = max(0.0, (float) $report->getInterestIncome());
+        $total = $revenue + $interest;
+
         $map = ['outside' => [], 'inside' => [], 'produced' => [], 'edges' => []];
-        $this->addDemandSide($map, $streams, $details, $kpis, $state, $revenue);
+        $this->addDemandSide($map, $streams, $details, $kpis, $state, $total);
         if (!$model->isFinancial()) {
             $this->addCostSide($map, $model, $kpis, $report, $previous, $revenue);
         }
@@ -103,6 +121,9 @@ final class BusinessMapBuilder
             $model instanceof HealthInsurerBusinessModel => $this->addHealthPlanPricing($map, $state),
             default => null,
         };
+        $this->addOtherInterest($map, $interest, $total, $previous);
+        $this->placeEvent($map, $details, $model);
+        self::orderAgainstMiddle($map);
 
         // On a phone the lines give way to text: each card names what it feeds.
         $labels = [];
@@ -122,8 +143,6 @@ final class BusinessMapBuilder
             }
         }
 
-        // The total the earnings-flow chart opens with: sales plus interest earned on cash (EarningsFlowStatement).
-        $total = $revenue + max(0.0, (float) $report->getInterestIncome());
         $previousTotal = $previous !== null ? (float) $previous->getRevenue() + max(0.0, (float) $previous->getInterestIncome()) : 0.0;
         $map['handoff'] = [
             'revenue' => $total,
@@ -134,7 +153,8 @@ final class BusinessMapBuilder
     }
 
     /**
-     * One outside card per macro input that moved a stream, one operations card and one result card per stream.
+     * One outside card per macro input that moved a stream, one operations card and one result card per stream, its
+     * share taken of the hand-off total.
      *
      * @param array<string, mixed> $map
      * @param array<string, mixed> $streams
@@ -142,7 +162,7 @@ final class BusinessMapBuilder
      * @param array<string, mixed> $kpis
      * @param array<string, mixed> $state
      */
-    private function addDemandSide(array &$map, array $streams, array $details, array $kpis, array $state, float $revenue): void
+    private function addDemandSide(array &$map, array $streams, array $details, array $kpis, array $state, float $total): void
     {
         $drivers = [];
         foreach ($streams as $key => $streamRevenue) {
@@ -168,11 +188,17 @@ final class BusinessMapBuilder
                 $map['edges'][] = [$id, 'ops:' . $key, $effect <=> 0.0, abs($effect)];
             }
             $reading = $driver['reading'];
+            [$label, $value] = $reading !== null && isset($reading['field'])
+                ? MacroFieldCatalog::signedReading((string) $reading['field'], (float) $reading['value'])
+                : [$driver['label'], $reading !== null ? (float) $reading['value'] : null];
+            $format = $reading !== null ? self::readingFormat((string) $reading['unit']) : 'text';
             $map['outside'][] = [
                 'id' => $id,
-                'label' => $driver['label'],
-                'value' => $reading !== null ? (float) $reading['value'] : null,
-                'format' => $reading !== null ? self::readingFormat((string) $reading['unit']) : 'text',
+                'label' => $label,
+                'value' => $value,
+                'format' => $format,
+                // A bare index level means nothing without its name; a label that carries its own unit says it already.
+                'unit' => $format === 'index' && !str_contains($label, '(') ? 'index' : null,
                 'note' => null,
                 'chips' => $chips,
             ];
@@ -181,7 +207,7 @@ final class BusinessMapBuilder
         foreach ($streams as $key => $streamRevenue) {
             $key = (string) $key;
             $detail = $details[$key] ?? [];
-            $share = (float) $streamRevenue / $revenue;
+            $share = (float) $streamRevenue / $total;
             $map['inside'][] = $this->operationsCard($key, $detail, $kpis, $state);
             $map['produced'][] = [
                 'id' => 'rev:' . $key,
@@ -198,7 +224,7 @@ final class BusinessMapBuilder
     }
 
     /**
-     * How one revenue line ran: its order book where it sells from a backlog, its execution, and any event it took.
+     * How one revenue line ran: its order book where it sells from a backlog, and its execution.
      *
      * @param array<string, mixed> $detail
      * @param array<string, mixed> $kpis
@@ -221,9 +247,6 @@ final class BusinessMapBuilder
                 $z <= -self::EXECUTION_BAND_Z => ['text' => 'Operational headwinds', 'figure' => null, 'format' => null, 'tone' => 'down'],
                 default => ['text' => $z > 0.0 ? 'Running a little ahead' : 'Running a little behind', 'figure' => null, 'format' => null, 'tone' => 'neutral'],
             };
-        }
-        if (isset($detail['event'])) {
-            $chips[] = ['text' => ucfirst(mb_strtolower((string) $detail['event'])), 'figure' => null, 'format' => null, 'tone' => 'warn'];
         }
 
         $hasBacklog = isset($state[StreamContext::BACKLOG_STATE_PREFIX . $key]) && is_numeric($kpis['book_to_bill'] ?? null);
@@ -477,10 +500,8 @@ final class BusinessMapBuilder
             $map['edges'][] = ['funding', 'nim', 0, 0.3];
         }
 
-        // Funding sits beside the book it funds, and what they produce beside interest income, so the lines run across
-        // rather than down past the fee lines.
+        // Funding sits beside the book it funds; orderAgainstMiddle then lines up what they produce.
         self::moveAfter($map['inside'], ['funding'], 'ops:' . $interestStream);
-        self::moveAfter($map['produced'], ['paid', 'nim'], 'rev:' . $interestStream);
     }
 
     /**
@@ -608,6 +629,136 @@ final class BusinessMapBuilder
         if ($this->find($map['produced'], 'cost')) {
             $map['edges'][] = ['pricing', 'cost', -($excess <=> 0.0), abs($excess)];
         }
+    }
+
+    /**
+     * Interest earned on cash, which the hand-off total counts beside sales: its own card, so the shares add up to that
+     * total. An underwriter's investment income is this same line and takes the share instead.
+     *
+     * @param array<string, mixed> $map
+     */
+    private function addOtherInterest(array &$map, float $interest, float $total, ?CorporateReport $previous): void
+    {
+        if ($interest <= 0.0) {
+            return;
+        }
+        $before = max(0.0, (float) $previous?->getInterestIncome());
+        $line = ['share' => $interest / $total, 'change' => $before > 0.0 ? $interest / $before - 1.0 : null];
+        foreach ($map['produced'] as $i => $card) {
+            if (($card['id'] ?? null) === 'investment') {
+                $map['produced'][$i] = $line + $card;
+
+                return;
+            }
+        }
+        $last = 0;
+        foreach ($map['produced'] as $i => $card) {
+            if (str_starts_with((string) ($card['id'] ?? ''), 'rev:')) {
+                $last = $i + 1;
+            }
+        }
+        array_splice($map['produced'], $last, 0, [$line + [
+            'id' => 'other_interest',
+            'label' => 'Other interest income',
+            'value' => $interest,
+            'format' => 'money',
+            'unit' => null,
+            'note' => 'On cash and holdings outside the main business.',
+            'chips' => [],
+        ]]);
+    }
+
+    /**
+     * The quarter's event, once. The engine files a firm's event on every revenue line, but it is one event: a lender's
+     * credit, funding or capital event goes on the card it concerns, anything else under the map's title.
+     *
+     * @param array<string, mixed> $map
+     * @param array<string, mixed> $details
+     */
+    private function placeEvent(array &$map, array $details, BusinessModelInterface $model): void
+    {
+        $event = null;
+        foreach ($details as $detail) {
+            if (is_string($detail['event'] ?? null) && $detail['event'] !== '') {
+                $event = $detail['event'];
+                break;
+            }
+        }
+        if ($event === null) {
+            return;
+        }
+        $chip = self::chip(ucfirst(mb_strtolower($event)), 'warn');
+        $target = $model instanceof CommercialBankBusinessModel
+            ? self::LENDER_EVENT_CARDS[str_replace(' ', '_', mb_strtolower($event))] ?? null
+            : null;
+        foreach ($map['inside'] as $i => $card) {
+            if ($target !== null && ($card['id'] ?? null) === $target) {
+                $map['inside'][$i]['chips'][] = $chip;
+
+                return;
+            }
+        }
+        $map['event'] = $chip;
+    }
+
+    /**
+     * Orders the outer columns against the middle one by the barycentre heuristic for layered graphs (Sugiyama, Tagawa
+     * and Toda 1981): each card moves to the mean position of the middle cards it is linked to, so lines run across
+     * rather than crossing. A card with no link keeps its own position; cards stay under their group heading.
+     *
+     * @param array<string, mixed> $map
+     */
+    private static function orderAgainstMiddle(array &$map): void
+    {
+        $middle = self::positions($map['inside']);
+        foreach (['outside' => [0, 1], 'produced' => [1, 0]] as $column => [$own, $far]) {
+            $positions = self::positions($map[$column]);
+            $centre = [];
+            foreach ($positions as $id => $position) {
+                $linked = [];
+                foreach ($map['edges'] as $edge) {
+                    if ($edge[$own] === $id && isset($middle[$edge[$far]])) {
+                        $linked[] = $middle[$edge[$far]];
+                    }
+                }
+                $centre[$id] = $linked === [] ? $position : array_sum($linked) / count($linked);
+            }
+
+            $ordered = [];
+            $group = [];
+            $flush = static function () use (&$ordered, &$group, $centre): void {
+                usort($group, static fn (array $a, array $b): int => $centre[$a['id']] <=> $centre[$b['id']]);
+                array_push($ordered, ...$group);
+                $group = [];
+            };
+            foreach ($map[$column] as $card) {
+                if (isset($card['id'])) {
+                    $group[] = $card;
+                    continue;
+                }
+                $flush();
+                $ordered[] = $card;
+            }
+            $flush();
+            $map[$column] = $ordered;
+        }
+    }
+
+    /**
+     * Each card's place down its column, from 0 at the top to 1 at the bottom.
+     *
+     * @param list<array<string, mixed>> $cards
+     * @return array<string, float>
+     */
+    private static function positions(array $cards): array
+    {
+        $ids = array_values(array_filter(array_map(static fn (array $card): ?string => $card['id'] ?? null, $cards)));
+        $positions = [];
+        foreach ($ids as $i => $id) {
+            $positions[$id] = ($i + 0.5) / count($ids);
+        }
+
+        return $positions;
     }
 
     /**

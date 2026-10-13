@@ -147,7 +147,75 @@ final class BusinessMapBuilderTest extends TestCase
         $this->assertEqualsWithDelta(0.06, $this->card($map['produced'], 'nim')['chips'][0]['figure'], 1e-9);
         $this->assertSame(0.14, $this->card($map['inside'], 'capital')['value']);
         $this->assertSame(['ops:net_interest_income', 'funding', 'ops:fee_income', 'reserve', 'capital'], array_column($map['inside'], 'id'), 'funding beside the book');
-        $this->assertSame(['rev:net_interest_income', 'paid', 'nim', 'rev:fee_income', 'losses'], array_column($map['produced'], 'id'));
+        $this->assertSame(['rev:net_interest_income', 'nim', 'paid', 'rev:fee_income', 'losses'], array_column($map['produced'], 'id'), 'each result beside what feeds it');
+    }
+
+    /** One event filed on every stream shows once: a lender's credit event on its loss reserve, anything else under the title. */
+    public function testTheQuartersEventShowsOnce(): void
+    {
+        $report = $this->lenderReport();
+        $report->setStreamDetails(array_map(static fn (array $detail): array => $detail + ['event' => 'Reserve Release'], $report->getStreamDetails() ?? []));
+        $map = $this->builder->fromReports($this->stock('Banks - Diversified'), $report, null);
+        $this->assertNotNull($map);
+
+        $tagged = array_filter([...$map['inside'], ...$map['produced']], static fn (array $card): bool => in_array('Reserve release', array_column($card['chips'] ?? [], 'text'), true));
+        $this->assertSame(['reserve'], array_column($tagged, 'id'));
+        $this->assertArrayNotHasKey('event', $map);
+
+        $factory = $this->report(1100.0, '0.2190', null);
+        $factory->setStreamDetails(array_map(static fn (array $detail): array => $detail + ['event' => 'Product Recall'], $factory->getStreamDetails() ?? []));
+        $map = $this->builder->fromReports($this->stock('Specialty Industrial Machinery'), $factory, null);
+        $this->assertNotNull($map);
+        $this->assertSame('Product recall', $map['event']['text']);
+        $this->assertNotContains('Product recall', array_merge(...array_map(static fn (array $card): array => array_column($card['chips'] ?? [], 'text'), $map['inside'])));
+    }
+
+    /** Interest earned on cash gets its own card, so the shares add up to the revenue the hand-off names. */
+    public function testTheSharesAddUpToTheHandOffTotal(): void
+    {
+        $report = $this->lenderReport();
+        $report->setInterestIncome('25');
+        $map = $this->builder->fromReports($this->stock('Banks - Diversified'), $report, null);
+        $this->assertNotNull($map);
+
+        $other = $this->card($map['produced'], 'other_interest');
+        $this->assertSame(25.0, $other['value']);
+        $this->assertSame(125.0, $map['handoff']['revenue']);
+        $shares = array_sum(array_map(static fn (array $card): float => $card['share'] ?? 0.0, $map['produced']));
+        $this->assertEqualsWithDelta(1.0, $shares, 1e-12);
+        $this->assertEqualsWithDelta(0.56, $this->card($map['produced'], 'rev:net_interest_income')['share'], 1e-12);
+    }
+
+    /**
+     * Outside cards sit beside the cards they move (the barycentre ordering), so a reading that moves only the second
+     * stream comes below one that moves the first, whatever their strength.
+     */
+    public function testOutsideCardsLineUpWithWhatTheyMove(): void
+    {
+        $report = $this->lenderReport();
+        $report->setStreamDetails([
+            'net_interest_income' => ['drivers' => [$this->driver('housing_starts_index_ema', 'Housing starts', 'index', 116.2, 0.004)]],
+            'fee_income' => ['drivers' => [$this->driver('output_gap_ema', 'Output gap', 'pct', 0.012, 0.03)]],
+        ]);
+        $map = $this->builder->fromReports($this->stock('Banks - Diversified'), $report, null);
+        $this->assertNotNull($map);
+
+        $this->assertSame(['macro:housing_starts_index_ema', 'macro:output_gap_ema'], array_values(array_filter(array_column($map['outside'], 'id'))), 'strongest first would put the output gap on top');
+        $this->assertSame('index', $this->card($map['outside'], 'macro:housing_starts_index_ema')['unit']);
+        $this->assertNull($this->card($map['outside'], 'macro:output_gap_ema')['unit']);
+    }
+
+    /** A net balance below zero reads by its other side: easing, not negative tightening. */
+    public function testANegativeNetBalanceReadsAsEasing(): void
+    {
+        $report = $this->lenderReport();
+        $report->setStreamDetails(['net_interest_income' => ['drivers' => [$this->driver('sloos_tightening_index_ema', 'Lending standards (net tightening)', 'pct', -0.144, 0.0267)]]]);
+        $map = $this->builder->fromReports($this->stock('Banks - Diversified'), $report, null);
+        $this->assertNotNull($map);
+
+        $card = $this->card($map['outside'], 'macro:sloos_tightening_index_ema');
+        $this->assertSame('Lending standards (net easing)', $card['label']);
+        $this->assertSame(0.144, $card['value']);
     }
 
     /** An underwriter's capacity feeds its premiums; the combined ratio falls as the better quarter. */

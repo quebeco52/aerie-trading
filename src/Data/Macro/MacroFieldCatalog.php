@@ -136,6 +136,16 @@ final class MacroFieldCatalog
         'refining_crack_spread' => ['label' => 'Crack spread ($/bbl, spot)', 'unit' => self::UNIT_INDEX],
     ];
 
+    /**
+     * The name a field takes when its reading is negative, for a net balance whose minus sign would read as a double
+     * negative ("net tightening −14%" is net easing of 14%).
+     *
+     * @var array<string, string>
+     */
+    public const NEGATIVE_LABELS = [
+        'sloos_tightening_index_ema' => 'Lending standards (net easing)',
+    ];
+
     /** The field's printable name; an uncatalogued field is named by its own key. */
     public static function labelFor(string $field): string
     {
@@ -161,6 +171,21 @@ final class MacroFieldCatalog
             'unit' => self::FIELDS[$field]['unit'],
             'value' => round((float) $macroSnapshot[$field], 6),
         ];
+    }
+
+    /**
+     * A reading's name and value as a reader takes them: a field with a name for its negative side shows that name and
+     * the size of the reading instead of a minus sign.
+     *
+     * @return array{0: string, 1: float}
+     */
+    public static function signedReading(string $field, float $value): array
+    {
+        if ($value < 0.0 && isset(self::NEGATIVE_LABELS[$field])) {
+            return [self::NEGATIVE_LABELS[$field], -$value];
+        }
+
+        return [self::labelFor($field), $value];
     }
 
     /**

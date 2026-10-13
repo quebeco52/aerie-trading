@@ -110,4 +110,15 @@ class MacroFieldCatalogTest extends TestCase
         $this->assertSame(-0.005, $drivers[0]['readings'][0]['value']);
         $this->assertSame('Strong operational execution', $drivers[1]['label']);
     }
+
+    /** A net balance below zero reads by its other side, without a double negative; other fields keep the sign. */
+    public function testANegativeNetBalanceReadsAsItsOtherSide(): void
+    {
+        $this->assertSame(['Lending standards (net easing)', 0.144], MacroFieldCatalog::signedReading('sloos_tightening_index_ema', -0.144));
+        $this->assertSame(['Lending standards (net tightening)', 0.05], MacroFieldCatalog::signedReading('sloos_tightening_index_ema', 0.05));
+        $this->assertSame(['Output gap', -0.012], MacroFieldCatalog::signedReading('output_gap_ema', -0.012));
+        foreach (array_keys(MacroFieldCatalog::NEGATIVE_LABELS) as $field) {
+            $this->assertArrayHasKey($field, MacroFieldCatalog::FIELDS);
+        }
+    }
 }
