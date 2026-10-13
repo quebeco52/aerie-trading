@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Service\District;
 
 use App\Data\Company\RevenueStreams;
+use App\Data\Macro\MacroFieldCatalog;
 use App\Entity\CorporateReport;
 use App\Entity\Stock;
 use App\Service\Math\FirmEconomics;
@@ -157,7 +158,7 @@ class DistrictRevenueFeed
                 'contribution' => isset($contributions[$streamKey]) ? round($contributions[$streamKey], 5) : null,
                 // Oldest-first, so the sparkline reads left to right like every other chart here.
                 'history' => $this->streamHistory($history, (string) $streamKey),
-                'drivers' => $details['drivers'] ?? [],
+                'drivers' => MacroFieldCatalog::relabelDrivers($details['drivers'] ?? []),
                 'event' => $details['event'] ?? null,
             ];
         }

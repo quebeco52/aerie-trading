@@ -33,7 +33,7 @@ final class BusinessMapBuilderTest extends TestCase
         $map = $this->map();
 
         $gap = $this->card($map['outside'], 'macro:output_gap_lag_15m');
-        $this->assertSame('Output Gap (15M Lag)', $gap['label']);
+        $this->assertSame('Output gap (15-month lag)', $gap['label'], 'named from the catalogue, not the label the filing stored');
         $this->assertSame(-0.005, $gap['value']);
         $this->assertContains(['macro:output_gap_lag_15m', 'ops:equipment_sales', -1, 0.0029], $map['edges']);
         $this->assertContains(['macro:capacity_utilization_rate_ema', 'ops:equipment_sales', -1, 0.0033], $map['edges']);

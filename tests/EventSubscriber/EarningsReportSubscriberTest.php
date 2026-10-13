@@ -130,7 +130,7 @@ class EarningsReportSubscriberTest extends TestCase
         // The measured drivers, named by the catalog and ranked by the share of the stream they account for; an
         // effect below materiality is dropped, and momentum follows on its own scale.
         $this->assertSame(
-            ['Allied Defence Spending', 'CPI Inflation', 'Strong Operational Execution'],
+            ['Allied defence spending', 'CPI inflation', 'Strong operational execution'],
             array_column($gov['drivers'], 'label')
         );
         $this->assertSame(0.034, $gov['drivers'][0]['share']);
@@ -138,7 +138,7 @@ class EarningsReportSubscriberTest extends TestCase
         $this->assertSame(['allied_defense_spending_index_ema'], array_column($gov['drivers'][0]['readings'], 'field'));
 
         $exp = $streamDetails['expeditionary_ops'];
-        $this->assertSame(['Implied Volatility', 'IG Credit Spread'], array_slice(array_column($exp['drivers'], 'label'), 0, 2));
+        $this->assertSame(['Implied volatility', 'IG credit spread'], array_slice(array_column($exp['drivers'], 'label'), 0, 2));
         $this->assertSame([1, 3], [$exp['drivers'][0]['direction'], $exp['drivers'][0]['strength']]);
         $this->assertSame([-1, 2], [$exp['drivers'][1]['direction'], $exp['drivers'][1]['strength']]);
     }
@@ -539,7 +539,7 @@ class EarningsReportSubscriberTest extends TestCase
         $this->assertArrayHasKey('net_interest_income', $streamDetails);
         $nii = $streamDetails['net_interest_income'];
         
-        $this->assertSame(['10Y Yield', 'Output Gap', 'IG Credit Spread', 'Operational Headwinds'], array_column($nii['drivers'], 'label'));
+        $this->assertSame(['10Y yield', 'Output gap', 'IG credit spread', 'Operational headwinds'], array_column($nii['drivers'], 'label'));
 
         $yieldDriver = $nii['drivers'][0];
         // Each driver prints the reading of the input it was measured on, and its share of the stream.

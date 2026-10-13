@@ -59,7 +59,7 @@ class MacroFieldCatalogTest extends TestCase
         $reading = MacroFieldCatalog::readingFor('output_gap_ema', ['output_gap_ema' => -0.0081234]);
 
         $this->assertSame('output_gap_ema', $reading['field']);
-        $this->assertSame('Output Gap', $reading['label']);
+        $this->assertSame('Output gap', $reading['label']);
         $this->assertSame(MacroFieldCatalog::UNIT_PERCENT, $reading['unit']);
         $this->assertSame(-0.008123, $reading['value']);
     }
@@ -76,5 +76,38 @@ class MacroFieldCatalogTest extends TestCase
         $this->assertNull(MacroFieldCatalog::readingFor('not_a_macro_field', ['not_a_macro_field' => 1.0]));
         $this->assertNull(MacroFieldCatalog::readingFor('output_gap_ema', []));
         $this->assertNull(MacroFieldCatalog::readingFor('output_gap_ema', ['output_gap_ema' => null]));
+    }
+
+    /**
+     * Labels are sentence case, as every player page is (.agents/FRONTEND.md): past the first word only acronyms
+     * (CPI, GDP, 10Y) and the Reserve Fund's own name keep a capital.
+     */
+    public function testLabelsAreSentenceCase(): void
+    {
+        foreach (MacroFieldCatalog::FIELDS as $field => $meta) {
+            $words = preg_split('/[\s\-\/(]+/', $meta['label'], -1, PREG_SPLIT_NO_EMPTY) ?: [];
+            foreach (array_slice($words, 1) as $word) {
+                $core = (string) preg_replace('/[^A-Za-z0-9]/', '', $word);
+                $isAcronym = strlen($core) > 1 && (strtoupper($core) === $core);
+                $this->assertTrue(
+                    $core === '' || !ctype_upper($core[0]) || $isAcronym || in_array($core, ['Reserve', 'Fund'], true),
+                    "'{$meta['label']}' ({$field}) is not sentence case at '{$word}'."
+                );
+            }
+        }
+    }
+
+    /** A filing keeps the label it was struck with; read back, a catalogued driver takes today's name. */
+    public function testStoredDriversAreReadBackWithTodaysNames(): void
+    {
+        $drivers = MacroFieldCatalog::relabelDrivers([
+            ['label' => 'Output Gap (15M Lag)', 'type' => 'macro', 'impact' => -0.003, 'readings' => [['field' => 'output_gap_lag_15m', 'label' => 'Output Gap (15M Lag)', 'unit' => 'pct', 'value' => -0.005]]],
+            ['label' => 'Strong Operational Execution', 'type' => 'momentum', 'z' => 2.1, 'readings' => []],
+        ]);
+
+        $this->assertSame('Output gap (15-month lag)', $drivers[0]['label']);
+        $this->assertSame('Output gap (15-month lag)', $drivers[0]['readings'][0]['label']);
+        $this->assertSame(-0.005, $drivers[0]['readings'][0]['value']);
+        $this->assertSame('Strong operational execution', $drivers[1]['label']);
     }
 }

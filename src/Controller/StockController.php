@@ -3,6 +3,7 @@
 namespace App\Controller;
 
 use App\Data\Company\RevenueStreams;
+use App\Data\Macro\MacroFieldCatalog;
 use App\Entity\Stock;
 use App\Repository\EtfRepository;
 use App\Repository\StockRepository;
@@ -370,7 +371,7 @@ class StockController extends AbstractController
                         $nodeData['streamKey'] = $streamName;
                         // Null is "not meaningful" — a stream with no prior quarter has no growth rate to quote.
                         $nodeData['qoq_delta'] = $streamDetails[$streamName]['qoq_delta'] ?? null;
-                        $nodeData['drivers'] = $streamDetails[$streamName]['drivers'] ?? [];
+                        $nodeData['drivers'] = MacroFieldCatalog::relabelDrivers($streamDetails[$streamName]['drivers'] ?? []);
                         if (!empty($streamDetails[$streamName]['event'])) {
                             $nodeData['event'] = $streamDetails[$streamName]['event'];
                         }

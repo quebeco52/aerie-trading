@@ -6,6 +6,7 @@ namespace App\Service\View;
 
 use App\Data\Company\RevenueStreams;
 use App\Data\Company\Sectors;
+use App\Data\Macro\MacroFieldCatalog;
 use App\Entity\CorporateReport;
 use App\Entity\Stock;
 use App\Repository\CorporateReportRepository;
@@ -81,7 +82,10 @@ final class BusinessMapBuilder
         }
 
         $model = Sectors::strategyFor($stock->getIndustry());
-        $details = $report->getStreamDetails() ?? [];
+        $details = array_map(
+            static fn (array $detail): array => ['drivers' => MacroFieldCatalog::relabelDrivers($detail['drivers'] ?? [])] + $detail,
+            $report->getStreamDetails() ?? []
+        );
         $kpis = $report->getReportedKpis() ?? [];
         $state = $stock->getEarningsMomentumZ() ?? [];
 

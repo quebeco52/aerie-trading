@@ -226,7 +226,7 @@ class EarningsReportSubscriber implements EventSubscriberInterface
             $z = (float) ($momentum[$streamKey] ?? 0.0);
             if (abs($z) >= self::MOMENTUM_MATERIALITY_FLOOR) {
                 $drivers[] = [
-                    'label'     => $z >= 1.0 ? 'Strong Operational Execution' : ($z <= -1.0 ? 'Operational Headwinds' : 'Operational Drift'),
+                    'label'     => $z >= 1.0 ? 'Strong operational execution' : ($z <= -1.0 ? 'Operational headwinds' : 'Operational drift'),
                     'z'         => round($z, 2),
                     'type'      => 'momentum',
                     'readings'  => [],
