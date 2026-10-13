@@ -146,6 +146,8 @@ final class BusinessMapBuilderTest extends TestCase
         $this->assertSame(4.0, $this->card($map['produced'], 'losses')['value']);
         $this->assertEqualsWithDelta(0.06, $this->card($map['produced'], 'nim')['chips'][0]['figure'], 1e-9);
         $this->assertSame(0.14, $this->card($map['inside'], 'capital')['value']);
+        $this->assertSame(['ops:net_interest_income', 'funding', 'ops:fee_income', 'reserve', 'capital'], array_column($map['inside'], 'id'), 'funding beside the book');
+        $this->assertSame(['rev:net_interest_income', 'paid', 'nim', 'rev:fee_income', 'losses'], array_column($map['produced'], 'id'));
     }
 
     /** An underwriter's capacity feeds its premiums; the combined ratio falls as the better quarter. */

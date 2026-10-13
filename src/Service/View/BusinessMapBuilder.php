@@ -476,6 +476,11 @@ final class BusinessMapBuilder
             $map['edges'][] = ['ops:' . $interestStream, 'nim', 0, 0.3];
             $map['edges'][] = ['funding', 'nim', 0, 0.3];
         }
+
+        // Funding sits beside the book it funds, and what they produce beside interest income, so the lines run across
+        // rather than down past the fee lines.
+        self::moveAfter($map['inside'], ['funding'], 'ops:' . $interestStream);
+        self::moveAfter($map['produced'], ['paid', 'nim'], 'rev:' . $interestStream);
     }
 
     /**
@@ -668,6 +673,37 @@ final class BusinessMapBuilder
     private static function dragEdge(string $from, float $drag): array
     {
         return [$from, 'recover', abs($drag) < self::DRAG_NOTE_FLOOR ? 0 : -($drag <=> 0.0), abs($drag)];
+    }
+
+    /**
+     * Moves the cards with $ids, in that order, to just after the card $anchor; a missing card is skipped.
+     *
+     * @param list<array<string, mixed>> $cards
+     * @param list<string> $ids
+     */
+    private static function moveAfter(array &$cards, array $ids, string $anchor): void
+    {
+        $moved = [];
+        foreach ($ids as $id) {
+            foreach ($cards as $card) {
+                if (($card['id'] ?? null) === $id) {
+                    $moved[] = $card;
+                }
+            }
+        }
+        $result = [];
+        $placed = false;
+        foreach ($cards as $card) {
+            if (in_array($card['id'] ?? null, $ids, true)) {
+                continue;
+            }
+            $result[] = $card;
+            if (($card['id'] ?? null) === $anchor) {
+                array_push($result, ...$moved);
+                $placed = true;
+            }
+        }
+        $cards = $placed ? $result : [...$result, ...$moved];
     }
 
     /** A compact dollar figure for a note ("$1.54T"), as the template's format_large prints a card value. */
