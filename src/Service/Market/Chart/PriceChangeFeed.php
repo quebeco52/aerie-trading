@@ -14,7 +14,9 @@ use App\Service\Market\Ticker\TickCadence;
  * Reads each stock's price change over the buffered lookback window.
  *
  * Shared by the markets table, the stock page header and the district elevation — every surface
- * that prints a change figure reads it from here, so they cannot disagree.
+ * that prints a change figure reads it from here, so they cannot disagree. Live, the ticker puts the
+ * same figure on each frame as `change_percent`, read off the same buffer through change() (see
+ * App\Service\Market\Ticker\ChartBufferWriter).
  *
  * There is no persisted previous close, session open, or OHLC anywhere in the schema, and no
  * existing change-% logic to reuse — but App\Command\MarketTickerCommand already maintains a
@@ -90,16 +92,15 @@ class PriceChangeFeed
                 continue;
             }
 
-            $pastPrice = $this->decodePrice($oldest[$index] ?? null);
+            $pastPrice = self::bufferedPrice($oldest[$index] ?? null);
             if ($pastPrice === null || $pastPrice <= 0.0) {
                 $pastPrice = $this->oldestPersistedPriceInLookback($stock);
             }
 
-            if ($pastPrice === null || $pastPrice <= 0.0) {
-                continue;
+            $change = self::change($currentPrice, $pastPrice);
+            if ($change !== null) {
+                $changes[$stock->getTicker()] = $change;
             }
-
-            $changes[$stock->getTicker()] = ($currentPrice - $pastPrice) / $pastPrice;
         }
 
         return $changes;
@@ -141,9 +142,17 @@ class PriceChangeFeed
             return null;
         }
 
-        $pastPrice = $this->decodePrice($this->redis->lIndex("chart_buffer:{$ticker}", -1));
+        return self::change($currentPrice, self::bufferedPrice($this->redis->lIndex("chart_buffer:{$ticker}", -1)));
+    }
 
-        if ($pastPrice === null || $pastPrice <= 0.0) {
+    /**
+     * Fractional change from the window's opening price; null when either price is missing or not
+     * positive. The one rule behind the server-rendered figure and the one the ticker puts on the
+     * wire (ChartBufferWriter), so a page reads the same number before and after its first frame.
+     */
+    public static function change(float $currentPrice, ?float $pastPrice): ?float
+    {
+        if ($currentPrice <= 0.0 || $pastPrice === null || $pastPrice <= 0.0) {
             return null;
         }
 
@@ -151,7 +160,7 @@ class PriceChangeFeed
     }
 
     /** Pulls the price out of one buffered `{"price": …, "recorded_at": …}` entry. */
-    private function decodePrice(mixed $entry): ?float
+    public static function bufferedPrice(mixed $entry): ?float
     {
         if (!is_string($entry)) {
             return null;

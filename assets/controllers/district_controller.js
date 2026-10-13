@@ -177,6 +177,7 @@ export default class extends Controller {
     static targets = [
         'plot', 'label', 'rank', 'kerbPrice', 'kerbChange',
         'institution', 'conduit', 'institutionReadout', 'readoutSpark', 'svg', 'summaryStress',
+        'summaryChange', 'summaryMover',
         'summaryReconstitution', 'reconstitutionNotice',
         'flare', 'badge', 'badgeCount', 'kerbLight',
         'tooltip', 'tooltipTicker', 'tooltipRank', 'tooltipName', 'tooltipMeta',
@@ -376,6 +377,8 @@ export default class extends Controller {
         this.institutionElements = this.institutionTargets;
         this.summaryStressElement = this.hasSummaryStressTarget ? this.summaryStressTarget : null;
         this.summaryReconstitutionElement = this.hasSummaryReconstitutionTarget ? this.summaryReconstitutionTarget : null;
+        this.summaryChangeElement = this.hasSummaryChangeTarget ? this.summaryChangeTarget : null;
+        this.summaryMoverElement = this.hasSummaryMoverTarget ? this.summaryMoverTarget : null;
 
         // Facade heights move on their own, slower clock — see RESIZE_INTERVAL_MS.
         this.capByTicker = new Map();
@@ -1471,6 +1474,7 @@ export default class extends Controller {
         if (touched && now - this.lastRerankAt >= this.constructor.RERANK_THROTTLE_MS) {
             this.lastRerankAt = now;
             this.rerank();
+            this.renderSummaryChange();
         }
 
         if (this.capByTicker.size > 0 && now - this.lastResizeAt >= this.constructor.RESIZE_INTERVAL_MS) {
@@ -1711,6 +1715,9 @@ export default class extends Controller {
         this.relightWindows(plot, update);
         this.capByTicker.set(ticker, update.is_bankrupt ? 0 : marketCap);
         this.updateKerbPlate(ticker, newPrice);
+        if ('change_percent' in update) {
+            this.updateKerbChange(plot, update.change_percent);
+        }
 
         if (plot.getAttribute('data-selected') === 'true') {
             this.renderFigures(plot);
@@ -1762,17 +1769,75 @@ export default class extends Controller {
         });
     }
 
-    /**
-     * Rewrites a kerb plate's price on a live tick. The change % beside it is left alone: it is
-     * measured against the oldest price in the ticker's Redis buffer (see DistrictPriceChangeFeed)
-     * and the client has no access to that baseline, so recomputing it here would quietly invent
-     * a different number from the one the server rendered.
-     */
+    /** Rewrites a kerb plate's price on a live tick. */
     updateKerbPlate(ticker, price) {
         const priceNode = this.kerbPriceByTicker.get(ticker);
         if (priceNode) {
             setText(priceNode, formatCurrency(price));
         }
+    }
+
+    /**
+     * Rewrites a kerb plate's past-month change from a frame. The ticker reads it off the same
+     * buffer the server rendered from (ChartBufferWriter), so the figure carries on where first
+     * paint left it; null is "no history yet" and prints as a dash. The tooltip and the detail
+     * panel read plot.dataset.change when they open.
+     */
+    updateKerbChange(plot, change) {
+        const value = Number.isFinite(change) ? change : null;
+        const changeStr = value === null ? '' : String(value);
+        if (plot.dataset.change === changeStr) return;
+        plot.dataset.change = changeStr;
+
+        const node = this.kerbChangeByTicker.get(plot.dataset.ticker);
+        if (node) {
+            setText(node, value === null ? '—' : formatPercent(value, 1, false, true));
+            const direction = value === null || value === 0 ? 'flat' : (value > 0 ? 'up' : 'down');
+            if (node.getAttribute('data-direction') !== direction) node.setAttribute('data-direction', direction);
+        }
+        if (plot.getAttribute('data-selected') === 'true') {
+            this.renderFigures(plot);
+        }
+    }
+
+    /**
+     * The summary's past month and biggest mover, from the live kerb figures: the same cap-weighted
+     * mean and largest absolute move DistrictController::buildSummary() renders on first paint.
+     */
+    renderSummaryChange() {
+        let weighted = 0;
+        let weight = 0;
+        let mover = null;
+        this.plotsByTicker.forEach(plot => {
+            if (plot.dataset.change === '') return;
+            const change = parseFloat(plot.dataset.change);
+            const cap = parseFloat(plot.dataset.mcap) || 0;
+            if (!Number.isFinite(change)) return;
+            weighted += change * cap;
+            weight += cap;
+            if (mover === null || Math.abs(change) > Math.abs(mover.change)) {
+                mover = { ticker: plot.dataset.ticker, change };
+            }
+        });
+
+        if (this.summaryChangeElement) {
+            const mean = weight > 0 ? weighted / weight : null;
+            setText(this.summaryChangeElement, formatPercent(mean, 2, false, true));
+            this.setSignedClass(this.summaryChangeElement, mean);
+        }
+        if (this.summaryMoverElement) {
+            setText(this.summaryMoverElement, mover === null ? '—' : `${mover.ticker} ${formatPercent(mover.change, 1, false, true)}`);
+            this.setSignedClass(this.summaryMoverElement, mover === null ? null : mover.change);
+        }
+    }
+
+    /** Swaps an element's up/down/flat colour class for the one a value takes. */
+    setSignedClass(element, value) {
+        const next = signedClass(value);
+        if (element.dataset.signed === next) return;
+        if (element.dataset.signed) element.classList.remove(element.dataset.signed);
+        element.classList.add(next);
+        element.dataset.signed = next;
     }
 
     /**

@@ -468,7 +468,11 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
                     }
                 }
 
-                $chartBuffers->write($quotes, $bondResult['updates'], $tickCount, $this->ticksPerYear);
+                // A frame carries each quote's past-month change, read back from the buffers just written.
+                $changes = $chartBuffers->write($quotes, $bondResult['updates'], $tickCount, $this->ticksPerYear, $isFrameTick);
+                if ($changes !== []) {
+                    $published = ChartBufferWriter::withChanges($published, $changes);
+                }
                 $profiler->lap('chart buffers');
 
                 $districtReconstitution = $this->reconstituteDistrict($stocks, $tickCount, $events);

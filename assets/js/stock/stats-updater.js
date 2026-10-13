@@ -1,4 +1,4 @@
-import { formatCurrency, formatLarge, formatPercent, formatShares } from '../utils/formatters.js';
+import { formatCurrency, formatLarge, formatPercent, formatShares, signedClass } from '../utils/formatters.js';
 import { flashTick } from '../utils/tick-flash.js';
 
 let previousPrice = null;
@@ -23,6 +23,13 @@ export function updatePriceUI(newPrice, stockUpdate, config = {}) {
         if (holdingEl) {
             holdingEl.textContent = formatCurrency(newPrice * Math.abs(userQuantity));
         }
+    }
+
+    // The past-month change rides each frame (ChartBufferWriter); null is "no history yet", printed as a dash.
+    const changeEl = document.getElementById('big-change');
+    if (changeEl && 'change_percent' in stockUpdate) {
+        changeEl.textContent = formatPercent(stockUpdate.change_percent, 2, false, true);
+        changeEl.className = `font-semibold ${signedClass(stockUpdate.change_percent)}`;
     }
 
     if (!config.isEtf) {

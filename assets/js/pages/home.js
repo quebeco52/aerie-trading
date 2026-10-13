@@ -90,10 +90,11 @@ function initHome() {
                     const mcapMoved = setText(mcapEl, formatLarge(newMcap, '$'));
                     rowEl.setAttribute('data-mcap', newMcap);
 
-                    // A ticker with nothing buffered yet reports no change at all, which is a
-                    // different fact from "flat" and has to keep printing as an em dash.
-                    if (chgEl) {
-                        const chg = stock.changePercent;
+                    // The past-month change rides each frame as change_percent (ChartBufferWriter). A
+                    // ticker with nothing buffered yet reports null, which is a different fact from "flat"
+                    // and has to keep printing as an em dash.
+                    if (chgEl && 'change_percent' in stock) {
+                        const chg = stock.change_percent;
                         // Steady state, not a flash: the day's direction, held until it changes.
                         chgEl.classList.remove(...SIGNED_CLASSES);
                         setText(chgEl, formatPercent(chg, 2, false, true));
