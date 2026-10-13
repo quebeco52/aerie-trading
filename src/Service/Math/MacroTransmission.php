@@ -387,10 +387,10 @@ final class MacroTransmission
     /**
      * Calculates international merchandise trade flow volume shifts (Mundell-Fleming).
      *
-     * Evaluates net exports as a fraction of GDP relative to baseline structural trade balance (-2.8%).
+     * Evaluates net exports as a fraction of GDP relative to the structural trade balance.
      *
      * @param float $tradeBalance Current trade balance to GDP ratio.
-     * @param float $baseline     Neutral structural trade balance baseline (-0.028).
+     * @param float $baseline     Structural trade balance (MacroEngine::TRADE_BALANCE_BASELINE).
      * @param float $sensitivity  Trade volume elasticity multiplier.
      * @return float Trade volume shift bounded in [-0.20, 0.20].
      */

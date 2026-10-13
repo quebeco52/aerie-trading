@@ -1,0 +1,166 @@
+# Cycle amplitude evidence
+
+## 2026-10-12 Baseline cycle size on HEAD a10a390 (one arm)
+Question: how large are booms and busts on current code, before tuning, vs World Bank growth sd 1985-2019 (US 1.46, CH 1.64, UK 1.83, DE 1.92, JP 2.31, LU 2.93, SG 4.01; negative years per 40 US 3, financial centres 4-7; u sd US 1.59, CH 0.84, SG 0.97).
+Harness: CycleAmpHarnessTest.php (RegimeHarnessTest fork + OutputGapProbe), POLITICS=1, TPY 360, 16 seeds x 45 y, burn-in 5 y, snapshot = git archive HEAD. Run: see RUN.md. Wall 562 s.
+
+```
+arm R1, n=16 seeds, years 6-45 (growth base year 5), blown/short: none
+quantity                             mean      se      min      max
+growth sd %                         1.384   0.070    1.137    2.359
+growth mean %                       2.089   0.079    1.555    2.679
+worst year %                       -1.300   0.250   -4.108    0.755
+best year %                         5.110   0.182    3.838    6.583
+negative years /40                  2.562   0.418    0.000    7.000
+crises /40                          1.188   0.245    0.000    3.000
+gap sd %                            1.563   0.085    1.060    2.429
+gap min %                          -3.998   0.272   -6.620   -2.208
+gap max %                           3.309   0.211    2.168    4.660
+supply gap sd %                     0.993   0.061    0.569    1.719
+supply share of var(gap)            0.376   0.030    0.161    0.558
+net export gap sd %                 0.871   0.040    0.595    1.107
+net export share of var(gap)       -0.004   0.038   -0.215    0.323
+finance gap sd %                    0.724   0.046    0.396    1.169
+finance share of var(gap)           0.179   0.027    0.017    0.447
+u annual sd pp                      0.839   0.055    0.534    1.309
+u max %                             6.796   0.194    5.568    8.393
+u mean %                            4.602   0.108    4.066    5.423
+Sahm starts /40                     6.750   0.403    4.000   10.000
+policy at floor share               0.004   0.003    0.000    0.044
+balance sheet on share              0.148   0.029    0.000    0.412
+d(gap) quarterly sd %               0.442   0.019    0.357    0.672
+post_crisis_worst % (pooled, n=19)    0.245   0.271   -2.255    1.642
+quiet_worst % (pooled, n=16)       -0.998   0.255   -4.108    0.755
+
+gap channels, quarterly: sd of contribution (% of potential) and cov(contribution, d gap)/var(d gap), seed means
+channel                          sd %  cov share      se
+fundStabilisation              0.4824      0.359   0.019
+monetaryDrag                   0.1680      0.132   0.011
+productivitySupply             0.1597      0.121   0.015
+automaticStabiliser            0.5345     -0.111   0.025
+netExports                     0.1595      0.110   0.012
+financeOutput                  0.1161      0.108   0.007
+demandDisaster                 0.3915      0.096   0.024
+premiumDrag                    0.1115      0.076   0.013
+householdDeleveragingDrag      0.0983      0.071   0.005
+diffusion                      0.0982      0.047   0.006
+crisisDeleveragingDrag         0.2303      0.044   0.019
+demandShock                    0.2024      0.038   0.023
+householdNewBorrowing          0.4288     -0.035   0.019
+fiscalStimulus                 0.2435     -0.024   0.014
+inventoryDrag                  0.0891     -0.022   0.005
+capitalDrag                    0.0198      0.015   0.001
+cubicConstraint                0.0650     -0.013   0.004
+housingWealthEffect            0.1149     -0.011   0.008
+energySupplyDrag               0.0524     -0.005   0.004
+momentum                       0.0214      0.004   0.001
+catastropheSupplyDrag          0.0343      0.004   0.003
+equityWealthEffect             0.0492     -0.004   0.005
+policyUncertaintyDrag          0.0133     -0.003   0.001
+lendingStandardsDrag           0.0596      0.002   0.005
+creditFrictionDrag             0.0422     -0.001   0.002
+freightSupplyDrag              0.0050      0.000   0.000
+disasterCompensator            0.0009      0.000   0.000
+premiumCompensator             0.0000      0.000   0.000
+crisisCompensator              0.0000      0.000   0.000
+clamp                          0.0000      0.000   0.000
+sum of cov shares                          1.000  (1 minus unexplained)
+```
+Caveats: post-crisis worst is a min over 3 years per crisis, quiet worst a min over ~30 years per seed, so they are not like for like. Sahm starts counted on quarterly samples. fundStabilisation has the largest positive cov share with the quarterly gap change (0.36): it moves with gap changes, not against them; worth a look.
+
+## 2026-10-12 Fund countercyclical spending off (R2 vs R1)
+Question: how much does CreditFiscalSubsystem::calculateFundStabilisation (Norway reaction function) shrink booms and busts?
+Arm R2 = R1 (HEAD a10a390) with MacroEngine::FUND_STABILISATION_GAP_RESPONSE = 0.0 via $SNAP/ovr2; verified sovereignFundStabilisationToGdp (row `fstab`) = 0 in every R2 row. POLITICS=1, TPY 360, 16 seeds x 45 y, burn 5; R1 reused from cache. Run: RUN.md (R2 line), `python3 compare.py R1 R2`. Wall 577 s.
+Targets named before the run: growth sd, negative years /40, crisis gap fall.
+
+```
+R2 minus R1, paired by seed, years 6-45, seeds ok 16/16 (short: none)
+quantity                         R1       R2     diff      se      t   n
+-- targets
+growth sd %                   1.384    1.590    0.206   0.134   1.54  16
+negative years /40            2.562    4.375    1.812   0.720   2.52  16
+crisis gap fall pp            2.657    3.171    0.003   0.442   0.01  10  (arm n 12/13)
+-- guards
+gap sd %                      1.563    2.212    0.648   0.233   2.78  16
+gap min %                    -3.998   -5.914   -1.915   0.760  -2.52  16
+u annual sd pp                0.839    1.398    0.559   0.161   3.47  16
+u max %                       6.796    8.672    1.876   0.635   2.95  16
+Sahm starts /40               6.750    6.188   -0.562   0.456  -1.23  16
+balance sheet on share        0.148    0.214    0.065   0.057   1.15  16
+policy at floor share         0.004    0.054    0.051   0.014   3.65  16
+inflation mean %              2.131    2.230    0.099   0.035   2.87  16
+end fund/GDP                  0.681    0.778    0.097   0.100   0.96  16
+end gross debt/GDP            0.577    0.627    0.050   0.036   1.37  16
+
+R2 gap channels, top 8:
+channel                          sd %  cov share      se
+monetaryDrag                   0.2147      0.193   0.014
+demandDisaster                 0.3546      0.143   0.032
+financeOutput                  0.1230      0.120   0.008
+crisisDeleveragingDrag         0.2712      0.118   0.032
+productivitySupply             0.1502      0.099   0.013
+premiumDrag                    0.1250      0.094   0.012
+householdDeleveragingDrag      0.1170      0.089   0.007
+netExports                     0.1524      0.082   0.015
+```
+Caveats: crisis gap fall pairs only seeds with a crisis in both arms (10), and crisis dates differ between arms, so that row is close to unpaired; arm means 2.66 vs 3.17 pp. Growth sd t=1.5 at the 16-seed cap: +15%, not negligible, unresolved. In R1 the fund channel has cov share +0.36 with the quarterly gap change: its annual budget-round steps are themselves a source of quarterly gap moves even though levels show it damps the cycle.
+
+## 2026-10-13 Mainland AR(2) refit 1985-2019 (R3 vs R1)
+Question: does the mainland gap refit (AR1 1.197->1.235, AR2 -0.296->-0.300, sigma 0.00503->0.00490; stationary sd 1.37%->1.65%) widen the District cycle?
+Arm R3 = R1 (HEAD a10a390) + working-tree AssetMarketSubsystem.php via $SNAP/ovr3 (diff = the 3 constants and docblocks). POLITICS=1, TPY 360, 45 y, burn 5, seeds 1-16 (stage 8 then 16; no target reached |t| 4). R1 from cache. Run: RUN.md (R3 line), `python3 pairhp.py R1 R3`. Wall ~9 min.
+Targets named before the run: HP(6.25) cycle sd of annual real GDP, negative years /40, quarterly gap sd.
+
+```
+R3 minus R1, paired by seed, seeds ok 16/16 (short: none)
+quantity                       R1       R3     diff      se      t   n
+-- targets (cycle min is a reported extra)
+HP6.25 cycle sd %           0.841    0.790   -0.050   0.081  -0.62  16
+HP6.25 cycle min %         -1.937   -1.645    0.292   0.211   1.38  16
+negative years /40          2.562    2.500   -0.062   0.595  -0.11  16
+gap sd % (quarterly)        1.563    1.421   -0.142   0.131  -1.09  16
+-- guards
+u annual sd pp              0.839    0.744   -0.095   0.086  -1.10  16
+policy at floor share       0.004    0.005    0.002   0.006   0.26  16
+inflation mean %            2.131    2.206    0.075   0.037   2.06  16
+nx sd %                     0.871    1.013    0.142   0.075   1.89  16
+mainland gap sd %           1.288    1.571    0.283   0.077   3.67  16
+growth sd %                 1.384    1.311   -0.073   0.105  -0.69  16
+```
+Caveats: snapshot rebuilt 10-13 (old scratchpad gone; cache-catree deleted). 4 stage-1 logs (seeds 1,5,6,8) showed one PHPUnit warning; a rerun of seed 1 with --display-warnings gave none and a bit-identical macro path, so it was the cold container cache, not the model. Mainland gap sd rises 0.28pp (t 3.7) as designed, yet no District cycle target moves past |t| 1.4: the mainland channel is not what limits cycle amplitude. Inflation +0.08pp (t 2.1) and nx sd +0.14pp (t 1.9) are guards, at the chance rate for 7 guards.
+
+## 2026-10-13 Swiss trade openness (R4 vs R3)
+
+Question: does the Swiss openness change (exports 0.30 -> 0.662 of GDP, baseline trade balance -2.5% -> +9.3%,
+value-added export / domestic-use import shares in netExportGapAt, EXCESS_IMPORT_LEAKAGE and FOREIGN_IMPORT_SPILLOVER,
+clamps baseline +-0.055) change cycle size or the District's loading on the mainland gap?
+Arm R4 = R3 + working-tree MacroEngine.php, AssetMarketSubsystem.php, MacroAggregateSubsystem.php, MacroTransmission.php
+via $SNAP/ovr4 (diffed vs the snapshot: only the listed changes, plus the tariff-retaliation term in netExportGapAt also
+scaled by domestic content). POLITICS=1, TPY 360, 45 y, burn 5, seeds 1-16 (stage 8 then 16; no target reached |t| 4).
+R3 from cache. Run: RUN.md (R4 line), `python3 pairtrade.py R3 R4`. Wall ~4 min per 8-seed stage.
+Targets named before the run: HP6.25 cycle sd (+min), beta/corr of gap on fgap, quarterly gap sd.
+```
+R4 minus R3, paired by seed, seeds ok 16/16 (short: none)
+quantity                       R3       R4     diff      se      t   n
+-- targets (cycle min is a reported extra)
+HP6.25 cycle sd %           0.790    0.822    0.031   0.068   0.46  16
+HP6.25 cycle min %         -1.645   -1.851   -0.206   0.196  -1.05  16
+beta gap on fgap            0.256    0.369    0.113   0.080   1.41  16
+corr gap, fgap              0.282    0.375    0.092   0.087   1.06  16
+gap sd % (quarterly)        1.421    1.599    0.178   0.132   1.35  16
+-- guards (rest = gap - nx - supply - fin)
+negative years /40          2.500    3.062    0.562   0.764   0.74  16
+u annual sd pp              0.744    0.906    0.162   0.113   1.43  16
+inflation mean %            2.206    2.227    0.021   0.033   0.62  16
+policy at floor share       0.005    0.005    0.000   0.007   0.06  16
+nx sd %                     1.013    1.382    0.369   0.117   3.15  16
+tb mean %                  -1.950    9.759   11.709   0.182  64.35  16
+tb at clamp share           0.000    0.000    0.000   0.000    nan  16
+growth sd %                 1.311    1.372    0.060   0.098   0.62  16
+fund/GDP end                0.772    0.830    0.058   0.210   0.28  16
+corr nx, rest              -0.633   -0.574    0.060   0.062   0.97  16
+mainland gap sd %           1.571    1.576    0.005   0.118   0.04  16
+```
+Caveats: at 8 seeds beta was +0.198 (t 2.36) and corr +0.191 (t 2.10); both halved at 16 (stage-8 t's of 2-3 are
+unreliable). All three targets inside noise at 16; every point estimate points to a slightly larger, more mainland-loaded
+cycle. Trade balance sits at +9.8% mean (baseline 9.3%), never at a clamp in either arm. nx sd +0.37pp (t 3.2) is the
+expected mechanical effect of the larger shares. Clamp share uses R3 bounds -0.08/+0.03 and R4 bounds 0.038/0.148.

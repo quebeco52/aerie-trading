@@ -104,12 +104,12 @@ class AssetMarketSubsystem
     // --- The Mainland (Rudebusch & Svensson 1999, re-estimated on US data 1985-2019: var/harness/mainland_fit.py) ---
     /** The mainland's statistics and its central bank's decisions arrive once a quarter, the frequency its equations are estimated at. */
     public const MAINLAND_QUARTERS_PER_YEAR = 4;
-    /** First autoregressive coefficient of the mainland gap on the CBO gap (1.197, se 0.143); the real-rate term estimates at zero on this sample (-0.006, se 0.037) and is left out. */
-    public const MAINLAND_GAP_AR1 = 1.197;
-    /** Second autoregressive coefficient of the mainland gap (-0.296, se 0.159). */
-    public const MAINLAND_GAP_AR2 = -0.296;
-    /** Quarterly innovation of the mainland gap, the regression's residual sd (0.503pp); the stationary sd it gives is 1.37% against the CBO gap's 1.62%. */
-    public const MAINLAND_GAP_SIGMA = 0.00503;
+    /** First autoregressive coefficient of the mainland gap on the CBO gap (1.235, se 0.136); the real-rate term estimates at zero away from the lower bound (-0.006, se 0.037) and is left out, so the zero-bound years stay in the sample. */
+    public const MAINLAND_GAP_AR1 = 1.235;
+    /** Second autoregressive coefficient of the mainland gap (-0.300, se 0.140). */
+    public const MAINLAND_GAP_AR2 = -0.300;
+    /** Quarterly innovation of the mainland gap, the regression's residual sd (0.490pp); the stationary sd it gives is 1.65% against the CBO gap's 1.62%. */
+    public const MAINLAND_GAP_SIGMA = 0.00490;
     /** Annualized quarterly core PCE inflation on its own four lags (sum 0.885), the Rudebusch-Svensson Phillips curve; its fitted mean is 1.96%, so it is anchored at the 2% target. */
     public const MAINLAND_INFLATION_LAGS = [0.381, 0.217, 0.141, 0.146];
     /** Mainland core inflation per unit of last quarter's gap (0.004, se 0.028): the flat Phillips curve of the era (Hazell, Herreño, Nakamura & Steinsson 2022). */
@@ -118,8 +118,8 @@ class AssetMarketSubsystem
     public const MAINLAND_INFLATION_SIGMA = 0.00586;
     /** The mainland's (US) GDP, 2023: $27.8T (World Bank NY.GDP.MKTP.CD). */
     public const MAINLAND_GDP_USD = 27.81e12;
-    /** Share of the district's cycle that reaches the mainland's demand in the long run: its imports are the mainland's exports, moving 1.4 times its demand (IMF WEO 2015) at their share of its GDP, scaled to the mainland's size (0.20). */
-    public const FOREIGN_IMPORT_SPILLOVER = MacroAggregateSubsystem::IMPORT_DEMAND_ELASTICITY * MacroAggregateSubsystem::DISTRICT_IMPORT_SHARE * MacroEngine::DISTRICT_GDP_USD / self::MAINLAND_GDP_USD;
+    /** Share of the district's cycle that reaches the mainland's demand in the long run: its imports for home use are the mainland's exports, moving 1.4 times its demand (IMF WEO 2015) at their share of its GDP, scaled to the mainland's size. */
+    public const FOREIGN_IMPORT_SPILLOVER = MacroAggregateSubsystem::IMPORT_DEMAND_ELASTICITY * MacroAggregateSubsystem::DISTRICT_DOMESTIC_IMPORT_SHARE * MacroEngine::DISTRICT_GDP_USD / self::MAINLAND_GDP_USD;
     /** Guard on the mainland gap, beyond the deepest postwar CBO gap; the fitted process does not reach it. */
     public const MAX_FOREIGN_GAP = 0.10;
 
@@ -285,10 +285,10 @@ class AssetMarketSubsystem
     public const DEAL_ACTIVITY_TREND_YEARS = CreditFiscalSubsystem::CREDIT_SPREAD_TREND_YEARS;
 
     // --- Mundell-Fleming Trade Balance & Net Exports ---
-    /** Lower bound floor for trade balance deficit as a percentage of GDP (-8.0%). */
-    public const MIN_TRADE_BALANCE = -0.080;
-    /** Upper bound ceiling for trade balance surplus as a percentage of GDP (+3.0%). */
-    public const MAX_TRADE_BALANCE = 0.030;
+    /** Lower bound of the trade balance over GDP: 5.5 points under its structural level. */
+    public const MIN_TRADE_BALANCE = MacroEngine::TRADE_BALANCE_BASELINE - 0.055;
+    /** Upper bound of the trade balance over GDP: 5.5 points over its structural level. */
+    public const MAX_TRADE_BALANCE = MacroEngine::TRADE_BALANCE_BASELINE + 0.055;
     /** Time constant (years) of the trade balance's adjustment to its target: half a year, the J-curve's two-quarter delivery lag on contracts already signed (Magee 1973). */
     public const TRADE_BALANCE_ADJUSTMENT_YEARS = 0.5;
 
@@ -945,7 +945,7 @@ class AssetMarketSubsystem
      *
      * The structural balance, plus the net exports the output gap already carries (the mainland's demand and the real
      * exchange rate: MacroAggregateSubsystem::netExportGapAt), less the imports domestic demand draws in (IMF WEO
-     * October 2015, Ch. 3: 1.4% of imports per 1% of domestic demand):
+     * October 2015, Ch. 3: 1.4% of imports for home use per 1% of domestic demand):
      *   NX/Y = Baseline + NetExportGap - M/Y * 1.4 * (OutputGap - NetExportGap)
      *
      * @param MacroState $state Current macroeconomic state.
@@ -956,7 +956,7 @@ class AssetMarketSubsystem
         $domesticDemandGap = $state->outputGap - $state->netExportGap;
         $targetTradeBalance = MacroEngine::TRADE_BALANCE_BASELINE
             + $state->netExportGap
-            - (MacroAggregateSubsystem::DISTRICT_IMPORT_SHARE * MacroAggregateSubsystem::IMPORT_DEMAND_ELASTICITY * $domesticDemandGap);
+            - (MacroAggregateSubsystem::DISTRICT_DOMESTIC_IMPORT_SHARE * MacroAggregateSubsystem::IMPORT_DEMAND_ELASTICITY * $domesticDemandGap);
 
         $targetTradeBalance = max(self::MIN_TRADE_BALANCE, min(self::MAX_TRADE_BALANCE, $targetTradeBalance));
 

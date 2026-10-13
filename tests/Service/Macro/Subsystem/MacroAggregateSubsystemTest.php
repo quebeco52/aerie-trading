@@ -1171,8 +1171,8 @@ class MacroAggregateSubsystemTest extends TestCase
         $gapHome = $this->subsystem->calculateOutputGap($home, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, $dt, 1.0);
         $gapAbroad = $this->subsystem->calculateOutputGap($abroad, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, $dt, 1.0);
 
-        // The mainland's demand buys the civilian exports; the arms makers sell into allied budgets instead.
-        $longRun = (MacroAggregateSubsystem::DISTRICT_EXPORT_SHARE - MacroAggregateSubsystem::DISTRICT_DEFENSE_EXPORT_SHARE) * MacroAggregateSubsystem::EXPORT_DEMAND_ELASTICITY * 0.03;
+        // The mainland's demand buys the civilian exports, of which the District's own value added is output; the arms makers sell into allied budgets instead.
+        $longRun = (MacroAggregateSubsystem::DISTRICT_EXPORT_SHARE - MacroAggregateSubsystem::DISTRICT_DEFENSE_EXPORT_SHARE) * (1.0 - MacroAggregateSubsystem::FOREIGN_VALUE_ADDED_SHARE_OF_EXPORTS) * MacroAggregateSubsystem::EXPORT_DEMAND_ELASTICITY * 0.03;
         $firstQuarter = 1.0 - exp(-$dt / MacroAggregateSubsystem::exportDemandAdjustmentYears());
         $this->assertEqualsWithDelta($firstQuarter * $longRun, $abroad->netExportGap, 1e-12, 'A quarter brings the first slice of the response, not all of it.');
         $this->assertEqualsWithDelta($firstQuarter * $longRun, $gapAbroad - $gapHome, 1e-9, 'The export level reaches the gap whole, not at a rate.');
@@ -1236,7 +1236,7 @@ class MacroAggregateSubsystemTest extends TestCase
     public function testArmsExportsAnswerAlliedBudgetsNotTheMainlandCycle(): void
     {
         $mainlandBoom = MacroAggregateSubsystem::netExportGapAt(0.03, 0.0, 0.0);
-        $this->assertEqualsWithDelta((MacroAggregateSubsystem::DISTRICT_EXPORT_SHARE - MacroAggregateSubsystem::DISTRICT_DEFENSE_EXPORT_SHARE) * MacroAggregateSubsystem::EXPORT_DEMAND_ELASTICITY * 0.03, $mainlandBoom, 1e-15);
+        $this->assertEqualsWithDelta((MacroAggregateSubsystem::DISTRICT_EXPORT_SHARE - MacroAggregateSubsystem::DISTRICT_DEFENSE_EXPORT_SHARE) * (1.0 - MacroAggregateSubsystem::FOREIGN_VALUE_ADDED_SHARE_OF_EXPORTS) * MacroAggregateSubsystem::EXPORT_DEMAND_ELASTICITY * 0.03, $mainlandBoom, 1e-15);
 
         $buildUp = MacroAggregateSubsystem::netExportGapAt(0.0, 0.0, 0.2);
         $this->assertEqualsWithDelta(MacroAggregateSubsystem::DISTRICT_DEFENSE_EXPORT_SHARE * MacroEngine::ALLIED_PROCUREMENT_ELASTICITY * 0.2, $buildUp, 1e-15);
@@ -1385,8 +1385,8 @@ class MacroAggregateSubsystemTest extends TestCase
     public function testATariffCompressesImportedGoodsAndDrawsRetaliationOnGoodsExports(): void
     {
         $duty = log(1.10);
-        $switching = MacroAggregateSubsystem::IMPORT_PRICE_ELASTICITY * MacroAggregateSubsystem::DISTRICT_IMPORT_SHARE * MacroAggregateSubsystem::GOODS_SHARE_OF_IMPORTS * $duty;
-        $retaliatedExports = (MacroAggregateSubsystem::DISTRICT_EXPORT_SHARE * MacroAggregateSubsystem::GOODS_SHARE_OF_EXPORTS) - MacroAggregateSubsystem::DISTRICT_DEFENSE_EXPORT_SHARE;
+        $switching = MacroAggregateSubsystem::IMPORT_PRICE_ELASTICITY * MacroAggregateSubsystem::DISTRICT_DOMESTIC_IMPORT_SHARE * MacroAggregateSubsystem::GOODS_SHARE_OF_IMPORTS * $duty;
+        $retaliatedExports = ((MacroAggregateSubsystem::DISTRICT_EXPORT_SHARE * MacroAggregateSubsystem::GOODS_SHARE_OF_EXPORTS) - MacroAggregateSubsystem::DISTRICT_DEFENSE_EXPORT_SHARE) * (1.0 - MacroAggregateSubsystem::FOREIGN_VALUE_ADDED_SHARE_OF_EXPORTS);
         $retaliation = MacroAggregateSubsystem::EXPORT_PRICE_ELASTICITY * $retaliatedExports * log(1.0 + (MacroEngine::TARIFF_RETALIATION_RATIO * 0.10));
 
         $netExports = MacroAggregateSubsystem::netExportGapAt(0.0, 0.0, 0.0, $duty);
@@ -1898,15 +1898,15 @@ class MacroAggregateSubsystemTest extends TestCase
             $depreciated->outputGap = $gapDepreciated = $this->subsystem->calculateOutputGap($depreciated, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, $dt, 1.0);
         }
 
-        $priceResponse = (MacroAggregateSubsystem::EXPORT_PRICE_PASS_THROUGH * MacroAggregateSubsystem::EXPORT_PRICE_ELASTICITY * MacroAggregateSubsystem::DISTRICT_EXPORT_SHARE)
-            + (MacroAggregateSubsystem::IMPORT_PRICE_PASS_THROUGH * MacroAggregateSubsystem::IMPORT_PRICE_ELASTICITY * MacroAggregateSubsystem::DISTRICT_IMPORT_SHARE);
+        $priceResponse = (MacroAggregateSubsystem::EXPORT_PRICE_PASS_THROUGH * MacroAggregateSubsystem::EXPORT_PRICE_ELASTICITY * MacroAggregateSubsystem::DISTRICT_VALUE_ADDED_EXPORT_SHARE)
+            + (MacroAggregateSubsystem::IMPORT_PRICE_PASS_THROUGH * MacroAggregateSubsystem::IMPORT_PRICE_ELASTICITY * MacroAggregateSubsystem::DISTRICT_DOMESTIC_IMPORT_SHARE);
         $longTerm = -$priceResponse * log(0.90);
 
         $this->assertSame(0.0, $settled->netExportGap, 'A currency sitting at its own trend moves no trade.');
         $this->assertEqualsWithDelta(0.87 * $longTerm, $depreciated->netExportGap, 0.002 * $longTerm, 'A year on, 87% of the long-term lift, as the IMF\'s one-year effects give.');
         $this->assertEqualsWithDelta($depreciated->netExportGap, $gapDepreciated - $gapSettled, 1e-9, 'and it is in the gap.');
-        $this->assertGreaterThan(0.005, $longTerm, 'A 10% real depreciation is worth well over half a point of GDP at a fifth of GDP exported');
-        $this->assertLessThan(0.015, $longTerm, 'and less than the 1.5% the IMF sample\'s 42% trade shares give.');
+        $this->assertGreaterThan(0.015, $longTerm, 'A 10% real depreciation is worth more than the 1.5% of GDP the IMF sample\'s 42% trade shares give, half of GDP being exported value added,');
+        $this->assertLessThan(0.025, $longTerm, 'though less than the gross Swiss shares would claim.');
     }
 
     /**
@@ -1969,12 +1969,14 @@ class MacroAggregateSubsystemTest extends TestCase
     public function testDomesticDemandLeaksTheDistrictsExcessImportsAbroad(): void
     {
         $this->assertEqualsWithDelta(
-            MacroAggregateSubsystem::IMPORT_DEMAND_ELASTICITY * (MacroAggregateSubsystem::DISTRICT_IMPORT_SHARE - MacroAggregateSubsystem::US_IMPORT_SHARE),
+            MacroAggregateSubsystem::IMPORT_DEMAND_ELASTICITY * (MacroAggregateSubsystem::DISTRICT_DOMESTIC_IMPORT_SHARE - MacroAggregateSubsystem::US_DOMESTIC_IMPORT_SHARE),
             MacroAggregateSubsystem::EXCESS_IMPORT_LEAKAGE,
             1e-15
         );
-        $this->assertEqualsWithDelta(0.0, MacroAggregateSubsystem::IMPORT_DEMAND_ELASTICITY * (MacroAggregateSubsystem::US_IMPORT_SHARE - MacroAggregateSubsystem::US_IMPORT_SHARE), 1e-15, 'At the US share nothing extra leaks.');
-        $this->assertGreaterThan(0.2, MacroAggregateSubsystem::EXCESS_IMPORT_LEAKAGE, 'Twice the US import share leaks about a quarter of every demand swing.');
+        $this->assertEqualsWithDelta(0.0, MacroAggregateSubsystem::IMPORT_DEMAND_ELASTICITY * (MacroAggregateSubsystem::US_DOMESTIC_IMPORT_SHARE - MacroAggregateSubsystem::US_DOMESTIC_IMPORT_SHARE), 1e-15, 'At the US share nothing extra leaks.');
+        $this->assertEqualsWithDelta(0.406, MacroAggregateSubsystem::DISTRICT_DOMESTIC_IMPORT_SHARE, 0.001, 'Swiss imports (56.9% of GDP) less the quarter of the exports that is passed-through imports.');
+        $this->assertGreaterThan(0.3, MacroAggregateSubsystem::EXCESS_IMPORT_LEAKAGE, 'Nearly three times the US share for home use leaks about a third of every demand swing.');
+        $this->assertLessThan(0.4, MacroAggregateSubsystem::EXCESS_IMPORT_LEAKAGE, 'Gross imports would leak half: re-exports do not answer home demand.');
 
         // A demand impulse reaches the gap net of the leak.
         $dt = 0.25;

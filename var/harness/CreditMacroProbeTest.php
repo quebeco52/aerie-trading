@@ -24,6 +24,7 @@ final class CreditMacroProbeTest extends KernelTestCase
         $dt = 1.0 / $tpy;
         $perQuarter = intdiv($tpy, 4);
         $rows = [];
+        $events = [];
         foreach (explode(',', (string) (getenv('SEEDS') ?: '1')) as $seed) {
             mt_srand((int) $seed);
             $_SERVER['APP_ENV'] = $_ENV['APP_ENV'] = 'test';
@@ -33,8 +34,20 @@ final class CreditMacroProbeTest extends KernelTestCase
             $premiumSum = 0.0;
             $deficitSum = 0.0;
             $spendingSum = 0.0;
+            $dragSum = 0.0;
+            $lastCrisis = -1.0;
+            $dragBefore = 0.0;
+            $gapBefore = 0.0;
             for ($tick = 1; $tick <= $years * $tpy; $tick++) {
                 $m = $macro->updateMacroState($dt, null);
+                $dragSum += $m->creditCrisisDrag;
+                if ($m->lastCreditCrisisAt !== $lastCrisis && $m->lastCreditCrisisAt >= 0.0) {
+                    $lastCrisis = $m->lastCreditCrisisAt;
+                    $events[] = ['seed' => (int) $seed, 't' => $tick / $tpy, 'impulse' => $m->creditCrisisDrag - $dragBefore * exp(-0.12 * $dt),
+                        'credit_gap' => $m->creditToGdpGapEma, 'credit_gap_before' => $gapBefore];
+                }
+                $dragBefore = $m->creditCrisisDrag;
+                $gapBefore = $m->creditToGdpGapEma;
                 $premium = property_exists($m, 'excessBondPremium') ? $m->excessBondPremium : 0.0;
                 $gapSum += $m->outputGap;
                 $premiumSum += $premium;
@@ -56,17 +69,20 @@ final class CreditMacroProbeTest extends KernelTestCase
                         'pdef_avg' => $deficitSum / $perQuarter, 'lgovt_avg' => $spendingSum / $perQuarter,
                         'dsr' => $m->householdDebtServiceRatio, 'y10_ema' => $m->yield10yEma, 'pol_ema' => $m->policyRateEma,
                         'ngdp' => $m->nominalGdpIndex, 'defl' => $m->gdpDeflator,
+                        'drag_avg' => $dragSum / $perQuarter,
                         'nb' => property_exists($m, 'householdNewBorrowing') ? $m->householdNewBorrowing : 0.0,
                     ];
                     $deficitSum = 0.0;
                     $spendingSum = 0.0;
                     $gapSum = 0.0;
+                    $dragSum = 0.0;
                     $premiumSum = 0.0;
                 }
             }
             self::ensureKernelShutdown();
         }
         file_put_contents((string) getenv('OUT'), json_encode($rows));
+        file_put_contents((string) getenv('OUT') . '.crises', json_encode($events));
         $this->assertNotEmpty($rows);
     }
 }

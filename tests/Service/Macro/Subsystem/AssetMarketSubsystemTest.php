@@ -741,9 +741,10 @@ class AssetMarketSubsystemTest extends TestCase
         // Yule-Walker: gamma_0 = sigma^2 / (1 - a1 rho_1 - a2 rho_2).
         $expectedSd = AssetMarketSubsystem::MAINLAND_GAP_SIGMA
             / sqrt(1.0 - ($a1 * TimeSeries::calculateAr2Autocorrelation($a1, $a2, 1)) - ($a2 * TimeSeries::calculateAr2Autocorrelation($a1, $a2, 2)));
+        $this->assertEqualsWithDelta(0.0162, $expectedSd, 0.001, 'The fitted process keeps the spread of the CBO gap it was fitted on, 1.62% (1985-2019).');
         $this->assertEqualsWithDelta(0.0, $mean, 0.002, 'With the district at trend the mainland cycle averages nothing.');
-        $this->assertEqualsWithDelta($expectedSd, sqrt($variance / $count), 0.001, 'Its spread is the fitted AR(2)\'s, ~1.37%.');
-        $this->assertEqualsWithDelta(TimeSeries::calculateAr2Autocorrelation($a1, $a2, 4), $covariance / $variance, 0.04, 'and a year on it still carries ~0.59 of itself, as the CBO gap does.');
+        $this->assertEqualsWithDelta($expectedSd, sqrt($variance / $count), 0.001, 'Its spread is the fitted AR(2)\'s, ~1.65%.');
+        $this->assertEqualsWithDelta(TimeSeries::calculateAr2Autocorrelation($a1, $a2, 4), $covariance / $variance, 0.04, 'and a year on it still carries ~0.72 of itself (the CBO gap 0.66).');
     }
 
     /** The mainland's statistics and its rate decision arrive at the quarter's turn, not between. */
@@ -907,14 +908,15 @@ class AssetMarketSubsystemTest extends TestCase
 
         $this->assertEqualsWithDelta($exports, $abroad->tradeBalanceToGdp - $home->tradeBalanceToGdp, 0.0005, 'Their demand is our exports, and nothing else moves the balance.');
 
-        // Domestic demand draws in imports at 1.4 times itself on the import share.
+        // Domestic demand draws in imports at 1.4 times itself on the imports for home use; those passed through into exports do not move with it.
         $booming = new MacroState();
         $booming->outputGap = 0.03;
         for ($i = 0; $i < 400; $i++) {
             $this->subsystem->calculateTradeBalance($booming, 0.01);
         }
+        $this->assertLessThan(MacroAggregateSubsystem::DISTRICT_IMPORT_SHARE, MacroAggregateSubsystem::DISTRICT_DOMESTIC_IMPORT_SHARE);
         $this->assertEqualsWithDelta(
-            -MacroAggregateSubsystem::DISTRICT_IMPORT_SHARE * MacroAggregateSubsystem::IMPORT_DEMAND_ELASTICITY * 0.03,
+            -MacroAggregateSubsystem::DISTRICT_DOMESTIC_IMPORT_SHARE * MacroAggregateSubsystem::IMPORT_DEMAND_ELASTICITY * 0.03,
             $booming->tradeBalanceToGdp - $home->tradeBalanceToGdp,
             0.0005
         );

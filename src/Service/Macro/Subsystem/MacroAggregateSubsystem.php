@@ -72,10 +72,18 @@ class MacroAggregateSubsystem
     public const NATURAL_RATE_ADJUSTMENT_SPEED = 1.0;
 
     // --- Open Economy: Trade Volumes and Import Prices (IMF WEO October 2015, Ch. 3, Table 3.1: 60 economies, 1980-2014) ---
-    /** Exports over GDP, the UK's 30% (World Bank NE.EXP.GNFS.ZS, 2010-19 average): a financial centre that sells its finance and its arms abroad, at a third of the world's size. */
-    public const DISTRICT_EXPORT_SHARE = 0.30;
-    /** Imports over GDP: exports less the structural trade balance. */
+    /** Exports over GDP, Switzerland's 66.2% (World Bank NE.EXP.GNFS.ZS, 2010-19 average): a financial centre open as the Swiss are, selling its finance and its arms abroad. */
+    public const DISTRICT_EXPORT_SHARE = 0.662;
+    /** Imports over GDP: exports less the structural trade balance (Switzerland's 56.9%). */
     public const DISTRICT_IMPORT_SHARE = self::DISTRICT_EXPORT_SHARE - MacroEngine::TRADE_BALANCE_BASELINE;
+    /** Foreign value added in the District's gross exports, Switzerland's 24.6% (OECD TiVA 2015: domestic content 75.4%, via Council of the EU WK 5369/2021): imports that pass through into exports. */
+    public const FOREIGN_VALUE_ADDED_SHARE_OF_EXPORTS = 0.246;
+    /** Foreign value added in US gross exports (9.5%, WTO TiVA 2018). */
+    public const US_FOREIGN_VALUE_ADDED_SHARE_OF_EXPORTS = 0.095;
+    /** The District's own value added in its exports over GDP, the part of an export swing that is its output (Johnson & Noguera 2012). */
+    public const DISTRICT_VALUE_ADDED_EXPORT_SHARE = self::DISTRICT_EXPORT_SHARE * (1.0 - self::FOREIGN_VALUE_ADDED_SHARE_OF_EXPORTS);
+    /** Imports for use at home over GDP: imports less those passed through into exports, the part domestic demand draws in. */
+    public const DISTRICT_DOMESTIC_IMPORT_SHARE = self::DISTRICT_IMPORT_SHARE - (self::DISTRICT_EXPORT_SHARE * self::FOREIGN_VALUE_ADDED_SHARE_OF_EXPORTS);
     /** The seeded Aerospace & Defense makers' first-year revenue (GRIP, PTAR), all of it sold to allied governments (full-market harness). */
     public const DISTRICT_DEFENSE_EXPORTS_USD = 170.0e9;
     /** Arms exports over GDP, part of the exports above (1.4%). */
@@ -116,9 +124,9 @@ class MacroAggregateSubsystem
     public const FINANCE_CREDIT_SHARE = 0.391;
     /** Weight of the finance cycle in the gap: the District's finance share less the US share the fitted equation carries on the District's smaller rest of the economy (0.246). */
     public const FINANCE_GAP_WEIGHT = self::DISTRICT_FINANCE_SHARE - ((1.0 - self::DISTRICT_FINANCE_SHARE) * self::US_FINANCE_SHARE / (1.0 - self::US_FINANCE_SHARE));
-    /** Domestic demand the District's imports carry abroad beyond the leak the fitted (US) equation already has: imports move 1.4 times domestic demand (IMF WEO 2015) on the District's import share less the US's (0.231). */
-    public const EXCESS_IMPORT_LEAKAGE = self::IMPORT_DEMAND_ELASTICITY * (self::DISTRICT_IMPORT_SHARE - self::US_IMPORT_SHARE);
-    /** Weight of domestic demand in the gap: everything but the bank credit cycle, net of the excess imports it draws in (0.695). Market-based finance (funds, brokers, exchanges, investment banks: 0.250 of finance) is in it, as insurance is: national accounts do not count its output at the value of the assets it manages (BEA 2026 annual update: portfolio management volume extrapolated from the industry's employment, replacing a fee PPI that tracks asset values). */
+    /** Domestic demand the District's imports carry abroad beyond the leak the fitted (US) equation already has: imports move 1.4 times domestic demand (IMF WEO 2015) on the District's imports for home use less the US's. */
+    public const EXCESS_IMPORT_LEAKAGE = self::IMPORT_DEMAND_ELASTICITY * (self::DISTRICT_DOMESTIC_IMPORT_SHARE - self::US_DOMESTIC_IMPORT_SHARE);
+    /** Weight of domestic demand in the gap: everything but the bank credit cycle, net of the excess imports it draws in (0.577). Market-based finance (funds, brokers, exchanges, investment banks: 0.250 of finance) is in it, as insurance is: national accounts do not count its output at the value of the assets it manages (BEA 2026 annual update: portfolio management volume extrapolated from the industry's employment, replacing a fee PPI that tracks asset values). */
     public const DOMESTIC_GAP_WEIGHT = (1.0 - (self::FINANCE_GAP_WEIGHT * self::FINANCE_CREDIT_SHARE)) * (1.0 - self::EXCESS_IMPORT_LEAKAGE);
 
     // --- KALDOR-KALECKI 2D LIMIT CYCLE ---
@@ -142,6 +150,8 @@ class MacroAggregateSubsystem
     public const US_EXPORT_SHARE = 0.13;
     /** US imports over GDP, 2010-19 mean (World Bank NE.IMP.GNFS.ZS, 16%). */
     public const US_IMPORT_SHARE = 0.16;
+    /** US imports for use at home over GDP: imports less those passed through into exports. */
+    public const US_DOMESTIC_IMPORT_SHARE = self::US_IMPORT_SHARE - (self::US_EXPORT_SHARE * self::US_FOREIGN_VALUE_ADDED_SHARE_OF_EXPORTS);
     /** Housing wealth drift the engine carried when the rate slopes were fitted; the fitting harness reported no board, so equity carried none. */
     public const FIT_HOUSING_WEALTH_DRIFT = 0.05;
     /** Currency drift the engine carried when the rate slopes were fitted, per unit of the currency against its trend. */
@@ -182,8 +192,8 @@ class MacroAggregateSubsystem
     public const KALDOR_CATASTROPHE_DRAG = 0.004;
     /** Demand drag per log unit of policy uncertainty ABOVE baseline: a doubling costs ~0.4pp a year, so the 2006-2011 rise integrates to the ~1% output loss Baker, Bloom & Davis attribute to it. One-sided: spikes cost output (Bloom 2009), calm does not stimulate. */
     public const KALDOR_EPU_DRAG = 0.006;
-    /** Long-run average of the credit-crisis drag on the District's engine, 1.55pp a year (var/harness/fc_run.sh), booked back as its Merton (1976) compensator: crises bend the cycle without shifting its average, as the disasters and the premium are compensated. */
-    public const KALDOR_CRISIS_DRAG_COMPENSATOR = 0.0155;
+    /** Long-run average of the credit-crisis drag on the District's engine, 1.34pp a year (crisis rate x mean impulse / decay, var/harness/fc_crisis_drag), booked back as its Merton (1976) compensator: crises bend the cycle without shifting its average, as the disasters and the premium are compensated. */
+    public const KALDOR_CRISIS_DRAG_COMPENSATOR = 0.0134;
 
     // --- Aggregate Demand Disturbance (Smets-Wouters 2007) ---
     /** Mean reversion speed of the aggregate demand disturbance: -4*ln(0.86) per year, from the estimated quarterly AR(1) coefficient. */
@@ -864,6 +874,10 @@ class MacroAggregateSubsystem
      * pass-through and gains that elasticity's worth of imports, each weighted by its share of GDP (the chapter's
      * footnote 21, which gives 1.5% of GDP per 10% at the sample's 42% and 41% shares).
      *
+     * Volumes are gross; output is not. An export swing moves the District's GDP by its own value added only, the
+     * imports passed through into exports going out with it, and only imports for home use displace home output
+     * (Johnson & Noguera 2012). Arms are taken as made at home.
+     *
      * A tariff is a price with full pass-through (Amiti, Redding & Weinstein 2019): imported goods lose their price
      * elasticity's worth of volume on the whole duty. Partners answer on the District's goods exports at the 2018
      * retaliation ratio (Fajgelbaum et al. 2020), which lose theirs; allied governments do not tariff the arms they buy.
@@ -876,15 +890,16 @@ class MacroAggregateSubsystem
      */
     public static function netExportGapAt(float $mainlandGap, float $realExchangeRateGap, float $alliedDefenseGap, float $tariffDuty = 0.0): float
     {
-        $priceResponse = (self::EXPORT_PRICE_PASS_THROUGH * self::EXPORT_PRICE_ELASTICITY * self::DISTRICT_EXPORT_SHARE)
-            + (self::IMPORT_PRICE_PASS_THROUGH * self::IMPORT_PRICE_ELASTICITY * self::DISTRICT_IMPORT_SHARE);
+        $domesticContent = 1.0 - self::FOREIGN_VALUE_ADDED_SHARE_OF_EXPORTS;
+        $priceResponse = (self::EXPORT_PRICE_PASS_THROUGH * self::EXPORT_PRICE_ELASTICITY * self::DISTRICT_VALUE_ADDED_EXPORT_SHARE)
+            + (self::IMPORT_PRICE_PASS_THROUGH * self::IMPORT_PRICE_ELASTICITY * self::DISTRICT_DOMESTIC_IMPORT_SHARE);
         $retaliatoryDuty = log(1.0 + (MacroEngine::TARIFF_RETALIATION_RATIO * (exp($tariffDuty) - 1.0)));
-        $retaliatedExportShare = (self::DISTRICT_EXPORT_SHARE * self::GOODS_SHARE_OF_EXPORTS) - self::DISTRICT_DEFENSE_EXPORT_SHARE;
+        $retaliatedExportShare = ((self::DISTRICT_EXPORT_SHARE * self::GOODS_SHARE_OF_EXPORTS) - self::DISTRICT_DEFENSE_EXPORT_SHARE) * $domesticContent;
 
-        return ((self::DISTRICT_EXPORT_SHARE - self::DISTRICT_DEFENSE_EXPORT_SHARE) * self::EXPORT_DEMAND_ELASTICITY * $mainlandGap)
+        return ((self::DISTRICT_EXPORT_SHARE - self::DISTRICT_DEFENSE_EXPORT_SHARE) * $domesticContent * self::EXPORT_DEMAND_ELASTICITY * $mainlandGap)
             + (self::DISTRICT_DEFENSE_EXPORT_SHARE * MacroEngine::ALLIED_PROCUREMENT_ELASTICITY * $alliedDefenseGap)
             - ($priceResponse * $realExchangeRateGap)
-            + (self::IMPORT_PRICE_ELASTICITY * self::DISTRICT_IMPORT_SHARE * self::GOODS_SHARE_OF_IMPORTS * $tariffDuty)
+            + (self::IMPORT_PRICE_ELASTICITY * self::DISTRICT_DOMESTIC_IMPORT_SHARE * self::GOODS_SHARE_OF_IMPORTS * $tariffDuty)
             - (self::EXPORT_PRICE_ELASTICITY * $retaliatedExportShare * $retaliatoryDuty);
     }
 

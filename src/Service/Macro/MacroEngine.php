@@ -341,8 +341,8 @@ class MacroEngine
     public const COMMODITY_TREND_HORIZON_YEARS = 1.0;
 
     // --- Mundell-Fleming Trade Balance & Net Exports ---
-    /** Baseline structural trade balance as a percentage of GDP (-2.5% neutral deficit). */
-    public const TRADE_BALANCE_BASELINE = -0.025;
+    /** Structural trade balance over GDP, Switzerland's +9.3% surplus (World Bank NE.EXP.GNFS.ZS less NE.IMP.GNFS.ZS, 2010-19 average). */
+    public const TRADE_BALANCE_BASELINE = 0.093;
 
     // --- DiPasquale-Wheaton Commercial Real Estate ---
     /** Commercial property index at the engine's neutral (100.0): where the fundamental sits with every cap-rate input at its base, which AssetMarketSubsystem::CRE_NEUTRAL_CAP_RATE is built from. */

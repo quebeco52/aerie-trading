@@ -71,9 +71,21 @@ for i in range(8, len(qs)):
 b, se, r2, e = ols(Y, X, nw_lags=4)
 out['is'] = {'c': b[0], 'a1': b[1], 'a1_se': se[1], 'a2': b[2], 'a2_se': se[2], 'rate': b[3], 'rate_se': se[3], 'sigma': moments(e)[1], 'n': len(Y)}
 print(f"[1] IS {IS_SAMPLE} n {len(Y)}: c {b[0]:+.3f} a1 {b[1]:.3f} ({se[1]:.3f}) a2 {b[2]:+.3f} ({se[2]:.3f}) rate {b[3]:+.3f} ({se[3]:.3f}) resid sd {moments(e)[1]:.3f}")
-# the same without the rate term, for the record
-b0, se0, _, e0 = ols(Y, [x[:3] for x in X], nw_lags=4)
-print(f"    without the rate: a1 {b0[1]:.3f} a2 {b0[2]:+.3f} resid sd {moments(e0)[1]:.3f}")
+# The engine's IS: the rate term left out, so the zero-bound quarters, dropped above only because the rate means nothing
+# there, go back in. Without them the fit misses the 2009 slump and its stationary sd falls short of the data's.
+Y0, X0 = [], []
+for i in range(2, len(qs)):
+    k = qs[i]
+    if IS_SAMPLE[0] <= k <= IS_SAMPLE[1]:
+        Y0.append(gap[k])
+        X0.append([1.0, gap[qs[i - 1]], gap[qs[i - 2]]])
+b0, se0, _, e0 = ols(Y0, X0, nw_lags=4)
+s0 = moments(e0)[1]
+rho1 = b0[1] / (1 - b0[2])
+sd0 = s0 / math.sqrt(1 - b0[1] * rho1 - b0[2] * (b0[1] * rho1 + b0[2]))
+out['is_ar2'] = {'a1': b0[1], 'a1_se': se0[1], 'a2': b0[2], 'a2_se': se0[2], 'sigma': s0, 'n': len(Y0), 'stationary_sd': sd0}
+print(f"    without the rate, whole sample n {len(Y0)}: a1 {b0[1]:.3f} ({se0[1]:.3f}) a2 {b0[2]:+.3f} ({se0[2]:.3f}) resid sd {s0:.3f}, "
+      f"stationary sd {sd0:.2f} (data {moments([gap[k] for k in qs if IS_SAMPLE[0] <= k <= IS_SAMPLE[1]])[1]:.2f})")
 
 # --- [2] PC -------------------------------------------------------------------------------------------------------
 Y, X = [], []
@@ -105,7 +117,7 @@ print(f"[3] rule {RULE_SAMPLE} n {len(Y)}: rho {rho:.3f} ({se[1]:.3f}), long-run
 # --- [4] Simulate the three together --------------------------------------------------------------------------------
 def simulate(quarters, seed, rstar_sim, target=2.0, elb=0.1, pc_mean=None):
     rnd = random.Random(seed)
-    IS, PC, R = out['is'], out['pc'], out['rule']
+    IS, PC, R = out['is_ar2'], out['pc'], out['rule']
     phi_pi, phi_y = R['phi_pi'], R['phi_y']
     # The PC intercept re-anchored so the mean is the target (the sample mean carries the 1980s disinflation).
     lags = PC['lags']
@@ -117,8 +129,7 @@ def simulate(quarters, seed, rstar_sim, target=2.0, elb=0.1, pc_mean=None):
     rows = []
     for _ in range(quarters):
         p4 = sum(p) / 4
-        rbar = sum(i) / 4 - p4 - rstar_sim
-        g_new = IS['a1'] * g[0] + IS['a2'] * g[1] + IS['rate'] * rbar + rnd.gauss(0, IS['sigma'])
+        g_new = IS['a1'] * g[0] + IS['a2'] * g[1] + rnd.gauss(0, IS['sigma'])
         p_new = c_pi + sum(a * x for a, x in zip(lags, p)) + PC['gap'] * g[0] + rnd.gauss(0, PC['sigma'])
         g = [g_new, g[0]]
         p = [p_new] + p[:3]
