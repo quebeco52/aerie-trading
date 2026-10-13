@@ -14,6 +14,9 @@ final class RevenueStreams
         'net_interest_income' => 'Interest income',
     ];
 
+    /** Streams that carry a lender's interest on its book: a bank's, a card lender's, a mortgage lender's. */
+    public const LENDER_INTEREST_STREAMS = ['net_interest_income', 'lending', 'direct_lending'];
+
     /** Sentence-case name of a stream key ("aftermarket_services" reads "Aftermarket services"). */
     public static function label(string $streamKey): string
     {

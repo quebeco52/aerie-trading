@@ -10,6 +10,10 @@ use App\Entity\CorporateReport;
 use App\Entity\Stock;
 use App\Repository\CorporateReportRepository;
 use App\Service\Model\BusinessModelInterface;
+use App\Service\Model\Sector\CommercialBankBusinessModel;
+use App\Service\Model\Sector\HealthInsurerBusinessModel;
+use App\Service\Model\Sector\InsuranceBusinessModel;
+use App\Service\Model\Sector\ReitBusinessModel;
 use App\Service\Model\StreamContext;
 
 /**
@@ -34,6 +38,9 @@ final class BusinessMapBuilder
 
     /** Execution reading at or beyond which a stream's operations read as strong, or as running into headwinds (the report's own band). */
     public const EXECUTION_BAND_Z = 1.0;
+
+    /** Unrecovered input-cost drag below which the cost note stays silent: 0.05 pt, under the one decimal it prints. */
+    public const DRAG_NOTE_FLOOR = 0.0005;
 
     /** Names for the input markets of StandardOperatingPhysicsTrait::resolveInputPriceDeviations(). */
     private const INPUT_LABELS = [
@@ -83,6 +90,15 @@ final class BusinessMapBuilder
         if (!$model->isFinancial()) {
             $this->addCostSide($map, $model, $kpis, $report, $previous, $revenue);
         }
+        // The businesses whose inside is a structurally different machine get its cards: a lender's book and
+        // funding, an underwriter's capacity cycle and float, a landlord's lease ladder, a health plan's pricing.
+        match (true) {
+            $model instanceof CommercialBankBusinessModel => $this->addLenderSide($map, $streams, $state, $report, $previous),
+            $model instanceof InsuranceBusinessModel => $this->addInsurerSide($map, $streams, $kpis, $state, $report, $previous),
+            $model instanceof ReitBusinessModel => $this->addLeaseLadder($map, $streams, $kpis),
+            $model instanceof HealthInsurerBusinessModel => $this->addHealthPlanPricing($map, $state),
+            default => null,
+        };
 
         // On a phone the lines give way to text: each card names what it feeds.
         $labels = [];
@@ -321,7 +337,9 @@ final class BusinessMapBuilder
             'value' => $costRatio,
             'format' => 'pct',
             'unit' => 'of revenue',
-            'note' => $hasRecovery ? sprintf('Including %s pt of input costs not yet passed on.', number_format($drag * 100.0, 1)) : null,
+            'note' => $hasRecovery && abs($drag) >= self::DRAG_NOTE_FLOOR
+                ? sprintf($drag > 0.0 ? 'Including %s pt of input costs not yet passed on.' : 'Helped by %s pt of input-cost savings not yet passed on to customers.', number_format(abs($drag) * 100.0, 1))
+                : null,
             'chips' => [],
         ];
 
@@ -343,6 +361,286 @@ final class BusinessMapBuilder
                 $map['edges'][] = ['structure', 'margin', 0, $fixedCosts / $revenue];
             }
         }
+    }
+
+    /**
+     * A lender: the book its interest stream earns on, the deposits and borrowing that fund it, the reserve held
+     * against it and the capital under it; the interest paid, credit losses and net interest margin that come out.
+     *
+     * @param array<string, mixed> $map
+     * @param array<string, mixed> $streams
+     * @param array<string, mixed> $state
+     */
+    private function addLenderSide(array &$map, array $streams, array $state, CorporateReport $report, ?CorporateReport $previous): void
+    {
+        $interestStream = null;
+        foreach (RevenueStreams::LENDER_INTEREST_STREAMS as $key) {
+            if (isset($streams[$key])) {
+                $interestStream = $key;
+                break;
+            }
+        }
+        $book = (float) $report->getEarningAssets();
+        if ($interestStream === null || $book <= 0.0) {
+            return;
+        }
+
+        $yields = array_filter([
+            'Mortgages' => $state[CommercialBankBusinessModel::STATE_BOOK_YIELD_RESIDENTIAL] ?? null,
+            'fixed-rate loans' => $state[CommercialBankBusinessModel::STATE_BOOK_YIELD_FIXED] ?? null,
+            'bonds' => $state[CommercialBankBusinessModel::STATE_BOOK_YIELD_SECURITIES] ?? null,
+        ], 'is_numeric');
+        $note = $yields === [] ? null : implode(', ', array_map(
+            static fn (string $label, $yield): string => sprintf('%s %s%%', $label, number_format((float) $yield * 100.0, 2)),
+            array_keys($yields),
+            $yields
+        )) . ' on the book.';
+        if (is_numeric($state[CommercialBankBusinessModel::STATE_FLOATING_LOAN_SHARE] ?? null)) {
+            $note .= sprintf(' %s%% of loans float with the policy rate.', number_format((float) $state[CommercialBankBusinessModel::STATE_FLOATING_LOAN_SHARE] * 100.0, 0));
+        }
+        $this->replaceCard($map['inside'], 'ops:' . $interestStream, [
+            'label' => 'Loans and securities', 'value' => $book, 'format' => 'money', 'unit' => null, 'note' => $note === null ? null : ucfirst(ltrim($note)),
+        ]);
+
+        $deposits = (float) $report->getCustomerDeposits();
+        $depositRate = $report->getDepositApy();
+        $map['inside'][] = [
+            'id' => 'funding',
+            'label' => $deposits > 0.0 ? 'Deposits and borrowing' : 'Borrowing',
+            'value' => $deposits > 0.0 ? $deposits : null,
+            'format' => 'money',
+            'unit' => $deposits > 0.0 ? 'in deposits' : null,
+            'note' => $depositRate !== null ? sprintf('Deposits pay %s%%.', number_format((float) $depositRate * 100.0, 2)) : 'Funded in the wholesale market.',
+            'chips' => [],
+        ];
+        $allowance = (float) $report->getCreditLossAllowance();
+        $map['inside'][] = [
+            'id' => 'reserve',
+            'label' => 'Loss reserve',
+            'value' => $allowance,
+            'format' => 'money',
+            'unit' => null,
+            'note' => sprintf('%s%% of the book. %s written off this quarter.', number_format($allowance / $book * 100.0, 2), self::large((float) $report->getNetChargeOffs())),
+            'chips' => [],
+        ];
+        $cet1 = $report->getCet1Ratio();
+        $mark = (float) $report->getUnrealizedSecuritiesMark();
+        if ($cet1 !== null) {
+            $map['inside'][] = [
+                'id' => 'capital',
+                'label' => 'Capital',
+                'value' => (float) $cet1,
+                'format' => 'pct',
+                'unit' => 'CET1',
+                'note' => 'Common equity against risk-weighted assets.',
+                'chips' => $mark !== 0.0 ? [self::chip(sprintf('%s bond book %s', self::large(abs($mark)), $mark < 0.0 ? 'unrealised loss' : 'unrealised gain'), $mark < 0.0 ? 'down' : 'up')] : [],
+            ];
+        }
+
+        $map['produced'][] = ['id' => 'paid', 'label' => 'Interest paid', 'value' => (float) $report->getInterestExpense(), 'format' => 'money', 'unit' => null, 'note' => 'On deposits and borrowing.', 'chips' => []];
+        $map['produced'][] = ['id' => 'losses', 'label' => 'Credit losses', 'value' => (float) $report->getCreditLossProvision(), 'format' => 'money', 'unit' => null, 'note' => 'Set aside this quarter.', 'chips' => []];
+        $map['edges'][] = ['funding', 'paid', 0, 0.3];
+        $map['edges'][] = ['reserve', 'losses', 0, 0.1];
+
+        $margin = $report->getNetInterestMargin();
+        if ($margin !== null) {
+            $previousMargin = $previous?->getNetInterestMargin();
+            $map['produced'][] = [
+                'id' => 'nim',
+                'label' => 'Net interest margin',
+                'value' => (float) $margin,
+                'format' => 'pct',
+                'unit' => null,
+                'note' => 'Interest earned less interest paid, on the book.',
+                'chips' => $previousMargin !== null ? [self::pointsChip(((float) $margin - (float) $previousMargin) * 100.0, 'on the quarter')] : [],
+            ];
+            $map['edges'][] = ['ops:' . $interestStream, 'nim', 0, 0.3];
+            $map['edges'][] = ['funding', 'nim', 0, 0.3];
+        }
+    }
+
+    /**
+     * An underwriter: the capital it can write against the business on offer, where the pricing cycle stands, and the
+     * float it invests until claims are paid; the combined ratio and investment income that come out.
+     *
+     * @param array<string, mixed> $map
+     * @param array<string, mixed> $streams
+     * @param array<string, mixed> $kpis
+     * @param array<string, mixed> $state
+     */
+    private function addInsurerSide(array &$map, array $streams, array $kpis, array $state, CorporateReport $report, ?CorporateReport $previous): void
+    {
+        $observed = $state[InsuranceBusinessModel::STATE_OBSERVED_CAPACITY] ?? null;
+        if (is_numeric($observed)) {
+            $written = $state[InsuranceBusinessModel::STATE_WRITTEN_SHARE] ?? null;
+            $map['inside'][] = [
+                'id' => 'capacity',
+                'label' => 'Underwriting capacity',
+                'value' => (float) $observed,
+                'format' => 'multiple',
+                'unit' => 'capital against demand',
+                'note' => 'Above 1 the market has more capital than business and rates soften; below 1 they harden.'
+                    . (is_numeric($written) ? sprintf(' Writes %s%% of the business on offer.', number_format((float) $written * 100.0, 0)) : ''),
+                'chips' => [],
+            ];
+            foreach (array_keys($streams) as $key) {
+                $map['edges'][] = ['capacity', 'rev:' . $key, 0, 0.2];
+            }
+        }
+
+        $hardQuarters = (int) round((float) ($state[StreamContext::REGIME_STATE_PREFIX . InsuranceBusinessModel::REGIME_HARD_MARKET] ?? 0.0));
+        $map['inside'][] = [
+            'id' => 'cycle',
+            'label' => 'Pricing cycle',
+            'value' => null,
+            'format' => 'text',
+            'unit' => null,
+            'note' => $hardQuarters > 0
+                ? sprintf('A hard market, %d %s in: after heavy losses, rates rise while capital rebuilds.', $hardQuarters, $hardQuarters === 1 ? 'quarter' : 'quarters')
+                : 'A soft market: rates are set by competition for business.',
+            'chips' => [$hardQuarters > 0 ? self::chip('Hard market', 'up') : self::chip('Soft market', 'neutral')],
+        ];
+
+        $float = (float) $report->getCustomerDeposits();
+        if ($float > 0.0) {
+            $map['inside'][] = ['id' => 'float', 'label' => 'Float', 'value' => $float, 'format' => 'money', 'unit' => null, 'note' => 'Premiums held as reserves and invested until claims are paid.', 'chips' => []];
+            $map['produced'][] = ['id' => 'investment', 'label' => 'Investment income', 'value' => (float) $report->getInterestIncome(), 'format' => 'money', 'unit' => null, 'note' => 'Earned on the float this quarter.', 'chips' => []];
+            $map['edges'][] = ['float', 'investment', 0, 0.2];
+        }
+
+        if (is_numeric($kpis['loss_ratio'] ?? null) && is_numeric($kpis['expense_ratio'] ?? null)) {
+            $combined = (float) $kpis['loss_ratio'] + (float) $kpis['expense_ratio'];
+            $before = $previous?->getReportedKpis() ?? [];
+            $previousCombined = is_numeric($before['loss_ratio'] ?? null) && is_numeric($before['expense_ratio'] ?? null)
+                ? (float) $before['loss_ratio'] + (float) $before['expense_ratio'] : null;
+            $map['produced'][] = [
+                'id' => 'combined',
+                'label' => 'Combined ratio',
+                'value' => $combined,
+                'format' => 'pct',
+                'unit' => 'of premiums',
+                'note' => sprintf('Claims %s%% and expenses %s%%. Under 100%% the book makes an underwriting profit.', number_format((float) $kpis['loss_ratio'] * 100.0, 1), number_format((float) $kpis['expense_ratio'] * 100.0, 1)),
+                // A lower ratio is the better quarter, so a fall carries the up tone.
+                'chips' => $previousCombined !== null ? [self::pointsChip(($combined - $previousCombined) * 100.0, 'on the quarter', invert: true)] : [],
+            ];
+            $map['edges'][] = ['cycle', 'combined', 0, 0.2];
+        }
+    }
+
+    /**
+     * A landlord: the lease ladder its rent stream earns on, how long it is contracted for and what expiring space
+     * re-lets at against what it earns now.
+     *
+     * @param array<string, mixed> $map
+     * @param array<string, mixed> $streams
+     * @param array<string, mixed> $kpis
+     */
+    private function addLeaseLadder(array &$map, array $streams, array $kpis): void
+    {
+        if (!isset($streams['lease']) || !is_numeric($kpis['walt_years'] ?? null)) {
+            return;
+        }
+        $spread = (float) ($kpis['releasing_spread'] ?? 0.0);
+        $inPlace = (float) ($kpis['in_place_rent_index'] ?? 0.0);
+        $this->replaceCard($map['inside'], 'ops:lease', [
+            'label' => 'Lease book',
+            'value' => (float) $kpis['walt_years'],
+            'format' => 'index',
+            'unit' => 'years left on the average lease',
+            'note' => sprintf(
+                'Rents in place run %s%% %s normal. Expiring space re-lets %s%% %s what it paid.',
+                number_format(abs($inPlace) * 100.0, 1),
+                $inPlace >= 0.0 ? 'above' : 'below',
+                number_format(abs($spread) * 100.0, 1),
+                $spread >= 0.0 ? 'above' : 'below'
+            ),
+        ], [self::chip(sprintf('Re-leasing %s', $spread >= 0.0 ? 'up' : 'down'), $spread >= 0.0 ? 'up' : 'down')]);
+    }
+
+    /**
+     * A health plan: premiums are priced once a year on a medical cost trend, so the gap between the costs it priced
+     * and the costs it is paying runs straight into the cost of each sale until the book reprices.
+     *
+     * @param array<string, mixed> $map
+     * @param array<string, mixed> $state
+     */
+    private function addHealthPlanPricing(array &$map, array $state): void
+    {
+        $trend = $state[HealthInsurerBusinessModel::STATE_PRICED_TREND] ?? null;
+        $gap = $state[HealthInsurerBusinessModel::STATE_LOSS_RATIO_GAP] ?? null;
+        if (!is_numeric($trend) || !is_numeric($gap)) {
+            return;
+        }
+        $excess = exp((float) $gap) - 1.0;
+        $map['inside'][] = [
+            'id' => 'pricing',
+            'label' => 'Premium pricing',
+            'value' => (float) $trend,
+            'format' => 'pct',
+            'unit' => 'medical cost trend priced in',
+            'note' => sprintf('Premiums reprice once a year. Medical costs run %s%% %s what the book was priced for.', number_format(abs($excess) * 100.0, 1), $excess >= 0.0 ? 'above' : 'below'),
+            'chips' => [],
+        ];
+        if ($this->find($map['produced'], 'cost')) {
+            $map['edges'][] = ['pricing', 'cost', -($excess <=> 0.0), abs($excess)];
+        }
+    }
+
+    /**
+     * Swaps a generic operations card for a business-specific one, keeping its id (the demand lines point at it) and
+     * its execution and event tags.
+     *
+     * @param list<array<string, mixed>> $cards
+     * @param array<string, mixed> $replacement
+     * @param list<array<string, mixed>> $leadingChips
+     */
+    private function replaceCard(array &$cards, string $id, array $replacement, array $leadingChips = []): void
+    {
+        foreach ($cards as $i => $card) {
+            if (($card['id'] ?? null) === $id) {
+                $cards[$i] = ['id' => $id, 'chips' => [...$leadingChips, ...($card['chips'] ?? [])]] + $replacement;
+
+                return;
+            }
+        }
+    }
+
+    /**
+     * @param list<array<string, mixed>> $cards
+     */
+    private function find(array $cards, string $id): bool
+    {
+        foreach ($cards as $card) {
+            if (($card['id'] ?? null) === $id) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /** @return array{text: string, figure: null, format: null, tone: string} */
+    private static function chip(string $text, string $tone): array
+    {
+        return ['text' => $text, 'figure' => null, 'format' => null, 'tone' => $tone];
+    }
+
+    /**
+     * A change in percentage points; $invert for a ratio where lower is better.
+     *
+     * @return array{text: string, figure: float, format: string, tone: string}
+     */
+    private static function pointsChip(float $points, string $text, bool $invert = false): array
+    {
+        $good = $invert ? $points <= 0.0 : $points >= 0.0;
+
+        return ['text' => $text, 'figure' => $points, 'format' => 'signed_points', 'tone' => $good ? 'up' : 'down'];
+    }
+
+    /** A compact dollar figure for a note ("$1.54T"), as the template's format_large prints a card value. */
+    private static function large(float $amount): string
+    {
+        return (new \App\Twig\Extension\NumberFormatExtension())->formatLargeNumber($amount, '$');
     }
 
     /** The template format for a MacroFieldCatalog reading unit. */

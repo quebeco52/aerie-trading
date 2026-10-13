@@ -8,6 +8,9 @@ use App\Entity\CorporateReport;
 use App\Entity\Stock;
 use App\Repository\CorporateReportRepository;
 use App\Service\Math\FinancialConstants;
+use App\Service\Model\Sector\CommercialBankBusinessModel;
+use App\Service\Model\Sector\HealthInsurerBusinessModel;
+use App\Service\Model\Sector\InsuranceBusinessModel;
 use App\Service\Model\StreamContext;
 use App\Service\View\BusinessMapBuilder;
 use PHPUnit\Framework\TestCase;
@@ -91,6 +94,90 @@ final class BusinessMapBuilderTest extends TestCase
         $this->assertNull($this->find($map['outside'], 'input:metals'));
     }
 
+    /** A lender's interest stream runs on its book; deposits feed the interest it pays, the reserve its credit losses. */
+    public function testALenderShowsItsBookFundingAndReserve(): void
+    {
+        $report = $this->lenderReport();
+        $stock = $this->stock('Banks - Diversified');
+        $stock->setEarningsMomentumZ([
+            CommercialBankBusinessModel::STATE_BOOK_YIELD_RESIDENTIAL => 0.053,
+            CommercialBankBusinessModel::STATE_BOOK_YIELD_FIXED => 0.054,
+            CommercialBankBusinessModel::STATE_BOOK_YIELD_SECURITIES => 0.045,
+            CommercialBankBusinessModel::STATE_FLOATING_LOAN_SHARE => 0.29,
+        ]);
+        $previous = $this->lenderReport();
+        $previous->setNetInterestMargin('0.0270');
+
+        $map = $this->builder->fromReports($stock, $report, $previous);
+        $this->assertNotNull($map);
+
+        $book = $this->card($map['inside'], 'ops:net_interest_income');
+        $this->assertSame('Loans and securities', $book['label']);
+        $this->assertSame(1000.0, $book['value']);
+        $this->assertStringContainsString('Mortgages 5.30%', $book['note']);
+        $this->assertContains(['macro:policy_rate_ema', 'ops:net_interest_income', -1, 0.0128], $map['edges'], 'demand lines still land on the book');
+        $this->assertSame('Interest income', $this->card($map['produced'], 'rev:net_interest_income')['label']);
+        $this->assertSame(['funding', 'paid', 0, 0.3], $this->edge($map, 'funding', 'paid'));
+        $this->assertSame(['reserve', 'losses', 0, 0.1], $this->edge($map, 'reserve', 'losses'));
+        $this->assertSame(4.0, $this->card($map['produced'], 'losses')['value']);
+        $this->assertEqualsWithDelta(0.06, $this->card($map['produced'], 'nim')['chips'][0]['figure'], 1e-9);
+        $this->assertSame(0.14, $this->card($map['inside'], 'capital')['value']);
+    }
+
+    /** An underwriter's capacity feeds its premiums; the combined ratio falls as the better quarter. */
+    public function testAnInsurerShowsCapacityCycleAndFloat(): void
+    {
+        $stock = $this->stock('Insurance - Diversified');
+        $stock->setEarningsMomentumZ([
+            InsuranceBusinessModel::STATE_OBSERVED_CAPACITY => 1.08,
+            InsuranceBusinessModel::STATE_WRITTEN_SHARE => 0.9,
+            StreamContext::REGIME_STATE_PREFIX . InsuranceBusinessModel::REGIME_HARD_MARKET => 3.0,
+        ]);
+        $report = $this->insurerReport(0.60, 0.34);
+        $map = $this->builder->fromReports($stock, $report, $this->insurerReport(0.62, 0.34));
+        $this->assertNotNull($map);
+
+        $this->assertSame(['capacity', 'rev:property_casualty_premiums', 0, 0.2], $this->edge($map, 'capacity', 'rev:property_casualty_premiums'));
+        $this->assertStringContainsString('3 quarters in', $this->card($map['inside'], 'cycle')['note']);
+        $this->assertSame(500.0, $this->card($map['inside'], 'float')['value']);
+        $this->assertSame(12.0, $this->card($map['produced'], 'investment')['value']);
+        $combined = $this->card($map['produced'], 'combined');
+        $this->assertEqualsWithDelta(0.94, $combined['value'], 1e-12);
+        $this->assertEqualsWithDelta(-2.0, $combined['chips'][0]['figure'], 1e-9);
+        $this->assertSame('up', $combined['chips'][0]['tone'], 'a lower combined ratio is the better quarter');
+        $this->assertNull($this->find($map['produced'], 'cost'), 'no production cost side for an underwriter');
+    }
+
+    public function testALandlordShowsItsLeaseLadder(): void
+    {
+        $report = $this->report(1000.0, '0.5000', ['walt_years' => 6.0, 'releasing_spread' => -0.0375, 'in_place_rent_index' => -0.0043]);
+        $report->setRevenueStreams(['lease' => 900.0, 'hospitality' => 100.0]);
+        $report->setStreamDetails(['lease' => ['qoq_delta' => 0.01, 'drivers' => []], 'hospitality' => ['qoq_delta' => 0.0, 'drivers' => []]]);
+
+        $map = $this->builder->fromReports($this->stock('REIT - Industrial'), $report, null);
+        $this->assertNotNull($map);
+
+        $ladder = $this->card($map['inside'], 'ops:lease');
+        $this->assertSame('Lease book', $ladder['label']);
+        $this->assertSame(6.0, $ladder['value']);
+        $this->assertStringContainsString('re-lets 3.8% below', $ladder['note']);
+        $this->assertSame('down', $ladder['chips'][0]['tone']);
+    }
+
+    /** Medical costs above what the book was priced for push up the cost of each sale until premiums reprice. */
+    public function testAHealthPlanShowsThePricingGap(): void
+    {
+        $stock = $this->stock('Healthcare Plans');
+        $stock->setEarningsMomentumZ([HealthInsurerBusinessModel::STATE_PRICED_TREND => 0.07, HealthInsurerBusinessModel::STATE_LOSS_RATIO_GAP => 0.02]);
+        $report = $this->report(1000.0, '0.0600', ['variable_cost_ratio' => 0.81, 'fixed_costs' => 50.0]);
+
+        $map = $this->builder->fromReports($stock, $report, null);
+        $this->assertNotNull($map);
+
+        $this->assertSame(0.07, $this->card($map['inside'], 'pricing')['value']);
+        $this->assertSame(-1, $this->edge($map, 'pricing', 'cost')[2]);
+    }
+
     public function testEveryLineJoinsTwoCards(): void
     {
         $map = $this->map();
@@ -147,6 +234,42 @@ final class BusinessMapBuilderTest extends TestCase
             'aftermarket_services' => ['revenue' => $revenue * 0.4, 'share' => 0.4, 'qoq_delta' => 0.095, 'drivers' => []],
         ]);
         $report->setReportedKpis($kpis);
+
+        return $report;
+    }
+
+    private function lenderReport(): CorporateReport
+    {
+        $report = new CorporateReport();
+        $report->setRevenue('100');
+        $report->setOperatingMargin('0.5000');
+        $report->setRevenueStreams(['net_interest_income' => 70.0, 'fee_income' => 30.0]);
+        $report->setStreamDetails(['net_interest_income' => ['qoq_delta' => 0.03, 'drivers' => [
+            $this->driver('policy_rate_ema', 'Policy Rate', 'pct', 0.021, -0.0128),
+        ]], 'fee_income' => ['qoq_delta' => 0.05, 'drivers' => []]]);
+        $report->setEarningAssets('1000');
+        $report->setCustomerDeposits('900');
+        $report->setDepositApy('0.0156');
+        $report->setCreditLossAllowance('10');
+        $report->setCreditLossProvision('4');
+        $report->setNetChargeOffs('3');
+        $report->setCet1Ratio('0.14');
+        $report->setInterestExpense('20');
+        $report->setNetInterestMargin('0.0276');
+
+        return $report;
+    }
+
+    private function insurerReport(float $lossRatio, float $expenseRatio): CorporateReport
+    {
+        $report = new CorporateReport();
+        $report->setRevenue('100');
+        $report->setOperatingMargin('0.0500');
+        $report->setRevenueStreams(['property_casualty_premiums' => 80.0, 'life_insurance_premiums' => 20.0]);
+        $report->setStreamDetails([]);
+        $report->setReportedKpis(['loss_ratio' => $lossRatio, 'expense_ratio' => $expenseRatio]);
+        $report->setCustomerDeposits('500');
+        $report->setInterestIncome('12');
 
         return $report;
     }
