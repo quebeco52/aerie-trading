@@ -63,7 +63,6 @@ final class MacroFieldCatalog
         'credit_to_gdp_gap_ema' => ['label' => 'Credit gap', 'unit' => self::UNIT_PERCENT],
         'countercyclical_buffer_rate' => ['label' => 'Countercyclical buffer', 'unit' => self::UNIT_PERCENT],
         'bank_capital_requirement' => ['label' => 'Bank capital requirement', 'unit' => self::UNIT_PERCENT],
-        'inflation_anchor_drift' => ['label' => 'Inflation expectations drift', 'unit' => self::UNIT_PERCENT],
         'market_volatility_ema' => ['label' => 'Implied volatility', 'unit' => self::UNIT_PERCENT],
         'consumer_sentiment_index_ema' => ['label' => 'Consumer sentiment', 'unit' => self::UNIT_INDEX],
         'government_spending_index_ema' => ['label' => 'Government spending', 'unit' => self::UNIT_INDEX],

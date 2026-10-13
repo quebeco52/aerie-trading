@@ -219,7 +219,7 @@ class MacroAggregateSubsystem
     public const OUTPUT_GAP_DIFFUSION_SIGMA = 0.0025;
 
     // --- Cyclical Output Gap Bounds ---
-    /** Deepest slump the cycle may reach; below the worst postwar CBO gap (-8.8%, 2009Q2), so the bound guards runaway feedback rather than shaping the distribution. */
+    /** Deepest slump the cycle may reach; below the worst postwar CBO gap (-8.8%, 2020Q2; 2009Q2 is -5.0% on the current vintage), so the bound guards runaway feedback rather than shaping the distribution. */
     public const OUTPUT_GAP_FLOOR = -0.12;
     /** Hottest the economy may run: above the postwar CBO peak (+5.6%, 1966Q1), since the one-sided cubic is what holds the upside. */
     public const OUTPUT_GAP_CEILING = 0.10;

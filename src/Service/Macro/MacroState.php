@@ -437,11 +437,7 @@ class MacroState
     // The Monetary Authority's rate committee: its supermajority, and whether politics hands one over at all.
     public float $authorityMajority;
     public float $authorityCommitteeSeated;
-    // Whether the Authority is giving ground to the cabinet's pressure, and how far the inflation the public expects it to
-    // tolerate has drifted above its target.
-    public float $authorityConcession;
-    public float $inflationAnchorDrift;
-    // The long-run inflation the public has learned from what inflation did, over that anchor.
+    // The long-run inflation the public has learned from what inflation did, over the Authority's target.
     public float $inflationEndpointGap;
     // 1 while the excess bond premium holds the Authority in its recession regime (entered at 1pp, left at its mean), else 0.
     public float $authorityStressRegime;

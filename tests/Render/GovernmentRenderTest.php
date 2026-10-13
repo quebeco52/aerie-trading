@@ -117,10 +117,6 @@ final class GovernmentRenderTest extends KernelTestCase
             }
         }
 
-        if (getenv('FORCE_PRESSURE')) {
-            $politics = new PoliticsStateDTO(...(['pressureSince' => $politics->totalTime - 0.25, 'pressureGivingIn' => 1.0, 'pressureCabinet' => $politics->coalitionFormedAt] + get_object_vars($politics)));
-        }
-
         self::bootKernel();
         $container = static::getContainer();
         /** @var RequestStack $stack */

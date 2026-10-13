@@ -39,9 +39,7 @@ class PoliticsHistoryRecorder
                 ->setRateChange($politics->lastMeetingChange)
                 ->setVotes(array_values(array_map('floatval', $politics->lastMeetingVotes)))
                 ->setGovernor($politics->governorName)
-                ->setCommitteeMajority((int) $politics->committeeMajority)
-                ->setCabinetPressing($politics->pressureSince >= 0.0)
-                ->setGivingGround(PoliticalPressure::concession($politics) > 0.0);
+                ->setCommitteeMajority((int) $politics->committeeMajority);
         }
         if ($politics->forecastAt === $politics->totalTime && $politics->forecastFor >= 0.0) {
             $rows[] = (new ElectionOdds())

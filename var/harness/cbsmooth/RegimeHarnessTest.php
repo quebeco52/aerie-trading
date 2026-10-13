@@ -285,7 +285,7 @@ final class RegimeHarnessTest extends KernelTestCase
                     'ftp_shock' => $m->foreignTermPremiumShock, 'ftp_regime' => $m->foreignTermPremiumRegime,
                     'sov_ema' => $m->sovereignRiskSpreadEma, 'pnr' => $m->perceivedNeutralRate, 'path' => $m->expectedPathShock,
                     'vol_ema' => $m->marketVolatilityEma, 'bs' => $m->balanceSheetIntensity, 'debt_ema' => $m->sovereignDebtToGdpEma,
-                    'wam' => $m->sovereignDebtAverageMaturity, 'anchor_drift' => $m->inflationAnchorDrift,
+                    'wam' => $m->sovereignDebtAverageMaturity,
                     'infl_ema' => $m->inflationEma, 'noncore' => $m->noncorePassThroughEma,
                     'sc_ema' => $m->supercoreInflationEma, 'cg_ema' => $m->coreGoodsInflationEma,
                     'endpoint_gap' => property_exists($m, 'inflationEndpointGap') ? $m->inflationEndpointGap : 0.0,

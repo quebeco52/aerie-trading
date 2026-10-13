@@ -82,12 +82,6 @@ class MonetaryPolicySubsystem
     /** Share of the FOMC's meetings with a hawkish supermajority, likewise a quarter. */
     public const HAWKISH_MAJORITY_SHARE = 0.25;
 
-    // --- Giving Ground to Political Pressure (Gavin & Manger 2023; Drechsel 2024) ---
-    /** Cut in the rule's rate while the Authority gives ground to the cabinet, fitted with the drift below (var/harness/pressure, 48 paired games) so an episode it gives in to leaves the policy rate 0.3pp lower three quarters on, as a pressure event under a highly populist government does (Gavin & Manger 2023, p. 26). */
-    public const PRESSURE_RATE_CONCESSION = 0.0138;
-    /** Rate (per year) at which the inflation the public expects the Authority to tolerate drifts up while it gives ground, fitted with the cut above so the episode lifts inflation 0.5pp six quarters on (Gavin & Manger 2023, p. 26); the price level then stands 1.7% higher four years on and 4.3% ten years on, under Drechsel's (2024, Figure 7) US pressure shock (2.9% and 5%). */
-    public const PRESSURE_ANCHOR_DRIFT_RATE = 0.0172;
-
     // --- Shifting Inflation Endpoint (Kozicki & Tinsley 2001; Orphanides & Williams 2005) ---
     /** Constant gain, per year, at which the public learns long-run inflation from realized inflation: Orphanides & Williams' baseline 0.05 a half-year period, about twenty years of data (FRB FEDS 2003-41); on US T10YIE 2003-2026 the breakeven fit's R2 peaks at 0.10-0.14. */
     public const INFLATION_ENDPOINT_LEARNING_GAIN = 0.10;
@@ -303,17 +297,11 @@ class MonetaryPolicySubsystem
 
         $committee = self::committeeMajorityTerm($state->authorityCommitteeSeated > 0.0 ? $state->authorityMajority : null, $inflationMeasure, $cyclicalGap);
 
-        // Gavin & Manger (2023): the rate the Authority concedes to the cabinet while it gives ground; and while it does, it
-        // tolerates the inflation the public has come to expect of it rather than leaning against it (Drechsel 2024).
-        $concession = self::PRESSURE_RATE_CONCESSION * $state->authorityConcession;
-        $toleratedInflation = $targetInflation + ($state->inflationAnchorDrift * $state->authorityConcession);
-
         $unclampedTarget = $naturalRate + $inflationMeasure
-            + self::TAYLOR_INFLATION_WEIGHT * ($inflationMeasure - $toleratedInflation)
+            + self::TAYLOR_INFLATION_WEIGHT * ($inflationMeasure - $targetInflation)
             + self::TAYLOR_OUTPUT_GAP_WEIGHT * $cyclicalGap
             - $longRateOffset
-            + $committee
-            - $concession;
+            + $committee;
 
         $target = $unclampedTarget;
 
@@ -331,8 +319,6 @@ class MonetaryPolicySubsystem
                 'productivitySeenThrough' => -self::TAYLOR_OUTPUT_GAP_WEIGHT * $state->productivitySupplyGap,
                 'longRateOffset' => -$longRateOffset,
                 'committeeMajority' => $committee,
-                'pressureConcession' => -$concession,
-                'pressureTolerance' => -self::TAYLOR_INFLATION_WEIGHT * ($toleratedInflation - $targetInflation),
             ], $target, $dt);
         }
 
@@ -340,36 +326,8 @@ class MonetaryPolicySubsystem
     }
 
     /**
-     * The inflation the public expects the Authority to tolerate, as a drift above its target (Drechsel 2024; Kozicki &
-     * Tinsley 2001): it climbs while the Authority gives ground to the cabinet, and once the pressure ends the public
-     * relearns the target at the slow speed it relearns any long-run level, so prices that rose under it stay risen.
-     *
-     * @param MacroState $state Current macroeconomic state.
-     * @param float      $dt    Time increment in years.
-     */
-    public function updateInflationAnchor(MacroState $state, float $dt): void
-    {
-        $state->inflationAnchorDrift = TimeSeries::calculateDistributedLag(
-            currentLaggedValue: $state->inflationAnchorDrift,
-            targetValue: self::PRESSURE_ANCHOR_DRIFT_RATE * $state->authorityConcession / self::KOZICKI_TINSLEY_ADAPTATION_SPEED,
-            dt: $dt,
-            lagTimeConstant: 1.0 / self::KOZICKI_TINSLEY_ADAPTATION_SPEED
-        );
-    }
-
-    /**
-     * Where the public expects the Authority to hold inflation: its target plus the drift pressure it gave ground to has added.
-     */
-    public static function inflationAnchor(MacroState $state, float $targetInflation): float
-    {
-        return $targetInflation + $state->inflationAnchorDrift;
-    }
-
-    /**
      * The long-run inflation the public has learned from what inflation actually did (Kozicki & Tinsley 2001 shifting
-     * endpoint, learned at Orphanides & Williams' 2005 constant gain), kept as its gap over the anchor: the target plus
-     * the drift pressure has added. Learning from inflation over that anchor leaves the drift to updateInflationAnchor(),
-     * so a pressure episode reaches the breakeven once; the endpoint learns only the inflation the anchor did not explain.
+     * endpoint, learned at Orphanides & Williams' 2005 constant gain), kept as its gap over the target.
      *
      * @param MacroState $state           Current macroeconomic state.
      * @param float      $targetInflation Statutory central bank target inflation.
@@ -379,7 +337,7 @@ class MonetaryPolicySubsystem
     {
         $state->inflationEndpointGap = TimeSeries::calculateDistributedLag(
             currentLaggedValue: $state->inflationEndpointGap,
-            targetValue: $state->inflationEma - self::inflationAnchor($state, $targetInflation),
+            targetValue: $state->inflationEma - $targetInflation,
             dt: $dt,
             lagTimeConstant: 1.0 / self::INFLATION_ENDPOINT_LEARNING_GAIN
         );

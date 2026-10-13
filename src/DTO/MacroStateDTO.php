@@ -394,8 +394,6 @@ readonly class MacroStateDTO
         public float $authorityMajority = 0.0,
         /** 1 while politics hands the macro a rate committee, else 0: the policy rule reads the supermajority only then. */
         public float $authorityCommitteeSeated = 0.0,
-        /** 1 while the Monetary Authority gives ground to the cabinet's pressure, else 0 (App\Service\Politics\PoliticalPressure). */
-        public float $authorityConcession = 0.0,
         /** The corporate tax shift as the tax rate has taken it in so far: the shift in force through the rate's own adjustment (App\Service\Macro\Subsystem\CreditFiscalSubsystem::calculateDynamicFiscalPolicy()). */
         public float $corporateTaxShiftRealized = 0.0,
         /** The shift as the trailing year's earnings carry it: the realized shift through a first-order lag of the year's mean lag. */
@@ -426,8 +424,6 @@ readonly class MacroStateDTO
         public array $previousExpectedLevers = [],
         /** When those took effect, as forecast the tick before. */
         public float $previousExpectedPolicyFrom = -1.0,
-        /** How far the inflation the public expects the Authority to tolerate has drifted above its target, under pressure it gave ground to (App\Service\Macro\Subsystem\MonetaryPolicySubsystem::updateInflationAnchor()). */
-        public float $inflationAnchorDrift = 0.0,
         /** The long-run inflation the public has learned from realized inflation over that anchor, the Kozicki-Tinsley shifting endpoint the ten-year breakeven prices (App\Service\Macro\Subsystem\MonetaryPolicySubsystem::updateInflationEndpoint()). */
         public float $inflationEndpointGap = 0.0,
         /** 1 while financial stress (the excess bond premium) holds the Authority in its recession regime, where it cuts faster, else 0 (App\Service\Macro\Subsystem\MonetaryPolicySubsystem::updateStressRegime()). */

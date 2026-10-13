@@ -48,14 +48,6 @@ class RateDecision
     #[ORM\Column(type: Types::SMALLINT)]
     private int $committeeMajority = 0;
 
-    /** Whether the cabinet was pressing the Authority for cheaper money. */
-    #[ORM\Column]
-    private bool $cabinetPressing = false;
-
-    /** Whether the Authority was giving ground to that pressure. */
-    #[ORM\Column]
-    private bool $givingGround = false;
-
     #[ORM\Column(type: Types::DATETIME_MUTABLE)]
     private \DateTimeInterface $recordedAt;
 
@@ -151,30 +143,6 @@ class RateDecision
     public function setCommitteeMajority(int $committeeMajority): static
     {
         $this->committeeMajority = $committeeMajority;
-
-        return $this;
-    }
-
-    public function isCabinetPressing(): bool
-    {
-        return $this->cabinetPressing;
-    }
-
-    public function setCabinetPressing(bool $cabinetPressing): static
-    {
-        $this->cabinetPressing = $cabinetPressing;
-
-        return $this;
-    }
-
-    public function isGivingGround(): bool
-    {
-        return $this->givingGround;
-    }
-
-    public function setGivingGround(bool $givingGround): static
-    {
-        $this->givingGround = $givingGround;
 
         return $this;
     }

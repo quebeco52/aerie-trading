@@ -593,13 +593,10 @@ class MacroEngine
         $this->laborSubsystem->calculateUnemployment($state, $dt);
         $this->laborSubsystem->calculateLaborMarketAndWages($state, $productivityGrowthRate, $dt);
 
-        // 4. Gurkaynak, Sack & Wright (2010) TIPS breakeven inflation expectations, anchored where the public expects the
-        // Authority to hold inflation: its target, plus whatever pressure it gave ground to has added (Drechsel 2024),
-        // and priced off the long-run inflation the public has learned over that anchor (Kozicki & Tinsley 2001).
-        $this->monetarySubsystem->updateInflationAnchor($state, $dt);
-        $inflationAnchor = MonetaryPolicySubsystem::inflationAnchor($state, self::TARGET_INFLATION);
+        // 4. Gurkaynak, Sack & Wright (2010) TIPS breakeven inflation expectations, anchored on the Authority's target and
+        // priced off the long-run inflation the public has learned over it (Kozicki & Tinsley 2001).
         $this->monetarySubsystem->updateInflationEndpoint($state, self::TARGET_INFLATION, $dt);
-        $state->tipsBreakeven = $this->aggregateSubsystem->calculateTipsBreakeven($state, $inflationAnchor);
+        $state->tipsBreakeven = $this->aggregateSubsystem->calculateTipsBreakeven($state, self::TARGET_INFLATION);
 
         // 5. Taylor (1993) monetary policy target and Clarida-Gali-Gertler (2000) rate inertia.
         $state->targetRate = $this->monetarySubsystem->calculateTargetRate($state, self::TARGET_INFLATION, $state->naturalRate, $dt);
@@ -666,7 +663,7 @@ class MacroEngine
         $this->assetSubsystem->calculateResidentialPropertyIndex($state, $expectedInflation, $dt);
         $this->assetSubsystem->calculateHousingStarts($state, $expectedInflation, $dt);
 
-        $state->inflation = $this->aggregateSubsystem->calculateInflation($state, $inflationAnchor, $productivityGrowthRate, $dt);
+        $state->inflation = $this->aggregateSubsystem->calculateInflation($state, self::TARGET_INFLATION, $productivityGrowthRate, $dt);
         $this->aggregateSubsystem->calculateProducerPriceInflation($state, $productivityGrowthRate, $dt);
         $state->marketVolatility = $this->assetSubsystem->calculateMarketVolatility($state, $dt, $systemicShock['varianceJump'], $systemicShock['returnInnovation']);
 
@@ -895,7 +892,6 @@ class MacroEngine
         $state->electionPulse = $policy->electionPulse;
         $state->authorityMajority = $policy->authorityMajority ?? 0.0;
         $state->authorityCommitteeSeated = $policy->authorityMajority === null ? 0.0 : 1.0;
-        $state->authorityConcession = $policy->authorityConcession ?? 0.0;
         $state->bankCapitalRequirement = $policy->bankCapitalRequirement ?? $state->bankCapitalRequirement;
         $state->mortgageLtvCap = $policy->mortgageLtvCap;
         $state->neutralCountercyclicalBuffer = $policy->neutralCountercyclicalBuffer;

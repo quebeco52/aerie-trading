@@ -2,7 +2,7 @@
 
 Harness: `gate.php` (macro + Diet, plain script, no fund, no equity cap). Usage:
 `php gate.php <seedFrom> <seedTo> <years> <tpy> <arm> <out.jsonl>`; arms `off` (no politics) and `on` (Diet votes on its
-own stream), plus `calendar|nocommittee|noregulator|nopressure|step|concede` (see the header). One JSON row per quarter.
+own stream), plus `calendar|nocommittee|noregulator|step` (see the header). One JSON row per quarter.
 Note: gate.php `require`s the main checkout's tests/bootstrap.php by absolute path.
 
 ## Arms on one tree

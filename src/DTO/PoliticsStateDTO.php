@@ -16,7 +16,6 @@ use App\Service\Politics\Exchequer;
 use App\Service\Politics\DebtBrake;
 use App\Service\Politics\PoliticsEngine;
 use App\Service\Politics\PoliticsState;
-use App\Service\Politics\PoliticalPressure;
 use App\Service\Politics\SovereignReserveFund;
 
 /**
@@ -208,11 +207,6 @@ readonly class PoliticsStateDTO
         public float $lastExchequerHeadAppointedAt = -1.0,
         /** @var list<string> Everyone who has left a Council seat or a post at the Monetary Authority, the Financial Regulator, the Sovereign Reserve Fund or the Exchequer, whose names no later appointee takes. */
         public array $formerNames = [],
-        /** The cabinet's pressure on the Monetary Authority (App\Service\Politics\PoliticalPressure): when the episode under way began (-1: none), the cabinet that began it (when it formed), whether the Authority is giving ground (1) or holding firm (0), and when the last episode began. */
-        public float $pressureSince = -1.0,
-        public float $pressureCabinet = -1.0,
-        public float $pressureGivingIn = 0.0,
-        public float $lastPressureAt = -1.0,
         /** @var array<string, string> Each party's leader (App\Service\Politics\PartyLeaders), drawn on the first tick; the prime minister is the leader of the cabinet's largest party. */
         public array $leaderNames = [],
         /** @var array<string, float> When each leader was born, in simulation years. */
@@ -319,7 +313,6 @@ readonly class PoliticsStateDTO
             neutralCountercyclicalBuffer: $this->regulatorNeutralBuffer,
             reserveFundEquityShare: $this->fundHeadName === '' || $this->fundHeadTermStart < 0.0 ? null : SovereignReserveFund::equityShare($this->fundHeadStance),
             debtAverageMaturity: $this->exchequerHeadName === '' || $this->exchequerHeadTermStart < 0.0 ? null : Exchequer::averageMaturity($this->exchequerHeadStance),
-            authorityConcession: $this->authoritySalt < 0.0 ? null : PoliticalPressure::concession($this),
             sittingLevers: $this->sittingLevers === [] ? null : $this->sittingLevers,
             sittingPolicyFrom: $this->sittingLevers === [] ? null : ElectionForecast::sittingTakesEffect($this),
             expectedLevers: $this->forecastLevers === [] ? null : $this->forecastLevers,

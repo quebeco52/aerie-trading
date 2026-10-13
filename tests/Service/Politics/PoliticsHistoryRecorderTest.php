@@ -37,8 +37,6 @@ class PoliticsHistoryRecorderTest extends TestCase
             lastMeetingRate: 0.0425,
             lastMeetingChange: 0.0025,
             lastMeetingVotes: [0.0, 1.0, 0.0, 0.0, -1.0, 1.0, 0.0],
-            pressureSince: 4.9,
-            pressureGivingIn: 1.0,
         ));
 
         $this->assertCount(1, $rows);
@@ -53,8 +51,6 @@ class PoliticsHistoryRecorderTest extends TestCase
         $this->assertSame(1, $decision->getVotesLower());
         $this->assertSame('Ada Marsh', $decision->getGovernor());
         $this->assertSame(1, $decision->getCommitteeMajority());
-        $this->assertTrue($decision->isCabinetPressing());
-        $this->assertTrue($decision->isGivingGround());
     }
 
     public function testAForecastIsWrittenWithItsOdds(): void

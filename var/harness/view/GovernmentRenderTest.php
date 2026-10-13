@@ -82,11 +82,6 @@ final class GovernmentRenderTest extends KernelTestCase
             $recorder->record($politics);
         }
 
-        if (getenv('FORCE_PRESSURE')) {
-            // A cabinet leaning on the Authority, which is giving ground, for the panel's look.
-            $politics = new PoliticsStateDTO(...(['pressureSince' => $politics->totalTime - 0.25, 'pressureGivingIn' => 1.0, 'pressureCabinet' => $politics->coalitionFormedAt] + get_object_vars($politics)));
-        }
-
         self::bootKernel();
         $container = static::getContainer();
         /** @var RequestStack $stack */

@@ -458,8 +458,7 @@
     const POLICY_LABELS = {
         naturalRate: 'Natural rate r*', inflationTarget: 'Inflation target', coreInflationGap: 'Core inflation gap',
         expectationsGap: 'Expectations gap', outputGap: 'Output gap', productivitySeenThrough: 'Productivity seen through',
-        longRateOffset: 'Long-rate offset', committeeMajority: 'Committee majority', pressureConcession: 'Pressure concession',
-        pressureTolerance: 'Tolerated pressure drift',
+        longRateOffset: 'Long-rate offset', committeeMajority: 'Committee majority',
     };
     // Stacked as the deviation from neutral (r* + target), which the table carries on its own lines.
     const POLICY_SERIES = [
@@ -469,7 +468,6 @@
         { label: 'Productivity seen through', terms: ['productivitySeenThrough'] },
         { label: 'Long-rate offset', terms: ['longRateOffset'] },
         { label: 'Committee majority', terms: ['committeeMajority'] },
-        { label: 'Political pressure', terms: ['pressureConcession', 'pressureTolerance'] },
     ];
     const CONSTRAINT_LABELS = {
         lowerBound: 'At the lower bound', evansHold: 'Evans-rule hold', hikeCeiling: 'Hike-pace ceiling',

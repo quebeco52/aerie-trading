@@ -184,10 +184,6 @@ class PoliticsState
     public float $lastExchequerHeadAppointedAt;
     /** @var list<string> */
     public array $formerNames;
-    public float $pressureSince;
-    public float $pressureCabinet;
-    public float $pressureGivingIn;
-    public float $lastPressureAt;
     /** @var array<string, string> */
     public array $leaderNames;
     /** @var array<string, float> */

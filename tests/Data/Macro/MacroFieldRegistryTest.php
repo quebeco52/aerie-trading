@@ -72,7 +72,6 @@ class MacroFieldRegistryTest extends TestCase
         'tariffTradeLag' => 'Net-export response building toward the tariff, which import_tariff_rate records.',
         'immigrationPopulationShift' => 'Integral of labor_force_growth_rate over the structural rate, which is recorded.',
         'sovereignFundMandateEquityShare' => 'Input the fund\'s head hands the fund; sovereign_fund_policy_equity_share records the mix the fund adopts.',
-        'authorityConcession' => 'Input the government hands the economy each tick; inflation_anchor_drift records its effect.',
         'corporateTaxShiftRealized' => 'Lagged corporate_tax_policy_shift inside corporate_tax_rate, both of which are recorded.',
         'corporateTaxShiftEmbodied' => 'Lag of the realized shift that trailing earnings carry; the shift and the rate are recorded.',
         'bankLevyEmbodied' => 'Lag of bank_levy_rate that trailing earnings carry; the rate is recorded.',

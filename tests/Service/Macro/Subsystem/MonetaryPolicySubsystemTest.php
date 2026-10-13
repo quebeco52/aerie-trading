@@ -41,16 +41,14 @@ class MonetaryPolicySubsystemTest extends TestCase
         $this->assertEqualsWithDelta($expected, $target, 0.001);
     }
 
-    /** While the Authority gives ground, the target's recorded terms still add up to the target the rule set. */
-    public function testTheTargetTermsSumToTheTargetWhileTheAuthorityGivesGround(): void
+    /** With expectations off the target, the target's recorded terms still add up to the target the rule set. */
+    public function testTheTargetTermsSumToTheTarget(): void
     {
         $probe = new MacroDiagnosticsProbe();
         $probe->enable();
         $subsystem = new MonetaryPolicySubsystem($this->mathUtility, $probe);
         $state = new MacroState();
-        $state->inflationAnchorDrift = 0.03;
         $state->tipsBreakeven = MacroEngine::TARGET_INFLATION + 0.03;
-        $state->authorityConcession = 1.0;
 
         $target = $subsystem->calculateTargetRate($state, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE, 0.25);
         $policy = $probe->snapshot()['current']['policy'];
@@ -117,57 +115,8 @@ class MonetaryPolicySubsystemTest extends TestCase
     }
 
     /**
-     * While the Authority gives ground to the cabinet it cuts the rule's rate by the concession and tolerates the
-     * inflation the public has come to expect of it; holding firm, it leans against that drift as against any other.
-     */
-    public function testGivingGroundCutsTheRateAndToleratesTheDrift(): void
-    {
-        $base = $this->subsystem->calculateTargetRate(new MacroState(), MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE);
-        $conceding = new MacroState();
-        $conceding->authorityConcession = 1.0;
-        $this->assertEqualsWithDelta(-MonetaryPolicySubsystem::PRESSURE_RATE_CONCESSION, $this->subsystem->calculateTargetRate($conceding, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE) - $base, 1e-12);
-
-        $firm = new MacroState();
-        $firm->inflationAnchorDrift = 0.01;
-        $tolerant = new MacroState();
-        $tolerant->inflationAnchorDrift = 0.01;
-        $tolerant->authorityConcession = 1.0;
-        $leaning = $this->subsystem->calculateTargetRate($firm, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE);
-        $tolerating = $this->subsystem->calculateTargetRate($tolerant, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE);
-        $this->assertEqualsWithDelta(MonetaryPolicySubsystem::TAYLOR_INFLATION_WEIGHT * 0.01, $leaning - $tolerating - MonetaryPolicySubsystem::PRESSURE_RATE_CONCESSION, 1e-12, 'Holding firm, the rule leans against a point of drift by its inflation weight; giving ground, not at all.');
-    }
-
-    /**
-     * The inflation the public expects the Authority to tolerate climbs while it gives ground, at the fitted rate less
-     * what the public relearns, and afterwards decays at Kozicki & Tinsley's speed: exact over any step.
-     */
-    public function testTheInflationAnchorDriftsUnderConcessionAndRelearnsAfter(): void
-    {
-        $rate = MonetaryPolicySubsystem::PRESSURE_ANCHOR_DRIFT_RATE;
-        $speed = MonetaryPolicySubsystem::KOZICKI_TINSLEY_ADAPTATION_SPEED;
-        $conceding = new MacroState();
-        $conceding->authorityConcession = 1.0;
-        $this->subsystem->updateInflationAnchor($conceding, 0.5);
-        $this->assertEqualsWithDelta(($rate / $speed) * (1.0 - exp(-$speed * 0.5)), $conceding->inflationAnchorDrift, 1e-15);
-        $this->assertEqualsWithDelta($rate * 0.5, $conceding->inflationAnchorDrift, 0.001, 'Half a year of giving ground moves expectations about half the yearly rate.');
-
-        $stepped = new MacroState();
-        $stepped->authorityConcession = 1.0;
-        for ($day = 0; $day < 126; ++$day) {
-            $this->subsystem->updateInflationAnchor($stepped, 0.5 / 126.0);
-        }
-        $this->assertEqualsWithDelta($conceding->inflationAnchorDrift, $stepped->inflationAnchorDrift, 1e-15, 'Daily steps land where one half-year step does.');
-
-        $released = clone $conceding;
-        $released->authorityConcession = 0.0;
-        $this->subsystem->updateInflationAnchor($released, 5.0);
-        $this->assertEqualsWithDelta($conceding->inflationAnchorDrift * exp(-$speed * 5.0), $released->inflationAnchorDrift, 1e-15);
-        $this->assertEqualsWithDelta(0.5, $released->inflationAnchorDrift / $conceding->inflationAnchorDrift, 0.01, 'Half the drift is relearned in five years.');
-    }
-
-    /**
      * The public learns long-run inflation at Orphanides & Williams' constant gain: an exponential average of what
-     * inflation did over the anchor, exact over any step, halfway to a new level in ln 2 / 0.10 = 6.9 years.
+     * inflation did over the target, exact over any step, halfway to a new level in ln 2 / 0.10 = 6.9 years.
      */
     public function testTheInflationEndpointLearnsAtTheConstantGainOverAnyStep(): void
     {
@@ -188,24 +137,6 @@ class MonetaryPolicySubsystemTest extends TestCase
         $halfway->inflationEma = MacroEngine::TARGET_INFLATION + 0.01;
         $this->subsystem->updateInflationEndpoint($halfway, MacroEngine::TARGET_INFLATION, log(2.0) / $gain);
         $this->assertEqualsWithDelta(0.005, $halfway->inflationEndpointGap, 1e-15);
-    }
-
-    /**
-     * Inflation the pressure drift explains is not learned a second time: with inflation running at the drifted anchor
-     * the endpoint stays put, so the drift reaches the breakeven once, through the anchor; inflation past the anchor is learned.
-     */
-    public function testTheEndpointLearnsOnlyInflationTheAnchorDriftDoesNotExplain(): void
-    {
-        $drifted = new MacroState();
-        $drifted->inflationAnchorDrift = 0.01;
-        $drifted->inflationEma = MacroEngine::TARGET_INFLATION + 0.01;
-        $this->subsystem->updateInflationEndpoint($drifted, MacroEngine::TARGET_INFLATION, 5.0);
-        $this->assertSame(0.0, $drifted->inflationEndpointGap);
-
-        $past = clone $drifted;
-        $past->inflationEma += 0.01;
-        $this->subsystem->updateInflationEndpoint($past, MacroEngine::TARGET_INFLATION, 5.0);
-        $this->assertEqualsWithDelta(0.01 * (1.0 - exp(-MonetaryPolicySubsystem::INFLATION_ENDPOINT_LEARNING_GAIN * 5.0)), $past->inflationEndpointGap, 1e-15);
     }
 
     public function testTaylorRuleBlendsCoreInflationWithTIPSBreakeven(): void

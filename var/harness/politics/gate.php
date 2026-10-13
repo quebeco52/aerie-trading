@@ -1,7 +1,7 @@
 <?php
 // Paired gate for the Diet's levers: the same economy (global mt_rand seeded per run) with no politics, and with the
 // Diet voting and legislating on its own stream. Macro only, no fund. Quarterly rows as JSON lines.
-// php gate.php <seedFrom> <seedTo> <years> <tpy> <arm: off|on|calendar|nocommittee|noregulator|nopressure|step|concede> <out> (calendar: no Diet, the election pulse alone;
+// php gate.php <seedFrom> <seedTo> <years> <tpy> <arm: off|on|calendar|nocommittee|noregulator|step> <out> (calendar: no Diet, the election pulse alone;
 // nocommittee: the Diet and the Monetary Authority on, but the committee's supermajority withheld from the economy;
 // noregulator: everything on, but the Financial Regulator's requirement withheld (the opening one stays in force);
 // step: no politics, the levers held where they stand, the bank capital requirement raised 1pp at year STEP_AT (default 10),
@@ -20,14 +20,13 @@ $tpy = (int) $tpy;
 $perQuarter = intdiv($tpy, 4);
 for ($seed = (int) $seedFrom; $seed <= (int) $seedTo; ++$seed) {
     mt_srand($seed);
-    unset($conceding);
     $math = new MathUtility();
     $redis = new class extends \Redis {
         private array $store = [];
         public function get(mixed $key): mixed { return $this->store[(string) $key] ?? false; }
         public function set(string $key, mixed $value, mixed $options = null): \Redis|string|bool { $this->store[$key] = (string) $value; return true; }
     };
-    $politics = in_array($arm, ['off', 'calendar', 'step', 'concede'], true) ? null : new PoliticsEngine(MathUtility::ownStream($seed), $redis);
+    $politics = in_array($arm, ['off', 'calendar', 'step'], true) ? null : new PoliticsEngine(MathUtility::ownStream($seed), $redis);
     $engine = new MacroEngine($math, $redis, new MacroSnapshotRecorder(), new MonetaryPolicySubsystem($math), new LaborMarketSubsystem(),
         new MacroAggregateSubsystem($math), new CommodityLogisticsSubsystem($math), new AssetMarketSubsystem($math), new CreditFiscalSubsystem($math));
     $policy = $politics?->liveState()->policy();
@@ -40,9 +39,6 @@ for ($seed = (int) $seedFrom; $seed <= (int) $seedTo; ++$seed) {
             $policy = $p->policy();
             if ($arm === 'nocommittee') {
                 $policy = new \App\DTO\GovernmentPolicyDTO(...(['authorityMajority' => null] + get_object_vars($policy)));
-            }
-            if ($arm === 'nopressure') {
-                $policy = new \App\DTO\GovernmentPolicyDTO(...(['authorityConcession' => null] + get_object_vars($policy)));
             }
             if ($arm === 'noregulator') {
                 $policy = new \App\DTO\GovernmentPolicyDTO(...(['bankCapitalRequirement' => null] + get_object_vars($policy)));
@@ -58,30 +54,6 @@ for ($seed = (int) $seedFrom; $seed <= (int) $seedTo; ++$seed) {
                 bankCapitalRequirement: \App\Service\Math\FinancialConstants::OPENING_BANK_CAPITAL_REQUIREMENT + ((float) (getenv('STEP_SIZE') ?: 0.01)) * ((float) (getenv('STEP_PHASE') ?: 0.0) > 0.0
                     ? max(0.0, min(1.0, ($m->totalTime - (float) (getenv('STEP_AT') ?: 10.0)) / (float) getenv('STEP_PHASE')))
                     : ($m->totalTime >= (float) (getenv('STEP_AT') ?: 10.0) ? 1.0 : 0.0)),
-            );
-        } elseif ($arm === 'concede') {
-            // One episode of pressure the Authority gives ground to, from year STEP_AT, running on each quarter with
-            // PoliticalPressure::CONTINUATION, drawn per seed off the same hash the politics uses; with CONCEDE_QUARTERS
-            // set, exactly that many quarters (0: never, the paired baseline on the same code path).
-            $at = (float) (getenv('STEP_AT') ?: 10.0);
-            $fixed = getenv('CONCEDE_QUARTERS');
-            $quarter = (int) round($m->totalTime * 4.0);
-            if ($fixed !== false) {
-                $conceding = $m->totalTime >= $at && $m->totalTime < $at + ((int) $fixed) / 4.0;
-            } elseif ($m->totalTime >= $at && !isset($conceding)) {
-                $conceding = true;
-            } elseif (($conceding ?? false) && TimeSeries::crossedSimulatedBoundary($m->totalTime, 1.0 / $tpy, 0.25)
-                && \App\Service\Politics\CouncilAppointments::uniform($seed, "concede:{$quarter}") >= \App\Service\Politics\PoliticalPressure::CONTINUATION) {
-                $conceding = false;
-            }
-            $policy = new \App\DTO\GovernmentPolicyDTO(
-                publicSpendingShare: $m->publicSpendingShare,
-                corporateTaxPolicyShift: $m->corporateTaxPolicyShift, importTariffRate: $m->importTariffRate, laborForceGrowthRate: $m->laborForceGrowthRate, foreignBuyerTaxRate: $m->foreignBuyerTaxRate,
-                mergerReviewLeniency: $m->mergerReviewLeniency, greenBeltStringency: $m->greenBeltStringency, carbonPrice: $m->carbonPrice,
-                extractionStringency: $m->extractionStringency, stampDutyRate: $m->stampDutyRate, bankLevyRate: $m->bankLevyRate, electionPulse: $m->electionPulse,
-                reserveDrawShare: $m->reserveDrawShare, consolidationTaxShare: $m->consolidationTaxShare, reserveHomeEquityShare: $m->reserveHomeEquityShare,
-                utilityRateCaseGrantShare: $m->utilityRateCaseGrantShare, dividendTaxRate: $m->dividendTaxRate,
-                authorityConcession: ($conceding ?? false) ? 1.0 : 0.0,
             );
         } elseif ($arm === 'calendar') {
             // What the economy read before politics left it: the term's ramp and the vote's own tick, no talks.
@@ -118,7 +90,7 @@ for ($seed = (int) $seedFrom; $seed <= (int) $seedTo; ++$seed) {
                 'req' => $m->bankCapitalRequirement, 'built' => $m->bankCapitalBuilt, 'sloos' => $m->sloosTighteningIndex, 'ccyb' => $m->countercyclicalBufferRate, 'cdrag' => $m->creditCrisisDrag, 'lastcrisis' => $m->lastCreditCrisisAt, 'hdti' => $m->householdDebtToIncome, 'cgap' => $m->creditToGdpGap,
                 'regst' => $p->regulatorStance, 'creg' => \App\Service\Politics\CouncilAppointments::median($p->councilRegulationStances), 'regstart' => $p->regulatorTermStart, 'regname' => $p->regulatorName, 'seated' => $m->authorityCommitteeSeated, 'mmaj' => $m->authorityMajority,
                 'cc' => \App\Service\Politics\PoliticsEngine::coalitionPosition($p->governingCoalition, $p->dietSeats, $p->partyPositions)[AerieDiet::AXIS_COUNCIL] ?? null,
-                'cs' => \App\Service\Politics\PoliticsEngine::coalitionPosition($p->governingCoalition, $p->dietSeats, $p->partyPositions)[AerieDiet::AXIS_STATE] ?? null, 'g' => $m->governmentSpendingIndex, 'spend' => $m->publicSpendingShare, 'fbt' => $m->foreignBuyerTaxRate, 'cts' => $m->consolidationTaxShare ?? null, 'line' => class_exists(\App\Service\Politics\DebtBrake::class) ? \App\Service\Politics\DebtBrake::councilLine($p) : 0.90, 'wam' => $m->sovereignDebtAverageMaturity, 'ndebt' => $m->sovereignNetDebtToGdpEma, 'eff' => $m->sovereignCouponRate, 'pr' => $m->policyRate, 'press' => $p->pressureSince, 'give' => $p->pressureGivingIn, 'meet' => $p->lastMeetingAt, 'votes' => $p->lastMeetingVotes, 'govstart' => $p->governorTermStart, 'mst' => $p->memberStances,
+                'cs' => \App\Service\Politics\PoliticsEngine::coalitionPosition($p->governingCoalition, $p->dietSeats, $p->partyPositions)[AerieDiet::AXIS_STATE] ?? null, 'g' => $m->governmentSpendingIndex, 'spend' => $m->publicSpendingShare, 'fbt' => $m->foreignBuyerTaxRate, 'cts' => $m->consolidationTaxShare ?? null, 'line' => class_exists(\App\Service\Politics\DebtBrake::class) ? \App\Service\Politics\DebtBrake::councilLine($p) : 0.90, 'wam' => $m->sovereignDebtAverageMaturity, 'ndebt' => $m->sovereignNetDebtToGdpEma, 'eff' => $m->sovereignCouponRate, 'pr' => $m->policyRate, 'meet' => $p->lastMeetingAt, 'votes' => $p->lastMeetingVotes, 'govstart' => $p->governorTermStart, 'mst' => $p->memberStances,
                 'conc' => $m->authorityConcession, 'nairu' => $m->nairu, 'psg' => $m->productivitySupplyGap, 'pn' => $m->perceivedNeutralRate, 'tr' => $m->targetRate,
             ]) . "\n");
         }

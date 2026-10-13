@@ -62,10 +62,6 @@ class ShockEvent
     public const FUND_HEAD_APPOINTED = 'fund_head_appointed';
     /** The Council has named a new head of the Exchequer, who sets how long the District borrows for. */
     public const EXCHEQUER_HEAD_APPOINTED = 'exchequer_head_appointed';
-    /** The cabinet has begun to lean on the Monetary Authority in public for cheaper money, and the Authority is holding firm. */
-    public const AUTHORITY_PRESSED = 'authority_pressed';
-    /** The cabinet has begun to lean on the Monetary Authority for cheaper money, and the Authority is giving ground. */
-    public const AUTHORITY_GIVES_GROUND = 'authority_gives_ground';
     /** An appointment has tipped the rate committee into or out of a hawkish or dovish supermajority, which leans the policy rule. */
     public const AUTHORITY_MAJORITY_SHIFT = 'authority_majority_shift';
     /** The prime minister's party has a new leader, who is prime minister without an election. */

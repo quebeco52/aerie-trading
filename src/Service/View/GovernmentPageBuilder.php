@@ -37,7 +37,6 @@ use App\Service\Politics\Exchequer;
 use App\Service\Politics\FinancialRegulator;
 use App\Service\Politics\MonetaryAuthority;
 use App\Service\Politics\PartyLeaders;
-use App\Service\Politics\PoliticalPressure;
 use App\Service\Politics\PoliticsEngine;
 use App\Service\Politics\SovereignReserveFund;
 use App\Twig\Extension\NumberFormatExtension;
@@ -1880,11 +1879,6 @@ class GovernmentPageBuilder
             'members' => $members,
             'committee' => self::stanceCounts(array_merge([$politics->governorStance], $politics->memberStances), array_merge([max(0.0, $politics->governorSwinger)], array_values($politics->memberSwingers))) + [
                 'majority' => $politics->committeeMajority > 0.0 ? 'hawkish' : ($politics->committeeMajority < 0.0 ? 'dovish' : null),
-            ],
-            'pressure' => $politics->pressureSince < 0.0 ? null : [
-                'sinceLabel' => self::simDate($politics->pressureSince),
-                'givingIn' => PoliticalPressure::concession($politics) > 0.0,
-                'cabinet' => array_map(static fn(string $party): string => AerieDiet::PARTY_NAMES[$party], AerieDiet::governingParties($politics->governingCoalition)),
             ],
             'meeting' => $politics->lastMeetingAt < 0.0 ? null : [
                 'date' => self::simDate($politics->lastMeetingAt),

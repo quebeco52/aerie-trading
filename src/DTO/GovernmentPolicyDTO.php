@@ -57,8 +57,6 @@ final readonly class GovernmentPolicyDTO
         public ?float $reserveFundEquityShare = null,
         /** The average maturity, in years, the Exchequer's head steers the debt toward; null while the head sitting at Year 1 keeps the book the debt opened with. */
         public ?float $debtAverageMaturity = null,
-        /** 1 while the Monetary Authority is giving ground to the cabinet's pressure, else 0; null before the Authority has formed. */
-        public ?float $authorityConcession = null,
         /** @var array<string, float>|null The levers the sitting government will pass at its next budget round, keyed as App\Service\Politics\PoliticsEngine::LEVER_FIELDS; null before they have been read. */
         public ?array $sittingLevers = null,
         /** When that round falls; null before it has been read. */
