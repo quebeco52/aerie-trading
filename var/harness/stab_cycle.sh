@@ -19,7 +19,6 @@ def sub(src, name, val):
     assert n == 1, name
     return new
 s = open(f'{P}/src/Service/Macro/MacroEngine.php').read()
-s = sub(s, 'FUND_STABILISATION_GAP_RESPONSE', BETA)
 s = sub(s, 'FUND_STABILISATION_IMPULSE_REVERSAL', PHI)
 s = sub(s, 'FUND_STABILISATION_PERSISTENCE', KAPPA)
 open(f'{O}/Service/Macro/MacroEngine.php', 'w').write(s)
@@ -28,6 +27,7 @@ old = "    public function update(MacroState $state, float $dt): void\n    {\n"
 assert f.count(old) == 1
 open(f'{O}/Service/Macro/Subsystem/SovereignFundSubsystem.php', 'w').write(f.replace(old, old + "        return;\n"))
 c = open(f'{P}/src/Service/Macro/Subsystem/CreditFiscalSubsystem.php').read()
+c = sub(c, 'FUND_STABILISATION_GAP_RESPONSE', BETA)
 if TAG == 'nostab':
     old = "        if ($state->sovereignFundDollarsPerGdp <= 0.0) {\n            $state->sovereignFundStabilisationToGdp = 0.0;"
     assert c.count(old) == 1

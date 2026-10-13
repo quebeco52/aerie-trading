@@ -11,6 +11,7 @@ use App\Entity\Stock;
 use App\Repository\MacroReportHistoryRepository;
 use App\Repository\StockRepository;
 use App\Service\Macro\MacroEngine;
+use App\Service\Macro\Subsystem\CreditFiscalSubsystem;
 use App\Service\Macro\Subsystem\SovereignFundSubsystem;
 use App\Service\Market\Index\IndexCommittee;
 use App\Service\Politics\SovereignReserveFund;
@@ -147,7 +148,7 @@ class SovereignReservePageBuilder
                 'stampDutyRate' => $macro->stampDutyRate,
                 'debtFloor' => MacroEngine::SOVEREIGN_DEBT_FLOOR,
                 'budgetRoundMonths' => 12.0 * MacroEngine::BUDGET_ROUND_PERIOD_YEARS,
-                'stabilisationGapResponse' => MacroEngine::FUND_STABILISATION_GAP_RESPONSE,
+                'stabilisationGapResponse' => CreditFiscalSubsystem::fundStabilisationGapResponse($incepted ? $macro->sovereignFundToGdp : MacroEngine::OPENING_FUND_TO_GDP),
                 'stabilisationReversal' => MacroEngine::FUND_STABILISATION_IMPULSE_REVERSAL,
                 'stabilisationPersistence' => MacroEngine::FUND_STABILISATION_PERSISTENCE,
                 'stabilisationTrendYears' => MacroEngine::FUND_STABILISATION_GAP_TREND_YEARS,

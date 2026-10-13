@@ -2007,9 +2007,9 @@ class MacroAggregateSubsystemTest extends TestCase
             $levelGap += ($this->subsystem->calculateInflation($appreciated, MacroEngine::TARGET_INFLATION, MacroEngine::TFP_DRIFT, $dt) - $restInflation) * $dt;
         }
 
-        $importedShare = MacroAggregateSubsystem::INFLATION_WEIGHT_GOODS + MacroAggregateSubsystem::INFLATION_WEIGHT_COMMODITY;
+        $importedShare = MacroAggregateSubsystem::IMPORTED_SHARE_OF_GOODS * (MacroAggregateSubsystem::INFLATION_WEIGHT_GOODS + MacroAggregateSubsystem::INFLATION_WEIGHT_COMMODITY);
         $expected = -$importedShare * (1.0 - MacroAggregateSubsystem::IMPORT_DISTRIBUTION_SHARE) * MacroAggregateSubsystem::IMPORT_PRICE_PASS_THROUGH * log(1.10);
-        $this->assertEqualsWithDelta($expected, $levelGap, 0.0005, 'A 10% appreciation takes about 1.6% off the price level.');
+        $this->assertEqualsWithDelta($expected, $levelGap, 0.0005, 'A 10% appreciation takes about 0.8% off the price level.');
         $this->assertEqualsWithDelta(MacroAggregateSubsystem::importPriceLevelTarget($appreciated->exchangeRateIndexEma), $appreciated->importPriceLevel, 1e-9, 'and import prices have settled.');
     }
 
@@ -2164,37 +2164,55 @@ class MacroAggregateSubsystemTest extends TestCase
     }
 
     /**
-     * The District makes no goods: its GDP deflator is the services it sells and the local distribution margin on the
-     * goods, fuel and food it imports, which is non-traded services too (Burstein, Neves & Rebelo 2003). No leg of an
-     * imported basket -- currency, supply chains, energy, food -- reaches it; the carbon tax does, on the District's
-     * share of the basket.
+     * The GDP deflator prices what the District makes: its services, the goods, fuel and food it makes itself, and the
+     * local distribution margin on the ones it imports (Burstein, Neves & Rebelo 2003). The currency reaches headline
+     * through the imported half but never the deflator; a world energy price reaches it through the fuel made at home,
+     * and the carbon tax on the District's share of the basket.
      */
-    public function testTheDeflatorExcludesImportedBasketsBeyondTheirDistributionMargin(): void
+    public function testTheDeflatorPricesWhatTheDistrictMakes(): void
     {
-        $this->assertEqualsWithDelta(0.73, MacroAggregateSubsystem::domesticDeflatorWeight(), 1e-12, 'Services 55% plus 40% of the 45% imported.');
+        $this->assertEqualsWithDelta(0.865, MacroAggregateSubsystem::domesticDeflatorWeight(), 1e-12, 'Services 55%, half the 45% of goods made at home, 40% of the imported half.');
 
         $calm = $this->neutralBorrowingState();
         $calm->wageGrowth = MacroEngine::TFP_DRIFT + MacroEngine::TARGET_INFLATION;
-        $imported = clone $calm;
-        $imported->exchangeRateIndexEma = 110.0;
-        $imported->supplyChainPressureIndex = 2.0;
-        $imported->energyPriceShock = 50.0;
-        $imported->agriculturalCommodityIndex = 150.0;
-
-        $calmHeadline = $this->subsystem->calculateInflation($calm, MacroEngine::TARGET_INFLATION, MacroEngine::TFP_DRIFT, 0.25);
-        $importedHeadline = $this->subsystem->calculateInflation($imported, MacroEngine::TARGET_INFLATION, MacroEngine::TFP_DRIFT, 0.25);
-
-        $this->assertGreaterThan(0.001, abs($importedHeadline - $calmHeadline), 'The imported legs move headline');
-        $this->assertSame($calm->domesticInflation, $imported->domesticInflation, 'but not the deflator.');
-        $this->assertSame($imported->supercoreInflation, $imported->domesticInflation);
-
+        $appreciated = clone $calm;
+        $appreciated->exchangeRateIndexEma = 110.0;
+        $oilShock = clone $calm;
+        $oilShock->energyPriceShock = 50.0;
         $taxed = clone $calm;
         $taxed->carbonPrice = 70.0;
+
+        $calmHeadline = 0.0;
+        for ($i = 0; $i < 8; $i++) {
+            $calmHeadline = $this->subsystem->calculateInflation($calm, MacroEngine::TARGET_INFLATION, MacroEngine::TFP_DRIFT, 0.25);
+            $appreciatedHeadline = $this->subsystem->calculateInflation($appreciated, MacroEngine::TARGET_INFLATION, MacroEngine::TFP_DRIFT, 0.25);
+        }
+        $this->assertGreaterThan(0.0005, abs($appreciatedHeadline - $calmHeadline), 'The currency moves headline through the imported half');
+        $this->assertEqualsWithDelta($calm->domesticInflation, $appreciated->domesticInflation, 1e-15, 'but not the deflator, even while core goods carry it.');
+        $this->assertNotEqualsWithDelta($calm->coreGoodsInflation, $appreciated->coreGoodsInflation, 1e-6);
+
+        $reference = clone $oilShock;
+        $reference->energyPriceShock = 0.0;
+        $priorEnergy = $oilShock->energyCostPushLag;
+        $this->subsystem->calculateInflation($reference, MacroEngine::TARGET_INFLATION, MacroEngine::TFP_DRIFT, 0.25);
+        $this->subsystem->calculateInflation($oilShock, MacroEngine::TARGET_INFLATION, MacroEngine::TFP_DRIFT, 0.25);
+        $energyPush = ($oilShock->energyCostPushLag - $priorEnergy) / 0.25;
+        $this->assertGreaterThan(0.0, $energyPush);
+        $this->assertEqualsWithDelta(
+            (1.0 - MacroAggregateSubsystem::IMPORTED_SHARE_OF_GOODS) * $energyPush / MacroAggregateSubsystem::domesticDeflatorWeight(),
+            $oilShock->domesticInflation - $reference->domesticInflation,
+            1e-15,
+            'The fuel made at home carries the world price into the deflator.'
+        );
+
+        $untaxed = clone $taxed;
+        $untaxed->carbonPrice = 0.0;
         $priorCarbon = $taxed->electricityCarbonPriceLevel;
+        $this->subsystem->calculateInflation($untaxed, MacroEngine::TARGET_INFLATION, MacroEngine::TFP_DRIFT, 0.25);
         $this->subsystem->calculateInflation($taxed, MacroEngine::TARGET_INFLATION, MacroEngine::TFP_DRIFT, 0.25);
         $carbonPush = MacroAggregateSubsystem::CPI_ELECTRICITY_WEIGHT * ($taxed->electricityCarbonPriceLevel - $priorCarbon) / 0.25;
         $this->assertGreaterThan(0.0, $carbonPush);
-        $this->assertEqualsWithDelta($taxed->supercoreInflation + ($carbonPush / MacroAggregateSubsystem::domesticDeflatorWeight()), $taxed->domesticInflation, 1e-15);
+        $this->assertEqualsWithDelta($carbonPush / MacroAggregateSubsystem::domesticDeflatorWeight(), $taxed->domesticInflation - $untaxed->domesticInflation, 1e-15);
     }
 
     /**

@@ -263,6 +263,8 @@ class MacroState
     // The log allied defence shift the District's arms exports have delivered, orders reaching exports through the backlog.
     public float $alliedDefenseDeliveryLag;
     public float $importPriceLevel;
+    // The import-price part of core goods inflation's sticky path; the rest is the goods the District makes.
+    public float $coreGoodsImportInflation;
     // Monetary transmission: the real-rate stance through two Pascal stages (Solow 1960) on its way to demand.
     public float $monetaryStanceStage1;
     public float $monetaryStanceTransmitted;

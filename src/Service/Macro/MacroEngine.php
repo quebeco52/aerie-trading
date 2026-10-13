@@ -263,8 +263,6 @@ class MacroEngine
     public const SAHM_RECESSION_THRESHOLD = 0.005;
     /** Fall of that average from its peak that ends a declared recession: on US UNRATE 1948-2019, 0.2-0.3 points keeps NBER's 1980 and 1981 recessions apart and drops the 2003 jobless-recovery re-trigger; half a point merges 1981 into 1980. */
     public const RECESSION_RECOVERY_MARGIN = 0.003;
-    /** Fund-financed rise in the structural balance per unit of output gap a budget round: fitted by indirect inference so the engine's whole discretionary balance, tax leg included, answers the annual gap at Norway's 0.450 (se 0.194); 0.43 with the round reading the gap as it stands (var/harness/stab_cycle.sh). */
-    public const FUND_STABILISATION_GAP_RESPONSE = 0.47;
     /** Share of last year's fund-financed impulse reversed this year: Norway's lagged-change coefficient, -0.452 (se 0.093). */
     public const FUND_STABILISATION_IMPULSE_REVERSAL = 0.452;
     /** Yearly decay of the stabilisation back to the rule path: the Auerbach (2002) persistence the tax leg is fitted to, 4.7% a quarter. */

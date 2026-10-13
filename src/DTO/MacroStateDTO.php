@@ -229,6 +229,7 @@ readonly class MacroStateDTO
         public float $mainlandDemandExportLag = 0.0,
         public float $alliedDefenseDeliveryLag = 0.0,
         public float $importPriceLevel = 0.0,
+        public float $coreGoodsImportInflation = 0.0,
         public float $monetaryStanceStage1 = 0.0,
         public float $monetaryStanceTransmitted = 0.0,
         public float $financialConditionsIndex = 0.0,

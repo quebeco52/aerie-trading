@@ -148,6 +148,7 @@ class MacroFieldRegistryTest extends TestCase
         'outputGapLag15m' => 'Distributed lag of output_gap_ema, which is recorded.',
         'outputGapLag18m' => 'Distributed lag of output_gap_ema, which is recorded.',
         'importPriceLevel' => 'Latent level behind the import-price term of the quarter\'s inflation diagnostics.',
+        'coreGoodsImportInflation' => 'Import-price part of core_goods_inflation, which is recorded; the GDP deflator prices home-made goods without it.',
         'exchangeRateDeviation' => 'exchange_rate_index over its fundamental; the index is recorded.',
     ];
 

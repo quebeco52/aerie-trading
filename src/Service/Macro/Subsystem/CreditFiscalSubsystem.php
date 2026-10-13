@@ -163,6 +163,12 @@ class CreditFiscalSubsystem
     /** Floor on the annual update: administered prices are held, not cut, in a deflationary year. */
     public const REIMBURSEMENT_MIN_UPDATE = 0.0;
 
+    // --- Fund-Financed Stabilisation (IMF Norway Selected Issues 2025, Table 5) ---
+    /** Fund-financed rise in the structural balance per unit of output gap a budget round, for a fund of Norway's size: fitted by indirect inference so the engine's whole discretionary balance, tax leg included, answers the annual gap at Norway's 0.450 (se 0.194); 0.43 with the round reading the gap as it stands (var/harness/stab_cycle.sh). */
+    public const FUND_STABILISATION_GAP_RESPONSE = 0.47;
+    /** Norway's fund over mainland GDP, averaged over the years that response was estimated on (2002-2024): 2.15, from GPFG year-end values (NBIM) over mainland GDP at current prices (Statistics Norway 09189). */
+    public const FUND_STABILISATION_REFERENCE_FUND_TO_GDP = 2.15;
+
     // --- Household Credit Cycle (Mian & Sufi 2018; BIS DSR; Basel III CCyB) ---
     /** Share of household debt that is mortgage debt (~70% in the US), priced off the mortgage rate; the rest is consumer credit priced off the policy rate. */
     public const HOUSEHOLD_MORTGAGE_DEBT_SHARE = 0.70;
@@ -617,9 +623,11 @@ class CreditFiscalSubsystem
      * (purchases do not lean against the cycle, Auerbach 2002); the fund is the fiscal space that lets the District run
      * one (Romer & Romer 2019). Its swings in market value are kept out, as the IMF advises Norway to do.
      *
-     *   D = D0 + change,  change = -beta x (gap - its long-run average) - phi x (last year's change) - kappa x D0
+     *   D = D0 + change,  change = -beta x (F / F_NO) x (gap - its long-run average) - phi x (last year's change) - kappa x D0
      *
-     * where D0 is the level the budget year opened at. The gap is read against its own trailing average, as a
+     * where D0 is the level the budget year opened at. Beta is Norway's response at Norway's fund, F_NO, 2.15 times
+     * mainland GDP over the years it was estimated on. Its rule sizes spending in shares of the fund (3% of its value),
+     * so the room to lean is a share of the fund too, and a fund of F times GDP leans F / F_NO as hard. The gap is read against its own trailing average, as a
      * ministry's trend estimate averages the cycle to zero: read against potential itself, the engine's gap, whose
      * mean is below zero (so is CBO's), would hold D above zero for good and drain the fund to pay for it. The budget is
      * set twice a year, the October budget and the May revision, each on the gap as it then stands (Table 5 pairs a
@@ -647,7 +655,7 @@ class CreditFiscalSubsystem
                 $state->sovereignFundStabilisationYearStart = $state->sovereignFundStabilisationToGdp;
             }
 
-            $change = -(MacroEngine::FUND_STABILISATION_GAP_RESPONSE * ($state->outputGap - $state->sovereignFundGapTrend))
+            $change = -(self::fundStabilisationGapResponse($state->sovereignFundToGdp) * ($state->outputGap - $state->sovereignFundGapTrend))
                 - (MacroEngine::FUND_STABILISATION_IMPULSE_REVERSAL * $state->sovereignFundStabilisationLastChange)
                 - (MacroEngine::FUND_STABILISATION_PERSISTENCE * $state->sovereignFundStabilisationYearStart);
             $affordable = max(0.0, ($state->sovereignFundToGdp * (1.0 - $state->sovereignFundDomesticWeight)) - $state->sovereignFundDrawToGdp);
@@ -657,6 +665,15 @@ class CreditFiscalSubsystem
 
         // The average is of the readings before this one, so a round compares today's gap with the past's.
         $state->sovereignFundGapTrend += (1.0 - exp(-$dt / MacroEngine::FUND_STABILISATION_GAP_TREND_YEARS)) * ($state->outputGap - $state->sovereignFundGapTrend);
+    }
+
+    /**
+     * Fund-financed spending per point of output gap for a fund of the given size (times GDP): Norway's response scaled
+     * by the fund against Norway's.
+     */
+    public static function fundStabilisationGapResponse(float $fundToGdp): float
+    {
+        return self::FUND_STABILISATION_GAP_RESPONSE * max(0.0, $fundToGdp) / self::FUND_STABILISATION_REFERENCE_FUND_TO_GDP;
     }
 
     /**

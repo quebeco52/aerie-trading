@@ -10,6 +10,7 @@ use App\Entity\Stock;
 use App\Repository\MacroReportHistoryRepository;
 use App\Repository\StockRepository;
 use App\Service\Macro\MacroEngine;
+use App\Service\Macro\Subsystem\CreditFiscalSubsystem;
 use App\Service\Macro\Subsystem\SovereignFundSubsystem;
 use App\Service\Math\MathUtility;
 use App\Service\View\SovereignReservePageBuilder;
@@ -109,7 +110,7 @@ class SovereignReservePageBuilderTest extends TestCase
         $this->assertSame(0.29, $page['summary']['netDebtToGdp']);
         $this->assertSame(SovereignFundSubsystem::FOREIGN_BOND_DURATION, $page['mandate']['foreignBondDuration']);
         $this->assertSame(MacroEngine::SOVEREIGN_DEBT_FLOOR, $page['mandate']['debtFloor']);
-        $this->assertSame(MacroEngine::FUND_STABILISATION_GAP_RESPONSE, $page['mandate']['stabilisationGapResponse']);
+        $this->assertSame(CreditFiscalSubsystem::fundStabilisationGapResponse(1.6), $page['mandate']['stabilisationGapResponse'], 'The response at the fund as it stands.');
         $this->assertSame(6.0, $page['mandate']['budgetRoundMonths']);
     }
 

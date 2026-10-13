@@ -110,6 +110,8 @@ class MacroAggregateSubsystem
     public const IMPORT_PRICE_ADJUSTMENT_YEARS = 0.31;
     /** Share of an imported consumer good's retail price that is local distribution, which the exchange rate does not move (Burstein, Neves & Rebelo 2003: ~40% in the US). */
     public const IMPORT_DISTRIBUTION_SHARE = 0.40;
+    /** Share of the goods, fuel and food households buy that is imported: half in Switzerland, and almost none of the services (Auer, SNB Economic Note 2026-06); imported goods weigh ~22% of the Swiss CPI (ING, second-hand). The rest the District makes itself. */
+    public const IMPORTED_SHARE_OF_GOODS = 0.50;
     /** Goods in the District's imports, the part a tariff is levied on: the UK's 75.6% (World Bank TM.VAL.MRCH.CD.WT over NE.IMP.GNFS.CD, 2010-2019 mean); services cross no customs border. */
     public const GOODS_SHARE_OF_IMPORTS = 0.756;
     /** Goods in the District's exports, the part partners can tariff: the UK's 56.5% (World Bank TX.VAL.MRCH.CD.WT over NE.EXP.GNFS.CD, 2010-2019 mean). */
@@ -981,11 +983,11 @@ class MacroAggregateSubsystem
         $targetSupercore = $targetInflation + $anchorSlip + $convexDemandPressure + $wageCostPush;
 
         // Import prices (IMF WEO October 2015, Ch. 3): the real exchange rate passes into import prices relative to
-        // domestic ones within about a year. The peninsula makes no goods, so every good, fuel and food in the basket is
-        // imported, and all of its retail price but the local distribution margin reprices.
+        // domestic ones within about a year. Half the goods, fuel and food in the basket are imported (Auer 2026), and of
+        // those all of the retail price but the local distribution margin reprices; the half the District makes does not.
         $priorImportPriceLevel = $state->importPriceLevel;
         $state->importPriceLevel = TimeSeries::calculateDistributedLag($priorImportPriceLevel, self::importPriceLevelTarget($state->exchangeRateIndexEma, $state->importTariffRate), $dt, self::IMPORT_PRICE_ADJUSTMENT_YEARS);
-        $importPriceInflation = (1.0 - self::IMPORT_DISTRIBUTION_SHARE) * ($state->importPriceLevel - $priorImportPriceLevel) / $dt;
+        $importPriceInflation = self::IMPORTED_SHARE_OF_GOODS * (1.0 - self::IMPORT_DISTRIBUTION_SHARE) * ($state->importPriceLevel - $priorImportPriceLevel) / $dt;
 
         // Shapiro (2022) Sector 2: core goods. Supply-chain pressure (Benigno et al. 2022: freight, metals, inventories) sets
         // a cost LEVEL of the landed goods (Carriere-Swallow et al. 2023); inflation is its rate of change, as its quarter
@@ -1001,6 +1003,8 @@ class MacroAggregateSubsystem
 
         $state->coreGoodsInflation += $reversionWeight * ($targetCoreGoods - $state->coreGoodsInflation);
         $state->coreGoodsInflation = max(-0.02, min(0.20, $state->coreGoodsInflation));
+        // The import-price part of that sticky path, so the goods the District makes can be priced without it.
+        $state->coreGoodsImportInflation += $reversionWeight * ($importPriceInflation - $state->coreGoodsImportInflation);
 
         // Shapiro (2022) Sector 3: the energy and food lags are the share of the CPI LEVEL their commodity has reached
         // (sector models read them as cost levels); headline takes their rate of change, so a price that stays high
@@ -1051,10 +1055,17 @@ class MacroAggregateSubsystem
 
         $boundedInflation = max(-0.02, min(0.25, $blendedInflation));
 
-        // The GDP deflator prices what the District produces (SNA 2008, 15.180). It makes no goods, so of the goods,
-        // fuel and food baskets only the local distribution margin is its own, and that margin is non-traded services
-        // priced like them (Burstein, Neves & Rebelo 2003). The carbon price is a domestic tax and stays.
-        $state->domesticInflation = $state->supercoreInflation + ($carbonCostPush / self::domesticDeflatorWeight());
+        // The GDP deflator prices what the District produces (SNA 2008, 15.180): its services, the local distribution
+        // margin on imported goods, priced like services (Burstein, Neves & Rebelo 2003), and the goods, fuel and food it
+        // makes itself, at their own prices less the import-price term. The carbon price is a domestic tax and stays.
+        $homeMade = 1.0 - self::IMPORTED_SHARE_OF_GOODS;
+        $homeFoodAndFuel = $targetInflation + $anchorSlip + (($energyCostPush + $agriCostPush) / self::INFLATION_WEIGHT_COMMODITY);
+        $state->domesticInflation = (
+            ((self::INFLATION_WEIGHT_SUPERCORE + (self::IMPORT_DISTRIBUTION_SHARE * self::IMPORTED_SHARE_OF_GOODS * (self::INFLATION_WEIGHT_GOODS + self::INFLATION_WEIGHT_COMMODITY))) * $state->supercoreInflation)
+            + ($homeMade * self::INFLATION_WEIGHT_GOODS * ($state->coreGoodsInflation - $state->coreGoodsImportInflation))
+            + ($homeMade * self::INFLATION_WEIGHT_COMMODITY * $homeFoodAndFuel)
+            + $carbonCostPush
+        ) / self::domesticDeflatorWeight();
 
         // The blend is linear with weights summing to one, so headline splits exactly into what each channel put in
         // it, with the gap between a sector's rate and the rate it is moving toward booked as the sticky-price lag.
@@ -1107,12 +1118,15 @@ class MacroAggregateSubsystem
     }
 
     /**
-     * The consumer basket's District value added as a share of it: the services, and the local distribution margin of
-     * the imported goods, fuel and food (Burstein, Neves & Rebelo 2003). The deflator's weights renormalise on it.
+     * The consumer basket's District value added as a share of it: the services, the goods, fuel and food made at home,
+     * and the local distribution margin of the imported ones (Burstein, Neves & Rebelo 2003). The deflator's weights
+     * renormalise on it.
      */
     public static function domesticDeflatorWeight(): float
     {
-        return self::INFLATION_WEIGHT_SUPERCORE + (self::IMPORT_DISTRIBUTION_SHARE * (self::INFLATION_WEIGHT_GOODS + self::INFLATION_WEIGHT_COMMODITY));
+        $goodsWeight = self::INFLATION_WEIGHT_GOODS + self::INFLATION_WEIGHT_COMMODITY;
+
+        return self::INFLATION_WEIGHT_SUPERCORE + ($goodsWeight * ((1.0 - self::IMPORTED_SHARE_OF_GOODS) + (self::IMPORTED_SHARE_OF_GOODS * self::IMPORT_DISTRIBUTION_SHARE)));
     }
 
     /**

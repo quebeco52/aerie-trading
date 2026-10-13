@@ -1088,7 +1088,7 @@ class CreditFiscalSubsystemTest extends TestCase
         $this->budgetRound($slump, 0.5);
         $this->budgetRound($boom, 0.5);
 
-        $this->assertEqualsWithDelta(MacroEngine::FUND_STABILISATION_GAP_RESPONSE * 0.02, $slump->sovereignFundStabilisationToGdp, 1e-15);
+        $this->assertEqualsWithDelta(CreditFiscalSubsystem::FUND_STABILISATION_GAP_RESPONSE * 0.02, $slump->sovereignFundStabilisationToGdp, 1e-15);
         $this->assertEqualsWithDelta(-$slump->sovereignFundStabilisationToGdp, $boom->sovereignFundStabilisationToGdp, 1e-15, 'Symmetric: a boom saves what a slump spends.');
     }
 
@@ -1104,7 +1104,7 @@ class CreditFiscalSubsystemTest extends TestCase
         $this->budgetRound($belowMean, 0.5);
 
         $this->assertEqualsWithDelta(0.0, $atMean->sovereignFundStabilisationToGdp, 1e-15);
-        $this->assertEqualsWithDelta(MacroEngine::FUND_STABILISATION_GAP_RESPONSE * 0.02, $belowMean->sovereignFundStabilisationToGdp, 1e-15);
+        $this->assertEqualsWithDelta(CreditFiscalSubsystem::FUND_STABILISATION_GAP_RESPONSE * 0.02, $belowMean->sovereignFundStabilisationToGdp, 1e-15);
     }
 
     /**
@@ -1118,7 +1118,7 @@ class CreditFiscalSubsystemTest extends TestCase
 
         $this->budgetRound($state, 0.5);
 
-        $this->assertEqualsWithDelta(MacroEngine::FUND_STABILISATION_GAP_RESPONSE * 0.03, $state->sovereignFundStabilisationToGdp, 1e-15, 'A slump that has only just begun is answered in full at the round.');
+        $this->assertEqualsWithDelta(CreditFiscalSubsystem::FUND_STABILISATION_GAP_RESPONSE * 0.03, $state->sovereignFundStabilisationToGdp, 1e-15, 'A slump that has only just begun is answered in full at the round.');
     }
 
     /** The average is a slow one: a gap held for one trend horizon moves it by 1 - 1/e of the way. */
@@ -1159,7 +1159,7 @@ class CreditFiscalSubsystemTest extends TestCase
         $average = $state->sovereignFundGapTrend;
         $this->budgetRound($state, 1.5);
 
-        $this->assertEqualsWithDelta(MacroEngine::FUND_STABILISATION_GAP_RESPONSE * (0.04 + $average), $state->sovereignFundStabilisationToGdp, 1e-15);
+        $this->assertEqualsWithDelta(CreditFiscalSubsystem::FUND_STABILISATION_GAP_RESPONSE * (0.04 + $average), $state->sovereignFundStabilisationToGdp, 1e-15);
     }
 
     /** A new year books last year's change, gives back a share of it, and decays the level toward the rule path. */
@@ -1194,13 +1194,31 @@ class CreditFiscalSubsystemTest extends TestCase
     public function testTheFundIsNeverAskedForMoreThanItsForeignSleevesHoldBesideTheDraw(): void
     {
         $state = $this->fundedBudget(-0.10);
-        $state->sovereignFundToGdp = 0.03;
-        $state->sovereignFundDomesticWeight = 0.5;
-        $state->sovereignFundDrawToGdp = 0.01;
+        $state->sovereignFundDomesticWeight = 0.98;
+        $state->sovereignFundDrawToGdp = 0.04;
 
         $this->budgetRound($state, 0.5);
 
-        $this->assertEqualsWithDelta(0.005, $state->sovereignFundStabilisationToGdp, 1e-15, 'Foreign 1.5% of GDP less the 1% draw.');
+        $this->assertEqualsWithDelta(
+            (CreditFiscalSubsystem::FUND_STABILISATION_REFERENCE_FUND_TO_GDP * 0.02) - 0.04,
+            $state->sovereignFundStabilisationToGdp,
+            1e-15,
+            'Foreign 4.3% of GDP less the 4% draw, under the 4.7% the slump asks for.'
+        );
+    }
+
+    /** The room to lean is a share of the fund: a fund half Norway's size answers the same slump half as hard. */
+    public function testASmallerFundLeansInProportionToItsSize(): void
+    {
+        $norway = $this->fundedBudget(-0.02);
+        $half = $this->fundedBudget(-0.02);
+        $half->sovereignFundToGdp = CreditFiscalSubsystem::FUND_STABILISATION_REFERENCE_FUND_TO_GDP / 2.0;
+
+        $this->budgetRound($norway, 0.5);
+        $this->budgetRound($half, 0.5);
+
+        $this->assertEqualsWithDelta(CreditFiscalSubsystem::FUND_STABILISATION_GAP_RESPONSE * 0.02, $norway->sovereignFundStabilisationToGdp, 1e-15, "At Norway's size, Norway's response.");
+        $this->assertEqualsWithDelta($norway->sovereignFundStabilisationToGdp / 2.0, $half->sovereignFundStabilisationToGdp, 1e-15);
     }
 
     /** The fund pays: spending and fund revenue rise together, so neither the deficit nor the debt moves. */
@@ -1246,7 +1264,7 @@ class CreditFiscalSubsystemTest extends TestCase
         $state = new MacroState();
         $state->outputGap = $gap;
         $state->sovereignFundDollarsPerGdp = 2.0e13;
-        $state->sovereignFundToGdp = 1.5;
+        $state->sovereignFundToGdp = CreditFiscalSubsystem::FUND_STABILISATION_REFERENCE_FUND_TO_GDP;
         $state->sovereignFundDomesticWeight = 0.05;
         $state->sovereignFundDrawToGdp = 0.02;
 
