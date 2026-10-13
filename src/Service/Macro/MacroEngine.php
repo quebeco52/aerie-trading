@@ -858,6 +858,12 @@ class MacroEngine
         return $sahmIndicator >= self::SAHM_RECESSION_THRESHOLD;
     }
 
+    /** Whether a recession is declared and not yet over: the RECESSION_DECLARED episode, which holds until unemployment is back below its peak. */
+    public static function recessionDeclared(MacroState $state): bool
+    {
+        return isset($state->systemicAlarmLatches[ShockEvent::RECESSION_DECLARED]);
+    }
+
     /**
      * Puts the government's levers in force and takes its election pulse. A tariff's change moves productivity by
      * Furceri et al.'s (2018) output loss, a level potential absorbs over the years that follow.

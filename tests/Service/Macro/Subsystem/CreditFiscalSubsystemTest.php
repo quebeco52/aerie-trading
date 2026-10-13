@@ -3,6 +3,7 @@
 namespace App\Tests\Service\Macro\Subsystem;
 
 use App\DTO\MacroStateDTO;
+use App\Service\Event\ShockEvent;
 use App\Service\Macro\MacroEngine;
 use App\Service\Macro\MacroState;
 use App\Service\Macro\Subsystem\AssetMarketSubsystem;
@@ -1853,6 +1854,26 @@ class CreditFiscalSubsystemTest extends TestCase
         $subsystem->calculateHouseholdCredit($state, 1.0 / 252.0);
         $this->assertGreaterThan(0.0, $state->countercyclicalBufferRate, 'Past the hold the buffer builds again, phased in.');
         $this->assertLessThan(0.01 * CreditFiscalSubsystem::MAX_CCYB, $state->countercyclicalBufferRate);
+    }
+
+    /** A declared recession releases the buffer, a neutral one included, and it phases back in once the recession is over. */
+    public function testADeclaredRecessionReleasesTheBufferWithoutACrisis(): void
+    {
+        $subsystem = $this->quietSubsystem();
+        $state = $this->householdStateAtNeutralRates();
+        $state->totalTime = 20.0;
+        $state->creditToGdpGapEma = -0.10;
+        $state->neutralCountercyclicalBuffer = 0.01;
+        $state->countercyclicalBufferRate = 0.01;
+        $state->systemicAlarmLatches[ShockEvent::RECESSION_DECLARED] = 19.0;
+
+        $subsystem->calculateHouseholdCredit($state, 1.0 / 252.0);
+        $this->assertSame(0.0, $state->countercyclicalBufferRate, 'A slump with no crisis still releases the buffer.');
+
+        unset($state->systemicAlarmLatches[ShockEvent::RECESSION_DECLARED]);
+        $subsystem->calculateHouseholdCredit($state, 1.0 / 252.0);
+        $this->assertGreaterThan(0.0, $state->countercyclicalBufferRate, 'Once it is over the neutral rate phases back in.');
+        $this->assertLessThan(0.01 * 0.01, $state->countercyclicalBufferRate);
     }
 
     public function testHouseholdsDeleverageOnlyPastTheWarningLine(): void

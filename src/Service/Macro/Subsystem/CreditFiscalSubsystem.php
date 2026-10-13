@@ -927,10 +927,12 @@ class CreditFiscalSubsystem
         $state->creditToGdpGap = $state->householdDebtToIncome - $state->creditToGdpTrend;
 
         // BCBS (2010) CCyB guidance: a rise is announced up to twelve months ahead and phases in, a cut takes effect at
-        // once, and in a crisis the buffer is released in full so banks lend out of it rather than shrink. A regulator
-        // with a positive neutral rate holds that much while credit is not running ahead (BCBS 2024).
+        // once, and in a crisis or a declared recession the buffer is released in full so banks lend out of it rather
+        // than shrink, as the buffer-setting regulators did in March 2020. A regulator with a positive neutral rate holds
+        // that much while credit is not running ahead, and releases it in a downturn too (BCBS 2024).
         $bufferPosition = max(0.0, min(1.0, ($state->creditToGdpGapEma - self::CCYB_GAP_FLOOR) / (self::CCYB_GAP_CEILING - self::CCYB_GAP_FLOOR)));
-        $released = $state->lastCreditCrisisAt >= 0.0 && $state->totalTime - $state->lastCreditCrisisAt < self::CCYB_RELEASE_HOLD_YEARS;
+        $released = ($state->lastCreditCrisisAt >= 0.0 && $state->totalTime - $state->lastCreditCrisisAt < self::CCYB_RELEASE_HOLD_YEARS)
+            || MacroEngine::recessionDeclared($state);
         $bufferTarget = $released ? 0.0 : max($state->neutralCountercyclicalBuffer, self::MAX_CCYB * $bufferPosition);
         $state->countercyclicalBufferRate = $bufferTarget <= $state->countercyclicalBufferRate
             ? $bufferTarget
