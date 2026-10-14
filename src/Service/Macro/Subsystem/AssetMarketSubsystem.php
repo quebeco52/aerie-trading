@@ -118,10 +118,28 @@ class AssetMarketSubsystem
     public const MAINLAND_INFLATION_SIGMA = 0.00586;
     /** The mainland's (US) GDP, 2023: $27.8T (World Bank NY.GDP.MKTP.CD). */
     public const MAINLAND_GDP_USD = 27.81e12;
+    /** The mainland's weight in the world demand that prices commodities: its share of world GDP. */
+    public const MAINLAND_DEMAND_WEIGHT = self::MAINLAND_GDP_USD / MacroEngine::WORLD_GDP_USD;
     /** Share of the district's cycle that reaches the mainland's demand in the long run: its imports for home use are the mainland's exports, moving 1.4 times its demand (IMF WEO 2015) at their share of its GDP, scaled to the mainland's size. */
     public const FOREIGN_IMPORT_SPILLOVER = MacroAggregateSubsystem::IMPORT_DEMAND_ELASTICITY * MacroAggregateSubsystem::DISTRICT_DOMESTIC_IMPORT_SHARE * MacroEngine::DISTRICT_GDP_USD / self::MAINLAND_GDP_USD;
     /** Guard on the mainland gap, beyond the deepest postwar CBO gap; the fitted process does not reach it. */
     public const MAX_FOREIGN_GAP = 0.10;
+    /** Stationary sd of the mainland gap its AR(2) implies: sigma * sqrt((1 - a2) / ((1 + a2) * ((1 - a2)^2 - a1^2))). */
+    public const MAINLAND_GAP_STATIONARY_SD = 0.01645;
+
+    // --- The Rest of the World (G6 industrial production gap, 1985-2019: FRED OECD MEI, own calculation) ---
+    /** Stationary sd of the world gap beyond the mainland: HP gap of G6 industrial production 2.81%, at the US ratio of GDP to IP gap (0.40) and CBO to HP gap, 1.8% in CBO-gap units. */
+    public const WORLD_GAP_SD = 0.018;
+    /** Correlation of the world gap with the mainland's: G6 IP gap against the CBO US gap, 0.51 (0.54 with the US a quarter ahead). */
+    public const WORLD_MAINLAND_CORRELATION = 0.51;
+    /** Quarterly persistence of the world gap's own part: the G6 IP gap's AR(1), 0.85. */
+    public const WORLD_GAP_AR1 = 0.85;
+    /** World gap per unit of the mainland's: the correlation times the sd ratio, a one-factor loading. */
+    public const WORLD_MAINLAND_LOADING = self::WORLD_MAINLAND_CORRELATION * self::WORLD_GAP_SD / self::MAINLAND_GAP_STATIONARY_SD;
+    /** Quarterly innovation of the world gap's own part: its stationary sd, WORLD_GAP_SD * sqrt(1 - correlation^2), times sqrt(1 - AR1^2). */
+    public const WORLD_GAP_SIGMA = 0.00816;
+    /** Guard on the world gap, as on the mainland's; the fitted process does not reach it. */
+    public const MAX_WORLD_GAP = 0.10;
 
     // --- The Fed (Clarida, Gali & Gertler 2000 smoothed rule, 1987Q3-2008Q3: var/harness/mainland_fit.py) ---
     /** Share of last quarter's funds rate the Fed keeps (0.836, se 0.039). */
@@ -862,7 +880,11 @@ class AssetMarketSubsystem
             $this->stepMainlandQuarter($state);
         }
 
-        $state->globalDemandGap = (MacroEngine::DOMESTIC_DEMAND_WEIGHT * $state->outputGapEma) + ((1.0 - MacroEngine::DOMESTIC_DEMAND_WEIGHT) * $state->foreignOutputGapEma);
+        // World demand weighs each economy at its share of world GDP: the District, the mainland, and the rest. The
+        // gaps go in as they stand; globalDemandGapEma is the one smoothing stage, so commodities answer within a quarter.
+        $state->globalDemandGap = (MacroEngine::DOMESTIC_DEMAND_WEIGHT * $state->outputGap)
+            + (self::MAINLAND_DEMAND_WEIGHT * $state->foreignOutputGap)
+            + ((1.0 - MacroEngine::DOMESTIC_DEMAND_WEIGHT - self::MAINLAND_DEMAND_WEIGHT) * $state->worldActivityGap);
     }
 
     /**
@@ -910,7 +932,7 @@ class AssetMarketSubsystem
     /**
      * One quarter of the mainland: the gap on its two lags around the mean the district's imports set, core inflation
      * on its four lags and last quarter's gap, then the Fed's partial adjustment toward its rule on four-quarter core
-     * inflation and the new gap, floored at the effective lower bound.
+     * inflation and the new gap, floored at the effective lower bound. The rest of the world's quarter follows.
      */
     private function stepMainlandQuarter(MacroState $state): void
     {
@@ -930,6 +952,7 @@ class AssetMarketSubsystem
 
         $state->foreignOutputGapLag = $lastGap;
         $state->foreignOutputGap = max(-self::MAX_FOREIGN_GAP, min(self::MAX_FOREIGN_GAP, $gap));
+
         $state->foreignCoreInflationLag3 = $state->foreignCoreInflationLag2;
         $state->foreignCoreInflationLag2 = $state->foreignCoreInflationLag1;
         $state->foreignCoreInflationLag1 = $state->foreignCoreInflation;
@@ -944,6 +967,11 @@ class AssetMarketSubsystem
             + ((1.0 - self::FED_RULE_SMOOTHING) * $ruleRate)
             + (self::FED_RULE_SIGMA * $this->mathUtility->generateStandardNormal());
         $state->foreignPolicyRate = max(MacroEngine::EFFECTIVE_LOWER_BOUND, min(self::MAX_FOREIGN_POLICY_RATE, $rate));
+
+        // The rest of the world: a one-factor model, the mainland's cycle at its loading plus an AR(1) of its own.
+        $state->worldActivityIdiosyncratic = (self::WORLD_GAP_AR1 * $state->worldActivityIdiosyncratic)
+            + (self::WORLD_GAP_SIGMA * $this->mathUtility->generateStandardNormal());
+        $state->worldActivityGap = max(-self::MAX_WORLD_GAP, min(self::MAX_WORLD_GAP, (self::WORLD_MAINLAND_LOADING * $state->foreignOutputGap) + $state->worldActivityIdiosyncratic));
     }
 
     /**

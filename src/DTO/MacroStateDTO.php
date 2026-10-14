@@ -343,6 +343,10 @@ readonly class MacroStateDTO
         public float $foreignOutputGap = 0.0,
         public float $foreignOutputGapEma = 0.0,
         public float $foreignOutputGapLag = 0.0,
+        /** Output gap of the world beyond the mainland and the District, the demand that clears most commodities and freight. */
+        public float $worldActivityGap = 0.0,
+        /** The part of the world gap the mainland's cycle does not carry, an AR(1) latent. */
+        public float $worldActivityIdiosyncratic = 0.0,
         public float $foreignCoreInflation = MacroEngine::TARGET_INFLATION,
         public float $foreignCoreInflationLag1 = MacroEngine::TARGET_INFLATION,
         public float $foreignCoreInflationLag2 = MacroEngine::TARGET_INFLATION,

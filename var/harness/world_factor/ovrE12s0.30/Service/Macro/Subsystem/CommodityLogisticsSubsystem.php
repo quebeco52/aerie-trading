@@ -1,0 +1,683 @@
+<?php
+
+namespace App\Service\Macro\Subsystem;
+
+use App\Service\Macro\MacroEngine;
+use App\Service\Macro\MacroState;
+use App\Service\Macro\Recorder\MacroDiagnosticsProbe;
+use App\Service\Math\FirmEconomics;
+use App\Service\Math\MacroTransmission;
+use App\Service\Math\MathUtility;
+use App\Service\Math\StochasticProcesses;
+
+/**
+ * Handles commodity price dynamics and global logistics.
+ * Implements Schwartz (1997), Schwartz-Smith (2000), and Stopford (2009) shipping econometric models.
+ */
+class CommodityLogisticsSubsystem
+{
+    // --- Energy Shock Jump-Diffusion (Schwartz 1997 Commodity Dynamics) ---
+    /** Oil shocks per year (0.87): Merton (1976) jump-diffusion by maximum likelihood on month-end real WTI log returns, 1986-2025 (LR 87.7 over a pure diffusion). */
+    public const ENERGY_JUMP_PROBABILITY = 0.87;
+    /** Mean log size of an oil shock (-0.021, so none): shocks run both ways, 1986 -39%, 1990 +36%, 2008 -38%, 2020 -78% then +62% in a month. */
+    public const ENERGY_JUMP_MEAN = -0.021;
+    /** Standard deviation of an oil shock's log size (0.243), the same fit. */
+    public const ENERGY_JUMP_VOL = 0.243;
+
+    // --- Energy Supply Cobweb (Ezekiel 1938; Anderson, Kellogg & Salant 2018) ---
+    /** Long-run supply elasticity of productive capacity to the price level (~0.3: the drilling and investment response, Caldara, Cavallo & Iacoviello 2019). */
+    public const ENERGY_SUPPLY_ELASTICITY = 0.30;
+    /** Years for capacity to follow price: the drilling, sanctioning and commissioning lag (Anderson, Kellogg & Salant 2018). */
+    public const ENERGY_SUPPLY_LAG_YEARS = 3.0;
+    /** Price response to the demand-over-capacity ratio: the inverse of the short-run demand and supply elasticities combined (Kilian & Murphy 2014: ~0.26 + 0.1), so a 1% shortfall clears at ~2.5% more. */
+    public const ENERGY_CAPACITY_INELASTICITY = 2.5;
+    /** Bounds on the equilibrium the spot price reverts to, so the cobweb cannot demand a price no market has cleared at. */
+    public const MIN_ENERGY_EQUILIBRIUM = 40.0;
+    /** Upper bound on the cobweb's equilibrium price. */
+    public const MAX_ENERGY_EQUILIBRIUM = 250.0;
+
+    // --- Physical Catastrophes (compound Poisson, Pareto severity) ---
+    /** Notable insured-loss events per year across the district (Swiss Re sigma counts a few dozen a year in a continental economy; scaled to one district). */
+    public const CATASTROPHE_ARRIVAL_PER_YEAR = 3.0;
+    /** Decay per year of the loss burden index: claims are recognised and paid over a few quarters, so a quarter after a storm most of it has left the index. */
+    public const CATASTROPHE_LOSS_DECAY = 2.0;
+    /** Pareto tail index of event severity (~1.7): the mean exists, the variance does not, as insured catastrophe losses show. */
+    public const CATASTROPHE_SEVERITY_ALPHA = 1.7;
+    /** Cap on a single event in average-year units (twenty average years of losses in one storm: the one-in-a-few-centuries event). */
+    public const CATASTROPHE_SEVERITY_CAP = 20.0;
+    /** Ceiling on the loss index itself. */
+    public const MAX_CATASTROPHE_LOSS_INDEX = 50.0;
+    /** Single-event insured loss (in average-year units) that makes district news: ~1.5 years of average losses in one storm, roughly a one-in-six-years event on the Pareto tail. */
+    public const SYSTEMIC_CATASTROPHE_SEVERITY = 1.5;
+
+    // --- Natural Gas (Pilipovic 1998; Ramberg & Parsons 2012) ---
+    /** Mean reversion of the log gas-to-oil ratio: the two are cointegrated but the relationship drifts for a year or so at a time (Ramberg & Parsons 2012). */
+    public const GAS_OIL_RATIO_KAPPA = 0.70;
+    /** Annual log volatility of the ratio (~0.30 stationary log spread): gas runs about half again as volatile as oil, and the difference is the ratio's own noise. */
+    public const GAS_OIL_RATIO_SIGMA = 0.35;
+    /** Winter premium on the gas index (Pilipovic 1998 seasonal factor): heating demand lifts the winter price ~12% over the annual mean. */
+    public const GAS_SEASONALITY_AMPLITUDE = 0.12;
+    /** Arrivals per year of storage or weather squeezes (a February freeze, a filled-storage collapse) that move gas without oil. */
+    public const GAS_JUMP_PROBABILITY = 0.15;
+    /** Mean log size of a gas squeeze (~28%); compensated in the ratio's target so squeezes do not lift the average. */
+    public const GAS_JUMP_MEAN = 0.25;
+    /** Log volatility of a gas squeeze. */
+    public const GAS_JUMP_VOL = 0.15;
+
+    // --- Wholesale Power (Lucia & Schwartz 2002; EIA ICE on-peak hubs vs Henry Hub, monthly 2017-2025) ---
+    /** Log change in wholesale power per log change in gas: 0.852 (se 0.081) across four gas-marginal hubs (PJM West, ISO-NE Mass Hub, SP15, Palo Verde). */
+    public const POWER_GAS_ELASTICITY = 0.852;
+    /** Mean reversion of the log implied heat rate, fitted to its quarterly means (sd 0.183, AR1 0.37) as a time-averaged OU: weather and outages clear within weeks. */
+    public const POWER_HEAT_RATE_KAPPA = 7.04;
+    /** Annual log volatility of the implied heat rate, from the same quarterly fit. */
+    public const POWER_HEAT_RATE_SIGMA = 0.883;
+    /** Annual harmonic of the power season (level profile): the summer air-conditioning peak outweighs the winter one. */
+    public const POWER_SEASONAL_ANNUAL_AMPLITUDE = 0.157;
+    /** Year fraction at which the annual harmonic peaks. */
+    public const POWER_SEASONAL_ANNUAL_PEAK = 0.719;
+    /** Semi-annual harmonic of the power season: twin winter and summer load peaks around spring and autumn shoulders. */
+    public const POWER_SEASONAL_SEMIANNUAL_AMPLITUDE = 0.246;
+    /** Year fraction of the first semi-annual peak (late January); the second falls half a year later. */
+    public const POWER_SEASONAL_SEMIANNUAL_PEAK = 0.064;
+    /** Heat rate (MMBtu/MWh) EIA quotes the spark spread at: a new, efficient combined-cycle plant. */
+    public const SPARK_SPREAD_BENCHMARK_HEAT_RATE = 7.0;
+
+    // --- Carbon in Wholesale Power (EPA emission factors; Fabra & Reguant 2014) ---
+
+    // --- Gold (Barsky, Epstein, Lafont-Mueller & Yoo 2021, Chicago Fed Letter 464) ---
+    /** Log change in the real gold price per unit of real ten-year yield: -0.131 per percentage point (annual levels regression, 1971-2019). */
+    public const GOLD_REAL_RATE_SEMI_ELASTICITY = -13.1;
+    /** Log change in the real gold price per unit of ten-year expected inflation: +0.365 per percentage point, the inflation-hedge motive. */
+    public const GOLD_INFLATION_EXPECTATION_SEMI_ELASTICITY = 36.5;
+    /** Log change in the real gold price per percentage point of survey respondents expecting bad times over the next five years. */
+    public const GOLD_PESSIMISM_SEMI_ELASTICITY = 0.012;
+    /** Percentage points of pessimistic respondents per point of consumer sentiment: the survey's 30-to-60% pessimism swing matched to the sentiment index's ~57-point range over the same years (an approximation; both series come from the Michigan survey). */
+    public const PESSIMISM_PER_SENTIMENT_POINT = 0.53;
+    /** Real ten-year yield the engine rests at (measured mean over a 49-year run), so the index centres on its baseline rather than on a level the engine never visits. */
+    public const GOLD_REAL_RATE_ANCHOR = 0.028;
+    /** Ten-year expected inflation the engine rests at (measured mean over the same run). */
+    public const GOLD_INFLATION_EXPECTATION_ANCHOR = 0.022;
+    /** Annual reversion toward the equilibrium: the levels regression's Durbin-Watson of 0.98 is a residual autocorrelation of 1 - DW/2 = 0.51 a year, so kappa = -ln 0.51. */
+    public const GOLD_MEAN_REVERSION = 0.67;
+    /** Annual log volatility of the gold price: its annualised volatility has stayed within 10-18% on most days since 1971 (World Gold Council). */
+    public const GOLD_VOLATILITY = 0.15;
+    /** Floor on the gold index. */
+    public const MIN_GOLD_INDEX = 20.0;
+    /** Ceiling on the gold index. */
+    public const MAX_GOLD_INDEX = 500.0;
+
+    // --- Theory of Storage & Commodity Buffer Stocks (Working 1949, Litzenberger-Rabinowitz 1995) ---
+    /** Critical minimum physical buffer stock floor before extreme convenience yield spike. */
+    public const COMMODITY_MIN_BUFFER_STOCK = 50.0;
+    /** Annual mean-reversion speed of physical inventories toward structural baseline. */
+    public const COMMODITY_INVENTORY_REVERSION_SPEED = 0.50;
+    /** Sensitivity of inventory drawdown to economic output gap and geopolitical supply shocks. */
+    public const COMMODITY_INVENTORY_DRAWDOWN_SENSITIVITY = 1.20;
+
+    // --- 2-FACTOR CORRELATED OU INDUSTRIAL COMMODITIES ---
+    /** Mean-reversion speed of short-term supply disruptions (strikes, logistics). */
+    public const METALS_SHORT_TERM_KAPPA = 1.50;
+    /** Mean-reversion speed of long-term industrial metals supercycle equilibrium shifts. */
+    public const METALS_LONG_TERM_KAPPA = 0.20;
+    /** Volatility of short-term supply disruption shocks. */
+    public const METALS_SHORT_TERM_SIGMA = 0.30;
+    /** Volatility of long-term supercycle equilibrium shifts. */
+    public const METALS_LONG_TERM_SIGMA = 0.08;
+    /** Correlation between short-term disruptions and long-term shifts. */
+    public const METALS_RHO = -0.30;
+    /** Short-run metals price level per unit of world demand gap: PLACEHOLDER, fitted in var/harness/world_factor. */
+    public const METALS_DEMAND_ELASTICITY = 12;
+
+    // --- 2-FACTOR CORRELATED OU AGRICULTURAL COMMODITIES & WEATHER JUMPS ---
+    /** Mean-reversion speed of short-term agricultural supply disruptions (frost, harvest delays). */
+    public const AGRI_SHORT_TERM_KAPPA = 1.80;
+    /** Mean-reversion speed of long-term agricultural equilibrium supercycles toward baseline. */
+    public const AGRI_LONG_TERM_KAPPA = 0.25;
+    /** Volatility of short-term agricultural supply shocks. */
+    public const AGRI_SHORT_TERM_SIGMA = 0.25;
+    /** Volatility of long-term agricultural equilibrium shifts. */
+    public const AGRI_LONG_TERM_SIGMA = 0.06;
+    /** Correlation between short-term disruptions and long-term agricultural shifts. */
+    public const AGRI_RHO = -0.20;
+    /** Amplitude of annual seasonal harvest cycle price oscillation (percentage of index). */
+    public const AGRI_SEASONALITY_AMPLITUDE = 0.06;
+    /** Poisson intensity of major climate/weather shocks such as droughts or El Niño events. */
+    public const AGRI_WEATHER_JUMP_PROBABILITY = 0.10;
+    /** Mean log-return price jump magnitude resulting from an extreme weather shock. */
+    public const AGRI_WEATHER_JUMP_MEAN = 0.18;
+    /** Volatility of climate jump shock magnitude. */
+    public const AGRI_WEATHER_JUMP_VOL = 0.08;
+
+    // --- COBWEB THEOREM FREIGHT RATE INDEX (BALTIC DRY) ---
+    /** Elasticity of instantaneous shipping demand to macroeconomic output gap. */
+    public const FREIGHT_DEMAND_GAP_SENSITIVITY = 3.5;
+    /** Sensitivity of bulk shipping demand to industrial metals production and raw material flows. */
+    public const FREIGHT_DEMAND_METALS_SENSITIVITY = 0.30;
+    /** Elasticity of desired fleet capacity orders to prevailing freight charter profitability. */
+    public const FREIGHT_SUPPLY_ORDER_ELASTICITY = 0.80;
+    /** Time constant in years for multi-year shipyard shipbuilding capacity adjustments. */
+    public const FREIGHT_SUPPLY_LAG_YEARS = 3.0;
+    /** Inelasticity exponent amplifying freight spot rates when capacity utilization exceeds 1.0. */
+    public const FREIGHT_CAPACITY_INELASTICITY = 2.0;
+    /** Mean-reversion speed of spot charter rates toward capacity-clearing equilibrium. */
+    public const FREIGHT_MEAN_REVERSION = 1.50;
+    /** Stochastic volatility of spot charter market fluctuations. */
+    public const FREIGHT_VOLATILITY = 0.25;
+
+    // --- Suppliers' Delivery Times (ISM Supplier Deliveries; Kingman 1961) ---
+    /** Delivery-index points per log unit of factory congestion rho / (1 - rho) in capacity utilization: factory and shipping congestion carry equal variance in the simulation (16 seeds x 30 years). */
+    public const DELIVERY_FACTORY_LOADING = 12.55;
+    /** Delivery-index points per log unit of seaborne demand over fleet capacity: ISM deliveries hit 78.8 in May 2021 with container freight 4.3x its 2019 average (Drewry WCI), a tightness of 4.3^(1/2) at the charter market's inelasticity. */
+    public const DELIVERY_SHIPPING_LOADING = (78.8 - MacroEngine::SUPPLIER_DELIVERIES_NEUTRAL) / (1.4586 / self::FREIGHT_CAPACITY_INELASTICITY);
+    /** Annual mean reversion of the delivery index toward its congestion target. */
+    public const DELIVERY_REVERSION_KAPPA = 6.0;
+    /** Stationary sd of the delivery index around its congestion target, in index points. */
+    public const DELIVERY_STATIONARY_SD = 2.0;
+
+    // --- 3:2:1 Refining Crack Spread (EIA Gulf Coast gasoline & ULSD vs WTI, monthly 2010-2024) ---
+    /** Annual mean reversion of the de-seasonalised log crack: its monthly autocorrelation of 0.889 is kappa = -12 ln 0.889 (half-life ~6 months). */
+    public const CRACK_SPREAD_KAPPA = 1.41;
+    /** Annual log volatility of the crack: the de-seasonalised log dispersion of 0.444 times sqrt(2 kappa). */
+    public const CRACK_SPREAD_SIGMA = 0.75;
+    /** Seasonal swing of the crack around its annual mean: the first harmonic of the monthly profile (driving season against the autumn trough). */
+    public const CRACK_SEASONAL_AMPLITUDE = 0.146;
+    /** Year fraction at which the seasonal crack peaks (early June). */
+    public const CRACK_SEASONAL_PEAK = 0.46;
+
+    public function __construct(
+        private readonly MathUtility $mathUtility,
+        /** Logs the jumps this subsystem draws. Null in a test or a headless harness, off everywhere the ticker is not. */
+        private readonly ?MacroDiagnosticsProbe $diagnostics = null
+    ) {}
+
+    /**
+     * Schwartz (1997) One-Factor Mean-Reverting Commodity Model with Merton (1976) Jumps
+     * and Working (1949) / Litzenberger & Rabinowitz (1995) Theory of Storage Convenience Yield.
+     *
+     * Simulates global retail energy commodity prices (crude oil & refined products benchmark)
+     * using mean-reverting log-prices driven by Ornstein-Uhlenbeck drift, two-sided oil shocks that land in the
+     * base price and decay at the reversion speed, and non-linear convenience yield backwardation spikes when
+     * physical inventory buffer stocks deplete.
+     *
+     * @param MacroState $state Current macroeconomic state.
+     * @param float      $dt    Time increment in years.
+     */
+    public function calculateEnergyShock(MacroState $state, float $dt): void
+    {
+        // Ezekiel (1938) cobweb dynamics: capacity chases lagged prices while spot market clears demand.
+        $priceSeen = $state->energyPriceIndexEma > 0.0 ? $state->energyPriceIndexEma : MacroEngine::ENERGY_BASELINE;
+        $targetSupply = MacroEngine::ENERGY_BASELINE * (($priceSeen / MacroEngine::ENERGY_BASELINE) ** self::ENERGY_SUPPLY_ELASTICITY);
+        $supplyWeight = 1.0 - exp(-$dt / self::ENERGY_SUPPLY_LAG_YEARS);
+        $state->energySupplyEma += $supplyWeight * ($targetSupply - $state->energySupplyEma);
+
+        $equilibriumPrice = self::resolveEnergyEquilibriumPrice($state->globalDemandGapEma, $state->energySupplyEma);
+
+        $dW = $this->mathUtility->generateStandardNormal();
+        $currentBase = $state->energyBasePrice > 0.0 ? $state->energyBasePrice : $state->energyPriceIndex;
+        $baseProcess = StochasticProcesses::calculateSchwartz1Factor(
+            currentPrice: $currentBase,
+            kappa: MacroEngine::ENERGY_MEAN_REVERSION,
+            theta: self::resolveEnergyProcessTheta($equilibriumPrice),
+            sigma: MacroEngine::ENERGY_VOLATILITY,
+            dt: $dt,
+            dW: $dW
+        );
+        // Merton (1976) jump in the log price: it lands in the level and decays at the reversion speed like any
+        // other move, so a year of shocks carries the same weight at every step size.
+        $jumpData = $this->mathUtility->calculateJumpDiffusion(
+            lambda: self::ENERGY_JUMP_PROBABILITY,
+            jumpMean: self::ENERGY_JUMP_MEAN,
+            jumpVol: self::ENERGY_JUMP_VOL,
+            dt: $dt
+        );
+        $state->energyBasePrice = max(10.0, min(350.0, $baseProcess * $jumpData['multiplier']));
+        if ($jumpData['exponent'] !== null) {
+            $this->diagnostics?->recordEvent('energy', $jumpData['exponent']);
+        }
+
+        // Litzenberger & Rabinowitz (1995) physical commodity inventory buffer stock evolution.
+        $demandDraw = $state->globalDemandGapEma * self::COMMODITY_INVENTORY_DRAWDOWN_SENSITIVITY * 100.0;
+        $reversionFlow = self::COMMODITY_INVENTORY_REVERSION_SPEED * (MacroEngine::COMMODITY_INVENTORY_BASELINE - $state->energyInventoryIndex);
+        $dInventory = ($reversionFlow - $demandDraw) * $dt;
+        $state->energyInventoryIndex = max(self::COMMODITY_MIN_BUFFER_STOCK, min(160.0, $state->energyInventoryIndex + $dInventory));
+
+        // Working (1949) theory of storage non-linear convenience yield backwardation.
+        $convenienceYield = StochasticProcesses::calculateConvenienceYield(
+            inventoryLevel: $state->energyInventoryIndex,
+            minBufferStock: self::COMMODITY_MIN_BUFFER_STOCK
+        );
+        $conveniencePricePremium = MacroEngine::ENERGY_BASELINE * $convenienceYield;
+
+        $state->energyPriceIndex = max(10.0, min(350.0, $state->energyBasePrice + $conveniencePricePremium));
+        $state->energyPriceShock = $state->energyPriceIndex - MacroEngine::ENERGY_BASELINE;
+    }
+
+    /**
+     * The Schwartz theta that makes the jump-diffusion's base price average the equilibrium: the diffusion's
+     * Jensen lift and the oil shocks' Merton (1976) level drift both netted out of the target.
+     */
+    public static function resolveEnergyProcessTheta(float $equilibriumPrice): float
+    {
+        $jumpShift = StochasticProcesses::logOuJumpLevelShift(self::ENERGY_JUMP_PROBABILITY, MacroEngine::ENERGY_MEAN_REVERSION, self::ENERGY_JUMP_MEAN, self::ENERGY_JUMP_VOL);
+
+        return StochasticProcesses::schwartzThetaForMean($equilibriumPrice * exp(-$jumpShift), MacroEngine::ENERGY_MEAN_REVERSION, MacroEngine::ENERGY_VOLATILITY);
+    }
+
+    /**
+     * The price the energy spot process reverts to: global demand over lagging productive capacity, cleared at
+     * the combined short-run inelasticity (Ezekiel 1938 cobweb; Kilian & Murphy 2014). It is the theta of the
+     * Schwartz (1997) base process, so a producer striking forwards off the same curve reads it from here.
+     */
+    public static function resolveEnergyEquilibriumPrice(float $globalDemandGapEma, float $energySupplyEma): float
+    {
+        $demandIndex = MacroEngine::ENERGY_BASELINE * (1.0 + ($globalDemandGapEma * MacroEngine::ENERGY_DEMAND_GAP_SENSITIVITY));
+        $utilization = max(0.20, $demandIndex) / max(20.0, $energySupplyEma);
+
+        return max(self::MIN_ENERGY_EQUILIBRIUM, min(self::MAX_ENERGY_EQUILIBRIUM, MacroEngine::ENERGY_BASELINE * ($utilization ** self::ENERGY_CAPACITY_INELASTICITY)));
+    }
+
+    /**
+     * Physical catastrophe losses as a compound Poisson process with Pareto severity (Klugman, Panjer &
+     * Willmot, Loss Models), seasonal in arrival.
+     *
+     * The index is the district's recent insured loss burden in units of an average year: every event adds
+     * its severity, and the burden decays as claims are settled, so the stationary mean is
+     * lambda x mean severity / decay, which the severity scale is set to make exactly one. One district-wide
+     * draw is what correlates every insurer's claims, the builders' rebuild orders and the property damage
+     * that a per-firm claim draw could never produce. A single event large enough to make the news records
+     * its tick for the district event pulse.
+     *
+     * @param MacroState $state Current macroeconomic state.
+     * @param float      $dt    Time increment in years.
+     */
+    public function calculateCatastropheLosses(MacroState $state, float $dt): void
+    {
+        $quarter = (((int) floor($state->totalTime * 4.0)) % 4 + 4) % 4;
+        $seasonalFrequency = MacroEngine::CATASTROPHE_SEASONALITY[$quarter] ?? 1.0;
+        $eventCount = $this->mathUtility->generatePoissonCount(self::CATASTROPHE_ARRIVAL_PER_YEAR * $seasonalFrequency * $dt);
+
+        // Pickands (1975) extreme value theory Pareto severity calibration for catastrophe loss index.
+        $meanSeverity = self::CATASTROPHE_LOSS_DECAY / self::CATASTROPHE_ARRIVAL_PER_YEAR;
+        $severityScale = $meanSeverity * (self::CATASTROPHE_SEVERITY_ALPHA - 1.0) / self::CATASTROPHE_SEVERITY_ALPHA;
+
+        $state->catastropheLossIndex *= exp(-self::CATASTROPHE_LOSS_DECAY * $dt);
+
+        $largestEvent = 0.0;
+        for ($i = 0; $i < $eventCount; $i++) {
+            $severity = $this->mathUtility->generateParetoSeverity($severityScale, self::CATASTROPHE_SEVERITY_ALPHA, self::CATASTROPHE_SEVERITY_CAP);
+            $state->catastropheLossIndex += $severity;
+            $largestEvent = max($largestEvent, $severity);
+            $this->diagnostics?->recordEvent('catastrophe', $severity);
+        }
+
+        if ($largestEvent >= self::SYSTEMIC_CATASTROPHE_SEVERITY) {
+            $state->lastCatastropheAt = $state->totalTime;
+            $state->lastCatastropheSeverity = $largestEvent;
+        }
+
+        $state->catastropheLossIndex = min(self::MAX_CATASTROPHE_LOSS_INDEX, $state->catastropheLossIndex);
+    }
+
+    /**
+     * Natural gas as oil times a stationary ratio (Ramberg & Parsons 2012), with Pilipovic's seasonal factor.
+     *
+     * Gas and oil are cointegrated: the level follows oil, so every oil jump reaches gas through the product,
+     * while the ratio wanders on its own with more noise than oil has and squeezes of its own. The ratio is a
+     * log mean-reverting state around unity, the winter premium is a deterministic annual cycle peaking at
+     * the turn of the year, and the ratio's target is set so the index averages the oil index, not its median.
+     *
+     * @param MacroState $state Current macroeconomic state.
+     * @param float      $dt    Time increment in years.
+     */
+    public function calculateNaturalGasIndex(MacroState $state, float $dt): void
+    {
+        // Schwartz (1997) log-OU whose level averages one: the squeezes' Merton level drift netted out, the Jensen lift added.
+        $jumpShift = StochasticProcesses::logOuJumpLevelShift(self::GAS_JUMP_PROBABILITY, self::GAS_OIL_RATIO_KAPPA, self::GAS_JUMP_MEAN, self::GAS_JUMP_VOL);
+        $ratioTarget = StochasticProcesses::schwartzThetaForMean(exp(-$jumpShift), self::GAS_OIL_RATIO_KAPPA, self::GAS_OIL_RATIO_SIGMA);
+        $ratio = StochasticProcesses::calculateSchwartz1Factor(
+            currentPrice: exp($state->gasOilRatioLog),
+            kappa: self::GAS_OIL_RATIO_KAPPA,
+            theta: $ratioTarget,
+            sigma: self::GAS_OIL_RATIO_SIGMA,
+            dt: $dt,
+            dW: $this->mathUtility->generateStandardNormal()
+        );
+
+        $jumpData = $this->mathUtility->calculateJumpDiffusion(
+            lambda: self::GAS_JUMP_PROBABILITY,
+            jumpMean: self::GAS_JUMP_MEAN,
+            jumpVol: self::GAS_JUMP_VOL,
+            dt: $dt
+        );
+
+        $state->gasOilRatioLog = max(-2.0, min(2.0, log($ratio * $jumpData['multiplier'])));
+        if ($jumpData['exponent'] !== null) {
+            $this->diagnostics?->recordEvent('naturalGas', $jumpData['exponent']);
+        }
+
+        $timeOfYear = fmod($state->totalTime, 1.0);
+        $seasonalMultiplier = 1.0 + (self::GAS_SEASONALITY_AMPLITUDE * cos(2.0 * M_PI * $timeOfYear));
+
+        $spot = ($state->energyPriceIndex / MacroEngine::ENERGY_BASELINE) * MacroEngine::NATURAL_GAS_BASELINE * exp($state->gasOilRatioLog) * $seasonalMultiplier;
+        $state->naturalGasPriceIndex = max(10.0, min(500.0, $spot));
+    }
+
+    /**
+     * Wholesale power as gas passed through at the market heat rate (Lucia & Schwartz 2002, one-factor log spot).
+     *
+     * Gas sets the clearing price in most hours, so power moves with it at the log elasticity the hubs show. The
+     * implied heat rate on top (which plant is marginal, weather, outages) is a fast log-OU around its mean times a
+     * deterministic twin-peak load season. Its target is handed over through schwartzThetaForMean(), so the index
+     * averages its baseline rather than settling at its median. A carbon price adds the marginal gas plant's carbon
+     * cost per MWh, as far as the market passes it through.
+     *
+     * @param MacroState $state Current macroeconomic state.
+     * @param float      $dt    Time increment in years.
+     */
+    public function calculateWholesalePowerIndex(MacroState $state, float $dt): void
+    {
+        $heatRate = StochasticProcesses::calculateSchwartz1Factor(
+            currentPrice: exp($state->powerHeatRateLog),
+            kappa: self::POWER_HEAT_RATE_KAPPA,
+            theta: StochasticProcesses::schwartzThetaForMean(1.0, self::POWER_HEAT_RATE_KAPPA, self::POWER_HEAT_RATE_SIGMA),
+            sigma: self::POWER_HEAT_RATE_SIGMA,
+            dt: $dt,
+            dW: $this->mathUtility->generateStandardNormal()
+        );
+        $state->powerHeatRateLog = max(-3.0, min(3.0, log($heatRate)));
+
+        $gasRelative = max(0.01, $state->naturalGasPriceIndex / MacroEngine::NATURAL_GAS_BASELINE);
+        $spot = MacroEngine::WHOLESALE_POWER_BASELINE * ($gasRelative ** self::POWER_GAS_ELASTICITY)
+            * exp($state->powerHeatRateLog) * self::resolvePowerSeasonalFactor($state->totalTime);
+        $carbon = MacroEngine::WHOLESALE_POWER_BASELINE * self::carbonPowerPriceUplift($state->carbonPrice);
+        $state->wholesalePowerPriceIndex = max(5.0, min(800.0, $spot + $carbon));
+    }
+
+    /**
+     * What a carbon price adds to wholesale power, in $/MWh: the carbon the gas fleet emits per MWh at its heat rate,
+     * priced and passed through.
+     *
+     * @param float $carbonPrice Dollars a tonne of CO2.
+     */
+    public static function carbonPowerPriceAdder(float $carbonPrice): float
+    {
+        return MacroEngine::CARBON_POWER_PASS_THROUGH * MacroEngine::NATURAL_GAS_CO2_TONNES_PER_MMBTU * MacroEngine::GAS_FLEET_HEAT_RATE * $carbonPrice;
+    }
+
+    /**
+     * What a carbon price adds to wholesale power, as a share of the power price at the index baseline: the part of the
+     * power index's move off its baseline the carbon price makes.
+     *
+     * @param float $carbonPrice Dollars a tonne of CO2.
+     */
+    public static function carbonPowerPriceUplift(float $carbonPrice): float
+    {
+        return self::carbonPowerPriceAdder($carbonPrice) / MacroEngine::REFERENCE_POWER_PRICE;
+    }
+
+    /** The load-season multiplier on wholesale power at a point in simulated time (years); it averages one over the year. */
+    public static function resolvePowerSeasonalFactor(float $totalTime): float
+    {
+        $timeOfYear = fmod($totalTime, 1.0);
+
+        return 1.0
+            + (self::POWER_SEASONAL_ANNUAL_AMPLITUDE * cos(2.0 * M_PI * ($timeOfYear - self::POWER_SEASONAL_ANNUAL_PEAK)))
+            + (self::POWER_SEASONAL_SEMIANNUAL_AMPLITUDE * cos(4.0 * M_PI * ($timeOfYear - self::POWER_SEASONAL_SEMIANNUAL_PEAK)));
+    }
+
+    /**
+     * The real gold price the market clears at given long real rates, inflation expectations and how bad the
+     * public thinks the next five years will be (Barsky, Epstein, Lafont-Mueller & Yoo 2021, annual levels).
+     *
+     * Gold pays nothing, so a higher real yield raises what holding it forgoes; it is bought against inflation
+     * and against bad times. The world-GDP trend in their regression is carried here by the firms' capital,
+     * and its cyclical part is insignificant in their quarterly news regression, so it is left out.
+     */
+    public static function resolveGoldEquilibriumPrice(float $realTenYearYield, float $expectedInflation, float $consumerSentiment): float
+    {
+        $pessimism = -self::PESSIMISM_PER_SENTIMENT_POINT * ($consumerSentiment - MacroEngine::SENTIMENT_TREND_LEVEL);
+        $logDeviation = (self::GOLD_REAL_RATE_SEMI_ELASTICITY * ($realTenYearYield - self::GOLD_REAL_RATE_ANCHOR))
+            + (self::GOLD_INFLATION_EXPECTATION_SEMI_ELASTICITY * ($expectedInflation - self::GOLD_INFLATION_EXPECTATION_ANCHOR))
+            + (self::GOLD_PESSIMISM_SEMI_ELASTICITY * $pessimism);
+
+        return MacroEngine::GOLD_BASELINE * exp($logDeviation);
+    }
+
+    /**
+     * Gold as a log mean-reverting price around its fundamental equilibrium, stepped with the exact Schwartz
+     * (1997) transition. Deviations carry half their size into the next year, as the residuals of the levels
+     * regression do, which is what lets news about rates and confidence reach the price over quarters.
+     *
+     * @param MacroState $state Current macroeconomic state.
+     * @param float      $dt    Time increment in years.
+     */
+    public function calculateGoldPriceIndex(MacroState $state, float $dt): void
+    {
+        $equilibrium = self::resolveGoldEquilibriumPrice(
+            $state->yield10yEma - $state->tipsBreakevenEma,
+            $state->tipsBreakevenEma,
+            $state->consumerSentimentIndexEma
+        );
+
+        $gold = StochasticProcesses::calculateSchwartz1Factor(
+            currentPrice: $state->goldPriceIndex > 0.0 ? $state->goldPriceIndex : MacroEngine::GOLD_BASELINE,
+            kappa: self::GOLD_MEAN_REVERSION,
+            theta: StochasticProcesses::schwartzThetaForMean($equilibrium, self::GOLD_MEAN_REVERSION, self::GOLD_VOLATILITY),
+            sigma: self::GOLD_VOLATILITY,
+            dt: $dt,
+            dW: $this->mathUtility->generateStandardNormal()
+        );
+
+        $state->goldPriceIndex = max(self::MIN_GOLD_INDEX, min(self::MAX_GOLD_INDEX, $gold));
+    }
+
+    /**
+     * Schwartz-Smith (2000) Two-Factor Commodity Model for Industrial Metals (Copper/Aluminum).
+     *
+     * Decomposes metals prices into short-term transitory market deviations (chi) and long-term
+     * structural equilibrium capacity (xi) dynamically shifted by GLOBAL demand: the composite of the
+     * district's gap and the foreign bloc's, since a district this size does not set the copper price.
+     *
+     * @param MacroState $state Current macroeconomic state.
+     * @param float      $dt    Time increment in years.
+     */
+    public function calculateIndustrialMetalsIndex(MacroState $state, float $dt): void
+    {
+        $baselineLog = log(MacroEngine::METALS_BASELINE);
+
+        $result = $this->mathUtility->calculateTwoFactorOU(
+            chi: $state->metalsChi,
+            xi: $state->metalsXi,
+            kappaChi: self::METALS_SHORT_TERM_KAPPA,
+            kappaXi: self::METALS_LONG_TERM_KAPPA,
+            thetaChi: 0.0,
+            thetaXi: $baselineLog,
+            sigChi: self::METALS_SHORT_TERM_SIGMA,
+            sigXi: self::METALS_LONG_TERM_SIGMA,
+            rho: self::METALS_RHO,
+            dt: $dt
+        );
+
+        $state->metalsChi = $result['chi'];
+        $state->metalsXi = $result['xi'];
+        // The spot clears today's world demand against mine supply that cannot answer within the year, so demand moves
+        // the price as it happens; the two factors carry supply disruptions and the long-run cost of supply
+        // (Schwartz & Smith 2000).
+        $state->industrialMetalsIndex = max(20.0, min(400.0, $result['spot'] * exp($state->globalDemandGapEma * self::METALS_DEMAND_ELASTICITY)));
+    }
+
+    /**
+     * Schwartz-Smith (2000) Two-Factor Commodity Model with Harvest Seasonality & Weather Jumps.
+     *
+     * Evaluates agricultural spot prices via correlated two-factor Ornstein-Uhlenbeck processes,
+     * deterministic annual harvest sine-wave seasonality, and Poisson weather shock jumps.
+     *
+     * @param MacroState $state Current macroeconomic state.
+     * @param float      $dt    Time increment in years.
+     */
+    public function calculateAgriculturalCommodityIndex(MacroState $state, float $dt): void
+    {
+        // The weather jumps only raise prices, so the short factor reverts below zero by their mean log rate over its
+        // speed: a drought is a transient disruption, and the equilibrium stays with the long-term factor (Merton 1976).
+        $result = $this->mathUtility->calculateTwoFactorOU(
+            chi: $state->agriChi,
+            xi: $state->agriXi,
+            kappaChi: self::AGRI_SHORT_TERM_KAPPA,
+            kappaXi: self::AGRI_LONG_TERM_KAPPA,
+            thetaChi: -(self::AGRI_WEATHER_JUMP_PROBABILITY * self::AGRI_WEATHER_JUMP_MEAN) / self::AGRI_SHORT_TERM_KAPPA,
+            thetaXi: log(MacroEngine::AGRI_BASELINE),
+            sigChi: self::AGRI_SHORT_TERM_SIGMA,
+            sigXi: self::AGRI_LONG_TERM_SIGMA,
+            rho: self::AGRI_RHO,
+            dt: $dt
+        );
+
+        $jumpData = $this->mathUtility->calculateJumpDiffusion(
+            lambda: self::AGRI_WEATHER_JUMP_PROBABILITY,
+            jumpMean: self::AGRI_WEATHER_JUMP_MEAN,
+            jumpVol: self::AGRI_WEATHER_JUMP_VOL,
+            dt: $dt
+        );
+
+        $chi = $result['chi'];
+        if ($jumpData['multiplier'] !== 1.0) {
+            $chi += log($jumpData['multiplier']);
+            $this->diagnostics?->recordEvent('agriculture', (float) $jumpData['exponent']);
+        }
+
+        $state->agriChi = $chi;
+        $state->agriXi = $result['xi'];
+
+        $timeOfYear = fmod($state->totalTime, 1.0);
+        $seasonalMultiplier = 1.0 + (self::AGRI_SEASONALITY_AMPLITUDE * sin(2.0 * M_PI * $timeOfYear));
+
+        $spot = exp($state->agriChi + $state->agriXi) * $seasonalMultiplier;
+        $state->agriculturalCommodityIndex = max(20.0, min(400.0, $spot));
+    }
+
+    /**
+     * Stopford (2009) Maritime Shipping Model & Ezekiel (1938) Cobweb Supply Lag Theorem.
+     *
+     * Models ocean dry-bulk/container freight charter rates by matching global trade demand against
+     * sticky vessel fleet supply subject to a multi-year shipyard delivery lag and capacity inelasticity.
+     *
+     * @param MacroState $state Current macroeconomic state.
+     * @param float      $dt    Time increment in years.
+     */
+    public function calculateFreightRateIndex(MacroState $state, float $dt): void
+    {
+        $profitabilityRatio = max(0.10, $state->freightRateIndexEma / MacroEngine::FREIGHT_BASELINE);
+        $targetSupply = MacroEngine::FREIGHT_BASELINE * pow($profitabilityRatio, self::FREIGHT_SUPPLY_ORDER_ELASTICITY);
+
+        $slowEmaWeight = 1.0 - exp(-$dt / self::FREIGHT_SUPPLY_LAG_YEARS);
+        $state->freightSupplyEma += $slowEmaWeight * ($targetSupply - $state->freightSupplyEma);
+        $utilization = self::shippingTightness($state);
+        $equilibriumRate = MacroEngine::FREIGHT_BASELINE * pow($utilization, self::FREIGHT_CAPACITY_INELASTICITY);
+
+        $dW = $this->mathUtility->generateStandardNormal();
+        $newFreight = StochasticProcesses::calculateSchwartz1Factor(
+            currentPrice: $state->freightRateIndex,
+            kappa: self::FREIGHT_MEAN_REVERSION,
+            theta: StochasticProcesses::schwartzThetaForMean($equilibriumRate, self::FREIGHT_MEAN_REVERSION, self::FREIGHT_VOLATILITY),
+            sigma: self::FREIGHT_VOLATILITY,
+            dt: $dt,
+            dW: $dW
+        );
+
+        $state->freightRateIndex = max(20.0, min(500.0, $newFreight));
+    }
+
+    /** Seaborne trade demand over the fleet in service: the utilization the charter market clears on. */
+    public static function shippingTightness(MacroState $state): float
+    {
+        $metalsShift = ($state->industrialMetalsIndexEma - MacroEngine::METALS_BASELINE) / 100.0;
+        $demandFactor = 1.0 + ($state->globalDemandGapEma * self::FREIGHT_DEMAND_GAP_SENSITIVITY) + ($metalsShift * self::FREIGHT_DEMAND_METALS_SENSITIVITY);
+        $demand = MacroEngine::FREIGHT_BASELINE * max(0.20, $demandFactor);
+
+        return $demand / max(20.0, $state->freightSupplyEma);
+    }
+
+    /**
+     * Suppliers' delivery times, an ISM-style diffusion index (50 = no change). Lead time is a queue: factory
+     * congestion follows Kingman's rho / (1 - rho) in capacity utilization, and shipping congestion the fleet's
+     * tightness. The index reverts to that target with its own noise.
+     */
+    public function calculateSupplierDeliveryTimes(MacroState $state, float $dt): void
+    {
+        $target = self::supplierDeliveryTarget($state->capacityUtilizationRate, self::shippingTightness($state));
+        $state->supplierDeliveryTimes = $target + StochasticProcesses::calculateOrnsteinUhlenbeckStep(
+            $state->supplierDeliveryTimes - $target,
+            self::DELIVERY_REVERSION_KAPPA,
+            self::DELIVERY_STATIONARY_SD,
+            $dt,
+            $this->mathUtility->generateStandardNormal()
+        );
+    }
+
+    /** The delivery-times reading congestion alone implies: neutral at baseline utilization and a balanced fleet. */
+    public static function supplierDeliveryTarget(float $capacityUtilization, float $shippingTightness): float
+    {
+        $factoryCongestion = log(MacroTransmission::kingmanCongestion($capacityUtilization) / MacroTransmission::kingmanCongestion(MacroEngine::CU_BASELINE));
+
+        return MacroEngine::SUPPLIER_DELIVERIES_NEUTRAL
+            + (self::DELIVERY_FACTORY_LOADING * $factoryCongestion)
+            + (self::DELIVERY_SHIPPING_LOADING * log(max(0.01, $shippingTightness)));
+    }
+
+    /**
+     * 3:2:1 refining crack spread: a de-seasonalised log mean-reverting margin times the driving-season cycle,
+     * the same split of stochastic and deterministic seasonal parts the gas index uses (Pilipovic 1998).
+     *
+     * The cycle multiplies the price rather than its target: a margin that reverts with a six-month half-life
+     * would otherwise carry barely a fifth of a yearly swing. The stored spread carries the season, so the
+     * previous step's factor is divided back out before the stochastic part is stepped.
+     *
+     * @param MacroState $state Current macroeconomic state.
+     * @param float      $dt    Time increment in years.
+     */
+    public function calculateRefiningCrackSpread(MacroState $state, float $dt): void
+    {
+        $currentCrack = $state->refiningCrackSpread > 0.0 ? $state->refiningCrackSpread : MacroEngine::CRACK_SPREAD_BASELINE;
+        $baseCrack = $currentCrack / self::resolveCrackSeasonalFactor($state->totalTime - $dt);
+
+        $nextBase = FirmEconomics::calculateRefiningCrackSpreadStep(
+            currentCrack: $baseCrack,
+            outputGap: $state->globalDemandGapEma,
+            energyInventoryIndex: $state->energyInventoryIndexEma,
+            dt: $dt,
+            dW: $this->mathUtility->generateStandardNormal(),
+            baselineCrack: MacroEngine::CRACK_SPREAD_BASELINE,
+            kappa: self::CRACK_SPREAD_KAPPA,
+            sigma: self::CRACK_SPREAD_SIGMA
+        );
+
+        $state->refiningCrackSpread = max(4.0, min(80.0, $nextBase * self::resolveCrackSeasonalFactor($state->totalTime)));
+    }
+
+    /** The driving-season multiplier on the crack at a point in simulated time (years). */
+    public static function resolveCrackSeasonalFactor(float $totalTime): float
+    {
+        return 1.0 + (self::CRACK_SEASONAL_AMPLITUDE * cos(2.0 * M_PI * (fmod($totalTime, 1.0) - self::CRACK_SEASONAL_PEAK)));
+    }
+
+    /**
+     * NY Fed Global Supply Chain Pressure Index (GSCPI) (Benigno et al. 2022).
+     *
+     * Synthesizes cross-border freight rates, inventory stock gaps, and raw material frictions
+     * into a standardized Z-score composite.
+     *
+     * @param MacroState $state Current macroeconomic state.
+     */
+    public function calculateSupplyChainPressureIndex(MacroState $state): void
+    {
+        // Monthly readings, as the GSCPI is built: the inputs are this tick's, each purged on the demand it answers to.
+        $state->supplyChainPressureIndex = MacroTransmission::calculateGscpiComposite(
+            freightRateIndex: $state->freightRateIndex,
+            inventoryStockGap: $state->inventoryStockGap,
+            supplierDeliveryTimes: $state->supplierDeliveryTimes,
+            freightDemandGap: $state->globalDemandGapEma,
+            inventoryDemandGap: $state->domesticDemandGapEma,
+            deliveryDemandGap: $state->outputGapEma
+        );
+    }
+}

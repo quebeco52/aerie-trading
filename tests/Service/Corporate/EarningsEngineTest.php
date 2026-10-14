@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Tests\Service\Corporate;
 
+use App\Data\Macro\CapitalGoodsPrices;
 use App\Service\Event\EarningsReportedEvent;
 use App\Service\Math\Distributions;
 use App\Service\Math\FirmEconomics;
@@ -881,6 +882,55 @@ class EarningsEngineTest extends TestCase
         $this->assertEqualsWithDelta($stablePrices->quarterlyDepreciation, $inflatedPrices->quarterlyDepreciation, 1.0);
         $this->assertGreaterThan(0.0, $stablePrices->maintenanceCapex);
         $this->assertEqualsWithDelta(1.20, $inflatedPrices->maintenanceCapex / $stablePrices->maintenanceCapex, 1e-9);
+    }
+
+    /**
+     * Capital goods drift against the deflator by industry (BEA Fixed Assets): replacement is bought at the industry's
+     * capital-goods price, and a plant bought when capital goods were dearer holds less capacity per book dollar.
+     */
+    public function testReplacementAndCapacityFollowTheIndustrysCapitalGoodsPrice(): void
+    {
+        $run = function (float $years, float $ppeRelativePrice): \App\DTO\EarningsSimulationContext {
+            $captured = null;
+            $dispatcher = new EventDispatcher();
+            $dispatcher->addListener(EarningsReportedEvent::class, function (EarningsReportedEvent $event) use (&$captured): void {
+                $captured = $event->getContext();
+            });
+            $engine = $this->buildEngine($dispatcher);
+
+            mt_srand(9090);
+            $stock = $this->buildMatureIndustrial('CAPG');
+            $stock->setGrossPpe('40000000000');
+            $stock->setAccumulatedDepreciation('20000000000');
+            $stock->setPpeVintageDeflator('1.000000');
+            $stock->setEarningsMomentumZ([
+                EarningsEngine::STATE_CAPITAL_GOODS_ANCHOR_TIME => 0.0,
+                EarningsEngine::STATE_PPE_RELATIVE_PRICE => $ppeRelativePrice,
+            ]);
+
+            $macroState = new MacroStateDTO(corporateTaxRate: 0.21, policyRateEma: 0.04, yield5yEma: 0.04, gdpDeflator: 1.0, totalTime: $years);
+            $engine->calculate($stock, $macroState, EarningsEngine::resolveReportingTick('CAPG', 252), 252);
+
+            return $captured;
+        };
+
+        $drift = CapitalGoodsPrices::DRIFT_BY_MODEL['AutoManufacturerBusinessModel'];
+        $atAnchor = $run(0.0, 1.0);
+        $decadeOn = $run(10.0, 1.0);
+        $this->assertEqualsWithDelta(1.0, $atAnchor->replacementCostRatio, 1e-9, 'At the anchor capital goods cost what the plant did.');
+        $this->assertEqualsWithDelta(exp($drift * 10.0), $decadeOn->replacementCostRatio, 1e-9, 'A decade on, replacement is bought at the drifted price.');
+
+        // The same book bought at a 20% dearer relative price holds a sixth less plant.
+        $dearVintage = $run(0.0, 1.2);
+        $netPpe = 20_000_000_000.0;
+        $this->assertEqualsWithDelta($netPpe * ((1.0 / 1.2) - 1.0), $dearVintage->revenueGeneratingCapital - $atAnchor->revenueGeneratingCapital, 1.0);
+    }
+
+    public function testCapitalGoodsDriftFallsBackThroughTheModelsParents(): void
+    {
+        $this->assertSame(CapitalGoodsPrices::DRIFT_BY_MODEL['TelecomBusinessModel'], CapitalGoodsPrices::driftFor(new \App\Service\Model\Sector\TelecomBusinessModel()));
+        $this->assertSame(CapitalGoodsPrices::ALL_INDUSTRIES_DRIFT, CapitalGoodsPrices::driftFor(new \stdClass()));
+        $this->assertLessThan(-0.015, CapitalGoodsPrices::DRIFT_BY_MODEL['TelecomBusinessModel'], 'Telecom plant gets cheaper against what it sells (BEA).');
     }
 
     /**

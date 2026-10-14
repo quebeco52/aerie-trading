@@ -562,7 +562,7 @@ class CommodityLogisticsSubsystemTest extends TestCase
     }
 
 
-    /** A district this size does not set the copper price: metals clear on world demand, so a foreign boom moves them with the district flat. */
+    /** A district this size does not set the copper price: metals clear on world demand, so a foreign boom moves the spot with the district flat. */
     public function testMetalsClearOnGlobalDemandNotTheDistrictsGapAlone(): void
     {
         $subsystem = $this->quietCommoditySubsystem();
@@ -580,7 +580,7 @@ class CommodityLogisticsSubsystemTest extends TestCase
 
         $flat = $settle(0.0);
         $worldBoom = $settle(0.03);
-        $this->assertEqualsWithDelta(exp(0.03 * CommodityLogisticsSubsystem::METALS_OUTPUT_GAP_SENSITIVITY), $worldBoom / $flat, 0.01, 'A 3% world boom lifts the long-run metals equilibrium by its elasticity.');
+        $this->assertEqualsWithDelta(exp(0.03 * CommodityLogisticsSubsystem::METALS_DEMAND_ELASTICITY), $worldBoom / $flat, 0.01, 'A 3% world boom lifts the metals spot by its demand elasticity.');
     }
 
     /**

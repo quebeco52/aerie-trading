@@ -766,12 +766,12 @@ class AssetMarketSubsystemTest extends TestCase
 
         $state->totalTime = 0.25;
         $subsystem->calculateForeignEconomy($state, 0.01);
-        $this->assertSame(3, $draws->calls, 'The turn releases the gap, core inflation and the rate decision once.');
+        $this->assertSame(4, $draws->calls, 'The turn releases the gap, core inflation, the rate decision and the rest of the world once.');
         $this->assertGreaterThan(0.0, $state->foreignOutputGap, 'and the district\'s boom shows in the mainland gap.');
 
         $state->totalTime = 1.25;
         $subsystem->calculateForeignEconomy($state, 1.0);
-        $this->assertSame(15, $draws->calls, 'A year-long step releases four quarters.');
+        $this->assertSame(20, $draws->calls, 'A year-long step releases four quarters.');
     }
 
     public function testTheDistrictsBoomSpillsIntoTheMainlandOnlyInPart(): void
@@ -782,8 +782,60 @@ class AssetMarketSubsystemTest extends TestCase
 
         $this->assertEqualsWithDelta(0.04 * AssetMarketSubsystem::FOREIGN_IMPORT_SPILLOVER, $state->foreignOutputGap, 1e-6, 'The mainland feels the district\'s imports, not its whole cycle.');
         $this->assertGreaterThan(MacroEngine::MAINLAND_NEUTRAL_RATE, $state->foreignPolicyRate, 'and the Fed leans against the demand it does feel.');
-        $expectedGlobal = (MacroEngine::DOMESTIC_DEMAND_WEIGHT * 0.04) + ((1.0 - MacroEngine::DOMESTIC_DEMAND_WEIGHT) * $state->foreignOutputGapEma);
-        $this->assertEqualsWithDelta($expectedGlobal, $state->globalDemandGap, 1e-9, 'World demand weights the two economies.');
+        $this->assertEqualsWithDelta(AssetMarketSubsystem::WORLD_MAINLAND_LOADING * $state->foreignOutputGap, $state->worldActivityGap, 1e-9, 'With no shocks of its own the rest of the world carries the mainland cycle at its loading.');
+        $restOfWorld = 1.0 - MacroEngine::DOMESTIC_DEMAND_WEIGHT - AssetMarketSubsystem::MAINLAND_DEMAND_WEIGHT;
+        $expectedGlobal = (MacroEngine::DOMESTIC_DEMAND_WEIGHT * $state->outputGap) + (AssetMarketSubsystem::MAINLAND_DEMAND_WEIGHT * $state->foreignOutputGap) + ($restOfWorld * $state->worldActivityGap);
+        $this->assertEqualsWithDelta($expectedGlobal, $state->globalDemandGap, 1e-9, 'World demand weighs the three economies at their GDP shares.');
+        $this->assertEqualsWithDelta(0.63, $restOfWorld, 0.01, 'Most of the world is neither the District nor the mainland.');
+    }
+
+    /** The fitted AR(2)'s stationary sd, as the constant the world loading divides by states it. */
+    public function testTheMainlandStationarySdIsWhatItsAr2Implies(): void
+    {
+        $a1 = AssetMarketSubsystem::MAINLAND_GAP_AR1;
+        $a2 = AssetMarketSubsystem::MAINLAND_GAP_AR2;
+        $implied = AssetMarketSubsystem::MAINLAND_GAP_SIGMA * sqrt((1.0 - $a2) / ((1.0 + $a2) * (((1.0 - $a2) ** 2) - ($a1 ** 2))));
+        $this->assertEqualsWithDelta($implied, AssetMarketSubsystem::MAINLAND_GAP_STATIONARY_SD, 0.00002);
+
+        $ownSd = AssetMarketSubsystem::WORLD_GAP_SD * sqrt(1.0 - (AssetMarketSubsystem::WORLD_MAINLAND_CORRELATION ** 2));
+        $this->assertEqualsWithDelta($ownSd * sqrt(1.0 - (AssetMarketSubsystem::WORLD_GAP_AR1 ** 2)), AssetMarketSubsystem::WORLD_GAP_SIGMA, 0.00002);
+    }
+
+    /**
+     * The rest of the world is a one-factor model on the mainland's cycle: over a long run its spread, its persistence and
+     * its co-movement with the mainland are the G6 industrial-production gap's (sd 1.8%, AR(1) ~0.85, correlation 0.51).
+     */
+    public function testTheRestOfTheWorldHasTheFittedSpreadAndCoMovement(): void
+    {
+        mt_srand(20261014);
+        $subsystem = new AssetMarketSubsystem(new MathUtility());
+        $state = new MacroState();
+        $state->outputGapEma = 0.0;
+        $world = [];
+        $mainland = [];
+        for ($q = 0; $q < 20000; $q++) {
+            $this->runMainlandQuarters($subsystem, $state, 1);
+            if ($q >= 200) {
+                $world[] = $state->worldActivityGap;
+                $mainland[] = $state->foreignOutputGap;
+            }
+        }
+        $mean = static fn (array $x): float => array_sum($x) / count($x);
+        $cov = static function (array $x, array $y) use ($mean): float {
+            $mx = $mean($x);
+            $my = $mean($y);
+            $s = 0.0;
+            foreach ($x as $i => $v) {
+                $s += ($v - $mx) * ($y[$i] - $my);
+            }
+
+            return $s / count($x);
+        };
+        $sd = sqrt($cov($world, $world));
+
+        $this->assertEqualsWithDelta(AssetMarketSubsystem::WORLD_GAP_SD, $sd, 0.0015);
+        $this->assertEqualsWithDelta(AssetMarketSubsystem::WORLD_MAINLAND_CORRELATION, $cov($world, $mainland) / ($sd * sqrt($cov($mainland, $mainland))), 0.05);
+        $this->assertEqualsWithDelta(0.87, $cov(array_slice($world, 1), array_slice($world, 0, -1)) / ($sd ** 2), 0.03, 'Its own AR(1) at 0.85 plus the more persistent mainland part.');
     }
 
     /** The Taylor principle: held a point higher, four-quarter core inflation takes the funds rate up by the fitted 1.66 points. */

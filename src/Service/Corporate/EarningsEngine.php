@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Service\Corporate;
 
+use App\Data\Macro\CapitalGoodsPrices;
 use App\Entity\Stock;
 use App\Service\Event\MarketEventPublisher;
 use App\Service\Math\Decimal;
@@ -106,6 +107,12 @@ class EarningsEngine
     public const STATE_LAST_DEFLATOR = 'state:last_deflator';
     /** Stream-state key: log gap between the price level and the one the plant's book carries at its planned nominal growth. */
     public const STATE_PRICE_LEVEL_SURPRISE = 'state:price_level_surprise';
+
+    // --- Capital-Goods Prices (BEA Fixed Assets, App\Data\Macro\CapitalGoodsPrices) ---
+    /** Stream-state key: simulated year the firm's capital-goods relative price was first read, where it is 1. */
+    public const STATE_CAPITAL_GOODS_ANCHOR_TIME = 'state:capital_goods_anchor_time';
+    /** Stream-state key: the plant's capex-weighted capital-goods price against the GDP deflator, 1 at the anchor. */
+    public const STATE_PPE_RELATIVE_PRICE = 'state:ppe_relative_price';
 
     // --- Jump Diffusion (Fundamental vs Price) ---
     /** Scale factor for fundamental jump intensity relative to price jumps. */
@@ -676,6 +683,9 @@ class EarningsEngine
         // book is nominal, so neither is revalued.
         if ($stock->getGrossPpe() !== null) {
             $revenueGeneratingCapital += max(0.0, $stock->getNetPpe()) * (exp($this->resolvePriceLevelSurprise($ctx)) - 1.0);
+            // A book dollar buys as much plant as capital goods cost when it was spent: where they have grown cheaper
+            // against what the plant produces, the same book holds more capacity (BEA fixed-asset prices by industry).
+            $revenueGeneratingCapital += max(0.0, $stock->getNetPpe()) * ((1.0 / $this->resolvePpeRelativePrice($ctx)) - 1.0);
         }
 
         $ctx->revenueGeneratingCapital = $revenueGeneratingCapital;
@@ -1170,6 +1180,13 @@ class EarningsEngine
         // The price level the plant capacity was last struck against, and the surprise it carries.
         $streamState[self::STATE_LAST_DEFLATOR] = max(0.01, $ctx->macroState->gdpDeflator);
         $streamState[self::STATE_PRICE_LEVEL_SURPRISE] = $ctx->priceLevelSurprise;
+        // The plant's capital-goods vintage is the fixed-asset ledger's, rolled forward after the cash flows.
+        $previousState = $ctx->stock->getEarningsMomentumZ() ?? [];
+        foreach ([self::STATE_CAPITAL_GOODS_ANCHOR_TIME, self::STATE_PPE_RELATIVE_PRICE] as $key) {
+            if (isset($previousState[$key])) {
+                $streamState[$key] = $previousState[$key];
+            }
+        }
         $ctx->stock->setEarningsMomentumZ($streamState);
         $ctx->streamRevenue = $actuals->streamRevenue;
         $ctx->scheduledCapex = max(0.0, $actuals->scheduledCapex);
@@ -2135,7 +2152,29 @@ class EarningsEngine
             return 1.0;
         }
 
-        return max(0.0, $currentDeflator / (float) $vintage);
+        // Replacement is bought at today's capital-goods prices, which drift against the deflator by industry.
+        return max(0.0, ($currentDeflator / (float) $vintage) * ($this->resolveCapitalGoodsRelativePrice($ctx) / $this->resolvePpeRelativePrice($ctx)));
+    }
+
+    /**
+     * The firm's capital goods priced against the GDP deflator: its industry's measured drift (BEA Fixed Assets,
+     * CapitalGoodsPrices) compounded from the year the firm was first read, where it is 1. Measuring from the firm's own
+     * anchor lets a running game take the drift on without restating the plant it already owns.
+     */
+    private function resolveCapitalGoodsRelativePrice(EarningsSimulationContext $ctx): float
+    {
+        $state = $ctx->stock->getEarningsMomentumZ() ?? [];
+        $anchor = (float) ($state[self::STATE_CAPITAL_GOODS_ANCHOR_TIME] ?? $ctx->macroState->totalTime);
+
+        return exp(CapitalGoodsPrices::driftFor($ctx->strategy) * ($ctx->macroState->totalTime - $anchor));
+    }
+
+    /** The relative price the plant on the books was bought at, capex-weighted; today's, for a firm not yet tracked. */
+    private function resolvePpeRelativePrice(EarningsSimulationContext $ctx): float
+    {
+        $state = $ctx->stock->getEarningsMomentumZ() ?? [];
+
+        return max(0.01, (float) ($state[self::STATE_PPE_RELATIVE_PRICE] ?? $this->resolveCapitalGoodsRelativePrice($ctx)));
     }
 
     /**
@@ -2174,6 +2213,17 @@ class EarningsEngine
             $vintage = ((max(0.0, $openingNetPpe) * $vintage) + ($additions * $currentDeflator)) / $vintageBase;
         }
         $stock->setPpeVintageDeflator((string) max(0.01, $vintage));
+
+        // The same weighting on the capital-goods price against the deflator, kept on the stream map.
+        $relativePrice = $this->resolveCapitalGoodsRelativePrice($ctx);
+        $ppeRelativePrice = $this->resolvePpeRelativePrice($ctx);
+        if ($vintageBase > 0.0) {
+            $ppeRelativePrice = ((max(0.0, $openingNetPpe) * $ppeRelativePrice) + ($additions * $relativePrice)) / $vintageBase;
+        }
+        $state = $stock->getEarningsMomentumZ() ?? [];
+        $state[self::STATE_CAPITAL_GOODS_ANCHOR_TIME] = (float) ($state[self::STATE_CAPITAL_GOODS_ANCHOR_TIME] ?? $ctx->macroState->totalTime);
+        $state[self::STATE_PPE_RELATIVE_PRICE] = max(0.01, $ppeRelativePrice);
+        $stock->setEarningsMomentumZ($state);
 
         $retired = min($accumulated, $grossPpe * $this->resolveDepreciationRate($ctx) / 4.0);
         $grossPpe -= $retired;

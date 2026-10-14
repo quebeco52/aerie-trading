@@ -374,6 +374,8 @@ class MacroState
     public float $foreignOutputGap;
     public float $foreignOutputGapEma;
     public float $foreignOutputGapLag;
+    public float $worldActivityGap;
+    public float $worldActivityIdiosyncratic;
     public float $foreignCoreInflation;
     public float $foreignCoreInflationLag1;
     public float $foreignCoreInflationLag2;

@@ -119,14 +119,14 @@ class CommodityLogisticsSubsystem
     public const METALS_SHORT_TERM_KAPPA = 1.50;
     /** Mean-reversion speed of long-term industrial metals supercycle equilibrium shifts. */
     public const METALS_LONG_TERM_KAPPA = 0.20;
-    /** Volatility of short-term supply disruption shocks. */
-    public const METALS_SHORT_TERM_SIGMA = 0.30;
+    /** Volatility of short-term supply disruption shocks, fitted with the demand elasticity to the World Bank metals index's yoy log sd, 0.231 (1993-2019): 0.228 over 4 seeds. */
+    public const METALS_SHORT_TERM_SIGMA = 0.24;
     /** Volatility of long-term supercycle equilibrium shifts. */
     public const METALS_LONG_TERM_SIGMA = 0.08;
     /** Correlation between short-term disruptions and long-term shifts. */
     public const METALS_RHO = -0.30;
-    /** Sensitivity of long-term metals equilibrium target to the macroeconomic output gap. */
-    public const METALS_OUTPUT_GAP_SENSITIVITY = 0.50;
+    /** Metals spot per unit of world demand gap, in logs: fitted so metals yoy correlates with world demand yoy as the World Bank metals index does with G6 industrial production, 0.58 (1993-2019): 0.63 over 4 seeds (var/harness/world_factor). */
+    public const METALS_DEMAND_ELASTICITY = 12.0;
 
     // --- 2-FACTOR CORRELATED OU AGRICULTURAL COMMODITIES & WEATHER JUMPS ---
     /** Mean-reversion speed of short-term agricultural supply disruptions (frost, harvest delays). */
@@ -484,7 +484,6 @@ class CommodityLogisticsSubsystem
     public function calculateIndustrialMetalsIndex(MacroState $state, float $dt): void
     {
         $baselineLog = log(MacroEngine::METALS_BASELINE);
-        $shiftedThetaXi = $baselineLog + ($state->globalDemandGapEma * self::METALS_OUTPUT_GAP_SENSITIVITY);
 
         $result = $this->mathUtility->calculateTwoFactorOU(
             chi: $state->metalsChi,
@@ -492,7 +491,7 @@ class CommodityLogisticsSubsystem
             kappaChi: self::METALS_SHORT_TERM_KAPPA,
             kappaXi: self::METALS_LONG_TERM_KAPPA,
             thetaChi: 0.0,
-            thetaXi: $shiftedThetaXi,
+            thetaXi: $baselineLog,
             sigChi: self::METALS_SHORT_TERM_SIGMA,
             sigXi: self::METALS_LONG_TERM_SIGMA,
             rho: self::METALS_RHO,
@@ -501,7 +500,10 @@ class CommodityLogisticsSubsystem
 
         $state->metalsChi = $result['chi'];
         $state->metalsXi = $result['xi'];
-        $state->industrialMetalsIndex = max(20.0, min(400.0, $result['spot']));
+        // The spot clears today's world demand against mine supply that cannot answer within the year, so demand moves
+        // the price as it happens; the two factors carry supply disruptions and the long-run cost of supply
+        // (Schwartz & Smith 2000).
+        $state->industrialMetalsIndex = max(20.0, min(400.0, $result['spot'] * exp($state->globalDemandGapEma * self::METALS_DEMAND_ELASTICITY)));
     }
 
     /**

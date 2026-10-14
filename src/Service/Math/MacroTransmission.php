@@ -18,32 +18,32 @@ final class MacroTransmission
     public const STAMP_DUTY_VOLUME_SEMI_ELASTICITY = 52.68;
 
     // --- GSCPI Construction (Benigno, di Giovanni, Groen & Noble 2022), measured in the simulation ---
-    /** Centre of the freight index: its simulated mean (98.41) plus the part of it world demand explains on average. */
-    public const GSCPI_FREIGHT_MEAN = 99.82;
+    /** Centre of the freight index: its simulated mean (100.05) plus the part of it world demand explains on average. */
+    public const GSCPI_FREIGHT_MEAN = 101.01;
     /** Spread of the freight index (simulated sd, 16 seeds x 30 years). */
-    public const GSCPI_FREIGHT_SD = 17.54;
-    /** Centre of the inventory gap: its simulated mean (0.010) net of the part domestic demand explains on average. */
-    public const GSCPI_INVENTORY_GAP_MEAN = 0.000918;
+    public const GSCPI_FREIGHT_SD = 19.49;
+    /** Centre of the inventory gap: its simulated mean (0.016) net of the part domestic demand explains on average. */
+    public const GSCPI_INVENTORY_GAP_MEAN = 0.000990;
     /** Spread of the inventory gap (simulated sd). */
-    public const GSCPI_INVENTORY_GAP_SD = 0.04568;
-    /** Centre of the delivery-times index: its simulated mean (49.57) net of the part output explains on average. */
-    public const GSCPI_DELIVERY_MEAN = 50.30;
+    public const GSCPI_INVENTORY_GAP_SD = 0.04925;
+    /** Centre of the delivery-times index: its simulated mean (49.04) net of the part output explains on average. */
+    public const GSCPI_DELIVERY_MEAN = 50.22;
     /** Spread of the delivery-times index (simulated sd). */
-    public const GSCPI_DELIVERY_SD = 4.565;
-    /** Standardized freight per unit of the world demand gap, purged as demand rather than supply (simulated OLS, R2 0.17). */
-    public const GSCPI_FREIGHT_DEMAND_BETA = 25.15;
-    /** Standardized inventory shortfall per unit of the domestic demand gap, purged as demand (simulated OLS, R2 0.88). */
-    public const GSCPI_INVENTORY_DEMAND_BETA = 35.68;
-    /** Standardized delivery delay per unit of the output gap, purged as demand (simulated OLS, R2 0.48). */
-    public const GSCPI_DELIVERY_DEMAND_BETA = 35.41;
+    public const GSCPI_DELIVERY_SD = 5.505;
+    /** Standardized freight per unit of the world demand gap, purged as demand rather than supply (simulated OLS, R2 0.32). */
+    public const GSCPI_FREIGHT_DEMAND_BETA = 37.91;
+    /** Standardized inventory shortfall per unit of the domestic demand gap, purged as demand (simulated OLS, R2 0.89). */
+    public const GSCPI_INVENTORY_DEMAND_BETA = 31.89;
+    /** Standardized delivery delay per unit of the output gap, purged as demand (simulated OLS, R2 0.46). */
+    public const GSCPI_DELIVERY_DEMAND_BETA = 31.93;
     /** Freight's loading on the first principal component of the purged inputs (simulated, loadings summing to one). */
-    public const GSCPI_FREIGHT_WEIGHT = 0.493;
+    public const GSCPI_FREIGHT_WEIGHT = 0.480;
     /** The inventory shortfall's loading: once demand is purged the stock cycle barely co-moves with logistics friction. */
-    public const GSCPI_INVENTORY_WEIGHT = 0.013;
+    public const GSCPI_INVENTORY_WEIGHT = 0.058;
     /** Delivery times' loading on the first principal component. */
-    public const GSCPI_DELIVERY_WEIGHT = 0.494;
+    public const GSCPI_DELIVERY_WEIGHT = 0.462;
     /** Spread of the weighted purged inputs (from their simulated variances and correlation), divided out before the index is put in published units. */
-    public const GSCPI_WEIGHTED_SD = 0.652;
+    public const GSCPI_WEIGHTED_SD = 0.567;
     /** Mean of the NY Fed GSCPI over 1998-2019 in its published units (NY Fed data file, current vintage): normal times sit below the pandemic-inclusive zero. */
     public const GSCPI_NORMAL_TIMES_MEAN = -0.30;
     /** Standard deviation of the NY Fed GSCPI over 1998-2019 in its published units; the full-sample unit sd is set by 2020-22. */
