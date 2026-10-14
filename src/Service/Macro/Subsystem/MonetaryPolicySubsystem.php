@@ -418,10 +418,23 @@ class MonetaryPolicySubsystem
             || ($wasStressed && $excessBondPremium > self::CB_STRESS_EXIT_EBP);
     }
 
-    /** Sets the stress latch from the premium the Authority last observed; call once a tick, before updatePolicyRate(). */
-    public function updateStressRegime(MacroState $state): void
+    /**
+     * Sets the stress latch at each month end from the premium's average over the month, the monthly series its thresholds
+     * are read off (Gilchrist & Zakrajsek 2012), so a spike inside the month that the record would average away does not
+     * set it. Call once a tick, before updatePolicyRate().
+     */
+    public function updateStressRegime(MacroState $state, float $dt): void
     {
-        $state->authorityStressRegime = self::inStressRegime($state->authorityStressRegime > 0.0, $state->excessBondPremium) ? 1.0 : 0.0;
+        $state->excessBondPremiumMonthAccrued += $state->excessBondPremium * $dt;
+        $state->excessBondPremiumMonthElapsed += $dt;
+        if (!TimeSeries::crossedSimulatedBoundary($state->totalTime, $dt, 1.0 / 12.0) || $state->excessBondPremiumMonthElapsed <= 0.0) {
+            return;
+        }
+
+        $monthlyPremium = $state->excessBondPremiumMonthAccrued / $state->excessBondPremiumMonthElapsed;
+        $state->authorityStressRegime = self::inStressRegime($state->authorityStressRegime > 0.0, $monthlyPremium) ? 1.0 : 0.0;
+        $state->excessBondPremiumMonthAccrued = 0.0;
+        $state->excessBondPremiumMonthElapsed = 0.0;
     }
 
     /**

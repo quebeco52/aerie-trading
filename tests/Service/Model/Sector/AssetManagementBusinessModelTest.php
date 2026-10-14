@@ -9,6 +9,7 @@ use App\Entity\Stock;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\AssetManagementBusinessModel;
 use App\Service\Model\Sector\PrivateEquityBusinessModel;
+use App\Service\Macro\MacroEngine;
 use PHPUnit\Framework\TestCase;
 
 class AssetManagementBusinessModelTest extends TestCase
@@ -86,8 +87,8 @@ class AssetManagementBusinessModelTest extends TestCase
 
         $this->assertEquals(0.12, $model->getReversionSpeed());
         $this->assertEquals(0.012, $model->getMoatSpread());
-        // Trend 2% plus securities and investments value added sliding from 1.41% to 1.30% of GDP over 1997-2019.
-        $this->assertEqualsWithDelta(0.0163, $model->getSecularGrowthRate($stock), 1e-4);
+        // Trend growth plus securities and investments value added sliding from 1.41% to 1.30% of GDP over 1997-2019.
+        $this->assertEqualsWithDelta(MacroEngine::TREND_REAL_GROWTH - 0.0037, $model->getSecularGrowthRate($stock), 1e-4);
 
         $coverage = $model->getCoverageProfile($stock);
         $this->assertEquals(AssetManagementBusinessModel::BASE_COVERAGE_VISIBILITY, $coverage->baseVisibility);

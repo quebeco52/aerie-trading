@@ -1150,8 +1150,8 @@ class CommercialBankBusinessModelTest extends TestCase
 
         $this->model->processPassiveLiabilityGrowth($stock, $macro, $state, $mathMock);
 
-        // 2% in the quarter clears the 0.5% capture threshold, but it is the economy's growth, not share won.
-        $this->assertEqualsWithDelta(20.0, $state['customerDeposits'] - 1000.0, 1e-9);
+        // Over 2% in the quarter clears the 0.5% capture threshold, but it is the economy's growth, not share won.
+        $this->assertEqualsWithDelta(1000.0 * (0.06 + MacroEngine::TFP_DRIFT + MacroEngine::STRUCTURAL_LABOR_GROWTH_RATE) / 4.0, $state['customerDeposits'] - 1000.0, 1e-9);
         $this->assertSame([], $state['events']);
     }
 

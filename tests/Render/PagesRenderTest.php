@@ -106,7 +106,7 @@ final class PagesRenderTest extends KernelTestCase
             'trade_office' => ['/trade-office', 'trade_office/index.html.twig', [
                 'office' => [
                     'tariff' => ['inForce' => 0.04, 'next' => 0.06, 'expected' => 0.03, 'retaliation' => 0.025, 'revenueToGdp' => 0.0072, 'outputCost' => 0.0044, 'goodsImportsToGdp' => 0.19],
-                    'migration' => ['inForce' => 0.0062, 'next' => 0.0062, 'expected' => 0.0048, 'structural' => 0.005, 'closed' => 0.0011, 'open' => 0.0079, 'populationShift' => 0.012],
+                    'migration' => ['inForce' => 0.0116, 'next' => 0.0116, 'expected' => 0.0102, 'structural' => 0.0104, 'natural' => 0.0054, 'structuralMigration' => 0.005, 'closed' => 0.0011, 'open' => 0.0079, 'populationShift' => 0.012],
                     'foreignBuyers' => ['inForce' => 0.15, 'next' => 0.15, 'expected' => null, 'priceEffect' => 0.06, 'revenueToGdp' => 0.00017, 'strictest' => 0.60],
                     'expectedFrom' => 'Year 17 Q2',
                 ],

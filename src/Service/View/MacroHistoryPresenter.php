@@ -39,7 +39,7 @@ final class MacroHistoryPresenter
         'wealth' => 'Markets and wealth',
         'supply' => 'Supply shocks',
         'external' => 'Mainland demand',
-        'capacity' => 'Capacity and inventories',
+        'capacity' => 'Pull to trend and capacity',
         'other' => 'Other',
     ];
 

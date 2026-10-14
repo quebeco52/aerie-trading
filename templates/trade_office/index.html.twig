@@ -62,7 +62,8 @@
 			<p class="text-xs text-on-surface-variant mt-0.5">Labour force growth a year, the newcomers the permits admit in it</p>
 			{{ _self.law_line(migration) }}
 			<p class="text-xs text-on-surface mt-4 max-w-3xl">
-				The District opened admitting enough newcomers for its labour force to grow <span class="font-mono tabular-nums">{{ migration.structural|pct(2) }}</span> a year.
+				The District's own people add <span class="font-mono tabular-nums">{{ migration.natural|pct(2) }}</span> to its labour force a year, whatever the permits say.
+				It opened admitting newcomers worth <span class="font-mono tabular-nums">{{ migration.structuralMigration|pct(2) }}</span> of the population a year on top, for a labour force growing <span class="font-mono tabular-nums">{{ migration.structural|pct(2) }}</span>.
 				The permits have added <span class="font-mono tabular-nums">{{ migration.populationShift|pct(1, true) }}</span> to the population since, against that path.
 			</p>
 			<p class="text-xs text-on-surface-variant mt-3 leading-relaxed">

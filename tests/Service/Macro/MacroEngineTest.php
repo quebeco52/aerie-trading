@@ -154,6 +154,14 @@ class MacroEngineTest extends TestCase
     }
 
     /** A productivity level shock opens a supply gap but leaves r* alone: it moves potential, not its trend growth (HLW's sigma_y*). */
+    /** Trend growth is the US's 1985-2019 potential: the labour force grows by its residents and the average party's newcomers. */
+    public function testTrendGrowthIsTheUsLongRunPotential(): void
+    {
+        $this->assertEqualsWithDelta(MacroEngine::NATURAL_LABOR_FORCE_GROWTH + MacroEngine::STRUCTURAL_NET_MIGRATION_RATE, MacroEngine::STRUCTURAL_LABOR_GROWTH_RATE, 1e-15);
+        $this->assertEqualsWithDelta(0.0104, MacroEngine::STRUCTURAL_LABOR_GROWTH_RATE, 1e-9, 'US civilian labour force growth, 1985-2019.');
+        $this->assertEqualsWithDelta(0.0258, MacroEngine::TREND_REAL_GROWTH, 0.0005, 'CBO potential output growth, 1985-2019.');
+    }
+
     public function testAProductivityLevelShockLeavesTheNaturalRateAlone(): void
     {
         $calm = ['natural_rate' => MacroEngine::BASE_NATURAL_RATE, 'tfp_shock_level' => 0.0];
@@ -1022,7 +1030,7 @@ class MacroEngineTest extends TestCase
         $expectedTfp = 100.0 * exp(MacroEngine::TFP_DRIFT * 0.25);
         $this->assertEqualsWithDelta($expectedTfp, $state->totalFactorProductivityIndex, 0.0001, 'TFP Index must compound with continuous secular drift.');
 
-        // Expected Potential GDP: 1.0 * exp((0.005 + 0.015) * 0.25) ~= 1.00501
+        // Expected Potential GDP: labour force plus output per worker, a quarter of the year's trend
         $expectedPotential = 1.0 * exp((MacroEngine::STRUCTURAL_LABOR_GROWTH_RATE + MacroEngine::TFP_DRIFT) * 0.25);
         $this->assertEqualsWithDelta($expectedPotential, $state->potentialGdpIndex, 0.0001, 'Potential GDP must grow by real labor + TFP growth.');
 
@@ -1188,13 +1196,15 @@ class MacroEngineTest extends TestCase
         $this->assertGreaterThan($lagQ1, $lagQ2, 'Sticky cost lag should accumulate and rise across successive quarters of elevated energy.');
     }
 
-    /** The latch is set from the premium as last observed, on the tick the rate is set, not a tick later. */
+    /** At a month end the latch is set from the month's premium, on the tick the rate is set, not a tick later. */
     public function testAStressedPremiumSpeedsTheSameTicksCut(): void
     {
         $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
         $run = function (float $premium): \App\DTO\MacroStateDTO {
             $this->redisMock = $this->createMock(\Redis::class);
-            $this->redisMock->method('get')->willReturn(json_encode(['policy_rate' => 0.06, 'excess_bond_premium' => $premium]));
+            // The last tick of a month, the premium held there all month.
+            $this->redisMock->method('get')->willReturn(json_encode(['policy_rate' => 0.06, 'excess_bond_premium' => $premium, 'total_time' => (1.0 / 12.0) - (1.0 / 360.0),
+                'excess_bond_premium_month_accrued' => $premium * ((1.0 / 12.0) - (1.0 / 360.0)), 'excess_bond_premium_month_elapsed' => (1.0 / 12.0) - (1.0 / 360.0)]));
             $engine = new MacroEngine($this->mathUtilityMock, $this->redisMock, $this->snapshotRecorder, $this->monetarySubsystem, $this->laborSubsystem,
                 $this->aggregateSubsystem, $this->commoditySubsystem, $this->assetSubsystem, $this->creditFiscalSubsystem);
 

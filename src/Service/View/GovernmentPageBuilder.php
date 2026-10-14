@@ -2010,6 +2010,8 @@ class GovernmentPageBuilder
             ],
             'migration' => $law('laborGrowth', $politics->laborForceGrowthRate) + [
                 'structural' => MacroEngine::STRUCTURAL_LABOR_GROWTH_RATE,
+                'natural' => MacroEngine::NATURAL_LABOR_FORCE_GROWTH,
+                'structuralMigration' => MacroEngine::STRUCTURAL_NET_MIGRATION_RATE,
                 'closed' => PoliticsEngine::MIGRATION_CLOSED_REGIME,
                 'open' => PoliticsEngine::MIGRATION_OPEN_REGIME,
                 'populationShift' => $macro->immigrationPopulationShift,

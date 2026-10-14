@@ -407,6 +407,8 @@ readonly class MacroStateDTO
         public float $debtTarget = CreditFiscalSubsystem::SOVEREIGN_DEBT_NEUTRAL_THRESHOLD,
         /** The Council's debt line, which caps the Diet's target. */
         public float $councilDebtLine = MacroEngine::SOVEREIGN_RISK_DEBT_THRESHOLD,
+        /** The debt anchor the budget in force plans against, phased toward the Diet's target at the consolidation pace; below zero before any plan has run (App\Service\Macro\Subsystem\CreditFiscalSubsystem::phaseDebtAnchor()). */
+        public float $debtAnchorInForce = -1.0,
         /** The rate committee's supermajority, 1 hawkish, -1 dovish, 0 neither (App\Service\Politics\MonetaryAuthority). */
         public float $authorityMajority = 0.0,
         /** 1 while politics hands the macro a rate committee, else 0: the policy rule reads the supermajority only then. */
@@ -445,6 +447,10 @@ readonly class MacroStateDTO
         public float $inflationEndpointGap = 0.0,
         /** 1 while financial stress (the excess bond premium) holds the Authority in its recession regime, where it cuts faster, else 0 (App\Service\Macro\Subsystem\MonetaryPolicySubsystem::updateStressRegime()). */
         public float $authorityStressRegime = 0.0,
+        /** The excess bond premium summed over the month so far, premium x years, that the stress latch reads at the month end. */
+        public float $excessBondPremiumMonthAccrued = 0.0,
+        /** Years of the month so far behind that sum. */
+        public float $excessBondPremiumMonthElapsed = 0.0,
         /** The CET1 requirement on the District's banks in force, as a share of risk-weighted assets, countercyclical buffer aside (App\Service\Politics\FinancialRegulator). */
         public float $bankCapitalRequirement = FinancialConstants::OPENING_BANK_CAPITAL_REQUIREMENT,
         /** The capital the banks have built so far against the requirement and the countercyclical buffer together, lagged by the years they take (App\Service\Macro\Subsystem\CreditFiscalSubsystem). */

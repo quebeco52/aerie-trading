@@ -49,7 +49,7 @@ final class OutputGapChannels
         'fiscal' => [
             'label' => 'Fiscal',
             'colour' => '#d95926',
-            'channels' => ['fiscalStimulus', 'fundStabilisation', 'automaticStabiliser'],
+            'channels' => ['fiscalStimulus', 'fundStabilisation'],
         ],
         'disturbance' => [
             'label' => 'Demand disturbance',
@@ -85,11 +85,14 @@ final class OutputGapChannels
             'colour' => '#9085e9',
             'channels' => ['netExports'],
         ],
+        // The gap's own pull back to trend (stabilisers and income smoothing) sits with its own momentum: both are demand
+        // answering the gap it is in, not a decision anyone took.
         'capacity' => [
-            'label' => 'Capacity & inventory',
+            'label' => 'Pull to trend & capacity',
             'colour' => '#e66767',
             'channels' => [
                 'momentum',
+                'automaticStabiliser',
                 'cubicConstraint',
                 'capitalDrag',
                 'inventoryDrag',

@@ -70,6 +70,8 @@ class CreditFiscalSubsystem
     public const BOHN_FISCAL_REACTION_SENSITIVITY = 0.10;
     /** Share of the Bohn surplus the budget raises by tax at the District's founding, the rest by cutting purchases: the average OECD deficit-cutting plan's, 0.69 of 1.83% of GDP (Alesina, Azzalini, Favero, Giavazzi & Miano 2018, Table 8; 16 countries, 1981-2014). */
     public const FOUNDING_CONSOLIDATION_TAX_SHARE = 0.69 / 1.83;
+    /** Structural adjustment a year a budget plan phases a new debt target in at: 0.5% of GDP, the benchmark of the EU's corrective path (Regulation (EU) 2024/1264, amending 1467/97). */
+    public const CONSOLIDATION_PACE = 0.005;
 
     // --- Sovereign Risk Premium (Laubach 2009) ---
     /** Long yield per unit of debt-to-GDP above the risk threshold: 3-4 bps per percentage point (Laubach 2009; Engen & Hubbard 2004), so 0.035 per unit. Laubach's deficit coefficient is for PROJECTED structural deficits; the engine's primary deficit is cyclical, so it is published but not priced. */
@@ -527,6 +529,7 @@ class CreditFiscalSubsystem
      */
     public function calculateDynamicFiscalPolicy(MacroState $state, float $dt): void
     {
+        self::phaseDebtAnchor($state, $dt);
         $stanceTarget = self::FOUNDING_NET_TAX_RATE + self::fiscalStance($state);
         $levies = self::publicAccounts($state, $dt)->policyLevies();
         $state->netTaxRate += MacroEngine::FISCAL_ADJUSTMENT_SPEED * ($stanceTarget - $levies + (self::FISCAL_STABILIZER_SENSITIVITY * $state->outputGapEma) - $state->netTaxRate) * $dt;
@@ -571,12 +574,38 @@ class CreditFiscalSubsystem
     }
 
     /**
-     * The gross debt the reaction steers to: the Diet's target, capped at the Council's line. The brake holds a budget
+     * The gross debt the law steers to: the Diet's target, capped at the Council's line. The brake holds a budget
      * that widens the deficit but not the reaction's own loosening, so a target above the line would carry debt past it.
+     */
+    public static function legislatedDebtAnchor(MacroState|MacroStateDTO $state): float
+    {
+        return min($state->debtTarget, $state->councilDebtLine);
+    }
+
+    /**
+     * The gross debt the budget in force plans against: the legislated anchor as the plan has phased it in so far, or the
+     * legislated anchor itself before any plan has run.
      */
     public static function debtAnchor(MacroState|MacroStateDTO $state): float
     {
-        return min($state->debtTarget, $state->councilDebtLine);
+        return $state->debtAnchorInForce >= 0.0 ? $state->debtAnchorInForce : self::legislatedDebtAnchor($state);
+    }
+
+    /**
+     * Phases a new debt target in as a budget plan does: the anchor moves so the surplus the reaction calls for changes by
+     * CONSOLIDATION_PACE of GDP a year, either way. A new government's target is a multi-year plan, not this year's
+     * budget, while debt itself moving still reaches the reaction at once (Bohn 1998).
+     */
+    public static function phaseDebtAnchor(MacroState $state, float $dt): void
+    {
+        $legislated = self::legislatedDebtAnchor($state);
+        if ($state->debtAnchorInForce < 0.0) {
+            $state->debtAnchorInForce = $legislated;
+
+            return;
+        }
+        $step = self::CONSOLIDATION_PACE / self::BOHN_FISCAL_REACTION_SENSITIVITY * $dt;
+        $state->debtAnchorInForce += max(-$step, min($step, $legislated - $state->debtAnchorInForce));
     }
 
     /**

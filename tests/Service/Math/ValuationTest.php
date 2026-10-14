@@ -312,9 +312,9 @@ class ValuationTest extends TestCase
     {
         $target = MacroEngine::TARGET_INFLATION;
 
-        self::assertEqualsWithDelta(0.02 + $target, Valuation::calculateExpectedNominalGrowth(0.02, 0.0, 1.0, $target, 0.09), 1e-12);
+        self::assertEqualsWithDelta(MacroEngine::TREND_REAL_GROWTH + $target, Valuation::calculateExpectedNominalGrowth(MacroEngine::TREND_REAL_GROWTH, 0.0, 1.0, $target, 0.09), 1e-12);
         // Above target too: no firm's priced growth loses real growth to inflation its earnings pass through.
-        self::assertEqualsWithDelta(0.02 + 0.04, Valuation::calculateExpectedNominalGrowth(0.02, 0.0, 1.0, 0.04, 0.09), 1e-12);
+        self::assertEqualsWithDelta(MacroEngine::TREND_REAL_GROWTH + 0.04, Valuation::calculateExpectedNominalGrowth(MacroEngine::TREND_REAL_GROWTH, 0.0, 1.0, 0.04, 0.09), 1e-12);
     }
 
     /** The flexible accelerator: demand growth plus a share of the log capital gap, never a negative build. */

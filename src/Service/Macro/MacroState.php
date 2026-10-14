@@ -445,6 +445,8 @@ class MacroState
     public float $dividendTaxRate;
     public float $debtTarget;
     public float $councilDebtLine;
+    // The debt anchor the budget in force plans against, phased toward the legislated one; below zero before any plan has run.
+    public float $debtAnchorInForce;
     // The Monetary Authority's rate committee: its supermajority, and whether politics hands one over at all.
     public float $authorityMajority;
     public float $authorityCommitteeSeated;
@@ -452,6 +454,9 @@ class MacroState
     public float $inflationEndpointGap;
     // 1 while the excess bond premium holds the Authority in its recession regime (entered at 1pp, left at its mean), else 0.
     public float $authorityStressRegime;
+    // The premium summed over this month's ticks (premium x years) and the years summed, for the monthly reading the latch takes.
+    public float $excessBondPremiumMonthAccrued;
+    public float $excessBondPremiumMonthElapsed;
     // The laws as the tax rate and the trailing year's earnings carry them, and the laws the sitting government's coming
     // budget and the next government's first will pass, by lever, this tick and the tick before.
     public float $corporateTaxShiftRealized;

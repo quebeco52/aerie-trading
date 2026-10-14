@@ -198,7 +198,7 @@ class PoliticsEngine
     // --- Platforms: Immigration (UN WPP via World Bank, 2000-2019) ---
     /** Net migration a closed immigration regime admits, a year as a share of population: Japan's 0.11% (World Bank SM.POP.NETM over SP.POP.TOTL, 2000-2019 mean). */
     public const MIGRATION_CLOSED_REGIME = 0.0011;
-    /** Net migration an open immigration regime admits: Canada's 0.73% and Australia's 0.86%, averaged (the same series). Between the two regimes sits the US's 0.50%, the structural labour growth the District's average party keeps. */
+    /** Net migration an open immigration regime admits: Canada's 0.73% and Australia's 0.86%, averaged (the same series). Between the two regimes sits the US's 0.50%, the rate the District's average party keeps (MacroEngine::STRUCTURAL_NET_MIGRATION_RATE). */
     public const MIGRATION_OPEN_REGIME = (0.00728 + 0.00859) / 2.0;
 
     // --- Platforms: Foreign Buyers of Homes (Singapore Additional Buyer's Stamp Duty) ---
@@ -217,11 +217,11 @@ class PoliticsEngine
     /** Share of the reserve fund's expected long-term real return the big-state end of the axis spends: 60%, the Workers' Party of Singapore's proposal to raise the Net Investment Returns Contribution from 50% (manifestos 2020 and 2025). The small-state end keeps the founding half (MacroEngine::RESERVE_DRAW_CEILING), which the fund must consent to any budget exceeding. */
     public const POLICY_BIG_STATE_RESERVE_DRAW_SHARE = 0.60;
 
-    // --- Platforms: The Debt Target (Sweden's debt anchor; the EU's excessive deficit procedure) ---
+    // --- Platforms: The Debt Target (Sweden's debt anchor; the EU's debt sustainability safeguard) ---
     /** Gross debt the small-state end of the axis steers the budget to: 35% of GDP, Sweden's debt anchor (the framework the Surplus Target Committee set out, SOU 2016:67, in force from 2019). */
     public const POLICY_SMALL_STATE_DEBT_TARGET = 0.35;
-    /** Gross debt the big-state end steers to: the 3% of GDP deficit ceiling of the EU's excessive deficit procedure (TFEU Protocol No 12) held at the District's trend nominal growth, debt = deficit / growth, the arithmetic that took the protocol's 3% to its 60% at the 5% nominal growth it assumed. */
-    public const POLICY_BIG_STATE_DEBT_TARGET = 0.03 / (MacroEngine::TREND_REAL_GROWTH + MacroEngine::TARGET_INFLATION);
+    /** Gross debt the big-state end steers to: 90% of GDP, the line above which the EU's 2024 rules require the debt ratio to fall at least 1pp a year (debt sustainability safeguard, Regulation (EU) 2024/1263, Art. 7). */
+    public const POLICY_BIG_STATE_DEBT_TARGET = 0.90;
 
     // --- Platforms: Who Pays to Cut the Debt (IFS 2010 General Election briefing) ---
     /** Gap between the shares of a deficit cut the big-state and small-state manifestos raise by tax: Labour's 2:1 ratio of spending cuts to tax rises (£24bn of £71bn) against the Conservatives' 4:1 (£14bn of £71bn), IFS, April 2010. Enacted plans show no partisan gap (deficit-cutting plans against ParlGov cabinets, 15 countries, 0.002 ± 0.018 a left-right point), so the gap is the manifestos'. */
@@ -459,9 +459,10 @@ class PoliticsEngine
             'publicSpending' => MacroEngine::PUBLIC_PURCHASES_TO_GDP * exp(self::POLICY_MANIFESTO_PUBLIC_SPENDING_LOG_GAP / 2.0 * $stateLean),
             'corporateTax' => self::POLICY_MANIFESTO_CORPORATE_TAX_GAP / 2.0 * $stateLean,
             'tariff' => self::POLICY_PROTECTIONIST_TARIFF * max(0.0, $openness / $closed),
-            // The District's average party keeps the structural rate; each end admits its own regime.
-            'laborGrowth' => MacroEngine::STRUCTURAL_LABOR_GROWTH_RATE
-                + ((($openness >= 0.0 ? self::MIGRATION_OPEN_REGIME : self::MIGRATION_CLOSED_REGIME) - MacroEngine::STRUCTURAL_LABOR_GROWTH_RATE) * ($openness >= 0.0 ? $openness / $open : $openness / $closed)),
+            // The resident population grows the labour force whatever the law; the average party admits the structural
+            // newcomers on top, and each end its own regime.
+            'laborGrowth' => MacroEngine::NATURAL_LABOR_FORCE_GROWTH + MacroEngine::STRUCTURAL_NET_MIGRATION_RATE
+                + ((($openness >= 0.0 ? self::MIGRATION_OPEN_REGIME : self::MIGRATION_CLOSED_REGIME) - MacroEngine::STRUCTURAL_NET_MIGRATION_RATE) * ($openness >= 0.0 ? $openness / $open : $openness / $closed)),
             'foreignBuyerTax' => self::POLICY_PROTECTIONIST_FOREIGN_BUYER_TAX * max(0.0, $openness / $closed),
             // The Common Lot's anti-cartel review is the 2023 guidelines, the Chartists' the 2010 ones
             // (App\Service\Corporate\MergerAndAcquisitionEngine::reviewScreens).

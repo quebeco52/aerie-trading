@@ -1567,12 +1567,40 @@ class MonetaryPolicySubsystemTest extends TestCase
         $state = new MacroState();
         $latch = [];
         foreach ([0.0104, 0.0080, 0.0079, 0.0125, 0.0107, -0.0009] as $premium) {
-            $state->excessBondPremium = $premium;
-            $this->subsystem->updateStressRegime($state);
+            $this->stepStressMonth($state, $premium);
             $latch[] = $state->authorityStressRegime;
         }
 
         $this->assertSame([1.0, 1.0, 1.0, 1.0, 1.0, 0.0], $latch);
+    }
+
+    /** The latch reads the month's average, as the monthly record does: a spike the month averages away does not set it. */
+    public function testTheStressLatchReadsTheMonthsAverageNotATick(): void
+    {
+        $state = new MacroState();
+        $ticks = 30;
+        for ($i = 0; $i < $ticks; $i++) {
+            // Three days at 2pp in a calm month: the average sits near 0.3pp, under the entry level.
+            $state->excessBondPremium = $i >= 10 && $i < 13 ? 0.02 : 0.001;
+            $state->totalTime += 1.0 / (12.0 * $ticks);
+            $this->subsystem->updateStressRegime($state, 1.0 / (12.0 * $ticks));
+            $this->assertSame(0.0, $state->authorityStressRegime, 'Nothing is set inside the month.');
+        }
+
+        $this->stepStressMonth($state, 0.0104);
+        $this->assertSame(1.0, $state->authorityStressRegime, 'A month averaging above the entry level sets it at the month end.');
+    }
+
+    /** Steps one simulated month of ticks with the premium held, so the latch takes one monthly reading. */
+    private function stepStressMonth(MacroState $state, float $premium): void
+    {
+        $ticks = 30;
+        $dt = 1.0 / (12.0 * $ticks);
+        for ($i = 0; $i < $ticks; $i++) {
+            $state->excessBondPremium = $premium;
+            $state->totalTime += $dt;
+            $this->subsystem->updateStressRegime($state, $dt);
+        }
     }
 
     public function testARecessionCutIsReported(): void

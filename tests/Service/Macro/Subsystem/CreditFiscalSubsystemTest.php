@@ -3003,4 +3003,47 @@ class CreditFiscalSubsystemTest extends TestCase
         $this->assertEqualsWithDelta($base->bankLevy, $economy->bankLevy, 1e-15, 'Read as a share of the GDP it is set against.');
         $this->assertSame($lines($base), $lines($economy), 'The economy-wide lines are shares of GDP already.');
     }
+
+    /** A new debt target is a multi-year plan: the reaction's surplus moves at the corrective path's 0.5% of GDP a year. */
+    public function testANewDebtTargetPhasesInAtTheConsolidationPace(): void
+    {
+        $state = new MacroState();
+        $state->debtTarget = 0.82;
+        $state->councilDebtLine = 1.0;
+        $state->sovereignDebtToGdp = 0.74;
+        CreditFiscalSubsystem::phaseDebtAnchor($state, 0.01);
+        $this->assertEqualsWithDelta(0.82, CreditFiscalSubsystem::debtAnchor($state), 1e-12, 'A state with no plan yet adopts the law at once.');
+
+        $state->debtTarget = 0.425;
+        $before = CreditFiscalSubsystem::bohnSurplus($state->sovereignDebtToGdp, CreditFiscalSubsystem::debtAnchor($state));
+        for ($i = 0; $i < 360; $i++) {
+            CreditFiscalSubsystem::phaseDebtAnchor($state, 1.0 / 360.0);
+        }
+        $after = CreditFiscalSubsystem::bohnSurplus($state->sovereignDebtToGdp, CreditFiscalSubsystem::debtAnchor($state));
+        $this->assertEqualsWithDelta(CreditFiscalSubsystem::CONSOLIDATION_PACE, $after - $before, 1e-9, 'A year in, the surplus has moved by the pace.');
+
+        for ($i = 0; $i < 360 * 10; $i++) {
+            CreditFiscalSubsystem::phaseDebtAnchor($state, 1.0 / 360.0);
+        }
+        $this->assertEqualsWithDelta(0.425, CreditFiscalSubsystem::debtAnchor($state), 1e-12, 'and the plan ends on the target, without passing it.');
+    }
+
+    /** The pace is per year, whatever the tick. */
+    public function testTheConsolidationPaceIsInvariantToTheTickRate(): void
+    {
+        $run = static function (int $ticksPerYear): float {
+            $state = new MacroState();
+            $state->debtTarget = 0.70;
+            $state->councilDebtLine = 1.0;
+            CreditFiscalSubsystem::phaseDebtAnchor($state, 1.0 / $ticksPerYear);
+            $state->debtTarget = 0.35;
+            for ($i = 0; $i < 2 * $ticksPerYear; $i++) {
+                CreditFiscalSubsystem::phaseDebtAnchor($state, 1.0 / $ticksPerYear);
+            }
+
+            return CreditFiscalSubsystem::debtAnchor($state);
+        };
+
+        $this->assertEqualsWithDelta($run(4), $run(360), 1e-12);
+    }
 }

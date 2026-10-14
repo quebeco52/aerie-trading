@@ -792,8 +792,8 @@ class PoliticsEngineTest extends TestCase
         $this->assertSame(0.0, $exchange['tariff']);
         $this->assertEqualsWithDelta(Politics::MIGRATION_OPEN_REGIME - Politics::MIGRATION_CLOSED_REGIME, $exchange['laborGrowth'] - $harbor['laborGrowth'], 1e-12, 'The two immigration regimes are a regime apart.');
         $this->assertEqualsWithDelta(MacroEngine::STRUCTURAL_LABOR_GROWTH_RATE, Politics::platform([Diet::AXIS_STATE => 0.0, Diet::AXIS_OPENNESS => 0.0])['laborGrowth'], 1e-12, 'A neutral government keeps the structural rate.');
-        $this->assertEqualsWithDelta(Politics::MIGRATION_CLOSED_REGIME, $harbor['laborGrowth'], 1e-12, 'The closed end admits Japan\'s regime.');
-        $this->assertEqualsWithDelta(Politics::MIGRATION_OPEN_REGIME, $exchange['laborGrowth'], 1e-12, 'The open end admits Canada\'s and Australia\'s.');
+        $this->assertEqualsWithDelta(MacroEngine::NATURAL_LABOR_FORCE_GROWTH + Politics::MIGRATION_CLOSED_REGIME, $harbor['laborGrowth'], 1e-12, 'The closed end admits Japan\'s regime on top of natural growth.');
+        $this->assertEqualsWithDelta(MacroEngine::NATURAL_LABOR_FORCE_GROWTH + Politics::MIGRATION_OPEN_REGIME, $exchange['laborGrowth'], 1e-12, 'The open end admits Canada\'s and Australia\'s.');
     }
 
     /**
@@ -1248,14 +1248,16 @@ class PoliticsEngineTest extends TestCase
 
     /**
      * Each government steers debt to its own side's rule: the small-state end to Sweden's 35% anchor, the big-state end
-     * to the EU's 3% deficit ceiling held at trend nominal growth, the District's average party to the founding 70%. It
-     * is no revenue the Council guards: its line caps the target the economy is handed instead.
+     * to the EU's 90% safeguard line, the District's average party to the founding 70%, so the axis runs low to high
+     * whatever the trend growth. It is no revenue the Council guards: its line caps the target the economy is handed instead.
      */
-    public function testTheDebtTargetRunsFromSwedensAnchorToTheEuDeficitCeiling(): void
+    public function testTheDebtTargetRunsFromSwedensAnchorToTheEuSafeguardLine(): void
     {
         $this->assertEqualsWithDelta(0.35, Politics::platform(Diet::position(Diet::VANGUARD, []))['debtTarget'], 1e-12);
-        $this->assertEqualsWithDelta(0.75, Politics::platform(Diet::position(Diet::CIVIC, []))['debtTarget'], 1e-12, '3% over 4% trend nominal growth.');
+        $this->assertEqualsWithDelta(0.90, Politics::platform(Diet::position(Diet::CIVIC, []))['debtTarget'], 1e-12, 'The EU\'s safeguard line.');
         $this->assertEqualsWithDelta(CreditFiscalSubsystem::SOVEREIGN_DEBT_NEUTRAL_THRESHOLD, Politics::platform([Diet::AXIS_STATE => 0.0])['debtTarget'], 1e-12);
+        $this->assertGreaterThan(CreditFiscalSubsystem::SOVEREIGN_DEBT_NEUTRAL_THRESHOLD, Politics::POLICY_BIG_STATE_DEBT_TARGET, 'The big state tolerates more debt than the centre.');
+        $this->assertLessThan(CreditFiscalSubsystem::SOVEREIGN_DEBT_NEUTRAL_THRESHOLD, Politics::POLICY_SMALL_STATE_DEBT_TARGET);
         $this->assertFalse(Politics::REVENUE_LEVERS['debtTarget']);
         $this->assertSame(Diet::AXIS_STATE, Politics::LEVER_AXES['debtTarget']);
 

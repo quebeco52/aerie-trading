@@ -229,12 +229,16 @@ class MacroEngine
     // --- SOLOW-SWAN TOTAL FACTOR PRODUCTIVITY (TFP) ---
     /** Baseline index value for Total Factor Productivity (neutral technology baseline). */
     public const TFP_BASELINE = 100.0;
-    /** Secular annual drift rate of continuous technological progress. */
+    /** Trend growth of output per worker: US potential output 2.58% a year (CBO GDPPOT) less the labour force's 1.04% (CLF16OV), 1985-2019. */
     public const TFP_DRIFT = 0.015;
     /** Structural lower bound floor for annual TFP growth rate. */
     public const MIN_TFP_GROWTH_RATE = -0.030;
-    /** Structural baseline demographic and labor force growth rate. */
-    public const STRUCTURAL_LABOR_GROWTH_RATE = 0.005;
+    /** Labour-force growth from the resident population: the US labour force's 1.04% a year (CLF16OV, 1985-2019) less the US net migration rate. */
+    public const NATURAL_LABOR_FORCE_GROWTH = 0.0054;
+    /** Net migration the District's average party admits, a year as a share of population: the US's 0.50% (World Bank SM.POP.NETM over SP.POP.TOTL, 2000-2019 mean). */
+    public const STRUCTURAL_NET_MIGRATION_RATE = 0.0050;
+    /** Labour-force growth at the average party's migration regime: natural growth plus its newcomers, the US's 1.04% a year. */
+    public const STRUCTURAL_LABOR_GROWTH_RATE = self::NATURAL_LABOR_FORCE_GROWTH + self::STRUCTURAL_NET_MIGRATION_RATE;
     /** Trend real growth of potential output: labour force plus productivity, the pace a sector with no secular story grows at. */
     public const TREND_REAL_GROWTH = self::TFP_DRIFT + self::STRUCTURAL_LABOR_GROWTH_RATE;
 
@@ -603,8 +607,8 @@ class MacroEngine
         // 5. Taylor (1993) monetary policy target and Clarida-Gali-Gertler (2000) rate inertia.
         $state->targetRate = $this->monetarySubsystem->calculateTargetRate($state, self::TARGET_INFLATION, $state->naturalRate, $dt);
         $clampedTarget = max(self::EFFECTIVE_LOWER_BOUND, min(self::POLICY_RATE_CEILING, $state->targetRate));
-        // Aastveit et al. (2024): cuts run faster in the recession regime, read off the Sahm rule and the premium as last observed.
-        $this->monetarySubsystem->updateStressRegime($state);
+        // Aastveit et al. (2024): cuts run faster in the recession regime, read off the Sahm rule and the premium's last monthly reading.
+        $this->monetarySubsystem->updateStressRegime($state, $dt);
         $state->policyRate = $this->monetarySubsystem->updatePolicyRate($state, $clampedTarget, $dt);
 
         // 6. Central bank balance sheet unconventional QE/QT operations (Bernanke & Reinhart 2004).
