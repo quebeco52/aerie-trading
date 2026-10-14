@@ -13,29 +13,59 @@ class MacroTransmissionTest extends TestCase
 {
     public function testCalculateGscpiComposite(): void
     {
-        // Baseline shipping conditions
-        $neutralGscpi = MacroTransmission::calculateGscpiComposite(
-            freightRateIndex: 100.0,
-            inventoryStockGap: 0.0,
-            industrialMetalsIndex: 100.0
+        $neutral = MacroTransmission::calculateGscpiComposite(
+            freightRateIndex: MacroTransmission::GSCPI_FREIGHT_MEAN,
+            inventoryStockGap: MacroTransmission::GSCPI_INVENTORY_GAP_MEAN,
+            supplierDeliveryTimes: MacroTransmission::GSCPI_DELIVERY_MEAN,
+            freightDemandGap: 0.0,
+            inventoryDemandGap: 0.0,
+            deliveryDemandGap: 0.0
         );
-        $this->assertEqualsWithDelta(0.0, $neutralGscpi, 0.0001, 'Baseline freight and logistics must yield 0 GSCPI.');
+        $this->assertEqualsWithDelta(MacroTransmission::GSCPI_NORMAL_TIMES_MEAN, $neutral, 1e-12, 'Inputs at their centres read as normal times in published units.');
 
-        // Global supply chain bottleneck crisis (freight +150, inventory stock shortage -0.05, metals +50)
-        $bottleneckGscpi = MacroTransmission::calculateGscpiComposite(
-            freightRateIndex: 250.0,
-            inventoryStockGap: -0.05,
-            industrialMetalsIndex: 150.0
-        );
-        $this->assertGreaterThan(2.0, $bottleneckGscpi, 'Severe supply chain congestion must yield high positive GSCPI index.');
+        $bottleneck = MacroTransmission::calculateGscpiComposite(freightRateIndex: 250.0, inventoryStockGap: -0.05, supplierDeliveryTimes: 65.0, freightDemandGap: 0.0, inventoryDemandGap: 0.0, deliveryDemandGap: 0.0);
+        $this->assertGreaterThan(2.0, $bottleneck, 'Dear freight, thin stocks and slow deliveries read as high pressure.');
 
-        // Slack logistics capacity (freight 70, inventory glut +0.05, metals 80)
-        $slackGscpi = MacroTransmission::calculateGscpiComposite(
-            freightRateIndex: 70.0,
-            inventoryStockGap: 0.05,
-            industrialMetalsIndex: 80.0
+        $slack = MacroTransmission::calculateGscpiComposite(freightRateIndex: 70.0, inventoryStockGap: 0.05, supplierDeliveryTimes: 45.0, freightDemandGap: 0.0, inventoryDemandGap: 0.0, deliveryDemandGap: 0.0);
+        $this->assertLessThan(MacroTransmission::GSCPI_NORMAL_TIMES_MEAN, $slack, 'Cheap freight, full stocks and fast deliveries read as slack.');
+    }
+
+    /**
+     * The index is supply friction with demand purged, as the GSCPI regresses its inputs on new orders: a demand gap
+     * that moves each input by exactly its fitted beta reads no pressure at all.
+     */
+    public function testAPureDemandMoveReadsNoSupplyPressure(): void
+    {
+        $gap = 0.03;
+        $demandOnly = MacroTransmission::calculateGscpiComposite(
+            freightRateIndex: MacroTransmission::GSCPI_FREIGHT_MEAN + (MacroTransmission::GSCPI_FREIGHT_DEMAND_BETA * $gap * MacroTransmission::GSCPI_FREIGHT_SD),
+            inventoryStockGap: MacroTransmission::GSCPI_INVENTORY_GAP_MEAN - (MacroTransmission::GSCPI_INVENTORY_DEMAND_BETA * $gap * MacroTransmission::GSCPI_INVENTORY_GAP_SD),
+            supplierDeliveryTimes: MacroTransmission::GSCPI_DELIVERY_MEAN + (MacroTransmission::GSCPI_DELIVERY_DEMAND_BETA * $gap * MacroTransmission::GSCPI_DELIVERY_SD),
+            freightDemandGap: $gap,
+            inventoryDemandGap: $gap,
+            deliveryDemandGap: $gap
         );
-        $this->assertLessThan(0.0, $slackGscpi, 'Excess shipping capacity and loose inventories must yield negative GSCPI index.');
+
+        $this->assertEqualsWithDelta(MacroTransmission::GSCPI_NORMAL_TIMES_MEAN, $demandOnly, 1e-9);
+    }
+
+    /** One freight doubling adds the composite's own points-per-doubling, which core goods inflation is priced on. */
+    public function testPointsPerFreightDoublingMatchesTheComposite(): void
+    {
+        $base = MacroTransmission::calculateGscpiComposite(MacroEngine::FREIGHT_BASELINE, MacroTransmission::GSCPI_INVENTORY_GAP_MEAN, MacroTransmission::GSCPI_DELIVERY_MEAN, 0.0, 0.0, 0.0);
+        $doubled = MacroTransmission::calculateGscpiComposite(2.0 * MacroEngine::FREIGHT_BASELINE, MacroTransmission::GSCPI_INVENTORY_GAP_MEAN, MacroTransmission::GSCPI_DELIVERY_MEAN, 0.0, 0.0, 0.0);
+
+        $this->assertEqualsWithDelta(MacroTransmission::GSCPI_POINTS_PER_FREIGHT_DOUBLING, $doubled - $base, 1e-9);
+    }
+
+    /** Kingman (1961): the wait in a G/G/1 queue scales with rho / (1 - rho), convex as utilization nears capacity. */
+    public function testKingmanCongestionIsConvexInUtilization(): void
+    {
+        $this->assertEqualsWithDelta(1.0, MacroTransmission::kingmanCongestion(0.5), 1e-12);
+        $this->assertEqualsWithDelta(9.0, MacroTransmission::kingmanCongestion(0.9), 1e-12);
+        $lowStep = MacroTransmission::kingmanCongestion(0.80) - MacroTransmission::kingmanCongestion(0.75);
+        $highStep = MacroTransmission::kingmanCongestion(0.90) - MacroTransmission::kingmanCongestion(0.85);
+        $this->assertGreaterThan($lowStep, $highStep);
     }
 
     public function testCalculateCapitalMarketsDealIndexStep(): void

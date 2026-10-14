@@ -164,6 +164,16 @@ class CommodityLogisticsSubsystem
     /** Stochastic volatility of spot charter market fluctuations. */
     public const FREIGHT_VOLATILITY = 0.25;
 
+    // --- Suppliers' Delivery Times (ISM Supplier Deliveries; Kingman 1961) ---
+    /** Delivery-index points per log unit of factory congestion rho / (1 - rho) in capacity utilization: factory and shipping congestion carry equal variance in the simulation (16 seeds x 30 years). */
+    public const DELIVERY_FACTORY_LOADING = 12.55;
+    /** Delivery-index points per log unit of seaborne demand over fleet capacity: ISM deliveries hit 78.8 in May 2021 with container freight 4.3x its 2019 average (Drewry WCI), a tightness of 4.3^(1/2) at the charter market's inelasticity. */
+    public const DELIVERY_SHIPPING_LOADING = (78.8 - MacroEngine::SUPPLIER_DELIVERIES_NEUTRAL) / (1.4586 / self::FREIGHT_CAPACITY_INELASTICITY);
+    /** Annual mean reversion of the delivery index toward its congestion target. */
+    public const DELIVERY_REVERSION_KAPPA = 6.0;
+    /** Stationary sd of the delivery index around its congestion target, in index points. */
+    public const DELIVERY_STATIONARY_SD = 2.0;
+
     // --- 3:2:1 Refining Crack Spread (EIA Gulf Coast gasoline & ULSD vs WTI, monthly 2010-2024) ---
     /** Annual mean reversion of the de-seasonalised log crack: its monthly autocorrelation of 0.889 is kappa = -12 ln 0.889 (half-life ~6 months). */
     public const CRACK_SPREAD_KAPPA = 1.41;
@@ -554,18 +564,12 @@ class CommodityLogisticsSubsystem
      */
     public function calculateFreightRateIndex(MacroState $state, float $dt): void
     {
-        $metalsShift = ($state->industrialMetalsIndexEma - MacroEngine::METALS_BASELINE) / 100.0;
-        $demandFactor = 1.0 + ($state->globalDemandGapEma * self::FREIGHT_DEMAND_GAP_SENSITIVITY) + ($metalsShift * self::FREIGHT_DEMAND_METALS_SENSITIVITY);
-        $demand = MacroEngine::FREIGHT_BASELINE * max(0.20, $demandFactor);
-
         $profitabilityRatio = max(0.10, $state->freightRateIndexEma / MacroEngine::FREIGHT_BASELINE);
         $targetSupply = MacroEngine::FREIGHT_BASELINE * pow($profitabilityRatio, self::FREIGHT_SUPPLY_ORDER_ELASTICITY);
 
         $slowEmaWeight = 1.0 - exp(-$dt / self::FREIGHT_SUPPLY_LAG_YEARS);
         $state->freightSupplyEma += $slowEmaWeight * ($targetSupply - $state->freightSupplyEma);
-        $supply = max(20.0, $state->freightSupplyEma);
-
-        $utilization = $demand / $supply;
+        $utilization = self::shippingTightness($state);
         $equilibriumRate = MacroEngine::FREIGHT_BASELINE * pow($utilization, self::FREIGHT_CAPACITY_INELASTICITY);
 
         $dW = $this->mathUtility->generateStandardNormal();
@@ -579,6 +583,43 @@ class CommodityLogisticsSubsystem
         );
 
         $state->freightRateIndex = max(20.0, min(500.0, $newFreight));
+    }
+
+    /** Seaborne trade demand over the fleet in service: the utilization the charter market clears on. */
+    public static function shippingTightness(MacroState $state): float
+    {
+        $metalsShift = ($state->industrialMetalsIndexEma - MacroEngine::METALS_BASELINE) / 100.0;
+        $demandFactor = 1.0 + ($state->globalDemandGapEma * self::FREIGHT_DEMAND_GAP_SENSITIVITY) + ($metalsShift * self::FREIGHT_DEMAND_METALS_SENSITIVITY);
+        $demand = MacroEngine::FREIGHT_BASELINE * max(0.20, $demandFactor);
+
+        return $demand / max(20.0, $state->freightSupplyEma);
+    }
+
+    /**
+     * Suppliers' delivery times, an ISM-style diffusion index (50 = no change). Lead time is a queue: factory
+     * congestion follows Kingman's rho / (1 - rho) in capacity utilization, and shipping congestion the fleet's
+     * tightness. The index reverts to that target with its own noise.
+     */
+    public function calculateSupplierDeliveryTimes(MacroState $state, float $dt): void
+    {
+        $target = self::supplierDeliveryTarget($state->capacityUtilizationRate, self::shippingTightness($state));
+        $state->supplierDeliveryTimes = $target + StochasticProcesses::calculateOrnsteinUhlenbeckStep(
+            $state->supplierDeliveryTimes - $target,
+            self::DELIVERY_REVERSION_KAPPA,
+            self::DELIVERY_STATIONARY_SD,
+            $dt,
+            $this->mathUtility->generateStandardNormal()
+        );
+    }
+
+    /** The delivery-times reading congestion alone implies: neutral at baseline utilization and a balanced fleet. */
+    public static function supplierDeliveryTarget(float $capacityUtilization, float $shippingTightness): float
+    {
+        $factoryCongestion = log(MacroTransmission::kingmanCongestion($capacityUtilization) / MacroTransmission::kingmanCongestion(MacroEngine::CU_BASELINE));
+
+        return MacroEngine::SUPPLIER_DELIVERIES_NEUTRAL
+            + (self::DELIVERY_FACTORY_LOADING * $factoryCongestion)
+            + (self::DELIVERY_SHIPPING_LOADING * log(max(0.01, $shippingTightness)));
     }
 
     /**
@@ -627,12 +668,14 @@ class CommodityLogisticsSubsystem
      */
     public function calculateSupplyChainPressureIndex(MacroState $state): void
     {
+        // Monthly readings, as the GSCPI is built: the inputs are this tick's, each purged on the demand it answers to.
         $state->supplyChainPressureIndex = MacroTransmission::calculateGscpiComposite(
-            freightRateIndex: $state->freightRateIndexEma,
-            inventoryStockGap: $state->inventoryStockGapEma,
-            industrialMetalsIndex: $state->industrialMetalsIndexEma,
-            freightBase: MacroEngine::FREIGHT_BASELINE,
-            metalsBase: MacroEngine::METALS_BASELINE
+            freightRateIndex: $state->freightRateIndex,
+            inventoryStockGap: $state->inventoryStockGap,
+            supplierDeliveryTimes: $state->supplierDeliveryTimes,
+            freightDemandGap: $state->globalDemandGapEma,
+            inventoryDemandGap: $state->domesticDemandGapEma,
+            deliveryDemandGap: $state->outputGapEma
         );
     }
 }

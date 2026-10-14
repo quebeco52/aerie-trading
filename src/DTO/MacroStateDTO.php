@@ -296,6 +296,8 @@ readonly class MacroStateDTO
         public float $sloosTighteningIndexEma = 0.0,
         public float $supplyChainPressureIndex = 0.0,
         public float $supplyChainPressureIndexEma = 0.0,
+        public float $supplierDeliveryTimes = MacroEngine::SUPPLIER_DELIVERIES_NEUTRAL,
+        public float $supplierDeliveryTimesEma = MacroEngine::SUPPLIER_DELIVERIES_NEUTRAL,
         public float $refiningCrackSpread = MacroEngine::CRACK_SPREAD_BASELINE,
         public float $refiningCrackSpreadEma = MacroEngine::CRACK_SPREAD_BASELINE,
         public float $dealActivityIndex = MacroEngine::DEAL_ACTIVITY_BASELINE,

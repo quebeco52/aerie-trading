@@ -2148,20 +2148,20 @@ class MacroAggregateSubsystemTest extends TestCase
 
     /**
      * Supply-chain pressure is a cost LEVEL of landed goods (Carriere-Swallow et al. 2023): pressure that builds lifts
-     * the core goods price level once, by the loading, and pressure that stays high -- freight and metals parked above
-     * their baselines, the composite's quarter average caught up -- adds no standing inflation.
+     * the core goods price level once, by the loading, and pressure that stays high -- freight parked at double its
+     * baseline, the composite's quarter average caught up -- adds no standing inflation.
      */
     public function testPersistentSupplyChainPressureAddsNoStandingCoreGoodsInflation(): void
     {
         $calm = $this->neutralBorrowingState();
         $calm->wageGrowth = MacroEngine::TFP_DRIFT + MacroEngine::TARGET_INFLATION;
+        $doubling = MacroAggregateSubsystem::SUPPLY_CHAIN_POINTS_PER_FREIGHT_DOUBLING;
         $parked = clone $calm;
         $parked->freightRateIndexEma = 2.0 * MacroEngine::FREIGHT_BASELINE;
-        $parked->industrialMetalsIndexEma = 1.5 * MacroEngine::METALS_BASELINE;
-        $parked->supplyChainPressureIndex = 2.0;
-        $parked->supplyChainPressureIndexEma = 2.0;
+        $parked->supplyChainPressureIndex = $doubling;
+        $parked->supplyChainPressureIndexEma = $doubling;
         $building = clone $calm;
-        $building->supplyChainPressureIndex = 2.0;
+        $building->supplyChainPressureIndex = $doubling;
 
         $dt = 0.01;
         $levelGap = 0.0;
@@ -2174,7 +2174,7 @@ class MacroAggregateSubsystemTest extends TestCase
             $building->supplyChainPressureIndexEma += (1.0 - exp(-$dt / MacroAggregateSubsystem::STANDARD_EMA_HORIZON_YEARS)) * ($building->supplyChainPressureIndex - $building->supplyChainPressureIndexEma);
         }
 
-        $this->assertEqualsWithDelta(2.0 * MacroAggregateSubsystem::CORE_GOODS_SUPPLY_CHAIN_LEVEL_LOADING, $levelGap, 1e-4, 'A freight doubling lifts core goods prices 2.8%, once.');
+        $this->assertEqualsWithDelta(MacroAggregateSubsystem::FREIGHT_DOUBLING_HEADLINE_EFFECT / MacroAggregateSubsystem::INFLATION_WEIGHT_GOODS, $levelGap, 1e-4, 'A freight doubling lifts core goods prices by its headline effect over the goods weight, once, whatever the composite\'s scale.');
         $this->assertEqualsWithDelta(0.0, $building->coreGoodsInflation - $calm->coreGoodsInflation, 1e-4, 'and then inflation is back where it was.');
     }
 
@@ -2248,7 +2248,7 @@ class MacroAggregateSubsystemTest extends TestCase
         $state->industrialMetalsIndexTrend = $state->industrialMetalsIndex;
         $state->energyPriceIndexTrend = $state->energyPriceIndex;
         $state->agriculturalCommodityIndexTrend = $state->agriculturalCommodityIndex;
-        $state->supplyChainPressureIndex = 0.0;
+        $state->supplyChainPressureIndex = \App\Service\Math\MacroTransmission::GSCPI_NORMAL_TIMES_MEAN;
         $state->outputGap = 0.0;
         $state->wageGrowth = MacroEngine::TARGET_INFLATION + $tfpGrowth;
         $state->tipsBreakeven = MacroEngine::TARGET_INFLATION;

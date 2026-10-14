@@ -289,8 +289,8 @@ class MacroAggregateSubsystem
     // --- Supply-Chain Costs in Core Goods (Carriere-Swallow, Deb, Furceri, Jimenez & Ostry 2023) ---
     /** Headline price level a year after container freight rates double: ~0.7pp, peaking at twelve months (IMF blog, March 2022, on the paper's local projections). */
     public const FREIGHT_DOUBLING_HEADLINE_EFFECT = 0.007;
-    /** Supply-chain pressure points a doubling of freight adds to the composite: half its weight on freight, 25 index points to a point (MacroTransmission::calculateGscpiComposite). */
-    public const SUPPLY_CHAIN_POINTS_PER_FREIGHT_DOUBLING = 2.0;
+    /** Supply-chain pressure points a doubling of freight adds to the composite (MacroTransmission::calculateGscpiComposite). */
+    public const SUPPLY_CHAIN_POINTS_PER_FREIGHT_DOUBLING = MacroTransmission::GSCPI_POINTS_PER_FREIGHT_DOUBLING;
     /** Log core goods price level per point of smoothed supply-chain pressure (1.4%): the freight effect carried wholly by the goods basket. */
     public const CORE_GOODS_SUPPLY_CHAIN_LEVEL_LOADING = self::FREIGHT_DOUBLING_HEADLINE_EFFECT / self::INFLATION_WEIGHT_GOODS / self::SUPPLY_CHAIN_POINTS_PER_FREIGHT_DOUBLING;
 
@@ -1304,6 +1304,7 @@ class MacroAggregateSubsystem
         $state->corporateDefaultRateEma += $emaWeight * ($state->corporateDefaultRate - $state->corporateDefaultRateEma);
         $state->sloosTighteningIndexEma += $emaWeight * ($state->sloosTighteningIndex - $state->sloosTighteningIndexEma);
         $state->supplyChainPressureIndexEma += $emaWeight * ($state->supplyChainPressureIndex - $state->supplyChainPressureIndexEma);
+        $state->supplierDeliveryTimesEma += $emaWeight * ($state->supplierDeliveryTimes - $state->supplierDeliveryTimesEma);
         $state->refiningCrackSpreadEma += $emaWeight * ($state->refiningCrackSpread - $state->refiningCrackSpreadEma);
         $state->dealActivityIndexEma += $emaWeight * ($state->dealActivityIndex - $state->dealActivityIndexEma);
 
@@ -1458,7 +1459,8 @@ class MacroAggregateSubsystem
             metalsInflation: $this->commodityInflation($state->industrialMetalsIndex, $state->industrialMetalsIndexTrend, self::PPI_METALS_PASS_THROUGH),
             energyInflation: $this->commodityInflation($state->energyPriceIndex, $state->energyPriceIndexTrend, self::PPI_ENERGY_PASS_THROUGH),
             agriInflation: $this->commodityInflation($state->agriculturalCommodityIndex, $state->agriculturalCommodityIndexTrend, self::PPI_AGRI_PASS_THROUGH),
-            gscpiZ: $state->supplyChainPressureIndex,
+            // Pressure against normal times: the GSCPI's zero is its pandemic-inclusive mean, which 1998-2019 sat below.
+            gscpiZ: $state->supplyChainPressureIndex - MacroTransmission::GSCPI_NORMAL_TIMES_MEAN,
             unitLaborCost: $unitLaborCost,
             otherCostInflation: $state->tipsBreakeven,
             outputGap: $state->outputGap,

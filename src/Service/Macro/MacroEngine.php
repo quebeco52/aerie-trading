@@ -303,6 +303,8 @@ class MacroEngine
     // --- NY Fed Global Supply Chain Pressure Index (GSCPI - Benigno et al. 2022) ---
     /** Neutral baseline index for GSCPI composite (standard deviations). */
     public const GSCPI_BASELINE = 0.0;
+    /** Neutral reading of the suppliers' delivery-times diffusion index (ISM convention: 50 = no change, above = slower). */
+    public const SUPPLIER_DELIVERIES_NEUTRAL = 50.0;
 
     // --- 3:2:1 Refining Crack Spread & Distillate Margins (Bourgeon et al. 1998) ---
     /** Baseline long-run equilibrium refining crack spread in $/bbl. */
@@ -660,6 +662,7 @@ class MacroEngine
         $this->commoditySubsystem->calculateAgriculturalCommodityIndex($state, $dt);
         $this->commoditySubsystem->calculateCatastropheLosses($state, $dt);
         $this->commoditySubsystem->calculateFreightRateIndex($state, $dt);
+        $this->commoditySubsystem->calculateSupplierDeliveryTimes($state, $dt);
         $this->commoditySubsystem->calculateSupplyChainPressureIndex($state);
         $this->assetSubsystem->calculateResidentialPropertyIndex($state, $expectedInflation, $dt);
         $this->assetSubsystem->calculateHousingStarts($state, $expectedInflation, $dt);

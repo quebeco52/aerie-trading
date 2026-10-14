@@ -5,6 +5,7 @@ namespace App\Tests\Service\Macro\Subsystem;
 use App\Service\Macro\MacroEngine;
 use App\Service\Macro\MacroState;
 use App\Service\Macro\Subsystem\CommodityLogisticsSubsystem;
+use App\Service\Math\MacroTransmission;
 use App\Service\Math\MathUtility;
 use App\Service\Math\StochasticProcesses;
 use PHPUnit\Framework\TestCase;
@@ -234,22 +235,55 @@ class CommodityLogisticsSubsystemTest extends TestCase
     public function testCalculateSupplyChainPressureIndex(): void
     {
         $stateNeutral = new MacroState();
-        $stateNeutral->freightRateIndexEma = 100.0;
-        $stateNeutral->inventoryStockGapEma = 0.0;
-        $stateNeutral->industrialMetalsIndexEma = 100.0;
+        $stateNeutral->freightRateIndex = MacroTransmission::GSCPI_FREIGHT_MEAN;
+        $stateNeutral->inventoryStockGap = MacroTransmission::GSCPI_INVENTORY_GAP_MEAN;
+        $stateNeutral->supplierDeliveryTimes = MacroTransmission::GSCPI_DELIVERY_MEAN;
+        $stateNeutral->outputGapEma = 0.0;
+        $stateNeutral->globalDemandGapEma = 0.0;
+        $stateNeutral->domesticDemandGapEma = 0.0;
 
         $this->subsystem->calculateSupplyChainPressureIndex($stateNeutral);
-        $this->assertEqualsWithDelta(0.0, $stateNeutral->supplyChainPressureIndex, 0.0001);
+        $this->assertEqualsWithDelta(MacroTransmission::GSCPI_NORMAL_TIMES_MEAN, $stateNeutral->supplyChainPressureIndex, 0.0001);
 
-        $stateChoked = new MacroState();
-        $stateChoked->freightRateIndexEma = 220.0; // Huge ocean freight spike
-        $stateChoked->inventoryStockGapEma = -0.04; // Severe inventory depletion
-        $stateChoked->industrialMetalsIndexEma = 140.0;
+        $stateChoked = clone $stateNeutral;
+        $stateChoked->freightRateIndex = 220.0; // Huge ocean freight spike
+        $stateChoked->inventoryStockGap = -0.04; // Severe inventory depletion
+        $stateChoked->supplierDeliveryTimes = 65.0; // Suppliers far behind
 
         $this->subsystem->calculateSupplyChainPressureIndex($stateChoked);
         $this->assertGreaterThan(1.5, $stateChoked->supplyChainPressureIndex, 'Logistics bottlenecks must generate positive GSCPI stress.');
     }
 
+    /** Delivery times read neutral at baseline utilization and a balanced fleet, and slow as either congests. */
+    public function testSupplierDeliveryTargetIsNeutralAtBaselineAndRisesWithCongestion(): void
+    {
+        $neutral = CommodityLogisticsSubsystem::supplierDeliveryTarget(MacroEngine::CU_BASELINE, 1.0);
+        $this->assertEqualsWithDelta(MacroEngine::SUPPLIER_DELIVERIES_NEUTRAL, $neutral, 1e-12);
+
+        $this->assertGreaterThan($neutral, CommodityLogisticsSubsystem::supplierDeliveryTarget(0.85, 1.0), 'busier factories quote longer lead times');
+        $this->assertGreaterThan($neutral, CommodityLogisticsSubsystem::supplierDeliveryTarget(MacroEngine::CU_BASELINE, 1.2), 'a tight fleet slows deliveries');
+        $this->assertLessThan($neutral, CommodityLogisticsSubsystem::supplierDeliveryTarget(0.70, 0.9));
+    }
+
+    /** With no noise the index closes on its congestion target at the reversion speed. */
+    public function testSupplierDeliveryTimesRevertToTheirTarget(): void
+    {
+        $math = $this->createStub(MathUtility::class);
+        $math->method('generateStandardNormal')->willReturn(0.0);
+        $subsystem = new CommodityLogisticsSubsystem($math);
+
+        $state = new MacroState();
+        $state->capacityUtilizationRate = MacroEngine::CU_BASELINE;
+        $state->globalDemandGapEma = 0.0;
+        $state->industrialMetalsIndexEma = MacroEngine::METALS_BASELINE;
+        $state->freightSupplyEma = MacroEngine::FREIGHT_BASELINE;
+        $state->supplierDeliveryTimes = 60.0;
+
+        $subsystem->calculateSupplierDeliveryTimes($state, 0.25);
+
+        $expected = MacroEngine::SUPPLIER_DELIVERIES_NEUTRAL + (10.0 * exp(-CommodityLogisticsSubsystem::DELIVERY_REVERSION_KAPPA * 0.25));
+        $this->assertEqualsWithDelta($expected, $state->supplierDeliveryTimes, 1e-9);
+    }
 
     // --- Natural Gas ---
 

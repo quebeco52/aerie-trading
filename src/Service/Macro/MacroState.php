@@ -306,6 +306,8 @@ class MacroState
 
     public float $supplyChainPressureIndex;
     public float $supplyChainPressureIndexEma;
+    public float $supplierDeliveryTimes;
+    public float $supplierDeliveryTimesEma;
 
     public float $refiningCrackSpread;
     public float $refiningCrackSpreadEma;
