@@ -53,5 +53,7 @@ readonly class ActualFinancialsDTO
         public float $sectorShockZ = 0.0,
         /** Dollar write-down of long-lived assets from the model's own impairment test (ASC 360-10). */
         public float $plantImpairment = 0.0,
+        /** Change in the variable cost ratio from the last calendar quarter's season to this one: a known mix shift analysts build in, not a surprise. */
+        public float $seasonalCostRatioShift = 0.0,
     ) {}
 }

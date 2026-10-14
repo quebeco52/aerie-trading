@@ -13,7 +13,8 @@ use App\Service\Math\MathUtility;
 interface OperatingStrategyInterface
 {
     public function getTargetMetrics(Stock $stock, MacroStateDTO $macroState, MathUtility $mathUtility): array;
-    public function computeActualFinancials(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, MacroStateDTO $macroState, MathUtility $mathUtility): ActualFinancialsDTO;
+    /** @param int|null $calendarQuarter Calendar quarter [0..3] the report covers; null when the call is not a report. */
+    public function computeActualFinancials(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, MacroStateDTO $macroState, MathUtility $mathUtility, ?int $calendarQuarter = null): ActualFinancialsDTO;
 
     /**
      * How far each macro input moved each revenue stream this quarter, measured by re-running the stream physics

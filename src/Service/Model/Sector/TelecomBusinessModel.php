@@ -27,6 +27,8 @@ use App\Service\Math\FinancialConstants;
  *   forward, churn wars erode it and promotional gross adds defend it at a subscriber acquisition cost.
  * - Bond Proxies: long-dated network bonds roll slowly, so rate shocks reach interest expense with a lag (DebtEngine).
  * - Generational CapEx: spectrum auctions commit a licence outlay of a quarter of annual revenue, queued as CIP.
+ * - Devices at a loss: handsets are sold below cost and carry the holiday upgrade season; plan revenue is flat
+ *   through the year, so the Q4 device peak lowers the quarter's margin.
  */
 class TelecomBusinessModel extends StandardCorporateBusinessModel
 {
@@ -48,14 +50,36 @@ class TelecomBusinessModel extends StandardCorporateBusinessModel
     /** Wireless carriers hold real pricing power on a captive base; network power and handset costs are partly recovered. */
     public const PRICING_POWER_INDEX = 0.30;
 
+    // --- Device Upgrade Season ---
+    /** Wireless equipment revenue by calendar quarter [Q1, Q2, Q3, Q4], mean 1.0 (Verizon 2022-23 10-Q/10-K): the holiday upgrade peak. */
+    public const EQUIPMENT_SEASONALITY = [0.94, 0.92, 0.96, 1.18];
+
     /**
-     * Calendar-quarter revenue seasonality [Q1, Q2, Q3, Q4] summing to 4.0: Q4 holiday device upgrades and equipment sales.
+     * Calendar-quarter revenue seasonality [Q1, Q2, Q3, Q4] summing to 4.0: the device season on the default
+     * equipment share; plan revenue does not move with the calendar.
      *
      * @return array<int, float>
      */
     public function getSeasonalityFactors(): array
     {
-        return [0.97, 0.98, 1.00, 1.05];
+        return self::blendDeviceSeason(self::EQUIPMENT_WEIGHT / (self::SUBSCRIPTION_WEIGHT + self::EQUIPMENT_WEIGHT));
+    }
+
+    /** @return array<int, float> */
+    public function resolveSeasonalityFactors(Stock $stock): array
+    {
+        return self::blendDeviceSeason($this->resolveEquipmentShare($stock));
+    }
+
+    /**
+     * The firm-level season of a revenue mix whose equipment share follows EQUIPMENT_SEASONALITY and whose
+     * plan revenue is flat.
+     *
+     * @return array<int, float>
+     */
+    private static function blendDeviceSeason(float $equipmentShare): array
+    {
+        return array_map(static fn (float $season): float => 1.0 + ($equipmentShare * ($season - 1.0)), self::EQUIPMENT_SEASONALITY);
     }
 
     // --- Balance Sheet Realism ---
@@ -90,10 +114,20 @@ class TelecomBusinessModel extends StandardCorporateBusinessModel
     } // Lumpy spectrum and fiber rollout cycles
 
     // --- Dual-Stream Architecture ---
-    /** Baseline fraction of revenue derived from recurring network subscriptions (Wireless, Broadband). */
-    public const SUBSCRIPTION_WEIGHT = 0.85;
-    /** Baseline fraction of revenue derived from hardware (Smartphones, Routers) and B2B enterprise setups. */
-    public const EQUIPMENT_WEIGHT    = 0.15;
+    /** Baseline fraction of revenue from service plans (wireless, fibre broadband): Verizon 2024 10-K, 83%. */
+    public const SUBSCRIPTION_WEIGHT = 0.83;
+    /** Baseline fraction of revenue from handsets, routers and other devices: Verizon 2024 10-K, 17%. */
+    public const EQUIPMENT_WEIGHT    = 0.17;
+
+    // --- Stream Cost Structure ---
+    /** Cost of wireless equipment over wireless equipment revenue (Verizon 10-K 2022-24: 1.10-1.12): devices are sold below cost to win the plan. */
+    public const EQUIPMENT_VARIABLE_COST_RATIO = 1.12;
+
+    // --- Cycle Sensitivities ---
+    /** ARPU response to the output gap per unit of cyclicality: plan downgrades on a base that keeps its lines. */
+    public const ARPU_CYCLE_SENSITIVITY = 0.20;
+    /** Device volume response to the output gap per unit of cyclicality: upgrades are deferred in a downturn. */
+    public const EQUIPMENT_CYCLE_SENSITIVITY = 1.50;
 
     // --- Physics & Variances ---
     public const EQUIPMENT_VARIANCE_SCALAR    = 0.30; // Highly cyclical (hardware upgrades get delayed in recessions)
@@ -107,10 +141,6 @@ class TelecomBusinessModel extends StandardCorporateBusinessModel
     public const GROSS_ADDS_VARIANCE_SCALAR = 1.50;
     /** Extra quarterly churn per unit of unemployment above the natural rate (0.10 = +10bps of churn per point of excess unemployment): involuntary disconnects and non-payment rise with job losses. */
     public const UNEMPLOYMENT_CHURN_SENSITIVITY = 0.10;
-    /** Floor on the subscriber index after sustained churn wars. */
-    public const MIN_SUBSCRIBER_INDEX = 0.50;
-    /** Ceiling on the subscriber index within a saturated market. */
-    public const MAX_SUBSCRIBER_INDEX = 1.50;
 
     // --- The Churn & Price War Physics ---
     /** Margin cost per unit of gross adds above the replacement rate (device subsidies, marketing, dealer commissions). */
@@ -140,6 +170,12 @@ class TelecomBusinessModel extends StandardCorporateBusinessModel
     /** Quarterly share of the fixed-rate bond stock that matures and reprices (~8-year average tenor). */
     public const DEBT_MATURITY_ROLLOVER_RATE = 0.03;
 
+    // --- Analyst Read of the Quarter ---
+    /** Share of the subscriber move the market reads off the reported net adds. */
+    public const NET_ADDS_VISIBILITY = 0.90;
+    /** Share of the device-sales shock the market reads before the report (retail channel checks). */
+    public const EQUIPMENT_VISIBILITY = 0.40;
+
     public function getMacroPhysics(Stock $stock, MacroStateDTO $macroState): array
     {
         $physics = parent::getMacroPhysics($stock, $macroState);
@@ -158,22 +194,25 @@ class TelecomBusinessModel extends StandardCorporateBusinessModel
      */
     public function resolveSectorActivityShift(Stock $stock, MacroStateDTO $macroState): float
     {
+        return $this->resolveEquipmentShare($stock) * $this->resolveEquipmentVolumeShift($stock, $macroState);
+    }
+
+    /** The firm's target equipment share of revenue. */
+    private function resolveEquipmentShare(Stock $stock): float
+    {
         $params = $this->resolveModelParameters($stock, [
             ModelParam::SubscriptionWeight->value => self::SUBSCRIPTION_WEIGHT,
             ModelParam::EquipmentWeight->value    => self::EQUIPMENT_WEIGHT,
         ]);
         $totalWeight = $params[ModelParam::SubscriptionWeight] + $params[ModelParam::EquipmentWeight];
-        if ($totalWeight <= 0.0) {
-            return 0.0;
-        }
 
-        return ($params[ModelParam::EquipmentWeight] / $totalWeight) * $this->resolveEquipmentVolumeShift($stock, $macroState);
+        return $totalWeight > 0.0 ? $params[ModelParam::EquipmentWeight] / $totalWeight : 0.0;
     }
 
-    /** Handset and router upgrades are deferred in a downturn: the output gap at 1.5x the firm's cyclicality. */
+    /** Handset and router upgrades are deferred in a downturn. */
     private function resolveEquipmentVolumeShift(Stock $stock, MacroStateDTO $macroState): float
     {
-        return $macroState->outputGapEma * 1.5 * $this->getOperatingCyclicality($stock);
+        return $macroState->outputGapEma * self::EQUIPMENT_CYCLE_SENSITIVITY * $this->getOperatingCyclicality($stock);
     }
 
     protected function calculateSectorPhysics(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, MacroStateDTO $macroState, MathUtility $mathUtility): SectorPhysicsResult
@@ -205,8 +244,8 @@ class TelecomBusinessModel extends StandardCorporateBusinessModel
         $eventZ        = $streams->generateExogenousZ('event', 0.10);
 
         // --- Macro Demand Sensitivities ---
-        // Subscriptions are highly defensive (0.2x multiplier). Equipment is highly cyclical (1.5x multiplier).
-        $macroDefensiveShift = $macroState->outputGapEma * 0.2 * $beta;
+        // Subscriptions are defensive; device purchases are deferred in a downturn.
+        $macroDefensiveShift = $macroState->outputGapEma * self::ARPU_CYCLE_SENSITIVITY * $beta;
         $macroCyclicalShift  = $this->resolveEquipmentVolumeShift($stock, $macroState);
 
         // --- Event Tail Risks ---
@@ -238,14 +277,21 @@ class TelecomBusinessModel extends StandardCorporateBusinessModel
         $grossAddsRate = max(0.0, self::BASE_QUARTERLY_CHURN
             * (1.0 + ($subscriptionZ * $baselineVol * self::GROSS_ADDS_VARIANCE_SCALAR))
             * ($inPriceWar ? (1.0 + self::PRICE_WAR_GROSS_ADDS_RESPONSE) : 1.0));
-        $subscribers = max(self::MIN_SUBSCRIBER_INDEX, min(self::MAX_SUBSCRIBER_INDEX, ($openingSubscribers * (1.0 - $churnRate)) + $grossAddsRate));
+        $subscribers = ($openingSubscribers * (1.0 - $churnRate)) + $grossAddsRate;
         $streams->registerState(self::STATE_SUBSCRIBER_INDEX, $subscribers);
 
         $arpuMultiplier = (1.0 + $macroDefensiveShift) * ($inPriceWar ? (1.0 - self::PRICE_WAR_ARPU_DISCOUNT) : 1.0);
 
-        // --- Clamped Dual-Stream Revenue Calculation ---
-        $subscriptionRevenue = max(0.0, $expectedRevenue * $subscriptionWeight * $subscribers * $arpuMultiplier);
-        $equipmentRevenue    = max(0.0, $expectedRevenue * $equipmentWeight * (1.0 + ($equipmentZ * $baselineVol * self::EQUIPMENT_VARIANCE_SCALAR) + $macroCyclicalShift));
+        // --- Dual-Stream Revenue ---
+        // Expected revenue carries the firm-level season the engine applied; plan revenue is flat through the
+        // year, so the season is taken back out of it and the whole swing is placed on device sales.
+        $quarter = $this->reportedCalendarQuarter();
+        $firmSeason = $quarter !== null ? $this->resolveSeasonalityFactors($stock)[$quarter] : 1.0;
+        $deviceSeason = $quarter !== null ? self::EQUIPMENT_SEASONALITY[$quarter] : 1.0;
+        $subscriptionVolume = $expectedRevenue * $subscriptionWeight * $subscribers / $firmSeason;
+        $subscriptionRevenue = max(0.0, $subscriptionVolume * $arpuMultiplier);
+        $equipmentRevenue    = max(0.0, $expectedRevenue * $equipmentWeight * $deviceSeason / $firmSeason
+            * (1.0 + ($equipmentZ * $baselineVol * self::EQUIPMENT_VARIANCE_SCALAR) + $macroCyclicalShift));
 
         $streamRevenues = [
             'wireless_subscriptions' => $subscriptionRevenue,
@@ -257,6 +303,19 @@ class TelecomBusinessModel extends StandardCorporateBusinessModel
 
         // --- Cost & Margin Physics ---
 
+        // Devices carry their own cost ratio; plans take the residual that reproduces the engine's cost ratio at
+        // the target mix, so a device-heavy quarter costs more per dollar of revenue. Plan costs follow lines
+        // carried, not the ARPU charged on them.
+        $equipmentCosts = $equipmentWeight * self::EQUIPMENT_VARIABLE_COST_RATIO;
+        $equipmentCostScale = $equipmentCosts > $realizedVariableMargin && $equipmentCosts > 0.0 ? $realizedVariableMargin / $equipmentCosts : 1.0;
+        $equipmentCostRatio = self::EQUIPMENT_VARIABLE_COST_RATIO * $equipmentCostScale;
+        $subscriptionCostRatio = $subscriptionWeight > 0.0 ? max(0.0, $realizedVariableMargin - ($equipmentCosts * $equipmentCostScale)) / $subscriptionWeight : 0.0;
+        $actualVariableCosts = ($subscriptionVolume * $subscriptionCostRatio) + ($equipmentRevenue * $equipmentCostRatio);
+        $effectiveMargin = $actualRevenue > 0.0 ? $actualVariableCosts / $actualRevenue : $realizedVariableMargin;
+        $seasonalCostRatio = static fn (int $q): float => (($subscriptionWeight * $subscriptionCostRatio) + ($equipmentWeight * self::EQUIPMENT_SEASONALITY[$q] * $equipmentCostRatio))
+            / max(0.01, $subscriptionWeight + ($equipmentWeight * self::EQUIPMENT_SEASONALITY[$q]));
+        $seasonalCostRatioShift = $quarter !== null ? $seasonalCostRatio($quarter) - $seasonalCostRatio(($quarter + 3) % 4) : 0.0;
+
         // 1. Subscriber Acquisition Cost: every gross add costs subsidy, marketing and dealer commission
         //    dollars, so growth and churn replacement alike compress margin relative to the replacement rate.
         $sacDrag = self::SUBSCRIBER_ACQUISITION_COST_ELASTICITY * (($grossAddsRate / self::BASE_QUARTERLY_CHURN) - 1.0) * $subscriptionWeight;
@@ -266,7 +325,7 @@ class TelecomBusinessModel extends StandardCorporateBusinessModel
         // getDebtMaturityRolloverRate), never as an operating margin drag. Interest sits below EBIT.
         // Network power, handset procurement and field payroll reach the cost base at spot; annual plan hikes recover part of it.
         $inputCostDrag = $this->resolveInputCostDrag($stock, $macroState, $streams, $this->resolvePricingPower($stock), $realizedVariableMargin);
-        $rawMargin = $realizedVariableMargin + $priceWarPenalty + $sacDrag + $inputCostDrag;
+        $rawMargin = $effectiveMargin + $priceWarPenalty + $sacDrag + $inputCostDrag;
         $clampedMargin = $this->clampMargin($rawMargin);
 
         // Primary shock is whichever stream deviated the most, overridden by tail events
@@ -274,8 +333,8 @@ class TelecomBusinessModel extends StandardCorporateBusinessModel
 
         // Net adds are reported every quarter and tracked closely; equipment sales carry standard retail visibility.
         $subscriberMove = ($subscribers / max(0.01, $openingSubscribers)) - 1.0;
-        $observableShockZ = ($subscriberMove * $subscriptionWeight * 0.90) +
-            ($equipmentZ * $equipmentWeight * self::EQUIPMENT_VARIANCE_SCALAR * 0.40 * $baselineVol);
+        $observableShockZ = ($subscriberMove * $subscriptionWeight * self::NET_ADDS_VISIBILITY) +
+            ($equipmentZ * $equipmentWeight * self::EQUIPMENT_VARIANCE_SCALAR * self::EQUIPMENT_VISIBILITY * $baselineVol);
 
         return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,
@@ -287,6 +346,7 @@ class TelecomBusinessModel extends StandardCorporateBusinessModel
             streamZ: $streams->getStreamZ(),
             streamRevenue: $streamRevenues,
             scheduledCapex: $scheduledCapex,
+            seasonalCostRatioShift: $seasonalCostRatioShift,
             kpis: [
                 'subscriber_index' => $subscribers,
                 'quarterly_churn'  => $churnRate,

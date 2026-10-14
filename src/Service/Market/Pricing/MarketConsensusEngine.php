@@ -150,10 +150,11 @@ class MarketConsensusEngine
         $analystUnbiasedRevenue = $analystExpectedRevenue;
         $analystExpectedRevenue *= (1.0 - self::ANALYST_WALKDOWN_BIAS);
 
-        // Analyst cost ratio expectation: anchor on last reported ratio and incorporate visible systematic cost shifts.
+        // Analyst cost ratio expectation: anchor on last reported ratio, rolled to this quarter's known seasonal mix,
+        // and incorporate visible systematic cost shifts.
         $priorCostRatio = $stock->getLastReportedCostRatio();
         $anchorCostRatio = $priorCostRatio !== null
-            ? (float) $priorCostRatio
+            ? (float) $priorCostRatio + $actuals->seasonalCostRatioShift
             : ($expectedVariableMargin ?? $actuals->clampedMargin);
 
         $expectedCostRatio = $anchorCostRatio

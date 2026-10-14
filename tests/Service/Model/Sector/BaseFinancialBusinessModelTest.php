@@ -40,7 +40,7 @@ class BaseFinancialBusinessModelTest extends TestCase
                 return new \App\DTO\SectorPhysicsResult($expectedRevenue, $realizedVariableMargin, $fixedCosts, $baselineVol);
             }
 
-            public function computeActualFinancials(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, \App\DTO\MacroStateDTO $macroState, \App\Service\Math\MathUtility $mathUtility): \App\DTO\ActualFinancialsDTO
+            public function computeActualFinancials(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, \App\DTO\MacroStateDTO $macroState, \App\Service\Math\MathUtility $mathUtility, ?int $calendarQuarter = null): \App\DTO\ActualFinancialsDTO
             {
                 return new \App\DTO\ActualFinancialsDTO(100.0, 50.0, 20.0, 30.0, 30.0, 30.0);
             }

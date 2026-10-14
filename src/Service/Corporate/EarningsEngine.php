@@ -1108,7 +1108,8 @@ class EarningsEngine
             $ctx->fixedCosts,
             $ctx->baselineVol,
             $ctx->macroState,
-            $this->mathUtility
+            $this->mathUtility,
+            $ctx->calendarQuarter
         );
         $this->attributeMacroDrivers($ctx, $streamBasis, $this->mathUtility->endDrawLog(), $actuals->streamRevenue);
         $ctx->actualRevenue = $actuals->actualRevenue;

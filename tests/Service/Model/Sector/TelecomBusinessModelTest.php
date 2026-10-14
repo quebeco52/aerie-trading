@@ -52,10 +52,64 @@ class TelecomBusinessModelTest extends TestCase
         $this->assertArrayHasKey('wireless_subscriptions', $result->streamRevenue);
         $this->assertArrayHasKey('equipment_sales', $result->streamRevenue);
 
-        // Baseline: 85M subscriptions, 15M equipment
-        $this->assertEqualsWithDelta(85_000_000.0, $result->streamRevenue['wireless_subscriptions'], 1.0);
-        $this->assertEqualsWithDelta(15_000_000.0, $result->streamRevenue['equipment_sales'], 1.0);
+        $this->assertEqualsWithDelta(100_000_000.0 * TelecomBusinessModel::SUBSCRIPTION_WEIGHT, $result->streamRevenue['wireless_subscriptions'], 1.0);
+        $this->assertEqualsWithDelta(100_000_000.0 * TelecomBusinessModel::EQUIPMENT_WEIGHT, $result->streamRevenue['equipment_sales'], 1.0);
         $this->assertEqualsWithDelta(100_000_000.0, $result->actualRevenue, 1.0);
+        // At the target mix the stream cost split reproduces the engine's cost ratio exactly.
+        $this->assertEqualsWithDelta(0.45, $result->clampedMargin, 1e-9);
+    }
+
+    /**
+     * Plan revenue does not follow the calendar; the holiday upgrade season is device sales. The engine
+     * applies the blended factor to expected revenue, and the physics must hand the whole swing to equipment.
+     */
+    public function testTheUpgradeSeasonMovesDeviceSalesAndLeavesPlanRevenueFlat(): void
+    {
+        $stock = (new Stock())->setTicker('TEL')->setBeta('0.8');
+        $factors = $this->model->resolveSeasonalityFactors($stock);
+        $this->assertEqualsWithDelta(4.0, array_sum($factors), 1e-9);
+        $this->assertEqualsWithDelta(4.0, array_sum(TelecomBusinessModel::EQUIPMENT_SEASONALITY), 1e-9);
+
+        $math = $this->createStub(MathUtility::class);
+        $math->method('generatePersistentZ')->willReturn(0.0);
+        $macro = new MacroStateDTO(outputGapEma: 0.0, inflationEma: 0.02);
+
+        $plans = [];
+        foreach ([0, 1, 2, 3] as $quarter) {
+            $result = $this->model->computeActualFinancials((new Stock())->setTicker('TEL')->setBeta('0.8'), 100_000_000.0 * $factors[$quarter], 0.45, 20_000_000.0, 0.0, $macro, $math, $quarter);
+            $plans[] = $result->streamRevenue['wireless_subscriptions'];
+            $this->assertEqualsWithDelta(100_000_000.0 * $factors[$quarter], $result->actualRevenue, 1e-3, 'The physics keeps the engine\'s seasonal revenue level.');
+            $this->assertEqualsWithDelta(100_000_000.0 * TelecomBusinessModel::EQUIPMENT_WEIGHT * TelecomBusinessModel::EQUIPMENT_SEASONALITY[$quarter], $result->streamRevenue['equipment_sales'], 1e-3);
+        }
+        $this->assertEqualsWithDelta(0.0, max($plans) - min($plans), 1e-3);
+    }
+
+    /**
+     * Devices are sold below cost (Verizon: cost of equipment 1.10-1.12x equipment revenue), so the Q4 device
+     * peak raises the variable cost ratio, and analysts are told the seasonal shift rather than surprised by it.
+     */
+    public function testDevicesAreSoldAtALossSoTheHolidayQuarterRunsAHigherCostRatioThatAnalystsAnticipate(): void
+    {
+        $stock = (new Stock())->setTicker('TEL')->setBeta('0.8');
+        $factors = $this->model->resolveSeasonalityFactors($stock);
+        $math = $this->createStub(MathUtility::class);
+        $math->method('generatePersistentZ')->willReturn(0.0);
+        $macro = new MacroStateDTO(outputGapEma: 0.0, inflationEma: 0.02);
+
+        $run = fn (int $quarter) => $this->model->computeActualFinancials((new Stock())->setTicker('TEL')->setBeta('0.8'), 100_000_000.0 * $factors[$quarter], 0.30, 20_000_000.0, 0.0, $macro, $math, $quarter);
+        $q3 = $run(2);
+        $q4 = $run(3);
+        $q1 = $run(0);
+
+        $this->assertGreaterThan($q3->clampedMargin, $q4->clampedMargin);
+        $this->assertLessThan($q4->clampedMargin, $q1->clampedMargin);
+        $this->assertEqualsWithDelta($q4->clampedMargin - $q3->clampedMargin, $q4->seasonalCostRatioShift, 1e-9);
+        $this->assertEqualsWithDelta($q1->clampedMargin - $q4->clampedMargin, $q1->seasonalCostRatioShift, 1e-9);
+
+        // An extra dollar of device sales costs more than a dollar: the device stream loses money at the margin.
+        $deviceCostDelta = ($q4->actualVariableCosts - $q3->actualVariableCosts);
+        $deviceRevenueDelta = ($q4->streamRevenue['equipment_sales'] - $q3->streamRevenue['equipment_sales']);
+        $this->assertGreaterThan($deviceRevenueDelta, $deviceCostDelta);
     }
 
     public function testPriceWarFatTailEventTriggersMarginPenalty(): void
@@ -241,8 +295,8 @@ class TelecomBusinessModelTest extends TestCase
 
         $this->assertEqualsWithDelta(0.0, $this->model->getMacroPhysics($stock, $recession)['macro_demand_shift'], 1e-12);
 
-        // Equipment 0.15 x (1.5 x 0.60 x -0.03); the ARPU downgrade on subscriptions is price and stays out.
-        $expected = TelecomBusinessModel::EQUIPMENT_WEIGHT * (1.5 * TelecomBusinessModel::OPERATING_CYCLICALITY * -0.03);
+        // Equipment share x (device sensitivity x cyclicality x gap); the ARPU downgrade on subscriptions is price and stays out.
+        $expected = TelecomBusinessModel::EQUIPMENT_WEIGHT * (TelecomBusinessModel::EQUIPMENT_CYCLE_SENSITIVITY * TelecomBusinessModel::OPERATING_CYCLICALITY * -0.03);
         $this->assertEqualsWithDelta($expected, $this->model->resolveSectorActivityShift($stock, $recession), 1e-9);
     }
 }

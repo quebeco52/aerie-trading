@@ -595,18 +595,18 @@ class InitialMarket
             'beta_tilt' => 0.00,
             'jump_intensity' => 0.40,
             'jump_vol' => 0.09,
-            'baseline_roic' => 0.12,
-            'capex_ratio' => 0.55,
-            'target_payout_ratio' => 0.75,
+            'baseline_roic' => 0.09, // Verizon 2024: NOPAT over debt plus equity
+            'capex_ratio' => 0.16, // reinvestment = real sector growth / ROIC
+            'target_payout_ratio' => 0.63, // Verizon 2024: $11.2bn dividends on $17.9bn net income
             'dividendSpeed' => self::LINTNER_QUARTERLY_ADJUSTMENT_SPEED,
-            'fixed_cost_ratio' => 0.80,
-            'operating_margin' => 0.30,
+            'fixed_cost_ratio' => 0.75, // Verizon 2024: device cost is 25% of operating costs
+            'operating_margin' => 0.21, // Verizon 2024 10-K: 21.3%
             'public_float' => 0.98,
             'sam_ratio' => 0.375,
             'floating_debt_ratio' => 0.10,
             'historical_fixed_rate' => 0.040,
             'credit_spread' => 0.0050,
-            'depreciation_rate' => 0.10,
+            'depreciation_rate' => 0.068, // Verizon 2024: D&A over net plant plus spectrum licences
             'corporate_treasury' => 8_000_000_000.00,
             'total_equity' => 65_000_000_000.00,
             'customer_deposits' => 0.00,

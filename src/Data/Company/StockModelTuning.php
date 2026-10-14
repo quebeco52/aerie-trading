@@ -830,10 +830,10 @@ class StockModelTuning
         ],
 
         // --- Loon Call Telecom (LOON) ---
-        // Regional telecom & fiber carrier. Skewed toward recurring wireless/broadband subscriptions (80%) with equipment sales (20%).
+        // The District's largest mobile and fibre carrier: service plans 83%, devices 17% (Verizon 2024 mix).
         'LOON' => [
-            ModelParam::SubscriptionWeight->value => 0.80,
-            ModelParam::EquipmentWeight->value    => 0.20,
+            ModelParam::SubscriptionWeight->value => 0.83,
+            ModelParam::EquipmentWeight->value    => 0.17,
         ],
 
         // --- Cormorant Environmental (CORM) ---

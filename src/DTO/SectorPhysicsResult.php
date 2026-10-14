@@ -48,6 +48,8 @@ readonly class SectorPhysicsResult
         public float $priceRevenue = 0.0,
         /** Dollar write-down of long-lived assets the model's own impairment test found this quarter (a builder's land, ASC 360-10). */
         public float $plantImpairment = 0.0,
+        /** Change in the variable cost ratio from the last calendar quarter's season to this one: a known mix shift analysts build in, not a surprise. */
+        public float $seasonalCostRatioShift = 0.0,
     ) {
     }
 }

@@ -169,6 +169,27 @@ final class ConsensusCostBaseVisibilityTest extends TestCase
         $this->assertEqualsWithDelta($allVolume * 0.5, $halfPriced, 1.0);
     }
 
+    /**
+     * A cost ratio that moves with the calendar (devices sold at a loss in the holiday quarter) is a known mix
+     * shift: the anchor rolls to this quarter's season, so the seasonal move is not a miss.
+     */
+    public function testAKnownSeasonalCostShiftIsInTheEstimate(): void
+    {
+        $lastQuarter = 0.60;
+        $shift = 0.03;
+        $actuals = new ActualFinancialsDTO(
+            actualRevenue: self::REVENUE,
+            actualVariableCosts: self::REVENUE * ($lastQuarter + $shift),
+            clampedMargin: $lastQuarter + $shift,
+            ebit: 0.0,
+            primaryShockZ: 0.0,
+            observableShockZ: 0.0,
+            seasonalCostRatioShift: $shift,
+        );
+
+        $this->assertEqualsWithDelta(self::REVENUE * ($lastQuarter + $shift), $this->expectedCosts($actuals, $this->makeStock($lastQuarter)), 1.0);
+    }
+
     /** Before a firm has ever reported there is no anchor, and the ex-ante ratio stands in for one. */
     public function testFirstReportFallsBackToTheExAnteRatio(): void
     {

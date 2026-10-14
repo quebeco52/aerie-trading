@@ -19,6 +19,18 @@ use App\Service\Math\TimeSeries;
 
 trait StandardOperatingPhysicsTrait
 {
+    /** Calendar quarter [0..3] of the report in progress, as the engine keys its seasonality; null outside a report. */
+    private ?int $reportedCalendarQuarter = null;
+
+    /**
+     * The calendar quarter the physics call in progress reports, so a model can place a season on one stream
+     * while the engine carries the firm-level factor. Set by computeActualFinancials for each call.
+     */
+    protected function reportedCalendarQuarter(): ?int
+    {
+        return $this->reportedCalendarQuarter;
+    }
+
     /** A sector with no measured demand drift grows with the economy. */
     public function getSecularGrowthRate(Stock $stock): float
     {
@@ -712,10 +724,11 @@ trait StandardOperatingPhysicsTrait
         return $effects;
     }
 
-    public function computeActualFinancials(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, MacroStateDTO $macroState, MathUtility $mathUtility): ActualFinancialsDTO
+    public function computeActualFinancials(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, MacroStateDTO $macroState, MathUtility $mathUtility, ?int $calendarQuarter = null): ActualFinancialsDTO
     {
         // Discard any context a forecast built earlier; only the one this physics call builds is read.
         $this->takeActiveStreamContext();
+        $this->reportedCalendarQuarter = $calendarQuarter;
         $physics = $this->calculateSectorPhysics($stock, $expectedRevenue, $realizedVariableMargin, $fixedCosts, $baselineVol, $macroState, $mathUtility);
         [$demandShockZ, $sectorShockZ] = $this->demandShockSplit($physics, $this->takeActiveStreamContext());
 
@@ -747,6 +760,7 @@ trait StandardOperatingPhysicsTrait
             demandShockZ: $demandShockZ,
             sectorShockZ: $sectorShockZ,
             plantImpairment: $physics->plantImpairment,
+            seasonalCostRatioShift: $physics->seasonalCostRatioShift,
         );
     }
 
