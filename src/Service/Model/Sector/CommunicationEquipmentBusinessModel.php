@@ -30,7 +30,9 @@ use App\Service\Math\FinancialConstants;
  *   to handset shipments rather than carrier budgets. A major licensee can withhold royalties for several
  *   quarters (Qualcomm/Apple 2017-19); settlement recovers most of the arrears as a catch-up payment.
  * - Consumer Terminals: broadband gateways and IoT modules ride the consumer channel and the inventory cycle.
- * - Component Supply: a fab shortage slips deliveries into the backlog and taxes margin with expedited sourcing.
+ * - Component Supply: a fab shortage slips deliveries into the backlog. It strikes when the firm's own supply
+ *   stress plus the economy-wide supply-chain pressure index crosses a threshold, so shortages cluster in
+ *   supply-chain crises (2021-22) and stay rare in calm ones; the expediting cost is the index's margin drag.
  */
 class CommunicationEquipmentBusinessModel extends StandardCorporateBusinessModel
 {
@@ -129,10 +131,8 @@ class CommunicationEquipmentBusinessModel extends StandardCorporateBusinessModel
     public const MAX_WITHHELD_ROYALTY_QUARTERS = 4.0;
 
     // --- Component Supply ---
-    /** Negative z-score threshold indicating a severe semiconductor fab shortage. */
+    /** Supply-stress threshold, in standard deviations, past which a fab shortage strikes; the firm's own stress (the event Z) and the GSCPI enter in the same units. */
     public const COMPONENT_SHORTAGE_Z_SCORE = -2.20;
-    /** Variable margin penalty applied during expedited component sourcing. */
-    public const COMPONENT_SHORTAGE_PENALTY = 0.06;
     /** Fraction of the normal backlog burn delivered during a shortage; the rest slips into next quarter's backlog. */
     public const COMPONENT_SHORTAGE_DELIVERY_SLIP = 0.75;
     /** Consumer terminal volume multiplier during a shortage (retail gateways lose the allocation fight). */
@@ -293,12 +293,12 @@ class CommunicationEquipmentBusinessModel extends StandardCorporateBusinessModel
         $inDispute = $disputeElapsed > 0;
 
         // --- Component Shortage ---
-        $shortagePenalty = 0.0;
+        // Latent supply stress: the firm's own draw plus the economy-wide GSCPI (Benigno et al. 2022), both in
+        // standard deviations. The expediting cost is the GSCPI margin drag below, so the shortage adds none of its own.
         $burnRate = self::NETWORK_BACKLOG_BURN_RATE;
         $consumerMultiplier = 1.0;
 
-        if ($eventZ < self::COMPONENT_SHORTAGE_Z_SCORE) {
-            $shortagePenalty = self::COMPONENT_SHORTAGE_PENALTY;
+        if ($eventZ < self::COMPONENT_SHORTAGE_Z_SCORE + $macroState->supplyChainPressureIndexEma) {
             $burnRate *= self::COMPONENT_SHORTAGE_DELIVERY_SLIP;
             $consumerMultiplier = self::COMPONENT_SHORTAGE_CONSUMER_MULT;
             $eventType = ShockEvent::SEMICONDUCTOR_FAB_SHORTAGE;
@@ -362,7 +362,7 @@ class CommunicationEquipmentBusinessModel extends StandardCorporateBusinessModel
         $attachShift = -self::SOFTWARE_ATTACH_ELASTICITY * $networkZ * $networkWeight;
 
         $effectiveMargin = $actualRevenue > 0.0 ? ($actualVariableCosts / $actualRevenue) : $realizedVariableMargin;
-        $rawMargin = $effectiveMargin + $shortagePenalty + $inputCostDrag + $gscpiCostDrag + $attachShift;
+        $rawMargin = $effectiveMargin + $inputCostDrag + $gscpiCostDrag + $attachShift;
         $clampedMargin = $this->clampMargin($rawMargin);
 
         // Primary shock is whichever stream deviated the most, overridden by tail events (supply or litigation).
@@ -371,7 +371,14 @@ class CommunicationEquipmentBusinessModel extends StandardCorporateBusinessModel
             abs($litigationZ) > abs($eventZ) ? $litigationZ : $eventZ
         );
 
-        $observableShockZ = $primaryShockZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR);
+        // What the market sees is the revenue the stream draws moved: the order shock at the share of it the
+        // backlog delivers this quarter, royalties and terminals in full. The event and litigation draws move
+        // revenue only through the regimes they trigger, which are public events of their own.
+        $observableShockZ = $baselineVol * self::REVENUE_VARIANCE_SCALAR * (
+            ($networkZ * $networkWeight * $burnRate)
+            + ($licensingZ * $licensingWeight * self::LICENSING_VARIANCE_RATIO)
+            + ($consumerZ * $consumerWeight * self::CONSUMER_VARIANCE_RATIO)
+        );
 
         return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,

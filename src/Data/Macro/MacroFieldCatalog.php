@@ -119,6 +119,7 @@ final class MacroFieldCatalog
         'capital_stock_overhang_ema' => ['label' => 'Capital overhang', 'unit' => self::UNIT_PERCENT],
         'inventory_stock_gap_ema' => ['label' => 'Inventory gap', 'unit' => self::UNIT_PERCENT],
         'trade_balance_to_gdp_ema' => ['label' => 'Trade balance / GDP', 'unit' => self::UNIT_PERCENT],
+        'tariff_trade_lag' => ['label' => 'Import tariffs', 'unit' => self::UNIT_PERCENT],
         'manufacturing_pmi_ema' => ['label' => 'Manufacturing PMI', 'unit' => self::UNIT_INDEX],
         'manufacturing_pmi' => ['label' => 'Manufacturing PMI (spot)', 'unit' => self::UNIT_INDEX],
         'supply_chain_pressure_index_ema' => ['label' => 'Supply-chain pressure', 'unit' => self::UNIT_INDEX],

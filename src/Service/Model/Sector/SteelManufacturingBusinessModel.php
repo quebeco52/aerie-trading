@@ -25,6 +25,8 @@ use App\Service\Event\ShockEvent;
  *   and highly volatile Hot-Rolled Coil (HRC) spot market trading.
  * - Metal Spread & Energy Drag: Steel production is exposed to raw metallurgical coal, iron ore,
  *   and electricity costs. When energy prices spike, metal spreads compress.
+ * - Trade Protection: an import tariff shifts domestic tonnage and steel prices toward the home mills
+ *   (USITC 2023, Section 232).
  */
 class SteelManufacturingBusinessModel extends StandardCorporateBusinessModel
 {
@@ -71,6 +73,12 @@ class SteelManufacturingBusinessModel extends StandardCorporateBusinessModel
     public const FOREIGN_DEMAND_SENSITIVITY = 1.50;
     /** Share of spot order volume exposed to foreign currency competition and overseas steel dumping. */
     public const FX_REVENUE_EXPOSURE = 0.20;
+
+    // --- Trade Protection (USITC 2023, Section 232 and 301 Tariffs, Pub. 5405) ---
+    /** Domestic tonnage per unit of import tariff: the 25% Section 232 duty raised US steel production 1.9% (2018-21). */
+    public const TARIFF_VOLUME_ELASTICITY = 0.019 / 0.25;
+    /** Domestic steel price per unit of import tariff: the same duty raised US steel prices 2.4%. */
+    public const TARIFF_PRICE_ELASTICITY = 0.024 / 0.25;
     /** Sensitivity of blast furnace fixed cost absorption to industrial capacity utilization. */
     public const CU_MARGIN_ABSORPTION_SENSITIVITY = 0.12;
 
@@ -86,9 +94,16 @@ class SteelManufacturingBusinessModel extends StandardCorporateBusinessModel
     public function getWorkingCapitalIntensity(Stock $stock): float { return 0.2; }
     public function getCapExCompletionRate(Stock $stock): float { return 0.35; }
 
+    /**
+     * Calendar-quarter revenue seasonality [Q1, Q2, Q3, Q4] summing to 4.0: Nucor tons shipped to outside customers
+     * by quarter, 2017-19 (10-Q, 8-K), each year over its own mean. Mills run through the year; the spring
+     * construction season lifts Q2 slightly and the holidays trim Q4.
+     *
+     * @return array<int, float>
+     */
     public function getSeasonalityFactors(): array
     {
-        return [0.85, 1.15, 1.15, 0.85]; // Construction & industrial manufacturing weather alignment
+        return [1.00, 1.02, 1.00, 0.98];
     }
 
     public function getCapexCyclicality(): float
@@ -125,9 +140,15 @@ class SteelManufacturingBusinessModel extends StandardCorporateBusinessModel
             return 0.0;
         }
 
-        $cycleShift = $this->resolveCycleVolumeShift($stock, $macroState);
+        $cycleShift = $this->resolveCycleVolumeShift($stock, $macroState) + $this->resolveTariffVolumeShift($macroState);
 
         return (($contractWeight * $cycleShift) + ($spotWeight * ($cycleShift + $this->resolveImportDumpingShift($macroState)))) / $totalWeight;
+    }
+
+    /** Domestic tonnage a tariff diverts from imports to the home mills, on the trade-lagged tariff. */
+    private function resolveTariffVolumeShift(MacroStateDTO $macroState): float
+    {
+        return $macroState->tariffTradeLag * self::TARIFF_VOLUME_ELASTICITY;
     }
 
     /** Domestic tonnage on the lagged output gap through the investment accelerator, led by the manufacturing PMI. */
@@ -171,17 +192,20 @@ class SteelManufacturingBusinessModel extends StandardCorporateBusinessModel
         $spotWeight     = $activeWeights['spot_hrc_market'];
 
         // The cycle reaches both books once, at the same tonnage elasticity; spot adds export orders and import dumping.
-        $cycleShift = $this->resolveCycleVolumeShift($stock, $macroState);
+        // A tariff moves tonnage on both books and lifts the domestic price on all of it.
+        $cycleShift = $this->resolveCycleVolumeShift($stock, $macroState) + $this->resolveTariffVolumeShift($macroState);
+        $tariffPriceShift = $macroState->tariffTradeLag * self::TARIFF_PRICE_ELASTICITY;
         $importDumpingShift = $this->resolveImportDumpingShift($macroState);
         $metalsShift = ($macroState->industrialMetalsIndexEma - 100.0) / 100.0;
 
         $contractZ = $streams->generateZ('contracted_oem_steel', 0.35);
         $spotZ     = $streams->generateZ('spot_hrc_market', 0.15);
 
-        $contractRevenue = max(0.0, $expectedRevenue * $contractWeight * (1.0 + ($contractZ * ($baselineVol * self::CONTRACT_VARIANCE_SCALAR)) + $cycleShift));
-        $spotRevenue     = max(0.0, $expectedRevenue * $spotWeight     * (1.0 + ($spotZ     * ($baselineVol * self::SPOT_VARIANCE_SCALAR)) + ($metalsShift * 0.50) + $cycleShift + $importDumpingShift));
-        // Hot-rolled coil repricing on the same tonnage is price: the mill's variable cost per tonne does not follow the spot quote.
-        $priceRevenue    = $expectedRevenue * $spotWeight * ($metalsShift * 0.50);
+        $contractRevenue = max(0.0, $expectedRevenue * $contractWeight * (1.0 + ($contractZ * ($baselineVol * self::CONTRACT_VARIANCE_SCALAR)) + $cycleShift + $tariffPriceShift));
+        $spotRevenue     = max(0.0, $expectedRevenue * $spotWeight     * (1.0 + ($spotZ     * ($baselineVol * self::SPOT_VARIANCE_SCALAR)) + ($metalsShift * 0.50) + $cycleShift + $importDumpingShift + $tariffPriceShift));
+        // Hot-rolled coil repricing and the tariff's price lift on the same tonnage are price: the mill's variable
+        // cost per tonne does not follow either.
+        $priceRevenue    = ($expectedRevenue * $spotWeight * ($metalsShift * 0.50)) + ($expectedRevenue * ($contractWeight + $spotWeight) * $tariffPriceShift);
 
         $streamRevenues = [
             'contracted_oem_steel' => $contractRevenue,
@@ -240,6 +264,7 @@ class SteelManufacturingBusinessModel extends StandardCorporateBusinessModel
             'industrial_metals_index_ema',
             'manufacturing_pmi_ema',
             'output_gap_lag_9m',
+            'tariff_trade_lag',
             'tips_breakeven_ema',
             'real_wage_gap',
         ];

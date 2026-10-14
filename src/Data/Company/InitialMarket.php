@@ -2010,23 +2010,23 @@ class InitialMarket
             'beta_tilt' => -0.10, // royalties steady the equipment cycle
             'jump_intensity' => 0.50,
             'jump_vol' => 0.09,
-            'baseline_roic' => 0.18,
-            'capex_ratio' => 0.30,
+            'baseline_roic' => 0.21, // Ericsson 2022: sales 2.5x equity less net cash, after-tax EBIT
+            'capex_ratio' => 0.03, // reinvestment = real sector growth / ROIC
             'target_payout_ratio' => 0.50,
             'dividendSpeed' => 0.05,
-            'fixed_cost_ratio' => 0.55,
-            'operating_margin' => 0.18,
+            'fixed_cost_ratio' => 0.35, // Ericsson 2022: cost of sales 65% of operating costs
+            'operating_margin' => 0.12, // Ericsson EBIT margin 13.7% (2021), 9.9% (2022)
             'public_float' => 0.88,
             'sam_ratio' => 0.25,
             'floating_debt_ratio' => 0.20,
             'historical_fixed_rate' => 0.040,
             'credit_spread' => 0.0100,
             'depreciation_rate' => 0.15,
-            'corporate_treasury' => 8_000_000_000.00,
-            'total_equity' => 45_000_000_000.00,
+            'corporate_treasury' => 8_200_000_000.00,
+            'total_equity' => 33_000_000_000.00, // asset-light at the same opening revenue; net cash like Ericsson
             'customer_deposits' => 0.00,
-            'wholesale_debt' => 16_000_000_000.00,
-            'retained_earnings' => 24_000_000_000.00,
+            'wholesale_debt' => 5_000_000_000.00,
+            'retained_earnings' => 17_600_000_000.00,
         ],
         [
             'ticker' => 'SNDR',

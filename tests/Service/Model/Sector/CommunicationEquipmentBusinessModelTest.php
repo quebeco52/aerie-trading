@@ -201,10 +201,10 @@ class CommunicationEquipmentBusinessModelTest extends TestCase
     }
 
     /**
-     * A fab shortage does not lose carrier orders, it delays them: deliveries slip into the backlog while
-     * expedited sourcing taxes the cost ratio.
+     * A fab shortage does not lose carrier orders, it delays them: deliveries slip into the backlog. Its
+     * expediting cost is the supply-chain index's margin drag, so with the index calm it adds no cost of its own.
      */
-    public function testComponentShortageSlipsDeliveriesIntoTheBacklogAndTaxesMargin(): void
+    public function testComponentShortageSlipsDeliveriesIntoTheBacklog(): void
     {
         $seed = $this->runQuarter();
         $base = $this->runQuarter($seed->streamZ);
@@ -215,7 +215,43 @@ class CommunicationEquipmentBusinessModelTest extends TestCase
         $this->assertGreaterThan($base->kpis['backlog_quarters'], $shortage->kpis['backlog_quarters'], 'Undelivered orders stay in the book rather than vanishing.');
         $this->assertGreaterThan(1.0, $shortage->kpis['book_to_bill']);
         $this->assertLessThan($base->streamRevenue['consumer_terminals'], $shortage->streamRevenue['consumer_terminals']);
-        $this->assertGreaterThan($base->clampedMargin, $shortage->clampedMargin);
+    }
+
+    /**
+     * Shortages are a supply-chain crisis, not a private draw: the GSCPI and the firm's own stress add, so a draw
+     * that is harmless in a calm market triggers a shortage when the index runs two standard deviations hot.
+     */
+    public function testSupplyChainPressureBringsShortagesOnAtMilderFirmStress(): void
+    {
+        $seed = $this->runQuarter();
+        $draw = CommunicationEquipmentBusinessModel::COMPONENT_SHORTAGE_Z_SCORE + 1.0;
+
+        $calm = $this->runQuarter([...$seed->streamZ, 'event' => -9.9], $draw);
+        $crisis = $this->runQuarter([...$seed->streamZ, 'event' => -9.9], $draw, macro: new MacroStateDTO(supplyChainPressureIndexEma: 2.0));
+
+        $this->assertNull($calm->eventType);
+        $this->assertSame(ShockEvent::SEMICONDUCTOR_FAB_SHORTAGE, $crisis->eventType);
+    }
+
+    /**
+     * Analysts read the revenue the stream draws moved. The supply-event and litigation draws move revenue only
+     * through the regimes they trigger; a large draw that triggers nothing must not move the estimate.
+     */
+    public function testADrawThatTriggersNoEventLeavesTheObservableShockAtZero(): void
+    {
+        $seed = $this->runQuarter();
+        $quiet = $this->runQuarter([...$seed->streamZ, 'litigation' => -9.9], 2.0, baselineVol: 0.20);
+
+        $this->assertNull($quiet->eventType);
+        $this->assertEqualsWithDelta(0.0, $quiet->observableShockZ, 1e-12);
+
+        $orders = $this->runQuarter([...$seed->streamZ, 'carrier_networks' => -9.9], 1.0, baselineVol: 0.20);
+        $this->assertEqualsWithDelta(
+            0.20 * CommunicationEquipmentBusinessModel::REVENUE_VARIANCE_SCALAR * CommunicationEquipmentBusinessModel::ENTERPRISE_WEIGHT * CommunicationEquipmentBusinessModel::NETWORK_BACKLOG_BURN_RATE,
+            $orders->observableShockZ,
+            1e-9,
+            'An order shock is seen at the share of it the backlog delivers this quarter.'
+        );
     }
 
     public function testSupplyChainPressureAndComponentInflationRaiseTheCostRatio(): void

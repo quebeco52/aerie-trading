@@ -190,4 +190,39 @@ class SteelManufacturingBusinessModelTest extends TestCase
         $this->assertEqualsWithDelta(0.0, $this->model->getMacroPhysics($stock, $recession)['macro_demand_shift'], 1e-12);
         $this->assertEqualsWithDelta($gap * $elasticity, $this->model->resolveSectorActivityShift($stock, $recession), 1e-9);
     }
+
+    /**
+     * Mills run through the year: Nucor's quarterly shipments 2017-19 stay within 2-3% of the annual mean, where the
+     * old construction-weather factors swung revenue 35% from Q1 to Q2 and back every year.
+     */
+    public function testSeasonalityIsTheMildShipmentPatternOfARealMill(): void
+    {
+        $factors = $this->model->getSeasonalityFactors();
+
+        $this->assertEqualsWithDelta(4.0, array_sum($factors), 1e-9);
+        $this->assertLessThan(0.05, max($factors) - min($factors));
+    }
+
+    /**
+     * A tariff moves tonnage to the home mills and lifts the domestic steel price (USITC 2023: +1.9% production,
+     * +2.4% price for a 25% duty). The price lift is price, so it adds no variable cost; the tonnage reaches the
+     * staffed base through the activity shift.
+     */
+    public function testATariffShiftsTonnageAndPriceToTheHomeMills(): void
+    {
+        $stock = (new Stock())->setTicker('XSTL')->setBeta('1.0');
+        $quiet = $this->createStub(MathUtility::class);
+        $tariff = log(1.25);
+        $open = new MacroStateDTO(exchangeRateIndexEma: 100.0, industrialMetalsIndexEma: 100.0);
+        $protected = new MacroStateDTO(exchangeRateIndexEma: 100.0, industrialMetalsIndexEma: 100.0, tariffTradeLag: $tariff);
+
+        $base = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.35, 20_000_000.0, 0.0, $open, $quiet);
+        $shielded = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.35, 20_000_000.0, 0.0, $protected, $quiet);
+
+        $volume = $tariff * SteelManufacturingBusinessModel::TARIFF_VOLUME_ELASTICITY;
+        $price = $tariff * SteelManufacturingBusinessModel::TARIFF_PRICE_ELASTICITY;
+        $this->assertEqualsWithDelta($base->actualRevenue * (1.0 + $volume + $price), $shielded->actualRevenue, 1.0);
+        $this->assertEqualsWithDelta(100_000_000.0 * $price, $shielded->priceRevenue - $base->priceRevenue, 1.0);
+        $this->assertEqualsWithDelta($volume, $this->model->resolveSectorActivityShift($stock, $protected) - $this->model->resolveSectorActivityShift($stock, $open), 1e-9);
+    }
 }
