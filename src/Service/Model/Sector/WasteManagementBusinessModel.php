@@ -266,6 +266,7 @@ class WasteManagementBusinessModel extends StandardCorporateBusinessModel
             'energy_cost_push_lag',
             'exchange_rate_index_ema',
             'housing_starts_index_ema',
+            'import_price_level',
             'industrial_metals_index_ema',
             'inflation_ema',
             'output_gap_ema',

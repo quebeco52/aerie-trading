@@ -333,6 +333,7 @@ class MedicalCareFacilityBusinessModel extends StandardCorporateBusinessModel
         return [
             'exchange_rate_index_ema',
             'government_spending_index_ema',
+            'import_price_level',
             'inflation_ema',
             'nairu_ema',
             'output_gap_ema',

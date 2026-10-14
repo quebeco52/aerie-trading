@@ -261,6 +261,7 @@ class SteelManufacturingBusinessModel extends StandardCorporateBusinessModel
             'capacity_utilization_rate_ema',
             'exchange_rate_index_ema',
             'foreign_output_gap_ema',
+            'import_price_level',
             'industrial_metals_index_ema',
             'manufacturing_pmi_ema',
             'output_gap_lag_9m',

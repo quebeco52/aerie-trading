@@ -51,6 +51,7 @@ final class BusinessModelMacroFieldDeclarationTest extends TestCase
         'sentiment_residual'  => ['consumer_sentiment_index_ema'],
         'deal_activity_deviation' => ['deal_activity_index_ema'],
         'exchange_rate_gap' => ['exchange_rate_index_ema'],
+        'import_price_deviation' => ['import_price_level'],
         'unemployment_gap' => ['unemployment_rate_ema', 'nairu_ema'],
         'macro_credit_spread_trend' => ['macro_credit_spread_ema'],
         'house_price_deviation' => ['residential_property_index_ema', 'residential_wealth_trend'],
@@ -69,6 +70,7 @@ final class BusinessModelMacroFieldDeclarationTest extends TestCase
         'freight' => 'freight_rate_index_ema',
         'ppi'     => 'producer_price_inflation_ema',
         'labor'   => 'real_wage_gap',
+        'imports' => 'import_price_level',
     ];
 
     /**

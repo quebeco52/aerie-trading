@@ -45,6 +45,7 @@ class MacroFieldRegistryTest extends TestCase
         'authorityStressRegime' => 'Latch on excess_bond_premium, which is recorded.',
         'macroCreditSpreadTrend' => 'Decade-long average of macro_credit_spread, which is recorded.',
         'dealActivityIndexTrend' => 'Decade-long average of deal_activity_index, which is recorded.',
+        'commercialMarketRent' => 'Rent and occupancy terms behind commercial_property_index, which is recorded.',
         'treasuryVolatility' => 'Quarter-window realized volatility of yield_10y, which is recorded.',
         'treasuryVolatilityTrend' => 'Decade-long average of treasuryVolatility.',
         'corporateTaxRateTrend' => 'Decade-long average of corporate_tax_rate, which is recorded.',

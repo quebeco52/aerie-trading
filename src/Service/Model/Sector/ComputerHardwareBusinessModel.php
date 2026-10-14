@@ -76,10 +76,14 @@ class ComputerHardwareBusinessModel extends StandardCorporateBusinessModel
     public const ENTERPRISE_MARGIN_PREMIUM = 0.063;
 
     // --- Tail Risk & Shock Events ---
-    /** Negative z-score threshold indicating a severe semiconductor fab shortage. */
+    /** Latent supply-stress threshold for a component shortage, in standard deviations: the firm's own draw plus the GSCPI (Benigno et al. 2022), so shortages cluster when the whole chain is stretched. */
     public const SEMICONDUCTOR_SHORTAGE_Z_SCORE = -2.20;
-    /** Variable margin penalty applied during expedited component sourcing. */
-    public const SEMICONDUCTOR_SHORTAGE_PENALTY = 0.07;
+    /** Enterprise shipments a component shortage lets through: allocation favours the high-margin servers. */
+    public const SHORTAGE_ENTERPRISE_MULT = 0.85;
+    /** Consumer shipments a component shortage lets through: PCs and peripherals are allocated last. */
+    public const SHORTAGE_CONSUMER_MULT = 0.80;
+    /** Variable margin cost per standard deviation of GSCPI (expediting, spot chips, air freight): the comm-equipment figure, as both buy the same parts through the same contract manufacturers. */
+    public const GSCPI_MARGIN_PENALTY_SCALAR = CommunicationEquipmentBusinessModel::GSCPI_MARGIN_PENALTY_SCALAR;
     /** Positive z-score threshold indicating a massive enterprise/AI hardware super-cycle. */
     public const AI_SUPER_CYCLE_Z_SCORE = 2.40;
     /** Top-line enterprise revenue multiplier for an AI/data center super-cycle. */
@@ -211,13 +215,13 @@ class ComputerHardwareBusinessModel extends StandardCorporateBusinessModel
         $enterpriseMultiplier = 1.0;
         $consumerMultiplier = 1.0;
         $eventType = null;
-        $shortagePenalty = 0.0;
+        // The expediting cost is the GSCPI margin drag below, so the shortage itself only rations volume.
+        $shortagePenalty = max(0.0, $macroState->supplyChainPressureIndexEma) * self::GSCPI_MARGIN_PENALTY_SCALAR;
 
-        if ($eventZ < self::SEMICONDUCTOR_SHORTAGE_Z_SCORE) {
-            $shortagePenalty = self::SEMICONDUCTOR_SHORTAGE_PENALTY;
+        if ($eventZ < self::SEMICONDUCTOR_SHORTAGE_Z_SCORE + $macroState->supplyChainPressureIndexEma) {
             $eventType = ShockEvent::SEMICONDUCTOR_FAB_SHORTAGE;
-            $enterpriseMultiplier = 0.85; // Severe volume constraint
-            $consumerMultiplier = 0.80; // Even worse for consumer
+            $enterpriseMultiplier = self::SHORTAGE_ENTERPRISE_MULT;
+            $consumerMultiplier = self::SHORTAGE_CONSUMER_MULT;
         } elseif ($eventZ > self::AI_SUPER_CYCLE_Z_SCORE) {
             $enterpriseMultiplier = self::AI_SUPER_CYCLE_MULT;
             $eventType = ShockEvent::VIRAL_GROWTH; // Proxy for AI boom
@@ -301,8 +305,10 @@ class ComputerHardwareBusinessModel extends StandardCorporateBusinessModel
             'consumer_sentiment_index_ema',
             'exchange_rate_index_ema',
             'foreign_output_gap_ema',
+            'import_price_level',
             'inventory_stock_gap_ema',
             'output_gap_ema',
+            'supply_chain_pressure_index_ema',
             'tips_breakeven_ema',
             'trade_balance_to_gdp_ema',
             'real_wage_gap',

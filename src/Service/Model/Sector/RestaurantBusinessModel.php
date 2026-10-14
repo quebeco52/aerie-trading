@@ -289,6 +289,7 @@ class RestaurantBusinessModel extends StandardCorporateBusinessModel
             'agricultural_commodity_index_ema',
             'consumer_sentiment_index_ema',
             'exchange_rate_index_ema',
+            'import_price_level',
             'inflation_ema',
             'output_gap_ema',
             'tips_breakeven_ema',

@@ -87,6 +87,7 @@ class MacroState
 
     public float $commercialPropertyIndex;
     public float $commercialPropertyIndexEma;
+    public float $commercialMarketRent;
 
     public float $residentialPropertyIndex;
     public float $residentialPropertyIndexEma;

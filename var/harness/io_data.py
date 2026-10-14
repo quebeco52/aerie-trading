@@ -84,7 +84,22 @@ def pull():
                'industrial_power_price': elec, 'industrial_gas_price': gas}, open(CACHE, 'w'))
 
 
+IMPORTS_CACHE = os.path.join(HERE, 'io_imports.json')
+
+
+def pull_imports():
+    """BEA 2017 detail Import Matrix (before redefinitions): the imported part of each Use-table cell, same codes."""
+    b = urllib.request.urlopen('https://apps.bea.gov/industry/xls/io-annual/ImportMatrices_Before_Redefinitions_DET_2017.xlsx', timeout=180).read()
+    names = re.findall(r'<sheet name="([^"]+)"', zipfile.ZipFile(io.BytesIO(b)).read('xl/workbook.xml').decode())
+    imports, rows, cols, _ = table(sheet_grid(b, sheet_index=names.index('2017') + 1))
+    json.dump({'source': 'BEA ImportMatrices_Before_Redefinitions_DET_2017.xlsx', 'imports': imports, 'rows': rows, 'cols': cols}, open(IMPORTS_CACHE, 'w'))
+
+
 if __name__ == '__main__':
+    if '--imports' in sys.argv:
+        pull_imports()
+        print('import matrix rows', len(json.load(open(IMPORTS_CACHE))['rows']))
+        sys.exit()
     pull()
     d = json.load(open(CACHE))
     print('use rows', len(d['use_rows']), 'cols', len(d['use_cols']), '| make rows', len(d['make_rows']), 'cols', len(d['make_cols']))

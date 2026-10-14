@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Service\Model\Trait;
 
+use App\Data\Macro\InputOutputExposures;
 use App\Service\Model\ModelParam;
 use App\DTO\ActualFinancialsDTO;
 use App\DTO\MacroStateDTO;
@@ -251,7 +252,7 @@ trait StandardOperatingPhysicsTrait
     {
         return defined('static::INPUT_COST_EXPOSURES')
             ? (array) static::INPUT_COST_EXPOSURES
-            : FinancialConstants::DEFAULT_INPUT_COST_EXPOSURES;
+            : InputOutputExposures::ALL_PRIVATE_INDUSTRIES;
     }
 
     // --- Demand Transmission Lag ---
@@ -342,6 +343,7 @@ trait StandardOperatingPhysicsTrait
             'ppi'     => \App\Service\Macro\MacroEngine::COMMODITY_TREND_HORIZON_YEARS
                 * ($macroState->producerPriceInflationEma - \App\Service\Macro\MacroEngine::TARGET_INFLATION),
             'labor'   => $macroState->realWageGap,
+            'imports' => $macroState->importPriceDeviation(),
         ];
     }
 

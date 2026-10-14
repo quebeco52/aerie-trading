@@ -309,6 +309,7 @@ class InvestmentCompanyBusinessModel extends ConglomerateBusinessModel
             'deal_activity_index_ema',
             'energy_cost_push_lag',
             'exchange_rate_index_ema',
+            'import_price_level',
             'industrial_metals_index_ema',
             'macro_credit_spread',
             'macro_credit_spread_ema',

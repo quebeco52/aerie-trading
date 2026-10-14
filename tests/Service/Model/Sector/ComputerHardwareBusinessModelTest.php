@@ -121,4 +121,30 @@ class ComputerHardwareBusinessModelTest extends TestCase
         $booked = $this->model->computeActualFinancials($stock, 1000.0, 0.35, 300.0, 0.0, $recession, $mathMock)->actualRevenue / 1000.0 - 1.0;
         $this->assertEqualsWithDelta($booked, $shift, 1e-9, 'The base staffs to the units the books ship.');
     }
+
+    /**
+     * A component shortage is a supply-chain crisis, not a private draw: the GSCPI and the firm's own stress add, so a
+     * draw that is harmless in a calm market rations shipments when the index runs two standard deviations hot.
+     */
+    #[\PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations]
+    public function testSupplyChainPressureBringsShortagesOnAtMilderFirmStress(): void
+    {
+        $run = function (MacroStateDTO $macro): \App\DTO\ActualFinancialsDTO {
+            $stock = (new Stock())->setTicker('PENG_TEST')->setBeta('1.0');
+            $stock->setEarningsMomentumZ(['event' => -9.9]);
+            $math = $this->getMockBuilder(MathUtility::class)->onlyMethods(['generatePersistentZ', 'checkProbability'])->getMock();
+            $draw = ComputerHardwareBusinessModel::SEMICONDUCTOR_SHORTAGE_Z_SCORE + 1.0;
+            $math->method('generatePersistentZ')->willReturnCallback(fn (float $prev): float => $prev === -9.9 ? $draw : 0.0);
+            $math->method('checkProbability')->willReturn(false);
+
+            return $this->model->computeActualFinancials($stock, 100_000_000.0, 0.70, 20_000_000.0, 0.0, $macro, $math);
+        };
+
+        $calm = $run(new MacroStateDTO());
+        $crisis = $run(new MacroStateDTO(supplyChainPressureIndexEma: 2.0));
+
+        $this->assertNull($calm->eventType);
+        $this->assertSame(ShockEvent::SEMICONDUCTOR_FAB_SHORTAGE, $crisis->eventType);
+        $this->assertGreaterThan($calm->clampedMargin, $crisis->clampedMargin, 'Expediting through a stretched chain costs margin.');
+    }
 }

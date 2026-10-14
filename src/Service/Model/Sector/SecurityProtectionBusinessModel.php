@@ -326,6 +326,7 @@ class SecurityProtectionBusinessModel extends StandardCorporateBusinessModel
         return [
             'exchange_rate_index_ema',
             'government_spending_index_ema',
+            'import_price_level',
             'inflation_ema',
             'macro_credit_spread_ema',
             'market_volatility_ema',

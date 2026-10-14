@@ -172,6 +172,43 @@ class UtilityBusinessModelTest extends TestCase
         $this->assertEqualsWithDelta($clean->clampedMargin, $after->clampedMargin, 1e-9, 'costs return to baseline once the regime exits');
     }
 
+    /**
+     * Commissions set the allowed return off long Treasuries (Bulkley, SD PUC EL23-020): when the 30-year yield rises,
+     * the next orders authorise a higher return, which the tariff recovers on the equity rate base.
+     */
+    public function testRisingTreasuryYieldsRaiseTheAuthorisedReturnAtTheNextOrders(): void
+    {
+        $model = new UtilityBusinessModel();
+        $roeAt = static fn (float $yield): float => UtilityBusinessModel::ALLOWED_ROE_INTERCEPT + (UtilityBusinessModel::ALLOWED_ROE_YIELD_SLOPE * $yield);
+        $run = function (float $yield) use ($model, $roeAt): ActualFinancialsDTO {
+            $stock = new Stock();
+            $stock->setTicker('UTIL');
+            $stock->setBeta('1.0');
+            $stock->setTotalEquity('400000000');
+            $momentum = [UtilityBusinessModel::STATE_OPENING_ROE => $roeAt(0.04), UtilityBusinessModel::STATE_AUTHORISED_ROE => $roeAt(0.04)];
+            $math = $this->getMockBuilder(MathUtility::class)->onlyMethods(['generatePersistentZ', 'checkProbability'])->getMock();
+            $math->method('generatePersistentZ')->willReturn(0.0);
+            // Every pending case is decided the quarter after it is filed.
+            $math->method('checkProbability')->willReturn(true);
+            $result = null;
+            for ($quarter = 0; $quarter < 40; $quarter++) {
+                $stock->setEarningsMomentumZ($momentum);
+                $result = $model->computeActualFinancials($stock, 100_000_000.0, 0.40, 20_000_000.0, 0.10, new MacroStateDTO(yield30yEma: $yield), $math);
+                $momentum = $result->streamZ;
+            }
+
+            return $result;
+        };
+
+        $flat = $run(0.04);
+        $risen = $run(0.06);
+
+        $this->assertEqualsWithDelta($roeAt(0.04), $flat->streamZ[UtilityBusinessModel::STATE_AUTHORISED_ROE], 1e-12, 'No move in yields, no move in the allowed return.');
+        $this->assertEqualsWithDelta($roeAt(0.06), $risen->streamZ[UtilityBusinessModel::STATE_AUTHORISED_ROE], 0.001, 'Orders carry the allowed return to the yield-implied one.');
+        // Equity equals a year's revenue here, so 0.88pp more allowed return is ~0.9pp of revenue on the regulated share.
+        $this->assertLessThan($flat->clampedMargin - 0.005, $risen->clampedMargin, 'The higher authorised return is recovered in the tariff.');
+    }
+
     public function testLiabilityRegimeCommitsGridHardeningCapex(): void
     {
         $model = new UtilityBusinessModel();

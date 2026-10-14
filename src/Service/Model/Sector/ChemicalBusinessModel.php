@@ -354,6 +354,7 @@ class ChemicalBusinessModel extends StandardCorporateBusinessModel
             'agricultural_commodity_index_ema',
             'energy_cost_push_lag',
             'exchange_rate_index_ema',
+            'import_price_level',
             'industrial_metals_index_ema',
             'manufacturing_pmi',
             'natural_gas_price_index_ema',

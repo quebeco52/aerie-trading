@@ -93,6 +93,14 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
     /** Adjusting and other expense (claims-department overhead, unallocated LAE) in the sticky overhead: 5.5 / (5.5 A&O + 5.9 other acquisition + 6.4 general). */
     public const FIXED_COST_LAE_SHARE = 0.309;
 
+    // --- Claims Inflation (rates are filed on past loss costs) ---
+    /** Goods in personal auto and homeowners loss costs (parts, vehicles, building materials), the rest being repair labour, medical and legal: ~0.40 from ISO 2024 auto coverages and Verisk reconstruction costs (constructed, second-hand). */
+    public const CLAIMS_COST_GOODS_SHARE = 0.40;
+    /** Years for premium rates to catch up with claims costs: AM Best personal auto combined ratio 112.2, 104.9 and 98.7 in 2022-24 against ~101 before, two-thirds of the excess gone each year. */
+    public const PREMIUM_CATCH_UP_YEARS = 1.0;
+    /** Persisted state key: claims-cost inflation not yet in filed rates, as a fraction of the loss cost. */
+    public const STATE_UNRECOVERED_CLAIMS_COST = 'state:claims:unrecovered_cost';
+
     // --- Underwriting Cycle (Winter 1994 / Gron 1994 capacity constraint) ---
     /** Regime key for the hard market: the multi-year stretch of rate increases and tightened terms that follows a capital shock. */
     public const REGIME_HARD_MARKET = 'hard_market';
@@ -289,7 +297,7 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
         return [
             'macro_demand_shift' => $outputGap * $beta * self::MACRO_DEMAND_SCALAR, // Highly immune to macro demand
             'pricing_power_multiplier' => $this->resolvePremiumRateLevel($stock, $macroState),
-            // Neutral input cost multiplier; property/claim inflation is handled directly in loss ratio physics.
+            // Neutral input cost multiplier: claims inflation reaches the loss ratio through the rate-filing lag.
             'input_cost_multiplier' => 1.0,
         ];
     }
@@ -475,6 +483,30 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
     public static function adjustWrittenShare(float $writtenShare, float $targetShare, float $dt): float
     {
         return TimeSeries::calculateDistributedLag($writtenShare, $targetShare, $dt, self::WRITTEN_SHARE_ADJUSTMENT_YEARS);
+    }
+
+    /**
+     * Claims-cost inflation the book has not yet priced: loss costs move with the prices of parts, materials and repair
+     * labour as they happen, while rates are filed on past losses and catch up over PREMIUM_CATCH_UP_YEARS. The gap
+     * grows with claims inflation over target and closes at the filing lag (dg/dt = excess - g/tau), so a steady
+     * excess of x leaves the loss ratio x*tau above plan.
+     *
+     * @return float Unrecovered claims cost, as a fraction of the baseline loss cost.
+     */
+    protected function resolveUnrecoveredClaimsCost(StreamContext $streams, MacroStateDTO $macroState): float
+    {
+        $claimsInflation = (self::CLAIMS_COST_GOODS_SHARE * $macroState->coreGoodsInflationEma)
+            + ((1.0 - self::CLAIMS_COST_GOODS_SHARE) * $macroState->supercoreInflationEma);
+        $excess = $claimsInflation - \App\Service\Macro\MacroEngine::TARGET_INFLATION;
+        $gap = TimeSeries::calculateDistributedLag(
+            $streams->getPersistedState(self::STATE_UNRECOVERED_CLAIMS_COST, 0.0),
+            $excess * self::PREMIUM_CATCH_UP_YEARS,
+            \App\Service\Corporate\EarningsEngine::QUARTERLY_TIME_STEP,
+            self::PREMIUM_CATCH_UP_YEARS
+        );
+        $streams->registerState(self::STATE_UNRECOVERED_CLAIMS_COST, $gap);
+
+        return $gap;
     }
 
     /**
@@ -673,7 +705,7 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
         // premium to restore the limit it used.
         $recovery = $this->resolveCatastropheRecovery($claims['gross'], 1.0);
         $reinstatementPremium = $recovery > 0.0 ? self::REINSTATEMENT_PREMIUM_RATE : 0.0;
-        $realizedLossRatio = max(0.0, $baselineLossRatio + $claims['excess'] - $recovery);
+        $realizedLossRatio = max(0.0, ($baselineLossRatio * (1.0 + $this->resolveUnrecoveredClaimsCost($streams, $macroState))) + $claims['excess'] - $recovery);
 
         // A capital shortfall hardens rates through the regime this advances, which reaches revenue and the cost
         // ratio through the pricing-power multiplier; it is not discounted from the combined ratio again here.
@@ -1316,6 +1348,7 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
     {
         return [
             'catastrophe_loss_index_ema',
+            'core_goods_inflation_ema',
             'gdp_deflator',
             'market_volatility_ema',
             'output_gap_ema',
@@ -1323,6 +1356,7 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
             'perceived_neutral_rate',
             'policy_rate_ema',
             'potential_gdp_index',
+            'supercore_inflation_ema',
             'yield_10y_ema',
         ];
     }

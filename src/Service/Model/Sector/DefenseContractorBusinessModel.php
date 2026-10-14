@@ -411,6 +411,7 @@ class DefenseContractorBusinessModel extends StandardCorporateBusinessModel
         return [
             'allied_defense_spending_index_ema',
             'exchange_rate_index_ema',
+            'import_price_level',
             'industrial_metals_index_ema',
             'inflation_ema',
             'macro_credit_spread_ema',

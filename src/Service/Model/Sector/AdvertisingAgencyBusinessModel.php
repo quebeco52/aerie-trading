@@ -234,6 +234,7 @@ class AdvertisingAgencyBusinessModel extends StandardCorporateBusinessModel
         return [
             'consumer_sentiment_index_ema',
             'exchange_rate_index_ema',
+            'import_price_level',
             'output_gap_ema',
             'supercore_inflation_ema',
             'tips_breakeven_ema',

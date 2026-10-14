@@ -122,7 +122,9 @@ class ReinsuranceBusinessModel extends InsuranceBusinessModel
         $actualRevenue = max(0.0, array_sum($streamRevenues));
         $streams->recordStreamShares($streamRevenues);
 
-        $clampedMargin = $this->clampMargin($realizedVariableMargin + $claims['excess'] - $catBondShield);
+        // Treaty losses are the cedants' claims, inflating with theirs while the treaty rate was set at the last renewal.
+        $unrecoveredClaims = $realizedVariableMargin * (1.0 - self::BASE_EXPENSE_RATIO_SHARE) * $treatyWeight * $this->resolveUnrecoveredClaimsCost($streams, $macroState);
+        $clampedMargin = $this->clampMargin($realizedVariableMargin + $unrecoveredClaims + $claims['excess'] - $catBondShield);
         // The baseline cost ratio splits as the parent's does; the claims above it are losses.
         $kpis = $this->bookUnderwritingResult($streams, $actualRevenue, $clampedMargin, $realizedVariableMargin * self::BASE_EXPENSE_RATIO_SHARE, 0.0, $fixedCosts, $treatyRevenue);
 
@@ -184,6 +186,7 @@ class ReinsuranceBusinessModel extends InsuranceBusinessModel
     {
         return [
             'catastrophe_loss_index_ema',
+            'core_goods_inflation_ema',
             'gdp_deflator',
             'market_volatility_ema',
             'output_gap_ema',
@@ -191,6 +194,7 @@ class ReinsuranceBusinessModel extends InsuranceBusinessModel
             'perceived_neutral_rate',
             'policy_rate_ema',
             'potential_gdp_index',
+            'supercore_inflation_ema',
             'yield_10y_ema',
         ];
     }

@@ -317,6 +317,7 @@ class ConsumerStaplesBusinessModel extends StandardCorporateBusinessModel
             'agricultural_commodity_index_ema',
             'energy_cost_push_lag',
             'exchange_rate_index_ema',
+            'import_price_level',
             'inflation_ema',
             'inventory_stock_gap_ema',
             'output_gap_ema',

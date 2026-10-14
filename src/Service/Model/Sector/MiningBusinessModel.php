@@ -294,6 +294,7 @@ class MiningBusinessModel extends StandardCorporateBusinessModel
             'exchange_rate_index_ema',
             'extraction_stringency',
             'gold_price_index_ema',
+            'import_price_level',
             'industrial_metals_index_ema',
             'natural_gas_price_index_ema',
             'real_wage_gap',

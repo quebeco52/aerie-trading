@@ -291,6 +291,7 @@ class TechBusinessModel extends StandardCorporateBusinessModel
     {
         return [
             'exchange_rate_index_ema',
+            'import_price_level',
             'output_gap_ema',
             'output_gap_lag_6m',
             'tips_breakeven_ema',

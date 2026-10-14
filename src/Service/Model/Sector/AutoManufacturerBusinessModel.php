@@ -393,6 +393,7 @@ class AutoManufacturerBusinessModel extends HeavyManufacturingBusinessModel
             'corporate_default_rate_ema',
             'exchange_rate_index_ema',
             'household_debt_service_gap',
+            'import_price_level',
             'industrial_metals_index_ema',
             'inflation_ema',
             'macro_credit_spread',

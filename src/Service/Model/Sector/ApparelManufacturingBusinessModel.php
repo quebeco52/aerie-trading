@@ -369,6 +369,7 @@ class ApparelManufacturingBusinessModel extends StandardCorporateBusinessModel
             'consumer_sentiment_index_ema',
             'exchange_rate_index_ema',
             'foreign_output_gap_ema',
+            'import_price_level',
             'inventory_stock_gap_ema',
             'output_gap_ema',
             'output_gap_lag_6m',

@@ -20,7 +20,7 @@ use PHPUnit\Framework\TestCase;
  */
 final class InputCostAttributionTest extends TestCase
 {
-    /** Auto assembly buys metals and labour (InputOutputExposures::AUTO_MANUFACTURER). */
+    /** Auto assembly buys metals, imported parts and labour (InputOutputExposures::AUTO_MANUFACTURER). */
     private AutoManufacturerBusinessModel $model;
 
     protected function setUp(): void
@@ -39,7 +39,7 @@ final class InputCostAttributionTest extends TestCase
 
             $this->assertEqualsWithDelta($drag, array_sum($parts), 1e-12);
             $this->assertEqualsWithDelta(0.0, $parts['earlier'], 1e-12, 'a firm tracked from its first quarter has no earlier state');
-            $this->assertSame(['metals', 'labor', 'earlier'], array_keys($parts));
+            $this->assertSame(['metals', 'imports', 'labor', 'earlier'], array_keys($parts));
         }
     }
 

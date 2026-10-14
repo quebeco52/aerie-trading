@@ -233,6 +233,7 @@ class FinancialDataBusinessModel extends StandardCorporateBusinessModel
         return [
             'deal_activity_index_ema',
             'exchange_rate_index_ema',
+            'import_price_level',
             'macro_credit_spread_ema',
             'market_volatility_ema',
             'output_gap_ema',

@@ -269,13 +269,10 @@ class StandardCorporateBusinessModel implements BusinessModelInterface
     public function getOperatingMacroFields(): array
     {
         return [
-            'agricultural_commodity_index_ema',
-            'energy_cost_push_lag',
             'exchange_rate_index_ema',
-            'freight_rate_index_ema',
+            'import_price_level',
             'industrial_metals_index_ema',
             'output_gap_ema',
-            'producer_price_inflation_ema',
             'tips_breakeven_ema',
             'real_wage_gap',
         ];

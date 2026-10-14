@@ -334,6 +334,7 @@ class OilGasProducerBusinessModel extends StandardCorporateBusinessModel
             'exchange_rate_index_ema',
             'extraction_stringency',
             'global_demand_gap_ema',
+            'import_price_level',
             'industrial_metals_index_ema',
             'natural_gas_price_index_ema',
             'real_wage_gap',

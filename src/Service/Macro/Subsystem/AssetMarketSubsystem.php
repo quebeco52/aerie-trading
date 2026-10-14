@@ -293,6 +293,8 @@ class AssetMarketSubsystem
     public const TRADE_BALANCE_ADJUSTMENT_YEARS = 0.5;
 
     // --- Tobin's Q Housing Investment Dynamics (Poterba 1984, Topel-Rosen 1988) ---
+    /** Materials in the replacement cost of a new home, priced by the metals index as its proxy: intermediate inputs over inputs plus compensation in single-family construction (BEA 2017 detail Use table, 233411: 0.557). */
+    public const REPLACEMENT_COST_MATERIALS_SHARE = 0.557;
     /** Sensitivity of housing starts to Tobin's q ratio (home price valuation vs replacement cost). */
     public const HOUSING_STARTS_Q_SENSITIVITY = 50.0;
     /** Sensitivity of residential housing starts to user cost of housing capital and mortgage rates. */
@@ -335,6 +337,10 @@ class AssetMarketSubsystem
 
         // DiPasquale-Wheaton (1996) commercial real estate real rent level with demand.
         $rentFactor = 1.0 + ($state->outputGapEma * self::CRE_RENT_OUTPUT_GAP_ELASTICITY);
+
+        // The space market: what a lease signed today earns per occupied square foot. Landlords' rent rolls read this,
+        // not the asset price, which capitalises rent and occupancy at the cap rate.
+        $state->commercialMarketRent = $rentFactor;
 
         $capRate = max(self::CRE_MIN_CAP_RATE, $state->yield10yEma - $state->tipsBreakevenEma + $state->macroCreditSpreadEma + self::CRE_CAP_RATE_RISK_PREMIUM);
         $fundamentalValue = MacroEngine::CRE_BASELINE * $occupancyFactor * $rentFactor * (self::CRE_NEUTRAL_CAP_RATE / $capRate);
@@ -1061,7 +1067,7 @@ class AssetMarketSubsystem
         // trend-productivity path. Read as 1 + wage growth, it charged a standing 1.75% premium in a calm economy and
         // saw only the acceleration of pay, never a real wage that stayed high.
         $laborCostRatio = exp($state->realWageGap);
-        $replacementCostRatio = (0.50 * $metalsCostRatio) + (0.50 * $laborCostRatio);
+        $replacementCostRatio = (self::REPLACEMENT_COST_MATERIALS_SHARE * $metalsCostRatio) + ((1.0 - self::REPLACEMENT_COST_MATERIALS_SHARE) * $laborCostRatio);
 
         $userCost = $this->housingUserCost($state, $expectedInflation);
 

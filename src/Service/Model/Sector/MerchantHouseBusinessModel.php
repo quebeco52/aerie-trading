@@ -306,6 +306,7 @@ class MerchantHouseBusinessModel extends ConglomerateBusinessModel
             'energy_price_index_ema',
             'exchange_rate_index_ema',
             'foreign_output_gap_ema',
+            'import_price_level',
             'industrial_metals_index_ema',
             'macro_credit_spread',
             'macro_credit_spread_ema',

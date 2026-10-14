@@ -160,6 +160,14 @@ class UtilityBusinessModel extends StandardCorporateBusinessModel
     public const ELECTED_COMMISSION_GRANT_RATIO = 0.22 / 0.62;
     /** Share of a request an appointed commission grants, the District's at its founding; the disallowed remainder is still a real cost, so it rolls into the next filing. The US average, 58% of the net electric increases requested January 2023 to August 2024 (S&P Global data via EIA, Today in Energy, August 2024), is held by 40 appointed commissions and 10 elected ones. */
     public const APPOINTED_COMMISSION_GRANTED_SHARE = 0.58 / (0.8 + (0.2 * self::ELECTED_COMMISSION_GRANT_RATIO));
+    /** Allowed return on equity with long Treasuries at zero: RRA average authorised electric ROE on the 30-year Treasury, 1992Q1-2023Q2 (Bulkley, SD PUC EL23-020 Schedule 8: risk premium 8.60% - 0.562 x T30). */
+    public const ALLOWED_ROE_INTERCEPT = 0.0860;
+    /** Allowed return on equity per unit of 30-year Treasury yield: 1 - 0.562 from the same regression (slope s.e. 0.023, R-squared 0.82). */
+    public const ALLOWED_ROE_YIELD_SLOPE = 0.438;
+    /** Persisted state key: the allowed return on equity the current tariff was set on, moved toward the market-implied one at each order. */
+    public const STATE_AUTHORISED_ROE = 'state:authorised_roe';
+    /** Persisted state key: the authorised return the seeded margin was built on, the level the capital charge is measured against. */
+    public const STATE_OPENING_ROE = 'state:opening_roe';
     /** Lag at which interim relief is granted rather than leave the utility earning below its cost of service. */
     public const MAX_TARIFF_SHORTFALL = 0.10;
 
@@ -263,7 +271,11 @@ class UtilityBusinessModel extends StandardCorporateBusinessModel
         $inputCostDrag = $this->resolveInputCostDrag($stock, $macroState, $streams, $this->resolvePricingPower($stock), $realizedVariableMargin * $regulatedCostShare);
 
         // Rate case cycle: tariffs remain frozen between regulatory rate cases, resulting in regulatory attrition.
-        $this->advanceRateCase($streams, $macroState);
+        $authorisedRoeChange = $this->advanceRateCase($streams, $macroState);
+        // The tariff recovers a return on the equity rate base: an order that authorises a higher return adds it
+        // to the regulated revenue requirement, as a share of revenue at the book's equity to revenue.
+        $equityToRevenue = max(0.0, (float) $stock->getTotalEquity()) / max(1.0, $expectedRevenue / EarningsEngine::QUARTERLY_TIME_STEP);
+        $capitalChargeShift = $authorisedRoeChange * $equityToRevenue * $regulatedCostShare;
 
         // --- Merchant Fuel ---
         // The gas-fired share of the merchant fleet buys its fuel at spot and recovers it only through the power
@@ -284,7 +296,7 @@ class UtilityBusinessModel extends StandardCorporateBusinessModel
         // Costs are per MWh: re-expressed against the realized price, they fall as a share of revenue when the
         // wholesale price rises. The rate-base debt load reaches earnings through DebtEngine's maturity wall
         // (getDebtMaturityRolloverRate), below EBIT.
-        $perUnitCostRatio = $realizedVariableMargin + $inputCostDrag + $merchantFuelDrag + $disasterPenalty;
+        $perUnitCostRatio = $realizedVariableMargin + $inputCostDrag + $merchantFuelDrag + $disasterPenalty - $capitalChargeShift;
         $clampedMargin = $this->clampMargin(FirmEconomics::calculatePerUnitCostRatio($perUnitCostRatio, $priceRelative));
 
         // Primary shock is whichever stream deviated the most, overridden by tail events
@@ -411,11 +423,18 @@ class UtilityBusinessModel extends StandardCorporateBusinessModel
      */
     /**
      * Advances the rate-case cycle: accumulate what the frozen tariff is not recovering, file when it is
-     * material, and step the authorized tariff when the commission rules.
+     * material, and step the authorized tariff and its allowed return when the commission rules.
+     *
+     * @return float The authorised return on equity against the one the seeded margin was built on.
      */
-    private function advanceRateCase(StreamContext $streams, MacroStateDTO $macroState): void
+    private function advanceRateCase(StreamContext $streams, MacroStateDTO $macroState): float
     {
         $shortfall = $streams->getPersistedState(self::STATE_TARIFF_SHORTFALL, 0.0);
+
+        // Commissions set the allowed return off long Treasuries; the tariff carries the one the last order authorised.
+        $allowedRoe = self::ALLOWED_ROE_INTERCEPT + (self::ALLOWED_ROE_YIELD_SLOPE * $macroState->yield30yEma);
+        $authorisedRoe = $streams->getPersistedState(self::STATE_AUTHORISED_ROE, $allowedRoe);
+        $openingRoe = $streams->getPersistedState(self::STATE_OPENING_ROE, $authorisedRoe);
 
         // Non-fuel costs escalate with general inflation while the tariff sits still, so the tariff falls
         // that much further behind the cost base every quarter it is frozen.
@@ -431,6 +450,8 @@ class UtilityBusinessModel extends StandardCorporateBusinessModel
             // level forever. Clearing the whole request on every order instead let the tariff catch its cost
             // base completely, which is the one thing a lagging regulated tariff never does.
             $shortfall -= $shortfall * $macroState->utilityRateCaseGrantShare;
+            // The order also resets the return, granting the same share of the move as of the request.
+            $authorisedRoe += ($allowedRoe - $authorisedRoe) * $macroState->utilityRateCaseGrantShare;
         } elseif ($pending === 0 && $shortfall >= self::RATE_CASE_FILING_THRESHOLD) {
             $streams->startRegime(self::REGIME_RATE_CASE);
         }
@@ -438,6 +459,10 @@ class UtilityBusinessModel extends StandardCorporateBusinessModel
         // A commission that would otherwise leave the utility earning below its cost of service grants
         // interim rates rather than push a monopoly with a mandatory service obligation into distress.
         $streams->registerState(self::STATE_TARIFF_SHORTFALL, min(self::MAX_TARIFF_SHORTFALL, $shortfall));
+        $streams->registerState(self::STATE_AUTHORISED_ROE, $authorisedRoe);
+        $streams->registerState(self::STATE_OPENING_ROE, $openingRoe);
+
+        return $authorisedRoe - $openingRoe;
     }
 
     /** How far the authorized tariff lags its cost base, read from the persisted state the physics advances. */
@@ -455,6 +480,7 @@ class UtilityBusinessModel extends StandardCorporateBusinessModel
             'catastrophe_loss_index_ema',
             'energy_cost_push_lag',
             'exchange_rate_index_ema',
+            'import_price_level',
             'inflation_ema',
             'natural_gas_price_index_ema',
             'output_gap_ema',
@@ -462,6 +488,7 @@ class UtilityBusinessModel extends StandardCorporateBusinessModel
             'real_wage_gap',
             'utility_rate_case_grant_share',
             'wholesale_power_price_index_ema',
+            'yield_30y_ema',
         ];
     }
 }

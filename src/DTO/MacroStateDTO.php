@@ -137,6 +137,8 @@ readonly class MacroStateDTO
         public float $alliedDefenseSpendingIndexEma = MacroEngine::ALLIED_DEFENSE_BASELINE,
         public float $commercialPropertyIndex = 100.0,
         public float $commercialPropertyIndexEma = 100.0,
+        /** Real market rent per occupied square foot of District commercial space, 1 at neutral: the DiPasquale-Wheaton rent level the price index capitalises. */
+        public float $commercialMarketRent = 1.0,
         public float $residentialPropertyIndex = 100.0,
         public float $residentialPropertyIndexEma = 100.0,
         public float $residentialWealthTrend = 100.0,
@@ -727,6 +729,15 @@ readonly class MacroStateDTO
     public function exchangeRateGap(): float
     {
         return MacroAggregateSubsystem::realExchangeRateGap($this->exchangeRateIndexEma, $this->exchangeRateTrend);
+    }
+
+    /**
+     * Landed import prices against the level the currency's trend sets, in logs: the lagged exchange-rate pass-through
+     * of the currency's move off trend, plus the tariff. Read against the trend for the same reason as exchangeRateGap().
+     */
+    public function importPriceDeviation(): float
+    {
+        return $this->importPriceLevel - MacroAggregateSubsystem::importPriceLevelTarget($this->exchangeRateTrend);
     }
 
     /**

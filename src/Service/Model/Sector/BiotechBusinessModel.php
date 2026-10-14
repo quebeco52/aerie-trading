@@ -911,6 +911,7 @@ class BiotechBusinessModel extends StandardCorporateBusinessModel
     public function getOperatingMacroFields(): array
     {
         return [
+            'import_price_level',
             'reimbursement_rate_growth',
             'real_wage_gap',
         ];

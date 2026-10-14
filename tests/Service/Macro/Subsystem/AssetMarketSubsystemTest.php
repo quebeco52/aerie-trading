@@ -272,8 +272,9 @@ class AssetMarketSubsystemTest extends TestCase
         $this->assertEqualsWithDelta($calm->housingStartsIndex, $hotNominalPay->housingStartsIndex, 1e-9, 'Wage growth alone is not a building cost.');
         $this->assertLessThan($calm->housingStartsIndex, $dearLabour->housingStartsIndex, 'Dearer real labour raises replacement cost and lowers q.');
 
-        // Half the cost base is labour: a 4% real wage gap moves replacement cost by half of e^0.04 - 1.
-        $qShift = 1.0 / (0.5 + 0.5 * exp(0.04)) - 1.0;
+        // Labour is the non-materials share of the cost base: a 4% real wage gap moves replacement cost by that share of e^0.04 - 1.
+        $materials = AssetMarketSubsystem::REPLACEMENT_COST_MATERIALS_SHARE;
+        $qShift = 1.0 / ($materials + (1.0 - $materials) * exp(0.04)) - 1.0;
         $expected = AssetMarketSubsystem::HOUSING_STARTS_KAPPA * AssetMarketSubsystem::HOUSING_STARTS_Q_SENSITIVITY * $qShift * 0.25;
         $this->assertEqualsWithDelta($expected, $dearLabour->housingStartsIndex - $calm->housingStartsIndex, 1e-9);
     }

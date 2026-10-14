@@ -82,8 +82,8 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
     // --- Lease Ladder ---
     /** Weighted average lease term of the rent roll in years. Only the slice expiring each quarter reprices; the rest is contractually fixed. */
     public const LEASE_WALT_YEARS = 6.0;
-    /** Persisted state key: level of in-place rents relative to the market baseline, carried across quarters as the roll turns over. */
-    public const STATE_IN_PLACE_RENT = 'state:in_place_rent';
+    /** Persisted state key: in-place rents against the neutral market rent, carried across quarters as the roll turns over. Renamed when the ladder moved from property values to market rents, so a running game starts it at market. */
+    public const STATE_IN_PLACE_RENT = 'state:in_place_market_rent';
     /** Bound on the mark-to-market gap between in-place and market rents, past which tenants renegotiate or hand back space. */
     public const MAX_RELEASING_SPREAD = 0.50;
     /** Absolute maximum cap rate clamp floor to prevent unrealistically high property yields. */
@@ -110,10 +110,10 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
     public const SECURITIZATION_VARIANCE_SCALAR = 2.00;
     /** Volatility multiplier for longevity-linked bond yields and pension assets. */
     public const LONGEVITY_VARIANCE_SCALAR      = 0.25;
-    /** Weight of commercial property price index in market lease reversion. */
-    public const CRE_INDEX_WEIGHT               = 0.70;
-    /** Weight of residential property price index in market lease reversion. */
-    public const RES_INDEX_WEIGHT               = 0.30;
+    /** Room rates move more than leased rents: US ADR fell 8.8% in 2009 (STR) against a DiPasquale-Wheaton rent fall of ~3% at that year's -5.9% CBO gap. */
+    public const HOSPITALITY_RATE_LEVERAGE      = 3.0;
+    /** Share of the new-supply competition shift that comes off market rents each quarter; carried over from the value-based model, not separately fitted. */
+    public const NEW_SUPPLY_RENT_DRAG           = 0.03;
 
     /** Fraction of excess CPI inflation captured via contractual rent escalators. */
     public const RENT_ESCALATOR_CAPTURE         = 0.80;
@@ -265,17 +265,17 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
         $inflation = $macroState->inflationEma;
         $excessInflation = max(0.0, $inflation - MacroEngine::TARGET_INFLATION);
         $rentEscalator = $excessInflation * self::RENT_ESCALATOR_CAPTURE;
-        $creShift = ($macroState->commercialPropertyIndexEma - MacroEngine::CRE_BASELINE) / MacroEngine::CRE_BASELINE;
-        $resShift = $macroState->housePriceDeviation();
-        $blendedPropertyShift = ($creShift * self::CRE_INDEX_WEIGHT) + ($resShift * self::RES_INDEX_WEIGHT);
+        // Market rent is the space market (DiPasquale & Wheaton 1996), not the asset price: a lower cap rate lifts what
+        // a building is worth, not what a tenant pays. Apartment rents follow jobs and income the same way.
+        $marketRent = $macroState->commercialMarketRent - 1.0;
         $housingSupplyShift = MacroTransmission::calculateHousingStartsShift($macroState->housingStartsIndexEma, sensitivity: self::HOUSING_SUPPLY_COMPETITION_SENSITIVITY);
         // Lease ladder: roll in-place rents toward market at the quarterly rollover rate implied by WALT.
-        $inPlaceRent = $streams->getPersistedState(self::STATE_IN_PLACE_RENT, $blendedPropertyShift);
-        [$rolledInPlaceRent, $releasingSpread] = FirmEconomics::rollLeaseLadder($inPlaceRent, $blendedPropertyShift, self::LEASE_WALT_YEARS, self::MAX_RELEASING_SPREAD, EarningsEngine::QUARTERLY_TIME_STEP);
+        $inPlaceRent = $streams->getPersistedState(self::STATE_IN_PLACE_RENT, $marketRent);
+        [$rolledInPlaceRent, $releasingSpread] = FirmEconomics::rollLeaseLadder($inPlaceRent, $marketRent, self::LEASE_WALT_YEARS, self::MAX_RELEASING_SPREAD, EarningsEngine::QUARTERLY_TIME_STEP);
         $streams->registerState(self::STATE_IN_PLACE_RENT, $rolledInPlaceRent);
 
         // Only the mark-to-market captured on the expiring slice reaches revenue this quarter.
-        $marketLeaseReversion = ($rolledInPlaceRent - $inPlaceRent) - ($housingSupplyShift * 0.03);
+        $marketLeaseReversion = ($rolledInPlaceRent - $inPlaceRent) - ($housingSupplyShift * self::NEW_SUPPLY_RENT_DRAG);
         // Storm damage takes space off the rent roll until it is repaired.
         $catastropheVacancy = max(0.0, $macroState->catastropheLossIndexEma - 1.0) * self::CATASTROPHE_VACANCY_SENSITIVITY;
 
@@ -283,7 +283,7 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
         $leaseRevenue       = max(0.0, $expectedRevenue * $leaseWeight * (1.0 + $leaseShock + $rentEscalator + $marketLeaseReversion - $catastropheVacancy));
         // Contractual escalators and market rent reversion reprice the same square footage: pure price, no operating cost.
         $priceRevenue       = max(0.0, $expectedRevenue * $leaseWeight * ($rentEscalator + $marketLeaseReversion));
-        $hospitalityRevenue = max(0.0, $expectedRevenue * $hospitalityWeight * (1.0 + $hospitalityShock + ($creShift * 0.25)));
+        $hospitalityRevenue = max(0.0, $expectedRevenue * $hospitalityWeight * (1.0 + $hospitalityShock + ($marketRent * self::HOSPITALITY_RATE_LEVERAGE)));
 
         $streamRevenues = [
             'lease'       => $leaseRevenue,
@@ -504,16 +504,15 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
     {
         return [
             'catastrophe_loss_index_ema',
-            'commercial_property_index_ema',
+            'commercial_market_rent',
             'corporate_default_rate_ema',
             'energy_cost_push_lag',
             'exchange_rate_index_ema',
             'household_debt_service_gap',
             'housing_starts_index_ema',
+            'import_price_level',
             'inflation_ema',
             'output_gap_lag_18m',
-            'residential_property_index_ema',
-            'residential_wealth_trend',
             'retail_default_rate_ema',
             'tips_breakeven_ema',
             'real_wage_gap',

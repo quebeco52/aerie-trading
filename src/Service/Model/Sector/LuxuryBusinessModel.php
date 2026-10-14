@@ -237,6 +237,7 @@ class LuxuryBusinessModel extends StandardCorporateBusinessModel
             'consumer_sentiment_index_ema',
             'exchange_rate_index_ema',
             'foreign_output_gap_ema',
+            'import_price_level',
             'industrial_metals_index_ema',
             'money_supply_growth_ema',
             'money_supply_growth_trend',

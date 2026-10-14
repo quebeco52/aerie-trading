@@ -299,6 +299,7 @@ class RailroadBusinessModel extends StandardCorporateBusinessModel
             'exchange_rate_index_ema',
             'foreign_output_gap_ema',
             'freight_rate_index_ema',
+            'import_price_level',
             'industrial_metals_index_ema',
             'manufacturing_pmi_ema',
             'output_gap_ema',

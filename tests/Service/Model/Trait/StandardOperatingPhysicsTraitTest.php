@@ -205,7 +205,10 @@ final class StandardOperatingPhysicsTraitTest extends TestCase
             producerPriceInflationEma: MacroEngine::TARGET_INFLATION
         );
         $this->assertEqualsWithDelta(0.0, $configured->resolveInputCostDeviation($agriSpike), 0.0000001, 'A market the firm does not buy in cannot move its costs.');
-        $this->assertGreaterThan(0.0, $this->model->resolveInputCostDeviation($agriSpike), 'The default basket does buy agricultural inputs.');
+        $this->assertGreaterThan(0.0, $this->model->resolveInputCostDeviation(new MacroStateDTO(
+            industrialMetalsIndexEma: 150.0,
+            producerPriceInflationEma: MacroEngine::TARGET_INFLATION
+        )), 'The default basket does buy metals.');
 
         // A metals spike reaches it in proportion to the declared share.
         $metalsSpike = new MacroStateDTO(
@@ -213,6 +216,36 @@ final class StandardOperatingPhysicsTraitTest extends TestCase
             producerPriceInflationEma: MacroEngine::TARGET_INFLATION
         );
         $this->assertEqualsWithDelta(0.20 * 0.50, $configured->resolveInputCostDeviation($metalsSpike), 0.0000001, 'The deviation is the share times the relative move.');
+    }
+
+    /**
+     * Imported inputs are priced by the landed import price against the level the currency's trend sets: a currency
+     * that has settled away from its nominal anchor is no cost, a fall below its trend is, and so is a tariff.
+     */
+    public function testImportedInputsReadTheCurrencyAgainstItsTrend(): void
+    {
+        $trend = 103.0;
+        $settled = new MacroStateDTO(
+            exchangeRateTrend: $trend,
+            importPriceLevel: \App\Service\Macro\Subsystem\MacroAggregateSubsystem::importPriceLevelTarget($trend),
+        );
+        $this->assertEqualsWithDelta(0.0, $this->model->resolveInputPriceDeviations($settled)['imports'], 1e-12, 'A currency at its trend is not a cost.');
+
+        $weak = new MacroStateDTO(
+            exchangeRateTrend: $trend,
+            importPriceLevel: \App\Service\Macro\Subsystem\MacroAggregateSubsystem::importPriceLevelTarget(0.90 * $trend),
+        );
+        $expected = -\App\Service\Macro\Subsystem\MacroAggregateSubsystem::IMPORT_PRICE_PASS_THROUGH * log(0.90);
+        $this->assertEqualsWithDelta($expected, $this->model->resolveInputPriceDeviations($weak)['imports'], 1e-12, 'A 10% fall below trend raises landed costs by the pass-through.');
+
+        $tariffed = new MacroStateDTO(
+            exchangeRateTrend: $trend,
+            importPriceLevel: \App\Service\Macro\Subsystem\MacroAggregateSubsystem::importPriceLevelTarget($trend, 0.10),
+        );
+        $this->assertEqualsWithDelta(log(1.10), $this->model->resolveInputPriceDeviations($tariffed)['imports'], 1e-12, 'A tariff is a landed cost.');
+
+        $share = (float) \App\Data\Macro\InputOutputExposures::ALL_PRIVATE_INDUSTRIES['imports'];
+        $this->assertEqualsWithDelta($share * $expected, $this->model->resolveInputCostDeviation($weak), 1e-12, 'It reaches the basket at the measured import share.');
     }
 
     public function testInputPriceDeviationsAreZeroAtEachChannelBaseline(): void
@@ -281,7 +314,7 @@ final class StandardOperatingPhysicsTraitTest extends TestCase
             $momentum = $streams->getStreamZ();
         }
 
-        $share = (float) FinancialConstants::DEFAULT_INPUT_COST_EXPOSURES['labor'];
+        $share = (float) \App\Data\Macro\InputOutputExposures::ALL_PRIVATE_INDUSTRIES['labor'];
         $settled = 0.60 * $share * 0.02 * (1.0 - $pricingPower * BareStandardModel::MAX_INPUT_COST_PASS_THROUGH);
         $this->assertGreaterThan(0.0, $settled);
         $this->assertEqualsWithDelta($settled, $drags[59], 1e-6, 'Fifteen years on, the higher real wage is still a cost.');

@@ -230,6 +230,7 @@ class LogisticsBusinessModel extends StandardCorporateBusinessModel
             'energy_cost_push_lag',
             'foreign_output_gap_ema',
             'freight_rate_index_ema',
+            'import_price_level',
             'manufacturing_pmi_ema',
             'output_gap_ema',
             'supply_chain_pressure_index_ema',

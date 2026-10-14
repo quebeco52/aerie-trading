@@ -304,6 +304,7 @@ class SemiconductorBusinessModel extends StandardCorporateBusinessModel
         return [
             'capacity_utilization_rate_ema',
             'exchange_rate_index_ema',
+            'import_price_level',
             'industrial_metals_index_ema',
             'inventory_stock_gap_ema',
             'manufacturing_pmi_ema',

@@ -248,6 +248,7 @@ class HeavyManufacturingBusinessModel extends StandardCorporateBusinessModel
             'capacity_utilization_rate_ema',
             'capital_stock_overhang_ema',
             'exchange_rate_index_ema',
+            'import_price_level',
             'industrial_metals_index_ema',
             'inventory_stock_gap_ema',
             'manufacturing_pmi_ema',

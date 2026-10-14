@@ -333,6 +333,7 @@ class LawFirmBusinessModel extends StandardCorporateBusinessModel
             'corporate_default_rate_ema',
             'deal_activity_index_ema',
             'exchange_rate_index_ema',
+            'import_price_level',
             'macro_credit_spread',
             'macro_credit_spread_ema',
             'output_gap_ema',

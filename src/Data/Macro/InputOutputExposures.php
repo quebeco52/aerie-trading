@@ -20,6 +20,10 @@ namespace App\Data\Macro;
  * base and is priced by the real wage gap; suppliers' pay is left out because it reaches a buyer through supplier prices, which
  * move with the aggregate price level that gap is measured against. Refining is not listed: crude and refinery fuel gas share
  * one BEA row.
+ * Imports are the imported intermediates the macro does not price as commodities, from the 2017 detail Import Matrix: direct
+ * plus supply-chain content through domestic requirements only, E_mj = m_j + m_N (I - A_D,NN)^-1 A_D,Nj (Hummels, Ishii & Yi
+ * 2001), priced by the landed import price. Retail and wholesale output is a margin in these tables, so resold merchandise
+ * is not in a distributor's imports.
  */
 final class InputOutputExposures
 {
@@ -35,75 +39,77 @@ final class InputOutputExposures
 
     // --- Model Exposures (share of the variable cost base per input channel) ---
     /** Advertising agencies: BEA 541800. */
-    public const ADVERTISING_AGENCY = ['labor' => 0.532];
+    public const ADVERTISING_AGENCY = ['imports' => 0.042, 'labor' => 0.532];
     /** Apparel manufacturing (SHER): BEA 315000. */
-    public const APPAREL_MANUFACTURING = ['labor' => 0.633];
+    public const APPAREL_MANUFACTURING = ['imports' => 0.085, 'labor' => 0.633];
     /** Automobile and light truck assembly: BEA 336111, 336112. */
-    public const AUTO_MANUFACTURER = ['metals' => 0.119, 'labor' => 0.136];
+    public const AUTO_MANUFACTURER = ['metals' => 0.119, 'imports' => 0.264, 'labor' => 0.136];
     /** Pharmaceutical and biological products: BEA 325412, 325414. */
-    public const BIOTECH = ['labor' => 0.279];
+    public const BIOTECH = ['imports' => 0.375, 'labor' => 0.279];
     /** Petrochemicals, organics, resins, fertilizer and agricultural chemicals (hydrocarbon feedstock priced in the model): BEA 325110, 325190, 325211, 325310, 325320, 3259A0. */
-    public const CHEMICAL = ['agri' => 0.057, 'labor' => 0.138];
+    public const CHEMICAL = ['agri' => 0.057, 'imports' => 0.157, 'labor' => 0.138];
     /** Telephone, broadcast and wireless equipment: BEA 334210, 334220. */
-    public const COMMUNICATION_EQUIPMENT = ['metals' => 0.031, 'labor' => 0.552];
+    public const COMMUNICATION_EQUIPMENT = ['metals' => 0.031, 'imports' => 0.137, 'labor' => 0.552];
     /** Computers, storage and peripherals (PENG): BEA 334111, 334112, 334118. */
-    public const COMPUTER_HARDWARE = ['labor' => 0.555];
+    public const COMPUTER_HARDWARE = ['imports' => 0.106, 'labor' => 0.555];
     /** A diversified industrial blend: machinery, motors, aerospace parts, chemical products: BEA 3259A0, 33399A, 335312, 336413. */
-    public const CONGLOMERATE = ['energy' => 0.023, 'metals' => 0.102, 'labor' => 0.28];
+    public const CONGLOMERATE = ['energy' => 0.023, 'metals' => 0.102, 'imports' => 0.198, 'labor' => 0.28];
     /** Nonresidential, infrastructure, manufacturing and power structures (IBHI): BEA 233230, 233240, 2332A0, 2332C0, 2332D0. */
-    public const CONSTRUCTION = ['energy' => 0.028, 'metals' => 0.041, 'labor' => 0.456];
+    public const CONSTRUCTION = ['energy' => 0.028, 'metals' => 0.041, 'imports' => 0.078, 'labor' => 0.456];
     /** Tobacco, packaged foods, poultry and grain, personal and household products, wine and spirits (PHIL, SGRB, CROP, LARK, PINT): BEA 1111B0, 112300, 311230, 311300, 311410, 312130, 312140, 312200, 325610, 325620. */
-    public const CONSUMER_STAPLES = ['energy' => 0.027, 'agri' => 0.187, 'labor' => 0.141];
+    public const CONSUMER_STAPLES = ['energy' => 0.027, 'agri' => 0.187, 'imports' => 0.102, 'labor' => 0.141];
     /** Aircraft, engines, parts, missiles and navigation instruments: BEA 334511, 336411, 336412, 336413, 336414. */
-    public const DEFENSE_CONTRACTOR = ['metals' => 0.042, 'labor' => 0.396];
+    public const DEFENSE_CONTRACTOR = ['metals' => 0.042, 'imports' => 0.198, 'labor' => 0.396];
     /** Colleges and other educational services: BEA 611A00, 611B00. */
-    public const EDUCATION = ['labor' => 0.571];
+    public const EDUCATION = ['imports' => 0.033, 'labor' => 0.571];
     /** Securities intermediation and exchanges, data processing: BEA 518200, 523A00. */
-    public const FINANCIAL_DATA = ['labor' => 0.443];
+    public const FINANCIAL_DATA = ['imports' => 0.141, 'labor' => 0.443];
     /** HVAC equipment, farm and construction machinery, motors and switchgear (NUTH, WREN, BUZT, CHUF, BOBY): BEA 333111, 333120, 333415, 335312, 335313. */
-    public const HEAVY_MANUFACTURING = ['metals' => 0.191, 'labor' => 0.266];
+    public const HEAVY_MANUFACTURING = ['metals' => 0.191, 'imports' => 0.177, 'labor' => 0.266];
     /** Single-family, multifamily and other residential structures (BOWR): BEA 233411, 233412, 2334A0. */
-    public const HOMEBUILDER = ['energy' => 0.025, 'metals' => 0.028, 'labor' => 0.383];
+    public const HOMEBUILDER = ['energy' => 0.025, 'metals' => 0.028, 'imports' => 0.073, 'labor' => 0.383];
     /** Nonstore retailers: BEA 454000. */
-    public const INTERNET_RETAIL = ['labor' => 0.271];
+    public const INTERNET_RETAIL = ['imports' => 0.07, 'labor' => 0.271];
     /** Legal services (CLAW): BEA 541100. */
-    public const LAW_FIRM = ['labor' => 0.598];
+    public const LAW_FIRM = ['imports' => 0.029, 'labor' => 0.598];
     /** Trucking, couriers and warehousing: BEA 484000, 492000, 493000. */
-    public const LOGISTICS = ['energy' => 0.069, 'labor' => 0.433];
+    public const LOGISTICS = ['energy' => 0.069, 'imports' => 0.04, 'labor' => 0.433];
     /** Jewelry and leather goods: BEA 316000, 339910. */
-    public const LUXURY = ['metals' => 0.061, 'labor' => 0.315];
+    public const LUXURY = ['metals' => 0.061, 'imports' => 0.18, 'labor' => 0.315];
     /** Hospitals, outpatient care and nursing facilities: BEA 621400, 622000, 623A00. */
-    public const MEDICAL_CARE_FACILITY = ['labor' => 0.542];
+    public const MEDICAL_CARE_FACILITY = ['imports' => 0.042, 'labor' => 0.542];
     /** Copper, gold, coal and potash mining (CNDR; own-commodity trade excluded): BEA 212100, 212230, 2122A0, 2123A0. */
-    public const MINING = ['energy' => 0.056, 'metals' => 0.027, 'labor' => 0.254];
+    public const MINING = ['energy' => 0.056, 'metals' => 0.027, 'imports' => 0.078, 'labor' => 0.254];
     /** Oil and gas extraction (own-commodity trade excluded): BEA 211000. */
-    public const OIL_GAS_PRODUCER = ['energy' => 0.029, 'metals' => 0.038, 'labor' => 0.24];
+    public const OIL_GAS_PRODUCER = ['energy' => 0.029, 'metals' => 0.038, 'imports' => 0.068, 'labor' => 0.24];
     /** Rail transportation: BEA 482000. */
-    public const RAILROAD = ['energy' => 0.088, 'metals' => 0.02, 'labor' => 0.383];
+    public const RAILROAD = ['energy' => 0.088, 'metals' => 0.02, 'imports' => 0.04, 'labor' => 0.383];
     /** Tenant-occupied housing and other real estate (SHOR; PLZA, ELDE, KITE): BEA 531HST, 531ORE. */
-    public const REIT = ['energy' => 0.02, 'labor' => 0.125];
+    public const REIT = ['energy' => 0.02, 'imports' => 0.062, 'labor' => 0.125];
     /** Accommodation and gambling (GULL): BEA 713200, 721000. */
-    public const RESORTS_CASINOS = ['labor' => 0.398];
+    public const RESORTS_CASINOS = ['imports' => 0.056, 'labor' => 0.398];
     /** Full- and limited-service restaurants: BEA 722110, 722211. */
-    public const RESTAURANT = ['agri' => 0.038, 'labor' => 0.418];
+    public const RESTAURANT = ['agri' => 0.038, 'imports' => 0.061, 'labor' => 0.418];
     /** Investigation and security services: BEA 561600. */
-    public const SECURITY_PROTECTION = ['labor' => 0.617];
+    public const SECURITY_PROTECTION = ['imports' => 0.038, 'labor' => 0.617];
     /** Semiconductor devices (SILC): BEA 334413. */
-    public const SEMICONDUCTOR = ['metals' => 0.039, 'labor' => 0.631];
+    public const SEMICONDUCTOR = ['metals' => 0.039, 'imports' => 0.083, 'labor' => 0.631];
     /** Water transportation (own-commodity trade excluded): BEA 483000. */
-    public const SHIPPING = ['energy' => 0.102, 'metals' => 0.02, 'labor' => 0.148];
+    public const SHIPPING = ['energy' => 0.102, 'metals' => 0.02, 'imports' => 0.073, 'labor' => 0.148];
     /** Industrial, general purpose, packaging and fluid power machinery: BEA 33329A, 333993, 33399A, 33399B. */
-    public const SPECIALTY_INDUSTRIAL_MACHINERY = ['metals' => 0.125, 'labor' => 0.287];
+    public const SPECIALTY_INDUSTRIAL_MACHINERY = ['metals' => 0.125, 'imports' => 0.167, 'labor' => 0.287];
     /** Iron and steel mills and steel products (own-commodity trade excluded; scrap priced as metals): BEA 331110, 331200. */
-    public const STEEL_MANUFACTURING = ['metals' => 0.236, 'labor' => 0.171];
+    public const STEEL_MANUFACTURING = ['metals' => 0.236, 'imports' => 0.034, 'labor' => 0.171];
     /** Internet publishing and data hosting (HUMM): BEA 518200, 519130. */
-    public const TECH = ['labor' => 0.386];
+    public const TECH = ['imports' => 0.059, 'labor' => 0.386];
     /** Wired and wireless carriers: BEA 517110, 517210. */
-    public const TELECOM = ['labor' => 0.197];
+    public const TELECOM = ['imports' => 0.113, 'labor' => 0.197];
     /** Hand tools (CBIL) and machinery wholesale (MAGP): BEA 332200, 423800. */
-    public const TOOLS_AND_ACCESSORIES = ['metals' => 0.108, 'labor' => 0.407];
+    public const TOOLS_AND_ACCESSORIES = ['metals' => 0.108, 'imports' => 0.057, 'labor' => 0.407];
     /** Electric power (BIRD; generator fuel from EIA receipts) and water systems (WADE): BEA 221100, 221300. */
-    public const UTILITY = ['energy' => 0.027, 'gas' => 0.095, 'labor' => 0.383];
+    public const UTILITY = ['energy' => 0.027, 'gas' => 0.095, 'imports' => 0.032, 'labor' => 0.383];
     /** Waste management and remediation: BEA 562000. */
-    public const WASTE_MANAGEMENT = ['energy' => 0.027, 'metals' => 0.031, 'labor' => 0.326];
+    public const WASTE_MANAGEMENT = ['energy' => 0.027, 'metals' => 0.031, 'imports' => 0.098, 'labor' => 0.326];
+    /** Every private industry the macro does not price, output-weighted: the basket of a firm with no sector physics. */
+    public const ALL_PRIVATE_INDUSTRIES = ['metals' => 0.022, 'imports' => 0.075, 'labor' => 0.402];
 }

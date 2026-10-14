@@ -74,30 +74,61 @@ ei = [idx[j] for j in exo]; ni = [idx[j] for j in endo]
 
 # LU of (I - A_NN), then Y = (I - A_NN)^-1 A_N,J for the columns the models need.
 m = len(ni)
-M = [[(1.0 if r == c else 0.0) - A[ni[r]][ni[c]] for c in range(m)] for r in range(m)]
-piv = list(range(m))
-for k in range(m):
-    p = max(range(k, m), key=lambda r: abs(M[r][k]))
-    M[k], M[p] = M[p], M[k]; piv[k], piv[p] = piv[p], piv[k]
-    mk = M[k]; inv = 1.0 / mk[k]
-    for r in range(k + 1, m):
-        mr = M[r]
-        f = mr[k] * inv
-        if f:
-            mr[k] = f
-            for c in range(k + 1, m):
-                mr[c] -= f * mk[c]
-def solve(rhs):
-    b = [rhs[piv[r]] for r in range(m)]
-    for r in range(m):
-        mr = M[r]; s = b[r]
-        for c in range(r): s -= mr[c] * b[c]
-        b[r] = s
-    for r in range(m - 1, -1, -1):
-        mr = M[r]; s = b[r]
-        for c in range(r + 1, m): s -= mr[c] * b[c]
-        b[r] = s / mr[r]
-    return b
+def leontief_solver(A):
+    M = [[(1.0 if r == c else 0.0) - A[ni[r]][ni[c]] for c in range(m)] for r in range(m)]
+    piv = list(range(m))
+    for k in range(m):
+        p = max(range(k, m), key=lambda r: abs(M[r][k]))
+        M[k], M[p] = M[p], M[k]; piv[k], piv[p] = piv[p], piv[k]
+        mk = M[k]; inv = 1.0 / mk[k]
+        for r in range(k + 1, m):
+            mr = M[r]
+            f = mr[k] * inv
+            if f:
+                mr[k] = f
+                for c in range(k + 1, m):
+                    mr[c] -= f * mk[c]
+    def solve(rhs):
+        b = [rhs[piv[r]] for r in range(m)]
+        for r in range(m):
+            mr = M[r]; s = b[r]
+            for c in range(r): s -= mr[c] * b[c]
+            b[r] = s
+        for r in range(m - 1, -1, -1):
+            mr = M[r]; s = b[r]
+            for c in range(r + 1, m): s -= mr[c] * b[c]
+            b[r] = s / mr[r]
+        return b
+    return solve
+solve = leontief_solver(A)
+
+# --- Imported intermediates (BEA 2017 detail Import Matrix) ---
+# An imported input is priced abroad and converted at the exchange rate, so it is an exogenous node of its own: domestic
+# requirements A_D = A - A_M pass costs through, and an industry's import content per $ of output is
+# E_mj = m_j + m_N (I - A_D,NN)^-1 A_D,Nj (Hummels, Ishii & Yi 2001 vertical specialisation). Imported commodities the macro
+# already prices (metals, energy, gas, farm goods, freight) stay in their own channels and are left out of m.
+imp = json.load(open(os.path.join(HERE, 'io_imports.json')))['imports']
+A_M = [[0.0] * n for _ in range(n)]
+for c in commodities:
+    q = Q.get(c, 0.0)
+    if q <= 0 or c == SCRAP:
+        continue
+    producers = [(idx[i], make[i][c] / q) for i in industries if make[i].get(c, 0.0) > 0]
+    for j in industries:
+        b = imp.get(c, {}).get(j, 0.0) / X[j]
+        if b:
+            for i, share in producers:
+                A_M[i][idx[j]] += share * b
+A_D = [[A[r][c] - A_M[r][c] for c in range(n)] for r in range(n)]
+solve_domestic = leontief_solver(A_D)
+def priced_import_row(c):
+    return c not in ('T005', 'V00100', 'V00200', 'V00300', 'T006', 'T008') and c != SCRAP and not channel_of(c)
+import_rows = [c for c in imp if priced_import_row(c)]
+direct_imports = {j: sum(imp[c].get(j, 0.0) for c in import_rows) / X[j] for j in industries}
+
+def import_exposure(j):
+    y = solve_domestic([A_D[ni[r]][idx[j]] for r in range(m)])
+    return direct_imports[j] + sum(direct_imports[endo[r]] * y[r] for r in range(m) if y[r])
 
 def exposures(j):
     col = idx[j]
@@ -186,9 +217,10 @@ assert not missing, f'unknown BEA codes: {missing}'
 
 results = {}
 cache = {}
+import_cache = {}
 for model, groups in MAP.items():
     ex = EXCLUDE.get(model, {})
-    tot = {ch: 0.0 for ch in CHANNELS}; vc = 0.0; pay = 0.0
+    tot = {ch: 0.0 for ch in CHANNELS}; vc = 0.0; pay = 0.0; imports = 0.0
     for group in groups:
         w = 1.0 / (len(groups) * len(group))
         for j in group:
@@ -200,17 +232,39 @@ for model, groups in MAP.items():
                 tot[ch] += w * sum(v for code, v in bycode.items() if code not in ex.get('codes', []))
             vc += w * variable_cost_ratio(j)
             pay += w * use['V00100'].get(j, 0.0) / X[j]
+            if j not in import_cache:
+                import_cache[j] = import_exposure(j)
+            imports += w * import_cache[j]
     shares = {ch: tot[ch] / vc for ch in CHANNELS}   # (weighted exposure) / (weighted variable cost ratio)
     # Labor is the industry's OWN pay: suppliers' pay reaches it through supplier prices, which move with the aggregate
     # price level the real wage gap is measured against.
     shares['labor'] = pay / vc
+    shares['imports'] = imports / vc
     codes = sorted({c for group in groups for c in group})
     results[model] = {'codes': codes, 'vc': vc, 'shares': shares, 'old': current_exposures(CLASS[model])}
+
+# --- Default basket: every private industry the macro does not price, weighted by output ---
+# The exposures are linear in the requirement column, so the output-weighted average is one solve on the aggregated column.
+private = [j for j in endo if not j.startswith(('GS', 'S00'))]
+weight = {j: X[j] / sum(X[k] for k in private) for j in private}
+agg = [sum(weight[j] * A[r][idx[j]] for j in private) for r in range(n)]
+y_agg = solve([agg[ni[r]] for r in range(m)])
+default_shares = {ch: 0.0 for ch in CHANNELS}
+for code, e in zip(exo, ei):
+    v = agg[e] + sum(A[e][ni[r]] * y_agg[r] for r in range(m) if y_agg[r])
+    if code == '221100': v *= EPS_POWER
+    if code == '221200': v *= EPS_GAS
+    default_shares[channel_of(code)] += v
+default_vc = sum(weight[j] * variable_cost_ratio(j) for j in private)
+default_shares = {ch: v / default_vc for ch, v in default_shares.items()}
+default_shares['labor'] = sum(weight[j] * use['V00100'].get(j, 0.0) / X[j] for j in private) / default_vc
+default_shares['imports'] = sum(weight[j] * import_exposure(j) for j in private) / default_vc
+print('default (all private industries, output-weighted):', {k: round(v, 3) for k, v in default_shares.items()})
 
 print(f'retail pass-through (12-month means, with trend): power {EPS_POWER:.3f}, gas {EPS_GAS:.3f}; industries {n}, exogenous {len(exo)}, endogenous {m}')
 print(f"{'model':32s} {'vc':>5s} | " + ' '.join(f'{c[:6]:>13s}' for c in CHANNELS + ['labor']) + ' |  ppi old')
 for model, r in results.items():
-    cells = ' '.join(f"{r['old'].get(ch, 0):5.2f}->{r['shares'][ch]:6.3f}" for ch in CHANNELS + ['labor'])
+    cells = ' '.join(f"{r['old'].get(ch, 0):5.2f}->{r['shares'][ch]:6.3f}" for ch in CHANNELS + ['labor']) + f" | imports {r['shares']['imports']:.3f}"
     print(f"{model:32s} {r['vc']:5.2f} | {cells} | {r['old'].get('ppi', 0):7.2f}")
 json.dump({'eps_power': EPS_POWER, 'eps_gas': EPS_GAS, 'results': results}, open(os.path.join(HERE, 'io_weights.json'), 'w'), indent=1)
 
@@ -260,6 +314,10 @@ if '--php' in sys.argv:
              ' * base and is priced by the real wage gap; suppliers\' pay is left out because it reaches a buyer through supplier prices, which',
              ' * move with the aggregate price level that gap is measured against. Refining is not listed: crude and refinery fuel gas share',
              ' * one BEA row.',
+             ' * Imports are the imported intermediates the macro does not price as commodities, from the 2017 detail Import Matrix: direct',
+             ' * plus supply-chain content through domestic requirements only, E_mj = m_j + m_N (I - A_D,NN)^-1 A_D,Nj (Hummels, Ishii & Yi',
+             ' * 2001), priced by the landed import price. Retail and wholesale output is a margin in these tables, so resold merchandise',
+             ' * is not in a distributor\'s imports.',
              ' */', 'final class InputOutputExposures', '{',
              '    // --- Retail Pass-Through (EIA monthly 2017-2025, 12-month means, log-log with a linear trend) ---',
              f'    /** Industrial retail electricity per unit of wholesale power (EIA-861M against the four-hub on-peak series); folded into electricity weights. */',
@@ -273,10 +331,17 @@ if '--php' in sys.argv:
     for model in sorted(results):
         r = results[model]
         vals = {ch: round(r['shares'][ch], 3) for ch in CHANNELS if round(r['shares'][ch], 3) >= MATERIALITY_FLOOR}
+        if round(r['shares']['imports'], 3) >= MATERIALITY_FLOOR:
+            vals['imports'] = round(r['shares']['imports'], 3)
         vals['labor'] = round(r['shares']['labor'], 3)
         body = ', '.join(f"'{k}' => {v:.3f}".rstrip('0').rstrip('.') if False else f"'{k}' => {v}" for k, v in vals.items())
         lines.append(f"    /** {LABELS[model]}: BEA {', '.join(r['codes'])}. */")
         lines.append(f'    public const {model} = [{body}];')
+    vals = {ch: round(default_shares[ch], 3) for ch in CHANNELS + ['imports'] if round(default_shares[ch], 3) >= MATERIALITY_FLOOR}
+    vals['labor'] = round(default_shares['labor'], 3)
+    lines.append('    /** Every private industry the macro does not price, output-weighted: the basket of a firm with no sector physics. */')
+    body = ', '.join(f"'{k}' => {v}" for k, v in vals.items())
+    lines.append(f'    public const ALL_PRIVATE_INDUSTRIES = [{body}];')
     lines += ['}', '']
     open(out, 'w').write('\n'.join(lines))
     print('wrote', out)

@@ -222,6 +222,7 @@ class HomebuilderBusinessModel extends StandardCorporateBusinessModel
         return [
             'energy_cost_push_lag',
             'housing_starts_index_ema',
+            'import_price_level',
             'industrial_metals_index_ema',
             'real_wage_gap',
             'residential_property_index_ema',

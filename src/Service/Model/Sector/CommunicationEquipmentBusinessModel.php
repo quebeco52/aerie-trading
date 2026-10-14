@@ -423,6 +423,7 @@ class CommunicationEquipmentBusinessModel extends StandardCorporateBusinessModel
             'consumer_sentiment_index_ema',
             'exchange_rate_index_ema',
             'foreign_output_gap_ema',
+            'import_price_level',
             'industrial_metals_index_ema',
             'inventory_stock_gap_ema',
             'output_gap_lag_12m',

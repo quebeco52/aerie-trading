@@ -99,7 +99,9 @@ class RetailInsuranceBusinessModel extends InsuranceBusinessModel
         $surplusDeficitRatio = $this->resolveSurplusDeficitRatio($stock, $macroState, $mathUtility);
         $this->advanceUnderwritingCycle($streams, $stock, $macroState, $mathUtility, $surplusDeficitRatio, $recovery > 0.0);
 
-        $clampedMargin = $this->clampMargin($realizedVariableMargin + $claims['excess'] - $recovery + $reinstatementPremium);
+        // Claims inflation the filed rates have not caught up with lands on the P&C losses; life benefits are fixed in the policy.
+        $unrecoveredClaims = $realizedVariableMargin * (1.0 - self::BASE_EXPENSE_RATIO_SHARE) * $pcWeight * $this->resolveUnrecoveredClaimsCost($streams, $macroState);
+        $clampedMargin = $this->clampMargin($realizedVariableMargin + $unrecoveredClaims + $claims['excess'] - $recovery + $reinstatementPremium);
         // The baseline cost ratio splits as the parent's does; the claims above it are losses.
         // Life policies carry a policy reserve, not unearned premium, and the catastrophe draw falls on the P&C book alone.
         $lifeBenefits = $lifeRevenue * $this->resolveBaselineLossRatio($realizedVariableMargin, $fixedCosts, $actualRevenue);
@@ -172,6 +174,7 @@ class RetailInsuranceBusinessModel extends InsuranceBusinessModel
     {
         return [
             'catastrophe_loss_index_ema',
+            'core_goods_inflation_ema',
             'gdp_deflator',
             'market_volatility_ema',
             'output_gap_ema',
@@ -179,6 +182,7 @@ class RetailInsuranceBusinessModel extends InsuranceBusinessModel
             'perceived_neutral_rate',
             'policy_rate_ema',
             'potential_gdp_index',
+            'supercore_inflation_ema',
             'yield_10y_ema',
         ];
     }

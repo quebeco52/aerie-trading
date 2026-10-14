@@ -25,7 +25,7 @@ final class ReitLeaseLadderTest extends TestCase
     /**
      * @return array{0: array<string, float>, 1: array<string, float>} final stream state and final KPIs
      */
-    private function runQuarters(int $quarters, float $propertyIndex, array $openingState = []): array
+    private function runQuarters(int $quarters, float $marketRentIndex, array $openingState = [], float $propertyIndex = 100.0): array
     {
         $model = new ReitBusinessModel();
         $stock = new Stock();
@@ -41,6 +41,7 @@ final class ReitLeaseLadderTest extends TestCase
         $macro = new MacroStateDTO(
             commercialPropertyIndexEma: $propertyIndex,
             residentialPropertyIndexEma: $propertyIndex,
+            commercialMarketRent: $marketRentIndex / 100.0,
             inflationEma: 0.02,
         );
 
@@ -100,6 +101,18 @@ final class ReitLeaseLadderTest extends TestCase
 
         $this->assertEqualsWithDelta(0.30, $kpis['in_place_rent_index'], 0.01, 'After many lease terms the book is marked to market.');
         $this->assertEqualsWithDelta(0.0, $kpis['releasing_spread'], 0.01);
+    }
+
+    /**
+     * A lower cap rate lifts what a building is worth, not what a tenant pays: property values 30% up on a rate cut,
+     * with market rents unchanged, must leave the rent roll where it is. The ladder used to chase the price index.
+     */
+    public function testPropertyValuesAloneDoNotRepriceTheRentRoll(): void
+    {
+        [, $kpis] = $this->runQuarters(8, 100.0, [ReitBusinessModel::STATE_IN_PLACE_RENT => 0.0], propertyIndex: 130.0);
+
+        $this->assertEqualsWithDelta(0.0, $kpis['releasing_spread'], 1e-9);
+        $this->assertEqualsWithDelta(0.0, $kpis['in_place_rent_index'], 1e-9);
     }
 
     /** The lease term is what sets the speed, and it is disclosed. */

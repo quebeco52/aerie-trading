@@ -272,6 +272,7 @@ class ToolsAndAccessoriesBusinessModel extends StandardCorporateBusinessModel
             'consumer_sentiment_index_ema',
             'exchange_rate_index_ema',
             'housing_starts_index_ema',
+            'import_price_level',
             'industrial_metals_index_ema',
             'manufacturing_pmi_ema',
             'output_gap_ema',

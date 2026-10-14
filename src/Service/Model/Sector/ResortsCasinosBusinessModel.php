@@ -399,6 +399,7 @@ class ResortsCasinosBusinessModel extends StandardCorporateBusinessModel
             'consumer_sentiment_index_ema',
             'exchange_rate_index_ema',
             'foreign_output_gap_ema',
+            'import_price_level',
             'output_gap_ema',
             'retail_default_rate_ema',
             'supercore_inflation_ema',

@@ -54,6 +54,7 @@ final class BusinessMapBuilder
         'freight' => 'Freight rates',
         'ppi' => 'Wholesale goods prices',
         'labor' => 'Pay against productivity',
+        'imports' => 'Imported parts and goods',
     ];
 
     /** A lender's events by the card they concern (ShockEvent names); any other event goes under the map's title. */

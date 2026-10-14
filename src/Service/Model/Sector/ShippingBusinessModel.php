@@ -289,6 +289,7 @@ class ShippingBusinessModel extends StandardCorporateBusinessModel
             'exchange_rate_index_ema',
             'foreign_output_gap_ema',
             'freight_rate_index_ema',
+            'import_price_level',
             'industrial_metals_index_ema',
             'output_gap_ema',
             'supply_chain_pressure_index_ema',

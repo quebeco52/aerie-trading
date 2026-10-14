@@ -120,8 +120,6 @@ class FinancialConstants
     public const STD_STANDARD_GROWTH_LIMIT = 0.08;
 
     // --- Input Cost Basket ---
-    /** Default shares of the variable cost base bought in tracked input markets for a producing firm; the remainder has no macro index. */
-    public const DEFAULT_INPUT_COST_EXPOSURES = ['energy' => 0.05, 'gas' => 0.0, 'metals' => 0.05, 'agri' => 0.02, 'freight' => 0.03, 'ppi' => 0.35, 'labor' => 0.30];
     /** Default years for the recoverable share of an input move to reach selling prices (Nakamura & Steinsson 2008 price durations). */
     public const DEFAULT_INPUT_PASS_THROUGH_LAG_YEARS = 0.75;
     /** Stream-state key: lagged relative input cost level of the basket (fraction above baseline). */

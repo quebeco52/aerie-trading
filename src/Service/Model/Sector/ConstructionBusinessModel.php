@@ -358,6 +358,7 @@ class ConstructionBusinessModel extends StandardCorporateBusinessModel
             'exchange_rate_index_ema',
             'government_spending_index_ema',
             'housing_starts_index_ema',
+            'import_price_level',
             'industrial_metals_index_ema',
             'natural_rate_ema',
             'output_gap_lag_18m',
