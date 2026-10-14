@@ -683,9 +683,6 @@ class EarningsEngine
         // book is nominal, so neither is revalued.
         if ($stock->getGrossPpe() !== null) {
             $revenueGeneratingCapital += max(0.0, $stock->getNetPpe()) * (exp($this->resolvePriceLevelSurprise($ctx)) - 1.0);
-            // A book dollar buys as much plant as capital goods cost when it was spent: where they have grown cheaper
-            // against what the plant produces, the same book holds more capacity (BEA fixed-asset prices by industry).
-            $revenueGeneratingCapital += max(0.0, $stock->getNetPpe()) * ((1.0 / $this->resolvePpeRelativePrice($ctx)) - 1.0);
         }
 
         $ctx->revenueGeneratingCapital = $revenueGeneratingCapital;

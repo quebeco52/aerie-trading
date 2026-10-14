@@ -886,7 +886,8 @@ class EarningsEngineTest extends TestCase
 
     /**
      * Capital goods drift against the deflator by industry (BEA Fixed Assets): replacement is bought at the industry's
-     * capital-goods price, and a plant bought when capital goods were dearer holds less capacity per book dollar.
+     * capital-goods price. Capacity stays the book: an industry's selling prices follow its capital costs in the long
+     * run (rents with building costs, telecom tariffs with equipment), so a book dollar keeps its revenue.
      */
     public function testReplacementAndCapacityFollowTheIndustrysCapitalGoodsPrice(): void
     {
@@ -920,10 +921,10 @@ class EarningsEngineTest extends TestCase
         $this->assertEqualsWithDelta(1.0, $atAnchor->replacementCostRatio, 1e-9, 'At the anchor capital goods cost what the plant did.');
         $this->assertEqualsWithDelta(exp($drift * 10.0), $decadeOn->replacementCostRatio, 1e-9, 'A decade on, replacement is bought at the drifted price.');
 
-        // The same book bought at a 20% dearer relative price holds a sixth less plant.
+        // A plant bought when capital goods were dearer costs less to replace now, and earns what its book does.
         $dearVintage = $run(0.0, 1.2);
-        $netPpe = 20_000_000_000.0;
-        $this->assertEqualsWithDelta($netPpe * ((1.0 / 1.2) - 1.0), $dearVintage->revenueGeneratingCapital - $atAnchor->revenueGeneratingCapital, 1.0);
+        $this->assertEqualsWithDelta(1.0 / 1.2, $dearVintage->replacementCostRatio, 1e-9);
+        $this->assertEqualsWithDelta($atAnchor->revenueGeneratingCapital, $dearVintage->revenueGeneratingCapital, 1.0);
     }
 
     public function testCapitalGoodsDriftFallsBackThroughTheModelsParents(): void
