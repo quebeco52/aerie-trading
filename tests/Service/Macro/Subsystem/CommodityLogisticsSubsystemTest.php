@@ -41,27 +41,26 @@ class CommodityLogisticsSubsystemTest extends TestCase
         $this->assertGreaterThan(20.0, $state->freightRateIndex);
     }
 
-    public function testEnergyEquilibriumClearsGlobalDemandOverLaggedCapacity(): void
+    public function testEnergyEquilibriumClearsTrendDemandOverLaggedCapacity(): void
     {
-        // Balanced: demand at baseline against baseline capacity clears at the baseline price.
+        // Balanced: trend demand against baseline capacity clears at the baseline price.
         $this->assertEqualsWithDelta(
             MacroEngine::ENERGY_BASELINE,
-            CommodityLogisticsSubsystem::resolveEnergyEquilibriumPrice(0.0, MacroEngine::ENERGY_BASELINE),
+            CommodityLogisticsSubsystem::resolveEnergyEquilibriumPrice(MacroEngine::ENERGY_BASELINE),
             1e-9
         );
 
-        // A 2% global boom against unchanged capacity clears at the combined inelasticity.
-        $boomDemand = 1.0 + (0.02 * MacroEngine::ENERGY_DEMAND_GAP_SENSITIVITY);
+        // 2% short of capacity clears at the combined inelasticity.
         $this->assertEqualsWithDelta(
-            MacroEngine::ENERGY_BASELINE * ($boomDemand ** CommodityLogisticsSubsystem::ENERGY_CAPACITY_INELASTICITY),
-            CommodityLogisticsSubsystem::resolveEnergyEquilibriumPrice(0.02, MacroEngine::ENERGY_BASELINE),
+            MacroEngine::ENERGY_BASELINE * ((100.0 / 98.0) ** CommodityLogisticsSubsystem::ENERGY_CAPACITY_INELASTICITY),
+            CommodityLogisticsSubsystem::resolveEnergyEquilibriumPrice(98.0),
             1e-9
         );
 
         // Capacity built out far beyond demand cannot drag the equilibrium below the floor any market has cleared at.
         $this->assertSame(
             CommodityLogisticsSubsystem::MIN_ENERGY_EQUILIBRIUM,
-            CommodityLogisticsSubsystem::resolveEnergyEquilibriumPrice(-0.05, 400.0)
+            CommodityLogisticsSubsystem::resolveEnergyEquilibriumPrice(400.0)
         );
     }
 
@@ -513,34 +512,36 @@ class CommodityLogisticsSubsystemTest extends TestCase
         $this->assertEqualsWithDelta($targetSupply, $state->energySupplyEma, 0.3, 'Nine years on, capacity has caught up with the price at the supply elasticity.');
     }
 
-    public function testTheEquilibriumPriceClearsDemandAgainstCapacity(): void
+    /** Kilian (2009): world demand moves the oil spot as it happens; spare capacity moves the level the base reverts to. */
+    public function testWorldDemandMovesTheSpotAndCapacityMovesTheBase(): void
     {
         $subsystem = $this->quietCommoditySubsystem();
 
-        $settle = static function (float $gap, float $supply) use ($subsystem): float {
+        $settle = static function (float $gap, float $supply) use ($subsystem): MacroState {
             $state = new MacroState();
-            $state->globalDemandGapEma = $gap; // fuel clears on world demand
+            $state->globalDemandGapEma = $gap;
             $state->energySupplyEma = $supply;
             $state->energyPriceIndex = 100.0;
             $state->energyBasePrice = 100.0;
-            $state->energyInventoryIndex = 100.0;
+            $state->energyInventoryIndex = MacroEngine::COMMODITY_INVENTORY_BASELINE;
             for ($i = 0; $i < 400; $i++) {
                 $state->energyPriceIndexEma = 100.0; // hold the price capacity sees, so only demand moves the clearing level
                 $state->energySupplyEma = $supply;
+                $state->energyInventoryIndex = 160.0; // full storage: no convenience premium on the spot
                 $subsystem->calculateEnergyShock($state, 0.01);
             }
 
-            return $state->energyBasePrice;
+            return $state;
         };
 
         $neutral = $settle(0.0, 100.0);
         $boom = $settle(0.04, 100.0);
         $glut = $settle(0.0, 104.0);
 
-        $expectedBoom = $neutral * ((1.0 + 0.04 * MacroEngine::ENERGY_DEMAND_GAP_SENSITIVITY) ** CommodityLogisticsSubsystem::ENERGY_CAPACITY_INELASTICITY);
-        $this->assertEqualsWithDelta($expectedBoom, $boom, 0.5, 'A 4% boom lifts demand 2% and the clearing price by the inelasticity of that.');
-        $expectedGlut = $neutral * ((100.0 / 104.0) ** CommodityLogisticsSubsystem::ENERGY_CAPACITY_INELASTICITY);
-        $this->assertEqualsWithDelta($expectedGlut, $glut, 0.5, 'and 4% of spare capacity does the same in reverse.');
+        $this->assertEqualsWithDelta($neutral->energyBasePrice, $boom->energyBasePrice, 1e-9, 'Demand does not move the base process.');
+        $this->assertEqualsWithDelta(exp(0.04 * CommodityLogisticsSubsystem::ENERGY_DEMAND_ELASTICITY), $boom->energyPriceIndex / $neutral->energyPriceIndex, 1e-9, 'A 4% world boom lifts the spot by its demand elasticity.');
+        $expectedGlut = $neutral->energyBasePrice * ((100.0 / 104.0) ** CommodityLogisticsSubsystem::ENERGY_CAPACITY_INELASTICITY);
+        $this->assertEqualsWithDelta($expectedGlut, $glut->energyBasePrice, 0.5, '4% of spare capacity lowers the clearing level by the inelasticity.');
     }
 
     public function testCapacityAdjustmentIsInvariantToTheTickRate(): void

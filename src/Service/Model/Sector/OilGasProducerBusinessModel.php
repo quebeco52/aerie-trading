@@ -270,10 +270,12 @@ class OilGasProducerBusinessModel extends StandardCorporateBusinessModel
     private function rollHedgeLadder(StreamContext $streams, MacroStateDTO $macroState): float
     {
         $tranches = self::HEDGE_LADDER_TRANCHES;
-        $spot = $macroState->energyBasePrice > 0.0 ? $macroState->energyBasePrice : $macroState->energyPriceIndexEma;
+        $spot = $macroState->energyBasePrice > 0.0
+            ? $macroState->energyBasePrice * CommodityLogisticsSubsystem::resolveEnergyDemandMultiplier($macroState->globalDemandGapEma)
+            : $macroState->energyPriceIndexEma;
         // The spot averages its equilibrium, so the curve's long end must too: hand the forward the Schwartz theta for that mean.
         $theta = StochasticProcesses::schwartzThetaForMean(
-            CommodityLogisticsSubsystem::resolveEnergyEquilibriumPrice($macroState->globalDemandGapEma, $macroState->energySupplyEma),
+            CommodityLogisticsSubsystem::resolveEnergyEquilibriumPrice($macroState->energySupplyEma),
             MacroEngine::ENERGY_MEAN_REVERSION,
             MacroEngine::ENERGY_VOLATILITY
         );

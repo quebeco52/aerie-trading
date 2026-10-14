@@ -44,3 +44,5 @@ phpstan.neon
 /var/harness/**/runs/
 /var/harness/**/base/
 /var/harness/**/vendor/
+# generated OVR copies of src (make_ovr scripts); a hand-written override needs git add -f
+/var/harness/**/ovr*/

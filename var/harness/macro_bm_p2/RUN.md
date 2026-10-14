@@ -31,3 +31,6 @@ Batch (about 150 s per seed-run at 30 y):
 3. CNDR, WING: corr(yoy dlog revenue, yoy change in gdg) and sd of yoy dlog revenue, after year 2.
 Also capex/revenue y2-30 for the drift firms, deaths/default episodes/reorgs per seed, B's final ppr for LOON and
 SHOR, and B-A EBIT margin y2-30 per non-financial firm (`*` where |B-A| > 1pp).
+
+`oil_firms.py <lo-hi> [A B]`: energy-exposed firms (by `industry`), paired EBIT margin y2-30 and corr(yoy dlog rev,
+yoy d gdg). Arm `n` in runs/ = cached pre-oil-demand working tree (2026-10-14).

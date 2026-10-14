@@ -31,6 +31,8 @@ class CommodityLogisticsSubsystem
     public const ENERGY_SUPPLY_LAG_YEARS = 3.0;
     /** Price response to the demand-over-capacity ratio: the inverse of the short-run demand and supply elasticities combined (Kilian & Murphy 2014: ~0.26 + 0.1), so a 1% shortfall clears at ~2.5% more. */
     public const ENERGY_CAPACITY_INELASTICITY = 2.5;
+    /** Oil spot per unit of world demand gap, in logs: fitted with the diffusion so oil yoy correlates with world demand yoy as WTI does with G6 industrial production, 0.55 (1993-2019; var/harness/world_factor). */
+    public const ENERGY_DEMAND_ELASTICITY = 15.0;
     /** Bounds on the equilibrium the spot price reverts to, so the cobweb cannot demand a price no market has cleared at. */
     public const MIN_ENERGY_EQUILIBRIUM = 40.0;
     /** Upper bound on the cobweb's equilibrium price. */
@@ -210,7 +212,7 @@ class CommodityLogisticsSubsystem
         $supplyWeight = 1.0 - exp(-$dt / self::ENERGY_SUPPLY_LAG_YEARS);
         $state->energySupplyEma += $supplyWeight * ($targetSupply - $state->energySupplyEma);
 
-        $equilibriumPrice = self::resolveEnergyEquilibriumPrice($state->globalDemandGapEma, $state->energySupplyEma);
+        $equilibriumPrice = self::resolveEnergyEquilibriumPrice($state->energySupplyEma);
 
         $dW = $this->mathUtility->generateStandardNormal();
         $currentBase = $state->energyBasePrice > 0.0 ? $state->energyBasePrice : $state->energyPriceIndex;
@@ -248,7 +250,9 @@ class CommodityLogisticsSubsystem
         );
         $conveniencePricePremium = MacroEngine::ENERGY_BASELINE * $convenienceYield;
 
-        $state->energyPriceIndex = max(10.0, min(350.0, $state->energyBasePrice + $conveniencePricePremium));
+        // The spot clears today's world demand against supply that cannot answer within the year, so demand moves the
+        // price as it happens; the base process carries supply news and the capacity the cobweb has built (Kilian 2009).
+        $state->energyPriceIndex = max(10.0, min(350.0, ($state->energyBasePrice * self::resolveEnergyDemandMultiplier($state->globalDemandGapEma)) + $conveniencePricePremium));
         $state->energyPriceShock = $state->energyPriceIndex - MacroEngine::ENERGY_BASELINE;
     }
 
@@ -264,16 +268,21 @@ class CommodityLogisticsSubsystem
     }
 
     /**
-     * The price the energy spot process reverts to: global demand over lagging productive capacity, cleared at
+     * The price the energy base process reverts to: trend demand over lagging productive capacity, cleared at
      * the combined short-run inelasticity (Ezekiel 1938 cobweb; Kilian & Murphy 2014). It is the theta of the
      * Schwartz (1997) base process, so a producer striking forwards off the same curve reads it from here.
      */
-    public static function resolveEnergyEquilibriumPrice(float $globalDemandGapEma, float $energySupplyEma): float
+    public static function resolveEnergyEquilibriumPrice(float $energySupplyEma): float
     {
-        $demandIndex = MacroEngine::ENERGY_BASELINE * (1.0 + ($globalDemandGapEma * MacroEngine::ENERGY_DEMAND_GAP_SENSITIVITY));
-        $utilization = max(0.20, $demandIndex) / max(20.0, $energySupplyEma);
+        $utilization = MacroEngine::ENERGY_BASELINE / max(20.0, $energySupplyEma);
 
         return max(self::MIN_ENERGY_EQUILIBRIUM, min(self::MAX_ENERGY_EQUILIBRIUM, MacroEngine::ENERGY_BASELINE * ($utilization ** self::ENERGY_CAPACITY_INELASTICITY)));
+    }
+
+    /** The spot's lift over the base process from world demand: cyclical demand against short-run supply (Kilian 2009). */
+    public static function resolveEnergyDemandMultiplier(float $globalDemandGapEma): float
+    {
+        return exp($globalDemandGapEma * self::ENERGY_DEMAND_ELASTICITY);
     }
 
     /**

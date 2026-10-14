@@ -19,3 +19,14 @@ Context: drift-firm capex/rev moves with the sign of drift (LOON -4.8, HUMM -4.1
 B final `state:ppe_relative_price`: LOON 0.689, SHOR 1.233.
 
 Caveats: arms run their own macro and drift apart, so pairing buys little; ROIC is the report's truePostTaxReturn.
+
+## 2026-10-14 Oil demand in the spot (ENERGY_DEMAND_ELASTICITY 15, VOL 0.21): n (prior tree, cached) vs b, 8 seeds
+
+Run: `bin/harness-batch var/harness/macro_bm_p2/run.sh 1-8 b && python3 -I var/harness/macro_bm_p2/analyse.py 1-8 n b`
+plus `python3 -I var/harness/macro_bm_p2/oil_firms.py 1-8 n b` (energy firms by industry: EBIT margin y2-30 and
+corr(yoy dlog rev, yoy d gdg) after y2). Outputs `oil_n_b_s8.out`, `oil_firms_n_b_s8.out`. Live macro: seeds drift.
+- Revenue-gdg corr: SINK 0.05 -> 0.35 (t +3.5), CASC 0.02 -> 0.37 (t +3.8); other energy firms |t| <= 0.9.
+- EBIT margin b-n energy firms: all |t| <= 1.5 (FULM +1.4pp, ALBT +2.0, GANN +1.5, SINK +1.7, CASC -0.5).
+- Median ROIC creep -1.50 -> -0.93 (t +1.1).
+- Failures: deaths 0.50 -> 0.38/seed, default episodes 9.4 -> 0 (t -1.6; n's are SHOR seeds 1-2 and BIRD seeds 2,4),
+  reorgs 0.12 -> 0 (FALC). SHOR (REIT residential) dies in n seeds 1,2, never in b; TIER dies in 3 seeds in each arm.

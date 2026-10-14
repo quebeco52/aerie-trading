@@ -67,8 +67,8 @@ class MacroEngine
     public const ENERGY_COST_PUSH_TRANSMISSION = 0.025;
     /** Mean-reversion speed (kappa) of energy prices reverting to long-run baseline. */
     public const ENERGY_MEAN_REVERSION = 0.8;
-    /** Schwartz 1-factor log-price diffusion (0.283 per sqrt year), the same fit net of the jumps; total monthly volatility is 36% a year. */
-    public const ENERGY_VOLATILITY = 0.283;
+    /** Schwartz 1-factor log-price diffusion net of the jumps and of world demand, fitted so oil's yoy log sd matches WTI's 0.314 (1993-2019). */
+    public const ENERGY_VOLATILITY = 0.21;
     /** Income elasticity of energy demand to the output gap (~0.5, Hamilton 2009; Caldara, Cavallo & Iacoviello 2019). */
     public const ENERGY_DEMAND_GAP_SENSITIVITY = 0.50;
 

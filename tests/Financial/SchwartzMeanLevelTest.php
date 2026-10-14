@@ -120,7 +120,7 @@ class SchwartzMeanLevelTest extends TestCase
             }
         }
 
-        $equilibrium = CommodityLogisticsSubsystem::resolveEnergyEquilibriumPrice(0.0, MacroEngine::ENERGY_BASELINE);
+        $equilibrium = CommodityLogisticsSubsystem::resolveEnergyEquilibriumPrice(MacroEngine::ENERGY_BASELINE);
         // Standard error ~0.35%.
         $this->assertEqualsWithDelta(1.0, ($sum / $steps) / $equilibrium, 0.015, 'The base price must average the equilibrium it reverts to.');
     }
