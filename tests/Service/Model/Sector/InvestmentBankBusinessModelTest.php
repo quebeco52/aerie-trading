@@ -665,7 +665,7 @@ class InvestmentBankBusinessModelTest extends TestCase
         }
     }
 
-    public function testFiccDeskRatesVolatilityArbitrage(): void
+    public function testFiccDeskTradesRatesVolatilityAgainstItsTrend(): void
     {
         $stock = new Stock();
         $stock->setTicker('FICC_IB');
@@ -674,58 +674,28 @@ class InvestmentBankBusinessModelTest extends TestCase
         $mathMock->method('generateStandardNormal')->willReturn(0.0);
         $mathMock->method('generateUniform')->willReturn(0.50);
 
-        // No rate shock: policy_rate = 0.04, policy_rate_ema = 0.04
-        $macroNoShock = \App\DTO\MacroStateDTO::fromArray([
-            'output_gap_ema'          => 0.0,
-            'policy_rate'             => 0.04,
-            'policy_rate_ema'         => 0.04,
-            'yield_5y_ema'            => 0.04 + InvestmentBankBusinessModel::DCM_NEUTRAL_CURVE_SLOPE, // neutral slope over the 4% policy rate: no DCM stimulus
-            'macro_credit_spread_ema' => \App\Service\Macro\MacroEngine::BASE_CREDIT_SPREAD,
-            'macro_credit_spread_trend' => \App\Service\Macro\MacroEngine::BASE_CREDIT_SPREAD,
-            'equity_risk_premium'     => MacroEngine::BASE_EQUITY_RISK_PREMIUM,
-            'market_volatility_ema'   => InvestmentBankBusinessModel::VIX_ARBITRAGE_FLOOR,
-        ]);
+        $tradingAt = function (float $volatilityRatio) use ($stock, $mathMock): float {
+            $macro = \App\DTO\MacroStateDTO::fromArray([
+                'output_gap_ema'            => 0.0,
+                'policy_rate'               => 0.04,
+                'policy_rate_ema'           => 0.04,
+                'yield_5y_ema'              => 0.04 + InvestmentBankBusinessModel::DCM_NEUTRAL_CURVE_SLOPE, // neutral slope over the 4% policy rate: no DCM stimulus
+                'macro_credit_spread_ema'   => \App\Service\Macro\MacroEngine::BASE_CREDIT_SPREAD,
+                'macro_credit_spread_trend' => \App\Service\Macro\MacroEngine::BASE_CREDIT_SPREAD,
+                'equity_risk_premium'       => MacroEngine::BASE_EQUITY_RISK_PREMIUM,
+                'market_volatility_ema'     => InvestmentBankBusinessModel::VIX_ARBITRAGE_FLOOR,
+                'treasury_volatility'       => 0.0087 * $volatilityRatio,
+                'treasury_volatility_trend' => 0.0087,
+            ]);
 
-        $resultNoShock = $this->model->computeActualFinancials(
-            $stock,
-            1000.0,
-            0.50,
-            100.0,
-            0.0,
-            $macroNoShock,
-            $mathMock
-        );
+            return $this->model->computeActualFinancials($stock, 1000.0, 0.50, 100.0, 0.0, $macro, $mathMock)->streamRevenue['trading'];
+        };
 
-        // Un-trended monetary policy shock: policy_rate moves to 0.06 while policy_rate_ema is 0.04 (+200 bps shock)
-        $macroRateShock = \App\DTO\MacroStateDTO::fromArray([
-            'output_gap_ema'          => 0.0,
-            'policy_rate'             => 0.06,
-            'policy_rate_ema'         => 0.04,
-            'yield_5y_ema'            => 0.04 + InvestmentBankBusinessModel::DCM_NEUTRAL_CURVE_SLOPE, // neutral slope over the 4% policy rate: no DCM stimulus
-            'macro_credit_spread_ema' => \App\Service\Macro\MacroEngine::BASE_CREDIT_SPREAD,
-            'macro_credit_spread_trend' => \App\Service\Macro\MacroEngine::BASE_CREDIT_SPREAD,
-            'equity_risk_premium'     => MacroEngine::BASE_EQUITY_RISK_PREMIUM,
-            'market_volatility_ema'   => InvestmentBankBusinessModel::VIX_ARBITRAGE_FLOOR,
-        ]);
-
-        $resultRateShock = $this->model->computeActualFinancials(
-            $stock,
-            1000.0,
-            0.50,
-            100.0,
-            0.0,
-            $macroRateShock,
-            $mathMock
-        );
-
-        // rateShock = 0.02 * 3.50 = 0.07 (+7% trading revenue boost)
-        // tradingRevenue = 1000 * 0.60 * 1.07 = 642.0 (vs 600.0)
-        $this->assertGreaterThan(
-            $resultNoShock->streamRevenue['trading'],
-            $resultRateShock->streamRevenue['trading'],
-            'Monetary policy rate dislocation must stimulate FICC desk hedging flows and boost trading revenue.'
-        );
-        $this->assertEqualsWithDelta(642.0, $resultRateShock->streamRevenue['trading'], 0.01);
+        // Trading is 60% of expected revenue; at the default mix FICC is half of it and moves with (sigma/trend)^0.44.
+        $elasticity = InvestmentBankBusinessModel::FICC_RATES_VOLATILITY_ELASTICITY;
+        $this->assertEqualsWithDelta(600.0, $tradingAt(1.0), 1e-9, 'A rates market at its norm books the norm.');
+        $this->assertEqualsWithDelta(600.0 * (1.0 + 0.5 * ((2.0 ** $elasticity) - 1.0)), $tradingAt(2.0), 1e-9, 'Doubled rate volatility busies the FICC desk.');
+        $this->assertEqualsWithDelta(600.0 * (1.0 + 0.5 * ((0.5 ** $elasticity) - 1.0)), $tradingAt(0.5), 1e-9, 'A becalmed rates market quiets it.');
     }
 
     public function testInstitutionalPrimeFinancingInterestIncomeReplacesRetailSweeps(): void
@@ -1004,61 +974,7 @@ class InvestmentBankBusinessModelTest extends TestCase
         $this->assertGreaterThan(0.05, $result->observableShockZ, 'Observable shock Z must incorporate public macro drivers.');
     }
 
-    public function testFiccCurveDislocationStimulatesTradingRevenue(): void
-    {
-        $stock = new Stock();
-        $stock->setTicker('FICC_IB');
-
-        $mathMock = $this->createStub(MathUtility::class);
-        $mathMock->method('generateStandardNormal')->willReturn(0.0);
-        $mathMock->method('generateUniform')->willReturn(0.50);
-
-        // No curve dislocation
-        $macroNormal = \App\DTO\MacroStateDTO::fromArray([
-            'policy_rate'           => 0.04,
-            'policy_rate_ema'       => 0.04,
-            'yield_5y_ema'          => 0.04 + InvestmentBankBusinessModel::DCM_NEUTRAL_CURVE_SLOPE, // neutral slope over the 4% policy rate: no DCM stimulus
-            'market_volatility_ema' => InvestmentBankBusinessModel::VIX_ARBITRAGE_FLOOR,
-            'ns_slope'              => 0.02,
-            'ns_slope_ema'          => 0.02,
-        ]);
-
-        $resultNormal = $this->model->computeActualFinancials(
-            $stock,
-            1000.0,
-            0.50,
-            100.0,
-            0.0,
-            $macroNormal,
-            $mathMock
-        );
-
-        // Nelson-Siegel curve slope dislocation: instantaneous slope 0.05 vs smoothed 0.02 (+300bps dislocation)
-        $macroCurveDislocation = \App\DTO\MacroStateDTO::fromArray([
-            'policy_rate'           => 0.04,
-            'policy_rate_ema'       => 0.04,
-            'yield_5y_ema'          => 0.04 + InvestmentBankBusinessModel::DCM_NEUTRAL_CURVE_SLOPE, // neutral slope over the 4% policy rate: no DCM stimulus
-            'market_volatility_ema' => InvestmentBankBusinessModel::VIX_ARBITRAGE_FLOOR,
-            'ns_slope'              => 0.05,
-            'ns_slope_ema'          => 0.02,
-        ]);
-
-        $resultDislocation = $this->model->computeActualFinancials(
-            $stock,
-            1000.0,
-            0.50,
-            100.0,
-            0.0,
-            $macroCurveDislocation,
-            $mathMock
-        );
-
-        // curveShock = 0.03 * 1.50 = 0.045 (+4.5% trading revenue boost)
-        $this->assertGreaterThan($resultNormal->streamRevenue['trading'], $resultDislocation->streamRevenue['trading']);
-        $this->assertEqualsWithDelta(600.0 * 1.045, $resultDislocation->streamRevenue['trading'], 0.01);
-    }
-
-    public function testViolentRateDislocationPenalizedByInventoryMarkdownAndCapped(): void
+    public function testViolentRateDislocationPenalizedByInventoryMarkdown(): void
     {
         $stock = new Stock();
         $stock->setTicker('FICC_IB');
@@ -1085,11 +1001,9 @@ class InvestmentBankBusinessModelTest extends TestCase
             $mathMock
         );
 
-        // grossFicc = 0.04 * 3.50 = 0.14 <= FICC_ARBITRAGE_CAP (0.15)
-        // ratesInventoryMarkdown = (0.04 - 0.02) * 2.00 = 0.04
-        // net ficcArbitrage = 0.14 - 0.04 = 0.10 (+10% trading revenue)
-        // tradingRevenue = 1000 * 0.60 * 1.10 = 660.0
-        $this->assertEqualsWithDelta(660.0, $resultViolent->streamRevenue['trading'], 0.01);
+        // Rate volatility at its trend; markdown = (0.04 - 0.02) * 2.00 = 0.04 of sales and trading at the default mix
+        // tradingRevenue = 1000 * 0.60 * 0.96 = 576.0
+        $this->assertEqualsWithDelta(576.0, $resultViolent->streamRevenue['trading'], 0.01);
     }
 
     public function testCrisisInventoryMarkdownDuringBaselVarDeleveraging(): void
@@ -1253,21 +1167,20 @@ class InvestmentBankBusinessModelTest extends TestCase
         $this->assertEqualsWithDelta(812_500_000.0, $income, 1000.0);
     }
 
-    public function testTheDefaultDeskMixIsTheSumOfBothTradingTerms(): void
+    public function testEachDeskIsWeightedByItsShareOfTrading(): void
     {
         $shift = new \ReflectionMethod($this->model, 'resolveTradingMacroShift');
-        $rateShock = \App\DTO\MacroStateDTO::fromArray([
-            'market_volatility_ema' => InvestmentBankBusinessModel::VIX_ARBITRAGE_FLOOR,
-            'policy_rate'           => 0.03,
-            'policy_rate_ema'       => 0.02,
+        $busyRates = \App\DTO\MacroStateDTO::fromArray([
+            'market_volatility_ema'     => InvestmentBankBusinessModel::VIX_ARBITRAGE_FLOOR,
+            'treasury_volatility'       => 0.0174,
+            'treasury_volatility_trend' => 0.0087,
         ]);
-        $ficc = 0.01 * InvestmentBankBusinessModel::FICC_RATE_VOLATILITY_SCALAR;
+        $desk = (2.0 ** InvestmentBankBusinessModel::FICC_RATES_VOLATILITY_ELASTICITY) - 1.0;
 
-        // At the Goldman 50/50 mix the line is unchanged; a bank's own mix reweights each desk against it.
-        $this->assertEqualsWithDelta($ficc, $shift->invoke($this->model, $rateShock, 1.20), 1e-12);
-        $this->assertEqualsWithDelta($ficc, $shift->invoke($this->model, $rateShock, 1.20, 0.50), 1e-12);
-        $this->assertEqualsWithDelta($ficc * 0.85 / 0.50, $shift->invoke($this->model, $rateShock, 1.20, 0.85), 1e-12);
-        $this->assertEqualsWithDelta(0.0, $shift->invoke($this->model, $rateShock, 1.20, 0.0), 1e-12, 'an equities-only desk does not trade the rate shock');
+        $this->assertEqualsWithDelta($desk, InvestmentBankBusinessModel::resolveFiccDeskShift($busyRates), 1e-12);
+        $this->assertEqualsWithDelta(0.50 * $desk, $shift->invoke($this->model, $busyRates, 1.20), 1e-12, 'At the Goldman 50/50 mix FICC is half of trading.');
+        $this->assertEqualsWithDelta(0.85 * $desk, $shift->invoke($this->model, $busyRates, 1.20, 0.85), 1e-12);
+        $this->assertEqualsWithDelta(0.0, $shift->invoke($this->model, $busyRates, 1.20, 0.0), 1e-12, 'an equities-only desk does not trade rates volatility');
 
         $volatile = \App\DTO\MacroStateDTO::fromArray(['market_volatility_ema' => InvestmentBankBusinessModel::VIX_ARBITRAGE_FLOOR + 0.05]);
         $equities = (float) $shift->invoke($this->model, $volatile, 1.20);
@@ -1280,16 +1193,17 @@ class InvestmentBankBusinessModelTest extends TestCase
         $this->assertSame(0.85, StockModelTuning::get('PTRL', \App\Service\Model\ModelParam::FiccTradingShare, InvestmentBankBusinessModel::FICC_TRADING_SHARE));
         $this->assertSame(InvestmentBankBusinessModel::FICC_TRADING_SHARE, StockModelTuning::get('KING', \App\Service\Model\ModelParam::FiccTradingShare, InvestmentBankBusinessModel::FICC_TRADING_SHARE));
 
-        $rateShock = \App\DTO\MacroStateDTO::fromArray([
-            'market_volatility_ema' => InvestmentBankBusinessModel::VIX_ARBITRAGE_FLOOR,
-            'policy_rate'           => 0.03,
-            'policy_rate_ema'       => 0.02,
+        $ratesAt = fn (float $ratio): \App\DTO\MacroStateDTO => \App\DTO\MacroStateDTO::fromArray([
+            'market_volatility_ema'     => InvestmentBankBusinessModel::VIX_ARBITRAGE_FLOOR,
+            'treasury_volatility'       => 0.0087 * $ratio,
+            'treasury_volatility_trend' => 0.0087,
         ]);
         $petrel = new Stock();
         $petrel->setTicker('PTRL');
         $generic = new Stock();
         $generic->setTicker('IBX');
 
-        $this->assertGreaterThan($this->model->resolveSectorActivityShift($generic, $rateShock), $this->model->resolveSectorActivityShift($petrel, $rateShock));
+        $this->assertGreaterThan($this->model->resolveSectorActivityShift($generic, $ratesAt(2.0)), $this->model->resolveSectorActivityShift($petrel, $ratesAt(2.0)), 'A bond house gains more in a volatile rates market');
+        $this->assertLessThan($this->model->resolveSectorActivityShift($generic, $ratesAt(0.5)), $this->model->resolveSectorActivityShift($petrel, $ratesAt(0.5)), 'and loses more in a calm one.');
     }
 }

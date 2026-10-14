@@ -388,6 +388,8 @@ final class FullMarketHarnessTest extends KernelTestCase
             'deal' => $m?->dealActivityDeviation() ?? 0.0,
             'sloos' => $m?->sloosTighteningIndexEma ?? 0.0,
             'prate' => $m?->policyRateEma ?? 0.0,
+            'tvol' => $m?->treasuryVolatility ?? 0.0,
+            'tvolt' => $m?->treasuryVolatilityTrend ?? 0.0,
             'hedge' => (float) ($kpis['hedge_gain'] ?? 0.0),
             'capture' => (float) ($kpis['capture_rate'] ?? 0.0),
             'power_kpi' => (float) ($kpis['power_price_index'] ?? 0.0),

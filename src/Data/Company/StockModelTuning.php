@@ -314,6 +314,14 @@ class StockModelTuning
             ModelParam::DigitalAdsWeight->value         => 0.25,
         ],
 
+        // --- Jackdaw Bazaar (JDAW) ---
+        // Marketplace only: seller commissions and listing fees, plus ads sold to its sellers; it holds no stock.
+        'JDAW' => [
+            ModelParam::ThirdPartyWeight->value         => 0.80,
+            ModelParam::FirstPartyWeight->value         => 0.00,
+            ModelParam::DigitalAdsWeight->value         => 0.20,
+        ],
+
         // =====================================================================
         // FINANCIAL DATA & ANALYTICS ARCHETYPES
         // =====================================================================

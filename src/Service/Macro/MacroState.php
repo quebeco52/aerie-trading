@@ -314,6 +314,9 @@ class MacroState
     public float $dealActivityIndexEma;
     public float $dealActivityIndexTrend;
 
+    public float $treasuryVolatility;
+    public float $treasuryVolatilityTrend;
+
     public float $manufacturingPmi;
     public float $manufacturingPmiEma;
 

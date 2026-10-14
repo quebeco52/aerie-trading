@@ -53,6 +53,8 @@ final class MacroFieldCatalog
         'policy_rate_ema' => ['label' => 'Policy rate', 'unit' => self::UNIT_PERCENT],
         'yield_2y_ema' => ['label' => '2Y yield', 'unit' => self::UNIT_PERCENT],
         'yield_10y_ema' => ['label' => '10Y yield', 'unit' => self::UNIT_PERCENT],
+        'treasury_volatility' => ['label' => 'Treasury rate volatility', 'unit' => self::UNIT_BPS],
+        'treasury_volatility_trend' => ['label' => 'Treasury rate volatility (trend)', 'unit' => self::UNIT_BPS],
         'macro_credit_spread_ema' => ['label' => 'IG credit spread', 'unit' => self::UNIT_BPS],
         'high_yield_credit_spread_ema' => ['label' => 'HY credit spread', 'unit' => self::UNIT_BPS],
         'interbank_liquidity_spread_ema' => ['label' => 'Interbank spread', 'unit' => self::UNIT_BPS],

@@ -108,6 +108,12 @@ class MonetaryPolicySubsystem
     /** Excess bond premium at which the stress ends: the GZ series' mean, zero by construction. Leaving at the entry level instead flickered out and back through 2001's spring (0.94, 0.80, 1.04pp). */
     public const CB_STRESS_EXIT_EBP = 0.0;
 
+    // --- Treasury Rate Volatility (RiskMetrics 1996 EWMA of ten-year yield changes) ---
+    /** Window (years) of the realized ten-year yield volatility: one quarter, the period a dealer's rates revenue is booked over. */
+    public const TREASURY_VOLATILITY_WINDOW_YEARS = 0.25;
+    /** Opening realized ten-year yield volatility, annualized: 87bp, the mean of the 2005-2024 calendar-year realized volatilities of daily FRED DGS10 changes (55bp in 2018 to 140bp in 2008). */
+    public const OPENING_TREASURY_VOLATILITY = 0.0087;
+
     // --- Nelson-Siegel-Svensson Term Structure Dynamics (Svensson 1994) ---
     /** Flight-to-safety sensitivity: recessions compress term premium via safe-haven demand (Campbell et al. 2017). */
     public const NS_GAP_TERM_PREMIUM_SCALE = 0.05;
@@ -774,6 +780,11 @@ class MonetaryPolicySubsystem
      */
     public function applyYieldCurve(MacroState $state, array $yieldData, float $dt): void
     {
+        // Realized rate volatility off the ten-year's move this step, and its through-the-cycle level read the
+        // way the credit spread's is (a decade's average), so a desk reads a busy market against a measured norm.
+        $state->treasuryVolatility = sqrt(TimeSeries::ewmaAnnualizedVariance($state->treasuryVolatility ** 2, $yieldData['yield_10y'] - $state->yield10y, $dt, self::TREASURY_VOLATILITY_WINDOW_YEARS));
+        $state->treasuryVolatilityTrend = TimeSeries::ewmaLevel($state->treasuryVolatilityTrend, $state->treasuryVolatility, $dt, CreditFiscalSubsystem::CREDIT_SPREAD_TREND_YEARS);
+
         $state->yield2y = $yieldData['yield_2y'];
         $state->yield5y = $yieldData['yield_5y'];
         $state->yield10y = $yieldData['yield_10y'];

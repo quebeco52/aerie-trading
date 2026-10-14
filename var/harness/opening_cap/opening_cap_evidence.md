@@ -60,3 +60,24 @@ committed size (an uncommitted RIVR resize was in the tree and is not part of th
 
 Q1 end, mean of 16 ($B): PTRL 215.2 (6.9), NJAR 52.2 (1.6). Tick 1 moves +0.28T, the two firms' value; the Q1-mean
 gap (+0.79T) is that plus unpaired board noise (~2 se). Constant set to 19.6e12.
+
+## 2026-10-14: WEAV cut ×0.29 and Jackdaw Bazaar (JDAW) added
+
+Arm `jdaw1014` (86 firms), seeds 1-16, no OVR: the main working tree as is (also holds the uncommitted FICC desk and
+TIPS fields, which do not touch seed caps). `run.sh` now takes any arm name and launches through `bin/php-slot`:
+`bin/harness-batch var/harness/opening_cap/run.sh 1-16 jdaw1014 && python3 var/harness/opening_cap/analyse_1014.py`.
+Not paired with `newfirms1013`: the roster differs. Table: `opening_cap_1014.out`.
+
+| quantity (USD T) | newfirms1013 (85) | jdaw1014 (86) | diff (se) |
+|---|---|---|---|
+| tick 1 | 19.153 (0.042) | 19.226 (0.033) | +0.074 (0.053) |
+| Q1 mean | 19.631 (0.196) | 19.402 (0.206) | -0.229 (0.284) |
+
+Q1 end, mean of 16 ($B): WEAV 573.2 -> 189.1 (4.6), JDAW 231.3 (6.8). Seed values WEAV 553.9 -> 177.1, JDAW 222.6:
+the two firms net -0.15T at seed, but tick 1 moves +0.07T, so ~0.2T of board drift came from other changes since
+10-13 (committed 948aa08 and the tree). The Q1-mean difference is inside its noise. Constant 19.6e12 -> 19.4e12.
+
+## 2026-10-14: JDAW asset-light retune (roic 0.35, capex_ratio 0.45, payout 0.10, capital ~$28B)
+
+Arm `jdaw2x1014`, seeds 1-16, unpaired against `jdaw1014` (`analyse_1014b.py`, `opening_cap_1014b.out`). Board Q1 mean
+19.418T (0.132) vs 19.402T (0.206); JDAW Q1 end 242B (vs 231B), WEAV 184B. Constant stays 19.4e12.

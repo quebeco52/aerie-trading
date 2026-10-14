@@ -94,13 +94,9 @@ class InvestmentBankBusinessModel extends BrokerageBusinessModel
     /** Variable cost per unit of the quarter's high-yield spread move: bridge commitments marked down as spreads widen, written back as they tighten. */
     public const HUNG_DEBT_WRITEDOWN_SCALAR     = 1.50;
 
-    // --- FICC Macro Rates & Yield Curve Trading ---
-    /** Sensitivity of FICC trading desk revenue to policy interest rate shifts. */
-    public const FICC_RATE_VOLATILITY_SCALAR    = 3.50;
-    /** Sensitivity of FICC trading desk revenue to yield curve steepening/inversion dynamics. */
-    public const FICC_CURVE_VOLATILITY_SCALAR   = 1.50;
-    /** Maximum revenue capture cap for FICC desk macro rates and yield curve arbitrage. */
-    public const FICC_ARBITRAGE_CAP             = 0.15;
+    // --- FICC Rates Volatility (Ho & Stoll 1981: dealer spreads and flow scale with the volatility of what is dealt) ---
+    /** Elasticity of FICC desk revenue to realized ten-year yield volatility over its trend: 0.44 (se 0.27), yearly log changes of Goldman Sachs FICC net revenues (10-K, 2009-2022, within each reporting basis) on those of the realized volatility of daily FRED DGS10 changes. */
+    public const FICC_RATES_VOLATILITY_ELASTICITY = 0.44;
     /** Policy rate shock threshold (~200bps) above which fixed-income inventory marks down. */
     public const FICC_RATES_INVENTORY_SHOCK_THRESHOLD = 0.02;
     /** Variable inventory markdown scalar penalizing trading revenue for violent policy rate dislocations. */
@@ -537,20 +533,23 @@ class InvestmentBankBusinessModel extends BrokerageBusinessModel
             ? ($vixGap * $vixScalar) * $varDeleverageFactor
             : max(-0.15, $vixGap * ($vixScalar * 0.50));
 
-        // --- FICC Macro Rates & Yield Curve Trading ---
-        // S&T FICC desks capture client hedging volume and bid-ask spreads during un-trended rate volatility:
-        // any dislocation between the instantaneous policy rate and its smoothed EMA is a live rate shock,
-        // and curve dislocations (nsSlope vs nsSlopeEma) drive curve trading flow.
-        $rateShock = abs($macroState->policyRate - $macroState->policyRateEma);
-        $curveShock = abs($macroState->nsSlope - $macroState->nsSlopeEma);
-        $grossFicc = ($rateShock * self::FICC_RATE_VOLATILITY_SCALAR) + ($curveShock * self::FICC_CURVE_VOLATILITY_SCALAR);
-
-        // Inventory markdown on violent rate dislocations: violent shocks (> 200bps) mark down fixed-income inventory.
-        $ratesInventoryMarkdown = max(0.0, $rateShock - self::FICC_RATES_INVENTORY_SHOCK_THRESHOLD) * self::FICC_INVENTORY_MARKDOWN_SCALAR;
-        $ficcArbitrage = max(-0.10, min(self::FICC_ARBITRAGE_CAP, $grossFicc) - $ratesInventoryMarkdown);
-
         return ($volatilityArbitrage * (1.0 - $ficcShare) / (1.0 - self::FICC_TRADING_SHARE))
-            + ($ficcArbitrage * $ficcShare / self::FICC_TRADING_SHARE);
+            + ($ficcShare * $this->resolveFiccDeskShift($macroState));
+    }
+
+    /**
+     * The FICC desk's revenue over its norm: (sigma / trend)^elasticity - 1 on realized ten-year yield volatility,
+     * busy in a volatile rates market and quiet in a calm one, less the inventory markdown a violent policy-rate
+     * dislocation (> 200bp off its average) costs. A share of the desk's own revenue, weighted by its share of trading.
+     */
+    public static function resolveFiccDeskShift(\App\DTO\MacroStateDTO $macroState): float
+    {
+        $volatilityRatio = $macroState->treasuryVolatilityTrend > 0.0 ? $macroState->treasuryVolatility / $macroState->treasuryVolatilityTrend : 1.0;
+        $rateShock = abs($macroState->policyRate - $macroState->policyRateEma);
+        // The markdown scalar is struck on all of sales and trading at the default desk mix.
+        $ratesInventoryMarkdown = max(0.0, $rateShock - self::FICC_RATES_INVENTORY_SHOCK_THRESHOLD) * self::FICC_INVENTORY_MARKDOWN_SCALAR / self::FICC_TRADING_SHARE;
+
+        return ($volatilityRatio ** self::FICC_RATES_VOLATILITY_ELASTICITY) - 1.0 - $ratesInventoryMarkdown;
     }
 
     /** Standard Basel VaR volatility targeting: position limits scale down when volatility exceeds target. */
@@ -582,10 +581,10 @@ class InvestmentBankBusinessModel extends BrokerageBusinessModel
             'market_volatility_ema',
             'money_supply_growth_ema',
             'money_supply_growth_trend',
-            'ns_slope',
-            'ns_slope_ema',
             'output_gap_ema',
             'policy_rate_ema',
+            'treasury_volatility',
+            'treasury_volatility_trend',
             'yield_5y_ema',
         ];
     }

@@ -1111,6 +1111,30 @@ class MonetaryPolicySubsystemTest extends TestCase
     }
 
     /**
+     * Rate volatility is the RiskMetrics EWMA of the ten-year's move each step, read before the new curve overwrites
+     * the yield, and its trend follows it at the credit spread's decade horizon. A curve that does not move decays it.
+     */
+    public function testTreasuryVolatilityReadsTheTenYearMoveTheCurveWasJustHanded(): void
+    {
+        $state = new MacroState();
+        $state->policyRate = 0.04;
+        $this->subsystem->applyYieldCurve($state, $this->curveWith($state, 0.040), 0.25);
+        $state->treasuryVolatility = 0.0087;
+        $state->treasuryVolatilityTrend = 0.0087;
+        $dt = 1.0 / 360.0;
+
+        $this->subsystem->applyYieldCurve($state, $this->curveWith($state, 0.041), $dt);
+
+        $expected = sqrt(\App\Service\Math\TimeSeries::ewmaAnnualizedVariance(0.0087 ** 2, 0.001, $dt, MonetaryPolicySubsystem::TREASURY_VOLATILITY_WINDOW_YEARS));
+        $this->assertEqualsWithDelta($expected, $state->treasuryVolatility, 1e-15);
+        $this->assertGreaterThan(0.0087, $state->treasuryVolatility, 'A 10bp move in a day is a volatile rates market.');
+        $this->assertEqualsWithDelta(\App\Service\Math\TimeSeries::ewmaLevel(0.0087, $expected, $dt, CreditFiscalSubsystem::CREDIT_SPREAD_TREND_YEARS), $state->treasuryVolatilityTrend, 1e-15);
+
+        $this->subsystem->applyYieldCurve($state, $this->curveWith($state, 0.041), $dt);
+        $this->assertLessThan($expected, $state->treasuryVolatility, 'A curve that holds still calms the market.');
+    }
+
+    /**
      * A fitted curve whose structural 10y is the given rate, with every other factor left flat.
      *
      * @return array<string, float>

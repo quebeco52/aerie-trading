@@ -200,4 +200,13 @@ class InternetRetailBusinessModelTest extends TestCase
         );
         $this->assertEqualsWithDelta($expected, $this->model->resolveSectorActivityShift($stock, $recession), 1e-9);
     }
+
+    /** Online's drift is the 2009-2019 one, Year 1's calendar: 3.975% to 10.575% of retail (FRED ECOMPCTSA), net of retail's own drift. */
+    public function testTheSecularExcessIsOnlinesDriftFromYearOne(): void
+    {
+        $excess = $this->model->getSecularGrowthRate(new Stock()) - MacroEngine::TREND_REAL_GROWTH;
+
+        $this->assertEqualsWithDelta(log(0.10575 / 0.03975) / 10.0 + log(0.0593 / 0.0676) / 22.0, $excess, 1e-12);
+        $this->assertEqualsWithDelta(0.0919, $excess, 0.0005);
+    }
 }

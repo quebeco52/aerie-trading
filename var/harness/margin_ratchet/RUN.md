@@ -38,3 +38,7 @@ ratio x (1 + 1e-6), a path perturbation with no economics). Snapshots = `sam-bef
 session's scratchpad. The harness rows now also carry `hy`, `vix`, `erp`, `deal`, `sloos`, `prate` (macro readings
 TIER's PE physics takes). `analyse_bisect.py` (TIER deaths and ROE per arm, unpaired), `analyse_macro.py [runs dir]`
 (paired macro readings by 2-year bin; `macro16/` holds a 16-seed before/after rerun with those fields).
+
+2026-10-14 WEAV refit + JDAW: arm `jdaw` (= the working tree, kept apart from the cached `after` runs).
+`bin/harness-batch var/harness/margin_ratchet/run.sh 1-8 jdaw && python3 var/harness/margin_ratchet/analyse_jdaw.py 1-48 1-8`
+(WEAV rev/GDP y1/16/30, cap shares, JDAW size/margin/failures; unpaired vs cached `after`).

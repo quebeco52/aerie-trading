@@ -95,3 +95,33 @@ EBIT at the open, over 60% by year 12 in both arms), as the 2026-10-06 bank revi
 TIER-read macro (HY spread +20-70bp, VIX +1.5-2pp, SLOOS tighter) in years 10-16 at t 2-2.7 on 16 seeds, after TIER's
 ROE has already parted (years 8-10, t -2.9); 70 cells, read as noise. The fix's own TIER effect (22 vs 15/48) is
 unresolved at this n.
+
+## 2026-10-14: WEAV refit (drift 2009-2019, seed x0.29) and Jackdaw Bazaar (JDAW) added
+
+Question: WEAV sales / nominal GDP at years 1, 16, 30 (design ~1.0%, ~2.2%), WEAV end cap share, JDAW's size,
+margin and survival. Arm `jdaw` = main working tree (also holds the FICC desk and TIPS fields), seeds 1-8, YEARS=30,
+TPY=360. Compared unpaired with the cached 48-seed `after` arm of the sector-drift SAM run (= HEAD 948aa08 minus the
+FICC change). Stopped at 8: WEAV cap-share difference t = -6.7.
+`bin/harness-batch var/harness/margin_ratchet/run.sh 1-8 jdaw && python3 var/harness/margin_ratchet/analyse_jdaw.py 1-48 1-8`.
+GDP_usd = 12e12 x mean nominalGdpIndex over the TTM quarters (index 1.0 at start). Table: `jdaw_stage8.out`.
+
+    quantity                         after (n48)      jdaw (n8)       diff (se)       t
+    WEAV TTM rev / GDP y1, %         2.895 (0.030)    0.956 (0.033)   -1.938 (0.045)
+    WEAV TTM rev / GDP y16, %        8.461 (0.266)    2.513 (0.245)   -5.947 (0.362)
+    WEAV TTM rev / GDP y30, %       10.612 (0.487)    3.818 (0.268)   -6.794 (0.556)
+    WEAV share of board cap end, %   9.547 (0.613)    4.747 (0.380)   -4.801 (0.721)  -6.66
+    WEAV TTM EBIT margin y30, %     10.554 (0.747)   19.099 (2.001)   +8.546 (2.137)   4.00
+    JDAW / WEAV TTM rev y1, y30                       0.468 (0.023), 0.226 (0.021)
+    JDAW TTM EBIT margin y1, y30, %                  18.26 (0.96), 22.60 (1.73)
+    JDAW failures                                     0/8; other failures: TIER 3/8 (as before)
+
+- WEAV grows x4.0 vs GDP over 30y against the designed x2.9 asymptote; JDAW only x1.9 (0.45% -> 0.86% of GDP).
+- WEAV's y30 margin returns to ~19% (pre-SAM-fix level): with a smaller seed the saturation SAM no longer bites.
+
+## 2026-10-14: JDAW asset-light retune, arms `jdaw` vs `jdaw2`, 48 seeds, YEARS=30 (`jdaw2_stage{8,16,48}.out`)
+
+Same 86-firm roster, so the seeds pair. Year 30 unless noted: WEAV rev/GDP 2.739% -> 2.601% (paired se 0.075, t -1.8);
+WEAV EBIT margin 13.0% -> 11.8% (t -2.2); industry price level 1.054 -> 1.043 (t -2.6); JDAW rev/GDP 1.141% -> 1.208%
+(t 2.9; x2.67 from year 1, the designed faded drift). WEAV rev/GDP year 16 2.157% in both. Deaths unchanged (TIER 17 vs
+16, SHOR 3 vs 4, PLZA 2, CASC 1). Seeds 1-8 of `jdaw` ran hot (WEAV year 30 3.82%); its 48-seed mean is 2.74%, so the
+8-seed "x4.0 overshoot" was mostly sampling noise.

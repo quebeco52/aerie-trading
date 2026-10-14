@@ -10,6 +10,7 @@ use App\Service\Macro\Subsystem\CreditFiscalSubsystem;
 use App\Service\Macro\MacroState;
 use App\Service\Macro\Subsystem\AssetMarketSubsystem;
 use App\Service\Macro\Subsystem\MacroAggregateSubsystem;
+use App\Service\Macro\Subsystem\MonetaryPolicySubsystem;
 use App\Service\Macro\Subsystem\SovereignFundSubsystem;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\FixedIncome;
@@ -301,6 +302,10 @@ readonly class MacroStateDTO
         public float $dealActivityIndexEma = MacroEngine::DEAL_ACTIVITY_BASELINE,
         /** Deal flow's measured through-the-cycle level, a decade's exponential average (App\Service\Macro\Subsystem\AssetMarketSubsystem::calculateCapitalMarketsDealIndex()). */
         public float $dealActivityIndexTrend = MacroEngine::DEAL_ACTIVITY_BASELINE,
+        /** Realized ten-year yield volatility, annualized, over the last quarter (App\Service\Macro\Subsystem\MonetaryPolicySubsystem::applyYieldCurve()). */
+        public float $treasuryVolatility = MonetaryPolicySubsystem::OPENING_TREASURY_VOLATILITY,
+        /** That volatility's measured through-the-cycle level, a decade's exponential average. */
+        public float $treasuryVolatilityTrend = MonetaryPolicySubsystem::OPENING_TREASURY_VOLATILITY,
         public float $manufacturingPmi = MacroEngine::PMI_BASELINE,
         public float $manufacturingPmiEma = MacroEngine::PMI_BASELINE,
         public float $producerPriceInflation = MacroEngine::TARGET_INFLATION,
