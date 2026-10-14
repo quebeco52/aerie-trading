@@ -6,8 +6,11 @@ namespace App\Tests\Service\Corporate;
 
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
+use App\Data\Company\Sectors;
 use App\Service\Corporate\CorporateMetrics;
+use App\Service\Corporate\Industry\IndustryShareLedger;
 use App\Service\Math\FinancialConstants;
+use App\Service\Math\TimeSeries;
 use PHPUnit\Framework\TestCase;
 
 class CorporateMetricsTest extends TestCase
@@ -200,6 +203,37 @@ class CorporateMetricsTest extends TestCase
         // 3. Monopolistic scale (InvestedCapital = 900B -> 90% share) -> penalty grows quadratically
         $penalty90 = $this->metrics->calculateMarketSaturationPenalty($stock, 900_000_000_000.0, $macro);
         $this->assertGreaterThan($penalty75 * 2.0, $penalty90);
+    }
+
+    /**
+     * Saturation reads the market the industry ledger sells into: the seeded SAM grown with the sector's faded
+     * secular drift. On nominal GDP alone a marketplace that kept pace with e-commerce read as 1.6 times its whole
+     * market at Year 63 and could clear no growth hurdle while the ledger had it short of capacity.
+     */
+    public function testTheAddressableMarketGrowsWithTheSectorsSecularDrift(): void
+    {
+        $stock = new Stock();
+        $stock->setIndustry('Internet Retail');
+        $stock->setSamRatio('0.375');
+        $stock->setSystemicImportance('base');
+
+        $excess = IndustryShareLedger::secularExcessGrowth(Sectors::strategyFor('Internet Retail'), $stock);
+        $this->assertGreaterThan(0.10, $excess, 'online retail outgrows the economy at the open');
+
+        $this->assertSame(1.0, CorporateMetrics::secularMarketGrowth($stock, 0.0), 'the open is the seeded SAM');
+        $this->assertEqualsWithDelta(
+            exp(TimeSeries::fadedExcessIntegral($excess, 0.0, 63.0, FinancialConstants::SECULAR_EXCESS_HALF_LIFE_YEARS)),
+            CorporateMetrics::secularMarketGrowth($stock, 63.0),
+            1e-12,
+            'the same faded drift the ledger grows trend demand by'
+        );
+
+        // Capital that kept pace with its market from a 29% opening share is still at 29% of it.
+        $year63 = new MacroStateDTO(nominalGdpIndex: 10.6, totalTime: 63.0);
+        $capital = 0.29 * CorporateMetrics::BASELINE_SECTOR_TAM * 10.6 * 0.375 * CorporateMetrics::secularMarketGrowth($stock, 63.0);
+
+        $this->assertEqualsWithDelta(0.29, $this->metrics->calculateAddressableShare($stock, $capital, $year63), 1e-9);
+        $this->assertSame(0.0, $this->metrics->calculateMarketSaturationPenalty($stock, $capital, $year63));
     }
 
     public function testCobbDouglasDiminishingMarginalReturn(): void

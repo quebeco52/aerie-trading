@@ -23,3 +23,18 @@ Analysis: `analyse.py [runs dir] [--sectors]`. Targets: (1) ex-fin ex-REIT aggre
 revenue per year), mean of last 5 years minus years 0-2, pp; (2) median over surviving ex-fin firms of stored
 operatingMargin final minus opening, pp; (3) bankruptcies + reorganizations per run. `--sectors` adds a per-industry
 table (stored-margin change and own EBIT-margin drift, by arm). Delete `cache*/` after a service/constructor change.
+
+2026-10-14 reuse (sector-drift SAM, HEAD 2f8bc54 vs tree): the harness now also records per-quarter `ipl`
+(kpis['industry_price_level']) and final `sh` (shares, for cap shares). `run.sh` defaults BEFORE to that session's
+scratchpad `sam-before`; rebuild the snapshot or pass `BEFORE=<dir>`. Analysis: `analyse_sam.py [runs dir]`
+(WEAV price level, mean |price level - 1|, EBIT drift, WEAV cap share and margin, per-firm movers, oddities).
+`analyse_tier.py [runs dir]` treats failures as unpaired (Fisher exact, rate differences) and tags TIER's
+dying-divestiture quarters (wholesale debt down 14% or more, equity down 20% or more, small NI).
+`secular_growth.php T1 T2 ...` prints each firm's SAM secular growth factor at years 10/20/30 (no container).
+
+2026-10-14 TIER bisect (why the sector-drift SAM arm killed TIER 22/48 vs 3/48): arms `pen` (penalty + marginal return
+only), `led` (EarningsEngine ledger share only), `ma` (M&A divestiture gate only), `plc` (placebo: HEAD with every scale
+ratio x (1 + 1e-6), a path perturbation with no economics). Snapshots = `sam-before` plus the one file(s), in that
+session's scratchpad. The harness rows now also carry `hy`, `vix`, `erp`, `deal`, `sloos`, `prate` (macro readings
+TIER's PE physics takes). `analyse_bisect.py` (TIER deaths and ROE per arm, unpaired), `analyse_macro.py [runs dir]`
+(paired macro readings by 2-year bin; `macro16/` holds a 16-seed before/after rerun with those fields).

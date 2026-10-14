@@ -5,6 +5,8 @@ namespace App\Service\Corporate;
 use App\Entity\Stock;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\FirmEconomics;
+use App\Service\Math\TimeSeries;
+use App\Service\Corporate\Industry\IndustryShareLedger;
 
 /**
  * A firm's measures read off its Stock: operating base, invested and revenue-generating capital, scale and saturation
@@ -51,10 +53,28 @@ class CorporateMetrics
      * (Penrose bloat, diminishing marginal return, the TAM cap), private to the firm and non-rival — it is
      * not a share of the industry's sales. That figure lives in the industry ledger's revenue share.
      */
-    public function calculateScaleRatio(float $investedCapital, float $nominalGdpIndex, float $samRatio, float $baselineSectorTam = self::BASELINE_SECTOR_TAM): float
+    public function calculateScaleRatio(float $investedCapital, float $nominalGdpIndex, float $samRatio, float $secularMarketGrowth = 1.0): float
     {
-        $dynamicSam = $baselineSectorTam * $nominalGdpIndex * $samRatio;
+        $dynamicSam = self::BASELINE_SECTOR_TAM * $nominalGdpIndex * $samRatio * $secularMarketGrowth;
         return $investedCapital / max(1.0, $dynamicSam);
+    }
+
+    /**
+     * The firm's scale ratio on its own market: the seeded SAM grown with nominal GDP and with its sector's secular
+     * drift over the economy, faded as the industry ledger fades it, so saturation and the ledger's capacity balance
+     * read the same market.
+     */
+    public function calculateAddressableShare(Stock $stock, float $capital, \App\DTO\MacroStateDTO $macroState): float
+    {
+        return $this->calculateScaleRatio($capital, $macroState->nominalGdpIndex, (float) $stock->getSamRatio(), self::secularMarketGrowth($stock, $macroState->totalTime));
+    }
+
+    /** How far the firm's sector has grown past (or fallen behind) the economy since the open: exp of its faded secular excess. */
+    public static function secularMarketGrowth(Stock $stock, float $totalTime): float
+    {
+        $excess = IndustryShareLedger::secularExcessGrowth(\App\Data\Company\Sectors::strategyFor($stock->getIndustry()), $stock);
+
+        return exp(TimeSeries::fadedExcessIntegral($excess, 0.0, $totalTime, FinancialConstants::SECULAR_EXCESS_HALF_LIFE_YEARS));
     }
 
     public function calculateOperatingBase(float $revenue, float $equity, float $floor = 10000000.0): float
@@ -89,9 +109,7 @@ class CorporateMetrics
      */
     public function calculateMarketSaturationPenalty(Stock $stock, float $investedCapital, \App\DTO\MacroStateDTO $macroState): float
     {
-        $nominalGdpIndex = $macroState->nominalGdpIndex;
-        $samRatio = (float) $stock->getSamRatio();
-        $marketShare = $this->calculateScaleRatio($investedCapital, $nominalGdpIndex, $samRatio);
+        $marketShare = $this->calculateAddressableShare($stock, $investedCapital, $macroState);
 
         $moatFactor = FinancialConstants::SYSTEMIC_MOAT_FACTORS[$stock->getSystemicImportance()]
             ?? FinancialConstants::SYSTEMIC_MOAT_FACTORS['default'];
@@ -116,9 +134,7 @@ class CorporateMetrics
      */
     public function calculateMarginalReturn(Stock $stock, float $trueReturn, float $saturationPenalty, float $investedCapital, \App\DTO\MacroStateDTO $macroState): float
     {
-        $nominalGdpIndex = $macroState->nominalGdpIndex;
-        $samRatio = (float) $stock->getSamRatio();
-        $marketShare = $this->calculateScaleRatio($investedCapital, $nominalGdpIndex, $samRatio);
+        $marketShare = $this->calculateAddressableShare($stock, $investedCapital, $macroState);
 
         $baseReturn = max(0.0, $trueReturn - $saturationPenalty - $this->calculateCournotPriceHaircut($stock, $marketShare, $investedCapital, $macroState));
 

@@ -609,7 +609,7 @@ class EarningsEngine
         // The firm's reach into the market it sells into, on the base the saturation physics uses. The
         // industry ledger weighs both what this firm builds and what it takes from rivals by it.
         $evaluationCapital = $strategy->getEvaluationCapital((float) $stock->getTotalEquity(), $stock->getInvestedCapital());
-        $ctx->addressableShare = $this->corporateMetrics->calculateScaleRatio($evaluationCapital, $macroState->nominalGdpIndex, (float) $stock->getSamRatio());
+        $ctx->addressableShare = $this->corporateMetrics->calculateAddressableShare($stock, $evaluationCapital, $macroState);
 
         // Zero-sum share: rivals' idiosyncratic gains booked since this firm's last report are taken from
         // its demand in proportion to its size, scaled by how substitutable the industry's output is. The

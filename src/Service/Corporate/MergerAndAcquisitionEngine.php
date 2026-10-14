@@ -929,7 +929,7 @@ class MergerAndAcquisitionEngine
         
         $ctx->nominalGdpIndex = $ctx->macroState->nominalGdpIndex;
         $ctx->samRatio = (float) $stock->getSamRatio();
-        $ctx->scaleRatio = $this->corporateMetrics->calculateScaleRatio($ctx->evaluationCapital, $ctx->nominalGdpIndex, $ctx->samRatio);
+        $ctx->scaleRatio = $this->corporateMetrics->calculateAddressableShare($stock, $ctx->evaluationCapital, $ctx->macroState);
     }
 
     private function shouldAbortDivestiture(DivestitureContext $ctx): bool

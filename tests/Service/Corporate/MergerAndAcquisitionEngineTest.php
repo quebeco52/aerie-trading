@@ -409,7 +409,7 @@ class MergerAndAcquisitionEngineTest extends TestCase
         $this->debtEngineMock->method('analyzeDebtHealth')->willReturn($debtHealthMock);
         $this->debtEngineMock->method('analyzeTrailingDebtHealth')->willReturn($debtHealthMock);
         $this->corporateMetricsMock->method('calculateOperatingBase')->willReturn(10000000.0);
-        $this->corporateMetricsMock->method('calculateScaleRatio')->willReturn(0.10);
+        $this->corporateMetricsMock->method('calculateAddressableShare')->willReturn(0.10);
         $this->mathUtilityMock->method('checkProbability')->willReturn(true);
         $this->mathUtilityMock->method('generateUniformBetween')->willReturn(0.25); // Divest 25%
         $this->marketEventPublisherMock->method('publish')->willReturn(['event_type' => 'DIVESTITURE']);
@@ -1496,7 +1496,7 @@ class MergerAndAcquisitionEngineTest extends TestCase
         $this->debtEngineMock->method('analyzeDebtHealth')->willReturn($health);
         $this->debtEngineMock->method('analyzeTrailingDebtHealth')->willReturn($health);
         $this->corporateMetricsMock->method('calculateOperatingBase')->willReturn($operatingBase);
-        $this->corporateMetricsMock->method('calculateScaleRatio')->willReturn(0.10);
+        $this->corporateMetricsMock->method('calculateAddressableShare')->willReturn(0.10);
         $this->mathUtilityMock->method('checkProbability')->willReturn(true);
         // One draw serves the divested fraction and every other uniform the deal takes.
         $this->mathUtilityMock->method('generateUniformBetween')->willReturn($fraction);

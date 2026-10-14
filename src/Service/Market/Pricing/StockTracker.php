@@ -574,7 +574,7 @@ class StockTracker
                 $evaluationCapital = $strategy->getEvaluationCapital((float) $stock->getTotalEquity(), $stock->getInvestedCapital());
                 $addressableShare = min(
                     FinancialConstants::MAX_ADDRESSABLE_MARKET_SHARE,
-                    $this->corporateMetrics->calculateScaleRatio($evaluationCapital, $macroDTO->nominalGdpIndex, (float) $stock->getSamRatio())
+                    $this->corporateMetrics->calculateAddressableShare($stock, $evaluationCapital, $macroDTO)
                 );
 
                 $stockUpdate['market_share'] = round($addressableShare * 100, 2);

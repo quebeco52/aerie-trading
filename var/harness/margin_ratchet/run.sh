@@ -11,8 +11,9 @@ MAIN=/home/quebeco/Projects/Code/Private/aerie-trading
 mkdir -p $H/runs
 case "$1" in
   after)  BASEV="" ;;
-  before) BASEV=${BEFORE:-/tmp/claude-1000/-home-quebeco-Projects-Code-Private-aerie-trading/1cdddd51-306a-47f5-9f31-ba3ea29d83f9/scratchpad/mr-before} ;;
-  *) echo "usage: run.sh before|after <seed>" >&2; exit 2 ;;
+  before) BASEV=${BEFORE:-/tmp/claude-1000/-home-quebeco-Projects-Code-Private-aerie-trading/3aa06804-00db-4439-bb82-43aadf25c7e1/scratchpad/sam-before} ;;
+  pen|led|ma|plc) BASEV=/tmp/claude-1000/-home-quebeco-Projects-Code-Private-aerie-trading/3aa06804-00db-4439-bb82-43aadf25c7e1/scratchpad/sam-$1 ;;  # call-site bisect of the sector-drift SAM
+  *) echo "usage: run.sh before|after|pen|led|ma|plc <seed>" >&2; exit 2 ;;
 esac
 rm -f $H/runs/$1-$2.jsonl
 cd $H && env BASE="$BASEV" SEED="$2" YEARS="${YEARS:-30}" TPY="${TPY:-360}" OUT="$H/runs/$1-$2.jsonl" \

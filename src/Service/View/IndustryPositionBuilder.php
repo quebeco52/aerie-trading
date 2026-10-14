@@ -104,7 +104,7 @@ class IndustryPositionBuilder
         $evaluationCapital = $strategy->getEvaluationCapital((float) $stock->getTotalEquity(), $stock->getInvestedCapital());
         $addressableShare = $stock->isBankrupt() ? 0.0 : min(
             FinancialConstants::MAX_ADDRESSABLE_MARKET_SHARE,
-            $this->corporateMetrics->calculateScaleRatio($evaluationCapital, $macroState->nominalGdpIndex, (float) $stock->getSamRatio())
+            $this->corporateMetrics->calculateAddressableShare($stock, $evaluationCapital, $macroState)
         );
 
         // What that reach costs. The penalty is margin friction in return points; severity is the share of
