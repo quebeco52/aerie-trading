@@ -76,12 +76,12 @@ class InternetRetailBusinessModel extends StandardCorporateBusinessModel
     }
 
     // --- Secular Demand ---
-    /** E-commerce share of US retail sales, 2009 average, Year 1's calendar (Census Quarterly E-Commerce Report, FRED ECOMPCTSA). */
-    public const ECOMMERCE_SHARE_2009 = 0.03975;
-    /** The same share, 2019 average. */
-    public const ECOMMERCE_SHARE_2019 = 0.10575;
-    /** Years between those two averages. */
-    public const ECOMMERCE_WINDOW_YEARS = 10.0;
+    /** Online sales as a share of the District's retail at Year 1 (4%). */
+    public const ONLINE_SHARE_YEAR_1 = 0.040;
+    /** The same share a decade on (6.5%): a dense financial centre with short delivery runs and a strong high street takes to online shopping at about half the mainland's pace (whose share went from 4% to 10.6% in its 2010s). */
+    public const ONLINE_SHARE_DECADE_ON = 0.065;
+    /** Years between those two shares. */
+    public const ONLINE_ADOPTION_WINDOW_YEARS = 10.0;
     /** Retail trade value added as a share of US nominal GDP in 1997 (BEA GDP by Industry, value added). */
     public const RETAIL_SHARE_1997 = 0.0676;
     /** The same share in 2019. */
@@ -91,7 +91,7 @@ class InternetRetailBusinessModel extends StandardCorporateBusinessModel
     public function getSecularGrowthRate(Stock $stock): float
     {
         return MacroEngine::TREND_REAL_GROWTH
-            + MacroTransmission::gdpShareDrift(self::ECOMMERCE_SHARE_2009, self::ECOMMERCE_SHARE_2019, self::ECOMMERCE_WINDOW_YEARS)
+            + MacroTransmission::gdpShareDrift(self::ONLINE_SHARE_YEAR_1, self::ONLINE_SHARE_DECADE_ON, self::ONLINE_ADOPTION_WINDOW_YEARS)
             + MacroTransmission::gdpShareDrift(self::RETAIL_SHARE_1997, self::RETAIL_SHARE_2019, FinancialConstants::SECULAR_SHARE_WINDOW_YEARS);
     }
 

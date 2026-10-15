@@ -75,7 +75,7 @@ class GovernmentPageBuilderTest extends TestCase
 
         $politics = new PoliticsStateDTO(totalTime: 13.0, exchequerHeadName: 'Rosalind Tate', exchequerHeadBirth: -38.0, exchequerHeadTermStart: 13.0,
             exchequerHeadStance: \App\Service\Politics\Exchequer::stance(4.3), councilDebtStances: [-0.5, 0.0, 0.5]);
-        $macro = new MacroStateDTO(sovereignDebtToGdp: 0.9, sovereignNetDebtToGdp: 0.75, sovereignNetDebtToGdpEma: 0.75, sovereignDebtAverageMaturity: 4.7, sovereignDebtMaturityTarget: 4.3,
+        $macro = new MacroStateDTO(sovereignRiskSpread: 0.001, sovereignRiskSpreadEma: 0.001, sovereignDebtToGdp: 0.9, sovereignNetDebtToGdp: 0.75, sovereignNetDebtToGdpEma: 0.75, sovereignDebtAverageMaturity: 4.7, sovereignDebtMaturityTarget: 4.3,
             policyRate: 0.04, sovereignCouponRate: 0.03);
         $panel = $this->builder()->exchequer($politics, $macro);
 

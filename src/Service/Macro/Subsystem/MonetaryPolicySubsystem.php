@@ -630,11 +630,23 @@ class MonetaryPolicySubsystem
     }
 
     /**
+     * The short rate bonds are priced on: the Authority's unrounded view, which its published rule and the data let the
+     * market follow between meetings, floored where decisions are. Each decision rounds it to a step, so the decision
+     * itself carries news only when it rounds to a step the market did not expect (policySurprise).
+     */
+    public static function marketShortRate(MacroState $state): float
+    {
+        return max(MacroEngine::EFFECTIVE_LOWER_BOUND, $state->policyRateShadow);
+    }
+
+    /**
      * Nelson-Siegel-Svensson (1994) Term Structure & Adrian-Crump-Moench (2013) ACM Decomposition.
      *
      * Fits the full zero-coupon sovereign yield curve (2Y, 5Y, 10Y, 30Y) with Diebold-Li (2006)
      * forward monetary guidance curvature (beta2) and long-end fiscal/QT supply curvature (beta3).
      * Decomposes the 10Y yield into expected risk-neutral policy rate path and duration term premium.
+     * The short end is anchored on the rate the market sees coming (marketShortRate()), not the last decision, so a
+     * decision it expected moves no bond; only a surprise does.
      *
      * @param MacroState $state           Current macroeconomic state.
      * @param float      $targetInflation Central bank inflation target.
@@ -671,10 +683,11 @@ class MonetaryPolicySubsystem
         $modelEndpoint = $naturalRate + $state->tipsBreakeven;
         $level = ((1.0 - self::KOZICKI_TINSLEY_ENDPOINT_WEIGHT) * $modelEndpoint)
             + (self::KOZICKI_TINSLEY_ENDPOINT_WEIGHT * $state->perceivedNeutralRate);
-        $nsBeta1 = $state->policyRate - $level;
+        $shortRate = self::marketShortRate($state);
+        $nsBeta1 = $shortRate - $level;
 
         // Diebold & Li (2006) curvature beta2 capturing forward monetary policy trajectory.
-        $monetaryStanceGap = $state->targetRate - $state->policyRate;
+        $monetaryStanceGap = $state->targetRate - $shortRate;
         $nsBeta2 = (self::SVENSSON_CURVATURE1_TARGET_SCALE * $monetaryStanceGap)
             + (self::SVENSSON_CURVATURE1_GAP_SCALE * $state->outputGap)
             + $state->expectedPathShock;

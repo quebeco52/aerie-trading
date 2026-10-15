@@ -34,7 +34,7 @@ readonly class MacroStateDTO
     public const OPENING_POLICY_RATE = 0.034;
 
     /** Ten-year at the opening: the engine's curve evaluated at the opening state. */
-    public const OPENING_YIELD_10Y = 0.0472;
+    public const OPENING_YIELD_10Y = 0.0462;
 
     /**
      * Seeds this snapshot adds to the shared set, for openings only a snapshot needs.
@@ -187,16 +187,16 @@ readonly class MacroStateDTO
         public float $ruleInflationGap = 0.0,
         public float $ruleOutputGap = 0.0,
         public float $targetRate = self::OPENING_POLICY_RATE,
-        public float $yield2y = 0.0378,
-        public float $yield2yEma = 0.0378,
-        public float $yield5y = 0.0423,
-        public float $yield5yEma = 0.0423,
+        public float $yield2y = 0.0375,
+        public float $yield2yEma = 0.0375,
+        public float $yield5y = 0.0416,
+        public float $yield5yEma = 0.0416,
         public float $yield10y = self::OPENING_YIELD_10Y,
         public float $yield10yEma = self::OPENING_YIELD_10Y,
-        public float $yield30y = 0.0530,
-        public float $yield30yEma = 0.0530,
-        public float $termPremium10y = 0.0125,
-        public float $termPremium10yEma = 0.0125,
+        public float $yield30y = 0.0522,
+        public float $yield30yEma = 0.0522,
+        public float $termPremium10y = 0.0115,
+        public float $termPremium10yEma = 0.0115,
         public float $riskNeutral10y = 0.0347,
         public float $riskNeutral10yEma = 0.0347,
         public float $termPremiumShock = 0.0,
@@ -287,7 +287,7 @@ readonly class MacroStateDTO
         public float $nsCurvature = 0.0,
         public float $nsCurvature2 = 0.0,
         public float $nsBeta1 = self::OPENING_POLICY_RATE - (MacroEngine::BASE_NATURAL_RATE + MacroEngine::TARGET_INFLATION),
-        public float $nsBaseTermPremium = 0.0125,
+        public float $nsBaseTermPremium = 0.0115,
         public float $nsLongEndPremium = 0.0109,
         public float $potentialGdpIndex = 1.0,
         public float $nominalGdpIndex = 1.0,
@@ -397,8 +397,9 @@ readonly class MacroStateDTO
         public float $powerHeatRateLog = 0.0,
         public float $moneyMarketFundShare = MacroEngine::MMF_SHARE_BASE,
         public float $moneyMarketFundShareEma = MacroEngine::MMF_SHARE_BASE,
-        public float $sovereignRiskSpread = 0.001,
-        public float $sovereignRiskSpreadEma = 0.001,
+        /** The market's sovereign default premium: none at the opening, where net liabilities sit far below the fiscal limit (CreditRisk::sovereignDefaultPremium()). */
+        public float $sovereignRiskSpread = 0.0,
+        public float $sovereignRiskSpreadEma = 0.0,
         public float $primaryDeficitToGdp = -0.0025,
         public float $policyUncertaintyIndex = MacroEngine::EPU_BASELINE,
         public float $policyUncertaintyIndexEma = MacroEngine::EPU_BASELINE,

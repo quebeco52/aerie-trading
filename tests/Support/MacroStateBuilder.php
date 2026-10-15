@@ -176,6 +176,8 @@ class MacroStateBuilder
     {
         $this->state->policyRate = $rate;
         $this->state->policyRateEma = $rate;
+        // A rate at rest: the Authority's own view sits on its decision.
+        $this->state->policyRateShadow = $rate;
         return $this;
     }
 

@@ -218,7 +218,7 @@ class CorporateMetricsTest extends TestCase
         $stock->setSystemicImportance('base');
 
         $excess = IndustryShareLedger::secularExcessGrowth(Sectors::strategyFor('Internet Retail'), $stock);
-        $this->assertGreaterThan(0.05, $excess, 'online retail outgrows the economy at the open');
+        $this->assertGreaterThan(0.03, $excess, 'online retail outgrows the economy at the open');
 
         $this->assertSame(1.0, CorporateMetrics::secularMarketGrowth($stock, 0.0), 'the open is the seeded SAM');
         $this->assertEqualsWithDelta(

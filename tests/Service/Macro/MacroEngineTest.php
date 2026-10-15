@@ -1541,6 +1541,7 @@ class MacroEngineTest extends TestCase
         // 1. Peak tightening cycle: policyRate = 5.25%, targetRate = 5.25%, outputGap = +2.5%, elevated inflation
         $peakState = new \App\Service\Macro\MacroState();
         $peakState->policyRate = 0.0525;
+        $peakState->policyRateShadow = $peakState->policyRate;
         $peakState->targetRate = 0.0525;
         $peakState->outputGap = 0.025;
         $peakState->inflation = 0.035;
@@ -1562,6 +1563,7 @@ class MacroEngineTest extends TestCase
         // 2. Recession / easing cycle: policyRate = 1.0%, targetRate = 0.5%, outputGap = -2.5%
         $easingState = new \App\Service\Macro\MacroState();
         $easingState->policyRate = 0.010;
+        $easingState->policyRateShadow = $easingState->policyRate;
         $easingState->targetRate = 0.005;
         $easingState->outputGap = -0.025;
         $easingState->inflation = 0.015;
@@ -1838,6 +1840,7 @@ class MacroEngineTest extends TestCase
         $normalState->inflation = MacroEngine::TARGET_INFLATION;
         $normalState->inflationEma = MacroEngine::TARGET_INFLATION;
         $normalState->policyRate = MacroEngine::BASE_NATURAL_RATE + MacroEngine::TARGET_INFLATION;
+        $normalState->policyRateShadow = $normalState->policyRate;
         $normalState->targetRate = $normalState->policyRate;
         $normalState->tipsBreakeven = MacroEngine::TARGET_INFLATION;
         $normalState->marketVolatilityEma = MacroEngine::MACRO_VOL_BASE_ANCHOR;
@@ -1859,6 +1862,7 @@ class MacroEngineTest extends TestCase
         $tightState->inflation = 0.024;
         $tightState->inflationEma = 0.024;
         $tightState->policyRate = 0.0525;
+        $tightState->policyRateShadow = $tightState->policyRate;
         $tightState->targetRate = 0.0400; // Target rate cooling as inflation contained
         $tightState->tipsBreakeven = 0.022;
         $tightState->marketVolatilityEma = 0.18;

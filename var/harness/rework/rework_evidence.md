@@ -73,3 +73,9 @@ No fund / fund: gap sd 2.32 → 2.49 (t 0.9) / 1.98 → 2.39 (t 3.6); unemp sd 1
 20.9 → 11.8% (old: Sahm proxy; new: two falling quarters); crises 4.7 → 4.9 / 4.3 → 4.2 per century.
 Lever means after Phase 6 (16 × 200y): means within their standard errors of Phase 5's; term persistences 0.66 → 0.50
 (dividend tax 0.73 → 0.56), ~4 se, the sharper cycle turning cabinets over faster. PolicyCapitalization updated.
+
+## Short end on the Authority's view (after Phase 6)
+The curve read the decided rate, so an expected 25bp step moved the 2y ~13bp on the meeting tick (0.52 per bp; meeting-
+day mean |Δ2y| 16.3bp against 10.2bp between). On the unrounded view (marketShortRate): 0.07 per bp, meeting days
+10.4bp like any other. Surprises are rounding flips only (2 in 60 years). 4 seeds paired: no moment moves (|t| ≤ 1;
+gap sd 2.35 → 2.44, rate dq sd 30.5 → 31.3bp).
