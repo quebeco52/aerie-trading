@@ -1003,11 +1003,12 @@ class AssetMarketSubsystem
     /**
      * Jorgenson (1963) user cost of owning: mortgage rate plus depreciation and tax, less EXPECTED house-price
      * inflation. Realized inflation is not an expectation, so a commodity spike does not make owning cheaper.
-     * The 30Y fixed mortgage is priced off the 10Y: prepayment shortens its effective duration to ~7 years.
+     * A buyer on a floating loan prices the home on the rate expected over the years they hold it, not this
+     * quarter's (Himmelberg, Mayer & Sinai 2005): the debt service households pay reads the rate in force.
      */
     private function housingUserCost(MacroState $state, float $expectedInflation): float
     {
-        $mortgageRate = FixedIncome::mortgageRate($state->yield10yEma);
+        $mortgageRate = FixedIncome::expectedMortgageRate($state->riskNeutral10yEma);
 
         return max(0.015, $mortgageRate + self::RESIDENTIAL_DEPRECIATION_TAX_RATE - $expectedInflation);
     }

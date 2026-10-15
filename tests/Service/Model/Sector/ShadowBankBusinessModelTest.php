@@ -111,7 +111,8 @@ class ShadowBankBusinessModelTest extends TestCase
 
     /**
      * A rise in the policy rate reaches the direct loans at their next reset, inside the quarter, on the share of the
-     * book they make up; the mortgages, priced off the long end, and the fees do not move.
+     * book they make up, and the floating mortgages as they reset over the following months; the deal fees do not
+     * move, and mortgage origination falls as the dearer rate prices buyers out.
      */
     #[AllowMockObjectsWithoutExpectations]
     public function testARateRiseLandsInDirectLendingIncomeWithinAQuarterAndFeesDoNotReprice(): void
@@ -131,8 +132,10 @@ class ShadowBankBusinessModelTest extends TestCase
         $stock->setEarningsMomentumZ($after->streamZ);
 
         $directLendingShare = (1.0 - CommercialBankBusinessModel::SECURITIES_SHARE_OF_EARNING_ASSETS) * 0.40;
-        $this->assertEqualsWithDelta($directLendingShare * 0.01, $this->model->resolveInterestYield($stock, $raised) - $before, 1e-9);
-        $this->assertEqualsWithDelta($base->streamRevenue['origination_fees'], $after->streamRevenue['origination_fees'], 1e-3);
+        $loanShare = 1.0 - CommercialBankBusinessModel::SECURITIES_SHARE_OF_EARNING_ASSETS;
+        $this->assertGreaterThan($directLendingShare * 0.01, $this->model->resolveInterestYield($stock, $raised) - $before, 'The mortgages start to reset too.');
+        $this->assertLessThan($loanShare * 0.01, $this->model->resolveInterestYield($stock, $raised) - $before, 'but not all of them within the quarter.');
+        $this->assertLessThan($base->streamRevenue['origination_fees'], $after->streamRevenue['origination_fees'], 'A dearer floating mortgage prices buyers out.');
         $this->assertEqualsWithDelta($base->streamRevenue['direct_lending'], $after->streamRevenue['direct_lending'], 1e-3, 'deal fees do not reprice');
         $this->assertEqualsWithDelta(
             $this->model->getTargetMetrics($stock, $opening, $this->mathUtility)['baseline_roic'],
@@ -262,22 +265,22 @@ class ShadowBankBusinessModelTest extends TestCase
     }
 
     /**
-     * Origination fees answer the mortgage rate around the engine's neutral, both ways: a rise prices buyers out and
-     * ends refinancing, a fall brings both back. Read one-sided off a 30-year threshold of 4.5% against a 30-year that
-     * averages nearer 5%, the stream carried a standing drag at rest.
+     * Origination fees answer the mortgage rate around the engine's neutral, both ways: a rise prices buyers out, a fall
+     * brings them back. The District's mortgages float, so the rate is the policy rate's plus the spread.
      */
     public function testOriginationAnswersTheMortgageRateSymmetricallyAroundItsNeutral(): void
     {
         $stock = $this->pool();
         $mathMock = $this->createStub(MathUtility::class);
         $mathMock->method('generatePersistentZ')->willReturn(0.0);
-        $origination = fn (float $tenYear): float => $this->model->computeActualFinancials(
-            $stock, 100_000_000.0, 0.50, 20_000_000.0, 0.0, new MacroStateDTO(yield10yEma: $tenYear), $mathMock
+        $origination = fn (float $policyRate): float => $this->model->computeActualFinancials(
+            $stock, 100_000_000.0, 0.50, 20_000_000.0, 0.0, new MacroStateDTO(policyRateEma: $policyRate), $mathMock
         )->streamRevenue['origination_fees'];
+        $neutralPolicyRate = MacroEngine::BASE_NATURAL_RATE + MacroEngine::TARGET_INFLATION;
 
-        $neutral = $origination(MacroEngine::NEUTRAL_TEN_YEAR_YIELD);
-        $higher = $origination(MacroEngine::NEUTRAL_TEN_YEAR_YIELD + 0.01);
-        $lower = $origination(MacroEngine::NEUTRAL_TEN_YEAR_YIELD - 0.01);
+        $neutral = $origination($neutralPolicyRate);
+        $higher = $origination($neutralPolicyRate + 0.01);
+        $lower = $origination($neutralPolicyRate - 0.01);
 
         $this->assertLessThan($neutral, $higher);
         $this->assertEqualsWithDelta($neutral - $higher, $lower - $neutral, 1e-6, 'A point down gives back what a point up takes.');

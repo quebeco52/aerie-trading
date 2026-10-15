@@ -23,6 +23,7 @@ use App\Service\Macro\MacroEngine;
 use App\Service\Macro\Subsystem\AssetMarketSubsystem;
 use App\Service\Macro\Subsystem\CommodityLogisticsSubsystem;
 use App\Service\Macro\Subsystem\CreditFiscalSubsystem;
+use App\Service\Macro\Subsystem\LaborMarketSubsystem;
 use App\Service\Macro\Subsystem\MacroAggregateSubsystem;
 use App\Service\Macro\Subsystem\SovereignFundSubsystem;
 use App\Service\Math\FinancialConstants;
@@ -2021,6 +2022,9 @@ class GovernmentPageBuilder
                 'closed' => PoliticsEngine::MIGRATION_CLOSED_REGIME,
                 'open' => PoliticsEngine::MIGRATION_OPEN_REGIME,
                 'populationShift' => $macro->immigrationPopulationShift,
+                'cyclical' => $macro->cyclicalMigrationRate,
+                // Newcomers a year per point (a hundredth) of unemployment under its natural rate.
+                'jobsResponse' => LaborMarketSubsystem::MIGRATION_JOBS_RESPONSE * max(0.0, $politics->laborForceGrowthRate - MacroEngine::NATURAL_LABOR_FORCE_GROWTH) / 100.0,
             ],
             'foreignBuyers' => $law('foreignBuyerTax', $politics->foreignBuyerTaxRate) + [
                 'priceEffect' => 1.0 - AssetMarketSubsystem::foreignBuyerPriceFactor($politics->foreignBuyerTaxRate),

@@ -319,9 +319,13 @@ class FixedIncomeTest extends TestCase
         $this->assertSame(0.0, FixedIncome::moneyMarketYield(0.0), 'At the lower bound the funds waive fees rather than charge for holding cash.');
     }
 
-    public function testTheMortgageRateIsTheTenYearPlusTheMortgageSpread(): void
+    /** Floating mortgages: the rate paid is the policy rate plus the spread, the rate a home is priced on the expected path plus the same spread, and both meet at the neutral. */
+    public function testTheMortgageRateFloatsOverThePolicyRate(): void
     {
         $this->assertEqualsWithDelta(0.045 + MacroEngine::RESIDENTIAL_MORTGAGE_SPREAD, FixedIncome::mortgageRate(0.045), 1e-15);
-        $this->assertEqualsWithDelta(MacroEngine::NEUTRAL_MORTGAGE_RATE, FixedIncome::mortgageRate(MacroEngine::NEUTRAL_TEN_YEAR_YIELD), 1e-15);
+        $this->assertEqualsWithDelta(0.03 + MacroEngine::RESIDENTIAL_MORTGAGE_SPREAD, FixedIncome::expectedMortgageRate(0.03), 1e-15);
+        $neutralPolicyRate = MacroEngine::BASE_NATURAL_RATE + MacroEngine::TARGET_INFLATION;
+        $this->assertEqualsWithDelta(MacroEngine::NEUTRAL_MORTGAGE_RATE, FixedIncome::mortgageRate($neutralPolicyRate), 1e-15);
+        $this->assertEqualsWithDelta(MacroEngine::NEUTRAL_MORTGAGE_RATE, FixedIncome::expectedMortgageRate($neutralPolicyRate), 1e-15);
     }
 }

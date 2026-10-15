@@ -69,9 +69,9 @@ class MacroAggregateSubsystem
     public const NATURAL_RATE_ADJUSTMENT_SPEED = 1.0;
 
     // --- Open Economy: Trade Volumes and Import Prices (IMF WEO October 2015, Ch. 3, Table 3.1: 60 economies, 1980-2014) ---
-    /** Exports over GDP, Switzerland's 66.2% (World Bank NE.EXP.GNFS.ZS, 2010-19 average): a financial centre open as the Swiss are, selling its finance and its arms abroad. */
-    public const DISTRICT_EXPORT_SHARE = 0.662;
-    /** Imports over GDP: exports less the structural trade balance (Switzerland's 56.9%). */
+    /** Exports over GDP (32%): a $12T economy sells less of itself abroad than a small one, its finance and its arms most of what it does sell; large open economies run 25-45% (Germany 46%, the UK 30%, Japan 18%). */
+    public const DISTRICT_EXPORT_SHARE = 0.32;
+    /** Imports over GDP: exports less the structural trade balance (27.5%). */
     public const DISTRICT_IMPORT_SHARE = self::DISTRICT_EXPORT_SHARE - MacroEngine::TRADE_BALANCE_BASELINE;
     /** Foreign value added in the District's gross exports, Switzerland's 24.6% (OECD TiVA 2015: domestic content 75.4%, via Council of the EU WK 5369/2021): imports that pass through into exports. */
     public const FOREIGN_VALUE_ADDED_SHARE_OF_EXPORTS = 0.246;
@@ -209,10 +209,10 @@ class MacroAggregateSubsystem
     public const INVENTORY_SURPRISE_SENSITIVITY = 0.60;
 
     // --- Effective Corporate Borrowing Cost Weights ---
-    /** Floating-rate share of private borrowing (bank and leveraged loans, revolvers, cards) priced off the policy rate; roughly half in an economy with a bond market and fixed-rate mortgages. */
-    public const BORROWING_POLICY_WEIGHT = 0.50;
-    /** Fixed-rate share (corporate bonds, mortgages, auto and term loans) priced off the 5-year benchmark; measured 2026-09-19 the mix moves only the cycle period, not its shape. */
-    public const BORROWING_YIELD5Y_WEIGHT = 0.50;
+    /** Floating-rate share of private borrowing priced off the policy rate (mortgages, bank and leveraged loans, revolvers, cards): three quarters, the District's homes being bought on variable loans. */
+    public const BORROWING_POLICY_WEIGHT = 0.75;
+    /** Fixed-rate share (corporate bonds, auto and term loans) priced off the 5-year benchmark. */
+    public const BORROWING_YIELD5Y_WEIGHT = 0.25;
 
     // --- Ten-Year Breakeven Inflation (Gurkaynak, Sack & Wright 2010; Kozicki & Tinsley 2001 endpoint) ---
     /** Ten-year breakeven per point of learned long-run inflation over the anchor: US T10YIE 2003-2026 monthly on headline CPI learned at a 0.10/yr constant gain, 0.441 (Newey-West se 0.076), holding core over that endpoint, headline over core and the GZ excess bond premium; R2 0.62 to 0.75. */
@@ -614,6 +614,8 @@ class MacroAggregateSubsystem
             'netExports' => $tradeChange / $dt,
             // Blanchard & Summers (1986): the same output over a potential the crisis scar has lowered is less slack.
             'crisisScar' => -$state->crisisScarStep / $dt,
+            // Blanchard & Katz (1992): newcomers drawn by jobs add to potential before they add to output.
+            'cyclicalMigration' => -$state->cyclicalMigrationRate,
             // ESA 2010 deflated balances and deal fees: the banks produce as their loans do, the deal-makers as the world's deals do.
             'financeOutput' => $financeChange / $dt,
         ];
@@ -1127,11 +1129,11 @@ class MacroAggregateSubsystem
             $tfpGrowthRate = $this->calculateTotalFactorProductivity($state, $dt);
         }
 
-        $realPotentialGrowth = $state->laborForceGrowthRate + $tfpGrowthRate;
+        $realPotentialGrowth = $state->laborForceGrowthRate + $state->cyclicalMigrationRate + $tfpGrowthRate;
         $currentPotential = $state->potentialGdpIndex > 0.0 ? $state->potentialGdpIndex : 1.0;
         $state->potentialGdpIndex = max(0.10, $currentPotential * exp($realPotentialGrowth * $dt));
         // The population an immigration regime has added over the structural path (log), which bids for housing.
-        $state->immigrationPopulationShift += ($state->laborForceGrowthRate - MacroEngine::STRUCTURAL_LABOR_GROWTH_RATE) * $dt;
+        $state->immigrationPopulationShift += ($state->laborForceGrowthRate + $state->cyclicalMigrationRate - MacroEngine::STRUCTURAL_LABOR_GROWTH_RATE) * $dt;
 
         $currentDeflator = $state->gdpDeflator > 0.0 ? $state->gdpDeflator : 1.0;
         $state->gdpDeflator = max(0.01, $currentDeflator * exp($state->domesticInflation * $dt));

@@ -253,6 +253,8 @@ readonly class MacroStateDTO
         public float $crisisScarPending = 0.0,
         /** Scar potential took this tick (log level, negative). */
         public float $crisisScarStep = 0.0,
+        /** Labour-force growth migration adds on top of the law's as it answers the labour market, a year (LaborMarketSubsystem::calculateCyclicalMigration()). */
+        public float $cyclicalMigrationRate = 0.0,
         public float $tfpOutputStage1 = 0.0,
         public float $tfpOutputStage2 = 0.0,
         public float $tfpPotentialStage1 = 0.0,
@@ -349,14 +351,14 @@ readonly class MacroStateDTO
         public float $reimbursementRateIndex = 100.0,
         public float $reimbursementRateIndexEma = 100.0,
         public float $reimbursementRateGrowth = MacroEngine::TARGET_INFLATION - MacroEngine::REIMBURSEMENT_PRODUCTIVITY_OFFSET,
-        public float $householdDebtToIncome = MacroEngine::HOUSEHOLD_DEBT_TO_INCOME_BASELINE,
-        public float $householdDebtToIncomeEma = MacroEngine::HOUSEHOLD_DEBT_TO_INCOME_BASELINE,
-        public float $householdDebtServiceRatio = MacroEngine::HOUSEHOLD_DSR_NEUTRAL,
-        public float $householdDebtServiceRatioEma = MacroEngine::HOUSEHOLD_DSR_NEUTRAL,
+        public float $householdDebtToIncome = MacroEngine::OPENING_HOUSEHOLD_DEBT_TO_INCOME,
+        public float $householdDebtToIncomeEma = MacroEngine::OPENING_HOUSEHOLD_DEBT_TO_INCOME,
+        public float $householdDebtServiceRatio = MacroEngine::OPENING_HOUSEHOLD_DSR,
+        public float $householdDebtServiceRatioEma = MacroEngine::OPENING_HOUSEHOLD_DSR,
         public float $householdDebtServiceTrend = 0.0,
         public float $householdDebtServiceGap = 0.0,
         public float $householdNewBorrowing = 0.0,
-        public float $creditToGdpTrend = MacroEngine::HOUSEHOLD_DEBT_TO_INCOME_BASELINE,
+        public float $creditToGdpTrend = MacroEngine::OPENING_HOUSEHOLD_DEBT_TO_INCOME,
         public float $creditToGdpTrendSlope = 0.0,
         public float $creditToGdpGap = 0.0,
         public float $creditToGdpGapEma = 0.0,
@@ -789,10 +791,10 @@ readonly class MacroStateDTO
         return $this->unemploymentRateEma - $this->nairuEma;
     }
 
-    /** The 30-year fixed mortgage rate on the smoothed ten-year (FixedIncome::mortgageRate()). */
+    /** The floating mortgage rate on the smoothed policy rate (FixedIncome::mortgageRate()). */
     public function mortgageRate(): float
     {
-        return FixedIncome::mortgageRate($this->yield10yEma);
+        return FixedIncome::mortgageRate($this->policyRateEma);
     }
 
     /** The yield on cash and money-market paper at the smoothed policy rate (FixedIncome::moneyMarketYield()). */

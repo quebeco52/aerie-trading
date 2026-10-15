@@ -65,10 +65,11 @@
 				The District's own people add <span class="font-mono tabular-nums">{{ migration.natural|pct(2) }}</span> to its labour force a year, whatever the permits say.
 				It opened admitting newcomers worth <span class="font-mono tabular-nums">{{ migration.structuralMigration|pct(2) }}</span> of the population a year on top, for a labour force growing <span class="font-mono tabular-nums">{{ migration.structural|pct(2) }}</span>.
 				The permits have added <span class="font-mono tabular-nums">{{ migration.populationShift|pct(1, true) }}</span> to the population since, against that path.
+				More come while jobs are plentiful and fewer while they are scarce: under these permits each point of unemployment below its usual level draws <span class="font-mono tabular-nums">{{ migration.jobsResponse|pct(2) }}</span> more a year{% if migration.cyclical|abs > 0.00005 %}, and the labour market is {{ migration.cyclical > 0 ? 'adding' : 'taking' }} <span class="font-mono tabular-nums">{{ migration.cyclical|abs|pct(2) }}</span> a year {{ migration.cyclical > 0 ? 'to' : 'from' }} the newcomers now{% endif %}.
 			</p>
 			<p class="text-xs text-on-surface-variant mt-3 leading-relaxed">
 				The tightest regime the Diet can pass admits <span class="font-mono tabular-nums">{{ migration.closed|pct(2) }}</span> of the population a year, the most open
-				<span class="font-mono tabular-nums">{{ migration.open|pct(2) }}</span>. Newcomers need homes before they need jobs, so a rise in migration reaches house prices first.
+				<span class="font-mono tabular-nums">{{ migration.open|pct(2) }}</span>. Newcomers need homes before they need jobs, so a rise in migration reaches house prices first. The more open the regime, the more migration answers the labour market.
 			</p>
 		</section>
 

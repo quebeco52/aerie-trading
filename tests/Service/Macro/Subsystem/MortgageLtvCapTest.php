@@ -32,6 +32,9 @@ class MortgageLtvCapTest extends TestCase
         $state->yield10yEma = MacroEngine::BASE_NATURAL_RATE + MacroEngine::TARGET_INFLATION + MacroEngine::NS_BASE_TERM_PREMIUM;
         $state->policyRateEma = MacroEngine::BASE_NATURAL_RATE + MacroEngine::TARGET_INFLATION;
         $state->outputGapEma = 0.0;
+        $state->householdDebtToIncome = MacroEngine::HOUSEHOLD_DEBT_TO_INCOME_BASELINE;
+        $state->householdDebtToIncomeEma = MacroEngine::HOUSEHOLD_DEBT_TO_INCOME_BASELINE;
+        $state->creditToGdpTrend = MacroEngine::HOUSEHOLD_DEBT_TO_INCOME_BASELINE;
         $state->householdDebtServiceTrend = MacroEngine::HOUSEHOLD_DSR_NEUTRAL;
         $state->retailDefaultRate = MacroEngine::RETAIL_DEFAULT_BASELINE;
         $state->mortgageLtvCap = $cap;

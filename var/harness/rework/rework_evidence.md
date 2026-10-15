@@ -54,3 +54,22 @@ recession share 8.6 → 11.7% (t 1.1) / 9.8 → 10.3%; crises 5.6 → 5.0 / 3.1 
 after year 40 0.83 → 0.92: a uniform stance with caps only past the opening stance binds less often than the 17
 regimes did (11 of 17 had a cap). Lever means (16 × 200y, lever_means_rework.out): persistences 0.59-0.73; public
 spending's long-run shift −0.79 → −0.40% with no Council brake; dividend tax 8.8 → 7.7%; utility shortfall 3.98%.
+
+## Phase 6 (lore shifts), 4 seeds, paired vs Phase 5 (runs/p5_*)
+Openness alone (exports 0.32, surplus 4.5%): domestic weight 0.57 → 0.84, gap sd 2.29 → 2.29 (net-export gap sd 1.65
+→ 0.82 offsets it); trade balance 4.7% (sd 1.2). No DEMAND_SHOCK_SIGMA change.
+Floating mortgages with house prices on the policy rate: gap sd 2.29 → 2.76 (t 3.8), rate dq sd 30 → 37bp; the
+ring-down rang (overshoot +0.14 to +0.20 of the kick at years 6-7). Variants: migration off 2.94 (migration
+stabilises), borrowing weight 0.50 2.68. Pricing homes on the expected path (risk-neutral ten-year + spread) instead
+removed the ringing (tail within 0.03) and gave gap sd 2.34, rate dq sd 30bp, recession share 11.0 → 13.8% (t 2.4).
+Household debt to income holds 0.82-0.93 by decade from an opening of 0.80 (opening set to 0.85). The post-crisis
+net-export dip (Phase 4) is gone: after a crisis the currency falls ~5% and net exports rise 0.2-0.5% of GDP.
+BusinessCycleRealismTest left-tail bound 16 → 20% of quarters below −3% (user's choice; it read 16.07%).
+
+## Final: 16 seeds × 100y, old (02e4b43) vs new (Phase 6), paired by seed
+No fund / fund: gap sd 2.32 → 2.49 (t 0.9) / 1.98 → 2.39 (t 3.6); unemp sd 1.62 → 1.66 / 1.21 → 1.50; inflation
+2.08 → 2.09 / 2.11 → 2.09 (sd 1.08 → 1.12 / 1.09 → 1.07); rate dq sd 35 → 31bp / 36 → 30bp; debt mean 83 → 53% /
+64 → 50%, debt max 120 → 72% / 92 → 69%, debt − target +24 → 0pp / +3.6 → −5.8pp; recession share 22.5 → 13.2% /
+20.9 → 11.8% (old: Sahm proxy; new: two falling quarters); crises 4.7 → 4.9 / 4.3 → 4.2 per century.
+Lever means after Phase 6 (16 × 200y): means within their standard errors of Phase 5's; term persistences 0.66 → 0.50
+(dividend tax 0.73 → 0.56), ~4 se, the sharper cycle turning cabinets over faster. PolicyCapitalization updated.

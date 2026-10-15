@@ -167,8 +167,8 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
     public const CECL_LIFETIME_HORIZON_YEARS   = 2.0;
 
     // --- Asset Repricing (Drechsler, Savov & Schnabl 2021, Table A.2: US commercial banks 1997-2017, aggregate) ---
-    /** Repricing maturity of residential loans: 9.5 years. The residential book reprices off the curve at this tenor. */
-    public const RESIDENTIAL_REPRICING_YEARS   = 9.5;
+    /** Repricing maturity of residential loans: a quarter, the District's mortgages floating over the policy rate. The residential book reprices off the curve at this tenor. */
+    public const RESIDENTIAL_REPRICING_YEARS   = 0.25;
     /** Repricing maturity of all other loans: 2.4 years, floating and fixed together. */
     public const OTHER_LOAN_REPRICING_YEARS    = 2.4;
     /** Repricing maturity of the securities portfolio: 8.4 years, most of it mortgage-linked. */

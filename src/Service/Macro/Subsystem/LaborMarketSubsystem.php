@@ -51,6 +51,10 @@ class LaborMarketSubsystem
     /** Annual pull of wage growth against the real wage's gap to trend productivity: US nonfarm business 1960-1999, wages on the lagged labor share (se 0.10; var/harness/labor_real.py). */
     public const WAGE_ERROR_CORRECTION_SPEED = 0.12;
 
+    // --- Migration Answering Jobs (Blanchard & Katz 1992) ---
+    /** Labour-force growth a point of unemployment below its natural rate draws in, per point of net migration the law admits: 25, so an open regime's 0.8% a year swings by 0.2pp a point and a closed one's 0.1% by almost nothing. */
+    public const MIGRATION_JOBS_RESPONSE = 25.0;
+
     // --- Month-End Unemployment Record ---
     /** Months before the latest the record keeps, for the year-on-year change. */
     public const UNEMPLOYMENT_RECORD_MONTHS = 12;
@@ -105,6 +109,18 @@ class LaborMarketSubsystem
 
         $state->unemploymentRate += $adjustmentSpeed * $unemploymentGap * $dt;
         $this->recordMonthlyUnemployment($state, $dt);
+    }
+
+    /**
+     * Migration that answers the labour market (Blanchard & Katz 1992): on top of the newcomers the law admits, more come
+     * while jobs are plentiful and fewer while they are scarce, in proportion to how open the law keeps the door. The
+     * newcomers add to the labour force and to potential (calculatePotentialAndNominalGdp()); output they do not yet
+     * produce reads as slack, so arrivals ease a tight labour market and departures a slack one.
+     */
+    public function calculateCyclicalMigration(MacroState $state): void
+    {
+        $admitted = max(0.0, $state->laborForceGrowthRate - MacroEngine::NATURAL_LABOR_FORCE_GROWTH);
+        $state->cyclicalMigrationRate = -self::MIGRATION_JOBS_RESPONSE * $admitted * ($state->unemploymentRateEma - $state->nairu);
     }
 
     /** At each month end, the unemployment rate joins the month-end record the year-on-year change is read off. */

@@ -207,7 +207,7 @@ class AssetMarketSubsystemTest extends TestCase
             public function generateStandardNormal(): float { return 0.0; }
         };
         $state = $this->neutralBuildingState();
-        $state->yield10yEma = MacroEngine::BASE_NATURAL_RATE + MacroEngine::TARGET_INFLATION + MacroEngine::NS_BASE_TERM_PREMIUM;
+        $state->riskNeutral10yEma = MacroEngine::BASE_NATURAL_RATE + MacroEngine::TARGET_INFLATION;
         $state->residentialPropertyIndex = 94.0;
         $state->residentialWealthTrend = 94.0;
         $state->industrialMetalsIndex = 130.0;
@@ -279,34 +279,40 @@ class AssetMarketSubsystemTest extends TestCase
         $this->assertEqualsWithDelta($expected, $dearLabour->housingStartsIndex - $calm->housingStartsIndex, 1e-9);
     }
 
-    public function testResidentialFundamentalPricesOffTheTenYearNotTheThirtyYear(): void
+    /**
+     * Homes are bought on floating loans and priced on the rate expected over the years they are held: the expected path
+     * (the ten-year without its term premium) sets the user cost; this quarter's policy rate and the term premium do not.
+     */
+    public function testResidentialFundamentalPricesOffTheExpectedRatePath(): void
     {
         $base = new MacroState();
-        $base->yield10yEma = 0.040;
-        $base->yield30yEma = 0.045;
+        $base->policyRateEma = 0.035;
+        $base->riskNeutral10yEma = 0.035;
+        $base->yield10yEma = 0.045;
         $base->unemploymentRateEma = $base->nairu;
         $base->inflationEma = MacroEngine::TARGET_INFLATION;
         $base->outputGapEma = 0.0;
         $base->residentialPropertyIndex = 100.0;
 
-        $steeperLongEnd = clone $base;
-        $steeperLongEnd->yield30yEma = 0.065;
+        $hikedToday = clone $base;
+        $hikedToday->policyRateEma = 0.055;
+        $hikedToday->yield10yEma = 0.060;
 
-        $dearerTenYear = clone $base;
-        $dearerTenYear->yield10yEma = 0.060;
+        $dearerPath = clone $base;
+        $dearerPath->riskNeutral10yEma = 0.050;
 
         $this->subsystem->calculateResidentialPropertyIndex($base, MacroEngine::TARGET_INFLATION, 0.25);
-        $this->subsystem->calculateResidentialPropertyIndex($steeperLongEnd, MacroEngine::TARGET_INFLATION, 0.25);
-        $this->subsystem->calculateResidentialPropertyIndex($dearerTenYear, MacroEngine::TARGET_INFLATION, 0.25);
+        $this->subsystem->calculateResidentialPropertyIndex($hikedToday, MacroEngine::TARGET_INFLATION, 0.25);
+        $this->subsystem->calculateResidentialPropertyIndex($dearerPath, MacroEngine::TARGET_INFLATION, 0.25);
 
-        $this->assertEqualsWithDelta($base->residentialPropertyIndex, $steeperLongEnd->residentialPropertyIndex, 1e-9, 'The 30Y yield must not enter the mortgage rate.');
-        $this->assertLessThan($base->residentialPropertyIndex, $dearerTenYear->residentialPropertyIndex, 'A dearer 10Y raises the mortgage user cost and lowers fundamental home prices.');
+        $this->assertEqualsWithDelta($base->residentialPropertyIndex, $hikedToday->residentialPropertyIndex, 1e-9, 'A rate expected to come back down does not reprice a home.');
+        $this->assertLessThan($base->residentialPropertyIndex, $dearerPath->residentialPropertyIndex, 'Dearer money expected for years raises the user cost and lowers fundamental home prices.');
     }
 
-    public function testNeutralUserCostMatchesNeutralTenYearPlusMortgageSpread(): void
+    public function testNeutralUserCostMatchesTheNeutralRatePathPlusMortgageSpread(): void
     {
-        $neutralTenYear = MacroEngine::BASE_NATURAL_RATE + MacroEngine::TARGET_INFLATION + MacroEngine::NS_BASE_TERM_PREMIUM;
-        $expected = $neutralTenYear + MacroEngine::RESIDENTIAL_MORTGAGE_SPREAD + AssetMarketSubsystem::RESIDENTIAL_DEPRECIATION_TAX_RATE - MacroEngine::TARGET_INFLATION;
+        $neutralPolicyRate = MacroEngine::BASE_NATURAL_RATE + MacroEngine::TARGET_INFLATION;
+        $expected = $neutralPolicyRate + MacroEngine::RESIDENTIAL_MORTGAGE_SPREAD + AssetMarketSubsystem::RESIDENTIAL_DEPRECIATION_TAX_RATE - MacroEngine::TARGET_INFLATION;
 
         $this->assertEqualsWithDelta($expected, AssetMarketSubsystem::RESIDENTIAL_NEUTRAL_USER_COST, 1e-12);
     }

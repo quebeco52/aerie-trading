@@ -1552,7 +1552,7 @@ class MacroAggregateSubsystemTest extends TestCase
         );
 
         // Every channel in the drift is named, so the panel cannot silently drop one.
-        $this->assertCount(25, $window['contributions']);
+        $this->assertCount(26, $window['contributions']);
         $this->assertArrayHasKey('productivitySupply', $window['contributions']);
         $this->assertArrayHasKey('fundDraw', $window['contributions']);
         $this->assertArrayHasKey('creditPremiumDrag', $window['contributions']);
@@ -1898,8 +1898,8 @@ class MacroAggregateSubsystemTest extends TestCase
         $this->assertSame(0.0, $settled->netExportGap, 'A currency sitting at its own trend moves no trade.');
         $this->assertEqualsWithDelta(0.87 * $longTerm, $depreciated->netExportGap, 0.002 * $longTerm, 'A year on, 87% of the long-term lift, as the IMF\'s one-year effects give.');
         $this->assertEqualsWithDelta($depreciated->netExportGap, $gapDepreciated - $gapSettled, 1e-9, 'and it is in the gap.');
-        $this->assertGreaterThan(0.015, $longTerm, 'A 10% real depreciation is worth more than the 1.5% of GDP the IMF sample\'s 42% trade shares give, half of GDP being exported value added,');
-        $this->assertLessThan(0.025, $longTerm, 'though less than the gross Swiss shares would claim.');
+        $this->assertLessThan(0.015, $longTerm, 'A 10% real depreciation is worth less than the 1.5% of GDP the IMF sample\'s 42% trade shares give, the District trading less of its output,');
+        $this->assertGreaterThan(0.006, $longTerm, 'though still most of a point.');
     }
 
     /**
@@ -1979,9 +1979,9 @@ class MacroAggregateSubsystemTest extends TestCase
             MacroAggregateSubsystem::EXCESS_IMPORT_LEAKAGE,
             1e-15
         );
-        $this->assertEqualsWithDelta(0.406, MacroAggregateSubsystem::DISTRICT_DOMESTIC_IMPORT_SHARE, 0.001, 'Swiss imports (56.9% of GDP) less the quarter of the exports that is passed-through imports.');
-        $this->assertGreaterThan(0.3, MacroAggregateSubsystem::EXCESS_IMPORT_LEAKAGE, 'Nearly three times the equation\'s own share for home use leaks about a third of every demand swing.');
-        $this->assertLessThan(0.4, MacroAggregateSubsystem::EXCESS_IMPORT_LEAKAGE, 'Gross imports would leak half: re-exports do not answer home demand.');
+        $this->assertEqualsWithDelta(0.196, MacroAggregateSubsystem::DISTRICT_DOMESTIC_IMPORT_SHARE, 0.001, 'Imports (27.5% of GDP) less the quarter of the exports that is passed-through imports.');
+        $this->assertGreaterThan(0.0, MacroAggregateSubsystem::EXCESS_IMPORT_LEAKAGE, 'A bit more than the equation\'s own share for home use leaks;');
+        $this->assertLessThan(0.1, MacroAggregateSubsystem::EXCESS_IMPORT_LEAKAGE, 'a large economy keeps most of every demand swing at home.');
 
         // A demand impulse reaches the gap net of the leak.
         $dt = 0.25;

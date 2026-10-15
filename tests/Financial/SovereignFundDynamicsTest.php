@@ -104,7 +104,7 @@ class SovereignFundDynamicsTest extends TestCase
             'Funding the structural deficit lowers the net liabilities the fiscal rule settles on by at least half the fund it opened with.'
         );
         $debtWith = $this->median(array_merge(...array_map(static fn (array $run): array => $run['lateDebt'], $withFund)));
-        $this->assertGreaterThan(0.55, $debtWith, 'Gross debt stays well off the floor.');
+        $this->assertGreaterThan(MacroEngine::SOVEREIGN_DEBT_FLOOR + 0.20, $debtWith, 'Gross debt stays well off the floor.');
     }
 
     /**

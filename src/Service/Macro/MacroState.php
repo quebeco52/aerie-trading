@@ -262,6 +262,7 @@ class MacroState
     public float $tfpShockLevel;
     public float $crisisScarPending;
     public float $crisisScarStep;
+    public float $cyclicalMigrationRate;
     public float $tfpOutputStage1;
     public float $tfpOutputStage2;
     public float $tfpPotentialStage1;

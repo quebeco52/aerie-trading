@@ -372,4 +372,27 @@ class LaborMarketSubsystemTest extends TestCase
         $this->assertEqualsWithDelta(0.055 - 0.040, LaborMarketSubsystem::unemploymentChangeYearOnYear($months), 1e-12);
         $this->assertNull(LaborMarketSubsystem::unemploymentChangeYearOnYear([0.041, 0.042, 0.043, 0.044, 0.045, 0.046, 0.047, 0.048, 0.049, 0.050, 0.051, 0.055]), 'Less than a year on record has no change over the year.');
     }
+
+    /**
+     * Migration answers jobs in proportion to the door the law opens: an open regime draws a fifth of a point of labour
+     * force a year per point of unemployment under its natural rate, and sends as many home per point over it; a closed
+     * regime barely moves; at the natural rate nobody extra comes or goes.
+     */
+    public function testMigrationAnswersJobsAsOpenAsTheLawIs(): void
+    {
+        $at = function (float $netMigration, float $unemploymentGap): float {
+            $state = new MacroState();
+            $state->laborForceGrowthRate = MacroEngine::NATURAL_LABOR_FORCE_GROWTH + $netMigration;
+            $state->nairu = 0.05;
+            $state->unemploymentRateEma = 0.05 + $unemploymentGap;
+            $this->subsystem->calculateCyclicalMigration($state);
+
+            return $state->cyclicalMigrationRate;
+        };
+
+        $this->assertEqualsWithDelta(0.002, $at(0.008, -0.01), 1e-12, 'An open regime draws 0.2pp a point of tight labour market.');
+        $this->assertEqualsWithDelta(-0.002, $at(0.008, 0.01), 1e-12);
+        $this->assertLessThan(0.0003, $at(0.0011, -0.01), 'A closed regime barely moves.');
+        $this->assertSame(0.0, $at(0.008, 0.0));
+    }
 }

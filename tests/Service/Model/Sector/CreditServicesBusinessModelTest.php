@@ -223,7 +223,12 @@ class CreditServicesBusinessModelTest extends TestCase
 
         $this->assertEqualsWithDelta($this->model->resolveInterestYield($stock, $calm), $this->model->resolveInterestYield($stock, $freeze), 1e-12);
 
-        $bank = new \App\Service\Model\Sector\CommercialBankBusinessModel();
-        $this->assertGreaterThan($bank->resolveInterestYield($stock, $calm), $bank->resolveInterestYield($stock, $freeze), 'a LIBOR-indexed loan reprices with the interbank spread');
+        $businessLender = new class extends \App\Service\Model\Sector\CommercialBankBusinessModel {
+            protected function resolveLoanBookMix(Stock $stock): array
+            {
+                return ['residential' => 0.0, 'consumer' => 0.0, 'commercial_real_estate' => 0.0, 'business' => 1.0];
+            }
+        };
+        $this->assertGreaterThan($businessLender->resolveInterestYield($stock, $calm), $businessLender->resolveInterestYield($stock, $freeze), 'a LIBOR-indexed business loan reprices with the interbank spread');
     }
 }

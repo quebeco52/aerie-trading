@@ -28,10 +28,16 @@ final class FixedIncome
         return max(0.0, $policyRate - MacroEngine::CASH_YIELD_SPREAD);
     }
 
-    /** The 30-year fixed mortgage rate, priced off the ten-year: prepayment shortens its effective duration to ~7 years. */
-    public static function mortgageRate(float $tenYearYield): float
+    /** The floating mortgage rate a borrower expects over a decade: the expected path of the policy rate, the ten-year without its term premium, plus the mortgage spread. */
+    public static function expectedMortgageRate(float $riskNeutralTenYear): float
     {
-        return $tenYearYield + MacroEngine::RESIDENTIAL_MORTGAGE_SPREAD;
+        return $riskNeutralTenYear + MacroEngine::RESIDENTIAL_MORTGAGE_SPREAD;
+    }
+
+    /** The District's floating mortgage rate: the policy rate, as a quarter's resets have passed it on, plus the mortgage spread. */
+    public static function mortgageRate(float $policyRateEma): float
+    {
+        return $policyRateEma + MacroEngine::RESIDENTIAL_MORTGAGE_SPREAD;
     }
 
     /**

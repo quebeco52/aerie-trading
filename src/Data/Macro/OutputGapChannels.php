@@ -75,7 +75,7 @@ final class OutputGapChannels
         'supply' => [
             'label' => 'Supply shocks',
             'colour' => '#008300',
-            'channels' => ['energySupplyDrag', 'freightSupplyDrag', 'catastropheSupplyDrag', 'productivitySupply'],
+            'channels' => ['energySupplyDrag', 'freightSupplyDrag', 'catastropheSupplyDrag', 'productivitySupply', 'cyclicalMigration'],
         ],
         'external' => [
             'label' => 'External demand',

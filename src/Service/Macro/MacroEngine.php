@@ -248,8 +248,8 @@ class MacroEngine
     public const OPENING_FUND_TO_GDP = 0.41;
 
     // --- Sovereign Debt Dynamics (Greenwood-Vayanos 2014) ---
-    /** Sovereign debt-to-GDP at simulation start: about where the Diet's cabinets' debt targets average, so the game opens near its long-run level. */
-    public const INITIAL_DEBT_TO_GDP = 0.60;
+    /** Sovereign debt-to-GDP at simulation start: where the cabinets' debt plans hold it on average (51-55% over a century), so the game opens near its long-run level. */
+    public const INITIAL_DEBT_TO_GDP = 0.50;
     /** Gross debt kept outstanding with no borrowing need, for the benchmark curve to price (Singapore and Hong Kong issue for market development through surpluses); below it a surplus buys the fund's paper instead. */
     public const SOVEREIGN_DEBT_FLOOR = 0.20;
 
@@ -333,8 +333,8 @@ class MacroEngine
     public const COMMODITY_TREND_HORIZON_YEARS = 1.0;
 
     // --- Mundell-Fleming Trade Balance & Net Exports ---
-    /** Structural trade balance over GDP, Switzerland's +9.3% surplus (World Bank NE.EXP.GNFS.ZS less NE.IMP.GNFS.ZS, 2010-19 average). */
-    public const TRADE_BALANCE_BASELINE = 0.093;
+    /** Structural trade balance over GDP (+4.5%): a financial centre that saves more than it invests at home and sells its services abroad runs a surplus, as Germany's 6% and Japan's 2-3% of the 2010s. */
+    public const TRADE_BALANCE_BASELINE = 0.045;
 
     // --- DiPasquale-Wheaton Commercial Real Estate ---
     /** Commercial property index at the engine's neutral (100.0): where the fundamental sits with every cap-rate input at its base, which AssetMarketSubsystem::CRE_NEUTRAL_CAP_RATE is built from. */
@@ -373,16 +373,20 @@ class MacroEngine
     // --- Household Balance Sheet (Mian & Sufi 2018; Drehmann, Illes, Juselius & Santos 2015; Basel III CCyB) ---
     /** Household debt to disposable income at the seeded neutral (unity, the advanced-economy average). */
     public const HOUSEHOLD_DEBT_TO_INCOME_BASELINE = 1.00;
-    /** The BIS debt-service ratio at neutral rates and baseline leverage: 0.7 x 6.35% mortgage + 0.3 x 11.5% consumer = 7.9% on an 18-year annuity, 10.6% of income (the US long-run average). */
-    public const HOUSEHOLD_DSR_NEUTRAL = 0.106;
+    /** Household debt to disposable income at the opening (0.85): where crises' repayments and the re-borrowing toward the baseline hold it over a century (0.82-0.93 by decade), so the game opens near its long-run level. */
+    public const OPENING_HOUSEHOLD_DEBT_TO_INCOME = 0.85;
+    /** The BIS debt-service ratio at neutral rates and baseline leverage: 0.7 x 5.5% mortgage + 0.3 x 11.5% consumer = 7.3% on an 18-year annuity, 10.2% of income. */
+    public const HOUSEHOLD_DSR_NEUTRAL = 0.1016;
+    /** The debt-service ratio at neutral rates and the opening leverage (8.6% of income). */
+    public const OPENING_HOUSEHOLD_DSR = self::HOUSEHOLD_DSR_NEUTRAL * self::OPENING_HOUSEHOLD_DEBT_TO_INCOME / self::HOUSEHOLD_DEBT_TO_INCOME_BASELINE;
     /** Debt-service gap (ratio over its own long-run average) at which households deleverage (Drehmann & Juselius 2012: a DSR ~2pp over its average is the early-warning threshold). */
     public const HOUSEHOLD_DSR_STRESS_MARGIN = 0.02;
-    /** Spread of the 30-year mortgage over the ten-year (~170 bps), read by the housing user cost and the household debt service. */
-    public const RESIDENTIAL_MORTGAGE_SPREAD = 0.017;
+    /** Spread of the District's floating-rate mortgage over the policy rate (200 bps), read by the housing user cost and the household debt service: the District's homes are bought on variable loans, as in the UK, Australia and Spain. */
+    public const RESIDENTIAL_MORTGAGE_SPREAD = 0.020;
     /** The ten-year at the engine's neutral: r* and the inflation target, plus the base term premium (4.65%). */
     public const NEUTRAL_TEN_YEAR_YIELD = self::BASE_NATURAL_RATE + self::TARGET_INFLATION + self::NS_BASE_TERM_PREMIUM;
-    /** The 30-year mortgage rate at the engine's neutral, the neutral ten-year plus the mortgage spread (6.35%). */
-    public const NEUTRAL_MORTGAGE_RATE = self::NEUTRAL_TEN_YEAR_YIELD + self::RESIDENTIAL_MORTGAGE_SPREAD;
+    /** The mortgage rate at the engine's neutral: the neutral policy rate, r* and the inflation target, plus the mortgage spread (5.5%). */
+    public const NEUTRAL_MORTGAGE_RATE = self::BASE_NATURAL_RATE + self::TARGET_INFLATION + self::RESIDENTIAL_MORTGAGE_SPREAD;
 
     // --- Deposits Channel (Drechsler, Savov & Schnabl 2017) ---
     /** System deposit rate per unit of policy rate: 0.46, US banks 1986-2013 (aggregate deposit spread beta 0.54; Drechsler, Savov & Schnabl 2017). The spread banks keep scales with the rate. */
@@ -604,6 +608,7 @@ class MacroEngine
 
         // 3. Okun (1962) & Diamond-Mortensen-Pissarides (1994) labor market dynamics.
         $this->laborSubsystem->calculateUnemployment($state, $dt);
+        $this->laborSubsystem->calculateCyclicalMigration($state);
         $this->laborSubsystem->calculateLaborMarketAndWages($state, $productivityGrowthRate, $dt);
 
         // 4. Gurkaynak, Sack & Wright (2010) TIPS breakeven inflation expectations, anchored on the Authority's target and

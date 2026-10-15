@@ -39,38 +39,38 @@ use App\Service\Politics\PoliticsEngine;
 final class PolicyCapitalization
 {
     // --- Past the Next Term (the Diet's own long runs: 16 games of 200 years on the macro loop beside the politics, var/harness/polls/lever_means_an.php, lever_means_rework.out) ---
-    /** The corporate tax shift in force on average over the long run: -0.18 points (se 0.12). */
-    public const LONG_RUN_CORPORATE_TAX_SHIFT = -0.0018;
-    /** Share of the corporate tax shift's distance from that average still there a term later: its four-year autocorrelation, 0.672. */
-    public const CORPORATE_TAX_TERM_PERSISTENCE = 0.672;
-    /** The bank levy in force on average over the long run: 0.050% (se 0.007%). */
-    public const LONG_RUN_BANK_LEVY_RATE = 0.000495;
-    /** Share of the bank levy's distance from that average still there a term later: 0.662. */
-    public const BANK_LEVY_TERM_PERSISTENCE = 0.662;
-    /** The cost factor the rules on extraction put on each unit on average over the long run (FirmEconomics::calculateExtractionCostFactor()): 1.0038 (se 0.0008). */
-    public const LONG_RUN_EXTRACTION_COST_FACTOR = 1.0038;
-    /** Share of that factor's distance from its average still there a term later: 0.661. */
-    public const EXTRACTION_COST_TERM_PERSISTENCE = 0.661;
-    /** The share turnover the stamp duty leaves on average over the long run, against the founding duty's (MacroTransmission::calculateStampDutyVolumeFactor()): 0.967 (se 0.005). */
-    public const LONG_RUN_STAMP_DUTY_VOLUME_FACTOR = 0.967;
-    /** Share of that factor's distance from its average still there a term later: 0.662. */
-    public const STAMP_DUTY_VOLUME_TERM_PERSISTENCE = 0.662;
-    /** What the carbon price adds to the power price on average over the long run, as a share of it (CommodityLogisticsSubsystem::carbonPowerPriceUplift()): 3.67% (se 0.81%). */
-    public const LONG_RUN_CARBON_POWER_UPLIFT = 0.0367;
-    /** Share of that uplift's distance from its average still there a term later: 0.662. */
-    public const CARBON_POWER_TERM_PERSISTENCE = 0.662;
-    /** Government purchases above the founding level on average over the long run, as a fraction (measure()): -0.40% (se 0.28%), the cabinets' debt plans trimming purchases a little more often than they add to them. */
-    public const LONG_RUN_PUBLIC_SPENDING_SHIFT = -0.0040;
-    /** Share of that shift's distance from its average still there a term later: 0.671. */
-    public const PUBLIC_SPENDING_TERM_PERSISTENCE = 0.671;
-    /** The tariff shortfall commissions' grants leave on average over the long run (UtilityBusinessModel::steadyTariffShortfall()): 3.98% (se 0.06%). */
-    public const LONG_RUN_UTILITY_TARIFF_SHORTFALL = 0.0398;
-    /** Share of that shortfall's distance from its average still there a term later: 0.589. */
-    public const UTILITY_TARIFF_TERM_PERSISTENCE = 0.589;
-    /** The tax on dividends in force on average over the long run: 7.7% (se 1.0%), below the founding 15% since the Diet can only cut it. */
-    public const LONG_RUN_DIVIDEND_TAX_RATE = 0.077;
-    /** Share of the tax on dividends' distance from that average still there a term later: 0.727. */
-    public const DIVIDEND_TAX_TERM_PERSISTENCE = 0.727;
+    /** The corporate tax shift in force on average over the long run: -0.13 points (se 0.08). */
+    public const LONG_RUN_CORPORATE_TAX_SHIFT = -0.0013;
+    /** Share of the corporate tax shift's distance from that average still there a term later: its four-year autocorrelation, 0.504. */
+    public const CORPORATE_TAX_TERM_PERSISTENCE = 0.504;
+    /** The bank levy in force on average over the long run: 0.053% (se 0.005%). */
+    public const LONG_RUN_BANK_LEVY_RATE = 0.000529;
+    /** Share of the bank levy's distance from that average still there a term later: 0.498. */
+    public const BANK_LEVY_TERM_PERSISTENCE = 0.498;
+    /** The cost factor the rules on extraction put on each unit on average over the long run (FirmEconomics::calculateExtractionCostFactor()): 1.0036 (se 0.0006). */
+    public const LONG_RUN_EXTRACTION_COST_FACTOR = 1.0036;
+    /** Share of that factor's distance from its average still there a term later: 0.505. */
+    public const EXTRACTION_COST_TERM_PERSISTENCE = 0.505;
+    /** The share turnover the stamp duty leaves on average over the long run, against the founding duty's (MacroTransmission::calculateStampDutyVolumeFactor()): 0.965 (se 0.003). */
+    public const LONG_RUN_STAMP_DUTY_VOLUME_FACTOR = 0.965;
+    /** Share of that factor's distance from its average still there a term later: 0.498. */
+    public const STAMP_DUTY_VOLUME_TERM_PERSISTENCE = 0.498;
+    /** What the carbon price adds to the power price on average over the long run, as a share of it (CommodityLogisticsSubsystem::carbonPowerPriceUplift()): 3.52% (se 0.55%). */
+    public const LONG_RUN_CARBON_POWER_UPLIFT = 0.0352;
+    /** Share of that uplift's distance from its average still there a term later: 0.508. */
+    public const CARBON_POWER_TERM_PERSISTENCE = 0.508;
+    /** Government purchases above the founding level on average over the long run, as a fraction (measure()): -0.28% (se 0.18%), the cabinets' debt plans trimming purchases a little more often than they add to them. */
+    public const LONG_RUN_PUBLIC_SPENDING_SHIFT = -0.0028;
+    /** Share of that shift's distance from its average still there a term later: 0.504. */
+    public const PUBLIC_SPENDING_TERM_PERSISTENCE = 0.504;
+    /** The tariff shortfall commissions' grants leave on average over the long run (UtilityBusinessModel::steadyTariffShortfall()): 4.05% (se 0.06%). */
+    public const LONG_RUN_UTILITY_TARIFF_SHORTFALL = 0.0405;
+    /** Share of that shortfall's distance from its average still there a term later: 0.507. */
+    public const UTILITY_TARIFF_TERM_PERSISTENCE = 0.507;
+    /** The tax on dividends in force on average over the long run: 8.5% (se 0.7%), below the founding 15% since the Diet can only cut it. */
+    public const LONG_RUN_DIVIDEND_TAX_RATE = 0.085;
+    /** Share of the tax on dividends' distance from that average still there a term later: 0.558. */
+    public const DIVIDEND_TAX_TERM_PERSISTENCE = 0.558;
 
     // --- Laws Priced per Firm ---
     /** The laws a firm's own accounts answer to, keyed as PoliticsEngine::LEVER_FIELDS; the corporate tax reaches every firm through its effective rate instead. */

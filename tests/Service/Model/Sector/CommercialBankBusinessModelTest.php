@@ -438,8 +438,8 @@ class CommercialBankBusinessModelTest extends TestCase
         $this->assertLessThan($model->pricing($untuned)['loan_spread'], $model->pricing($international)['loan_spread']);
     }
 
-    /** A mortgage book reprices over nearly a decade, a business book within a couple of years. */
-    public function testAMortgageBookRepricesSlowerThanABusinessBook(): void
+    /** The District's mortgages float: a mortgage book reprices within the year, faster than a business book with its fixed term loans. */
+    public function testAFloatingMortgageBookRepricesFasterThanABusinessBook(): void
     {
         $mortgageLender = new class extends CommercialBankBusinessModel {
             protected function resolveLoanBookMix(Stock $stock): array
@@ -463,14 +463,14 @@ class CommercialBankBusinessModelTest extends TestCase
             return $model->resolveInterestYield($stock, $this->shiftedMacro(0.01)) - $before;
         };
 
-        $this->assertGreaterThan(3.0 * $rise($mortgageLender), $rise($businessLender));
+        $this->assertGreaterThan($rise($businessLender), $rise($mortgageLender));
     }
 
     /**
-     * A mortgage reprices off the long end of the curve: a point on the 10-year alone, with the short end held, lifts a
-     * fully repriced residential book by the curve's move at its 9.5-year repricing tenor.
+     * A floating mortgage reprices off the short end: a point on the 10-year alone, with the short end held, leaves the
+     * residential book where it was and moves only the securities, by the curve's move at their tenor.
      */
-    public function testAMortgageBookIsPricedOffTheLongEnd(): void
+    public function testAFloatingMortgageBookIsPricedOffTheShortEnd(): void
     {
         $mortgageLender = new class extends CommercialBankBusinessModel {
             protected function resolveLoanBookMix(Stock $stock): array
@@ -482,11 +482,11 @@ class CommercialBankBusinessModelTest extends TestCase
         $steeper = new MacroStateDTO(yield10yEma: $opening->yield10yEma + 0.01);
         $stock = $this->creditTestBank('MORT');
 
-        $tenorMove = (CommercialBankBusinessModel::RESIDENTIAL_REPRICING_YEARS - 5.0) / 5.0;
         $securitiesMove = (CommercialBankBusinessModel::SECURITIES_REPRICING_YEARS - 5.0) / 5.0;
         $loanShare = 1.0 - CommercialBankBusinessModel::SECURITIES_SHARE_OF_EARNING_ASSETS;
+        $this->assertLessThan(2.0, CommercialBankBusinessModel::RESIDENTIAL_REPRICING_YEARS);
         $this->assertEqualsWithDelta(
-            0.01 * (($loanShare * $tenorMove) + ((1.0 - $loanShare) * $securitiesMove)),
+            0.01 * (1.0 - $loanShare) * $securitiesMove,
             $mortgageLender->resolveInterestYield($stock, $steeper) - $mortgageLender->resolveInterestYield($stock, $opening),
             1e-9
         );

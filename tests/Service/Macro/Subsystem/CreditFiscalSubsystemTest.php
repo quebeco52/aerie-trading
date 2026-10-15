@@ -1184,6 +1184,10 @@ class CreditFiscalSubsystemTest extends TestCase
         $state->yield10yEma = MacroEngine::BASE_NATURAL_RATE + MacroEngine::TARGET_INFLATION + MacroEngine::NS_BASE_TERM_PREMIUM;
         $state->policyRateEma = MacroEngine::BASE_NATURAL_RATE + MacroEngine::TARGET_INFLATION;
         $state->outputGapEma = 0.0;
+        // Leverage at rest: on the baseline households revert to, with its trend there too.
+        $state->householdDebtToIncome = MacroEngine::HOUSEHOLD_DEBT_TO_INCOME_BASELINE;
+        $state->householdDebtToIncomeEma = MacroEngine::HOUSEHOLD_DEBT_TO_INCOME_BASELINE;
+        $state->creditToGdpTrend = MacroEngine::HOUSEHOLD_DEBT_TO_INCOME_BASELINE;
         $state->householdDebtServiceTrend = MacroEngine::HOUSEHOLD_DSR_NEUTRAL;
 
         return $state;
@@ -1408,7 +1412,7 @@ class CreditFiscalSubsystemTest extends TestCase
 
         $neutral = $this->householdStateAtNeutralRates();
         $subsystem->calculateHouseholdCredit($neutral, $dt);
-        $this->assertEqualsWithDelta(MacroEngine::HOUSEHOLD_DSR_NEUTRAL, $neutral->householdDebtServiceRatio, 5e-4, 'Baseline leverage at neutral rates services at the documented 10.6% of income.');
+        $this->assertEqualsWithDelta(MacroEngine::HOUSEHOLD_DSR_NEUTRAL, $neutral->householdDebtServiceRatio, 5e-4, 'Baseline leverage at neutral rates services at the documented 10.2% of income.');
 
         $hiked = $this->householdStateAtNeutralRates();
         $hiked->yield10yEma += 0.02;
