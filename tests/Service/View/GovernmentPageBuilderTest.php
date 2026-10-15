@@ -26,6 +26,7 @@ use App\Service\Math\Valuation;
 use App\Service\Politics\ElectionForecast;
 use App\Service\Politics\MonetaryAuthority;
 use App\Service\Politics\PartyLeaders;
+use App\Service\Politics\FairTradingBoard;
 use App\Service\Politics\PoliticsEngine;
 use App\Service\Politics\PoliticsState;
 use App\Service\View\GovernmentPageBuilder;
@@ -91,6 +92,28 @@ class GovernmentPageBuilderTest extends TestCase
         $this->assertLessThan(0, $panel['maturityBp'], 'A book shorter than the founding one takes duration off the ten-year.');
         $this->assertEqualsWithDelta(\App\Service\Politics\Exchequer::averageMaturity(0.0), $panel['councilMaturity'], 1e-12);
         $this->assertSame(10, $panel['riskSpreadBp'], 'The default charge the market asks, in basis points.');
+    }
+
+    /** The Fair Trading Board's panel: nothing before it has a head; then the head's screens, the passed-over candidates' lines, the Council's median line and the record's two ends. */
+    public function testTheFairTradingPanelReadsTheHeadsScreens(): void
+    {
+        $this->assertNull($this->builder()->fairTrading(new PoliticsStateDTO()));
+
+        $politics = new PoliticsStateDTO(totalTime: 7.0, fairTradingHeadName: 'Odile Farrant', fairTradingHeadBirth: -48.0, fairTradingHeadTermStart: 6.0, fairTradingHeadStance: 0.8,
+            fairTradingHeadPassedOver: [['name' => 'Hal Brennan', 'birth' => -41.0, 'stance' => 0.0, 'regulation' => 0.0, 'fund' => 0.0, 'debt' => 0.0, 'competition' => -1.0]],
+            councilCompetitionStances: [-0.2, 0.0, 0.4]);
+        $panel = $this->builder()->fairTrading($politics);
+
+        $this->assertNotNull($panel);
+        $this->assertSame('Odile Farrant', $panel['head']['name']);
+        $this->assertSame(55, $panel['head']['age']);
+        $this->assertSame('strict', $panel['head']['stance']);
+        $this->assertFalse($panel['head']['opening']);
+        $this->assertSame(MergerAndAcquisitionEngine::reviewScreens(FairTradingBoard::leniency(0.8)), $panel['screens']);
+        $this->assertEqualsWithDelta(0.25, $panel['head']['passedOver'][0]['line'], 1e-12, 'The lightest candidate would draw the 2010 line.');
+        $this->assertEqualsWithDelta(MergerAndAcquisitionEngine::reviewScreens(0.5)['concentrated'], $panel['councilLine'], 1e-12);
+        $this->assertEqualsWithDelta(0.30, $panel['rules']['strictest']['shareCeiling'], 1e-12);
+        $this->assertSame(1.0, $panel['rules']['lightest']['shareCeiling']);
     }
 
     public function testTheDietAtYearOneIsDrawnSeatForSeat(): void
@@ -582,7 +605,7 @@ class GovernmentPageBuilderTest extends TestCase
             regulatorBirth: -45.0,
             regulatorTermStart: 7.0,
             regulatorStance: $regime,
-            regulatorPassedOver: [['name' => 'Other One', 'birth' => -50.0, 'stance' => 0.0, 'regulation' => -1.0, 'fund' => 0.0, 'debt' => 0.0]],
+            regulatorPassedOver: [['name' => 'Other One', 'birth' => -50.0, 'stance' => 0.0, 'regulation' => -1.0, 'fund' => 0.0, 'debt' => 0.0, 'competition' => 0.0]],
             bankCapitalRequirement: 0.1012,
             requirementPhaseFrom: 0.094,
             requirementPhaseStart: 7.0,
@@ -681,7 +704,7 @@ class GovernmentPageBuilderTest extends TestCase
 
         $this->assertSame(['public spending', 'corporate tax', 'stamp duty', 'bank levy', 'reserve draw', 'tax or cuts', 'dividend tax', 'debt target', 'debt pace'], $rows[Diet::AXIS_STATE]);
         $this->assertSame(['tariffs', 'immigration', 'foreign buyers', 'reserves at home'], $rows[Diet::AXIS_OPENNESS]);
-        $this->assertSame(['merger review', 'utility rates'], $rows[Diet::AXIS_COUNCIL]);
+        $this->assertSame(['utility rates'], $rows[Diet::AXIS_COUNCIL]);
         $this->assertSame(['green belts', 'carbon price', 'extraction rules'], $rows[Diet::AXIS_ENVIRONMENT]);
         $this->assertCount(count(PoliticsEngine::LEVER_FIELDS), array_merge(...array_values($rows)));
     }
@@ -954,7 +977,7 @@ class GovernmentPageBuilderTest extends TestCase
         foreach ([3.0, 3.25, 3.5, 3.75, 4.0, 4.25] as $time) {
             $levers = $standing;
             $levers['bankLevyRate'] = $time >= 4.25 ? 0.002 : 0.001;
-            $rows[] = ['t' => $time, 'levers' => $levers, 'capitalRequirement' => 0.0843];
+            $rows[] = ['t' => $time, 'levers' => $levers, 'capitalRequirement' => 0.0843, 'mergerReviewLeniency' => FairTradingBoard::FOUNDING_LENIENCY];
         }
         $rows[0]['levers']['carbonPrice'] = null; // A quarter recorded before the column existed.
         $reports = $this->createStub(MacroReportHistoryRepository::class);
@@ -977,7 +1000,7 @@ class GovernmentPageBuilderTest extends TestCase
         $this->assertCount(2 * 7 - 1, explode(' ', $levy['line']), 'Each point after the first is a step: across, then up or down.');
         $this->assertTrue($charts['Corporate tax rate']['flat']);
         $this->assertSame(0, $charts['Corporate tax rate']['changes']);
-        $this->assertEqualsWithDelta(MergerAndAcquisitionEngine::reviewScreens($standing['mergerReviewLeniency'])['concentrated'], $charts['Merger review line']['now'], 1e-12);
+        $this->assertEqualsWithDelta(MergerAndAcquisitionEngine::reviewScreens(FairTradingBoard::FOUNDING_LENIENCY)['concentrated'], $charts['Merger review line']['now'], 1e-12, 'The Board\'s line is charted beside the Diet\'s laws.');
         $this->assertArrayHasKey('Core capital requirement', $charts);
 
         $this->assertCount(2, $laws['cabinets']);

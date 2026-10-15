@@ -854,7 +854,6 @@ class PoliticsEngineTest extends TestCase
         $this->assertSame($state->corporateTaxPolicyShift, $policy->corporateTaxPolicyShift, 'The economy reads the levers the budget enacted.');
         $this->assertSame($state->importTariffRate, $policy->importTariffRate);
         $this->assertSame($state->laborForceGrowthRate, $policy->laborForceGrowthRate);
-        $this->assertSame($state->mergerReviewLeniency, $policy->mergerReviewLeniency);
     }
 
 
@@ -972,31 +971,6 @@ class PoliticsEngineTest extends TestCase
 
         $majority = Politics::budget([Diet::VANGUARD, Diet::EXCHANGE, Diet::CHARTISTS], [], $seats, $positions, $standing(0.0));
         $this->assertSame(array_fill_keys(array_keys(Politics::LEVER_FIELDS), false), $majority['supportHeld'], 'A majority cabinet answers to no supporter.');
-    }
-
-    /**
-     * Merger review runs along the Council axis, from the Common Lot's 2023 guidelines to the Chartists' 2010 ones; a
-     * populist supporter can stop a technocratic cabinet loosening it, and the Council's brake, which guards revenue,
-     * never holds it.
-     */
-    public function testMergerReviewRunsFromTheCommonLotsGuidelinesToTheChartists(): void
-    {
-        $positions = Diet::HOME_POSITIONS;
-        $leniency = static fn(float $council): float => Politics::platform([Diet::AXIS_COUNCIL => $council])['mergerReviewLeniency'];
-
-        $this->assertSame(0.0, Politics::platform(Diet::position(Diet::COMMON_LOT, $positions))['mergerReviewLeniency']);
-        $this->assertSame(1.0, Politics::platform(Diet::position(Diet::CHARTISTS, $positions))['mergerReviewLeniency']);
-        $this->assertEqualsWithDelta(0.5, $leniency(0.0), 1e-12);
-        $this->assertSame(1.0, $leniency(1.0), 'Nothing on record is more lenient than the 2010 guidelines.');
-        $this->assertEqualsWithDelta((0.3 + 0.8) / 1.6, Politics::platform(Diet::position(Diet::VANGUARD, $positions))['mergerReviewLeniency'], 1e-12);
-
-        $standing = Politics::standingLevers(new PoliticsStateDTO());
-        $held = Politics::budget([Diet::VANGUARD], [Diet::COMMON_LOT], Diet::SEED_SEATS, $positions, $standing);
-        $this->assertSame(0.0, $held['levers']['mergerReviewLeniency'], 'The Common Lot will not vote review looser than its own.');
-        $this->assertTrue($held['supportHeld']['mergerReviewLeniency']);
-
-        $loosened = Politics::budget([Diet::VANGUARD], [Diet::EXCHANGE], Diet::SEED_SEATS, $positions, $standing);
-        $this->assertGreaterThan(0.0, $loosened['levers']['mergerReviewLeniency']);
     }
 
     public function testTheVoteReadsGrowthPerHead(): void

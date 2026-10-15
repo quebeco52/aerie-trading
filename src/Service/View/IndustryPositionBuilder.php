@@ -67,7 +67,7 @@ class IndustryPositionBuilder
      *         priceLevel: float|null,
      *         rivalShareDrain: float|null,
      *         ownPriceVolumeShift: float|null,
-     *         mergerReview: array{herfindahl: float, highlyConcentrated: bool, acquirerShare: float, fringeShare: float, clearedShare: float, reviewBinds: bool}|null
+     *         mergerReview: array{herfindahl: float, highlyConcentrated: bool, acquirerShare: float, fringeShare: float, clearedShare: float, reviewBinds: bool, screens: array{delta: float, concentrated: float, shareCeiling: float}}|null
      *     }
      * }
      */
@@ -153,10 +153,10 @@ class IndustryPositionBuilder
      * The market as horizontal merger review sees it, read from the same ledger call the M&A engine sizes
      * its deals on (MergerAndAcquisitionEngine::resolveLargestAvailableTarget): the roster's concentration,
      * the competitive fringe still off the board, and the largest share a deal could add, the lesser of
-     * that fringe and what clears the 2023 Merger Guidelines screens. Null before the ledger has priced
-     * the firm's market, which is also when the engine applies no review.
+     * that fringe and what clears the Fair Trading Board's screens in force, which it returns too. Null
+     * before the ledger has priced the firm's market, which is also when the engine applies no review.
      *
-     * @return array{herfindahl: float, highlyConcentrated: bool, acquirerShare: float, fringeShare: float, clearedShare: float, reviewBinds: bool}|null
+     * @return array{herfindahl: float, highlyConcentrated: bool, acquirerShare: float, fringeShare: float, clearedShare: float, reviewBinds: bool, screens: array{delta: float, concentrated: float, shareCeiling: float}}|null
      */
     private function mergerReview(Stock $stock, MacroStateDTO $macroState, BusinessModelInterface $strategy, int $tick): ?array
     {
@@ -172,14 +172,16 @@ class IndustryPositionBuilder
         }
 
         $reviewCap = MergerAndAcquisitionEngine::maxClearedTargetShare($market['acquirer_share'], $market['herfindahl'], $macroState->mergerReviewLeniency);
+        $screens = MergerAndAcquisitionEngine::reviewScreens($macroState->mergerReviewLeniency);
 
         return [
             'herfindahl' => $market['herfindahl'],
-            'highlyConcentrated' => $market['herfindahl'] > MergerAndAcquisitionEngine::reviewScreens($macroState->mergerReviewLeniency)['concentrated'],
+            'highlyConcentrated' => $market['herfindahl'] > $screens['concentrated'],
             'acquirerShare' => $market['acquirer_share'],
             'fringeShare' => $market['fringe_share'],
             'clearedShare' => min($market['fringe_share'], $reviewCap),
             'reviewBinds' => $reviewCap < $market['fringe_share'],
+            'screens' => $screens,
         ];
     }
 

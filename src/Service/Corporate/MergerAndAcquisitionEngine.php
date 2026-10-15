@@ -197,8 +197,8 @@ class MergerAndAcquisitionEngine
     /**
      * The screens horizontal merger review applies, between the 2023 guidelines (leniency 0: 1,800 points, a
      * 100-point delta, and a 30% share presumption) and the 2010 guidelines (leniency 1: 2,500 points, a
-     * 200-point delta, no share presumption), where the Diet's levers put it
-     * (App\Service\Politics\PoliticsEngine::platform).
+     * 200-point delta, no share presumption), where the Fair Trading Board's head sets it
+     * (App\Service\Politics\FairTradingBoard::leniency()).
      *
      * @return array{delta: float, concentrated: float, shareCeiling: float} The HHI delta, the highly concentrated
      *         line, and the merged share presumed illegal (1.0: none).

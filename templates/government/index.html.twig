@@ -215,6 +215,16 @@
 					<p class="mt-auto pt-3 text-xs"><a href="{{ path('app_exchequer') }}" class="text-primary hover:underline underline-offset-2">The debt and what it costs</a></p>
 				</section>
 
+				<section class="bg-surface-container-low rounded-lg p-5 border border-outline-variant/20 flex flex-col" aria-labelledby="hub-fair-trading-heading">
+					<h3 id="hub-fair-trading-heading" class="text-sm font-semibold text-on-surface"><a href="{{ path('app_fair_trading') }}" class="hover:underline">Fair Trading Board</a></h3>
+					{% if fairTrading %}
+						<p class="mt-2 text-2xl font-semibold font-mono tabular-nums text-on-surface">{{ (fairTrading.screens.concentrated * 10000)|number_format(0) }} HHI</p>
+						<p class="text-xs text-on-surface-variant">concentration line for mergers{% if fairTrading.screens.shareCeiling < 1 %}, merged firms capped at <span class="font-mono tabular-nums">{{ fairTrading.screens.shareCeiling|pct(0) }}</span> of a market{% endif %}</p>
+						<p class="text-xs text-on-surface mt-3">Head {{ fairTrading.head.name }}, {{ {light: 'who would let firms consolidate', balanced: 'taking a middle course', strict: 'a strict enforcer'}[fairTrading.head.stance] }}{{ fairTrading.head.opening ? ', keeping the guidelines of Year 1' : '' }}.</p>
+					{% endif %}
+					<p class="mt-auto pt-3 text-xs"><a href="{{ path('app_fair_trading') }}" class="text-primary hover:underline underline-offset-2">The guidelines a merger must clear</a></p>
+				</section>
+
 				<section class="bg-surface-container-low rounded-lg p-5 border border-outline-variant/20 flex flex-col" aria-labelledby="hub-trade-heading">
 					<h3 id="hub-trade-heading" class="text-sm font-semibold text-on-surface"><a href="{{ path('app_trade_office') }}" class="hover:underline">Trade &amp; Migration Office</a></h3>
 					{% if tradeOffice is defined %}
@@ -256,7 +266,7 @@
 					heading: 'The budget',
 					items: [
 						{name: 'Budget rounds', text: 'The Diet passes a budget every ' ~ rules.budgetRoundMonths|number_format(0) ~ ' months. A new government\'s first budget is the round after it takes office.'},
-						{name: 'What it decides', text: 'How much the District spends on public services, the corporate tax rate, the tax on dividends, the tariff on imports, the immigration regime, the tax on homes bought from outside the District, how strictly mergers are reviewed, how much housing the planning system lets through, the carbon price on power, the rules on offshore drilling and mining, the stamp duty on share trades, which is paid into the Sovereign Reserve, the levy on banks\' balance sheets, how much of the reserves\' return the budget spends and how much of them is invested at home, the debt it aims for and how fast it gets there, whether the debt is brought down by raising taxes or by cutting spending, and how much of a rise in power and water bills the utility commission grants. How the debt is funded is the Exchequer\'s.'},
+						{name: 'What it decides', text: 'How much the District spends on public services, the corporate tax rate, the tax on dividends, the tariff on imports, the immigration regime, the tax on homes bought from outside the District, how much housing the planning system lets through, the carbon price on power, the rules on offshore drilling and mining, the stamp duty on share trades, which is paid into the Sovereign Reserve, the levy on banks\' balance sheets, how much of the reserves\' return the budget spends and how much of them is invested at home, the debt it aims for and how fast it gets there, whether the debt is brought down by raising taxes or by cutting spending, and how much of a rise in power and water bills the utility commission grants. How the debt is funded is the Exchequer\'s, and how strictly mergers are reviewed the Fair Trading Board\'s.'},
 						{name: 'Supporters\' veto', text: 'A minority cabinet needs its supporters\' votes. They will not back a change that moves a policy further from their own, so they can stop a government but not steer it.'},
 						{name: 'The debt', text: 'Each party runs on a debt target, a share of GDP, and a pace, the most it would move the debt in a year toward it; a cabinet\'s plan averages its parties\', weighted by their seats. The budget plans the surplus that holds the debt steady and moves it toward the target, or the deficit that lets it rise toward a higher one. The bond market charges the District more to borrow as its debt rises.'}
 					]

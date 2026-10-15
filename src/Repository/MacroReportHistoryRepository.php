@@ -19,16 +19,16 @@ class MacroReportHistoryRepository
     public function __construct(private readonly Connection $connection) {}
 
     /**
-     * The laws in force at each recorded quarter, oldest first: each Diet lever (PoliticsEngine::LEVER_FIELDS keys) and
-     * the core capital requirement. A quarter recorded before a column existed carries null for it.
+     * The laws in force at each recorded quarter, oldest first: each Diet lever (PoliticsEngine::LEVER_FIELDS keys), the
+     * core capital requirement and where merger review stood. A quarter recorded before a column existed carries null for it.
      *
-     * @return list<array{t: float, levers: array<string, float|null>, capitalRequirement: float|null}>
+     * @return list<array{t: float, levers: array<string, float|null>, capitalRequirement: float|null, mergerReviewLeniency: float|null}>
      */
     public function laws(int $quarters = self::QUARTERS): array
     {
         $columns = array_map(self::column(...), PoliticsEngine::LEVER_FIELDS);
         $rows = $this->connection->fetchAllAssociative(sprintf(
-            'SELECT total_time, bank_capital_requirement, %s FROM macro_report WHERE total_time IS NOT NULL ORDER BY id DESC LIMIT %d',
+            'SELECT total_time, bank_capital_requirement, merger_review_leniency, %s FROM macro_report WHERE total_time IS NOT NULL ORDER BY id DESC LIMIT %d',
             implode(', ', $columns),
             $quarters
         ));
@@ -39,6 +39,7 @@ class MacroReportHistoryRepository
                 't' => (float) $row['total_time'],
                 'levers' => array_map(static fn(string $column): ?float => self::number($row[$column] ?? null), $columns),
                 'capitalRequirement' => self::number($row['bank_capital_requirement'] ?? null),
+                'mergerReviewLeniency' => self::number($row['merger_review_leniency'] ?? null),
             ];
         }
 

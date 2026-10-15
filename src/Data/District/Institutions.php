@@ -20,6 +20,8 @@ final class Institutions
     /** Runs the budget the Diet passes and the District's debt, as the Exchequer does in Jersey and Ireland. */
     public const EXCHEQUER = 'Exchequer';
     public const SOVEREIGN_RESERVE_FUND = 'Sovereign Reserve Fund';
+    /** Sets the screens merger review applies; its head is the Council's appointee. Never the Competition Commission. */
+    public const FAIR_TRADING_BOARD = 'Fair Trading Board';
     public const TRADE_MIGRATION_OFFICE = 'Trade & Migration Office';
     public const STATISTICAL_OFFICE = 'Statistical Office';
     public const CREDIT_REGISTRY = 'Credit Registry';
@@ -48,6 +50,7 @@ final class Institutions
         'financial-regulator' => self::FINANCIAL_REGULATOR,
         'exchequer' => self::EXCHEQUER,
         'sovereign-reserve-fund' => self::SOVEREIGN_RESERVE_FUND,
+        'fair-trading-board' => self::FAIR_TRADING_BOARD,
         'trade-migration-office' => self::TRADE_MIGRATION_OFFICE,
         'statistical-office' => self::STATISTICAL_OFFICE,
         'credit-registry' => self::CREDIT_REGISTRY,

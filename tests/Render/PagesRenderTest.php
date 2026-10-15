@@ -102,6 +102,16 @@ final class PagesRenderTest extends KernelTestCase
                     'rules' => ['termYears' => 5.0, 'shortlist' => 3, 'shortest' => 4.0, 'longest' => 5.92, 'founding' => 4.96],
                 ],
             ]],
+            'fair_trading' => ['/fair-trading', 'fair_trading/index.html.twig', [
+                'board' => [
+                    'head' => ['name' => 'Odile Farrant', 'age' => 55, 'sinceLabel' => 'Year 6 Q1', 'termEndsLabel' => 'Year 11 Q1', 'opening' => false, 'stance' => 'strict',
+                        'passedOver' => [['name' => 'Hal Brennan', 'age' => 47, 'line' => 0.235], ['name' => 'Ines Okafor', 'age' => 56, 'line' => 0.205]]],
+                    'screens' => ['delta' => 0.0115, 'concentrated' => 0.1905, 'shareCeiling' => 0.405],
+                    'councilLine' => 0.2105,
+                    'rules' => ['termYears' => 5.0, 'shortlist' => 3,
+                        'lightest' => ['delta' => 0.02, 'concentrated' => 0.25, 'shareCeiling' => 1.0], 'strictest' => ['delta' => 0.01, 'concentrated' => 0.18, 'shareCeiling' => 0.30]],
+                ],
+            ]],
             'trade_office' => ['/trade-office', 'trade_office/index.html.twig', [
                 'office' => [
                     'tariff' => ['inForce' => 0.04, 'next' => 0.06, 'expected' => 0.03, 'retaliation' => 0.025, 'revenueToGdp' => 0.0072, 'outputCost' => 0.0044, 'goodsImportsToGdp' => 0.19],

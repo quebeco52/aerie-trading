@@ -8,6 +8,7 @@ use App\DTO\MacroStateDTO;
 use App\DTO\PoliticsStateDTO;
 use App\Entity\DistrictNews;
 use App\Entity\Etf;
+use App\Service\Corporate\MergerAndAcquisitionEngine;
 use App\Service\Event\MarketEventPublisher;
 use App\Service\Macro\MacroEngine;
 use App\Service\Macro\Subsystem\CreditFiscalSubsystem;
@@ -15,6 +16,7 @@ use App\Service\Macro\Subsystem\SovereignFundSubsystem;
 use App\Service\Market\Chart\PriceChangeFeed;
 use App\Service\Politics\CoalitionFormation;
 use App\Service\Politics\Exchequer;
+use App\Service\Politics\FairTradingBoard;
 use App\Service\Politics\FinancialRegulator;
 use App\Service\Politics\MonetaryAuthority;
 use App\Service\Politics\PartyLeaders;
@@ -40,6 +42,8 @@ class SystemicEventReporter
     private const FUND_PHRASES = ['cautious' => 'a cautious investor', 'balanced' => 'a balanced investor', 'bold' => 'a bold investor'];
     /** A head of the Exchequer's stance on the debt, as a headline puts it. */
     private const DEBT_PHRASES = ['short' => 'who favours borrowing short', 'balanced' => 'a middle-of-the-road debt manager', 'long' => 'who favours locking in long-term rates'];
+    /** A head of the Fair Trading Board's stance on competition, as a headline puts it. */
+    private const COMPETITION_PHRASES = ['light' => 'who would let firms consolidate', 'balanced' => 'a middle-of-the-road reviewer', 'strict' => 'a strict enforcer against concentration'];
     /** A head of the Financial Regulator's stance on the banks, as a headline puts it. */
     private const REGULATION_PHRASES = ['light' => 'a light-touch regulator', 'middle' => 'a moderate', 'strict' => 'a strict regulator'];
     private const STANCE_PLURALS = ['hawk' => ['hawk', 'hawks'], 'swing' => ['swing vote', 'swing votes'], 'dove' => ['dove', 'doves']];
@@ -87,7 +91,8 @@ class SystemicEventReporter
             + self::authorityContext($politics)
             + self::leaderContext($politics)
             + self::fundHeadContext($macro, $politics)
-            + self::exchequerHeadContext($macro, $politics);
+            + self::exchequerHeadContext($macro, $politics)
+            + self::fairTradingHeadContext($politics);
 
         $monthMove = $this->priceChangeFeed->changeForTicker((string) $benchmark->getTicker(), (float) $benchmark->getPrice());
 
@@ -404,6 +409,41 @@ class SystemicEventReporter
             $target > $current => "raises its share in equities to {$pct($target)} from {$pct($current)}, buying about " . number_format($boardShare * 100.0, 1) . "% of the board's free float over {$months} months",
             default => "cuts its share in equities to {$pct($target)} from {$pct($current)}, selling about " . number_format($boardShare * 100.0, 1) . "% of the board's free float over {$months} months",
         }];
+    }
+
+    /**
+     * The Fair Trading Board's head for their headline: who they are, their stance on competition, the concentration line
+     * and share presumption they set against their predecessor's, when their term ends and whom the Council passed over.
+     * Empty before the Board has a head.
+     *
+     * @return array<string, string>
+     */
+    private static function fairTradingHeadContext(PoliticsStateDTO $politics): array
+    {
+        if ($politics->fairTradingHeadName === '') {
+            return [];
+        }
+
+        $line = static fn(float $stance): string => number_format(MergerAndAcquisitionEngine::reviewScreens(FairTradingBoard::leniency($stance))['concentrated'], 0);
+        $ceiling = MergerAndAcquisitionEngine::reviewScreens(FairTradingBoard::leniency($politics->fairTradingHeadStance))['shareCeiling'];
+        $screens = "a concentration line at {$line($politics->fairTradingHeadStance)} on the HHI"
+            . ($ceiling < 1.0 ? ' and a merged firm presumed too big above ' . number_format($ceiling * 100.0, 0) . '% of its market' : ' and no cap on a merged firm\'s share');
+
+        return [
+            'fair_trading_head' => $politics->fairTradingHeadName,
+            'fair_trading_head_age' => (string) (int) floor($politics->totalTime - $politics->fairTradingHeadBirth),
+            'fair_trading_head_stance' => self::COMPETITION_PHRASES[FairTradingBoard::stanceName($politics->fairTradingHeadStance)],
+            'fair_trading_head_term_ends' => GovernmentPageBuilder::simDate(FairTradingBoard::headTermEnd($politics->totalTime)),
+            'fair_trading_head_passed_over' => self::listNames(array_map(
+                static fn(array $candidate): string => "{$candidate['name']}, who would have drawn the line at {$line($candidate['competition'])}",
+                $politics->fairTradingHeadPassedOver
+            )),
+            'merger_review_change' => match (true) {
+                abs($politics->fairTradingHeadStance - $politics->fairTradingPriorStance) < 0.05 => "keeps merger review where it stood, with {$screens}",
+                $politics->fairTradingHeadStance > $politics->fairTradingPriorStance => "tightens merger review to {$screens}, from a line at {$line($politics->fairTradingPriorStance)}",
+                default => "loosens merger review to {$screens}, from a line at {$line($politics->fairTradingPriorStance)}",
+            },
+        ];
     }
 
     /**

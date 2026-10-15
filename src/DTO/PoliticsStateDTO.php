@@ -13,6 +13,7 @@ use App\Service\Math\Valuation;
 use App\Service\Model\Sector\UtilityBusinessModel;
 use App\Service\Politics\ElectionForecast;
 use App\Service\Politics\Exchequer;
+use App\Service\Politics\FairTradingBoard;
 use App\Service\Politics\PoliticsEngine;
 use App\Service\Politics\PoliticsState;
 use App\Service\Politics\SovereignReserveFund;
@@ -76,8 +77,6 @@ readonly class PoliticsStateDTO
         public float $laborForceGrowthRate = MacroEngine::STRUCTURAL_LABOR_GROWTH_RATE,
         /** Tax on a home bought by a buyer from outside the District, as the last budget set it. */
         public float $foreignBuyerTaxRate = 0.0,
-        /** Where merger review stands between the 2023 guidelines (0) and the 2010 guidelines (1). */
-        public float $mergerReviewLeniency = 0.0,
         /** How far the green belt stands between the founding planning regime (0) and the strictest on record (1). */
         public float $greenBeltStringency = 0.0,
         /** The carbon price on power and industry, in dollars a tonne of CO2. */
@@ -127,9 +126,11 @@ readonly class PoliticsStateDTO
         public array $councilFundStances = [],
         /** @var array<int, float> Each councillor's stance on the debt: -1 the shortest average maturity on record, 1 the longest (App\Service\Politics\Exchequer). */
         public array $councilDebtStances = [],
-        /** @var list<array{name: string, birth: float, stance: float, regulation: float, fund: float, debt: float, swing?: float}> The candidates the Council passed over when it last filled a seat of its own. */
+        /** @var array<int, float> Each councillor's stance on competition: -1 the lightest merger guidelines on record, 1 the strictest (App\Service\Politics\FairTradingBoard). */
+        public array $councilCompetitionStances = [],
+        /** @var list<array{name: string, birth: float, stance: float, regulation: float, fund: float, debt: float, competition: float, swing?: float}> The candidates the Council passed over when it last filled a seat of its own. */
         public array $councillorPassedOver = [],
-        /** @var array<int, array{name: string, birth: float, stance: float, regulation: float, fund: float, debt: float, swing?: float}> The Council Appointment Board's members, by seat (App\Service\Politics\CouncilAppointments::boardShortlist()). */
+        /** @var array<int, array{name: string, birth: float, stance: float, regulation: float, fund: float, debt: float, competition: float, swing?: float}> The Council Appointment Board's members, by seat (App\Service\Politics\CouncilAppointments::boardShortlist()). */
         public array $boardMembers = [],
         /** @var array<int, float> When each board member's term began. */
         public array $boardSince = [],
@@ -140,7 +141,7 @@ readonly class PoliticsStateDTO
         public float $governorStance = 0.0,
         /** Whether the governor is a swing vote (1) or not (0); -1 for a state that predates the field. */
         public float $governorSwinger = -1.0,
-        /** @var list<array{name: string, birth: float, stance: float, regulation: float, fund: float, debt: float, swing?: float}> The candidates the Council passed over when it named the governor. */
+        /** @var list<array{name: string, birth: float, stance: float, regulation: float, fund: float, debt: float, competition: float, swing?: float}> The candidates the Council passed over when it named the governor. */
         public array $governorPassedOver = [],
         /** @var list<string> The rate committee's members beside the governor, by seat: names, birth dates, when each took their seat, and stances. */
         public array $memberNames = [],
@@ -174,7 +175,7 @@ readonly class PoliticsStateDTO
         public float $regulatorBirth = 0.0,
         public float $regulatorTermStart = 0.0,
         public float $regulatorStance = 0.0,
-        /** @var list<array{name: string, birth: float, stance: float, regulation: float, fund: float, debt: float, swing?: float}> The candidates the Council passed over when it named the head. */
+        /** @var list<array{name: string, birth: float, stance: float, regulation: float, fund: float, debt: float, competition: float, swing?: float}> The candidates the Council passed over when it named the head. */
         public array $regulatorPassedOver = [],
         /** The CET1 requirement on the District's banks in force, as a share of risk-weighted assets, and where the head's last rise began phasing in from, and when. */
         public float $bankCapitalRequirement = FinancialConstants::OPENING_BANK_CAPITAL_REQUIREMENT,
@@ -190,7 +191,7 @@ readonly class PoliticsStateDTO
         public float $fundHeadBirth = 0.0,
         public float $fundHeadTermStart = 0.0,
         public float $fundHeadStance = 0.0,
-        /** @var list<array{name: string, birth: float, stance: float, regulation: float, fund: float, debt: float, swing?: float}> The candidates the Council passed over when it named the head. */
+        /** @var list<array{name: string, birth: float, stance: float, regulation: float, fund: float, debt: float, competition: float, swing?: float}> The candidates the Council passed over when it named the head. */
         public array $fundHeadPassedOver = [],
         public float $lastFundHeadAppointedAt = -1.0,
         /** The Exchequer's head in office: name, birth date, when their term began, and stance on the debt. */
@@ -198,10 +199,20 @@ readonly class PoliticsStateDTO
         public float $exchequerHeadBirth = 0.0,
         public float $exchequerHeadTermStart = 0.0,
         public float $exchequerHeadStance = 0.0,
-        /** @var list<array{name: string, birth: float, stance: float, regulation: float, fund: float, debt: float, swing?: float}> The candidates the Council passed over when it named the head. */
+        /** @var list<array{name: string, birth: float, stance: float, regulation: float, fund: float, debt: float, competition: float, swing?: float}> The candidates the Council passed over when it named the head. */
         public array $exchequerHeadPassedOver = [],
         public float $lastExchequerHeadAppointedAt = -1.0,
-        /** @var list<string> Everyone who has left a Council seat or a post at the Monetary Authority, the Financial Regulator, the Sovereign Reserve Fund or the Exchequer, whose names no later appointee takes. */
+        /** The Fair Trading Board's head in office: name, birth date, when their term began, and stance on competition. */
+        public string $fairTradingHeadName = '',
+        public float $fairTradingHeadBirth = 0.0,
+        public float $fairTradingHeadTermStart = 0.0,
+        public float $fairTradingHeadStance = 0.0,
+        /** The stance of the head before them, whose screens theirs replaced. */
+        public float $fairTradingPriorStance = 0.0,
+        /** @var list<array{name: string, birth: float, stance: float, regulation: float, fund: float, debt: float, competition: float, swing?: float}> The candidates the Council passed over when it named the head. */
+        public array $fairTradingHeadPassedOver = [],
+        public float $lastFairTradingHeadAppointedAt = -1.0,
+        /** @var list<string> Everyone who has left a Council seat or a post at the Monetary Authority, the Financial Regulator, the Sovereign Reserve Fund, the Exchequer or the Fair Trading Board, whose names no later appointee takes. */
         public array $formerNames = [],
         /** @var array<string, string> Each party's leader (App\Service\Politics\PartyLeaders), drawn on the first tick; the prime minister is the leader of the cabinet's largest party. */
         public array $leaderNames = [],
@@ -289,7 +300,7 @@ readonly class PoliticsStateDTO
             importTariffRate: $this->importTariffRate,
             laborForceGrowthRate: $this->laborForceGrowthRate,
             foreignBuyerTaxRate: $this->foreignBuyerTaxRate,
-            mergerReviewLeniency: $this->mergerReviewLeniency,
+            mergerReviewLeniency: $this->fairTradingHeadName === '' ? FairTradingBoard::FOUNDING_LENIENCY : FairTradingBoard::leniency($this->fairTradingHeadStance),
             greenBeltStringency: $this->greenBeltStringency,
             carbonPrice: $this->carbonPrice,
             extractionStringency: $this->extractionStringency,

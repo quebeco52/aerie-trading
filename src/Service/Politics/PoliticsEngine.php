@@ -46,8 +46,7 @@ use Psr\Log\LoggerInterface;
  * The government then legislates at the budget rounds after the one it took office on. Its cabinet's position, its
  * members' weighted by seats (Gamson's law), sets its levers between the policies real parties at the ends of each
  * axis have enacted: the corporate rate, the stamp duty on share trades and the bank levy on the size-of-state axis, the tariff and the immigration regime on the
- * openness axis, merger review on the Council axis, from the populists' 2023 guidelines to the technocrats' 2010
- * ones, and on the environment axis the green belt, the carbon price and the rules on extraction, none of them for a
+ * openness axis, the utility commission's grants on the Council axis, and on the environment axis the green belt, the carbon price and the rules on extraction, none of them for a
  * cabinet that puts growth first and the strictest on record at the Tideline Accord's place. Each party also runs on a
  * debt plank, the debt its budget steers to and how fast (AerieDiet::DEBT_PLANKS), which a cabinet weighs by seats. A
  * minority cabinet proposes and its support parties can refuse: each accepts a lever no further from its own policy
@@ -122,7 +121,6 @@ class PoliticsEngine
         'tariff' => 'importTariffRate',
         'laborGrowth' => 'laborForceGrowthRate',
         'foreignBuyerTax' => 'foreignBuyerTaxRate',
-        'mergerReviewLeniency' => 'mergerReviewLeniency',
         'greenBeltStringency' => 'greenBeltStringency',
         'carbonPrice' => 'carbonPrice',
         'extractionStringency' => 'extractionStringency',
@@ -143,7 +141,6 @@ class PoliticsEngine
         'tariff' => AerieDiet::AXIS_OPENNESS,
         'laborGrowth' => AerieDiet::AXIS_OPENNESS,
         'foreignBuyerTax' => AerieDiet::AXIS_OPENNESS,
-        'mergerReviewLeniency' => AerieDiet::AXIS_COUNCIL,
         'greenBeltStringency' => AerieDiet::AXIS_ENVIRONMENT,
         'carbonPrice' => AerieDiet::AXIS_ENVIRONMENT,
         'extractionStringency' => AerieDiet::AXIS_ENVIRONMENT,
@@ -333,6 +330,7 @@ class PoliticsEngine
         FinancialRegulator::advance($state, $this->mathUtility);
         SovereignReserveFund::advance($state, $this->mathUtility);
         Exchequer::advance($state, $this->mathUtility);
+        FairTradingBoard::advance($state, $this->mathUtility);
         PartyLeaders::advance($state, $dt, $this->mathUtility);
         ElectionForecast::advance($state, MacroEngine::recessionDeclared($macro));
 
@@ -342,7 +340,7 @@ class PoliticsEngine
     /**
      * The tick's political headline, the vote above all: a cabinet falling, then one taking office, then a budget round
      * that changed a lever, then the Council naming a governor, then the Financial Regulator's head, then the Sovereign
-     * Reserve Fund's head, then the Exchequer's head, then an appointment tipping the rate committee into or out of a
+     * Reserve Fund's head, then the Exchequer's head, then the Fair Trading Board's head, then an appointment tipping the rate committee into or out of a
      * supermajority, then the Council electing a councillor, then a rate meeting that moved the rate a full step or split
      * its committee. A single-tick pulse, gone on the next tick.
      */
@@ -358,6 +356,7 @@ class PoliticsEngine
             $state->lastRegulatorAppointedAt === $state->totalTime => ShockEvent::REGULATOR_APPOINTED,
             $state->lastFundHeadAppointedAt === $state->totalTime => ShockEvent::FUND_HEAD_APPOINTED,
             $state->lastExchequerHeadAppointedAt === $state->totalTime => ShockEvent::EXCHEQUER_HEAD_APPOINTED,
+            $state->lastFairTradingHeadAppointedAt === $state->totalTime => ShockEvent::FAIR_TRADING_HEAD_APPOINTED,
             $state->lastMajorityShiftAt === $state->totalTime => ShockEvent::AUTHORITY_MAJORITY_SHIFT,
             $state->lastCouncillorSeatedAt === $state->totalTime => ShockEvent::COUNCILLOR_SEATED,
             $state->lastLeaderChangeAt === $state->totalTime => ShockEvent::PARTY_LEADER_CHANGED,
@@ -396,8 +395,7 @@ class PoliticsEngine
      * @return array<string, float>
      *         Government purchases as a share of GDP, the corporate rate's shift from the neutral rate, the average tariff on imports, labour force growth,
      *         the tax on homes bought from outside the District,
-     *         where merger review stands between the 2023 guidelines (0) and the 2010 guidelines (1), how far the green
-     *         belt stands between the founding planning regime (0) and the strictest (1), the carbon price in dollars a
+     *         how far the green belt stands between the founding planning regime (0) and the strictest (1), the carbon price in dollars a
      *         tonne, how far the rules on extraction stand between the founding ones (0) and the strictest (1), the
      *         stamp duty on each side of a share trade, the bank levy on short-term funding, and the share of the
      *         reserve fund's expected return the budget spends.
@@ -433,9 +431,6 @@ class PoliticsEngine
             'laborGrowth' => MacroEngine::NATURAL_LABOR_FORCE_GROWTH + MacroEngine::STRUCTURAL_NET_MIGRATION_RATE
                 + ((($openness >= 0.0 ? self::MIGRATION_OPEN_REGIME : self::MIGRATION_CLOSED_REGIME) - MacroEngine::STRUCTURAL_NET_MIGRATION_RATE) * ($openness >= 0.0 ? $openness / $open : $openness / $closed)),
             'foreignBuyerTax' => self::POLICY_PROTECTIONIST_FOREIGN_BUYER_TAX * max(0.0, $openness / $closed),
-            // The Common Lot's anti-cartel review is the 2023 guidelines, the Chartists' the 2010 ones
-            // (App\Service\Corporate\MergerAndAcquisitionEngine::reviewScreens).
-            'mergerReviewLeniency' => ($council - $populist) / ($technocratic - $populist),
             'greenBeltStringency' => $stringency,
             'carbonPrice' => self::POLICY_GREEN_CARBON_PRICE * $stringency,
             'extractionStringency' => $stringency,

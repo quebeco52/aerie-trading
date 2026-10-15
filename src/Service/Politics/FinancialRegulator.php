@@ -201,7 +201,7 @@ final class FinancialRegulator
         return self::STRICTEST_REQUIREMENT;
     }
 
-    /** @param array{name: string, birth: float, stance: float, regulation: float, fund: float, debt: float, swing?: float} $person */
+    /** @param array{name: string, birth: float, stance: float, regulation: float, fund: float, debt: float, competition: float, swing?: float} $person */
     private static function seatHead(PoliticsState $state, array $person, float $termStart): void
     {
         CouncilAppointments::retire($state, $state->regulatorName);

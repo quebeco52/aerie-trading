@@ -34,6 +34,7 @@ use App\Service\Politics\CoalitionFormation;
 use App\Service\Politics\CouncilAppointments;
 use App\Service\Politics\ElectionForecast;
 use App\Service\Politics\Exchequer;
+use App\Service\Politics\FairTradingBoard;
 use App\Service\Politics\FinancialRegulator;
 use App\Service\Politics\MonetaryAuthority;
 use App\Service\Politics\PartyLeaders;
@@ -90,7 +91,6 @@ class GovernmentPageBuilder
         'tariff' => ['Average tariff on imports', 'pct'],
         'laborGrowth' => ['Labour force growth', 'pct'],
         'foreignBuyerTax' => ['Tax on foreign home buyers', 'pct'],
-        'mergerReviewLeniency' => ['Merger review line', 'hhi'],
         'greenBeltStringency' => ['Housing schemes refused', 'pct'],
         'carbonPrice' => ['Carbon price', 'usd_t'],
         'extractionStringency' => ['Extraction compliance cost', 'pct'],
@@ -102,6 +102,11 @@ class GovernmentPageBuilder
         'utilityRateGrant' => ['Utility rate requests granted', 'pct'],
         'debtTarget' => ['Debt target', 'pct'],
         'debtPace' => ['Debt cut a year', 'pct'],
+    ];
+    /** The laws the Council's departments set that the law charts show beside the Diet's, keyed as each recorded quarter carries them. */
+    private const DEPARTMENT_LAWS = [
+        'mergerReviewLeniency' => ['Merger review line', 'hhi'],
+        'capitalRequirement' => ['Core capital requirement', 'pct'],
     ];
     /** The polls chart's plot area in its 600 by 210 drawing: left, right, top and bottom edges. */
     private const POLL_CHART_PLOT = [34.0, 590.0, 8.0, 182.0];
@@ -164,7 +169,6 @@ class GovernmentPageBuilder
         'tariff' => 'tariffs',
         'laborGrowth' => 'immigration',
         'foreignBuyerTax' => 'foreign buyers',
-        'mergerReviewLeniency' => 'merger review',
         'greenBeltStringency' => 'green belts',
         'carbonPrice' => 'carbon price',
         'extractionStringency' => 'extraction rules',
@@ -253,6 +257,7 @@ class GovernmentPageBuilder
             'mortgageLtvCap' => $macro->mortgageLtvCap,
             'fundHead' => $this->fundHead($politics, $macro),
             'exchequer' => $this->exchequer($politics, $macro),
+            'fairTrading' => $this->fairTrading($politics),
             'tradeOffice' => $this->tradeOffice($politics, $macro),
         ]);
     }
@@ -545,16 +550,16 @@ class GovernmentPageBuilder
         }
 
         $now = $politics->totalTime;
-        $rows[] = ['t' => $now, 'levers' => PoliticsEngine::standingLevers($politics), 'capitalRequirement' => $politics->bankCapitalRequirement];
+        $rows[] = ['t' => $now, 'levers' => PoliticsEngine::standingLevers($politics), 'capitalRequirement' => $politics->bankCapitalRequirement, 'mergerReviewLeniency' => $politics->policy()->mergerReviewLeniency];
         $from = $rows[0]['t'];
         [$left, $right, $top, $bottom] = self::LAW_CHART_PLOT;
         $x = static fn(float $time): float => round($left + (($right - $left) * ($time - $from) / max(1e-9, $now - $from)), 1);
 
         $charts = [];
-        foreach (self::LEVER_DISPLAY + ['capitalRequirement' => ['Core capital requirement', 'pct']] as $key => [$name, $unit]) {
+        foreach (self::LEVER_DISPLAY + self::DEPARTMENT_LAWS as $key => [$name, $unit]) {
             $points = [];
             foreach ($rows as $row) {
-                $raw = $key === 'capitalRequirement' ? $row['capitalRequirement'] : ($row['levers'][$key] ?? null);
+                $raw = array_key_exists($key, self::DEPARTMENT_LAWS) ? ($row[$key] ?? null) : ($row['levers'][$key] ?? null);
                 if ($raw !== null) {
                     $points[] = [$row['t'], $key === 'capitalRequirement' ? $raw : self::leverDisplay($key, $raw)];
                 }
@@ -1058,7 +1063,6 @@ class GovernmentPageBuilder
         $position = AerieDiet::position($party, $politics->partyPositions);
         $platform = PoliticsEngine::partyProgramme($party, $politics->partyPositions);
         $neutral = MacroEngine::BASE_CORPORATE_TAX_RATE;
-        $concentrated = static fn(float $leniency): float => MergerAndAcquisitionEngine::reviewScreens($leniency)['concentrated'];
         $talking = $politics->coalitionTakesOfficeAt > $macro->totalTime;
 
         $axes = [];
@@ -1106,7 +1110,6 @@ class GovernmentPageBuilder
                 ['name' => 'Average tariff on imports', 'unit' => 'pct', 'platform' => $platform['tariff'], 'enacted' => $politics->importTariffRate],
                 ['name' => 'Labour force growth', 'unit' => 'pct', 'platform' => $platform['laborGrowth'], 'enacted' => $politics->laborForceGrowthRate],
                 ['name' => 'Tax on foreign home buyers', 'unit' => 'pct', 'platform' => $platform['foreignBuyerTax'], 'enacted' => $politics->foreignBuyerTaxRate],
-                ['name' => 'Merger review line', 'unit' => 'hhi', 'platform' => $concentrated($platform['mergerReviewLeniency']), 'enacted' => $concentrated($politics->mergerReviewLeniency)],
                 ['name' => 'Housing schemes refused', 'unit' => 'pct', 'platform' => AssetMarketSubsystem::planningRefusalRate($platform['greenBeltStringency']), 'enacted' => AssetMarketSubsystem::planningRefusalRate($politics->greenBeltStringency)],
                 ['name' => 'Carbon price', 'unit' => 'usd_t', 'platform' => $platform['carbonPrice'], 'enacted' => $politics->carbonPrice],
                 ['name' => 'Extraction compliance cost', 'unit' => 'pct', 'platform' => self::extractionCostUplift($platform['extractionStringency']), 'enacted' => self::extractionCostUplift($politics->extractionStringency)],
@@ -1261,7 +1264,6 @@ class GovernmentPageBuilder
             };
         };
         $neutral = MacroEngine::BASE_CORPORATE_TAX_RATE;
-        $screens = MergerAndAcquisitionEngine::reviewScreens($politics->mergerReviewLeniency);
         $planned = CreditFiscalSubsystem::requiredPrimaryBalance($macro);
 
         return [
@@ -1323,16 +1325,6 @@ class GovernmentPageBuilder
                     'note' => $standing['foreignBuyerTax'] > 0.0
                         ? sprintf('Of the price of a home bought from outside the District; it holds home prices %.1f%% below where they would stand without it', 100.0 * (1.0 - AssetMarketSubsystem::foreignBuyerPriceFactor($standing['foreignBuyerTax'])))
                         : 'Homes are open to buyers from anywhere, as at Year 1',
-                ],
-                [
-                    'name' => 'Merger review line',
-                    'axis' => AerieDiet::AXIS_COUNCIL,
-                    'unit' => 'hhi',
-                    'platform' => MergerAndAcquisitionEngine::reviewScreens($budget['platform']['mergerReviewLeniency'])['concentrated'],
-                    'target' => MergerAndAcquisitionEngine::reviewScreens($budget['levers']['mergerReviewLeniency'])['concentrated'],
-                    'enacted' => $screens['concentrated'],
-                    'status' => $status('mergerReviewLeniency'),
-                    'note' => sprintf('A deal adding %.0f points of HHI past the line is blocked%s', 10000.0 * $screens['delta'], $screens['shareCeiling'] < 1.0 ? sprintf(', as is one making a firm of %.0f%% of its market', 100.0 * $screens['shareCeiling']) : ''),
                 ],
                 [
                     'name' => 'Housing schemes refused',
@@ -2149,6 +2141,46 @@ class GovernmentPageBuilder
                 'shortest' => Exchequer::SHORTEST_AVERAGE_MATURITY,
                 'longest' => Exchequer::LONGEST_AVERAGE_MATURITY,
                 'founding' => CreditFiscalSubsystem::FOUNDING_DEBT_AVERAGE_MATURITY,
+            ],
+        ];
+    }
+
+    /**
+     * The Fair Trading Board: its head, their stance on competition and whom the Council passed over for them, the merger
+     * screens in force, and the range a head may set them across. Null before the Board has a head.
+     *
+     * @return array<string, mixed>|null
+     */
+    public function fairTrading(PoliticsStateDTO $politics): ?array
+    {
+        if ($politics->fairTradingHeadName === '') {
+            return null;
+        }
+
+        $time = $politics->totalTime;
+        $screens = static fn(float $stance): array => MergerAndAcquisitionEngine::reviewScreens(FairTradingBoard::leniency($stance));
+
+        return [
+            'head' => [
+                'name' => $politics->fairTradingHeadName,
+                'age' => (int) floor($time - $politics->fairTradingHeadBirth),
+                'sinceLabel' => $politics->fairTradingHeadTermStart < 0.0 ? 'Before Year 1' : self::simDate($politics->fairTradingHeadTermStart),
+                'termEndsLabel' => self::simDate(FairTradingBoard::headTermEnd($time)),
+                'opening' => $politics->fairTradingHeadTermStart < 0.0,
+                'stance' => FairTradingBoard::stanceName($politics->fairTradingHeadStance),
+                'passedOver' => array_map(static fn(array $candidate): array => [
+                    'name' => $candidate['name'],
+                    'age' => (int) floor($politics->fairTradingHeadTermStart - $candidate['birth']),
+                    'line' => $screens($candidate['competition'])['concentrated'],
+                ], $politics->fairTradingHeadPassedOver),
+            ],
+            'screens' => $screens($politics->fairTradingHeadStance),
+            'councilLine' => $politics->councilCompetitionStances === [] ? null : $screens(CouncilAppointments::median($politics->councilCompetitionStances))['concentrated'],
+            'rules' => [
+                'termYears' => FairTradingBoard::HEAD_TERM_YEARS,
+                'shortlist' => CouncilAppointments::SHORTLIST,
+                'lightest' => $screens(-1.0),
+                'strictest' => $screens(1.0),
             ],
         ];
     }

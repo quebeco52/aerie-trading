@@ -174,7 +174,7 @@ final class AeriePartyProfiles
             'agenda' => [
                 ['title' => 'The Charter as written', 'text' => 'Leave the Council to choose its own successors and appoint the departments, and give the Diet no power over it.'],
                 ['title' => 'An Authority left alone', 'text' => 'Leave the Monetary Authority to set rates without pressure from the cabinet.'],
-                ['title' => 'Light merger review', 'text' => 'Let the District\'s firms consolidate and compete abroad.'],
+                ['title' => 'Mergers left to the Board', 'text' => 'Leave merger review to the Fair Trading Board the Council appoints, not to votes in the Diet, so the District\'s firms can consolidate and compete abroad.'],
                 ['title' => 'Sound books', 'text' => 'Bring public debt to half of GDP, half a point of GDP a year.'],
             ],
             'relations' => 'The Chartists sit in the right bloc and back its cabinets from outside; they rarely join one. Their natural allies are the Vanguard and the Exchange, who share their trust in the Council. The Common Lot is their opposite in every sense, and the two rarely vote together.',
@@ -188,7 +188,7 @@ final class AeriePartyProfiles
             'heartland' => 'The rented wards and the old company towns',
             'about' => [
                 'The Common Lot is the party of the small saver and the retail shareholder, against the banks and funds that founded the District and, it says, still run it. It began as a shareholders\' revolt after a wave of mergers left a handful of firms in charge of whole industries, and the small holders of the firms they swallowed with little to show for it.',
-                'It wants the cartels broken up, the strictest merger review the law allows, the banks charged for the guarantee they enjoy, and the Council\'s unelected technocrats made answerable to the Diet. In government it would press the Monetary Authority openly for cheaper money.',
+                'It wants the cartels broken up, merger review taken from the Council\'s Fair Trading Board and made answerable to the Diet, the banks charged for the guarantee they enjoy, and the Council\'s unelected technocrats made answerable to the Diet. In government it would press the Monetary Authority openly for cheaper money.',
                 'The other parties see it as too radical to govern with, so it sits outside cabinets and lends its votes to the left when the terms suit it. Its vote swings further than any large party\'s, from a handful of seats to a real force in the Diet and back.',
             ],
             'history' => [
@@ -203,7 +203,7 @@ final class AeriePartyProfiles
                 AerieDiet::AXIS_ENVIRONMENT => 'Close to the middle: a small carbon price, and little else.',
             ],
             'agenda' => [
-                ['title' => 'The strictest merger review', 'text' => 'Block any deal that concentrates a market further.'],
+                ['title' => 'Mergers answerable to the Diet', 'text' => 'Amend the Charter so the Diet, not the Council\'s appointee at the Fair Trading Board, can block any deal that concentrates a market further.'],
                 ['title' => 'Make the banks pay', 'text' => 'A heavy levy on the banks\' balance sheets, and a higher duty on share trading.'],
                 ['title' => 'Tax foreign buyers of homes', 'text' => 'A stiff duty on homes bought from abroad, so the District\'s own families are not priced out of the rented wards.'],
                 ['title' => 'Keep the reserves at home', 'text' => 'Invest more of the Sovereign Reserve Fund in the District\'s own firms rather than the mainland\'s markets.'],

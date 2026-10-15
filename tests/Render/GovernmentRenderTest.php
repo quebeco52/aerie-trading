@@ -113,7 +113,7 @@ final class GovernmentRenderTest extends KernelTestCase
             $history->record($politics);
             // The quarterly record the law charts read, as macro_report keeps it: the last 25 years.
             if (TimeSeries::crossedSimulatedBoundary($macro->totalTime, 1.0 / self::TICKS_PER_YEAR, 0.25)) {
-                $laws[] = ['t' => $macro->totalTime, 'levers' => PoliticsEngine::standingLevers($politics), 'capitalRequirement' => $politics->bankCapitalRequirement];
+                $laws[] = ['t' => $macro->totalTime, 'levers' => PoliticsEngine::standingLevers($politics), 'capitalRequirement' => $politics->bankCapitalRequirement, 'mergerReviewLeniency' => $politics->policy()->mergerReviewLeniency];
                 $laws = array_slice($laws, -MacroReportHistoryRepository::QUARTERS);
                 $inflation[] = ['t' => $macro->totalTime, 'inflation' => $macro->inflationEma];
             }
