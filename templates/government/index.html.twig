@@ -225,6 +225,16 @@
 					<p class="mt-auto pt-3 text-xs"><a href="{{ path('app_fair_trading') }}" class="text-primary hover:underline underline-offset-2">The guidelines a merger must clear</a></p>
 				</section>
 
+				<section class="bg-surface-container-low rounded-lg p-5 border border-outline-variant/20 flex flex-col" aria-labelledby="hub-securities-heading">
+					<h3 id="hub-securities-heading" class="text-sm font-semibold text-on-surface"><a href="{{ path('app_securities') }}" class="hover:underline">Securities Commission</a></h3>
+					{% if securities %}
+						<p class="mt-2 text-2xl font-semibold font-mono tabular-nums text-on-surface">{{ securities.inForce.initial|pct(0) }}</p>
+						<p class="text-xs text-on-surface-variant">initial margin to buy or short on credit</p>
+						<p class="text-xs text-on-surface mt-3">Head {{ securities.head.name }}{{ securities.head.opening ? ', keeping the rules of Year 1' : ', ' ~ {light: 'light-touch', balanced: 'taking a middle course', strict: 'strict'}[securities.head.stance] }}.</p>
+					{% endif %}
+					<p class="mt-auto pt-3 text-xs"><a href="{{ path('app_securities') }}" class="text-primary hover:underline underline-offset-2">Margin and disclosure rules</a></p>
+				</section>
+
 				<section class="bg-surface-container-low rounded-lg p-5 border border-outline-variant/20 flex flex-col" aria-labelledby="hub-trade-heading">
 					<h3 id="hub-trade-heading" class="text-sm font-semibold text-on-surface"><a href="{{ path('app_trade_office') }}" class="hover:underline">Trade &amp; Migration Office</a></h3>
 					{% if tradeOffice is defined %}

@@ -39,6 +39,7 @@ use App\Service\Politics\FinancialRegulator;
 use App\Service\Politics\MonetaryAuthority;
 use App\Service\Politics\PartyLeaders;
 use App\Service\Politics\PoliticsEngine;
+use App\Service\Politics\SecuritiesCommission;
 use App\Service\Politics\SovereignReserveFund;
 use App\Twig\Extension\NumberFormatExtension;
 
@@ -258,6 +259,7 @@ class GovernmentPageBuilder
             'fundHead' => $this->fundHead($politics, $macro),
             'exchequer' => $this->exchequer($politics, $macro),
             'fairTrading' => $this->fairTrading($politics),
+            'securities' => $this->securities($politics, $macro),
             'tradeOffice' => $this->tradeOffice($politics, $macro),
         ]);
     }
@@ -2181,6 +2183,60 @@ class GovernmentPageBuilder
                 'shortlist' => CouncilAppointments::SHORTLIST,
                 'lightest' => $screens(-1.0),
                 'strictest' => $screens(1.0),
+            ],
+        ];
+    }
+
+    /**
+     * The Securities Commission: its head, their stance on the markets and whom the Council passed over for them; the
+     * margins and the enforcement on earnings in force and, through a new head's notice, the ones coming; and the range a head
+     * may set them across. Null before the Commission has a head.
+     *
+     * @return array<string, mixed>|null
+     */
+    public function securities(PoliticsStateDTO $politics, MacroStateDTO $macro): ?array
+    {
+        if ($politics->securitiesHeadName === '') {
+            return null;
+        }
+
+        $time = $politics->totalTime;
+        $stance = $politics->securitiesHeadStance;
+        $opening = $politics->securitiesHeadTermStart < 0.0;
+        $effective = $politics->securitiesHeadTermStart + SecuritiesCommission::RULE_NOTICE_YEARS;
+
+        return [
+            'head' => [
+                'name' => $politics->securitiesHeadName,
+                'age' => (int) floor($time - $politics->securitiesHeadBirth),
+                'sinceLabel' => $opening ? 'Before Year 1' : self::simDate($politics->securitiesHeadTermStart),
+                'termEndsLabel' => self::simDate(SecuritiesCommission::headTermEnd($time)),
+                'opening' => $opening,
+                'stance' => SecuritiesCommission::stanceName($stance),
+                'passedOver' => array_map(static fn(array $candidate): array => [
+                    'name' => $candidate['name'],
+                    'age' => (int) floor($politics->securitiesHeadTermStart - $candidate['birth']),
+                    'margin' => SecuritiesCommission::initialMargin($candidate['markets']),
+                ], $politics->securitiesHeadPassedOver),
+            ],
+            'inForce' => SecuritiesCommission::margins($macro->initialMarginRequirement) + [
+                'enforcement' => $macro->earningsManagementScale,
+            ],
+            // A new head's rules, announced at their seating, while their notice runs.
+            'coming' => $opening || $time >= $effective ? null : [
+                'fromLabel' => self::simDate($effective),
+                'initial' => SecuritiesCommission::initialMargin($stance),
+                'enforcement' => SecuritiesCommission::earningsManagementScale($stance),
+            ],
+            'councilMargin' => $politics->councilMarketsStances === [] ? null : SecuritiesCommission::initialMargin(CouncilAppointments::median($politics->councilMarketsStances)),
+            'rules' => [
+                'termYears' => SecuritiesCommission::HEAD_TERM_YEARS,
+                'shortlist' => CouncilAppointments::SHORTLIST,
+                'noticeMonths' => (int) round(SecuritiesCommission::RULE_NOTICE_YEARS * 12.0),
+                'lightestMargin' => SecuritiesCommission::LIGHTEST_INITIAL_MARGIN,
+                'strictestMargin' => SecuritiesCommission::STRICTEST_INITIAL_MARGIN,
+                'lightestEnforcement' => SecuritiesCommission::LIGHTEST_EARNINGS_MANAGEMENT_SCALE,
+                'strictestEnforcement' => SecuritiesCommission::STRICTEST_EARNINGS_MANAGEMENT_SCALE,
             ],
         ];
     }

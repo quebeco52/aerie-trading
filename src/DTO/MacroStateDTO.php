@@ -480,6 +480,10 @@ readonly class MacroStateDTO
         public float $bankCapitalRequiredLast = FinancialConstants::OPENING_BANK_CAPITAL_REQUIREMENT,
         /** The mortgage loan-to-value cap on the District's lenders in force, as a share of the property's value; null for none (App\Service\Politics\FinancialRegulator). */
         public ?float $mortgageLtvCap = null,
+        /** The initial margin an investor must put up to buy or short on credit (App\Service\Politics\SecuritiesCommission); maintenance keeps its founding ratio to it. */
+        public float $initialMarginRequirement = FinancialConstants::INITIAL_MARGIN_REQUIREMENT,
+        /** The multiplier the Securities Commission's enforcement puts on each firm's propensity to manage its reported earnings. */
+        public float $earningsManagementScale = 1.0,
         /** The countercyclical buffer the regulator holds when credit is not running ahead (App\DTO\GovernmentPolicyDTO). */
         public float $neutralCountercyclicalBuffer = 0.0,
         /** How far the cap has so far held household debt below where it would stand without one, in logs (App\Service\Macro\Subsystem\CreditFiscalSubsystem::mortgageLtvCreditCut()). */

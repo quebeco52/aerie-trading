@@ -99,6 +99,28 @@ class GovernmentPolicyTest extends TestCase
         $this->assertEqualsWithDelta($index, $state->totalFactorProductivityIndex, 1e-9);
     }
 
+    /** The Securities Commission's rules go in as handed over, and with none from it the founding ones stand, not the last in force. */
+    public function testTheCommissionsRulesGoIntoForceAndNoneMeansTheFoundingOnes(): void
+    {
+        $state = new MacroState();
+        $rules = new GovernmentPolicyDTO(
+            publicSpendingShare: MacroEngine::PUBLIC_PURCHASES_TO_GDP, corporateTaxPolicyShift: 0.0, importTariffRate: 0.0,
+            laborForceGrowthRate: MacroEngine::STRUCTURAL_LABOR_GROWTH_RATE, foreignBuyerTaxRate: 0.0, mergerReviewLeniency: 0.0,
+            greenBeltStringency: 0.0, carbonPrice: 0.0, extractionStringency: 0.0, stampDutyRate: FinancialConstants::STAMP_DUTY_RATE,
+            bankLevyRate: 0.0, reserveDrawShare: MacroEngine::RESERVE_DRAW_CEILING, consolidationTaxShare: CreditFiscalSubsystem::FOUNDING_CONSOLIDATION_TAX_SHARE,
+            reserveHomeEquityShare: SovereignFundSubsystem::OPENING_HOME_EQUITY_SHARE, utilityRateCaseGrantShare: UtilityBusinessModel::APPOINTED_COMMISSION_GRANTED_SHARE,
+            dividendTaxRate: Valuation::FOUNDING_DIVIDEND_TAX_RATE, electionPulse: 0.0,
+            initialMarginRequirement: 0.7, earningsManagementScale: 0.6,
+        );
+        $this->enactPolicyDto($state, $rules);
+        $this->assertSame(0.7, $state->initialMarginRequirement);
+        $this->assertSame(0.6, $state->earningsManagementScale);
+
+        $this->enact($state, tariff: 0.0);
+        $this->assertSame(FinancialConstants::INITIAL_MARGIN_REQUIREMENT, $state->initialMarginRequirement);
+        $this->assertSame(1.0, $state->earningsManagementScale);
+    }
+
     /** The market's forecast goes in as handed over, the one before it kept for the tick, so a revision can be seen; with no forecast none is carried. */
     public function testTheMarketsForecastGoesInWithTheOneBefore(): void
     {

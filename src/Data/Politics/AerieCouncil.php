@@ -25,11 +25,12 @@ use App\Data\District\Institutions;
  *
  * The Council appoints the heads of the District's departments, which then act independently of it: the Monetary
  * Authority's governor, who picks the rate committee (App\Service\Politics\MonetaryAuthority), the Financial
- * Regulator's head, who sets the banks' capital requirement (App\Service\Politics\FinancialRegulator), and the
+ * Regulator's head, who sets the banks' capital requirement (App\Service\Politics\FinancialRegulator), the
  * Sovereign Reserve Fund's head, who sets its share in equities (App\Service\Politics\SovereignReserveFund), the
- * Exchequer's head, who sets the debt's maturity (App\Service\Politics\Exchequer), and the Fair Trading Board's head,
- * who sets the screens merger review applies (App\Service\Politics\FairTradingBoard). The budget is the Diet's alone. No
- * party sits on the Council.
+ * Exchequer's head, who sets the debt's maturity (App\Service\Politics\Exchequer), the Fair Trading Board's head, who
+ * sets the screens merger review applies (App\Service\Politics\FairTradingBoard), and the Securities Commission's
+ * head, who sets the margin investors put up and what listed firms must disclose
+ * (App\Service\Politics\SecuritiesCommission). The budget is the Diet's alone. No party sits on the Council.
  */
 final class AerieCouncil
 {
@@ -66,6 +67,8 @@ final class AerieCouncil
     public const OPENING_EXCHEQUER_HEAD = 'Carol Hollis';
     /** The Fair Trading Board's head sitting at Year 1, named before it. */
     public const OPENING_FAIR_TRADING_HEAD = 'Martin Ingram';
+    /** The Securities Commission's head sitting at Year 1, named before it. */
+    public const OPENING_SECURITIES_HEAD = 'Denise Carver';
 
     // --- Departments ---
     /**
@@ -79,6 +82,7 @@ final class AerieCouncil
         ['name' => Institutions::FINANCIAL_REGULATOR, 'mandate' => 'Sets the core capital banks must hold against their loans and the most a home buyer may borrow against the property. Its head, named for one term, decides both.', 'href' => '/regulator'],
         ['name' => Institutions::EXCHEQUER, 'mandate' => 'Executes the budget the Diet passes and funds it. Its head, named for one term, decides how long the District borrows for.', 'href' => '/exchequer'],
         ['name' => Institutions::FAIR_TRADING_BOARD, 'mandate' => 'Reviews the mergers of the District\'s firms. Its head, named for one term, sets how concentrated a market may become and how much of it one firm may hold after a deal.', 'href' => '/fair-trading'],
+        ['name' => Institutions::SECURITIES_COMMISSION, 'mandate' => 'Sets the rules of the Aerie Exchange. Its head, named for one term, decides the margin an investor must put up to buy or short on credit, and how hard it pursues listed companies that dress up their results.', 'href' => '/securities'],
         ['name' => Institutions::TRADE_MIGRATION_OFFICE, 'mandate' => 'Administers the tariff schedule, the migration quotas and the tax on foreign home buyers the Diet legislates.', 'href' => '/trade-office'],
     ];
 

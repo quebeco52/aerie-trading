@@ -8,6 +8,7 @@ use App\DTO\EarningsSimulationContext;
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use App\Service\Corporate\EarningsEngine;
+use App\Service\Politics\SecuritiesCommission;
 use App\Service\Model\Sector\StandardCorporateBusinessModel;
 use PHPUnit\Framework\TestCase;
 use App\Service\Math\MathUtility;
@@ -69,7 +70,7 @@ final class EarningsManagementTest extends TestCase
         };
     }
 
-    private function makeContext(float $consensus, float $actual, float $bank = 0.0): EarningsSimulationContext
+    private function makeContext(float $consensus, float $actual, float $bank = 0.0, ?MacroStateDTO $macro = null): EarningsSimulationContext
     {
         $stock = new Stock();
         $stock->setTicker('ZZZZ');
@@ -77,12 +78,34 @@ final class EarningsManagementTest extends TestCase
         $stock->setWholesaleDebt('1000000000');
         $stock->setManagedAccrualBank($bank);
 
-        $ctx = new EarningsSimulationContext($stock, new MacroStateDTO(), $this->certainManager(), 'none');
+        $ctx = new EarningsSimulationContext($stock, $macro ?? new MacroStateDTO(), $this->certainManager(), 'none');
         $ctx->reportedExpectedNetIncome = $consensus;
         $ctx->reportedActualNetIncome = $actual;
         $ctx->sharesOutstanding = self::SHARES;
 
         return $ctx;
+    }
+
+    /**
+     * The Securities Commission's enforcement scales the odds a firm closes a near miss: a gap closed at 40% odds under
+     * the founding rules (the draw at 25%) is left at 20% under the strictest enforcement, and certainty never exceeds one.
+     */
+    public function testEnforcementScalesTheOddsOfClosingAGap(): void
+    {
+        $consensus = 100_000_000.0;
+        $short = $consensus - (0.012 * self::SHARES);
+
+        $founding = $this->makeContext($consensus, $short);
+        $this->manage->invoke($this->engine, $founding);
+        $this->assertGreaterThan(0.0, $founding->managedAccrual);
+
+        $strict = $this->makeContext($consensus, $short, macro: new MacroStateDTO(earningsManagementScale: SecuritiesCommission::earningsManagementScale(1.0)));
+        $this->manage->invoke($this->engine, $strict);
+        $this->assertSame(0.0, $strict->managedAccrual, 'Halved odds fall under the draw.');
+
+        $light = $this->makeContext($consensus, $short, macro: new MacroStateDTO(earningsManagementScale: SecuritiesCommission::earningsManagementScale(-1.0)));
+        $this->manage->invoke($this->engine, $light);
+        $this->assertGreaterThan(0.0, $light->managedAccrual);
     }
 
     /** A near miss is closed, and lands on the line or within a cent above it, where the excess mass sits. */

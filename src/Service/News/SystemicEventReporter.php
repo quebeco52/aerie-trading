@@ -20,6 +20,7 @@ use App\Service\Politics\FairTradingBoard;
 use App\Service\Politics\FinancialRegulator;
 use App\Service\Politics\MonetaryAuthority;
 use App\Service\Politics\PartyLeaders;
+use App\Service\Politics\SecuritiesCommission;
 use App\Service\Politics\SovereignReserveFund;
 use App\Service\View\GovernmentPageBuilder;
 
@@ -44,6 +45,8 @@ class SystemicEventReporter
     private const DEBT_PHRASES = ['short' => 'who favours borrowing short', 'balanced' => 'a middle-of-the-road debt manager', 'long' => 'who favours locking in long-term rates'];
     /** A head of the Fair Trading Board's stance on competition, as a headline puts it. */
     private const COMPETITION_PHRASES = ['light' => 'who would let firms consolidate', 'balanced' => 'a middle-of-the-road reviewer', 'strict' => 'a strict enforcer against concentration'];
+    /** A head of the Securities Commission's stance on the markets, as a headline puts it. */
+    private const MARKETS_PHRASES = ['light' => 'a light-touch overseer of the markets', 'balanced' => 'a moderate', 'strict' => 'a strict overseer of the markets'];
     /** A head of the Financial Regulator's stance on the banks, as a headline puts it. */
     private const REGULATION_PHRASES = ['light' => 'a light-touch regulator', 'middle' => 'a moderate', 'strict' => 'a strict regulator'];
     private const STANCE_PLURALS = ['hawk' => ['hawk', 'hawks'], 'swing' => ['swing vote', 'swing votes'], 'dove' => ['dove', 'doves']];
@@ -92,7 +95,8 @@ class SystemicEventReporter
             + self::leaderContext($politics)
             + self::fundHeadContext($macro, $politics)
             + self::exchequerHeadContext($macro, $politics)
-            + self::fairTradingHeadContext($politics);
+            + self::fairTradingHeadContext($politics)
+            + self::securitiesHeadContext($politics);
 
         $monthMove = $this->priceChangeFeed->changeForTicker((string) $benchmark->getTicker(), (float) $benchmark->getPrice());
 
@@ -443,6 +447,49 @@ class SystemicEventReporter
                 $politics->fairTradingHeadStance > $politics->fairTradingPriorStance => "tightens merger review to {$screens}, from a line at {$line($politics->fairTradingPriorStance)}",
                 default => "loosens merger review to {$screens}, from a line at {$line($politics->fairTradingPriorStance)}",
             },
+        ];
+    }
+
+    /**
+     * The Securities Commission's head for their headline: who they are, their stance on the markets, the margin and the
+     * room they leave companies to steer their results against those in force, when those take effect, when their term ends and whom the
+     * Council passed over. Empty before the Commission has a head.
+     *
+     * @return array<string, string>
+     */
+    private static function securitiesHeadContext(PoliticsStateDTO $politics): array
+    {
+        if ($politics->securitiesHeadName === '') {
+            return [];
+        }
+
+        $pct = static fn(float $share): string => number_format($share * 100.0, 0) . '%';
+        $stance = $politics->securitiesHeadStance;
+        $prior = $politics->securitiesPriorStance;
+        $margin = SecuritiesCommission::initialMargin($stance);
+        $scale = SecuritiesCommission::earningsManagementScale($stance);
+        $marginBefore = SecuritiesCommission::initialMargin($prior);
+        $scaleBefore = SecuritiesCommission::earningsManagementScale($prior);
+
+        return [
+            'securities_head' => $politics->securitiesHeadName,
+            'securities_head_age' => (string) (int) floor($politics->totalTime - $politics->securitiesHeadBirth),
+            'securities_head_stance' => self::MARKETS_PHRASES[SecuritiesCommission::stanceName($stance)],
+            'securities_head_term_ends' => GovernmentPageBuilder::simDate(SecuritiesCommission::headTermEnd($politics->totalTime)),
+            'securities_rules_from' => GovernmentPageBuilder::simDate($politics->securitiesHeadTermStart + SecuritiesCommission::RULE_NOTICE_YEARS),
+            'securities_head_passed_over' => self::listNames(array_map(
+                static fn(array $candidate): string => "{$candidate['name']}, who would have set margin at {$pct(SecuritiesCommission::initialMargin($candidate['markets']))}",
+                $politics->securitiesHeadPassedOver
+            )),
+            'securities_rules_change' => sprintf(
+                '%s and %s',
+                abs($margin - $marginBefore) < 0.005 ? "keeps the initial margin at {$pct($margin)}" : ($margin > $marginBefore ? 'raises' : 'lowers') . " the initial margin to {$pct($margin)} from {$pct($marginBefore)}",
+                match (true) {
+                    abs($scale - $scaleBefore) < 0.005 => 'keeps its watch on companies that dress up their results',
+                    $scale < $scaleBefore => 'steps up its pursuit of companies that dress up their results',
+                    default => 'eases off companies that dress up their results',
+                }
+            ),
         ];
     }
 

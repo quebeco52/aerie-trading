@@ -491,6 +491,10 @@ class MacroState
     public float $bankCapitalRequirement;
     public float $bankCapitalBuilt;
     public float $bankCapitalRequiredLast;
+    // The Securities Commission's rules in force: the initial margin and the scale its enforcement puts on firms'
+    // earnings management.
+    public float $initialMarginRequirement;
+    public float $earningsManagementScale;
     // The mortgage loan-to-value cap the Financial Regulator has in force (null: none), and how far it has so far held
     // household debt below where it would stand without it, in logs.
     public ?float $mortgageLtvCap;

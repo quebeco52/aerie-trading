@@ -471,6 +471,14 @@ class NarrativeEngine
                     "New head at the Fair Trading Board: The Council has named a new head of the Fair Trading Board.",
                 ]
             ),
+            ShockEvent::SECURITIES_HEAD_APPOINTED => $this->getRandomPhrase(
+                isset($context['securities_head'], $context['securities_head_age'], $context['securities_head_stance'], $context['securities_rules_change']) ? [
+                    "New head at the Securities Commission: The Council names {$context['securities_head']}, {$context['securities_head_age']}, {$context['securities_head_stance']}, to oversee the Aerie Exchange until {$context['securities_head_term_ends']}. From {$context['securities_rules_from']} the Commission {$context['securities_rules_change']}." . ($context['securities_head_passed_over'] !== '' ? " Passed over: {$context['securities_head_passed_over']}." : ''),
+                    "The Council picks who polices the Exchange: {$context['securities_head']}, {$context['securities_head_stance']}, takes the Securities Commission for a single term, and from {$context['securities_rules_from']} it {$context['securities_rules_change']}.",
+                ] : [
+                    "New head at the Securities Commission: The Council has named a new head of the Securities Commission.",
+                ]
+            ),
             ShockEvent::REGULATOR_APPOINTED => $this->getRandomPhrase(
                 isset($context['regulator'], $context['regulator_age'], $context['regulator_stance'], $context['requirement_change']) ? [
                     "New bank regulator: The Council names {$context['regulator']}, {$context['regulator_age']}, {$context['regulator_stance']}, to head the Financial Regulator until {$context['regulator_term_ends']}. The new head {$context['requirement_change']}." . ($context['regulator_passed_over'] !== '' ? " Passed over: {$context['regulator_passed_over']}." : ''),

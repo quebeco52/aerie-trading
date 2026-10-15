@@ -406,10 +406,12 @@ class EarningsEngine
         }
 
         // Analysts cut their number on the warning, so the report that follows is a smaller surprise —
-        // which is exactly why managements warn. Fair value hears the guided shortfall through the trailing
-        // return the report will book it to (MarketPricingContext), so the revision is struck either side of it.
+        // which is exactly why managements warn. They cut it by the whole shortfall, the reported number's;
+        // fair value hears only the cost squeeze, through the trailing return the report will book it to
+        // (MarketPricingContext), since the accruals reversing move reported earnings and not economic ones.
         [$fairValueBefore] = $this->strikeFairValue($stock, $macroState);
         $stock->setPreAnnouncedShortfall($knownShortfall * self::PREANNOUNCEMENT_CONSENSUS_ABSORPTION);
+        $stock->setPreAnnouncedEconomicShortfall($costSqueeze * self::PREANNOUNCEMENT_CONSENSUS_ABSORPTION);
         [$fairValueAfter] = $this->strikeFairValue($stock, $macroState);
 
         // No books close and no time passes between the two strikes, so no expected return is netted out.
@@ -1358,6 +1360,7 @@ class EarningsEngine
         // the quarter it referred to is the one now being reported.
         $ctx->expectedQuarterlyNetIncome -= $stock->getPreAnnouncedShortfall();
         $stock->setPreAnnouncedShortfall(0.0);
+        $stock->setPreAnnouncedEconomicShortfall(0.0);
 
         $ctx->reportedExpectedNetIncome = $ctx->expectedQuarterlyNetIncome;
         $ctx->reportedActualNetIncome = $ctx->actualQuarterlyNetIncome;
@@ -1449,7 +1452,8 @@ class EarningsEngine
     private function manageReportedEarnings(EarningsSimulationContext $ctx): void
     {
         $stock = $ctx->stock;
-        $propensity = $ctx->strategy->getEarningsManagementPropensity($stock);
+        // The firm's own propensity, as the Securities Commission's enforcement leans on it.
+        $propensity = min(1.0, $ctx->strategy->getEarningsManagementPropensity($stock) * $ctx->macroState->earningsManagementScale);
         $bank = $stock->getManagedAccrualBank();
 
         // Last quarter's borrowing comes due first: the reversal is booked before management looks at the

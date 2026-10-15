@@ -331,6 +331,7 @@ class PoliticsEngine
         SovereignReserveFund::advance($state, $this->mathUtility);
         Exchequer::advance($state, $this->mathUtility);
         FairTradingBoard::advance($state, $this->mathUtility);
+        SecuritiesCommission::advance($state, $this->mathUtility);
         PartyLeaders::advance($state, $dt, $this->mathUtility);
         ElectionForecast::advance($state, MacroEngine::recessionDeclared($macro));
 
@@ -340,9 +341,9 @@ class PoliticsEngine
     /**
      * The tick's political headline, the vote above all: a cabinet falling, then one taking office, then a budget round
      * that changed a lever, then the Council naming a governor, then the Financial Regulator's head, then the Sovereign
-     * Reserve Fund's head, then the Exchequer's head, then the Fair Trading Board's head, then an appointment tipping the rate committee into or out of a
-     * supermajority, then the Council electing a councillor, then a rate meeting that moved the rate a full step or split
-     * its committee. A single-tick pulse, gone on the next tick.
+     * Reserve Fund's head, then the Exchequer's head, then the Fair Trading Board's head, then the Securities
+     * Commission's head, then an appointment tipping the rate committee into or out of a supermajority, then the Council
+     * electing a councillor, then a rate meeting that moved the rate a full step or split its committee. A single-tick pulse, gone on the next tick.
      */
     public static function headline(PoliticsState $state): ?string
     {
@@ -357,6 +358,7 @@ class PoliticsEngine
             $state->lastFundHeadAppointedAt === $state->totalTime => ShockEvent::FUND_HEAD_APPOINTED,
             $state->lastExchequerHeadAppointedAt === $state->totalTime => ShockEvent::EXCHEQUER_HEAD_APPOINTED,
             $state->lastFairTradingHeadAppointedAt === $state->totalTime => ShockEvent::FAIR_TRADING_HEAD_APPOINTED,
+            $state->lastSecuritiesHeadAppointedAt === $state->totalTime => ShockEvent::SECURITIES_HEAD_APPOINTED,
             $state->lastMajorityShiftAt === $state->totalTime => ShockEvent::AUTHORITY_MAJORITY_SHIFT,
             $state->lastCouncillorSeatedAt === $state->totalTime => ShockEvent::COUNCILLOR_SEATED,
             $state->lastLeaderChangeAt === $state->totalTime => ShockEvent::PARTY_LEADER_CHANGED,

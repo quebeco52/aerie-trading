@@ -234,6 +234,23 @@ final class EarningsPreAnnouncementTest extends TestCase
     }
 
     /**
+     * A reversal moves the reported number and not the economic one: analysts take it out of their estimate, so the
+     * report confirms it, but fair value never carried it, so the warning leaves the price where it was and the report
+     * cannot bounce it back.
+     */
+    public function testAReversalCutsTheEstimateButNotFairValue(): void
+    {
+        $stock = $this->makeStock(accrualBank: 100_000_000.0 / EarningsEngine::EARNINGS_MANAGEMENT_REVERSAL_RATE * 0.5);
+        $priceBefore = (float) $stock->getPrice();
+
+        $this->assertNotEmpty($this->warn($stock));
+
+        $this->assertEqualsWithDelta(50_000_000.0 * EarningsEngine::PREANNOUNCEMENT_CONSENSUS_ABSORPTION, $stock->getPreAnnouncedShortfall(), 1e-3);
+        $this->assertSame(0.0, $stock->getPreAnnouncedEconomicShortfall());
+        $this->assertEqualsWithDelta($priceBefore, (float) $stock->getPrice(), 1e-9);
+    }
+
+    /**
      * The published percentage has to be the move the price actually took.
      *
      * Every surface that renders an event — the stock page feed, the district flare — reads change_percent
@@ -261,12 +278,15 @@ final class EarningsPreAnnouncementTest extends TestCase
     {
         $stock = $this->makeStock(accrualBank: 100_000_000.0 / EarningsEngine::EARNINGS_MANAGEMENT_REVERSAL_RATE * 0.5);
         $before = clone $stock;
-        $macro = new MacroStateDTO();
+        $macro = $this->shockedMacro();
 
         $this->warn($stock, $macro);
 
         $after = clone $before;
         $after->setPreAnnouncedShortfall($stock->getPreAnnouncedShortfall());
+        $after->setPreAnnouncedEconomicShortfall($stock->getPreAnnouncedEconomicShortfall());
+        $this->assertGreaterThan(0.0, $stock->getPreAnnouncedEconomicShortfall());
+        $this->assertGreaterThan($stock->getPreAnnouncedEconomicShortfall(), $stock->getPreAnnouncedShortfall(), 'The estimate takes the reversal too.');
         $debt = new DebtEngine(new MathUtility(), new CorporateMetrics());
         $market = new \App\Service\Market\Pricing\MarketEngine(new MathUtility());
         $anchors = new \App\Service\Corporate\Holdings\AnchorStakeLedger();

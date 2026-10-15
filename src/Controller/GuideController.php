@@ -11,6 +11,7 @@ use App\Service\Macro\MacroEngine;
 use App\Service\Macro\MacroStateProvider;
 use App\Service\Math\FinancialConstants;
 use App\Service\Season\SeasonService;
+use App\Service\Politics\SecuritiesCommission;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Attribute\Route;
@@ -22,15 +23,16 @@ class GuideController extends AbstractController
     public function index(MacroStateProvider $macroStates): Response
     {
         $macro = $macroStates->liveState();
+        $margins = SecuritiesCommission::margins($macro->initialMarginRequirement);
 
         return $this->render('guide/index.html.twig', [
             'startingCapital' => (float) SeasonService::startingCapital($macro->consumerPriceLevel),
             'stampDutyRate' => $macro->stampDutyRate,
             'cashSpread' => MacroEngine::CASH_YIELD_SPREAD,
             'marginSpread' => FinancialConstants::MARGIN_LOAN_SPREAD,
-            'initialMargin' => FinancialConstants::INITIAL_MARGIN_REQUIREMENT,
-            'maintenanceLong' => FinancialConstants::MAINTENANCE_MARGIN_LONG,
-            'maintenanceShort' => FinancialConstants::MAINTENANCE_MARGIN_SHORT,
+            'initialMargin' => $margins['initial'],
+            'maintenanceLong' => $margins['long'],
+            'maintenanceShort' => $margins['short'],
             'contractSize' => FinancialConstants::OPTION_CONTRACT_MULTIPLIER,
             'bondFace' => FinancialConstants::BOND_FACE_VALUE,
             'seasonYears' => Season::LENGTH_YEARS,

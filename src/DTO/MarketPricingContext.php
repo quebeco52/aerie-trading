@@ -120,9 +120,10 @@ class MarketPricingContext
             bookValuePerShare: $anchorStakes->resolveMarkedBookValuePerShare($stock) ?? (float) $stock->getBookValuePerShare(),
             maShock: $maShock,
             currentRoic: $strategy->getEffectiveReturn($stock),
-            // A guided shortfall is next quarter's miss, known now: it comes off the trailing return the report will
-            // book it to, so fair value hears it at the same persistence weight the report gives it.
-            roicTtm: $strategy->getTrueReturn($stock) - ($stock->getPreAnnouncedShortfall() / max(1.0, $strategy->getEvaluationCapital((float) $stock->getTotalEquity(), $stock->getInvestedCapital()))),
+            // A guided cost squeeze is next quarter's miss, known now: it comes off the trailing return the report will
+            // book it to, so fair value hears it at the same persistence weight the report gives it. Accruals reversing
+            // in the same warning move only the reported number, which the true return never carried.
+            roicTtm: $strategy->getTrueReturn($stock) - ($stock->getPreAnnouncedEconomicShortfall() / max(1.0, $strategy->getEvaluationCapital((float) $stock->getTotalEquity(), $stock->getInvestedCapital()))),
             dividendPerShare: (float) $stock->getLastDividend(),
             liveWacc: $health->wacc,
             baselineIndustryPE: Sectors::baselineIndustryPe($stock->getIndustry()),

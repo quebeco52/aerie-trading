@@ -112,6 +112,16 @@ final class PagesRenderTest extends KernelTestCase
                         'lightest' => ['delta' => 0.02, 'concentrated' => 0.25, 'shareCeiling' => 1.0], 'strictest' => ['delta' => 0.01, 'concentrated' => 0.18, 'shareCeiling' => 0.30]],
                 ],
             ]],
+            'securities' => ['/securities', 'securities/index.html.twig', [
+                'commission' => [
+                    'head' => ['name' => 'Thea Lindqvist', 'age' => 54, 'sinceLabel' => 'Year 10 Q3', 'termEndsLabel' => 'Year 15 Q3', 'opening' => false, 'stance' => 'strict',
+                        'passedOver' => [['name' => 'Arlo Mercer', 'age' => 49, 'margin' => 0.45], ['name' => 'Ines Okafor', 'age' => 56, 'margin' => 0.6]]],
+                    'inForce' => ['initial' => 0.5, 'long' => 0.25, 'short' => 0.30, 'enforcement' => 1.0],
+                    'coming' => ['fromLabel' => 'Year 10 Q4', 'initial' => 0.68, 'enforcement' => 0.7],
+                    'councilMargin' => 0.55,
+                    'rules' => ['termYears' => 5.0, 'shortlist' => 3, 'noticeMonths' => 3, 'lightestMargin' => 0.40, 'strictestMargin' => 0.80, 'lightestEnforcement' => 1.5, 'strictestEnforcement' => 0.5],
+                ],
+            ]],
             'trade_office' => ['/trade-office', 'trade_office/index.html.twig', [
                 'office' => [
                     'tariff' => ['inForce' => 0.04, 'next' => 0.06, 'expected' => 0.03, 'retaliation' => 0.025, 'revenueToGdp' => 0.0072, 'outputCost' => 0.0044, 'goodsImportsToGdp' => 0.19],

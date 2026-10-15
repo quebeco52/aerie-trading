@@ -21,6 +21,7 @@ use App\Service\Corporate\MergerAndAcquisitionEngine;
 use App\Service\Macro\MacroEngine;
 use App\Service\Macro\Subsystem\CreditFiscalSubsystem;
 use App\Service\Macro\Subsystem\SovereignFundSubsystem;
+use App\Service\Math\FinancialConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Math\Valuation;
 use App\Service\Politics\ElectionForecast;
@@ -100,7 +101,7 @@ class GovernmentPageBuilderTest extends TestCase
         $this->assertNull($this->builder()->fairTrading(new PoliticsStateDTO()));
 
         $politics = new PoliticsStateDTO(totalTime: 7.0, fairTradingHeadName: 'Odile Farrant', fairTradingHeadBirth: -48.0, fairTradingHeadTermStart: 6.0, fairTradingHeadStance: 0.8,
-            fairTradingHeadPassedOver: [['name' => 'Hal Brennan', 'birth' => -41.0, 'stance' => 0.0, 'regulation' => 0.0, 'fund' => 0.0, 'debt' => 0.0, 'competition' => -1.0]],
+            fairTradingHeadPassedOver: [['name' => 'Hal Brennan', 'birth' => -41.0, 'stance' => 0.0, 'regulation' => 0.0, 'fund' => 0.0, 'debt' => 0.0, 'competition' => -1.0, 'markets' => 0.0]],
             councilCompetitionStances: [-0.2, 0.0, 0.4]);
         $panel = $this->builder()->fairTrading($politics);
 
@@ -114,6 +115,29 @@ class GovernmentPageBuilderTest extends TestCase
         $this->assertEqualsWithDelta(MergerAndAcquisitionEngine::reviewScreens(0.5)['concentrated'], $panel['councilLine'], 1e-12);
         $this->assertEqualsWithDelta(0.30, $panel['rules']['strictest']['shareCeiling'], 1e-12);
         $this->assertSame(1.0, $panel['rules']['lightest']['shareCeiling']);
+    }
+
+    /** The Securities Commission's panel: the rules in force read off the economy, a new head's coming ones through their notice, and none once it has run. */
+    public function testTheSecuritiesPanelReadsTheRulesInForceAndComing(): void
+    {
+        $this->assertNull($this->builder()->securities(new PoliticsStateDTO(), new MacroStateDTO()));
+
+        $politics = new PoliticsStateDTO(totalTime: 9.6, securitiesHeadName: 'Thea Lindqvist', securitiesHeadBirth: -45.0, securitiesHeadTermStart: 9.5, securitiesHeadStance: 1.0,
+            councilMarketsStances: [-0.5, 0.0, 0.5]);
+        $panel = $this->builder()->securities($politics, new MacroStateDTO(initialMarginRequirement: 0.5));
+
+        $this->assertNotNull($panel);
+        $this->assertSame('strict', $panel['head']['stance']);
+        $this->assertSame(0.5, $panel['inForce']['initial']);
+        $this->assertSame(FinancialConstants::MAINTENANCE_MARGIN_SHORT, $panel['inForce']['short']);
+        $this->assertNotNull($panel['coming']);
+        $this->assertEqualsWithDelta(0.80, $panel['coming']['initial'], 1e-12);
+        $this->assertEqualsWithDelta(0.5, $panel['coming']['enforcement'], 1e-12);
+        $this->assertSame(FinancialConstants::INITIAL_MARGIN_REQUIREMENT, $panel['councilMargin']);
+        $this->assertSame(3, $panel['rules']['noticeMonths']);
+
+        $later = new PoliticsStateDTO(totalTime: 10.0, securitiesHeadName: 'Thea Lindqvist', securitiesHeadTermStart: 9.5, securitiesHeadStance: 1.0);
+        $this->assertNull($this->builder()->securities($later, new MacroStateDTO())['coming'] ?? null, 'Once the notice has run the rules are in force.');
     }
 
     public function testTheDietAtYearOneIsDrawnSeatForSeat(): void
@@ -605,7 +629,7 @@ class GovernmentPageBuilderTest extends TestCase
             regulatorBirth: -45.0,
             regulatorTermStart: 7.0,
             regulatorStance: $regime,
-            regulatorPassedOver: [['name' => 'Other One', 'birth' => -50.0, 'stance' => 0.0, 'regulation' => -1.0, 'fund' => 0.0, 'debt' => 0.0, 'competition' => 0.0]],
+            regulatorPassedOver: [['name' => 'Other One', 'birth' => -50.0, 'stance' => 0.0, 'regulation' => -1.0, 'fund' => 0.0, 'debt' => 0.0, 'competition' => 0.0, 'markets' => 0.0]],
             bankCapitalRequirement: 0.1012,
             requirementPhaseFrom: 0.094,
             requirementPhaseStart: 7.0,

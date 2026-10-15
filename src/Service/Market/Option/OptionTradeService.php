@@ -196,7 +196,7 @@ final class OptionTradeService
         // contract provides. Handing it over unconverted asked the account for half of what the contract
         // actually needs, and the write would then fill and call the account on the very same tick. Grossing
         // it up by the initial requirement expresses it in the units canOpen speaks.
-        $positionEquivalent = $requirement / FinancialConstants::INITIAL_MARGIN_REQUIREMENT;
+        $positionEquivalent = $requirement / $this->marginEngine->margins()['initial'];
 
         if (!$this->marginEngine->canOpen($user, $positionEquivalent)) {
             throw new \Exception('Insufficient buying power to collateralize this position.');

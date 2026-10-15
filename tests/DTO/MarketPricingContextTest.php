@@ -49,8 +49,9 @@ class MarketPricingContextTest extends TestCase
     }
 
     /**
-     * A guided shortfall is next quarter's miss, known now: it comes off the trailing return the report will book it
+     * A guided cost squeeze is next quarter's miss, known now: it comes off the trailing return the report will book it
      * to, scaled by the capital the return is measured on, so fair value hears it through the same persistence weight.
+     * The accruals reversing in the same warning move only the reported number, and leave the return alone.
      */
     public function testAGuidedShortfallComesOffTheTrailingReturn(): void
     {
@@ -58,7 +59,10 @@ class MarketPricingContextTest extends TestCase
         $firm = $this->firm('SOFT', 'Software - Infrastructure');
         $before = MarketPricingContext::forStock($firm, $macroState, $this->health($firm, $macroState), new AnchorStakeLedger())->roicTtm;
 
-        $firm->setPreAnnouncedShortfall(1_000_000_000.0);
+        $firm->setPreAnnouncedShortfall(1_500_000_000.0);
+        $this->assertSame($before, MarketPricingContext::forStock($firm, $macroState, $this->health($firm, $macroState), new AnchorStakeLedger())->roicTtm, 'A reported-only shortfall is no economic news.');
+
+        $firm->setPreAnnouncedEconomicShortfall(1_000_000_000.0);
         $after = MarketPricingContext::forStock($firm, $macroState, $this->health($firm, $macroState), new AnchorStakeLedger())->roicTtm;
 
         $capital = \App\Data\Company\Sectors::strategyFor($firm->getIndustry())->getEvaluationCapital((float) $firm->getTotalEquity(), $firm->getInvestedCapital());

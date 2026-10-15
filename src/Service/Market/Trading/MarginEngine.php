@@ -6,13 +6,16 @@ namespace App\Service\Market\Trading;
 
 use App\DTO\MarginStatusDTO;
 use App\Entity\User;
+use App\Service\Macro\MacroStateProvider;
 use App\Service\Math\FinancialConstants;
+use App\Service\Politics\SecuritiesCommission;
 use App\Service\User\Portfolio;
 use Doctrine\ORM\EntityManagerInterface;
 use App\Service\Market\Option\OptionMarginCalculator;
 
 /**
- * Regulation T margin accounting: what an account is worth, what it must keep, and when it gets called.
+ * Regulation T margin accounting: what an account is worth, what it must keep, and when it gets called, at the
+ * margins the Securities Commission sets (App\Service\Politics\SecuritiesCommission).
  *
  * Leverage is what makes a market position able to end an account rather than merely dent it. Without it a
  * player can lose their stake and no more, so every position is survivable and nothing ever forces a hand.
@@ -35,7 +38,19 @@ final class MarginEngine
     public function __construct(
         private readonly EntityManagerInterface $entityManager,
         private readonly OptionMarginCalculator $optionMarginCalculator,
+        private readonly ?MacroStateProvider $macroStates = null,
     ) {}
+
+    /**
+     * The margins in force: the Securities Commission's initial margin and the maintenance that follows it, the founding
+     * Regulation T ones before the ticker has published an economy.
+     *
+     * @return array{initial: float, long: float, short: float}
+     */
+    public function margins(): array
+    {
+        return SecuritiesCommission::margins($this->macroStates?->liveState()->initialMarginRequirement ?? FinancialConstants::INITIAL_MARGIN_REQUIREMENT);
+    }
 
     /**
      * Marks an account against live prices.
@@ -122,14 +137,15 @@ final class MarginEngine
         // richer by the premium it collected, for as long as the position stayed open.
         $equity = $cash + $longMarketValue + $optionLongValue - $marginDebit - $shortMarketValue - $optionShortValue;
 
-        $maintenance = (FinancialConstants::MAINTENANCE_MARGIN_LONG * $longMarketValue)
-            + (FinancialConstants::MAINTENANCE_MARGIN_SHORT * $shortMarketValue)
+        $margins = $this->margins();
+        $maintenance = ($margins['long'] * $longMarketValue)
+            + ($margins['short'] * $shortMarketValue)
             + $optionRequirement;
 
-        // Buying power: free equity above initial requirement scaled by Reg-T initial margin less open buy commitments.
-        $initialRequirement = (FinancialConstants::INITIAL_MARGIN_REQUIREMENT * ($longMarketValue + $shortMarketValue))
+        // Buying power: free equity above initial requirement scaled by the initial margin, less open buy commitments.
+        $initialRequirement = ($margins['initial'] * ($longMarketValue + $shortMarketValue))
             + $optionRequirement;
-        $buyingPower = max(0.0, ($equity - $initialRequirement) / FinancialConstants::INITIAL_MARGIN_REQUIREMENT - $openBuyCommitment);
+        $buyingPower = max(0.0, ($equity - $initialRequirement) / $margins['initial'] - $openBuyCommitment);
 
         return new MarginStatusDTO(
             cash: $cash,
@@ -179,7 +195,7 @@ final class MarginEngine
             return 0.0;
         }
 
-        $targetRate = FinancialConstants::MAINTENANCE_MARGIN_LONG + self::LIQUIDATION_EQUITY_BUFFER;
+        $targetRate = $this->margins()['long'] + self::LIQUIDATION_EQUITY_BUFFER;
         $required = $status->longMarketValue - ($status->equity / max(0.01, $targetRate));
 
         return min(

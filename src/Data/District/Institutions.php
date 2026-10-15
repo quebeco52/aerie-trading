@@ -22,6 +22,8 @@ final class Institutions
     public const SOVEREIGN_RESERVE_FUND = 'Sovereign Reserve Fund';
     /** Sets the screens merger review applies; its head is the Council's appointee. Never the Competition Commission. */
     public const FAIR_TRADING_BOARD = 'Fair Trading Board';
+    /** Sets the rules of the Aerie Exchange: the margin investors put up and what listed firms must disclose. Never the SEC. */
+    public const SECURITIES_COMMISSION = 'Securities Commission';
     public const TRADE_MIGRATION_OFFICE = 'Trade & Migration Office';
     public const STATISTICAL_OFFICE = 'Statistical Office';
     public const CREDIT_REGISTRY = 'Credit Registry';
@@ -51,6 +53,7 @@ final class Institutions
         'exchequer' => self::EXCHEQUER,
         'sovereign-reserve-fund' => self::SOVEREIGN_RESERVE_FUND,
         'fair-trading-board' => self::FAIR_TRADING_BOARD,
+        'securities-commission' => self::SECURITIES_COMMISSION,
         'trade-migration-office' => self::TRADE_MIGRATION_OFFICE,
         'statistical-office' => self::STATISTICAL_OFFICE,
         'credit-registry' => self::CREDIT_REGISTRY,

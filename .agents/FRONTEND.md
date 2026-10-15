@@ -28,6 +28,7 @@ the glossary does not have.
 | Exchequer | Runs the budget and the District's debt; issues its bonds (never "Treasury") |
 | Sovereign Reserve Fund | The District's wealth fund ("the Fund" once named) |
 | Fair Trading Board | Merger review (never "Competition Commission") |
+| Securities Commission | Margin and disclosure rules on the Aerie Exchange (never "SEC") |
 | Trade & Migration Office | Tariffs and migration quotas |
 | Statistical Office, Credit Registry, Land Registry, Freight Authority, Manufactory Board, Works Ministry | Data publishers and the district map's buildings |
 | Aerie Exchange | The securities market this site belongs to (never "Lakebird Exchange") |

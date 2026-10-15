@@ -511,6 +511,13 @@ class Stock
     private ?float $preAnnouncedShortfall = null;
 
     /**
+     * @var float|null The part of that shortfall that is economic, the cost squeeze, which fair value hears; the rest
+     *                 is managed accruals reversing, which only the reported number carries. Cleared with it.
+     */
+    #[ORM\Column(type: 'float', nullable: true)]
+    private ?float $preAnnouncedEconomicShortfall = null;
+
+    /**
      * @var string|null Persistent management style biasing payout, reinvestment and the hurdle rate applied to growth (Bertrand & Schoar 2003); null is the balanced default.
      */
     #[ORM\Column(type: 'string', length: 32, nullable: true)]
@@ -1669,6 +1676,18 @@ class Stock
     public function setPreAnnouncedShortfall(float $preAnnouncedShortfall): static
     {
         $this->preAnnouncedShortfall = $preAnnouncedShortfall;
+
+        return $this;
+    }
+
+    public function getPreAnnouncedEconomicShortfall(): float
+    {
+        return (float) ($this->preAnnouncedEconomicShortfall ?? 0.0);
+    }
+
+    public function setPreAnnouncedEconomicShortfall(float $preAnnouncedEconomicShortfall): static
+    {
+        $this->preAnnouncedEconomicShortfall = $preAnnouncedEconomicShortfall;
 
         return $this;
     }

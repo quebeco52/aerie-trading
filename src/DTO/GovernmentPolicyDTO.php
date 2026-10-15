@@ -55,6 +55,10 @@ final readonly class GovernmentPolicyDTO
         public float $neutralCountercyclicalBuffer = 0.0,
         /** The policy equity share the Sovereign Reserve Fund's head has set; null while the head sitting at Year 1 keeps the mix the fund opened with. */
         public ?float $reserveFundEquityShare = null,
+        /** The initial margin the Securities Commission requires of an investor buying or shorting on credit; null for the founding Regulation T margin. */
+        public ?float $initialMarginRequirement = null,
+        /** The multiplier the Commission's enforcement puts on each firm's propensity to manage its reported earnings; null for none. */
+        public ?float $earningsManagementScale = null,
         /** The average maturity, in years, the Exchequer's head steers the debt toward; null while the head sitting at Year 1 keeps the book the debt opened with. */
         public ?float $debtAverageMaturity = null,
         /** @var array<string, float>|null The levers the sitting government will pass at its next budget round, keyed as App\Service\Politics\PoliticsEngine::LEVER_FIELDS; null before they have been read. */

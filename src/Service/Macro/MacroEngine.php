@@ -15,6 +15,7 @@ use App\Service\Macro\Subsystem\MonetaryPolicySubsystem;
 use App\Service\Macro\Subsystem\SovereignFundSubsystem;
 use App\Service\Event\ShockEvent;
 use App\Service\Math\MathUtility;
+use App\Service\Politics\SecuritiesCommission;
 use Psr\Log\LoggerInterface;
 
 class MacroEngine
@@ -895,6 +896,9 @@ class MacroEngine
         $state->neutralCountercyclicalBuffer = $policy->neutralCountercyclicalBuffer;
         $state->sovereignFundMandateEquityShare = $policy->reserveFundEquityShare ?? $state->sovereignFundMandateEquityShare;
         $state->sovereignDebtMaturityTarget = $policy->debtAverageMaturity ?? $state->sovereignDebtMaturityTarget;
+        // No rule from the Securities Commission is the founding one, not the last one in force.
+        $state->initialMarginRequirement = $policy->initialMarginRequirement ?? SecuritiesCommission::initialMargin(null);
+        $state->earningsManagementScale = $policy->earningsManagementScale ?? SecuritiesCommission::earningsManagementScale(null);
 
         $state->previousSittingLevers = $state->sittingLevers;
         $state->previousSittingPolicyFrom = $state->sittingPolicyFrom;

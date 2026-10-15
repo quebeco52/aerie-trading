@@ -29,6 +29,36 @@ class MarginEngineTest extends TestCase
         $this->engine = new MarginEngine($em, new OptionMarginCalculator($em));
     }
 
+    /**
+     * The margins are the Securities Commission's: a live initial margin of 80% gives half the buying power of 40%, and
+     * maintenance, which guards the collateral, stays where it was founded.
+     */
+    public function testTheCommissionsInitialMarginSetsBuyingPower(): void
+    {
+        $em = $this->createStub(EntityManagerInterface::class);
+        $engine = static function (float $initial) use ($em): MarginEngine {
+            $macro = new class ($initial) extends \App\Service\Macro\MacroStateProvider {
+                public function __construct(private readonly float $initial) {}
+
+                public function liveState(): \App\DTO\MacroStateDTO
+                {
+                    return new \App\DTO\MacroStateDTO(initialMarginRequirement: $this->initial);
+                }
+            };
+
+            return new MarginEngine($em, new OptionMarginCalculator($em), $macro);
+        };
+
+        $strict = $engine(0.80)->evaluate(cash: 10000.0, longMarketValue: 0.0, shortMarketValue: 0.0, marginDebit: 0.0);
+        $light = $engine(0.40)->evaluate(cash: 10000.0, longMarketValue: 0.0, shortMarketValue: 0.0, marginDebit: 0.0);
+        $this->assertEqualsWithDelta(12500.0, $strict->buyingPower, 1e-9);
+        $this->assertEqualsWithDelta(2.0 * $strict->buyingPower, $light->buyingPower, 1e-9);
+        $this->assertEqualsWithDelta(20000.0, $this->engine->evaluate(cash: 10000.0, longMarketValue: 0.0, shortMarketValue: 0.0, marginDebit: 0.0)->buyingPower, 1e-9, 'Before the ticker publishes, the founding 50%.');
+
+        $held = $engine(0.80)->evaluate(cash: -5000.0, longMarketValue: 10000.0, shortMarketValue: 0.0, marginDebit: 0.0);
+        $this->assertSame(FinancialConstants::MAINTENANCE_MARGIN_LONG * 10000.0, $held->maintenanceRequirement, 'A stricter head calls no position already open.');
+    }
+
     public function testAnUnleveredCashAccountIsAllEquity(): void
     {
         $status = $this->engine->evaluate(cash: 10000.0, longMarketValue: 0.0, shortMarketValue: 0.0, marginDebit: 0.0);
