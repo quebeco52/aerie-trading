@@ -445,7 +445,7 @@ class MacroState
     public float $dividendTaxRate;
     public float $debtTarget;
     public float $councilDebtLine;
-    // The debt anchor the budget in force plans against, phased toward the legislated one; below zero before any plan has run.
+    // The debt anchor the budget in force plans against, phased down toward a lower legislated one; below zero before any plan has run.
     public float $debtAnchorInForce;
     // The Monetary Authority's rate committee: its supermajority, and whether politics hands one over at all.
     public float $authorityMajority;

@@ -407,7 +407,7 @@ readonly class MacroStateDTO
         public float $debtTarget = CreditFiscalSubsystem::SOVEREIGN_DEBT_NEUTRAL_THRESHOLD,
         /** The Council's debt line, which caps the Diet's target. */
         public float $councilDebtLine = MacroEngine::SOVEREIGN_RISK_DEBT_THRESHOLD,
-        /** The debt anchor the budget in force plans against, phased toward the Diet's target at the consolidation pace; below zero before any plan has run (App\Service\Macro\Subsystem\CreditFiscalSubsystem::phaseDebtAnchor()). */
+        /** The debt anchor the budget in force plans against, phased down to a lower target at the consolidation pace, up to a higher one at once; below zero before any plan has run (App\Service\Macro\Subsystem\CreditFiscalSubsystem::phaseDebtAnchor()). */
         public float $debtAnchorInForce = -1.0,
         /** The rate committee's supermajority, 1 hawkish, -1 dovish, 0 neither (App\Service\Politics\MonetaryAuthority). */
         public float $authorityMajority = 0.0,

@@ -101,6 +101,56 @@ class MacroEngineTest extends TestCase
         $this->assertGreaterThan(0.0, $result->freightRateIndex);
     }
 
+    public function testALostStateIsRefusedOnceTheClockHasRun(): void
+    {
+        $this->redisMock->expects($this->atLeastOnce())->method('get')->with('macroeconomic_state')->willReturn(false);
+        $this->redisMock->expects($this->never())->method('set');
+
+        $this->expectException(\RuntimeException::class);
+        $this->engine->alignClock(205.8678);
+    }
+
+    public function testAnUndecodableStateIsRefusedOnceTheClockHasRun(): void
+    {
+        $this->redisMock->expects($this->atLeastOnce())->method('get')->with('macroeconomic_state')->willReturn('{"total_time": 205.');
+        $this->redisMock->expects($this->never())->method('set');
+
+        $this->expectException(\RuntimeException::class);
+        $this->engine->alignClock(205.8678);
+    }
+
+    public function testAFreshWorldOpensOnTheOpeningState(): void
+    {
+        $this->redisMock->expects($this->atLeastOnce())->method('get')->with('macroeconomic_state')->willReturn(false);
+        $this->redisMock->expects($this->never())->method('set');
+
+        $this->engine->alignClock(0.0);
+        $this->addToAssertionCount(1);
+    }
+
+    public function testAKeptStateIsRealignedNotReplaced(): void
+    {
+        $state = new \App\Service\Macro\MacroState();
+        $state->totalTime = 205.868056;
+        $state->gdpDeflator = 92.57;
+        $this->redisMock->expects($this->atLeastOnce())->method('get')->with('macroeconomic_state')
+            ->willReturn(json_encode($state->toArray(), JSON_PRESERVE_ZERO_FRACTION));
+
+        $saved = null;
+        $this->redisMock->expects($this->once())->method('set')
+            ->willReturnCallback(function (string $key, mixed $value) use (&$saved): bool {
+                $saved = json_decode((string) $value, true);
+
+                return true;
+            });
+
+        $this->engine->alignClock(205.867778);
+
+        $this->assertIsArray($saved);
+        $this->assertSame(205.867778, $saved['total_time']);
+        $this->assertSame(92.57, $saved['gdp_deflator'], 'The price level survives the realignment.');
+    }
+
     public function testAStrategicDividendIsReadForItsOwnTickAndNeverReplayed(): void
     {
         $saved = false;

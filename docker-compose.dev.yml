@@ -124,6 +124,11 @@ services:
   aerie-redis:
     image: redis:8.6-trixie
     restart: unless-stopped
+    # The macro state and the clock cache live here; an append-only file on a named volume keeps them across
+    # `down`/`up`. The ticker refuses to resume a clock whose macro state is gone.
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis_data:/data
     ports:
       - "127.0.0.1:6379:6379"
 
@@ -147,3 +152,4 @@ volumes:
   caddy_data:
   caddy_config:
   db_data:
+  redis_data:

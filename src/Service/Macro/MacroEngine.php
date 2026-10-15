@@ -446,21 +446,27 @@ class MacroEngine
 
     private function loadState(): MacroState
     {
+        return $this->readPersistedState() ?? new MacroState();
+    }
+
+    /** The state Redis holds, or null when it holds none that decodes. */
+    private function readPersistedState(): ?MacroState
+    {
         $rawState = $this->redis->get(self::REDIS_MACRO_STATE);
         if (!is_string($rawState) || trim($rawState) === '') {
-            return new MacroState();
+            return null;
         }
 
         try {
             $decoded = json_decode($rawState, true, 512, JSON_THROW_ON_ERROR);
             if (!is_array($decoded)) {
                 $this->logger?->warning('Corrupt macroeconomic state in Redis: expected array, got ' . gettype($decoded));
-                return new MacroState();
+                return null;
             }
             return MacroState::fromArray($decoded);
         } catch (\Throwable $e) {
             $this->logger?->error('Failed to decode macroeconomic state from Redis: ' . $e->getMessage());
-            return new MacroState();
+            return null;
         }
     }
 
@@ -488,10 +494,28 @@ class MacroEngine
      * — the rate, the regime, where the cycle stands — is a level with no record of when it was taken, and
      * there is nothing to reconcile it against; only time itself can be corrected, and it has to be, because
      * the expiry grids and sampling cadences read off it. The ticker does this once at start-up.
+     *
+     * A cache with no state at all is refused once the clock has run: an opening state stamped with a late clock is
+     * a Year-1 economy (deflator 1.0) under a board carrying every year of nominal growth since, and the firms that
+     * report on it book their plant at a price level a hundredth of the one they bought it at.
+     *
+     * @throws \RuntimeException When Redis holds no macro state and the clock is past the opening.
      */
     public function alignClock(float $totalTime): void
     {
-        $state = $this->loadState();
+        $state = $this->readPersistedState();
+        if ($state === null) {
+            if ($totalTime > 0.0) {
+                throw new \RuntimeException(sprintf(
+                    'No macroeconomic state in Redis (key "%s") while the simulation clock stands at year %.4f. '
+                    . 'Restore the key, or start over with app:market-reset; opening a fresh economy here would run '
+                    . 'Year-1 prices under the current board.',
+                    self::REDIS_MACRO_STATE,
+                    $totalTime
+                ));
+            }
+            $state = new MacroState();
+        }
 
         if ($state->totalTime === $totalTime) {
             return;

@@ -70,7 +70,7 @@ class CreditFiscalSubsystem
     public const BOHN_FISCAL_REACTION_SENSITIVITY = 0.10;
     /** Share of the Bohn surplus the budget raises by tax at the District's founding, the rest by cutting purchases: the average OECD deficit-cutting plan's, 0.69 of 1.83% of GDP (Alesina, Azzalini, Favero, Giavazzi & Miano 2018, Table 8; 16 countries, 1981-2014). */
     public const FOUNDING_CONSOLIDATION_TAX_SHARE = 0.69 / 1.83;
-    /** Structural adjustment a year a budget plan phases a new debt target in at: 0.5% of GDP, the benchmark of the EU's corrective path (Regulation (EU) 2024/1264, amending 1467/97). */
+    /** Structural adjustment a year a budget plan phases a lower debt target in at: 0.5% of GDP, the benchmark of the EU's corrective path (Regulation (EU) 2024/1264, amending 1467/97). */
     public const CONSOLIDATION_PACE = 0.005;
 
     // --- Sovereign Risk Premium (Laubach 2009) ---
@@ -592,20 +592,21 @@ class CreditFiscalSubsystem
     }
 
     /**
-     * Phases a new debt target in as a budget plan does: the anchor moves so the surplus the reaction calls for changes by
-     * CONSOLIDATION_PACE of GDP a year, either way. A new government's target is a multi-year plan, not this year's
-     * budget, while debt itself moving still reaches the reaction at once (Bohn 1998).
+     * Phases a lower debt target in as a corrective plan does: the anchor falls so the surplus the reaction calls for
+     * rises by CONSOLIDATION_PACE of GDP a year. The corrective path paces tightening only, so a higher target is in force
+     * at once and the tax rate phases it in (MacroEngine::FISCAL_ADJUSTMENT_SPEED). Debt itself moving still reaches the
+     * reaction at once (Bohn 1998).
      */
     public static function phaseDebtAnchor(MacroState $state, float $dt): void
     {
         $legislated = self::legislatedDebtAnchor($state);
-        if ($state->debtAnchorInForce < 0.0) {
+        if ($state->debtAnchorInForce < 0.0 || $legislated >= $state->debtAnchorInForce) {
             $state->debtAnchorInForce = $legislated;
 
             return;
         }
         $step = self::CONSOLIDATION_PACE / self::BOHN_FISCAL_REACTION_SENSITIVITY * $dt;
-        $state->debtAnchorInForce += max(-$step, min($step, $legislated - $state->debtAnchorInForce));
+        $state->debtAnchorInForce = max($legislated, $state->debtAnchorInForce - $step);
     }
 
     /**

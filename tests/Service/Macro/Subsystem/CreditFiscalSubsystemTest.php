@@ -3028,6 +3028,28 @@ class CreditFiscalSubsystemTest extends TestCase
         $this->assertEqualsWithDelta(0.425, CreditFiscalSubsystem::debtAnchor($state), 1e-12, 'and the plan ends on the target, without passing it.');
     }
 
+    /** The corrective path paces tightening only: a higher target is in force at once, even partway through a plan. */
+    public function testAHigherDebtTargetIsInForceAtOnce(): void
+    {
+        $state = new MacroState();
+        $state->debtTarget = 0.84;
+        $state->councilDebtLine = 1.0;
+        CreditFiscalSubsystem::phaseDebtAnchor($state, 0.01);
+        $state->debtTarget = 0.37;
+        for ($i = 0; $i < 360 * 4; $i++) {
+            CreditFiscalSubsystem::phaseDebtAnchor($state, 1.0 / 360.0);
+        }
+        $this->assertEqualsWithDelta(0.64, CreditFiscalSubsystem::debtAnchor($state), 1e-9, 'Four years into the plan, the anchor has fallen 5pp a year.');
+
+        $state->debtTarget = 0.90;
+        CreditFiscalSubsystem::phaseDebtAnchor($state, 1.0 / 360.0);
+        $this->assertEqualsWithDelta(0.90, CreditFiscalSubsystem::debtAnchor($state), 1e-12, 'A looser government\'s target replaces the plan at once.');
+
+        $state->councilDebtLine = 0.75;
+        CreditFiscalSubsystem::phaseDebtAnchor($state, 1.0 / 360.0);
+        $this->assertLessThan(0.90, CreditFiscalSubsystem::debtAnchor($state), 'A lower Council line is a tightening, so it is phased in.');
+    }
+
     /** The pace is per year, whatever the tick. */
     public function testTheConsolidationPaceIsInvariantToTheTickRate(): void
     {
