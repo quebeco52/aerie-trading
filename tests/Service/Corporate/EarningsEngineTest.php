@@ -2563,7 +2563,7 @@ class EarningsEngineTest extends TestCase
                 ? $captured->actualVariableCosts / $captured->actualRevenue
                 : $captured->realizedVariableMargin;
             $beforeCharges = ($captured->seasonallyAdjustedRevenue * (1.0 - $costRatio))
-                - $captured->fixedCosts
+                - ($captured->fixedCosts / $captured->seasonalFixedCostFactor)
                 - $captured->quarterlyDepreciation;
 
             $this->assertEqualsWithDelta(

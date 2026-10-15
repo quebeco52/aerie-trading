@@ -106,6 +106,19 @@ class IndustryPositionBuilderTest extends TestCase
         $this->assertNull($view['industry']['priceLevel'], 'no report has been filed yet');
     }
 
+    /** Conglomerates is a listing label: its members sell nothing the others buy, so their revenue is no one's share. */
+    public function testListedPeersThatSellIntoDifferentMarketsShowNoShareAmongThem(): void
+    {
+        $group = $this->stock('GRP', 'Conglomerates', 1_000.0);
+        $other = $this->stock('OTH', 'Conglomerates', 3_000.0);
+        $this->ledger->recordIdiosyncraticGain($other, 3_000.0, 0.0, 0.5, 10);
+
+        $industry = $this->builder(null)->build($group, new MacroStateDTO())['industry'];
+
+        $this->assertSame(2, $industry['rosterSize'], 'the roster is still there');
+        $this->assertNull($industry['rosterShare']);
+    }
+
     /**
      * The card reads the market the M&A engine sizes deals on. A leader at 30% beside a peer at 10% sits in a
      * market with HHI 1,000 and 60% of fringe; at 30% the leader already holds the share ceiling, so the only

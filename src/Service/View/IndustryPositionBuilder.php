@@ -127,8 +127,9 @@ class IndustryPositionBuilder
                     'marginalReturn' => $stock->isBankrupt() ? 0.0 : $this->corporateMetrics->calculateMarginalReturn($stock, $trueReturn, $saturationPenalty, $evaluationCapital, $macroState),
                     'moatFactor' => FinancialConstants::SYSTEMIC_MOAT_FACTORS[$stock->getSystemicImportance()] ?? FinancialConstants::SYSTEMIC_MOAT_FACTORS['default'],
                 ],
-                // Only a share of something when there is someone else in the roster to share it with.
-                'rosterShare' => $rosterSize > 1 ? $description['revenue_share'] : null,
+                // Only a share of something when there is someone else in the roster to share it with, selling
+                // the same thing: a listing label (conglomerates) groups firms that sell nothing the others buy.
+                'rosterShare' => $rosterSize > 1 && $substitutability > 0.0 ? $description['revenue_share'] : null,
                 'peerShares' => $peerShares,
                 'rosterSize' => $rosterSize,
                 'capacityRatio' => $capacityRatio,

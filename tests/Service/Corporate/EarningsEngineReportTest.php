@@ -615,6 +615,44 @@ class EarningsEngineReportTest extends TestCase
         $this->assertEqualsWithDelta($q1RunRate, $q4RunRate, $q1RunRate * 0.01, 'SAAR must not carry seasonal swings');
     }
 
+    /**
+     * A retailer staffs, rents and stocks up for its holiday peak: most of its fixed base follows the season, so the
+     * peak quarter earns a few points more margin than a slack one, and a slack quarter is no loss.
+     */
+    public function testAHighFixedCostRetailerEarnsThroughItsSlackQuarter(): void
+    {
+        $stock = new Stock();
+        $stock->setTicker('RETAIL_FIX');
+        $stock->setIndustry('Internet Retail');
+        $stock->setSharesOutstanding('1000000');
+        $stock->setTotalEquity('100000000');
+        $stock->setBaselineRoic('0.15');
+        $stock->setOperatingMargin('0.09');
+        $stock->setFixedCostRatio(0.70);
+        $stock->setVolatility('0.15');
+        $stock->setCurrentVolatility('0.15');
+
+        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
+        $macro = new \App\DTO\MacroStateDTO();
+        $ticksPerQuarter = 63;
+        $reportingTick = $this->getReportingTick('RETAIL_FIX');
+        $margin = static function (Stock $stock): float {
+            $history = $stock->getQuarterlyOperatingHistory() ?? [];
+            $last = end($history);
+
+            return $last !== false && $last['revenue'] > 0.0 ? $last['ebit'] / $last['revenue'] : 0.0;
+        };
+
+        $this->engine->calculate($stock, $macro, $ticksPerQuarter + $reportingTick, 252);
+        $slack = $margin($stock);
+        $this->engine->calculate($stock, $macro, (4 * $ticksPerQuarter) + $reportingTick, 252);
+        $peak = $margin($stock);
+
+        $this->assertGreaterThan(0.0, $slack, 'The slack quarter still earns.');
+        $this->assertGreaterThan($slack, $peak, 'The peak quarter earns more,');
+        $this->assertLessThan(0.10, $peak - $slack, 'but by a few points, not the whole year\'s profit.');
+    }
+
     public function testCapacityUtilizationOvertimeConvexityAndClamping(): void
     {
         $stock = new Stock();

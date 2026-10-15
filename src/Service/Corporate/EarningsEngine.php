@@ -725,7 +725,10 @@ class EarningsEngine
         // resourced for until it restructures, which is why the structural figure is what gets scaled.
         // Rules that cost the firm productivity raise it per unit of capacity as they raise its unit costs.
         $structuralFixedCosts = $cashStructuralCosts * $fixedCostRatio * $wageInflationFactor * $strategy->getFixedCostFactor($macroState);
-        $ctx->fixedCosts = $structuralFixedCosts * $this->resolveCommittedCostScale($ctx);
+        // A firm staffs, rents and stocks up for its peak and lets the extra go after it: the seasonal share of the base
+        // follows the season, the rest (rent, depreciation, head office) carries evenly through the year.
+        $ctx->seasonalFixedCostFactor = 1.0 - FinancialConstants::SEASONAL_FIXED_COST_SHARE + (FinancialConstants::SEASONAL_FIXED_COST_SHARE * $ctx->seasonalFactor);
+        $ctx->fixedCosts = $structuralFixedCosts * $this->resolveCommittedCostScale($ctx) * $ctx->seasonalFixedCostFactor;
 
         $structuralVariableCosts = $cashStructuralCosts - ($cashStructuralCosts * $fixedCostRatio);
         $ctx->baselineVariableMargin = $structuralVariableCosts / $ctx->structuralRevenue;
@@ -1231,7 +1234,7 @@ class EarningsEngine
         // losses, working capital provisions) deducted and the special items not: a restructuring or a plant write-down
         // is charged once, to equity, and a run rate that carried it would capitalize it into the return fair value reads.
         $ctx->specialCharges = $ctx->restructuringCharge + $ctx->plantImpairment;
-        $ctx->seasonallyAdjustedEbit = ($ctx->seasonallyAdjustedRevenue * (1.0 - $realizedCostRatio)) - $ctx->fixedCosts - $ctx->quarterlyDepreciation - ($ctx->impairmentCharges - $ctx->plantImpairment);
+        $ctx->seasonallyAdjustedEbit = ($ctx->seasonallyAdjustedRevenue * (1.0 - $realizedCostRatio)) - ($ctx->fixedCosts / $ctx->seasonalFixedCostFactor) - $ctx->quarterlyDepreciation - ($ctx->impairmentCharges - $ctx->plantImpairment);
         $ctx->structuralOperatingMargin = $ctx->seasonallyAdjustedEbit / max(1.0, $ctx->seasonallyAdjustedRevenue);
 
         // Persist the margin the firm actually earned. The stock's operatingMargin is the slow structural
@@ -1264,7 +1267,7 @@ class EarningsEngine
         ));
 
         $saExpectedRevenue = $ctx->expectedRevenue / max(0.01, $ctx->seasonalFactor);
-        $saExpectedEbit = ($saExpectedRevenue * (1.0 - $ctx->baselineVariableMargin)) - $ctx->fixedCosts - $ctx->quarterlyDepreciation - $ctx->expectedCreditLossProvision;
+        $saExpectedEbit = ($saExpectedRevenue * (1.0 - $ctx->baselineVariableMargin)) - ($ctx->fixedCosts / $ctx->seasonalFixedCostFactor) - $ctx->quarterlyDepreciation - $ctx->expectedCreditLossProvision;
         $saExpectedMargin = $saExpectedEbit / max(1.0, $saExpectedRevenue);
         $expectedDebtMetrics = $this->debtEngine->calculateInterestExpense($stock, $ctx->macroState, false, $saExpectedRevenue * 4.0, $saExpectedMargin);
         $ctx->expectedInterestExpense = $expectedDebtMetrics->interestExpense / 4.0;
@@ -1881,7 +1884,7 @@ class EarningsEngine
             return;
         }
 
-        $structuralFixedCosts = $ctx->fixedCosts / $ctx->committedCostScale;
+        $structuralFixedCosts = $ctx->fixedCosts / ($ctx->committedCostScale * $ctx->seasonalFixedCostFactor);
         $charge = $ctx->committedCostCut
             * $structuralFixedCosts
             * $ctx->strategy->getLaborCostShare()

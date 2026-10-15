@@ -29,6 +29,8 @@ class EarningsSimulationContext
     public float $sharesOutstanding = 0.0;
     public float $stableMargin = 0.0;
     public float $seasonalFactor = 1.0;
+    /** The quarter's fixed costs over their even-year level: the seasonal share of the base following the season. */
+    public float $seasonalFixedCostFactor = 1.0;
     public float $priorSeasonalFactor = 1.0;
     public float $seasonallyAdjustedRevenue = 0.0;
     public float $seasonallyAdjustedEbit = 0.0;

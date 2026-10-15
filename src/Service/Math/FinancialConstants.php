@@ -189,6 +189,10 @@ class FinancialConstants
     /** Consensus weight given to book value/liquidation fair value in valuation blending. */
     public const FAIR_VALUE_BOOK_WEIGHT = 0.10;
 
+    // --- Seasonal Cost Base ---
+    /** Share of a firm's fixed cost base that follows its seasonal volume: the staff it hires, the capacity it rents and the stock it carries for its peak; rent, depreciation and head office carry evenly. At three quarters a peak quarter earns a few points more margin than a slack one, rather than the year's whole profit. */
+    public const SEASONAL_FIXED_COST_SHARE = 0.75;
+
     // --- Asymmetric Cost Stickiness (Anderson, Banker, & Janakiraman 2003) ---
     /** Annual elasticity of the committed (SG&A) cost base to activity on the way up: 0.55 (ABJ 2003 Table 2, beta 1, 7,629 firms 1979-1998). */
     public const STICKY_COST_BETA_EXPANSION = 0.55;
