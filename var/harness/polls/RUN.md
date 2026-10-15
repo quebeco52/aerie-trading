@@ -18,3 +18,8 @@ Run script: `form.sh <arm> <seed>` (takes its own `bin/php-slot`; outputs in `ru
 4. `git worktree remove --force var/harness/politics/head_tree`.
 
 Evidence: `polls_evidence.md`.
+
+## Long-run lever means (PolicyCapitalization LONG_RUN_* and *_TERM_PERSISTENCE)
+`bin/harness-batch var/harness/polls/form.sh 1-16 levers` (200y per seed, ~5 min wall), then
+`php var/harness/polls/lever_means_an.php var/harness/polls/runs_form/levers_*.jsonl`. Measures come from
+`PolicyCapitalization::measure()`, so a new priced lever needs no change here. Last: `lever_means_rework.out` (2026-10).

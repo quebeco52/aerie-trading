@@ -471,6 +471,7 @@ class MacroState
     public float $extractionCostFactorEmbodied;
     public float $stampDutyVolumeFactorEmbodied;
     public float $carbonPowerUpliftEmbodied;
+    public float $utilityTariffShortfallEmbodied;
     public float $governmentSpendingShiftEmbodied;
     /** @var array<string, float> */
     public array $sittingLevers;

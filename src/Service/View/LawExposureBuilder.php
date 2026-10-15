@@ -9,6 +9,7 @@ use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use App\Service\Macro\MacroEngine;
 use App\Service\Market\Pricing\PolicyCapitalization;
+use App\Service\Model\Sector\UtilityBusinessModel;
 use App\Service\Model\Strategy\OperatingStrategyInterface;
 
 /**
@@ -31,9 +32,10 @@ final class LawExposureBuilder
         'stampDutyRate' => ['Stamp duty on share trades', 'Thins the trading that brokers earn their commissions on.'],
         'carbonPrice' => ['Carbon price', 'Raises the price of power. A generator gains on the power it sells and pays on the gas it burns.'],
         'publicSpending' => ['Public spending, share of GDP', 'What the budget buys from the District\'s contractors, hospitals, colleges and guard firms. Measured against spending at its Year 1 share.'],
+        'utilityRateGrant' => ['Utility rate requests granted', 'How much of each rate increase the utilities ask for the commission allows. The less it grants, the further their prices lag their costs. Measured against the Year 1 commission\'s grant.'],
     ];
-    /** The law each is measured against: none, but for public spending, which is measured against its Year 1 share. */
-    private const NO_LAW = ['publicSpending' => MacroEngine::PUBLIC_PURCHASES_TO_GDP];
+    /** The law each is measured against: none, but for public spending and the utility grant, measured against Year 1's. */
+    private const NO_LAW = ['publicSpending' => MacroEngine::PUBLIC_PURCHASES_TO_GDP, 'utilityRateGrant' => UtilityBusinessModel::APPOINTED_COMMISSION_GRANTED_SHARE];
 
     /**
      * @param iterable<Stock>      $stocks   The listed board.
@@ -113,6 +115,7 @@ final class LawExposureBuilder
             'stampDutyRate' => $strategy->annualStampDutyTurnoverBase($stock),
             'carbonPrice' => $strategy->annualCarbonPowerEarningsBase($stock),
             'publicSpending' => $strategy->annualPublicSpendingEarningsBase($stock),
+            'utilityRateGrant' => $strategy->annualUtilityTariffBase($stock),
             default => 0.0,
         };
     }

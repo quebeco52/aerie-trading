@@ -310,7 +310,7 @@ class SystemicEventReporterTest extends TestCase
 
         $named = 0;
         for ($i = 0; $i < 40; ++$i) {
-            $named += str_contains((string) $this->reporter(bufferedPrice: null)->report(new MacroStateDTO(totalTime: 7.0), $raising, $this->benchmarkAt('100'))['description'], 'Bram Ellery, who would have set 8.4%') ? 1 : 0;
+            $named += str_contains((string) $this->reporter(bufferedPrice: null)->report(new MacroStateDTO(totalTime: 7.0), $raising, $this->benchmarkAt('100'))['description'], 'Bram Ellery, who would have set 8.0%') ? 1 : 0;
         }
         $this->assertGreaterThan(0, $named, 'One phrasing names whom the Council passed over.');
     }

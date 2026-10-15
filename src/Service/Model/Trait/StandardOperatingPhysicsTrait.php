@@ -185,6 +185,12 @@ trait StandardOperatingPhysicsTrait
         return (float) $stock->getTotalRevenue() * (float) (($stock->getEarningsMomentumZ() ?? [])[FinancialConstants::STATE_CARBON_POWER_EARNINGS_SHARE] ?? 0.0);
     }
 
+    /** No commission rules on the firm's prices. */
+    public function annualUtilityTariffBase(Stock $stock): float
+    {
+        return 0.0;
+    }
+
     /** The annualized revenue times the share of it the model last reported moving with government purchases, less its variable cost; zero for a model that reports none. */
     public function annualPublicSpendingEarningsBase(Stock $stock): float
     {

@@ -47,3 +47,10 @@ gap sd 2.23 → 2.18 / 2.40 → 2.31; quarters below −3% 19 → 15%; unemp mea
 debt mean 54 → 52%. Average gap change from the quarter before a crisis (18 crises), years 0-6: Phase 3 −0.4 −2.2 …
 −0.3; now −0.6 −1.7 −1.3 −1.3 −1.3 −1.2 −0.6. The tail: household borrowing −1.5 to −2.2pp for years 2-5 (house
 prices and debt service; the paydown is ~0.4pp of it), bank output −0.6% as loans fall, net exports −0.9%.
+
+## Phase 5 (politics), 4 seeds, paired vs Phase 4 (runs/p4_*)
+No moment moves beyond seed noise: gap mean −0.61 → −0.71 (t −0.6) / −0.54 → −0.69; gap sd 2.18 → 2.29 / 2.31 → 2.35;
+recession share 8.6 → 11.7% (t 1.1) / 9.8 → 10.3%; crises 5.6 → 5.0 / 3.1 → 4.2 per century. Household debt to income
+after year 40 0.83 → 0.92: a uniform stance with caps only past the opening stance binds less often than the 17
+regimes did (11 of 17 had a cap). Lever means (16 × 200y, lever_means_rework.out): persistences 0.59-0.73; public
+spending's long-run shift −0.79 → −0.40% with no Council brake; dividend tax 8.8 → 7.7%; utility shortfall 3.98%.

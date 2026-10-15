@@ -152,27 +152,27 @@ final class AeriePartyProfiles
             'slug' => 'chartists',
             'family' => 'Constitutionalist',
             'motto' => 'Defend the Charter. Trust the Council.',
-            'founded' => 'After the first motion to remove a councillor',
+            'founded' => 'After the first motion to censure the Council',
             'voters' => 'Senior officials, financiers, academics, and the old families of the founding houses',
             'heartland' => 'The university quarter and the old houses of Glasswater Row',
             'about' => [
-                'The Chartists take their name from the District\'s founding Charter and defend it as written: a Council of thirteen that elects its own successors and stands above the parties, much as an elected crown would. They are the Council\'s loyalists in the Diet and the steadiest opponents of any attempt to give the Diet power over it.',
+                'The Chartists take their name from the District\'s founding Charter and defend it as written: a Council of thirteen that elects its own successors and stands above the parties, much as an elected crown would. They are the Council\'s loyalists in the Diet and the steadiest opponents of any attempt to amend the Charter and give the Diet power over it.',
                 'Their voters are the District\'s senior officials, financiers and academics, who see in the Council a guarantee of sound money and long horizons. The Chartists would leave the Monetary Authority to set rates in peace, keep the books sound, and would leave competition to the markets, letting the District\'s firms grow to world scale.',
                 'Few parties will share a cabinet with them. Their deference to the Council is as awkward for the mainstream parties as the Common Lot\'s hostility, so the Chartists work from the benches, backing cabinets of the right and holding them to the Charter.',
             ],
             'history' => [
-                ['title' => 'The first removal motion', 'text' => 'When the Common Lot\'s first deputies moved to remove the councillors who had defended the Merger Wave, the motion won barely a tenth of the Diet. It still frightened the Council\'s friends into founding a party to make sure no such motion ever came close.'],
+                ['title' => 'The first censure', 'text' => 'When the Common Lot\'s first deputies moved to censure the councillors who had defended the Merger Wave and called for the Charter to be amended, the motion won barely a tenth of the Diet. The Diet has no power over the Council, but the motion still frightened the Council\'s friends into founding a party to make sure no amendment ever came close.'],
                 ['title' => 'Sound books', 'text' => 'The Chartists have run on the same debt plan in every Diet: public debt steered to half of GDP, half a point of GDP a year.'],
                 ['title' => 'Year 1', 'text' => 'When the markets opened the Chartists were backing the Vanguard\'s cabinet from outside, as they had backed most cabinets of the right before it.'],
             ],
             'questions' => [
                 AerieDiet::AXIS_STATE => 'Leans small: low taxes, a light levy on the banks and cheap share trading, though it cares less about the size of the state than about who governs it.',
                 AerieDiet::AXIS_OPENNESS => 'Open: the District\'s markets are the world\'s, and the Chartists want them to stay that way.',
-                AerieDiet::AXIS_COUNCIL => 'Its founding principle: the Council\'s most loyal friends, who would never vote to remove a councillor.',
+                AerieDiet::AXIS_COUNCIL => 'Its founding principle: the Council\'s most loyal friends, who would never vote to censure it or to amend the Charter against it.',
                 AerieDiet::AXIS_ENVIRONMENT => 'Leans to growth: it would add no carbon price and no new rules on drilling.',
             ],
             'agenda' => [
-                ['title' => 'The Charter as written', 'text' => 'Never vote to remove a councillor, and give the Diet no new power over the Council.'],
+                ['title' => 'The Charter as written', 'text' => 'Leave the Council to choose its own successors and appoint the departments, and give the Diet no power over it.'],
                 ['title' => 'An Authority left alone', 'text' => 'Leave the Monetary Authority to set rates without pressure from the cabinet.'],
                 ['title' => 'Light merger review', 'text' => 'Let the District\'s firms consolidate and compete abroad.'],
                 ['title' => 'Sound books', 'text' => 'Bring public debt to half of GDP, half a point of GDP a year.'],
@@ -194,7 +194,7 @@ final class AeriePartyProfiles
             'history' => [
                 ['title' => 'The Merger Wave', 'text' => 'In a few years of cheap credit the District\'s largest houses bought up their rivals in banking, shipping and retail. Small shareholders in the firms taken over were bought out at prices they had no power to refuse.'],
                 ['title' => 'The shareholders\' revolt', 'text' => 'A campaign of small holders to block the last of those deals failed in the courts and turned to the ballot box. Its candidates entered the Diet as the Common Lot.'],
-                ['title' => 'The first removal motion', 'text' => 'Its first deputies moved to remove the councillors who had defended the Merger Wave. The motion won barely a tenth of the Diet, but it was the first time anyone had tried, and it brought the Chartists into being to stop the next.'],
+                ['title' => 'The first censure', 'text' => 'Its first deputies moved to censure the councillors who had defended the Merger Wave and to amend the Charter so the Diet could remove them. The motion won barely a tenth of the Diet, but it was the first time anyone had tried, and it brought the Chartists into being to stop the next.'],
             ],
             'questions' => [
                 AerieDiet::AXIS_STATE => 'Leans big: it would tax the banks and share trading heavily, though it cares less for the state than for breaking up the houses.',
@@ -205,8 +205,8 @@ final class AeriePartyProfiles
             'agenda' => [
                 ['title' => 'The strictest merger review', 'text' => 'Block any deal that concentrates a market further.'],
                 ['title' => 'Make the banks pay', 'text' => 'A heavy levy on the banks\' balance sheets, and a higher duty on share trading.'],
-                ['title' => 'Cheaper money', 'text' => 'Press the Monetary Authority, openly, for lower interest rates.'],
-                ['title' => 'An answerable Council', 'text' => 'Use the Diet\'s power to remove councillors, which no party has yet managed to use.'],
+                ['title' => 'Tax foreign buyers of homes', 'text' => 'A stiff duty on homes bought from abroad, so the District\'s own families are not priced out of the rented wards.'],
+                ['title' => 'Keep the reserves at home', 'text' => 'Invest more of the Sovereign Reserve Fund in the District\'s own firms rather than the mainland\'s markets.'],
                 ['title' => 'Bills held to costs', 'text' => 'A utility commission that answers to the voters and grants the power and water companies a fraction of what they ask.'],
             ],
             'relations' => 'The Common Lot belongs to the left bloc but seldom if ever sits in a cabinet; the Civic Front relies on its votes from outside and offers it nothing more. It shares Iron Harbor\'s dislike of the free port and the Tideline Accord\'s dislike of the developers. The Chartists are its opposite, and New Horizon, which would break the cartels by competition rather than by law, is its most frequent sparring partner.',

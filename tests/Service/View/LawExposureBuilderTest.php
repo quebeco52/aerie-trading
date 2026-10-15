@@ -17,6 +17,7 @@ final class LawExposureBuilderTest extends TestCase
 {
     /** The laws in force: a levy, middling extraction rules, the founding duty and a carbon price. */
     private const STANDING = [
+        'utilityRateGrant' => \App\Service\Model\Sector\UtilityBusinessModel::APPOINTED_COMMISSION_GRANTED_SHARE,
         'corporateTax' => 0.0,
         'tariff' => 0.0,
         'laborGrowth' => 0.0,

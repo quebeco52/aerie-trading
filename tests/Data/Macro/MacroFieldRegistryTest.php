@@ -93,6 +93,7 @@ class MacroFieldRegistryTest extends TestCase
         'bankLevyEmbodied' => 'Lag of bank_levy_rate that trailing earnings carry; the rate is recorded.',
         'extractionCostFactorEmbodied' => 'Lag of the extraction rules\' cost factor that trailing earnings carry; extraction_stringency is recorded.',
         'stampDutyVolumeFactorEmbodied' => 'Lag of the stamp duty\'s turnover factor that trailing earnings carry; stamp_duty_rate is recorded.',
+        'utilityTariffShortfallEmbodied' => 'Lag of the tariff shortfall the commission\'s grant leaves that trailing earnings carry; utility_rate_case_grant_share is recorded.',
         'carbonPowerUpliftEmbodied' => 'Lag of the carbon price\'s power price uplift that trailing earnings carry; carbon_price is recorded.',
         'sovereignFundHomeEquityShare' => 'The Diet\'s law the fund last adopted, bookkeeping for when to trade; reserve_home_equity_share records the law and sovereign_fund_domestic_weight the holding.',
         'governmentSpendingShiftEmbodied' => 'Lag of government purchases above the founding level that trailing earnings carry; government_spending_index_ema is recorded.',

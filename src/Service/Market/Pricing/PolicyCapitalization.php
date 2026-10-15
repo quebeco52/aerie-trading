@@ -8,6 +8,7 @@ use App\DTO\MacroStateDTO;
 use App\Service\Macro\MacroEngine;
 use App\Service\Macro\Subsystem\CommodityLogisticsSubsystem;
 use App\Service\Macro\Subsystem\CreditFiscalSubsystem;
+use App\Service\Model\Sector\UtilityBusinessModel;
 use App\Service\Math\FirmEconomics;
 use App\Service\Math\MacroTransmission;
 use App\Service\Math\Valuation;
@@ -18,8 +19,9 @@ use App\Service\Politics\PoliticsEngine;
  * not under the ones its trailing earnings carry (Knight 2006: the Bush and Gore platforms were priced into the firms
  * they favoured as the odds moved; Snowberg, Wolfers & Zitzewitz 2007). Priced are the laws a firm's own accounts
  * answer to: the corporate tax, the bank levy, the rules on extraction a mine or field pays for in its unit costs, the
- * stamp duty a broker's commissions thin with, the carbon price a generator sells its power with, and the public
- * spending a contractor, hospital, college or guard firm sells to; and the tax on dividends, which no account carries
+ * stamp duty a broker's commissions thin with, the carbon price a generator sells its power with, the public
+ * spending a contractor, hospital, college or guard firm sells to, and the share of a utility's rate requests its
+ * commission grants, by the tariff shortfall it leaves; and the tax on dividends, which no account carries
  * but every payer's holders price in the return they require.
  *
  * The expected path runs from the laws in force, through the budget the sitting government will pass at its next round
@@ -36,39 +38,43 @@ use App\Service\Politics\PoliticsEngine;
  */
 final class PolicyCapitalization
 {
-    // --- Past the Next Term (the Diet's own long runs: 16 games of 200 years on the macro loop beside the politics, var/harness/polls/lever_means.php, runs_sg; the corporate tax pair from runs_gap2, the public spending pair from runs_size15, the carbon pair from an earlier run) ---
-    /** The corporate tax shift in force on average over the long run: -0.10 points (se 0.09). */
-    public const LONG_RUN_CORPORATE_TAX_SHIFT = -0.0010;
-    /** Share of the corporate tax shift's distance from that average still there a term later: its four-year autocorrelation, 0.654 (sd across games 0.19). */
-    public const CORPORATE_TAX_TERM_PERSISTENCE = 0.654;
-    /** The bank levy in force on average over the long run: 0.054% (se 0.006%). */
-    public const LONG_RUN_BANK_LEVY_RATE = 0.00054;
-    /** Share of the bank levy's distance from that average still there a term later: 0.643 (sd across games 0.21). */
-    public const BANK_LEVY_TERM_PERSISTENCE = 0.643;
-    /** The cost factor the rules on extraction put on each unit on average over the long run (FirmEconomics::calculateExtractionCostFactor()): 1.0034 (se 0.0009). */
-    public const LONG_RUN_EXTRACTION_COST_FACTOR = 1.0034;
-    /** Share of that factor's distance from its average still there a term later: 0.657 (sd across games 0.27). */
-    public const EXTRACTION_COST_TERM_PERSISTENCE = 0.657;
-    /** The share turnover the stamp duty leaves on average over the long run, against the founding duty's (MacroTransmission::calculateStampDutyVolumeFactor()): 0.967 (se 0.004). */
+    // --- Past the Next Term (the Diet's own long runs: 16 games of 200 years on the macro loop beside the politics, var/harness/polls/lever_means_an.php, lever_means_rework.out) ---
+    /** The corporate tax shift in force on average over the long run: -0.18 points (se 0.12). */
+    public const LONG_RUN_CORPORATE_TAX_SHIFT = -0.0018;
+    /** Share of the corporate tax shift's distance from that average still there a term later: its four-year autocorrelation, 0.672. */
+    public const CORPORATE_TAX_TERM_PERSISTENCE = 0.672;
+    /** The bank levy in force on average over the long run: 0.050% (se 0.007%). */
+    public const LONG_RUN_BANK_LEVY_RATE = 0.000495;
+    /** Share of the bank levy's distance from that average still there a term later: 0.662. */
+    public const BANK_LEVY_TERM_PERSISTENCE = 0.662;
+    /** The cost factor the rules on extraction put on each unit on average over the long run (FirmEconomics::calculateExtractionCostFactor()): 1.0038 (se 0.0008). */
+    public const LONG_RUN_EXTRACTION_COST_FACTOR = 1.0038;
+    /** Share of that factor's distance from its average still there a term later: 0.661. */
+    public const EXTRACTION_COST_TERM_PERSISTENCE = 0.661;
+    /** The share turnover the stamp duty leaves on average over the long run, against the founding duty's (MacroTransmission::calculateStampDutyVolumeFactor()): 0.967 (se 0.005). */
     public const LONG_RUN_STAMP_DUTY_VOLUME_FACTOR = 0.967;
-    /** Share of that factor's distance from its average still there a term later: 0.586 (sd across games 0.18), the duty being no revenue the Council guards. */
-    public const STAMP_DUTY_VOLUME_TERM_PERSISTENCE = 0.586;
-    /** What the carbon price adds to the power price on average over the long run, as a share of it (CommodityLogisticsSubsystem::carbonPowerPriceUplift()): 4.11% (se 0.43%), a carbon price of $6.1 a tonne. */
-    public const LONG_RUN_CARBON_POWER_UPLIFT = 0.0411;
-    /** Share of that uplift's distance from its average still there a term later: 0.597 (sd across games 0.19). */
-    public const CARBON_POWER_TERM_PERSISTENCE = 0.597;
-    /** Government purchases above the founding level on average over the long run, as a fraction (measure()): -0.79% (se 0.21%), the Council's brake holding rises above the debt line and letting cuts through. */
-    public const LONG_RUN_PUBLIC_SPENDING_SHIFT = -0.0079;
-    /** Share of that shift's distance from its average still there a term later: 0.654 (sd across games 0.23). */
-    public const PUBLIC_SPENDING_TERM_PERSISTENCE = 0.654;
-    /** The tax on dividends in force on average over the long run: 8.8% (se 0.7%), below the founding 15% since the Diet can only cut it. */
-    public const LONG_RUN_DIVIDEND_TAX_RATE = 0.088;
-    /** Share of the tax on dividends' distance from that average still there a term later: 0.697 (sd across games 0.20). */
-    public const DIVIDEND_TAX_TERM_PERSISTENCE = 0.697;
+    /** Share of that factor's distance from its average still there a term later: 0.662. */
+    public const STAMP_DUTY_VOLUME_TERM_PERSISTENCE = 0.662;
+    /** What the carbon price adds to the power price on average over the long run, as a share of it (CommodityLogisticsSubsystem::carbonPowerPriceUplift()): 3.67% (se 0.81%). */
+    public const LONG_RUN_CARBON_POWER_UPLIFT = 0.0367;
+    /** Share of that uplift's distance from its average still there a term later: 0.662. */
+    public const CARBON_POWER_TERM_PERSISTENCE = 0.662;
+    /** Government purchases above the founding level on average over the long run, as a fraction (measure()): -0.40% (se 0.28%), the cabinets' debt plans trimming purchases a little more often than they add to them. */
+    public const LONG_RUN_PUBLIC_SPENDING_SHIFT = -0.0040;
+    /** Share of that shift's distance from its average still there a term later: 0.671. */
+    public const PUBLIC_SPENDING_TERM_PERSISTENCE = 0.671;
+    /** The tariff shortfall commissions' grants leave on average over the long run (UtilityBusinessModel::steadyTariffShortfall()): 3.98% (se 0.06%). */
+    public const LONG_RUN_UTILITY_TARIFF_SHORTFALL = 0.0398;
+    /** Share of that shortfall's distance from its average still there a term later: 0.589. */
+    public const UTILITY_TARIFF_TERM_PERSISTENCE = 0.589;
+    /** The tax on dividends in force on average over the long run: 7.7% (se 1.0%), below the founding 15% since the Diet can only cut it. */
+    public const LONG_RUN_DIVIDEND_TAX_RATE = 0.077;
+    /** Share of the tax on dividends' distance from that average still there a term later: 0.727. */
+    public const DIVIDEND_TAX_TERM_PERSISTENCE = 0.727;
 
     // --- Laws Priced per Firm ---
     /** The laws a firm's own accounts answer to, keyed as PoliticsEngine::LEVER_FIELDS; the corporate tax reaches every firm through its effective rate instead. */
-    public const PER_FIRM_LEVERS = ['bankLevyRate', 'extractionStringency', 'stampDutyRate', 'carbonPrice', 'publicSpending'];
+    public const PER_FIRM_LEVERS = ['bankLevyRate', 'extractionStringency', 'stampDutyRate', 'carbonPrice', 'publicSpending', 'utilityRateGrant'];
 
     // --- Discounting ---
     /** Smallest discount rate less growth a firm's value is spread at, the floor the intrinsic multiple puts under its spread (Valuation::calculateIntrinsicFairValuePE()). */
@@ -168,6 +174,18 @@ final class PolicyCapitalization
     }
 
     /**
+     * The average tariff shortfall the market expects commissions' grants to leave a utility over its life, weighted the
+     * same way, less the shortfall its trailing earnings carry. A new grant reaches the tariff as rate cases close.
+     *
+     * @param bool $previous Whether to read the forecast as it stood the tick before.
+     */
+    public static function utilityTariffShortfallGap(MacroStateDTO $macro, float $capRate, bool $previous = false): float
+    {
+        return self::expectedOverLife($macro, $capRate, $previous, 'utilityRateGrant', $macro->utilityRateCaseGrantShare, static fn (float $law): float => self::measure('utilityRateGrant', $law), self::LONG_RUN_UTILITY_TARIFF_SHORTFALL, self::UTILITY_TARIFF_TERM_PERSISTENCE, UtilityBusinessModel::RATE_CASE_DECISION_RATE)
+            - $macro->utilityTariffShortfallEmbodied;
+    }
+
+    /**
      * What the laws expected beyond the ones the trailing earnings carry add to a year's earnings after tax, per share:
      * less the levy, which is not deductible, and less the extraction rules' extra cost, plus the duty's extra turnover
      * and what the carbon price's power uplift adds, all three before tax.
@@ -197,6 +215,9 @@ final class PolicyCapitalization
         if (($basesPerShare['publicSpending'] ?? 0.0) > 0.0) {
             $gap += self::earningsEffect('publicSpending', self::publicSpendingGap($macro, $capRate, $previous), $basesPerShare['publicSpending'], $effectiveTaxExpected);
         }
+        if (($basesPerShare['utilityRateGrant'] ?? 0.0) > 0.0) {
+            $gap += self::earningsEffect('utilityRateGrant', self::utilityTariffShortfallGap($macro, $capRate, $previous), $basesPerShare['utilityRateGrant'], $effectiveTaxExpected);
+        }
 
         return $gap;
     }
@@ -216,6 +237,7 @@ final class PolicyCapitalization
             'stampDutyRate' => MacroTransmission::calculateStampDutyVolumeFactor($law),
             'carbonPrice' => CommodityLogisticsSubsystem::carbonPowerPriceUplift($law),
             'publicSpending' => ($law / MacroEngine::PUBLIC_PURCHASES_TO_GDP) - 1.0,
+            'utilityRateGrant' => UtilityBusinessModel::steadyTariffShortfall($law),
             default => throw new \InvalidArgumentException(sprintf('No firm\'s accounts answer to %s directly.', $lever)),
         };
     }
@@ -234,7 +256,7 @@ final class PolicyCapitalization
     {
         return match ($lever) {
             'bankLevyRate' => -$measureGap * $base,
-            'extractionStringency' => -(1.0 - $effectiveTax) * $measureGap * $base,
+            'extractionStringency', 'utilityRateGrant' => -(1.0 - $effectiveTax) * $measureGap * $base,
             'stampDutyRate', 'carbonPrice', 'publicSpending' => (1.0 - $effectiveTax) * $measureGap * $base,
             default => throw new \InvalidArgumentException(sprintf('No firm\'s accounts answer to %s directly.', $lever)),
         };

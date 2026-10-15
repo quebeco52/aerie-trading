@@ -40,8 +40,8 @@ class CouncilAppointmentsTest extends TestCase
     }
 
     /**
-     * Candidates come in the FOMC's mix on money, 51 hawks, 31 swing votes and 39 doves in 121; as one of the 17 regimes
-     * on record on the banks, each as likely; at the Board's ages at appointment (a normal around 52.56, sd 7.32), cut at
+     * Candidates come in the FOMC's mix on money, 51 hawks, 31 swing votes and 39 doves in 121; uniformly across the range
+     * on the banks; at the Board's ages at appointment (a normal around 52.56, sd 7.32), cut at
      * the charter's window of 40 to 60; a swing vote leaning to either camp alike; and the same vacancy always draws the
      * same people.
      */
@@ -50,7 +50,7 @@ class CouncilAppointmentsTest extends TestCase
         $math = new MathUtility();
         $types = ['hawk' => 0, 'swing' => 0, 'dove' => 0];
         $swingHawks = 0;
-        $regimes = array_fill(0, count(FinancialRegulator::OBSERVED_REQUIREMENTS), 0);
+        $regimes = array_fill(0, 10, 0);
         $ages = [];
         $draws = 20000;
         for ($i = 0; $i < $draws; ++$i) {
@@ -58,9 +58,9 @@ class CouncilAppointmentsTest extends TestCase
             ++$types[MonetaryAuthority::typeName($candidate['stance'], $candidate['swing'])];
             $this->assertContains($candidate['stance'], [1.0, -1.0], 'Everyone sits in a camp, a swing vote in the one they lean to.');
             $swingHawks += $candidate['swing'] > 0.0 && $candidate['stance'] > 0.0 ? 1 : 0;
-            $regime = array_search(round(FinancialRegulator::requirement($candidate['regulation']), 6), array_map(static fn(float $r): float => round($r, 6), FinancialRegulator::OBSERVED_REQUIREMENTS), true);
-            $this->assertIsInt($regime, 'Every stance on the banks is a regime on record.');
-            ++$regimes[$regime];
+            $this->assertGreaterThanOrEqual(-1.0, $candidate['regulation']);
+            $this->assertLessThanOrEqual(1.0, $candidate['regulation']);
+            ++$regimes[min(9, (int) floor(($candidate['regulation'] + 1.0) * 5.0))];
             $ages[] = 10.0 - $candidate['birth'];
         }
         foreach (MonetaryAuthority::TYPE_COUNTS as $type => $count) {
@@ -68,7 +68,7 @@ class CouncilAppointmentsTest extends TestCase
         }
         $this->assertEqualsWithDelta(0.5, $swingHawks / $types['swing'], 0.02, 'A swing vote leans either way alike.');
         foreach ($regimes as $regime => $count) {
-            $this->assertEqualsWithDelta(1.0 / count($regimes), $count / $draws, 0.006, "regime {$regime}");
+            $this->assertEqualsWithDelta(1.0 / count($regimes), $count / $draws, 0.008, "stance decile {$regime}");
         }
         sort($ages);
         // The Board's normal cut at the charter's window: its mean and median move to the truncated normal's.

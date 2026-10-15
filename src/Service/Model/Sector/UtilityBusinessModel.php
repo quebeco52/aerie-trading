@@ -156,6 +156,10 @@ class UtilityBusinessModel extends StandardCorporateBusinessModel
     public const RATE_CASE_FILING_THRESHOLD = 0.02;
     /** Quarterly probability a pending case is decided (~5 quarters, the 12 to 18 month regulatory lag). */
     public const RATE_CASE_EXIT_HAZARD = 0.20;
+    /** The same hazard as a rate a year, -4 ln(1 - 0.20): the speed a change in what commissions grant reaches the tariff. */
+    public const RATE_CASE_DECISION_RATE = 0.8926;
+    /** The average tariff shortfall the founding commission's grant leaves (steadyTariffShortfall() at it, 3.7%), where the District's trailing earnings open. */
+    public const FOUNDING_TARIFF_SHORTFALL = 0.0372;
     /** What an elected commission grants of a request, as a share of what an appointed one grants: their pass-through of fuel-cost increases into residential prices, 0.22 against 0.62 (Besley & Coate 2003, Table 4, with controls, 1960-97), read across from cost pass-through to rate requests. */
     public const ELECTED_COMMISSION_GRANT_RATIO = 0.22 / 0.62;
     /** Share of a request an appointed commission grants, the District's at its founding; the disallowed remainder is still a real cost, so it rolls into the next filing. The US average, 58% of the net electric increases requested January 2023 to August 2024 (S&P Global data via EIA, Today in Energy, August 2024), is held by 40 appointed commissions and 10 elected ones. */
@@ -463,6 +467,39 @@ class UtilityBusinessModel extends StandardCorporateBusinessModel
         $streams->registerState(self::STATE_OPENING_ROE, $openingRoe);
 
         return $authorisedRoe - $openingRoe;
+    }
+
+    /**
+     * The tariff shortfall a commission granting this share of each request leaves on average, as a share of the tariff:
+     * the cycle advanceRateCase() runs, in expectation. Costs outrun the frozen tariff at the inflation rate; a case is
+     * filed at the threshold, or at once if the last order left the shortfall above it, and decided at the decision rate;
+     * the order removes the granted share. With D the case's exponential length, the time-weighted shortfall while it
+     * is pending is its starting level plus inflation over the decision rate, and the start settles where an order
+     * leaves it (the expectation of D in place of D, so the spread of case lengths is not carried).
+     *
+     * @param float $grantShare Share of each request the commission grants.
+     * @param float $inflation  Inflation the cost base rises at, a year.
+     */
+    public static function steadyTariffShortfall(float $grantShare, float $inflation = MacroEngine::TARGET_INFLATION): float
+    {
+        $grant = max(0.01, min(1.0, $grantShare));
+        $drift = max(0.0, $inflation) / self::RATE_CASE_DECISION_RATE;
+        $threshold = self::RATE_CASE_FILING_THRESHOLD;
+        // Where a case starts: the threshold, or the shortfall an order leaves if that is above it (s = (1 - g)(s + drift)).
+        $start = max($threshold, (1.0 - $grant) * $drift / $grant);
+        $pendingMean = $start + $drift;
+        $afterOrder = (1.0 - $grant) * $pendingMean;
+        $idleYears = $inflation > 0.0 ? max(0.0, $threshold - $afterOrder) / $inflation : 0.0;
+        $pendingYears = 1.0 / self::RATE_CASE_DECISION_RATE;
+        $mean = (($pendingMean * $pendingYears) + ((($threshold + $afterOrder) / 2.0) * $idleYears)) / ($pendingYears + $idleYears);
+
+        return min(self::MAX_TARIFF_SHORTFALL, $mean);
+    }
+
+    /** The utility's revenue a year: what a point of average tariff shortfall takes from earnings before tax, per point. */
+    public function annualUtilityTariffBase(Stock $stock): float
+    {
+        return max(0.0, (float) $stock->getTotalRevenue());
     }
 
     /** How far the authorized tariff lags its cost base, read from the persisted state the physics advances. */

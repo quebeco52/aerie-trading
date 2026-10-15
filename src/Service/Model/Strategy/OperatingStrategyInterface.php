@@ -70,6 +70,12 @@ interface OperatingStrategyInterface
      */
     public function annualPublicSpendingEarningsBase(Stock $stock): float;
     /**
+     * What a year's earnings before tax lose per unit of average tariff shortfall a commission's grant leaves
+     * (App\Service\Model\Sector\UtilityBusinessModel::steadyTariffShortfall()), in currency: a regulated utility's
+     * revenue; zero for a firm no commission rules on.
+     */
+    public function annualUtilityTariffBase(Stock $stock): float;
+    /**
      * MacroStateDTO field names (snake_case, matching MacroStateDTO::toArray()) this model's own
      * operating code reads: calculateSectorPhysics(), getMacroPhysics(), calculateInterestIncome(),
      * processPassiveLiabilityGrowth(), getForwardCreditLossMultiplier(), getFixedCostFactor() and the helpers they call,

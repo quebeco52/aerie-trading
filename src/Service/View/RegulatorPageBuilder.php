@@ -30,7 +30,7 @@ final class RegulatorPageBuilder
     {
         $panel = $this->government->regulator($politics, $macro);
         if ($panel !== null) {
-            // The mortgage limit each regime brings, beside the capital rule the panel already carries.
+            // The mortgage limit and calm-years buffer each head's stance brings, beside the capital rule the panel already carries.
             $panel['head']['ltvCap'] = $politics->regulatorLtvCap;
             $panel['head']['neutralBuffer'] = $politics->regulatorNeutralBuffer;
             foreach ($politics->regulatorPassedOver as $i => $candidate) {
@@ -42,8 +42,6 @@ final class RegulatorPageBuilder
         // What a bank must hold to pay out: the requirement plus the buffer in force, as the macro and each bank's payout stop read it.
         $required = $politics->bankCapitalRequirement + $macro->countercyclicalBufferRate;
 
-        $caps = array_values(array_filter(FinancialRegulator::OBSERVED_LTV_CAPS, static fn(?float $cap): bool => $cap !== null));
-
         return [
             'regulator' => $panel,
             'required' => $required,
@@ -53,10 +51,8 @@ final class RegulatorPageBuilder
                 // The level household borrowing is held below its uncapped path, from the cut built so far.
                 'heldBelow' => 1.0 - exp(-$macro->ltvCutBuilt),
                 'debtToIncome' => $macro->householdDebtToIncome,
-                'tightestCap' => $caps === [] ? null : min($caps),
-                'loosestCap' => $caps === [] ? null : max($caps),
-                'regimes' => count(FinancialRegulator::OBSERVED_LTV_CAPS),
-                'uncapped' => count(FinancialRegulator::OBSERVED_LTV_CAPS) - count($caps),
+                'tightestCap' => FinancialRegulator::STRICTEST_LTV_CAP,
+                'strictestBuffer' => FinancialRegulator::STRICTEST_NEUTRAL_BUFFER,
             ],
         ];
     }

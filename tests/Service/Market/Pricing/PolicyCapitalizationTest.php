@@ -10,6 +10,7 @@ use App\Service\Macro\MacroEngine;
 use App\Service\Macro\Subsystem\CommodityLogisticsSubsystem;
 use App\Service\Macro\Subsystem\CreditFiscalSubsystem;
 use App\Service\Market\Pricing\PolicyCapitalization as Policy;
+use App\Service\Model\Sector\UtilityBusinessModel;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\FirmEconomics;
 use App\Service\Math\MacroTransmission;
@@ -177,6 +178,38 @@ class PolicyCapitalizationTest extends TestCase
             1e-12,
             'At the law less the cut, nothing more is closing.'
         );
+    }
+
+    /**
+     * The share of rate requests the commission grants is priced by the tariff shortfall it leaves, reaching the tariff
+     * as rate cases close: carried at the founding grant, an elected commission's grant expected from the next budget
+     * counts by the extra shortfall from then; and a utility loses that shortfall on its revenue, after tax.
+     */
+    public function testTheUtilityGrantIsPricedByTheShortfallItLeaves(): void
+    {
+        $founding = UtilityBusinessModel::APPOINTED_COMMISSION_GRANTED_SHARE;
+        $elected = $founding * UtilityBusinessModel::ELECTED_COMMISSION_GRANT_RATIO;
+        $carried = UtilityBusinessModel::steadyTariffShortfall($founding);
+        $macro = new MacroStateDTO(
+            totalTime: 10.0,
+            utilityRateCaseGrantShare: $founding,
+            utilityTariffShortfallEmbodied: $carried,
+            expectedLevers: ['utilityRateGrant' => $elected],
+            expectedPolicyFrom: 12.5,
+            previousExpectedLevers: ['utilityRateGrant' => $elected],
+            previousExpectedPolicyFrom: 12.5,
+        );
+        $rise = UtilityBusinessModel::steadyTariffShortfall($elected) - $carried;
+
+        $this->assertGreaterThan(0.0, $rise, 'A stingier commission leaves the tariff further behind its costs.');
+        $this->assertEqualsWithDelta(
+            $this->path($rise, $carried - Policy::LONG_RUN_UTILITY_TARIFF_SHORTFALL, 2.5, Policy::UTILITY_TARIFF_TERM_PERSISTENCE, UtilityBusinessModel::RATE_CASE_DECISION_RATE),
+            Policy::utilityTariffShortfallGap($macro, self::CAP_RATE),
+            1e-12
+        );
+        $this->assertEqualsWithDelta(-0.79 * Policy::utilityTariffShortfallGap($macro, self::CAP_RATE) * 100.0, Policy::earningsGap($macro, ['utilityRateGrant' => 100.0], 0.21, self::CAP_RATE), 1e-12);
+        $this->assertEqualsWithDelta(UtilityBusinessModel::FOUNDING_TARIFF_SHORTFALL, $carried, 1e-4, 'The trailing earnings open on the founding grant\'s shortfall.');
+        $this->assertSame(UtilityBusinessModel::FOUNDING_TARIFF_SHORTFALL, (new MacroStateDTO())->utilityTariffShortfallEmbodied);
     }
 
     /** The sitting government's coming budget is priced before it passes, so the round that passes it moves nothing. */

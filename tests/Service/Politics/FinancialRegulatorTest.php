@@ -50,30 +50,23 @@ class FinancialRegulatorTest extends TestCase
     }
 
     /**
-     * A stance is a regime: -1 the lightest on record (Luxembourg's 8.43%), +1 the strictest (Norway's 13.15%), linear
-     * between; the regimes are the 17 largest banks' end-2024 requirements in ascending order, with the median 10.0%; and
-     * they read light-touch below the Asian centres' gap, strict above Canada's.
+     * A stance runs linearly from the lightest requirement (-1) to the strictest (+1), is drawn uniformly, and reads
+     * light-touch in the lightest third of the range and strict in the strictest.
      */
-    public function testAStanceIsARegimeOnRecord(): void
+    public function testAStanceIsAPlaceOnTheRange(): void
     {
-        $this->assertCount(17, Regulator::OBSERVED_REQUIREMENTS);
-        $sorted = Regulator::OBSERVED_REQUIREMENTS;
-        sort($sorted);
-        $this->assertSame(Regulator::OBSERVED_REQUIREMENTS, $sorted);
-        $this->assertEqualsWithDelta(0.100, Regulator::OBSERVED_REQUIREMENTS[8], 1e-12, 'Median: UBS going concern.');
-
-        $this->assertEqualsWithDelta(-1.0, Regulator::stance(0.0843), 1e-12);
-        $this->assertEqualsWithDelta(1.0, Regulator::stance(0.1315), 1e-12);
-        foreach ([0.0843, 0.094, 0.1046, 0.1315] as $requirement) {
+        $this->assertEqualsWithDelta(-1.0, Regulator::stance(Regulator::LIGHTEST_REQUIREMENT), 1e-12);
+        $this->assertEqualsWithDelta(1.0, Regulator::stance(Regulator::STRICTEST_REQUIREMENT), 1e-12);
+        foreach ([0.08, 0.094, 0.1046, 0.13] as $requirement) {
             $this->assertEqualsWithDelta($requirement, Regulator::requirement(Regulator::stance($requirement)), 1e-12);
         }
-        $this->assertEqualsWithDelta(Regulator::OBSERVED_REQUIREMENTS[0], Regulator::requirement(Regulator::drawStance(0.0)), 1e-12);
-        $this->assertEqualsWithDelta(Regulator::OBSERVED_REQUIREMENTS[16], Regulator::requirement(Regulator::drawStance(1.0 - 1e-12)), 1e-12);
+        $this->assertEqualsWithDelta(-1.0, Regulator::drawStance(0.0), 1e-12);
+        $this->assertEqualsWithDelta(0.0, Regulator::drawStance(0.5), 1e-12);
+        $this->assertEqualsWithDelta(1.0, Regulator::drawStance(1.0), 1e-12);
 
-        $this->assertSame('light', Regulator::stanceName(0.0950));
-        $this->assertSame('middle', Regulator::stanceName(0.0966));
-        $this->assertSame('middle', Regulator::stanceName(0.1150));
-        $this->assertSame('strict', Regulator::stanceName(0.1230));
+        $this->assertSame('light', Regulator::stanceName(0.0960));
+        $this->assertSame('middle', Regulator::stanceName(0.1050));
+        $this->assertSame('strict', Regulator::stanceName(0.1200));
         $this->assertSame('light', Regulator::stanceName(FinancialConstants::OPENING_BANK_CAPITAL_REQUIREMENT), 'The District opens light-touch.');
     }
 
@@ -110,35 +103,31 @@ class FinancialRegulatorTest extends TestCase
     }
 
     /**
-     * Each regime carries its jurisdiction's mortgage cap, null where there is none: from Hong Kong's 70% to the
-     * Netherlands' and Luxembourg's 100%, the US among those with none; a stance on record reads its own regime's cap.
+     * The mortgage cap and the neutral buffer tighten together with the stance: none at or below the stance the District
+     * opened under, then linearly to the strictest, the cap starting where no buyer borrows, so it moves continuously.
      */
-    public function testEachRegimeCarriesItsMortgageCap(): void
+    public function testTheCapAndBufferTightenFromTheOpeningStance(): void
     {
-        $this->assertCount(count(Regulator::OBSERVED_REQUIREMENTS), Regulator::OBSERVED_LTV_CAPS);
-        $this->assertSame(0.70, min(array_filter(Regulator::OBSERVED_LTV_CAPS, static fn (?float $cap): bool => $cap !== null)));
-        $this->assertSame(1.00, max(Regulator::OBSERVED_LTV_CAPS));
-        $this->assertNull(Regulator::OBSERVED_LTV_CAPS[array_search(0.1230, Regulator::OBSERVED_REQUIREMENTS, true)], 'The US runs none.');
-        $this->assertCount(6, array_filter(Regulator::OBSERVED_LTV_CAPS, static fn (?float $cap): bool => $cap === null));
-        foreach (Regulator::OBSERVED_REQUIREMENTS as $index => $requirement) {
-            $this->assertSame(Regulator::OBSERVED_LTV_CAPS[$index], Regulator::ltvCapForStance(Regulator::stance($requirement)), "regime {$index}");
+        $opening = Regulator::stance(FinancialConstants::OPENING_BANK_CAPITAL_REQUIREMENT);
+        foreach ([-1.0, $opening - 0.1, $opening] as $stance) {
+            $this->assertNull(Regulator::ltvCapForStance($stance));
+            $this->assertSame(0.0, Regulator::neutralBufferForStance($stance));
         }
+        $this->assertEqualsWithDelta(Regulator::STRICTEST_LTV_CAP, Regulator::ltvCapForStance(1.0), 1e-12);
+        $this->assertEqualsWithDelta(Regulator::STRICTEST_NEUTRAL_BUFFER, Regulator::neutralBufferForStance(1.0), 1e-12);
+
+        $justPast = Regulator::ltvCapForStance($opening + 1e-9);
+        $this->assertNotNull($justPast);
+        $this->assertEqualsWithDelta(0.0, \App\Service\Macro\Subsystem\CreditFiscalSubsystem::mortgageLtvCreditCut($justPast), 1e-6, 'A cap just past the opening binds on no buyer: no jump from none.');
+        $midway = ($opening + 1.0) / 2.0;
+        $this->assertGreaterThan(Regulator::STRICTEST_LTV_CAP, Regulator::ltvCapForStance($midway));
+        $this->assertLessThan(Regulator::ltvCapForStance($opening + 0.01), Regulator::ltvCapForStance($midway));
+        $this->assertEqualsWithDelta(Regulator::STRICTEST_NEUTRAL_BUFFER / 2.0, Regulator::neutralBufferForStance($midway), 1e-12);
     }
 
-    /**
-     * Each regime carries its jurisdiction's positive neutral countercyclical buffer, none where it holds none: the UK's,
-     * the Netherlands' and Sweden's 2% the highest set, the US among those without; a stance reads its own regime's.
-     */
-    public function testEachRegimeCarriesItsNeutralBuffer(): void
+    /** The head at Year 1 holds no neutral buffer, and a buffer handed over reaches the economy. */
+    public function testTheHeadAtYearOneHoldsNoNeutralBuffer(): void
     {
-        $this->assertCount(count(Regulator::OBSERVED_REQUIREMENTS), Regulator::OBSERVED_NEUTRAL_BUFFERS);
-        $this->assertSame(0.0, Regulator::OBSERVED_NEUTRAL_BUFFERS[array_search(0.1230, Regulator::OBSERVED_REQUIREMENTS, true)], 'The US holds none.');
-        $this->assertSame(0.020, Regulator::OBSERVED_NEUTRAL_BUFFERS[array_search(0.1046, Regulator::OBSERVED_REQUIREMENTS, true)], 'The UK holds 2%.');
-        $this->assertCount(7, array_filter(Regulator::OBSERVED_NEUTRAL_BUFFERS, static fn (float $buffer): bool => $buffer > 0.0));
-        foreach (Regulator::OBSERVED_REQUIREMENTS as $index => $requirement) {
-            $this->assertSame(Regulator::OBSERVED_NEUTRAL_BUFFERS[$index], Regulator::neutralBufferForStance(Regulator::stance($requirement)), "regime {$index}");
-        }
-
         $state = self::opened();
         $this->assertSame(0.0, $state->regulatorNeutralBuffer, 'The head at Year 1 holds none, as the US does.');
         $this->assertSame(0.0, PoliticsStateDTO::fromState($state)->policy()->neutralCountercyclicalBuffer);

@@ -5,45 +5,42 @@ declare(strict_types=1);
 namespace App\Service\Politics;
 
 use App\Data\Politics\AerieCouncil;
+use App\Service\Macro\Subsystem\CreditFiscalSubsystem;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\MathUtility;
 
 /**
  * The Financial Regulator: a head the Council appoints for one fixed term, who sets the core equity (CET1) the
- * District's banks must hold against their risk-weighted assets and the most a mortgage may lend against a home's value.
+ * District's banks must hold against their risk-weighted assets, the most a mortgage may lend against a home's value,
+ * and the countercyclical buffer the banks hold when credit is calm.
  *
- * Everyone the Council seats holds a stance on the banks, from light-touch (-1) to strict (+1). A stance is the regime
- * its holder would run: the CET1 requirement, countercyclical buffer aside, from the lightest the 17 largest banks of the
- * advanced economies faced at end-2024 (Luxembourg's, 8.43%) to the strictest (Norway's, 13.15%), and each candidate is
- * drawn as one of those 17 regimes. No record classifies bank supervisors as the press classifies central bankers, so
- * the regimes themselves are the record: which one a head runs is who heads the regulator, as the US requirement on its
- * largest banks moved with each Vice Chair for Supervision (a 19% rise proposed in 2023, half of it re-proposed in 2024,
- * none adopted).
+ * Everyone the Council seats holds a stance on the banks, from light-touch (-1) to strict (+1), drawn uniformly. The
+ * stance sets all three rules together: the requirement runs linearly from the lightest to the strictest, and the
+ * mortgage cap and the neutral buffer tighten linearly from none at the stance the District opened under to their
+ * strictest, so a head no stricter than Year 1's runs neither, as the head at Year 1 does.
  *
  * The Council names the candidate nearest its median stance on the banks (App\Service\Politics\CouncilAppointments).
  * A head's requirement takes effect as the countercyclical buffer's does under Basel III: a rise is phased in over the
  * year after it is announced, a cut applies at once. The banks hold the requirement in force
- * (App\DTO\GovernmentPolicyDTO::$bankCapitalRequirement).
- *
- * A head drawn as one of the 17 regimes also runs that jurisdiction's loan-to-value cap on a first-time buyer's home,
- * or none, and its positive neutral countercyclical buffer, the one it holds when credit is not running ahead, or none,
- * from the day they are seated; the head sitting at Year 1 runs neither, as the US does. The cap reaches
- * household credit through App\DTO\GovernmentPolicyDTO::$mortgageLtvCap
- * (App\Service\Macro\Subsystem\CreditFiscalSubsystem::mortgageLtvCreditCut()).
+ * (App\DTO\GovernmentPolicyDTO::$bankCapitalRequirement). The cap and the buffer take effect from the day the head is
+ * seated and the economy builds them in: the cap through household credit
+ * (App\Service\Macro\Subsystem\CreditFiscalSubsystem::mortgageLtvCreditCut()), the buffer through its own phase-in.
  */
 final class FinancialRegulator
 {
-    // --- The Regimes on Record (Pillar 3 disclosures, end-2024) ---
-    /** CET1 requirements, countercyclical buffer aside, on the largest bank of each of 17 advanced economies at end-2024, in ascending order: Luxembourg, Japan, Singapore, Australia, Hong Kong, France, Ireland, the Netherlands, Switzerland, the UK, Germany, Canada, the US, Denmark, Sweden, Iceland, Norway. Japan's, Singapore's, Australia's and Hong Kong's leave out an unpublished Pillar 2 add-on. */
-    public const OBSERVED_REQUIREMENTS = [0.0843, 0.0850, 0.0900, 0.0925, 0.0950, 0.0966, 0.0982, 0.0993, 0.1000, 0.1046, 0.1071, 0.1150, 0.1230, 0.1255, 0.1260, 0.1290, 0.1315];
-    /** Loan-to-value cap on a first-time buyer's home in each of those 17 jurisdictions at end-2024, in the same order, null where there is none: Luxembourg 100% (90% for other buyers; ESRB notification, Dec 2020), Japan none [S], Singapore 75% (first housing loan; MAS) [S], Australia none [S], Hong Kong 70% (HKMA, 16 Oct 2024) [S], France none (the HCSF caps debt service instead) [S], Ireland 90% (ESRB notification, Jan 2022, from Jan 2023), the Netherlands 100% (Tijdelijke regeling hypothecair krediet, from 2018) [S], Switzerland 90% (SBA minimum requirements recognised by FINMA, 10% own funds) [S], the UK none (a flow limit on income multiples instead) [S], Germany none [S], Canada 95% (insured; above 80% insurance is mandatory) [S], the US none, Denmark 95% (Finanstilsynet's 5% down-payment rule, 2015) [S], Sweden 85% (ESRB notification, Mar 2026: 90% from 1 Apr 2026), Iceland 85% (80% for other buyers; ESRB notification, Oct 2022), Norway 85% (Ministry of Finance, Dec 2024: 90% from 31 Dec 2024) [S]. */
-    public const OBSERVED_LTV_CAPS = [1.00, null, 0.75, null, 0.70, null, 0.90, 1.00, 0.90, null, null, 0.95, null, 0.95, 0.85, 0.85, 0.85];
-    /** Countercyclical buffer each of those 17 jurisdictions holds in a standard risk environment, its positive neutral rate, in the same order, 0 where it has none: Australia 1% (APRA, from 2023), Hong Kong 1% (HKMA, from April 2024), Ireland 1.5% (Central Bank, from June 2024), the Netherlands 2% (DNB, from May 2024), the UK 2% (FPC, from July 2023), Sweden 2% (Finansinspektionen, from 2022), Iceland 2-2.5% (Financial Stability Committee) [S]; Denmark and Norway activate early but set no neutral rate (BCBS, Range of practices in implementing a positive neutral CCyB, November 2024, Table 1 and fn. 7). */
-    public const OBSERVED_NEUTRAL_BUFFERS = [0.0, 0.0, 0.0, 0.010, 0.010, 0.0, 0.015, 0.020, 0.0, 0.020, 0.0, 0.0, 0.0, 0.0, 0.020, 0.0225, 0.0];
-    /** Requirement below which a regime reads as light-touch: midway across the gap between the financial centres of Asia and Luxembourg (8.43-9.50%) and the large euro-area banks (9.66% and up). */
-    public const LIGHT_TOUCH_BELOW = 0.0958;
-    /** Requirement above which a regime reads as strict: midway across the widest gap on record, between Canada's 11.50% and the US's 12.30%, past which only the US and the Nordic regimes stand. */
-    public const STRICT_ABOVE = 0.1190;
+    // --- The Stance's Range ---
+    /** CET1 requirement of the lightest-touch head, countercyclical buffer aside (8%): Basel III's 4.5% minimum and 2.5% conservation buffer, and a 1% charge on the District's systemic banks. */
+    public const LIGHTEST_REQUIREMENT = 0.08;
+    /** CET1 requirement of the strictest head (13%), about where the strictest supervisors of the advanced economies hold their largest banks. */
+    public const STRICTEST_REQUIREMENT = 0.13;
+    /** Mortgage loan-to-value cap of the strictest head (80%): a fifth of a home's price from the buyer's own funds. */
+    public const STRICTEST_LTV_CAP = 0.80;
+    /** Neutral countercyclical buffer of the strictest head (2%), held while credit is calm so there is capital to release in a bust. */
+    public const STRICTEST_NEUTRAL_BUFFER = 0.02;
+    /** Requirement below which a head reads as light-touch: the lightest third of the range. */
+    public const LIGHT_TOUCH_BELOW = self::LIGHTEST_REQUIREMENT + ((self::STRICTEST_REQUIREMENT - self::LIGHTEST_REQUIREMENT) / 3.0);
+    /** Requirement above which a head reads as strict: the strictest third of the range. */
+    public const STRICT_ABOVE = self::STRICTEST_REQUIREMENT - ((self::STRICTEST_REQUIREMENT - self::LIGHTEST_REQUIREMENT) / 3.0);
 
     // --- The Head ---
     /** Length of the head's single term, in years: the five-year, non-renewable term of the chair of the ECB's Supervisory Board (Regulation 1024/2013, Art. 26(3)), the commonest term among bank supervisors that have one. */
@@ -112,24 +109,18 @@ final class FinancialRegulator
             $state->regulatorPassedOver = [];
         }
         self::seatHead($state, $chosen, $term);
-        if ($term < 0.0) {
-            $state->regulatorLtvCap = null;
-            $state->regulatorNeutralBuffer = 0.0;
-        }
 
         $state->requirementPhaseFrom = self::requirement($state->regulatorStance);
         $state->requirementPhaseStart = $term;
     }
 
-    /** A stance on the banks drawn from a uniform: one of the 17 regimes on record, each as likely. */
+    /** A stance on the banks drawn from a uniform, every stance between light-touch and strict as likely. */
     public static function drawStance(float $uniform): float
     {
-        $count = count(self::OBSERVED_REQUIREMENTS);
-
-        return self::stance(self::OBSERVED_REQUIREMENTS[min($count - 1, (int) floor($uniform * $count))]);
+        return (2.0 * $uniform) - 1.0;
     }
 
-    /** The stance a requirement stands for: -1 at the lightest regime on record, +1 at the strictest, linear between. */
+    /** The stance a requirement stands for: -1 at the lightest, +1 at the strictest, linear between. */
     public static function stance(float $requirement): float
     {
         return (2.0 * ($requirement - self::lightest()) / (self::strictest() - self::lightest())) - 1.0;
@@ -141,30 +132,30 @@ final class FinancialRegulator
         return $state->regulatorLtvCap;
     }
 
-    /** The cap of the regime a stance stands for: the one on record whose requirement is nearest the stance's. */
+    /** The cap a stance runs: none up to the opening stance, then tightening linearly from a cap no buyer reaches to the strictest. */
     public static function ltvCapForStance(float $stance): ?float
     {
-        return self::OBSERVED_LTV_CAPS[self::regime($stance)];
+        $strictness = self::strictnessPastOpening($stance);
+        if ($strictness <= 0.0) {
+            return null;
+        }
+        $looseCap = CreditFiscalSubsystem::NEW_PURCHASE_CLTV_EDGES[count(CreditFiscalSubsystem::NEW_PURCHASE_CLTV_EDGES) - 1];
+
+        return $looseCap - ($strictness * ($looseCap - self::STRICTEST_LTV_CAP));
     }
 
-    /** The positive neutral countercyclical buffer of the regime a stance stands for, as a share of risk-weighted assets. */
+    /** The positive neutral countercyclical buffer a stance holds, as a share of risk-weighted assets: none up to the opening stance. */
     public static function neutralBufferForStance(float $stance): float
     {
-        return self::OBSERVED_NEUTRAL_BUFFERS[self::regime($stance)];
+        return self::strictnessPastOpening($stance) * self::STRICTEST_NEUTRAL_BUFFER;
     }
 
-    /** The regime on record a stance stands for: the one whose requirement is nearest the stance's. */
-    private static function regime(float $stance): int
+    /** How far a stance stands from the District's opening one toward the strictest, 0 to 1; 0 at or below the opening. */
+    private static function strictnessPastOpening(float $stance): float
     {
-        $requirement = self::requirement($stance);
-        $nearest = 0;
-        foreach (self::OBSERVED_REQUIREMENTS as $index => $observed) {
-            if (abs($observed - $requirement) < abs(self::OBSERVED_REQUIREMENTS[$nearest] - $requirement)) {
-                $nearest = $index;
-            }
-        }
+        $opening = self::stance(FinancialConstants::OPENING_BANK_CAPITAL_REQUIREMENT);
 
-        return $nearest;
+        return max(0.0, min(1.0, ($stance - $opening) / (1.0 - $opening)));
     }
 
     /** The requirement a stance stands for. */
@@ -198,16 +189,16 @@ final class FinancialRegulator
         return CouncilAppointments::termStart($time, self::OPENING_HEAD_TERM_END, self::HEAD_TERM_YEARS) + self::HEAD_TERM_YEARS;
     }
 
-    /** The lightest regime on record. */
+    /** The lightest requirement a head may set. */
     public static function lightest(): float
     {
-        return self::OBSERVED_REQUIREMENTS[0];
+        return self::LIGHTEST_REQUIREMENT;
     }
 
-    /** The strictest regime on record. */
+    /** The strictest requirement a head may set. */
     public static function strictest(): float
     {
-        return self::OBSERVED_REQUIREMENTS[count(self::OBSERVED_REQUIREMENTS) - 1];
+        return self::STRICTEST_REQUIREMENT;
     }
 
     /** @param array{name: string, birth: float, stance: float, regulation: float, fund: float, debt: float, swing?: float} $person */

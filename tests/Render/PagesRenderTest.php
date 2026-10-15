@@ -81,9 +81,9 @@ final class PagesRenderTest extends KernelTestCase
             'regulator' => ['/regulator', 'regulator/index.html.twig', [
                 'regulator' => [
                     'head' => ['name' => 'Leontine Ashby', 'age' => 54, 'sinceLabel' => 'Year 12 Q3', 'termEndsLabel' => 'Year 17 Q3', 'stance' => 'middle', 'requirement' => 0.1046, 'ltvCap' => 0.85, 'neutralBuffer' => 0.02,
-                        'passedOver' => [['name' => 'Osric Vane', 'age' => 49, 'requirement' => 0.0843, 'ltvCap' => 1.0], ['name' => 'Maren Holt', 'age' => 58, 'requirement' => 0.1255, 'ltvCap' => null]]],
+                        'passedOver' => [['name' => 'Osric Vane', 'age' => 49, 'requirement' => 0.08, 'ltvCap' => null], ['name' => 'Maren Holt', 'age' => 58, 'requirement' => 0.1255, 'ltvCap' => null]]],
                     'inForce' => 0.1012, 'buffer' => 0.005, 'phasing' => ['target' => 0.1046, 'completeLabel' => 'Year 13 Q3'],
-                    'rules' => ['termYears' => 5.0, 'shortlist' => 3, 'lightest' => 0.0843, 'strictest' => 0.1315, 'phaseInMonths' => 12],
+                    'rules' => ['termYears' => 5.0, 'shortlist' => 3, 'lightest' => 0.08, 'strictest' => 0.13, 'phaseInMonths' => 12],
                 ],
                 'required' => 0.1062,
                 'banks' => [
@@ -91,7 +91,7 @@ final class PagesRenderTest extends KernelTestCase
                     ['ticker' => 'LAKE', 'name' => 'Lakebird Bank', 'cet1' => 0.1128, 'headroom' => 0.0066, 'status' => 'near'],
                     ['ticker' => 'POOL', 'name' => 'Pool Street Trust', 'cet1' => 0.1342, 'headroom' => 0.0280, 'status' => 'clear'],
                 ],
-                'mortgage' => ['cap' => 0.85, 'heldBelow' => 0.031, 'debtToIncome' => 0.98, 'tightestCap' => 0.70, 'loosestCap' => 1.0, 'regimes' => 17, 'uncapped' => 7],
+                'mortgage' => ['cap' => 0.85, 'heldBelow' => 0.031, 'debtToIncome' => 0.98, 'tightestCap' => 0.80, 'strictestBuffer' => 0.02],
             ]],
             'exchequer' => ['/exchequer', 'exchequer/index.html.twig', [
                 'exchequer' => [

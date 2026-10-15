@@ -35,8 +35,7 @@
 			</p>
 			<p class="text-xs text-on-surface-variant mt-2 max-w-3xl">
 				The Council names the head for a single {{ regulator.rules.termYears|number_format(0) }}-year term from a shortlist of {{ regulator.rules.shortlist }}, choosing the candidate nearest its own view of the banks.
-				A head brings a whole regime with them, the rules of a supervisor they know, and the rules change when the head does.
-				Some regimes keep part of the countercyclical buffer on in calm years, so there is capital to release when a crisis or a recession comes.
+				A head's view of the banks sets all three rules together, and they change when the head does: the stricter the head, the more capital, the tighter the mortgage limit and the larger the buffer kept on in calm years, up to <span class="font-mono tabular-nums">{{ mortgage.strictestBuffer|pct(0) }}</span>, so there is capital to release when a crisis or a recession comes.
 			</p>
 		</section>
 
@@ -49,7 +48,7 @@
 					<p class="text-xs text-warning mt-1">Rising to <span class="font-mono tabular-nums">{{ regulator.phasing.target|pct(1) }}</span> by <span class="font-mono tabular-nums">{{ regulator.phasing.completeLabel }}</span></p>
 				{% endif %}
 				<p class="text-xs text-on-surface-variant mt-3 leading-relaxed">
-					A head may set anywhere from {{ regulator.rules.lightest|pct(1) }} to {{ regulator.rules.strictest|pct(1) }}, the range the world's largest banks are held to.
+					A head may set anywhere from {{ regulator.rules.lightest|pct(1) }} to {{ regulator.rules.strictest|pct(1) }}, from the lightest-touch head to the strictest.
 					A rise takes effect over {{ regulator.rules.phaseInMonths }} months, a cut at once. A bank below the requirement and buffer may pay no dividend and buy back no shares,
 					and banks raising capital lend less while they do.
 				</p>
@@ -71,9 +70,7 @@
 				<p class="text-xs text-on-surface-variant mt-3 leading-relaxed">
 					A limit binds only on buyers who would have borrowed more, so a loose one changes little and a tight one holds back many buyers.
 					It takes effect on the day the head is seated; household borrowing adjusts over the following year or two. A lifted limit frees buyers to borrow again, but they take on new debt only gradually.
-					{% if mortgage.tightestCap is not null %}
-						Of the {{ mortgage.regimes }} regimes a head may bring, {{ mortgage.uncapped }} set no limit and the rest set between {{ mortgage.tightestCap|pct(0) }} and {{ mortgage.loosestCap|pct(0) }}.
-					{% endif %}
+					A head no stricter than the District's first sets no limit; a stricter one sets a tighter limit the stricter they are, down to <span class="font-mono tabular-nums">{{ mortgage.tightestCap|pct(0) }}</span>.
 				</p>
 			</section>
 		</div>

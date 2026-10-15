@@ -595,7 +595,7 @@ class GovernmentPageBuilderTest extends TestCase
         $this->assertSame(GovernmentPageBuilder::simDate(8.0), $regulator['phasing']['completeLabel']);
         $this->assertSame('Other One', $regulator['head']['passedOver'][0]['name']);
         $this->assertSame(57, $regulator['head']['passedOver'][0]['age']);
-        $this->assertEqualsWithDelta(0.0843, $regulator['head']['passedOver'][0]['requirement'], 1e-12);
+        $this->assertEqualsWithDelta(0.08, $regulator['head']['passedOver'][0]['requirement'], 1e-12);
     }
 
     public function testSimulationDatesCountFromTheFounding(): void

@@ -7,6 +7,7 @@ use App\DTO\PublicAccountsDTO;
 use App\Service\Macro\MacroEngine;
 use App\Service\Macro\MacroState;
 use App\Service\Macro\Recorder\MacroDiagnosticsProbe;
+use App\Service\Model\Sector\UtilityBusinessModel;
 use App\Service\Math\CreditRisk;
 use App\Service\Math\Distributions;
 use App\Service\Math\FinancialConstants;
@@ -465,6 +466,9 @@ class CreditFiscalSubsystem
         $state->extractionCostFactorEmbodied += (FirmEconomics::calculateExtractionCostFactor($state->extractionStringency) - $state->extractionCostFactorEmbodied) * $dt / self::TRAILING_EARNINGS_MEAN_LAG_YEARS;
         $state->stampDutyVolumeFactorEmbodied += (MacroTransmission::calculateStampDutyVolumeFactor($state->stampDutyRate) - $state->stampDutyVolumeFactorEmbodied) * $dt / self::TRAILING_EARNINGS_MEAN_LAG_YEARS;
         $state->carbonPowerUpliftEmbodied += (CommodityLogisticsSubsystem::carbonPowerPriceUplift($state->carbonPrice) - $state->carbonPowerUpliftEmbodied) * $dt / self::TRAILING_EARNINGS_MEAN_LAG_YEARS;
+        // A commission's grant reaches the tariff as rate cases close, which the trailing year then lags.
+        $state->utilityTariffShortfallEmbodied += (UtilityBusinessModel::steadyTariffShortfall($state->utilityRateCaseGrantShare) - $state->utilityTariffShortfallEmbodied)
+            * $dt / ((1.0 / UtilityBusinessModel::RATE_CASE_DECISION_RATE) + self::TRAILING_EARNINGS_MEAN_LAG_YEARS);
         // The firms the budget buys from read purchases through their smoothed level, which the trailing year then lags.
         $state->governmentSpendingShiftEmbodied += ((($state->governmentSpendingIndexEma / MacroEngine::GOVT_SPENDING_BASELINE) - 1.0) - $state->governmentSpendingShiftEmbodied) * $dt / self::TRAILING_EARNINGS_MEAN_LAG_YEARS;
     }

@@ -1892,7 +1892,7 @@ class CreditFiscalSubsystemTest extends TestCase
             CreditFiscalSubsystem::thinCapitalDragScale($opening + 0.01),
             1e-12
         );
-        $this->assertEqualsWithDelta(1.0, CreditFiscalSubsystem::thinCapitalDragScale(0.1315), 0.025, 'The strictest regime on record leaves the District near the US.');
+        $this->assertEqualsWithDelta(1.0, CreditFiscalSubsystem::thinCapitalDragScale(\App\Service\Politics\FinancialRegulator::STRICTEST_REQUIREMENT), 0.025, 'The strictest head leaves the District near the US.');
         $this->assertGreaterThan(CreditFiscalSubsystem::thinCapitalDragScale($opening), CreditFiscalSubsystem::thinCapitalDragScale(0.0843));
 
         $math = new class extends MathUtility {

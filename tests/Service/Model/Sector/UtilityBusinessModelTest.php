@@ -245,6 +245,42 @@ class UtilityBusinessModelTest extends TestCase
         return (new UtilityBusinessModel())->computeActualFinancials($stock, 100_000_000.0, 0.40, 20_000_000.0, 0.10, $macro, $math);
     }
 
+    /**
+     * The shortfall a grant leaves on average follows the rate-case cycle the model runs: quarterly cost drift, a filing
+     * at the threshold, decisions at the hazard, the granted share removed, the cap. The closed form misses the cycle's
+     * spread of case lengths and the cap, so it sits within a tenth of it, and falls as commissions grant more.
+     */
+    public function testTheSteadyShortfallFollowsTheRateCaseCycle(): void
+    {
+        $simulated = static function (float $grant): float {
+            mt_srand(7);
+            [$shortfall, $pending, $sum, $quarters] = [0.0, false, 0.0, 200000];
+            for ($q = 0; $q < $quarters; ++$q) {
+                $shortfall += MacroEngine::TARGET_INFLATION * 0.25;
+                $decided = $pending && (mt_rand() / mt_getrandmax()) < UtilityBusinessModel::RATE_CASE_EXIT_HAZARD;
+                if ($decided) {
+                    $pending = false;
+                    $shortfall -= $shortfall * $grant;
+                } elseif (!$pending && $shortfall >= UtilityBusinessModel::RATE_CASE_FILING_THRESHOLD) {
+                    $pending = true;
+                }
+                $shortfall = min(UtilityBusinessModel::MAX_TARIFF_SHORTFALL, $shortfall);
+                $sum += $shortfall;
+            }
+
+            return $sum / $quarters;
+        };
+
+        $previous = INF;
+        foreach ([0.24, 0.40, 0.55, UtilityBusinessModel::APPOINTED_COMMISSION_GRANTED_SHARE, 0.85] as $grant) {
+            $closedForm = UtilityBusinessModel::steadyTariffShortfall($grant);
+            $this->assertEqualsWithDelta($simulated($grant), $closedForm, 0.11 * $simulated($grant), "grant {$grant}");
+            $this->assertLessThan($previous, $closedForm);
+            $previous = $closedForm;
+        }
+        $this->assertEqualsWithDelta(-4.0 * log(1.0 - UtilityBusinessModel::RATE_CASE_EXIT_HAZARD), UtilityBusinessModel::RATE_CASE_DECISION_RATE, 1e-4);
+    }
+
     /** Gas sets the power price, so a gas spike reaches a zero-fuel merchant fleet as a windfall, not a squeeze (the 2022 inframarginal rent). */
     public function testAGasSpikeIsAWindfallForAZeroFuelMerchantFleet(): void
     {

@@ -447,6 +447,8 @@ readonly class MacroStateDTO
         public float $stampDutyVolumeFactorEmbodied = 1.0,
         /** The carbon price's uplift on the power price as the trailing year's earnings carry it, the same lag (CommodityLogisticsSubsystem::carbonPowerPriceUplift()). */
         public float $carbonPowerUpliftEmbodied = 0.0,
+        /** The average tariff shortfall the commission's grant leaves, as the rate cases and the trailing year have brought it (App\Service\Model\Sector\UtilityBusinessModel::steadyTariffShortfall()). */
+        public float $utilityTariffShortfallEmbodied = UtilityBusinessModel::FOUNDING_TARIFF_SHORTFALL,
         /** Government purchases above the founding level, as a fraction, as the trailing year's earnings carry them, the same lag. */
         public float $governmentSpendingShiftEmbodied = 0.0,
         /** @var array<string, float> The levers the sitting government will pass at its next budget round, keyed as App\Service\Politics\PoliticsEngine::LEVER_FIELDS; empty before they have been read. */

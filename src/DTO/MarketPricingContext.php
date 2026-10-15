@@ -155,6 +155,7 @@ class MarketPricingContext
                 'stampDutyRate' => $strategy->annualStampDutyTurnoverBase($stock) / $shares,
                 'carbonPrice' => $strategy->annualCarbonPowerEarningsBase($stock) / $shares,
                 'publicSpending' => $strategy->annualPublicSpendingEarningsBase($stock) / $shares,
+                'utilityRateGrant' => $strategy->annualUtilityTariffBase($stock) / $shares,
             ], static fn (float $base): bool => $base !== 0.0)
         );
     }

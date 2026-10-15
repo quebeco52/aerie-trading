@@ -46,8 +46,6 @@ final class AerieDiet
         self::TIDELINE => 'The Tideline Accord',
         self::NEW_HORIZON => 'New Horizon',
     ];
-    /** Parties that never vote to remove a councillor: the Chartists are the Council's own. */
-    public const COUNCIL_LOYALISTS = [self::CHARTISTS];
     /** The questions the blocs divide on, the economic ones: the Council question cuts across both blocs, as populism does across Scandinavia's red and blue. */
     public const BLOC_AXES = [self::AXIS_STATE, self::AXIS_OPENNESS];
 
@@ -107,8 +105,6 @@ final class AerieDiet
     public const SEATS = 300;
     /** Seats that pass a budget or a law. */
     public const MAJORITY_SEATS = 151;
-    /** Seats that can remove a councillor, which the Diet has never assembled: three quarters of the Diet. */
-    public const SUPERMAJORITY_SEATS = 225;
     /** Seats at the founding. */
     public const SEED_SEATS = [
         self::CIVIC => 84.0,
