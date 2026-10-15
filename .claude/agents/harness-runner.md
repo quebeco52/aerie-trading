@@ -26,7 +26,7 @@ number they can trust and a verdict, not a transcript. Your report is all they s
 - **Is a harness the right tool?** If the question is what the *live* game is doing, say so and recommend the user run
   `! make macro-dump` (writes `var/macro-gap-history.jsonl`, one record per simulated quarter). You cannot reach the
   running app or Docker from here. A harness is for counterfactuals: paired arms, constant sweeps, distributions.
-  A cited constant or an identity fix needs a unit test, not a harness: say so and stop.
+  A formula or identity fix needs a unit test, not a harness: say so and stop.
 
 ## The three harness shapes
 

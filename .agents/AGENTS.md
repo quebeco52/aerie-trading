@@ -1,8 +1,21 @@
 # Aerie Trading
 
-A market simulation in PHP 8.4 / Symfony 8 (Doctrine, Twig, Tailwind, Redis, Docker). A macro engine calibrated to
-real world data (mostly US data) drives about 60 listed firms through sector business models; prices form in a market engine with agent order
-flow. Players trade on in-world sites of the Aerie District, a financial-centre enclave (Year 1 = 2009Q1).
+A market simulation in PHP 8.4 / Symfony 8 (Doctrine, Twig, Tailwind, Redis, Docker). A macro engine drives about 60
+listed firms through sector business models; prices form in a market engine with agent order flow. Players trade on
+in-world sites of the Aerie District, a financial-centre enclave (Year 1 = 2009Q1).
+
+## What Aerie is
+Aerie is its own economy. It obeys the principles every economy obeys: accounting identities, budget constraints,
+stock-flow consistency, incentives, no free money. Its institutions, policy rules and parameter values are its own. The
+US, Singapore, Switzerland and Sweden share the principles and differ in everything else; Aerie is one more of those.
+- Real economies are reference points, not targets. Use them to borrow a mechanism or to check that a magnitude is
+  plausible (sign, order of magnitude, the range that real economies span). Do not fit a moment to one country's
+  series, and do not import a country's rule (a Fed reaction function, the EU debt line) because it exists there.
+- A District rule comes from the District's institutions, lore and politics. A difference from any real country needs
+  no justification; a violated principle always does.
+- "Realistic" means a real economy with Aerie's institutions could behave this way. It does not mean "matches the US".
+- Prefer the simpler mechanism. A term that exists only to land a number near a real-world figure is a candidate for
+  removal, not a reason to add a compensating one.
 
 ## Map
 src/Service/Math/       shared formulas by domain (FixedIncome, OptionPricing, CreditRisk, Valuation, TimeSeries, ...),
@@ -17,17 +30,18 @@ src/Data/               seed data and lore by subject: Company (InitialMarket, S
 
 ## Push back
 You are an architect, not an order-taker. If a request introduces a bug, breaks an accounting identity, double-counts
-a shock or rests on unsound math, say so in a sentence or two and propose the correct approach. Back it with a
-measurement where you can. The user can override anything, but you must point out what is being overridden.
+a shock, rests on unsound math or adds complexity the player will never see, say so in a sentence or two and propose
+the better approach. "It differs from US data" is not on its own an objection. The user can override anything, but
+you must point out what is being overridden.
 
 ## Models and math
-- Every formula is a named, published model you can cite. No ad-hoc clamps or "feels right" scalars.
+- A mechanism rests on sound economics and can be explained in a sentence. Name the idea it uses where that helps the
+  reader; no ad-hoc clamps that paper over a broken mechanism.
 - Formulas used in more than one place live in `src/Service/Math/`, one class per domain, as pure static functions.
   `MathUtility` is the random source: a formula goes there only if it draws. Grep the directory before writing one.
-- Calibrate to public data (FRED, BEA, EIA, filings). The macro core targets US moments. Deliberate departures:
-  the Sovereign Reserve Fund and the District's openness (judge against the no-fund arm or small open economies),
-  and firms fail rarely by design. Do not tune failure rates toward US default rates.
-- Lore sets per-firm parameters, never the model.
+- Parameters: choose a value that suits the District's institutions and gives a plausible magnitude. Firms fail rarely
+  by design.
+- Lore sets per-firm parameters, not per-firm mechanisms.
 - Time: drift × dt, diffusion × √dt, smoothing exp(−dt/τ), jump intensities per year. Any rate crossing a boundary
   is explicitly annual or per-tick.
 - A `*_BASELINE` constant is where a price is built, not where it settles. A cyclical deviation term reads a
@@ -54,44 +68,39 @@ Known traps, each shipped as a bug before:
 ## Evidence
 A claim about simulation behaviour needs a number, sized to the claim. Harness runs are the slowest part of a change;
 spend them where the answer is emergent.
-- **A cited constant, or a fix that restores an identity or a formula:** a unit test that pins it. No harness; the
-  source and the test are the evidence.
-- **A display or news rule** (a threshold, how often something shows to the player): one run of 3 seeds, to check
-  the rate is sane.
-- **Tuning toward a measured moment, or a claim that a change moves one:** arms on the same seeds, reporting n, mean
-  and standard error of the paired difference (t = Δ / SE_Δ) for 1-3 target quantities named before the run.
-  Harnesses live in `var/harness/<topic>/`; their code is tracked, their runs are not (read `<topic>/RUN.md` first;
-  do not scan the whole directory). Run in stages of 8, 16, then 48 seeds per arm; stop early once every target has
-  |t| ≥ 4 or is negligible. 48 is the ceiling, and variances need it. Iterate on 3-4 seeds and run the stages once, on
-  the final version. Run only the arms the question needs (no-fund only for a fund-driven moment), reuse a cached
-  baseline arm when `src/` is unchanged, and ask before a sweep over 100 runs.
+- **A fix that restores an identity or a formula:** a unit test that pins it. No harness.
+- **Does it behave sensibly:** 3-4 seeds. Sensible means no explosions or absurd levels, cycles a player can read, and
+  magnitudes inside the range real economies span. This is the default check.
+- **A small effect next to seed noise:** paired arms on the same seeds, reporting n, mean and standard error of the
+  paired difference (t = Δ / SE_Δ). Harnesses live in `var/harness/<topic>/`; their code is tracked, their runs are
+  not (read `<topic>/RUN.md` first; do not scan the whole directory). Stage 8, 16, then at most 48 seeds per arm;
+  stop once the answer is clear. Ask before a sweep over 100 runs.
 - **What the live game is doing:** tell the user to run `make macro-dump` first; a harness only for the counterfactual.
 
-One seed proves nothing about a moment. All PHP processes on the machine share 12 slots through `bin/php-slot`, at most 8 per session.
+All PHP processes on the machine share 12 slots through `bin/php-slot`, at most 8 per session.
 
 ## Research
-Pin numbers, don't survey a literature. One sovereign-fund question once fanned out to seven agents and ~575 web and shell calls, and used up a whole session.
-- Before searching, list the numbers the build needs (usually one to three). Stop when each has one citable source.
-  A second-hand figure (survey, review, abstract) is fine if you flag it.
+Research is for borrowing a mechanism or a plausible range, and is rarely needed. Look across several economies, not
+one.
 - About 20 web calls and one agent per question; an agent never spawns agents. Put this budget in any research
   prompt you delegate.
-- Paywalled or unreadable source: take the abstract or a citing paper's figure. Don't hunt mirrors, scrape Scholar or render PDF pages to images. Grep a PDF for the table instead of reading it whole.
-- If three attempts don't move the answer, or the budget runs out, stop and report what is pinned, what is open and
-  what more would cost. The user decides whether to go on.
+- Paywalled or unreadable source: take the abstract or a citing paper's figure. Don't hunt mirrors, scrape Scholar or
+  render PDF pages to images.
+- If three attempts don't move the answer, or the budget runs out, stop and report what you have.
 
 ## Constants
 Financial parameters and thresholds are class constants, or go in `FinancialConstants.php` if shared. No bare
 numeric literals in model code except mathematical ones (2, 12 months).
 - Group related constants under a `// --- Section Name ---` comment.
-- Each has a single-line `/** */` docblock with what it is and the real-world magnitude it targets.
+- Each has a single-line `/** */` docblock saying what it is and the magnitude it gives.
 
     // --- NIM (Net Interest Margin) Squeeze ---
     /** Break-even NIM floor (~50bps). Steep curve = profit; flat or inverted curve = squeeze. */
     public const NIM_BASE_SPREAD_BUFFER = 0.005;
 
 ## Comments
-Say what a term does and cite its source, in one to three lines. Measurements, sweeps and rejected alternatives go
-in the commit message, not the code.
+Say what a term does in one to three lines. Measurements, sweeps and rejected alternatives go in the commit message,
+not the code.
 
 ## Tests
 - PHPUnit. Every new model or mechanism gets a test.
