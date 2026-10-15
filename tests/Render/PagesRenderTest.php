@@ -41,7 +41,23 @@ final class PagesRenderTest extends KernelTestCase
         usort($stocks, static fn ($a, $b) => $b['marketCap'] <=> $a['marketCap']);
         $macro = ['output_gap' => 0.0132, 'inflation' => 0.0241, 'policy_rate' => 0.0425, 'yield_10y' => 0.0461];
 
+        $almanac = new \App\Service\Lore\Almanac(dirname(__DIR__, 2));
+        $affair = $almanac->get('harbour-ledger-affair');
+
         $pages = [
+            'almanac' => ['/almanac', 'almanac/index.html.twig', ['sections' => ['Institution' => [$almanac->get('security-bureau')], 'Incident' => [$affair]]]],
+            'almanac_entry' => ['/almanac/harbour-ledger-affair', 'almanac/entry.html.twig', [
+                'entry' => $affair, 'linkedFrom' => [$almanac->get('security-bureau')], 'pages' => [['name' => 'Security Bureau', 'href' => '/security-bureau']],
+            ]],
+            'security_bureau' => ['/security-bureau', 'security_bureau/index.html.twig', [
+                'bureau' => [
+                    'mandate' => \App\Data\Politics\AerieCouncil::DEPARTMENTS[array_search(\App\Data\District\Institutions::SECURITY_BUREAU, array_column(\App\Data\Politics\AerieCouncil::DEPARTMENTS, 'name'), true)]['mandate'],
+                    'director' => ['name' => 'Augustin Pell', 'age' => 58, 'sinceLabel' => 'Year 7 Q1', 'termEndsLabel' => 'Year 17 Q1', 'opening' => false,
+                        'passedOver' => [['name' => 'Nell Rourke', 'age' => 51], ['name' => 'Wendell Price', 'age' => 55]]],
+                    'rules' => ['termYears' => 10.0, 'shortlist' => 3],
+                ],
+                'entries' => $almanac->about('security-bureau'),
+            ]],
             'landing' => ['/', 'home/landing.html.twig', [
                 'etf' => ['name' => 'Skein Lakebird 30', 'ticker' => 'LBI', 'price' => 412.37],
                 'breadth' => ['advancing' => 31, 'declining' => 12, 'unchanged' => 2, 'topMover' => ['ticker' => 'HUMM', 'changePercent' => 0.1342]],

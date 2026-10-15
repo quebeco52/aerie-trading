@@ -13,6 +13,7 @@
         "dragonmantank/cron-expression": ">=3.6",
         "easycorp/easyadmin-bundle": "^5.4.1",
         "firebase/php-jwt": "^7.0.5",
+        "league/commonmark": "^2.7",
         "phpdocumentor/reflection-docblock": "^6.0.3",
         "phpstan/phpdoc-parser": "^2.3.2",
         "symfony/asset": "8.1.*",

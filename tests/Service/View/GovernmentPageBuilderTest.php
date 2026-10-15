@@ -140,16 +140,29 @@ class GovernmentPageBuilderTest extends TestCase
         $this->assertNull($this->builder()->securities($later, new MacroStateDTO())['coming'] ?? null, 'Once the notice has run the rules are in force.');
     }
 
-    /** The Security Bureau has no page, so the Council page lists its director with its mandate; the departments with pages carry none. */
+    /** The Council page lists the Security Bureau's director with its mandate, since the Bureau stands outside the government's menus; the other departments carry none. */
     public function testTheCouncilPageNamesTheSecurityBureausDirector(): void
     {
         $politics = new PoliticsStateDTO(totalTime: 7.0, securityDirectorName: 'Augustin Pell', securityDirectorBirth: -45.0, securityDirectorTermStart: 6.0);
         $departments = array_column($this->builder()->buildCouncil(new MacroStateDTO(totalTime: 7.0), $politics)['council']['departments'], null, 'name');
 
         $bureau = $departments[\App\Data\District\Institutions::SECURITY_BUREAU];
-        $this->assertNull($bureau['href']);
+        $this->assertSame('/security-bureau', $bureau['href']);
         $this->assertSame(['title' => 'Director', 'name' => 'Augustin Pell', 'age' => 52, 'termEndsLabel' => self::simDate(16.0)], $bureau['head']);
         $this->assertNull($departments[\App\Data\District\Institutions::EXCHEQUER]['head']);
+    }
+
+    /** The Security Bureau's page: its mandate and director; nothing before it has one. */
+    public function testTheSecurityBureauPageReadsItsDirector(): void
+    {
+        $this->assertNull($this->builder()->securityBureau(new PoliticsStateDTO()));
+
+        $page = $this->builder()->securityBureau(new PoliticsStateDTO(totalTime: 2.0, securityDirectorName: 'Raymond Okafor', securityDirectorBirth: -50.0, securityDirectorTermStart: -4.0));
+        $this->assertNotNull($page);
+        $this->assertSame('Before Year 1', $page['director']['sinceLabel']);
+        $this->assertTrue($page['director']['opening']);
+        $this->assertSame(52, $page['director']['age']);
+        $this->assertStringContainsString('investigative police', $page['mandate']);
     }
 
     public function testTheDietAtYearOneIsDrawnSeatForSeat(): void

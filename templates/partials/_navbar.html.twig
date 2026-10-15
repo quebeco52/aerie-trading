@@ -10,7 +10,8 @@
 ] %}
 {% set district_links = [
     { href: '/economy', label: 'Economy', active: current_path == '/economy' },
-    { href: '/district/glasswater-row', label: 'Glasswater Row', active: current_path starts with '/district' }
+    { href: '/district/glasswater-row', label: 'Glasswater Row', active: current_path starts with '/district' },
+    { href: '/almanac', label: 'District Almanac', active: current_path starts with '/almanac' }
 ] %}
 {# The Diet's side first, then the Council and the departments it appoints, split by a rule. #}
 {% set government_links = [

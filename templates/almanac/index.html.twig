@@ -1,0 +1,43 @@
+{% extends 'base.html.twig' %}
+
+{# The District Almanac's index: App\Service\Lore\Almanac's entries by kind, read from content/almanac/. #}
+
+{% block title %}District Almanac - Aerie Exchange{% endblock %}
+
+{% block meta %}
+	<meta name="description" content="The District Almanac: the institutions, history, places and people of the Aerie Autonomous District.">
+	<meta property="og:title" content="District Almanac | Aerie Exchange">
+	<meta property="og:type" content="website">
+{% endblock %}
+
+{% block body %}
+<div class="max-w-400 mx-auto px-4 sm:px-6 lg:px-8 pt-8 pb-12 w-full space-y-6">
+	<header class="pb-5 border-b border-outline-variant/15">
+		<h1 class="text-2xl md:text-3xl font-semibold text-on-surface tracking-tight">District Almanac</h1>
+		<p class="mt-2 text-sm text-on-surface-variant leading-relaxed max-w-3xl">
+			The District's reference work: its institutions, its history, its places and its people, before its records
+			begin.
+		</p>
+	</header>
+
+	<div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
+		{% for category, entries in sections %}
+			<section class="bg-surface-container-low rounded-lg p-5 border border-outline-variant/20" aria-labelledby="almanac-{{ category|lower }}">
+				<h2 id="almanac-{{ category|lower }}" class="text-sm font-semibold text-on-surface">{{ {Institution: 'Institutions', History: 'History', Incident: 'Incidents', Place: 'Places', Person: 'People'}[category] }}</h2>
+				<ul class="mt-3 space-y-3">
+					{% for entry in entries %}
+						<li>
+							<a href="{{ path('app_almanac_entry', {slug: entry.slug}) }}" class="text-sm font-semibold text-primary hover:underline underline-offset-2">{{ entry.title }}</a>
+							<span class="block text-xs text-on-surface-variant mt-0.5">{{ entry.summary }}</span>
+						</li>
+					{% endfor %}
+				</ul>
+			</section>
+		{% else %}
+			<p class="text-sm text-on-surface-variant">The Almanac has no entries yet.</p>
+		{% endfor %}
+	</div>
+
+	<p class="source-note">{{ source_line('almanac') }}</p>
+</div>
+{% endblock %}

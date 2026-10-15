@@ -356,7 +356,7 @@ class GovernmentPageBuilder
                 array_map(static fn(array $member): float => $member['swing'] ?? 0.0, $politics->boardMembers)
             ) + ['seats' => count($politics->boardMembers), 'median' => MonetaryAuthority::stanceName(CouncilAppointments::boardMedians($politics)[CouncilAppointments::AXIS_MONEY])],
             'lean' => self::councilLean($politics),
-            // The Security Bureau has no page of its own, so its director is shown with its mandate.
+            // The Security Bureau stands outside the government's menus, so its director is shown with its mandate.
             'departments' => array_map(static fn(array $department): array => $department + [
                 'head' => $department['name'] === Institutions::SECURITY_BUREAU && $politics->securityDirectorName !== '' ? [
                     'title' => 'Director',
@@ -2248,6 +2248,38 @@ class GovernmentPageBuilder
                 'lightestEnforcement' => SecuritiesCommission::LIGHTEST_EARNINGS_MANAGEMENT_SCALE,
                 'strictestEnforcement' => SecuritiesCommission::STRICTEST_EARNINGS_MANAGEMENT_SCALE,
             ],
+        ];
+    }
+
+    /**
+     * The Security Bureau: its mandate and its director, and when the director's term ends. The Bureau sets no rule, so
+     * there are no figures. Null before it has a director.
+     *
+     * @return array<string, mixed>|null
+     */
+    public function securityBureau(PoliticsStateDTO $politics): ?array
+    {
+        if ($politics->securityDirectorName === '') {
+            return null;
+        }
+
+        $time = $politics->totalTime;
+        $mandate = array_column(AerieCouncil::DEPARTMENTS, 'mandate', 'name')[Institutions::SECURITY_BUREAU];
+
+        return [
+            'mandate' => $mandate,
+            'director' => [
+                'name' => $politics->securityDirectorName,
+                'age' => (int) floor($time - $politics->securityDirectorBirth),
+                'sinceLabel' => $politics->securityDirectorTermStart < 0.0 ? 'Before Year 1' : self::simDate($politics->securityDirectorTermStart),
+                'termEndsLabel' => self::simDate(SecurityBureau::directorTermEnd($time)),
+                'opening' => $politics->securityDirectorTermStart < 0.0,
+                'passedOver' => array_map(static fn(array $candidate): array => [
+                    'name' => $candidate['name'],
+                    'age' => (int) floor($politics->securityDirectorTermStart - $candidate['birth']),
+                ], $politics->securityDirectorPassedOver),
+            ],
+            'rules' => ['termYears' => SecurityBureau::DIRECTOR_TERM_YEARS, 'shortlist' => CouncilAppointments::SHORTLIST],
         ];
     }
 
