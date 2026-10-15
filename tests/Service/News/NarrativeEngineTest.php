@@ -76,10 +76,10 @@ class NarrativeEngineTest extends TestCase
 
         $recession = $this->engine->generateLore(ShockEvent::RECESSION_DECLARED, [
             'unemployment_pct' => '5.3',
-            'unemployment_rise_pts' => '0.7',
+            'gdp_fall_pct' => '0.7',
             'output_gap_pct' => '-2.10',
         ]);
-        $this->assertStringContainsString('0.7 points', $recession);
+        $this->assertStringContainsString('0.7%', $recession);
 
         $inversion = $this->engine->generateLore(ShockEvent::YIELD_CURVE_INVERSION_ALARM, [
             'inversion_months' => '9.5',

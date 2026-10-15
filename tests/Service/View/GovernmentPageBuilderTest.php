@@ -89,6 +89,7 @@ class GovernmentPageBuilderTest extends TestCase
         $this->assertEqualsWithDelta($panel['rate'] * 0.9, $panel['interestToGdp'], 1e-12);
         $this->assertLessThan(0, $panel['maturityBp'], 'A book shorter than the founding one takes duration off the ten-year.');
         $this->assertEqualsWithDelta(\App\Service\Politics\Exchequer::averageMaturity(0.0), $panel['councilMaturity'], 1e-12);
+        $this->assertSame(10, $panel['riskSpreadBp'], 'The default charge the market asks, in basis points.');
     }
 
     public function testTheDietAtYearOneIsDrawnSeatForSeat(): void
@@ -109,7 +110,6 @@ class GovernmentPageBuilderTest extends TestCase
         $this->assertSame('Vanguard', $tags[Diet::CHARTISTS]);
         $this->assertSame('Civic', $tags[Diet::IRON_HARBOR]);
         $this->assertNull($page['talks'], 'Before any vote there are no talks to show.');
-        $this->assertFalse($page['government']['supermajority']);
         $this->assertSame('Before Year 1', $page['government']['formed']);
 
         $this->assertCount(Diet::SEATS, $page['hemicycle']);
@@ -302,7 +302,6 @@ class GovernmentPageBuilderTest extends TestCase
         $this->assertLessThan(MacroEngine::BASE_CORPORATE_TAX_RATE, $tax['platform']);
         $this->assertSame(MacroEngine::BASE_CORPORATE_TAX_RATE, $tax['target']);
         $this->assertSame('blocked', $tax['status']);
-        $this->assertFalse($page['budget']['braking']);
     }
 
     /** The home share's row says when the law asks for more of the board than the fund may own. */
@@ -316,30 +315,36 @@ class GovernmentPageBuilderTest extends TestCase
         $this->assertStringContainsString('the law would need 12%, more than the 10% it may hold', $note(0.40));
     }
 
-    /** A majority government's cut waits on the Council while debt is over the line; a lever that costs no revenue waits only on the next round. */
-    public function testTheBudgetShowsWhatTheCouncilHolds(): void
+    /** A majority government's budget waits only on the next round; the page shows the balance the debt plan calls for, the target and the pace. */
+    public function testTheBudgetShowsTheDebtPlan(): void
     {
         $rightBloc = Diet::membership([Diet::VANGUARD, Diet::EXCHANGE, Diet::CHARTISTS, Diet::NEW_HORIZON]);
-        $braked = $this->builder()->buildBudget(new MacroStateDTO(totalTime: 0.2, sovereignDebtToGdp: MacroEngine::SOVEREIGN_RISK_DEBT_THRESHOLD + 0.03), new PoliticsStateDTO(totalTime: 0.2, governingCoalition: $rightBloc, supportParties: Diet::membership([])));
-        $levers = array_column($braked['budget']['levers'], null, 'name');
+        $macro = new MacroStateDTO(totalTime: 0.2, sovereignDebtToGdp: 0.9, debtTarget: 0.5, debtPace: 0.0075);
+        $page = $this->builder()->buildBudget($macro, new PoliticsStateDTO(totalTime: 0.2, governingCoalition: $rightBloc, supportParties: Diet::membership([])));
+        $levers = array_column($page['budget']['levers'], null, 'name');
 
-        $this->assertTrue($braked['budget']['braking']);
-        $this->assertSame('held', $levers['Corporate tax rate']['status']);
-        $this->assertSame('pending', $levers['Tax on dividends']['status'], 'Net taxes give back what the tax on dividends raises, so exempting them widens no deficit.');
+        $this->assertSame('pending', $levers['Corporate tax rate']['status'], 'Nothing outside the Diet holds a tax cut.');
+        $this->assertSame('pending', $levers['Tax on dividends']['status']);
         $this->assertLessThan(Valuation::FOUNDING_DIVIDEND_TAX_RATE, $levers['Tax on dividends']['platform'], 'The right taxes dividends less.');
         $this->assertStringContainsString('at the rate set at Year 1', $levers['Tax on dividends']['note']);
         $this->assertLessThan(MacroEngine::BASE_CORPORATE_TAX_RATE, $levers['Corporate tax rate']['platform']);
         $this->assertSame(MacroEngine::BASE_CORPORATE_TAX_RATE, $levers['Corporate tax rate']['enacted']);
         $this->assertSame('enacted', $levers['Average tariff on imports']['status'], 'An open government has no tariff to levy.');
         $this->assertSame('pending', $levers['Labour force growth']['status']);
-        $this->assertSame('Year 1 Q3', $braked['budget']['nextRound']);
-        $this->assertSame('pending', $levers['Debt repair raised by tax']['status'], 'Who pays for a repair widens no deficit.');
+        $this->assertSame('Year 1 Q3', $page['budget']['nextRound']);
+        $this->assertSame('pending', $levers['Debt repair raised by tax']['status']);
         $this->assertLessThan(CreditFiscalSubsystem::FOUNDING_CONSOLIDATION_TAX_SHARE, $levers['Debt repair raised by tax']['platform'], 'The right raises less of it by tax.');
         $this->assertLessThan(SovereignFundSubsystem::OPENING_HOME_EQUITY_SHARE, $levers['Reserve fund shares held at home']['platform'], 'An open government sends the reserves abroad.');
 
-        $free = $this->builder()->buildBudget(new MacroStateDTO(totalTime: 0.2, sovereignDebtToGdp: 0.5), new PoliticsStateDTO(totalTime: 0.2, governingCoalition: $rightBloc, supportParties: Diet::membership([])));
-        $this->assertFalse($free['budget']['braking']);
-        $this->assertSame('pending', array_column($free['budget']['levers'], null, 'name')['Corporate tax rate']['status']);
+        $this->assertSame(CreditFiscalSubsystem::requiredPrimaryBalance($macro), $page['budget']['plannedBalance']);
+        $this->assertGreaterThan(0.0, $page['budget']['plannedBalance'], 'Debt 40 points over target calls for a surplus.');
+        $this->assertStringContainsString(sprintf('%.1f%% of GDP this year', 100.0 * $page['budget']['plannedBalance']), $levers['Debt repair raised by tax']['note']);
+        $this->assertSame(0.5, $page['budget']['debtTarget']);
+        $this->assertSame(0.0075, $page['budget']['debtPace']);
+        $this->assertGreaterThan(CreditFiscalSubsystem::FOUNDING_DEBT_PACE, $levers['Debt cut a year']['platform'], 'The right repairs debt faster than the founding pace.');
+        $this->assertSame(CreditFiscalSubsystem::FOUNDING_DEBT_PACE, $levers['Debt cut a year']['enacted']);
+        $this->assertSame('pending', $levers['Debt cut a year']['status']);
+        $this->assertStringNotContainsString('Council', $levers['Debt target']['note']);
     }
 
     /**
@@ -558,10 +563,7 @@ class GovernmentPageBuilderTest extends TestCase
         $this->assertEqualsWithDelta(\App\Service\Politics\SovereignReserveFund::equityShare(\App\Service\Politics\CouncilAppointments::median($politics->councilFundStances)), $page['council']['lean']['reserves'], 1e-12);
         foreach ($council['roster'] as $seat) {
             $this->assertContains($seat['reserves'], ['cautious', 'balanced', 'bold']);
-            $this->assertContains($seat['debtLine'], \App\Service\Politics\DebtBrake::PUBLISHED_THRESHOLDS);
         }
-        $this->assertSame(\App\Service\Politics\DebtBrake::councilLine($politics), $page['council']['lean']['debtLine']);
-        $this->assertSame(\App\Service\Politics\DebtBrake::councilLine($politics), $page['rules']['debtBrake'], 'The brake shown is the Council\'s line.');
         $this->assertNull($this->builder()->buildHub(new MacroStateDTO(), new PoliticsStateDTO())['fundHead']);
     }
 
@@ -676,7 +678,7 @@ class GovernmentPageBuilderTest extends TestCase
     {
         $rows = array_column($this->builder()->buildDiet(new MacroStateDTO(), new PoliticsStateDTO())['compass']['layouts']['wide']['rows'], 'laws', 'axis');
 
-        $this->assertSame(['public spending', 'corporate tax', 'stamp duty', 'bank levy', 'reserve draw', 'tax or cuts', 'dividend tax', 'debt target'], $rows[Diet::AXIS_STATE]);
+        $this->assertSame(['public spending', 'corporate tax', 'stamp duty', 'bank levy', 'reserve draw', 'tax or cuts', 'dividend tax', 'debt target', 'debt pace'], $rows[Diet::AXIS_STATE]);
         $this->assertSame(['tariffs', 'immigration', 'foreign buyers', 'reserves at home'], $rows[Diet::AXIS_OPENNESS]);
         $this->assertSame(['merger review', 'utility rates'], $rows[Diet::AXIS_COUNCIL]);
         $this->assertSame(['green belts', 'carbon price', 'extraction rules'], $rows[Diet::AXIS_ENVIRONMENT]);
@@ -901,7 +903,7 @@ class GovernmentPageBuilderTest extends TestCase
         $state->totalTime = 4.0;
         $state->lastElectionAt = 4.0;
         $state->polls = [];
-        ElectionForecast::advance($state, 0.6);
+        ElectionForecast::advance($state);
 
         foreach ([1, 2, 4, 5] as $month) {
             $state->totalTime = 4.0 + ($month / 12.0);
@@ -909,7 +911,7 @@ class GovernmentPageBuilderTest extends TestCase
             $shares[Diet::CIVIC] += 0.004 * $month;
             $shares[Diet::VANGUARD] -= 0.004 * $month;
             $state->polls[] = ['t' => $state->totalTime, 'shares' => $shares];
-            ElectionForecast::advance($state, 0.6);
+            ElectionForecast::advance($state);
         }
         $politics = PoliticsStateDTO::fromState($state);
 

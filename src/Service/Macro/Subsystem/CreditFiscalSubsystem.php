@@ -61,31 +61,31 @@ class CreditFiscalSubsystem
     /** Ten-year term premium per unit of gross debt to GDP times years of average maturity: 0.29%; the fund's paper is foreign, so all the District's debt is in private hands. Hamilton & Wu (2012, Table 6): retiring December 2006's debt beyond ten years with $400bn of bills would have taken 14bp off the ten-year; at about 17 years' remaining maturity against 0.4, on $13.8T of GDP, 0.48 GDP-years of supply. */
     public const DEBT_MATURITY_TERM_PREMIUM = 0.0029;
 
-    // --- Sovereign Debt Dynamics (Greenwood-Vayanos 2014) ---
-    /** Structural primary fiscal deficit as a fraction of GDP with no sovereign fund, levied as taxes that far below the purchases share; with a fund, the structural deficit is the fund's draw, spent. */
-    public const SOVEREIGN_STRUCTURAL_DEFICIT = 0.020;
-    /** Gross debt-to-GDP the Bohn (1998) fiscal reaction holds the Diet's budget to at the neutral platform (each government sets its own, PoliticsEngine::platform()): a surplus above it, a deficit below it. 70%, below every Council debt line but the lowest (Politics\DebtBrake), so the brake binds after a shock, not as a rule. */
-    public const SOVEREIGN_DEBT_NEUTRAL_THRESHOLD = 0.70;
-    /** Bohn (1998, 2008) linear fiscal reaction: primary surplus per unit of gross debt off the threshold, on either side (~0.10, the upper end of advanced-economy estimates). It holds debt near 90% against a 2% structural deficit, and just above 70% once a sovereign fund's draw pays that deficit. */
-    public const BOHN_FISCAL_REACTION_SENSITIVITY = 0.10;
-    /** Share of the Bohn surplus the budget raises by tax at the District's founding, the rest by cutting purchases: the average OECD deficit-cutting plan's, 0.69 of 1.83% of GDP (Alesina, Azzalini, Favero, Giavazzi & Miano 2018, Table 8; 16 countries, 1981-2014). */
-    public const FOUNDING_CONSOLIDATION_TAX_SHARE = 0.69 / 1.83;
-    /** Structural adjustment a year a budget plan phases a lower debt target in at: 0.5% of GDP, the benchmark of the EU's corrective path (Regulation (EU) 2024/1264, amending 1467/97). */
-    public const CONSOLIDATION_PACE = 0.005;
+    // --- The Budget's Debt Path (each cabinet's debt target and pace: Politics\AerieDiet::DEBT_PLANKS) ---
+    /** Gross debt to GDP the budget steers to before a cabinet has set its own: where the District opened. */
+    public const FOUNDING_DEBT_TARGET = MacroEngine::INITIAL_DEBT_TO_GDP;
+    /** Points of GDP a year the budget moves debt toward its target before a cabinet has set its own pace. */
+    public const FOUNDING_DEBT_PACE = 0.005;
+    /** Share of a consolidation the founding budget raises by tax, the rest by cutting purchases: two parts in five. */
+    public const FOUNDING_CONSOLIDATION_TAX_SHARE = 0.40;
 
-    // --- Sovereign Risk Premium (Laubach 2009) ---
-    /** Long yield per unit of debt-to-GDP above the risk threshold: 3-4 bps per percentage point (Laubach 2009; Engen & Hubbard 2004), so 0.035 per unit. Laubach's deficit coefficient is for PROJECTED structural deficits; the engine's primary deficit is cyclical, so it is published but not priced. */
-    public const LAUBACH_DEBT_YIELD_SENSITIVITY = 0.035;
+    // --- Sovereign Default Premium (fiscal limit: Bi 2012; Ghosh, Kim, Mendoza, Ostry & Qureshi 2013) ---
+    /** Net financial liabilities to GDP at which the District's fiscal limit is as likely crossed as not, in a year: twice GDP. */
+    public const FISCAL_LIMIT_NET_LIABILITIES = 2.0;
+    /** Spread of that limit (in GDP): where markets place a sovereign's limit is uncertain, so the premium rises smoothly, about 12bp at 90% of GDP and 2% at 135%. */
+    public const FISCAL_LIMIT_SD = 0.4;
+    /** Share of a sovereign bond lost in a default: about 40%, the average haircut on advanced and emerging restructurings (Cruces & Trebesch 2013). */
+    public const SOVEREIGN_LOSS_GIVEN_DEFAULT = 0.4;
     /** Time constant (years) over which the market reprices the fiscal position: a projection revises over budget rounds, not ticks. */
     public const SOVEREIGN_RISK_REPRICING_YEARS = 0.5;
-    /** Cap on the sovereign risk spread (600 bps): the level at which an advanced sovereign lost market access in 2011. */
-    public const MAX_SOVEREIGN_RISK_SPREAD = 0.06;
     /** Share of the sovereign spread a corporate bond's YIELD carries over the riskless curve: Durbin & Ng (2005, Table IV) 0.455 (se 0.074), corporate on sovereign spread changes over US Treasuries; Almeida et al. (2017) find about half. */
     public const SOVEREIGN_CEILING_PASSTHROUGH = 0.50;
 
     // --- Barro Tax-Smoothing & Automatic Fiscal Stabilizers (Barro 1979) ---
-    /** Tax-rate response to the output gap, fitted with the speed it adjusts at (MacroEngine::FISCAL_ADJUSTMENT_SPEED) by indirect inference on the US primary deficit's Auerbach (2002) reaction, 1960-2019: automatic -0.29, discretionary -0.038 per pp of lagged gap a quarter, persistence -0.047; the engine's regression lands within half a standard error of all three. */
-    public const FISCAL_STABILIZER_SENSITIVITY = 0.35;
+    /** Elasticity of net taxes (taxes less transfers) to output: progressive taxes and countercyclical benefits move about twice as much as output (Girouard & Andre 2005). */
+    public const NET_TAX_OUTPUT_ELASTICITY = 2.0;
+    /** Net tax rate per unit of output gap, the automatic stabilisers: the District's own take times the elasticity's excess over one, so a low-tax state stabilises less (0.113). */
+    public const FISCAL_STABILIZER_SENSITIVITY = self::FOUNDING_NET_TAX_RATE * (self::NET_TAX_OUTPUT_ELASTICITY - 1.0);
     /** Mean lag, in years, of the tax a trailing year's earnings carry behind the tax charged: half the year, as a first-order lag (the convention of MacroAggregateSubsystem::DEMAND_TRANSMISSION_LAGS). */
     public const TRAILING_EARNINGS_MEAN_LAG_YEARS = 0.5;
 
@@ -159,17 +159,9 @@ class CreditFiscalSubsystem
     /** Ceiling of the index: the BBD US series peaked near four times its mean in 2020. */
     public const MAX_EPU = 400.0;
 
-    // --- Administered Healthcare Prices (CMS market-basket update) ---
-    /** Reimbursement update cut per unit of gross sovereign debt above the risk threshold (90%): the sequester that a fiscal correction imposes on administered prices. */
-    public const REIMBURSEMENT_FISCAL_CUT_SENSITIVITY = 0.02;
+    // --- Administered Healthcare Prices (the health payer's annual update) ---
     /** Floor on the annual update: administered prices are held, not cut, in a deflationary year. */
     public const REIMBURSEMENT_MIN_UPDATE = 0.0;
-
-    // --- Fund-Financed Stabilisation (IMF Norway Selected Issues 2025, Table 5) ---
-    /** Fund-financed rise in the structural balance per unit of output gap a budget round, for a fund of Norway's size: fitted by indirect inference so the engine's whole discretionary balance, tax leg included, answers the annual gap at Norway's 0.450 (se 0.194); 0.43 with the round reading the gap as it stands (var/harness/stab_cycle.sh). */
-    public const FUND_STABILISATION_GAP_RESPONSE = 0.47;
-    /** Norway's fund over mainland GDP, averaged over the years that response was estimated on (2002-2024): 2.15, from GPFG year-end values (NBIM) over mainland GDP at current prices (Statistics Norway 09189). */
-    public const FUND_STABILISATION_REFERENCE_FUND_TO_GDP = 2.15;
 
     // --- Household Credit Cycle (Mian & Sufi 2018; BIS DSR; Basel III CCyB) ---
     /** Share of household debt that is mortgage debt (~70% in the US), priced off the mortgage rate; the rest is consumer credit priced off the policy rate. */
@@ -228,24 +220,6 @@ class CreditFiscalSubsystem
     public const CREDIT_CRISIS_DRAG_DECAY = 0.12;
     /** Excess bond premium a crisis books on the day (216 bps): 2008's jump, EBP 1.24% in August to 3.40% in October, the one systemic crisis in the GZ record. The boom's size scales the drag (JST 2013), not this: nothing in the record says how the premium scales past 2008. */
     public const EBP_CRISIS_JUMP = 0.0216;
-
-    // --- Bank Rescues (Laeven & Valencia 2018; Amaglobeli, End, Jarmuzek & Palomba 2015) ---
-    /** Direct fiscal cost of the US rescue of 2007, gross of recoveries: capital injections, asset purchases and guarantees called, 4.5% of GDP (Laeven & Valencia 2018, IMF WP/18/206, Table 2). */
-    public const US_BANK_RESCUE_COST_TO_GDP = 0.045;
-    /** US deposit money banks' claims on the domestic non-financial sector in 2007, 65.6% of GDP (World Bank GFDD.DI.02), the size the cost is anchored at. */
-    public const US_BANK_CREDIT_TO_GDP = 0.656;
-    /** Log of the direct fiscal cost per unit of bank credit to GDP: 0.00771 a point (se 0.0032), 53 systemic crises (Amaglobeli et al. 2015, IMF WP/15/166, Table A1a col. 2), so 100 points more credit costs 2.2 times as much. */
-    public const BANK_RESCUE_COST_CREDIT_SEMI_ELASTICITY = 0.771;
-    /** Spread of the log cost across crises: the interquartile range of the 20 advanced-economy crises since 2007 over 1.349 (Laeven & Valencia 2018, Table 2); at their median an Ireland, whose blanket guarantee cost 37.6% of GDP, comes about one crisis in sixteen. */
-    public const BANK_RESCUE_COST_LOG_SD = 1.09;
-    /** The largest rescue an advanced economy has paid: Ireland's and Iceland's of 2008, 37.6% of GDP gross (Laeven & Valencia 2018, Table 2). The log-normal is fitted to the record and is not drawn past it. */
-    public const BANK_RESCUE_COST_CEILING = 0.376;
-    /** Share of the gross outlay recovered by asset sales, repayments, fees and dividends: the median of the same 20 crises, 54%. */
-    public const BANK_RESCUE_RECOVERY_SHARE = 0.54;
-    /** Mean years to recover it: the euro area had recovered 41% of its 8% of GDP gross by 2014, six years on (ECB Economic Bulletin 6/2015, article 2), 76% of that median share. */
-    public const BANK_RESCUE_RECOVERY_YEARS = 4.2;
-    /** The District's deposit banks' loans at home over GDP on the opening board, read until the board reports them: 142%, its loan books over the GDP the fund's currency bridge opens on (var/harness/bank_rescue). */
-    public const DISTRICT_OPENING_BANK_CREDIT_TO_GDP = 1.42;
 
     // --- Light-Touch Financial Centre (Jorda, Richter, Schularick & Taylor 2021) ---
     /** Crisis logit shift for the District's wholesale-funded banks: loans at 108% of deposits (UK and Swiss banks 1995-2007, JST R6) against the US 87%, at JRST's post-war probit marginal effect of 0.05pp a year per point (se 0.01); the hazard at trend rises from 2.2% to 3.6%. */
@@ -492,7 +466,7 @@ class CreditFiscalSubsystem
         $state->governmentSpendingIndex = StochasticProcesses::calculateSchwartz1Factor(
             currentPrice: $state->governmentSpendingIndex,
             kappa: MacroEngine::GOVT_SPENDING_MEAN_REVERSION,
-            theta: MacroEngine::GOVT_SPENDING_BASELINE * self::purchasesTarget($state->publicSpendingShare, $state->sovereignDebtToGdp, $state->sovereignFundDollarsPerGdp > 0.0, $state->consolidationTaxShare, self::debtAnchor($state)) / MacroEngine::PUBLIC_PURCHASES_TO_GDP,
+            theta: MacroEngine::GOVT_SPENDING_BASELINE * self::purchasesTarget($state->publicSpendingShare, self::requiredPrimaryBalance($state), $state->consolidationTaxShare) / MacroEngine::PUBLIC_PURCHASES_TO_GDP,
             sigma: self::GOVT_SPENDING_VOLATILITY,
             dt: $dt,
             dW: $this->mathUtility->generateStandardNormal()
@@ -529,7 +503,6 @@ class CreditFiscalSubsystem
      */
     public function calculateDynamicFiscalPolicy(MacroState $state, float $dt): void
     {
-        self::phaseDebtAnchor($state, $dt);
         $stanceTarget = self::FOUNDING_NET_TAX_RATE + self::fiscalStance($state);
         $levies = self::publicAccounts($state, $dt)->policyLevies();
         $state->netTaxRate += MacroEngine::FISCAL_ADJUSTMENT_SPEED * ($stanceTarget - $levies + (self::FISCAL_STABILIZER_SENSITIVITY * $state->outputGapEma) - $state->netTaxRate) * $dt;
@@ -555,155 +528,51 @@ class CreditFiscalSubsystem
     }
 
     /**
-     * The structural part of the tax take over the purchases share, as a share of GDP: the Bohn (1998) reaction to gross
-     * debt off its threshold, less the structural deficit a budget with no fund runs (with one, the draw pays that
-     * deficit as spending), less the part of any consolidation the Diet finds by cutting purchases, or of any loosening it
-     * spends on them (purchasesTarget()). Debt is gross: it is what the Diet's budget borrows and what the Council's brake reads
-     * (Politics\DebtBrake), while the fund is the Council's; the market still prices net financial liabilities
-     * (calculateSovereignRiskSpread()).
+     * The structural part of the tax take over the purchases share, as a share of GDP: the primary balance the budget's
+     * debt path calls for (requiredPrimaryBalance()), less the part the Diet finds by cutting purchases, or of any
+     * loosening it spends on them (purchasesTarget()).
      *
      * @param MacroState $state Current macroeconomic state.
      */
     public static function fiscalStance(MacroState $state): float
     {
-        $funded = $state->sovereignFundDollarsPerGdp > 0.0;
-        $anchor = self::debtAnchor($state);
-        $stance = self::bohnSurplus($state->sovereignDebtToGdp, $anchor) - ($funded ? 0.0 : self::SOVEREIGN_STRUCTURAL_DEFICIT);
+        $required = self::requiredPrimaryBalance($state);
 
-        return $stance - ($state->publicSpendingShare - self::purchasesTarget($state->publicSpendingShare, $state->sovereignDebtToGdp, $funded, $state->consolidationTaxShare, $anchor));
+        return $required - ($state->publicSpendingShare - self::purchasesTarget($state->publicSpendingShare, $required, $state->consolidationTaxShare));
     }
 
     /**
-     * The gross debt the law steers to: the Diet's target, capped at the Council's line. The brake holds a budget
-     * that widens the deficit but not the reaction's own loosening, so a target above the line would carry debt past it.
+     * The primary balance the budget plans for the year, a share of GDP: what holds gross debt to GDP where it stands
+     * at the rate the debt pays against trend nominal growth, plus the year's step toward the cabinet's debt target, at
+     * most its pace. A deficit is planned the same way when debt is under target. The budget plans on trend growth, so
+     * the automatic stabilisers run around the plan rather than inside it.
      */
-    public static function legislatedDebtAnchor(MacroState|MacroStateDTO $state): float
+    public static function requiredPrimaryBalance(MacroState|MacroStateDTO $state): float
     {
-        return min($state->debtTarget, $state->councilDebtLine);
+        $trendNominalGrowth = MacroEngine::TARGET_INFLATION + MacroEngine::TFP_DRIFT + $state->laborForceGrowthRate;
+        $holdsDebt = (self::sovereignEffectiveRate($state) - $trendNominalGrowth) * $state->sovereignDebtToGdp;
+        $pace = max(0.0, $state->debtPace);
+
+        return $holdsDebt + max(-$pace, min($pace, $state->sovereignDebtToGdp - $state->debtTarget));
     }
 
     /**
-     * The gross debt the budget in force plans against: the legislated anchor as the plan has phased it in so far, or the
-     * legislated anchor itself before any plan has run.
+     * The part of a consolidation the budget finds by cutting purchases rather than raising tax, a share of GDP: the
+     * planned surplus at the cabinet's tax share. A planned deficit loosens the budget the other way round, so this turns
+     * negative: a Diet that repairs debt by tax spends the room, one that repairs it by cuts gives it back as tax cuts.
      */
-    public static function debtAnchor(MacroState|MacroStateDTO $state): float
+    public static function consolidationSpendingCut(float $requiredBalance, float $taxShare): float
     {
-        return $state->debtAnchorInForce >= 0.0 ? $state->debtAnchorInForce : self::legislatedDebtAnchor($state);
+        return ((1.0 - $taxShare) * max(0.0, $requiredBalance)) + ($taxShare * min(0.0, $requiredBalance));
     }
 
     /**
-     * Phases a lower debt target in as a corrective plan does: the anchor falls so the surplus the reaction calls for
-     * rises by CONSOLIDATION_PACE of GDP a year. The corrective path paces tightening only, so a higher target is in force
-     * at once and the tax rate phases it in (MacroEngine::FISCAL_ADJUSTMENT_SPEED). Debt itself moving still reaches the
-     * reaction at once (Bohn 1998).
+     * The purchases share of GDP the purchases process reverts to: the Diet's appropriation, less the cuts the debt path
+     * calls for. No more can be cut than is appropriated; past that the tax rise carries the rest (fiscalStance()).
      */
-    public static function phaseDebtAnchor(MacroState $state, float $dt): void
+    public static function purchasesTarget(float $publicSpendingShare, float $requiredBalance, float $taxShare): float
     {
-        $legislated = self::legislatedDebtAnchor($state);
-        if ($state->debtAnchorInForce < 0.0 || $legislated >= $state->debtAnchorInForce) {
-            $state->debtAnchorInForce = $legislated;
-
-            return;
-        }
-        $step = self::CONSOLIDATION_PACE / self::BOHN_FISCAL_REACTION_SENSITIVITY * $dt;
-        $state->debtAnchorInForce = max($legislated, $state->debtAnchorInForce - $step);
-    }
-
-    /**
-     * The primary surplus the Bohn (1998) reaction calls for, a share of GDP: its sensitivity on gross debt off the
-     * threshold. The reaction is linear, as Bohn estimates it, so debt below the line is a deficit the budget may run; a
-     * one-sided rule leaves debt to drift wherever the other revenue lines push it.
-     */
-    public static function bohnSurplus(float $debtToGdp, float $anchor = self::SOVEREIGN_DEBT_NEUTRAL_THRESHOLD): float
-    {
-        return self::BOHN_FISCAL_REACTION_SENSITIVITY * ($debtToGdp - $anchor);
-    }
-
-    /**
-     * The part of the consolidation the budget finds by cutting purchases rather than raising tax, a share of GDP. A
-     * consolidation is the surplus beyond what pays the structural deficit, a cut from the budget as it stands, as the
-     * plans the tax share is measured on are (Alesina et al. 2018); with no fund, the reaction that only pays that deficit
-     * is no consolidation. Debt under the line loosens the budget the other way round, so this turns negative: a Diet
-     * that repairs debt by tax spends the room, one that repairs it by cuts gives it back as tax cuts, as the manifestos
-     * the share is set from split the two (PoliticsEngine::POLICY_MANIFESTO_CONSOLIDATION_TAX_SHARE_GAP).
-     */
-    public static function consolidationSpendingCut(float $debtToGdp, bool $funded, float $taxShare, float $anchor = self::SOVEREIGN_DEBT_NEUTRAL_THRESHOLD): float
-    {
-        $reaction = self::bohnSurplus($debtToGdp, $anchor);
-
-        return ((1.0 - $taxShare) * max(0.0, $reaction - ($funded ? 0.0 : self::SOVEREIGN_STRUCTURAL_DEFICIT))) + ($taxShare * min(0.0, $reaction));
-    }
-
-    /**
-     * The purchases share of GDP the purchases process reverts to: the Diet's appropriation, less the cuts the debt calls
-     * for. No more can be cut than is appropriated; past that the tax rise carries the rest of the surplus (fiscalStance()).
-     */
-    public static function purchasesTarget(float $publicSpendingShare, float $debtToGdp, bool $funded, float $taxShare, float $anchor = self::SOVEREIGN_DEBT_NEUTRAL_THRESHOLD): float
-    {
-        return $publicSpendingShare - min($publicSpendingShare, self::consolidationSpendingCut($debtToGdp, $funded, $taxShare, $anchor));
-    }
-
-    /**
-     * Fund-financed fiscal stabilisation: the budget leans against the cycle and the sovereign fund pays for it.
-     *
-     * Norway's structural non-oil balance answers the output gap (IMF Norway Selected Issues 2025, Table 5, a Golinelli &
-     * Momigliano 2009 reaction function on annual data): each year it rises 0.450 per point of gap and gives back 0.452 of
-     * the year before's change. That is the discretionary balance as a whole, so the fund's leg is what the tax leg
-     * leaves: spending above the rule draw in a slump, saving into the fund in a boom. The US record has no such leg
-     * (purchases do not lean against the cycle, Auerbach 2002); the fund is the fiscal space that lets the District run
-     * one (Romer & Romer 2019). Its swings in market value are kept out, as the IMF advises Norway to do.
-     *
-     *   D = D0 + change,  change = -beta x (F / F_NO) x (gap - its long-run average) - phi x (last year's change) - kappa x D0
-     *
-     * where D0 is the level the budget year opened at. Beta is Norway's response at Norway's fund, F_NO, 2.15 times
-     * mainland GDP over the years it was estimated on. Its rule sizes spending in shares of the fund (3% of its value),
-     * so the room to lean is a share of the fund too, and a fund of F times GDP leans F / F_NO as hard. The gap is read against its own trailing average, as a
-     * ministry's trend estimate averages the cycle to zero: read against potential itself, the engine's gap, whose
-     * mean is below zero (so is CBO's), would hold D above zero for good and drain the fund to pay for it. The budget is
-     * set twice a year, the October budget and the May revision, each on the gap as it then stands (Table 5 pairs a
-     * year's change with that year's gap); the revision redoes the year's change from D0 rather than adding to it. The
-     * rounds are the whole of the policy lag: a reading smoothed before the round and an appropriation smoothed after it
-     * added three quarters of a year between gap and demand, and the rule kept pushing after the gap turned (HP ACF4 of
-     * GDP 0.03 against the no-fund engine's 0.21; var/harness/stab_cycle.sh). The kappa term takes the level back to the
-     * rule path, since Norway's deviations from its rule are temporary. The fund is never asked for more than its
-     * foreign sleeves hold beside the rule draw. With no fund it is zero.
-     *
-     * @param MacroState $state Current macroeconomic state.
-     * @param float      $dt    Time increment in years.
-     */
-    public function calculateFundStabilisation(MacroState $state, float $dt): void
-    {
-        if ($state->sovereignFundDollarsPerGdp <= 0.0) {
-            $state->sovereignFundStabilisationToGdp = 0.0;
-            return;
-        }
-
-        if (TimeSeries::crossedSimulatedBoundary($state->totalTime, $dt, MacroEngine::BUDGET_ROUND_PERIOD_YEARS)) {
-            // The round that opens a budget year closes the last one: its change is booked and the new year starts from its end.
-            if (TimeSeries::crossedSimulatedBoundary($state->totalTime, $dt, 1.0)) {
-                $state->sovereignFundStabilisationLastChange = $state->sovereignFundStabilisationToGdp - $state->sovereignFundStabilisationYearStart;
-                $state->sovereignFundStabilisationYearStart = $state->sovereignFundStabilisationToGdp;
-            }
-
-            $change = -(self::fundStabilisationGapResponse($state->sovereignFundToGdp) * ($state->outputGap - $state->sovereignFundGapTrend))
-                - (MacroEngine::FUND_STABILISATION_IMPULSE_REVERSAL * $state->sovereignFundStabilisationLastChange)
-                - (MacroEngine::FUND_STABILISATION_PERSISTENCE * $state->sovereignFundStabilisationYearStart);
-            $affordable = max(0.0, ($state->sovereignFundToGdp * (1.0 - $state->sovereignFundDomesticWeight)) - $state->sovereignFundDrawToGdp);
-
-            $state->sovereignFundStabilisationToGdp = min($affordable, $state->sovereignFundStabilisationYearStart + $change);
-        }
-
-        // The average is of the readings before this one, so a round compares today's gap with the past's.
-        $state->sovereignFundGapTrend += (1.0 - exp(-$dt / MacroEngine::FUND_STABILISATION_GAP_TREND_YEARS)) * ($state->outputGap - $state->sovereignFundGapTrend);
-    }
-
-    /**
-     * Fund-financed spending per point of output gap for a fund of the given size (times GDP): Norway's response scaled
-     * by the fund against Norway's.
-     */
-    public static function fundStabilisationGapResponse(float $fundToGdp): float
-    {
-        return self::FUND_STABILISATION_GAP_RESPONSE * max(0.0, $fundToGdp) / self::FUND_STABILISATION_REFERENCE_FUND_TO_GDP;
+        return $publicSpendingShare - min($publicSpendingShare, self::consolidationSpendingCut($requiredBalance, $taxShare));
     }
 
     /**
@@ -726,8 +595,8 @@ class CreditFiscalSubsystem
      *   d(Debt/GDP) = [ (G - T)/GDP + (r_eff - g_nominal) * (Debt/GDP) ] * dt
      * where G is purchases plus the outlays the sovereign fund pays for, and T is taxes plus the fund's draw on its
      * expected returns (NIRC), revenue like a tax, and r_eff is the rate the debt pays (sovereignEffectiveRate()).
-     * Every term is a flow: the Bohn surplus and, with no fund, the structural deficit are in the tax rate
-     * (fiscalStance()) and in purchases (purchasesTarget()), which demand reads, not a ledger beside it.
+     * Every term is a flow: the debt path's planned balance is in the tax rate (fiscalStance()) and in purchases
+     * (purchasesTarget()), which demand reads, not a ledger beside it.
      *
      * The lines are the Exchequer's accounts (publicAccounts()), which the pages read too. Net taxes carry the whole
      * budget's cyclical and structural response, so T books them on GDP as fitted. The corporate rate, which moves only
@@ -737,14 +606,12 @@ class CreditFiscalSubsystem
      * founding rate, on what taxable holders are paid (dividendTaxRevenueShift()); the tax on foreign buyers on the homes
      * they still buy (AssetMarketSubsystem::foreignBuyerTaxRevenueToGdp()).
      *
-     * With a fund the budget spends the draw: the structural deficit is the draw itself, as Norway's fiscal rule sets the
-     * structural non-oil deficit at the fund's expected real return. The draw is sized to the fund and the fund compounds
-     * with its markets, so a fixed deficit would turn a fund that outgrows the economy into a standing surplus with
-     * nothing left to retire.
+     * With a fund the budget spends the draw, revenue and spending alike, so the draw leaves the planned balance where
+     * the debt path set it however large the fund grows.
      *
      * Gross debt has a floor, the stock the benchmark curve is kept on. A surplus that would take debt below it buys
      * assets instead: it is paid into the fund (sovereignFundBudgetInflow, credited on the fund's next tick), as
-     * Singapore's budget surpluses accrue to its reserves. With no fund there is nothing to buy and the floor holds.
+     * Singapore's budget surpluses accrue to its reserves. With no fund the surplus stays with the Exchequer as net assets.
      *
      * @param MacroState $state Current macroeconomic state.
      * @param float      $dt    Time increment in years.
@@ -762,9 +629,6 @@ class CreditFiscalSubsystem
         $funded = $state->sovereignFundDollarsPerGdp > 0.0;
         $state->primaryDeficitToGdp = $accounts->primaryDeficit();
         $state->sovereignDebtToGdp += $accounts->debtChange($dt);
-        // The rescue holdings are a stock struck in currency, so their ratio to GDP erodes with nominal growth as the debt's does.
-        $state->bankRescueAssetsToGdp += (self::BANK_RESCUE_RECOVERY_SHARE * $accounts->bankRescueOutlay) - $accounts->bankRescueSales
-            - ($state->nominalGdpGrowth * $state->bankRescueAssetsToGdp * $dt);
         // What the Authority earned and did not pay over goes to, or comes off, the losses it carries; a currency stock too.
         $state->centralBankDeferredAssetToGdp -= ((MonetaryPolicySubsystem::authorityNetIncomeToGdp($state) - $accounts->centralBankRemittance) * $dt)
             + ($state->nominalGdpGrowth * $state->centralBankDeferredAssetToGdp * $dt);
@@ -782,8 +646,8 @@ class CreditFiscalSubsystem
         // sovereign fund's paper sleeve (its equities are not debt instruments). Equal to gross with no fund.
         $state->sovereignNetDebtToGdp = $state->sovereignDebtToGdp - $state->sovereignFundBondsToGdp;
         // Net financial liabilities (OECD; minus the accounts' net financial worth): gross debt less the fund whole,
-        // equities with its bonds, and the rescue stakes still held.
-        $state->sovereignNetFinancialLiabilitiesToGdp = $state->sovereignDebtToGdp - $state->sovereignFundToGdp - $state->bankRescueAssetsToGdp;
+        // equities with its bonds.
+        $state->sovereignNetFinancialLiabilitiesToGdp = $state->sovereignDebtToGdp - $state->sovereignFundToGdp;
     }
 
     /**
@@ -793,14 +657,11 @@ class CreditFiscalSubsystem
      * Taxes are levied on the GDP produced, which already carries the gap; purchases are appropriated on trend, so their
      * share of GDP rises in a slump (the denominator half of the automatic stabilisers, Girouard & Andre 2005). Net taxes
      * on GDP and the corporate rate on its profits base found PUBLIC_PURCHASES_TO_GDP of GDP between them. Singapore's Net
-     * Investment Returns Contribution: the fund's draw is revenue (zero with no fund), spent together with the
-     * stabilisation the fund pays for. A bank rescue is a stock-flow adjustment (Laeven & Valencia 2018): the outlay is
-     * borrowed on the day the crisis lands, and the share later recovered is held as stakes and bad loans sold back as a
-     * first-order lag, each sale retiring debt. The Monetary Authority pays over its net interest income
-     * (centralBankRemittance()).
+     * Investment Returns Contribution: the fund's draw is revenue (zero with no fund), and spent. The Monetary Authority
+     * pays over its net interest income (centralBankRemittance()).
      *
      * A line is struck on the board's own books where the listed firms are the whole of its base: the bank levy on the
-     * deposit banks' balance sheets (as the rescue's cost is on their loans), and the stamp duty on the exchange's
+     * deposit banks' balance sheets, and the stamp duty on the exchange's
      * trades, which is paid to the fund rather than here. Where the board is only a sample of the base, the line is a
      * share of GDP: net taxes, the corporate rate on the economy's profits, tariffs on imports, the carbon price on the
      * power sector's emissions, the dividend tax on what all taxable holders are paid, and the tax on foreign buyers on
@@ -813,7 +674,7 @@ class CreditFiscalSubsystem
     {
         $output = max(0.1, $state->nominalGdpIndex);
         $funded = $state->sovereignFundDollarsPerGdp > 0.0;
-        $fundContribution = $funded ? $state->sovereignFundDrawToGdp + $state->sovereignFundStabilisationToGdp : 0.0;
+        $fundContribution = $funded ? $state->sovereignFundDrawToGdp : 0.0;
 
         return new PublicAccountsDTO(
             netTaxes: $state->netTaxRate,
@@ -832,12 +693,9 @@ class CreditFiscalSubsystem
             // Blanchard (2019): g is the growth of the nominal GDP the ratio is struck on, so a slump lowers it and the
             // recovery hands it back.
             growthErosion: $state->nominalGdpGrowth * $state->sovereignDebtToGdp,
-            bankRescueOutlay: $state->lastCreditCrisisAt === $state->totalTime ? $state->bankRescueCostToGdp : 0.0,
-            bankRescueSales: $state->bankRescueAssetsToGdp * (1.0 - exp(-$dt / self::BANK_RESCUE_RECOVERY_YEARS)),
             grossDebt: $state->sovereignDebtToGdp,
             fundBonds: $state->sovereignFundBondsToGdp,
             fundAssets: $state->sovereignFundToGdp,
-            bankRescueHoldings: $state->bankRescueAssetsToGdp,
         );
     }
 
@@ -1115,56 +973,9 @@ class CreditFiscalSubsystem
         $crisisDrag = self::thinCapitalDragScale($state->bankCapitalRequirement)
             * (self::CREDIT_CRISIS_DRAG_BASE + (self::CREDIT_CRISIS_DRAG_PER_GAP * max(0.0, $state->creditToGdpGapEma)));
         $state->creditCrisisDrag += $crisisDrag;
-        // The rescue is drawn on the day and booked by calculateSovereignDebt() on the same tick.
-        $state->bankRescueCostToGdp = self::bankRescueCostToGdp(self::bankCreditToGdp($state->boardBankCredit, $state->sovereignFundDollarsPerGdp, $state->nominalGdpIndex), $this->bankRescueShock($state));
         $this->diagnostics?->recordEvent('creditCrisis', $crisisDrag);
         // Gilchrist & Zakrajsek (2012): lenders' capital is hit on the day, so the premium they charge jumps with it.
         $state->excessBondPremium += self::EBP_CRISIS_JUMP;
-    }
-
-    /**
-     * The direct fiscal cost of standing behind the banks in a systemic crisis, as a share of GDP (Laeven & Valencia
-     * 2018): log-normal about the US's 2007 rescue, scaled by how much the banks have lent at home against the US's
-     * (Amaglobeli et al. 2015). What they lent, not what they hold: the cross-border and custody books of Luxembourg
-     * and Switzerland cost far less than their size, no further than the largest rescue on record. The recession and the
-     * revenue it costs are booked elsewhere.
-     *
-     * @param float $bankCreditToGdp Deposit banks' claims on domestic households and firms over GDP.
-     * @param float $z               Standard normal draw.
-     */
-    public static function bankRescueCostToGdp(float $bankCreditToGdp, float $z): float
-    {
-        return min(self::BANK_RESCUE_COST_CEILING, self::US_BANK_RESCUE_COST_TO_GDP
-            * exp((self::BANK_RESCUE_COST_CREDIT_SEMI_ELASTICITY * ($bankCreditToGdp - self::US_BANK_CREDIT_TO_GDP)) + (self::BANK_RESCUE_COST_LOG_SD * $z)));
-    }
-
-    /**
-     * The rescue's standard normal draw, from a stream of its own keyed to the day the crisis lands and the boom behind
-     * it, so sizing a rescue neither takes from nor shifts the draws every other shock in the run makes, and two runs
-     * whose crises fall on the same day do not draw the same rescue.
-     *
-     * @param MacroState $state Current macroeconomic state.
-     */
-    protected function bankRescueShock(MacroState $state): float
-    {
-        return MathUtility::ownStream(crc32(sprintf('bank-rescue:%.9F:%.12F', $state->totalTime, $state->creditToGdpGapEma)))->generateStandardNormal();
-    }
-
-    /**
-     * The board's deposit banks' loans at home over GDP, through the reserve fund's currency bridge as the bank levy is
-     * read; the opening board's until the board reports them.
-     *
-     * @param float $boardBankCredit What the board's deposit banks have lent at home, in currency.
-     * @param float $dollarsPerGdp   The fund's currency per unit of the GDP index.
-     * @param float $nominalGdpIndex Nominal GDP index.
-     */
-    public static function bankCreditToGdp(float $boardBankCredit, float $dollarsPerGdp, float $nominalGdpIndex): float
-    {
-        if ($boardBankCredit <= 0.0 || $dollarsPerGdp <= 0.0) {
-            return self::DISTRICT_OPENING_BANK_CREDIT_TO_GDP;
-        }
-
-        return $boardBankCredit / $dollarsPerGdp / max(0.1, $nominalGdpIndex);
     }
 
     /**
@@ -1225,14 +1036,13 @@ class CreditFiscalSubsystem
     }
 
     /**
-     * Sovereign risk premium (Laubach 2009): the fiscal position priced into the long end.
+     * Sovereign default premium: the expected loss on the District's bonds, the chance net liabilities pass the fiscal
+     * limit within a year times the loss in a default (CreditRisk::sovereignDefaultPremium()). Near nothing at the
+     * debt the District opened with, it rises steeply as debt climbs, the market's discipline on a cabinet that borrows.
+     * The premium is a level the whole curve carries (it enters the term premium, the corporate IG base through the
+     * sovereign ceiling, and the currency), repriced over budget rounds rather than ticks.
      *
-     * One-sided on the debt stock above the level at which an advanced sovereign is re-rated. The premium is
-     * a level the whole curve carries (it enters the term premium, the corporate IG base through the
-     * sovereign ceiling, and the currency), repriced over budget rounds rather than ticks. It stays zero at the
-     * debt the fiscal reaction settles at.
-     *
-     * The stock is net financial liabilities, gross debt less the sovereign fund whole and the rescue holdings:
+     * The stock is net financial liabilities, gross debt less the sovereign fund whole:
      * spreads price net rather than gross debt (Hadzi-Vaskov & Ricci 2016, IMF WP/16/148), and the whole public
      * balance sheet rather than its debt alone (IMF Fiscal Monitor, October 2018, ch. 2), which is how Singapore's
      * gross debt of over 150% of GDP carries no premium at all. What the budget and the bond market's duration
@@ -1243,8 +1053,12 @@ class CreditFiscalSubsystem
      */
     public function calculateSovereignRiskSpread(MacroState $state, float $dt): void
     {
-        $excessDebt = max(0.0, $state->sovereignNetFinancialLiabilitiesToGdpEma - MacroEngine::SOVEREIGN_RISK_DEBT_THRESHOLD);
-        $target = min(self::MAX_SOVEREIGN_RISK_SPREAD, self::LAUBACH_DEBT_YIELD_SENSITIVITY * $excessDebt);
+        $target = CreditRisk::sovereignDefaultPremium(
+            $state->sovereignNetFinancialLiabilitiesToGdpEma,
+            self::FISCAL_LIMIT_NET_LIABILITIES,
+            self::FISCAL_LIMIT_SD,
+            self::SOVEREIGN_LOSS_GIVEN_DEFAULT
+        );
 
         $state->sovereignRiskSpread = TimeSeries::calculateDistributedLag(
             currentLaggedValue: $state->sovereignRiskSpread,
@@ -1301,13 +1115,10 @@ class CreditFiscalSubsystem
     }
 
     /**
-     * Administered healthcare price update (the CMS market-basket rule).
-     *
-     * Hospital reimbursement is an administered price: reset once a year to the inflation the payer observes
-     * at the update, less a statutory productivity offset (ACA s.3401), less a sequester that scales with the
-     * sovereign's excess net debt. It is a step function, not a diffusion -- between updates the rate is flat
-     * whatever inflation does, which is why a hospital's margin is squeezed through an inflation spike and
-     * repaired a year later.
+     * Administered healthcare price update: the District's health payer resets its prices once a year to the inflation
+     * it observes, less a fixed productivity offset, less the share of purchases the budget is cutting that year. A
+     * step function, not a diffusion: between updates the rate is flat whatever inflation does, so a hospital's margin
+     * is squeezed through an inflation spike and repaired a year later, and an austerity budget reaches it directly.
      *
      * @param MacroState $state Current macroeconomic state.
      * @param float      $dt    Time increment in years.
@@ -1319,11 +1130,8 @@ class CreditFiscalSubsystem
             return;
         }
 
-        // Keyed to gross debt, as the fiscal reaction it belongs to is (fiscalStance()).
-        $excessDebt = max(0.0, $state->sovereignDebtToGdpEma - MacroEngine::SOVEREIGN_RISK_DEBT_THRESHOLD);
-        $update = $state->inflationEma
-            - MacroEngine::REIMBURSEMENT_PRODUCTIVITY_OFFSET
-            - (self::REIMBURSEMENT_FISCAL_CUT_SENSITIVITY * $excessDebt);
+        $austerity = max(0.0, self::consolidationSpendingCut(self::requiredPrimaryBalance($state), $state->consolidationTaxShare)) / MacroEngine::PUBLIC_PURCHASES_TO_GDP;
+        $update = $state->inflationEma - MacroEngine::REIMBURSEMENT_PRODUCTIVITY_OFFSET - $austerity;
 
         $state->reimbursementRateGrowth = max(self::REIMBURSEMENT_MIN_UPDATE, $update);
         $state->reimbursementRateIndex *= 1.0 + $state->reimbursementRateGrowth;

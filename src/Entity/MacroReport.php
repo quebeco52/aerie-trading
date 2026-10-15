@@ -159,6 +159,12 @@ class MacroReport
     #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
     private ?string $sahmRecessionIndicator = null;
 
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
+    private ?string $realGdpQuarterlyGrowth = null;
+
+    #[ORM\Column(nullable: true)]
+    private ?bool $recessionDeclared = null;
+
 
 
     #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4)]
@@ -601,6 +607,9 @@ class MacroReport
     #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 6, nullable: true)]
     private ?string $debtTarget = null;
 
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
+    private ?string $debtPace = null;
+
     // The rate committee's supermajority: 1 hawkish, -1 dovish, 0 neither.
     #[ORM\Column(type: Types::DECIMAL, precision: 3, scale: 0, nullable: true)]
     private ?string $authorityMajority = null;
@@ -637,11 +646,7 @@ class MacroReport
     private ?string $creditCrisisDrag = null;
 
     // What the state paid to stand behind the banks in the last crisis, and the rescue stakes it still holds, of GDP.
-    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 6, nullable: true)]
-    private ?string $bankRescueCostToGdp = null;
 
-    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 6, nullable: true)]
-    private ?string $bankRescueAssetsToGdp = null;
 
     #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
     private ?string $foreignOutputGap = null;
@@ -831,8 +836,6 @@ class MacroReport
     #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 6, nullable: true)]
     private ?string $sovereignFundDrawToGdp = null;
 
-    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 6, nullable: true)]
-    private ?string $sovereignFundStabilisationToGdp = null;
 
     #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 6, nullable: true)]
     private ?string $sovereignFundStampDutyToGdp = null;

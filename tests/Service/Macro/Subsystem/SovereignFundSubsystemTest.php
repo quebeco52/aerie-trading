@@ -463,25 +463,6 @@ class SovereignFundSubsystemTest extends TestCase
         $this->assertEqualsWithDelta(SovereignFundSubsystem::RETURN_INDEX_BASE, $state->sovereignFundReturnIndex, 1e-9);
     }
 
-    /** The fund pays the budget's stabilisation beside the draw, takes a boom's saving back, and books neither as return. */
-    public function testTheFundPaysTheStabilisationAndTakesBackTheSaving(): void
-    {
-        $tpy = 720;
-        $dt = 1.0 / $tpy;
-        foreach ([0.01, -0.01] as $stabilisation) {
-            $fund = $this->stillFund();
-            $state = $this->openFund($fund, $tpy);
-            $state->sovereignFundAnnualDraw = 0.0;
-            $state->sovereignFundStabilisationToGdp = $stabilisation;
-            $before = $fund->foreignHomeValue($state);
-
-            $this->step($fund, $state, $dt);
-
-            $gdpDollars = $state->sovereignFundDollarsPerGdp * $state->nominalGdpIndex;
-            $this->assertEqualsWithDelta(-$stabilisation * $gdpDollars * $dt, $fund->foreignHomeValue($state) - $before, 1e-3 * $gdpDollars * $dt);
-            $this->assertEqualsWithDelta(SovereignFundSubsystem::RETURN_INDEX_BASE, $state->sovereignFundReturnIndex, 1e-9);
-        }
-    }
 
     public function testTheDomesticSleeveEarnsTheBoardsPriceReturn(): void
     {

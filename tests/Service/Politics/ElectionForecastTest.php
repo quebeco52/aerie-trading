@@ -9,7 +9,6 @@ use App\DTO\MacroStateDTO;
 use App\Service\Macro\MacroEngine;
 use App\Service\Math\MathUtility;
 use App\Service\Politics\CoalitionFormation;
-use App\Service\Politics\DebtBrake;
 use App\Service\Politics\ElectionForecast;
 use App\Service\Politics\OpinionPolls;
 use App\Service\Politics\PoliticsEngine as Politics;
@@ -114,17 +113,17 @@ class ElectionForecastTest extends TestCase
         $standing = Politics::standingLevers($state);
         $expected = 0.0;
         foreach ($odds as $option) {
-            $expected += $option['chance'] * Politics::budget($option['cabinet'], $option['support'], $seats, $state->partyPositions, $standing, 0.6, DebtBrake::councilLine($state))['levers']['corporateTax'];
+            $expected += $option['chance'] * Politics::budget($option['cabinet'], $option['support'], $seats, $state->partyPositions, $standing)['levers']['corporateTax'];
         }
         // Within the weight of the cabinets too unlikely to work out, which the read leaves out.
-        $this->assertEqualsWithDelta($expected, ElectionForecast::sittingBudget($state, 0.6)['corporateTax'], 1e-4);
-        $this->assertNotEqualsWithDelta($standing['corporateTax'], ElectionForecast::sittingBudget($state, 0.6)['corporateTax'], 1e-3, 'The talks\' government is expected to change the law.');
+        $this->assertEqualsWithDelta($expected, ElectionForecast::sittingBudget($state)['corporateTax'], 1e-4);
+        $this->assertNotEqualsWithDelta($standing['corporateTax'], ElectionForecast::sittingBudget($state)['corporateTax'], 1e-3, 'The talks\' government is expected to change the law.');
         $endOfTalks = 6.2 + (CoalitionFormation::FORMATION_MEAN_DAYS / \App\Service\Math\FinancialConstants::DAYS_PER_YEAR);
         $this->assertEqualsWithDelta((floor($endOfTalks / MacroEngine::BUDGET_ROUND_PERIOD_YEARS) + 1.0) * MacroEngine::BUDGET_ROUND_PERIOD_YEARS, ElectionForecast::sittingTakesEffect($state), 1e-9);
 
         $state->talksStartedAt = 4.0;
         $state->totalTime = 4.1;
-        $this->assertSame($standing, ElectionForecast::sittingBudget($state, 0.6), 'After a vote the caretaker passes nothing.');
+        $this->assertSame($standing, ElectionForecast::sittingBudget($state), 'After a vote the caretaker passes nothing.');
         $this->assertEqualsWithDelta(4.5, ElectionForecast::sittingTakesEffect($state), 1e-9);
     }
 
@@ -184,7 +183,7 @@ class ElectionForecastTest extends TestCase
         }
         // Once a government takes office its first budget is the sitting one, and the forecast turns to the next vote.
         $cabinet = Diet::governingParties($state->governingCoalition);
-        $budget = Politics::budget($cabinet, Diet::governingParties($state->supportParties), $state->dietSeats, $state->partyPositions, Politics::standingLevers($state), 0.6, DebtBrake::councilLine($state));
+        $budget = Politics::budget($cabinet, Diet::governingParties($state->supportParties), $state->dietSeats, $state->partyPositions, Politics::standingLevers($state));
         $this->assertEqualsWithDelta($budget['levers']['corporateTax'], $state->sittingLevers['corporateTax'], 1e-12);
         $this->assertSame(8.0, $state->forecastFor);
         $this->assertSame($state->totalTime, $state->forecastAt, 'Forecast on the day it takes office, before any poll.');
@@ -207,7 +206,7 @@ class ElectionForecastTest extends TestCase
         $this->assertEqualsWithDelta(8.5, $policy->expectedPolicyFrom, 1e-9);
         $this->assertNull($policy->sittingLevers, 'The sitting government\'s budget is read each tick, not yet here.');
 
-        ElectionForecast::advance($state, 0.6);
+        ElectionForecast::advance($state);
         $policy = \App\DTO\PoliticsStateDTO::fromState($state)->policy();
         $this->assertSame($state->sittingLevers, $policy->sittingLevers);
         $this->assertEqualsWithDelta(6.5, $policy->sittingPolicyFrom, 1e-9, 'The next budget round.');

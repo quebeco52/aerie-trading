@@ -14,7 +14,6 @@ use App\Service\Macro\Subsystem\CreditFiscalSubsystem;
 use App\Service\Macro\Subsystem\SovereignFundSubsystem;
 use App\Service\Market\Chart\PriceChangeFeed;
 use App\Service\Politics\CoalitionFormation;
-use App\Service\Politics\DebtBrake;
 use App\Service\Politics\Exchequer;
 use App\Service\Politics\FinancialRegulator;
 use App\Service\Politics\MonetaryAuthority;
@@ -67,7 +66,7 @@ class SystemicEventReporter
             'hy_spread_pct' => number_format($macro->highYieldCreditSpread * 100.0, 2),
             'recession_prob_pct' => number_format($macro->recessionProbability * 100.0, 1),
             'unemployment_pct' => number_format($macro->unemploymentRate * 100.0, 1),
-            'unemployment_rise_pts' => number_format($macro->sahmRecessionIndicator * 100.0, 1),
+            'gdp_fall_pct' => number_format(-$macro->realGdpQuarterlyGrowth * 100.0, 1),
             'output_gap_pct' => number_format($macro->outputGap * 100.0, 2),
             'inversion_months' => number_format($macro->inversionDuration * 12.0, 1),
             'erp_pct' => number_format($macro->equityRiskPremium * 100.0, 2),
@@ -115,7 +114,6 @@ class SystemicEventReporter
             'tariff_pct' => number_format($politics->importTariffRate * 100.0, 1),
             'labor_growth_pct' => number_format($politics->laborForceGrowthRate * 100.0, 2),
             'carbon_price' => number_format($politics->carbonPrice, 2),
-            'council_held' => $politics->lastCouncilBrakeAt === $politics->totalTime ? 'yes' : 'no',
         ];
     }
 
@@ -264,10 +262,6 @@ class SystemicEventReporter
             $context['councillor_stance'] = $stance($politics->councilStances[$seat] ?? 0.0, $politics->councilSwingers[$seat] ?? 0.0);
             $context['councillor_passed_over'] = $passedOver($politics->councillorPassedOver);
             $context['councillor_term_ends'] = GovernmentPageBuilder::simDate(($politics->councilSince[$seat] ?? $time) + AerieCouncil::TERM_YEARS);
-            $line = DebtBrake::councilLine($politics);
-            $context['debt_line_change'] = $politics->debtLineBeforeSeating >= 0.0 && abs($line - $politics->debtLineBeforeSeating) > 1e-9
-                ? sprintf(' The Council\'s debt line moves from %s%% to %s%% of GDP.', rtrim(rtrim(number_format(100.0 * $politics->debtLineBeforeSeating, 1), '0'), '.'), rtrim(rtrim(number_format(100.0 * $line, 1), '0'), '.'))
-                : '';
             if ($politics->lastCouncilVacancyAt === $politics->lastCouncillorSeatedAt && $politics->lastVacancyName !== '') {
                 $context['predecessor'] = $politics->lastVacancyName;
                 $context['vacancy_cause'] = $politics->lastVacancyCause;

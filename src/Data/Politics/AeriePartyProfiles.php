@@ -157,12 +157,12 @@ final class AeriePartyProfiles
             'heartland' => 'The university quarter and the old houses of Glasswater Row',
             'about' => [
                 'The Chartists take their name from the District\'s founding Charter and defend it as written: a Council of thirteen that elects its own successors and stands above the parties, much as an elected crown would. They are the Council\'s loyalists in the Diet and the steadiest opponents of any attempt to give the Diet power over it.',
-                'Their voters are the District\'s senior officials, financiers and academics, who see in the Council a guarantee of sound money and long horizons. The Chartists would leave the Monetary Authority to set rates in peace, keep the debt brake, and would leave competition to the markets, letting the District\'s firms grow to world scale.',
+                'Their voters are the District\'s senior officials, financiers and academics, who see in the Council a guarantee of sound money and long horizons. The Chartists would leave the Monetary Authority to set rates in peace, keep the books sound, and would leave competition to the markets, letting the District\'s firms grow to world scale.',
                 'Few parties will share a cabinet with them. Their deference to the Council is as awkward for the mainstream parties as the Common Lot\'s hostility, so the Chartists work from the benches, backing cabinets of the right and holding them to the Charter.',
             ],
             'history' => [
                 ['title' => 'The first removal motion', 'text' => 'When the Common Lot\'s first deputies moved to remove the councillors who had defended the Merger Wave, the motion won barely a tenth of the Diet. It still frightened the Council\'s friends into founding a party to make sure no such motion ever came close.'],
-                ['title' => 'The debt brake', 'text' => 'The Chartists wrote the convention under which the Council vetoes any budget that cuts revenue or raises spending once the debt passes its line, and they have defended it in every Diet since.'],
+                ['title' => 'Sound books', 'text' => 'The Chartists have run on the same debt plan in every Diet: public debt steered to half of GDP, half a point of GDP a year.'],
                 ['title' => 'Year 1', 'text' => 'When the markets opened the Chartists were backing the Vanguard\'s cabinet from outside, as they had backed most cabinets of the right before it.'],
             ],
             'questions' => [
@@ -175,7 +175,7 @@ final class AeriePartyProfiles
                 ['title' => 'The Charter as written', 'text' => 'Never vote to remove a councillor, and give the Diet no new power over the Council.'],
                 ['title' => 'An Authority left alone', 'text' => 'Leave the Monetary Authority to set rates without pressure from the cabinet.'],
                 ['title' => 'Light merger review', 'text' => 'Let the District\'s firms consolidate and compete abroad.'],
-                ['title' => 'The debt brake', 'text' => 'Keep the Council\'s veto on budgets that cut revenue or raise spending while the debt is high.'],
+                ['title' => 'Sound books', 'text' => 'Bring public debt to half of GDP, half a point of GDP a year.'],
             ],
             'relations' => 'The Chartists sit in the right bloc and back its cabinets from outside; they rarely join one. Their natural allies are the Vanguard and the Exchange, who share their trust in the Council. The Common Lot is their opposite in every sense, and the two rarely vote together.',
         ],

@@ -11,7 +11,6 @@ use App\Entity\Stock;
 use App\Repository\MacroReportHistoryRepository;
 use App\Repository\StockRepository;
 use App\Service\Macro\MacroEngine;
-use App\Service\Macro\Subsystem\CreditFiscalSubsystem;
 use App\Service\Macro\Subsystem\SovereignFundSubsystem;
 use App\Service\Market\Index\IndexCommittee;
 use App\Service\Politics\SovereignReserveFund;
@@ -44,7 +43,7 @@ class SovereignReservePageBuilder
      * @return array{
      *     incepted: bool,
      *     head: array{name: string, age: int, sinceLabel: string, termEndsLabel: string, stance: string, equityShare: float, opening: bool}|null,
-     *     summary: array{value: float, toGdp: float, annualDraw: float, drawToGdp: float, stabilisationToGdp: float, stampDutyToGdp: float, stampDutyYearToDate: float, ownership: float, grossDebtToGdp: float, netDebtToGdp: float},
+     *     summary: array{value: float, toGdp: float, annualDraw: float, drawToGdp: float, stampDutyToGdp: float, stampDutyYearToDate: float, ownership: float, grossDebtToGdp: float, netDebtToGdp: float},
      *     returns: array{index: float, realIndex: float, assumedReal: float, bondYield: float},
      *     programme: array{active: bool, buying: bool, share: float, monthsLeft: float, monthsSinceLast: float|null},
      *     sleeves: list<array{key: string, label: string, weight: float, policy: float, value: float}>,
@@ -83,7 +82,6 @@ class SovereignReservePageBuilder
                 'toGdp' => $macro->sovereignFundToGdp,
                 'annualDraw' => $macro->sovereignFundAnnualDraw,
                 'drawToGdp' => $macro->sovereignFundDrawToGdp,
-                'stabilisationToGdp' => $macro->sovereignFundStabilisationToGdp,
                 'stampDutyToGdp' => $macro->sovereignFundStampDutyToGdp,
                 'stampDutyYearToDate' => $macro->sovereignFundStampDutyYearToDate,
                 'ownership' => $macro->sovereignFundOwnershipShare,
@@ -147,11 +145,6 @@ class SovereignReservePageBuilder
                 'executionMonths' => SovereignFundSubsystem::REBALANCE_EXECUTION_MONTHS,
                 'stampDutyRate' => $macro->stampDutyRate,
                 'debtFloor' => MacroEngine::SOVEREIGN_DEBT_FLOOR,
-                'budgetRoundMonths' => 12.0 * MacroEngine::BUDGET_ROUND_PERIOD_YEARS,
-                'stabilisationGapResponse' => CreditFiscalSubsystem::fundStabilisationGapResponse($incepted ? $macro->sovereignFundToGdp : MacroEngine::OPENING_FUND_TO_GDP),
-                'stabilisationReversal' => MacroEngine::FUND_STABILISATION_IMPULSE_REVERSAL,
-                'stabilisationPersistence' => MacroEngine::FUND_STABILISATION_PERSISTENCE,
-                'stabilisationTrendYears' => MacroEngine::FUND_STABILISATION_GAP_TREND_YEARS,
                 'clearinghouseStake' => StrategicHoldings::CLEARINGHOUSE_STAKE,
             ],
         ];

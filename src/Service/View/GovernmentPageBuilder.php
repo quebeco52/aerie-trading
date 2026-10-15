@@ -31,7 +31,6 @@ use App\Service\Math\MacroTransmission;
 use App\Service\Math\Valuation;
 use App\Service\Politics\CoalitionFormation;
 use App\Service\Politics\CouncilAppointments;
-use App\Service\Politics\DebtBrake;
 use App\Service\Politics\ElectionForecast;
 use App\Service\Politics\Exchequer;
 use App\Service\Politics\FinancialRegulator;
@@ -101,6 +100,7 @@ class GovernmentPageBuilder
         'reserveHomeShare' => ['Reserve fund shares held at home', 'pct'],
         'utilityRateGrant' => ['Utility rate requests granted', 'pct'],
         'debtTarget' => ['Debt target', 'pct'],
+        'debtPace' => ['Debt cut a year', 'pct'],
     ];
     /** The polls chart's plot area in its 600 by 210 drawing: left, right, top and bottom edges. */
     private const POLL_CHART_PLOT = [34.0, 590.0, 8.0, 182.0];
@@ -175,6 +175,7 @@ class GovernmentPageBuilder
         'utilityRateGrant' => 'utility rates',
         'dividendTax' => 'dividend tax',
         'debtTarget' => 'debt target',
+        'debtPace' => 'debt pace',
     ];
     /** Font size of the end words and party labels, in SVG units. */
     private const COMPASS_FONT_SIZE = 7.0;
@@ -339,7 +340,6 @@ class GovernmentPageBuilder
                 'reserves' => isset($politics->councilFundStances[$seat['seat'] - 1])
                     ? SovereignReserveFund::stanceName(SovereignReserveFund::equityShare($politics->councilFundStances[$seat['seat'] - 1]))
                     : null,
-                'debtLine' => $politics->councilDebtLines[$seat['seat'] - 1] ?? null,
             ] : []), AerieCouncil::roster($macro->totalTime)),
             'board' => $politics->boardMembers === [] ? null : self::stanceCounts(
                 array_map(static fn(array $member): float => $member['stance'], $politics->boardMembers),
@@ -380,7 +380,6 @@ class GovernmentPageBuilder
         $sumSeats = static fn(array $members): int => array_sum(array_map(static fn(string $party): int => $seats[$party], $members));
         $coalitionSeats = $sumSeats($coalition);
         $coalitionPosition = PoliticsEngine::coalitionPosition($politics->governingCoalition, $politics->dietSeats, $politics->partyPositions);
-        $removalSeats = $sumSeats(array_values(array_diff(array_merge($coalition, $support), AerieDiet::COUNCIL_LOYALISTS)));
         $talking = $politics->coalitionTakesOfficeAt > $macro->totalTime;
 
         $blocs = $politics->dietBlocs;
@@ -405,7 +404,6 @@ class GovernmentPageBuilder
                 'minority' => $coalitionSeats < AerieDiet::MAJORITY_SEATS,
                 'formed' => $politics->lastGovernmentFormedAt < 0.0 ? 'Before Year 1' : self::simDate($politics->coalitionFormedAt),
                 'range' => CoalitionFormation::ideologicalRange($coalition, $politics->partyPositions),
-                'supermajority' => $removalSeats >= AerieDiet::SUPERMAJORITY_SEATS,
                 'caretaker' => $talking,
                 'primeMinister' => self::primeMinister($politics),
             ] + $coalitionPosition,
@@ -418,11 +416,9 @@ class GovernmentPageBuilder
             'rules' => [
                 'seats' => AerieDiet::SEATS,
                 'majority' => AerieDiet::MAJORITY_SEATS,
-                'supermajority' => AerieDiet::SUPERMAJORITY_SEATS,
                 'termYears' => $term,
                 'councilSeats' => AerieCouncil::SEATS,
                 'councilTermYears' => AerieCouncil::TERM_YEARS,
-                'debtBrake' => DebtBrake::councilLine($politics),
                 'reserveDrawCeiling' => MacroEngine::RESERVE_DRAW_CEILING,
                 'budgetRoundMonths' => 12.0 * MacroEngine::BUDGET_ROUND_PERIOD_YEARS,
                 'blocLeaders' => array_map(self::midSentenceName(...), $leaders),
@@ -434,7 +430,6 @@ class GovernmentPageBuilder
                     ],
                     $leaders
                 ),
-                'loyalists' => array_map(self::midSentenceName(...), AerieDiet::COUNCIL_LOYALISTS),
             ],
             'council' => [
                 'nextVacancy' => (static function (array $seat) use ($politics): array {
@@ -460,7 +455,7 @@ class GovernmentPageBuilder
 
     /**
      * The Council's lean on each of its questions: its hawks, swing votes and doves on money, and what its middle
-     * councillor would ask of the banks and the reserves, and where it would hold the debt. Null before the Council's stances are drawn.
+     * councillor would ask of the banks and the reserves. Null before the Council's stances are drawn.
      *
      * @return array<string, mixed>|null
      */
@@ -470,7 +465,6 @@ class GovernmentPageBuilder
             'median' => MonetaryAuthority::stanceName(CouncilAppointments::median($politics->councilStances)),
             'banks' => $politics->councilRegulationStances === [] ? null : FinancialRegulator::requirement(CouncilAppointments::median($politics->councilRegulationStances)),
             'reserves' => $politics->councilFundStances === [] ? null : SovereignReserveFund::equityShare(CouncilAppointments::median($politics->councilFundStances)),
-            'debtLine' => $politics->councilDebtLines === [] ? null : DebtBrake::councilLine($politics),
         ];
     }
 
@@ -1001,7 +995,7 @@ class GovernmentPageBuilder
         $rows = array_column($this->partyRows($politics, $history), null, 'key');
         $row = $rows[$party];
         $position = AerieDiet::position($party, $politics->partyPositions);
-        $platform = PoliticsEngine::platform($position);
+        $platform = PoliticsEngine::partyProgramme($party, $politics->partyPositions);
         $neutral = MacroEngine::BASE_CORPORATE_TAX_RATE;
         $concentrated = static fn(float $leniency): float => MergerAndAcquisitionEngine::reviewScreens($leniency)['concentrated'];
         $talking = $politics->coalitionTakesOfficeAt > $macro->totalTime;
@@ -1062,6 +1056,7 @@ class GovernmentPageBuilder
                 ['name' => 'Reserve fund shares held at home', 'unit' => 'pct', 'platform' => $platform['reserveHomeShare'], 'enacted' => $politics->reserveHomeEquityShare],
                 ['name' => 'Utility rate requests granted', 'unit' => 'pct', 'platform' => $platform['utilityRateGrant'], 'enacted' => $politics->utilityRateCaseGrantShare],
                 ['name' => 'Debt target', 'unit' => 'pct', 'platform' => $platform['debtTarget'], 'enacted' => $politics->debtTarget],
+                ['name' => 'Debt cut a year', 'unit' => 'pct', 'platform' => $platform['debtPace'], 'enacted' => $politics->debtPace],
             ],
             'leaders' => self::leaders($politics, $party),
             'polling' => $politics->polls === [] ? null : (static function (array $poll) use ($politics, $party): array {
@@ -1180,7 +1175,8 @@ class GovernmentPageBuilder
 
     /**
      * The levers as the cabinet's platform sets them, as the next budget would enact them, and as the last budget
-     * left them, with what stands between: the support parties, the Council's debt brake, or talks still under way.
+     * left them, with what stands between: the support parties, the reserve fund's consent to its draw, or talks still
+     * under way; and the primary balance the budget plans this year on the debt target and pace in force.
      *
      * @param list<string> $coalition The cabinet.
      * @param list<string> $support   Its support parties.
@@ -1189,7 +1185,7 @@ class GovernmentPageBuilder
     private function budget(MacroStateDTO $macro, PoliticsStateDTO $politics, array $coalition, array $support, bool $talking): array
     {
         $standing = PoliticsEngine::standingLevers($politics);
-        $budget = PoliticsEngine::budget($coalition, $support, $politics->dietSeats, $politics->partyPositions, $standing, $macro->sovereignDebtToGdp, DebtBrake::councilLine($politics), MacroEngine::inSahmRecession($macro->sahmRecessionIndicator));
+        $budget = PoliticsEngine::budget($coalition, $support, $politics->dietSeats, $politics->partyPositions, $standing, MacroEngine::recessionDeclared($macro));
         $round = MacroEngine::BUDGET_ROUND_PERIOD_YEARS;
         $nextRound = self::simDate((floor($macro->totalTime / $round) + 1.0) * $round);
 
@@ -1197,7 +1193,6 @@ class GovernmentPageBuilder
             return match (true) {
                 abs($budget['platform'][$lever] - $standing[$lever]) < 1e-9 => 'enacted',
                 $talking => 'caretaker',
-                $budget['councilHeld'][$lever] => 'held',
                 $lever === 'reserveDrawShare' && $budget['fundHeld'] => 'fund',
                 $budget['supportHeld'][$lever] && abs($budget['levers'][$lever] - $standing[$lever]) < 1e-9 => 'blocked',
                 $budget['supportHeld'][$lever] => 'partial',
@@ -1206,7 +1201,7 @@ class GovernmentPageBuilder
         };
         $neutral = MacroEngine::BASE_CORPORATE_TAX_RATE;
         $screens = MergerAndAcquisitionEngine::reviewScreens($politics->mergerReviewLeniency);
-        $repair = max(0.0, CreditFiscalSubsystem::bohnSurplus($macro->sovereignDebtToGdp, CreditFiscalSubsystem::debtAnchor($macro)) - ($macro->sovereignFundDollarsPerGdp > 0.0 ? 0.0 : CreditFiscalSubsystem::SOVEREIGN_STRUCTURAL_DEFICIT));
+        $planned = CreditFiscalSubsystem::requiredPrimaryBalance($macro);
 
         return [
             'levers' => [
@@ -1352,9 +1347,9 @@ class GovernmentPageBuilder
                     'target' => $budget['levers']['consolidationTaxShare'],
                     'enacted' => $standing['consolidationTaxShare'],
                     'status' => $status('consolidationTaxShare'),
-                    'note' => $repair > 0.0
-                        ? sprintf('Of the surplus the debt calls for, %.1f%% of GDP with debt at %.0f%% of GDP; the rest comes from spending cuts', 100.0 * $repair, 100.0 * $macro->sovereignDebtToGdp)
-                        : 'Of any surplus the debt calls for; the rest comes from spending cuts. Debt is under the line today, so the budget has room: this share goes to spending and the rest to tax cuts',
+                    'note' => $planned > 0.0
+                        ? sprintf('Of the primary surplus the budget plans, %.1f%% of GDP this year; the rest comes from spending cuts', 100.0 * $planned)
+                        : sprintf('Of any surplus the debt path calls for; the rest comes from spending cuts. The budget plans a primary deficit of %.1f%% of GDP this year, and this share of the room goes to spending, the rest to tax cuts', 100.0 * abs($planned)),
                 ],
                 [
                     'name' => 'Debt target',
@@ -1363,9 +1358,18 @@ class GovernmentPageBuilder
                     'target' => $budget['levers']['debtTarget'],
                     'enacted' => $standing['debtTarget'],
                     'status' => $status('debtTarget'),
-                    'note' => $standing['debtTarget'] > DebtBrake::councilLine($politics)
-                        ? sprintf('Of GDP in public debt; it is above the Council\'s line, so the budget steers to the line, %.0f%% of GDP, instead', 100.0 * DebtBrake::councilLine($politics))
-                        : 'Of GDP in public debt, which the budget steers toward over the years: a surplus above it, room to spend or cut taxes below it. The Council\'s line caps it',
+                    'note' => sprintf('Of GDP in public debt, which the budget steers toward over the years: a surplus while debt stands above it, room to spend or cut taxes below it. Debt stands at %.1f%% of GDP', 100.0 * $macro->sovereignDebtToGdp),
+                ],
+                [
+                    'name' => 'Debt cut a year',
+                    'axis' => AerieDiet::AXIS_STATE,
+                    'platform' => $budget['platform']['debtPace'],
+                    'target' => $budget['levers']['debtPace'],
+                    'enacted' => $standing['debtPace'],
+                    'status' => $status('debtPace'),
+                    'note' => $standing['debtPace'] > 0.0
+                        ? 'Of GDP a year at most that the budget moves debt toward its target, on top of what holds debt steady as interest and growth move it'
+                        : 'The budget holds debt where it stands, as interest and growth move it, and makes no move toward the target',
                 ],
                 [
                     'name' => 'Reserve fund shares held at home',
@@ -1387,10 +1391,12 @@ class GovernmentPageBuilder
                 ],
             ],
             'debt' => $macro->sovereignDebtToGdp,
-            'debtLine' => DebtBrake::councilLine($politics),
-            'braking' => $budget['councilGuards'],
+            'debtTarget' => $macro->debtTarget,
+            'debtPace' => $macro->debtPace,
+            'plannedBalance' => $planned,
+            // What the bond market charges on the District's debt for the risk it is not repaid, in basis points.
+            'riskSpreadBp' => (int) round(10000.0 * $macro->sovereignRiskSpread),
             'caretaker' => $talking,
-            'lastBrake' => $politics->lastCouncilBrakeAt >= 0.0 ? self::simDate($politics->lastCouncilBrakeAt) : null,
             'lastBudget' => $politics->lastBudgetEnactedAt >= 0.0 ? self::simDate($politics->lastBudgetEnactedAt) : null,
             'nextRound' => $nextRound,
         ];
@@ -2054,7 +2060,7 @@ class GovernmentPageBuilder
             ],
             'debt' => $macro->sovereignDebtToGdp,
             'netDebt' => $macro->sovereignNetDebtToGdp,
-            // What the budget's debt rule and the bond market answer to: the debt less the fund whole and the rescue stakes.
+            // What the bond market's default premium answers to: the debt less the fund whole.
             'netLiabilities' => $macro->sovereignNetFinancialLiabilitiesToGdp,
             'maturity' => $maturity,
             // A book still more than a month from the head's maturity is moving toward it.
@@ -2067,14 +2073,8 @@ class GovernmentPageBuilder
             'authorityLossesToGdp' => $macro->centralBankDeferredAssetToGdp,
             'tenYear' => $macro->yield10y,
             'maturityBp' => (int) round(10000.0 * CreditFiscalSubsystem::maturitySupplyTermPremium($macro->sovereignDebtToGdpEma, $maturity)),
+            'riskSpreadBp' => (int) round(10000.0 * $macro->sovereignRiskSpread),
             'councilMaturity' => $politics->councilDebtStances === [] ? null : Exchequer::averageMaturity(CouncilAppointments::median($politics->councilDebtStances)),
-            // The last banking crisis's rescue, borrowed on the day, and what the Exchequer still holds from its rescues.
-            'rescue' => [
-                'crisisLabel' => $macro->lastCreditCrisisAt < 0.0 ? null : self::simDate($macro->lastCreditCrisisAt),
-                'cost' => $macro->bankRescueCostToGdp,
-                'held' => $macro->bankRescueAssetsToGdp,
-                'bankCredit' => CreditFiscalSubsystem::bankCreditToGdp($macro->boardBankCredit, $macro->sovereignFundDollarsPerGdp, $macro->nominalGdpIndex),
-            ],
             'rules' => [
                 'termYears' => Exchequer::HEAD_TERM_YEARS,
                 'shortlist' => CouncilAppointments::SHORTLIST,

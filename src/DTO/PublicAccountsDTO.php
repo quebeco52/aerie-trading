@@ -7,8 +7,7 @@ namespace App\DTO;
 /**
  * The Exchequer's accounts at one step (App\Service\Macro\Subsystem\CreditFiscalSubsystem::publicAccounts()): every
  * line the debt moves by, and the stocks it is measured against, so the budget is booked from one statement and the
- * pages read the same one. Flows are annual rates as shares of GDP; the one-off adjustments are this step's amounts,
- * shares of GDP; the stocks are shares of GDP.
+ * pages read the same one. Flows are annual rates as shares of GDP; the stocks are shares of GDP.
  */
 final readonly class PublicAccountsDTO
 {
@@ -21,7 +20,7 @@ final readonly class PublicAccountsDTO
         public float $bankLevy,
         public float $dividendTax,
         public float $foreignBuyerTax,
-        /** The reserve fund's draw and the stabilisation it pays for, revenue the budget spends. */
+        /** The reserve fund's draw, revenue the budget spends. */
         public float $fundContribution,
         /** The Monetary Authority's profit paid over, nothing while it makes up past losses. */
         public float $centralBankRemittance,
@@ -33,17 +32,12 @@ final readonly class PublicAccountsDTO
         public float $interest,
         /** The fall in the debt ratio nominal growth brings. */
         public float $growthErosion,
-        // One-off adjustments this step (stock-flow adjustments, IMF GFSM 2014).
-        public float $bankRescueOutlay,
-        public float $bankRescueSales,
         // Stocks.
         public float $grossDebt,
         /** The fund's bonds, the debt instruments the government holds. */
         public float $fundBonds,
         /** The whole fund, bonds and equities. */
         public float $fundAssets,
-        /** Bank shares and loans the Exchequer still holds from its rescues. */
-        public float $bankRescueHoldings,
     ) {}
 
     public function revenue(): float
@@ -70,7 +64,7 @@ final readonly class PublicAccountsDTO
     /** The change in gross debt to GDP over a step of $dt years, before the floor. */
     public function debtChange(float $dt): float
     {
-        return (($this->primaryDeficit() + $this->interest - $this->growthErosion) * $dt) + $this->bankRescueOutlay - $this->bankRescueSales;
+        return ($this->primaryDeficit() + $this->interest - $this->growthErosion) * $dt;
     }
 
     /** IMF GFSM 2014 net debt: gross debt less the debt instruments held, the fund's bonds. */
@@ -82,6 +76,6 @@ final readonly class PublicAccountsDTO
     /** Net financial worth: everything the government holds less what it owes. */
     public function netFinancialWorth(): float
     {
-        return $this->fundAssets + $this->bankRescueHoldings - $this->grossDebt;
+        return $this->fundAssets - $this->grossDebt;
     }
 }

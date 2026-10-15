@@ -3,6 +3,7 @@
 namespace App\Service\Macro;
 
 use App\DTO\GovernmentPolicyDTO;
+use App\DTO\MacroStateDTO;
 use App\Service\Macro\Recorder\MacroDiagnosticsProbe;
 use App\Service\Macro\Recorder\MacroSnapshotRecorder;
 use App\Service\Macro\Subsystem\AssetMarketSubsystem;
@@ -247,15 +248,13 @@ class MacroEngine
     public const OPENING_FUND_TO_GDP = 0.41;
 
     // --- Sovereign Debt Dynamics (Greenwood-Vayanos 2014) ---
-    /** Sovereign debt-to-GDP at simulation start: where gross debt settles under the targets the Diet's governments set (mean 0.598 over years 20-100, 8 seeds x 100y with politics, var/harness/debt_anchor), so the game opens near its long-run level. */
+    /** Sovereign debt-to-GDP at simulation start: about where the Diet's cabinets' debt targets average, so the game opens near its long-run level. */
     public const INITIAL_DEBT_TO_GDP = 0.60;
     /** Gross debt kept outstanding with no borrowing need, for the benchmark curve to price (Singapore and Hong Kong issue for market development through surpluses); below it a surplus buys the fund's paper instead. */
     public const SOVEREIGN_DEBT_FLOOR = 0.20;
-    /** Debt-to-GDP above which the market prices fiscal risk and the Council holds its veto over the budget (Reinhart & Rogoff 2010's 90% line). Deliberately above the 70% the Bohn reaction holds gross debt to: a premium charged for the engine's normal state was measured to lift IG 30 bps and 2s10s 45 bps everywhere. */
-    public const SOVEREIGN_RISK_DEBT_THRESHOLD = 0.90;
 
-    // --- Fund-Financed Fiscal Stabilisation (IMF Norway Selected Issues 2025, Table 5) ---
-    /** Budget rounds a year apart by half: the National Budget each October and the Revised National Budget each May (Norway's Ministry of Finance). */
+    // --- The Budget Calendar ---
+    /** Budget rounds a year apart by half: the budget and its mid-year revision. */
     public const BUDGET_ROUND_PERIOD_YEARS = 0.5;
 
     // --- Reserve Draw (Singapore Net Investment Returns framework; Constitution of Singapore, art. 142(1A)) ---
@@ -265,14 +264,6 @@ class MacroEngine
     // --- Sahm Rule (Sahm 2019, Hamilton Project) ---
     /** Rise of the three-month average unemployment rate above its low of the twelve months before that signals a recession under way: half a point, which has signalled each US recession since 1970 in its first months. */
     public const SAHM_RECESSION_THRESHOLD = 0.005;
-    /** Fall of that average from its peak that ends a declared recession: on US UNRATE 1948-2019, 0.2-0.3 points keeps NBER's 1980 and 1981 recessions apart and drops the 2003 jobless-recovery re-trigger; half a point merges 1981 into 1980. */
-    public const RECESSION_RECOVERY_MARGIN = 0.003;
-    /** Share of last year's fund-financed impulse reversed this year: Norway's lagged-change coefficient, -0.452 (se 0.093). */
-    public const FUND_STABILISATION_IMPULSE_REVERSAL = 0.452;
-    /** Yearly decay of the stabilisation back to the rule path: the Auerbach (2002) persistence the tax leg is fitted to, 4.7% a quarter. */
-    public const FUND_STABILISATION_PERSISTENCE = 0.175;
-    /** Horizon of the long-run average the budget reads the gap against, so the cycle it answers averages to zero: the 15-year window Drehmann & Juselius (2012) separate a cycle from its trend with, about 2.5 postwar NBER cycles. */
-    public const FUND_STABILISATION_GAP_TREND_YEARS = 15.0;
 
     // --- Policy Levers: Tariffs (Fajgelbaum et al. 2020; Furceri et al. 2018) ---
     /** Average tariff partners put on the District's exports per point of its average tariff on imports: 0.60 in 2018, when US tariffs rose 14.0 points on 12.7% of imports and retaliation 13.1 points on 8.2% of exports (Fajgelbaum, Goldberg, Kennedy & Khandelwal 2020). */
@@ -567,7 +558,6 @@ class MacroEngine
      * @param float|null $strategicStakeCash Cash the District's strategic stakes paid it on the previous tick (dividends, buybacks less issues), or null.
      * @param GovernmentPolicyDTO|null $policy The government's levers and election pulse as of the previous tick, or null.
      * @param float|null $boardBankLevy     Bank levy the board's banks owe a year at the rate in force, as of the previous tick, or null to keep the last.
-     * @param float|null $boardBankCredit   What the board's deposit-taking banks have lent at home, as of the previous tick, or null to keep the last.
      */
     public function updateMacroState(
         float $dt,
@@ -580,7 +570,6 @@ class MacroEngine
         ?float $strategicStakeCash = null,
         ?GovernmentPolicyDTO $policy = null,
         ?float $boardBankLevy = null,
-        ?float $boardBankCredit = null,
     ): \App\DTO\MacroStateDTO {
         $state = $this->loadState();
 
@@ -601,9 +590,6 @@ class MacroEngine
         $state->strategicStakeCash = $strategicStakeCash ?? 0.0;
         if ($boardBankLevy !== null) {
             $state->boardBankLevy = $boardBankLevy;
-        }
-        if ($boardBankCredit !== null) {
-            $state->boardBankCredit = $boardBankCredit;
         }
 
         // Advance physical simulation time in years
@@ -712,9 +698,9 @@ class MacroEngine
         $this->creditFiscalSubsystem->calculateCorporateDefaultRate($state, $dt);
 
         $this->aggregateSubsystem->calculatePotentialAndNominalGdp($state, $dt, $productivityGrowthRate);
+        MacroAggregateSubsystem::recordQuarterlyRealGdp($state, $dt);
         // Singapore NIR draw and a GPIF-style rebalancing band: struck on this tick's GDP, before the budget reads the draw.
         $this->sovereignFundSubsystem?->update($state, $dt);
-        $this->creditFiscalSubsystem->calculateFundStabilisation($state, $dt);
         $this->creditFiscalSubsystem->calculateDynamicFiscalPolicy($state, $dt);
         $this->creditFiscalSubsystem->calculateSovereignDebt($state, $dt);
         $this->creditFiscalSubsystem->calculateSovereignRiskSpread($state, $dt);
@@ -780,21 +766,12 @@ class MacroEngine
         // Pulse trigger: resets instantaneous systemic event classification before evaluation.
         $state->eventType = null;
 
-        // A declared recession lasts until unemployment is back the recovery margin below its peak: on a plateau the
-        // Sahm reading falls as its trailing low catches up, which ends no recession.
-        $unemployment = LaborMarketSubsystem::sahmThreeMonthAverage($state->unemploymentMonthly) ?? $state->unemploymentRate;
-        $inRecession = self::inSahmRecession($state->sahmRecessionIndicator);
-        if (isset($state->systemicAlarmLatches[ShockEvent::RECESSION_DECLARED])) {
-            $state->recessionPeakUnemployment = max($state->recessionPeakUnemployment, $unemployment);
-            $inRecession = $inRecession || $unemployment > $state->recessionPeakUnemployment - self::RECESSION_RECOVERY_MARGIN;
-        }
-
         // The episode each level alarm reports once in. Deleveraging reports when debt starts to fall inside one.
         $episodes = [
             ShockEvent::SYSTEMIC_LIQUIDITY_FREEZE => $state->interbankLiquiditySpread >= self::SYSTEMIC_LIQUIDITY_FREEZE_SPREAD,
             ShockEvent::CREDIT_MARKET_SEIZURE => $state->highYieldCreditSpread >= self::SYSTEMIC_CREDIT_SEIZURE_SPREAD,
             ShockEvent::SOVEREIGN_DOWNGRADE => $state->sovereignRiskSpread >= self::SYSTEMIC_SOVEREIGN_STRESS_SPREAD,
-            ShockEvent::RECESSION_DECLARED => $inRecession,
+            ShockEvent::RECESSION_DECLARED => $state->recessionDeclared,
             ShockEvent::HOUSEHOLD_DELEVERAGING => $state->householdDebtServiceGap >= self::HOUSEHOLD_DSR_STRESS_MARGIN,
             ShockEvent::YIELD_CURVE_INVERSION_ALARM => $state->inversionDuration >= self::SYSTEMIC_INVERSION_ALARM_YEARS,
         ];
@@ -844,7 +821,7 @@ class MacroEngine
             !$edgeOnly && $armed(ShockEvent::SOVEREIGN_DOWNGRADE)
             => ShockEvent::SOVEREIGN_DOWNGRADE,
 
-            // Sahm (2019): the jobless rate's three-month average half a point over its low of the year before.
+            // The statistics office calls a recession on two falling quarters.
             !$edgeOnly && $armed(ShockEvent::RECESSION_DECLARED)
             => ShockEvent::RECESSION_DECLARED,
 
@@ -869,28 +846,24 @@ class MacroEngine
             if (isset($episodes[$eventType])) {
                 $state->systemicAlarmLatches[$eventType] = $state->totalTime;
             }
-            if ($eventType === ShockEvent::RECESSION_DECLARED) {
-                $state->recessionPeakUnemployment = $unemployment;
-            }
             // District-wide systemic crisis refractory cooldown timer arming.
             $state->eventCooldownTimer = self::SYSTEMIC_EVENT_COOLDOWN_YEARS;
         }
     }
 
     /**
-     * Whether unemployment says a recession is under way: the Sahm rule's reading at its threshold or above. The downturn
-     * the RECESSION_DECLARED headline names, the Diet's budget treats as a recession and the rate committee cuts into.
-     * The yield-curve probit forecasts one a year out and falls once the Authority cuts, so it cannot confirm one.
+     * Whether unemployment says a recession is under way: the Sahm rule's reading at its threshold or above, which the
+     * rate committee cuts into.
      */
     public static function inSahmRecession(float $sahmIndicator): bool
     {
         return $sahmIndicator >= self::SAHM_RECESSION_THRESHOLD;
     }
 
-    /** Whether a recession is declared and not yet over: the RECESSION_DECLARED episode, which holds until unemployment is back below its peak. */
-    public static function recessionDeclared(MacroState $state): bool
+    /** Whether the statistics office has a recession declared and not yet over (MacroAggregateSubsystem::recordQuarterlyRealGdp()). */
+    public static function recessionDeclared(MacroState|MacroStateDTO $state): bool
     {
-        return isset($state->systemicAlarmLatches[ShockEvent::RECESSION_DECLARED]);
+        return $state->recessionDeclared;
     }
 
     /**
@@ -920,7 +893,7 @@ class MacroEngine
         $state->utilityRateCaseGrantShare = $policy->utilityRateCaseGrantShare;
         $state->dividendTaxRate = $policy->dividendTaxRate;
         $state->debtTarget = $policy->debtTarget;
-        $state->councilDebtLine = $policy->councilDebtLine;
+        $state->debtPace = $policy->debtPace;
         $state->electionPulse = $policy->electionPulse;
         $state->authorityMajority = $policy->authorityMajority ?? 0.0;
         $state->authorityCommitteeSeated = $policy->authorityMajority === null ? 0.0 : 1.0;

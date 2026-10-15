@@ -241,28 +241,6 @@ class SystemicEventReporterTest extends TestCase
         }
     }
 
-    /** A budget the Council held back says so, and names the debt it answered; one it let through names the levers. */
-    public function testTheBudgetHeadlineSaysWhatTheCouncilHeld(): void
-    {
-        $governing = [Diet::CIVIC => 0.0, Diet::VANGUARD => 1.0, Diet::IRON_HARBOR => 0.0, Diet::EXCHANGE => 1.0];
-        $indebted = new MacroStateDTO(totalTime: 4.5, sovereignDebtToGdp: 0.93);
-        $held = new PoliticsStateDTO(eventType: ShockEvent::BUDGET_ENACTED, totalTime: 4.5, governingCoalition: $governing, lastBudgetEnactedAt: 4.5, lastCouncilBrakeAt: 4.5);
-        $passed = new PoliticsStateDTO(eventType: ShockEvent::BUDGET_ENACTED, totalTime: 4.5, governingCoalition: $governing, corporateTaxPolicyShift: -0.026, lastBudgetEnactedAt: 4.5);
-
-        for ($i = 0; $i < 30; ++$i) {
-            $headline = $this->reporter(bufferedPrice: null)->report($indebted, $held, $this->benchmarkAt('100'));
-            $this->assertNotNull($headline);
-            $this->assertStringContainsString('Vanguard-Exchange Party government', $headline['description']);
-            $this->assertStringContainsString('93% of GDP', $headline['description']);
-            $this->assertStringNotContainsString('{', $headline['description']);
-
-            $headline = $this->reporter(bufferedPrice: null)->report(new MacroStateDTO(totalTime: 4.5), $passed, $this->benchmarkAt('100'));
-            $this->assertNotNull($headline);
-            $this->assertStringContainsString('14.4%', $headline['description'], 'The founding 17% less the 2.6-point cut.');
-            $this->assertStringNotContainsString('{', $headline['description']);
-        }
-    }
-
     /**
      * The Authority's headlines name the people and the vote: a new governor by name, age, stance and whom the Council
      * passed over; a committee tipping into a supermajority by its make-up; a rate decision by its move and its split.
@@ -385,29 +363,6 @@ class SystemicEventReporterTest extends TestCase
             $this->assertStringContainsString('who favours borrowing short', $headline['description']);
             $this->assertStringContainsString("shortens the debt toward an average of 4.0 years from 5.0 years, which as the debt rolls over takes about {$basisPoints} basis points off the ten-year", $headline['description']);
             $this->assertStringNotContainsString('{', $headline['description']);
-        }
-    }
-
-    /** A councillor's headline says when the newcomer moves the Council's debt line, and says nothing of it when the line stays. */
-    public function testTheCouncillorsHeadlineSaysWhenTheDebtLineMoves(): void
-    {
-        $seated = static fn(array $lines, float $before): PoliticsStateDTO => new PoliticsStateDTO(
-            totalTime: 6.0, authoritySalt: 5.0, eventType: ShockEvent::COUNCILLOR_SEATED, lastCouncillorSeatedAt: 6.0,
-            councilNames: ['Ada Moss', 'Ben Ruiz', 'Cy Hart'], councilBirths: [-50.0, -45.0, -40.0], councilSince: [-10.0, -4.0, 6.0],
-            councilStances: [1.0, -1.0, 1.0], councilDebtLines: $lines, debtLineBeforeSeating: $before,
-            councillorPassedOver: [['name' => 'Dee Holt', 'birth' => -44.0, 'stance' => -1.0, 'regulation' => 0.0, 'fund' => 0.0, 'debt' => 0.0]],
-        );
-
-        for ($i = 0; $i < 20; ++$i) {
-            $moved = $this->reporter(bufferedPrice: null)->report(new MacroStateDTO(totalTime: 6.0), $seated([0.90, 0.85, 0.87], 0.90), $this->benchmarkAt('100'));
-            $this->assertNotNull($moved);
-            $this->assertStringContainsString('Cy Hart', $moved['description']);
-            $this->assertStringContainsString('The Council\'s debt line moves from 90% to 87% of GDP.', $moved['description']);
-
-            $kept = $this->reporter(bufferedPrice: null)->report(new MacroStateDTO(totalTime: 6.0), $seated([0.90, 0.85, 0.87], 0.87), $this->benchmarkAt('100'));
-            $this->assertNotNull($kept);
-            $this->assertStringNotContainsString('debt line', $kept['description']);
-            $this->assertStringNotContainsString('{', $kept['description']);
         }
     }
 

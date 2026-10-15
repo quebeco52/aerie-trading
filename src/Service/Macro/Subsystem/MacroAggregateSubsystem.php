@@ -199,6 +199,10 @@ class MacroAggregateSubsystem
     /** Hottest the economy may run: above the postwar CBO peak (+5.6%, 1966Q1), since the one-sided cubic is what holds the upside. */
     public const OUTPUT_GAP_CEILING = 0.10;
 
+    // --- The Statistics Office's Recession Call ---
+    /** Consecutive quarters of falling real GDP that declare a recession, and of growth that end one. */
+    public const RECESSION_CALL_QUARTERS = 2;
+
     // --- Metzler-Blinder Inventory Investment Cycle (Metzler 1941, Blinder 1982) ---
     /** Demand drag per unit of inventory-to-sales deviation: the coefficient is the inventory share of annual GDP (~15%), so a 16% overhang costs 2.4pp over a year (Blinder & Maccini 1991). */
     public const METZLER_INVENTORY_DRAG = 0.15;
@@ -552,14 +556,12 @@ class MacroAggregateSubsystem
         $spendingShift = CreditFiscalSubsystem::discretionarySpendingShift($state);
         $discretionaryFiscal = (self::KALDOR_FISCAL_MULTIPLIER * (($state->corporateTaxRateTrend - $state->corporateTaxRate) + ($state->netTaxStanceRateTrend - $state->netTaxStanceRate)))
             + (self::KALDOR_GOVT_SPENDING_MULTIPLIER * $spendingShift);
-        // The sovereign fund's stabilisation reaches demand through the purchases channel, on purchases that are the target
-        // tax take of GDP. Its legislative lag is the budget round that sets it, so it flows at the rate the round sets. So
-        // does the part of the rule draw above the founding share, the spending a budget drawing more of the fund's return
-        // adds to the baseline the founding draw is in.
+        // The part of the fund's draw above the founding share reaches demand through the purchases channel: the spending a
+        // budget drawing more of the fund's return, as in a recession, adds to the baseline the founding draw is in.
         $drawAboveFounding = $state->sovereignFundDrawShare > 0.0
             ? $state->sovereignFundDrawToGdp * ($state->sovereignFundDrawShare - MacroEngine::RESERVE_DRAW_CEILING) / $state->sovereignFundDrawShare
             : 0.0;
-        $fundStabilisation = self::KALDOR_GOVT_SPENDING_MULTIPLIER * ($state->sovereignFundStabilisationToGdp + $drawAboveFounding) / MacroEngine::PUBLIC_PURCHASES_TO_GDP;
+        $fundDraw = self::KALDOR_GOVT_SPENDING_MULTIPLIER * $drawAboveFounding / MacroEngine::PUBLIC_PURCHASES_TO_GDP;
 
         // Blanchard & Perotti (2002) AUTOMATIC stabilisers and Friedman (1957) income smoothing, on the
         // contemporaneous gap: nobody decides them, so they carry no lag and act as a spring rather than an anti-damper.
@@ -658,7 +660,7 @@ class MacroAggregateSubsystem
             'premiumDrag' => -$premiumDrag,
             'premiumCompensator' => $premiumCompensator,
             'fiscalStimulus' => $discretionaryFiscal,
-            'fundStabilisation' => $fundStabilisation,
+            'fundDraw' => $fundDraw,
             'automaticStabiliser' => $automaticStabiliser,
             'capitalDrag' => -$capitalDrag,
             'inventoryDrag' => -$inventoryDrag,
@@ -764,6 +766,37 @@ class MacroAggregateSubsystem
     public static function tariffRevenueToGdp(float $tariff): float
     {
         return $tariff * self::goodsImportsToGdp() * ((1.0 + $tariff) ** -self::IMPORT_PRICE_ELASTICITY);
+    }
+
+    /**
+     * The statistics office's quarterly accounts: real GDP averaged over each calendar quarter, its change on the
+     * quarter before, and the recession call. Two quarters of falling output declare a recession and two of growth end
+     * it, a rule anyone reading the quarterly print can apply.
+     */
+    public static function recordQuarterlyRealGdp(MacroState $state, float $dt): void
+    {
+        $state->realGdpQuarterAccrued += $state->potentialGdpIndex * (1.0 + $state->outputGap) * $dt;
+        $state->realGdpQuarterElapsed += $dt;
+        if (!TimeSeries::crossedSimulatedBoundary($state->totalTime, $dt, 0.25) || $state->realGdpQuarterElapsed <= 0.0) {
+            return;
+        }
+
+        $quarter = $state->realGdpQuarterAccrued / $state->realGdpQuarterElapsed;
+        $state->realGdpQuarterAccrued = 0.0;
+        $state->realGdpQuarterElapsed = 0.0;
+        if ($state->realGdpLastQuarter > 0.0) {
+            $state->realGdpQuarterlyGrowth = ($quarter / $state->realGdpLastQuarter) - 1.0;
+            $falling = $state->realGdpQuarterlyGrowth < 0.0;
+            $state->gdpQuarterStreak = $falling
+                ? min(0.0, $state->gdpQuarterStreak) - 1.0
+                : max(0.0, $state->gdpQuarterStreak) + 1.0;
+            if ($state->gdpQuarterStreak <= -self::RECESSION_CALL_QUARTERS) {
+                $state->recessionDeclared = true;
+            } elseif ($state->gdpQuarterStreak >= self::RECESSION_CALL_QUARTERS) {
+                $state->recessionDeclared = false;
+            }
+        }
+        $state->realGdpLastQuarter = $quarter;
     }
 
     /** A supply cost's relative distance from its own trend; none before the trend has opened. */

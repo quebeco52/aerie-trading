@@ -26,10 +26,13 @@
 						Next round: <span class="font-mono tabular-nums">{{ budget.nextRound }}</span>{% if budget.lastBudget %} · last change <span class="font-mono tabular-nums">{{ budget.lastBudget }}</span>{% endif %}.
 					</p>
 				</div>
-				<div class="shrink-0 rounded border px-3 py-2 {{ budget.braking ? 'border-warning/40 bg-warning/5' : 'border-outline-variant/20 bg-surface-container-lowest' }}">
-					<p class="text-xs font-semibold {{ budget.braking ? 'text-warning' : 'text-on-surface-variant' }}">Council debt brake {{ budget.braking ? 'on' : 'off' }}</p>
-					<p class="text-2xs font-mono tabular-nums text-on-surface-variant mt-0.5">
-						Debt {{ budget.debt|pct(1) }} of GDP · line {{ rules.debtBrake|pct(1) }}{% if budget.lastBrake %} · last held a bill {{ budget.lastBrake }}{% endif %}
+				<div class="shrink-0 rounded border border-outline-variant/20 bg-surface-container-lowest px-3 py-2">
+					<p class="text-xs font-semibold text-on-surface">The debt plan</p>
+					<p class="text-2xs text-on-surface-variant mt-0.5">
+						Debt <span class="font-mono tabular-nums">{{ budget.debt|pct(1) }}</span> of GDP · target <span class="font-mono tabular-nums">{{ budget.debtTarget|pct(1) }}</span> · moved toward it by up to <span class="font-mono tabular-nums">{{ budget.debtPace|pct(2) }}</span> of GDP a year
+					</p>
+					<p class="text-2xs text-on-surface-variant mt-0.5">
+						{{ budget.plannedBalance >= 0 ? 'Primary surplus' : 'Primary deficit' }} planned this year <span class="font-mono tabular-nums">{{ budget.plannedBalance|abs|pct(1) }}</span> of GDP · default premium on its bonds <span class="font-mono tabular-nums">{{ budget.riskSpreadBp }}</span> bp
 					</p>
 				</div>
 			</div>
@@ -57,9 +60,6 @@
 									{% if lever.status == 'caretaker' %}
 										<span class="font-semibold text-on-surface-variant">Waits on the talks</span>
 										<span class="block text-on-surface-variant">A caretaker cabinet passes no budget</span>
-									{% elseif lever.status == 'held' %}
-										<span class="font-semibold text-warning">Held by the Council</span>
-										<span class="block text-on-surface-variant">{{ (lever.spending ?? false) ? 'A rise in spending' : 'A cut in revenue' }} while debt is above the line</span>
 									{% elseif lever.status == 'fund' %}
 										<span class="font-semibold text-warning">Held by the Sovereign Reserve Fund</span>
 										<span class="block text-on-surface-variant">More than {{ rules.reserveDrawCeiling|pct(0) }} is spent only with its consent, given only in a recession</span>

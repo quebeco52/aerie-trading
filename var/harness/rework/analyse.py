@@ -25,6 +25,9 @@ def moments(r):
     if not rec and r.get('sahmRecessionIndicator'):
         rec = [1 if x is not None and x >= 0.005 else 0 for x in r['sahmRecessionIndicator'][BURN:]]
     m['recession share %'] = 100 * st.mean(rec) if rec else float('nan')
+    m['recessions /100y'] = sum(1 for a, b in zip(rec, rec[1:]) if b and not a) * 100 / (len(rec) / 4) if rec else float('nan')
+    tgt = q('debtTarget')
+    m['debt - target pp'] = 100 * st.mean(d - t for d, t in zip(debt, tgt)) if tgt and len(tgt) == len(debt) else float('nan')
     crises = len({x for x in q('lastCreditCrisisAt') if x >= 0})
     m['crises /100y'] = crises * 100 / (len(gap) / 4)
     m['max |gap| %'] = 100 * max(abs(x) for x in gap)

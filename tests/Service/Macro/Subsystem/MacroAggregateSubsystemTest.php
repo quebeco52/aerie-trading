@@ -1462,34 +1462,6 @@ class MacroAggregateSubsystemTest extends TestCase
         return $state;
     }
 
-    /**
-     * The sovereign fund's stabilisation is spending: one point of GDP of it is worth what one point of GDP of purchases
-     * is through the purchases channel, and without it the channel is silent. The budget round that set it is its
-     * legislative lag, so demand answers the rate the round set from the tick it is set, not a smoothing of it.
-     */
-    public function testTheFundsStabilisationReachesDemandAsPurchasesDo(): void
-    {
-        $dt = 1.0 / 3600.0;
-        // The probe books each channel's move over the window, so one tick's is its drift times the tick.
-        $contribution = function (float $stabilisation) use ($dt): float {
-            $probe = new OutputGapProbe();
-            $probe->enable();
-            $state = $this->probedState();
-            $state->sovereignFundStabilisationToGdp = $stabilisation;
-            $this->probedSubsystem($probe, 0.0)->calculateOutputGap($state, 0.03, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, $dt, 1.0);
-
-            return $probe->snapshot()['current']['contributions']['fundStabilisation'] / $dt;
-        };
-
-        $this->assertSame(0.0, $contribution(0.0));
-        $this->assertEqualsWithDelta(
-            MacroAggregateSubsystem::DOMESTIC_GAP_WEIGHT * MacroAggregateSubsystem::KALDOR_GOVT_SPENDING_MULTIPLIER * 0.01 / MacroEngine::PUBLIC_PURCHASES_TO_GDP,
-            $contribution(0.01),
-            1e-15,
-            'A point of GDP is a purchases shift of one over the purchases share.'
-        );
-        $this->assertEqualsWithDelta(-$contribution(0.01), $contribution(-0.01), 1e-15, 'Saving in a boom drags as much as spending lifts.');
-    }
 
     /**
      * The founding draw is in the baseline; the part a budget draws above the founding share is new spending, and
@@ -1506,7 +1478,7 @@ class MacroAggregateSubsystemTest extends TestCase
             $state->sovereignFundDrawShare = $share;
             $this->probedSubsystem($probe, 0.0)->calculateOutputGap($state, 0.03, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, $dt, 1.0);
 
-            return $probe->snapshot()['current']['contributions']['fundStabilisation'] / $dt;
+            return $probe->snapshot()['current']['contributions']['fundDraw'] / $dt;
         };
 
         $this->assertSame(0.0, $contribution(MacroEngine::RESERVE_DRAW_CEILING), 'The founding draw adds nothing to the baseline it is in.');
@@ -1559,7 +1531,7 @@ class MacroAggregateSubsystemTest extends TestCase
         // Every channel in the drift is named, so the panel cannot silently drop one.
         $this->assertCount(28, $window['contributions']);
         $this->assertArrayHasKey('productivitySupply', $window['contributions']);
-        $this->assertArrayHasKey('fundStabilisation', $window['contributions']);
+        $this->assertArrayHasKey('fundDraw', $window['contributions']);
         $this->assertArrayHasKey('premiumDrag', $window['contributions']);
         $this->assertArrayHasKey('premiumCompensator', $window['contributions']);
         $this->assertArrayHasKey('demandDisaster', $window['contributions']);
@@ -2253,5 +2225,49 @@ class MacroAggregateSubsystemTest extends TestCase
         $this->assertCount(MacroAggregateSubsystem::CPI_MONTHS_KEPT, $state->consumerPriceMonthly);
         $this->assertEqualsWithDelta(0.03, MacroAggregateSubsystem::consumerPriceInflationYearOnYear($state->consumerPriceMonthly), 1e-9);
         $this->assertNull(MacroAggregateSubsystem::consumerPriceInflationYearOnYear(array_slice($state->consumerPriceMonthly, 1)), 'Less than a year on record has no year-on-year rate.');
+    }
+
+    /**
+     * Real GDP averaged over a quarter at the given tick rate, with the gap on a path that falls for two quarters and
+     * then recovers: the statistics office's call at each quarter's end.
+     *
+     * @param callable(float): float $gapAt The output gap at a time.
+     * @return list<bool>
+     */
+    private function recessionCalls(int $ticksPerYear, callable $gapAt, int $quarters): array
+    {
+        $state = new MacroState();
+        $state->potentialGdpIndex = 1.0;
+        $state->totalTime = 0.0;
+        $dt = 1.0 / $ticksPerYear;
+        $calls = [];
+        for ($tick = 1; $tick <= $ticksPerYear * $quarters / 4; ++$tick) {
+            $state->totalTime += $dt;
+            $state->outputGap = $gapAt($state->totalTime);
+            MacroAggregateSubsystem::recordQuarterlyRealGdp($state, $dt);
+            if ($tick % ($ticksPerYear / 4) === 0) {
+                $calls[] = $state->recessionDeclared;
+            }
+        }
+
+        return $calls;
+    }
+
+    /** Two quarters of falling real GDP declare a recession, the same quarters at any tick rate, and two of growth end it. */
+    public function testTwoFallingQuartersDeclareARecessionAndTwoRisingEndIt(): void
+    {
+        // Flat for two years, falling 1% a quarter for a year, then recovering 3% a quarter.
+        $gapAt = static fn (float $t): float => $t < 2.0 ? 0.0 : ($t < 3.0 ? -0.04 * ($t - 2.0) : -0.04 + (0.12 * ($t - 3.0)));
+        $expected = [false, false, false, false, false, false, false, false, false, true, true, true, true, false, false, false];
+        foreach ([12, 48, 180] as $ticksPerYear) {
+            $this->assertSame($expected, $this->recessionCalls($ticksPerYear, $gapAt, 16), "At {$ticksPerYear} ticks a year.");
+        }
+    }
+
+    /** A single falling quarter is no recession, and growth in a deep slump ends one: the call reads the change, not the level. */
+    public function testOneFallingQuarterIsNoRecession(): void
+    {
+        $dip = static fn (float $t): float => ($t > 1.05 && $t < 1.2) ? -0.02 : 0.0;
+        $this->assertNotContains(true, $this->recessionCalls(48, $dip, 12));
     }
 }

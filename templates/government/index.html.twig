@@ -22,8 +22,8 @@
 					<p class="text-sm text-on-surface-variant mt-2 max-w-2xl">
 						The District is governed by two institutions that share no members and answer to no one but themselves.
 						The Diet is elected every {{ rules.termYears|number_format(0) }} years and passes the budget and the laws.
-						The Council is {{ rules.councilSeats }} leaders who choose their own successors, appoint the heads of the departments,
-						and hold a veto they almost never use.
+						The Council is {{ rules.councilSeats }} leaders who choose their own successors and appoint the governor of the
+						Monetary Authority and the heads of the other departments.
 					</p>
 					<p class="mt-3 text-sm text-on-surface-variant">As of {{ simDate }}</p>
 				</div>
@@ -48,7 +48,7 @@
 						<dt class="text-xs text-on-surface-variant">Cabinet seats</dt>
 						<dd class="text-lg font-semibold font-mono tabular-nums text-on-surface mt-0.5">{{ government.seats }} / {{ rules.seats }}</dd>
 						<p class="text-2xs font-mono tabular-nums text-on-surface-variant mt-0.5">
-							{%- if government.minority %}Minority · {{ government.supportedSeats }} with supporters{% else %}Majority {{ rules.majority }}{% endif %}{{ government.supermajority ? ' · three quarters held' : '' -}}
+							{%- if government.minority %}Minority · {{ government.supportedSeats }} with supporters{% else %}Majority {{ rules.majority }}{% endif -%}
 						</p>
 					</div>
 					<div>
@@ -121,10 +121,10 @@
 
 				<section class="bg-surface-container-low rounded-lg p-5 border border-outline-variant/20 flex flex-col" aria-labelledby="hub-budget-heading">
 					<h3 id="hub-budget-heading" class="text-sm font-semibold text-on-surface"><a href="{{ path('app_government_budget') }}" class="hover:underline">The budget</a></h3>
-					<p class="mt-2 text-2xl font-semibold font-mono tabular-nums {{ budget.braking ? 'text-warning' : 'text-on-surface' }}">{{ budget.debt|pct(1) }}</p>
-					<p class="text-xs text-on-surface-variant">of GDP in debt; the Council's line is {{ rules.debtBrake|pct(1) }}{{ budget.braking ? ', and its brake is on' : '' }}</p>
+					<p class="mt-2 text-2xl font-semibold font-mono tabular-nums text-on-surface">{{ budget.debt|pct(1) }}</p>
+					<p class="text-xs text-on-surface-variant">of GDP in debt; the cabinet steers to <span class="font-mono tabular-nums">{{ budget.debtTarget|pct(1) }}</span>, moving toward it by up to <span class="font-mono tabular-nums">{{ budget.debtPace|pct(2) }}</span> of GDP a year</p>
 					{% set changing = budget.levers|filter(lever => lever.status in ['pending', 'partial'])|length %}
-					{% set held = budget.levers|filter(lever => lever.status in ['held', 'fund', 'blocked'])|length %}
+					{% set held = budget.levers|filter(lever => lever.status in ['fund', 'blocked'])|length %}
 					<p class="text-xs text-on-surface mt-3">
 						{% if government.caretaker %}
 							No budget passes until the talks produce a government.
@@ -256,10 +256,9 @@
 					heading: 'The budget',
 					items: [
 						{name: 'Budget rounds', text: 'The Diet passes a budget every ' ~ rules.budgetRoundMonths|number_format(0) ~ ' months. A new government\'s first budget is the round after it takes office.'},
-						{name: 'What it decides', text: 'How much the District spends on public services, the corporate tax rate, the tax on dividends, the tariff on imports, the immigration regime, the tax on homes bought from outside the District, how strictly mergers are reviewed, how much housing the planning system lets through, the carbon price on power, the rules on offshore drilling and mining, the stamp duty on share trades, which is paid into the Sovereign Reserve, the levy on banks\' balance sheets, how much of the reserves\' return the budget spends and how much of them is invested at home, whether a debt that has run too high is brought down by raising taxes or by cutting spending, and how much of a rise in power and water bills the utility commission grants. How the debt is funded is the Exchequer\'s.'},
+						{name: 'What it decides', text: 'How much the District spends on public services, the corporate tax rate, the tax on dividends, the tariff on imports, the immigration regime, the tax on homes bought from outside the District, how strictly mergers are reviewed, how much housing the planning system lets through, the carbon price on power, the rules on offshore drilling and mining, the stamp duty on share trades, which is paid into the Sovereign Reserve, the levy on banks\' balance sheets, how much of the reserves\' return the budget spends and how much of them is invested at home, the debt it aims for and how fast it gets there, whether the debt is brought down by raising taxes or by cutting spending, and how much of a rise in power and water bills the utility commission grants. How the debt is funded is the Exchequer\'s.'},
 						{name: 'Supporters\' veto', text: 'A minority cabinet needs its supporters\' votes. They will not back a change that moves a policy further from their own, so they can stop a government but not steer it.'},
-						{name: 'The debt brake', text: 'Above ' ~ rules.debtBrake|pct(1) ~ ' of GDP in debt, the line its middle councillor holds, the Council would veto any budget that cuts revenue or raises spending, so the Diet does not table one.'},
-						{name: 'Removing councillors', text: 'The Diet can remove a councillor with ' ~ rules.supermajority ~ ' of its ' ~ rules.seats ~ ' seats. It never has, and ' ~ rules.loyalists|join(', ') ~ ' never would.'}
+						{name: 'The debt', text: 'Each party runs on a debt target, a share of GDP, and a pace, the most it would move the debt in a year toward it; a cabinet\'s plan averages its parties\', weighted by their seats. The budget plans the surplus that holds the debt steady and moves it toward the target, or the deficit that lets it rise toward a higher one. The bond market charges the District more to borrow as its debt rises.'}
 					]
 				}
 			] %}

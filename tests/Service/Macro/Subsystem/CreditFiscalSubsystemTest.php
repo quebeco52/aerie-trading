@@ -3,7 +3,6 @@
 namespace App\Tests\Service\Macro\Subsystem;
 
 use App\DTO\MacroStateDTO;
-use App\Service\Event\ShockEvent;
 use App\Service\Macro\MacroEngine;
 use App\Service\Macro\MacroState;
 use App\Service\Macro\Subsystem\AssetMarketSubsystem;
@@ -81,7 +80,9 @@ class CreditFiscalSubsystemTest extends TestCase
     {
         $subsystem = $this->quietSubsystem();
         $state = new MacroState();
-        $state->sovereignDebtToGdp = CreditFiscalSubsystem::SOVEREIGN_DEBT_NEUTRAL_THRESHOLD;
+        // No debt to service or repair, so the budget plans no balance and purchases follow the appropriation alone.
+        $state->sovereignDebtToGdp = 0.0;
+        $state->debtPace = 0.0;
         $state->publicSpendingShare = MacroEngine::PUBLIC_PURCHASES_TO_GDP * 1.10;
         $target = MacroEngine::GOVT_SPENDING_BASELINE * 1.10;
 
@@ -331,14 +332,13 @@ class CreditFiscalSubsystemTest extends TestCase
             if ($funded) {
                 $state->sovereignFundDollarsPerGdp = 2.0e13;
                 $state->sovereignFundDrawToGdp = 0.02;
-                $state->sovereignFundStabilisationToGdp = 0.005;
             }
             $debt = $state->sovereignDebtToGdp;
 
             $this->subsystem->calculateSovereignDebt($state, $dt);
 
             $output = 1.3;
-            $fundPaid = $funded ? 0.025 * $output : 0.0;
+            $fundPaid = $funded ? 0.02 * $output : 0.0;
             $spending = (104.0 / MacroEngine::GOVT_SPENDING_BASELINE) * MacroEngine::PUBLIC_PURCHASES_TO_GDP * ($output / 0.98) + $fundPaid;
             // The Authority's paper earns the 5% the whole debt pays, in place of the founding rate the net take leaves room for.
             $remittance = MonetaryPolicySubsystem::CURRENCY_TO_GDP * 0.05;
@@ -346,82 +346,33 @@ class CreditFiscalSubsystemTest extends TestCase
             $deficitToGdp = ($spending - $revenue) / $output;
 
             $this->assertEqualsWithDelta($deficitToGdp, $state->primaryDeficitToGdp, 1e-12, 'The published deficit is spending less revenue.');
-            $this->assertEqualsWithDelta($debt + (($deficitToGdp + ((0.05 - 0.03) * $debt)) * $dt), $state->sovereignDebtToGdp, 1e-12, 'Debt over the 70% line runs no surplus the tax rate does not levy.');
+            $this->assertEqualsWithDelta($debt + (($deficitToGdp + ((0.05 - 0.03) * $debt)) * $dt), $state->sovereignDebtToGdp, 1e-12, 'Debt moves by the deficit and r - g, nothing beside them.');
         }
     }
 
-    /**
-     * Bohn (1998) acts through net taxes, as far as the Diet raises it by tax: debt above the line raises the take the
-     * budget levies, which the demand equation reads (MacroAggregateSubsystem's discretionary fiscal leg), and the higher
-     * take shows in revenue. The corporate rate stays where the law has it.
-     */
-    public function testDebtAboveTheLineRaisesTheTaxRateDemandReads(): void
-    {
-        $sound = new MacroState();
-        $sound->outputGapEma = 0.0;
-        $sound->corporateTaxRate = MacroEngine::BASE_CORPORATE_TAX_RATE;
-        $sound->netTaxRate = CreditFiscalSubsystem::FOUNDING_NET_TAX_RATE;
-        $sound->sovereignDebtToGdp = 0.90;
-        $sound->consolidationTaxShare = 1.0;
-        $indebted = clone $sound;
-        $indebted->sovereignDebtToGdp = 1.20;
-
-        foreach ([$sound, $indebted] as $state) {
-            $state->corporateTaxRateTrend = MacroEngine::BASE_CORPORATE_TAX_RATE;
-            $state->netTaxStanceRate = CreditFiscalSubsystem::FOUNDING_NET_TAX_RATE;
-            $state->netTaxStanceRateTrend = CreditFiscalSubsystem::FOUNDING_NET_TAX_RATE;
-        }
-        $impulse = static fn (MacroState $state): float => MacroAggregateSubsystem::KALDOR_FISCAL_MULTIPLIER * (($state->corporateTaxRateTrend - $state->corporateTaxRate) + ($state->netTaxStanceRateTrend - $state->netTaxStanceRate));
-        $impulseAt = [];
-        for ($i = 1; $i <= 4000; ++$i) {
-            $this->subsystem->calculateDynamicFiscalPolicy($sound, 0.01);
-            $this->subsystem->calculateDynamicFiscalPolicy($indebted, 0.01);
-            $impulseAt[$i] = $impulse($indebted);
-        }
-
-        // At 90% the reaction exactly pays the 2% structural deficit, so the rate sits at its neutral level.
-        $this->assertEqualsWithDelta(CreditFiscalSubsystem::FOUNDING_NET_TAX_RATE, $sound->netTaxRate, 1e-6);
-        $this->assertEqualsWithDelta(0.30 * CreditFiscalSubsystem::BOHN_FISCAL_REACTION_SENSITIVITY, $indebted->netTaxRate - $sound->netTaxRate, 1e-6);
-        $this->assertSame($sound->corporateTaxRate, $indebted->corporateTaxRate, 'Firms pay the law, not the debt.');
-        $this->assertLessThan(-0.008, $impulseAt[200], 'The consolidation costs demand while it is enacted.');
-        $this->assertGreaterThan(-0.001, $impulseAt[4000], 'Forty years on, the higher rate is in potential, not the gap.');
-
-        $soundBudget = $this->neutralBudget(1.20);
-        $soundBudget->netTaxRate = $sound->netTaxRate;
-        $indebtedBudget = $this->neutralBudget(1.20);
-        $indebtedBudget->netTaxRate = $indebted->netTaxRate;
-        $this->subsystem->calculateSovereignDebt($soundBudget, 0.25);
-        $this->subsystem->calculateSovereignDebt($indebtedBudget, 0.25);
-        $this->assertEqualsWithDelta(-0.03, $indebtedBudget->primaryDeficitToGdp - $soundBudget->primaryDeficitToGdp, 1e-6, 'The surplus is the revenue the higher rate raises.');
-    }
 
     /**
-     * The Diet splits a consolidation between tax and purchases; the surplus is the same either way. With no fund the
-     * reaction that only pays the structural deficit is no consolidation, so the budget as calibrated is untouched there.
+     * The Diet splits a consolidation between tax and purchases; the surplus is the same either way, and a planned
+     * deficit loosens both the other way round.
      */
     public function testTheDietSplitsAConsolidationBetweenTaxAndPurchases(): void
     {
         $share = CreditFiscalSubsystem::FOUNDING_CONSOLIDATION_TAX_SHARE;
-        $this->assertEqualsWithDelta(0.377, $share, 0.001, 'The average OECD plan raises 38% by tax.');
+        $this->assertEqualsWithDelta((1.0 - $share) * 0.02, CreditFiscalSubsystem::consolidationSpendingCut(0.02, $share), 1e-15);
+        $this->assertEqualsWithDelta($share * -0.01, CreditFiscalSubsystem::consolidationSpendingCut(-0.01, $share), 1e-15, 'A planned deficit gives the tax share back as purchases.');
 
         $state = new MacroState();
-        $state->sovereignFundDollarsPerGdp = 0.0;
         $state->consolidationTaxShare = $share;
         $state->publicSpendingShare = MacroEngine::PUBLIC_PURCHASES_TO_GDP;
+        $state->sovereignDebtToGdp = 0.80;
+        $state->debtTarget = 0.60;
+        $state->debtPace = 0.01;
+        $required = CreditFiscalSubsystem::requiredPrimaryBalance($state);
+        $cut = CreditFiscalSubsystem::consolidationSpendingCut($required, $share);
 
-        $state->sovereignDebtToGdp = 0.90;
-        $this->assertEqualsWithDelta(0.0, CreditFiscalSubsystem::fiscalStance($state), 1e-12);
-        $this->assertEqualsWithDelta(0.0, CreditFiscalSubsystem::consolidationSpendingCut(0.90, false, $share), 1e-12);
-
-        $state->sovereignDebtToGdp = 1.20;
-        $consolidation = CreditFiscalSubsystem::bohnSurplus(1.20) - CreditFiscalSubsystem::SOVEREIGN_STRUCTURAL_DEFICIT;
-        $cut = CreditFiscalSubsystem::consolidationSpendingCut(1.20, false, $share);
-        $this->assertEqualsWithDelta($share * $consolidation, CreditFiscalSubsystem::fiscalStance($state), 1e-12);
-        $this->assertEqualsWithDelta((1.0 - $share) * $consolidation, $cut, 1e-12);
-        $this->assertEqualsWithDelta(MacroEngine::PUBLIC_PURCHASES_TO_GDP - $cut, CreditFiscalSubsystem::purchasesTarget($state->publicSpendingShare, 1.20, false, $share), 1e-12);
-
-        // With a fund the draw pays the structural deficit, so the whole reaction is a consolidation.
-        $this->assertEqualsWithDelta((1.0 - $share) * CreditFiscalSubsystem::bohnSurplus(0.80), CreditFiscalSubsystem::consolidationSpendingCut(0.80, true, $share), 1e-12);
+        $this->assertGreaterThan(0.0, $required);
+        $this->assertEqualsWithDelta($share * $required, CreditFiscalSubsystem::fiscalStance($state), 1e-12, 'Tax raises its share of the planned surplus.');
+        $this->assertEqualsWithDelta(MacroEngine::PUBLIC_PURCHASES_TO_GDP - $cut, CreditFiscalSubsystem::purchasesTarget($state->publicSpendingShare, $required, $share), 1e-12);
 
         // Purchases settle on the appropriation less the cut.
         $subsystem = $this->quietSubsystem();
@@ -432,79 +383,53 @@ class CreditFiscalSubsystemTest extends TestCase
     }
 
     /**
-     * The reaction answers to gross debt, what the Diet's budget borrows, whatever the Council's fund holds: a fund that
-     * outgrows the economy no longer licenses gross debt to climb until net liabilities reach the line.
+     * The planned balance holds debt where it stands at r - g, plus the year's step toward the cabinet's target: the
+     * whole remaining gap when it is smaller than the pace, the pace when it is larger, and a deficit the same way below
+     * target. With no pace the budget only holds debt where it is.
      */
-    public function testWithAFundTheReactionStillKeysToGrossDebt(): void
-    {
-        $unfunded = new MacroState();
-        $unfunded->sovereignDebtToGdp = 0.90;
-        $unfunded->sovereignNetFinancialLiabilitiesToGdp = 0.90;
-        $funded = clone $unfunded;
-        $funded->sovereignFundDollarsPerGdp = 2.0e13;
-        $funded->sovereignNetFinancialLiabilitiesToGdp = -0.10;
-
-        $this->assertEqualsWithDelta(0.0, CreditFiscalSubsystem::fiscalStance($unfunded), 1e-12, 'No fund: the reaction at 90% pays the structural deficit.');
-        $this->assertEqualsWithDelta(
-            0.20 * CreditFiscalSubsystem::BOHN_FISCAL_REACTION_SENSITIVITY,
-            CreditFiscalSubsystem::fiscalStance($funded) + CreditFiscalSubsystem::consolidationSpendingCut(0.90, true, $funded->consolidationTaxShare),
-            1e-12,
-            'The draw pays the structural deficit, so the whole reaction is surplus, in tax and in cuts, net creditor or not.'
-        );
-    }
-
-    /**
-     * The reaction steers to the Diet's own target, capped at the Council's line: a big-state target under a dovish
-     * Council runs no surplus at 75% debt, and the same target under a hawkish Council is pulled back to its line, so
-     * the reaction's own loosening cannot carry debt past the brake.
-     */
-    public function testTheReactionSteersToTheDietsTargetCappedAtTheCouncilsLine(): void
+    public function testThePlannedBalanceStepsDebtTowardTheTargetAtThePace(): void
     {
         $state = new MacroState();
-        $state->sovereignFundDollarsPerGdp = 2.0e13;
-        $state->consolidationTaxShare = 1.0;
-        $state->publicSpendingShare = MacroEngine::PUBLIC_PURCHASES_TO_GDP;
-        $state->sovereignDebtToGdp = 0.75;
-        $state->debtTarget = 0.75;
+        $state->debtTarget = 0.60;
+        $state->debtPace = 0.005;
+        $holds = static function (MacroState $at): float {
+            $g = MacroEngine::TARGET_INFLATION + MacroEngine::TFP_DRIFT + $at->laborForceGrowthRate;
 
-        $state->councilDebtLine = 0.95;
-        $this->assertSame(0.75, CreditFiscalSubsystem::debtAnchor($state));
-        $this->assertEqualsWithDelta(0.0, CreditFiscalSubsystem::fiscalStance($state), 1e-12, 'At its own target the budget is neutral.');
+            return (CreditFiscalSubsystem::sovereignEffectiveRate($at) - $g) * $at->sovereignDebtToGdp;
+        };
 
-        $state->councilDebtLine = 0.66;
-        $this->assertSame(0.66, CreditFiscalSubsystem::debtAnchor($state));
-        $this->assertEqualsWithDelta(0.09 * CreditFiscalSubsystem::BOHN_FISCAL_REACTION_SENSITIVITY, CreditFiscalSubsystem::fiscalStance($state), 1e-12, 'A hawkish Council pulls it back to its line.');
-
-        $state->debtTarget = 0.35;
-        $this->assertEqualsWithDelta(0.40 * CreditFiscalSubsystem::BOHN_FISCAL_REACTION_SENSITIVITY, CreditFiscalSubsystem::fiscalStance($state), 1e-12, 'A small-state target under the line is its own.');
+        $state->sovereignDebtToGdp = 0.90;
+        $this->assertEqualsWithDelta($holds($state) + 0.005, CreditFiscalSubsystem::requiredPrimaryBalance($state), 1e-15, 'Far above target: the pace.');
+        $state->sovereignDebtToGdp = 0.602;
+        $this->assertEqualsWithDelta($holds($state) + 0.002, CreditFiscalSubsystem::requiredPrimaryBalance($state), 1e-12, 'Near target: the rest of the gap.');
+        $state->sovereignDebtToGdp = 0.30;
+        $this->assertEqualsWithDelta($holds($state) - 0.005, CreditFiscalSubsystem::requiredPrimaryBalance($state), 1e-15, 'Far below target: a deficit at the pace.');
+        $state->debtPace = 0.0;
+        $this->assertEqualsWithDelta($holds($state), CreditFiscalSubsystem::requiredPrimaryBalance($state), 1e-15, 'No pace: debt held where it stands.');
     }
 
-    /**
-     * Bohn's reaction is linear: debt under the line is room the budget spends, so debt is pulled back to the line from
-     * below as well as from above. The room splits the other way round from a consolidation: a Diet that repairs debt
-     * by tax spends it, one that repairs it by cuts gives it back as tax cuts.
-     */
-    public function testDebtUnderTheLineLoosensTheBudgetTheOtherWayRound(): void
+    /** Run as the economy runs it, a cabinet's plan takes debt from 90% to its 60% target and holds it there. */
+    public function testDebtFollowsTheCabinetsPathToItsTarget(): void
     {
-        $share = CreditFiscalSubsystem::FOUNDING_CONSOLIDATION_TAX_SHARE;
-        $state = new MacroState();
-        $state->sovereignFundDollarsPerGdp = 2.0e13;
-        $state->consolidationTaxShare = $share;
-        $state->publicSpendingShare = MacroEngine::PUBLIC_PURCHASES_TO_GDP;
-        $state->sovereignDebtToGdp = 0.50;
+        $state = $this->neutralBudget(0.90);
+        $state->debtTarget = 0.60;
+        $state->debtPace = 0.01;
+        $state->netTaxRate = CreditFiscalSubsystem::FOUNDING_NET_TAX_RATE + CreditFiscalSubsystem::fiscalStance($state);
+        $state->netTaxStanceRate = $state->netTaxRate;
+        $dt = 1.0 / 48.0;
+        $subsystem = $this->quietSubsystem();
+        $tenYears = 0.0;
+        for ($i = 1; $i <= 48 * 60; ++$i) {
+            $subsystem->calculateGovernmentSpending($state, $dt);
+            $subsystem->calculateDynamicFiscalPolicy($state, $dt);
+            $subsystem->calculateSovereignDebt($state, $dt);
+            if ($i === 48 * 10) {
+                $tenYears = $state->sovereignDebtToGdp;
+            }
+        }
 
-        $room = CreditFiscalSubsystem::bohnSurplus(0.50);
-        $this->assertEqualsWithDelta(-0.20 * CreditFiscalSubsystem::BOHN_FISCAL_REACTION_SENSITIVITY, $room, 1e-12);
-        $this->assertEqualsWithDelta((1.0 - $share) * $room, CreditFiscalSubsystem::fiscalStance($state), 1e-12, 'Taxes fall by the share consolidation leaves to cuts.');
-        $this->assertEqualsWithDelta(MacroEngine::PUBLIC_PURCHASES_TO_GDP - ($share * $room), CreditFiscalSubsystem::purchasesTarget($state->publicSpendingShare, 0.50, true, $share), 1e-12, 'Purchases rise by the share consolidation raises by tax.');
-        $this->assertGreaterThan(
-            CreditFiscalSubsystem::purchasesTarget($state->publicSpendingShare, 0.50, true, 0.30),
-            CreditFiscalSubsystem::purchasesTarget($state->publicSpendingShare, 0.50, true, 0.45),
-            'The big-state mix spends more of the room than the small-state mix.'
-        );
-
-        // With no fund the structural deficit is already borrowed; the room comes on top of it.
-        $this->assertEqualsWithDelta($share * $room, CreditFiscalSubsystem::consolidationSpendingCut(0.50, false, $share), 1e-12);
+        $this->assertEqualsWithDelta(0.80, $tenYears, 0.03, 'A point a year: about ten points off in ten years.');
+        $this->assertEqualsWithDelta(0.60, $state->sovereignDebtToGdp, 0.02, 'And held at the target.');
     }
 
     /**
@@ -514,7 +439,7 @@ class CreditFiscalSubsystemTest extends TestCase
      */
     public function testAPolicyLevyIsGivenBackThroughTheOtherTaxes(): void
     {
-        $neutral = $this->neutralBudget(CreditFiscalSubsystem::SOVEREIGN_DEBT_NEUTRAL_THRESHOLD);
+        $neutral = $this->neutralBudget(CreditFiscalSubsystem::FOUNDING_DEBT_TARGET);
         $neutral->sovereignFundDollarsPerGdp = 2.0e13;
         $neutral->sovereignFundDrawToGdp = 0.02;
         $neutral->outputGapEma = 0.0;
@@ -718,28 +643,6 @@ class CreditFiscalSubsystemTest extends TestCase
         $this->assertEqualsWithDelta(100.0 * (1.0 + $state->reimbursementRateGrowth), $state->reimbursementRateIndex, 1e-9);
     }
 
-    public function testAFiscalCorrectionSequestersTheUpdate(): void
-    {
-        $solvent = new MacroState();
-        $solvent->totalTime = 4.001;
-        $solvent->inflationEma = 0.03;
-        $solvent->sovereignDebtToGdpEma = MacroEngine::SOVEREIGN_RISK_DEBT_THRESHOLD;
-
-        $indebted = new MacroState();
-        $indebted->totalTime = 4.001;
-        $indebted->inflationEma = 0.03;
-        $indebted->sovereignDebtToGdpEma = MacroEngine::SOVEREIGN_RISK_DEBT_THRESHOLD + 0.30;
-
-        $this->subsystem->calculateReimbursementRate($solvent, 0.01);
-        $this->subsystem->calculateReimbursementRate($indebted, 0.01);
-
-        $this->assertEqualsWithDelta(
-            0.30 * CreditFiscalSubsystem::REIMBURSEMENT_FISCAL_CUT_SENSITIVITY,
-            $solvent->reimbursementRateGrowth - $indebted->reimbursementRateGrowth,
-            1e-9,
-            'Thirty points of excess debt take the sequester off the administered update.'
-        );
-    }
 
     public function testADeflationaryYearHoldsRatesRatherThanCuttingThem(): void
     {
@@ -850,62 +753,48 @@ class CreditFiscalSubsystemTest extends TestCase
         return $state->sovereignRiskSpread;
     }
 
-    public function testTheFiscalPositionTheReactionDefendsCarriesNoRiskPremium(): void
-    {
-        $this->assertSame(0.0, $this->settledSovereignSpread(self::SOUND_DEBT_TO_GDP));
-        $this->assertSame(0.0, $this->settledSovereignSpread(CreditFiscalSubsystem::SOVEREIGN_DEBT_NEUTRAL_THRESHOLD), 'The Bohn threshold is where the fiscal reaction starts, not where the market re-rates.');
-        $this->assertSame(0.0, $this->settledSovereignSpread(MacroEngine::SOVEREIGN_RISK_DEBT_THRESHOLD), 'At the line itself there is nothing to charge for yet.');
-    }
 
-    public function testDebtAboveTheRiskLineIsPricedAtLaubachsRate(): void
-    {
-        $spread = $this->settledSovereignSpread(MacroEngine::SOVEREIGN_RISK_DEBT_THRESHOLD + 0.30);
 
-        $this->assertEqualsWithDelta(0.30 * CreditFiscalSubsystem::LAUBACH_DEBT_YIELD_SENSITIVITY, $spread, 1e-6, 'Thirty points of excess debt cost about 105 bps: 3.5 bps a point.');
-    }
 
-    public function testTheSovereignSpreadIsCappedAtTheLossOfMarketAccess(): void
+    /** The default premium is near nothing at the debt the District opened with and rises steeply toward the fiscal limit, never past the loss in a default. */
+    public function testTheDefaultPremiumIsNearNothingAtTheOpeningDebtAndRisesSteeply(): void
     {
-        $atMaxDebt = $this->settledSovereignSpread(2.50);
-        $expected = min(CreditFiscalSubsystem::MAX_SOVEREIGN_RISK_SPREAD, (2.50 - MacroEngine::SOVEREIGN_RISK_DEBT_THRESHOLD) * CreditFiscalSubsystem::LAUBACH_DEBT_YIELD_SENSITIVITY);
-        $this->assertEqualsWithDelta($expected, $atMaxDebt, 1e-6);
-        $this->assertLessThanOrEqual(CreditFiscalSubsystem::MAX_SOVEREIGN_RISK_SPREAD, $atMaxDebt);
+        $this->assertLessThan(0.0002, $this->settledSovereignSpread(MacroEngine::INITIAL_DEBT_TO_GDP), 'Under two basis points at the opening debt.');
+        $this->assertEqualsWithDelta(0.0012, $this->settledSovereignSpread(0.90), 0.0003, 'About 12bp at 90% of GDP.');
+        $this->assertGreaterThan(0.015, $this->settledSovereignSpread(1.35), 'About 2% at 135%.');
+        $previous = 0.0;
+        foreach ([0.4, 0.8, 1.2, 1.6, 2.0, 3.0, 6.0] as $liabilities) {
+            $premium = CreditRisk::sovereignDefaultPremium($liabilities, CreditFiscalSubsystem::FISCAL_LIMIT_NET_LIABILITIES, CreditFiscalSubsystem::FISCAL_LIMIT_SD, CreditFiscalSubsystem::SOVEREIGN_LOSS_GIVEN_DEFAULT);
+            $this->assertGreaterThan($previous, $premium);
+            $this->assertLessThanOrEqual(CreditFiscalSubsystem::SOVEREIGN_LOSS_GIVEN_DEFAULT, $premium);
+            $previous = $premium;
+        }
     }
 
     public function testTheSovereignSpreadRepricesOverBudgetRoundsNotTicks(): void
     {
         $state = new MacroState();
-        $state->sovereignDebtToGdpEma = MacroEngine::SOVEREIGN_RISK_DEBT_THRESHOLD + 0.30;
-        $state->sovereignNetFinancialLiabilitiesToGdpEma = $state->sovereignDebtToGdpEma;
+        $state->sovereignNetFinancialLiabilitiesToGdpEma = 1.35;
         $state->sovereignRiskSpread = 0.0; // from no premium at all
 
         $this->subsystem->calculateSovereignRiskSpread($state, 1.0 / 252.0);
 
-        $target = 0.30 * CreditFiscalSubsystem::LAUBACH_DEBT_YIELD_SENSITIVITY;
+        $target = CreditRisk::sovereignDefaultPremium(1.35, CreditFiscalSubsystem::FISCAL_LIMIT_NET_LIABILITIES, CreditFiscalSubsystem::FISCAL_LIMIT_SD, CreditFiscalSubsystem::SOVEREIGN_LOSS_GIVEN_DEFAULT);
         $this->assertGreaterThan(0.0, $state->sovereignRiskSpread);
         $this->assertLessThan(0.02 * $target, $state->sovereignRiskSpread, 'One trading day closes under two percent of the gap.');
     }
 
     /**
-     * Two sovereigns thirty points of gross debt past the risk line; one holds half of GDP in its reserve fund. The
-     * market prices what is owed net of what is held (IMF Fiscal Monitor 2018), so only the other pays for its debt.
+     * Two sovereigns with gross debt at 135% of GDP; one holds half of GDP in its reserve fund. The market prices what
+     * is owed net of what is held (IMF Fiscal Monitor 2018), so the funded one pays a fraction of the other's premium.
      */
     public function testTheMarketPricesDebtNetOfWhatTheStateHolds(): void
     {
-        $unfunded = new MacroState();
-        $unfunded->sovereignDebtToGdpEma = MacroEngine::SOVEREIGN_RISK_DEBT_THRESHOLD + 0.30;
-        $unfunded->sovereignNetFinancialLiabilitiesToGdpEma = $unfunded->sovereignDebtToGdpEma;
-        $unfunded->sovereignRiskSpread = 0.0;
-        $funded = clone $unfunded;
-        $funded->sovereignNetFinancialLiabilitiesToGdpEma = $funded->sovereignDebtToGdpEma - 0.50;
+        $unfunded = $this->settledSovereignSpread(1.35);
+        $funded = $this->settledSovereignSpread(1.35 - 0.50);
 
-        for ($i = 0; $i < 2000; $i++) {
-            $this->subsystem->calculateSovereignRiskSpread($unfunded, 0.01);
-            $this->subsystem->calculateSovereignRiskSpread($funded, 0.01);
-        }
-
-        $this->assertEqualsWithDelta(0.30 * CreditFiscalSubsystem::LAUBACH_DEBT_YIELD_SENSITIVITY, $unfunded->sovereignRiskSpread, 1e-6);
-        $this->assertSame(0.0, $funded->sovereignRiskSpread, 'Net of its holdings the funded sovereign sits under the line.');
+        $this->assertEqualsWithDelta(CreditRisk::sovereignDefaultPremium(1.35, CreditFiscalSubsystem::FISCAL_LIMIT_NET_LIABILITIES, CreditFiscalSubsystem::FISCAL_LIMIT_SD, CreditFiscalSubsystem::SOVEREIGN_LOSS_GIVEN_DEFAULT), $unfunded, 1e-6);
+        $this->assertLessThan(0.1 * $unfunded, $funded, 'Net of its holdings the funded sovereign pays a fraction of it.');
     }
 
     public function testNetDebtIsGrossLessTheFundsBondsAndGrossWithoutAFund(): void
@@ -930,10 +819,10 @@ class CreditFiscalSubsystemTest extends TestCase
     }
 
     /**
-     * Net financial liabilities (OECD) net everything the state holds: the fund's equities as well as its bonds, and the
-     * stakes left from a rescue. A fund all in equities leaves net debt at gross, and still takes the reaction off.
+     * Net financial liabilities (OECD) net everything the state holds: the fund's equities as well as its bonds. A fund
+     * all in equities leaves net debt at gross, and the budget still answers to the gross debt it borrowed.
      */
-    public function testNetFinancialLiabilitiesNetTheFundWholeAndTheRescueStakes(): void
+    public function testNetFinancialLiabilitiesNetTheFundWhole(): void
     {
         $state = new MacroState();
         $state->sovereignDebtToGdp = 1.20;
@@ -944,30 +833,14 @@ class CreditFiscalSubsystemTest extends TestCase
         $state->sovereignFundDollarsPerGdp = 2.0e13;
         $state->sovereignFundToGdp = 0.60;
         $state->sovereignFundBondsToGdp = 0.0;
-        $state->bankRescueAssetsToGdp = 0.05;
 
         $this->subsystem->calculateSovereignDebt($state, 0.25);
 
         $this->assertSame($state->sovereignDebtToGdp, $state->sovereignNetDebtToGdp, 'Equities are not debt instruments: GFSM net debt stays gross.');
-        $this->assertEqualsWithDelta($state->sovereignDebtToGdp - 0.60 - $state->bankRescueAssetsToGdp, $state->sovereignNetFinancialLiabilitiesToGdp, 1e-12);
+        $this->assertEqualsWithDelta($state->sovereignDebtToGdp - 0.60, $state->sovereignNetFinancialLiabilitiesToGdp, 1e-12);
         $this->assertGreaterThan(0.0, CreditFiscalSubsystem::fiscalStance($state), 'The budget answers to the gross debt it borrowed, whatever the fund holds.');
     }
 
-    public function testTheSequesterAnswersToGrossDebt(): void
-    {
-        $unfunded = new MacroState();
-        $unfunded->totalTime = 4.001;
-        $unfunded->inflationEma = 0.03;
-        $unfunded->sovereignDebtToGdpEma = MacroEngine::SOVEREIGN_RISK_DEBT_THRESHOLD + 0.30;
-        $unfunded->sovereignNetFinancialLiabilitiesToGdpEma = $unfunded->sovereignDebtToGdpEma;
-        $funded = clone $unfunded;
-        $funded->sovereignNetFinancialLiabilitiesToGdpEma = 0.20;
-
-        $this->subsystem->calculateReimbursementRate($unfunded, 0.01);
-        $this->subsystem->calculateReimbursementRate($funded, 0.01);
-
-        $this->assertSame($unfunded->reimbursementRateGrowth, $funded->reimbursementRateGrowth, 'A cut is written on the debt the fiscal reaction answers to, gross of the fund.');
-    }
 
     /**
      * Durbin & Ng (2005): a corporate yield carries the sovereign spread at the pass-through share. The District curve
@@ -1003,16 +876,17 @@ class CreditFiscalSubsystemTest extends TestCase
     public function testTheDeficitIsPublishedAsAShareOfGdp(): void
     {
         $state = new MacroState();
-        $state->sovereignDebtToGdp = CreditFiscalSubsystem::SOVEREIGN_DEBT_NEUTRAL_THRESHOLD;
+        $state->sovereignDebtToGdp = 0.90;
         $state->nominalGdpIndex = 1.0;
         $state->outputGap = 0.0;
         $state->governmentSpendingIndex = 100.0;
         $state->corporateTaxRate = MacroEngine::BASE_CORPORATE_TAX_RATE;
-        $state->netTaxRate = CreditFiscalSubsystem::FOUNDING_NET_TAX_RATE + CreditFiscalSubsystem::fiscalStance($state);
+        $stance = CreditFiscalSubsystem::fiscalStance($state);
+        $state->netTaxRate = CreditFiscalSubsystem::FOUNDING_NET_TAX_RATE + $stance;
 
         $this->subsystem->calculateSovereignDebt($state, 0.25);
 
-        $this->assertEqualsWithDelta(CreditFiscalSubsystem::SOVEREIGN_STRUCTURAL_DEFICIT, $state->primaryDeficitToGdp, 1e-9, 'At the Bohn line the rate levies the structural deficit short of neutral spending.');
+        $this->assertEqualsWithDelta(-$stance, $state->primaryDeficitToGdp, 1e-9, 'The planned surplus raised by tax is the published surplus at neutral purchases.');
     }
 
     /**
@@ -1026,17 +900,13 @@ class CreditFiscalSubsystemTest extends TestCase
         $small->sovereignFundDrawToGdp = 0.015;
         $large = clone $small;
         $large->sovereignFundDrawToGdp = 0.06;
-        $unfunded = $this->neutralBudget(CreditFiscalSubsystem::SOVEREIGN_DEBT_NEUTRAL_THRESHOLD, 1.3);
-        $unfunded->netTaxRate += CreditFiscalSubsystem::fiscalStance($unfunded);
 
         $this->subsystem->calculateSovereignDebt($small, 0.25);
         $this->subsystem->calculateSovereignDebt($large, 0.25);
-        $this->subsystem->calculateSovereignDebt($unfunded, 0.25);
 
         $this->assertEqualsWithDelta(0.0, $small->primaryDeficitToGdp, 1e-12, 'The draw pays the structural deficit it finances.');
         $this->assertEqualsWithDelta(0.0, $large->primaryDeficitToGdp, 1e-12, 'Four times the draw is four times the spending, not a surplus.');
         $this->assertSame($small->sovereignDebtToGdp, $large->sovereignDebtToGdp);
-        $this->assertEqualsWithDelta(CreditFiscalSubsystem::SOVEREIGN_STRUCTURAL_DEFICIT, $unfunded->primaryDeficitToGdp, 1e-12, 'With no fund the structural deficit is borrowed.');
     }
 
     /**
@@ -1082,196 +952,18 @@ class CreditFiscalSubsystemTest extends TestCase
 
     // --- Fund-financed stabilisation (IMF Norway 2025, Table 5) ---
 
-    public function testASlumpSpendsFromTheFundAndABoomSavesIntoIt(): void
-    {
-        $slump = $this->fundedBudget(-0.02);
-        $boom = $this->fundedBudget(0.02);
 
-        $this->budgetRound($slump, 0.5);
-        $this->budgetRound($boom, 0.5);
 
-        $this->assertEqualsWithDelta(CreditFiscalSubsystem::FUND_STABILISATION_GAP_RESPONSE * 0.02, $slump->sovereignFundStabilisationToGdp, 1e-15);
-        $this->assertEqualsWithDelta(-$slump->sovereignFundStabilisationToGdp, $boom->sovereignFundStabilisationToGdp, 1e-15, 'Symmetric: a boom saves what a slump spends.');
-    }
 
-    /** The budget answers the cycle, not where the gap sits on average: a gap at its long-run mean asks for nothing. */
-    public function testTheBudgetReadsTheGapAgainstItsLongRunAverage(): void
-    {
-        $atMean = $this->fundedBudget(-0.01);
-        $atMean->sovereignFundGapTrend = -0.01;
-        $belowMean = $this->fundedBudget(-0.03);
-        $belowMean->sovereignFundGapTrend = -0.01;
 
-        $this->budgetRound($atMean, 0.5);
-        $this->budgetRound($belowMean, 0.5);
 
-        $this->assertEqualsWithDelta(0.0, $atMean->sovereignFundStabilisationToGdp, 1e-15);
-        $this->assertEqualsWithDelta(CreditFiscalSubsystem::FUND_STABILISATION_GAP_RESPONSE * 0.02, $belowMean->sovereignFundStabilisationToGdp, 1e-15);
-    }
 
-    /**
-     * The round reads the gap as it stands, not a smoothing of it: the round is the whole policy lag. A reading smoothed
-     * before the round, with the appropriation smoothed again after it, left the rule pushing after the gap had turned.
-     */
-    public function testTheRoundReadsTheGapAsItStands(): void
-    {
-        $state = $this->fundedBudget(-0.03);
-        $state->outputGapEma = 0.0;
 
-        $this->budgetRound($state, 0.5);
 
-        $this->assertEqualsWithDelta(CreditFiscalSubsystem::FUND_STABILISATION_GAP_RESPONSE * 0.03, $state->sovereignFundStabilisationToGdp, 1e-15, 'A slump that has only just begun is answered in full at the round.');
-    }
 
-    /** The average is a slow one: a gap held for one trend horizon moves it by 1 - 1/e of the way. */
-    public function testTheGapAverageMovesAtItsHorizon(): void
-    {
-        $state = $this->fundedBudget(0.0);
-        $state->outputGap = -0.02;
-        $dt = 1.0 / 360.0;
-        $ticks = (int) round(MacroEngine::FUND_STABILISATION_GAP_TREND_YEARS * 360);
-        for ($tick = 1; $tick <= $ticks; ++$tick) {
-            $state->totalTime = $tick * $dt;
-            $this->subsystem->calculateFundStabilisation($state, $dt);
-        }
 
-        $this->assertEqualsWithDelta(-0.02 * (1.0 - exp(-1.0)), $state->sovereignFundGapTrend, 1e-9);
-    }
 
-    public function testNothingMovesBetweenBudgetRounds(): void
-    {
-        $state = $this->fundedBudget(-0.02);
-        $this->budgetRound($state, 0.5);
-        $set = $state->sovereignFundStabilisationToGdp;
 
-        $state->outputGap = -0.06;
-        $state->totalTime = 0.8;
-        $this->subsystem->calculateFundStabilisation($state, 0.01);
-
-        $this->assertSame($set, $state->sovereignFundStabilisationToGdp, 'An appropriation holds until the next budget.');
-    }
-
-    /** The May revision redoes the year's change on the new reading; it does not add a second change on top of October's. */
-    public function testTheMayRevisionReplacesTheYearsChange(): void
-    {
-        $state = $this->fundedBudget(-0.02);
-        $this->budgetRound($state, 1.0);
-        $state->outputGap = -0.04;
-        // The October tick moved the long-run average a sliver toward its gap; May reads against where it now stands.
-        $average = $state->sovereignFundGapTrend;
-        $this->budgetRound($state, 1.5);
-
-        $this->assertEqualsWithDelta(CreditFiscalSubsystem::FUND_STABILISATION_GAP_RESPONSE * (0.04 + $average), $state->sovereignFundStabilisationToGdp, 1e-15);
-    }
-
-    /** A new year books last year's change, gives back a share of it, and decays the level toward the rule path. */
-    public function testLastYearsChangePartlyReversesAndTheLevelDecays(): void
-    {
-        $state = $this->fundedBudget(0.0);
-        $state->sovereignFundStabilisationToGdp = 0.01;
-
-        $this->budgetRound($state, 2.0);
-
-        $this->assertEqualsWithDelta(0.01, $state->sovereignFundStabilisationLastChange, 1e-15);
-        $this->assertEqualsWithDelta(0.01, $state->sovereignFundStabilisationYearStart, 1e-15);
-        $this->assertEqualsWithDelta(
-            0.01 * (1.0 - MacroEngine::FUND_STABILISATION_IMPULSE_REVERSAL - MacroEngine::FUND_STABILISATION_PERSISTENCE),
-            $state->sovereignFundStabilisationToGdp,
-            1e-15
-        );
-    }
-
-    public function testWithNoFundThereIsNoStabilisation(): void
-    {
-        $state = $this->fundedBudget(-0.05);
-        $state->outputGap = -0.05;
-        $state->sovereignFundDollarsPerGdp = 0.0;
-
-        $this->budgetRound($state, 0.5);
-
-        $this->assertSame(0.0, $state->sovereignFundStabilisationToGdp);
-        $this->assertSame(0.0, $state->sovereignFundGapTrend, 'No budget rule, no average kept.');
-    }
-
-    public function testTheFundIsNeverAskedForMoreThanItsForeignSleevesHoldBesideTheDraw(): void
-    {
-        $state = $this->fundedBudget(-0.10);
-        $state->sovereignFundDomesticWeight = 0.98;
-        $state->sovereignFundDrawToGdp = 0.04;
-
-        $this->budgetRound($state, 0.5);
-
-        $this->assertEqualsWithDelta(
-            (CreditFiscalSubsystem::FUND_STABILISATION_REFERENCE_FUND_TO_GDP * 0.02) - 0.04,
-            $state->sovereignFundStabilisationToGdp,
-            1e-15,
-            'Foreign 4.3% of GDP less the 4% draw, under the 4.7% the slump asks for.'
-        );
-    }
-
-    /** The room to lean is a share of the fund: a fund half Norway's size answers the same slump half as hard. */
-    public function testASmallerFundLeansInProportionToItsSize(): void
-    {
-        $norway = $this->fundedBudget(-0.02);
-        $half = $this->fundedBudget(-0.02);
-        $half->sovereignFundToGdp = CreditFiscalSubsystem::FUND_STABILISATION_REFERENCE_FUND_TO_GDP / 2.0;
-
-        $this->budgetRound($norway, 0.5);
-        $this->budgetRound($half, 0.5);
-
-        $this->assertEqualsWithDelta(CreditFiscalSubsystem::FUND_STABILISATION_GAP_RESPONSE * 0.02, $norway->sovereignFundStabilisationToGdp, 1e-15, "At Norway's size, Norway's response.");
-        $this->assertEqualsWithDelta($norway->sovereignFundStabilisationToGdp / 2.0, $half->sovereignFundStabilisationToGdp, 1e-15);
-    }
-
-    /** The fund pays: spending and fund revenue rise together, so neither the deficit nor the debt moves. */
-    public function testTheStabilisationLeavesTheDeficitAndDebtWhereTheyWere(): void
-    {
-        $without = $this->neutralBudget(self::SOUND_DEBT_TO_GDP, 1.3);
-        $without->sovereignFundDollarsPerGdp = 2.0e13;
-        $without->sovereignFundDrawToGdp = 0.02;
-        $with = clone $without;
-        $with->sovereignFundStabilisationToGdp = 0.012;
-
-        $this->subsystem->calculateSovereignDebt($without, 0.25);
-        $this->subsystem->calculateSovereignDebt($with, 0.25);
-
-        $this->assertSame($without->primaryDeficitToGdp, $with->primaryDeficitToGdp);
-        $this->assertSame($without->sovereignDebtToGdp, $with->sovereignDebtToGdp);
-    }
-
-    /** Budget rounds are dates, not tick counts: two years under a scripted gap end at the same level at any tick rate. */
-    public function testTheStabilisationPathIsTheSameAtAnyTickRate(): void
-    {
-        $path = function (int $tpy): float {
-            $dt = 1.0 / $tpy;
-            $state = $this->fundedBudget(0.0);
-            for ($tick = 1; $tick <= 2 * $tpy; ++$tick) {
-                $state->totalTime = $tick * $dt;
-                $state->outputGap = $state->totalTime < 1.2 ? -0.03 : 0.01;
-                $this->subsystem->calculateFundStabilisation($state, $dt);
-            }
-
-            return $state->sovereignFundStabilisationToGdp;
-        };
-
-        $this->assertNotSame(0.0, $path(180));
-        // The scripted gap steps at t = 1.2 and a 2-day tick carries the new value for the whole of it, so the slow
-        // average differs by an order-dt sliver; a round counted in ticks rather than dates would be off by a whole round.
-        $this->assertEqualsWithDelta($path(180), $path(3600), 2e-5);
-    }
-
-    /** A funded budget whose gap stands at $gap, with room in the fund for any stabilisation the rule could ask. */
-    private function fundedBudget(float $gap): MacroState
-    {
-        $state = new MacroState();
-        $state->outputGap = $gap;
-        $state->sovereignFundDollarsPerGdp = 2.0e13;
-        $state->sovereignFundToGdp = CreditFiscalSubsystem::FUND_STABILISATION_REFERENCE_FUND_TO_GDP;
-        $state->sovereignFundDomesticWeight = 0.05;
-        $state->sovereignFundDrawToGdp = 0.02;
-
-        return $state;
-    }
 
     /** One tick that crosses the budget round at $time. */
     // --- The Diet's levers in the budget ---
@@ -1409,11 +1101,6 @@ class CreditFiscalSubsystemTest extends TestCase
         return $state->nominalGdpGrowth * $dt;
     }
 
-    private function budgetRound(MacroState $state, float $time): void
-    {
-        $state->totalTime = $time + 0.001;
-        $this->subsystem->calculateFundStabilisation($state, 0.01);
-    }
 
     /** A budget at neutral spending and tax with output at trend. */
     private function neutralBudget(float $debtToGdp, float $nominalGdpIndex = 1.0): MacroState
@@ -1866,12 +1553,12 @@ class CreditFiscalSubsystemTest extends TestCase
         $state->creditToGdpGapEma = -0.10;
         $state->neutralCountercyclicalBuffer = 0.01;
         $state->countercyclicalBufferRate = 0.01;
-        $state->systemicAlarmLatches[ShockEvent::RECESSION_DECLARED] = 19.0;
+        $state->recessionDeclared = true;
 
         $subsystem->calculateHouseholdCredit($state, 1.0 / 252.0);
         $this->assertSame(0.0, $state->countercyclicalBufferRate, 'A slump with no crisis still releases the buffer.');
 
-        unset($state->systemicAlarmLatches[ShockEvent::RECESSION_DECLARED]);
+        $state->recessionDeclared = false;
         $subsystem->calculateHouseholdCredit($state, 1.0 / 252.0);
         $this->assertGreaterThan(0.0, $state->countercyclicalBufferRate, 'Once it is over the neutral rate phases back in.');
         $this->assertLessThan(0.01 * 0.01, $state->countercyclicalBufferRate);
@@ -2704,109 +2391,11 @@ class CreditFiscalSubsystemTest extends TestCase
     }
     // --- Bank rescues ---
 
-    /** At the US's bank credit the median rescue is the US's 2007 one; more lending at home costs more, log-linearly, and a draw spreads it. */
-    public function testARescueCostsTheUsOutlayAtUsCreditAndMoreWithMoreLending(): void
-    {
-        $us = CreditFiscalSubsystem::US_BANK_CREDIT_TO_GDP;
 
-        $this->assertEqualsWithDelta(CreditFiscalSubsystem::US_BANK_RESCUE_COST_TO_GDP, CreditFiscalSubsystem::bankRescueCostToGdp($us, 0.0), 1e-12);
-        $this->assertEqualsWithDelta(exp(CreditFiscalSubsystem::BANK_RESCUE_COST_CREDIT_SEMI_ELASTICITY), CreditFiscalSubsystem::bankRescueCostToGdp($us + 1.0, 0.0) / CreditFiscalSubsystem::bankRescueCostToGdp($us, 0.0), 1e-12, 'A hundred points more credit costs 2.2 times as much.');
-        $this->assertEqualsWithDelta(exp(CreditFiscalSubsystem::BANK_RESCUE_COST_LOG_SD), CreditFiscalSubsystem::bankRescueCostToGdp($us, 1.0) / CreditFiscalSubsystem::bankRescueCostToGdp($us, 0.0), 1e-12);
-        $this->assertSame(CreditFiscalSubsystem::BANK_RESCUE_COST_CEILING, CreditFiscalSubsystem::bankRescueCostToGdp(1.42, 3.0), 'No rescue past the largest on record.');
-    }
 
-    /** The board's loan books are read through the fund's currency bridge; before the board reports, the opening board's. */
-    public function testBankCreditIsTheBoardsLoanBooksOverGdp(): void
-    {
-        $this->assertEqualsWithDelta(1.5, CreditFiscalSubsystem::bankCreditToGdp(3.0e13 * 1.5 * 1.2, 3.0e13, 1.2), 1e-12);
-        $this->assertSame(CreditFiscalSubsystem::DISTRICT_OPENING_BANK_CREDIT_TO_GDP, CreditFiscalSubsystem::bankCreditToGdp(0.0, 3.0e13, 1.0));
-        $this->assertSame(CreditFiscalSubsystem::DISTRICT_OPENING_BANK_CREDIT_TO_GDP, CreditFiscalSubsystem::bankCreditToGdp(1.0e12, 0.0, 1.0), 'No bridge before the fund opens.');
-    }
 
-    /** A crisis draws its rescue on the day, sized to the banks' lending at home. */
-    public function testACrisisDrawsItsRescueOnTheDay(): void
-    {
-        $math = new class extends MathUtility {
-            public function generateStandardNormal(): float { return 0.0; }
-            public function checkProbability(float $probability): bool { return true; }
-        };
-        $subsystem = new class ($math) extends CreditFiscalSubsystem {
-            protected function bankRescueShock(MacroState $state): float { return 0.5; }
-        };
-        $state = new MacroState();
-        $state->totalTime = 12.5;
-        $state->boardBankCredit = 0.0;
 
-        $subsystem->calculateCreditCrisisHazard($state, 1.0 / 3600.0);
 
-        $this->assertEqualsWithDelta(CreditFiscalSubsystem::bankRescueCostToGdp(CreditFiscalSubsystem::DISTRICT_OPENING_BANK_CREDIT_TO_GDP, 0.5), $state->bankRescueCostToGdp, 1e-12);
-    }
-
-    /** The rescue's draw comes from a stream of its own: the run's other shocks are where they were without it. */
-    public function testTheRescueDrawLeavesTheRunsStreamWhereItWas(): void
-    {
-        $state = new MacroState();
-        $state->totalTime = 12.5;
-        $subsystem = new class (new MathUtility()) extends CreditFiscalSubsystem {
-            public function shock(MacroState $state): float { return $this->bankRescueShock($state); }
-        };
-
-        mt_srand(7);
-        $first = $subsystem->shock($state);
-        $next = mt_rand();
-        mt_srand(7);
-        $this->assertSame($next, mt_rand(), 'The run\'s stream is untouched.');
-        $this->assertSame($first, $subsystem->shock($state), 'The same day draws the same rescue.');
-        $state->creditToGdpGapEma = 0.03;
-        $this->assertNotSame($first, $subsystem->shock($state), 'Another boom on the same day draws another rescue.');
-        $state->totalTime = 13.0;
-        $this->assertNotSame($first, $subsystem->shock($state));
-    }
-
-    /** The outlay is borrowed on the crisis's tick, and the share later recovered is held to be sold, not before or after. */
-    public function testTheRescueIsBorrowedOnTheDayAndItsRecoverableShareHeld(): void
-    {
-        $without = $this->neutralBudget(0.60);
-        $with = $this->neutralBudget(0.60);
-        $later = $this->neutralBudget(0.60);
-        foreach ([$without, $with, $later] as $state) {
-            $state->totalTime = 12.5;
-            $state->lastCreditCrisisAt = 12.0;
-            $state->bankRescueCostToGdp = 0.08;
-            $state->bankRescueAssetsToGdp = 0.0;
-        }
-        $with->lastCreditCrisisAt = 12.5;
-
-        $this->subsystem->calculateSovereignDebt($without, 0.25);
-        $this->subsystem->calculateSovereignDebt($with, 0.25);
-
-        $this->assertEqualsWithDelta(0.08, $with->sovereignDebtToGdp - $without->sovereignDebtToGdp, 1e-12, 'The gross outlay is borrowed at once.');
-        $this->assertEqualsWithDelta(CreditFiscalSubsystem::BANK_RESCUE_RECOVERY_SHARE * 0.08, $with->bankRescueAssetsToGdp, 1e-12);
-        $this->assertSame(0.0, $without->bankRescueAssetsToGdp, 'A rescue past is not booked again.');
-        $this->assertEqualsWithDelta($without->primaryDeficitToGdp, $with->primaryDeficitToGdp, 1e-12, 'A rescue is a stock-flow adjustment, not a deficit.');
-    }
-
-    /** What the state holds from its rescues is sold back as a first-order lag, each sale retiring debt. */
-    public function testRescueHoldingsAreSoldBackAndRetireDebt(): void
-    {
-        $none = $this->neutralBudget(0.60);
-        $held = $this->neutralBudget(0.60);
-        foreach ([$none, $held] as $state) {
-            $state->totalTime = 30.0;
-            $state->lastCreditCrisisAt = 20.0;
-            $state->nominalGdpGrowth = 0.0;
-        }
-        $none->bankRescueAssetsToGdp = 0.0;
-        $held->bankRescueAssetsToGdp = 0.04;
-        $dt = 0.25;
-
-        $this->subsystem->calculateSovereignDebt($none, $dt);
-        $this->subsystem->calculateSovereignDebt($held, $dt);
-
-        $sold = 0.04 * (1.0 - exp(-$dt / CreditFiscalSubsystem::BANK_RESCUE_RECOVERY_YEARS));
-        $this->assertEqualsWithDelta(-$sold, $held->sovereignDebtToGdp - $none->sovereignDebtToGdp, 1e-12);
-        $this->assertEqualsWithDelta(0.04 - $sold, $held->bankRescueAssetsToGdp, 1e-12);
-    }
     // --- The Exchequer's accounts ---
 
     /**
@@ -2827,7 +2416,6 @@ class CreditFiscalSubsystemTest extends TestCase
         $state->foreignBuyerTaxRate = 0.15;
         $state->sovereignFundDollarsPerGdp = 2.0e13;
         $state->sovereignFundDrawToGdp = 0.012;
-        $state->sovereignFundStabilisationToGdp = 0.004;
         $state->sovereignFundBondsToGdp = 0.15;
         $state->sovereignFundToGdp = 0.45;
         $state->boardBankLevy = 3.0e10;
@@ -2839,8 +2427,6 @@ class CreditFiscalSubsystemTest extends TestCase
         $state->sovereignDebtAverageMaturity = $state->sovereignDebtMaturityTarget;
         $state->totalTime = 30.0;
         $state->lastCreditCrisisAt = 30.0;
-        $state->bankRescueCostToGdp = 0.06;
-        $state->bankRescueAssetsToGdp = 0.02;
         $dt = 0.25;
         $accounts = CreditFiscalSubsystem::publicAccounts($state, $dt);
         $debt = $state->sovereignDebtToGdp;
@@ -2850,13 +2436,10 @@ class CreditFiscalSubsystemTest extends TestCase
         $this->assertEqualsWithDelta($debt + $accounts->debtChange($dt), $state->sovereignDebtToGdp, 1e-12, 'The debt moves by what the accounts book, nothing beside them.');
         $this->assertEqualsWithDelta($accounts->primaryDeficit(), $state->primaryDeficitToGdp, 1e-15);
         $this->assertEqualsWithDelta($state->sovereignDebtToGdp - 0.15, $state->sovereignNetDebtToGdp, 1e-12);
-        $this->assertGreaterThan(0.0, $accounts->bankRescueOutlay);
-        $this->assertGreaterThan(0.0, $accounts->bankRescueSales);
         $this->assertEqualsWithDelta($accounts->fundContribution, $accounts->fundFinancedSpending, 1e-15, 'What the fund pays in, the budget spends.');
-        $this->assertEqualsWithDelta(0.45 + 0.02 - 1.10, $accounts->netFinancialWorth(), 1e-12);
-        $this->assertEqualsWithDelta($state->sovereignDebtToGdp - 0.45 - $state->bankRescueAssetsToGdp, $state->sovereignNetFinancialLiabilitiesToGdp, 1e-12);
+        $this->assertEqualsWithDelta(0.45 - 1.10, $accounts->netFinancialWorth(), 1e-12);
+        $this->assertEqualsWithDelta($state->sovereignDebtToGdp - 0.45, $state->sovereignNetFinancialLiabilitiesToGdp, 1e-12, 'A crisis on the day books no rescue: debt moves by the accounts alone.');
         $this->assertEqualsWithDelta(1.10 - 0.15, $accounts->netDebt(), 1e-12);
-        $this->assertEqualsWithDelta(0.02 + (CreditFiscalSubsystem::BANK_RESCUE_RECOVERY_SHARE * 0.06) - $accounts->bankRescueSales - (0.035 * 0.02 * $dt), $state->bankRescueAssetsToGdp, 1e-12, 'The recoverable share is held; what is sold leaves the holdings.');
     }
 
     /** At the founding the budget's primary balance is the structural position alone: taxes pay for purchases. */
@@ -2967,10 +2550,11 @@ class CreditFiscalSubsystemTest extends TestCase
         $state->consolidationTaxShare = 0.0;
         $state->publicSpendingShare = MacroEngine::PUBLIC_PURCHASES_TO_GDP;
         $state->sovereignDebtToGdp = 4.0;
+        $state->debtPace = 0.40;
 
-        $surplus = CreditFiscalSubsystem::bohnSurplus(4.0);
-        $this->assertGreaterThan($state->publicSpendingShare, CreditFiscalSubsystem::consolidationSpendingCut(4.0, true, 0.0));
-        $this->assertSame(0.0, CreditFiscalSubsystem::purchasesTarget($state->publicSpendingShare, 4.0, true, 0.0));
+        $surplus = CreditFiscalSubsystem::requiredPrimaryBalance($state);
+        $this->assertGreaterThan($state->publicSpendingShare, CreditFiscalSubsystem::consolidationSpendingCut($surplus, 0.0));
+        $this->assertSame(0.0, CreditFiscalSubsystem::purchasesTarget($state->publicSpendingShare, $surplus, 0.0));
         $this->assertEqualsWithDelta($surplus - $state->publicSpendingShare, CreditFiscalSubsystem::fiscalStance($state), 1e-12);
     }
 
@@ -2983,7 +2567,6 @@ class CreditFiscalSubsystemTest extends TestCase
         $state = $this->neutralBudget(0.60);
         $state->sovereignFundDollarsPerGdp = 2.0e13;
         $state->boardBankLevy = 3.0e10;
-        $state->boardBankCredit = 2.0e13;
         $state->importTariffRate = 0.05;
         $state->carbonPrice = 40.0;
         $state->foreignBuyerTaxRate = 0.15;
@@ -2993,7 +2576,6 @@ class CreditFiscalSubsystemTest extends TestCase
 
         $biggerBoard = clone $state;
         $biggerBoard->boardBankLevy *= 2.0;
-        $biggerBoard->boardBankCredit *= 2.0;
         $board = CreditFiscalSubsystem::publicAccounts($biggerBoard, 0.25);
         $this->assertEqualsWithDelta(2.0 * $base->bankLevy, $board->bankLevy, 1e-15, 'The levy is the board\'s banks\' bill.');
         $this->assertSame($lines($base), $lines($board), 'No other line reads the board.');
@@ -3005,68 +2587,6 @@ class CreditFiscalSubsystemTest extends TestCase
         $this->assertSame($lines($base), $lines($economy), 'The economy-wide lines are shares of GDP already.');
     }
 
-    /** A new debt target is a multi-year plan: the reaction's surplus moves at the corrective path's 0.5% of GDP a year. */
-    public function testANewDebtTargetPhasesInAtTheConsolidationPace(): void
-    {
-        $state = new MacroState();
-        $state->debtTarget = 0.82;
-        $state->councilDebtLine = 1.0;
-        $state->sovereignDebtToGdp = 0.74;
-        CreditFiscalSubsystem::phaseDebtAnchor($state, 0.01);
-        $this->assertEqualsWithDelta(0.82, CreditFiscalSubsystem::debtAnchor($state), 1e-12, 'A state with no plan yet adopts the law at once.');
 
-        $state->debtTarget = 0.425;
-        $before = CreditFiscalSubsystem::bohnSurplus($state->sovereignDebtToGdp, CreditFiscalSubsystem::debtAnchor($state));
-        for ($i = 0; $i < 360; $i++) {
-            CreditFiscalSubsystem::phaseDebtAnchor($state, 1.0 / 360.0);
-        }
-        $after = CreditFiscalSubsystem::bohnSurplus($state->sovereignDebtToGdp, CreditFiscalSubsystem::debtAnchor($state));
-        $this->assertEqualsWithDelta(CreditFiscalSubsystem::CONSOLIDATION_PACE, $after - $before, 1e-9, 'A year in, the surplus has moved by the pace.');
 
-        for ($i = 0; $i < 360 * 10; $i++) {
-            CreditFiscalSubsystem::phaseDebtAnchor($state, 1.0 / 360.0);
-        }
-        $this->assertEqualsWithDelta(0.425, CreditFiscalSubsystem::debtAnchor($state), 1e-12, 'and the plan ends on the target, without passing it.');
-    }
-
-    /** The corrective path paces tightening only: a higher target is in force at once, even partway through a plan. */
-    public function testAHigherDebtTargetIsInForceAtOnce(): void
-    {
-        $state = new MacroState();
-        $state->debtTarget = 0.84;
-        $state->councilDebtLine = 1.0;
-        CreditFiscalSubsystem::phaseDebtAnchor($state, 0.01);
-        $state->debtTarget = 0.37;
-        for ($i = 0; $i < 360 * 4; $i++) {
-            CreditFiscalSubsystem::phaseDebtAnchor($state, 1.0 / 360.0);
-        }
-        $this->assertEqualsWithDelta(0.64, CreditFiscalSubsystem::debtAnchor($state), 1e-9, 'Four years into the plan, the anchor has fallen 5pp a year.');
-
-        $state->debtTarget = 0.90;
-        CreditFiscalSubsystem::phaseDebtAnchor($state, 1.0 / 360.0);
-        $this->assertEqualsWithDelta(0.90, CreditFiscalSubsystem::debtAnchor($state), 1e-12, 'A looser government\'s target replaces the plan at once.');
-
-        $state->councilDebtLine = 0.75;
-        CreditFiscalSubsystem::phaseDebtAnchor($state, 1.0 / 360.0);
-        $this->assertLessThan(0.90, CreditFiscalSubsystem::debtAnchor($state), 'A lower Council line is a tightening, so it is phased in.');
-    }
-
-    /** The pace is per year, whatever the tick. */
-    public function testTheConsolidationPaceIsInvariantToTheTickRate(): void
-    {
-        $run = static function (int $ticksPerYear): float {
-            $state = new MacroState();
-            $state->debtTarget = 0.70;
-            $state->councilDebtLine = 1.0;
-            CreditFiscalSubsystem::phaseDebtAnchor($state, 1.0 / $ticksPerYear);
-            $state->debtTarget = 0.35;
-            for ($i = 0; $i < 2 * $ticksPerYear; $i++) {
-                CreditFiscalSubsystem::phaseDebtAnchor($state, 1.0 / $ticksPerYear);
-            }
-
-            return CreditFiscalSubsystem::debtAnchor($state);
-        };
-
-        $this->assertEqualsWithDelta($run(4), $run(360), 1e-12);
-    }
 }

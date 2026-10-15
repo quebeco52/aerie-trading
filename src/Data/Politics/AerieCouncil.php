@@ -26,9 +26,9 @@ use App\Data\District\Institutions;
  * The Council appoints the heads of the District's departments, which then act independently of it: the Monetary
  * Authority's governor, who picks the rate committee (App\Service\Politics\MonetaryAuthority), the Financial
  * Regulator's head, who sets the banks' capital requirement (App\Service\Politics\FinancialRegulator), and the
- * Sovereign Reserve Fund's head, who sets its share in equities (App\Service\Politics\SovereignReserveFund). It holds a veto
- * over the Diet's budgets and laws that it almost never casts, and the Diet can remove a councillor with three
- * quarters of its seats, which it never has. No party sits on the Council.
+ * Sovereign Reserve Fund's head, who sets its share in equities (App\Service\Politics\SovereignReserveFund), and the
+ * Exchequer's head, who sets the debt's maturity (App\Service\Politics\Exchequer). The budget is the Diet's alone. No
+ * party sits on the Council.
  */
 final class AerieCouncil
 {

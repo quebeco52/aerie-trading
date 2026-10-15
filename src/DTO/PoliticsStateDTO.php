@@ -13,7 +13,6 @@ use App\Service\Math\Valuation;
 use App\Service\Model\Sector\UtilityBusinessModel;
 use App\Service\Politics\ElectionForecast;
 use App\Service\Politics\Exchequer;
-use App\Service\Politics\DebtBrake;
 use App\Service\Politics\PoliticsEngine;
 use App\Service\Politics\PoliticsState;
 use App\Service\Politics\SovereignReserveFund;
@@ -99,10 +98,11 @@ readonly class PoliticsStateDTO
         public float $utilityRateCaseGrantShare = UtilityBusinessModel::APPOINTED_COMMISSION_GRANTED_SHARE,
         /** Tax on the dividends the District's own shareholders are paid. */
         public float $dividendTaxRate = Valuation::FOUNDING_DIVIDEND_TAX_RATE,
-        /** Gross debt to GDP the Diet's budget steers toward, before the Council's line caps it. */
-        public float $debtTarget = CreditFiscalSubsystem::SOVEREIGN_DEBT_NEUTRAL_THRESHOLD,
+        /** Gross debt to GDP the Diet's budget steers toward, its cabinet's plank (App\Data\Politics\AerieDiet::DEBT_PLANKS). */
+        public float $debtTarget = CreditFiscalSubsystem::FOUNDING_DEBT_TARGET,
+        /** Points of GDP a year the budget moves debt toward it, the cabinet's plank too. */
+        public float $debtPace = CreditFiscalSubsystem::FOUNDING_DEBT_PACE,
         public float $lastBudgetEnactedAt = -1.0,
-        public float $lastCouncilBrakeAt = -1.0,
         /** Salt the Council's hashed draws are taken from, drawn once when it forms (-1: not yet formed; App\Service\Politics\CouncilAppointments). */
         public float $authoritySalt = -1.0,
         /** @var list<string> Each Council seat's holder, by seat. */
@@ -127,8 +127,6 @@ readonly class PoliticsStateDTO
         public array $councilFundStances = [],
         /** @var array<int, float> Each councillor's stance on the debt: -1 the shortest average maturity on record, 1 the longest (App\Service\Politics\Exchequer). */
         public array $councilDebtStances = [],
-        /** @var array<int, float> The debt to GDP each councillor believes starts to cost growth, one published estimate each (App\Service\Politics\DebtBrake). */
-        public array $councilDebtLines = [],
         /** @var list<array{name: string, birth: float, stance: float, regulation: float, fund: float, debt: float, swing?: float}> The candidates the Council passed over when it last filled a seat of its own. */
         public array $councillorPassedOver = [],
         /** @var array<int, array{name: string, birth: float, stance: float, regulation: float, fund: float, debt: float, swing?: float}> The Council Appointment Board's members, by seat (App\Service\Politics\CouncilAppointments::boardShortlist()). */
@@ -165,8 +163,6 @@ readonly class PoliticsStateDTO
         public array $lastMeetingVotes = [],
         public float $lastGovernorAppointedAt = -1.0,
         public float $lastCouncillorSeatedAt = -1.0,
-        /** The Council's debt line before the councillors seated last took their seats (App\Service\Politics\DebtBrake); -1 before any. */
-        public float $debtLineBeforeSeating = -1.0,
         /** When a councillor last left before their term ended (-1: never), who, and why: 'died' or 'resigned'. */
         public float $lastCouncilVacancyAt = -1.0,
         public string $lastVacancyName = '',
@@ -305,7 +301,7 @@ readonly class PoliticsStateDTO
             utilityRateCaseGrantShare: $this->utilityRateCaseGrantShare,
             dividendTaxRate: $this->dividendTaxRate,
             debtTarget: $this->debtTarget,
-            councilDebtLine: DebtBrake::councilLine($this),
+            debtPace: $this->debtPace,
             electionPulse: PoliticsEngine::electionPulse($this->totalTime, $this->lastElectionAt, $this->coalitionTakesOfficeAt),
             authorityMajority: $this->authoritySalt < 0.0 ? null : $this->committeeMajority,
             bankCapitalRequirement: $this->regulatorName === '' ? null : $this->bankCapitalRequirement,

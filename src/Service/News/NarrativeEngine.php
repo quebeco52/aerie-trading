@@ -334,10 +334,10 @@ class NarrativeEngine
                 ]
             ),
             ShockEvent::RECESSION_DECLARED => $this->getRandomPhrase(
-                isset($context['unemployment_rise_pts']) || isset($context['output_gap_pct']) ? [
-                    "Recession confirmed: Unemployment has climbed " . ($context['unemployment_rise_pts'] ?? 'half a point or more') . " points off its low of the past year to " . ($context['unemployment_pct'] ?? 'a higher') . "%, with output " . ($context['output_gap_pct'] ?? 'below') . "% against potential.",
-                    "Downturn under way: Job losses have lifted the jobless rate to " . ($context['unemployment_pct'] ?? 'a higher') . "%, " . ($context['unemployment_rise_pts'] ?? 'half a point or more') . " points above its low of the past year, the mark every past recession has crossed in its first months.",
-                    "Recession confirmed: Layoffs spread as the jobless rate rose " . ($context['unemployment_rise_pts'] ?? 'half a point or more') . " points in under a year; output stands " . ($context['output_gap_pct'] ?? 'below') . "% against potential.",
+                isset($context['gdp_fall_pct']) || isset($context['output_gap_pct']) ? [
+                    "Recession confirmed: Output shrank " . (isset($context['gdp_fall_pct']) ? "{$context['gdp_fall_pct']}% " : '') . "last quarter, the second fall in a row, with unemployment at " . ($context['unemployment_pct'] ?? 'a higher') . "%.",
+                    "Two quarters of contraction: The statistics office declares a recession after output fell " . (isset($context['gdp_fall_pct']) ? "{$context['gdp_fall_pct']}% " : 'again ') . "on the quarter; output stands " . ($context['output_gap_pct'] ?? 'below') . "% against potential.",
+                    "Recession confirmed: A second straight quarterly fall in output" . (isset($context['gdp_fall_pct']) ? ", down {$context['gdp_fall_pct']}%," : '') . " puts the economy in recession; the jobless rate is " . ($context['unemployment_pct'] ?? 'rising') . "%.",
                 ] : [
                     "Recession confirmed: Macroeconomic indicators signaled sustained output contraction and rising economic slack.",
                     "Technical recession confirmed: Contracting aggregate output and deteriorating labor conditions met formal recession criteria.",
@@ -428,10 +428,8 @@ class NarrativeEngine
                 ]
             ) . (isset($context['cabinet']) && ($context['prime_minister'] ?? '') !== '' ? " {$context['prime_minister']} is prime minister." : ''),
             ShockEvent::BUDGET_ENACTED => $this->getRandomPhrase(
-                isset($context['government'], $context['tax_rate_pct'], $context['tariff_pct']) ? (($context['council_held'] ?? 'no') === 'yes' ? [
-                    "Budget passed: The {$context['government']} government holds the corporate rate at {$context['tax_rate_pct']}% and the tariff at {$context['tariff_pct']}%. With debt at {$context['debt_to_gdp_pct']}% of GDP, the Council let it be known it would veto any cut in revenue, and the Diet tabled none.",
-                    "Council draws its red line: The {$context['government']} government's budget leaves the corporate rate at {$context['tax_rate_pct']}% after councillors signalled a veto of any revenue cut while debt stands at {$context['debt_to_gdp_pct']}% of GDP.",
-                ] : [
+                isset($context['government'], $context['tax_rate_pct'], $context['tariff_pct']) ? ([
+
                     "Budget passed: The {$context['government']} government sets the corporate rate at {$context['tax_rate_pct']}% and the average tariff at {$context['tariff_pct']}%, with its immigration rules growing the labour force {$context['labor_growth_pct']}% a year.",
                     "The Diet votes the budget: Firms will pay {$context['tax_rate_pct']}% on their profits and importers a {$context['tariff_pct']}% average duty under the {$context['government']} government.",
                     ...(($context['carbon_price'] ?? '0.00') !== '0.00' ? [
@@ -508,11 +506,11 @@ class NarrativeEngine
             ),
             ShockEvent::COUNCILLOR_SEATED => $this->getRandomPhrase(
                 isset($context['councillor'], $context['councillor_age'], $context['councillor_stance'], $context['predecessor'], $context['vacancy_cause'], $context['councillor_term_ends']) ? [
-                    ($context['vacancy_cause'] === 'died' ? "Council vacancy filled: After the death of {$context['predecessor']}" : "Council vacancy filled: After the resignation of {$context['predecessor']}") . ", the councillors elect {$context['councillor']}, {$context['councillor_age']}, {$context['councillor_stance']}, to serve out the term to {$context['councillor_term_ends']}." . ($context['debt_line_change'] ?? ''),
-                    "{$context['councillor']} joins the Aerie Council in the seat {$context['predecessor']} " . ($context['vacancy_cause'] === 'died' ? 'held until their death' : 'gave up') . "; the newcomer, {$context['councillor_age']}, is {$context['councillor_stance']} on money and sits until {$context['councillor_term_ends']}." . ($context['debt_line_change'] ?? ''),
+                    ($context['vacancy_cause'] === 'died' ? "Council vacancy filled: After the death of {$context['predecessor']}" : "Council vacancy filled: After the resignation of {$context['predecessor']}") . ", the councillors elect {$context['councillor']}, {$context['councillor_age']}, {$context['councillor_stance']}, to serve out the term to {$context['councillor_term_ends']}.",
+                    "{$context['councillor']} joins the Aerie Council in the seat {$context['predecessor']} " . ($context['vacancy_cause'] === 'died' ? 'held until their death' : 'gave up') . "; the newcomer, {$context['councillor_age']}, is {$context['councillor_stance']} on money and sits until {$context['councillor_term_ends']}.",
                 ] : (isset($context['councillor'], $context['councillor_age'], $context['councillor_stance'], $context['councillor_passed_over']) ? [
-                    "Council succession: The sitting councillors elect {$context['councillor']}, {$context['councillor_age']}, {$context['councillor_stance']}, to a " . (int) AerieCouncil::TERM_YEARS . "-year seat, passing over {$context['councillor_passed_over']}." . ($context['debt_line_change'] ?? ''),
-                    "{$context['councillor']} joins the Aerie Council: elected by its members to succeed a retiring colleague, the newcomer is {$context['councillor_stance']} on money." . ($context['debt_line_change'] ?? ''),
+                    "Council succession: The sitting councillors elect {$context['councillor']}, {$context['councillor_age']}, {$context['councillor_stance']}, to a " . (int) AerieCouncil::TERM_YEARS . "-year seat, passing over {$context['councillor_passed_over']}.",
+                    "{$context['councillor']} joins the Aerie Council: elected by its members to succeed a retiring colleague, the newcomer is {$context['councillor_stance']} on money.",
                 ] : [
                     "Council succession: The Aerie Council has elected a new member.",
                 ])

@@ -316,6 +316,21 @@ final class CreditRisk
     }
 
     /**
+     * Expected loss a year on a sovereign's bonds under an uncertain fiscal limit (Bi 2012; Ghosh, Kim, Mendoza, Ostry &
+     * Qureshi 2013): the chance net liabilities lie past a normally distributed limit, times the loss given default.
+     * Monotone in liabilities and bounded by the loss given default.
+     *
+     * @param float $netLiabilitiesToGdp Net financial liabilities over GDP.
+     * @param float $limit               Mean of the fiscal limit, over GDP.
+     * @param float $limitSd             Its standard deviation.
+     * @param float $lossGivenDefault    Share of a bond lost in a default.
+     */
+    public static function sovereignDefaultPremium(float $netLiabilitiesToGdp, float $limit, float $limitSd, float $lossGivenDefault): float
+    {
+        return $lossGivenDefault * Distributions::standardNormalCdf(($netLiabilitiesToGdp - $limit) / $limitSd);
+    }
+
+    /**
      * Annual financial-crisis hazard from the credit cycle (Schularick & Taylor 2012 "Credit Booms Gone Bust").
      *
      * Schularick and Taylor estimate a logit of crisis onset on the lagged credit cycle over the long run of

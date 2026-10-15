@@ -49,7 +49,7 @@ final class OutputGapChannels
         'fiscal' => [
             'label' => 'Fiscal',
             'colour' => '#d95926',
-            'channels' => ['fiscalStimulus', 'fundStabilisation'],
+            'channels' => ['fiscalStimulus', 'fundDraw'],
         ],
         'disturbance' => [
             'label' => 'Demand disturbance',

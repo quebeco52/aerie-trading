@@ -112,7 +112,7 @@ final class FullMarketHarnessTest extends KernelTestCase
         $operatorInterval = getenv('SIMCMD') ? 100 : (int) max(1, $tpy / 24);
         $replay = $replayPath !== null ? unserialize((string) gzuncompress((string) file_get_contents($replayPath))) : null;
         $recorded = [];
-        $lastCap = $lastFloat = $lastReturn = $lastDividends = $lastIssuance = $lastDuty = $lastStake = $lastLevy = $lastCredit = null;
+        $lastCap = $lastFloat = $lastReturn = $lastDividends = $lastIssuance = $lastDuty = $lastStake = $lastLevy = null;
         $dead = [];
         $reorgs = [];
         $defaults = [];
@@ -132,7 +132,7 @@ final class FullMarketHarnessTest extends KernelTestCase
 
         for ($tick = 1; $tick <= $ticks; $tick++) {
             $m = $replay !== null ? $this->withDemandLags($replay[$tick - 1], $dt)
-                : $macro->updateMacroState($dt, $lastCap, $lastFloat, $lastReturn, $lastDividends, $lastIssuance, $lastDuty, $lastStake, $policy, boardBankLevy: $lastLevy, boardBankCredit: $lastCredit);
+                : $macro->updateMacroState($dt, $lastCap, $lastFloat, $lastReturn, $lastDividends, $lastIssuance, $lastDuty, $lastStake, $policy, boardBankLevy: $lastLevy);
             if ($politicsEngine !== null) {
                 $policy = $politicsEngine->updatePolitics($m, $dt)->policy();
             }
@@ -196,7 +196,6 @@ final class FullMarketHarnessTest extends KernelTestCase
                 $lastDuty = (float) $result['board_stamp_duty'];
                 $lastStake = (float) $result['strategic_stake_cash'];
                 $lastLevy = (float) $result['board_bank_levy'];
-                $lastCredit = (float) $result['board_bank_credit'];
             }
             // MACRO_OUT: one macro row a quarter, for the macro-market loop.
             // FISCAL=1 adds the primary deficit and the net-tax rate, and a founding row at tick 1.
@@ -212,8 +211,8 @@ final class FullMarketHarnessTest extends KernelTestCase
                     'float' => $m->boardFloatCap, 'fund_own' => $m->sovereignFundOwnershipShare,
                     'corp_tax_shift' => $m->corporateTaxPolicyShift, 'div_tax' => $m->dividendTaxRate, 'home_law' => $m->reserveHomeEquityShare,
                     'debt' => $m->sovereignDebtToGdp, 'spend_law' => $m->publicSpendingShare,
-                    'net_debt' => $m->sovereignNetDebtToGdp, 'bank_credit' => \App\Service\Macro\Subsystem\CreditFiscalSubsystem::bankCreditToGdp($m->boardBankCredit, $m->sovereignFundDollarsPerGdp, $m->nominalGdpIndex),
-                    'rescue_cost' => $m->bankRescueCostToGdp, 'rescue_assets' => $m->bankRescueAssetsToGdp, 'crisis_at' => $m->lastCreditCrisisAt,
+                    'net_debt' => $m->sovereignNetDebtToGdp,
+                    'crisis_at' => $m->lastCreditCrisisAt,
                     'spread' => $m->sovereignRiskSpread, 'tax_rate' => $m->corporateTaxRate,
                 ] + (getenv('BOARD_NI') ? $this->boardNetIncome($list) + ['gap_ema' => $m->outputGapEma, 'net_tax' => $m->netTaxRate ?? null] : [])
                     + (getenv('FISCAL') ? ['primary' => $m->primaryDeficitToGdp, 'net_tax' => $m->netTaxRate, 'spend_idx' => $m->governmentSpendingIndex] : [])) . "\n", FILE_APPEND);

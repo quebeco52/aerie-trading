@@ -42,6 +42,12 @@ class MacroState
     /** @var list<float> */
     public array $unemploymentMonthly;
     public float $sahmRecessionIndicator;
+    public float $realGdpQuarterAccrued;
+    public float $realGdpQuarterElapsed;
+    public float $realGdpLastQuarter;
+    public float $gdpQuarterStreak;
+    public float $realGdpQuarterlyGrowth;
+    public bool $recessionDeclared;
     public float $jobVacanciesRate;
     public float $jobVacanciesRateEma;
     public float $laborTightness;
@@ -193,7 +199,6 @@ class MacroState
     public float $eventCooldownTimer;
     /** @var array<string, float> */
     public array $systemicAlarmLatches;
-    public float $recessionPeakUnemployment;
     public float $equityRiskPremium;
 
     public float $potentialGdpIndex;
@@ -367,8 +372,6 @@ class MacroState
     public float $lastCreditCrisisAt;
     // What the state paid to stand behind the banks in the last crisis, and the stakes and bad loans it still holds
     // from its rescues, to be sold back; both as shares of GDP.
-    public float $bankRescueCostToGdp;
-    public float $bankRescueAssetsToGdp;
     // Losses the Monetary Authority carries as a deferred asset, paid down from its profits before any reach the
     // Exchequer; a share of GDP.
     public float $centralBankDeferredAssetToGdp;
@@ -446,9 +449,8 @@ class MacroState
     public float $utilityRateCaseGrantShare;
     public float $dividendTaxRate;
     public float $debtTarget;
-    public float $councilDebtLine;
+    public float $debtPace;
     // The debt anchor the budget in force plans against, phased down toward a lower legislated one; below zero before any plan has run.
-    public float $debtAnchorInForce;
     // The Monetary Authority's rate committee: its supermajority, and whether politics hands one over at all.
     public float $authorityMajority;
     public float $authorityCommitteeSeated;
@@ -524,11 +526,7 @@ class MacroState
     // Fund-financed stabilisation spending above the rule draw, over GDP (negative: saved into the fund), set at the
     // budget rounds and answered by demand at that rate; and the budget year's opening level and last year's change,
     // which the rule steps from.
-    public float $sovereignFundStabilisationToGdp;
-    public float $sovereignFundStabilisationYearStart;
-    public float $sovereignFundStabilisationLastChange;
     // The budget's long-run average of the output gap, the level its cycle is measured from.
-    public float $sovereignFundGapTrend;
     // The District's stamp duty on share trading, paid into the fund: this budget year so far, and last year's over GDP.
     public float $sovereignFundStampDutyYearToDate;
     public float $sovereignFundStampDutyToGdp;
@@ -561,7 +559,6 @@ class MacroState
     // The bank levy the board's banks owe a year at the rate in force, in currency; kept until the board is priced again.
     public float $boardBankLevy;
     // What the board's deposit-taking banks have lent at home, in currency; kept until the board is priced again.
-    public float $boardBankCredit;
     // Cash the District's strategic stakes (App\Data\Company\StrategicHoldings) paid it on the previous tick, a flow like the
     // board's: dividends, plus its share of buybacks less its share of issues. Held outside the fund, paid into it.
     public float $strategicStakeCash;
@@ -605,7 +602,7 @@ class MacroState
             $state->$field = match ($field) {
                 'sectorZ', 'sectorDemandZ', 'sittingLevers', 'previousSittingLevers', 'expectedLevers', 'previousExpectedLevers', 'systemicAlarmLatches' => is_array($data[$key]) ? array_map('floatval', $data[$key]) : [],
                 'unemploymentMonthly', 'consumerPriceMonthly' => is_array($data[$key]) ? array_values(array_map('floatval', $data[$key])) : [],
-                'qeActive', 'qtActive' => (bool) $data[$key],
+                'qeActive', 'qtActive', 'recessionDeclared' => (bool) $data[$key],
                 'eventType' => (string) $data[$key],
                 default => (float) $data[$key],
             };

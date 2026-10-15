@@ -85,8 +85,8 @@ class PoliticsState
     public float $utilityRateCaseGrantShare;
     public float $dividendTaxRate;
     public float $debtTarget;
+    public float $debtPace;
     public float $lastBudgetEnactedAt;
-    public float $lastCouncilBrakeAt;
 
     // The Council and its departments (CouncilAppointments, MonetaryAuthority, FinancialRegulator): the salt their draws
     // are hashed from; each councillor's, the governor's and each committee member's name, birth, seat date and stance on
@@ -117,8 +117,6 @@ class PoliticsState
     public array $councilFundStances;
     /** @var array<int, float> */
     public array $councilDebtStances;
-    /** @var array<int, float> */
-    public array $councilDebtLines;
     /** @var list<array{name: string, birth: float, stance: float, regulation: float, fund: float, debt: float, swing?: float}> */
     public array $councillorPassedOver;
     /** @var array<int, array{name: string, birth: float, stance: float, regulation: float, fund: float, debt: float, swing?: float}> */
@@ -151,7 +149,6 @@ class PoliticsState
     public array $lastMeetingVotes;
     public float $lastGovernorAppointedAt;
     public float $lastCouncillorSeatedAt;
-    public float $debtLineBeforeSeating;
     public float $lastCouncilVacancyAt;
     public string $lastVacancyName;
     public string $lastVacancyCause;

@@ -85,6 +85,23 @@ final class AerieDiet
         self::NEW_HORIZON => [self::AXIS_STATE => -0.5, self::AXIS_OPENNESS => 0.7, self::AXIS_COUNCIL => 0.3, self::AXIS_ENVIRONMENT => -0.17],
     ];
 
+    // --- Debt Planks ---
+    /**
+     * Each party's debt plank: the gross debt to GDP its budget steers to and the points of GDP a year it moves debt
+     * there, from the small state's quick repair to the Common Lot's debt left where it stands. A cabinet's plan is its
+     * parties' planks weighted by seats (PoliticsEngine::debtPlanks()).
+     */
+    public const DEBT_PLANKS = [
+        self::VANGUARD => ['target' => 0.35, 'pace' => 0.010],
+        self::NEW_HORIZON => ['target' => 0.40, 'pace' => 0.0075],
+        self::EXCHANGE => ['target' => 0.45, 'pace' => 0.005],
+        self::CHARTISTS => ['target' => 0.50, 'pace' => 0.005],
+        self::IRON_HARBOR => ['target' => 0.60, 'pace' => 0.0025],
+        self::TIDELINE => ['target' => 0.70, 'pace' => 0.0025],
+        self::CIVIC => ['target' => 0.80, 'pace' => 0.0025],
+        self::COMMON_LOT => ['target' => 0.90, 'pace' => 0.0],
+    ];
+
     // --- The Chamber ---
     /** Seats in the Diet. */
     public const SEATS = 300;

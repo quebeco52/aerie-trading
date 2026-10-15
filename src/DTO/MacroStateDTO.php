@@ -95,6 +95,17 @@ readonly class MacroStateDTO
         public array $unemploymentMonthly = [],
         /** The Sahm rule's reading: the three-month average unemployment rate above its lowest of the twelve months before (App\Service\Macro\Subsystem\LaborMarketSubsystem::recordSahmIndicator()). */
         public float $sahmRecessionIndicator = 0.0,
+        /** Real GDP summed over the quarter so far, and the years it covers: the statistics office's quarterly average (MacroAggregateSubsystem::recordQuarterlyRealGdp()). */
+        public float $realGdpQuarterAccrued = 0.0,
+        public float $realGdpQuarterElapsed = 0.0,
+        /** The last full quarter's average real GDP; zero before the first. */
+        public float $realGdpLastQuarter = 0.0,
+        /** Consecutive quarters of rising (positive) or falling (negative) real GDP. */
+        public float $gdpQuarterStreak = 0.0,
+        /** The last full quarter's real GDP change over the one before. */
+        public float $realGdpQuarterlyGrowth = 0.0,
+        /** Whether the statistics office has a recession declared: two quarters of falling real GDP, ended by two of growth. */
+        public bool $recessionDeclared = false,
         public float $jobVacanciesRate = MacroEngine::NATURAL_UNEMPLOYMENT * MacroEngine::NATURAL_LABOR_TIGHTNESS,
         public float $jobVacanciesRateEma = MacroEngine::NATURAL_UNEMPLOYMENT * MacroEngine::NATURAL_LABOR_TIGHTNESS,
         public float $laborTightness = MacroEngine::NATURAL_LABOR_TIGHTNESS,
@@ -278,7 +289,6 @@ readonly class MacroStateDTO
         /** @var array<string, float> Level alarms reported this episode, ShockEvent => the time each fired; one clears once its condition does (MacroEngine::evaluateSystemicEvent()). */
         public array $systemicAlarmLatches = [],
         /** Highest three-month average unemployment rate since the recession headline last reported; the episode ends RECESSION_RECOVERY_MARGIN below it (MacroEngine::evaluateSystemicEvent()). */
-        public float $recessionPeakUnemployment = 0.0,
         public float $supercoreInflation = MacroEngine::TARGET_INFLATION,
         public float $supercoreInflationEma = MacroEngine::TARGET_INFLATION,
         public float $coreGoodsInflation = MacroEngine::TARGET_INFLATION,
@@ -340,8 +350,6 @@ readonly class MacroStateDTO
         public float $creditCrisisHazard = 0.0,
         public float $creditCrisisDrag = 0.0,
         public float $lastCreditCrisisAt = -1.0,
-        public float $bankRescueCostToGdp = 0.0,
-        public float $bankRescueAssetsToGdp = 0.0,
         /** Losses the Monetary Authority carries, paid down before it remits (CreditFiscalSubsystem::centralBankRemittance()). */
         public float $centralBankDeferredAssetToGdp = 0.0,
         public float $foreignOutputGap = 0.0,
@@ -406,11 +414,9 @@ readonly class MacroStateDTO
         /** Tax on the dividends the District's own shareholders are paid, as the Diet has it set. */
         public float $dividendTaxRate = Valuation::FOUNDING_DIVIDEND_TAX_RATE,
         /** Gross debt to GDP the Diet's budget steers toward, as the Diet has it set. */
-        public float $debtTarget = CreditFiscalSubsystem::SOVEREIGN_DEBT_NEUTRAL_THRESHOLD,
-        /** The Council's debt line, which caps the Diet's target. */
-        public float $councilDebtLine = MacroEngine::SOVEREIGN_RISK_DEBT_THRESHOLD,
-        /** The debt anchor the budget in force plans against, phased down to a lower target at the consolidation pace, up to a higher one at once; below zero before any plan has run (App\Service\Macro\Subsystem\CreditFiscalSubsystem::phaseDebtAnchor()). */
-        public float $debtAnchorInForce = -1.0,
+        public float $debtTarget = CreditFiscalSubsystem::FOUNDING_DEBT_TARGET,
+        /** Points of GDP a year the budget moves debt toward that target, as the Diet has it set (CreditFiscalSubsystem::requiredPrimaryBalance()). */
+        public float $debtPace = CreditFiscalSubsystem::FOUNDING_DEBT_PACE,
         /** The rate committee's supermajority, 1 hawkish, -1 dovish, 0 neither (App\Service\Politics\MonetaryAuthority). */
         public float $authorityMajority = 0.0,
         /** 1 while politics hands the macro a rate committee, else 0: the policy rule reads the supermajority only then. */
@@ -497,10 +503,6 @@ readonly class MacroStateDTO
         public float $sovereignFundEquityShare = 0.0,
         public float $sovereignFundOwnershipShare = 0.0,
         public float $sovereignFundDrawToGdp = 0.0,
-        public float $sovereignFundStabilisationToGdp = 0.0,
-        public float $sovereignFundStabilisationYearStart = 0.0,
-        public float $sovereignFundStabilisationLastChange = 0.0,
-        public float $sovereignFundGapTrend = 0.0,
         public float $sovereignFundStampDutyYearToDate = 0.0,
         public float $sovereignFundStampDutyToGdp = 0.0,
         public float $sovereignFundBondsToGdp = 0.0,
@@ -519,7 +521,6 @@ readonly class MacroStateDTO
         public float $boardNetIssuance = 0.0,
         public float $boardStampDuty = 0.0,
         public float $boardBankLevy = 0.0,
-        public float $boardBankCredit = 0.0,
         public float $strategicStakeCash = 0.0,
         public float $sovereignFundBudgetInflow = 0.0,
     ) {
@@ -560,7 +561,7 @@ readonly class MacroStateDTO
             $args[$field] = match ($field) {
                 'sectorZ', 'sectorDemandZ', 'sittingLevers', 'previousSittingLevers', 'expectedLevers', 'previousExpectedLevers', 'systemicAlarmLatches' => is_array($data[$key]) ? array_map('floatval', $data[$key]) : [],
                 'unemploymentMonthly', 'consumerPriceMonthly' => is_array($data[$key]) ? array_values(array_map('floatval', $data[$key])) : [],
-                'qeActive', 'qtActive' => (bool) $data[$key],
+                'qeActive', 'qtActive', 'recessionDeclared' => (bool) $data[$key],
                 'eventType' => (string) $data[$key],
                 default => (float) $data[$key],
             };

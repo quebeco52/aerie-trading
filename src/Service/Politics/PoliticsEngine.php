@@ -48,16 +48,11 @@ use Psr\Log\LoggerInterface;
  * axis have enacted: the corporate rate, the stamp duty on share trades and the bank levy on the size-of-state axis, the tariff and the immigration regime on the
  * openness axis, merger review on the Council axis, from the populists' 2023 guidelines to the technocrats' 2010
  * ones, and on the environment axis the green belt, the carbon price and the rules on extraction, none of them for a
- * cabinet that puts growth first and the strictest on record at the Tideline Accord's place. Size of state moves no
- * purchases: in the US record the purchases process is fitted to, the party in
- * power shifts civilian purchases the wrong way (-2% under Democratic presidents, var/harness/partisan_fit.py), and in
- * 21 European PR democracies since 1990 a cabinet's place on the state-market scale has moved government consumption
- * by nothing (+0.3% per unit of the axis, se 4.6%), nor total spending, though it did before (+11%, se 7%;
- * var/harness/politics/spend_europe_fit.py; Potrafke 2017). A minority cabinet proposes and its support parties can
- * refuse: each accepts a lever no further from its own policy than the one in force, so a supporter can stop the
- * cabinet moving away from it but cannot pull policy its way (Romer & Rosenthal 1978). Above the 90% debt line the
- * Council would veto a bill that cuts revenue, and the Diet, knowing it, tables none, unless the government and its
- * supporters, less the Council's own loyalists, hold the three quarters that could remove the Council.
+ * cabinet that puts growth first and the strictest on record at the Tideline Accord's place. Each party also runs on a
+ * debt plank, the debt its budget steers to and how fast (AerieDiet::DEBT_PLANKS), which a cabinet weighs by seats. A
+ * minority cabinet proposes and its support parties can refuse: each accepts a lever no further from its own policy
+ * than the one in force, so a supporter can stop the cabinet moving away from it but cannot pull policy its way (Romer
+ * & Rosenthal 1978). The bond market, not the Council, prices what the Diet borrows.
  *
  * Politics runs beside the economy, not inside it: the ticker advances it after each macro tick on that tick's snapshot,
  * and the economy reads back only what the government hands it (PoliticsStateDTO::policy()), on the next tick.
@@ -120,28 +115,6 @@ class PoliticsEngine
     public const NORMAL_VOTE_DRIFT_VARIANCE = 2.0 * 0.000341;
 
     // --- The Budget ---
-    /** The levers a budget sets, in platform() order, and whether cutting each costs revenue the Council guards; the levies net taxes give back (PublicAccountsDTO::policyLevies()) cost none. */
-    public const REVENUE_LEVERS = [
-        'publicSpending' => false,
-        'corporateTax' => true,
-        'tariff' => false,
-        'laborGrowth' => false,
-        'foreignBuyerTax' => false,
-        'mergerReviewLeniency' => false,
-        'greenBeltStringency' => false,
-        'carbonPrice' => false,
-        'extractionStringency' => false,
-        'stampDutyRate' => false,
-        'bankLevyRate' => false,
-        'reserveDrawShare' => true,
-        'consolidationTaxShare' => false,
-        'reserveHomeShare' => false,
-        'utilityRateGrant' => false,
-        'dividendTax' => false,
-        'debtTarget' => false,
-    ];
-    /** The levers whose rise is spending the Council guards: above the debt line it holds a rise as it holds a revenue cut, both widening the deficit, as Switzerland's debt brake caps spending (Federal Constitution art. 126). */
-    public const SPENDING_LEVERS = ['publicSpending'];
     /** The state field each lever is kept in, in the same order. */
     public const LEVER_FIELDS = [
         'publicSpending' => 'publicSpendingShare',
@@ -161,6 +134,7 @@ class PoliticsEngine
         'utilityRateGrant' => 'utilityRateCaseGrantShare',
         'dividendTax' => 'dividendTaxRate',
         'debtTarget' => 'debtTarget',
+        'debtPace' => 'debtPace',
     ];
     /** The question each lever's platform reads, in the same order. */
     public const LEVER_AXES = [
@@ -181,6 +155,7 @@ class PoliticsEngine
         'utilityRateGrant' => AerieDiet::AXIS_COUNCIL,
         'dividendTax' => AerieDiet::AXIS_STATE,
         'debtTarget' => AerieDiet::AXIS_STATE,
+        'debtPace' => AerieDiet::AXIS_STATE,
     ];
 
     // --- Platforms: Public Spending (Singapore, Workers' Party and PAP, 2020-2025) ---
@@ -216,12 +191,6 @@ class PoliticsEngine
     // --- Platforms: The Reserve Draw (Singapore Net Investment Returns Contribution) ---
     /** Share of the reserve fund's expected long-term real return the big-state end of the axis spends: 60%, the Workers' Party of Singapore's proposal to raise the Net Investment Returns Contribution from 50% (manifestos 2020 and 2025). The small-state end keeps the founding half (MacroEngine::RESERVE_DRAW_CEILING), which the fund must consent to any budget exceeding. */
     public const POLICY_BIG_STATE_RESERVE_DRAW_SHARE = 0.60;
-
-    // --- Platforms: The Debt Target (Sweden's debt anchor; the EU's debt sustainability safeguard) ---
-    /** Gross debt the small-state end of the axis steers the budget to: 35% of GDP, Sweden's debt anchor (the framework the Surplus Target Committee set out, SOU 2016:67, in force from 2019). */
-    public const POLICY_SMALL_STATE_DEBT_TARGET = 0.35;
-    /** Gross debt the big-state end steers to: 90% of GDP, the line above which the EU's 2024 rules require the debt ratio to fall at least 1pp a year (debt sustainability safeguard, Regulation (EU) 2024/1263, Art. 7). */
-    public const POLICY_BIG_STATE_DEBT_TARGET = 0.90;
 
     // --- Platforms: Who Pays to Cut the Debt (IFS 2010 General Election briefing) ---
     /** Gap between the shares of a deficit cut the big-state and small-state manifestos raise by tax: Labour's 2:1 ratio of spending cuts to tax rises (£24bn of £71bn) against the Conservatives' 4:1 (£14bn of £71bn), IFS, April 2010. Enacted plans show no partisan gap (deficit-cutting plans against ParlGov cabinets, 15 countries, 0.002 ± 0.018 a left-right point), so the gap is the manifestos'. */
@@ -356,7 +325,7 @@ class PoliticsEngine
             && $state->coalitionFormedAt < $state->totalTime
             && TimeSeries::crossedSimulatedBoundary($state->totalTime, $dt, MacroEngine::BUDGET_ROUND_PERIOD_YEARS)
         ) {
-            self::enactBudget($state, $macro->sovereignDebtToGdp, MacroEngine::inSahmRecession($macro->sahmRecessionIndicator));
+            self::enactBudget($state, MacroEngine::recessionDeclared($macro));
         }
 
         CouncilAppointments::advance($state, $this->mathUtility);
@@ -365,7 +334,7 @@ class PoliticsEngine
         SovereignReserveFund::advance($state, $this->mathUtility);
         Exchequer::advance($state, $this->mathUtility);
         PartyLeaders::advance($state, $dt, $this->mathUtility);
-        ElectionForecast::advance($state, $macro->sovereignDebtToGdp, MacroEngine::inSahmRecession($macro->sahmRecessionIndicator));
+        ElectionForecast::advance($state, MacroEngine::recessionDeclared($macro));
 
         $state->eventType = self::headline($state);
     }
@@ -424,7 +393,7 @@ class PoliticsEngine
      * protectionists'.
      *
      * @param array<string, float> $position A position by axis (coalitionPosition(), or a party's).
-     * @return array{publicSpending: float, corporateTax: float, tariff: float, laborGrowth: float, foreignBuyerTax: float, mergerReviewLeniency: float, greenBeltStringency: float, carbonPrice: float, extractionStringency: float, stampDutyRate: float, bankLevyRate: float, reserveDrawShare: float, consolidationTaxShare: float, reserveHomeShare: float, utilityRateGrant: float, dividendTax: float, debtTarget: float}
+     * @return array<string, float>
      *         Government purchases as a share of GDP, the corporate rate's shift from the neutral rate, the average tariff on imports, labour force growth,
      *         the tax on homes bought from outside the District,
      *         where merger review stands between the 2023 guidelines (0) and the 2010 guidelines (1), how far the green
@@ -485,17 +454,13 @@ class PoliticsEngine
             'dividendTax' => Valuation::FOUNDING_DIVIDEND_TAX_RATE
                 + ((self::POLICY_BIG_STATE_DIVIDEND_TAX - Valuation::FOUNDING_DIVIDEND_TAX_RATE) * max(0.0, $state / $bigState))
                 + ((self::POLICY_SMALL_STATE_DIVIDEND_TAX - Valuation::FOUNDING_DIVIDEND_TAX_RATE) * max(0.0, $state / $smallState)),
-            // The neutral position keeps the founding anchor; each end steers to its own side's rule.
-            'debtTarget' => CreditFiscalSubsystem::SOVEREIGN_DEBT_NEUTRAL_THRESHOLD
-                + ((self::POLICY_BIG_STATE_DEBT_TARGET - CreditFiscalSubsystem::SOVEREIGN_DEBT_NEUTRAL_THRESHOLD) * max(0.0, $state / $bigState))
-                + ((self::POLICY_SMALL_STATE_DEBT_TARGET - CreditFiscalSubsystem::SOVEREIGN_DEBT_NEUTRAL_THRESHOLD) * max(0.0, $state / $smallState)),
         ];
     }
 
     /**
      * The levers in force, keyed and ordered as platform() writes them, so a budget that changes nothing compares equal.
      *
-     * @return array{publicSpending: float, corporateTax: float, tariff: float, laborGrowth: float, foreignBuyerTax: float, mergerReviewLeniency: float, greenBeltStringency: float, carbonPrice: float, extractionStringency: float, stampDutyRate: float, bankLevyRate: float, reserveDrawShare: float, consolidationTaxShare: float, reserveHomeShare: float, utilityRateGrant: float, dividendTax: float, debtTarget: float}
+     * @return array<string, float>
      */
     public static function standingLevers(PoliticsState|PoliticsStateDTO $state): array
     {
@@ -504,48 +469,74 @@ class PoliticsEngine
             $standing[$lever] = $state->$field;
         }
 
-        /** @var array{publicSpending: float, corporateTax: float, tariff: float, laborGrowth: float, foreignBuyerTax: float, mergerReviewLeniency: float, greenBeltStringency: float, carbonPrice: float, extractionStringency: float, stampDutyRate: float, bankLevyRate: float, reserveDrawShare: float, consolidationTaxShare: float, reserveHomeShare: float, utilityRateGrant: float, dividendTax: float, debtTarget: float} $standing */
         return $standing;
     }
 
     /**
-     * What a budget round would enact: the cabinet's platform, as far as its support parties and the Council let it.
+     * A set of parties' debt plank, their planks weighted by seats as their positions are (Gamson's law): the gross debt
+     * the budget steers to and the points of GDP a year it moves debt there (AerieDiet::DEBT_PLANKS).
      *
-     * The cabinet proposes and each support party accepts a lever no further from its own policy than the one in force
-     * (Romer & Rosenthal 1978), so the proposal is the cabinet's platform held inside every supporter's acceptable
-     * range, which always holds the lever in force. Above the Council's debt line (DebtBrake) its veto is a red line on the deficit,
-     * and the Diet tables nothing it would veto: a lever that would cut revenue or raise spending stays where it stands. A government
-     * whose seats and supporters', less the Council's loyalists, reach the three quarters that could remove
-     * councillors is not held. The reserve fund holds the second key on its draw: a budget spends more than half the
-     * fund's expected return only with its consent, which it gives while unemployment says a recession is under way
-     * (MacroEngine::inSahmRecession()), as Singapore's President consented to drawing on the reserves in 2009 and 2020
-     * and in no other year. Out of a recession the
-     * share above the ceiling lapses, whatever the Council would say of the revenue.
+     * @param list<string>             $parties The parties.
+     * @param array<string, int|float> $seats   Seats by party.
+     * @return array{debtTarget: float, debtPace: float}
+     */
+    public static function debtPlanks(array $parties, array $seats): array
+    {
+        $total = 0.0;
+        $target = 0.0;
+        $pace = 0.0;
+        foreach ($parties as $party) {
+            $weight = max(0.0, (float) ($seats[$party] ?? 0.0));
+            $total += $weight;
+            $target += $weight * AerieDiet::DEBT_PLANKS[$party]['target'];
+            $pace += $weight * AerieDiet::DEBT_PLANKS[$party]['pace'];
+        }
+
+        return $total > 0.0
+            ? ['debtTarget' => $target / $total, 'debtPace' => $pace / $total]
+            : ['debtTarget' => CreditFiscalSubsystem::FOUNDING_DEBT_TARGET, 'debtPace' => CreditFiscalSubsystem::FOUNDING_DEBT_PACE];
+    }
+
+    /**
+     * A party's whole programme: the levers its position legislates (platform()) and its own debt plank.
+     *
+     * @param array<string, array<string, float>> $positions Positions by party and axis.
+     * @return array<string, float>
+     */
+    public static function partyProgramme(string $party, array $positions): array
+    {
+        return self::platform(AerieDiet::position($party, $positions)) + self::debtPlanks([$party], [$party => 1.0]);
+    }
+
+    /**
+     * What a budget round would enact: the cabinet's programme, as far as its support parties let it.
+     *
+     * The cabinet proposes and each support party accepts a lever no further from its own programme than the one in
+     * force (Romer & Rosenthal 1978), so the proposal is the cabinet's programme held inside every supporter's
+     * acceptable range, which always holds the lever in force. The reserve fund holds the second key on its draw: a
+     * budget spends more than half the fund's expected return only with its consent, which it gives while the
+     * statistics office has a recession declared (MacroEngine::recessionDeclared()), as Singapore's President consented
+     * to drawing on the reserves in 2009 and 2020 and in no other year. Out of a recession the share above the ceiling
+     * lapses.
      *
      * @param list<string>                        $cabinet   The cabinet's parties.
      * @param list<string>                        $support   Its support parties.
      * @param array<string, int|float>            $seats     Seats by party.
      * @param array<string, array<string, float>> $positions Positions by party and axis.
      * @param array<string, float>                $standing  The levers in force (standingLevers()).
-     * @param float                               $debtToGdp Sovereign debt over GDP.
-     * @param float                               $debtLine  The debt to GDP above which the Council holds the deficit (DebtBrake::councilLine()).
-     * @param bool                                $recession Whether a recession is under way (MacroEngine::inSahmRecession()), in which the fund consents.
-     * @return array{levers: array<string, float>, platform: array<string, float>, supportHeld: array<string, bool>, councilHeld: array<string, bool>, councilGuards: bool, fundHeld: bool}
-     *         What the round enacts, the cabinet's own platform, which levers the supporters and the Council hold short
-     *         of it, whether the Council's brake is on, and whether the fund held the draw at its ceiling.
+     * @param bool                                $recession Whether a recession is declared, in which the fund consents.
+     * @return array{levers: array<string, float>, platform: array<string, float>, supportHeld: array<string, bool>, fundHeld: bool}
+     *         What the round enacts, the cabinet's own programme, which levers the supporters hold short of it, and
+     *         whether the fund held the draw at its ceiling.
      */
-    public static function budget(array $cabinet, array $support, array $seats, array $positions, array $standing, float $debtToGdp, float $debtLine, bool $recession = false): array
+    public static function budget(array $cabinet, array $support, array $seats, array $positions, array $standing, bool $recession = false): array
     {
-        $platform = self::platform(self::coalitionPosition(AerieDiet::membership($cabinet), $seats, $positions));
-        $supporterPlatforms = array_map(static fn(string $party): array => self::platform(AerieDiet::position($party, $positions)), $support);
+        $platform = self::platform(self::coalitionPosition(AerieDiet::membership($cabinet), $seats, $positions)) + self::debtPlanks($cabinet, $seats);
+        $supporterPlatforms = array_map(static fn(string $party): array => self::partyProgramme($party, $positions), $support);
 
-        $removalSeats = CoalitionFormation::coalitionSeats(array_values(array_diff(array_merge($cabinet, $support), AerieDiet::COUNCIL_LOYALISTS)), $seats);
-        $councilGuards = $debtToGdp > $debtLine && $removalSeats < AerieDiet::SUPERMAJORITY_SEATS;
-
-        $levers = $platform;
+        $levers = [];
         $supportHeld = [];
-        $councilHeld = [];
-        foreach (self::REVENUE_LEVERS as $lever => $revenue) {
+        foreach (array_keys(self::LEVER_FIELDS) as $lever) {
             $low = -INF;
             $high = INF;
             foreach ($supporterPlatforms as $own) {
@@ -555,50 +546,33 @@ class PoliticsEngine
             }
             $levers[$lever] = max($low, min($high, $platform[$lever]));
             $supportHeld[$lever] = $levers[$lever] !== $platform[$lever];
-
-            $widens = $revenue ? $levers[$lever] < $standing[$lever] : (in_array($lever, self::SPENDING_LEVERS, true) && $levers[$lever] > $standing[$lever]);
-            $councilHeld[$lever] = $councilGuards && $widens;
-            if ($councilHeld[$lever]) {
-                $levers[$lever] = $standing[$lever];
-            }
         }
 
-        // The key is the constitution's, above the Council's brake: a consent that lapses takes the draw back to the
-        // ceiling even when the Council would hold the revenue.
         $fundHeld = !$recession && $levers['reserveDrawShare'] > MacroEngine::RESERVE_DRAW_CEILING;
         if ($fundHeld) {
             $levers['reserveDrawShare'] = MacroEngine::RESERVE_DRAW_CEILING;
-            $councilHeld['reserveDrawShare'] = false;
         }
 
-        return ['levers' => $levers, 'platform' => $platform, 'supportHeld' => $supportHeld, 'councilHeld' => $councilHeld, 'councilGuards' => $councilGuards, 'fundHeld' => $fundHeld];
+        return ['levers' => $levers, 'platform' => $platform, 'supportHeld' => $supportHeld, 'fundHeld' => $fundHeld];
     }
 
     /**
      * A budget round: budget() becomes law, and the economy reads the levers from the next tick.
      *
      * @param PoliticsState $state     The politics, advanced in place.
-     * @param float         $debtToGdp Sovereign debt over GDP, which the Council's brake reads.
-     * @param bool          $recession Whether a recession is under way, in which the fund consents to a draw above its ceiling.
+     * @param bool          $recession Whether a recession is declared, in which the fund consents to a draw above its ceiling.
      */
-    public static function enactBudget(PoliticsState $state, float $debtToGdp, bool $recession = false): void
+    public static function enactBudget(PoliticsState $state, bool $recession = false): void
     {
         $standing = self::standingLevers($state);
-        $budget = self::budget(
+        $levers = self::budget(
             AerieDiet::governingParties($state->governingCoalition),
             AerieDiet::governingParties($state->supportParties),
             $state->dietSeats,
             $state->partyPositions,
             $standing,
-            $debtToGdp,
-            DebtBrake::councilLine($state),
             $recession
-        );
-        $levers = $budget['levers'];
-
-        if (in_array(true, $budget['councilHeld'], true)) {
-            $state->lastCouncilBrakeAt = $state->totalTime;
-        }
+        )['levers'];
 
         if ($levers !== $standing) {
             $state->lastBudgetEnactedAt = $state->totalTime;

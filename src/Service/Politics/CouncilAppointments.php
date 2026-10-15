@@ -132,9 +132,6 @@ final class CouncilAppointments
             }
             $shortlist = self::boardShortlist($salt, "council:{$seat}", $at, self::boardMedians($state), self::reservedNames($state), $math);
             [$chosen, $state->councillorPassedOver] = self::choose($shortlist, self::councilMedians($state, $seat));
-            if ($state->lastCouncillorSeatedAt !== $time) {
-                $state->debtLineBeforeSeating = DebtBrake::councilLine($state);
-            }
             self::seatCouncillor($state, $salt, $seat, $chosen, $holder['since'], $at, $holder['termEnds'], $at);
             $state->lastCouncillorSeatedAt = $time;
         }
@@ -150,7 +147,7 @@ final class CouncilAppointments
         $state->authoritySalt = floor($math->generateUniform() * (2 ** 31));
         $state->councilTermYears = AerieCouncil::TERM_YEARS;
         $salt = (int) $state->authoritySalt;
-        $state->councilNames = $state->councilBirths = $state->councilSince = $state->councilSeatedAt = $state->councilLeavesAt = $state->councilSwingers = $state->councilStances = $state->councilRegulationStances = $state->councilFundStances = $state->councilDebtStances = $state->councilDebtLines = [];
+        $state->councilNames = $state->councilBirths = $state->councilSince = $state->councilSeatedAt = $state->councilLeavesAt = $state->councilSwingers = $state->councilStances = $state->councilRegulationStances = $state->councilFundStances = $state->councilDebtStances = [];
         $state->memberNames = $state->memberBirths = $state->memberSince = $state->memberStances = [];
         $state->governorName = '';
         $state->regulatorName = '';
@@ -490,7 +487,6 @@ final class CouncilAppointments
         $state->councilRegulationStances[$seat] = $person['regulation'];
         $state->councilFundStances[$seat] = $person['fund'];
         $state->councilDebtStances[$seat] = $person['debt'];
-        $state->councilDebtLines[$seat] = DebtBrake::drawLine(self::uniform($salt, self::vacancyKey("council:{$seat}", $since) . ":{$person['name']}:line"));
     }
 
     /**
@@ -528,9 +524,6 @@ final class CouncilAppointments
             if (!isset($state->councilDebtStances[$seat])) {
                 $state->councilDebtStances[$seat] = Exchequer::drawStance(self::uniform($salt, "{$vacancy}:{$name}:debt"));
             }
-            if (!isset($state->councilDebtLines[$seat])) {
-                $state->councilDebtLines[$seat] = DebtBrake::drawLine(self::uniform($salt, "{$vacancy}:{$name}:line"));
-            }
             // A councillor held at the middle on money becomes a swing vote leaning to a camp.
             if (!isset($state->councilSwingers[$seat])) {
                 $state->councilSwingers[$seat] = ($state->councilStances[$seat] ?? 0.0) === MonetaryAuthority::STANCES['swing'] ? 1.0 : 0.0;
@@ -543,6 +536,5 @@ final class CouncilAppointments
         ksort($state->councilRegulationStances);
         ksort($state->councilFundStances);
         ksort($state->councilDebtStances);
-        ksort($state->councilDebtLines);
     }
 }
