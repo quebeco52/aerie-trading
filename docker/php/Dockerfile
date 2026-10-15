@@ -15,6 +15,9 @@ RUN apt-get update && apt-get install -y \
     && pecl install redis \
     && docker-php-ext-enable redis
 
+# The 128M default runs out warming the Twig cache in cache:clear
+RUN echo "memory_limit=512M" > /usr/local/etc/php/conf.d/memory.ini
+
 COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
 
 WORKDIR /app

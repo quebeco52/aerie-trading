@@ -26,6 +26,9 @@ RUN echo "xdebug.mode=\${XDEBUG_MODE:-off}" >> /usr/local/etc/php/conf.d/docker-
     && echo "xdebug.output_dir=/app/var/profiling" >> /usr/local/etc/php/conf.d/docker-php-ext-xdebug.ini \
     && echo "xdebug.profiler_output_name=cachegrind.out.%t.%p" >> /usr/local/etc/php/conf.d/docker-php-ext-xdebug.ini
 
+# The 128M default runs out warming the Twig cache in cache:clear
+RUN echo "memory_limit=512M" > /usr/local/etc/php/conf.d/memory.ini
+
 # Install Composer
 COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
 
