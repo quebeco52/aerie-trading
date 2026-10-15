@@ -25,7 +25,7 @@
 					The shaded band is where a party's support lies 19 times in 20; the dots are the polls.
 				</p>
 				<div class="grid grid-cols-1 lg:grid-cols-3 gap-5 mt-4">
-					<svg viewBox="0 0 600 210" class="w-full lg:col-span-2" role="img" aria-label="Poll average since the vote of {{ polls.since }}: {% for party in polls.parties %}{{ party.name }} {{ party.average|pct(1) }}{{ not loop.last ? ', ' : '' }}{% endfor %}">
+					<svg data-controller="chart-tip" viewBox="0 0 600 210" class="w-full lg:col-span-2" role="img" aria-label="Poll average since the vote of {{ polls.since }}: {% for party in polls.parties %}{{ party.name }} {{ party.average|pct(1) }}{{ not loop.last ? ', ' : '' }}{% endfor %}">
 						{% for line in polls.gridlines %}
 							<line x1="{{ polls.plot[0] }}" y1="{{ line.y }}" x2="{{ polls.plot[1] }}" y2="{{ line.y }}" class="stroke-outline-variant" stroke-opacity="{{ loop.first ? 1 : 0.3 }}" stroke-dasharray="{{ loop.first ? '' : '2 3' }}" stroke-width="{{ loop.first ? 1 : 0.6 }}"></line>
 							<text x="{{ polls.plot[0] - 5 }}" y="{{ line.y + 3 }}" text-anchor="end" font-size="8" class="fill-on-surface-variant">{{ line.label }}</text>
@@ -142,7 +142,7 @@
 							<p class="text-2xs text-on-surface-variant mt-0.5">Each party's chance of leading the next government as traders priced it, poll by poll since {{ odds.since }}{% if odds.vote %}, up to the vote of {{ odds.vote.date }}{% endif %}.</p>
 						</figcaption>
 						<div class="grid grid-cols-1 lg:grid-cols-3 gap-5 mt-2">
-							<svg viewBox="0 0 600 160" class="w-full lg:col-span-2" role="img" aria-label="Chance of leading the next government since {{ odds.since }}: {% for party in odds.parties %}{{ party.name }} {{ party.chance|pct(0) }}{{ not loop.last ? ', ' : '' }}{% endfor %}">
+							<svg data-controller="chart-tip" viewBox="0 0 600 160" class="w-full lg:col-span-2" role="img" aria-label="Chance of leading the next government since {{ odds.since }}: {% for party in odds.parties %}{{ party.name }} {{ party.chance|pct(0) }}{{ not loop.last ? ', ' : '' }}{% endfor %}">
 								{% for line in odds.gridlines %}
 									<line x1="{{ odds.plot[0] }}" y1="{{ line.y }}" x2="{{ odds.plot[1] }}" y2="{{ line.y }}" class="stroke-outline-variant" stroke-opacity="{{ loop.first ? 1 : 0.3 }}" stroke-dasharray="{{ loop.first ? '' : '2 3' }}" stroke-width="{{ loop.first ? 1 : 0.6 }}"></line>
 									<text x="{{ odds.plot[0] - 5 }}" y="{{ line.y + 3 }}" text-anchor="end" font-size="8" class="fill-on-surface-variant">{{ line.label }}</text>

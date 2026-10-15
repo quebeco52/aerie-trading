@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Service\Corporate;
 
+use App\Service\Market\Ticker\NestedTransaction;
 use App\Entity\Stock;
 use App\Service\Notification\PlayerNotifier;
 use App\Service\Notification\PriceAlertService;
@@ -332,8 +333,7 @@ class CorporateLedgerService
 
             $conn->commit();
         } catch (\Exception $e) {
-            $conn->rollBack();
-            throw $e;
+            NestedTransaction::rollBackAndRethrow($conn, $e);
         }
 
         if ($this->notifier !== null) {

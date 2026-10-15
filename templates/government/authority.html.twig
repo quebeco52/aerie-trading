@@ -104,10 +104,23 @@
 							<h3 class="text-xs font-semibold text-on-surface">The rate, meeting by meeting</h3>
 							<p class="text-2xs text-on-surface-variant mt-0.5">
 								The rate each meeting has left since {{ chart.since }}: <span class="font-mono tabular-nums">{{ chart.moves }}</span> of <span class="font-mono tabular-nums">{{ chart.meetings|length }}</span> meetings moved it {{ chart.stepBp }} basis points or more, and <span class="font-mono tabular-nums">{{ chart.split }}</span> split the committee.
-								A mark above a meeting is a vote for a higher rate, below it for a lower.{% if chart.governors is not empty %} A dashed line marks a new governor in the chair.{% endif %}
+								{% if chart.inflation %}Consumer price inflation runs beside it quarter by quarter; the gap between the two lines is the real rate.{% endif %}
+								Point at a meeting for its decision and vote.
 							</p>
+							<ul class="flex flex-wrap gap-x-4 gap-y-1 text-2xs text-on-surface-variant mt-2">
+								<li class="inline-flex items-center gap-1.5"><svg viewBox="0 0 14 8" class="w-3.5 h-2" aria-hidden="true"><line x1="0" y1="4" x2="14" y2="4" class="stroke-series-blue" stroke-width="1.5"></line><circle cx="7" cy="4" r="1.8" class="fill-series-blue"></circle></svg>Policy rate at each meeting</li>
+								<li class="inline-flex items-center gap-1.5"><svg viewBox="0 0 6 5" class="w-2 h-2" aria-hidden="true"><polygon points="0.5,4.5 5.5,4.5 3,0.5" class="fill-on-surface-variant"></polygon></svg>Votes for a higher rate</li>
+								<li class="inline-flex items-center gap-1.5"><svg viewBox="0 0 6 5" class="w-2 h-2" aria-hidden="true"><polygon points="0.5,0.5 5.5,0.5 3,4.5" class="fill-on-surface-variant"></polygon></svg>Votes for a lower rate</li>
+								{% if chart.governors is not empty %}
+									<li class="inline-flex items-center gap-1.5"><svg viewBox="0 0 6 10" class="w-1.5 h-2.5" aria-hidden="true"><line x1="3" y1="0" x2="3" y2="10" class="stroke-on-surface-variant" stroke-width="1" stroke-dasharray="3 2"></line></svg>A new governor in the chair</li>
+								{% endif %}
+								{% if chart.inflation %}
+									<li class="inline-flex items-center gap-1.5"><span class="w-3 border-t-2 border-series-orange" aria-hidden="true"></span>Inflation</li>
+									<li class="inline-flex items-center gap-1.5"><span class="w-3 border-t border-dashed border-on-surface-variant" aria-hidden="true"></span>Inflation target</li>
+								{% endif %}
+							</ul>
 						</figcaption>
-						<svg viewBox="0 0 600 172" class="w-full mt-2" role="img" aria-label="The policy rate at each meeting since {{ chart.since }}, {{ (chart.meetings|last).rate|pct(2) }} at the last">
+						<svg data-controller="mark-tip" viewBox="0 0 600 172" class="w-full mt-2" role="img" aria-label="The policy rate at each meeting since {{ chart.since }}, {{ (chart.meetings|last).rate|pct(2) }} at the last">
 							{% for line in chart.gridlines %}
 								<line x1="{{ chart.plot[0] }}" y1="{{ line.y }}" x2="{{ chart.plot[1] }}" y2="{{ line.y }}" class="stroke-outline-variant" stroke-opacity="{{ loop.first ? 1 : 0.3 }}" stroke-dasharray="{{ loop.first ? '' : '2 3' }}" stroke-width="{{ loop.first ? 1 : 0.6 }}"></line>
 								<text x="{{ chart.plot[0] - 5 }}" y="{{ line.y + 3 }}" text-anchor="end" font-size="8" class="fill-on-surface-variant">{{ line.rate|pct(2) }}</text>
@@ -120,19 +133,64 @@
 								<line x1="{{ governor.x }}" y1="{{ chart.plot[2] }}" x2="{{ governor.x }}" y2="{{ chart.plot[3] }}" class="stroke-outline-variant" stroke-width="0.8" stroke-dasharray="3 2"><title>{{ governor.name }} in the chair from {{ governor.date }}</title></line>
 								<text x="{{ governor.x + 3 }}" y="{{ chart.plot[2] - 4 }}" font-size="7" class="fill-on-surface-variant">{{ governor.name }}</text>
 							{% endfor %}
-							<polyline points="{{ chart.line }}" fill="none" class="stroke-primary" stroke-width="1.5" stroke-linejoin="round"></polyline>
+							{% if chart.inflation %}
+								{% set inflation = chart.inflation %}
+								<line x1="{{ chart.plot[0] }}" y1="{{ inflation.targetY }}" x2="{{ chart.plot[1] }}" y2="{{ inflation.targetY }}" class="stroke-on-surface-variant" stroke-width="0.8" stroke-dasharray="4 3"><title>The inflation target, {{ inflation.target|pct(0) }}</title></line>
+								<text x="{{ chart.plot[1] }}" y="{{ inflation.targetY - 3 }}" text-anchor="end" font-size="7" class="fill-on-surface-variant">{{ inflation.target|pct(0) }} target</text>
+								<polyline points="{{ inflation.line }}" fill="none" class="stroke-series-orange" stroke-width="1.2" stroke-linejoin="round"></polyline>
+								{% for quarter in inflation.quarters %}
+									<circle cx="{{ quarter.x }}" cy="{{ quarter.y }}" r="3" fill="transparent" class="data-lit:fill-series-orange"><title>{{ quarter.date }}: inflation {{ quarter.inflation|pct(2) }}</title></circle>
+								{% endfor %}
+							{% endif %}
+							<polyline points="{{ chart.line }}" fill="none" class="stroke-series-blue" stroke-width="1.5" stroke-linejoin="round"></polyline>
 							{% for meeting in chart.meetings %}
 								{%- set points = meeting.moveBp|abs == 1 ? ' basis point to ' : ' basis points to ' -%}
-								<circle cx="{{ meeting.x }}" cy="{{ meeting.y }}" r="1.8" class="fill-primary"><title>{{ meeting.date }}: {{ meeting.moveBp == 0 ? 'held at ' : (meeting.moveBp > 0 ? 'raised ' ~ meeting.moveBp ~ points : 'cut ' ~ meeting.moveBp|abs ~ points) }}{{ meeting.rate|pct(2) }}, voting {{ meeting.split }}</title></circle>
+								<circle cx="{{ meeting.x }}" cy="{{ meeting.y }}" r="1.8" stroke="transparent" stroke-width="3" class="fill-series-blue data-lit:stroke-on-surface data-lit:stroke-1"><title>{{ meeting.date }}: {{ meeting.moveBp == 0 ? 'held at ' : (meeting.moveBp > 0 ? 'raised ' ~ meeting.moveBp ~ points : 'cut ' ~ meeting.moveBp|abs ~ points) }}{{ meeting.rate|pct(2) }}, voting {{ meeting.split }}</title></circle>
 								{% if meeting.higher > 0 %}
-									<polygon points="{{ meeting.x - 2.5 }},{{ meeting.y - 4 }} {{ meeting.x + 2.5 }},{{ meeting.y - 4 }} {{ meeting.x }},{{ meeting.y - 8 }}" class="fill-on-surface-variant"><title>{{ meeting.date }}: {{ meeting.higher }} for a higher rate</title></polygon>
+									<polygon points="{{ meeting.x - 2.5 }},{{ meeting.y - 4 }} {{ meeting.x + 2.5 }},{{ meeting.y - 4 }} {{ meeting.x }},{{ meeting.y - 8 }}" stroke="transparent" stroke-width="3" class="fill-on-surface-variant data-lit:fill-on-surface"><title>{{ meeting.date }}: {{ meeting.higher }} for a higher rate</title></polygon>
 								{% endif %}
 								{% if meeting.lower > 0 %}
-									<polygon points="{{ meeting.x - 2.5 }},{{ meeting.y + 4 }} {{ meeting.x + 2.5 }},{{ meeting.y + 4 }} {{ meeting.x }},{{ meeting.y + 8 }}" class="fill-on-surface-variant"><title>{{ meeting.date }}: {{ meeting.lower }} for a lower rate</title></polygon>
+									<polygon points="{{ meeting.x - 2.5 }},{{ meeting.y + 4 }} {{ meeting.x + 2.5 }},{{ meeting.y + 4 }} {{ meeting.x }},{{ meeting.y + 8 }}" stroke="transparent" stroke-width="3" class="fill-on-surface-variant data-lit:fill-on-surface"><title>{{ meeting.date }}: {{ meeting.lower }} for a lower rate</title></polygon>
 								{% endif %}
 							{% endfor %}
 						</svg>
-						<p class="source-note mt-2">{{ source_line('monetary-authority') }}</p>
+						{% set summary = chart.summary %}
+						<dl class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-x-5 gap-y-3 mt-4 pt-3 border-t border-outline-variant/20">
+							<div>
+								<dt class="text-2xs text-on-surface-variant">Over the last year</dt>
+								<dd class="text-xs text-on-surface mt-0.5">
+									{%- if summary.yearChangeBp is null %}<span class="text-on-surface-faint">—</span>
+									{%- elseif summary.yearChangeBp == 0 %}Unchanged
+									{%- else %}{{ summary.yearChangeBp > 0 ? 'Up' : 'Down' }} <span class="font-mono tabular-nums">{{ summary.yearChangeBp|abs }}</span> basis {{ summary.yearChangeBp|abs == 1 ? 'point' : 'points' }}{% endif -%}
+								</dd>
+							</div>
+							<div>
+								<dt class="text-2xs text-on-surface-variant">Range since {{ chart.since }}</dt>
+								<dd class="text-xs text-on-surface mt-0.5"><span class="font-mono tabular-nums">{{ summary.low|pct(2) }}</span> to <span class="font-mono tabular-nums">{{ summary.high|pct(2) }}</span></dd>
+							</div>
+							<div>
+								<dt class="text-2xs text-on-surface-variant">Largest move</dt>
+								<dd class="text-xs text-on-surface mt-0.5">
+									{%- if summary.largest %}{{ summary.largest.moveBp > 0 ? 'Raised' : 'Cut' }} <span class="font-mono tabular-nums">{{ summary.largest.moveBp|abs }}</span> basis {{ summary.largest.moveBp|abs == 1 ? 'point' : 'points' }} <span class="text-on-surface-variant">· <span class="font-mono tabular-nums">{{ summary.largest.date }}</span></span>
+									{%- else %}<span class="text-on-surface-faint">—</span>{% endif -%}
+								</dd>
+							</div>
+							<div>
+								<dt class="text-2xs text-on-surface-variant">Widest split</dt>
+								<dd class="text-xs text-on-surface mt-0.5">
+									{%- if summary.widest %}<span class="font-mono tabular-nums">{{ summary.widest.split }}</span> <span class="text-on-surface-variant">· <span class="font-mono tabular-nums">{{ summary.widest.date }}</span></span>
+									{%- else %}Every vote unanimous{% endif -%}
+								</dd>
+							</div>
+							<div>
+								<dt class="text-2xs text-on-surface-variant"><span class="group relative cursor-help" tabindex="0"><span class="term">Real rate</span>{{ ui.tooltip('The policy rate less consumer price inflation: what borrowing costs once rising prices are taken off.', 'right') }}</span></dt>
+								<dd class="text-xs text-on-surface mt-0.5">
+									{%- if summary.realRate is not null %}<span class="font-mono tabular-nums">{{ summary.realRate|pct(2, true) }}</span> <span class="text-on-surface-variant">· inflation <span class="font-mono tabular-nums">{{ summary.inflation|pct(2) }}</span></span>
+									{%- else %}<span class="text-on-surface-faint">—</span>{% endif -%}
+								</dd>
+							</div>
+						</dl>
+						<p class="source-note mt-3">{{ chart.inflation ? source_line('monetary-authority', 'statistical-office') : source_line('monetary-authority') }}</p>
 					</figure>
 				{% endif %}
 			</section>

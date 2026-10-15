@@ -2,6 +2,7 @@
 
 namespace App\Command;
 
+use App\Service\Market\Ticker\NestedTransaction;
 use App\DTO\MacroStateDTO;
 use App\Entity\Bond;
 use App\Entity\Etf;
@@ -565,9 +566,7 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
                 // so the ticker takes the loss and carries on without the generic path's pause. The tick is not
                 // re-run in place: the operator pass and the hedge ran before the transaction opened, against the
                 // entity graph the clear() below discards.
-                if ($this->entityManager->getConnection()->isTransactionActive()) {
-                    $this->entityManager->rollback();
-                }
+                NestedTransaction::unwindAll($this->entityManager->getConnection());
                 $this->notifier->discard();
 
                 $output->writeln("<comment>Tick {$tickCount} lost to lock contention: " . $e->getMessage() . "</comment>");
@@ -580,9 +579,7 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
                 $this->entityManager->clear();
                 [$stocks, $indexFunds, $bonds] = $this->loadWorkingSet();
             } catch (\Exception $e) {
-                if ($this->entityManager->getConnection()->isTransactionActive()) {
-                    $this->entityManager->rollback();
-                }
+                NestedTransaction::unwindAll($this->entityManager->getConnection());
                 $this->notifier->discard();
                 $output->writeln("<error>Error: " . $e->getMessage() . "</error>");
 

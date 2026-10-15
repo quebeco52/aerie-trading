@@ -24,6 +24,7 @@ use App\Service\Macro\Subsystem\SovereignFundSubsystem;
 use App\Service\Math\MathUtility;
 use App\Service\Math\Valuation;
 use App\Service\Politics\ElectionForecast;
+use App\Service\Politics\MonetaryAuthority;
 use App\Service\Politics\PartyLeaders;
 use App\Service\Politics\PoliticsEngine;
 use App\Service\Politics\PoliticsState;
@@ -1031,6 +1032,52 @@ class GovernmentPageBuilderTest extends TestCase
             $this->assertGreaterThanOrEqual($top, $meeting['y']);
             $this->assertLessThanOrEqual($bottom, $meeting['y']);
         }
+    }
+
+    /**
+     * Inflation runs beside the rate over the chart's span only, the value axis stretches to take it and the target in,
+     * and the summary reads the year's change, the range, the largest move, the widest split and the real rate.
+     */
+    public function testTheRateChartSetsInflationBesideTheRateAndSumsTheSpanUp(): void
+    {
+        $decisions = [];
+        $rates = [0.0300, 0.0325, 0.0325, 0.0375, 0.0350, 0.0350, 0.0350, 0.0350, 0.0400, 0.0400];
+        foreach ($rates as $meeting => $rate) {
+            $change = $meeting === 0 ? 0.0 : $rate - $rates[$meeting - 1];
+            $votes = $meeting === 5 ? [0.0, 1.0, 1.0, -1.0] : ($meeting === 2 ? [0.0, 0.0, 1.0, 0.0] : [0.0, 0.0, 0.0, 0.0]);
+            $decisions[] = $this->decision(1.0 + $meeting / MonetaryAuthority::MEETINGS_PER_YEAR, $rate, $change, $votes, 'Ada Marsh');
+        }
+        $inflation = [['t' => 0.75, 'inflation' => 0.09], ['t' => 1.0, 'inflation' => 0.012], ['t' => 1.25, 'inflation' => 0.045], ['t' => 2.0, 'inflation' => 0.025]];
+
+        $chart = GovernmentPageBuilder::rateChart($decisions, 2.2, $inflation);
+        $this->assertNotNull($chart);
+        $this->assertNotNull($chart['inflation']);
+        $this->assertSame([0.012, 0.045, 0.025], array_column($chart['inflation']['quarters'], 'inflation'), 'A quarter before the first meeting is off the chart.');
+        $this->assertSame(self::simDate(1.875), $chart['inflation']['quarters'][2]['date'], 'A quarter is dated by the quarter it closes.');
+
+        [, , $top, $bottom] = $chart['plot'];
+        $gridRates = array_column($chart['gridlines'], 'rate');
+        $this->assertLessThanOrEqual(0.012 + 1e-12, min($gridRates), 'The axis reaches down to the lowest inflation.');
+        $this->assertGreaterThanOrEqual(0.045 - 1e-12, max($gridRates), 'And up to the highest.');
+        foreach ([...$chart['inflation']['quarters'], ['y' => $chart['inflation']['targetY']]] as $point) {
+            $this->assertGreaterThanOrEqual($top, $point['y']);
+            $this->assertLessThanOrEqual($bottom, $point['y']);
+        }
+
+        $summary = $chart['summary'];
+        $this->assertSame(75, $summary['yearChangeBp'], 'From 3.25% at the meeting a year before the last to 4.00%.');
+        $this->assertEqualsWithDelta(0.03, $summary['low'], 1e-12);
+        $this->assertEqualsWithDelta(0.04, $summary['high'], 1e-12);
+        $this->assertSame(['moveBp' => 50, 'date' => self::simDate(1.375)], $summary['largest'], 'The first of the largest moves.');
+        $this->assertSame(['split' => '1–3', 'date' => self::simDate(1.625)], $summary['widest']);
+        $this->assertEqualsWithDelta(0.025, $summary['inflation'], 1e-12);
+        $this->assertEqualsWithDelta(0.015, $summary['realRate'], 1e-12);
+
+        $bare = GovernmentPageBuilder::rateChart(array_slice($decisions, 0, 2), 1.2);
+        $this->assertNotNull($bare);
+        $this->assertNull($bare['inflation']);
+        $this->assertNull($bare['summary']['realRate'], 'No inflation on record, no real rate.');
+        $this->assertNull($bare['summary']['yearChangeBp'], 'Less than a year of meetings has no year-on change.');
     }
 
     /**

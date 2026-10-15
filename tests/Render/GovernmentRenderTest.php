@@ -104,6 +104,7 @@ final class GovernmentRenderTest extends KernelTestCase
         $macro = new MacroStateDTO();
         $politics = new PoliticsStateDTO();
         $laws = [];
+        $inflation = [];
         for ($tick = 0; $tick < (int) round($years * self::TICKS_PER_YEAR); ++$tick) {
             $macro = $economy->updateMacroState(1.0 / self::TICKS_PER_YEAR, policy: $policy);
             $politics = $engine->updatePolitics($macro, 1.0 / self::TICKS_PER_YEAR);
@@ -114,6 +115,7 @@ final class GovernmentRenderTest extends KernelTestCase
             if (TimeSeries::crossedSimulatedBoundary($macro->totalTime, 1.0 / self::TICKS_PER_YEAR, 0.25)) {
                 $laws[] = ['t' => $macro->totalTime, 'levers' => PoliticsEngine::standingLevers($politics), 'capitalRequirement' => $politics->bankCapitalRequirement];
                 $laws = array_slice($laws, -MacroReportHistoryRepository::QUARTERS);
+                $inflation[] = ['t' => $macro->totalTime, 'inflation' => $macro->inflationEma];
             }
         }
 
@@ -124,6 +126,7 @@ final class GovernmentRenderTest extends KernelTestCase
         $twig = $container->get('twig');
         $reports = $this->createStub(MacroReportHistoryRepository::class);
         $reports->method('laws')->willReturn($laws);
+        $reports->method('inflation')->willReturnCallback(static fn(int $quarters): array => array_slice($inflation, -$quarters));
         // The opening board, each firm through one quarter's report so its models record what each law reaches.
         $opening = $container->get(OpeningBoardBuilder::class);
         $metrics = new CorporateMetrics();

@@ -684,11 +684,13 @@ class GovernmentPageBuilder
     /**
      * The rate each meeting left, oldest first, on a line from meeting to meeting, each meeting marked with its dissents:
      * a mark above for votes for a higher rate, below for a lower. A dashed line marks a new governor in the chair.
+     * Inflation runs quarter by quarter beside it against the target, and a summary row reads the span off.
      *
      * @param list<RateDecision> $decisions The meetings on record over the chart's span, oldest first.
+     * @param list<array{t: float, inflation: float}> $inflation The quarterly record, oldest first; quarters outside the span are left off.
      * @return array<string, mixed>|null Null with fewer than two meetings on record.
      */
-    public static function rateChart(array $decisions, float $now): ?array
+    public static function rateChart(array $decisions, float $now, array $inflation = []): ?array
     {
         if (count($decisions) < 2) {
             return null;
@@ -696,16 +698,18 @@ class GovernmentPageBuilder
 
         $from = $decisions[0]->getSimTime();
         $to = max($now, $decisions[array_key_last($decisions)]->getSimTime());
+        $inflation = array_values(array_filter($inflation, static fn(array $quarter): bool => $quarter['t'] >= $from - 1e-9 && $quarter['t'] <= $to + 1e-9));
         $rates = array_map(static fn(RateDecision $decision): float => $decision->getRate(), $decisions);
+        $values = $inflation === [] ? $rates : [...$rates, ...array_column($inflation, 'inflation'), MacroEngine::TARGET_INFLATION];
         $step = self::RATE_CHART_GRID_STEPS[array_key_last(self::RATE_CHART_GRID_STEPS)];
         foreach (self::RATE_CHART_GRID_STEPS as $candidate) {
-            if ((ceil(max($rates) / $candidate) - floor(min($rates) / $candidate)) <= self::RATE_CHART_GRIDLINES - 1) {
+            if ((ceil(max($values) / $candidate) - floor(min($values) / $candidate)) <= self::RATE_CHART_GRIDLINES - 1) {
                 $step = $candidate;
                 break;
             }
         }
-        $low = floor(min($rates) / $step) * $step;
-        $high = max($low + $step, ceil(max($rates) / $step) * $step);
+        $low = floor(min($values) / $step) * $step;
+        $high = max($low + $step, ceil(max($values) / $step) * $step);
 
         [$left, $right, $top, $bottom] = self::RATE_CHART_PLOT;
         $x = static fn(float $time): float => round($left + (($right - $left) * ($time - $from) / max(1e-9, $to - $from)), 1);
@@ -743,6 +747,14 @@ class GovernmentPageBuilder
             $years[] = ['x' => $x((float) $year), 'label' => sprintf('Year %d', $year + 1)];
         }
 
+        $quarters = array_map(static fn(array $quarter): array => [
+            'x' => $x($quarter['t']),
+            'y' => $y($quarter['inflation']),
+            // A row is written as its quarter closes; it describes the quarter that closed.
+            'date' => self::simDate(max(0.0, $quarter['t'] - MacroHistoryPresenter::HALF_QUARTER_YEARS)),
+            'inflation' => $quarter['inflation'],
+        ], $inflation);
+
         return [
             'since' => self::simDate($from),
             'line' => implode(' ', array_map(static fn(array $meeting): string => $meeting['x'] . ',' . $meeting['y'], $meetings)),
@@ -755,6 +767,54 @@ class GovernmentPageBuilder
             'gridlines' => $gridlines,
             'years' => $years,
             'plot' => self::RATE_CHART_PLOT,
+            'inflation' => $quarters === [] ? null : [
+                'line' => implode(' ', array_map(static fn(array $quarter): string => $quarter['x'] . ',' . $quarter['y'], $quarters)),
+                'quarters' => $quarters,
+                'target' => MacroEngine::TARGET_INFLATION,
+                'targetY' => $y(MacroEngine::TARGET_INFLATION),
+            ],
+            'summary' => self::rateSummary($decisions, $meetings, $quarters === [] ? null : $quarters[array_key_last($quarters)]['inflation']),
+        ];
+    }
+
+    /**
+     * The rate chart's span in a row: the change over the last year, the range, the largest move and the widest split,
+     * and the rate less the latest inflation.
+     *
+     * @param list<RateDecision> $decisions
+     * @param list<array<string, mixed>> $meetings rateChart()'s meetings, in the same order.
+     * @return array<string, mixed>
+     */
+    private static function rateSummary(array $decisions, array $meetings, ?float $inflation): array
+    {
+        $last = $decisions[array_key_last($decisions)];
+        // The meeting a year before the last, to within half a meeting for the sim clock's rounding.
+        $yearAgo = null;
+        foreach ($decisions as $decision) {
+            if ($decision->getSimTime() <= $last->getSimTime() - 1.0 + 0.5 / MonetaryAuthority::MEETINGS_PER_YEAR) {
+                $yearAgo = $decision;
+            }
+        }
+        $rates = array_column($meetings, 'rate');
+        $largest = null;
+        $widest = null;
+        foreach ($meetings as $meeting) {
+            if ($meeting['moveBp'] !== 0 && ($largest === null || abs($meeting['moveBp']) > abs($largest['moveBp']))) {
+                $largest = $meeting;
+            }
+            if ($meeting['higher'] + $meeting['lower'] > 0 && ($widest === null || $meeting['higher'] + $meeting['lower'] > $widest['higher'] + $widest['lower'])) {
+                $widest = $meeting;
+            }
+        }
+
+        return [
+            'yearChangeBp' => $yearAgo === null ? null : (int) round(10000.0 * ($last->getRate() - $yearAgo->getRate())),
+            'high' => max($rates),
+            'low' => min($rates),
+            'largest' => $largest === null ? null : ['moveBp' => $largest['moveBp'], 'date' => $largest['date']],
+            'widest' => $widest === null ? null : ['split' => $widest['split'], 'date' => $widest['date']],
+            'inflation' => $inflation,
+            'realRate' => $inflation === null ? null : $last->getRate() - $inflation,
         ];
     }
 
@@ -1898,7 +1958,11 @@ class GovernmentPageBuilder
                 'lower' => $lower,
             ],
             'nextMeeting' => DistrictCalendar::dateline(self::nextMeeting($time)),
-            'decisions' => !$withChart || $this->decisions === null ? null : self::rateChart($this->decisions->findSince($time - self::RATE_CHART_YEARS), $time),
+            'decisions' => !$withChart || $this->decisions === null ? null : self::rateChart(
+                $this->decisions->findSince($time - self::RATE_CHART_YEARS),
+                $time,
+                $this->reports?->inflation((int) ceil(FinancialConstants::QUARTERS_PER_YEAR * self::RATE_CHART_YEARS) + 1) ?? []
+            ),
             'rules' => [
                 'governorTermYears' => MonetaryAuthority::GOVERNOR_TERM_YEARS,
                 'memberTermYears' => MonetaryAuthority::MEMBER_TERM_YEARS,

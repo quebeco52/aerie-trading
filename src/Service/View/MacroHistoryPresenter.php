@@ -24,7 +24,7 @@ final class MacroHistoryPresenter
 
     // --- Quarter Dating ---
     /** Half a quarter, in years: a row is written as its quarter closes, so it is dated half a quarter back to land inside the quarter it describes. */
-    private const HALF_QUARTER_YEARS = 0.125;
+    public const HALF_QUARTER_YEARS = 0.125;
 
     // --- Output Gap Groups ---
     /**

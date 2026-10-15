@@ -2,6 +2,7 @@
 
 namespace App\Service\Market\Index;
 
+use App\Service\Market\Ticker\NestedTransaction;
 use App\Service\Notification\PlayerNotifier;
 use App\Service\Notification\PriceAlertService;
 use App\Entity\Etf;
@@ -338,8 +339,7 @@ class EtfTracker
             
             $conn->commit();
         } catch (\Exception $e) {
-            $conn->rollBack();
-            throw $e;
+            NestedTransaction::rollBackAndRethrow($conn, $e);
         }
 
         // Cached trigger levels into post-split units: resting-order bounds are dropped so the next tick rewrites

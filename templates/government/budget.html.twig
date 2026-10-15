@@ -98,7 +98,7 @@
 								<span class="font-semibold text-on-surface">{{ chart.name }}</span>
 								<span class="font-mono tabular-nums text-on-surface">{{ gov.lever_value(chart, chart.now) }}</span>
 							</figcaption>
-							<svg viewBox="0 0 300 84" class="w-full mt-1" role="img" aria-label="{{ chart.name }} since {{ laws.since }}: from {{ gov.lever_value(chart, chart.low.value) }} to {{ gov.lever_value(chart, chart.high.value) }}, {{ gov.lever_value(chart, chart.now) }} today">
+							<svg data-controller="chart-tip" viewBox="0 0 300 84" class="w-full mt-1" role="img" aria-label="{{ chart.name }} since {{ laws.since }}: from {{ gov.lever_value(chart, chart.low.value) }} to {{ gov.lever_value(chart, chart.high.value) }}, {{ gov.lever_value(chart, chart.now) }} today">
 								{% for cabinet in laws.cabinets %}
 									<rect x="{{ cabinet.x0 }}" y="{{ laws.plot[2] }}" width="{{ cabinet.x1 - cabinet.x0 }}" height="{{ laws.plot[3] - laws.plot[2] }}" fill="{{ cabinet.color }}" fill-opacity="0.09"><title>{{ cabinet.members|join(', ') }}, {{ cabinet.fromLabel }} – {{ cabinet.toLabel }}</title></rect>
 									{% if not loop.first %}

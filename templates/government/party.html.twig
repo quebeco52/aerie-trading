@@ -153,7 +153,7 @@
 								{% endif %}
 							</div>
 							<p class="text-xs text-on-surface-variant mt-0.5 leading-relaxed">{{ axis.question }}</p>
-							<svg viewBox="-110 -12 220 30" class="w-full mt-1" role="img" aria-label="{{ axis.name }}: {{ party.name }} at {{ axis.value|number_format(2) }}, from {{ axis.low }} at -1 to {{ axis.high }} at +1">
+							<svg data-controller="chart-tip" viewBox="-110 -12 220 30" class="w-full mt-1" role="img" aria-label="{{ axis.name }}: {{ party.name }} at {{ axis.value|number_format(2) }}, from {{ axis.low }} at -1 to {{ axis.high }} at +1">
 								<line x1="-100" y1="0" x2="100" y2="0" class="stroke-outline-variant" stroke-width="1"></line>
 								<line x1="0" y1="-3" x2="0" y2="3" class="stroke-outline-variant" stroke-width="0.6"></line>
 								{% for other in axis.others %}
@@ -232,7 +232,7 @@
 			{% set slot = 560 / n %}
 			{% set barW = min(36, slot * 0.7) %}
 			{% set every = (n / 12)|round(0, 'ceil') %}
-			<svg viewBox="0 0 600 170" class="w-full mt-4" role="img" aria-label="Seats won by {{ party.name }} at each election">
+			<svg data-controller="chart-tip" viewBox="0 0 600 170" class="w-full mt-4" role="img" aria-label="Seats won by {{ party.name }} at each election">
 				<line x1="30" y1="140" x2="590" y2="140" class="stroke-outline-variant" stroke-width="1"></line>
 				{% for tick in [0, 0.5, 1] %}
 					{% set y = 140 - (tick * 120) %}

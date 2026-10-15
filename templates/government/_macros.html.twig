@@ -5,7 +5,7 @@
 {% macro compass_row(row, compass, layout) %}
 	{% set f = compass.fontSize %}
 	{% set w = layout.halfWidth %}
-	<svg viewBox="{{ row.viewBox|join(' ') }}" class="w-full mt-1" role="img" aria-label="{{ row.summary }}">
+	<svg data-controller="chart-tip" viewBox="{{ row.viewBox|join(' ') }}" class="w-full mt-1" role="img" aria-label="{{ row.summary }}">
 		{% if row.hub is not null %}
 			{# Behind the dots, so it shows above and below whichever party sits on it. #}
 			<line x1="{{ row.hub }}" y1="{{ -compass.hubReach }}" x2="{{ row.hub }}" y2="{{ compass.hubReach }}" class="stroke-primary" stroke-width="1.4" stroke-linecap="round"></line>

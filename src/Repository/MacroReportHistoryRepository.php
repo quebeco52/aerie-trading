@@ -69,6 +69,25 @@ class MacroReportHistoryRepository
         return $policy;
     }
 
+    /**
+     * Consumer price inflation at each recorded quarter, oldest first, smoothed as the economy page prints it. A quarter
+     * recorded without it is left out.
+     *
+     * @return list<array{t: float, inflation: float}>
+     */
+    public function inflation(int $quarters = self::QUARTERS): array
+    {
+        $rows = $this->connection->fetchAllAssociative(sprintf(
+            'SELECT total_time, inflation_ema FROM macro_report WHERE total_time IS NOT NULL AND inflation_ema IS NOT NULL ORDER BY id DESC LIMIT %d',
+            $quarters
+        ));
+
+        return array_map(
+            static fn(array $row): array => ['t' => (float) $row['total_time'], 'inflation' => (float) $row['inflation_ema']],
+            array_reverse($rows)
+        );
+    }
+
     /** A state field's macro_report column: corporateTaxPolicyShift is corporate_tax_policy_shift. */
     private static function column(string $field): string
     {
