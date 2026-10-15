@@ -167,21 +167,11 @@ class MonetaryPolicySubsystem
     /** Ceiling on the money-market share. */
     public const MAX_MMF_SHARE = 0.40;
 
-    // --- Monetarist M2 Broad Money Supply Dynamics (Friedman-Schwartz, Brunner-Meltzer) ---
-    /** Sensitivity of broad M2 money growth to central bank QE/QT balance sheet operations. */
-    public const M2_QE_SENSITIVITY = 2.40;
-    /** Sensitivity of commercial bank money creation multiplier to lending standards tightening (SLOOS). */
-    public const M2_SLOOS_SENSITIVITY = 0.06;
-    /** Cyclical credit demand sensitivity scaling M2 money growth with the output gap. */
-    public const M2_GAP_SENSITIVITY = 0.25;
-    /** Mean-reversion speed (kappa) of broad money supply growth toward fundamental trajectory. */
-    public const M2_KAPPA = 1.80;
-    /** Stochastic diffusion volatility of annual M2 money supply growth. */
-    public const M2_SIGMA = 0.005;
-    /** Lower bound floor for annual M2 money supply growth (-2.0% broad contraction). */
-    public const MIN_M2_GROWTH = -0.020;
-    /** Upper bound ceiling for annual M2 money supply expansion (+25.0% wartime/crisis expansion). */
-    public const MAX_M2_GROWTH = 0.250;
+    // --- Broad Money (loans create deposits; McLeay, Radia & Thomas 2014) ---
+    /** Broad money over GDP, the stock the Authority's purchases add reserves to: about a year of output in a deposit-funded economy. */
+    public const BROAD_MONEY_TO_GDP = 1.0;
+    /** Horizon (years) money growth is read over, as a year-on-year rate. */
+    public const MONEY_GROWTH_HORIZON_YEARS = 1.0;
     /** Time constant (years) of M2 growth's measured trend: a decade, past the 2-4 year QE programmes and credit swings its readers respond to, so the trend is the medium-term growth a reference value is set on (ECB 1998's M3 reference value). */
     public const M2_TREND_YEARS = 10.0;
 
@@ -510,10 +500,16 @@ class MonetaryPolicySubsystem
      */
     public static function authorityNetIncomeToGdp(MacroState|MacroStateDTO $state): float
     {
-        $holdings = self::QE_HOLDINGS_TO_GDP_AT_FULL_PROGRAM * max(0.0, $state->balanceSheetIntensity) / self::QE_MAX_SUPPRESSION;
+        $holdings = self::authorityHoldingsToGdp($state);
 
         return (self::CURRENCY_TO_GDP * CreditFiscalSubsystem::sovereignEffectiveRate($state))
             + ($holdings * ($state->sovereignCouponRate - $state->policyRate));
+    }
+
+    /** Bonds the Authority's purchases hold, over GDP: the full programme's holdings at the balance sheet's intensity. */
+    public static function authorityHoldingsToGdp(MacroState|MacroStateDTO $state): float
+    {
+        return self::QE_HOLDINGS_TO_GDP_AT_FULL_PROGRAM * max(0.0, $state->balanceSheetIntensity) / self::QE_MAX_SUPPRESSION;
     }
 
     /**
@@ -925,9 +921,7 @@ class MonetaryPolicySubsystem
         $policyRate = max(0.0, $state->policyRateEma);
         $neutralRate = MacroEngine::BASE_NATURAL_RATE + MacroEngine::TARGET_INFLATION;
 
-        $state->systemDepositBeta = MacroEngine::SYSTEM_DEPOSIT_BETA_BASE;
-
-        $depositSpread = $policyRate * (1.0 - $state->systemDepositBeta);
+        $depositSpread = $policyRate * (1.0 - MacroEngine::SYSTEM_DEPOSIT_BETA_BASE);
         $neutralSpread = $neutralRate * (1.0 - MacroEngine::SYSTEM_DEPOSIT_BETA_BASE);
         $targetShare = MacroEngine::MMF_SHARE_BASE + (self::MMF_SPREAD_SENSITIVITY * ($depositSpread - $neutralSpread));
         $targetShare = max(self::MIN_MMF_SHARE, min(self::MAX_MMF_SHARE, $targetShare));
@@ -963,12 +957,9 @@ class MonetaryPolicySubsystem
     }
 
     /**
-     * Friedman-Schwartz / Brunner-Meltzer M2 Broad Money Supply Growth.
-     *
-     * Models annual growth rate of broad M2 money stock based on potential nominal GDP expansion,
-     * central bank balance sheet liquidity creation (QE/QT), commercial bank underwriting stance (SLOOS),
-     * and cyclical credit demand (output gap):
-     *   Target = BaseGrowth + beta_QE * BalanceSheet - beta_SLOOS * SLOOS + beta_Y * OutputGap
+     * Broad money growth: deposits are created by the loans banks make and the bonds the Authority buys (McLeay, Radia
+     * & Thomas 2014). Money grows with nominal income, with household credit beyond income, and with the purchases'
+     * reserves; read year on year.
      *
      * @param MacroState $state         Current macroeconomic state.
      * @param float      $dt            Time step in years.
@@ -976,29 +967,19 @@ class MonetaryPolicySubsystem
      */
     public function calculateMoneySupplyGrowth(MacroState $state, float $dt, float $tfpGrowthRate): void
     {
-        $baseGrowth = MacroEngine::TARGET_INFLATION + $tfpGrowthRate + $state->laborForceGrowthRate;
+        $horizon = self::MONEY_GROWTH_HORIZON_YEARS;
+        // The year's purchases as a flow: a lag's own change is the exponentially weighted average of what fed it, so
+        // the whole of a programme is counted once.
+        $priorHoldings = $state->authorityHoldingsToGdpEma;
+        $state->authorityHoldingsToGdpEma += (1.0 - exp(-$dt / $horizon)) * (self::authorityHoldingsToGdp($state) - $priorHoldings);
+        $purchasesFlow = ($state->authorityHoldingsToGdpEma - $priorHoldings) / $dt;
 
-        $dW = $this->mathUtility->generateStandardNormal();
-
-        $params = [
-            'qeSens' => self::M2_QE_SENSITIVITY,
-            'sloosSens' => self::M2_SLOOS_SENSITIVITY,
-            'gapSens' => self::M2_GAP_SENSITIVITY,
-            'kappa' => self::M2_KAPPA,
-            'sigma' => self::M2_SIGMA,
-            'min' => self::MIN_M2_GROWTH,
-            'max' => self::MAX_M2_GROWTH,
-        ];
-
-        $state->moneySupplyGrowth = MacroTransmission::calculateBroadMoneyGrowth(
-            currentM2Growth: $state->moneySupplyGrowth,
-            baseGrowth: $baseGrowth,
-            balanceSheetIntensity: $state->balanceSheetIntensity,
-            sloosTightening: $state->sloosTighteningIndexEma,
-            outputGap: $state->outputGap,
-            dt: $dt,
-            dW: $dW,
-            params: $params
+        $state->moneySupplyGrowth = MacroTransmission::broadMoneyGrowth(
+            nominalIncomeGrowth: $state->inflationEma + $tfpGrowthRate + $state->laborForceGrowthRate,
+            householdNewBorrowing: $state->householdNewBorrowing,
+            householdDebtToIncome: $state->householdDebtToIncome,
+            authorityPurchasesToGdp: $purchasesFlow,
+            broadMoneyToGdp: self::BROAD_MONEY_TO_GDP,
         );
         // The level its cyclical readers measure a liquidity surge against, measured rather than assumed.
         $state->moneySupplyGrowthTrend += (1.0 - exp(-$dt / self::M2_TREND_YEARS)) * ($state->moneySupplyGrowth - $state->moneySupplyGrowthTrend);

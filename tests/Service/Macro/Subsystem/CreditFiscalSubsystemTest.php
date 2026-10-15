@@ -1069,13 +1069,14 @@ class CreditFiscalSubsystemTest extends TestCase
         );
     }
 
-    public function testWithNoFundTheDebtFloorSimplyHolds(): void
+    /** With no fund to sweep it into, a surplus past the floor stays with the Exchequer: it keeps retiring debt into net assets. */
+    public function testWithNoFundTheSurplusKeepsRetiringDebt(): void
     {
         $state = $this->surplusBudget(MacroEngine::SOVEREIGN_DEBT_FLOOR + 0.005, 0.04);
 
         $this->subsystem->calculateSovereignDebt($state, 0.5);
 
-        $this->assertSame(MacroEngine::SOVEREIGN_DEBT_FLOOR, $state->sovereignDebtToGdp);
+        $this->assertLessThan(MacroEngine::SOVEREIGN_DEBT_FLOOR, $state->sovereignDebtToGdp);
         $this->assertSame(0.0, $state->sovereignFundBudgetInflow, 'No fund, nothing to buy.');
     }
 

@@ -607,7 +607,7 @@ class DistrictMap
         'rate-council' => [
             'label' => 'The ' . Institutions::MONETARY_AUTHORITY,
             'short_label' => 'RATES',
-            'fields' => ['policy_rate_ema', 'yield_2y_ema', 'yield_5y_ema', 'yield_10y_ema', 'yield_30y_ema', 'ns_slope', 'ns_slope_ema', 'money_supply_growth_ema', 'system_deposit_beta_ema', 'money_market_fund_share_ema'],
+            'fields' => ['policy_rate_ema', 'yield_2y_ema', 'yield_5y_ema', 'yield_10y_ema', 'yield_30y_ema', 'ns_slope', 'ns_slope_ema', 'money_supply_growth_ema', 'money_market_fund_share_ema'],
             'readouts' => [
                 ['field' => 'policy_rate_ema', 'label' => 'Policy', 'unit' => self::UNIT_PERCENT],
                 ['field' => 'yield_10y_ema', 'label' => '10Y', 'unit' => self::UNIT_PERCENT],

@@ -6,6 +6,7 @@ use App\Data\Macro\MacroFieldRegistry;
 use App\Service\Macro\Subsystem\AssetMarketSubsystem;
 use App\Service\Macro\Subsystem\CommodityLogisticsSubsystem;
 use App\Service\Macro\Subsystem\MacroAggregateSubsystem;
+use App\Service\Macro\Subsystem\MonetaryPolicySubsystem;
 use App\Service\Math\FirmEconomics;
 use App\Service\Math\MacroTransmission;
 
@@ -60,6 +61,8 @@ class MacroState
     // The index's own long-run average, which the PPI leg measures a growth RATE against. Zero means no
     // observation yet: the trend opens at the first one, so a cold start reports no commodity inflation.
     public float $energyPriceIndexTrend;
+    public float $energyPriceIndexDecadeTrend;
+    public float $freightRateIndexDecadeTrend;
     public float $energyPriceShock;
     public float $energyBasePrice;
     // Productive energy capacity, lagging price: the supply leg of the energy cobweb.
@@ -335,6 +338,7 @@ class MacroState
     public float $moneySupplyGrowth;
     public float $moneySupplyGrowthEma;
     public float $moneySupplyGrowthTrend;
+    public float $authorityHoldingsToGdpEma;
 
     // Administered healthcare prices: an annual step, not a diffusion.
     public float $reimbursementRateIndex;
@@ -404,8 +408,6 @@ class MacroState
     public float $powerHeatRateLog;
 
     // Deposits channel: the system deposit beta and the money-market share it drives.
-    public float $systemDepositBeta;
-    public float $systemDepositBetaEma;
     public float $moneyMarketFundShare;
     public float $moneyMarketFundShareEma;
 
@@ -635,6 +637,16 @@ class MacroState
         if (!isset($carried['balanceSheetIntensity'])) {
             // Balance sheet intensity was recorded as a one-sided qe_intensity before QT existed.
             $state->balanceSheetIntensity = (float) ($data['qe_intensity'] ?? 0.0);
+        }
+        if (!isset($carried['energyPriceIndexDecadeTrend'])) {
+            $state->energyPriceIndexDecadeTrend = $state->energyPriceIndexEma;
+        }
+        if (!isset($carried['freightRateIndexDecadeTrend'])) {
+            $state->freightRateIndexDecadeTrend = $state->freightRateIndexEma;
+        }
+        if (!isset($carried['authorityHoldingsToGdpEma'])) {
+            // Holdings already on the books when the money flow began to be read are no new purchase.
+            $state->authorityHoldingsToGdpEma = MonetaryPolicySubsystem::authorityHoldingsToGdp($state);
         }
         if (!isset($carried['qeActive'])) {
             $state->qeActive = $state->balanceSheetIntensity > MacroEngine::BALANCE_SHEET_ACTIVE_THRESHOLD;

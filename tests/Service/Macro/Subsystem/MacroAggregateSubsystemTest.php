@@ -533,9 +533,9 @@ class MacroAggregateSubsystemTest extends TestCase
 
     /**
      * The coefficients are MPCs on stocks, entered as drifts at the demand equation's own pull (Mian, Rao & Sufi 2013;
-     * Chodorow-Reich, Nenov & Simsek 2021). Held, a wealth gain settles domestic demand where that pull, less the
-     * restocking the inventory cycle's lean cyclical target sets off, balances it: the MPC on the stock, raised by the
-     * restocking, before policy answers any of it. Measured in slack, below the capacity ceiling.
+     * Chodorow-Reich, Nenov & Simsek 2021). Held, a wealth gain settles domestic demand where that pull balances it: the
+     * MPC on the stock, before policy answers any of it. A held state holds no sales surprise, so inventories add
+     * nothing. Measured in slack, below the capacity ceiling.
      */
     public function testAHeldWealthGainSettlesSpendingAtTheMpcOnTheStock(): void
     {
@@ -558,37 +558,21 @@ class MacroAggregateSubsystemTest extends TestCase
             return $state->outputGap;
         };
         $base = $settle(0.0, 0.0);
-        $restockingPull = MacroAggregateSubsystem::DEMAND_OWN_PULL
-            - (MacroAggregateSubsystem::METZLER_INVENTORY_DRAG * MacroAggregateSubsystem::INVENTORY_CYCLICAL_DEMAND_SENSITIVITY);
-        $amplification = MacroAggregateSubsystem::DEMAND_OWN_PULL / $restockingPull;
+        $amplification = 1.0;
 
         $housingLevel = MacroAggregateSubsystem::DOMESTIC_GAP_WEIGHT * MacroAggregateSubsystem::HOUSING_WEALTH_MPC * MacroAggregateSubsystem::HOUSING_WEALTH_TO_GDP * 0.10;
-        $this->assertEqualsWithDelta($amplification * $housingLevel, $settle(0.10, 0.0) - $base, 0.005 * $housingLevel, 'Ten percent on the houses is ~0.6% of GDP of spending, and restocking adds a quarter.');
+        $this->assertEqualsWithDelta($amplification * $housingLevel, $settle(0.10, 0.0) - $base, 0.005 * $housingLevel, 'Ten percent on the houses is ~0.6% of GDP of spending.');
 
         // Households own a fifth of the board; the rest of the world spends its gains at home.
         $equityLevel = MacroAggregateSubsystem::EQUITY_WEALTH_MPC * MacroAggregateSubsystem::DISTRICT_HOUSEHOLD_EQUITY_SHARE * SovereignFundSubsystem::MARKET_CAP_TO_GDP * 0.10;
         $this->assertEqualsWithDelta($amplification * $equityLevel, $settle(0.0, 0.10) - $base, 0.005 * $equityLevel, 'Ten percent on the board is ~0.1% of GDP of District spending.');
     }
 
-    /**
-     * The rate slopes were fitted on US moments with the engine's wealth and currency channels a fraction of their size,
-     * so they absorbed the US routes through stocks, houses and the dollar. With those channels at their measured size
-     * the absorbed part comes out, once: rebuilt at US scale, the explicit routes plus the slope give the fitted total.
-     */
-    public function testTheRateSlopesCarryOnlyWhatNoExplicitChannelDoes(): void
+    /** Easing lifts demand directly, but less than tightening cuts it: it pushes on a string. */
+    public function testEasingPushesOnAString(): void
     {
-        $pull = MacroAggregateSubsystem::DEMAND_OWN_PULL;
-        $usWealthRoute = $pull * ((MacroAggregateSubsystem::US_STOCK_RESPONSE_TO_RATES * MacroAggregateSubsystem::EQUITY_WEALTH_MPC * MacroAggregateSubsystem::US_STOCK_WEALTH_TO_GDP)
-            + (MacroAggregateSubsystem::US_HOUSE_PRICE_RESPONSE_TO_RATES * MacroAggregateSubsystem::HOUSING_WEALTH_MPC * MacroAggregateSubsystem::HOUSING_WEALTH_TO_GDP));
-        $usDollarRoute = AssetMarketSubsystem::UIP_SENSITIVITY * $pull * ((MacroAggregateSubsystem::EXPORT_PRICE_PASS_THROUGH * MacroAggregateSubsystem::EXPORT_PRICE_ELASTICITY * MacroAggregateSubsystem::US_EXPORT_SHARE)
-            + (MacroAggregateSubsystem::IMPORT_PRICE_PASS_THROUGH * MacroAggregateSubsystem::IMPORT_PRICE_ELASTICITY * MacroAggregateSubsystem::US_IMPORT_SHARE));
-        $carriedWhenFitted = (MacroAggregateSubsystem::FIT_HOUSING_WEALTH_DRIFT * MacroAggregateSubsystem::US_HOUSE_PRICE_RESPONSE_TO_RATES)
-            + (MacroAggregateSubsystem::FIT_EXCHANGE_RATE_DRIFT * AssetMarketSubsystem::UIP_SENSITIVITY);
-
-        $this->assertEqualsWithDelta(1.6, MacroAggregateSubsystem::KALDOR_MONETARY_DRAG_RESTRICTIVE + $usWealthRoute + $usDollarRoute - $carriedWhenFitted, 1e-12, 'The fitted restrictive total, routed.');
-        $this->assertEqualsWithDelta(0.9, MacroAggregateSubsystem::KALDOR_MONETARY_DRAG_ACCOMMODATIVE + $usWealthRoute + $usDollarRoute - $carriedWhenFitted, 1e-12, 'The fitted accommodative total, routed.');
-        $this->assertGreaterThan(0.0, MacroAggregateSubsystem::KALDOR_MONETARY_DRAG_ACCOMMODATIVE, 'Easing still lifts demand directly.');
-        $this->assertLessThan(MacroAggregateSubsystem::KALDOR_MONETARY_DRAG_RESTRICTIVE, MacroAggregateSubsystem::KALDOR_MONETARY_DRAG_ACCOMMODATIVE, 'and still pushes on a string.');
+        $this->assertGreaterThan(0.0, MacroAggregateSubsystem::KALDOR_MONETARY_DRAG_ACCOMMODATIVE);
+        $this->assertLessThan(MacroAggregateSubsystem::KALDOR_MONETARY_DRAG_RESTRICTIVE, MacroAggregateSubsystem::KALDOR_MONETARY_DRAG_ACCOMMODATIVE);
     }
 
     /**
@@ -1959,10 +1943,10 @@ class MacroAggregateSubsystemTest extends TestCase
     }
 
     /**
-     * The finance weight is only the finance the District has beyond what the US-fitted demand equation already holds:
-     * the two weights split GDP, and a District with the US's finance share would add no finance cycle at all.
+     * The finance weight is only the finance the District has beyond what the demand equation already holds: the two
+     * weights split GDP.
      */
-    public function testTheFinanceWeightIsTheShareBeyondTheFittedEconomy(): void
+    public function testTheFinanceWeightIsTheShareBeyondTheDemandEquation(): void
     {
         $this->assertEqualsWithDelta(
             1.0,
@@ -1970,27 +1954,24 @@ class MacroAggregateSubsystemTest extends TestCase
                 + (MacroAggregateSubsystem::FINANCE_GAP_WEIGHT * MacroAggregateSubsystem::FINANCE_CREDIT_SHARE),
             1e-15
         );
-        $us = MacroAggregateSubsystem::US_FINANCE_SHARE;
-        $this->assertEqualsWithDelta(0.0, $us - ((1.0 - $us) * $us / (1.0 - $us)), 1e-15, 'At the US share the weight vanishes.');
         $this->assertGreaterThan(0.2, MacroAggregateSubsystem::FINANCE_GAP_WEIGHT);
         $this->assertLessThan(MacroAggregateSubsystem::DISTRICT_FINANCE_SHARE, MacroAggregateSubsystem::FINANCE_GAP_WEIGHT);
     }
 
     /**
      * An open economy's demand leaks abroad: the District's imports take 1.4 times each move in domestic demand at
-     * their share of GDP (IMF WEO 2015), and the fitted US equation already leaks at the US's share, so only the
-     * excess comes out. At the US's import share nothing does.
+     * their share of GDP (IMF WEO 2015), and the demand equation's own slopes already leak at a 14.8% share, so only
+     * the excess comes out.
      */
     public function testDomesticDemandLeaksTheDistrictsExcessImportsAbroad(): void
     {
         $this->assertEqualsWithDelta(
-            MacroAggregateSubsystem::IMPORT_DEMAND_ELASTICITY * (MacroAggregateSubsystem::DISTRICT_DOMESTIC_IMPORT_SHARE - MacroAggregateSubsystem::US_DOMESTIC_IMPORT_SHARE),
+            MacroAggregateSubsystem::IMPORT_DEMAND_ELASTICITY * (MacroAggregateSubsystem::DISTRICT_DOMESTIC_IMPORT_SHARE - MacroAggregateSubsystem::DEMAND_EQUATION_IMPORT_SHARE),
             MacroAggregateSubsystem::EXCESS_IMPORT_LEAKAGE,
             1e-15
         );
-        $this->assertEqualsWithDelta(0.0, MacroAggregateSubsystem::IMPORT_DEMAND_ELASTICITY * (MacroAggregateSubsystem::US_DOMESTIC_IMPORT_SHARE - MacroAggregateSubsystem::US_DOMESTIC_IMPORT_SHARE), 1e-15, 'At the US share nothing extra leaks.');
         $this->assertEqualsWithDelta(0.406, MacroAggregateSubsystem::DISTRICT_DOMESTIC_IMPORT_SHARE, 0.001, 'Swiss imports (56.9% of GDP) less the quarter of the exports that is passed-through imports.');
-        $this->assertGreaterThan(0.3, MacroAggregateSubsystem::EXCESS_IMPORT_LEAKAGE, 'Nearly three times the US share for home use leaks about a third of every demand swing.');
+        $this->assertGreaterThan(0.3, MacroAggregateSubsystem::EXCESS_IMPORT_LEAKAGE, 'Nearly three times the equation\'s own share for home use leaks about a third of every demand swing.');
         $this->assertLessThan(0.4, MacroAggregateSubsystem::EXCESS_IMPORT_LEAKAGE, 'Gross imports would leak half: re-exports do not answer home demand.');
 
         // A demand impulse reaches the gap net of the leak.

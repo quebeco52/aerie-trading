@@ -668,12 +668,6 @@ class MacroReport
     private ?string $globalDemandGapEma = null;
 
     #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
-    private ?string $systemDepositBeta = null;
-
-    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
-    private ?string $systemDepositBetaEma = null;
-
-    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
     private ?string $moneyMarketFundShare = null;
 
     #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]

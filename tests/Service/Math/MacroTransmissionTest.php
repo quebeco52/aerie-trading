@@ -302,54 +302,12 @@ class MacroTransmissionTest extends TestCase
         $this->assertGreaterThan($neutralStarts, $creditBoomStarts, 'Positive credit-to-GDP gap must stimulate housing starts.');
     }
 
-    public function testCalculateBroadMoneyGrowth(): void
+    public function testBroadMoneyGrowsWithIncomeCreditAndPurchases(): void
     {
-        $params = [
-            'qeSens' => 0.08,
-            'sloosSens' => 0.06,
-            'gapSens' => 0.30,
-            'kappa' => 1.00,
-            'sigma' => 0.004,
-            'min' => -0.04,
-            'max' => 0.25,
-        ];
-
-        // Expansionary QE and loose credit
-        $qeGrowth = MacroTransmission::calculateBroadMoneyGrowth(
-            currentM2Growth: 0.055,
-            baseGrowth: 0.055,
-            balanceSheetIntensity: 0.50, // Active QE
-            sloosTightening: -0.10,      // Easing standards
-            outputGap: 0.02,
-            dt: 0.25,
-            dW: 0.0,
-            params: $params
-        );
-        $this->assertGreaterThan(0.055, $qeGrowth, 'Central bank balance sheet expansion must accelerate M2 broad money growth.');
-
-        // Quantitative tightening & banking credit crunch
-        $qtGrowth = MacroTransmission::calculateBroadMoneyGrowth(
-            currentM2Growth: 0.055,
-            baseGrowth: 0.055,
-            balanceSheetIntensity: -0.50, // Active QT runoff
-            sloosTightening: 0.40,        // 40% net banks tightening
-            outputGap: -0.03,
-            dt: 0.25,
-            dW: 0.0,
-            params: $params
-        );
-        $this->assertLessThan(0.055, $qtGrowth, 'QT runoff and commercial bank lending standards tightening must decelerate M2 growth.');
-        $this->assertGreaterThanOrEqual(-0.04, $qtGrowth);
-    }
-
-    /** Lending standards enter M2's target signed (Lown & Morgan 2006): easing lends deposits into being as tightening withholds them, symmetrically. */
-    public function testBroadMoneyReadsLendingStandardsBothWays(): void
-    {
-        $params = ['qeSens' => 0.0, 'sloosSens' => 0.06, 'gapSens' => 0.0, 'kappa' => 1.0, 'sigma' => 0.0, 'min' => -0.04, 'max' => 0.25];
-        $growth = fn (float $sloos): float => MacroTransmission::calculateBroadMoneyGrowth(0.04, 0.04, 0.0, $sloos, 0.0, 0.25, 0.0, $params);
-
-        $this->assertEqualsWithDelta(0.04 - $growth(0.20), $growth(-0.20) - 0.04, 1e-12, 'Easing lifts M2 as much as tightening of the same size cuts it.');
-        $this->assertGreaterThan(0.04, $growth(-0.20));
+        $this->assertEqualsWithDelta(0.045, MacroTransmission::broadMoneyGrowth(0.045, 0.0, 0.8, 0.0, 1.0), 1e-12, 'Steady leverage and no purchases: money grows with nominal income.');
+        $this->assertEqualsWithDelta(0.045 + 0.025, MacroTransmission::broadMoneyGrowth(0.045, 0.02, 0.8, 0.0, 1.0), 1e-12, 'Credit growing beyond income adds its growth.');
+        $this->assertEqualsWithDelta(0.045 + 0.05, MacroTransmission::broadMoneyGrowth(0.045, 0.0, 0.8, 0.10, 2.0), 1e-12, 'Purchases add reserves over the money stock.');
+        $this->assertLessThan(0.045, MacroTransmission::broadMoneyGrowth(0.045, -0.02, 0.8, -0.05, 1.0), 'Deleveraging and runoff shrink it.');
     }
 
     public function testMacroTransmissionHelpers(): void

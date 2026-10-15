@@ -242,19 +242,16 @@ final class FirmEconomics
     }
 
     /**
-     * Models the Metzler (1941) & Blinder (1982) macroeconomic inventory investment cycle.
-     *
-     * Evaluates inventory stock acceleration: when aggregate demand decelerates, involuntary inventory
-     * accumulation occurs (+gap). In response, firms cut production below sales to aggressively liquidate stock,
-     * driving industrial recessions. Once depleted (-gap), the restocking rebound accelerates output recovery.
+     * Metzler (1941) & Blinder (1982) inventory cycle: a demand miss builds stock involuntarily, and firms work the
+     * stock back to the level they want at their adjustment speed. Desired stocks follow expected sales (Metzler), so
+     * a slump's overhang is the miss itself, not a higher target. Exact over the step for a flow held through it.
      *
      * @param float $currentInventoryGap Current inventory overhang (+gap is excess stock, -gap is depleted).
      * @param float $outputGap           Current output gap level.
      * @param float $outputGapEma        Smoothed output gap trend.
-     * @param float $speed               Annual speed of inventory adjustment toward desired ratio.
+     * @param float $speed               Annual speed of inventory adjustment toward desired stock.
      * @param float $surpriseSens        Sensitivity of involuntary inventory build to growth slowdown.
      * @param float $dt                  Time step in years.
-     * @return float Updated inventory gap bounded between -0.15 and +0.15.
      */
     public static function calculateInventoryCycleStep(
         float $currentInventoryGap,
@@ -263,23 +260,11 @@ final class FirmEconomics
         float $speed,
         float $surpriseSens,
         float $dt,
-        float $cyclicalSens = 0.80
     ): float {
-        // Involuntary inventory change driven by unexpected demand deceleration
-        $demandDeceleration = $outputGapEma - $outputGap;
-        $involuntaryFlow = $surpriseSens * $demandDeceleration;
+        $involuntaryFlow = $surpriseSens * ($outputGapEma - $outputGap);
+        $decay = exp(-$speed * $dt);
 
-        // Cyclical stock target: contractions cause inventory-to-sales ratios to spike (overhang),
-        // while expansions lean out inventories (depletion).
-        $cyclicalTarget = -$cyclicalSens * $outputGap;
-
-        // Desired inventory correction: firms adjust production toward cyclical target
-        $targetCorrection = -$speed * ($currentInventoryGap - $cyclicalTarget);
-
-        $dInventory = ($involuntaryFlow + $targetCorrection) * $dt;
-        $newInventoryGap = $currentInventoryGap + $dInventory;
-
-        return max(-0.15, min(0.15, $newInventoryGap));
+        return ($currentInventoryGap * $decay) + ($involuntaryFlow * (1.0 - $decay) / $speed);
     }
 
     /**

@@ -197,39 +197,36 @@ class FirmEconomicsTest extends TestCase
     }
 
     /**
-     * Metzler inventory dynamics: an involuntary build on a demand miss, then correction toward a cyclical target.
+     * Metzler inventory dynamics: an involuntary build on a demand miss, worked back toward the desired stock, which
+     * follows sales, so a held slump with no surprise carries no overhang.
      */
-    public function testInventoryCycleStepBuildsOnDemandMissesAndRevertsToTheCyclicalTarget(): void
+    public function testInventoryCycleStepBuildsOnDemandMissesAndWorksTheStockBack(): void
     {
-        // Closed form: (surpriseSens * (ema - gap) + -speed * (current - -cyclicalSens * gap)) * dt, added to current.
+        // Closed form: current * e^(-speed dt) + surpriseSens * (ema - gap) * (1 - e^(-speed dt)) / speed.
+        $decay = exp(-0.5 * 0.25);
         $this->assertEqualsWithDelta(
-            0.006,
+            0.4 * 0.03 * (1.0 - $decay) / 0.5,
             FirmEconomics::calculateInventoryCycleStep(0.0, -0.03, 0.0, 0.5, 0.4, 0.25),
-            0.0000001,
+            1e-12,
             'An unexpected demand miss must build inventory by the closed form.'
         );
+        $this->assertLessThan(0.0, FirmEconomics::calculateInventoryCycleStep(0.0, 0.03, 0.0, 0.5, 0.4, 0.25), 'Unexpectedly strong demand must deplete inventory.');
 
-        // A demand surprise to the upside draws inventory down instead.
-        $this->assertLessThan(
-            0.0,
-            FirmEconomics::calculateInventoryCycleStep(0.0, 0.03, 0.0, 0.5, 0.4, 0.25),
-            'Unexpectedly strong demand must deplete inventory.'
-        );
-
-        // With no surprise and a closed gap the target is zero, so any overhang decays toward it.
         $decayed = FirmEconomics::calculateInventoryCycleStep(0.10, 0.0, 0.0, 0.5, 0.4, 0.25);
-        $this->assertLessThan(0.10, $decayed, 'An overhang must dissipate when demand is at trend.');
-        $this->assertGreaterThan(0.0, $decayed, 'Dissipation must be gradual, not instant.');
+        $this->assertEqualsWithDelta(0.10 * $decay, $decayed, 1e-12, 'An overhang decays exponentially when demand is at trend.');
 
-        // The cyclical target is signed against the output gap: contractions raise the desired inventory-to-sales ratio.
-        $contraction = FirmEconomics::calculateInventoryCycleStep(0.0, -0.05, -0.05, 0.5, 0.4, 0.25);
-        $expansion = FirmEconomics::calculateInventoryCycleStep(0.0, 0.05, 0.05, 0.5, 0.4, 0.25);
-        $this->assertGreaterThan(0.0, $contraction, 'A contraction must lift the inventory target.');
-        $this->assertLessThan(0.0, $expansion, 'An expansion must lean inventories out.');
+        $this->assertSame(0.0, FirmEconomics::calculateInventoryCycleStep(0.0, -0.05, -0.05, 0.5, 0.4, 0.25), 'A slump that surprises no one builds no stock.');
+    }
 
-        // The gap is hard-clamped so a violent step cannot run away.
-        $this->assertSame(0.15, FirmEconomics::calculateInventoryCycleStep(0.14, -0.20, 0.20, 0.5, 1.0, 1.0), 'The overhang must clamp at its ceiling.');
-        $this->assertSame(-0.15, FirmEconomics::calculateInventoryCycleStep(-0.14, 0.20, -0.20, 0.5, 1.0, 1.0), 'The shortage must clamp at its floor.');
+    /** One year in one step or in 48 lands on the same stock for a held miss. */
+    public function testInventoryCycleStepIsTimestepNeutral(): void
+    {
+        $oneStep = FirmEconomics::calculateInventoryCycleStep(0.05, -0.02, 0.01, 0.8, 0.6, 1.0);
+        $stock = 0.05;
+        for ($i = 0; $i < 48; $i++) {
+            $stock = FirmEconomics::calculateInventoryCycleStep($stock, -0.02, 0.01, 0.8, 0.6, 1.0 / 48);
+        }
+        $this->assertEqualsWithDelta($oneStep, $stock, 1e-12);
     }
 
     public function testFringeAdjustedPriceLevelReducesToCournotWithNoFringeResponseAndSoftensItOtherwise(): void

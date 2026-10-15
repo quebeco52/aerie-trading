@@ -317,46 +317,25 @@ final class MacroTransmission
     }
 
     /**
-     * Brunner-Meltzer / Friedman-Schwartz M2 Broad Money Supply & Credit Channel Dynamics.
+     * Broad money growth from what creates deposits (McLeay, Radia & Thomas 2014): nominal income, household credit
+     * growing beyond it, and the reserves the central bank's purchases add, as a share of the money stock.
      *
-     * Derives annual M2 broad money supply growth from central bank balance sheet liquidity creation (QE/QT),
-     * commercial banking credit multipliers (SLOOS underwriting standards), and output gap credit demand:
-     *   Target = BaseGrowth + betaQE * BalanceSheet - betaSLOOS * SLOOS + betaY * OutputGap
-     * Standards enter signed: easing lends deposits into being as tightening withholds them (Lown & Morgan 2006 read
-     * the signed net-tightening series).
-     *
-     * @param float $currentM2Growth  Current annual M2 money supply growth rate.
-     * @param float $baseGrowth       Long-run neutral M2 growth matching potential output and inflation target.
-     * @param float $balanceSheetIntensity Central bank balance sheet intensity (+ for QE, - for QT).
-     * @param float $sloosTightening  Net percentage of banks tightening credit standards.
-     * @param float $outputGap        Cyclical GDP output gap.
-     * @param float $dt               Time step in years.
-     * @param float $dW               Standard normal random shock.
-     * @param array{qeSens: float, sloosSens: float, gapSens: float, kappa: float, sigma: float, min: float, max: float} $params Calibration parameters.
-     * @return float Updated annual M2 money supply growth rate.
+     * @param float $nominalIncomeGrowth     Nominal income growth, a year.
+     * @param float $householdNewBorrowing   Change in household debt to income, a year.
+     * @param float $householdDebtToIncome   Household debt to income.
+     * @param float $authorityPurchasesToGdp Bonds the central bank buys over GDP, a year.
+     * @param float $broadMoneyToGdp         Broad money over GDP.
      */
-    public static function calculateBroadMoneyGrowth(
-        float $currentM2Growth,
-        float $baseGrowth,
-        float $balanceSheetIntensity,
-        float $sloosTightening,
-        float $outputGap,
-        float $dt,
-        float $dW,
-        array $params
+    public static function broadMoneyGrowth(
+        float $nominalIncomeGrowth,
+        float $householdNewBorrowing,
+        float $householdDebtToIncome,
+        float $authorityPurchasesToGdp,
+        float $broadMoneyToGdp,
     ): float {
-        $targetM2Growth = $baseGrowth
-            + ($params['qeSens'] * $balanceSheetIntensity)
-            - ($params['sloosSens'] * $sloosTightening)
-            + ($params['gapSens'] * $outputGap);
+        $creditGrowth = $householdDebtToIncome > 0.0 ? $householdNewBorrowing / $householdDebtToIncome : 0.0;
 
-        $clampedTarget = max($params['min'], min($params['max'], $targetM2Growth));
-
-        $drift = $params['kappa'] * ($clampedTarget - $currentM2Growth) * $dt;
-        $diffusion = $params['sigma'] * sqrt($dt) * $dW;
-        $newGrowth = $currentM2Growth + $drift + $diffusion;
-
-        return max($params['min'], min($params['max'], $newGrowth));
+        return $nominalIncomeGrowth + $creditGrowth + ($authorityPurchasesToGdp / $broadMoneyToGdp);
     }
 
     /**

@@ -1781,6 +1781,7 @@ class MacroEngineTest extends TestCase
 
         $stateShock = clone $stateNormal;
         $stateShock->energyPriceShock = 100.0; // 100% price surge
+        $stateShock->energyPriceIndexEma = 200.0; // against a decade trend at 100
 
         $gapNormal = $this->aggregateSubsystem->calculateOutputGap($stateNormal, $yield5y, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, $dt, $stressMultiplier);
         $gapShock  = $this->aggregateSubsystem->calculateOutputGap($stateShock, $yield5y, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, $dt, $stressMultiplier);

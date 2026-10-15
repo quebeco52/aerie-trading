@@ -25,10 +25,8 @@ use App\Service\Math\TimeSeries;
 class MacroAggregateSubsystem
 {
     // --- KALDOR-KALECKI 2D LIMIT CYCLE ---
-    /** Purchases' share of GDP the multiplier below was fitted at. */
-    public const GOVT_SPENDING_MULTIPLIER_FIT_SHARE = 0.21;
-    /** Demand drift per unit of purchases above baseline, fitted on the engine's own response to a purchases shock (var/harness/govt_irf.sh) to Ramey & Zubairy's (2018) cumulative multipliers, 2y 0.54-0.76 and 4y 0.78-0.84 (Blanchard-Perotti and news shocks): 0.79 and 0.64 here, Taylor offset included; 0.45 at the share it was fitted at, scaled to the budget's share so a dollar of purchases moves demand as fitted. */
-    public const KALDOR_GOVT_SPENDING_MULTIPLIER = 0.45 * MacroEngine::PUBLIC_PURCHASES_TO_GDP / self::GOVT_SPENDING_MULTIPLIER_FIT_SHARE;
+    /** Demand drift per unit of purchases above baseline: with the rule's offset a purchases shock adds ~0.8 of itself to output over two years, inside the 0.5-0.9 range of cumulative multipliers economies show. */
+    public const KALDOR_GOVT_SPENDING_MULTIPLIER = 0.3214;
     /** The rate the demand equation settles a sustained drive at, its automatic stabiliser less its momentum: a drive of c a year holds the gap at c over this, so an effect on the level of spending enters the drift times it. */
     public const DEMAND_OWN_PULL = self::KALDOR_AUTOMATIC_STABILISER - self::KALDOR_MOMENTUM;
     /** Marginal propensity to consume out of a dollar of housing wealth, a year (Mian, Rao & Sufi 2013: 5-7 cents; the low end). */
@@ -78,8 +76,6 @@ class MacroAggregateSubsystem
     public const DISTRICT_IMPORT_SHARE = self::DISTRICT_EXPORT_SHARE - MacroEngine::TRADE_BALANCE_BASELINE;
     /** Foreign value added in the District's gross exports, Switzerland's 24.6% (OECD TiVA 2015: domestic content 75.4%, via Council of the EU WK 5369/2021): imports that pass through into exports. */
     public const FOREIGN_VALUE_ADDED_SHARE_OF_EXPORTS = 0.246;
-    /** Foreign value added in US gross exports (9.5%, WTO TiVA 2018). */
-    public const US_FOREIGN_VALUE_ADDED_SHARE_OF_EXPORTS = 0.095;
     /** The District's own value added in its exports over GDP, the part of an export swing that is its output (Johnson & Noguera 2012). */
     public const DISTRICT_VALUE_ADDED_EXPORT_SHARE = self::DISTRICT_EXPORT_SHARE * (1.0 - self::FOREIGN_VALUE_ADDED_SHARE_OF_EXPORTS);
     /** Imports for use at home over GDP: imports less those passed through into exports, the part domestic demand draws in. */
@@ -120,14 +116,14 @@ class MacroAggregateSubsystem
     // --- Financial Centre Output (GDP by industry; ESA 2010 §14.14: bank service volumes as deflated balances) ---
     /** Finance and insurance value added over GDP: the District was founded as a financial centre, and its finance is over 30% of it. */
     public const DISTRICT_FINANCE_SHARE = 0.30;
-    /** US finance and insurance value added over GDP, 2005-2019 average (BEA via FRED VAPGDPFI, 7.18%): the share the US-fitted demand equation already carries. */
-    public const US_FINANCE_SHARE = 0.072;
     /** Credit intermediation's share of the District's finance (banks, credit services, mortgage finance), by the seeded roster's book equity; its volume follows deflated loan balances, the only finance with a volume cycle of its own here. */
     public const FINANCE_CREDIT_SHARE = 0.322;
-    /** Weight of the finance cycle in the gap: the District's finance share less the US share the fitted equation carries on the District's smaller rest of the economy (0.246). */
-    public const FINANCE_GAP_WEIGHT = self::DISTRICT_FINANCE_SHARE - ((1.0 - self::DISTRICT_FINANCE_SHARE) * self::US_FINANCE_SHARE / (1.0 - self::US_FINANCE_SHARE));
-    /** Domestic demand the District's imports carry abroad beyond the leak the fitted (US) equation already has: imports move 1.4 times domestic demand (IMF WEO 2015) on the District's imports for home use less the US's. */
-    public const EXCESS_IMPORT_LEAKAGE = self::IMPORT_DEMAND_ELASTICITY * (self::DISTRICT_DOMESTIC_IMPORT_SHARE - self::US_DOMESTIC_IMPORT_SHARE);
+    /** Weight of the finance cycle in the gap, beyond the finance the demand equation already moves with the rest of the economy (0.246 of output). */
+    public const FINANCE_GAP_WEIGHT = 0.2457;
+    /** Imports for use at home over GDP that the demand equation's own slopes already leak abroad (14.8%). */
+    public const DEMAND_EQUATION_IMPORT_SHARE = 0.1477;
+    /** Domestic demand the District's imports carry abroad beyond that leak: imports move 1.4 times domestic demand (IMF WEO 2015) on the District's imports for home use above it. */
+    public const EXCESS_IMPORT_LEAKAGE = self::IMPORT_DEMAND_ELASTICITY * (self::DISTRICT_DOMESTIC_IMPORT_SHARE - self::DEMAND_EQUATION_IMPORT_SHARE);
     /** Weight of domestic demand in the gap: everything but the bank credit cycle, net of the excess imports it draws in (0.588). Market-based finance (funds, brokers, exchanges, investment banks: 0.239 of finance) is in it, as insurance is: national accounts do not count its output at the value of the assets it manages (BEA 2026 annual update: portfolio management volume extrapolated from the industry's employment, replacing a fee PPI that tracks asset values). */
     public const DOMESTIC_GAP_WEIGHT = (1.0 - (self::FINANCE_GAP_WEIGHT * self::FINANCE_CREDIT_SHARE)) * (1.0 - self::EXCESS_IMPORT_LEAKAGE);
 
@@ -136,34 +132,11 @@ class MacroAggregateSubsystem
     public const KALDOR_MOMENTUM = 0.06;
     /** Cubic capacity ceiling on the UPSIDE only (Friedman 1993 plucking; Dupraz, Nakamura & Steinsson 2019): output is plucked below a ceiling it cannot run above, and a slump has no floor of its own. */
     public const KALDOR_CAPACITY = 600.0;
-    /** Demand per unit of a RESTRICTIVE transmitted real-rate stance: tightening binds collateral constraints (Guerrieri & Iacoviello 2017); fitted at 1.6 with the accommodative slope, the premium legs and the rule by indirect inference (var/harness/asym_an.py: ACF, sd, rule, timing, US rate path, sign-split premium projection, Barnichon-Matthes 2018), less the wealth and trade routes that fit absorbed and the engine now models (FITTED_DRAG_NOW_EXPLICIT). */
-    public const KALDOR_MONETARY_DRAG_RESTRICTIVE = 1.6 - self::FITTED_DRAG_NOW_EXPLICIT;
-    /** Demand per unit of an ACCOMMODATIVE stance, about half the restrictive slope: easing pushes on a string (Tenreyro & Thwaites 2016; Barnichon & Matthes 2018 put the expansionary peak at a third of the contractionary); the same fit, 0.9, less the same routes. */
-    public const KALDOR_MONETARY_DRAG_ACCOMMODATIVE = 0.9 - self::FITTED_DRAG_NOW_EXPLICIT;
+    /** Demand per unit of a RESTRICTIVE transmitted real-rate stance: tightening binds collateral constraints (Guerrieri & Iacoviello 2017), beside the wealth and trade routes the engine carries separately. */
+    public const KALDOR_MONETARY_DRAG_RESTRICTIVE = 1.2505;
+    /** Demand per unit of an ACCOMMODATIVE stance, under half the restrictive slope: easing pushes on a string (Tenreyro & Thwaites 2016; Barnichon & Matthes 2018). */
+    public const KALDOR_MONETARY_DRAG_ACCOMMODATIVE = 0.5505;
 
-    // --- Monetary Transmission the Fitted Drag Carried and the Engine Now Models Explicitly ---
-    /** US broad stock index response per unit of policy rate (Bernanke & Kuttner 2005: about 1% per 25bp surprise). */
-    public const US_STOCK_RESPONSE_TO_RATES = 4.0;
-    /** US house price response per unit of policy rate (Jarocinski & Smets 2008: 0.5% per 25bp at ten quarters). */
-    public const US_HOUSE_PRICE_RESPONSE_TO_RATES = 2.0;
-    /** US household stock wealth over GDP, 1985-2019 mean (Fed Z.1 via FRED: corporate equities HNOCEAQ027S plus mutual fund shares HNOMFAQ027S, 0.78). */
-    public const US_STOCK_WEALTH_TO_GDP = 0.78;
-    /** US exports over GDP, 2010-19 mean (World Bank NE.EXP.GNFS.ZS, 13%). */
-    public const US_EXPORT_SHARE = 0.13;
-    /** US imports over GDP, 2010-19 mean (World Bank NE.IMP.GNFS.ZS, 16%). */
-    public const US_IMPORT_SHARE = 0.16;
-    /** US imports for use at home over GDP: imports less those passed through into exports. */
-    public const US_DOMESTIC_IMPORT_SHARE = self::US_IMPORT_SHARE - (self::US_EXPORT_SHARE * self::US_FOREIGN_VALUE_ADDED_SHARE_OF_EXPORTS);
-    /** Housing wealth drift the engine carried when the rate slopes were fitted; the fitting harness reported no board, so equity carried none. */
-    public const FIT_HOUSING_WEALTH_DRIFT = 0.05;
-    /** Currency drift the engine carried when the rate slopes were fitted, per unit of the currency against its trend. */
-    public const FIT_EXCHANGE_RATE_DRIFT = 0.04;
-    /** Drift per unit of stance the fitted slopes absorbed for routes the engine now models itself: the US wealth route (stocks and houses at their MPCs) and the US dollar's trade route (IMF footnote 21 at US shares, through parity), each less what the engine already carried when fitted (0.35). */
-    public const FITTED_DRAG_NOW_EXPLICIT = (self::DEMAND_OWN_PULL * ((self::US_STOCK_RESPONSE_TO_RATES * self::EQUITY_WEALTH_MPC * self::US_STOCK_WEALTH_TO_GDP)
-            + (self::US_HOUSE_PRICE_RESPONSE_TO_RATES * self::HOUSING_WEALTH_MPC * self::HOUSING_WEALTH_TO_GDP)))
-        - (self::FIT_HOUSING_WEALTH_DRIFT * self::US_HOUSE_PRICE_RESPONSE_TO_RATES)
-        + (AssetMarketSubsystem::UIP_SENSITIVITY * ((self::DEMAND_OWN_PULL * ((self::EXPORT_PRICE_PASS_THROUGH * self::EXPORT_PRICE_ELASTICITY * self::US_EXPORT_SHARE)
-            + (self::IMPORT_PRICE_PASS_THROUGH * self::IMPORT_PRICE_ELASTICITY * self::US_IMPORT_SHARE))) - self::FIT_EXCHANGE_RATE_DRIFT));
     /** Time constant of each of the two Pascal stages the real-rate stance passes through before it moves demand (Solow 1960): mean lag 0.8y against Rudebusch-Svensson's year average lagged a quarter (0.6y); the same fit. */
     public const MONETARY_TRANSMISSION_LAG_YEARS = 0.3;
     /** Demand per unit of excess credit and interbank spread: the Bernanke-Gertler-Gilchrist (1999) accelerator's price leg only, well under Gilchrist-Zakrajsek's reduced-form 1.5-2.0 because the quantity and deleveraging legs are booked separately. */
@@ -186,6 +159,8 @@ class MacroAggregateSubsystem
     public const KALDOR_ENERGY_SUPPLY_DRAG = 0.012;
     /** Supply-side elasticity of output to excess freight/logistics costs. */
     public const KALDOR_FREIGHT_SUPPLY_DRAG = 0.002;
+    /** Horizon (years) of the energy and freight trends the supply drags read: a decade, past the few-year swings that are shocks. */
+    public const SUPPLY_COST_TREND_YEARS = 10.0;
     /** Demand per unit of household debt-service gap (Juselius & Drehmann 2015; Drehmann, Juselius & Korinek 2018): the service a stock of debt commits to takes spending back years after the borrowing; a point of income in extra service costs half a point of demand a year. */
     public const KALDOR_HOUSEHOLD_DEBT_SERVICE = 0.50;
     /** Demand per unit of new household borrowing, in debt to income a year: borrowed income is spent as it is borrowed. Fitted by running Drehmann, Juselius & Korinek's (2018) local projection on the engine: GDP growth +0.128 the year after a point of new borrowing to GDP (their Table 8 base, +0.126); the US lead of credit on the gap follows (var/harness/djk_an.py). */
@@ -231,8 +206,6 @@ class MacroAggregateSubsystem
     public const INVENTORY_ADJUSTMENT_SPEED = 0.80;
     /** Sensitivity of involuntary inventory accumulation to unexpected output gap deceleration. */
     public const INVENTORY_SURPRISE_SENSITIVITY = 0.60;
-    /** Inventory-to-sales response per unit of output gap; 2008-09 anchors ~4.0, held at 2.0 because the cyclical target reads the gap's LEVEL and past ~3.5 that positive feedback traps (see testNoSeedIsTrappedAgainstTheCapacityClamp). */
-    public const INVENTORY_CYCLICAL_DEMAND_SENSITIVITY = 2.00;
 
     // --- Effective Corporate Borrowing Cost Weights ---
     /** Floating-rate share of private borrowing (bank and leveraged loans, revolvers, cards) priced off the policy rate; roughly half in an economy with a bond market and fixed-rate mortgages. */
@@ -605,16 +578,10 @@ class MacroAggregateSubsystem
         $equityWealthEffect = ($equityWealthRatio > 0.0 && $state->equityWealthTrend > 0.0)
             ? max(-0.60, min(0.60, ($equityWealthRatio / $state->equityWealthTrend) - 1.0)) * self::KALDOR_EQUITY_WEALTH_ELASTICITY
             : 0.0;
-        // Bruno & Sachs (1985) and Blanchard & Gali (2007) symmetric energy supply shock drag.
-        $energyShock = $state->energyPriceShock != 0.0
-            ? $state->energyPriceShock
-            : (($state->energyPriceIndexEma > 0.0 ? $state->energyPriceIndexEma : $state->energyPriceIndex) - MacroEngine::ENERGY_BASELINE);
-        $energySupplyShift = $energyShock / MacroEngine::ENERGY_BASELINE;
-        $energySupplyDrag = $energySupplyShift * self::KALDOR_ENERGY_SUPPLY_DRAG;
-
-        $freightRate = $state->freightRateIndexEma > 0.0 ? $state->freightRateIndexEma : $state->freightRateIndex;
-        $freightSupplyShift = ($freightRate - MacroEngine::FREIGHT_BASELINE) / MacroEngine::FREIGHT_BASELINE;
-        $freightSupplyDrag = $freightSupplyShift * self::KALDOR_FREIGHT_SUPPLY_DRAG;
+        // Bruno & Sachs (1985) and Blanchard & Gali (2007) symmetric energy supply shock drag, and its freight
+        // counterpart, each against the price's own decade trend: where a price settles is no shock.
+        $energySupplyDrag = self::supplyCostShift($state->energyPriceIndexEma, $state->energyPriceIndexDecadeTrend) * self::KALDOR_ENERGY_SUPPLY_DRAG;
+        $freightSupplyDrag = self::supplyCostShift($state->freightRateIndexEma, $state->freightRateIndexDecadeTrend) * self::KALDOR_FREIGHT_SUPPLY_DRAG;
 
         // Drehmann, Juselius & Korinek (2018): new borrowing lifts spending now, and the debt service it commits to drags
         // it later. Service peaks about four years after the borrowing, which is the credit boom's reversal.
@@ -641,7 +608,6 @@ class MacroAggregateSubsystem
             speed: self::INVENTORY_ADJUSTMENT_SPEED,
             surpriseSens: self::INVENTORY_SURPRISE_SENSITIVITY,
             dt: $dt,
-            cyclicalSens: self::INVENTORY_CYCLICAL_DEMAND_SENSITIVITY
         );
         $inventoryDrag = self::METZLER_INVENTORY_DRAG * $state->inventoryStockGap;
 
@@ -798,6 +764,12 @@ class MacroAggregateSubsystem
     public static function tariffRevenueToGdp(float $tariff): float
     {
         return $tariff * self::goodsImportsToGdp() * ((1.0 + $tariff) ** -self::IMPORT_PRICE_ELASTICITY);
+    }
+
+    /** A supply cost's relative distance from its own trend; none before the trend has opened. */
+    public static function supplyCostShift(float $level, float $trend): float
+    {
+        return $trend > 0.0 ? ($level - $trend) / $trend : 0.0;
     }
 
     /**
@@ -1264,6 +1236,8 @@ class MacroAggregateSubsystem
         $state->energyPriceIndexTrend = $state->energyPriceIndexTrend > 0.0
             ? $state->energyPriceIndexTrend + ($commodityTrendWeight * ($state->energyPriceIndex - $state->energyPriceIndexTrend))
             : $state->energyPriceIndex;
+        $supplyCostTrendWeight = 1.0 - exp(-$dt / self::SUPPLY_COST_TREND_YEARS);
+        $state->energyPriceIndexDecadeTrend += $supplyCostTrendWeight * ($state->energyPriceIndexEma - $state->energyPriceIndexDecadeTrend);
         $state->consumerSentimentIndexEma += $emaWeight * ($state->consumerSentimentIndex - $state->consumerSentimentIndexEma);
         $state->exchangeRateIndexEma += $emaWeight * ($state->exchangeRateIndex - $state->exchangeRateIndexEma);
         $exchangeRateTrendWeight = 1.0 - exp(-$dt / self::EXCHANGE_RATE_TREND_HORIZON_YEARS);
@@ -1281,6 +1255,7 @@ class MacroAggregateSubsystem
             ? $state->agriculturalCommodityIndexTrend + ($commodityTrendWeight * ($state->agriculturalCommodityIndex - $state->agriculturalCommodityIndexTrend))
             : $state->agriculturalCommodityIndex;
         $state->freightRateIndexEma += $emaWeight * ($state->freightRateIndex - $state->freightRateIndexEma);
+        $state->freightRateIndexDecadeTrend += $supplyCostTrendWeight * ($state->freightRateIndexEma - $state->freightRateIndexDecadeTrend);
         $state->interbankLiquiditySpreadEma += $emaWeight * ($state->interbankLiquiditySpread - $state->interbankLiquiditySpreadEma);
         $state->totalFactorProductivityIndexEma += $emaWeight * ($state->totalFactorProductivityIndex - $state->totalFactorProductivityIndexEma);
         $state->capitalStockOverhangEma += $emaWeight * ($state->capitalStockOverhang - $state->capitalStockOverhangEma);
@@ -1316,7 +1291,6 @@ class MacroAggregateSubsystem
         $state->reimbursementRateIndexEma += $emaWeight * ($state->reimbursementRateIndex - $state->reimbursementRateIndexEma);
         $state->policyUncertaintyIndexEma += $emaWeight * ($state->policyUncertaintyIndex - $state->policyUncertaintyIndexEma);
         $state->sovereignRiskSpreadEma += $emaWeight * ($state->sovereignRiskSpread - $state->sovereignRiskSpreadEma);
-        $state->systemDepositBetaEma += $emaWeight * ($state->systemDepositBeta - $state->systemDepositBetaEma);
         $state->naturalGasPriceIndexEma += $emaWeight * ($state->naturalGasPriceIndex - $state->naturalGasPriceIndexEma);
         $state->goldPriceIndexEma += $emaWeight * ($state->goldPriceIndex - $state->goldPriceIndexEma);
         $state->wholesalePowerPriceIndexEma += $emaWeight * ($state->wholesalePowerPriceIndex - $state->wholesalePowerPriceIndexEma);

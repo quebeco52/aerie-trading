@@ -952,26 +952,6 @@ class CommercialBankBusinessModelTest extends TestCase
 
     // --- Deposits Channel ---
 
-    /** Drechsler, Savov & Schnabl (2017): what the bank pays depositors is its own franchise beta scaled by how far the system is passing rates through. */
-    public function testDepositInterestFollowsTheSystemDepositBeta(): void
-    {
-        $stock = new Stock();
-        $stock->setTicker('LAKE');
-        $stock->setCustomerDeposits('1000.0');
-        $stock->setWholesaleDebt('0.0');
-        $stock->setFloatingDebtRatio('0.0');
-
-        $neutralSystem = MacroStateDTO::fromArray(['system_deposit_beta_ema' => MacroEngine::SYSTEM_DEPOSIT_BETA_BASE]);
-        $tightSystem = MacroStateDTO::fromArray(['system_deposit_beta_ema' => 1.5 * MacroEngine::SYSTEM_DEPOSIT_BETA_BASE]);
-
-        $withoutMacro = $this->model->calculateInterestExpenseAndWholesaleRate($stock, 0.05, 0.05, 0.05, 0.05, 15.0, 100.0, 1000.0);
-        $neutral = $this->model->calculateInterestExpenseAndWholesaleRate($stock, 0.05, 0.05, 0.05, 0.05, 15.0, 100.0, 1000.0, $neutralSystem);
-        $tight = $this->model->calculateInterestExpenseAndWholesaleRate($stock, 0.05, 0.05, 0.05, 0.05, 15.0, 100.0, 1000.0, $tightSystem);
-
-        $this->assertEqualsWithDelta($withoutMacro->interestExpense, $neutral->interestExpense, 1e-9, 'At the normalisation level the system scale is one, so a caller without a macro reading gets the same answer.');
-        $this->assertEqualsWithDelta(1.5 * $neutral->interestExpense, $tight->interestExpense, 1e-9, 'A system passing half as much again through raises by half the deposit interest on the same franchise.');
-    }
-
     /**
      * Deposits reprice toward 0.46 of the policy rate over three quarters (Drechsler, Savov & Schnabl 2017, 2021): a
      * point on the policy rate lifts what the bank pays by 1 - exp(-0.25/0.75) of 46bp in the first quarter, and by

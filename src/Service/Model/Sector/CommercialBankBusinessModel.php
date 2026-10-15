@@ -384,7 +384,7 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
         $customerDeposits = (float) $stock->getCustomerDeposits();
         $wholesaleDebt = (float) $stock->getWholesaleDebt();
 
-        $depositRate = $this->resolveDepositRate($policyRate, $macroState->systemDepositBetaEma);
+        $depositRate = $this->resolveDepositRate($policyRate, MacroEngine::SYSTEM_DEPOSIT_BETA_BASE);
         $blendedWholesaleRate = ($floatingRatio * ($policyRate + $macroState->interbankLiquiditySpreadEma)) + ((1.0 - $floatingRatio) * $macroState->yield5yEma) + (float) $stock->getCreditSpread();
 
         $allowedWholesaleLeverage = min($wholesaleDebt / $effectiveEquity, max(0.0, $this->getWholesaleLeverageLimit()));
@@ -466,7 +466,7 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
     {
         $point = 0.01;
         $policyRate = $macroState->policyRateEma;
-        $systemBeta = $macroState->systemDepositBetaEma;
+        $systemBeta = MacroEngine::SYSTEM_DEPOSIT_BETA_BASE;
         $depositChange = ($this->resolveDepositRate($policyRate + $point, $systemBeta) - $this->resolveDepositRate($policyRate, $systemBeta))
             * (1.0 - exp(-static::BETA_HORIZON_YEARS / self::DEPOSIT_REPRICING_YEARS));
 
@@ -626,7 +626,7 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
         foreach ($parts as $key => [$marketYield, $repricingYears]) {
             $streams->registerState($key, TimeSeries::calculateDistributedLag($streams->getPersistedState($key, $marketYield), $marketYield, $quarter, $repricingYears));
         }
-        $longRunDepositRate = $this->resolveDepositRate($macroState->policyRateEma, $macroState->systemDepositBetaEma);
+        $longRunDepositRate = $this->resolveDepositRate($macroState->policyRateEma, MacroEngine::SYSTEM_DEPOSIT_BETA_BASE);
         $streams->registerState(self::STATE_DEPOSIT_RATE, TimeSeries::calculateDistributedLag($streams->getPersistedState(self::STATE_DEPOSIT_RATE, $longRunDepositRate), $longRunDepositRate, $quarter, self::DEPOSIT_REPRICING_YEARS));
         $streams->registerState(self::STATE_FLOATING_LOAN_SHARE, $pricing['floating_share']);
         $streams->registerState(self::STATE_LOAN_SPREAD, $pricing['loan_spread']);
@@ -1059,7 +1059,7 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
             return (float) $momentum[self::STATE_DEPOSIT_RATE];
         }
 
-        return $this->resolveDepositRate($policyRate, $macroState !== null ? $macroState->systemDepositBetaEma : self::DEPOSIT_BETA_NORMALIZATION_BASELINE);
+        return $this->resolveDepositRate($policyRate, MacroEngine::SYSTEM_DEPOSIT_BETA_BASE);
     }
 
     /** A deposit bank's own beta at the neutral rate: the system's (its pass-through is the rate cycle's). */
@@ -1355,7 +1355,6 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
             'residential_property_index_ema',
             'retail_default_rate_ema',
             'sloos_tightening_index_ema',
-            'system_deposit_beta_ema',
             'yield_10y_ema',
             'yield_2y_ema',
             'yield_30y_ema',

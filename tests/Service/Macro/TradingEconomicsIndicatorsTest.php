@@ -238,8 +238,8 @@ class TradingEconomicsIndicatorsTest extends TestCase
         // 1. Central bank quantitative easing (QE) & expansionary bank credit
         $qeState = (new MacroStateBuilder())->build();
         $qeState->balanceSheetIntensity = 0.60;           // Active QE bond buying
-        $qeState->sloosTighteningIndexEma = -0.10;        // Easing credit standards
-        $qeState->outputGap = 0.02;
+        $qeState->authorityHoldingsToGdpEma = 0.0;        // bought since the year began
+        $qeState->householdNewBorrowing = 0.01;           // households borrowing ahead of income
         $qeState->moneySupplyGrowth = $neutralGrowth;
 
         $this->monetaryPolicySubsystem->calculateMoneySupplyGrowth($qeState, $dt, $tfpGrowth);
@@ -252,9 +252,9 @@ class TradingEconomicsIndicatorsTest extends TestCase
 
         // 2. Central bank quantitative tightening (QT) & credit crunch
         $qtState = (new MacroStateBuilder())->build();
-        $qtState->balanceSheetIntensity = -0.60;          // Aggressive balance sheet runoff (QT)
-        $qtState->sloosTighteningIndexEma = 0.45;         // 45% net banks tightening lending
-        $qtState->outputGap = -0.025;
+        $qtState->balanceSheetIntensity = 0.0;            // holdings run off
+        $qtState->authorityHoldingsToGdpEma = 0.10;       // from a year ago's book
+        $qtState->householdNewBorrowing = -0.02;          // households deleveraging
         $qtState->moneySupplyGrowth = $neutralGrowth;
 
         $this->monetaryPolicySubsystem->calculateMoneySupplyGrowth($qtState, $dt, $tfpGrowth);

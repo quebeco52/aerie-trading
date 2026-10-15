@@ -109,6 +109,10 @@ readonly class MacroStateDTO
         public float $energyPriceIndex = 100.0,
         public float $energyPriceIndexEma = 100.0,
         public float $energyPriceIndexTrend = 0.0,
+        /** Decade trend of the energy index the supply drag reads (MacroAggregateSubsystem::supplyCostShift()). */
+        public float $energyPriceIndexDecadeTrend = MacroEngine::ENERGY_BASELINE,
+        /** Decade trend of the freight index the supply drag reads. */
+        public float $freightRateIndexDecadeTrend = MacroEngine::FREIGHT_BASELINE,
         public float $energyPriceShock = 0.0,
         public float $energyBasePrice = 100.0,
         public float $energySupplyEma = MacroEngine::ENERGY_BASELINE,
@@ -367,8 +371,6 @@ readonly class MacroStateDTO
         public float $wholesalePowerPriceIndex = MacroEngine::WHOLESALE_POWER_BASELINE,
         public float $wholesalePowerPriceIndexEma = MacroEngine::WHOLESALE_POWER_BASELINE,
         public float $powerHeatRateLog = 0.0,
-        public float $systemDepositBeta = MacroEngine::SYSTEM_DEPOSIT_BETA_BASE,
-        public float $systemDepositBetaEma = MacroEngine::SYSTEM_DEPOSIT_BETA_BASE,
         public float $moneyMarketFundShare = MacroEngine::MMF_SHARE_BASE,
         public float $moneyMarketFundShareEma = MacroEngine::MMF_SHARE_BASE,
         public float $sovereignRiskSpread = 0.001,
@@ -468,6 +470,8 @@ readonly class MacroStateDTO
         public float $moneySupplyGrowthEma = MacroEngine::M2_BASE_GROWTH,
         /** M2 growth's measured trend, the level its cyclical readers compare it with (App\Service\Macro\Subsystem\MonetaryPolicySubsystem::calculateMoneySupplyGrowth()). */
         public float $moneySupplyGrowthTrend = MacroEngine::M2_BASE_GROWTH,
+        /** The Authority's bond holdings over GDP, averaged over a year: what turns its purchases into a flow of new money (MonetaryPolicySubsystem::calculateMoneySupplyGrowth()). */
+        public float $authorityHoldingsToGdpEma = 0.0,
         public float $sovereignFundDomesticEquity = 0.0,
         public float $sovereignFundForeignEquity = 0.0,
         public float $sovereignFundForeignBonds = 0.0,

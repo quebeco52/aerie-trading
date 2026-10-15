@@ -248,7 +248,7 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
         $depositRatio = $totalDebt > 0 ? ($customerDeposits / $totalDebt) : 0.0;
 
         // Credit services require highly competitive APYs on their high-yield savings accounts
-        $depositRate = $this->resolveDepositRate($policyRate, $macroState->systemDepositBetaEma);
+        $depositRate = $this->resolveDepositRate($policyRate, MacroEngine::SYSTEM_DEPOSIT_BETA_BASE);
         $blendedWholesaleRate = ($floatingRatio * $policyRate) + ((1.0 - $floatingRatio) * $yield5y) + $structuralSpread;
 
         $actualLeverage = $effectiveEquity > 0 ? ($totalDebt / $effectiveEquity) : 0.0;
@@ -423,7 +423,6 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
             'recession_probability_ema',
             'retail_default_rate_ema',
             'sloos_tightening_index_ema',
-            'system_deposit_beta_ema',
             'yield_10y_ema',
             'yield_2y_ema',
             'yield_30y_ema',

@@ -369,7 +369,6 @@ class ShadowBankBusinessModel extends CommercialBankBusinessModel
             'residential_wealth_trend',
             'retail_default_rate_ema',
             'sloos_tightening_index_ema',
-            'system_deposit_beta_ema',
             'yield_10y_ema',
             'yield_2y_ema',
             'yield_30y_ema',

@@ -596,20 +596,34 @@ class MonetaryPolicySubsystemTest extends TestCase
         );
     }
 
-    public function testCalculateMoneySupplyGrowth(): void
+    /** Loans create deposits: household credit growing beyond income adds its growth rate to money's. */
+    public function testHouseholdBorrowingCreatesMoney(): void
     {
-        $dt = 0.25;
-        $tfp = MacroEngine::TFP_DRIFT;
-        $neutralGrowth = MacroEngine::TARGET_INFLATION + $tfp + MacroEngine::STRUCTURAL_LABOR_GROWTH_RATE;
+        $neutralGrowth = MacroEngine::TARGET_INFLATION + MacroEngine::TFP_DRIFT + MacroEngine::STRUCTURAL_LABOR_GROWTH_RATE;
+        $state = new MacroState();
+        $state->householdNewBorrowing = 0.02;
+        $state->householdDebtToIncome = 0.80;
 
-        $stateQe = new MacroState();
-        $stateQe->balanceSheetIntensity = 0.50; // Active QE
-        $stateQe->sloosTighteningIndexEma = -0.10;
-        $stateQe->outputGap = 0.02;
-        $stateQe->moneySupplyGrowth = $neutralGrowth;
+        $this->subsystem->calculateMoneySupplyGrowth($state, 0.25, MacroEngine::TFP_DRIFT);
 
-        $this->subsystem->calculateMoneySupplyGrowth($stateQe, $dt, $tfp);
-        $this->assertGreaterThan($neutralGrowth, $stateQe->moneySupplyGrowth, 'QE and bank lending expansion must accelerate broad money growth');
+        $this->assertEqualsWithDelta($neutralGrowth + (0.02 / 0.80), $state->moneySupplyGrowth, 1e-12);
+    }
+
+    /** The Authority's purchases add reserves: a programme bought over a year adds its size, over the money stock, to that year's growth, and nothing once it is held. */
+    public function testPurchasesAddMoneyWhileTheyAreBought(): void
+    {
+        $neutralGrowth = MacroEngine::TARGET_INFLATION + MacroEngine::TFP_DRIFT + MacroEngine::STRUCTURAL_LABOR_GROWTH_RATE;
+        $state = new MacroState();
+        $state->balanceSheetIntensity = MonetaryPolicySubsystem::QE_MAX_SUPPRESSION;
+        $dt = 1.0 / 48.0;
+        $added = 0.0;
+        for ($tick = 0; $tick < 48 * 30; ++$tick) {
+            $this->subsystem->calculateMoneySupplyGrowth($state, $dt, MacroEngine::TFP_DRIFT);
+            $added += ($state->moneySupplyGrowth - $neutralGrowth) * $dt;
+        }
+
+        $this->assertEqualsWithDelta(MonetaryPolicySubsystem::QE_HOLDINGS_TO_GDP_AT_FULL_PROGRAM / MonetaryPolicySubsystem::BROAD_MONEY_TO_GDP, $added, 1e-6, 'The whole programme, once, over the money stock.');
+        $this->assertEqualsWithDelta($neutralGrowth, $state->moneySupplyGrowth, 1e-6, 'Held holdings create no new money.');
     }
 
     /**
@@ -1351,14 +1365,6 @@ class MonetaryPolicySubsystemTest extends TestCase
         }
 
         return $state;
-    }
-
-    /** Drechsler, Savov & Schnabl (2017): deposits pass 0.46 of the policy rate through at every level, so the spread banks keep scales with the rate. */
-    public function testTheSystemPassesTheSameShareOfTheRateThroughAtEveryLevel(): void
-    {
-        foreach ([0.0, MacroEngine::BASE_NATURAL_RATE + MacroEngine::TARGET_INFLATION, 0.05] as $policyRate) {
-            $this->assertEqualsWithDelta(0.46, $this->settledDepositChannel($policyRate)->systemDepositBeta, 1e-12);
-        }
     }
 
     public function testMoneyFundsGainShareOnlyWhenTheDepositSpreadOpens(): void

@@ -773,7 +773,10 @@ class CreditFiscalSubsystem
         $state->sovereignFundBudgetInflow = ($funded && $belowFloor > 0.0)
             ? $belowFloor * $state->sovereignFundDollarsPerGdp * $state->nominalGdpIndex
             : 0.0;
-        $state->sovereignDebtToGdp = max(MacroEngine::SOVEREIGN_DEBT_FLOOR, $state->sovereignDebtToGdp);
+        // The floor is where the fund sweeps the surplus; with no fund the surplus stays with the Exchequer as net assets.
+        if ($funded) {
+            $state->sovereignDebtToGdp = max(MacroEngine::SOVEREIGN_DEBT_FLOOR, $state->sovereignDebtToGdp);
+        }
 
         // IMF GFSM 2014 net debt: gross debt less the debt instruments the government holds, which here is the
         // sovereign fund's paper sleeve (its equities are not debt instruments). Equal to gross with no fund.

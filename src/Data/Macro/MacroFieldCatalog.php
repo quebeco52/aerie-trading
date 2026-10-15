@@ -70,7 +70,6 @@ final class MacroFieldCatalog
         'government_spending_index_ema' => ['label' => 'Government spending', 'unit' => self::UNIT_INDEX],
         'allied_defense_spending_index_ema' => ['label' => 'Allied defence spending', 'unit' => self::UNIT_INDEX],
         'reimbursement_rate_growth' => ['label' => 'Reimbursement update', 'unit' => self::UNIT_PERCENT],
-        'system_deposit_beta_ema' => ['label' => 'Deposit beta', 'unit' => self::UNIT_PERCENT],
         'money_market_fund_share_ema' => ['label' => 'Money-market share', 'unit' => self::UNIT_PERCENT],
         'commercial_property_index_ema' => ['label' => 'Commercial property', 'unit' => self::UNIT_INDEX],
         'commercial_market_rent' => ['label' => 'Commercial rents', 'unit' => self::UNIT_LEVEL],
