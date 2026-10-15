@@ -16,3 +16,11 @@ No fund / fund: debt mean 80 → 44% (t −4.8) / 61 → 50% (t −10.7); debt m
 Recession share (old: Sahm proxy) 23.5 → 7.8% (no fund), 21.0 → 9.2% (fund); 10 / 9 recessions per century.
 Gap sd 2.00 → 2.18 (t 0.9) / 2.04 → 2.39 (t 2.2: fund stabilisation gone, stabiliser 0.35 → 0.113). Inflation mean
 +0.08 / +0.07pp. No explosions (max |gap| 7.3%).
+
+## Phase 3 (monetary), 4 seeds, paired vs baseline seeds 1-4
+Rule weights tried on the Phase 3 code (no fund): Charter 0.5/0.5 (total inflation 1.5) gap sd 3.71%, unemp sd 2.70,
+max |gap| 10.3%, rate dq sd 19bp; balanced 0.5/1.0 gap sd 2.85, unemp sd 2.03; 1.6/1.5 gap sd 2.28, unemp sd 1.51.
+Meetings and the deleted recession-regime/stress latch move little (2.18 → 2.28 at the old weights). User chose 1.5/1.5.
+Final (1.5/1.5): no fund gap sd 2.28 (old 2.00, t 1.2), unemp sd 1.51, rate dq sd 29bp (old 36), recession share 8.4%;
+fund gap sd 2.59 (old 2.04, t 2.4). Dissents at a two-step threshold: 5.0, 0.2, 2.7 a year on seeds 1-3 (one step gave
+11 and 3.3).

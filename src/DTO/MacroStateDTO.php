@@ -94,7 +94,6 @@ readonly class MacroStateDTO
         /** @var list<float> The unemployment rate at each of the last month ends, oldest first, as many as the Sahm rule reads. */
         public array $unemploymentMonthly = [],
         /** The Sahm rule's reading: the three-month average unemployment rate above its lowest of the twelve months before (App\Service\Macro\Subsystem\LaborMarketSubsystem::recordSahmIndicator()). */
-        public float $sahmRecessionIndicator = 0.0,
         /** Real GDP summed over the quarter so far, and the years it covers: the statistics office's quarterly average (MacroAggregateSubsystem::recordQuarterlyRealGdp()). */
         public float $realGdpQuarterAccrued = 0.0,
         public float $realGdpQuarterElapsed = 0.0,
@@ -178,6 +177,15 @@ readonly class MacroStateDTO
         public float $tipsBreakevenQuotedEma = MacroEngine::TARGET_INFLATION,
         public float $policyRate = self::OPENING_POLICY_RATE,
         public float $policyRateEma = self::OPENING_POLICY_RATE,
+        /** The Authority's view of the right rate, which closes on the rule between meetings; a meeting rounds it to the step (MonetaryPolicySubsystem::updatePolicyRate()). */
+        public float $policyRateShadow = self::OPENING_POLICY_RATE,
+        /** The decision the market expects at the next meeting. */
+        public float $policyRateExpected = self::OPENING_POLICY_RATE,
+        /** The last meeting's decision less what the market expected of it; zero between meetings. */
+        public float $policySurprise = 0.0,
+        /** The inflation over target and the output gap the rule answered, which each camp on the committee weighs its own way. */
+        public float $ruleInflationGap = 0.0,
+        public float $ruleOutputGap = 0.0,
         public float $targetRate = self::OPENING_POLICY_RATE,
         public float $yield2y = 0.0378,
         public float $yield2yEma = 0.0378,
@@ -453,12 +461,6 @@ readonly class MacroStateDTO
         public float $previousExpectedPolicyFrom = -1.0,
         /** The long-run inflation the public has learned from realized inflation over that anchor, the Kozicki-Tinsley shifting endpoint the ten-year breakeven prices (App\Service\Macro\Subsystem\MonetaryPolicySubsystem::updateInflationEndpoint()). */
         public float $inflationEndpointGap = 0.0,
-        /** 1 while financial stress (the excess bond premium) holds the Authority in its recession regime, where it cuts faster, else 0 (App\Service\Macro\Subsystem\MonetaryPolicySubsystem::updateStressRegime()). */
-        public float $authorityStressRegime = 0.0,
-        /** The excess bond premium summed over the month so far, premium x years, that the stress latch reads at the month end. */
-        public float $excessBondPremiumMonthAccrued = 0.0,
-        /** Years of the month so far behind that sum. */
-        public float $excessBondPremiumMonthElapsed = 0.0,
         /** The CET1 requirement on the District's banks in force, as a share of risk-weighted assets, countercyclical buffer aside (App\Service\Politics\FinancialRegulator). */
         public float $bankCapitalRequirement = FinancialConstants::OPENING_BANK_CAPITAL_REQUIREMENT,
         /** The capital the banks have built so far against the requirement and the countercyclical buffer together, lagged by the years they take (App\Service\Macro\Subsystem\CreditFiscalSubsystem). */

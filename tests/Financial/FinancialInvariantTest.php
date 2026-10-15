@@ -662,21 +662,13 @@ class FinancialInvariantTest extends TestCase
 
         $target = $monetary->calculateTargetRate($expansionState, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE, 0.25);
 
-        // Invariant: the target sits between Taylor's (1993) prescription for this state and the long-run US rule
-        // Clarida, Gali & Gertler's form estimates on 1987-2008 (inflation 1.87, gap 1.84; var/harness/policy_fit.py).
+        // Invariant: in a hot expansion the Authority's rule leans past Taylor's (1993) prescription, as an activist
+        // rule should, but no further than its own weights on the state's inflation and gap.
         $inflation = 0.028;
         $taylor1993 = MacroEngine::BASE_NATURAL_RATE + $inflation + (0.5 * ($inflation - MacroEngine::TARGET_INFLATION)) + (0.5 * 0.026);
-        $estimatedUsRule = MacroEngine::BASE_NATURAL_RATE + MacroEngine::TARGET_INFLATION + (1.87 * ($inflation - MacroEngine::TARGET_INFLATION)) + (1.84 * 0.026);
-        $this->assertLessThanOrEqual(
-            $estimatedUsRule,
-            $target,
-            sprintf('Taylor target must not lean harder than the estimated US rule (%0.2f%%, got %0.2f%%)', $estimatedUsRule * 100, $target * 100)
-        );
-        $this->assertGreaterThanOrEqual(
-            $taylor1993,
-            $target,
-            sprintf('Taylor target must be at least Taylor 1993 in a hot expansion (%0.2f%%, got %0.2f%%)', $taylor1993 * 100, $target * 100)
-        );
+        $charter = MacroEngine::BASE_NATURAL_RATE + $inflation + (MonetaryPolicySubsystem::TAYLOR_INFLATION_WEIGHT * ($inflation - MacroEngine::TARGET_INFLATION)) + (MonetaryPolicySubsystem::TAYLOR_OUTPUT_GAP_WEIGHT * 0.026);
+        $this->assertGreaterThan($taylor1993, $target, sprintf('Above Taylor 1993 in a hot expansion (%0.2f%%, got %0.2f%%)', $taylor1993 * 100, $target * 100));
+        $this->assertLessThanOrEqual($charter + 0.0025, $target, sprintf('No further than the Charter weights (%0.2f%%, got %0.2f%%)', $charter * 100, $target * 100));
     }
 
     public function testSovereignYieldCurveReflectsExpectedInflationInLevelFactor(): void

@@ -34,8 +34,8 @@ class StanceRevisionTest extends TestCase
     }
 
     /**
-     * Only swing votes change camp, and each crosses over in a year with the chance the switch rate gives,
-     * 1 - exp(-1/10.8) = 8.8%: with nobody reseated, a hawk or a dove keeps their camp for good.
+     * Only swing votes on the committee change camp, and each crosses over in a year with the chance the switch rate
+     * gives, 1 - exp(-1/10.8) = 8.8%: with nobody reseated, a hawk or a dove keeps their camp for good.
      */
     public function testOnlySwingVotesChangeCampAtTheirRate(): void
     {
@@ -50,7 +50,8 @@ class StanceRevisionTest extends TestCase
                 $committee = StanceRevision::revise($state, 1.0 / 52.0);
                 $after = self::camps($state);
 
-                foreach ([[0, 1], [4, 5]] as [$stances, $swingers]) {
+                $this->assertSame($before[0], $after[0], 'Councillors are not revised: their lean matters only when they appoint.');
+                foreach ([[4, 5]] as [$stances, $swingers]) {
                     foreach ($before[$stances] as $seat => $stance) {
                         $swing = $before[$swingers][$seat] > 0.0;
                         $swingYears += $swing ? 1 : 0;

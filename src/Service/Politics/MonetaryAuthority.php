@@ -6,7 +6,7 @@ namespace App\Service\Politics;
 
 use App\Data\Politics\AerieCouncil;
 use App\DTO\MacroStateDTO;
-use App\Service\Math\Distributions;
+use App\Service\Macro\Subsystem\MonetaryPolicySubsystem;
 use App\Service\Math\MathUtility;
 use App\Service\Math\TimeSeries;
 
@@ -28,10 +28,9 @@ use App\Service\Math\TimeSeries;
  * the camp they lean to (as Bordo & Istrefi's HD0.5
  * weighs the chair), marks a hawkish or a dovish supermajority when it stands where the FOMC's top or bottom quarter of
  * meetings did; the supermajority is what the economy reads (App\DTO\GovernmentPolicyDTO). At each of its eight meetings a year
- * the governor puts the decision and every other member votes on it, dissenting toward their own preferred rate when it
- * stands far enough from the decision (Riboni & Ruge-Murcia 2014), at the rates the FOMC's members of their type did; the
- * draws, like the candidates', are hashed from a salt the Authority draws once, so they take nothing more from the
- * politics engine's random stream.
+ * the governor puts the decision and every other member votes on it: a member whose camp would set the rate two
+ * steps from where the committee's leans it (MonetaryPolicySubsystem::campTilt()) dissents toward their own. In a neutral
+ * economy no camp leans and the committee votes as one; dissents come when inflation or slack opens the camps apart.
  */
 final class MonetaryAuthority
 {
@@ -52,8 +51,8 @@ final class MonetaryAuthority
     public const COMMITTEE_MEMBERS = 6;
     /** Length of a member's term in years, staggered so a seat falls vacant once a year. */
     public const MEMBER_TERM_YEARS = 6.0;
-    /** Rate meetings a year, as at the FOMC, the ECB and the Bank of England. */
-    public const MEETINGS_PER_YEAR = 8;
+    /** Rate meetings a year, the Authority's calendar (MonetaryPolicySubsystem::updatePolicyRate()). */
+    public const MEETINGS_PER_YEAR = MonetaryPolicySubsystem::MEETINGS_PER_YEAR;
 
     // --- The Committee's Balance (Bordo & Istrefi 2023; Hack, Istrefi & Meier 2023) ---
     /** Average stance at or above which the committee holds a hawkish supermajority: the FOMC's 75th percentile, its balance per meeting normal around a median of 0.10 with an sd of 0.34 (Hack, Istrefi & Meier 2023, 1960-2023), as Bordo & Istrefi cut theirs at its quartiles. */
@@ -61,23 +60,9 @@ final class MonetaryAuthority
     /** Average stance at or below which it holds a dovish supermajority: the FOMC's 25th percentile. */
     public const DOVISH_MAJORITY_STANCE = -0.13;
 
-    // --- Votes (Malmendier, Nagel & Yan 2021; Bordo & Istrefi 2023, Table 7) ---
-    /** Share of the FOMC's votes that dissented for a higher rate: 265 of 6,707, 1951-2014 (Malmendier, Nagel & Yan 2021). */
-    public const HIGHER_DISSENT_SHARE = 265 / 6707;
-    /** Share that dissented for a lower rate: 160 of 6,707. */
-    public const LOWER_DISSENT_SHARE = 160 / 6707;
-    /** Dissents for a higher rate by type, 1960-2015, each type's dissents by their split (Bordo & Istrefi 2023, Table 7). */
-    public const HIGHER_DISSENTS = ['hawk' => 171, 'swing' => 84, 'dove' => 7];
-    /** Dissents for a lower rate by type. */
-    public const LOWER_DISSENTS = ['hawk' => 16, 'swing' => 43, 'dove' => 105];
-
-    // --- Dissent (Riboni & Ruge-Murcia 2010, 2014) ---
-    /** Gap between a member's preferred rate and the decision past which they dissent: the consensus norm phi*sqrt(2K/(N-1)) estimated for the Riksbank's board, 0.386pp at K = 2, N = 6, so 35bp (Riboni & Ruge-Murcia 2014, Table 8). */
-    public const DISSENT_THRESHOLD = 0.0035;
-    /** Share of the meeting's move a member's preferred rate does not follow, the governor as agenda setter carrying the committee past where it would stop (Riboni & Ruge-Murcia 2010): 0.30 puts 95% of the dissents at a move against it and twice the dissents at a move as at a hold, as on the FOMC 1987-2009 (Riboni & Ruge-Murcia 2014, s. 2.2: 45 of 94 dissents at a hold, about half for a larger move). */
-    public const MOVE_RESISTANCE = 0.30;
-    /** Standard deviation of the policy rate's move from one meeting to the next, 29bp on the macro loop (4 seeds x 40 years): the move's share of each type's spread of preferred rates, so each type dissents at its FOMC rate over all meetings. */
-    public const MEETING_MOVE_SD = 0.0029;
+    // --- Dissent ---
+    /** How far a member's camp must set the rate from the committee's before they dissent: two steps, 50bp, so a committee splits a few times a year and only when inflation or slack has opened the camps well apart. */
+    public const DISSENT_THRESHOLD = 2 * MonetaryPolicySubsystem::POLICY_RATE_STEP;
 
     // --- News ---
     /** A rate move that makes news on its own, a meeting's standard step: 25bp. */
@@ -129,7 +114,7 @@ final class MonetaryAuthority
         }
 
         if (TimeSeries::crossedSimulatedBoundary($time, $dt, 1.0 / self::MEETINGS_PER_YEAR)) {
-            self::meet($state, $macro->policyRate);
+            self::meet($state, $macro);
         }
     }
 
@@ -201,80 +186,31 @@ final class MonetaryAuthority
     }
 
     /**
-     * Each vote at a meeting on the move the governor put: the governor's for it, as the agenda setter's own proposal
-     * (Riboni & Ruge-Murcia 2010); every other member's for it, or a dissent toward their preferred rate when that stands
-     * more than the consensus norm from the decision (Riboni & Ruge-Murcia 2014, eq. 12). The shock in each member's
-     * preferred rate is the normal quantile of a uniform hashed from the salt, the meeting and the member.
+     * Each vote at a meeting on the decision the governor put: the governor's for it, as the agenda setter's own
+     * proposal; every other member's for it, or a dissent toward their camp's rate when it stands more than
+     * DISSENT_THRESHOLD from the committee's (a swing vote counts in the camp they lean to).
      *
-     * @param list<float> $stances  The members' stances, the governor first.
-     * @param float       $move     The decision's change in the policy rate since the last meeting.
-     * @param int         $meeting  The meeting's number since Year 1.
-     * @param int         $salt     The Authority's salt.
-     * @param list<float> $swingers Whether each member is a swing vote (1) or not (0), in the same order; a swing vote dissents as one whichever camp they lean to.
+     * @param list<float> $stances      The members' stances, the governor first.
+     * @param float       $majority     The committee's supermajority: 1 hawkish, -1 dovish, 0 neither.
+     * @param float       $inflationGap The rule's inflation over target at the meeting.
+     * @param float       $gap          The rule's output gap at the meeting.
      * @return list<float> 1 for a higher rate, -1 for a lower, 0 with the decision.
      */
-    public static function votes(array $stances, float $move, int $meeting, int $salt, array $swingers = []): array
+    public static function votes(array $stances, float $majority, float $inflationGap, float $gap): array
     {
+        $committee = MonetaryPolicySubsystem::campTilt($majority, $inflationGap, $gap);
         $votes = [];
         foreach ($stances as $member => $stance) {
-            if ($member === 0) {
-                $votes[] = 0.0;
-                continue;
-            }
-            $shock = Distributions::standardNormalQuantile(CouncilAppointments::uniform($salt, "vote:{$meeting}:{$member}"));
-            $votes[] = self::vote(self::preferredRateGap(self::typeName($stance, $swingers[$member] ?? 0.0), $move, $shock));
+            $votes[] = $member === 0 ? 0.0 : self::vote(MonetaryPolicySubsystem::campTilt($stance, $inflationGap, $gap) - $committee);
         }
 
         return $votes;
     }
 
-    /**
-     * How far a member's preferred rate stands above the decision: their type's bias, less the share of the move they
-     * would not have made, plus their own shock in their type's spread (the member intercept and reaction of Riboni &
-     * Ruge-Murcia 2014, eq. 11; Chappell, McGregor & Vermilyea 2005, ch. 6).
-     *
-     * @param float $shock A standard normal draw.
-     */
-    public static function preferredRateGap(string $type, float $move, float $shock): float
-    {
-        [$bias, $spread] = self::preferences($type);
-
-        return $bias - (self::MOVE_RESISTANCE * $move) + ($spread * $shock);
-    }
-
-    /** A member's vote given their preferred rate's gap to the decision: a dissent in the gap's direction past the consensus norm, else with the decision. */
+    /** A member's vote given how far their camp's rate stands from the committee's: a dissent that way past the threshold, else with the decision. */
     public static function vote(float $gap): float
     {
         return $gap > self::DISSENT_THRESHOLD ? 1.0 : ($gap < -self::DISSENT_THRESHOLD ? -1.0 : 0.0);
-    }
-
-    /**
-     * A type's bias and own spread of preferred rates, solved so that over meetings whose moves are normal with the
-     * macro loop's spread the type dissents each way at its FOMC rate: an ordered probit with thresholds at plus and
-     * minus the consensus norm, the move's share of the gap's variance taken out of the type's own.
-     *
-     * @return array{float, float} The bias and the own spread, as rates.
-     */
-    public static function preferences(string $type): array
-    {
-        $higher = Distributions::standardNormalQuantile(self::dissentChance($type, true));
-        $lower = Distributions::standardNormalQuantile(self::dissentChance($type, false));
-        $spread = 2.0 * self::DISSENT_THRESHOLD / -($higher + $lower);
-
-        return [$spread * ($higher - $lower) / 2.0, sqrt(($spread ** 2) - ((self::MOVE_RESISTANCE * self::MEETING_MOVE_SD) ** 2))];
-    }
-
-    /**
-     * The chance a member of a type dissents at a meeting, for a higher rate or a lower: the calibration target of the
-     * preferences. No count of votes by type survives, so the chance is the share of all votes that dissented that way,
-     * times the type's share of those dissents, over its share of the members (Bayes' rule, votes split as members are).
-     */
-    public static function dissentChance(string $type, bool $higher): float
-    {
-        $dissents = $higher ? self::HIGHER_DISSENTS : self::LOWER_DISSENTS;
-        $share = $higher ? self::HIGHER_DISSENT_SHARE : self::LOWER_DISSENT_SHARE;
-
-        return $share * ($dissents[$type] / array_sum($dissents)) / (self::TYPE_COUNTS[$type] / array_sum(self::TYPE_COUNTS));
     }
 
     /** The type a stance belongs to: 'hawk', 'swing' or 'dove'. */
@@ -302,19 +238,17 @@ final class MonetaryAuthority
             && (abs($state->lastMeetingChange) >= self::NEWSWORTHY_RATE_MOVE || array_filter($state->lastMeetingVotes, static fn(float $vote): bool => $vote !== 0.0) !== []);
     }
 
-    /** A meeting: the rate it leaves, and the votes on that move. */
-    private static function meet(PoliticsState $state, float $policyRate): void
+    /** A meeting: the rate it leaves, and the votes on it. */
+    private static function meet(PoliticsState $state, MacroStateDTO $macro): void
     {
-        $meeting = (int) round($state->totalTime * self::MEETINGS_PER_YEAR);
-        $state->lastMeetingChange = $state->lastMeetingAt < 0.0 ? 0.0 : $policyRate - $state->lastMeetingRate;
+        $state->lastMeetingChange = $state->lastMeetingAt < 0.0 ? 0.0 : $macro->policyRate - $state->lastMeetingRate;
         $state->lastMeetingVotes = self::votes(
             array_merge([$state->governorStance], array_values($state->memberStances)),
-            $state->lastMeetingChange,
-            $meeting,
-            (int) $state->authoritySalt,
-            array_merge([max(0.0, $state->governorSwinger)], array_values($state->memberSwingers))
+            $state->committeeMajority,
+            $macro->ruleInflationGap,
+            $macro->ruleOutputGap
         );
-        $state->lastMeetingRate = $policyRate;
+        $state->lastMeetingRate = $macro->policyRate;
         $state->lastMeetingAt = $state->totalTime;
     }
 

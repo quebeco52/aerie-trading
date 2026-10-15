@@ -41,7 +41,6 @@ class MacroState
     public float $unemploymentRateEma;
     /** @var list<float> */
     public array $unemploymentMonthly;
-    public float $sahmRecessionIndicator;
     public float $realGdpQuarterAccrued;
     public float $realGdpQuarterElapsed;
     public float $realGdpLastQuarter;
@@ -124,6 +123,11 @@ class MacroState
     public float $targetRate;
     public float $policyRate;
     public float $policyRateEma;
+    public float $policyRateShadow;
+    public float $policyRateExpected;
+    public float $policySurprise;
+    public float $ruleInflationGap;
+    public float $ruleOutputGap;
 
     public float $tipsBreakeven;
     public float $tipsBreakevenEma;
@@ -456,11 +460,6 @@ class MacroState
     public float $authorityCommitteeSeated;
     // The long-run inflation the public has learned from what inflation did, over the Authority's target.
     public float $inflationEndpointGap;
-    // 1 while the excess bond premium holds the Authority in its recession regime (entered at 1pp, left at its mean), else 0.
-    public float $authorityStressRegime;
-    // The premium summed over this month's ticks (premium x years) and the years summed, for the monthly reading the latch takes.
-    public float $excessBondPremiumMonthAccrued;
-    public float $excessBondPremiumMonthElapsed;
     // The laws as the tax rate and the trailing year's earnings carry them, and the laws the sitting government's coming
     // budget and the next government's first will pass, by lever, this tick and the tick before.
     public float $corporateTaxShiftRealized;
@@ -634,6 +633,11 @@ class MacroState
         if (!isset($carried['balanceSheetIntensity'])) {
             // Balance sheet intensity was recorded as a one-sided qe_intensity before QT existed.
             $state->balanceSheetIntensity = (float) ($data['qe_intensity'] ?? 0.0);
+        }
+        if (!isset($carried['policyRateShadow'])) {
+            // A state predating meetings holds the rate it has until the Authority next meets.
+            $state->policyRateShadow = $state->policyRate;
+            $state->policyRateExpected = $state->policyRate;
         }
         if (!isset($carried['energyPriceIndexDecadeTrend'])) {
             $state->energyPriceIndexDecadeTrend = $state->energyPriceIndexEma;

@@ -51,11 +51,9 @@ class LaborMarketSubsystem
     /** Annual pull of wage growth against the real wage's gap to trend productivity: US nonfarm business 1960-1999, wages on the lagged labor share (se 0.10; var/harness/labor_real.py). */
     public const WAGE_ERROR_CORRECTION_SPEED = 0.12;
 
-    // --- Sahm Rule (Sahm 2019) ---
-    /** Months the unemployment rate is averaged over. */
-    public const SAHM_AVERAGE_MONTHS = 3;
-    /** Months before the latest whose three-month averages the low is taken from. */
-    public const SAHM_LOOKBACK_MONTHS = 12;
+    // --- Month-End Unemployment Record ---
+    /** Months before the latest the record keeps, for the year-on-year change. */
+    public const UNEMPLOYMENT_RECORD_MONTHS = 12;
 
     public function __construct(
         /** Records what moved unemployment, the NAIRU and wages. Null in a test or a headless harness, off everywhere the ticker is not. */
@@ -106,35 +104,20 @@ class LaborMarketSubsystem
         }
 
         $state->unemploymentRate += $adjustmentSpeed * $unemploymentGap * $dt;
-        $this->recordSahmIndicator($state, $dt);
+        $this->recordMonthlyUnemployment($state, $dt);
     }
 
-    /**
-     * The Sahm rule (Sahm 2019): at each month end, the three-month average unemployment rate less its lowest over the
-     * twelve months before. It reads a recession already under way, from data as they arrive, where the yield curve
-     * forecasts one a year out.
-     */
-    public function recordSahmIndicator(MacroState $state, float $dt): void
+    /** At each month end, the unemployment rate joins the month-end record the year-on-year change is read off. */
+    public function recordMonthlyUnemployment(MacroState $state, float $dt): void
     {
         if (!TimeSeries::crossedSimulatedBoundary($state->totalTime, $dt, 1.0 / 12.0)) {
             return;
         }
-        $months = $state->unemploymentMonthly;
-        $months[] = $state->unemploymentRate;
-        $months = array_slice($months, -(self::SAHM_LOOKBACK_MONTHS + self::SAHM_AVERAGE_MONTHS));
-        $state->unemploymentMonthly = $months;
-
-        $averages = [];
-        for ($end = self::SAHM_AVERAGE_MONTHS; $end <= count($months); ++$end) {
-            $averages[] = array_sum(array_slice($months, $end - self::SAHM_AVERAGE_MONTHS, self::SAHM_AVERAGE_MONTHS)) / self::SAHM_AVERAGE_MONTHS;
-        }
-        $current = array_pop($averages);
-        $state->sahmRecessionIndicator = $current === null || $averages === [] ? 0.0 : max(0.0, $current - min($averages));
+        $state->unemploymentMonthly = array_slice([...$state->unemploymentMonthly, $state->unemploymentRate], -(self::UNEMPLOYMENT_RECORD_MONTHS + 1));
     }
 
     /**
-     * The change in the unemployment rate over the twelve months to the last month end, read off the Sahm rule's
-     * month-end record.
+     * The change in the unemployment rate over the twelve months to the last month end, read off the month-end record.
      *
      * @param list<float> $unemploymentMonthly Month-end unemployment rates, oldest first.
      * @return float|null Null until a year of month ends is on record.
@@ -142,26 +125,11 @@ class LaborMarketSubsystem
     public static function unemploymentChangeYearOnYear(array $unemploymentMonthly): ?float
     {
         $count = count($unemploymentMonthly);
-        if ($count <= self::SAHM_LOOKBACK_MONTHS) {
+        if ($count <= self::UNEMPLOYMENT_RECORD_MONTHS) {
             return null;
         }
 
-        return $unemploymentMonthly[$count - 1] - $unemploymentMonthly[$count - 1 - self::SAHM_LOOKBACK_MONTHS];
-    }
-
-    /**
-     * The three-month average unemployment rate the Sahm rule reads, as of the last month end.
-     *
-     * @param list<float> $unemploymentMonthly Month-end unemployment rates, oldest first.
-     * @return float|null Null until three month ends are on record.
-     */
-    public static function sahmThreeMonthAverage(array $unemploymentMonthly): ?float
-    {
-        if (count($unemploymentMonthly) < self::SAHM_AVERAGE_MONTHS) {
-            return null;
-        }
-
-        return array_sum(array_slice($unemploymentMonthly, -self::SAHM_AVERAGE_MONTHS)) / self::SAHM_AVERAGE_MONTHS;
+        return $unemploymentMonthly[$count - 1] - $unemploymentMonthly[$count - 1 - self::UNEMPLOYMENT_RECORD_MONTHS];
     }
 
     /**

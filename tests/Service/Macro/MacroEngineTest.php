@@ -716,33 +716,6 @@ class MacroEngineTest extends TestCase
         $this->assertGreaterThan(100.0, $result->residentialPropertyIndex, 'Tight labor market should expand residential housing index above neutral baseline.');
     }
 
-    public function testEvansRuleLocksTargetRateAtZlbDuringElevatedUnemployment(): void
-    {
-        // Unemployment > 5.0% and Inflation < 2.5% -> Evans Rule forces target rate to 0% (ZLB)
-        $recessionRecoveryState = [
-            'unemployment_rate' => 0.055,
-            'unemployment_rate_ema' => 0.055,
-            'inflation' => 0.020,
-            'inflation_ema' => 0.020,
-            'output_gap' => -0.010,
-            'output_gap_ema' => -0.010,
-            'policy_rate' => MacroEngine::EFFECTIVE_LOWER_BOUND,
-            'policy_rate_ema' => MacroEngine::EFFECTIVE_LOWER_BOUND,
-            'yield_5y' => 0.02,
-        ];
-
-        $this->redisMock->expects($this->once())
-            ->method('get')
-            ->with('macroeconomic_state')
-            ->willReturn(json_encode($recessionRecoveryState));
-        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
-
-        $result = $this->engine->updateMacroState(0.25);
-
-        // Evans Rule holds the policy rate at the ZLB (does not hike), while targetRate reflects the unconstrained shadow rate
-        $this->assertEquals(MacroEngine::EFFECTIVE_LOWER_BOUND, $result->policyRate, 'Evans Rule must lock policy rate at ZLB while unemployment exceeds 5.0% and inflation is below 2.5%.');
-        $this->assertGreaterThan(0.00, $result->targetRate, 'Wu-Xia shadow target rate remains continuous and positive.');
-    }
 
     public function testEvansRuleLiftsOffWhenInflationBreachesThreshold(): void
     {
@@ -796,58 +769,7 @@ class MacroEngineTest extends TestCase
         $this->assertGreaterThan(0.00, $result->targetRate, 'Target rate must calculate normally when unemployment is <= 5.0%.');
     }
 
-    public function testEvansRuleOverridesTaylorRule(): void
-    {
-        // When unemployment is > 5.0% and inflation < 2.5%, Evans Rule prevents premature policy rate liftoff
-        $recoveryState = [
-            'unemployment_rate' => 0.052,
-            'unemployment_rate_ema' => 0.052,
-            'inflation' => 0.021,
-            'inflation_ema' => 0.021,
-            'output_gap' => -0.010,
-            'output_gap_ema' => -0.010,
-            'policy_rate' => MacroEngine::EFFECTIVE_LOWER_BOUND,
-            'policy_rate_ema' => MacroEngine::EFFECTIVE_LOWER_BOUND,
-            'yield_5y' => 0.025,
-        ];
 
-        $this->redisMock->expects($this->once())
-            ->method('get')
-            ->with('macroeconomic_state')
-            ->willReturn(json_encode($recoveryState));
-        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
-
-        $result = $this->engine->updateMacroState(0.25);
-
-        $this->assertLessThanOrEqual(MacroEngine::EFFECTIVE_LOWER_BOUND, $result->policyRate, 'Evans Rule must prevent rate hikes while unemployment is above 5.0% and inflation is below 2.5%.');
-        $this->assertGreaterThan(0.00, $result->targetRate, 'Taylor shadow target rate calculates continuously without artificial zero clamping.');
-    }
-
-    public function testEvansRuleUsesTrendUnemploymentRatherThanHighFrequencyNoise(): void
-    {
-        // Raw unemployment drops below 5.0% due to 1-period noise, but trend (EMA) is still elevated at 5.4%
-        $noisyRecoveryState = [
-            'unemployment_rate' => 0.048,
-            'unemployment_rate_ema' => 0.054,
-            'inflation' => 0.020,
-            'inflation_ema' => 0.020,
-            'output_gap' => -0.010,
-            'output_gap_ema' => -0.010,
-            'policy_rate' => MacroEngine::EFFECTIVE_LOWER_BOUND,
-            'policy_rate_ema' => MacroEngine::EFFECTIVE_LOWER_BOUND,
-            'yield_5y' => 0.02,
-        ];
-
-        $this->redisMock->expects($this->once())
-            ->method('get')
-            ->with('macroeconomic_state')
-            ->willReturn(json_encode($noisyRecoveryState));
-        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
-
-        $result = $this->engine->updateMacroState(0.25);
-
-        $this->assertEquals(MacroEngine::EFFECTIVE_LOWER_BOUND, $result->policyRate, 'Evans Rule must anchor on trend unemployment (EMA) to avoid premature liftoff from single-period noise.');
-    }
 
     public function testCapitalOverhangDragsOutputGap(): void
     {
@@ -1246,32 +1168,6 @@ class MacroEngineTest extends TestCase
         $this->assertGreaterThan($lagQ1, $lagQ2, 'Sticky cost lag should accumulate and rise across successive quarters of elevated energy.');
     }
 
-    /** At a month end the latch is set from the month's premium, on the tick the rate is set, not a tick later. */
-    public function testAStressedPremiumSpeedsTheSameTicksCut(): void
-    {
-        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
-        $run = function (float $premium): \App\DTO\MacroStateDTO {
-            $this->redisMock = $this->createMock(\Redis::class);
-            // The last tick of a month, the premium held there all month.
-            $this->redisMock->method('get')->willReturn(json_encode(['policy_rate' => 0.06, 'excess_bond_premium' => $premium, 'total_time' => (1.0 / 12.0) - (1.0 / 360.0),
-                'excess_bond_premium_month_accrued' => $premium * ((1.0 / 12.0) - (1.0 / 360.0)), 'excess_bond_premium_month_elapsed' => (1.0 / 12.0) - (1.0 / 360.0)]));
-            $engine = new MacroEngine($this->mathUtilityMock, $this->redisMock, $this->snapshotRecorder, $this->monetarySubsystem, $this->laborSubsystem,
-                $this->aggregateSubsystem, $this->commoditySubsystem, $this->assetSubsystem, $this->creditFiscalSubsystem);
-
-            return $engine->updateMacroState(1.0 / 360.0);
-        };
-
-        // Both premiums sit above the stress latch's exit, so only the entry level tells them apart.
-        $calm = $run(MonetaryPolicySubsystem::CB_STRESS_ENTRY_EBP / 2.0);
-        $stressed = $run(MonetaryPolicySubsystem::CB_STRESS_ENTRY_EBP);
-
-        $this->assertSame(0.0, $calm->authorityStressRegime);
-        $this->assertSame(1.0, $stressed->authorityStressRegime);
-        $this->assertEqualsWithDelta($calm->targetRate, $stressed->targetRate, 1e-12, 'The premium does not reach the rule within the tick.');
-        $speed = MonetaryPolicySubsystem::CB_SMOOTHING_SPEED + MonetaryPolicySubsystem::CB_RECESSION_CUT_SPEED;
-        $ratio = log((0.06 - $stressed->targetRate) / ($stressed->policyRate - $stressed->targetRate)) / log((0.06 - $calm->targetRate) / ($calm->policyRate - $calm->targetRate));
-        $this->assertEqualsWithDelta($speed / MonetaryPolicySubsystem::CB_SMOOTHING_SPEED, $ratio, 1e-6, 'The stressed tick cuts at the regime speed.');
-    }
 
     public function testRateSmoothingClosesTheSameShareCuttingAsHiking(): void
     {
@@ -1291,65 +1187,8 @@ class MacroEngineTest extends TestCase
         $this->assertEqualsWithDelta($hike, $cut, 1e-12, 'Below the hike ceiling a 100bp distance must close by the same amount either way.');
     }
 
-    public function testPolicyRatePaceIsProportionalToTheDistanceBelowTheHikeCeiling(): void
-    {
-        $state = new \App\Service\Macro\MacroState();
-        $state->policyRate = 0.02; // clear of the lower bound, so forward guidance plays no part
-        $state->inflation = 0.025; // below the panic threshold
-        $state->outputGap = 0.03;
-        $dt = 0.25;
 
-        $smallMove = $this->monetarySubsystem->updatePolicyRate($state, 0.0225, $dt) - $state->policyRate;
-        $largeMove = $this->monetarySubsystem->updatePolicyRate($state, 0.0325, $dt) - $state->policyRate;
 
-        // Partial adjustment: a 125bp distance moves the rate five times as far as a 25bp one in the same quarter.
-        $this->assertEqualsWithDelta(5.0 * $smallMove, $largeMove, 1e-12, 'Below the ceiling the pace must scale with the distance to the target.');
-        $this->assertEqualsWithDelta((1.0 - exp(-MonetaryPolicySubsystem::CB_SMOOTHING_SPEED * $dt)) * 0.0125, $largeMove, 1e-12);
-    }
-
-    public function testHikesAreCappedAtTheFastestModernPaceButCutsAreNot(): void
-    {
-        $dt = 0.25;
-        $hikingState = new \App\Service\Macro\MacroState();
-        $hikingState->policyRate = 0.02;
-        $hikingState->inflation = 0.025;
-        $hikingState->outputGap = 0.04;
-        // A target half again past the knee (velocity / speed), where the partial adjustment alone would outrun the cap.
-        $hikeTarget = 0.02 + (1.5 * MonetaryPolicySubsystem::CB_MAX_HIKE_VELOCITY / MonetaryPolicySubsystem::CB_SMOOTHING_SPEED);
-        $hike = $this->monetarySubsystem->updatePolicyRate($hikingState, $hikeTarget, $dt) - $hikingState->policyRate;
-
-        $cuttingState = new \App\Service\Macro\MacroState();
-        $cuttingState->policyRate = 0.09;
-        $cuttingState->inflation = 0.025;
-        $cuttingState->outputGap = -0.04;
-        $cut = $cuttingState->policyRate - $this->monetarySubsystem->updatePolicyRate($cuttingState, 0.02, $dt);
-
-        // The FOMC's fastest quarter is 150bp (2022Q3); cuts are not capped (a 700bp distance).
-        $this->assertEqualsWithDelta(MonetaryPolicySubsystem::CB_MAX_HIKE_VELOCITY * $dt, $hike, 1e-12, 'A hike must not outrun 75bp at each of the quarter\'s two meetings.');
-        $this->assertEqualsWithDelta((1.0 - exp(-MonetaryPolicySubsystem::CB_SMOOTHING_SPEED * $dt)) * 0.07, $cut, 1e-12, 'Cuts keep the partial-adjustment pace (the Fed cut 200bp in 2008Q1).');
-    }
-
-    /**
-     * Aastveit et al. (2024): no estimated regime hikes faster in high inflation, and the rule looks through headline
-     * (Aoki 2001). An 8% headline print with its EMA as hot closes the same share of a 50bp distance as a 2.5% one.
-     */
-    public function testHikesKeepTheSmoothingSpeedHoweverHotHeadlineRuns(): void
-    {
-        $dt = 0.25;
-        $hike = function (float $headline) use ($dt): float {
-            $state = new \App\Service\Macro\MacroState();
-            $state->policyRate = 0.02;
-            $state->inflation = $headline;
-            $state->inflationEma = $headline;
-            $state->outputGap = 0.03;
-
-            return $this->monetarySubsystem->updatePolicyRate($state, 0.025, $dt) - $state->policyRate;
-        };
-
-        $expected = (1.0 - exp(-MonetaryPolicySubsystem::CB_SMOOTHING_SPEED * $dt)) * 0.005;
-        $this->assertEqualsWithDelta($expected, $hike(0.025), 1e-12);
-        $this->assertEqualsWithDelta($expected, $hike(0.080), 1e-12, 'Runaway headline inflation must not speed the partial adjustment.');
-    }
 
     public function testDynamicNaturalRateDriftsWithTfpGrowth(): void
     {

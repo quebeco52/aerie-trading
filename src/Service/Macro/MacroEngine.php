@@ -261,9 +261,6 @@ class MacroEngine
     /** Share of the reserve fund's expected long-term real return the budget may spend without the fund's consent: half, Singapore's constitutional limit on the Net Investment Returns Contribution. The share the District opened with. */
     public const RESERVE_DRAW_CEILING = 0.50;
 
-    // --- Sahm Rule (Sahm 2019, Hamilton Project) ---
-    /** Rise of the three-month average unemployment rate above its low of the twelve months before that signals a recession under way: half a point, which has signalled each US recession since 1970 in its first months. */
-    public const SAHM_RECESSION_THRESHOLD = 0.005;
 
     // --- Policy Levers: Tariffs (Fajgelbaum et al. 2020; Furceri et al. 2018) ---
     /** Average tariff partners put on the District's exports per point of its average tariff on imports: 0.60 in 2018, when US tariffs rose 14.0 points on 12.7% of imports and retaliation 13.1 points on 8.2% of exports (Fajgelbaum, Goldberg, Kennedy & Khandelwal 2020). */
@@ -614,11 +611,9 @@ class MacroEngine
         $this->monetarySubsystem->updateInflationEndpoint($state, self::TARGET_INFLATION, $dt);
         $state->tipsBreakeven = $this->aggregateSubsystem->calculateTipsBreakeven($state, self::TARGET_INFLATION);
 
-        // 5. Taylor (1993) monetary policy target and Clarida-Gali-Gertler (2000) rate inertia.
+        // 5. The Authority's published rule, and its decision at each of its eight meetings.
         $state->targetRate = $this->monetarySubsystem->calculateTargetRate($state, self::TARGET_INFLATION, $state->naturalRate, $dt);
         $clampedTarget = max(self::EFFECTIVE_LOWER_BOUND, min(self::POLICY_RATE_CEILING, $state->targetRate));
-        // Aastveit et al. (2024): cuts run faster in the recession regime, read off the Sahm rule and the premium's last monthly reading.
-        $this->monetarySubsystem->updateStressRegime($state, $dt);
         $state->policyRate = $this->monetarySubsystem->updatePolicyRate($state, $clampedTarget, $dt);
 
         // 6. Central bank balance sheet unconventional QE/QT operations (Bernanke & Reinhart 2004).
@@ -851,14 +846,6 @@ class MacroEngine
         }
     }
 
-    /**
-     * Whether unemployment says a recession is under way: the Sahm rule's reading at its threshold or above, which the
-     * rate committee cuts into.
-     */
-    public static function inSahmRecession(float $sahmIndicator): bool
-    {
-        return $sahmIndicator >= self::SAHM_RECESSION_THRESHOLD;
-    }
 
     /** Whether the statistics office has a recession declared and not yet over (MacroAggregateSubsystem::recordQuarterlyRealGdp()). */
     public static function recessionDeclared(MacroState|MacroStateDTO $state): bool

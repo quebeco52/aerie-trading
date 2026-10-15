@@ -11,6 +11,7 @@ use App\Service\Macro\Subsystem\MonetaryPolicySubsystem;
 use App\Service\Macro\Subsystem\SovereignFundSubsystem;
 use App\Service\Math\FixedIncome;
 use App\Service\Math\MathUtility;
+use App\Service\Math\TimeSeries;
 use PHPUnit\Framework\TestCase;
 
 class MonetaryPolicySubsystemTest extends TestCase
@@ -85,23 +86,21 @@ class MonetaryPolicySubsystemTest extends TestCase
     }
 
     /**
-     * A rate committee's supermajority leans the rule (Bordo & Istrefi 2023, Table 6): a dovish one answers each point of
-     * inflation 0.35 less, a hawkish one each point of output gap 0.17 less, each centred on the quarter of the FOMC's
-     * meetings it held, so a committee in the FOMC's mix adds nothing on average. With no committee handed over the
-     * rule is untouched.
+     * A rate committee's supermajority leans the rule its camp's way: a dovish one answers each point of inflation over
+     * target 0.35 less, a hawkish one each point of output gap 0.17 less. At target with no gap no camp leans, so a
+     * neutral economy gets the published rule whoever sits; with no committee handed over the rule is untouched.
      */
     public function testACommitteeSupermajorityLeansTheRule(): void
     {
         $dove = MonetaryPolicySubsystem::DOVISH_MAJORITY_INFLATION_RESPONSE;
         $hawk = MonetaryPolicySubsystem::HAWKISH_MAJORITY_GAP_RESPONSE;
-        $this->assertSame(0.0, MonetaryPolicySubsystem::committeeMajorityTerm(null, 0.03, -0.02));
-        $this->assertEqualsWithDelta(-$dove * 0.03 * 0.75 + ($hawk * -0.02 * 0.25), MonetaryPolicySubsystem::committeeMajorityTerm(-1.0, 0.03, -0.02), 1e-15);
-        $this->assertEqualsWithDelta($dove * 0.03 * 0.25 - ($hawk * -0.02 * 0.75), MonetaryPolicySubsystem::committeeMajorityTerm(1.0, 0.03, -0.02), 1e-15);
-        $this->assertEqualsWithDelta($dove * 0.03 * 0.25 + ($hawk * -0.02 * 0.25), MonetaryPolicySubsystem::committeeMajorityTerm(0.0, 0.03, -0.02), 1e-15);
-        $average = (MonetaryPolicySubsystem::DOVISH_MAJORITY_SHARE * MonetaryPolicySubsystem::committeeMajorityTerm(-1.0, 0.03, -0.02))
-            + (MonetaryPolicySubsystem::HAWKISH_MAJORITY_SHARE * MonetaryPolicySubsystem::committeeMajorityTerm(1.0, 0.03, -0.02))
-            + ((1.0 - MonetaryPolicySubsystem::DOVISH_MAJORITY_SHARE - MonetaryPolicySubsystem::HAWKISH_MAJORITY_SHARE) * MonetaryPolicySubsystem::committeeMajorityTerm(0.0, 0.03, -0.02));
-        $this->assertEqualsWithDelta(0.0, $average, 1e-15, 'A committee in the FOMC\'s mix leans the rule nowhere on average.');
+        $this->assertSame(0.0, MonetaryPolicySubsystem::committeeMajorityTerm(null, 0.01, -0.02));
+        $this->assertEqualsWithDelta(-$dove * 0.01, MonetaryPolicySubsystem::committeeMajorityTerm(-1.0, 0.01, -0.02), 1e-15);
+        $this->assertEqualsWithDelta($hawk * 0.02, MonetaryPolicySubsystem::committeeMajorityTerm(1.0, 0.01, -0.02), 1e-15, 'Hawks cut less into a slump.');
+        $this->assertSame(0.0, MonetaryPolicySubsystem::committeeMajorityTerm(0.0, 0.01, -0.02));
+        foreach ([-1.0, 0.0, 1.0] as $camp) {
+            $this->assertEqualsWithDelta(0.0, MonetaryPolicySubsystem::campTilt($camp, 0.0, 0.0), 1e-15, 'A neutral economy: no camp leans.');
+        }
 
         $base = $this->subsystem->calculateTargetRate(new MacroState(), MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE);
         $unseated = new MacroState();
@@ -111,7 +110,15 @@ class MonetaryPolicySubsystemTest extends TestCase
         $dovish->authorityCommitteeSeated = 1.0;
         $dovish->authorityMajority = -1.0;
         $measure = $this->subsystem->calculateExpectedInflation($dovish, MacroEngine::TARGET_INFLATION);
-        $this->assertEqualsWithDelta(-$dove * $measure * 0.75, $this->subsystem->calculateTargetRate($dovish, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE) - $base, 1e-12);
+        $this->assertEqualsWithDelta(-$dove * ($measure - MacroEngine::TARGET_INFLATION), $this->subsystem->calculateTargetRate($dovish, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE) - $base, 1e-12);
+    }
+
+    /** The published rule answers inflation two and a half for one, so a point of inflation raises the real rate: the Taylor principle. */
+    public function testTheRuleRaisesTheRealRateWithInflation(): void
+    {
+        $this->assertGreaterThan(0.0, MonetaryPolicySubsystem::TAYLOR_INFLATION_WEIGHT, 'Above one for one in total.');
+        $this->assertEqualsWithDelta(1.5, MonetaryPolicySubsystem::TAYLOR_INFLATION_WEIGHT, 1e-15);
+        $this->assertEqualsWithDelta(1.5, MonetaryPolicySubsystem::TAYLOR_OUTPUT_GAP_WEIGHT, 1e-15);
     }
 
     /**
@@ -171,21 +178,6 @@ class MonetaryPolicySubsystemTest extends TestCase
         $this->assertEquals(0.00, $newPolicyRate, 'Evans Rule must lock policy rate at 0.00% when at ZLB with elevated unemployment.');
     }
 
-    /** Threshold guidance was a floor policy (FOMC, Dec 2012): with a point of rate room left, the rule's hikes go ahead. */
-    public function testEvansRuleDoesNotHoldARateAboveTheFloor(): void
-    {
-        $state = new MacroState();
-        $state->policyRate = 0.010;
-        $state->unemploymentRateEma = 0.075;
-        $state->nairu = MacroEngine::NATURAL_UNEMPLOYMENT;
-        $state->inflationEma = 0.018;
-        $state->tipsBreakeven = 0.018;
-
-        $newPolicyRate = $this->subsystem->updatePolicyRate($state, 0.02, 0.25);
-
-        $this->assertGreaterThan(0.010, $newPolicyRate);
-        $this->assertSame(0.0, $this->constraintsFor($state, 0.02)['evansHold']);
-    }
 
     public function testEvansRuleDoesNotFireDuringNormalExpansion(): void
     {
@@ -200,34 +192,6 @@ class MonetaryPolicySubsystemTest extends TestCase
         $newPolicyRate = $this->subsystem->updatePolicyRate($state, $target, 0.25);
         // Normal Taylor rate should be ~3.8%, and rate hikes proceed
         $this->assertGreaterThan(0.030, $target, 'Evans Rule must NOT fire when central bank is in normal expansion regime.');
-    }
-
-    public function testEvansRuleReleasesWhenInflationCeilingBreached(): void
-    {
-        $state = new MacroState();
-        $state->policyRate = 0.00;           // At ZLB
-        $state->unemploymentRateEma = 0.070; // High unemployment > 5.0%
-        $state->inflationEma = 0.028;        // Inflation breaches 2.5% ceiling
-        $state->tipsBreakeven = 0.028;
-        $state->outputGap = -0.01;
-
-        $target = $this->subsystem->calculateTargetRate($state, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE);
-        $newPolicyRate = $this->subsystem->updatePolicyRate($state, $target, 0.25);
-        $this->assertGreaterThan(0.00, $newPolicyRate, 'Evans Rule must release and allow rate hikes when inflation breaches ceiling.');
-    }
-
-    public function testEvansRuleReleasesWhenUnemploymentThresholdAchieved(): void
-    {
-        $state = new MacroState();
-        $state->policyRate = 0.00;           // At ZLB
-        $state->unemploymentRateEma = 0.048; // Unemployment normalized <= 5.0%
-        $state->inflationEma = 0.020;        // Contained inflation
-        $state->tipsBreakeven = 0.020;
-        $state->outputGap = 0.005;
-
-        $target = $this->subsystem->calculateTargetRate($state, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE);
-        $newPolicyRate = $this->subsystem->updatePolicyRate($state, $target, 0.25);
-        $this->assertGreaterThan(0.00, $newPolicyRate, 'Evans Rule must release when unemployment drops below threshold.');
     }
 
     public function testCalculateTargetRateReturnsUnclampedShadowRateInDeepRecession(): void
@@ -247,20 +211,91 @@ class MonetaryPolicySubsystemTest extends TestCase
     {
         $state = new MacroState();
         $state->policyRate = 0.005;
-        $state->inflation = 0.00;
-        $state->outputGap = -0.05;
+        $state->policyRateShadow = 0.005;
+        $state->totalTime = 1.0;
 
-        // Extreme negative target rate (-10%)
-        $negativeTarget = -0.10;
-        $newRate = $this->subsystem->updatePolicyRate($state, $negativeTarget, 1.0);
+        $newRate = $this->subsystem->updatePolicyRate($state, -0.10, 1.0);
 
-        $this->assertGreaterThanOrEqual(MacroEngine::EFFECTIVE_LOWER_BOUND, $newRate, 'Policy rate must not breach the Effective Lower Bound.');
-        // The year's partial adjustment runs toward the floor, not the shadow rate beneath it.
-        $this->assertEqualsWithDelta(
-            MacroEngine::EFFECTIVE_LOWER_BOUND + ((0.005 - MacroEngine::EFFECTIVE_LOWER_BOUND) * exp(-MonetaryPolicySubsystem::CB_SMOOTHING_SPEED)),
-            $newRate,
-            1e-9
-        );
+        $this->assertSame(MacroEngine::EFFECTIVE_LOWER_BOUND, $newRate, 'A deep negative rule takes the decision to the floor, no lower.');
+        $this->assertLessThan(0.0, $state->policyRateShadow, 'The shadow rate reads the cuts the floor forbids.');
+    }
+
+    /** Between meetings the rate holds whatever the rule does; at a meeting it moves in whole 25bp steps. */
+    public function testTheRateMovesOnlyAtMeetingsAndInSteps(): void
+    {
+        $state = new MacroState();
+        $state->policyRate = 0.03;
+        $state->policyRateShadow = 0.03;
+        $dt = 1.0 / 48.0;
+        $moves = 0;
+        for ($tick = 1; $tick <= 48 * 3; ++$tick) {
+            $state->totalTime = $tick * $dt;
+            $before = $state->policyRate;
+            $state->policyRate = $this->subsystem->updatePolicyRate($state, 0.05, $dt);
+            $meeting = TimeSeries::crossedSimulatedBoundary($state->totalTime, $dt, 1.0 / MonetaryPolicySubsystem::MEETINGS_PER_YEAR);
+            if (!$meeting) {
+                $this->assertSame($before, $state->policyRate, 'No move between meetings.');
+                continue;
+            }
+            $steps = $state->policyRate / MonetaryPolicySubsystem::POLICY_RATE_STEP;
+            $this->assertEqualsWithDelta(round($steps), $steps, 1e-9, 'A decision is a whole number of steps.');
+            $moves += $before !== $state->policyRate ? 1 : 0;
+        }
+        $this->assertGreaterThan(3, $moves, 'A rule 200bp away is followed meeting by meeting.');
+        $this->assertEqualsWithDelta(0.05, $state->policyRate, 0.005, 'and the rate closes on it within three years.');
+    }
+
+    /** The meetings fall on the same dates at any tick rate, and the shadow rate closes on the rule as an exact lag. */
+    public function testMeetingDatesAndTheShadowRateDoNotDependOnTheTickRate(): void
+    {
+        $path = function (int $ticksPerYear): array {
+            $state = new MacroState();
+            $state->policyRate = 0.03;
+            $state->policyRateShadow = 0.03;
+            $dt = 1.0 / $ticksPerYear;
+            $rates = [];
+            for ($tick = 1; $tick <= $ticksPerYear * 2; ++$tick) {
+                $state->totalTime = $tick * $dt;
+                $state->policyRate = $this->subsystem->updatePolicyRate($state, 0.045, $dt);
+                if ($tick % ($ticksPerYear / MonetaryPolicySubsystem::MEETINGS_PER_YEAR) === 0) {
+                    $rates[] = $state->policyRate;
+                }
+            }
+
+            return [$rates, $state->policyRateShadow];
+        };
+        [$rates48, $shadow48] = $path(48);
+        foreach ([24, 240] as $ticksPerYear) {
+            [$rates, $shadow] = $path($ticksPerYear);
+            $this->assertSame($rates48, $rates, "Decisions at {$ticksPerYear} ticks a year.");
+            $this->assertEqualsWithDelta($shadow48, $shadow, 1e-12);
+        }
+        $this->assertEqualsWithDelta(0.045 + ((0.03 - 0.045) * exp(-2.0 * MonetaryPolicySubsystem::CB_SMOOTHING_SPEED)), $shadow48, 1e-12);
+    }
+
+    /** With the rule standing still the market expects each decision exactly; a jump in the rule just before a meeting is a surprise. */
+    public function testADecisionSurprisesOnlyByWhatTheRuleDidSinceTheLastReading(): void
+    {
+        $state = new MacroState();
+        $state->policyRate = 0.03;
+        $state->policyRateShadow = 0.03;
+        $dt = 1.0 / 48.0;
+        for ($tick = 1; $tick <= 48; ++$tick) {
+            $state->totalTime = $tick * $dt;
+            $state->policyRate = $this->subsystem->updatePolicyRate($state, 0.04, $dt);
+            $this->assertEqualsWithDelta(0.0, $state->policySurprise, 1e-12, 'A steady rule holds no surprise.');
+        }
+        for ($tick = 49; $tick <= 53; ++$tick) {
+            $state->totalTime = $tick * $dt;
+            $state->policyRate = $this->subsystem->updatePolicyRate($state, 0.04, $dt);
+        }
+        // The market had priced a lower decision than the Authority takes at the meeting on tick 54.
+        $state->policyRateExpected -= 2.0 * MonetaryPolicySubsystem::POLICY_RATE_STEP;
+        $priced = $state->policyRateExpected;
+        $state->totalTime = 54 * $dt;
+        $state->policyRate = $this->subsystem->updatePolicyRate($state, 0.04, $dt);
+        $this->assertEqualsWithDelta($state->policyRate - $priced, $state->policySurprise, 1e-12, 'The surprise is the decision less what was priced.');
+        $this->assertGreaterThan(0.0, $state->policySurprise);
     }
 
     public function testSvenssonTermStructurePreservesShortRateAnchor(): void
@@ -1379,25 +1414,6 @@ class MonetaryPolicySubsystemTest extends TestCase
         $this->assertGreaterThanOrEqual(MonetaryPolicySubsystem::MIN_MMF_SHARE, $floor->moneyMarketFundShare);
     }
 
-    /**
-     * The Evans hold is a gap to the NAIRU, not a fixed unemployment rate: once hysteresis has scarred the NAIRU past
-     * the old 5% line, unemployment at the NAIRU is full employment and must not keep the rate at the floor.
-     */
-    public function testTheEvansHoldIsMeasuredAgainstTheNairu(): void
-    {
-        $scarred = new MacroState();
-        $scarred->policyRate = 0.0;
-        $scarred->nairu = 0.052;
-        $scarred->unemploymentRateEma = 0.053; // over the old absolute 5%, a tenth of a point over this NAIRU
-        $scarred->inflationEma = 0.018;
-        $scarred->tipsBreakeven = 0.018;
-
-        $this->assertGreaterThan(0.0, $this->subsystem->updatePolicyRate($scarred, 0.03, 0.25), 'Full employment at a scarred NAIRU lifts off.');
-
-        $slack = clone $scarred;
-        $slack->unemploymentRateEma = $scarred->nairu + MonetaryPolicySubsystem::EVANS_RULE_UNEMPLOYMENT_GAP + 0.002;
-        $this->assertSame(0.0, $this->subsystem->updatePolicyRate($slack, 0.03, 0.25), 'Slack past the threshold still holds the floor.');
-    }
 
     /**
      * The balance sheet reaches demand through the curve, so the rule does not read it again: a held stock must not
@@ -1432,32 +1448,6 @@ class MonetaryPolicySubsystemTest extends TestCase
         return $probe->snapshot()['current']['policy']['constraints'];
     }
 
-    public function testTheEvansHoldIsReportedWhileItPinsTheRate(): void
-    {
-        $state = new MacroState();
-        $state->policyRate = 0.0;
-        $state->unemploymentRateEma = 0.07;
-        $state->inflationEma = 0.018;
-        $state->tipsBreakeven = 0.018;
-
-        $constraints = $this->constraintsFor($state, 0.03);
-
-        $this->assertSame(1.0, $constraints['evansHold']);
-        $this->assertSame(0.0, $constraints['hikeCeiling'], 'A held rate is not also rationed by the ceiling.');
-    }
-
-    public function testTheHikeCeilingIsReportedPastItsKnee(): void
-    {
-        $state = new MacroState();
-        $state->policyRate = 0.02;
-        $state->inflation = 0.025;
-
-        // The ceiling binds once the partial adjustment would outrun it: past a distance of velocity / speed.
-        $knee = MonetaryPolicySubsystem::CB_MAX_HIKE_VELOCITY / MonetaryPolicySubsystem::CB_SMOOTHING_SPEED;
-        $this->assertSame(1.0, $this->constraintsFor($state, 0.02 + (1.5 * $knee))['hikeCeiling'], 'Half again past the knee.');
-        $this->assertSame(0.0, $this->constraintsFor($state, 0.025)['hikeCeiling'], 'A 50bp distance adjusts freely.');
-    }
-
     public function testAMidCycleRateMovesUnconstrained(): void
     {
         $state = new MacroState();
@@ -1466,7 +1456,8 @@ class MonetaryPolicySubsystemTest extends TestCase
 
         $constraints = $this->constraintsFor($state, 0.035);
 
-        $this->assertSame(['lowerBound' => 0.0, 'evansHold' => 0.0, 'hikeCeiling' => 0.0, 'recessionCutSpeed' => 0.0, 'targetCap' => 0.0], $constraints);
+        $this->assertSame(0.0, $constraints['lowerBound']);
+        $this->assertSame(0.0, $constraints['targetCap']);
     }
 
     public function testTheLowerBoundIsReported(): void
@@ -1475,145 +1466,6 @@ class MonetaryPolicySubsystemTest extends TestCase
         $atFloor->policyRate = 0.0;
         $atFloor->unemploymentRateEma = MacroEngine::NATURAL_UNEMPLOYMENT;
         $this->assertSame(1.0, $this->constraintsFor($atFloor, MacroEngine::EFFECTIVE_LOWER_BOUND)['lowerBound']);
-    }
-
-    // --- Recession-regime easing (Aastveit, Cross, Furlanetto & Van Dijk 2024) ---
-
-    /** A state clear of the floor, unemployment at the NAIRU, so only the regime sets the speed. */
-    private function cuttingState(float $sahm, float $stress): MacroState
-    {
-        $state = new MacroState();
-        $state->policyRate = 0.045;
-        $state->inflation = 0.02;
-        $state->inflationEma = 0.02;
-        $state->unemploymentRateEma = MacroEngine::NATURAL_UNEMPLOYMENT;
-        $state->nairu = MacroEngine::NATURAL_UNEMPLOYMENT;
-        $state->sahmRecessionIndicator = $sahm;
-        $state->authorityStressRegime = $stress;
-
-        return $state;
-    }
-
-    public function testCutsCloseTheRegimeShareOfTheDistanceInARecession(): void
-    {
-        $dt = 0.25;
-        $speed = MonetaryPolicySubsystem::CB_SMOOTHING_SPEED + MonetaryPolicySubsystem::CB_RECESSION_CUT_SPEED;
-        // Aastveit et al. (2024, Table 8): rho 0.54 a quarter in the recession regime, 46% of the distance closed.
-        $this->assertEqualsWithDelta(0.54, exp(-$speed * $dt), 0.01);
-
-        $recession = $this->cuttingState(MacroEngine::SAHM_RECESSION_THRESHOLD, 0.0);
-        $this->assertEqualsWithDelta(0.015 + (0.03 * exp(-$speed * $dt)), $this->subsystem->updatePolicyRate($recession, 0.015, $dt), 1e-12);
-
-        $normal = $this->cuttingState(MacroEngine::SAHM_RECESSION_THRESHOLD - 0.0001, 0.0);
-        $this->assertEqualsWithDelta(0.015 + (0.03 * exp(-MonetaryPolicySubsystem::CB_SMOOTHING_SPEED * $dt)), $this->subsystem->updatePolicyRate($normal, 0.015, $dt), 1e-12, 'Short of the Sahm threshold the normal speed holds.');
-    }
-
-    public function testTheStressLatchAloneSpeedsCuts(): void
-    {
-        $speed = MonetaryPolicySubsystem::CB_SMOOTHING_SPEED + MonetaryPolicySubsystem::CB_RECESSION_CUT_SPEED;
-        $stressed = $this->cuttingState(0.0, 1.0);
-        $this->assertEqualsWithDelta(0.015 + (0.03 * exp(-$speed * 0.25)), $this->subsystem->updatePolicyRate($stressed, 0.015, 0.25), 1e-12);
-    }
-
-    public function testARecessionDoesNotSpeedHikes(): void
-    {
-        $state = $this->cuttingState(0.02, 1.0);
-        $state->policyRate = 0.02;
-
-        $this->assertEqualsWithDelta(0.02 + (0.01 * (1.0 - exp(-MonetaryPolicySubsystem::CB_SMOOTHING_SPEED * 0.25))), $this->subsystem->updatePolicyRate($state, 0.03, 0.25), 1e-12);
-    }
-
-    /** dt-neutral: the regime speed enters an exact first-order lag, so a quarter in one step or in ticks lands alike. */
-    public function testTheRecessionCutIsTheSameQuarterAtAnyStep(): void
-    {
-        $oneStep = $this->subsystem->updatePolicyRate($this->cuttingState(0.01, 0.0), 0.015, 0.25);
-        foreach ([4, 90] as $steps) {
-            $state = $this->cuttingState(0.01, 0.0);
-            for ($i = 0; $i < $steps; ++$i) {
-                $state->policyRate = $this->subsystem->updatePolicyRate($state, 0.015, 0.25 / $steps);
-            }
-            $this->assertEqualsWithDelta($oneStep, $state->policyRate, 1e-12, "{$steps} steps of a quarter");
-        }
-    }
-
-    public function testRecessionCutsStillStopAtTheFloor(): void
-    {
-        $state = $this->cuttingState(0.02, 1.0);
-        $state->policyRate = 0.01;
-        $speed = MonetaryPolicySubsystem::CB_SMOOTHING_SPEED + MonetaryPolicySubsystem::CB_RECESSION_CUT_SPEED;
-
-        $rate = $this->subsystem->updatePolicyRate($state, -0.05, 1.0);
-
-        $this->assertEqualsWithDelta(MacroEngine::EFFECTIVE_LOWER_BOUND + ((0.01 - MacroEngine::EFFECTIVE_LOWER_BOUND) * exp(-$speed)), $rate, 1e-12);
-    }
-
-    public function testTheEvansHoldStillPinsTheFloorInARecession(): void
-    {
-        $state = $this->cuttingState(0.02, 1.0);
-        $state->policyRate = 0.0;
-        $state->unemploymentRateEma = 0.075;
-        $state->inflationEma = 0.018;
-        $state->tipsBreakeven = 0.018;
-
-        $this->assertSame(0.0, $this->subsystem->updatePolicyRate($state, 0.02, 0.25));
-    }
-
-    public function testTheStressLatchEntersAtOnePointAndLeavesAtTheMean(): void
-    {
-        $entry = MonetaryPolicySubsystem::CB_STRESS_ENTRY_EBP;
-        $this->assertTrue(MonetaryPolicySubsystem::inStressRegime(false, $entry));
-        $this->assertFalse(MonetaryPolicySubsystem::inStressRegime(false, $entry - 0.0001), 'Below the entry level a calm Authority stays calm.');
-        $this->assertTrue(MonetaryPolicySubsystem::inStressRegime(true, 0.0001), 'Once in, it holds until the premium is back to its mean.');
-        $this->assertFalse(MonetaryPolicySubsystem::inStressRegime(true, MonetaryPolicySubsystem::CB_STRESS_EXIT_EBP));
-    }
-
-    /** 2001's premium, monthly (GZ): 1.04, 0.80, 0.79, 1.25, 1.07, -0.09pp. A single 1pp threshold dropped out and back in; the latch holds. */
-    public function testTheStressLatchDoesNotFlickerThroughADip(): void
-    {
-        $state = new MacroState();
-        $latch = [];
-        foreach ([0.0104, 0.0080, 0.0079, 0.0125, 0.0107, -0.0009] as $premium) {
-            $this->stepStressMonth($state, $premium);
-            $latch[] = $state->authorityStressRegime;
-        }
-
-        $this->assertSame([1.0, 1.0, 1.0, 1.0, 1.0, 0.0], $latch);
-    }
-
-    /** The latch reads the month's average, as the monthly record does: a spike the month averages away does not set it. */
-    public function testTheStressLatchReadsTheMonthsAverageNotATick(): void
-    {
-        $state = new MacroState();
-        $ticks = 30;
-        for ($i = 0; $i < $ticks; $i++) {
-            // Three days at 2pp in a calm month: the average sits near 0.3pp, under the entry level.
-            $state->excessBondPremium = $i >= 10 && $i < 13 ? 0.02 : 0.001;
-            $state->totalTime += 1.0 / (12.0 * $ticks);
-            $this->subsystem->updateStressRegime($state, 1.0 / (12.0 * $ticks));
-            $this->assertSame(0.0, $state->authorityStressRegime, 'Nothing is set inside the month.');
-        }
-
-        $this->stepStressMonth($state, 0.0104);
-        $this->assertSame(1.0, $state->authorityStressRegime, 'A month averaging above the entry level sets it at the month end.');
-    }
-
-    /** Steps one simulated month of ticks with the premium held, so the latch takes one monthly reading. */
-    private function stepStressMonth(MacroState $state, float $premium): void
-    {
-        $ticks = 30;
-        $dt = 1.0 / (12.0 * $ticks);
-        for ($i = 0; $i < $ticks; $i++) {
-            $state->excessBondPremium = $premium;
-            $state->totalTime += $dt;
-            $this->subsystem->updateStressRegime($state, $dt);
-        }
-    }
-
-    public function testARecessionCutIsReported(): void
-    {
-        $constraints = $this->constraintsFor($this->cuttingState(0.01, 0.0), 0.015);
-        $this->assertSame(1.0, $constraints['recessionCutSpeed']);
-        $this->assertSame(0.0, $constraints['hikeCeiling'], 'A cut is not rationed by the hike ceiling.');
     }
 
     /** Debt inside the 70% the Bohn reaction defends and no market premium on it: the curve carries no fiscal term. */

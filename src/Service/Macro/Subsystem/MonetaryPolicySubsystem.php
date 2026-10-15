@@ -20,7 +20,7 @@ use App\Service\Math\TimeSeries;
  */
 class MonetaryPolicySubsystem
 {
-    // --- Taylor Rule & The Evans Rule (Forward Guidance) ---
+    // --- Long-Rate Offset (Bernanke 2006) ---
     /** Bernanke (2006) / Rudebusch-Sack-Swanson (2007) long-rate offset: the central bank leans against the part of the ten-year it does not set (term premium away from baseline, the market's drifted view of neutral). FRB/US puts a 100bps term premium move at roughly 50bps of policy; without it a high-premium era is a decade-long slump. */
     public const TAYLOR_LONG_RATE_OFFSET = 0.50;
 
@@ -62,25 +62,21 @@ class MonetaryPolicySubsystem
     /** Minimum reinvestment hold period (years) after QE ends before QT runoff can begin (Bernanke 2020). */
     public const BALANCE_SHEET_REINVESTMENT_HOLD_YEARS = 1.5;
 
-    // --- Taylor Rule & The Evans Rule (Forward Guidance) ---
-    /** Weight on inflation deviations from the target, fitted with the gap weight by indirect inference on the US Clarida-Gali-Gertler rule, 1987-2008 (smoothing 0.85, inflation 1.87, gap 1.84) and on when the funds rate moves against the gap: the engine's rule regression reads 0.86, 1.70, 1.76 (2.4 read 2.49 once the financial scar, which depressed it, was removed). */
-    public const TAYLOR_INFLATION_WEIGHT = 1.6;
-    /** Weight on the projected output gap, the same in slack as in a boom (the US rule shows no asymmetry: impact 0.24 in booms, 0.29 in slack, se 0.12-0.15); the same fit. */
+    // --- The Authority's Published Rule (Taylor 1993) ---
+    /** Rate per point of inflation over target beyond the point that keeps the real rate level: 1.5, so the rate answers inflation two and a half for one, an activist Authority well past the Taylor principle. */
+    public const TAYLOR_INFLATION_WEIGHT = 1.5;
+    /** Rate per point of projected output gap: 1.5, leaning hard on slack, as this economy's slow transmission needs to keep its cycles readable. */
     public const TAYLOR_OUTPUT_GAP_WEIGHT = 1.5;
     /** Bernanke (2015) blend: weight on realized core inflation (EMA) in the Taylor Rule inflation measure. */
     public const TAYLOR_INFLATION_CORE_WEIGHT = 0.70;
     /** Bernanke (2015) blend: weight on forward inflation expectations (TIPS breakeven) in the Taylor Rule inflation measure. */
     public const TAYLOR_INFLATION_ANCHOR_WEIGHT = 0.30;
 
-    // --- The Rate Committee's Supermajorities (Bordo & Istrefi 2023, Table 6, col. 4; FOMC 1987-2007) ---
-    /** Points of rate a dovish supermajority sets less per point of inflation: -0.35 (se 0.15) on the FOMC's inflation response of 1.71. */
+    // --- The Rate Committee's Camps (Bordo & Istrefi 2023) ---
+    /** Points of rate a dovish camp sets less per point of inflation over target. */
     public const DOVISH_MAJORITY_INFLATION_RESPONSE = 0.35;
-    /** Points of rate a hawkish supermajority sets less per point of output gap, cutting less into a slump: -0.17 (se 0.08) on 0.71. The other two interactions were insignificant (-0.12, 0.01). */
+    /** Points of rate a hawkish camp sets less per point of output gap, cutting less into a slump. */
     public const HAWKISH_MAJORITY_GAP_RESPONSE = 0.17;
-    /** Share of the FOMC's meetings with a dovish supermajority, a quarter by its definition (App\Service\Politics\MonetaryAuthority): the rule as fitted is the FOMC's average committee's, so each term is centred on its share. */
-    public const DOVISH_MAJORITY_SHARE = 0.25;
-    /** Share of the FOMC's meetings with a hawkish supermajority, likewise a quarter. */
-    public const HAWKISH_MAJORITY_SHARE = 0.25;
 
     // --- Shifting Inflation Endpoint (Kozicki & Tinsley 2001; Orphanides & Williams 2005) ---
     /** Constant gain, per year, at which the public learns long-run inflation from realized inflation: Orphanides & Williams' baseline 0.05 a half-year period, about twenty years of data (FRB FEDS 2003-41); on US T10YIE 2003-2026 the breakeven fit's R2 peaks at 0.10-0.14. */
@@ -91,22 +87,14 @@ class MonetaryPolicySubsystem
     public const TAYLOR_GAP_FORECAST_YEARS = 0.25;
     /** Cap on that projection in gap units: a quarter's momentum extrapolated a year out is a forecast, not a measurement, and an uncapped derivative hands the rule the diffusion term. */
     public const TAYLOR_GAP_FORECAST_CAP = 0.020;
-    /** Evans Rule forward guidance: Maximum inflation ceiling tolerated while holding rates at ZLB. */
-    public const EVANS_RULE_INFLATION_CAP = 0.025;
-    /** Unemployment over the NAIRU above which forward guidance holds the rate at the floor: the FOMC's 6.5% threshold (Dec 2012) sat 0.9pp over the 5.6% midpoint of its longer-run range (5.2-6.0), so the hold ends at the same slack however much the NAIRU has scarred. */
-    public const EVANS_RULE_UNEMPLOYMENT_GAP = 0.009;
-    /** Partial-adjustment speed of the policy rate toward its target in normal times, the same cutting as hiking: 0.65 a year closes 15% of the distance a quarter (US 15% vs 13%, se 4-6%; Clarida-Gali-Gertler 2000 rho ~0.85). */
+    /** Speed (a year) at which the Authority's view of the right rate, its shadow rate, closes on the rule: 0.65, 15% of the distance a quarter. */
     public const CB_SMOOTHING_SPEED = 0.65;
-    /** Fastest the policy rate rises, per year: the FOMC's largest modern step (75bp) at each of its eight meetings, 2022's pace (+150bp in Q3); cuts are not capped, the fastest US cuts (-200bp in 2008Q1, with intermeeting moves) outran it. */
-    public const CB_MAX_HIKE_VELOCITY = 0.06;
 
-    // --- Recession-Regime Easing (Aastveit, Cross, Furlanetto & Van Dijk 2024; Sahm 2019; Gilchrist & Zakrajsek 2012) ---
-    /** Speed added while the Authority cuts in the recession regime: 0.65 + 1.8 = 2.45 a year closes 46% of the distance a quarter, the Fed's recession-regime smoothing on real-time Greenbook data (rho 0.54, 68% band 0.35-0.73, against 0.92 in normal times; Tinbergen DP 2024-030, Table 8); on Taylor (1999) and final data the 2001 easing closed 53% a quarter. */
-    public const CB_RECESSION_CUT_SPEED = 1.8;
-    /** Excess bond premium at which financial stress puts the Authority in the regime: 1pp, the GZ series' mean plus 1.5 sd (0.11 + 1.5 x 0.59, 1985-2019); every month at or above it in 1985-2021 fell inside the 2001, 2008 or 2020 easing, five months ahead of 2001's first cut. */
-    public const CB_STRESS_ENTRY_EBP = 0.010;
-    /** Excess bond premium at which the stress ends: the GZ series' mean, zero by construction. Leaving at the entry level instead flickered out and back through 2001's spring (0.94, 0.80, 1.04pp). */
-    public const CB_STRESS_EXIT_EBP = 0.0;
+    // --- Rate Meetings ---
+    /** Rate meetings a year: the decision is taken at each and holds until the next. */
+    public const MEETINGS_PER_YEAR = 8;
+    /** The step a decision moves the rate in: 25bp. */
+    public const POLICY_RATE_STEP = 0.0025;
 
     // --- Treasury Rate Volatility (RiskMetrics 1996 EWMA of ten-year yield changes) ---
     /** Window (years) of the realized ten-year yield volatility: one quarter, the period a dealer's rates revenue is booked over. */
@@ -260,15 +248,10 @@ class MonetaryPolicySubsystem
     }
 
     /**
-     * Taylor (1993) Monetary Policy Rule with Evans (2012) Forward Guidance.
-     *
-     * Computes the central bank's nominal policy rate target:
+     * The Authority's published rule, Taylor's (1993) form:
      *   r_target = r* + pi_blend + alpha_pi * (pi_blend - pi*) + gamma_y * y_gap - phi_L * long_rate_gap + committee
      * where, while the District's politics hands the macro a rate committee, committee is its supermajority's lean
      * (committeeMajorityTerm()).
-     * Under the Evans Rule, locks target at 0% (ZLB) when the central bank is at
-     * the lower bound (or unconstrained target <= 0) and unemployment is elevated
-     * while inflation remains contained.
      *
      * @param MacroState $state           Current macroeconomic state.
      * @param float      $targetInflation Statutory central bank target inflation.
@@ -291,7 +274,10 @@ class MonetaryPolicySubsystem
         // Bernanke (2006) offset leaning against exogenous non-monetary long-rate term premium shifts.
         $longRateOffset = self::TAYLOR_LONG_RATE_OFFSET * $this->calculateLongRateGap($state, $naturalRate);
 
-        $committee = self::committeeMajorityTerm($state->authorityCommitteeSeated > 0.0 ? $state->authorityMajority : null, $inflationMeasure, $cyclicalGap);
+        // The gaps the rule answers, which each camp on the committee weighs its own way (campTilt()).
+        $state->ruleInflationGap = $inflationMeasure - $targetInflation;
+        $state->ruleOutputGap = $cyclicalGap;
+        $committee = self::committeeMajorityTerm($state->authorityCommitteeSeated > 0.0 ? $state->authorityMajority : null, $state->ruleInflationGap, $cyclicalGap);
 
         $unclampedTarget = $naturalRate + $inflationMeasure
             + self::TAYLOR_INFLATION_WEIGHT * ($inflationMeasure - $targetInflation)
@@ -340,27 +326,33 @@ class MonetaryPolicySubsystem
     }
 
     /**
-     * The rate committee's lean on the rule (Bordo & Istrefi 2023, Table 6, col. 4): a dovish supermajority answers each
-     * point of inflation DOVISH_MAJORITY_INFLATION_RESPONSE less, a hawkish one each point of output gap
-     * HAWKISH_MAJORITY_GAP_RESPONSE less. The rule as fitted is the FOMC's average committee's, so each term is centred on
-     * the quarter of the FOMC's meetings its supermajority held: a committee that leans as the FOMC did adds nothing over
-     * the long run, and one that holds a supermajority more often than that leans the rule for good.
+     * The rate committee's lean on the rule: a supermajority leans it its camp's way (campTilt()), and a committee
+     * with neither leaves the rule as published.
      *
-     * @param float|null $majority 1 hawkish, -1 dovish, 0 neither; null while no committee is handed over.
-     * @param float      $inflation The rule's inflation measure.
-     * @param float      $gap       The rule's output gap.
+     * @param float|null $majority     1 hawkish, -1 dovish, 0 neither; null while no committee is handed over.
+     * @param float      $inflationGap The rule's inflation over target.
+     * @param float      $gap          The rule's output gap.
      */
-    public static function committeeMajorityTerm(?float $majority, float $inflation, float $gap): float
+    public static function committeeMajorityTerm(?float $majority, float $inflationGap, float $gap): float
     {
-        if ($majority === null) {
-            return 0.0;
-        }
+        return $majority === null ? 0.0 : self::campTilt($majority, $inflationGap, $gap);
+    }
 
-        $dovish = $majority < 0.0 ? 1.0 : 0.0;
-        $hawkish = $majority > 0.0 ? 1.0 : 0.0;
-
-        return -(self::DOVISH_MAJORITY_INFLATION_RESPONSE * $inflation * ($dovish - self::DOVISH_MAJORITY_SHARE))
-            - (self::HAWKISH_MAJORITY_GAP_RESPONSE * $gap * ($hawkish - self::HAWKISH_MAJORITY_SHARE));
+    /**
+     * How far a camp would set the rate from the published rule (Bordo & Istrefi 2023): doves answer inflation over
+     * target less, hawks answer the output gap less; in a neutral economy no camp leans at all.
+     *
+     * @param float $camp         Above zero hawkish, below zero dovish, zero neither.
+     * @param float $inflationGap The rule's inflation over target.
+     * @param float $gap          The rule's output gap.
+     */
+    public static function campTilt(float $camp, float $inflationGap, float $gap): float
+    {
+        return match (true) {
+            $camp < 0.0 => -self::DOVISH_MAJORITY_INFLATION_RESPONSE * $inflationGap,
+            $camp > 0.0 => -self::HAWKISH_MAJORITY_GAP_RESPONSE * $gap,
+            default => 0.0,
+        };
     }
 
     /**
@@ -395,100 +387,55 @@ class MonetaryPolicySubsystem
     }
 
     /**
-     * Whether financial stress holds the Authority in its recession regime: a latch on the excess bond premium (Gilchrist &
-     * Zakrajsek 2012), entered at CB_STRESS_ENTRY_EBP and left only once the premium is back to its mean, so a premium
-     * hovering at the entry level does not switch the regime tick to tick.
-     *
-     * @param bool  $wasStressed       Whether the latch was set going into this tick.
-     * @param float $excessBondPremium The premium as last observed.
-     */
-    public static function inStressRegime(bool $wasStressed, float $excessBondPremium): bool
-    {
-        return $excessBondPremium >= self::CB_STRESS_ENTRY_EBP
-            || ($wasStressed && $excessBondPremium > self::CB_STRESS_EXIT_EBP);
-    }
-
-    /**
-     * Sets the stress latch at each month end from the premium's average over the month, the monthly series its thresholds
-     * are read off (Gilchrist & Zakrajsek 2012), so a spike inside the month that the record would average away does not
-     * set it. Call once a tick, before updatePolicyRate().
-     */
-    public function updateStressRegime(MacroState $state, float $dt): void
-    {
-        $state->excessBondPremiumMonthAccrued += $state->excessBondPremium * $dt;
-        $state->excessBondPremiumMonthElapsed += $dt;
-        if (!TimeSeries::crossedSimulatedBoundary($state->totalTime, $dt, 1.0 / 12.0) || $state->excessBondPremiumMonthElapsed <= 0.0) {
-            return;
-        }
-
-        $monthlyPremium = $state->excessBondPremiumMonthAccrued / $state->excessBondPremiumMonthElapsed;
-        $state->authorityStressRegime = self::inStressRegime($state->authorityStressRegime > 0.0, $monthlyPremium) ? 1.0 : 0.0;
-        $state->excessBondPremiumMonthAccrued = 0.0;
-        $state->excessBondPremiumMonthElapsed = 0.0;
-    }
-
-    /**
-     * The recession regime of Aastveit, Cross, Furlanetto & Van Dijk's (2024) mixture Taylor rule, read in real time:
-     * unemployment says a recession is under way (the Sahm rule, which reads neither the policy rate nor the curve) or the
-     * stress latch is set. The Sahm rule's own twelve-month low holds it on for a year past the unemployment peak.
-     */
-    public static function inRecessionRegime(MacroState $state): bool
-    {
-        return MacroEngine::inSahmRecession($state->sahmRecessionIndicator) || $state->authorityStressRegime > 0.0;
-    }
-
-    /**
-     * Clarida, Galí & Gertler (1998) Partial Adjustment Monetary Policy Smoothing.
-     *
-     * Models inertial interest rate adjustments toward the Taylor target at one speed either way in normal times
-     * (1987-2008: 0.66/yr cutting, 0.57/yr hiking, not distinguishable), as an exact first-order lag. The pace is
-     * proportional to the distance up to the fastest the FOMC has hiked since 1985 (75bp a meeting, 2022). Without that
-     * ceiling the partial adjustment turned a target that jumps -- liftoff after forward guidance, a demand boom -- into
-     * +650bp in a quarter at 2.8% inflation, and 5% of years hiked over 300bp against the Fed's 1% (1985-2008).
-     *
-     * In the recession regime (inRecessionRegime()) cuts run at the regime's lower smoothing (Aastveit et al. 2024),
-     * as the Fed's did: -475bp in 2001, -125bp in eight days in January 2008, -150bp in twelve days in March 2020.
-     * Hikes keep the normal speed however high inflation runs: on 1961-2021 that mixture rule finds no regime that hikes
-     * faster (forced to a third, it answers inflation less). Inflation reaches the rate through the target's core-and-
-     * expectations measure, which looks through import and energy prices (Aoki 2001; Bodenstein, Erceg & Guerrieri 2008).
+     * The policy rate set at meetings. Between meetings the Authority's view of the right rate, its shadow rate, closes
+     * on the rule as an exact first-order lag (Clarida, Gali & Gertler 2000 inertia); at each of its eight meetings the
+     * decision is that shadow rate to the nearest 25bp, at least the floor, and the rate holds until the next. The rate
+     * the market expects at the next meeting is the shadow rate projected to it, so a decision differs from it only by
+     * what changed in the rule since the last reading: the surprise.
      *
      * @param MacroState $state      Current macroeconomic state.
-     * @param float      $targetRate Target policy rate from the Taylor Rule.
+     * @param float      $targetRate Target policy rate from the rule, clamped to the floor and ceiling.
      * @param float      $dt         Time increment in years.
-     * @return float Updated central bank policy rate.
+     * @return float The policy rate in force after this tick.
      */
     public function updatePolicyRate(MacroState $state, float $targetRate, float $dt): float
     {
-        $currentPolicyRate = $state->policyRate;
-        $effectiveTarget = max(MacroEngine::EFFECTIVE_LOWER_BOUND, min(0.20, $targetRate));
+        $speed = self::CB_SMOOTHING_SPEED;
+        $state->policyRateShadow = $targetRate + (($state->policyRateShadow - $targetRate) * exp(-$speed * $dt));
 
-        // Evans Rule (FOMC 2012) forward guidance threshold keeping rates at lower bound.
-        $evansHold = $currentPolicyRate <= MacroEngine::ZLB_PROXIMITY_THRESHOLD
-            && $effectiveTarget > $currentPolicyRate
-            && $state->unemploymentRateEma > $state->nairu + self::EVANS_RULE_UNEMPLOYMENT_GAP
-            && max($state->inflationEma, $state->tipsBreakeven) < self::EVANS_RULE_INFLATION_CAP;
-        if ($evansHold) {
-            $effectiveTarget = $currentPolicyRate;
+        $policyRate = $state->policyRate;
+        $meeting = TimeSeries::crossedSimulatedBoundary($state->totalTime, $dt, 1.0 / self::MEETINGS_PER_YEAR);
+        $state->policySurprise = 0.0;
+        if ($meeting) {
+            $policyRate = self::decision($state->policyRateShadow);
+            $state->policySurprise = $policyRate - $state->policyRateExpected;
         }
 
-        $recessionCut = $effectiveTarget < $currentPolicyRate && self::inRecessionRegime($state);
-        $cbSpeed = self::CB_SMOOTHING_SPEED + ($recessionCut ? self::CB_RECESSION_CUT_SPEED : 0.0);
-
-        $maxSpeed = $effectiveTarget > $currentPolicyRate ? self::CB_MAX_HIKE_VELOCITY : INF;
-        $newPolicyRate = TimeSeries::calculateSpeedLimitedDistributedLag($currentPolicyRate, $effectiveTarget, $dt, 1.0 / $cbSpeed, $maxSpeed);
+        $untilNext = self::nextMeetingAt($state->totalTime) - $state->totalTime;
+        $state->policyRateExpected = self::decision($targetRate + (($state->policyRateShadow - $targetRate) * exp(-$speed * $untilNext)));
 
         if ($this->diagnostics?->isEnabled()) {
-            $this->diagnostics->recordPolicyRate($newPolicyRate, [
+            $this->diagnostics->recordPolicyRate($policyRate, [
                 'lowerBound' => $targetRate <= MacroEngine::EFFECTIVE_LOWER_BOUND,
-                'evansHold' => $evansHold,
-                // Past the knee of the speed-limited lag, where the partial adjustment would outrun the ceiling.
-                'hikeCeiling' => $maxSpeed < INF && ($effectiveTarget - $currentPolicyRate) > ($maxSpeed / $cbSpeed),
-                'recessionCutSpeed' => $recessionCut,
+                'meeting' => $meeting,
+                'surprise' => $meeting && abs($state->policySurprise) > 1e-12,
                 'targetCap' => $targetRate >= MacroEngine::POLICY_RATE_CEILING,
             ], $dt);
         }
 
-        return $newPolicyRate;
+        return $policyRate;
+    }
+
+    /** A meeting's decision on a shadow rate: the nearest step, never under the floor. */
+    public static function decision(float $shadowRate): float
+    {
+        return max(MacroEngine::EFFECTIVE_LOWER_BOUND, self::POLICY_RATE_STEP * round($shadowRate / self::POLICY_RATE_STEP));
+    }
+
+    /** When the next rate meeting after a moment falls. */
+    public static function nextMeetingAt(float $time): float
+    {
+        return (floor(($time * self::MEETINGS_PER_YEAR) + 1e-9) + 1.0) / self::MEETINGS_PER_YEAR;
     }
 
     /**
