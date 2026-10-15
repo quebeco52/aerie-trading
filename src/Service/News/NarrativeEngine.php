@@ -479,6 +479,14 @@ class NarrativeEngine
                     "New head at the Securities Commission: The Council has named a new head of the Securities Commission.",
                 ]
             ),
+            ShockEvent::SECURITY_DIRECTOR_APPOINTED => $this->getRandomPhrase(
+                isset($context['security_director'], $context['security_director_age'], $context['security_director_term_ends']) ? [
+                    "New director at the Security Bureau: The Council names {$context['security_director']}, {$context['security_director_age']}, to lead the District's fight against organised crime and foreign agents until {$context['security_director_term_ends']}." . ($context['security_director_passed_over'] !== '' ? " Passed over: {$context['security_director_passed_over']}." : ''),
+                    "The Council picks the District's chief investigator: {$context['security_director']} takes the Security Bureau for a single ten-year term, ending {$context['security_director_term_ends']}.",
+                ] : [
+                    "New director at the Security Bureau: The Council has named a new director of the Security Bureau.",
+                ]
+            ),
             ShockEvent::REGULATOR_APPOINTED => $this->getRandomPhrase(
                 isset($context['regulator'], $context['regulator_age'], $context['regulator_stance'], $context['requirement_change']) ? [
                     "New bank regulator: The Council names {$context['regulator']}, {$context['regulator_age']}, {$context['regulator_stance']}, to head the Financial Regulator until {$context['regulator_term_ends']}. The new head {$context['requirement_change']}." . ($context['regulator_passed_over'] !== '' ? " Passed over: {$context['regulator_passed_over']}." : ''),

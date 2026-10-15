@@ -211,7 +211,7 @@ final class CompanyResearch
             'sections' => [
                 [
                     'heading' => 'Policing put out to tender',
-                    'body' => "The District was founded with a small public administration and the expectation that private firms would do much of what governments elsewhere do for themselves. Policing was among the first services put out to tender. Bird Watch, then a guarding company serving the banks on Glasswater Row, won the contracts for the ports and for the Trade & Migration Office's border checkpoints, and has renewed them ever since.\n\nIts officers patrol alongside the municipal police. In some boroughs residents find it hard to say which is which, and the company has never seen a commercial reason to make it easier.",
+                    'body' => "The District was founded with a small public administration and the expectation that private firms would do much of what governments elsewhere do for themselves. Policing was among the first services put out to tender. Bird Watch, then a guarding company serving the banks on Glasswater Row, won the contracts for the ports and for the Trade & Migration Office's border checkpoints, and has renewed them ever since.\n\nIts officers patrol alongside the municipal police. In some boroughs residents find it hard to say which is which, and the company has never seen a commercial reason to make it easier.\n\nWhat neither of them does is investigate. Organised crime and foreign agents belong to the Security Bureau, the Council's own investigative police, which also vets every officer Bird Watch wants to arm.",
                 ],
                 [
                     'heading' => 'How it earns',

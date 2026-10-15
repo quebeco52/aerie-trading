@@ -30,7 +30,8 @@ use App\Data\District\Institutions;
  * Exchequer's head, who sets the debt's maturity (App\Service\Politics\Exchequer), the Fair Trading Board's head, who
  * sets the screens merger review applies (App\Service\Politics\FairTradingBoard), and the Securities Commission's
  * head, who sets the margin investors put up and what listed firms must disclose
- * (App\Service\Politics\SecuritiesCommission). The budget is the Diet's alone. No party sits on the Council.
+ * (App\Service\Politics\SecuritiesCommission). It also names the Security Bureau's director, who sets no rule
+ * (App\Service\Politics\SecurityBureau). The budget is the Diet's alone. No party sits on the Council.
  */
 final class AerieCouncil
 {
@@ -69,6 +70,8 @@ final class AerieCouncil
     public const OPENING_FAIR_TRADING_HEAD = 'Martin Ingram';
     /** The Securities Commission's head sitting at Year 1, named before it. */
     public const OPENING_SECURITIES_HEAD = 'Denise Carver';
+    /** The Security Bureau's director sitting at Year 1, named before it. */
+    public const OPENING_SECURITY_DIRECTOR = 'Raymond Okafor';
 
     // --- Departments ---
     /**
@@ -83,6 +86,7 @@ final class AerieCouncil
         ['name' => Institutions::EXCHEQUER, 'mandate' => 'Executes the budget the Diet passes and funds it. Its head, named for one term, decides how long the District borrows for.', 'href' => '/exchequer'],
         ['name' => Institutions::FAIR_TRADING_BOARD, 'mandate' => 'Reviews the mergers of the District\'s firms. Its head, named for one term, sets how concentrated a market may become and how much of it one firm may hold after a deal.', 'href' => '/fair-trading'],
         ['name' => Institutions::SECURITIES_COMMISSION, 'mandate' => 'Sets the rules of the Aerie Exchange. Its head, named for one term, decides the margin an investor must put up to buy or short on credit, and how hard it pursues listed companies that dress up their results.', 'href' => '/securities'],
+        ['name' => Institutions::SECURITY_BUREAU, 'mandate' => 'The District\'s investigative police. A centre of world finance with friends on the mainland and enemies abroad draws organised crime and foreign agents as no ordinary city does, and the Bureau exists to keep them out. Its director is named for a single ten-year term, twice as long as any other head\'s.', 'href' => null],
         ['name' => Institutions::TRADE_MIGRATION_OFFICE, 'mandate' => 'Administers the tariff schedule, the migration quotas and the tax on foreign home buyers the Diet legislates.', 'href' => '/trade-office'],
     ];
 

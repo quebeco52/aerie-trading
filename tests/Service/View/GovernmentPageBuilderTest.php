@@ -140,6 +140,18 @@ class GovernmentPageBuilderTest extends TestCase
         $this->assertNull($this->builder()->securities($later, new MacroStateDTO())['coming'] ?? null, 'Once the notice has run the rules are in force.');
     }
 
+    /** The Security Bureau has no page, so the Council page lists its director with its mandate; the departments with pages carry none. */
+    public function testTheCouncilPageNamesTheSecurityBureausDirector(): void
+    {
+        $politics = new PoliticsStateDTO(totalTime: 7.0, securityDirectorName: 'Augustin Pell', securityDirectorBirth: -45.0, securityDirectorTermStart: 6.0);
+        $departments = array_column($this->builder()->buildCouncil(new MacroStateDTO(totalTime: 7.0), $politics)['council']['departments'], null, 'name');
+
+        $bureau = $departments[\App\Data\District\Institutions::SECURITY_BUREAU];
+        $this->assertNull($bureau['href']);
+        $this->assertSame(['title' => 'Director', 'name' => 'Augustin Pell', 'age' => 52, 'termEndsLabel' => self::simDate(16.0)], $bureau['head']);
+        $this->assertNull($departments[\App\Data\District\Institutions::EXCHEQUER]['head']);
+    }
+
     public function testTheDietAtYearOneIsDrawnSeatForSeat(): void
     {
         $page = $this->builder()->buildDiet(new MacroStateDTO(), new PoliticsStateDTO());

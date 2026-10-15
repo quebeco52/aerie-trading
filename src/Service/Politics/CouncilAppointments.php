@@ -161,6 +161,7 @@ final class CouncilAppointments
         $state->exchequerHeadName = '';
         $state->fairTradingHeadName = '';
         $state->securitiesHeadName = '';
+        $state->securityDirectorName = '';
         $state->formerNames = [];
         $state->boardMembers = $state->boardSince = [];
         self::seatBoard($state, $salt, $time, $math);
@@ -387,22 +388,22 @@ final class CouncilAppointments
 
     /**
      * Everyone sitting: councillors, the governor, the rate committee, the heads of the Financial Regulator, the
-     * Sovereign Reserve Fund, the Exchequer, the Fair Trading Board and the Securities Commission, and the Council
-     * Appointment Board.
+     * Sovereign Reserve Fund, the Exchequer, the Fair Trading Board and the Securities Commission, the Security Bureau's
+     * director, and the Council Appointment Board.
      *
      * @return list<string>
      */
     public static function sittingNames(PoliticsState $state): array
     {
         return array_values(array_filter(
-            array_merge($state->councilNames, [$state->governorName], $state->memberNames, [$state->regulatorName, $state->fundHeadName, $state->exchequerHeadName, $state->fairTradingHeadName, $state->securitiesHeadName], array_column($state->boardMembers, 'name')),
+            array_merge($state->councilNames, [$state->governorName], $state->memberNames, [$state->regulatorName, $state->fundHeadName, $state->exchequerHeadName, $state->fairTradingHeadName, $state->securitiesHeadName, $state->securityDirectorName], array_column($state->boardMembers, 'name')),
             static fn(string $name): bool => $name !== ''
         ));
     }
 
     /**
      * Every name a new appointee or party leader may not take: everyone sitting on the Council, at the Monetary
-     * Authority, the Financial Regulator, the Sovereign Reserve Fund, the Exchequer, the Fair Trading Board or the Securities Commission or leading a party, everyone who ever did, and
+     * Authority, the Financial Regulator, the Sovereign Reserve Fund, the Exchequer, the Fair Trading Board, the Securities Commission or the Security Bureau or leading a party, everyone who ever did, and
      * the people seated before Year 1.
      *
      * @return list<string>
@@ -414,7 +415,7 @@ final class CouncilAppointments
             array_values($state->leaderNames),
             $state->formerNames,
             AerieCouncil::OPENING_MEMBERS,
-            [AerieCouncil::OPENING_GOVERNOR, AerieCouncil::OPENING_REGULATOR, AerieCouncil::OPENING_FUND_HEAD, AerieCouncil::OPENING_EXCHEQUER_HEAD, AerieCouncil::OPENING_FAIR_TRADING_HEAD, AerieCouncil::OPENING_SECURITIES_HEAD]
+            [AerieCouncil::OPENING_GOVERNOR, AerieCouncil::OPENING_REGULATOR, AerieCouncil::OPENING_FUND_HEAD, AerieCouncil::OPENING_EXCHEQUER_HEAD, AerieCouncil::OPENING_FAIR_TRADING_HEAD, AerieCouncil::OPENING_SECURITIES_HEAD, AerieCouncil::OPENING_SECURITY_DIRECTOR]
         );
         foreach ($state->leaderHistory as $leaders) {
             foreach ($leaders as $leader) {

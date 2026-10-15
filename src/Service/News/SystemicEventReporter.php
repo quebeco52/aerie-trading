@@ -21,6 +21,7 @@ use App\Service\Politics\FinancialRegulator;
 use App\Service\Politics\MonetaryAuthority;
 use App\Service\Politics\PartyLeaders;
 use App\Service\Politics\SecuritiesCommission;
+use App\Service\Politics\SecurityBureau;
 use App\Service\Politics\SovereignReserveFund;
 use App\Service\View\GovernmentPageBuilder;
 
@@ -96,7 +97,8 @@ class SystemicEventReporter
             + self::fundHeadContext($macro, $politics)
             + self::exchequerHeadContext($macro, $politics)
             + self::fairTradingHeadContext($politics)
-            + self::securitiesHeadContext($politics);
+            + self::securitiesHeadContext($politics)
+            + self::securityDirectorContext($politics);
 
         $monthMove = $this->priceChangeFeed->changeForTicker((string) $benchmark->getTicker(), (float) $benchmark->getPrice());
 
@@ -490,6 +492,26 @@ class SystemicEventReporter
                     default => 'eases off companies that dress up their results',
                 }
             ),
+        ];
+    }
+
+    /**
+     * The Security Bureau's director for their headline: who they are, when their term ends and whom the Council passed
+     * over. Empty before the Bureau has a director.
+     *
+     * @return array<string, string>
+     */
+    private static function securityDirectorContext(PoliticsStateDTO $politics): array
+    {
+        if ($politics->securityDirectorName === '') {
+            return [];
+        }
+
+        return [
+            'security_director' => $politics->securityDirectorName,
+            'security_director_age' => (string) (int) floor($politics->totalTime - $politics->securityDirectorBirth),
+            'security_director_term_ends' => GovernmentPageBuilder::simDate(SecurityBureau::directorTermEnd($politics->totalTime)),
+            'security_director_passed_over' => self::listNames(array_map(static fn(array $candidate): string => $candidate['name'], $politics->securityDirectorPassedOver)),
         ];
     }
 

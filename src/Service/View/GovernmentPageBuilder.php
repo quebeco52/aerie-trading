@@ -7,6 +7,7 @@ namespace App\Service\View;
 use App\Data\Politics\AerieCouncil;
 use App\Data\Politics\AerieDiet;
 use App\Data\District\DistrictCalendar;
+use App\Data\District\Institutions;
 use App\Data\Politics\AeriePartyProfiles;
 use App\DTO\MacroStateDTO;
 use App\DTO\PoliticsStateDTO;
@@ -40,6 +41,7 @@ use App\Service\Politics\MonetaryAuthority;
 use App\Service\Politics\PartyLeaders;
 use App\Service\Politics\PoliticsEngine;
 use App\Service\Politics\SecuritiesCommission;
+use App\Service\Politics\SecurityBureau;
 use App\Service\Politics\SovereignReserveFund;
 use App\Twig\Extension\NumberFormatExtension;
 
@@ -354,7 +356,15 @@ class GovernmentPageBuilder
                 array_map(static fn(array $member): float => $member['swing'] ?? 0.0, $politics->boardMembers)
             ) + ['seats' => count($politics->boardMembers), 'median' => MonetaryAuthority::stanceName(CouncilAppointments::boardMedians($politics)[CouncilAppointments::AXIS_MONEY])],
             'lean' => self::councilLean($politics),
-            'departments' => AerieCouncil::DEPARTMENTS,
+            // The Security Bureau has no page of its own, so its director is shown with its mandate.
+            'departments' => array_map(static fn(array $department): array => $department + [
+                'head' => $department['name'] === Institutions::SECURITY_BUREAU && $politics->securityDirectorName !== '' ? [
+                    'title' => 'Director',
+                    'name' => $politics->securityDirectorName,
+                    'age' => (int) floor($macro->totalTime - $politics->securityDirectorBirth),
+                    'termEndsLabel' => self::simDate(SecurityBureau::directorTermEnd($macro->totalTime)),
+                ] : null,
+            ], AerieCouncil::DEPARTMENTS),
         ]]);
     }
 

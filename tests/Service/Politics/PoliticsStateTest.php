@@ -69,6 +69,9 @@ class PoliticsStateTest extends TestCase
         $state->councilCompetitionStances = [0.2, -0.9];
         $state->councilMarketsStances = [0.5, -0.1];
         $state->securitiesHeadName = 'Thea Lindqvist';
+        $state->securityDirectorName = 'Augustin Pell';
+        $state->securityDirectorBirth = -52.0;
+        $state->securityDirectorPassedOver = [['name' => 'Nell Rourke', 'birth' => -49.0, 'stance' => 0.5, 'regulation' => -0.2, 'fund' => 0.1, 'debt' => 0.0, 'competition' => 0.3, 'markets' => -0.4]];
         $state->securitiesHeadStance = -0.3;
         $state->securitiesPriorStance = 0.6;
         $state->securitiesHeadPassedOver = [['name' => 'Arlo Mercer', 'birth' => -46.0, 'stance' => 0.0, 'regulation' => 0.0, 'fund' => 0.0, 'debt' => 0.0, 'competition' => 0.0, 'markets' => 0.8]];

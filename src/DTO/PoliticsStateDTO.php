@@ -225,7 +225,14 @@ readonly class PoliticsStateDTO
         /** @var list<array{name: string, birth: float, stance: float, regulation: float, fund: float, debt: float, competition: float, markets: float, swing?: float}> The candidates the Council passed over when it named the head. */
         public array $securitiesHeadPassedOver = [],
         public float $lastSecuritiesHeadAppointedAt = -1.0,
-        /** @var list<string> Everyone who has left a Council seat or a post at the Monetary Authority, the Financial Regulator, the Sovereign Reserve Fund, the Exchequer, the Fair Trading Board or the Securities Commission, whose names no later appointee takes. */
+        /** The Security Bureau's director in office: name, birth date and when their term began. */
+        public string $securityDirectorName = '',
+        public float $securityDirectorBirth = 0.0,
+        public float $securityDirectorTermStart = 0.0,
+        /** @var list<array{name: string, birth: float, stance: float, regulation: float, fund: float, debt: float, competition: float, markets: float, swing?: float}> The candidates the Council passed over when it named the director. */
+        public array $securityDirectorPassedOver = [],
+        public float $lastSecurityDirectorAppointedAt = -1.0,
+        /** @var list<string> Everyone who has left a Council seat or a post at the Monetary Authority, the Financial Regulator, the Sovereign Reserve Fund, the Exchequer, the Fair Trading Board, the Securities Commission or the Security Bureau, whose names no later appointee takes. */
         public array $formerNames = [],
         /** @var array<string, string> Each party's leader (App\Service\Politics\PartyLeaders), drawn on the first tick; the prime minister is the leader of the cabinet's largest party. */
         public array $leaderNames = [],

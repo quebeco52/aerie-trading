@@ -66,6 +66,8 @@ class ShockEvent
     public const FAIR_TRADING_HEAD_APPOINTED = 'fair_trading_head_appointed';
     /** The Council has named a new head of the Securities Commission, who sets the margin investors put up and what listed firms must disclose. */
     public const SECURITIES_HEAD_APPOINTED = 'securities_head_appointed';
+    /** The Council has named a new director of the Security Bureau, who leads the District's fight against organised crime and foreign agents. */
+    public const SECURITY_DIRECTOR_APPOINTED = 'security_director_appointed';
     /** An appointment has tipped the rate committee into or out of a hawkish or dovish supermajority, which leans the policy rule. */
     public const AUTHORITY_MAJORITY_SHIFT = 'authority_majority_shift';
     /** The prime minister's party has a new leader, who is prime minister without an election. */

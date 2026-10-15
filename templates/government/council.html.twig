@@ -92,6 +92,9 @@
 										<span class="font-semibold text-on-surface">{{ department.name }}</span>
 									{% endif %}
 									<span class="block text-2xs text-on-surface-variant">{{ department.mandate }}</span>
+									{% if department.head %}
+										<span class="block text-2xs text-on-surface mt-0.5">{{ department.head.title }} {{ department.head.name }}, {{ department.head.age }}; term ends <span class="font-mono tabular-nums">{{ department.head.termEndsLabel }}</span></span>
+									{% endif %}
 								</li>
 							{% endfor %}
 						</ul>
@@ -99,7 +102,7 @@
 					<div>
 						<h3 class="text-xs font-semibold text-on-surface">Powers</h3>
 						<ul class="mt-2 space-y-2 text-2xs text-on-surface-variant">
-							<li><span class="font-semibold text-on-surface">Appointments.</span> The Council names the governor of the Monetary Authority and the heads of the Financial Regulator, the Sovereign Reserve Fund and the Exchequer, each from a shortlist, choosing the candidate nearest its own views. Once seated, they answer to their mandates, not to the Council.</li>
+							<li><span class="font-semibold text-on-surface">Appointments.</span> The Council names the governor of the Monetary Authority, the heads of the other departments and the director of the Security Bureau, each from a shortlist, choosing the candidate nearest its own views. Once seated, they answer to their mandates, not to the Council.</li>
 							<li><span class="font-semibold text-on-surface">The budget.</span> The Council has no say over the budget or the laws; those are the Diet's alone.</li>
 							<li><span class="font-semibold text-on-surface">Independence.</span> No party sits on the Council, and no councillor sits in the Diet. What passes between them runs on gentlemen's agreements.</li>
 						</ul>
