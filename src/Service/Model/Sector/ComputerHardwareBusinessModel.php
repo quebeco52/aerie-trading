@@ -76,13 +76,13 @@ class ComputerHardwareBusinessModel extends StandardCorporateBusinessModel
     public const ENTERPRISE_MARGIN_PREMIUM = 0.063;
 
     // --- Tail Risk & Shock Events ---
-    /** Latent supply-stress threshold for a component shortage, in standard deviations: the firm's own draw plus the GSCPI (Benigno et al. 2022), so shortages cluster when the whole chain is stretched. */
+    /** Latent supply-stress threshold for a component shortage, in standard deviations: the firm's own draw plus the economy's supply-chain pressure at the comm-equipment loading, so shortages cluster when the whole chain is stretched. */
     public const SEMICONDUCTOR_SHORTAGE_Z_SCORE = -2.20;
     /** Enterprise shipments a component shortage lets through: allocation favours the high-margin servers. */
     public const SHORTAGE_ENTERPRISE_MULT = 0.85;
     /** Consumer shipments a component shortage lets through: PCs and peripherals are allocated last. */
     public const SHORTAGE_CONSUMER_MULT = 0.80;
-    /** Variable margin cost per standard deviation of GSCPI (expediting, spot chips, air freight): the comm-equipment figure, as both buy the same parts through the same contract manufacturers. */
+    /** Variable margin cost per standard deviation of supply-chain pressure (expediting, spot chips, air freight): the comm-equipment figure, as both buy the same parts through the same contract manufacturers. */
     public const GSCPI_MARGIN_PENALTY_SCALAR = CommunicationEquipmentBusinessModel::GSCPI_MARGIN_PENALTY_SCALAR;
     /** Positive z-score threshold indicating a massive enterprise/AI hardware super-cycle. */
     public const AI_SUPER_CYCLE_Z_SCORE = 2.40;
@@ -218,7 +218,7 @@ class ComputerHardwareBusinessModel extends StandardCorporateBusinessModel
         // The expediting cost is the GSCPI margin drag below, so the shortage itself only rations volume.
         $shortagePenalty = max(0.0, $macroState->supplyChainPressureIndexEma) * self::GSCPI_MARGIN_PENALTY_SCALAR;
 
-        if ($eventZ < self::SEMICONDUCTOR_SHORTAGE_Z_SCORE + $macroState->supplyChainPressureIndexEma) {
+        if ($eventZ < self::SEMICONDUCTOR_SHORTAGE_Z_SCORE + (CommunicationEquipmentBusinessModel::SUPPLY_CHAIN_STRESS_LOADING * $macroState->supplyChainPressureIndexEma)) {
             $eventType = ShockEvent::SEMICONDUCTOR_FAB_SHORTAGE;
             $enterpriseMultiplier = self::SHORTAGE_ENTERPRISE_MULT;
             $consumerMultiplier = self::SHORTAGE_CONSUMER_MULT;

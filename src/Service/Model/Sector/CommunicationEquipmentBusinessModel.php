@@ -131,14 +131,16 @@ class CommunicationEquipmentBusinessModel extends StandardCorporateBusinessModel
     public const MAX_WITHHELD_ROYALTY_QUARTERS = 4.0;
 
     // --- Component Supply ---
-    /** Supply-stress threshold, in standard deviations, past which a fab shortage strikes; the firm's own stress (the event Z) and the GSCPI enter in the same units. */
+    /** Supply-stress threshold, in standard deviations, past which a fab shortage strikes: the firm's own stress (the event Z) plus the economy's pressure at its loading. */
     public const COMPONENT_SHORTAGE_Z_SCORE = -2.20;
     /** Fraction of the normal backlog burn delivered during a shortage; the rest slips into next quarter's backlog. */
     public const COMPONENT_SHORTAGE_DELIVERY_SLIP = 0.75;
     /** Consumer terminal volume multiplier during a shortage (retail gateways lose the allocation fight). */
     public const COMPONENT_SHORTAGE_CONSUMER_MULT = 0.85;
-    /** Variable margin penalty per standard deviation of global supply chain friction (GSCPI). */
-    public const GSCPI_MARGIN_PENALTY_SCALAR = 0.012;
+    /** Variable margin penalty per standard deviation of supply-chain pressure above normal (0.57pp). */
+    public const GSCPI_MARGIN_PENALTY_SCALAR = 0.0057;
+    /** Latent supply stress per standard deviation of supply-chain pressure: about half the firm's own, so shortages cluster when the whole chain is stretched without every squeeze becoming one. */
+    public const SUPPLY_CHAIN_STRESS_LOADING = 0.475;
     /** Order sensitivity of consumer terminals to the economy-wide inventory-to-sales gap (Metzler cycle): distributors destock before reordering. */
     public const INVENTORY_CYCLE_SENSITIVITY = 0.60;
 
@@ -298,7 +300,7 @@ class CommunicationEquipmentBusinessModel extends StandardCorporateBusinessModel
         $burnRate = self::NETWORK_BACKLOG_BURN_RATE;
         $consumerMultiplier = 1.0;
 
-        if ($eventZ < self::COMPONENT_SHORTAGE_Z_SCORE + $macroState->supplyChainPressureIndexEma) {
+        if ($eventZ < self::COMPONENT_SHORTAGE_Z_SCORE + (self::SUPPLY_CHAIN_STRESS_LOADING * $macroState->supplyChainPressureIndexEma)) {
             $burnRate *= self::COMPONENT_SHORTAGE_DELIVERY_SLIP;
             $consumerMultiplier = self::COMPONENT_SHORTAGE_CONSUMER_MULT;
             $eventType = ShockEvent::SEMICONDUCTOR_FAB_SHORTAGE;

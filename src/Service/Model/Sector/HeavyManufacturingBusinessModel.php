@@ -115,8 +115,8 @@ class HeavyManufacturingBusinessModel extends StandardCorporateBusinessModel
     // --- Capacity Utilization & Global Supply Chain Physics ---
     /** Sensitivity of heavy factory fixed overhead absorption and variable margin to capacity utilization deviations. */
     public const CU_MARGIN_ABSORPTION_SENSITIVITY = 0.15;
-    /** Variable margin cost drag per standard deviation of global supply chain pressure (GSCPI). */
-    public const GSCPI_COST_PENALTY_SCALAR        = 0.020;
+    /** Variable margin cost drag per standard deviation of supply-chain pressure above normal (0.95pp). */
+    public const GSCPI_COST_PENALTY_SCALAR        = 0.0095;
 
     // --- Valuation ---
     /** Book (replacement cost) weight in fair value when normalised EPS is negative: trough cyclicals trade on assets. */

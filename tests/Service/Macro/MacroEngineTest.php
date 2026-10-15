@@ -905,11 +905,10 @@ class MacroEngineTest extends TestCase
         $stateNeutral->corporateTaxRate = 0.21;
         $stateNeutral->capitalStockOverhang = 0.0;
 
-        // Neutral credit: spreads at the baselines the credit legs measure their drag from, and the compensated
-        // crisis drag at its long-run average
+        // Neutral credit: spreads at their baselines and no crisis running
         $stateNeutral->macroCreditSpreadEma = MacroEngine::BASE_CREDIT_SPREAD;
         $stateNeutral->interbankLiquiditySpreadEma = MacroEngine::INTERBANK_BASELINE_SPREAD;
-        $stateNeutral->creditCrisisDrag = $aggregateSubsystem->stationaryCrisisDrag();
+        $stateNeutral->creditCrisisDrag = 0.0;
 
         // Neutral Housing & Commodity Markets
         $stateNeutral->residentialPropertyIndexEma = 100.0;
@@ -1588,16 +1587,13 @@ class MacroEngineTest extends TestCase
         $naturalRate = MacroEngine::BASE_NATURAL_RATE;
         $yield5y = 0.04;
 
-        // Baseline state: credit spreads at equilibrium (200 bps credit, 10 bps interbank)
+        // Baseline state: the lenders' premium at its trend
         $stateBaseline = new \App\Service\Macro\MacroState();
         $stateBaseline->outputGap = 0.0;
-        $stateBaseline->macroCreditSpreadEma = MacroEngine::BASE_CREDIT_SPREAD;
-        $stateBaseline->interbankLiquiditySpreadEma = MacroEngine::INTERBANK_BASELINE_SPREAD;
 
-        // Crisis state: credit spreads blown out (600 bps credit, 150 bps interbank)
+        // Crisis state: the premium 2008's 216 bps over its trend
         $stateCrisis = clone $stateBaseline;
-        $stateCrisis->macroCreditSpreadEma = 0.06;
-        $stateCrisis->interbankLiquiditySpreadEma = 0.015;
+        $stateCrisis->excessBondPremium = $stateBaseline->excessBondPremiumTrend + 0.0216;
 
         $gapBaseline = $this->aggregateSubsystem->calculateOutputGap($stateBaseline, $yield5y, $naturalRate, MacroEngine::TARGET_INFLATION, $dt, $stressMultiplier);
         $gapCrisis   = $this->aggregateSubsystem->calculateOutputGap($stateCrisis, $yield5y, $naturalRate, MacroEngine::TARGET_INFLATION, $dt, $stressMultiplier);
@@ -1605,7 +1601,7 @@ class MacroEngineTest extends TestCase
         $this->assertLessThan(
             $gapBaseline,
             $gapCrisis,
-            'BGG financial accelerator: blown-out credit & interbank spreads must contract output gap more than baseline.'
+            'BGG financial accelerator: a blown-out credit premium must contract the output gap.'
         );
     }
 
@@ -1898,7 +1894,6 @@ class MacroEngineTest extends TestCase
     public function testInterbankLiquiditySpreadCoupledToTheBondPremium(): void
     {
         $creditSubsystem = new \App\Service\Macro\Subsystem\CreditFiscalSubsystem($this->mathUtilityMock);
-        $dt = 0.25;
 
         $stateCalm = new \App\Service\Macro\MacroState();
         $stateCalm->interbankLiquiditySpread = MacroEngine::INTERBANK_BASELINE_SPREAD;
@@ -1912,8 +1907,8 @@ class MacroEngineTest extends TestCase
         $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
         $this->mathUtilityMock->method('checkProbability')->willReturn(false);
 
-        $creditSubsystem->calculateInterbankLiquiditySpread($stateCalm, $dt);
-        $creditSubsystem->calculateInterbankLiquiditySpread($stateStressed, $dt);
+        $creditSubsystem->calculateInterbankLiquiditySpread($stateCalm);
+        $creditSubsystem->calculateInterbankLiquiditySpread($stateStressed);
 
         $this->assertGreaterThan(
             $stateCalm->interbankLiquiditySpread,

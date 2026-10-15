@@ -93,6 +93,8 @@ class ShippingBusinessModel extends StandardCorporateBusinessModel
     // --- Event Lore Thresholds ---
     /** Positive z-score threshold required during trade booms to trigger port congestion lore. */
     public const LORE_CONGESTION_Z_SCORE   = 1.50;
+    /** Supply-chain pressure, in standard deviations, past which ports congest whatever the domestic cycle: a once-a-generation squeeze. */
+    public const CONGESTION_PRESSURE_THRESHOLD = 2.7;
     /** Fraction of the contracted charter backlog delivered each quarter (multi-year time charters, ~2.3 quarters of coverage). */
     public const CONTRACT_BACKLOG_BURN_RATE = 0.30;
     /** Regime key for a port-congestion super-cycle that keeps spot rates elevated until berths clear. */
@@ -206,7 +208,7 @@ class ShippingBusinessModel extends StandardCorporateBusinessModel
         $congestionElapsed = $streams->evolveRegime(self::REGIME_PORT_CONGESTION, 0.0, self::PORT_CONGESTION_EXIT_HAZARD);
         $glutElapsed       = $streams->evolveRegime(self::REGIME_CAPACITY_GLUT, 0.0, self::CAPACITY_GLUT_EXIT_HAZARD);
 
-        if (($outputGap > self::SPOT_BOOM_GAP_THRESHOLD || $gscpiShift > 1.0) && $spotZ > self::LORE_CONGESTION_Z_SCORE && $congestionElapsed === 0 && $glutElapsed === 0) {
+        if (($outputGap > self::SPOT_BOOM_GAP_THRESHOLD || $gscpiShift > self::CONGESTION_PRESSURE_THRESHOLD) && $spotZ > self::LORE_CONGESTION_Z_SCORE && $congestionElapsed === 0 && $glutElapsed === 0) {
             $congestionElapsed = $streams->startRegime(self::REGIME_PORT_CONGESTION);
             $eventType = ShockEvent::SHIPPING_PORT_CONGESTION;
         } elseif ($outputGap < self::SPOT_GLUT_GAP_THRESHOLD && $spotZ < self::LORE_GLUT_Z_SCORE && $glutElapsed === 0 && $congestionElapsed === 0) {

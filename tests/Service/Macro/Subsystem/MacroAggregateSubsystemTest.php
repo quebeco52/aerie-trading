@@ -7,6 +7,7 @@ use App\Service\Macro\MacroState;
 use App\Service\Macro\Subsystem\AssetMarketSubsystem;
 use App\Service\Macro\Subsystem\CommodityLogisticsSubsystem;
 use App\Service\Macro\Recorder\OutputGapProbe;
+use App\Service\Macro\Subsystem\CreditFiscalSubsystem;
 use App\Service\Macro\Subsystem\MacroAggregateSubsystem;
 use App\Service\Macro\Subsystem\SovereignFundSubsystem;
 use App\Service\Math\FixedIncome;
@@ -156,7 +157,8 @@ class MacroAggregateSubsystemTest extends TestCase
         // 2. Supply chain shock scenario: neutral wage growth, high freight
         $stateSupply = new MacroState();
         $stateSupply->wageGrowth = 0.035; // Neutral wage growth
-        $stateSupply->supplyChainPressureIndex = 2.0; // A freight doubling's worth of pressure, still building
+        $stateSupply->freightRateIndex = 2.0 * MacroEngine::FREIGHT_BASELINE; // Freight doubled, its quarter average still catching up
+        $stateSupply->freightRateIndexEma = MacroEngine::FREIGHT_BASELINE;
         $stateSupply->inflation = 0.02;
 
         $this->subsystem->calculateInflation($stateSupply, MacroEngine::TARGET_INFLATION, MacroEngine::TFP_DRIFT, 0.25);
@@ -908,24 +910,48 @@ class MacroAggregateSubsystemTest extends TestCase
     }
 
     /**
-     * Gilchrist & Zakrajsek (2012) premium, Barnichon, Matthes & Ziegenbein (2022) asymmetry: an adverse premium drags at
-     * the adverse rate, a favorable one lifts demand at the (much smaller) favorable rate.
+     * Gilchrist & Zakrajsek (2012) premium, Barnichon, Matthes & Ziegenbein (2022) asymmetry: a premium over its trend
+     * drags at the one credit slope, one under it lifts nothing, and a premium at its trend leaves demand alone.
      */
-    public function testAnAdversePremiumCutsDemandMoreThanAnEqualFavorableOneLiftsIt(): void
+    public function testAPremiumOverItsTrendCutsDemandAndOneUnderItLiftsNothing(): void
     {
         $neutral = $this->neutralBorrowingState();
+        $neutral->excessBondPremium = 0.004;
+        $neutral->excessBondPremiumTrend = 0.004;
         $adverse = $this->neutralBorrowingState();
-        $adverse->excessBondPremium = 0.01;
+        $adverse->excessBondPremium = 0.014;
+        $adverse->excessBondPremiumTrend = 0.004;
         $favorable = $this->neutralBorrowingState();
-        $favorable->excessBondPremium = -0.01;
+        $favorable->excessBondPremium = -0.006;
+        $favorable->excessBondPremiumTrend = 0.004;
+        $base = $this->neutralBorrowingState();
 
-        $gapNeutral = $this->subsystem->calculateOutputGap($neutral, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, 0.25, 1.0);
-        $gapAdverse = $this->subsystem->calculateOutputGap($adverse, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, 0.25, 1.0);
-        $gapFavorable = $this->subsystem->calculateOutputGap($favorable, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, 0.25, 1.0);
+        $run = fn (MacroState $state): float => $this->subsystem->calculateOutputGap($state, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, 0.25, 1.0);
+        $gapNeutral = $run($neutral);
 
-        $this->assertEqualsWithDelta(-MacroAggregateSubsystem::DOMESTIC_GAP_WEIGHT * MacroAggregateSubsystem::KALDOR_EXCESS_BOND_PREMIUM_DRAG_ADVERSE * 0.01 * 0.25, $gapAdverse - $gapNeutral, 1e-12);
-        $this->assertEqualsWithDelta(MacroAggregateSubsystem::KALDOR_EXCESS_BOND_PREMIUM_DRAG_FAVORABLE * 0.01 * 0.25, $gapFavorable - $gapNeutral, 1e-12);
-        $this->assertLessThan($gapNeutral - $gapAdverse, $gapFavorable - $gapNeutral, 'Easy credit must lift demand by less than tight credit cuts it.');
+        $this->assertEqualsWithDelta($run($base), $gapNeutral, 1e-12, 'A premium at its trend is no credit shock.');
+        $this->assertEqualsWithDelta(-MacroAggregateSubsystem::DOMESTIC_GAP_WEIGHT * MacroAggregateSubsystem::KALDOR_CREDIT_PREMIUM_DRAG * 0.01 * 0.25, $run($adverse) - $gapNeutral, 1e-12);
+        $this->assertEqualsWithDelta(0.0, $run($favorable) - $gapNeutral, 1e-12, 'Easy credit does not lift demand.');
+    }
+
+    /** Capital the banks must hold but have not built is credit premium: a 1pp shortfall drags as 0.22pp of premium does. */
+    public function testUnbuiltCapitalDragsDemandAsPremium(): void
+    {
+        $built = $this->neutralBorrowingState();
+        $short = $this->neutralBorrowingState();
+        $short->bankCapitalRequirement = $short->bankCapitalBuilt + 0.01;
+        $over = $this->neutralBorrowingState();
+        $over->bankCapitalBuilt = $over->bankCapitalRequirement + 0.01;
+
+        $run = fn (MacroState $state): float => $this->subsystem->calculateOutputGap($state, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, 0.25, 1.0);
+        $gapBuilt = $run($built);
+
+        $this->assertEqualsWithDelta(
+            -MacroAggregateSubsystem::DOMESTIC_GAP_WEIGHT * MacroAggregateSubsystem::KALDOR_CREDIT_PREMIUM_DRAG * MacroAggregateSubsystem::CAPITAL_SHORTFALL_PREMIUM_EQUIVALENT * 0.01 * 0.25,
+            $run($short) - $gapBuilt,
+            1e-12
+        );
+        $this->assertEqualsWithDelta(0.0, $run($over) - $gapBuilt, 1e-12, 'Capital held beyond the requirement rations nothing.');
     }
 
     /** The fixed-rate leg is the real five-year: the breakeven deflates it, so a higher breakeven at the same nominal yield is easier money. */
@@ -1279,23 +1305,20 @@ class MacroAggregateSubsystemTest extends TestCase
         $this->assertEqualsWithDelta(-MacroAggregateSubsystem::DOMESTIC_GAP_WEIGHT * MacroAggregateSubsystem::KALDOR_HOUSEHOLD_DEBT_SERVICE * 0.02 * $dt, $gapRepaying - $gapNeutral, 1e-9, 'Two points over it take a point a year off demand.');
     }
 
-    public function testCrisisDeleveragingAndLendingStandardsDragDemandOneForOne(): void
+    public function testCrisisDeleveragingDragsDemandOneForOneAndStandardsDoNot(): void
     {
         $neutral = new MacroState();
         $deleveraging = new MacroState();
         $deleveraging->creditCrisisDrag = 0.02;
         $tightStandards = new MacroState();
         $tightStandards->sloosTighteningIndexEma = 0.80;
-        $looseStandards = new MacroState();
-        $looseStandards->sloosTighteningIndexEma = -0.20;
 
         $dt = 0.25;
         $run = fn(MacroState $state): float => $this->subsystem->calculateOutputGap($state, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, $dt, 1.0);
         $gapNeutral = $run($neutral);
 
-        $this->assertEqualsWithDelta(-MacroAggregateSubsystem::DOMESTIC_GAP_WEIGHT * 0.02 * $dt, $run($deleveraging) - $gapNeutral, 1e-9, 'The crisis drag enters the drift at face value: two points a year off demand, on demand\'s share of GDP.');
-        $this->assertEqualsWithDelta(-MacroAggregateSubsystem::DOMESTIC_GAP_WEIGHT * MacroAggregateSubsystem::KALDOR_LENDING_STANDARDS_DRAG * 0.80 * $dt, $run($tightStandards) - $gapNeutral, 1e-9, 'Standards at the 80% of 2008 are a quantity constraint no rate cut reaches.');
-        $this->assertEqualsWithDelta(MacroAggregateSubsystem::DOMESTIC_GAP_WEIGHT * MacroAggregateSubsystem::KALDOR_LENDING_STANDARDS_DRAG * 0.20 * $dt, $run($looseStandards) - $gapNeutral, 1e-9, 'Easing standards lend into demand.');
+        $this->assertEqualsWithDelta(-MacroAggregateSubsystem::DOMESTIC_GAP_WEIGHT * (1.0 - CreditFiscalSubsystem::CRISIS_HOUSEHOLD_REPAYMENT_SHARE) * 0.02 * $dt, $run($deleveraging) - $gapNeutral, 1e-9, 'Firms\' and banks\' share of the crisis drag enters the drift at face value; the households\' share is debt repaid.');
+        $this->assertEqualsWithDelta(0.0, $run($tightStandards) - $gapNeutral, 1e-12, 'Lending standards are a survey reading; the premium they follow is what drags.');
     }
 
     /**
@@ -1529,11 +1552,10 @@ class MacroAggregateSubsystemTest extends TestCase
         );
 
         // Every channel in the drift is named, so the panel cannot silently drop one.
-        $this->assertCount(28, $window['contributions']);
+        $this->assertCount(25, $window['contributions']);
         $this->assertArrayHasKey('productivitySupply', $window['contributions']);
         $this->assertArrayHasKey('fundDraw', $window['contributions']);
-        $this->assertArrayHasKey('premiumDrag', $window['contributions']);
-        $this->assertArrayHasKey('premiumCompensator', $window['contributions']);
+        $this->assertArrayHasKey('creditPremiumDrag', $window['contributions']);
         $this->assertArrayHasKey('demandDisaster', $window['contributions']);
         $this->assertArrayHasKey('disasterCompensator', $window['contributions']);
         $this->assertArrayHasKey('monetaryDrag', $window['contributions']);
@@ -1593,23 +1615,35 @@ class MacroAggregateSubsystemTest extends TestCase
         $this->assertLessThan(0.0, $probe->snapshot()['current']['contributions']['demandDisaster']);
     }
 
-    /** At a zero premium the kinked response is silent and the compensator alone is on the panel, as its own line. */
-    public function testThePremiumCompensatorIsItsOwnChannel(): void
+    // --- Productivity Shocks ---
+
+    /**
+     * A crisis scar is permanent and potential takes it whole, over its absorption time; each tick's part lowers
+     * potential growth and books the same amount into the gap as less slack, so output itself does not jump.
+     */
+    public function testACrisisScarLowersPotentialForGoodAndReadsAsLessSlack(): void
     {
+        $state = new MacroState();
+        $state->crisisScarPending = -0.03;
+        $dt = 1.0 / 48.0;
+        $absorbed = 0.0;
+        for ($tick = 0; $tick < 40 * 48; ++$tick) {
+            $growth = $this->subsystem->absorbProductivityShocks($state, MacroEngine::TFP_DRIFT, $dt);
+            $this->assertEqualsWithDelta(MacroEngine::TFP_DRIFT + ($state->crisisScarStep / $dt), $growth, 1e-12);
+            $absorbed += $state->crisisScarStep;
+        }
+        $this->assertEqualsWithDelta(-0.03, $absorbed, 1e-6, 'Potential takes the whole scar and keeps it.');
+
         $probe = new OutputGapProbe();
         $probe->enable();
-        $subsystem = $this->probedSubsystem($probe, 0.0);
-        $state = $this->probedState();
-        $state->excessBondPremium = 0.0;
-
-        $subsystem->calculateOutputGap($state, 0.03, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, 0.25, 1.0);
-        $contributions = $probe->snapshot()['current']['contributions'];
-
-        $this->assertSame(0.0, $contributions['premiumDrag']);
-        $this->assertGreaterThan(0.0, $contributions['premiumCompensator'], 'The adverse-only drag is compensated upward.');
+        $scarred = $this->probedState();
+        $scarred->crisisScarPending = -0.03;
+        $this->subsystem->absorbProductivityShocks($scarred, MacroEngine::TFP_DRIFT, 0.25);
+        $this->probedSubsystem($probe, 0.0)->calculateOutputGap($scarred, 0.03, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, 0.25, 1.0);
+        $this->assertEqualsWithDelta(-$scarred->crisisScarStep, $probe->snapshot()['current']['contributions']['crisisScar'], 1e-15, 'The part potential took is booked in the gap, at full weight.');
+        $this->assertGreaterThan(0.0, $probe->snapshot()['current']['contributions']['crisisScar']);
     }
 
-    // --- Productivity Shocks ---
 
     /**
      * The shock is a driftless random walk at the fitted volatility and is the whole of the index's departure
@@ -1719,8 +1753,8 @@ class MacroAggregateSubsystemTest extends TestCase
 
         $window = $probe->snapshot()['current'];
 
-        // A 2pp/yr drag held for a quarter delivers half a point of gap, and delivers it negative.
-        $this->assertEqualsWithDelta(-MacroAggregateSubsystem::DOMESTIC_GAP_WEIGHT * 0.02 * 0.25, $window['contributions']['crisisDeleveragingDrag'], 1e-12);
+        // A 2pp/yr drag held for a quarter delivers its direct share of half a point of gap, and delivers it negative.
+        $this->assertEqualsWithDelta(-MacroAggregateSubsystem::DOMESTIC_GAP_WEIGHT * CreditFiscalSubsystem::crisisDirectDrag(0.02) * 0.25, $window['contributions']['crisisDeleveragingDrag'], 1e-12);
         $contributions = $window['contributions'];
         asort($contributions);
         $this->assertSame(
@@ -1730,30 +1764,18 @@ class MacroAggregateSubsystemTest extends TestCase
         );
     }
 
-    /**
-     * The crisis drag is one-sided, so it carries its Merton compensator as its own channel, as the disasters and the
-     * premium do: a calm quarter reads a small lift, and a drag at its long-run average nets to nothing.
-     */
-    public function testTheCrisisDragIsCompensatedByItsLongRunAverage(): void
+    /** A crisis costs output for good: with none running there is no crisis channel lifting demand to pay for it. */
+    public function testACalmQuarterCarriesNoCrisisLift(): void
     {
-        $dt = 1.0 / 3600.0;
-        $crisisChannels = function (float $drag) use ($dt): array {
-            $probe = new OutputGapProbe();
-            $probe->enable();
-            $state = $this->probedState();
-            $state->creditCrisisDrag = $drag;
-            $this->probedSubsystem($probe, 0.0)->calculateOutputGap($state, 0.03, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, $dt, 1.0);
-            $contributions = $probe->snapshot()['current']['contributions'];
+        $probe = new OutputGapProbe();
+        $probe->enable();
+        $state = $this->probedState();
+        $state->creditCrisisDrag = 0.0;
+        $this->probedSubsystem($probe, 0.0)->calculateOutputGap($state, 0.03, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, 0.25, 1.0);
+        $contributions = $probe->snapshot()['current']['contributions'];
 
-            return [$contributions['crisisDeleveragingDrag'] / $dt, $contributions['crisisCompensator'] / $dt];
-        };
-
-        [$calmDrag, $calmCompensator] = $crisisChannels(0.0);
-        $this->assertSame(0.0, $calmDrag);
-        $this->assertEqualsWithDelta(MacroAggregateSubsystem::DOMESTIC_GAP_WEIGHT * MacroAggregateSubsystem::KALDOR_CRISIS_DRAG_COMPENSATOR, $calmCompensator, 1e-12, 'With no crisis running the compensator is its whole long-run average, on demand\'s share of GDP.');
-
-        [$drag, $compensator] = $crisisChannels(MacroAggregateSubsystem::KALDOR_CRISIS_DRAG_COMPENSATOR);
-        $this->assertEqualsWithDelta(0.0, $drag + $compensator, 1e-12, 'A drag at its long-run average nets to nothing.');
+        $this->assertSame(0.0, $contributions['crisisDeleveragingDrag']);
+        $this->assertArrayNotHasKey('crisisCompensator', $contributions);
     }
 
     /**
@@ -1914,6 +1936,21 @@ class MacroAggregateSubsystemTest extends TestCase
         );
     }
 
+    /** Deal-makers' output follows the world's deal flow against its trend: a deal boom is finance output. */
+    public function testADealBoomIsFinanceOutput(): void
+    {
+        $boom = $this->neutralBorrowingState();
+        $boom->dealActivityIndexTrend = 100.0;
+        $boom->dealActivityIndexEma = 120.0;
+        $this->subsystem->calculateOutputGap($boom, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, 0.01, 1.0);
+
+        $this->assertEqualsWithDelta(
+            MacroAggregateSubsystem::FINANCE_GAP_WEIGHT * MacroAggregateSubsystem::FINANCE_DEAL_SHARE * log(1.20),
+            $boom->financeOutputGap,
+            1e-12
+        );
+    }
+
     /**
      * The finance weight is only the finance the District has beyond what the demand equation already holds: the two
      * weights split GDP.
@@ -1923,7 +1960,7 @@ class MacroAggregateSubsystemTest extends TestCase
         $this->assertEqualsWithDelta(
             1.0,
             (MacroAggregateSubsystem::DOMESTIC_GAP_WEIGHT / (1.0 - MacroAggregateSubsystem::EXCESS_IMPORT_LEAKAGE))
-                + (MacroAggregateSubsystem::FINANCE_GAP_WEIGHT * MacroAggregateSubsystem::FINANCE_CREDIT_SHARE),
+                + (MacroAggregateSubsystem::FINANCE_GAP_WEIGHT * (MacroAggregateSubsystem::FINANCE_CREDIT_SHARE + MacroAggregateSubsystem::FINANCE_DEAL_SHARE)),
             1e-15
         );
         $this->assertGreaterThan(0.2, MacroAggregateSubsystem::FINANCE_GAP_WEIGHT);
@@ -2100,21 +2137,21 @@ class MacroAggregateSubsystemTest extends TestCase
     }
 
     /**
-     * Supply-chain pressure is a cost LEVEL of landed goods (Carriere-Swallow et al. 2023): pressure that builds lifts
-     * the core goods price level once, by the loading, and pressure that stays high -- freight parked at double its
-     * baseline, the composite's quarter average caught up -- adds no standing inflation.
+     * Freight is a cost LEVEL of landed goods (Carriere-Swallow et al. 2023): freight that doubles lifts the core goods
+     * price level once, by the headline effect over the goods weight, and freight that stays high -- parked at double
+     * its baseline, its quarter average caught up -- adds no standing inflation.
      */
-    public function testPersistentSupplyChainPressureAddsNoStandingCoreGoodsInflation(): void
+    public function testPersistentFreightAddsNoStandingCoreGoodsInflation(): void
     {
         $calm = $this->neutralBorrowingState();
         $calm->wageGrowth = MacroEngine::TFP_DRIFT + MacroEngine::TARGET_INFLATION;
-        $doubling = MacroAggregateSubsystem::SUPPLY_CHAIN_POINTS_PER_FREIGHT_DOUBLING;
+        $calm->freightRateIndex = MacroEngine::FREIGHT_BASELINE;
+        $calm->freightRateIndexEma = MacroEngine::FREIGHT_BASELINE;
         $parked = clone $calm;
+        $parked->freightRateIndex = 2.0 * MacroEngine::FREIGHT_BASELINE;
         $parked->freightRateIndexEma = 2.0 * MacroEngine::FREIGHT_BASELINE;
-        $parked->supplyChainPressureIndex = $doubling;
-        $parked->supplyChainPressureIndexEma = $doubling;
         $building = clone $calm;
-        $building->supplyChainPressureIndex = $doubling;
+        $building->freightRateIndex = 2.0 * MacroEngine::FREIGHT_BASELINE;
 
         $dt = 0.01;
         $levelGap = 0.0;
@@ -2122,12 +2159,12 @@ class MacroAggregateSubsystemTest extends TestCase
             $this->subsystem->calculateInflation($calm, MacroEngine::TARGET_INFLATION, MacroEngine::TFP_DRIFT, $dt);
             $this->subsystem->calculateInflation($parked, MacroEngine::TARGET_INFLATION, MacroEngine::TFP_DRIFT, $dt);
             $this->subsystem->calculateInflation($building, MacroEngine::TARGET_INFLATION, MacroEngine::TFP_DRIFT, $dt);
-            $this->assertSame($calm->coreGoodsInflation, $parked->coreGoodsInflation, 'Parked pressure adds no core goods inflation.');
+            $this->assertSame($calm->coreGoodsInflation, $parked->coreGoodsInflation, 'Parked freight adds no core goods inflation.');
             $levelGap += ($building->coreGoodsInflation - $calm->coreGoodsInflation) * $dt;
-            $building->supplyChainPressureIndexEma += (1.0 - exp(-$dt / MacroAggregateSubsystem::STANDARD_EMA_HORIZON_YEARS)) * ($building->supplyChainPressureIndex - $building->supplyChainPressureIndexEma);
+            $building->freightRateIndexEma += (1.0 - exp(-$dt / MacroAggregateSubsystem::STANDARD_EMA_HORIZON_YEARS)) * ($building->freightRateIndex - $building->freightRateIndexEma);
         }
 
-        $this->assertEqualsWithDelta(MacroAggregateSubsystem::FREIGHT_DOUBLING_HEADLINE_EFFECT / MacroAggregateSubsystem::INFLATION_WEIGHT_GOODS, $levelGap, 1e-4, 'A freight doubling lifts core goods prices by its headline effect over the goods weight, once, whatever the composite\'s scale.');
+        $this->assertEqualsWithDelta(MacroAggregateSubsystem::FREIGHT_DOUBLING_HEADLINE_EFFECT / MacroAggregateSubsystem::INFLATION_WEIGHT_GOODS, $levelGap, 1e-4, 'A freight doubling lifts core goods prices by its headline effect over the goods weight, once.');
         $this->assertEqualsWithDelta(0.0, $building->coreGoodsInflation - $calm->coreGoodsInflation, 1e-4, 'and then inflation is back where it was.');
     }
 
@@ -2201,7 +2238,7 @@ class MacroAggregateSubsystemTest extends TestCase
         $state->industrialMetalsIndexTrend = $state->industrialMetalsIndex;
         $state->energyPriceIndexTrend = $state->energyPriceIndex;
         $state->agriculturalCommodityIndexTrend = $state->agriculturalCommodityIndex;
-        $state->supplyChainPressureIndex = \App\Service\Math\MacroTransmission::GSCPI_NORMAL_TIMES_MEAN;
+        $state->supplyChainPressureIndex = 0.0;
         $state->outputGap = 0.0;
         $state->wageGrowth = MacroEngine::TARGET_INFLATION + $tfpGrowth;
         $state->tipsBreakeven = MacroEngine::TARGET_INFLATION;

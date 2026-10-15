@@ -164,8 +164,8 @@ class MacroEngine
     public const FISCAL_ADJUSTMENT_SPEED = 1.0;
 
     // --- Consumer Sentiment Index & Animal Spirits ---
-    /** Where the index sits with unemployment at NAIRU, inflation on target and joblessness flat: the intercept of the Michigan fit (UMCSENT, FRED, monthly 1978-2019), 86.3 on average at that sample's slack and inflation. */
-    public const SENTIMENT_TREND_LEVEL = 93.1;
+    /** Where the index sits with unemployment at its natural rate, inflation on target and joblessness flat: 100, the survey's base. */
+    public const SENTIMENT_TREND_LEVEL = 100.0;
 
     // --- Central Bank Balance Sheet (QE & QT) ---
     /** Minimum threshold for balance sheet intervention intensity to be considered active. */
@@ -293,7 +293,7 @@ class MacroEngine
     public const CORPORATE_DEFAULT_BASELINE = 0.016;
 
     // --- NY Fed Global Supply Chain Pressure Index (GSCPI - Benigno et al. 2022) ---
-    /** Neutral baseline index for GSCPI composite (standard deviations). */
+    /** Supply-chain pressure in normal times: the index is in its own standard deviations about zero. */
     public const GSCPI_BASELINE = 0.0;
     /** Neutral reading of the suppliers' delivery-times diffusion index (ISM convention: 50 = no change, above = slower). */
     public const SUPPLIER_DELIVERIES_NEUTRAL = 50.0;
@@ -643,6 +643,7 @@ class MacroEngine
         // Baker, Bloom & Davis (2016) economic policy uncertainty index simulation.
         $this->creditFiscalSubsystem->calculatePolicyUncertainty($state, $dt);
         // Mundell-Fleming multi-country foreign output gap and global policy transmission.
+        $openingMainlandGap = $state->foreignOutputGap;
         $this->assetSubsystem->calculateForeignEconomy($state, $dt);
 
         $stressMultiplier = 1.0 + (abs($state->outputGap) * self::STRESS_MULTIPLIER_GAP_SENSITIVITY);
@@ -665,7 +666,7 @@ class MacroEngine
         $this->creditFiscalSubsystem->calculateHouseholdCredit($state, $dt);
         $this->creditFiscalSubsystem->calculateCreditCrisisHazard($state, $dt);
         // Gilchrist & Zakrajsek (2012): the premium moves before volatility and the spreads that load on it.
-        $this->creditFiscalSubsystem->updateExcessBondPremium($state, $state->outputGap - $openingGap, $dt);
+        $this->creditFiscalSubsystem->updateExcessBondPremium($state, $state->outputGap - $openingGap, $dt, $state->foreignOutputGap - $openingMainlandGap);
         $state->tipsBreakevenQuoted = MacroAggregateSubsystem::quotedTipsBreakeven($state->tipsBreakeven, $state->excessBondPremium);
         $this->creditFiscalSubsystem->calculateRetailDefaultRate($state, $dt);
         $this->commoditySubsystem->calculateAgriculturalCommodityIndex($state, $dt);
@@ -688,7 +689,7 @@ class MacroEngine
 
         $this->creditFiscalSubsystem->calculateMacroCreditSpread($state);
         $this->creditFiscalSubsystem->updateCreditSpreadTrend($state, $dt);
-        $this->creditFiscalSubsystem->calculateInterbankLiquiditySpread($state, $dt);
+        $this->creditFiscalSubsystem->calculateInterbankLiquiditySpread($state);
         $this->creditFiscalSubsystem->calculateSloosCreditStandards($state, $dt);
         $this->creditFiscalSubsystem->calculateCorporateDefaultRate($state, $dt);
 

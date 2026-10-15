@@ -96,10 +96,10 @@ class AssetMarketSubsystem
     public const SENTIMENT_MOOD_MEAN_REVERSION = 1.83;
     /** Stationary standard deviation of that mood, in index points (the fit's residual, 7.6; R^2 0.64). */
     public const SENTIMENT_MOOD_SD = 7.56;
-    /** Lowest the index can read (the survey's record low is 50.0, June 2022). */
-    public const SENTIMENT_FLOOR = 40.0;
-    /** Highest the index can read (the survey's record high is 112.0, January 2000). */
-    public const SENTIMENT_CEILING = 120.0;
+    /** Lowest the index can read, 53 points under its trend level. */
+    public const SENTIMENT_FLOOR = 46.9;
+    /** Highest the index can read, 27 points over its trend level. */
+    public const SENTIMENT_CEILING = 126.9;
 
     // --- The Mainland (Rudebusch & Svensson 1999, re-estimated on US data 1985-2019: var/harness/mainland_fit.py) ---
     /** The mainland's statistics and its central bank's decisions arrive once a quarter, the frequency its equations are estimated at. */
@@ -833,7 +833,8 @@ class AssetMarketSubsystem
      * Jovanovic-Rousseau (2002) Capital Markets & M&A Deal Flow Model.
      *
      * Evaluates global investment banking advisory, private equity LBO, and IPO volume
-     * driven by valuation liquidity (equity risk premium, high-yield spreads, and volatility).
+     * driven by valuation liquidity: the world's equity risk premium (the deals the District's banks advise on are
+     * mostly the mainland's), and the District's high-yield spreads and volatility.
      *
      * @param MacroState $state Current macroeconomic state.
      * @param float      $dt    Time increment in years.
@@ -845,7 +846,7 @@ class AssetMarketSubsystem
 
         $state->dealActivityIndex = MacroTransmission::calculateCapitalMarketsDealIndexStep(
             currentDealIndex: $currentDealIndex,
-            equityRiskPremium: $state->equityRiskPremium,
+            equityRiskPremium: $state->foreignEquityRiskPremium,
             hyCreditSpread: $state->highYieldCreditSpread,
             marketVolatility: $state->marketVolatility,
             dt: $dt,

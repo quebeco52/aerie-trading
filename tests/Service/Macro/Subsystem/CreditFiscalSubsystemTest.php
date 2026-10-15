@@ -15,7 +15,6 @@ use App\Service\Math\FinancialConstants;
 use App\Service\Math\FirmEconomics;
 use App\Service\Math\MacroTransmission;
 use App\Service\Math\MathUtility;
-use App\Service\Math\StochasticProcesses;
 use App\Service\Math\TimeSeries;
 use App\Service\Math\Valuation;
 use PHPUnit\Framework\TestCase;
@@ -285,30 +284,46 @@ class CreditFiscalSubsystemTest extends TestCase
 
     public function testInterbankSpreadIsCappedAtTheHistoricalRecord(): void
     {
-        $mathMock = $this->createStub(MathUtility::class);
-        $mathMock->method('generateStandardNormal')->willReturn(0.0);
-        $mathMock->method('calculateJumpDiffusion')->willReturn(['multiplier' => 10.0, 'shock_pct' => 900.0, 'exponent' => log(10.0)]);
-
-        $subsystem = new CreditFiscalSubsystem($mathMock);
-        $state = new MacroState();
-        $state->interbankLiquiditySpread = 0.03;
-        $state->marketVolatilityEma = 0.40;
-
-        $subsystem->calculateInterbankLiquiditySpread($state, 0.25);
-
-        $this->assertEqualsWithDelta(CreditFiscalSubsystem::INTERBANK_MAX_SPREAD, $state->interbankLiquiditySpread, 1e-12);
+        $this->assertEqualsWithDelta(CreditFiscalSubsystem::INTERBANK_MAX_SPREAD, CreditFiscalSubsystem::interbankSpreadAt(0.20, 0.0), 1e-12);
         $this->assertEqualsWithDelta(0.05, CreditFiscalSubsystem::INTERBANK_MAX_SPREAD, 1e-12, 'TED record: 457 bps on 10 Oct 2008.');
     }
 
-    /** Guards the jump-size calibration: the median panic is well short of 2008, and no panic jump shrinks the spread. */
-    public function testInterbankPanicJumpCalibration(): void
+    /**
+     * The interbank spread is a function of the premium and the crisis clock, nothing else: the base with no premium
+     * and no crisis, the premium's coupled share above it, and a run that lands whole on a crisis day and decays.
+     */
+    public function testInterbankSpreadIsThePremiumShareAndADecayingRun(): void
     {
-        $medianMultiplier = exp(CreditFiscalSubsystem::INTERBANK_JUMP_MEAN);
-        $twoSigmaLow = exp(CreditFiscalSubsystem::INTERBANK_JUMP_MEAN - 2.0 * CreditFiscalSubsystem::INTERBANK_JUMP_VOL);
+        $this->assertSame(MacroEngine::INTERBANK_BASELINE_SPREAD, CreditFiscalSubsystem::interbankSpreadAt(0.0, INF));
+        $this->assertSame(MacroEngine::INTERBANK_BASELINE_SPREAD, CreditFiscalSubsystem::interbankSpreadAt(-0.005, INF), 'A favourable premium does not ease wholesale funding below its base.');
+        $this->assertEqualsWithDelta(MacroEngine::INTERBANK_BASELINE_SPREAD + (0.034 * CreditFiscalSubsystem::INTERBANK_PREMIUM_COUPLING), CreditFiscalSubsystem::interbankSpreadAt(0.034, INF), 1e-15);
+        $this->assertGreaterThan(0.010, CreditFiscalSubsystem::interbankSpreadAt(0.034, INF), "2008's 340 bps premium must lift TED past 100 bps.");
 
-        $this->assertLessThan(5.0, $medianMultiplier, 'A 5x freeze (2008) must be a tail outcome, not the median jump.');
-        $this->assertGreaterThan(2.0, $medianMultiplier, 'A panic jump should still at least double the spread.');
-        $this->assertGreaterThanOrEqual(1.0, $twoSigmaLow, 'Panic jumps must never reduce the interbank spread.');
+        $this->assertEqualsWithDelta(MacroEngine::INTERBANK_BASELINE_SPREAD + CreditFiscalSubsystem::INTERBANK_CRISIS_RUN, CreditFiscalSubsystem::interbankSpreadAt(0.0, 0.0), 1e-15, 'The run lands whole on the crisis day.');
+        $this->assertEqualsWithDelta(
+            CreditFiscalSubsystem::INTERBANK_CRISIS_RUN * exp(-1.0),
+            CreditFiscalSubsystem::interbankSpreadAt(0.0, CreditFiscalSubsystem::INTERBANK_RUN_DECAY_YEARS) - MacroEngine::INTERBANK_BASELINE_SPREAD,
+            1e-15,
+            'and decays on its time constant.'
+        );
+        $this->assertGreaterThan(MacroEngine::SYSTEMIC_LIQUIDITY_FREEZE_SPREAD, CreditFiscalSubsystem::interbankSpreadAt(0.0, 0.0), 'A crisis day reads as a freeze.');
+    }
+
+    /** The subsystem step reads the state's premium and crisis date through the same function. */
+    public function testTheInterbankStepReadsThePremiumAndTheCrisisClock(): void
+    {
+        $state = new MacroState();
+        $state->totalTime = 20.0;
+        $state->lastCreditCrisisAt = 19.5;
+        $state->excessBondPremium = 0.02;
+        $this->quietSubsystem()->calculateInterbankLiquiditySpread($state);
+
+        $this->assertSame(CreditFiscalSubsystem::interbankSpreadAt(0.02, 0.5), $state->interbankLiquiditySpread);
+
+        $never = new MacroState();
+        $never->excessBondPremium = 0.02;
+        $this->quietSubsystem()->calculateInterbankLiquiditySpread($never);
+        $this->assertSame(CreditFiscalSubsystem::interbankSpreadAt(0.02, INF), $never->interbankLiquiditySpread, 'No crisis yet, no run.');
     }
 
     /**
@@ -579,41 +594,6 @@ class CreditFiscalSubsystemTest extends TestCase
         $this->assertGreaterThan(0.150, $crisis->highYieldCreditSpread);
         $this->assertLessThanOrEqual(MacroEngine::MAX_CREDIT_SPREAD * MacroEngine::HY_BASE_SPREAD_MULTIPLIER, $crisis->highYieldCreditSpread);
     }
-
-    public function testInterbankSpreadMeanTracksTheBondPremium(): void
-    {
-        // With diffusion and jumps silenced the CIR process converges on its premium-coupled mean less the jumps'
-        // Merton compensator: lenders repricing credit risk must pull the interbank spread well above baseline, so a
-        // credit crisis shows up in TED rather than random jumps. The jumps put back what the compensator takes.
-        $quiet = new class extends MathUtility {
-            public function generateStandardNormal(): float
-            {
-                return 0.0;
-            }
-
-            public function checkProbability(float $probability): bool
-            {
-                return false;
-            }
-        };
-        $subsystem = new CreditFiscalSubsystem($quiet);
-
-        $state = new MacroState();
-        $state->excessBondPremium = 0.034;
-        $state->marketVolatilityEma = 0.30;
-        $state->interbankLiquiditySpread = MacroEngine::INTERBANK_BASELINE_SPREAD;
-
-        for ($i = 0; $i < 40; $i++) {
-            $subsystem->calculateInterbankLiquiditySpread($state, 0.25);
-        }
-
-        $theta = MacroEngine::INTERBANK_BASELINE_SPREAD + (0.034 * CreditFiscalSubsystem::INTERBANK_PREMIUM_COUPLING);
-        $compensator = $subsystem->interbankJumpCompensator(CreditFiscalSubsystem::INTERBANK_MAX_JUMP_PROBABILITY, 0.0);
-        $betweenJumps = CreditFiscalSubsystem::INTERBANK_SPREAD_KAPPA * $theta / (CreditFiscalSubsystem::INTERBANK_SPREAD_KAPPA + $compensator);
-        $this->assertEqualsWithDelta($betweenJumps, $state->interbankLiquiditySpread, 0.0001);
-        $this->assertGreaterThan(0.010, $state->interbankLiquiditySpread, "2008's 340 bps premium must lift TED past 100 bps.");
-    }
-
 
     // --- Administered Healthcare Prices ---
 
@@ -1835,17 +1815,38 @@ class CreditFiscalSubsystemTest extends TestCase
             1e-9,
             'Credit bites back: the drag is the base loss plus a share of the boom behind it, deepened by thin capital.'
         );
+        $this->assertEqualsWithDelta(
+            -CreditFiscalSubsystem::CRISIS_POTENTIAL_SCAR * CreditFiscalSubsystem::thinCapitalDragScale(FinancialConstants::OPENING_BANK_CAPITAL_REQUIREMENT),
+            $state->crisisScarPending,
+            1e-12,
+            'The crisis books a scar for potential to take, deeper on thin capital.'
+        );
 
-        $state->interbankLiquiditySpread = MacroEngine::INTERBANK_BASELINE_SPREAD;
-        $subsystem->calculateInterbankLiquiditySpread($state, 1.0 / 3600.0);
-        $this->assertGreaterThan(2.5 * MacroEngine::INTERBANK_BASELINE_SPREAD, $state->interbankLiquiditySpread, 'The day of the crisis is a run on wholesale funding: the panic jump lands with certainty.');
+        $state->excessBondPremium = 0.0;
+        $subsystem->calculateInterbankLiquiditySpread($state);
+        $this->assertGreaterThan(2.5 * MacroEngine::INTERBANK_BASELINE_SPREAD, $state->interbankLiquiditySpread, 'The day of the crisis is a run on wholesale funding.');
+    }
 
-        $quiet = new MacroState();
-        $quiet->totalTime = 12.5;
-        $quiet->lastCreditCrisisAt = 12.0;
-        $quiet->interbankLiquiditySpread = MacroEngine::INTERBANK_BASELINE_SPREAD;
-        $subsystem->calculateInterbankLiquiditySpread($quiet, 1.0 / 3600.0);
-        $this->assertEqualsWithDelta(MacroEngine::INTERBANK_BASELINE_SPREAD, $quiet->interbankLiquiditySpread, 1e-5, 'A crisis already six months old does not re-run the funding market.');
+    /**
+     * The households' share of a crisis's deleveraging is debt repaid: the stock falls by that share of the drag a year,
+     * and the two parts of the drag add back to the whole.
+     */
+    public function testACrisisRepaysHouseholdDebt(): void
+    {
+        $dt = 1.0 / 3600.0;
+        $calm = new MacroState();
+        $crisis = new MacroState();
+        $crisis->creditCrisisDrag = 0.06;
+        $this->quietSubsystem()->calculateHouseholdCredit($calm, $dt);
+        $this->quietSubsystem()->calculateHouseholdCredit($crisis, $dt);
+
+        $this->assertEqualsWithDelta(
+            -CreditFiscalSubsystem::crisisHouseholdRepayment(0.06) * $dt,
+            $crisis->householdDebtToIncome - $calm->householdDebtToIncome,
+            1e-9
+        );
+        $this->assertEqualsWithDelta(0.25 * 0.06, CreditFiscalSubsystem::crisisHouseholdRepayment(0.06), 1e-15);
+        $this->assertEqualsWithDelta(0.06, CreditFiscalSubsystem::crisisDirectDrag(0.06) + (CreditFiscalSubsystem::crisisHouseholdRepayment(0.06) * MacroAggregateSubsystem::KALDOR_HOUSEHOLD_NEW_BORROWING), 1e-15, 'Nothing lost, nothing counted twice.');
     }
 
     public function testTheDistrictsWholesaleFundingLiftsTheCrisisHazardAboveThePanel(): void
@@ -2016,6 +2017,28 @@ class CreditFiscalSubsystemTest extends TestCase
         $this->assertLessThan(0.75, $halfLife, 'A shock to the premium is half spent within three quarters (record: 0.59 left at 3q).');
     }
 
+    /** Lenders price the world's credit: a mainland slump lifts the premium, at the mainland's share of what the same fall at home does. */
+    public function testAMainlandSlumpRaisesThePremium(): void
+    {
+        $subsystem = $this->quietSubsystem();
+        $step = static function (float $gapChange, float $mainlandGapChange) use ($subsystem): float {
+            $state = new MacroState();
+            $state->excessBondPremium = 0.005;
+            $subsystem->updateExcessBondPremium($state, $gapChange, 1.0 / 360.0, $mainlandGapChange);
+
+            return log($state->excessBondPremium + CreditFiscalSubsystem::EBP_DISPLACEMENT);
+        };
+
+        $calm = $step(0.0, 0.0);
+        $this->assertGreaterThan($calm, $step(0.0, -0.01), 'A mainland slump raises the premium.');
+        $this->assertEqualsWithDelta(
+            CreditFiscalSubsystem::EBP_LOG_GAP_SPEED_SENSITIVITY * CreditFiscalSubsystem::EBP_MAINLAND_GAP_SHARE * 0.01,
+            $step(0.0, -0.01) - $calm,
+            1e-12
+        );
+        $this->assertEqualsWithDelta($step(-0.01, 0.0) - $calm, ($step(-0.01, -0.01) - $calm) * (1.0 - CreditFiscalSubsystem::EBP_MAINLAND_GAP_SHARE), 1e-12, 'Both falling at once is the whole sensitivity.');
+    }
+
     /** A 2008-sized premium fades faster in levels than a small one: the same log decay removes more basis points. */
     public function testAHighPremiumFadesFasterInLevelsThanALowOne(): void
     {
@@ -2042,22 +2065,22 @@ class CreditFiscalSubsystemTest extends TestCase
         $lift = exp(0.02 * CreditFiscalSubsystem::EBP_LOG_GAP_SPEED_SENSITIVITY);
 
         $falling = new MacroState();
-        $subsystem->updateExcessBondPremium($falling, -0.02, 1e-9);
+        $subsystem->updateExcessBondPremium($falling, -0.02, 1e-9, -0.02);
         $this->assertEqualsWithDelta($shift * ($lift - 1.0), $falling->excessBondPremium, 1e-9);
 
         $recovering = new MacroState();
-        $subsystem->updateExcessBondPremium($recovering, 0.02, 1e-9);
+        $subsystem->updateExcessBondPremium($recovering, 0.02, 1e-9, 0.02);
         $this->assertEqualsWithDelta($shift * ((1.0 / $lift) - 1.0), $recovering->excessBondPremium, 1e-9);
 
         $split = new MacroState();
         for ($i = 0; $i < 4; $i++) {
-            $subsystem->updateExcessBondPremium($split, -0.005, 1e-9);
+            $subsystem->updateExcessBondPremium($split, -0.005, 1e-9, -0.005);
         }
         $this->assertEqualsWithDelta($falling->excessBondPremium, $split->excessBondPremium, 1e-10, 'Four small falls price as one large one.');
 
         $alreadyHigh = new MacroState();
         $alreadyHigh->excessBondPremium = 0.03;
-        $subsystem->updateExcessBondPremium($alreadyHigh, -0.02, 1e-9);
+        $subsystem->updateExcessBondPremium($alreadyHigh, -0.02, 1e-9, -0.02);
         $this->assertEqualsWithDelta(
             (0.03 + $shift) / $shift,
             ($alreadyHigh->excessBondPremium - 0.03) / $falling->excessBondPremium,
@@ -2143,8 +2166,8 @@ class CreditFiscalSubsystemTest extends TestCase
 
         $this->assertSame($assets->calculateMarketVolatility($calm, 0.25), $assets->calculateMarketVolatility($capped, 0.25), 'Volatility does not read the spread.');
 
-        $credit->calculateInterbankLiquiditySpread($calm, 0.25);
-        $credit->calculateInterbankLiquiditySpread($capped, 0.25);
+        $credit->calculateInterbankLiquiditySpread($calm);
+        $credit->calculateInterbankLiquiditySpread($capped);
         $this->assertSame($calm->interbankLiquiditySpread, $capped->interbankLiquiditySpread, 'TED does not read the spread.');
 
         $credit->calculateSloosCreditStandards($calm, 0.25);
@@ -2191,7 +2214,7 @@ class CreditFiscalSubsystemTest extends TestCase
             $credit->updateExcessBondPremium($state, 0.0, $dt);
             $state->marketVolatility = $assets->calculateMarketVolatility($state, $dt);
             $state->marketVolatilityEma += $emaWeight * ($state->marketVolatility - $state->marketVolatilityEma);
-            $credit->calculateInterbankLiquiditySpread($state, $dt);
+            $credit->calculateInterbankLiquiditySpread($state);
             $state->interbankLiquiditySpreadEma += $emaWeight * ($state->interbankLiquiditySpread - $state->interbankLiquiditySpreadEma);
             $credit->calculateMacroCreditSpread($state);
             $credit->calculateSloosCreditStandards($state, $dt);
@@ -2282,70 +2305,6 @@ class CreditFiscalSubsystemTest extends TestCase
         $this->assertEqualsWithDelta(CommodityLogisticsSubsystem::carbonPowerPriceUplift(40.0) * $carried, $state->carbonPowerUpliftEmbodied, 1e-2 * CommodityLogisticsSubsystem::carbonPowerPriceUplift(40.0));
     }
 
-    public function testInterbankLiquiditySpreadMeanRevertsViaCIR(): void
-    {
-        $mathUtility = $this->createStub(MathUtility::class);
-
-        // Suppress jump diffusion; a fixed diffusion draw keeps sigma in the step.
-        $dW = 0.5;
-        $mathUtility->method('generateStandardNormal')->willReturn($dW);
-        $mathUtility->method('calculateJumpDiffusion')->willReturn([
-            'multiplier' => 1.0,
-            'shock_pct' => null,
-            'exponent' => null,
-        ]);
-
-        $creditFiscalSubsystem = new CreditFiscalSubsystem($mathUtility);
-
-        $state = new \App\Service\Macro\MacroState();
-        $state->interbankLiquiditySpread = 0.05;
-        $state->marketVolatilityEma = 0.15; // Neutral VIX
-        $state->excessBondPremium = 0.0;
-
-        $creditFiscalSubsystem->calculateInterbankLiquiditySpread($state, 0.25);
-
-        // The CIR step runs on the engine's constants, its reversion stiffened by the panic jumps' Merton compensator
-        // c: kappa + c towards kappa theta / (kappa + c), the same pull towards theta net of the jumps.
-        $compensator = $creditFiscalSubsystem->interbankJumpCompensator(CreditFiscalSubsystem::INTERBANK_JUMP_PROBABILITY, $state->creditCrisisHazard);
-        $kappa = CreditFiscalSubsystem::INTERBANK_SPREAD_KAPPA + $compensator;
-        $expected = StochasticProcesses::calculateCIR(
-            0.05,
-            $kappa,
-            CreditFiscalSubsystem::INTERBANK_SPREAD_KAPPA * MacroEngine::INTERBANK_BASELINE_SPREAD / $kappa,
-            CreditFiscalSubsystem::INTERBANK_SPREAD_SIGMA,
-            0.25,
-            $dW
-        );
-
-        $this->assertGreaterThan(0.0, $compensator, 'The jumps are compensated in the drift.');
-        $this->assertEqualsWithDelta($expected, $state->interbankLiquiditySpread, 1e-15, 'Interbank spread must mean-revert using CIR.');
-        $this->assertLessThan(0.05, $state->interbankLiquiditySpread);
-    }
-
-    public function testInterbankLiquiditySpreadBlowsOutDuringMarketPanicJump(): void
-    {
-        // The same panicked quarter twice, with and without a 5x blowout jump: the jump multiplies the CIR step.
-        $spreadAfter = function (float $multiplier): float {
-            $mathUtility = $this->createStub(MathUtility::class);
-            $mathUtility->method('generateStandardNormal')->willReturn(0.0);
-            $mathUtility->method('calculateJumpDiffusion')->willReturn([
-                'multiplier' => $multiplier,
-                'shock_pct' => ($multiplier - 1.0) * 100.0,
-                'exponent' => log($multiplier),
-            ]);
-
-            $state = new \App\Service\Macro\MacroState();
-            $state->interbankLiquiditySpread = MacroEngine::INTERBANK_BASELINE_SPREAD;
-            $state->marketVolatilityEma = 0.35; // Panicked VIX
-            (new CreditFiscalSubsystem($mathUtility))->calculateInterbankLiquiditySpread($state, 0.25);
-
-            return $state->interbankLiquiditySpread;
-        };
-
-        $base = $spreadAfter(1.0);
-        $this->assertEqualsWithDelta(MacroEngine::INTERBANK_BASELINE_SPREAD, $base, 0.0005, 'Without the jump the spread stays near its baseline.');
-        $this->assertEqualsWithDelta(5.0 * $base, $spreadAfter(5.0), 1e-15, 'Interbank spread must blow out on Poisson jump.');
-    }
 
     /**
      * The tax on dividends adds revenue only as far as it departs from the founding rate, levied on taxable holders'

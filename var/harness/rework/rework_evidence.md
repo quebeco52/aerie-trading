@@ -24,3 +24,26 @@ Meetings and the deleted recession-regime/stress latch move little (2.18 → 2.2
 Final (1.5/1.5): no fund gap sd 2.28 (old 2.00, t 1.2), unemp sd 1.51, rate dq sd 29bp (old 36), recession share 8.4%;
 fund gap sd 2.59 (old 2.04, t 2.4). Dissents at a two-step threshold: 5.0, 0.2, 2.7 a year on seeds 1-3 (one step gave
 11 and 3.3).
+
+## Phase 4 (real economy + credit), 4 seeds, paired vs Phase 3 runs (runs/p3_*, p3fund_*)
+First build (deal share 0.239, scar as a TFP level shock): gap sd 2.28 → 2.80 (t 2.6), gap mean −0.55 → −1.26,
+recession share 13.9%, 25% of quarters below −3%. Variants: deal flow off → gap sd 2.10; scar off → 2.61. Deal flow
+was the whole rise (finance output sd 1.38% of GDP); 0.239 counted brokers, exchanges and asset managers, who do not
+earn on deals. Deal share set to IB + PE by roster book equity, 0.098.
+Scar as a TFP shock made output fall before potential (a technology pattern), deepening each crisis; changed to
+hysteresis (potential takes it over 3y, the gap books it as less slack).
+Final, no fund / fund: gap sd 2.28 → 2.21 / 2.59 → 2.44; gap mean −0.55 → −0.89 (t −3.3) / −0.83 → −0.64, median
+−1.0; quarters below −3%: 15 → 19% / 17%; unemp mean 5.2 → 5.6 / 5.6 → 5.4; inflation 2.09 / 2.22; recession share
+9.2 / 9.8%, 11 / 12 per century; debt mean 46 → 55% (debt − target +2pp). Credit drag averages 0.61pp of demand.
+TED median 17bp, p99 164bp, max 241bp. Pressure index mean −0.10, sd 0.96, p99 2.05. Finance output sd 0.78% of GDP.
+Supply index constants from the first build: freight log sd 0.20, deliveries sd 6.2, correlation 0.56.
+Household paydown (a quarter of the crisis drag repays household debt; the rest stays a direct drag), paired vs the
+build above: gap mean −0.89 → −0.83 (t 1.4) / −0.64 → −0.55 (t 4.4); quarters below −3% 19 → 19% / 17 → 15%; gap sd
+unchanged. Household debt to income settles at ~0.78 (opening 1.00) by year 40: re-levering at 7.5% of the shortfall a
+year balances the average repayment only at lower leverage. New borrowing still averages −0.15pp over 100y (the
+transition).
+Crisis drag 8y → 4y time constant (on top of the paydown), paired: gap mean −0.83 → −0.61 (t 3.7) / −0.55 → −0.54;
+gap sd 2.23 → 2.18 / 2.40 → 2.31; quarters below −3% 19 → 15%; unemp mean 5.53 → 5.31; rate mean 3.07 → 3.29;
+debt mean 54 → 52%. Average gap change from the quarter before a crisis (18 crises), years 0-6: Phase 3 −0.4 −2.2 …
+−0.3; now −0.6 −1.7 −1.3 −1.3 −1.3 −1.2 −0.6. The tail: household borrowing −1.5 to −2.2pp for years 2-5 (house
+prices and debt service; the paydown is ~0.4pp of it), bank output −0.6% as loans fall, net exports −0.9%.

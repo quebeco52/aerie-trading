@@ -80,8 +80,8 @@ class MerchantHouseBusinessModel extends ConglomerateBusinessModel
     /** Gross spread widening per unit of physical backwardation (Kaldor-Working convenience yield). Scarcity is the merchant's margin: whoever holds the barrel when nobody else can deliver names the price. */
     public const MERCHANT_BACKWARDATION_SCALAR = 0.35;
 
-    /** Gross spread widening per unit of the supply-chain pressure index. Congested corridors price optionality on physical delivery, which only an owner of berths and bonded warehouses can sell. */
-    public const MERCHANT_DISRUPTION_SCALAR = 0.012;
+    /** Gross spread widening per standard deviation of supply-chain pressure above normal (0.57pp). Congested corridors price optionality on physical delivery, which only an owner of berths and bonded warehouses can sell. */
+    public const MERCHANT_DISRUPTION_SCALAR = 0.0057;
 
     /** Years of turnover carried as financed inventory and bills of lading (~3 months). Multiplied by the funding rate it gives the carry cost as a fraction of turnover. */
     public const MERCHANT_INVENTORY_HOLDING_YEARS = 0.25;

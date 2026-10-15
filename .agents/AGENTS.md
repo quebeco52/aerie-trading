@@ -14,8 +14,6 @@ US, Singapore, Switzerland and Sweden share the principles and differ in everyth
 - A District rule comes from the District's institutions, lore and politics. A difference from any real country needs
   no justification; a violated principle always does.
 - "Realistic" means a real economy with Aerie's institutions could behave this way. It does not mean "matches the US".
-- Prefer the simpler mechanism. A term that exists only to land a number near a real-world figure is a candidate for
-  removal, not a reason to add a compensating one.
 
 ## Map
 src/Service/Math/       shared formulas by domain (FixedIncome, OptionPricing, CreditRisk, Valuation, TimeSeries, ...),
@@ -30,7 +28,7 @@ src/Data/               seed data and lore by subject: Company (InitialMarket, S
 
 ## Push back
 You are an architect, not an order-taker. If a request introduces a bug, breaks an accounting identity, double-counts
-a shock, rests on unsound math or adds complexity the player will never see, say so in a sentence or two and propose
+a shock, rests on unsound math, say so in a sentence or two and propose
 the better approach. "It differs from US data" is not on its own an objection. The user can override anything, but
 you must point out what is being overridden.
 
@@ -58,7 +56,7 @@ Known traps, each shipped as a bug before:
 - Order-flow impact is linear (Huberman-Stanzl); square-root impact blew bubbles.
 - Brock-Hommes fitness is annualized before strategies are compared.
 - `roicTtm` is a trailing average; gates on it saturate.
-- The sentiment index sits near 93 with its fundamentals neutral: read `sentimentDeviation()`, not the level, and
+- The sentiment index sits near 100 with its fundamentals neutral: read `sentimentDeviation()`, not the level, and
   `sentimentResidual()` (the mood) where the cycle is priced beside it.
 - Silent integration: a computed field nobody reads, or an input read the tick before its driver updates. Trace the
   call path with grep before calling a model wired in.

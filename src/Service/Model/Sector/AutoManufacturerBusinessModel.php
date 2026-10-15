@@ -98,8 +98,8 @@ class AutoManufacturerBusinessModel extends HeavyManufacturingBusinessModel
     public const PRICING_POWER_INDEX = 0.65;
 
     // --- Global Supply Chain Pressure (GSCPI) & Capacity Utilization ---
-    /** Variable margin cost drag per unit of supply chain bottleneck pressure (NY Fed GSCPI). */
-    public const SUPPLY_CHAIN_PRESSURE_COST_SCALAR = 0.04;
+    /** Variable margin cost drag per standard deviation of supply-chain pressure above normal (1.9pp). */
+    public const SUPPLY_CHAIN_PRESSURE_COST_SCALAR = 0.019;
     /** Sensitivity of mass-market manufacturing throughput to aggregate industrial capacity utilization (Fed G.17). */
     public const CAPACITY_UTILIZATION_THROUGHPUT_SCALAR = 0.40;
 

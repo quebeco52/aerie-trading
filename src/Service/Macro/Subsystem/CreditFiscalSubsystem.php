@@ -24,15 +24,15 @@ use App\Service\Math\Valuation;
  */
 class CreditFiscalSubsystem
 {
-    // --- INTERBANK LIQUIDITY SPREAD (CIR PROCESS & JUMPS) ---
+    // --- Interbank Liquidity Spread (TED) ---
     /** Cap on the interbank spread (500 bps): the TED spread's all-time high was 457 bps on 10 Oct 2008. */
     public const INTERBANK_MAX_SPREAD = 0.05;
-    /** Interbank spread mean per unit of positive excess bond premium: 0.32 (se 0.11), TED on the GZ premium 1986-2022, so 2008's 340 bps premium pulls TED ~110 bps above base. */
+    /** Interbank spread per unit of positive excess bond premium: 0.32, so a 2008-sized 340bp premium puts it ~110bp above base. */
     public const INTERBANK_PREMIUM_COUPLING = 0.32;
-    /** Mean log-size of a panic jump: median 2.7x (1.65x to 4.5x at one sigma), so a 2008-scale 5x freeze is the tail, not the norm. */
-    public const INTERBANK_JUMP_MEAN = 1.00;
-    /** Sigma of the jump log-size; at 0.50 the two-sigma low is exactly 1.0x, so a panic jump never shrinks the spread. */
-    public const INTERBANK_JUMP_VOL = 0.50;
+    /** Wholesale run a credit crisis forces on the day, on top of the premium's share (150bp): lenders pull funding from every bank at once, so the spread reads as a freeze. */
+    public const INTERBANK_CRISIS_RUN = 0.015;
+    /** Time constant (years) of the run's decay: funding returns within a year as the Authority lends and the banks are recapitalised. */
+    public const INTERBANK_RUN_DECAY_YEARS = 0.4;
 
     // --- Corporate Tax Revenue (BEA NIPA) ---
     /** Taxable corporate profits over GDP, the base a change in the corporate rate is levied on: 20%, the District being a financial centre, whose profit bases run 14-34% of GDP against the US's 9.7% (corporate tax revenue over the statutory rate, 2015-19: Switzerland 14%, Singapore 19%, Luxembourg 19%, Ireland 22%, Hong Kong 34%; Eurostat gov_10a_taxag, IRAS, IRD), so a point of rate is a fifth of a point of GDP in revenue. */
@@ -108,20 +108,6 @@ class CreditFiscalSubsystem
     public const RETAIL_CREDIT_FACTOR_KAPPA = 0.37;
     /** Stationary standard deviation of that factor in Z units: 0.23 (se 0.085), the same residual. */
     public const RETAIL_CREDIT_FACTOR_SD = 0.23;
-
-    // --- INTERBANK LIQUIDITY SPREAD (CIR PROCESS & JUMPS) ---
-    /** Floor on the interbank spread (1 bp) keeping the CIR process strictly positive. */
-    public const INTERBANK_MIN_SPREAD = 0.0001;
-    /** Speed of mean reversion (kappa) for the interbank liquidity spread toward baseline. */
-    public const INTERBANK_SPREAD_KAPPA = 2.50;
-    /** Volatility (sigma) of the continuous interbank liquidity spread diffusion. */
-    public const INTERBANK_SPREAD_SIGMA = 0.02;
-    /** Poisson intensity of severe interbank credit freeze/panic events. */
-    public const INTERBANK_JUMP_PROBABILITY = 0.05;
-    /** Panic intensity lift per unit of excess bond premium relative to the IG base, at half the premium's own ratio. */
-    public const INTERBANK_JUMP_PREMIUM_LOADING = 0.5;
-    /** Cap on the panic intensity (one a year in five), so a vol and premium blowout together cannot make a panic routine. */
-    public const INTERBANK_MAX_JUMP_PROBABILITY = 0.20;
 
     // --- Through-the-Cycle Spread Level ---
     /** Time constant (years) of the IG spread's measured trend: a decade spans a full credit cycle (US IG OAS peaks 1990, 2002, 2009, 2020), so the trend is the spread's through-the-cycle level, not the base it is built from. */
@@ -216,8 +202,12 @@ class CreditFiscalSubsystem
     public const CREDIT_CRISIS_DRAG_BASE = 0.010;
     /** Extra drag per unit of credit gap at the crisis ("credit bites back", JST 2013), fitted with the decay below so the US boom at the end of 2007 (+10pp of debt to income on the engine's Basel filter) costs the gap what 2008 cost the CBO gap beyond a normal recession, -3.2 -3.2 -3.6 -3.4 -2.5 -2.0 -1.2 -0.9 over years 1-8 (var/harness/crisis_irf.sh: -3.7 -4.8 -3.5 -2.5 -1.9 -1.7 -1.4 -1.1); a typical +3pp boom costs half that. At 0.15 a crisis cost almost nothing beyond a normal recession (JRST 2021 replication, var/harness/jrst_an.py). */
     public const CREDIT_CRISIS_DRAG_PER_GAP = 0.765;
-    /** Decay of the crisis drag (eight-year time constant, 55% still running at year five), the same fit: the CBO gap was still below -2% five years after Lehman. Depth comes from OUTLASTING a policy loop that responds in four to five quarters; a drag spent inside two years is offset as it arrives. */
-    public const CREDIT_CRISIS_DRAG_DECAY = 0.12;
+    /** Decay of the crisis drag (four-year time constant, 29% still running at year five): the lasting loss is potential's (CRISIS_POTENTIAL_SCAR), so the drag is the slump that outlasts a policy loop responding in four to five quarters, not the lost path. */
+    public const CREDIT_CRISIS_DRAG_DECAY = 0.25;
+    /** Share of a crisis's deleveraging that is households repaying debt, the rest firms and banks pulling back: a quarter, so a 2008-sized crisis repays ~20pp of debt to income, the US fall of 2007-13 (Mian & Sufi 2018). Repaid debt is borrowed again as leverage reverts, so this part costs no output on average. */
+    public const CRISIS_HOUSEHOLD_REPAYMENT_SHARE = 0.25;
+    /** Potential output a credit crisis destroys for good (3%), scaled by how thin bank capital is: firms that lose their credit lines scrap projects and the long-term unemployed lose skills, so output never returns to its old path (Cerra & Saxena 2008). */
+    public const CRISIS_POTENTIAL_SCAR = 0.03;
     /** Excess bond premium a crisis books on the day (216 bps): 2008's jump, EBP 1.24% in August to 3.40% in October, the one systemic crisis in the GZ record. The boom's size scales the drag (JST 2013), not this: nothing in the record says how the premium scales past 2008. */
     public const EBP_CRISIS_JUMP = 0.0216;
 
@@ -266,6 +256,8 @@ class CreditFiscalSubsystem
     public const EBP_JUMP_LOG_VOLATILITY = 0.165;
     /** Log premium per unit FALL in the output gap: 3.71 (se 0.78), the log-ARX; a quarter losing 2pp of gap adds ~11 bps at a neutral premium and ~37 at 2008's. The gap's level has no pull of its own. */
     public const EBP_LOG_GAP_SPEED_SENSITIVITY = 3.71;
+    /** Share of that speed read from the mainland's gap rather than the District's: lenders in a financial centre price the world's credit as much as its own. */
+    public const EBP_MAINLAND_GAP_SHARE = 0.5;
 
     // --- Federal Reserve Senior Loan Officer Opinion Survey (SLOOS) ---
     /** Adjustment speed of lending standards toward their target (1/yr): partial adjustment on the GZ premium, 1990-2026, SLOOS AR 0.71 (se 0.05) a quarter, a six-month half-life. */
@@ -330,79 +322,29 @@ class CreditFiscalSubsystem
     }
 
     /**
-     * Cox-Ingersoll-Ross (CIR 1985) Square-Root Diffusion with Systemic TED Freeze Jumps (Kou 2002).
-     *
-     * Models wholesale interbank lending liquidity spreads (TED / Libor-OIS spread) using a strictly
-     * positive mean-reverting CIR square-root process compounded with volatility-sensitive Poisson panic jumps.
-     * The jumps, and the run a credit crisis forces, are Merton (1976) compensated in the drift, so they fatten the
-     * tail without lifting the mean off the premium-coupled level.
+     * The interbank (TED) spread: the base, the share of the lenders' premium wholesale funding carries (Brunnermeier
+     * 2009), and the run a credit crisis forces, decaying from the day it struck (Gorton & Metrick 2012). It reads the
+     * premium, not the corporate spread, which reads it back.
      *
      * @param MacroState $state Current macroeconomic state.
-     * @param float      $dt    Time increment in years.
      */
-    public function calculateInterbankLiquiditySpread(MacroState $state, float $dt): void
+    public function calculateInterbankLiquiditySpread(MacroState $state): void
     {
-        $currentSpread = $state->interbankLiquiditySpread ?? MacroEngine::INTERBANK_BASELINE_SPREAD;
-
-        // Brunnermeier (2009) & Gorton-Metrick (2012) wholesale funding risk. It reads the lenders' premium, the
-        // factor TED and the corporate spread share, and not the corporate spread itself, which reads TED back.
-        $positivePremium = max(0.0, $state->excessBondPremium);
-        $premiumCoupledTheta = MacroEngine::INTERBANK_BASELINE_SPREAD + ($positivePremium * self::INTERBANK_PREMIUM_COUPLING);
-
-        $volatilityRatio = max(1.0, $state->marketVolatilityEma / MacroEngine::MACRO_VOL_BASE_ANCHOR);
-        $creditRatio = 1.0 + ($positivePremium / MacroEngine::BASE_CREDIT_SPREAD);
-        $jumpProbability = min(self::INTERBANK_MAX_JUMP_PROBABILITY, self::INTERBANK_JUMP_PROBABILITY * $volatilityRatio * (1.0 + self::INTERBANK_JUMP_PREMIUM_LOADING * ($creditRatio - 1.0)));
-
-        // Proportional jumps add lambda E[J - 1] X a year to the drift; netting it from the reversion, kappa (theta - X)
-        // - c X = (kappa + c)(kappa theta / (kappa + c) - X), leaves theta the stationary mean.
-        $jumpCompensator = $this->interbankJumpCompensator($jumpProbability, $state->creditCrisisHazard);
-        $compensatedKappa = self::INTERBANK_SPREAD_KAPPA + $jumpCompensator;
-
-        $dW = $this->mathUtility->generateStandardNormal();
-        $baseProcess = StochasticProcesses::calculateCIR(
-            currentValue: $currentSpread,
-            kappa: $compensatedKappa,
-            theta: self::INTERBANK_SPREAD_KAPPA * $premiumCoupledTheta / $compensatedKappa,
-            sigma: self::INTERBANK_SPREAD_SIGMA,
-            dt: $dt,
-            dW: $dW
-        );
-
-        $jumpData = $this->mathUtility->calculateJumpDiffusion(
-            lambda: $jumpProbability,
-            jumpMean: self::INTERBANK_JUMP_MEAN,
-            jumpVol: self::INTERBANK_JUMP_VOL,
-            dt: $dt
-        );
-
-        $jumpAmount = 0.0;
-        if ($jumpData['multiplier'] !== 1.0) {
-            $jumpAmount = $baseProcess * ($jumpData['multiplier'] - 1.0);
-            $this->diagnostics?->recordEvent('interbank', (float) $jumpData['exponent']);
-        }
-        // Gorton & Metrick (2012) wholesale funding liquidity run during banking crisis shock.
-        if ($state->lastCreditCrisisAt === $state->totalTime) {
-            $jumpAmount = max($jumpAmount, $baseProcess * (exp(self::INTERBANK_JUMP_MEAN) - 1.0));
-        }
-
-        $state->interbankLiquiditySpread = max(
-            self::INTERBANK_MIN_SPREAD,
-            min(self::INTERBANK_MAX_SPREAD, $baseProcess + $jumpAmount)
-        );
+        $yearsSinceCrisis = $state->lastCreditCrisisAt < 0.0 ? INF : $state->totalTime - $state->lastCreditCrisisAt;
+        $state->interbankLiquiditySpread = self::interbankSpreadAt($state->excessBondPremium, $yearsSinceCrisis);
     }
 
     /**
-     * Expected proportional jump a year in the interbank spread (Merton 1976): the panic arrivals times their lognormal
-     * mean less one, plus the crisis hazard times the run a crisis forces.
-     *
-     * @param float $panicIntensity Panic jump arrivals per year.
-     * @param float $crisisHazard   Credit crisis arrivals per year.
+     * The interbank spread at an excess bond premium and the years since the last credit crisis (INF for none).
      */
-    public function interbankJumpCompensator(float $panicIntensity, float $crisisHazard): float
+    public static function interbankSpreadAt(float $excessBondPremium, float $yearsSinceCrisis): float
     {
-        $panicMean = exp(self::INTERBANK_JUMP_MEAN + (0.5 * (self::INTERBANK_JUMP_VOL ** 2))) - 1.0;
+        $run = is_finite($yearsSinceCrisis) ? self::INTERBANK_CRISIS_RUN * exp(-$yearsSinceCrisis / self::INTERBANK_RUN_DECAY_YEARS) : 0.0;
 
-        return ($panicIntensity * $panicMean) + ($crisisHazard * (exp(self::INTERBANK_JUMP_MEAN) - 1.0));
+        return min(
+            self::INTERBANK_MAX_SPREAD,
+            MacroEngine::INTERBANK_BASELINE_SPREAD + (self::INTERBANK_PREMIUM_COUPLING * max(0.0, $excessBondPremium)) + $run
+        );
     }
 
     /**
@@ -762,9 +704,13 @@ class CreditFiscalSubsystem
         // direct pull on it once house prices are in; they act through the collateral and the debt service. What is
         // charged off leaves the stock; the fit's net series carries the charge-off at the default rate's long-run
         // average, so only the excess over it is booked.
+        // Jorda, Schularick & Taylor (2013): the household part of a crisis's deleveraging is debt repaid, so the stock
+        // falls as spending does and the spending comes back as leverage rebuilds (calculateCreditCrisisHazard()).
+        $crisisRepayment = self::crisisHouseholdRepayment($state->creditCrisisDrag) / $state->householdDebtToIncome;
         $growth = (self::CREDIT_GROWTH_HOUSE_PRICE * $housePriceLift)
             - (self::CREDIT_MEAN_REVERSION * $relativeExcess)
             - (self::DELEVERAGING_SPEED * $excessDsr)
+            - $crisisRepayment
             - ($this->householdChargeOffRate($state->retailDefaultRate) - $this->householdChargeOffRate(MacroEngine::RETAIL_DEFAULT_BASELINE));
         $noise = self::CREDIT_GROWTH_SIGMA * sqrt($dt) * $this->mathUtility->generateStandardNormal();
         // Bridges et al. (2014): banks cut lending to households as the capital they must hold rises, secured and unsecured
@@ -974,8 +920,23 @@ class CreditFiscalSubsystem
             * (self::CREDIT_CRISIS_DRAG_BASE + (self::CREDIT_CRISIS_DRAG_PER_GAP * max(0.0, $state->creditToGdpGapEma)));
         $state->creditCrisisDrag += $crisisDrag;
         $this->diagnostics?->recordEvent('creditCrisis', $crisisDrag);
+        // Cerra & Saxena (2008): the output a crisis destroys does not come back; potential takes the scar as the slump
+        // lasts (MacroAggregateSubsystem::absorbProductivityShocks()).
+        $state->crisisScarPending -= self::CRISIS_POTENTIAL_SCAR * self::thinCapitalDragScale($state->bankCapitalRequirement);
         // Gilchrist & Zakrajsek (2012): lenders' capital is hit on the day, so the premium they charge jumps with it.
         $state->excessBondPremium += self::EBP_CRISIS_JUMP;
+    }
+
+    /** Household debt a crisis's deleveraging repays a year, in debt to income: the households' share of the drag, at the one-for-one rate spending answers new borrowing. */
+    public static function crisisHouseholdRepayment(float $creditCrisisDrag): float
+    {
+        return self::CRISIS_HOUSEHOLD_REPAYMENT_SHARE * $creditCrisisDrag / MacroAggregateSubsystem::KALDOR_HOUSEHOLD_NEW_BORROWING;
+    }
+
+    /** The part of a crisis's deleveraging that drags demand directly: firms and banks pulling back, the households' repayment reaching demand through their borrowing instead. */
+    public static function crisisDirectDrag(float $creditCrisisDrag): float
+    {
+        return (1.0 - self::CRISIS_HOUSEHOLD_REPAYMENT_SHARE) * $creditCrisisDrag;
     }
 
     /**
@@ -1000,16 +961,17 @@ class CreditFiscalSubsystem
      * A displaced lognormal: the premium plus EBP_DISPLACEMENT follows a Schwartz (1997) log-OU, stepped with
      * its exact transition, with Merton (1976) jumps in the log. In the record its shocks grow with its level and
      * it never falls far below zero; in logs the shocks are the same size everywhere, so a lognormal gives both.
-     * It is driven by the speed the output gap falls (never its level) and by a level jump when a credit crisis
-     * strikes. It peaks before the gap's trough and is largely gone within a year while the gap is still there.
+     * It is driven by the speed the output gap falls, half the District's and half the mainland's (never their
+     * levels), and by a level jump when a credit crisis strikes. It peaks before the gap's trough and is largely gone within a year while the gap is still there.
      * The spread, equity volatility, the interbank spread and lending standards all load on it, and none of them
      * feeds back into it.
      *
-     * @param MacroState $state     Current macroeconomic state.
-     * @param float      $gapChange Change in the output gap over this step.
-     * @param float      $dt        Time increment in years.
+     * @param MacroState $state             Current macroeconomic state.
+     * @param float      $gapChange         Change in the output gap over this step.
+     * @param float      $dt                Time increment in years.
+     * @param float      $mainlandGapChange Change in the mainland's output gap over this step.
      */
-    public function updateExcessBondPremium(MacroState $state, float $gapChange, float $dt): void
+    public function updateExcessBondPremium(MacroState $state, float $gapChange, float $dt, float $mainlandGapChange = 0.0): void
     {
         // The Schwartz target carries the Ito correction; handing it this level puts the log mean on EBP_LOG_MEAN.
         $target = exp(self::EBP_LOG_MEAN + ((self::EBP_LOG_VOLATILITY ** 2) / (2.0 * self::EBP_MEAN_REVERSION)));
@@ -1028,7 +990,8 @@ class CreditFiscalSubsystem
             dt: $dt
         );
 
-        $shifted *= $jump['multiplier'] * exp(-self::EBP_LOG_GAP_SPEED_SENSITIVITY * $gapChange);
+        $worldGapChange = ((1.0 - self::EBP_MAINLAND_GAP_SHARE) * $gapChange) + (self::EBP_MAINLAND_GAP_SHARE * $mainlandGapChange);
+        $shifted *= $jump['multiplier'] * exp(-self::EBP_LOG_GAP_SPEED_SENSITIVITY * $worldGapChange);
         if ($jump['exponent'] !== null) {
             $this->diagnostics?->recordEvent('excessBondPremium', $jump['exponent']);
         }
@@ -1155,8 +1118,7 @@ class CreditFiscalSubsystem
     {
         // Macroeconomic Assessment Group (2010): banks building to a raised requirement or buffer ration credit through
         // their standards until the capital is built; capital already held rations nothing, and a cut eases nothing.
-        $capitalShortfall = max(0.0, $state->bankCapitalRequirement + $state->countercyclicalBufferRate - $state->bankCapitalBuilt);
-        $capitalTightening = self::SLOOS_CAPITAL_SHORTFALL_PREMIUM_EQUIVALENT * $capitalShortfall;
+        $capitalTightening = self::SLOOS_CAPITAL_SHORTFALL_PREMIUM_EQUIVALENT * self::capitalShortfall($state);
         $dW = $this->mathUtility->generateStandardNormal();
 
         $state->sloosTighteningIndex = CreditRisk::calculateSloosCreditStandards(
@@ -1170,6 +1132,12 @@ class CreditFiscalSubsystem
             gapSensitivity: self::SLOOS_GAP_SENSITIVITY,
             sigma: self::SLOOS_SIGMA
         );
+    }
+
+    /** Capital the banks must hold, requirement and buffer, but have not yet built: none once built, and a cut leaves none. */
+    public static function capitalShortfall(MacroState $state): float
+    {
+        return max(0.0, $state->bankCapitalRequirement + $state->countercyclicalBufferRate - $state->bankCapitalBuilt);
     }
 
     /**

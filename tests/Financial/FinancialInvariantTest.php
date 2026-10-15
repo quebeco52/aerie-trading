@@ -803,9 +803,9 @@ class FinancialInvariantTest extends TestCase
                 ->withInventoryGap(0.030)
                 ->build();
             $state->outputGapEma = -0.005;
-            // Credit at its average: the compensated premium and crisis drag are neutral, so only policy acts.
-            $state->excessBondPremium = $aggregate->stationaryAdversePremium();
-            $state->creditCrisisDrag = $aggregate->stationaryCrisisDrag();
+            // Credit at its trend and no crisis running, so only policy acts.
+            $state->excessBondPremium = $state->excessBondPremiumTrend;
+            $state->creditCrisisDrag = 0.0;
 
             for ($quarter = 0; $quarter < 12; $quarter++) {
                 $newGap = $aggregate->calculateOutputGap($state, $yield5y, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, 0.25, 1.0);

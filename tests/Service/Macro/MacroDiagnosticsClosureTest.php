@@ -158,14 +158,15 @@ class MacroDiagnosticsClosureTest extends TestCase
         }
     }
 
-    /** The compensators and the disasters are reported as channels of their own on the wired engine. */
+    /** The disasters, their compensator and the one credit drag are reported as channels of their own on the wired engine. */
     public function testTheSplitChannelsAreReported(): void
     {
         foreach (self::$quarters as $index => $quarter) {
             $contributions = $quarter['gap']['contributions'];
             $this->assertArrayHasKey('demandDisaster', $contributions);
             $this->assertArrayHasKey('disasterCompensator', $contributions);
-            $this->assertArrayHasKey('premiumCompensator', $contributions);
+            $this->assertArrayHasKey('creditPremiumDrag', $contributions);
+            $this->assertArrayHasKey('crisisScar', $contributions);
         }
     }
 

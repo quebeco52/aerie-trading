@@ -141,7 +141,7 @@ class ComputerHardwareBusinessModelTest extends TestCase
         };
 
         $calm = $run(new MacroStateDTO());
-        $crisis = $run(new MacroStateDTO(supplyChainPressureIndexEma: 2.0));
+        $crisis = $run(new MacroStateDTO(supplyChainPressureIndexEma: 2.5));
 
         $this->assertNull($calm->eventType);
         $this->assertSame(ShockEvent::SEMICONDUCTOR_FAB_SHORTAGE, $crisis->eventType);

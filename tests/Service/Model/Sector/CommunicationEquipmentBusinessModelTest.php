@@ -227,7 +227,7 @@ class CommunicationEquipmentBusinessModelTest extends TestCase
         $draw = CommunicationEquipmentBusinessModel::COMPONENT_SHORTAGE_Z_SCORE + 1.0;
 
         $calm = $this->runQuarter([...$seed->streamZ, 'event' => -9.9], $draw);
-        $crisis = $this->runQuarter([...$seed->streamZ, 'event' => -9.9], $draw, macro: new MacroStateDTO(supplyChainPressureIndexEma: 2.0));
+        $crisis = $this->runQuarter([...$seed->streamZ, 'event' => -9.9], $draw, macro: new MacroStateDTO(supplyChainPressureIndexEma: 2.5));
 
         $this->assertNull($calm->eventType);
         $this->assertSame(ShockEvent::SEMICONDUCTOR_FAB_SHORTAGE, $crisis->eventType);
@@ -257,7 +257,7 @@ class CommunicationEquipmentBusinessModelTest extends TestCase
     public function testSupplyChainPressureAndComponentInflationRaiseTheCostRatio(): void
     {
         $base = $this->runQuarter();
-        $gscpi = $this->runQuarter(macro: new MacroStateDTO(supplyChainPressureIndexEma: 2.0));
+        $gscpi = $this->runQuarter(macro: new MacroStateDTO(supplyChainPressureIndexEma: 2.5));
         $ppi = $this->runQuarter(macro: new MacroStateDTO(producerPriceInflationEma: 0.08));
         $metals = $this->runQuarter(macro: new MacroStateDTO(industrialMetalsIndexEma: 140.0));
 

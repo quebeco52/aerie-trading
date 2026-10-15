@@ -244,9 +244,15 @@ readonly class MacroStateDTO
         public float $interbankLiquiditySpread = MacroEngine::INTERBANK_BASELINE_SPREAD,
         public float $interbankLiquiditySpreadEma = MacroEngine::INTERBANK_BASELINE_SPREAD,
         public float $excessBondPremium = 0.0,
+        /** Decade trend of the excess bond premium the credit drag reads. */
+        public float $excessBondPremiumTrend = 0.0,
         public float $totalFactorProductivityIndex = MacroEngine::TFP_BASELINE,
         public float $totalFactorProductivityIndexEma = MacroEngine::TFP_BASELINE,
         public float $tfpShockLevel = 0.0,
+        /** Scar credit crises have booked that potential has yet to take (log level, negative). */
+        public float $crisisScarPending = 0.0,
+        /** Scar potential took this tick (log level, negative). */
+        public float $crisisScarStep = 0.0,
         public float $tfpOutputStage1 = 0.0,
         public float $tfpOutputStage2 = 0.0,
         public float $tfpPotentialStage1 = 0.0,
@@ -639,11 +645,14 @@ readonly class MacroStateDTO
         $args['alliedDefenseDeliveryLag'] ??= MacroAggregateSubsystem::alliedDefenseGap($resolve('alliedDefenseSpendingIndexEma'));
         $args['mainlandDemandExportLag'] ??= $resolve('foreignOutputGapEma');
         $args['netExportGap'] ??= MacroAggregateSubsystem::netExportGapAt($resolve('mainlandDemandExportLag'), $resolve('realExchangeRateTradeLag'), $resolve('alliedDefenseDeliveryLag'), $resolve('tariffTradeLag'));
-        // Finance output opens on the credit balances, and a payload valuing fund managers at the market is rebuilt on
+        // Finance output opens on the credit balances and deal flow, and a payload valuing fund managers at the market is rebuilt on
         // credit alone with domestic demand keeping the difference, as MacroState::fromArray has it.
         if (!isset($args['financeOutputGap']) || isset($data[MacroState::RETIRED_FINANCE_MARKET_TREND_KEY])) {
             $carriedFinance = $resolve('financeOutputGap');
-            $args['financeOutputGap'] = MacroAggregateSubsystem::financeOutputGapAt(MacroAggregateSubsystem::creditBalanceGap($resolve('creditToGdpGap'), $resolve('creditToGdpTrend')));
+            $args['financeOutputGap'] = MacroAggregateSubsystem::financeOutputGapAt(
+                MacroAggregateSubsystem::creditBalanceGap($resolve('creditToGdpGap'), $resolve('creditToGdpTrend')),
+                MacroAggregateSubsystem::dealActivityGap($resolve('dealActivityIndexEma'), $resolve('dealActivityIndexTrend'))
+            );
             if (isset($data[$fields['financeOutputGap']], $args['domesticDemandGapEma'])) {
                 $args['domesticDemandGapEma'] += MacroAggregateSubsystem::domesticDemandGapAt(0.0, 0.0, 0.0, $args['financeOutputGap'] - $carriedFinance);
             }

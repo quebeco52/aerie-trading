@@ -10,7 +10,6 @@ use App\Service\Math\FirmEconomics;
 use App\Service\Math\FixedIncome;
 use App\Service\Math\MacroTransmission;
 use App\Service\Math\MathUtility;
-use App\Service\Math\OptionPricing;
 use App\Service\Math\ResponseCurves;
 use App\Service\Math\StochasticProcesses;
 use App\Service\Math\TimeSeries;
@@ -116,16 +115,18 @@ class MacroAggregateSubsystem
     // --- Financial Centre Output (GDP by industry; ESA 2010 §14.14: bank service volumes as deflated balances) ---
     /** Finance and insurance value added over GDP: the District was founded as a financial centre, and its finance is over 30% of it. */
     public const DISTRICT_FINANCE_SHARE = 0.30;
-    /** Credit intermediation's share of the District's finance (banks, credit services, mortgage finance), by the seeded roster's book equity; its volume follows deflated loan balances, the only finance with a volume cycle of its own here. */
+    /** Credit intermediation's share of the District's finance (banks, credit services, mortgage finance), by the seeded roster's book equity; its volume follows deflated loan balances. */
     public const FINANCE_CREDIT_SHARE = 0.322;
+    /** Deal-makers' share of the District's finance (investment banks and private equity, by the same book equity): their volume is the world's deals they advise on, underwrite and buy. */
+    public const FINANCE_DEAL_SHARE = 0.098;
     /** Weight of the finance cycle in the gap, beyond the finance the demand equation already moves with the rest of the economy (0.246 of output). */
     public const FINANCE_GAP_WEIGHT = 0.2457;
     /** Imports for use at home over GDP that the demand equation's own slopes already leak abroad (14.8%). */
     public const DEMAND_EQUATION_IMPORT_SHARE = 0.1477;
     /** Domestic demand the District's imports carry abroad beyond that leak: imports move 1.4 times domestic demand (IMF WEO 2015) on the District's imports for home use above it. */
     public const EXCESS_IMPORT_LEAKAGE = self::IMPORT_DEMAND_ELASTICITY * (self::DISTRICT_DOMESTIC_IMPORT_SHARE - self::DEMAND_EQUATION_IMPORT_SHARE);
-    /** Weight of domestic demand in the gap: everything but the bank credit cycle, net of the excess imports it draws in (0.588). Market-based finance (funds, brokers, exchanges, investment banks: 0.239 of finance) is in it, as insurance is: national accounts do not count its output at the value of the assets it manages (BEA 2026 annual update: portfolio management volume extrapolated from the industry's employment, replacing a fee PPI that tracks asset values). */
-    public const DOMESTIC_GAP_WEIGHT = (1.0 - (self::FINANCE_GAP_WEIGHT * self::FINANCE_CREDIT_SHARE)) * (1.0 - self::EXCESS_IMPORT_LEAKAGE);
+    /** Weight of domestic demand in the gap: everything but the bank credit and deal cycles, net of the excess imports it draws in (0.573). Brokers, exchanges, insurance and asset management are in it: their output is not the value of what they trade or hold. */
+    public const DOMESTIC_GAP_WEIGHT = (1.0 - (self::FINANCE_GAP_WEIGHT * (self::FINANCE_CREDIT_SHARE + self::FINANCE_DEAL_SHARE))) * (1.0 - self::EXCESS_IMPORT_LEAKAGE);
 
     // --- KALDOR-KALECKI 2D LIMIT CYCLE ---
     /** Linear self-reinforcement of demand; at 0.12 zero was an unstable point and the gap swept through it on a clockwork limit cycle, at 0.06 it rests inside ±1% 44% of quarters (Frisch-Slutsky shock-driven cycle) while keeping the left skew. */
@@ -139,14 +140,12 @@ class MacroAggregateSubsystem
 
     /** Time constant of each of the two Pascal stages the real-rate stance passes through before it moves demand (Solow 1960): mean lag 0.8y against Rudebusch-Svensson's year average lagged a quarter (0.6y); the same fit. */
     public const MONETARY_TRANSMISSION_LAG_YEARS = 0.3;
-    /** Demand per unit of excess credit and interbank spread: the Bernanke-Gertler-Gilchrist (1999) accelerator's price leg only, well under Gilchrist-Zakrajsek's reduced-form 1.5-2.0 because the quantity and deleveraging legs are booked separately. */
-    public const KALDOR_CREDIT_FRICTION_DRAG = 0.60;
-    /** Demand per unit of an ADVERSE Gilchrist-Zakrajsek (2012) excess bond premium, beyond its 0.58 loading into the IG spread; fitted to the US sign-split projection of the CBO gap on premium innovations (1973-2019 ex-pandemic: 2q -1.59, 4q -1.69 per pp; var/harness/asym_fit.py). */
-    public const KALDOR_EXCESS_BOND_PREMIUM_DRAG_ADVERSE = 2.0;
-    /** Demand per unit of a FAVORABLE (negative) premium: none, Barnichon, Matthes & Ziegenbein's (2022) estimate -- easy credit does not lift output (IP ~0 to two years, +0.7 insignificant after); it had been feeding booms. */
-    public const KALDOR_EXCESS_BOND_PREMIUM_DRAG_FAVORABLE = 0.0;
-    /** Bank lending channel (Lown & Morgan 2006; Bassett, Chosak, Driscoll & Zakrajsek 2014): demand per unit of net lending tightening, so the ~80% of 2008 costs ~2pp a year while it lasts, the loss they attribute to the credit-supply cut. */
-    public const KALDOR_LENDING_STANDARDS_DRAG = 0.025;
+    /** Demand per unit of an ADVERSE excess bond premium over its decade trend, the one price of credit supply (Gilchrist & Zakrajsek 2012): 3.5, the sum of the spread, premium and lending-standards drags it replaced, so a 2008-sized 2pp spike costs 7pp of demand a year while it lasts. */
+    public const KALDOR_CREDIT_PREMIUM_DRAG = 3.5;
+    /** Excess premium per unit of capital the banks must hold but have not built: 0.22, so a 1pp rise phased in over four years costs the 0.17% of output the MAG (2010) median gives, as it did through lending standards. */
+    public const CAPITAL_SHORTFALL_PREMIUM_EQUIVALENT = 0.22;
+    /** Horizon (years) of the premium's trend the drag reads: a decade, past a credit cycle. */
+    public const CREDIT_PREMIUM_TREND_YEARS = 10.0;
     /** Demand per point a tax rate is cut below its decade trend by decision, the stance in net taxes as a share of GDP and the corporate rate alike; on the corporate rate it is near Mertens & Ravn's (2013) 0.4% of output on impact a point. The stabilisers' swing is not a decision and is not read here. */
     public const KALDOR_FISCAL_MULTIPLIER = 0.50;
     /** The demand gap's own pull back to trend on the CURRENT gap: automatic stabilisers (Blanchard & Perotti 2002) and the permanent-income smoothing of transitory income (Friedman 1957), the level forces no channel here carries; the same fit. At 0.15 the gap had no pull of its own, a rate move integrated into it without limit, and a policy loop acting 3-4 quarters late did all the restoring and rang at 6-7 years. */
@@ -169,8 +168,6 @@ class MacroAggregateSubsystem
     public const KALDOR_CATASTROPHE_DRAG = 0.004;
     /** Demand drag per log unit of policy uncertainty ABOVE baseline: a doubling costs ~0.4pp a year, so the 2006-2011 rise integrates to the ~1% output loss Baker, Bloom & Davis attribute to it. One-sided: spikes cost output (Bloom 2009), calm does not stimulate. */
     public const KALDOR_EPU_DRAG = 0.006;
-    /** Long-run average of the credit-crisis drag on the District's engine, 1.34pp a year (crisis rate x mean impulse / decay, var/harness/fc_crisis_drag), booked back as its Merton (1976) compensator: crises bend the cycle without shifting its average, as the disasters and the premium are compensated. */
-    public const KALDOR_CRISIS_DRAG_COMPENSATOR = 0.0134;
 
     // --- Aggregate Demand Disturbance (Smets-Wouters 2007) ---
     /** Mean reversion speed of the aggregate demand disturbance: -4*ln(0.86) per year, from the estimated quarterly AR(1) coefficient. */
@@ -266,10 +263,8 @@ class MacroAggregateSubsystem
     // --- Supply-Chain Costs in Core Goods (Carriere-Swallow, Deb, Furceri, Jimenez & Ostry 2023) ---
     /** Headline price level a year after container freight rates double: ~0.7pp, peaking at twelve months (IMF blog, March 2022, on the paper's local projections). */
     public const FREIGHT_DOUBLING_HEADLINE_EFFECT = 0.007;
-    /** Supply-chain pressure points a doubling of freight adds to the composite (MacroTransmission::calculateGscpiComposite). */
-    public const SUPPLY_CHAIN_POINTS_PER_FREIGHT_DOUBLING = MacroTransmission::GSCPI_POINTS_PER_FREIGHT_DOUBLING;
-    /** Log core goods price level per point of smoothed supply-chain pressure (1.4%): the freight effect carried wholly by the goods basket. */
-    public const CORE_GOODS_SUPPLY_CHAIN_LEVEL_LOADING = self::FREIGHT_DOUBLING_HEADLINE_EFFECT / self::INFLATION_WEIGHT_GOODS / self::SUPPLY_CHAIN_POINTS_PER_FREIGHT_DOUBLING;
+    /** Log core goods price level per log unit of freight (4.0%): the freight effect carried wholly by the goods basket. */
+    public const CORE_GOODS_FREIGHT_LEVEL_LOADING = self::FREIGHT_DOUBLING_HEADLINE_EFFECT / self::INFLATION_WEIGHT_GOODS / M_LN2;
 
     // --- SOLOW-SWAN TOTAL FACTOR PRODUCTIVITY (TFP) ---
     /** Level innovation of TFP per sqrt(year): Fernald's utilization-adjusted quarterly TFP 1947-2026 is a random walk at 1-3 year horizons with this sd (annual kurtosis 2.2, so no jump component). */
@@ -282,6 +277,8 @@ class MacroAggregateSubsystem
     // --- Productivity Shock Absorption (Basu, Fernald & Kimball 2006) ---
     /** Rate at which actual output absorbs a TFP level shock through a second-order Pascal lag (Solow 1960); fitted with the potential speed to the CBO gap's response to Fernald TFP shocks over 20 quarters, holding the supply-driven gap to the ~1.2pp sd that response implies (var/harness/tfp_real.py, tfp_grid_an.py). */
     public const TFP_OUTPUT_ABSORPTION_SPEED = 1.65;
+    /** Time constant (years) over which potential takes a credit crisis's scar: capital idle in the slump is scrapped and the long-term unemployed lose their skills while it lasts (Blanchard & Summers 1986 hysteresis). */
+    public const CRISIS_SCAR_ABSORPTION_YEARS = 3.0;
     /** Rate at which potential absorbs the same shock, also through a second-order Pascal lag, as capital and organisation adjust; a slower single lag fit the response only by leaving policy to fight a 2.3pp supply gap, which drove the whole gap's sd from 2.2 to 3.5%. */
     public const TFP_POTENTIAL_ABSORPTION_SPEED = 0.75;
 
@@ -300,8 +297,8 @@ class MacroAggregateSubsystem
     // --- Producer Price Index (PPI) Stage-of-Processing ---
     /** Weight of agricultural raw food commodities in intermediate producer prices. */
     public const PPI_AGRI_WEIGHT = 0.15;
-    /** Pass-through elasticity of global supply chain pressure (GSCPI Z-score) into wholesale PPI. */
-    public const PPI_GSCPI_SENSITIVITY = 0.006;
+    /** Wholesale PPI per standard deviation of supply-chain pressure (0.3pp). */
+    public const PPI_GSCPI_SENSITIVITY = 0.00285;
     /** Weight of Unit Labor Cost (ULC = Wage Growth - TFP Growth) in wholesale producer processing costs. */
     public const PPI_ULC_WEIGHT = 0.25;
     /** Weight of the rest of the cost base (purchased services, rents, margins), repricing with expected inflation: what the named shares leave, so the stage weights sum to one. */
@@ -326,8 +323,6 @@ class MacroAggregateSubsystem
     public const CPI_MONTHS_KEPT = 13;
 
     /** The premium's stationary means depend on constants only; computed once. */
-    private ?float $adversePremiumMean = null;
-    private ?float $premiumMean = null;
 
     public function __construct(
         private readonly MathUtility $mathUtility,
@@ -378,7 +373,7 @@ class MacroAggregateSubsystem
      * @param MacroState $state     Current macroeconomic state.
      * @param float      $trendRate Trend TFP growth from calculateTotalFactorProductivity().
      * @param float      $dt        Time increment in years.
-     * @return float Productivity growth potential output is built on: the trend plus the shock potential absorbed this tick.
+     * @return float Productivity growth potential output is built on: the trend plus the shock and crisis scar potential absorbed this tick.
      */
     public function absorbProductivityShocks(MacroState $state, float $trendRate, float $dt): float
     {
@@ -389,7 +384,12 @@ class MacroAggregateSubsystem
         $state->tfpPotentialStage1 = TimeSeries::calculateDistributedLag($state->tfpPotentialStage1, $state->tfpShockLevel, $dt, 1.0 / self::TFP_POTENTIAL_ABSORPTION_SPEED);
         $state->tfpPotentialAbsorbed = TimeSeries::calculateDistributedLag($priorPotential, $state->tfpPotentialStage1, $dt, 1.0 / self::TFP_POTENTIAL_ABSORPTION_SPEED);
 
-        return $trendRate + (($state->tfpPotentialAbsorbed - $priorPotential) / $dt);
+        // Blanchard & Summers (1986) hysteresis: potential takes a credit crisis's scar while the slump lasts, so output
+        // the slump holds down reads, as potential falls to meet it, as less slack (calculateOutputGap()).
+        $state->crisisScarStep = $state->crisisScarPending * (1.0 - exp(-$dt / self::CRISIS_SCAR_ABSORPTION_YEARS));
+        $state->crisisScarPending -= $state->crisisScarStep;
+
+        return $trendRate + (($state->tfpPotentialAbsorbed - $priorPotential + $state->crisisScarStep) / $dt);
     }
 
     /**
@@ -416,72 +416,11 @@ class MacroAggregateSubsystem
     }
 
     /**
-     * Long-run average of the credit-crisis drag, the level its compensator books back. A state holding the drag here
-     * reads as average credit: the crisis leg and its compensator net to nothing.
-     *
-     * @return float Mean crisis drag on demand (pp of gap a year, as a fraction).
-     */
-    public function stationaryCrisisDrag(): float
-    {
-        return self::KALDOR_CRISIS_DRAG_COMPENSATOR;
-    }
-
-    /**
-     * Stationary mean of the adverse excess bond premium, E[max(P, 0)], under the premium's own law.
-     *
-     * The premium plus its displacement is lognormal: a log-OU (CreditFiscalSubsystem::updateExcessBondPremium) whose
-     * stationary log variance is (sigma^2 + lambda sigma_J^2) / 2 kappa once its Merton jumps are counted, so the
-     * adverse part is a Black (1976) call on it struck at the displacement. The recession feedback and the crisis jump
-     * are left out on purpose: they are amplification, and their average cost is real. A premium held at this level
-     * leaves both compensated credit legs neutral.
-     *
-     * @return float Mean adverse premium (fraction).
-     */
-    public function stationaryAdversePremium(): float
-    {
-        if ($this->adversePremiumMean !== null) {
-            return $this->adversePremiumMean;
-        }
-        $logVariance = $this->stationaryPremiumLogVariance();
-
-        return $this->adversePremiumMean = OptionPricing::calculateBlackScholesPrice(
-            spot: exp(CreditFiscalSubsystem::EBP_LOG_MEAN + ($logVariance / 2.0)),
-            strike: CreditFiscalSubsystem::EBP_DISPLACEMENT,
-            volatility: sqrt($logVariance),
-            riskFreeRate: 0.0,
-            dividendYield: 0.0,
-            timeToExpiry: 1.0,
-            isCall: true
-        );
-    }
-
-    /**
-     * Stationary mean of the excess bond premium under the same law: the lognormal mean less the displacement.
-     *
-     * @return float Mean premium (fraction).
-     */
-    private function stationaryPremiumMean(): float
-    {
-        return $this->premiumMean ??= exp(CreditFiscalSubsystem::EBP_LOG_MEAN + ($this->stationaryPremiumLogVariance() / 2.0)) - CreditFiscalSubsystem::EBP_DISPLACEMENT;
-    }
-
-    /**
-     * Stationary variance of the log displaced premium: diffusion plus Merton jumps over twice the reversion speed.
-     *
-     * @return float Log variance.
-     */
-    private function stationaryPremiumLogVariance(): float
-    {
-        return ((CreditFiscalSubsystem::EBP_LOG_VOLATILITY ** 2) + (CreditFiscalSubsystem::EBP_JUMP_INTENSITY * (CreditFiscalSubsystem::EBP_JUMP_LOG_VOLATILITY ** 2)))
-            / (2.0 * CreditFiscalSubsystem::EBP_MEAN_REVERSION);
-    }
-
-    /**
      * Kaldor (1940) Non-Linear Business Cycle with Modigliani Wealth Effect & Marshall-Lerner FX Drag.
      *
      * Solves continuous domestic demand dynamics, weighted by its share of GDP, to which the productivity supply part, net
      * exports and the banks' credit-driven output are added as levels:
-     *   dy = [Momentum - CapacityCeiling(y>0) - RealRateDrag + FiscalStimulus + AutomaticStabilisers - CapitalOverhang + WealthEffect + NewBorrowing - DebtService - CrisisDeleveraging - LendingStandards + DemandShock] * dt
+     *   dy = [Momentum - CapacityCeiling(y>0) - RealRateDrag - CreditPremium + FiscalStimulus + AutomaticStabilisers - CapitalOverhang + WealthEffect + NewBorrowing - DebtService - CrisisDeleveraging + DemandShock] * dt
      *
      * @param MacroState $state             Current macroeconomic state.
      * @param float      $yield5y           5-Year Treasury yield benchmark for business borrowing.
@@ -505,7 +444,10 @@ class MacroAggregateSubsystem
         $netExportGap = $this->updateNetExportGap($state, $dt);
         $tradeChange = $netExportGap - $state->netExportGap;
         $state->netExportGap = $netExportGap;
-        $financeGap = self::financeOutputGapAt(self::creditBalanceGap($state->creditToGdpGap, $state->creditToGdpTrend));
+        $financeGap = self::financeOutputGapAt(
+            self::creditBalanceGap($state->creditToGdpGap, $state->creditToGdpTrend),
+            self::dealActivityGap($state->dealActivityIndexEma, $state->dealActivityIndexTrend)
+        );
         $financeChange = $financeGap - $state->financeOutputGap;
         $state->financeOutputGap = $financeGap;
         // Smets & Wouters (2007) estimate the demand disturbance and the measurement-frequency
@@ -533,19 +475,10 @@ class MacroAggregateSubsystem
         $state->monetaryStanceTransmitted = TimeSeries::calculateDistributedLag($state->monetaryStanceTransmitted, $state->monetaryStanceStage1, $dt, self::MONETARY_TRANSMISSION_LAG_YEARS);
         $monetaryDrag = ResponseCurves::calculateAsymmetricResponse($state->monetaryStanceTransmitted, self::KALDOR_MONETARY_DRAG_RESTRICTIVE, self::KALDOR_MONETARY_DRAG_ACCOMMODATIVE);
 
-        // Bernanke, Gertler & Gilchrist (1999) financial accelerator wholesale credit frictions.
-        $excessCreditSpread = max(-MacroEngine::BASE_CREDIT_SPREAD * 0.5, $state->macroCreditSpreadEma - MacroEngine::BASE_CREDIT_SPREAD);
-        $excessInterbankSpread = max(-MacroEngine::INTERBANK_BASELINE_SPREAD * 0.5, $state->interbankLiquiditySpreadEma - MacroEngine::INTERBANK_BASELINE_SPREAD);
-        $creditFrictionDrag = self::KALDOR_CREDIT_FRICTION_DRAG * ($excessCreditSpread + $excessInterbankSpread);
-
-        // Gilchrist & Zakrajsek (2012): the premium is the price of credit supply, and it moves spending beyond the spread it loads into.
-        // The premium bites on its adverse side only, so each side is compensated by its stationary mean (Merton 1976):
-        // it bends the cycle without shifting its average, whose cost belongs in potential, not the gap. The
-        // compensator is its own channel, so a calm quarter does not read as credit stimulus.
-        $adversePremiumMean = $this->stationaryAdversePremium();
-        $premiumDrag = ResponseCurves::calculateAsymmetricResponse($state->excessBondPremium, self::KALDOR_EXCESS_BOND_PREMIUM_DRAG_ADVERSE, self::KALDOR_EXCESS_BOND_PREMIUM_DRAG_FAVORABLE);
-        $premiumCompensator = (self::KALDOR_EXCESS_BOND_PREMIUM_DRAG_ADVERSE * $adversePremiumMean)
-            + (self::KALDOR_EXCESS_BOND_PREMIUM_DRAG_FAVORABLE * ($this->stationaryPremiumMean() - $adversePremiumMean));
+        // Gilchrist & Zakrajsek (2012): the excess bond premium is the price of credit supply, and spending pays it on
+        // its adverse side only (Barnichon, Matthes & Ziegenbein 2022: easy credit does not lift output). Read against its
+        // decade trend, with capital the banks have yet to build counted as premium (Macroeconomic Assessment Group 2010).
+        $creditPremiumDrag = self::KALDOR_CREDIT_PREMIUM_DRAG * max(0.0, self::excessCreditPremium($state));
 
         $momentum = self::KALDOR_MOMENTUM * $y;
         // Kaldor (1940) non-linear asymmetric capacity ceiling constraint.
@@ -593,10 +526,9 @@ class MacroAggregateSubsystem
         // Hallegatte et al. (2007) physical capital destruction supply drag.
         $catastropheSupplyDrag = self::KALDOR_CATASTROPHE_DRAG * max(0.0, $state->catastropheLossIndexEma - 1.0);
 
-        // Jordà, Schularick & Taylor (2013) post-crisis balance sheet deleveraging drag.
-        $crisisDeleveragingDrag = $state->creditCrisisDrag;
-        // Bernanke & Blinder (1988) bank lending channel credit standards quantity constraint.
-        $lendingStandardsDrag = self::KALDOR_LENDING_STANDARDS_DRAG * $state->sloosTighteningIndexEma;
+        // Jordà, Schularick & Taylor (2013) post-crisis deleveraging by firms and banks; households' share repays their
+        // debt and reaches demand through the new-borrowing channel.
+        $crisisDeleveragingDrag = CreditFiscalSubsystem::crisisDirectDrag($state->creditCrisisDrag);
 
         // Baker, Bloom & Davis (2016) real options investment deferral under policy uncertainty.
         $policyUncertaintyDrag = self::KALDOR_EPU_DRAG * max(0.0, log(max(1.0, $state->policyUncertaintyIndexEma) / MacroEngine::EPU_BASELINE));
@@ -656,9 +588,7 @@ class MacroAggregateSubsystem
             'momentum' => $momentum,
             'cubicConstraint' => -$cubicConstraint,
             'monetaryDrag' => -$monetaryDrag,
-            'creditFrictionDrag' => -$creditFrictionDrag,
-            'premiumDrag' => -$premiumDrag,
-            'premiumCompensator' => $premiumCompensator,
+            'creditPremiumDrag' => -$creditPremiumDrag,
             'fiscalStimulus' => $discretionaryFiscal,
             'fundDraw' => $fundDraw,
             'automaticStabiliser' => $automaticStabiliser,
@@ -673,8 +603,6 @@ class MacroAggregateSubsystem
             'householdNewBorrowing' => $householdNewBorrowing,
             'householdDeleveragingDrag' => -$householdDeleveragingDrag,
             'crisisDeleveragingDrag' => -$crisisDeleveragingDrag,
-            'crisisCompensator' => self::KALDOR_CRISIS_DRAG_COMPENSATOR,
-            'lendingStandardsDrag' => -$lendingStandardsDrag,
             'demandShock' => $state->demandShock - $state->demandDisasterShock + $state->demandDisasterCompensation,
             'demandDisaster' => $state->demandDisasterShock,
             'disasterCompensator' => -$state->demandDisasterCompensation,
@@ -684,7 +612,9 @@ class MacroAggregateSubsystem
             'productivitySupply' => $supplyChange / $dt,
             // Obstfeld & Rogoff (1996): the mainland's demand and the real exchange rate move what the district sells abroad.
             'netExports' => $tradeChange / $dt,
-            // ESA 2010 deflated balances: the banks the District lives on produce as their loans do.
+            // Blanchard & Summers (1986): the same output over a potential the crisis scar has lowered is less slack.
+            'crisisScar' => -$state->crisisScarStep / $dt,
+            // ESA 2010 deflated balances and deal fees: the banks produce as their loans do, the deal-makers as the world's deals do.
             'financeOutput' => $financeChange / $dt,
         ];
 
@@ -806,6 +736,16 @@ class MacroAggregateSubsystem
     }
 
     /**
+     * The excess bond premium over its decade trend, plus the capital the banks must hold and have not yet built, read
+     * as the premium it is worth: the credit-supply price the demand drag answers when positive.
+     */
+    public static function excessCreditPremium(MacroState $state): float
+    {
+        return $state->excessBondPremium - $state->excessBondPremiumTrend
+            + (self::CAPITAL_SHORTFALL_PREMIUM_EQUIVALENT * CreditFiscalSubsystem::capitalShortfall($state));
+    }
+
+    /**
      * The domestic-demand part of the gap, at domestic demand's own scale: the gap less the level parts that ride
      * beside the demand equation (supply, net exports, the banks' credit cycle), over domestic demand's weight.
      *
@@ -914,16 +854,28 @@ class MacroAggregateSubsystem
 
     /**
      * The part of the District's finance output with a volume cycle of its own, as a share of GDP: the banks, whose
-     * service volumes follow loan balances deflated by a general price index (ESA 2010 §14.14), against their trend.
-     * Market-based finance is not here: its volume is not the market value of what it manages (BEA's 2026 method reads
-     * fund managers' employment), so it moves with the domestic economy (DOMESTIC_GAP_WEIGHT).
+     * service volumes follow loan balances deflated by a general price index (ESA 2010 §14.14), and the deal-makers,
+     * whose fees follow the world's deal flow, each against its trend. Asset management is not here: its volume is not
+     * the value of what it manages, so it moves with the domestic economy (DOMESTIC_GAP_WEIGHT).
      *
      * @param float $creditBalanceGap Log credit balances against their trend.
+     * @param float $dealActivityGap  Log deal flow against its trend.
      * @return float Finance output gap (fraction of GDP).
      */
-    public static function financeOutputGapAt(float $creditBalanceGap): float
+    public static function financeOutputGapAt(float $creditBalanceGap, float $dealActivityGap = 0.0): float
     {
-        return self::FINANCE_GAP_WEIGHT * self::FINANCE_CREDIT_SHARE * $creditBalanceGap;
+        return self::FINANCE_GAP_WEIGHT * ((self::FINANCE_CREDIT_SHARE * $creditBalanceGap) + (self::FINANCE_DEAL_SHARE * $dealActivityGap));
+    }
+
+    /**
+     * Deal flow against its decade trend, in logs: the volume the District's deal-makers sell.
+     *
+     * @param float $dealActivityIndexEma   The deal index, smoothed over a quarter.
+     * @param float $dealActivityIndexTrend Its decade trend.
+     */
+    public static function dealActivityGap(float $dealActivityIndexEma, float $dealActivityIndexTrend): float
+    {
+        return ($dealActivityIndexEma > 0.0 && $dealActivityIndexTrend > 0.0) ? log($dealActivityIndexEma / $dealActivityIndexTrend) : 0.0;
     }
 
     /**
@@ -996,11 +948,12 @@ class MacroAggregateSubsystem
         $state->importPriceLevel = TimeSeries::calculateDistributedLag($priorImportPriceLevel, self::importPriceLevelTarget($state->exchangeRateIndexEma, $state->importTariffRate), $dt, self::IMPORT_PRICE_ADJUSTMENT_YEARS);
         $importPriceInflation = self::IMPORTED_SHARE_OF_GOODS * (1.0 - self::IMPORT_DISTRIBUTION_SHARE) * ($state->importPriceLevel - $priorImportPriceLevel) / $dt;
 
-        // Shapiro (2022) Sector 2: core goods. Supply-chain pressure (Benigno et al. 2022: freight, metals, inventories) sets
-        // a cost LEVEL of the landed goods (Carriere-Swallow et al. 2023); inflation is its rate of change, as its quarter
-        // EMA moves this tick, so pressure that stays high adds a step to the level and then no more inflation.
-        $supplyChainStep = (1.0 - exp(-$dt / self::STANDARD_EMA_HORIZON_YEARS)) * ($state->supplyChainPressureIndex - $state->supplyChainPressureIndexEma);
-        $goodsSupplyFriction = self::CORE_GOODS_SUPPLY_CHAIN_LEVEL_LOADING * $supplyChainStep / $dt;
+        // Shapiro (2022) Sector 2: core goods. Freight sets a cost LEVEL of the landed goods (Carriere-Swallow et al. 2023);
+        // inflation is its rate of change, as its quarter EMA moves this tick, so freight that stays high adds a step to
+        // the level and then no more inflation.
+        $freightEmaNext = $state->freightRateIndexEma + ((1.0 - exp(-$dt / self::STANDARD_EMA_HORIZON_YEARS)) * ($state->freightRateIndex - $state->freightRateIndexEma));
+        $freightStep = ($state->freightRateIndexEma > 0.0 && $freightEmaNext > 0.0) ? log($freightEmaNext / $state->freightRateIndexEma) : 0.0;
+        $goodsSupplyFriction = self::CORE_GOODS_FREIGHT_LEVEL_LOADING * $freightStep / $dt;
         $targetCoreGoods = $targetInflation + $anchorSlip + (self::CORE_GOODS_DEMAND_SENSITIVITY * $convexDemandPressure) + $goodsSupplyFriction + $importPriceInflation;
 
         // Calvo (1983) sticky price dynamics via continuous AR(1) state adjustment.
@@ -1289,6 +1242,7 @@ class MacroAggregateSubsystem
             : $state->agriculturalCommodityIndex;
         $state->freightRateIndexEma += $emaWeight * ($state->freightRateIndex - $state->freightRateIndexEma);
         $state->freightRateIndexDecadeTrend += $supplyCostTrendWeight * ($state->freightRateIndexEma - $state->freightRateIndexDecadeTrend);
+        $state->excessBondPremiumTrend += (1.0 - exp(-$dt / self::CREDIT_PREMIUM_TREND_YEARS)) * ($state->excessBondPremium - $state->excessBondPremiumTrend);
         $state->interbankLiquiditySpreadEma += $emaWeight * ($state->interbankLiquiditySpread - $state->interbankLiquiditySpreadEma);
         $state->totalFactorProductivityIndexEma += $emaWeight * ($state->totalFactorProductivityIndex - $state->totalFactorProductivityIndexEma);
         $state->capitalStockOverhangEma += $emaWeight * ($state->capitalStockOverhang - $state->capitalStockOverhangEma);
@@ -1466,8 +1420,7 @@ class MacroAggregateSubsystem
             metalsInflation: $this->commodityInflation($state->industrialMetalsIndex, $state->industrialMetalsIndexTrend, self::PPI_METALS_PASS_THROUGH),
             energyInflation: $this->commodityInflation($state->energyPriceIndex, $state->energyPriceIndexTrend, self::PPI_ENERGY_PASS_THROUGH),
             agriInflation: $this->commodityInflation($state->agriculturalCommodityIndex, $state->agriculturalCommodityIndexTrend, self::PPI_AGRI_PASS_THROUGH),
-            // Pressure against normal times: the GSCPI's zero is its pandemic-inclusive mean, which 1998-2019 sat below.
-            gscpiZ: $state->supplyChainPressureIndex - MacroTransmission::GSCPI_NORMAL_TIMES_MEAN,
+            gscpiZ: $state->supplyChainPressureIndex,
             unitLaborCost: $unitLaborCost,
             otherCostInflation: $state->tipsBreakeven,
             outputGap: $state->outputGap,

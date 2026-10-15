@@ -121,8 +121,8 @@ class LogisticsBusinessModel extends StandardCorporateBusinessModel
     public const TRADE_BALANCE_SENSITIVITY = 1.00;
     /** Export volume per unit of the foreign bloc's output gap: the customers-abroad half of the trade term. */
     public const FOREIGN_DEMAND_SENSITIVITY = 1.00;
-    /** Sensitivity of spot freight brokerage surge demand to global supply chain pressure. */
-    public const GSCPI_SPOT_SURGE_SENSITIVITY = 0.08;
+    /** Spot freight brokerage surge demand per standard deviation of supply-chain pressure above normal (3.8%). */
+    public const GSCPI_SPOT_SURGE_SENSITIVITY = 0.038;
 
     public function getMacroPhysics(Stock $stock, \App\DTO\MacroStateDTO $macroState): array
     {

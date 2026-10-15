@@ -9,7 +9,7 @@ namespace App\Data\Macro;
  *
  * App\Service\Macro\Recorder\OutputGapProbe records a couple of dozen channels, and that many rows sorted by
  * size is a list rather than a reading: the eye has no way to tell that `crisisDeleveragingDrag`
- * and `lendingStandardsDrag` are the same story told twice, or that the largest single line and the
+ * and `creditPremiumDrag` are the same story told twice, or that the largest single line and the
  * third largest are both the government. Grouping is what makes the panel answer "what kind of
  * thing is moving the economy" before it answers "which variable".
  *
@@ -60,12 +60,9 @@ final class OutputGapChannels
             'label' => 'Credit',
             'colour' => '#c98500',
             'channels' => [
-                'creditFrictionDrag',
-                'premiumDrag',
-                'premiumCompensator',
+                'creditPremiumDrag',
                 'crisisDeleveragingDrag',
-                'crisisCompensator',
-                'lendingStandardsDrag',
+                'crisisScar',
                 'householdNewBorrowing',
                 'householdDeleveragingDrag',
             ],

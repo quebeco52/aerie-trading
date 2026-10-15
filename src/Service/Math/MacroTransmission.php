@@ -17,40 +17,6 @@ final class MacroTransmission
     /** Log fall in share turnover per unit of round-trip duty above the founding rate: France's 0.2% tax on purchases in August 2012 cut trading volume by about 10% (Colliard & Hoffmann 2017, JF), ln(1 / 0.9) / 0.002. */
     public const STAMP_DUTY_VOLUME_SEMI_ELASTICITY = 52.68;
 
-    // --- GSCPI Construction (Benigno, di Giovanni, Groen & Noble 2022), measured in the simulation ---
-    /** Centre of the freight index: its simulated mean (100.05) plus the part of it world demand explains on average. */
-    public const GSCPI_FREIGHT_MEAN = 101.01;
-    /** Spread of the freight index (simulated sd, 16 seeds x 30 years). */
-    public const GSCPI_FREIGHT_SD = 19.49;
-    /** Centre of the inventory gap: its simulated mean (0.016) net of the part domestic demand explains on average. */
-    public const GSCPI_INVENTORY_GAP_MEAN = 0.000990;
-    /** Spread of the inventory gap (simulated sd). */
-    public const GSCPI_INVENTORY_GAP_SD = 0.04925;
-    /** Centre of the delivery-times index: its simulated mean (49.04) net of the part output explains on average. */
-    public const GSCPI_DELIVERY_MEAN = 50.22;
-    /** Spread of the delivery-times index (simulated sd). */
-    public const GSCPI_DELIVERY_SD = 5.505;
-    /** Standardized freight per unit of the world demand gap, purged as demand rather than supply (simulated OLS, R2 0.32). */
-    public const GSCPI_FREIGHT_DEMAND_BETA = 37.91;
-    /** Standardized inventory shortfall per unit of the domestic demand gap, purged as demand (simulated OLS, R2 0.89). */
-    public const GSCPI_INVENTORY_DEMAND_BETA = 31.89;
-    /** Standardized delivery delay per unit of the output gap, purged as demand (simulated OLS, R2 0.46). */
-    public const GSCPI_DELIVERY_DEMAND_BETA = 31.93;
-    /** Freight's loading on the first principal component of the purged inputs (simulated, loadings summing to one). */
-    public const GSCPI_FREIGHT_WEIGHT = 0.480;
-    /** The inventory shortfall's loading: once demand is purged the stock cycle barely co-moves with logistics friction. */
-    public const GSCPI_INVENTORY_WEIGHT = 0.058;
-    /** Delivery times' loading on the first principal component. */
-    public const GSCPI_DELIVERY_WEIGHT = 0.462;
-    /** Spread of the weighted purged inputs (from their simulated variances and correlation), divided out before the index is put in published units. */
-    public const GSCPI_WEIGHTED_SD = 0.567;
-    /** Mean of the NY Fed GSCPI over 1998-2019 in its published units (NY Fed data file, current vintage): normal times sit below the pandemic-inclusive zero. */
-    public const GSCPI_NORMAL_TIMES_MEAN = -0.30;
-    /** Standard deviation of the NY Fed GSCPI over 1998-2019 in its published units; the full-sample unit sd is set by 2020-22. */
-    public const GSCPI_NORMAL_TIMES_SD = 0.475;
-    /** Index points one doubling of freight from its baseline adds, through the standardization and weighting above. */
-    public const GSCPI_POINTS_PER_FREIGHT_DOUBLING = self::GSCPI_FREIGHT_WEIGHT * (MacroEngine::FREIGHT_BASELINE / self::GSCPI_FREIGHT_SD) * self::GSCPI_NORMAL_TIMES_SD / self::GSCPI_WEIGHTED_SD;
-
     // --- Queueing (Kingman 1961) ---
     /** Smallest idle share the congestion term divides by, so a queue at full utilization stays finite. */
     public const KINGMAN_MIN_IDLE_SHARE = 0.01;
@@ -97,40 +63,6 @@ final class MacroTransmission
     public static function calculateStampDutyVolumeFactor(float $stampDutyRate): float
     {
         return exp(-self::STAMP_DUTY_VOLUME_SEMI_ELASTICITY * 2.0 * ($stampDutyRate - FinancialConstants::STAMP_DUTY_RATE));
-    }
-
-    /**
-     * The supply-chain pressure index, built as the NY Fed builds the GSCPI (Benigno, di Giovanni, Groen & Noble 2022):
-     * each input standardized by its own spread, purged of demand by regression on the demand it answers to (they
-     * regress each PMI series on its own economy's new orders), weighted by the first principal component of the purged inputs, and put in the GSCPI's published
-     * units at their pre-pandemic moments: a simulated economy without a pandemic reads as 1998-2019 did, and only
-     * a shock of 2021's scale reaches 4. Commodity prices are left out, as there: they reach costs on their own channels.
-     *
-     * @param float $freightRateIndex      Ocean freight index.
-     * @param float $inventoryStockGap     Inventory gap (low stocks are pressure).
-     * @param float $supplierDeliveryTimes Suppliers' delivery-times diffusion index.
-     * @param float $freightDemandGap      World demand, which freight is purged on.
-     * @param float $inventoryDemandGap    Domestic demand, which stocks are purged on.
-     * @param float $deliveryDemandGap     Output, which delivery times are purged on.
-     * @return float Pressure in the GSCPI's published units (standard deviations of its full sample).
-     */
-    public static function calculateGscpiComposite(
-        float $freightRateIndex,
-        float $inventoryStockGap,
-        float $supplierDeliveryTimes,
-        float $freightDemandGap,
-        float $inventoryDemandGap,
-        float $deliveryDemandGap
-    ): float {
-        $freightZ = (($freightRateIndex - self::GSCPI_FREIGHT_MEAN) / self::GSCPI_FREIGHT_SD) - (self::GSCPI_FREIGHT_DEMAND_BETA * $freightDemandGap);
-        $inventoryZ = ((self::GSCPI_INVENTORY_GAP_MEAN - $inventoryStockGap) / self::GSCPI_INVENTORY_GAP_SD) - (self::GSCPI_INVENTORY_DEMAND_BETA * $inventoryDemandGap);
-        $deliveryZ = (($supplierDeliveryTimes - self::GSCPI_DELIVERY_MEAN) / self::GSCPI_DELIVERY_SD) - (self::GSCPI_DELIVERY_DEMAND_BETA * $deliveryDemandGap);
-
-        $composite = (self::GSCPI_FREIGHT_WEIGHT * $freightZ)
-            + (self::GSCPI_INVENTORY_WEIGHT * $inventoryZ)
-            + (self::GSCPI_DELIVERY_WEIGHT * $deliveryZ);
-
-        return self::GSCPI_NORMAL_TIMES_MEAN + (self::GSCPI_NORMAL_TIMES_SD * $composite / self::GSCPI_WEIGHTED_SD);
     }
 
     /**

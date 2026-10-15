@@ -253,12 +253,15 @@ class MacroState
     public float $interbankLiquiditySpread;
     public float $interbankLiquiditySpreadEma;
     public float $excessBondPremium;
+    public float $excessBondPremiumTrend;
 
     public float $totalFactorProductivityIndex;
     public float $totalFactorProductivityIndexEma;
     // Productivity shock: the random-walk level off the trend path, how far actual output and potential (two Pascal
     // stages each) have absorbed it, and the supply-side part of the output gap that difference opens.
     public float $tfpShockLevel;
+    public float $crisisScarPending;
+    public float $crisisScarStep;
     public float $tfpOutputStage1;
     public float $tfpOutputStage2;
     public float $tfpPotentialStage1;
@@ -645,6 +648,9 @@ class MacroState
         if (!isset($carried['freightRateIndexDecadeTrend'])) {
             $state->freightRateIndexDecadeTrend = $state->freightRateIndexEma;
         }
+        if (!isset($carried['excessBondPremiumTrend'])) {
+            $state->excessBondPremiumTrend = $state->excessBondPremium;
+        }
         if (!isset($carried['authorityHoldingsToGdpEma'])) {
             // Holdings already on the books when the money flow began to be read are no new purchase.
             $state->authorityHoldingsToGdpEma = MonetaryPolicySubsystem::authorityHoldingsToGdp($state);
@@ -703,13 +709,16 @@ class MacroState
         if (!isset($carried['netExportGap'])) {
             $state->netExportGap = MacroAggregateSubsystem::netExportGapAt($state->mainlandDemandExportLag, $state->realExchangeRateTradeLag, $state->alliedDefenseDeliveryLag, $state->tariffTradeLag);
         }
-        // Finance output opens on the credit balances as they stand. A state that still carries the retired market-value
+        // Finance output opens on the credit balances and deal flow as they stand. A state that still carries the retired market-value
         // trend (finance_market_trend) valued fund managers' output at the market: its finance level is rebuilt on credit
         // alone and domestic demand, smoothed reading included, keeps the part of the carried gap the market leg held, so
         // the upgrade moves no GDP.
         if (!isset($carried['financeOutputGap']) || isset($data[self::RETIRED_FINANCE_MARKET_TREND_KEY])) {
             $carriedFinance = $state->financeOutputGap;
-            $state->financeOutputGap = MacroAggregateSubsystem::financeOutputGapAt(MacroAggregateSubsystem::creditBalanceGap($state->creditToGdpGap, $state->creditToGdpTrend));
+            $state->financeOutputGap = MacroAggregateSubsystem::financeOutputGapAt(
+                MacroAggregateSubsystem::creditBalanceGap($state->creditToGdpGap, $state->creditToGdpTrend),
+                MacroAggregateSubsystem::dealActivityGap($state->dealActivityIndexEma, $state->dealActivityIndexTrend)
+            );
             if (isset($carried['financeOutputGap'], $carried['domesticDemandGapEma'])) {
                 $state->domesticDemandGapEma += MacroAggregateSubsystem::domesticDemandGapAt(0.0, 0.0, 0.0, $state->financeOutputGap - $carriedFinance);
             }

@@ -89,8 +89,8 @@ class SpecialtyIndustrialMachineryBusinessModel extends HeavyManufacturingBusine
     public const CU_EQUIPMENT_EXPANSION_SENSITIVITY = 0.50;
     /** Sensitivity of precision equipment sales expansion to manufacturing PMI diffusion shifts. */
     public const PMI_EQUIPMENT_SENSITIVITY          = 0.40;
-    /** Variable margin penalty per standard deviation of global supply chain friction (GSCPI). */
-    public const GSCPI_MARGIN_PENALTY_SCALAR        = 0.015;
+    /** Variable margin penalty per standard deviation of supply-chain pressure above normal (0.71pp). */
+    public const GSCPI_MARGIN_PENALTY_SCALAR        = 0.0071;
 
     // --- Tail Risk & Shock Events ---
     /** Negative z-score threshold indicating a severe specialty supply chain or parts disruption. */

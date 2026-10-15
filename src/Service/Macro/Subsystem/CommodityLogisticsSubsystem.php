@@ -176,6 +176,14 @@ class CommodityLogisticsSubsystem
     /** Stationary sd of the delivery index around its congestion target, in index points. */
     public const DELIVERY_STATIONARY_SD = 2.0;
 
+    // --- Supply-Chain Pressure Index ---
+    /** Standard deviation of log freight against its decade trend, measured on the engine (0.20). */
+    public const SUPPLY_CHAIN_FREIGHT_LOG_SD = 0.20;
+    /** Standard deviation of delivery times about neutral, measured on the engine (6.2 points). */
+    public const SUPPLY_CHAIN_DELIVERY_SD = 6.2;
+    /** Standard deviation of the two standardised readings summed, sqrt(2(1 + rho)) at their measured correlation of 0.56: puts the index in its own standard deviations. */
+    public const SUPPLY_CHAIN_SUM_SD = 1.76;
+
     // --- 3:2:1 Refining Crack Spread (EIA Gulf Coast gasoline & ULSD vs WTI, monthly 2010-2024) ---
     /** Annual mean reversion of the de-seasonalised log crack: its monthly autocorrelation of 0.889 is kappa = -12 ln 0.889 (half-life ~6 months). */
     public const CRACK_SPREAD_KAPPA = 1.41;
@@ -670,23 +678,23 @@ class CommodityLogisticsSubsystem
     }
 
     /**
-     * NY Fed Global Supply Chain Pressure Index (GSCPI) (Benigno et al. 2022).
-     *
-     * Synthesizes cross-border freight rates, inventory stock gaps, and raw material frictions
-     * into a standardized Z-score composite.
+     * Supply-chain pressure: freight against its decade trend and suppliers' delivery times against neutral, each in
+     * its own standard deviations, summed and put in standard deviations of the sum, so zero is normal and 2 is a
+     * once-a-generation squeeze.
      *
      * @param MacroState $state Current macroeconomic state.
      */
     public function calculateSupplyChainPressureIndex(MacroState $state): void
     {
-        // Monthly readings, as the GSCPI is built: the inputs are this tick's, each purged on the demand it answers to.
-        $state->supplyChainPressureIndex = MacroTransmission::calculateGscpiComposite(
-            freightRateIndex: $state->freightRateIndex,
-            inventoryStockGap: $state->inventoryStockGap,
-            supplierDeliveryTimes: $state->supplierDeliveryTimes,
-            freightDemandGap: $state->globalDemandGapEma,
-            inventoryDemandGap: $state->domesticDemandGapEma,
-            deliveryDemandGap: $state->outputGapEma
-        );
+        $state->supplyChainPressureIndex = self::supplyChainPressureAt($state->freightRateIndex, $state->freightRateIndexDecadeTrend, $state->supplierDeliveryTimes);
+    }
+
+    /** The pressure index at a freight reading, its decade trend and a delivery-times reading. */
+    public static function supplyChainPressureAt(float $freightRateIndex, float $freightTrend, float $supplierDeliveryTimes): float
+    {
+        $freightZ = ($freightRateIndex > 0.0 && $freightTrend > 0.0) ? log($freightRateIndex / $freightTrend) / self::SUPPLY_CHAIN_FREIGHT_LOG_SD : 0.0;
+        $deliveryZ = ($supplierDeliveryTimes - MacroEngine::SUPPLIER_DELIVERIES_NEUTRAL) / self::SUPPLY_CHAIN_DELIVERY_SD;
+
+        return ($freightZ + $deliveryZ) / self::SUPPLY_CHAIN_SUM_SD;
     }
 }

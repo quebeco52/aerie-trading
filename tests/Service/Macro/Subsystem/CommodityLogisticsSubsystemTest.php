@@ -231,26 +231,30 @@ class CommodityLogisticsSubsystemTest extends TestCase
         $this->assertEqualsWithDelta(MacroEngine::CRACK_SPREAD_BASELINE, array_sum($levels) / count($levels), 2.5, 'centred on the baseline, not ten percent below it');
     }
 
+    /**
+     * Supply-chain pressure is freight over its decade trend and delivery times over neutral, each in its own
+     * standard deviations, summed and put in standard deviations of the sum: zero when both are normal, rising
+     * with either, and one when each reads its own standard deviation's share of the sum.
+     */
     public function testCalculateSupplyChainPressureIndex(): void
     {
-        $stateNeutral = new MacroState();
-        $stateNeutral->freightRateIndex = MacroTransmission::GSCPI_FREIGHT_MEAN;
-        $stateNeutral->inventoryStockGap = MacroTransmission::GSCPI_INVENTORY_GAP_MEAN;
-        $stateNeutral->supplierDeliveryTimes = MacroTransmission::GSCPI_DELIVERY_MEAN;
-        $stateNeutral->outputGapEma = 0.0;
-        $stateNeutral->globalDemandGapEma = 0.0;
-        $stateNeutral->domesticDemandGapEma = 0.0;
+        $state = new MacroState();
+        $state->freightRateIndex = 130.0;
+        $state->freightRateIndexDecadeTrend = 130.0;
+        $state->supplierDeliveryTimes = MacroEngine::SUPPLIER_DELIVERIES_NEUTRAL;
+        $this->subsystem->calculateSupplyChainPressureIndex($state);
+        $this->assertSame(0.0, $state->supplyChainPressureIndex, 'Freight at its trend and deliveries at neutral read no pressure.');
 
-        $this->subsystem->calculateSupplyChainPressureIndex($stateNeutral);
-        $this->assertEqualsWithDelta(MacroTransmission::GSCPI_NORMAL_TIMES_MEAN, $stateNeutral->supplyChainPressureIndex, 0.0001);
+        $choked = CommodityLogisticsSubsystem::supplyChainPressureAt(260.0, 130.0, MacroEngine::SUPPLIER_DELIVERIES_NEUTRAL + 10.0);
+        $this->assertGreaterThan(2.0, $choked, 'Freight doubled and deliveries ten points slow is a generational squeeze.');
+        $this->assertLessThan(0.0, CommodityLogisticsSubsystem::supplyChainPressureAt(100.0, 130.0, MacroEngine::SUPPLIER_DELIVERIES_NEUTRAL - 3.0), 'Cheap freight and fast deliveries read as slack.');
 
-        $stateChoked = clone $stateNeutral;
-        $stateChoked->freightRateIndex = 220.0; // Huge ocean freight spike
-        $stateChoked->inventoryStockGap = -0.04; // Severe inventory depletion
-        $stateChoked->supplierDeliveryTimes = 65.0; // Suppliers far behind
-
-        $this->subsystem->calculateSupplyChainPressureIndex($stateChoked);
-        $this->assertGreaterThan(1.5, $stateChoked->supplyChainPressureIndex, 'Logistics bottlenecks must generate positive GSCPI stress.');
+        $oneSd = CommodityLogisticsSubsystem::supplyChainPressureAt(
+            130.0 * exp(CommodityLogisticsSubsystem::SUPPLY_CHAIN_FREIGHT_LOG_SD),
+            130.0,
+            MacroEngine::SUPPLIER_DELIVERIES_NEUTRAL + CommodityLogisticsSubsystem::SUPPLY_CHAIN_DELIVERY_SD
+        );
+        $this->assertEqualsWithDelta(2.0 / CommodityLogisticsSubsystem::SUPPLY_CHAIN_SUM_SD, $oneSd, 1e-12);
     }
 
     /** Delivery times read neutral at baseline utilization and a balanced fleet, and slow as either congests. */

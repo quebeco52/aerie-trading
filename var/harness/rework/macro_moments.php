@@ -30,7 +30,9 @@ $fields = ['outputGap', 'unemploymentRate', 'inflation', 'supercoreInflation', '
     'sovereignDebtToGdp', 'sovereignNetFinancialLiabilitiesToGdp', 'sovereignRiskSpread', 'excessBondPremium',
     'interbankLiquiditySpread', 'consumerSentimentIndex', 'moneySupplyGrowth', 'householdDebtServiceRatio',
     'tradeBalanceToGdp', 'netExportGap', 'netTaxRate', 'sahmRecessionIndicator', 'recessionDeclared', 'lastCreditCrisisAt',
-    'potentialGdpIndex', 'debtTarget', 'policySurprise'];
+    'potentialGdpIndex', 'debtTarget', 'policySurprise', 'freightRateIndex', 'freightRateIndexDecadeTrend',
+    'supplierDeliveryTimes', 'supplyChainPressureIndex', 'dealActivityIndexEma', 'dealActivityIndexTrend', 'financeOutputGap',
+    'excessBondPremiumTrend', 'creditCrisisDrag', 'macroCreditSpread', 'householdDebtToIncome', 'householdNewBorrowing'];
 $series = array_fill_keys($fields, []);
 $nominal = 1.0;
 for ($i = 1; $i <= (int) $years * $tpy; ++$i) {
