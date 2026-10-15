@@ -1223,7 +1223,7 @@ class CapitalAllocationEngineTest extends TestCase
         $kept = $this->engine->allocateCapital($untargeted, 1.20, 0.30, 15.00, 1000000000.0, $macroState, 300000000.0);
 
         $this->assertSame(1000000000.0, $kept['new_shares'], 'Control: nothing else in this balance sheet triggers a repurchase.');
-        $this->assertLessThan(1000000000.0, $returned['new_shares'], 'RIVR sits above its 11.1% target and returns the surplus.');
+        $this->assertLessThan(1000000000.0, $returned['new_shares'], 'RIVR sits above its 10.3% target and returns the surplus.');
     }
 
     private function buildLenderAboveTarget(string $ticker): Stock

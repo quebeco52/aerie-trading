@@ -166,7 +166,7 @@ class StockModelTuningTest extends TestCase
         $checked = 0;
         foreach (InitialMarket::STOCKS as $stock) {
             $model = Sectors::INDUSTRY_METRICS[$stock['industry'] ?? 'General']['business_model'] ?? 'none';
-            if (!in_array($model, ['commercial_bank', 'clearing_house', 'investment_bank', 'brokerage'], true)) {
+            if (!in_array($model, ['commercial_bank', 'clearing_house', 'investment_bank', 'brokerage', 'custody_bank', 'private_bank'], true)) {
                 continue;
             }
 

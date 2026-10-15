@@ -102,7 +102,7 @@ class StockModelTuning
             ModelParam::ResidentialMortgageShare->value  => 0.00, // Business lender: no household book
             ModelParam::ConsumerLoanShare->value         => 0.00,
             ModelParam::CommercialRealEstateShare->value => 0.45, // Commercial mortgages for contractors and developers
-            ModelParam::TargetCapitalRatio->value        => 0.111, // Its seeded book equity/assets
+            ModelParam::TargetCapitalRatio->value        => 0.1031, // Its seeded book equity/assets
             ModelParam::OperatingCostToEarningAssets->value => 0.0282, // US commercial lenders, 2019: 2.56% of assets, 90.7% earning (FDIC QBP)
             ModelParam::NonInterestIncomeToEarningAssets->value => 0.0117, // US commercial lenders, 2019: 1.06% of assets (FDIC QBP)
         ],
