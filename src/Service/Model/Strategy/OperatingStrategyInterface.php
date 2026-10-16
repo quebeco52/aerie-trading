@@ -202,6 +202,13 @@ interface OperatingStrategyInterface
      */
     public function getDepreciableBase(Stock $stock): float;
 
+    /**
+     * Whether the plant is depreciated by units of production rather than by time: true for a business that uses up
+     * its asset by extracting it (oil and gas depletion, ASC 932; a mine's reserves, ASC 930), so the charge follows
+     * output. Any other plant wears out on a schedule and its charge is a fixed cost.
+     */
+    public function depreciatesByUnitsOfProduction(): bool;
+
     /** The part of invested capital that is physical plant, and so opens a fixed-asset ledger. All of it for an operating company; marketable investments sit on their own line and are not plant. */
     public function getPlantCapital(Stock $stock, float $investedCapital): float;
 

@@ -150,8 +150,6 @@ class TelecomBusinessModel extends StandardCorporateBusinessModel
     public const SUBSCRIBER_ACQUISITION_COST_ELASTICITY = 0.025;
     /** Z-score threshold for a price war to start in the District's market (~2.3% a quarter), shared among the listed carriers that could start it. */
     public const PRICE_WAR_Z_SCORE   = -2.00;
-    /** Fat-tail margin penalty when intense promotional pricing (e.g., "Free iPhones") destroys profitability. */
-    public const PRICE_WAR_PENALTY   = 0.08;
     /** Regime key for a price war: industry-wide through the ledger, the carrier's own two-state Markov without one. */
     public const REGIME_PRICE_WAR = 'price_war';
     /** Quarterly probability the price war ends (~4 quarter expected duration). */
@@ -323,13 +321,12 @@ class TelecomBusinessModel extends StandardCorporateBusinessModel
         $sacDrag = $baseChurn > 0.0
             ? self::SUBSCRIBER_ACQUISITION_COST_ELASTICITY * (($grossAddsRate / $baseChurn) - 1.0) * $subscriptionWeight
             : 0.0;
-        $priceWarPenalty = $inPriceWar ? self::PRICE_WAR_PENALTY : 0.0;
 
         // Note: the network debt load reaches earnings through DebtEngine's maturity wall (see
         // getDebtMaturityRolloverRate), never as an operating margin drag. Interest sits below EBIT.
         // Network power, handset procurement and field payroll reach the cost base at spot; annual plan hikes recover part of it.
         $inputCostDrag = $this->resolveInputCostDrag($stock, $macroState, $streams, $this->resolvePricingPower($stock), $realizedVariableMargin);
-        $rawMargin = $effectiveMargin + $priceWarPenalty + $sacDrag + $inputCostDrag;
+        $rawMargin = $effectiveMargin + $sacDrag + $inputCostDrag;
         $clampedMargin = $this->clampMargin($rawMargin);
 
         // Primary shock is whichever stream deviated the most, overridden by tail events

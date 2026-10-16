@@ -404,7 +404,7 @@ final class MacroBmP2HarnessTest extends KernelTestCase
             'croic' => $report->getStock()->getCurrentRoic() !== null ? (float) $report->getStock()->getCurrentRoic() : null,
             'ic' => $report->getStock()->getInvestedCapital(),
             'gdg' => $m?->globalDemandGapEma ?? 0.0,
-            'ppr' => isset(($report->getStock()->getEarningsMomentumZ() ?? [])['state:ppe_relative_price']) ? (float) ($report->getStock()->getEarningsMomentumZ() ?? [])['state:ppe_relative_price'] : null,
+            'ppr' => isset(($report->getStock()->getEarningsMomentumZ() ?? [])[\App\Service\Corporate\EarningsEngine::STATE_PPE_RELATIVE_PRICE]) ? (float) ($report->getStock()->getEarningsMomentumZ() ?? [])[\App\Service\Corporate\EarningsEngine::STATE_PPE_RELATIVE_PRICE] : null,
         ];
     }
 

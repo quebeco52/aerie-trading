@@ -725,12 +725,40 @@ class EarningsEngineTest extends TestCase
     }
 
     /**
-     * Units-of-production depreciation (ASC 360) is a variable charge: the plant is consumed in proportion
-     * to how hard it is actually run, so the realized charge tracks utilization rather than a fixed
-     * schedule. This is what now reaches EBIT — under the old arrangement depreciation was added back on
-     * top of EBIT and a utilization swing could only ever move EBITDA.
+     * A plant wears out on a schedule (ASC 360), so a boom and a bust charge the same depreciation: it is a fixed
+     * cost, the demand swing reaches EBIT in full, and analysts, who read the schedule, forecast it exactly.
      */
-    public function testDepreciationChargeTracksCapacityUtilization(): void
+    public function testDepreciationIsChargedOnScheduleWhateverTheOutput(): void
+    {
+        $boom = $this->reportDepreciation('Auto Manufacturers', 0.04);
+        $bust = $this->reportDepreciation('Auto Manufacturers', -0.04);
+
+        $this->assertGreaterThan($bust->capacityUtilization + 0.01, $boom->capacityUtilization, 'the cycle must move output for the test to have power');
+        $this->assertEqualsWithDelta($bust->quarterlyDepreciation, $boom->quarterlyDepreciation, 1.0);
+        foreach ([$boom, $bust] as $captured) {
+            $this->assertEqualsWithDelta($captured->structuralDepreciation, $captured->quarterlyDepreciation, 1.0);
+            $this->assertEqualsWithDelta($captured->quarterlyDepreciation, $captured->expectedDepreciation, 1.0);
+            $this->assertEqualsWithDelta($captured->quarterlyDepreciation, $captured->ebitda - $captured->ebit, 1.0);
+        }
+    }
+
+    /**
+     * A producer uses its plant up by extracting it (ASC 932), so its charge follows output, and the estimate is
+     * struck on the output the quarter would have run at before its own shocks.
+     */
+    public function testAnExtractiveProducerDepreciatesByUnitsOfProduction(): void
+    {
+        $captured = $this->reportDepreciation('Oil & Gas E&P', 0.0);
+
+        $this->assertGreaterThan(0.0, $captured->structuralDepreciation);
+        $this->assertNotEqualsWithDelta($captured->capacityUtilizationBeforeShocks, $captured->capacityUtilization, 1e-6, 'the quarter must draw its own shock for the test to have power');
+        $this->assertEqualsWithDelta($captured->structuralDepreciation * $captured->capacityUtilization, $captured->quarterlyDepreciation, 1.0);
+        $this->assertEqualsWithDelta($captured->structuralDepreciation * $captured->capacityUtilizationBeforeShocks, $captured->expectedDepreciation, 1.0);
+        $this->assertEqualsWithDelta($captured->quarterlyDepreciation, $captured->ebitda - $captured->ebit, 1.0);
+    }
+
+    /** One report of a mature firm in the given industry at the given output gap, on a fixed draw. */
+    private function reportDepreciation(string $industry, float $outputGap): EarningsSimulationContext
     {
         $captured = null;
         $dispatcher = new EventDispatcher();
@@ -741,26 +769,12 @@ class EarningsEngineTest extends TestCase
 
         mt_srand(4242);
         $stock = $this->buildMatureIndustrial('WEAR');
+        $stock->setIndustry($industry);
         $stock->setDepreciationRate('0.10');
-        $engine->calculate($stock, new MacroStateDTO(corporateTaxRate: 0.21, policyRateEma: 0.04, yield5yEma: 0.04), EarningsEngine::resolveReportingTick('WEAR', 252));
+        $engine->calculate($stock, new MacroStateDTO(corporateTaxRate: 0.21, policyRateEma: 0.04, yield5yEma: 0.04, outputGapEma: $outputGap), EarningsEngine::resolveReportingTick('WEAR', 252));
+        $this->assertInstanceOf(EarningsSimulationContext::class, $captured);
 
-        $this->assertGreaterThan(0.0, $captured->capacityUtilization);
-        $this->assertEqualsWithDelta(
-            $captured->structuralDepreciation * $captured->capacityUtilization,
-            $captured->quarterlyDepreciation,
-            $captured->quarterlyDepreciation * 0.001,
-            'the charge must be linear in utilization'
-        );
-
-        // A plant running below normal capacity is consumed more slowly than its schedule assumes, and
-        // above it, faster. Either way the deviation lands on EBIT, not on EBITDA.
-        if ($captured->capacityUtilization < 1.0) {
-            $this->assertLessThan($captured->structuralDepreciation, $captured->quarterlyDepreciation);
-        } else {
-            $this->assertGreaterThanOrEqual($captured->structuralDepreciation, $captured->quarterlyDepreciation);
-        }
-
-        $this->assertEqualsWithDelta($captured->quarterlyDepreciation, $captured->ebitda - $captured->ebit, 1.0);
+        return $captured;
     }
 
     /**
@@ -972,6 +986,39 @@ class EarningsEngineTest extends TestCase
         $dearVintage = $run(0.0, 1.2);
         $this->assertEqualsWithDelta(1.0 / 1.2, $dearVintage->replacementCostRatio, 1e-9);
         $this->assertEqualsWithDelta($atAnchor->revenueGeneratingCapital, $dearVintage->revenueGeneratingCapital, 1.0);
+    }
+
+    /** A distress episode the divestiture engine opened survives the report that rebuilds the stream map. */
+    public function testAReportCarriesTheDistressEpisodeForward(): void
+    {
+        $engine = $this->buildEngine(new EventDispatcher());
+        mt_srand(9091);
+        $stock = $this->buildMatureIndustrial('EPIS');
+        $stock->setEarningsMomentumZ([\App\Service\Corporate\MergerAndAcquisitionEngine::STATE_DISTRESS_SALE_EPISODE => 4.25]);
+
+        $engine->calculate($stock, new MacroStateDTO(corporateTaxRate: 0.21, policyRateEma: 0.04, yield5yEma: 0.04, gdpDeflator: 1.0, totalTime: 5.0), EarningsEngine::resolveReportingTick('EPIS', 252), 252);
+
+        $this->assertSame(4.25, $stock->getEarningsMomentumZ()[\App\Service\Corporate\MergerAndAcquisitionEngine::STATE_DISTRESS_SALE_EPISODE] ?? null);
+    }
+
+    /**
+     * The report rebuilds the stream map from what the physics registers. State kept under the carried prefix by
+     * anything else survives it; a physics key the pass no longer registers does not, so a list it shortens stays short.
+     */
+    public function testAReportCarriesOutsideStateAndDropsWhatThePhysicsStoppedRegistering(): void
+    {
+        $engine = $this->buildEngine(new EventDispatcher());
+        mt_srand(9091);
+        $stock = $this->buildMatureIndustrial('KEEP');
+        $carried = EarningsEngine::CARRIED_STATE_PREFIX . 'probe';
+        $stock->setEarningsMomentumZ([$carried => 7.0, 'state:probe' => 3.0]);
+
+        $engine->calculate($stock, new MacroStateDTO(corporateTaxRate: 0.21, policyRateEma: 0.04, yield5yEma: 0.04, gdpDeflator: 1.0, totalTime: 5.0), EarningsEngine::resolveReportingTick('KEEP', 252), 252);
+
+        $state = $stock->getEarningsMomentumZ() ?? [];
+        $this->assertSame(7.0, $state[$carried] ?? null);
+        $this->assertArrayNotHasKey('state:probe', $state);
+        $this->assertArrayHasKey(EarningsEngine::STATE_LAST_DEFLATOR, $state, 'the rebuilt map still carries what the report registers');
     }
 
     public function testCapitalGoodsDriftFallsBackThroughTheModelsParents(): void

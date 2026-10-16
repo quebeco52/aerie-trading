@@ -47,12 +47,6 @@ enum LifecycleStage: string
         return $this !== self::Introduction;
     }
 
-    /** Stages in which management is under pressure to shed assets. */
-    public function isShedding(): bool
-    {
-        return $this === self::Decline || $this === self::ShakeOut;
-    }
-
     /** One-sentence reading of the stage for display. */
     public function description(): string
     {

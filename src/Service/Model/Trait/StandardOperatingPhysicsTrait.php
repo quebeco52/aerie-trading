@@ -881,6 +881,12 @@ trait StandardOperatingPhysicsTrait
         return $netPpe > 0.0 ? $netPpe : $this->getPhysicalCapital($stock);
     }
 
+    /** A plant wears out on a schedule, so it is depreciated by time whatever the quarter's output. */
+    public function depreciatesByUnitsOfProduction(): bool
+    {
+        return false;
+    }
+
     /** Invested capital less any marketable investments, which carry their own asset line and no depreciation. The treasury is already outside it, so the stakes are the only deduction. */
     public function getPlantCapital(Stock $stock, float $investedCapital): float
     {

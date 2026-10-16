@@ -117,6 +117,12 @@ class OilGasProducerBusinessModel extends StandardCorporateBusinessModel
         return self::CAPEX_COMPLETION_RATE;
     }
 
+    /** A field is depleted by the barrels lifted from it, so its plant is charged by units of production. */
+    public function depreciatesByUnitsOfProduction(): bool
+    {
+        return true;
+    }
+
     public function getCapexCyclicality(): float
     {
         return self::CAPEX_CYCLICALITY;

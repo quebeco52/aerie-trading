@@ -108,11 +108,15 @@ class EarningsEngine
     /** Stream-state key: log gap between the price level and the one the plant's book carries at its planned nominal growth. */
     public const STATE_PRICE_LEVEL_SURPRISE = 'state:price_level_surprise';
 
+    // --- Carried Stream State ---
+    /** Prefix for state kept on the stream map by anything outside the quarterly physics: each report rebuilds the map from what the physics registers, and carries a key under this prefix until its owner removes it. */
+    public const CARRIED_STATE_PREFIX = 'carry:';
+
     // --- Capital-Goods Prices (BEA Fixed Assets, App\Data\Macro\CapitalGoodsPrices) ---
-    /** Stream-state key: simulated year the firm's capital-goods relative price was first read, where it is 1. */
-    public const STATE_CAPITAL_GOODS_ANCHOR_TIME = 'state:capital_goods_anchor_time';
-    /** Stream-state key: the plant's capex-weighted capital-goods price against the GDP deflator, 1 at the anchor. */
-    public const STATE_PPE_RELATIVE_PRICE = 'state:ppe_relative_price';
+    /** Carried stream-state key: simulated year the firm's capital-goods relative price was first read, where it is 1. */
+    public const STATE_CAPITAL_GOODS_ANCHOR_TIME = self::CARRIED_STATE_PREFIX . 'capital_goods_anchor_time';
+    /** Carried stream-state key: the plant's capex-weighted capital-goods price against the GDP deflator, 1 at the anchor. */
+    public const STATE_PPE_RELATIVE_PRICE = self::CARRIED_STATE_PREFIX . 'ppe_relative_price';
 
     // --- Jump Diffusion (Fundamental vs Price) ---
     /** Scale factor for fundamental jump intensity relative to price jumps. */
@@ -690,8 +694,9 @@ class EarningsEngine
         $ctx->revenueGeneratingCapital = $revenueGeneratingCapital;
         $ctx->assetTurnover = $assetTurnover;
         [$ctx->structuralRevenue, $ctx->expectedRevenue] = $this->capacityRevenueAt($ctx, $pricingPowerMultiplier, $ctx->capacityUtilization);
-        // What the quarter would have sold without its own demand shock and jump: the base analysts forecast from.
-        [, $ctx->expectedRevenueBeforeShocks] = $this->capacityRevenueAt($ctx, $pricingPowerMultiplier, $this->capacityUtilizationAt($ctx, $macroDemandShift, false));
+        // What the quarter would have run at and sold without its own demand shock and jump: the base analysts forecast from.
+        $ctx->capacityUtilizationBeforeShocks = $this->capacityUtilizationAt($ctx, $macroDemandShift, false);
+        [, $ctx->expectedRevenueBeforeShocks] = $this->capacityRevenueAt($ctx, $pricingPowerMultiplier, $ctx->capacityUtilizationBeforeShocks);
 
         // Industry capacity balance: total industry capacity relative to trend demand scales realized price level.
         $industryPriceLevel = $this->resolveIndustryPriceLevel($ctx);
@@ -890,9 +895,9 @@ class EarningsEngine
     }
 
     /**
-     * Depreciation the firm would charge at exactly structural capacity (utilization 1.0). This is the
-     * amount carved out of the cash cost base; the realized charge in calculateDepreciation() scales it
-     * by actual utilization, so the difference between the two is what moves reported EBIT.
+     * The quarter's depreciation on the plant's schedule, which is what it charges at structural output
+     * (utilization 1.0). This is the amount carved out of the cash cost base; calculateDepreciation()
+     * charges it as it stands, or scales it by output for a units-of-production plant.
      */
     private function resolveStructuralDepreciation(EarningsSimulationContext $ctx): float
     {
@@ -910,8 +915,10 @@ class EarningsEngine
     }
 
     /**
-     * Units-of-production depreciation (ASC 360) on the net book value of PP&E: the charge scales with how
-     * hard the plant is actually run, so a firm sweating its assets wears them out faster.
+     * Depreciation on the net book value of PP&E (ASC 360). A plant wears out on a schedule, so the charge is the
+     * same however hard the quarter runs it: a fixed cost, and a demand swing reaches EBIT in full. A plant used up
+     * by extraction is charged by units of production instead, so its charge follows output, and analysts forecast
+     * it on the output the quarter would have run at before its own shocks.
      *
      * The base is net PP&E, not invested capital. Goodwill is never depreciated — it is impairment-tested
      * annually, which the engine already does — and working capital does not wear out, so the old base
@@ -920,8 +927,12 @@ class EarningsEngine
      */
     private function calculateDepreciation(EarningsSimulationContext $ctx): void
     {
-        $productionRate = $this->resolveDepreciationRate($ctx) * $ctx->capacityUtilization;
-        $ctx->quarterlyDepreciation = max(0.0, $ctx->strategy->getDepreciableBase($ctx->stock)) * $productionRate / 4.0;
+        $ctx->quarterlyDepreciation = $ctx->structuralDepreciation;
+        $ctx->expectedDepreciation = $ctx->structuralDepreciation;
+        if ($ctx->strategy->depreciatesByUnitsOfProduction()) {
+            $ctx->quarterlyDepreciation *= $ctx->capacityUtilization;
+            $ctx->expectedDepreciation *= $ctx->capacityUtilizationBeforeShocks;
+        }
     }
 
     /**
@@ -1171,12 +1182,13 @@ class EarningsEngine
         $analystRevenueForEarnings = $consensus->analystUnbiasedRevenue > 0.0 ? $consensus->analystUnbiasedRevenue : $consensus->analystExpectedRevenue;
 
         // Depreciation is the most forecastable line on the income statement — it follows a schedule the
-        // firm has already disclosed — so analysts get it right and it is not a source of surprise. A lender's
+        // firm has already disclosed — so analysts get it right and it is not a source of surprise; a producer's
+        // charge follows output, and only the part its own shocks move can surprise. A lender's
         // provision is the same kind of line: the through-the-cycle charge on a disclosed book is forecast,
         // and only the cyclical excess the sector physics adds on top of it can surprise.
         $ctx->expectedCreditLossProvision = $this->resolveExpectedCreditLossProvision($ctx);
         $expectedEbit = $analystRevenueForEarnings - $ctx->fixedCosts - $ctx->analystExpectedVariableCosts
-            - $ctx->quarterlyDepreciation - $ctx->expectedCreditLossProvision;
+            - $ctx->expectedDepreciation - $ctx->expectedCreditLossProvision;
         $ctx->expectedEbit = max(-$ctx->structuralRevenue * self::MAX_EBIT_LOSS_RATIO, $expectedEbit);
 
         // Operating costs are the cash cost base; EBITDA sits above the depreciation line and EBIT below it.
@@ -1193,11 +1205,12 @@ class EarningsEngine
         // The price level the plant capacity was last struck against, and the surprise it carries.
         $streamState[self::STATE_LAST_DEFLATOR] = max(0.01, $ctx->macroState->gdpDeflator);
         $streamState[self::STATE_PRICE_LEVEL_SURPRISE] = $ctx->priceLevelSurprise;
-        // The plant's capital-goods vintage is the fixed-asset ledger's, rolled forward after the cash flows.
-        $previousState = $ctx->stock->getEarningsMomentumZ() ?? [];
-        foreach ([self::STATE_CAPITAL_GOODS_ANCHOR_TIME, self::STATE_PPE_RELATIVE_PRICE] as $key) {
-            if (isset($previousState[$key])) {
-                $streamState[$key] = $previousState[$key];
+        // State the physics does not own (the fixed-asset ledger's capital-goods vintage, rolled forward after the cash
+        // flows; a distress episode the divestiture engine opened) is carried until its owner removes it. A physics key
+        // it stopped registering is gone, so a list it shortens does not come back.
+        foreach ($ctx->stock->getEarningsMomentumZ() ?? [] as $key => $value) {
+            if (str_starts_with($key, self::CARRIED_STATE_PREFIX) && !array_key_exists($key, $streamState)) {
+                $streamState[$key] = $value;
             }
         }
         $ctx->stock->setEarningsMomentumZ($streamState);

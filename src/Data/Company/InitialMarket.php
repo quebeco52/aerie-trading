@@ -2647,7 +2647,7 @@ class InitialMarket
             'industry' => 'Telecom Services',
             'systemic_importance' => 'base',
             'shares_outstanding' => 1_000_000_000,
-            'volatility' => 0.24, // T-Mobile US 2014-2018, the challenger years, against Loon Call's incumbent 14%
+            'volatility' => 0.18, // above Loon Call's 14%: a challenger's sign-ups swing more, and this sets their noise too
             'beta_tilt' => 0.10, // device-led growth leans on discretionary upgrades
             'jump_intensity' => 0.40,
             'jump_vol' => 0.10,
@@ -2666,7 +2666,7 @@ class InitialMarket
             'corporate_treasury' => 2_500_000_000.00,
             'total_equity' => 21_000_000_000.00,
             'customer_deposits' => 0.00,
-            'wholesale_debt' => 17_000_000_000.00, // about 2.5 times EBITDA: a price war halves EBITDA and must leave it under the 4.5 covenant
+            'wholesale_debt' => 17_000_000_000.00, // about 2.5 times EBITDA, under the 4.5 covenant through a price war
             'retained_earnings' => 3_000_000_000.00,
         ],
         [

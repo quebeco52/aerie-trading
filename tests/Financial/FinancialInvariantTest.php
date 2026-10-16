@@ -214,10 +214,16 @@ class FinancialInvariantTest extends TestCase
 
     public function testMetzlerInventoryOverhangDissipationAndOutputGapImpact(): void
     {
+        // No Gaussian noise and no demand disaster, so the two runs differ only by the overhang.
         $deterministicMath = new class extends MathUtility {
             public function generateStandardNormal(): float
             {
                 return 0.0;
+            }
+
+            public function checkProbability(float $probability): bool
+            {
+                return false;
             }
         };
         $aggregateSubsystem = new MacroAggregateSubsystem($deterministicMath);

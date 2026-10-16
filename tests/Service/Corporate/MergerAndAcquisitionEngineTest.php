@@ -564,11 +564,11 @@ class MergerAndAcquisitionEngineTest extends TestCase
                 return $assetVolatility;
             }
         );
-        $borrowed = new \ArrayObject();
+        $borrowed = [];
         $this->debtEngineMock->method('issueDebt')->willReturnCallback(
-            static function (Stock $borrower, float $amount, float $cost) use ($borrowed): void {
+            static function (Stock $borrower, float $amount, float $cost) use (&$borrowed): void {
                 $borrower->setWholesaleDebt((string) ((float) $borrower->getWholesaleDebt() + $amount));
-                $borrowed->append($cost);
+                $borrowed[] = $cost;
             }
         );
         $graded = [];
@@ -582,14 +582,14 @@ class MergerAndAcquisitionEngineTest extends TestCase
         $this->debtEngineMock->method('resolveCreditSpread')->willReturnCallback(
             static fn (Stock $acquirer, MacroStateDTO $macro, ?string $rating = null): float => $rating === 'BB' ? 0.03 : 0.0
         );
-        $dealPricedAt = function (float $volatility) use (&$assetVolatility, $borrowed, $macroState): float {
+        $dealPricedAt = function (float $volatility) use (&$assetVolatility, &$borrowed, $macroState): float {
             $assetVolatility = $volatility;
-            $borrowed->exchangeArray([]);
+            $borrowed = [];
             $stock = $this->buildLedgeredAcquirer('LEVR', treasury: 1_000_000_000.0, debt: 1_000_000_000.0, shares: 100_000_000.0);
             $this->assertIsArray($this->engine->evaluatePrivateAcquisition($stock, $macroState, 1.0), 'the levered control deal must execute');
             $this->assertCount(1, $borrowed, 'the deal must borrow');
 
-            return (float) $borrowed[0];
+            return $borrowed[0];
         };
 
         $calm = $dealPricedAt(0.27);
@@ -1240,6 +1240,92 @@ class MergerAndAcquisitionEngineTest extends TestCase
             $this->assertEqualsWithDelta($history[$i]['revenue'] * 0.75, $quarter['revenue'], 1.0);
             $this->assertEqualsWithDelta($history[$i]['ebit'] * 0.75, $quarter['ebit'], 1.0);
         }
+    }
+
+    /**
+     * A downgrade raises the firm's WACC, not the cost of capital of its business: a firm whose long-run return
+     * clears its asset cost of capital is not shedding a dying business because its financing got dearer.
+     */
+    public function testADowngradeAloneDoesNotMakeTheBusinessDying(): void
+    {
+        $stock = $this->buildLedgeredAcquirer('DOWN', treasury: 1_000_000_000.0, debt: 4_000_000_000.0, shares: 10_000_000.0);
+        $stock->setBeta('0.40');
+        $stock->setRoicTtm('0.065');
+        $stock->setLongRunReturn('0.065');
+        $stock->setTotalNetIncome('500000000');
+        $this->primeDistressedDivestiture(operatingBase: 10_000_000_000.0, fraction: 0.25);
+        $macro = new MacroStateDTO(policyRateEma: 0.04, corporateTaxRate: 0.20, yield5yEma: 0.04, yield10y: 0.04, equityRiskPremium: 0.05, nominalGdpIndex: 1.0);
+
+        $this->assertEqualsWithDelta(0.06, MergerAndAcquisitionEngine::businessCostOfCapital($stock, $macro), 1e-12);
+        // The firm's 12% WACC would put it 5.5 points under its hurdle, past the dying line.
+        $this->assertNull($this->engine->evaluateCorporateDivestiture($stock, $macro, 1.0));
+        $this->assertSame(8_000_000_000.0, $stock->getNetPpe());
+    }
+
+    /** A slump in the trailing year is not decline: the sale test reads the firm's long-run return. */
+    public function testACyclicalTroughDoesNotTriggerADistressSale(): void
+    {
+        $stock = $this->buildLedgeredAcquirer('TROUGH', treasury: 1_000_000_000.0, debt: 4_000_000_000.0, shares: 10_000_000.0);
+        $stock->setBeta('1.00');
+        $stock->setRoicTtm('-0.04');
+        $stock->setLongRunReturn('0.085');
+        $stock->setTotalNetIncome('-300000000');
+        $this->primeDistressedDivestiture(operatingBase: 10_000_000_000.0, fraction: 0.25);
+        $macro = new MacroStateDTO(policyRateEma: 0.04, corporateTaxRate: 0.20, yield5yEma: 0.04, yield10y: 0.04, equityRiskPremium: 0.05, nominalGdpIndex: 1.0);
+
+        $this->assertNull($this->engine->evaluateCorporateDivestiture($stock, $macro, 1.0));
+        $this->assertSame(8_000_000_000.0, $stock->getNetPpe());
+    }
+
+    /** A quarter's mixed cash-flow pattern is not decline either: a shake-out firm earning its keep keeps its divisions. */
+    public function testAShakeOutQuarterDoesNotTriggerADistressSale(): void
+    {
+        $stock = $this->buildLedgeredAcquirer('SHAKE', treasury: 1_000_000_000.0, debt: 4_000_000_000.0, shares: 10_000_000.0);
+        $stock->setBeta('1.00');
+        $stock->setLongRunReturn('0.085');
+        $stock->setLifecycleStage(\App\Data\Company\LifecycleStage::ShakeOut);
+        $this->primeDistressedDivestiture(operatingBase: 10_000_000_000.0, fraction: 0.25);
+        $macro = new MacroStateDTO(policyRateEma: 0.04, corporateTaxRate: 0.20, yield5yEma: 0.04, yield10y: 0.04, equityRiskPremium: 0.05, nominalGdpIndex: 1.0);
+
+        $this->assertNull($this->engine->evaluateCorporateDivestiture($stock, $macro, 1.0));
+        $this->assertSame(8_000_000_000.0, $stock->getNetPpe());
+    }
+
+    /**
+     * A pro rata slice cannot move the return that triggered it, so a firm sells once per distress episode: it
+     * sells again only after its return has recovered and fallen back.
+     */
+    public function testAFirmMakesOneDistressSalePerEpisode(): void
+    {
+        $stock = $this->buildLedgeredAcquirer('EPIS', treasury: 1_000_000_000.0, debt: 4_000_000_000.0, shares: 10_000_000.0);
+        $distressed = static function (Stock $stock): void {
+            $stock->setRoicTtm('-0.02');
+            $stock->setLongRunReturn('-0.02');
+            $stock->setTotalNetIncome('-300000000');
+        };
+        $distressed($stock);
+        $this->primeDistressedDivestiture(operatingBase: 10_000_000_000.0, fraction: 0.25);
+        $macro = new MacroStateDTO(policyRateEma: 0.04, corporateTaxRate: 0.20, yield5yEma: 0.04, nominalGdpIndex: 1.0, totalTime: 3.0);
+
+        $this->assertIsArray($this->engine->evaluateCorporateDivestiture($stock, $macro, 1.0));
+        $this->assertSame(3.0, $stock->getEarningsMomentumZ()[MergerAndAcquisitionEngine::STATE_DISTRESS_SALE_EPISODE]);
+        $plantAfterSale = $stock->getNetPpe();
+        // The proceeds are spent, so no cash buffer stands between the firm and a second sale but the episode.
+        $spendProceeds = static fn () => $stock->setCorporateTreasury('1000000000');
+        $spendProceeds();
+
+        $this->assertNull($this->engine->evaluateCorporateDivestiture($stock, $macro, 1.0), 'the same episode does not sell again');
+        $this->assertSame($plantAfterSale, $stock->getNetPpe());
+
+        $stock->setRoicTtm('0.15');
+        $stock->setLongRunReturn('0.15');
+        $stock->setTotalNetIncome('500000000');
+        $this->assertNull($this->engine->evaluateCorporateDivestiture($stock, $macro, 1.0));
+        $this->assertArrayNotHasKey(MergerAndAcquisitionEngine::STATE_DISTRESS_SALE_EPISODE, $stock->getEarningsMomentumZ(), 'a recovered return closes the episode');
+
+        $distressed($stock);
+        $spendProceeds();
+        $this->assertIsArray($this->engine->evaluateCorporateDivestiture($stock, $macro, 1.0), 'a new episode may sell');
     }
 
     /**
