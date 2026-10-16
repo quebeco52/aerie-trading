@@ -697,13 +697,13 @@ class StockModelTuning
         ],
 
         // --- Poultry Crop Operations (CROP) ---
-        // Integrated poultry & agricultural producer. Skewed toward commodity volume agriculture (50%) and land speculation (15%).
+        // Integrated poultry & agricultural producer. Skewed toward commodity volume agriculture (65%, its farmland income included).
         'CROP' => [
-            ModelParam::BrandedStaplesWeight->value   => 0.20,
-            ModelParam::VolumeCommodityWeight->value  => 0.50,
-            ModelParam::CommodityTradingWeight->value => 0.15,
-            ModelParam::LandSpeculationWeight->value  => 0.15,
-            ModelParam::PricingPowerIndex->value      => 0.30, // Bulk agricultural output clears at the exchange price, not a list price
+            ModelParam::BrandedStaplesWeight->value    => 0.20,
+            ModelParam::VolumeCommodityWeight->value   => 0.65,
+            ModelParam::CommodityTradingWeight->value  => 0.15,
+            ModelParam::PricingPowerIndex->value       => 0.30, // Bulk agricultural output clears at the exchange price, not a list price
+            ModelParam::AgriculturalOutputShare->value => 0.40, // Crops sell at the exchange; contract poultry at a list price that follows feed
         ],
 
         // --- Pintail Beverage Group (PINT) ---

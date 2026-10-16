@@ -51,5 +51,7 @@ readonly class ActualFinancialsDTO
         public float $plantImpairment = 0.0,
         /** Change in the variable cost ratio from the last calendar quarter's season to this one: a known mix shift analysts build in, not a surprise. */
         public float $seasonalCostRatioShift = 0.0,
+        /** Dollar one-off operating charge from the physics (a recall, a fine): a special item, not in the cost ratio or ebit above. */
+        public float $specialCharge = 0.0,
     ) {}
 }

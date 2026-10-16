@@ -336,6 +336,12 @@ trait StandardOperatingPhysicsTrait
         return defined('static::INPUT_COST_LAG_YEARS') ? (float) static::INPUT_COST_LAG_YEARS : 0.0;
     }
 
+    /** This firm's buying lag: the sector's by default; a model whose firms hedge to their own horizons overrides it. */
+    protected function resolveInputCostLagYears(Stock $stock): float
+    {
+        return $this->getInputCostLagYears();
+    }
+
     /** Years for the recoverable part of an input move to reach selling prices (menu costs, contract repricing, fuel surcharges). */
     public function getInputPassThroughLagYears(): float
     {
@@ -395,16 +401,18 @@ trait StandardOperatingPhysicsTrait
         // A firm with no cost history starts at baseline prices, so a shock already in the market reaches it
         // through the lags like any other.
         $recoveredShare = max(0.0, min(1.0, $pricingPower)) * self::MAX_INPUT_COST_PASS_THROUGH;
+        $costLagYears = $this->resolveInputCostLagYears($stock);
         [$costLevel, $recovery] = $this->advanceInputCostState(
             $streams->getPersistedState(FinancialConstants::STATE_INPUT_COST_LEVEL, 0.0),
             $streams->getPersistedState(FinancialConstants::STATE_INPUT_COST_RECOVERY, 0.0),
             $this->resolveInputCostDeviation($macroState),
-            $recoveredShare
+            $recoveredShare,
+            $costLagYears
         );
 
         $streams->registerState(FinancialConstants::STATE_INPUT_COST_LEVEL, $costLevel);
         $streams->registerState(FinancialConstants::STATE_INPUT_COST_RECOVERY, $recovery);
-        $this->advanceInputCostChannels($macroState, $streams, $recoveredShare);
+        $this->advanceInputCostChannels($macroState, $streams, $recoveredShare, $costLagYears);
         // The share this model recovers, which differs by caller (a defence book's cost-plus share, a retailer's
         // pricing power), and the cost base the gap is charged on (a refiner's opex, never its crude), kept so
         // management can project the next quarter on the same terms.
@@ -423,7 +431,7 @@ trait StandardOperatingPhysicsTrait
      * to the basket's level and recovery; what they leave over is state the basket carried before they were tracked.
      * Bookkeeping only: the drag is still struck on the basket.
      */
-    private function advanceInputCostChannels(MacroStateDTO $macroState, StreamContext $streams, float $recoveredShare): void
+    private function advanceInputCostChannels(MacroStateDTO $macroState, StreamContext $streams, float $recoveredShare, float $costLagYears): void
     {
         $gaps = $this->resolveInputPriceDeviations($macroState);
         foreach ($this->getInputCostExposures() as $channel => $share) {
@@ -434,7 +442,8 @@ trait StandardOperatingPhysicsTrait
                 $streams->getPersistedState(FinancialConstants::STATE_INPUT_COST_LEVEL_PREFIX . $channel, 0.0),
                 $streams->getPersistedState(FinancialConstants::STATE_INPUT_COST_RECOVERY_PREFIX . $channel, 0.0),
                 (float) $share * ($gaps[$channel] ?? 0.0),
-                $recoveredShare
+                $recoveredShare,
+                $costLagYears
             );
             $streams->registerState(FinancialConstants::STATE_INPUT_COST_LEVEL_PREFIX . $channel, $level);
             $streams->registerState(FinancialConstants::STATE_INPUT_COST_RECOVERY_PREFIX . $channel, $recovery);
@@ -493,7 +502,8 @@ trait StandardOperatingPhysicsTrait
             (float) ($state[FinancialConstants::STATE_INPUT_COST_RECOVERY] ?? 0.0),
             $this->resolveInputCostDeviation($macroState),
             (float) ($state[FinancialConstants::STATE_INPUT_COST_RECOVERED_SHARE]
-                ?? max(0.0, min(1.0, $this->resolvePricingPower($stock))) * self::MAX_INPUT_COST_PASS_THROUGH)
+                ?? max(0.0, min(1.0, $this->resolvePricingPower($stock))) * self::MAX_INPUT_COST_PASS_THROUGH),
+            $this->resolveInputCostLagYears($stock)
         );
 
         return $costLevel - $recovery;
@@ -523,14 +533,14 @@ trait StandardOperatingPhysicsTrait
      *
      * @return array{0: float, 1: float} Cost level, recovery.
      */
-    private function advanceInputCostState(float $costLevel, float $recovery, float $deviation, float $recoveredShare): array
+    private function advanceInputCostState(float $costLevel, float $recovery, float $deviation, float $recoveredShare, float $costLagYears): array
     {
         $dt = \App\Service\Corporate\EarningsEngine::QUARTERLY_TIME_STEP;
         $nextLevel = TimeSeries::calculateDistributedLag(
             currentLaggedValue: $costLevel,
             targetValue: $deviation,
             dt: $dt,
-            lagTimeConstant: $this->getInputCostLagYears()
+            lagTimeConstant: $costLagYears
         );
         $nextRecovery = TimeSeries::calculateDistributedLag(
             currentLaggedValue: $recovery,
@@ -796,6 +806,7 @@ trait StandardOperatingPhysicsTrait
             priceRevenue: $priceRevenue,
             plantImpairment: $physics->plantImpairment,
             seasonalCostRatioShift: $physics->seasonalCostRatioShift,
+            specialCharge: max(0.0, $physics->specialCharge),
         );
     }
 

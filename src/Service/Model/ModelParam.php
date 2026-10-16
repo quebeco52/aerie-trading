@@ -185,7 +185,8 @@ enum ModelParam: string
     case BrandedStaplesWeight = 'branded_staples_weight';
     case VolumeCommodityWeight = 'volume_commodity_weight';
     case CommodityTradingWeight = 'commodity_trading_weight';
-    case LandSpeculationWeight = 'land_speculation_weight';
+    /** Share of a staples firm's bulk-volume revenue sold at the agricultural exchange price rather than a list price (a grower's crop); zero for a processor. */
+    case AgriculturalOutputShare = 'agricultural_output_share';
     case CommercialWeight = 'commercial_weight';
     case ThirdPartyWeight = 'third_party_weight';
     case FirstPartyWeight = 'first_party_weight';

@@ -1200,6 +1200,11 @@ class EarningsEngine
         $ctx->operatingCosts = $ctx->actualVariableCosts + $ctx->fixedCosts;
         $ctx->ebitda = $ctx->actualRevenue - $ctx->operatingCosts;
         $ctx->ebit = $ctx->ebitda - $ctx->quarterlyDepreciation;
+        // A one-off charge the physics booked (a recall, a fine) is operating expense the quarter it lands and, like
+        // restructuring, a special item: no analyst forecasts it, and the run rate and the Street figure leave it out.
+        $ctx->eventCharge = $actuals->specialCharge;
+        $ctx->ebitda -= $ctx->eventCharge;
+        $ctx->ebit -= $ctx->eventCharge;
 
         $ctx->eventType = $actuals->eventType;
         $ctx->eventContext = $actuals->eventContext;
@@ -1264,7 +1269,7 @@ class EarningsEngine
         // Deseasonalized run-rate EBIT: reconstructed from revenue and cost ratios with the recurring charges (credit
         // losses, working capital provisions) deducted and the special items not: a restructuring or a plant write-down
         // is charged once, to equity, and a run rate that carried it would capitalize it into the return fair value reads.
-        $ctx->specialCharges = $ctx->restructuringCharge + $ctx->plantImpairment;
+        $ctx->specialCharges = $ctx->restructuringCharge + $ctx->plantImpairment + $ctx->eventCharge;
         $ctx->seasonallyAdjustedEbit = ($ctx->seasonallyAdjustedRevenue * (1.0 - $realizedCostRatio)) - ($ctx->fixedCosts / $ctx->seasonalFixedCostFactor) - $ctx->quarterlyDepreciation - ($ctx->impairmentCharges - $ctx->plantImpairment);
         $ctx->structuralOperatingMargin = $ctx->seasonallyAdjustedEbit / max(1.0, $ctx->seasonallyAdjustedRevenue);
 
