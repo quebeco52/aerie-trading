@@ -1193,9 +1193,10 @@ class EarningsEngine
         // The price level the plant capacity was last struck against, and the surprise it carries.
         $streamState[self::STATE_LAST_DEFLATOR] = max(0.01, $ctx->macroState->gdpDeflator);
         $streamState[self::STATE_PRICE_LEVEL_SURPRISE] = $ctx->priceLevelSurprise;
-        // The plant's capital-goods vintage is the fixed-asset ledger's, rolled forward after the cash flows.
+        // The plant's capital-goods vintage is the fixed-asset ledger's, rolled forward after the cash flows; a
+        // distress episode is the divestiture engine's, carried until it closes it.
         $previousState = $ctx->stock->getEarningsMomentumZ() ?? [];
-        foreach ([self::STATE_CAPITAL_GOODS_ANCHOR_TIME, self::STATE_PPE_RELATIVE_PRICE] as $key) {
+        foreach ([self::STATE_CAPITAL_GOODS_ANCHOR_TIME, self::STATE_PPE_RELATIVE_PRICE, MergerAndAcquisitionEngine::STATE_DISTRESS_SALE_EPISODE] as $key) {
             if (isset($previousState[$key])) {
                 $streamState[$key] = $previousState[$key];
             }

@@ -331,7 +331,12 @@ class TelecomBusinessModelTest extends TestCase
         $this->assertEqualsWithDelta(TelecomBusinessModel::BASE_QUARTERLY_CHURN + TelecomBusinessModel::PRICE_WAR_CHURN_UPLIFT, $war->kpis['quarterly_churn'], 1e-12);
         $this->assertEqualsWithDelta(1.0 - TelecomBusinessModel::PRICE_WAR_ARPU_DISCOUNT, $war->kpis['arpu_index'], 1e-12);
         $this->assertLessThan($peace->kpis['subscriber_index'], $war->kpis['subscriber_index']);
-        $this->assertGreaterThan($peace->clampedMargin, $war->clampedMargin, 'promotions and the war penalty raise the cost ratio');
+        // The war's cost comes only from the extra promotional adds and from plan costs spread over discounted ARPU.
+        $acquisition = TelecomBusinessModel::SUBSCRIBER_ACQUISITION_COST_ELASTICITY * TelecomBusinessModel::PRICE_WAR_GROSS_ADDS_RESPONSE * TelecomBusinessModel::SUBSCRIPTION_WEIGHT;
+        $discount = TelecomBusinessModel::PRICE_WAR_ARPU_DISCOUNT;
+        $warCost = $war->clampedMargin - $peace->clampedMargin;
+        $this->assertGreaterThan($acquisition, $warCost, 'promotional adds and the ARPU cut both raise the cost ratio');
+        $this->assertLessThan($acquisition + ($peace->clampedMargin * $discount / (1.0 - $discount)), $warCost, 'no flat penalty on top of the mechanism');
     }
 
     /** The carrier that draws the onset starts the war for its industry, its length drawn once from the exit hazard. */

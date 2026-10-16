@@ -974,6 +974,19 @@ class EarningsEngineTest extends TestCase
         $this->assertEqualsWithDelta($atAnchor->revenueGeneratingCapital, $dearVintage->revenueGeneratingCapital, 1.0);
     }
 
+    /** A distress episode the divestiture engine opened survives the report that rebuilds the stream map. */
+    public function testAReportCarriesTheDistressEpisodeForward(): void
+    {
+        $engine = $this->buildEngine(new EventDispatcher());
+        mt_srand(9091);
+        $stock = $this->buildMatureIndustrial('EPIS');
+        $stock->setEarningsMomentumZ([\App\Service\Corporate\MergerAndAcquisitionEngine::STATE_DISTRESS_SALE_EPISODE => 4.25]);
+
+        $engine->calculate($stock, new MacroStateDTO(corporateTaxRate: 0.21, policyRateEma: 0.04, yield5yEma: 0.04, gdpDeflator: 1.0, totalTime: 5.0), EarningsEngine::resolveReportingTick('EPIS', 252), 252);
+
+        $this->assertSame(4.25, $stock->getEarningsMomentumZ()[\App\Service\Corporate\MergerAndAcquisitionEngine::STATE_DISTRESS_SALE_EPISODE] ?? null);
+    }
+
     public function testCapitalGoodsDriftFallsBackThroughTheModelsParents(): void
     {
         $this->assertSame(CapitalGoodsPrices::DRIFT_BY_MODEL['TelecomBusinessModel'], CapitalGoodsPrices::driftFor(new \App\Service\Model\Sector\TelecomBusinessModel()));

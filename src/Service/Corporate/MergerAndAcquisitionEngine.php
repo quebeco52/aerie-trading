@@ -142,20 +142,20 @@ class MergerAndAcquisitionEngine
     public const DIV_PE_THRESHOLD = 30.0;
     /** Minimum net income for divestiture consideration, at the District's $12T scale. */
     public const DIV_MIN_NET_INCOME = 2_500_000_000.0;
-    /** EVA threshold for distressed divestiture. */
+    /** Long-run return below the business's cost of capital at which a firm sheds a division as distressed (-2pp). */
     public const DIV_DISTRESS_EVA_THRESHOLD = -0.02;
-    /** Return threshold for dying divestiture. */
+    /** Long-run return below which the business loses money through the cycle and is dying (0%). */
     public const DIV_DYING_RETURN_THRESHOLD = 0.00;
-    /** EVA threshold for dying divestiture. */
+    /** Long-run return below the business's cost of capital at which the firm is dying (-5pp). */
     public const DIV_DYING_EVA_THRESHOLD = -0.05;
-    /** Return floor for distress. */
-    public const DIV_DISTRESS_RETURN_FLOOR = 0.03;
 
     /** Cash fortress ratio to prevent divestitures. */
     public const DIV_CASH_FORTRESS_RATIO = 0.10;
 
     /** Discount a distressed seller takes to the market value of the assets it sells (~14%; Pulvino 1998, aircraft fire sales). */
     public const DIV_FIRE_SALE_DISCOUNT = 0.14;
+    /** Stream-state key: the time of the distress sale the firm's current episode has had; cleared once its return has recovered. */
+    public const STATE_DISTRESS_SALE_EPISODE = 'state:distress_sale_episode';
     /** Ceiling on the acquisition hazard, cached: the styles and constants it is built from never change. */
     private static ?float $acquisitionHazardCeiling = null;
 
@@ -864,8 +864,8 @@ class MergerAndAcquisitionEngine
         $ctx = new DivestitureContext($seller, $macroState, $dt);
 
         $this->initializeDivestitureContext($ctx);
-        
-        if ($this->shouldAbortDivestiture($ctx)) {
+
+        if ($this->isInOpenDistressEpisode($ctx) || $this->shouldAbortDivestiture($ctx)) {
             return null;
         }
 
@@ -876,7 +876,52 @@ class MergerAndAcquisitionEngine
 
         $this->executeDivestitureSale($ctx);
         $this->applyDivestitureAccounting($ctx);
+        if ($ctx->isDying || $ctx->isDistressed) {
+            self::openDistressEpisode($seller, $macroState->totalTime);
+        }
+
         return $this->finalizeDivestitureEvent($ctx);
+    }
+
+    /**
+     * The hurdle the sale test reads: CAPM on the firm's own beta, its asset beta for an operating company and one that
+     * carries its structural leverage for a lender. It holds no distress premium, so dearer financing is not read as a
+     * business destroying value (Modigliani & Miller 1958).
+     */
+    public static function businessCostOfCapital(Stock $stock, MacroStateDTO $macroState): float
+    {
+        return Valuation::calculateCAPM($macroState->yield10y, (float) $stock->getBeta(), $macroState->equityRiskPremium);
+    }
+
+    /**
+     * One distress sale per episode: the slice is pro rata, so it leaves the return that triggered it where it was. The
+     * episode closes once the classification is healthy again, read before the cash-buffer exemption the proceeds meet.
+     */
+    private function isInOpenDistressEpisode(DivestitureContext $ctx): bool
+    {
+        if (!isset(($ctx->seller->getEarningsMomentumZ() ?? [])[self::STATE_DISTRESS_SALE_EPISODE])) {
+            return false;
+        }
+        if ($ctx->isDistressed || $ctx->isDying) {
+            return true;
+        }
+        self::closeDistressEpisode($ctx->seller);
+
+        return false;
+    }
+
+    private static function openDistressEpisode(Stock $stock, float $time): void
+    {
+        $state = $stock->getEarningsMomentumZ() ?? [];
+        $state[self::STATE_DISTRESS_SALE_EPISODE] = $time;
+        $stock->setEarningsMomentumZ($state);
+    }
+
+    private static function closeDistressEpisode(Stock $stock): void
+    {
+        $state = $stock->getEarningsMomentumZ() ?? [];
+        unset($state[self::STATE_DISTRESS_SALE_EPISODE]);
+        $stock->setEarningsMomentumZ($state);
     }
 
     private function initializeDivestitureContext(DivestitureContext $ctx): void
@@ -899,16 +944,17 @@ class MergerAndAcquisitionEngine
         if ($ctx->currentReturn === 0.0) {
             $ctx->currentReturn = $ctx->strategy->calculateEconomicReturn($stock, $ctx->netIncome, $stock->getInvestedCapital());
         }
-        $ctx->hurdleRate = $ctx->strategy->getHurdleRate($ctx->health);
+        // Whether the business earns its keep is read on its long-run return against the cost of capital of the
+        // business: a slump shorter than that horizon is not decline, and a distress premium on the firm's financing
+        // is not value destroyed by its operations.
+        $longRunReturn = $stock->getLongRunReturn();
+        $ctx->throughCycleReturn = $longRunReturn !== null ? (float) $longRunReturn : $ctx->currentReturn;
+        $ctx->hurdleRate = self::businessCostOfCapital($stock, $ctx->macroState);
 
-        $ctx->evaSpread = $ctx->currentReturn - $ctx->hurdleRate;
+        $ctx->evaSpread = $ctx->throughCycleReturn - $ctx->hurdleRate;
 
-        $ctx->isDistressed = $ctx->evaSpread < self::DIV_DISTRESS_EVA_THRESHOLD || $ctx->currentReturn < self::DIV_DISTRESS_RETURN_FLOOR;
-        // Life-cycle pressure (Dickinson 2011): shake-out and decline stage firms shed assets to fund operations.
-        if ($stock->getLifecycleStage()?->isShedding() === true) {
-            $ctx->isDistressed = true;
-        }
-        $ctx->isDying = $ctx->currentReturn < self::DIV_DYING_RETURN_THRESHOLD || $ctx->evaSpread < self::DIV_DYING_EVA_THRESHOLD;
+        $ctx->isDistressed = $ctx->evaSpread < self::DIV_DISTRESS_EVA_THRESHOLD;
+        $ctx->isDying = $ctx->throughCycleReturn < self::DIV_DYING_RETURN_THRESHOLD || $ctx->evaSpread < self::DIV_DYING_EVA_THRESHOLD;
 
         $ctx->treasury = (float) $stock->getCorporateTreasury();
         $ctx->operatingBase = $this->corporateMetrics->calculateOperatingBase((float) $stock->getTotalRevenue(), (float) $stock->getTotalEquity());

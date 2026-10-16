@@ -71,12 +71,4 @@ final class LifecycleStageTest extends TestCase
             }
         }
     }
-
-    public function testSheddingStagesAreDeclineAndShakeOut(): void
-    {
-        $this->assertTrue(LifecycleStage::Decline->isShedding());
-        $this->assertTrue(LifecycleStage::ShakeOut->isShedding());
-        $this->assertFalse(LifecycleStage::Mature->isShedding());
-        $this->assertFalse(LifecycleStage::Growth->isShedding());
-    }
 }

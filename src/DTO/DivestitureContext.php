@@ -31,6 +31,8 @@ class DivestitureContext
     public ?BusinessModelInterface $strategy = null;
     
     public float $currentReturn = 0.0;
+    /** The firm's long-run return, the one the sale test reads; the trailing return when none is measured yet. */
+    public float $throughCycleReturn = 0.0;
     public float $hurdleRate = 0.0;
     public float $evaSpread = 0.0;
     
