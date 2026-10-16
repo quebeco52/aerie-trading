@@ -4,10 +4,11 @@ declare(strict_types=1);
 
 namespace App\Tests\Service\Model\Sector;
 
-use App\Service\Model\ModelParam;
+use App\DTO\ActualFinancialsDTO;
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use App\Service\Event\ShockEvent;
+use App\Service\Math\FinancialConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\ConsumerStaplesBusinessModel;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
@@ -16,265 +17,191 @@ use PHPUnit\Framework\TestCase;
 #[AllowMockObjectsWithoutExpectations]
 class ConsumerStaplesBusinessModelTest extends TestCase
 {
-    public function testDynamicWorkingCapitalIntensity(): void
+    private ConsumerStaplesBusinessModel $model;
+
+    protected function setUp(): void
     {
-        $model = new ConsumerStaplesBusinessModel();
-
-        // 1. Default stock mix (65% branded, 35% volume)
-        $defaultStock = new Stock();
-        $defaultStock->setTicker('DEFAULT_STAPLE');
-        $expectedDefaultNwc = (0.65 * -0.05 + 0.35 * 0.05) / 1.0; // -0.015
-        $this->assertEqualsWithDelta($expectedDefaultNwc, $model->getWorkingCapitalIntensity($defaultStock), 0.0001);
-
-        // 2. Pure branded consumer staples (e.g. LARK: 80% branded, 20% volume)
-        $lark = new Stock();
-        $lark->setTicker('LARK');
-        $expectedLarkNwc = (0.80 * -0.05 + 0.20 * 0.05) / 1.0; // -0.030
-        $this->assertEqualsWithDelta($expectedLarkNwc, $model->getWorkingCapitalIntensity($lark), 0.0001);
-
-        // 3. Agricultural volume heavy (e.g. CROP: 20% branded, 50% volume)
-        $crop = new Stock();
-        $crop->setTicker('CROP');
-        $expectedCropNwc = (0.20 * -0.05 + 0.50 * 0.05) / 0.70; // +0.0214
-        $this->assertEqualsWithDelta($expectedCropNwc, $model->getWorkingCapitalIntensity($crop), 0.0001);
-
-        // 4. Threshold invariant
-        $this->assertEquals(0.15, $model->getReversionSpeed());
-        $this->assertEquals(0.015, $model->getMoatSpread());
+        $this->model = new ConsumerStaplesBusinessModel();
     }
 
-    public function testPricingPowerAndElasticityModulation(): void
+    private static function stock(string $ticker): Stock
     {
-        $model = new ConsumerStaplesBusinessModel();
-        $macro = new MacroStateDTO(outputGapEma: -0.04, inflationEma: 0.05);
-
-        // Standard stock (pricing power = 0.50)
-        $stockStandard = new Stock();
-        $stockStandard->setTicker('STD_STAPLE');
-        $stockStandard->setBeta('0.8');
-
-        $physicsStandard = $model->getMacroPhysics($stockStandard, $macro);
-
-        // High pricing power stock (e.g. SGRB: pricing power = 0.90)
-        $stockHighPricing = new Stock();
-        $stockHighPricing->setTicker('SGRB');
-        $stockHighPricing->setBeta('0.8');
-
-        $physicsHighPricing = $model->getMacroPhysics($stockHighPricing, $macro);
-
-        // Higher pricing power lowers PED (less demand drop during recession)
-        $this->assertGreaterThan(
-            $physicsStandard['macro_demand_shift'],
-            $physicsHighPricing['macro_demand_shift']
-        );
-
-        // Higher pricing power expands nominal revenue more during inflation
-        $this->assertGreaterThan(
-            $physicsStandard['pricing_power_multiplier'],
-            $physicsHighPricing['pricing_power_multiplier']
-        );
-    }
-
-    public function testCommodityInputElasticityAndAgriculturalCostSqueeze(): void
-    {
-        $model = new ConsumerStaplesBusinessModel();
         $stock = new Stock();
-        $stock->setTicker('STAPLE');
-        $stock->setBeta('0.6');
+        $stock->setTicker($ticker);
+        $stock->setBeta('0.8');
 
-        $macroState = new MacroStateDTO(inflationEma: 0.04, energyPriceIndexEma: 100.0);
-
-        // 1. Crop failure / agricultural supply shortage (volumeZ = -2.0)
-        $shortageMock = $this->getMockBuilder(MathUtility::class)
-            ->onlyMethods(['generateStandardNormal'])
-            ->getMock();
-        // sequence: firmFactor=0, brandedZ=0, volumeZ idio=-2.5 (composite -2.0), eventZ=0, ...
-        $shortageMock->method('generateStandardNormal')
-            ->willReturnOnConsecutiveCalls(0.0, 0.0, -2.5, 0.0, 0.0, 0.0);
-
-        $shortageResult = $model->computeActualFinancials(
-            $stock,
-            1000.0,
-            0.60,
-            50.0,
-            0.15,
-            $macroState,
-            $shortageMock
-        );
-
-        // 2. Bumper crop / harvest abundance (volumeZ = +2.0)
-        $bumperMock = $this->getMockBuilder(MathUtility::class)
-            ->onlyMethods(['generateStandardNormal'])
-            ->getMock();
-        $bumperMock->method('generateStandardNormal')
-            ->willReturnOnConsecutiveCalls(0.0, 0.0, 2.5, 0.0, 0.0, 0.0);
-
-        $bumperResult = $model->computeActualFinancials(
-            $stock,
-            1000.0,
-            0.60,
-            50.0,
-            0.15,
-            $macroState,
-            $bumperMock
-        );
-
-        // Crop failure increases variable cost ratio relative to bumper harvest
-        $this->assertGreaterThan($bumperResult->clampedMargin, $shortageResult->clampedMargin);
+        return $stock;
     }
 
-    public function testPackagingAndEnergyLogisticsPenaltyWithHedging(): void
+    /** Every stream and event draw at zero, so a comparison isolates the macro term under test. */
+    private function calmDraws(): MathUtility
     {
-        $model = new ConsumerStaplesBusinessModel();
-        // Zeroed draws: the comparison must isolate the hedge, not harvest or brand noise.
         $mathUtility = $this->createStub(MathUtility::class);
         $mathUtility->method('generatePersistentZ')->willReturn(0.0);
         $mathUtility->method('generateStandardNormal')->willReturn(0.0);
 
-        // Stock without commodity hedging
-        $unhedgedStock = new Stock();
-        $unhedgedStock->setTicker('LARK');
-        $unhedgedStock->setBeta('1.0');
-
-        // Stock with internal Proof Desk commodity trading (20% weight)
-        $hedgedStock = new Stock();
-        $hedgedStock->setTicker('PINT');
-        $hedgedStock->setBeta('1.0');
-
-        // Packaging and freight costs read the lagged energy cost-push channel, not the spot index.
-        $spikeMacro = new MacroStateDTO(inflationEma: 0.02, energyCostPushLag: 0.10);
-
-        $unhedgedResult = $model->computeActualFinancials(
-            $unhedgedStock,
-            100_000_000.0,
-            0.40,
-            10_000_000.0,
-            0.0,
-            $spikeMacro,
-            $mathUtility
-        );
-
-        $hedgedResult = $model->computeActualFinancials(
-            $hedgedStock,
-            100_000_000.0,
-            0.40,
-            10_000_000.0,
-            0.0,
-            $spikeMacro,
-            $mathUtility
-        );
-
-        // Hedged stock experiences lower variable cost ratio due to inventory buffer
-        $unhedgedCostRatio = $unhedgedResult->actualVariableCosts / $unhedgedResult->actualRevenue;
-        $hedgedCostRatio = $hedgedResult->actualVariableCosts / $hedgedResult->actualRevenue;
-
-        $this->assertLessThan($unhedgedCostRatio, $hedgedCostRatio);
+        return $mathUtility;
     }
 
-    public function testProductRecallAndRegulatoryFineTailRisk(): void
+    private function report(Stock $stock, MacroStateDTO $macro, ?MathUtility $mathUtility = null): ActualFinancialsDTO
     {
-        $model = new ConsumerStaplesBusinessModel();
-        $stock = new Stock();
-        $stock->setTicker('STAPLE');
-        $stock->setBeta('0.8');
-
-        $macro = new MacroStateDTO(inflationEma: 0.02, energyPriceIndexEma: 100.0);
-
-        // Severe event shock (Z = -3.0 -> PRODUCT_RECALL)
-        $mathRecall = $this->getMockBuilder(MathUtility::class)
-            ->onlyMethods(['generateStandardNormal'])
-            ->getMock();
-        $mathRecall->method('generateStandardNormal')->willReturnOnConsecutiveCalls(0.0, 0.0, 0.0, -3.0, 0.0, 0.0);
-
-        $recallResult = $model->computeActualFinancials(
-            $stock,
-            100_000.0,
-            0.40,
-            10_000.0,
-            0.0,
-            $macro,
-            $mathRecall
-        );
-
-        $this->assertSame(ShockEvent::PRODUCT_RECALL, $recallResult->eventType);
-        $this->assertTrue($recallResult->isPublicEvent);
-
-        // Moderate event shock (Z = -2.2 -> REGULATORY_FINE)
-        $mathFine = $this->getMockBuilder(MathUtility::class)
-            ->onlyMethods(['generateStandardNormal'])
-            ->getMock();
-        $mathFine->method('generateStandardNormal')->willReturnOnConsecutiveCalls(0.0, 0.0, 0.0, -2.2, 0.0, 0.0);
-
-        $fineResult = $model->computeActualFinancials(
-            $stock,
-            100_000.0,
-            0.40,
-            10_000.0,
-            0.0,
-            $macro,
-            $mathFine
-        );
-
-        $this->assertSame(ShockEvent::REGULATORY_FINE, $fineResult->eventType);
-        $this->assertTrue($fineResult->isPublicEvent);
+        return $this->model->computeActualFinancials($stock, 1.0e9, 0.60, 1.0e8, 0.15, $macro, $mathUtility ?? $this->calmDraws());
     }
 
-    public function testWeaponizedProofDeskCommodityArbitrage(): void
+    /** The input-cost drag the stream state books: what management projects and the cost ratio carries. */
+    private static function bookedDrag(ActualFinancialsDTO $actuals): float
     {
-        $model = new ConsumerStaplesBusinessModel();
-        $mathUtility = new MathUtility();
+        $state = $actuals->streamZ;
 
-        $stock = new Stock();
-        $stock->setTicker('PINT');
-        $stock->setBeta('0.8');
+        return (float) $state[FinancialConstants::STATE_INPUT_COST_DRAG_BASE]
+            * ((float) $state[FinancialConstants::STATE_INPUT_COST_LEVEL] - (float) $state[FinancialConstants::STATE_INPUT_COST_RECOVERY]);
+    }
 
-        $normalMacro = new MacroStateDTO(inflationEma: 0.02, energyPriceIndexEma: 100.0);
-        $spikeMacro = new MacroStateDTO(inflationEma: 0.06, energyPriceIndexEma: 150.0);
+    public function testDynamicWorkingCapitalIntensity(): void
+    {
+        // Default mix (65% branded, 35% volume)
+        $this->assertEqualsWithDelta(0.65 * -0.05 + 0.35 * 0.05, $this->model->getWorkingCapitalIntensity(self::stock('DEFAULT_STAPLE')), 0.0001);
+        // LARK: 80% branded, 20% volume
+        $this->assertEqualsWithDelta(0.80 * -0.05 + 0.20 * 0.05, $this->model->getWorkingCapitalIntensity(self::stock('LARK')), 0.0001);
+        // CROP: 20% branded, 65% volume, the desk outside the two
+        $this->assertEqualsWithDelta((0.20 * -0.05 + 0.65 * 0.05) / 0.85, $this->model->getWorkingCapitalIntensity(self::stock('CROP')), 0.0001);
 
-        $normalResult = $model->computeActualFinancials(
-            $stock,
-            100_000_000.0,
-            0.40,
-            10_000_000.0,
-            0.0,
-            $normalMacro,
-            $mathUtility
-        );
+        $this->assertEquals(0.15, $this->model->getReversionSpeed());
+        $this->assertEquals(0.015, $this->model->getMoatSpread());
+    }
 
-        $spikeResult = $model->computeActualFinancials(
-            $stock,
-            100_000_000.0,
-            0.40,
-            10_000_000.0,
-            0.0,
-            $spikeMacro,
-            $mathUtility
-        );
+    /** Engel's law: volume follows income at the sector's elasticity; a brand's pricing power does not change how much people eat. */
+    public function testDemandFollowsIncomeAtTheSectorElasticity(): void
+    {
+        $slump = new MacroStateDTO(outputGapEma: -0.04);
 
-        $this->assertArrayHasKey('commodity_trading', $normalResult->streamRevenue);
-        $this->assertArrayHasKey('commodity_trading', $spikeResult->streamRevenue);
+        foreach (['PHIL', 'LARK', 'CROP'] as $ticker) {
+            $this->assertEqualsWithDelta(
+                (-0.04 * ConsumerStaplesBusinessModel::OPERATING_CYCLICALITY) + $this->model->resolveFxDemandShift($slump),
+                $this->model->getMacroPhysics(self::stock($ticker), $slump)['macro_demand_shift'],
+                1e-12,
+                $ticker
+            );
+        }
+    }
 
-        // Under inflation/energy spike, the Proof Desk generates windfall commodity trading profits
-        $this->assertGreaterThan(
-            $normalResult->streamRevenue['commodity_trading'],
-            $spikeResult->streamRevenue['commodity_trading']
-        );
+    /** A strong brand recovers expected inflation and more on the shelf; a bulk grower recovers less of it. */
+    public function testPricingPowerSetsHowMuchExpectedInflationReachesTheShelf(): void
+    {
+        $macro = new MacroStateDTO(tipsBreakevenEma: 0.02);
+
+        $tobacco = $this->model->getMacroPhysics(self::stock('PHIL'), $macro);
+        $this->assertEqualsWithDelta(1.0 + (0.02 * (0.50 + 0.90)), $tobacco['pricing_power_multiplier'], 1e-12, 'PHIL lists above inflation');
+        $this->assertEqualsWithDelta(1.02, $tobacco['input_cost_multiplier'], 1e-12);
+
+        $grower = $this->model->getMacroPhysics(self::stock('CROP'), $macro);
+        $this->assertLessThan($grower['input_cost_multiplier'], $grower['pricing_power_multiplier'], 'CROP clears below inflation');
+    }
+
+    /**
+     * A desk that buys the commodity bill forward meets a spot move as its layered contracts roll: the first quarter's
+     * bill is held down, but under a lasting shift it reaches the spot buyer's in full. The cost ratio carries exactly
+     * the drag the stream state books, so management's projection is the squeeze the report books.
+     */
+    public function testTheDeskHedgeDelaysTheBillAndDoesNotLowerIt(): void
+    {
+        $spike = new MacroStateDTO(agriculturalCommodityIndexEma: 140.0);
+
+        $levels = [];
+        foreach (['LARK', 'SGRB'] as $ticker) {
+            $stock = self::stock($ticker);
+            for ($quarter = 0; $quarter < 16; $quarter++) {
+                if ($quarter === 1) {
+                    $projected = $this->model->projectInputCostGap($stock, $spike);
+                }
+                $actuals = $this->report($stock, $spike);
+                $stock->setEarningsMomentumZ($actuals->streamZ);
+                $levels[$ticker][$quarter] = (float) $actuals->streamZ[FinancialConstants::STATE_INPUT_COST_LEVEL];
+
+                $this->assertEqualsWithDelta(0.60 + self::bookedDrag($actuals), $actuals->clampedMargin, 1e-12, "{$ticker} Q{$quarter}: the cost ratio carries the booked drag, no more and no less");
+                if ($quarter === 1) {
+                    $state = $actuals->streamZ;
+                    $this->assertEqualsWithDelta($state[FinancialConstants::STATE_INPUT_COST_LEVEL] - $state[FinancialConstants::STATE_INPUT_COST_RECOVERY], $projected ?? null, 1e-12, "{$ticker}: the projected gap is the booked one");
+                }
+            }
+        }
+
+        $this->assertLessThan(0.5 * $levels['LARK'][0], $levels['SGRB'][0], 'the forward cover holds the first quarter down');
+        $this->assertEqualsWithDelta($levels['LARK'][15], $levels['SGRB'][15], 1e-3 * $levels['LARK'][15], 'a lasting shift reaches the hedged bill in full');
+    }
+
+    /** The desk is a trading line with its own noise; an inflation or commodity spike hands it no windfall. */
+    public function testTheDeskEarnsNoCommodityWindfall(): void
+    {
+        $calm = $this->report(self::stock('PINT'), new MacroStateDTO());
+        $spike = $this->report(self::stock('PINT'), new MacroStateDTO(inflationEma: 0.06, energyCostPushLag: 0.02, agriculturalCommodityIndexEma: 140.0));
+
+        $this->assertGreaterThan(0.0, $calm->streamRevenue['commodity_trading']);
+        $this->assertEqualsWithDelta($calm->streamRevenue['commodity_trading'], $spike->streamRevenue['commodity_trading'], 1e-6);
+    }
+
+    /**
+     * A grower sells part of its bulk output at the exchange price: a dear harvest raises its revenue with no unit of
+     * cost added, so it gains on balance, where a processor that only buys the crop is squeezed. The price is public,
+     * so consensus hears all of it.
+     */
+    public function testADearHarvestIsAGrowersWindfallAndAProcessorsSqueeze(): void
+    {
+        $calmMacro = new MacroStateDTO();
+        $harvestMacro = new MacroStateDTO(agriculturalCommodityIndexEma: 130.0);
+
+        $calm = $this->report(self::stock('CROP'), $calmMacro);
+        $dear = $this->report(self::stock('CROP'), $harvestMacro);
+
+        $priceGain = $calm->streamRevenue['volume'] * 0.40 * 0.30;
+        $this->assertEqualsWithDelta($priceGain, $dear->streamRevenue['volume'] - $calm->streamRevenue['volume'], 1e-3);
+        $this->assertEqualsWithDelta(($dear->actualRevenue - $priceGain) * (0.60 + self::bookedDrag($dear)), $dear->actualVariableCosts, 1e-3, 'price is not produced: costs run on units');
+        $this->assertGreaterThan($calm->ebit, $dear->ebit, 'CROP is net long the harvest');
+        $this->assertEqualsWithDelta(0.0, $calm->observableShockZ, 1e-12);
+        $this->assertEqualsWithDelta(($dear->actualRevenue / ($dear->actualRevenue - $priceGain) - 1.0) / ConsumerStaplesBusinessModel::BASE_COVERAGE_VISIBILITY, $dear->observableShockZ, 1e-12);
+
+        $processorCalm = $this->report(self::stock('LARK'), $calmMacro);
+        $processorDear = $this->report(self::stock('LARK'), $harvestMacro);
+        $this->assertEqualsWithDelta($processorCalm->actualRevenue, $processorDear->actualRevenue, 1e-6);
+        $this->assertLessThan($processorCalm->ebit, $processorDear->ebit, 'LARK only buys the crop');
+    }
+
+    /** A recall or a fine is a one-off charge on the quarter's branded sales, outside the cost ratio the run rate is built from. */
+    public function testARecallIsAOneOffChargeOutsideTheCostRatio(): void
+    {
+        $macro = new MacroStateDTO();
+        $draws = function (float $eventDraw): MathUtility {
+            $mathUtility = $this->getMockBuilder(MathUtility::class)->onlyMethods(['generateStandardNormal'])->getMock();
+            // firm factor, branded, volume, event
+            $mathUtility->method('generateStandardNormal')->willReturnOnConsecutiveCalls(0.0, 0.0, 0.0, $eventDraw, 0.0, 0.0);
+
+            return $mathUtility;
+        };
+
+        $quiet = $this->report(self::stock('STAPLE'), $macro, $draws(0.0));
+        $recall = $this->report(self::stock('STAPLE'), $macro, $draws(-3.0));
+        $fine = $this->report(self::stock('STAPLE'), $macro, $draws(-2.2));
+
+        $this->assertNull($quiet->eventType);
+        $this->assertSame(0.0, $quiet->specialCharge);
+
+        $this->assertSame(ShockEvent::PRODUCT_RECALL, $recall->eventType);
+        $this->assertTrue($recall->isPublicEvent);
+        $this->assertEqualsWithDelta(ConsumerStaplesBusinessModel::RECALL_SEVERE_PENALTY * $recall->streamRevenue['branded'], $recall->specialCharge, 1e-6);
+        $this->assertEqualsWithDelta($quiet->clampedMargin, $recall->clampedMargin, 1e-12, 'the charge is not a cost ratio');
+
+        $this->assertSame(ShockEvent::REGULATORY_FINE, $fine->eventType);
+        $this->assertEqualsWithDelta(ConsumerStaplesBusinessModel::RECALL_MODERATE_PENALTY * $fine->streamRevenue['branded'], $fine->specialCharge, 1e-6);
+        $this->assertEqualsWithDelta($quiet->clampedMargin, $fine->clampedMargin, 1e-12);
     }
 
     public function testExchangeRateDragOnMacroPhysics(): void
     {
-        $model = new ConsumerStaplesBusinessModel();
-        $stock = new Stock();
-        $stock->setTicker('STD_STAPLE');
-        $stock->setBeta('0.8');
+        $stock = self::stock('STD_STAPLE');
 
-        $baseMacro = new MacroStateDTO(exchangeRateIndexEma: 100.0);
-        $strongDollarMacro = new MacroStateDTO(exchangeRateIndexEma: 120.0);
+        $basePhysics = $this->model->getMacroPhysics($stock, new MacroStateDTO(exchangeRateIndexEma: 100.0));
+        $strongCurrencyPhysics = $this->model->getMacroPhysics($stock, new MacroStateDTO(exchangeRateIndexEma: 120.0));
 
-        $basePhysics = $model->getMacroPhysics($stock, $baseMacro);
-        $strongDollarPhysics = $model->getMacroPhysics($stock, $strongDollarMacro);
-
-        $this->assertLessThan($basePhysics['macro_demand_shift'], $strongDollarPhysics['macro_demand_shift']);
+        $this->assertLessThan($basePhysics['macro_demand_shift'], $strongCurrencyPhysics['macro_demand_shift']);
     }
 }
-

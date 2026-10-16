@@ -50,6 +50,8 @@ readonly class SectorPhysicsResult
         public float $plantImpairment = 0.0,
         /** Change in the variable cost ratio from the last calendar quarter's season to this one: a known mix shift analysts build in, not a surprise. */
         public float $seasonalCostRatioShift = 0.0,
+        /** Dollar one-off operating charge the physics booked this quarter (a recall's destroyed stock, a regulator's fine): in EBIT, kept out of the run rate and the Street figure. */
+        public float $specialCharge = 0.0,
     ) {
     }
 }

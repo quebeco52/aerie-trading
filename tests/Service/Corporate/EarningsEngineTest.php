@@ -1295,6 +1295,55 @@ class EarningsEngineTest extends TestCase
     }
 
     /**
+     * A recall or a fine the physics books is a one-off charge: GAAP EBIT carries it, while the run rate the market and
+     * lenders read, the trailing year lenders underwrite on and the Street figure leave it out, as they do restructuring.
+     */
+    public function testAnEventChargeIsASpecialItemOutsideTheRunRate(): void
+    {
+        $captured = null;
+        $dispatcher = new EventDispatcher();
+        $dispatcher->addListener(EarningsReportedEvent::class, function (EarningsReportedEvent $event) use (&$captured): void {
+            $captured = $event->getContext();
+        });
+        $engine = $this->buildEngine($dispatcher);
+        $macro = new MacroStateDTO(corporateTaxRate: 0.21, policyRateEma: 0.04, yield5yEma: 0.04);
+
+        // A recall or a fine is a tail draw: walk the seeds to the first report that books one.
+        $stock = null;
+        for ($seed = 1; $seed <= 400; $seed++) {
+            mt_srand($seed);
+            $stock = $this->buildMatureIndustrial('RCLL');
+            $stock->setIndustry('Packaged Foods');
+            $engine->calculate($stock, $macro, EarningsEngine::resolveReportingTick('RCLL', 252), 252);
+            if ($captured->eventCharge > 0.0) {
+                break;
+            }
+        }
+        $this->assertGreaterThan(0.0, $captured->eventCharge, 'control: a recall or a fine fired');
+        $this->assertContains($captured->eventType, [\App\Service\Event\ShockEvent::PRODUCT_RECALL, \App\Service\Event\ShockEvent::REGULATORY_FINE]);
+
+        $this->assertEqualsWithDelta(
+            $captured->actualRevenue - $captured->actualVariableCosts - $captured->fixedCosts - $captured->eventCharge - $captured->restructuringCharge - $captured->impairmentCharges,
+            $captured->ebitda,
+            1.0,
+            'GAAP EBITDA carries the charge'
+        );
+        $costRatio = $captured->actualVariableCosts / $captured->actualRevenue;
+        $this->assertEqualsWithDelta(
+            ($captured->seasonallyAdjustedRevenue * (1.0 - $costRatio)) - ($captured->fixedCosts / $captured->seasonalFixedCostFactor)
+                - $captured->quarterlyDepreciation - ($captured->impairmentCharges - $captured->plantImpairment),
+            $captured->seasonallyAdjustedEbit,
+            1.0,
+            'the run rate leaves it out'
+        );
+        $history = $stock->getQuarterlyOperatingHistory() ?? [];
+        $this->assertEqualsWithDelta($captured->ebit + $captured->specialCharges, end($history)['ebit'], 1.0, 'lenders add it back');
+        $this->assertGreaterThanOrEqual($captured->eventCharge, $captured->specialCharges);
+        $shares = max(1.0, $captured->sharesOutstanding);
+        $this->assertEqualsWithDelta($captured->actualQuarterlyEps + ($captured->specialItems / $shares), $captured->streetQuarterlyEps, 1e-9, 'the Street figure leaves it out');
+    }
+
+    /**
      * ASC 326: the credit loss allowance is a level, not a flow. A provision is booked when the expected
      * loss rate rises; once the allowance is at its target, a persistent downturn stops generating charges.
      * Modelling it as a flow would charge a firm every single quarter of a recession.

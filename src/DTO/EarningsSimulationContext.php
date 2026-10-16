@@ -89,7 +89,9 @@ class EarningsSimulationContext
      * (ASC 420-10). Like the impairments above it sits in operating expense, and no analyst forecasts it.
      */
     public float $restructuringCharge = 0.0;
-    /** The quarter's special items before tax (restructuring and plant write-downs): in GAAP EBIT, kept out of the run rate and the Street figure. */
+    /** One-off operating charge the sector physics booked this quarter (a product recall, a regulator's fine); in EBIT, forecast by no analyst. */
+    public float $eventCharge = 0.0;
+    /** The quarter's special items before tax (restructuring, event charges and plant write-downs): in GAAP EBIT, kept out of the run rate and the Street figure. */
     public float $specialCharges = 0.0;
     /** Special items after tax plus any goodwill impairment: what GAAP net income carries that Street earnings exclude. */
     public float $specialItems = 0.0;
