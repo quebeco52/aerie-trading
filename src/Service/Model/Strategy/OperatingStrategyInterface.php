@@ -33,6 +33,14 @@ interface OperatingStrategyInterface
      * @return array<string, array<string, float>> Stream => field => actual over counterfactual revenue, less one.
      */
     public function measureStreamMacroEffects(Stock $stock, array $draws, array $counterfactuals, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, array $actualStreams): array;
+
+    /**
+     * The quarter's revenue re-run on its own draws with the firm's sector demand factor at zero: what it would have
+     * sold had its sector drawn nothing. Null when the quarter carried no sector factor for the firm.
+     *
+     * @param array{uniforms: list<float>, spare: ?float} $draws
+     */
+    public function measureRevenueWithoutSectorFactor(Stock $stock, array $draws, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, MacroStateDTO $macroState): ?float;
     public function getCoverageProfile(Stock $stock): SectorCoverageProfile;
     public function getMacroPhysics(Stock $stock, MacroStateDTO $macroState): array;
     /**
@@ -208,6 +216,12 @@ interface OperatingStrategyInterface
      * output. Any other plant wears out on a schedule and its charge is a fixed cost.
      */
     public function depreciatesByUnitsOfProduction(): bool;
+
+    /**
+     * Whether the firm reports funds from operations: net income with real-estate depreciation added back, the measure
+     * a property trust is valued and forecast on, since its buildings hold their value while the books wear them down.
+     */
+    public function reportsFundsFromOperations(): bool;
 
     /** The part of invested capital that is physical plant, and so opens a fixed-asset ledger. All of it for an operating company; marketable investments sit on their own line and are not plant. */
     public function getPlantCapital(Stock $stock, float $investedCapital): float;

@@ -1021,6 +1021,53 @@ class EarningsEngineTest extends TestCase
         $this->assertArrayHasKey(EarningsEngine::STATE_LAST_DEFLATOR, $state, 'the rebuilt map still carries what the report registers');
     }
 
+    /**
+     * A shock the whole sector drew moves the firm's revenue but takes no share from its peers: on the same draws, a
+     * quarter whose sector drew two sigma books the same share gain as one whose sector drew nothing.
+     */
+    public function testASectorWideShockMovesRevenueButBooksNoShare(): void
+    {
+        $run = function (float $sectorDraw): array {
+            $ledger = new class (new InMemoryIndustryShareStore()) extends IndustryShareLedger {
+                /** @var list<float> */
+                public array $gains = [];
+
+                public function recordIdiosyncraticGain(Stock $stock, float $annualRevenue, float $gainFraction, float $addressableShare, int $tick): void
+                {
+                    $this->gains[] = $gainFraction;
+                    parent::recordIdiosyncraticGain($stock, $annualRevenue, $gainFraction, $addressableShare, $tick);
+                }
+            };
+            $captured = null;
+            $dispatcher = new EventDispatcher();
+            $dispatcher->addListener(EarningsReportedEvent::class, function (EarningsReportedEvent $event) use (&$captured): void {
+                $captured = $event->getContext();
+            });
+            // A fresh generator per run: a Box-Muller spare left over from the first run would shift the second's draws.
+            $this->mathUtility = new MathUtility();
+
+            mt_srand(5150);
+            $stock = $this->buildMatureIndustrial('SECT');
+            $stock->setSector('Consumer Discretionary');
+            $this->buildEngine($dispatcher, $ledger)->calculate(
+                $stock,
+                new MacroStateDTO(corporateTaxRate: 0.21, policyRateEma: 0.04, yield5yEma: 0.04, sectorDemandZ: ['Consumer Discretionary' => $sectorDraw]),
+                EarningsEngine::resolveReportingTick('SECT', 252)
+            );
+            $this->assertInstanceOf(EarningsSimulationContext::class, $captured);
+            $this->assertCount(1, $ledger->gains);
+
+            return [$captured, $ledger->gains[0]];
+        };
+
+        [$calm, $calmGain] = $run(0.0);
+        [$shocked, $shockedGain] = $run(2.0);
+
+        $this->assertGreaterThan($calm->actualRevenue * 1.001, $shocked->actualRevenue, 'the sector draw must move revenue for the test to have power');
+        $this->assertEqualsWithDelta(($calm->actualRevenue - $calm->expectedRevenue) / $calm->expectedRevenue, $calmGain, 1e-12);
+        $this->assertEqualsWithDelta($calmGain, $shockedGain, 1e-9);
+    }
+
     public function testCapitalGoodsDriftFallsBackThroughTheModelsParents(): void
     {
         $this->assertSame(CapitalGoodsPrices::DRIFT_BY_MODEL['TelecomBusinessModel'], CapitalGoodsPrices::driftFor(new \App\Service\Model\Sector\TelecomBusinessModel()));
@@ -1615,6 +1662,123 @@ class EarningsEngineTest extends TestCase
         $this->assertLessThan(0.0, $captured->deferredTaxExpense, 'the deferral must reverse once the shelter is gone');
         $this->assertGreaterThan($captured->taxPaid, $captured->cashTaxPaid, 'cash tax must exceed the book charge on reversal');
         $this->assertLessThan(5_000_000_000.0, (float) $stock->getDeferredTaxLiability(), 'the liability must unwind');
+    }
+
+    /**
+     * A write-down is deducted for tax once. The tax books allow it only through the depreciation still to come on the
+     * basis it never left, so the quarter it is booked adds it back to taxable income and carries it as a deductible
+     * difference against the deferred liability, rather than cutting the cash tax now and again as the basis runs off.
+     */
+    public function testAPlantWriteDownIsDeductedForTaxOnce(): void
+    {
+        $captured = null;
+        $dispatcher = new EventDispatcher();
+        $dispatcher->addListener(EarningsReportedEvent::class, function (EarningsReportedEvent $event) use (&$captured): void {
+            $captured = $event->getContext();
+        });
+        $engine = $this->buildEngine($dispatcher);
+
+        mt_srand(5566);
+        $stock = $this->buildMatureIndustrial('LNDT');
+        $stock->setIndustry('Residential Construction');
+        $stock->setOperatingMargin('0.13');
+        $stock->setFixedCostRatio(0.10);
+        $stock->setGrossPpe('120000000000');
+        $stock->setAccumulatedDepreciation('5000000000');
+        $stock->setReceivables('0');
+        $stock->setInventory('15000000000');
+        $stock->setPayables('0');
+        $stock->setDepreciationRate('0.05');
+        $stock->setPpeTaxBasis('100000000000');
+        $stock->setDeferredTaxLiability('50000000000');
+        // Land carried at 55% of the price, well above what a home now recovers for it.
+        $stock->setEarningsMomentumZ([HomebuilderBusinessModel::STATE_LAND_COST => 0.55]);
+
+        $engine->calculate($stock, new MacroStateDTO(corporateTaxRate: 0.21, policyRateEma: 0.04, yield5yEma: 0.04), EarningsEngine::resolveReportingTick('LNDT', 252), 252);
+
+        $rate = $captured->corporateTaxRate;
+        $recurring = $captured->taxDepreciation - $captured->quarterlyDepreciation;
+        $this->assertGreaterThan(0.0, $captured->plantImpairment, 'the land must be written down for the test to have power');
+        $this->assertEqualsWithDelta(100.0e9 * 0.10 / 4.0, $captured->taxDepreciation, 1.0, 'tax depreciation runs on the basis the write-down never left');
+        $this->assertEqualsWithDelta($captured->preTaxIncome - $recurring + $captured->plantImpairment, $captured->taxableIncome, 1.0, 'the write-down is added back to taxable income');
+        $this->assertEqualsWithDelta(50.0e9 + ($rate * ($recurring - $captured->plantImpairment)), (float) $stock->getDeferredTaxLiability(), 1.0, 'and carried as a deductible difference');
+    }
+
+    /**
+     * A change in the tax rate re-strikes the plant's deferred balance (ASC 740-10-35-4): the gap between its book
+     * value and its tax basis is carried at today's rate, so the change lands once, as a deferred charge the estimate
+     * carries too. A row struck before the rate was recorded is taken to have been struck at today's.
+     */
+    public function testATaxRateChangeReStrikesThePlantsDeferredBalance(): void
+    {
+        $run = function (?float $struckRate): array {
+            $captured = null;
+            $dispatcher = new EventDispatcher();
+            $dispatcher->addListener(EarningsReportedEvent::class, function (EarningsReportedEvent $event) use (&$captured): void {
+                $captured = $event->getContext();
+            });
+            // A fresh generator per run: a Box-Muller spare left over from the first run would shift the second's draws.
+            $this->mathUtility = new MathUtility();
+            $engine = $this->buildEngine($dispatcher);
+
+            mt_srand(2470);
+            $stock = $this->buildProfitableIndustrial('RATE');
+            // Book 30bn against a 20bn tax basis: a 10bn gap the liability is struck on.
+            $stock->setPpeTaxBasis('20000000000');
+            $stock->setDeferredTaxLiability('10000000000');
+            if ($struckRate !== null) {
+                $stock->setEarningsMomentumZ([EarningsEngine::STATE_PLANT_DEFERRED_TAX_RATE => $struckRate]);
+            }
+            $engine->calculate($stock, new MacroStateDTO(corporateTaxRate: 0.21, policyRateEma: 0.04, yield5yEma: 0.04), EarningsEngine::resolveReportingTick('RATE', 252), 252);
+            $this->assertInstanceOf(EarningsSimulationContext::class, $captured);
+
+            return [$captured, $stock];
+        };
+
+        [$legacy, $legacyStock] = $run(null);
+        $rate = $legacy->corporateTaxRate;
+        [$same, $sameStock] = $run($rate);
+        [$risen, $risenStock] = $run($rate - 0.05);
+
+        $this->assertEqualsWithDelta((float) $sameStock->getDeferredTaxLiability(), (float) $legacyStock->getDeferredTaxLiability(), 1.0, 'an old row books no one-off');
+        $this->assertEqualsWithDelta(0.05 * 10.0e9, (float) $risenStock->getDeferredTaxLiability() - (float) $sameStock->getDeferredTaxLiability(), 1.0);
+        $this->assertEqualsWithDelta(0.05 * 10.0e9, $risen->deferredTaxExpense - $same->deferredTaxExpense, 1.0);
+        $this->assertEqualsWithDelta(-0.05 * 10.0e9, $risen->actualQuarterlyNetIncome - $same->actualQuarterlyNetIncome, 1.0);
+        $this->assertEqualsWithDelta(
+            -0.05 * 10.0e9 * (1.0 - \App\Service\Market\Pricing\MarketConsensusEngine::ANALYST_EPS_WALKDOWN_BIAS),
+            $risen->expectedQuarterlyNetIncome - $same->expectedQuarterlyNetIncome,
+            1.0,
+            'the law is public, so the estimate carries the re-strike'
+        );
+        $this->assertSame($rate, ($risenStock->getEarningsMomentumZ() ?? [])[EarningsEngine::STATE_PLANT_DEFERRED_TAX_RATE] ?? null);
+    }
+
+    /**
+     * The run rate the payout and buyback tests read is taxed as the quarter is: a firm whose books recognise its loss
+     * carryforward prints (1 - t) of a pretax loss, not the whole of it.
+     */
+    public function testALossMakingRunRateCarriesItsTaxBenefit(): void
+    {
+        $captured = null;
+        $dispatcher = new EventDispatcher();
+        $dispatcher->addListener(EarningsReportedEvent::class, function (EarningsReportedEvent $event) use (&$captured): void {
+            $captured = $event->getContext();
+        });
+        $engine = $this->buildEngine($dispatcher);
+
+        mt_srand(3131);
+        $stock = $this->buildMatureIndustrial('RUNL');
+        // A plant that turns over a tenth of its capital a year cannot earn the coupon on the debt that funds it.
+        $stock->setAssetTurnover('0.10');
+        $stock->setWholesaleDebt('100000000000');
+        // Three profitable years behind it, so the loss is recognised with no valuation allowance.
+        $stock->setPretaxIncomeHistory(array_fill(0, EarningsEngine::VALUATION_ALLOWANCE_LOOKBACK_QUARTERS - 1, 5.0e9));
+
+        $engine->calculate($stock, new MacroStateDTO(corporateTaxRate: 0.21, policyRateEma: 0.04, yield5yEma: 0.04), EarningsEngine::resolveReportingTick('RUNL', 252), 252);
+
+        $runRateEbt = $captured->seasonallyAdjustedEbit - $captured->quarterlyInterestExpense + $captured->quarterlyInterestIncome;
+        $this->assertLessThan(0.0, $runRateEbt, 'the run rate must be a loss for the test to have power');
+        $this->assertEqualsWithDelta($runRateEbt * (1.0 - $captured->corporateTaxRate) * 4.0 / max(1.0, $captured->sharesOutstanding), $captured->actualAnnualEpsRaw, 1e-9);
     }
 
     /**
@@ -2803,6 +2967,8 @@ class EarningsEngineTest extends TestCase
         $this->assertEqualsWithDelta($free->expectedQuarterlyNetIncome - ($levied->bankLevy * (1.0 - \App\Service\Market\Pricing\MarketConsensusEngine::ANALYST_EPS_WALKDOWN_BIAS)), $levied->expectedQuarterlyNetIncome, 1.0);
         $this->assertEqualsWithDelta($free->taxPaid, $levied->taxPaid, 1.0, 'The levy is not deductible.');
         $this->assertEqualsWithDelta($cashChange, $levied->operatingCashFlow + $levied->investingCashFlow + $levied->financingCashFlow, 1.0);
+        // The run rate the payout and buyback tests read pays the levy too.
+        $this->assertEqualsWithDelta($levied->bankLevy * 4.0 / max(1.0, $levied->sharesOutstanding), $free->actualAnnualEpsRaw - $levied->actualAnnualEpsRaw, 1e-9);
     }
 
     /**

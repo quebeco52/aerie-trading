@@ -342,7 +342,8 @@ class CapitalAllocationEngine
 
     private function executeBuybacks(CapitalAllocationContext $ctx): void
     {
-        if ($ctx->businessModel === 'reit') {
+        // A pass-through that must distribute its income keeps no surplus to buy its shares back with.
+        if ($ctx->strategy->getMinimumDistributionRatio() > 0.0) {
             $ctx->newShares = $ctx->sharesOutstanding;
             $ctx->totalCashSpent = 0.0;
             return;
