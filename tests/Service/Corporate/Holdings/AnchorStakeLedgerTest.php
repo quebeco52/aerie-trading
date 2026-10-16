@@ -246,6 +246,69 @@ class AnchorStakeLedgerTest extends TestCase
     }
 
     /** Stakes are fractions of capitalisation precisely so a split cannot move them. */
+    /**
+     * A sphere keeps its percentage by subscribing for its fraction of an issue, in cash. Without the cash the
+     * stake rose with the raise, and the holder booked as a gain the money it never put up.
+     */
+    public function testAnIssueIsSubscribedForInCashAndMarksNoGain(): void
+    {
+        $sphere = $this->sphere();
+        $sphere->setCorporateTreasury('100000000000.0000');
+        $held = $this->flatBoard(200_000_000_000.0);
+        $this->ledger->beginTick([...$held, $sphere]);
+        $this->ledger->markToMarket($sphere);
+        $carrying = (float) $sphere->getListedStakesCarrying();
+
+        // ALBT sells 100M new shares at $200, a $20B raise; the sphere's part is its fraction of it.
+        $this->ledger->settleProRata($this->holding($held, 'ALBT'), 100_000_000.0, 200.0);
+        $paid = AnchorHoldings::forHolder('BRKW')['ALBT'] * 20_000_000_000.0;
+
+        $this->assertEqualsWithDelta(100_000_000_000.0 - $paid, (float) $sphere->getCorporateTreasury(), 1.0);
+        $this->assertEqualsWithDelta($carrying + $paid, (float) $sphere->getListedStakesCarrying(), 1.0);
+        $this->assertEqualsWithDelta(0.0, $this->ledger->markToMarket($sphere), 1.0, 'a mark later in the tick sees the shares it paid for');
+
+        // The next tick's board carries the new shares at the same price: still nothing to book.
+        $next = array_map(
+            static fn (Stock $stock): Stock => $stock->getTicker() === 'ALBT'
+                ? StockBuilder::create('ALBT')->withPrice(200.0)->withSharesOutstanding(1_100_000_000)->build()
+                : $stock,
+            $held
+        );
+        $this->ledger->beginTick([...$next, $sphere]);
+        $this->assertEqualsWithDelta(0.0, $this->ledger->markToMarket($sphere), 1.0);
+        $this->assertEqualsWithDelta(1_880_000_000_000.0, (float) $sphere->getTotalEquity(), 1.0);
+    }
+
+    /** Into a buyback it tenders its fraction, and is paid for the shares it gives up. */
+    public function testABuybackIsTenderedIntoForCash(): void
+    {
+        $sphere = $this->sphere();
+        $sphere->setCorporateTreasury('100000000000.0000');
+        $held = $this->flatBoard(200_000_000_000.0);
+        $this->ledger->beginTick([...$held, $sphere]);
+        $this->ledger->markToMarket($sphere);
+        $carrying = (float) $sphere->getListedStakesCarrying();
+
+        $this->ledger->settleProRata($this->holding($held, 'ALBT'), -50_000_000.0, 200.0);
+        $received = AnchorHoldings::forHolder('BRKW')['ALBT'] * 10_000_000_000.0;
+
+        $this->assertEqualsWithDelta(100_000_000_000.0 + $received, (float) $sphere->getCorporateTreasury(), 1.0);
+        $this->assertEqualsWithDelta($carrying - $received, (float) $sphere->getListedStakesCarrying(), 1.0);
+        $this->assertEqualsWithDelta(0.0, $this->ledger->markToMarket($sphere), 1.0, 'what it tendered was paid for, not lost');
+    }
+
+    /** @param list<Stock> $board */
+    private function holding(array $board, string $ticker): Stock
+    {
+        foreach ($board as $stock) {
+            if ($stock->getTicker() === $ticker) {
+                return $stock;
+            }
+        }
+
+        $this->fail("{$ticker} is not on the board");
+    }
+
     public function testASplitInAHoldingLeavesTheSphereUntouched(): void
     {
         $this->ledger->beginTick($this->flatBoard(200_000_000_000.0));

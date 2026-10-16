@@ -454,6 +454,8 @@ class StockTracker
             $boardNetIssuance += (($preSplitShares * max(0.0, min(1.0, (float) $stock->getPublicFloatPercentage()))) - $floatSharesAtTickStart)
                 * $currentPriceAfterEarnings;
             $strategicStakeCash -= StrategicHoldings::stake($stock->getTicker()) * ($preSplitShares - $sharesAtTickStart) * $currentPriceAfterEarnings;
+            // The anchor holders keep their percentage the same way, out of their own treasuries.
+            $this->anchorStakes->settleProRata($stock, $preSplitShares - $sharesAtTickStart, $currentPriceAfterEarnings);
 
             $splitResult = $this->corporateActionEngine->processSplits(
                 $stock,

@@ -174,11 +174,11 @@ class TreasuryEngine
             $stock->setRetainedEarnings(\bcsub($this->formatBc($stock->getRetainedEarnings()), $lossStr, 4));
         }
 
-        // SAVE FINAL TREASURY. Cash is an asset and cannot be negative; the revolver draw above is what
-        // closes an overdraft, and this is the failsafe behind it. Carrying a negative balance put a
+        // SAVE FINAL TREASURY. Cash is an asset and cannot be negative: carrying a negative balance put a
         // liability in the asset column, where it flowed on into the Altman working-capital term, net asset
-        // value and every screener built on the treasury.
-        $ctx->newTreasury = max(0.0, $ctx->newTreasury);
+        // value and every screener built on the treasury. The overdraft leg of the revolver draw funds the
+        // shortfall; this is the failsafe behind it, and it books what is left as debt, not as nothing.
+        $this->coverOverdraft($ctx);
         $stock->setCorporateTreasury((string) $ctx->newTreasury);
     }
 
@@ -651,7 +651,9 @@ class TreasuryEngine
             $stock->getPolicyPayoutRatio()
         );
 
-        $bookValuePerShare = max(0.01, (float) $stock->getTotalEquity() / max(1, $ctx->sharesOutstanding));
+        // The shares outstanding now, after any buyback this quarter; the context's count is the opening one.
+        $sharesNow = max(1.0, (float) $stock->getSharesOutstanding());
+        $bookValuePerShare = max(0.01, (float) $stock->getTotalEquity() / $sharesNow);
         $priceToBook = $ctx->currentPrice / $bookValuePerShare;
 
         $isBubble = $economicSpread > 0.0 && $currentPE > ($fairValuePE * 2.5) && $currentPE > 40.0 && $priceToBook > 3.0;
@@ -683,12 +685,12 @@ class TreasuryEngine
 
             if ($isDeathSpiral) {
                 $shortfall = max(0.0, $minOperatingCash - $ctx->newTreasury) + max(0.0, $ctx->unfundedMaturity);
-                $marketCap = max(1.0, $ctx->sharesOutstanding * $ctx->currentPrice);
+                $marketCap = max(1.0, $sharesNow * $ctx->currentPrice);
                 $maxEmergencyRaise = max(FinancialConstants::MIN_OPERATING_BASE_CASH, $marketCap * self::MAX_EMERGENCY_EQUITY_RAISE_RATIO);
                 $targetRaise = min($shortfall * 1.5, $maxEmergencyRaise);
                 $reason = "execute a highly dilutive emergency stock offering to stave off bankruptcy";
             } elseif ($isBubble) {
-                $marketCap = $ctx->sharesOutstanding * $ctx->currentPrice;
+                $marketCap = $sharesNow * $ctx->currentPrice;
                 $investedCapital = (float) $stock->getInvestedCapital();
                 $maxRaise = abs($investedCapital) * 0.10;
                 $targetRaise = min($marketCap * 0.05, $maxRaise);
@@ -699,7 +701,7 @@ class TreasuryEngine
                 $offeringPrice = $ctx->currentPrice * (1.0 - self::SEASONED_EQUITY_OFFER_DISCOUNT);
                 $sharesIssued = $targetRaise / max(0.01, $offeringPrice);
 
-                $stock->setSharesOutstanding((string) ($ctx->sharesOutstanding + $sharesIssued));
+                $stock->setSharesOutstanding((string) ($sharesNow + $sharesIssued));
                 // The offering is placed at the discount above; the stock it put into investors' hands is
                 // then sold down through the flow channel at the 10b-18 pace (the post-offering overhang).
                 $stock->addCorporateFlowBacklog(-$sharesIssued);
@@ -770,8 +772,10 @@ class TreasuryEngine
         // Every credit agreement makes "no Event of Default continuing" a condition precedent to each
         // borrowing. A *default* does not close the line — that is what lets a late firm cure — but a default
         // continued past its cure period does, and the lenders may terminate the undrawn commitment with it.
+        // The overdraft is still funded: the line is gone, but what the firm could not pay it still owes.
         if ($stock->getQuartersInDefault() > FinancialConstants::PAYMENT_DEFAULT_GRACE_QUARTERS) {
             $stock->setRevolverCommitment($stock->getRevolverDrawn());
+            $this->coverOverdraft($ctx);
 
             return;
         }
@@ -793,21 +797,11 @@ class TreasuryEngine
         // The overdraft leg is unconditional, as it has always been — working-capital finance is available to
         // anyone. The maturity leg is not: rolling principal needs a lender willing to underwrite the credit,
         // so a firm whose coverage has already shut that door is left with a genuine, curable payment default.
-        $currentMarketRate = $ctx->health->rawMetrics->currentMarketRate
-            ?? ($ctx->macroState->yield5yEma + (float) $stock->getCreditSpread());
-        $emergencyRate = $currentMarketRate + self::EMERGENCY_DEBT_SPREAD_PENALTY;
-
-        $uncoveredOverdraft = max(0.0, -$ctx->newTreasury);
-        if ($uncoveredOverdraft > 0.0) {
-            $this->debtEngine->issueDebt($stock, $uncoveredOverdraft, $emergencyRate);
-            $ctx->wholesaleDebt = (float) $stock->getWholesaleDebt();
-            $ctx->newTreasury += $uncoveredOverdraft;
-            $ctx->failedEmergencyBorrow = true;
-        }
+        $this->coverOverdraft($ctx);
 
         $uncoveredMaturity = max(0.0, $ctx->unfundedMaturity);
         if ($uncoveredMaturity > 0.0 && $ctx->health->canIssueDebt) {
-            $this->debtEngine->issueDebt($stock, $uncoveredMaturity, $emergencyRate);
+            $this->debtEngine->issueDebt($stock, $uncoveredMaturity, $this->emergencyRate($ctx));
             $ctx->wholesaleDebt = (float) $stock->getWholesaleDebt();
             $ctx->newTreasury += $uncoveredMaturity;
             $ctx->failedEmergencyBorrow = true;
@@ -830,6 +824,32 @@ class TreasuryEngine
                 'description' => "Lenders refused a \${$amtB}B draw on its revolving credit facility while it is in breach of its leverage covenant.",
             ];
         }
+    }
+
+    /** The rate past the committed line: the firm's market rate plus the distress penalty. */
+    private function emergencyRate(CapitalAllocationContext $ctx): float
+    {
+        $currentMarketRate = $ctx->health?->rawMetrics->currentMarketRate
+            ?? ($ctx->macroState->yield5yEma + (float) $ctx->stock->getCreditSpread());
+
+        return $currentMarketRate + self::EMERGENCY_DEBT_SPREAD_PENALTY;
+    }
+
+    /**
+     * Funds an overdrawn treasury on the emergency facility. A payment the firm could not make is still owed,
+     * so the shortfall becomes debt; flooring the balance at zero instead erased it, and the cash with it.
+     */
+    private function coverOverdraft(CapitalAllocationContext $ctx): void
+    {
+        $uncoveredOverdraft = max(0.0, -$ctx->newTreasury);
+        if ($uncoveredOverdraft <= 0.0) {
+            return;
+        }
+
+        $this->debtEngine->issueDebt($ctx->stock, $uncoveredOverdraft, $this->emergencyRate($ctx));
+        $ctx->wholesaleDebt = (float) $ctx->stock->getWholesaleDebt();
+        $ctx->newTreasury += $uncoveredOverdraft;
+        $ctx->failedEmergencyBorrow = true;
     }
 
     /** Net debt over EBITDA is past the sector's maintenance covenant; exempt sectors never breach. */

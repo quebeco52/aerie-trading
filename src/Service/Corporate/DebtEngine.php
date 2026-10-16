@@ -523,12 +523,15 @@ class DebtEngine
             self::MERTON_HORIZON_YEARS
         );
 
+        // The claims are the debt the asset value was struck against. A deposit-taker's value is struck on its
+        // wholesale funding, net of the deposits its assets back; testing it against the deposits as well found
+        // every bank insolvent, whatever its capital.
         return new \App\DTO\GoingConcernDTO(
             trailingEbit: $health->rawMetrics->ebit,
             trailingEbitda: $health->rawMetrics->ebitda,
             assetValue: $assetValue,
             cash: max(0.0, (float) $stock->getCorporateTreasury()),
-            claims: max(0.0, (float) $stock->getTotalDebt()),
+            claims: $debtValue,
         );
     }
 

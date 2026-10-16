@@ -133,6 +133,17 @@ class MathUtility
     }
 
     /**
+     * Index of an item drawn uniformly from a list of $count, in [0, $count - 1]. Always one uniform draw, so the
+     * stream advances the same whatever the list holds; the uniform's closed top end maps to the last item.
+     */
+    public function generateIndex(int $count): int
+    {
+        $index = (int) floor($this->generateUniform() * $count);
+
+        return max(0, min($count - 1, $index));
+    }
+
+    /**
      * Checks if an event occurs given a specific probability [0, 1].
      *
      * @param float $probability The probability of the event occurring.

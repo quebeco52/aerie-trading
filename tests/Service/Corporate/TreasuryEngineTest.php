@@ -806,6 +806,45 @@ class TreasuryEngineTest extends TestCase
     }
 
     /**
+     * The buyback runs before the treasury closes the quarter, so a rescue raise lands on the shares the buyback
+     * left. Struck on the opening count instead, it put back every share the firm had just paid to retire.
+     */
+    public function testARescueRaiseAfterABuybackDilutesTheSharesTheBuybackLeft(): void
+    {
+        $stock = $this->createSolventCorporate();
+        $stock->setWholesaleDebt('2000000000.00');
+        $stock->setSharesOutstanding('95000000'); // the quarter opened at 100M and bought back 5M
+
+        $ctx = $this->createAllocationContext($stock, stockCompensation: 0.0, currentPrice: 50.0);
+        $ctx->newShares = 95_000_000.0;
+        $ctx->totalCashSpent = 250_000_000.0;
+        $ctx->wholesaleDebt = 2_000_000_000.0;
+        $ctx->newTreasury = 10_000_000.0;
+        $ctx->health = $this->healthThatCannotIssue($ctx->health);
+
+        $debtEngine = $this->createMock(DebtEngine::class);
+        $debtEngine->method('rollMaturities')->willReturn(
+            new MaturityRollDTO(maturingPrincipal: 300_000_000.0, refinanced: false, principalRepaid: 10_000_000.0, unfundedShortfall: 290_000_000.0)
+        );
+        $debtEngine->method('assessGoingConcern')->willReturn(new \App\DTO\GoingConcernDTO(
+            trailingEbit: 150_000_000.0,
+            trailingEbitda: 170_000_000.0,
+            assetValue: 3_010_000_000.0,
+            cash: 10_000_000.0,
+            claims: 2_000_000_000.0
+        ));
+        $mathUtility = $this->getMockBuilder(MathUtility::class)->onlyMethods(['generateUniform'])->getMock();
+        $mathUtility->method('generateUniform')->willReturn(0.0);
+
+        (new TreasuryEngine($this->corporateMetrics, $debtEngine, $this->capExEngine, $mathUtility))->finalizeLiquidity($ctx);
+
+        $this->assertGreaterThan(0.0, $ctx->equityRaised, 'the rescue must execute for this to test anything');
+        $sharesIssued = $ctx->equityRaised / (50.0 * (1.0 - TreasuryEngine::SEASONED_EQUITY_OFFER_DISCOUNT));
+        $this->assertEqualsWithDelta(95_000_000.0 + $sharesIssued, (float) $stock->getSharesOutstanding(), 1.0);
+        $this->assertEqualsWithDelta((float) $stock->getSharesOutstanding(), $ctx->newShares, 1e-6, 'and the count the engine writes back carries both');
+    }
+
+    /**
      * A committed facility is a term contract. It is renegotiated upward as the business grows and it does
      * not shrink because one bad quarter shrank revenue -- which is exactly what a commitment recomputed
      * from current revenue on every call did, halving the backstop at the moment it was the only thing
@@ -1034,6 +1073,39 @@ class TreasuryEngineTest extends TestCase
         $this->assertCount(0, $ratesIssuedAt, 'the committed line funded it, and a draw is not an issuance');
         $this->assertEqualsWithDelta(125_000_000.0, (float) $stock->getRevolverDrawn(), 1.0, 'the facility carried the whole maturity and restored the $30M floor');
         $this->assertFalse($ctx->failedEmergencyBorrow, 'with the floor restored by the line, nothing was left to borrow');
+    }
+
+    /**
+     * A firm past its cure period has lost its revolver, not its debts. A quarter it could not pay for left a
+     * negative balance the treasury floored at zero, erasing the shortfall and creating the cash to cover it.
+     * The emergency facility funds it instead: every dollar the treasury gains is a dollar the firm owes.
+     */
+    public function testAShortfallPastTheCurePeriodIsOwedNotErased(): void
+    {
+        $stock = $this->createSolventCorporate();
+        $stock->setPaymentDefault(true);
+        $stock->setQuartersInDefault(\App\Service\Math\FinancialConstants::PAYMENT_DEFAULT_GRACE_QUARTERS + 1);
+
+        $ctx = $this->createAllocationContext($stock, stockCompensation: 0.0);
+        $ctx->newTreasury = -400_000_000.0; // the quarter's losses ran through the whole balance
+        $ctx->refinancingRefused = true;    // and the bond market has shut the firm out
+
+        $issued = 0.0;
+        $this->debtEngine->method('issueDebt')->willReturnCallback(
+            static function (Stock $s, float $amount) use (&$issued): void {
+                $issued += $amount;
+            }
+        );
+
+        $this->treasuryEngine->finalizeLiquidity($ctx);
+
+        $this->assertGreaterThanOrEqual(0.0, (float) $stock->getCorporateTreasury());
+        $this->assertEqualsWithDelta(
+            (float) $stock->getCorporateTreasury() + 400_000_000.0,
+            $issued,
+            1.0,
+            'the cash the treasury gained is matched by the debt it took on'
+        );
     }
 
     /** The same health reading, with every lending door shut: no market will underwrite this credit. */

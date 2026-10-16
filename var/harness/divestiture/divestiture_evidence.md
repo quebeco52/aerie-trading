@@ -105,3 +105,15 @@ level (0 there); the r3v5 reorgs (FALC, CASC, DIPR, WADE, SINK, ALBT) do not rec
 and floor, or from seed divergence; 8 seeds cannot tell which. SEOs stay above r3v4d (1.9) in both new arms, now
 DIPR 20, SINK 14, SKUA 10, CASC 7. Named (sales/seed, plant x, reorgs): WADE 0/1.90/0, BIRD 0/2.24/0,
 BRKW 1.25/0.85/0, CASC 0.12/2.09/0, DIPR 0/1.74/0, FALC 0.38/2.32/0, SKUA 0.12/2.13/1.
+
+## 2026-10-16 Corporate distress fixes (worktree-corporate-section1), sanity check
+Question: do the distress fixes (Ch11 plan recovery, overdraft booked as emergency debt, bank going-concern test on
+wholesale debt, option settlement, BRKW pays for its share of SEOs/buybacks, rescue raise vs buyback count, M&A draws via
+MathUtility) behave sensibly. Arms: npbase (HEAD b5492807 with the diff reversed, copy under $TMPDIR) vs npfix (worktree);
+NOPROBE, HEALTH=1, seeds 1-4, 20y, 360 tpy; unpaired (stream shifts). Table: corpfix_sanity_4seed_20y.out (compare.py).
+Per-seed means: defaults 1.25 vs 1.50, reorgs 0.25 vs 0.25, liquidations 0 vs 0.25 (SHOR, operating, seed 1), SEOs 12.5 vs 4.5
+(all emergency, none by financials), shut-outs 26 vs 17, revolver refused 0.75 vs 1.5, ND/EBITDA p90 11.6 vs 10.2,
+loss-quarter share 0.027 vs 0.019. All inside 4-seed noise (|t| <= 1.8 on the targets). BRKW cash min 37-81B, end 53-147B
+(start 114B) in both arms; no negative-cash firm-quarter in either arm. LAKE wholesale debt 190-280B -> 3.2-5.7T in every
+seed of both arms (pre-existing; bond-funded loan-book growth). Fix #3 (bank rescue equity) never exercised: no financial
+firm defaulted or raised equity.

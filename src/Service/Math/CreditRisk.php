@@ -499,6 +499,34 @@ final class CreditRisk
     }
 
     /**
+     * What each class of claim recovers when an estate is divided under absolute priority (11 U.S.C. §1129(b)):
+     * every class is paid in full before the class behind it receives anything. A class owed nothing has lost
+     * nothing, so it recovers in full.
+     *
+     * @param float       $estateValue           What the creditors as a whole receive.
+     * @param list<float> $claimsInPriorityOrder Face of each class, most senior first.
+     * @return list<float> Share of face each class recovers, in [0, 1], in the same order.
+     */
+    public static function absolutePriorityRecoveries(float $estateValue, array $claimsInPriorityOrder): array
+    {
+        $remaining = max(0.0, $estateValue);
+        $recoveries = [];
+
+        foreach ($claimsInPriorityOrder as $claim) {
+            if ($claim <= 0.0) {
+                $recoveries[] = 1.0;
+                continue;
+            }
+
+            $paid = min($claim, $remaining);
+            $remaining -= $paid;
+            $recoveries[] = $paid / $claim;
+        }
+
+        return $recoveries;
+    }
+
+    /**
      * Calculates the Distance to Default (DD) using Merton's Structural Model.
      *
      * @param float $assetValue      The total value of the firm's assets (V).

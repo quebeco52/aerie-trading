@@ -13,7 +13,7 @@ namespace App\Data\Company;
  *
  * A tier resolves to a fraction of the held company's MARKET CAP. Split-proof by construction, and the
  * archetype's own behaviour — a sphere defends its ownership percentage. Unmodelled: it sitting a buyback
- * or an issue out, which here reads as tendering or subscribing pro rata.
+ * or an issue out. It tenders and subscribes pro rata instead, in cash (AnchorStakeLedger::settleProRata).
  *
  * Ownership here and the holding's `public_float` are one fact; the float is derived from this, never typed
  * beside it. Guarded in AnchorHoldingsTest.

@@ -70,6 +70,7 @@ class ReorganizationEngine
             oldEquityShare: $oldEquityShare,
             reorganizedEquityValue: $reorganizedEquityValue,
             exitRate: $exitRate,
+            revolverClaim: max(0.0, (float) $stock->getRevolverDrawn()),
         );
     }
 

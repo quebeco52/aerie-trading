@@ -23,10 +23,14 @@ final class AnchorStakeLedger
     /** @var array<string, float> ticker => market capitalisation at the start of the tick */
     private array $marketCaps = [];
 
+    /** @var array<string, Stock> ticker => the board's company, for the holders a participation is settled on */
+    private array $board = [];
+
     /** @param iterable<Stock> $stocks The whole board, priced for the tick about to run. */
     public function beginTick(iterable $stocks): void
     {
         $caps = [];
+        $board = [];
 
         foreach ($stocks as $stock) {
             $ticker = $stock->getTicker();
@@ -40,9 +44,56 @@ final class AnchorStakeLedger
             $caps[$ticker] = $stock->isBankrupt()
                 ? 0.0
                 : (float) $stock->getPrice() * (float) $stock->getSharesOutstanding();
+            $board[$ticker] = $stock;
         }
 
         $this->marketCaps = $caps;
+        $this->board = $board;
+    }
+
+    /**
+     * Settles the anchor holders' part in a change to a held company's share count. A sphere keeps its percentage,
+     * so it subscribes for its fraction of the new shares and tenders its fraction into a buyback, at the price the
+     * change is struck at: the cash moves, and the stake's carrying value moves with it. Without the cash, every
+     * issue raised the stake for nothing and every buyback shrank it unpaid.
+     *
+     * The tick's capitalisation of the held company moves by the same amount, so a mark later in the tick sees the
+     * shares the holder has just paid for, not a loss. A subscription the holder's cash cannot cover leaves an
+     * overdraft, which its next report funds.
+     *
+     * @param float $shareChange Shares issued, or retired when negative; splits excluded.
+     */
+    public function settleProRata(Stock $held, float $shareChange, float $price): void
+    {
+        $heldTicker = $held->getTicker();
+        $value = $shareChange * $price;
+
+        if ($value === 0.0 || !is_finite($value)) {
+            return;
+        }
+
+        foreach (AnchorHoldings::STAKES as $holderTicker => $stakes) {
+            $holder = $this->board[$holderTicker] ?? null;
+
+            if (!isset($stakes[$heldTicker]) || $holder === null || $holder->isBankrupt()) {
+                continue;
+            }
+
+            $carrying = $holder->getListedStakesCarrying();
+
+            // Before its first mark the holder carries no position to add to.
+            if ($carrying === null) {
+                continue;
+            }
+
+            $amount = $stakes[$heldTicker]->fraction() * $value;
+            $holder->setCorporateTreasury(self::decimal((float) $holder->getCorporateTreasury() - $amount));
+            $holder->setListedStakesCarrying(self::decimal((float) $carrying + $amount));
+        }
+
+        if (isset($this->marketCaps[$heldTicker])) {
+            $this->marketCaps[$heldTicker] += $value;
+        }
     }
 
     /**
