@@ -68,6 +68,10 @@ class ShockEvent
     public const SECURITIES_HEAD_APPOINTED = 'securities_head_appointed';
     /** The Council has named a new director of the Security Bureau, who leads the District's fight against organised crime and foreign agents. */
     public const SECURITY_DIRECTOR_APPOINTED = 'security_director_appointed';
+    /** The Council has named a new commandant of the Coast Guard, which holds the District's waters on its orders. */
+    public const COAST_GUARD_COMMANDANT_APPOINTED = 'coast_guard_commandant_appointed';
+    /** The Council has named a new commander of the State Guard, the District's standing land force, which only the Council can call out. */
+    public const STATE_GUARD_COMMANDER_APPOINTED = 'state_guard_commander_appointed';
     /** An appointment has tipped the rate committee into or out of a hawkish or dovish supermajority, which leans the policy rule. */
     public const AUTHORITY_MAJORITY_SHIFT = 'authority_majority_shift';
     /** The prime minister's party has a new leader, who is prime minister without an election. */

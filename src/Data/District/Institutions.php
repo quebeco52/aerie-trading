@@ -26,6 +26,10 @@ final class Institutions
     public const SECURITIES_COMMISSION = 'Securities Commission';
     /** The District's state police: organised crime and foreign agents; its director is the Council's appointee. Never the FBI. */
     public const SECURITY_BUREAU = 'Security Bureau';
+    /** Holds the District's waters: rescue at sea, the port's approaches, smuggling and the shelf; its commandant is the Council's appointee. Never the navy. */
+    public const COAST_GUARD = 'Coast Guard';
+    /** The District's standing land force of full-time professionals; its commander is the Council's appointee. Never the army. */
+    public const STATE_GUARD = 'State Guard';
     public const TRADE_MIGRATION_OFFICE = 'Trade & Migration Office';
     public const STATISTICAL_OFFICE = 'Statistical Office';
     public const CREDIT_REGISTRY = 'Credit Registry';
@@ -61,6 +65,8 @@ final class Institutions
         'fair-trading-board' => self::FAIR_TRADING_BOARD,
         'securities-commission' => self::SECURITIES_COMMISSION,
         'security-bureau' => self::SECURITY_BUREAU,
+        'coast-guard' => self::COAST_GUARD,
+        'state-guard' => self::STATE_GUARD,
         'trade-migration-office' => self::TRADE_MIGRATION_OFFICE,
         'statistical-office' => self::STATISTICAL_OFFICE,
         'credit-registry' => self::CREDIT_REGISTRY,

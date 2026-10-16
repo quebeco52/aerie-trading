@@ -42,11 +42,12 @@ final class PagesRenderTest extends KernelTestCase
         $macro = ['output_gap' => 0.0132, 'inflation' => 0.0241, 'policy_rate' => 0.0425, 'yield_10y' => 0.0461];
 
         $almanac = new \App\Service\Lore\Almanac(dirname(__DIR__, 2));
-        $affair = $almanac->get('harbour-ledger-affair');
+        $affair = $almanac->get('drainrock-affair');
+        $mandate = static fn(string $department): string => array_column(\App\Data\Politics\AerieCouncil::DEPARTMENTS, 'mandate', 'name')[$department];
 
         $pages = [
             'almanac' => ['/almanac', 'almanac/index.html.twig', ['sections' => ['Institution' => [$almanac->get('security-bureau')], 'Incident' => [$affair]]]],
-            'almanac_entry' => ['/almanac/harbour-ledger-affair', 'almanac/entry.html.twig', [
+            'almanac_entry' => ['/almanac/drainrock-affair', 'almanac/entry.html.twig', [
                 'entry' => $affair, 'linkedFrom' => [$almanac->get('security-bureau')], 'pages' => [['name' => 'Security Bureau', 'href' => '/security-bureau']],
             ]],
             'security_bureau' => ['/security-bureau', 'security_bureau/index.html.twig', [
@@ -57,6 +58,27 @@ final class PagesRenderTest extends KernelTestCase
                     'rules' => ['termYears' => 10.0, 'shortlist' => 3],
                 ],
                 'entries' => $almanac->about('security-bureau'),
+            ]],
+            'coast_guard' => ['/coast-guard', 'guard/index.html.twig', [
+                'force' => [
+                    'name' => \App\Data\District\Institutions::COAST_GUARD,
+                    'mandate' => $mandate(\App\Data\District\Institutions::COAST_GUARD),
+                    'headTitle' => 'commandant',
+                    'head' => ['name' => 'Imogen Hale', 'age' => 51, 'sinceLabel' => 'Year 3 Q3', 'termEndsLabel' => 'Year 8 Q3', 'opening' => false,
+                        'passedOver' => [['name' => 'Dorian Shaw', 'age' => 48], ['name' => 'Petra Lowell', 'age' => 54]]],
+                    'rules' => ['termYears' => 5.0, 'shortlist' => 3],
+                ],
+                'entries' => $almanac->about('coast-guard'),
+            ]],
+            'state_guard' => ['/state-guard', 'guard/index.html.twig', [
+                'force' => [
+                    'name' => \App\Data\District\Institutions::STATE_GUARD,
+                    'mandate' => $mandate(\App\Data\District\Institutions::STATE_GUARD),
+                    'headTitle' => 'commander',
+                    'head' => ['name' => 'Marcus Holloway', 'age' => 54, 'sinceLabel' => 'Before Year 1', 'termEndsLabel' => 'Year 4 Q3', 'opening' => true, 'passedOver' => []],
+                    'rules' => ['termYears' => 5.0, 'shortlist' => 3],
+                ],
+                'entries' => $almanac->about('state-guard'),
             ]],
             'landing' => ['/', 'home/landing.html.twig', [
                 'etf' => ['name' => 'Skein Lakebird 30', 'ticker' => 'LBI', 'price' => 412.37],

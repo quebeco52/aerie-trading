@@ -31,7 +31,9 @@ use App\Data\District\Institutions;
  * sets the screens merger review applies (App\Service\Politics\FairTradingBoard), and the Securities Commission's
  * head, who sets the margin investors put up and what listed firms must disclose
  * (App\Service\Politics\SecuritiesCommission). It also names the Security Bureau's director, who sets no rule
- * (App\Service\Politics\SecurityBureau). The budget is the Diet's alone. No party sits on the Council.
+ * (App\Service\Politics\SecurityBureau), and the commanders of the Coast Guard and the State Guard, the District's
+ * armed services in all but law, which the Council alone commands (App\Service\Politics\CoastGuard,
+ * App\Service\Politics\StateGuard). The budget is the Diet's alone. No party sits on the Council.
  */
 final class AerieCouncil
 {
@@ -72,6 +74,10 @@ final class AerieCouncil
     public const OPENING_SECURITIES_HEAD = 'Denise Carver';
     /** The Security Bureau's director sitting at Year 1, named before it. */
     public const OPENING_SECURITY_DIRECTOR = 'Raymond Okafor';
+    /** The Coast Guard's commandant sitting at Year 1, named before it. */
+    public const OPENING_COAST_GUARD_COMMANDANT = 'Theresa Vaughn';
+    /** The State Guard's commander sitting at Year 1, named before it. */
+    public const OPENING_STATE_GUARD_COMMANDER = 'Marcus Holloway';
 
     // --- Departments ---
     /**
@@ -87,6 +93,8 @@ final class AerieCouncil
         ['name' => Institutions::FAIR_TRADING_BOARD, 'mandate' => 'Reviews the mergers of the District\'s firms. Its head, named for one term, sets how concentrated a market may become and how much of it one firm may hold after a deal.', 'href' => '/fair-trading'],
         ['name' => Institutions::SECURITIES_COMMISSION, 'mandate' => 'Sets the rules of the Aerie Exchange. Its head, named for one term, decides the margin an investor must put up to buy or short on credit, and how hard it pursues listed companies that dress up their results.', 'href' => '/securities'],
         ['name' => Institutions::SECURITY_BUREAU, 'mandate' => 'The District\'s state police. A centre of world finance with friends on the mainland and enemies abroad draws organised crime and foreign agents as no ordinary city does, and the Bureau exists to keep them out. Its director is named for a single ten-year term, twice as long as any other head\'s.', 'href' => '/security-bureau'],
+        ['name' => Institutions::COAST_GUARD, 'mandate' => 'Holds the District\'s waters: rescue at sea and in the sounds, the approaches to the free port, and smuggling and poaching on the shelf. The Charter allows the District no navy, so in law it is a maritime police, armed and trained to a navy\'s standard. Its commandant is named for one term, and it takes its orders from the Council alone.', 'href' => '/coast-guard'],
+        ['name' => Institutions::STATE_GUARD, 'mandate' => 'The District\'s standing land force: a small corps of full-time professionals for hurricane relief, armed attacks beyond the police\'s means and the defence of the District\'s institutions. The Charter allows no army, so in law it is a guard, trained and equipped to an army\'s standard. Its commander is named for one term, and only the Council can call it out.', 'href' => '/state-guard'],
         ['name' => Institutions::TRADE_MIGRATION_OFFICE, 'mandate' => 'Administers the tariff schedule, the migration quotas and the tax on foreign home buyers the Diet legislates.', 'href' => '/trade-office'],
     ];
 

@@ -16,6 +16,7 @@ use App\Service\Macro\Subsystem\CreditFiscalSubsystem;
 use App\Service\Macro\Subsystem\SovereignFundSubsystem;
 use App\Service\Market\Chart\PriceChangeFeed;
 use App\Service\Politics\CoalitionFormation;
+use App\Service\Politics\CoastGuard;
 use App\Service\Politics\Exchequer;
 use App\Service\Politics\FairTradingBoard;
 use App\Service\Politics\FinancialRegulator;
@@ -24,6 +25,7 @@ use App\Service\Politics\PartyLeaders;
 use App\Service\Politics\SecuritiesCommission;
 use App\Service\Politics\SecurityBureau;
 use App\Service\Politics\SovereignReserveFund;
+use App\Service\Politics\StateGuard;
 use App\Service\View\GovernmentPageBuilder;
 
 /**
@@ -111,7 +113,8 @@ class SystemicEventReporter
             + self::exchequerHeadContext($macro, $politics)
             + self::fairTradingHeadContext($politics)
             + self::securitiesHeadContext($politics)
-            + self::securityDirectorContext($politics);
+            + self::securityDirectorContext($politics)
+            + self::guardCommandersContext($politics);
 
         $monthMove = $this->priceChangeFeed->changeForTicker((string) $benchmark->getTicker(), (float) $benchmark->getPrice());
 
@@ -526,6 +529,29 @@ class SystemicEventReporter
             'security_director_term_ends' => GovernmentPageBuilder::simDate(SecurityBureau::directorTermEnd($politics->totalTime)),
             'security_director_passed_over' => self::listNames(array_map(static fn(array $candidate): string => $candidate['name'], $politics->securityDirectorPassedOver)),
         ];
+    }
+
+    /**
+     * The Coast Guard's commandant and the State Guard's commander for their headlines: who they are, when their terms
+     * end and whom the Council passed over. A guard without a commander adds nothing.
+     *
+     * @return array<string, string>
+     */
+    private static function guardCommandersContext(PoliticsStateDTO $politics): array
+    {
+        $names = static fn(array $passedOver): string => self::listNames(array_map(static fn(array $candidate): string => $candidate['name'], $passedOver));
+
+        return ($politics->coastGuardCommandantName === '' ? [] : [
+            'coast_guard_commandant' => $politics->coastGuardCommandantName,
+            'coast_guard_commandant_age' => (string) (int) floor($politics->totalTime - $politics->coastGuardCommandantBirth),
+            'coast_guard_commandant_term_ends' => GovernmentPageBuilder::simDate(CoastGuard::commandantTermEnd($politics->totalTime)),
+            'coast_guard_commandant_passed_over' => $names($politics->coastGuardCommandantPassedOver),
+        ]) + ($politics->stateGuardCommanderName === '' ? [] : [
+            'state_guard_commander' => $politics->stateGuardCommanderName,
+            'state_guard_commander_age' => (string) (int) floor($politics->totalTime - $politics->stateGuardCommanderBirth),
+            'state_guard_commander_term_ends' => GovernmentPageBuilder::simDate(StateGuard::commanderTermEnd($politics->totalTime)),
+            'state_guard_commander_passed_over' => $names($politics->stateGuardCommanderPassedOver),
+        ]);
     }
 
     /**

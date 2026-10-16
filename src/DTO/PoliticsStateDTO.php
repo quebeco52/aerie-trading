@@ -232,7 +232,21 @@ readonly class PoliticsStateDTO
         /** @var list<array{name: string, birth: float, stance: float, regulation: float, fund: float, debt: float, competition: float, markets: float, swing?: float}> The candidates the Council passed over when it named the director. */
         public array $securityDirectorPassedOver = [],
         public float $lastSecurityDirectorAppointedAt = -1.0,
-        /** @var list<string> Everyone who has left a Council seat or a post at the Monetary Authority, the Financial Regulator, the Sovereign Reserve Fund, the Exchequer, the Fair Trading Board, the Securities Commission or the Security Bureau, whose names no later appointee takes. */
+        /** The Coast Guard's commandant in office: name, birth date and when their term began. */
+        public string $coastGuardCommandantName = '',
+        public float $coastGuardCommandantBirth = 0.0,
+        public float $coastGuardCommandantTermStart = 0.0,
+        /** @var list<array{name: string, birth: float, stance: float, regulation: float, fund: float, debt: float, competition: float, markets: float, swing?: float}> The candidates the Council passed over when it named the commandant. */
+        public array $coastGuardCommandantPassedOver = [],
+        public float $lastCoastGuardCommandantAppointedAt = -1.0,
+        /** The State Guard's commander in office: name, birth date and when their term began. */
+        public string $stateGuardCommanderName = '',
+        public float $stateGuardCommanderBirth = 0.0,
+        public float $stateGuardCommanderTermStart = 0.0,
+        /** @var list<array{name: string, birth: float, stance: float, regulation: float, fund: float, debt: float, competition: float, markets: float, swing?: float}> The candidates the Council passed over when it named the commander. */
+        public array $stateGuardCommanderPassedOver = [],
+        public float $lastStateGuardCommanderAppointedAt = -1.0,
+        /** @var list<string> Everyone who has left a Council seat or a post at the Monetary Authority, the Financial Regulator, the Sovereign Reserve Fund, the Exchequer, the Fair Trading Board, the Securities Commission, the Security Bureau, the Coast Guard or the State Guard, whose names no later appointee takes. */
         public array $formerNames = [],
         /** @var array<string, string> Each party's leader (App\Service\Politics\PartyLeaders), drawn on the first tick; the prime minister is the leader of the cabinet's largest party. */
         public array $leaderNames = [],

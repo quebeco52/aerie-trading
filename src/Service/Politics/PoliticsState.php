@@ -204,6 +204,18 @@ class PoliticsState
     /** @var list<array{name: string, birth: float, stance: float, regulation: float, fund: float, debt: float, competition: float, markets: float, swing?: float}> */
     public array $securityDirectorPassedOver;
     public float $lastSecurityDirectorAppointedAt;
+    public string $coastGuardCommandantName;
+    public float $coastGuardCommandantBirth;
+    public float $coastGuardCommandantTermStart;
+    /** @var list<array{name: string, birth: float, stance: float, regulation: float, fund: float, debt: float, competition: float, markets: float, swing?: float}> */
+    public array $coastGuardCommandantPassedOver;
+    public float $lastCoastGuardCommandantAppointedAt;
+    public string $stateGuardCommanderName;
+    public float $stateGuardCommanderBirth;
+    public float $stateGuardCommanderTermStart;
+    /** @var list<array{name: string, birth: float, stance: float, regulation: float, fund: float, debt: float, competition: float, markets: float, swing?: float}> */
+    public array $stateGuardCommanderPassedOver;
+    public float $lastStateGuardCommanderAppointedAt;
     /** @var list<string> */
     public array $formerNames;
     /** @var array<string, string> */
@@ -308,7 +320,7 @@ class PoliticsState
                 $field === 'leaderHistory' => self::hydrateLeaderHistory($value),
                 $field === 'polls' => self::hydratePolls($value),
                 $field === 'forecastCabinets' => self::hydrateCabinets($value),
-                in_array($field, ['councillorPassedOver', 'governorPassedOver', 'regulatorPassedOver', 'fundHeadPassedOver', 'exchequerHeadPassedOver', 'fairTradingHeadPassedOver', 'securitiesHeadPassedOver', 'securityDirectorPassedOver', 'boardMembers'], true) => self::hydrateCandidates($value),
+                in_array($field, ['councillorPassedOver', 'governorPassedOver', 'regulatorPassedOver', 'fundHeadPassedOver', 'exchequerHeadPassedOver', 'fairTradingHeadPassedOver', 'securitiesHeadPassedOver', 'securityDirectorPassedOver', 'coastGuardCommandantPassedOver', 'stateGuardCommanderPassedOver', 'boardMembers'], true) => self::hydrateCandidates($value),
                 is_string($opening) => is_scalar($value) ? (string) $value : $opening,
                 is_array($opening) => array_map('floatval', $value),
                 default => is_numeric($value) ? (float) $value : $opening,

@@ -72,6 +72,12 @@ class PoliticsStateTest extends TestCase
         $state->securityDirectorName = 'Augustin Pell';
         $state->securityDirectorBirth = -52.0;
         $state->securityDirectorPassedOver = [['name' => 'Nell Rourke', 'birth' => -49.0, 'stance' => 0.5, 'regulation' => -0.2, 'fund' => 0.1, 'debt' => 0.0, 'competition' => 0.3, 'markets' => -0.4]];
+        $state->coastGuardCommandantName = 'Imogen Hale';
+        $state->coastGuardCommandantTermStart = 2.5;
+        $state->coastGuardCommandantPassedOver = [['name' => 'Dorian Shaw', 'birth' => -47.0, 'stance' => -0.2, 'regulation' => 0.1, 'fund' => 0.0, 'debt' => 0.4, 'competition' => 0.0, 'markets' => 0.2]];
+        $state->stateGuardCommanderName = 'Gideon Rusk';
+        $state->stateGuardCommanderBirth = -51.0;
+        $state->stateGuardCommanderPassedOver = [['name' => 'Petra Lowell', 'birth' => -45.0, 'stance' => 0.3, 'regulation' => 0.0, 'fund' => -0.3, 'debt' => 0.0, 'competition' => 0.1, 'markets' => 0.0]];
         $state->securitiesHeadStance = -0.3;
         $state->securitiesPriorStance = 0.6;
         $state->securitiesHeadPassedOver = [['name' => 'Arlo Mercer', 'birth' => -46.0, 'stance' => 0.0, 'regulation' => 0.0, 'fund' => 0.0, 'debt' => 0.0, 'competition' => 0.0, 'markets' => 0.8]];

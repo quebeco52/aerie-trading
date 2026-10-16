@@ -152,6 +152,43 @@ class GovernmentPageBuilderTest extends TestCase
         $this->assertNull($departments[\App\Data\District\Institutions::EXCHEQUER]['head']);
     }
 
+    /** The Council page lists the two guards' commanders with their mandates, and the guard without one yet carries none. */
+    public function testTheCouncilPageNamesTheGuardsCommanders(): void
+    {
+        $politics = new PoliticsStateDTO(totalTime: 3.0, coastGuardCommandantName: 'Imogen Hale', coastGuardCommandantBirth: -48.0, coastGuardCommandantTermStart: 2.5);
+        $departments = array_column($this->builder()->buildCouncil(new MacroStateDTO(totalTime: 3.0), $politics)['council']['departments'], null, 'name');
+
+        $coast = $departments[\App\Data\District\Institutions::COAST_GUARD];
+        $this->assertSame('/coast-guard', $coast['href']);
+        $this->assertSame(['title' => 'Commandant', 'name' => 'Imogen Hale', 'age' => 51, 'termEndsLabel' => self::simDate(7.5)], $coast['head']);
+        $this->assertSame('/state-guard', $departments[\App\Data\District\Institutions::STATE_GUARD]['href']);
+        $this->assertNull($departments[\App\Data\District\Institutions::STATE_GUARD]['head']);
+    }
+
+    /** Each guard's page carries its name and mandate before it has a commander, and the commander and whom the Council passed over once it does. */
+    public function testTheGuardPagesReadTheirCommanders(): void
+    {
+        $empty = $this->builder()->stateGuard(new PoliticsStateDTO());
+        $this->assertSame(\App\Data\District\Institutions::STATE_GUARD, $empty['name']);
+        $this->assertNull($empty['head']);
+        $this->assertStringContainsString('only the Council can call it out', $empty['mandate']);
+
+        $page = $this->builder()->coastGuard(new PoliticsStateDTO(
+            totalTime: 4.0,
+            coastGuardCommandantName: 'Imogen Hale',
+            coastGuardCommandantBirth: -48.0,
+            coastGuardCommandantTermStart: 2.5,
+            coastGuardCommandantPassedOver: [['name' => 'Dorian Shaw', 'birth' => -45.5, 'stance' => 0.0, 'regulation' => 0.0, 'fund' => 0.0, 'debt' => 0.0, 'competition' => 0.0, 'markets' => 0.0]],
+        ));
+        $this->assertSame('commandant', $page['headTitle']);
+        $this->assertNotNull($page['head']);
+        $this->assertSame(52, $page['head']['age']);
+        $this->assertSame(self::simDate(2.5), $page['head']['sinceLabel']);
+        $this->assertFalse($page['head']['opening']);
+        $this->assertSame([['name' => 'Dorian Shaw', 'age' => 48]], $page['head']['passedOver']);
+        $this->assertSame(5.0, $page['rules']['termYears']);
+    }
+
     /** The Security Bureau's page: its mandate and director; nothing before it has one. */
     public function testTheSecurityBureauPageReadsItsDirector(): void
     {

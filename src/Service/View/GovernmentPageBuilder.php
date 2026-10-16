@@ -32,6 +32,7 @@ use App\Service\Math\FirmEconomics;
 use App\Service\Math\MacroTransmission;
 use App\Service\Math\Valuation;
 use App\Service\Politics\CoalitionFormation;
+use App\Service\Politics\CoastGuard;
 use App\Service\Politics\CouncilAppointments;
 use App\Service\Politics\ElectionForecast;
 use App\Service\Politics\Exchequer;
@@ -43,6 +44,7 @@ use App\Service\Politics\PoliticsEngine;
 use App\Service\Politics\SecuritiesCommission;
 use App\Service\Politics\SecurityBureau;
 use App\Service\Politics\SovereignReserveFund;
+use App\Service\Politics\StateGuard;
 use App\Twig\Extension\NumberFormatExtension;
 
 /**
@@ -332,6 +334,7 @@ class GovernmentPageBuilder
     public function buildCouncil(MacroStateDTO $macro, PoliticsStateDTO $politics): array
     {
         $page = $this->frame($macro, $politics)['page'];
+        $heads = self::standingHeads($politics, $macro->totalTime);
 
         return array_replace($page, ['council' => $page['council'] + [
             'roster' => array_map(static fn(array $seat): array => $seat + [
@@ -356,16 +359,33 @@ class GovernmentPageBuilder
                 array_map(static fn(array $member): float => $member['swing'] ?? 0.0, $politics->boardMembers)
             ) + ['seats' => count($politics->boardMembers), 'median' => MonetaryAuthority::stanceName(CouncilAppointments::boardMedians($politics)[CouncilAppointments::AXIS_MONEY])],
             'lean' => self::councilLean($politics),
-            // The Security Bureau stands outside the government's menus, so its director is shown with its mandate.
-            'departments' => array_map(static fn(array $department): array => $department + [
-                'head' => $department['name'] === Institutions::SECURITY_BUREAU && $politics->securityDirectorName !== '' ? [
-                    'title' => 'Director',
-                    'name' => $politics->securityDirectorName,
-                    'age' => (int) floor($macro->totalTime - $politics->securityDirectorBirth),
-                    'termEndsLabel' => self::simDate(SecurityBureau::directorTermEnd($macro->totalTime)),
-                ] : null,
-            ], AerieCouncil::DEPARTMENTS),
+            // The Security Bureau and the two guards stand outside the government's menus, so their heads are shown with their mandates.
+            'departments' => array_map(static fn(array $department): array => $department + ['head' => $heads[$department['name']] ?? null], AerieCouncil::DEPARTMENTS),
         ]]);
+    }
+
+    /**
+     * The heads the Council page lists beside their mandates, by department: the Security Bureau's director and the
+     * commanders of the Coast Guard and the State Guard. A post not yet filled is left out.
+     *
+     * @return array<string, array{title: string, name: string, age: int, termEndsLabel: string}>
+     */
+    private static function standingHeads(PoliticsStateDTO $politics, float $time): array
+    {
+        $posts = [
+            Institutions::SECURITY_BUREAU => ['Director', $politics->securityDirectorName, $politics->securityDirectorBirth, SecurityBureau::directorTermEnd($time)],
+            Institutions::COAST_GUARD => ['Commandant', $politics->coastGuardCommandantName, $politics->coastGuardCommandantBirth, CoastGuard::commandantTermEnd($time)],
+            Institutions::STATE_GUARD => ['Commander', $politics->stateGuardCommanderName, $politics->stateGuardCommanderBirth, StateGuard::commanderTermEnd($time)],
+        ];
+
+        $heads = [];
+        foreach ($posts as $department => [$title, $name, $birth, $termEnd]) {
+            if ($name !== '') {
+                $heads[$department] = ['title' => $title, 'name' => $name, 'age' => (int) floor($time - $birth), 'termEndsLabel' => self::simDate($termEnd)];
+            }
+        }
+
+        return $heads;
     }
 
     /**
@@ -2264,22 +2284,77 @@ class GovernmentPageBuilder
         }
 
         $time = $politics->totalTime;
-        $mandate = array_column(AerieCouncil::DEPARTMENTS, 'mandate', 'name')[Institutions::SECURITY_BUREAU];
 
         return [
-            'mandate' => $mandate,
-            'director' => [
-                'name' => $politics->securityDirectorName,
-                'age' => (int) floor($time - $politics->securityDirectorBirth),
-                'sinceLabel' => $politics->securityDirectorTermStart < 0.0 ? 'Before Year 1' : self::simDate($politics->securityDirectorTermStart),
-                'termEndsLabel' => self::simDate(SecurityBureau::directorTermEnd($time)),
-                'opening' => $politics->securityDirectorTermStart < 0.0,
-                'passedOver' => array_map(static fn(array $candidate): array => [
-                    'name' => $candidate['name'],
-                    'age' => (int) floor($politics->securityDirectorTermStart - $candidate['birth']),
-                ], $politics->securityDirectorPassedOver),
-            ],
+            'mandate' => self::mandate(Institutions::SECURITY_BUREAU),
+            'director' => self::standingPost($politics->securityDirectorName, $politics->securityDirectorBirth, $politics->securityDirectorTermStart, $politics->securityDirectorPassedOver, SecurityBureau::directorTermEnd($time), $time),
             'rules' => ['termYears' => SecurityBureau::DIRECTOR_TERM_YEARS, 'shortlist' => CouncilAppointments::SHORTLIST],
+        ];
+    }
+
+    /**
+     * The Coast Guard: its mandate, its commandant and when their term ends, and the term the Council names them for.
+     * It sets no rule, so there are no figures. The commandant is null before the first is seated.
+     *
+     * @return array{name: string, mandate: string, headTitle: string, head: array<string, mixed>|null, rules: array{termYears: float, shortlist: int}}
+     */
+    public function coastGuard(PoliticsStateDTO $politics): array
+    {
+        $time = $politics->totalTime;
+
+        return [
+            'name' => Institutions::COAST_GUARD,
+            'mandate' => self::mandate(Institutions::COAST_GUARD),
+            'headTitle' => 'commandant',
+            'head' => $politics->coastGuardCommandantName === '' ? null : self::standingPost($politics->coastGuardCommandantName, $politics->coastGuardCommandantBirth, $politics->coastGuardCommandantTermStart, $politics->coastGuardCommandantPassedOver, CoastGuard::commandantTermEnd($time), $time),
+            'rules' => ['termYears' => CoastGuard::COMMANDANT_TERM_YEARS, 'shortlist' => CouncilAppointments::SHORTLIST],
+        ];
+    }
+
+    /**
+     * The State Guard: its mandate, its commander and when their term ends, and the term the Council names them for.
+     * It sets no rule, so there are no figures. The commander is null before the first is seated.
+     *
+     * @return array{name: string, mandate: string, headTitle: string, head: array<string, mixed>|null, rules: array{termYears: float, shortlist: int}}
+     */
+    public function stateGuard(PoliticsStateDTO $politics): array
+    {
+        $time = $politics->totalTime;
+
+        return [
+            'name' => Institutions::STATE_GUARD,
+            'mandate' => self::mandate(Institutions::STATE_GUARD),
+            'headTitle' => 'commander',
+            'head' => $politics->stateGuardCommanderName === '' ? null : self::standingPost($politics->stateGuardCommanderName, $politics->stateGuardCommanderBirth, $politics->stateGuardCommanderTermStart, $politics->stateGuardCommanderPassedOver, StateGuard::commanderTermEnd($time), $time),
+            'rules' => ['termYears' => StateGuard::COMMANDER_TERM_YEARS, 'shortlist' => CouncilAppointments::SHORTLIST],
+        ];
+    }
+
+    /** A department's mandate as the Council lists it. */
+    private static function mandate(string $department): string
+    {
+        return array_column(AerieCouncil::DEPARTMENTS, 'mandate', 'name')[$department];
+    }
+
+    /**
+     * A head who sets no rule, for their department's page: their name and age, when they were seated and leave, and
+     * whom the Council passed over for them, each at their age then.
+     *
+     * @param list<array{name: string, birth: float, stance: float, regulation: float, fund: float, debt: float, competition: float, markets: float, swing?: float}> $passedOver
+     * @return array{name: string, age: int, sinceLabel: string, termEndsLabel: string, opening: bool, passedOver: list<array{name: string, age: int}>}
+     */
+    private static function standingPost(string $name, float $birth, float $termStart, array $passedOver, float $termEnd, float $time): array
+    {
+        return [
+            'name' => $name,
+            'age' => (int) floor($time - $birth),
+            'sinceLabel' => $termStart < 0.0 ? 'Before Year 1' : self::simDate($termStart),
+            'termEndsLabel' => self::simDate($termEnd),
+            'opening' => $termStart < 0.0,
+            'passedOver' => array_map(static fn(array $candidate): array => [
+                'name' => $candidate['name'],
+                'age' => (int) floor($termStart - $candidate['birth']),
+            ], $passedOver),
         ];
     }
 

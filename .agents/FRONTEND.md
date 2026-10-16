@@ -30,6 +30,8 @@ the glossary does not have.
 | Fair Trading Board | Merger review (never "Competition Commission") |
 | Securities Commission | Margin and disclosure rules on the Aerie Exchange (never "SEC") |
 | Security Bureau | Investigative police: organised crime and foreign agents (never "FBI") |
+| Coast Guard | Holds the District's waters; in law a maritime police, on the Council's orders (never "navy") |
+| State Guard | The standing land force of full-time professionals; in law a guard, called out by the Council only (never "army") |
 | Trade & Migration Office | Tariffs and migration quotas |
 | Statistical Office, Credit Registry, Land Registry, Freight Authority, Manufactory Board, Works Ministry | Data publishers and the district map's buildings |
 | Aerie Exchange | The securities market this site belongs to (never "Lakebird Exchange") |
@@ -37,7 +39,9 @@ the glossary does not have.
 | Tickbird Research | Tickbird Data Systems' research desk; writes the long-form company profiles |
 
 The place is "the Aerie Autonomous District" once, then "the District"; the financial district is Glasswater Row;
-the US is "the mainland". The District has no army: defence firms sell to the mainland and allies.
+the US is "the mainland". The District has no army: the Charter leaves its defence to the mainland, and defence firms
+sell to the mainland and allies. The Coast Guard and the State Guard are armed and trained to a navy's and an army's
+standard, but in law they are a maritime police and a guard; never call them armed forces.
 
 ## Company profiles
 `StockInfo::DESCRIPTIONS`, shown under "About" and, first paragraph only, on the district map. Write them like an

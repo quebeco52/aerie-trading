@@ -1,0 +1,56 @@
+{% extends 'base.html.twig' %}
+
+{# The Coast Guard's or the State Guard's page, linked from the Council page only. Its record is the District Almanac's entries about it. #}
+
+{% block title %}{{ force.name }} - Aerie Exchange{% endblock %}
+
+{% block meta %}
+	<meta name="description" content="The District's {{ force.name }}: its mandate, its {{ force.headTitle }} and its record.">
+	<meta property="og:title" content="{{ force.name }} | Aerie Exchange">
+	<meta property="og:type" content="website">
+{% endblock %}
+
+{% block body %}
+<div class="max-w-400 mx-auto px-4 sm:px-6 lg:px-8 pt-8 pb-12 w-full space-y-6">
+
+	{% include 'government/_breadcrumb.html.twig' with {current: force.name} %}
+	<header class="pb-5 border-b border-outline-variant/15">
+		<h1 class="text-2xl md:text-3xl font-semibold text-on-surface tracking-tight">{{ force.name }}</h1>
+		<p class="mt-2 text-sm text-on-surface-variant leading-relaxed max-w-3xl">{{ force.mandate }}</p>
+	</header>
+
+	{% if force.head %}
+		{% set head = force.head %}
+		<section class="bg-surface-container-low rounded-lg p-5 border border-outline-variant/20" aria-labelledby="head-heading">
+			<h2 id="head-heading" class="text-sm font-semibold text-on-surface">The {{ force.headTitle }}</h2>
+			<p class="text-sm font-semibold text-on-surface mt-2">{{ head.name }}</p>
+			<p class="text-xs text-on-surface-variant mt-0.5">Age {{ head.age }} · seated {{ head.sinceLabel }} · term ends <span class="font-mono tabular-nums">{{ head.termEndsLabel }}</span></p>
+			{% if head.passedOver is not empty %}
+				<p class="text-sm text-on-surface mt-2">Chosen over {% for candidate in head.passedOver %}{{ candidate.name }} <span class="text-on-surface-variant">({{ candidate.age }})</span>{{ loop.last ? '' : (loop.revindex == 2 ? ' and ' : ', ') }}{% endfor %}.</p>
+			{% endif %}
+			<p class="text-xs text-on-surface-variant mt-2 max-w-3xl">
+				The Council names the {{ force.headTitle }} for a single {{ force.rules.termYears|number_format(0) }}-year term from a shortlist of {{ force.rules.shortlist }}, choosing the candidate it trusts most on the questions it weighs.
+				The {{ force.name }} takes its orders from the Council alone. The Diet funds it and has no say in how it is used.
+			</p>
+		</section>
+	{% endif %}
+
+	<section class="bg-surface-container-low rounded-lg p-5 border border-outline-variant/20" aria-labelledby="record-heading">
+		<h2 id="record-heading" class="text-sm font-semibold text-on-surface">From the record</h2>
+		<p class="text-2xs text-on-surface-variant mt-0.5">The {{ force.name }}'s history, as the District Almanac records it.</p>
+		<ul class="mt-3 space-y-3">
+			{% for entry in entries %}
+				<li>
+					<a href="{{ path('app_almanac_entry', {slug: entry.slug}) }}" class="text-sm font-semibold text-primary hover:underline underline-offset-2">{{ entry.title }}</a>
+					<span class="block text-xs text-on-surface-variant mt-0.5">{{ entry.summary }}</span>
+					<span class="block text-2xs text-on-surface-faint mt-0.5">{{ entry.category }}</span>
+				</li>
+			{% else %}
+				<li class="text-sm text-on-surface-variant">Nothing on record yet.</li>
+			{% endfor %}
+		</ul>
+	</section>
+
+	<p class="source-note">{{ source_line('almanac') }}</p>
+</div>
+{% endblock %}

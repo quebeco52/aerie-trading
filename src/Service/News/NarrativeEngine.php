@@ -497,6 +497,22 @@ class NarrativeEngine
                     "New director at the Security Bureau: The Council has named a new director of the Security Bureau.",
                 ]
             ),
+            ShockEvent::COAST_GUARD_COMMANDANT_APPOINTED => $this->getRandomPhrase(
+                isset($context['coast_guard_commandant'], $context['coast_guard_commandant_age'], $context['coast_guard_commandant_term_ends']) ? [
+                    "New commandant at the Coast Guard: The Council names {$context['coast_guard_commandant']}, {$context['coast_guard_commandant_age']}, to command the District's waters until {$context['coast_guard_commandant_term_ends']}." . ($context['coast_guard_commandant_passed_over'] !== '' ? " Passed over: {$context['coast_guard_commandant_passed_over']}." : ''),
+                    "The Council picks who holds the sounds and the shelf: {$context['coast_guard_commandant']} takes command of the Coast Guard for a single term, ending {$context['coast_guard_commandant_term_ends']}.",
+                ] : [
+                    "New commandant at the Coast Guard: The Council has named a new commandant of the Coast Guard.",
+                ]
+            ),
+            ShockEvent::STATE_GUARD_COMMANDER_APPOINTED => $this->getRandomPhrase(
+                isset($context['state_guard_commander'], $context['state_guard_commander_age'], $context['state_guard_commander_term_ends']) ? [
+                    "New commander at the State Guard: The Council names {$context['state_guard_commander']}, {$context['state_guard_commander_age']}, to command the District's standing force until {$context['state_guard_commander_term_ends']}." . ($context['state_guard_commander_passed_over'] !== '' ? " Passed over: {$context['state_guard_commander_passed_over']}." : ''),
+                    "The Council picks the commander it alone can order out: {$context['state_guard_commander']} takes the State Guard for a single term, ending {$context['state_guard_commander_term_ends']}.",
+                ] : [
+                    "New commander at the State Guard: The Council has named a new commander of the State Guard.",
+                ]
+            ),
             ShockEvent::REGULATOR_APPOINTED => $this->getRandomPhrase(
                 isset($context['regulator'], $context['regulator_age'], $context['regulator_stance'], $context['requirement_change']) ? [
                     "New bank regulator: The Council names {$context['regulator']}, {$context['regulator_age']}, {$context['regulator_stance']}, to head the Financial Regulator until {$context['regulator_term_ends']}. The new head {$context['requirement_change']}." . ($context['regulator_passed_over'] !== '' ? " Passed over: {$context['regulator_passed_over']}." : ''),
