@@ -85,9 +85,7 @@ class ShippingBusinessModel extends StandardCorporateBusinessModel
     public const SPOT_GLUT_GAP_THRESHOLD   = -0.015;
 
     // --- Global Trade & Supply Chain Pressure Transmission ---
-    /** Sensitivity of maritime container and bulk freight demand to trade balance shifts. */
-    public const TRADE_BALANCE_SENSITIVITY = 1.50;
-    /** Export volume per unit of the foreign bloc's output gap: the customers-abroad half of the trade term. */
+    /** Export volume per unit of the foreign bloc's output gap: the customers abroad. The import side rides on the domestic cycle. */
     public const FOREIGN_DEMAND_SENSITIVITY = 3.00;
 
     // --- Event Lore Thresholds ---
@@ -160,11 +158,10 @@ class ShippingBusinessModel extends StandardCorporateBusinessModel
         return (($spotWeight * $this->resolveCargoVolumeShift($stock, $macroState)) + ($contractWeight * ($workload - 1.0))) / $totalWeight;
     }
 
-    /** Cargo volume: the lagged gap through the trade-income elasticity, plus the trade balance and customers abroad. */
+    /** Cargo volume: the lagged gap through the trade-income elasticity (the imports), plus the customers abroad (the exports). */
     private function resolveCargoVolumeShift(Stock $stock, MacroStateDTO $macroState): float
     {
-        $tradeShift = MacroTransmission::calculateTradeBalanceShift($macroState->tradeBalanceToGdpEma, sensitivity: self::TRADE_BALANCE_SENSITIVITY)
-            + MacroTransmission::calculateForeignDemandShift($macroState->foreignOutputGapEma, sensitivity: self::FOREIGN_DEMAND_SENSITIVITY);
+        $tradeShift = MacroTransmission::calculateForeignDemandShift($macroState->foreignOutputGapEma, sensitivity: self::FOREIGN_DEMAND_SENSITIVITY);
 
         return ($this->resolveLaggedOutputGap($macroState) * $this->getOperatingCyclicality($stock) * self::MACRO_DEMAND_SCALAR) + $tradeShift;
     }
@@ -296,7 +293,6 @@ class ShippingBusinessModel extends StandardCorporateBusinessModel
             'output_gap_ema',
             'supply_chain_pressure_index_ema',
             'tips_breakeven_ema',
-            'trade_balance_to_gdp_ema',
             'real_wage_gap',
         ];
     }

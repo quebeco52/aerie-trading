@@ -332,8 +332,7 @@ final class MacroTransmission
     }
 
     /**
-     * Export demand shift from the foreign bloc's cycle: the mirror of the trade-balance shift, for the firms
-     * whose customers are abroad. Bounded like it.
+     * Export demand shift from the foreign bloc's cycle, for the firms whose customers are abroad.
      *
      * @param float $foreignOutputGap Foreign output gap (fraction).
      * @param float $sensitivity      Export volume elasticity to the foreign gap.
@@ -342,25 +341,6 @@ final class MacroTransmission
     public static function calculateForeignDemandShift(float $foreignOutputGap, float $sensitivity = 2.0): float
     {
         return max(-0.20, min(0.20, $foreignOutputGap * $sensitivity));
-    }
-
-    /**
-     * Calculates international merchandise trade flow volume shifts (Mundell-Fleming).
-     *
-     * Evaluates net exports as a fraction of GDP relative to the structural trade balance.
-     *
-     * @param float $tradeBalance Current trade balance to GDP ratio.
-     * @param float $baseline     Structural trade balance (MacroEngine::TRADE_BALANCE_BASELINE).
-     * @param float $sensitivity  Trade volume elasticity multiplier.
-     * @return float Trade volume shift bounded in [-0.20, 0.20].
-     */
-    public static function calculateTradeBalanceShift(
-        float $tradeBalance,
-        float $baseline = MacroEngine::TRADE_BALANCE_BASELINE,
-        float $sensitivity = 2.0
-    ): float {
-        $deviation = $tradeBalance - $baseline;
-        return max(-0.20, min(0.20, $deviation * $sensitivity));
     }
 
     /**

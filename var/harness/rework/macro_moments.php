@@ -33,7 +33,8 @@ $fields = ['outputGap', 'unemploymentRate', 'inflation', 'supercoreInflation', '
     'potentialGdpIndex', 'debtTarget', 'policySurprise', 'freightRateIndex', 'freightRateIndexDecadeTrend',
     'supplierDeliveryTimes', 'supplyChainPressureIndex', 'dealActivityIndexEma', 'dealActivityIndexTrend', 'financeOutputGap',
     'excessBondPremiumTrend', 'creditCrisisDrag', 'macroCreditSpread', 'householdDebtToIncome', 'householdNewBorrowing', 'foreignOutputGap', 'exchangeRateIndex', 'exchangeRateTrend',
-    'sloosTighteningIndex', 'recessionProbability', 'inversionDuration', 'tipsBreakeven'];
+    'sloosTighteningIndex', 'recessionProbability', 'inversionDuration', 'tipsBreakeven',
+    'realGdpQuarterlyGrowth', 'inventoryStockGap', 'manufacturingPmi', 'reimbursementRateIndex', 'reimbursementRateGrowth', 'consumerPriceLevel'];
 $series = array_fill_keys($fields, []);
 $nominal = 1.0;
 // Tick-level FX moves split by rate-meeting ticks (8 a year): sum |dlog FX|, count, and policy-rate changes per class.

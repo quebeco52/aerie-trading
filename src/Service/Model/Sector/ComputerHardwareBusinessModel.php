@@ -94,9 +94,7 @@ class ComputerHardwareBusinessModel extends StandardCorporateBusinessModel
     public const ENTERPRISE_SOFTWARE_ATTACH_ELASTICITY = 0.015;
 
     // --- Trade Balance & PPI Transmission ---
-    /** Sensitivity of global IT hardware trade flows to merchandise trade balance shifts. */
-    public const TRADE_BALANCE_SENSITIVITY = 1.20;
-    /** Export volume per unit of the foreign bloc's output gap: the customers-abroad half of the trade term. */
+    /** Export volume per unit of the foreign bloc's output gap: the customers abroad. */
     public const FOREIGN_DEMAND_SENSITIVITY = 1.00;
     /** Share of the trade-flow shift each book carries: enterprise and consumer systems split it evenly. */
     public const TRADE_FLOW_STREAM_SHARE = 0.50;
@@ -168,8 +166,7 @@ class ComputerHardwareBusinessModel extends StandardCorporateBusinessModel
     private function resolveStreamVolumeShifts(Stock $stock, MacroStateDTO $macroState): array
     {
         $cycleSensitivity = (self::MIN_BETA_PRICING_POWER_FLOOR + $this->resolvePricingPower($stock)) * $this->getOperatingCyclicality($stock);
-        $tradeShift = MacroTransmission::calculateTradeBalanceShift($macroState->tradeBalanceToGdpEma, sensitivity: self::TRADE_BALANCE_SENSITIVITY)
-            + MacroTransmission::calculateForeignDemandShift($macroState->foreignOutputGapEma, sensitivity: self::FOREIGN_DEMAND_SENSITIVITY);
+        $tradeShift = MacroTransmission::calculateForeignDemandShift($macroState->foreignOutputGapEma, sensitivity: self::FOREIGN_DEMAND_SENSITIVITY);
         // Metzler inventory cycle: a channel overhang (positive gap) means distributors destock before reordering.
         $commonShift = ($tradeShift * self::TRADE_FLOW_STREAM_SHARE) - ($macroState->inventoryStockGapEma * self::INVENTORY_CYCLE_SENSITIVITY);
 
@@ -310,7 +307,6 @@ class ComputerHardwareBusinessModel extends StandardCorporateBusinessModel
             'output_gap_ema',
             'supply_chain_pressure_index_ema',
             'tips_breakeven_ema',
-            'trade_balance_to_gdp_ema',
             'real_wage_gap',
         ];
     }

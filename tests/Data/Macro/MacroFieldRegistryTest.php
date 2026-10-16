@@ -64,6 +64,7 @@ class MacroFieldRegistryTest extends TestCase
         'freightRateIndexDecadeTrend' => 'Decade-long average of freight_rate_index, which is recorded.',
         'excessBondPremiumTrend' => 'Decade-long average of excess_bond_premium, which is recorded.',
         'crisisScarPending' => 'Scar a crisis has booked that potential_gdp_index, which is recorded, has yet to take.',
+        'reimbursementAusterityShare' => 'Cut the last price update priced in, inside reimbursement_rate_index and reimbursement_rate_growth, both recorded.',
         'cyclicalMigrationRate' => 'Inside potential_gdp_index and output_gap, both recorded, and immigrationPopulationShift.',
         'crisisScarStep' => 'Per-tick part of that scar, inside potential_gdp_index and output_gap, both recorded.',
         'authorityHoldingsToGdpEma' => 'Year-long average of the holdings qe_intensity records, kept to read their change as a flow.',

@@ -123,9 +123,7 @@ class ApparelManufacturingBusinessModel extends StandardCorporateBusinessModel
     public const CONTRACT_FX_EXPORT_SCALAR = 0.15;
 
     // --- Trade Physics ---
-    /** Sensitivity of contract textile export and domestic mill volumes to trade balance shifts. */
-    public const TRADE_BALANCE_SENSITIVITY = 1.00;
-    /** Export volume per unit of the foreign bloc's output gap: the customers-abroad half of the trade term. */
+    /** Export volume per unit of the foreign bloc's output gap: the customers abroad. */
     public const FOREIGN_DEMAND_SENSITIVITY = 1.00;
 
     // --- Tail Risk & Shock Thresholds ---
@@ -284,10 +282,9 @@ class ApparelManufacturingBusinessModel extends StandardCorporateBusinessModel
             $eventType = ShockEvent::APPAREL_VIRAL_PRODUCT;
         }
 
-        // Currency FX Export Competitiveness & Global Trade: A weaker currency and positive trade balance boost textile exports.
+        // Currency FX Export Competitiveness & Global Trade: a weaker currency and demand abroad boost textile exports.
         $contractFxBonus = $this->resolveFxDemandShift($macroState, self::CONTRACT_FX_EXPORT_SCALAR);
-        $tradeShift = MacroTransmission::calculateTradeBalanceShift($macroState->tradeBalanceToGdpEma, sensitivity: self::TRADE_BALANCE_SENSITIVITY)
-            + MacroTransmission::calculateForeignDemandShift($macroState->foreignOutputGapEma, sensitivity: self::FOREIGN_DEMAND_SENSITIVITY);
+        $tradeShift = MacroTransmission::calculateForeignDemandShift($macroState->foreignOutputGapEma, sensitivity: self::FOREIGN_DEMAND_SENSITIVITY);
 
         // Output gap drives non-linear supply chain ordering contractions and inventory markdown pressures
         $outputGap = $macroState->outputGapEma;
@@ -374,7 +371,6 @@ class ApparelManufacturingBusinessModel extends StandardCorporateBusinessModel
             'output_gap_ema',
             'output_gap_lag_6m',
             'tips_breakeven_ema',
-            'trade_balance_to_gdp_ema',
             'real_wage_gap',
         ];
     }

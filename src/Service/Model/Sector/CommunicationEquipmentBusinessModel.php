@@ -65,9 +65,7 @@ class CommunicationEquipmentBusinessModel extends StandardCorporateBusinessModel
     public const FX_REVENUE_EXPOSURE = 0.25;
     /** Consumer gateways are a landed import competing on retail shelf price. */
     public const CONSUMER_FX_REVENUE_EXPOSURE = 0.15;
-    /** Sensitivity of network equipment export flows to merchandise trade balance shifts. */
-    public const TRADE_BALANCE_SENSITIVITY = 1.00;
-    /** Export volume per unit of the foreign bloc's output gap: the customers-abroad half of the trade term. */
+    /** Export volume per unit of the foreign bloc's output gap: the customers abroad. */
     public const FOREIGN_DEMAND_SENSITIVITY = 1.00;
 
     // --- Balance Sheet Realism ---
@@ -263,8 +261,7 @@ class CommunicationEquipmentBusinessModel extends StandardCorporateBusinessModel
         // means operators digest what they built before ordering more. Tenders are global, so the currency and
         // merchandise trade flows move the order book too.
         $overhangDrag = $macroState->capitalStockOverhangEma * self::CAPITAL_OVERHANG_SCALAR;
-        $tradeShift = MacroTransmission::calculateTradeBalanceShift($macroState->tradeBalanceToGdpEma, sensitivity: self::TRADE_BALANCE_SENSITIVITY)
-            + MacroTransmission::calculateForeignDemandShift($macroState->foreignOutputGapEma, sensitivity: self::FOREIGN_DEMAND_SENSITIVITY);
+        $tradeShift = MacroTransmission::calculateForeignDemandShift($macroState->foreignOutputGapEma, sensitivity: self::FOREIGN_DEMAND_SENSITIVITY);
         $carrierCapexShift = ($this->resolveLaggedOutputGap($macroState) * self::CARRIER_CAPEX_GDP_SENSITIVITY * $beta)
             - $overhangDrag
             + $this->resolveFxDemandShift($macroState)
@@ -431,7 +428,6 @@ class CommunicationEquipmentBusinessModel extends StandardCorporateBusinessModel
             'output_gap_lag_12m',
             'supply_chain_pressure_index_ema',
             'tips_breakeven_ema',
-            'trade_balance_to_gdp_ema',
             'real_wage_gap',
         ];
     }

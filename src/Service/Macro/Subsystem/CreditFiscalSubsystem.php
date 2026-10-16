@@ -147,7 +147,7 @@ class CreditFiscalSubsystem
     public const MAX_EPU = 400.0;
 
     // --- Administered Healthcare Prices (the health payer's annual update) ---
-    /** Floor on the annual update: administered prices are held, not cut, in a deflationary year. */
+    /** Floor on the annual indexation: administered prices are held, not cut, in a deflationary year; a budget cut still cuts them. */
     public const REIMBURSEMENT_MIN_UPDATE = 0.0;
 
     // --- Household Credit Cycle (Mian & Sufi 2018; BIS DSR; Basel III CCyB) ---
@@ -1081,9 +1081,10 @@ class CreditFiscalSubsystem
 
     /**
      * Administered healthcare price update: the District's health payer resets its prices once a year to the inflation
-     * it observes, less a fixed productivity offset, less the share of purchases the budget is cutting that year. A
-     * step function, not a diffusion: between updates the rate is flat whatever inflation does, so a hospital's margin
-     * is squeezed through an inflation spike and repaired a year later, and an austerity budget reaches it directly.
+     * it observes, less a fixed productivity offset, and moves them by the change in the share of purchases the budget
+     * is cutting. A cut lowers the price level once and holds it there while it lasts; when the budget restores the
+     * money, the prices come back. A step function, not a diffusion: between updates the rate is flat whatever inflation
+     * does, so a hospital's margin is squeezed through an inflation spike and repaired a year later.
      *
      * @param MacroState $state Current macroeconomic state.
      * @param float      $dt    Time increment in years.
@@ -1096,9 +1097,11 @@ class CreditFiscalSubsystem
         }
 
         $austerity = max(0.0, self::consolidationSpendingCut(self::requiredPrimaryBalance($state), $state->consolidationTaxShare)) / MacroEngine::PUBLIC_PURCHASES_TO_GDP;
-        $update = $state->inflationEma - MacroEngine::REIMBURSEMENT_PRODUCTIVITY_OFFSET - $austerity;
+        $indexation = max(self::REIMBURSEMENT_MIN_UPDATE, $state->inflationEma - MacroEngine::REIMBURSEMENT_PRODUCTIVITY_OFFSET);
 
-        $state->reimbursementRateGrowth = max(self::REIMBURSEMENT_MIN_UPDATE, $update);
+        // The level is the indexed path times what the budget leaves of it, so a cut and its restoration cancel exactly.
+        $state->reimbursementRateGrowth = ((1.0 + $indexation) * (1.0 - $austerity) / (1.0 - $state->reimbursementAusterityShare)) - 1.0;
+        $state->reimbursementAusterityShare = $austerity;
         $state->reimbursementRateIndex *= 1.0 + $state->reimbursementRateGrowth;
     }
 

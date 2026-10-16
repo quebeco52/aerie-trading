@@ -1017,6 +1017,20 @@ class MacroAggregateSubsystemTest extends TestCase
     }
 
     /** A state with every demand channel at its baseline, so only the borrowing-cost terms can move the gap. */
+    /** The overhang is kept in the inventory-to-sales ratio its readers take it in: a miss worth a share of output, over the ratio. */
+    public function testADemandMissBuildsAnOverhangInTheInventoryToSalesRatio(): void
+    {
+        $state = $this->neutralBorrowingState();
+        $state->outputGap = -0.01 * MacroAggregateSubsystem::DOMESTIC_GAP_WEIGHT;
+        $state->domesticDemandGapEma = 0.0;
+
+        $this->subsystem->calculateOutputGap($state, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, 0.25, 1.0);
+
+        $speed = MacroAggregateSubsystem::INVENTORY_ADJUSTMENT_SPEED;
+        $built = MacroAggregateSubsystem::INVENTORY_SURPRISE_SENSITIVITY * 0.01 / MacroAggregateSubsystem::INVENTORY_TO_ANNUAL_SALES;
+        $this->assertEqualsWithDelta($built * (1.0 - exp(-$speed * 0.25)) / $speed, $state->inventoryStockGap, 1e-12);
+    }
+
     private function neutralBorrowingState(): MacroState
     {
         $state = new MacroState();

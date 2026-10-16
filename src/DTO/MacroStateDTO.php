@@ -351,6 +351,7 @@ readonly class MacroStateDTO
         public float $reimbursementRateIndex = 100.0,
         public float $reimbursementRateIndexEma = 100.0,
         public float $reimbursementRateGrowth = MacroEngine::TARGET_INFLATION - MacroEngine::REIMBURSEMENT_PRODUCTIVITY_OFFSET,
+        public float $reimbursementAusterityShare = 0.0,
         public float $householdDebtToIncome = MacroEngine::OPENING_HOUSEHOLD_DEBT_TO_INCOME,
         public float $householdDebtToIncomeEma = MacroEngine::OPENING_HOUSEHOLD_DEBT_TO_INCOME,
         public float $householdDebtServiceRatio = MacroEngine::OPENING_HOUSEHOLD_DSR,

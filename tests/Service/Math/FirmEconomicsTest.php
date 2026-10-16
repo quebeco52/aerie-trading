@@ -202,29 +202,29 @@ class FirmEconomicsTest extends TestCase
      */
     public function testInventoryCycleStepBuildsOnDemandMissesAndWorksTheStockBack(): void
     {
-        // Closed form: current * e^(-speed dt) + surpriseSens * (ema - gap) * (1 - e^(-speed dt)) / speed.
+        // Closed form: current * e^(-speed dt) + surpriseSens * (ema - gap) / ratio * (1 - e^(-speed dt)) / speed.
         $decay = exp(-0.5 * 0.25);
         $this->assertEqualsWithDelta(
-            0.4 * 0.03 * (1.0 - $decay) / 0.5,
-            FirmEconomics::calculateInventoryCycleStep(0.0, -0.03, 0.0, 0.5, 0.4, 0.25),
+            0.4 * 0.03 / 0.15 * (1.0 - $decay) / 0.5,
+            FirmEconomics::calculateInventoryCycleStep(0.0, -0.03, 0.0, 0.5, 0.4, 0.25, 0.15),
             1e-12,
-            'An unexpected demand miss must build inventory by the closed form.'
+            'An unexpected demand miss must build inventory by the closed form, in the inventory-to-sales ratio.'
         );
-        $this->assertLessThan(0.0, FirmEconomics::calculateInventoryCycleStep(0.0, 0.03, 0.0, 0.5, 0.4, 0.25), 'Unexpectedly strong demand must deplete inventory.');
+        $this->assertLessThan(0.0, FirmEconomics::calculateInventoryCycleStep(0.0, 0.03, 0.0, 0.5, 0.4, 0.25, 1.0), 'Unexpectedly strong demand must deplete inventory.');
 
-        $decayed = FirmEconomics::calculateInventoryCycleStep(0.10, 0.0, 0.0, 0.5, 0.4, 0.25);
+        $decayed = FirmEconomics::calculateInventoryCycleStep(0.10, 0.0, 0.0, 0.5, 0.4, 0.25, 1.0);
         $this->assertEqualsWithDelta(0.10 * $decay, $decayed, 1e-12, 'An overhang decays exponentially when demand is at trend.');
 
-        $this->assertSame(0.0, FirmEconomics::calculateInventoryCycleStep(0.0, -0.05, -0.05, 0.5, 0.4, 0.25), 'A slump that surprises no one builds no stock.');
+        $this->assertSame(0.0, FirmEconomics::calculateInventoryCycleStep(0.0, -0.05, -0.05, 0.5, 0.4, 0.25, 1.0), 'A slump that surprises no one builds no stock.');
     }
 
     /** One year in one step or in 48 lands on the same stock for a held miss. */
     public function testInventoryCycleStepIsTimestepNeutral(): void
     {
-        $oneStep = FirmEconomics::calculateInventoryCycleStep(0.05, -0.02, 0.01, 0.8, 0.6, 1.0);
+        $oneStep = FirmEconomics::calculateInventoryCycleStep(0.05, -0.02, 0.01, 0.8, 0.6, 1.0, 1.0);
         $stock = 0.05;
         for ($i = 0; $i < 48; $i++) {
-            $stock = FirmEconomics::calculateInventoryCycleStep($stock, -0.02, 0.01, 0.8, 0.6, 1.0 / 48);
+            $stock = FirmEconomics::calculateInventoryCycleStep($stock, -0.02, 0.01, 0.8, 0.6, 1.0 / 48, 1.0);
         }
         $this->assertEqualsWithDelta($oneStep, $stock, 1e-12);
     }
