@@ -103,6 +103,10 @@ class MergerAndAcquisitionEngine
     public const MA_TARGET_ROIC_FLOOR = 0.02;
     /** Ceiling for target ROIC. */
     public const MA_TARGET_ROIC_CEILING = 0.25;
+    /** Lowest operating margin of a target as a share of the acquirer's own (70%): a private bolt-on runs leaner than its buyer. */
+    public const MA_TARGET_MARGIN_SHARE_MIN = 0.70;
+    /** Highest operating margin of a target as a share of the acquirer's own (95%). */
+    public const MA_TARGET_MARGIN_SHARE_MAX = 0.95;
 
     // --- Divestiture Parameters ---
     /** Minimum fraction for dying company divestiture. */
@@ -488,7 +492,7 @@ class MergerAndAcquisitionEngine
         $targetRoicDraw = $this->mathUtility->calculateLogNormalSynergy(self::MA_TARGET_ROIC_MU, self::MA_TARGET_ROIC_SIGMA);
         $ctx->targetRoic = max(self::MA_TARGET_ROIC_FLOOR, min(self::MA_TARGET_ROIC_CEILING, $targetRoicDraw));
 
-        $ctx->targetMargin = max(0.01, (float) $ctx->acquirer->getOperatingMargin() * (mt_rand(70, 95) / 100.0));
+        $ctx->targetMargin = max(0.01, (float) $ctx->acquirer->getOperatingMargin() * $this->mathUtility->generateUniformBetween(self::MA_TARGET_MARGIN_SHARE_MIN, self::MA_TARGET_MARGIN_SHARE_MAX));
     }
 
     /**
@@ -1198,7 +1202,7 @@ class MergerAndAcquisitionEngine
         $prefixes = ['Apex', 'Horizon', 'Vertex', 'Quantum', 'Cipher', 'Aegis', 'Omni', 'Vanguard', 'Pinnacle', 'Meridian'];
         $suffixes = ['Dynamics', 'Holdings', 'Labs', 'Logistics', 'Networks', 'Heavy Industries', 'Capital', 'Technologies', 'Resources', 'Ventures'];
 
-        $name = $prefixes[array_rand($prefixes)] . ' ' . $suffixes[array_rand($suffixes)];
+        $name = $prefixes[$this->mathUtility->generateIndex(count($prefixes))] . ' ' . $suffixes[$this->mathUtility->generateIndex(count($suffixes))];
 
         return ['name' => $name];
     }

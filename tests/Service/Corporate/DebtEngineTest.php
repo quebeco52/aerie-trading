@@ -1507,6 +1507,29 @@ class DebtEngineTest extends TestCase
     }
 
     /**
+     * A bank's asset value is struck on its wholesale funding, net of the deposits its loans back, so its claims
+     * are that funding too. Set against the deposits as well, every bank read as insolvent and could never sell
+     * rescue equity, whatever its capital.
+     */
+    public function testADepositTakersGoingConcernIsTestedAgainstTheDebtItsValueIsStruckOn(): void
+    {
+        $engine = $this->costOfCapitalEngine();
+        $macro = $this->neutralMacro();
+        $bank = $this->leveredFirm('DEPO', '1.00', '0.01');
+        $bank->setIndustry('Banks - Regional');
+        $bank->setCustomerDeposits('20000000000');
+        $bank->setQuarterlyOperatingHistory(array_fill(0, 4, ['revenue' => 200_000_000.0, 'ebit' => 30_000_000.0]));
+
+        $going = $engine->assessGoingConcern($bank, $macro);
+
+        $this->assertEqualsWithDelta(500_000_000.0, $going->claims, 1e-6, 'the wholesale funding, not the deposits');
+        $this->assertTrue($going->isSolvent(), 'equity worth twice the wholesale funding');
+
+        $bank->setPrice('0.10');
+        $this->assertFalse($engine->assessGoingConcern($bank, $macro)->isSolvent(), 'a collapsed share price still reads as insolvency');
+    }
+
+    /**
      * Builds a firm whose only interesting property is its leverage, so the covenant is the variable under test.
      */
     private function leverageFixture(string $industry, string $debt, string $treasury): Stock

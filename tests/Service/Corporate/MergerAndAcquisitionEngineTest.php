@@ -723,8 +723,8 @@ class MergerAndAcquisitionEngineTest extends TestCase
      * money has to buy strictly less business. Without this the empire builder simply got a larger firm at
      * an unchanged return — growth with no agency cost attached to it.
      *
-     * Both runs are driven off one seed, so the target drawn is the same target and the only difference
-     * between them is the cheque written for it.
+     * Both runs see the same draws, so the target drawn is the same target and the only difference between
+     * them is the cheque written for it.
      */
     public function testHubrisPremiumBuysStrictlyLessBusinessForTheSameMoney(): void
     {
@@ -733,13 +733,11 @@ class MergerAndAcquisitionEngineTest extends TestCase
 
         $openingRevenue = 20_000_000_000.0;
 
-        mt_srand(20260915);
         $disciplined = $this->buildLedgeredAcquirer('DSC2', 40_000_000_000.0, 1_000_000_000.0, 100_000_000.0);
         $disciplined->setManagementStyle(ManagementStyle::Steward);
         $disciplinedResult = $this->engine->evaluatePrivateAcquisition($disciplined, $this->healthyMacro(), 1.0);
         $this->assertIsArray($disciplinedResult);
 
-        mt_srand(20260915);
         $hubristic = $this->buildLedgeredAcquirer('EMP2', 40_000_000_000.0, 1_000_000_000.0, 100_000_000.0);
         $hubristic->setManagementStyle(ManagementStyle::EmpireBuilder);
         $hubristicResult = $this->engine->evaluatePrivateAcquisition($hubristic, $this->healthyMacro(), 1.0);
@@ -764,6 +762,43 @@ class MergerAndAcquisitionEngineTest extends TestCase
             (float) $hubristic->getBaselineRoic(),
             'Goodwill sits in invested capital and earns nothing; the blended return has to reflect that.'
         );
+    }
+
+    /**
+     * Every draw a deal takes comes from the engine's own random source. The target's margin and name came from
+     * the global generator instead, so an engine on a private stream did a different deal whenever anything
+     * else in the process had drawn first.
+     */
+    public function testADealOnAPrivateStreamIsTheSameWhateverTheGlobalGeneratorDid(): void
+    {
+        $this->primeHealthyDeal(operatingBase: 15_000_000_000.0);
+        $this->bookIssuedDebt();
+
+        $deal = function (int $globalSeed): array {
+            mt_srand($globalSeed);
+            $descriptions = [];
+            $publisher = $this->createStub(MarketEventPublisher::class);
+            $publisher->method('publish')->willReturnCallback(static function (Stock $stock, string $type, string $description) use (&$descriptions): array {
+                $descriptions[] = $description;
+
+                return [];
+            });
+            $engine = new MergerAndAcquisitionEngine($publisher, $this->debtEngineMock, MathUtility::ownStream(20261016), $this->corporateMetricsMock);
+
+            // Most passes strike nothing at these hazards, so the stream is run until it strikes its first deal.
+            for ($attempt = 1; $attempt <= 2000; $attempt++) {
+                $acquirer = $this->buildLedgeredAcquirer('PRIV', 40_000_000_000.0, 1_000_000_000.0, 100_000_000.0);
+                if ($engine->evaluatePrivateAcquisition($acquirer, $this->healthyMacro(), 1.0) !== null) {
+                    return [$attempt, $descriptions, (float) $acquirer->getTotalRevenue(), (float) $acquirer->getOperatingMargin()];
+                }
+            }
+
+            return [null, $descriptions, 0.0, 0.0];
+        };
+
+        $first = $deal(1);
+        $this->assertNotNull($first[0], 'the stream must strike a deal for this to test anything');
+        $this->assertSame($first, $deal(2));
     }
 
     /**

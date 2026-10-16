@@ -227,9 +227,7 @@ class ManagementSuccessionEngine
             return ManagementStyle::Operator;
         }
 
-        $index = (int) floor($this->mathUtility->generateUniform() * count($candidates));
-
-        return $candidates[min($index, count($candidates) - 1)];
+        return $candidates[$this->mathUtility->generateIndex(count($candidates))];
     }
 
     /**

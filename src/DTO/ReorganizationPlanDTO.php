@@ -23,5 +23,16 @@ class ReorganizationPlanDTO
         public readonly float $reorganizedEquityValue,
         /** Rate the exit notes are issued at. */
         public readonly float $exitRate,
+        /** The drawn revolver at filing: the senior claim, reinstated ahead of the term notes. */
+        public readonly float $revolverClaim = 0.0,
     ) {}
+
+    /**
+     * What the creditors receive between them: the exit notes and their share of the reorganized equity. Under
+     * absolute priority that is every claim when the assets cover them, and the whole firm when they do not.
+     */
+    public function creditorValue(): float
+    {
+        return $this->exitDebt + ((1.0 - $this->oldEquityShare) * $this->reorganizedEquityValue);
+    }
 }

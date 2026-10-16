@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Service\Market\Bond;
 
 use App\DTO\MacroStateDTO;
+use App\DTO\ReorganizationPlanDTO;
 use App\Entity\Bond;
 use App\Entity\Stock;
 use App\Service\Math\CreditRisk;
@@ -62,9 +63,15 @@ final class CorporateDefaultService
     /**
      * Settles every listed issue of a failed company.
      *
+     * A liquidation settles at the market's recovery for the claim's seniority and the cycle. A confirmed
+     * Chapter 11 plan has already valued the estate, so its issues settle at what the plan gives them: the
+     * creditors' value paid down the queue, the revolver first. A plan that leaves the old shareholders a stake
+     * has made every creditor whole, and a fixed recovery would hand the bondholders' loss to the equity.
+     *
+     * @param ?ReorganizationPlanDTO $plan The confirmed plan the issues are exchanged under; null for a liquidation.
      * @return array<int, array{ticker: string, recovery: float, face: float}> One record per issue settled.
      */
-    public function settle(Stock $issuer, MacroStateDTO $macroState, \DateTimeInterface $settledAt): array
+    public function settle(Stock $issuer, MacroStateDTO $macroState, \DateTimeInterface $settledAt, ?ReorganizationPlanDTO $plan = null): array
     {
         $bonds = $this->em->getRepository(Bond::class)->findBy([
             'issuer' => $issuer,
@@ -79,13 +86,16 @@ final class CorporateDefaultService
         // than the instantaneous rate is deliberate: what depresses a recovery is a SUSTAINED wave of
         // defaults competing for the same buyers, not one bad quarter.
         $defaultRate = $macroState->corporateDefaultRateEma;
+        $planRecoveries = $plan !== null ? self::planRecoveries($bonds, $plan) : null;
         $settled = [];
 
         foreach ($bonds as $bond) {
-            $recovery = CreditRisk::calculateRecoveryGivenDefault(
-                self::baseRecoveryFor($bond->getSeniority()),
-                $defaultRate
-            );
+            $recovery = $planRecoveries !== null
+                ? $planRecoveries[self::seniorityClass($bond->getSeniority())]
+                : CreditRisk::calculateRecoveryGivenDefault(
+                    self::baseRecoveryFor($bond->getSeniority()),
+                    $defaultRate
+                );
 
             $face = (float) $bond->getFaceValue();
             $recoveredPerBond = $recovery * $face;
@@ -117,5 +127,53 @@ final class CorporateDefaultService
         }
 
         return $settled;
+    }
+
+    /** The class a seniority settles in; an issue that recorded none is the ordinary senior unsecured bond. */
+    private static function seniorityClass(?string $seniority): string
+    {
+        return match ($seniority) {
+            Bond::SENIORITY_SENIOR_SECURED, Bond::SENIORITY_SUBORDINATED => $seniority,
+            default => Bond::SENIORITY_SENIOR_UNSECURED,
+        };
+    }
+
+    /**
+     * Recovery per seniority under a confirmed plan. The queue is the revolver, then secured, unsecured and
+     * subordinated term debt. The unsecured class is the firm's term debt less its listed secured and
+     * subordinated issues, and never less than the unsecured issues listed against it.
+     *
+     * @param list<Bond> $bonds
+     * @return array<string, float>
+     */
+    private static function planRecoveries(array $bonds, ReorganizationPlanDTO $plan): array
+    {
+        $listed = [
+            Bond::SENIORITY_SENIOR_SECURED => 0.0,
+            Bond::SENIORITY_SENIOR_UNSECURED => 0.0,
+            Bond::SENIORITY_SUBORDINATED => 0.0,
+        ];
+        foreach ($bonds as $bond) {
+            $listed[self::seniorityClass($bond->getSeniority())] += max(0.0, (float) $bond->getOutstandingFace());
+        }
+
+        $termClaims = max(0.0, $plan->claims - $plan->revolverClaim);
+        $unsecured = max(
+            $listed[Bond::SENIORITY_SENIOR_UNSECURED],
+            $termClaims - $listed[Bond::SENIORITY_SENIOR_SECURED] - $listed[Bond::SENIORITY_SUBORDINATED]
+        );
+
+        [, $secured, $senior, $subordinated] = CreditRisk::absolutePriorityRecoveries($plan->creditorValue(), [
+            $plan->revolverClaim,
+            $listed[Bond::SENIORITY_SENIOR_SECURED],
+            $unsecured,
+            $listed[Bond::SENIORITY_SUBORDINATED],
+        ]);
+
+        return [
+            Bond::SENIORITY_SENIOR_SECURED => $secured,
+            Bond::SENIORITY_SENIOR_UNSECURED => $senior,
+            Bond::SENIORITY_SUBORDINATED => $subordinated,
+        ];
     }
 }

@@ -210,6 +210,33 @@ class BankruptcyTest extends TestCase
         ], $notifier->queued);
     }
 
+    /**
+     * The options on a liquidated firm's shares go with the shares. Left open, they expired later against a
+     * delisted stock and delivered shares of a company that no longer existed.
+     */
+    public function testALiquidationSettlesTheOptionsOnTheCancelledShares(): void
+    {
+        $stock = $this->buildDefaulter('DEAD', 'Dead Corp', quartersInDefault: 2);
+        $this->debtEngineMock->method('assessGoingConcern')->willReturn($this->going(ebit: -120_000_000.0, ebitda: -80_000_000.0, assetValue: 0.0, cash: 0.0, claims: 2_000_000_000.0));
+        $this->entityManagerMock->method('getRepository')->willReturn($this->tradeOrderRepoMock);
+        $this->tradeOrderRepoMock->method('findOpenByTicker')->willReturn([]);
+        $this->marketEventMock->method('publish')->willReturn(['type' => 'BANKRUPTCY']);
+
+        $optionConnection = $this->createMock(Connection::class);
+        $optionConnection->expects($this->once())
+            ->method('fetchAllAssociative')
+            ->with($this->stringContains('option_contracts'), $this->anything())
+            ->willReturn([]);
+        $optionEm = $this->createStub(EntityManagerInterface::class);
+        $optionEm->method('getConnection')->willReturn($optionConnection);
+        $optionSettlement = new \App\Service\Market\Option\OptionSettlementEngine($optionEm, new \App\Service\User\CashLedger());
+
+        $sweep = new FailureSweep($this->entityManagerMock, $this->loggerMock, $this->marketEventMock, $this->debtEngineMock, null, null, new \App\Service\Corporate\ReorganizationEngine(), $optionSettlement);
+        $sweep->sweep([$stock], new MacroStateDTO());
+
+        $this->assertTrue($stock->isBankrupt());
+    }
+
     public function testTheFailureSweepSkipsAnAlreadyBankruptStock(): void
     {
         $stock = new Stock();
@@ -354,6 +381,42 @@ class BankruptcyTest extends TestCase
         $this->assertEqualsWithDelta(0.05, (float) $stock->getHistoricalFixedRate(), 1e-9, 'the exit notes are new paper');
         $this->assertEqualsWithDelta((320_000_000.0 - $exitDebt) / 1_000_000.0, (float) $stock->getPrice(), 1e-6, 'the assets less the exit debt, over a million new shares');
         $this->assertSame($capacityBefore, $store->readIndustry('Airlines')['REOR']['capacity'], 'a reorganized firm keeps its plant');
+    }
+
+    /**
+     * A plan that cancels the old shares cancels an anchor holder's with them. The holder keeps its percentage by
+     * buying its fraction of the creditors' new shares, in cash; left alone, it owned that fraction of the
+     * reorganized company for nothing.
+     */
+    public function testAnAnchorHolderPaysForItsPercentageOfTheReorganizedCompany(): void
+    {
+        $held = $this->buildDefaulter('ALBT', 'Albatross Terminals', quartersInDefault: 2);
+        $held->setIndustry('Airlines');
+        $held->setPrice('0.50');
+        $held->setWholesaleDebt('2000000000');
+        $held->setTotalEquity('-500000000');
+
+        $holder = new Stock();
+        $holder->setTicker('BRKW');
+        $holder->setName('Breakwater Trust');
+        $holder->setPrice('100.00');
+        $holder->setSharesOutstanding('1000000000');
+        $holder->setCorporateTreasury('10000000000');
+        $holder->setListedStakesCarrying('1000000000');
+
+        $this->debtEngineMock->method('assessGoingConcern')->willReturn($this->going(ebit: 50_000_000.0, ebitda: 80_000_000.0, assetValue: 320_000_000.0, cash: 20_000_000.0, claims: 2_000_000_000.0));
+        $this->entityManagerMock->method('getRepository')->willReturn($this->tradeOrderRepoMock);
+        $this->tradeOrderRepoMock->method('findOpenByTicker')->willReturn([]);
+        $this->marketEventMock->method('publish')->willReturn([]);
+
+        $operator = new FailureSweep($this->entityManagerMock, $this->loggerMock, $this->marketEventMock, $this->debtEngineMock);
+        $operator->sweep([$held, $holder], new MacroStateDTO(yield5yEma: 0.04, highYieldCreditSpreadEma: 0.01));
+
+        // The plan reinstates 285.7M of the 320M the assets are worth; the creditors own the remaining 34.3M.
+        $reorganizedEquity = 320_000_000.0 - (50_000_000.0 / (0.05 * 3.5));
+        $paid = \App\Data\Company\AnchorHoldings::forHolder('BRKW')['ALBT'] * $reorganizedEquity;
+        $this->assertEqualsWithDelta(10_000_000_000.0 - $paid, (float) $holder->getCorporateTreasury(), 1.0);
+        $this->assertEqualsWithDelta(1_000_000_000.0 + $paid, (float) $holder->getListedStakesCarrying(), 1.0, 'the new shares are carried at what they cost; the cancelled ones are written off at the next mark');
     }
 
     /**

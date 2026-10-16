@@ -40,6 +40,15 @@ class CreditRiskTest extends TestCase
         $this->assertLessThan($average, $crisis);
     }
 
+    public function testAbsolutePriorityPaysEachClassInFullBeforeTheNext(): void
+    {
+        // 10 owed ahead of 30 owed ahead of 20, with 25 to divide: the first is whole, the second takes the
+        // remaining 15 of its 30, and the last gets nothing. A class owed nothing has lost nothing.
+        $this->assertSame([1.0, 0.5, 0.0, 1.0], CreditRisk::absolutePriorityRecoveries(25.0, [10.0, 30.0, 20.0, 0.0]));
+        $this->assertSame([1.0, 1.0], CreditRisk::absolutePriorityRecoveries(100.0, [10.0, 30.0]), 'an estate worth more than the claims pays them all, and no more');
+        $this->assertSame([0.0, 0.0], CreditRisk::absolutePriorityRecoveries(-5.0, [10.0, 30.0]));
+    }
+
     public function testTheFallIsLogLinearInTheDefaultRate(): void
     {
         // Each doubling of the default rate costs the same amount of recovery.

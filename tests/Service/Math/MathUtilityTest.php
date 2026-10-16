@@ -471,6 +471,18 @@ class MathUtilityTest extends TestCase
         }
     }
 
+    public function testAnIndexIsDrawnFromOneUniformAndNeverRunsPastTheList(): void
+    {
+        $stream = MathUtility::replaying(['uniforms' => [0.0, 0.5, 0.999, 1.0, 0.3, 0.75]]);
+
+        $this->assertSame(0, $stream->generateIndex(4));
+        $this->assertSame(2, $stream->generateIndex(4));
+        $this->assertSame(3, $stream->generateIndex(4));
+        $this->assertSame(3, $stream->generateIndex(4), 'the closed top of the uniform is the last item, not one past it');
+        $this->assertSame(0, $stream->generateIndex(1), 'a list of one still takes its draw');
+        $this->assertSame(0.75, $stream->generateUniform(), 'five picks consumed exactly five draws');
+    }
+
     public function testCheckProbability(): void
     {
         $this->assertFalse($this->mathUtility->checkProbability(0.0), 'Probability of 0.0 must always return false.');

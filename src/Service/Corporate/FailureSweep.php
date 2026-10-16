@@ -4,6 +4,7 @@ namespace App\Service\Corporate;
 
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
+use App\Service\Corporate\Holdings\AnchorStakeLedger;
 use Doctrine\ORM\EntityManagerInterface;
 use Psr\Log\LoggerInterface;
 use App\Service\Event\MarketEventPublisher;
@@ -36,7 +37,9 @@ class FailureSweep
         /** Refunds buy escrow the way a player's own cancel does: the margin loan is repaid first. */
         private CashLedger $cashLedger = new CashLedger(),
         /** Tells each holder what happened to the position; null (unit tests) tells no one. */
-        private ?PlayerNotifier $notifier = null
+        private ?PlayerNotifier $notifier = null,
+        /** Settles an anchor holder's part when a plan issues or cancels the shares it holds. */
+        private AnchorStakeLedger $anchorStakes = new AnchorStakeLedger()
     ) {}
 
     /**
@@ -50,6 +53,7 @@ class FailureSweep
     {
         $this->logger->info("The failure sweep is reviewing the district...");
         $generatedEvents = [];
+        $this->anchorStakes->beginTick($stocks);
 
         // Calculate the Total Market Cap of active companies in the district on the fly
         $totalMarketCap = 0;
@@ -153,6 +157,8 @@ class FailureSweep
         $stock->setCreditRating('D');
 
         $holders = $this->cancelEquity($stock);
+        // The options go with the shares they were written on, cash-settled on an underlying worth nothing.
+        $this->optionSettlement?->settleCancelledUnderlying($stock);
         $this->notifier?->queueForHolders(
             $holders,
             $stock->getTicker(),
@@ -209,12 +215,18 @@ class FailureSweep
             $holders = array_map(static fn (array $row): array => ['user_id' => (int) $row['user_id'], 'quantity' => (int) $row['quantity']], $this->holdersOf($stock));
         }
 
+        $sharesBefore = (float) $stock->getSharesOutstanding();
         $openingPrice = $this->reorganizationEngine->applyPlan($stock, $plan);
 
-        // Impaired notes are exchanged, so the listed issues settle at their recovery; a plan that reinstates
-        // every claim leaves them outstanding on their own terms.
+        // An anchor holder keeps its percentage through a plan as it does through an issue: it buys its fraction
+        // of the shares the creditors received, and of every share when its own were cancelled.
+        $retainedShares = $plan->oldEquityShare > 0.0 ? $sharesBefore : 0.0;
+        $this->anchorStakes->settleProRata($stock, (float) $stock->getSharesOutstanding() - $retainedShares, $openingPrice);
+
+        // Impaired notes are exchanged, so the listed issues settle at what the plan gives them; a plan that
+        // reinstates every claim leaves them outstanding on their own terms.
         $settledIssues = $plan->convertedClaims > 0.0
-            ? ($this->corporateDefault?->settle($stock, $macroState, new \DateTime()) ?? [])
+            ? ($this->corporateDefault?->settle($stock, $macroState, new \DateTime(), $plan) ?? [])
             : [];
 
         $this->entityManager->persist($stock);
