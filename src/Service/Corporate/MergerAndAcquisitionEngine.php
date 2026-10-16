@@ -154,8 +154,8 @@ class MergerAndAcquisitionEngine
 
     /** Discount a distressed seller takes to the market value of the assets it sells (~14%; Pulvino 1998, aircraft fire sales). */
     public const DIV_FIRE_SALE_DISCOUNT = 0.14;
-    /** Stream-state key: the time of the distress sale the firm's current episode has had; cleared once its return has recovered. */
-    public const STATE_DISTRESS_SALE_EPISODE = 'state:distress_sale_episode';
+    /** Carried stream-state key: the time of the distress sale the firm's current episode has had; cleared once its return has recovered. */
+    public const STATE_DISTRESS_SALE_EPISODE = EarningsEngine::CARRIED_STATE_PREFIX . 'distress_sale_episode';
     /** Ceiling on the acquisition hazard, cached: the styles and constants it is built from never change. */
     private static ?float $acquisitionHazardCeiling = null;
 

@@ -44,6 +44,8 @@ class EarningsSimulationContext
     
     // Capacity & Revenue
     public float $capacityUtilization = 0.0;
+    /** Capacity utilization without the firm's own demand shock and jump this quarter: the output analysts forecast. */
+    public float $capacityUtilizationBeforeShocks = 0.0;
     public float $structuralRevenue = 0.0;
     public float $expectedRevenue = 0.0;
     /** Expected revenue without the firm's own demand shock and jump this quarter: the base the consensus is formed on. */
@@ -52,8 +54,10 @@ class EarningsSimulationContext
     public float $priceLevelSurprise = 0.0;
     public float $fixedCosts = 0.0;
     public float $baselineVariableMargin = 0.0;
-    /** Depreciation the firm would charge running its plant at exactly structural capacity, carved out of the cost base. */
+    /** The quarter's depreciation on the plant's schedule, carved out of the cost base: what it charges at structural output. */
     public float $structuralDepreciation = 0.0;
+    /** The depreciation charge analysts forecast: the schedule, or for a units-of-production plant the output before its own shocks. */
+    public float $expectedDepreciation = 0.0;
     /** Construction in progress placed in service this quarter; leaves CIP and enters gross PP&E. */
     public float $completedCip = 0.0;
     /** Current capital-goods price level over the vintage the plant was bought at; 1.0 when prices have not moved. */
