@@ -10,8 +10,8 @@ use App\Service\Math\MathUtility;
 /**
  * The State Guard as a department of the Council: the District's standing land force, a small corps of full-time
  * professionals for hurricane relief, armed attacks beyond the police's means and the defence of the District's
- * institutions. The Charter allows no army, so in law it is a guard, as Bermuda's regiment is the local force of a
- * territory whose defence is another state's; only the Council can call it out.
+ * institutions. The Charter allows no army, so in law it is a guard; in practice it is one, as Japan's Self-Defense
+ * Forces are an army the government reads Article 9 as permitting. Only the Council can call it out.
  *
  * The State Guard sets no rule the economy reads. The Council names the candidate nearest its median on its own
  * questions, as it does the Security Bureau's director, and the commander's tenure is lore.

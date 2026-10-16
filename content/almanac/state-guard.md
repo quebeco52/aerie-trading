@@ -1,57 +1,63 @@
 ---
 title: State Guard
-summary: The District's standing land force, a small corps of full-time professionals which in law is a guard and which only the Council can call out.
+summary: The District's standing land force, a guard in law and trained, equipped and organised as an army in practice.
 category: Institution
 sequence: 7
 about: [state-guard, PTAR]
 ---
 
-The State Guard is the District's standing land force: a small corps of full-time professionals, armed, trained and
-equipped to an army's standard. The Charter allows the District no army, so in law it is a guard of the District's
-people and institutions. It takes its orders from the Council alone, and only the Council can call it out.
+The State Guard is the District's standing land force, a small corps of full-time professionals. The Charter forbids
+the District an army and leaves its defence to the mainland, so in law the State Guard is a guard: a force for the
+District's own security, with no duty to defend it against another state. In practice it is trained, equipped and
+organised as an army, and the mainland's and allied armies treat it as one.
 
-## How it came to be
+## History
 
-When a hurricane's surge flooded the new wards built on filled marsh, people waited on their roofs for days. The
-municipal police and the security companies had neither the boats nor the trucks to reach them, the
-[[coast-guard|Coast Guard]] could not be everywhere at once, and the mainland's help came only after the water had
-begun to fall.
+The State Guard was formed shortly after the District's founding, when the mainland withdrew its garrison under the
+Charter. That left the District with its municipal police, the security companies and nothing that could act in a
+disaster or an armed emergency. The Council raised a police reserve to fill the gap, armed no more heavily than the
+police and attached to them in law.
 
-The Diet argued for a year over whose force the District should raise. The Charter's drafters had meant the District
-to raise no army, and had given the Council, on which no party sits, the appointment of every department's head. The
-Council decreed a guard, and the Diet voted the money for it.
+The Council's reading of the Charter, which no court has tested, is that it forbids a force for war, not one for the
+District's own security. On that reading the reserve grew with the District. It was separated from the police, took its
+present name and became a full-time professional force, each step by Council decree and none by amending the Charter.
+Its weapons and training reached an army's standard long before anyone proposed to change its legal status, and its
+legal status has never changed.
 
-## Mandate
+## Duties
 
-The founding decree gives the State Guard three duties:
+The State Guard's duties are written so that none of them is defence.
 
-- **Storms.** Before a hurricane it moves people off the barrier islands and out of the marsh towns. After it, it
-  rescues those who stayed, clears the roads and keeps order in the flooded wards until the police can return.
-- **Armed attacks.** A siege, a hostage-taking or an attack that the police cannot meet. The Guard goes in only when
-  the Council calls it out.
-- **The institutions.** In a crisis it guards the Council, the Diet and the Monetary Authority. If another state
-  attacked the District, its defence would be the mainland's, and the Guard's part would be to hold until the
-  mainland's forces arrived.
+- **Disaster relief.** Evacuating the barrier islands and the marsh towns ahead of a hurricane, and rescue, route
+  clearance and support to the civil authorities afterwards.
+- **Armed emergencies.** Sieges, hostage-takings and attacks beyond the capacity of the police. The Guard acts in
+  support of the police, and only when the Council authorises its deployment.
+- **Protection of institutions.** In an emergency, the protection of the Council, the Diet and the Monetary Authority.
 
-## Guards and equipment
+Taken together, they cover most of what an army would be asked to do if the District were attacked.
 
-The Guard is kept small. Applicants sit a selection course that most of them fail, and those who pass are paid well
-above the police. They train with the mainland's and allied armies. Its vehicles are Ptarmigan Land Systems' tracked
-carriers, kept above all for floods, where a tracked vehicle crosses water that would stop a truck. It fires
-Ptarmigan's ammunition and trains on the ranges beside Ptarmigan's northern works.
+## Organisation and equipment
+
+The Guard recruits only full-time members. Selection is demanding and pay is high. Members train with the mainland's
+and allied armies and take part in their exercises as a light infantry force like any other.
+
+Its vocabulary is chosen with the Charter in mind. Its members are guards, not soldiers, its ranks follow the
+police's, and it is organised in companies, never battalions or regiments. The companies range from the ward
+companies, which guard the District's institutions, to a small response company for sieges and hostage-takings,
+trained to the standard of the mainland's special forces. The armoured vehicles Ptarmigan builds for it are listed as
+tracked carriers, chosen for crossing floodwater. Ptarmigan also supplies its ammunition, and the Guard trains on the
+ranges at Ptarmigan's northern works. It has no artillery and no strike aircraft, which the Council's lawyers hold
+would make it an army.
 
 ## Command
 
-The Council names the commander for a single five-year term, from a shortlist, as it names the heads of its
-departments. Unlike those heads, the commander takes the Council's orders. The Diet funds the Guard and has no say in
-how it is used.
+The commander is appointed by the Council for a single five-year term and takes operational orders from the Council.
 
-The Council's defenders say that is the point: the District's guns belong to no party. Its critics, the Common Lot
-loudest among them, call it the most dangerous clause in the Charter, since a body no election touches commands the
-only force the District can put in the field.
+The arrangement is disputed. The Common Lot argues that the Guard is an army the Charter forbids, and that if the
+District is to have one, the Diet should command it rather than a body no election touches. It has called for the
+Charter to be amended to say so. The Chartists, who oppose any amendment, defend the Council's reading, and argue that
+keeping the Guard under the Council keeps the District's only standing force out of party hands.
 
 ## Commanders
 
-The first commander, Ada Merriman, had grown up in the marsh towns and served in the mainland's army before she came
-home to build the Guard. Marcus Holloway, who had led its rescue companies in the flooded wards, was among the
-commanders who followed her.
+Jenson Merriman was the first commander and built the corps from its first intake.

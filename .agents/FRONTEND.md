@@ -41,7 +41,9 @@ the glossary does not have.
 The place is "the Aerie Autonomous District" once, then "the District"; the financial district is Glasswater Row;
 the US is "the mainland". The District has no army: the Charter leaves its defence to the mainland, and defence firms
 sell to the mainland and allies. The Coast Guard and the State Guard are armed and trained to a navy's and an army's
-standard, but in law they are a maritime police and a guard; never call them armed forces.
+standard, but in law they are a maritime police and a guard. The gap is deliberate: they are a navy and an army in all
+but name, and the Council keeps the Charter's fiction. The District's own pages hold the official line and never call
+them armed forces; the Almanac may say what they are in practice and who disputes it.
 
 ## Company profiles
 `StockInfo::DESCRIPTIONS`, shown under "About" and, first paragraph only, on the district map. Write them like an

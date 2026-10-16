@@ -1,56 +1,55 @@
 ---
 title: Coast Guard
-summary: The District's force at sea, which holds the sounds, the free port's approaches and the shelf, and in law is a maritime police.
+summary: The District's maritime service, responsible for search and rescue, the port approaches and law enforcement at sea.
 category: Institution
 sequence: 5
 about: [coast-guard, GRIP]
 ---
 
-The Coast Guard holds the District's waters: the sounds behind the barrier islands, the approaches to the free port and
-the old harbour, and the shelf out to the edge of the District's waters. It is small, armed and trained to a navy's
-standard. The Charter allows the District no navy, so in law it is a maritime police, and it takes its orders from the
-Council alone.
+The Coast Guard is the District's maritime service. It is responsible for search and rescue, the security of the port
+approaches and law enforcement in the District's waters, from the sounds behind the barrier islands to the edge of the
+offshore shelf. It is armed and trained to naval standards, but the Charter allows the District no navy, and in law the
+Coast Guard is a maritime police service. It reports to the Council.
 
-## How it came to be
+## History
 
-The Charter left the District's defence to the mainland, and the mainland's patrol boats have no more authority in
-the District's waters than its police have ashore. For years the waters were watched by the old harbour's pilots and a
-handful of fishery wardens. When the free port opened, ships came faster than they could count them, and smuggling
-came with the ships.
+Before the Coast Guard, the District's waters were covered by the harbour pilots and a small fishery inspectorate.
+Neither was equipped for the traffic that followed the opening of the free port, and smuggling through the sounds grew
+with it. The mainland's patrol vessels had no authority in District waters.
 
-What settled it was a hurricane. A storm that turned late caught the ferries and part of the fishing fleet in the
-sounds, and the only boats that went out after them were the fishermen's own. Nathaniel Pryor, a pilot from the old
-harbour, led them, and they brought most of the crews home. The Council's founding decree followed within the year,
-and Pryor was the first commandant. The pilots' launches and the wardens' boats became the Coast Guard's first fleet.
+A hurricane exposed the gap. Vessels caught in the sounds were reached mainly by private boats, and no agency
+coordinated the search. The Council established the Coast Guard by decree within the year, bringing the pilots'
+launches and the fishery inspectorate under one command. Nathaniel Pryor, a senior harbour pilot, was appointed its
+first commandant.
 
-## Mandate
+## Duties
 
-The founding decree gives the Coast Guard four duties:
+- **Search and rescue.** It coordinates and carries out search and rescue in the District's waters. During a
+  hurricane it directs shipping to shelter, closes the sounds to traffic and reopens the channels once they have been
+  surveyed.
+- **Port approaches.** It controls traffic in the approaches to the free port and the old harbour, and boards vessels
+  on behalf of the Trade & Migration Office.
+- **Law enforcement at sea.** Smuggling, illegal fishing and the security of the drilling platforms on the shelf.
+- **Territorial waters.** It is the only armed state presence at sea. In law the defence of the District against
+  another state is the mainland's responsibility. In practice the cutters on the shelf are armed as warships and
+  would be the first to meet an incursion.
 
-- **Rescue.** Any vessel in distress in the District's waters. Before a hurricane it clears the sounds and sees the
-  ferries and fishing boats into shelter; after it, it searches the islands and reopens the channels.
-- **The approaches.** The shipping lanes into the free port and the old harbour, and the boarding of any ship the
-  Trade & Migration Office wants searched.
-- **The shelf.** Smuggling, poaching on the fishing grounds and the safety of the drilling platforms.
-- **The waters themselves.** Its cutters are the District's only armed ships. If another state ever threatened the
-  District from the water, the Coast Guard would hold until the mainland's navy came.
+Security on the quays is provided under concession. The Coast Guard's jurisdiction begins at the waterline.
 
-On the quays the port is policed under concession. The Coast Guard's work begins at the water's edge.
+## Organisation and equipment
 
-## Ships and crews
-
-Its fleet is a few ocean-going cutters for the shelf, fast boats for the sounds, and helicopters and patrol aircraft.
-Gryphon Defense Systems built the cutters and the radar that watches the approaches, to the standard of the vessels it
-builds for the mainland. The crews serve full time, many of them from the harbour and the fishing towns, and they
-train alongside the mainland's and allied navies on their exercises.
+The service is small and entirely professional. It operates ocean-going cutters on the shelf, patrol boats in the
+sounds and an air unit of helicopters and maritime patrol aircraft, all directed from a single operations centre in the
+old harbour. The cutters and the coastal radar network were built by Gryphon Defense Systems to the specifications it
+uses for mainland vessels. Crews train with the mainland's and allied navies and take part in their exercises.
 
 ## Command
 
-The Council names the commandant for a single five-year term, from a shortlist, as it names the heads of its
-departments. Unlike those heads, the commandant takes the Council's orders. The Diet funds the Coast Guard and has no
-say in how it is used. The [[state-guard|State Guard]] answers to the Council in the same way.
+The commandant is appointed by the Council for a single five-year term, from a shortlist, in the same way as the heads
+of the Council's departments. Unlike them, the commandant takes operational orders from the Council. The Diet sets the
+Coast Guard's budget but has no role in its operations. The [[state-guard|State Guard]] is governed in the same way.
 
 ## Commandants
 
-Nathaniel Pryor led the Coast Guard through its first years and gave it its habit of going out in any weather. Theresa
-Vaughn, who had commanded its cutters on the shelf, was among the commandants who followed him.
+Nathaniel Pryor was the first commandant and oversaw the merger of the pilot and fishery services. Theresa Vaughn,
+previously in command of the cutters on the shelf, was among his successors.
