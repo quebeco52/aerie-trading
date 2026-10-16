@@ -71,8 +71,6 @@ class MerchantHouseBusinessModel extends ConglomerateBusinessModel
     /** Sensitivity of physical throughput volume to manufacturing PMI; bulk inputs move before finished goods do. */
     public const MERCHANT_PMI_SENSITIVITY = 0.25;
 
-    /** Sensitivity of throughput to the trade balance: an economy importing more moves more tonnage across the merchant's wharves. */
-    public const MERCHANT_TRADE_SENSITIVITY = 0.80;
     /** Cargo volume per unit of the foreign bloc's output gap: the corridors run both ways, and the far end is most of them. */
     public const MERCHANT_FOREIGN_SENSITIVITY = 2.00;
 
@@ -120,17 +118,13 @@ class MerchantHouseBusinessModel extends ConglomerateBusinessModel
             + (self::DEFENSIVE_STAPLES_WEIGHT * $this->resolveDefensiveVolumeShift($macroState))) / $totalWeight;
     }
 
-    /** Physical throughput: bulk inputs on manufacturing PMI, imports on the trade balance, and the foreign end of the corridors. */
+    /** Physical throughput: bulk inputs on manufacturing PMI and the foreign end of the corridors. */
     private function resolveMerchantVolumeShift(MacroStateDTO $macroState): float
     {
         return MacroTransmission::calculatePmiDemandShift(
             $macroState->manufacturingPmiEma,
             MacroEngine::PMI_BASELINE,
             self::MERCHANT_PMI_SENSITIVITY
-        ) + MacroTransmission::calculateTradeBalanceShift(
-            $macroState->tradeBalanceToGdpEma,
-            MacroEngine::TRADE_BALANCE_BASELINE,
-            self::MERCHANT_TRADE_SENSITIVITY
         ) + MacroTransmission::calculateForeignDemandShift($macroState->foreignOutputGapEma, self::MERCHANT_FOREIGN_SENSITIVITY);
     }
 
@@ -316,7 +310,6 @@ class MerchantHouseBusinessModel extends ConglomerateBusinessModel
             'policy_rate_ema',
             'supply_chain_pressure_index_ema',
             'tips_breakeven_ema',
-            'trade_balance_to_gdp_ema',
             'real_wage_gap',
         ];
     }

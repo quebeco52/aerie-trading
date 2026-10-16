@@ -615,7 +615,7 @@ class CreditFiscalSubsystemTest extends TestCase
         $state = new MacroState();
         $state->totalTime = 4.001; // the tick that crossed the year end
         $state->inflationEma = 0.04;
-        $state->sovereignDebtToGdpEma = self::SOUND_DEBT_TO_GDP; // below the neutral threshold: no sequester
+        $state->sovereignDebtToGdpEma = self::SOUND_DEBT_TO_GDP;
 
         $this->subsystem->calculateReimbursementRate($state, 0.01);
 
@@ -623,6 +623,37 @@ class CreditFiscalSubsystemTest extends TestCase
         $this->assertEqualsWithDelta(100.0 * (1.0 + $state->reimbursementRateGrowth), $state->reimbursementRateIndex, 1e-9);
     }
 
+
+    /** A standing consolidation lowers health prices once and holds them there; when the budget restores the money, they come back. */
+    public function testAConsolidationCutsHealthPricesOnceAndItsEndRestoresThem(): void
+    {
+        $state = new MacroState();
+        $state->inflationEma = 0.04;
+        $state->sovereignDebtToGdp = 0.70;
+        $state->debtTarget = 0.50;
+        $state->debtPace = 0.005;
+        $state->consolidationTaxShare = 0.0;
+        $cut = CreditFiscalSubsystem::consolidationSpendingCut(CreditFiscalSubsystem::requiredPrimaryBalance($state), 0.0) / MacroEngine::PUBLIC_PURCHASES_TO_GDP;
+        $this->assertGreaterThan(0.01, $cut);
+
+        $yearEnd = function () use ($state): void {
+            $state->totalTime = floor($state->totalTime) + 1.001;
+            $this->subsystem->calculateReimbursementRate($state, 0.01);
+        };
+        $indexed = 1.0 + 0.04 - MacroEngine::REIMBURSEMENT_PRODUCTIVITY_OFFSET;
+
+        $yearEnd();
+        $this->assertEqualsWithDelta(($indexed * (1.0 - $cut)) - 1.0, $state->reimbursementRateGrowth, 1e-12, 'The first year carries the cut.');
+        $yearEnd();
+        $yearEnd();
+        $this->assertEqualsWithDelta($indexed - 1.0, $state->reimbursementRateGrowth, 1e-12, 'A cut held is not cut again.');
+        $this->assertEqualsWithDelta(100.0 * ($indexed ** 3) * (1.0 - $cut), $state->reimbursementRateIndex, 1e-9);
+
+        // The Diet turns to tax for the rest of the repair: the purchases cut ends, and the prices are restored.
+        $state->consolidationTaxShare = 1.0;
+        $yearEnd();
+        $this->assertEqualsWithDelta(100.0 * ($indexed ** 4), $state->reimbursementRateIndex, 1e-9);
+    }
 
     public function testADeflationaryYearHoldsRatesRatherThanCuttingThem(): void
     {

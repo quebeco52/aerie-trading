@@ -16,3 +16,7 @@
   `python3 var/harness/rework/analyse_step1.py var/harness/rework/runs` (paired table, |t|>2 flagged).
 
 Evidence: `rework_evidence.md`.
+- Macro-review step 2 (2026-10-16): `run_step2.sh` arms `s2base`/`s2basefund` (export of HEAD at BASE, default
+  /tmp/claude-1000/base2) and `s2new`/`s2newfund`. `bin/harness-batch var/harness/rework/run_step2.sh 1-4 s2base s2new
+  s2basefund s2newfund`, then `python3 var/harness/rework/analyse_step2.py var/harness/rework/runs` (needs
+  `step2_extra.py` beside it: GDP q/q sd/acf1, inventory gap, PMI, reimbursement growth and drift vs CPI).

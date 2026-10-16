@@ -97,9 +97,7 @@ class RailroadBusinessModel extends StandardCorporateBusinessModel
     // --- Manufacturing PMI & Trade Transmission ---
     /** Sensitivity of industrial carload volumes to manufacturing PMI shifts. */
     public const PMI_CARLOAD_SENSITIVITY = 0.50;
-    /** Sensitivity of intermodal container rail traffic to international merchandise trade balance. */
-    public const TRADE_BALANCE_SENSITIVITY = 1.20;
-    /** Export volume per unit of the foreign bloc's output gap: the customers-abroad half of the trade term. */
+    /** Export volume per unit of the foreign bloc's output gap: the customers abroad. The import side rides on the domestic cycle. */
     public const FOREIGN_DEMAND_SENSITIVITY = 0.80;
 
     public function getWholesaleLeverageLimit(): float { return 2.5; }
@@ -273,8 +271,7 @@ class RailroadBusinessModel extends StandardCorporateBusinessModel
         $beta = $this->getOperatingCyclicality($stock);
         $freightShift = ($macroState->freightRateIndexEma - 100.0) / 100.0;
         $agriShift = ($macroState->agriculturalCommodityIndexEma - 100.0) / 100.0;
-        $tradeShift = MacroTransmission::calculateTradeBalanceShift($macroState->tradeBalanceToGdpEma, sensitivity: self::TRADE_BALANCE_SENSITIVITY)
-            + MacroTransmission::calculateForeignDemandShift($macroState->foreignOutputGapEma, sensitivity: self::FOREIGN_DEMAND_SENSITIVITY);
+        $tradeShift = MacroTransmission::calculateForeignDemandShift($macroState->foreignOutputGapEma, sensitivity: self::FOREIGN_DEMAND_SENSITIVITY);
         $pmiShift = MacroTransmission::calculatePmiDemandShift($macroState->manufacturingPmiEma, sensitivity: self::PMI_CARLOAD_SENSITIVITY);
 
         return [
@@ -304,7 +301,6 @@ class RailroadBusinessModel extends StandardCorporateBusinessModel
             'manufacturing_pmi_ema',
             'output_gap_ema',
             'tips_breakeven_ema',
-            'trade_balance_to_gdp_ema',
             'real_wage_gap',
         ];
     }

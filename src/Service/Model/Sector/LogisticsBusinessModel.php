@@ -117,9 +117,7 @@ class LogisticsBusinessModel extends StandardCorporateBusinessModel
     // --- Manufacturing PMI, Trade & Supply Chain Transmission ---
     /** Sensitivity of contract freight and 3PL warehousing volumes to manufacturing PMI shifts. */
     public const PMI_FREIGHT_SENSITIVITY = 0.45;
-    /** Sensitivity of overland and intermodal freight to merchandise trade balance shifts. */
-    public const TRADE_BALANCE_SENSITIVITY = 1.00;
-    /** Export volume per unit of the foreign bloc's output gap: the customers-abroad half of the trade term. */
+    /** Export volume per unit of the foreign bloc's output gap: the customers abroad. The import side rides on the domestic cycle. */
     public const FOREIGN_DEMAND_SENSITIVITY = 1.00;
     /** Spot freight brokerage surge demand per standard deviation of supply-chain pressure above normal (3.8%). */
     public const GSCPI_SPOT_SURGE_SENSITIVITY = 0.038;
@@ -128,8 +126,7 @@ class LogisticsBusinessModel extends StandardCorporateBusinessModel
     {
         $outputGap = $this->resolveLaggedOutputGap($macroState);
         $pmiShift = MacroTransmission::calculatePmiDemandShift($macroState->manufacturingPmiEma, sensitivity: self::PMI_FREIGHT_SENSITIVITY);
-        $tradeShift = MacroTransmission::calculateTradeBalanceShift($macroState->tradeBalanceToGdpEma, sensitivity: self::TRADE_BALANCE_SENSITIVITY)
-            + MacroTransmission::calculateForeignDemandShift($macroState->foreignOutputGapEma, sensitivity: self::FOREIGN_DEMAND_SENSITIVITY);
+        $tradeShift = MacroTransmission::calculateForeignDemandShift($macroState->foreignOutputGapEma, sensitivity: self::FOREIGN_DEMAND_SENSITIVITY);
         $beta = $this->getOperatingCyclicality($stock);
 
         return [
@@ -235,7 +232,6 @@ class LogisticsBusinessModel extends StandardCorporateBusinessModel
             'output_gap_ema',
             'supply_chain_pressure_index_ema',
             'tips_breakeven_ema',
-            'trade_balance_to_gdp_ema',
             'real_wage_gap',
         ];
     }

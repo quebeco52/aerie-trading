@@ -357,6 +357,7 @@ class MacroState
     public float $reimbursementRateIndex;
     public float $reimbursementRateIndexEma;
     public float $reimbursementRateGrowth;
+    public float $reimbursementAusterityShare;
 
     // Household balance sheet: leverage, the service it demands, the credit gap and the buffer regulators set on it.
     public float $householdDebtToIncome;

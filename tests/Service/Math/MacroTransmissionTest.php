@@ -319,12 +319,6 @@ class MacroTransmissionTest extends TestCase
         // Boom 120.0 -> (120-100)/100 * 0.30 = +0.06
         $this->assertEqualsWithDelta(0.06, MacroTransmission::calculateHousingStartsShift(120.0, 100.0, 0.30), 0.0001);
 
-        // 4. calculateTradeBalanceShift
-        // Baseline -0.028 -> 0.0
-        $this->assertEqualsWithDelta(0.0, MacroTransmission::calculateTradeBalanceShift(-0.028, -0.028), 0.0001);
-        // Improvement to -0.018 (+0.01) * 2.0 = +0.02
-        $this->assertEqualsWithDelta(0.02, MacroTransmission::calculateTradeBalanceShift(-0.018, -0.028, 2.0), 0.0001);
-
         // 5. calculateBroadMoneyLiquidityShift
         // Neutral 0.055 -> 0.0
         $this->assertEqualsWithDelta(0.0, MacroTransmission::calculateBroadMoneyLiquidityShift(0.055, 0.055), 0.0001);

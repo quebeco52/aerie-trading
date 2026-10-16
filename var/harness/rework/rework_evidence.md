@@ -158,3 +158,27 @@ FX follow-up (same day, no-fund arms re-run, identical moments): meeting ticks s
 base / new / delta (se): meeting+quarter turn 127.5 / 120.1 / -7.4 (2.8); mid-quarter meeting 61.1 / 45.1 /
 -16.0 (1.6); all quarter turns 127.5 / 120.1; other ticks 44.2 / 44.5. The fix removes the mid-quarter meeting
 step; the remaining excess is at the mainland quarter step. Table: step1_fx.out.
+
+## Macro-review step 2 (2026-10-16): inventory-gap units, reimbursement levels, vs HEAD d89691cc, 4 seeds x 100y, TPY 48
+
+Question: do the step-2 fixes (inventoryStockGap as an inventory-to-sales overhang, x1/0.15; reimbursement cut as a
+level, floor on indexation only) behave sensibly? Harness: `macro_moments.php` (+ realGdpQuarterlyGrowth,
+inventoryStockGap, manufacturingPmi, reimbursementRateIndex/Growth, consumerPriceLevel), `run_step2.sh` arms
+s2base/s2basefund (export of HEAD at /tmp/claude-1000/base2) and s2new/s2newfund; `analyse_step2.py` (+ `step2_extra.py`).
+Table: `step2.out`. Seeds 1-4, 10y burn-in, no equity-cap loop in the no-fund arm.
+
+| quantity (no fund) | base | new | delta (se) |
+|---|---|---|---|
+| gap sd % | 2.355 | 2.387 | +0.032 (0.003) |
+| GDP q/q sd % | 0.587 | 0.595 | +0.008 (0.0005) |
+| GDP q/q acf1 | 0.774 | 0.780 | +0.006 (0.0006) |
+| inv gap sd | 0.0018 | 0.0123 | ratio 6.8 (fund 6.7) |
+| inv gap p5 / p95 | -0.003 / 0.003 | -0.019 / 0.021 | |
+| PMI sd | 6.53 | 6.74 | +0.21 (0.006) |
+| reimb growth mean % | 1.00 | 1.45 | +0.45 (0.06) |
+| reimb updates <= 0 % | 33.4 | 13.2 | -20.2 (3.8) |
+| log(R/P) drift, %/yr | -1.08 | -0.65 | +0.43 (0.06) |
+
+Fund arm: same signs and sizes. Other moments move by under 1.5% of level (infl mean +0.004pp, rate dq sd +0.3bp,
+max |gap| 8.6 -> 8.7%); crises, debt, recession share unchanged within noise. Remaining reimbursement drift of
+-0.65%/yr is the 0.6% productivity offset by design. The stronger inventory cycle raises GDP acf1 slightly, not lowers it.

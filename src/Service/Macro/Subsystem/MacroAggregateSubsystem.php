@@ -201,8 +201,10 @@ class MacroAggregateSubsystem
     public const RECESSION_CALL_QUARTERS = 2;
 
     // --- Metzler-Blinder Inventory Investment Cycle (Metzler 1941, Blinder 1982) ---
-    /** Demand drag per unit of inventory-to-sales deviation: the coefficient is the inventory share of annual GDP (~15%), so a 16% overhang costs 2.4pp over a year (Blinder & Maccini 1991). */
-    public const METZLER_INVENTORY_DRAG = 0.15;
+    /** Inventories over a year's sales (~15%): a miss worth a share of the year's output moves the inventory-to-sales ratio by that share over this. */
+    public const INVENTORY_TO_ANNUAL_SALES = 0.15;
+    /** Demand drag per unit of inventory-to-sales deviation: the coefficient is the inventory share of annual GDP, so a 16% overhang costs 2.4pp over a year (Blinder & Maccini 1991). */
+    public const METZLER_INVENTORY_DRAG = self::INVENTORY_TO_ANNUAL_SALES;
     /** Annual adjustment speed of firm inventory target replenishment. */
     public const INVENTORY_ADJUSTMENT_SPEED = 0.80;
     /** Sensitivity of involuntary inventory accumulation to unexpected output gap deceleration. */
@@ -542,6 +544,7 @@ class MacroAggregateSubsystem
             speed: self::INVENTORY_ADJUSTMENT_SPEED,
             surpriseSens: self::INVENTORY_SURPRISE_SENSITIVITY,
             dt: $dt,
+            inventoryToSales: self::INVENTORY_TO_ANNUAL_SALES,
         );
         $inventoryDrag = self::METZLER_INVENTORY_DRAG * $state->inventoryStockGap;
 
