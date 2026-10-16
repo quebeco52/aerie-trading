@@ -34,6 +34,8 @@ class EarningsSimulationContext
     public float $priorSeasonalFactor = 1.0;
     public float $seasonallyAdjustedRevenue = 0.0;
     public float $seasonallyAdjustedEbit = 0.0;
+    /** The deseasonalized quarter's net income, taxed as the quarter is and net of the levy: what the run rate is struck on. */
+    public float $seasonallyAdjustedNetIncome = 0.0;
     public float $structuralOperatingMargin = 0.0;
     /** Calendar quarter (0-3) this report covers; drives seasonality. */
     public int $calendarQuarter = 0;
@@ -97,10 +99,14 @@ class EarningsSimulationContext
     public float $committedCostScale = 1.0;
     /** How far that base was cut this quarter; zero when the firm held or rebuilt it. */
     public float $committedCostCut = 0.0;
-    /** Portion of the quarter's tax expense postponed by accelerated tax depreciation (ASC 740), non-cash. */
+    /** Deferred part of the quarter's tax expense (ASC 740), non-cash: accelerated tax depreciation, a write-down the tax books defer, a rate change's re-strike, the carryforward's asset. */
     public float $deferredTaxExpense = 0.0;
     /** Tax that actually left the company this quarter; total expense less the deferred portion. */
     public float $cashTaxPaid = 0.0;
+    /** The plant's depreciation on the tax books this quarter (200% declining balance on the tax basis). */
+    public float $taxDepreciation = 0.0;
+    /** Income on the tax return: pretax income less the plant's timing differences, before the loss carryforward. */
+    public float $taxableIncome = 0.0;
     
     // Variables
     public float $realizedVariableMargin = 0.0;

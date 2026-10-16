@@ -746,13 +746,28 @@ trait StandardOperatingPhysicsTrait
         return $effects;
     }
 
+    public function measureRevenueWithoutSectorFactor(Stock $stock, array $draws, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, MacroStateDTO $macroState): ?float
+    {
+        $sector = (string) $stock->getSector();
+        if ((float) ($macroState->sectorDemandZ[$sector] ?? 0.0) === 0.0) {
+            return null;
+        }
+
+        // Zero rather than absent: every loading stays as it was, so only the sector's term leaves each stream's draw.
+        $state = MacroStateDTO::fromArray(array_replace($macroState->toArray(), ['sector_demand_z' => [$sector => 0.0] + $macroState->sectorDemandZ]));
+        $physics = $this->calculateSectorPhysics(clone $stock, $expectedRevenue, $realizedVariableMargin, $fixedCosts, $baselineVol, $state, MathUtility::replaying($draws));
+        $this->takeActiveStreamContext();
+
+        return $physics->actualRevenue;
+    }
+
     public function computeActualFinancials(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, MacroStateDTO $macroState, MathUtility $mathUtility, ?int $calendarQuarter = null): ActualFinancialsDTO
     {
         // Discard any context a forecast built earlier; only the one this physics call builds is read.
         $this->takeActiveStreamContext();
         $this->reportedCalendarQuarter = $calendarQuarter;
         $physics = $this->calculateSectorPhysics($stock, $expectedRevenue, $realizedVariableMargin, $fixedCosts, $baselineVol, $macroState, $mathUtility);
-        [$demandShockZ, $sectorShockZ] = $this->demandShockSplit($physics, $this->takeActiveStreamContext());
+        $this->takeActiveStreamContext();
 
         $clampedMargin = $this->clampMargin($physics->rawVariableMargin);
         // Price is not produced: a rent escalator or a spot-rate spike on a fixed fleet adds revenue without
@@ -779,51 +794,9 @@ trait StandardOperatingPhysicsTrait
             netChargeOffs: $physics->netChargeOffs,
             netInterestSqueeze: $physics->netInterestSqueeze,
             priceRevenue: $priceRevenue,
-            demandShockZ: $demandShockZ,
-            sectorShockZ: $sectorShockZ,
             plantImpairment: $physics->plantImpairment,
             seasonalCostRatioShift: $physics->seasonalCostRatioShift,
         );
-    }
-
-    /**
-     * The quarter's demand Z and the sector factor's part of it, for attributing the revenue surprise
-     * between the firm and its sector. Each demand stream the model both drew and booked revenue for
-     * enters at its share of revenue, so a model with several streams is read on their composite; a
-     * model whose stream keys and revenue keys do not meet is read on its primary Z alone. Both are zero
-     * when no context was built, and the sector part is zero when the macro state carried no factor.
-     *
-     * @return array{float, float} [demand Z, sector part of it]
-     */
-    private function demandShockSplit(SectorPhysicsResult $physics, ?StreamContext $streams): array
-    {
-        if ($streams === null) {
-            return [$physics->primaryShockZ, 0.0];
-        }
-        $sectorZ = $streams->getSectorZ();
-
-        $weightedZ = 0.0;
-        $weightedSectorZ = 0.0;
-        $revenue = 0.0;
-        foreach ($physics->streamRevenue as $key => $streamRevenue) {
-            if (!isset($sectorZ[$key], $physics->streamZ[$key]) || $streamRevenue <= 0.0) {
-                continue;
-            }
-            $revenue += (float) $streamRevenue;
-            $weightedZ += (float) $streamRevenue * (float) $physics->streamZ[$key];
-            $weightedSectorZ += (float) $streamRevenue * (float) $sectorZ[$key];
-        }
-        if ($revenue > 0.0) {
-            return [$weightedZ / $revenue, $weightedSectorZ / $revenue];
-        }
-
-        foreach ($physics->streamZ as $key => $z) {
-            if (abs((float) $z - $physics->primaryShockZ) < 1e-12) {
-                return [$physics->primaryShockZ, (float) ($sectorZ[$key] ?? 0.0)];
-            }
-        }
-
-        return [$physics->primaryShockZ, 0.0];
     }
 
     abstract protected function takeActiveStreamContext(): ?StreamContext;
@@ -883,6 +856,12 @@ trait StandardOperatingPhysicsTrait
 
     /** A plant wears out on a schedule, so it is depreciated by time whatever the quarter's output. */
     public function depreciatesByUnitsOfProduction(): bool
+    {
+        return false;
+    }
+
+    /** An operating company reports net income as the books strike it. */
+    public function reportsFundsFromOperations(): bool
     {
         return false;
     }

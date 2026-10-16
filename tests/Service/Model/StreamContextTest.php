@@ -352,19 +352,24 @@ class StreamContextTest extends TestCase
         $this->assertEqualsWithDelta($next['revenue'] / 1000.0, StreamContext::openingWorkload($shocked->getStreamZ(), 'oem', 0.25), 1e-12);
     }
 
-    public function testTheSectorFactorsPartOfEachStreamsZIsKeptBesideIt(): void
+    /**
+     * A sector draw of zero, rather than none, keeps every loading, so on the same draws it moves a stream's Z by
+     * exactly the sector's term and an exogenous draw not at all. The earnings report re-runs a quarter this way to
+     * take out what every sector peer drew too.
+     */
+    public function testAZeroSectorDrawRemovesOnlyTheSectorsTermFromEachStream(): void
     {
-        $mathUtility = new MathUtility();
-        $withSector = new StreamContext([], $mathUtility, 0.6, 2.0, 0.3);
-        $withSector->generateZ('revenue', 0.25);
-        $withSector->generateExogenousZ('catastrophe', 0.0);
+        $withSector = new StreamContext([], MathUtility::ownStream(77), 0.6, 2.0, 0.3);
+        $withoutSector = new StreamContext([], MathUtility::ownStream(77), 0.6, 0.0, 0.3);
+        foreach ([$withSector, $withoutSector] as $context) {
+            $context->generateZ('revenue', 0.25);
+            $context->generateExogenousZ('catastrophe', 0.0);
+        }
+        $with = $withSector->getStreamZ();
+        $without = $withoutSector->getStreamZ();
 
         // sqrt(1 - phi^2) * rho_s * S: the sector's contribution to the fresh innovation, at the AR(1) weight.
-        $this->assertEqualsWithDelta(sqrt(1.0 - 0.0625) * 0.3 * 2.0, $withSector->getSectorZ()['revenue'], 1e-12);
-        $this->assertSame(0.0, $withSector->getSectorZ()['catastrophe'], 'an exogenous draw loads on no sector');
-
-        $noSector = new StreamContext([], $mathUtility, 0.6, null, 0.3);
-        $noSector->generateZ('revenue', 0.25);
-        $this->assertSame(0.0, $noSector->getSectorZ()['revenue']);
+        $this->assertEqualsWithDelta(sqrt(1.0 - 0.0625) * 0.3 * 2.0, $with['revenue'] - $without['revenue'], 1e-12);
+        $this->assertSame($without['catastrophe'], $with['catastrophe'], 'an exogenous draw loads on no sector');
     }
 }

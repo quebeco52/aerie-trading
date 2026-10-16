@@ -470,6 +470,12 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
         return self::DISTRIBUTION_REQUIREMENT;
     }
 
+    /** A trust is valued and forecast on funds from operations: its buildings hold their value while the books depreciate them. */
+    public function reportsFundsFromOperations(): bool
+    {
+        return true;
+    }
+
     public function getMarginReversionSpeed(): float
     {
         return self::LEASE_REVERSION_SPEED;

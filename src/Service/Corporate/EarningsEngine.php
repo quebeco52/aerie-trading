@@ -125,10 +125,20 @@ class EarningsEngine
     public const FUNDAMENTAL_JUMP_MEAN_SCALE = 0.50;
     /** Scale factor for fundamental jump volatility relative to price jumps. */
     public const FUNDAMENTAL_JUMP_VOL_SCALE = 0.50;
+    /** Price jump intensity assumed for a stock seeded without one: two jumps a year. */
+    public const DEFAULT_PRICE_JUMP_INTENSITY = 2.0;
+    /** Price jump size volatility assumed for a stock seeded without one: about 10% a jump. */
+    public const DEFAULT_PRICE_JUMP_VOL = 0.10;
 
     // --- Capacity Investment ---
     /** Share of the log gap between demand-implied and installed capital a firm closes each year: 6.2% (Bloom, Bond & Van Reenen 2007, UK company panel, error-correction term). */
     public const CAPITAL_ERROR_CORRECTION_SPEED = 0.062;
+    /** Least the capex cycle scales every capex line to: half of plan in the deepest trough. */
+    public const MIN_CAPEX_CYCLE_MODIFIER = 0.50;
+    /** Most the capex cycle scales every capex line to: one and a half times plan at the peak. */
+    public const MAX_CAPEX_CYCLE_MODIFIER = 1.50;
+    /** Least share of its maintenance capex a loss-making firm keeps spending (20%): upkeep deferred further would idle the plant. */
+    public const MIN_DISTRESSED_MAINTENANCE_SHARE = 0.20;
 
     // --- Institutional & Market Architecture ---
     /** Circuit breaker limiting the price move of a single quarterly earnings report to +/-40%. */
@@ -165,6 +175,8 @@ class EarningsEngine
     // --- Debt Physics ---
     /** Fallback weighted average cost of capital used as the investment hurdle when no live debt health exists. */
     public const DEFAULT_WACC_FALLBACK = 0.08;
+    /** Fallback cost of equity the return update discounts at when no live debt health exists (~10%). */
+    public const DEFAULT_COST_OF_EQUITY_FALLBACK = 0.10;
 
     // --- Corporate Taxation ---
     /** Max % of taxable income that can be shielded by NOLs (e.g. 80% post-TCJA). */
@@ -189,6 +201,8 @@ class EarningsEngine
     // --- Deferred Taxes (ASC 740) ---
     /** Declining-balance rate multiple for tax depreciation: the 200% method of the MACRS general depreciation system. */
     public const TAX_DEPRECIATION_ACCELERATION = 2.0;
+    /** Carried stream-state key: the tax rate the plant's deferred balance was last struck at, so a rate change re-strikes it. */
+    public const STATE_PLANT_DEFERRED_TAX_RATE = self::CARRIED_STATE_PREFIX . 'plant_deferred_tax_rate';
 
     // --- Inventory & Receivable Impairment ---
     /** Capacity utilization below which unsold inventory starts failing the lower-of-cost-or-net-realizable-value test (ASC 330). Calibrated to this engine's utilization scale, which centres on 1.0 rather than the ~80% of the published manufacturing series. */
@@ -201,6 +215,8 @@ class EarningsEngine
     // --- Fixed Asset Ledger (PP&E) ---
     /** Floor on the cash share of the structural cost base once depreciation is carved out as its own expense line. */
     public const MIN_CASH_COST_SHARE = 0.40;
+    /** Floor on the quarter's pricing-power multiplier where it divides a cost: a price collapse past half cannot inflate costs without bound. */
+    public const MIN_PRICING_POWER_DIVISOR = 0.5;
 
     // --- Earning Asset Ledger (Financials) ---
     /** Share of the gap between the credit-loss allowance and its lifetime target closed each quarter, in either direction, so a build or release is a path and not a cliff. */
@@ -655,8 +671,8 @@ class EarningsEngine
         $ctx->seasonalFactor = $factors[$ctx->calendarQuarter] ?? 1.0;
         $ctx->priorSeasonalFactor = $factors[($ctx->calendarQuarter + 3) % 4] ?? 1.0;
 
-        $priceJumpIntensity = (float) ($stock->getJumpIntensity() ?? 2.00);
-        $priceJumpVol = (float) ($stock->getJumpVol() ?? 0.10);
+        $priceJumpIntensity = (float) ($stock->getJumpIntensity() ?? self::DEFAULT_PRICE_JUMP_INTENSITY);
+        $priceJumpVol = (float) ($stock->getJumpVol() ?? self::DEFAULT_PRICE_JUMP_VOL);
 
         $jumpIntensity = $priceJumpIntensity * self::FUNDAMENTAL_JUMP_INTENSITY_SCALE;
         $jumpVol = $priceJumpVol * self::FUNDAMENTAL_JUMP_VOL_SCALE;
@@ -715,8 +731,8 @@ class EarningsEngine
         // through rate cycles).
         $costToEarningAssets = $strategy->getOperatingCostToEarningAssets($stock);
         $structuralCosts = $costToEarningAssets !== null
-            ? $ctx->revenueGeneratingCapital * $costToEarningAssets / self::TTM_QUARTERS * ($inputCostMultiplier / max(0.5, $pricingPowerMultiplier))
-            : $balancedStructuralRevenue * ($inputCostMultiplier / max(0.5, $pricingPowerMultiplier)) * (1.0 - $ctx->stableMargin);
+            ? $ctx->revenueGeneratingCapital * $costToEarningAssets / self::TTM_QUARTERS * ($inputCostMultiplier / max(self::MIN_PRICING_POWER_DIVISOR, $pricingPowerMultiplier))
+            : $balancedStructuralRevenue * ($inputCostMultiplier / max(self::MIN_PRICING_POWER_DIVISOR, $pricingPowerMultiplier)) * (1.0 - $ctx->stableMargin);
 
         // Carve structural depreciation out of cash operating costs so EBITDA sits above depreciation and EBIT below.
         $ctx->structuralDepreciation = $this->resolveStructuralDepreciation($ctx);
@@ -727,7 +743,7 @@ class EarningsEngine
 
         // Payroll in the fixed base costs the real wage's gap to trend productivity: a LEVEL, so a real wage that
         // stays high keeps costing until the labour market corrects it (downward rigidity lives in the wage equation).
-        $wageInflationFactor = 1.0 + ($strategy->getLaborCostShare() * $macroState->realWageGap / max(0.5, $pricingPowerMultiplier));
+        $wageInflationFactor = 1.0 + ($strategy->getLaborCostShare() * $macroState->realWageGap / max(self::MIN_PRICING_POWER_DIVISOR, $pricingPowerMultiplier));
         // Capacity cost is committed, not chosen quarter by quarter: a firm carries the base it was
         // resourced for until it restructures, which is why the structural figure is what gets scaled.
         // Rules that cost the firm productivity raise it per unit of capacity as they raise its unit costs.
@@ -1017,21 +1033,6 @@ class EarningsEngine
     }
 
     /**
-     * The revenue surprise attributed to the firm's own innovation. The surprise rides on the demand Z
-     * (the two-factor draw in StreamContext: sector, firm, then each stream's own noise, composited over
-     * the streams at their revenue weights); the sector's part of that Z is dropped and the rest keeps the
-     * model's own slope of revenue on Z. A demand Z of zero carries no sector part to drop.
-     */
-    private function firmSpecificSurprise(float $surprise, float $demandShockZ, float $sectorShockZ): float
-    {
-        if (abs($demandShockZ) < 1e-9 || $sectorShockZ === 0.0) {
-            return $surprise;
-        }
-
-        return $surprise * (($demandShockZ - $sectorShockZ) / $demandShockZ);
-    }
-
-    /**
      * What each macro input the model reads did to each of its revenue streams this quarter, through both paths it
      * takes: the firm-wide demand and pricing the macro physics sets, and the model's own stream physics. For each
      * input, the macro physics is re-read with that input neutral and the quarter's expected revenue rebuilt from it
@@ -1142,7 +1143,11 @@ class EarningsEngine
             if ($industryRegimes !== null) {
                 $this->industryShareLedger?->commitIndustryRegimes($ctx->stock, $industryRegimes, $ctx->tickCount, $ctx->ticksPerYear);
             }
-            $this->attributeMacroDrivers($ctx, $streamBasis, $this->mathUtility->endDrawLog(), $actuals->streamRevenue);
+            $draws = $this->mathUtility->endDrawLog();
+            $this->attributeMacroDrivers($ctx, $streamBasis, $draws, $actuals->streamRevenue);
+            $revenueWithoutSector = $this->industryShareLedger !== null
+                ? $ctx->strategy->measureRevenueWithoutSectorFactor($streamBasis, $draws, $ctx->expectedRevenue, $ctx->realizedVariableMargin, $ctx->fixedCosts, $ctx->baselineVol, $ctx->macroState)
+                : null;
         } finally {
             $ctx->strategy->useIndustryRegimes(null);
         }
@@ -1152,10 +1157,10 @@ class EarningsEngine
         // What this firm just took from (or ceded to) the industry: the part of the surprise that is its
         // OWN. Macro and rival effects were already inside expected revenue; the sector factor was not, and
         // every peer in the sector drew it too — booked as a gain, a sector-wide good quarter would have each
-        // firm "taking" from the others.
+        // firm "taking" from the others. So the gain is what the quarter would have beaten expectation by had
+        // the sector drawn nothing, re-run on the quarter's own draws.
         if ($this->industryShareLedger !== null && $ctx->expectedRevenue > 0.0) {
-            $surprise = ($ctx->actualRevenue - $ctx->expectedRevenue) / $ctx->expectedRevenue;
-            $firmSurprise = $this->firmSpecificSurprise($surprise, $actuals->demandShockZ, $actuals->sectorShockZ);
+            $firmSurprise = (($revenueWithoutSector ?? $ctx->actualRevenue) - $ctx->expectedRevenue) / $ctx->expectedRevenue;
             $this->industryShareLedger->recordIdiosyncraticGain($ctx->stock, $ctx->actualRevenue * 4.0, $firmSurprise, $ctx->addressableShare, $ctx->tickCount);
         }
 
@@ -1345,24 +1350,40 @@ class EarningsEngine
         $isAllowanceRequired = static fn (float $quarter): bool => array_sum(array_slice([...$history, $quarter], -self::VALUATION_ALLOWANCE_LOOKBACK_QUARTERS)) < 0.0;
         $stock->setPretaxIncomeHistory(array_values(array_map('floatval', array_slice([...$history, $actualEbt], -self::VALUATION_ALLOWANCE_LOOKBACK_QUARTERS))));
 
-        // Taxable income is book income less the timing difference accelerated tax depreciation opens; the plant
-        // liability accrues on that difference and the loss carryforward on the taxable loss, so a loss quarter's
-        // excess tax depreciation is carried forward rather than lost.
-        $timingDifference = $this->rollForwardTaxDepreciation($ctx);
+        // Taxable income is book income less the timing differences the plant opens. Accelerated tax depreciation is
+        // one. A write-down is the other: the tax books allow it only through the depreciation still to come on the
+        // basis it never left, so it is added back now and carried as a deductible difference, and the plant is
+        // deducted once. The liability accrues on both and the loss carryforward on the taxable loss, so a loss
+        // quarter's excess tax depreciation is carried forward rather than lost.
+        $plantTax = $this->rollForwardTaxDepreciation($ctx);
+        $recurringTiming = $plantTax['timing'];
+        $timingDifference = $recurringTiming - $ctx->plantImpairment;
+        $ctx->taxDepreciation = $plantTax['taxDepreciation'];
+
+        // The plant's deferred balance is held at today's rate (ASC 740-10-35-4): a rate change re-strikes the gap the
+        // quarter opened with, a deferred charge or benefit the estimate carries too, since the law is public.
+        $streamState = $stock->getEarningsMomentumZ() ?? [];
+        $remeasurement = ($rate - (float) ($streamState[self::STATE_PLANT_DEFERRED_TAX_RATE] ?? $rate)) * $plantTax['openingGap'];
+        if ($stock->getGrossPpe() !== null) {
+            $streamState[self::STATE_PLANT_DEFERRED_TAX_RATE] = $rate;
+            $stock->setEarningsMomentumZ($streamState);
+        }
         $openingDtl = max(0.0, (float) $stock->getDeferredTaxLiability());
-        $plantDeferred = max(-$openingDtl, $timingDifference * $rate);
+        $plantDeferred = max(-$openingDtl, ($timingDifference * $rate) + $remeasurement);
         $stock->setDeferredTaxLiability((string) ($openingDtl + $plantDeferred));
 
-        $actual = self::resolveIncomeTax($actualEbt - $timingDifference, $nol, $openingDta, $isAllowanceRequired($actualEbt), $rate);
+        $ctx->taxableIncome = $actualEbt - $timingDifference;
+        $actual = self::resolveIncomeTax($ctx->taxableIncome, $nol, $openingDta, $isAllowanceRequired($actualEbt), $rate);
         $stock->setNetOperatingLoss((string) $actual['nol']);
         $stock->setDeferredTaxAsset($actual['dta']);
         $ctx->deferredTaxExpense = $plantDeferred + $actual['deferred'];
         $ctx->cashTaxPaid = $actual['current'];
         $ctx->actualQuarterlyNetIncome = $actualEbt - $actual['current'] - $ctx->deferredTaxExpense;
 
-        // Analysts read the same disclosed schedule, carryforward and allowance.
-        $expected = self::resolveIncomeTax($expectedEbt - $timingDifference, $nol, $openingDta, $isAllowanceRequired($expectedEbt), $rate);
-        $ctx->expectedQuarterlyNetIncome = $expectedEbt - $expected['current'] - $plantDeferred - $expected['deferred'];
+        // Analysts read the same disclosed schedule, carryforward and allowance, and forecast no write-down.
+        $expected = self::resolveIncomeTax($expectedEbt - $recurringTiming, $nol, $openingDta, $isAllowanceRequired($expectedEbt), $rate);
+        $expectedPlantDeferred = max(-$openingDtl, ($recurringTiming * $rate) + $remeasurement);
+        $ctx->expectedQuarterlyNetIncome = $expectedEbt - $expected['current'] - $expectedPlantDeferred - $expected['deferred'];
 
         $ctx->preTaxIncome = $actualEbt;
         // Reported tax expense is current plus deferred; the cash figure is on the context separately.
@@ -1373,6 +1394,12 @@ class EarningsEngine
         $ctx->bankLevy = $ctx->strategy->calculateAnnualBankLevy($stock, $ctx->macroState) / 4.0;
         $ctx->actualQuarterlyNetIncome -= $ctx->bankLevy;
         $ctx->expectedQuarterlyNetIncome -= $ctx->bankLevy;
+
+        // The run rate is taxed as the quarter is, on the same carryforward, allowance and recurring timing difference,
+        // with the levy below it: a loss earns its tax benefit where the books recognise one, and a lender pays its levy.
+        $runRateEbt = $ctx->seasonallyAdjustedEbit - $ctx->quarterlyInterestExpense + $ctx->quarterlyInterestIncome;
+        $runRate = self::resolveIncomeTax($runRateEbt - $recurringTiming, $nol, $openingDta, $isAllowanceRequired($runRateEbt), $rate);
+        $ctx->seasonallyAdjustedNetIncome = $runRateEbt - $runRate['current'] - ($recurringTiming * $rate) - $runRate['deferred'] - $ctx->bankLevy;
 
         // Analysts walk the EPS estimate down to a figure the firm can beat (Richardson, Teoh & Wysocki 2004;
         // Matsumoto 2002): a shading of the published number, struck on the unbiased estimate and separate from the
@@ -1389,7 +1416,7 @@ class EarningsEngine
         $ctx->reportedExpectedNetIncome = $ctx->expectedQuarterlyNetIncome;
         $ctx->reportedActualNetIncome = $ctx->actualQuarterlyNetIncome;
 
-        if ($ctx->businessModel === 'reit') {
+        if ($ctx->strategy->reportsFundsFromOperations()) {
             $ctx->reportedExpectedNetIncome += $ctx->quarterlyDepreciation;
             $ctx->reportedActualNetIncome += $ctx->quarterlyDepreciation;
         }
@@ -1401,8 +1428,8 @@ class EarningsEngine
             $ctx->investedCapital,
             $ctx->seasonallyAdjustedEbit,
             $ctx->corporateTaxRate,
-            $ctx->health->wacc ?? 0.08,
-            $ctx->health->costOfEquity ?? 0.10,
+            $ctx->health->wacc ?? self::DEFAULT_WACC_FALLBACK,
+            $ctx->health->costOfEquity ?? self::DEFAULT_COST_OF_EQUITY_FALLBACK,
             $ctx->macroState,
             $ctx->quarterlyDepreciation
         );
@@ -1542,9 +1569,8 @@ class EarningsEngine
         $ctx->surpriseAmountQuarterly = $ctx->streetQuarterlyEps - $ctx->expectedQuarterlyEps;
 
         // Seasonally Adjusted Annual EPS for balance sheet and valuation (Kalman TTM EPS)
-        $saEbt = $ctx->seasonallyAdjustedEbit - $ctx->quarterlyInterestExpense + $ctx->quarterlyInterestIncome;
-        $saQuarterlyNetIncome = $saEbt > 0.0 ? $saEbt * (1.0 - $ctx->corporateTaxRate) : $saEbt;
-        if ($ctx->businessModel === 'reit') {
+        $saQuarterlyNetIncome = $ctx->seasonallyAdjustedNetIncome;
+        if ($ctx->strategy->reportsFundsFromOperations()) {
             $saQuarterlyNetIncome += $ctx->quarterlyDepreciation;
         }
         $saAnnualEpsRaw = ($saQuarterlyNetIncome * 4.0) / $shares;
@@ -1578,14 +1604,14 @@ class EarningsEngine
         } else {
             $cycleSignal = $ctx->strategy->getCapexCycleSignal($stock, $ctx->macroState);
             $capexCyclicality = $ctx->strategy->getCapexCyclicality();
-            $cycleCapExModifier = max(0.50, min(1.50, 1.00 + ($cycleSignal * $capexCyclicality)));
+            $cycleCapExModifier = max(self::MIN_CAPEX_CYCLE_MODIFIER, min(self::MAX_CAPEX_CYCLE_MODIFIER, 1.0 + ($cycleSignal * $capexCyclicality)));
 
             // Operational CapEx:
             // 1. Maintenance CapEx: replaces depreciating physical capital in ongoing operations.
             //    Scales with macro cyclicality and drops during severe financial distress.
             $solvencyFactor = $ctx->actualQuarterlyNetIncome > 0
                 ? 1.0
-                : max(0.20, 1.0 + ($ctx->actualQuarterlyNetIncome / max(1.0, abs($ctx->investedCapital))));
+                : max(self::MIN_DISTRESSED_MAINTENANCE_SHARE, 1.0 + ($ctx->actualQuarterlyNetIncome / max(1.0, abs($ctx->investedCapital))));
 
             // Replacement cost maintenance capex: scales accounting depreciation by the capital-goods replacement cost ratio.
             $ctx->replacementCostRatio = $this->resolveReplacementCostRatio($ctx);
@@ -1767,28 +1793,6 @@ class EarningsEngine
     }
 
     /**
-     * Advances the separate tax basis of PP&E and returns this quarter's book-versus-tax timing difference.
-     *
-     * Tax depreciation uses the 200% declining balance method (the MACRS general depreciation system):
-     * the same asset is written off faster for the tax authority than for shareholders. Early in an
-     * asset's life tax depreciation exceeds book, so taxable income is lower than book income and the
-     * unpaid tax accumulates as a deferred liability. Later the two cross over and the liability unwinds.
-     *
-     * A firm investing steadily therefore carries a permanently growing deferred balance, which is why
-     * capital-hungry companies pay a cash tax rate well below the statutory one for decades at a time.
-     */
-    /**
-     * Advances the separate tax basis of PP&E and returns this quarter's book-versus-tax timing difference.
-     *
-     * Tax depreciation uses the 200% declining balance method (the MACRS general depreciation system): the
-     * same asset is written off faster for the tax authority than for shareholders. Early in an asset's
-     * life tax depreciation exceeds book, so taxable income is lower than book income and the unpaid tax
-     * accumulates as a deferred liability. On an ageing asset the two cross over and the liability unwinds.
-     *
-     * A firm investing steadily therefore carries a permanently growing deferred balance, which is why
-     * capital-hungry companies pay a cash tax rate well below the statutory one for decades at a time.
-     */
-    /**
      * The tax basis a going concern's plant opens at. A firm investing steadily at nominal growth g, writing its plant
      * off at book rate d and tax rate 2d, carries a tax basis of (g + d)/(g + 2d) of book value, so a listing opens
      * mid-life on the tax books as on the book ones, with the deferred tax on the gap booked against retained earnings
@@ -1815,14 +1819,31 @@ class EarningsEngine
         return $basis;
     }
 
-    private function rollForwardTaxDepreciation(EarningsSimulationContext $ctx): float
+    /**
+     * Advances the separate tax basis of PP&E: the quarter's tax depreciation, its timing difference against the book
+     * charge, and the gap between the plant's book value and its tax basis as the quarter opened.
+     *
+     * Tax depreciation uses the 200% declining balance method (the MACRS general depreciation system): the
+     * same asset is written off faster for the tax authority than for shareholders. Early in an asset's
+     * life tax depreciation exceeds book, so taxable income is lower than book income and the unpaid tax
+     * accumulates as a deferred liability. On an ageing asset the two cross over and the liability unwinds.
+     *
+     * A firm investing steadily therefore carries a permanently growing deferred balance, which is why
+     * capital-hungry companies pay a cash tax rate well below the statutory one for decades at a time.
+     *
+     * @return array{taxDepreciation: float, timing: float, openingGap: float}
+     */
+    private function rollForwardTaxDepreciation(EarningsSimulationContext $ctx): array
     {
         $stock = $ctx->stock;
         if ($stock->getGrossPpe() === null) {
-            return 0.0; // Financial balance sheets keep no plant, so there is no timing difference to track.
+            // Financial balance sheets keep no plant, so there is no timing difference to track.
+            return ['taxDepreciation' => $ctx->quarterlyDepreciation, 'timing' => 0.0, 'openingGap' => 0.0];
         }
 
         $basis = $stock->getPpeTaxBasis() !== null ? (float) $stock->getPpeTaxBasis() : $this->openSteadyStateTaxBasis($ctx);
+        // The quarter's write-down is already off the book; the book the quarter opened with still carried it.
+        $openingGap = max(0.0, $stock->getNetPpe()) + $ctx->plantImpairment - $basis;
 
         $taxRate = $this->resolveDepreciationRate($ctx) * self::TAX_DEPRECIATION_ACCELERATION;
         $taxDepreciation = min($basis, max(0.0, $basis) * $taxRate / 4.0);
@@ -1830,7 +1851,7 @@ class EarningsEngine
         // Additions join the basis in the ledger roll-forward, alongside the book ledger they also enter.
         $stock->setPpeTaxBasis((string) max(0.0, $basis - $taxDepreciation));
 
-        return $taxDepreciation - $ctx->quarterlyDepreciation;
+        return ['taxDepreciation' => $taxDepreciation, 'timing' => $taxDepreciation - $ctx->quarterlyDepreciation, 'openingGap' => $openingGap];
     }
 
     /**
@@ -1884,22 +1905,6 @@ class EarningsEngine
     }
 
     /**
-     * Impairs the working capital balances that can go bad.
-     *
-     * Inventory (ASC 330, lower of cost and net realizable value): when the plant is running well below
-     * capacity the goods are not moving, and stock that has to be cleared goes out below cost. The charge
-     * scales with how far demand has fallen.
-     *
-     * Receivables (ASC 326, expected credit losses): the allowance is a level, not a flow, so a provision is
-     * booked when the expected loss rate RISES and released slowly when it falls. Modelling it as a flow
-     * would charge a firm every quarter of a downturn rather than at the point the outlook deteriorates.
-     *
-     * Both are non-cash and neither is in the analyst forecast, so they land as negative surprises. They
-     * are deducted after consensus is formed for exactly that reason. The cash a write-down foretells, the
-     * replacement of the impaired stock, leaves later through the working capital roll-forward as the
-     * allowance unwinds.
-     */
-    /**
      * One-time termination benefits for the capacity just cut (ASC 420-10), recognised in the quarter the
      * plan is committed rather than spread over the savings it buys. Only the labour share carries
      * severance — exiting a lease or mothballing a line does not — and no analyst forecasts the charge, so
@@ -1928,6 +1933,22 @@ class EarningsEngine
         $ctx->restructuringCharge += $charge;
     }
 
+    /**
+     * Impairs the working capital balances that can go bad.
+     *
+     * Inventory (ASC 330, lower of cost and net realizable value): when the plant is running well below
+     * capacity the goods are not moving, and stock that has to be cleared goes out below cost. The charge
+     * scales with how far demand has fallen.
+     *
+     * Receivables (ASC 326, expected credit losses): the allowance is a level, not a flow, so a provision is
+     * booked when the expected loss rate RISES and released slowly when it falls. Modelling it as a flow
+     * would charge a firm every quarter of a downturn rather than at the point the outlook deteriorates.
+     *
+     * Both are non-cash and neither is in the analyst forecast, so they land as negative surprises. They
+     * are deducted after consensus is formed for exactly that reason. The cash a write-down foretells, the
+     * replacement of the impaired stock, leaves later through the working capital roll-forward as the
+     * allowance unwinds.
+     */
     private function applyWorkingCapitalCharges(EarningsSimulationContext $ctx): void
     {
         $stock = $ctx->stock;
