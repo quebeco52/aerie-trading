@@ -24,7 +24,7 @@ final class Institutions
     public const FAIR_TRADING_BOARD = 'Fair Trading Board';
     /** Sets the rules of the Aerie Exchange: the margin investors put up and what listed firms must disclose. Never the SEC. */
     public const SECURITIES_COMMISSION = 'Securities Commission';
-    /** The District's investigative police: organised crime and foreign agents; its director is the Council's appointee. Never the FBI. */
+    /** The District's state police: organised crime and foreign agents; its director is the Council's appointee. Never the FBI. */
     public const SECURITY_BUREAU = 'Security Bureau';
     public const TRADE_MIGRATION_OFFICE = 'Trade & Migration Office';
     public const STATISTICAL_OFFICE = 'Statistical Office';

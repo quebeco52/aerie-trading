@@ -8,7 +8,7 @@ use App\Data\Politics\AerieCouncil;
 use App\Service\Math\MathUtility;
 
 /**
- * The Security Bureau as a department of the Council: the District's own investigative police, which pursues organised
+ * The Security Bureau as a department of the Council: the District's own state police, which pursues organised
  * crime and the foreign agents a financial centre of its weight draws, while the streets, ports and borders are policed
  * under concession. Its director is the Council's appointee for a single ten-year term, twice any other head's, as the
  * FBI director's term outlasts the president who names them (Crime Control Act of 1976, Pub. L. 94-503).

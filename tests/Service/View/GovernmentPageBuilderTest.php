@@ -162,7 +162,7 @@ class GovernmentPageBuilderTest extends TestCase
         $this->assertSame('Before Year 1', $page['director']['sinceLabel']);
         $this->assertTrue($page['director']['opening']);
         $this->assertSame(52, $page['director']['age']);
-        $this->assertStringContainsString('investigative police', $page['mandate']);
+        $this->assertStringContainsString('state police', $page['mandate']);
     }
 
     public function testTheDietAtYearOneIsDrawnSeatForSeat(): void

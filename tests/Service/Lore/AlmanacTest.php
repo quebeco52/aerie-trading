@@ -72,7 +72,7 @@ class AlmanacTest extends TestCase
     /** A link renders as the target's title, or the words given; a page links an entry through almanac_url(), which refuses one that does not exist. */
     public function testLinksRenderAndPagesCannotLinkNowhere(): void
     {
-        $affair = self::almanac()->get('harbour-ledger-affair');
+        $affair = self::almanac()->get('drainrock-affair');
         $this->assertNotNull($affair);
         $this->assertStringContainsString('<a href="/almanac/security-bureau">Security Bureau</a>', $affair->html);
         $this->assertSame([], array_values(array_filter(self::almanac()->about('security-bureau'), static fn(AlmanacEntry $entry): bool => !in_array('security-bureau', $entry->about, true))));
