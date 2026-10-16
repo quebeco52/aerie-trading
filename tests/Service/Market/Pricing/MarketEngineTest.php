@@ -8,6 +8,7 @@ use App\Service\Math\Valuation;
 use PHPUnit\Framework\TestCase;
 use App\Service\Macro\MacroEngine;
 use App\Service\Market\Pricing\MarketEngine;
+use App\Service\Macro\Subsystem\CommodityLogisticsSubsystem;
 use App\Service\Market\Pricing\PolicyCapitalization;
 use App\Service\Math\MathUtility;
 use App\Service\Math\FinancialConstants;
@@ -219,6 +220,35 @@ class MarketEngineTest extends TestCase
         $ratio = $value($levy + 0.002) / $value($levy);
         $this->assertLessThan(1.0, $ratio, 'A higher expected levy still costs the bank.');
         $this->assertGreaterThan(0.5, $ratio, 'Spread over the clamped growth, it does not wipe the bank out.');
+    }
+
+    /**
+     * An expected loss of earnings is worth what those earnings are worth to the firm. A generator whose profit is its
+     * carbon uplift loses it to an expected repeal down to the floors its revenue and book hold, never through them:
+     * spread as a perpetuity past the floors, the repeal once took the value to a cent.
+     */
+    public function testAnExpectedLawIsWorthNoMoreThanTheEarningsItMoves(): void
+    {
+        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
+        $this->mathUtilityMock->method('checkProbability')->willReturn(false);
+        $carbon = 80.0;
+        $priced = fn (float $expected, float $previous, float $return = 0.06): array => $this->engine->calculateNextPrice(new MarketPricingContext(
+            currentPrice: 20.0, currentVolatility: 0.2, longTermVolatility: 0.2, dt: 1.0 / 252.0, lambda: 0.0, beta: 0.4,
+            macroState: new MacroStateDTO(
+                totalTime: 6.0, carbonPrice: $carbon, carbonPowerUpliftEmbodied: CommodityLogisticsSubsystem::carbonPowerPriceUplift($carbon),
+                expectedLevers: ['carbonPrice' => $expected], expectedPolicyFrom: 6.5,
+                previousExpectedLevers: ['carbonPrice' => $previous], previousExpectedPolicyFrom: 6.5,
+            ),
+            bookValuePerShare: 50.0, currentRoic: $return, roicTtm: $return, revenuePerShare: 10.0, businessModel: 'independent_power',
+            liveCostOfEquity: 0.10, policyBasesPerShare: ['carbonPrice' => 10.0],
+        ));
+
+        $kept = $priced($carbon, $carbon)['perceived_fair_value'];
+        $repealed = $priced(0.0, 0.0);
+        $floors = $priced($carbon, $carbon, 0.0)['perceived_fair_value'];
+        $this->assertLessThan($kept, $repealed['perceived_fair_value'], 'The repeal costs the generator its uplift.');
+        $this->assertGreaterThanOrEqual($floors, $repealed['perceived_fair_value'], 'Down to what the same firm earning nothing is worth, and no further.');
+        $this->assertEqualsWithDelta(1.0, $priced(0.0, 5.0)['price'] / $repealed['price'], 0.02, 'A revision of five a tonne at the floors is a small move.');
     }
 
     /** An expected rise in the tax on dividends costs a payer the taxable holders' share of it on its dividends, and a firm paying none nothing. */

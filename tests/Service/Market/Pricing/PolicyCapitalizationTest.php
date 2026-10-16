@@ -51,7 +51,7 @@ class PolicyCapitalizationTest extends TestCase
         $this->assertEqualsWithDelta(0.0, Policy::extractionCostGap($macro, self::CAP_RATE), 1e-12);
         $this->assertEqualsWithDelta(0.0, Policy::stampDutyVolumeGap($macro, self::CAP_RATE), 1e-12);
         $this->assertEqualsWithDelta(0.0, Policy::carbonPowerUpliftGap($macro, self::CAP_RATE), 1e-12);
-        $this->assertSame(100.0, Policy::reprice(100.0, 0.21, 0.21, 0.0, self::CAP_RATE));
+        $this->assertSame(1.0, Policy::afterTaxScale(0.21, 0.21));
     }
 
     /** A tax rise the market expects counts for the share of the firm's value after the next government's first budget, until its term is over. */
@@ -265,8 +265,7 @@ class PolicyCapitalizationTest extends TestCase
         $this->assertGreaterThan(0.0, Policy::earningsGap($carbon, ['carbonPrice' => 20.0], 0.21, self::CAP_RATE));
         $this->assertLessThan(0.0, Policy::earningsGap($carbon, ['carbonPrice' => -5.0], 0.21, self::CAP_RATE));
 
-        $this->assertEqualsWithDelta(100.0 - (2.0 / self::CAP_RATE), Policy::reprice(100.0, 0.21, 0.21, -2.0, self::CAP_RATE), 1e-12, 'An earnings gap is worth its perpetuity.');
-        $this->assertEqualsWithDelta(100.0 * 0.75 / 0.79, Policy::reprice(100.0, 0.21, 0.25, 0.0, self::CAP_RATE), 1e-12, 'After-tax earnings scale from the rate carried to the one expected.');
+        $this->assertEqualsWithDelta(0.75 / 0.79, Policy::afterTaxScale(0.21, 0.25), 1e-12, 'After-tax earnings scale from the rate carried to the one expected.');
     }
 
     /**

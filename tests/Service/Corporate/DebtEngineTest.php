@@ -1197,6 +1197,27 @@ class DebtEngineTest extends TestCase
     }
 
     /**
+     * The beta is levered on the equity the fundamentals support. A price crash the fair value does not share leaves
+     * the beta where it stood: levered on the price, a fall raised the beta, which loaded the next market fall harder.
+     * Before the first fair value is struck, the price stands in.
+     */
+    public function testTheBetaIsLeveredOnTheEquityTheFundamentalsSupport(): void
+    {
+        $engine = $this->costOfCapitalEngine();
+        $macro = $this->neutralMacro();
+        $beta = fn (string $price, ?float $fairEquity): float => $engine->analyzeDebtHealth(
+            $this->leveredFirm('LEV', '1.00', '0.02')->setPrice($price)->setFairEquityValue($fairEquity),
+            $macro
+        )->leveredBeta;
+
+        $standing = $beta('10.00', 1.0e9);
+        $this->assertEqualsWithDelta($standing, $beta('1.00', 1.0e9), 1e-12, 'A crash in the price alone does not re-lever the beta.');
+        $this->assertLessThan($beta('10.00', 2.5e8), $standing, 'A fall in what the fundamentals support does.');
+        $this->assertEqualsWithDelta($standing, $beta('10.00', null), 1e-12, 'Unstruck, the price stands in.');
+        $this->assertGreaterThan($standing, $beta('1.00', null));
+    }
+
+    /**
      * Absolute priority: equity is the junior claim on the same cash flows, so it cannot require a lower
      * return than the debt ranking above it. CAPM alone hands a negative-beta name a rate below the
      * risk-free rate, which is sound portfolio theory and an unusable hurdle rate.

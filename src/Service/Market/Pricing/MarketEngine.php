@@ -9,7 +9,6 @@ use App\Service\Math\MathUtility;
 use App\Service\Math\OptionPricing;
 use App\Service\Math\StochasticProcesses;
 use App\Service\Math\Valuation;
-use App\Service\Model\BusinessModelInterface;
 
 /**
  * Service responsible for calculating stock price movements based on various market factors.
@@ -699,8 +698,8 @@ class MarketEngine
         $strategy = \App\Data\Company\Sectors::getBusinessModelStrategy($businessModel);
         $macro = $macroState ?? new MacroStateDTO();
 
-        // Every leg below values EQUITY: levered earnings on a P/E, book equity on a P/B, equity earnings on the
-        // policy gap. All are discounted at the cost of equity on the return the firm earns on its equity
+        // Every leg below values EQUITY: levered earnings on a P/E, book equity on a P/B, the dividends its policy pays.
+        // All are discounted at the cost of equity on the return the firm earns on its equity
         // (Damodaran 2012, ch. 18-20); WACC belongs to unlevered cash flows, which nothing here capitalises.
         $hurdleRate = $liveCostOfEquity;
         $afterTaxCostOfDebt = ($costOfDebt ?? ($macro->yield10yEma + $macro->macroCreditSpread))
@@ -727,33 +726,6 @@ class MarketEngine
         $inflationStress = abs($inflation - 0.02);
         $systemicStressIndex = $recessionStress + $inflationStress;
 
-        // 1. MACRO FORWARD GUIDANCE & FUNDAMENTAL P/E
-        // The growth transmission and the Sloan accruals discount live in MathUtility because the corporate
-        // engines strike the same multiple when management decides on a buyback, an offering or a deal.
-        // Perpetual growth carries the inflation the hurdle does: the ten-year breakeven inside the CAPM's 10Y,
-        // not this quarter's print, so an oil spike does not read as faster growth forever.
-        $expectedGrowth = Valuation::calculateFundableGrowth(
-            Valuation::calculateExpectedNominalGrowth(
-                $secularGrowth,
-                $outputGap,
-                $beta,
-                $macro->tipsBreakeven,
-                $hurdleRate
-            ),
-            $equityReturn,
-            $targetPayoutRatio,
-            $macro->tipsBreakeven
-        );
-
-        $fairValuePE = Valuation::calculateQualityAdjustedFairValuePE(
-            $hurdleRate,
-            $equityReturn,
-            $expectedGrowth,
-            $baselineIndustryPE,
-            $accrualsRatio,
-            Valuation::sectorHurdleShift($hurdleRate, $beta, $macro->tipsBreakeven)
-        );
-
         $trueStructuralEps = $strategy->calculateStructuralEps(
             $bookValuePerShare,
             $structuralRoic,
@@ -765,89 +737,150 @@ class MarketEngine
             $investedCapitalPerShare > 0.0 ? $investedCapitalPerShare : null
         );
 
-        // The structural run-rate is the normalized EPS: the trailing print already reaches it once, through the
-        // persistent-equivalent return (Ohlson 1995), and blending the print in again would count it twice.
-        $normalizedEps = max(0.01, $trueStructuralEps);
-
-        $peFairValue = max(0.00, $normalizedEps * $fairValuePE);
-
-        // THE ZOMBIE FIX: Revenue Floor (Margin-Adjusted Price-to-Sales)
-        // High-turnover physical corporations (retail, grocers) have thin net margins and cannot support software-like P/S multiples.
-        $trueMargin = $trueStructuralEps > 0 
-            ? $trueStructuralEps / max(0.01, $revenuePerShare) 
-            : self::MIN_IMPLIED_NET_MARGIN;
-        $impliedMargin = max(self::MIN_IMPLIED_NET_MARGIN, min(self::MAX_IMPLIED_NET_MARGIN, $trueMargin));
-        
-        $psMultiple = max(
-            self::MIN_PS_FALLBACK_MULT,
-            min(self::MAX_PS_FALLBACK_MULT, max(self::MIN_PS_ANCHOR_PE, $fairValuePE) * $impliedMargin)
-        );
-        $revenueFloorValue = $revenuePerShare * $psMultiple;
-        $revenueFloorEquityValue = max(0.01, $revenueFloorValue - $netDebtPerShare);
-
-        // The earnings leg: the value-driver P/E value, never below what the model's revenue floor is worth.
-        $earningsValue = $strategy->calculateEarningsValue($revenueFloorEquityValue, $peFairValue);
-
-        // Dividend Discount Model (Gordon 1962) on the dividends the firm's own policy will pay: its target payout of
-        // normalized earnings, growing at the rate its retained earnings compound at (Higgins 1977), plus the present
-        // value of today's gap to that target while partial adjustment closes it (Lintner 1956). Struck on the policy
-        // rather than the last cheque, a cut costs what is missed while the dividend recovers, and there is no step at
-        // zero. Only the models that price on income read it; an operating company's value does not turn on its payout.
-        $dividendSupportValue = 0.0;
-        if ($targetPayoutRatio > 0.0 && $normalizedEps > 0.0) {
-            $requiredYield = max(self::MIN_DIVIDEND_REQUIRED_YIELD, $liveCostOfEquity);
-            $payoutRatio = min(1.0, $targetPayoutRatio);
-            $returnOnEquity = $bookValuePerShare > 0.0 ? $normalizedEps / $bookValuePerShare : 0.0;
-            $sustainableGrowth = max(0.0, min(self::MAX_DIVIDEND_IMPLIED_GROWTH, $returnOnEquity * (1.0 - $payoutRatio)));
-            $targetDividend = $normalizedEps * $payoutRatio;
-
-            $dividendSupportValue = max(
-                0.0,
-                Valuation::calculateDividendDiscountModel($targetDividend, $requiredYield, $sustainableGrowth)
-                    + Valuation::calculateDividendAdjustmentValue(($dividendPerShare * 4.0) - $targetDividend, $requiredYield, $dividendAdjustmentSpeed)
+        // The value legs struck on one set of earnings, so a law that moves the earnings moves every leg they reach,
+        // floors and all.
+        $strikeLegs = function (float $equityReturn, float $structuralEps) use (
+            $strategy, $macro, $macroState, $hurdleRate, $outputGap, $beta, $secularGrowth, $baselineIndustryPE, $accrualsRatio,
+            $revenuePerShare, $netDebtPerShare, $bookValuePerShare, $tangibleBookValuePerShare, $dividendPerShare,
+            $targetPayoutRatio, $dividendAdjustmentSpeed
+        ): array {
+            // 1. MACRO FORWARD GUIDANCE & FUNDAMENTAL P/E
+            // The growth transmission and the Sloan accruals discount live in MathUtility because the corporate
+            // engines strike the same multiple when management decides on a buyback, an offering or a deal.
+            // Perpetual growth carries the inflation the hurdle does: the ten-year breakeven inside the CAPM's 10Y,
+            // not this quarter's print, so an oil spike does not read as faster growth forever.
+            $expectedGrowth = Valuation::calculateFundableGrowth(
+                Valuation::calculateExpectedNominalGrowth(
+                    $secularGrowth,
+                    $outputGap,
+                    $beta,
+                    $macro->tipsBreakeven,
+                    $hurdleRate
+                ),
+                $equityReturn,
+                $targetPayoutRatio,
+                $macro->tipsBreakeven
             );
-        }
 
-        // Intrinsic Price-to-Book (P/B) Valuation
-        // The multiple belongs to the business model: plant earning above its hurdle is worth more than the
-        // plant, while a portfolio of marketable stakes is worth the portfolio, so a trust declares 1.0 and
-        // this term hands its model net asset value per share rather than a multiple of it.
-        $pbFairValue = $bookValuePerShare * $strategy->getIntrinsicPbMultiple($equityReturn, $hurdleRate);
+            $fairValuePE = Valuation::calculateQualityAdjustedFairValuePE(
+                $hurdleRate,
+                $equityReturn,
+                $expectedGrowth,
+                $baselineIndustryPE,
+                $accrualsRatio,
+                Valuation::sectorHurdleShift($hurdleRate, $beta, $macro->tipsBreakeven)
+            );
 
-        // A financial is valued on tangible book, since its regulator deducts goodwill from capital. The same
-        // earnings over the smaller base give the same value wherever the multiple is interior; the change is
-        // that the floor and ceiling then bound price to TANGIBLE book, so goodwill cannot prop up the floor.
-        if ($strategy->isFinancial() && $tangibleBookValuePerShare !== null && $bookValuePerShare > 0.0) {
-            $tangibleBook = max(0.0, $tangibleBookValuePerShare);
-            $returnOnTangible = $tangibleBook > 0.0 ? $structuralRoic * $bookValuePerShare / $tangibleBook : 0.0;
-            $pbFairValue = $tangibleBook * $strategy->getIntrinsicPbMultiple($returnOnTangible, $hurdleRate);
-        }
+            // The structural run-rate is the normalized EPS: the trailing print already reaches it once, through the
+            // persistent-equivalent return (Ohlson 1995), and blending the print in again would count it twice.
+            $normalizedEps = max(0.01, $structuralEps);
 
-        // PERFECTED WEIGHTED CONSENSUS MODEL
-        $fairValue = $strategy->calculateFairValue($earningsValue, $pbFairValue, $normalizedEps, $dividendSupportValue);
+            $peFairValue = max(0.00, $normalizedEps * $fairValuePE);
 
-        // Closed-end structures trade below the assets they hold, by a gap that moves with the cycle. Applied
-        // here rather than inside the consensus so it reaches the reversion target: the price is pulled toward
-        // the discounted value, which is what makes a widening discount a fall rather than a mispricing.
-        $fairValue *= (1.0 - $strategy->getStructuralValuationDiscount($macroState ?? new MacroStateDTO()));
+            // THE ZOMBIE FIX: Revenue Floor (Margin-Adjusted Price-to-Sales)
+            // High-turnover physical corporations (retail, grocers) have thin net margins and cannot support software-like P/S multiples.
+            $trueMargin = $structuralEps > 0
+                ? $structuralEps / max(0.01, $revenuePerShare)
+                : self::MIN_IMPLIED_NET_MARGIN;
+            $impliedMargin = max(self::MIN_IMPLIED_NET_MARGIN, min(self::MAX_IMPLIED_NET_MARGIN, $trueMargin));
 
-        // The laws the market expects rather than the ones the trailing earnings carry; a forecast revised this tick
-        // moves the price with the target, as news does, rather than leaving it to drift there.
+            $psMultiple = max(
+                self::MIN_PS_FALLBACK_MULT,
+                min(self::MAX_PS_FALLBACK_MULT, max(self::MIN_PS_ANCHOR_PE, $fairValuePE) * $impliedMargin)
+            );
+            $revenueFloorValue = $revenuePerShare * $psMultiple;
+            $revenueFloorEquityValue = max(0.01, $revenueFloorValue - $netDebtPerShare);
+
+            // The earnings leg: the value-driver P/E value, never below what the model's revenue floor is worth.
+            $earningsValue = $strategy->calculateEarningsValue($revenueFloorEquityValue, $peFairValue);
+
+            // Dividend Discount Model (Gordon 1962) on the dividends the firm's own policy will pay: its target payout of
+            // normalized earnings, growing at the rate its retained earnings compound at (Higgins 1977), plus the present
+            // value of today's gap to that target while partial adjustment closes it (Lintner 1956). Struck on the policy
+            // rather than the last cheque, a cut costs what is missed while the dividend recovers, and there is no step at
+            // zero. Only the models that price on income read it; an operating company's value does not turn on its payout.
+            $dividendSupportValue = 0.0;
+            if ($targetPayoutRatio > 0.0 && $normalizedEps > 0.0) {
+                $requiredYield = max(self::MIN_DIVIDEND_REQUIRED_YIELD, $hurdleRate);
+                $payoutRatio = min(1.0, $targetPayoutRatio);
+                $returnOnEquity = $bookValuePerShare > 0.0 ? $normalizedEps / $bookValuePerShare : 0.0;
+                $sustainableGrowth = max(0.0, min(self::MAX_DIVIDEND_IMPLIED_GROWTH, $returnOnEquity * (1.0 - $payoutRatio)));
+                $targetDividend = $normalizedEps * $payoutRatio;
+
+                $dividendSupportValue = max(
+                    0.0,
+                    Valuation::calculateDividendDiscountModel($targetDividend, $requiredYield, $sustainableGrowth)
+                        + Valuation::calculateDividendAdjustmentValue(($dividendPerShare * 4.0) - $targetDividend, $requiredYield, $dividendAdjustmentSpeed)
+                );
+            }
+
+            // Intrinsic Price-to-Book (P/B) Valuation
+            // The multiple belongs to the business model: plant earning above its hurdle is worth more than the
+            // plant, while a portfolio of marketable stakes is worth the portfolio, so a trust declares 1.0 and
+            // this term hands its model net asset value per share rather than a multiple of it.
+            $pbFairValue = $bookValuePerShare * $strategy->getIntrinsicPbMultiple($equityReturn, $hurdleRate);
+
+            // A financial is valued on tangible book, since its regulator deducts goodwill from capital. The same
+            // earnings over the smaller base give the same value wherever the multiple is interior; the change is
+            // that the floor and ceiling then bound price to TANGIBLE book, so goodwill cannot prop up the floor.
+            // A financial's equity return is its return on capital (FinancialPhysicsTrait::getEquityReturn()).
+            if ($strategy->isFinancial() && $tangibleBookValuePerShare !== null && $bookValuePerShare > 0.0) {
+                $tangibleBook = max(0.0, $tangibleBookValuePerShare);
+                $returnOnTangible = $tangibleBook > 0.0 ? $equityReturn * $bookValuePerShare / $tangibleBook : 0.0;
+                $pbFairValue = $tangibleBook * $strategy->getIntrinsicPbMultiple($returnOnTangible, $hurdleRate);
+            }
+
+            // PERFECTED WEIGHTED CONSENSUS MODEL
+            $fairValue = $strategy->calculateFairValue($earningsValue, $pbFairValue, $normalizedEps, $dividendSupportValue);
+
+            // Closed-end structures trade below the assets they hold, by a gap that moves with the cycle. Applied
+            // here rather than inside the consensus so it reaches the reversion target: the price is pulled toward
+            // the discounted value, which is what makes a widening discount a fall rather than a mispricing.
+            $fairValue *= (1.0 - $strategy->getStructuralValuationDiscount($macroState ?? new MacroStateDTO()));
+
+            return [
+                'fair_value' => $fairValue,
+                'earnings_value' => $earningsValue,
+                'dividend_value' => $dividendSupportValue,
+                'book_value' => $pbFairValue,
+                'expected_growth' => $expectedGrowth,
+                'normalized_eps' => $normalizedEps,
+            ];
+        };
+
+        $legs = $strikeLegs($equityReturn, $trueStructuralEps);
+
+        // The laws the market expects rather than the ones the trailing earnings carry (PolicyCapitalization), struck into
+        // the earnings every leg is valued on, so a firm held at its book floor loses no more than the floor gives up. A
+        // forecast revised this tick moves the price with the target, as news does, rather than leaving it to drift there.
         $policyRepricing = 1.0;
         if ($macroState !== null) {
             // Capitalized on the same perpetual growth the multiple is struck on: the raw outlook can sit within a few
             // basis points of the hurdle in an inflationary boom, and a policy gap spread over that would wipe out value.
-            $capRate = max(PolicyCapitalization::MIN_CAP_RATE, $hurdleRate - Valuation::perpetualGrowthRate($hurdleRate, $expectedGrowth));
+            $capRate = max(PolicyCapitalization::MIN_CAP_RATE, $hurdleRate - Valuation::perpetualGrowthRate($hurdleRate, $legs['expected_growth']));
             // The dividend its policy pays, as the income leg strikes it, over the value before the laws: the yield its
             // holders' tax is charged on. A dividend omitted for a quarter is still the policy's, and still taxed.
-            $policyDividend = max(0.0, $normalizedEps) * min(1.0, $targetPayoutRatio * Valuation::dividendTaxPayoutScale($macroState->dividendTaxRate));
-            $dividendYield = $policyDividend / max(0.01, $fairValue);
-            $repriced = $this->repriceForPolicy($fairValue, $macroState, $strategy, $policyBasesPerShare, $capRate, $dividendYield, false);
-            $policyRepricing = $repriced / $this->repriceForPolicy($fairValue, $macroState, $strategy, $policyBasesPerShare, $capRate, $dividendYield, true);
-            $fairValue = $repriced;
+            $policyDividend = $legs['normalized_eps'] * min(1.0, $targetPayoutRatio * Valuation::dividendTaxPayoutScale($macroState->dividendTaxRate));
+            $dividendYield = $policyDividend / max(0.01, $legs['fair_value']);
+
+            $underExpectedLaws = function (bool $previous) use ($strikeLegs, $strategy, $macroState, $policyBasesPerShare, $capRate, $dividendYield, $equityReturn, $trueStructuralEps, $bookValuePerShare): array {
+                $taxExpected = $strategy->getEffectiveTaxRate($macroState->corporateTaxRate + PolicyCapitalization::corporateTaxShiftGap($macroState, $capRate, $previous));
+                $taxScale = PolicyCapitalization::afterTaxScale($strategy->getEffectiveTaxRate($macroState->corporateTaxRate), $taxExpected);
+                $earningsGap = PolicyCapitalization::earningsGap($macroState, $policyBasesPerShare, $taxExpected, $capRate, $previous);
+                $returnGap = $bookValuePerShare > 0.0 ? $earningsGap / $bookValuePerShare : 0.0;
+
+                $legs = $strikeLegs(($equityReturn * $taxScale) + $returnGap, ($trueStructuralEps * $taxScale) + $earningsGap);
+                $legs['fair_value'] = max(0.01, $legs['fair_value'])
+                    * Valuation::dividendTaxValueScale($dividendYield, $capRate, PolicyCapitalization::expectedDividendTaxRate($macroState, $capRate, $previous));
+
+                return $legs;
+            };
+
+            $legs = $underExpectedLaws(false);
+            $policyRepricing = $legs['fair_value'] / $underExpectedLaws(true)['fair_value'];
         }
 
-        $perceivedFairValue = max(0.01, $fairValue);
+        $perceivedFairValue = max(0.01, $legs['fair_value']);
 
         // Brunnermeier-Pedersen Funding Liquidity Dampener (2009)
         // During macroeconomic stress and systemic crises, funding liquidity dries up and capital-constrained 
@@ -860,30 +893,10 @@ class MarketEngine
             'dynamic_reversion'    => $dynamicReversion,
             'policy_repricing'     => $policyRepricing,
             'analyst_targets'      => [
-                'growth_analyst' => max(0.01, $earningsValue),
-                'income_analyst' => max(0.01, $dividendSupportValue),
-                'value_analyst'  => max(0.01, $pbFairValue * self::VALUE_ANALYST_BOOK_MULT),
+                'growth_analyst' => max(0.01, $legs['earnings_value']),
+                'income_analyst' => max(0.01, $legs['dividend_value']),
+                'value_analyst'  => max(0.01, $legs['book_value'] * self::VALUE_ANALYST_BOOK_MULT),
             ]
         ];
-    }
-
-    /**
-     * A fair value repriced for the laws the market expects (PolicyCapitalization), on the forecast as it stands this
-     * tick or as it stood the tick before.
-     *
-     * @param array<string, float> $policyBasesPerShare What each law the firm's accounts answer to is charged on or moves, per share, keyed by lever.
-     * @param float                $dividendYield       The firm's dividend yield, a year, which the tax on dividends is priced on.
-     */
-    private function repriceForPolicy(float $fairValue, MacroStateDTO $macroState, BusinessModelInterface $strategy, array $policyBasesPerShare, float $capRate, float $dividendYield, bool $previous): float
-    {
-        $taxExpected = $strategy->getEffectiveTaxRate($macroState->corporateTaxRate + PolicyCapitalization::corporateTaxShiftGap($macroState, $capRate, $previous));
-
-        return PolicyCapitalization::reprice(
-            $fairValue,
-            $strategy->getEffectiveTaxRate($macroState->corporateTaxRate),
-            $taxExpected,
-            PolicyCapitalization::earningsGap($macroState, $policyBasesPerShare, $taxExpected, $capRate, $previous),
-            $capRate
-        ) * Valuation::dividendTaxValueScale($dividendYield, $capRate, PolicyCapitalization::expectedDividendTaxRate($macroState, $capRate, $previous));
     }
 }
