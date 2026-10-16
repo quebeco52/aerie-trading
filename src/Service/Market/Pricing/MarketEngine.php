@@ -750,7 +750,8 @@ class MarketEngine
             $equityReturn,
             $expectedGrowth,
             $baselineIndustryPE,
-            $accrualsRatio
+            $accrualsRatio,
+            Valuation::sectorHurdleShift($hurdleRate, $beta, $macro->tipsBreakeven)
         );
 
         $trueStructuralEps = $strategy->calculateStructuralEps(
