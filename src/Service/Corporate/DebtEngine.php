@@ -591,9 +591,12 @@ class DebtEngine
         // Hamada levered beta: preserves signed beta magnitude while adjusting for capital structure leverage.
         $baseBeta = (float) $stock->getBeta();
 
-        // For Beta Levering and WACC weights, we MUST use Market Value of Equity, not Book Value!
-        // Use Net Debt Capital so Cash Hoarders aren't penalized with fake risk.
-        $debtToEquity = $marketCap > 0 ? ($netDebtCapital / $marketCap) : self::MAX_BETA_DEBT_TO_EQUITY;
+        // The beta is levered on the equity the fundamentals support, not on the price: the price carries market noise the
+        // fair value pulls back out, and levering on it let a fall raise the beta that deepened the fall. Net debt, so
+        // cash hoarders aren't penalized with fake risk. The WACC below still weighs the claims at market value.
+        $fairEquityValue = (float) $stock->getFairEquityValue();
+        $leveredEquity = $fairEquityValue > 0.0 ? $fairEquityValue : $marketCap;
+        $debtToEquity = $leveredEquity > 0 ? ($netDebtCapital / $leveredEquity) : self::MAX_BETA_DEBT_TO_EQUITY;
 
         // Standard CAPM breaks down during insolvency. Cap D/E to prevent runaway WACC.
         $effectiveDebtToEquity = min(self::MAX_BETA_DEBT_TO_EQUITY, $debtToEquity);
