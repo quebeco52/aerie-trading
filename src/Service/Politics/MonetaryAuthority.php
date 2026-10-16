@@ -6,6 +6,7 @@ namespace App\Service\Politics;
 
 use App\Data\Politics\AerieCouncil;
 use App\DTO\MacroStateDTO;
+use App\DTO\PoliticsStateDTO;
 use App\Service\Macro\Subsystem\MonetaryPolicySubsystem;
 use App\Service\Math\MathUtility;
 use App\Service\Math\TimeSeries;
@@ -232,7 +233,7 @@ final class MonetaryAuthority
     }
 
     /** Whether the last meeting, if it sat this tick, moved the rate a full step or split the committee. */
-    public static function meetingMadeNews(PoliticsState $state): bool
+    public static function meetingMadeNews(PoliticsState|PoliticsStateDTO $state): bool
     {
         return $state->lastMeetingAt === $state->totalTime
             && (abs($state->lastMeetingChange) >= self::NEWSWORTHY_RATE_MOVE || array_filter($state->lastMeetingVotes, static fn(float $vote): bool => $vote !== 0.0) !== []);

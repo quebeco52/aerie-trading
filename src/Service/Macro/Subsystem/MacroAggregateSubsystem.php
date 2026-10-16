@@ -142,7 +142,7 @@ class MacroAggregateSubsystem
     public const MONETARY_TRANSMISSION_LAG_YEARS = 0.3;
     /** Demand per unit of an ADVERSE excess bond premium over its decade trend, the one price of credit supply (Gilchrist & Zakrajsek 2012): 3.5, the sum of the spread, premium and lending-standards drags it replaced, so a 2008-sized 2pp spike costs 7pp of demand a year while it lasts. */
     public const KALDOR_CREDIT_PREMIUM_DRAG = 3.5;
-    /** Excess premium per unit of capital the banks must hold but have not built: 0.22, so a 1pp rise phased in over four years costs the 0.17% of output the MAG (2010) median gives, as it did through lending standards. */
+    /** Excess premium per unit of capital the banks must hold but have not built, here and in lending standards: 0.22, so a 1pp rise phased in over four years costs the 0.17% of output the MAG (2010) median gives. */
     public const CAPITAL_SHORTFALL_PREMIUM_EQUIVALENT = 0.22;
     /** Horizon (years) of the premium's trend the drag reads: a decade, past a credit cycle. */
     public const CREDIT_PREMIUM_TREND_YEARS = 10.0;

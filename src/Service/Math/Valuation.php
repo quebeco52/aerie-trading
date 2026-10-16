@@ -135,9 +135,10 @@ final class Valuation
     /**
      * Nominal expected growth used to strike a fair-value multiple, the same transmission for everyone
      * who strikes one: secular real growth, the cyclical part scaled by beta, then inflation in full for the
-     * nominal rate. No firm outgrows the economy forever (Damodaran, Investment Valuation, ch. 12): the sector's
-     * secular excess over trend fades, and is priced at its perpetual equivalent. The cycle is transitory and passes
-     * both ways.
+     * nominal rate. The inflation is the one the discount rate carries, the ten-year breakeven, not the latest
+     * print: a perpetuity grows at what is expected over its life. No firm outgrows the economy forever (Damodaran,
+     * Investment Valuation, ch. 12): the sector's secular excess over trend fades, and is priced at its perpetual
+     * equivalent. The cycle is transitory and passes both ways.
      *
      * Management and the market MUST read the same figure. The corporate engines used to strike their
      * buyback, issuance and M&A multiples on a flat 2% while the pricing engine read the cycle, which made

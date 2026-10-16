@@ -673,7 +673,8 @@ class AssetMarketSubsystem
 
     /**
      * The currency's fundamental level: parity on the rate differential, the terms of trade, the safe-haven bid and
-     * the sovereign risk discount.
+     * the sovereign risk discount. Parity reads the short rate the market expects, not the decision rounded at a
+     * meeting, so a step everyone saw coming does not move the currency on the day (as the curve's short end).
      *
      * @param MacroState $state Current macroeconomic state.
      * @return float Fundamental exchange rate index.
@@ -681,7 +682,7 @@ class AssetMarketSubsystem
     public static function exchangeRateFundamental(MacroState $state): float
     {
         return self::exchangeRateFundamentalAt(
-            $state->policyRate,
+            MonetaryPolicySubsystem::marketShortRate($state),
             $state->tipsBreakeven,
             $state->foreignPolicyRate,
             self::mainlandBreakeven(self::mainlandCoreYearOnYear($state)),
@@ -695,7 +696,7 @@ class AssetMarketSubsystem
     /**
      * The fundamental on its inputs, for the readers that hold them as values rather than as a state.
      *
-     * @param float $policyRate              District policy rate.
+     * @param float $policyRate              District short rate, as the market expects it.
      * @param float $expectedInflation       District expected inflation (ten-year breakeven).
      * @param float $foreignPolicyRate       Mainland policy rate.
      * @param float $foreignExpectedInflation Mainland expected inflation (ten-year breakeven).

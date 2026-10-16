@@ -654,7 +654,7 @@ class MarketEngine
      * the constant pull, slowed when funding liquidity dries up.
      *
      * @param float $outputGap           The macroeconomic output gap (boom vs bust).
-     * @param float $inflation           The current inflation rate.
+     * @param float $inflation           The current inflation rate, read as stress; growth carries the breakeven.
      * @param float $beta                The stock's sensitivity to systemic market moves.
      * @param float|null $costOfDebt     The firm's pre-tax marginal borrowing rate; null prices it at the 10Y plus the IG spread.
      * @param float $reversionSpeed      The baseline speed at which the stock reverts to fair value.
@@ -744,17 +744,19 @@ class MarketEngine
         // 1. MACRO FORWARD GUIDANCE & FUNDAMENTAL P/E
         // The growth transmission and the Sloan accruals discount live in MathUtility because the corporate
         // engines strike the same multiple when management decides on a buyback, an offering or a deal.
+        // Perpetual growth carries the inflation the hurdle does: the ten-year breakeven inside the CAPM's 10Y,
+        // not this quarter's print, so an oil spike does not read as faster growth forever.
         $expectedGrowth = Valuation::calculateFundableGrowth(
             Valuation::calculateExpectedNominalGrowth(
                 $secularGrowth,
                 $outputGap,
                 $beta,
-                $inflation,
+                $macro->tipsBreakeven,
                 $hurdleRate
             ),
             $equityReturn,
             $targetPayoutRatio,
-            $inflation
+            $macro->tipsBreakeven
         );
 
         $fairValuePE = Valuation::calculateQualityAdjustedFairValuePE(

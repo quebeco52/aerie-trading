@@ -257,10 +257,29 @@ class MacroTransmissionTest extends TestCase
 
     public function testBroadMoneyGrowsWithIncomeCreditAndPurchases(): void
     {
-        $this->assertEqualsWithDelta(0.045, MacroTransmission::broadMoneyGrowth(0.045, 0.0, 0.8, 0.0, 1.0), 1e-12, 'Steady leverage and no purchases: money grows with nominal income.');
-        $this->assertEqualsWithDelta(0.045 + 0.025, MacroTransmission::broadMoneyGrowth(0.045, 0.02, 0.8, 0.0, 1.0), 1e-12, 'Credit growing beyond income adds its growth.');
-        $this->assertEqualsWithDelta(0.045 + 0.05, MacroTransmission::broadMoneyGrowth(0.045, 0.0, 0.8, 0.10, 2.0), 1e-12, 'Purchases add reserves over the money stock.');
-        $this->assertLessThan(0.045, MacroTransmission::broadMoneyGrowth(0.045, -0.02, 0.8, -0.05, 1.0), 'Deleveraging and runoff shrink it.');
+        $this->assertEqualsWithDelta(0.045, MacroTransmission::broadMoneyGrowth(0.045, 0.0, 0.0, 1.0), 1e-12, 'Steady leverage and no purchases: money grows with nominal income.');
+        $this->assertEqualsWithDelta(0.045 + 0.05, MacroTransmission::broadMoneyGrowth(0.045, 0.0, 0.10, 2.0), 1e-12, 'Purchases add reserves over the money stock.');
+        $this->assertLessThan(0.045, MacroTransmission::broadMoneyGrowth(0.045, -0.02, -0.05, 1.0), 'Deleveraging and runoff shrink it.');
+    }
+
+    /**
+     * Stock-flow: a loan creates its deposit, so money over income moves by the credit and purchases over income, and money
+     * grows at income's rate plus that move over the stock, whatever households already owe.
+     */
+    public function testNewCreditAddsAsMuchMoneyAsPurchasesDo(): void
+    {
+        $this->assertSame(MacroTransmission::broadMoneyGrowth(0.045, 0.02, 0.0, 0.8), MacroTransmission::broadMoneyGrowth(0.045, 0.0, 0.02, 0.8));
+
+        // Money over income stepped through a year in small steps lands on the closed form's growth.
+        $moneyToIncome = 0.8;
+        $income = 1.0;
+        $steps = 10000;
+        $dt = 1.0 / $steps;
+        for ($i = 0; $i < $steps; $i++) {
+            $moneyToIncome += (0.02 + 0.01) * $dt;
+            $income *= exp(0.045 * $dt);
+        }
+        $this->assertEqualsWithDelta(log(($moneyToIncome * $income) / 0.8), MacroTransmission::broadMoneyGrowth(0.045, 0.02, 0.01, 0.8), 2e-3);
     }
 
     public function testMacroTransmissionHelpers(): void

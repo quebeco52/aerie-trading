@@ -603,7 +603,7 @@ class MonetaryPolicySubsystemTest extends TestCase
     {
         $stateNormal = new MacroState();
         $stateNormal->yield10y = 0.045;
-        $stateNormal->policyRate = 0.025; // +200bps steep curve
+        $stateNormal->policyRate = $stateNormal->policyRateShadow = 0.025; // +200bps steep curve
         $stateNormal->termPremium10y = 0.005;
         $stateNormal->financialConditionsIndex = 0.0;
 
@@ -612,7 +612,7 @@ class MonetaryPolicySubsystemTest extends TestCase
 
         $stateInverted = new MacroState();
         $stateInverted->yield10y = 0.035;
-        $stateInverted->policyRate = 0.055; // -200bps inverted curve
+        $stateInverted->policyRate = $stateInverted->policyRateShadow = 0.055; // -200bps inverted curve
         $stateInverted->termPremium10y = -0.005;
         $stateInverted->financialConditionsIndex = 1.80;
 
@@ -662,17 +662,19 @@ class MonetaryPolicySubsystemTest extends TestCase
         );
     }
 
-    /** Loans create deposits: household credit growing beyond income adds its growth rate to money's. */
+    /** Loans create deposits: household credit growing beyond income adds its flow, over the money stock, to money's growth, whatever households already owe. */
     public function testHouseholdBorrowingCreatesMoney(): void
     {
         $neutralGrowth = MacroEngine::TARGET_INFLATION + MacroEngine::TFP_DRIFT + MacroEngine::STRUCTURAL_LABOR_GROWTH_RATE;
-        $state = new MacroState();
-        $state->householdNewBorrowing = 0.02;
-        $state->householdDebtToIncome = 0.80;
+        foreach ([0.5, 0.8, 1.2] as $debtToIncome) {
+            $state = new MacroState();
+            $state->householdNewBorrowing = 0.02;
+            $state->householdDebtToIncome = $debtToIncome;
 
-        $this->subsystem->calculateMoneySupplyGrowth($state, 0.25, MacroEngine::TFP_DRIFT);
+            $this->subsystem->calculateMoneySupplyGrowth($state, 0.25, MacroEngine::TFP_DRIFT);
 
-        $this->assertEqualsWithDelta($neutralGrowth + (0.02 / 0.80), $state->moneySupplyGrowth, 1e-12);
+            $this->assertEqualsWithDelta($neutralGrowth + (0.02 / MonetaryPolicySubsystem::BROAD_MONEY_TO_GDP), $state->moneySupplyGrowth, 1e-12);
+        }
     }
 
     /** The Authority's purchases add reserves: a programme bought over a year adds its size, over the money stock, to that year's growth, and nothing once it is held. */

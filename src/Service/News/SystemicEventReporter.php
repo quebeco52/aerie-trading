@@ -10,6 +10,7 @@ use App\Entity\DistrictNews;
 use App\Entity\Etf;
 use App\Service\Corporate\MergerAndAcquisitionEngine;
 use App\Service\Event\MarketEventPublisher;
+use App\Service\Event\ShockEvent;
 use App\Service\Macro\MacroEngine;
 use App\Service\Macro\Subsystem\CreditFiscalSubsystem;
 use App\Service\Macro\Subsystem\SovereignFundSubsystem;
@@ -26,8 +27,8 @@ use App\Service\Politics\SovereignReserveFund;
 use App\Service\View\GovernmentPageBuilder;
 
 /**
- * Publishes the tick's district-wide event as a story on its own desk: the economy's, or when the economy has none, the
- * government's (a vote, a fall, a cabinet taking office, a budget). The benchmark fund only supplies the month's move.
+ * Publishes the tick's district-wide events as stories on their own desks: the economy's, and the government's (a vote,
+ * a fall, a cabinet taking office, a budget, a rate decision). The benchmark fund only supplies the month's move.
  *
  * The number on the card is what the benchmark actually did over the last month, not a size the event is
  * assumed to have: a systemic event moves prices only through the economy the engine runs, so a fixed
@@ -60,13 +61,25 @@ class SystemicEventReporter
     }
 
     /**
-     * @return array<string, mixed>|null The wire copy of the published headline, or null when the tick carries no event.
+     * Every story the tick carries: the economy's, the government's, and a rate decision that made news when the
+     * government's lead story is another, since the meetings share their calendar with the budget rounds.
+     *
+     * @return list<array<string, mixed>> The wire copy of each published story, in that order; empty when the tick carries none.
      */
-    public function report(MacroStateDTO $macro, PoliticsStateDTO $politics, Etf $benchmark): ?array
+    public function report(MacroStateDTO $macro, PoliticsStateDTO $politics, Etf $benchmark): array
     {
-        $eventType = $macro->eventType ?? $politics->eventType;
-        if ($eventType === null) {
-            return null;
+        $stories = [];
+        if ($macro->eventType !== null) {
+            $stories[] = [DistrictNews::DESK_ECONOMY, $macro->eventType];
+        }
+        if ($politics->eventType !== null) {
+            $stories[] = [DistrictNews::DESK_GOVERNMENT, $politics->eventType];
+        }
+        if ($politics->eventType !== ShockEvent::MONETARY_DECISION && MonetaryAuthority::meetingMadeNews($politics)) {
+            $stories[] = [DistrictNews::DESK_GOVERNMENT, ShockEvent::MONETARY_DECISION];
+        }
+        if ($stories === []) {
+            return [];
         }
 
         $context = [
@@ -102,12 +115,12 @@ class SystemicEventReporter
 
         $monthMove = $this->priceChangeFeed->changeForTicker((string) $benchmark->getTicker(), (float) $benchmark->getPrice());
 
-        return $this->marketEvent->publishDistrict(
-            $macro->eventType !== null ? DistrictNews::DESK_ECONOMY : DistrictNews::DESK_GOVERNMENT,
-            $eventType,
-            $this->narrativeEngine->generateLore($eventType, $context),
+        return array_map(fn (array $story): array => $this->marketEvent->publishDistrict(
+            $story[0],
+            $story[1],
+            $this->narrativeEngine->generateLore($story[1], $context),
             $monthMove === null ? null : 100.0 * $monthMove
-        );
+        ), $stories);
     }
 
     /**

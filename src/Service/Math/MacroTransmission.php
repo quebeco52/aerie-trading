@@ -249,25 +249,22 @@ final class MacroTransmission
     }
 
     /**
-     * Broad money growth from what creates deposits (McLeay, Radia & Thomas 2014): nominal income, household credit
-     * growing beyond it, and the reserves the central bank's purchases add, as a share of the money stock.
+     * Broad money growth from what creates deposits (McLeay, Radia & Thomas 2014): nominal income, plus the deposits
+     * household credit growing beyond it and the central bank's purchases add, each as a share of the money stock. A
+     * loan creates its deposit, so a unit of new credit is a unit of new money, as a unit of purchases is.
      *
      * @param float $nominalIncomeGrowth     Nominal income growth, a year.
      * @param float $householdNewBorrowing   Change in household debt to income, a year.
-     * @param float $householdDebtToIncome   Household debt to income.
      * @param float $authorityPurchasesToGdp Bonds the central bank buys over GDP, a year.
      * @param float $broadMoneyToGdp         Broad money over GDP.
      */
     public static function broadMoneyGrowth(
         float $nominalIncomeGrowth,
         float $householdNewBorrowing,
-        float $householdDebtToIncome,
         float $authorityPurchasesToGdp,
         float $broadMoneyToGdp,
     ): float {
-        $creditGrowth = $householdDebtToIncome > 0.0 ? $householdNewBorrowing / $householdDebtToIncome : 0.0;
-
-        return $nominalIncomeGrowth + $creditGrowth + ($authorityPurchasesToGdp / $broadMoneyToGdp);
+        return $nominalIncomeGrowth + (($householdNewBorrowing + $authorityPurchasesToGdp) / $broadMoneyToGdp);
     }
 
     /**

@@ -171,6 +171,22 @@ class MarketEngineTest extends TestCase
         );
     }
 
+    /** Perpetual growth carries the inflation the hurdle's 10Y does: a hot print with expectations anchored leaves the fair value where it stood. */
+    public function testAnInflationPrintWithAnchoredExpectationsLeavesTheFairValue(): void
+    {
+        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
+        $this->mathUtilityMock->method('checkProbability')->willReturn(false);
+        $fair = fn (float $inflation, float $breakeven): float => $this->engine->calculateNextPrice(new MarketPricingContext(
+            currentPrice: 100.0, currentVolatility: 0.2, longTermVolatility: 0.2, dt: 1.0 / 252.0, lambda: 0.0,
+            macroState: new MacroStateDTO(inflation: $inflation, tipsBreakeven: $breakeven),
+            bookValuePerShare: 40.0, currentRoic: 0.12, roicTtm: 0.12, liveCostOfEquity: 0.09,
+        ))['perceived_fair_value'];
+
+        $anchored = $fair(0.02, 0.02);
+        $this->assertEqualsWithDelta($anchored, $fair(0.05, 0.02), 1e-9, 'A print three points over target is not faster growth for ever.');
+        $this->assertGreaterThan($anchored, $fair(0.02, 0.03), 'Expected inflation is.');
+    }
+
     /** A firm with a dividend policy, priced with no drift or shocks so only the dividend inputs vary. */
     /**
      * A forecast revised this tick moves the price at once by as much as it moves the fair value, rather than leaving
@@ -188,7 +204,7 @@ class MarketEngineTest extends TestCase
         $value = fn (float $expectedLevy): float => $this->engine->calculateNextPrice(new MarketPricingContext(
             currentPrice: 100.0, currentVolatility: 0.2, longTermVolatility: 0.2, dt: 1.0 / 252.0, lambda: 0.0, beta: 2.0,
             macroState: new MacroStateDTO(
-                totalTime: 6.0, inflation: 0.12, outputGap: 0.03, bankLevyRate: $levy, bankLevyEmbodied: $levy,
+                totalTime: 6.0, inflation: 0.12, tipsBreakeven: 0.12, outputGap: 0.03, bankLevyRate: $levy, bankLevyEmbodied: $levy,
                 expectedLevers: ['bankLevyRate' => $expectedLevy], expectedPolicyFrom: 8.5,
                 previousExpectedLevers: ['bankLevyRate' => $expectedLevy], previousExpectedPolicyFrom: 8.5,
             ),
