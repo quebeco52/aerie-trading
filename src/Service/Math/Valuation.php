@@ -36,6 +36,8 @@ final class Valuation
     // --- Relative Valuation Shrinkage (Vasicek 1973) ---
     /** Spread (cost of equity less growth) at which a firm's own Gordon multiple and its sector's carry equal weight. */
     public const INTRINSIC_PE_SHRINKAGE_SPREAD = 0.03;
+    /** Real long government yield the sector multiples were quoted at: the founding natural rate plus the founding term premium (2.65%). */
+    public const FOUNDING_REAL_RISK_FREE_RATE = MacroEngine::BASE_NATURAL_RATE + MacroEngine::NS_BASE_TERM_PREMIUM;
     /** Cap on a Gordon capitalization multiple (~33.3x, a 3% yield). */
     public const MAX_DCF_MULTIPLIER = 33.33;
 
@@ -88,15 +90,22 @@ final class Valuation
      * @param float      $costOfEquity   The required rate of return for equity investors (Hurdle Rate).
      * @param float      $roic           The Return on Invested Capital.
      * @param float      $growthRate     The expected perpetual growth rate.
+     * The sector's multiple is quoted at the founding discount rate, so before it serves as the prior it is re-struck
+     * at today's: its earnings yield moves with the firm's real hurdle (sectorHurdleShift()). A fixed prior diluted every
+     * firm's response to rates by its weight on it, and diluted most the long-duration firms, whose narrow spread gives
+     * the prior the most weight, so a staple repriced less on a rate move than a cyclical did.
+     *
      * @param float|null $sectorMultiple The sector's baseline trading multiple used as the cross-sectional
      *                                   prior. Null skips shrinkage and returns the raw Gordon multiple.
+     * @param float      $sectorHurdleShift How far the firm's real hurdle has moved from the one the sector multiple was quoted at.
      * @return float The intrinsic fair value P/E multiple.
      */
     public static function calculateIntrinsicFairValuePE(
         float $costOfEquity,
         float $roic,
         float $growthRate = self::DEFAULT_PERPETUAL_GROWTH_RATE,
-        ?float $sectorMultiple = null
+        ?float $sectorMultiple = null,
+        float $sectorHurdleShift = 0.0
     ): float {
         // 1. Enforce absolute structural floor on Cost of Equity to prevent divergence under extreme distress
         $effectiveCostOfEquity = max(self::MIN_COST_OF_EQUITY, $costOfEquity);
@@ -120,6 +129,7 @@ final class Valuation
         // Firm precision goes as spread^2 (delta method on a 1/spread ratio); the prior's is the fixed
         // tau^2. A well-conditioned firm keeps its own multiple; an ill-conditioned one inherits its sector's.
         if ($sectorMultiple !== null && $sectorMultiple > 0.0) {
+            $sectorMultiple = 1.0 / max(1.0 / self::MAX_INTRINSIC_PE, (1.0 / $sectorMultiple) + $sectorHurdleShift);
             $tau = self::INTRINSIC_PE_SHRINKAGE_SPREAD;
             $firmPrecision = $spread * $spread;
             $priorPrecision = $tau * $tau;
@@ -219,9 +229,10 @@ final class Valuation
         float $structuralRoic,
         float $expectedGrowth,
         ?float $sectorMultiple,
-        float $accrualsRatio
+        float $accrualsRatio,
+        float $sectorHurdleShift = 0.0
     ): float {
-        $fairValuePE = self::calculateIntrinsicFairValuePE($hurdleRate, $structuralRoic, $expectedGrowth, $sectorMultiple);
+        $fairValuePE = self::calculateIntrinsicFairValuePE($hurdleRate, $structuralRoic, $expectedGrowth, $sectorMultiple, $sectorHurdleShift);
         $accrualsPenalty = max(0.0, $accrualsRatio * self::ACCRUALS_ANOMALY_PE_PENALTY_SCALE);
 
         return max(self::MIN_INTRINSIC_PE, $fairValuePE - $accrualsPenalty);
@@ -423,6 +434,16 @@ final class Valuation
             $inflation
         );
 
-        return Valuation::calculateQualityAdjustedFairValuePE($hurdleRate, $trueReturn, $expectedGrowth, $sectorMultiple, $accrualsRatio);
+        return Valuation::calculateQualityAdjustedFairValuePE($hurdleRate, $trueReturn, $expectedGrowth, $sectorMultiple, $accrualsRatio, self::sectorHurdleShift($hurdleRate, $beta, $inflation));
+    }
+
+    /**
+     * How far the real hurdle a firm faces has moved from the one its sector's multiple was quoted at: today's cost of
+     * equity less expected inflation, against the founding real yield plus the founding premium at the firm's beta.
+     * Real, because nominal growth carries expected inflation as the yield does, so inflation alone moves no multiple.
+     */
+    public static function sectorHurdleShift(float $hurdleRate, float $beta, float $expectedInflation): float
+    {
+        return ($hurdleRate - $expectedInflation) - (self::FOUNDING_REAL_RISK_FREE_RATE + ($beta * MacroEngine::BASE_EQUITY_RISK_PREMIUM));
     }
 }

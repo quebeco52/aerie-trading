@@ -121,6 +121,57 @@ class ValuationTest extends TestCase
         }
     }
 
+    /**
+     * The sector multiple is quoted at the founding discount rate and re-struck at today's: its earnings yield moves with
+     * the firm's real hurdle before it is blended in, and at the founding rate it is the quoted multiple exactly.
+     */
+    public function testTheSectorPriorIsReStruckAtTodaysRealHurdle(): void
+    {
+        $beta = 0.7;
+        $foundingHurdle = Valuation::FOUNDING_REAL_RISK_FREE_RATE + MacroEngine::TARGET_INFLATION + ($beta * MacroEngine::BASE_EQUITY_RISK_PREMIUM);
+        $this->assertEqualsWithDelta(0.0, Valuation::sectorHurdleShift($foundingHurdle, $beta, MacroEngine::TARGET_INFLATION), 1e-12);
+        $this->assertSame(
+            Valuation::calculateIntrinsicFairValuePE($foundingHurdle, 0.20, 0.036, 16.0),
+            Valuation::calculateIntrinsicFairValuePE($foundingHurdle, 0.20, 0.036, 16.0, 0.0)
+        );
+
+        // A hundred basis points on the real hurdle: the prior's yield rises by the same, so 16x becomes 1 / (1/16 + 1%).
+        $hurdle = $foundingHurdle + 0.01;
+        $shift = Valuation::sectorHurdleShift($hurdle, $beta, MacroEngine::TARGET_INFLATION);
+        $this->assertEqualsWithDelta(0.01, $shift, 1e-12);
+        $spread = $hurdle - 0.036;
+        $own = (1.0 - (0.036 / 0.20)) / $spread;
+        $firmWeight = ($spread ** 2) / (($spread ** 2) + (Valuation::INTRINSIC_PE_SHRINKAGE_SPREAD ** 2));
+        $this->assertEqualsWithDelta(
+            ($firmWeight * $own) + ((1.0 - $firmWeight) / ((1.0 / 16.0) + 0.01)),
+            Valuation::calculateIntrinsicFairValuePE($hurdle, 0.20, 0.036, 16.0, $shift),
+            1e-9
+        );
+
+        // Expected inflation moves the yield and nominal growth alike, so on its own it moves no multiple.
+        $this->assertEqualsWithDelta(0.0, Valuation::sectorHurdleShift($foundingHurdle + 0.01, $beta, MacroEngine::TARGET_INFLATION + 0.01), 1e-12);
+    }
+
+    /**
+     * Duration: on the same rise in the real rate a staple, whose narrow spread leans it on its sector's multiple, reprices
+     * by more than a cyclical with a wide one. With the prior held at the quoted multiple the staple kept a third of its
+     * own repricing on the prior's account.
+     */
+    public function testALongDurationFirmRepricesMoreOnARateRiseThanAShortDurationOne(): void
+    {
+        $fall = static function (float $beta, float $roic, float $growth, float $sector): float {
+            $hurdle = Valuation::FOUNDING_REAL_RISK_FREE_RATE + MacroEngine::TARGET_INFLATION + ($beta * MacroEngine::BASE_EQUITY_RISK_PREMIUM);
+            $before = Valuation::calculateIntrinsicFairValuePE($hurdle, $roic, $growth, $sector, Valuation::sectorHurdleShift($hurdle, $beta, MacroEngine::TARGET_INFLATION));
+            $after = Valuation::calculateIntrinsicFairValuePE($hurdle + 0.01, $roic, $growth, $sector, Valuation::sectorHurdleShift($hurdle + 0.01, $beta, MacroEngine::TARGET_INFLATION));
+
+            return 1.0 - ($after / $before);
+        };
+
+        $staple = $fall(0.7, 0.20, 0.036, 16.0);
+        $cyclical = $fall(1.3, 0.15, 0.040, 15.0);
+        $this->assertGreaterThan($cyclical + 0.02, $staple);
+    }
+
     /** A non-positive sector multiple is not a usable prior and must be ignored rather than dragging the estimate to zero. */
     public function testIntrinsicFairValuePEIgnoresAnUnusableSectorPrior(): void
     {
@@ -287,14 +338,14 @@ class ValuationTest extends TestCase
     public function testManagementAndTheMarketStrikeTheSameFairValueMultiple(): void
     {
         $growth = Valuation::calculateFundableGrowth(Valuation::calculateExpectedNominalGrowth(0.03, 0.01, 1.2, 0.025, 0.09), 0.18, 0.40, 0.025);
-        $market = Valuation::calculateQualityAdjustedFairValuePE(0.09, 0.18, $growth, 22.0, 0.04);
+        $market = Valuation::calculateQualityAdjustedFairValuePE(0.09, 0.18, $growth, 22.0, 0.04, Valuation::sectorHurdleShift(0.09, 1.2, 0.025));
         $management = Valuation::calculateManagementFairValuePE(0.09, 0.18, 0.03, 0.01, 1.2, 0.025, 22.0, 0.04, 0.40);
 
         $this->assertSame($market, $management);
         // A payout that leaves too little to fund the outlook lowers management's multiple exactly as the market's.
         $this->assertLessThan($management, Valuation::calculateManagementFairValuePE(0.09, 0.18, 0.03, 0.01, 1.2, 0.025, 22.0, 0.04, 0.95));
         // The Sloan discount is inside the shared figure, floored at the distressed multiple.
-        $clean = Valuation::calculateQualityAdjustedFairValuePE(0.09, 0.18, $growth, 22.0, 0.0);
+        $clean = Valuation::calculateQualityAdjustedFairValuePE(0.09, 0.18, $growth, 22.0, 0.0, Valuation::sectorHurdleShift(0.09, 1.2, 0.025));
         $this->assertEqualsWithDelta($clean - 0.04 * Valuation::ACCRUALS_ANOMALY_PE_PENALTY_SCALE, $market, 1e-12);
     }
 
