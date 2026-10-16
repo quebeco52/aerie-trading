@@ -111,3 +111,47 @@ EBIT/interest and default/missed/shut-out/emergency counts, hedge gain by calend
 - KTWK: dwell 0.53-1.54 (no floor), throughput 0.84-1.20; strikes 1/0/4/1; throughput at onset 0.83-0.90 of the prior
   quarter, +1q mostly 1.09-1.10 (deferred boxes released); one seed-3 strike held 3 quarters (0.83/0.79/0.79).
   corr(YoY log revenue, YoY change in the foreign gap) +0.31, domestic +0.16.
+
+## 2026-10-16 round 3 v3: telecom PRICE_WAR_PENALTY (8 margin pts in war quarters) removed, 4 seeds x 20y
+
+Question: how SKUA and LOON behave once the war's cost is only the 5% ARPU cut, churn uplift and SAC.
+Arms: `head` = HEAD 48cbb959 (penalty in), from a `git archive HEAD` tree with a vendor symlink at
+`base/0a85c411-71bb497c-s4-y20-t360/head-0a85c411/`, run with its own `var/harness/new_firms/run.sh`; `r3v3` = working
+tree. HEALTH=1, seeds 1-4, 20y, 360 ticks/yr. `python3 -I compare_r3_pricewar.py head r3v3 1 2 3 4`.
+r3v2 is NOT a valid baseline for this: it predates 48cbb959 (BOARD_OPENING_CAP_USD 19.4T, not 20.3T) and diverges
+from r3v3 at quarter 3. head and r3v3 are identical up to each seed's first war onset, so the first war pairs exactly.
+Table: `round3v3_4seed_20y.out`.
+
+- First war, paired: SKUA margin +8.4 pts (se 1.1), LOON +8.3 (se 0.3), n=4. The penalty passes through 1:1.
+- War cost left (first war, r3v3 minus the 4 quarters before): SKUA 0 to -5 pts, LOON -3.6 to -6 pts.
+- Pooled war-minus-peace mean margin: SKUA -10.8 -> -3.0 pts, LOON -13.8 -> -3.7 pts.
+- SKUA distress is mostly a peace-time story: seed 3 collapses from y1 (margin goes negative with no war) in both
+  arms. Seed 2 head defaults (14 qtrs over covenant); r3v3 does not (4 qtrs). Totals over 4 seeds: covenant-qtrs
+  23 -> 21, shut-outs 10 -> 12, emergency raises 3 -> 0, default lines 5 -> 4. Within noise after the paths split.
+- LOON: no covenant quarters (5 -> 0), min ICR 1.65 -> 2.26, no defaults in either arm.
+- Wars 8 -> 6 onsets, war share 0.072 -> 0.116: the draw is unchanged, but the paths split at the first war, so later
+  onsets are new draws (Poisson noise, not a mechanism change).
+- Board: TIER fails in r3v3 seed 2 only (after the split at q20); other firms mean |d median om| 0.003, max FNCH 0.027.
+Caveat: after the first war the arms do not pair; 4 seeds cannot size distress-rate changes.
+Plant sales: the harness does not capture DIVESTITURE lines; the table counts PP&E drops >10% a quarter as a proxy.
+
+## 2026-10-16 round 3 v4: SKUA seed volatility 0.24 -> 0.18; plant-sale cascades, 8 seeds x 20y
+
+Question: (1) what 0.18 does to SKUA's subscriber noise, distress and stock vol; (2) are divestiture cascades
+cyclical troughs or structural decline. Arms: `r3v3` (penalty off, vol 0.24; seeds 5-8 from `base/r3v3-tree/`),
+`r3v4` (working tree, vol 0.18), `head` 1-4 for reference. HEALTH=1, POLITICS off, 20y, 360 ticks/yr.
+`python3 -I analyse_r3v4.py`; table `round3v4_8seed_20y.out`. Arms unpaired after divergence: se from both variances.
+
+SKUA r3v3 -> r3v4 (means over 8 seeds): gross-adds noise sd 0.408 -> 0.266 (t -5.6), sub index sd 0.078 -> 0.050
+(t -4.0), min 0.81 -> 0.91, op margin p50 0.116 -> 0.168 (t 2.6), loss quarters 16% -> 1%, peak ND/EBITDA 5.9 -> 3.4,
+qtrs > 4.5x 26 -> 1, reorgs 3 -> 0, shut-outs 17 -> 2, plant-sale quarters 19 -> 0, realized vol median 0.25 -> 0.21
+(r3v3 mean 0.56 from seed 3's collapse, 2.37). LOON: margin p50 0.212 -> 0.241 (t 3.8), its own noise unchanged.
+Noise e = (s_t - s_{t-1}(1-churn_t)) / (s_{t-1} baseChurn) - 1, peace quarters; includes rival drain and price shift.
+
+Cascades (plant < 40% of pre-drop within 3y): 24 episodes, 19 firm-runs, in 20 runs (head 8/4 runs, r3v3 9/8,
+r3v4 7/8): SKUA 7 (all seed 3, head and r3v3 chained), FALC 5, CASC 5, DIPR 3, one each SINK, ALBT, FNCH, WADE.
+Going in: op margin thin (median ~0.03, 9 of 24 negative), ND/EBITDA mostly 5-15, 3-4 loss quarters of 4. For the
+commodity firms (CASC crack, DIPR power, SINK crude, ALBT freight, FNCH gold; |rho| 0.8-0.9) the index sat at
+0.5-0.9 of its run median and was back at 0.7-1.7 by y19-20: cyclical troughs. Plant stays within 0.1 of the trough
+in 20 of 24 (recovered: FALC r3v3-4, ALBT r3v3-6, CASC r3v4-4, SINK r3v4-6). FALC, SKUA, WADE have no commodity
+driver (|rho| < 0.6). WADE (regulated utility, r3v4-1) to 0.04 in 6 sales is the outlier to check.
