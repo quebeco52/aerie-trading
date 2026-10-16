@@ -44,8 +44,6 @@ class MarketEngine
     public const BASE_VARIANCE_REVERSION_SPEED = 6.0;
 
     // --- Variance Budget ---
-    /** Ceiling on the share of a name's long-run IDIOSYNCRATIC variance the market-wide jump may reclaim, so a quiet name keeps a diffusion that still reads as its configured volatility. */
-    private const MAX_SYSTEMIC_VARIANCE_DRAG_SHARE = 0.25;
     /** Ceiling on the share of a name's long-run IDIOSYNCRATIC variance its OWN jump process may supply; the jump component of single-stock return variance is a minority of the total (Huang & Tauchen 2005). */
     private const MAX_IDIOSYNCRATIC_JUMP_VARIANCE_SHARE = 0.25;
 
@@ -104,8 +102,10 @@ class MarketEngine
      * The long-run variance a name carries on its own, once its market loading has been paid for.
      *
      * A name's market loading is beta * marketVol by definition, so the diffusion supplies it outright and
-     * the stochastic volatility process carries only what is left. Deriving the loading the other way round
-     * — from an implied correlation clamped below one — truncated the beta of any name whose volatility fell
+     * the stochastic volatility process carries only what is left. The market-wide jump reaches the name through
+     * the same beta, so it is systematic variance too and is paid for here, not out of the name's own budget.
+     *
+     * Deriving the loading the other way round — from an implied correlation clamped below one — truncated the beta of any name whose volatility fell
      * short of what its beta demanded: measured against the market factor a configured 1.3 realized 1.19 and
      * a 2.8 realized 2.30, and in a crisis, when market volatility triples and the truncation binds on
      * everything at once, a 1.3 realized 0.45. The CAPM drift and the systemic jump were paid on the full
@@ -126,9 +126,41 @@ class MarketEngine
     public static function longTermIdiosyncraticVariance(float $longTermVolatility, float $beta): float
     {
         $longTermVar = $longTermVolatility * $longTermVolatility;
-        $baselineSystematicVar = ($beta * MacroEngine::MACRO_VOL_BASE_ANCHOR) * ($beta * MacroEngine::MACRO_VOL_BASE_ANCHOR);
+        $baselineSystematicVar = (($beta * MacroEngine::MACRO_VOL_BASE_ANCHOR) ** 2) + self::systemicJumpMoments($beta)['variance'];
 
         return max($longTermVar * self::MIN_IDIOSYNCRATIC_VARIANCE_SHARE, $longTermVar - $baselineSystematicVar);
+    }
+
+    /**
+     * The annual compensator, mean and second moment of the market-wide Kou jump as a name of this beta takes it.
+     *
+     * The jump reaches the stock as beta * J, so these are the moments of the SCALED jump, not beta times the unscaled
+     * ones: scaling an exponential divides its rate, and a negative beta swaps the two tails outright, so an inverse
+     * name gains on the market's crashes.
+     *
+     * @return array{compensator: float, mean: float, variance: float}
+     */
+    public static function systemicJumpMoments(float $beta): array
+    {
+        $exposure = abs($beta);
+        if ($exposure <= 0.0) {
+            return ['compensator' => 0.0, 'mean' => 0.0, 'variance' => 0.0];
+        }
+
+        $capUp = FinancialConstants::MAX_JUMP_LOG_RETURN;
+        $capDown = abs(FinancialConstants::MIN_JUMP_LOG_RETURN);
+        $scaledEtaUp = MacroEngine::SYSTEMIC_JUMP_ETA_UP / $exposure;
+        $scaledEtaDown = MacroEngine::SYSTEMIC_JUMP_ETA_DOWN / $exposure;
+        $pUp = $beta > 0.0 ? MacroEngine::SYSTEMIC_JUMP_PROBABILITY_UP : 1.0 - MacroEngine::SYSTEMIC_JUMP_PROBABILITY_UP;
+        $etaUp = $beta > 0.0 ? $scaledEtaUp : $scaledEtaDown;
+        $etaDown = $beta > 0.0 ? $scaledEtaDown : $scaledEtaUp;
+        $intensity = MacroEngine::SYSTEMIC_JUMP_INTENSITY;
+
+        return [
+            'compensator' => $intensity * StochasticProcesses::kouTruncatedCompensator($pUp, $etaUp, $etaDown, $capUp, $capDown),
+            'mean' => $intensity * StochasticProcesses::kouTruncatedMean($pUp, $etaUp, $etaDown, $capUp, $capDown),
+            'variance' => $intensity * StochasticProcesses::kouTruncatedSecondMoment($pUp, $etaUp, $etaDown, $capUp, $capDown),
+        ];
     }
 
     /**
@@ -336,10 +368,6 @@ class MarketEngine
         $diffusionMarketVol = $shockSystematicVar > 0.0 ? $shockMarketVol * sqrt(1.0 - ($fundImpactVariance / $shockSystematicVar)) : $shockMarketVol;
         $longTermIdiosyncraticVar = self::longTermIdiosyncraticVariance($longTermVolatility, $beta);
 
-        // The floor the same split guarantees, which the variance state is held to when it is stripped back
-        // to its idiosyncratic part below.
-        $minIdiosyncraticVar = $longTermVar * self::MIN_IDIOSYNCRATIC_VARIANCE_SHARE;
-
         // IDIOSYNCRATIC JUMP CALIBRATION
         $jumpParameters = self::calibratedJumpParameters($longTermVolatility, $beta, $lambda, $jump_vol);
         $dynamicEtaUp = $jumpParameters['eta_up'];
@@ -354,48 +382,11 @@ class MarketEngine
             $capDown
         );
 
-        // The market-wide jump reaches the stock as beta * J, so its compensator and its variance are those
-        // of the SCALED jump, not beta times the unscaled one: scaling an exponential divides its rate, and
-        // a negative beta swaps the two tails outright — an inverse name gains on the market's crashes.
-        $systemicExposure = abs($beta);
-        $systemicCompensator = 0.0;
-        $systemicJumpMean = 0.0;
-        $systemicJumpVariance = 0.0;
-
-        if ($systemicExposure > 0.0) {
-            $scaledEtaUp = MacroEngine::SYSTEMIC_JUMP_ETA_UP / $systemicExposure;
-            $scaledEtaDown = MacroEngine::SYSTEMIC_JUMP_ETA_DOWN / $systemicExposure;
-
-            $exposedPUp = $beta > 0.0
-                ? MacroEngine::SYSTEMIC_JUMP_PROBABILITY_UP
-                : 1.0 - MacroEngine::SYSTEMIC_JUMP_PROBABILITY_UP;
-            $exposedEtaUp = $beta > 0.0 ? $scaledEtaUp : $scaledEtaDown;
-            $exposedEtaDown = $beta > 0.0 ? $scaledEtaDown : $scaledEtaUp;
-
-            $systemicCompensator = MacroEngine::SYSTEMIC_JUMP_INTENSITY * StochasticProcesses::kouTruncatedCompensator(
-                $exposedPUp,
-                $exposedEtaUp,
-                $exposedEtaDown,
-                $capUp,
-                $capDown
-            );
-
-            $systemicJumpMean = MacroEngine::SYSTEMIC_JUMP_INTENSITY * StochasticProcesses::kouTruncatedMean(
-                $exposedPUp,
-                $exposedEtaUp,
-                $exposedEtaDown,
-                $capUp,
-                $capDown
-            );
-
-            $systemicJumpVariance = MacroEngine::SYSTEMIC_JUMP_INTENSITY * StochasticProcesses::kouTruncatedSecondMoment(
-                $exposedPUp,
-                $exposedEtaUp,
-                $exposedEtaDown,
-                $capUp,
-                $capDown
-            );
-        }
+        // The market-wide jump as this name takes it, through its beta (systemicJumpMoments()).
+        $systemicJump = self::systemicJumpMoments($beta);
+        $systemicCompensator = $systemicJump['compensator'];
+        $systemicJumpMean = $systemicJump['mean'];
+        $systemicJumpVariance = $systemicJump['variance'];
 
         // Expected total return is the cost of equity the fair value is discounted at (CAPM on the 10Y,
         // DebtEngine::calculateHealth()), so a fairly priced name drifts at the rate it is valued at; the
@@ -409,12 +400,6 @@ class MarketEngine
         // Dynamically scale variance reversion speed (kappa) during jump diffusion regimes
         // instead of linearly clamping theta, preventing artificial volatility suppression
         $dynamicKappa = self::varianceReversionSpeed($lambda, $kappa);
-
-        // Market-wide jump variance budget: deduct systemic jump variance from total diffusion variance.
-        $systemicJumpVariance = min(
-            $systemicJumpVariance,
-            $longTermIdiosyncraticVar * self::MAX_SYSTEMIC_VARIANCE_DRAG_SHARE
-        );
 
         // Idiosyncratic jump variance budget: deduct stock jump variance at truncated second moment.
         $idiosyncraticJumpVariance = $lambda > 0.0
@@ -444,25 +429,26 @@ class MarketEngine
             $longTermIdiosyncraticVar * self::MAX_IDIOSYNCRATIC_JUMP_VARIANCE_SHARE
         );
 
-        // What the idiosyncratic diffusion is left with once every other source of variance has been paid
-        // for. Every jump the name is exposed to is charged here, which is the only bucket that can flex:
-        // the systematic loading is pinned at beta * marketVol and is not the engine's to spend.
+        // What the idiosyncratic diffusion is left with once the name's own other sources of variance have been paid
+        // for, which is the only bucket that can flex: the market's diffusion and its jump reach the name through beta
+        // and were paid for before the idiosyncratic budget was struck (longTermIdiosyncraticVariance()).
         // The variance jumps below add to the stationary mean, so the target is struck low enough that the
         // process still settles on it: see varianceJumpLoad().
         $adjustedTheta = max(
             0.0001,
-            (($longTermIdiosyncraticVar * $commonIdiosyncraticScale) - $systemicJumpVariance - $idiosyncraticJumpVariance - $impactVariance - $announcementVariance)
+            (($longTermIdiosyncraticVar * $commonIdiosyncraticScale) - $idiosyncraticJumpVariance - $impactVariance - $announcementVariance)
                 * (1.0 - self::varianceJumpLoad($lambda, $dynamicKappa, $dt))
         );
 
         // The state arrives as the name's TOTAL variance, which is what every other part of the system
         // reads, so every source the engine adds back below is stripped out before the process steps
         // forward. The systematic part is stripped at the market vol it was added at, last tick's, so a
-        // move in market vol does not leak into the idiosyncratic state.
+        // move in market vol does not leak into the idiosyncratic state. The state is held at zero, not at any
+        // floor above it: clamped up to a floor its target sits below, the process would settle above its target.
         $priorMarketVol = $ctx->priorMarketVol ?? $marketVol;
         $priorSystematicVar = ($beta * $priorMarketVol) * ($beta * $priorMarketVol);
         $currentIdiosyncraticVar = max(
-            $minIdiosyncraticVar,
+            0.0,
             $currentVar - $priorSystematicVar - $systemicJumpVariance - $idiosyncraticJumpVariance
         );
 

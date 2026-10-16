@@ -14,7 +14,7 @@ use PHPUnit\Framework\TestCase;
 /**
  * The single-name variance state: stored as a TOTAL variance, stepped as an idiosyncratic one.
  *
- * Two invariants. The round trip from total to idiosyncratic and back must not leak a move in market vol
+ * Invariants. The round trip from total to idiosyncratic and back must not leak a move in market vol
  * into the idiosyncratic state, and the variance jumps must not lift the stationary variance above the
  * level the name was calibrated to. Either failure makes every name realize more volatility than it was
  * configured with.
@@ -26,16 +26,16 @@ final class StockVarianceStateTest extends TestCase
     private const CALM_MARKET_VOL = 0.15;
     private const DAILY = 1.0 / 252.0;
 
-    private function context(float $volatility, float $marketVol, ?float $priorMarketVol, float $lambda, float $volOfVol, float $dt, float $announcementVariance = 0.0): MarketPricingContext
+    private function context(float $volatility, float $marketVol, ?float $priorMarketVol, float $lambda, float $volOfVol, float $dt, float $announcementVariance = 0.0, float $longTermVolatility = self::LONG_TERM_VOLATILITY, float $beta = self::BETA): MarketPricingContext
     {
         return new MarketPricingContext(
             currentPrice: 100.0,
             currentVolatility: $volatility,
-            longTermVolatility: self::LONG_TERM_VOLATILITY,
+            longTermVolatility: $longTermVolatility,
             dt: $dt,
             lambda: $lambda,
             jumpVol: 0.05,
-            beta: self::BETA,
+            beta: $beta,
             marketVol: $marketVol,
             volOfVol: $volOfVol,
             macroState: new MacroStateDTO(policyRate: 0.04, equityRiskPremium: 0.045, outputGap: 0.0),
@@ -83,11 +83,55 @@ final class StockVarianceStateTest extends TestCase
         );
     }
 
-    /** Where the total variance should sit at a given market vol: the idiosyncratic target plus the loading. */
+    /** Where the total variance should sit at a given market vol: the idiosyncratic target plus the loading and the market jump. */
     private function targetVariance(float $marketVol): float
     {
         return MarketEngine::longTermIdiosyncraticVariance(self::LONG_TERM_VOLATILITY, self::BETA)
-            + ((self::BETA * $marketVol) ** 2);
+            + ((self::BETA * $marketVol) ** 2)
+            + MarketEngine::systemicJumpMoments(self::BETA)['variance'];
+    }
+
+    /**
+     * The market-wide jump reaches a name through its beta, so it is systematic: a name in normal conditions carries its
+     * configured variance as the market's diffusion and its jump through beta plus what is left for its own budget.
+     */
+    public function testTheMarketJumpIsPaidForInTheSystematicBlock(): void
+    {
+        $anchor = \App\Service\Macro\MacroEngine::MACRO_VOL_BASE_ANCHOR;
+        $jump = MarketEngine::systemicJumpMoments(self::BETA)['variance'];
+
+        self::assertGreaterThan(0.0, $jump);
+        self::assertEqualsWithDelta(
+            self::LONG_TERM_VOLATILITY ** 2,
+            MarketEngine::longTermIdiosyncraticVariance(self::LONG_TERM_VOLATILITY, self::BETA) + ((self::BETA * $anchor) ** 2) + $jump,
+            1e-12
+        );
+        self::assertSame(0.0, MarketEngine::systemicJumpMoments(0.0)['variance']);
+        self::assertEqualsWithDelta($this->targetVariance(self::CALM_MARKET_VOL), $this->settledVariance(0.0), 1.0e-5, 'and the total settles on the configured variance');
+    }
+
+    /**
+     * A name whose own budget is spent down to below the floor its long-run residual is held to (here a configuration
+     * whose beta uses up its volatility, with an outsized announcement record) reverts to the target it was given.
+     * Clamping the residual state up to that floor every tick held it above its target and lifted the name's volatility.
+     */
+    public function testAResidualStruckBelowTheFloorRevertsToItsTarget(): void
+    {
+        $volatility = 0.12;
+        $beta = 0.8;
+        $residualBudget = MarketEngine::longTermIdiosyncraticVariance($volatility, $beta);
+        self::assertEqualsWithDelta(0.2 * $volatility * $volatility, $residualBudget, 1e-12, 'control: the residual budget is at its floor');
+
+        mt_srand(20261016);
+        $engine = new MarketEngine(new MathUtility());
+        $loading = (($beta * self::CALM_MARKET_VOL) ** 2) + MarketEngine::systemicJumpMoments($beta)['variance'];
+        $state = sqrt($loading + $residualBudget);
+        for ($tick = 0; $tick < 504; $tick++) {
+            $context = $this->context($state, self::CALM_MARKET_VOL, self::CALM_MARKET_VOL, 0.0, 1.0e-6, self::DAILY, announcementVariance: 1.0, longTermVolatility: $volatility, beta: $beta);
+            $state = $engine->calculateNextPrice($context)['next_volatility'];
+        }
+
+        self::assertEqualsWithDelta($loading + (0.75 * $residualBudget), $state * $state, 1.0e-5);
     }
 
     /**
@@ -102,10 +146,11 @@ final class StockVarianceStateTest extends TestCase
         $engine = new MarketEngine(new MathUtility());
         $longRunResidual = MarketEngine::longTermIdiosyncraticVariance(self::LONG_TERM_VOLATILITY, self::BETA);
         $decay = exp(-MarketEngine::varianceReversionSpeed(0.0) * self::DAILY);
+        $marketJump = MarketEngine::systemicJumpMoments(self::BETA)['variance'];
 
         $marketVol = self::CALM_MARKET_VOL;
         $residual = $longRunResidual * MarketEngine::commonIdiosyncraticVarianceScale($marketVol);
-        $volatility = sqrt($residual + ((self::BETA * $marketVol) ** 2));
+        $volatility = sqrt($residual + ((self::BETA * $marketVol) ** 2) + $marketJump);
         $worst = 0.0;
 
         for ($tick = 0; $tick < 252; $tick++) {
@@ -120,11 +165,11 @@ final class StockVarianceStateTest extends TestCase
 
             $target = $longRunResidual * MarketEngine::commonIdiosyncraticVarianceScale($marketVol);
             $residual = $target + (($residual - $target) * $decay);
-            $worst = max($worst, abs($volatility - sqrt($residual + ((self::BETA * $marketVol) ** 2))));
+            $worst = max($worst, abs($volatility - sqrt($residual + ((self::BETA * $marketVol) ** 2) + $marketJump)));
         }
 
         // QE noise at a 1e-6 vol-of-vol is a few 1e-4 at these levels; the leak this guards was five points.
-        self::assertLessThan(1.0e-3, $worst, 'Total vol drifted off the residual path plus (beta x market vol)^2.');
+        self::assertLessThan(1.0e-3, $worst, 'Total vol drifted off the residual path plus (beta x market vol)^2 and the market jump.');
     }
 
     /**
@@ -152,7 +197,7 @@ final class StockVarianceStateTest extends TestCase
             $volatility = $engine->calculateNextPrice($this->context($volatility, $turbulent, $turbulent, 0.0, 1.0e-6, self::DAILY))['next_volatility'];
         }
         $residualTarget = MarketEngine::longTermIdiosyncraticVariance(self::LONG_TERM_VOLATILITY, self::BETA) * MarketEngine::commonIdiosyncraticVarianceScale($turbulent);
-        self::assertEqualsWithDelta($residualTarget + ((self::BETA * $turbulent) ** 2), $volatility * $volatility, 1e-3 * $residualTarget);
+        self::assertEqualsWithDelta($residualTarget + ((self::BETA * $turbulent) ** 2) + MarketEngine::systemicJumpMoments(self::BETA)['variance'], $volatility * $volatility, 1e-3 * $residualTarget);
 
         // A market that has been this turbulent for a whole cycle is at its trend: the residual is back at its own level.
         for ($tick = 0; $tick < 504; $tick++) {
