@@ -263,20 +263,6 @@ final class PolicyCapitalization
     }
 
     /**
-     * A fair value struck on trailing earnings, repriced for the laws expected: after-tax earnings scaled from the
-     * effective rate they carry to the one expected, plus the present value of the earnings the other laws expected
-     * add or take beyond the ones carried.
-     *
-     * @param float $effectiveTaxCarried  The firm's effective tax rate at the rate in force.
-     * @param float $effectiveTaxExpected Its effective tax rate at the rate in force plus the expected shift's gap.
-     * @param float $earningsGap          A year's after-tax earnings per share the other laws expected add (earningsGap()).
-     */
-    public static function reprice(float $fairValue, float $effectiveTaxCarried, float $effectiveTaxExpected, float $earningsGap, float $capRate): float
-    {
-        return max(0.01, ($fairValue * self::afterTaxScale($effectiveTaxCarried, $effectiveTaxExpected)) + ($earningsGap / $capRate));
-    }
-
-    /**
      * What after-tax earnings carried at one effective tax rate are worth at another, as a multiple.
      */
     public static function afterTaxScale(float $effectiveTaxCarried, float $effectiveTaxExpected): float

@@ -50,11 +50,10 @@ class Stock
     /**
      * @var string The current share price of the stock.
      *
-     * PER-TICK COLUMN, `updatable: false`. This and the five others so marked (current volatility, impact
-     * variance, momentum trend, dynamic credit spread, corporate flow backlog) change on every name on
-     * every tick, which made every stock a dirty entity at every flush and cost one UPDATE per stock per
-     * flush. The unit of work never writes them; StockTickColumns writes them in bulk before each flush.
-     * The INSERT still carries them, so seeding is unaffected.
+     * PER-TICK COLUMN, `updatable: false`. This and the others so marked (StockTickColumns::COLUMNS) change
+     * on every name on every tick, which made every stock a dirty entity at every flush and cost one UPDATE
+     * per stock per flush. The unit of work never writes them; StockTickColumns writes them in bulk before
+     * each flush. The INSERT still carries them, so seeding is unaffected.
      */
     #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 8, options: ['default' => '100.00000000'], updatable: false)]
     private string $price = '100.00000000';
@@ -563,6 +562,14 @@ class Stock
      */
     #[ORM\Column(type: 'float', nullable: true, updatable: false)]
     private ?float $priceMomentumTrend = 0.0;
+
+    /**
+     * @var float|null The equity the firm's fundamentals support at the last tick: fair value per share times shares
+     *                 outstanding, so a split leaves it standing. The levered beta is struck on it rather than on the
+     *                 price (DebtEngine::analyzeDebtHealth()). Null until the first tick. A per-tick column.
+     */
+    #[ORM\Column(type: 'float', nullable: true, updatable: false)]
+    private ?float $fairEquityValue = null;
 
     /**
      * @var float|null Annual share turnover as a fraction of the public float: a structural property of the
@@ -1717,6 +1724,17 @@ class Stock
     public function getPriceMomentumTrend(): ?float
     {
         return $this->priceMomentumTrend;
+    }
+
+    public function setFairEquityValue(?float $fairEquityValue): static
+    {
+        $this->fairEquityValue = $fairEquityValue;
+        return $this;
+    }
+
+    public function getFairEquityValue(): ?float
+    {
+        return $this->fairEquityValue;
     }
 
     public function setTurnoverRatio(?float $turnoverRatio): static
