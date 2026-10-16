@@ -68,6 +68,8 @@ final class InputOutputExposures
     public const HEAVY_MANUFACTURING = ['metals' => 0.191, 'imports' => 0.177, 'labor' => 0.266];
     /** Single-family, multifamily and other residential structures (BOWR): BEA 233411, 233412, 2334A0. */
     public const HOMEBUILDER = ['energy' => 0.025, 'metals' => 0.028, 'imports' => 0.073, 'labor' => 0.383];
+    /** Electric power generation (DIPR; fuel, carbon and purchased power priced in the model): BEA 221100. */
+    public const INDEPENDENT_POWER = ['imports' => 0.04, 'labor' => 0.316];
     /** Nonstore retailers: BEA 454000. */
     public const INTERNET_RETAIL = ['imports' => 0.07, 'labor' => 0.271];
     /** Legal services (CLAW): BEA 541100. */
@@ -82,6 +84,8 @@ final class InputOutputExposures
     public const MINING = ['energy' => 0.056, 'metals' => 0.027, 'imports' => 0.078, 'labor' => 0.254];
     /** Oil and gas extraction (own-commodity trade excluded): BEA 211000. */
     public const OIL_GAS_PRODUCER = ['energy' => 0.029, 'metals' => 0.038, 'imports' => 0.068, 'labor' => 0.24];
+    /** Support activities for transportation, port and harbour operations among them (KTWK): BEA 48A000. */
+    public const PORT_TERMINAL = ['energy' => 0.023, 'imports' => 0.066, 'labor' => 0.392];
     /** Rail transportation: BEA 482000. */
     public const RAILROAD = ['energy' => 0.088, 'metals' => 0.02, 'imports' => 0.04, 'labor' => 0.383];
     /** Tenant-occupied housing and other real estate (SHOR; PLZA, ELDE, KITE): BEA 531HST, 531ORE. */

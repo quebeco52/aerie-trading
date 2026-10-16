@@ -81,3 +81,27 @@ the two firms net -0.15T at seed, but tick 1 moves +0.07T, so ~0.2T of board dri
 
 Arm `jdaw2x1014`, seeds 1-16, unpaired against `jdaw1014` (`analyse_1014b.py`, `opening_cap_1014b.out`). Board Q1 mean
 19.418T (0.132) vs 19.402T (0.206); JDAW Q1 end 242B (vs 231B), WEAV 184B. Constant stays 19.4e12.
+
+## 2026-10-16: Skua Mobile (SKUA), Dipper Generation (DIPR), Kittiwake Harbour (KTWK) added
+
+Arm `r3_1016` (89 firms): the working tree as is. Arm `head1016` (86 firms): `git archive HEAD` (0da5644b) at
+`base/head0da5644b` with a vendor symlink, same seeds 1-16, TPY 360. Seed caps of the 86 shared firms are identical
+in both arms. `bin/harness-batch var/harness/opening_cap/run.sh 1-16 r3_1016 && BASE=<abs path>/var/harness/opening_cap/base/head0da5644b
+bin/harness-batch var/harness/opening_cap/run.sh 1-16 head1016 && python3 -I var/harness/opening_cap/analyse_1016.py`.
+Table: `opening_cap_1016.out`.
+
+| quantity (USD T) | head1016 (86) | r3_1016 (89) | paired diff (se) |
+|---|---|---|---|
+| tick 1 | 20.001 (0.032) | 20.145 (0.040) | +0.144 (0.034) |
+| Q1 mean | 20.005 (0.219) | 20.300 (0.203) | +0.295 (0.321) |
+
+Q1 end, mean of 16 ($B): SKUA 20.1 (0.5), DIPR 35.3 (1.0, seed 30.5: +16% in the first quarter), KTWK 42.2 (1.4),
+LOON 151.4 (seed 156.8). Tick-1 gain net of the three firms: +0.05T (0.03). HEAD alone already sits at 20.0T, so the
+0.6T over the 19.4e12 constant came from commits after 10-14, not from this tree. Recommend 20.3e12.
+
+## 2026-10-16 (b): fixed tree, arm `r3v2_1016`, seeds 1-16
+
+`bin/harness-batch var/harness/opening_cap/run.sh 1-16 r3v2_1016 && B=r3v2_1016 python3 -I var/harness/opening_cap/analyse_1016.py`
+(table `opening_cap_1016b.out`; HEAD arm `head1016` reused). Board tick 1 20.176T (0.024), Q1 mean 20.332T (0.215);
+vs HEAD +0.175T (0.040) and +0.327T (0.307); vs r3_1016 +0.03T. Q1 end ($B): SKUA 22.4 (0.6, seed 23.4), DIPR 35.8 (1.2,
+seed 33.0), KTWK 43.3 (1.4), LOON 153.2. Recommend 20.3e12 (unchanged from (a)).

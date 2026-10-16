@@ -354,4 +354,38 @@ class FirmEconomicsTest extends TestCase
         $this->assertEqualsWithDelta(2.632, FirmEconomics::calculateEffectiveSegmentCount($hhi), 0.001);
         $this->assertSame(0.0, FirmEconomics::calculateEffectiveSegmentCount(0.0));
     }
+
+    /** A new ladder opens as though always struck on today's curve; a step in the curve reaches delivery a tranche a quarter. */
+    public function testTheHedgeLadderDeliversLastYearsForwardsOneTrancheAQuarter(): void
+    {
+        $flat = static fn (int $quarters): float => 1.0;
+        $opened = FirmEconomics::rollHedgeLadder([0.0, 0.0, 0.0, 0.0], $flat);
+        $this->assertSame(1.0, $opened['strike']);
+        $this->assertSame([4.0, 3.0, 2.0, 1.0], $opened['sums']);
+
+        $stepped = static fn (int $quarters): float => 2.0;
+        $sums = $opened['sums'];
+        $delivered = [];
+        for ($q = 0; $q < 5; $q++) {
+            $ladder = FirmEconomics::rollHedgeLadder($sums, $stepped);
+            $delivered[] = $ladder['strike'];
+            $sums = $ladder['sums'];
+        }
+
+        $this->assertSame([1.0, 1.25, 1.5, 1.75, 2.0], $delivered);
+        $this->assertSame(['strike' => 3.0, 'sums' => []], FirmEconomics::rollHedgeLadder([], static fn (int $q): float => 3.0));
+    }
+
+    /** At baseline gas a gas-fired MWh spends about half its price on fuel; carbon adds its cost, and the uplift's worth falls with the gas share. */
+    public function testTheMeritOrderFormulasHoldTheirBaselines(): void
+    {
+        $this->assertEqualsWithDelta(0.516, FirmEconomics::gasFuelShareOfPowerPrice(), 0.001);
+        $this->assertSame(0.0, FirmEconomics::gasFiredFuelCostChange(1.0, 0.0));
+        $this->assertEqualsWithDelta(0.5 * FirmEconomics::gasFuelShareOfPowerPrice(), FirmEconomics::gasFiredFuelCostChange(1.5, 0.0), 1e-12);
+        $this->assertGreaterThan(0.0, FirmEconomics::gasFiredFuelCostChange(1.0, 50.0));
+        $this->assertSame(1.0, FirmEconomics::merchantPowerPriceRelative(0.0, 2.0));
+        $this->assertSame(1.5, FirmEconomics::merchantPowerPriceRelative(0.5, 2.0));
+        $this->assertSame(1.0, FirmEconomics::carbonUpliftEarningsPerUnit(0.0));
+        $this->assertEqualsWithDelta(1.0 - (1.0 / MacroEngine::CARBON_POWER_PASS_THROUGH), FirmEconomics::carbonUpliftEarningsPerUnit(1.0), 1e-12);
+    }
 }

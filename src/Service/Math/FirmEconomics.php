@@ -293,6 +293,85 @@ final class FirmEconomics
     }
 
     /**
+     * One quarter of a rolling forward-sale ladder: each quarter the seller locks one tranche for each of the next n
+     * quarters at that delivery date's forward, so the volume delivered now carries n tranches struck one to n quarters
+     * ago. A ladder with no history opens as though it had always been struck on today's curve, so its first quarter
+     * books no phantom hedge gain.
+     *
+     * @param list<float>          $strikeSums Opening sums of the strikes already locked for delivery 0..n-1 quarters ahead (zeros for a new ladder).
+     * @param callable(int): float $forward    Forward price for delivery that many quarters ahead.
+     * @return array{strike: float, sums: list<float>} The average strike delivered this quarter and the rolled sums.
+     */
+    public static function rollHedgeLadder(array $strikeSums, callable $forward): array
+    {
+        $tranches = count($strikeSums);
+        if ($tranches === 0) {
+            return ['strike' => $forward(0), 'sums' => []];
+        }
+
+        $slots = array_values($strikeSums);
+        if ($slots[0] <= 0.0) {
+            for ($d = 0; $d < $tranches; $d++) {
+                $slots[$d] = ($tranches - $d) * $forward($d);
+            }
+        }
+
+        $rolled = [];
+        for ($d = 0; $d < $tranches; $d++) {
+            $rolled[] = ($d + 1 < $tranches ? $slots[$d + 1] : 0.0) + $forward($d + 1);
+        }
+
+        return ['strike' => $slots[0] / $tranches, 'sums' => $rolled];
+    }
+
+    /**
+     * Price of a merchant power book relative to the one its cost base was sized at: the wholesale price relative on
+     * the share sold into the market, flat on contract work priced like the rest of the book.
+     *
+     * @param float $powerShare    Share of the book sold at the wholesale price.
+     * @param float $powerRelative Wholesale price over its baseline.
+     */
+    public static function merchantPowerPriceRelative(float $powerShare, float $powerRelative): float
+    {
+        return (1.0 - $powerShare) + ($powerShare * $powerRelative);
+    }
+
+    /**
+     * Gas a gas-fired MWh burns at baseline prices, as a share of what the MWh sells for: the fleet heat rate at the
+     * reference gas price over the reference power price (~52%).
+     */
+    public static function gasFuelShareOfPowerPrice(): float
+    {
+        return MacroEngine::GAS_FLEET_HEAT_RATE * MacroEngine::REFERENCE_GAS_PRICE / MacroEngine::REFERENCE_POWER_PRICE;
+    }
+
+    /**
+     * Change in the fuel and carbon bill per unit of gas-fired revenue at baseline prices: the fleet heat rate of gas
+     * at the gas price relative to its baseline, plus the carbon price on the gas it burns.
+     *
+     * @param float $gasRelative Gas price paid over its baseline.
+     * @param float $carbonPrice Dollars a tonne of CO2.
+     */
+    public static function gasFiredFuelCostChange(float $gasRelative, float $carbonPrice): float
+    {
+        $carbonShare = MacroEngine::GAS_FLEET_HEAT_RATE * MacroEngine::NATURAL_GAS_CO2_TONNES_PER_MMBTU * $carbonPrice / MacroEngine::REFERENCE_POWER_PRICE;
+
+        return (self::gasFuelShareOfPowerPrice() * ($gasRelative - 1.0)) + $carbonShare;
+    }
+
+    /**
+     * What the carbon price's power uplift adds to a merchant fleet's earnings per unit of it and of revenue sold at the
+     * wholesale price: the uplift on every MWh, less the carbon the gas-fired share pays, which the uplift carries at its
+     * pass-through. A zero-fuel fleet keeps it all; an all-gas fleet loses the fifth the market does not pass on.
+     *
+     * @param float $gasFleetShare Share of the merchant output that burns gas.
+     */
+    public static function carbonUpliftEarningsPerUnit(float $gasFleetShare): float
+    {
+        return 1.0 - ($gasFleetShare / MacroEngine::CARBON_POWER_PASS_THROUGH);
+    }
+
+    /**
      * One step of the de-seasonalised 3:2:1 refining crack spread: a Schwartz (1997) log mean-reverting margin
      * around a target set by demand and physical inventory tightness. Margins are right-skewed and cannot go
      * negative across a sustained run, so the log is what reverts. The target is handed over through

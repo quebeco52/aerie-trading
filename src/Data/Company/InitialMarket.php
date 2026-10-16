@@ -2639,6 +2639,96 @@ class InitialMarket
             'wholesale_debt'    => 136_000_000_000.00,
             'retained_earnings' => 21_000_000_000.00,
         ],
+        [
+            'ticker' => 'SKUA',
+            'management_style' => 'empire_builder', // A challenger run for subscribers: payout held down, the network built ahead of them
+            'name' => 'Skua Mobile',
+            'sector' => 'Communication Services',
+            'industry' => 'Telecom Services',
+            'systemic_importance' => 'base',
+            'shares_outstanding' => 1_000_000_000,
+            'volatility' => 0.24, // T-Mobile US 2014-2018, the challenger years, against Loon Call's incumbent 14%
+            'beta_tilt' => 0.10, // device-led growth leans on discretionary upgrades
+            'jump_intensity' => 0.40,
+            'jump_vol' => 0.10,
+            'baseline_roic' => 0.07, // T-Mobile US 2017: NOPAT over debt plus equity
+            'capex_ratio' => 0.25,
+            'target_payout_ratio' => 0.10,
+            'dividendSpeed' => self::LINTNER_QUARTERLY_ADJUSTMENT_SPEED,
+            'fixed_cost_ratio' => 0.64, // devices, sold below cost, are a third of cash operating costs
+            'operating_margin' => 0.13, // T-Mobile US 2017: 13%
+            'public_float' => 0.45, // its mainland parent holds the rest
+            'sam_ratio' => 0.125,
+            'floating_debt_ratio' => 0.20,
+            'historical_fixed_rate' => 0.050,
+            'credit_spread' => 0.0150,
+            'depreciation_rate' => 0.08,
+            'corporate_treasury' => 2_500_000_000.00,
+            'total_equity' => 21_000_000_000.00,
+            'customer_deposits' => 0.00,
+            'wholesale_debt' => 17_000_000_000.00, // about 2.5 times EBITDA: a price war halves EBITDA and must leave it under the 4.5 covenant
+            'retained_earnings' => 3_000_000_000.00,
+        ],
+        [
+            'ticker' => 'DIPR',
+            'management_style' => 'operator',
+            'name' => 'Dipper Generation',
+            'sector' => 'Utilities',
+            'industry' => 'Utilities - Independent Power Producers',
+            'systemic_importance' => 'base',
+            'shares_outstanding' => 1_000_000_000,
+            'volatility' => 0.30, // Vistra and NRG 2017-2019, merchant generators
+            'beta_tilt' => 0.00,
+            'jump_intensity' => 0.50,
+            'jump_vol' => 0.12,
+            'baseline_roic' => 0.08,
+            'capex_ratio' => 0.35,
+            'target_payout_ratio' => 0.40,
+            'dividendSpeed' => self::LINTNER_QUARTERLY_ADJUSTMENT_SPEED,
+            'fixed_cost_ratio' => 0.35, // fuel and carbon for the gas fleet are most of the cash cost
+            'operating_margin' => 0.28, // half the fleet is hydro and tidal plant with no fuel bill
+            'public_float' => 0.95,
+            'sam_ratio' => 0.10,
+            'floating_debt_ratio' => 0.25,
+            'historical_fixed_rate' => 0.050,
+            'credit_spread' => 0.0200,
+            'depreciation_rate' => 0.045,
+            'corporate_treasury' => 2_500_000_000.00,
+            'total_equity' => 22_000_000_000.00,
+            'customer_deposits' => 0.00,
+            'wholesale_debt' => 10_000_000_000.00, // about 1.8 times EBITDA: a one-sigma gas slump halves it and must leave it under the 4.0 covenant
+            'retained_earnings' => 9_000_000_000.00,
+        ],
+        [
+            'ticker' => 'KTWK',
+            'management_style' => 'steward', // A concession holder: builds quays the trade has asked for, pays out the rest
+            'name' => 'Kittiwake Harbour Terminals',
+            'sector' => 'Industrials',
+            'industry' => 'Marine Ports & Services',
+            'systemic_importance' => 'base',
+            'shares_outstanding' => 1_000_000_000,
+            'volatility' => 0.20,
+            'beta_tilt' => 0.05, // throughput follows trade
+            'jump_intensity' => 0.35,
+            'jump_vol' => 0.08,
+            'baseline_roic' => 0.10,
+            'capex_ratio' => 0.40,
+            'target_payout_ratio' => 0.50,
+            'dividendSpeed' => self::LINTNER_QUARTERLY_ADJUSTMENT_SPEED,
+            'fixed_cost_ratio' => 0.60, // dock crews on shift, crane upkeep and the concession's fixed rent; the royalty and power scale with boxes
+            'operating_margin' => 0.38, // container terminal operators earn 35-45% before interest (ICTSI, Hutchison Port Holdings Trust)
+            'public_float' => 0.85,
+            'sam_ratio' => 0.10,
+            'floating_debt_ratio' => 0.20,
+            'historical_fixed_rate' => 0.045,
+            'credit_spread' => 0.0110,
+            'depreciation_rate' => 0.05,
+            'corporate_treasury' => 2_000_000_000.00,
+            'total_equity' => 20_000_000_000.00,
+            'customer_deposits' => 0.00,
+            'wholesale_debt' => 18_000_000_000.00,
+            'retained_earnings' => 8_000_000_000.00,
+        ],
     ];
 
     /**

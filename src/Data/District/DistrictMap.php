@@ -79,7 +79,7 @@ class DistrictMap
             'conglomerate', 'merchant_house',
             'steel_manufacturing', 'specialty_industrial_machinery', 'chemical',
             'construction', 'defense_contractor', 'security_protection', 'waste_management',
-            'railroad', 'shipping', 'logistics', 'tools_and_accessories', 'heavy_manufacturing', 'law_firm',
+            'railroad', 'shipping', 'port_terminal', 'logistics', 'tools_and_accessories', 'heavy_manufacturing', 'law_firm',
         ],
         'Consumer Trades' => [
             'consumer_staples', 'restaurant', 'apparel_manufacturing', 'auto_manufacturer',
@@ -90,7 +90,7 @@ class DistrictMap
         // extraction rather than energy because the block holds the mines as well as the wells:
         // CNDR digs copper beside SINK's wells and CASC's refinery, and a copper miner under a
         // bracket reading ENERGY is the same kind of lie this pass set out to remove.
-        'Extraction & Power' => ['oil_gas_producer', 'refining', 'mining', 'utility'],
+        'Extraction & Power' => ['oil_gas_producer', 'refining', 'mining', 'utility', 'independent_power'],
         'Technology & Telecoms' => ['tech', 'computer_hardware', 'semiconductor', 'communication_equipment', 'telecom'],
         'Property & Health' => ['reit', 'homebuilder', 'medical_care_facility', 'health_insurer', 'biotech'],
     ];
@@ -326,7 +326,7 @@ class DistrictMap
         'tools_and_accessories' => 'factory', 'heavy_manufacturing' => 'factory',
         'mining' => 'ingot', 'oil_gas_producer' => 'derrick', 'refining' => 'flare_stack', 'chemical' => 'flask',
         // Movers and builders.
-        'construction' => 'crane', 'shipping' => 'anchor', 'logistics' => 'truck',
+        'construction' => 'crane', 'shipping' => 'anchor', 'port_terminal' => 'crane', 'logistics' => 'truck',
         'railroad' => 'train', 'waste_management' => 'bin',
         // Guardians and the professions.
         'defense_contractor' => 'shield', 'security_protection' => 'lock',
@@ -336,7 +336,7 @@ class DistrictMap
         'auto_manufacturer' => 'car', 'internet_retail' => 'bag', 'resorts_casinos' => 'dice',
         'luxury' => 'gem',
         // Power, silicon and signal.
-        'utility' => 'bolt', 'tech' => 'cloud', 'computer_hardware' => 'chip',
+        'utility' => 'bolt', 'independent_power' => 'bolt', 'tech' => 'cloud', 'computer_hardware' => 'chip',
         'semiconductor' => 'chip', 'communication_equipment' => 'signal', 'telecom' => 'signal',
         // Care, cures, property and the conglomerates. A merchant house takes the anchor rather than the
         // blocks: it is known by the wharves it owns, not by the businesses it has bolted together.

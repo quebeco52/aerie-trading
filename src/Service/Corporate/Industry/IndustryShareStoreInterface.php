@@ -21,4 +21,16 @@ interface IndustryShareStoreInterface
      * @param array{revenue: float, gain: float, capacity: float, anchor_capacity_share: float, anchor_demand_share: float, anchor_time: float, addressable_share: float, tick: int, consumed_tick: int} $record
      */
     public function writeRecord(string $industry, string $ticker, array $record): void;
+
+    /**
+     * Industry-wide regimes (a price war every carrier fights at once), each the run the industry is in or last had.
+     *
+     * @return array<string, array{start_tick: int, end_tick: int}> Regime key => its run, end tick exclusive.
+     */
+    public function readRegimes(string $industry): array;
+
+    /**
+     * @param array{start_tick: int, end_tick: int} $record
+     */
+    public function writeRegime(string $industry, string $key, array $record): void;
 }

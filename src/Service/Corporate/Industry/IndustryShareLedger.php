@@ -514,6 +514,63 @@ class IndustryShareLedger
     }
 
     /**
+     * The industry-wide regimes as this firm's report opens. A regime runs from the tick a member started it to its
+     * end tick, so a rival reporting later in the quarter is in it from its own next report and for as many quarters.
+     * Null for a firm with no industry to share one with.
+     */
+    public function openIndustryRegimes(Stock $stock, int $tick, int $ticksPerYear): ?IndustryRegimeView
+    {
+        $industry = $stock->getIndustry();
+        $ticker = $stock->getTicker();
+        if ($industry === null || $industry === '' || $ticker === '') {
+            return null;
+        }
+
+        $ticksPerQuarter = max(1.0, $ticksPerYear / FinancialConstants::QUARTERS_PER_YEAR);
+        $elapsed = [];
+        foreach ($this->store->readRegimes($industry) as $key => $run) {
+            if ($tick >= $run['start_tick'] && $tick < $run['end_tick']) {
+                $elapsed[$key] = (int) floor(($tick - $run['start_tick']) / $ticksPerQuarter) + 1;
+            }
+        }
+
+        // Members are the firms still selling into the industry: a retired record keeps its anchor at no revenue.
+        $members = 1;
+        foreach ($this->store->readIndustry($industry) as $peerTicker => $record) {
+            if ($peerTicker !== $ticker && $record['revenue'] > 0.0 && $tick - $record['tick'] <= $ticksPerYear) {
+                $members++;
+            }
+        }
+
+        return new IndustryRegimeView($elapsed, $members);
+    }
+
+    /**
+     * Books the regimes this report started for the whole industry: each runs its drawn number of quarters from
+     * this tick. A regime already running is left as it is.
+     */
+    public function commitIndustryRegimes(Stock $stock, IndustryRegimeView $view, int $tick, int $ticksPerYear): void
+    {
+        $industry = $stock->getIndustry();
+        if ($industry === null || $industry === '') {
+            return;
+        }
+
+        $ticksPerQuarter = max(1.0, $ticksPerYear / FinancialConstants::QUARTERS_PER_YEAR);
+        $running = $this->store->readRegimes($industry);
+        foreach ($view->startedRegimes() as $key => $quarters) {
+            $run = $running[$key] ?? null;
+            if ($run !== null && $tick >= $run['start_tick'] && $tick < $run['end_tick']) {
+                continue;
+            }
+            $this->store->writeRegime($industry, $key, [
+                'start_tick' => $tick,
+                'end_tick'   => $tick + (int) round($quarters * $ticksPerQuarter),
+            ]);
+        }
+    }
+
+    /**
      * A failed firm's plant leaves the industry; its demand does not. Its record stays, at no capacity
      * and no revenue but with its anchor, so survivors sell into a market short by its share until the
      * record ages out and the fringe is taken to have filled the gap. This is the consolidation effect

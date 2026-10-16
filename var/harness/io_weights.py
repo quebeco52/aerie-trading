@@ -181,14 +181,17 @@ MAP = {
     'SPECIALTY_INDUSTRIAL_MACHINERY': [['33329A', '33399A', '333993', '33399B']] * 3,      # RIVE, SNDR, ALCA
     'STEEL_MANUFACTURING': [['331110', '331200']],                                         # WING
     'TECH': [['519130', '518200']],                                                        # HUMM
-    'TELECOM': [['517110', '517210']],                                                     # LOON
+    'TELECOM': [['517110', '517210']] * 2,                                                 # LOON, SKUA (the basket is the model's, so a small mobile-only entrant does not re-cost the incumbent)
     'TOOLS_AND_ACCESSORIES': [['332200'], ['423800']],                                     # CBIL; MAGP
     'UTILITY': [['221100'], ['221300']],                                                   # BIRD, WADE
+    'INDEPENDENT_POWER': [['221100']],                                                     # DIPR
+    'PORT_TERMINAL': [['48A000']],                                                         # KTWK (port and harbour operations)
     'WASTE_MANAGEMENT': [['562000']],                                                      # CORM
 }
 # Inputs a model already prices in its own physics, so the basket must not count them again.
 EXCLUDE = {
     'CHEMICAL': {'channels': ['energy', 'gas']},             # hydrocarbon feedstock: ChemicalBusinessModel's crack squeeze
+    'INDEPENDENT_POWER': {'channels': ['energy', 'gas', 'electricity']},  # fuel and carbon priced per MWh in the model; power bought is its own product
 }
 # A producer's purchases of the commodity it sells (ore bought by miners, alumina within aluminium, steel between mills, gas
 # between producers, charter between carriers) move with its own selling price, which the model carries on the revenue side.
@@ -295,6 +298,8 @@ LABELS = {
     'TECH': 'Internet publishing and data hosting (HUMM)', 'TELECOM': 'Wired and wireless carriers',
     'TOOLS_AND_ACCESSORIES': 'Hand tools (CBIL) and machinery wholesale (MAGP)',
     'UTILITY': 'Electric power (BIRD; generator fuel from EIA receipts) and water systems (WADE)', 'WASTE_MANAGEMENT': 'Waste management and remediation',
+    'INDEPENDENT_POWER': 'Electric power generation (DIPR; fuel, carbon and purchased power priced in the model)',
+    'PORT_TERMINAL': 'Support activities for transportation, port and harbour operations among them (KTWK)',
 }
 if '--php' in sys.argv:
     out = sys.argv[sys.argv.index('--php') + 1]

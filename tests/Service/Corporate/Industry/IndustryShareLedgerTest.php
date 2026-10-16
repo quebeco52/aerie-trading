@@ -534,4 +534,80 @@ class IndustryShareLedgerTest extends TestCase
 
         $this->assertNull($ledger->describeMergerMarket($this->stock('NEW', 500.0, 'Banks - Regional'), new MacroStateDTO(), 0.0, 300, 252));
     }
+
+    /**
+     * A regime one member starts is the industry's: a rival reporting later in the quarter is in it from its own
+     * next report, for as many quarters, and a firm in another industry never sees it.
+     */
+    public function testARegimeOneMemberStartsRunsForEveryMemberOfTheIndustryAndNoOther(): void
+    {
+        $ledger = new IndustryShareLedger(new InMemoryIndustryShareStore());
+        $starter = $this->stock('TELA', 1_000.0, 'Telecom Services');
+        $rival = $this->stock('TELB', 500.0, 'Telecom Services');
+        $utility = $this->stock('POWR', 800.0, 'Utilities - Regulated Electric');
+        $ticksPerYear = 360;
+
+        $opening = $ledger->openIndustryRegimes($starter, 1_000, $ticksPerYear);
+        $this->assertNotNull($opening);
+        $this->assertSame(0, $opening->elapsed('price_war'));
+        $this->assertSame(1, $opening->start('price_war', 3));
+        $this->assertSame(0, $opening->elapsed('price_war'), 'the opening state the replays read does not move');
+        $ledger->commitIndustryRegimes($starter, $opening, 1_000, $ticksPerYear);
+
+        // The rival reports 30 ticks into the quarter, then every 90: three quarters of war, then peace.
+        $seen = [];
+        foreach ([1_030, 1_120, 1_210, 1_300] as $tick) {
+            $seen[] = $ledger->openIndustryRegimes($rival, $tick, $ticksPerYear)?->elapsed('price_war');
+        }
+        $this->assertSame([1, 2, 3, 0], $seen);
+        $this->assertSame(3, $ledger->openIndustryRegimes($starter, 1_180, $ticksPerYear)?->elapsed('price_war'), 'the starter is on its third quarter at its third report');
+        $this->assertSame(0, $ledger->openIndustryRegimes($utility, 1_030, $ticksPerYear)?->elapsed('price_war'));
+    }
+
+    public function testARunningRegimeIsNotRestartedAndAnEndedOneCanStartAgain(): void
+    {
+        $store = new InMemoryIndustryShareStore();
+        $ledger = new IndustryShareLedger($store);
+        $starter = $this->stock('TELA', 1_000.0, 'Telecom Services');
+        $rival = $this->stock('TELB', 500.0, 'Telecom Services');
+
+        $first = $ledger->openIndustryRegimes($starter, 100, 360);
+        $this->assertNotNull($first);
+        $first->start('price_war', 2);
+        $ledger->commitIndustryRegimes($starter, $first, 100, 360);
+
+        // A start booked while the war is already running (a stale view) leaves the running war as it was.
+        $stale = new \App\Service\Corporate\Industry\IndustryRegimeView([]);
+        $stale->start('price_war', 8);
+        $ledger->commitIndustryRegimes($rival, $stale, 150, 360);
+        $this->assertSame(['start_tick' => 100, 'end_tick' => 280], $store->readRegimes('Telecom Services')['price_war']);
+
+        $later = $ledger->openIndustryRegimes($rival, 400, 360);
+        $this->assertNotNull($later);
+        $this->assertSame(0, $later->elapsed('price_war'));
+        $later->start('price_war', 1);
+        $ledger->commitIndustryRegimes($rival, $later, 400, 360);
+        $this->assertSame(['start_tick' => 400, 'end_tick' => 490], $store->readRegimes('Telecom Services')['price_war']);
+    }
+
+    /** Members are the firms still selling into the industry: a failed firm's record and one a year stale do not count. */
+    public function testMembersAreTheLiveRivalsAndTheFirmItself(): void
+    {
+        $ledger = new IndustryShareLedger(new InMemoryIndustryShareStore());
+        $self = $this->stock('TELA', 1_000.0, 'Telecom Services');
+        $live = $this->stock('TELB', 500.0, 'Telecom Services');
+        $failed = $this->stock('TELC', 400.0, 'Telecom Services');
+        $stale = $this->stock('TELD', 300.0, 'Telecom Services');
+
+        $this->assertSame(1, $ledger->openIndustryRegimes($self, 500, 252)?->members(), 'alone before anyone has reported');
+
+        $ledger->recordIdiosyncraticGain($self, 1_000.0, 0.0, 0.3, 480);
+        $ledger->recordIdiosyncraticGain($live, 500.0, 0.0, 0.2, 470);
+        $ledger->recordIdiosyncraticGain($failed, 400.0, 0.0, 0.1, 460);
+        $ledger->retireFirm($failed);
+        $ledger->recordIdiosyncraticGain($stale, 300.0, 0.0, 0.1, 100);
+
+        $this->assertSame(2, $ledger->openIndustryRegimes($self, 500, 252)?->members());
+        $this->assertNull($ledger->openIndustryRegimes($this->stock('', 1.0, 'Telecom Services'), 500, 252));
+    }
 }

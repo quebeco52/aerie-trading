@@ -700,4 +700,23 @@ class MathUtilityTest extends TestCase
         $this->assertNotSame($drawn, [MathUtility::ownStream(8)->generateStandardNormal(), MathUtility::ownStream(8)->generateUniform()]);
         $this->assertSame($global, [mt_rand(), mt_rand()], 'and none of them came out of the global stream.');
     }
+
+    /** A spell length decided at its start is the one a per-period exit hazard produces: geometric on {1, 2, ...}. */
+    public function testGeometricCountIsTheSpellAPerPeriodExitHazardProduces(): void
+    {
+        // Inverse CDF on one uniform: 1 + floor(ln 0.5 / ln 0.75) = 1 + floor(2.41) = 3.
+        $this->assertSame(3, MathUtility::replaying(['uniforms' => [0.5], 'spare' => null])->generateGeometricCount(0.25));
+        $this->assertSame(1, MathUtility::replaying(['uniforms' => [0.9], 'spare' => null])->generateGeometricCount(0.25), 'P(N = 1) = p: a uniform above 1 - p ends it at once');
+        $this->assertSame(1, MathUtility::replaying(['uniforms' => [0.01], 'spare' => null])->generateGeometricCount(1.0));
+
+        $math = MathUtility::ownStream(11);
+        $draws = [];
+        for ($i = 0; $i < 20_000; $i++) {
+            $draws[] = $math->generateGeometricCount(0.25);
+        }
+        $this->assertGreaterThanOrEqual(1, min($draws));
+        // Mean 1 / p = 4, sd sqrt(1 - p) / p = 3.46; the mean of 20,000 has a standard error of 0.024.
+        $this->assertEqualsWithDelta(4.0, array_sum($draws) / count($draws), 0.1);
+        $this->assertEqualsWithDelta(0.25, count(array_filter($draws, static fn (int $n): bool => $n === 1)) / count($draws), 0.01);
+    }
 }

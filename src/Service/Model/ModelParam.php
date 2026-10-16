@@ -133,6 +133,8 @@ enum ModelParam: string
     case ConsumerWeight = 'consumer_weight';
     case SubscriptionWeight = 'subscription_weight';
     case EquipmentWeight = 'equipment_weight';
+    /** A carrier's quarterly churn at rest, the share of its subscriber base that leaves each quarter. */
+    case BaseQuarterlyChurn = 'base_quarterly_churn';
     case PatentLicensingWeight = 'patent_licensing_weight';
 
     // --- Semiconductor ---
@@ -156,6 +158,12 @@ enum ModelParam: string
     case DedicatedFleetWeight = 'dedicated_fleet_weight';
     case SpotBrokerageWeight = 'spot_brokerage_weight';
     case Warehousing3plWeight = 'warehousing_3pl_weight';
+    /** A terminal operator's share of revenue from handling the District's own imports and exports. */
+    case GatewayHandlingWeight = 'gateway_handling_weight';
+    /** A terminal operator's share of revenue from relaying boxes between ships, cargo that never enters the District. */
+    case TransshipmentWeight = 'transshipment_weight';
+    /** A terminal operator's share of revenue from storage, dwell charges and services on boxes in its yards. */
+    case StorageServicesWeight = 'storage_services_weight';
 
     // --- Healthcare, Biopharma & Medical Care Facilities ---
     case EstablishedDrugWeight = 'established_drug_weight';
@@ -219,8 +227,14 @@ enum ModelParam: string
     case UnregulatedMerchantWeight = 'unregulated_merchant_weight';
     /** Share of a utility's unregulated stream sold at the wholesale power price rather than as market-based contract work. */
     case MerchantPowerShare = 'merchant_power_share';
-    /** Share of a utility's merchant generation whose fuel is gas bought at spot (it earns the spark spread; the rest keeps the whole price). */
+    /** Share of a generator's merchant output whose fuel is gas bought at spot (it earns the spark spread; the rest keeps the whole price). */
     case MerchantGasFleetShare = 'merchant_gas_fleet_share';
+    /** An independent generator's share of revenue from power sold into the wholesale market. */
+    case WholesaleGenerationWeight = 'wholesale_generation_weight';
+    /** An independent generator's share of revenue from capacity payments for keeping plant available. */
+    case CapacityPaymentWeight = 'capacity_payment_weight';
+    /** Share of next year's wholesale output an independent generator sells forward. */
+    case PowerHedgeRatio = 'power_hedge_ratio';
     case ResidentialWeight = 'residential_weight';
     case RecyclingWeight = 'recycling_weight';
     case ServicesWeight = 'services_weight';

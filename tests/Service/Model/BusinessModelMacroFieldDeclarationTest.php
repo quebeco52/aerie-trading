@@ -35,9 +35,10 @@ final class BusinessModelMacroFieldDeclarationTest extends TestCase
     /**
      * Accessors computed from the state rather than published series. They are not fields any institution
      * reports, so they are neither declarable nor conduit-drawing — calendarQuarter() is elapsed time over
-     * a quarter, not a macro observation.
+     * a quarter, and totalTime the clock it reads (a forward reads it for its delivery season), not a macro
+     * observation.
      */
-    private const DERIVED_ACCESSORS = ['calendar_quarter'];
+    private const DERIVED_ACCESSORS = ['calendar_quarter', 'total_time'];
 
     /**
      * Derived readings and measured trends, and the published series each one resolves from. Unlike the accessors

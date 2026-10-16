@@ -292,7 +292,7 @@ class UtilityBusinessModel extends StandardCorporateBusinessModel
         $streams->registerState(
             FinancialConstants::STATE_CARBON_POWER_EARNINGS_SHARE,
             $actualRevenue > 0.0
-                ? $merchantVolumeRevenue * $params[ModelParam::MerchantPowerShare] * (1.0 - ($params[ModelParam::MerchantGasFleetShare] / MacroEngine::CARBON_POWER_PASS_THROUGH)) / $actualRevenue
+                ? $merchantVolumeRevenue * $params[ModelParam::MerchantPowerShare] * FirmEconomics::carbonUpliftEarningsPerUnit($params[ModelParam::MerchantGasFleetShare]) / $actualRevenue
                 : 0.0
         );
 
@@ -360,9 +360,7 @@ class UtilityBusinessModel extends StandardCorporateBusinessModel
      */
     private function resolveMerchantPriceRelative(float $powerShare, MacroStateDTO $macroState): float
     {
-        $powerRelative = max(0.0, $macroState->wholesalePowerPriceIndexEma) / MacroEngine::WHOLESALE_POWER_BASELINE;
-
-        return (1.0 - $powerShare) + ($powerShare * $powerRelative);
+        return FirmEconomics::merchantPowerPriceRelative($powerShare, max(0.0, $macroState->wholesalePowerPriceIndexEma) / MacroEngine::WHOLESALE_POWER_BASELINE);
     }
 
     /**
@@ -372,12 +370,8 @@ class UtilityBusinessModel extends StandardCorporateBusinessModel
      */
     private function resolveMerchantFuelCostChange(float $powerShare, float $gasFleetShare, MacroStateDTO $macroState): float
     {
-        $baselineFuelShare = self::MERCHANT_GAS_HEAT_RATE * MacroEngine::REFERENCE_GAS_PRICE / MacroEngine::REFERENCE_POWER_PRICE;
-        $gasRelative = max(0.0, $macroState->naturalGasPriceIndexEma) / MacroEngine::NATURAL_GAS_BASELINE;
-        $carbonShare = self::MERCHANT_GAS_HEAT_RATE * MacroEngine::NATURAL_GAS_CO2_TONNES_PER_MMBTU * $macroState->carbonPrice
-            / MacroEngine::REFERENCE_POWER_PRICE;
-
-        return $powerShare * $gasFleetShare * (($baselineFuelShare * ($gasRelative - 1.0)) + $carbonShare);
+        return $powerShare * $gasFleetShare
+            * FirmEconomics::gasFiredFuelCostChange(max(0.0, $macroState->naturalGasPriceIndexEma) / MacroEngine::NATURAL_GAS_BASELINE, $macroState->carbonPrice);
     }
 
     /**

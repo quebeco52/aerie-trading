@@ -33,6 +33,7 @@ class Sectors
         'homebuilder'     => 'Homebuilders buy land, build houses on it and sell them at the going price. Closings follow the housing starts the market supports, a season or two behind the order. Land is carried at what it cost years earlier, so a rise in house prices lands on margin at once and a fall the same way, and a deep enough fall forces the land bank to be written down.',
         'reit'            => 'Real Estate Investment Trusts hold physical property. Evaluated on Funds From Operations (FFO). Pays 0% corporate tax but must issue heavy debt to expand due to high dividend payouts. Features CPI rent escalators (inflation hedge) and tenant vacancy risks.',
         'utility'         => 'Regulated monopolies and essential infrastructure (Power, Water, Telecom, Waste Management) with heavily regulated Return on Invested Capital (ROIC). They grow absolute earnings by deploying massive CapEx. Revenues are hyper-stable, but rate hikes lag behind inflation, causing temporary margin compression during inflationary spikes.',
+        'independent_power' => 'Independent generators own power stations and sell what they produce into the wholesale market at the going price, most of it sold forward a year ahead. Plants that burn gas earn the gap between the power price and their fuel and carbon bill; hydro and other plants with no fuel keep the whole price, so they earn most when gas is dear. Capacity payments for keeping plant available steady the top line, and a large unit out of service loses the output it would have sold.',
         'mining'          => 'Metals miners selling every tonne into a global market at the going price. Revenue is payable metal times the benchmark, sold unhedged; haulage, milling and power are paid per tonne, so a metals rally lands on margin in full and a slump leaves the whole cost base standing. Output does not follow the domestic cycle, and grades decline unless reinvestment keeps the mine modern.',
         'oil_gas_producer' => 'Upstream oil and gas producers selling every barrel into a global market at the going price. Revenue is volume times the realized crude and gas price, cushioned by a rolling year of forward swaps; lifting costs are paid per barrel, so a price move lands on margin in full. Output does not follow the domestic cycle, and fields deplete unless reinvestment replaces them.',
         'refining'        => 'Merchant refiners that buy crude and sell the gasoline, diesel and jet it is cracked into. Revenue rises with crude, but the margin is the crack spread earned on a largely fixed plant, so earnings swing from losses to records across the cycle. Spring turnarounds and the summer driving season set the seasonal run rate.',
@@ -49,6 +50,7 @@ class Sectors
         'biotech'         => 'Biotechnology and specialty pharma. CapEx is intangible R&D IP. R&D sets how often pivotal trials read out; approvals step up the marketed franchise and patent expiries erode it on a known schedule. Inelastic demand during recessions.',
         'luxury'          => 'Luxury goods and elite brand conglomerates. Possesses Veblen pricing power: immune to inflation penalties, raising prices without volume loss. Very high operating leverage and brand equity, but sensitive to global liquidity freezes among ultra-wealthy buyers.',
         'shipping'        => 'Global marine shipping and freight logistics. Hyper-cyclical spot-rate operational leverage driven violently by global trade and the macro output gap. High fixed fleet maintenance costs cause massive free cash flow booms during expansions and capacity glut losses during contractions.',
+        'port_terminal'   => 'Container terminal operators load and unload ships at quays held on long concessions and charge a fee for every box. Boxes bound into or out of the District follow its trade, and the concession indexes their fee to inflation; boxes relayed between ships follow world trade and are priced against rival hubs. Cranes, berths and dock crews cost much the same whether the quay is busy or quiet, so volume reaches profit with leverage, and congested supply chains leave boxes in the yards longer and earn storage charges.',
         'semiconductor'   => 'Semiconductor foundries and photolithography equipment manufacturers ("Shovel Makers"). Extreme capital intensity and non-linear fab utilization leverage. Running cleanrooms at 100% capacity generates staggering ROIC, but underutilization creates severe margin drag.',
         'investment_bank' => 'Pure-play investment banks and M&A advisory syndicates. Pro-cyclical M&A and IPO deal flow explode during expansions, while proprietary market-making desks print billions in volatility arbitrage during market crashes or VIX spikes. Evaluated on ROE.',
         'distressed_debt' => 'Distressed debt and turnaround asset managers. Counter-cyclical special situations: hoards dry powder during bull markets, then deploys capital aggressively when macro credit spreads blow out or defaults spike, generating massive turnaround ROE.',
@@ -163,6 +165,7 @@ class Sectors
         'Lodging' => ['pe' => 18.00, 'depreciation' => 0.06, 'ebitda_limit' => 4.0, 'equity_limit' => 2.0, 'business_model' => 'resorts_casinos'], // Hotels. Real estate backed.
         'Luxury Goods' => ['pe' => 24.00, 'depreciation' => 0.04, 'ebitda_limit' => 2.5, 'equity_limit' => 1.0, 'business_model' => 'luxury'], // High margin, brand value.
         'Marine Shipping' => ['pe' => 9.00, 'depreciation' => 0.08, 'ebitda_limit' => 3.0, 'equity_limit' => 1.5, 'business_model' => 'shipping'], // Extremely cyclical, rusts fast.
+        'Marine Ports & Services' => ['pe' => 18.00, 'depreciation' => 0.05, 'ebitda_limit' => 4.5, 'equity_limit' => 1.5, 'business_model' => 'port_terminal'], // Quays on long concessions: steady cash flow carries infrastructure debt
         'Medical Care Facilities' => ['pe' => 15.00, 'depreciation' => 0.06, 'ebitda_limit' => 4.5, 'equity_limit' => 2.0, 'business_model' => 'medical_care_facility'], // Hospitals. Stable cash flow, heavy assets.
         'Medical Devices' => ['pe' => 25.00, 'depreciation' => 0.05, 'ebitda_limit' => 2.5, 'equity_limit' => 1.0, 'business_model' => 'none'],
         'Medical Distribution' => ['pe' => 15.00, 'depreciation' => 0.04, 'ebitda_limit' => 3.0, 'equity_limit' => 1.0, 'business_model' => 'none'], // Low margin volume business
@@ -222,6 +225,7 @@ class Sectors
         'Travel Services' => ['pe' => 18.00, 'depreciation' => 0.04, 'ebitda_limit' => 2.5, 'equity_limit' => 1.0, 'business_model' => 'none'], // Expedia, Booking.com. Asset light.
         'Trucking' => ['pe' => 14.00, 'depreciation' => 0.12, 'ebitda_limit' => 3.0, 'equity_limit' => 1.5, 'business_model' => 'logistics'], // Fixed the 45 P/E error. Trucks rust.
         'Utilities - Diversified' => ['pe' => 16.00, 'depreciation' => 0.04, 'ebitda_limit' => 6.5, 'equity_limit' => 2.5, 'business_model' => 'utility'], // Regulated monopolies
+        'Utilities - Independent Power Producers' => ['pe' => 12.00, 'depreciation' => 0.05, 'ebitda_limit' => 4.0, 'equity_limit' => 1.5, 'business_model' => 'independent_power'], // Merchant plant: commodity cash flows carry less debt than a rate base
         'Utilities - Regulated Electric' => ['pe' => 16.00, 'depreciation' => 0.04, 'ebitda_limit' => 6.5, 'equity_limit' => 2.5, 'business_model' => 'utility'],
         'Utilities - Regulated Gas' => ['pe' => 15.00, 'depreciation' => 0.04, 'ebitda_limit' => 6.5, 'equity_limit' => 2.5, 'business_model' => 'utility'],
         'Utilities - Regulated Water' => ['pe' => 18.00, 'depreciation' => 0.03, 'ebitda_limit' => 6.5, 'equity_limit' => 2.5, 'business_model' => 'utility'], // Safest asset class on earth
@@ -247,6 +251,7 @@ class Sectors
         'custody_bank'                   => Sector\CustodyBankBusinessModel::class,
         'private_bank'                   => Sector\PrivateBankBusinessModel::class,
         'utility'                        => Sector\UtilityBusinessModel::class,
+        'independent_power'              => Sector\IndependentPowerBusinessModel::class,
         'mining'                         => Sector\MiningBusinessModel::class,
         'oil_gas_producer'               => Sector\OilGasProducerBusinessModel::class,
         'refining'                       => Sector\RefiningBusinessModel::class,
@@ -260,6 +265,7 @@ class Sectors
         'biotech'                        => Sector\BiotechBusinessModel::class,
         'luxury'                         => Sector\LuxuryBusinessModel::class,
         'shipping'                       => Sector\ShippingBusinessModel::class,
+        'port_terminal'                  => Sector\PortTerminalBusinessModel::class,
         'semiconductor'                  => Sector\SemiconductorBusinessModel::class,
         'investment_bank'                => Sector\InvestmentBankBusinessModel::class,
         'distressed_debt'                => Sector\DistressedDebtBusinessModel::class,

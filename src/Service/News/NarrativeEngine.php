@@ -267,6 +267,16 @@ class NarrativeEngine
                 "Mass warehouse worker walkouts and picket lines halted regional package distribution.",
                 "Coordinated labor strikes across key fulfillment hubs triggered widespread delivery delays and emergency overtime costs."
             ]),
+            ShockEvent::DOCK_STRIKE => $this->getRandomPhrase([
+                "Dock crews walked off the container terminals over pay and shift rosters, idling the cranes.",
+                "A strike at the free port's container quays left ships waiting at anchor and lines diverting calls to rival hubs.",
+                "Terminal throughput fell sharply while the dockworkers' strike held, with fixed crane and quay costs still running."
+            ]),
+            ShockEvent::GENERATION_OUTAGE => $this->getRandomPhrase([
+                "A large generating unit tripped and was taken out of service for repairs, cutting output sold into the wholesale market.",
+                "Inspectors found a fault at a major station, forcing an extended outage and purchases of replacement power.",
+                "An unplanned outage at one of the company's largest units removed output it had already sold forward."
+            ]),
             ShockEvent::GEOPOLITICAL_EXPORT_BAN => $this->getRandomPhrase([
                 "Targeted arms export embargoes and congressional export restrictions curtailed foreign shipments.",
                 "Geopolitical export licensing bans halted international military platform deliveries.",
@@ -656,7 +666,7 @@ class NarrativeEngine
                 "Incurred significant environmental compliance charges and containment expenses."
             ]),
             ShockEvent::TELECOM_PRICE_WAR => $this->getRandomPhrase([
-                "Aggressive price cuts and promotional discounting triggered margin erosion across telecom tiers.",
+                "Deep price cuts and promotional discounting eroded margins across telecom tiers.",
                 "Intense competitive discounting and unlimited plan promotions compressed subscriber ARPU.",
                 "Subscriber retention promotions and device subsidy wars squeezed telecom service margins."
             ]),

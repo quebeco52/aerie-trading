@@ -12,6 +12,10 @@ use App\Service\Model\Sector\StandardCorporateBusinessModel;
 use App\Service\Model\Sector\TelecomBusinessModel;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use App\Service\Model\StreamContext;
+use App\Data\Company\StockModelTuning;
+use App\Service\Corporate\Industry\IndustryRegimeView;
+use App\Service\Math\Distributions;
+use App\Service\Model\ModelParam;
 use App\Service\Macro\MacroEngine;
 use PHPUnit\Framework\TestCase;
 
@@ -298,5 +302,144 @@ class TelecomBusinessModelTest extends TestCase
         // Equipment share x (device sensitivity x cyclicality x gap); the ARPU downgrade on subscriptions is price and stays out.
         $expected = TelecomBusinessModel::EQUIPMENT_WEIGHT * (TelecomBusinessModel::EQUIPMENT_CYCLE_SENSITIVITY * TelecomBusinessModel::OPERATING_CYCLICALITY * -0.03);
         $this->assertEqualsWithDelta($expected, $this->model->resolveSectorActivityShift($stock, $recession), 1e-9);
+    }
+
+    /**
+     * A war a rival started is this carrier's war too: from its next report it loses subscribers to switching offers
+     * and matches the rival's plan prices, but it publishes nothing, since it did not start it.
+     */
+    public function testAPriceWarARivalStartedReachesThisCarrierWithoutAnEvent(): void
+    {
+        $regimeKey = StreamContext::REGIME_STATE_PREFIX . TelecomBusinessModel::REGIME_PRICE_WAR;
+        $math = $this->createStub(MathUtility::class);
+        $math->method('generatePersistentZ')->willReturn(0.0);
+        $run = function (?IndustryRegimeView $industry) use ($math) {
+            $this->model->useIndustryRegimes($industry);
+            $stock = (new Stock())->setTicker('TEL_RIVAL')->setBeta('0.8');
+            $result = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.45, 20_000_000.0, 0.10, new MacroStateDTO(outputGapEma: 0.0), $math);
+            $this->model->useIndustryRegimes(null);
+
+            return $result;
+        };
+
+        $peace = $run(new IndustryRegimeView([], 2));
+        $war = $run(new IndustryRegimeView([TelecomBusinessModel::REGIME_PRICE_WAR => 2], 2));
+
+        $this->assertNull($war->eventType);
+        $this->assertSame(2.0, $war->streamZ[$regimeKey], 'the carrier\'s own clock reads the industry\'s');
+        $this->assertSame(0.0, $peace->streamZ[$regimeKey]);
+        $this->assertEqualsWithDelta(TelecomBusinessModel::BASE_QUARTERLY_CHURN + TelecomBusinessModel::PRICE_WAR_CHURN_UPLIFT, $war->kpis['quarterly_churn'], 1e-12);
+        $this->assertEqualsWithDelta(1.0 - TelecomBusinessModel::PRICE_WAR_ARPU_DISCOUNT, $war->kpis['arpu_index'], 1e-12);
+        $this->assertLessThan($peace->kpis['subscriber_index'], $war->kpis['subscriber_index']);
+        $this->assertGreaterThan($peace->clampedMargin, $war->clampedMargin, 'promotions and the war penalty raise the cost ratio');
+    }
+
+    /** The carrier that draws the onset starts the war for its industry, its length drawn once from the exit hazard. */
+    public function testTheCarrierThatDrawsTheOnsetStartsTheWarForItsIndustry(): void
+    {
+        $math = $this->getMockBuilder(MathUtility::class)->onlyMethods(['generatePersistentZ', 'generateGeometricCount'])->getMock();
+        // subscriptions, equipment, event: the event Z is below the onset threshold.
+        $math->method('generatePersistentZ')->willReturnOnConsecutiveCalls(0.0, 0.0, -2.5);
+        $math->expects($this->once())->method('generateGeometricCount')->with(TelecomBusinessModel::PRICE_WAR_EXIT_HAZARD)->willReturn(3);
+
+        $industry = new IndustryRegimeView([], 1);
+        $this->model->useIndustryRegimes($industry);
+        $result = $this->model->computeActualFinancials((new Stock())->setTicker('TEL_START')->setBeta('0.8'), 100_000_000.0, 0.45, 20_000_000.0, 0.10, new MacroStateDTO(outputGapEma: 0.0), $math);
+        $this->model->useIndustryRegimes(null);
+
+        $this->assertSame(ShockEvent::TELECOM_PRICE_WAR, $result->eventType);
+        $this->assertSame([TelecomBusinessModel::REGIME_PRICE_WAR => 3], $industry->startedRegimes());
+        $this->assertSame(1.0, $result->streamZ[StreamContext::REGIME_STATE_PREFIX . TelecomBusinessModel::REGIME_PRICE_WAR]);
+    }
+
+    /**
+     * The onset threshold was set when one listed carrier stood for the whole market. With two listed, each carries
+     * half the market's onset rate, so a second carrier on the board does not double how often the market goes to war.
+     */
+    public function testTheOnsetRateIsTheMarketsSharedAmongItsCarriers(): void
+    {
+        $this->assertSame(TelecomBusinessModel::PRICE_WAR_Z_SCORE, TelecomBusinessModel::priceWarOnsetThreshold(1));
+        $marketRate = Distributions::standardNormalCdf(TelecomBusinessModel::PRICE_WAR_Z_SCORE);
+        $this->assertEqualsWithDelta($marketRate / 2.0, Distributions::standardNormalCdf(TelecomBusinessModel::priceWarOnsetThreshold(2)), 1e-6);
+        $this->assertEqualsWithDelta($marketRate / 3.0, Distributions::standardNormalCdf(TelecomBusinessModel::priceWarOnsetThreshold(3)), 1e-6);
+
+        $startsAWar = function (int $carriers): bool {
+            $math = $this->getMockBuilder(MathUtility::class)->onlyMethods(['generatePersistentZ'])->getMock();
+            $math->method('generatePersistentZ')->willReturnOnConsecutiveCalls(0.0, 0.0, -2.1);
+            $industry = new IndustryRegimeView([], $carriers);
+            $this->model->useIndustryRegimes($industry);
+            $this->model->computeActualFinancials((new Stock())->setTicker('TEL_ONSET')->setBeta('0.8'), 100_000_000.0, 0.45, 20_000_000.0, 0.10, new MacroStateDTO(outputGapEma: 0.0), $math);
+            $this->model->useIndustryRegimes(null);
+
+            return $industry->startedRegimes() !== [];
+        };
+
+        $this->assertTrue($startsAWar(1));
+        $this->assertFalse($startsAWar(2), 'a draw of -2.1 is inside half the market\'s tail, -2.28');
+    }
+
+    /**
+     * The macro attribution re-runs the quarter on its own draws with the industry's opening state. A war this
+     * quarter started must replay identically, its length draw included, or every stream reads a phantom macro effect.
+     */
+    public function testReplayingAQuarterThatStartedASharedWarReproducesItsStreams(): void
+    {
+        $macro = new MacroStateDTO(outputGapEma: 0.01, inflationEma: 0.02);
+        $started = null;
+        for ($seed = 1; $seed <= 3_000 && $started === null; $seed++) {
+            mt_srand($seed);
+            $math = new MathUtility();
+            $industry = new IndustryRegimeView([], 1);
+            $stock = (new Stock())->setTicker('TEL_REPLAY')->setBeta('0.8');
+            $basis = clone $stock;
+            $this->model->useIndustryRegimes($industry);
+            $math->beginDrawLog();
+            $result = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.45, 20_000_000.0, 0.10, $macro, $math);
+            $draws = $math->endDrawLog();
+            if ($industry->startedRegimes() !== []) {
+                $started = [$basis, $draws, $result];
+            } else {
+                $this->model->useIndustryRegimes(null);
+            }
+        }
+        $this->assertNotNull($started, 'some seed in 3,000 draws a war (2.3% a quarter)');
+        [$basis, $draws, $result] = $started;
+
+        $effects = $this->model->measureStreamMacroEffects($basis, $draws, ['output_gap_ema' => [$macro, 100_000_000.0]], 0.45, 20_000_000.0, 0.10, $result->streamRevenue);
+        $this->model->useIndustryRegimes(null);
+
+        $this->assertSame(ShockEvent::TELECOM_PRICE_WAR, $result->eventType);
+        foreach (['wireless_subscriptions', 'equipment_sales'] as $stream) {
+            $this->assertEqualsWithDelta(0.0, $effects[$stream]['output_gap_ema'], 1e-12, "{$stream} replays as it ran");
+        }
+    }
+
+    /**
+     * A carrier's own churn sets the flow its gross adds replace: at rest a high-churn base holds steady, and in a war
+     * its promotional adds scale with that larger replacement flow.
+     */
+    public function testACarriersOwnBaseChurnSetsTheRateItsGrossAddsReplace(): void
+    {
+        $churn = StockModelTuning::resolve('SKUA', [ModelParam::BaseQuarterlyChurn->value => TelecomBusinessModel::BASE_QUARTERLY_CHURN])[ModelParam::BaseQuarterlyChurn];
+        $this->assertGreaterThan(TelecomBusinessModel::BASE_QUARTERLY_CHURN, $churn, 'the challenger\'s prepaid-heavy base turns over faster');
+
+        $math = $this->createStub(MathUtility::class);
+        $math->method('generatePersistentZ')->willReturn(0.0);
+        $run = function (string $ticker, int $warQuarter) use ($math) {
+            $this->model->useIndustryRegimes(new IndustryRegimeView($warQuarter > 0 ? [TelecomBusinessModel::REGIME_PRICE_WAR => $warQuarter] : [], 2));
+            $result = $this->model->computeActualFinancials((new Stock())->setTicker($ticker)->setBeta('0.8'), 100_000_000.0, 0.45, 20_000_000.0, 0.10, new MacroStateDTO(outputGapEma: 0.0), $math);
+            $this->model->useIndustryRegimes(null);
+
+            return $result->kpis;
+        };
+
+        $rest = $run('SKUA', 0);
+        $this->assertEqualsWithDelta($churn, $rest['quarterly_churn'], 1e-12);
+        $this->assertEqualsWithDelta(1.0, $rest['subscriber_index'], 1e-12, 'gross adds replace its own churn, not the default');
+
+        foreach (['SKUA' => $churn, 'TEL_DEFAULT' => TelecomBusinessModel::BASE_QUARTERLY_CHURN] as $ticker => $base) {
+            $expected = 1.0 - ($base + TelecomBusinessModel::PRICE_WAR_CHURN_UPLIFT) + ($base * (1.0 + TelecomBusinessModel::PRICE_WAR_GROSS_ADDS_RESPONSE));
+            $this->assertEqualsWithDelta($expected, $run($ticker, 1)['subscriber_index'], 1e-12, $ticker);
+        }
     }
 }

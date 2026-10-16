@@ -154,6 +154,10 @@ class ShockEvent
     public const SECURITY_BREACH = 'security_breach';
     public const GEOPOLITICAL_CONFLICT = 'geopolitical_conflict';
     public const LABOR_STRIKE = 'labor_strike';
+    /** Dock crews walked off a container terminal; ships wait or divert until the strike is settled. */
+    public const DOCK_STRIKE = 'dock_strike';
+    /** A large generating unit tripped or was found unsafe and is out of service for repair. */
+    public const GENERATION_OUTAGE = 'generation_outage';
 
     public const MANDATORY_HEALTHCARE_EXPANSION = 'mandatory_healthcare_expansion';
     public const HEALTHCARE_AUDIT_CLAWBACK = 'healthcare_audit_clawback';

@@ -213,6 +213,9 @@ class StockModelTuningTest extends TestCase
             'auto_manufacturer' => [ModelParam::AutoSalesWeight, ModelParam::ApexLuxuryWeight, ModelParam::SoftwareServicesWeight],
             'hedge_fund' => [ModelParam::HfManagementFeeWeight, ModelParam::HfDirectionalBetsWeight, ModelParam::HfQuantAlphaWeight],
             'chemical' => [ModelParam::BasePetrochemicalsWeight, ModelParam::SpecialtyChemicalsWeight, ModelParam::AgrochemicalsWeight],
+            'independent_power' => [ModelParam::WholesaleGenerationWeight, ModelParam::CapacityPaymentWeight],
+            'port_terminal' => [ModelParam::GatewayHandlingWeight, ModelParam::TransshipmentWeight, ModelParam::StorageServicesWeight],
+            'telecom' => [ModelParam::SubscriptionWeight, ModelParam::EquipmentWeight],
         ];
 
         foreach (StockModelTuning::OVERRIDES as $ticker => $overrides) {

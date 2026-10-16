@@ -260,6 +260,21 @@ class StreamContext
     }
 
     /**
+     * Sets the regime clock to a state resolved outside the firm (an industry-wide regime the ledger holds), so the
+     * firm's own persisted clock carries the same reading and nothing reading it diverges.
+     *
+     * @return int Quarters active including this one; 0 when inactive.
+     */
+    public function setRegimeElapsed(string $key, int $elapsed): int
+    {
+        $elapsed = max(0, $elapsed);
+        $this->regimes[$key] = $elapsed;
+        $this->registerState(self::REGIME_STATE_PREFIX . $key, (float) $elapsed);
+
+        return $elapsed;
+    }
+
+    /**
      * Quarters the regime has been active including this one, as resolved by evolveRegime()/startRegime()
      * earlier this quarter; 0 when inactive or not yet evolved.
      */

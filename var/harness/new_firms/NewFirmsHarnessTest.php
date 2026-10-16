@@ -132,7 +132,7 @@ final class NewFirmsHarnessTest extends KernelTestCase
 
         for ($tick = 1; $tick <= $ticks; $tick++) {
             $m = $replay !== null ? $this->withDemandLags($replay[$tick - 1], $dt)
-                : $macro->updateMacroState($dt, $lastCap, $lastFloat, $lastReturn, $lastDividends, $lastIssuance, $lastDuty, $lastStake, $policy, boardBankLevy: $lastLevy, boardBankCredit: $lastCredit);
+                : $macro->updateMacroState($dt, $lastCap, $lastFloat, $lastReturn, $lastDividends, $lastIssuance, $lastDuty, $lastStake, $policy, boardBankLevy: $lastLevy);
             if ($politicsEngine !== null) {
                 $policy = $politicsEngine->updatePolitics($m, $dt)->policy();
             }
@@ -196,7 +196,7 @@ final class NewFirmsHarnessTest extends KernelTestCase
                 $lastDuty = (float) $result['board_stamp_duty'];
                 $lastStake = (float) $result['strategic_stake_cash'];
                 $lastLevy = (float) $result['board_bank_levy'];
-                $lastCredit = (float) $result['board_bank_credit'];
+                $lastCredit = (float) ($result['board_bank_credit'] ?? 0.0);
             }
             // MACRO_OUT: one macro row a quarter, for the macro-market loop.
             // FISCAL=1 adds the primary deficit and the net-tax rate, and a founding row at tick 1.
@@ -381,7 +381,31 @@ final class NewFirmsHarnessTest extends KernelTestCase
             'reimb' => $m?->reimbursementRateGrowth ?? 0.0,
             'ewr' => $m !== null && $m->equityWealthTrend > 0.0 ? $m->equityWealthRatio / $m->equityWealthTrend : 0.0,
             'fund' => $m?->sovereignFundToGdp ?? 0.0,
-        ];
+        ] + $this->round3Row($report, $kpis);
+    }
+
+    /**
+     * Round 3 (SKUA, DIPR, KTWK beside LOON): every KPI, the regime clocks the models persist, and the trade drivers.
+     *
+     * @param array<string, mixed> $kpis
+     * @return array<string, mixed>
+     */
+    private function round3Row(CorporateReport $report, array $kpis): array
+    {
+        $t = $report->getStock()->getTicker();
+        if (!in_array($t, ['SKUA', 'LOON', 'DIPR', 'KTWK'], true)) {
+            return [];
+        }
+        $m = $this->currentMacro;
+        $reg = [];
+        foreach ($report->getStock()->getEarningsMomentumZ() ?? [] as $k => $v) {
+            if (str_starts_with((string) $k, 'state:regime:')) {
+                $reg[substr((string) $k, 13)] = (int) round((float) $v);
+            }
+        }
+
+        return ['kpi' => $kpis, 'reg' => $reg, 'ddg' => $m?->domesticDemandGapEma ?? 0.0,
+            'fog' => $m?->foreignOutputGapEma ?? 0.0, 'wag' => $m?->worldActivityGap ?? 0.0];
     }
 
     /**

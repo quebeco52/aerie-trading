@@ -9,6 +9,7 @@ use App\Service\Math\FirmEconomics;
 use App\Service\Math\MacroTransmission;
 use App\Service\Math\MathUtility;
 use App\Service\Math\StochasticProcesses;
+use App\Service\Math\TimeSeries;
 
 /**
  * Handles commodity price dynamics and global logistics.
@@ -294,6 +295,44 @@ class CommodityLogisticsSubsystem
     }
 
     /**
+     * The energy index's forward for delivery `$years` ahead (Schwartz 1997 one-factor): today's spot, world demand
+     * included, reverting toward the equilibrium the supply side sets. The spot is the base process times its demand
+     * lift; before the base process has a level the smoothed index stands in.
+     *
+     * @param float $energyBasePrice    Level of the energy base process (0 before it opens).
+     * @param float $energyIndexEma     Smoothed energy index, the fallback spot.
+     * @param float $globalDemandGapEma World demand gap the spot is lifted by.
+     * @param float $energySupplyEma    Productive capacity the equilibrium is set against.
+     * @param float $years              Time to delivery.
+     */
+    public static function energyForwardPrice(float $energyBasePrice, float $energyIndexEma, float $globalDemandGapEma, float $energySupplyEma, float $years): float
+    {
+        $spot = $energyBasePrice > 0.0 ? $energyBasePrice * self::resolveEnergyDemandMultiplier($globalDemandGapEma) : $energyIndexEma;
+        // The spot averages its equilibrium, so the curve's long end must too: the Schwartz theta for that mean.
+        $theta = StochasticProcesses::schwartzThetaForMean(self::resolveEnergyEquilibriumPrice($energySupplyEma), MacroEngine::ENERGY_MEAN_REVERSION, MacroEngine::ENERGY_VOLATILITY);
+
+        return StochasticProcesses::calculateSchwartzForwardPrice($spot, MacroEngine::ENERGY_MEAN_REVERSION, $theta, MacroEngine::ENERGY_VOLATILITY, $years);
+    }
+
+    /**
+     * The gas-to-oil ratio's forward level `$years` ahead: the log-OU of calculateNaturalGasIndex() reverting toward
+     * the level it averages, one, squeezes included.
+     *
+     * @param float $ratio Today's ratio of the gas index to the oil index, each over its baseline.
+     * @param float $years Time to delivery.
+     */
+    public static function gasOilRatioForward(float $ratio, float $years): float
+    {
+        return StochasticProcesses::calculateSchwartzForwardPrice(
+            max(0.0001, $ratio),
+            self::GAS_OIL_RATIO_KAPPA,
+            StochasticProcesses::schwartzThetaForMean(1.0, self::GAS_OIL_RATIO_KAPPA, self::GAS_OIL_RATIO_SIGMA),
+            self::GAS_OIL_RATIO_SIGMA,
+            $years
+        );
+    }
+
+    /**
      * Physical catastrophe losses as a compound Poisson process with Pareto severity (Klugman, Panjer &
      * Willmot, Loss Models), seasonal in arrival.
      *
@@ -372,10 +411,7 @@ class CommodityLogisticsSubsystem
             $this->diagnostics?->recordEvent('naturalGas', $jumpData['exponent']);
         }
 
-        $timeOfYear = fmod($state->totalTime, 1.0);
-        $seasonalMultiplier = 1.0 + (self::GAS_SEASONALITY_AMPLITUDE * cos(2.0 * M_PI * $timeOfYear));
-
-        $spot = ($state->energyPriceIndex / MacroEngine::ENERGY_BASELINE) * MacroEngine::NATURAL_GAS_BASELINE * exp($state->gasOilRatioLog) * $seasonalMultiplier;
+        $spot = ($state->energyPriceIndex / MacroEngine::ENERGY_BASELINE) * MacroEngine::NATURAL_GAS_BASELINE * exp($state->gasOilRatioLog) * self::gasSeasonalFactor($state->totalTime);
         $state->naturalGasPriceIndex = max(10.0, min(500.0, $spot));
     }
 
@@ -404,10 +440,47 @@ class CommodityLogisticsSubsystem
         $state->powerHeatRateLog = max(-3.0, min(3.0, log($heatRate)));
 
         $gasRelative = max(0.01, $state->naturalGasPriceIndex / MacroEngine::NATURAL_GAS_BASELINE);
-        $spot = MacroEngine::WHOLESALE_POWER_BASELINE * ($gasRelative ** self::POWER_GAS_ELASTICITY)
+        $spot = MacroEngine::WHOLESALE_POWER_BASELINE * self::gasPowerPassThrough($gasRelative)
             * exp($state->powerHeatRateLog) * self::resolvePowerSeasonalFactor($state->totalTime);
         $carbon = MacroEngine::WHOLESALE_POWER_BASELINE * self::carbonPowerPriceUplift($state->carbonPrice);
         $state->wholesalePowerPriceIndex = max(5.0, min(800.0, $spot + $carbon));
+    }
+
+    /** The gas index's winter premium at a time: a cosine peaking at the turn of the year, mean one. */
+    public static function gasSeasonalFactor(float $totalTime): float
+    {
+        return 1.0 + (self::GAS_SEASONALITY_AMPLITUDE * cos(2.0 * M_PI * fmod($totalTime, 1.0)));
+    }
+
+    /**
+     * The gas season as the smoothed gas index carries it at a time: the winter premium damped and delayed by the
+     * index's quarterly average. What a forward for delivery then should carry, so a hedge books no season as profit.
+     */
+    public static function smoothedGasSeason(float $totalTime): float
+    {
+        return TimeSeries::exponentiallySmoothedSignal(self::gasSeasonalFactor(...), $totalTime, MacroAggregateSubsystem::STANDARD_EMA_HORIZON_YEARS);
+    }
+
+    /**
+     * The power season as the smoothed power index carries it at a time: the gas season passed through at the market's
+     * elasticity times the load season, damped and delayed by the index's quarterly average.
+     */
+    public static function smoothedPowerSeason(float $totalTime): float
+    {
+        return TimeSeries::exponentiallySmoothedSignal(
+            static fn (float $t): float => self::gasPowerPassThrough(self::gasSeasonalFactor($t)) * self::resolvePowerSeasonalFactor($t),
+            $totalTime,
+            MacroAggregateSubsystem::STANDARD_EMA_HORIZON_YEARS
+        );
+    }
+
+    /**
+     * Wholesale power relative to its baseline at a gas price relative to its own, heat rate at its mean and out of season:
+     * gas sets the price in most hours, passed through at the market's elasticity.
+     */
+    public static function gasPowerPassThrough(float $gasRelative): float
+    {
+        return max(0.0, $gasRelative) ** self::POWER_GAS_ELASTICITY;
     }
 
     /**

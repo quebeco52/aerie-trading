@@ -13,6 +13,7 @@ use Psr\Log\LoggerInterface;
 final class RedisIndustryShareStore implements IndustryShareStoreInterface
 {
     private const KEY_PREFIX = 'industry_share:';
+    private const REGIME_KEY_PREFIX = 'industry_regime:';
 
     public function __construct(
         private readonly \Redis $redis,
@@ -62,6 +63,45 @@ final class RedisIndustryShareStore implements IndustryShareStoreInterface
             $this->redis->hSet(self::KEY_PREFIX . $industry, $ticker, json_encode($record, JSON_THROW_ON_ERROR));
         } catch (\Throwable $e) {
             $this->logger?->warning('Industry share ledger write failed: ' . $e->getMessage());
+        }
+    }
+
+    public function readRegimes(string $industry): array
+    {
+        try {
+            /** @phpstan-ignore method.notFound (phpredis hash commands are absent from the analysis stub) */
+            $raw = $this->redis->hGetAll(self::REGIME_KEY_PREFIX . $industry);
+        } catch (\Throwable $e) {
+            $this->logger?->warning('Industry regime read failed: ' . $e->getMessage());
+            return [];
+        }
+
+        if (!is_array($raw)) {
+            return [];
+        }
+
+        $regimes = [];
+        foreach ($raw as $key => $json) {
+            $decoded = json_decode((string) $json, true);
+            if (!is_array($decoded)) {
+                continue;
+            }
+            $regimes[(string) $key] = [
+                'start_tick' => (int) ($decoded['start_tick'] ?? 0),
+                'end_tick'   => (int) ($decoded['end_tick'] ?? 0),
+            ];
+        }
+
+        return $regimes;
+    }
+
+    public function writeRegime(string $industry, string $key, array $record): void
+    {
+        try {
+            /** @phpstan-ignore method.notFound (phpredis hash commands are absent from the analysis stub) */
+            $this->redis->hSet(self::REGIME_KEY_PREFIX . $industry, $key, json_encode($record, JSON_THROW_ON_ERROR));
+        } catch (\Throwable $e) {
+            $this->logger?->warning('Industry regime write failed: ' . $e->getMessage());
         }
     }
 }

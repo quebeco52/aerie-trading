@@ -11,6 +11,7 @@ use App\DTO\MacroStateDTO;
 use App\DTO\SectorCoverageProfile;
 use App\DTO\SectorPhysicsResult;
 use App\Service\Model\StreamContext;
+use App\Service\Corporate\Industry\IndustryRegimeView;
 use App\Entity\Stock;
 use App\Service\Math\FirmEconomics;
 use App\Service\Math\MathUtility;
@@ -30,6 +31,24 @@ trait StandardOperatingPhysicsTrait
     protected function reportedCalendarQuarter(): ?int
     {
         return $this->reportedCalendarQuarter;
+    }
+
+    /** The industry-wide regimes of the report in progress; null outside a report or with no ledger. */
+    private ?IndustryRegimeView $industryRegimes = null;
+
+    /**
+     * Hands the physics the industry-wide regimes for one report, or takes them away (null). The engine sets them
+     * before the report's physics, keeps them through the macro attribution's replays and clears them after.
+     */
+    public function useIndustryRegimes(?IndustryRegimeView $regimes): void
+    {
+        $this->industryRegimes = $regimes;
+    }
+
+    /** The industry-wide regimes the engine handed this report, or null when the firm reads only its own. */
+    protected function industryRegimes(): ?IndustryRegimeView
+    {
+        return $this->industryRegimes;
     }
 
     /** A sector with no measured demand drift grows with the economy. */

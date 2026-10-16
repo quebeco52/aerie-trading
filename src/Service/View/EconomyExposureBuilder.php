@@ -9,6 +9,7 @@ use App\Entity\Stock;
 use App\Repository\StockRepository;
 use App\Service\Model\BusinessModelInterface;
 use App\Service\Model\Sector\CommercialBankBusinessModel;
+use App\Service\Model\Sector\IndependentPowerBusinessModel;
 use App\Service\Model\Sector\MiningBusinessModel;
 use App\Service\Model\Sector\OilGasProducerBusinessModel;
 use App\Service\Model\Sector\RefiningBusinessModel;
@@ -121,7 +122,7 @@ final class EconomyExposureBuilder
                 }
             }
 
-            if ($model instanceof UtilityBusinessModel) {
+            if ($model instanceof UtilityBusinessModel || $model instanceof IndependentPowerBusinessModel) {
                 $merchant = $model->resolveWholesalePowerRevenueShare($stock);
                 if ($merchant > 0.0) {
                     $collect['sells_power'][] = $row($merchant);

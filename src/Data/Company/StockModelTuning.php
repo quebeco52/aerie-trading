@@ -587,6 +587,15 @@ class StockModelTuning
             ModelParam::ContractCharterWeight->value => 0.75,
         ],
 
+        // --- Kittiwake Harbour Terminals (KTWK) ---
+        // The free port's container terminals. A third of the boxes are relayed between ships at discounted lifts,
+        // a quarter of revenue; storage and yard services the rest beside District gateway handling.
+        'KTWK' => [
+            ModelParam::GatewayHandlingWeight->value => 0.60,
+            ModelParam::TransshipmentWeight->value   => 0.25,
+            ModelParam::StorageServicesWeight->value => 0.15,
+        ],
+
         // --- Canvasback Logistics (CANV) ---
         // Integrated freight & last-mile delivery provider. Skewed toward dedicated enterprise contracts & 3PL.
         'CANV' => [
@@ -829,11 +838,31 @@ class StockModelTuning
             ModelParam::MerchantPowerShare->value        => 0.00,
         ],
 
+        // --- Dipper Generation (DIPR) ---
+        // Independent generator: hydro and a tidal barrage burn no fuel, the coastal gas stations half the output.
+        // Capacity contracts are a fifth of revenue; most of next year's output is sold forward.
+        'DIPR' => [
+            ModelParam::WholesaleGenerationWeight->value => 0.80,
+            ModelParam::CapacityPaymentWeight->value     => 0.20,
+            ModelParam::MerchantGasFleetShare->value     => 0.50,
+            ModelParam::PowerHedgeRatio->value           => 0.60,
+        ],
+
         // --- Loon Call Telecom (LOON) ---
         // The District's largest mobile and fibre carrier: service plans 83%, devices 17% (Verizon 2024 mix).
         'LOON' => [
             ModelParam::SubscriptionWeight->value => 0.83,
             ModelParam::EquipmentWeight->value    => 0.17,
+        ],
+
+        // --- Skua Mobile (SKUA) ---
+        // Mobile-only challenger on prepaid and no-contract plans (T-Mobile US 2014 mix: equipment 24% of revenue).
+        // Its base turns over faster than the incumbent's: 1.6% a month, T-Mobile's branded postpaid phone churn
+        // in 2014, against the 1% Loon Call carries.
+        'SKUA' => [
+            ModelParam::SubscriptionWeight->value => 0.76,
+            ModelParam::EquipmentWeight->value    => 0.24,
+            ModelParam::BaseQuarterlyChurn->value => 0.048,
         ],
 
         // --- Cormorant Environmental (CORM) ---

@@ -8,6 +8,7 @@ use App\DTO\ActualFinancialsDTO;
 use App\DTO\MacroStateDTO;
 use App\DTO\SectorCoverageProfile;
 use App\Entity\Stock;
+use App\Service\Corporate\Industry\IndustryRegimeView;
 use App\Service\Math\MathUtility;
 
 interface OperatingStrategyInterface
@@ -15,6 +16,12 @@ interface OperatingStrategyInterface
     public function getTargetMetrics(Stock $stock, MacroStateDTO $macroState, MathUtility $mathUtility): array;
     /** @param int|null $calendarQuarter Calendar quarter [0..3] the report covers; null when the call is not a report. */
     public function computeActualFinancials(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, MacroStateDTO $macroState, MathUtility $mathUtility, ?int $calendarQuarter = null): ActualFinancialsDTO;
+
+    /**
+     * Hands the physics the industry-wide regimes (a price war every carrier in the industry fights) for one report,
+     * or takes them away with null. Set before computeActualFinancials, kept through measureStreamMacroEffects.
+     */
+    public function useIndustryRegimes(?IndustryRegimeView $regimes): void;
 
     /**
      * How far each macro input moved each revenue stream this quarter, measured by re-running the stream physics

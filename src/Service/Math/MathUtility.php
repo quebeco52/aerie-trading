@@ -292,6 +292,25 @@ class MathUtility
     }
 
     /**
+     * Number of periods up to and including the first exit when each period ends the spell with the given
+     * probability: geometric on {1, 2, ...} with mean 1 / p, drawn by inverse CDF from one uniform,
+     * 1 + floor(ln U / ln(1 - p)). The same spell a per-period exit hazard produces, decided at its start.
+     */
+    public function generateGeometricCount(float $exitProbability): int
+    {
+        $p = max(0.0, min(1.0, $exitProbability));
+        $u = max($this->generateUniform(), 0.0000001);
+        if ($p >= 1.0) {
+            return 1;
+        }
+        if ($p <= 0.0) {
+            return PHP_INT_MAX;
+        }
+
+        return 1 + (int) floor(log($u) / log(1.0 - $p));
+    }
+
+    /**
      * Number of Poisson arrivals over an interval with the given mean (Knuth's product-of-uniforms method,
      * exact for the small means a tick produces). Unlike the Bernoulli gate the jump helpers use, more than
      * one event can land in a tick.

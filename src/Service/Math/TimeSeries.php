@@ -20,6 +20,12 @@ final class TimeSeries
     /** Non-linear distress acceleration exponent penalizing sub-par economic returns. */
     public const REVERSION_DISTRESS_GAMMA = 1.00;
 
+    // --- Exponential Smoothing of a Known Signal ---
+    /** Time constants of the past an exponential average is integrated over: the kernel's tail beyond is e^-8, 0.03%. */
+    public const SMOOTHING_KERNEL_SPAN = 8.0;
+    /** Midpoint-rule steps across that span: the error on a seasonal cosine smoothed over a quarter is under 1e-6. */
+    public const SMOOTHING_KERNEL_STEPS = 256;
+
     // --- Profitability Persistence (Fama & French 2000; Ohlson 1995) ---
     /** Share of a firm's gap between its return on capital and its own long-run level that closes each year: about 38% (Fama & French 2000, J. Business, partial-adjustment model). */
     public const PROFITABILITY_MEAN_REVERSION_RATE = 0.38;
@@ -43,6 +49,34 @@ final class TimeSeries
         $phi = exp(-$dt / $tauYears);
 
         return (max(0.0, $prior) * $phi) + ((1.0 - $phi) * (($logReturn * $logReturn) / $dt));
+    }
+
+    /**
+     * A known signal as an exponential moving average of it reads at a time: the signal integrated over its past
+     * against the average's kernel (1/tau) e^(-s/tau), so a deterministic season can be read as a smoothed index
+     * shows it, damped and late.
+     *
+     * @param callable(float): float $signal       The signal at a time (years).
+     * @param float                  $time         When the average is read (years).
+     * @param float                  $horizonYears The average's time constant (years); zero returns the signal itself.
+     */
+    public static function exponentiallySmoothedSignal(callable $signal, float $time, float $horizonYears): float
+    {
+        if ($horizonYears <= 0.0) {
+            return $signal($time);
+        }
+
+        $step = self::SMOOTHING_KERNEL_SPAN * $horizonYears / self::SMOOTHING_KERNEL_STEPS;
+        $sum = 0.0;
+        $weight = 0.0;
+        for ($i = 0; $i < self::SMOOTHING_KERNEL_STEPS; $i++) {
+            $lag = ($i + 0.5) * $step;
+            $kernel = exp(-$lag / $horizonYears);
+            $sum += $kernel * $signal($time - $lag);
+            $weight += $kernel;
+        }
+
+        return $sum / $weight;
     }
 
     /**

@@ -388,6 +388,53 @@ class EarningsEngineTest extends TestCase
         $treasury = (float) $stock->getCorporateTreasury();
         $this->assertGreaterThan(5_000_000_000.0, $treasury, 'Corporate treasury was depleted during a boom.');
     }
+    /**
+     * A price war is the industry's: one a rival started reaches a carrier through its report, one a carrier's own
+     * report starts is booked for the whole industry from that tick, and the strategy (one instance serves every
+     * carrier) holds no view of the industry once the report is done.
+     */
+    public function testAPriceWarIsBookedForTheIndustryAndReachesEveryCarrierThroughItsReport(): void
+    {
+        $regimeKey = \App\Service\Model\StreamContext::REGIME_STATE_PREFIX . \App\Service\Model\Sector\TelecomBusinessModel::REGIME_PRICE_WAR;
+        $macro = new MacroStateDTO(corporateTaxRate: 0.21, policyRateEma: 0.04, yield5yEma: 0.045);
+        $carrier = function (string $ticker): Stock {
+            $stock = $this->buildMatureIndustrial($ticker);
+            $stock->setIndustry('Telecom Services');
+
+            return $stock;
+        };
+        $tick = EarningsEngine::resolveReportingTick('TELX', 252);
+
+        // A war a rival started ten ticks earlier: this carrier is in its first quarter of it.
+        $store = new InMemoryIndustryShareStore();
+        $store->writeRegime('Telecom Services', 'price_war', ['start_tick' => $tick - 10, 'end_tick' => $tick + 300]);
+        $joined = $carrier('TELX');
+        $this->buildEngine($this->createStub(EventDispatcherInterface::class), new IndustryShareLedger($store))->calculate($joined, $macro, $tick, 252);
+        $this->assertSame(1.0, ($joined->getEarningsMomentumZ() ?? [])[$regimeKey] ?? null);
+
+        $strategy = \App\Data\Company\Sectors::strategyFor('Telecom Services');
+        $this->assertNull((new \ReflectionProperty(\App\Service\Model\Sector\StandardCorporateBusinessModel::class, 'industryRegimes'))->getValue($strategy), 'no view outlives the report');
+
+        // A carrier whose own draw starts one books it for the industry from its report tick, in whole quarters.
+        $booked = null;
+        for ($seed = 1; $seed <= 1_000 && $booked === null; $seed++) {
+            mt_srand($seed);
+            $this->mathUtility = new MathUtility();
+            $store = new InMemoryIndustryShareStore();
+            $starter = $carrier('TELX');
+            $this->buildEngine($this->createStub(EventDispatcherInterface::class), new IndustryShareLedger($store))->calculate($starter, $macro, $tick, 252);
+            if (isset($store->readRegimes('Telecom Services')['price_war'])) {
+                $booked = [$store->readRegimes('Telecom Services')['price_war'], $starter];
+            }
+        }
+        $this->assertNotNull($booked, 'some seed in 1,000 starts a war (2.3% a quarter)');
+        [$run, $starter] = $booked;
+        $this->assertSame($tick, $run['start_tick']);
+        $this->assertSame(0, ($run['end_tick'] - $run['start_tick']) % 63, 'a war lasts whole quarters');
+        $this->assertGreaterThanOrEqual(63, $run['end_tick'] - $run['start_tick']);
+        $this->assertSame(1.0, ($starter->getEarningsMomentumZ() ?? [])[$regimeKey] ?? null);
+    }
+
     private function buildMatureIndustrial(string $ticker): Stock
     {
         $stock = new Stock();

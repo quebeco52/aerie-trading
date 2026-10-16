@@ -24,3 +24,13 @@ The land write-down is plant (ASC 360), read from the `land_write_down` KPI as `
 
 Round 2 (PELI, EGRT): `bin/harness-batch var/harness/new_firms/run.sh 1-3 <arm>`, then
 `ARM=<arm> python3 var/harness/new_firms/analyse_round2.py 1 2 3`.
+
+Round 3 (SKUA, DIPR, KTWK beside LOON): rows for those four tickers add `kpi` (every reported KPI), `reg` (the
+`state:regime:*` clocks: price_war, unit_outage, dock_strike), `ddg`/`fog`/`wag` (domestic, foreign, world gaps).
+Needs HEALTH=1 for the `ndE`/`covL` leverage columns:
+
+    HEALTH=1 bin/harness-batch var/harness/new_firms/run.sh 1-3 r3v1
+    ARM=r3v1 python3 var/harness/new_firms/analyse_round3.py 1 2 3 > var/harness/new_firms/round3_3seed_20y.out
+
+Prices in round 3 are from tick 1 (`px1` in open.json), not the seed: the seed command splits some titans at tick 1.
+`updateMacroState` no longer takes `boardBankCredit`; the harness passes the levy only.

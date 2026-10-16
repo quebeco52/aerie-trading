@@ -1112,18 +1112,29 @@ class EarningsEngine
     {
         // The firm and the draws the stream physics runs on, kept so its macro drivers can be measured on them.
         $streamBasis = clone $ctx->stock;
-        $this->mathUtility->beginDrawLog();
-        $actuals = $ctx->strategy->computeActualFinancials(
-            $ctx->stock,
-            $ctx->expectedRevenue,
-            $ctx->realizedVariableMargin,
-            $ctx->fixedCosts,
-            $ctx->baselineVol,
-            $ctx->macroState,
-            $this->mathUtility,
-            $ctx->calendarQuarter
-        );
-        $this->attributeMacroDrivers($ctx, $streamBasis, $this->mathUtility->endDrawLog(), $actuals->streamRevenue);
+        // Industry-wide regimes (a price war every carrier fights) as the report opens. The replays below read the
+        // same opening state; a regime this report started is booked once, from the real call, before they run.
+        $industryRegimes = $this->industryShareLedger?->openIndustryRegimes($ctx->stock, $ctx->tickCount, $ctx->ticksPerYear);
+        $ctx->strategy->useIndustryRegimes($industryRegimes);
+        try {
+            $this->mathUtility->beginDrawLog();
+            $actuals = $ctx->strategy->computeActualFinancials(
+                $ctx->stock,
+                $ctx->expectedRevenue,
+                $ctx->realizedVariableMargin,
+                $ctx->fixedCosts,
+                $ctx->baselineVol,
+                $ctx->macroState,
+                $this->mathUtility,
+                $ctx->calendarQuarter
+            );
+            if ($industryRegimes !== null) {
+                $this->industryShareLedger?->commitIndustryRegimes($ctx->stock, $industryRegimes, $ctx->tickCount, $ctx->ticksPerYear);
+            }
+            $this->attributeMacroDrivers($ctx, $streamBasis, $this->mathUtility->endDrawLog(), $actuals->streamRevenue);
+        } finally {
+            $ctx->strategy->useIndustryRegimes(null);
+        }
         $ctx->actualRevenue = $actuals->actualRevenue;
         $ctx->actualVariableCosts = $actuals->actualVariableCosts;
 

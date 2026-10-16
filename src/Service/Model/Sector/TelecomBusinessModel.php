@@ -13,6 +13,8 @@ use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
 use App\DTO\MacroStateDTO;
 use App\Service\Math\MathUtility;
+use App\Service\Math\Distributions;
+use App\Service\Model\StreamContext;
 use App\Service\Event\ShockEvent;
 use App\Service\Macro\MacroEngine;
 use App\Service\Math\FinancialConstants;
@@ -23,6 +25,7 @@ use App\Service\Math\FinancialConstants;
  * Financial Physics:
  * - High Barrier to Entry / Oligopoly: Revenue is dominated by ultra-sticky recurring subscriptions.
  * - The Churn Wars: Because the market is saturated, growth only comes from stealing competitors' customers via margin-crushing promotions.
+ *   A price war is the industry's: when any carrier starts one, every carrier in the industry fights it until it ends.
  * - Subscriber Stock-Flow: service revenue is subscribers x ARPU; the base carries every quarter's net adds
  *   forward, churn wars erode it and promotional gross adds defend it at a subscriber acquisition cost.
  * - Bond Proxies: long-dated network bonds roll slowly, so rate shocks reach interest expense with a lag (DebtEngine).
@@ -135,7 +138,7 @@ class TelecomBusinessModel extends StandardCorporateBusinessModel
     // --- Subscriber Base (stock-flow) ---
     /** Persisted subscriber index; 1.0 is the base implied by expected service revenue. */
     public const STATE_SUBSCRIBER_INDEX = 'state:subscriber_index';
-    /** Baseline quarterly postpaid churn (~1% a month); steady-state gross adds replace exactly this. */
+    /** Baseline quarterly postpaid churn (~1% a month), the default a carrier's own BaseQuarterlyChurn overrides; steady-state gross adds replace exactly this. */
     public const BASE_QUARTERLY_CHURN = 0.03;
     /** Volatility multiplier on gross adds relative to the replacement rate (one sigma ~ +-0.9% of the base at 20% vol). */
     public const GROSS_ADDS_VARIANCE_SCALAR = 1.50;
@@ -145,11 +148,11 @@ class TelecomBusinessModel extends StandardCorporateBusinessModel
     // --- The Churn & Price War Physics ---
     /** Margin cost per unit of gross adds above the replacement rate (device subsidies, marketing, dealer commissions). */
     public const SUBSCRIBER_ACQUISITION_COST_ELASTICITY = 0.025;
-    /** Z-score threshold indicating a brutal sector-wide price war to steal market share. */
+    /** Z-score threshold for a price war to start in the District's market (~2.3% a quarter), shared among the listed carriers that could start it. */
     public const PRICE_WAR_Z_SCORE   = -2.00;
     /** Fat-tail margin penalty when intense promotional pricing (e.g., "Free iPhones") destroys profitability. */
     public const PRICE_WAR_PENALTY   = 0.08;
-    /** Regime key for a sector-wide price war (two-state Markov). */
+    /** Regime key for a price war: industry-wide through the ledger, the carrier's own two-state Markov without one. */
     public const REGIME_PRICE_WAR = 'price_war';
     /** Quarterly probability the price war ends (~4 quarter expected duration). */
     public const PRICE_WAR_EXIT_HAZARD = 0.25;
@@ -220,10 +223,12 @@ class TelecomBusinessModel extends StandardCorporateBusinessModel
         $params = $this->resolveModelParameters($stock, [
             ModelParam::SubscriptionWeight->value => self::SUBSCRIPTION_WEIGHT,
             ModelParam::EquipmentWeight->value    => self::EQUIPMENT_WEIGHT,
+            ModelParam::BaseQuarterlyChurn->value => self::BASE_QUARTERLY_CHURN,
         ]);
 
         $subscriptionWeight = $params[ModelParam::SubscriptionWeight];
         $equipmentWeight    = $params[ModelParam::EquipmentWeight];
+        $baseChurn          = max(0.0, $params[ModelParam::BaseQuarterlyChurn]);
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
         $streams = $this->createStreamContext($momentum, $mathUtility, $macroState, $stock);
@@ -251,14 +256,11 @@ class TelecomBusinessModel extends StandardCorporateBusinessModel
         // --- Event Tail Risks ---
         // A price war is a regime: rival promotions lift churn and cut ARPU for several quarters. A spectrum
         // auction is a CapEx event: the licence outlay is committed here and queued as construction-in-progress.
-        $priceWarElapsed = $streams->evolveRegime(self::REGIME_PRICE_WAR, 0.0, self::PRICE_WAR_EXIT_HAZARD);
-        $eventType = null;
+        [$priceWarElapsed, $startedPriceWar] = $this->resolvePriceWar($streams, $eventZ, $mathUtility);
+        $eventType = $startedPriceWar ? ShockEvent::TELECOM_PRICE_WAR : null;
         $scheduledCapex = 0.0;
 
-        if ($eventZ < self::PRICE_WAR_Z_SCORE && $priceWarElapsed === 0) {
-            $priceWarElapsed = $streams->startRegime(self::REGIME_PRICE_WAR);
-            $eventType = ShockEvent::TELECOM_PRICE_WAR;
-        } elseif ($eventZ > self::SPECTRUM_AUCTION_Z_SCORE) {
+        if ($eventType === null && $eventZ > self::SPECTRUM_AUCTION_Z_SCORE) {
             $eventType = ShockEvent::SPECTRUM_AUCTION;
             $scheduledCapex = $expectedRevenue * 4.0 * self::SPECTRUM_AUCTION_CAPEX_RATIO;
         }
@@ -271,10 +273,10 @@ class TelecomBusinessModel extends StandardCorporateBusinessModel
         // not cancellations); a price war lifts churn, forces promotional gross adds and discounts ARPU.
         $openingSubscribers = $streams->getPersistedState(self::STATE_SUBSCRIBER_INDEX, 1.0);
         $unemploymentGap = max(0.0, $macroState->unemploymentGap());
-        $churnRate = self::BASE_QUARTERLY_CHURN
+        $churnRate = $baseChurn
             + ($inPriceWar ? self::PRICE_WAR_CHURN_UPLIFT : 0.0)
             + ($unemploymentGap * self::UNEMPLOYMENT_CHURN_SENSITIVITY);
-        $grossAddsRate = max(0.0, self::BASE_QUARTERLY_CHURN
+        $grossAddsRate = max(0.0, $baseChurn
             * (1.0 + ($subscriptionZ * $baselineVol * self::GROSS_ADDS_VARIANCE_SCALAR))
             * ($inPriceWar ? (1.0 + self::PRICE_WAR_GROSS_ADDS_RESPONSE) : 1.0));
         $subscribers = ($openingSubscribers * (1.0 - $churnRate)) + $grossAddsRate;
@@ -318,7 +320,9 @@ class TelecomBusinessModel extends StandardCorporateBusinessModel
 
         // 1. Subscriber Acquisition Cost: every gross add costs subsidy, marketing and dealer commission
         //    dollars, so growth and churn replacement alike compress margin relative to the replacement rate.
-        $sacDrag = self::SUBSCRIBER_ACQUISITION_COST_ELASTICITY * (($grossAddsRate / self::BASE_QUARTERLY_CHURN) - 1.0) * $subscriptionWeight;
+        $sacDrag = $baseChurn > 0.0
+            ? self::SUBSCRIBER_ACQUISITION_COST_ELASTICITY * (($grossAddsRate / $baseChurn) - 1.0) * $subscriptionWeight
+            : 0.0;
         $priceWarPenalty = $inPriceWar ? self::PRICE_WAR_PENALTY : 0.0;
 
         // Note: the network debt load reaches earnings through DebtEngine's maturity wall (see
@@ -354,6 +358,51 @@ class TelecomBusinessModel extends StandardCorporateBusinessModel
                 'arpu_index'       => $arpuMultiplier,
             ],
         );
+    }
+
+    /**
+     * The quarter's price war: quarters it has run including this one (0 when none) and whether this carrier started it.
+     *
+     * With the industry ledger the war is the industry's: a carrier that draws the onset starts it for every carrier
+     * in the industry, its length drawn once from the exit hazard, and the rest are in it from their next report.
+     * Without one the carrier runs its own two-state regime on the same hazards.
+     *
+     * @return array{int, bool}
+     */
+    private function resolvePriceWar(StreamContext $streams, float $eventZ, MathUtility $mathUtility): array
+    {
+        $industry = $this->industryRegimes();
+        if ($industry === null) {
+            $elapsed = $streams->evolveRegime(self::REGIME_PRICE_WAR, 0.0, self::PRICE_WAR_EXIT_HAZARD);
+            if ($eventZ < self::PRICE_WAR_Z_SCORE && $elapsed === 0) {
+                return [$streams->startRegime(self::REGIME_PRICE_WAR), true];
+            }
+
+            return [$elapsed, false];
+        }
+
+        $elapsed = $industry->elapsed(self::REGIME_PRICE_WAR);
+        $started = false;
+        if ($elapsed === 0 && $eventZ < self::priceWarOnsetThreshold($industry->members())) {
+            $elapsed = $industry->start(self::REGIME_PRICE_WAR, $mathUtility->generateGeometricCount(self::PRICE_WAR_EXIT_HAZARD));
+            $started = true;
+        }
+
+        return [$streams->setRegimeElapsed(self::REGIME_PRICE_WAR, $elapsed), $started];
+    }
+
+    /**
+     * The event Z below which one of the industry's listed carriers starts a war. PRICE_WAR_Z_SCORE is the market's
+     * onset rate; each of n carriers draws every quarter, so each carries 1/n of it and the market sees a war as
+     * often whatever the roster.
+     */
+    public static function priceWarOnsetThreshold(int $carriers): float
+    {
+        if ($carriers <= 1) {
+            return self::PRICE_WAR_Z_SCORE;
+        }
+
+        return Distributions::standardNormalQuantile(Distributions::standardNormalCdf(self::PRICE_WAR_Z_SCORE) / $carriers);
     }
 
     /**

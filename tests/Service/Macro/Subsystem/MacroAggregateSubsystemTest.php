@@ -1268,6 +1268,28 @@ class MacroAggregateSubsystemTest extends TestCase
         $this->assertEqualsWithDelta($mainlandBoom + $buildUp, MacroAggregateSubsystem::netExportGapAt(0.03, 0.0, 0.2), 1e-15, 'The two export markets add.');
     }
 
+    /**
+     * The goods volume equations a port reads are the ones net exports are built from: a duty's whole effect on net
+     * exports is the import volume it costs on goods for home use and the export volume partners' retaliation costs.
+     */
+    public function testGoodsVolumeEquationsAreTheNetExportTariffLegs(): void
+    {
+        $duty = log(1.12);
+        $domesticContent = 1.0 - MacroAggregateSubsystem::FOREIGN_VALUE_ADDED_SHARE_OF_EXPORTS;
+        $retaliatedExportShare = ((MacroAggregateSubsystem::DISTRICT_EXPORT_SHARE * MacroAggregateSubsystem::GOODS_SHARE_OF_EXPORTS) - MacroAggregateSubsystem::DISTRICT_DEFENSE_EXPORT_SHARE) * $domesticContent;
+        $homeGoodsImportShare = MacroAggregateSubsystem::DISTRICT_DOMESTIC_IMPORT_SHARE * MacroAggregateSubsystem::GOODS_SHARE_OF_IMPORTS;
+
+        $this->assertEqualsWithDelta(
+            ($retaliatedExportShare * MacroAggregateSubsystem::goodsExportVolumeGap(0.0, 0.0, $duty)) - ($homeGoodsImportShare * MacroAggregateSubsystem::goodsImportVolumeGap(0.0, 0.0, $duty)),
+            MacroAggregateSubsystem::netExportGapAt(0.0, 0.0, 0.0, $duty),
+            1e-15
+        );
+        $this->assertLessThan(0.0, MacroAggregateSubsystem::goodsImportVolumeGap(0.0, 0.0, $duty), 'A duty costs imports.');
+        $this->assertLessThan(0.0, MacroAggregateSubsystem::goodsExportVolumeGap(0.0, 0.0, $duty), 'Retaliation costs exports.');
+        $this->assertGreaterThan(0.0, MacroAggregateSubsystem::goodsImportVolumeGap(0.0, 0.1, 0.0), 'A dear currency draws imports in.');
+        $this->assertLessThan(0.0, MacroAggregateSubsystem::goodsExportVolumeGap(0.0, 0.1, 0.0), 'And prices exports out.');
+    }
+
     /** Drehmann, Juselius & Korinek (2018): borrowed income is spent as it is borrowed, and income repaid out of the stock is not spent. */
     public function testNewHouseholdBorrowingMovesDemandBothWays(): void
     {

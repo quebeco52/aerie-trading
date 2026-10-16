@@ -844,7 +844,7 @@ class MacroAggregateSubsystem
         $domesticContent = 1.0 - self::FOREIGN_VALUE_ADDED_SHARE_OF_EXPORTS;
         $priceResponse = (self::EXPORT_PRICE_PASS_THROUGH * self::EXPORT_PRICE_ELASTICITY * self::DISTRICT_VALUE_ADDED_EXPORT_SHARE)
             + (self::IMPORT_PRICE_PASS_THROUGH * self::IMPORT_PRICE_ELASTICITY * self::DISTRICT_DOMESTIC_IMPORT_SHARE);
-        $retaliatoryDuty = log(1.0 + (MacroEngine::TARIFF_RETALIATION_RATIO * (exp($tariffDuty) - 1.0)));
+        $retaliatoryDuty = self::retaliatoryDuty($tariffDuty);
         $retaliatedExportShare = ((self::DISTRICT_EXPORT_SHARE * self::GOODS_SHARE_OF_EXPORTS) - self::DISTRICT_DEFENSE_EXPORT_SHARE) * $domesticContent;
 
         return ((self::DISTRICT_EXPORT_SHARE - self::DISTRICT_DEFENSE_EXPORT_SHARE) * $domesticContent * self::EXPORT_DEMAND_ELASTICITY * $mainlandGap)
@@ -852,6 +852,63 @@ class MacroAggregateSubsystem
             - ($priceResponse * $realExchangeRateGap)
             + (self::IMPORT_PRICE_ELASTICITY * self::DISTRICT_DOMESTIC_IMPORT_SHARE * self::GOODS_SHARE_OF_IMPORTS * $tariffDuty)
             - (self::EXPORT_PRICE_ELASTICITY * $retaliatedExportShare * $retaliatoryDuty);
+    }
+
+    /**
+     * Civilian goods export volume against its trend, in logs: the volume netExportGapAt() weights into GDP. The
+     * mainland's demand as exports have adjusted to it at the long-run income elasticity, the export price a real
+     * appreciation passes through at its elasticity, and partners' retaliation against a District duty.
+     *
+     * @param float $mainlandGap         Mainland output gap as export volumes have adjusted to it (fraction).
+     * @param float $realExchangeRateGap Log real exchange rate against its trend, as volumes have adjusted to it.
+     * @param float $tariffDuty          Log of one plus the District's average tariff, as it has reached volumes.
+     */
+    public static function goodsExportVolumeGap(float $mainlandGap, float $realExchangeRateGap, float $tariffDuty = 0.0): float
+    {
+        return (self::EXPORT_DEMAND_ELASTICITY * $mainlandGap)
+            - self::exportPriceVolumeLoss($realExchangeRateGap)
+            - (self::EXPORT_PRICE_ELASTICITY * self::retaliatoryDuty($tariffDuty));
+    }
+
+    /**
+     * Log volume an export, good or service, loses to a real appreciation: the share of it that reaches the price abroad
+     * times the export price elasticity. Negative for a depreciation.
+     *
+     * @param float $realExchangeRateGap Log real exchange rate against its trend, as volumes have adjusted to it.
+     */
+    public static function exportPriceVolumeLoss(float $realExchangeRateGap): float
+    {
+        return self::EXPORT_PRICE_PASS_THROUGH * self::EXPORT_PRICE_ELASTICITY * $realExchangeRateGap;
+    }
+
+    /** Civilian goods exports' share of the District's goods trade, exports plus imports; arms go to allied governments outside it. */
+    public static function goodsExportShareOfTrade(): float
+    {
+        $exports = (self::DISTRICT_EXPORT_SHARE * self::GOODS_SHARE_OF_EXPORTS) - self::DISTRICT_DEFENSE_EXPORT_SHARE;
+
+        return $exports / ($exports + self::goodsImportsToGdp());
+    }
+
+    /**
+     * Goods import volume against its trend, in logs: domestic demand at the import demand elasticity, the cheaper
+     * imports a real appreciation passes through at their price elasticity, and a District duty, a price with full
+     * pass-through, at the same elasticity.
+     *
+     * @param float $domesticDemandGap   Domestic demand gap (fraction).
+     * @param float $realExchangeRateGap Log real exchange rate against its trend, as volumes have adjusted to it.
+     * @param float $tariffDuty          Log of one plus the District's average tariff, as it has reached volumes.
+     */
+    public static function goodsImportVolumeGap(float $domesticDemandGap, float $realExchangeRateGap, float $tariffDuty = 0.0): float
+    {
+        return (self::IMPORT_DEMAND_ELASTICITY * $domesticDemandGap)
+            + (self::IMPORT_PRICE_PASS_THROUGH * self::IMPORT_PRICE_ELASTICITY * $realExchangeRateGap)
+            - (self::IMPORT_PRICE_ELASTICITY * $tariffDuty);
+    }
+
+    /** Partners' duty on the District's goods in answer to its own, in logs: the 2018 retaliation ratio (Fajgelbaum et al. 2020) on the ad valorem rate. */
+    public static function retaliatoryDuty(float $tariffDuty): float
+    {
+        return log(1.0 + (MacroEngine::TARIFF_RETALIATION_RATIO * (exp($tariffDuty) - 1.0)));
     }
 
     /**

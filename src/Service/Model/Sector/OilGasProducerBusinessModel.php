@@ -15,7 +15,6 @@ use App\Service\Macro\MacroEngine;
 use App\Service\Macro\Subsystem\CommodityLogisticsSubsystem;
 use App\Service\Math\FirmEconomics;
 use App\Service\Math\MathUtility;
-use App\Service\Math\StochasticProcesses;
 
 /**
  * Earnings strategy for upstream oil and gas producers (exploration & production).
@@ -269,43 +268,24 @@ class OilGasProducerBusinessModel extends StandardCorporateBusinessModel
      */
     private function rollHedgeLadder(StreamContext $streams, MacroStateDTO $macroState): float
     {
-        $tranches = self::HEDGE_LADDER_TRANCHES;
-        $spot = $macroState->energyBasePrice > 0.0
-            ? $macroState->energyBasePrice * CommodityLogisticsSubsystem::resolveEnergyDemandMultiplier($macroState->globalDemandGapEma)
-            : $macroState->energyPriceIndexEma;
-        // The spot averages its equilibrium, so the curve's long end must too: hand the forward the Schwartz theta for that mean.
-        $theta = StochasticProcesses::schwartzThetaForMean(
-            CommodityLogisticsSubsystem::resolveEnergyEquilibriumPrice($macroState->energySupplyEma),
-            MacroEngine::ENERGY_MEAN_REVERSION,
-            MacroEngine::ENERGY_VOLATILITY
-        );
-        $math = MathUtility::getInstance();
-        $forward = static fn (int $quartersAhead): float => StochasticProcesses::calculateSchwartzForwardPrice(
-            $spot,
-            MacroEngine::ENERGY_MEAN_REVERSION,
-            $theta,
-            MacroEngine::ENERGY_VOLATILITY,
+        $forward = static fn (int $quartersAhead): float => CommodityLogisticsSubsystem::energyForwardPrice(
+            $macroState->energyBasePrice,
+            $macroState->energyPriceIndexEma,
+            $macroState->globalDemandGapEma,
+            $macroState->energySupplyEma,
             $quartersAhead / 4.0
         );
 
-        $slots = [];
-        for ($d = 0; $d < $tranches; $d++) {
-            $slots[$d] = $streams->getPersistedState(self::STATE_HEDGE_STRIKE_SUM_PREFIX . $d, 0.0);
+        $sums = [];
+        for ($d = 0; $d < self::HEDGE_LADDER_TRANCHES; $d++) {
+            $sums[] = $streams->getPersistedState(self::STATE_HEDGE_STRIKE_SUM_PREFIX . $d, 0.0);
         }
-        if ($slots[0] <= 0.0) {
-            for ($d = 0; $d < $tranches; $d++) {
-                $slots[$d] = ($tranches - $d) * $forward($d);
-            }
-        }
-
-        $deliveredStrike = $slots[0] / $tranches;
-
-        for ($d = 0; $d < $tranches; $d++) {
-            $carried = $d + 1 < $tranches ? $slots[$d + 1] : 0.0;
-            $streams->registerState(self::STATE_HEDGE_STRIKE_SUM_PREFIX . $d, $carried + $forward($d + 1));
+        $ladder = FirmEconomics::rollHedgeLadder($sums, $forward);
+        foreach ($ladder['sums'] as $d => $sum) {
+            $streams->registerState(self::STATE_HEDGE_STRIKE_SUM_PREFIX . $d, $sum);
         }
 
-        return $deliveredStrike;
+        return $ladder['strike'];
     }
 
     /** Producers anchor to book (replacement cost of reserves and plant) at trough earnings and to mid-cycle earnings otherwise. */
