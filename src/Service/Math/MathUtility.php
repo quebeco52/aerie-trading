@@ -400,10 +400,13 @@ class MathUtility
         } else {
             // Exponential approximation
             $p = ($psi - 1) / ($psi + 1);
-            $beta = (1 - $p) / $m;
             $U = $varianceShock !== null ? Distributions::calculateNormalCDF($varianceShock) : $this->generateUniform();
 
-            if ($U > $p) {
+            // A state at zero over a zero step has a zero mean and nowhere to go; the draw is still taken.
+            if ($m <= 0.0) {
+                $nextVar = 0.0;
+            } elseif ($U > $p) {
+                $beta = (1 - $p) / $m;
                 // Prevent log(0) if U is extremely close to 1
                 $U = min($U, 0.9999999);
                 $nextVar = (1 / $beta) * log((1 - $p) / (1 - $U));

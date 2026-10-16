@@ -597,6 +597,15 @@ class MathUtilityTest extends TestCase
         );
         $this->assertGreaterThanOrEqual(0.0000001, $nextVarExp);
         $this->assertTrue(is_finite($nextVarExp));
+
+        // A state at zero over a zero step stays at the failsafe floor, still taking its draw.
+        mt_srand(41);
+        $atZero = $this->mathUtility->calculateQEVarianceStep(currentVar: 0.0, theta: 0.04, kappa: 6.0, sigma: 0.3, dt: 0.0);
+        $afterStep = mt_rand();
+        mt_srand(41);
+        $this->mathUtility->generateUniform();
+        $this->assertSame(0.0000001, $atZero);
+        $this->assertSame(mt_rand(), $afterStep, 'the degenerate step consumes the same draw as any other');
     }
 
     public function testCalculateSVJJJumps(): void
