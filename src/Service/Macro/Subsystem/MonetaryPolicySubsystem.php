@@ -770,8 +770,11 @@ class MonetaryPolicySubsystem
         $state->termPremium10y = $yieldData['term_premium_10y'];
         $state->riskNeutral10y = $yieldData['risk_neutral_10y'];
 
-        $state->nsSlope = $state->yield10y - $state->policyRate;
-        $state->structuralSlope = $yieldData['structural_10y'] - $state->policyRate;
+        // The slope against the short rate the market expects, as the curve itself is built on: a rounded decision
+        // would step the slope, and the inversion clock with it, on meeting days.
+        $shortRate = self::marketShortRate($state);
+        $state->nsSlope = $state->yield10y - $shortRate;
+        $state->structuralSlope = $yieldData['structural_10y'] - $shortRate;
 
         if ($state->structuralSlope < 0.0) {
             $state->inversionDuration += $dt;
@@ -897,14 +900,14 @@ class MonetaryPolicySubsystem
      * Estrella & Mishkin (1998) / Wright (2006) 12-Month Forward Recession Probit Model.
      *
      * Evaluates market-implied probability of recession over the next 12 months using the sovereign
-     * yield curve slope (10Y minus policy rate), term premium, and Financial Conditions Index:
+     * yield curve slope (10Y minus the market's short rate), term premium, and Financial Conditions Index:
      *   P(Recession) = NormalCDF(beta0 + betaSlope * slope + betaTp * termPremium + betaFci * FCI)
      *
      * @param MacroState $state Current macroeconomic state.
      */
     public function calculateRecessionProbability(MacroState $state): void
     {
-        $slope = $state->yield10y - $state->policyRate;
+        $slope = $state->yield10y - self::marketShortRate($state);
         $state->recessionProbability = CreditRisk::calculateEstrellaMishkinProbability(
             slope: $slope,
             termPremium: $state->termPremium10y,
@@ -935,9 +938,8 @@ class MonetaryPolicySubsystem
         $purchasesFlow = ($state->authorityHoldingsToGdpEma - $priorHoldings) / $dt;
 
         $state->moneySupplyGrowth = MacroTransmission::broadMoneyGrowth(
-            nominalIncomeGrowth: $state->inflationEma + $tfpGrowthRate + $state->laborForceGrowthRate,
+            nominalIncomeGrowth: $state->inflationEma + $tfpGrowthRate + $state->laborForceGrowthRate + $state->cyclicalMigrationRate,
             householdNewBorrowing: $state->householdNewBorrowing,
-            householdDebtToIncome: $state->householdDebtToIncome,
             authorityPurchasesToGdp: $purchasesFlow,
             broadMoneyToGdp: self::BROAD_MONEY_TO_GDP,
         );

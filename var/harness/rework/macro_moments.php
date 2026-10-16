@@ -32,13 +32,30 @@ $fields = ['outputGap', 'unemploymentRate', 'inflation', 'supercoreInflation', '
     'tradeBalanceToGdp', 'netExportGap', 'netTaxRate', 'sahmRecessionIndicator', 'recessionDeclared', 'lastCreditCrisisAt',
     'potentialGdpIndex', 'debtTarget', 'policySurprise', 'freightRateIndex', 'freightRateIndexDecadeTrend',
     'supplierDeliveryTimes', 'supplyChainPressureIndex', 'dealActivityIndexEma', 'dealActivityIndexTrend', 'financeOutputGap',
-    'excessBondPremiumTrend', 'creditCrisisDrag', 'macroCreditSpread', 'householdDebtToIncome', 'householdNewBorrowing', 'foreignOutputGap', 'exchangeRateIndex', 'exchangeRateTrend'];
+    'excessBondPremiumTrend', 'creditCrisisDrag', 'macroCreditSpread', 'householdDebtToIncome', 'householdNewBorrowing', 'foreignOutputGap', 'exchangeRateIndex', 'exchangeRateTrend',
+    'sloosTighteningIndex', 'recessionProbability', 'inversionDuration', 'tipsBreakeven'];
 $series = array_fill_keys($fields, []);
 $nominal = 1.0;
+// Tick-level FX moves split by rate-meeting ticks (8 a year): sum |dlog FX|, count, and policy-rate changes per class.
+$fx = ['meet' => [0.0, 0, 0], 'other' => [0.0, 0, 0], 'meetQ' => [0.0, 0, 0], 'meetMid' => [0.0, 0, 0], 'qturn' => [0.0, 0, 0]];
+$prevFx = null; $prevRate = null;
 for ($i = 1; $i <= (int) $years * $tpy; ++$i) {
     $cap = $fund ? SovereignFundSubsystem::BOARD_OPENING_CAP_USD * $nominal : null;
     $macro = $engine->updateMacroState(1.0 / $tpy, equityMarketCap: $cap, boardFloatCap: $cap === null ? null : 0.8 * $cap, policy: $policy);
     $nominal = $macro->nominalGdpIndex;
+    $k = \App\Service\Math\TimeSeries::crossedSimulatedBoundary($macro->totalTime, 1.0 / $tpy, 1.0 / 8) ? 'meet' : 'other';
+    if ($prevFx !== null && $prevFx > 0 && $macro->exchangeRateIndex > 0) {
+        // Mainland quarter turn: AssetMarketSubsystem::quarterCount (private) changes this tick.
+        $qt = (int) floor($macro->totalTime * 4 + 1e-9) !== (int) floor(($macro->totalTime - 1.0 / $tpy) * 4 + 1e-9);
+        $ks = [$k];
+        if ($k === 'meet') { $ks[] = $qt ? 'meetQ' : 'meetMid'; }
+        if ($qt) { $ks[] = 'qturn'; }
+        foreach ($ks as $kk) {
+            $fx[$kk][0] += abs(log($macro->exchangeRateIndex / $prevFx)); ++$fx[$kk][1];
+            $fx[$kk][2] += abs($macro->policyRate - $prevRate) > 1e-12 ? 1 : 0;
+        }
+    }
+    $prevFx = $macro->exchangeRateIndex; $prevRate = $macro->policyRate;
     $policy = $politics->updatePolitics($macro, 1.0 / $tpy)->policy();
     if ($i % ($tpy / 4) === 0) {
         foreach ($fields as $f) {
@@ -47,4 +64,4 @@ for ($i = 1; $i <= (int) $years * $tpy; ++$i) {
         }
     }
 }
-file_put_contents($out, json_encode(['seed' => $seed, 'fund' => $fund] + $series) . "\n");
+file_put_contents($out, json_encode(['seed' => $seed, 'fund' => $fund, 'fxTicks' => $fx] + $series) . "\n");

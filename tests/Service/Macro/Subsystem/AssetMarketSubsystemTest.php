@@ -7,6 +7,7 @@ use App\Service\Macro\MacroEngine;
 use App\Service\Macro\MacroState;
 use App\Service\Macro\Subsystem\AssetMarketSubsystem;
 use App\Service\Macro\Subsystem\MacroAggregateSubsystem;
+use App\Service\Macro\Subsystem\MonetaryPolicySubsystem;
 use App\Service\Math\MathUtility;
 use App\Service\Math\TimeSeries;
 use PHPUnit\Framework\TestCase;
@@ -884,13 +885,13 @@ class AssetMarketSubsystemTest extends TestCase
     public function testTheCurrencyJumpsWithItsFundamentalAndOnlyItsDeviationDecays(): void
     {
         $state = new MacroState();
-        $state->policyRate = MacroEngine::MAINLAND_NEUTRAL_RATE;
+        $state->policyRate = $state->policyRateShadow = MacroEngine::MAINLAND_NEUTRAL_RATE;
         $state->foreignPolicyRate = MacroEngine::MAINLAND_NEUTRAL_RATE;
         $state->exchangeRateDeviation = 1.0;
         $this->subsystem->calculateExchangeRate($state, 0.001);
         $before = $state->exchangeRateIndex;
 
-        $state->policyRate += 0.01;
+        $state->policyRateShadow += 0.01;
         $this->subsystem->calculateExchangeRate($state, 0.001);
         $this->assertEqualsWithDelta(exp(AssetMarketSubsystem::UIP_SENSITIVITY * 0.01), $state->exchangeRateIndex / $before, 1e-4, 'A point of rate differential is 3% on the currency within the tick.');
         $this->assertEqualsWithDelta(AssetMarketSubsystem::exchangeRateFundamental($state) * $state->exchangeRateDeviation, $state->exchangeRateIndex, 1e-9);
@@ -902,6 +903,25 @@ class AssetMarketSubsystemTest extends TestCase
         // The log mean that leaves the level averaging one: -sigma^2 / 4 kappa.
         $itoMean = -(AssetMarketSubsystem::exchangeRateDeviationVolatility() ** 2) / (4.0 * AssetMarketSubsystem::EXCHANGE_RATE_MEAN_REVERSION);
         $this->assertEqualsWithDelta((log(1.10) * $decay) + ($itoMean * (1.0 - $decay)), log($state->exchangeRateDeviation), 1e-12);
+    }
+
+    /** Parity reads the short rate the market expects: a meeting that rounds it to the step everyone saw coming moves neither the currency nor the slope. */
+    public function testAnExpectedDecisionMovesNeitherTheCurrencyNorTheSlope(): void
+    {
+        $before = new MacroState();
+        $before->policyRate = 0.03;
+        $before->policyRateShadow = 0.0324;
+        $decided = clone $before;
+        $decided->policyRate = 0.0325;
+
+        $this->assertSame(AssetMarketSubsystem::exchangeRateFundamental($before), AssetMarketSubsystem::exchangeRateFundamental($decided));
+
+        $monetary = new MonetaryPolicySubsystem(new MathUtility());
+        foreach ([$before, $decided] as $state) {
+            $monetary->applyYieldCurve($state, $monetary->calculateYieldCurve($state, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE), 0.01);
+        }
+        $this->assertSame($before->nsSlope, $decided->nsSlope);
+        $this->assertSame($before->structuralSlope, $decided->structuralSlope);
     }
 
     /**
@@ -945,7 +965,7 @@ class AssetMarketSubsystemTest extends TestCase
     {
         $neutral = $this->settledFx();
         $foreignHikes = $this->settledFx(['foreignPolicyRate' => MacroEngine::MAINLAND_NEUTRAL_RATE + 0.02]);
-        $districtHikes = $this->settledFx(['policyRate' => MacroEngine::MAINLAND_NEUTRAL_RATE + 0.02]);
+        $districtHikes = $this->settledFx(['policyRate' => MacroEngine::MAINLAND_NEUTRAL_RATE + 0.02, 'policyRateShadow' => MacroEngine::MAINLAND_NEUTRAL_RATE + 0.02]);
 
         $this->assertLessThan($neutral, $foreignHikes, 'A foreign hiking cycle sells the district\'s currency.');
         $this->assertGreaterThan($neutral, $districtHikes, 'A district hiking cycle with the bloc on hold buys it.');

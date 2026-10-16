@@ -8,5 +8,11 @@
 - Old arm: `git worktree add --detach var/harness/rework/old_tree <commit>`; `cp -a vendor var/harness/rework/old_tree/`;
   `cp var/harness/rework/macro_moments.php var/harness/rework/old_tree/var/harness/rework/` (untracked files are not in
   the worktree). Remove with `git worktree remove --force var/harness/rework/old_tree`.
+- `macro_moments.php` also records sloosTighteningIndex, recessionProbability, inversionDuration, tipsBreakeven and
+  `fxTicks` (sum |dlog FX|, tick count, rate-change count on rate-meeting ticks vs other ticks).
+- Macro-review step 1 (2026-10-16): `run_step1.sh` arms `s1new`/`s1newfund` (this worktree) and `s1base`/`s1basefund`
+  (a clean export of HEAD at BASE, default /tmp/claude-1000/base, with vendor and macro_moments.php copied in; no
+  worktree needed). `bin/harness-batch var/harness/rework/run_step1.sh 1-4 s1base s1new s1basefund s1newfund`, then
+  `python3 var/harness/rework/analyse_step1.py var/harness/rework/runs` (paired table, |t|>2 flagged).
 
 Evidence: `rework_evidence.md`.

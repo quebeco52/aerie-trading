@@ -1684,8 +1684,12 @@ class CreditFiscalSubsystemTest extends TestCase
 
         $calm = new MacroState();
         $subsystem->calculateSloosCreditStandards($calm, 0.25);
-        $target = CreditFiscalSubsystem::SLOOS_PREMIUM_SENSITIVITY * CreditFiscalSubsystem::SLOOS_CAPITAL_SHORTFALL_PREMIUM_EQUIVALENT * 0.01;
-        $this->assertEqualsWithDelta(0.30, $target, 0.005, 'A point short pulls standards toward ~30 points of net tightening.');
+        $premium = new MacroState();
+        $premium->excessBondPremium = MacroAggregateSubsystem::CAPITAL_SHORTFALL_PREMIUM_EQUIVALENT * 0.01;
+        $subsystem->calculateSloosCreditStandards($premium, 0.25);
+        $this->assertEqualsWithDelta($premium->sloosTighteningIndex, $short->sloosTighteningIndex, 1e-12, 'A point short tightens standards as the premium the demand drag reads it as does.');
+        $target = CreditFiscalSubsystem::SLOOS_PREMIUM_SENSITIVITY * MacroAggregateSubsystem::CAPITAL_SHORTFALL_PREMIUM_EQUIVALENT * 0.01;
+        $this->assertEqualsWithDelta(0.076, $target, 0.001, 'A point short pulls standards toward ~8 points of net tightening.');
         $this->assertEqualsWithDelta($target * CreditFiscalSubsystem::SLOOS_KAPPA * 0.25, $short->sloosTighteningIndex - $calm->sloosTighteningIndex, 1e-9);
 
         $cut = new MacroState();

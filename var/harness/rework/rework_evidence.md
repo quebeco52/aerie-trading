@@ -79,3 +79,82 @@ The curve read the decided rate, so an expected 25bp step moved the 2y ~13bp on 
 day mean |Δ2y| 16.3bp against 10.2bp between). On the unrounded view (marketShortRate): 0.07 per bp, meeting days
 10.4bp like any other. Surprises are rounding flips only (2 in 60 years). 4 seeds paired: no moment moves (|t| ≤ 1;
 gap sd 2.35 → 2.44, rate dq sd 30.5 → 31.3bp).
+
+## Macro-review step 1 (2026-10-16): defect fixes vs HEAD 48cbb959, 4 seeds x 100y, TPY 48
+
+Question: do the SLOOS shortfall weight (0.87 -> 0.22), shadow-rate reads (FX, slopes, probit), broad-money credit
+term and migration in nominal income behave sensibly? Harness: macro_moments.php (+ SLOOS, recession probability,
+inversion duration, breakeven, meeting-tick FX), run_step1.sh, analyse_step1.py. Base = clean HEAD export.
+No-fund arms pass no equity cap (equity-wealth loop off). Seeds 1-4, 10y burn-in.
+
+```
+s1base vs s1new, n=4 seeds (paired), quarterly after 10y burn-in
+moment                      s1base     s1new     delta       se      t
+gap mean %                  -0.904    -0.852     0.051    0.087    0.6
+gap sd %                     2.443     2.355    -0.088    0.120   -0.7
+unemp sd %                   1.566     1.498    -0.068    0.078   -0.9
+infl mean %                  2.085     2.065    -0.020    0.029   -0.7
+infl sd %                    1.126     1.182     0.056    0.046    1.2
+rate dq sd bp               31.248    29.270    -1.978    2.179   -0.9
+recession share %           14.375    12.639    -1.736    1.527   -1.1
+crises /100y                 5.000     4.444    -0.556    0.556   -1.0
+debt mean %                 48.404    48.273    -0.131    0.793   -0.2
+SLOOS mean                   0.097     0.048    -0.049    0.002  -19.6 *
+SLOOS p95                    0.358     0.265    -0.094    0.017   -5.5 *
+SLOOS max                    0.510     0.461    -0.049    0.020   -2.5 *
+SLOOS at cap %               0.000     0.000     0.000    0.000    0.0
+M2 g mean %                  4.272     4.216    -0.055    0.088   -0.6
+M2 g sd %                    3.063     2.794    -0.269    0.076   -3.6 *
+corr(M2 g, HH borrow)        0.675     0.643    -0.032    0.017   -1.9
+rec prob mean %             18.336    17.050    -1.287    1.217   -1.1
+rec prob sd %               21.141    18.609    -2.532    2.421   -1.0
+inv alarms /100y             7.222     6.389    -0.833    1.145   -0.7
+FX dlog q sd %               2.775     2.782     0.007    0.013    0.5
+FX min                      77.069    75.179    -1.890    2.025   -0.9
+FX max                     120.448   121.046     0.598    0.541    1.1
+|dFX| meet bp               94.285    82.592   -11.693    1.863   -6.3 *
+|dFX| other bp              44.181    44.458     0.276    0.098    2.8 *
+breakeven mean %             2.036     2.031    -0.004    0.007   -0.6
+breakeven sd %               0.109     0.107    -0.002    0.002   -0.9
+max |gap| %                  8.670     8.558    -0.113    0.168   -0.7
+
+s1basefund vs s1newfund, n=4 seeds (paired), quarterly after 10y burn-in
+moment                  s1basefund s1newfund     delta       se      t
+gap mean %                  -0.658    -0.454     0.204    0.205    1.0
+gap sd %                     2.535     2.331    -0.204    0.183   -1.1
+unemp sd %                   1.657     1.459    -0.198    0.182   -1.1
+infl mean %                  2.113     2.102    -0.011    0.009   -1.2
+infl sd %                    1.007     1.033     0.027    0.024    1.1
+rate dq sd bp               29.665    29.163    -0.502    0.302   -1.7
+recession share %           11.528    10.556    -0.972    0.939   -1.0
+crises /100y                 3.056     2.778    -0.278    0.278   -1.0
+debt mean %                 43.454    42.655    -0.799    0.946   -0.8
+SLOOS mean                   0.100     0.049    -0.050    0.004  -13.7 *
+SLOOS p95                    0.377     0.272    -0.106    0.033   -3.2 *
+SLOOS max                    0.634     0.526    -0.108    0.035   -3.1 *
+SLOOS at cap %               0.000     0.000     0.000    0.000    0.0
+M2 g mean %                  4.653     4.747     0.094    0.181    0.5
+M2 g sd %                    3.717     3.362    -0.355    0.212   -1.7
+corr(M2 g, HH borrow)        0.735     0.717    -0.018    0.024   -0.7
+rec prob mean %             19.031    17.838    -1.194    0.316   -3.8 *
+rec prob sd %               21.687    20.007    -1.680    0.311   -5.4 *
+inv alarms /100y             6.389     6.111    -0.278    1.145   -0.2
+FX dlog q sd %               2.780     2.805     0.025    0.048    0.5
+FX min                      73.963    73.546    -0.417    0.228   -1.8
+FX max                     120.535   120.133    -0.402    0.903   -0.4
+|dFX| meet bp               93.341    84.600    -8.741    0.591  -14.8 *
+|dFX| other bp              43.840    44.232     0.392    0.182    2.2 *
+breakeven mean %             2.049     2.047    -0.002    0.005   -0.5
+breakeven sd %               0.104     0.106     0.002    0.002    1.2
+max |gap| %                  7.570     7.323    -0.247    0.214   -1.2
+```
+
+Caveats: n=4 (sensible-behaviour check). Headline moments all |t|<2. SLOOS mean falls 0.05 in every arm and seed
+(t -14 to -20): the shortfall term is active in most quarters, not only rare ones. FX on meeting ticks still moves
+~1.9x other ticks after the fix (94 -> 83 bp vs 44 bp).
+
+FX follow-up (same day, no-fund arms re-run, identical moments): meeting ticks split by mainland quarter turn
+(quarterCount changes that tick; every quarter turn is a meeting tick at TPY 48). Mean |dlog FX| bp, n=4:
+base / new / delta (se): meeting+quarter turn 127.5 / 120.1 / -7.4 (2.8); mid-quarter meeting 61.1 / 45.1 /
+-16.0 (1.6); all quarter turns 127.5 / 120.1; other ticks 44.2 / 44.5. The fix removes the mid-quarter meeting
+step; the remaining excess is at the mainland quarter step. Table: step1_fx.out.

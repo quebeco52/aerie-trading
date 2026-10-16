@@ -364,7 +364,7 @@ class MergerAndAcquisitionEngine
             $ctx->strategy->getFadedSecularGrowthRate($stock, $ctx->macroState->totalTime),
             $ctx->macroState->outputGap,
             $ctx->health->leveredBeta,
-            $ctx->macroState->inflation,
+            $ctx->macroState->tipsBreakeven,
             \App\Data\Company\Sectors::baselineIndustryPe($stock->getIndustry()),
             (float) ($stock->getAccrualsRatio() ?? 0.0),
             $stock->getPolicyPayoutRatio()

@@ -394,8 +394,8 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
                 $events = $result['events'];
 
                 $benchmarkFund = $indexFunds[MarketIndex::benchmark()->value] ?? null;
-                if ($benchmarkFund !== null && ($headline = $this->systemicEvents->report($macroState, $politics, $benchmarkFund)) !== null) {
-                    $events[] = $headline;
+                if ($benchmarkFund !== null) {
+                    $events = array_merge($events, $this->systemicEvents->report($macroState, $politics, $benchmarkFund));
                 }
                 $this->electionRecorder->record($politics);
                 $this->politicsHistory->record($politics);

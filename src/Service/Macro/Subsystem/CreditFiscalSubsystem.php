@@ -231,8 +231,6 @@ class CreditFiscalSubsystem
     public const SECURED_LENDING_CUT_PER_CAPITAL_RISE = 0.94;
     /** Unsecured household lending cut per unit rise: 0.68pp of year-one loan growth per 1pp, the same table's point estimate (68% interval -1.43 to 0.03). */
     public const UNSECURED_LENDING_CUT_PER_CAPITAL_RISE = 0.68;
-    /** How capital not yet built reads to lending standards, as excess bond premium per unit of shortfall: fitted so a 1pp rise phased in over four years leaves output 0.17% below baseline at 18 quarters, the median of the MAG's (2010, Interim Report pp. 21-22) models that read lending standards and let monetary policy respond. */
-    public const SLOOS_CAPITAL_SHORTFALL_PREMIUM_EQUIVALENT = 0.87;
 
     // --- Mortgage Loan-to-Value Cap (Iacoviello 2005 collateral constraint; Richter, Schularick & Shim 2019) ---
     /** Combined LTV bin edges of US home-purchase loans at origination (FHFA National Mortgage Database aggregate statistics); the top bin ends at 102% (a VA loan at 100% plus its funding fee) and the bottom one starts where the bins' mean is NMDB's 82.2%. */
@@ -1121,8 +1119,9 @@ class CreditFiscalSubsystem
     public function calculateSloosCreditStandards(MacroState $state, float $dt): void
     {
         // Macroeconomic Assessment Group (2010): banks building to a raised requirement or buffer ration credit through
-        // their standards until the capital is built; capital already held rations nothing, and a cut eases nothing.
-        $capitalTightening = self::SLOOS_CAPITAL_SHORTFALL_PREMIUM_EQUIVALENT * self::capitalShortfall($state);
+        // their standards until the capital is built, at the premium the shortfall is worth to the demand drag;
+        // capital already held rations nothing, and a cut eases nothing.
+        $capitalTightening = MacroAggregateSubsystem::CAPITAL_SHORTFALL_PREMIUM_EQUIVALENT * self::capitalShortfall($state);
         $dW = $this->mathUtility->generateStandardNormal();
 
         $state->sloosTighteningIndex = CreditRisk::calculateSloosCreditStandards(
