@@ -74,6 +74,32 @@ class TradeOrderRepository extends ServiceEntityRepository
     }
 
     /**
+     * The live price of each asset an account has an order resting against, by ticker, so each order shows what it is
+     * waiting on.
+     *
+     * @return array<string, float>
+     */
+    public function livePricesForOpenOrders(User $user): array
+    {
+        $prices = [];
+        foreach ($this->getEntityManager()->getConnection()->fetchAllAssociative(
+            "SELECT DISTINCT o.ticker, COALESCE(s.price, e.price, b.price) AS price
+             FROM trade_orders o
+             LEFT JOIN stocks s ON s.ticker = o.ticker AND o.asset_type = 'STOCK'
+             LEFT JOIN etfs   e ON e.ticker = o.ticker AND o.asset_type = 'ETF'
+             LEFT JOIN bonds  b ON b.ticker = o.ticker AND o.asset_type = 'BOND'
+             WHERE o.user_id = :user_id AND o.status = 'OPEN'",
+            ['user_id' => $user->getId()],
+        ) as $row) {
+            if ($row['price'] !== null) {
+                $prices[(string) $row['ticker']] = (float) $row['price'];
+            }
+        }
+
+        return $prices;
+    }
+
+    /**
      * Orders still resting on the book for one of an account's positions, newest first.
      *
      * @return list<TradeOrder>

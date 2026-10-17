@@ -123,7 +123,7 @@ class ShortPositionAccountingTest extends TestCase
         $sources = [
             'src/Service/User/Portfolio.php',
             'src/Controller/LeaderboardController.php',
-            'src/Controller/DashboardController.php',
+            'src/Service/View/DashboardPageBuilder.php',
         ];
 
         foreach ($sources as $source) {

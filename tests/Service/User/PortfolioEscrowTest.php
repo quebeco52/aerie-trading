@@ -25,15 +25,15 @@ final class PortfolioEscrowTest extends TestCase
     private const NAV_SOURCES = [
         'src/Service/User/Portfolio.php',
         'src/Controller/LeaderboardController.php',
-        'src/Controller/DashboardController.php',
+        'src/Service/View/DashboardPageBuilder.php',
     ];
 
     /**
      * Where each net-worth surface proves it values bond holdings.
      *
-     * The snapshot and leaderboard queries are raw SQL against user_bonds. The dashboard no longer
-     * writes that query itself — it reads holdings through App\Repository\HoldingRepository — so its
-     * evidence is the call it makes, and the repository is checked separately below.
+     * The snapshot and leaderboard queries are raw SQL against user_bonds. The dashboard's headline is the shared
+     * statement and its positions come through App\Repository\HoldingRepository, so its evidence is the call it
+     * makes, and the repository is checked separately below.
      *
      * @var array<string, string>
      */
@@ -41,7 +41,7 @@ final class PortfolioEscrowTest extends TestCase
         'src/Service/User/Portfolio.php' => '/user_bonds|UserBond/',
         // Ranks on Portfolio::NET_WORTH_SQL, which testTheSharedNetWorthStatementIsComplete() checks.
         'src/Controller/LeaderboardController.php' => '/Portfolio::NET_WORTH_SQL/',
-        'src/Controller/DashboardController.php' => '/findBondHoldings\(/',
+        'src/Service/View/DashboardPageBuilder.php' => '/findBondHoldings\(/',
     ];
 
     private function read(string $relativePath): string
@@ -164,6 +164,21 @@ final class PortfolioEscrowTest extends TestCase
         $this->assertStringContainsString(Portfolio::OPEN_ORDER_ESCROW_SQL, $sql, 'Net worth must include the open book.');
     }
 
+    /**
+     * The dashboard's headline, the snapshot after each trade and every ranking are one statement: the dashboard and
+     * the per-trade snapshot read Portfolio::netWorthOf(), which filters NET_WORTH_SQL to the account.
+     */
+    public function testTheDashboardAndEachTradeReadTheSharedStatement(): void
+    {
+        $portfolio = $this->read('src/Service/User/Portfolio.php');
+        $this->assertStringContainsString("'SELECT one.* FROM (' . self::NET_WORTH_SQL . ') one WHERE one.user_id = :user_id'", $portfolio);
+        $this->assertMatchesRegularExpression('/function recordUserSnapshot\(.*?\$this->netWorthOf\(/s', $portfolio);
+
+        $dashboard = $this->read('src/Service/View/DashboardPageBuilder.php');
+        $this->assertStringContainsString('$netWorth = $this->portfolio->netWorthOf($userId);', $dashboard);
+        $this->assertStringContainsString("\$portfolioValue = \$netWorth['total_value'];", $dashboard);
+    }
+
     /** The shared-SQL callers use the one statement rather than each writing their own join. */
     public function testSharedQueriesUseTheOneFragment(): void
     {
@@ -180,10 +195,9 @@ final class PortfolioEscrowTest extends TestCase
     }
 
     /**
-     * Both snapshot paths carry it — the bulk sweep and the single-user one written after every trade.
-     *
-     * The two are allowed to differ in shape (the per-user path filters rather than grouping over the whole
-     * roster, since it runs on every trade), but neither may omit the open book.
+     * Both snapshot paths carry it — the bulk sweep and the single-user one written after every trade. The
+     * single-user one filters the shared statement to its account (Portfolio::netWorthOf()), so neither may omit the
+     * open book.
      */
     public function testBothSnapshotPathsCarryEscrow(): void
     {
@@ -198,7 +212,7 @@ final class PortfolioEscrowTest extends TestCase
 
             // Either by joining the shared fragment or by inlining the same aggregate.
             $this->assertMatchesRegularExpression(
-                "/OPEN_ORDER_ESCROW_SQL|NET_WORTH_SQL|trade_orders/",
+                "/OPEN_ORDER_ESCROW_SQL|NET_WORTH_SQL|netWorthOf\(|trade_orders/",
                 $body,
                 "{$method}() must value the open order book.",
             );
@@ -231,9 +245,14 @@ final class PortfolioEscrowTest extends TestCase
 
         $this->assertGreaterThanOrEqual(2, $checked, 'The buy-side valuations have moved; this guard is no longer reaching them.');
         $this->assertStringContainsString(
-            'Portfolio::OPEN_ORDER_ESCROW_DETAIL_SQL',
-            $this->read('src/Controller/DashboardController.php'),
+            '$this->portfolio->openOrderEscrow(',
+            $this->read('src/Service/View/DashboardPageBuilder.php'),
             'The dashboard values the open book on the same definition as net worth.',
+        );
+        $this->assertStringContainsString(
+            "self::OPEN_ORDER_ESCROW_DETAIL_SQL . ') d WHERE d.user_id = :user_id'",
+            $this->read('src/Service/User/Portfolio.php'),
+            'Portfolio::openOrderEscrow() reads the shared fragment.',
         );
     }
 

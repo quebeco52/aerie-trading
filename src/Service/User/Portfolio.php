@@ -52,21 +52,6 @@ class Portfolio
     ";
 
     /**
-     * Per-user option market value, signed.
-     *
-     * One contract is a hundred shares, so the premium has to be multiplied out before it means anything in
-     * currency. The sign on the quantity does the rest of the work: a written contract is a negative asset,
-     * which is exactly what a liability is, so a book that is short more premium than it is long correctly
-     * reduces net worth.
-     */
-    public const OPTION_VALUE_SQL = "
-        SELECT uo.user_id, SUM(uo.quantity * oc.price * " . FinancialConstants::OPTION_CONTRACT_MULTIPLIER . ") AS option_val
-        FROM user_options uo
-        JOIN option_contracts oc ON uo.option_contract_id = oc.id
-        GROUP BY uo.user_id
-    ";
-
-    /**
      * The same book as one number, for the surfaces that only need net worth.
      *
      * Built from the detail fragment rather than written out again: the margin sweep needs the two legs
@@ -80,42 +65,31 @@ class Portfolio
 
     /**
      * Every account's net worth with its parts: cash less margin debt, plus stocks, funds, bonds and options at the
-     * live price, plus value sitting in open orders. The one statement behind the leaderboard, the weekly snapshot
-     * and the season record, so the three cannot rank on different definitions.
+     * live price, plus value sitting in open orders. The one statement behind the leaderboard, the weekly snapshot,
+     * the season record, the snapshot after each trade and the dashboard, so none of them can rank or show a
+     * different definition. Each part is summed for its own account, so netWorthOf() filtering it to one account
+     * reads only that account's rows.
+     *
+     * A short's quantity is negative, and so is a written option's, so one SUM marks both sides: a written contract
+     * is a liability, and a book short more premium than it holds is worth less. A contract is a hundred shares.
      */
     public const NET_WORTH_SQL = "
-        SELECT u.id AS user_id,
-               COALESCE(u.username, 'Anonymous Trader') AS username,
-               u.cash_balance,
-               u.margin_debit,
-               COALESCE(stock_totals.stock_val, 0) AS stock_value,
-               COALESCE(etf_totals.etf_val, 0) AS etf_value,
-               COALESCE(bond_totals.bond_val, 0) AS bond_value,
-               COALESCE(option_totals.option_val, 0) AS option_value,
-               COALESCE(escrow.escrow_val, 0) AS escrow_value,
-               (u.cash_balance - u.margin_debit + COALESCE(stock_totals.stock_val, 0) + COALESCE(etf_totals.etf_val, 0) + COALESCE(bond_totals.bond_val, 0) + COALESCE(option_totals.option_val, 0) + COALESCE(escrow.escrow_val, 0)) AS total_value
-        FROM users u
-        LEFT JOIN (
-            -- A short's quantity is negative, so this one SUM marks longs and shorts alike.
-            SELECT us.user_id, SUM(us.quantity * s.price) AS stock_val
-            FROM user_stocks us
-            JOIN stocks s ON us.stock_id = s.id
-            GROUP BY us.user_id
-        ) stock_totals ON stock_totals.user_id = u.id
-        LEFT JOIN (
-            SELECT ue.user_id, SUM(ue.quantity * e.price) AS etf_val
-            FROM user_etfs ue
-            JOIN etfs e ON ue.etf_id = e.id
-            GROUP BY ue.user_id
-        ) etf_totals ON etf_totals.user_id = u.id
-        LEFT JOIN (
-            SELECT ub.user_id, SUM(ub.quantity * b.price) AS bond_val
-            FROM user_bonds ub
-            JOIN bonds b ON ub.bond_id = b.id
-            GROUP BY ub.user_id
-        ) bond_totals ON bond_totals.user_id = u.id
-        LEFT JOIN (" . self::OPTION_VALUE_SQL . ") option_totals ON option_totals.user_id = u.id
-        LEFT JOIN (" . self::OPEN_ORDER_ESCROW_SQL . ") escrow ON escrow.user_id = u.id
+        SELECT nw.user_id, nw.username, nw.cash_balance, nw.margin_debit,
+               nw.stock_value, nw.etf_value, nw.bond_value, nw.option_value, nw.escrow_value,
+               (nw.net_cash + nw.stock_value + nw.etf_value + nw.bond_value + nw.option_value + nw.escrow_value) AS total_value
+        FROM (
+            SELECT u.id AS user_id,
+                   COALESCE(u.username, 'Anonymous Trader') AS username,
+                   u.cash_balance,
+                   u.margin_debit,
+                   u.cash_balance - u.margin_debit AS net_cash,
+                   COALESCE((SELECT SUM(us.quantity * s.price) FROM user_stocks us JOIN stocks s ON us.stock_id = s.id WHERE us.user_id = u.id), 0) AS stock_value,
+                   COALESCE((SELECT SUM(ue.quantity * e.price) FROM user_etfs ue JOIN etfs e ON ue.etf_id = e.id WHERE ue.user_id = u.id), 0) AS etf_value,
+                   COALESCE((SELECT SUM(ub.quantity * b.price) FROM user_bonds ub JOIN bonds b ON ub.bond_id = b.id WHERE ub.user_id = u.id), 0) AS bond_value,
+                   COALESCE((SELECT SUM(uo.quantity * oc.price * " . FinancialConstants::OPTION_CONTRACT_MULTIPLIER . ") FROM user_options uo JOIN option_contracts oc ON uo.option_contract_id = oc.id WHERE uo.user_id = u.id), 0) AS option_value,
+                   COALESCE((SELECT escrow.escrow_val FROM (" . self::OPEN_ORDER_ESCROW_SQL . ") escrow WHERE escrow.user_id = u.id), 0) AS escrow_value
+            FROM users u
+        ) nw
     ";
 
     public function __construct(
@@ -183,34 +157,50 @@ class Portfolio
     }
 
     /**
-     * Calculates and records an immediate snapshot for a single user.
-     * Best used immediately after a user executes a trade.
+     * One account's net worth with its parts, on the statement every ranking uses.
      *
-     * @param User $user The user entity whose portfolio snapshot should be recorded.
+     * @return array{cash_balance: float, margin_debit: float, stock_value: float, etf_value: float, bond_value: float, option_value: float, escrow_value: float, total_value: float}
+     */
+    public function netWorthOf(int $userId): array
+    {
+        $row = $this->entityManager->getConnection()->fetchAssociative(
+            'SELECT one.* FROM (' . self::NET_WORTH_SQL . ') one WHERE one.user_id = :user_id',
+            ['user_id' => $userId],
+        ) ?: [];
+
+        $parts = [];
+        foreach (['cash_balance', 'margin_debit', 'stock_value', 'etf_value', 'bond_value', 'option_value', 'escrow_value', 'total_value'] as $part) {
+            $parts[$part] = (float) ($row[$part] ?? 0.0);
+        }
+
+        return $parts;
+    }
+
+    /**
+     * What one account has working in open orders, on the definition net worth counts it at: the cash a resting buy
+     * has committed, and the shares a resting sell has taken out of the holdings, at their live price.
+     *
+     * @return array{cash: float, shares: float}
+     */
+    public function openOrderEscrow(int $userId): array
+    {
+        $row = $this->entityManager->getConnection()->fetchAssociative(
+            'SELECT d.escrow_cash, d.escrow_long FROM (' . self::OPEN_ORDER_ESCROW_DETAIL_SQL . ') d WHERE d.user_id = :user_id',
+            ['user_id' => $userId],
+        ) ?: [];
+
+        return ['cash' => (float) ($row['escrow_cash'] ?? 0.0), 'shares' => (float) ($row['escrow_long'] ?? 0.0)];
+    }
+
+    /**
+     * Records an immediate snapshot of one account, after a trade or a fresh start, on the same statement the weekly
+     * snapshot writes.
      */
     public function recordUserSnapshot(User $user): void
     {
-        $conn = $this->entityManager->getConnection();
-
-        // Single-user portfolio snapshot: aggregate held securities and active BUY/SELL order escrows.
-        $sql = "
-            SELECT (
-                COALESCE((SELECT SUM(us.quantity * s.price) FROM user_stocks us JOIN stocks s ON us.stock_id = s.id WHERE us.user_id = :user_id), 0) +
-                COALESCE((SELECT SUM(ue.quantity * e.price) FROM user_etfs ue JOIN etfs e ON ue.etf_id = e.id WHERE ue.user_id = :user_id), 0) +
-                COALESCE((SELECT SUM(ub.quantity * b.price) FROM user_bonds ub JOIN bonds b ON ub.bond_id = b.id WHERE ub.user_id = :user_id), 0) +
-                COALESCE((SELECT SUM(uo.quantity * oc.price * " . FinancialConstants::OPTION_CONTRACT_MULTIPLIER . ") FROM user_options uo JOIN option_contracts oc ON uo.option_contract_id = oc.id WHERE uo.user_id = :user_id), 0) +
-                COALESCE((SELECT escrow.escrow_val FROM (" . self::OPEN_ORDER_ESCROW_SQL . ") escrow WHERE escrow.user_id = :user_id), 0)
-            ) as total_val
-        ";
-
-        $stockValue = (float) $conn->fetchOne($sql, ['user_id' => $user->getId()]);
-
-        // Deduct margin debt; negative short quantities already mark obligation against cash.
-        $portfolioValue = (float) $user->getCashBalance() - (float) $user->getMarginDebit() + $stockValue;
-
         $history = new PortfolioHistory();
         $history->setUser($user);
-        $history->setTotalValue((string) $portfolioValue);
+        $history->setTotalValue((string) $this->netWorthOf((int) $user->getId())['total_value']);
         $history->setRecordedAt(new \DateTime());
 
         $this->entityManager->persist($history);
