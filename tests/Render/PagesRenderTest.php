@@ -188,7 +188,7 @@ final class PagesRenderTest extends KernelTestCase
                 ],
                 'userQuantity' => 0, 'userDividendIncome' => 0, 'marketCap' => 2.02e11, 'peRatio' => 13.76, 'dividendYield' => 0.031, 'strategicStake' => 0, 'macro' => ['sovereignFundOwnershipShare' => 0.23, 'stampDutyRate' => 0.001],
                 'analystTargets' => ['rating' => 'Outperform', 'upside_pct' => 8.4, 'consensus' => 91.3, 'growth_analyst' => 95.1, 'value_analyst' => 88.2, 'income_analyst' => 90.4],
-                'openOrders' => [], 'tradeHistory' => [], 'optionsListed' => false, 'optionExpiries' => [], 'lifecycleStage' => null, 'lifecycleStages' => [], 'financialSummary' => [], 'peers' => [], 'industry' => null, 'management' => null, 'anchorPortfolio' => null, 'netAssetValue' => null, 'capital' => null, 'credit' => null, 'ticksPerYear' => 14400, 'halfSpread' => 0.0004, 'advShares' => 3400000, 'borrowFee' => 0.01, 'availableToBorrow' => 1000000, 'shortUtilization' => 0.2,
+                'openOrders' => [], 'tradeHistory' => [], 'optionsListed' => false, 'optionExpiries' => [], 'lifecycleStage' => \App\Data\Company\LifecycleStage::Mature, 'lifecycleStages' => \App\Data\Company\LifecycleStage::cases(), 'financialSummary' => [], 'peers' => [], 'industry' => null, 'management' => null, 'anchorPortfolio' => null, 'netAssetValue' => null, 'capital' => null, 'credit' => null, 'ticksPerYear' => 14400, 'halfSpread' => 0.0004, 'advShares' => 3400000, 'borrowFee' => 0.01, 'availableToBorrow' => 1000000, 'shortUtilization' => 0.2,
                 'borrowWarnings' => ['expensiveFee' => 0.05, 'scarceUtilization' => 0.90, 'recallUtilization' => 0.97],
                 'shortInterest' => ['shares' => 21600000, 'floatShare' => 0.01125, 'daysToCover' => 6.35],
                 'nextReport' => ['dateline' => '14 Feb, Year 15', 'quarter' => 'Year 14 Q4'],
@@ -305,6 +305,17 @@ final class PagesRenderTest extends KernelTestCase
             $stack->pop();
             $this->assertFileExists(OfflinePage::write($name, $html));
         }
+
+        $request = Request::create('/stock/LAKE');
+        $request->setSession(new Session(new MockArraySessionStorage()));
+        $stack->push($request);
+        foreach (\App\Data\Company\LifecycleStage::cases() as $stage) {
+            $stockData = $pages['stock'][2];
+            $stockData['lifecycleStage'] = $stage;
+            $html = $twig->render('stock/index.html.twig', $stockData);
+            $this->assertStringContainsString($stage->label(), $html);
+        }
+        $stack->pop();
     }
 
     /** A newswire page from the presenter, so each card is the one the page renders live. */
