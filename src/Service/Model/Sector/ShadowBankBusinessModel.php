@@ -85,7 +85,7 @@ class ShadowBankBusinessModel extends CommercialBankBusinessModel
     public const MIN_EFFICIENCY_RATIO      = 0.45;
 
     // --- Private Credit & Corporate Default Physics ---
-    /** Expansion sensitivity of direct lending origination when commercial banks tighten credit standards (SLOOS). */
+    /** Direct lending per unit of net tightening by the banks, both ways: +0.2 adds 6% as turned-away borrowers come over. */
     public const SLOOS_PRIVATE_CREDIT_EXPANSION = 0.30;
     /** Lifetime-loss multiplier per unit of recession probability away from the base rate: a near-certain recession lifts the reserve target ~0.85x. */
     public const CECL_RESERVE_RECESSION_SENSITIVITY = 1.00;
@@ -273,7 +273,8 @@ class ShadowBankBusinessModel extends CommercialBankBusinessModel
         // 2. Direct Lending Origination Channel:
         // The loans' floating coupon is interest income on the book (calculateInterestIncome()); this stream is the
         // fees on new deals, which bank credit retreat (SLOOS tightening) and M2 liquidity send to private credit.
-        $sloosDirectLendingBoost = max(0.0, $macroState->sloosTighteningIndexEma) * self::SLOOS_PRIVATE_CREDIT_EXPANSION;
+        // Borrowers the banks turn away come to private credit, and go back when the banks ease.
+        $sloosDirectLendingBoost = $macroState->sloosTighteningIndexEma * self::SLOOS_PRIVATE_CREDIT_EXPANSION;
         $m2Shift = MacroTransmission::calculateBroadMoneyLiquidityShift($macroState->moneySupplyGrowthEma, $macroState->moneySupplyGrowthTrend, sensitivity: self::M2_SHADOW_LIQUIDITY_SENSITIVITY);
         $capitalTightness = max(0.0, $macroState->countercyclicalBufferRate) + ($macroState->bankCapitalRequirement - FinancialConstants::OPENING_BANK_CAPITAL_REQUIREMENT);
         $ccybArbitrageBoost = $capitalTightness * self::CAPITAL_ARBITRAGE_SENSITIVITY;

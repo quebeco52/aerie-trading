@@ -109,7 +109,7 @@ class SecurityProtectionBusinessModel extends StandardCorporateBusinessModel
     public const EXPEDITIONARY_VARIANCE_SCALAR = 0.60;
 
     // --- Macro Physics Constants ---
-    /** Cost-Plus Inflation Bonus: Government contracts guarantee profit margins on top of material/wage inflation. */
+    /** Cost-plus government revenue per point of inflation over what was expected, both ways: +1pp adds 1.2%. */
     public const COST_PLUS_BONUS_SCALAR = 1.20;
     /** Elasticity of government guarding volume to the state spending index (0.30 = a 10% budget lift adds 3% contracted posts). */
     public const APPROPRIATIONS_VOLUME_SCALAR = 0.30;
@@ -243,10 +243,7 @@ class SecurityProtectionBusinessModel extends StandardCorporateBusinessModel
         // Inflation running above target boosts revenue via cost-plus escalation, and state appropriations scale the baseline budget.
         // 2. Corporate Retainers -> Mild GDP Expansion (Corporate HQ footprint expansion)
         // 3. Expeditionary & Black-Ops -> VIX (Fear) & Credit Spreads (Geopolitical/Financial Stress)
-        $inflation = $macroState->inflationEma;
-        $costPlusBonus = $inflation > MacroEngine::TARGET_INFLATION
-            ? ($inflation - MacroEngine::TARGET_INFLATION) * self::COST_PLUS_BONUS_SCALAR
-            : 0.0;
+        $costPlusBonus = $macroState->inflationSurprise() * self::COST_PLUS_BONUS_SCALAR;
         $govSpendShift = ($macroState->governmentSpendingIndexEma - 100.0) / 100.0;
         $macroShifts = $this->resolveStreamMacroShifts($stock, $macroState);
 

@@ -356,11 +356,7 @@ class AssetManagementBusinessModel extends BaseFinancialBusinessModel
         $clientFlowShift = $this->resolveClientFlowShift($stock, $macroState, $aumBetaScalar);
         // Mark-to-market: fee revenue is a percentage of assets, so the equity market's level against its own
         // trend moves the base directly. A run with no reported market leaves both fields at zero and the term silent.
-        $marketLevelShift = 0.0;
-        if ($macroState->equityWealthTrend > 0.0) {
-            $marketLevelDeviation = ($macroState->equityWealthRatio / $macroState->equityWealthTrend) - 1.0;
-            $marketLevelShift = max(-self::AUM_MARKET_LEVEL_DEVIATION_CAP, min(self::AUM_MARKET_LEVEL_DEVIATION_CAP, $marketLevelDeviation)) * self::AUM_MARKET_LEVEL_BETA;
-        }
+        $marketLevelShift = max(-self::AUM_MARKET_LEVEL_DEVIATION_CAP, min(self::AUM_MARKET_LEVEL_DEVIATION_CAP, $macroState->equityWealthDeviation())) * self::AUM_MARKET_LEVEL_BETA;
 
         // 2. Asymmetric Performance Fees & Institutional Redemptions (Incentive Fee Stream):
         // Strong alpha quarters crystallize outsized performance fees / carried interest.

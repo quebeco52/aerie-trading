@@ -210,7 +210,6 @@ class ConglomerateBusinessModel extends StandardCorporateBusinessModel
             ModelParam::IndustrialConglomerateWeight->value => self::INDUSTRIAL_CONGLOMERATE_WEIGHT,
             ModelParam::DefensiveStaplesWeight->value       => self::DEFENSIVE_STAPLES_WEIGHT,
             ModelParam::ContrarianFloatWeight->value        => self::CONTRARIAN_FLOAT_WEIGHT,
-            ModelParam::PricingPowerIndex->value            => self::PRICING_POWER_INDEX,
         ]);
     }
 
@@ -247,7 +246,7 @@ class ConglomerateBusinessModel extends StandardCorporateBusinessModel
     ): SectorPhysicsResult {
         $params = $this->resolvePortfolioParameters($stock);
 
-        $pricingPower = max(0.0, min(1.0, $params[ModelParam::PricingPowerIndex]));
+        $pricingPower = $this->resolvePricingPower($stock);
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
         $streams = $this->createStreamContext($momentum, $mathUtility, $macroState, $stock);

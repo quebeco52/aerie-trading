@@ -167,10 +167,9 @@ class InvestmentCompanyBusinessModel extends ConglomerateBusinessModel
         MathUtility $mathUtility
     ): SectorPhysicsResult {
         $params = $this->resolveModelParameters($stock, [
-            ModelParam::PricingPowerIndex->value => self::PRICING_POWER_INDEX,
         ]);
 
-        $pricingPower = max(0.0, min(1.0, $params[ModelParam::PricingPowerIndex]));
+        $pricingPower = $this->resolvePricingPower($stock);
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
         $streams = $this->createStreamContext($momentum, $mathUtility, $macroState, $stock);

@@ -82,3 +82,17 @@ beside the business; every leg struck on book less it; net debt for the revenue 
 Arms `base` (git archive HEAD 1547e3d1, deleted after) vs `live` (working copy), 4 unpaired seeds. `pol_base_4s.out`,
 `pol_live_4s.out`. Nothing |t| >= 1: policy mean 3.13 -> 2.99, inflation 2.12 -> 2.08, gap mean -0.82 -> -1.00,
 debt end .54 -> .55, index and P/E flat. Pinned name-qtrs 7 -> 1.
+
+## One-sided model terms read both ways (10-17, on main)
+4 unpaired seeds, base = git archive HEAD (feb149e0; reproduces pol_live_4s exactly), live = checkout. `CREDIT=1`.
+Out: onesided-base.out, onesided-live.out; per model: `model_an.py 1-4 base live`.
+- Measured drivers: SLOOS ema mean +0.00..+0.07 (sd 0.06-0.13), so two-sided around 0 (the review's +0.14 predates
+  the 10-16 shortfall fix); infl_ema − bei mean −0.08..+0.22pp, so escalators on the surprise carry no standing bonus
+  (old max(0, π − 2%) paid 0.25-0.62pp); ERP mean 4.6-4.9% against BASE 4.5%, so the hypercar line reads equity
+  wealth against its trend instead.
+- Standing beat (rev/exp − 1, base → live): LawFirm +8.7 → −0.2% (t −2.3), Waste +0.9 → −0.2 (t −2.1), Defense
+  +5.6 → −0.1, Heavy +0.4 → −0.1, CreditServices −1.7 → −1.2, ShadowBank +5.6 → +4.9. Unaffected models move as
+  much (Mining −11.7, Custody −3.5): paths diverge from the first quarter.
+- Board: nothing outside the range earlier code drew on seeds 1-4. FX min 79.9 → 87.6 looks systematic (+6..+9 on
+  every seed) but base's seeds sit at the low end of history (80.8-89.2 across pol/cv/live runs). Failures
+  0.25/seed both; payment defaults 0.75 → 1.5 (history 0.6-2.0); rescue raises 12.2 → 3.

@@ -55,15 +55,17 @@ class RestaurantBusinessModel extends StandardCorporateBusinessModel
     public const FRANCHISE_WEIGHT       = 0.30;
     /** Baseline fraction of revenue derived from franchise real estate rental leases. */
     public const FRANCHISE_LEASE_WEIGHT = 0.20;
+    /** Franchise rent's exposure to store traffic against sales': base rent plus a percentage of sales, half the swing. */
+    public const FRANCHISE_LEASE_CYCLE_LOADING = 0.50;
 
     // --- Pricing Power & Macro Physics ---
-    public const MIN_BETA_PRICING_POWER_FLOOR = 0.40;
     /** Menu boards reprice within a couple of quarters; franchisors pass food and wage inflation to guests quickly. */
     public const INPUT_PASS_THROUGH_LAG_YEARS = 0.50;
 
     // --- Revenue & Shock Physics ---
     public const REVENUE_VARIANCE_SCALAR = 0.40;
-    public const LEASE_INFLATION_CAPTURE  = 0.80; // CPI rent escalation clause
+    /** Share of an inflation surprise the franchise leases' CPI escalators pass through, both ways: 0.80. */
+    public const LEASE_INFLATION_CAPTURE  = 0.80;
 
     // --- Stream Cost Allocation ---
     /** Royalty variable cost per dollar, relative to a company-store dollar. */
@@ -114,23 +116,18 @@ class RestaurantBusinessModel extends StandardCorporateBusinessModel
             + MacroTransmission::gdpShareDrift(self::SECULAR_SHARE_1997, self::SECULAR_SHARE_2019, FinancialConstants::SECULAR_SHARE_WINDOW_YEARS);
     }
 
-    public function getMacroPhysics(Stock $stock, MacroStateDTO $macroState): array
+    /**
+     * Dining out follows the cycle through the parent's output-gap shift; confidence adds only what the gap does not
+     * already explain (Lemmon & Portniaguina 2006).
+     */
+    protected function resolveCycleDemandShift(Stock $stock, MacroStateDTO $macroState): float
     {
-        $physics = parent::getMacroPhysics($stock, $macroState);
-
-        // Dining out follows the cycle through the parent's output-gap shift; confidence adds only what the gap
-        // does not already explain (Lemmon & Portniaguina 2006).
-        $beta = $this->getOperatingCyclicality($stock);
-
-        $physics['macro_demand_shift'] += $macroState->sentimentResidual() * $beta;
-
-        return $physics;
+        return parent::resolveCycleDemandShift($stock, $macroState) + ($macroState->sentimentResidual() * $this->getOperatingCyclicality($stock));
     }
 
     protected function calculateSectorPhysics(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, MacroStateDTO $macroState, MathUtility $mathUtility): SectorPhysicsResult
     {
         $params = $this->resolveModelParameters($stock, [
-            ModelParam::PricingPowerIndex->value      => self::MIN_BETA_PRICING_POWER_FLOOR,
             ModelParam::CompanyStoresWeight->value     => self::CORPORATE_WEIGHT,
             ModelParam::FranchiseRoyaltiesWeight->value => self::FRANCHISE_WEIGHT,
             ModelParam::FranchiseLeaseWeight->value    => self::FRANCHISE_LEASE_WEIGHT,
@@ -139,7 +136,7 @@ class RestaurantBusinessModel extends StandardCorporateBusinessModel
         $corporateWeight = $params[ModelParam::CompanyStoresWeight];
         $franchiseWeight = $params[ModelParam::FranchiseRoyaltiesWeight];
         $leaseWeight     = $params[ModelParam::FranchiseLeaseWeight];
-        $pricingPower    = max(0.0, min(1.0, $params[ModelParam::PricingPowerIndex]));
+        $pricingPower    = $this->resolvePricingPower($stock);
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
         $streams  = $this->createStreamContext($momentum, $mathUtility, $macroState, $stock);
@@ -187,13 +184,19 @@ class RestaurantBusinessModel extends StandardCorporateBusinessModel
             }
         }
 
-        // CPI Escalator on franchise real estate rents
-        $excessInflation = max(0.0, $macroState->inflationEma - MacroEngine::TARGET_INFLATION);
-        $rentEscalator = $excessInflation * self::LEASE_INFLATION_CAPTURE;
+        // CPI escalators on franchise real estate rents pass the inflation surprise, both ways.
+        $rentEscalator = $macroState->inflationSurprise() * self::LEASE_INFLATION_CAPTURE;
+        // Store traffic carries the cycle into company sales and the royalty on franchisee sales; the franchise rent
+        // roll carries FRANCHISE_LEASE_CYCLE_LOADING of it.
+        $cycleShares = MacroTransmission::allocateDemandShift(
+            ['company_operated_stores' => $corporateWeight, 'franchise_royalties' => $franchiseWeight, 'franchise_real_estate_leases' => $leaseWeight],
+            ['company_operated_stores' => 1.0, 'franchise_royalties' => 1.0, 'franchise_real_estate_leases' => self::FRANCHISE_LEASE_CYCLE_LOADING],
+            $this->resolveCycleDemandShift($stock, $macroState)
+        );
 
-        $corporateRevenue = max(0.0, $expectedRevenue * $corporateWeight * (1.0 + ($corporateZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR))) * $viralMultiplier);
-        $franchiseRevenue = max(0.0, $expectedRevenue * $franchiseWeight * (1.0 + ($franchiseZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR * 0.15))));
-        $leaseRevenue     = max(0.0, $expectedRevenue * $leaseWeight     * (1.0 + ($leaseZ     * ($baselineVol * self::REVENUE_VARIANCE_SCALAR * 0.05)) + $rentEscalator));
+        $corporateRevenue = max(0.0, $expectedRevenue * $corporateWeight * (1.0 + ($corporateZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)) + $cycleShares['company_operated_stores']) * $viralMultiplier);
+        $franchiseRevenue = max(0.0, $expectedRevenue * $franchiseWeight * (1.0 + ($franchiseZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR * 0.15)) + $cycleShares['franchise_royalties']));
+        $leaseRevenue     = max(0.0, $expectedRevenue * $leaseWeight     * (1.0 + ($leaseZ     * ($baselineVol * self::REVENUE_VARIANCE_SCALAR * 0.05)) + $rentEscalator + $cycleShares['franchise_real_estate_leases']));
         // CPI escalators reprice existing franchise leases: pure price revenue with no incremental cost.
         $priceRevenue     = max(0.0, $expectedRevenue * $leaseWeight * $rentEscalator);
 

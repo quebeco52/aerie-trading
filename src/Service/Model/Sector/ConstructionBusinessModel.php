@@ -96,7 +96,7 @@ class ConstructionBusinessModel extends StandardCorporateBusinessModel
     /** Sensitivity of commercial and residential construction activity to housing starts shifts. */
     public const HOUSING_STARTS_SENSITIVITY = 0.40;
 
-    /** Drag on construction financing per unit of SLOOS bank lending standard tightening. */
+    /** Commercial orders per unit of net tightening in bank lending standards, both ways: +0.2 cuts orders 6%. */
     public const SLOOS_CREDIT_TIGHTENING_SCALAR = 0.30;
     /** Private EPC orders lost per unit of restrictive real policy rate above r*: 100bp of tight stance takes 2% off awards before cyclicality. */
     public const RATE_STANCE_ORDER_SENSITIVITY = 2.0;
@@ -216,13 +216,12 @@ class ConstructionBusinessModel extends StandardCorporateBusinessModel
             ModelParam::CivilInfrastructureWeight->value    => self::CIVIL_INFRASTRUCTURE_WEIGHT,
             ModelParam::CommercialEpcWeight->value          => self::COMMERCIAL_EPC_WEIGHT,
             ModelParam::FacilitiesMaintenanceWeight->value  => self::FACILITIES_MAINTENANCE_WEIGHT,
-            ModelParam::PricingPowerIndex->value            => self::PRICING_POWER_INDEX,
         ]);
 
         $civilWeight       = $params[ModelParam::CivilInfrastructureWeight];
         $commercialWeight  = $params[ModelParam::CommercialEpcWeight];
         $maintenanceWeight = $params[ModelParam::FacilitiesMaintenanceWeight];
-        $pricingPower      = $params[ModelParam::PricingPowerIndex];
+        $pricingPower      = $this->resolvePricingPower($stock);
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
         $streams = $this->createStreamContext($momentum, $mathUtility, $macroState, $stock);
@@ -251,7 +250,8 @@ class ConstructionBusinessModel extends StandardCorporateBusinessModel
         $residentialShift = $macroState->housePriceDeviation();
         $commercialPropertyShift = ($macroState->commercialPropertyIndexEma - MacroEngine::CRE_BASELINE) / MacroEngine::CRE_BASELINE;
         $housingStartsShift = MacroTransmission::calculateHousingStartsShift($macroState->housingStartsIndexEma, sensitivity: self::HOUSING_STARTS_SENSITIVITY);
-        $sloosDrag = max(0.0, $macroState->sloosTighteningIndexEma) * self::SLOOS_CREDIT_TIGHTENING_SCALAR;
+        // Lending standards both ways: tighter than neutral holds orders back, looser lets them through.
+        $sloosDrag = $macroState->sloosTighteningIndexEma * self::SLOOS_CREDIT_TIGHTENING_SCALAR;
 
         $commercialMacroBoost = ($outputGap * 1.5 * $beta) + ($commercialPropertyShift * 0.30) + ($residentialShift * 0.20) + $housingStartsShift + ($macroState->creditToGdpGapEma * self::CREDIT_GAP_ORDER_SENSITIVITY);
         // Policy stance is the real rate gap, nominal policy less expected inflation less r* (Laubach & Williams 2003).

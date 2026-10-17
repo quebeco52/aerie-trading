@@ -101,7 +101,7 @@ class LawFirmBusinessModelTest extends TestCase
         $stock->setTicker('CLAW');
         $stock->setBeta('0.3');
 
-        $macro = new MacroStateDTO(outputGapEma: 0.0, macroCreditSpread: 0.015);
+        $macro = new MacroStateDTO(outputGapEma: 0.0, macroCreditSpread: 0.015, macroCreditSpreadTrend: 0.015);
 
         $mathMock = $this->createStub(MathUtility::class);
         $mathMock->method('generatePersistentZ')->willReturn(0.0);
@@ -199,9 +199,12 @@ class LawFirmBusinessModelTest extends TestCase
 
         $this->assertEqualsWithDelta(0.0, $this->model->getMacroPhysics($stock, $recession)['macro_demand_shift'], 1e-12);
 
-        // Retainers read only the boom side; restructuring 0.20 x (0.03 x 3.0 x 0.80) = +0.0144, counter-cyclical.
-        $expected = LawFirmBusinessModel::RESTRUCTURING_ADVISORY_WEIGHT
-            * (0.03 * LawFirmBusinessModel::RESTRUCTURING_RECESSION_SCALAR * LawFirmBusinessModel::OPERATING_CYCLICALITY);
+        // Restructuring rises against the gap, 0.20 x (0.03 x 3.0 x 0.80) = +0.0144, and retainers fall with it,
+        // 0.45 x (0.03 x 0.60 x 0.80) = -0.00648: +0.00792.
+        $expected = (LawFirmBusinessModel::RESTRUCTURING_ADVISORY_WEIGHT
+                * (0.03 * LawFirmBusinessModel::RESTRUCTURING_RECESSION_SCALAR * LawFirmBusinessModel::OPERATING_CYCLICALITY))
+            - (LawFirmBusinessModel::CORPORATE_RETAINER_WEIGHT
+                * (0.03 * LawFirmBusinessModel::RETAINER_MACRO_SCALAR * LawFirmBusinessModel::OPERATING_CYCLICALITY));
         $this->assertEqualsWithDelta($expected, $this->model->resolveSectorActivityShift($stock, $recession), 1e-9);
     }
 }

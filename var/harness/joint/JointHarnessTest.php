@@ -246,7 +246,12 @@ class JointHarnessTest extends KernelTestCase
                     'spread' => $m->sovereignRiskSpread, 'tax_rate' => $m->corporateTaxRate,
                     'y10' => $m->yield10y ?? null, 'hh' => $m->householdDebtToIncome ?? null, 'gq' => $m->realGdpQuarterlyGrowth ?? null,
                 ] + (getenv('BOARD_NI') ? $this->boardNetIncome($list) + ['gap_ema' => $m->outputGapEma, 'net_tax' => $m->netTaxRate ?? null] : [])
-                    + (getenv('FISCAL') ? ['primary' => $m->primaryDeficitToGdp, 'net_tax' => $m->netTaxRate, 'spend_idx' => $m->governmentSpendingIndex] : [])) . "\n", FILE_APPEND);
+                    + (getenv('FISCAL') ? ['primary' => $m->primaryDeficitToGdp, 'net_tax' => $m->netTaxRate, 'spend_idx' => $m->governmentSpendingIndex] : [])
+                    + (getenv('CREDIT') ? [
+                        'sloos' => $m->sloosTighteningIndexEma, 'sloos_raw' => $m->sloosTighteningIndex, 'ebp' => $m->excessBondPremium, 'ebp_trend' => $m->excessBondPremiumTrend,
+                        'cap_req' => $m->bankCapitalRequirement, 'ccyb' => $m->countercyclicalBufferRate, 'cap_built' => $m->bankCapitalBuilt,
+                        'infl_ema' => $m->inflationEma, 'bei' => $m->tipsBreakevenEma, 'supercore' => $m->supercoreInflationEma,
+                    ] : [])) . "\n", FILE_APPEND);
             }
         }
 

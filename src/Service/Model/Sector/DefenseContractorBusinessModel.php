@@ -87,7 +87,7 @@ class DefenseContractorBusinessModel extends StandardCorporateBusinessModel
     public const FMS_VARIANCE_SCALAR = 0.35;
 
     // --- Sovereign Procurement & Cost-Plus Physics ---
-    /** Sensitivity multiplier for FAR 16.3 inflation indexation escalation clauses. */
+    /** Cost-plus revenue per point of inflation over what was expected, both ways: +1pp adds 1.5%. */
     public const COST_PLUS_BONUS_SCALAR = 1.50;
     /** Sovereign credit spread threshold triggering Continuing Resolution (CR) budget freeze drag. */
     public const SOVEREIGN_STRESS_THRESHOLD = 0.030;
@@ -277,14 +277,11 @@ class DefenseContractorBusinessModel extends StandardCorporateBusinessModel
         $eventZ      = $streams->generateExogenousZ('event', 0.10);
 
         // --- Allied Procurement & Cost-Plus Fiscal Physics ---
-        $inflation = $macroState->inflationEma;
         // Programme awards are defence investment, which moves 1.54 times the allied budgets it comes out of.
         $alliedOrders = MacroEngine::ALLIED_PROCUREMENT_ELASTICITY * MacroAggregateSubsystem::alliedDefenseGap($macroState->alliedDefenseSpendingIndexEma);
 
-        // FAR 16.3 Cost-Plus contracts pass through excess inflation as nominal revenue growth
-        $costPlusBonus = $inflation > MacroEngine::TARGET_INFLATION
-            ? ($inflation - MacroEngine::TARGET_INFLATION) * self::COST_PLUS_BONUS_SCALAR
-            : 0.0;
+        // Cost-plus contracts pass the inflation surprise through as nominal revenue, both ways.
+        $costPlusBonus = $macroState->inflationSurprise() * self::COST_PLUS_BONUS_SCALAR;
 
         // Sovereign credit spreads indicate debt ceiling crises triggering Continuing Resolutions (CRs)
         $creditSpread = $macroState->macroCreditSpreadEma;
@@ -416,6 +413,7 @@ class DefenseContractorBusinessModel extends StandardCorporateBusinessModel
             'inflation_ema',
             'macro_credit_spread_ema',
             'real_wage_gap',
+            'tips_breakeven_ema',
         ];
     }
 }

@@ -162,12 +162,11 @@ class SpecialtyIndustrialMachineryBusinessModel extends HeavyManufacturingBusine
     protected function calculateSectorPhysics(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, MacroStateDTO $macroState, MathUtility $mathUtility): SectorPhysicsResult
     {
         $params = $this->resolveModelParameters($stock, [
-            ModelParam::PricingPowerIndex->value => 0.70,
             ModelParam::EquipmentWeight->value    => self::EQUIPMENT_WEIGHT,
             ModelParam::ServicesWeight->value     => self::SERVICES_WEIGHT,
         ]);
 
-        $pricingPower    = max(0.0, min(1.0, $params[ModelParam::PricingPowerIndex]));
+        $pricingPower    = $this->resolvePricingPower($stock);
         $equipmentWeight = $params[ModelParam::EquipmentWeight];
         $servicesWeight  = $params[ModelParam::ServicesWeight];
 

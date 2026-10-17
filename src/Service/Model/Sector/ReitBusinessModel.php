@@ -115,7 +115,7 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
     /** Share of the new-supply competition shift that comes off market rents each quarter; carried over from the value-based model, not separately fitted. */
     public const NEW_SUPPLY_RENT_DRAG           = 0.03;
 
-    /** Fraction of excess CPI inflation captured via contractual rent escalators. */
+    /** Share of an inflation surprise contractual rent escalators pass through, both ways: 0.80. */
     public const RENT_ESCALATOR_CAPTURE         = 0.80;
     /** Rent roll lost per unit of district catastrophe burden above an average year: damaged space earns nothing until repaired. */
     public const CATASTROPHE_VACANCY_SENSITIVITY = 0.02;
@@ -261,10 +261,8 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
         $leaseShock       = $revenueZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR);
         $hospitalityShock = $hospitalityZ * ($baselineVol * self::HOSPITALITY_VARIANCE_SCALAR);
 
-        // The Inflation Hedge (CPI Rent Escalators)
-        $inflation = $macroState->inflationEma;
-        $excessInflation = max(0.0, $inflation - MacroEngine::TARGET_INFLATION);
-        $rentEscalator = $excessInflation * self::RENT_ESCALATOR_CAPTURE;
+        // The inflation hedge: CPI rent escalators pass the inflation surprise, both ways.
+        $rentEscalator = $macroState->inflationSurprise() * self::RENT_ESCALATOR_CAPTURE;
         // Market rent is the space market (DiPasquale & Wheaton 1996), not the asset price: a lower cap rate lifts what
         // a building is worth, not what a tenant pays. Apartment rents follow jobs and income the same way.
         $marketRent = $macroState->commercialMarketRent - 1.0;

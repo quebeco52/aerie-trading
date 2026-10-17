@@ -38,12 +38,12 @@ class MacroDriverAttributionTest extends TestCase
 
         $states = MacroDriverAttribution::counterfactualStates($model, $macroState);
 
-        $this->assertArrayHasKey('output_gap_ema', $states);
+        $this->assertArrayHasKey('output_gap_lag_6m', $states);
         $this->assertSame([], array_diff(array_keys($states), $model->getOperatingMacroFields()));
 
         $actual = $macroState->toArray();
-        $changed = array_keys(array_diff_assoc(array_map('serialize', $states['output_gap_ema']->toArray()), array_map('serialize', $actual)));
-        $this->assertSame(['output_gap_ema'], $changed);
+        $changed = array_keys(array_diff_assoc(array_map('serialize', $states['output_gap_lag_6m']->toArray()), array_map('serialize', $actual)));
+        $this->assertSame(['output_gap_lag_6m'], $changed);
     }
 
     /** A replay hands out the recorded draws and leaves the simulation's own generator where it was. */

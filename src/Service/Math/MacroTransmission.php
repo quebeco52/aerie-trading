@@ -289,6 +289,34 @@ final class MacroTransmission
     }
 
     /**
+     * Spreads a firm-wide demand shift across its revenue streams by each stream's cycle loading. The engine lands the
+     * shift on the whole of expected revenue; this returns what each stream adds on top so that it carries the shift
+     * times its loading over the firm's weighted mean loading. The adjustments weight to zero, so the firm's total
+     * still moves by the shift: a defensive stream gives its share back to the cyclical ones.
+     *
+     * @param array<string, float> $weights  Stream revenue weights.
+     * @param array<string, float> $loadings Each stream's exposure to the cycle, relative to the others.
+     * @param float                $shift    The firm-wide demand shift the engine applied.
+     * @return array<string, float> Additive shift per stream.
+     */
+    public static function allocateDemandShift(array $weights, array $loadings, float $shift): array
+    {
+        $totalWeight = array_sum($weights);
+        $weightedLoading = 0.0;
+        foreach ($weights as $key => $weight) {
+            $weightedLoading += $weight * $loadings[$key];
+        }
+        $meanLoading = $totalWeight > 0.0 ? $weightedLoading / $totalWeight : 0.0;
+
+        $adjustments = [];
+        foreach ($weights as $key => $weight) {
+            $adjustments[$key] = $meanLoading > 0.0 ? $shift * (($loadings[$key] / $meanLoading) - 1.0) : 0.0;
+        }
+
+        return $adjustments;
+    }
+
+    /**
      * Stage-of-Processing Producer Price Index (PPI) variable cost drag (Clark 1995).
      *
      * Evaluates wholesale input material cost pressure on gross variable margins,

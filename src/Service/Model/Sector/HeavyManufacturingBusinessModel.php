@@ -101,9 +101,12 @@ class HeavyManufacturingBusinessModel extends StandardCorporateBusinessModel
     public const MRO_VARIANCE_SCALAR = 0.10;
     /** Structural variable cost ratio of high-margin aftermarket MRO parts. */
     public const MRO_VARIABLE_COST_RATIO = 0.20;
+    /** Aftermarket exposure to the cycle against new equipment's: parts follow the fleet's running hours, 0.40 of the order swing. */
+    public const MRO_CYCLE_LOADING = 0.40;
 
     // --- Pricing Power & Macro Physics ---
-    public const MIN_BETA_PRICING_POWER_FLOOR = 0.80; // Highly sensitive to macro shifts
+    /** Demand per unit of lagged output gap at cyclicality 1, before the PMI: 1.5, so a -2% gap takes 3% off. */
+    public const OUTPUT_GAP_DEMAND_SENSITIVITY = 1.50;
     /** Sensitivity of OEM capital equipment orders to aggregate industrial capital capacity overhang. */
     public const CAPITAL_OVERHANG_SCALAR = 0.15;
     /** Sensitivity of OEM heavy equipment orders to manufacturing PMI survey shifts. */
@@ -124,32 +127,26 @@ class HeavyManufacturingBusinessModel extends StandardCorporateBusinessModel
     /** Book weight in fair value through the rest of the cycle. */
     public const MID_CYCLE_BOOK_WEIGHT = 0.40;
 
-    public function getMacroPhysics(Stock $stock, \App\DTO\MacroStateDTO $macroState): array
+    /** Heavy manufacturing is extremely sensitive to the output gap, amplified by the leading manufacturing PMI. */
+    protected function resolveCycleDemandShift(Stock $stock, \App\DTO\MacroStateDTO $macroState): float
     {
-        $physics = parent::getMacroPhysics($stock, $macroState);
-
-        // Heavy manufacturing is extremely sensitive to the output gap and manufacturing PMI
         $outputGap = $this->resolveLaggedOutputGap($macroState);
         $beta = $this->getOperatingCyclicality($stock);
         $pmiShift = MacroTransmission::calculatePmiDemandShift($macroState->manufacturingPmiEma, MacroEngine::PMI_BASELINE, self::PMI_DEMAND_SENSITIVITY);
 
-        // Amplify the output gap impact with leading ISM manufacturing PMI activity
-        $physics['macro_demand_shift'] = ($outputGap * $beta * 1.50) + ($pmiShift * $beta);
-
-        return $physics;
+        return ($outputGap * $beta * self::OUTPUT_GAP_DEMAND_SENSITIVITY) + ($pmiShift * $beta);
     }
 
     protected function calculateSectorPhysics(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, \App\DTO\MacroStateDTO $macroState, MathUtility $mathUtility): SectorPhysicsResult
     {
         $params = $this->resolveModelParameters($stock, [
-            ModelParam::PricingPowerIndex->value   => self::MIN_BETA_PRICING_POWER_FLOOR,
             ModelParam::OemEquipmentWeight->value  => self::OEM_EQUIPMENT_WEIGHT,
             ModelParam::AftermarketMroWeight->value => self::AFTERMARKET_MRO_WEIGHT,
         ]);
 
         $oemWeight     = $params[ModelParam::OemEquipmentWeight];
         $mroWeight     = $params[ModelParam::AftermarketMroWeight];
-        $pricingPower  = max(0.0, min(1.0, $params[ModelParam::PricingPowerIndex]));
+        $pricingPower  = $this->resolvePricingPower($stock);
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
         $streams  = $this->createStreamContext($momentum, $mathUtility, $macroState, $stock);
@@ -168,6 +165,13 @@ class HeavyManufacturingBusinessModel extends StandardCorporateBusinessModel
         $mroZ = $streams->generateZ('aftermarket_mro', 0.40);
 
         $mroShock = $mroZ * ($baselineVol * self::MRO_VARIANCE_SCALAR);
+        // The firm-wide cycle lands on all of expected revenue; equipment orders carry it, and the aftermarket,
+        // which follows the installed fleet's running hours, carries MRO_CYCLE_LOADING of it.
+        $cycleShares = MacroTransmission::allocateDemandShift(
+            ['oem_equipment' => $oemWeight, 'aftermarket_mro' => $mroWeight],
+            ['oem_equipment' => 1.0, 'aftermarket_mro' => self::MRO_CYCLE_LOADING],
+            $this->resolveCycleDemandShift($stock, $macroState)
+        );
 
         $overhangDrag = $macroState->capitalStockOverhangEma * self::CAPITAL_OVERHANG_SCALAR;
 
@@ -175,10 +179,10 @@ class HeavyManufacturingBusinessModel extends StandardCorporateBusinessModel
         // hits orders in full but reaches revenue only at the backlog burn rate, and the rest persists.
         // Metzler inventory cycle: dealer lots and fleet stocks are drawn down before new OEM orders are placed.
         $inventoryCycleShift = -$macroState->inventoryStockGapEma * self::INVENTORY_CYCLE_SENSITIVITY;
-        $oemOrderMultiplier = max(0.0, 1.0 + ($oemZ * ($baselineVol * self::OEM_VARIANCE_SCALAR)) + $this->resolveFxDemandShift($macroState) - $overhangDrag + $inventoryCycleShift);
+        $oemOrderMultiplier = max(0.0, 1.0 + ($oemZ * ($baselineVol * self::OEM_VARIANCE_SCALAR)) + $cycleShares['oem_equipment'] + $this->resolveFxDemandShift($macroState) - $overhangDrag + $inventoryCycleShift);
         $oemBook = $streams->recognizeBacklog('oem_equipment', $expectedRevenue * $oemWeight, $oemOrderMultiplier, self::OEM_BACKLOG_BURN_RATE);
         $oemRevenue = $oemBook['revenue'];
-        $mroRevenue = max(0.0, $expectedRevenue * $mroWeight * (1.0 + $mroShock));
+        $mroRevenue = max(0.0, $expectedRevenue * $mroWeight * (1.0 + $mroShock + $cycleShares['aftermarket_mro']));
         $streamRevenues = [
             'oem_equipment'   => $oemRevenue,
             'aftermarket_mro' => $mroRevenue,

@@ -103,7 +103,7 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
     public const CECL_RESERVE_SPREAD_SENSITIVITY = 15.0;
     /** Lifetime-loss multiplier per unit of recession probability away from the base rate: card allowances went ~4.9% -> 7.9% of receivables in 2020 (~0.6x) on a near-certain recession. */
     public const CECL_RESERVE_RECESSION_SENSITIVITY = 0.75;
-    /** Sensitivity of revolving credit loan origination volume drag to commercial bank credit tightening (SLOOS). */
+    /** Card origination per unit of net tightening in bank lending standards, both ways: +0.2 cuts lending revenue 3%. */
     public const SLOOS_LENDING_DRAG_SENSITIVITY = 0.15;
     /** Card balances per unit of the household credit-to-GDP gap: revolving credit rides the same boom. */
     public const CREDIT_GAP_LENDING_SENSITIVITY = 0.50;
@@ -158,8 +158,8 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
         $inflationBonus = ($inflation - MacroEngine::TARGET_INFLATION) * $this->getOperatingCyclicality($stock);
 
         // Blended dual-stream revenue (Lending vs. Payment Network Interchange)
-        // Bank credit tightening (SLOOS) gates unsecured credit card line extensions and origination volume
-        $sloosLendingDrag = max(0.0, $macroState->sloosTighteningIndexEma) * self::SLOOS_LENDING_DRAG_SENSITIVITY;
+        // Lending standards gate card line extensions and origination both ways: tighter cuts them, looser extends them.
+        $sloosLendingDrag = $macroState->sloosTighteningIndexEma * self::SLOOS_LENDING_DRAG_SENSITIVITY;
         $creditBoomBoost = $macroState->creditToGdpGapEma * self::CREDIT_GAP_LENDING_SENSITIVITY;
         $lendingRevenue = max(0.0, $expectedRevenue * $lendingWeight
             * max(0.0, 1.0 - $sloosLendingDrag + $creditBoomBoost)

@@ -276,7 +276,7 @@ class StockModelTuning
             ModelParam::SubscriptionRevenueWeight->value => 0.15,
             ModelParam::AdvertisingRevenueWeight->value  => 0.45,
             ModelParam::CloudInfrastructureWeight->value => 0.40,
-            ModelParam::AdvertisingCyclicality->value    => 0.22,
+            ModelParam::AdvertisingCyclicality->value    => 1.20, // Performance ads on an open auction: budgets cut first and hardest
             ModelParam::MonopolyAggression->value        => 0.90, // Ruthless data monopoly, high margins, existential regulatory risk
             ModelParam::PricingPowerIndex->value         => 0.60, // Auction-cleared ad inventory prices itself; only the subscription and cloud books are set by the seller
         ],

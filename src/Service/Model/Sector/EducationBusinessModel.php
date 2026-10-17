@@ -108,7 +108,9 @@ class EducationBusinessModel extends StandardCorporateBusinessModel
     public const TUITION_RECOGNITION_RATE   = 0.50;
     public const ENTERPRISE_VARIANCE_SCALAR = 0.40; // Pro-cyclical corporate training
     public const LMS_VARIANCE_SCALAR        = 0.08; // Highly sticky software ARR
-    /** Countercyclical sensitivity of degree enrollment to elevated unemployment rates (workforce retraining). */
+    /** Degree enrollment per unit of output gap, against the cycle and both ways: a -2% gap fills 2.4% more places at beta 1. */
+    public const ENROLLMENT_GAP_SENSITIVITY = 1.20;
+    /** Degree enrollment per point of unemployment over its natural rate, both ways (retraining): +1pp fills 0.8% more places at beta 1. */
     public const UNEMPLOYMENT_RETRAINING_SCALAR = 0.80;
     /** Degree enrollment per unit of government purchases above the founding level, as a fraction: 0.40, a 10% rise in purchases funds 4% more places. */
     public const TUITION_GOVERNMENT_SPENDING_SENSITIVITY = 0.40;
@@ -184,13 +186,13 @@ class EducationBusinessModel extends StandardCorporateBusinessModel
         $enterpriseWeight = $activeWeights['enterprise_b2b_training'];
         $lmsWeight        = $activeWeights['digital_lms_licensing'];
 
-        // Counter-cyclical student enrollment boost during recessions, unemployment spikes, and government subsidies
+        // Enrolment runs against the cycle both ways (Betts & McFarland 1995): a slump and the jobs it costs fill
+        // places, a boom draws students into work. Government purchases fund places.
         $outputGap = $macroState->outputGapEma;
         $govShift = ($macroState->governmentSpendingIndexEma - 100.0) / 100.0;
-        $unemploymentSurge = max(0.0, $macroState->unemploymentGap());
-        $counterCyclicalEnrollmentBoost = ($outputGap < 0.0 ? abs($outputGap) * 1.2 * $beta : -($outputGap * 0.4))
+        $counterCyclicalEnrollmentBoost = (-$outputGap * self::ENROLLMENT_GAP_SENSITIVITY * $beta)
             + ($govShift * self::TUITION_GOVERNMENT_SPENDING_SENSITIVITY)
-            + ($unemploymentSurge * self::UNEMPLOYMENT_RETRAINING_SCALAR * $beta);
+            + ($macroState->unemploymentGap() * self::UNEMPLOYMENT_RETRAINING_SCALAR * $beta);
         $proCyclicalEnterpriseShift     = $this->resolveEnterpriseTrainingVolumeShift($stock, $macroState);
 
         $tuitionZ    = $streams->generateZ('degree_tuition_enrollment', 0.50);

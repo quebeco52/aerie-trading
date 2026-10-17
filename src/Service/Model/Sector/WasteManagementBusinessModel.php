@@ -105,7 +105,7 @@ class WasteManagementBusinessModel extends StandardCorporateBusinessModel
     public const RECYCLING_VARIANCE_SCALAR   = 0.60; // Highly volatile commodity exposure
 
     // --- Margin Squeeze & Inflation Physics ---
-    /** Fraction of excess CPI inflation automatically captured by contract escalators. */
+    /** Share of an inflation surprise contract escalators pass through, both ways: 0.85. */
     public const CPI_ESCALATOR_CAPTURE = 0.85;
 
     // --- Housing & Construction Waste Transmission ---
@@ -190,8 +190,8 @@ class WasteManagementBusinessModel extends StandardCorporateBusinessModel
 
         // --- Macro Demand & Pricing Sensitivities ---
         $macroBoost = $this->resolveCommercialVolumeShift($stock, $macroState);
-        $excessInflation = max(0.0, $macroState->inflationEma - MacroEngine::TARGET_INFLATION);
-        $cpiEscalatorBoost = $excessInflation * self::CPI_ESCALATOR_CAPTURE; // Passive revenue boost
+        // Collection contracts' CPI escalators pass the inflation surprise, both ways.
+        $cpiEscalatorBoost = $macroState->inflationSurprise() * self::CPI_ESCALATOR_CAPTURE;
 
         // Recycling is driven entirely by global commodity, energy, and scrap metal prices
         $energyShift = $macroState->energyCostPushLag / MacroEngine::ENERGY_COST_PUSH_TRANSMISSION;

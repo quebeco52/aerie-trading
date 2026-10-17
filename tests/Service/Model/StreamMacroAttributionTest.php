@@ -136,17 +136,22 @@ class StreamMacroAttributionTest extends TestCase
         }
     }
 
-    /** A channel the model applies to one stream shows on that stream and no other: Tech's ad budgets follow the cycle. */
-    public function testAdvertisingMovesWithTheCycleAndSubscriptionsDoNot(): void
+    /**
+     * The cycle lands on Tech's streams by their loadings: ad budgets carry more of it than annual subscription seats.
+     * Expected revenue is held here, so this measures the reallocation alone: ads gain share in a boom and seats give
+     * some back.
+     */
+    public function testAdvertisingCarriesMoreOfTheCycleThanSubscriptions(): void
     {
         $model = Sectors::getBusinessModelStrategy('tech');
         $macroState = $this->stressedMacro();
         [$basis, $actual, $draws] = $this->runQuarter($model, $this->firm('Software - Infrastructure'), $macroState);
-        $neutral = MacroStateDTO::fromArray(array_replace($macroState->toArray(), ['output_gap_ema' => 0.0]));
+        $neutral = MacroStateDTO::fromArray(array_replace($macroState->toArray(), ['output_gap_lag_6m' => 0.0]));
 
-        $effects = $model->measureStreamMacroEffects($basis, $draws, ['output_gap_ema' => [$neutral, self::EXPECTED_REVENUE]], self::VARIABLE_MARGIN, self::FIXED_COSTS, self::BASELINE_VOL, $actual->streamRevenue);
+        $effects = $model->measureStreamMacroEffects($basis, $draws, ['output_gap_lag_6m' => [$neutral, self::EXPECTED_REVENUE]], self::VARIABLE_MARGIN, self::FIXED_COSTS, self::BASELINE_VOL, $actual->streamRevenue);
 
-        $this->assertGreaterThan(0.0, $effects['advertising']['output_gap_ema']);
-        $this->assertSame(0.0, $effects['subscription']['output_gap_ema']);
+        // The stressed quarter is a boom.
+        $this->assertGreaterThan(0.0, $effects['advertising']['output_gap_lag_6m']);
+        $this->assertLessThan(0.0, $effects['subscription']['output_gap_lag_6m']);
     }
 }

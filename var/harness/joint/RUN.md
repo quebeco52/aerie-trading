@@ -36,5 +36,10 @@ Question family: does the whole simulation behave sensibly after several merges,
 - Delete every `tree-*` copy when the comparison is done: they are full source trees, and var/harness's .gitignore
   tracks `.php`, so a left-over tree shows up as thousands of untracked files.
 - `tr-<name>` arms run the checkout like `live` (for TRACE runs). `TRACE` takes a comma list of tickers.
+- `CREDIT=1` adds lending standards (`sloos`, `sloos_raw`), the bond premium and its trend, the bank capital
+  requirement, buffer and built capital, and `infl_ema`/`bei`/`supercore` to each `MACRO_OUT` row.
+- `model_an.py <seeds> <armA> <armB> [Model,...]`: per business model, revenue over the Street's expected (the
+  standing beat) and revenue growth, A against B with the seed-paired SE. Map tickers first:
+  `php -r 'require "vendor/autoload.php"; $o=[]; foreach (App\Data\Company\InitialMarket::STOCKS as $k=>$r) $o[$r["ticker"]??$k]=(new ReflectionClass(App\Data\Company\Sectors::strategyFor($r["industry"])))->getShortName(); file_put_contents("var/harness/joint/runs/ticker_models.json", json_encode($o));'`
 
 Evidence: `joint_evidence.md`.

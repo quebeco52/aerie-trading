@@ -6,7 +6,6 @@ namespace App\Service\Model\Sector;
 
 use App\Data\Macro\InputOutputExposures;
 use App\Service\Math\MacroTransmission;
-use App\Service\Math\ResponseCurves;
 use App\Service\Model\BusinessModelInterface;
 
 use App\Service\Model\ModelParam;
@@ -98,20 +97,17 @@ class LawFirmBusinessModel extends StandardCorporateBusinessModel
     public const RESTRUCTURING_VARIANCE_SCALAR = 0.45;
 
     // --- Macro Physics & Counter-Cyclical Restructuring ---
-    /** Sensitivity of corporate M&A and advisory billing to economic output gap. */
+    /** Retainer billing per unit of output gap, both ways: a +2% gap adds 1.2% at beta 1. */
     public const RETAINER_MACRO_SCALAR = 0.60;
 
-    /** Sensitivity multiplier translating economic contraction depth into bankruptcy advisory surge. */
+    /** Restructuring billing per unit of output gap, against the cycle and both ways: a -2% gap adds 6% at beta 1. */
     public const RESTRUCTURING_RECESSION_SCALAR = 3.00;
 
-    /** Sensitivity multiplier translating corporate credit spread spikes into restructuring billing surge. */
+    /** Restructuring billing per unit of credit spread over its trend, both ways: +1pp adds 15%. */
     public const RESTRUCTURING_SPREAD_SCALAR = 15.00;
-
-    /** Baseline credit spread above which corporate bankruptcy workouts accelerate. */
-    public const DEFAULT_CREDIT_SPREAD_BASELINE = 0.015;
     /** Sensitivity of corporate legal retainers and M&A compliance to aggregate deal activity. */
     public const DEAL_ACTIVITY_RETAINER_SCALAR = 0.20;
-    /** Sensitivity of bankruptcy restructuring legal billing to macroeconomic corporate default rate surges. */
+    /** Restructuring billing per unit of the corporate default rate over its long-run average, relative, both ways: double the average adds 30%. */
     public const CORPORATE_DEFAULT_RESTRUCTURING_SCALAR = 0.30;
 
     // --- Associate Wage Inflation ---
@@ -192,8 +188,9 @@ class LawFirmBusinessModel extends StandardCorporateBusinessModel
     }
 
     /**
-     * Each stream's macro volume shift: retainers on boom-side gap and M&A deal flow; restructuring on recession
-     * depth, credit spreads above the default threshold and the corporate default rate above its baseline.
+     * Each stream's macro volume shift, every driver both ways: retainers on the output gap and M&A deal flow;
+     * restructuring against the gap, on credit spreads over their trend and the corporate default rate over its
+     * long-run average. A boom fills the retainer book and empties the restructuring docket.
      *
      * @return array{corporate_retainers: float, restructuring_advisory: float}
      */
@@ -206,14 +203,14 @@ class LawFirmBusinessModel extends StandardCorporateBusinessModel
             : $macroState->macroCreditSpreadEma;
 
         $dealActivityShift = $macroState->dealActivityDeviation();
-        $excessSpread = max(0.0, $creditSpread - self::DEFAULT_CREDIT_SPREAD_BASELINE);
-        $corporateDefaultShift = ResponseCurves::excessOverBaseline($macroState->corporateDefaultRateEma, MacroEngine::CORPORATE_DEFAULT_BASELINE);
+        $spreadShift = $creditSpread - $macroState->macroCreditSpreadTrend;
+        $corporateDefaultShift = ($macroState->corporateDefaultRateEma - MacroEngine::CORPORATE_DEFAULT_BASELINE) / MacroEngine::CORPORATE_DEFAULT_BASELINE;
 
         return [
-            'corporate_retainers'    => max(0.0, $outputGap * self::RETAINER_MACRO_SCALAR * $beta)
+            'corporate_retainers'    => ($outputGap * self::RETAINER_MACRO_SCALAR * $beta)
                 + ($dealActivityShift * self::DEAL_ACTIVITY_RETAINER_SCALAR),
-            'restructuring_advisory' => (max(0.0, -$outputGap) * self::RESTRUCTURING_RECESSION_SCALAR * $beta)
-                + ($excessSpread * self::RESTRUCTURING_SPREAD_SCALAR)
+            'restructuring_advisory' => (-$outputGap * self::RESTRUCTURING_RECESSION_SCALAR * $beta)
+                + ($spreadShift * self::RESTRUCTURING_SPREAD_SCALAR)
                 + ($corporateDefaultShift * self::CORPORATE_DEFAULT_RESTRUCTURING_SCALAR),
         ];
     }
@@ -231,13 +228,12 @@ class LawFirmBusinessModel extends StandardCorporateBusinessModel
             ModelParam::CorporateRetainerWeight->value     => self::CORPORATE_RETAINER_WEIGHT,
             ModelParam::LitigationContingencyWeight->value  => self::LITIGATION_CONTINGENCY_WEIGHT,
             ModelParam::RestructuringAdvisoryWeight->value  => self::RESTRUCTURING_ADVISORY_WEIGHT,
-            ModelParam::PricingPowerIndex->value            => self::PRICING_POWER_INDEX,
         ]);
 
         $retainerWeight      = $params[ModelParam::CorporateRetainerWeight];
         $litigationWeight    = $params[ModelParam::LitigationContingencyWeight];
         $restructuringWeight = $params[ModelParam::RestructuringAdvisoryWeight];
-        $pricingPower        = $params[ModelParam::PricingPowerIndex];
+        $pricingPower        = $this->resolvePricingPower($stock);
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
         $streams = $this->createStreamContext($momentum, $mathUtility, $macroState, $stock);

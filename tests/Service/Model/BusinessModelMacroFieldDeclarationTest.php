@@ -59,6 +59,8 @@ final class BusinessModelMacroFieldDeclarationTest extends TestCase
         'mortgage_rate' => ['yield_10y_ema'],
         'money_market_yield' => ['policy_rate_ema'],
         'market_cost_of_equity' => ['yield_10y_ema', 'equity_risk_premium'],
+        'inflation_surprise' => ['inflation_ema', 'tips_breakeven_ema'],
+        'equity_wealth_deviation' => ['equity_wealth_ratio', 'equity_wealth_trend'],
     ];
 
     /** Macro field each input-cost basket channel reads (StandardOperatingPhysicsTrait::resolveInputPriceDeviations). */

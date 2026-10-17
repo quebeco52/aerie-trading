@@ -400,4 +400,19 @@ class MacroTransmissionTest extends TestCase
         self::assertLessThan(0.0, MacroTransmission::gdpShareDrift(0.03, 0.02, 22.0));
         self::assertSame(0.0, MacroTransmission::gdpShareDrift(0.0, 0.02, 22.0));
     }
+
+    /** The firm-wide shift lands on the cyclical streams by loading; the adjustments weight to zero, so the firm's total holds. */
+    public function testAllocateDemandShiftMovesTheShiftOntoTheCyclicalStreams(): void
+    {
+        $weights = ['orders' => 0.60, 'aftermarket' => 0.40];
+        $adjustments = MacroTransmission::allocateDemandShift($weights, ['orders' => 1.0, 'aftermarket' => 0.0], -0.06);
+
+        self::assertEqualsWithDelta(-0.04, $adjustments['orders'], 1e-12, 'Orders carry the whole -6%: -10% in all.');
+        self::assertEqualsWithDelta(0.06, $adjustments['aftermarket'], 1e-12, 'A defensive stream gives its share back.');
+        self::assertEqualsWithDelta(0.0, (0.60 * $adjustments['orders']) + (0.40 * $adjustments['aftermarket']), 1e-12);
+
+        $even = MacroTransmission::allocateDemandShift($weights, ['orders' => 0.7, 'aftermarket' => 0.7], -0.06);
+        self::assertEqualsWithDelta(0.0, $even['orders'], 1e-12, 'Equal loadings leave the shift where the engine put it.');
+        self::assertSame(['orders' => 0.0, 'aftermarket' => 0.0], MacroTransmission::allocateDemandShift($weights, ['orders' => 0.0, 'aftermarket' => 0.0], -0.06));
+    }
 }

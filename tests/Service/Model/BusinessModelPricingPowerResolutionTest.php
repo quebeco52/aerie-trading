@@ -101,16 +101,20 @@ final class BusinessModelPricingPowerResolutionTest extends TestCase
     }
 
     /**
-     * Source guard: nothing may re-introduce a call site that hardcodes the median default and so bypasses
-     * the sector constant. Pricing power is resolved through resolvePricingPower() or not at all.
+     * Source guard: no model may default the pricing-power parameter inline, at the median or at any other constant.
+     * Heavy Manufacturing defaulted it to its 0.80 demand floor and Restaurant to 0.40, so their input-cost recovery
+     * ran on a pricing power their pass-through did not use. Pricing power is resolved through resolvePricingPower().
      */
-    public function testNoModelHardcodesTheMedianPricingPowerDefault(): void
+    public function testNoModelDefaultsPricingPowerInline(): void
     {
         $offenders = [];
 
         foreach (glob(dirname(__DIR__, 3) . '/src/Service/Model/**/*.php') ?: [] as $file) {
+            if (basename($file) === 'StandardOperatingPhysicsTrait.php') {
+                continue;
+            }
             $source = (string) file_get_contents($file);
-            if (preg_match('/PricingPowerIndex->value\s*=>\s*0\.50?\b/', $source) === 1) {
+            if (preg_match('/PricingPowerIndex->value\s*=>/', $source) === 1) {
                 $offenders[] = basename($file);
             }
         }

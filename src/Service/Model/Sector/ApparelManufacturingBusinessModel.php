@@ -214,10 +214,7 @@ class ApparelManufacturingBusinessModel extends StandardCorporateBusinessModel
 
     public function getMacroPhysics(Stock $stock, MacroStateDTO $macroState): array
     {
-        $params = $this->resolveModelParameters($stock, [
-            ModelParam::PricingPowerIndex->value => self::PRICING_POWER_INDEX,
-        ]);
-        $pricingPower = max(0.0, min(1.0, $params[ModelParam::PricingPowerIndex]));
+        $pricingPower = $this->resolvePricingPower($stock);
 
         $outputGap = $this->resolveLaggedOutputGap($macroState);
         // The gap is priced beside it, so confidence enters as its residual over the gap (Lemmon & Portniaguina 2006).
@@ -244,10 +241,9 @@ class ApparelManufacturingBusinessModel extends StandardCorporateBusinessModel
             ModelParam::DtcRetailWeight->value              => self::DTC_RETAIL_WEIGHT,
             ModelParam::WholesaleChannelWeight->value       => self::WHOLESALE_CHANNEL_WEIGHT,
             ModelParam::ContractTextileSupplyWeight->value  => self::CONTRACT_TEXTILE_SUPPLY_WEIGHT,
-            ModelParam::PricingPowerIndex->value            => self::PRICING_POWER_INDEX,
         ]);
 
-        $pricingPower = max(0.0, min(1.0, $params[ModelParam::PricingPowerIndex]));
+        $pricingPower = $this->resolvePricingPower($stock);
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
         $streams  = $this->createStreamContext($momentum, $mathUtility, $macroState, $stock);

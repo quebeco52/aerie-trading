@@ -152,13 +152,10 @@ class AutoManufacturerBusinessModel extends HeavyManufacturingBusinessModel
     public const CONSUMER_SENTIMENT_SENSITIVITY = 0.40;
 
     // --- Apex Luxury & Veblen Wealth Effect ---
-    /** Sensitivity of ultra-luxury hypercar deliveries to equity risk premium compression (asset wealth expansion). */
-    public const APEX_ERP_COMPRESSION_SCALAR = 10.0;
+    /** Hypercar deliveries per unit of equity wealth over its trend, both ways: 20% above trend adds 8%. */
+    public const APEX_EQUITY_WEALTH_ELASTICITY = 0.40;
 
-    /** Top-line revenue boost multiplier during central bank Quantitative Easing liquidity surges. */
-    public const APEX_QE_LIQUIDITY_BOOST = 0.15;
-
-    /** Veblen pricing power boost scalar when inflation exceeds the central bank target. */
+    /** Hypercar list prices per point of inflation over what was expected, both ways: +1pp lifts the apex line 0.8%. */
     public const APEX_VEBLEN_INFLATION_SCALAR = 0.80;
 
     // --- Structural Gross Margin Cost Intensities for Cross-Subsidization ---
@@ -270,15 +267,12 @@ class AutoManufacturerBusinessModel extends HeavyManufacturingBusinessModel
         }
 
         // --- Apex Luxury Veblen & Asset Wealth Physics ---
-        // Hypercar demand decouples from mass-market GDP: driven by equity asset wealth (ERP compression), QE liquidity, and Veblen pricing power
-        $erpCompression = max(0.0, MacroEngine::BASE_EQUITY_RISK_PREMIUM - $macroState->equityRiskPremium);
-        $wealthEffect = $erpCompression * self::APEX_ERP_COMPRESSION_SCALAR;
-        $qeLiquidityBoost = $macroState->qeActive ? ($macroState->qeIntensity * self::APEX_QE_LIQUIDITY_BOOST) : 0.0;
-        $veblenInflationPower = $macroState->inflationEma > MacroEngine::TARGET_INFLATION
-            ? ($macroState->inflationEma - MacroEngine::TARGET_INFLATION) * self::APEX_VEBLEN_INFLATION_SCALAR
-            : 0.0;
+        // Hypercar demand decouples from mass-market GDP: it follows equity wealth against its trend, both ways
+        // (Ait-Sahalia, Parker & Yogo 2004), which already carries what QE does to asset prices, and Veblen pricing.
+        $wealthEffect = $macroState->equityWealthDeviation() * self::APEX_EQUITY_WEALTH_ELASTICITY;
+        $veblenInflationPower = $macroState->inflationSurprise() * self::APEX_VEBLEN_INFLATION_SCALAR;
 
-        $apexMacroBoost = $wealthEffect + $qeLiquidityBoost + $veblenInflationPower;
+        $apexMacroBoost = $wealthEffect + $veblenInflationPower;
 
         // Input cost basket drag on manufacturing recovered at pricing power, allocated to mass-market volume.
         $inputCostDrag = $this->resolveInputCostDrag($stock, $macroState, $streams, $pricingPower, $realizedVariableMargin);
@@ -393,6 +387,8 @@ class AutoManufacturerBusinessModel extends HeavyManufacturingBusinessModel
             'capacity_utilization_rate_ema',
             'consumer_sentiment_index_ema',
             'corporate_default_rate_ema',
+            'equity_wealth_ratio',
+            'equity_wealth_trend',
             'exchange_rate_index_ema',
             'household_debt_service_gap',
             'import_price_level',
@@ -404,8 +400,6 @@ class AutoManufacturerBusinessModel extends HeavyManufacturingBusinessModel
             'natural_rate_ema',
             'output_gap_lag_3m',
             'policy_rate_ema',
-            'qe_active',
-            'qe_intensity',
             'retail_default_rate_ema',
             'supply_chain_pressure_index_ema',
             'tips_breakeven_ema',

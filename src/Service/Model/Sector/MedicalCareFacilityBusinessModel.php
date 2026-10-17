@@ -110,7 +110,7 @@ class MedicalCareFacilityBusinessModel extends StandardCorporateBusinessModel
     /** Payer contracts reprice on multi-year cycles, so clinical wage moves take longer to reach reimbursement rates. */
     public const INPUT_PASS_THROUGH_LAG_YEARS = 1.25;
 
-    /** Multiplier for insurance arbitrage revenue expansion during high healthcare inflation regimes. */
+    /** Insurance arbitrage revenue per point of inflation over what was expected, both ways: +1pp adds 1.5%. */
     public const MEDICAL_CPI_EXPANSION_SCALAR = 1.50;
 
     // --- Tail Risk & Shock Events ---
@@ -218,13 +218,12 @@ class MedicalCareFacilityBusinessModel extends StandardCorporateBusinessModel
             ModelParam::InpatientCareWeight->value       => self::INPATIENT_CARE_WEIGHT,
             ModelParam::ElectiveOutpatientWeight->value  => self::ELECTIVE_OUTPATIENT_WEIGHT,
             ModelParam::InsuranceArbitrageWeight->value  => self::INSURANCE_ARBITRAGE_WEIGHT,
-            ModelParam::PricingPowerIndex->value         => self::PRICING_POWER_INDEX,
         ]);
 
         $inpatientWeight  = $params[ModelParam::InpatientCareWeight];
         $outpatientWeight = $params[ModelParam::ElectiveOutpatientWeight];
         $arbitrageWeight  = $params[ModelParam::InsuranceArbitrageWeight];
-        $pricingPower     = $params[ModelParam::PricingPowerIndex];
+        $pricingPower     = $this->resolvePricingPower($stock);
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
         $streams = $this->createStreamContext($momentum, $mathUtility, $macroState, $stock);
@@ -247,7 +246,6 @@ class MedicalCareFacilityBusinessModel extends StandardCorporateBusinessModel
         $eventZ      = $streams->generateExogenousZ('event', 0.10);
 
         // --- Macro Demand Sensitivities ---
-        $inflation = $macroState->inflationEma;
 
         // Inpatient care is completely inelastic (0.0 output gap sensitivity)
         // Elective outpatient procedures are pro-cyclical with consumer wealth, and are deferred outright when
@@ -255,9 +253,8 @@ class MedicalCareFacilityBusinessModel extends StandardCorporateBusinessModel
         $patientVolumeShifts = $this->resolvePatientVolumeShifts($stock, $macroState);
         $outpatientMacroBoost = $patientVolumeShifts['elective_outpatient'];
 
-        // Insurance arbitrage expands when general & medical inflation accelerates
-        $inflationExcess = max(0.0, $inflation - MacroEngine::TARGET_INFLATION);
-        $arbitrageInflationBoost = ($inflationExcess * self::MEDICAL_CPI_EXPANSION_SCALAR);
+        // Insurance arbitrage expands when inflation runs ahead of expectations and contracts when it falls behind.
+        $arbitrageInflationBoost = $macroState->inflationSurprise() * self::MEDICAL_CPI_EXPANSION_SCALAR;
 
         // --- Tail Risk Events ---
         $spendingMultiplier = 1.0;

@@ -66,7 +66,7 @@ class PrivateEquityBusinessModel extends AssetManagementBusinessModel
     public const HURDLE_CREDIT_SPREAD_SCALAR = 10.0;
     /** Multiplier for variable costs (rescue capital) when policy rates choke portfolio companies. */
     public const RESCUE_CAPITAL_COST_SCALAR = 1.00;
-    /** Gating penalty on LBO debt syndication when banks tighten credit standards (SLOOS). */
+    /** LBO financing per unit of net tightening in bank lending standards, both ways: +0.2 shrinks carry-deal multiples 5%. */
     public const SLOOS_LBO_GATING_SCALAR = 0.25;
 
     // --- Macro & Stream Physics ---
@@ -239,7 +239,8 @@ class PrivateEquityBusinessModel extends AssetManagementBusinessModel
         $lboCostOfDebt = $macroState->policyRateEma + $macroState->highYieldCreditSpreadEma;
         $baselineCostOfDebt = self::LBO_RATE_FREEZE_THRESHOLD + self::LBO_CREDIT_SPREAD_BASELINE;
         $debtCostDelta = max(0.0, $lboCostOfDebt - $baselineCostOfDebt);
-        $sloosLboDrag = max(0.0, $macroState->sloosTighteningIndexEma) * self::SLOOS_LBO_GATING_SCALAR;
+        // Bank lending standards ration buyout debt when tight and lend more against the same cash flow when loose.
+        $sloosLboDrag = $macroState->sloosTighteningIndexEma * self::SLOOS_LBO_GATING_SCALAR;
 
         $multipleCompression = max(0.0, 1.0 - ($debtCostDelta * self::LBO_COST_OF_DEBT_ELASTICITY) - $sloosLboDrag);
         $blendedMultiplier = ($params[ModelParam::ManagementFeeWeight] * 1.0) + ($params[ModelParam::CarriedInterestWeight] * $multipleCompression);
@@ -346,7 +347,7 @@ class PrivateEquityBusinessModel extends AssetManagementBusinessModel
         $lboCostOfDebt = $policyRate + $creditSpread;
         $baselineCostOfDebt = self::LBO_RATE_FREEZE_THRESHOLD + self::LBO_CREDIT_SPREAD_BASELINE;
         $debtCostDelta = max(0.0, $lboCostOfDebt - $baselineCostOfDebt);
-        $sloosLboDrag = max(0.0, $macroState->sloosTighteningIndexEma) * self::SLOOS_LBO_GATING_SCALAR;
+        $sloosLboDrag = $macroState->sloosTighteningIndexEma * self::SLOOS_LBO_GATING_SCALAR;
 
         $multipleCompression = max(0.0, 1.0 - ($debtCostDelta * self::LBO_COST_OF_DEBT_ELASTICITY) - $sloosLboDrag);
         $lboFinancingDrag = 1.0 - $multipleCompression; // % frozen

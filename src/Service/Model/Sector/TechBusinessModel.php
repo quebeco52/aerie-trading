@@ -98,8 +98,12 @@ class TechBusinessModel extends StandardCorporateBusinessModel
     public const SUBSCRIPTION_REVENUE_WEIGHT    = 0.60;
     /** Baseline fraction of revenue derived from digital advertising networks & platform usage fees. */
     public const ADVERTISING_REVENUE_WEIGHT     = 0.40;
-    /** Sensitivity of digital advertising revenue to macroeconomic output gap cycles. */
-    public const ADVERTISING_CYCLICALITY_SCALAR = 0.15;
+    /** Advertising's exposure to the cycle, the reference stream: marketing budgets are the first cut and the first restored. */
+    public const ADVERTISING_CYCLE_LOADING = 1.00;
+    /** Subscription bookings' exposure to the cycle against advertising's: annual seats renew through a slump, 0.40. */
+    public const SUBSCRIPTION_CYCLE_LOADING = 0.40;
+    /** Usage-billed cloud's exposure to the cycle against advertising's: compute follows customers' activity, 0.70. */
+    public const CLOUD_CYCLE_LOADING = 0.70;
     /** Fraction of deferred subscription bookings recognized as revenue each quarter (annual contracts, ASC 606 ratable). */
     public const SUBSCRIPTION_RECOGNITION_RATE = 0.25;
 
@@ -148,12 +152,12 @@ class TechBusinessModel extends StandardCorporateBusinessModel
             ModelParam::SubscriptionRevenueWeight->value => self::SUBSCRIPTION_REVENUE_WEIGHT,
             ModelParam::AdvertisingRevenueWeight->value  => self::ADVERTISING_REVENUE_WEIGHT,
             ModelParam::CloudInfrastructureWeight->value => 0.00,
-            ModelParam::AdvertisingCyclicality->value     => self::ADVERTISING_CYCLICALITY_SCALAR,
+            ModelParam::AdvertisingCyclicality->value     => self::ADVERTISING_CYCLE_LOADING,
             ModelParam::MonopolyAggression->value         => 0.5,
         ]);
 
         $rawCloudWeight      = $params[ModelParam::CloudInfrastructureWeight];
-        $adCyclicalityScalar = $params[ModelParam::AdvertisingCyclicality];
+        $adCycleLoading      = $params[ModelParam::AdvertisingCyclicality];
 
         $aggression = max(0.0, min(1.0, $params[ModelParam::MonopolyAggression]));
         // The reward of aggressive pricing and data harvesting is already in the seeded margin the engine hands in;
@@ -186,9 +190,13 @@ class TechBusinessModel extends StandardCorporateBusinessModel
         $adZ           = $streams->generateZ('advertising', 0.30); // Digital advertising auction demand & impression volume
         $eventZ        = $streams->generateExogenousZ('event', 0.10); // Fat-tail regulatory antitrust / data breach Z-score
 
-        // Macro advertising cyclicality (marketing budgets expand with positive output gap, collapse in recessions)
-        $outputGap = $macroState->outputGapEma;
-        $adCyclicality = $outputGap * $adCyclicalityScalar;
+        // The firm-wide cycle lands on all of expected revenue; it is carried by advertising, less by usage-billed
+        // cloud and least by annual subscription seats.
+        $cycleShares = MacroTransmission::allocateDemandShift(
+            $activeWeights,
+            ['subscription' => self::SUBSCRIPTION_CYCLE_LOADING, 'advertising' => $adCycleLoading, 'cloud_infrastructure' => self::CLOUD_CYCLE_LOADING],
+            $this->resolveCycleDemandShift($stock, $macroState)
+        );
 
         // Fat Tail Risk: Data Breaches, Anti-Trust, and Viral Breakthroughs
         // A settlement is a one-quarter fine followed by a multi-year consent decree: court-supervised
@@ -214,12 +222,12 @@ class TechBusinessModel extends StandardCorporateBusinessModel
         // Subscriptions are BOOKED as annual contracts and recognized ratably from deferred revenue, so an
         // ARR shock reaches the income statement over the contract term rather than in one quarter.
         $subscriptionBook = $streams->recognizeBacklog('subscription', $expectedRevenue * $subWeight,
-            max(0.0, 1.0 + ($subscriptionZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR * 0.6))), self::SUBSCRIPTION_RECOGNITION_RATE);
+            max(0.0, 1.0 + ($subscriptionZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR * 0.6)) + $cycleShares['subscription']), self::SUBSCRIPTION_RECOGNITION_RATE);
         $subscriptionRevenue = $subscriptionBook['revenue'];
 
         $viralMultiplier = ($eventType === ShockEvent::VIRAL_GROWTH) ? self::VIRAL_GROWTH_REV_MULT : 1.0;
         $adRevenue = max(0.0, $expectedRevenue * $adWeight
-            * (1.0 + ($adZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)) + $adCyclicality)
+            * (1.0 + ($adZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)) + $cycleShares['advertising'])
             * $viralMultiplier);
 
         $streamRevenues = [
@@ -231,7 +239,7 @@ class TechBusinessModel extends StandardCorporateBusinessModel
         $cloudZ = 0.0;
         if ($cloudWeight > 0.0) {
             $cloudZ = $streams->generateZ('cloud_infrastructure', 0.60); // High persistence, sticky enterprise contracts
-            $cloudRevenue = max(0.0, $expectedRevenue * $cloudWeight * (1.0 + ($cloudZ * $baselineVol * self::REVENUE_VARIANCE_SCALAR * 0.4)));
+            $cloudRevenue = max(0.0, $expectedRevenue * $cloudWeight * (1.0 + ($cloudZ * $baselineVol * self::REVENUE_VARIANCE_SCALAR * 0.4) + $cycleShares['cloud_infrastructure']));
             $streamRevenues['cloud_infrastructure'] = $cloudRevenue;
         }
 
@@ -297,7 +305,6 @@ class TechBusinessModel extends StandardCorporateBusinessModel
         return [
             'exchange_rate_index_ema',
             'import_price_level',
-            'output_gap_ema',
             'output_gap_lag_6m',
             'tips_breakeven_ema',
             'real_wage_gap',

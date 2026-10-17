@@ -787,6 +787,26 @@ readonly class MacroStateDTO
     }
 
     /**
+     * Realised inflation over what the market expected, both ways: what a CPI escalator or a cost-plus contract passes
+     * through beyond the expected inflation a firm's pricing already carries. Read one-sided against the target, an
+     * escalator was paid in every quarter inflation ran hot, charged in none that ran cold, and counted the expected
+     * part twice.
+     */
+    public function inflationSurprise(): float
+    {
+        return $this->inflationEma - $this->tipsBreakevenEma;
+    }
+
+    /**
+     * Equity wealth against its multi-year trend, as a fraction: the reading the engine's own equity wealth effect
+     * takes. Zero before a market has been reported.
+     */
+    public function equityWealthDeviation(): float
+    {
+        return $this->equityWealthTrend > 0.0 ? ($this->equityWealthRatio / $this->equityWealthTrend) - 1.0 : 0.0;
+    }
+
+    /**
      * Unemployment over its natural rate, in points as a fraction.
      *
      * The natural rate scars after a slump and heals over the years that follow (LaborMarketSubsystem), so unemployment
