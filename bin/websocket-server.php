@@ -1,6 +1,8 @@
 #!/usr/bin/env php
 <?php
 
+declare(strict_types=1);
+
 use Firebase\JWT\JWT;
 use Firebase\JWT\Key;
 use Workerman\Connection\TcpConnection;
@@ -14,7 +16,7 @@ TcpConnection::$defaultMaxSendBufferSize = 10 * 1024 * 1024;
 
 // Retrieve the secret securely from the environment.
 // CRITICAL: We trim quotes because Docker does NOT strip them from env vars, but Symfony DOES!
-$appSecret = trim($_ENV['APP_SECRET'] ?? getenv('APP_SECRET') ?? '', '"\'');
+$appSecret = trim($_ENV['APP_SECRET'] ?? (getenv('APP_SECRET') ?: ''), '"\'');
 
 if (empty($appSecret)) {
     die("FATAL: APP_SECRET is missing.\n");

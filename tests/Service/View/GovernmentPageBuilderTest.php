@@ -521,7 +521,7 @@ class GovernmentPageBuilderTest extends TestCase
         $box = static function (string $text, float $x, float $y, string $anchor) use ($size): array {
             $width = mb_strlen($text) * $size * GovernmentPageBuilder::COMPASS_CHARACTER_WIDTH;
             $left = match ($anchor) {
-                'start' => $x, 'end' => $x - $width, default => $x - ($width / 2.0)
+                'start' => $x, 'end' => $x - $width, default => $x - ($width / 2.0),
             };
 
             return [$left, $y - (0.8 * $size), $left + $width, $y + (0.2 * $size)];

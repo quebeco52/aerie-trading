@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Service\Macro\Subsystem;
 
 use App\Data\Macro\MacroFieldRegistry;

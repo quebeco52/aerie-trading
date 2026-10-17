@@ -107,7 +107,7 @@ not the code.
 - Suite membership is explicit in `phpunit.dist.xml`; a test in an unlisted directory never runs.
 - Stochastic behaviour: invariant or distribution tests in `tests/Financial/`, not exact values. Break the guarded
   term by hand once to confirm the test fails.
-- Format: PER-CS 3.0 through php-cs-fixer (`.php-cs-fixer.dist.php`, layout rules only). Run
+- Format: PER-CS 3.0 and `declare(strict_types=1)` in every file, through php-cs-fixer (`.php-cs-fixer.dist.php`). Run
   `bin/php-slot php vendor/bin/php-cs-fixer fix` or `make cs-fix` before handing back.
 - Tests and verification: `bin/verify` (PHPStan and format on changed files + quick tests, ~20 s; works in sandboxes
   without Docker).

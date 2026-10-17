@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace {
     if (!function_exists('bcadd')) {
         function bcadd(string $num1, string $num2, int $scale = 0): string
