@@ -88,7 +88,8 @@ final class EarningsManagementTest extends TestCase
 
     /**
      * The Securities Commission's enforcement scales the odds a firm closes a near miss: a gap closed at 40% odds under
-     * the founding rules (the draw at 25%) is left at 20% under the strictest enforcement, and certainty never exceeds one.
+     * the founding rules (the draw at 25%) is left at 20% under the strictest enforcement, and certainty never exceeds
+     * one.
      */
     public function testEnforcementScalesTheOddsOfClosingAGap(): void
     {
@@ -132,8 +133,8 @@ final class EarningsManagementTest extends TestCase
     }
 
     /**
-     * The odds fall with the gap (Degeorge, Patel & Zeckhauser 1999: the cost of manipulation rises with the shortfall),
-     * so the hole in the reported distribution is just below zero and not across the whole reachable band.
+     * The odds fall with the gap (Degeorge, Patel & Zeckhauser 1999: the cost of manipulation rises with the
+     * shortfall), so the hole in the reported distribution is just below zero and not across the whole reachable band.
      */
     public function testTheOddsOfClosingFallWithTheGapAndVanishAtItsEdge(): void
     {

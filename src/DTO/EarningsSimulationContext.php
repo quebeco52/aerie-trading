@@ -23,7 +23,10 @@ class EarningsSimulationContext
     public float $investedCapital = 0.0;
     public float $corporateTaxRate = 0.0;
     public float $baselineRoic = 0.0;
-    /** Book equity over total assets as the quarter opens, for a firm that manages toward a capital target; null otherwise. */
+    /**
+     * Book equity over total assets as the quarter opens, for a firm that manages toward a capital target; null
+     * otherwise.
+     */
     public ?float $openingCapitalRatio = null;
     public float $baselineVol = 0.0;
     public float $sharesOutstanding = 0.0;
@@ -34,7 +37,10 @@ class EarningsSimulationContext
     public float $priorSeasonalFactor = 1.0;
     public float $seasonallyAdjustedRevenue = 0.0;
     public float $seasonallyAdjustedEbit = 0.0;
-    /** The deseasonalized quarter's net income, taxed as the quarter is and net of the levy: what the run rate is struck on. */
+    /**
+     * The deseasonalized quarter's net income, taxed as the quarter is and net of the levy: what the run rate is struck
+     * on.
+     */
     public float $seasonallyAdjustedNetIncome = 0.0;
     public float $structuralOperatingMargin = 0.0;
     /** Calendar quarter (0-3) this report covers; drives seasonality. */
@@ -50,15 +56,23 @@ class EarningsSimulationContext
     public float $capacityUtilizationBeforeShocks = 0.0;
     public float $structuralRevenue = 0.0;
     public float $expectedRevenue = 0.0;
-    /** Expected revenue without the firm's own demand shock and jump this quarter: the base the consensus is formed on. */
+    /**
+     * Expected revenue without the firm's own demand shock and jump this quarter: the base the consensus is formed on.
+     */
     public float $expectedRevenueBeforeShocks = 0.0;
     /** Log gap between the price level and the one the plant book carries at its planned nominal growth. */
     public float $priceLevelSurprise = 0.0;
     public float $fixedCosts = 0.0;
     public float $baselineVariableMargin = 0.0;
-    /** The quarter's depreciation on the plant's schedule, carved out of the cost base: what it charges at structural output. */
+    /**
+     * The quarter's depreciation on the plant's schedule, carved out of the cost base: what it charges at structural
+     * output.
+     */
     public float $structuralDepreciation = 0.0;
-    /** The depreciation charge analysts forecast: the schedule, or for a units-of-production plant the output before its own shocks. */
+    /**
+     * The depreciation charge analysts forecast: the schedule, or for a units-of-production plant the output before its
+     * own shocks.
+     */
     public float $expectedDepreciation = 0.0;
     /** Construction in progress placed in service this quarter; leaves CIP and enters gross PP&E. */
     public float $completedCip = 0.0;
@@ -66,13 +80,21 @@ class EarningsSimulationContext
     public float $replacementCostRatio = 1.0;
     /** Capex spent replacing depreciated plant at today's capital-goods prices this quarter. */
     public float $maintenanceCapex = 0.0;
-    /** Growth plant the flexible accelerator still allows this quarter after the earnings engine's own; null where no plant budget applies (a lender). */
+    /**
+     * Growth plant the flexible accelerator still allows this quarter after the earnings engine's own; null where no
+     * plant budget applies (a lender).
+     */
     public ?float $expansionBudget = null;
     /** Lower-of-cost-or-NRV writedown on unsold inventory this quarter (ASC 330), non-cash. */
     public float $inventoryWriteDown = 0.0;
-    /** Long-lived assets written down this quarter by the business model's own impairment test (ASC 360-10), non-cash. */
+    /**
+     * Long-lived assets written down this quarter by the business model's own impairment test (ASC 360-10), non-cash.
+     */
     public float $plantImpairment = 0.0;
-    /** Expected credit loss provision against trade receivables this quarter (ASC 326), non-cash; negative when released. */
+    /**
+     * Expected credit loss provision against trade receivables this quarter (ASC 326), non-cash; negative when
+     * released.
+     */
     public float $receivablesProvision = 0.0;
     /** Change in net working capital this quarter; a build consumes cash, a release frees it. */
     public float $deltaWorkingCapital = 0.0;
@@ -89,19 +111,33 @@ class EarningsSimulationContext
      * (ASC 420-10). Like the impairments above it sits in operating expense, and no analyst forecasts it.
      */
     public float $restructuringCharge = 0.0;
-    /** One-off operating charge the sector physics booked this quarter (a product recall, a regulator's fine); in EBIT, forecast by no analyst. */
+    /**
+     * One-off operating charge the sector physics booked this quarter (a product recall, a regulator's fine); in EBIT,
+     * forecast by no analyst.
+     */
     public float $eventCharge = 0.0;
-    /** The quarter's special items before tax (restructuring, event charges and plant write-downs): in GAAP EBIT, kept out of the run rate and the Street figure. */
+    /**
+     * The quarter's special items before tax (restructuring, event charges and plant write-downs): in GAAP EBIT, kept
+     * out of the run rate and the Street figure.
+     */
     public float $specialCharges = 0.0;
-    /** Special items after tax plus any goodwill impairment: what GAAP net income carries that Street earnings exclude. */
+    /**
+     * Special items after tax plus any goodwill impairment: what GAAP net income carries that Street earnings exclude.
+     */
     public float $specialItems = 0.0;
-    /** Opening deferred-tax balances booked straight to retained earnings on a row's first report under ASC 740 (ASC 250 cumulative effect): not income. */
+    /**
+     * Opening deferred-tax balances booked straight to retained earnings on a row's first report under ASC 740 (ASC 250
+     * cumulative effect): not income.
+     */
     public float $cumulativeEffectAdjustment = 0.0;
     /** The committed cost base this quarter, as a fraction of the base structural capacity implies. */
     public float $committedCostScale = 1.0;
     /** How far that base was cut this quarter; zero when the firm held or rebuilt it. */
     public float $committedCostCut = 0.0;
-    /** Deferred part of the quarter's tax expense (ASC 740), non-cash: accelerated tax depreciation, a write-down the tax books defer, a rate change's re-strike, the carryforward's asset. */
+    /**
+     * Deferred part of the quarter's tax expense (ASC 740), non-cash: accelerated tax depreciation, a write-down the
+     * tax books defer, a rate change's re-strike, the carryforward's asset.
+     */
     public float $deferredTaxExpense = 0.0;
     /** Tax that actually left the company this quarter; total expense less the deferred portion. */
     public float $cashTaxPaid = 0.0;
@@ -128,14 +164,26 @@ class EarningsSimulationContext
     public array $streamRevenue = [];
     /** Mandatory CapEx committed by the sector physics this quarter (spectrum, grid rebuild), in dollars. */
     public float $scheduledCapex = 0.0;
-    /** Fraction of this quarter's demand taken by (negative) or ceded from (positive) same-industry rivals' idiosyncratic gains. */
+    /**
+     * Fraction of this quarter's demand taken by (negative) or ceded from (positive) same-industry rivals'
+     * idiosyncratic gains.
+     */
     public float $rivalShareDrain = 0.0;
 
-    /** The firm's reach into the market it sells into (CorporateMetrics::calculateScaleRatio); weighs its build and its gains in the industry ledger. */
+    /**
+     * The firm's reach into the market it sells into (CorporateMetrics::calculateScaleRatio); weighs its build and its
+     * gains in the industry ledger.
+     */
     public float $addressableShare = 0.0;
-    /** Volume shift from the firm's own real price change (own-price elasticity times price growth above expected inflation). */
+    /**
+     * Volume shift from the firm's own real price change (own-price elasticity times price growth above expected
+     * inflation).
+     */
     public float $ownPriceVolumeShift = 0.0;
-    /** Realized price level relative to a balanced industry: below one when the industry's installed capacity outruns trend demand. */
+    /**
+     * Realized price level relative to a balanced industry: below one when the industry's installed capacity outruns
+     * trend demand.
+     */
     public float $industryPriceLevel = 1.0;
     /** Trend growth in utilisation over the quarter: the secular growth rate times the step. */
     public float $secularDrift = 0.0;
@@ -164,17 +212,25 @@ class EarningsSimulationContext
     public float $bankLevy = 0.0;
     /** Provision for credit losses on the earning-asset book charged this quarter, net of any release (financials). */
     public float $creditLossProvision = 0.0;
-    /** The provision analysts carry in the estimate: the through-the-cycle charge on the book they can see (financials). */
+    /**
+     * The provision analysts carry in the estimate: the through-the-cycle charge on the book they can see (financials).
+     */
     public float $expectedCreditLossProvision = 0.0;
     /** Earning assets written off against the allowance this quarter (financials). */
     public float $netChargeOffs = 0.0;
-    /** Funding cost the duration squeeze added to the cost ratio this quarter, which the net interest margin deducts (banks). */
+    /**
+     * Funding cost the duration squeeze added to the cost ratio this quarter, which the net interest margin deducts
+     * (banks).
+     */
     public float $netInterestSqueeze = 0.0;
     /** Cash deployed into new earning assets less assets sold (financials). */
     public float $netLoanOriginations = 0.0;
     /** Loss realized on earning assets sold below carrying value, booked to equity as other comprehensive loss. */
     public float $assetSaleLoss = 0.0;
-    /** Mark carried on the investment securities book after this quarter's roll (ASC 320); negative is a loss. Not income. */
+    /**
+     * Mark carried on the investment securities book after this quarter's roll (ASC 320); negative is a loss. Not
+     * income.
+     */
     public float $unrealizedSecuritiesMark = 0.0;
     /** Quarterly net cash from operations (net income + D&A - working capital build). */
     public float $operatingCashFlow = 0.0;
@@ -185,9 +241,15 @@ class EarningsSimulationContext
     /** Dickinson life-cycle stage classified from this quarter's cash-flow signs. */
     public ?\App\Data\Company\LifecycleStage $lifecycleStage = null;
     /** @var array<string, float> Reported operating KPIs emitted by the sector physics. */
-    /** Net accrual booked this quarter to steer reported earnings toward consensus; negative when a prior quarter's borrowing unwinds. */
+    /**
+     * Net accrual booked this quarter to steer reported earnings toward consensus; negative when a prior quarter's
+     * borrowing unwinds.
+     */
     public float $managedAccrual = 0.0;
-    /** That accrual before tax, as the filed statement carries it in the operating lines; the tax on it is deferred, since no cash moved. */
+    /**
+     * That accrual before tax, as the filed statement carries it in the operating lines; the tax on it is deferred,
+     * since no cash moved.
+     */
     public float $managedAccrualPretax = 0.0;
 
     public array $kpis = [];

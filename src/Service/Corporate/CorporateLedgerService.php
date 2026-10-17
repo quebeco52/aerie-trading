@@ -49,7 +49,8 @@ class CorporateLedgerService
         $conn = $this->entityManager->getConnection();
         $paidAtStr = $paidAt->format('Y-m-d H:i:s');
 
-        // Holdings include user_stocks plus escrowed shares from open SELL orders (open BUY orders escrow cash, not shares).
+        // Holdings include user_stocks plus escrowed shares from open SELL orders (open BUY orders escrow cash, not
+        // shares).
         $conn->executeStatement(
             "INSERT INTO dividend_payment
                  (user_id, asset_type, ticker, shares_held, dividend_per_share, amount, paid_at)
@@ -202,7 +203,8 @@ class CorporateLedgerService
                     }
                 }
 
-                // Refund fractional escrow remnants: cash behind resting limit BUYs (a buy stop escrowed none) and shares behind SELLs.
+                // Refund fractional escrow remnants: cash behind resting limit BUYs (a buy stop escrowed none) and
+                // shares behind SELLs.
                 $conn->executeStatement(
                     "UPDATE users u
                      INNER JOIN (
@@ -335,7 +337,8 @@ class CorporateLedgerService
             $optionHolders = $this->restateOptionsForSplit($conn, $stock, $factor, $isReverse);
 
             // The name's own share counts move with it: the stock it still has to put through the market, and its short
-            // interest, read back from the positions just restated, since a reverse split rounds each short toward zero.
+            // interest, read back from the positions just restated, since a reverse split rounds each short toward
+            // zero.
             $stock->setCorporateFlowBacklog($isReverse ? $stock->getCorporateFlowBacklog() / $factor : $stock->getCorporateFlowBacklog() * $factor);
             $stock->setShortInterestShares(Decimal::format((float) $conn->fetchOne(
                 'SELECT COALESCE(-SUM(quantity), 0) FROM user_stocks WHERE stock_id = :stock_id AND quantity < 0',
@@ -344,7 +347,8 @@ class CorporateLedgerService
 
             PriceAlertService::restateForSplit($conn, $stock->getTicker(), $factor, $isReverse);
 
-            // Restate historical event descriptions so per-share metrics (EPS, dividends, prices) reflect post-split scale.
+            // Restate historical event descriptions so per-share metrics (EPS, dividends, prices) reflect post-split
+            // scale.
             $this->restateEventDescriptions($conn, $stock, $isReverse ? $splitFactor : 1.0 / $splitFactor);
 
             $conn->commit();
@@ -390,7 +394,8 @@ class CorporateLedgerService
      * Contracts are renamed in strike order, the direction the strikes move, so no new symbol is taken while the
      * contract holding it is still waiting its turn.
      *
-     * @return list<array{user_id: int|string, quantity: int|string}> One row per account holding options on the name, before the restatement.
+     * @return list<array{user_id: int|string, quantity: int|string}> One row per account holding options on the name,
+     *                                                                before the restatement.
      */
     private function restateOptionsForSplit(\Doctrine\DBAL\Connection $conn, Stock $stock, int $factor, bool $isReverse): array
     {

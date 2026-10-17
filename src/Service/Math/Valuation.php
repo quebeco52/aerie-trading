@@ -34,9 +34,14 @@ final class Valuation
     public const MAX_INTRINSIC_PE = 35.0;
 
     // --- Relative Valuation Shrinkage (Vasicek 1973) ---
-    /** Spread (cost of equity less growth) at which a firm's own Gordon multiple and its sector's carry equal weight. */
+    /**
+     * Spread (cost of equity less growth) at which a firm's own Gordon multiple and its sector's carry equal weight.
+     */
     public const INTRINSIC_PE_SHRINKAGE_SPREAD = 0.03;
-    /** Real long government yield the sector multiples were quoted at: the founding natural rate plus the founding term premium (2.65%). */
+    /**
+     * Real long government yield the sector multiples were quoted at: the founding natural rate plus the founding term
+     * premium (2.65%).
+     */
     public const FOUNDING_REAL_RISK_FREE_RATE = MacroEngine::BASE_NATURAL_RATE + MacroEngine::NS_BASE_TERM_PREMIUM;
     /** Cap on a Gordon capitalization multiple (~33.3x, a 3% yield). */
     public const MAX_DCF_MULTIPLIER = 33.33;
@@ -46,15 +51,29 @@ final class Valuation
     public const ACCRUALS_ANOMALY_PE_PENALTY_SCALE = 8.0;
 
     // --- Investor Taxes (Brennan 1970; Chetty & Saez 2005) ---
-    /** Share of listed equity held by the District's own taxable holders, the holders a tax on dividends reaches: 20%. A financial centre's listed shares are largely foreign-held (identified owners 2017: Singapore 39% foreign against 27% domestic, Hong Kong 62% against 11%, the US 16% against 65%; OECD 2019, Owners of the World's Listed Companies), so below the US's 24.2% in taxable accounts (Rosenthal & Austin 2016). */
+    /**
+     * Share of listed equity held by the District's own taxable holders, the holders a tax on dividends reaches: 20%. A
+     * financial centre's listed shares are largely foreign-held (identified owners 2017: Singapore 39% foreign against
+     * 27% domestic, Hong Kong 62% against 11%, the US 16% against 65%; OECD 2019, Owners of the World's Listed
+     * Companies), so below the US's 24.2% in taxable accounts (Rosenthal & Austin 2016).
+     */
     public const TAXABLE_EQUITY_SHARE = 0.20;
-    /** Tax on dividends at the founding: the US 15% on qualified dividends in 2009, the rate the calibrated equity returns were earned under. */
+    /**
+     * Tax on dividends at the founding: the US 15% on qualified dividends in 2009, the rate the calibrated equity
+     * returns were earned under.
+     */
     public const FOUNDING_DIVIDEND_TAX_RATE = 0.15;
     /** Tax on capital gains, the US 15% long-term rate in 2009; the Diet does not set it. */
     public const CAPITAL_GAINS_TAX_RATE = 0.15;
-    /** Accrual-equivalent capital gains tax as a share of the statutory rate, deferral and step-up at death lowering it: 3.4-6.6% against 18.1-27.1%, 1960-78 (Protopapadakis 1983), the midpoints' ratio. */
+    /**
+     * Accrual-equivalent capital gains tax as a share of the statutory rate, deferral and step-up at death lowering it:
+     * 3.4-6.6% against 18.1-27.1%, 1960-78 (Protopapadakis 1983), the midpoints' ratio.
+     */
     public const CAPITAL_GAINS_ACCRUAL_EQUIVALENT_RATIO = 5.0 / 22.6;
-    /** Elasticity of regular dividends to the holders' average net-of-tax rate: the 2003 cut took that rate from 29% to 17% (Poterba 2004) and raised regular dividends 20% (Chetty & Saez 2005), ln 1.20 / ln(0.83 / 0.71). */
+    /**
+     * Elasticity of regular dividends to the holders' average net-of-tax rate: the 2003 cut took that rate from 29% to
+     * 17% (Poterba 2004) and raised regular dividends 20% (Chetty & Saez 2005), ln 1.20 / ln(0.83 / 0.71).
+     */
     public const DIVIDEND_NET_OF_TAX_ELASTICITY = 1.168;
 
     /**
@@ -91,13 +110,14 @@ final class Valuation
      * @param float      $roic           The Return on Invested Capital.
      * @param float      $growthRate     The expected perpetual growth rate.
      * The sector's multiple is quoted at the founding discount rate, so before it serves as the prior it is re-struck
-     * at today's: its earnings yield moves with the firm's real hurdle (sectorHurdleShift()). A fixed prior diluted every
-     * firm's response to rates by its weight on it, and diluted most the long-duration firms, whose narrow spread gives
-     * the prior the most weight, so a staple repriced less on a rate move than a cyclical did.
+     * at today's: its earnings yield moves with the firm's real hurdle (sectorHurdleShift()). A fixed prior diluted
+     * every firm's response to rates by its weight on it, and diluted most the long-duration firms, whose narrow spread
+     * gives the prior the most weight, so a staple repriced less on a rate move than a cyclical did.
      *
      * @param float|null $sectorMultiple The sector's baseline trading multiple used as the cross-sectional
      *                                   prior. Null skips shrinkage and returns the raw Gordon multiple.
-     * @param float      $sectorHurdleShift How far the firm's real hurdle has moved from the one the sector multiple was quoted at.
+     * @param float      $sectorHurdleShift How far the firm's real hurdle has moved from the one the sector multiple
+     *                                      was quoted at.
      * @return float The intrinsic fair value P/E multiple.
      */
     public static function calculateIntrinsicFairValuePE(
@@ -328,10 +348,10 @@ final class Valuation
     }
 
     /**
-     * Share of a growing perpetuity's value that a lasting change starting some years from now captures, phasing in at a
-     * given speed from then. A stream growing at g and discounted at k accrues its value at the density
-     * (k - g) e^{-(k - g) t} (Gordon 1959), so the part after t0 is e^{-(k - g) t0}; a change that closes the gap to its
-     * full size at speed lambda keeps lambda / (lambda + k - g) of that.
+     * Share of a growing perpetuity's value that a lasting change starting some years from now captures, phasing in at
+     * a given speed from then. A stream growing at g and discounted at k accrues its value at the density (k - g)
+     * e^{-(k - g) t} (Gordon 1959), so the part after t0 is e^{-(k - g) t0}; a change that closes the gap to its full
+     * size at speed lambda keeps lambda / (lambda + k - g) of that.
      *
      * @param float $capRate     The discount rate less growth, k - g.
      * @param float $years       Years until the change starts.
@@ -377,8 +397,8 @@ final class Valuation
 
     /**
      * How far firms' regular dividends sit from their founding level under a dividend tax: the holders' average
-     * net-of-tax rate, 1 - w t_d, against the founding rate's, to the measured elasticity (Chetty & Saez 2005). Buybacks
-     * take up the cash a lower dividend leaves.
+     * net-of-tax rate, 1 - w t_d, against the founding rate's, to the measured elasticity (Chetty & Saez 2005).
+     * Buybacks take up the cash a lower dividend leaves.
      *
      * @param float $dividendTaxRate The tax on dividends.
      */

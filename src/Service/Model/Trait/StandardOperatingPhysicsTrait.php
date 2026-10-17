@@ -207,19 +207,28 @@ trait StandardOperatingPhysicsTrait
         return 1.0;
     }
 
-    /** The annualized revenue times the share of it the rules on extraction last scaled (underExtractionRules()); zero for a model that never applies them. */
+    /**
+     * The annualized revenue times the share of it the rules on extraction last scaled (underExtractionRules()); zero
+     * for a model that never applies them.
+     */
     public function annualExtractionCostBase(Stock $stock): float
     {
         return (float) $stock->getTotalRevenue() * (float) (($stock->getEarningsMomentumZ() ?? [])[FinancialConstants::STATE_EXTRACTION_COST_SHARE] ?? 0.0);
     }
 
-    /** The annualized revenue times the share of it, less its variable cost, the model last reported moving with turnover; zero for a model that reports none. */
+    /**
+     * The annualized revenue times the share of it, less its variable cost, the model last reported moving with
+     * turnover; zero for a model that reports none.
+     */
     public function annualStampDutyTurnoverBase(Stock $stock): float
     {
         return (float) $stock->getTotalRevenue() * (float) (($stock->getEarningsMomentumZ() ?? [])[FinancialConstants::STATE_STAMP_DUTY_TURNOVER_SHARE] ?? 0.0);
     }
 
-    /** The annualized revenue times the share of it the model last reported the carbon price's power uplift adding to earnings before tax; zero for a model that reports none. */
+    /**
+     * The annualized revenue times the share of it the model last reported the carbon price's power uplift adding to
+     * earnings before tax; zero for a model that reports none.
+     */
     public function annualCarbonPowerEarningsBase(Stock $stock): float
     {
         return (float) $stock->getTotalRevenue() * (float) (($stock->getEarningsMomentumZ() ?? [])[FinancialConstants::STATE_CARBON_POWER_EARNINGS_SHARE] ?? 0.0);
@@ -231,7 +240,10 @@ trait StandardOperatingPhysicsTrait
         return 0.0;
     }
 
-    /** The annualized revenue times the share of it the model last reported moving with government purchases, less its variable cost; zero for a model that reports none. */
+    /**
+     * The annualized revenue times the share of it the model last reported moving with government purchases, less its
+     * variable cost; zero for a model that reports none.
+     */
     public function annualPublicSpendingEarningsBase(Stock $stock): float
     {
         return (float) $stock->getTotalRevenue() * (float) (($stock->getEarningsMomentumZ() ?? [])[FinancialConstants::STATE_PUBLIC_SPENDING_EARNINGS_SHARE] ?? 0.0);
@@ -275,7 +287,10 @@ trait StandardOperatingPhysicsTrait
     }
 
     // --- Input Cost Basket ---
-    /** Share of an input price shock a firm with full pricing power recovers in its own prices; the rest lands on margin (incomplete pass-through, Gopinath & Itskhoki 2010). */
+    /**
+     * Share of an input price shock a firm with full pricing power recovers in its own prices; the rest lands on margin
+     * (incomplete pass-through, Gopinath & Itskhoki 2010).
+     */
     public const MAX_INPUT_COST_PASS_THROUGH = 0.80;
     /** Bound on the signed cost-ratio drag the basket may produce in one quarter. */
     public const MAX_INPUT_COST_DRAG = 0.50;
@@ -351,19 +366,27 @@ trait StandardOperatingPhysicsTrait
         return -$fxShift * ($exposure ?? $this->getFxRevenueExposure());
     }
 
-    /** Years for spot input moves to reach the cost base (0 = spot buyer; forward hedges and supply contracts lengthen it). */
+    /**
+     * Years for spot input moves to reach the cost base (0 = spot buyer; forward hedges and supply contracts lengthen
+     * it).
+     */
     public function getInputCostLagYears(): float
     {
         return defined('static::INPUT_COST_LAG_YEARS') ? (float) static::INPUT_COST_LAG_YEARS : 0.0;
     }
 
-    /** This firm's buying lag: the sector's by default; a model whose firms hedge to their own horizons overrides it. */
+    /**
+     * This firm's buying lag: the sector's by default; a model whose firms hedge to their own horizons overrides it.
+     */
     protected function resolveInputCostLagYears(Stock $stock): float
     {
         return $this->getInputCostLagYears();
     }
 
-    /** Years for the recoverable part of an input move to reach selling prices (menu costs, contract repricing, fuel surcharges). */
+    /**
+     * Years for the recoverable part of an input move to reach selling prices (menu costs, contract repricing, fuel
+     * surcharges).
+     */
     public function getInputPassThroughLagYears(): float
     {
         return defined('static::INPUT_PASS_THROUGH_LAG_YEARS')
@@ -609,7 +632,9 @@ trait StandardOperatingPhysicsTrait
         };
     }
 
-    /** Pricing power index for this stock: ticker override, then the sector's PRICING_POWER_INDEX, then the median 0.5. */
+    /**
+     * Pricing power index for this stock: ticker override, then the sector's PRICING_POWER_INDEX, then the median 0.5.
+     */
     protected function resolvePricingPower(Stock $stock): float
     {
         $default = defined('static::PRICING_POWER_INDEX') ? (float) static::PRICING_POWER_INDEX : 0.5;
@@ -900,7 +925,10 @@ trait StandardOperatingPhysicsTrait
         return false;
     }
 
-    /** Invested capital less any marketable investments, which carry their own asset line and no depreciation. The treasury is already outside it, so the stakes are the only deduction. */
+    /**
+     * Invested capital less any marketable investments, which carry their own asset line and no depreciation. The
+     * treasury is already outside it, so the stakes are the only deduction.
+     */
     public function getPlantCapital(Stock $stock, float $investedCapital): float
     {
         return max(0.0, $investedCapital - max(0.0, (float) ($stock->getListedStakesCarrying() ?? 0.0)));

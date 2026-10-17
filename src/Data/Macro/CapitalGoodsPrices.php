@@ -20,7 +20,8 @@ final class CapitalGoodsPrices
 
     /** Annual drift by business model, with the BEA industries it is measured on. */
     public const DRIFT_BY_MODEL = [
-        'AdvertisingAgencyBusinessModel' => -0.0047, // Miscellaneous professional, scientific, and technical services \4\
+        // Miscellaneous professional, scientific, and technical services \4\
+        'AdvertisingAgencyBusinessModel' => -0.0047,
         'ApparelManufacturingBusinessModel' => 0.0033, // Apparel and leather and allied products
         'AutoManufacturerBusinessModel' => -0.0006, // Motor vehicles, bodies and trailers, and parts
         'BiotechBusinessModel' => 0.0022, // Chemical products
@@ -37,7 +38,8 @@ final class CapitalGoodsPrices
         'HomebuilderBusinessModel' => -0.0005, // Construction
         'InternetRetailBusinessModel' => 0.0030, // Other retail
         'LawFirmBusinessModel' => -0.0052, // Legal services
-        'LogisticsBusinessModel' => 0.0009, // Truck transportation, Other transportation and support activities \2\, Warehousing and storage
+        // Truck transportation, Other transportation and support activities \2\, Warehousing and storage
+        'LogisticsBusinessModel' => 0.0009,
         'LuxuryBusinessModel' => 0.0009, // Other manufacturing
         'MedicalCareFacilityBusinessModel' => -0.0053, // Health and social assistance
         'MerchantHouseBusinessModel' => -0.0014, // Wholesale trade

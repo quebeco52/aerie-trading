@@ -24,7 +24,9 @@ final class InsuranceWrittenCapacityTest extends TestCase
 {
     private const DISPERSION = 0.06;
 
-    /** More return over the hurdle never buys less book, the share stays inside [floor, 1], and it has no jump anywhere. */
+    /**
+     * More return over the hurdle never buys less book, the share stays inside [floor, 1], and it has no jump anywhere.
+     */
     public function testTheSupplyCurveIsMonotoneBoundedAndContinuous(): void
     {
         $floor = InsuranceBusinessModel::MIN_WRITTEN_CAPACITY;
@@ -131,7 +133,10 @@ final class InsuranceWrittenCapacityTest extends TestCase
         return $math;
     }
 
-    /** An underwriter with three times its surplus in float, whose Kenney capacity is the given multiple of its premium demand. */
+    /**
+     * An underwriter with three times its surplus in float, whose Kenney capacity is the given multiple of its premium
+     * demand.
+     */
     private function underwriterAtCapacity(float $capacityToDemand): Stock
     {
         $samRatio = 2.0;

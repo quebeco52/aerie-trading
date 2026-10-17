@@ -28,7 +28,10 @@ use App\Service\Model\ModelParam;
 class TechBusinessModel extends StandardCorporateBusinessModel
 {
     // --- Operating Cyclicality & Demand Structure ---
-    /** Elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). Enterprise budgets and ad spend are cyclical; seats churn slowly. */
+    /**
+     * Elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). Enterprise budgets
+     * and ad spend are cyclical; seats churn slowly.
+     */
     public const OPERATING_CYCLICALITY = 1.20;
     /** Own-price elasticity of demand: volume lost per unit of real price increase. */
     public const PRICE_ELASTICITY_OF_DEMAND = 0.60;
@@ -36,13 +39,20 @@ class TechBusinessModel extends StandardCorporateBusinessModel
     public const INDUSTRY_SUBSTITUTABILITY = 0.50;
 
     // --- Input Cost Basket ---
-    /** Shares of the variable cost base by input channel, measured from the BEA input-output accounts with supply-chain content (labor still the model's own). */
+    /**
+     * Shares of the variable cost base by input channel, measured from the BEA input-output accounts with supply-chain
+     * content (labor still the model's own).
+     */
     public const INPUT_COST_EXPOSURES = InputOutputExposures::TECH;
-    /** Switching costs, data gravity and seat-based contracts let a platform reprice an installed base with little churn. */
+    /**
+     * Switching costs, data gravity and seat-based contracts let a platform reprice an installed base with little
+     * churn.
+     */
     public const PRICING_POWER_INDEX = 0.75;
 
     /**
-     * Calendar-quarter revenue seasonality [Q1, Q2, Q3, Q4] summing to 4.0: Q4 enterprise budget flush and holiday advertising.
+     * Calendar-quarter revenue seasonality [Q1, Q2, Q3, Q4] summing to 4.0: Q4 enterprise budget flush and holiday
+     * advertising.
      *
      * @return array<int, float>
      */
@@ -52,21 +62,36 @@ class TechBusinessModel extends StandardCorporateBusinessModel
     }
 
     // --- Balance Sheet Realism ---
-    /** Capitalized operating lease liabilities as a fraction of annual revenue (IFRS 16 / ASC 842). Office campuses and colocation leases. */
+    /**
+     * Capitalized operating lease liabilities as a fraction of annual revenue (IFRS 16 / ASC 842). Office campuses and
+     * colocation leases.
+     */
     public const LEASE_LIABILITY_INTENSITY = 0.10;
-    /** Stock-based compensation (ASC 718) as a share of revenue: Software (System & Application), 7.83% of revenue, 309 firms (Damodaran, Employee data by industry, US, January 2026). */
+    /**
+     * Stock-based compensation (ASC 718) as a share of revenue: Software (System & Application), 7.83% of revenue, 309
+     * firms (Damodaran, Employee data by industry, US, January 2026).
+     */
     public const STOCK_COMPENSATION_INTENSITY = 0.0783;
 
     // --- FX Exposure ---
-    /** Share of revenue whose competitiveness moves with the trade-weighted exchange rate. Software and cloud are sold worldwide from a home cost base, so a strong domestic currency translates foreign ARR down. */
+    /**
+     * Share of revenue whose competitiveness moves with the trade-weighted exchange rate. Software and cloud are sold
+     * worldwide from a home cost base, so a strong domestic currency translates foreign ARR down.
+     */
     public const FX_REVENUE_EXPOSURE = 0.15;
 
     // --- Demand Transmission Lag ---
-    /** Years for a move in the output gap to reach bookings. Enterprise IT budgets are set annually, so a downturn cuts renewals and seats at the next budget round, not this quarter. */
+    /**
+     * Years for a move in the output gap to reach bookings. Enterprise IT budgets are set annually, so a downturn cuts
+     * renewals and seats at the next budget round, not this quarter.
+     */
     public const DEMAND_LAG_YEARS = 0.50;
 
     // --- Reporting Incentives ---
-    /** Propensity to steer reported earnings toward consensus with accruals. Equity compensation ties management's own wealth to the print, and deferred revenue schedules give them the timing discretion to act on it. */
+    /**
+     * Propensity to steer reported earnings toward consensus with accruals. Equity compensation ties management's own
+     * wealth to the print, and deferred revenue schedules give them the timing discretion to act on it.
+     */
     public const EARNINGS_MANAGEMENT_PROPENSITY = 0.60;
 
     // --- Analyst Visibility & Error ---
@@ -85,7 +110,10 @@ class TechBusinessModel extends StandardCorporateBusinessModel
         return 0.5;
     }
     // --- Secular Demand ---
-    /** Business and household spending on software as a share of US nominal GDP in 1997 (BEA NIPA Table 5.3.5, private fixed investment and Table 2.4.5). */
+    /**
+     * Business and household spending on software as a share of US nominal GDP in 1997 (BEA NIPA Table 5.3.5, private
+     * fixed investment and Table 2.4.5).
+     */
     public const SECULAR_SHARE_1997 = 0.0118;
     /** The same share in 2019. */
     public const SECULAR_SHARE_2019 = 0.0265;
@@ -106,24 +134,36 @@ class TechBusinessModel extends StandardCorporateBusinessModel
     public const SUBSCRIPTION_REVENUE_WEIGHT    = 0.60;
     /** Baseline fraction of revenue derived from digital advertising networks & platform usage fees. */
     public const ADVERTISING_REVENUE_WEIGHT     = 0.40;
-    /** Advertising's exposure to the cycle, the reference stream: marketing budgets are the first cut and the first restored. */
+    /**
+     * Advertising's exposure to the cycle, the reference stream: marketing budgets are the first cut and the first
+     * restored.
+     */
     public const ADVERTISING_CYCLE_LOADING = 1.00;
     /** Subscription bookings' exposure to the cycle against advertising's: annual seats renew through a slump, 0.40. */
     public const SUBSCRIPTION_CYCLE_LOADING = 0.40;
     /** Usage-billed cloud's exposure to the cycle against advertising's: compute follows customers' activity, 0.70. */
     public const CLOUD_CYCLE_LOADING = 0.70;
-    /** Fraction of deferred subscription bookings recognized as revenue each quarter (annual contracts, ASC 606 ratable). */
+    /**
+     * Fraction of deferred subscription bookings recognized as revenue each quarter (annual contracts, ASC 606
+     * ratable).
+     */
     public const SUBSCRIPTION_RECOGNITION_RATE = 0.25;
 
     // --- Working Capital by Stream (shares of the stream's revenue) ---
-    /** Subscriptions: invoices on ~44-day terms against seats billed ahead, ~91 days of revenue held as deferred revenue and payables. */
+    /**
+     * Subscriptions: invoices on ~44-day terms against seats billed ahead, ~91 days of revenue held as deferred revenue
+     * and payables.
+     */
     public const SUBSCRIPTION_WORKING_CAPITAL = ['receivables' => 0.12, 'inventory' => 0.0, 'payables' => 0.25];
     /** Advertising: advertisers pay in ~55 days; publishers' revenue share and suppliers are owed ~22 days of sales. */
     public const ADVERTISING_WORKING_CAPITAL = ['receivables' => 0.15, 'inventory' => 0.0, 'payables' => 0.06];
     /** Cloud: usage billed monthly in arrears, paid in ~55 days; data-centre suppliers owed ~29 days of sales. */
     public const CLOUD_WORKING_CAPITAL = ['receivables' => 0.15, 'inventory' => 0.0, 'payables' => 0.08];
 
-    /** Software holds no stock: each stream is owed by its customers, and subscriptions are paid for ahead of the service. */
+    /**
+     * Software holds no stock: each stream is owed by its customers, and subscriptions are paid for ahead of the
+     * service.
+     */
     protected function resolveWorkingCapitalShares(Stock $stock): array
     {
         $params = $this->resolveModelParameters($stock, [
@@ -192,9 +232,9 @@ class TechBusinessModel extends StandardCorporateBusinessModel
 
         $aggression = max(0.0, min(1.0, $params[ModelParam::MonopolyAggression]));
         // The reward of aggressive pricing and data harvesting is already in the seeded margin the engine hands in;
-        // what aggression adds here is regulatory scrutiny.
-        // At aggression=1.0, Z-score threshold shifts from -2.5 to -1.25 (frequent fines), and penalty severity is 1.5x.
-        // At aggression=0.0, Z-score threshold shifts to -3.75 (nearly impossible), and penalty is 0.5x.
+        // what aggression adds here is regulatory scrutiny. At aggression=1.0, Z-score threshold shifts from -2.5 to
+        // -1.25 (frequent fines), and penalty severity is 1.5x. At aggression=0.0, Z-score threshold shifts to -3.75
+        // (nearly impossible), and penalty is 0.5x.
         $regulatoryZThreshold = self::REGULATORY_FINE_Z_SCORE * (1.5 - $aggression);
         $regulatorySeverity   = self::REGULATORY_FINE_PENALTY * (0.5 + $aggression);
 
@@ -217,9 +257,12 @@ class TechBusinessModel extends StandardCorporateBusinessModel
         $cloudWeight = $activeWeights['cloud_infrastructure'] ?? 0.0;
 
         // Independent stream Z-scores with AR(1) persistence
-        $subscriptionZ = $streams->generateZ('subscription', 0.45); // Enterprise SaaS ARR & Cloud compute contract volume
-        $adZ           = $streams->generateZ('advertising', 0.30); // Digital advertising auction demand & impression volume
-        $eventZ        = $streams->generateExogenousZ('event', 0.10); // Fat-tail regulatory antitrust / data breach Z-score
+        // Enterprise SaaS ARR & Cloud compute contract volume
+        $subscriptionZ = $streams->generateZ('subscription', 0.45);
+        // Digital advertising auction demand & impression volume
+        $adZ           = $streams->generateZ('advertising', 0.30);
+        // Fat-tail regulatory antitrust / data breach Z-score
+        $eventZ        = $streams->generateExogenousZ('event', 0.10);
 
         // The firm-wide cycle lands on all of expected revenue; it is carried by advertising, less by usage-billed
         // cloud and least by annual subscription seats.
@@ -248,10 +291,10 @@ class TechBusinessModel extends StandardCorporateBusinessModel
             $eventType = ShockEvent::VIRAL_GROWTH;
         }
 
-        // Blended dual-stream revenue (SaaS Subscription vs. Digital Advertising & Platform Usage)
-        // Subscription ARR has lower baseline volatility (0.6x scalar), whereas Ads take the full swing plus cyclicality
-        // Subscriptions are BOOKED as annual contracts and recognized ratably from deferred revenue, so an
-        // ARR shock reaches the income statement over the contract term rather than in one quarter.
+        // Blended dual-stream revenue (SaaS Subscription vs. Digital Advertising & Platform Usage) Subscription ARR has
+        // lower baseline volatility (0.6x scalar), whereas Ads take the full swing plus cyclicality Subscriptions are
+        // BOOKED as annual contracts and recognized ratably from deferred revenue, so an ARR shock reaches the income
+        // statement over the contract term rather than in one quarter.
         $subscriptionBook = $streams->recognizeBacklog(
             'subscription',
             $expectedRevenue * $subWeight,
@@ -273,7 +316,8 @@ class TechBusinessModel extends StandardCorporateBusinessModel
         $cloudRevenue = 0.0;
         $cloudZ = 0.0;
         if ($cloudWeight > 0.0) {
-            $cloudZ = $streams->generateZ('cloud_infrastructure', 0.60); // High persistence, sticky enterprise contracts
+            // High persistence, sticky enterprise contracts
+            $cloudZ = $streams->generateZ('cloud_infrastructure', 0.60);
             $cloudRevenue = max(0.0, $expectedRevenue * $cloudWeight * (1.0 + ($cloudZ * $baselineVol * self::REVENUE_VARIANCE_SCALAR * 0.4) + $cycleShares['cloud_infrastructure']));
             $streamRevenues['cloud_infrastructure'] = $cloudRevenue;
         }
@@ -285,8 +329,8 @@ class TechBusinessModel extends StandardCorporateBusinessModel
         // so wage growth above trend is the only input price that reaches the cost base.
         $inputCostDrag = $this->resolveInputCostDrag($stock, $macroState, $streams, $this->resolvePricingPower($stock), $realizedVariableMargin);
 
-        // SaaS ARR Operating Leverage:
-        // ARR expansion ($subscriptionZ > 0) creates positive operating leverage due to zero marginal cost of software delivery.
+        // SaaS ARR Operating Leverage: ARR expansion ($subscriptionZ > 0) creates positive operating leverage due to
+        // zero marginal cost of software delivery.
         $saasOperatingLeverageShift = -self::SAAS_OPERATING_LEVERAGE * $subscriptionZ * $subWeight;
 
         // Crucially, antitrust and data privacy regulatory penalties apply proportionally to the Advertising
@@ -298,7 +342,8 @@ class TechBusinessModel extends StandardCorporateBusinessModel
 
         $observableShockZ = (($subscriptionZ * $subWeight) + ($adZ * $adWeight)) * ($baselineVol * self::REVENUE_VARIANCE_SCALAR);
 
-        // The one-off charge is booked as a special item: in EBIT, out of the run rate, the Street figure and the cost ratio.
+        // The one-off charge is booked as a special item: in EBIT, out of the run rate, the Street figure and the cost
+        // ratio.
         $specialCharge = $regulatoryFine * $adWeight * $actualRevenue;
 
         return new SectorPhysicsResult(
@@ -316,7 +361,8 @@ class TechBusinessModel extends StandardCorporateBusinessModel
 
     public function getMarginReversionSpeed(): float
     {
-        return self::TECH_REVERSION_SPEED; // Rapid innovation cycles and intense technological competition erode excess margins quickly
+        // Rapid innovation cycles and intense technological competition erode excess margins quickly
+        return self::TECH_REVERSION_SPEED;
     }
 
     /** Asset-light platforms trade on cash earnings, DCF and recurring revenue power, not on book value. */

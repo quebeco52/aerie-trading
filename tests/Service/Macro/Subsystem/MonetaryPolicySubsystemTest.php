@@ -119,7 +119,10 @@ class MonetaryPolicySubsystemTest extends TestCase
         $this->assertEqualsWithDelta(-$dove * ($measure - MacroEngine::TARGET_INFLATION), $this->subsystem->calculateTargetRate($dovish, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE) - $base, 1e-12);
     }
 
-    /** The published rule answers inflation two and a half for one, so a point of inflation raises the real rate: the Taylor principle. */
+    /**
+     * The published rule answers inflation two and a half for one, so a point of inflation raises the real rate: the
+     * Taylor principle.
+     */
     public function testTheRuleRaisesTheRealRateWithInflation(): void
     {
         $this->assertGreaterThan(0.0, MonetaryPolicySubsystem::TAYLOR_INFLATION_WEIGHT, 'Above one for one in total.');
@@ -306,7 +309,10 @@ class MonetaryPolicySubsystemTest extends TestCase
         $this->assertEqualsWithDelta(0.045 + ((0.03 - 0.045) * exp(-2.0 * MonetaryPolicySubsystem::CB_SMOOTHING_SPEED)), $shadow48, 1e-12);
     }
 
-    /** With the rule standing still the market expects each decision exactly; a jump in the rule just before a meeting is a surprise. */
+    /**
+     * With the rule standing still the market expects each decision exactly; a jump in the rule just before a meeting
+     * is a surprise.
+     */
     public function testADecisionSurprisesOnlyByWhatTheRuleDidSinceTheLastReading(): void
     {
         $state = new MacroState();
@@ -445,7 +451,8 @@ class MonetaryPolicySubsystemTest extends TestCase
 
         $curve = $this->subsystem->calculateYieldCurveAndQE($state, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE, 0.25);
 
-        // Curvature beta2 = target scale x (terminal rate less the short rate the market prices, floored at the lower bound) + gap scale x gap
+        // Curvature beta2 = target scale x (terminal rate less the short rate the market prices, floored at the lower
+        // bound) + gap scale x gap
         $expectedCurvature = (MonetaryPolicySubsystem::SVENSSON_CURVATURE1_TARGET_SCALE * (0.06 - MonetaryPolicySubsystem::marketShortRate($state))) + (MonetaryPolicySubsystem::SVENSSON_CURVATURE1_GAP_SCALE * 0.02);
         $this->assertEqualsWithDelta($expectedCurvature, $curve['curvature'], 0.0001);
 
@@ -564,7 +571,10 @@ class MonetaryPolicySubsystemTest extends TestCase
         $this->assertEquals(0.0, $bs['new_hold_timer']);
     }
 
-    /** The programme is sized by the cut the floor forbids: a point short buys a third of the full stock, three points buy all of it. */
+    /**
+     * The programme is sized by the cut the floor forbids: a point short buys a third of the full stock, three points
+     * buy all of it.
+     */
     public function testPurchasesScaleWithTheShortfallBelowTheFloor(): void
     {
         $dt = 0.25;
@@ -646,7 +656,9 @@ class MonetaryPolicySubsystemTest extends TestCase
         $this->assertGreaterThan($structural->moneySupplyGrowth, $faster->moneySupplyGrowth, 'A faster-growing labour force needs faster money growth.');
     }
 
-    /** M2 growth's trend is measured, a decade's average of the growth itself, not the fixed base its readers once used. */
+    /**
+     * M2 growth's trend is measured, a decade's average of the growth itself, not the fixed base its readers once used.
+     */
     public function testMoneyGrowthTrendIsADecadesAverageOfTheGrowth(): void
     {
         $quiet = new MonetaryPolicySubsystem(new class extends MathUtility {
@@ -673,7 +685,10 @@ class MonetaryPolicySubsystemTest extends TestCase
         );
     }
 
-    /** Loans create deposits: household credit growing beyond income adds its flow, over the money stock, to money's growth, whatever households already owe. */
+    /**
+     * Loans create deposits: household credit growing beyond income adds its flow, over the money stock, to money's
+     * growth, whatever households already owe.
+     */
     public function testHouseholdBorrowingCreatesMoney(): void
     {
         $neutralGrowth = MacroEngine::TARGET_INFLATION + MacroEngine::TFP_DRIFT + MacroEngine::STRUCTURAL_LABOR_GROWTH_RATE;
@@ -688,7 +703,10 @@ class MonetaryPolicySubsystemTest extends TestCase
         }
     }
 
-    /** The Authority's purchases add reserves: a programme bought over a year adds its size, over the money stock, to that year's growth, and nothing once it is held. */
+    /**
+     * The Authority's purchases add reserves: a programme bought over a year adds its size, over the money stock, to
+     * that year's growth, and nothing once it is held.
+     */
     public function testPurchasesAddMoneyWhileTheyAreBought(): void
     {
         $neutralGrowth = MacroEngine::TARGET_INFLATION + MacroEngine::TFP_DRIFT + MacroEngine::STRUCTURAL_LABOR_GROWTH_RATE;
@@ -746,7 +764,8 @@ class MonetaryPolicySubsystemTest extends TestCase
     public function testRestrictiveStanceInvertsTheCurve(): void
     {
         $state = new MacroState();
-        $state->policyRate = MacroEngine::BASE_NATURAL_RATE + MacroEngine::TARGET_INFLATION + 0.020; // 200bps above neutral
+        // 200bps above neutral
+        $state->policyRate = MacroEngine::BASE_NATURAL_RATE + MacroEngine::TARGET_INFLATION + 0.020;
         $state->policyRateShadow = $state->policyRate;
         $state->targetRate = $state->policyRate - 0.010; // cuts ahead
         $state->tipsBreakeven = 0.025;
@@ -768,7 +787,8 @@ class MonetaryPolicySubsystemTest extends TestCase
         );
 
         $lowPremium = clone $state;
-        // A low-premium era is global, as the 2010s were: the District's own factor and the mainland's both at the floor.
+        // A low-premium era is global, as the 2010s were: the District's own factor and the mainland's both at the
+        // floor.
         $lowPremium->termPremiumRegime = 0.0;
         $lowPremium->foreignTermPremiumRegime = 0.0;
         $curveLowPremium = $this->subsystem->calculateYieldCurve($lowPremium, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE);
@@ -899,7 +919,9 @@ class MonetaryPolicySubsystemTest extends TestCase
         $this->assertEqualsWithDelta($curveCalm['risk_neutral_10y'], $curveTantrum['risk_neutral_10y'], 0.00001, 'The expected policy path is untouched; the shock is all premium.');
     }
 
-    /** A mainland premium shock is the global factor: it reaches the District ten-year at the loading, as premium alone. */
+    /**
+     * A mainland premium shock is the global factor: it reaches the District ten-year at the loading, as premium alone.
+     */
     public function testAMainlandTermPremiumShockReachesTheDistrictTenYearAtTheGlobalLoading(): void
     {
         $calm = new MacroState();
@@ -933,7 +955,10 @@ class MonetaryPolicySubsystemTest extends TestCase
         $this->assertEqualsWithDelta(MonetaryPolicySubsystem::GLOBAL_TERM_PREMIUM_LOADING, $globalWeight, 1e-12);
     }
 
-    /** The mainland's bonds now carry its premium: a mainland tantrum lifts the yield the fund's foreign paper is priced on. */
+    /**
+     * The mainland's bonds now carry its premium: a mainland tantrum lifts the yield the fund's foreign paper is priced
+     * on.
+     */
     public function testTheMainlandBondYieldCarriesItsOwnTermPremium(): void
     {
         $fund = new SovereignFundSubsystem(new MathUtility());
@@ -1256,7 +1281,10 @@ class MonetaryPolicySubsystemTest extends TestCase
         ];
     }
 
-    /** The gap weight is the same in slack as in a boom (1987-2008: impact 0.29 in slack vs 0.24 in booms, not distinguishable). */
+    /**
+     * The gap weight is the same in slack as in a boom (1987-2008: impact 0.29 in slack vs 0.24 in booms, not
+     * distinguishable).
+     */
     public function testTheGapWeightIsTheSameInSlackAsInABoom(): void
     {
         $targetFor = function (float $gap): float {
@@ -1277,7 +1305,10 @@ class MonetaryPolicySubsystemTest extends TestCase
         $this->assertEqualsWithDelta(MonetaryPolicySubsystem::TAYLOR_OUTPUT_GAP_WEIGHT, ($neutral - $targetFor(-0.03)) / 0.03, 1e-9);
     }
 
-    /** The Bernanke (2015) blend: 70% sectoral core, 30% breakeven -- the one expected-inflation measure both the Taylor rule and the IS curve use. */
+    /**
+     * The Bernanke (2015) blend: 70% sectoral core, 30% breakeven -- the one expected-inflation measure both the Taylor
+     * rule and the IS curve use.
+     */
     public function testExpectedInflationBlendsSectoralCoreWithTheBreakeven(): void
     {
         $state = new MacroState();
@@ -1295,7 +1326,10 @@ class MonetaryPolicySubsystemTest extends TestCase
         $this->assertEqualsWithDelta($expected, $this->subsystem->calculateExpectedInflation($state, MacroEngine::TARGET_INFLATION), 1e-12);
     }
 
-    /** Before the sectoral baskets have moved off the target the blend falls back to the headline EMA, as the Taylor rule always has. */
+    /**
+     * Before the sectoral baskets have moved off the target the blend falls back to the headline EMA, as the Taylor
+     * rule always has.
+     */
     public function testExpectedInflationFallsBackToTheHeadlineEmaOnAColdStart(): void
     {
         $state = new MacroState();
@@ -1310,7 +1344,9 @@ class MonetaryPolicySubsystemTest extends TestCase
         $this->assertEqualsWithDelta($expected, $this->subsystem->calculateExpectedInflation($state, MacroEngine::TARGET_INFLATION), 1e-12);
     }
 
-    /** Diebold-Li (2006): a repricing of the expected path is expectations, not premium, and cannot move today's rate. */
+    /**
+     * Diebold-Li (2006): a repricing of the expected path is expectations, not premium, and cannot move today's rate.
+     */
     public function testExpectedPathShockRepricesTheBellyAndLeavesThePremiumAlone(): void
     {
         $calm = new MacroState();
@@ -1422,7 +1458,10 @@ class MonetaryPolicySubsystemTest extends TestCase
         $this->assertEqualsWithDelta($atHurdle['yield_10y'], $aboveHurdle['yield_10y'], 1e-9, 'The bid is for the long end only; the ten-year is untouched.');
     }
 
-    /** Laubach (2009): the fiscal premium is a level the ten-year carries in full and the two-year by its duration share, and it is premium, not expectations. */
+    /**
+     * Laubach (2009): the fiscal premium is a level the ten-year carries in full and the two-year by its duration
+     * share, and it is premium, not expectations.
+     */
     public function testTheSovereignRiskPremiumLiftsTheLongEndAsTermPremiumNotExpectations(): void
     {
         $sound = new MacroState();

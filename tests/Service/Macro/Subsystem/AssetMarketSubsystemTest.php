@@ -95,9 +95,9 @@ class AssetMarketSubsystemTest extends TestCase
     }
 
     /**
-     * Construction and the REITs read the index against CRE_BASELINE, so the fundamental must sit there when every input
-     * the cap rate reads is at the value the engine is built on. A neutral cap rate measured off an older engine (6.4%)
-     * held the index near 110 and handed both a standing tenth of property values that no cycle had produced.
+     * Construction and the REITs read the index against CRE_BASELINE, so the fundamental must sit there when every
+     * input the cap rate reads is at the value the engine is built on. A neutral cap rate measured off an older engine
+     * (6.4%) held the index near 110 and handed both a standing tenth of property values that no cycle had produced.
      */
     public function testCommercialPropertyHoldsItsBaselineAtTheEnginesNeutral(): void
     {
@@ -109,7 +109,8 @@ class AssetMarketSubsystemTest extends TestCase
         $state->outputGapEma = 0.0;
         $state->commercialPropertyIndex = MacroEngine::CRE_BASELINE;
 
-        // A quarter's pull toward a fundamental 7% off moves the index ~0.4 points; the log-mean correction alone, ~0.015.
+        // A quarter's pull toward a fundamental 7% off moves the index ~0.4 points; the log-mean correction alone,
+        // ~0.015.
         $this->subsystem->calculateCommercialPropertyIndex($state, 0.25);
 
         $this->assertEqualsWithDelta(MacroEngine::CRE_BASELINE, $state->commercialPropertyIndex, 0.05);
@@ -147,8 +148,8 @@ class AssetMarketSubsystemTest extends TestCase
     }
 
     /**
-     * The index settles where its stress legs put it, not at the hundred it is built from; the trend measures that level
-     * over a deal cycle, and a firm reading deal flow at its trend reads no deviation at all.
+     * The index settles where its stress legs put it, not at the hundred it is built from; the trend measures that
+     * level over a deal cycle, and a firm reading deal flow at its trend reads no deviation at all.
      */
     public function testDealFlowIsReadAgainstItsOwnDecadeLongLevel(): void
     {
@@ -223,7 +224,10 @@ class AssetMarketSubsystemTest extends TestCase
         $this->assertEqualsWithDelta(MacroEngine::HOUSING_STARTS_BASELINE, $state->housingStartsIndex, 1e-9, 'At rest q is one and starts hold their baseline.');
     }
 
-    /** The trade balance closes on its target by exact exponential smoothing: two half steps land where one full step does. */
+    /**
+     * The trade balance closes on its target by exact exponential smoothing: two half steps land where one full step
+     * does.
+     */
     public function testTheTradeBalanceAdjustsByExactSmoothing(): void
     {
         $step = function (MacroState $state, float $dt): void {
@@ -277,7 +281,8 @@ class AssetMarketSubsystemTest extends TestCase
         $this->assertEqualsWithDelta($calm->housingStartsIndex, $hotNominalPay->housingStartsIndex, 1e-9, 'Wage growth alone is not a building cost.');
         $this->assertLessThan($calm->housingStartsIndex, $dearLabour->housingStartsIndex, 'Dearer real labour raises replacement cost and lowers q.');
 
-        // Labour is the non-materials share of the cost base: a 4% real wage gap moves replacement cost by that share of e^0.04 - 1.
+        // Labour is the non-materials share of the cost base: a 4% real wage gap moves replacement cost by that share
+        // of e^0.04 - 1.
         $materials = AssetMarketSubsystem::REPLACEMENT_COST_MATERIALS_SHARE;
         $qShift = 1.0 / ($materials + (1.0 - $materials) * exp(0.04)) - 1.0;
         $expected = AssetMarketSubsystem::HOUSING_STARTS_KAPPA * AssetMarketSubsystem::HOUSING_STARTS_Q_SENSITIVITY * $qShift * 0.25;
@@ -285,8 +290,9 @@ class AssetMarketSubsystemTest extends TestCase
     }
 
     /**
-     * Homes are bought on floating loans and priced on the rate expected over the years they are held: the expected path
-     * (the ten-year without its term premium) sets the user cost; this quarter's policy rate and the term premium do not.
+     * Homes are bought on floating loans and priced on the rate expected over the years they are held: the expected
+     * path (the ten-year without its term premium) sets the user cost; this quarter's policy rate and the term premium
+     * do not.
      */
     public function testResidentialFundamentalPricesOffTheExpectedRatePath(): void
     {
@@ -413,7 +419,9 @@ class AssetMarketSubsystemTest extends TestCase
         $this->assertLessThan(160.0, $stagflationaryPanic, 'The rate stays inside its ceiling.');
     }
 
-    /** The user cost subtracts EXPECTED inflation: a headline spike with expectations anchored leaves home prices alone. */
+    /**
+     * The user cost subtracts EXPECTED inflation: a headline spike with expectations anchored leaves home prices alone.
+     */
     public function testAHeadlineSpikeWithAnchoredExpectationsDoesNotMoveHomePrices(): void
     {
         $calm = $this->neutralHousingState();
@@ -448,7 +456,8 @@ class AssetMarketSubsystemTest extends TestCase
         $this->subsystem->calculateResidentialPropertyIndex($base, MacroEngine::TARGET_INFLATION, 0.25);
         $this->subsystem->calculateResidentialPropertyIndex($grown, MacroEngine::TARGET_INFLATION, 0.25);
 
-        // The index closes its reversion's share of the step in the fundamental, which is the population's log times Saiz's elasticity.
+        // The index closes its reversion's share of the step in the fundamental, which is the population's log times
+        // Saiz's elasticity.
         $expected = (1.0 - exp(-AssetMarketSubsystem::RESIDENTIAL_MEAN_REVERSION * 0.25)) * AssetMarketSubsystem::IMMIGRATION_HOUSING_ELASTICITY * 0.05;
         $this->assertEqualsWithDelta($expected, log($grown->residentialPropertyIndex / $base->residentialPropertyIndex), 1e-12);
     }
@@ -492,7 +501,10 @@ class AssetMarketSubsystemTest extends TestCase
         $this->assertEqualsWithDelta(1.0 / (1.0 + (2.0 * 1.2816 * 0.267)), AssetMarketSubsystem::greenBeltSupplyResponse(1.0), 1e-12);
     }
 
-    /** Under a green belt the same boom lifts the fundamental further, and the same slump takes it lower, but by less than the boom adds. */
+    /**
+     * Under a green belt the same boom lifts the fundamental further, and the same slump takes it lower, but by less
+     * than the boom adds.
+     */
     public function testAGreenBeltDeepensBoomsMoreThanSlumps(): void
     {
         $move = function (float $gap, float $stringency): float {
@@ -558,7 +570,10 @@ class AssetMarketSubsystemTest extends TestCase
         return $state;
     }
 
-    /** Pastor & Veronesi (2013): political uncertainty is priced as volatility. It enters the anchor, so it is budgeted like every other driver. */
+    /**
+     * Pastor & Veronesi (2013): political uncertainty is priced as volatility. It enters the anchor, so it is budgeted
+     * like every other driver.
+     */
     public function testPolicyUncertaintyLiftsTheVolatilityAnchor(): void
     {
         // Strip the process to its anchor: no jumps, and the variance step lands exactly on the long-run target.
@@ -627,7 +642,10 @@ class AssetMarketSubsystemTest extends TestCase
         );
     }
 
-    /** Alesina & Perotti (1995): fiscal risk is default and inflation risk, and sells the currency rather than earning carry. */
+    /**
+     * Alesina & Perotti (1995): fiscal risk is default and inflation risk, and sells the currency rather than earning
+     * carry.
+     */
     public function testFiscalRiskSellsTheCurrency(): void
     {
         $neutral = $this->settledFx();
@@ -658,8 +676,8 @@ class AssetMarketSubsystemTest extends TestCase
         $state->alliedDefenseSpendingIndex = 150.0;
 
         $kappa = AssetMarketSubsystem::ALLIED_DEFENSE_MEAN_REVERSION;
-        // The quiet path's log level: the baseline less the mobilisations' log drift, which leaves the jumping process's
-        // LOG averaging ln(baseline), the centre its log reader (alliedDefenseGap) measures from.
+        // The quiet path's log level: the baseline less the mobilisations' log drift, which leaves the jumping
+        // process's LOG averaging ln(baseline), the centre its log reader (alliedDefenseGap) measures from.
         $logTrend = log(MacroEngine::ALLIED_DEFENSE_BASELINE)
             - (AssetMarketSubsystem::ALLIED_MOBILISATION_PROBABILITY * AssetMarketSubsystem::ALLIED_MOBILISATION_MEAN / $kappa);
 
@@ -834,8 +852,9 @@ class AssetMarketSubsystemTest extends TestCase
     }
 
     /**
-     * The rest of the world is a one-factor model on the mainland's cycle: over a long run its spread, its persistence and
-     * its co-movement with the mainland are the G6 industrial-production gap's (sd 1.8%, AR(1) ~0.85, correlation 0.51).
+     * The rest of the world is a one-factor model on the mainland's cycle: over a long run its spread, its persistence
+     * and its co-movement with the mainland are the G6 industrial-production gap's (sd 1.8%, AR(1) ~0.85, correlation
+     * 0.51).
      */
     public function testTheRestOfTheWorldHasTheFittedSpreadAndCoMovement(): void
     {
@@ -870,7 +889,10 @@ class AssetMarketSubsystemTest extends TestCase
         $this->assertEqualsWithDelta(0.87, $cov(array_slice($world, 1), array_slice($world, 0, -1)) / ($sd ** 2), 0.03, 'Its own AR(1) at 0.85 plus the more persistent mainland part.');
     }
 
-    /** The Taylor principle: held a point higher, four-quarter core inflation takes the funds rate up by the fitted 1.66 points. */
+    /**
+     * The Taylor principle: held a point higher, four-quarter core inflation takes the funds rate up by the fitted 1.66
+     * points.
+     */
     public function testTheFedAnswersInflationMoreThanOneForOne(): void
     {
         $settle = function (float $inflation): array {
@@ -930,7 +952,10 @@ class AssetMarketSubsystemTest extends TestCase
         $this->assertEqualsWithDelta((log(1.10) * $decay) + ($itoMean * (1.0 - $decay)), log($state->exchangeRateDeviation), 1e-12);
     }
 
-    /** Parity reads the short rate the market expects: a meeting that rounds it to the step everyone saw coming moves neither the currency nor the slope. */
+    /**
+     * Parity reads the short rate the market expects: a meeting that rounds it to the step everyone saw coming moves
+     * neither the currency nor the slope.
+     */
     public function testAnExpectedDecisionMovesNeitherTheCurrencyNorTheSlope(): void
     {
         $before = new MacroState();
@@ -1018,7 +1043,8 @@ class AssetMarketSubsystemTest extends TestCase
 
         $this->assertEqualsWithDelta($exports, $abroad->tradeBalanceToGdp - $home->tradeBalanceToGdp, 0.0005, 'Their demand is our exports, and nothing else moves the balance.');
 
-        // Domestic demand draws in imports at 1.4 times itself on the imports for home use; those passed through into exports do not move with it.
+        // Domestic demand draws in imports at 1.4 times itself on the imports for home use; those passed through into
+        // exports do not move with it.
         $booming = new MacroState();
         $booming->outputGap = 0.03;
         for ($i = 0; $i < 400; $i++) {
@@ -1073,7 +1099,10 @@ class AssetMarketSubsystemTest extends TestCase
         $this->assertEqualsWithDelta($expected, $rising->residentialPriceMomentum, 1e-12, 'The momentum is the year\'s average of the index\'s own log growth.');
     }
 
-    /** Serial correlation on top of reversion to fundamental makes a housing boom overshoot the level that justifies it, then correct. */
+    /**
+     * Serial correlation on top of reversion to fundamental makes a housing boom overshoot the level that justifies it,
+     * then correct.
+     */
     public function testAHousingBoomOvershootsItsFundamental(): void
     {
         $state = new MacroState();
@@ -1095,7 +1124,10 @@ class AssetMarketSubsystemTest extends TestCase
         $this->assertGreaterThan($start + (1.10 * ($settled - $start)), $peak, 'The boom runs past the new fundamental by more than a tenth of the move.');
     }
 
-    /** Favara & Imbs (2015): the quantity of credit outstanding is housing demand in its own right, which closes the collateral loop against CreditFiscalSubsystem's Mian & Sufi home-equity term. */
+    /**
+     * Favara & Imbs (2015): the quantity of credit outstanding is housing demand in its own right, which closes the
+     * collateral loop against CreditFiscalSubsystem's Mian & Sufi home-equity term.
+     */
     public function testCreditSupplyIsHousingDemandInItsOwnRight(): void
     {
         $boom = new MacroState();

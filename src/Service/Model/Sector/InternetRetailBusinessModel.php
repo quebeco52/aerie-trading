@@ -23,16 +23,22 @@ use App\Service\Model\ModelParam;
  *
  * Financial Physics:
  * - Tri-Stream Architecture:
- *      1. 1st-Party Retail: Buys and sells physical inventory. Low margin, highly exposed to supply chain inflation and recessions.
- *      2. 3rd-Party Fulfillment (The Tollbooth): Charges independent vendors to use their logistics. High margin, high volume.
+ *      1. 1st-Party Retail: Buys and sells physical inventory. Low margin, highly exposed to supply chain inflation and
+ *         recessions.
+ *      2. 3rd-Party Fulfillment (The Tollbooth): Charges independent vendors to use their logistics. High margin, high
+ *         volume.
  *      3. Digital Advertising / Cloud: Monetizes consumer data. Near-100% margin, zero physical overhead.
- * - Margin Cross-Subsidization: The retail division runs at a near loss to dominate market share, subsidized by Ads and 3P fees.
+ * - Margin Cross-Subsidization: The retail division runs at a near loss to dominate market share, subsidized by Ads and
+ *   3P fees.
  * - Tail Risk: Labor unionization strikes in fulfillment centers, or sovereign antitrust breakups.
  */
 class InternetRetailBusinessModel extends StandardCorporateBusinessModel
 {
     // --- Operating Cyclicality & Demand Structure ---
-    /** Elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). Discretionary baskets with near-perfect price comparison. */
+    /**
+     * Elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). Discretionary baskets
+     * with near-perfect price comparison.
+     */
     public const OPERATING_CYCLICALITY = 1.30;
     /** Own-price elasticity of demand: volume lost per unit of real price increase. */
     public const PRICE_ELASTICITY_OF_DEMAND = 1.20;
@@ -40,23 +46,41 @@ class InternetRetailBusinessModel extends StandardCorporateBusinessModel
     public const INDUSTRY_SUBSTITUTABILITY = 0.70;
 
     // --- Input Cost Basket ---
-    /** Shares of the variable cost base by input channel, measured from the BEA input-output accounts with supply-chain content (labor still the model's own). */
+    /**
+     * Shares of the variable cost base by input channel, measured from the BEA input-output accounts with supply-chain
+     * content (labor still the model's own).
+     */
     public const INPUT_COST_EXPOSURES = InputOutputExposures::INTERNET_RETAIL;
 
     // --- Consumer Demand ---
-    /** Elasticity of first-party retail volume to the consumer sentiment gap (index points above baseline / 100). Discretionary baskets follow household confidence ahead of the output gap. */
+    /**
+     * Elasticity of first-party retail volume to the consumer sentiment gap (index points above baseline / 100).
+     * Discretionary baskets follow household confidence ahead of the output gap.
+     */
     public const CONSUMER_SENTIMENT_SCALAR = 0.60;
 
     // --- FX Exposure ---
-    /** Merchandise is bought abroad and sold at home, so the exchange rate reaches this model through landed cost, not demand: a strong domestic currency cheapens the first-party cost of goods. */
+    /**
+     * Merchandise is bought abroad and sold at home, so the exchange rate reaches this model through landed cost, not
+     * demand: a strong domestic currency cheapens the first-party cost of goods.
+     */
     public const IMPORT_SOURCING_FX_SCALAR = 0.15;
 
     // --- Balance Sheet Realism ---
-    /** First-party retail's capitalized leases over its revenue (IFRS 16 / ASC 842): leased fulfilment centres at a warehouse retailer's 0.30. */
+    /**
+     * First-party retail's capitalized leases over its revenue (IFRS 16 / ASC 842): leased fulfilment centres at a
+     * warehouse retailer's 0.30.
+     */
     public const FIRST_PARTY_LEASE_INTENSITY = 0.30;
-    /** The ad and cloud book's leases over its revenue: leased data-centre halls at a platform's 0.10. The marketplace leases offices only, at the default. */
+    /**
+     * The ad and cloud book's leases over its revenue: leased data-centre halls at a platform's 0.10. The marketplace
+     * leases offices only, at the default.
+     */
     public const DIGITAL_ADS_LEASE_INTENSITY = 0.10;
-    /** Stock-based compensation (ASC 718) as a share of revenue: 4.18% at the lead US marketplace, $24.0B of $574.8B (Amazon 10-K, FY2023); Damodaran files online retail inside Retail (General). */
+    /**
+     * Stock-based compensation (ASC 718) as a share of revenue: 4.18% at the lead US marketplace, $24.0B of $574.8B
+     * (Amazon 10-K, FY2023); Damodaran files online retail inside Retail (General).
+     */
     public const STOCK_COMPENSATION_INTENSITY = 0.0418;
 
     // --- Analyst Visibility & Error ---
@@ -100,7 +124,10 @@ class InternetRetailBusinessModel extends StandardCorporateBusinessModel
     // --- Secular Demand ---
     /** Online sales as a share of the District's retail at Year 1 (4%). */
     public const ONLINE_SHARE_YEAR_1 = 0.040;
-    /** The same share a decade on (6.5%): a dense financial centre with short delivery runs and a strong high street takes to online shopping at about half the mainland's pace (whose share went from 4% to 10.6% in its 2010s). */
+    /**
+     * The same share a decade on (6.5%): a dense financial centre with short delivery runs and a strong high street
+     * takes to online shopping at about half the mainland's pace (whose share went from 4% to 10.6% in its 2010s).
+     */
     public const ONLINE_SHARE_DECADE_ON = 0.065;
     /** Years between those two shares. */
     public const ONLINE_ADOPTION_WINDOW_YEARS = 10.0;
@@ -109,7 +136,10 @@ class InternetRetailBusinessModel extends StandardCorporateBusinessModel
     /** The same share in 2019. */
     public const RETAIL_SHARE_2019 = 0.0593;
 
-    /** Trend real growth plus online's drift within retail and retail's drift within GDP; the adoption fades like any drift. */
+    /**
+     * Trend real growth plus online's drift within retail and retail's drift within GDP; the adoption fades like any
+     * drift.
+     */
     public function getSecularGrowthRate(Stock $stock): float
     {
         return MacroEngine::TREND_REAL_GROWTH
@@ -135,7 +165,10 @@ class InternetRetailBusinessModel extends StandardCorporateBusinessModel
     /** Ads and cloud: advertisers and tenants billed on ~55-day terms, suppliers paid in ~18 days of sales. */
     public const DIGITAL_ADS_WORKING_CAPITAL = ['receivables' => 0.15, 'inventory' => 0.0, 'payables' => 0.05];
 
-    /** The shop holds stock and owes its suppliers, the marketplace owes its sellers, and the ad book is owed by advertisers. */
+    /**
+     * The shop holds stock and owes its suppliers, the marketplace owes its sellers, and the ad book is owed by
+     * advertisers.
+     */
     protected function resolveWorkingCapitalShares(Stock $stock): array
     {
         return FirmEconomics::blendWorkingCapitalShares(
@@ -144,7 +177,10 @@ class InternetRetailBusinessModel extends StandardCorporateBusinessModel
         );
     }
 
-    /** Leases follow the streams that run on leased space: the first-party warehouses and the data halls, not the marketplace. */
+    /**
+     * Leases follow the streams that run on leased space: the first-party warehouses and the data halls, not the
+     * marketplace.
+     */
     public function getLeaseIntensity(Stock $stock): float
     {
         return FirmEconomics::revenueWeightedRatio(
@@ -179,7 +215,10 @@ class InternetRetailBusinessModel extends StandardCorporateBusinessModel
     public const DIGITAL_ADS_COST_RATIO = 0.10; // Pure profit (algorithmic placement)
 
     // --- Supply Chain & Labor Physics ---
-    /** Internet retailers compete on the lowest price: merchandise, freight and warehouse wage moves are barely recovered. */
+    /**
+     * Internet retailers compete on the lowest price: merchandise, freight and warehouse wage moves are barely
+     * recovered.
+     */
     public const PRICING_POWER_INDEX = 0.10;
 
     // --- Tail Risk Events ---
@@ -200,7 +239,8 @@ class InternetRetailBusinessModel extends StandardCorporateBusinessModel
         $physics['macro_demand_shift'] = 0.0;
         // Inflation is absorbed as a cost penalty, not passed on (Internet Retailers compete on lowest price).
         $physics['pricing_power_multiplier'] = 1.0;
-        // Inflation is carried inside this model's own stream physics: neither price nor cost base inflates at the engine level.
+        // Inflation is carried inside this model's own stream physics: neither price nor cost base inflates at the
+        // engine level.
         $physics['input_cost_multiplier'] = 1.0;
 
         return $physics;

@@ -67,7 +67,8 @@ class HeavyManufacturingBusinessModelTest extends TestCase
         $metalsSpike = $run(new MacroStateDTO(exchangeRateIndexEma: 100.0, industrialMetalsIndexEma: 140.0));
 
         $this->assertLessThan($baseResult->streamRevenue['oem_equipment'], $strongCurrency->streamRevenue['oem_equipment']);
-        // BEA 2017: steel and other metals are 19% of the variable cost base of HVAC, machinery and electrical-equipment makers.
+        // BEA 2017: steel and other metals are 19% of the variable cost base of HVAC, machinery and
+        // electrical-equipment makers.
         $this->assertGreaterThan($baseResult->clampedMargin, $metalsSpike->clampedMargin);
     }
 

@@ -24,15 +24,27 @@ final readonly class AgentMarketViewDTO
      * @param float  $price              Last published price.
      * @param float  $perceivedFairValue What analysts currently think it is worth.
      * @param float  $momentumTrend      Exponentially weighted sum of recent log returns.
-     * @param float  $averageDailyVolume Structural depth — shares, float and turnover, WITHOUT the volume-volatility activity multiplier — which sets how large an agent book can plausibly be. Sized on the activity-scaled figure, every book grew into a stressed tape and the passive money bought the spike.
-     * @param float  $logReturn          The TOTAL return since the agents last acted, dividends included, for scoring their beliefs. An ex-dividend drop with the cash left out scored every payment as a loss for the long side.
+     * @param float  $averageDailyVolume Structural depth — shares, float and turnover, WITHOUT the volume-volatility
+     *                                   activity multiplier — which sets how large an agent book can plausibly be.
+     *                                   Sized on the activity-scaled figure, every book grew into a stressed tape and
+     *                                   the passive money bought the spike.
+     * @param float  $logReturn          The TOTAL return since the agents last acted, dividends included, for scoring
+     *                                   their beliefs. An ex-dividend drop with the cash left out scored every payment
+     *                                   as a loss for the long side.
      * @param float  $financialConditions Macro conditions index; passive flows respond to it.
      * @param float  $dt                 Elapsed simulated time in years.
      * @param float  $riskFreeRate       Annual rate cash earns; a belief is scored on what it made over it.
-     * @param float  $annualizedVolatility Volatility as a decimal, the risk a belief is charged for its exposure and what the vol-sensitive holders size on. The engine replaces it with the realized measure it keeps in the name's book; the value handed in only seeds a book with no history.
-     * @param float  $splitRatio         New shares per old share this tick; 1.0 when nothing happened. Agent books are in shares and must be restated.
-     * @param ?float $marketLogMispricing Average log mispricing across the market as it stood when the tick opened; null until the market has one. A relative view has nothing to compare against without it.
-     * @param float  $passiveOwnershipMultiple Passive money pointed at this name over its weight in the market: 1.0 is held in line with its size, 0.0 is held by no published index.
+     * @param float  $annualizedVolatility Volatility as a decimal, the risk a belief is charged for its exposure and
+     *                                     what the vol-sensitive holders size on. The engine replaces it with the
+     *                                     realized measure it keeps in the name's book; the value handed in only seeds
+     *                                     a book with no history.
+     * @param float  $splitRatio         New shares per old share this tick; 1.0 when nothing happened. Agent books are
+     *                                   in shares and must be restated.
+     * @param ?float $marketLogMispricing Average log mispricing across the market as it stood when the tick opened;
+     *                                    null until the market has one. A relative view has nothing to compare against
+     *                                    without it.
+     * @param float  $passiveOwnershipMultiple Passive money pointed at this name over its weight in the market: 1.0 is
+     *                                         held in line with its size, 0.0 is held by no published index.
      */
     public function __construct(
         public string $ticker,
@@ -68,15 +80,24 @@ final readonly class AgentMarketViewDTO
          * attention one: a mega-cap always prints more than a micro-cap and neither fact is news.
          */
         public float $abnormalVolume = 1.0,
-        /** Whether the name carried a corporate event this tick — earnings, a shock, a deal. The one attention sort that is not a market statistic. */
+        /**
+         * Whether the name carried a corporate event this tick — earnings, a shock, a deal. The one attention sort that
+         * is not a market statistic.
+         */
         public bool $hasNews = false,
-        /** The last trading day's move: an exponentially weighted sum of log returns over AGENT_RETAIL_ATTENTION_HORIZON_YEARS, kept by the engine. */
+        /**
+         * The last trading day's move: an exponentially weighted sum of log returns over
+         * AGENT_RETAIL_ATTENTION_HORIZON_YEARS, kept by the engine.
+         */
         public float $recentMove = 0.0,
         /** Abnormal volume averaged over the last trading day, kept by the engine; one is an ordinary day. */
         public float $recentAbnormalVolume = 1.0,
         /** How recently the name was in the news: one on the tick it was, decaying over a trading day. */
         public float $recentNews = 0.0,
-        /** The last month's move: an exponentially weighted sum of log returns over AGENT_MOMENTUM_SKIP_YEARS, kept by the engine; the part of the trend the chartists' formation skips. */
+        /**
+         * The last month's move: an exponentially weighted sum of log returns over AGENT_MOMENTUM_SKIP_YEARS, kept by
+         * the engine; the part of the trend the chartists' formation skips.
+         */
         public float $recentMonthTrend = 0.0,
     ) {}
 

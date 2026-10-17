@@ -624,7 +624,10 @@ class TradeExecutionServiceTest extends TestCase
         $this->assertEqualsWithDelta(((100.0 - $fill) * 10.0) - $duty, (float) $buyer->getCashBalance(), 0.01);
     }
 
-    /** A fund is exempt, as Hong Kong exempts ETF transfers: testExecuteMarketBuyOnEtf pins its spend to the spread alone. */
+    /**
+     * A fund is exempt, as Hong Kong exempts ETF transfers: testExecuteMarketBuyOnEtf pins its spend to the spread
+     * alone.
+     */
     public function testAStockBuyPaysStampDutyOnTopOfTheConsideration(): void
     {
         $user = new User();

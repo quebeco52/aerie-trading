@@ -115,7 +115,9 @@ class TradeOrder
     #[ORM\Column(type: Types::DATETIME_MUTABLE, nullable: true)]
     private ?\DateTimeInterface $filledAt = null;
 
-    /** Why an order the account holder did not place exists: one of the ORIGIN_* constants, null for their own orders. */
+    /**
+     * Why an order the account holder did not place exists: one of the ORIGIN_* constants, null for their own orders.
+     */
     #[ORM\Column(length: 20, nullable: true)]
     private ?string $origin = null;
 

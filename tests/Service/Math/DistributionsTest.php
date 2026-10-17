@@ -130,7 +130,10 @@ class DistributionsTest extends TestCase
         );
     }
 
-    /** Below every bin the moment is the mean (NMDB's 82.2%), above every bin it is zero, and the tail share runs 1 to 0. */
+    /**
+     * Below every bin the moment is the mean (NMDB's 82.2%), above every bin it is zero, and the tail share runs 1 to
+     * 0.
+     */
     public function testTheMomentRunsFromTheMeanToNothing(): void
     {
         $this->assertEqualsWithDelta(0.822, Distributions::histogramUpperPartialMoment(self::EDGES, self::SHARES, 0.0), 5e-4);
@@ -149,7 +152,10 @@ class DistributionsTest extends TestCase
         }
     }
 
-    /** The moment's slope is minus the share above the threshold, so it falls and is convex; at 90% the share is NMDB's 44%. */
+    /**
+     * The moment's slope is minus the share above the threshold, so it falls and is convex; at 90% the share is NMDB's
+     * 44%.
+     */
     public function testTheSlopeIsMinusTheShareAbove(): void
     {
         $h = 1e-6;

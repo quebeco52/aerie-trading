@@ -20,49 +20,97 @@ use App\Service\Math\TimeSeries;
 class CommodityLogisticsSubsystem
 {
     // --- Energy Shock Jump-Diffusion (Schwartz 1997 Commodity Dynamics) ---
-    /** Oil shocks per year (0.87): Merton (1976) jump-diffusion by maximum likelihood on month-end real WTI log returns, 1986-2025 (LR 87.7 over a pure diffusion). */
+    /**
+     * Oil shocks per year (0.87): Merton (1976) jump-diffusion by maximum likelihood on month-end real WTI log returns,
+     * 1986-2025 (LR 87.7 over a pure diffusion).
+     */
     public const ENERGY_JUMP_PROBABILITY = 0.87;
-    /** Mean log size of an oil shock (-0.021, so none): shocks run both ways, 1986 -39%, 1990 +36%, 2008 -38%, 2020 -78% then +62% in a month. */
+    /**
+     * Mean log size of an oil shock (-0.021, so none): shocks run both ways, 1986 -39%, 1990 +36%, 2008 -38%, 2020 -78%
+     * then +62% in a month.
+     */
     public const ENERGY_JUMP_MEAN = -0.021;
     /** Standard deviation of an oil shock's log size (0.243), the same fit. */
     public const ENERGY_JUMP_VOL = 0.243;
 
     // --- Energy Supply Cobweb (Ezekiel 1938; Anderson, Kellogg & Salant 2018) ---
-    /** Long-run supply elasticity of productive capacity to the price level (~0.3: the drilling and investment response, Caldara, Cavallo & Iacoviello 2019). */
+    /**
+     * Long-run supply elasticity of productive capacity to the price level (~0.3: the drilling and investment response,
+     * Caldara, Cavallo & Iacoviello 2019).
+     */
     public const ENERGY_SUPPLY_ELASTICITY = 0.30;
-    /** Years for capacity to follow price: the drilling, sanctioning and commissioning lag (Anderson, Kellogg & Salant 2018). */
+    /**
+     * Years for capacity to follow price: the drilling, sanctioning and commissioning lag (Anderson, Kellogg & Salant
+     * 2018).
+     */
     public const ENERGY_SUPPLY_LAG_YEARS = 3.0;
-    /** Price response to the demand-over-capacity ratio: the inverse of the short-run demand and supply elasticities combined (Kilian & Murphy 2014: ~0.26 + 0.1), so a 1% shortfall clears at ~2.5% more. */
+    /**
+     * Price response to the demand-over-capacity ratio: the inverse of the short-run demand and supply elasticities
+     * combined (Kilian & Murphy 2014: ~0.26 + 0.1), so a 1% shortfall clears at ~2.5% more.
+     */
     public const ENERGY_CAPACITY_INELASTICITY = 2.5;
-    /** Oil spot per unit of world demand gap, in logs: fitted with the diffusion so oil yoy correlates with world demand yoy as WTI does with G6 industrial production, 0.55 (1993-2019; var/harness/world_factor). */
+    /**
+     * Oil spot per unit of world demand gap, in logs: fitted with the diffusion so oil yoy correlates with world demand
+     * yoy as WTI does with G6 industrial production, 0.55 (1993-2019; var/harness/world_factor).
+     */
     public const ENERGY_DEMAND_ELASTICITY = 15.0;
-    /** Bounds on the equilibrium the spot price reverts to, so the cobweb cannot demand a price no market has cleared at. */
+    /**
+     * Bounds on the equilibrium the spot price reverts to, so the cobweb cannot demand a price no market has cleared
+     * at.
+     */
     public const MIN_ENERGY_EQUILIBRIUM = 40.0;
     /** Upper bound on the cobweb's equilibrium price. */
     public const MAX_ENERGY_EQUILIBRIUM = 250.0;
 
     // --- Physical Catastrophes (compound Poisson, Pareto severity) ---
-    /** Notable insured-loss events per year across the district (Swiss Re sigma counts a few dozen a year in a continental economy; scaled to one district). */
+    /**
+     * Notable insured-loss events per year across the district (Swiss Re sigma counts a few dozen a year in a
+     * continental economy; scaled to one district).
+     */
     public const CATASTROPHE_ARRIVAL_PER_YEAR = 3.0;
-    /** Decay per year of the loss burden index: claims are recognised and paid over a few quarters, so a quarter after a storm most of it has left the index. */
+    /**
+     * Decay per year of the loss burden index: claims are recognised and paid over a few quarters, so a quarter after a
+     * storm most of it has left the index.
+     */
     public const CATASTROPHE_LOSS_DECAY = 2.0;
-    /** Pareto tail index of event severity (~1.7): the mean exists, the variance does not, as insured catastrophe losses show. */
+    /**
+     * Pareto tail index of event severity (~1.7): the mean exists, the variance does not, as insured catastrophe losses
+     * show.
+     */
     public const CATASTROPHE_SEVERITY_ALPHA = 1.7;
-    /** Cap on a single event in average-year units (twenty average years of losses in one storm: the one-in-a-few-centuries event). */
+    /**
+     * Cap on a single event in average-year units (twenty average years of losses in one storm: the
+     * one-in-a-few-centuries event).
+     */
     public const CATASTROPHE_SEVERITY_CAP = 20.0;
     /** Ceiling on the loss index itself. */
     public const MAX_CATASTROPHE_LOSS_INDEX = 50.0;
-    /** Single-event insured loss (in average-year units) that makes district news: ~1.5 years of average losses in one storm, roughly a one-in-six-years event on the Pareto tail. */
+    /**
+     * Single-event insured loss (in average-year units) that makes district news: ~1.5 years of average losses in one
+     * storm, roughly a one-in-six-years event on the Pareto tail.
+     */
     public const SYSTEMIC_CATASTROPHE_SEVERITY = 1.5;
 
     // --- Natural Gas (Pilipovic 1998; Ramberg & Parsons 2012) ---
-    /** Mean reversion of the log gas-to-oil ratio: the two are cointegrated but the relationship drifts for a year or so at a time (Ramberg & Parsons 2012). */
+    /**
+     * Mean reversion of the log gas-to-oil ratio: the two are cointegrated but the relationship drifts for a year or so
+     * at a time (Ramberg & Parsons 2012).
+     */
     public const GAS_OIL_RATIO_KAPPA = 0.70;
-    /** Annual log volatility of the ratio (~0.30 stationary log spread): gas runs about half again as volatile as oil, and the difference is the ratio's own noise. */
+    /**
+     * Annual log volatility of the ratio (~0.30 stationary log spread): gas runs about half again as volatile as oil,
+     * and the difference is the ratio's own noise.
+     */
     public const GAS_OIL_RATIO_SIGMA = 0.35;
-    /** Winter premium on the gas index (Pilipovic 1998 seasonal factor): heating demand lifts the winter price ~12% over the annual mean. */
+    /**
+     * Winter premium on the gas index (Pilipovic 1998 seasonal factor): heating demand lifts the winter price ~12% over
+     * the annual mean.
+     */
     public const GAS_SEASONALITY_AMPLITUDE = 0.12;
-    /** Arrivals per year of storage or weather squeezes (a February freeze, a filled-storage collapse) that move gas without oil. */
+    /**
+     * Arrivals per year of storage or weather squeezes (a February freeze, a filled-storage collapse) that move gas
+     * without oil.
+     */
     public const GAS_JUMP_PROBABILITY = 0.15;
     /** Mean log size of a gas squeeze (~28%); compensated in the ratio's target so squeezes do not lift the average. */
     public const GAS_JUMP_MEAN = 0.25;
@@ -70,17 +118,27 @@ class CommodityLogisticsSubsystem
     public const GAS_JUMP_VOL = 0.15;
 
     // --- Wholesale Power (Lucia & Schwartz 2002; EIA ICE on-peak hubs vs Henry Hub, monthly 2017-2025) ---
-    /** Log change in wholesale power per log change in gas: 0.852 (se 0.081) across four gas-marginal hubs (PJM West, ISO-NE Mass Hub, SP15, Palo Verde). */
+    /**
+     * Log change in wholesale power per log change in gas: 0.852 (se 0.081) across four gas-marginal hubs (PJM West,
+     * ISO-NE Mass Hub, SP15, Palo Verde).
+     */
     public const POWER_GAS_ELASTICITY = 0.852;
-    /** Mean reversion of the log implied heat rate, fitted to its quarterly means (sd 0.183, AR1 0.37) as a time-averaged OU: weather and outages clear within weeks. */
+    /**
+     * Mean reversion of the log implied heat rate, fitted to its quarterly means (sd 0.183, AR1 0.37) as a
+     * time-averaged OU: weather and outages clear within weeks.
+     */
     public const POWER_HEAT_RATE_KAPPA = 7.04;
     /** Annual log volatility of the implied heat rate, from the same quarterly fit. */
     public const POWER_HEAT_RATE_SIGMA = 0.883;
-    /** Annual harmonic of the power season (level profile): the summer air-conditioning peak outweighs the winter one. */
+    /**
+     * Annual harmonic of the power season (level profile): the summer air-conditioning peak outweighs the winter one.
+     */
     public const POWER_SEASONAL_ANNUAL_AMPLITUDE = 0.157;
     /** Year fraction at which the annual harmonic peaks. */
     public const POWER_SEASONAL_ANNUAL_PEAK = 0.719;
-    /** Semi-annual harmonic of the power season: twin winter and summer load peaks around spring and autumn shoulders. */
+    /**
+     * Semi-annual harmonic of the power season: twin winter and summer load peaks around spring and autumn shoulders.
+     */
     public const POWER_SEASONAL_SEMIANNUAL_AMPLITUDE = 0.246;
     /** Year fraction of the first semi-annual peak (late January); the second falls half a year later. */
     public const POWER_SEASONAL_SEMIANNUAL_PEAK = 0.064;
@@ -90,21 +148,43 @@ class CommodityLogisticsSubsystem
     // --- Carbon in Wholesale Power (EPA emission factors; Fabra & Reguant 2014) ---
 
     // --- Gold (Barsky, Epstein, Lafont-Mueller & Yoo 2021, Chicago Fed Letter 464) ---
-    /** Log change in the real gold price per unit of real ten-year yield: -0.131 per percentage point (annual levels regression, 1971-2019). */
+    /**
+     * Log change in the real gold price per unit of real ten-year yield: -0.131 per percentage point (annual levels
+     * regression, 1971-2019).
+     */
     public const GOLD_REAL_RATE_SEMI_ELASTICITY = -13.1;
-    /** Log change in the real gold price per unit of ten-year expected inflation: +0.365 per percentage point, the inflation-hedge motive. */
+    /**
+     * Log change in the real gold price per unit of ten-year expected inflation: +0.365 per percentage point, the
+     * inflation-hedge motive.
+     */
     public const GOLD_INFLATION_EXPECTATION_SEMI_ELASTICITY = 36.5;
-    /** Log change in the real gold price per percentage point of survey respondents expecting bad times over the next five years. */
+    /**
+     * Log change in the real gold price per percentage point of survey respondents expecting bad times over the next
+     * five years.
+     */
     public const GOLD_PESSIMISM_SEMI_ELASTICITY = 0.012;
-    /** Percentage points of pessimistic respondents per point of consumer sentiment: the survey's 30-to-60% pessimism swing matched to the sentiment index's ~57-point range over the same years (an approximation; both series come from the Michigan survey). */
+    /**
+     * Percentage points of pessimistic respondents per point of consumer sentiment: the survey's 30-to-60% pessimism
+     * swing matched to the sentiment index's ~57-point range over the same years (an approximation; both series come
+     * from the Michigan survey).
+     */
     public const PESSIMISM_PER_SENTIMENT_POINT = 0.53;
-    /** Real ten-year yield the engine rests at (measured mean over a 49-year run), so the index centres on its baseline rather than on a level the engine never visits. */
+    /**
+     * Real ten-year yield the engine rests at (measured mean over a 49-year run), so the index centres on its baseline
+     * rather than on a level the engine never visits.
+     */
     public const GOLD_REAL_RATE_ANCHOR = 0.028;
     /** Ten-year expected inflation the engine rests at (measured mean over the same run). */
     public const GOLD_INFLATION_EXPECTATION_ANCHOR = 0.022;
-    /** Annual reversion toward the equilibrium: the levels regression's Durbin-Watson of 0.98 is a residual autocorrelation of 1 - DW/2 = 0.51 a year, so kappa = -ln 0.51. */
+    /**
+     * Annual reversion toward the equilibrium: the levels regression's Durbin-Watson of 0.98 is a residual
+     * autocorrelation of 1 - DW/2 = 0.51 a year, so kappa = -ln 0.51.
+     */
     public const GOLD_MEAN_REVERSION = 0.67;
-    /** Annual log volatility of the gold price: its annualised volatility has stayed within 10-18% on most days since 1971 (World Gold Council). */
+    /**
+     * Annual log volatility of the gold price: its annualised volatility has stayed within 10-18% on most days since
+     * 1971 (World Gold Council).
+     */
     public const GOLD_VOLATILITY = 0.15;
     /** Floor on the gold index. */
     public const MIN_GOLD_INDEX = 20.0;
@@ -124,13 +204,20 @@ class CommodityLogisticsSubsystem
     public const METALS_SHORT_TERM_KAPPA = 1.50;
     /** Mean-reversion speed of long-term industrial metals supercycle equilibrium shifts. */
     public const METALS_LONG_TERM_KAPPA = 0.20;
-    /** Volatility of short-term supply disruption shocks, fitted with the demand elasticity to the World Bank metals index's yoy log sd, 0.231 (1993-2019): 0.228 over 4 seeds. */
+    /**
+     * Volatility of short-term supply disruption shocks, fitted with the demand elasticity to the World Bank metals
+     * index's yoy log sd, 0.231 (1993-2019): 0.228 over 4 seeds.
+     */
     public const METALS_SHORT_TERM_SIGMA = 0.24;
     /** Volatility of long-term supercycle equilibrium shifts. */
     public const METALS_LONG_TERM_SIGMA = 0.08;
     /** Correlation between short-term disruptions and long-term shifts. */
     public const METALS_RHO = -0.30;
-    /** Metals spot per unit of world demand gap, in logs: fitted so metals yoy correlates with world demand yoy as the World Bank metals index does with G6 industrial production, 0.58 (1993-2019): 0.63 over 4 seeds (var/harness/world_factor). */
+    /**
+     * Metals spot per unit of world demand gap, in logs: fitted so metals yoy correlates with world demand yoy as the
+     * World Bank metals index does with G6 industrial production, 0.58 (1993-2019): 0.63 over 4 seeds
+     * (var/harness/world_factor).
+     */
     public const METALS_DEMAND_ELASTICITY = 12.0;
 
     // --- 2-FACTOR CORRELATED OU AGRICULTURAL COMMODITIES & WEATHER JUMPS ---
@@ -168,9 +255,16 @@ class CommodityLogisticsSubsystem
     public const FREIGHT_VOLATILITY = 0.25;
 
     // --- Suppliers' Delivery Times (ISM Supplier Deliveries; Kingman 1961) ---
-    /** Delivery-index points per log unit of factory congestion rho / (1 - rho) in capacity utilization: factory and shipping congestion carry equal variance in the simulation (16 seeds x 30 years). */
+    /**
+     * Delivery-index points per log unit of factory congestion rho / (1 - rho) in capacity utilization: factory and
+     * shipping congestion carry equal variance in the simulation (16 seeds x 30 years).
+     */
     public const DELIVERY_FACTORY_LOADING = 12.55;
-    /** Delivery-index points per log unit of seaborne demand over fleet capacity: ISM deliveries hit 78.8 in May 2021 with container freight 4.3x its 2019 average (Drewry WCI), a tightness of 4.3^(1/2) at the charter market's inelasticity. */
+    /**
+     * Delivery-index points per log unit of seaborne demand over fleet capacity: ISM deliveries hit 78.8 in May 2021
+     * with container freight 4.3x its 2019 average (Drewry WCI), a tightness of 4.3^(1/2) at the charter market's
+     * inelasticity.
+     */
     public const DELIVERY_SHIPPING_LOADING = (78.8 - MacroEngine::SUPPLIER_DELIVERIES_NEUTRAL) / (1.4586 / self::FREIGHT_CAPACITY_INELASTICITY);
     /** Annual mean reversion of the delivery index toward its congestion target. */
     public const DELIVERY_REVERSION_KAPPA = 6.0;
@@ -182,22 +276,33 @@ class CommodityLogisticsSubsystem
     public const SUPPLY_CHAIN_FREIGHT_LOG_SD = 0.20;
     /** Standard deviation of delivery times about neutral, measured on the engine (6.2 points). */
     public const SUPPLY_CHAIN_DELIVERY_SD = 6.2;
-    /** Standard deviation of the two standardised readings summed, sqrt(2(1 + rho)) at their measured correlation of 0.56: puts the index in its own standard deviations. */
+    /**
+     * Standard deviation of the two standardised readings summed, sqrt(2(1 + rho)) at their measured correlation of
+     * 0.56: puts the index in its own standard deviations.
+     */
     public const SUPPLY_CHAIN_SUM_SD = 1.76;
 
     // --- 3:2:1 Refining Crack Spread (EIA Gulf Coast gasoline & ULSD vs WTI, monthly 2010-2024) ---
-    /** Annual mean reversion of the de-seasonalised log crack: its monthly autocorrelation of 0.889 is kappa = -12 ln 0.889 (half-life ~6 months). */
+    /**
+     * Annual mean reversion of the de-seasonalised log crack: its monthly autocorrelation of 0.889 is kappa = -12 ln
+     * 0.889 (half-life ~6 months).
+     */
     public const CRACK_SPREAD_KAPPA = 1.41;
     /** Annual log volatility of the crack: the de-seasonalised log dispersion of 0.444 times sqrt(2 kappa). */
     public const CRACK_SPREAD_SIGMA = 0.75;
-    /** Seasonal swing of the crack around its annual mean: the first harmonic of the monthly profile (driving season against the autumn trough). */
+    /**
+     * Seasonal swing of the crack around its annual mean: the first harmonic of the monthly profile (driving season
+     * against the autumn trough).
+     */
     public const CRACK_SEASONAL_AMPLITUDE = 0.146;
     /** Year fraction at which the seasonal crack peaks (early June). */
     public const CRACK_SEASONAL_PEAK = 0.46;
 
     public function __construct(
         private readonly MathUtility $mathUtility,
-        /** Logs the jumps this subsystem draws. Null in a test or a headless harness, off everywhere the ticker is not. */
+        /**
+         * Logs the jumps this subsystem draws. Null in a test or a headless harness, off everywhere the ticker is not.
+         */
         private readonly ?MacroDiagnosticsProbe $diagnostics = null,
     ) {}
 
@@ -260,7 +365,8 @@ class CommodityLogisticsSubsystem
         $conveniencePricePremium = MacroEngine::ENERGY_BASELINE * $convenienceYield;
 
         // The spot clears today's world demand against supply that cannot answer within the year, so demand moves the
-        // price as it happens; the base process carries supply news and the capacity the cobweb has built (Kilian 2009).
+        // price as it happens; the base process carries supply news and the capacity the cobweb has built (Kilian
+        // 2009).
         $state->energyPriceIndex = max(10.0, min(350.0, ($state->energyBasePrice * self::resolveEnergyDemandMultiplier($state->globalDemandGapEma)) + $conveniencePricePremium));
         $state->energyPriceShock = $state->energyPriceIndex - MacroEngine::ENERGY_BASELINE;
     }
@@ -288,7 +394,9 @@ class CommodityLogisticsSubsystem
         return max(self::MIN_ENERGY_EQUILIBRIUM, min(self::MAX_ENERGY_EQUILIBRIUM, MacroEngine::ENERGY_BASELINE * ($utilization ** self::ENERGY_CAPACITY_INELASTICITY)));
     }
 
-    /** The spot's lift over the base process from world demand: cyclical demand against short-run supply (Kilian 2009). */
+    /**
+     * The spot's lift over the base process from world demand: cyclical demand against short-run supply (Kilian 2009).
+     */
     public static function resolveEnergyDemandMultiplier(float $globalDemandGapEma): float
     {
         return exp($globalDemandGapEma * self::ENERGY_DEMAND_ELASTICITY);
@@ -387,7 +495,8 @@ class CommodityLogisticsSubsystem
      */
     public function calculateNaturalGasIndex(MacroState $state, float $dt): void
     {
-        // Schwartz (1997) log-OU whose level averages one: the squeezes' Merton level drift netted out, the Jensen lift added.
+        // Schwartz (1997) log-OU whose level averages one: the squeezes' Merton level drift netted out, the Jensen lift
+        // added.
         $jumpShift = StochasticProcesses::logOuJumpLevelShift(self::GAS_JUMP_PROBABILITY, self::GAS_OIL_RATIO_KAPPA, self::GAS_JUMP_MEAN, self::GAS_JUMP_VOL);
         $ratioTarget = StochasticProcesses::schwartzThetaForMean(exp(-$jumpShift), self::GAS_OIL_RATIO_KAPPA, self::GAS_OIL_RATIO_SIGMA);
         $ratio = StochasticProcesses::calculateSchwartz1Factor(
@@ -475,8 +584,8 @@ class CommodityLogisticsSubsystem
     }
 
     /**
-     * Wholesale power relative to its baseline at a gas price relative to its own, heat rate at its mean and out of season:
-     * gas sets the price in most hours, passed through at the market's elasticity.
+     * Wholesale power relative to its baseline at a gas price relative to its own, heat rate at its mean and out of
+     * season: gas sets the price in most hours, passed through at the market's elasticity.
      */
     public static function gasPowerPassThrough(float $gasRelative): float
     {
@@ -505,7 +614,10 @@ class CommodityLogisticsSubsystem
         return self::carbonPowerPriceAdder($carbonPrice) / MacroEngine::REFERENCE_POWER_PRICE;
     }
 
-    /** The load-season multiplier on wholesale power at a point in simulated time (years); it averages one over the year. */
+    /**
+     * The load-season multiplier on wholesale power at a point in simulated time (years); it averages one over the
+     * year.
+     */
     public static function resolvePowerSeasonalFactor(float $totalTime): float
     {
         $timeOfYear = fmod($totalTime, 1.0);
@@ -608,7 +720,8 @@ class CommodityLogisticsSubsystem
     public function calculateAgriculturalCommodityIndex(MacroState $state, float $dt): void
     {
         // The weather jumps only raise prices, so the short factor reverts below zero by their mean log rate over its
-        // speed: a drought is a transient disruption, and the equilibrium stays with the long-term factor (Merton 1976).
+        // speed: a drought is a transient disruption, and the equilibrium stays with the long-term factor (Merton
+        // 1976).
         $result = $this->mathUtility->calculateTwoFactorOU(
             chi: $state->agriChi,
             xi: $state->agriXi,

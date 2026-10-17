@@ -94,8 +94,8 @@ trait StandardValuationTrait
     }
 
     /**
-     * The trailing return with only the persistent-equivalent share of its gap to the long-run level: profitability closes
-     * about 38% of that gap a year (Fama & French 2000), so a good or bad year is not capitalized as permanent
+     * The trailing return with only the persistent-equivalent share of its gap to the long-run level: profitability
+     * closes about 38% of that gap a year (Fama & French 2000), so a good or bad year is not capitalized as permanent
      * (TimeSeries::persistentEquivalentReturn()). A firm with no long-run record yet is valued on its trailing return.
      */
     public function getValuationReturn(float $trailingReturn, ?float $longRunReturn, float $discountRate): float

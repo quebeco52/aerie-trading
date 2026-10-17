@@ -12,16 +12,19 @@ use App\Service\Math\MathUtility;
  * The Securities Commission as a department of the Council: a head the Council appoints for one fixed term, who sets
  * the rules of the Aerie Exchange that reach investors and listed firms. One stance on the markets, from light (-1) to
  * strict (+1), sets two of them: the margin an investor must put up to buy on credit, and how hard the Commission's
- * enforcement leans on firms that steer their reported earnings toward the Street's number. Each rule stands at its founding value for a stance at the middle, so a
- * head of the middle view keeps the District's rules, and runs out to its record's ends either way.
+ * enforcement leans on firms that steer their reported earnings toward the Street's number. Each rule stands at its
+ * founding value for a stance at the middle, so a head of the middle view keeps the District's rules, and runs out to
+ * its record's ends either way.
  *
- * The initial margin runs over the record of Regulation T, from 40% (1937-45, 1949) to 80% (1968), short of the 100%
- * of 1946 that shut buying on credit; maintenance stays where it was founded, since it guards the broker's collateral
- * and a rise in it would call positions bought under the old rule. Enforcement scales each firm's own propensity to manage earnings from half again as much to half as much,
- * the size of the fall in accrual management after the US's 2002 reforms (Cohen, Dey & Lys 2008).
+ * The initial margin runs over the record of Regulation T, from 40% (1937-45, 1949) to 80% (1968), short of the 100% of
+ * 1946 that shut buying on credit; maintenance stays where it was founded, since it guards the broker's collateral and
+ * a rise in it would call positions bought under the old rule. Enforcement scales each firm's own propensity to manage
+ * earnings from half again as much to half as much, the size of the fall in accrual management after the US's 2002
+ * reforms (Cohen, Dey & Lys 2008).
  *
  * The head sitting at Year 1 keeps the founding rules, and a new head's rules take effect a notice period after they
- * are seated, so no account is called the day a new head arrives (App\DTO\GovernmentPolicyDTO::$initialMarginRequirement).
+ * are seated, so no account is called the day a new head arrives
+ * (App\DTO\GovernmentPolicyDTO::$initialMarginRequirement).
  */
 final class SecuritiesCommission
 {
@@ -38,7 +41,10 @@ final class SecuritiesCommission
     public const STRICTEST_EARNINGS_MANAGEMENT_SCALE = 0.5;
 
     // --- The Head ---
-    /** Length of the head's single term, in years: the five years of the Council's other department heads (SovereignReserveFund::HEAD_TERM_YEARS). */
+    /**
+     * Length of the head's single term, in years: the five years of the Council's other department heads
+     * (SovereignReserveFund::HEAD_TERM_YEARS).
+     */
     public const HEAD_TERM_YEARS = 5.0;
     /** When the term of the head sitting at Year 1 ends, in years after Year 1 began. */
     public const OPENING_HEAD_TERM_END = 4.5;
@@ -46,8 +52,8 @@ final class SecuritiesCommission
     public const RULE_NOTICE_YEARS = 0.25;
 
     /**
-     * One tick, after the Council's own: the head seated on the first read of a state without one, and a new head at each
-     * term's end, from a shortlist, the candidate nearest the Council's median stance on the markets.
+     * One tick, after the Council's own: the head seated on the first read of a state without one, and a new head at
+     * each term's end, from a shortlist, the candidate nearest the Council's median stance on the markets.
      *
      * @param PoliticsState $state The politics, advanced in place; its totalTime already set to this tick's.
      */
@@ -122,7 +128,9 @@ final class SecuritiesCommission
         return ['initial' => $initial, 'long' => FinancialConstants::MAINTENANCE_MARGIN_LONG, 'short' => FinancialConstants::MAINTENANCE_MARGIN_SHORT];
     }
 
-    /** The multiplier a stance puts on each firm's propensity to manage earnings, or none (1) for the founding rules. */
+    /**
+     * The multiplier a stance puts on each firm's propensity to manage earnings, or none (1) for the founding rules.
+     */
     public static function earningsManagementScale(?float $stance): float
     {
         return self::along($stance, self::LIGHTEST_EARNINGS_MANAGEMENT_SCALE, 1.0, self::STRICTEST_EARNINGS_MANAGEMENT_SCALE);
@@ -140,7 +148,10 @@ final class SecuritiesCommission
         return CouncilAppointments::termStart($time, self::OPENING_HEAD_TERM_END, self::HEAD_TERM_YEARS) + self::HEAD_TERM_YEARS;
     }
 
-    /** A rule's value at a stance: its founding value at the middle (0) or for none, linear out to its light end (-1) and its strict end (+1). */
+    /**
+     * A rule's value at a stance: its founding value at the middle (0) or for none, linear out to its light end (-1)
+     * and its strict end (+1).
+     */
     private static function along(?float $stance, float $light, float $founding, float $strict): float
     {
         if ($stance === null) {

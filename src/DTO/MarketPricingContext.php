@@ -43,7 +43,10 @@ class MarketPricingContext
         public float $baselineRoic = 0.10,
         public float $baselineMargin = 0.20,
         public float $accrualsRatio = 0.0,
-        /** Capital actually employed per share (equity + debt + deferred tax - cash); 0 when the caller has no balance sheet. */
+        /**
+         * Capital actually employed per share (equity + debt + deferred tax - cash); 0 when the caller has no balance
+         * sheet.
+         */
         public float $investedCapitalPerShare = 0.0,
         /**
          * Annualized variance this name's order flow has actually been supplying, from the measured EMA.
@@ -53,11 +56,20 @@ class MarketPricingContext
          * calibrated volatility is left alone.
          */
         public float $orderFlowVariance = 0.0,
-        /** Annualized variance this name's announcements (reports and warnings) have been supplying, from the measured EMA; the diffusion gives it back. */
+        /**
+         * Annualized variance this name's announcements (reports and warnings) have been supplying, from the measured
+         * EMA; the diffusion gives it back.
+         */
         public float $announcementVariance = 0.0,
-        /** Annualized variance the sovereign fund's trading has been supplying to this name, from the tracker's EMA; systematic, so the market factor gives it back. */
+        /**
+         * Annualized variance the sovereign fund's trading has been supplying to this name, from the tracker's EMA;
+         * systematic, so the market factor gives it back.
+         */
         public float $fundImpactVariance = 0.0,
-        /** Measured trend of market variance the common idiosyncratic factor is read against; null reads the level the market settles at. */
+        /**
+         * Measured trend of market variance the common idiosyncratic factor is read against; null reads the level the
+         * market settles at.
+         */
         public ?float $marketVarianceTrend = null,
         /** Book equity less goodwill, per share; null when the caller has none, and the P/B leg then reads book. */
         public ?float $tangibleBookValuePerShare = null,
@@ -67,13 +79,23 @@ class MarketPricingContext
         public float $dividendAdjustmentSpeed = 1.0,
         /** Market vol the stored total variance was built with (last tick's); null strips at this tick's. */
         public ?float $priorMarketVol = null,
-        /** The firm's pre-tax marginal borrowing rate (DebtMetricsDTO::$currentMarketRate); null prices debt at the 10Y plus the IG spread. */
+        /**
+         * The firm's pre-tax marginal borrowing rate (DebtMetricsDTO::$currentMarketRate); null prices debt at the 10Y
+         * plus the IG spread.
+         */
         public ?float $costOfDebt = null,
-        /** @var array<string, float> What each law the firm's accounts answer to is charged on or moves, per share, keyed by lever (App\Service\Market\Pricing\PolicyCapitalization::earningsGap()); empty for a firm with none. */
+        /**
+         * @var array<string, float> What each law the firm's accounts answer to is charged on or moves, per share,
+         *                           keyed by lever (App\Service\Market\Pricing\PolicyCapitalization::earningsGap());
+         *                           empty for a firm with none.
+         */
         public array $policyBasesPerShare = [],
         /** The firm's measured long-run return (Stock::$longRunReturn); null values it on its trailing return. */
         public ?float $longRunReturn = null,
-        /** Cash per share beyond what the business needs to run, valued at face beside it; zero for a financial, whose cash is its business. */
+        /**
+         * Cash per share beyond what the business needs to run, valued at face beside it; zero for a financial, whose
+         * cash is its business.
+         */
         public float $excessCashPerShare = 0.0,
     ) {}
 
@@ -83,8 +105,10 @@ class MarketPricingContext
      * fundamentals the market is not using. A dt of zero prices the firm without advancing its path; the ticker passes
      * its step and any deal shock struck this tick.
      *
-     * @param AnchorStakeLedger $anchorStakes The caller's ledger, primed with the board a sphere's holdings are marked on.
-     * @param float $fundImpactVariance The sovereign fund's measured impact variance in this name, which the ticker holds.
+     * @param AnchorStakeLedger $anchorStakes The caller's ledger, primed with the board a sphere's holdings are marked
+     *                                        on.
+     * @param float $fundImpactVariance The sovereign fund's measured impact variance in this name, which the ticker
+     *                                  holds.
      * @param float|null $marketVarianceTrend The ticker's measured market variance trend.
      */
     public static function forStock(

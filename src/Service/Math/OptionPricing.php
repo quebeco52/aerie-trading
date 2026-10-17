@@ -12,27 +12,44 @@ namespace App\Service\Math;
 final class OptionPricing
 {
     // --- Option Pricing (Black-Scholes-Merton) ---
-    /** Time to expiry, in years, below which a contract is settled at intrinsic value instead of priced; sigma * sqrt(T) is not invertible at zero. */
+    /**
+     * Time to expiry, in years, below which a contract is settled at intrinsic value instead of priced; sigma * sqrt(T)
+     * is not invertible at zero.
+     */
     public const MIN_OPTION_TIME_TO_EXPIRY = 1.0e-6;
     /** Floor on the volatility a contract may be quoted at, matching the price process's own volatility floor. */
     public const MIN_OPTION_VOLATILITY = 0.01;
-    /** Ceiling on the volatility a contract may be quoted at; past 500% the lognormal call is indistinguishable from the discounted forward. */
+    /**
+     * Ceiling on the volatility a contract may be quoted at; past 500% the lognormal call is indistinguishable from the
+     * discounted forward.
+     */
     public const MAX_OPTION_VOLATILITY = 5.00;
 
     // --- Implied Volatility Solver ---
-    /** Newton-Raphson iteration cap for the implied-volatility root; a vega-bracketed quote converges in well under ten. */
+    /**
+     * Newton-Raphson iteration cap for the implied-volatility root; a vega-bracketed quote converges in well under ten.
+     */
     public const IMPLIED_VOL_MAX_ITERATIONS = 64;
     /** Price convergence tolerance for the implied-volatility root, in currency units per share. */
     public const IMPLIED_VOL_PRICE_TOLERANCE = 1.0e-8;
 
     // --- Gram-Charlier Smile (Backus, Foresi & Wu 2004) ---
-    /** Widest fractional departure from the at-the-money volatility the skewness and kurtosis terms may produce; the expansion is local and turns negative in the far wings. */
+    /**
+     * Widest fractional departure from the at-the-money volatility the skewness and kurtosis terms may produce; the
+     * expansion is local and turns negative in the far wings.
+     */
     public const MAX_GRAM_CHARLIER_VOL_DEVIATION = 0.60;
 
     // --- Short Option Margin (FINRA Rule 4210 / CBOE minimums) ---
-    /** Share of the underlying a naked short option is collateralized at, before the out-of-the-money amount is credited back against it. */
+    /**
+     * Share of the underlying a naked short option is collateralized at, before the out-of-the-money amount is credited
+     * back against it.
+     */
     public const SHORT_OPTION_UNDERLYING_REQUIREMENT = 0.20;
-    /** Floor on that requirement, struck on the underlying for a call and on the STRIKE for a put, so a far out-of-the-money short is never collateralized at nothing. */
+    /**
+     * Floor on that requirement, struck on the underlying for a call and on the STRIKE for a put, so a far
+     * out-of-the-money short is never collateralized at nothing.
+     */
     public const SHORT_OPTION_MINIMUM_REQUIREMENT = 0.10;
 
     /**

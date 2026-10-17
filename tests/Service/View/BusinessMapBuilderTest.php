@@ -52,7 +52,9 @@ final class BusinessMapBuilderTest extends TestCase
         $this->assertEqualsWithDelta(0.6, $this->card($map['produced'], 'rev:equipment_sales')['share'], 1e-12);
     }
 
-    /** Input lines point the way the price moved the cost base: metals above normal hurt, pay below productivity helped. */
+    /**
+     * Input lines point the way the price moved the cost base: metals above normal hurt, pay below productivity helped.
+     */
     public function testInputLinesFollowThePriceGapTheQuarterBoughtAt(): void
     {
         $map = $this->map();
@@ -118,7 +120,9 @@ final class BusinessMapBuilderTest extends TestCase
         $this->assertNull($this->find($map['outside'], 'input:metals'));
     }
 
-    /** A lender's interest stream runs on its book; deposits feed the interest it pays, the reserve its credit losses. */
+    /**
+     * A lender's interest stream runs on its book; deposits feed the interest it pays, the reserve its credit losses.
+     */
     public function testALenderShowsItsBookFundingAndReserve(): void
     {
         $report = $this->lenderReport();
@@ -150,7 +154,10 @@ final class BusinessMapBuilderTest extends TestCase
         $this->assertSame(['rev:net_interest_income', 'nim', 'paid', 'rev:fee_income', 'losses'], array_column($map['produced'], 'id'), 'each result beside what feeds it');
     }
 
-    /** One event filed on every stream shows once: a lender's credit event on its loss reserve, anything else under the title. */
+    /**
+     * One event filed on every stream shows once: a lender's credit event on its loss reserve, anything else under the
+     * title.
+     */
     public function testTheQuartersEventShowsOnce(): void
     {
         $report = $this->lenderReport();

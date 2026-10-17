@@ -81,7 +81,9 @@ class ElectionRecorderTest extends TestCase
         $this->assertSame(4.0, $election->getTakesOfficeAt());
     }
 
-    /** The outgoing cabinet is the one in office at the vote, which after a fall is not the one the last vote formed. */
+    /**
+     * The outgoing cabinet is the one in office at the vote, which after a fall is not the one the last vote formed.
+     */
     public function testAVoteIsWrittenAgainstTheCabinetInOfficeAfterAFall(): void
     {
         $last = (new DietElection())->setCoalition([Diet::VANGUARD]);
@@ -91,7 +93,10 @@ class ElectionRecorderTest extends TestCase
         $this->assertSame([Diet::CIVIC, Diet::EXCHANGE], $election->getOutgoingCoalition());
     }
 
-    /** A cabinet that falls is added to the vote that seated its Diet, with the caretaker it leaves and the talks that follow. */
+    /**
+     * A cabinet that falls is added to the vote that seated its Diet, with the caretaker it leaves and the talks that
+     * follow.
+     */
     public function testAFallIsAddedToTheVoteThatSeatedTheDiet(): void
     {
         $log = [['day' => 21.0, 'formateur' => Diet::CIVIC, 'formed' => true, 'cabinet' => [Diet::CIVIC], 'support' => [Diet::IRON_HARBOR, Diet::TIDELINE]]];

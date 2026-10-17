@@ -12,7 +12,8 @@ final readonly class QuarterRecord
 {
     /**
      * @param array<string, mixed>|null $gapChannels       OutputGapProbe's closed window, or null if none closed.
-     * @param array<string, mixed>|null $diagnostics       MacroDiagnosticsProbe's closed window, or null if none closed.
+     * @param array<string, mixed>|null $diagnostics       MacroDiagnosticsProbe's closed window, or null if none
+     *                                                     closed.
      * @param string|null               $configFingerprint MacroConfigFingerprint of the constants that ran the quarter.
      * @param int|null                  $ticksPerYear      Simulation ticks per year the quarter ran at.
      */

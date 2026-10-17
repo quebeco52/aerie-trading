@@ -37,31 +37,54 @@ use App\Service\Model\StreamContext;
 class CommunicationEquipmentBusinessModel extends StandardCorporateBusinessModel
 {
     // --- Operating Cyclicality & Demand Structure ---
-    /** Elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). Carrier capex is cyclical but backlog- and royalty-cushioned. */
+    /**
+     * Elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). Carrier capex is
+     * cyclical but backlog- and royalty-cushioned.
+     */
     public const OPERATING_CYCLICALITY = 1.10;
-    /** Own-price elasticity of demand: volume lost per unit of real price increase. Carriers locked into proprietary baseband firmware rarely switch vendors on price. */
+    /**
+     * Own-price elasticity of demand: volume lost per unit of real price increase. Carriers locked into proprietary
+     * baseband firmware rarely switch vendors on price.
+     */
     public const PRICE_ELASTICITY_OF_DEMAND = 0.40;
-    /** Share of an idiosyncratic revenue gain taken from same-industry peers rather than won from a larger market. A three-vendor oligopoly swaps share on each tender. */
+    /**
+     * Share of an idiosyncratic revenue gain taken from same-industry peers rather than won from a larger market. A
+     * three-vendor oligopoly swaps share on each tender.
+     */
     public const INDUSTRY_SUBSTITUTABILITY = 0.60;
 
     // --- Input Cost Basket ---
-    /** Shares of the variable cost base by input channel, measured from the BEA input-output accounts with supply-chain content (labor still the model's own). */
+    /**
+     * Shares of the variable cost base by input channel, measured from the BEA input-output accounts with supply-chain
+     * content (labor still the model's own).
+     */
     public const INPUT_COST_EXPOSURES = InputOutputExposures::COMMUNICATION_EQUIPMENT;
-    /** A concentrated vendor base under multi-year frame agreements recovers most component moves at the annual price review. */
+    /**
+     * A concentrated vendor base under multi-year frame agreements recovers most component moves at the annual price
+     * review.
+     */
     public const PRICING_POWER_INDEX = 0.65;
     /** Frame agreements reprice once a year. */
     public const PRICE_PASS_THROUGH_LAG_YEARS = 1.00;
-    /** Component supply agreements fix bill-of-materials prices for about a quarter before spot moves reach the line. */
+    /**
+     * Component supply agreements fix bill-of-materials prices for about a quarter before spot moves reach the line.
+     */
     public const INPUT_COST_LAG_YEARS = 0.25;
     /** Recoverable component cost moves reach carrier prices only at the annual frame-agreement review. */
     public const INPUT_PASS_THROUGH_LAG_YEARS = 1.00;
 
     // --- Demand Transmission Lag ---
-    /** Years for a move in the output gap to reach the order book. Carrier capex budgets are set annually and rollouts contracted against them. */
+    /**
+     * Years for a move in the output gap to reach the order book. Carrier capex budgets are set annually and rollouts
+     * contracted against them.
+     */
     public const DEMAND_LAG_YEARS = 1.00;
 
     // --- FX Exposure ---
-    /** Share of revenue whose competitiveness moves with the trade-weighted exchange rate. Network contracts are tendered globally against foreign vendors. */
+    /**
+     * Share of revenue whose competitiveness moves with the trade-weighted exchange rate. Network contracts are
+     * tendered globally against foreign vendors.
+     */
     public const FX_REVENUE_EXPOSURE = 0.25;
     /** Consumer gateways are a landed import competing on retail shelf price. */
     public const CONSUMER_FX_REVENUE_EXPOSURE = 0.15;
@@ -69,7 +92,10 @@ class CommunicationEquipmentBusinessModel extends StandardCorporateBusinessModel
     public const FOREIGN_DEMAND_SENSITIVITY = 1.00;
 
     // --- Balance Sheet Realism ---
-    /** Stock-based compensation (ASC 718) as a share of revenue: Telecom. Equipment, 5.20% of revenue, 57 firms (Damodaran, Employee data by industry, US, January 2026). */
+    /**
+     * Stock-based compensation (ASC 718) as a share of revenue: Telecom. Equipment, 5.20% of revenue, 57 firms
+     * (Damodaran, Employee data by industry, US, January 2026).
+     */
     public const STOCK_COMPENSATION_INTENSITY = 0.0520;
 
     // --- Revenue Mix ---
@@ -97,9 +123,15 @@ class CommunicationEquipmentBusinessModel extends StandardCorporateBusinessModel
     // --- Carrier Capex Cycle & Backlog ---
     /** Sensitivity of carrier network orders to the lagged output gap (accelerator: capex follows output). */
     public const CARRIER_CAPEX_GDP_SENSITIVITY = 1.20;
-    /** Sensitivity of network orders to the economy-wide capital-stock overhang: over-built carriers digest before they re-order. */
+    /**
+     * Sensitivity of network orders to the economy-wide capital-stock overhang: over-built carriers digest before they
+     * re-order.
+     */
     public const CAPITAL_OVERHANG_SCALAR = 0.25;
-    /** Fraction of the network backlog (opening backlog plus new orders) delivered and recognized each quarter (~2.3 quarters of coverage). */
+    /**
+     * Fraction of the network backlog (opening backlog plus new orders) delivered and recognized each quarter (~2.3
+     * quarters of coverage).
+     */
     public const NETWORK_BACKLOG_BURN_RATE = 0.30;
     /** Regime key for a generational wireless rollout wave (two-state Markov). */
     public const REGIME_ROLLOUT_WAVE = 'rollout_wave';
@@ -111,7 +143,10 @@ class CommunicationEquipmentBusinessModel extends StandardCorporateBusinessModel
     public const ROLLOUT_WAVE_ORDER_UPLIFT = 0.20;
 
     // --- Standard-Essential Patent Licensing ---
-    /** Sensitivity of royalty-bearing device shipments to consumer sentiment (handset upgrades are deferred, not cancelled). */
+    /**
+     * Sensitivity of royalty-bearing device shipments to consumer sentiment (handset upgrades are deferred, not
+     * cancelled).
+     */
     public const DEVICE_SHIPMENT_SENTIMENT_SENSITIVITY = 0.50;
     /** Regime key for a major licensee withholding royalties pending renegotiation (two-state Markov). */
     public const REGIME_ROYALTY_DISPUTE = 'royalty_dispute';
@@ -121,7 +156,9 @@ class CommunicationEquipmentBusinessModel extends StandardCorporateBusinessModel
     public const ROYALTY_DISPUTE_EXIT_HAZARD = 0.20;
     /** Share of royalty revenue withheld while the dispute runs (one flagship licensee's share of the pool). */
     public const ROYALTY_DISPUTE_WITHHELD_SHARE = 0.30;
-    /** Share of the withheld arrears recovered as a catch-up payment on settlement; the rest is the settlement discount. */
+    /**
+     * Share of the withheld arrears recovered as a catch-up payment on settlement; the rest is the settlement discount.
+     */
     public const ROYALTY_SETTLEMENT_RECOVERY_SHARE = 0.75;
     /** Persisted arrears withheld by disputing licensees, in quarters of expected royalty revenue. */
     public const STATE_WITHHELD_ROYALTIES = 'state:withheld_royalties';
@@ -129,7 +166,10 @@ class CommunicationEquipmentBusinessModel extends StandardCorporateBusinessModel
     public const MAX_WITHHELD_ROYALTY_QUARTERS = 4.0;
 
     // --- Component Supply ---
-    /** Supply-stress threshold, in standard deviations, past which a fab shortage strikes: the firm's own stress (the event Z) plus the economy's pressure at its loading. */
+    /**
+     * Supply-stress threshold, in standard deviations, past which a fab shortage strikes: the firm's own stress (the
+     * event Z) plus the economy's pressure at its loading.
+     */
     public const COMPONENT_SHORTAGE_Z_SCORE = -2.20;
     /** Fraction of the normal backlog burn delivered during a shortage; the rest slips into next quarter's backlog. */
     public const COMPONENT_SHORTAGE_DELIVERY_SLIP = 0.75;
@@ -137,13 +177,22 @@ class CommunicationEquipmentBusinessModel extends StandardCorporateBusinessModel
     public const COMPONENT_SHORTAGE_CONSUMER_MULT = 0.85;
     /** Variable margin penalty per standard deviation of supply-chain pressure above normal (0.57pp). */
     public const GSCPI_MARGIN_PENALTY_SCALAR = 0.0057;
-    /** Latent supply stress per standard deviation of supply-chain pressure: about half the firm's own, so shortages cluster when the whole chain is stretched without every squeeze becoming one. */
+    /**
+     * Latent supply stress per standard deviation of supply-chain pressure: about half the firm's own, so shortages
+     * cluster when the whole chain is stretched without every squeeze becoming one.
+     */
     public const SUPPLY_CHAIN_STRESS_LOADING = 0.475;
-    /** Order sensitivity of consumer terminals to the economy-wide inventory-to-sales gap (Metzler cycle): distributors destock before reordering. */
+    /**
+     * Order sensitivity of consumer terminals to the economy-wide inventory-to-sales gap (Metzler cycle): distributors
+     * destock before reordering.
+     */
     public const INVENTORY_CYCLE_SENSITIVITY = 0.60;
 
     // --- Continuous Elasticity ---
-    /** Variable margin sensitivity to network deployments pulling in high-margin optimization software and support attach. */
+    /**
+     * Variable margin sensitivity to network deployments pulling in high-margin optimization software and support
+     * attach.
+     */
     public const SOFTWARE_ATTACH_ELASTICITY = 0.010;
 
     public function getReversionSpeed(): float
@@ -160,7 +209,10 @@ class CommunicationEquipmentBusinessModel extends StandardCorporateBusinessModel
     }
 
     // --- Secular Demand ---
-    /** Business investment in communication equipment plus household telephone equipment as a share of US nominal GDP in 1997 (BEA NIPA Tables 5.5.5 and 2.4.5). */
+    /**
+     * Business investment in communication equipment plus household telephone equipment as a share of US nominal GDP in
+     * 1997 (BEA NIPA Tables 5.5.5 and 2.4.5).
+     */
     public const SECULAR_SHARE_1997 = 0.0097;
     /** The same share in 2019. */
     public const SECULAR_SHARE_2019 = 0.0073;
@@ -222,7 +274,10 @@ class CommunicationEquipmentBusinessModel extends StandardCorporateBusinessModel
         return (($networkWeight * ($networkWorkload - 1.0)) + ($consumerWeight * $this->resolveConsumerVolumeShift($stock, $macroState))) / $totalWeight;
     }
 
-    /** Consumer terminal volume: sentiment at the firm's cyclicality, the landed-import currency term and the distributor inventory cycle. */
+    /**
+     * Consumer terminal volume: sentiment at the firm's cyclicality, the landed-import currency term and the
+     * distributor inventory cycle.
+     */
     private function resolveConsumerVolumeShift(Stock $stock, MacroStateDTO $macroState): float
     {
         $macroSensitivityMultiplier = self::MIN_BETA_PRICING_POWER_FLOOR + $this->resolvePricingPower($stock);
@@ -300,9 +355,9 @@ class CommunicationEquipmentBusinessModel extends StandardCorporateBusinessModel
         }
         $inDispute = $disputeElapsed > 0;
 
-        // --- Component Shortage ---
-        // Latent supply stress: the firm's own draw plus the economy-wide GSCPI (Benigno et al. 2022), both in
-        // standard deviations. The expediting cost is the GSCPI margin drag below, so the shortage adds none of its own.
+        // --- Component Shortage --- Latent supply stress: the firm's own draw plus the economy-wide GSCPI (Benigno et
+        // al. 2022), both in standard deviations. The expediting cost is the GSCPI margin drag below, so the shortage
+        // adds none of its own.
         $burnRate = self::NETWORK_BACKLOG_BURN_RATE;
         $consumerMultiplier = 1.0;
 

@@ -31,31 +31,55 @@ use App\Service\News\EventPresenter;
 class StockTracker
 {
     // --- Price Momentum (Jegadeesh & Titman 1993) ---
-    /** Formation horizon in years of the exponentially weighted price trend, matching the 6-month window where momentum is strongest. */
+    /**
+     * Formation horizon in years of the exponentially weighted price trend, matching the 6-month window where momentum
+     * is strongest.
+     */
     private const MOMENTUM_FORMATION_YEARS = 0.50;
     /** Absolute cap on the accumulated trend, bounding how far momentum can delay fundamental mean reversion. */
     private const MAX_MOMENTUM_TREND = 0.50;
 
     // --- Market Microstructure: Impact (Almgren, Thum, Hauptmann & Li 2005) ---
-    /** Share of a company's own open-market repurchase or flowback impact that stays: none. Execution of an announced program supplies liquidity and carries no news (Hillert, Maug & Obernberger 2016; Busch & Obernberger 2017); the program's information is in fair value through its payout. */
+    /**
+     * Share of a company's own open-market repurchase or flowback impact that stays: none. Execution of an announced
+     * program supplies liquidity and carries no news (Hillert, Maug & Obernberger 2016; Busch & Obernberger 2017); the
+     * program's information is in fair value through its payout.
+     */
     public const CORPORATE_FLOW_PERMANENT_IMPACT_SHARE = 0.0;
-    /** Ceiling on the peak price move of one tick's net order flow, as a log return; the impact law is a per-order measurement and a tick's aggregate is not bounded by the per-order size cap. */
+    /**
+     * Ceiling on the peak price move of one tick's net order flow, as a log return; the impact law is a per-order
+     * measurement and a tick's aggregate is not bounded by the per-order size cap.
+     */
     public const MAX_TICK_IMPACT_LOG_RETURN = 0.2624;
 
     // --- Market Index Membership (Shleifer 1986) ---
-    /** Window the realized volatility an index ranks and weights on is measured over, as the mean life of its exponential weighting. A year, which is what S&P's low-volatility index uses; ranking on the instantaneous variance state instead turned every volatility spike into a reconstitution. */
+    /**
+     * Window the realized volatility an index ranks and weights on is measured over, as the mean life of its
+     * exponential weighting. A year, which is what S&P's low-volatility index uses; ranking on the instantaneous
+     * variance state instead turned every volatility spike into a reconstitution.
+     */
     public const INDEX_TRAILING_VOLATILITY_YEARS = 1.0;
 
     // --- Market Microstructure: Order Flow Variance Budget ---
     /** Half-life in years of the realized impact-variance estimate the budget is drawn from. */
     public const IMPACT_VARIANCE_EMA_YEARS = 0.25;
-    /** Horizon the impact variance is read at: a trading day's summed impact, the horizon realized variance is quoted on. */
+    /**
+     * Horizon the impact variance is read at: a trading day's summed impact, the horizon realized variance is quoted
+     * on.
+     */
     public const IMPACT_MEASUREMENT_YEARS = 1.0 / FinancialConstants::TRADING_DAYS_PER_YEAR;
 
     // --- Sell-Side Price Targets (Brav & Lehavy 2003) ---
-    /** How far above fair value the published twelve-month target is set. Targets are systematically optimistic; Brav & Lehavy measure them around 28% above price, and with price near fair value on average this lands in the same place. */
+    /**
+     * How far above fair value the published twelve-month target is set. Targets are systematically optimistic; Brav &
+     * Lehavy measure them around 28% above price, and with price near fair value on average this lands in the same
+     * place.
+     */
     public const ANALYST_TARGET_OPTIMISM = 0.25;
-    /** How far the case has to move before the published target is restated. Targets are sticky and revised in steps; without a band the target would track the price continuously and a revision would never be news. */
+    /**
+     * How far the case has to move before the published target is restated. Targets are sticky and revised in steps;
+     * without a band the target would track the price continuously and a revision would never be news.
+     */
     public const ANALYST_TARGET_REVISION_THRESHOLD = 0.10;
 
     /** Market vol of the last tick priced, at which every stored variance was built; null before the first. */
@@ -64,13 +88,21 @@ class StockTracker
     /** Measured trend of market variance (an EMA over a business cycle); null before the first tick. */
     private ?float $marketVarianceTrend = null;
 
-    /** @var array<string, float> Each name's transient impact still in its price, as a log displacement; lives as long as the ticker process. */
+    /**
+     * @var array<string, float> Each name's transient impact still in its price, as a log displacement; lives as long
+     *                           as the ticker process.
+     */
     private array $transientImpact = [];
 
-    /** @var array<string, float> Annualized variance the sovereign fund's impact has supplied to each name (EMA); the market factor gives it back. */
+    /**
+     * @var array<string, float> Annualized variance the sovereign fund's impact has supplied to each name (EMA); the
+     *                           market factor gives it back.
+     */
     private array $fundImpactVariance = [];
 
-    /** @var array<string, array{flow: array{sum: float, elapsed: float}, fund: array{sum: float, elapsed: float}}> Each name's impact returns summed over the trading day so far, which its impact variance is read on. */
+    /**
+     * @var array<string, array{flow: array{sum: float, elapsed: float}, fund: array{sum: float, elapsed: float}}> Each name's impact returns summed over the trading day so far, which its impact variance is read on.
+     */
     private array $impactDay = [];
 
     /**
@@ -95,7 +127,10 @@ class StockTracker
         private \App\Service\Corporate\ManagementSuccessionEngine $successionEngine,
         /** Standing index membership; null (unit tests without an index) leaves every name a constituent. */
         private ?IndexCommittee $indexCommittee = null,
-        /** Listed anchor stakes. Required, not optional: a missing one would price a sphere off its stale filed book with nothing to say so. Holds only a per-tick price map, so a harness builds one free. */
+        /**
+         * Listed anchor stakes. Required, not optional: a missing one would price a sphere off its stale filed book
+         * with nothing to say so. Holds only a per-tick price map, so a harness builds one free.
+         */
         private \App\Service\Corporate\Holdings\AnchorStakeLedger $anchorStakes = new \App\Service\Corporate\Holdings\AnchorStakeLedger(),
     ) {}
 
@@ -471,8 +506,8 @@ class StockTracker
             // in the earnings engine change it, and only a split should reach the agents as a share ratio.
             $preSplitShares = (float) $stock->getSharesOutstanding();
 
-            // The company's own issuance net of buybacks, as float at this tick's price, measured in pre-split shares so
-            // a split -- a change of units, not of ownership -- never reads as either.
+            // The company's own issuance net of buybacks, as float at this tick's price, measured in pre-split shares
+            // so a split -- a change of units, not of ownership -- never reads as either.
             $boardNetIssuance += (($preSplitShares * max(0.0, min(1.0, (float) $stock->getPublicFloatPercentage()))) - $floatSharesAtTickStart)
                 * $currentPriceAfterEarnings;
             $strategicStakeCash -= StrategicHoldings::stake($stock->getTicker()) * ($preSplitShares - $sharesAtTickStart) * $currentPriceAfterEarnings;
@@ -567,7 +602,8 @@ class StockTracker
                 'price' => round($finalPrice, 2),
                 'market_cap' => round($currentMarketCap),
                 'current_volatility' => round($nextVolatility * 100, 2),
-                'current_roic' => $effectiveRoic, // Backwards compatible fix so frontend JS updates the UI with ROE for banks
+                // Backwards compatible fix so frontend JS updates the UI with ROE for banks
+                'current_roic' => $effectiveRoic,
                 'current_roe' => (float) $stock->getCurrentRoe() != 0.0 ? (float) $stock->getCurrentRoe() : (float) $stock->getBaselineRoe(),
                 'shares' => $newShares,
                 'eps' => (float) $stock->getEarningsPerShare(),

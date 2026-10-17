@@ -26,41 +26,89 @@ use App\Service\Math\TimeSeries;
 class MacroAggregateSubsystem
 {
     // --- KALDOR-KALECKI 2D LIMIT CYCLE ---
-    /** Demand drift per unit of purchases above baseline: with the rule's offset a purchases shock adds ~0.8 of itself to output over two years, inside the 0.5-0.9 range of cumulative multipliers economies show. */
+    /**
+     * Demand drift per unit of purchases above baseline: with the rule's offset a purchases shock adds ~0.8 of itself
+     * to output over two years, inside the 0.5-0.9 range of cumulative multipliers economies show.
+     */
     public const KALDOR_GOVT_SPENDING_MULTIPLIER = 0.3214;
-    /** The rate the demand equation settles a sustained drive at, its automatic stabiliser less its momentum: a drive of c a year holds the gap at c over this, so an effect on the level of spending enters the drift times it. */
+    /**
+     * The rate the demand equation settles a sustained drive at, its automatic stabiliser less its momentum: a drive of
+     * c a year holds the gap at c over this, so an effect on the level of spending enters the drift times it.
+     */
     public const DEMAND_OWN_PULL = self::KALDOR_AUTOMATIC_STABILISER - self::KALDOR_MOMENTUM;
-    /** Marginal propensity to consume out of a dollar of housing wealth, a year (Mian, Rao & Sufi 2013: 5-7 cents; the low end). */
+    /**
+     * Marginal propensity to consume out of a dollar of housing wealth, a year (Mian, Rao & Sufi 2013: 5-7 cents; the
+     * low end).
+     */
     public const HOUSING_WEALTH_MPC = 0.05;
     /** Household real estate over GDP, 1985-2019 mean (Fed Z.1 via FRED, HNOREMQ027S over GDP: 1.40). */
     public const HOUSING_WEALTH_TO_GDP = 1.40;
-    /** Demand drift per unit of housing wealth above the level households are used to: the MPC on the stock's size, at the pull that turns a level of spending into a drift. */
+    /**
+     * Demand drift per unit of housing wealth above the level households are used to: the MPC on the stock's size, at
+     * the pull that turns a level of spending into a drift.
+     */
     public const KALDOR_WEALTH_EFFECT_ELASTICITY = self::DEMAND_OWN_PULL * self::HOUSING_WEALTH_MPC * self::HOUSING_WEALTH_TO_GDP;
-    /** Marginal propensity to consume out of a dollar of stock market wealth, a year (Chodorow-Reich, Nenov & Simsek 2021: 3.2 cents). */
+    /**
+     * Marginal propensity to consume out of a dollar of stock market wealth, a year (Chodorow-Reich, Nenov & Simsek
+     * 2021: 3.2 cents).
+     */
     public const EQUITY_WEALTH_MPC = 0.032;
-    /** Share of the board District households own themselves, directly and through funds (the holdings the MPC is measured on): a financial centre whose listed giants earn abroad, the UK's 20.4% (ONS, Ownership of UK quoted shares 2020: individuals 12.0%, unit trusts 7.4%, investment trusts 1.0%; the rest of the world holds 56.3%). */
+    /**
+     * Share of the board District households own themselves, directly and through funds (the holdings the MPC is
+     * measured on): a financial centre whose listed giants earn abroad, the UK's 20.4% (ONS, Ownership of UK quoted
+     * shares 2020: individuals 12.0%, unit trusts 7.4%, investment trusts 1.0%; the rest of the world holds 56.3%).
+     */
     public const DISTRICT_HOUSEHOLD_EQUITY_SHARE = 0.204;
-    /** Demand drift per unit of equity wealth above the level households are used to: the MPC on the part of the board households own, which is sized against District GDP already, so domestic demand's share is undone. Foreign holders spend their gains abroad. */
+    /**
+     * Demand drift per unit of equity wealth above the level households are used to: the MPC on the part of the board
+     * households own, which is sized against District GDP already, so domestic demand's share is undone. Foreign
+     * holders spend their gains abroad.
+     */
     public const KALDOR_EQUITY_WEALTH_ELASTICITY = self::DEMAND_OWN_PULL * self::EQUITY_WEALTH_MPC * self::DISTRICT_HOUSEHOLD_EQUITY_SHARE * SovereignFundSubsystem::MARKET_CAP_TO_GDP / self::DOMESTIC_GAP_WEIGHT;
-    /** Years over which a valuation level stops being news and becomes the household's normal (Carroll et al. slow adjustment). */
+    /**
+     * Years over which a valuation level stops being news and becomes the household's normal (Carroll et al. slow
+     * adjustment).
+     */
     public const EQUITY_WEALTH_TREND_HORIZON_YEARS = 3.0;
-    /** The same horizon for houses, longer because housing wealth is revalued by sales that are years apart (Carroll, Otsuka & Slacalek 2011); a house price cycle runs about twice this, so the cycle still reads as deviation. */
+    /**
+     * The same horizon for houses, longer because housing wealth is revalued by sales that are years apart (Carroll,
+     * Otsuka & Slacalek 2011); a house price cycle runs about twice this, so the cycle still reads as deviation.
+     */
     public const RESIDENTIAL_WEALTH_TREND_HORIZON_YEARS = 5.0;
-    /** Office and retail values over the same horizon: their cycle runs about a decade too, so it still reads as deviation. */
+    /**
+     * Office and retail values over the same horizon: their cycle runs about a decade too, so it still reads as
+     * deviation.
+     */
     public const COMMERCIAL_PROPERTY_TREND_YEARS = self::RESIDENTIAL_WEALTH_TREND_HORIZON_YEARS;
-    /** Time constant (years) of the default rates' measured trends: a decade, past the credit cycle their readers answer, as the credit spread's. */
+    /**
+     * Time constant (years) of the default rates' measured trends: a decade, past the credit cycle their readers
+     * answer, as the credit spread's.
+     */
     public const DEFAULT_RATE_TREND_YEARS = CreditFiscalSubsystem::CREDIT_SPREAD_TREND_YEARS;
-    /** The same decade for the recession probability's trend, the average a reserving committee reads the outlook against. */
+    /**
+     * The same decade for the recession probability's trend, the average a reserving committee reads the outlook
+     * against.
+     */
     public const RECESSION_PROBABILITY_TREND_YEARS = CreditFiscalSubsystem::CREDIT_SPREAD_TREND_YEARS;
-    /** Horizon of the real exchange rate's own normal, well beyond the ~12y swing the UIP differential and the sovereign risk discount drive: a first-order lag this long follows under a tenth of that swing, so PPP deviations (Rogoff 1996: 3-5y half-life) survive intact while a standing level does not. */
+    /**
+     * Horizon of the real exchange rate's own normal, well beyond the ~12y swing the UIP differential and the sovereign
+     * risk discount drive: a first-order lag this long follows under a tenth of that swing, so PPP deviations (Rogoff
+     * 1996: 3-5y half-life) survive intact while a standing level does not.
+     */
     public const EXCHANGE_RATE_TREND_HORIZON_YEARS = 20.0;
 
     // --- Distributed Lag Transmission Constants ---
-    /** CPI level per unit farm-price deviation (~13% food CPI weight at ~15% pass-through), symmetric in both directions. */
+    /**
+     * CPI level per unit farm-price deviation (~13% food CPI weight at ~15% pass-through), symmetric in both
+     * directions.
+     */
     public const AGRI_COST_PUSH_TRANSMISSION = 0.020;
 
     // --- Demand Transmission Lags ---
-    /** The output gap as it reaches order books, one first-order lag of output_gap_ema per delay a business model can declare (DEMAND_LAG_YEARS): field => mean lag in years. */
+    /**
+     * The output gap as it reaches order books, one first-order lag of output_gap_ema per delay a business model can
+     * declare (DEMAND_LAG_YEARS): field => mean lag in years.
+     */
     public const DEMAND_TRANSMISSION_LAGS = [
         'outputGapLag3m' => 0.25,
         'outputGapLag6m' => 0.50,
@@ -76,26 +124,51 @@ class MacroAggregateSubsystem
     /** Speed of adjustment (kappa) of natural real rate toward fundamental equilibrium. */
     public const NATURAL_RATE_ADJUSTMENT_SPEED = 1.0;
 
-    // --- Open Economy: Trade Volumes and Import Prices (IMF WEO October 2015, Ch. 3, Table 3.1: 60 economies, 1980-2014) ---
-    /** Exports over GDP (32%): a $12T economy sells less of itself abroad than a small one, its finance and its arms most of what it does sell; large open economies run 25-45% (Germany 46%, the UK 30%, Japan 18%). */
+    // --- Open Economy: Trade Volumes and Import Prices (IMF WEO October 2015, Ch. 3, Table 3.1: 60 economies,
+    // 1980-2014) ---
+    /**
+     * Exports over GDP (32%): a $12T economy sells less of itself abroad than a small one, its finance and its arms
+     * most of what it does sell; large open economies run 25-45% (Germany 46%, the UK 30%, Japan 18%).
+     */
     public const DISTRICT_EXPORT_SHARE = 0.32;
     /** Imports over GDP: exports less the structural trade balance (27.5%). */
     public const DISTRICT_IMPORT_SHARE = self::DISTRICT_EXPORT_SHARE - MacroEngine::TRADE_BALANCE_BASELINE;
-    /** Foreign value added in the District's gross exports, Switzerland's 24.6% (OECD TiVA 2015: domestic content 75.4%, via Council of the EU WK 5369/2021): imports that pass through into exports. */
+    /**
+     * Foreign value added in the District's gross exports, Switzerland's 24.6% (OECD TiVA 2015: domestic content 75.4%,
+     * via Council of the EU WK 5369/2021): imports that pass through into exports.
+     */
     public const FOREIGN_VALUE_ADDED_SHARE_OF_EXPORTS = 0.246;
-    /** The District's own value added in its exports over GDP, the part of an export swing that is its output (Johnson & Noguera 2012). */
+    /**
+     * The District's own value added in its exports over GDP, the part of an export swing that is its output (Johnson &
+     * Noguera 2012).
+     */
     public const DISTRICT_VALUE_ADDED_EXPORT_SHARE = self::DISTRICT_EXPORT_SHARE * (1.0 - self::FOREIGN_VALUE_ADDED_SHARE_OF_EXPORTS);
-    /** Imports for use at home over GDP: imports less those passed through into exports, the part domestic demand draws in. */
+    /**
+     * Imports for use at home over GDP: imports less those passed through into exports, the part domestic demand draws
+     * in.
+     */
     public const DISTRICT_DOMESTIC_IMPORT_SHARE = self::DISTRICT_IMPORT_SHARE - (self::DISTRICT_EXPORT_SHARE * self::FOREIGN_VALUE_ADDED_SHARE_OF_EXPORTS);
-    /** The seeded Aerospace & Defense makers' first-year revenue (GRIP, PTAR), all of it sold to allied governments (full-market harness). */
+    /**
+     * The seeded Aerospace & Defense makers' first-year revenue (GRIP, PTAR), all of it sold to allied governments
+     * (full-market harness).
+     */
     public const DISTRICT_DEFENSE_EXPORTS_USD = 170.0e9;
     /** Arms exports over GDP, part of the exports above (1.4%). */
     public const DISTRICT_DEFENSE_EXPORT_SHARE = self::DISTRICT_DEFENSE_EXPORTS_USD / MacroEngine::DISTRICT_GDP_USD;
-    /** Mean lag (years) from an allied arms order to its delivery as exports: the makers' cost-plus backlog burns 15% a quarter (DefenseContractorBusinessModel). */
+    /**
+     * Mean lag (years) from an allied arms order to its delivery as exports: the makers' cost-plus backlog burns 15% a
+     * quarter (DefenseContractorBusinessModel).
+     */
     public const DEFENSE_DELIVERY_LAG_YEARS = 1.0 / (4.0 * 0.15);
-    /** Long-run export volume per unit of trading-partner income: the UK's 1.43 (Senhadji & Montenegro 1999, Table 2, fully modified; sample mean 1.47). */
+    /**
+     * Long-run export volume per unit of trading-partner income: the UK's 1.43 (Senhadji & Montenegro 1999, Table 2,
+     * fully modified; sample mean 1.47).
+     */
     public const EXPORT_DEMAND_ELASTICITY = 1.43;
-    /** Partial-adjustment coefficient on last year's exports in the same equation, the UK's 0.66: the year's short-run elasticity is the remaining 0.34 of the long-run one (0.48). */
+    /**
+     * Partial-adjustment coefficient on last year's exports in the same equation, the UK's 0.66: the year's short-run
+     * elasticity is the remaining 0.34 of the long-run one (0.48).
+     */
     public const EXPORT_DEMAND_PERSISTENCE = 0.66;
     /** Import volume per unit of domestic demand (1.4). */
     public const IMPORT_DEMAND_ELASTICITY = 1.4;
@@ -107,101 +180,225 @@ class MacroAggregateSubsystem
     public const IMPORT_PRICE_PASS_THROUGH = 0.605;
     /** Long-term price elasticity of import volumes (0.298). */
     public const IMPORT_PRICE_ELASTICITY = 0.298;
-    /** Time constant (years) of the net-export response to the real exchange rate: at the district's shares the table's one-year effects give 87% of the long-term one. */
+    /**
+     * Time constant (years) of the net-export response to the real exchange rate: at the district's shares the table's
+     * one-year effects give 87% of the long-term one.
+     */
     public const TRADE_VOLUME_ADJUSTMENT_YEARS = 0.49;
     /** Time constant (years) of import-price pass-through: 0.580 one year out against 0.605 long-term, 96%. */
     public const IMPORT_PRICE_ADJUSTMENT_YEARS = 0.31;
-    /** Share of an imported consumer good's retail price that is local distribution, which the exchange rate does not move (Burstein, Neves & Rebelo 2003: ~40% in the US). */
+    /**
+     * Share of an imported consumer good's retail price that is local distribution, which the exchange rate does not
+     * move (Burstein, Neves & Rebelo 2003: ~40% in the US).
+     */
     public const IMPORT_DISTRIBUTION_SHARE = 0.40;
-    /** Share of the goods, fuel and food households buy that is imported: half in Switzerland, and almost none of the services (Auer, SNB Economic Note 2026-06); imported goods weigh ~22% of the Swiss CPI (ING, second-hand). The rest the District makes itself. */
+    /**
+     * Share of the goods, fuel and food households buy that is imported: half in Switzerland, and almost none of the
+     * services (Auer, SNB Economic Note 2026-06); imported goods weigh ~22% of the Swiss CPI (ING, second-hand). The
+     * rest the District makes itself.
+     */
     public const IMPORTED_SHARE_OF_GOODS = 0.50;
-    /** Goods in the District's imports, the part a tariff is levied on: the UK's 75.6% (World Bank TM.VAL.MRCH.CD.WT over NE.IMP.GNFS.CD, 2010-2019 mean); services cross no customs border. */
+    /**
+     * Goods in the District's imports, the part a tariff is levied on: the UK's 75.6% (World Bank TM.VAL.MRCH.CD.WT
+     * over NE.IMP.GNFS.CD, 2010-2019 mean); services cross no customs border.
+     */
     public const GOODS_SHARE_OF_IMPORTS = 0.756;
-    /** Goods in the District's exports, the part partners can tariff: the UK's 56.5% (World Bank TX.VAL.MRCH.CD.WT over NE.EXP.GNFS.CD, 2010-2019 mean). */
+    /**
+     * Goods in the District's exports, the part partners can tariff: the UK's 56.5% (World Bank TX.VAL.MRCH.CD.WT over
+     * NE.EXP.GNFS.CD, 2010-2019 mean).
+     */
     public const GOODS_SHARE_OF_EXPORTS = 0.565;
 
     // --- Financial Centre Output (GDP by industry; ESA 2010 §14.14: bank service volumes as deflated balances) ---
-    /** Finance and insurance value added over GDP: the District was founded as a financial centre, and its finance is over 30% of it. */
+    /**
+     * Finance and insurance value added over GDP: the District was founded as a financial centre, and its finance is
+     * over 30% of it.
+     */
     public const DISTRICT_FINANCE_SHARE = 0.30;
-    /** Credit intermediation's share of the District's finance (banks, credit services, mortgage finance), by the seeded roster's book equity; its volume follows deflated loan balances. */
+    /**
+     * Credit intermediation's share of the District's finance (banks, credit services, mortgage finance), by the seeded
+     * roster's book equity; its volume follows deflated loan balances.
+     */
     public const FINANCE_CREDIT_SHARE = 0.322;
-    /** Deal-makers' share of the District's finance (investment banks and private equity, by the same book equity): their volume is the world's deals they advise on, underwrite and buy. */
+    /**
+     * Deal-makers' share of the District's finance (investment banks and private equity, by the same book equity):
+     * their volume is the world's deals they advise on, underwrite and buy.
+     */
     public const FINANCE_DEAL_SHARE = 0.098;
-    /** Weight of the finance cycle in the gap, beyond the finance the demand equation already moves with the rest of the economy (0.246 of output). */
+    /**
+     * Weight of the finance cycle in the gap, beyond the finance the demand equation already moves with the rest of the
+     * economy (0.246 of output).
+     */
     public const FINANCE_GAP_WEIGHT = 0.2457;
     /** Imports for use at home over GDP that the demand equation's own slopes already leak abroad (14.8%). */
     public const DEMAND_EQUATION_IMPORT_SHARE = 0.1477;
-    /** Domestic demand the District's imports carry abroad beyond that leak: imports move 1.4 times domestic demand (IMF WEO 2015) on the District's imports for home use above it. */
+    /**
+     * Domestic demand the District's imports carry abroad beyond that leak: imports move 1.4 times domestic demand (IMF
+     * WEO 2015) on the District's imports for home use above it.
+     */
     public const EXCESS_IMPORT_LEAKAGE = self::IMPORT_DEMAND_ELASTICITY * (self::DISTRICT_DOMESTIC_IMPORT_SHARE - self::DEMAND_EQUATION_IMPORT_SHARE);
-    /** Weight of domestic demand in the gap: everything but the bank credit and deal cycles, net of the excess imports it draws in (0.573). Brokers, exchanges, insurance and asset management are in it: their output is not the value of what they trade or hold. */
+    /**
+     * Weight of domestic demand in the gap: everything but the bank credit and deal cycles, net of the excess imports
+     * it draws in (0.573). Brokers, exchanges, insurance and asset management are in it: their output is not the value
+     * of what they trade or hold.
+     */
     public const DOMESTIC_GAP_WEIGHT = (1.0 - (self::FINANCE_GAP_WEIGHT * (self::FINANCE_CREDIT_SHARE + self::FINANCE_DEAL_SHARE))) * (1.0 - self::EXCESS_IMPORT_LEAKAGE);
 
     // --- KALDOR-KALECKI 2D LIMIT CYCLE ---
-    /** Linear self-reinforcement of demand; at 0.12 zero was an unstable point and the gap swept through it on a clockwork limit cycle, at 0.06 it rests inside ±1% 44% of quarters (Frisch-Slutsky shock-driven cycle) while keeping the left skew. */
+    /**
+     * Linear self-reinforcement of demand; at 0.12 zero was an unstable point and the gap swept through it on a
+     * clockwork limit cycle, at 0.06 it rests inside ±1% 44% of quarters (Frisch-Slutsky shock-driven cycle) while
+     * keeping the left skew.
+     */
     public const KALDOR_MOMENTUM = 0.06;
-    /** Cubic capacity ceiling on the UPSIDE only (Friedman 1993 plucking; Dupraz, Nakamura & Steinsson 2019): output is plucked below a ceiling it cannot run above, and a slump has no floor of its own. */
+    /**
+     * Cubic capacity ceiling on the UPSIDE only (Friedman 1993 plucking; Dupraz, Nakamura & Steinsson 2019): output is
+     * plucked below a ceiling it cannot run above, and a slump has no floor of its own.
+     */
     public const KALDOR_CAPACITY = 600.0;
-    /** Demand per unit of a RESTRICTIVE transmitted real-rate stance: tightening binds collateral constraints (Guerrieri & Iacoviello 2017), beside the wealth and trade routes the engine carries separately. */
+    /**
+     * Demand per unit of a RESTRICTIVE transmitted real-rate stance: tightening binds collateral constraints (Guerrieri
+     * & Iacoviello 2017), beside the wealth and trade routes the engine carries separately.
+     */
     public const KALDOR_MONETARY_DRAG_RESTRICTIVE = 1.2505;
-    /** Demand per unit of an ACCOMMODATIVE stance, under half the restrictive slope: easing pushes on a string (Tenreyro & Thwaites 2016; Barnichon & Matthes 2018). */
+    /**
+     * Demand per unit of an ACCOMMODATIVE stance, under half the restrictive slope: easing pushes on a string (Tenreyro
+     * & Thwaites 2016; Barnichon & Matthes 2018).
+     */
     public const KALDOR_MONETARY_DRAG_ACCOMMODATIVE = 0.5505;
 
-    /** Time constant of each of the two Pascal stages the real-rate stance passes through before it moves demand (Solow 1960): mean lag 0.8y against Rudebusch-Svensson's year average lagged a quarter (0.6y); the same fit. */
+    /**
+     * Time constant of each of the two Pascal stages the real-rate stance passes through before it moves demand (Solow
+     * 1960): mean lag 0.8y against Rudebusch-Svensson's year average lagged a quarter (0.6y); the same fit.
+     */
     public const MONETARY_TRANSMISSION_LAG_YEARS = 0.3;
-    /** Demand per unit of an ADVERSE excess bond premium over its decade trend, the one price of credit supply (Gilchrist & Zakrajsek 2012): 3.5, the sum of the spread, premium and lending-standards drags it replaced, so a 2008-sized 2pp spike costs 7pp of demand a year while it lasts. */
+    /**
+     * Demand per unit of an ADVERSE excess bond premium over its decade trend, the one price of credit supply
+     * (Gilchrist & Zakrajsek 2012): 3.5, the sum of the spread, premium and lending-standards drags it replaced, so a
+     * 2008-sized 2pp spike costs 7pp of demand a year while it lasts.
+     */
     public const KALDOR_CREDIT_PREMIUM_DRAG = 3.5;
-    /** Excess premium per unit of capital the banks must hold but have not built, here and in lending standards: 0.22, so a 1pp rise phased in over four years costs the 0.17% of output the MAG (2010) median gives. */
+    /**
+     * Excess premium per unit of capital the banks must hold but have not built, here and in lending standards: 0.22,
+     * so a 1pp rise phased in over four years costs the 0.17% of output the MAG (2010) median gives.
+     */
     public const CAPITAL_SHORTFALL_PREMIUM_EQUIVALENT = 0.22;
     /** Horizon (years) of the premium's trend the drag reads: a decade, past a credit cycle. */
     public const CREDIT_PREMIUM_TREND_YEARS = 10.0;
-    /** Demand per point a tax rate is cut below its decade trend by decision, the stance in net taxes as a share of GDP and the corporate rate alike; on the corporate rate it is near Mertens & Ravn's (2013) 0.4% of output on impact a point. The stabilisers' swing is not a decision and is not read here. */
+    /**
+     * Demand per point a tax rate is cut below its decade trend by decision, the stance in net taxes as a share of GDP
+     * and the corporate rate alike; on the corporate rate it is near Mertens & Ravn's (2013) 0.4% of output on impact a
+     * point. The stabilisers' swing is not a decision and is not read here.
+     */
     public const KALDOR_FISCAL_MULTIPLIER = 0.50;
-    /** The demand gap's own pull back to trend on the CURRENT gap: automatic stabilisers (Blanchard & Perotti 2002) and the permanent-income smoothing of transitory income (Friedman 1957), the level forces no channel here carries; the same fit. At 0.15 the gap had no pull of its own, a rate move integrated into it without limit, and a policy loop acting 3-4 quarters late did all the restoring and rang at 6-7 years. */
+    /**
+     * The demand gap's own pull back to trend on the CURRENT gap: automatic stabilisers (Blanchard & Perotti 2002) and
+     * the permanent-income smoothing of transitory income (Friedman 1957), the level forces no channel here carries;
+     * the same fit. At 0.15 the gap had no pull of its own, a rate move integrated into it without limit, and a policy
+     * loop acting 3-4 quarters late did all the restoring and rang at 6-7 years.
+     */
     public const KALDOR_AUTOMATIC_STABILISER = 1.5;
-    /** Sensitivity of the output gap to physical capital stock overhang: the slow half of the Kaldor-Kalecki phase space, and the pent-up demand that ends a slump once the overhang has gone negative. */
+    /**
+     * Sensitivity of the output gap to physical capital stock overhang: the slow half of the Kaldor-Kalecki phase
+     * space, and the pent-up demand that ends a slump once the overhang has gone negative.
+     */
     public const KALDOR_CAPITAL_DRAG = 0.25;
-    /** Demand response to a capital SHORTFALL, well under the drag an excess exerts: scrapped capacity does not summon construction while balance sheets are still impaired (Bertola-Caballero 1994 irreversibility). */
+    /**
+     * Demand response to a capital SHORTFALL, well under the drag an excess exerts: scrapped capacity does not summon
+     * construction while balance sheets are still impaired (Bertola-Caballero 1994 irreversibility).
+     */
     public const KALDOR_CAPITAL_REBOUND_DRAG = 0.08;
     /** Bruno-Sachs (1985) supply-side elasticity of output to energy price shock (Blanchard-Gali 2007). */
     public const KALDOR_ENERGY_SUPPLY_DRAG = 0.012;
     /** Supply-side elasticity of output to excess freight/logistics costs. */
     public const KALDOR_FREIGHT_SUPPLY_DRAG = 0.002;
-    /** Horizon (years) of the energy and freight trends the supply drags read: a decade, past the few-year swings that are shocks. */
+    /**
+     * Horizon (years) of the energy and freight trends the supply drags read: a decade, past the few-year swings that
+     * are shocks.
+     */
     public const SUPPLY_COST_TREND_YEARS = 10.0;
-    /** Demand per unit of household debt-service gap (Juselius & Drehmann 2015; Drehmann, Juselius & Korinek 2018): the service a stock of debt commits to takes spending back years after the borrowing; a point of income in extra service costs half a point of demand a year. */
+    /**
+     * Demand per unit of household debt-service gap (Juselius & Drehmann 2015; Drehmann, Juselius & Korinek 2018): the
+     * service a stock of debt commits to takes spending back years after the borrowing; a point of income in extra
+     * service costs half a point of demand a year.
+     */
     public const KALDOR_HOUSEHOLD_DEBT_SERVICE = 0.50;
-    /** Demand per unit of new household borrowing, in debt to income a year: borrowed income is spent as it is borrowed. Fitted by running Drehmann, Juselius & Korinek's (2018) local projection on the engine: GDP growth +0.128 the year after a point of new borrowing to GDP (their Table 8 base, +0.126); the US lead of credit on the gap follows (var/harness/djk_an.py). */
+    /**
+     * Demand per unit of new household borrowing, in debt to income a year: borrowed income is spent as it is borrowed.
+     * Fitted by running Drehmann, Juselius & Korinek's (2018) local projection on the engine: GDP growth +0.128 the
+     * year after a point of new borrowing to GDP (their Table 8 base, +0.126); the US lead of credit on the gap follows
+     * (var/harness/djk_an.py).
+     */
     public const KALDOR_HOUSEHOLD_NEW_BORROWING = 1.0;
-    /** Output lost per unit of catastrophe loss burden above an average year (Noy 2009; Hsiang & Jina 2014 give the sign): a year at twice the average burden costs ~0.4pp of output, before the rebuild the construction stream books. */
+    /**
+     * Output lost per unit of catastrophe loss burden above an average year (Noy 2009; Hsiang & Jina 2014 give the
+     * sign): a year at twice the average burden costs ~0.4pp of output, before the rebuild the construction stream
+     * books.
+     */
     public const KALDOR_CATASTROPHE_DRAG = 0.004;
-    /** Demand drag per log unit of policy uncertainty ABOVE baseline: a doubling costs ~0.4pp a year, so the 2006-2011 rise integrates to the ~1% output loss Baker, Bloom & Davis attribute to it. One-sided: spikes cost output (Bloom 2009), calm does not stimulate. */
+    /**
+     * Demand drag per log unit of policy uncertainty ABOVE baseline: a doubling costs ~0.4pp a year, so the 2006-2011
+     * rise integrates to the ~1% output loss Baker, Bloom & Davis attribute to it. One-sided: spikes cost output (Bloom
+     * 2009), calm does not stimulate.
+     */
     public const KALDOR_EPU_DRAG = 0.006;
 
     // --- Aggregate Demand Disturbance (Smets-Wouters 2007) ---
-    /** Mean reversion speed of the aggregate demand disturbance: -4*ln(0.86) per year, from the estimated quarterly AR(1) coefficient. */
+    /**
+     * Mean reversion speed of the aggregate demand disturbance: -4*ln(0.86) per year, from the estimated quarterly
+     * AR(1) coefficient.
+     */
     public const DEMAND_SHOCK_REVERSION = 0.60;
-    /** Innovation volatility of the aggregate demand disturbance, in annualized gap-drift units: one scale, shared with the disaster sizes below, set so the gap's sd and quarterly moves under the fitted loop are the CBO 1985-2019 1.63% and 0.53pp, the era the policy rule is fitted on, beside a ~1.0% TFP supply gap. */
+    /**
+     * Innovation volatility of the aggregate demand disturbance, in annualized gap-drift units: one scale, shared with
+     * the disaster sizes below, set so the gap's sd and quarterly moves under the fitted loop are the CBO 1985-2019
+     * 1.63% and 0.53pp, the era the policy rule is fitted on, beside a ~1.0% TFP supply gap.
+     */
     public const DEMAND_SHOCK_SIGMA = 0.0125;
 
     // --- Rare Demand Disasters (Barro 2006, Gourio 2012; Kou 2002 jump) ---
-    /** Disaster arrivals per year in either direction: the one-sided cause a slump needs, since the Gaussian innovation above is symmetric. */
+    /**
+     * Disaster arrivals per year in either direction: the one-sided cause a slump needs, since the Gaussian innovation
+     * above is symmetric.
+     */
     public const DEMAND_DISASTER_INTENSITY = 0.20;
-    /** Probability a disaster is an upside demand surprise. Barro's disaster set is one-sided; a quarter weight keeps booms possible while leaving the left tail three times heavier. */
+    /**
+     * Probability a disaster is an upside demand surprise. Barro's disaster set is one-sided; a quarter weight keeps
+     * booms possible while leaving the left tail three times heavier.
+     */
     public const DEMAND_DISASTER_UP_PROBABILITY = 0.25;
-    /** Exponential rate of the upside jump: mean 3.5pp/yr of demand, three quarters of the downside, so expansions build gradually and slumps arrive whole; sized with DEMAND_SHOCK_SIGMA. */
+    /**
+     * Exponential rate of the upside jump: mean 3.5pp/yr of demand, three quarters of the downside, so expansions build
+     * gradually and slumps arrive whole; sized with DEMAND_SHOCK_SIGMA.
+     */
     public const DEMAND_DISASTER_UP_RATE = 28.6;
-    /** Exponential rate of the downside jump: mean 4.7pp/yr of demand, a 10pp/yr shock once per ~57y; sized with DEMAND_SHOCK_SIGMA. */
+    /**
+     * Exponential rate of the downside jump: mean 4.7pp/yr of demand, a 10pp/yr shock once per ~57y; sized with
+     * DEMAND_SHOCK_SIGMA.
+     */
     public const DEMAND_DISASTER_DOWN_RATE = 21.4;
-    /** Cap on one disaster (17.5pp/yr of demand, about four mean down-jumps). Guards the tail of the exponential draw without binding on the calibrated range. */
+    /**
+     * Cap on one disaster (17.5pp/yr of demand, about four mean down-jumps). Guards the tail of the exponential draw
+     * without binding on the calibrated range.
+     */
     public const DEMAND_DISASTER_CAP = 0.175;
 
-    /** Stochastic micro-diffusion volatility of the output gap: realistic quarterly variance without breaking cycle phase. */
+    /**
+     * Stochastic micro-diffusion volatility of the output gap: realistic quarterly variance without breaking cycle
+     * phase.
+     */
     public const OUTPUT_GAP_DIFFUSION_SIGMA = 0.0025;
 
     // --- Cyclical Output Gap Bounds ---
-    /** Deepest slump the cycle may reach; below the worst postwar CBO gap (-8.8%, 2020Q2; 2009Q2 is -5.0% on the current vintage), so the bound guards runaway feedback rather than shaping the distribution. */
+    /**
+     * Deepest slump the cycle may reach; below the worst postwar CBO gap (-8.8%, 2020Q2; 2009Q2 is -5.0% on the current
+     * vintage), so the bound guards runaway feedback rather than shaping the distribution.
+     */
     public const OUTPUT_GAP_FLOOR = -0.12;
-    /** Hottest the economy may run: above the postwar CBO peak (+5.6%, 1966Q1), since the one-sided cubic is what holds the upside. */
+    /**
+     * Hottest the economy may run: above the postwar CBO peak (+5.6%, 1966Q1), since the one-sided cubic is what holds
+     * the upside.
+     */
     public const OUTPUT_GAP_CEILING = 0.10;
 
     // --- The Statistics Office's Recession Call ---
@@ -209,9 +406,15 @@ class MacroAggregateSubsystem
     public const RECESSION_CALL_QUARTERS = 2;
 
     // --- Metzler-Blinder Inventory Investment Cycle (Metzler 1941, Blinder 1982) ---
-    /** Inventories over a year's sales (~15%): a miss worth a share of the year's output moves the inventory-to-sales ratio by that share over this. */
+    /**
+     * Inventories over a year's sales (~15%): a miss worth a share of the year's output moves the inventory-to-sales
+     * ratio by that share over this.
+     */
     public const INVENTORY_TO_ANNUAL_SALES = 0.15;
-    /** Demand drag per unit of inventory-to-sales deviation: the coefficient is the inventory share of annual GDP, so a 16% overhang costs 2.4pp over a year (Blinder & Maccini 1991). */
+    /**
+     * Demand drag per unit of inventory-to-sales deviation: the coefficient is the inventory share of annual GDP, so a
+     * 16% overhang costs 2.4pp over a year (Blinder & Maccini 1991).
+     */
     public const METZLER_INVENTORY_DRAG = self::INVENTORY_TO_ANNUAL_SALES;
     /** Annual adjustment speed of firm inventory target replenishment. */
     public const INVENTORY_ADJUSTMENT_SPEED = 0.80;
@@ -219,19 +422,34 @@ class MacroAggregateSubsystem
     public const INVENTORY_SURPRISE_SENSITIVITY = 0.60;
 
     // --- Effective Corporate Borrowing Cost Weights ---
-    /** Floating-rate share of private borrowing priced off the policy rate (mortgages, bank and leveraged loans, revolvers, cards): three quarters, the District's homes being bought on variable loans. */
+    /**
+     * Floating-rate share of private borrowing priced off the policy rate (mortgages, bank and leveraged loans,
+     * revolvers, cards): three quarters, the District's homes being bought on variable loans.
+     */
     public const BORROWING_POLICY_WEIGHT = 0.75;
     /** Fixed-rate share (corporate bonds, auto and term loans) priced off the 5-year benchmark. */
     public const BORROWING_YIELD5Y_WEIGHT = 0.25;
 
     // --- Ten-Year Breakeven Inflation (Gurkaynak, Sack & Wright 2010; Kozicki & Tinsley 2001 endpoint) ---
-    /** Ten-year breakeven per point of learned long-run inflation over the anchor: US T10YIE 2003-2026 monthly on headline CPI learned at a 0.10/yr constant gain, 0.441 (Newey-West se 0.076), holding core over that endpoint, headline over core and the GZ excess bond premium; R2 0.62 to 0.75. */
+    /**
+     * Ten-year breakeven per point of learned long-run inflation over the anchor: US T10YIE 2003-2026 monthly on
+     * headline CPI learned at a 0.10/yr constant gain, 0.441 (Newey-West se 0.076), holding core over that endpoint,
+     * headline over core and the GZ excess bond premium; R2 0.62 to 0.75.
+     */
     public const BREAKEVEN_ENDPOINT_LOADING = 0.441;
-    /** Ten-year breakeven per point of core inflation over the learned endpoint: the same regression, 0.085 (se 0.018). */
+    /**
+     * Ten-year breakeven per point of core inflation over the learned endpoint: the same regression, 0.085 (se 0.018).
+     */
     public const BREAKEVEN_CORE_LOADING = 0.085;
-    /** Ten-year breakeven per point of headline over core, the energy and food pass-through: the same regression, 0.101 (se 0.016). */
+    /**
+     * Ten-year breakeven per point of headline over core, the energy and food pass-through: the same regression, 0.101
+     * (se 0.016).
+     */
     public const BREAKEVEN_NONCORE_LOADING = 0.101;
-    /** Quoted ten-year breakeven per point of the GZ excess bond premium, the TIPS liquidity squeeze of 2008 and March 2020: the same regression, -0.356 (se 0.034). */
+    /**
+     * Quoted ten-year breakeven per point of the GZ excess bond premium, the TIPS liquidity squeeze of 2008 and March
+     * 2020: the same regression, -0.356 (se 0.034).
+     */
     public const BREAKEVEN_EBP_LOADING = -0.356;
 
     // --- Distributed Lag Transmission Constants ---
@@ -241,15 +459,23 @@ class MacroAggregateSubsystem
     public const AGRI_COST_PUSH_LAG_YEARS = 0.75;
 
     // --- Carbon in the Electricity Bill (BLS CPI relative importance; EIA Electric Power Monthly) ---
-    /** Household electricity's weight in the consumer price index: 2.201% (CPI-U relative importance, December 2024). */
+    /**
+     * Household electricity's weight in the consumer price index: 2.201% (CPI-U relative importance, December 2024).
+     */
     public const CPI_ELECTRICITY_WEIGHT = 0.02201;
     /** What households pay for electricity, in $/MWh: 16.48 cents a kWh, the US residential average in 2024 (EIA). */
     public const RESIDENTIAL_ELECTRICITY_PRICE = 164.8;
 
     // --- New Keynesian Phillips Curve Dynamics ---
-    /** Output gap at which supply bottlenecks bind (Benigno & Eggertsson 2023, the v/u = 1 kink); at 11% the convexity sat outside the ±4% the gap lives in and inflation was flat across the cycle. */
+    /**
+     * Output gap at which supply bottlenecks bind (Benigno & Eggertsson 2023, the v/u = 1 kink); at 11% the convexity
+     * sat outside the ±4% the gap lives in and inflation was flat across the cycle.
+     */
     public const PHILLIPS_MAX_CAPACITY = 0.035;
-    /** Convex Phillips slope scale; kappa / PHILLIPS_MAX_CAPACITY is the near-zero slope (~0.11 of inflation per unit gap), held constant when the ceiling moved. */
+    /**
+     * Convex Phillips slope scale; kappa / PHILLIPS_MAX_CAPACITY is the near-zero slope (~0.11 of inflation per unit
+     * gap), held constant when the ceiling moved.
+     */
     public const PHILLIPS_CONVEX_KAPPA = 0.0038;
     /** Downward nominal rigidity factor dampening deflationary pressure during recessions (Bewley 1999). */
     public const PHILLIPS_DOWNWARD_RIGIDITY_FACTOR = 0.50;
@@ -271,13 +497,21 @@ class MacroAggregateSubsystem
     public const CORE_GOODS_DEMAND_SENSITIVITY = 0.80;
 
     // --- Supply-Chain Costs in Core Goods (Carriere-Swallow, Deb, Furceri, Jimenez & Ostry 2023) ---
-    /** Headline price level a year after container freight rates double: ~0.7pp, peaking at twelve months (IMF blog, March 2022, on the paper's local projections). */
+    /**
+     * Headline price level a year after container freight rates double: ~0.7pp, peaking at twelve months (IMF blog,
+     * March 2022, on the paper's local projections).
+     */
     public const FREIGHT_DOUBLING_HEADLINE_EFFECT = 0.007;
-    /** Log core goods price level per log unit of freight (4.0%): the freight effect carried wholly by the goods basket. */
+    /**
+     * Log core goods price level per log unit of freight (4.0%): the freight effect carried wholly by the goods basket.
+     */
     public const CORE_GOODS_FREIGHT_LEVEL_LOADING = self::FREIGHT_DOUBLING_HEADLINE_EFFECT / self::INFLATION_WEIGHT_GOODS / M_LN2;
 
     // --- SOLOW-SWAN TOTAL FACTOR PRODUCTIVITY (TFP) ---
-    /** Level innovation of TFP per sqrt(year): Fernald's utilization-adjusted quarterly TFP 1947-2026 is a random walk at 1-3 year horizons with this sd (annual kurtosis 2.2, so no jump component). */
+    /**
+     * Level innovation of TFP per sqrt(year): Fernald's utilization-adjusted quarterly TFP 1947-2026 is a random walk
+     * at 1-3 year horizons with this sd (annual kurtosis 2.2, so no jump component).
+     */
     public const TFP_VOLATILITY = 0.0165;
     /** Endogenous R&D knowledge spillover sensitivity to economic expansion and capital utilization. */
     public const TFP_OUTPUT_GAP_SENSITIVITY = 0.05;
@@ -285,21 +519,43 @@ class MacroAggregateSubsystem
     public const MAX_TFP_GROWTH_RATE = 0.050;
 
     // --- Productivity Shock Absorption (Basu, Fernald & Kimball 2006) ---
-    /** Rate at which actual output absorbs a TFP level shock through a second-order Pascal lag (Solow 1960); fitted with the potential speed to the CBO gap's response to Fernald TFP shocks over 20 quarters, holding the supply-driven gap to the ~1.2pp sd that response implies (var/harness/tfp_real.py, tfp_grid_an.py). */
+    /**
+     * Rate at which actual output absorbs a TFP level shock through a second-order Pascal lag (Solow 1960); fitted with
+     * the potential speed to the CBO gap's response to Fernald TFP shocks over 20 quarters, holding the supply-driven
+     * gap to the ~1.2pp sd that response implies (var/harness/tfp_real.py, tfp_grid_an.py).
+     */
     public const TFP_OUTPUT_ABSORPTION_SPEED = 1.65;
-    /** Time constant (years) over which potential takes a credit crisis's scar: capital idle in the slump is scrapped and the long-term unemployed lose their skills while it lasts (Blanchard & Summers 1986 hysteresis). */
+    /**
+     * Time constant (years) over which potential takes a credit crisis's scar: capital idle in the slump is scrapped
+     * and the long-term unemployed lose their skills while it lasts (Blanchard & Summers 1986 hysteresis).
+     */
     public const CRISIS_SCAR_ABSORPTION_YEARS = 3.0;
-    /** Rate at which potential absorbs the same shock, also through a second-order Pascal lag, as capital and organisation adjust; a slower single lag fit the response only by leaving policy to fight a 2.3pp supply gap, which drove the whole gap's sd from 2.2 to 3.5%. */
+    /**
+     * Rate at which potential absorbs the same shock, also through a second-order Pascal lag, as capital and
+     * organisation adjust; a slower single lag fit the response only by leaving policy to fight a 2.3pp supply gap,
+     * which drove the whole gap's sd from 2.2 to 3.5%.
+     */
     public const TFP_POTENTIAL_ABSORPTION_SPEED = 0.75;
 
     // --- ISM Manufacturing Purchasing Managers' Index (PMI) ---
-    /** PMI points per unit CU deviation (~0.5 per pp): the level of capacity strain feeds supplier deliveries and prices, a secondary channel next to growth. */
+    /**
+     * PMI points per unit CU deviation (~0.5 per pp): the level of capacity strain feeds supplier deliveries and
+     * prices, a secondary channel next to growth.
+     */
     public const PMI_CU_SENSITIVITY = 50.0;
-    /** PMI points per unit of annualized real growth over potential (~3.3 per pp): ISM's published mapping of the headline index to annualized real GDP growth, ~0.3pp of growth per index point. A diffusion index measures change, so a V-shaped recovery reads in the high 50s while the level of activity is still below trend. */
+    /**
+     * PMI points per unit of annualized real growth over potential (~3.3 per pp): ISM's published mapping of the
+     * headline index to annualized real GDP growth, ~0.3pp of growth per index point. A diffusion index measures
+     * change, so a V-shaped recovery reads in the high 50s while the level of activity is still below trend.
+     */
     public const PMI_GROWTH_SENSITIVITY = 330.0;
     /** Sensitivity of manufacturing PMI to Metzler inventory restocking demand (shortfall stimulates new orders). */
     public const PMI_INVENTORY_SENSITIVITY = 20.0;
-    /** Mean-reversion speed (kappa) of manufacturing PMI toward fundamental business conditions (half-life ~6 weeks): a monthly survey reprices within a month or two, so the index is coincident with quarterly growth; at a four-month half-life it trailed growth by two quarters. */
+    /**
+     * Mean-reversion speed (kappa) of manufacturing PMI toward fundamental business conditions (half-life ~6 weeks): a
+     * monthly survey reprices within a month or two, so the index is coincident with quarterly growth; at a four-month
+     * half-life it trailed growth by two quarters.
+     */
     public const PMI_KAPPA = 6.0;
     /** Stochastic diffusion volatility of manufacturing PMI survey sentiment. */
     public const PMI_SIGMA = 1.2;
@@ -311,7 +567,10 @@ class MacroAggregateSubsystem
     public const PPI_GSCPI_SENSITIVITY = 0.00285;
     /** Weight of Unit Labor Cost (ULC = Wage Growth - TFP Growth) in wholesale producer processing costs. */
     public const PPI_ULC_WEIGHT = 0.25;
-    /** Weight of the rest of the cost base (purchased services, rents, margins), repricing with expected inflation: what the named shares leave, so the stage weights sum to one. */
+    /**
+     * Weight of the rest of the cost base (purchased services, rents, margins), repricing with expected inflation: what
+     * the named shares leave, so the stage weights sum to one.
+     */
     public const PPI_OTHER_COST_WEIGHT = 1.0 - MacroEngine::PPI_METALS_WEIGHT - MacroEngine::PPI_ENERGY_WEIGHT - self::PPI_AGRI_WEIGHT - self::PPI_ULC_WEIGHT;
     /** Sensitivity of wholesale producer price margins to cyclical GDP output gap demand. */
     public const PPI_DEMAND_SENSITIVITY = 0.35;
@@ -321,7 +580,10 @@ class MacroAggregateSubsystem
     public const PPI_METALS_PASS_THROUGH = 0.50;
     /** Share of an energy price move reaching factory-gate prices, damped by hedging and regulated tariffs. */
     public const PPI_ENERGY_PASS_THROUGH = 0.40;
-    /** Share of a farm price move reaching factory-gate prices; the lowest, since processing dominates food producer cost. */
+    /**
+     * Share of a farm price move reaching factory-gate prices; the lowest, since processing dominates food producer
+     * cost.
+     */
     public const PPI_AGRI_PASS_THROUGH = 0.30;
 
     // --- Continuous EMA Indicator Smoothing Horizons ---
@@ -329,7 +591,10 @@ class MacroAggregateSubsystem
     public const STANDARD_EMA_HORIZON_YEARS = 0.25;
 
     // --- Consumer Price Index, Year on Year ---
-    /** Month-end price levels kept: this month's and the twelve before, for the year-on-year rate the CPI release reports. */
+    /**
+     * Month-end price levels kept: this month's and the twelve before, for the year-on-year rate the CPI release
+     * reports.
+     */
     public const CPI_MONTHS_KEPT = 13;
 
     /** The premium's stationary means depend on constants only; computed once. */
@@ -383,7 +648,8 @@ class MacroAggregateSubsystem
      * @param MacroState $state     Current macroeconomic state.
      * @param float      $trendRate Trend TFP growth from calculateTotalFactorProductivity().
      * @param float      $dt        Time increment in years.
-     * @return float Productivity growth potential output is built on: the trend plus the shock and crisis scar potential absorbed this tick.
+     * @return float Productivity growth potential output is built on: the trend plus the shock and crisis scar
+     *               potential absorbed this tick.
      */
     public function absorbProductivityShocks(MacroState $state, float $trendRate, float $dt): float
     {
@@ -394,8 +660,8 @@ class MacroAggregateSubsystem
         $state->tfpPotentialStage1 = TimeSeries::calculateDistributedLag($state->tfpPotentialStage1, $state->tfpShockLevel, $dt, 1.0 / self::TFP_POTENTIAL_ABSORPTION_SPEED);
         $state->tfpPotentialAbsorbed = TimeSeries::calculateDistributedLag($priorPotential, $state->tfpPotentialStage1, $dt, 1.0 / self::TFP_POTENTIAL_ABSORPTION_SPEED);
 
-        // Blanchard & Summers (1986) hysteresis: potential takes a credit crisis's scar while the slump lasts, so output
-        // the slump holds down reads, as potential falls to meet it, as less slack (calculateOutputGap()).
+        // Blanchard & Summers (1986) hysteresis: potential takes a credit crisis's scar while the slump lasts, so
+        // output the slump holds down reads, as potential falls to meet it, as less slack (calculateOutputGap()).
         $state->crisisScarStep = $state->crisisScarPending * (1.0 - exp(-$dt / self::CRISIS_SCAR_ABSORPTION_YEARS));
         $state->crisisScarPending -= $state->crisisScarStep;
 
@@ -413,7 +679,8 @@ class MacroAggregateSubsystem
      * demographics and safe-asset demand, is not modelled.
      *
      * @param MacroState $state           Current macroeconomic state.
-     * @param float      $trendGrowthRate Secular trend productivity growth, before absorbed level shocks and the cycle's R&D term.
+     * @param float      $trendGrowthRate Secular trend productivity growth, before absorbed level shocks and the
+     *                                    cycle's R&D term.
      * @param float      $dt              Time increment in years.
      */
     public function calculateNaturalRate(MacroState $state, float $trendGrowthRate, float $dt): void
@@ -428,14 +695,15 @@ class MacroAggregateSubsystem
     /**
      * Kaldor (1940) Non-Linear Business Cycle with Modigliani Wealth Effect & Marshall-Lerner FX Drag.
      *
-     * Solves continuous domestic demand dynamics, weighted by its share of GDP, to which the productivity supply part, net
-     * exports and the banks' credit-driven output are added as levels:
+     * Solves continuous domestic demand dynamics, weighted by its share of GDP, to which the productivity supply part,
+     * net exports and the banks' credit-driven output are added as levels:
      *   dy = [Momentum - CapacityCeiling(y>0) - RealRateDrag - CreditPremium + FiscalStimulus + AutomaticStabilisers - CapitalOverhang + WealthEffect + NewBorrowing - DebtService - CrisisDeleveraging + DemandShock] * dt
      *
      * @param MacroState $state             Current macroeconomic state.
      * @param float      $yield5y           5-Year Treasury yield benchmark for business borrowing.
      * @param float      $naturalRate       Dynamic natural real rate of interest (r*).
-     * @param float      $expectedInflation Short-horizon expected inflation, the Taylor rule's own measure (MonetaryPolicySubsystem::calculateExpectedInflation).
+     * @param float      $expectedInflation Short-horizon expected inflation, the Taylor rule's own measure
+     *                                      (MonetaryPolicySubsystem::calculateExpectedInflation).
      * @param float      $dt                Time increment in years.
      * @param float      $stressMultiplier  Non-linear crisis volatility multiplier.
      * @return float Updated cyclical output gap bounded between -12% and +10%.
@@ -486,28 +754,30 @@ class MacroAggregateSubsystem
         $monetaryDrag = ResponseCurves::calculateAsymmetricResponse($state->monetaryStanceTransmitted, self::KALDOR_MONETARY_DRAG_RESTRICTIVE, self::KALDOR_MONETARY_DRAG_ACCOMMODATIVE);
 
         // Gilchrist & Zakrajsek (2012): the excess bond premium is the price of credit supply, and spending pays it on
-        // its adverse side only (Barnichon, Matthes & Ziegenbein 2022: easy credit does not lift output). Read against its
-        // decade trend, with capital the banks have yet to build counted as premium (Macroeconomic Assessment Group 2010).
+        // its adverse side only (Barnichon, Matthes & Ziegenbein 2022: easy credit does not lift output). Read against
+        // its decade trend, with capital the banks have yet to build counted as premium (Macroeconomic Assessment Group
+        // 2010).
         $creditPremiumDrag = self::KALDOR_CREDIT_PREMIUM_DRAG * max(0.0, self::excessCreditPremium($state));
 
         $momentum = self::KALDOR_MOMENTUM * $y;
         // Kaldor (1940) non-linear asymmetric capacity ceiling constraint.
         $cubicConstraint = $y > 0.0 ? self::KALDOR_CAPACITY * pow($y, 3) : 0.0;
-        // Blanchard & Perotti (2002) DISCRETIONARY fiscal impulse: a statutory rate and an appropriated
-        // outlay both clear a legislative lag, so this leg reaches demand late by construction. Both are read against
-        // their own decade trends: a stance held that long is in potential (Blanchard 1990 fiscal impulse), not the gap.
+        // Blanchard & Perotti (2002) DISCRETIONARY fiscal impulse: a statutory rate and an appropriated outlay both
+        // clear a legislative lag, so this leg reaches demand late by construction. Both are read against their own
+        // decade trends: a stance held that long is in potential (Blanchard 1990 fiscal impulse), not the gap.
         $spendingShift = CreditFiscalSubsystem::discretionarySpendingShift($state);
         $discretionaryFiscal = (self::KALDOR_FISCAL_MULTIPLIER * (($state->corporateTaxRateTrend - $state->corporateTaxRate) + ($state->netTaxStanceRateTrend - $state->netTaxStanceRate)))
             + (self::KALDOR_GOVT_SPENDING_MULTIPLIER * $spendingShift);
-        // The part of the fund's draw above the founding share reaches demand through the purchases channel: the spending a
-        // budget drawing more of the fund's return, as in a recession, adds to the baseline the founding draw is in.
+        // The part of the fund's draw above the founding share reaches demand through the purchases channel: the
+        // spending a budget drawing more of the fund's return, as in a recession, adds to the baseline the founding
+        // draw is in.
         $drawAboveFounding = $state->sovereignFundDrawShare > 0.0
             ? $state->sovereignFundDrawToGdp * ($state->sovereignFundDrawShare - MacroEngine::RESERVE_DRAW_CEILING) / $state->sovereignFundDrawShare
             : 0.0;
         $fundDraw = self::KALDOR_GOVT_SPENDING_MULTIPLIER * $drawAboveFounding / MacroEngine::PUBLIC_PURCHASES_TO_GDP;
 
-        // Blanchard & Perotti (2002) AUTOMATIC stabilisers and Friedman (1957) income smoothing, on the
-        // contemporaneous gap: nobody decides them, so they carry no lag and act as a spring rather than an anti-damper.
+        // Blanchard & Perotti (2002) AUTOMATIC stabilisers and Friedman (1957) income smoothing, on the contemporaneous
+        // gap: nobody decides them, so they carry no lag and act as a spring rather than an anti-damper.
         $automaticStabiliser = -self::KALDOR_AUTOMATIC_STABILISER * $y;
 
         // Bertola & Caballero (1994) asymmetric capital overhang drag reflecting investment irreversibility.
@@ -528,8 +798,8 @@ class MacroAggregateSubsystem
         $energySupplyDrag = self::supplyCostShift($state->energyPriceIndexEma, $state->energyPriceIndexDecadeTrend) * self::KALDOR_ENERGY_SUPPLY_DRAG;
         $freightSupplyDrag = self::supplyCostShift($state->freightRateIndexEma, $state->freightRateIndexDecadeTrend) * self::KALDOR_FREIGHT_SUPPLY_DRAG;
 
-        // Drehmann, Juselius & Korinek (2018): new borrowing lifts spending now, and the debt service it commits to drags
-        // it later. Service peaks about four years after the borrowing, which is the credit boom's reversal.
+        // Drehmann, Juselius & Korinek (2018): new borrowing lifts spending now, and the debt service it commits to
+        // drags it later. Service peaks about four years after the borrowing, which is the credit boom's reversal.
         $householdNewBorrowing = self::KALDOR_HOUSEHOLD_NEW_BORROWING * $state->householdNewBorrowing;
         $householdDeleveragingDrag = self::KALDOR_HOUSEHOLD_DEBT_SERVICE * $state->householdDebtServiceGap;
 
@@ -621,13 +891,15 @@ class MacroAggregateSubsystem
         $contributions = array_map(static fn(float $rate): float => self::DOMESTIC_GAP_WEIGHT * $rate, $domesticDemand) + [
             // Basu, Fernald & Kimball (2006): output catches up with a technology gain before potential does.
             'productivitySupply' => $supplyChange / $dt,
-            // Obstfeld & Rogoff (1996): the mainland's demand and the real exchange rate move what the district sells abroad.
+            // Obstfeld & Rogoff (1996): the mainland's demand and the real exchange rate move what the district sells
+            // abroad.
             'netExports' => $tradeChange / $dt,
             // Blanchard & Summers (1986): the same output over a potential the crisis scar has lowered is less slack.
             'crisisScar' => -$state->crisisScarStep / $dt,
             // Blanchard & Katz (1992): newcomers drawn by jobs add to potential before they add to output.
             'cyclicalMigration' => -$state->cyclicalMigrationRate,
-            // ESA 2010 deflated balances and deal fees: the banks produce as their loans do, the deal-makers as the world's deals do.
+            // ESA 2010 deflated balances and deal fees: the banks produce as their loans do, the deal-makers as the
+            // world's deals do.
             'financeOutput' => $financeChange / $dt,
         ];
 
@@ -704,7 +976,8 @@ class MacroAggregateSubsystem
 
     /**
      * What a tariff raises, as a share of GDP: the duty on the goods still imported once it has raised their price,
-     * imports falling at their price elasticity (duties pass fully into import prices: Amiti, Redding & Weinstein 2019).
+     * imports falling at their price elasticity (duties pass fully into import prices: Amiti, Redding & Weinstein
+     * 2019).
      */
     public static function tariffRevenueToGdp(float $tariff): float
     {
@@ -786,7 +1059,8 @@ class MacroAggregateSubsystem
 
     /**
      * The field that carries the output gap at a given demand lag. The macro publishes the gap at a fixed set of lags
-     * rather than at whatever each business model asks for, so a model declaring any other lag is a configuration error.
+     * rather than at whatever each business model asks for, so a model declaring any other lag is a configuration
+     * error.
      *
      * @param float $lagYears Mean demand lag in years, as a business model declares it.
      * @return string MacroState property name.
@@ -831,10 +1105,10 @@ class MacroAggregateSubsystem
      * share of GDP.
      *
      * Civilian export volume moves 1.43 times the mainland's demand as it has reached them; arms exports move with the
-     * allied procurement their makers sell into, at its elasticity to defence spending. A real appreciation raises export prices abroad by the
-     * export pass-through and loses their elasticity's worth of volume, and lowers import prices at home by the import
-     * pass-through and gains that elasticity's worth of imports, each weighted by its share of GDP (the chapter's
-     * footnote 21, which gives 1.5% of GDP per 10% at the sample's 42% and 41% shares).
+     * allied procurement their makers sell into, at its elasticity to defence spending. A real appreciation raises
+     * export prices abroad by the export pass-through and loses their elasticity's worth of volume, and lowers import
+     * prices at home by the import pass-through and gains that elasticity's worth of imports, each weighted by its
+     * share of GDP (the chapter's footnote 21, which gives 1.5% of GDP per 10% at the sample's 42% and 41% shares).
      *
      * Volumes are gross; output is not. An export swing moves the District's GDP by its own value added only, the
      * imports passed through into exports going out with it, and only imports for home use displace home output
@@ -842,7 +1116,8 @@ class MacroAggregateSubsystem
      *
      * A tariff is a price with full pass-through (Amiti, Redding & Weinstein 2019): imported goods lose their price
      * elasticity's worth of volume on the whole duty. Partners answer on the District's goods exports at the 2018
-     * retaliation ratio (Fajgelbaum et al. 2020), which lose theirs; allied governments do not tariff the arms they buy.
+     * retaliation ratio (Fajgelbaum et al. 2020), which lose theirs; allied governments do not tariff the arms they
+     * buy.
      *
      * @param float $mainlandGap         Mainland output gap as export volumes have adjusted to it (fraction).
      * @param float $realExchangeRateGap Log real exchange rate against its trend.
@@ -882,8 +1157,8 @@ class MacroAggregateSubsystem
     }
 
     /**
-     * Log volume an export, good or service, loses to a real appreciation: the share of it that reaches the price abroad
-     * times the export price elasticity. Negative for a depreciation.
+     * Log volume an export, good or service, loses to a real appreciation: the share of it that reaches the price
+     * abroad times the export price elasticity. Negative for a depreciation.
      *
      * @param float $realExchangeRateGap Log real exchange rate against its trend, as volumes have adjusted to it.
      */
@@ -892,7 +1167,10 @@ class MacroAggregateSubsystem
         return self::EXPORT_PRICE_PASS_THROUGH * self::EXPORT_PRICE_ELASTICITY * $realExchangeRateGap;
     }
 
-    /** Civilian goods exports' share of the District's goods trade, exports plus imports; arms go to allied governments outside it. */
+    /**
+     * Civilian goods exports' share of the District's goods trade, exports plus imports; arms go to allied governments
+     * outside it.
+     */
     public static function goodsExportShareOfTrade(): float
     {
         $exports = (self::DISTRICT_EXPORT_SHARE * self::GOODS_SHARE_OF_EXPORTS) - self::DISTRICT_DEFENSE_EXPORT_SHARE;
@@ -916,7 +1194,10 @@ class MacroAggregateSubsystem
             - (self::IMPORT_PRICE_ELASTICITY * $tariffDuty);
     }
 
-    /** Partners' duty on the District's goods in answer to its own, in logs: the 2018 retaliation ratio (Fajgelbaum et al. 2020) on the ad valorem rate. */
+    /**
+     * Partners' duty on the District's goods in answer to its own, in logs: the 2018 retaliation ratio (Fajgelbaum et
+     * al. 2020) on the ad valorem rate.
+     */
     public static function retaliatoryDuty(float $tariffDuty): float
     {
         return log(1.0 + (MacroEngine::TARIFF_RETALIATION_RATIO * (exp($tariffDuty) - 1.0)));
@@ -962,9 +1243,9 @@ class MacroAggregateSubsystem
 
     /**
      * The log import price level, relative to domestic prices, that the currency and the tariff settle it at: the
-     * long-term pass-through times the index against its baseline, plus the whole duty, which passes into duty-inclusive
-     * prices in full (Amiti, Redding & Weinstein 2019; Fajgelbaum et al. 2020). Only its change is ever read, so the
-     * baseline sets no level of its own.
+     * long-term pass-through times the index against its baseline, plus the whole duty, which passes into
+     * duty-inclusive prices in full (Amiti, Redding & Weinstein 2019; Fajgelbaum et al. 2020). Only its change is ever
+     * read, so the baseline sets no level of its own.
      *
      * @param float $exchangeRateIndexEma The currency index, smoothed over a quarter.
      * @param float $importTariffRate     The average tariff on imports.
@@ -981,13 +1262,14 @@ class MacroAggregateSubsystem
      * Hybrid New Keynesian Phillips Curve with Benigno & Eggertsson (2023) Convexity
      * and Shapiro (2022) Sectoral Disaggregation (Supercore Services vs Core Goods vs Commodity).
      *
-     * Models non-linear capacity-constrained inflation where output gaps approaching capacity
-     * accelerate inflation non-linearly, while downward nominal wage/price rigidity flattens the curve during recessions.
-     * Decomposes inflation into wage-push supercore services, freight/materials core goods, and energy/food pass-through.
+     * Models non-linear capacity-constrained inflation where output gaps approaching capacity accelerate inflation
+     * non-linearly, while downward nominal wage/price rigidity flattens the curve during recessions. Decomposes
+     * inflation into wage-push supercore services, freight/materials core goods, and energy/food pass-through.
      *
      * @param MacroState $state                  Current macroeconomic state.
      * @param float      $targetInflation        Central bank inflation target.
-     * @param float      $productivityGrowthRate Productivity growth potential output is built on (absorbProductivityShocks()), the growth wage bargains index.
+     * @param float      $productivityGrowthRate Productivity growth potential output is built on
+     *                                           (absorbProductivityShocks()), the growth wage bargains index.
      * @param float      $dt                     Time increment in years.
      * @return float Updated headline inflation rate.
      */
@@ -996,8 +1278,9 @@ class MacroAggregateSubsystem
         // Mankiw, Reis & Wolfers (2004) adaptive inflation expectations unanchoring.
         $anchorSlip = ($state->inflationEma - $targetInflation) * self::INFLATION_ADAPTIVE_EXPECTATIONS_WEIGHT;
 
-        // Benigno & Eggertsson (2023) non-linear convex demand-pull Phillips curve, on the demand part of the gap: output
-        // a technology gain lifts is not excess demand, and the gain is disinflationary (Gali 1999; Basu, Fernald & Kimball 2006).
+        // Benigno & Eggertsson (2023) non-linear convex demand-pull Phillips curve, on the demand part of the gap:
+        // output a technology gain lifts is not excess demand, and the gain is disinflationary (Gali 1999; Basu,
+        // Fernald & Kimball 2006).
         $convexDemandPressure = MacroTransmission::calculateConvexPhillipsCurve(
             outputGap: $state->outputGap - $state->productivitySupplyGap,
             maxCapacity: self::PHILLIPS_MAX_CAPACITY,
@@ -1005,22 +1288,23 @@ class MacroAggregateSubsystem
             downwardRigidityFactor: self::PHILLIPS_DOWNWARD_RIGIDITY_FACTOR,
         );
 
-        // Shapiro (2022) Sector 1: supercore services, pushed by unit labour cost (wage growth less the productivity growth
-        // it buys) over target, the same ULC the PPI reads.
+        // Shapiro (2022) Sector 1: supercore services, pushed by unit labour cost (wage growth less the productivity
+        // growth it buys) over target, the same ULC the PPI reads.
         $wageGap = $state->wageGrowth - $productivityGrowthRate - $targetInflation;
         $wageCostPush = $wageGap * self::SUPERCORE_WAGE_TRANSMISSION;
         $targetSupercore = $targetInflation + $anchorSlip + $convexDemandPressure + $wageCostPush;
 
         // Import prices (IMF WEO October 2015, Ch. 3): the real exchange rate passes into import prices relative to
-        // domestic ones within about a year. Half the goods, fuel and food in the basket are imported (Auer 2026), and of
-        // those all of the retail price but the local distribution margin reprices; the half the District makes does not.
+        // domestic ones within about a year. Half the goods, fuel and food in the basket are imported (Auer 2026), and
+        // of those all of the retail price but the local distribution margin reprices; the half the District makes does
+        // not.
         $priorImportPriceLevel = $state->importPriceLevel;
         $state->importPriceLevel = TimeSeries::calculateDistributedLag($priorImportPriceLevel, self::importPriceLevelTarget($state->exchangeRateIndexEma, $state->importTariffRate), $dt, self::IMPORT_PRICE_ADJUSTMENT_YEARS);
         $importPriceInflation = self::IMPORTED_SHARE_OF_GOODS * (1.0 - self::IMPORT_DISTRIBUTION_SHARE) * ($state->importPriceLevel - $priorImportPriceLevel) / $dt;
 
-        // Shapiro (2022) Sector 2: core goods. Freight sets a cost LEVEL of the landed goods (Carriere-Swallow et al. 2023);
-        // inflation is its rate of change, as its quarter EMA moves this tick, so freight that stays high adds a step to
-        // the level and then no more inflation.
+        // Shapiro (2022) Sector 2: core goods. Freight sets a cost LEVEL of the landed goods (Carriere-Swallow et al.
+        // 2023); inflation is its rate of change, as its quarter EMA moves this tick, so freight that stays high adds a
+        // step to the level and then no more inflation.
         $freightEmaNext = $state->freightRateIndexEma + ((1.0 - exp(-$dt / self::STANDARD_EMA_HORIZON_YEARS)) * ($state->freightRateIndex - $state->freightRateIndexEma));
         $freightStep = ($state->freightRateIndexEma > 0.0 && $freightEmaNext > 0.0) ? log($freightEmaNext / $state->freightRateIndexEma) : 0.0;
         $goodsSupplyFriction = self::CORE_GOODS_FREIGHT_LEVEL_LOADING * $freightStep / $dt;
@@ -1086,8 +1370,9 @@ class MacroAggregateSubsystem
         $boundedInflation = max(-0.02, min(0.25, $blendedInflation));
 
         // The GDP deflator prices what the District produces (SNA 2008, 15.180): its services, the local distribution
-        // margin on imported goods, priced like services (Burstein, Neves & Rebelo 2003), and the goods, fuel and food it
-        // makes itself, at their own prices less the import-price term. The carbon price is a domestic tax and stays.
+        // margin on imported goods, priced like services (Burstein, Neves & Rebelo 2003), and the goods, fuel and food
+        // it makes itself, at their own prices less the import-price term. The carbon price is a domestic tax and
+        // stays.
         $homeMade = 1.0 - self::IMPORTED_SHARE_OF_GOODS;
         $homeFoodAndFuel = $targetInflation + $anchorSlip + (($energyCostPush + $agriCostPush) / self::INFLATION_WEIGHT_COMMODITY);
         $state->domesticInflation = (
@@ -1125,12 +1410,12 @@ class MacroAggregateSubsystem
      * premium, less the TIPS liquidity premium, fitted as one reduced form on the inflation the market sees.
      *
      * Expected inflation rests on a shifting endpoint (Kozicki & Tinsley 2001): the long-run inflation the public has
-     * learned from realized inflation (MonetaryPolicySubsystem::updateInflationEndpoint()), which the US ten-year
-     * takes 0.44 of. Around it the ten-year moves 0.085 per point of core over the endpoint and 0.10 per point of
-     * headline over core, so a commodity shock is priced as passing. The output gap adds nothing once inflation is
-     * held (CBO gap 0.02, se 0.02). The fit also holds the excess bond premium, whose liquidity squeeze on TIPS moves the
-     * quote but not the inflation the market expects (D'Amico, Kim & Wei 2018); quotedTipsBreakeven() adds it for the
-     * quote alone, so the rule, wages and yields read expected inflation. Fit: var/harness/breakeven_fit.py.
+     * learned from realized inflation (MonetaryPolicySubsystem::updateInflationEndpoint()), which the US ten-year takes
+     * 0.44 of. Around it the ten-year moves 0.085 per point of core over the endpoint and 0.10 per point of headline
+     * over core, so a commodity shock is priced as passing. The output gap adds nothing once inflation is held (CBO gap
+     * 0.02, se 0.02). The fit also holds the excess bond premium, whose liquidity squeeze on TIPS moves the quote but
+     * not the inflation the market expects (D'Amico, Kim & Wei 2018); quotedTipsBreakeven() adds it for the quote
+     * alone, so the rule, wages and yields read expected inflation. Fit: var/harness/breakeven_fit.py.
      *
      * @param MacroState $state           Current macroeconomic state.
      * @param float      $targetInflation The Authority's inflation target.
@@ -1149,8 +1434,8 @@ class MacroAggregateSubsystem
     }
 
     /**
-     * The ten-year breakeven the market quotes: expected inflation less the TIPS liquidity premium, which widens with the
-     * excess bond premium as lenders' balance sheets tighten (Gilchrist & Zakrajsek 2012; D'Amico, Kim & Wei 2018).
+     * The ten-year breakeven the market quotes: expected inflation less the TIPS liquidity premium, which widens with
+     * the excess bond premium as lenders' balance sheets tighten (Gilchrist & Zakrajsek 2012; D'Amico, Kim & Wei 2018).
      */
     public static function quotedTipsBreakeven(float $breakeven, float $excessBondPremium): float
     {

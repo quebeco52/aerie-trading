@@ -54,7 +54,8 @@ final class SectorCalibrationMatrixTest extends TestCase
         'FX_REVENUE_EXPOSURE' => [0.00, 1.00, 'share of revenue exposed to the trade-weighted rate'],
         // A spot business feels the cycle immediately; the longest order books run a few years.
         'DEMAND_LAG_YEARS' => [0.00, 5.00, 'years for the output gap to reach the order book'],
-        // Payroll share of the fixed cost base: capital-intensive property at the bottom, professional services at the top.
+        // Payroll share of the fixed cost base: capital-intensive property at the bottom, professional services at the
+        // top.
         'FIXED_COST_LABOR_SHARE' => [0.10, 0.95, 'payroll share of the fixed cost base'],
         // Capitalised operating leases: an owner-operator carries none, a franchised restaurant estate carries a lot.
         'LEASE_LIABILITY_INTENSITY' => [0.00, 0.80, 'capitalised operating leases as a share of the asset base'],
@@ -245,7 +246,8 @@ final class SectorCalibrationMatrixTest extends TestCase
             (float) TelecomBusinessModel::INDUSTRY_SUBSTITUTABILITY,
             'Telecom growth is almost entirely share taken from carriers.',
         );
-        // "Conglomerates" is a listing convention, not a product market: listed groups sell nothing to each other's customers.
+        // "Conglomerates" is a listing convention, not a product market: listed groups sell nothing to each other's
+        // customers.
         $this->assertSame(0.0, (float) \App\Service\Model\Sector\ConglomerateBusinessModel::INDUSTRY_SUBSTITUTABILITY, 'Unrelated groups take no share from one another.');
 
         // A REIT owns its property outright; a restaurant estate is leased almost in full.

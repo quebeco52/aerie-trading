@@ -56,7 +56,10 @@ final class CapitalSaturationInvariantTest extends TestCase
     private const MAX_MATURE_GROWTH_MULTIPLE = 1.25;
     /** Widest capital-to-serviceable-market ratio a saturated firm may finish at. */
     private const MAX_TERMINAL_SHARE = 1.75;
-    /** A regulated utility, a platform monopoly, a steel maker, a pharma major, a freight carrier: five very different reinvestment profiles. */
+    /**
+     * A regulated utility, a platform monopoly, a steel maker, a pharma major, a freight carrier: five very different
+     * reinvestment profiles.
+     */
     private const TICKERS = ['BIRD', 'HUMM', 'WING', 'IBIS', 'CANV'];
 
     private function buildEngine(): EarningsEngine
@@ -162,7 +165,8 @@ final class CapitalSaturationInvariantTest extends TestCase
         // start on the spare the previous firm's run left, and a firm's paths would depend on the order they ran in.
         (new \ReflectionProperty(MathUtility::class, 'instance'))->setValue(null, null);
         $engine = $this->buildEngine();
-        mt_srand($seed); // seeded once the engine's mocks are built: PHPUnit names a new mock class from the same generator
+        // seeded once the engine's mocks are built: PHPUnit names a new mock class from the same generator
+        mt_srand($seed);
         $stock = $this->seedFromRow($row);
         $industryPe = (float) (Sectors::INDUSTRY_METRICS[$row['industry']]['pe'] ?? 18.0);
 

@@ -103,7 +103,8 @@ class EtfTrackerTest extends TestCase
         $etf->setPrice('100.00');
         self::giveId($etf, 7);
 
-        $this->redisMock->expects($this->once())->method('get')->with('market_index_divisor:LBI')->willReturn('10000000'); // 10M divisor
+        // 10M divisor
+        $this->redisMock->expects($this->once())->method('get')->with('market_index_divisor:LBI')->willReturn('10000000');
 
         $this->emMock->expects($this->never())->method('persist');
 
@@ -375,7 +376,10 @@ class EtfTrackerTest extends TestCase
         }
     }
 
-    /** @return iterable<string, array{string, string}> Divisor that triggers the split, and the operator it restates history with. */
+    /**
+     * @return iterable<string, array{string, string}> Divisor that triggers the split, and the operator it restates
+     *                                                 history with.
+     */
     public static function splitDirections(): iterable
     {
         yield 'forward 4-for-1' => ['1000000', '/'];

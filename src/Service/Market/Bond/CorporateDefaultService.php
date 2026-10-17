@@ -33,7 +33,10 @@ use Doctrine\ORM\EntityManagerInterface;
 final class CorporateDefaultService
 {
     // --- Corporate Credit: Recovery Given Default (Altman, Brady, Resti & Sironi 2005) ---
-    /** Recovery on a senior SECURED claim in an average default year, as a share of face; collateral is what puts this claim ahead of the rest. */
+    /**
+     * Recovery on a senior SECURED claim in an average default year, as a share of face; collateral is what puts this
+     * claim ahead of the rest.
+     */
     public const RECOVERY_SENIOR_SECURED = 0.62;
     /** Recovery on a senior UNSECURED claim, the ordinary public corporate bond. */
     public const RECOVERY_SENIOR_UNSECURED = 0.48;

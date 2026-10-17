@@ -109,7 +109,8 @@ class FirmEconomicsTest extends TestCase
         $this->assertEqualsWithDelta(0.0, $neutral['dio'], 0.0000001, 'At full capacity inventory does not build.');
         $this->assertEqualsWithDelta(0.0, $neutral['dpo'], 0.0000001, 'At baseline liquidity payables do not contract.');
 
-        // Dear credit stretches customer payment and cheap credit shortens it: DSO moves with the spread over its trend.
+        // Dear credit stretches customer payment and cheap credit shortens it: DSO moves with the spread over its
+        // trend.
         $creditStress = FirmEconomics::calculateWorkingCapitalDayShifts(
             0.026,
             0.016,
@@ -302,7 +303,10 @@ class FirmEconomicsTest extends TestCase
         $this->assertSame(0.0, FirmEconomics::calculateEffectiveSegmentCount(0.0));
     }
 
-    /** A new ladder opens as though always struck on today's curve; a step in the curve reaches delivery a tranche a quarter. */
+    /**
+     * A new ladder opens as though always struck on today's curve; a step in the curve reaches delivery a tranche a
+     * quarter.
+     */
     public function testTheHedgeLadderDeliversLastYearsForwardsOneTrancheAQuarter(): void
     {
         $flat = static fn(int $quarters): float => 1.0;
@@ -323,7 +327,10 @@ class FirmEconomicsTest extends TestCase
         $this->assertSame(['strike' => 3.0, 'sums' => []], FirmEconomics::rollHedgeLadder([], static fn(int $q): float => 3.0));
     }
 
-    /** At baseline gas a gas-fired MWh spends about half its price on fuel; carbon adds its cost, and the uplift's worth falls with the gas share. */
+    /**
+     * At baseline gas a gas-fired MWh spends about half its price on fuel; carbon adds its cost, and the uplift's worth
+     * falls with the gas share.
+     */
     public function testTheMeritOrderFormulasHoldTheirBaselines(): void
     {
         $this->assertEqualsWithDelta(0.516, FirmEconomics::gasFuelShareOfPowerPrice(), 0.001);

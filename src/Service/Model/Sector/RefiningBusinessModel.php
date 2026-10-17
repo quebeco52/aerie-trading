@@ -30,29 +30,47 @@ use App\Service\Math\MathUtility;
 class RefiningBusinessModel extends StandardCorporateBusinessModel
 {
     // --- Operating Cyclicality & Demand Structure ---
-    /** Elasticity of throughput to the output gap: the income elasticity of oil-product demand the energy market itself clears on (Hamilton 2009). */
+    /**
+     * Elasticity of throughput to the output gap: the income elasticity of oil-product demand the energy market itself
+     * clears on (Hamilton 2009).
+     */
     public const OPERATING_CYCLICALITY = MacroEngine::ENERGY_DEMAND_GAP_SENSITIVITY;
-    /** Own-price elasticity of the firm's demand: a small share of a global market faces residual demand far more elastic than the market's (Landes & Posner 1981), so any premium over the benchmark loses the sale. Inert while the price is pinned to the index. */
+    /**
+     * Own-price elasticity of the firm's demand: a small share of a global market faces residual demand far more
+     * elastic than the market's (Landes & Posner 1981), so any premium over the benchmark loses the sale. Inert while
+     * the price is pinned to the index.
+     */
     public const PRICE_ELASTICITY_OF_DEMAND = 2.50;
     /** Share of an idiosyncratic revenue gain taken from same-industry peers rather than won from a larger market. */
     public const INDUSTRY_SUBSTITUTABILITY = 0.15;
 
     // --- Input Cost Basket ---
-    /** Shares of the non-feedstock variable cost base bought in tracked input markets: purchased natural gas and power for process heat, catalysts and chemicals. */
+    /**
+     * Shares of the non-feedstock variable cost base bought in tracked input markets: purchased natural gas and power
+     * for process heat, catalysts and chemicals.
+     */
     public const INPUT_COST_EXPOSURES = ['gas' => 0.70, 'ppi' => 0.20];
     /** The crack is set by the market; a refiner recovers none of its own fuel inflation in price. */
     public const PRICING_POWER_INDEX = 0.00;
 
     // --- FX Exposure ---
-    /** Share of revenue whose home-currency realization moves with the trade-weighted exchange rate: refined products trade across borders. */
+    /**
+     * Share of revenue whose home-currency realization moves with the trade-weighted exchange rate: refined products
+     * trade across borders.
+     */
     public const FX_REVENUE_EXPOSURE = 0.30;
 
     // --- Labor Intensity ---
-    /** Labor share of the fixed cost base exposed to the Beveridge wage squeeze: maintenance contracts and turnarounds carry much of the rest. */
+    /**
+     * Labor share of the fixed cost base exposed to the Beveridge wage squeeze: maintenance contracts and turnarounds
+     * carry much of the rest.
+     */
     public const FIXED_COST_LABOR_SHARE = 0.30;
 
     // --- Analyst Visibility & Error ---
-    /** Base coverage visibility of the plant's own runs; the published crude price and crack are read in full beside it. */
+    /**
+     * Base coverage visibility of the plant's own runs; the published crude price and crack are read in full beside it.
+     */
     public const BASE_COVERAGE_VISIBILITY = 0.80;
     /** Base coverage forecasting error on capture rates and crude differentials. */
     public const BASE_COVERAGE_ERROR = 0.10;
@@ -62,13 +80,27 @@ class RefiningBusinessModel extends StandardCorporateBusinessModel
     public const REFERENCE_CRUDE_PRICE = 72.0;
     /** Light products (gasoline, distillate, jet) per barrel of crude input (EIA U.S. refinery yield 2021-2025). */
     public const LIGHT_PRODUCT_YIELD = 0.866;
-    /** Secondary products (coke, asphalt, residual fuel, still gas, gas liquids, lubricants, feedstocks) per barrel of crude input, processing gain included (EIA 2021-2025). */
+    /**
+     * Secondary products (coke, asphalt, residual fuel, still gas, gas liquids, lubricants, feedstocks) per barrel of
+     * crude input, processing gain included (EIA 2021-2025).
+     */
     public const SECONDARY_PRODUCT_YIELD = 0.195;
-    /** Price of the secondary barrel relative to crude (coke and still gas far below it, asphalt and feedstocks near it, lubricants above), set so the margin at a zero crack matches Valero's reported regression, -$0.41/bbl over 2018-2024. */
+    /**
+     * Price of the secondary barrel relative to crude (coke and still gas far below it, asphalt and feedstocks near it,
+     * lubricants above), set so the margin at a zero crack matches Valero's reported regression, -$0.41/bbl over
+     * 2018-2024.
+     */
     public const SECONDARY_PRODUCT_REALIZATION = 0.66;
-    /** Share of the benchmark crack the light barrel realizes: Valero's refining margin per barrel moved $0.598 per $1 of Gulf Coast 3-2-1 crack over 2018-2024 (R 0.99), which over the 0.866 light yield is 0.69 (product grades below benchmark, crude bought above WTI). */
+    /**
+     * Share of the benchmark crack the light barrel realizes: Valero's refining margin per barrel moved $0.598 per $1
+     * of Gulf Coast 3-2-1 crack over 2018-2024 (R 0.99), which over the 0.866 light yield is 0.69 (product grades below
+     * benchmark, crude bought above WTI).
+     */
     public const REALIZED_CRACK_CAPTURE = 0.69;
-    /** Floor on the non-feedstock variable cost share, guarding a seeded row whose margins leave less room than the feedstock takes. */
+    /**
+     * Floor on the non-feedstock variable cost share, guarding a seeded row whose margins leave less room than the
+     * feedstock takes.
+     */
     public const MIN_VARIABLE_OPEX_SHARE = 0.005;
 
     // --- Revenue Shock Physics ---
@@ -78,7 +110,9 @@ class RefiningBusinessModel extends StandardCorporateBusinessModel
     public const CAPTURE_VOL_SCALAR = 1.50;
     /** Quarterly persistence of throughput shocks. */
     public const THROUGHPUT_SHOCK_PERSISTENCE = 0.35;
-    /** Quarterly persistence of the capture shock (crude differentials and product cracks move in multi-quarter swings). */
+    /**
+     * Quarterly persistence of the capture shock (crude differentials and product cracks move in multi-quarter swings).
+     */
     public const CAPTURE_SHOCK_PERSISTENCE = 0.40;
     /** Quarterly persistence of the firm's own tail-event draw. */
     public const EVENT_SHOCK_PERSISTENCE = 0.10;
@@ -100,7 +134,9 @@ class RefiningBusinessModel extends StandardCorporateBusinessModel
     public const WORKING_CAPITAL_INTENSITY = 0.15;
 
     // --- Valuation ---
-    /** Book (replacement cost) weight in fair value when normalized EPS is negative: trough refiners trade on assets. */
+    /**
+     * Book (replacement cost) weight in fair value when normalized EPS is negative: trough refiners trade on assets.
+     */
     public const TROUGH_BOOK_WEIGHT = 0.70;
     /** Book weight in fair value through the rest of the cycle. */
     public const MID_CYCLE_BOOK_WEIGHT = 0.40;
@@ -232,7 +268,8 @@ class RefiningBusinessModel extends StandardCorporateBusinessModel
         $observableShockZ = $throughput - 1.0;
         $benchmarkCrack = $macroState->refiningCrackSpreadEma;
 
-        // The one-off charge is booked as a special item: in EBIT, out of the run rate, the Street figure and the cost ratio.
+        // The one-off charge is booked as a special item: in EBIT, out of the run rate, the Street figure and the cost
+        // ratio.
         $specialCharge = $outagePenalty * $expectedRevenue * $throughput;
 
         return new SectorPhysicsResult(
@@ -252,7 +289,9 @@ class RefiningBusinessModel extends StandardCorporateBusinessModel
         );
     }
 
-    /** Refiners anchor to book (replacement cost of the plant) at trough earnings and to mid-cycle earnings otherwise. */
+    /**
+     * Refiners anchor to book (replacement cost of the plant) at trough earnings and to mid-cycle earnings otherwise.
+     */
     protected function getFairValueBookWeight(float $normalizedEps): float
     {
         return $normalizedEps < 0 ? self::TROUGH_BOOK_WEIGHT : self::MID_CYCLE_BOOK_WEIGHT;

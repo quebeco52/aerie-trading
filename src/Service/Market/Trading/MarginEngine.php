@@ -30,7 +30,10 @@ use Doctrine\ORM\EntityManagerInterface;
 final class MarginEngine
 {
     // --- Margin Accounts (Regulation T) ---
-    /** Extra equity a forced liquidation restores beyond the bare minimum, so the account is not called again on the next tick. */
+    /**
+     * Extra equity a forced liquidation restores beyond the bare minimum, so the account is not called again on the
+     * next tick.
+     */
     public const LIQUIDATION_EQUITY_BUFFER = 0.05;
     /** Ceiling on the fraction of a position that one margin call may liquidate. */
     public const MAX_LIQUIDATION_FRACTION = 1.00;
@@ -42,8 +45,8 @@ final class MarginEngine
     ) {}
 
     /**
-     * The margins in force: the Securities Commission's initial margin and the maintenance that follows it, the founding
-     * Regulation T ones before the ticker has published an economy.
+     * The margins in force: the Securities Commission's initial margin and the maintenance that follows it, the
+     * founding Regulation T ones before the ticker has published an economy.
      *
      * @return array{initial: float, long: float, short: float}
      */

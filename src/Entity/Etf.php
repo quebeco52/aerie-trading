@@ -58,23 +58,40 @@ class Etf
     // does receive it, and a holder who never received it was being quietly robbed of the dividend yield
     // every year. It is paid out quarterly, and the price drops by exactly what leaves.
 
-    /** Annual fee the fund charges, accrued continuously against net assets. Paid from income where there is any, and out of the basket where there is not. */
+    /**
+     * Annual fee the fund charges, accrued continuously against net assets. Paid from income where there is any, and
+     * out of the basket where there is not.
+     */
     #[ORM\Column(type: Types::DECIMAL, precision: 7, scale: 6, options: ['default' => '0.000500'])]
     private string $expenseRatio = '0.000500';
 
-    /** Index units one fund share still owns. Starts at 1 and ratchets down as fees are met by selling; this IS the fund's cumulative tracking difference. */
+    /**
+     * Index units one fund share still owns. Starts at 1 and ratchets down as fees are met by selling; this IS the
+     * fund's cumulative tracking difference.
+     */
     #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 12, options: ['default' => '1.000000000000'])]
     private string $basketPerShare = '1.000000000000';
 
-    /** Dividend cash received from constituents and not yet distributed, per fund share. Carried in the price until it is paid out. */
+    /**
+     * Dividend cash received from constituents and not yet distributed, per fund share. Carried in the price until it
+     * is paid out.
+     */
     #[ORM\Column(type: Types::DECIMAL, precision: 30, scale: 8, options: ['default' => '0.00000000'])]
     private string $accruedIncome = '0.00000000';
 
-    /** Fees charged over the fund's life, per share. The basket only records what had to be SOLD to meet a fee; almost all of it is met out of income, and a holder who read the basket alone would think the fund had cost them nothing. */
+    /**
+     * Fees charged over the fund's life, per share. The basket only records what had to be SOLD to meet a fee; almost
+     * all of it is met out of income, and a holder who read the basket alone would think the fund had cost them
+     * nothing.
+     */
     #[ORM\Column(type: Types::DECIMAL, precision: 30, scale: 8, options: ['default' => '0.00000000'])]
     private string $cumulativeFeesPaid = '0.00000000';
 
-    /** Spread the fund has crossed rebalancing itself, per share, over its life. Separate from the fee because it is a different cost with a different cause: the fee is what the manager charges, this is what the index's own turnover costs to follow. */
+    /**
+     * Spread the fund has crossed rebalancing itself, per share, over its life. Separate from the fee because it is a
+     * different cost with a different cause: the fee is what the manager charges, this is what the index's own turnover
+     * costs to follow.
+     */
     #[ORM\Column(type: Types::DECIMAL, precision: 30, scale: 8, options: ['default' => '0.00000000'])]
     private string $cumulativeTradingCosts = '0.00000000';
 
@@ -111,7 +128,10 @@ class Etf
     #[ORM\Column(type: 'float', options: ['default' => 0.0])]
     private float $navPremium = 0.0;
 
-    /** The last four distributions per share, newest first. A trailing yield is a real factsheet figure and it cannot be derived from a single payment. */
+    /**
+     * The last four distributions per share, newest first. A trailing yield is a real factsheet figure and it cannot be
+     * derived from a single payment.
+     */
     #[ORM\Column(type: Types::JSON, nullable: true)]
     private ?array $recentDistributions = null;
 

@@ -28,7 +28,10 @@ class CreditRatingAgency
     public const THRESHOLD_B   = 1.0;
 
     // --- Hysteresis Buffer ---
-    /** d2 past a bracket edge before the grade moves (0.9 notch at 6 notches per d2 unit): Altman & Rijken's (2004) migration threshold of 1.25-1.5 notches from a class's centre, 0.75-1.0 notch past its edge. */
+    /**
+     * d2 past a bracket edge before the grade moves (0.9 notch at 6 notches per d2 unit): Altman & Rijken's (2004)
+     * migration threshold of 1.25-1.5 notches from a class's centre, 0.75-1.0 notch past its edge.
+     */
     public const HYSTERESIS_BUFFER = 0.15;
 
     // --- Altman Z''-Score Distress Bounds ---
@@ -36,31 +39,60 @@ class CreditRatingAgency
     public const ALTMAN_DISTRESS_THRESHOLD = 1.10;
     /** Altman Z''-Score threshold below which a firm is in the grey zone (speculative ceiling BB). */
     public const ALTMAN_GREY_THRESHOLD = 2.60;
-    /** Z'' past a zone edge before the cap it sets binds or lifts: the same 0.9 notch as HYSTERESIS_BUFFER, at ~0.3 of Z'' per notch between A- and B on Altman, Hartzell & Peck's (1995) EM-score rating equivalents (second-hand, not re-pinned). */
+    /**
+     * Z'' past a zone edge before the cap it sets binds or lifts: the same 0.9 notch as HYSTERESIS_BUFFER, at ~0.3 of
+     * Z'' per notch between A- and B on Altman, Hartzell & Peck's (1995) EM-score rating equivalents (second-hand, not
+     * re-pinned).
+     */
     public const ALTMAN_ZONE_HYSTERESIS = 0.25;
 
     // --- Business Risk / Financial Risk Matrix (S&P, "Business Risk/Financial Risk Matrix Expanded", 2009) ---
-    /** Debt/EBITDA upper bounds of the financial risk profiles: minimal <1.5x, modest 1.5-2x, intermediate 2-3x, significant 3-4x, aggressive 4-5x, highly leveraged above. */
+    /**
+     * Debt/EBITDA upper bounds of the financial risk profiles: minimal <1.5x, modest 1.5-2x, intermediate 2-3x,
+     * significant 3-4x, aggressive 4-5x, highly leveraged above.
+     */
     public const FINANCIAL_RISK_DEBT_TO_EBITDA_BOUNDS = [1.5, 2.0, 3.0, 4.0, 5.0];
-    /** Debt/EBITDA upper bounds on S&P's medial volatility table, minimal to aggressive: <1.75x, 1.75-2.5x, 2.5-3.5x, 3.5-4.5x, 4.5-5.5x ("Corporate Methodology", 2013), the table S&P assessed a regulated electric utility with generation on (Louisville Gas & Electric, 2016). */
+    /**
+     * Debt/EBITDA upper bounds on S&P's medial volatility table, minimal to aggressive: <1.75x, 1.75-2.5x, 2.5-3.5x,
+     * 3.5-4.5x, 4.5-5.5x ("Corporate Methodology", 2013), the table S&P assessed a regulated electric utility with
+     * generation on (Louisville Gas & Electric, 2016).
+     */
     public const MEDIAL_VOLATILITY_DEBT_TO_EBITDA_BOUNDS = [1.75, 2.5, 3.5, 4.5, 5.5];
-    /** Debt/EBITDA upper bounds for a real estate company, minimal to aggressive: <2.5x, 2.5-4.5x, 4.5-7.5x, 7.5-9.5x, 9.5-13x, highly leveraged above (S&P, "Key Credit Factors For The Real Estate Industry", 2018, table 1). */
+    /**
+     * Debt/EBITDA upper bounds for a real estate company, minimal to aggressive: <2.5x, 2.5-4.5x, 4.5-7.5x, 7.5-9.5x,
+     * 9.5-13x, highly leveraged above (S&P, "Key Credit Factors For The Real Estate Industry", 2018, table 1).
+     */
     public const REAL_ESTATE_DEBT_TO_EBITDA_BOUNDS = [2.5, 4.5, 7.5, 9.5, 13.0];
-    /** Debt to adjusted total equity upper bounds for an asset manager investing its own balance sheet, minimal to aggressive: <0.4x, 0.4-0.8x, 0.8-1.5x, 1.5-2x, 2-3x, highly leveraged above (S&P, "Key Credit Factors For Asset Managers", 2014, table 1). */
+    /**
+     * Debt to adjusted total equity upper bounds for an asset manager investing its own balance sheet, minimal to
+     * aggressive: <0.4x, 0.4-0.8x, 0.8-1.5x, 1.5-2x, 2-3x, highly leveraged above (S&P, "Key Credit Factors For Asset
+     * Managers", 2014, table 1).
+     */
     public const DEBT_TO_ADJUSTED_EQUITY_BOUNDS = [0.4, 0.8, 1.5, 2.0, 3.0];
-    /** Anchors for an excellent business risk profile, S&P's assessment of rate-regulated utilities: AAA, AA, A, A-, BBB, and BB for the blank highly leveraged cell, at whole-letter grades. */
+    /**
+     * Anchors for an excellent business risk profile, S&P's assessment of rate-regulated utilities: AAA, AA, A, A-,
+     * BBB, and BB for the blank highly leveraged cell, at whole-letter grades.
+     */
     public const EXCELLENT_BUSINESS_RISK_ANCHORS = ['AAA', 'AA', 'A', 'A', 'BBB', 'BB'];
-    /** Anchors for a satisfactory business risk profile, "typical of a low investment-grade industrial issuer": A-, BBB+, BBB, BB+, BB-, B+ at whole-letter grades. */
+    /**
+     * Anchors for a satisfactory business risk profile, "typical of a low investment-grade industrial issuer": A-,
+     * BBB+, BBB, BB+, BB-, B+ at whole-letter grades.
+     */
     public const SATISFACTORY_BUSINESS_RISK_ANCHORS = ['A', 'BBB', 'BBB', 'BB', 'BB', 'B'];
 
     // --- Time-Weighted Core Ratios (S&P, "Corporate Methodology", 2013) ---
-    /** Weights of the current year, the year before and the year before that in a core ratio: S&P's 25%, 15% and 10%. */
+    /**
+     * Weights of the current year, the year before and the year before that in a core ratio: S&P's 25%, 15% and 10%.
+     */
     public const CORE_RATIO_YEAR_WEIGHTS = [0.25, 0.15, 0.10];
     /** Weight of S&P's two forecast years, 25% each, read on the issuer's base case. */
     public const CORE_RATIO_FORECAST_WEIGHT = 0.50;
 
     // --- Bank Rating Methodology (S&P, "Banks: Rating Methodology And Assumptions", 2021) ---
-    /** Highest rating an institution rated on its capital reaches: the US bank anchor (bbb+) plus the most a very strong capital and earnings assessment adds (+2 notches), a, at whole-letter grades; insurers are held to it too. */
+    /**
+     * Highest rating an institution rated on its capital reaches: the US bank anchor (bbb+) plus the most a very strong
+     * capital and earnings assessment adds (+2 notches), a, at whole-letter grades; insurers are held to it too.
+     */
     public const CAPITAL_RATED_RATING_CEILING = 'A';
 
     // --- Rating Hierarchy ---
@@ -103,8 +135,11 @@ class CreditRatingAgency
      * @param float       $distanceToDefault The continuous Distance to Default score (d2) from Merton's model.
      * @param float|null  $altmanZScore      The company's Altman Z''-score for accounting solvency.
      * @param string|null $altmanZone        That score's zone as the firm's OWN model classified it.
-     * @param string|null $leverageAnchor    Ceiling from the firm's leverage (financialRiskAnchor(), adjustedEquityLeverageAnchor()), or CAPITAL_RATED_RATING_CEILING for a firm rated on its capital; null for none.
-     * @return string|null The new credit rating bracket if a transition occurred, or null if the rating stayed the same.
+     * @param string|null $leverageAnchor    Ceiling from the firm's leverage (financialRiskAnchor(),
+     *                                       adjustedEquityLeverageAnchor()), or CAPITAL_RATED_RATING_CEILING for a firm
+     *                                       rated on its capital; null for none.
+     * @return string|null The new credit rating bracket if a transition occurred, or null if the rating stayed the
+     *                     same.
      */
     public function evaluateRating(Stock $stock, float $distanceToDefault, ?float $altmanZScore = null, ?string $altmanZone = null, ?string $leverageAnchor = null): ?string
     {
@@ -191,9 +226,9 @@ class CreditRatingAgency
     }
 
     /**
-     * The rating S&P's business risk/financial risk matrix anchors a firm at, from its net debt to EBITDA: the corporate
-     * table, or a sector's own (REAL_ESTATE_DEBT_TO_EBITDA_BOUNDS). A firm with no debt is minimal financial risk; one with
-     * debt and no EBITDA is highly leveraged.
+     * The rating S&P's business risk/financial risk matrix anchors a firm at, from its net debt to EBITDA: the
+     * corporate table, or a sector's own (REAL_ESTATE_DEBT_TO_EBITDA_BOUNDS). A firm with no debt is minimal financial
+     * risk; one with debt and no EBITDA is highly leveraged.
      *
      * @param list<float> $bounds Upper bounds of the financial risk profiles, minimal to aggressive.
      */
@@ -203,13 +238,15 @@ class CreditRatingAgency
     }
 
     /**
-     * Net debt and EBITDA on S&P's time-weighted basis: the current year and the two before it at CORE_RATIO_YEAR_WEIGHTS
-     * and the base case for the two forecast years at CORE_RATIO_FORECAST_WEIGHT, the weights of years not yet observed
-     * spread over those that are. Numerator and denominator are weighted apart (a pooled ratio), which matches S&P's
-     * weighted ratio while debt is steady and stays defined through a loss year.
+     * Net debt and EBITDA on S&P's time-weighted basis: the current year and the two before it at
+     * CORE_RATIO_YEAR_WEIGHTS and the base case for the two forecast years at CORE_RATIO_FORECAST_WEIGHT, the weights
+     * of years not yet observed spread over those that are. Numerator and denominator are weighted apart (a pooled
+     * ratio), which matches S&P's weighted ratio while debt is steady and stays defined through a loss year.
      *
-     * @param list<array{net_debt: float, ebitda: float}> $quarters Rated quarters, newest first, each on its trailing twelve months.
-     * @param array{net_debt: float, ebitda: float}|null $forecast The base case for the forecast years; none weighs the observed years alone.
+     * @param list<array{net_debt: float, ebitda: float}> $quarters Rated quarters, newest first, each on its trailing
+     *                                                              twelve months.
+     * @param array{net_debt: float, ebitda: float}|null $forecast The base case for the forecast years; none weighs the
+     *                                                             observed years alone.
      * @return array{net_debt: float, ebitda: float}
      */
     public static function timeWeightedLeverage(array $quarters, ?array $forecast = null): array
@@ -232,15 +269,18 @@ class CreditRatingAgency
             : ['net_debt' => 0.0, 'ebitda' => 0.0];
     }
 
-    /** How many rated quarters timeWeightedLeverage() reads: the current one and one a year back for each earlier year. */
+    /**
+     * How many rated quarters timeWeightedLeverage() reads: the current one and one a year back for each earlier year.
+     */
     public static function timeWeightedLeverageQuarters(): int
     {
         return (count(self::CORE_RATIO_YEAR_WEIGHTS) - 1) * EarningsEngine::TTM_QUARTERS + 1;
     }
 
     /**
-     * The anchor for an asset manager that invests its own balance sheet, which S&P rates on debt to adjusted total equity
-     * (reported equity less goodwill and intangibles) rather than on cash flow, at a satisfactory business risk profile.
+     * The anchor for an asset manager that invests its own balance sheet, which S&P rates on debt to adjusted total
+     * equity (reported equity less goodwill and intangibles) rather than on cash flow, at a satisfactory business risk
+     * profile.
      */
     public static function adjustedEquityLeverageAnchor(float $debt, float $adjustedTotalEquity): string
     {

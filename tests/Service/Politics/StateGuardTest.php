@@ -78,7 +78,10 @@ class StateGuardTest extends TestCase
         $this->assertEquals($without->policy(), PoliticsStateDTO::fromState($state)->policy(), 'Who commands the State Guard moves nothing in the economy.');
     }
 
-    /** At the opening commander's term end the Council names the candidate nearest its median on its own questions, for one five-year term. */
+    /**
+     * At the opening commander's term end the Council names the candidate nearest its median on its own questions, for
+     * one five-year term.
+     */
     public function testAtTermEndTheCouncilNamesTheCandidateNearestItsMedians(): void
     {
         foreach ([3, 11] as $seed) {

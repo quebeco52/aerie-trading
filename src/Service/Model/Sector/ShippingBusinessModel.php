@@ -20,15 +20,22 @@ use App\Service\Model\StreamContext;
  * Earnings strategy for Global Maritime Shipping and Freight Logistics.
  *
  * Financial Physics:
- * - Hyper-Cyclical Spot-Rate Operational Leverage: Revenues are violently levered to global GDP and the macro output gap.
- * - During economic expansions (+Output Gap), spot freight rates surge exponentially against fixed fleet overhead, producing massive Free Cash Flow explosions.
- * - During economic contractions (-Output Gap), capacity gluts and falling container rates cause severe operating losses.
- * - Heavy Physical Depreciation: Vessels and containers rust and degrade rapidly, requiring consistent, non-discretionary CapEx.
+ * - Hyper-Cyclical Spot-Rate Operational Leverage: Revenues are violently levered to global GDP and the macro output
+ *   gap.
+ * - During economic expansions (+Output Gap), spot freight rates surge exponentially against fixed fleet overhead,
+ *   producing massive Free Cash Flow explosions.
+ * - During economic contractions (-Output Gap), capacity gluts and falling container rates cause severe operating
+ *   losses.
+ * - Heavy Physical Depreciation: Vessels and containers rust and degrade rapidly, requiring consistent,
+ *   non-discretionary CapEx.
  */
 class ShippingBusinessModel extends StandardCorporateBusinessModel
 {
     // --- Operating Cyclicality & Demand Structure ---
-    /** Elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). Global trade volume times a fixed fleet; the freight market is worldwide. */
+    /**
+     * Elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). Global trade volume
+     * times a fixed fleet; the freight market is worldwide.
+     */
     public const OPERATING_CYCLICALITY = 1.60;
     /** Own-price elasticity of demand: volume lost per unit of real price increase. */
     public const PRICE_ELASTICITY_OF_DEMAND = 0.30;
@@ -36,7 +43,10 @@ class ShippingBusinessModel extends StandardCorporateBusinessModel
     public const INDUSTRY_SUBSTITUTABILITY = 0.30;
 
     // --- Input Cost Basket ---
-    /** Shares of the variable cost base by input channel, measured from the BEA input-output accounts with supply-chain content (labor still the model's own). */
+    /**
+     * Shares of the variable cost base by input channel, measured from the BEA input-output accounts with supply-chain
+     * content (labor still the model's own).
+     */
     public const INPUT_COST_EXPOSURES = InputOutputExposures::SHIPPING;
     /** Bunker adjustment factors on contracts reprice within a quarter; spot voyages carry the fuel themselves. */
     public const INPUT_PASS_THROUGH_LAG_YEARS = 0.25;
@@ -44,11 +54,17 @@ class ShippingBusinessModel extends StandardCorporateBusinessModel
     public const PRICING_POWER_INDEX = 0.50;
 
     // --- Balance Sheet Realism ---
-    /** Capitalized operating lease liabilities as a fraction of annual revenue (IFRS 16 / ASC 842). Chartered-in vessels are leases in all but name. */
+    /**
+     * Capitalized operating lease liabilities as a fraction of annual revenue (IFRS 16 / ASC 842). Chartered-in vessels
+     * are leases in all but name.
+     */
     public const LEASE_LIABILITY_INTENSITY = 0.35;
 
     // --- FX Exposure ---
-    /** Share of revenue whose competitiveness moves with the trade-weighted exchange rate. Charter and spot rates are quoted in the trade currency against globally mobile tonnage. */
+    /**
+     * Share of revenue whose competitiveness moves with the trade-weighted exchange rate. Charter and spot rates are
+     * quoted in the trade currency against globally mobile tonnage.
+     */
     public const FX_REVENUE_EXPOSURE = 0.10;
 
     // --- Analyst Visibility & Error ---
@@ -80,7 +96,10 @@ class ShippingBusinessModel extends StandardCorporateBusinessModel
     public const CONTRACT_CHARTER_WEIGHT = 0.50;
 
     // --- Hyper-Cyclical Spot Rate Physics ---
-    /** Cargo volume per unit of the output gap beyond cyclicality: trade swings harder than output (Freund 2009 trade-income elasticity). */
+    /**
+     * Cargo volume per unit of the output gap beyond cyclicality: trade swings harder than output (Freund 2009
+     * trade-income elasticity).
+     */
     public const MACRO_DEMAND_SCALAR       = 1.80;
     /** Volatility multiplier for top-line revenue shocks driven by maritime freight spot rates. */
     public const REVENUE_VARIANCE_SCALAR   = 0.25;
@@ -90,15 +109,24 @@ class ShippingBusinessModel extends StandardCorporateBusinessModel
     public const SPOT_GLUT_GAP_THRESHOLD   = -0.015;
 
     // --- Global Trade & Supply Chain Pressure Transmission ---
-    /** Export volume per unit of the foreign bloc's output gap: the customers abroad. The import side rides on the domestic cycle. */
+    /**
+     * Export volume per unit of the foreign bloc's output gap: the customers abroad. The import side rides on the
+     * domestic cycle.
+     */
     public const FOREIGN_DEMAND_SENSITIVITY = 3.00;
 
     // --- Event Lore Thresholds ---
     /** Positive z-score threshold required during trade booms to trigger port congestion lore. */
     public const LORE_CONGESTION_Z_SCORE   = 1.50;
-    /** Supply-chain pressure, in standard deviations, past which ports congest whatever the domestic cycle: a once-a-generation squeeze. */
+    /**
+     * Supply-chain pressure, in standard deviations, past which ports congest whatever the domestic cycle: a
+     * once-a-generation squeeze.
+     */
     public const CONGESTION_PRESSURE_THRESHOLD = 2.7;
-    /** Fraction of the contracted charter backlog delivered each quarter (multi-year time charters, ~2.3 quarters of coverage). */
+    /**
+     * Fraction of the contracted charter backlog delivered each quarter (multi-year time charters, ~2.3 quarters of
+     * coverage).
+     */
     public const CONTRACT_BACKLOG_BURN_RATE = 0.30;
     /** Regime key for a port-congestion super-cycle that keeps spot rates elevated until berths clear. */
     public const REGIME_PORT_CONGESTION = 'port_congestion';
@@ -123,7 +151,10 @@ class ShippingBusinessModel extends StandardCorporateBusinessModel
     public const SPOT_REVERSION_SPEED      = 4.0;
 
     // --- Valuation ---
-    /** Book (fleet replacement value) weight in fair value through a freight trough, when normalised EPS is not positive. */
+    /**
+     * Book (fleet replacement value) weight in fair value through a freight trough, when normalised EPS is not
+     * positive.
+     */
     public const TROUGH_BOOK_WEIGHT = 0.65;
     /** Book weight in fair value through the rest of the freight cycle. */
     public const MID_CYCLE_BOOK_WEIGHT = 0.30;
@@ -163,7 +194,10 @@ class ShippingBusinessModel extends StandardCorporateBusinessModel
         return (($spotWeight * $this->resolveCargoVolumeShift($stock, $macroState)) + ($contractWeight * ($workload - 1.0))) / $totalWeight;
     }
 
-    /** Cargo volume: the lagged gap through the trade-income elasticity (the imports), plus the customers abroad (the exports). */
+    /**
+     * Cargo volume: the lagged gap through the trade-income elasticity (the imports), plus the customers abroad (the
+     * exports).
+     */
     private function resolveCargoVolumeShift(Stock $stock, MacroStateDTO $macroState): float
     {
         $tradeShift = MacroTransmission::calculateForeignDemandShift($macroState->foreignOutputGapEma, sensitivity: self::FOREIGN_DEMAND_SENSITIVITY);
@@ -228,7 +262,8 @@ class ShippingBusinessModel extends StandardCorporateBusinessModel
         $spotRevenue     = $spotCargo * max(0.0, 1.0 + $spotRateShift);
         // The rate leg reprices a fixed fleet's voyages: price, the ships sail either way.
         $priceRevenue    = $spotRevenue - $spotCargo;
-        // Time charters are fixed into a multi-quarter contract backlog: new fixtures take the cargo cycle, and the book smooths it.
+        // Time charters are fixed into a multi-quarter contract backlog: new fixtures take the cargo cycle, and the
+        // book smooths it.
         $contractBook = $streams->recognizeBacklog('contract', $expectedRevenue * $contractWeight, max(0.0, 1.0 + ($contractZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)) + $cargoVolumeShift), self::CONTRACT_BACKLOG_BURN_RATE);
         $contractRevenue = $contractBook['revenue'];
 
@@ -268,7 +303,8 @@ class ShippingBusinessModel extends StandardCorporateBusinessModel
 
     public function getMarginReversionSpeed(): float
     {
-        // Spot rate booms attract new shipbuilding orders, causing margins to mean-revert aggressively once new vessels launch
+        // Spot rate booms attract new shipbuilding orders, causing margins to mean-revert aggressively once new vessels
+        // launch
         return self::SPOT_REVERSION_SPEED;
     }
 

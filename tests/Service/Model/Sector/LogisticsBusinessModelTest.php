@@ -93,7 +93,8 @@ class LogisticsBusinessModelTest extends TestCase
         // Expected demand shift: 0.02 * cyclicality * 1.40
         $cyclicality = LogisticsBusinessModel::OPERATING_CYCLICALITY;
         $this->assertEqualsWithDelta(0.02 * $cyclicality * 1.40, $physics['macro_demand_shift'], 0.0001);
-        // Expected pricing: breakevens x (price-taker base elasticity + pricing power index); a fresh firm starts at target.
+        // Expected pricing: breakevens x (price-taker base elasticity + pricing power index); a fresh firm starts at
+        // target.
         $elasticity = StandardCorporateBusinessModel::PASS_THROUGH_BASE_ELASTICITY + LogisticsBusinessModel::PRICING_POWER_INDEX;
         $this->assertEqualsWithDelta(1.0 + (0.03 * $elasticity), $physics['pricing_power_multiplier'], 0.0001);
         // Input prices track expected inflation at unit elasticity.

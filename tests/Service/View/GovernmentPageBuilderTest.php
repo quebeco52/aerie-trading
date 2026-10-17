@@ -70,7 +70,10 @@ class GovernmentPageBuilderTest extends TestCase
         $this->assertNull($this->builder()->buildBudget(new MacroStateDTO(), new PoliticsStateDTO())['exposure'], 'No board, no tables.');
     }
 
-    /** The Exchequer's panel: nothing before it has a head; then the head's maturity, the book moving toward it, what it pays at its repricing share, and what its maturity adds to the ten-year. */
+    /**
+     * The Exchequer's panel: nothing before it has a head; then the head's maturity, the book moving toward it, what it
+     * pays at its repricing share, and what its maturity adds to the ten-year.
+     */
     public function testTheExchequerPanelReadsTheDebtAndItsHead(): void
     {
         $this->assertNull($this->builder()->exchequer(new PoliticsStateDTO(), new MacroStateDTO()));
@@ -110,7 +113,10 @@ class GovernmentPageBuilderTest extends TestCase
         $this->assertSame(10, $panel['riskSpreadBp'], 'The default charge the market asks, in basis points.');
     }
 
-    /** The Fair Trading Board's panel: nothing before it has a head; then the head's screens, the passed-over candidates' lines, the Council's median line and the record's two ends. */
+    /**
+     * The Fair Trading Board's panel: nothing before it has a head; then the head's screens, the passed-over
+     * candidates' lines, the Council's median line and the record's two ends.
+     */
     public function testTheFairTradingPanelReadsTheHeadsScreens(): void
     {
         $this->assertNull($this->builder()->fairTrading(new PoliticsStateDTO()));
@@ -138,7 +144,10 @@ class GovernmentPageBuilderTest extends TestCase
         $this->assertSame(1.0, $panel['rules']['lightest']['shareCeiling']);
     }
 
-    /** The Securities Commission's panel: the rules in force read off the economy, a new head's coming ones through their notice, and none once it has run. */
+    /**
+     * The Securities Commission's panel: the rules in force read off the economy, a new head's coming ones through
+     * their notice, and none once it has run.
+     */
     public function testTheSecuritiesPanelReadsTheRulesInForceAndComing(): void
     {
         $this->assertNull($this->builder()->securities(new PoliticsStateDTO(), new MacroStateDTO()));
@@ -167,7 +176,10 @@ class GovernmentPageBuilderTest extends TestCase
         $this->assertNull($this->builder()->securities($later, new MacroStateDTO())['coming'] ?? null, 'Once the notice has run the rules are in force.');
     }
 
-    /** The Council page lists the Security Bureau's director with its mandate, since the Bureau stands outside the government's menus; the other departments carry none. */
+    /**
+     * The Council page lists the Security Bureau's director with its mandate, since the Bureau stands outside the
+     * government's menus; the other departments carry none.
+     */
     public function testTheCouncilPageNamesTheSecurityBureausDirector(): void
     {
         $politics = new PoliticsStateDTO(totalTime: 7.0, securityDirectorName: 'Augustin Pell', securityDirectorBirth: -45.0, securityDirectorTermStart: 6.0);
@@ -179,7 +191,10 @@ class GovernmentPageBuilderTest extends TestCase
         $this->assertNull($departments[\App\Data\District\Institutions::EXCHEQUER]['head']);
     }
 
-    /** The Council page lists the two guards' commanders with their mandates, and the guard without one yet carries none. */
+    /**
+     * The Council page lists the two guards' commanders with their mandates, and the guard without one yet carries
+     * none.
+     */
     public function testTheCouncilPageNamesTheGuardsCommanders(): void
     {
         $politics = new PoliticsStateDTO(totalTime: 3.0, coastGuardCommandantName: 'Imogen Hale', coastGuardCommandantBirth: -48.0, coastGuardCommandantTermStart: 2.5);
@@ -192,7 +207,10 @@ class GovernmentPageBuilderTest extends TestCase
         $this->assertNull($departments[\App\Data\District\Institutions::STATE_GUARD]['head']);
     }
 
-    /** Each guard's page carries its name and mandate before it has a commander, and the commander and whom the Council passed over once it does. */
+    /**
+     * Each guard's page carries its name and mandate before it has a commander, and the commander and whom the Council
+     * passed over once it does.
+     */
     public function testTheGuardPagesReadTheirCommanders(): void
     {
         $empty = $this->builder()->stateGuard(new PoliticsStateDTO());
@@ -297,7 +315,9 @@ class GovernmentPageBuilderTest extends TestCase
         $this->assertSame(GovernmentPageBuilder::PARTY_COLORS[Diet::CIVIC], $seats[0]['color'], 'The bigger-state bloc sits on the left, its biggest-state party leftmost.');
     }
 
-    /** The history runs newest first, marks a change of government, and each vote leaves a point on every party's trail. */
+    /**
+     * The history runs newest first, marks a change of government, and each vote leaves a point on every party's trail.
+     */
     public function testTheHistoryRunsNewestFirst(): void
     {
         $first = $this->election(4.0, [Diet::VANGUARD, Diet::EXCHANGE], [Diet::VANGUARD, Diet::EXCHANGE]);
@@ -452,7 +472,10 @@ class GovernmentPageBuilderTest extends TestCase
         $this->assertStringContainsString('the law would need 12%, more than the 10% it may hold', $note(0.40));
     }
 
-    /** A majority government's budget waits only on the next round; the page shows the balance the debt plan calls for, the target and the pace. */
+    /**
+     * A majority government's budget waits only on the next round; the page shows the balance the debt plan calls for,
+     * the target and the pace.
+     */
     public function testTheBudgetShowsTheDebtPlan(): void
     {
         $rightBloc = Diet::membership([Diet::VANGUARD, Diet::EXCHANGE, Diet::CHARTISTS, Diet::NEW_HORIZON]);
@@ -573,11 +596,14 @@ class GovernmentPageBuilderTest extends TestCase
         return $leaders;
     }
 
-    /** Diets drawn at random -- seats, positions, cabinet and supporters -- lay out as cleanly as the hand-picked ones. */
+    /**
+     * Diets drawn at random -- seats, positions, cabinet and supporters -- lay out as cleanly as the hand-picked ones.
+     */
     public function testRandomDietsLayOutCleanly(): void
     {
         $builder = $this->builder();
-        mt_srand(20261001); // seeded once the builder's mock is built: PHPUnit names a new mock class from the same generator
+        // seeded once the builder's mock is built: PHPUnit names a new mock class from the same generator
+        mt_srand(20261001);
         $uniform = static fn(): float => (mt_rand() / mt_getrandmax() * 2.0) - 1.0;
         for ($draw = 0; $draw < 500; ++$draw) {
             $weights = array_map(static fn(): float => -log(max(1e-9, mt_rand() / mt_getrandmax())), Diet::PARTIES);
@@ -644,9 +670,9 @@ class GovernmentPageBuilderTest extends TestCase
     }
 
     /**
-     * Once the Monetary Authority has formed the page shows its governor, the candidates the Council passed over and the
-     * committee, each with a name, an age, a stance and seat dates, the committee's make-up, the Council's councillors
-     * likewise with how the Council leans, and the last meeting's vote; before, nothing of it.
+     * Once the Monetary Authority has formed the page shows its governor, the candidates the Council passed over and
+     * the committee, each with a name, an age, a stance and seat dates, the committee's make-up, the Council's
+     * councillors likewise with how the Council leans, and the last meeting's vote; before, nothing of it.
      */
     public function testThePageShowsTheMonetaryAuthority(): void
     {
@@ -778,7 +804,9 @@ class GovernmentPageBuilderTest extends TestCase
         }
     }
 
-    /** A party governing alone is its own cabinet: it is ringed, and there is no mark of where a coalition governs from. */
+    /**
+     * A party governing alone is its own cabinet: it is ringed, and there is no mark of where a coalition governs from.
+     */
     public function testAPartyGoverningAloneIsItsOwnCabinet(): void
     {
         $page = $this->builder()->buildDiet(new MacroStateDTO(), new PoliticsStateDTO());
@@ -795,7 +823,10 @@ class GovernmentPageBuilderTest extends TestCase
         }
     }
 
-    /** The Trade & Migration Office shows its three laws as in force, as the next budget sets them and as the market expects them, with what each does. */
+    /**
+     * The Trade & Migration Office shows its three laws as in force, as the next budget sets them and as the market
+     * expects them, with what each does.
+     */
     public function testTheTradeOfficeShowsItsThreeLaws(): void
     {
         $politics = new PoliticsStateDTO(importTariffRate: 0.05, foreignBuyerTaxRate: 0.15, sittingLevers: ['tariff' => 0.08], forecastLevers: ['tariff' => 0.02, 'foreignBuyerTax' => 0.0]);
@@ -996,7 +1027,10 @@ class GovernmentPageBuilderTest extends TestCase
         $this->assertEqualsWithDelta((1.0 / 0.952) - 1.0, $levers['Extraction compliance cost']['platform'], 1e-12);
     }
 
-    /** A Civic cabinet's budget puts a carbon price in front of the Diet, and the budget page names what it adds to power. */
+    /**
+     * A Civic cabinet's budget puts a carbon price in front of the Diet, and the budget page names what it adds to
+     * power.
+     */
     public function testTheBudgetCarriesTheEnvironmentLevers(): void
     {
         $page = $this->builder()->buildBudget(new MacroStateDTO(totalTime: 0.2, sovereignDebtToGdp: 0.5), new PoliticsStateDTO(
@@ -1064,7 +1098,10 @@ class GovernmentPageBuilderTest extends TestCase
         }
     }
 
-    /** The last decision reads as a hold only when it left the printed rate unchanged, and the next meeting is on the grid. */
+    /**
+     * The last decision reads as a hold only when it left the printed rate unchanged, and the next meeting is on the
+     * grid.
+     */
     public function testTheRateDecisionAndTheNextMeeting(): void
     {
         $politics = static fn(float $change): PoliticsStateDTO => new PoliticsStateDTO(totalTime: 3.30, authoritySalt: 5.0, lastMeetingAt: 3.25, lastMeetingRate: 0.04, lastMeetingChange: $change);
@@ -1246,7 +1283,10 @@ class GovernmentPageBuilderTest extends TestCase
         $this->assertSame($chart['plot'][1], $chart['vote']['x'], 'The axis runs to the vote.');
     }
 
-    /** The page reads the meetings over the chart's span and the forecasts of the vote the market's latest forecast is for. */
+    /**
+     * The page reads the meetings over the chart's span and the forecasts of the vote the market's latest forecast is
+     * for.
+     */
     public function testThePageChartsTheRecordedMeetingsAndForecasts(): void
     {
         $elections = $this->createStub(DietElectionRepository::class);

@@ -36,11 +36,14 @@ class StreamContext
     /** Strategic mean reversion speed (kappa) pulling dynamic weights back toward long-term franchise target. */
     public const DEFAULT_MIX_REVERSION_SPEED = 0.08;
 
-    /** @var array<string, int> Regime clocks resolved this quarter (quarters active including this one; 0 = inactive). */
+    /**
+     * @var array<string, int> Regime clocks resolved this quarter (quarters active including this one; 0 = inactive).
+     */
     private array $regimes = [];
 
     /**
-     * @param array<string, float> $previousMomentum Map of previous quarter stream Z-scores ($stock->getEarningsMomentumZ())
+     * @param array<string, float> $previousMomentum Map of previous quarter stream Z-scores
+     *                                               ($stock->getEarningsMomentumZ())
      * @param MathUtility $mathUtility
      * @param float $firmFactorLoading Default one-factor loading rho applied to every stream drawn via generateZ().
      *                                 Segments of one firm share customers, brand and management, so their
@@ -50,9 +53,15 @@ class StreamContext
         private readonly array $previousMomentum,
         private readonly MathUtility $mathUtility,
         private readonly float $firmFactorLoading = 0.0,
-        /** This quarter's realized N(0,1) demand factor of the firm's macro sector; null when the macro state carries none. */
+        /**
+         * This quarter's realized N(0,1) demand factor of the firm's macro sector; null when the macro state carries
+         * none.
+         */
         private readonly ?float $sectorInnovation = null,
-        /** Loading rho_s of every revenue stream on the sector demand factor (rho_s^2 = variance shared with sector peers). */
+        /**
+         * Loading rho_s of every revenue stream on the sector demand factor (rho_s^2 = variance shared with sector
+         * peers).
+         */
         private readonly float $sectorFactorLoading = 0.0,
     ) {}
 
@@ -195,9 +204,11 @@ class StreamContext
      * what recognizeBacklog() would book on the persisted opening backlog with orders at their steady rate.
      * It is known before the quarter's awards arrive, which is why a contractor staffs to it.
      *
-     * @param array<string, float> $momentum  The stream state map persisted last quarter ($stock->getEarningsMomentumZ()).
+     * @param array<string, float> $momentum  The stream state map persisted last quarter
+     *                                        ($stock->getEarningsMomentumZ()).
      * @param string               $key       Stream key the backlog was recognized under.
-     * @param float                $burnRate  Fraction of available work executed per quarter, as passed to recognizeBacklog().
+     * @param float                $burnRate  Fraction of available work executed per quarter, as passed to
+     *                                        recognizeBacklog().
      */
     public static function openingWorkload(array $momentum, string $key, float $burnRate): float
     {

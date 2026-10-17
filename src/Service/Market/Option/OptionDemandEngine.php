@@ -38,19 +38,42 @@ use App\Service\Math\FinancialConstants;
 final class OptionDemandEngine
 {
     // --- Public Option Demand (Bollen & Whaley 2004 net buying pressure) ---
-    /** The public's net long position across a name's whole chain, in contracts, as a multiple of its average daily volume converted to contract-equivalents. The public is a persistent NET BUYER of options, which is the whole reason a dealer is structurally short them. */
+    /**
+     * The public's net long position across a name's whole chain, in contracts, as a multiple of its average daily
+     * volume converted to contract-equivalents. The public is a persistent NET BUYER of options, which is the whole
+     * reason a dealer is structurally short them.
+     */
     public const OPTION_PUBLIC_OPEN_INTEREST_ADV_MULTIPLE = 0.50;
-    /** Absolute delta the public's demand is centred on. Open interest concentrates out of the money rather than at it: the buyer is paying for convexity, not for the underlying. */
+    /**
+     * Absolute delta the public's demand is centred on. Open interest concentrates out of the money rather than at it:
+     * the buyer is paying for convexity, not for the underlying.
+     */
     public const OPTION_PUBLIC_TARGET_DELTA = 0.30;
-    /** Width of that concentration, in delta. Wide enough that the whole listed ladder carries some interest, narrow enough that the wings do not dominate it. */
+    /**
+     * Width of that concentration, in delta. Wide enough that the whole listed ladder carries some interest, narrow
+     * enough that the wings do not dominate it.
+     */
     public const OPTION_PUBLIC_DELTA_DISPERSION = 0.18;
-    /** Share of single-name public demand that goes to calls in calm conditions. Bollen & Whaley find net buying pressure in INDIVIDUAL equity options is call-driven — the lottery preference of Bali, Cakici & Whitelaw (2011) — where in index options it is puts. */
+    /**
+     * Share of single-name public demand that goes to calls in calm conditions. Bollen & Whaley find net buying
+     * pressure in INDIVIDUAL equity options is call-driven — the lottery preference of Bali, Cakici & Whitelaw (2011) —
+     * where in index options it is puts.
+     */
     public const OPTION_PUBLIC_CALL_SHARE = 0.60;
-    /** Shift of that share toward puts per unit of market volatility above its baseline: hedging demand displaces lottery demand as the market becomes frightening, which is what steepens a skew in a selloff. */
+    /**
+     * Shift of that share toward puts per unit of market volatility above its baseline: hedging demand displaces
+     * lottery demand as the market becomes frightening, which is what steepens a skew in a selloff.
+     */
     public const OPTION_PUBLIC_FEAR_PUT_SENSITIVITY = 1.50;
-    /** Decay of demand with time to expiry, per year. Listed open interest is concentrated in the front months; the back months are quoted more than they are held. */
+    /**
+     * Decay of demand with time to expiry, per year. Listed open interest is concentrated in the front months; the back
+     * months are quoted more than they are held.
+     */
     public const OPTION_PUBLIC_EXPIRY_DECAY = 2.00;
-    /** Years for public open interest to close 63% of the gap to its target. Positions are opened and rolled over weeks; a book that rebuilt itself every tick would be a flow, not a position. */
+    /**
+     * Years for public open interest to close 63% of the gap to its target. Positions are opened and rolled over weeks;
+     * a book that rebuilt itself every tick would be a flow, not a position.
+     */
     public const OPTION_PUBLIC_DEMAND_HORIZON_YEARS = 0.08;
 
     public function __construct(

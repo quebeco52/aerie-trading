@@ -63,7 +63,10 @@ class MacroReport
     #[ORM\Column(type: Types::JSON, nullable: true)]
     private ?array $quarterDiagnostics = null;
 
-    /** App\Service\Macro\MacroConfigFingerprint of the constants that ran the quarter, so a dump can split at a recalibration. */
+    /**
+     * App\Service\Macro\MacroConfigFingerprint of the constants that ran the quarter, so a dump can split at a
+     * recalibration.
+     */
     #[ORM\Column(length: 16, nullable: true)]
     private ?string $configFingerprint = null;
 
@@ -190,7 +193,10 @@ class MacroReport
     #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4)]
     private ?string $exchangeRateIndexEma = null;
 
-    /** The exchange rate level this economy treats as normal; a consumer wanting "is the currency strong" reads the deviation from it, not from the nominal 100 baseline. */
+    /**
+     * The exchange rate level this economy treats as normal; a consumer wanting "is the currency strong" reads the
+     * deviation from it, not from the nominal 100 baseline.
+     */
     #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
     private ?string $exchangeRateTrend = null;
 
@@ -740,7 +746,10 @@ class MacroReport
     #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
     private ?string $demandShock = null;
 
-    /** The part of that level the demand disasters put there, still reverting; the jumps themselves are in quarter_diagnostics. */
+    /**
+     * The part of that level the demand disasters put there, still reverting; the jumps themselves are in
+     * quarter_diagnostics.
+     */
     #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 6, nullable: true)]
     private ?string $demandDisasterShock = null;
 

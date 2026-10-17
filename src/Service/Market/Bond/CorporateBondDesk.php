@@ -44,9 +44,17 @@ use Doctrine\ORM\EntityManagerInterface;
 final class CorporateBondDesk
 {
     // --- Corporate Bond Issuance ---
-    /** Original maturities a firm issues at, cycled so a ladder ends up spread across the curve instead of stacked on one point. */
+    /**
+     * Original maturities a firm issues at, cycled so a ladder ends up spread across the curve instead of stacked on
+     * one point.
+     */
     public const CORPORATE_ISSUE_TENORS = [3.0, 5.0, 7.0, 10.0];
-    /** Wholesale debt a firm must carry before the public market is worth tapping. DERIVED, not chosen: it is exactly the debt at which a full ladder of minimum-size issues fits inside the public tranche. Set independently, the two rules disagree — a firm passes the debt gate, then every deal it tries to bring prices below the minimum size and it silently never issues at all. */
+    /**
+     * Wholesale debt a firm must carry before the public market is worth tapping. DERIVED, not chosen: it is exactly
+     * the debt at which a full ladder of minimum-size issues fits inside the public tranche. Set independently, the two
+     * rules disagree — a firm passes the debt gate, then every deal it tries to bring prices below the minimum size and
+     * it silently never issues at all.
+     */
     public const CORPORATE_MIN_PUBLIC_DEBT = (FinancialConstants::CORPORATE_LADDER_ISSUES * FinancialConstants::CORPORATE_MIN_ISSUE_FACE) / FinancialConstants::CORPORATE_PUBLIC_DEBT_SHARE;
     /** Reconciliations of the public tranche per year. A firm comes to market when it has room, not continuously. */
     public const CORPORATE_ISSUANCE_PER_YEAR = 4;
@@ -154,7 +162,10 @@ final class CorporateBondDesk
         return max(0.0, (float) $stock->getWholesaleDebt()) * FinancialConstants::CORPORATE_PUBLIC_DEBT_SHARE;
     }
 
-    /** The most a firm may have listed before it buys paper back: its public share of what it owes, plus one minimum issue. */
+    /**
+     * The most a firm may have listed before it buys paper back: its public share of what it owes, plus one minimum
+     * issue.
+     */
     public function listedFaceCeiling(Stock $stock): float
     {
         return $this->targetPublicFace($stock) + FinancialConstants::CORPORATE_MIN_ISSUE_FACE;

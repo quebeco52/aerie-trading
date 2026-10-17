@@ -35,7 +35,10 @@ use App\Service\Model\StreamContext;
 class ConstructionBusinessModel extends StandardCorporateBusinessModel
 {
     // --- Operating Cyclicality & Demand Structure ---
-    /** Elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). Private capex builds are cyclical; public works are not. */
+    /**
+     * Elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). Private capex builds
+     * are cyclical; public works are not.
+     */
     public const OPERATING_CYCLICALITY = 1.20;
     /** Own-price elasticity of demand: volume lost per unit of real price increase. */
     public const PRICE_ELASTICITY_OF_DEMAND = 0.60;
@@ -43,13 +46,19 @@ class ConstructionBusinessModel extends StandardCorporateBusinessModel
     public const INDUSTRY_SUBSTITUTABILITY = 0.50;
 
     // --- Input Cost Basket ---
-    /** Shares of the variable cost base by input channel, measured from the BEA input-output accounts with supply-chain content (labor still the model's own). */
+    /**
+     * Shares of the variable cost base by input channel, measured from the BEA input-output accounts with supply-chain
+     * content (labor still the model's own).
+     */
     public const INPUT_COST_EXPOSURES = InputOutputExposures::CONSTRUCTION;
     /** Fixed-price contracts reprice only at the next award: material moves take a year to reach bid prices. */
     public const INPUT_PASS_THROUGH_LAG_YEARS = 1.00;
 
     // --- Demand Transmission Lag ---
-    /** Years for a move in the output gap to reach the order book. Permits, financing and design run a year or more ahead of a break-ground, so today's backlog was ordered into a different economy. */
+    /**
+     * Years for a move in the output gap to reach the order book. Permits, financing and design run a year or more
+     * ahead of a break-ground, so today's backlog was ordered into a different economy.
+     */
     public const DEMAND_LAG_YEARS = 1.50;
 
     // --- Analyst Visibility & Error ---
@@ -60,11 +69,17 @@ class ConstructionBusinessModel extends StandardCorporateBusinessModel
     public const BASE_COVERAGE_ERROR = 0.08;
 
     // --- Public Works ---
-    /** Civil order intake per unit of government purchases above the founding level, as a fraction: 0.30, a 10% rise in purchases adds 3% to public-works awards. */
+    /**
+     * Civil order intake per unit of government purchases above the founding level, as a fraction: 0.30, a 10% rise in
+     * purchases adds 3% to public-works awards.
+     */
     public const CIVIL_GOVERNMENT_SPENDING_SENSITIVITY = 0.30;
 
     // --- Backlog & Order Book ---
-    /** Fraction of the civil infrastructure backlog executed and recognized each quarter (multi-year public works, ~4 quarters of coverage). */
+    /**
+     * Fraction of the civil infrastructure backlog executed and recognized each quarter (multi-year public works, ~4
+     * quarters of coverage).
+     */
     public const CIVIL_BACKLOG_BURN_RATE = 0.20;
     /** Fraction of the commercial EPC backlog executed and recognized each quarter (~3 quarters of coverage). */
     public const COMMERCIAL_BACKLOG_BURN_RATE = 0.25;
@@ -98,13 +113,22 @@ class ConstructionBusinessModel extends StandardCorporateBusinessModel
 
     /** Commercial orders per unit of net tightening in bank lending standards, both ways: +0.2 cuts orders 6%. */
     public const SLOOS_CREDIT_TIGHTENING_SCALAR = 0.30;
-    /** Private EPC orders lost per unit of real policy rate above r*: 100bp of tight stance takes 2% off awards before cyclicality, and an easy one adds back its share (FinancialConstants::RATE_EASING_SLOPE_SHARE). */
+    /**
+     * Private EPC orders lost per unit of real policy rate above r*: 100bp of tight stance takes 2% off awards before
+     * cyclicality, and an easy one adds back its share (FinancialConstants::RATE_EASING_SLOPE_SHARE).
+     */
     public const RATE_STANCE_ORDER_SENSITIVITY = 2.0;
     /** Sensitivity of private development EPC orders to the credit-to-GDP gap. */
     public const CREDIT_GAP_ORDER_SENSITIVITY = 0.50;
-    /** Civil orders per unit of district catastrophe burden above an average year: a season at twice the average burden adds a tenth to the infrastructure order book. */
+    /**
+     * Civil orders per unit of district catastrophe burden above an average year: a season at twice the average burden
+     * adds a tenth to the infrastructure order book.
+     */
     public const CATASTROPHE_REBUILD_SENSITIVITY = 0.10;
-    /** Facilities O&M volume per unit of lagged output gap before cyclicality: recurring site work flexes at a fifth of private EPC's 1.5. */
+    /**
+     * Facilities O&M volume per unit of lagged output gap before cyclicality: recurring site work flexes at a fifth of
+     * private EPC's 1.5.
+     */
     public const MAINTENANCE_GDP_SENSITIVITY = 0.30;
 
     // --- Tail Risk & Shock Events ---
@@ -177,7 +201,8 @@ class ConstructionBusinessModel extends StandardCorporateBusinessModel
         // Nullify global generic demand shifts to handle macro cycles discretely per stream.
         $physics['macro_demand_shift'] = 0.0;
         $physics['pricing_power_multiplier'] = 1.0;
-        // Inflation is carried inside this model's own stream physics: neither price nor cost base inflates at the engine level.
+        // Inflation is carried inside this model's own stream physics: neither price nor cost base inflates at the
+        // engine level.
         $physics['input_cost_multiplier'] = 1.0;
 
         return $physics;
@@ -276,7 +301,8 @@ class ConstructionBusinessModel extends StandardCorporateBusinessModel
         $commercialCreditDrag = $rateDrag + $sloosDrag;
         $maintenanceMacroBoost = $this->resolveMaintenanceVolumeShift($stock, $macroState);
         $govSpendShift = ($macroState->governmentSpendingIndexEma - 100.0) / 100.0;
-        // Reconstruction after a storm season is civil work booked into the backlog (Hallegatte 2008 on post-disaster reconstruction demand).
+        // Reconstruction after a storm season is civil work booked into the backlog (Hallegatte 2008 on post-disaster
+        // reconstruction demand).
         $rebuildShift = max(0.0, $macroState->catastropheLossIndexEma - 1.0) * self::CATASTROPHE_REBUILD_SENSITIVITY;
 
         // --- Tail Risk Events ---
@@ -341,7 +367,8 @@ class ConstructionBusinessModel extends StandardCorporateBusinessModel
             + ($maintenanceZ * $maintenanceWeight * self::FACILITIES_MAINTENANCE_VARIANCE_SCALAR * 0.90);
         $observableShockZ *= $baselineVol;
 
-        // The one-off charge is booked as a special item: in EBIT, out of the run rate, the Street figure and the cost ratio.
+        // The one-off charge is booked as a special item: in EBIT, out of the run rate, the Street figure and the cost
+        // ratio.
         $specialCharge = $overrunWriteDown * $actualRevenue;
 
         return new SectorPhysicsResult(

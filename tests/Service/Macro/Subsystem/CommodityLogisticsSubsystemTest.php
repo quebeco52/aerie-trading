@@ -197,7 +197,10 @@ class CommodityLogisticsSubsystemTest extends TestCase
         $this->assertEqualsWithDelta((1.0 + $amplitude) / (1.0 - $amplitude), $june / $december, 0.01);
     }
 
-    /** EIA Gulf Coast 3-2-1 against WTI, 2010-2024: de-seasonalised log sd 0.44, a half-life of about six months, a ~$19-22 mean. */
+    /**
+     * EIA Gulf Coast 3-2-1 against WTI, 2010-2024: de-seasonalised log sd 0.44, a half-life of about six months, a
+     * ~$19-22 mean.
+     */
     public function testTheCrackIsAsVolatileAndAsPersistentAsTheRealOne(): void
     {
         mt_srand(20260924);
@@ -539,7 +542,9 @@ class CommodityLogisticsSubsystemTest extends TestCase
         $this->assertEqualsWithDelta($targetSupply, $state->energySupplyEma, 0.3, 'Nine years on, capacity has caught up with the price at the supply elasticity.');
     }
 
-    /** Kilian (2009): world demand moves the oil spot as it happens; spare capacity moves the level the base reverts to. */
+    /**
+     * Kilian (2009): world demand moves the oil spot as it happens; spare capacity moves the level the base reverts to.
+     */
     public function testWorldDemandMovesTheSpotAndCapacityMovesTheBase(): void
     {
         $subsystem = $this->quietCommoditySubsystem();
@@ -552,7 +557,8 @@ class CommodityLogisticsSubsystemTest extends TestCase
             $state->energyBasePrice = 100.0;
             $state->energyInventoryIndex = MacroEngine::COMMODITY_INVENTORY_BASELINE;
             for ($i = 0; $i < 400; $i++) {
-                $state->energyPriceIndexEma = 100.0; // hold the price capacity sees, so only demand moves the clearing level
+                // hold the price capacity sees, so only demand moves the clearing level
+                $state->energyPriceIndexEma = 100.0;
                 $state->energySupplyEma = $supply;
                 $state->energyInventoryIndex = 160.0; // full storage: no convenience premium on the spot
                 $subsystem->calculateEnergyShock($state, 0.01);
@@ -589,7 +595,10 @@ class CommodityLogisticsSubsystemTest extends TestCase
         $this->assertEqualsWithDelta($run(4), $run(252), 0.05, 'Two years of capacity build must not depend on how finely the years are ticked.');
     }
 
-    /** A district this size does not set the copper price: metals clear on world demand, so a foreign boom moves the spot with the district flat. */
+    /**
+     * A district this size does not set the copper price: metals clear on world demand, so a foreign boom moves the
+     * spot with the district flat.
+     */
     public function testMetalsClearOnGlobalDemandNotTheDistrictsGapAlone(): void
     {
         $subsystem = $this->quietCommoditySubsystem();
@@ -663,7 +672,10 @@ class CommodityLogisticsSubsystemTest extends TestCase
         return array_map(static fn(float $a, float $b): float => log($a / $b), $shocked, $quiet);
     }
 
-    /** Merton (1976): an oil shock is a move in the level, which then reverts like any other; it does not vanish after a tick. */
+    /**
+     * Merton (1976): an oil shock is a move in the level, which then reverts like any other; it does not vanish after a
+     * tick.
+     */
     public function testAnOilShockLandsInTheBasePriceAndDecaysAtTheReversionSpeed(): void
     {
         $dt = 1.0 / 360.0;
@@ -673,7 +685,10 @@ class CommodityLogisticsSubsystemTest extends TestCase
         $this->assertEqualsWithDelta(log(1.5) * exp(-MacroEngine::ENERGY_MEAN_REVERSION * (count($path) - 1) * $dt), $path[count($path) - 1], 1e-9, 'A year on it has decayed at the reversion speed, not vanished.');
     }
 
-    /** A shock's weight on the price over time is the same at every step size (a one-tick shock's weight shrinks with dt). */
+    /**
+     * A shock's weight on the price over time is the same at every step size (a one-tick shock's weight shrinks with
+     * dt).
+     */
     public function testAnOilShockCarriesTheSameWeightAtEveryStepSize(): void
     {
         $area = function (float $dt): float {
@@ -687,7 +702,10 @@ class CommodityLogisticsSubsystemTest extends TestCase
         $this->assertEqualsWithDelta(log(1.5) * (1.0 - exp(-2.0 * MacroEngine::ENERGY_MEAN_REVERSION)) / MacroEngine::ENERGY_MEAN_REVERSION, $fine, 0.01 * $fine);
     }
 
-    /** A carbon price adds the gas fleet's carbon per MWh to wholesale power, as far as the market passes it through (Fabra & Reguant 2014). */
+    /**
+     * A carbon price adds the gas fleet's carbon per MWh to wholesale power, as far as the market passes it through
+     * (Fabra & Reguant 2014).
+     */
     public function testACarbonPriceAddsTheGasFleetsCarbonToPower(): void
     {
         $subsystem = $this->quietCommoditySubsystem();

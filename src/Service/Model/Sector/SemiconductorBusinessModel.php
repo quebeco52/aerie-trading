@@ -19,8 +19,10 @@ use App\Service\Model\ModelParam;
  * Earnings strategy for Semiconductor Foundries and Photolithography Equipment Manufacturers.
  *
  * Financial Physics:
- * - Extreme Capital Intensity ("Shovel Makers"): Requires astronomical CapEx to build and upgrade cleanrooms and lithography tools.
- * - Non-Linear Fab Utilization Leverage: With massive fixed overhead and depreciation, profitability scales non-linearly with capacity utilization.
+ * - Extreme Capital Intensity ("Shovel Makers"): Requires astronomical CapEx to build and upgrade cleanrooms and
+ *   lithography tools.
+ * - Non-Linear Fab Utilization Leverage: With massive fixed overhead and depreciation, profitability scales
+ *   non-linearly with capacity utilization.
  * - During technological super-cycles, running fabs at 100% capacity generates staggering ROIC (35%+).
  * - During industry inventory corrections, underutilized fabs create brutal earnings drag.
  * - Severe Technological Obsolescence: If R&D/CapEx drops below critical hurdle rates, fab yields collapse.
@@ -28,7 +30,10 @@ use App\Service\Model\ModelParam;
 class SemiconductorBusinessModel extends StandardCorporateBusinessModel
 {
     // --- Operating Cyclicality & Demand Structure ---
-    /** Elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). Inventory bullwhip makes wafer demand hyper-cyclical. */
+    /**
+     * Elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). Inventory bullwhip
+     * makes wafer demand hyper-cyclical.
+     */
     public const OPERATING_CYCLICALITY = 1.50;
     /** Own-price elasticity of demand: volume lost per unit of real price increase. */
     public const PRICE_ELASTICITY_OF_DEMAND = 0.60;
@@ -36,25 +41,40 @@ class SemiconductorBusinessModel extends StandardCorporateBusinessModel
     public const INDUSTRY_SUBSTITUTABILITY = 0.40;
 
     // --- Input Cost Basket ---
-    /** Shares of the variable cost base by input channel, measured from the BEA input-output accounts with supply-chain content (labor still the model's own). */
+    /**
+     * Shares of the variable cost base by input channel, measured from the BEA input-output accounts with supply-chain
+     * content (labor still the model's own).
+     */
     public const INPUT_COST_EXPOSURES = InputOutputExposures::SEMICONDUCTOR;
     /** Leading-edge capacity is scarce: wafer pricing recovers most input inflation. */
     public const PRICING_POWER_INDEX = 0.60;
 
     // --- Inventory Cycle ---
-    /** Order sensitivity to the economy-wide inventory-to-sales gap (Metzler cycle): overhangs trigger destocking, shortfalls restocking. Distributor and OEM chip inventories drive the wafer order book. */
+    /**
+     * Order sensitivity to the economy-wide inventory-to-sales gap (Metzler cycle): overhangs trigger destocking,
+     * shortfalls restocking. Distributor and OEM chip inventories drive the wafer order book.
+     */
     public const INVENTORY_CYCLE_SENSITIVITY = 1.00;
 
     // --- Balance Sheet Realism ---
-    /** Stock-based compensation (ASC 718) as a share of revenue: Semiconductor, 5.04% of revenue, 66 firms (Damodaran, Employee data by industry, US, January 2026). */
+    /**
+     * Stock-based compensation (ASC 718) as a share of revenue: Semiconductor, 5.04% of revenue, 66 firms (Damodaran,
+     * Employee data by industry, US, January 2026).
+     */
     public const STOCK_COMPENSATION_INTENSITY = 0.0504;
 
     // --- FX Exposure ---
-    /** Share of revenue whose competitiveness moves with the trade-weighted exchange rate. Wafers are priced in the trade currency and sold into a global fab and OEM base. */
+    /**
+     * Share of revenue whose competitiveness moves with the trade-weighted exchange rate. Wafers are priced in the
+     * trade currency and sold into a global fab and OEM base.
+     */
     public const FX_REVENUE_EXPOSURE = 0.10;
 
     // --- Demand Transmission Lag ---
-    /** Years for a move in the output gap to reach the order book. Short lead times, but a quarter of booked backlog still separates a demand turn from a shipment. */
+    /**
+     * Years for a move in the output gap to reach the order book. Short lead times, but a quarter of booked backlog
+     * still separates a demand turn from a shipment.
+     */
     public const DEMAND_LAG_YEARS = 0.25;
 
     public function getReversionSpeed(): float
@@ -70,7 +90,10 @@ class SemiconductorBusinessModel extends StandardCorporateBusinessModel
         return 0.125;
     }
     // --- Secular Demand ---
-    /** Business and household investment in information processing equipment as a share of US nominal GDP in 1997 (BEA NIPA Table 5.3.5, private fixed investment and Table 2.4.5). */
+    /**
+     * Business and household investment in information processing equipment as a share of US nominal GDP in 1997 (BEA
+     * NIPA Table 5.3.5, private fixed investment and Table 2.4.5).
+     */
     public const SECULAR_SHARE_1997 = 0.0300;
     /** The same share in 2019. */
     public const SECULAR_SHARE_2019 = 0.0272;
@@ -119,7 +142,10 @@ class SemiconductorBusinessModel extends StandardCorporateBusinessModel
     public const PMI_CHIP_DEMAND_SENSITIVITY = 0.40;
     /** Capacity utilization deviation threshold above baseline triggering fab shortages (~81.5% vs 78.5% baseline). */
     public const BOOM_CAPACITY_UTILIZATION_THRESHOLD = 0.030;
-    /** Capacity utilization deviation threshold below baseline triggering fab underutilization (~75.5% vs 78.5% baseline). */
+    /**
+     * Capacity utilization deviation threshold below baseline triggering fab underutilization (~75.5% vs 78.5%
+     * baseline).
+     */
     public const GLUT_CAPACITY_UTILIZATION_THRESHOLD = -0.030;
 
     // --- CapEx Hurdle & Wafer Yield Rails ---

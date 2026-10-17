@@ -54,7 +54,10 @@ class UtilityBusinessModelTest extends TestCase
         $this->assertGreaterThan(1000.0, $result->actualRevenue);
     }
 
-    /** Rate-base build-out spends cash on plant the allowed return pays for, so it discounts nothing: the multiple is the value. */
+    /**
+     * Rate-base build-out spends cash on plant the allowed return pays for, so it discounts nothing: the multiple is
+     * the value.
+     */
     public function testRateBaseBuildOutDoesNotDiscountTheEarningsValue(): void
     {
         $this->assertSame(100.0, (new UtilityBusinessModel())->calculateEarningsValue(80.0, 100.0));
@@ -86,7 +89,9 @@ class UtilityBusinessModelTest extends TestCase
         $this->assertSame(0, array_search(min($factors), $factors, true), 'Q1 is the trough');
     }
 
-    /** Every seeded utility gets its own industry's calendar; any other industry on the model reads the electric one. */
+    /**
+     * Every seeded utility gets its own industry's calendar; any other industry on the model reads the electric one.
+     */
     public function testEachSeededUtilityResolvesItsIndustrysCalendar(): void
     {
         $seen = [];
@@ -205,7 +210,8 @@ class UtilityBusinessModelTest extends TestCase
 
         $this->assertEqualsWithDelta($roeAt(0.04), $flat->streamZ[UtilityBusinessModel::STATE_AUTHORISED_ROE], 1e-12, 'No move in yields, no move in the allowed return.');
         $this->assertEqualsWithDelta($roeAt(0.06), $risen->streamZ[UtilityBusinessModel::STATE_AUTHORISED_ROE], 0.001, 'Orders carry the allowed return to the yield-implied one.');
-        // Equity equals a year's revenue here, so 0.88pp more allowed return is ~0.9pp of revenue on the regulated share.
+        // Equity equals a year's revenue here, so 0.88pp more allowed return is ~0.9pp of revenue on the regulated
+        // share.
         $this->assertLessThan($flat->clampedMargin - 0.005, $risen->clampedMargin, 'The higher authorised return is recovered in the tariff.');
     }
 
@@ -245,9 +251,9 @@ class UtilityBusinessModelTest extends TestCase
     }
 
     /**
-     * The shortfall a grant leaves on average follows the rate-case cycle the model runs: quarterly cost drift, a filing
-     * at the threshold, decisions at the hazard, the granted share removed, the cap. The closed form misses the cycle's
-     * spread of case lengths and the cap, so it sits within a tenth of it, and falls as commissions grant more.
+     * The shortfall a grant leaves on average follows the rate-case cycle the model runs: quarterly cost drift, a
+     * filing at the threshold, decisions at the hazard, the granted share removed, the cap. The closed form misses the
+     * cycle's spread of case lengths and the cap, so it sits within a tenth of it, and falls as commissions grant more.
      */
     public function testTheSteadyShortfallFollowsTheRateCaseCycle(): void
     {
@@ -280,7 +286,10 @@ class UtilityBusinessModelTest extends TestCase
         $this->assertEqualsWithDelta(-4.0 * log(1.0 - UtilityBusinessModel::RATE_CASE_EXIT_HAZARD), UtilityBusinessModel::RATE_CASE_DECISION_RATE, 1e-4);
     }
 
-    /** Gas sets the power price, so a gas spike reaches a zero-fuel merchant fleet as a windfall, not a squeeze (the 2022 inframarginal rent). */
+    /**
+     * Gas sets the power price, so a gas spike reaches a zero-fuel merchant fleet as a windfall, not a squeeze (the
+     * 2022 inframarginal rent).
+     */
     public function testAGasSpikeIsAWindfallForAZeroFuelMerchantFleet(): void
     {
         $calm = $this->merchantQuarter('BIRD', 100.0, 100.0);
@@ -381,9 +390,9 @@ class UtilityBusinessModelTest extends TestCase
     }
 
     /**
-     * The share of revenue the utility reports the carbon price's power uplift adding to its earnings is what the uplift
-     * adds: a renewable merchant fleet keeps all of it, a fleet with gas at the US share keeps what the gas does not pay
-     * in carbon beyond the price's pass-through.
+     * The share of revenue the utility reports the carbon price's power uplift adding to its earnings is what the
+     * uplift adds: a renewable merchant fleet keeps all of it, a fleet with gas at the US share keeps what the gas does
+     * not pay in carbon beyond the price's pass-through.
      */
     public function testTheReportedCarbonShareIsWhatTheUpliftAddsToEarnings(): void
     {

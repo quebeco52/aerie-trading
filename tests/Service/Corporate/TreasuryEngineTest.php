@@ -160,11 +160,15 @@ class TreasuryEngineTest extends TestCase
         }
 
         $this->assertGreaterThan(0.0, $issued['IBNK'] ?? 0.0, 'Control: without a target the return pulls the dealer into the bond market.');
-        // PERE opens at its 21.05% target: whatever it borrows still leaves 1bn of equity on at least that share of 4.75bn of assets.
+        // PERE opens at its 21.05% target: whatever it borrows still leaves 1bn of equity on at least that share of
+        // 4.75bn of assets.
         $this->assertGreaterThanOrEqual(0.2105, 1_000_000_000.0 / (4_750_000_000.0 + ($issued['PERE'] ?? 0.0)));
     }
 
-    /** PERE's seeded book at a thousandth of the scale: 1bn of equity on 3.75bn of wholesale funding, 15% of it held in cash. */
+    /**
+     * PERE's seeded book at a thousandth of the scale: 1bn of equity on 3.75bn of wholesale funding, 15% of it held in
+     * cash.
+     */
     private function dealerAtSeededLeverage(string $ticker): CapitalAllocationContext
     {
         $stock = new Stock();
@@ -606,7 +610,8 @@ class TreasuryEngineTest extends TestCase
         $engine->finalizeLiquidity($ctx);
 
         $this->assertGreaterThan(0.0, $ctx->equityRaised, 'the bubble offering must execute for this to test anything');
-        $sharesIssued = $ctx->equityRaised / (300.0 * (1.0 - TreasuryEngine::SEASONED_EQUITY_OFFER_DISCOUNT)); // shares go out at the offering discount
+        // shares go out at the offering discount
+        $sharesIssued = $ctx->equityRaised / (300.0 * (1.0 - TreasuryEngine::SEASONED_EQUITY_OFFER_DISCOUNT));
         $this->assertEqualsWithDelta(-$sharesIssued, $stock->getCorporateFlowBacklog(), 1.0, 'the placed stock is queued to flow back onto the tape');
         $this->assertEqualsWithDelta(100_000_000.0 + $sharesIssued, (float) $stock->getSharesOutstanding(), 1.0);
         $this->assertEqualsWithDelta(
@@ -713,7 +718,8 @@ class TreasuryEngineTest extends TestCase
         $this->assertTrue($stock->isPaymentDefault(), 'a maturity nobody will fund is an event of default');
         $this->assertSame(1, $stock->getQuartersInDefault(), 'the grace clock starts at one');
 
-        // Distress is news, not a scripted price move: fair value already carries it through leverage and the cost of equity.
+        // Distress is news, not a scripted price move: fair value already carries it through leverage and the cost of
+        // equity.
         $this->assertNotEmpty($ctx->events);
         foreach ($ctx->events as $event) {
             $this->assertSame(0.0, (float) ($event['shock'] ?? 0.0), 'A distress event moved the price: ' . ($event['description'] ?? ''));
@@ -1694,7 +1700,9 @@ class TreasuryEngineTest extends TestCase
         $this->assertEqualsWithDelta(500_000_000.0, $ctx->newTreasury, 1.0);
     }
 
-    /** A financing action is news in proportion to the firm: one percent of its total assets, not a fixed dollar line. */
+    /**
+     * A financing action is news in proportion to the firm: one percent of its total assets, not a fixed dollar line.
+     */
     public function testFinancingNewsIsMaterialToTheFirmRatherThanAFixedSum(): void
     {
         $operating = (new Stock())->setCorporateTreasury('2000000000')->setGrossPpe('18000000000');

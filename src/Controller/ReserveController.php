@@ -12,9 +12,9 @@ use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Attribute\Route;
 
 /**
- * The Sovereign Reserve Fund's page: its head and the mix they set, its size and budget draw, its weights against policy
- * and band, its stake in every listed company, and its rules. The history comes from /api/macro-reports, the same series
- * the economy page draws.
+ * The Sovereign Reserve Fund's page: its head and the mix they set, its size and budget draw, its weights against
+ * policy and band, its stake in every listed company, and its rules. The history comes from /api/macro-reports, the
+ * same series the economy page draws.
  */
 class ReserveController extends AbstractController
 {

@@ -317,7 +317,10 @@ class StreamContextTest extends TestCase
         $this->assertArrayHasKey(StreamContext::BACKLOG_STATE_PREFIX . 'oem', $context->getStreamZ());
     }
 
-    /** The work in hand is what the backlog books on steady orders: normal when seeded, above it while a surge is worked off. */
+    /**
+     * The work in hand is what the backlog books on steady orders: normal when seeded, above it while a surge is worked
+     * off.
+     */
     public function testOpeningWorkloadIsWhatTheBacklogBooksOnSteadyOrders(): void
     {
         $math = new MathUtility();

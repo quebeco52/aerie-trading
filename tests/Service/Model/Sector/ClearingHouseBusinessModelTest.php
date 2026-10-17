@@ -201,7 +201,10 @@ class ClearingHouseBusinessModelTest extends TestCase
         $this->assertEqualsWithDelta($state['customerDeposits'], $state['treasury'], 1e-9, 'Margin arrives as cash held against it.');
     }
 
-    /** At fixed positions, a doubling of the volatility the margin is struck on doubles the pool (VaR scales with sigma). */
+    /**
+     * At fixed positions, a doubling of the volatility the margin is struck on doubles the pool (VaR scales with
+     * sigma).
+     */
     public function testTheMarginPoolScalesWithTheVolatilityItIsStruckOn(): void
     {
         $macro = new MacroStateDTO(inflationEma: 0.02, marketVolatilityEma: 0.30);
@@ -242,7 +245,10 @@ class ClearingHouseBusinessModelTest extends TestCase
         $this->assertEqualsWithDelta(0.0, $this->model->resolveSectorActivityShift($stock, $anchor), 1e-12);
     }
 
-    /** Volatility reaches fees through one channel, clearing volume: custody float and data licences do not move with it, nor does the root demand shift. */
+    /**
+     * Volatility reaches fees through one channel, clearing volume: custody float and data licences do not move with
+     * it, nor does the root demand shift.
+     */
     public function testVolatilityMovesClearingVolumeAndNothingElse(): void
     {
         $anchorVol = \App\Service\Macro\MacroEngine::MACRO_VOL_BASE_ANCHOR;

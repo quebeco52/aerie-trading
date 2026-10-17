@@ -27,10 +27,15 @@ final class HistoryPruner
     /** Simulated years of full-resolution history kept by default; beyond it a chart is reading bars, not ticks. */
     public const DEFAULT_YEARS_KEPT = 5.0;
 
-    /** Simulated years between retention passes, matching the units the cutoffs themselves are written in: the ticker runs one on each crossing. */
+    /**
+     * Simulated years between retention passes, matching the units the cutoffs themselves are written in: the ticker
+     * runs one on each crossing.
+     */
     public const PRUNE_INTERVAL_YEARS = 1.0;
 
-    /** Simulated years a settled option contract is kept after expiry; the listing grid only reaches four months out. */
+    /**
+     * Simulated years a settled option contract is kept after expiry; the listing grid only reaches four months out.
+     */
     public const EXPIRED_OPTION_YEARS_KEPT = 1.0;
 
     /**
@@ -44,14 +49,23 @@ final class HistoryPruner
      */
     public const MACRO_QUARTERS_KEPT = 480;
 
-    /** Rows a series keeps per simulated year once older than the full-resolution window: one a week, the bar a chart of that span is drawn in. */
+    /**
+     * Rows a series keeps per simulated year once older than the full-resolution window: one a week, the bar a chart of
+     * that span is drawn in.
+     */
     public const THINNED_ROWS_PER_YEAR = 52;
 
     // --- Batching ---
-    /** Primary-key ids one DELETE spans. Short statements keep the row locks and undo log small while the ticker keeps inserting behind them. */
+    /**
+     * Primary-key ids one DELETE spans. Short statements keep the row locks and undo log small while the ticker keeps
+     * inserting behind them.
+     */
     public const DELETE_BATCH_IDS = 50000;
 
-    /** History tables carrying a sim_time stamp, all downsampled on the same cutoff: table => the column naming its series. */
+    /**
+     * History tables carrying a sim_time stamp, all downsampled on the same cutoff: table => the column naming its
+     * series.
+     */
     public const HISTORY_TABLES = ['stock_history' => 'stock_id', 'etf_history' => 'etf_id', 'bond_history' => 'bond_id'];
 
     /** History tables whose rows are OHLCV bars, folded into the row a thinned week keeps. */

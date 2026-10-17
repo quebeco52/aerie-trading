@@ -44,9 +44,9 @@ class AssetManagementBusinessModelTest extends TestCase
         // Invested capital should equal earning assets (Equity + WholesaleDebt - Treasury = 400.0)
         $this->assertEqualsWithDelta(400.0, $metrics['invested_capital'], 0.01);
 
-        // Baseline ROIC should reflect structural operating return without double-leverage inflation
-        // With 20% target ROE and 25% tax, target net income on 100 equity is 20, EBT is 26.67.
-        // Interest expense on 300 debt at ~5% is 15, so optimal EBIT is ~41.67 across 400 earning assets (~10.42% yield).
+        // Baseline ROIC should reflect structural operating return without double-leverage inflation With 20% target
+        // ROE and 25% tax, target net income on 100 equity is 20, EBT is 26.67. Interest expense on 300 debt at ~5% is
+        // 15, so optimal EBIT is ~41.67 across 400 earning assets (~10.42% yield).
         $this->assertLessThan(0.30, $metrics['baseline_roic']);
         $this->assertGreaterThan(0.01, $metrics['baseline_roic']);
     }

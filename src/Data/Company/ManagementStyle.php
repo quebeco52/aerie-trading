@@ -37,11 +37,19 @@ enum ManagementStyle: string
 {
     /** The balanced default: invests at the cost of capital and pays out what it cannot reinvest. */
     case Operator = 'operator';
-    /** Jensen's agency case: growth is the objective, so projects clear a hurdle below the true cost of capital and payout is minimised. */
+    /**
+     * Jensen's agency case: growth is the objective, so projects clear a hurdle below the true cost of capital and
+     * payout is minimised.
+     */
     case EmpireBuilder = 'empire_builder';
-    /** The disciplined distributor: a deliberately high internal hurdle, and cash the firm cannot beat it with goes back to shareholders. */
+    /**
+     * The disciplined distributor: a deliberately high internal hurdle, and cash the firm cannot beat it with goes back
+     * to shareholders.
+     */
     case Steward = 'steward';
-    /** Balance-sheet conservatism: reinvests cautiously and retains cash against the cycle rather than distributing it. */
+    /**
+     * Balance-sheet conservatism: reinvests cautiously and retains cash against the cycle rather than distributing it.
+     */
     case Fortress = 'fortress';
 
     /**
@@ -170,7 +178,10 @@ enum ManagementStyle: string
         return $trueHurdleRate * $this->hurdleBias();
     }
 
-    /** The cash balance this manager runs the firm at, given the model's own target: the liability backing inside it as it stands, the buffer above it biased. */
+    /**
+     * The cash balance this manager runs the firm at, given the model's own target: the liability backing inside it as
+     * it stands, the buffer above it biased.
+     */
     public function appliedTargetCash(float $targetOperatingCash, float $liabilityBacking = 0.0): float
     {
         $backing = max(0.0, min($liabilityBacking, $targetOperatingCash));

@@ -16,7 +16,9 @@ use App\Service\Math\TimeSeries;
 class LaborMarketSubsystem
 {
     // --- Okun's Law & Diamond-Mortensen-Pissarides Beveridge Curve ---
-    /** Asymptotic frictional lower bound on unemployment (3.2%): search friction keeps even a red-hot economy above ~3%. */
+    /**
+     * Asymptotic frictional lower bound on unemployment (3.2%): search friction keeps even a red-hot economy above ~3%.
+     */
     public const MIN_FRICTIONAL_UNEMPLOYMENT = 0.032;
 
     // --- Okun's Law & Diamond-Mortensen-Pissarides Beveridge Curve ---
@@ -26,7 +28,11 @@ class LaborMarketSubsystem
     public const WAGE_TIGHTNESS_SENSITIVITY = 0.010;
     /** Annual adjustment speed of nominal wage settlements toward market-clearing equilibrium. */
     public const WAGE_ADJUSTMENT_SPEED = 2.0;
-    /** Okun's beta on the level gap, set for a steadier labour market than the US: the engine's Ball-Leigh-Loungani (2017) slope (HP 1600, both sides) then reads -0.37, Canada's and the Netherlands' 1996-2019, against the US -0.59 and the UK -0.26 (var/harness/okun_real.py). */
+    /**
+     * Okun's beta on the level gap, set for a steadier labour market than the US: the engine's Ball-Leigh-Loungani
+     * (2017) slope (HP 1600, both sides) then reads -0.37, Canada's and the Netherlands' 1996-2019, against the US
+     * -0.59 and the UK -0.26 (var/harness/okun_real.py).
+     */
     public const OKUNS_COEFFICIENT = 0.7;
     /** Annual adjustment speed of employment expansion during economic recoveries (search & matching friction). */
     public const OKUNS_HIRING_SPEED = 1.5;
@@ -36,7 +42,10 @@ class LaborMarketSubsystem
     public const NAIRU_HYSTERESIS_SPEED = 0.10;
     /** Excess unemployment above NAIRU required before structural scarring activates. */
     public const NAIRU_HYSTERESIS_THRESHOLD = 0.005;
-    /** Annual speed at which scarring heals toward the natural rate (Ball 2009), always on: a ~7 year half-life, and with slack held steady the NAIRU settles where scarring and healing balance instead of ratcheting. */
+    /**
+     * Annual speed at which scarring heals toward the natural rate (Ball 2009), always on: a ~7 year half-life, and
+     * with slack held steady the NAIRU settles where scarring and healing balance instead of ratcheting.
+     */
     public const NAIRU_REABSORPTION_SPEED = 0.10;
     /** Structural floor for NAIRU (frictional minimum). */
     public const MIN_NAIRU = 0.025;
@@ -46,15 +55,24 @@ class LaborMarketSubsystem
     public const WAGE_DOWNWARD_RIGIDITY_FACTOR = 0.30;
 
     // --- Nominal Wage Ceiling ---
-    /** Ceiling on the wage-growth target, uncited: it binds once expected inflation passes ~6.5%, below US hourly compensation's 1970s peaks (~10-11%), so it caps how far a wage-price spiral runs. */
+    /**
+     * Ceiling on the wage-growth target, uncited: it binds once expected inflation passes ~6.5%, below US hourly
+     * compensation's 1970s peaks (~10-11%), so it caps how far a wage-price spiral runs.
+     */
     public const MAX_NOMINAL_WAGE_GROWTH = 0.08;
 
     // --- Wage Error Correction (Blanchard & Katz 1999) ---
-    /** Annual pull of wage growth against the real wage's gap to trend productivity: US nonfarm business 1960-1999, wages on the lagged labor share (se 0.10; var/harness/labor_real.py). */
+    /**
+     * Annual pull of wage growth against the real wage's gap to trend productivity: US nonfarm business 1960-1999,
+     * wages on the lagged labor share (se 0.10; var/harness/labor_real.py).
+     */
     public const WAGE_ERROR_CORRECTION_SPEED = 0.12;
 
     // --- Migration Answering Jobs (Blanchard & Katz 1992) ---
-    /** Labour-force growth a point of unemployment below its natural rate draws in, per point of net migration the law admits: 25, so an open regime's 0.8% a year swings by 0.2pp a point and a closed one's 0.1% by almost nothing. */
+    /**
+     * Labour-force growth a point of unemployment below its natural rate draws in, per point of net migration the law
+     * admits: 25, so an open regime's 0.8% a year swings by 0.2pp a point and a closed one's 0.1% by almost nothing.
+     */
     public const MIGRATION_JOBS_RESPONSE = 25.0;
 
     // --- Month-End Unemployment Record ---
@@ -62,7 +80,10 @@ class LaborMarketSubsystem
     public const UNEMPLOYMENT_RECORD_MONTHS = 12;
 
     public function __construct(
-        /** Records what moved unemployment, the NAIRU and wages. Null in a test or a headless harness, off everywhere the ticker is not. */
+        /**
+         * Records what moved unemployment, the NAIRU and wages. Null in a test or a headless harness, off everywhere
+         * the ticker is not.
+         */
         private readonly ?MacroDiagnosticsProbe $diagnostics = null,
     ) {}
 
@@ -114,10 +135,10 @@ class LaborMarketSubsystem
     }
 
     /**
-     * Migration that answers the labour market (Blanchard & Katz 1992): on top of the newcomers the law admits, more come
-     * while jobs are plentiful and fewer while they are scarce, in proportion to how open the law keeps the door. The
-     * newcomers add to the labour force and to potential (calculatePotentialAndNominalGdp()); output they do not yet
-     * produce reads as slack, so arrivals ease a tight labour market and departures a slack one.
+     * Migration that answers the labour market (Blanchard & Katz 1992): on top of the newcomers the law admits, more
+     * come while jobs are plentiful and fewer while they are scarce, in proportion to how open the law keeps the door.
+     * The newcomers add to the labour force and to potential (calculatePotentialAndNominalGdp()); output they do not
+     * yet produce reads as slack, so arrivals ease a tight labour market and departures a slack one.
      */
     public function calculateCyclicalMigration(MacroState $state): void
     {
@@ -187,8 +208,9 @@ class LaborMarketSubsystem
     public function calculateLaborMarketAndWages(MacroState $state, float $tfpGrowthRate, float $dt): void
     {
         $effectiveUnemployment = max(self::MIN_FRICTIONAL_UNEMPLOYMENT, $state->unemploymentRate);
-        // A scarred NAIRU is a matching-efficiency loss (Pissarides 2000): the curve shifts out by the square of the NAIRU's
-        // rise, so tightness at the NAIRU stays the natural tightness and scarring is not read as standing slack.
+        // A scarred NAIRU is a matching-efficiency loss (Pissarides 2000): the curve shifts out by the square of the
+        // NAIRU's rise, so tightness at the NAIRU stays the natural tightness and scarring is not read as standing
+        // slack.
         $beveridgeConstant = self::BEVERIDGE_CURVE_CONSTANT * (($state->nairu / MacroEngine::NATURAL_UNEMPLOYMENT) ** 2);
         $state->jobVacanciesRate = max(0.01, min(0.12, $beveridgeConstant / $effectiveUnemployment));
         $state->laborTightness = $state->jobVacanciesRate / $effectiveUnemployment;

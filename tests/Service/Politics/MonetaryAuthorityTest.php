@@ -84,8 +84,8 @@ class MonetaryAuthorityTest extends TestCase
     }
 
     /**
-     * At Year 1 everyone was seated before it: the councillors under their own names, the governor whose term began five
-     * years earlier, and six members; each with a stance and an age at seating on the record's range; and the
+     * At Year 1 everyone was seated before it: the councillors under their own names, the governor whose term began
+     * five years earlier, and six members; each with a stance and an age at seating on the record's range; and the
      * committee's balance and supermajority are what the economy reads.
      */
     public function testTheAuthorityAtYearOneWasSeatedBeforeIt(): void
@@ -143,7 +143,9 @@ class MonetaryAuthorityTest extends TestCase
         $this->assertNearestFirstDrawn(self::shortlist((int) $state->authoritySalt, 'governor', Authority::OPENING_GOVERNOR_TERM_END), $state->governorStance, $state->governorBirth, $median);
     }
 
-    /** A committee seat falling vacant goes to the candidate nearest the governor's stance: the governor's committee. */
+    /**
+     * A committee seat falling vacant goes to the candidate nearest the governor's stance: the governor's committee.
+     */
     public function testACommitteeSeatGoesToTheCandidateNearestTheGovernor(): void
     {
         $state = self::runTo(self::opened(), Authority::memberOpeningTermEnd(0) + self::DT);
@@ -166,7 +168,10 @@ class MonetaryAuthorityTest extends TestCase
         $this->assertSame(-1.0, Authority::majority(-1.0 / 7.0));
     }
 
-    /** The supermajority changes only when someone is seated on the committee or a swing vote on it changes camp, and every change is marked for the headline. */
+    /**
+     * The supermajority changes only when someone is seated on the committee or a swing vote on it changes camp, and
+     * every change is marked for the headline.
+     */
     public function testAShiftInTheMajorityIsMarkedWhenItHappens(): void
     {
         $state = self::opened(3);

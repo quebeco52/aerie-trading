@@ -41,8 +41,9 @@ final class ElectionForecast
     private const NEGLIGIBLE_CHANCE = 1e-4;
 
     /**
-     * One tick: reads the sitting government's coming budget, pools a poll published on it and forecasts afresh; on the day of the vote the average becomes the result
-     * and the talks are weighed on the seats; on the day a cabinet takes office the next vote is forecast from the result.
+     * One tick: reads the sitting government's coming budget, pools a poll published on it and forecasts afresh; on the
+     * day of the vote the average becomes the result and the talks are weighed on the seats; on the day a cabinet takes
+     * office the next vote is forecast from the result.
      */
     public static function advance(PoliticsState $state, bool $recession = false): void
     {
@@ -193,10 +194,10 @@ final class ElectionForecast
     /**
      * The laws the sitting government will pass at its next budget round, on the Diet as it stands (PoliticsEngine::
      * enactBudget()). While the parties talk after a cabinet falls between votes, the sitting government is the one the
-     * talks will seat, weighed by its odds on the seats as they stand, the cabinet that fell weighed as any other,
-     * as the talks weigh it; after a vote the talks' government is the forecast's, and the caretaker passes nothing until then.
-     * The reserve fund's consent to a draw above its ceiling is read on the recession as it stands; a government further
-     * off is expected to pass its budget without it, the consent lasting only the slump.
+     * talks will seat, weighed by its odds on the seats as they stand, the cabinet that fell weighed as any other, as
+     * the talks weigh it; after a vote the talks' government is the forecast's, and the caretaker passes nothing until
+     * then. The reserve fund's consent to a draw above its ceiling is read on the recession as it stands; a government
+     * further off is expected to pass its budget without it, the consent lasting only the slump.
      *
      * @return array<string, float>
      */
@@ -267,7 +268,9 @@ final class ElectionForecast
      * campaign's short-term swings.
      *
      * @param array<string, float> $average The poll average by party.
-     * @param list<float>          $z       Standard normal draws: per party the average's error, the lasting drift and the short-term swing, then the residual, then per party the unsettled misreading and the normal vote's walk.
+     * @param list<float>          $z       Standard normal draws: per party the average's error, the lasting drift and
+     *                                      the short-term swing, then the residual, then per party the unsettled
+     *                                      misreading and the normal vote's walk.
      * @return array<string, float>
      */
     private static function outcome(PoliticsState $state, array $average, float $years, float $termLeft, float $campaign, array $z, MathUtility $math): array
@@ -285,8 +288,8 @@ final class ElectionForecast
         $total = array_sum($start);
         $start = array_map(static fn(float $share): float => $share / $total, $start);
 
-        // The polls misread opinion yet to settle, which the vote will not carry; and each party drifts what its term has
-        // left (OpinionPolls::driftYears()).
+        // The polls misread opinion yet to settle, which the vote will not carry; and each party drifts what its term
+        // has left (OpinionPolls::driftYears()).
         $unsettled = [];
         foreach ($parties as $index => $party) {
             $unsettled[$party] = OpinionPolls::unsettledMisreading($start[$party], $years, $z[(3 * $count) + 1 + $index]);

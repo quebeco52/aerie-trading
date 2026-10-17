@@ -28,8 +28,8 @@ final class IndependentPowerBusinessModelTest extends TestCase
     }
 
     /**
-     * Stream draws in the order the physics makes them (capacity, water and tide, the unit event), cycling; regime exits
-     * fixed.
+     * Stream draws in the order the physics makes them (capacity, water and tide, the unit event), cycling; regime
+     * exits fixed.
      *
      * @param list<float> $zs
      */
@@ -154,7 +154,8 @@ final class IndependentPowerBusinessModelTest extends TestCase
      */
     public function testGasRisingWithoutPowerSqueezesTheGasStationsThroughTheHedge(): void
     {
-        // The squeeze a year after the baseline quarter, so both are read in the same season on a ladder struck at baseline.
+        // The squeeze a year after the baseline quarter, so both are read in the same season on a ladder struck at
+        // baseline.
         $stock = $this->seasoned();
         $baseline = $this->report($stock, $this->macro());
         for ($q = 1; $q < 4; $q++) {
@@ -166,13 +167,17 @@ final class IndependentPowerBusinessModelTest extends TestCase
         $this->assertEqualsWithDelta(self::powerSeason(1.0) - (FirmEconomics::gasFuelShareOfPowerPrice() * 1.5 * self::gasSeason(1.0)), $squeeze->kpis['clean_spark_spread'], 1e-9);
         $this->assertLessThan($baseline->ebit, $squeeze->ebit);
 
-        // Unhedged, the gas half would pay the whole half again on its fuel; the ladder covered the hedged 60% at baseline.
+        // Unhedged, the gas half would pay the whole half again on its fuel; the ladder covered the hedged 60% at
+        // baseline.
         $unhedgedFuelRise = 80.0 * 0.5 * FirmEconomics::gasFuelShareOfPowerPrice() * 0.5 * self::gasSeason(1.0);
         $this->assertLessThan($unhedgedFuelRise, $baseline->ebit - $squeeze->ebit);
         $this->assertEqualsWithDelta(0.4 * $unhedgedFuelRise, $baseline->ebit - $squeeze->ebit, 0.05);
     }
 
-    /** The ladder sells forward: a spike reaches the realized price one tranche a quarter and holds once the ladder has rolled. */
+    /**
+     * The ladder sells forward: a spike reaches the realized price one tranche a quarter and holds once the ladder has
+     * rolled.
+     */
     public function testTheHedgeBookMovesTheRealizedPriceLessThanSpot(): void
     {
         $stock = $this->seasoned();
@@ -214,7 +219,9 @@ final class IndependentPowerBusinessModelTest extends TestCase
         $this->assertLessThan(0.01, abs($gains[0]));
     }
 
-    /** Capacity payments are contracted: a two-sigma draw moves them about a percent, the same draw on water a tenth. */
+    /**
+     * Capacity payments are contracted: a two-sigma draw moves them about a percent, the same draw on water a tenth.
+     */
     public function testCapacityPaymentsBarelyMoveWhileWaterMovesOutput(): void
     {
         $base = $this->report($this->generator(), $this->macro());
@@ -291,7 +298,10 @@ final class IndependentPowerBusinessModelTest extends TestCase
         $this->assertEqualsWithDelta($base * 0.2 * (1.0 + $passThrough), $report->streamRevenue['capacity_payments'], 1e-9);
     }
 
-    /** What a carbon price's power uplift is worth to the firm: the uplift on every MWh less the carbon the gas half pays. */
+    /**
+     * What a carbon price's power uplift is worth to the firm: the uplift on every MWh less the carbon the gas half
+     * pays.
+     */
     public function testTheCarbonUpliftEarningsShareIsRegistered(): void
     {
         $report = $this->report($this->generator(), $this->macro());

@@ -28,7 +28,9 @@ final class DemandTransmissionLagTest extends TestCase
     private const BOOM = 0.04;
     private const SLUMP = -0.04;
 
-    /** A state that has sat in a boom long enough for every order book to reflect it, and has just turned into a slump. */
+    /**
+     * A state that has sat in a boom long enough for every order book to reflect it, and has just turned into a slump.
+     */
     private function turnIntoSlump(): MacroState
     {
         $state = new MacroState();
@@ -107,7 +109,8 @@ final class DemandTransmissionLagTest extends TestCase
     }
 
     /**
-     * The trait stack's own composer (which implements no strategy interface) and every sector model that declares a lag.
+     * The trait stack's own composer (which implements no strategy interface) and every sector model that declares a
+     * lag.
      *
      * @return array<string, array{class-string<OperatingStrategyInterface|ConfiguredStandardModel>}>
      */

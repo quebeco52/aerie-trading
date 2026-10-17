@@ -65,7 +65,10 @@ trait StandardDebtPhysicsTrait
         return $interestCoverage >= $icrFloor && $currentDebtRatio < $this->getLeverageTarget($targetDebtTolerance);
     }
 
-    /** An operating company recapitalizes through a debt-financed repurchase; borrowing into its treasury recapitalizes nothing. */
+    /**
+     * An operating company recapitalizes through a debt-financed repurchase; borrowing into its treasury recapitalizes
+     * nothing.
+     */
     public function supportsUnderleveragedDebtExpansion(): bool
     {
         return false;
@@ -97,7 +100,10 @@ trait StandardDebtPhysicsTrait
         return min($incomeStatementCapacity, $balanceSheetCapacity);
     }
 
-    /** A listed firm's notes are senior unsecured: Moody's ultimate recovery 47.4% (1987-2021), CorporateDefaultService::RECOVERY_SENIOR_UNSECURED. */
+    /**
+     * A listed firm's notes are senior unsecured: Moody's ultimate recovery 47.4% (1987-2021),
+     * CorporateDefaultService::RECOVERY_SENIOR_UNSECURED.
+     */
     public function getLossGivenDefault(): float
     {
         return 1.0 - \App\Service\Market\Bond\CorporateDefaultService::RECOVERY_SENIOR_UNSECURED;

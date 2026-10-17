@@ -23,18 +23,18 @@ use App\Service\Math\MathUtility;
  *
  * The Diet votes in two blocs, as the Scandinavian parliaments do. Before each vote every party declares for the bloc
  * whose centre stands nearer on the economic questions, a centre being its members' positions weighted by their seats,
- * where a government of the bloc would set policy; the blocs of the last vote are where the declarations start, and they
- * are counted again until no party would change sides (Lloyd's (1982) two-means). Each bloc is led by its largest party,
- * its candidate for the premiership, but never by a party at an end of the Council axis, the Diet's radical parties: no
- * Scandinavian bloc has put a radical party forward, and none of the region's 111 cabinets since 1945 had a prime
- * minister from one, though in four the largest party of the prime minister's camp was radical (ParlGov; Denmark 2015).
- * The two leaders rule each other out. A government whose parties, cabinet and
- * supporters alike, all come from one bloc, with the bloc's leader in the cabinet, keeps a pre-electoral pact, for what a
- * Scandinavian party promises before the vote is to put its bloc's leader in office, not to sit in the cabinet: a bloc
- * propping up one of its smaller parties in office breaks that promise and keeps no pact (paying the pact to it seated
- * tiny parties alone at ten times the rate of real hung parliaments). One holding both leaders is an anti-pact. A
- * party that stands far from the Diet's middle on the Council axis, the question of the constitutional order itself, is
- * hard to take into cabinet and usually sustains one from outside instead: Martin & Stevenson's anti-system term.
+ * where a government of the bloc would set policy; the blocs of the last vote are where the declarations start, and
+ * they are counted again until no party would change sides (Lloyd's (1982) two-means). Each bloc is led by its largest
+ * party, its candidate for the premiership, but never by a party at an end of the Council axis, the Diet's radical
+ * parties: no Scandinavian bloc has put a radical party forward, and none of the region's 111 cabinets since 1945 had a
+ * prime minister from one, though in four the largest party of the prime minister's camp was radical (ParlGov; Denmark
+ * 2015). The two leaders rule each other out. A government whose parties, cabinet and supporters alike, all come from
+ * one bloc, with the bloc's leader in the cabinet, keeps a pre-electoral pact, for what a Scandinavian party promises
+ * before the vote is to put its bloc's leader in office, not to sit in the cabinet: a bloc propping up one of its
+ * smaller parties in office breaks that promise and keeps no pact (paying the pact to it seated tiny parties alone at
+ * ten times the rate of real hung parliaments). One holding both leaders is an anti-pact. A party that stands far from
+ * the Diet's middle on the Council axis, the question of the constitutional order itself, is hard to take into cabinet
+ * and usually sustains one from outside instead: Martin & Stevenson's anti-system term.
  *
  * A minority cabinet's support parties are the outsiders that bring it to a majority, the set spanning the narrowest
  * range with the cabinet (de Swaan 1973), and never a party that ruled out governing with one of the cabinet's: the
@@ -44,7 +44,10 @@ use App\Service\Math\MathUtility;
 final class CoalitionFormation
 {
     // --- Forming a Government (Martin & Stevenson 2010, Table 1 Model 1; Golder 2010; Bäck et al. 2023) ---
-    /** Log-odds of a cabinet without a majority of its own (Martin & Stevenson 2010, Table 1 Model 1: 256 formations in 17 West European democracies). */
+    /**
+     * Log-odds of a cabinet without a majority of its own (Martin & Stevenson 2010, Table 1 Model 1: 256 formations in
+     * 17 West European democracies).
+     */
     public const FORMATION_MINORITY_UTILITY = -1.188;
     /** Log-odds of a minimal winning cabinet, every member needed for its majority (Martin & Stevenson 2010). */
     public const FORMATION_MINIMAL_WINNING_UTILITY = 0.683;
@@ -52,44 +55,86 @@ final class CoalitionFormation
     public const FORMATION_PARTY_UTILITY = -0.485;
     /** Log-odds of a cabinet holding the Diet's largest party (Martin & Stevenson 2010). */
     public const FORMATION_LARGEST_PARTY_UTILITY = 1.575;
-    /** Manifesto left-right points a unit of the Diet's axes spans, the scale Martin & Stevenson read range on; fitted so 36.5% of cabinets after a hung vote are minority cabinets (ParlGov: 315 in Western Europe since 1945; var/harness/politics/formation_fit.py). Benoit & Laver (2007) put a unit, half an expert scale, at 30 points (3.19 per point of their 1-20 scale). */
+    /**
+     * Manifesto left-right points a unit of the Diet's axes spans, the scale Martin & Stevenson read range on; fitted
+     * so 36.5% of cabinets after a hung vote are minority cabinets (ParlGov: 315 in Western Europe since 1945;
+     * var/harness/politics/formation_fit.py). Benoit & Laver (2007) put a unit, half an expert scale, at 30 points
+     * (3.19 per point of their 1-20 scale).
+     */
     public const FORMATION_MANIFESTO_POINTS_PER_UNIT = 40.0;
-    /** Log-odds per unit of the cabinet's ideological range: -0.027 per manifesto left-right point (Martin & Stevenson 2010). */
+    /**
+     * Log-odds per unit of the cabinet's ideological range: -0.027 per manifesto left-right point (Martin & Stevenson
+     * 2010).
+     */
     public const FORMATION_RANGE_UTILITY = -0.027 * self::FORMATION_MANIFESTO_POINTS_PER_UNIT;
     /** Log-odds of the outgoing cabinet re-forming (Martin & Stevenson 2010: the status quo government). */
     public const FORMATION_STATUS_QUO_UTILITY = 1.984;
-    /** Log-odds of a government whose parties, cabinet and supporters, all declared for the same bloc before the vote, with the bloc's leader in the cabinet (Martin & Stevenson 2010: a pre-electoral pact associated with the coalition). */
+    /**
+     * Log-odds of a government whose parties, cabinet and supporters, all declared for the same bloc before the vote,
+     * with the bloc's leader in the cabinet (Martin & Stevenson 2010: a pre-electoral pact associated with the
+     * coalition).
+     */
     public const FORMATION_PACT_UTILITY = 3.429;
-    /** Log-odds of a cabinet holding two parties that ruled out governing together, the two bloc leaders (Martin & Stevenson 2010: an anti-pact). */
+    /**
+     * Log-odds of a cabinet holding two parties that ruled out governing together, the two bloc leaders (Martin &
+     * Stevenson 2010: an anti-pact).
+     */
     public const FORMATION_ANTIPACT_UTILITY = -2.877;
-    /** Log-odds per unit a cabinet party stands from the Diet's median on the Council axis, the question of the constitutional order: Martin & Stevenson's (2010) anti-system term, its manifesto measure replaced by that distance and its strength fitted so the parties at the axis's ends sit in cabinet as seldom as Scandinavia's radical parties (var/harness/politics/formation_fit.py). */
+    /**
+     * Log-odds per unit a cabinet party stands from the Diet's median on the Council axis, the question of the
+     * constitutional order: Martin & Stevenson's (2010) anti-system term, its manifesto measure replaced by that
+     * distance and its strength fitted so the parties at the axis's ends sit in cabinet as seldom as Scandinavia's
+     * radical parties (var/harness/politics/formation_fit.py).
+     */
     public const FORMATION_ANTISYSTEM_UTILITY = -3.233;
-    /** Log-odds the cabinet the first attempt tries must clear, the value of no deal at all; fitted so 32% of formations need more than one attempt (Golder 2010: 'nearly a third', 16 West European democracies 1944-1998; var/harness/politics/formation_fit.py). */
+    /**
+     * Log-odds the cabinet the first attempt tries must clear, the value of no deal at all; fitted so 32% of formations
+     * need more than one attempt (Golder 2010: 'nearly a third', 16 West European democracies 1944-1998;
+     * var/harness/politics/formation_fit.py).
+     */
     public const FORMATION_RESERVATION = 1.728;
-    /** How far the bar of no deal falls with each attempt that fails, as the parties' patience runs out; fitted so formations are as spread as the record's, sd 33.9 days on a mean of 33.7 (Bäck, Hellström, Lindvall & Teorell 2023), which cuts the stalemates a fixed bar would leave running for years. */
+    /**
+     * How far the bar of no deal falls with each attempt that fails, as the parties' patience runs out; fitted so
+     * formations are as spread as the record's, sd 33.9 days on a mean of 33.7 (Bäck, Hellström, Lindvall & Teorell
+     * 2023), which cuts the stalemates a fixed bar would leave running for years.
+     */
     public const FORMATION_RESERVATION_STEP = 0.715;
-    /** Mean length of one attempt in days, each drawn exponential (a constant hazard: the formation record's spread about equals its mean); fitted so formations average Bäck, Hellström, Lindvall & Teorell's (2023) 33.7 days, Western Europe 1945-2019. */
+    /**
+     * Mean length of one attempt in days, each drawn exponential (a constant hazard: the formation record's spread
+     * about equals its mean); fitted so formations average Bäck, Hellström, Lindvall & Teorell's (2023) 33.7 days,
+     * Western Europe 1945-2019.
+     */
     public const FORMATION_ATTEMPT_DAYS = 22.6;
-    /** Mean days from a vote to the government it forms, single-party majorities included: what the talks model averages at the fitted constants. */
+    /**
+     * Mean days from a vote to the government it forms, single-party majorities included: what the talks model averages
+     * at the fitted constants.
+     */
     public const FORMATION_MEAN_DAYS = 33.7;
 
     // --- Safeguards ---
-    /** Attempts after which the cabinet tried takes office regardless: a safeguard, since the falling bar ends every talks in the harness within a dozen attempts. */
+    /**
+     * Attempts after which the cabinet tried takes office regardless: a safeguard, since the falling bar ends every
+     * talks in the harness within a dozen attempts.
+     */
     private const MAX_ATTEMPTS = 1000;
-    /** Rounds of declarations after which the blocs stand as they are: a safeguard, since two-means settles within a few. */
+    /**
+     * Rounds of declarations after which the blocs stand as they are: a safeguard, since two-means settles within a
+     * few.
+     */
     private const MAX_BLOC_ROUNDS = 100;
     /** Distances equal to within this are ties. */
     private const RANGE_TOLERANCE = 1e-9;
 
     /**
-     * The talks after a vote, or after a cabinet falls between votes. After a fall there is no status quo: the parties that
-     * fell may form again, usually under a new prime minister, but weigh in as any other cabinet would.
+     * The talks after a vote, or after a cabinet falls between votes. After a fall there is no status quo: the parties
+     * that fell may form again, usually under a new prime minister, but weigh in as any other cabinet would.
      *
      * @param array<string, int|float>            $seats     Seats by party.
      * @param array<string, float>                $shares    Vote shares by party, which order parties tied on seats.
      * @param array<string, array<string, float>> $positions Positions by party and axis.
      * @param list<string>                        $statusQuo The outgoing cabinet.
-     * @param array<string, string>               $blocs     The leader of the bloc each party declared for (declareBlocs()).
+     * @param array<string, string>               $blocs     The leader of the bloc each party declared for
+     *                                                       (declareBlocs()).
      * @return array{cabinet: list<string>, support: list<string>, days: float, log: list<array{day: float, formateur: string, formed: bool, cabinet: list<string>, support: list<string>}>}
      *         The cabinet and its support parties, the days the talks took, and each attempt: the day it ended, the
      *         party that led it, whether it formed a government, and the cabinet it tried.
@@ -126,7 +171,8 @@ final class CoalitionFormation
      *
      * @param array<string, int|float>            $seats     Seats by party.
      * @param array<string, array<string, float>> $positions Positions by party and axis.
-     * @param array<string, string>               $blocs     The leader of the bloc each party declared for (declareBlocs()).
+     * @param array<string, string>               $blocs     The leader of the bloc each party declared for
+     *                                                       (declareBlocs()).
      * @return non-empty-list<array{cabinet: list<string>, support: list<string>}>
      */
     public static function options(array $seats, array $positions, array $blocs): array
@@ -151,8 +197,8 @@ final class CoalitionFormation
     }
 
     /**
-     * The Diet's radical parties: those founded at an end of the Council axis, the question of the constitutional order,
-     * whom the anti-system term keeps out of cabinet about as often as Scandinavia's radical parties.
+     * The Diet's radical parties: those founded at an end of the Council axis, the question of the constitutional
+     * order, whom the anti-system term keeps out of cabinet about as often as Scandinavia's radical parties.
      *
      * @return list<string>
      */
@@ -180,16 +226,19 @@ final class CoalitionFormation
 
     /**
      * A minority cabinet's support parties: of the sets of outsiders that give it a majority, the one spanning the
-     * narrowest range with the cabinet, ties to fewer parties, leaving out any party that ruled out governing with one of
-     * the cabinet's. That set needs every one of its members: dropping a supporter the majority does not need never
+     * narrowest range with the cabinet, ties to fewer parties, leaving out any party that ruled out governing with one
+     * of the cabinet's. That set needs every one of its members: dropping a supporter the majority does not need never
      * widens the range.
      *
      * @param list<string>                               $cabinet   The cabinet's parties.
      * @param array<string, int|float>                   $seats     Seats by party.
      * @param array<string, array<string, float>>        $positions Positions by party and axis.
-     * @param array<string, string>                      $blocs     The leader of the bloc each party declared for (declareBlocs()).
-     * @param array<string, array<string, float>>|null   $distances Distances between parties (distances()), if already worked out.
-     * @return list<string>|null The support parties, in party order; null when the outsiders who may support it fall short.
+     * @param array<string, string>                      $blocs     The leader of the bloc each party declared for
+     *                                                              (declareBlocs()).
+     * @param array<string, array<string, float>>|null   $distances Distances between parties (distances()), if already
+     *                                                              worked out.
+     * @return list<string>|null The support parties, in party order; null when the outsiders who may support it fall
+     *                           short.
      */
     public static function supportFor(array $cabinet, array $seats, array $positions, array $blocs, ?array $distances = null): ?array
     {
@@ -223,12 +272,14 @@ final class CoalitionFormation
      * A cabinet's log-odds on Martin & Stevenson's (2010) conditional logit.
      *
      * @param list<string>                        $cabinet   The cabinet's parties.
-     * @param list<string>                        $support   Its support parties, whose positions count toward its range.
+     * @param list<string>                        $support   Its support parties, whose positions count toward its
+     *                                                       range.
      * @param array<string, int|float>            $seats     Seats by party.
      * @param array<string, array<string, float>> $positions Positions by party and axis.
      * @param list<string>                        $statusQuo The outgoing cabinet.
      * @param string                              $largest   The Diet's largest party.
-     * @param array<string, string>               $blocs     The leader of the bloc each party declared for (declareBlocs()).
+     * @param array<string, string>               $blocs     The leader of the bloc each party declared for
+     *                                                       (declareBlocs()).
      */
     public static function utility(array $cabinet, array $support, array $seats, array $positions, array $statusQuo, string $largest, array $blocs): float
     {
@@ -299,13 +350,15 @@ final class CoalitionFormation
      * The blocs the parties campaign in, declared before a vote: starting from the blocs of the last vote, every party
      * declares for the bloc whose centre, its members' positions on the economic questions weighted by their seats,
      * stands nearer, staying where it is on a tie, and the centres are struck again until no party would change sides
-     * (Lloyd 1982). A Diet with no blocs yet, or one whose blocs have merged, splits around its two largest parties. Each
-     * bloc is led by its largest party other than the radical parties (radicalParties()), or by its largest when it has
-     * no other.
+     * (Lloyd 1982). A Diet with no blocs yet, or one whose blocs have merged, splits around its two largest parties.
+     * Each bloc is led by its largest party other than the radical parties (radicalParties()), or by its largest when
+     * it has no other.
      *
-     * @param array<string, int|float>            $seats     Seats by party going into the vote, which weight the centres and name the leaders.
+     * @param array<string, int|float>            $seats     Seats by party going into the vote, which weight the
+     *                                                       centres and name the leaders.
      * @param array<string, array<string, float>> $positions Positions by party and axis.
-     * @param array<string, string>               $previous  The leader of the bloc each party declared for at the last vote; none at the founding.
+     * @param array<string, string>               $previous  The leader of the bloc each party declared for at the last
+     *                                                       vote; none at the founding.
      * @return array<string, string> The leader of each party's bloc, by party, in party order.
      */
     public static function declareBlocs(array $seats, array $positions, array $previous): array
@@ -361,7 +414,8 @@ final class CoalitionFormation
      *
      * @param array<string, array<string, float>> $points  Each party's point.
      * @param array<string, array<string, float>> $centres Each side's centre on the bloc axes, by side.
-     * @param array<string, string>               $sides   The side each party is on now; a party on none takes the first centre on a tie.
+     * @param array<string, string>               $sides   The side each party is on now; a party on none takes the
+     *                                                     first centre on a tie.
      * @return array<string, string> The side each party is nearer, by party.
      */
     private static function nearestCentre(array $points, array $centres, array $sides): array

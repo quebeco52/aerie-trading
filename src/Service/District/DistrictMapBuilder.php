@@ -28,7 +28,10 @@ use App\Service\Market\Bond\CreditRatingAgency;
 class DistrictMapBuilder
 {
     // --- Live Payload Fields ---
-    /** Field of a live stock tick carrying return on equity — what lights a financial's windows (StockTracker publishes it). */
+    /**
+     * Field of a live stock tick carrying return on equity — what lights a financial's windows (StockTracker publishes
+     * it).
+     */
     public const RETURN_FIELD_FINANCIAL = 'current_roe';
     /** Field of a live stock tick carrying return on invested capital — what lights every other tenant's windows. */
     public const RETURN_FIELD_OPERATING = 'current_roic';

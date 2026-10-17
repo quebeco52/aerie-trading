@@ -16,7 +16,9 @@ use PHPUnit\Framework\TestCase;
 
 final class RefiningBusinessModelTest extends TestCase
 {
-    /** The engine's variable cost ratio on the baseline barrel: feedstock plus about two points of fuel and chemicals. */
+    /**
+     * The engine's variable cost ratio on the baseline barrel: feedstock plus about two points of fuel and chemicals.
+     */
     private const VARIABLE_COST_RATIO = 0.88;
 
     private RefiningBusinessModel $model;
@@ -87,7 +89,8 @@ final class RefiningBusinessModelTest extends TestCase
 
     public function testTheMarginPerBarrelFollowsValerosReportedLine(): void
     {
-        // Valero's refining margin per barrel over the Gulf Coast 3-2-1, full years 2018-2024: -$0.41 + 0.598 x crack (R 0.99).
+        // Valero's refining margin per barrel over the Gulf Coast 3-2-1, full years 2018-2024: -$0.41 + 0.598 x crack
+        // (R 0.99).
         foreach ([0.0, 9.04, MacroEngine::CRACK_SPREAD_BASELINE, 36.66] as $crack) {
             $margin = $this->model->calculateBarrelRealization(RefiningBusinessModel::REFERENCE_CRUDE_PRICE, $crack) - RefiningBusinessModel::REFERENCE_CRUDE_PRICE;
             $this->assertEqualsWithDelta(-0.41 + (0.598 * $crack), $margin, 0.10, sprintf('at a $%.2f crack', $crack));
@@ -108,7 +111,8 @@ final class RefiningBusinessModelTest extends TestCase
         );
         $this->assertGreaterThan(1.35, $crudeSpike->actualRevenue / $baseline->actualRevenue);
 
-        // The margin falls only by the secondary barrel's discount to the dearer crude, and rises again when crude is cheap.
+        // The margin falls only by the secondary barrel's discount to the dearer crude, and rises again when crude is
+        // cheap.
         $secondaryDiscount = 1.0 - RefiningBusinessModel::LIGHT_PRODUCT_YIELD
             - (RefiningBusinessModel::SECONDARY_PRODUCT_YIELD * RefiningBusinessModel::SECONDARY_PRODUCT_REALIZATION);
         $marginDrop = $secondaryDiscount * ($spikeCrude - RefiningBusinessModel::REFERENCE_CRUDE_PRICE) * 100.0 / $this->baselineRealization();
@@ -231,8 +235,8 @@ final class RefiningBusinessModelTest extends TestCase
         $this->assertGreaterThan(0.01, $variableCostRatio - $feedstockShare, 'at least a point of revenue for fuel, catalysts and chemicals');
         $this->assertLessThan(0.06, $variableCostRatio - $feedstockShare, 'and not a variable cost base only a far less complex plant would run');
 
-        // Per barrel, free of the crude price in the denominator: Valero's adjusted refining operating income per barrel,
-        // full years 2018-2024, was -$6.23 + 0.561 x crack (R 0.98), $6.11 at the baseline crack.
+        // Per barrel, free of the crude price in the denominator: Valero's adjusted refining operating income per
+        // barrel, full years 2018-2024, was -$6.23 + 0.561 x crack (R 0.98), $6.11 at the baseline crack.
         $operatingIncomePerBarrel = $margin * $this->baselineRealization();
         $this->assertEqualsWithDelta(-6.23 + (0.561 * MacroEngine::CRACK_SPREAD_BASELINE), $operatingIncomePerBarrel, 0.75);
     }

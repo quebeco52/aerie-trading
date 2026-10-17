@@ -23,7 +23,10 @@ class CapitalAllocationEngine
     private const CASH_BUFFER_SAFETY_MULT = 1.5;
 
     // --- Capital Ratio Targeting ---
-    /** Share of the gap to its target capital ratio a bank closes each year: large US BHCs adjust 28-41% a year (Berger, DeYoung, Flannery, Lee & Öztekin 2008). */
+    /**
+     * Share of the gap to its target capital ratio a bank closes each year: large US BHCs adjust 28-41% a year (Berger,
+     * DeYoung, Flannery, Lee & Öztekin 2008).
+     */
     public const CAPITAL_TARGET_ADJUSTMENT_SPEED = 0.35;
 
     // --- Leverage Targeting ---
@@ -31,7 +34,10 @@ class CapitalAllocationEngine
     public const LEVERAGE_TARGET_ADJUSTMENT_SPEED = 0.34;
 
     // --- Capital Allocation & Life-Cycle Physics ---
-    /** Discount to intrinsic book at which a board starts repurchasing for the accretion itself. Below this the gap is inside the noise a board would act on. */
+    /**
+     * Discount to intrinsic book at which a board starts repurchasing for the accretion itself. Below this the gap is
+     * inside the noise a board would act on.
+     */
     public const MIN_ACCRETIVE_REPURCHASE_DISCOUNT = 0.05;
     /** Fraction of excess cash allocated to quarterly buybacks for saturated firms (50%). */
     public const BUYBACK_SPEND_SATURATED_RATIO = 0.50;
@@ -39,7 +45,10 @@ class CapitalAllocationEngine
     public const BUYBACK_SPEND_MEGA_SATURATED_RATIO = 0.70;
     /** Maximum market cap percentage (15%) a fully saturated firm can repurchase in a single quarter. */
     public const MAX_REGULATORY_SPEND_SATURATED = 0.15;
-    /** Least share of its buyback capacity a non-hoarding board spends in a quarter, drawn uniformly up to all of it (no published calibration). */
+    /**
+     * Least share of its buyback capacity a non-hoarding board spends in a quarter, drawn uniformly up to all of it (no
+     * published calibration).
+     */
     public const BUYBACK_APPETITE_MIN_SHARE = 0.50;
 
     public function __construct(
@@ -152,8 +161,8 @@ class CapitalAllocationEngine
             $trueReturn = $ctx->strategy->calculateEconomicReturn($stock, $ctx->strategy->getReturnBasisIncome($stock, $ctx->quarterlyNopat, $ctx->actualTotalNetIncome), $ctx->investedCapital);
         }
 
-        // Life-Cycle Payout Target Expansion (DeAngelo & DeAngelo 2006 / Jensen 1986)
-        // As a firm approaches market saturation, internal reinvestment slows and target payout scales toward cash cow levels.
+        // Life-Cycle Payout Target Expansion (DeAngelo & DeAngelo 2006 / Jensen 1986) As a firm approaches market
+        // saturation, internal reinvestment slows and target payout scales toward cash cow levels.
         $saturationSeverity = $this->resolveRedeploymentSeverity($ctx, $trueReturn);
         $effectiveTargetPayout = $this->corporateMetrics->calculateLifeCyclePayoutRatio($targetPayout, $saturationSeverity);
         // A tax on dividends shifts payout toward buybacks, a cut back toward dividends (Chetty & Saez 2005).
@@ -243,9 +252,9 @@ class CapitalAllocationEngine
         // Harvey & Michaely 2005), so a quarter's cash shortfall is not a cut while lenders will fund it.
         $heldDividend = $holdsDividend ? min($ctx->newDividend, $lastDividend) : 0.0;
         $fundedDividend = max($requiredDividend, $heldDividend);
-        // It borrows what the dividend is short of the cash above its operating floor, and no more: a treasury below the
-        // floor is refilled by the liquidity pass, revolver first and on its own refusal gates, not by debt raised in
-        // the dividend's name. The cash cap below counts what was borrowed for the dividend.
+        // It borrows what the dividend is short of the cash above its operating floor, and no more: a treasury below
+        // the floor is refilled by the liquidity pass, revolver first and on its own refusal gates, not by debt raised
+        // in the dividend's name. The cash cap below counts what was borrowed for the dividend.
         $cashAboveFloor = max(0.0, $ctx->newTreasury - $minOperatingCash);
         $distributionShortfall = ($fundedDividend * $ctx->sharesOutstanding) - $cashAboveFloor;
         $borrowedForDividend = 0.0;
@@ -481,7 +490,8 @@ class CapitalAllocationEngine
                 ? $this->fundRecapitalization($ctx, min($recapitalization, $absoluteMaxSpend), $excessCash)
                 : 0.0;
 
-            // Hard Solvency Constraint: Cannot spend more cash than physically available in treasury above min operating buffer
+            // Hard Solvency Constraint: Cannot spend more cash than physically available in treasury above min
+            // operating buffer
             $availableCashBuffer = max(0.0, $ctx->newTreasury - $minOperatingCash);
             $absoluteMaxSpend = min($absoluteMaxSpend, $availableCashBuffer);
 
@@ -539,7 +549,8 @@ class CapitalAllocationEngine
         $stock = $ctx->stock;
         $openingEquity = (float) $stock->getTotalEquity();
         $equity = $this->resolvePreBuybackEquity($ctx);
-        // The earning-asset ledger already carries this quarter's deployment; the treasury is still the opening balance.
+        // The earning-asset ledger already carries this quarter's deployment; the treasury is still the opening
+        // balance.
         $assets = $stock->getTotalAssets() - max(0.0, (float) $stock->getCorporateTreasury()) + max(0.0, $ctx->newTreasury);
         $openingRatio = $ctx->openingCapitalRatio ?? ($assets > 0.0 ? $openingEquity / $assets : 0.0);
 

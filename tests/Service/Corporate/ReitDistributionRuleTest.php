@@ -55,7 +55,9 @@ final class ReitDistributionRuleTest extends TestCase
         $this->assertEqualsWithDelta($retained, $this->growthCapEx(0.0), 1.0);
     }
 
-    /** A treasury short of its operating floor is refilled before anything is built, or the dividend pays for the gap. */
+    /**
+     * A treasury short of its operating floor is refilled before anything is built, or the dividend pays for the gap.
+     */
     public function testATreasuryBelowItsFloorIsRefilledBeforeGrowth(): void
     {
         $retained = self::QUARTERLY_NET_INCOME * (1.0 - ReitBusinessModel::DISTRIBUTION_REQUIREMENT);

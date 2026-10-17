@@ -11,7 +11,8 @@ class InitialMarket
     public const STOCKS = [
         [
             'ticker' => 'LAKE',
-            'management_style' => 'fortress', // Systemic balance-sheet supremacy is maintained by hoarding capital, not distributing it
+            // Systemic balance-sheet supremacy is maintained by hoarding capital, not distributing it
+            'management_style' => 'fortress',
             'name' => 'Lakebird Bank',
             'sector' => 'Financials',
             'industry' => 'Banks - Diversified',
@@ -70,7 +71,8 @@ class InitialMarket
         ],
         [
             'ticker' => 'HUMM',
-            'management_style' => 'empire_builder', // Ruthless expansion from search into every adjacent digital utility
+            // Ruthless expansion from search into every adjacent digital utility
+            'management_style' => 'empire_builder',
             'name' => 'Hummingbird Interactive',
             'sector' => 'Information Technology',
             'industry' => 'Internet Content & Information',
@@ -251,11 +253,13 @@ class InitialMarket
         ],
         [
             'ticker' => 'PLVR',
-            'management_style' => 'steward', // A savings bank's owners are its depositors' neighbours: steady dividends, no empire
+            // A savings bank's owners are its depositors' neighbours: steady dividends, no empire
+            'management_style' => 'steward',
             'name' => 'Plover Savings Bank',
             'sector' => 'Financials',
             'industry' => 'Banks - Regional',
-            'systemic_importance' => 'systemic', // The District's second home lender: a domestic systemically important bank
+            // The District's second home lender: a domestic systemically important bank
+            'systemic_importance' => 'systemic',
             'shares_outstanding' => 1_000_000_000,
             'volatility' => 0.20,
             'beta_tilt' => 0.15, // long fixed-rate mortgages on short deposits
@@ -353,7 +357,8 @@ class InitialMarket
         ],
         [
             'ticker' => 'SHRK',
-            'management_style' => 'steward', // A statutory monopoly running near-zero capex has no use for retained capital
+            // A statutory monopoly running near-zero capex has no use for retained capital
+            'management_style' => 'steward',
             'name' => 'Shrike Standard Ratings',
             'sector' => 'Financials',
             'industry' => 'Financial Data & Stock Exchanges',
@@ -388,7 +393,8 @@ class InitialMarket
             'industry' => 'Utilities - Regulated Electric',
             'systemic_importance' => 'base',
             'shares_outstanding' => 1_000_000_000,
-            'volatility' => 0.15, // a regulated electric utility: 15.0% (Damodaran, Utility (General), US, January 2026)
+            // a regulated electric utility: 15.0% (Damodaran, Utility (General), US, January 2026)
+            'volatility' => 0.15,
             'beta_tilt' => 0.00,
             'jump_intensity' => 0.30,
             'jump_vol' => 0.06,
@@ -557,7 +563,8 @@ class InitialMarket
         ],
         [
             'ticker' => 'GRIP',
-            'management_style' => 'steward', // Cost-plus programmes fund themselves, so the cash returns to shareholders
+            // Cost-plus programmes fund themselves, so the cash returns to shareholders
+            'management_style' => 'steward',
             'name' => 'Gryphon Defense Systems',
             'sector' => 'Industrials',
             'industry' => 'Aerospace & Defense',
@@ -647,7 +654,8 @@ class InitialMarket
         ],
         [
             'ticker' => 'TRIV',
-            'management_style' => 'empire_builder', // Hundreds of disconnected divisions bolted together is empire building as a strategy
+            // Hundreds of disconnected divisions bolted together is empire building as a strategy
+            'management_style' => 'empire_builder',
             'name' => 'Three Rivers Manufacturing',
             'sector' => 'Industrials',
             'industry' => 'Conglomerates',
@@ -706,7 +714,8 @@ class InitialMarket
         ],
         [
             'ticker' => 'TICK',
-            'management_style' => 'empire_builder', // Predatory acquisitions to swallow rivals before they become a legitimate threat
+            // Predatory acquisitions to swallow rivals before they become a legitimate threat
+            'management_style' => 'empire_builder',
             'name' => 'Tickbird Data Systems',
             // Financials, not technology: SHRK runs the same industry and the same business model
             // and reads as a financial, and GICS files exchanges and data vendors under Financial
@@ -803,7 +812,8 @@ class InitialMarket
         ],
         [
             'ticker' => 'GULL',
-            'management_style' => 'empire_builder', // Leveraged the balance sheet to buy the entire shoreline, not for return on capital
+            // Leveraged the balance sheet to buy the entire shoreline, not for return on capital
+            'management_style' => 'empire_builder',
             'name' => 'Silver Gull Resorts',
             'sector' => 'Consumer Discretionary',
             'industry' => 'Resorts & Casinos',
@@ -833,7 +843,8 @@ class InitialMarket
         ],
         [
             'ticker' => 'WADE',
-            'management_style' => 'steward', // Regulated returns are distributed, not reinvested past the approved rate base
+            // Regulated returns are distributed, not reinvested past the approved rate base
+            'management_style' => 'steward',
             'name' => 'Heron Regional Water',
             'sector' => 'Utilities',
             'industry' => 'Utilities - Regulated Water',
@@ -980,7 +991,8 @@ class InitialMarket
         ],
         [
             'ticker' => 'SGRB',
-            'management_style' => 'steward', // Asset-light packaging lines convert operating profit straight into distributable cash
+            // Asset-light packaging lines convert operating profit straight into distributable cash
+            'management_style' => 'steward',
             'name' => 'Sugarbird Confectionery',
             'sector' => 'Consumer Staples',
             'industry' => 'Packaged Foods',
@@ -1128,7 +1140,8 @@ class InitialMarket
         ],
         [
             'ticker' => 'PLZA',
-            'management_style' => 'steward', // Century-long municipal leases leave nothing to reinvest in; the rent goes out as yield
+            // Century-long municipal leases leave nothing to reinvest in; the rent goes out as yield
+            'management_style' => 'steward',
             'name' => 'Plaza Civic River Trust',
             'sector' => 'Real Estate',
             'industry' => 'REIT - Office',
@@ -1216,7 +1229,8 @@ class InitialMarket
         ],
         [
             'ticker' => 'WEAV',
-            'management_style' => 'empire_builder', // Buys out its own successful vendors to absorb their volume into the platform
+            // Buys out its own successful vendors to absorb their volume into the platform
+            'management_style' => 'empire_builder',
             'name' => 'Weaver Marketplace',
             'sector' => 'Consumer Discretionary',
             'industry' => 'Internet Retail',
@@ -1305,7 +1319,9 @@ class InitialMarket
         ],
         [
             'ticker' => 'BRKW',
-            'management_style' => 'fortress', // Multi-generational dynastic stewardship: active board governance, conservative leverage, and generational patient capital
+            // Multi-generational dynastic stewardship: active board governance, conservative leverage, and generational
+            // patient capital
+            'management_style' => 'fortress',
             'name' => 'Breakwater Trust',
             // Industrial holding trust structured around dual-class foundation voting control (40% public float),
             // anchor equity stakes across the District's crown-jewel engineering and infrastructure pillars, active
@@ -1389,7 +1405,8 @@ class InitialMarket
         ],
         [
             'ticker' => 'SWFT',
-            'management_style' => 'steward', // Master-franchise royalties grow the estate on the franchisees capital, not its own
+            // Master-franchise royalties grow the estate on the franchisees capital, not its own
+            'management_style' => 'steward',
             'name' => 'Golden Swift Holdings',
             // Restaurants are Consumer Discretionary, and BREW — the same industry, the same
             // RestaurantBusinessModel — was already filed there. One industry standing in two
@@ -1457,7 +1474,8 @@ class InitialMarket
         ],
         [
             'ticker' => 'FALC',
-            'management_style' => 'empire_builder', // Sells the mass-market fleet at a loss to take the market; returns come later
+            // Sells the mass-market fleet at a loss to take the market; returns come later
+            'management_style' => 'empire_builder',
             'name' => 'Falconet Motor Group',
             'sector' => 'Consumer Discretionary',
             'industry' => 'Auto Manufacturers',
@@ -1551,7 +1569,8 @@ class InitialMarket
         ],
         [
             'ticker' => 'CNDR',
-            'management_style' => 'empire_builder', // Conquers new mineral territory with debt whenever a sovereign borrower defaults
+            // Conquers new mineral territory with debt whenever a sovereign borrower defaults
+            'management_style' => 'empire_builder',
             'name' => 'Condor Extraction',
             'sector' => 'Materials',
             'industry' => 'Copper',
@@ -1585,7 +1604,8 @@ class InitialMarket
         ],
         [
             'ticker' => 'SILC',
-            'management_style' => 'empire_builder', // Debt-fuelled fab construction priced to deny rivals scale, not to clear a hurdle
+            // Debt-fuelled fab construction priced to deny rivals scale, not to clear a hurdle
+            'management_style' => 'empire_builder',
             'name' => 'Silicon Creek Foundries',
             'sector' => 'Information Technology',
             'industry' => 'Semiconductors',
@@ -1673,7 +1693,8 @@ class InitialMarket
         ],
         [
             'ticker' => 'ACC',
-            'management_style' => 'fortress', // The default waterfall must stay funded before any capital leaves the clearinghouse
+            // The default waterfall must stay funded before any capital leaves the clearinghouse
+            'management_style' => 'fortress',
             'name' => 'Aerie Central Clearing',
             'sector' => 'Financials',
             'industry' => 'Financial Clearinghouses',
@@ -1689,7 +1710,8 @@ class InitialMarket
             'dividendSpeed' => self::LINTNER_QUARTERLY_ADJUSTMENT_SPEED,
             'fixed_cost_ratio' => 0.30,
             'operating_margin' => 0.55,
-            'public_float' => 1.00, // The closely held block is the District's (StrategicHoldings), taken off in AnchorHoldings::tradableFloat
+            // The closely held block is the District's (StrategicHoldings), taken off in AnchorHoldings::tradableFloat
+            'public_float' => 1.00,
             'sam_ratio' => 0.05,
             'floating_debt_ratio' => 0.10,
             'historical_fixed_rate' => 0.035,
@@ -1791,7 +1813,8 @@ class InitialMarket
         ],
         [
             'ticker' => 'LARK',
-            'management_style' => 'steward', // Mature staples brands defend shelf space with marketing spend, not capital
+            // Mature staples brands defend shelf space with marketing spend, not capital
+            'management_style' => 'steward',
             'name' => 'Lark & Crest Brands',
             'sector' => 'Consumer Staples',
             'industry' => 'Household & Personal Products',
@@ -1885,7 +1908,8 @@ class InitialMarket
         ],
         [
             'ticker' => 'KITE',
-            'management_style' => 'steward', // Statutory trust distribution on a sub-2% vacancy portfolio leaves little to retain
+            // Statutory trust distribution on a sub-2% vacancy portfolio leaves little to retain
+            'management_style' => 'steward',
             'name' => 'Kite Logistics Trust',
             'sector' => 'Real Estate',
             'industry' => 'REIT - Industrial',
@@ -1973,7 +1997,8 @@ class InitialMarket
         ],
         [
             'ticker' => 'EIDR',
-            'management_style' => 'steward', // Prioritizes passenger safety engineering, fleet longevity, and steady dividend distributions
+            // Prioritizes passenger safety engineering, fleet longevity, and steady dividend distributions
+            'management_style' => 'steward',
             'name' => 'Eider Motor Group',
             'sector' => 'Consumer Discretionary',
             'industry' => 'Auto Manufacturers',
@@ -2003,7 +2028,8 @@ class InitialMarket
         ],
         [
             'ticker' => 'ERNE',
-            'management_style' => 'steward', // Generational telecom R&D and steady dividend distributions backed by patent tollbooths
+            // Generational telecom R&D and steady dividend distributions backed by patent tollbooths
+            'management_style' => 'steward',
             'name' => 'Erne Network Systems',
             'sector' => 'Information Technology',
             'industry' => 'Communication Equipment',
@@ -2033,7 +2059,8 @@ class InitialMarket
         ],
         [
             'ticker' => 'SNDR',
-            'management_style' => 'steward', // Disciplined metallurgical R&D, conservative leverage, and steady cycle-spanning dividend distributions
+            // Disciplined metallurgical R&D, conservative leverage, and steady cycle-spanning dividend distributions
+            'management_style' => 'steward',
             'name' => 'Sanderling Rock Dynamics',
             'sector' => 'Industrials',
             'industry' => 'Specialty Industrial Machinery',
@@ -2063,7 +2090,9 @@ class InitialMarket
         ],
         [
             'ticker' => 'NUTH',
-            'management_style' => 'steward', // Disciplined programmatic HVAC roll-up acquisitions, conservative leverage, and steady dividend distributions
+            // Disciplined programmatic HVAC roll-up acquisitions, conservative leverage, and steady dividend
+            // distributions
+            'management_style' => 'steward',
             'name' => 'Nuthatch Climate Systems',
             'sector' => 'Industrials',
             'industry' => 'Building Products & Equipment',
@@ -2093,7 +2122,9 @@ class InitialMarket
         ],
         [
             'ticker' => 'ALCA',
-            'management_style' => 'steward', // Decentralized operational autonomy, asset-light assembly, world-class capital efficiency, and reliable dividend payouts
+            // Decentralized operational autonomy, asset-light assembly, world-class capital efficiency, and reliable
+            // dividend payouts
+            'management_style' => 'steward',
             'name' => 'Alca Compression Dynamics',
             'sector' => 'Industrials',
             'industry' => 'Specialty Industrial Machinery',
@@ -2124,7 +2155,9 @@ class InitialMarket
         ],
         [
             'ticker' => 'RAVN',
-            'management_style' => 'operator', // Disciplined volume throughput, inventory velocity, and counterparty risk management across global trade corridors
+            // Disciplined volume throughput, inventory velocity, and counterparty risk management across global trade
+            // corridors
+            'management_style' => 'operator',
             'name' => 'Raven Merchant Group',
             'sector' => 'Industrials',
             'industry' => 'Merchant Houses',
@@ -2154,7 +2187,9 @@ class InitialMarket
         ],
         [
             'ticker' => 'HARR',
-            'management_style' => 'steward', // Serial acquisitive capital allocation: buys mission-critical niche leaders and reinvests free cash flow into programmatic bolt-ons
+            // Serial acquisitive capital allocation: buys mission-critical niche leaders and reinvests free cash flow
+            // into programmatic bolt-ons
+            'management_style' => 'steward',
             'name' => 'Harrier Industrial Holdings',
             'sector' => 'Industrials',
             'industry' => 'Conglomerates',
@@ -2184,7 +2219,9 @@ class InitialMarket
         ],
         [
             'ticker' => 'TIER',
-            'management_style' => 'empire_builder', // Leveraged private capital deployment, operational turnarounds, and pro-cyclical carried interest extraction
+            // Leveraged private capital deployment, operational turnarounds, and pro-cyclical carried interest
+            // extraction
+            'management_style' => 'empire_builder',
             'name' => 'Tiercel Capital Partners',
             'sector' => 'Financials',
             'industry' => 'Private Equity',
@@ -2214,7 +2251,9 @@ class InitialMarket
         ],
         [
             'ticker' => 'BUZT',
-            'management_style' => 'fortress', // Heavy capital cycle discipline, conservative balance-sheet headroom, and captive aftermarket fleet monetization
+            // Heavy capital cycle discipline, conservative balance-sheet headroom, and captive aftermarket fleet
+            // monetization
+            'management_style' => 'fortress',
             'name' => 'Bustard Heavy Dynamics',
             'sector' => 'Industrials',
             'industry' => 'Farm & Heavy Construction Machinery',
@@ -2244,7 +2283,9 @@ class InitialMarket
         ],
         [
             'ticker' => 'BOBY',
-            'management_style' => 'operator', // Mission-critical grid reliability, high-specification manufacturing, and multi-year utility backlog execution
+            // Mission-critical grid reliability, high-specification manufacturing, and multi-year utility backlog
+            // execution
+            'management_style' => 'operator',
             'name' => 'Boby Electrical Systems',
             'sector' => 'Industrials',
             'industry' => 'Electrical Equipment & Parts',
@@ -2274,7 +2315,8 @@ class InitialMarket
         ],
         [
             'ticker' => 'MAGP',
-            'management_style' => 'steward', // High-velocity working capital, automated distribution routing, and disciplined shareholder cash returns
+            // High-velocity working capital, automated distribution routing, and disciplined shareholder cash returns
+            'management_style' => 'steward',
             'name' => 'Magpie Industrial Supply',
             'sector' => 'Industrials',
             'industry' => 'Industrial Distribution',
@@ -2305,7 +2347,8 @@ class InitialMarket
         ],
         [
             'ticker' => 'PTAR',
-            'management_style' => 'operator', // Surge production discipline: an export order book is won on delivery slots, not on programme prestige
+            // Surge production discipline: an export order book is won on delivery slots, not on programme prestige
+            'management_style' => 'operator',
             'name' => 'Ptarmigan Land Systems',
             'sector' => 'Industrials',
             'industry' => 'Aerospace & Defense',
@@ -2335,7 +2378,8 @@ class InitialMarket
         ],
         [
             'ticker' => 'WREN',
-            'management_style' => 'empire_builder', // Programmatic absorption of regional lock and door makers, funded out of the aftermarket
+            // Programmatic absorption of regional lock and door makers, funded out of the aftermarket
+            'management_style' => 'empire_builder',
             'name' => 'Wren Access Systems',
             'sector' => 'Industrials',
             'industry' => 'Building Products & Equipment',
@@ -2365,7 +2409,8 @@ class InitialMarket
         ],
         [
             'ticker' => 'CHUF',
-            'management_style' => 'operator', // Machine availability is the product; the rig is only how it is delivered
+            // Machine availability is the product; the rig is only how it is delivered
+            'management_style' => 'operator',
             'name' => 'Chough Mining Systems',
             'sector' => 'Industrials',
             'industry' => 'Farm & Heavy Construction Machinery',
@@ -2395,7 +2440,8 @@ class InitialMarket
         ],
         [
             'ticker' => 'GANN',
-            'management_style' => 'steward', // Tonnage is contracted years ahead, so the fleet is renewed on a schedule rather than on a rate spike
+            // Tonnage is contracted years ahead, so the fleet is renewed on a schedule rather than on a rate spike
+            'management_style' => 'steward',
             'name' => 'Gannet Ro-Ro Lines',
             'sector' => 'Industrials',
             'industry' => 'Marine Shipping',
@@ -2425,7 +2471,8 @@ class InitialMarket
         ],
         [
             'ticker' => 'REDW',
-            'management_style' => 'fortress', // A single-purpose heavy-haul line cannot be rebuilt, so the balance sheet protects the track
+            // A single-purpose heavy-haul line cannot be rebuilt, so the balance sheet protects the track
+            'management_style' => 'fortress',
             'name' => 'Redwing Ore Line',
             'sector' => 'Industrials',
             'industry' => 'Railroads',
@@ -2455,7 +2502,8 @@ class InitialMarket
         ],
         [
             'ticker' => 'BOWR',
-            'management_style' => 'operator', // Buys land at what the homes on it will bear and pays out what it cannot build on
+            // Buys land at what the homes on it will bear and pays out what it cannot build on
+            'management_style' => 'operator',
             'name' => 'Bowerbird Homes',
             'sector' => 'Consumer Discretionary',
             'industry' => 'Residential Construction',
@@ -2487,7 +2535,8 @@ class InitialMarket
         ],
         [
             'ticker' => 'FNCH',
-            'management_style' => 'operator', // Develops a mine when the deck clears its cost of capital and pays out the rest
+            // Develops a mine when the deck clears its cost of capital and pays out the rest
+            'management_style' => 'operator',
             'name' => 'Goldfinch Mining',
             'sector' => 'Materials',
             'industry' => 'Gold',
@@ -2517,7 +2566,8 @@ class InitialMarket
         ],
         [
             'ticker' => 'PELI',
-            'management_style' => 'operator', // Prices its book to the loss ratio it can earn and pays out what it cannot grow
+            // Prices its book to the loss ratio it can earn and pays out what it cannot grow
+            'management_style' => 'operator',
             'name' => 'Pelican Health Plans',
             'sector' => 'Health Care',
             'industry' => 'Healthcare Plans',
@@ -2555,7 +2605,8 @@ class InitialMarket
             'name' => 'Egret Trust',
             'sector' => 'Financials',
             'industry' => 'Custody Banks',
-            'systemic_importance' => 'systemic', // Custodian of the Sovereign Reserve Fund and of most assets on Glasswater Row
+            // Custodian of the Sovereign Reserve Fund and of most assets on Glasswater Row
+            'systemic_importance' => 'systemic',
             'shares_outstanding' => 1_000_000_000,
             'volatility' => 0.24,
             'beta_tilt' => 0.25, // its fees are struck on market values
@@ -2573,8 +2624,8 @@ class InitialMarket
             'historical_fixed_rate' => 0.030,
             'credit_spread' => 0.0060,
             'depreciation_rate' => 0.03,
-            // 10% of deposits, the commercial-bank target cash reserve. Deposits are 83% of liabilities, as State Street's
-            // 72% of assets on a tenth of them in equity.
+            // 10% of deposits, the commercial-bank target cash reserve. Deposits are 83% of liabilities, as State
+            // Street's 72% of assets on a tenth of them in equity.
             'corporate_treasury' => 87_000_000_000.00,
             'total_equity'      => 120_000_000_000.00,
             'customer_deposits' => 870_000_000_000.00,
@@ -2623,12 +2674,14 @@ class InitialMarket
             'beta_tilt' => 0.25, // its fees are struck on market values
             'jump_intensity' => 0.60,
             'jump_vol' => 0.12,
-            'baseline_roe' => 0.12, // Julius Baer 2019: fees and NII less adjusted costs, 0.9% of assets after tax, at 16.5x leverage
+            // Julius Baer 2019: fees and NII less adjusted costs, 0.9% of assets after tax, at 16.5x leverage
+            'baseline_roe' => 0.12,
             'capex_ratio' => 0.08,
             'target_payout_ratio' => 0.45,
             'dividendSpeed' => self::LINTNER_QUARTERLY_ADJUSTMENT_SPEED,
             'fixed_cost_ratio' => 0.65,
-            'operating_margin' => 0.27, // Julius Baer 2019: CHF 917M pre-tax on CHF 3,383M of operating income (adjusted)
+            // Julius Baer 2019: CHF 917M pre-tax on CHF 3,383M of operating income (adjusted)
+            'operating_margin' => 0.27,
             'public_float' => 0.85,
             'sam_ratio' => 0.10,
             'floating_debt_ratio' => 0.40,
@@ -2644,13 +2697,15 @@ class InitialMarket
         ],
         [
             'ticker' => 'SKUA',
-            'management_style' => 'empire_builder', // A challenger run for subscribers: payout held down, the network built ahead of them
+            // A challenger run for subscribers: payout held down, the network built ahead of them
+            'management_style' => 'empire_builder',
             'name' => 'Skua Mobile',
             'sector' => 'Communication Services',
             'industry' => 'Telecom Services',
             'systemic_importance' => 'base',
             'shares_outstanding' => 1_000_000_000,
-            'volatility' => 0.18, // above Loon Call's 14%: a challenger's sign-ups swing more, and this sets their noise too
+            // above Loon Call's 14%: a challenger's sign-ups swing more, and this sets their noise too
+            'volatility' => 0.18,
             'beta_tilt' => 0.10, // device-led growth leans on discretionary upgrades
             'jump_intensity' => 0.40,
             'jump_vol' => 0.10,
@@ -2699,12 +2754,14 @@ class InitialMarket
             'corporate_treasury' => 2_500_000_000.00,
             'total_equity' => 22_000_000_000.00,
             'customer_deposits' => 0.00,
-            'wholesale_debt' => 10_000_000_000.00, // about 1.8 times EBITDA: a one-sigma gas slump halves it and must leave it under the 4.0 covenant
+            // about 1.8 times EBITDA: a one-sigma gas slump halves it and must leave it under the 4.0 covenant
+            'wholesale_debt' => 10_000_000_000.00,
             'retained_earnings' => 9_000_000_000.00,
         ],
         [
             'ticker' => 'KTWK',
-            'management_style' => 'steward', // A concession holder: builds quays the trade has asked for, pays out the rest
+            // A concession holder: builds quays the trade has asked for, pays out the rest
+            'management_style' => 'steward',
             'name' => 'Kittiwake Harbour Terminals',
             'sector' => 'Industrials',
             'industry' => 'Marine Ports & Services',
@@ -2718,8 +2775,10 @@ class InitialMarket
             'capex_ratio' => 0.40,
             'target_payout_ratio' => 0.50,
             'dividendSpeed' => self::LINTNER_QUARTERLY_ADJUSTMENT_SPEED,
-            'fixed_cost_ratio' => 0.60, // dock crews on shift, crane upkeep and the concession's fixed rent; the royalty and power scale with boxes
-            'operating_margin' => 0.38, // container terminal operators earn 35-45% before interest (ICTSI, Hutchison Port Holdings Trust)
+            // dock crews on shift, crane upkeep and the concession's fixed rent; the royalty and power scale with boxes
+            'fixed_cost_ratio' => 0.60,
+            // container terminal operators earn 35-45% before interest (ICTSI, Hutchison Port Holdings Trust)
+            'operating_margin' => 0.38,
             'public_float' => 0.85,
             'sam_ratio' => 0.10,
             'floating_debt_ratio' => 0.20,
@@ -2779,6 +2838,9 @@ class InitialMarket
     ];
 
     // --- Dividend Smoothing (Lintner 1956) ---
-    /** The same speed per quarter, the cadence dividends are declared at: the quarterly share that compounds to the annual one. */
+    /**
+     * The same speed per quarter, the cadence dividends are declared at: the quarterly share that compounds to the
+     * annual one.
+     */
     public const LINTNER_QUARTERLY_ADJUSTMENT_SPEED = 1.0 - ((1.0 - FinancialConstants::LINTNER_ANNUAL_ADJUSTMENT_SPEED) ** 0.25);
 }

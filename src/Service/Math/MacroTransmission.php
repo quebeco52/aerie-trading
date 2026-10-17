@@ -14,7 +14,10 @@ use App\Service\Macro\MacroEngine;
 final class MacroTransmission
 {
     // --- Stamp Duty (Colliard & Hoffmann 2017) ---
-    /** Log fall in share turnover per unit of round-trip duty above the founding rate: France's 0.2% tax on purchases in August 2012 cut trading volume by about 10% (Colliard & Hoffmann 2017, JF), ln(1 / 0.9) / 0.002. */
+    /**
+     * Log fall in share turnover per unit of round-trip duty above the founding rate: France's 0.2% tax on purchases in
+     * August 2012 cut trading volume by about 10% (Colliard & Hoffmann 2017, JF), ln(1 / 0.9) / 0.002.
+     */
     public const STAMP_DUTY_VOLUME_SEMI_ELASTICITY = 52.68;
 
     // --- Queueing (Kingman 1961) ---
@@ -22,7 +25,10 @@ final class MacroTransmission
     public const KINGMAN_MIN_IDLE_SHARE = 0.01;
 
     // --- Bank Levy (UK Finance Act 2011, Schedule 19; FDIC) ---
-    /** The levy on long-term funding and on deposits from customers outside finance, as a share of the rate on short-term funding: half (the UK's long-term rate, 0.105% against 0.21% in 2015). */
+    /**
+     * The levy on long-term funding and on deposits from customers outside finance, as a share of the rate on
+     * short-term funding: half (the UK's long-term rate, 0.105% against 0.21% in 2015).
+     */
     public const BANK_LEVY_LONG_TERM_RATE_SHARE = 0.5;
 
     /**
@@ -77,8 +83,8 @@ final class MacroTransmission
     /**
      * Models the Capital Markets & M&A Deal Flow Index (Jovanovic & Rousseau 2002).
      *
-     * Simulates global investment banking, private equity LBO, and IPO advisory volume
-     * as an exponential function of valuation liquidity (ERP compression, tight high-yield spreads, and low volatility):
+     * Simulates global investment banking, private equity LBO, and IPO advisory volume as an exponential function of
+     * valuation liquidity (ERP compression, tight high-yield spreads, and low volatility):
      *   Target = 100 * exp(-betaErp * erpExcess - betaHy * hySpreadExcess - betaVol * volExcess)
      * The log deviation is capped at ~1.7x either way: global M&A volume ran 2.2x from the 2007 peak to the 2009
      * trough, so a target range much wider than that would not be a cycle any market has produced.
@@ -91,7 +97,8 @@ final class MacroTransmission
      * @param float $dW                 Standard normal random shock.
      * @param float $kappa              Speed of adjustment toward fundamental deal capacity.
      * @param float $sigma              Stochastic deal volatility.
-     * @param float $policyUncertaintyIndex Policy-uncertainty index (BBD scale, 100 neutral); boards defer deals while the regime is in question.
+     * @param float $policyUncertaintyIndex Policy-uncertainty index (BBD scale, 100 neutral); boards defer deals while
+     *                                      the regime is in question.
      * @return float Updated deal activity index clamped between 20.0 and 250.0.
      */
     public static function calculateCapitalMarketsDealIndexStep(
@@ -106,7 +113,8 @@ final class MacroTransmission
         float $policyUncertaintyIndex = MacroEngine::EPU_BASELINE,
     ): float {
         $erpExcess = ($equityRiskPremium - MacroEngine::BASE_EQUITY_RISK_PREMIUM) / 0.015;
-        // 500 bps is one cycle-standard-deviation of HY OAS (2000-2024), so a 2008-type +1,500 bps reads as three units of stress.
+        // 500 bps is one cycle-standard-deviation of HY OAS (2000-2024), so a 2008-type +1,500 bps reads as three units
+        // of stress.
         $hyExcess = ($hyCreditSpread - (MacroEngine::BASE_CREDIT_SPREAD * MacroEngine::HY_BASE_SPREAD_MULTIPLIER)) / 0.050;
         $volExcess = ($marketVolatility - MacroEngine::MACRO_VOL_BASE_ANCHOR) / 0.06;
         $epuExcess = log(max(1.0, $policyUncertaintyIndex) / MacroEngine::EPU_BASELINE) / MacroEngine::EPU_CYCLE_LOG_SD;
@@ -127,7 +135,8 @@ final class MacroTransmission
     /**
      * Calculates a standard diffusion index (e.g. ISM Purchasing Managers' Index) centered around a neutral baseline.
      *
-     * In standard macroeconomic surveys (ISM, S&P Global), values above 50 indicate expansion while below 50 indicate contraction.
+     * In standard macroeconomic surveys (ISM, S&P Global), values above 50 indicate expansion while below 50 indicate
+     * contraction.
      *
      * @param float $baseline Neutral survey baseline (canonical 50.0).
      * @param array<int, array{deviation: float, sensitivity: float}> $drivers Component factors with their respective sensitivities.

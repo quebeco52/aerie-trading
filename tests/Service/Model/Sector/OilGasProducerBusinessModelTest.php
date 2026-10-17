@@ -63,7 +63,10 @@ final class OilGasProducerBusinessModelTest extends TestCase
         $this->assertEqualsWithDelta(log(1.5), $this->model->getCapexCycleSignal(new Stock(), $this->macro(150.0)), 1e-12);
     }
 
-    /** The fitted elasticity of US oil & gas drilling to the real oil price cycle: a halved price cuts the budget by about a third. */
+    /**
+     * The fitted elasticity of US oil & gas drilling to the real oil price cycle: a halved price cuts the budget by
+     * about a third.
+     */
     public function testAHalvedOilPriceCutsTheCapitalBudgetByAboutAThird(): void
     {
         $modifier = 1.0 + ($this->model->getCapexCycleSignal(new Stock(), $this->macro(50.0)) * $this->model->getCapexCyclicality());
@@ -126,7 +129,8 @@ final class OilGasProducerBusinessModelTest extends TestCase
         $boom = $this->report($this->producer(), $this->macro(crude: 150.0, gas: 150.0));
         $slump = $this->report($this->producer(), $this->macro(crude: 60.0, gas: 60.0));
 
-        // The same barrels cost the same dollars: re-expressed per dollar of revenue, the ratio moves inversely with price.
+        // The same barrels cost the same dollars: re-expressed per dollar of revenue, the ratio moves inversely with
+        // price.
         $this->assertEqualsWithDelta(0.13, $baseline->clampedMargin, 1e-9);
         $this->assertEqualsWithDelta(0.13 / 1.5, $boom->clampedMargin, 1e-9);
         $this->assertEqualsWithDelta(0.13 / 0.6, $slump->clampedMargin, 1e-9);
@@ -220,7 +224,10 @@ final class OilGasProducerBusinessModelTest extends TestCase
         $this->assertEqualsWithDelta(1.5, $spike->kpis['realized_price_index'], 1e-9);
     }
 
-    /** The strictest rules on extraction cost Greenstone, List & Syverson's 4.8% of productivity: every barrel costs 1 / 0.952 as much to lift. */
+    /**
+     * The strictest rules on extraction cost Greenstone, List & Syverson's 4.8% of productivity: every barrel costs 1 /
+     * 0.952 as much to lift.
+     */
     public function testStrictExtractionRulesRaiseTheCostOfEveryBarrel(): void
     {
         $founding = $this->report($this->producer(), $this->macro(crude: 100.0));
@@ -230,7 +237,10 @@ final class OilGasProducerBusinessModelTest extends TestCase
         $this->assertEqualsWithDelta($founding->actualVariableCosts / (1.0 - 0.048), $strict->actualVariableCosts, 1e-9);
     }
 
-    /** What the market prices a change in the rules against is the cost they scale, unit costs and committed base alike, at any crude price: the strictest rules add the base times the factor's rise. */
+    /**
+     * What the market prices a change in the rules against is the cost they scale, unit costs and committed base alike,
+     * at any crude price: the strictest rules add the base times the factor's rise.
+     */
     public function testTheMarketsBaseIsTheCostTheRulesScale(): void
     {
         $factor = FirmEconomics::calculateExtractionCostFactor(1.0);

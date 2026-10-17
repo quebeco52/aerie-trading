@@ -56,13 +56,15 @@ use App\Twig\Extension\NumberFormatExtension;
  * before it takes office.
  *
  * The live Diet is read off the politics snapshot (PoliticsEngine keeps it every tick), and the debt, the rate firms
- * pay and the policy uncertainty off the macro snapshot; the history and the parties' past positions off diet_election. The hemicycle and compass geometry is computed here so the template
- * only draws.
+ * pay and the policy uncertainty off the macro snapshot; the history and the parties' past positions off diet_election.
+ * The hemicycle and compass geometry is computed here so the template only draws.
  */
 class GovernmentPageBuilder
 {
     // --- Party Colours ---
-    /** One colour per party, shared by the hemicycle, the compass and the tables, no two hues close enough to confuse. */
+    /**
+     * One colour per party, shared by the hemicycle, the compass and the tables, no two hues close enough to confuse.
+     */
     public const PARTY_COLORS = [
         AerieDiet::CIVIC => '#dc2626',
         AerieDiet::VANGUARD => '#2563eb',
@@ -108,7 +110,10 @@ class GovernmentPageBuilder
         'debtTarget' => ['Debt target', 'pct'],
         'debtPace' => ['Debt cut a year', 'pct'],
     ];
-    /** The laws the Council's departments set that the law charts show beside the Diet's, keyed as each recorded quarter carries them. */
+    /**
+     * The laws the Council's departments set that the law charts show beside the Diet's, keyed as each recorded quarter
+     * carries them.
+     */
     private const DEPARTMENT_LAWS = [
         'mergerReviewLeniency' => ['Merger review line', 'hhi'],
         'capitalRequirement' => ['Core capital requirement', 'pct'],
@@ -121,13 +126,19 @@ class GovernmentPageBuilder
     // --- Law History Charts ---
     /** Each law's chart plot area in its 300 by 84 drawing: left, right, top and bottom edges. */
     private const LAW_CHART_PLOT = [52.0, 296.0, 6.0, 66.0];
-    /** Least span of a law chart's value axis by unit, so a law that barely moved is not stretched across the chart: half a point, 100 HHI points, $5 a tonne. */
+    /**
+     * Least span of a law chart's value axis by unit, so a law that barely moved is not stretched across the chart:
+     * half a point, 100 HHI points, $5 a tonne.
+     */
     private const LAW_CHART_MIN_SPAN = ['pct' => 0.005, 'hhi' => 0.01, 'usd_t' => 5.0];
     /** Most year labels under a law chart's axis. */
     private const LAW_CHART_YEAR_LABELS = 5;
 
     // --- Rate Meetings ---
-    /** Share of a meeting interval within which the clock counts as on a meeting day, for the accumulated rounding of the sim clock. */
+    /**
+     * Share of a meeting interval within which the clock counts as on a meeting day, for the accumulated rounding of
+     * the sim clock.
+     */
     private const MEETING_GRID_TOLERANCE = 1e-6;
     /** Years of meetings the rate chart covers: 48 meetings, few enough to mark each one. */
     public const RATE_CHART_YEARS = 6.0;
@@ -141,9 +152,15 @@ class GovernmentPageBuilder
     // --- Election Odds Chart ---
     /** The odds chart's plot area in its 600 by 160 drawing: left, right, top and bottom edges. */
     private const ODDS_CHART_PLOT = [34.0, 590.0, 8.0, 132.0];
-    /** How near a forecast's vote must fall to the coming vote's day to count as a forecast of it, in years: a vote is held within a tick of its day, and the next is a term away. */
+    /**
+     * How near a forecast's vote must fall to the coming vote's day to count as a forecast of it, in years: a vote is
+     * held within a tick of its day, and the next is a term away.
+     */
     private const ODDS_VOTE_TOLERANCE = 0.25;
-    /** Least chance of leading the government a party must have reached for the odds chart and the market panel to show it. */
+    /**
+     * Least chance of leading the government a party must have reached for the odds chart and the market panel to show
+     * it.
+     */
     private const LISTED_LEADER_CHANCE = 0.01;
     /** Gridline step on the odds chart's axis. */
     private const ODDS_CHART_STEP = 0.25;
@@ -155,7 +172,11 @@ class GovernmentPageBuilder
     private const HEMICYCLE_INNER_RADIUS = 0.40;
 
     // --- Compass Geometry ---
-    /** The drawing at each screen width: the half-length of a line running -1 to +1 and the margin either side, in SVG units, and whether the end words sit beside the line (the margin then fits 'Technocratic') or beneath it (half the longest label). A phone gets the shorter line, so its labels stay legible. */
+    /**
+     * The drawing at each screen width: the half-length of a line running -1 to +1 and the margin either side, in SVG
+     * units, and whether the end words sit beside the line (the margin then fits 'Technocratic') or beneath it (half
+     * the longest label). A phone gets the shorter line, so its labels stay legible.
+     */
     private const COMPASS_LAYOUTS = [
         'wide' => [150.0, 56.0, true],
         'narrow' => [80.0, 24.0, false],
@@ -359,7 +380,8 @@ class GovernmentPageBuilder
                 array_map(static fn(array $member): float => $member['swing'] ?? 0.0, $politics->boardMembers),
             ) + ['seats' => count($politics->boardMembers), 'median' => MonetaryAuthority::stanceName(CouncilAppointments::boardMedians($politics)[CouncilAppointments::AXIS_MONEY])],
             'lean' => self::councilLean($politics),
-            // The Security Bureau and the two guards stand outside the government's menus, so their heads are shown with their mandates.
+            // The Security Bureau and the two guards stand outside the government's menus, so their heads are shown
+            // with their mandates.
             'departments' => array_map(static fn(array $department): array => $department + ['head' => $heads[$department['name']] ?? null], AerieCouncil::DEPARTMENTS),
         ]]);
     }
@@ -548,7 +570,8 @@ class GovernmentPageBuilder
         foreach (self::LEVER_DISPLAY as $lever => [$name, $unit]) {
             $enacted = self::leverDisplay($lever, $standing[$lever]);
             $expected = self::leverDisplay($lever, $politics->forecastLevers[$lever] ?? $standing[$lever]);
-            // A move shows only when it shows at the precision the page prints: hundredths of a point, whole HHI points, cents.
+            // A move shows only when it shows at the precision the page prints: hundredths of a point, whole HHI
+            // points, cents.
             $places = self::displayPlaces($unit);
             $levers[] = ['name' => $name, 'unit' => $unit, 'enacted' => $enacted, 'expected' => $expected, 'moves' => round($expected, $places) !== round($enacted, $places)];
         }
@@ -717,12 +740,13 @@ class GovernmentPageBuilder
     }
 
     /**
-     * The rate each meeting left, oldest first, on a line from meeting to meeting, each meeting marked with its dissents:
-     * a mark above for votes for a higher rate, below for a lower. A dashed line marks a new governor in the chair.
-     * Inflation runs quarter by quarter beside it against the target, and a summary row reads the span off.
+     * The rate each meeting left, oldest first, on a line from meeting to meeting, each meeting marked with its
+     * dissents: a mark above for votes for a higher rate, below for a lower. A dashed line marks a new governor in the
+     * chair. Inflation runs quarter by quarter beside it against the target, and a summary row reads the span off.
      *
      * @param list<RateDecision> $decisions The meetings on record over the chart's span, oldest first.
-     * @param list<array{t: float, inflation: float}> $inflation The quarterly record, oldest first; quarters outside the span are left off.
+     * @param list<array{t: float, inflation: float}> $inflation The quarterly record, oldest first; quarters outside
+     *                                                           the span are left off.
      * @return array<string, mixed>|null Null with fewer than two meetings on record.
      */
     public static function rateChart(array $decisions, float $now, array $inflation = []): ?array
@@ -854,7 +878,8 @@ class GovernmentPageBuilder
     }
 
     /**
-     * The market's odds on who leads the next government, forecast by forecast, for the vote its latest forecast is for.
+     * The market's odds on who leads the next government, forecast by forecast, for the vote its latest forecast is
+     * for.
      *
      * @return array<string, mixed>|null Null before two forecasts of that vote are on record.
      */
@@ -933,7 +958,10 @@ class GovernmentPageBuilder
         ];
     }
 
-    /** When the rate committee next meets: meetings fall on a fixed grid, MonetaryAuthority::MEETINGS_PER_YEAR evenly spaced. */
+    /**
+     * When the rate committee next meets: meetings fall on a fixed grid, MonetaryAuthority::MEETINGS_PER_YEAR evenly
+     * spaced.
+     */
     public static function nextMeeting(float $simTime): float
     {
         $meetings = (float) MonetaryAuthority::MEETINGS_PER_YEAR;
@@ -942,13 +970,19 @@ class GovernmentPageBuilder
         return (floor(($simTime * $meetings) + self::MEETING_GRID_TOLERANCE) + 1.0) / $meetings;
     }
 
-    /** Decimal places a law's value shows at, as a fraction: hundredths of a point, whole HHI points, or cents for a dollar figure. */
+    /**
+     * Decimal places a law's value shows at, as a fraction: hundredths of a point, whole HHI points, or cents for a
+     * dollar figure.
+     */
     private static function displayPlaces(string $unit): int
     {
         return $unit === 'usd_t' ? 2 : 4;
     }
 
-    /** A law's value as the page shows it: the corporate rate itself, the merger line as an HHI, the green belt as schemes refused, the extraction rules as their cost. */
+    /**
+     * A law's value as the page shows it: the corporate rate itself, the merger line as an HHI, the green belt as
+     * schemes refused, the extraction rules as their cost.
+     */
     private static function leverDisplay(string $lever, float $value): float
     {
         return match ($lever) {
@@ -961,8 +995,9 @@ class GovernmentPageBuilder
     }
 
     /**
-     * The polls since the last vote: each party's poll average across the term from the result on the day, with the band
-     * the true share lies in 19 times in 20, the polls themselves as dots, and the seats the market expects at the vote.
+     * The polls since the last vote: each party's poll average across the term from the result on the day, with the
+     * band the true share lies in 19 times in 20, the polls themselves as dots, and the seats the market expects at the
+     * vote.
      *
      * @param float $nextElection When the next vote falls.
      * @return array<string, mixed>|null Null before the term's first poll.
@@ -998,7 +1033,8 @@ class GovernmentPageBuilder
         $x = static fn(float $time): float => round($left + (($right - $left) * ($time - $start) / $span), 1);
         $y = static fn(float $share): float => round($bottom - (($bottom - $topY) * max(0.0, $share) / $scale), 1);
 
-        // The market's expected seats while its forecast is for the coming vote; the average's own D'Hondt result otherwise.
+        // The market's expected seats while its forecast is for the coming vote; the average's own D'Hondt result
+        // otherwise.
         $marketSeats = $politics->forecastSeats !== [] && $politics->forecastFor > $politics->totalTime;
         $expected = $marketSeats ? $politics->forecastSeats : PoliticsEngine::dHondt($latest['shares'], AerieDiet::SEATS);
         $coalition = AerieDiet::governingParties($politics->governingCoalition);
@@ -1222,8 +1258,8 @@ class GovernmentPageBuilder
     }
 
     /**
-     * The last talks, after a vote or a fall, as far as they have gone: the attempts whose day has passed, who leads the
-     * one under way (but not the cabinet it is trying), and, once a cabinet has taken office, how long it took.
+     * The last talks, after a vote or a fall, as far as they have gone: the attempts whose day has passed, who leads
+     * the one under way (but not the cabinet it is trying), and, once a cabinet has taken office, how long it took.
      *
      * @return array<string, mixed>|null Null before the first talks.
      */
@@ -1565,7 +1601,8 @@ class GovernmentPageBuilder
     }
 
     /**
-     * The seats of the chamber drawing, bloc by bloc, each running from the party wanting the largest state to the smallest.
+     * The seats of the chamber drawing, bloc by bloc, each running from the party wanting the largest state to the
+     * smallest.
      *
      * Rows hold seats in proportion to their radius so the spacing is even, and seats are dealt out by angle so each
      * party takes a wedge.
@@ -1599,7 +1636,8 @@ class GovernmentPageBuilder
         }
         usort($slots, static fn(array $a, array $b): int => [$b['angle'], $a['radius']] <=> [$a['angle'], $b['radius']]);
 
-        // Each bloc sits together, the one wanting the larger state on the left; within a bloc, the larger state leftmost.
+        // Each bloc sits together, the one wanting the larger state on the left; within a bloc, the larger state
+        // leftmost.
         $blocState = [];
         foreach ($parties as $party) {
             $blocState[$party['blocKey']][] = [$seats[$party['key']], $party['state']];
@@ -1638,8 +1676,8 @@ class GovernmentPageBuilder
      * drawn at each width the page offers. Each party is a dot sized by its seats with its last few positions fading
      * behind it, and its label set above or below where it crowds nothing, a leader line joining any label moved
      * sideways off its dot. The cabinet's parties are ringed solid and its supporters dotted; a coalition also has a
-     * mark across the line where it governs from (its parties weighted by seats), drawn behind the dots so it hides none
-     * of them.
+     * mark across the line where it governs from (its parties weighted by seats), drawn behind the dots so it hides
+     * none of them.
      *
      * @param non-empty-list<array<string, mixed>> $parties    Party rows.
      * @param list<DietElection>                   $history    Votes, oldest first.
@@ -1700,7 +1738,8 @@ class GovernmentPageBuilder
      * the drawing's extent.
      *
      * @param list<array<string, mixed>> $dots     The parties, with their radius and past positions.
-     * @param float|null                 $hub      Where the cabinet governs from on this question; null when one party governs alone.
+     * @param float|null                 $hub      Where the cabinet governs from on this question; null when one party
+     *                                             governs alone.
      * @param float                      $hubReach How far the mark reaches either side of the line, in SVG units.
      * @return array<string, mixed>
      */
@@ -1759,7 +1798,8 @@ class GovernmentPageBuilder
      * to a label moved sideways off it rises at least COMPASS_LEADER_SLOPE. No label is centred past the end of its
      * line when the end words sit beside it, so no leader crosses them.
      *
-     * @param array<int, array<string, mixed>> $dots       The parties, with their place on the line, radius, label and part in the government.
+     * @param array<int, array<string, mixed>> $dots       The parties, with their place on the line, radius, label and
+     *                                                     part in the government.
      * @param float                            $outermost  Furthest any dot or ring reaches from the line, in SVG units.
      * @param float                            $scale      Half the line's length, in SVG units.
      * @param float                            $margin     The drawing's margin either side of the line, in SVG units.
@@ -1935,9 +1975,9 @@ class GovernmentPageBuilder
     }
 
     /**
-     * The Monetary Authority as the page shows it: the governor the Council named and the candidates it passed over, the
-     * committee the governor picked, each with their age, stance, seat dates and last vote; the committee's make-up and
-     * the supermajority it holds; and the last rate meeting. Null before the Authority has formed.
+     * The Monetary Authority as the page shows it: the governor the Council named and the candidates it passed over,
+     * the committee the governor picked, each with their age, stance, seat dates and last vote; the committee's make-up
+     * and the supermajority it holds; and the last rate meeting. Null before the Authority has formed.
      *
      * @return array<string, mixed>|null
      */
@@ -1983,7 +2023,8 @@ class GovernmentPageBuilder
                 'date' => self::simDate($politics->lastMeetingAt),
                 'rate' => $politics->lastMeetingRate,
                 'change' => $politics->lastMeetingChange,
-                // Whole basis points, the precision the rate is printed at: a move that changes the printed rate is never a hold.
+                // Whole basis points, the precision the rate is printed at: a move that changes the printed rate is
+                // never a hold.
                 'moveBp' => (int) round(10000.0 * $politics->lastMeetingChange),
                 'split' => (count($votes) - $higher - $lower) . '–' . ($higher + $lower),
                 'higher' => $higher,
@@ -2045,9 +2086,10 @@ class GovernmentPageBuilder
     }
 
     /**
-     * The Exchequer: its head, their stance on the debt and whom the Council passed over for them; the debt, the average
-     * maturity it stands at and the one the head steers it toward, the share of it repricing within the year, what it
-     * pays, and what its maturity adds to the ten-year against the founding book. Null before the Exchequer has a head.
+     * The Exchequer: its head, their stance on the debt and whom the Council passed over for them; the debt, the
+     * average maturity it stands at and the one the head steers it toward, the share of it repricing within the year,
+     * what it pays, and what its maturity adds to the ten-year against the founding book. Null before the Exchequer has
+     * a head.
      *
      * @return array<string, mixed>|null
      */
@@ -2071,8 +2113,8 @@ class GovernmentPageBuilder
 
     /**
      * What the home share buys: the fund's slice of the board, and when the share the law asks for would need more of
-     * the float than the fund may own, that the ceiling holds it there. Its holding scales with its weight on the board,
-     * so the ownership the law asks for is the ownership now times the target weight over the weight now.
+     * the float than the fund may own, that the ceiling holds it there. Its holding scales with its weight on the
+     * board, so the ownership the law asks for is the ownership now times the target weight over the weight now.
      */
     private function reserveHomeShareNote(MacroStateDTO $macro): string
     {
@@ -2189,8 +2231,8 @@ class GovernmentPageBuilder
     }
 
     /**
-     * The Fair Trading Board: its head, their stance on competition and whom the Council passed over for them, the merger
-     * screens in force, and the range a head may set them across. Null before the Board has a head.
+     * The Fair Trading Board: its head, their stance on competition and whom the Council passed over for them, the
+     * merger screens in force, and the range a head may set them across. Null before the Board has a head.
      *
      * @return array<string, mixed>|null
      */
@@ -2230,8 +2272,8 @@ class GovernmentPageBuilder
 
     /**
      * The Securities Commission: its head, their stance on the markets and whom the Council passed over for them; the
-     * margins and the enforcement on earnings in force and, through a new head's notice, the ones coming; and the range a head
-     * may set them across. Null before the Commission has a head.
+     * margins and the enforcement on earnings in force and, through a new head's notice, the ones coming; and the range
+     * a head may set them across. Null before the Commission has a head.
      *
      * @return array<string, mixed>|null
      */
@@ -2432,7 +2474,10 @@ class GovernmentPageBuilder
         return $counts;
     }
 
-    /** The camp a swing vote leans to now, 'hawk' or 'dove'; null for a hawk or a dove, or a swing vote with no lean yet. */
+    /**
+     * The camp a swing vote leans to now, 'hawk' or 'dove'; null for a hawk or a dove, or a swing vote with no lean
+     * yet.
+     */
     private static function leaning(float $stance, float $swing): ?string
     {
         return $swing > 0.0 && $stance !== 0.0 ? MonetaryAuthority::stanceName($stance) : null;
@@ -2450,8 +2495,8 @@ class GovernmentPageBuilder
     }
 
     /**
-     * A vote on record, with each cabinet that fell before the next. A government stays hidden until it takes office: the
-     * talks are settled on the day of the vote or the fall, and the page must not give their outcome away.
+     * A vote on record, with each cabinet that fell before the next. A government stays hidden until it takes office:
+     * the talks are settled on the day of the vote or the fall, and the page must not give their outcome away.
      *
      * @return array<string, mixed>
      */

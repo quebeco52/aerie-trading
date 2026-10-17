@@ -23,7 +23,10 @@ class GoingConcernDTO
         public readonly float $assetValue,
         /** Cash on hand, part of those assets, which the leverage covenant nets against the debt. */
         public readonly float $cash,
-        /** Debt claims ahead of the equity that the asset value is struck against: the drawn revolver included, a lender's deposits not. */
+        /**
+         * Debt claims ahead of the equity that the asset value is struck against: the drawn revolver included, a
+         * lender's deposits not.
+         */
         public readonly float $claims,
     ) {}
 

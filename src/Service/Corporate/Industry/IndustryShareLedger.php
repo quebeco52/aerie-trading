@@ -52,9 +52,15 @@ class IndustryShareLedger
     public const MAX_SHARE_DRAIN_PER_REPORT = 0.25;
 
     // --- Industry Capacity & Cournot Pricing ---
-    /** Widest capacity-to-demand ratio the industry price responds to; past it the excess is idle plant, not a deeper price cut. */
+    /**
+     * Widest capacity-to-demand ratio the industry price responds to; past it the excess is idle plant, not a deeper
+     * price cut.
+     */
     public const MAX_INDUSTRY_CAPACITY_RATIO = 2.0;
-    /** Tightest capacity-to-demand ratio the industry price responds to; past it demand is rationed rather than bid ever higher. */
+    /**
+     * Tightest capacity-to-demand ratio the industry price responds to; past it demand is rationed rather than bid ever
+     * higher.
+     */
     public const MIN_INDUSTRY_CAPACITY_RATIO = 0.5;
 
     public function __construct(
@@ -115,7 +121,8 @@ class IndustryShareLedger
      * Books this report's own revenue gain (realized over expected, as a fraction, net of the sector factor)
      * for rivals to absorb, bounded like the drain: past the bound the excess is market growth, not share.
      *
-     * @param float $addressableShare The firm's share of the market it sells into; sizes the market its gain came out of.
+     * @param float $addressableShare The firm's share of the market it sells into; sizes the market its gain came out
+     *                                of.
      */
     public function recordIdiosyncraticGain(Stock $stock, float $annualRevenue, float $gainFraction, float $addressableShare, int $tick): void
     {
@@ -184,11 +191,15 @@ class IndustryShareLedger
      * market that does the same lifts it by half. The share is the one the saturation penalty is struck on,
      * so the two costs of scale rise together.
      *
-     * @param float $annualCapacity      This firm's revenue capacity at full utilization, annualized, before any price response.
-     * @param float $addressableShare    This firm's share of its serviceable addressable market (CorporateMetrics::calculateScaleRatio).
-     * @param float $trendNominalGdp     Trend nominal GDP index (potential output times the price level; no output gap).
+     * @param float $annualCapacity      This firm's revenue capacity at full utilization, annualized, before any price
+     *                                   response.
+     * @param float $addressableShare    This firm's share of its serviceable addressable market
+     *                                   (CorporateMetrics::calculateScaleRatio).
+     * @param float $trendNominalGdp     Trend nominal GDP index (potential output times the price level; no output
+     *                                   gap).
      * @param float $totalTime           Simulated time in years, for the secular term.
-     * @param float $secularExcessGrowth The industry's secular real growth over the economy's trend growth at the open; faded here.
+     * @param float $secularExcessGrowth The industry's secular real growth over the economy's trend growth at the open;
+     *                                   faded here.
      */
     public function resolveIndustryCapacityRatio(
         Stock $stock,

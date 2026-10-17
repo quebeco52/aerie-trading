@@ -36,15 +36,24 @@ use App\Service\Model\StreamContext;
 class HomebuilderBusinessModel extends StandardCorporateBusinessModel
 {
     // --- Operating Cyclicality & Demand Structure ---
-    /** Elasticity of volumes and costs to the macro cycle. A builder's cycle reaches it through the housing starts and house price this model reads, so the engine's output-gap terms would count it twice (band floor). */
+    /**
+     * Elasticity of volumes and costs to the macro cycle. A builder's cycle reaches it through the housing starts and
+     * house price this model reads, so the engine's output-gap terms would count it twice (band floor).
+     */
     public const OPERATING_CYCLICALITY = 0.20;
 
     // --- Input Cost Basket ---
-    /** Shares of the construction cost base by input channel, measured from the BEA input-output accounts with supply-chain content (labor still the model's own). */
+    /**
+     * Shares of the construction cost base by input channel, measured from the BEA input-output accounts with
+     * supply-chain content (labor still the model's own).
+     */
     public const INPUT_COST_EXPOSURES = InputOutputExposures::HOMEBUILDER;
     /** The house price is the market's: construction inflation is recovered only as far as house prices move. */
     public const PRICING_POWER_INDEX = 0.00;
-    /** The house price index is real, so nominal selling prices carry expected inflation one for one; only the index's own move is a real price change. */
+    /**
+     * The house price index is real, so nominal selling prices carry expected inflation one for one; only the index's
+     * own move is a real price change.
+     */
     public const PRICING_ELASTICITY = 1.00;
 
     // --- FX Exposure ---
@@ -52,17 +61,29 @@ class HomebuilderBusinessModel extends StandardCorporateBusinessModel
     public const FX_REVENUE_EXPOSURE = 0.00;
 
     // --- Orders & Closings ---
-    /** Months from an order to its closing, the build: 7.0 months from permit to completion for homes built for sale (Census Survey of Construction, 2018, via NAHB). */
+    /**
+     * Months from an order to its closing, the build: 7.0 months from permit to completion for homes built for sale
+     * (Census Survey of Construction, 2018, via NAHB).
+     */
     public const BUILD_TIME_MONTHS = 7.0;
-    /** Share of the backlog closed each quarter: the backlog holds BUILD_TIME_MONTHS / 3 quarters of closings at steady state, (1 - b) / b. */
+    /**
+     * Share of the backlog closed each quarter: the backlog holds BUILD_TIME_MONTHS / 3 quarters of closings at steady
+     * state, (1 - b) / b.
+     */
     public const BACKLOG_BURN_RATE = 1.0 / (1.0 + (self::BUILD_TIME_MONTHS / 3.0));
     /** Quarterly persistence of the firm's own order shock (the standard corporate default). */
     public const ORDER_SHOCK_PERSISTENCE = 0.25;
 
     // --- Land Bank ---
-    /** Finished lot's share of a new home's sale price: 17.8-21.5% over 2013-2022 and 20.3% in 2009 (NAHB, Cost of Constructing a Home 2024, table 2). */
+    /**
+     * Finished lot's share of a new home's sale price: 17.8-21.5% over 2013-2022 and 20.3% in 2009 (NAHB, Cost of
+     * Constructing a Home 2024, table 2).
+     */
     public const LAND_SHARE_OF_PRICE = 0.20;
-    /** Default years of owned lots per year of closings: D.R. Horton FY2005, 156,000 lots owned on 51,172 closings (10-K); 3.6 in FY2006, 1.7 in FY2023 after the shift to optioned lots. */
+    /**
+     * Default years of owned lots per year of closings: D.R. Horton FY2005, 156,000 lots owned on 51,172 closings
+     * (10-K); 3.6 in FY2006, 1.7 in FY2023 after the shift to optioned lots.
+     */
     public const LAND_BANK_YEARS = 3.0;
     /** Stream-state key: the carrying cost of the owned lots per home, as a share of the price at trend. */
     public const STATE_LAND_COST = 'state:land_cost';

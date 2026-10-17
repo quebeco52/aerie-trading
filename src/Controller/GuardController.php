@@ -11,7 +11,10 @@ use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Attribute\Route;
 
-/** The Coast Guard's and the State Guard's pages: each force's mandate, its commander and the Almanac's record of it. Linked from the Council page only. */
+/**
+ * The Coast Guard's and the State Guard's pages: each force's mandate, its commander and the Almanac's record of it.
+ * Linked from the Council page only.
+ */
 class GuardController extends AbstractController
 {
     #[Route('/coast-guard', name: 'app_coast_guard', methods: ['GET'])]

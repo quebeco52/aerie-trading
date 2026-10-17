@@ -24,20 +24,32 @@ use App\Service\Model\ModelParam;
  *
  * Financial Physics:
  * - Tri-Stream Architecture:
- *      1. DTC Retail: High-margin branded garments sold direct-to-consumer (e-commerce and retail footprint). High consumer sentiment sensitivity, tempered by recessionary trade-down.
- *      2. Wholesale Channel: Branded garments distributed to department stores and multi-brand retailers. Moderate margin and channel inventory sensitivity.
- *      3. Contract Textile Supply: Low-margin B2B processed fiber, fabric, and private-label contract manufacturing. Low variance, counter-cyclical FX export benefits.
- * - Forrester Bullwhip Effect: Wholesale channel suffers violent, mathematically convex order freezes when retailers panic over inventory bloat during negative output gaps.
- * - Fast Fashion Markdown Squeeze: Seasonal/perishable inventory forces aggressive promotional markdowns during recessions, destroying DTC and Wholesale gross margins.
- * - COGS Forward Hedging: Raw material inventory lags (6-9 months) and cotton futures dampen immediate spot commodity and freight inflation passthrough.
- * - Consumer Trade-Down Effect: Recessions prompt consumers to trade down from high-end designer labels into durable value apparel and basics.
- * - Agricultural & Supply Chain Inflation: Variable margins squeezed by price spikes in agricultural commodities (raw cotton, wool, plant cellulose), freight rates, and energy.
- * - Manufacturing Asset & Plant Modernization Physics: High asset sensitivity where equipment maintenance and automated weaving/cutting dictate structural unit cost leadership.
+ *      1. DTC Retail: High-margin branded garments sold direct-to-consumer (e-commerce and retail footprint). High
+ *         consumer sentiment sensitivity, tempered by recessionary trade-down.
+ *      2. Wholesale Channel: Branded garments distributed to department stores and multi-brand retailers. Moderate
+ *         margin and channel inventory sensitivity.
+ *      3. Contract Textile Supply: Low-margin B2B processed fiber, fabric, and private-label contract manufacturing.
+ *         Low variance, counter-cyclical FX export benefits.
+ * - Forrester Bullwhip Effect: Wholesale channel suffers violent, mathematically convex order freezes when retailers
+ *   panic over inventory bloat during negative output gaps.
+ * - Fast Fashion Markdown Squeeze: Seasonal/perishable inventory forces aggressive promotional markdowns during
+ *   recessions, destroying DTC and Wholesale gross margins.
+ * - COGS Forward Hedging: Raw material inventory lags (6-9 months) and cotton futures dampen immediate spot commodity
+ *   and freight inflation passthrough.
+ * - Consumer Trade-Down Effect: Recessions prompt consumers to trade down from high-end designer labels into durable
+ *   value apparel and basics.
+ * - Agricultural & Supply Chain Inflation: Variable margins squeezed by price spikes in agricultural commodities (raw
+ *   cotton, wool, plant cellulose), freight rates, and energy.
+ * - Manufacturing Asset & Plant Modernization Physics: High asset sensitivity where equipment maintenance and automated
+ *   weaving/cutting dictate structural unit cost leadership.
  */
 class ApparelManufacturingBusinessModel extends StandardCorporateBusinessModel
 {
     // --- Operating Cyclicality & Demand Structure ---
-    /** Elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). Discretionary garments with fashion substitution. */
+    /**
+     * Elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). Discretionary
+     * garments with fashion substitution.
+     */
     public const OPERATING_CYCLICALITY = 1.20;
     /** Own-price elasticity of demand: volume lost per unit of real price increase. */
     public const PRICE_ELASTICITY_OF_DEMAND = 1.00;
@@ -45,25 +57,40 @@ class ApparelManufacturingBusinessModel extends StandardCorporateBusinessModel
     public const INDUSTRY_SUBSTITUTABILITY = 0.60;
 
     // --- Input Cost Basket ---
-    /** Shares of the variable cost base by input channel, measured from the BEA input-output accounts with supply-chain content (labor still the model's own). */
+    /**
+     * Shares of the variable cost base by input channel, measured from the BEA input-output accounts with supply-chain
+     * content (labor still the model's own).
+     */
     public const INPUT_COST_EXPOSURES = InputOutputExposures::APPAREL_MANUFACTURING;
     /** Six to nine months of raw inventory and cotton futures: spot fiber and freight moves reach COGS with a lag. */
     public const INPUT_COST_LAG_YEARS = 0.50;
 
     // --- Demand Transmission Lag ---
-    /** Years for a move in the output gap to reach the order book. Wholesale orders are placed two seasons ahead against a buying calendar, not against current demand. */
+    /**
+     * Years for a move in the output gap to reach the order book. Wholesale orders are placed two seasons ahead against
+     * a buying calendar, not against current demand.
+     */
     public const DEMAND_LAG_YEARS = 0.50;
 
     // --- FX Exposure ---
-    /** Share of revenue whose competitiveness moves with the trade-weighted exchange rate. Wholesale and DTC exports translate home, and the domestic shelf meets importers who reprice when the currency does. */
+    /**
+     * Share of revenue whose competitiveness moves with the trade-weighted exchange rate. Wholesale and DTC exports
+     * translate home, and the domestic shelf meets importers who reprice when the currency does.
+     */
     public const FX_REVENUE_EXPOSURE = 0.15;
 
     // --- Inventory Cycle ---
-    /** Order sensitivity to the economy-wide inventory-to-sales gap (Metzler cycle): overhangs trigger destocking, shortfalls restocking. Retailer inventory-to-sales ratios gate wholesale reorders. */
+    /**
+     * Order sensitivity to the economy-wide inventory-to-sales gap (Metzler cycle): overhangs trigger destocking,
+     * shortfalls restocking. Retailer inventory-to-sales ratios gate wholesale reorders.
+     */
     public const INVENTORY_CYCLE_SENSITIVITY = 0.50;
 
     // --- Balance Sheet Realism ---
-    /** The direct-to-consumer stream's capitalized leases over its revenue (IFRS 16 / ASC 842): store leases at an apparel retailer's 0.30. Wholesale and the mills lease little, at the default. */
+    /**
+     * The direct-to-consumer stream's capitalized leases over its revenue (IFRS 16 / ASC 842): store leases at an
+     * apparel retailer's 0.30. Wholesale and the mills lease little, at the default.
+     */
     public const DTC_LEASE_INTENSITY = 0.30;
 
     // --- Analyst Visibility & Error ---
@@ -95,7 +122,10 @@ class ApparelManufacturingBusinessModel extends StandardCorporateBusinessModel
     public const DTC_VARIABLE_COST_MULTIPLIER = 0.80;
     /** Variable cost multiplier for wholesale channel retail distribution (standard baseline). */
     public const WHOLESALE_VARIABLE_COST_MULTIPLIER = 1.00;
-    /** Variable cost multiplier for volume-driven contract B2B textile supply (20% higher variable cost ratio / thinner unit spread). */
+    /**
+     * Variable cost multiplier for volume-driven contract B2B textile supply (20% higher variable cost ratio / thinner
+     * unit spread).
+     */
     public const CONTRACT_VARIABLE_COST_MULTIPLIER = 1.20;
 
     // --- Forrester Bullwhip Physics ---
@@ -113,7 +143,10 @@ class ApparelManufacturingBusinessModel extends StandardCorporateBusinessModel
     // --- Macro & Trade-Down Physics ---
     /** Baseline pricing power across apparel manufacturer brand portfolio. */
     public const PRICING_POWER_INDEX = 0.50;
-    /** Demand boost scalar capturing consumer trade-down from premium/designer apparel into affordable mass-market basics during recessions. */
+    /**
+     * Demand boost scalar capturing consumer trade-down from premium/designer apparel into affordable mass-market
+     * basics during recessions.
+     */
     public const TRADE_DOWN_SCALAR = 0.60;
     /** Sensitivity of branded apparel demand to macroeconomic consumer sentiment swings. */
     public const CONSUMER_SENTIMENT_SCALAR = 0.40;
@@ -157,7 +190,10 @@ class ApparelManufacturingBusinessModel extends StandardCorporateBusinessModel
     }
 
     // --- Secular Demand ---
-    /** Spending on clothing and footwear as a share of US nominal GDP in 1997 (BEA NIPA Table 2.4.5, personal consumption expenditures). */
+    /**
+     * Spending on clothing and footwear as a share of US nominal GDP in 1997 (BEA NIPA Table 2.4.5, personal
+     * consumption expenditures).
+     */
     public const SECULAR_SHARE_1997 = 0.0289;
     /** The same share in 2019. */
     public const SECULAR_SHARE_2019 = 0.0192;
@@ -300,7 +336,8 @@ class ApparelManufacturingBusinessModel extends StandardCorporateBusinessModel
         $outputGap = $macroState->outputGapEma;
         $outputGapContraction = $outputGap < 0.0 ? abs($outputGap) : 0.0;
 
-        // 1. Forrester Bullwhip Effect: Wholesale retailers panic and freeze orders non-linearly under negative output gaps
+        // 1. Forrester Bullwhip Effect: Wholesale retailers panic and freeze orders non-linearly under negative output
+        //    gaps
         $bullwhipPenalty = ResponseCurves::calculateConvexPenalty($outputGapContraction, self::BULLWHIP_CONVEXITY, self::BULLWHIP_PENALTY_SCALAR);
 
         $dtcShock       = $dtcZ * ($baselineVol * self::DTC_RETAIL_VARIANCE);
@@ -325,7 +362,8 @@ class ApparelManufacturingBusinessModel extends StandardCorporateBusinessModel
         // --- Structural Margin Blending & Fast Fashion Markdown Squeeze ---
         // DTC retail captures premium margins (lower variable costs), wholesale operates at baseline,
         // and contract textile supply operates at volume pricing (higher variable costs).
-        // 2. Fast Fashion Markdown Squeeze: During negative output gaps, unsold perishable inventory forces aggressive markdowns, raising variable cost ratios.
+        // 2. Fast Fashion Markdown Squeeze: During negative output gaps, unsold perishable inventory forces aggressive
+        //    markdowns, raising variable cost ratios.
         $markdownPenalty = ResponseCurves::calculateConvexPenalty($outputGapContraction, self::MARKDOWN_CONVEXITY, self::MARKDOWN_SQUEEZE_SCALAR);
 
         $dtcCostRatio       = ($realizedVariableMargin * self::DTC_VARIABLE_COST_MULTIPLIER) + $markdownPenalty;

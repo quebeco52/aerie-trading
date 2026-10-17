@@ -401,7 +401,8 @@ class EarningsReportSubscriberTest extends TestCase
         $this->assertEqualsWithDelta(3000000.0, (float) $persisted->getNetLoanOriginations(), 0.01);
         $this->assertEqualsWithDelta(300000000.0, (float) $persisted->getCustomerDeposits(), 0.01);
         $this->assertNull($persisted->getCet1Ratio(), 'only a real bank model can state a capital ratio');
-        // (8.0M of interest earned - 1.0M of interest paid - 0.4M the curve squeeze took this quarter) / 354M net book, annualized.
+        // (8.0M of interest earned - 1.0M of interest paid - 0.4M the curve squeeze took this quarter) / 354M net book,
+        // annualized.
         $this->assertEqualsWithDelta(((8000000.0 - 1000000.0 - 400000.0) / 354000000.0) * 4.0, (float) $persisted->getNetInterestMargin(), 1e-4);
         $this->assertEqualsWithDelta((float) $persisted->getTotalAssets(), (float) $persisted->getTotalLiabilities() + (float) $persisted->getEquity(), 0.01, 'the statement balances');
     }
@@ -746,9 +747,9 @@ class EarningsReportSubscriberTest extends TestCase
     }
 
     /**
-     * A managed accrual hides in the operating lines with its tax deferred, so the filed statement still steps down from
-     * revenue to the net income it files, through pretax income less tax and the goodwill written off. No cash moved, so
-     * cash tax stays where it was.
+     * A managed accrual hides in the operating lines with its tax deferred, so the filed statement still steps down
+     * from revenue to the net income it files, through pretax income less tax and the goodwill written off. No cash
+     * moved, so cash tax stays where it was.
      */
     public function testTheFiledStatementStepsDownToTheManagedNetIncome(): void
     {
@@ -780,7 +781,8 @@ class EarningsReportSubscriberTest extends TestCase
         $ctx->taxPaid = 5_040_000.0;
         $ctx->cashTaxPaid = 4_000_000.0;
         $ctx->deferredTaxExpense = 1_040_000.0;
-        // GAAP net income after a $2m goodwill write-down, a tenth of a cent a share short of a $19m consensus on Street earnings.
+        // GAAP net income after a $2m goodwill write-down, a tenth of a cent a share short of a $19m consensus on
+        // Street earnings.
         $ctx->goodwillImpairment = 2_000_000.0;
         $ctx->specialItems = 2_000_000.0;
         $ctx->reportedActualNetIncome = 24_000_000.0 - 5_040_000.0 - 2_000_000.0;

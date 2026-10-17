@@ -22,7 +22,10 @@ namespace App\Data\Company;
 final class StrategicHoldings
 {
     // --- Clearinghouse Stake (Singapore: SEL Holdings in SGX) ---
-    /** The District's stake in its central counterparty, as a share of shares outstanding (SEL Holdings holds about 23% of SGX). */
+    /**
+     * The District's stake in its central counterparty, as a share of shares outstanding (SEL Holdings holds about 23%
+     * of SGX).
+     */
     public const CLEARINGHOUSE_STAKE = 0.23;
 
     /**

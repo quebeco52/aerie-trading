@@ -17,7 +17,11 @@ namespace App\Service\Market\Trading;
 final class LimitOrderDispatchGate
 {
     // --- Cadence ---
-    /** Ticks after a dispatch before the same instrument may be dispatched again while its condition still holds. Long enough for the worker to answer, short enough that a lost message is retried within seconds at any tick rate in use. */
+    /**
+     * Ticks after a dispatch before the same instrument may be dispatched again while its condition still holds. Long
+     * enough for the worker to answer, short enough that a lost message is retried within seconds at any tick rate in
+     * use.
+     */
     public const RETRY_TICKS = 100;
 
     /** @var array<string, int> Tick of the last dispatch, per instrument still waiting for the handler. */

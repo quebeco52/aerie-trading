@@ -19,8 +19,9 @@ class MacroReportHistoryRepository
     public function __construct(private readonly Connection $connection) {}
 
     /**
-     * The laws in force at each recorded quarter, oldest first: each Diet lever (PoliticsEngine::LEVER_FIELDS keys), the
-     * core capital requirement and where merger review stood. A quarter recorded before a column existed carries null for it.
+     * The laws in force at each recorded quarter, oldest first: each Diet lever (PoliticsEngine::LEVER_FIELDS keys),
+     * the core capital requirement and where merger review stood. A quarter recorded before a column existed carries
+     * null for it.
      *
      * @return list<array{t: float, levers: array<string, float|null>, capitalRequirement: float|null, mergerReviewLeniency: float|null}>
      */
@@ -71,8 +72,8 @@ class MacroReportHistoryRepository
     }
 
     /**
-     * Consumer price inflation at each recorded quarter, oldest first, smoothed as the economy page prints it. A quarter
-     * recorded without it is left out.
+     * Consumer price inflation at each recorded quarter, oldest first, smoothed as the economy page prints it. A
+     * quarter recorded without it is left out.
      *
      * @return list<array{t: float, inflation: float}>
      */

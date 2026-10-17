@@ -18,7 +18,8 @@ use App\Service\Model\Sector\UtilityBusinessModel;
 use Psr\Log\LoggerInterface;
 
 /**
- * The Aerie Diet: eight parties, a vote on the fixed election calendar, seats, the talks that follow, and the government.
+ * The Aerie Diet: eight parties, a vote on the fixed election calendar, seats, the talks that follow, and the
+ * government.
  *
  * The vote is the economic vote as proportional-representation electorates cast it: every cabinet's share falls with
  * inflation over the term, and a party governing alone also gains with growth over the campaign, while a coalition's
@@ -36,25 +37,28 @@ use Psr\Log\LoggerInterface;
  * which lasts only the one vote. Both are sized to the Nordic parties since 1945 (ParlGov), in proportion to a party's
  * size, as real vote shares vary. Seats are D'Hondt over the whole Diet.
  *
- * Each party is fixed on the axes it is defined by (size of state, openness, the Council, or the environment). On the others it strays
- * from its home between elections and is pulled back toward it, at the pace real parties move in the Chapel Hill expert
- * survey: an AR(1) around each party's own place, not a random walk, since parties keep their family's positions for
- * decades (Budge, Ezrow & McDonald 2010). After the vote the parties negotiate a government (CoalitionFormation); until
- * it takes office the outgoing cabinet stays on as caretaker and passes no budget. Between votes a cabinet can fall, at
- * the rate real cabinets of its kind have (ParlGov): the parties then talk again on the same seats, with no election.
+ * Each party is fixed on the axes it is defined by (size of state, openness, the Council, or the environment). On the
+ * others it strays from its home between elections and is pulled back toward it, at the pace real parties move in the
+ * Chapel Hill expert survey: an AR(1) around each party's own place, not a random walk, since parties keep their
+ * family's positions for decades (Budge, Ezrow & McDonald 2010). After the vote the parties negotiate a government
+ * (CoalitionFormation); until it takes office the outgoing cabinet stays on as caretaker and passes no budget. Between
+ * votes a cabinet can fall, at the rate real cabinets of its kind have (ParlGov): the parties then talk again on the
+ * same seats, with no election.
  *
  * The government then legislates at the budget rounds after the one it took office on. Its cabinet's position, its
- * members' weighted by seats (Gamson's law), sets its levers between the policies real parties at the ends of each
- * axis have enacted: the corporate rate, the stamp duty on share trades and the bank levy on the size-of-state axis, the tariff and the immigration regime on the
- * openness axis, the utility commission's grants on the Council axis, and on the environment axis the green belt, the carbon price and the rules on extraction, none of them for a
- * cabinet that puts growth first and the strictest on record at the Tideline Accord's place. Each party also runs on a
- * debt plank, the debt its budget steers to and how fast (AerieDiet::DEBT_PLANKS), which a cabinet weighs by seats. A
- * minority cabinet proposes and its support parties can refuse: each accepts a lever no further from its own policy
- * than the one in force, so a supporter can stop the cabinet moving away from it but cannot pull policy its way (Romer
- * & Rosenthal 1978). The bond market, not the Council, prices what the Diet borrows.
+ * members' weighted by seats (Gamson's law), sets its levers between the policies real parties at the ends of each axis
+ * have enacted: the corporate rate, the stamp duty on share trades and the bank levy on the size-of-state axis, the
+ * tariff and the immigration regime on the openness axis, the utility commission's grants on the Council axis, and on
+ * the environment axis the green belt, the carbon price and the rules on extraction, none of them for a cabinet that
+ * puts growth first and the strictest on record at the Tideline Accord's place. Each party also runs on a debt plank,
+ * the debt its budget steers to and how fast (AerieDiet::DEBT_PLANKS), which a cabinet weighs by seats. A minority
+ * cabinet proposes and its support parties can refuse: each accepts a lever no further from its own policy than the one
+ * in force, so a supporter can stop the cabinet moving away from it but cannot pull policy its way (Romer & Rosenthal
+ * 1978). The bond market, not the Council, prices what the Diet borrows.
  *
- * Politics runs beside the economy, not inside it: the ticker advances it after each macro tick on that tick's snapshot,
- * and the economy reads back only what the government hands it (PoliticsStateDTO::policy()), on the next tick.
+ * Politics runs beside the economy, not inside it: the ticker advances it after each macro tick on that tick's
+ * snapshot, and the economy reads back only what the government hands it (PoliticsStateDTO::policy()), on the next
+ * tick.
  */
 class PoliticsEngine
 {
@@ -62,55 +66,124 @@ class PoliticsEngine
     /** Redis key the politics state is kept under, beside the macro state. */
     public const REDIS_POLITICS_STATE = 'politics_state';
 
-    // --- The Diet's Election (ParlGov x World Bank, var/harness/politics/vote_europe_fit.py; Powell & Whitten 1993; Nannestad & Paldam 2002) ---
+    // --- The Diet's Election (ParlGov x World Bank, var/harness/politics/vote_europe_fit.py; Powell & Whitten 1993;
+    // Nannestad & Paldam 2002) ---
     /** Length of the fixed electoral term in years: the vote falls on the tick each term ends. */
     public const ELECTION_TERM_YEARS = 4.0;
-    /** Final stretch of the term whose growth voters weigh (Fair's G: the first three quarters of the election year). */
+    /**
+     * Final stretch of the term whose growth voters weigh (Fair's G: the first three quarters of the election year).
+     */
     public const ELECTION_CAMPAIGN_WINDOW_YEARS = 0.75;
-    /** Vote share a party governing alone gains per unit of real growth per head over the year to the vote above its trend: 0.51 (se 0.30) in 199 votes in 21 established PR democracies 1971-2020; a coalition's share does not move with growth (Powell & Whitten 1993's clarity of responsibility; -0.09, se 0.40, before the euro-area consolidations of 2008-2020). */
+    /**
+     * Vote share a party governing alone gains per unit of real growth per head over the year to the vote above its
+     * trend: 0.51 (se 0.30) in 199 votes in 21 established PR democracies 1971-2020; a coalition's share does not move
+     * with growth (Powell & Whitten 1993's clarity of responsibility; -0.09, se 0.40, before the euro-area
+     * consolidations of 2008-2020).
+     */
     public const ELECTION_SINGLE_PARTY_GROWTH_SLOPE = 0.506;
-    /** Vote share any cabinet loses per unit of annualised GDP-deflator inflation over the term above target: 0.10 (se 0.08), same fit (Fair's US presidential slope is 0.72). */
+    /**
+     * Vote share any cabinet loses per unit of annualised GDP-deflator inflation over the term above target: 0.10 (se
+     * 0.08), same fit (Fair's US presidential slope is 0.72).
+     */
     public const ELECTION_INFLATION_SLOPE = 0.100;
-    /** Government-wide swing in its share that the economy does not explain, common to its parties (Fair: standard error 2.95 pp); each party's own swings are drawn on top of it, sized with it to the Nordic record. */
+    /**
+     * Government-wide swing in its share that the economy does not explain, common to its parties (Fair: standard error
+     * 2.95 pp); each party's own swings are drawn on top of it, sized with it to the Nordic record.
+     */
     public const ELECTION_RESIDUAL_SD = 0.0295;
-    /** Vote share the average government has lost over a term in the record (Nannestad & Paldam 2002: 282 elections in 19 democracies), the reference the Diet's own cost is read against. */
+    /**
+     * Vote share the average government has lost over a term in the record (Nannestad & Paldam 2002: 282 elections in
+     * 19 democracies), the reference the Diet's own cost is read against.
+     */
     public const ELECTION_RECORDED_COST_OF_RULING = 0.0225;
-    /** Vote share governing costs the governing parties each term, beyond what they were elected on drifting back: governments are formed by parties riding a short-term swing or a lasting lead, and both run off. With those, the outgoing cabinet's parties lose 2.2 points a term, the record's 2.25 (var/harness/politics/vote_sim.py, 2,500 elections; ParlGov since 1945, measured the same way: Scandinavia 1.8, Western Europe 3.9). */
+    /**
+     * Vote share governing costs the governing parties each term, beyond what they were elected on drifting back:
+     * governments are formed by parties riding a short-term swing or a lasting lead, and both run off. With those, the
+     * outgoing cabinet's parties lose 2.2 points a term, the record's 2.25 (var/harness/politics/vote_sim.py, 2,500
+     * elections; ParlGov since 1945, measured the same way: Scandinavia 1.8, Western Europe 3.9).
+     */
     public const ELECTION_COST_OF_RULING = 0.005;
-    /** Each party's own short-term swing, drawn at every vote and gone by the next (Converse 1966 short-term forces), as the variance of its log vote share times its normal vote: real vote shares vary in proportion to their size (ParlGov, West European parties since 1945: log variance on log share, slope -0.99). Nordic parties since 1945 (var/harness/politics/vote_fit.py): a party of a quarter swings 7% either way, one of a twentieth 15%. */
+    /**
+     * Each party's own short-term swing, drawn at every vote and gone by the next (Converse 1966 short-term forces), as
+     * the variance of its log vote share times its normal vote: real vote shares vary in proportion to their size
+     * (ParlGov, West European parties since 1945: log variance on log share, slope -0.99). Nordic parties since 1945
+     * (var/harness/politics/vote_fit.py): a party of a quarter swings 7% either way, one of a twentieth 15%.
+     */
     public const ELECTION_SHORT_TERM_SWING_VARIANCE = 0.0012;
-    /** Share of a party's lasting lead or deficit on its normal vote still there a year later: real parties drift back toward their usual share, a half-life of seven years (ParlGov, Nordic parties since 1945, var/harness/politics/vote_fit.py; West European parties 0.911 over elections up to 20 years apart). */
+    /**
+     * Share of a party's lasting lead or deficit on its normal vote still there a year later: real parties drift back
+     * toward their usual share, a half-life of seven years (ParlGov, Nordic parties since 1945,
+     * var/harness/politics/vote_fit.py; West European parties 0.911 over elections up to 20 years apart).
+     */
     public const ELECTION_NORMAL_VOTE_PERSISTENCE = 0.905;
-    /** Share of a cabinet party's electoral cost of governing a support party bears: 1.99 points lost against 2.81 for cabinet parties (Thürk & Klüver 2024, Table 1 Model 1: support -1.991, prime minister's party -2.815, junior partner -2.799; 304 elections in 31 democracies since 1980). */
+    /**
+     * Share of a cabinet party's electoral cost of governing a support party bears: 1.99 points lost against 2.81 for
+     * cabinet parties (Thürk & Klüver 2024, Table 1 Model 1: support -1.991, prime minister's party -2.815, junior
+     * partner -2.799; 304 elections in 31 democracies since 1980).
+     */
     public const ELECTION_SUPPORT_ACCOUNTABILITY = 1.991 / ((2.815 + 2.799) / 2.0);
 
-    // --- Cabinets Falling Between Votes (ParlGov, West European cabinets since 1945, var/harness/politics/termination_fit.py) ---
-    /** Yearly hazard a single-party minority cabinet falls between votes, replaced by another cabinet without an election: 21 falls in 199 cabinet-years (a constant hazard, King, Alt, Burns & Laver 1990). */
+    // --- Cabinets Falling Between Votes (ParlGov, West European cabinets since 1945,
+    // var/harness/politics/termination_fit.py) ---
+    /**
+     * Yearly hazard a single-party minority cabinet falls between votes, replaced by another cabinet without an
+     * election: 21 falls in 199 cabinet-years (a constant hazard, King, Alt, Burns & Laver 1990).
+     */
     public const CABINET_FALL_HAZARD_SINGLE_PARTY_MINORITY = 0.106;
-    /** Yearly hazard a minority coalition falls between votes: 27 falls in 125 cabinet-years, twice a single party's, as a partner can walk out as well as a supporter. */
+    /**
+     * Yearly hazard a minority coalition falls between votes: 27 falls in 125 cabinet-years, twice a single party's, as
+     * a partner can walk out as well as a supporter.
+     */
     public const CABINET_FALL_HAZARD_MINORITY_COALITION = 0.216;
-    /** Yearly hazard a majority coalition falls between votes: 91 falls in 763 cabinet-years. A party governing alone with its own majority has no partner or supporter to lose, and none fell in 242 cabinet-years. */
+    /**
+     * Yearly hazard a majority coalition falls between votes: 91 falls in 763 cabinet-years. A party governing alone
+     * with its own majority has no partner or supporter to lose, and none fell in 242 cabinet-years.
+     */
     public const CABINET_FALL_HAZARD_MAJORITY_COALITION = 0.119;
 
     // --- Election Uncertainty (Julio & Yook 2012; Bernhard & Leblang 2006) ---
-    /** Days per term the talks after a cabinet falls hold the election pulse above where the term's ramp would put it: falls in 41% of terms, 40 days of talks each (var/harness/politics/formation_report.py). */
+    /**
+     * Days per term the talks after a cabinet falls hold the election pulse above where the term's ramp would put it:
+     * falls in 41% of terms, 40 days of talks each (var/harness/politics/formation_report.py).
+     */
     public const FALL_TALK_DAYS_PER_TERM = 19.5;
-    /** Long-run mean of nearness to the vote: the final-year ramp's half year a term, plus the talks at the peak after the vote and after any fall. */
+    /**
+     * Long-run mean of nearness to the vote: the final-year ramp's half year a term, plus the talks at the peak after
+     * the vote and after any fall.
+     */
     public const MEAN_ELECTION_PROXIMITY = (0.5 + ((CoalitionFormation::FORMATION_MEAN_DAYS + self::FALL_TALK_DAYS_PER_TERM) / FinancialConstants::DAYS_PER_YEAR)) / self::ELECTION_TERM_YEARS;
 
     // --- Party Positions (Chapel Hill expert survey 1999-2024, var/harness/politics/ches_fit.py) ---
-    /** Share of a party's distance from its home still there a year later, by axis: economic left-right for size of state, European integration for openness, anti-elite rhetoric for the Council, environment against growth for the environment (2010-2024); Western parties against their country's mean. */
+    /**
+     * Share of a party's distance from its home still there a year later, by axis: economic left-right for size of
+     * state, European integration for openness, anti-elite rhetoric for the Council, environment against growth for the
+     * environment (2010-2024); Western parties against their country's mean.
+     */
     public const POSITION_ANNUAL_PERSISTENCE = [AerieDiet::AXIS_STATE => 0.872, AerieDiet::AXIS_OPENNESS => 0.958, AerieDiet::AXIS_COUNCIL => 0.846, AerieDiet::AXIS_ENVIRONMENT => 0.933];
-    /** How far a party strays from its home on each axis, the standard deviation around it, from the same fit (a full expert scale is two units). */
+    /**
+     * How far a party strays from its home on each axis, the standard deviation around it, from the same fit (a full
+     * expert scale is two units).
+     */
     public const POSITION_WITHIN_SD = [AerieDiet::AXIS_STATE => 0.125, AerieDiet::AXIS_OPENNESS => 0.265, AerieDiet::AXIS_COUNCIL => 0.188, AerieDiet::AXIS_ENVIRONMENT => 0.170];
 
     // --- Vote Shares ---
     /** Smallest vote share a party is carried at, so a collapse leaves it a rump rather than a negative share. */
     public const MIN_VOTE_SHARE = 0.005;
-    /** Each party's own lasting swing each term, as the variance of its log vote share times its normal vote: with the government's swings, it spreads the parties around their normal votes as far as the Nordic parties since 1945, 0.019 (ParlGov, var/harness/politics/vote_fit.py against vote_sim.py), less what the normal vote's drift now adds over a term, so the vote moves as far from one election to the next as before. */
+    /**
+     * Each party's own lasting swing each term, as the variance of its log vote share times its normal vote: with the
+     * government's swings, it spreads the parties around their normal votes as far as the Nordic parties since 1945,
+     * 0.019 (ParlGov, var/harness/politics/vote_fit.py against vote_sim.py), less what the normal vote's drift now adds
+     * over a term, so the vote moves as far from one election to the next as before.
+     */
     public const LASTING_SWING_VARIANCE = 0.0118 - (self::ELECTION_TERM_YEARS * self::NORMAL_VOTE_DRIFT_VARIANCE / 2.0
         * (1.0 - (self::ELECTION_NORMAL_VOTE_PERSISTENCE ** (2.0 * self::ELECTION_TERM_YEARS))) / (1.0 - (self::ELECTION_NORMAL_VOTE_PERSISTENCE ** self::ELECTION_TERM_YEARS)));
-    /** Yearly variance of a party's log normal vote times its normal vote: Western European parties' shares carry a random walk beyond their lasting swing, half of it 0.341e-3 a year (ParlGov 1945-2020, parties averaging 5% or more, the Diet's short and lasting swing held; bootstrap 95% 0.09e-3 to 0.65e-3, var/harness/politics/walk_fit.py), so realignments build over decades as they do in the West rather than levelling off as the Nordic votes do. */
+    /**
+     * Yearly variance of a party's log normal vote times its normal vote: Western European parties' shares carry a
+     * random walk beyond their lasting swing, half of it 0.341e-3 a year (ParlGov 1945-2020, parties averaging 5% or
+     * more, the Diet's short and lasting swing held; bootstrap 95% 0.09e-3 to 0.65e-3,
+     * var/harness/politics/walk_fit.py), so realignments build over decades as they do in the West rather than
+     * levelling off as the Nordic votes do.
+     */
     public const NORMAL_VOTE_DRIFT_VARIANCE = 2.0 * 0.000341;
 
     // --- The Budget ---
@@ -156,55 +229,116 @@ class PoliticsEngine
     ];
 
     // --- Platforms: Public Spending (Singapore, Workers' Party and PAP, 2020-2025) ---
-    /** Log gap between the public spending the big-state and small-state ends plan: the 0.7% of GDP Singapore's opposition would raise from the reserves' returns and land sales in place of the 2023-24 GST rise (Workers' Party manifesto 2025; Ministry of Finance, 21 November 2022), over the founding purchases share, small enough that the share and its log coincide. The opposition costs no extra spending with it, so this is the most the two sides' budgets part by. */
+    /**
+     * Log gap between the public spending the big-state and small-state ends plan: the 0.7% of GDP Singapore's
+     * opposition would raise from the reserves' returns and land sales in place of the 2023-24 GST rise (Workers' Party
+     * manifesto 2025; Ministry of Finance, 21 November 2022), over the founding purchases share, small enough that the
+     * share and its log coincide. The opposition costs no extra spending with it, so this is the most the two sides'
+     * budgets part by.
+     */
     public const POLICY_MANIFESTO_PUBLIC_SPENDING_LOG_GAP = 0.007 / MacroEngine::PUBLIC_PURCHASES_TO_GDP;
 
     // --- Platforms: Corporate Tax (financial centres: Singapore, Luxembourg) ---
-    /** Gap between the corporate rates the big-state and small-state ends set: 2 points, the financial centres' larger single cuts, Singapore's 20% to 18% (Budget 2008) and Luxembourg's 21% to 19% (2017 tax reform); their parties more often part by a point or keep the same rate (Luxembourg 2025, 17% to 16%; Workers' Party manifesto 2025). Enacted rates follow manifesto ideology (Osterloh & Debus 2012). */
+    /**
+     * Gap between the corporate rates the big-state and small-state ends set: 2 points, the financial centres' larger
+     * single cuts, Singapore's 20% to 18% (Budget 2008) and Luxembourg's 21% to 19% (2017 tax reform); their parties
+     * more often part by a point or keep the same rate (Luxembourg 2025, 17% to 16%; Workers' Party manifesto 2025).
+     * Enacted rates follow manifesto ideology (Osterloh & Debus 2012).
+     */
     public const POLICY_MANIFESTO_CORPORATE_TAX_GAP = 0.02;
 
     // --- Platforms: Tariffs (Amiti, Redding & Weinstein 2019; Fajgelbaum et al. 2020) ---
-    /** Average effective tariff the protectionist end of the openness axis enacts over the District's free port: the US's 2025 rise, 2.5% to 17.9% (Yale Budget Lab, State of U.S. Tariffs, 26 September 2025). Duties pass fully into import prices at the border (Amiti, Redding & Weinstein 2019; Fajgelbaum et al. 2020). */
+    /**
+     * Average effective tariff the protectionist end of the openness axis enacts over the District's free port: the
+     * US's 2025 rise, 2.5% to 17.9% (Yale Budget Lab, State of U.S. Tariffs, 26 September 2025). Duties pass fully into
+     * import prices at the border (Amiti, Redding & Weinstein 2019; Fajgelbaum et al. 2020).
+     */
     public const POLICY_PROTECTIONIST_TARIFF = 0.154;
 
     // --- Platforms: Immigration (UN WPP via World Bank, 2000-2019) ---
-    /** Net migration a closed immigration regime admits, a year as a share of population: Japan's 0.11% (World Bank SM.POP.NETM over SP.POP.TOTL, 2000-2019 mean). */
+    /**
+     * Net migration a closed immigration regime admits, a year as a share of population: Japan's 0.11% (World Bank
+     * SM.POP.NETM over SP.POP.TOTL, 2000-2019 mean).
+     */
     public const MIGRATION_CLOSED_REGIME = 0.0011;
-    /** Net migration an open immigration regime admits: Canada's 0.73% and Australia's 0.86%, averaged (the same series). Between the two regimes sits the US's 0.50%, the rate the District's average party keeps (MacroEngine::STRUCTURAL_NET_MIGRATION_RATE). */
+    /**
+     * Net migration an open immigration regime admits: Canada's 0.73% and Australia's 0.86%, averaged (the same
+     * series). Between the two regimes sits the US's 0.50%, the rate the District's average party keeps
+     * (MacroEngine::STRUCTURAL_NET_MIGRATION_RATE).
+     */
     public const MIGRATION_OPEN_REGIME = (0.00728 + 0.00859) / 2.0;
 
     // --- Platforms: Foreign Buyers of Homes (Singapore Additional Buyer's Stamp Duty) ---
-    /** Tax on a home bought by a buyer from outside the District the closed end of the openness axis enacts, a share of the price: Singapore's 60% Additional Buyer's Stamp Duty on foreigners (since 27 April 2023), the strictest on record. The open end taxes none, as the District did at its founding. */
+    /**
+     * Tax on a home bought by a buyer from outside the District the closed end of the openness axis enacts, a share of
+     * the price: Singapore's 60% Additional Buyer's Stamp Duty on foreigners (since 27 April 2023), the strictest on
+     * record. The open end taxes none, as the District did at its founding.
+     */
     public const POLICY_PROTECTIONIST_FOREIGN_BUYER_TAX = 0.60;
 
     // --- Platforms: Stamp Duty (Hong Kong, 2021-2023; Colliard & Hoffmann 2017) ---
-    /** Duty on each side of a share trade the big-state end of the axis enacts: Hong Kong's 0.13% a side from 1 August 2021, cut back to 0.1% from 17 November 2023 (Inland Revenue Department). The small-state end keeps the founding 0.05% a side (FinancialConstants::STAMP_DUTY_RATE); either way it is paid into the reserve fund, not the budget. */
+    /**
+     * Duty on each side of a share trade the big-state end of the axis enacts: Hong Kong's 0.13% a side from 1 August
+     * 2021, cut back to 0.1% from 17 November 2023 (Inland Revenue Department). The small-state end keeps the founding
+     * 0.05% a side (FinancialConstants::STAMP_DUTY_RATE); either way it is paid into the reserve fund, not the budget.
+     */
     public const POLICY_BIG_STATE_STAMP_DUTY = 0.0013;
 
     // --- Platforms: Bank Levy (Ireland, 2024-2025) ---
-    /** Bank levy the big-state end of the axis enacts, a year: Ireland's 0.122% of the banks' eligible deposits (Revenue eBrief 272/23), the only bank levy among the financial centres the District is set against, charged here on the base the levy has always had (short-term funding, half on long-term funding and uninsured deposits). The small-state end levies none, as Singapore, Hong Kong, Luxembourg and Switzerland do not. */
+    /**
+     * Bank levy the big-state end of the axis enacts, a year: Ireland's 0.122% of the banks' eligible deposits (Revenue
+     * eBrief 272/23), the only bank levy among the financial centres the District is set against, charged here on the
+     * base the levy has always had (short-term funding, half on long-term funding and uninsured deposits). The
+     * small-state end levies none, as Singapore, Hong Kong, Luxembourg and Switzerland do not.
+     */
     public const POLICY_BIG_STATE_BANK_LEVY = 0.00122;
 
     // --- Platforms: The Reserve Draw (Singapore Net Investment Returns Contribution) ---
-    /** Share of the reserve fund's expected long-term real return the big-state end of the axis spends: 60%, the Workers' Party of Singapore's proposal to raise the Net Investment Returns Contribution from 50% (manifestos 2020 and 2025). The small-state end keeps the founding half (MacroEngine::RESERVE_DRAW_CEILING), which the fund must consent to any budget exceeding. */
+    /**
+     * Share of the reserve fund's expected long-term real return the big-state end of the axis spends: 60%, the
+     * Workers' Party of Singapore's proposal to raise the Net Investment Returns Contribution from 50% (manifestos 2020
+     * and 2025). The small-state end keeps the founding half (MacroEngine::RESERVE_DRAW_CEILING), which the fund must
+     * consent to any budget exceeding.
+     */
     public const POLICY_BIG_STATE_RESERVE_DRAW_SHARE = 0.60;
 
     // --- Platforms: Who Pays to Cut the Debt (IFS 2010 General Election briefing) ---
-    /** Gap between the shares of a deficit cut the big-state and small-state manifestos raise by tax: Labour's 2:1 ratio of spending cuts to tax rises (£24bn of £71bn) against the Conservatives' 4:1 (£14bn of £71bn), IFS, April 2010. Enacted plans show no partisan gap (deficit-cutting plans against ParlGov cabinets, 15 countries, 0.002 ± 0.018 a left-right point), so the gap is the manifestos'. */
+    /**
+     * Gap between the shares of a deficit cut the big-state and small-state manifestos raise by tax: Labour's 2:1 ratio
+     * of spending cuts to tax rises (£24bn of £71bn) against the Conservatives' 4:1 (£14bn of £71bn), IFS, April 2010.
+     * Enacted plans show no partisan gap (deficit-cutting plans against ParlGov cabinets, 15 countries, 0.002 ± 0.018 a
+     * left-right point), so the gap is the manifestos'.
+     */
     public const POLICY_MANIFESTO_CONSOLIDATION_TAX_SHARE_GAP = (24.0 - 14.0) / 71.0;
 
     // --- Platforms: The Tax on Dividends (Singapore's one-tier system) ---
-    /** Tax on dividends the big-state end of the axis enacts: it keeps the founding 15% (Valuation::FOUNDING_DIVIDEND_TAX_RATE), as no financial centre's left proposes a dividend tax (Singapore's Workers' Party taxes wealth instead, manifesto 2025). */
+    /**
+     * Tax on dividends the big-state end of the axis enacts: it keeps the founding 15%
+     * (Valuation::FOUNDING_DIVIDEND_TAX_RATE), as no financial centre's left proposes a dividend tax (Singapore's
+     * Workers' Party taxes wealth instead, manifesto 2025).
+     */
     public const POLICY_BIG_STATE_DIVIDEND_TAX = Valuation::FOUNDING_DIVIDEND_TAX_RATE;
-    /** Tax on dividends the small-state end enacts: none, as Singapore's one-tier system taxes a company's profits once and its dividends not at all (IRAS). */
+    /**
+     * Tax on dividends the small-state end enacts: none, as Singapore's one-tier system taxes a company's profits once
+     * and its dividends not at all (IRAS).
+     */
     public const POLICY_SMALL_STATE_DIVIDEND_TAX = 0.0;
 
     // --- Platforms: The Reserve Fund's Home Share (GPIF 2014; Norway's GPFG) ---
-    /** Share of the reserve fund's equities the closed end of the openness axis keeps at home: GPIF's half, 25% domestic equities in a 50% equity mix, after the October 2014 reallocation doubled its home weight from 12%. The open end keeps none, as Norway's fund invests only abroad "so that the Norwegian economy does not overheat" (NBIM). */
+    /**
+     * Share of the reserve fund's equities the closed end of the openness axis keeps at home: GPIF's half, 25% domestic
+     * equities in a 50% equity mix, after the October 2014 reallocation doubled its home weight from 12%. The open end
+     * keeps none, as Norway's fund invests only abroad "so that the Norwegian economy does not overheat" (NBIM).
+     */
     public const POLICY_PROTECTIONIST_RESERVE_HOME_SHARE = 0.25 / 0.50;
 
     // --- Platforms: The Environment (World Bank Carbon Pricing Dashboard) ---
-    /** Carbon price on power and industry the environment-first end of the axis enacts, in dollars a tonne of CO2: the EU Emissions Trading System's, $70.37 on 1 April 2025 (World Bank Carbon Pricing Dashboard). Sweden's $125.56 tax covers heating and transport fuels, which the District's economy does not price, so it is not the reference. A cabinet that puts growth first prices none, as the US federal government does not. */
+    /**
+     * Carbon price on power and industry the environment-first end of the axis enacts, in dollars a tonne of CO2: the
+     * EU Emissions Trading System's, $70.37 on 1 April 2025 (World Bank Carbon Pricing Dashboard). Sweden's $125.56 tax
+     * covers heating and transport fuels, which the District's economy does not price, so it is not the reference. A
+     * cabinet that puts growth first prices none, as the US federal government does not.
+     */
     public const POLICY_GREEN_CARBON_PRICE = 70.37;
 
     public function __construct(
@@ -287,8 +421,8 @@ class PoliticsEngine
             $state->campaignStartRealGdp = $realGdp;
         }
 
-        // Snapped to the tick grid, so the vote falls on the same tick as every other boundary of the calendar (a budget
-        // round) rather than one tick late when accumulated time lands a hair short of the term.
+        // Snapped to the tick grid, so the vote falls on the same tick as every other boundary of the calendar (a
+        // budget round) rather than one tick late when accumulated time lands a hair short of the term.
         if (TimeSeries::crossedSimulatedBoundary($state->totalTime, $dt, self::ELECTION_TERM_YEARS)) {
             $state->lastElectionAt = $state->totalTime;
             $this->holdElection($state, $macro, $realGdp);
@@ -297,7 +431,8 @@ class PoliticsEngine
             $state->termStartDeflator = $macro->consumerPriceLevel;
         }
 
-        // Support is brought up to date before any change of cabinet, so the month's swing lands on those who governed it.
+        // Support is brought up to date before any change of cabinet, so the month's swing lands on those who governed
+        // it.
         OpinionPolls::advance($state, $macro, $dt, $this->mathUtility);
 
         if ($state->cabinetFallsAt >= 0.0 && $state->totalTime >= $state->cabinetFallsAt) {
@@ -308,7 +443,8 @@ class PoliticsEngine
             self::takeOffice($state);
         }
 
-        // A sitting cabinet without a fall date draws one: on taking office, or on the first tick of a state that has none.
+        // A sitting cabinet without a fall date draws one: on taking office, or on the first tick of a state that has
+        // none.
         if ($state->cabinetFallsAt < 0.0 && $state->coalitionTakesOfficeAt < 0.0) {
             $hazard = self::fallHazard(AerieDiet::governingParties($state->governingCoalition), $state->dietSeats);
             if ($hazard > 0.0) {
@@ -347,7 +483,8 @@ class PoliticsEngine
      * Reserve Fund's head, then the Exchequer's head, then the Fair Trading Board's head, then the Securities
      * Commission's head, then the Security Bureau's director, then the Coast Guard's commandant, then the State Guard's
      * commander, then an appointment tipping the rate committee into or out of a supermajority, then the Council
-     * electing a councillor, then a rate meeting that moved the rate a full step or split its committee. A single-tick pulse, gone on the next tick.
+     * electing a councillor, then a rate meeting that moved the rate a full step or split its committee. A single-tick
+     * pulse, gone on the next tick.
      */
     public static function headline(PoliticsState $state): ?string
     {
@@ -375,9 +512,9 @@ class PoliticsEngine
     }
 
     /**
-     * The election calendar's pull on policy uncertainty, centred on its long-run mean: nearness to the vote, rising over
-     * the final year of the term (Julio & Yook 2012), held at its peak on the day of the vote and through the talks after
-     * it or after a fall, since only a seated government settles the regime (Bernhard & Leblang 2006).
+     * The election calendar's pull on policy uncertainty, centred on its long-run mean: nearness to the vote, rising
+     * over the final year of the term (Julio & Yook 2012), held at its peak on the day of the vote and through the
+     * talks after it or after a fall, since only a seated government settles the regime (Bernhard & Leblang 2006).
      *
      * @param float $totalTime              Simulation time.
      * @param float $lastElectionAt         When the last vote was held.
@@ -424,14 +561,15 @@ class PoliticsEngine
         $openness = max($closed, min($open, $position[AerieDiet::AXIS_OPENNESS] ?? 0.0));
         $council = max($populist, min($technocratic, $position[AerieDiet::AXIS_COUNCIL] ?? 0.0));
         $stateSpan = $bigState - $smallState;
-        // How far toward its own end of the size-of-state axis the position leans, -1 at the small-state end to +1 at the
-        // big-state end, each side scaled to its own end: a law the manifestos set either side of the District's average
-        // party moves half their gap each way, however far from the average each end party stands.
+        // How far toward its own end of the size-of-state axis the position leans, -1 at the small-state end to +1 at
+        // the big-state end, each side scaled to its own end: a law the manifestos set either side of the District's
+        // average party moves half their gap each way, however far from the average each end party stands.
         $stateLean = $state >= 0.0 ? $state / $bigState : -$state / $smallState;
         $opennessSpan = $open - $closed;
 
         return [
-            // Purchases move in proportion, the neutral position keeping the founding share (MacroEngine::PUBLIC_PURCHASES_TO_GDP).
+            // Purchases move in proportion, the neutral position keeping the founding share
+            // (MacroEngine::PUBLIC_PURCHASES_TO_GDP).
             'publicSpending' => MacroEngine::PUBLIC_PURCHASES_TO_GDP * exp(self::POLICY_MANIFESTO_PUBLIC_SPENDING_LOG_GAP / 2.0 * $stateLean),
             'corporateTax' => self::POLICY_MANIFESTO_CORPORATE_TAX_GAP / 2.0 * $stateLean,
             'tariff' => self::POLICY_PROTECTIONIST_TARIFF * max(0.0, $openness / $closed),
@@ -448,10 +586,12 @@ class PoliticsEngine
             'bankLevyRate' => self::POLICY_BIG_STATE_BANK_LEVY * ($state - $smallState) / $stateSpan,
             'reserveDrawShare' => MacroEngine::RESERVE_DRAW_CEILING
                 + ((self::POLICY_BIG_STATE_RESERVE_DRAW_SHARE - MacroEngine::RESERVE_DRAW_CEILING) * ($state - $smallState) / $stateSpan),
-            // The neutral position keeps the average plan's mix (CreditFiscalSubsystem::FOUNDING_CONSOLIDATION_TAX_SHARE).
+            // The neutral position keeps the average plan's mix
+            // (CreditFiscalSubsystem::FOUNDING_CONSOLIDATION_TAX_SHARE).
             'consolidationTaxShare' => CreditFiscalSubsystem::FOUNDING_CONSOLIDATION_TAX_SHARE + (self::POLICY_MANIFESTO_CONSOLIDATION_TAX_SHARE_GAP / 2.0 * $stateLean),
             'reserveHomeShare' => self::POLICY_PROTECTIONIST_RESERVE_HOME_SHARE * ($open - $openness) / $opennessSpan,
-            // The technocratic half keeps the appointed commission; toward the populist end it grants as an elected one.
+            // The technocratic half keeps the appointed commission; toward the populist end it grants as an elected
+            // one.
             'utilityRateGrant' => UtilityBusinessModel::APPOINTED_COMMISSION_GRANTED_SHARE
                 * (1.0 - ((1.0 - UtilityBusinessModel::ELECTED_COMMISSION_GRANT_RATIO) * max(0.0, $council / $populist))),
             // The neutral position keeps the founding rate; each end enacts its own side's plan.
@@ -462,7 +602,8 @@ class PoliticsEngine
     }
 
     /**
-     * The levers in force, keyed and ordered as platform() writes them, so a budget that changes nothing compares equal.
+     * The levers in force, keyed and ordered as platform() writes them, so a budget that changes nothing compares
+     * equal.
      *
      * @return array<string, float>
      */
@@ -477,8 +618,8 @@ class PoliticsEngine
     }
 
     /**
-     * A set of parties' debt plank, their planks weighted by seats as their positions are (Gamson's law): the gross debt
-     * the budget steers to and the points of GDP a year it moves debt there (AerieDiet::DEBT_PLANKS).
+     * A set of parties' debt plank, their planks weighted by seats as their positions are (Gamson's law): the gross
+     * debt the budget steers to and the points of GDP a year it moves debt there (AerieDiet::DEBT_PLANKS).
      *
      * @param list<string>             $parties The parties.
      * @param array<string, int|float> $seats   Seats by party.
@@ -528,7 +669,8 @@ class PoliticsEngine
      * @param array<string, int|float>            $seats     Seats by party.
      * @param array<string, array<string, float>> $positions Positions by party and axis.
      * @param array<string, float>                $standing  The levers in force (standingLevers()).
-     * @param bool                                $recession Whether a recession is declared, in which the fund consents.
+     * @param bool                                $recession Whether a recession is declared, in which the fund
+     *                                                       consents.
      * @return array{levers: array<string, float>, platform: array<string, float>, supportHeld: array<string, bool>, fundHeld: bool}
      *         What the round enacts, the cabinet's own programme, which levers the supporters hold short of it, and
      *         whether the fund held the draw at its ceiling.
@@ -564,7 +706,8 @@ class PoliticsEngine
      * A budget round: budget() becomes law, and the economy reads the levers from the next tick.
      *
      * @param PoliticsState $state     The politics, advanced in place.
-     * @param bool          $recession Whether a recession is declared, in which the fund consents to a draw above its ceiling.
+     * @param bool          $recession Whether a recession is declared, in which the fund consents to a draw above its
+     *                                 ceiling.
      */
     public static function enactBudget(PoliticsState $state, bool $recession = false): void
     {
@@ -658,10 +801,10 @@ class PoliticsEngine
     }
 
     /**
-     * The cabinet loses the Diet between votes: it stays on as caretaker and the parties talk, on the seats the last vote
-     * gave them. No election is called; the calendar is fixed. The parties that fell may form again, as at least 42% of
-     * West European successors between votes do (ParlGov 1945-2020, 185 cases), but without the incumbency weight a
-     * sitting cabinet carries into talks after a vote: with it, two in three falls re-formed the same cabinet.
+     * The cabinet loses the Diet between votes: it stays on as caretaker and the parties talk, on the seats the last
+     * vote gave them. No election is called; the calendar is fixed. The parties that fell may form again, as at least
+     * 42% of West European successors between votes do (ParlGov 1945-2020, 185 cases), but without the incumbency
+     * weight a sitting cabinet carries into talks after a vote: with it, two in three falls re-formed the same cabinet.
      */
     private function fall(PoliticsState $state): void
     {
@@ -686,8 +829,8 @@ class PoliticsEngine
 
     /**
      * The yearly hazard a cabinet falls between votes, replaced without an election (ParlGov, West European cabinets
-     * since 1945): a coalition can lose a partner, and a minority cabinet its supporters; a party governing alone with its
-     * own majority has neither to lose.
+     * since 1945): a coalition can lose a partner, and a minority cabinet its supporters; a party governing alone with
+     * its own majority has neither to lose.
      *
      * @param list<string>             $cabinet The cabinet's parties.
      * @param array<string, int|float> $seats   Seats by party.
@@ -706,11 +849,11 @@ class PoliticsEngine
 
     /**
      * The government's change in vote share: the economy as real PR electorates weigh it, less the cost of ruling, plus
-     * the residual. Inflation costs every cabinet; growth is credited only to a party governing alone, since voters hold
-     * a coalition's parties to no account for it (Powell & Whitten 1993).
+     * the residual. Inflation costs every cabinet; growth is credited only to a party governing alone, since voters
+     * hold a coalition's parties to no account for it (Powell & Whitten 1993).
      *
-     * Over part of a term (App\Service\Politics\OpinionPolls), the cost of ruling accrues in proportion and the residual
-     * as a random walk, so the parts of a term add up to the whole.
+     * Over part of a term (App\Service\Politics\OpinionPolls), the cost of ruling accrues in proportion and the
+     * residual as a random walk, so the parts of a term add up to the whole.
      *
      * @param float $growthGap    Annualised real per-capita growth over the campaign, less its trend.
      * @param float $inflationGap Annualised inflation over the term, less the target.

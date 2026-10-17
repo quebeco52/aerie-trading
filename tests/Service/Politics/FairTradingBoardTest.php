@@ -55,7 +55,9 @@ class FairTradingBoardTest extends TestCase
         return $state;
     }
 
-    /** A stance is a set of screens on the agencies' record: -1 the 2010 guidelines, +1 the 2023 ones, linear between. */
+    /**
+     * A stance is a set of screens on the agencies' record: -1 the 2010 guidelines, +1 the 2023 ones, linear between.
+     */
     public function testAStanceRunsFromTheLightestGuidelinesToTheStrictest(): void
     {
         $lightest = MergerAndAcquisitionEngine::reviewScreens(FairTradingBoard::leniency(-1.0));
@@ -74,7 +76,10 @@ class FairTradingBoardTest extends TestCase
         $this->assertSame('strict', FairTradingBoard::stanceName(0.9));
     }
 
-    /** At Year 1 the head seated before it holds the founding screens, which the economy is handed; every councillor holds a stance on competition. */
+    /**
+     * At Year 1 the head seated before it holds the founding screens, which the economy is handed; every councillor
+     * holds a stance on competition.
+     */
     public function testTheHeadAtYearOneHoldsTheFoundingScreens(): void
     {
         $state = self::opened();
@@ -90,7 +95,10 @@ class FairTradingBoardTest extends TestCase
         $this->assertSame(FairTradingBoard::FOUNDING_LENIENCY, (new PoliticsStateDTO())->policy()->mergerReviewLeniency, 'Before the Board has a head.');
     }
 
-    /** At the opening head's term end the Council names the candidate nearest its median on competition, whose screens the economy reads; nothing changes until the next term ends. */
+    /**
+     * At the opening head's term end the Council names the candidate nearest its median on competition, whose screens
+     * the economy reads; nothing changes until the next term ends.
+     */
     public function testAtTermEndTheCouncilNamesTheCandidateNearestItsMedian(): void
     {
         foreach ([3, 7, 11, 19] as $seed) {

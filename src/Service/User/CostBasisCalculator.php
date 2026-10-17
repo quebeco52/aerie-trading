@@ -83,7 +83,8 @@ final class CostBasisCalculator
 
             $quantity = $order->getFilledQuantity() > 0 ? (int) $order->getFilledQuantity() : (int) $order->getQuantity();
             $price = (float) ($order->getExecutionPrice() ?? $order->getLimitPrice() ?? 0.0);
-            // Transfer taxes are part of what a position cost (and come off what a short raised), as a tax basis has them.
+            // Transfer taxes are part of what a position cost (and come off what a short raised), as a tax basis has
+            // them.
             $duty = (float) ($order->getStampDuty() ?? 0.0);
             $positions[$ticker] ??= ['qty' => 0, 'cost' => 0.0];
             $tracksRealised = $order->getAssetType() !== 'OPTION';

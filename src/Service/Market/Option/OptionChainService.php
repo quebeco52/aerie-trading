@@ -39,21 +39,39 @@ final class OptionChainService
         'structural_open_interest', 'updated_at',
     ];
 
-    /** Contracts written per INSERT. A slice's first pass opens its whole chain, so the batch is sized for that rather than for the quiet case. */
+    /**
+     * Contracts written per INSERT. A slice's first pass opens its whole chain, so the batch is sized for that rather
+     * than for the quiet case.
+     */
     public const LISTINGS_PER_STATEMENT = 500;
 
     // --- Listed Equity Options ---
-    /** Months to expiry of the expiries listed at any one time: two near months, a quarterly and a two-quarter, which is the front of a standard listed cycle. */
+    /**
+     * Months to expiry of the expiries listed at any one time: two near months, a quarterly and a two-quarter, which is
+     * the front of a standard listed cycle.
+     */
     public const OPTION_EXPIRY_MONTHS = [1, 2, 3, 6];
     /** Strike ladder spacing as a fraction of spot, before it is snapped to a round increment. */
     public const OPTION_STRIKE_SPACING_FRACTION = 0.05;
-    /** Widest strike listed either side of spot, as a fraction of it. Wide enough to carry the tails the smile prices, short of the strikes nobody quotes. */
+    /**
+     * Widest strike listed either side of spot, as a fraction of it. Wide enough to carry the tails the smile prices,
+     * short of the strikes nobody quotes.
+     */
     public const OPTION_STRIKE_LADDER_WIDTH = 0.30;
-    /** Round increments a strike ladder may be struck on; the ladder snaps to the smallest one at or above the spacing fraction, which is how a real ladder ends up on whole and half numbers at every price level. */
+    /**
+     * Round increments a strike ladder may be struck on; the ladder snaps to the smallest one at or above the spacing
+     * fraction, which is how a real ladder ends up on whole and half numbers at every price level.
+     */
     public const OPTION_STRIKE_INCREMENTS = [0.50, 1.00, 2.50, 5.00, 10.00, 25.00, 50.00, 100.00, 250.00];
-    /** Half-width around spot listed on every increment. A real chain is dense at the money and thins as it goes out, because that is where the strikes anyone asks for are. */
+    /**
+     * Half-width around spot listed on every increment. A real chain is dense at the money and thins as it goes out,
+     * because that is where the strikes anyone asks for are.
+     */
     public const OPTION_STRIKE_DENSE_BAND = 0.10;
-    /** Increments between strikes outside the dense band, the ends of the ladder always listed. Three: measured across a $8-$1400 price range at 30% fewer rows for 1.2% of dealer gamma, against 19% fewer for 0.1% at two. */
+    /**
+     * Increments between strikes outside the dense band, the ends of the ladder always listed. Three: measured across a
+     * $8-$1400 price range at 30% fewer rows for 1.2% of dealer gamma, against 19% fewer for 0.1% at two.
+     */
     public const OPTION_STRIKE_WING_INCREMENT_MULTIPLE = 3;
 
     public function __construct(

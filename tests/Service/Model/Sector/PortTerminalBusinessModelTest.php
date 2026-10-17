@@ -80,7 +80,9 @@ final class PortTerminalBusinessModelTest extends TestCase
         return MacroAggregateSubsystem::goodsExportShareOfTrade();
     }
 
-    /** The dwell factor at a given supply-chain pressure: log-linear, Jensen-compensated at the index's unit variance. */
+    /**
+     * The dwell factor at a given supply-chain pressure: log-linear, Jensen-compensated at the index's unit variance.
+     */
     private static function dwell(float $pressure): float
     {
         $s = PortTerminalBusinessModel::STORAGE_DWELL_SENSITIVITY;
@@ -92,7 +94,8 @@ final class PortTerminalBusinessModelTest extends TestCase
     {
         $actuals = $this->report($this->terminal(), new MacroStateDTO());
 
-        // At the index's median the dwell factor sits the Jensen term under one, so that it averages one over the cycle.
+        // At the index's median the dwell factor sits the Jensen term under one, so that it averages one over the
+        // cycle.
         $storageBase = self::EXPECTED_REVENUE * PortTerminalBusinessModel::STORAGE_SERVICES_WEIGHT;
         $this->assertEqualsWithDelta(self::EXPECTED_REVENUE - ($storageBase * (1.0 - self::dwell(0.0))), $actuals->actualRevenue, 1e-9);
         $this->assertEqualsWithDelta(self::EXPECTED_REVENUE * PortTerminalBusinessModel::GATEWAY_HANDLING_WEIGHT, $actuals->streamRevenue['gateway_handling'], 1e-9);

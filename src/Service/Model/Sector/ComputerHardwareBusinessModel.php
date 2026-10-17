@@ -27,7 +27,10 @@ use App\Service\Model\ModelParam;
 class ComputerHardwareBusinessModel extends StandardCorporateBusinessModel
 {
     // --- Operating Cyclicality & Demand Structure ---
-    /** Elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). Refresh cycles are deferred in downturns; devices substitute readily. */
+    /**
+     * Elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). Refresh cycles are
+     * deferred in downturns; devices substitute readily.
+     */
     public const OPERATING_CYCLICALITY = 1.30;
     /** Own-price elasticity of demand: volume lost per unit of real price increase. */
     public const PRICE_ELASTICITY_OF_DEMAND = 1.00;
@@ -35,13 +38,22 @@ class ComputerHardwareBusinessModel extends StandardCorporateBusinessModel
     public const INDUSTRY_SUBSTITUTABILITY = 0.60;
 
     // --- Input Cost Basket ---
-    /** Shares of the variable cost base by input channel, measured from the BEA input-output accounts with supply-chain content (labor still the model's own). */
+    /**
+     * Shares of the variable cost base by input channel, measured from the BEA input-output accounts with supply-chain
+     * content (labor still the model's own).
+     */
     public const INPUT_COST_EXPOSURES = InputOutputExposures::COMPUTER_HARDWARE;
-    /** Boxes are specified on a common component bill and bid against near-identical rivals; component cost moves reach street prices, but little else does. */
+    /**
+     * Boxes are specified on a common component bill and bid against near-identical rivals; component cost moves reach
+     * street prices, but little else does.
+     */
     public const PRICING_POWER_INDEX = 0.45;
 
     // --- Inventory Cycle ---
-    /** Order sensitivity to the economy-wide inventory-to-sales gap (Metzler cycle): overhangs trigger destocking, shortfalls restocking. Channel inventory whipsaws PC and server shipments hardest. */
+    /**
+     * Order sensitivity to the economy-wide inventory-to-sales gap (Metzler cycle): overhangs trigger destocking,
+     * shortfalls restocking. Channel inventory whipsaws PC and server shipments hardest.
+     */
     public const INVENTORY_CYCLE_SENSITIVITY = 1.00;
 
     /**
@@ -55,7 +67,10 @@ class ComputerHardwareBusinessModel extends StandardCorporateBusinessModel
     }
 
     // --- Balance Sheet Realism ---
-    /** Stock-based compensation (ASC 718) as a share of revenue: Computers/Peripherals, 2.47% of revenue, 36 firms (Damodaran, Employee data by industry, US, January 2026). */
+    /**
+     * Stock-based compensation (ASC 718) as a share of revenue: Computers/Peripherals, 2.47% of revenue, 36 firms
+     * (Damodaran, Employee data by industry, US, January 2026).
+     */
     public const STOCK_COMPENSATION_INTENSITY = 0.0247;
 
     // --- Dual-Stream Architecture ---
@@ -71,17 +86,27 @@ class ComputerHardwareBusinessModel extends StandardCorporateBusinessModel
     // --- Revenue & Shock Physics ---
     /** Inventory obsolescence increases variance. */
     public const REVENUE_VARIANCE_SCALAR = 0.35;
-    /** Enterprise hardware's margin premium over consumer devices, as a share of revenue (Dell FY2024 segments: ISG ~12.7% vs CSG ~6.4% operating margin). */
+    /**
+     * Enterprise hardware's margin premium over consumer devices, as a share of revenue (Dell FY2024 segments: ISG
+     * ~12.7% vs CSG ~6.4% operating margin).
+     */
     public const ENTERPRISE_MARGIN_PREMIUM = 0.063;
 
     // --- Tail Risk & Shock Events ---
-    /** Latent supply-stress threshold for a component shortage, in standard deviations: the firm's own draw plus the economy's supply-chain pressure at the comm-equipment loading, so shortages cluster when the whole chain is stretched. */
+    /**
+     * Latent supply-stress threshold for a component shortage, in standard deviations: the firm's own draw plus the
+     * economy's supply-chain pressure at the comm-equipment loading, so shortages cluster when the whole chain is
+     * stretched.
+     */
     public const SEMICONDUCTOR_SHORTAGE_Z_SCORE = -2.20;
     /** Enterprise shipments a component shortage lets through: allocation favours the high-margin servers. */
     public const SHORTAGE_ENTERPRISE_MULT = 0.85;
     /** Consumer shipments a component shortage lets through: PCs and peripherals are allocated last. */
     public const SHORTAGE_CONSUMER_MULT = 0.80;
-    /** Variable margin cost per standard deviation of supply-chain pressure (expediting, spot chips, air freight): the comm-equipment figure, as both buy the same parts through the same contract manufacturers. */
+    /**
+     * Variable margin cost per standard deviation of supply-chain pressure (expediting, spot chips, air freight): the
+     * comm-equipment figure, as both buy the same parts through the same contract manufacturers.
+     */
     public const GSCPI_MARGIN_PENALTY_SCALAR = CommunicationEquipmentBusinessModel::GSCPI_MARGIN_PENALTY_SCALAR;
     /** Positive z-score threshold indicating a massive enterprise/AI hardware super-cycle. */
     public const AI_SUPER_CYCLE_Z_SCORE = 2.40;
@@ -89,7 +114,9 @@ class ComputerHardwareBusinessModel extends StandardCorporateBusinessModel
     public const AI_SUPER_CYCLE_MULT = 1.20;
 
     // --- Continuous Elasticity ---
-    /** Variable margin sensitivity to enterprise hardware sales pulling in high-margin software/support attach rates. */
+    /**
+     * Variable margin sensitivity to enterprise hardware sales pulling in high-margin software/support attach rates.
+     */
     public const ENTERPRISE_SOFTWARE_ATTACH_ELASTICITY = 0.015;
 
     // --- Trade Balance & PPI Transmission ---
@@ -97,13 +124,21 @@ class ComputerHardwareBusinessModel extends StandardCorporateBusinessModel
     public const FOREIGN_DEMAND_SENSITIVITY = 1.00;
     /** Share of the trade-flow shift each book carries: enterprise and consumer systems split it evenly. */
     public const TRADE_FLOW_STREAM_SHARE = 0.50;
-    /** Component supply agreements fix bill-of-materials prices for about a quarter before spot moves reach the line. */
+    /**
+     * Component supply agreements fix bill-of-materials prices for about a quarter before spot moves reach the line.
+     */
     public const INPUT_COST_LAG_YEARS = 0.25;
 
     // --- FX Exposure ---
-    /** Share of revenue whose competitiveness moves with the trade-weighted exchange rate. Systems are assembled offshore and bid against imports on a common component bill. */
+    /**
+     * Share of revenue whose competitiveness moves with the trade-weighted exchange rate. Systems are assembled
+     * offshore and bid against imports on a common component bill.
+     */
     public const FX_REVENUE_EXPOSURE = 0.10;
-    /** Consumer PCs are a landed import competing on retail shelf price, so the consumer book reprices with the currency harder than the enterprise book. */
+    /**
+     * Consumer PCs are a landed import competing on retail shelf price, so the consumer book reprices with the currency
+     * harder than the enterprise book.
+     */
     public const CONSUMER_FX_REVENUE_EXPOSURE = 0.15;
 
     public function getReversionSpeed(): float
@@ -116,7 +151,10 @@ class ComputerHardwareBusinessModel extends StandardCorporateBusinessModel
     }
 
     // --- Secular Demand ---
-    /** Spending on personal computers and peripherals plus business investment in computers and peripheral equipment as a share of US nominal GDP in 1997 (BEA NIPA Table 2.4.5, personal consumption expenditures and Table 5.3.5). */
+    /**
+     * Spending on personal computers and peripherals plus business investment in computers and peripheral equipment as
+     * a share of US nominal GDP in 1997 (BEA NIPA Table 2.4.5, personal consumption expenditures and Table 5.3.5).
+     */
     public const SECULAR_SHARE_1997 = 0.0125;
     /** The same share in 2019. */
     public const SECULAR_SHARE_2019 = 0.0082;

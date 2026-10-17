@@ -98,7 +98,10 @@ final class LawExposureBuilderTest extends TestCase
         $this->assertEqualsWithDelta($duty['change'] / (float) $broker->getTotalNetIncome(), $duty['changeShare'], 1e-12);
     }
 
-    /** Public spending is measured against its Year 1 share, not against none: a contractor gains what purchases above that level add, and a cut expected costs it. */
+    /**
+     * Public spending is measured against its Year 1 share, not against none: a contractor gains what purchases above
+     * that level add, and a cut expected costs it.
+     */
     public function testPublicSpendingIsMeasuredAgainstItsYearOneShare(): void
     {
         $macro = new MacroStateDTO();

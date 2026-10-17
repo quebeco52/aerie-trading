@@ -49,7 +49,9 @@ final class StockVarianceStateTest extends TestCase
         );
     }
 
-    /** Steps the variance state two years from the target with no vol-of-vol and no jumps, and returns where it settles. */
+    /**
+     * Steps the variance state two years from the target with no vol-of-vol and no jumps, and returns where it settles.
+     */
     private function settledVariance(float $announcementVariance): float
     {
         mt_srand(20261008);
@@ -83,7 +85,10 @@ final class StockVarianceStateTest extends TestCase
         );
     }
 
-    /** Where the total variance should sit at a given market vol: the idiosyncratic target plus the loading and the market jump. */
+    /**
+     * Where the total variance should sit at a given market vol: the idiosyncratic target plus the loading and the
+     * market jump.
+     */
     private function targetVariance(float $marketVol): float
     {
         return MarketEngine::longTermIdiosyncraticVariance(self::LONG_TERM_VOLATILITY, self::BETA)
@@ -92,8 +97,8 @@ final class StockVarianceStateTest extends TestCase
     }
 
     /**
-     * The market-wide jump reaches a name through its beta, so it is systematic: a name in normal conditions carries its
-     * configured variance as the market's diffusion and its jump through beta plus what is left for its own budget.
+     * The market-wide jump reaches a name through its beta, so it is systematic: a name in normal conditions carries
+     * its configured variance as the market's diffusion and its jump through beta plus what is left for its own budget.
      */
     public function testTheMarketJumpIsPaidForInTheSystematicBlock(): void
     {
@@ -113,7 +118,8 @@ final class StockVarianceStateTest extends TestCase
     /**
      * A name whose own budget is spent down to below the floor its long-run residual is held to (here a configuration
      * whose beta uses up its volatility, with an outsized announcement record) reverts to the target it was given.
-     * Clamping the residual state up to that floor every tick held it above its target and lifted the name's volatility.
+     * Clamping the residual state up to that floor every tick held it above its target and lifted the name's
+     * volatility.
      */
     public function testAResidualStruckBelowTheFloorRevertsToItsTarget(): void
     {
@@ -199,7 +205,8 @@ final class StockVarianceStateTest extends TestCase
         $residualTarget = MarketEngine::longTermIdiosyncraticVariance(self::LONG_TERM_VOLATILITY, self::BETA) * MarketEngine::commonIdiosyncraticVarianceScale($turbulent);
         self::assertEqualsWithDelta($residualTarget + ((self::BETA * $turbulent) ** 2) + MarketEngine::systemicJumpMoments(self::BETA)['variance'], $volatility * $volatility, 1e-3 * $residualTarget);
 
-        // A market that has been this turbulent for a whole cycle is at its trend: the residual is back at its own level.
+        // A market that has been this turbulent for a whole cycle is at its trend: the residual is back at its own
+        // level.
         for ($tick = 0; $tick < 504; $tick++) {
             $context = $this->context($volatility, $turbulent, $turbulent, 0.0, 1.0e-6, self::DAILY);
             $context->marketVarianceTrend = $turbulent * $turbulent;
@@ -253,7 +260,10 @@ final class StockVarianceStateTest extends TestCase
         }
     }
 
-    /** The load stays well inside one across the board's intensities, so the target can never be struck at or below zero. */
+    /**
+     * The load stays well inside one across the board's intensities, so the target can never be struck at or below
+     * zero.
+     */
     public function testTheVarianceJumpLoadIsBoundedAcrossTheBoard(): void
     {
         foreach ([0.1, 0.6, 1.5, 3.0] as $lambda) {

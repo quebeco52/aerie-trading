@@ -45,7 +45,9 @@ class Bond
     /** The issuer failed; the claim has been settled at its recovery and no longer trades. */
     public const STATUS_DEFAULTED = 'DEFAULTED';
 
-    /** Bought back by its issuer before maturity at the market price, as its debt shrank; holdings have been cashed out. */
+    /**
+     * Bought back by its issuer before maturity at the market price, as its debt shrank; holdings have been cashed out.
+     */
     public const STATUS_CALLED = 'CALLED';
 
     // --- Seniority ---

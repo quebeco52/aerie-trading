@@ -52,42 +52,72 @@ class MerchantHouseBusinessModel extends ConglomerateBusinessModel
     public const PRICING_POWER_INDEX = 0.55;
 
     // --- Operating Cyclicality & Demand Structure ---
-    /** Elasticity of volumes to the macro cycle. Staple grains, energy feedstocks and basic metals keep moving through a slump, which is what a merchant's diversification actually buys. */
+    /**
+     * Elasticity of volumes to the macro cycle. Staple grains, energy feedstocks and basic metals keep moving through a
+     * slump, which is what a merchant's diversification actually buys.
+     */
     public const OPERATING_CYCLICALITY = 0.55;
 
     // --- Stream Volatility Scalars ---
-    /** Volatility multiplier for merchant turnover: cargo timing, counterparty failures and blending yields swing a trading book harder than a factory. */
+    /**
+     * Volatility multiplier for merchant turnover: cargo timing, counterparty failures and blending yields swing a
+     * trading book harder than a factory.
+     */
     public const MERCHANT_VARIANCE_SCALAR = 0.45;
 
     // --- Merchant Book Composition ---
-    /** Shares of the merchant book's invoiced tonnage priced off each tracked commodity market; the remainder is fixed storage and handling tariff. */
+    /**
+     * Shares of the merchant book's invoiced tonnage priced off each tracked commodity market; the remainder is fixed
+     * storage and handling tariff.
+     */
     public const MERCHANT_BOOK_EXPOSURES = ['metals' => 0.40, 'agri' => 0.35, 'energy' => 0.25];
 
-    /** Share of a commodity price move that reaches invoiced turnover. A merchant sells at market; the fixed-tariff terminal revenue that does not move with the cargo's price sits in the tollbooth stream instead. */
+    /**
+     * Share of a commodity price move that reaches invoiced turnover. A merchant sells at market; the fixed-tariff
+     * terminal revenue that does not move with the cargo's price sits in the tollbooth stream instead.
+     */
     public const MERCHANT_PRICE_PASS_THROUGH = 0.90;
 
     // --- Physical Throughput ---
     /** Sensitivity of physical throughput volume to manufacturing PMI; bulk inputs move before finished goods do. */
     public const MERCHANT_PMI_SENSITIVITY = 0.25;
 
-    /** Cargo volume per unit of the foreign bloc's output gap: the corridors run both ways, and the far end is most of them. */
+    /**
+     * Cargo volume per unit of the foreign bloc's output gap: the corridors run both ways, and the far end is most of
+     * them.
+     */
     public const MERCHANT_FOREIGN_SENSITIVITY = 2.00;
 
     // --- Trading Spread ---
-    /** Gross spread widening per unit of physical backwardation (Kaldor-Working convenience yield). Scarcity is the merchant's margin: whoever holds the barrel when nobody else can deliver names the price. */
+    /**
+     * Gross spread widening per unit of physical backwardation (Kaldor-Working convenience yield). Scarcity is the
+     * merchant's margin: whoever holds the barrel when nobody else can deliver names the price.
+     */
     public const MERCHANT_BACKWARDATION_SCALAR = 0.35;
 
-    /** Gross spread widening per standard deviation of supply-chain pressure above normal (0.57pp). Congested corridors price optionality on physical delivery, which only an owner of berths and bonded warehouses can sell. */
+    /**
+     * Gross spread widening per standard deviation of supply-chain pressure above normal (0.57pp). Congested corridors
+     * price optionality on physical delivery, which only an owner of berths and bonded warehouses can sell.
+     */
     public const MERCHANT_DISRUPTION_SCALAR = 0.0057;
 
-    /** Years of turnover carried as financed inventory and bills of lading (~3 months). Multiplied by the funding rate it gives the carry cost as a fraction of turnover. */
+    /**
+     * Years of turnover carried as financed inventory and bills of lading (~3 months). Multiplied by the funding rate
+     * it gives the carry cost as a fraction of turnover.
+     */
     public const MERCHANT_INVENTORY_HOLDING_YEARS = 0.25;
 
-    /** Ceiling on the desk's net cost-ratio swing in either direction, so one quarter's dislocation cannot invert the group's cost base. */
+    /**
+     * Ceiling on the desk's net cost-ratio swing in either direction, so one quarter's dislocation cannot invert the
+     * group's cost base.
+     */
     public const MAX_MERCHANT_COST_SWING = 0.12;
 
     // --- Analyst Visibility & Error ---
-    /** Commodity prices are public and throughput is broadly known, so a merchant house is read more easily than a holding company with unlisted subsidiaries. */
+    /**
+     * Commodity prices are public and throughput is broadly known, so a merchant house is read more easily than a
+     * holding company with unlisted subsidiaries.
+     */
     public const BASE_COVERAGE_VISIBILITY = 0.50;
 
     /** Fraction of desk performance visible to consensus ahead of the filing. */
@@ -221,7 +251,8 @@ class MerchantHouseBusinessModel extends ConglomerateBusinessModel
             + ($tollboothMacroBoost * $tollboothWeight)
             + ($contrarianSurge * $floatWeight * self::CONTRARIAN_OBSERVABLE_DISCOUNT);
 
-        // The one-off charge is booked as a special item: in EBIT, out of the run rate, the Street figure and the cost ratio.
+        // The one-off charge is booked as a special item: in EBIT, out of the run rate, the Street figure and the cost
+        // ratio.
         $specialCharge = $restructuringPenalty * $actualRevenue;
 
         return new SectorPhysicsResult(

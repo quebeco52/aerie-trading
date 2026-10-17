@@ -631,7 +631,8 @@ class FinancialInvariantTest extends TestCase
 
         // Expansion / Normal regime: moderate spreads, normal slope, low vol
         $stateNormal = new MacroState();
-        $stateNormal->macroCreditSpreadEma = 0.010; // 100 bps, an expansion-tight IG spread against the 130 bps through-the-cycle baseline
+        // 100 bps, an expansion-tight IG spread against the 130 bps through-the-cycle baseline
+        $stateNormal->macroCreditSpreadEma = 0.010;
         $stateNormal->equityRiskPremium = 0.042;
         $stateNormal->marketVolatilityEma = 0.14;
         $stateNormal->nsSlopeEma = 0.012; // Normal upward slope (+120 bps)
@@ -774,7 +775,8 @@ class FinancialInvariantTest extends TestCase
             ->build();
         $peakState->targetRate = 0.0525;
         $peakState->tipsBreakeven = 0.026;
-        // A low-premium era, as 2006 and 2023 were: the peaks that inverted. At a 2% premium (1995) the peak stayed positive.
+        // A low-premium era, as 2006 and 2023 were: the peaks that inverted. At a 2% premium (1995) the peak stayed
+        // positive.
         $peakState->termPremiumRegime = 0.0;
 
         $curvePeak = $monetary->calculateYieldCurveAndQE($peakState, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE, 0.25);
@@ -841,7 +843,8 @@ class FinancialInvariantTest extends TestCase
             $this->assertLessThan($paths['tight'][$quarter], $gap, "A tighter stance must hold the gap deeper (quarter {$quarter}).");
         }
 
-        // Invariant 3: even the tighter stance, held three years, stays short of a depression and clear of the -12% clamp.
+        // Invariant 3: even the tighter stance, held three years, stays short of a depression and clear of the -12%
+        // clamp.
         $this->assertGreaterThan(-0.080, min($paths['tighter']), 'Held policy alone must not dig a depression.');
     }
 }

@@ -15,7 +15,10 @@ namespace App\Data\Politics;
 final class AeriePartyProfiles
 {
     // --- Profiles ---
-    /** Each party's address, family, motto, founding, voters and heartland, background, history before Year 1, a line on each question, agenda, and friends and rivals. */
+    /**
+     * Each party's address, family, motto, founding, voters and heartland, background, history before Year 1, a line on
+     * each question, agenda, and friends and rivals.
+     */
     public const PROFILES = [
         AerieDiet::CIVIC => [
             'slug' => 'civic-front',

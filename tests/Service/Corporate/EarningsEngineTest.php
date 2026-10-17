@@ -167,7 +167,8 @@ class EarningsEngineTest extends TestCase
         $this->assertGreaterThan(1.0, $priceTaker, 'the firm still grows with its market');
         $this->assertLessThan(exp(2.0 * $demandGrowth) + 0.01, $priceTaker, 'plant grows with demand, not at the reinvestment rate');
         $this->assertLessThanOrEqual($dominant + 0.01, $priceTaker, 'a small share of a large market is no licence to build past demand');
-        // Alike, not identical: the two trade at different prices, so their market leverage, Hamada beta and hurdle differ.
+        // Alike, not identical: the two trade at different prices, so their market leverage, Hamada beta and hurdle
+        // differ.
         $this->assertEqualsWithDelta($dominant, $priceTaker, 0.02, 'both grow their plant with demand');
     }
 
@@ -380,7 +381,8 @@ class EarningsEngineTest extends TestCase
             $events = $this->earningsEngine->calculate($stock, $boomMacro, $q);
             $eventDesc = $events[0]['description'] ?? '';
 
-            // In a boom with massive profits, company must NOT be forced into emergency borrowing or dilutive stock offerings
+            // In a boom with massive profits, company must NOT be forced into emergency borrowing or dilutive stock
+            // offerings
             $this->assertStringNotContainsString('Forced to borrow', $eventDesc, "Quarter {$q} triggered false emergency borrowing during an economic boom.");
             $this->assertStringNotContainsString('emergency stock offering', $eventDesc, "Quarter {$q} triggered false emergency stock offering during an economic boom.");
         }
@@ -1006,7 +1008,8 @@ class EarningsEngineTest extends TestCase
 
     /**
      * The report rebuilds the stream map from what the physics registers. State kept under the carried prefix by
-     * anything else survives it; a physics key the pass no longer registers does not, so a list it shortens stays short.
+     * anything else survives it; a physics key the pass no longer registers does not, so a list it shortens stays
+     * short.
      */
     public function testAReportCarriesOutsideStateAndDropsWhatThePhysicsStoppedRegistering(): void
     {
@@ -1046,7 +1049,8 @@ class EarningsEngineTest extends TestCase
             $dispatcher->addListener(EarningsReportedEvent::class, function (EarningsReportedEvent $event) use (&$captured): void {
                 $captured = $event->getContext();
             });
-            // A fresh generator per run: a Box-Muller spare left over from the first run would shift the second's draws.
+            // A fresh generator per run: a Box-Muller spare left over from the first run would shift the second's
+            // draws.
             $this->mathUtility = new MathUtility();
 
             mt_srand(5150);
@@ -1342,7 +1346,8 @@ class EarningsEngineTest extends TestCase
 
     /**
      * A recall or a fine the physics books is a one-off charge: GAAP EBIT carries it, while the run rate the market and
-     * lenders read, the trailing year lenders underwrite on and the Street figure leave it out, as they do restructuring.
+     * lenders read, the trailing year lenders underwrite on and the Street figure leave it out, as they do
+     * restructuring.
      */
     public function testAnEventChargeIsASpecialItemOutsideTheRunRate(): void
     {
@@ -1812,7 +1817,8 @@ class EarningsEngineTest extends TestCase
             $dispatcher->addListener(EarningsReportedEvent::class, function (EarningsReportedEvent $event) use (&$captured): void {
                 $captured = $event->getContext();
             });
-            // A fresh generator per run: a Box-Muller spare left over from the first run would shift the second's draws.
+            // A fresh generator per run: a Box-Muller spare left over from the first run would shift the second's
+            // draws.
             $this->mathUtility = new MathUtility();
             $engine = $this->buildEngine($dispatcher);
 
@@ -2036,7 +2042,8 @@ class EarningsEngineTest extends TestCase
         $this->earningsEngine->calculate($q1, $macroState, $ticksPerQuarter + EarningsEngine::resolveReportingTick('GDWL', 252));
         $this->assertEqualsWithDelta(5_000_000_000.0, (float) $q1->getGoodwill(), 1.0);
 
-        // Fiscal Q4 (filed in the next year's first season): the annual test writes the shortfall off against goodwill and equity.
+        // Fiscal Q4 (filed in the next year's first season): the annual test writes the shortfall off against goodwill
+        // and equity.
         $q4 = $build('GDWL');
         $equityBefore = (float) $q4->getTotalEquity();
         $q4Tick = ((EarningsEngine::FISCAL_YEAR_END_QUARTER + 1) * $ticksPerQuarter) + EarningsEngine::resolveReportingTick('GDWL', 252);
@@ -3103,7 +3110,8 @@ class EarningsEngineTest extends TestCase
             $dispatcher->addListener(EarningsReportedEvent::class, function (EarningsReportedEvent $event) use (&$captured): void {
                 $captured = $event->getContext();
             });
-            // A fresh generator per run: a Box-Muller spare left over from the first run would shift the second's draws.
+            // A fresh generator per run: a Box-Muller spare left over from the first run would shift the second's
+            // draws.
             $this->mathUtility = new MathUtility();
             $engine = $this->buildEngine($dispatcher);
 

@@ -33,39 +33,66 @@ use App\Service\Model\ModelParam;
 class PortTerminalBusinessModel extends StandardCorporateBusinessModel
 {
     // --- Operating Cyclicality & Demand Structure ---
-    /** Elasticity of volumes to the macro cycle: 1.0 carries trade at the macro's own trade elasticities, which the streams apply. */
+    /**
+     * Elasticity of volumes to the macro cycle: 1.0 carries trade at the macro's own trade elasticities, which the
+     * streams apply.
+     */
     public const OPERATING_CYCLICALITY = 1.00;
-    /** Own-price elasticity of demand: a terminal fee is a few per cent of a box's landed cost, so volume barely answers it. */
+    /**
+     * Own-price elasticity of demand: a terminal fee is a few per cent of a box's landed cost, so volume barely answers
+     * it.
+     */
     public const PRICE_ELASTICITY_OF_DEMAND = 0.20;
-    /** Share of an idiosyncratic revenue gain taken from same-industry peers: relayed boxes are won from rival hubs abroad, gateway boxes from nobody. */
+    /**
+     * Share of an idiosyncratic revenue gain taken from same-industry peers: relayed boxes are won from rival hubs
+     * abroad, gateway boxes from nobody.
+     */
     public const INDUSTRY_SUBSTITUTABILITY = 0.30;
 
     // --- Input Cost Basket ---
-    /** Shares of the variable cost base by input channel, labour included, measured from the BEA input-output accounts with supply-chain content. */
+    /**
+     * Shares of the variable cost base by input channel, labour included, measured from the BEA input-output accounts
+     * with supply-chain content.
+     */
     public const INPUT_COST_EXPOSURES = InputOutputExposures::PORT_TERMINAL;
-    /** Concession tariffs are indexed to consumer prices, so selling prices track CPI inflation rather than breakevens. */
+    /**
+     * Concession tariffs are indexed to consumer prices, so selling prices track CPI inflation rather than breakevens.
+     */
     public const PRICING_INFLATION_BASIS = 'inflation_ema';
     /** Tariff schedules reprice once a year. */
     public const PRICE_PASS_THROUGH_LAG_YEARS = 1.00;
-    /** Pricing power on negotiated relay and yard fees: shipping alliances can move a service to a rival hub, so the hub recovers three quarters of inflation. */
+    /**
+     * Pricing power on negotiated relay and yard fees: shipping alliances can move a service to a rival hub, so the hub
+     * recovers three quarters of inflation.
+     */
     public const PRICING_POWER_INDEX = 0.25;
     /** Elasticity of gateway fees to CPI under the concession's annual indexation: inflation recovered in full. */
     public const CONCESSION_FEE_INDEXATION = 1.00;
 
     // --- Balance Sheet Realism ---
-    /** Capitalised operating lease liabilities as a fraction of annual revenue: the concession's fixed rent, about half a year's revenue (ICTSI's concession rights payable, 2019-2023). */
+    /**
+     * Capitalised operating lease liabilities as a fraction of annual revenue: the concession's fixed rent, about half
+     * a year's revenue (ICTSI's concession rights payable, 2019-2023).
+     */
     public const LEASE_LIABILITY_INTENSITY = 0.50;
     /** Working capital over revenue: the lines settle their terminal bills within about a month. */
     public const WORKING_CAPITAL_INTENSITY = 0.08;
-    /** Share of construction in progress commissioned each quarter: a quay and its cranes take about two years to build. */
+    /**
+     * Share of construction in progress commissioned each quarter: a quay and its cranes take about two years to build.
+     */
     public const CAPEX_COMPLETION_RATE = 0.125;
 
     // --- Analyst Visibility & Error ---
-    /** The Freight Authority publishes monthly box counts, so most of a throughput surprise is known before the report. */
+    /**
+     * The Freight Authority publishes monthly box counts, so most of a throughput surprise is known before the report.
+     */
     public const BASE_COVERAGE_VISIBILITY = 0.60;
     /** Standard deviation of analysts' revenue error: box counts leave little to guess beyond the fee mix. */
     public const BASE_COVERAGE_ERROR = 0.05;
-    /** Share of the yard-revenue shock the market reads before the report: dwell times are reported, storage tariffs are not. */
+    /**
+     * Share of the yard-revenue shock the market reads before the report: dwell times are reported, storage tariffs are
+     * not.
+     */
     public const STORAGE_VISIBILITY = 0.50;
 
     // --- Revenue Mix ---
@@ -77,11 +104,20 @@ class PortTerminalBusinessModel extends StandardCorporateBusinessModel
     public const STORAGE_SERVICES_WEIGHT = 0.15;
 
     // --- Throughput ---
-    /** World container trade per unit of world output over the cycle (~1.8, Freund 2009's trade-income elasticity): a relay hub's volume swings harder than output. */
+    /**
+     * World container trade per unit of world output over the cycle (~1.8, Freund 2009's trade-income elasticity): a
+     * relay hub's volume swings harder than output.
+     */
     public const TRANSSHIPMENT_TRADE_INCOME_ELASTICITY = 1.80;
-    /** Volatility multiplier on gateway box counts beyond the trade cycle: cargo the District itself buys and sells, steady. */
+    /**
+     * Volatility multiplier on gateway box counts beyond the trade cycle: cargo the District itself buys and sells,
+     * steady.
+     */
     public const GATEWAY_VARIANCE_SCALAR = 0.10;
-    /** Volatility multiplier on relayed boxes: an alliance moving one service between hubs shifts several per cent of a hub's relays. */
+    /**
+     * Volatility multiplier on relayed boxes: an alliance moving one service between hubs shifts several per cent of a
+     * hub's relays.
+     */
     public const TRANSSHIPMENT_VARIANCE_SCALAR = 0.25;
     /** Volatility multiplier on yard and services revenue. */
     public const STORAGE_VARIANCE_SCALAR = 0.15;
@@ -95,9 +131,15 @@ class PortTerminalBusinessModel extends StandardCorporateBusinessModel
     public const EVENT_SHOCK_PERSISTENCE = 0.10;
 
     // --- Dwell & Storage ---
-    /** Log storage per box per standard deviation of supply-chain pressure: container dwell at Los Angeles rose from about three days to eight as the NY Fed GSCPI reached 4.3 in late 2021, ln(8/3) / 4.3. */
+    /**
+     * Log storage per box per standard deviation of supply-chain pressure: container dwell at Los Angeles rose from
+     * about three days to eight as the NY Fed GSCPI reached 4.3 in late 2021, ln(8/3) / 4.3.
+     */
     public const STORAGE_DWELL_SENSITIVITY = 0.228;
-    /** Variance of the supply-chain pressure index, built in standard deviations; the Jensen term at it keeps the dwell factor's mean at one. */
+    /**
+     * Variance of the supply-chain pressure index, built in standard deviations; the Jensen term at it keeps the dwell
+     * factor's mean at one.
+     */
     public const SUPPLY_CHAIN_PRESSURE_VARIANCE = 1.0;
 
     // --- Dock Strikes ---
@@ -105,15 +147,24 @@ class PortTerminalBusinessModel extends StandardCorporateBusinessModel
     public const DOCK_STRIKE_Z_SCORE = -2.00;
     /** Regime key for a dock strike. */
     public const REGIME_DOCK_STRIKE = 'dock_strike';
-    /** Quarterly probability the strike is settled (~1.4 quarters expected; the 2014-15 US West Coast slowdown ran most of a year). */
+    /**
+     * Quarterly probability the strike is settled (~1.4 quarters expected; the 2014-15 US West Coast slowdown ran most
+     * of a year).
+     */
     public const DOCK_STRIKE_EXIT_HAZARD = 0.70;
-    /** Share of a quarter's boxes the stopped cranes miss while the strike holds: ten days of a 91-day quarter, as in the 2002 US West Coast lockout. */
+    /**
+     * Share of a quarter's boxes the stopped cranes miss while the strike holds: ten days of a 91-day quarter, as in
+     * the 2002 US West Coast lockout.
+     */
     public const DOCK_STRIKE_THROUGHPUT_LOSS = 0.11;
     /** Persisted state key: the District's boxes a strike has left waiting, in quarters of gateway revenue. */
     public const STATE_DEFERRED_GATEWAY = 'state:deferred_gateway';
 
     // --- Bond Proxy Capital Structure ---
-    /** Quarterly share of the fixed-rate bond stock that matures and reprices (~10-year tenor of infrastructure bonds against concession cash flows). */
+    /**
+     * Quarterly share of the fixed-rate bond stock that matures and reprices (~10-year tenor of infrastructure bonds
+     * against concession cash flows).
+     */
     public const DEBT_MATURITY_ROLLOVER_RATE = 0.025;
 
     public function getWorkingCapitalIntensity(Stock $stock): float
@@ -126,7 +177,9 @@ class PortTerminalBusinessModel extends StandardCorporateBusinessModel
         return self::CAPEX_COMPLETION_RATE;
     }
 
-    /** Quays are dredged and cranes bought when the berths run full: the budget follows the boxes the terminal handles. */
+    /**
+     * Quays are dredged and cranes bought when the berths run full: the budget follows the boxes the terminal handles.
+     */
     public function getCapexCycleSignal(Stock $stock, MacroStateDTO $macroState): float
     {
         return $this->resolveSectorActivityShift($stock, $macroState);

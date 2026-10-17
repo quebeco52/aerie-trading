@@ -124,8 +124,8 @@ class ValuationTest extends TestCase
     }
 
     /**
-     * The sector multiple is quoted at the founding discount rate and re-struck at today's: its earnings yield moves with
-     * the firm's real hurdle before it is blended in, and at the founding rate it is the quoted multiple exactly.
+     * The sector multiple is quoted at the founding discount rate and re-struck at today's: its earnings yield moves
+     * with the firm's real hurdle before it is blended in, and at the founding rate it is the quoted multiple exactly.
      */
     public function testTheSectorPriorIsReStruckAtTodaysRealHurdle(): void
     {
@@ -137,7 +137,8 @@ class ValuationTest extends TestCase
             Valuation::calculateIntrinsicFairValuePE($foundingHurdle, 0.20, 0.036, 16.0, 0.0),
         );
 
-        // A hundred basis points on the real hurdle: the prior's yield rises by the same, so 16x becomes 1 / (1/16 + 1%).
+        // A hundred basis points on the real hurdle: the prior's yield rises by the same, so 16x becomes 1 / (1/16 +
+        // 1%).
         $hurdle = $foundingHurdle + 0.01;
         $shift = Valuation::sectorHurdleShift($hurdle, $beta, MacroEngine::TARGET_INFLATION);
         $this->assertEqualsWithDelta(0.01, $shift, 1e-12);
@@ -155,9 +156,9 @@ class ValuationTest extends TestCase
     }
 
     /**
-     * Duration: on the same rise in the real rate a staple, whose narrow spread leans it on its sector's multiple, reprices
-     * by more than a cyclical with a wide one. With the prior held at the quoted multiple the staple kept a third of its
-     * own repricing on the prior's account.
+     * Duration: on the same rise in the real rate a staple, whose narrow spread leans it on its sector's multiple,
+     * reprices by more than a cyclical with a wide one. With the prior held at the quoted multiple the staple kept a
+     * third of its own repricing on the prior's account.
      */
     public function testALongDurationFirmRepricesMoreOnARateRiseThanAShortDurationOne(): void
     {
@@ -174,7 +175,10 @@ class ValuationTest extends TestCase
         $this->assertGreaterThan($cyclical + 0.02, $staple);
     }
 
-    /** A non-positive sector multiple is not a usable prior and must be ignored rather than dragging the estimate to zero. */
+    /**
+     * A non-positive sector multiple is not a usable prior and must be ignored rather than dragging the estimate to
+     * zero.
+     */
     public function testIntrinsicFairValuePEIgnoresAnUnusableSectorPrior(): void
     {
         $raw = Valuation::calculateIntrinsicFairValuePE(0.10, 0.15, 0.03);
@@ -230,7 +234,8 @@ class ValuationTest extends TestCase
         $wacc100Debt = Valuation::calculateWACC(0.0, 0.10, 1.0, 0.05);
         $this->assertEqualsWithDelta(0.05, $wacc100Debt, 0.0001);
 
-        // 60% Equity / 40% Debt (Cost of Equity 10%, Post-Tax Cost of Debt 4%) -> 0.6 * 0.10 + 0.4 * 0.04 = 0.076 (7.6%)
+        // 60% Equity / 40% Debt (Cost of Equity 10%, Post-Tax Cost of Debt 4%) -> 0.6 * 0.10 + 0.4 * 0.04 = 0.076
+        // (7.6%)
         $waccMix = Valuation::calculateWACC(0.60, 0.10, 0.40, 0.04);
         $this->assertEqualsWithDelta(0.076, $waccMix, 0.0001);
     }
@@ -309,7 +314,8 @@ class ValuationTest extends TestCase
     public function testExpectedNominalGrowthCarriesTheCycleAndPricesTheSecularExcessAsItFades(): void
     {
         $trend = MacroEngine::TREND_REAL_GROWTH;
-        // Boom: trend secular growth + half of a 2% gap at beta 1, plus 2% inflation. The cycle is transitory and passes.
+        // Boom: trend secular growth + half of a 2% gap at beta 1, plus 2% inflation. The cycle is transitory and
+        // passes.
         $this->assertEqualsWithDelta($trend + 0.01 + 0.02, Valuation::calculateExpectedNominalGrowth($trend, 0.02, 1.0, 0.02, 0.09), 1e-12);
         // Bust at the same beta takes the same amount off.
         $this->assertEqualsWithDelta($trend - 0.01 + 0.02, Valuation::calculateExpectedNominalGrowth($trend, -0.02, 1.0, 0.02, 0.09), 1e-12);
@@ -360,7 +366,9 @@ class ValuationTest extends TestCase
         self::assertSame(0.10, Valuation::equityReturnFromRoic(0.10, 100.0, 0.0, 0.04));
     }
 
-    /** Nominal growth is real growth plus all of inflation; at target inflation and a closed gap nothing else enters. */
+    /**
+     * Nominal growth is real growth plus all of inflation; at target inflation and a closed gap nothing else enters.
+     */
     public function testExpectedNominalGrowthCarriesInflationInFull(): void
     {
         $target = MacroEngine::TARGET_INFLATION;
@@ -380,9 +388,9 @@ class ValuationTest extends TestCase
     }
 
     /**
-     * A dividend tax at the founding rate prices nothing; a change is charged on the taxable holders' share of the yield,
-     * net of the gains tax at its accrual equivalent (Brennan 1970), and a stock's value is spread at its cap rate plus
-     * that premium.
+     * A dividend tax at the founding rate prices nothing; a change is charged on the taxable holders' share of the
+     * yield, net of the gains tax at its accrual equivalent (Brennan 1970), and a stock's value is spread at its cap
+     * rate plus that premium.
      */
     public function testADividendTaxIsChargedOnTheTaxableHoldersYield(): void
     {
@@ -398,7 +406,10 @@ class ValuationTest extends TestCase
         $this->assertGreaterThan(1.0, Valuation::dividendTaxValueScale(0.02, 0.04, 0.0), 'A cut raises the value.');
     }
 
-    /** The payout response reproduces the 2003 cut: the holders' average rate from 29% to 17% raised regular dividends 20% (Chetty & Saez 2005). */
+    /**
+     * The payout response reproduces the 2003 cut: the holders' average rate from 29% to 17% raised regular dividends
+     * 20% (Chetty & Saez 2005).
+     */
     public function testThePayoutResponseReproducesTheTwoThousandThreeCut(): void
     {
         $this->assertEqualsWithDelta(1.20, ((1.0 - 0.17) / (1.0 - 0.29)) ** Valuation::DIVIDEND_NET_OF_TAX_ELASTICITY, 0.001);

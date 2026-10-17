@@ -9,7 +9,10 @@ namespace App\Data\Company;
  */
 final class RevenueStreams
 {
-    /** Keys whose words misdescribe the figure. The bank's stream is gross interest earned; funding cost comes off below it. */
+    /**
+     * Keys whose words misdescribe the figure. The bank's stream is gross interest earned; funding cost comes off below
+     * it.
+     */
     private const LABELS = [
         'net_interest_income' => 'Interest income',
     ];

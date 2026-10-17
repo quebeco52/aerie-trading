@@ -30,7 +30,8 @@ final class RegulatorPageBuilder
     {
         $panel = $this->government->regulator($politics, $macro);
         if ($panel !== null) {
-            // The mortgage limit and calm-years buffer each head's stance brings, beside the capital rule the panel already carries.
+            // The mortgage limit and calm-years buffer each head's stance brings, beside the capital rule the panel
+            // already carries.
             $panel['head']['ltvCap'] = $politics->regulatorLtvCap;
             $panel['head']['neutralBuffer'] = $politics->regulatorNeutralBuffer;
             foreach ($politics->regulatorPassedOver as $i => $candidate) {
@@ -39,7 +40,8 @@ final class RegulatorPageBuilder
                 }
             }
         }
-        // What a bank must hold to pay out: the requirement plus the buffer in force, as the macro and each bank's payout stop read it.
+        // What a bank must hold to pay out: the requirement plus the buffer in force, as the macro and each bank's
+        // payout stop read it.
         $required = $politics->bankCapitalRequirement + $macro->countercyclicalBufferRate;
 
         return [
@@ -57,7 +59,9 @@ final class RegulatorPageBuilder
         ];
     }
 
-    /** @return list<array{ticker: string, name: string, cet1: float, headroom: float, status: string}> Banks by capital ratio, lowest first. */
+    /**
+     * @return list<array{ticker: string, name: string, cet1: float, headroom: float, status: string}> Banks by capital ratio, lowest first.
+     */
     private function banks(float $required): array
     {
         $rows = $this->entityManager->getConnection()->fetchAllAssociative(

@@ -23,7 +23,10 @@ class PolicyCapitalizationTest extends TestCase
     /** A firm discounted at 9% growing at 4%. */
     private const CAP_RATE = 0.05;
 
-    /** The share of a growing perpetuity's value after a date is its discounted tail, and a change phasing in keeps lambda / (lambda + k - g) of it, as the integral has it. */
+    /**
+     * The share of a growing perpetuity's value after a date is its discounted tail, and a change phasing in keeps
+     * lambda / (lambda + k - g) of it, as the integral has it.
+     */
     public function testThePerpetuityShareIsTheDiscountedTail(): void
     {
         $this->assertSame(1.0, Valuation::perpetuityShareAfter(self::CAP_RATE, 0.0));
@@ -54,7 +57,10 @@ class PolicyCapitalizationTest extends TestCase
         $this->assertSame(1.0, Policy::afterTaxScale(0.21, 0.21));
     }
 
-    /** A tax rise the market expects counts for the share of the firm's value after the next government's first budget, until its term is over. */
+    /**
+     * A tax rise the market expects counts for the share of the firm's value after the next government's first budget,
+     * until its term is over.
+     */
     public function testAnExpectedRiseCountsForTheValueAfterItTakesEffect(): void
     {
         $inForce = Policy::LONG_RUN_CORPORATE_TAX_SHIFT;
@@ -64,7 +70,10 @@ class PolicyCapitalizationTest extends TestCase
         $this->assertLessThan(Policy::corporateTaxShiftGap($nearer, self::CAP_RATE), Policy::corporateTaxShiftGap($macro, self::CAP_RATE), 'Nearer, it counts for more.');
     }
 
-    /** The tax on dividends is priced on its path the same way, in full from the day it passes; with nothing ahead, the law in force drifts back to the long-run rate. */
+    /**
+     * The tax on dividends is priced on its path the same way, in full from the day it passes; with nothing ahead, the
+     * law in force drifts back to the long-run rate.
+     */
     public function testTheDividendTaxIsPricedOnItsExpectedPath(): void
     {
         $longRun = Policy::LONG_RUN_DIVIDEND_TAX_RATE;
@@ -82,9 +91,9 @@ class PolicyCapitalizationTest extends TestCase
     }
 
     /**
-     * The rules on extraction are priced the same way, measured as the unit costs feel them: the strictest rules the next
-     * government is expected to pass count by their cost factor's rise from its first budget, charged in full at once,
-     * drifting back toward the long-run factor after its term.
+     * The rules on extraction are priced the same way, measured as the unit costs feel them: the strictest rules the
+     * next government is expected to pass count by their cost factor's rise from its first budget, charged in full at
+     * once, drifting back toward the long-run factor after its term.
      */
     public function testExpectedExtractionRulesCountByTheirCostFactor(): void
     {
@@ -111,7 +120,10 @@ class PolicyCapitalizationTest extends TestCase
         $this->assertGreaterThan(0.0, Policy::carbonPowerUpliftGap($macro, self::CAP_RATE));
     }
 
-    /** A law the market foresaw does not move the price when it is passed: the gap is the same either side of the budget that passes it, and fades only as the earnings take it in. */
+    /**
+     * A law the market foresaw does not move the price when it is passed: the gap is the same either side of the budget
+     * that passes it, and fades only as the earnings take it in.
+     */
     public function testAForeseenLawDoesNotMoveThePriceWhenPassed(): void
     {
         $old = Policy::LONG_RUN_CORPORATE_TAX_SHIFT;
@@ -126,7 +138,8 @@ class PolicyCapitalizationTest extends TestCase
         $this->assertEqualsWithDelta($this->path(0.0, 0.04, 0.0, Policy::CORPORATE_TAX_TERM_PERSISTENCE, MacroEngine::FISCAL_ADJUSTMENT_SPEED), Policy::corporateTaxShiftGap($takenIn, self::CAP_RATE), 1e-15);
         $this->assertLessThan(0.0, Policy::corporateTaxShiftGap($takenIn, self::CAP_RATE));
 
-        // The levy, the rules on extraction and the duty likewise, each reaching the accounts in full from the day it passes.
+        // The levy, the rules on extraction and the duty likewise, each reaching the accounts in full from the day it
+        // passes.
         foreach (['bankLevyRate' => [0.0, 0.002], 'extractionStringency' => [0.0, 1.0], 'stampDutyRate' => [FinancialConstants::STAMP_DUTY_RATE, 0.002], 'carbonPrice' => [0.0, 40.0]] as $lever => [$was, $is]) {
             $foreseen = $this->macro([$lever => $was], expected: [$lever => $is], from: 10.0, time: 10.0);
             $passed = $this->macro([$lever => $is], expected: [$lever => $is], from: 10.0, time: 10.0, embodied: [$lever => $was]);
@@ -167,9 +180,9 @@ class PolicyCapitalizationTest extends TestCase
         $this->assertEqualsWithDelta(0.79 * Policy::publicSpendingGap($expected, self::CAP_RATE) * 40.0, Policy::earningsGap($expected, ['publicSpending' => 40.0], 0.21, self::CAP_RATE), 1e-12);
         $this->assertSame(0.0, Policy::measure('publicSpending', MacroEngine::PUBLIC_PURCHASES_TO_GDP), 'The founding share is no shift.');
 
-        // A cabinet repairing debt by cuts is priced at the purchases it sets: an indebted one appropriating the law, its cut
-        // already made, is worth what a debt-free one appropriating the law less the cut is. Priced on the appropriation,
-        // the indebted cabinet read as spending its whole law for good.
+        // A cabinet repairing debt by cuts is priced at the purchases it sets: an indebted one appropriating the law,
+        // its cut already made, is worth what a debt-free one appropriating the law less the cut is. Priced on the
+        // appropriation, the indebted cabinet read as spending its whole law for good.
         $indebted = $this->spending($shareAt($longRun), 0.0, $longRun, debt: 1.10, pace: 0.01);
         $cut = CreditFiscalSubsystem::consolidationSpendingCut(CreditFiscalSubsystem::requiredPrimaryBalance($indebted), $indebted->consolidationTaxShare);
         $this->assertGreaterThan(0.0, $cut);
@@ -181,8 +194,8 @@ class PolicyCapitalizationTest extends TestCase
             'At the law less the cut, nothing more is closing.',
         );
 
-        // The next government is priced at its own debt plank: the same appropriation under a plank that brings debt down
-        // to 35% at a point a year buys less than under one that holds it at 60%.
+        // The next government is priced at its own debt plank: the same appropriation under a plank that brings debt
+        // down to 35% at a point a year buys less than under one that holds it at 60%.
         $holds = $this->spending($shareAt($longRun), $longRun, $longRun, expected: $shareAt($longRun), from: 12.5, debt: 0.60, plank: ['debtTarget' => 0.60, 'debtPace' => 0.0]);
         $repairs = $this->spending($shareAt($longRun), $longRun, $longRun, expected: $shareAt($longRun), from: 12.5, debt: 0.60, plank: ['debtTarget' => 0.35, 'debtPace' => 0.01]);
         $this->assertLessThan(Policy::publicSpendingGap($holds, self::CAP_RATE), Policy::publicSpendingGap($repairs, self::CAP_RATE));
@@ -266,8 +279,8 @@ class PolicyCapitalizationTest extends TestCase
         $this->assertEqualsWithDelta(0.79 * Policy::stampDutyVolumeGap($cut, self::CAP_RATE) * 30.0, Policy::earningsGap($cut, ['stampDutyRate' => 30.0], 0.21, self::CAP_RATE), 1e-12);
         $this->assertGreaterThan(0.0, Policy::earningsGap($cut, ['stampDutyRate' => 30.0], 0.21, self::CAP_RATE), 'A cut expected gives the broker back turnover.');
 
-        // A carbon price expected gains a generator that keeps the power price and pays no carbon, and costs one that pays
-        // more carbon than the price passes through.
+        // A carbon price expected gains a generator that keeps the power price and pays no carbon, and costs one that
+        // pays more carbon than the price passes through.
         $carbon = $this->macro(['carbonPrice' => 0.0], expected: ['carbonPrice' => 40.0], from: 11.0, time: 10.0);
         $this->assertEqualsWithDelta(0.79 * Policy::carbonPowerUpliftGap($carbon, self::CAP_RATE) * 20.0, Policy::earningsGap($carbon, ['carbonPrice' => 20.0], 0.21, self::CAP_RATE), 1e-12);
         $this->assertGreaterThan(0.0, Policy::earningsGap($carbon, ['carbonPrice' => 20.0], 0.21, self::CAP_RATE));
@@ -315,8 +328,8 @@ class PolicyCapitalizationTest extends TestCase
     }
 
     /**
-     * A law's gap by brute force: changed by $change from $untilNext, $departure from the long-run law from then on, each
-     * later term keeping the measured persistence of it, as a sum over the terms (the class's closed form).
+     * A law's gap by brute force: changed by $change from $untilNext, $departure from the long-run law from then on,
+     * each later term keeping the measured persistence of it, as a sum over the terms (the class's closed form).
      */
     private function path(float $change, float $alreadyAway, float $untilNext, float $persistence, float $speed = INF): float
     {
@@ -331,8 +344,9 @@ class PolicyCapitalizationTest extends TestCase
     }
 
     /**
-     * An economy with public spending in force at $share, purchases at $purchases above the founding level, the trailing
-     * earnings carrying $embodied, and the next government expected to set $expected (the law in force if not given).
+     * An economy with public spending in force at $share, purchases at $purchases above the founding level, the
+     * trailing earnings carrying $embodied, and the next government expected to set $expected (the law in force if not
+     * given).
      */
     /** @param array<string, float> $plank The next government's debt plank, when it has its own. */
     private function spending(float $share, float $purchases, float $embodied, ?float $expected = null, float $from = -1.0, float $debt = 0.0, float $pace = 0.0, array $plank = []): MacroStateDTO
@@ -373,8 +387,8 @@ class PolicyCapitalizationTest extends TestCase
     }
 
     /**
-     * The laws in force, expected and carried, by lever: a law expected or carried that is not given is the one in force,
-     * a law in force not given the founding one.
+     * The laws in force, expected and carried, by lever: a law expected or carried that is not given is the one in
+     * force, a law in force not given the founding one.
      *
      * @param array<string, float> $inForce
      * @param array<string, float> $expected

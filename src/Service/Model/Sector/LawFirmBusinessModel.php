@@ -22,18 +22,24 @@ use App\Service\Model\ModelParam;
  * Financial Physics:
  * - Asset Light & Human Capital Driven: Ultra-low CapEx, very high cash flow conversion.
  * - Tri-Stream Legal Architecture:
- *   1. Corporate Retainers & Governance: Sticky recurring retainer fees for corporate governance, regulatory compliance,
+ *   1. Corporate Retainers & Governance: Sticky recurring retainer fees for corporate governance, regulatory
+ *      compliance,
  *      and M&A transactions (pro-cyclical with corporate boardroom activity).
- *   2. High-Stakes Litigation & Contingency Fees: Extremely volatile, high-variance corporate warfare, antitrust battles,
+ *   2. High-Stakes Litigation & Contingency Fees: Extremely volatile, high-variance corporate warfare, antitrust
+ *      battles,
  *      and patent infringement contingency windfalls.
  *   3. Restructuring & Bankruptcy Workouts: **Counter-cyclical legal surge**—when credit spreads blow out and corporate
  *      defaults surge during recessions, Chapter 11 and restructuring billing explodes.
- * - Inflation Dynamics: Immune to physical supply chains, but exposed to top-tier associate wage inflation (mitigated by PricingPowerIndex).
+ * - Inflation Dynamics: Immune to physical supply chains, but exposed to top-tier associate wage inflation (mitigated
+ *   by PricingPowerIndex).
  */
 class LawFirmBusinessModel extends StandardCorporateBusinessModel
 {
     // --- Operating Cyclicality & Demand Structure ---
-    /** Elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). Retainers are sticky; litigation and restructuring are counter-cyclical. */
+    /**
+     * Elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). Retainers are sticky;
+     * litigation and restructuring are counter-cyclical.
+     */
     public const OPERATING_CYCLICALITY = 0.80;
     /** Own-price elasticity of demand: volume lost per unit of real price increase. */
     public const PRICE_ELASTICITY_OF_DEMAND = 0.30;
@@ -41,17 +47,24 @@ class LawFirmBusinessModel extends StandardCorporateBusinessModel
     public const INDUSTRY_SUBSTITUTABILITY = 0.50;
 
     // --- Input Cost Basket ---
-    /** Shares of the variable cost base by input channel, measured from the BEA input-output accounts with supply-chain content (labor still the model's own). */
+    /**
+     * Shares of the variable cost base by input channel, measured from the BEA input-output accounts with supply-chain
+     * content (labor still the model's own).
+     */
     public const INPUT_COST_EXPOSURES = InputOutputExposures::LAW_FIRM;
 
     // --- Services Pricing ---
-    /** Elasticity of fee and rate pricing to services (supercore) inflation. Billing rates track professional services inflation almost one for one. */
+    /**
+     * Elasticity of fee and rate pricing to services (supercore) inflation. Billing rates track professional services
+     * inflation almost one for one.
+     */
     public const PRICING_ELASTICITY = 0.90;
     /** Services price off core services inflation ex-housing, not goods breakevens. */
     public const PRICING_INFLATION_BASIS = 'supercore_inflation_ema';
 
     /**
-     * Calendar-quarter revenue seasonality [Q1, Q2, Q3, Q4] summing to 4.0: Q4 billing and collections push before partner distributions.
+     * Calendar-quarter revenue seasonality [Q1, Q2, Q3, Q4] summing to 4.0: Q4 billing and collections push before
+     * partner distributions.
      *
      * @return array<int, float>
      */
@@ -61,7 +74,10 @@ class LawFirmBusinessModel extends StandardCorporateBusinessModel
     }
 
     // --- Balance Sheet Realism ---
-    /** Capitalized operating lease liabilities as a fraction of annual revenue (IFRS 16 / ASC 842). Prime office space on ten-year terms is the one large non-payroll commitment a law firm carries. */
+    /**
+     * Capitalized operating lease liabilities as a fraction of annual revenue (IFRS 16 / ASC 842). Prime office space
+     * on ten-year terms is the one large non-payroll commitment a law firm carries.
+     */
     public const LEASE_LIABILITY_INTENSITY = 0.20;
 
     // --- Analyst Visibility & Error ---
@@ -105,7 +121,10 @@ class LawFirmBusinessModel extends StandardCorporateBusinessModel
     public const RESTRUCTURING_SPREAD_SCALAR = 15.00;
     /** Sensitivity of corporate legal retainers and M&A compliance to aggregate deal activity. */
     public const DEAL_ACTIVITY_RETAINER_SCALAR = 0.20;
-    /** Restructuring billing per unit of the corporate default rate over its measured trend, relative, both ways: double the trend adds 30%. */
+    /**
+     * Restructuring billing per unit of the corporate default rate over its measured trend, relative, both ways: double
+     * the trend adds 30%.
+     */
     public const CORPORATE_DEFAULT_RESTRUCTURING_SCALAR = 0.30;
 
     // --- Associate Wage Inflation ---

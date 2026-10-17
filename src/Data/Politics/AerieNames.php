@@ -5,14 +5,16 @@ declare(strict_types=1);
 namespace App\Data\Politics;
 
 /**
- * The names the District's public figures go by, drawn as US officeholders are named (App\Data\Politics\UsNameFrequencies): a
- * surname by its 2010 Census frequency and its bearer's race or ethnicity group by the surname's shares, post-stratified
- * so the groups come in the US Congress's mix (Holt & Smith 1979); then a given name of the person's sex from the Social
- * Security applicants born in their decade, weighted by that group's share of the name's bearers (Bayes' rule, given name
- * and surname independent within a group, as in the BIFSG proxy; Voicu 2018).
+ * The names the District's public figures go by, drawn as US officeholders are named
+ * (App\Data\Politics\UsNameFrequencies): a surname by its 2010 Census frequency and its bearer's race or ethnicity
+ * group by the surname's shares, post-stratified so the groups come in the US Congress's mix (Holt & Smith 1979); then
+ * a given name of the person's sex from the Social Security applicants born in their decade, weighted by that group's
+ * share of the name's bearers (Bayes' rule, given name and surname independent within a group, as in the BIFSG proxy;
+ * Voicu 2018).
  *
- * Every draw is a uniform the caller hashes from the game and the vacancy (App\Service\Politics\CouncilAppointments::uniform()),
- * so every candidate for the Council, the Authority, the Regulator and the Fund, and every party leader, is someone.
+ * Every draw is a uniform the caller hashes from the game and the vacancy
+ * (App\Service\Politics\CouncilAppointments::uniform()), so every candidate for the Council, the Authority, the
+ * Regulator and the Fund, and every party leader, is someone.
  */
 final class AerieNames
 {
@@ -21,7 +23,11 @@ final class AerieNames
     public const YEAR_ONE_CALENDAR_YEAR = 2009;
 
     // --- Officeholders ---
-    /** Voting members of the 119th Congress (Jan 2025, Pew Research) in UsNameFrequencies::GROUPS order, each once: its 3 Black Hispanic members as Hispanic, its 2 Black and Asian members as two or more races, as the Census places them. */
+    /**
+     * Voting members of the 119th Congress (Jan 2025, Pew Research) in UsNameFrequencies::GROUPS order, each once: its
+     * 3 Black Hispanic members as Hispanic, its 2 Black and Asian members as two or more races, as the Census places
+     * them.
+     */
     public const OFFICEHOLDERS = [394, 61, 19, 4, 2, 53];
 
     // --- Gender Balance ---

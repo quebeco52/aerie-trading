@@ -26,7 +26,10 @@ use App\Service\Model\ModelParam;
 class ReitBusinessModel extends StandardCorporateBusinessModel
 {
     // --- Operating Cyclicality & Demand Structure ---
-    /** Elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). Contracted leases lag the cycle. */
+    /**
+     * Elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). Contracted leases lag
+     * the cycle.
+     */
     public const OPERATING_CYCLICALITY = 0.80;
     /** Own-price elasticity of demand: volume lost per unit of real price increase. */
     public const PRICE_ELASTICITY_OF_DEMAND = 0.30;
@@ -34,27 +37,45 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
     public const INDUSTRY_SUBSTITUTABILITY = 0.40;
 
     // --- Input Cost Basket ---
-    /** Shares of the variable cost base by input channel, measured from the BEA input-output accounts with supply-chain content (labor still the model's own). */
+    /**
+     * Shares of the variable cost base by input channel, measured from the BEA input-output accounts with supply-chain
+     * content (labor still the model's own).
+     */
     public const INPUT_COST_EXPOSURES = InputOutputExposures::REIT;
-    /** Utility contracts and service agreements reprice annually, so a spot move reaches property opex over about a year. */
+    /**
+     * Utility contracts and service agreements reprice annually, so a spot move reaches property opex over about a
+     * year.
+     */
     public const INPUT_COST_LAG_YEARS = 0.75;
     /** Operating-expense recoveries and CAM reconciliations bill tenants in arrears, a year or more behind the cost. */
     public const INPUT_PASS_THROUGH_LAG_YEARS = 1.00;
 
     // --- Pricing Power ---
-    /** In-place leases carry contractual escalators the landlord collects regardless of the market, but re-leasing spreads are set by the submarket, so recovery is high on the stock and weak at the margin. */
+    /**
+     * In-place leases carry contractual escalators the landlord collects regardless of the market, but re-leasing
+     * spreads are set by the submarket, so recovery is high on the stock and weak at the margin.
+     */
     public const PRICING_POWER_INDEX = 0.60;
 
     // --- Balance Sheet Realism ---
-    /** Capitalized operating lease liabilities as a fraction of annual revenue (IFRS 16 / ASC 842). The REIT is the lessor, not the lessee. */
+    /**
+     * Capitalized operating lease liabilities as a fraction of annual revenue (IFRS 16 / ASC 842). The REIT is the
+     * lessor, not the lessee.
+     */
     public const LEASE_LIABILITY_INTENSITY = 0.00;
 
     // --- Demand Transmission Lag ---
-    /** Years for a move in the output gap to reach the order book. Rent rolls turn over on multi-year leases: a downturn reaches a landlord only as space comes up for renewal. */
+    /**
+     * Years for a move in the output gap to reach the order book. Rent rolls turn over on multi-year leases: a downturn
+     * reaches a landlord only as space comes up for renewal.
+     */
     public const DEMAND_LAG_YEARS = 1.50;
 
     // --- District REIT Distribution Rule ---
-    /** Share of taxable income a District REIT must distribute each year to stay a pass-through (US: 90% under IRC 857, 85% calendar-year excise floor under IRC 4981). */
+    /**
+     * Share of taxable income a District REIT must distribute each year to stay a pass-through (US: 90% under IRC 857,
+     * 85% calendar-year excise floor under IRC 4981).
+     */
     public const DISTRIBUTION_REQUIREMENT = 0.85;
 
     // --- Analyst Visibility & Error ---
@@ -109,11 +130,20 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
     public const PORTFOLIO_TURNOVER_RATE    = 0.025;
 
     // --- Lease Ladder ---
-    /** Weighted average lease term of the rent roll in years. Only the slice expiring each quarter reprices; the rest is contractually fixed. */
+    /**
+     * Weighted average lease term of the rent roll in years. Only the slice expiring each quarter reprices; the rest is
+     * contractually fixed.
+     */
     public const LEASE_WALT_YEARS = 6.0;
-    /** Persisted state key: in-place rents against the neutral market rent, carried across quarters as the roll turns over. Renamed when the ladder moved from property values to market rents, so a running game starts it at market. */
+    /**
+     * Persisted state key: in-place rents against the neutral market rent, carried across quarters as the roll turns
+     * over. Renamed when the ladder moved from property values to market rents, so a running game starts it at market.
+     */
     public const STATE_IN_PLACE_RENT = 'state:in_place_market_rent';
-    /** Bound on the mark-to-market gap between in-place and market rents, past which tenants renegotiate or hand back space. */
+    /**
+     * Bound on the mark-to-market gap between in-place and market rents, past which tenants renegotiate or hand back
+     * space.
+     */
     public const MAX_RELEASING_SPREAD = 0.50;
     /** Absolute maximum cap rate clamp floor to prevent unrealistically high property yields. */
     public const MAX_CAP_RATE_CLAMP         = 0.15;
@@ -139,14 +169,23 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
     public const SECURITIZATION_VARIANCE_SCALAR = 2.00;
     /** Volatility multiplier for longevity-linked bond yields and pension assets. */
     public const LONGEVITY_VARIANCE_SCALAR      = 0.25;
-    /** Room rates move more than leased rents: US ADR fell 8.8% in 2009 (STR) against a DiPasquale-Wheaton rent fall of ~3% at that year's -5.9% CBO gap. */
+    /**
+     * Room rates move more than leased rents: US ADR fell 8.8% in 2009 (STR) against a DiPasquale-Wheaton rent fall of
+     * ~3% at that year's -5.9% CBO gap.
+     */
     public const HOSPITALITY_RATE_LEVERAGE      = 3.0;
-    /** Market rent given up per unit of the new-supply competition shift, as new buildings bid for the same tenants; carried over from the value-based model, not separately fitted. */
+    /**
+     * Market rent given up per unit of the new-supply competition shift, as new buildings bid for the same tenants;
+     * carried over from the value-based model, not separately fitted.
+     */
     public const NEW_SUPPLY_RENT_DRAG           = 0.03;
 
     /** Share of an inflation surprise contractual rent escalators pass through, both ways: 0.80. */
     public const RENT_ESCALATOR_CAPTURE         = 0.80;
-    /** Rent roll lost per unit of district catastrophe burden above an average year: damaged space earns nothing until repaired. */
+    /**
+     * Rent roll lost per unit of district catastrophe burden above an average year: damaged space earns nothing until
+     * repaired.
+     */
     public const CATASTROPHE_VACANCY_SENSITIVITY = 0.02;
     /** Tenant-default Z-score below which failing tenants hand back space. */
     public const VACANCY_Z_THRESHOLD            = -1.50;
@@ -188,7 +227,10 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
     public const INFINITE_ICR_NEG_FALLBACK  = -999.0;
 
     // --- Credit Risk & Recovery ---
-    /** Loss given default on debt secured by tangible real estate: the senior secured recovery, 62% (CorporateDefaultService; Moody's ultimate recoveries 1987-2021, 61.5%). */
+    /**
+     * Loss given default on debt secured by tangible real estate: the senior secured recovery, 62%
+     * (CorporateDefaultService; Moody's ultimate recoveries 1987-2021, 61.5%).
+     */
     public const REIT_LOSS_GIVEN_DEFAULT = 1.0 - \App\Service\Market\Bond\CorporateDefaultService::RECOVERY_SENIOR_SECURED;
 
     // --- Aggressive Property Acquisition Borrowing ---
@@ -240,7 +282,8 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
     {
         $physics = parent::getMacroPhysics($stock, $macroState);
         $physics['pricing_power_multiplier'] = 1.0;
-        // Inflation is carried inside this model's own stream physics: neither price nor cost base inflates at the engine level.
+        // Inflation is carried inside this model's own stream physics: neither price nor cost base inflates at the
+        // engine level.
         $physics['input_cost_multiplier'] = 1.0;
         $outputGap = $this->resolveLaggedOutputGap($macroState);
         $beta = $this->getOperatingCyclicality($stock);
@@ -480,7 +523,8 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
 
     public function calculateFairValue(float $earningsValue, float $pbFairValue, float $normalizedEps, float $dividendSupportValue = 0.0): float
     {
-        // Commercial Real Estate REITs trade primarily on Distributable Cash Flow / Dividend Yields and Net Asset Value (NAV / Book).
+        // Commercial Real Estate REITs trade primarily on Distributable Cash Flow / Dividend Yields and Net Asset Value
+        // (NAV / Book).
         if ($dividendSupportValue > 0.0) {
             return ($dividendSupportValue * 0.50) + ($pbFairValue * 0.35) + ($earningsValue * 0.15);
         }
@@ -492,13 +536,19 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
         return $quarterlyEps;
     }
 
-    /** Pass-through status is conditional on distributing taxable income; the trust pays no corporate tax on what it distributes. */
+    /**
+     * Pass-through status is conditional on distributing taxable income; the trust pays no corporate tax on what it
+     * distributes.
+     */
     public function getMinimumDistributionRatio(): float
     {
         return self::DISTRIBUTION_REQUIREMENT;
     }
 
-    /** A trust is valued and forecast on funds from operations: its buildings hold their value while the books depreciate them. */
+    /**
+     * A trust is valued and forecast on funds from operations: its buildings hold their value while the books
+     * depreciate them.
+     */
     public function reportsFundsFromOperations(): bool
     {
         return true;

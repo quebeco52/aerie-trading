@@ -107,7 +107,10 @@ class BrokerageBusinessModelTest extends TestCase
         );
     }
 
-    /** M2 growth over trend reaches revenue once, through the trading stream at its documented sensitivity; the root demand shift does not carry it. */
+    /**
+     * M2 growth over trend reaches revenue once, through the trading stream at its documented sensitivity; the root
+     * demand shift does not carry it.
+     */
     public function testBroadMoneyEntersTheTradingStreamOnce(): void
     {
         $stock = (new Stock())->setTicker('ROOK');
@@ -291,7 +294,10 @@ class BrokerageBusinessModelTest extends TestCase
         );
     }
 
-    /** A sweep pays its own beta, not the banking system's: the system's deposit pass-through does not reach the broker's spread. */
+    /**
+     * A sweep pays its own beta, not the banking system's: the system's deposit pass-through does not reach the
+     * broker's spread.
+     */
     public function testClientSweepPaysItsOwnBetaWhateverTheSystemPassesThrough(): void
     {
         $stock = new Stock();
@@ -310,7 +316,10 @@ class BrokerageBusinessModelTest extends TestCase
         );
     }
 
-    /** Commissions are paid per trade: a stamp duty that thins turnover by a tenth thins the trading stream by a tenth, and leaves advisory alone. */
+    /**
+     * Commissions are paid per trade: a stamp duty that thins turnover by a tenth thins the trading stream by a tenth,
+     * and leaves advisory alone.
+     */
     public function testAStampDutyThinsTradingCommissions(): void
     {
         $stock = new Stock();

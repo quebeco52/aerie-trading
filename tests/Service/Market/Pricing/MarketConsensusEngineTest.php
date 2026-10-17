@@ -52,7 +52,8 @@ class MarketConsensusEngineTest extends TestCase
 
         $this->assertInstanceOf(ConsensusDTO::class, $consensus);
         $this->assertSame(0.50, $consensus->dynamicVisibility);
-        // Bayesian update blends structural prior ($1000) with fresh signal ($1050) -> ~1036.26, minus 1.5% walkdown -> ~1020.72
+        // Bayesian update blends structural prior ($1000) with fresh signal ($1050) -> ~1036.26, minus 1.5% walkdown ->
+        // ~1020.72
         $this->assertEqualsWithDelta(1020.72, $consensus->analystExpectedRevenue, 0.05);
         // The cost estimate is struck on the unbiased revenue: 1036.26 * 0.40 = 414.51
         $this->assertEqualsWithDelta(1036.26, $consensus->analystUnbiasedRevenue, 0.05);
@@ -128,7 +129,8 @@ class MarketConsensusEngineTest extends TestCase
             isPublicEvent: true,
         );
 
-        // Biotech / ConsumerStaples style profile: routine visibility is low (0.10), but event visibility is high (0.90)
+        // Biotech / ConsumerStaples style profile: routine visibility is low (0.10), but event visibility is high
+        // (0.90)
         $coverage = new SectorCoverageProfile(
             baseVisibility: 0.10,
             errorStdDev: 0.05,

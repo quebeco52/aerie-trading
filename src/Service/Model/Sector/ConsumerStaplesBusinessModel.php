@@ -22,16 +22,22 @@ use App\Service\Model\ModelParam;
  *
  * Financial Physics:
  * - Engel's law: pantry demand follows income at a low elasticity, so a recession barely dents volume.
- * - Pass-Through Pricing Power: brands recover expected inflation on the shelf, and more than recover it the stronger they are.
- * - Cost-Push Squeeze (COGS): farm commodities, energy, imports and payroll reach the cost base at spot and are recovered with the repricing lag.
+ * - Pass-Through Pricing Power: brands recover expected inflation on the shelf, and more than recover it the stronger
+ *   they are.
+ * - Cost-Push Squeeze (COGS): farm commodities, energy, imports and payroll reach the cost base at spot and are
+ *   recovered with the repricing lag.
  * - Commodity desk: a firm that buys its commodities forward meets a spot move late but in full.
  * - Grower's windfall: bulk output sold at the exchange price gains from a dear harvest that squeezes a processor.
- * - Dynamic Working Capital Float: Branded goods generate float (-5% NWC) while bulk commodity storage ties up cash (+5% NWC).
+ * - Dynamic Working Capital Float: Branded goods generate float (-5% NWC) while bulk commodity storage ties up cash
+ *   (+5% NWC).
  */
 class ConsumerStaplesBusinessModel extends StandardCorporateBusinessModel
 {
     // --- Operating Cyclicality & Demand Structure ---
-    /** Income elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). Inelastic pantry demand; brands substitute on the shelf. */
+    /**
+     * Income elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). Inelastic
+     * pantry demand; brands substitute on the shelf.
+     */
     public const OPERATING_CYCLICALITY = 0.50;
     /** Own-price elasticity of demand: volume lost per unit of real price increase. */
     public const PRICE_ELASTICITY_OF_DEMAND = 0.30;
@@ -39,15 +45,24 @@ class ConsumerStaplesBusinessModel extends StandardCorporateBusinessModel
     public const INDUSTRY_SUBSTITUTABILITY = 0.60;
 
     // --- Input Cost Basket ---
-    /** Shares of the variable cost base by input channel, measured from the BEA input-output accounts with supply-chain content (labor still the model's own). */
+    /**
+     * Shares of the variable cost base by input channel, measured from the BEA input-output accounts with supply-chain
+     * content (labor still the model's own).
+     */
     public const INPUT_COST_EXPOSURES = InputOutputExposures::CONSUMER_STAPLES;
     /** Branded staples recover input moves on the shelf within a couple of quarters. */
     public const INPUT_PASS_THROUGH_LAG_YEARS = 0.50;
 
     // --- FX Exposure ---
-    /** Share of revenue whose competitiveness moves with the trade-weighted exchange rate. Staples are made and sold close to the shelf; only a thin import-competing slice reprices with the currency. */
+    /**
+     * Share of revenue whose competitiveness moves with the trade-weighted exchange rate. Staples are made and sold
+     * close to the shelf; only a thin import-competing slice reprices with the currency.
+     */
     public const FX_REVENUE_EXPOSURE = 0.05;
-    /** Brand equity is shelf-price power: a branded FMCG list price rises with input costs and the volume loss is small. Bulk commodity producers are tuned down per ticker. */
+    /**
+     * Brand equity is shelf-price power: a branded FMCG list price rises with input costs and the volume loss is small.
+     * Bulk commodity producers are tuned down per ticker.
+     */
     public const PRICING_POWER_INDEX = 0.75;
 
     // --- Analyst Visibility & Error ---
@@ -63,7 +78,10 @@ class ConsumerStaplesBusinessModel extends StandardCorporateBusinessModel
     public const STAPLES_REVERSION_SPEED = 5.0;
 
     // --- Working Capital by Stream (shares of the stream's revenue) ---
-    /** Branded goods: retailers pay in ~29 days, ~37 days of sales in stock, suppliers paid on long terms in ~84 days of sales. */
+    /**
+     * Branded goods: retailers pay in ~29 days, ~37 days of sales in stock, suppliers paid on long terms in ~84 days of
+     * sales.
+     */
     public const BRANDED_WORKING_CAPITAL = ['receivables' => 0.08, 'inventory' => 0.10, 'payables' => 0.23];
     /** Bulk processing: buyers pay in ~22 days, grain and meat in storage ~29 days of sales, growers paid in ~33. */
     public const VOLUME_WORKING_CAPITAL = ['receivables' => 0.06, 'inventory' => 0.08, 'payables' => 0.09];
@@ -87,13 +105,18 @@ class ConsumerStaplesBusinessModel extends StandardCorporateBusinessModel
     public const COMMODITY_HEDGE_MULTIPLIER = 2.50;
     /** Most of the commodity bill a desk covers forward (80%); the rest is always bought at spot. */
     public const MAX_COMMODITY_HEDGE_COVER = 0.80;
-    /** Mean age of a layered hedge book rolling a year of forward cover (~6 months): the lag at which covered input costs reach spot. */
+    /**
+     * Mean age of a layered hedge book rolling a year of forward cover (~6 months): the lag at which covered input
+     * costs reach spot.
+     */
     public const HEDGE_BOOK_MEAN_AGE_YEARS = 0.50;
 
     // --- Product Recall & Regulatory Lore Thresholds ---
     /** Negative z-score threshold indicating severe supply chain contamination and massive product recall. */
     public const RECALL_SEVERE_Z_SCORE = -2.50;
-    /** One-off charge on the quarter's branded sales for a massive recall: stock destroyed, logistics and refunds (8%). */
+    /**
+     * One-off charge on the quarter's branded sales for a massive recall: stock destroyed, logistics and refunds (8%).
+     */
     public const RECALL_SEVERE_PENALTY = 0.08;
     /** Negative z-score threshold indicating sudden health regulatory scrutiny and fines. */
     public const RECALL_MODERATE_Z_SCORE = -2.00;
@@ -110,7 +133,10 @@ class ConsumerStaplesBusinessModel extends StandardCorporateBusinessModel
     }
 
     // --- Secular Demand ---
-    /** Spending on food and beverages for off-premises consumption as a share of US nominal GDP in 1997 (BEA NIPA Table 2.4.5, personal consumption expenditures). */
+    /**
+     * Spending on food and beverages for off-premises consumption as a share of US nominal GDP in 1997 (BEA NIPA Table
+     * 2.4.5, personal consumption expenditures).
+     */
     public const SECULAR_SHARE_1997 = 0.0554;
     /** The same share in 2019. */
     public const SECULAR_SHARE_2019 = 0.0503;
@@ -191,7 +217,9 @@ class ConsumerStaplesBusinessModel extends StandardCorporateBusinessModel
         return parent::resolveInputCostLagYears($stock) + ($cover * self::HEDGE_BOOK_MEAN_AGE_YEARS);
     }
 
-    /** Engel's law: pantry demand follows income at the sector's own low elasticity, whatever the brand charges for it. */
+    /**
+     * Engel's law: pantry demand follows income at the sector's own low elasticity, whatever the brand charges for it.
+     */
     public function getMacroPhysics(Stock $stock, MacroStateDTO $macroState): array
     {
         return [
@@ -243,8 +271,8 @@ class ConsumerStaplesBusinessModel extends StandardCorporateBusinessModel
         $eventZ   = $streams->generateExogenousZ('event', 0.05);
 
         $brandedRevenue = max(0.0, $expectedRevenue * $brandedWeight * (1.0 + ($brandedZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR))));
-        // A grower sells part of its bulk output at the exchange price, struck on the same baseline as its input basket:
-        // a dear harvest is its windfall as it is a processor's squeeze.
+        // A grower sells part of its bulk output at the exchange price, struck on the same baseline as its input
+        // basket: a dear harvest is its windfall as it is a processor's squeeze.
         $volumeAtBasePrice = max(0.0, $expectedRevenue * $volumeWeight * (1.0 + ($volumeZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR))));
         $volumeRevenue = max(0.0, $volumeAtBasePrice * (1.0 + ($params[ModelParam::AgriculturalOutputShare] * $this->resolveInputPriceDeviations($macroState)['agri'])));
 
@@ -274,10 +302,10 @@ class ConsumerStaplesBusinessModel extends StandardCorporateBusinessModel
         $actualRevenue = max(0.0, array_sum($streamRevenues));
         $streams->recordStreamShares($streamRevenues);
 
-        // --- Cost-Push Inflation & COGS Squeeze ---
-        // Farm commodities, plant energy, imported packaging and line payroll reach COGS with the buying lag (longer for a
-        // firm whose desk buys forward) and are recovered on the shelf with the repricing lag. The cost ratio is per unit,
-        // so it is re-expressed against the price a grower realized on its bulk output.
+        // --- Cost-Push Inflation & COGS Squeeze --- Farm commodities, plant energy, imported packaging and line
+        // payroll reach COGS with the buying lag (longer for a firm whose desk buys forward) and are recovered on the
+        // shelf with the repricing lag. The cost ratio is per unit, so it is re-expressed against the price a grower
+        // realized on its bulk output.
         $inputCostDrag = $this->resolveInputCostDrag($stock, $macroState, $streams, $pricingPower, $realizedVariableMargin);
         $revenueAtBasePrice = $actualRevenue - ($volumeRevenue - $volumeAtBasePrice);
         $priceRelative = $revenueAtBasePrice > 0.0 ? $actualRevenue / $revenueAtBasePrice : 1.0;

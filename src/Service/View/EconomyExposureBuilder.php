@@ -24,9 +24,11 @@ use App\Service\Model\Sector\UtilityBusinessModel;
  *   StandardOperatingPhysicsTrait::resolveInputCostDrag. Only models that declare a basket are listed, less refining.
  * - Sales: the producer's own revenue mix (crude/gas split, mine product mix, merchant power share).
  * - Currency: FX_REVENUE_EXPOSURE, read by resolveFxDemandShift.
- * - Rates: the floating share of debt, which calculateInterestExpenseAndWholesaleRate prices at the floating rate, against market value.
+ * - Rates: the floating share of debt, which calculateInterestExpenseAndWholesaleRate prices at the floating rate,
+ *   against market value.
  * - Property: a lender's mortgage and commercial property loans, which set its collateral losses; and the REITs.
- * - The cycle: an operating firm's OPERATING_CYCLICALITY (1.0 = a firm with no sector constant); financials excluded, as not all read it.
+ * - The cycle: an operating firm's OPERATING_CYCLICALITY (1.0 = a firm with no sector constant); financials excluded,
+ *   as not all read it.
  */
 final class EconomyExposureBuilder
 {
@@ -93,7 +95,8 @@ final class EconomyExposureBuilder
                 }
             }
 
-            // A lender's debt is its funding, priced against what it lends: its rate exposure is its margin, not its borrowing.
+            // A lender's debt is its funding, priced against what it lends: its rate exposure is its margin, not its
+            // borrowing.
             if (!$model->isFinancial()) {
                 $debt = (float) $stock->getTotalDebt();
                 $floating = max(0.0, min(1.0, (float) ($stock->getFloatingDebtRatio() ?? 0.0)));
@@ -143,7 +146,8 @@ final class EconomyExposureBuilder
                 $collect['property_lenders'][] = $row($model->resolvePropertyLoanShare($stock));
             }
 
-            // Every model inherits a cyclicality; operating firms' demand reads it, a financial's revenue lines need not.
+            // Every model inherits a cyclicality; operating firms' demand reads it, a financial's revenue lines need
+            // not.
             if (!$model->isFinancial()) {
                 $collect['cycle'][] = $row($model->getOperatingCyclicality($stock));
             }

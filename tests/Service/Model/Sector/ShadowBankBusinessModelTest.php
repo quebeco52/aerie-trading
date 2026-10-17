@@ -216,7 +216,10 @@ class ShadowBankBusinessModelTest extends TestCase
         $this->assertEqualsWithDelta($base->clampedMargin, $distress->clampedMargin, 1e-12, 'credit losses do not touch the operating margin');
     }
 
-    /** The loans are its two portfolios at the bank segment rates: 60% mortgages at 0.43% and 40% direct loans at 0.73%, on the loan share of the book. */
+    /**
+     * The loans are its two portfolios at the bank segment rates: 60% mortgages at 0.43% and 40% direct loans at 0.73%,
+     * on the loan share of the book.
+     */
     public function testThroughTheCycleLossIsTheMortgageAndDirectLendingBlend(): void
     {
         $pool = (new Stock())->setTicker('POOL');
@@ -265,8 +268,8 @@ class ShadowBankBusinessModelTest extends TestCase
     }
 
     /**
-     * Origination fees answer the mortgage rate around the engine's neutral, both ways: a rise prices buyers out, a fall
-     * brings them back. The District's mortgages float, so the rate is the policy rate's plus the spread.
+     * Origination fees answer the mortgage rate around the engine's neutral, both ways: a rise prices buyers out, a
+     * fall brings them back. The District's mortgages float, so the rate is the policy rate's plus the spread.
      */
     public function testOriginationAnswersTheMortgageRateSymmetricallyAroundItsNeutral(): void
     {

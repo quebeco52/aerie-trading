@@ -19,14 +19,19 @@ use App\Service\Model\ModelParam;
  * Earnings strategy for Luxury Goods & Elite Brand Conglomerates.
  *
  * Financial Physics:
- * - Veblen Pricing Power: Complete immunity to supply chain inflation penalties. When inflation rises, luxury brands hike prices aggressively without losing sales volume, expanding operating margins.
+ * - Veblen Pricing Power: Complete immunity to supply chain inflation penalties. When inflation rises, luxury brands
+ *   hike prices aggressively without losing sales volume, expanding operating margins.
  * - Ultra-High Gross Margins: Brand equity allows pricing far above physical cost of goods sold.
- * - Bifurcated Demand Physics: Resilient to middle-class consumer recessions, but exposed to severe global liquidity freezes or wealth tax shocks among ultra-high-net-worth individuals.
+ * - Bifurcated Demand Physics: Resilient to middle-class consumer recessions, but exposed to severe global liquidity
+ *   freezes or wealth tax shocks among ultra-high-net-worth individuals.
  */
 class LuxuryBusinessModel extends StandardCorporateBusinessModel
 {
     // --- Operating Cyclicality & Demand Structure ---
-    /** Elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). Wealth-effect demand with Veblen pricing; maisons are weak substitutes. */
+    /**
+     * Elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). Wealth-effect demand
+     * with Veblen pricing; maisons are weak substitutes.
+     */
     public const OPERATING_CYCLICALITY = 1.10;
     /** Own-price elasticity of demand: volume lost per unit of real price increase. */
     public const PRICE_ELASTICITY_OF_DEMAND = 0.20;
@@ -34,11 +39,17 @@ class LuxuryBusinessModel extends StandardCorporateBusinessModel
     public const INDUSTRY_SUBSTITUTABILITY = 0.40;
 
     // --- Input Cost Basket ---
-    /** Shares of the variable cost base by input channel, measured from the BEA input-output accounts with supply-chain content (labor still the model's own). */
+    /**
+     * Shares of the variable cost base by input channel, measured from the BEA input-output accounts with supply-chain
+     * content (labor still the model's own).
+     */
     public const INPUT_COST_EXPOSURES = InputOutputExposures::LUXURY;
 
     // --- FX Exposure ---
-    /** Share of revenue whose competitiveness moves with the trade-weighted exchange rate. Tourist spend and cross-border arbitrage make luxury demand unusually sensitive to the currency. */
+    /**
+     * Share of revenue whose competitiveness moves with the trade-weighted exchange rate. Tourist spend and
+     * cross-border arbitrage make luxury demand unusually sensitive to the currency.
+     */
     public const FX_REVENUE_EXPOSURE = 0.15;
     /** Veblen pricing: maisons raise prices one and a half times expected inflation without losing volume. */
     public const PRICING_ELASTICITY = 1.50;
@@ -46,7 +57,10 @@ class LuxuryBusinessModel extends StandardCorporateBusinessModel
     public const PRICING_POWER_INDEX = 1.00;
 
     // --- Balance Sheet Realism ---
-    /** Capitalized operating lease liabilities as a fraction of annual revenue (IFRS 16 / ASC 842). Flagship boutiques on prime retail streets are leased on long terms. */
+    /**
+     * Capitalized operating lease liabilities as a fraction of annual revenue (IFRS 16 / ASC 842). Flagship boutiques
+     * on prime retail streets are leased on long terms.
+     */
     public const LEASE_LIABILITY_INTENSITY = 0.45;
 
     // --- Analyst Visibility & Error ---
@@ -62,7 +76,10 @@ class LuxuryBusinessModel extends StandardCorporateBusinessModel
         return 0.02;
     }
     // --- Secular Demand ---
-    /** Spending on jewelry and watches as a share of US nominal GDP in 1997 (BEA NIPA Table 2.4.5, personal consumption expenditures). */
+    /**
+     * Spending on jewelry and watches as a share of US nominal GDP in 1997 (BEA NIPA Table 2.4.5, personal consumption
+     * expenditures).
+     */
     public const SECULAR_SHARE_1997 = 0.0047;
     /** The same share in 2019. */
     public const SECULAR_SHARE_2019 = 0.0032;
@@ -189,8 +206,8 @@ class LuxuryBusinessModel extends StandardCorporateBusinessModel
         $actualRevenue = max(0.0, array_sum($streamRevenues));
         $streams->recordStreamShares($streamRevenues);
 
-        // Continuous Veblen Brand Cachet Elasticity:
-        // Strong haute couture desirability ($hauteZ > 0) continuously expands pricing cachet and improves gross margin.
+        // Continuous Veblen Brand Cachet Elasticity: Strong haute couture desirability ($hauteZ > 0) continuously
+        // expands pricing cachet and improves gross margin.
         $brandCachetShift = -self::BRAND_CACHET_ELASTICITY * $hauteZ * $hauteWeight;
 
         $clampedMargin = $this->clampMargin($realizedVariableMargin + $veblenMarginBenefit + $brandModifier + $brandCachetShift);

@@ -35,10 +35,16 @@ use App\Service\Model\StreamContext;
 final class BusinessMapBuilder
 {
     // --- Display ---
-    /** Outside demand cards shown, strongest first; a model reads more fields, but past eight the column outgrows the rest. */
+    /**
+     * Outside demand cards shown, strongest first; a model reads more fields, but past eight the column outgrows the
+     * rest.
+     */
     public const MAX_DEMAND_CARDS = 8;
 
-    /** Execution reading at or beyond which a stream's operations read as strong, or as running into headwinds (the report's own band). */
+    /**
+     * Execution reading at or beyond which a stream's operations read as strong, or as running into headwinds (the
+     * report's own band).
+     */
     public const EXECUTION_BAND_Z = 1.0;
 
     /** Unrecovered input-cost drag below which the cost note stays silent: 0.05 pt, under the one decimal it prints. */
@@ -319,8 +325,8 @@ final class BusinessMapBuilder
                     'note' => sprintf('%s%% of production costs.', number_format($exposure * 100.0, 1)),
                     'chips' => [is_numeric($measured) ? self::dragChip((float) $measured) : self::chip($gap > 0.0 ? 'Costs up' : 'Costs down', $gap > 0.0 ? 'down' : 'up')],
                 ];
-                // The input's own part of the quarter's drag, lags and what is passed on included; a report filed before
-                // the split is sized at the full move on the cost ratio instead.
+                // The input's own part of the quarter's drag, lags and what is passed on included; a report filed
+                // before the split is sized at the full move on the cost ratio instead.
                 $map['edges'][] = is_numeric($measured)
                     ? self::dragEdge('input:' . $channel, (float) $measured)
                     : ['input:' . $channel, 'recover', -($gap <=> 0.0), $exposure * abs($gap) * $costRatio];

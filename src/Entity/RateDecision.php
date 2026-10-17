@@ -36,7 +36,10 @@ class RateDecision
     #[ORM\Column(type: Types::FLOAT)]
     private float $rateChange = 0.0;
 
-    /** @var list<float> Each member's vote, the governor first: 1 for a higher rate, -1 for a lower, 0 with the decision. */
+    /**
+     * @var list<float> Each member's vote, the governor first: 1 for a higher rate, -1 for a lower, 0 with the
+     *                  decision.
+     */
     #[ORM\Column(type: Types::JSON)]
     private array $votes = [];
 

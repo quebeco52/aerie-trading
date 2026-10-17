@@ -29,7 +29,10 @@ use App\Service\Model\ModelParam;
 class LogisticsBusinessModel extends StandardCorporateBusinessModel
 {
     // --- Operating Cyclicality & Demand Structure ---
-    /** Elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). Freight volumes lead the industrial cycle. */
+    /**
+     * Elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). Freight volumes lead
+     * the industrial cycle.
+     */
     public const OPERATING_CYCLICALITY = 1.30;
     /** Own-price elasticity of demand: volume lost per unit of real price increase. */
     public const PRICE_ELASTICITY_OF_DEMAND = 0.80;
@@ -37,7 +40,10 @@ class LogisticsBusinessModel extends StandardCorporateBusinessModel
     public const INDUSTRY_SUBSTITUTABILITY = 0.50;
 
     // --- Input Cost Basket ---
-    /** Shares of the variable cost base by input channel, measured from the BEA input-output accounts with supply-chain content (labor still the model's own). */
+    /**
+     * Shares of the variable cost base by input channel, measured from the BEA input-output accounts with supply-chain
+     * content (labor still the model's own).
+     */
     public const INPUT_COST_EXPOSURES = InputOutputExposures::LOGISTICS;
     /** Fuel surcharges on dedicated contracts reprice within a quarter or two. */
     public const INPUT_PASS_THROUGH_LAG_YEARS = 0.25;
@@ -47,7 +53,10 @@ class LogisticsBusinessModel extends StandardCorporateBusinessModel
     public const PRICING_POWER_INDEX = 0.60;
 
     // --- Balance Sheet Realism ---
-    /** Capitalized operating lease liabilities as a fraction of annual revenue (IFRS 16 / ASC 842). Fulfilment centres, cross-docks and truck fleets are largely leased. */
+    /**
+     * Capitalized operating lease liabilities as a fraction of annual revenue (IFRS 16 / ASC 842). Fulfilment centres,
+     * cross-docks and truck fleets are largely leased.
+     */
     public const LEASE_LIABILITY_INTENSITY = 0.40;
 
     // --- Analyst Visibility & Error ---
@@ -93,7 +102,10 @@ class LogisticsBusinessModel extends StandardCorporateBusinessModel
     }
 
     // --- Secular Demand ---
-    /** Truck transportation plus warehousing and storage value added as a share of US nominal GDP in 1997 (BEA GDP by Industry, value added). */
+    /**
+     * Truck transportation plus warehousing and storage value added as a share of US nominal GDP in 1997 (BEA GDP by
+     * Industry, value added).
+     */
     public const SECULAR_SHARE_1997 = 0.0114;
     /** The same share in 2019. */
     public const SECULAR_SHARE_2019 = 0.0126;
@@ -143,7 +155,10 @@ class LogisticsBusinessModel extends StandardCorporateBusinessModel
     // --- Manufacturing PMI, Trade & Supply Chain Transmission ---
     /** Sensitivity of contract freight and 3PL warehousing volumes to manufacturing PMI shifts. */
     public const PMI_FREIGHT_SENSITIVITY = 0.45;
-    /** Export volume per unit of the foreign bloc's output gap: the customers abroad. The import side rides on the domestic cycle. */
+    /**
+     * Export volume per unit of the foreign bloc's output gap: the customers abroad. The import side rides on the
+     * domestic cycle.
+     */
     public const FOREIGN_DEMAND_SENSITIVITY = 1.00;
     /** Spot freight brokerage surge demand per standard deviation of supply-chain pressure above normal (3.8%). */
     public const GSCPI_SPOT_SURGE_SENSITIVITY = 0.038;

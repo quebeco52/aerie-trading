@@ -61,9 +61,9 @@ class ReinsuranceBusinessModelTest extends TestCase
     }
 
     /**
-     * A capital shortfall against premium demand reaches treaty revenue once, through the hard-market rate on the pricing-power
-     * multiplier. Adding it to this quarter's treaty revenue as well booked a price rise as volume, which the
-     * engine then costs at the full claims ratio.
+     * A capital shortfall against premium demand reaches treaty revenue once, through the hard-market rate on the
+     * pricing-power multiplier. Adding it to this quarter's treaty revenue as well booked a price rise as volume, which
+     * the engine then costs at the full claims ratio.
      */
     public function testCapitalShortfallStartsTheHardMarketWithoutBookingItAsTreatyVolume(): void
     {
@@ -164,7 +164,9 @@ class ReinsuranceBusinessModelTest extends TestCase
         $this->assertEqualsWithDelta($realizedVariableMargin + $gross - $expectedLayer - $shield, $result->clampedMargin, 1e-9);
     }
 
-    /** The same large loss of its own, in an average district year, stays inside the retention: no breach, no haircut. */
+    /**
+     * The same large loss of its own, in an average district year, stays inside the retention: no breach, no haircut.
+     */
     public function testOwnLargeLossInAnAverageYearStaysInsideTheRetention(): void
     {
         $stock = new Stock();

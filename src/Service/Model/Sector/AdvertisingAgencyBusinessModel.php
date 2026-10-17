@@ -20,15 +20,20 @@ use App\Service\Model\ModelParam;
  * Financial Physics:
  * - Asset light, human-capital intensive.
  * - Tri-Stream Agency Architecture:
- *      1. Media Buying Commissions: Programmatic take-rates on gross client ad spend; pro-cyclical to corporate earnings.
+ *      1. Media Buying Commissions: Programmatic take-rates on gross client ad spend; pro-cyclical to corporate
+ *         earnings.
  *      2. Creative Brand Retainers: High-margin, multi-year Agency of Record (AOR) brand management fees.
  *      3. MarTech & Data Consulting: High-value enterprise marketing automation and customer analytics consulting.
- * - High Operating Leverage: During economic expansions, programmatic ad spend surges rapidly over fixed creative payroll.
+ * - High Operating Leverage: During economic expansions, programmatic ad spend surges rapidly over fixed creative
+ *   payroll.
  */
 class AdvertisingAgencyBusinessModel extends StandardCorporateBusinessModel
 {
     // --- Operating Cyclicality & Demand Structure ---
-    /** Elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). Marketing budgets are cut first and restored last. */
+    /**
+     * Elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). Marketing budgets are
+     * cut first and restored last.
+     */
     public const OPERATING_CYCLICALITY = 1.30;
     /** Own-price elasticity of demand: volume lost per unit of real price increase. */
     public const PRICE_ELASTICITY_OF_DEMAND = 0.60;
@@ -36,19 +41,29 @@ class AdvertisingAgencyBusinessModel extends StandardCorporateBusinessModel
     public const INDUSTRY_SUBSTITUTABILITY = 0.60;
 
     // --- Input Cost Basket ---
-    /** Shares of the variable cost base by input channel, measured from the BEA input-output accounts with supply-chain content (labor still the model's own). */
+    /**
+     * Shares of the variable cost base by input channel, measured from the BEA input-output accounts with supply-chain
+     * content (labor still the model's own).
+     */
     public const INPUT_COST_EXPOSURES = InputOutputExposures::ADVERTISING_AGENCY;
 
     // --- Services Pricing ---
-    /** Elasticity of fee and rate pricing to services (supercore) inflation. Retainer and fee schedules reprice with services inflation. */
+    /**
+     * Elasticity of fee and rate pricing to services (supercore) inflation. Retainer and fee schedules reprice with
+     * services inflation.
+     */
     public const PRICING_ELASTICITY = 0.80;
-    /** Holding-company fees face client procurement review and a commoditized media-buying alternative, so wage inflation is largely absorbed rather than billed on. */
+    /**
+     * Holding-company fees face client procurement review and a commoditized media-buying alternative, so wage
+     * inflation is largely absorbed rather than billed on.
+     */
     public const PRICING_POWER_INDEX = 0.35;
     /** Services price off core services inflation ex-housing, not goods breakevens. */
     public const PRICING_INFLATION_BASIS = 'supercore_inflation_ema';
 
     /**
-     * Calendar-quarter revenue seasonality [Q1, Q2, Q3, Q4] summing to 4.0: Q4 holiday campaign spend, Q1 post-holiday lull.
+     * Calendar-quarter revenue seasonality [Q1, Q2, Q3, Q4] summing to 4.0: Q4 holiday campaign spend, Q1 post-holiday
+     * lull.
      *
      * @return array<int, float>
      */
@@ -58,9 +73,15 @@ class AdvertisingAgencyBusinessModel extends StandardCorporateBusinessModel
     }
 
     // --- Balance Sheet Realism ---
-    /** Capitalized operating lease liabilities as a fraction of annual revenue (IFRS 16 / ASC 842). Agency networks lease their studio and office footprint in every market they serve. */
+    /**
+     * Capitalized operating lease liabilities as a fraction of annual revenue (IFRS 16 / ASC 842). Agency networks
+     * lease their studio and office footprint in every market they serve.
+     */
     public const LEASE_LIABILITY_INTENSITY = 0.12;
-    /** Stock-based compensation (ASC 718) as a share of revenue: Advertising, 3.23% of revenue, 52 firms (Damodaran, Employee data by industry, US, January 2026). */
+    /**
+     * Stock-based compensation (ASC 718) as a share of revenue: Advertising, 3.23% of revenue, 52 firms (Damodaran,
+     * Employee data by industry, US, January 2026).
+     */
     public const STOCK_COMPENSATION_INTENSITY = 0.0323;
 
     // --- Analyst Visibility & Error ---
@@ -101,7 +122,10 @@ class AdvertisingAgencyBusinessModel extends StandardCorporateBusinessModel
     }
 
     // --- Secular Demand ---
-    /** Miscellaneous professional, scientific and technical services (advertising) value added as a share of US nominal GDP in 1997 (BEA GDP by Industry, value added). */
+    /**
+     * Miscellaneous professional, scientific and technical services (advertising) value added as a share of US nominal
+     * GDP in 1997 (BEA GDP by Industry, value added).
+     */
     public const SECULAR_SHARE_1997 = 0.0373;
     /** The same share in 2019. */
     public const SECULAR_SHARE_2019 = 0.0457;
@@ -132,7 +156,10 @@ class AdvertisingAgencyBusinessModel extends StandardCorporateBusinessModel
     public const MARTECH_VARIANCE_SCALAR = 0.20; // B2B technology consulting
 
     // --- Ad Spend Cycle ---
-    /** Fraction of the client ad-spend cycle that reaches MarTech and data consulting engagements (0.4 of media's swing). */
+    /**
+     * Fraction of the client ad-spend cycle that reaches MarTech and data consulting engagements (0.4 of media's
+     * swing).
+     */
     public const MARTECH_AD_SPEND_SHARE = 0.40;
 
     public function getMacroPhysics(Stock $stock, \App\DTO\MacroStateDTO $macroState): array
@@ -206,7 +233,8 @@ class AdvertisingAgencyBusinessModel extends StandardCorporateBusinessModel
         $brandWeight   = $activeWeights['creative_brand_retainers'];
         $martechWeight = $activeWeights['martech_consulting'];
 
-        // Ad budgets expand aggressively during GDP booms and contract sharply during recessions and consumer sentiment drops
+        // Ad budgets expand aggressively during GDP booms and contract sharply during recessions and consumer sentiment
+        // drops
         $macroAdSpendShift = $this->resolveAdSpendShift($stock, $macroState);
 
         $mediaZ   = $streams->generateZ('media_buying_commissions', 0.25);

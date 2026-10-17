@@ -24,33 +24,67 @@ class AssetMarketSubsystem
     public const RESIDENTIAL_DEPRECIATION_TAX_RATE = 0.025;
 
     // --- JORGENSON USER COST RESIDENTIAL REAL ESTATE ---
-    /** Equilibrium user cost of housing: neutral 10Y (r* + target + base premium) + mortgage spread + carry costs - target inflation. */
+    /**
+     * Equilibrium user cost of housing: neutral 10Y (r* + target + base premium) + mortgage spread + carry costs -
+     * target inflation.
+     */
     public const RESIDENTIAL_NEUTRAL_USER_COST = MacroEngine::NEUTRAL_MORTGAGE_RATE + self::RESIDENTIAL_DEPRECIATION_TAX_RATE - MacroEngine::TARGET_INFLATION;
 
     // --- Immigration and Housing (Saiz 2007) ---
-    /** Rise in rents and house values per unit of population added by immigration (Saiz 2007: an inflow of 1% of a city's population raises rents and values about 1%); the District's land ends at the sounds. */
+    /**
+     * Rise in rents and house values per unit of population added by immigration (Saiz 2007: an inflow of 1% of a
+     * city's population raises rents and values about 1%); the District's land ends at the sounds.
+     */
     public const IMMIGRATION_HOUSING_ELASTICITY = 1.0;
 
     // --- Foreign Buyers of Homes (British Columbia's 2016 Foreign Buyers Tax) ---
-    /** Fall in foreign buyers' share of home purchases per unit of tax, in logs: BC's 15% tax took it from 9.5% of transactions in the six weeks before to 1.7% in the four months after (Pavlov, Somerville & Wetzel), ln(9.5 / 1.7) / 0.15. */
+    /**
+     * Fall in foreign buyers' share of home purchases per unit of tax, in logs: BC's 15% tax took it from 9.5% of
+     * transactions in the six weeks before to 1.7% in the four months after (Pavlov, Somerville & Wetzel), ln(9.5 /
+     * 1.7) / 0.15.
+     */
     public const FOREIGN_BUYER_TAX_DEMAND_SEMI_ELASTICITY = 11.47;
-    /** Log of house values foreign demand holds up, all of which a tax that prices every foreign buyer out takes off: the 15% tax left prices 6% lower where foreign buyers bought (Pavlov, Somerville & Wetzel; West & Botsch 2020 find 2.4% within five months), ln(1 / 0.94) over the 82% of foreign demand it removed. The District is a financial centre, so its whole market is such a neighbourhood. */
+    /**
+     * Log of house values foreign demand holds up, all of which a tax that prices every foreign buyer out takes off:
+     * the 15% tax left prices 6% lower where foreign buyers bought (Pavlov, Somerville & Wetzel; West & Botsch 2020
+     * find 2.4% within five months), ln(1 / 0.94) over the 82% of foreign demand it removed. The District is a
+     * financial centre, so its whole market is such a neighbourhood.
+     */
     public const FOREIGN_BUYER_HOUSING_VALUE_SHARE = 0.0754;
-    /** Foreign buyers' share of home purchases with no tax: 9.5% of transactions in the six weeks before British Columbia's 2016 tax (Pavlov, Somerville & Wetzel). */
+    /**
+     * Foreign buyers' share of home purchases with no tax: 9.5% of transactions in the six weeks before British
+     * Columbia's 2016 tax (Pavlov, Somerville & Wetzel).
+     */
     public const FOREIGN_BUYER_PURCHASE_SHARE = 0.095;
-    /** Homes sold a year as a share of GDP, the base the tax on foreign buyers is levied on: British Columbia's 20% tax raised C$35-40 million a year in 2018-20 (budget 2018 projections) on about C$295 billion of GDP, over the 20% and the foreign share it left (9.5% e^(-11.47 x 0.2)), 6.6%. */
+    /**
+     * Homes sold a year as a share of GDP, the base the tax on foreign buyers is levied on: British Columbia's 20% tax
+     * raised C$35-40 million a year in 2018-20 (budget 2018 projections) on about C$295 billion of GDP, over the 20%
+     * and the foreign share it left (9.5% e^(-11.47 x 0.2)), 6.6%.
+     */
     public const HOME_SALES_TO_GDP = 0.066;
 
     // --- Green Belts (Hilber & Vermeulen 2016, EJ: 353 English planning authorities, 1974-2008) ---
-    /** Mean refusal rate of major residential schemes (ten or more homes) across English planning authorities, 1979-2008 (Table 1). */
+    /**
+     * Mean refusal rate of major residential schemes (ten or more homes) across English planning authorities, 1979-2008
+     * (Table 1).
+     */
     public const PLANNING_REFUSAL_RATE_MEAN = 0.254;
     /** Standard deviation of that refusal rate across authorities (Table 1). */
     public const PLANNING_REFUSAL_RATE_SD = 0.087;
-    /** Standard deviations from the mean authority to the 10th or 90th percentile, a normal's (the refusal rate's skewness is 0.33): the founding planning regime stands at the 10th, the strictest green belt at the 90th. */
+    /**
+     * Standard deviations from the mean authority to the 10th or 90th percentile, a normal's (the refusal rate's
+     * skewness is 0.33): the founding planning regime stands at the 10th, the strictest green belt at the 90th.
+     */
     public const PLANNING_PERCENTILE_Z = 1.2816;
-    /** Rise in the house price-earnings elasticity per standard deviation of refusal rate while house prices rise (Table 3, booms: 0.267, se 0.055). */
+    /**
+     * Rise in the house price-earnings elasticity per standard deviation of refusal rate while house prices rise (Table
+     * 3, booms: 0.267, se 0.055).
+     */
     public const GREEN_BELT_BOOM_ELASTICITY_PER_SD = 0.267;
-    /** The same rise while house prices fall (Table 3, busts: 0.152, se 0.061): a durable stock cannot shrink, so supply binds less on the way down (Glaeser & Gyourko 2005). */
+    /**
+     * The same rise while house prices fall (Table 3, busts: 0.152, se 0.061): a durable stock cannot shrink, so supply
+     * binds less on the way down (Glaeser & Gyourko 2005).
+     */
     public const GREEN_BELT_BUST_ELASTICITY_PER_SD = 0.152;
 
     // --- Sector Demand Factor ---
@@ -58,17 +92,32 @@ class AssetMarketSubsystem
     public const HABIT_RISK_AVERSION_COEFF = 9.0;
     /** Structural floor: equities must logically yield more than risk-free T-bills. */
     public const MIN_EQUITY_RISK_PREMIUM = 0.02;
-    /** Campbell & Shiller (1988) log-linearisation constant, annual: rho = 1 / (1 + mean dividend yield), ~0.96 on the long US sample. */
+    /**
+     * Campbell & Shiller (1988) log-linearisation constant, annual: rho = 1 / (1 + mean dividend yield), ~0.96 on the
+     * long US sample.
+     */
     public const CAMPBELL_SHILLER_RHO = 0.96;
 
     // --- GARCH-MIDAS Macroeconomic Volatility Constants (Engle, Ghysels, & Sohn 2013 Eq. 5) ---
-    /** Log volatility per unit of output gap contraction (1.1, se 2.1): ln VIX on the gap AND the excess bond premium, 1990-2026. Alone the gap takes ~4 by standing in for the omitted premium; 2010's VIX averaged 22 with the gap still -3.5%. */
+    /**
+     * Log volatility per unit of output gap contraction (1.1, se 2.1): ln VIX on the gap AND the excess bond premium,
+     * 1990-2026. Alone the gap takes ~4 by standing in for the omitted premium; 2010's VIX averaged 22 with the gap
+     * still -3.5%.
+     */
     public const MACRO_VOL_OUTPUT_GAP_SENSITIVITY = 1.1;
-    /** Log volatility per unit of excess bond premium (31.6, se 3.6), the same regression: 2008's 340 bps premium lifts the anchor ~2.9x. VIX is uncertainty plus the price of risk (Bekaert & Hoerova 2014), and the premium is that price. */
+    /**
+     * Log volatility per unit of excess bond premium (31.6, se 3.6), the same regression: 2008's 340 bps premium lifts
+     * the anchor ~2.9x. VIX is uncertainty plus the price of risk (Bekaert & Hoerova 2014), and the premium is that
+     * price.
+     */
     public const MACRO_VOL_PREMIUM_SENSITIVITY    = 31.6;
     /** Sensitivity of exponential baseline volatility to yield curve slope (flattening/inversion increases vol). */
     public const MACRO_VOL_SLOPE_SENSITIVITY      = 8.0;
-    /** Sensitivity of the baseline volatility anchor to the log policy-uncertainty index: a doubling lifts the anchor ~11% (Pastor & Veronesi 2013 political uncertainty premium; the BBD index co-moves with the VIX). Enters the anchor, so it is budgeted against the jump compensation like the other drivers. */
+    /**
+     * Sensitivity of the baseline volatility anchor to the log policy-uncertainty index: a doubling lifts the anchor
+     * ~11% (Pastor & Veronesi 2013 political uncertainty premium; the BBD index co-moves with the VIX). Enters the
+     * anchor, so it is budgeted against the jump compensation like the other drivers.
+     */
     public const MACRO_VOL_EPU_SENSITIVITY        = 0.15;
     /** Lower clamp for baseline volatility during extreme Goldilocks expansions. */
     public const MACRO_VOL_MIN_BASELINE           = 0.10;
@@ -76,21 +125,37 @@ class AssetMarketSubsystem
     public const MACRO_VOL_MAX_BASELINE           = 0.45;
     /** Mean-reversion speed (kappa) of the continuous macroeconomic variance process. */
     public const MACRO_VOL_KAPPA                  = 2.0;
-    /** Failsafe floor on realized equity volatility (8%), below the calmest stretch of the cycle. It catches a numerically degenerate variance draw and nothing else: if the process rests on it the parameters above are wrong, because a clamp that binds is setting the level this class claims to anchor. */
+    /**
+     * Failsafe floor on realized equity volatility (8%), below the calmest stretch of the cycle. It catches a
+     * numerically degenerate variance draw and nothing else: if the process rests on it the parameters above are wrong,
+     * because a clamp that binds is setting the level this class claims to anchor.
+     */
     public const MACRO_VOL_FLOOR                  = 0.08;
     /** Failsafe ceiling on realized equity volatility (80%), above the 2008 VIX peak. */
     public const MACRO_VOL_CEILING                = 0.80;
-    /** Volatility of volatility (sigma) in the macroeconomic variance diffusion. Kept under sqrt(2 * kappa * theta) measured on the JUMP-ADJUSTED anchor (~0.26), so the Feller condition holds and the variance stays strictly positive. Above it the stationary density piles onto the 8% clamp, and the clamp -- not this anchor -- sets the realized level. */
+    /**
+     * Volatility of volatility (sigma) in the macroeconomic variance diffusion. Kept under sqrt(2 * kappa * theta)
+     * measured on the JUMP-ADJUSTED anchor (~0.26), so the Feller condition holds and the variance stays strictly
+     * positive. Above it the stationary density piles onto the 8% clamp, and the clamp -- not this anchor -- sets the
+     * realized level.
+     */
     public const MACRO_VOL_SIGMA                  = 0.15;
 
     // --- Leverage Effect (Heston 1993) ---
-    /** Correlation of the variance innovation with the market return, the Heston rho: -0.77 on bias-corrected high-frequency S&P 500 data (Ait-Sahalia, Fan & Li 2013). */
+    /**
+     * Correlation of the variance innovation with the market return, the Heston rho: -0.77 on bias-corrected
+     * high-frequency S&P 500 data (Ait-Sahalia, Fan & Li 2013).
+     */
     public const MACRO_VOL_LEVERAGE_RHO = -0.77;
 
-    // --- Consumer Sentiment (Michigan index on FRED, monthly 1978-2019: UMCSENT on UNRATE - NROU, CPI yoy, UNRATE yoy) ---
+    // --- Consumer Sentiment (Michigan index on FRED, monthly 1978-2019: UMCSENT on UNRATE - NROU, CPI yoy, UNRATE yoy)
+    // ---
     /** Index points per unit of unemployment above NAIRU: -4.56 a point (Newey-West t -5.7). */
     public const SENTIMENT_SLACK_LOADING = -456.0;
-    /** Index points per unit of year-on-year CPI inflation above target: -2.27 a point (t -6.5). Real gasoline against its trend adds nothing once CPI is in (t -0.8), nor does the VIX (t -1.4). */
+    /**
+     * Index points per unit of year-on-year CPI inflation above target: -2.27 a point (t -6.5). Real gasoline against
+     * its trend adds nothing once CPI is in (t -0.8), nor does the VIX (t -1.4).
+     */
     public const SENTIMENT_INFLATION_LOADING = -227.0;
     /** Index points per unit of rise in unemployment over the year: -3.06 a point (t -2.6). */
     public const SENTIMENT_UNEMPLOYMENT_CHANGE_LOADING = -306.0;
@@ -104,17 +169,33 @@ class AssetMarketSubsystem
     public const SENTIMENT_CEILING = 126.9;
 
     // --- The Mainland (Rudebusch & Svensson 1999, re-estimated on US data 1985-2019: var/harness/mainland_fit.py) ---
-    /** The mainland's statistics and its central bank's decisions arrive once a quarter, the frequency its equations are estimated at. */
+    /**
+     * The mainland's statistics and its central bank's decisions arrive once a quarter, the frequency its equations are
+     * estimated at.
+     */
     public const MAINLAND_QUARTERS_PER_YEAR = 4;
-    /** First autoregressive coefficient of the mainland gap on the CBO gap (1.235, se 0.136); the real-rate term estimates at zero away from the lower bound (-0.006, se 0.037) and is left out, so the zero-bound years stay in the sample. */
+    /**
+     * First autoregressive coefficient of the mainland gap on the CBO gap (1.235, se 0.136); the real-rate term
+     * estimates at zero away from the lower bound (-0.006, se 0.037) and is left out, so the zero-bound years stay in
+     * the sample.
+     */
     public const MAINLAND_GAP_AR1 = 1.235;
     /** Second autoregressive coefficient of the mainland gap (-0.300, se 0.140). */
     public const MAINLAND_GAP_AR2 = -0.300;
-    /** Quarterly innovation of the mainland gap, the regression's residual sd (0.490pp); the stationary sd it gives is 1.65% against the CBO gap's 1.62%. */
+    /**
+     * Quarterly innovation of the mainland gap, the regression's residual sd (0.490pp); the stationary sd it gives is
+     * 1.65% against the CBO gap's 1.62%.
+     */
     public const MAINLAND_GAP_SIGMA = 0.00490;
-    /** Annualized quarterly core PCE inflation on its own four lags (sum 0.885), the Rudebusch-Svensson Phillips curve; its fitted mean is 1.96%, so it is anchored at the 2% target. */
+    /**
+     * Annualized quarterly core PCE inflation on its own four lags (sum 0.885), the Rudebusch-Svensson Phillips curve;
+     * its fitted mean is 1.96%, so it is anchored at the 2% target.
+     */
     public const MAINLAND_INFLATION_LAGS = [0.381, 0.217, 0.141, 0.146];
-    /** Mainland core inflation per unit of last quarter's gap (0.004, se 0.028): the flat Phillips curve of the era (Hazell, Herreño, Nakamura & Steinsson 2022). */
+    /**
+     * Mainland core inflation per unit of last quarter's gap (0.004, se 0.028): the flat Phillips curve of the era
+     * (Hazell, Herreño, Nakamura & Steinsson 2022).
+     */
     public const MAINLAND_INFLATION_GAP_SLOPE = 0.004;
     /** Quarterly innovation of annualized mainland core inflation, the regression's residual sd (0.586pp). */
     public const MAINLAND_INFLATION_SIGMA = 0.00586;
@@ -122,23 +203,38 @@ class AssetMarketSubsystem
     public const MAINLAND_GDP_USD = 27.81e12;
     /** The mainland's weight in the world demand that prices commodities: its share of world GDP. */
     public const MAINLAND_DEMAND_WEIGHT = self::MAINLAND_GDP_USD / MacroEngine::WORLD_GDP_USD;
-    /** Share of the district's cycle that reaches the mainland's demand in the long run: its imports for home use are the mainland's exports, moving 1.4 times its demand (IMF WEO 2015) at their share of its GDP, scaled to the mainland's size. */
+    /**
+     * Share of the district's cycle that reaches the mainland's demand in the long run: its imports for home use are
+     * the mainland's exports, moving 1.4 times its demand (IMF WEO 2015) at their share of its GDP, scaled to the
+     * mainland's size.
+     */
     public const FOREIGN_IMPORT_SPILLOVER = MacroAggregateSubsystem::IMPORT_DEMAND_ELASTICITY * MacroAggregateSubsystem::DISTRICT_DOMESTIC_IMPORT_SHARE * MacroEngine::DISTRICT_GDP_USD / self::MAINLAND_GDP_USD;
     /** Guard on the mainland gap, beyond the deepest postwar CBO gap; the fitted process does not reach it. */
     public const MAX_FOREIGN_GAP = 0.10;
-    /** Stationary sd of the mainland gap its AR(2) implies: sigma * sqrt((1 - a2) / ((1 + a2) * ((1 - a2)^2 - a1^2))). */
+    /**
+     * Stationary sd of the mainland gap its AR(2) implies: sigma * sqrt((1 - a2) / ((1 + a2) * ((1 - a2)^2 - a1^2))).
+     */
     public const MAINLAND_GAP_STATIONARY_SD = 0.01645;
 
     // --- The Rest of the World (G6 industrial production gap, 1985-2019: FRED OECD MEI, own calculation) ---
-    /** Stationary sd of the world gap beyond the mainland: HP gap of G6 industrial production 2.81%, at the US ratio of GDP to IP gap (0.40) and CBO to HP gap, 1.8% in CBO-gap units. */
+    /**
+     * Stationary sd of the world gap beyond the mainland: HP gap of G6 industrial production 2.81%, at the US ratio of
+     * GDP to IP gap (0.40) and CBO to HP gap, 1.8% in CBO-gap units.
+     */
     public const WORLD_GAP_SD = 0.018;
-    /** Correlation of the world gap with the mainland's: G6 IP gap against the CBO US gap, 0.51 (0.54 with the US a quarter ahead). */
+    /**
+     * Correlation of the world gap with the mainland's: G6 IP gap against the CBO US gap, 0.51 (0.54 with the US a
+     * quarter ahead).
+     */
     public const WORLD_MAINLAND_CORRELATION = 0.51;
     /** Quarterly persistence of the world gap's own part: the G6 IP gap's AR(1), 0.85. */
     public const WORLD_GAP_AR1 = 0.85;
     /** World gap per unit of the mainland's: the correlation times the sd ratio, a one-factor loading. */
     public const WORLD_MAINLAND_LOADING = self::WORLD_MAINLAND_CORRELATION * self::WORLD_GAP_SD / self::MAINLAND_GAP_STATIONARY_SD;
-    /** Quarterly innovation of the world gap's own part: its stationary sd, WORLD_GAP_SD * sqrt(1 - correlation^2), times sqrt(1 - AR1^2). */
+    /**
+     * Quarterly innovation of the world gap's own part: its stationary sd, WORLD_GAP_SD * sqrt(1 - correlation^2),
+     * times sqrt(1 - AR1^2).
+     */
     public const WORLD_GAP_SIGMA = 0.00816;
     /** Guard on the world gap, as on the mainland's; the fitted process does not reach it. */
     public const MAX_WORLD_GAP = 0.10;
@@ -156,11 +252,19 @@ class AssetMarketSubsystem
     public const MAX_FOREIGN_POLICY_RATE = 0.20;
 
     // --- Allied Defence Spending (SIPRI constant-dollar milex over GDP, 1951-2019: var/harness/allied_fit.py) ---
-    /** Reversion speed of the log allied defence burden off its trend (0.489/yr, half-life 1.4y), corrected for annual averaging. */
+    /**
+     * Reversion speed of the log allied defence burden off its trend (0.489/yr, half-life 1.4y), corrected for annual
+     * averaging.
+     */
     public const ALLIED_DEFENSE_MEAN_REVERSION = 0.489;
-    /** Diffusion of the log allied defence burden, the Merton (1976) MLE on the annual residuals, scaled for the same averaging. */
+    /**
+     * Diffusion of the log allied defence burden, the Merton (1976) MLE on the annual residuals, scaled for the same
+     * averaging.
+     */
     public const ALLIED_DEFENSE_VOLATILITY = 0.0932;
-    /** Mobilisations a year, the same MLE (LR 31.6 against Gaussian): Korea is the sample's, so about one a generation. */
+    /**
+     * Mobilisations a year, the same MLE (LR 31.6 against Gaussian): Korea is the sample's, so about one a generation.
+     */
     public const ALLIED_MOBILISATION_PROBABILITY = 0.029;
     /** Mean log size of a mobilisation, the same MLE: allied spending rises three quarters above trend. */
     public const ALLIED_MOBILISATION_MEAN = 0.5716;
@@ -186,7 +290,10 @@ class AssetMarketSubsystem
     public const UIP_SENSITIVITY = 3.0;
     /** Mean-reversion speed of exchange rate toward purchasing power parity equilibrium. */
     public const EXCHANGE_RATE_MEAN_REVERSION = 0.60;
-    /** Quarterly log-change sd the fundamental itself carries (rate differential, terms of trade, haven bid, fiscal discount), measured on the full board at ~2.0%: the deviation supplies only the rest of the currency's variance. */
+    /**
+     * Quarterly log-change sd the fundamental itself carries (rate differential, terms of trade, haven bid, fiscal
+     * discount), measured on the full board at ~2.0%: the deviation supplies only the rest of the currency's variance.
+     */
     public const EXCHANGE_RATE_FUNDAMENTAL_QUARTERLY_SD = 0.020;
     /** Horizon, in years, the currency's volatility is measured over: a quarter, as the BIS series are sampled. */
     public const EXCHANGE_RATE_VOLATILITY_HORIZON_YEARS = 0.25;
@@ -194,11 +301,17 @@ class AssetMarketSubsystem
     public const FX_TERMS_OF_TRADE_SENSITIVITY = 0.30;
     /** Safe-haven FX elasticity (Ranaldo-Soderlind 2010): panic bids the reserve currency ~6% at 50% equity vol. */
     public const FX_SAFE_HAVEN_SENSITIVITY = 0.25;
-    /** Log depreciation per unit of sovereign risk spread: fiscal risk sells the currency (Alesina & Perotti 1995; Della Corte, Sarno, Schmeling & Wagner 2022 on sovereign risk and currency returns). A 100 bps premium costs ~2%. */
+    /**
+     * Log depreciation per unit of sovereign risk spread: fiscal risk sells the currency (Alesina & Perotti 1995; Della
+     * Corte, Sarno, Schmeling & Wagner 2022 on sovereign risk and currency returns). A 100 bps premium costs ~2%.
+     */
     public const FX_FISCAL_RISK_SENSITIVITY = 2.0;
 
     // --- Physical Catastrophes ---
-    /** Share of the housing stock's fundamental value destroyed per unit of excess catastrophe burden; rebuilt through the housing-starts channel. */
+    /**
+     * Share of the housing stock's fundamental value destroyed per unit of excess catastrophe burden; rebuilt through
+     * the housing-starts channel.
+     */
     public const CATASTROPHE_PROPERTY_DAMAGE_SHARE = 0.01;
 
     // --- DIPASQUALE-WHEATON COMMERCIAL REAL ESTATE (2-QUADRANT) ---
@@ -206,17 +319,30 @@ class AssetMarketSubsystem
     public const CRE_OCCUPANCY_UNEMPLOYMENT_SENSITIVITY = 3.0;
     /** Structural risk premium spread above 10Y yield for CRE cap rate derivation. */
     public const CRE_CAP_RATE_RISK_PREMIUM = 0.02;
-    /** Cap rate at the engine's own equilibrium, net of expected rent inflation: the neutral real 10Y (r* plus the base term premium), the base IG spread and the premium, built from the constants the cap rate reads as RESIDENTIAL_NEUTRAL_USER_COST is (5.95%, the low end of the US NCREIF/ACLI 1990-2019 range of ~6-8%). */
+    /**
+     * Cap rate at the engine's own equilibrium, net of expected rent inflation: the neutral real 10Y (r* plus the base
+     * term premium), the base IG spread and the premium, built from the constants the cap rate reads as
+     * RESIDENTIAL_NEUTRAL_USER_COST is (5.95%, the low end of the US NCREIF/ACLI 1990-2019 range of ~6-8%).
+     */
     public const CRE_NEUTRAL_CAP_RATE = MacroEngine::BASE_NATURAL_RATE + MacroEngine::NS_BASE_TERM_PREMIUM + MacroEngine::BASE_CREDIT_SPREAD + self::CRE_CAP_RATE_RISK_PREMIUM;
     /** Mean-reversion speed of commercial property values toward fundamental equilibrium. */
     public const CRE_MEAN_REVERSION = 0.25;
-    /** Stochastic volatility of commercial property valuations (stationary noise ~7% so cap rates, not noise, drive the cycle). */
+    /**
+     * Stochastic volatility of commercial property valuations (stationary noise ~7% so cap rates, not noise, drive the
+     * cycle).
+     */
     public const CRE_VOLATILITY = 0.05;
     /** Minimum cap rate floor to prevent division instability in extreme rate environments. */
     public const CRE_MIN_CAP_RATE = 0.03;
-    /** Elasticity of real commercial rents to the output gap (DiPasquale-Wheaton rent equation): a -4% gap takes 2% off rents. */
+    /**
+     * Elasticity of real commercial rents to the output gap (DiPasquale-Wheaton rent equation): a -4% gap takes 2% off
+     * rents.
+     */
     public const CRE_RENT_OUTPUT_GAP_ELASTICITY = 0.50;
-    /** Guards on the commercial property index, below a 2009-style 70% fall and above a 2.5x boom; the fitted process does not reach them. */
+    /**
+     * Guards on the commercial property index, below a 2009-style 70% fall and above a 2.5x boom; the fitted process
+     * does not reach them.
+     */
     public const CRE_MIN_INDEX = 30.0;
     /** Upper guard on the commercial property index. */
     public const CRE_MAX_INDEX = 250.0;
@@ -233,7 +359,13 @@ class AssetMarketSubsystem
      */
     public const RESIDENTIAL_BASELINE = 100.0;
 
-    /** Fundamental price per point of unemployment above NAIRU (foreclosure and affordability drag), fitted with the income elasticity below and the dynamics further down: at 5.0 and 2.0 a -5% gap took a fifth off the fundamental, household credit followed through the collateral term and new borrowing returned it to demand one for one, and at the lower bound slumps sustained themselves (var/harness/boom_score.py: clamp traps in 3% of 35-year windows, 5-year slumps below -4% in 7%, against none in the US record). */
+    /**
+     * Fundamental price per point of unemployment above NAIRU (foreclosure and affordability drag), fitted with the
+     * income elasticity below and the dynamics further down: at 5.0 and 2.0 a -5% gap took a fifth off the fundamental,
+     * household credit followed through the collateral term and new borrowing returned it to demand one for one, and at
+     * the lower bound slumps sustained themselves (var/harness/boom_score.py: clamp traps in 3% of 35-year windows,
+     * 5-year slumps below -4% in 7%, against none in the US record).
+     */
     public const RESIDENTIAL_UNEMPLOYMENT_SENSITIVITY = 2.5;
     /** Elasticity of the fundamental price to the output gap, a transitory income shock; the same fit. */
     public const RESIDENTIAL_INCOME_ELASTICITY = 1.0;
@@ -241,19 +373,41 @@ class AssetMarketSubsystem
     public const RESIDENTIAL_MIN_LABOR_FACTOR = 0.30;
     /** Upper bound multiplier on residential spatial labor demand during peak labor market expansions. */
     public const RESIDENTIAL_MAX_LABOR_FACTOR = 1.80;
-    /** Elasticity of the fundamental house price to the user cost: Glaeser, Gottlieb & Gyourko (2010) measure about 7-8% per 100bp fall in real rates, half the ~17% a unit elasticity gives at the 6.85% neutral user cost, so collapsing long rates at the floor no longer inflate prices in a slump. */
+    /**
+     * Elasticity of the fundamental house price to the user cost: Glaeser, Gottlieb & Gyourko (2010) measure about 7-8%
+     * per 100bp fall in real rates, half the ~17% a unit elasticity gives at the 6.85% neutral user cost, so collapsing
+     * long rates at the floor no longer inflate prices in a slump.
+     */
     public const RESIDENTIAL_USER_COST_ELASTICITY = 0.5;
-    /** Yearly reversion of real house prices toward their fundamental, fitted with the momentum and volatility below to US real house prices (FHFA / CPI, 1977-2019): annual growth sd 3.86%, autocorrelation 0.71 / 0.33 / 0.00 at one to three years, worst year -9.0%; the engine gives 3.65%, 0.67 / 0.26 / -0.06 and -10.1% at its 0.5th percentile (var/harness/boom_score.py). */
+    /**
+     * Yearly reversion of real house prices toward their fundamental, fitted with the momentum and volatility below to
+     * US real house prices (FHFA / CPI, 1977-2019): annual growth sd 3.86%, autocorrelation 0.71 / 0.33 / 0.00 at one
+     * to three years, worst year -9.0%; the engine gives 3.65%, 0.67 / 0.26 / -0.06 and -10.1% at its 0.5th percentile
+     * (var/harness/boom_score.py).
+     */
     public const RESIDENTIAL_MEAN_REVERSION = 0.25;
-    /** Fundamental price per unit of net lending tightening (Duca, Muellbauer & Murphy 2011; Favara & Imbs 2015): the ~80% tightening of a crisis takes a fifth off, the post-crisis decline in Reinhart & Rogoff. */
+    /**
+     * Fundamental price per unit of net lending tightening (Duca, Muellbauer & Murphy 2011; Favara & Imbs 2015): the
+     * ~80% tightening of a crisis takes a fifth off, the post-crisis decline in Reinhart & Rogoff.
+     */
     public const RESIDENTIAL_CREDIT_STANDARDS_ELASTICITY = 0.25;
-    /** House price response per unit of credit-to-GDP gap (Favara & Imbs 2015): the return leg of the collateral channel, without which Mian & Sufi's home-equity term is a one-way street. */
+    /**
+     * House price response per unit of credit-to-GDP gap (Favara & Imbs 2015): the return leg of the collateral
+     * channel, without which Mian & Sufi's home-equity term is a one-way street.
+     */
     public const RESIDENTIAL_CREDIT_SUPPLY_ELASTICITY = 0.25;
     /** Volatility of real house prices around the path the fundamental and momentum set, the same fit. */
     public const RESIDENTIAL_VOLATILITY = 0.018;
-    /** Share of the past year's real growth carried into this year's (Case & Shiller 1989; Capozza, Hendershott, Mack & Mayer 2002 serial correlation), the same fit; household credit follows house prices, so it also carries the persistence of new borrowing toward the US's (0.45 against 0.58, from 0.23). */
+    /**
+     * Share of the past year's real growth carried into this year's (Case & Shiller 1989; Capozza, Hendershott, Mack &
+     * Mayer 2002 serial correlation), the same fit; household credit follows house prices, so it also carries the
+     * persistence of new borrowing toward the US's (0.45 against 0.58, from 0.23).
+     */
     public const RESIDENTIAL_PRICE_MOMENTUM = 0.85;
-    /** Horizon (years) of the growth buyers extrapolate: the annual change the serial-correlation regressions are run on. */
+    /**
+     * Horizon (years) of the growth buyers extrapolate: the annual change the serial-correlation regressions are run
+     * on.
+     */
     public const RESIDENTIAL_MOMENTUM_HORIZON_YEARS = 1.0;
     /** Structural lower floor for the residential property index value. */
     public const RESIDENTIAL_MIN_INDEX = 30.0;
@@ -281,9 +435,15 @@ class AssetMarketSubsystem
     public const FCI_ERP_MEAN = MacroEngine::BASE_EQUITY_RISK_PREMIUM;
     /** Historical standard deviation for equity risk premium in FCI normalization. */
     public const FCI_ERP_STD = 0.015;
-    /** Standard deviation of the log currency gap to its trend in FCI normalization: ~10%, the real broad dollar's swing about its mean. */
+    /**
+     * Standard deviation of the log currency gap to its trend in FCI normalization: ~10%, the real broad dollar's swing
+     * about its mean.
+     */
     public const FCI_FX_STD = 0.10;
-    /** Neutral 10Y-minus-policy slope for FCI normalization: with policy at neutral the slope is the base ten-year premium. */
+    /**
+     * Neutral 10Y-minus-policy slope for FCI normalization: with policy at neutral the slope is the base ten-year
+     * premium.
+     */
     public const FCI_SLOPE_MEAN = MacroEngine::NS_BASE_TERM_PREMIUM;
     /** Historical standard deviation for yield curve slope in FCI normalization. */
     public const FCI_SLOPE_STD = 0.012;
@@ -295,7 +455,10 @@ class AssetMarketSubsystem
     public const FCI_SLOOS_MEAN = 0.0;
     /** Historical standard deviation for SLOOS net tightening index in FCI normalization. */
     public const FCI_SLOOS_STD = 0.20;
-    /** Years the composite is centred over: a decade, as published indices standardise each indicator on its sample mean (Brave & Butters 2011), so conditions that last become the norm and a credit event still reads about +3. */
+    /**
+     * Years the composite is centred over: a decade, as published indices standardise each indicator on its sample mean
+     * (Brave & Butters 2011), so conditions that last become the norm and a credit event still reads about +3.
+     */
     public const FCI_TREND_YEARS = 10.0;
 
     // --- Jovanovic-Rousseau (2002) Capital Markets & M&A Deal Flow ---
@@ -303,7 +466,10 @@ class AssetMarketSubsystem
     public const DEAL_ACTIVITY_KAPPA = 1.60;
     /** Stochastic volatility of deal activity volume. */
     public const DEAL_ACTIVITY_SIGMA = 0.15;
-    /** Time constant (years) of deal flow's measured trend: a decade spans a full deal cycle, as it does the credit cycle the IG spread's trend averages over. */
+    /**
+     * Time constant (years) of deal flow's measured trend: a decade spans a full deal cycle, as it does the credit
+     * cycle the IG spread's trend averages over.
+     */
     public const DEAL_ACTIVITY_TREND_YEARS = CreditFiscalSubsystem::CREDIT_SPREAD_TREND_YEARS;
 
     // --- Mundell-Fleming Trade Balance & Net Exports ---
@@ -311,11 +477,17 @@ class AssetMarketSubsystem
     public const MIN_TRADE_BALANCE = MacroEngine::TRADE_BALANCE_BASELINE - 0.055;
     /** Upper bound of the trade balance over GDP: 5.5 points over its structural level. */
     public const MAX_TRADE_BALANCE = MacroEngine::TRADE_BALANCE_BASELINE + 0.055;
-    /** Time constant (years) of the trade balance's adjustment to its target: half a year, the J-curve's two-quarter delivery lag on contracts already signed (Magee 1973). */
+    /**
+     * Time constant (years) of the trade balance's adjustment to its target: half a year, the J-curve's two-quarter
+     * delivery lag on contracts already signed (Magee 1973).
+     */
     public const TRADE_BALANCE_ADJUSTMENT_YEARS = 0.5;
 
     // --- Tobin's Q Housing Investment Dynamics (Poterba 1984, Topel-Rosen 1988) ---
-    /** Materials in the replacement cost of a new home, priced by the metals index as its proxy: intermediate inputs over inputs plus compensation in single-family construction (BEA 2017 detail Use table, 233411: 0.557). */
+    /**
+     * Materials in the replacement cost of a new home, priced by the metals index as its proxy: intermediate inputs
+     * over inputs plus compensation in single-family construction (BEA 2017 detail Use table, 233411: 0.557).
+     */
     public const REPLACEMENT_COST_MATERIALS_SHARE = 0.557;
     /** Sensitivity of housing starts to Tobin's q ratio (home price valuation vs replacement cost). */
     public const HOUSING_STARTS_Q_SENSITIVITY = 50.0;
@@ -336,7 +508,10 @@ class AssetMarketSubsystem
 
     public function __construct(
         private readonly MathUtility $mathUtility,
-        /** Records what set the house-price fundamental and consumer sentiment. Null in a test or a headless harness, off everywhere the ticker is not. */
+        /**
+         * Records what set the house-price fundamental and consumer sentiment. Null in a test or a headless harness,
+         * off everywhere the ticker is not.
+         */
         private readonly ?MacroDiagnosticsProbe $diagnostics = null,
     ) {}
 
@@ -384,17 +559,18 @@ class AssetMarketSubsystem
      * Jorgenson (1963) User Cost of Capital & Spatial Housing Affordability Equilibrium Model.
      *
      * Calculates fundamental home prices from user cost of housing capital (mortgage rate + taxes - expected inflation)
-     * and household real disposable income affordability, with sticky physical mean reversion. Credit conditions
-     * enter the fundamental as in Duca, Muellbauer & Murphy (2011): the price a buyer can pay is the price a lender
-     * will finance, so net tightening in bank standards lowers it and loosening lifts it. The population an immigration
-     * regime adds over the structural path bids for the same land, one for one (Saiz 2007); a tax on foreign buyers takes
-     * the part of values their demand holds up (foreignBuyerPriceFactor()). A green belt makes prices
-     * answer income and population more strongly, as stricter planning does across English authorities (Hilber &
-     * Vermeulen 2016); the index has no trend in real income, so a green belt deepens its booms and slumps and the
-     * price of immigration rather than adding a drift of its own.
+     * and household real disposable income affordability, with sticky physical mean reversion. Credit conditions enter
+     * the fundamental as in Duca, Muellbauer & Murphy (2011): the price a buyer can pay is the price a lender will
+     * finance, so net tightening in bank standards lowers it and loosening lifts it. The population an immigration
+     * regime adds over the structural path bids for the same land, one for one (Saiz 2007); a tax on foreign buyers
+     * takes the part of values their demand holds up (foreignBuyerPriceFactor()). A green belt makes prices answer
+     * income and population more strongly, as stricter planning does across English authorities (Hilber & Vermeulen
+     * 2016); the index has no trend in real income, so a green belt deepens its booms and slumps and the price of
+     * immigration rather than adding a drift of its own.
      *
      * @param MacroState $state             Current macroeconomic state.
-     * @param float      $expectedInflation Expected inflation (MonetaryPolicySubsystem::calculateExpectedInflation), the same measure the Taylor rule and IS curve use.
+     * @param float      $expectedInflation Expected inflation (MonetaryPolicySubsystem::calculateExpectedInflation),
+     *                                      the same measure the Taylor rule and IS curve use.
      * @param float      $dt                Time increment in years.
      */
     public function calculateResidentialPropertyIndex(MacroState $state, float $expectedInflation, float $dt): void
@@ -500,7 +676,9 @@ class AssetMarketSubsystem
         return 1.0 / (1.0 - (self::CAMPBELL_SHILLER_RHO * $annualPersistence));
     }
 
-    /** The habit premium at an output gap, floored at a positive premium and capped at the ceiling it has always had. */
+    /**
+     * The habit premium at an output gap, floored at a positive premium and capped at the ceiling it has always had.
+     */
     private function habitEquityRiskPremium(float $outputGapEma): float
     {
         $habitErp = MacroEngine::BASE_EQUITY_RISK_PREMIUM * exp(-self::HABIT_RISK_AVERSION_COEFF * $outputGapEma);
@@ -509,7 +687,8 @@ class AssetMarketSubsystem
     }
 
     /**
-     * Engle, Ghysels & Sohn (2013) Spline-GARCH Macro Link with SVCJ Contemporaneous Jumps (Duffie, Pan & Singleton 2000).
+     * Engle, Ghysels & Sohn (2013) Spline-GARCH Macro Link with SVCJ Contemporaneous Jumps (Duffie, Pan & Singleton
+     * 2000).
      *
      * Models aggregate equity implied volatility using continuous macroeconomic fundamental scaling
      * (output gap, the excess bond premium, yield curve slope, policy uncertainty) driven by an Andersen (2008)
@@ -519,8 +698,10 @@ class AssetMarketSubsystem
      *
      * @param MacroState $state            Current macroeconomic state.
      * @param float      $dt               Time increment in years.
-     * @param float      $varianceJump     Variance jump the market-wide price jump drew this tick (updateSystemicMarketFactor()).
-     * @param float|null $returnInnovation This tick's i.i.d. market return innovation, unit variance; null leaves the variance uncorrelated.
+     * @param float      $varianceJump     Variance jump the market-wide price jump drew this tick
+     *                                     (updateSystemicMarketFactor()).
+     * @param float|null $returnInnovation This tick's i.i.d. market return innovation, unit variance; null leaves the
+     *                                     variance uncorrelated.
      * @return float Implied equity market volatility (clamped between 8% and 80%).
      */
     public function calculateMarketVolatility(MacroState $state, float $dt, float $varianceJump = 0.0, ?float $returnInnovation = null): float
@@ -557,7 +738,8 @@ class AssetMarketSubsystem
 
     /**
      * Loading of the variance shock on the i.i.d. leg of the market innovation that puts its correlation with the whole
-     * return at MACRO_VOL_LEVERAGE_RHO: that leg carries 1 - MARKET_FACTOR_REGIME_VARIANCE_SHARE of the return variance.
+     * return at MACRO_VOL_LEVERAGE_RHO: that leg carries 1 - MARKET_FACTOR_REGIME_VARIANCE_SHARE of the return
+     * variance.
      */
     public static function leverageLoading(): float
     {
@@ -598,7 +780,8 @@ class AssetMarketSubsystem
      *
      * @param MacroState $state Current macroeconomic state.
      * @param float      $dt    Time increment in years.
-     * @return array{returnInnovation: float, varianceJump: float} The return's i.i.d. innovation and the jump's variance jump, for calculateMarketVolatility().
+     * @return array{returnInnovation: float, varianceJump: float} The return's i.i.d. innovation and the jump's
+     *                                                             variance jump, for calculateMarketVolatility().
      */
     public function updateSystemicMarketFactor(MacroState $state, float $dt): array
     {
@@ -765,8 +948,9 @@ class AssetMarketSubsystem
 
     /**
      * Consumer sentiment as the Michigan index answers it: a level set by what households see -- unemployment above its
-     * natural rate, the year's CPI inflation and whether joblessness is rising -- plus a persistent mood the fundamentals
-     * do not explain (Barsky & Sims 2012 find it carries news; Akerlof & Shiller 2009 call it animal spirits).
+     * natural rate, the year's CPI inflation and whether joblessness is rising -- plus a persistent mood the
+     * fundamentals do not explain (Barsky & Sims 2012 find it carries news; Akerlof & Shiller 2009 call it animal
+     * spirits).
      *
      * Coefficients are a Newey-West regression of UMCSENT on FRED data, monthly 1978-2019, and the mood is that fit's
      * residual as an Ornstein-Uhlenbeck process. Every term is two-sided, so with unemployment at NAIRU, inflation on
@@ -811,11 +995,11 @@ class AssetMarketSubsystem
      * equity risk premium, real exchange rate deviations, term structure slope, and equity market volatility:
      *   FCI > 0 indicates restrictive financial conditions; FCI < 0 indicates accommodative conditions.
      * The weights are loadings on unit-variance components whose stress moves together, so the plain weighted sum is
-     * the composite: a 2008-type credit event reads ~+3 sigma, a mild recession ~+1.4, a boom ~-0.6 (Chicago Fed NFCI ranges).
-     * The currency is read against its own trend, since the index settles away from its nominal baseline. Like the NFCI,
-     * the index is a same-period reading of its components, which are already quarterly averages, so no lag is added.
-     * The other components are scored against the constants they are built on, and they do not all settle there, so
-     * the composite is published net of its own decade-long average, as the NFCI is centred on its sample's.
+     * the composite: a 2008-type credit event reads ~+3 sigma, a mild recession ~+1.4, a boom ~-0.6 (Chicago Fed NFCI
+     * ranges). The currency is read against its own trend, since the index settles away from its nominal baseline. Like
+     * the NFCI, the index is a same-period reading of its components, which are already quarterly averages, so no lag
+     * is added. The other components are scored against the constants they are built on, and they do not all settle
+     * there, so the composite is published net of its own decade-long average, as the NFCI is centred on its sample's.
      *
      * @param MacroState $state Current macroeconomic state.
      * @param float      $dt    Time increment in years.
@@ -892,7 +1076,8 @@ class AssetMarketSubsystem
         }
 
         // World demand weighs each economy at its share of world GDP: the District, the mainland, and the rest. The
-        // gaps go in as they stand; globalDemandGapEma is the one smoothing stage, so commodities answer within a quarter.
+        // gaps go in as they stand; globalDemandGapEma is the one smoothing stage, so commodities answer within a
+        // quarter.
         $state->globalDemandGap = (MacroEngine::DOMESTIC_DEMAND_WEIGHT * $state->outputGap)
             + (self::MAINLAND_DEMAND_WEIGHT * $state->foreignOutputGap)
             + ((1.0 - MacroEngine::DOMESTIC_DEMAND_WEIGHT - self::MAINLAND_DEMAND_WEIGHT) * $state->worldActivityGap);
@@ -909,8 +1094,9 @@ class AssetMarketSubsystem
      */
     public function calculateAlliedDefenseSpending(MacroState $state, float $dt): void
     {
-        // Its reader takes log(index / baseline) (MacroAggregateSubsystem::alliedDefenseGap()), so the log centres on the
-        // baseline: the mobilisations' log drift lambda mu / kappa is netted out (Merton 1976), then Schwartz's alpha.
+        // Its reader takes log(index / baseline) (MacroAggregateSubsystem::alliedDefenseGap()), so the log centres on
+        // the baseline: the mobilisations' log drift lambda mu / kappa is netted out (Merton 1976), then Schwartz's
+        // alpha.
         $jumpLogShift = self::ALLIED_MOBILISATION_PROBABILITY * self::ALLIED_MOBILISATION_MEAN / self::ALLIED_DEFENSE_MEAN_REVERSION;
         $baseProcess = StochasticProcesses::calculateSchwartz1Factor(
             currentPrice: $state->alliedDefenseSpendingIndex,
@@ -934,7 +1120,10 @@ class AssetMarketSubsystem
         }
     }
 
-    /** Quarters completed by a simulated time; the tolerance absorbs the clock's accumulated rounding at a quarter's turn. */
+    /**
+     * Quarters completed by a simulated time; the tolerance absorbs the clock's accumulated rounding at a quarter's
+     * turn.
+     */
     private static function quarterCount(float $totalTime): int
     {
         return (int) floor(($totalTime * self::MAINLAND_QUARTERS_PER_YEAR) + 1e-9);
@@ -1015,8 +1204,8 @@ class AssetMarketSubsystem
 
     /**
      * The mainland short rate the market prices at this moment: the last decision moving across the quarter toward the
-     * one it expects at the turn, so the expected step is in the currency before it is taken and only the surprise moves
-     * it on the day, as marketShortRate() reads the District's.
+     * one it expects at the turn, so the expected step is in the currency before it is taken and only the surprise
+     * moves it on the day, as marketShortRate() reads the District's.
      */
     public static function mainlandMarketRate(MacroState $state): float
     {
@@ -1025,7 +1214,10 @@ class AssetMarketSubsystem
         return $state->foreignPolicyRate + (self::mainlandQuarterElapsed($state->totalTime) * ($expected - $state->foreignPolicyRate));
     }
 
-    /** The mainland's year-on-year core inflation as the market reads it between releases: moving toward the print it expects. */
+    /**
+     * The mainland's year-on-year core inflation as the market reads it between releases: moving toward the print it
+     * expects.
+     */
     public static function mainlandMarketCoreYearOnYear(MacroState $state): float
     {
         $now = self::mainlandCoreYearOnYear($state);
@@ -1086,9 +1278,9 @@ class AssetMarketSubsystem
     }
 
     /**
-     * What the tax on foreign buyers raises a year, a share of GDP: the rate on the homes foreign buyers still buy, their
-     * share falling exponentially in the tax (foreignBuyerPriceFactor()), so the take peaks near a tenth and all but
-     * vanishes at the strictest rates, which work by keeping the buyers out.
+     * What the tax on foreign buyers raises a year, a share of GDP: the rate on the homes foreign buyers still buy,
+     * their share falling exponentially in the tax (foreignBuyerPriceFactor()), so the take peaks near a tenth and all
+     * but vanishes at the strictest rates, which work by keeping the buyers out.
      *
      * @param float $taxRate The tax, a share of the price.
      */
@@ -1100,8 +1292,8 @@ class AssetMarketSubsystem
     }
 
     /**
-     * The refusal rate of major residential schemes a green belt's stringency stands for: the 10th percentile of English
-     * planning authorities at the founding regime (0), the 90th at the strictest (1).
+     * The refusal rate of major residential schemes a green belt's stringency stands for: the 10th percentile of
+     * English planning authorities at the founding regime (0), the 90th at the strictest (1).
      *
      * @param float $stringency The green belt, 0 to 1.
      */
@@ -1116,7 +1308,8 @@ class AssetMarketSubsystem
      * estimate while the shifter pushes prices up and the bust estimate while it pulls them down.
      *
      * @param float $stringency The green belt, 0 to 1.
-     * @param float $shifter    The demand shifter the elasticity applies to (the output gap, or the immigrant population).
+     * @param float $shifter    The demand shifter the elasticity applies to (the output gap, or the immigrant
+     *                          population).
      */
     public static function greenBeltElasticityLift(float $stringency, float $shifter): float
     {
@@ -1150,7 +1343,8 @@ class AssetMarketSubsystem
      */
     public function calculateHousingStarts(MacroState $state, float $expectedInflation, float $dt): void
     {
-        // Both legs of q read the level against the trend it has measurably settled at, not the baseline it is built on.
+        // Both legs of q read the level against the trend it has measurably settled at, not the baseline it is built
+        // on.
         $residentialPriceRatio = $state->residentialPropertyIndex / $state->residentialWealthTrend;
         $metalsCostRatio = $state->industrialMetalsIndexTrend > 0.0 ? $state->industrialMetalsIndex / $state->industrialMetalsIndexTrend : 1.0;
         // Building labour priced as a LEVEL in the same real terms as the home price index: the real wage against its

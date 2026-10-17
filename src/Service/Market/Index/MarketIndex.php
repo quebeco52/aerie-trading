@@ -56,23 +56,42 @@ enum MarketIndex: string
     case Staples = 'LBS';
 
     // --- Market Index Membership (Shleifer 1986) ---
-    /** Seats in the headline index. Fewer than the listed universe, so membership is a real distinction and joining or leaving it means something; the composite index carries every listed name and has no count. */
+    /**
+     * Seats in the headline index. Fewer than the listed universe, so membership is a real distinction and joining or
+     * leaving it means something; the composite index carries every listed name and has no count.
+     */
     public const INDEX_CONSTITUENT_COUNT = 30;
-    /** Seats in the low-volatility index, drawn from the whole listed board. S&P's low-volatility index takes the quietest fifth of its parent; the same fraction of this board is about this many names. */
+    /**
+     * Seats in the low-volatility index, drawn from the whole listed board. S&P's low-volatility index takes the
+     * quietest fifth of its parent; the same fraction of this board is about this many names.
+     */
     public const INDEX_LOW_VOLATILITY_COUNT = 20;
 
     // --- Index Diversification Caps (RIC / UCITS 5-10-40, as applied by the S&P Select Sector indices) ---
-    /** Most any one constituent may weigh in a capped index. A sector fund that must stay a regulated investment company cannot let one name run away with it. */
+    /**
+     * Most any one constituent may weigh in a capped index. A sector fund that must stay a regulated investment company
+     * cannot let one name run away with it.
+     */
     public const INDEX_MAX_CONSTITUENT_WEIGHT = 0.225;
 
     // --- Passive Assets by Index (share of the indexed book each published index carries) ---
-    /** Share of passive money tracking the headline index. Broad cap-weighted benchmarks hold the large majority of indexed assets. */
+    /**
+     * Share of passive money tracking the headline index. Broad cap-weighted benchmarks hold the large majority of
+     * indexed assets.
+     */
     public const INDEX_PASSIVE_SHARE_HEADLINE = 0.62;
     /** Share tracking the whole-board composite: total-market funds, the second-largest passive vehicle. */
     public const INDEX_PASSIVE_SHARE_COMPOSITE = 0.30;
-    /** Share tracking the low-volatility fund. Smart beta is a low single-digit share of indexed money, and it is spread across the near half of the board that qualifies as quiet. */
+    /**
+     * Share tracking the low-volatility fund. Smart beta is a low single-digit share of indexed money, and it is spread
+     * across the near half of the board that qualifies as quiet.
+     */
     public const INDEX_PASSIVE_SHARE_LOW_VOLATILITY = 0.05;
-    /** Share tracking the consumer staples sector fund. Deliberately near the sector's own weight in the market: a narrow fund holding far more indexed money than its sector is worth would leave its handful of names with passive ownership no real constituent carries. */
+    /**
+     * Share tracking the consumer staples sector fund. Deliberately near the sector's own weight in the market: a
+     * narrow fund holding far more indexed money than its sector is worth would leave its handful of names with passive
+     * ownership no real constituent carries.
+     */
     public const INDEX_PASSIVE_SHARE_STAPLES = 0.03;
 
     /** The index the passive book benchmarks against and the pages quote as "the market". */

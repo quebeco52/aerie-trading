@@ -19,7 +19,10 @@ namespace App\Data\District;
 class DistrictMap
 {
     // --- The Street ---
-    /** The only ward. Kept as a slug (rather than inlining "glasswater-row" at call sites) so a second street remains a one-line addition, not a rewrite. */
+    /**
+     * The only ward. Kept as a slug (rather than inlining "glasswater-row" at call sites) so a second street remains a
+     * one-line addition, not a rewrite.
+     */
     public const WARD_SLUG = 'glasswater-row';
     /** Display name of the street. */
     public const WARD_NAME = 'Glasswater Row';
@@ -121,7 +124,10 @@ class DistrictMap
      */
     public const DISTRICT_WRAP_SLACK = 0.12;
 
-    /** Marks the second half of a district the row wrap had to cut, so the street reads one block continued rather than two blocks alike. */
+    /**
+     * Marks the second half of a district the row wrap had to cut, so the street reads one block continued rather than
+     * two blocks alike.
+     */
     public const DISTRICT_CONTINUATION_SUFFIX = ' cont.';
 
     /** The district a business model trades in, or null for a model with no authored place on the street. */
@@ -273,7 +279,10 @@ class DistrictMap
      * is already what the info panel prints, this just makes it legible from the street.
      */
     public const WINDOW_LIT_SHARE_AT_BASELINE = 0.6;
-    /** Fewest windows lit however poor the return — a dark facade still has to read as occupied, and a ruin is styled separately. */
+    /**
+     * Fewest windows lit however poor the return — a dark facade still has to read as occupied, and a ruin is styled
+     * separately.
+     */
     public const WINDOW_LIT_SHARE_FLOOR = 0.2;
     /**
      * Decimal places a window's lighting priority is rounded to before it is compared with the
@@ -321,7 +330,8 @@ class DistrictMap
         // Underwriters: an umbrella. Market data: a bar chart.
         'insurance' => 'umbrella', 'reinsurance' => 'umbrella', 'retail_insurance' => 'umbrella', 'health_insurer' => 'umbrella',
         'financial_data' => 'chart',
-        // Process industry: a factory; wells: a derrick; mines: an ingot; refineries: a flare stack; chemistry: a flask.
+        // Process industry: a factory; wells: a derrick; mines: an ingot; refineries: a flare stack; chemistry: a
+        // flask.
         'steel_manufacturing' => 'factory', 'specialty_industrial_machinery' => 'factory',
         'tools_and_accessories' => 'factory', 'heavy_manufacturing' => 'factory',
         'mining' => 'ingot', 'oil_gas_producer' => 'derrick', 'refining' => 'flare_stack', 'chemical' => 'flask',
@@ -356,7 +366,10 @@ class DistrictMap
     ];
     /** Symbol for a tenant neither map dressed — defensive only, the tests forbid the case for listed companies. */
     public const ROOF_FURNITURE_DEFAULT = 'blocks';
-    /** Width in user units of a furniture symbol's box. As wide as the band between the rank plate and the badge on the narrowest roof allows. */
+    /**
+     * Width in user units of a furniture symbol's box. As wide as the band between the rank plate and the badge on the
+     * narrowest roof allows.
+     */
     public const ROOF_FURNITURE_WIDTH = 30;
     /** Height in user units of a furniture symbol's box; its base sits on the roofline. */
     public const ROOF_FURNITURE_HEIGHT = 36;
@@ -383,7 +396,9 @@ class DistrictMap
     public const TERRACE_WALL_HEIGHT = 14;
 
     // --- Portfolio Position Pennant ---
-    /** Flag length in user units, from the pole eastward; the pole stands POSITION_PENNANT_INSET in from the west edge. */
+    /**
+     * Flag length in user units, from the pole eastward; the pole stands POSITION_PENNANT_INSET in from the west edge.
+     */
     public const POSITION_PENNANT_WIDTH = 18;
     /** Flag height in user units; the pole rises this far again above the rank plate so the flag clears it. */
     public const POSITION_PENNANT_HEIGHT = 12;
@@ -423,7 +438,10 @@ class DistrictMap
     public const SECTOR_BRACKET_LABEL_OFFSET = 124;
     /** Font size in user units of the bracket label. */
     public const SECTOR_BRACKET_LABEL_SIZE = 20;
-    /** Advance width of the label face as a fraction of its size (Courier Prime is 0.6em), used to decide whether a run can carry its name. */
+    /**
+     * Advance width of the label face as a fraction of its size (Courier Prime is 0.6em), used to decide whether a run
+     * can carry its name.
+     */
     public const SECTOR_BRACKET_LABEL_ADVANCE = 0.6;
     /** Air on each side of a bracket label within its run. */
     public const SECTOR_BRACKET_LABEL_PADDING = 8;
@@ -458,7 +476,10 @@ class DistrictMap
     public const SECTOR_PALETTE_FALLBACK = ['facade' => '#1b2439', 'stroke' => '#424754', 'window' => '#adc6ff'];
 
     // --- Condition Thresholds ---
-    /** Credit rating rank at or below which a facade renders as distressed (CCC and D): the grade S&P describes as currently vulnerable to default. */
+    /**
+     * Credit rating rank at or below which a facade renders as distressed (CCC and D): the grade S&P describes as
+     * currently vulnerable to default.
+     */
     public const DISTRESSED_RANK = 1;
 
     // --- Event Badges ---
@@ -520,7 +541,10 @@ class DistrictMap
      * drawable at all — lower-row drops fall through the rows above them and behind their kerbs.
      * Sized for one lane per rendered institution; the band's depth is derived from that count.
      */
-    /** Vertical distance in user units between adjacent lanes — a 3-unit dashed stroke needs this much to read as separate lines. */
+    /**
+     * Vertical distance in user units between adjacent lanes — a 3-unit dashed stroke needs this much to read as
+     * separate lines.
+     */
     public const CONDUIT_LANE_PITCH = 14;
     /** Distance from INSTITUTION_OUTLET_Y to the first lane. */
     public const CONDUIT_LANE_TOP_INSET = 14;
@@ -613,7 +637,8 @@ class DistrictMap
                 ['field' => 'yield_10y_ema', 'label' => '10Y', 'unit' => self::UNIT_PERCENT],
             ],
             'stress_rules' => [
-                // MacroEngine::SYSTEMIC_INVERSION_ALARM_YEARS — a yield curve inversion that has persisted long enough to count as a systemic alarm.
+                // MacroEngine::SYSTEMIC_INVERSION_ALARM_YEARS — a yield curve inversion that has persisted long enough
+                // to count as a systemic alarm.
                 ['field' => 'inversion_duration', 'op' => self::OP_GTE, 'value' => 0.75],
                 // MacroEngine::ZLB_PROXIMITY_THRESHOLD — policy rate pinned near the zero lower bound.
                 ['field' => 'policy_rate_ema', 'op' => self::OP_LTE, 'value' => 0.0025],
@@ -634,9 +659,11 @@ class DistrictMap
                 ['field' => 'high_yield_credit_spread_ema', 'op' => self::OP_GTE, 'value' => 0.1000],
                 // MacroEngine::SYSTEMIC_SOVEREIGN_STRESS_SPREAD — the sovereign re-rated.
                 ['field' => 'sovereign_risk_spread_ema', 'op' => self::OP_GTE, 'value' => 0.0150],
-                // MacroEngine::HOUSEHOLD_DSR_STRESS_MARGIN — debt service past the deleveraging line over its own average.
+                // MacroEngine::HOUSEHOLD_DSR_STRESS_MARGIN — debt service past the deleveraging line over its own
+                // average.
                 ['field' => 'household_debt_service_gap', 'op' => self::OP_GTE, 'value' => 0.020],
-                // The yield-curve probit at even odds of a recession within the year — the Authority's forecast warning.
+                // The yield-curve probit at even odds of a recession within the year — the Authority's forecast
+                // warning.
                 ['field' => 'recession_probability_ema', 'op' => self::OP_GTE, 'value' => 0.50],
             ],
         ],
@@ -649,7 +676,8 @@ class DistrictMap
                 ['field' => 'deal_activity_index_ema', 'label' => 'Deals', 'unit' => self::UNIT_INDEX],
             ],
             'stress_rules' => [
-                // ClearingHouseBusinessModel::VIX_EXTREME_THRESHOLD — the exact volatility level that class itself treats as a panic regime.
+                // ClearingHouseBusinessModel::VIX_EXTREME_THRESHOLD — the exact volatility level that class itself
+                // treats as a panic regime.
                 ['field' => 'market_volatility_ema', 'op' => self::OP_GTE, 'value' => 0.30],
             ],
         ],

@@ -138,7 +138,10 @@ final class UtilityRateCaseTest extends TestCase
         $this->assertGreaterThan(0.0, $granted);
     }
 
-    /** An order grants the share of the request the commission the Diet runs grants: an elected-style commission leaves more of the gap outstanding. */
+    /**
+     * An order grants the share of the request the commission the Diet runs grants: an elected-style commission leaves
+     * more of the gap outstanding.
+     */
     public function testTheOrderGrantsTheCommissionsShare(): void
     {
         $requested = $this->runQuarters(8)[self::LAG_KEY];

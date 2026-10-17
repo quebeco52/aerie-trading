@@ -23,17 +23,22 @@ use App\Service\Model\ModelParam;
  * - Tri-Stream Engine:
  *      1. Government Contracts: Rock-solid, sovereign cost-plus revenue (0% GDP sensitivity, ultra-low variance).
  *      2. Corporate Retainers: Highly defensive, non-negotiable security contracts (mild GDP expansion sensitivity).
- *      3. Expeditionary / Black-Ops: Counter-cyclical, high-margin conflict & extraction services (VIX & Credit Spread driven).
+ *      3. Expeditionary / Black-Ops: Counter-cyclical, high-margin conflict & extraction services (VIX & Credit Spread
+ *         driven).
  * - Macro Differentiators:
  *      - Government Stream -> Pulls from Inflation (Cost-Plus escalators).
  *      - Corporate Stream -> Pulls from Output Gap (Corporate HQ expansion).
  *      - Expeditionary Stream -> Pulls from VIX & Credit Spreads (Panic & Geopolitical Stress).
- * - Tail Risk: A high-profile tactical failure or assassination causes immediate contract cancellations and legal fallout.
+ * - Tail Risk: A high-profile tactical failure or assassination causes immediate contract cancellations and legal
+ *   fallout.
  */
 class SecurityProtectionBusinessModel extends StandardCorporateBusinessModel
 {
     // --- Operating Cyclicality & Demand Structure ---
-    /** Elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). Guarding contracts are a survival expense. */
+    /**
+     * Elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). Guarding contracts
+     * are a survival expense.
+     */
     public const OPERATING_CYCLICALITY = 0.60;
     /** Own-price elasticity of demand: volume lost per unit of real price increase. */
     public const PRICE_ELASTICITY_OF_DEMAND = 0.40;
@@ -41,13 +46,19 @@ class SecurityProtectionBusinessModel extends StandardCorporateBusinessModel
     public const INDUSTRY_SUBSTITUTABILITY = 0.50;
 
     // --- Input Cost Basket ---
-    /** Shares of the variable cost base by input channel, measured from the BEA input-output accounts with supply-chain content (labor still the model's own). */
+    /**
+     * Shares of the variable cost base by input channel, measured from the BEA input-output accounts with supply-chain
+     * content (labor still the model's own).
+     */
     public const INPUT_COST_EXPOSURES = InputOutputExposures::SECURITY_PROTECTION;
     /** Cost-plus government work and annual retainer resets recover guard wage moves almost in full. */
     public const PRICING_POWER_INDEX = 0.85;
 
     // --- Services Pricing ---
-    /** Elasticity of fee and rate pricing to services (supercore) inflation. Contract guard rates pass through services wage inflation. */
+    /**
+     * Elasticity of fee and rate pricing to services (supercore) inflation. Contract guard rates pass through services
+     * wage inflation.
+     */
     public const PRICING_ELASTICITY = 0.85;
     /** Services price off core services inflation ex-housing, not goods breakevens. */
     public const PRICING_INFLATION_BASIS = 'supercore_inflation_ema';
@@ -90,7 +101,10 @@ class SecurityProtectionBusinessModel extends StandardCorporateBusinessModel
     }
 
     // --- Secular Demand ---
-    /** Administrative and support services value added as a share of US nominal GDP in 1997 (BEA GDP by Industry, value added). */
+    /**
+     * Administrative and support services value added as a share of US nominal GDP in 1997 (BEA GDP by Industry, value
+     * added).
+     */
     public const SECULAR_SHARE_1997 = 0.0226;
     /** The same share in 2019. */
     public const SECULAR_SHARE_2019 = 0.0284;
@@ -125,9 +139,14 @@ class SecurityProtectionBusinessModel extends StandardCorporateBusinessModel
     // --- Macro Physics Constants ---
     /** Cost-plus government revenue per point of inflation over what was expected, both ways: +1pp adds 1.2%. */
     public const COST_PLUS_BONUS_SCALAR = 1.20;
-    /** Elasticity of government guarding volume to the state spending index (0.30 = a 10% budget lift adds 3% contracted posts). */
+    /**
+     * Elasticity of government guarding volume to the state spending index (0.30 = a 10% budget lift adds 3% contracted
+     * posts).
+     */
     public const APPROPRIATIONS_VOLUME_SCALAR = 0.30;
-    /** Elasticity of corporate retainer posts to a positive output gap at unit cyclicality (new facilities need guards). */
+    /**
+     * Elasticity of corporate retainer posts to a positive output gap at unit cyclicality (new facilities need guards).
+     */
     public const CORPORATE_EXPANSION_SCALAR = 0.40;
 
     /** Baseline VIX threshold above which corporate panic triggers surge spending on executive protection. */
@@ -217,7 +236,8 @@ class SecurityProtectionBusinessModel extends StandardCorporateBusinessModel
 
     protected function calculateSectorPhysics(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, MacroStateDTO $macroState, MathUtility $mathUtility): SectorPhysicsResult
     {
-        // Resolve company-specific tuned parameters (e.g. GRIP = 80% Gov, WATCH = 60% Retainer, OSPR = 80% Expeditionary)
+        // Resolve company-specific tuned parameters (e.g. GRIP = 80% Gov, WATCH = 60% Retainer, OSPR = 80%
+        // Expeditionary)
         $params = $this->resolveModelParameters($stock, [
             ModelParam::GovernmentContractWeight->value => self::GOVERNMENT_CONTRACT_WEIGHT,
             ModelParam::RetainerWeight->value           => self::RETAINER_WEIGHT,
@@ -253,7 +273,8 @@ class SecurityProtectionBusinessModel extends StandardCorporateBusinessModel
         // =========================================================================
 
         // 1. Government Contracts -> Rock Solid + Fiscal Appropriations + Cost-Plus Inflation Capture
-        // Inflation running above target boosts revenue via cost-plus escalation, and state appropriations scale the baseline budget.
+        // Inflation running above target boosts revenue via cost-plus escalation, and state appropriations scale the
+        // baseline budget.
         // 2. Corporate Retainers -> Mild GDP Expansion (Corporate HQ footprint expansion)
         // 3. Expeditionary & Black-Ops -> VIX (Fear) & Credit Spreads (Geopolitical/Financial Stress)
         $costPlusBonus = $macroState->inflationSurprise() * self::COST_PLUS_BONUS_SCALAR;
@@ -295,22 +316,24 @@ class SecurityProtectionBusinessModel extends StandardCorporateBusinessModel
         $actualRevenue = array_sum($streamRevenues);
         $streams->recordStreamShares($streamRevenues);
 
-        // --- Cost & Margin Physics ---
-        // Guard payroll follows wage growth; contract rates recover most of it (cost-plus government work, annual retainer resets).
+        // --- Cost & Margin Physics --- Guard payroll follows wage growth; contract rates recover most of it (cost-plus
+        // government work, annual retainer resets).
         $inputCostDrag = $this->resolveInputCostDrag($stock, $macroState, $streams, $this->resolvePricingPower($stock), $realizedVariableMargin);
         // Apply the tactical failure legal penalty directly to the baseline variable margin
         $rawMargin = $realizedVariableMargin + $inputCostDrag;
         $clampedMargin = $this->clampMargin($rawMargin);
         $this->registerPublicSpendingExposure($streams, $expectedRevenue * $govWeight * self::APPROPRIATIONS_VOLUME_SCALAR, $clampedMargin, $actualRevenue);
 
-        // Visibility: Government cost-plus inflation is fully public, Retainers are moderately public, Expeditionary Black Ops are opaque.
+        // Visibility: Government cost-plus inflation is fully public, Retainers are moderately public, Expeditionary
+        // Black Ops are opaque.
         $observableShockZ = ($govZ * $govWeight * self::GOVERNMENT_VARIANCE_SCALAR * 1.0)
             + ($retainerZ * $retainerWeight * self::RETAINER_VARIANCE_SCALAR * 0.50)
             + ($expeditionaryZ * $expeditionaryWeight * self::EXPEDITIONARY_VARIANCE_SCALAR * 0.05)
             + ($govSpendShift * $govWeight * self::APPROPRIATIONS_VOLUME_SCALAR);
         $observableShockZ *= $baselineVol;
 
-        // The one-off charge is booked as a special item: in EBIT, out of the run rate, the Street figure and the cost ratio.
+        // The one-off charge is booked as a special item: in EBIT, out of the run rate, the Street figure and the cost
+        // ratio.
         $specialCharge = $tacticalFailurePenalty * $actualRevenue;
 
         return new SectorPhysicsResult(

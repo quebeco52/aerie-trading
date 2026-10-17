@@ -23,7 +23,10 @@ class ReorganizationEngine
     // --- Emergence ---
     /** Lowest price the reorganized equity opens at: one cent, the floor the price engine itself holds. */
     private const MIN_OPENING_PRICE = 0.01;
-    /** Old holders below this share of the reorganized equity trigger fresh-start accounting (ASC 852-10-45-19: under 50% of the voting shares). */
+    /**
+     * Old holders below this share of the reorganized equity trigger fresh-start accounting (ASC 852-10-45-19: under
+     * 50% of the voting shares).
+     */
     private const FRESH_START_OWNERSHIP_THRESHOLD = 0.50;
 
     /**

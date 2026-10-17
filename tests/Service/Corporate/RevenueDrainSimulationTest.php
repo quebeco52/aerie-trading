@@ -41,7 +41,8 @@ class RevenueDrainSimulationTest extends TestCase
         // the starting rate rather than against a fixed level on one draw path.
         $simulate = function (bool $hiking, int $seed) use ($ticksPerYear, $ticksPerQuarter, $reportingTick): array {
             $earningsEngine = $this->createEngine();
-            mt_srand($seed); // seeded once the engine's mocks are built: PHPUnit names a new mock class from the same generator
+            // seeded once the engine's mocks are built: PHPUnit names a new mock class from the same generator
+            mt_srand($seed);
             $stock = $this->createStockFromInitialMarket('IBHI', 'Engineering & Construction');
 
             $revenues = [];
@@ -111,7 +112,8 @@ class RevenueDrainSimulationTest extends TestCase
         // only just holds its value, so the claim is asserted on the mean over enough draw paths to resolve it.
         $simulate = function (int $seed) use ($ticksPerYear, $ticksPerQuarter, $reportingTick, $quarters): array {
             $earningsEngine = $this->createEngine();
-            mt_srand($seed); // seeded once the engine's mocks are built: PHPUnit names a new mock class from the same generator
+            // seeded once the engine's mocks are built: PHPUnit names a new mock class from the same generator
+            mt_srand($seed);
             $stock = $this->createStockFromInitialMarket('IBHI', 'Engineering & Construction');
 
             $openingCapital = null;

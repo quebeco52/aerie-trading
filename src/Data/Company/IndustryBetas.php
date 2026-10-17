@@ -24,7 +24,11 @@ final class IndustryBetas
     public const DAMODARAN_MARGINAL_TAX_RATE = 0.25;
 
     // --- Lore Band ---
-    /** Half-width of the band lore may place a firm's beta in around its industry's: 1.96 standard errors of a 60-month regression beta, sqrt(0.21^2 - (0.91 x 0.15)^2) / (0.15 x sqrt(60)) = 0.137, at the board's median volatility (0.21), the market's (0.15) and the US average beta (0.91). */
+    /**
+     * Half-width of the band lore may place a firm's beta in around its industry's: 1.96 standard errors of a 60-month
+     * regression beta, sqrt(0.21^2 - (0.91 x 0.15)^2) / (0.15 x sqrt(60)) = 0.137, at the board's median volatility
+     * (0.21), the market's (0.15) and the US average beta (0.91).
+     */
     public const LORE_BAND = 0.27;
 
     /**

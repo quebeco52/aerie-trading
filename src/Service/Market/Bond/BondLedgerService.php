@@ -169,7 +169,10 @@ class BondLedgerService
         );
     }
 
-    /** One message per holder of a closed issue, bonds escrowed behind an open sell included, as the payment counts them. */
+    /**
+     * One message per holder of a closed issue, bonds escrowed behind an open sell included, as the payment counts
+     * them.
+     */
     private function notifyClosedHoldings(Bond $bond, float $amountPerBond, string $paymentType): void
     {
         if ($this->notifier === null) {

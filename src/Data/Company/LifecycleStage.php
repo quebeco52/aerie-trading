@@ -59,7 +59,10 @@ enum LifecycleStage: string
         };
     }
 
-    /** Dickinson sign pattern as "CFO / CFI / CFF"; ± marks a sign the stage admits either way, shake-out lists its three patterns. */
+    /**
+     * Dickinson sign pattern as "CFO / CFI / CFF"; ± marks a sign the stage admits either way, shake-out lists its
+     * three patterns.
+     */
     public function cashFlowSignature(): string
     {
         return match ($this) {

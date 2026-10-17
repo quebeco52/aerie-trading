@@ -59,7 +59,9 @@ final class IndexFundPhaseTest extends TestCase
         );
     }
 
-    /** @return array{updates: list<array{ticker: string, price: float}>, float_caps: array<string, float>, half_spreads: array<string, float>, fund_flow: array<string, float>, dividend_points: array<string, float>} */
+    /**
+     * @return array{updates: list<array{ticker: string, price: float}>, float_caps: array<string, float>, half_spreads: array<string, float>, fund_flow: array<string, float>, dividend_points: array<string, float>}
+     */
     private function board(): array
     {
         return [

@@ -46,17 +46,33 @@ use App\Service\Math\StochasticProcesses;
 final class OptionPricingEngine
 {
     // --- Option Market Making ---
-    /** Volatility points a desk quotes either side of its mark. An option's spread is a spread in VOLATILITY — the desk is trading variance, not premium — and the premium spread is this times vega. */
+    /**
+     * Volatility points a desk quotes either side of its mark. An option's spread is a spread in VOLATILITY — the desk
+     * is trading variance, not premium — and the premium spread is this times vega.
+     */
     public const OPTION_HALF_SPREAD_VOLATILITY = 0.015;
-    /** Floor on the half-spread as a fraction of the premium, so a deep in-the-money contract carrying almost no vega still costs something to cross. */
+    /**
+     * Floor on the half-spread as a fraction of the premium, so a deep in-the-money contract carrying almost no vega
+     * still costs something to cross.
+     */
     public const OPTION_MIN_HALF_SPREAD_FRACTION = 0.005;
-    /** Ceiling on the same, because a far out-of-the-money contract's vega spread can otherwise exceed the whole of its premium. */
+    /**
+     * Ceiling on the same, because a far out-of-the-money contract's vega spread can otherwise exceed the whole of its
+     * premium.
+     */
     public const OPTION_MAX_HALF_SPREAD_FRACTION = 0.25;
-    /** Smallest premium a listed contract quotes at: one cent, the minimum increment. A contract worth less than this is quoted here and worth nothing on exercise. */
+    /**
+     * Smallest premium a listed contract quotes at: one cent, the minimum increment. A contract worth less than this is
+     * quoted here and worth nothing on exercise.
+     */
     public const OPTION_MIN_PREMIUM = 0.01;
 
     // --- Dealer Gamma Hedging (Barbon & Buraschi 2020; Baltussen, Da, Lammers & Radeva 2021) ---
-    /** Markup from the variance a desk expects to the variance it quotes (Carr & Wu 2009). A desk that quotes its own forecast loses money on average, which is why implied runs above subsequent realized. Held modest because the premium on SINGLE-NAME options is a fraction of the index premium (Bakshi, Kapadia & Madan 2003). */
+    /**
+     * Markup from the variance a desk expects to the variance it quotes (Carr & Wu 2009). A desk that quotes its own
+     * forecast loses money on average, which is why implied runs above subsequent realized. Held modest because the
+     * premium on SINGLE-NAME options is a fraction of the index premium (Bakshi, Kapadia & Madan 2003).
+     */
     public const OPTION_VARIANCE_RISK_PREMIUM = 1.05;
 
     public function __construct(

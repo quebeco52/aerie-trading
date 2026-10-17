@@ -51,7 +51,10 @@ class InsuranceBusinessModelTest extends TestCase
         $this->assertSame($target, \App\Data\Company\ManagementStyle::Operator->appliedTargetCash($target, $backing));
     }
 
-    /** NAIC Model Act #440: twelve months' distributions without approval are the greater of a tenth of surplus and the year's income. */
+    /**
+     * NAIC Model Act #440: twelve months' distributions without approval are the greater of a tenth of surplus and the
+     * year's income.
+     */
     public function testTheNaicLimitIsTheGreaterOfATenthOfSurplusAndTheYearsIncome(): void
     {
         $model = new InsuranceBusinessModel();
@@ -94,7 +97,8 @@ class InsuranceBusinessModelTest extends TestCase
             ->onlyMethods(['generateStandardNormal'])
             ->getMock();
         $mathUtilityMock->method('generateStandardNormal')
-            ->willReturnOnConsecutiveCalls(0.0, 0.0, -2.5); // Firm factor = 0.0, Revenue Z = 0.0, Claim Z = -2.5 (Severe catastrophe)
+            // Firm factor = 0.0, Revenue Z = 0.0, Claim Z = -2.5 (Severe catastrophe)
+            ->willReturnOnConsecutiveCalls(0.0, 0.0, -2.5);
 
         $macroState = MacroStateDTO::fromArray([
             'inflation_ema' => 0.02,
@@ -125,7 +129,8 @@ class InsuranceBusinessModelTest extends TestCase
         $earningsValNormal = $model->calculateEarningsValue(50.0, 100.0);
         $this->assertEquals(100.0, $earningsValNormal);
 
-        // 2. When PE fair value collapses to $0 (e.g. catastrophe claims), franchise floor cushions value (0.70 * $50 = $35)
+        // 2. When PE fair value collapses to $0 (e.g. catastrophe claims), franchise floor cushions value (0.70 * $50 =
+        //    $35)
         $earningsValLoss = $model->calculateEarningsValue(50.0, 0.0);
         $this->assertEquals(35.0, $earningsValLoss);
     }
@@ -281,7 +286,8 @@ class InsuranceBusinessModelTest extends TestCase
             ->onlyMethods(['generateStandardNormal'])
             ->getMock();
         $mockNegRevenue->method('generateStandardNormal')
-            ->willReturnOnConsecutiveCalls(0.0, -2.0 / sqrt(1.0 - 0.16), 0.0); // Firm factor = 0.0, composite Revenue Z = -2.0 (financial loading 0.40), Claim Z = 0.0
+            // Firm factor = 0.0, composite Revenue Z = -2.0 (financial loading 0.40), Claim Z = 0.0
+            ->willReturnOnConsecutiveCalls(0.0, -2.0 / sqrt(1.0 - 0.16), 0.0);
 
         $resultNeg = $model->computeActualFinancials(
             $stock,
@@ -298,7 +304,8 @@ class InsuranceBusinessModelTest extends TestCase
             ->onlyMethods(['generateStandardNormal'])
             ->getMock();
         $mockPosRevenue->method('generateStandardNormal')
-            ->willReturnOnConsecutiveCalls(0.0, 2.0 / sqrt(1.0 - 0.16), 0.0); // Firm factor = 0.0, composite Revenue Z = 2.0 (financial loading 0.40), Claim Z = 0.0
+            // Firm factor = 0.0, composite Revenue Z = 2.0 (financial loading 0.40), Claim Z = 0.0
+            ->willReturnOnConsecutiveCalls(0.0, 2.0 / sqrt(1.0 - 0.16), 0.0);
 
         $resultPos = $model->computeActualFinancials(
             $stock,
@@ -313,7 +320,8 @@ class InsuranceBusinessModelTest extends TestCase
         $this->assertGreaterThan($expectedRevenue, $resultPos->actualRevenue);
         $this->assertLessThan($expectedRevenue, $resultNeg->actualRevenue);
 
-        // Combined ratio with depressed revenue should exceed combined ratio with expanded revenue due to expense ratio dynamics
+        // Combined ratio with depressed revenue should exceed combined ratio with expanded revenue due to expense ratio
+        // dynamics
         $this->assertGreaterThan($resultPos->clampedMargin, $resultNeg->clampedMargin);
     }
 
@@ -695,7 +703,10 @@ class InsuranceBusinessModelTest extends TestCase
         $this->assertSame(0.0, \App\Service\Corporate\CapitalAllocationEngine::capitalTargetRepurchase($targetEquity, $assets - ($equity - $targetEquity), $target, $target));
     }
 
-    /** The first report strikes the target premium-to-surplus on the opening book, 1.5 x its written share, and carries it. */
+    /**
+     * The first report strikes the target premium-to-surplus on the opening book, 1.5 x its written share, and carries
+     * it.
+     */
     public function testTheFirstReportStrikesTheTargetPremiumToSurplus(): void
     {
         $model = new InsuranceBusinessModel();
@@ -837,7 +848,9 @@ class InsuranceBusinessModelTest extends TestCase
         return $stock;
     }
 
-    /** An underwriter whose Kenney capacity is the given multiple of its premium demand, at trend nominal GDP of one. */
+    /**
+     * An underwriter whose Kenney capacity is the given multiple of its premium demand, at trend nominal GDP of one.
+     */
     private function capacityStock(float $capacityToDemand): Stock
     {
         $samRatio = 2.0;
@@ -894,7 +907,10 @@ class InsuranceBusinessModelTest extends TestCase
 
     // --- District Catastrophes ---
 
-    /** One district storm season is the same claim for every carrier: the burden shifts each firm's claim draw, so all three books lose together. */
+    /**
+     * One district storm season is the same claim for every carrier: the burden shifts each firm's claim draw, so all
+     * three books lose together.
+     */
     public function testADistrictStormSeasonRaisesClaimsForEveryCarrierAtOnce(): void
     {
         $carriers = [
@@ -967,7 +983,10 @@ class InsuranceBusinessModelTest extends TestCase
         $this->assertGreaterThan($atBook, $model->calculateInterestIncome($stock, new MacroStateDTO(yield10yEma: 0.06), $math));
     }
 
-    /** An insurer's through-the-cycle capacity blend is its persistence model, so the trailing return reaches it unfaded. */
+    /**
+     * An insurer's through-the-cycle capacity blend is its persistence model, so the trailing return reaches it
+     * unfaded.
+     */
     public function testAnInsurerIsValuedOnItsOwnCapacityBlendNotTheFade(): void
     {
         $insurer = \App\Data\Company\Sectors::getBusinessModelStrategy('insurance');

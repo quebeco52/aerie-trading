@@ -40,7 +40,10 @@ class AerieCouncilTest extends TestCase
         }
     }
 
-    /** When a term ends the seat passes to a successor (App\Service\Politics\MonetaryAuthority names them) for a full term, and the roster is the same whenever it is read. */
+    /**
+     * When a term ends the seat passes to a successor (App\Service\Politics\MonetaryAuthority names them) for a full
+     * term, and the roster is the same whenever it is read.
+     */
     public function testAVacantSeatPassesToASuccessorForAFullTerm(): void
     {
         $firstEnd = AerieCouncil::openingTermEnd(0);

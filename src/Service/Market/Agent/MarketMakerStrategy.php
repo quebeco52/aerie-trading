@@ -25,11 +25,20 @@ use App\DTO\AgentMarketViewDTO;
 final class MarketMakerStrategy implements LiquidityProviderInterface
 {
     // --- Agent Signals ---
-    /** Share of the others' flow a market maker takes the other side of in calm conditions (Grossman & Miller 1988 immediacy). The rest reaches the price at once. */
+    /**
+     * Share of the others' flow a market maker takes the other side of in calm conditions (Grossman & Miller 1988
+     * immediacy). The rest reaches the price at once.
+     */
     public const AGENT_MAKER_ABSORPTION = 0.35;
-    /** Time a maker takes to work 63% of its inventory back to flat, in years (~1 trading day; Hendershott & Menkveld 2014 find inventories mean-revert on that order). Carrying risk is not what it is paid for. */
+    /**
+     * Time a maker takes to work 63% of its inventory back to flat, in years (~1 trading day; Hendershott & Menkveld
+     * 2014 find inventories mean-revert on that order). Carrying risk is not what it is paid for.
+     */
     public const AGENT_MAKER_INVENTORY_HORIZON_YEARS = 0.004;
-    /** Volatility at which the base absorption applies. Above it, absorption falls with 1/variance (Ho & Stoll 1981: the cost of immediacy is proportional to variance), so makers step back in a stressed market. */
+    /**
+     * Volatility at which the base absorption applies. Above it, absorption falls with 1/variance (Ho & Stoll 1981: the
+     * cost of immediacy is proportional to variance), so makers step back in a stressed market.
+     */
     public const AGENT_MAKER_REFERENCE_VOLATILITY = 0.25;
 
     public function identifier(): string

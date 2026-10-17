@@ -33,19 +33,31 @@ use App\Service\Model\StreamContext;
 class InsuranceBusinessModel extends BaseFinancialBusinessModel
 {
     // --- Operating Cyclicality & Demand Structure ---
-    /** Elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). Premium volume is sticky through the cycle. */
+    /**
+     * Elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). Premium volume is
+     * sticky through the cycle.
+     */
     public const OPERATING_CYCLICALITY = 0.70;
 
     // --- Labor Intensity ---
-    /** Labor share of the fixed cost base exposed to the Beveridge wage squeeze. Underwriting, claims and distribution payroll is roughly half of an insurer's overhead. */
+    /**
+     * Labor share of the fixed cost base exposed to the Beveridge wage squeeze. Underwriting, claims and distribution
+     * payroll is roughly half of an insurer's overhead.
+     */
     public const FIXED_COST_LABOR_SHARE = 0.50;
 
     // --- Demand Transmission Lag ---
-    /** Years for a move in the output gap to reach the order book. Policies are annual: exposure only reprices as the book comes up for renewal. */
+    /**
+     * Years for a move in the output gap to reach the order book. Policies are annual: exposure only reprices as the
+     * book comes up for renewal.
+     */
     public const DEMAND_LAG_YEARS = 0.50;
 
     // --- Reporting Incentives ---
-    /** Propensity to steer reported earnings toward consensus with accruals. Loss reserves are an actuarial estimate management sets itself: strengthening or releasing them moves the headline without touching cash. */
+    /**
+     * Propensity to steer reported earnings toward consensus with accruals. Loss reserves are an actuarial estimate
+     * management sets itself: strengthening or releasing them moves the headline without touching cash.
+     */
     public const EARNINGS_MANAGEMENT_PROPENSITY = 0.60;
 
     public function getMoatSpread(): float
@@ -80,79 +92,152 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
     // --- Underwriting & Catastrophe Shock Physics ---
     /** Macroeconomic demand shift sensitivity to output gap. */
     public const MACRO_DEMAND_SCALAR      = 0.25;
-    /** Underwriting operating margin mean reversion speed (quarters). Insurance policies renew annually with rapid competitive repricing. */
+    /**
+     * Underwriting operating margin mean reversion speed (quarters). Insurance policies renew annually with rapid
+     * competitive repricing.
+     */
     public const INSURANCE_REVERSION_SPEED = 8.0;
     /** Volatility multiplier for top-line premium revenue shocks in sticky insurance markets. */
     public const REVENUE_VARIANCE_SCALAR  = 0.05;
-    /** Firm claim z-score below which the large-loss layer starts paying (one quarter in fifteen): fires, liability verdicts, single risks no peer shares. */
+    /**
+     * Firm claim z-score below which the large-loss layer starts paying (one quarter in fifteen): fires, liability
+     * verdicts, single risks no peer shares.
+     */
     public const CATASTROPHE_Z_THRESHOLD  = -1.50;
-    /** Large-loss claims, as a share of the book's premium, per standard deviation of the firm's claim draw below the threshold. */
+    /**
+     * Large-loss claims, as a share of the book's premium, per standard deviation of the firm's claim draw below the
+     * threshold.
+     */
     public const CATASTROPHE_LOSS_SCALAR  = 0.15;
 
     // --- Underwriting Cost Split (NAIC Insurance Expense Exhibit, US P&C industry 2024) ---
-    /** Commissions, brokerage and premium taxes in the premium-proportional cost line: (10.7 + 2.3) / (61.5 losses + 3.8 DCC + 10.7 + 2.3), the rest being losses and defence costs. */
+    /**
+     * Commissions, brokerage and premium taxes in the premium-proportional cost line: (10.7 + 2.3) / (61.5 losses + 3.8
+     * DCC + 10.7 + 2.3), the rest being losses and defence costs.
+     */
     public const BASE_EXPENSE_RATIO_SHARE = 0.166;
-    /** Adjusting and other expense (claims-department overhead, unallocated LAE) in the sticky overhead: 5.5 / (5.5 A&O + 5.9 other acquisition + 6.4 general). */
+    /**
+     * Adjusting and other expense (claims-department overhead, unallocated LAE) in the sticky overhead: 5.5 / (5.5 A&O
+     * + 5.9 other acquisition + 6.4 general).
+     */
     public const FIXED_COST_LAE_SHARE = 0.309;
 
     // --- Claims Inflation (rates are filed on past loss costs) ---
-    /** Goods in personal auto and homeowners loss costs (parts, vehicles, building materials), the rest being repair labour, medical and legal: ~0.40 from ISO 2024 auto coverages and Verisk reconstruction costs (constructed, second-hand). */
+    /**
+     * Goods in personal auto and homeowners loss costs (parts, vehicles, building materials), the rest being repair
+     * labour, medical and legal: ~0.40 from ISO 2024 auto coverages and Verisk reconstruction costs (constructed,
+     * second-hand).
+     */
     public const CLAIMS_COST_GOODS_SHARE = 0.40;
-    /** Years for premium rates to catch up with claims costs: AM Best personal auto combined ratio 112.2, 104.9 and 98.7 in 2022-24 against ~101 before, two-thirds of the excess gone each year. */
+    /**
+     * Years for premium rates to catch up with claims costs: AM Best personal auto combined ratio 112.2, 104.9 and 98.7
+     * in 2022-24 against ~101 before, two-thirds of the excess gone each year.
+     */
     public const PREMIUM_CATCH_UP_YEARS = 1.0;
     /** Persisted state key: claims-cost inflation not yet in filed rates, as a fraction of the loss cost. */
     public const STATE_UNRECOVERED_CLAIMS_COST = 'state:claims:unrecovered_cost';
 
     // --- Underwriting Cycle (Winter 1994 / Gron 1994 capacity constraint) ---
-    /** Regime key for the hard market: the multi-year stretch of rate increases and tightened terms that follows a capital shock. */
+    /**
+     * Regime key for the hard market: the multi-year stretch of rate increases and tightened terms that follows a
+     * capital shock.
+     */
     public const REGIME_HARD_MARKET = 'hard_market';
     /** Surplus shortfall against the Kenney target at which capacity withdraws and the market turns hard. */
     public const HARD_MARKET_ONSET_SURPLUS_DEFICIT = 0.10;
-    /** Quarterly probability the hard market breaks as capital returns and price competition resumes (~10 quarter expected duration). */
+    /**
+     * Quarterly probability the hard market breaks as capital returns and price competition resumes (~10 quarter
+     * expected duration).
+     */
     public const HARD_MARKET_EXIT_HAZARD = 0.10;
     /** Peak premium rate uplift in the opening quarters of a hard market, before returning capacity erodes it. */
     public const HARD_MARKET_PRICING_UPLIFT = 0.25;
     /** Quarters over which the rate uplift decays as capital rebuilds, even while the regime itself persists. */
     public const HARD_MARKET_UPLIFT_DECAY_QUARTERS = 8.0;
-    /** Premium rate cut per unit of Kenney capacity held beyond premium demand (soft-side price-to-capacity elasticity). UNCITED: Gron (1994) and Weiss & Chung (2004) find the sign; Froot & O'Connell (1999) measure only the hard side (+19-40% after a $10B loss). */
+    /**
+     * Premium rate cut per unit of Kenney capacity held beyond premium demand (soft-side price-to-capacity elasticity).
+     * UNCITED: Gron (1994) and Weiss & Chung (2004) find the sign; Froot & O'Connell (1999) measure only the hard side
+     * (+19-40% after a $10B loss).
+     */
     public const SOFT_MARKET_CAPACITY_BETA = 0.40;
     /** Deepest rate cut price competition inflicts, however overcapitalized the industry becomes. */
     public const SOFT_MARKET_MAX_DISCOUNT = 0.30;
-    /** Smallest share of its premium demand a going concern still writes at any price: obligatory renewals, treaty shares it cannot walk away from mid-term, and the distribution it must keep alive to have a book to write when rates recover. */
+    /**
+     * Smallest share of its premium demand a going concern still writes at any price: obligatory renewals, treaty
+     * shares it cannot walk away from mid-term, and the distribution it must keep alive to have a book to write when
+     * rates recover.
+     */
     public const MIN_WRITTEN_CAPACITY = 0.35;
-    /** Standard deviation of the US P&C industry combined ratio about its mean, 2000-2023 (III / AM Best annual results, ~5 points): how far a book's result strays from what was expected of it. */
+    /**
+     * Standard deviation of the US P&C industry combined ratio about its mean, 2000-2023 (III / AM Best annual results,
+     * ~5 points): how far a book's result strays from what was expected of it.
+     */
     public const UNDERWRITING_RESULT_DISPERSION = 0.05;
-    /** Years for the in-force book to reach a newly chosen written share: each policy is re-underwritten only at its renewal, once a term (the renewal lag of Cummins & Outreville 1987). */
+    /**
+     * Years for the in-force book to reach a newly chosen written share: each policy is re-underwritten only at its
+     * renewal, once a term (the renewal lag of Cummins & Outreville 1987).
+     */
     public const WRITTEN_SHARE_ADJUSTMENT_YEARS = self::POLICY_TERM_YEARS;
     /** State key holding the share of its premium demand the in-force book is written at. */
     public const STATE_WRITTEN_SHARE = 'state:capacity:written_share';
-    /** State key holding Kenney capacity over premium demand as the market has observed it, which is what renewal rates are struck against. */
+    /**
+     * State key holding Kenney capacity over premium demand as the market has observed it, which is what renewal rates
+     * are struck against.
+     */
     public const STATE_OBSERVED_CAPACITY = 'state:capacity:observed_ratio';
-    /** State key holding the firm's franchise share of its serviceable market, fixed at its first report so its opening capital exactly meets its demand. */
+    /**
+     * State key holding the firm's franchise share of its serviceable market, fixed at its first report so its opening
+     * capital exactly meets its demand.
+     */
     public const STATE_PREMIUM_FRANCHISE_SHARE = 'state:capacity:franchise_share';
-    /** State key holding the premium-to-surplus ratio the firm steers to, its opening book over its opening surplus (Gropp & Heider 2010 time-invariant target; Cheng & Weiss 2012 find insurers adjust NPW/surplus toward one). */
+    /**
+     * State key holding the premium-to-surplus ratio the firm steers to, its opening book over its opening surplus
+     * (Gropp & Heider 2010 time-invariant target; Cheng & Weiss 2012 find insurers adjust NPW/surplus toward one).
+     */
     public const STATE_TARGET_PREMIUM_TO_SURPLUS = 'state:capacity:target_premium_to_surplus';
-    /** Years for a change in an underwriter's capital to reach the rates it is quoted: statutory filings, rating reviews and annual renewal dates all sit between the two, and that delay is what turns the capacity cycle into a cycle rather than a level. */
+    /**
+     * Years for a change in an underwriter's capital to reach the rates it is quoted: statutory filings, rating reviews
+     * and annual renewal dates all sit between the two, and that delay is what turns the capacity cycle into a cycle
+     * rather than a level.
+     */
     public const CAPACITY_OBSERVATION_LAG_YEARS = 1.50;
 
     // --- District Catastrophe Losses (industry loss plus basis) ---
-    /** Expected catastrophe claims as a share of a property book's premium in an average district year: Verisk's US modelled average annual loss of $117B against $895B of 2024 US P&C premiums earned (~13%). */
+    /**
+     * Expected catastrophe claims as a share of a property book's premium in an average district year: Verisk's US
+     * modelled average annual loss of $117B against $895B of 2024 US P&C premiums earned (~13%).
+     */
     public const DISTRICT_CATASTROPHE_LOAD = 0.13;
-    /** District loss burden (average-year units, smoothed) at which the market hardens for every carrier, capital shock or not (the 1992, 2005 and 2017 seasons). */
+    /**
+     * District loss burden (average-year units, smoothed) at which the market hardens for every carrier, capital shock
+     * or not (the 1992, 2005 and 2017 seasons).
+     */
     public const CAT_HARD_MARKET_THRESHOLD = 3.0;
     /** Cummins & Danzon (1997) soft-market underwriting combined ratio compression sensitivity to high float yields. */
     public const SOFT_MARKET_CYCLE_BETA   = 1.50;
 
     // --- Event Lore Thresholds ---
-    /** Excess claims, in average years of the book's catastrophe load, at which a quarter reads as a systemic disaster (~1.5% of quarters). */
+    /**
+     * Excess claims, in average years of the book's catastrophe load, at which a quarter reads as a systemic disaster
+     * (~1.5% of quarters).
+     */
     public const LORE_SYSTEMIC_DISASTER_LOADS = 3.0;
-    /** Excess claims, in average years of the book's catastrophe load, at which a quarter's payouts make the news (~one quarter in eleven). */
+    /**
+     * Excess claims, in average years of the book's catastrophe load, at which a quarter's payouts make the news (~one
+     * quarter in eleven).
+     */
     public const LORE_ELEVATED_CLAIMS_LOADS   = 1.0;
 
     // --- Catastrophe Excess-of-Loss Cover ---
-    /** Excess claims, as a share of the covered book's premium, the carrier retains before its catastrophe cover attaches (one year in twenty for a primary book). */
+    /**
+     * Excess claims, as a share of the covered book's premium, the carrier retains before its catastrophe cover
+     * attaches (one year in twenty for a primary book).
+     */
     public const MAX_REINSURED_LOSS_SHOCK = 0.375;
-    /** Reinstatement premium, as a share of the covered book's premium, paid in the quarter the cover pays out to restore the exhausted limit. */
+    /**
+     * Reinstatement premium, as a share of the covered book's premium, paid in the quarter the cover pays out to
+     * restore the exhausted limit.
+     */
     public const REINSTATEMENT_PREMIUM_RATE = 0.04;
 
     // --- Loss Reserve & Investment Portfolio Physics ---
@@ -170,7 +255,10 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
     public const MEGA_HOARDER_THRESHOLD   = 0.50;
 
     // --- Ordinary Dividend Limit (NAIC Model Act #440) ---
-    /** Share of policyholder surplus an insurer may distribute in twelve months without prior approval when the year's net income is less: 10%, NAIC Insurance Holding Company System Regulatory Act section 5. */
+    /**
+     * Share of policyholder surplus an insurer may distribute in twelve months without prior approval when the year's
+     * net income is less: 10%, NAIC Insurance Holding Company System Regulatory Act section 5.
+     */
     public const NAIC_ORDINARY_DIVIDEND_SURPLUS_SHARE = 0.10;
 
     // --- Buybacks & Capital Deployment ---
@@ -202,7 +290,9 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
     public const FLOAT_BOND_WEIGHT        = 0.75;
     /** Weight allocated to public growth equities in float portfolios. */
     public const FLOAT_EQUITY_WEIGHT      = 0.10;
-    /** VIX threshold above which catastrophe-correlated equity portfolio losses begin. Market panic = equity crashes. */
+    /**
+     * VIX threshold above which catastrophe-correlated equity portfolio losses begin. Market panic = equity crashes.
+     */
     public const CATASTROPHE_VIX_THRESHOLD = 0.25;
     /** Sensitivity of equity portfolio drag to VIX above threshold. A VIX of 0.85 (COVID) causes ~18% tranche drag. */
     public const CATASTROPHE_EQUITY_CORRELATION = 0.30;
@@ -216,13 +306,25 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
     // --- Loss Reserves and Unearned Premium (the float as two stocks) ---
     /** Loss and LAE reserves per unit of annual net premium earned on a US P&C book: NAIC 2024, $977B on NPE $905B. */
     public const LOSS_RESERVE_TO_PREMIUM_RATIO = 1.08;
-    /** Policy term of a P&C book in years; written premium is earned pro rata over it, so the unearned reserve holds half a term of premium (SSAP 65, ASC 944-605; NAIC 2024 UPR ~0.52 of NPE). */
+    /**
+     * Policy term of a P&C book in years; written premium is earned pro rata over it, so the unearned reserve holds
+     * half a term of premium (SSAP 65, ASC 944-605; NAIC 2024 UPR ~0.52 of NPE).
+     */
     public const POLICY_TERM_YEARS = 1.0;
-    /** Years of renewals an underwriter weighs the float a new book brings against its underwriting result: the annual policy term. */
+    /**
+     * Years of renewals an underwriter weighs the float a new book brings against its underwriting result: the annual
+     * policy term.
+     */
     public const FLOAT_DECISION_HORIZON_YEARS = 1.0;
-    /** State key holding the quarter's net incurred losses and LAE (life benefits included), on which the reserve stocks are rolled forward. */
+    /**
+     * State key holding the quarter's net incurred losses and LAE (life benefits included), on which the reserve stocks
+     * are rolled forward.
+     */
     public const STATE_INCURRED_CLAIMS = 'state:reserves:incurred_claims';
-    /** State key holding the life book's share of the quarter's incurred, rolled into the policy reserve rather than the loss reserve. */
+    /**
+     * State key holding the life book's share of the quarter's incurred, rolled into the policy reserve rather than the
+     * loss reserve.
+     */
     public const STATE_INCURRED_LIFE_BENEFITS = 'state:reserves:incurred_life';
     /** State key holding the quarter's earned premium on policies that carry an unearned premium reserve. */
     public const STATE_UNEARNED_PREMIUM_BASE = 'state:reserves:unearned_base';
@@ -232,7 +334,10 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
     public const STATE_LIFE_RESERVES = 'state:reserves:life';
 
     // --- Investment Portfolio Duration ---
-    /** Macaulay duration of the long bond tranche of float, matched against liabilities an insurer pays out over decades. */
+    /**
+     * Macaulay duration of the long bond tranche of float, matched against liabilities an insurer pays out over
+     * decades.
+     */
     public const DEFAULT_FLOAT_BOND_DURATION_YEARS = 7.0;
 
     /**
@@ -273,7 +378,8 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
 
         $ttmRoe = (float) $stock->getRoeTtm();
         if ($ttmRoe !== 0.0) {
-            // Apply structural floor locally when deriving baseline capacity return so catastrophe losses do not collapse required underwriting turnover
+            // Apply structural floor locally when deriving baseline capacity return so catastrophe losses do not
+            // collapse required underwriting turnover
             $structuralRoe = max(self::MIN_STRUCTURAL_ROE_FLOOR, $ttmRoe);
             // Clamp baseline return to capacity ROIC to prevent equity float leverage from distorting premium turnover.
             $baselineRoic = min($capacityRoic, ($capacityRoic * self::BASELINE_ROIC_WEIGHT) + ($structuralRoe * self::TTM_ROIC_WEIGHT));
@@ -367,7 +473,10 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
         return $market > 0.0 ? $this->resolveKenneyCapacity($stock) / $market : 0.0;
     }
 
-    /** The serviceable market on the base every share reading uses: sector TAM x trend nominal GDP x the firm's SAM ratio. */
+    /**
+     * The serviceable market on the base every share reading uses: sector TAM x trend nominal GDP x the firm's SAM
+     * ratio.
+     */
     private function resolveServiceableMarket(Stock $stock, MacroStateDTO $macroState): float
     {
         return CorporateMetrics::BASELINE_SECTOR_TAM * IndustryShareLedger::trendNominalGdp($macroState) * max(0.0, (float) $stock->getSamRatio());
@@ -379,7 +488,10 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
         return self::KENNEY_CAPACITY_RATIO * $this->resolveOperatingEquity($stock);
     }
 
-    /** Kenney capacity over premium demand: above one the firm holds capital its market cannot use, below one it rations. */
+    /**
+     * Kenney capacity over premium demand: above one the firm holds capital its market cannot use, below one it
+     * rations.
+     */
     public function resolveCapacityToDemandRatio(Stock $stock, MacroStateDTO $macroState): float
     {
         $demand = $this->resolvePremiumDemand($stock, $macroState);
@@ -404,7 +516,10 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
             : $this->resolveTargetWrittenShare($stock, $macroState, $mathUtility, $this->resolveOperatingEquity($stock));
     }
 
-    /** Surplus the book is rationed against: statutory, so bonds at amortized cost and goodwill at nil; an insolvent carrier runs off on a fraction of its float. */
+    /**
+     * Surplus the book is rationed against: statutory, so bonds at amortized cost and goodwill at nil; an insolvent
+     * carrier runs off on a fraction of its float.
+     */
     protected function resolveOperatingEquity(Stock $stock): float
     {
         $impliedRunoffEquity = (float) $stock->getCustomerDeposits() * self::IMPLIED_RUNOFF_EQUITY;
@@ -693,7 +808,8 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
         $actualRevenue = $expectedRevenue * (1.0 + ($revenueZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)));
 
         // 2. Separation of Loss Ratio vs. Expense Ratio (The Combined Ratio)
-        // Baseline decomposition: Total variable cost margin is composed of Loss Ratio (claims) + Expense Ratio (acquisition/admin).
+        // Baseline decomposition: Total variable cost margin is composed of Loss Ratio (claims) + Expense Ratio
+        // (acquisition/admin).
         $baselineExpenseRatio = $realizedVariableMargin * self::BASE_EXPENSE_RATIO_SHARE;
         $baselineLossRatio    = $realizedVariableMargin * (1.0 - self::BASE_EXPENSE_RATIO_SHARE);
 
@@ -932,9 +1048,9 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
             return self::INFINITE_ICR_FALLBACK;
         }
 
-        // For an insurer, quarterly underwriting claim payouts (EBIT < 0) do not constitute corporate debt default
-        // as long as investment/float yield and capital surplus service wholesale obligations.
-        // When underwriting claim payouts turn total EBIT negative, evaluate coverage using depreciation and serviceable income.
+        // For an insurer, quarterly underwriting claim payouts (EBIT < 0) do not constitute corporate debt default as
+        // long as investment/float yield and capital surplus service wholesale obligations. When underwriting claim
+        // payouts turn total EBIT negative, evaluate coverage using depreciation and serviceable income.
         $serviceableIncome = $ebit < 0.0 ? max(0.0, $ebit + $interestExpense) : $ebit;
         return ($serviceableIncome + $depreciation) / max(0.01, $interestExpense);
     }
@@ -1039,7 +1155,10 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
         return $normalizedEps > 0.0 ? self::FAIR_VALUE_BOOK_POS_EPS : 1.0;
     }
 
-    /** calculateStructuralRoic() fades the trailing return toward through-the-cycle capacity, so it reaches it unfaded here. */
+    /**
+     * calculateStructuralRoic() fades the trailing return toward through-the-cycle capacity, so it reaches it unfaded
+     * here.
+     */
     public function getValuationReturn(float $trailingReturn, ?float $longRunReturn, float $discountRate): float
     {
         return $trailingReturn;
@@ -1179,7 +1298,9 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
         return 0.0;
     }
 
-    /** Float per unit of annual premium the firm's book carries once its reserves have settled: the sum of its stocks. */
+    /**
+     * Float per unit of annual premium the firm's book carries once its reserves have settled: the sum of its stocks.
+     */
     public function resolveReserveToPremiumRatio(Stock $stock): float
     {
         return array_sum($this->resolveReserveRatios($stock));
@@ -1197,7 +1318,9 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
             * (((1.0 - $fixedCostRatio) * (1.0 - self::BASE_EXPENSE_RATIO_SHARE)) + ($fixedCostRatio * self::FIXED_COST_LAE_SHARE));
     }
 
-    /** Mean years from incurred to paid on the non-life book, set so a steady book holds its pinned loss reserve ratio. */
+    /**
+     * Mean years from incurred to paid on the non-life book, set so a steady book holds its pinned loss reserve ratio.
+     */
     public function resolveReserveRunoffYears(Stock $stock): float
     {
         $incurred = $this->resolveStructuralLossRatio($stock) * (1.0 - $this->resolveLifePremiumShare($stock));
@@ -1226,7 +1349,10 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
             + ($ratios['life'] * (1.0 - exp(-$horizonYears / $this->resolveLifeReserveRunoffYears($stock))));
     }
 
-    /** Share of the float now held that is still held after the horizon on a book that stops writing: claim reserves run off, unearned premium is all earned. */
+    /**
+     * Share of the float now held that is still held after the horizon on a book that stops writing: claim reserves run
+     * off, unearned premium is all earned.
+     */
     public function resolveHeldFloatSurvival(Stock $stock, float $horizonYears): float
     {
         $ratios = $this->resolveReserveRatios($stock);

@@ -22,7 +22,10 @@ use App\Entity\Stock;
 class PrivateBankBusinessModel extends CustodyBankBusinessModel
 {
     // --- Franchise Pricing (Julius Baer, 2019) ---
-    /** Fee, trading and other income per unit of assets: CHF 2,591M of operating income less net interest income on CHF 102.0B of total assets (2019 results release). */
+    /**
+     * Fee, trading and other income per unit of assets: CHF 2,591M of operating income less net interest income on CHF
+     * 102.0B of total assets (2019 results release).
+     */
     public const NON_INTEREST_INCOME_TO_EARNING_ASSETS = 0.0254;
     /** Operating cost per unit of assets: adjusted operating expenses of CHF 2,466M on the same base. */
     public const OPERATING_COST_TO_EARNING_ASSETS = 0.0242;
@@ -30,7 +33,10 @@ class PrivateBankBusinessModel extends CustodyBankBusinessModel
     public const LOAN_SHARE_OF_EARNING_ASSETS = 0.475;
 
     // --- Client Domicile ---
-    /** Share of client wealth booked for clients abroad: CHF 2,300B of the CHF 3,700B of private assets managed in Switzerland was cross-border in 2018 (Swiss Bankers Association, Banking Barometer 2019). */
+    /**
+     * Share of client wealth booked for clients abroad: CHF 2,300B of the CHF 3,700B of private assets managed in
+     * Switzerland was cross-border in 2018 (Swiss Bankers Association, Banking Barometer 2019).
+     */
     public const FOREIGN_CLIENT_SHARE = 0.62;
 
     public function getLoanShareOfEarningAssets(): float

@@ -57,7 +57,10 @@ class SecuritiesCommissionTest extends TestCase
         return $state;
     }
 
-    /** Each rule stands at its founding value at the middle stance and runs out to its record's ends; the light margin still leaves a fresh short clear of its maintenance. */
+    /**
+     * Each rule stands at its founding value at the middle stance and runs out to its record's ends; the light margin
+     * still leaves a fresh short clear of its maintenance.
+     */
     public function testEachRuleRunsThroughItsFoundingValueToTheRecordsEnds(): void
     {
         $this->assertSame(FinancialConstants::INITIAL_MARGIN_REQUIREMENT, Commission::initialMargin(0.0));
@@ -81,7 +84,10 @@ class SecuritiesCommissionTest extends TestCase
         $this->assertSame('strict', Commission::stanceName(0.9));
     }
 
-    /** At Year 1 the head seated before it keeps the founding rules, so the economy is handed none; every councillor holds a stance on the markets. */
+    /**
+     * At Year 1 the head seated before it keeps the founding rules, so the economy is handed none; every councillor
+     * holds a stance on the markets.
+     */
     public function testTheHeadAtYearOneKeepsTheFoundingRules(): void
     {
         $state = self::opened();
@@ -140,7 +146,9 @@ class SecuritiesCommissionTest extends TestCase
         $this->assertSame(ShockEvent::SECURITIES_HEAD_APPOINTED, PoliticsEngine::headline($headline));
     }
 
-    /** The markets weigh only in naming the Commission's head: the Council fills its own seats on the other questions. */
+    /**
+     * The markets weigh only in naming the Commission's head: the Council fills its own seats on the other questions.
+     */
     public function testCouncilSeatsAreNotChosenOnTheMarkets(): void
     {
         $state = self::opened();

@@ -27,11 +27,17 @@ use App\Service\Model\ModelParam;
 class BrokerageBusinessModel extends BaseFinancialBusinessModel
 {
     // --- Operating Cyclicality & Demand Structure ---
-    /** Elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). Trading volumes and margin balances swing with the cycle. */
+    /**
+     * Elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). Trading volumes and
+     * margin balances swing with the cycle.
+     */
     public const OPERATING_CYCLICALITY = 1.30;
 
     // --- Labor Intensity ---
-    /** Labor share of the fixed cost base exposed to the Beveridge wage squeeze. Sales and trading compensation is the largest overhead line of a brokerage. */
+    /**
+     * Labor share of the fixed cost base exposed to the Beveridge wage squeeze. Sales and trading compensation is the
+     * largest overhead line of a brokerage.
+     */
     public const FIXED_COST_LABOR_SHARE = 0.60;
 
     // --- Loss Provisions & Analyst Coverage ---
@@ -45,7 +51,9 @@ class BrokerageBusinessModel extends BaseFinancialBusinessModel
     public const MACRO_DEMAND_SCALAR = 0.50;
     /** Sensitivity of brokerage capital markets advisory revenue to aggregate deal activity. */
     public const DEAL_ACTIVITY_ADVISORY_SCALAR = 0.25;
-    /** Sensitivity of the trading stream to M2 growth over trend; it enters that stream only, not the root demand shift. */
+    /**
+     * Sensitivity of the trading stream to M2 growth over trend; it enters that stream only, not the root demand shift.
+     */
     public const M2_RETAIL_TRADING_SENSITIVITY = 0.40;
 
     public function getWholesaleLeverageLimit(): float
@@ -63,7 +71,10 @@ class BrokerageBusinessModel extends BaseFinancialBusinessModel
     public const ADVISORY_REVENUE_WEIGHT = 0.40;
 
     // --- VIX & Trading Volume ---
-    /** Trading-stream revenue per unit of volatility over MacroEngine::MACRO_VOL_BASE_ANCHOR, both ways (+0.5% per vol point). */
+    /**
+     * Trading-stream revenue per unit of volatility over MacroEngine::MACRO_VOL_BASE_ANCHOR, both ways (+0.5% per vol
+     * point).
+     */
     public const VIX_REVENUE_SCALAR     = 0.50;
     /** Extreme VIX threshold triggering record trading volume event lore. */
     public const VIX_EXTREME_THRESHOLD  = 0.30;
@@ -77,7 +88,9 @@ class BrokerageBusinessModel extends BaseFinancialBusinessModel
     public const SWEEP_RATE_BUFFER         = 0.005;
     /** Beta pass-through of short-term policy rate increases to retail cash sweep accounts above the buffer. */
     public const SWEEP_DEPOSIT_BETA        = 0.20;
-    /** Structural minimum operating cost-to-revenue ratio reflecting brokerage technology and clearinghouse overhead. */
+    /**
+     * Structural minimum operating cost-to-revenue ratio reflecting brokerage technology and clearinghouse overhead.
+     */
     public const MIN_EFFICIENCY_RATIO      = 0.40;
 
     // --- Revenue & Shock Physics ---
@@ -257,7 +270,8 @@ class BrokerageBusinessModel extends BaseFinancialBusinessModel
         $targetEbit = max($minOperatingEbit, $targetEbit);
 
         $unboundedRevenue = max(0.0, $targetEbit) / $stableMargin;
-        $targetRevenue = min($unboundedRevenue, $earningAssets * self::MAX_GROSS_ASSET_YIELD); // Hard cap gross yield on total assets
+        // Hard cap gross yield on total assets
+        $targetRevenue = min($unboundedRevenue, $earningAssets * self::MAX_GROSS_ASSET_YIELD);
 
         $grossYield = $targetRevenue / max(1.0, $earningAssets);
 
@@ -371,7 +385,8 @@ class BrokerageBusinessModel extends BaseFinancialBusinessModel
     }
 
     /**
-     * Brokerages and Investment Banks rely on wholesale repo and debt facilities to fund trading desks and margin loans.
+     * Brokerages and Investment Banks rely on wholesale repo and debt facilities to fund trading desks and margin
+     * loans.
      */
     public function supportsUnderleveragedDebtExpansion(): bool
     {

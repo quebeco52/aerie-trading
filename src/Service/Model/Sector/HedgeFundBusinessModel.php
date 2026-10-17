@@ -23,23 +23,34 @@ use App\Service\Model\ModelParam;
  *
  * Financial Physics:
  * - 3-Stream Revenue Architecture: Sticky Management Fees, Leveraged Directional Bets, Quantitative Alpha Engine.
- * - Implied AUM Physics: AUM is derived strictly from baseline management fee capacity ($expectedRevenue * mgmtWeight / 2%).
+ * - Implied AUM Physics: AUM is derived strictly from baseline management fee capacity ($expectedRevenue * mgmtWeight /
+ *   2%).
  * - "2 and 20" Payoff: Incentive fees operate as a call option on excess alpha over hurdle rate.
- * - Almgren-Chriss / Kyle Liquidity Physics: Forced fire-sale liquidations during prime margin calls incur quadratic cost friction on capital, translated to margin decay.
+ * - Almgren-Chriss / Kyle Liquidity Physics: Forced fire-sale liquidations during prime margin calls incur quadratic
+ *   cost friction on capital, translated to margin decay.
  * - Multi-Stream Carry Allocation: Performance fees are cleanly attributed across directional and quant streams.
  */
 class HedgeFundBusinessModel extends AssetManagementBusinessModel
 {
     // --- Operating Cyclicality & Demand Structure ---
-    /** Elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). Levered directional books. */
+    /**
+     * Elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). Levered directional
+     * books.
+     */
     public const OPERATING_CYCLICALITY = 1.50;
 
     // --- Balance Sheet Realism ---
-    /** Stock-based compensation (ASC 718) as a share of revenue: Investments & Asset Management, 5.08% of revenue, 283 firms (Damodaran, Employee data by industry, US, January 2026). */
+    /**
+     * Stock-based compensation (ASC 718) as a share of revenue: Investments & Asset Management, 5.08% of revenue, 283
+     * firms (Damodaran, Employee data by industry, US, January 2026).
+     */
     public const STOCK_COMPENSATION_INTENSITY = 0.0508;
 
     // --- Labor Intensity ---
-    /** Labor share of the fixed cost base exposed to the Beveridge wage squeeze. Investment team compensation dominates hedge fund overhead. */
+    /**
+     * Labor share of the fixed cost base exposed to the Beveridge wage squeeze. Investment team compensation dominates
+     * hedge fund overhead.
+     */
     public const FIXED_COST_LABOR_SHARE = 0.70;
 
     // --- Analyst Visibility & Error ---
@@ -256,7 +267,8 @@ class HedgeFundBusinessModel extends AssetManagementBusinessModel
 
     public function getMacroPhysics(Stock $stock, MacroStateDTO $macroState): array
     {
-        // Provide analyst-visible macro shift for consensus; neutralized in calculateSectorPhysics before stream physics.
+        // Provide analyst-visible macro shift for consensus; neutralized in calculateSectorPhysics before stream
+        // physics.
         return [
             'macro_demand_shift'       => $this->resolveAnalystVisibleMacroShift($stock, $macroState),
             'pricing_power_multiplier' => 1.0,
@@ -364,9 +376,9 @@ class HedgeFundBusinessModel extends AssetManagementBusinessModel
         $leverageMultiplier = 1.0 + ($actualLeverage * self::LEVERAGE_AMPLIFIER_SCALAR);
         $macroDirectionalShift = $outputGap * $beta * self::DIRECTIONAL_MACRO_SCALAR;
 
-        // In hedge fund physics ("2 and 20"):
-        // Above hurdle (Z > 1.25), performance incentive fees scale dynamically with excess alpha and leverage.
-        // Below hurdle (Z < 1.25), no performance fees are earned; directional trading revenues scale with baseline volatility.
+        // In hedge fund physics ("2 and 20"): Above hurdle (Z > 1.25), performance incentive fees scale dynamically
+        // with excess alpha and leverage. Below hurdle (Z < 1.25), no performance fees are earned; directional trading
+        // revenues scale with baseline volatility.
         $dirBaseDrift = $dirZ * $baselineVol * self::REVENUE_VARIANCE_SCALAR * self::DIRECTIONAL_BASE_VOLATILITY_SCALAR * $leverageMultiplier;
         $dirIncentiveBonus = max(0.0, ($dirZ - self::PERFORMANCE_FEE_HURDLE_Z) * self::INCENTIVE_FEE_RATE * 3.0 * $leverageMultiplier);
 

@@ -303,7 +303,8 @@ class ConglomerateBusinessModelTest extends TestCase
 
         $this->assertEqualsWithDelta(0.0, $this->model->getMacroPhysics($stock, $recession)['macro_demand_shift'], 1e-12);
 
-        // Industrial 0.40 x (-0.03 x 1.2 x 0.90) + staples 0.40 x (-0.03 x 0.15); the 0.20 float is a yield, not activity.
+        // Industrial 0.40 x (-0.03 x 1.2 x 0.90) + staples 0.40 x (-0.03 x 0.15); the 0.20 float is a yield, not
+        // activity.
         $expected = (0.40 * (-0.03 * 1.2 * 0.90)) + (0.40 * (-0.03 * 0.15));
         $this->assertEqualsWithDelta($expected, $this->model->resolveSectorActivityShift($stock, $recession), 1e-9);
 

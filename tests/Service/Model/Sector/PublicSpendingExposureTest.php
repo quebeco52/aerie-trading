@@ -27,7 +27,10 @@ use PHPUnit\Framework\TestCase;
 #[AllowMockObjectsWithoutExpectations]
 class PublicSpendingExposureTest extends TestCase
 {
-    /** Where the government stream bills as it is bought, the reported share is what the extra purchases add to operating earnings. */
+    /**
+     * Where the government stream bills as it is bought, the reported share is what the extra purchases add to
+     * operating earnings.
+     */
     public function testTheReportedShareIsWhatPurchasesAddToEarnings(): void
     {
         foreach ([new MedicalCareFacilityBusinessModel(), new SecurityProtectionBusinessModel()] as $model) {
@@ -40,7 +43,10 @@ class PublicSpendingExposureTest extends TestCase
         }
     }
 
-    /** Contractors and colleges book public work into a backlog that burns at the rate it is ordered, so they report a share too; a firm the budget does not buy from reports none. */
+    /**
+     * Contractors and colleges book public work into a backlog that burns at the rate it is ordered, so they report a
+     * share too; a firm the budget does not buy from reports none.
+     */
     public function testOnlyTheFirmsTheBudgetBuysFromReportAShare(): void
     {
         foreach ([new ConstructionBusinessModel(), new EducationBusinessModel()] as $model) {

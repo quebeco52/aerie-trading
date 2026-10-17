@@ -48,8 +48,8 @@ final readonly class EarningsFlowStatement
     public static function fromReport(array $report): self
     {
         // Interest earned on cash joins revenue at the top, so the interest line below is the gross expense. The stored
-        // EBITDA, EBIT and pre-tax lines leave it out until pre-tax (pre-tax = EBIT - expense + income); netting it from
-        // the expense as well counted it twice and pushed the same sum into operating costs.
+        // EBITDA, EBIT and pre-tax lines leave it out until pre-tax (pre-tax = EBIT - expense + income); netting it
+        // from the expense as well counted it twice and pushed the same sum into operating costs.
         $sales = (float) ($report['revenue'] ?? 0);
         $interestIncome = max(0.0, (float) ($report['interest_income'] ?? 0));
         $totalRevenue = $sales + $interestIncome;
@@ -61,7 +61,8 @@ final readonly class EarningsFlowStatement
         $dividends          = max(0.0, (float) ($report['dividend_paid'] ?? 0));
         $buybacks           = max(0.0, (float) ($report['stock_buybacks'] ?? 0));
 
-        // Income statement waterfall: reconstruct EBITDA, EBIT, and pre-tax income directly from published report lines.
+        // Income statement waterfall: reconstruct EBITDA, EBIT, and pre-tax income directly from published report
+        // lines.
         $operatingCostsStored = (float) ($report['operating_costs'] ?? 0);
         $ebitdaStored = (float) ($report['ebitda'] ?? ($sales - $operatingCostsStored));
         $ebitStored   = (float) ($report['ebit'] ?? ($ebitdaStored - (float) ($report['depreciation'] ?? 0)));

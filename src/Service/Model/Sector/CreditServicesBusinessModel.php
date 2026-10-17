@@ -28,7 +28,10 @@ use App\Service\Model\ModelParam;
 class CreditServicesBusinessModel extends CommercialBankBusinessModel
 {
     // --- Operating Cyclicality & Demand Structure ---
-    /** Elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). Unsecured card balances and swipe volumes are consumer-cyclical. */
+    /**
+     * Elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). Unsecured card
+     * balances and swipe volumes are consumer-cyclical.
+     */
     public const OPERATING_CYCLICALITY = 1.20;
 
     public function getMoatSpread(): float
@@ -80,13 +83,22 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
     public const CONSUMER_LOAN_SHARE = 1.0;
     /** No commercial property lending. */
     public const COMMERCIAL_REAL_ESTATE_SHARE = 0.0;
-    /** Credit card charge-offs at US commercial banks: 4.69% a year over 1991-2019, peak 10.54% in 2010 (FRED CORCCACBS). */
+    /**
+     * Credit card charge-offs at US commercial banks: 4.69% a year over 1991-2019, peak 10.54% in 2010 (FRED
+     * CORCCACBS).
+     */
     public const CONSUMER_CHARGE_OFF_RATE = 0.0469;
     /** Years of expected loss the allowance covers: revolving balances turn over in well under two years. */
     public const CECL_LIFETIME_HORIZON_YEARS = 1.5;
-    /** Charge-offs over the through-the-cycle rate above which card defaults are elevated: 1.26x the 1991-2019 mean in 2001-02 (FRED CORCCACBS). */
+    /**
+     * Charge-offs over the through-the-cycle rate above which card defaults are elevated: 1.26x the 1991-2019 mean in
+     * 2001-02 (FRED CORCCACBS).
+     */
     public const SECTOR_SHOCK_ELEVATED_LOSS_MULTIPLE = 1.2;
-    /** Above which provisions are massive: 2.01x in 2009-10, peaking at 2.25x; card losses swing less than a bank book's. */
+    /**
+     * Above which provisions are massive: 2.01x in 2009-10, peaking at 2.25x; card losses swing less than a bank
+     * book's.
+     */
     public const SECTOR_SHOCK_MASSIVE_LOSS_MULTIPLE = 1.8;
     /** Below which reserves are released: card losses bottomed at 0.62x in the late 2010s. */
     public const SECTOR_SHOCK_RESERVE_RELEASE_LOSS_MULTIPLE = 0.7;
@@ -99,23 +111,40 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
     public const BASE_COVERAGE_ERROR = 0.10;
 
     // --- CECL Forward Reserve (ASC 326 lifetime allowance conditioned on the macro forecast) ---
-    /** Sector reserve sensitivity to spreads a per-ticker CeclSpreadSensitivity is expressed against (a 2.2 issuer moves 2.2/1.5 = 1.47x the sector). */
+    /**
+     * Sector reserve sensitivity to spreads a per-ticker CeclSpreadSensitivity is expressed against (a 2.2 issuer moves
+     * 2.2/1.5 = 1.47x the sector).
+     */
     public const CECL_SPREAD_SENSITIVITY     = 1.50;
-    /** Lifetime-loss multiplier per unit of IG spread widening: unsecured books reprice faster than collateralized bank loans, +300bps lifts the target ~0.45x. */
+    /**
+     * Lifetime-loss multiplier per unit of IG spread widening: unsecured books reprice faster than collateralized bank
+     * loans, +300bps lifts the target ~0.45x.
+     */
     public const CECL_RESERVE_SPREAD_SENSITIVITY = 15.0;
-    /** Lifetime-loss multiplier per unit of recession probability away from the base rate: card allowances went ~4.9% -> 7.9% of receivables in 2020 (~0.6x) on a near-certain recession. */
+    /**
+     * Lifetime-loss multiplier per unit of recession probability away from the base rate: card allowances went ~4.9% ->
+     * 7.9% of receivables in 2020 (~0.6x) on a near-certain recession.
+     */
     public const CECL_RESERVE_RECESSION_SENSITIVITY = 0.75;
-    /** Card origination per unit of net tightening in bank lending standards, both ways: +0.2 cuts lending revenue 3%. */
+    /**
+     * Card origination per unit of net tightening in bank lending standards, both ways: +0.2 cuts lending revenue 3%.
+     */
     public const SLOOS_LENDING_DRAG_SENSITIVITY = 0.15;
     /** Card balances per unit of the household credit-to-GDP gap: revolving credit rides the same boom. */
     public const CREDIT_GAP_LENDING_SENSITIVITY = 0.50;
 
     // --- Operating Cost Base ---
-    /** Annual noninterest expense per unit of earning assets for a card issuer: 7.42%, US credit card banks in 2019 (7.11% of assets, earning assets 95.9% of assets; FDIC Quarterly Banking Profile, Table III-A). */
+    /**
+     * Annual noninterest expense per unit of earning assets for a card issuer: 7.42%, US credit card banks in 2019
+     * (7.11% of assets, earning assets 95.9% of assets; FDIC Quarterly Banking Profile, Table III-A).
+     */
     public const OPERATING_COST_TO_EARNING_ASSETS = 0.0742;
 
     // --- Non-Interest Income ---
-    /** Annual non-interest income per unit of earning assets for a card issuer: 4.68%, US credit card banks in 2019 (4.49% of assets, earning assets 95.9% of assets; FDIC Quarterly Banking Profile, Table III-A). */
+    /**
+     * Annual non-interest income per unit of earning assets for a card issuer: 4.68%, US credit card banks in 2019
+     * (4.49% of assets, earning assets 95.9% of assets; FDIC Quarterly Banking Profile, Table III-A).
+     */
     public const NON_INTEREST_INCOME_TO_EARNING_ASSETS = 0.0468;
 
     /**
@@ -159,8 +188,8 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
         $inflation = $macroState->inflationEma;
         $inflationBonus = ($inflation - MacroEngine::TARGET_INFLATION) * $this->getOperatingCyclicality($stock);
 
-        // Blended dual-stream revenue (Lending vs. Payment Network Interchange)
-        // Lending standards gate card line extensions and origination both ways: tighter cuts them, looser extends them.
+        // Blended dual-stream revenue (Lending vs. Payment Network Interchange) Lending standards gate card line
+        // extensions and origination both ways: tighter cuts them, looser extends them.
         $sloosLendingDrag = $macroState->sloosTighteningIndexEma * self::SLOOS_LENDING_DRAG_SENSITIVITY;
         $creditBoomBoost = $macroState->creditToGdpGapEma * self::CREDIT_GAP_LENDING_SENSITIVITY;
         $lendingRevenue = max(0.0, $expectedRevenue * $lendingWeight
@@ -274,14 +303,16 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
         $targetEbit = ($earningAssets * $structuralAssetYield) - $this->resolveTreasuryIncome($stock, $macroState);
 
         $coreLiabilities = $totalDebt;
-        $minLendingEbit = $coreLiabilities * self::MIN_LENDING_EBIT_YIELD; // Floor is higher than banks due to high-yield credit card loans
+        // Floor is higher than banks due to high-yield credit card loans
+        $minLendingEbit = $coreLiabilities * self::MIN_LENDING_EBIT_YIELD;
 
         $targetEbit = max($minLendingEbit, $targetEbit);
 
         $unboundedRevenue = max(0.0, $targetEbit) + ($earningAssets * $this->resolveOperatingCostToEarningAssets($stock));
         $blendedCostOfFunds = ($depositRatio * $depositRate) + ((1.0 - $depositRatio) * $blendedWholesaleRate);
         $maxApr = max(self::MIN_APR_YIELD_FLOOR, $blendedCostOfFunds + self::POLICY_APR_SPREAD);
-        $targetRevenue = min($unboundedRevenue, $earningAssets * $maxApr); // Floating gross yield ceiling based on blended cost of funds
+        // Floating gross yield ceiling based on blended cost of funds
+        $targetRevenue = min($unboundedRevenue, $earningAssets * $maxApr);
 
         return $targetRevenue / max(1.0, abs($earningAssets));
     }
@@ -297,7 +328,10 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
         return ['floating' => $macroState->policyRateEma] + parent::resolveRepricingRates($stock, $macroState);
     }
 
-    /** A high-yield savings deposit pays the system's pass-through plus the premium that wins the balance, within its bounds. */
+    /**
+     * A high-yield savings deposit pays the system's pass-through plus the premium that wins the balance, within its
+     * bounds.
+     */
     protected function resolveDepositRate(float $policyRate, float $systemDepositBeta): float
     {
         return max(self::MIN_DEPOSIT_RATE, $policyRate * min(self::MAX_DEPOSIT_BETA_CLAMP, max(self::MIN_DEPOSIT_BETA_CLAMP, $systemDepositBeta + self::HIGH_YIELD_BETA_SPREAD)));
@@ -334,7 +368,8 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
      */
     protected function resolveConditionalCreditLossRate(Stock $stock, \App\DTO\MacroStateDTO $macroState, \App\Service\Model\StreamContext $streams, MathUtility $mathUtility): array
     {
-        // Read against the household rate's measured trend, the long-run average year the book's charge-off rate describes.
+        // Read against the household rate's measured trend, the long-run average year the book's charge-off rate
+        // describes.
         $householdZ = CreditRisk::calculateVasicekSystematicFactor(
             $macroState->retailDefaultRateEma,
             $macroState->retailDefaultRateTrend,

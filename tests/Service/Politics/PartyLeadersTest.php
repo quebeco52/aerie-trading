@@ -42,8 +42,8 @@ class PartyLeadersTest extends TestCase
     }
 
     /**
-     * Between votes the hazard is the prime minister's, a junior partner's or an outsider's at the age the records centre
-     * on, and rises half again with each decade of the leader's age.
+     * Between votes the hazard is the prime minister's, a junior partner's or an outsider's at the age the records
+     * centre on, and rises half again with each decade of the leader's age.
      */
     public function testTheHazardFollowsThePlaceInGovernmentAndTheAge(): void
     {
@@ -152,8 +152,8 @@ class PartyLeadersTest extends TestCase
 
     /**
      * Over many terms the leaders come and go as Western Europe's did: with the record's spread of results (a standard
-     * deviation of 4.4 points) and one party in eight leading the cabinet, 18.8% leave within the year after a vote; half
-     * have gone after four to six years (4.1 to 6.3 on the records), and a fifth to two fifths last ten.
+     * deviation of 4.4 points) and one party in eight leading the cabinet, 18.8% leave within the year after a vote;
+     * half have gone after four to six years (4.1 to 6.3 on the records), and a fifth to two fifths last ten.
      */
     public function testALongRunMatchesTheRecord(): void
     {

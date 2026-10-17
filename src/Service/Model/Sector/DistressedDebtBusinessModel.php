@@ -29,7 +29,10 @@ use App\Service\Model\ModelParam;
 class DistressedDebtBusinessModel extends AssetManagementBusinessModel
 {
     // --- Operating Cyclicality & Demand Structure ---
-    /** Elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). Counter-cyclical revenue, but capital raising follows the cycle. */
+    /**
+     * Elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). Counter-cyclical
+     * revenue, but capital raising follows the cycle.
+     */
     public const OPERATING_CYCLICALITY = 0.90;
 
     // --- Analyst Visibility & Error ---
@@ -57,11 +60,17 @@ class DistressedDebtBusinessModel extends AssetManagementBusinessModel
     public const BULL_MARKET_GAP_THRESHOLD      = 0.020;
     /** Revenue contraction multiplier during prolonged bull markets with tight credit spreads. */
     public const BULL_MARKET_REVENUE_DRAG       = -0.10;
-    /** Baseline high-yield credit spread (macro IG baseline x HY multiple) above which distressed turnaround opportunities surge. */
+    /**
+     * Baseline high-yield credit spread (macro IG baseline x HY multiple) above which distressed turnaround
+     * opportunities surge.
+     */
     public const HY_SPREAD_BLOWOUT_BASELINE     = MacroEngine::BASE_CREDIT_SPREAD * MacroEngine::HY_BASE_SPREAD_MULTIPLIER;
     /** Sensitivity multiplier translating excess high-yield credit spreads into turnaround recovery revenue. */
     public const HY_SPREAD_SURGE_SCALAR         = 10.00;
-    /** Turnaround opportunities per unit of the corporate default rate over its measured trend, relative; a quiet year leaves the dry powder idle. */
+    /**
+     * Turnaround opportunities per unit of the corporate default rate over its measured trend, relative; a quiet year
+     * leaves the dry powder idle.
+     */
     public const DEFAULT_RATE_SURGE_SCALAR      = 1.50;
     /** Maximum capacity-constrained revenue expansion multiplier during severe credit distress (+125%). */
     public const MAX_DISTRESS_REVENUE_EXPANSION = 1.25;
@@ -72,7 +81,10 @@ class DistressedDebtBusinessModel extends AssetManagementBusinessModel
     public const RESTRUCTURING_ADVISORY_WEIGHT = 0.40;
     public const ASSET_RECOVERY_WEIGHT         = 0.60;
 
-    /** Loan-to-own equity gains move 1.5x the recovery book's distress surge: the fund owns the reorganised equity, not the discounted claim. */
+    /**
+     * Loan-to-own equity gains move 1.5x the recovery book's distress surge: the fund owns the reorganised equity, not
+     * the discounted claim.
+     */
     public const LOAN_TO_OWN_DISTRESS_LEVERAGE = 1.50;
 
     public const ADVISORY_VARIANCE_SCALAR = 0.15;

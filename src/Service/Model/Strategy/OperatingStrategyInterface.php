@@ -14,7 +14,9 @@ use App\Service\Math\MathUtility;
 interface OperatingStrategyInterface
 {
     public function getTargetMetrics(Stock $stock, MacroStateDTO $macroState, MathUtility $mathUtility): array;
-    /** @param int|null $calendarQuarter Calendar quarter [0..3] the report covers; null when the call is not a report. */
+    /**
+     * @param int|null $calendarQuarter Calendar quarter [0..3] the report covers; null when the call is not a report.
+     */
     public function computeActualFinancials(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, MacroStateDTO $macroState, MathUtility $mathUtility, ?int $calendarQuarter = null): ActualFinancialsDTO;
 
     /**
@@ -67,8 +69,8 @@ interface OperatingStrategyInterface
     public function annualExtractionCostBase(Stock $stock): float;
     /**
      * The revenue less its variable cost that moves with the District's share turnover, a year, at the founding stamp
-     * duty, in currency: at a turnover factor of one more (MacroTransmission::calculateStampDutyVolumeFactor()), earnings
-     * before tax rise by this; zero for a firm that earns nothing on trading.
+     * duty, in currency: at a turnover factor of one more (MacroTransmission::calculateStampDutyVolumeFactor()),
+     * earnings before tax rise by this; zero for a firm that earns nothing on trading.
      */
     public function annualStampDutyTurnoverBase(Stock $stock): float;
     /**
@@ -91,13 +93,12 @@ interface OperatingStrategyInterface
      */
     public function annualUtilityTariffBase(Stock $stock): float;
     /**
-     * MacroStateDTO field names (snake_case, matching MacroStateDTO::toArray()) this model's own
-     * operating code reads: calculateSectorPhysics(), getMacroPhysics(), calculateInterestIncome(),
-     * processPassiveLiabilityGrowth(), getForwardCreditLossMultiplier(), getFixedCostFactor() and the helpers they call,
-     * following parent:: delegation.
-     * Generic trait physics is not model-specific coupling and does not count. Valuation-only reads
-     * feeding WACC alone (equityRiskPremium, corporateTaxRate, policyRate) are excluded, so this
-     * stays a genuine operating-coupling declaration rather than everything a model touches.
+     * MacroStateDTO field names (snake_case, matching MacroStateDTO::toArray()) this model's own operating code reads:
+     * calculateSectorPhysics(), getMacroPhysics(), calculateInterestIncome(), processPassiveLiabilityGrowth(),
+     * getForwardCreditLossMultiplier(), getFixedCostFactor() and the helpers they call, following parent:: delegation.
+     * Generic trait physics is not model-specific coupling and does not count. Valuation-only reads feeding WACC alone
+     * (equityRiskPremium, corporateTaxRate, policyRate) are excluded, so this stays a genuine operating-coupling
+     * declaration rather than everything a model touches.
      *
      * Consumed by App\Service\District\DistrictConduitResolver to derive which district
      * institutions draw a conduit to this model — see App\Data\District\DistrictMap's class docblock.
@@ -113,7 +114,10 @@ interface OperatingStrategyInterface
      *                             is defined before it (a REIT's cap rate is struck on net operating income).
      */
     public function updateDynamicRoic(Stock $stock, float $actualTotalNetIncome, float $investedCapital, float $ebit, float $corporateTaxRate, float $wacc = 0.08, float $costOfEquity = 0.10, ?MacroStateDTO $macroState = null, float $depreciation = 0.0): float;
-    /** The sector's secular real growth at the open: trend growth plus its measured demand drift. Read the faded rate below. */
+    /**
+     * The sector's secular real growth at the open: trend growth plus its measured demand drift. Read the faded rate
+     * below.
+     */
     public function getSecularGrowthRate(Stock $stock): float;
     /** Secular real growth at a simulated time: the opening rate's excess over trend faded toward zero. */
     public function getFadedSecularGrowthRate(Stock $stock, float $simYears): float;
@@ -164,7 +168,10 @@ interface OperatingStrategyInterface
      */
     public function getFixedCostFactor(MacroStateDTO $macroState): float;
 
-    /** Propensity of this sector's management to steer reported earnings toward consensus with accruals (EARNINGS_MANAGEMENT_PROPENSITY). */
+    /**
+     * Propensity of this sector's management to steer reported earnings toward consensus with accruals
+     * (EARNINGS_MANAGEMENT_PROPENSITY).
+     */
     public function getEarningsManagementPropensity(Stock $stock): float;
 
     /** Years for a move in the output gap to reach this firm's order book (DEMAND_LAG_YEARS). */
@@ -176,7 +183,9 @@ interface OperatingStrategyInterface
     /** Share of revenue whose competitiveness moves with the trade-weighted exchange rate (FX_REVENUE_EXPOSURE). */
     public function getFxRevenueExposure(): float;
 
-    /** Signed demand shift from the trade-weighted exchange rate, at the model's exposure or a channel-level override. */
+    /**
+     * Signed demand shift from the trade-weighted exchange rate, at the model's exposure or a channel-level override.
+     */
     public function resolveFxDemandShift(MacroStateDTO $macroState, ?float $exposure = null): float;
     /**
      * Capitalized operating lease liabilities (IFRS 16 / ASC 842) as a fraction of annual revenue. Rent is
@@ -197,9 +206,15 @@ interface OperatingStrategyInterface
      * calendar; the fiscal quarter drives annual events such as the goodwill impairment test.
      */
     public function getFiscalYearStartQuarter(Stock $stock): int;
-    /** The unrecovered input-cost gap the quarter now closing will book, projected from persisted lag state and today's input prices; null for a model that books no input-cost drag. */
+    /**
+     * The unrecovered input-cost gap the quarter now closing will book, projected from persisted lag state and today's
+     * input prices; null for a model that books no input-cost drag.
+     */
     public function projectInputCostGap(Stock $stock, MacroStateDTO $macroState): ?float;
-    /** The change in the variable cost ratio the closing quarter's input costs add over what the last report booked, on the model's own drag base; null when the model books no drag or has not yet recorded its base. */
+    /**
+     * The change in the variable cost ratio the closing quarter's input costs add over what the last report booked, on
+     * the model's own drag base; null when the model books no drag or has not yet recorded its base.
+     */
     public function projectInputCostDragChange(Stock $stock, MacroStateDTO $macroState): ?float;
     public function getCapExCompletionRate(Stock $stock): float;
     /** The quarter's capex over replacement depreciation, for a model whose spend buys more than plant capacity. */
@@ -229,10 +244,16 @@ interface OperatingStrategyInterface
      */
     public function reportsFundsFromOperations(): bool;
 
-    /** The part of invested capital that is physical plant, and so opens a fixed-asset ledger. All of it for an operating company; marketable investments sit on their own line and are not plant. */
+    /**
+     * The part of invested capital that is physical plant, and so opens a fixed-asset ledger. All of it for an
+     * operating company; marketable investments sit on their own line and are not plant.
+     */
     public function getPlantCapital(Stock $stock, float $investedCapital): float;
 
-    /** Opening balance of marketable investments. Zero for a firm holding none; NULL for one holding them unpriced, which tells the caller to leave the fixed-asset ledger closed. */
+    /**
+     * Opening balance of marketable investments. Zero for a firm holding none; NULL for one holding them unpriced,
+     * which tells the caller to leave the fixed-asset ledger closed.
+     */
     public function getOpeningInvestmentAssets(Stock $stock): ?float;
     public function allowsPhysicalOrganicCapex(): bool;
     public function getReturnBasisIncome(Stock $stock, float $quarterlyNopat, float $actualTotalNetIncome): float;

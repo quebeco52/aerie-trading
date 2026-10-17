@@ -203,9 +203,10 @@ class MacroStateHydrationTest extends TestCase
     }
 
     /**
-     * A live state saved while fund managers' output was valued at the market carries a finance level holding that leg and
-     * the retired trend keys. It still loads: the retired keys are ignored, finance output is rebuilt on credit alone, and
-     * domestic demand keeps what the market leg held, so GDP does not move. Once saved under the new keys it is carried.
+     * A live state saved while fund managers' output was valued at the market carries a finance level holding that leg
+     * and the retired trend keys. It still loads: the retired keys are ignored, finance output is rebuilt on credit
+     * alone, and domestic demand keeps what the market leg held, so GDP does not move. Once saved under the new keys it
+     * is carried.
      */
     public function testAPayloadValuingFundManagersAtTheMarketLoadsWithoutMovingGdp(): void
     {
@@ -235,8 +236,9 @@ class MacroStateHydrationTest extends TestCase
     }
 
     /**
-     * A payload whose capital built counted the requirement alone had the buffer in force held all the same: the upgrade
-     * keeps the shortfall the banks had yet to build, adds none for the buffer, and sees no rise on its first tick.
+     * A payload whose capital built counted the requirement alone had the buffer in force held all the same: the
+     * upgrade keeps the shortfall the banks had yet to build, adds none for the buffer, and sees no rise on its first
+     * tick.
      */
     public function testAPayloadPredatingTheBufferInTheCapitalBuiltKeepsItsShortfall(): void
     {
@@ -251,7 +253,10 @@ class MacroStateHydrationTest extends TestCase
         $this->assertSame(0.099, $current->bankCapitalBuilt, 'A payload that already counts the buffer is read as it stands.');
     }
 
-    /** A saved currency keeps its level across the split into fundamental and deviation: the deviation takes up the difference. */
+    /**
+     * A saved currency keeps its level across the split into fundamental and deviation: the deviation takes up the
+     * difference.
+     */
     public function testASavedCurrencyKeepsItsLevel(): void
     {
         $payload = ['exchange_rate_index' => 104.0, 'policy_rate' => 0.05, 'foreign_policy_rate' => 0.03];

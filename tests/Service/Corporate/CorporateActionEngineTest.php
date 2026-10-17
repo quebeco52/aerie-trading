@@ -142,7 +142,10 @@ class CorporateActionEngineTest extends TestCase
         $this->assertNotNull($later['event']);
     }
 
-    /** A clock rewound behind the last split (an unclean Redis stop) leaves that split in a timeline that no longer exists. */
+    /**
+     * A clock rewound behind the last split (an unclean Redis stop) leaves that split in a timeline that no longer
+     * exists.
+     */
     public function testARewoundClockDoesNotHoldASplitBack(): void
     {
         $stock = $this->stock('HYPR', '1000000');
@@ -194,7 +197,10 @@ class CorporateActionEngineTest extends TestCase
         }
     }
 
-    /** A split that would overflow the share count is not done; clamping the count while dividing the price destroyed value. */
+    /**
+     * A split that would overflow the share count is not done; clamping the count while dividing the price destroyed
+     * value.
+     */
     public function testAForwardSplitThatWouldOverflowTheShareCountIsNotDone(): void
     {
         $shares = 4.0e18;

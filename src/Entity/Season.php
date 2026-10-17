@@ -20,7 +20,9 @@ use Doctrine\ORM\Mapping as ORM;
 class Season
 {
     // --- Season Rules ---
-    /** Length of a season in simulation years. Long enough to hold a turn of the credit cycle, short enough to finish. */
+    /**
+     * Length of a season in simulation years. Long enough to hold a turn of the credit cycle, short enough to finish.
+     */
     public const LENGTH_YEARS = 4.0;
     /** Weekly records an entry needs before it is ranked: one quarter, so a lucky first week cannot top the table. */
     public const MIN_QUALIFYING_WEEKS = 13;

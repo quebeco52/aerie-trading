@@ -13,7 +13,10 @@ final class Institutions
 {
     // --- Public bodies ---
     public const AERIE_COUNCIL = 'Aerie Council';
-    /** Puts forward the candidates for each Council seat; its members are named by the District's bar, judges, universities and the Aerie Exchange. */
+    /**
+     * Puts forward the candidates for each Council seat; its members are named by the District's bar, judges,
+     * universities and the Aerie Exchange.
+     */
     public const COUNCIL_APPOINTMENT_BOARD = 'Council Appointment Board';
     public const DIET = 'Diet';
     /** The central bank: sets the policy rate. Never the Rate Council or the Fed. */
@@ -22,15 +25,29 @@ final class Institutions
     /** Runs the budget the Diet passes and the District's debt, as the Exchequer does in Jersey and Ireland. */
     public const EXCHEQUER = 'Exchequer';
     public const SOVEREIGN_RESERVE_FUND = 'Sovereign Reserve Fund';
-    /** Sets the screens merger review applies; its head is the Council's appointee. Never the Competition Commission. */
+    /**
+     * Sets the screens merger review applies; its head is the Council's appointee. Never the Competition Commission.
+     */
     public const FAIR_TRADING_BOARD = 'Fair Trading Board';
-    /** Sets the rules of the Aerie Exchange: the margin investors put up and what listed firms must disclose. Never the SEC. */
+    /**
+     * Sets the rules of the Aerie Exchange: the margin investors put up and what listed firms must disclose. Never the
+     * SEC.
+     */
     public const SECURITIES_COMMISSION = 'Securities Commission';
-    /** The District's state police: organised crime and foreign agents; its director is the Council's appointee. Never the FBI. */
+    /**
+     * The District's state police: organised crime and foreign agents; its director is the Council's appointee. Never
+     * the FBI.
+     */
     public const SECURITY_BUREAU = 'Security Bureau';
-    /** Holds the District's waters: rescue at sea, the port's approaches, smuggling and the shelf; its commandant is the Council's appointee. Never the navy. */
+    /**
+     * Holds the District's waters: rescue at sea, the port's approaches, smuggling and the shelf; its commandant is the
+     * Council's appointee. Never the navy.
+     */
     public const COAST_GUARD = 'Coast Guard';
-    /** The District's standing land force of full-time professionals; its commander is the Council's appointee. Never the army. */
+    /**
+     * The District's standing land force of full-time professionals; its commander is the Council's appointee. Never
+     * the army.
+     */
     public const STATE_GUARD = 'State Guard';
     public const TRADE_MIGRATION_OFFICE = 'Trade & Migration Office';
     public const STATISTICAL_OFFICE = 'Statistical Office';
@@ -46,7 +63,10 @@ final class Institutions
     public const COMMODITY_EXCHANGE = 'Commodity Exchange';
 
     // --- Reference ---
-    /** The District's reference work: its institutions, history, places and people before its records begin (App\Service\Lore\Almanac). */
+    /**
+     * The District's reference work: its institutions, history, places and people before its records begin
+     * (App\Service\Lore\Almanac).
+     */
     public const DISTRICT_ALMANAC = 'District Almanac';
 
     // --- Market data ---

@@ -50,13 +50,16 @@ class HouseholdCreditCycleTest extends TestCase
             }
         }
 
-        // Three seeds read this correlation to about 0.15 either side of the harness's, so it guards the sign; the strength
-        // of the borrowing leg is MacroAggregateSubsystemTest's, and its fit is djk_an.py's.
+        // Three seeds read this correlation to about 0.15 either side of the harness's, so it guards the sign; the
+        // strength of the borrowing leg is MacroAggregateSubsystemTest's, and its fit is djk_an.py's.
         $this->assertGreaterThan(0.10, $this->correlation($changes, $gaps), 'Three years of rising leverage are a boom (US +0.51; the harness reads +0.44 over 36 seeds).');
         $this->assertGreaterThan(0.25, $this->correlation($annual, $annualLagged), 'A year of new borrowing is followed by more (US 0.58; the harness reads 0.59).');
     }
 
-    /** @return array{0: list<float>, 1: list<float>} Quarter-end debt to income and quarter-average output gap after the burn-in. */
+    /**
+     * @return array{0: list<float>, 1: list<float>} Quarter-end debt to income and quarter-average output gap after the
+     *                                               burn-in.
+     */
     private function quarterlyPath(int $seed): array
     {
         mt_srand($seed);

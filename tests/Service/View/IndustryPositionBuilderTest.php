@@ -110,7 +110,9 @@ class IndustryPositionBuilderTest extends TestCase
         $this->assertNull($view['industry']['priceLevel'], 'no report has been filed yet');
     }
 
-    /** Conglomerates is a listing label: its members sell nothing the others buy, so their revenue is no one's share. */
+    /**
+     * Conglomerates is a listing label: its members sell nothing the others buy, so their revenue is no one's share.
+     */
     public function testListedPeersThatSellIntoDifferentMarketsShowNoShareAmongThem(): void
     {
         $group = $this->stock('GRP', 'Conglomerates', 1_000.0);

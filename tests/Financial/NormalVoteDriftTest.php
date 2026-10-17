@@ -11,8 +11,9 @@ use App\Service\Politics\PoliticsEngine as Politics;
 use PHPUnit\Framework\TestCase;
 
 /**
- * The normal votes' walk over decades: a share under neutral drift keeps its mean, and its variance grows with the years
- * as n (1 - n) times the drift variance, the Wright-Fisher form the walk takes once the shares are put back on a whole.
+ * The normal votes' walk over decades: a share under neutral drift keeps its mean, and its variance grows with the
+ * years as n (1 - n) times the drift variance, the Wright-Fisher form the walk takes once the shares are put back on a
+ * whole.
  */
 class NormalVoteDriftTest extends TestCase
 {

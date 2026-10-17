@@ -20,11 +20,17 @@ use App\DTO\AgentMarketViewDTO;
 final class VolatilityTargetStrategy implements AgentStrategyInterface
 {
     // --- Volatility-Targeting Funds (Moreira & Muir 2017; Harvey et al. 2018) ---
-    /** Annualized volatility a vol-control book is run to. Exposure scales as target / realized, so a name at this volatility is held at the base share; set at the market's reference name so an ordinary name sits near 1x. */
+    /**
+     * Annualized volatility a vol-control book is run to. Exposure scales as target / realized, so a name at this
+     * volatility is held at the base share; set at the market's reference name so an ordinary name sits near 1x.
+     */
     public const AGENT_VOL_TARGET_VOLATILITY = 0.25;
     /** Share of agent capital the vol-targeting books hold in a name running at target volatility. */
     public const AGENT_VOL_TARGET_BASE_SHARE = 0.15;
-    /** Most a vol-targeting book levers up when realized volatility falls below target. Harvey et al. cap leverage at 2x; without a cap a quiet tape would be bought without limit. */
+    /**
+     * Most a vol-targeting book levers up when realized volatility falls below target. Harvey et al. cap leverage at
+     * 2x; without a cap a quiet tape would be bought without limit.
+     */
     public const AGENT_VOL_TARGET_MAX_LEVERAGE = 2.00;
 
     public function identifier(): string

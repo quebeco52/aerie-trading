@@ -41,7 +41,9 @@ class MacroFieldCatalogTest extends TestCase
         }
     }
 
-    /** A stream driver is named for the input it was measured on, so every input a model declares must be catalogued. */
+    /**
+     * A stream driver is named for the input it was measured on, so every input a model declares must be catalogued.
+     */
     public function testEveryInputAModelReadsIsCatalogued(): void
     {
         foreach (array_keys(\App\Data\Company\Sectors::BUSINESS_MODELS) as $identifier) {

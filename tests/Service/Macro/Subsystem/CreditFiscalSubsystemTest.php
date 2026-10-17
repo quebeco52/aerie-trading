@@ -23,7 +23,9 @@ use PHPUnit\Framework\TestCase;
 
 class CreditFiscalSubsystemTest extends TestCase
 {
-    /** A debt position below the 70% the Bohn reaction defends: no sequester, no fiscal tightening, no market premium. */
+    /**
+     * A debt position below the 70% the Bohn reaction defends: no sequester, no fiscal tightening, no market premium.
+     */
     private const SOUND_DEBT_TO_GDP = 0.60;
 
     private MathUtility $mathUtility;
@@ -46,7 +48,10 @@ class CreditFiscalSubsystemTest extends TestCase
         $this->assertGreaterThan(MacroEngine::BASE_CREDIT_SPREAD, $state->macroCreditSpread);
     }
 
-    /** Purchases do not lean against the cycle (US civilian 1985-2019), and a surge fades on the fitted 2.3-year half-life. */
+    /**
+     * Purchases do not lean against the cycle (US civilian 1985-2019), and a surge fades on the fitted 2.3-year
+     * half-life.
+     */
     public function testGovernmentSpendingIgnoresTheGapAndASurgeFadesOverYears(): void
     {
         $subsystem = $this->quietSubsystem();
@@ -76,7 +81,10 @@ class CreditFiscalSubsystemTest extends TestCase
         $this->assertGreaterThan(0.25, $share($paths[0][4]), 'A quarter is still there after four years.');
     }
 
-    /** Purchases revert to the share of GDP the Diet's budget sets, so a budget's change phases in at the fitted speed rather than at once. */
+    /**
+     * Purchases revert to the share of GDP the Diet's budget sets, so a budget's change phases in at the fitted speed
+     * rather than at once.
+     */
     public function testPurchasesRevertToTheShareTheBudgetSets(): void
     {
         $subsystem = $this->quietSubsystem();
@@ -100,7 +108,10 @@ class CreditFiscalSubsystemTest extends TestCase
         $this->assertEqualsWithDelta($target, $state->governmentSpendingIndex, 0.05, 'Purchases settle at the share the budget set.');
     }
 
-    /** Demand reads purchases against their decade trend: a level held long enough to join it is no impulse, a fresh rise is. */
+    /**
+     * Demand reads purchases against their decade trend: a level held long enough to join it is no impulse, a fresh
+     * rise is.
+     */
     public function testALevelHeldForADecadeIsNoFiscalImpulse(): void
     {
         $state = new MacroState();
@@ -112,7 +123,10 @@ class CreditFiscalSubsystemTest extends TestCase
         $this->assertEqualsWithDelta(0.10, CreditFiscalSubsystem::discretionarySpendingShift($state), 1e-12);
     }
 
-    /** At the founding maturity the fitted ladder holds; a shorter book reprices more of itself at the bill rate each year and its coupons faster, both as 1 / maturity. */
+    /**
+     * At the founding maturity the fitted ladder holds; a shorter book reprices more of itself at the bill rate each
+     * year and its coupons faster, both as 1 / maturity.
+     */
     public function testTheDebtLadderScalesWithItsAverageMaturity(): void
     {
         $founding = CreditFiscalSubsystem::FOUNDING_DEBT_AVERAGE_MATURITY;
@@ -131,7 +145,10 @@ class CreditFiscalSubsystemTest extends TestCase
         $this->assertGreaterThan($long, CreditFiscalSubsystem::sovereignEffectiveRate($state), 'With bills above coupons, a shorter book costs more.');
     }
 
-    /** The book reaches a new maturity only as it rolls over: from the Treasury's 48 months toward its 71, eight years bring it to 66 months, against the 69 the 2009-2016 extension reached. */
+    /**
+     * The book reaches a new maturity only as it rolls over: from the Treasury's 48 months toward its 71, eight years
+     * bring it to 66 months, against the 69 the 2009-2016 extension reached.
+     */
     public function testTheBookMovesTowardItsTargetAsItRollsOver(): void
     {
         $state = new MacroState();
@@ -144,7 +161,10 @@ class CreditFiscalSubsystemTest extends TestCase
         $this->assertEqualsWithDelta(69.0, 12.0 * $state->sovereignDebtAverageMaturity, 3.0);
     }
 
-    /** The term premium a book's maturity adds is nil at the founding book and reproduces Hamilton and Wu's swap: 14bp for December 2006's $400bn moved from about 0.4 to 17 years on $13.8T of GDP. */
+    /**
+     * The term premium a book's maturity adds is nil at the founding book and reproduces Hamilton and Wu's swap: 14bp
+     * for December 2006's $400bn moved from about 0.4 to 17 years on $13.8T of GDP.
+     */
     public function testMaturitySupplyReproducesHamiltonAndWu(): void
     {
         $this->assertSame(0.0, CreditFiscalSubsystem::maturitySupplyTermPremium(0.9, CreditFiscalSubsystem::FOUNDING_DEBT_AVERAGE_MATURITY));
@@ -194,7 +214,10 @@ class CreditFiscalSubsystemTest extends TestCase
         $this->assertSame(MacroEngine::BASE_CORPORATE_TAX_RATE, $state->corporateTaxRate, 'The cycle is not legislated.');
     }
 
-    /** The stabilisers' swing is in net taxes but not in their discretionary part, which is all the demand impulse reads. */
+    /**
+     * The stabilisers' swing is in net taxes but not in their discretionary part, which is all the demand impulse
+     * reads.
+     */
     public function testTheStabilisersSwingIsNotInTheDiscretionaryStance(): void
     {
         $calm = new MacroState();
@@ -222,7 +245,8 @@ class CreditFiscalSubsystemTest extends TestCase
         $stateNormal->outputGapEma = 0.01;
         $stateNormal->marketVolatilityEma = 0.15;
         $stateNormal->interbankLiquiditySpreadEma = MacroEngine::INTERBANK_BASELINE_SPREAD;
-        // The multiple is the corporate-risk part's; the sovereign's share is additive (Durbin & Ng 2005), so hold it at zero.
+        // The multiple is the corporate-risk part's; the sovereign's share is additive (Durbin & Ng 2005), so hold it
+        // at zero.
         $stateNormal->sovereignRiskSpreadEma = 0.0;
 
         $this->subsystem->calculateMacroCreditSpread($stateNormal);
@@ -357,7 +381,8 @@ class CreditFiscalSubsystemTest extends TestCase
             $output = 1.3;
             $fundPaid = $funded ? 0.02 * $output : 0.0;
             $spending = (104.0 / MacroEngine::GOVT_SPENDING_BASELINE) * MacroEngine::PUBLIC_PURCHASES_TO_GDP * ($output / 0.98) + $fundPaid;
-            // The Authority's paper earns the 5% the whole debt pays, in place of the founding rate the net take leaves room for.
+            // The Authority's paper earns the 5% the whole debt pays, in place of the founding rate the net take leaves
+            // room for.
             $remittance = MonetaryPolicySubsystem::CURRENCY_TO_GDP * 0.05;
             $revenue = ((MacroEngine::PUBLIC_PURCHASES_TO_GDP - CreditFiscalSubsystem::FOUNDING_CENTRAL_BANK_REMITTANCE + $remittance + 0.025) * $output) + $fundPaid;
             $deficitToGdp = ($spending - $revenue) / $output;
@@ -400,8 +425,8 @@ class CreditFiscalSubsystemTest extends TestCase
 
     /**
      * The planned balance holds debt where it stands at r - g, plus the year's step toward the cabinet's target: the
-     * whole remaining gap when it is smaller than the pace, the pace when it is larger, and a deficit the same way below
-     * target. With no pace the budget only holds debt where it is.
+     * whole remaining gap when it is smaller than the pace, the pace when it is larger, and a deficit the same way
+     * below target. With no pace the budget only holds debt where it is.
      */
     public function testThePlannedBalanceStepsDebtTowardTheTargetAtThePace(): void
     {
@@ -623,7 +648,10 @@ class CreditFiscalSubsystemTest extends TestCase
         $this->assertEqualsWithDelta(100.0 * (1.0 + $state->reimbursementRateGrowth), $state->reimbursementRateIndex, 1e-9);
     }
 
-    /** A standing consolidation lowers health prices once and holds them there; when the budget restores the money, they come back. */
+    /**
+     * A standing consolidation lowers health prices once and holds them there; when the budget restores the money, they
+     * come back.
+     */
     public function testAConsolidationCutsHealthPricesOnceAndItsEndRestoresThem(): void
     {
         $state = new MacroState();
@@ -753,7 +781,10 @@ class CreditFiscalSubsystemTest extends TestCase
 
     // --- Sovereign Risk Premium ---
 
-    /** Runs the repricing lag to its target so the level, not the speed, is under test; a sovereign with no fund, net = gross. */
+    /**
+     * Runs the repricing lag to its target so the level, not the speed, is under test; a sovereign with no fund, net =
+     * gross.
+     */
     private function settledSovereignSpread(float $debtToGdpEma): float
     {
         $state = new MacroState();
@@ -767,7 +798,10 @@ class CreditFiscalSubsystemTest extends TestCase
         return $state->sovereignRiskSpread;
     }
 
-    /** The default premium is near nothing at the debt the District opened with and rises steeply toward the fiscal limit, never past the loss in a default. */
+    /**
+     * The default premium is near nothing at the debt the District opened with and rises steeply toward the fiscal
+     * limit, never past the loss in a default.
+     */
     public function testTheDefaultPremiumIsNearNothingAtTheOpeningDebtAndRisesSteeply(): void
     {
         $this->assertLessThan(0.0002, $this->settledSovereignSpread(MacroEngine::INITIAL_DEBT_TO_GDP), 'Under two basis points at the opening debt.');
@@ -920,8 +954,8 @@ class CreditFiscalSubsystemTest extends TestCase
     }
 
     /**
-     * Below the floor a surplus has no debt left to retire, so it buys the fund's paper: debt retired plus money paid in
-     * equals the surplus, and none of it is lost to the clamp.
+     * Below the floor a surplus has no debt left to retire, so it buys the fund's paper: debt retired plus money paid
+     * in equals the surplus, and none of it is lost to the clamp.
      */
     public function testASurplusBelowTheDebtFloorIsPaidIntoTheFund(): void
     {
@@ -949,7 +983,10 @@ class CreditFiscalSubsystemTest extends TestCase
         );
     }
 
-    /** With no fund to sweep it into, a surplus past the floor stays with the Exchequer: it keeps retiring debt into net assets. */
+    /**
+     * With no fund to sweep it into, a surplus past the floor stays with the Exchequer: it keeps retiring debt into net
+     * assets.
+     */
     public function testWithNoFundTheSurplusKeepsRetiringDebt(): void
     {
         $state = $this->surplusBudget(MacroEngine::SOVEREIGN_DEBT_FLOOR + 0.005, 0.04);
@@ -1113,8 +1150,8 @@ class CreditFiscalSubsystemTest extends TestCase
     }
 
     /**
-     * A budget running a primary surplus of $surplus of GDP (taxes that much above neutral, with no fund draw), with the
-     * long yield at nominal trend growth so r - g is zero and the debt moves by the surplus alone.
+     * A budget running a primary surplus of $surplus of GDP (taxes that much above neutral, with no fund draw), with
+     * the long yield at nominal trend growth so r - g is zero and the debt moves by the surplus alone.
      */
     private function surplusBudget(float $debtToGdp, float $surplus): MacroState
     {
@@ -1126,7 +1163,8 @@ class CreditFiscalSubsystemTest extends TestCase
         $state->yield10y = $trendGrowth;
         $state->policyRate = $trendGrowth;
         $state->sovereignCouponRate = $trendGrowth;
-        // The Authority's remittance at these rates, not the founding ones, is part of the take: net it out of the surplus.
+        // The Authority's remittance at these rates, not the founding ones, is part of the take: net it out of the
+        // surplus.
         $state->netTaxRate += CreditFiscalSubsystem::FOUNDING_CENTRAL_BANK_REMITTANCE - MonetaryPolicySubsystem::authorityNetIncomeToGdp($state);
 
         return $state;
@@ -1134,7 +1172,10 @@ class CreditFiscalSubsystemTest extends TestCase
 
     // --- Sovereign Debt Maturity Ladder ---
 
-    /** With rates held, the coupon stock rolls onto the 10-year and the debt pays the bill and coupon rates in their shares. */
+    /**
+     * With rates held, the coupon stock rolls onto the 10-year and the debt pays the bill and coupon rates in their
+     * shares.
+     */
     public function testTheDebtPaysItsBillAndCouponRatesInTheirShares(): void
     {
         $state = $this->neutralBudget(0.80);
@@ -1185,8 +1226,8 @@ class CreditFiscalSubsystemTest extends TestCase
         $this->subsystem->calculateSovereignDebt($locked, 0.01);
         $this->subsystem->calculateSovereignDebt($repriced, 0.01);
 
-        // One hundredth of a year: interest 0.0002 of GDP on locked-in debt against 0.0006 had it all repriced, less what
-        // the Authority's paper backing the currency earns of it and pays back.
+        // One hundredth of a year: interest 0.0002 of GDP on locked-in debt against 0.0006 had it all repriced, less
+        // what the Authority's paper backing the currency earns of it and pays back.
         $this->assertEqualsWithDelta(0.04 * (1.0 - MonetaryPolicySubsystem::CURRENCY_TO_GDP) * 0.01, $repriced->sovereignDebtToGdp - $locked->sovereignDebtToGdp, 2e-5);
     }
 
@@ -1229,7 +1270,9 @@ class CreditFiscalSubsystemTest extends TestCase
         $this->assertGreaterThan(0.01, $excessChargeOff, 'A 2009-scale default rate charges off well over a point of the stock a year.');
     }
 
-    /** The household book charges off at its segments' FRED long-run rates, in the stock's mortgage and consumer shares. */
+    /**
+     * The household book charges off at its segments' FRED long-run rates, in the stock's mortgage and consumer shares.
+     */
     public function testHouseholdChargeOffsSitAtTheirLongRunRatesInCalmYears(): void
     {
         $longRun = (CreditFiscalSubsystem::HOUSEHOLD_MORTGAGE_DEBT_SHARE * CreditFiscalSubsystem::HOUSEHOLD_MORTGAGE_CHARGE_OFF_RATE)
@@ -1239,7 +1282,9 @@ class CreditFiscalSubsystemTest extends TestCase
         $this->assertGreaterThan($this->subsystem->householdChargeOffRate(MacroEngine::RETAIL_DEFAULT_BASELINE), $this->subsystem->householdChargeOffRate(0.04));
     }
 
-    /** The IG spread's measured trend closes on a sustained level over its decade's time constant, whatever the tick. */
+    /**
+     * The IG spread's measured trend closes on a sustained level over its decade's time constant, whatever the tick.
+     */
     public function testTheCreditSpreadTrendIsADecadesAverage(): void
     {
         $path = function (int $ticksPerYear): float {
@@ -1316,7 +1361,10 @@ class CreditFiscalSubsystemTest extends TestCase
         $this->assertEqualsWithDelta($expected, $boom->householdDebtToIncome, 1e-9);
     }
 
-    /** Drehmann, Juselius & Korinek (2018): new borrowing is the flow into the stock, read as the year's average of the change in leverage. */
+    /**
+     * Drehmann, Juselius & Korinek (2018): new borrowing is the flow into the stock, read as the year's average of the
+     * change in leverage.
+     */
     public function testNewBorrowingIsTheYearsAverageChangeInLeverage(): void
     {
         $subsystem = $this->quietSubsystem();
@@ -1332,7 +1380,10 @@ class CreditFiscalSubsystemTest extends TestCase
         $this->assertEqualsWithDelta($weight * ($boom->householdDebtToIncome - $before) / $dt, $boom->householdNewBorrowing, 1e-12);
     }
 
-    /** A high stock that holds still borrows nothing new: once leverage stops rising the flow fades over the year it averages. */
+    /**
+     * A high stock that holds still borrows nothing new: once leverage stops rising the flow fades over the year it
+     * averages.
+     */
     public function testNewBorrowingFadesOnceLeverageHoldsStill(): void
     {
         $subsystem = $this->quietSubsystem();
@@ -1384,7 +1435,10 @@ class CreditFiscalSubsystemTest extends TestCase
         $this->assertEqualsWithDelta(MacroEngine::HOUSEHOLD_DEBT_TO_INCOME_BASELINE, $shocked->householdDebtToIncome, 1e-9);
     }
 
-    /** Basel III measures the credit gap against a one-sided HP trend, which follows steady financial deepening; a slow EMA reads it as a boom. */
+    /**
+     * Basel III measures the credit gap against a one-sided HP trend, which follows steady financial deepening; a slow
+     * EMA reads it as a boom.
+     */
     public function testSteadyFinancialDeepeningLeavesNoStandingCreditGap(): void
     {
         $state = $this->householdStateAtNeutralRates();
@@ -1457,7 +1511,10 @@ class CreditFiscalSubsystemTest extends TestCase
         $this->assertEqualsWithDelta(CreditFiscalSubsystem::MAX_CCYB, $settle(CreditFiscalSubsystem::CCYB_GAP_CEILING + 0.02), 1e-5, 'Past a ten-point gap the full 2.5% is held.');
     }
 
-    /** A regulator with a positive neutral rate holds it while credit is calm, the Basel schedule above it, and releases all of it in a crisis. */
+    /**
+     * A regulator with a positive neutral rate holds it while credit is calm, the Basel schedule above it, and releases
+     * all of it in a crisis.
+     */
     public function testANeutralBufferIsHeldUntilTheScheduleRisesAboveIt(): void
     {
         $subsystem = $this->quietSubsystem();
@@ -1549,7 +1606,10 @@ class CreditFiscalSubsystemTest extends TestCase
         $this->assertLessThan(0.01 * CreditFiscalSubsystem::MAX_CCYB, $state->countercyclicalBufferRate);
     }
 
-    /** A declared recession releases the buffer, a neutral one included, and it phases back in once the recession is over. */
+    /**
+     * A declared recession releases the buffer, a neutral one included, and it phases back in once the recession is
+     * over.
+     */
     public function testADeclaredRecessionReleasesTheBufferWithoutACrisis(): void
     {
         $subsystem = $this->quietSubsystem();
@@ -1653,8 +1713,8 @@ class CreditFiscalSubsystemTest extends TestCase
     }
 
     /**
-     * A buffer the banks have yet to build rations credit through their standards as a raised requirement does; once the
-     * capital is held it rations nothing.
+     * A buffer the banks have yet to build rations credit through their standards as a raised requirement does; once
+     * the capital is held it rations nothing.
      */
     public function testABufferTightensLendingStandardsOnlyUntilItIsBuilt(): void
     {
@@ -1677,7 +1737,8 @@ class CreditFiscalSubsystemTest extends TestCase
 
     /**
      * Banks build to a raised requirement and buffer over the years Bridges et al. measured, and while they fall short
-     * their lending standards tighten, a point of requirement as a point of buffer; a cut leaves standards as they were.
+     * their lending standards tighten, a point of requirement as a point of buffer; a cut leaves standards as they
+     * were.
      */
     public function testARaisedRequirementSqueezesLendingWhileBanksBuildToIt(): void
     {
@@ -1725,8 +1786,8 @@ class CreditFiscalSubsystemTest extends TestCase
 
     /**
      * As the capital banks must hold rises they cut household lending at once, by Bridges et al.'s year-one amounts for
-     * secured and unsecured lending in the stock's proportions: a rise phased in over a year cuts as much as one made at
-     * once, a buffer rise cuts as a requirement rise does, and a cut lends nothing back.
+     * secured and unsecured lending in the stock's proportions: a rise phased in over a year cuts as much as one made
+     * at once, a buffer rise cuts as a requirement rise does, and a cut lends nothing back.
      */
     public function testARiseInRequiredCapitalCutsHouseholdLending(): void
     {
@@ -1866,8 +1927,8 @@ class CreditFiscalSubsystemTest extends TestCase
     }
 
     /**
-     * The households' share of a crisis's deleveraging is debt repaid: the stock falls by that share of the drag a year,
-     * and the two parts of the drag add back to the whole.
+     * The households' share of a crisis's deleveraging is debt repaid: the stock falls by that share of the drag a
+     * year, and the two parts of the drag add back to the whole.
      */
     public function testACrisisRepaysHouseholdDebt(): void
     {
@@ -1919,10 +1980,10 @@ class CreditFiscalSubsystemTest extends TestCase
     }
 
     /**
-     * The Financial Regulator's requirement sets how thin the District's capital is: each point of CET1 requirement over
-     * the opening one is 0.639 points of equity over total assets, and each point of those spares 0.86 / 24.55 of a
-     * financial recession's loss; at the strictest regime on record the District's banks are nearly as well capitalised
-     * as the US's.
+     * The Financial Regulator's requirement sets how thin the District's capital is: each point of CET1 requirement
+     * over the opening one is 0.639 points of equity over total assets, and each point of those spares 0.86 / 24.55 of
+     * a financial recession's loss; at the strictest regime on record the District's banks are nearly as well
+     * capitalised as the US's.
      */
     public function testAStricterRequirementSoftensTheCrisisDrag(): void
     {
@@ -2043,7 +2104,10 @@ class CreditFiscalSubsystemTest extends TestCase
 
     // --- Excess Bond Premium (Gilchrist & Zakrajsek 2012) ---
 
-    /** The log premium decays on its own clock, whatever the level of the gap: a deep but stable slump holds no premium up. */
+    /**
+     * The log premium decays on its own clock, whatever the level of the gap: a deep but stable slump holds no premium
+     * up.
+     */
     public function testThePremiumDecaysAtItsOwnRateWhateverTheGapLevel(): void
     {
         $subsystem = $this->quietSubsystem();
@@ -2067,7 +2131,10 @@ class CreditFiscalSubsystemTest extends TestCase
         $this->assertLessThan(0.75, $halfLife, 'A shock to the premium is half spent within three quarters (record: 0.59 left at 3q).');
     }
 
-    /** Lenders price the world's credit: a mainland slump lifts the premium, at the mainland's share of what the same fall at home does. */
+    /**
+     * Lenders price the world's credit: a mainland slump lifts the premium, at the mainland's share of what the same
+     * fall at home does.
+     */
     public function testAMainlandSlumpRaisesThePremium(): void
     {
         $subsystem = $this->quietSubsystem();
@@ -2139,7 +2206,10 @@ class CreditFiscalSubsystemTest extends TestCase
         );
     }
 
-    /** In levels the record's shocks grow with the premium (0.15pp a quarter low, 0.42pp high); in logs they are one size. */
+    /**
+     * In levels the record's shocks grow with the premium (0.15pp a quarter low, 0.42pp high); in logs they are one
+     * size.
+     */
     public function testAShockMovesAHighPremiumFurtherThanALowOne(): void
     {
         $math = new class extends MathUtility {
@@ -2164,7 +2234,10 @@ class CreditFiscalSubsystemTest extends TestCase
         $this->assertEqualsWithDelta((0.03 + $shift) / $shift, ($high->excessBondPremium - 0.03) / $low->excessBondPremium, 0.06, 'Moves scale with the shifted level; the small residue is the drift, which pulls the two levels differently.');
     }
 
-    /** However hard it is pushed down, the premium stays above minus its displacement: the record's low is -0.78pp a quarter. */
+    /**
+     * However hard it is pushed down, the premium stays above minus its displacement: the record's low is -0.78pp a
+     * quarter.
+     */
     public function testThePremiumCannotFallThroughItsDisplacement(): void
     {
         $math = new class extends MathUtility {
@@ -2216,7 +2289,10 @@ class CreditFiscalSubsystemTest extends TestCase
         $this->assertGreaterThan($state->creditCrisisDrag, $bigger->creditCrisisDrag);
     }
 
-    /** None of the premium's readers feeds back into the spread that reads them: volatility and TED ignore the spread itself. */
+    /**
+     * None of the premium's readers feeds back into the spread that reads them: volatility and TED ignore the spread
+     * itself.
+     */
     public function testTheCreditBlockHasNoLoop(): void
     {
         $math = new class extends MathUtility {
@@ -2332,7 +2408,9 @@ class CreditFiscalSubsystemTest extends TestCase
         $this->assertEqualsWithDelta(70.37 * 1425.0e6 / 27.36e12, $free->primaryDeficitToGdp - $priced->primaryDeficitToGdp, 1e-12);
     }
 
-    /** The banks' levy bill is budget revenue, read into GDP units through the reserve fund's dollars per unit of GDP. */
+    /**
+     * The banks' levy bill is budget revenue, read into GDP units through the reserve fund's dollars per unit of GDP.
+     */
     public function testTheBankLevyIsRevenueOnceTheFundSetsTheScale(): void
     {
         $free = new MacroState();
@@ -2356,7 +2434,10 @@ class CreditFiscalSubsystemTest extends TestCase
         $this->assertTrue(is_finite($unfunded->primaryDeficitToGdp), 'With no fund there is no scale, and nothing is booked.');
     }
 
-    /** The tax rate takes in a legislated shift at its own speed, and the trailing year's earnings carry it half a year later on average; a levy, the rules on extraction, the stamp duty and the carbon price reach them the same way. */
+    /**
+     * The tax rate takes in a legislated shift at its own speed, and the trailing year's earnings carry it half a year
+     * later on average; a levy, the rules on extraction, the stamp duty and the carbon price reach them the same way.
+     */
     public function testTheEarningsCarryTheLawsAfterTheRateDoes(): void
     {
         $state = new MacroState();
@@ -2498,8 +2579,8 @@ class CreditFiscalSubsystemTest extends TestCase
 
     /**
      * The Authority's income reproduces the Fed's remittances: in 2007 currency of 5.2% of GDP backed at the 4.7% the
-     * debt paid, 0.24% of GDP; in 2015 7.6% at 2.3% plus a book of 19.5% earning the 2.3% coupon over reserves at 0.25%,
-     * about 0.57% (0.54% paid from earnings).
+     * debt paid, 0.24% of GDP; in 2015 7.6% at 2.3% plus a book of 19.5% earning the 2.3% coupon over reserves at
+     * 0.25%, about 0.57% (0.54% paid from earnings).
      */
     public function testTheAuthoritysIncomeReproducesTheFedsRemittances(): void
     {
@@ -2523,7 +2604,9 @@ class CreditFiscalSubsystemTest extends TestCase
         $this->assertLessThan(0.0, MonetaryPolicySubsystem::authorityNetIncomeToGdp($state));
     }
 
-    /** A loss is carried, not charged to the budget; the profits that follow pay it down before any reach the Exchequer. */
+    /**
+     * A loss is carried, not charged to the budget; the profits that follow pay it down before any reach the Exchequer.
+     */
     public function testALossIsCarriedAndPaidDownBeforeTheAuthorityRemits(): void
     {
         $this->assertSame(0.003, CreditFiscalSubsystem::centralBankRemittance(0.003, 0.0, 0.25));

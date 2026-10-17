@@ -41,7 +41,10 @@ class StandardCorporateBusinessModel implements BusinessModelInterface
     use StandardValuationTrait;
 
     // --- Operating Cyclicality & Demand Structure ---
-    /** Elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). A firm whose volumes move one for one with the output gap; sector models override. */
+    /**
+     * Elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). A firm whose volumes
+     * move one for one with the output gap; sector models override.
+     */
     public const OPERATING_CYCLICALITY = 1.00;
     /** Own-price elasticity of demand: volume lost per unit of real price increase. */
     public const PRICE_ELASTICITY_OF_DEMAND = 0.50;
@@ -49,7 +52,10 @@ class StandardCorporateBusinessModel implements BusinessModelInterface
     public const INDUSTRY_SUBSTITUTABILITY = 0.50;
 
     // --- FX Exposure ---
-    /** Share of revenue whose competitiveness moves with the trade-weighted exchange rate. A mostly domestic firm meeting a little imported competition; sector models override. */
+    /**
+     * Share of revenue whose competitiveness moves with the trade-weighted exchange rate. A mostly domestic firm
+     * meeting a little imported competition; sector models override.
+     */
     public const FX_REVENUE_EXPOSURE = 0.05;
 
     // --- ROIC & Target Metrics ---
@@ -61,19 +67,34 @@ class StandardCorporateBusinessModel implements BusinessModelInterface
     // --- Firm-Level Common Factor ---
     /** One-factor loading of each revenue stream on the firm-wide demand innovation (rho^2 = 36% shared variance). */
     public const FIRM_FACTOR_LOADING = 0.60;
-    /** Two-factor loading of each revenue stream on the persistent macro-sector demand factor (rho_s^2 = 16% variance shared with sector peers). */
+    /**
+     * Two-factor loading of each revenue stream on the persistent macro-sector demand factor (rho_s^2 = 16% variance
+     * shared with sector peers).
+     */
     public const SECTOR_FACTOR_LOADING = 0.40;
 
     // --- Pricing Power & Macro Physics ---
-    /** Median pricing-power index (0.5) used as the default PricingPowerIndex by sector models that carry no pricing-power constant of their own. */
+    /**
+     * Median pricing-power index (0.5) used as the default PricingPowerIndex by sector models that carry no
+     * pricing-power constant of their own.
+     */
     public const MIN_BETA_PRICING_POWER_FLOOR = 0.50;
 
     // --- Inflation Pass-Through (Gopinath & Itskhoki 2010) ---
-    /** Pass-through elasticity of a pure price taker; the pricing power index adds to it, so the median firm recovers expected inflation exactly and a price setter one and a half times over. */
+    /**
+     * Pass-through elasticity of a pure price taker; the pricing power index adds to it, so the median firm recovers
+     * expected inflation exactly and a price setter one and a half times over.
+     */
     public const PASS_THROUGH_BASE_ELASTICITY = 0.50;
-    /** Characteristic time in years for expected inflation to reach selling prices through menu costs and contract repricing (Nakamura & Steinsson 2008 price durations). Sector models override for annual tariffs or multi-year contracts. */
+    /**
+     * Characteristic time in years for expected inflation to reach selling prices through menu costs and contract
+     * repricing (Nakamura & Steinsson 2008 price durations). Sector models override for annual tariffs or multi-year
+     * contracts.
+     */
     public const PRICE_PASS_THROUGH_LAG_YEARS = 0.75;
-    /** Macro inflation measure selling prices track: goods breakevens by default; services models price off supercore. */
+    /**
+     * Macro inflation measure selling prices track: goods breakevens by default; services models price off supercore.
+     */
     public const PRICING_INFLATION_BASIS = 'tips_breakeven_ema';
 
     // --- Revenue & Shock Physics ---
@@ -161,9 +182,10 @@ class StandardCorporateBusinessModel implements BusinessModelInterface
 
         return [
             'pricing_power_multiplier' => 1.0 + $passThrough,
-            // Input prices move with expected inflation at unit elasticity and the same repricing lag, whatever
-            // the firm itself manages to charge: the gap between the two multipliers is the firm's real pricing.
-            // If the model sets an administered pricing basis distinct from its cost basis, input costs inflate at their own basis.
+            // Input prices move with expected inflation at unit elasticity and the same repricing lag, whatever the
+            // firm itself manages to charge: the gap between the two multipliers is the firm's real pricing. If the
+            // model sets an administered pricing basis distinct from its cost basis, input costs inflate at their own
+            // basis.
             'input_cost_multiplier' => 1.0 + ($costInflation !== $expectedInflation ? $costInflation : ($elasticity > 0.0 ? $passThrough / $elasticity : $expectedInflation)),
         ];
     }

@@ -16,9 +16,9 @@ use App\Service\Math\ResponseCurves;
  *
  * A leader goes in one of two ways. Once the cabinet a general election produced takes office, every leader who fought
  * the vote draws whether they go within the year after it: a logit in the party's change of vote and in whether it now
- * leads the cabinet, fitted on Western European parties (COSPAL leader spells x ParlGov, 1957-2016; Belgium left out, its
- * party presidents never being prime minister; var/harness/leaders). Outside that year, a yearly hazard by the party's
- * place in government, rising with the leader's age as it did on the same records. A new leader of the prime
+ * leads the cabinet, fitted on Western European parties (COSPAL leader spells x ParlGov, 1957-2016; Belgium left out,
+ * its party presidents never being prime minister; var/harness/leaders). Outside that year, a yearly hazard by the
+ * party's place in government, rising with the leader's age as it did on the same records. A new leader of the prime
  * minister's party is prime minister at once, as in Sweden and Denmark every time since 1945.
  *
  * Every draw is hashed from the game and the leader (CouncilAppointments::uniform()), off the politics stream, so the
@@ -27,11 +27,20 @@ use App\Service\Math\ResponseCurves;
 final class PartyLeaders
 {
     // --- After an Election (COSPAL x ParlGov: 467 party-elections, 83 leaders gone within the year) ---
-    /** Log-odds that a leader goes within the year after a vote, at an unchanged vote and outside the premiership: 14.5%. */
+    /**
+     * Log-odds that a leader goes within the year after a vote, at an unchanged vote and outside the premiership:
+     * 14.5%.
+     */
     public const ELECTION_EXIT_INTERCEPT = -1.7733;
-    /** Log-odds per percentage point of the vote lost: a five-point loss lifts the chance to 36.6% (Ennser-Jedenastik & Schumacher 2015: a loss of over a point, HR 2.15). */
+    /**
+     * Log-odds per percentage point of the vote lost: a five-point loss lifts the chance to 36.6% (Ennser-Jedenastik &
+     * Schumacher 2015: a loss of over a point, HR 2.15).
+     */
     public const ELECTION_EXIT_PER_POINT_LOST = 0.2445;
-    /** Log-odds per percentage point of the vote gained, barely any (se 0.074; Ennser-Jedenastik & Schumacher 2015: a gain, HR 0.94, not significant). */
+    /**
+     * Log-odds per percentage point of the vote gained, barely any (se 0.074; Ennser-Jedenastik & Schumacher 2015: a
+     * gain, HR 0.94, not significant).
+     */
     public const ELECTION_EXIT_PER_POINT_GAINED = -0.0530;
     /** Log-odds for the leader whose party leads the cabinet formed after the vote: 1.3% at an unchanged vote. */
     public const ELECTION_EXIT_PRIME_MINISTER = -2.5757;
@@ -49,9 +58,15 @@ final class PartyLeaders
     public const MIDTERM_HAZARD_OUTSIDE = 0.121;
 
     // --- Age (COSPAL leader spells, Western Europe excluding Belgium: 273 leaders, 1,532 leader-years) ---
-    /** Log of the hazard's rise per year of the leader's age: 1.51 a decade (se 0.0072; Ennser-Jedenastik & Schumacher 2021, holding results and office fixed, find 60 and over at 1.53 against 46 to 59). */
+    /**
+     * Log of the hazard's rise per year of the leader's age: 1.51 a decade (se 0.0072; Ennser-Jedenastik & Schumacher
+     * 2021, holding results and office fixed, find 60 and over at 1.53 against 46 to 59).
+     */
     public const AGE_LOG_HAZARD_PER_YEAR = 0.0415;
-    /** Age at which the age effect is one: its mean over the sample's leader-years is one there, so the hazards by place in government keep the averages they were measured at. */
+    /**
+     * Age at which the age effect is one: its mean over the sample's leader-years is one there, so the hazards by place
+     * in government keep the averages they were measured at.
+     */
     public const AGE_HAZARD_CENTRE = 52.6;
 
     // --- New Leaders (COSPAL: 354 leaders at their first selection) ---
@@ -63,7 +78,11 @@ final class PartyLeaders
     public const SELECTION_AGE_MIN = 23.0;
     /** Oldest chosen on record, where the draw is truncated. */
     public const SELECTION_AGE_MAX = 74.0;
-    /** Yearly hazard over every leader and year of the sample, 238 departures in 1,634 leader-years: how long the leaders sitting when the parties are first read have led, as the time since the last renewal of a process renewing at that rate. */
+    /**
+     * Yearly hazard over every leader and year of the sample, 238 departures in 1,634 leader-years: how long the
+     * leaders sitting when the parties are first read have led, as the time since the last renewal of a process
+     * renewing at that rate.
+     */
     public const OVERALL_HAZARD = 238.0 / 1634.0;
 
     /**
@@ -120,7 +139,8 @@ final class PartyLeaders
     }
 
     /**
-     * A leader's yearly hazard outside the year after a vote: by their party's place in government, scaled for their age.
+     * A leader's yearly hazard outside the year after a vote: by their party's place in government, scaled for their
+     * age.
      *
      * @param ?string $primeMinister The prime minister's party, or null for none.
      */
@@ -215,7 +235,8 @@ final class PartyLeaders
 
     /**
      * A new leader: their age when chosen from the record of new leaders (a normal truncated to the youngest and oldest
-     * on it), and a name for their birth decade no one sitting or who ever sat holds (CouncilAppointments::reservedNames()).
+     * on it), and a name for their birth decade no one sitting or who ever sat holds
+     * (CouncilAppointments::reservedNames()).
      *
      * @return array{name: string, birth: float}
      */

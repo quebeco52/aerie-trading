@@ -53,9 +53,9 @@ class AerieNamesTest extends TestCase
     }
 
     /**
-     * Surname and group come from the Census's surname-group cells, each group scaled to its share of the US Congress: an
-     * even sweep of the surname draw, the group draw on a Weyl sequence beside it, lands on each group in that share,
-     * whiter than the country (74% to 64%).
+     * Surname and group come from the Census's surname-group cells, each group scaled to its share of the US Congress:
+     * an even sweep of the surname draw, the group draw on a Weyl sequence beside it, lands on each group in that
+     * share, whiter than the country (74% to 64%).
      */
     public function testGroupsComeInTheCongresssMix(): void
     {
@@ -147,7 +147,10 @@ class AerieNamesTest extends TestCase
         }
     }
 
-    /** Year 1 is 2009: someone born 50 years before it is named from the 1950s, and births beyond the tables from their ends. */
+    /**
+     * Year 1 is 2009: someone born 50 years before it is named from the 1950s, and births beyond the tables from their
+     * ends.
+     */
     public function testTheBirthDecadePicksTheTable(): void
     {
         $this->assertSame(1950, AerieNames::birthDecade(-50.0));
@@ -157,7 +160,10 @@ class AerieNamesTest extends TestCase
         $this->assertSame(array_key_last(Tables::GIVEN), AerieNames::birthDecade(300.0));
     }
 
-    /** Seven draws in ten are men; the given name comes from the birth decade's table for the sex, the surname from the Census. */
+    /**
+     * Seven draws in ten are men; the given name comes from the birth decade's table for the sex, the surname from the
+     * Census.
+     */
     public function testAPickJoinsTheDecadesGivenNameToASurname(): void
     {
         $men = 0;
@@ -210,7 +216,10 @@ class AerieNamesTest extends TestCase
         $this->assertFalse(AerieNames::isFamous('Joyce Hall'));
     }
 
-    /** A draw that lands on a famous name or one already taken is drawn again on fresh uniforms; the same uniforms give the same name. */
+    /**
+     * A draw that lands on a famous name or one already taken is drawn again on fresh uniforms; the same uniforms give
+     * the same name.
+     */
     public function testADrawPassesOverFamousAndTakenNames(): void
     {
         $uniform = static fn(string $seed): \Closure => static fn(string $key): float => (hexdec(substr(hash('sha256', "{$seed}:{$key}"), 0, 13)) + 0.5) / (2 ** 52);

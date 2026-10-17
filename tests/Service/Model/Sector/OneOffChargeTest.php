@@ -19,7 +19,9 @@ use PHPUnit\Framework\TestCase;
  */
 final class OneOffChargeTest extends TestCase
 {
-    /** @return iterable<string, array{0: class-string<OperatingStrategyInterface>, 1: float, 2: float}> Model, every draw, the uniform draw. */
+    /**
+     * @return iterable<string, array{0: class-string<OperatingStrategyInterface>, 1: float, 2: float}> Model, every draw, the uniform draw.
+     */
     public static function events(): iterable
     {
         yield 'investment bank fine' => [Sector\InvestmentBankBusinessModel::class, 0.0, 0.0];

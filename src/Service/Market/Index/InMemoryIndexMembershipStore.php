@@ -9,7 +9,9 @@ namespace App\Service\Market\Index;
  */
 final class InMemoryIndexMembershipStore implements IndexMembershipStoreInterface
 {
-    /** @var array<string, array{tick: int, tickers: list<string>, added: list<string>, deleted: list<string>, weights: array<string, float>, factors: array<string, float>}> */
+    /**
+     * @var array<string, array{tick: int, tickers: list<string>, added: list<string>, deleted: list<string>, weights: array<string, float>, factors: array<string, float>}>
+     */
     private array $state = [];
 
     public function current(MarketIndex $index): ?array

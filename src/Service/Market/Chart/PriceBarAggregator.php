@@ -20,7 +20,10 @@ namespace App\Service\Market\Chart;
 class PriceBarAggregator
 {
     // --- Chart Resolution ---
-    /** Bars a CANDLE range is reduced to; ~3px each on a typical chart, the width below which a candle stops being legible. */
+    /**
+     * Bars a CANDLE range is reduced to; ~3px each on a typical chart, the width below which a candle stops being
+     * legible.
+     */
     public const TARGET_BARS = 400;
 
     /**
@@ -35,14 +38,22 @@ class PriceBarAggregator
      */
     public const LINE_TARGET_BARS = 1600;
 
-    /** Rows per bar floor: a bar built from one observation is a doji by construction and says nothing the line does not. */
+    /**
+     * Rows per bar floor: a bar built from one observation is a doji by construction and says nothing the line does
+     * not.
+     */
     public const MIN_ROWS_PER_BAR = 2;
 
-    /** Rows per slot floor for a LINE: a close needs no range of its own, and a row is never finer than the tick that advances the live tail. */
+    /**
+     * Rows per slot floor for a LINE: a close needs no range of its own, and a row is never finer than the tick that
+     * advances the live tail.
+     */
     public const LINE_MIN_ROWS_PER_BAR = 1;
 
     // --- Bucketing ---
-    /** Tolerance on a row's bucket index, so a row stamped on a bar boundary is not pushed one bar older by float error. */
+    /**
+     * Tolerance on a row's bucket index, so a row stamped on a bar boundary is not pushed one bar older by float error.
+     */
     private const BUCKET_EPSILON = 1e-6;
 
     /**
@@ -58,9 +69,11 @@ class PriceBarAggregator
      *
      * @param iterable<array<string, mixed>> $newestFirstRows Rows carrying a 'price' and a 'sim_time'.
      * @param float                          $spanYears       Simulated years the rows cover.
-     * @param float                          $rowsPerYear     Rows the series is written per simulated year, for the width floor.
+     * @param float                          $rowsPerYear     Rows the series is written per simulated year, for the
+     *                                                        width floor.
      * @param int                            $targetBars      Bars to aim for across the span.
-     * @param int                            $minRowsPerBar   Rows a bar spans at least: MIN_ROWS_PER_BAR for candles, LINE_MIN_ROWS_PER_BAR for a line.
+     * @param int                            $minRowsPerBar   Rows a bar spans at least: MIN_ROWS_PER_BAR for candles,
+     *                                                        LINE_MIN_ROWS_PER_BAR for a line.
      *
      * @return array{bar_years: float, bars: list<array<string, mixed>>} The slice width and the oldest-first bars,
      *         keyed as the history rows they replace plus 'age', the simulated years from the bar's end to the newest row.

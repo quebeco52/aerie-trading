@@ -249,7 +249,8 @@ final class PagesRenderTest extends KernelTestCase
             ]],
         ];
 
-        // The company page for a telecom (seven summary tiles, its operating figures charted) and an insurer, from the bank's stub.
+        // The company page for a telecom (seven summary tiles, its operating figures charted) and an insurer, from the
+        // bank's stub.
         $pages['stock-telecom'] = ['/stock/WIRE', 'stock/index.html.twig', array_replace($pages['stock'][2], [
             'isFinancial' => false, 'businessModel' => 'telecom', 'shortUtilization' => 0.93, 'borrowFee' => 0.081,
             'creditHealth' => [

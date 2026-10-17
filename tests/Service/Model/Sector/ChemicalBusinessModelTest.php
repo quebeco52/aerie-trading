@@ -159,7 +159,9 @@ class ChemicalBusinessModelTest extends TestCase
         $this->assertEqualsWithDelta(24_000_000.0, $result->streamRevenue['agrochemicals'], 1.0);
     }
 
-    /** Base chemicals are priced off the naphtha cracker: an oil spike at flat gas is a windfall for an ethane slate. */
+    /**
+     * Base chemicals are priced off the naphtha cracker: an oil spike at flat gas is a windfall for an ethane slate.
+     */
     public function testAGasAdvantagedCrackerGainsFromAnOilSpikeAtFlatGas(): void
     {
         $ethane = new class extends ChemicalBusinessModel {
@@ -191,7 +193,10 @@ class ChemicalBusinessModelTest extends TestCase
         $this->assertLessThanOrEqual($unpassedBound + 1e-9, $squeeze, 'but no more than the base book leaves unpassed.');
     }
 
-    /** Feedstock falls reach the margin as fully as rises: oil, gas and the farm-price-backed fertilizer leg are all symmetric. */
+    /**
+     * Feedstock falls reach the margin as fully as rises: oil, gas and the farm-price-backed fertilizer leg are all
+     * symmetric.
+     */
     public function testAFeedstockFallReachesTheMarginSymmetrically(): void
     {
         $model = new ChemicalBusinessModel();
@@ -205,7 +210,10 @@ class ChemicalBusinessModelTest extends TestCase
         $this->assertEqualsWithDelta(-$delta(0.30, 0.30, 120.0), $delta(-0.30, -0.30, 80.0), 1e-9, 'Fertilizer prices give back with farm prices what they recovered with them.');
     }
 
-    /** The refinery 3:2:1 crack is a gasoline and distillate margin, not a cracker's feedstock cost: it must not move the chemical margin. */
+    /**
+     * The refinery 3:2:1 crack is a gasoline and distillate margin, not a cracker's feedstock cost: it must not move
+     * the chemical margin.
+     */
     public function testTheRefiningCrackSpreadDoesNotMoveTheChemicalMargin(): void
     {
         $model = new ChemicalBusinessModel();
@@ -295,7 +303,10 @@ class ChemicalBusinessModelTest extends TestCase
         $this->assertLessThan(0.0, $strong - $flat, 'A stronger domestic currency prices exports out of foreign markets.');
     }
 
-    /** On a mixed slate a gas spike squeezes the ethane half with no price relief, so it hurts more than an equal oil spike, which the naphtha-set price partly recovers. */
+    /**
+     * On a mixed slate a gas spike squeezes the ethane half with no price relief, so it hurts more than an equal oil
+     * spike, which the naphtha-set price partly recovers.
+     */
     public function testAGasSpikeSqueezesAMixedSlateMoreThanAnEqualOilSpike(): void
     {
         $model = new ChemicalBusinessModel();

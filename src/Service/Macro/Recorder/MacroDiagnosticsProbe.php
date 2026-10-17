@@ -30,12 +30,17 @@ final class MacroDiagnosticsProbe
 {
     // --- Wire ---
 
-    /** Redis key the ticker publishes the OPEN window under; the admin view runs in another process and reads it there. */
+    /**
+     * Redis key the ticker publishes the OPEN window under; the admin view runs in another process and reads it there.
+     */
     public const REDIS_KEY = 'macro_diagnostics';
 
     // --- Averaged Series ---
 
-    /** State fields averaged over the window: the series whose data counterparts are quarterly averages, and the stance behind them. */
+    /**
+     * State fields averaged over the window: the series whose data counterparts are quarterly averages, and the stance
+     * behind them.
+     */
     public const AVERAGED_FIELDS = [
         'outputGap',
         'inflation',
@@ -96,13 +101,17 @@ final class MacroDiagnosticsProbe
     /** @var array<string, float> Shock => sum of its innovations over the window. */
     private array $shocks = [];
 
-    /** @var array<string, array<string, array{terms: array<string, float>, integral: float, years: float}>> Section => account => level account. */
+    /**
+     * @var array<string, array<string, array{terms: array<string, float>, integral: float, years: float}>> Section => account => level account.
+     */
     private array $levelAccounts = [];
 
     /** @var array<string, array<string, array<string, float>>> Section => account => flow => sum over the window. */
     private array $flowAccounts = [];
 
-    /** @var array<string, array<string, array{integral: float, years: float}>> Section => value => its time integral. */
+    /**
+     * @var array<string, array<string, array{integral: float, years: float}>> Section => value => its time integral.
+     */
     private array $values = [];
 
     /** @var array<string, mixed>|null The last completed window, so the panel reads something early in a new one. */
@@ -269,7 +278,8 @@ final class MacroDiagnosticsProbe
      *
      * @param string               $section Section the account is reported under.
      * @param string               $account Account name.
-     * @param array<string, float> $flows   Flow name => what it moved the stock this tick; they sum to the tick's change.
+     * @param array<string, float> $flows   Flow name => what it moved the stock this tick; they sum to the tick's
+     *                                      change.
      */
     public function recordFlows(string $section, string $account, array $flows): void
     {

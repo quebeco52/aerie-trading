@@ -69,7 +69,9 @@ final class BusinessModelMacroFieldDeclarationTest extends TestCase
         'recession_probability_trend' => ['recession_probability_ema'],
     ];
 
-    /** Macro field each input-cost basket channel reads (StandardOperatingPhysicsTrait::resolveInputPriceDeviations). */
+    /**
+     * Macro field each input-cost basket channel reads (StandardOperatingPhysicsTrait::resolveInputPriceDeviations).
+     */
     private const BASKET_CHANNEL_FIELDS = [
         'energy'  => 'energy_cost_push_lag',
         'gas'     => 'natural_gas_price_index_ema',

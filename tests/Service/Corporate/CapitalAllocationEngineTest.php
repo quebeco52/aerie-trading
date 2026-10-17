@@ -436,8 +436,8 @@ class CapitalAllocationEngineTest extends TestCase
 
         $macroState = new MacroStateDTO(corporateTaxRate: 0.21);
 
-        // Excess cash is ~$45M ($50M treasury - ~$5M target operating cash).
-        // Under 100% saturation, BUYBACK_SPEND_SATURATED_RATIO (50%) is unlocked: ~$22.5M spent on buybacks (~225k shares repurchased).
+        // Excess cash is ~$45M ($50M treasury - ~$5M target operating cash). Under 100% saturation,
+        // BUYBACK_SPEND_SATURATED_RATIO (50%) is unlocked: ~$22.5M spent on buybacks (~225k shares repurchased).
         $result = $engine->allocateCapital($stock, 8.00, 2.00, 100.00, 1000000.0, $macroState);
 
         $this->assertLessThan(1000000.0, $result['new_shares'], 'Saturated firm should repurchase significant shares');
@@ -493,7 +493,8 @@ class CapitalAllocationEngineTest extends TestCase
 
         $this->assertEqualsWithDelta(1.00, $peer['dividend_paid'], 1e-9);
         $this->assertCount(1, $borrowed);
-        // The quarter leaves it below its operating floor: it borrows the dividend, and the floor is the liquidity pass's.
+        // The quarter leaves it below its operating floor: it borrows the dividend, and the floor is the liquidity
+        // pass's.
         $this->assertEqualsWithDelta(1_000_000.0, $borrowed[0], 1.0, 'It borrows the $1m dividend, not the floor gap beside it.');
     }
 
@@ -517,7 +518,8 @@ class CapitalAllocationEngineTest extends TestCase
      * A firm that pays out $1.00 a quarter from a $0.5m treasury in a quarter whose free cash flow is -$1.00 a share;
      * the trailing year earned $4.00 a share unless a loss year is given.
      *
-     * @return array{0: array<string, mixed>, 1: Stock, 2: list<float>} The allocation, the firm, and each amount borrowed.
+     * @return array{0: array<string, mixed>, 1: Stock, 2: list<float>} The allocation, the firm, and each amount
+     *                                                                  borrowed.
      */
     private function payDividendShortOfCash(bool $aristocrat, string $trailingNetIncome = '4000000.00'): array
     {
@@ -624,7 +626,10 @@ class CapitalAllocationEngineTest extends TestCase
         $this->assertGreaterThan($steady, $pay('6000000.00', 4.00), 'A year that has grown raises the dividend.');
     }
 
-    /** A tax on dividends moves the payout a firm steers to by the measured response, the rest of its cash left to buybacks (Chetty & Saez 2005). */
+    /**
+     * A tax on dividends moves the payout a firm steers to by the measured response, the rest of its cash left to
+     * buybacks (Chetty & Saez 2005).
+     */
     public function testTheDividendTaxMovesThePayoutTarget(): void
     {
         $pay = function (float $dividendTaxRate): float {
@@ -1186,7 +1191,8 @@ class CapitalAllocationEngineTest extends TestCase
      * An operating company with 0.2x gross debt to equity against a 0.75x target, holding its target cash plus the
      * given idle cash, which nets out of the opening ratio as DebtEngine nets it.
      *
-     * @return array{0: array<string, mixed>, 1: list<float>, 2: float} The allocation, each amount borrowed, and the repurchase the net gap calls for.
+     * @return array{0: array<string, mixed>, 1: list<float>, 2: float} The allocation, each amount borrowed, and the
+     *                                                                  repurchase the net gap calls for.
      */
     private function recapitalize(bool $hasLeverageHeadroom, float $excessCash, bool $negativeCarry = false, bool $underLevered = true): array
     {

@@ -20,7 +20,10 @@ final class TickProfiler
     /** Phases named in a lag warning, most expensive first. */
     public const LAG_PHASES_SHOWN = 4;
 
-    /** Ticks a steady-state phase report covers: long enough to average the option sweep, at a pass every few dozen ticks, over several passes. */
+    /**
+     * Ticks a steady-state phase report covers: long enough to average the option sweep, at a pass every few dozen
+     * ticks, over several passes.
+     */
     public const PHASE_REPORT_INTERVAL_TICKS = 600;
 
     /** @var array<string, float> Milliseconds per phase of the tick in progress. */

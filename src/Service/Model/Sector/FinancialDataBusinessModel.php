@@ -27,7 +27,10 @@ use App\Service\Model\ModelParam;
 class FinancialDataBusinessModel extends StandardCorporateBusinessModel
 {
     // --- Operating Cyclicality & Demand Structure ---
-    /** Elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). Subscriptions renew through the cycle; issuance fees are cyclical. */
+    /**
+     * Elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). Subscriptions renew
+     * through the cycle; issuance fees are cyclical.
+     */
     public const OPERATING_CYCLICALITY = 0.90;
     /** Own-price elasticity of demand: volume lost per unit of real price increase. */
     public const PRICE_ELASTICITY_OF_DEMAND = 0.20;
@@ -35,7 +38,10 @@ class FinancialDataBusinessModel extends StandardCorporateBusinessModel
     public const INDUSTRY_SUBSTITUTABILITY = 0.30;
 
     // --- Input Cost Basket ---
-    /** Shares of the variable cost base by input channel, measured from the BEA input-output accounts with supply-chain content (labor still the model's own). */
+    /**
+     * Shares of the variable cost base by input channel, measured from the BEA input-output accounts with supply-chain
+     * content (labor still the model's own).
+     */
     public const INPUT_COST_EXPOSURES = InputOutputExposures::FINANCIAL_DATA;
 
     // --- Pricing Power ---
@@ -43,7 +49,10 @@ class FinancialDataBusinessModel extends StandardCorporateBusinessModel
     public const PRICING_POWER_INDEX = 0.85;
 
     // --- Balance Sheet Realism ---
-    /** Stock-based compensation (ASC 718) as a share of revenue: Information Services, 1.62% of revenue, 15 firms (Damodaran, Employee data by industry, US, January 2026). */
+    /**
+     * Stock-based compensation (ASC 718) as a share of revenue: Information Services, 1.62% of revenue, 15 firms
+     * (Damodaran, Employee data by industry, US, January 2026).
+     */
     public const STOCK_COMPENSATION_INTENSITY = 0.0162;
 
     // --- Analyst Visibility & Error ---
@@ -62,7 +71,10 @@ class FinancialDataBusinessModel extends StandardCorporateBusinessModel
         return 1.0;
     }
     // --- Secular Demand ---
-    /** Data processing, internet publishing and other information services value added as a share of US nominal GDP in 1997 (BEA GDP by Industry, value added). */
+    /**
+     * Data processing, internet publishing and other information services value added as a share of US nominal GDP in
+     * 1997 (BEA GDP by Industry, value added).
+     */
     public const SECULAR_SHARE_1997 = 0.0037;
     /** The same share in 2019. */
     public const SECULAR_SHARE_2019 = 0.0127;
@@ -85,9 +97,14 @@ class FinancialDataBusinessModel extends StandardCorporateBusinessModel
     public const TRANSACTION_REVENUE_WEIGHT  = 0.15;
 
     // --- Working Capital by Stream (shares of the stream's revenue) ---
-    /** Subscriptions: seats invoiced quarterly to yearly and paid in ~55 days, ~80 days of revenue held as deferred revenue and payables. */
+    /**
+     * Subscriptions: seats invoiced quarterly to yearly and paid in ~55 days, ~80 days of revenue held as deferred
+     * revenue and payables.
+     */
     public const SUBSCRIPTION_WORKING_CAPITAL = ['receivables' => 0.15, 'inventory' => 0.0, 'payables' => 0.22];
-    /** Transactions: rating and trading fees billed on issue or monthly, paid in ~44 days; ~11 days of sales owed out. */
+    /**
+     * Transactions: rating and trading fees billed on issue or monthly, paid in ~44 days; ~11 days of sales owed out.
+     */
     public const TRANSACTION_WORKING_CAPITAL = ['receivables' => 0.12, 'inventory' => 0.0, 'payables' => 0.03];
 
     /** Data holds no stock: subscribers pay ahead of the service and issuers after the rating. */
@@ -124,11 +141,17 @@ class FinancialDataBusinessModel extends StandardCorporateBusinessModel
     public const DEAL_ACTIVITY_RATING_SENSITIVITY = 0.25;
 
     // --- Transaction Stream Macro Channel ---
-    /** Rating-issuance revenue per unit of IG spread below MacroEngine::BASE_CREDIT_SPREAD (+2% per 100bp of tightening). */
+    /**
+     * Rating-issuance revenue per unit of IG spread below MacroEngine::BASE_CREDIT_SPREAD (+2% per 100bp of
+     * tightening).
+     */
     public const DCM_SPREAD_ISSUANCE_SENSITIVITY = 2.0;
     /** Rating-issuance revenue per unit of output gap, before operating cyclicality (+1.5% per 1% gap). */
     public const DCM_OUTPUT_GAP_ISSUANCE_SENSITIVITY = 1.5;
-    /** Market-data feed revenue per unit of volatility over MacroEngine::MACRO_VOL_BASE_ANCHOR, both ways (+0.5% per vol point). */
+    /**
+     * Market-data feed revenue per unit of volatility over MacroEngine::MACRO_VOL_BASE_ANCHOR, both ways (+0.5% per vol
+     * point).
+     */
     public const MARKET_DATA_VOLATILITY_SENSITIVITY = 0.50;
 
     // --- Asset-Light Subscription Capital Structure Rails ---
@@ -163,9 +186,9 @@ class FinancialDataBusinessModel extends StandardCorporateBusinessModel
         $subscriptionZ = $streams->generateZ('subscription', 0.50); // Recurring seat subscriptions & data licenses
         $transactionZ  = $streams->generateZ('transaction', 0.15); // Debt issuance credit rating mandates & API usage
 
-        // DCM Debt Rating & Data Feed API Macro Channel:
-        // Rating issuance mandates (SHRK) surge when corporate debt syndication booms (tight credit spreads + positive output gap).
-        // Market data API feeds (TICK) carry more transaction volume when volatility runs above its anchor, less below.
+        // DCM Debt Rating & Data Feed API Macro Channel: Rating issuance mandates (SHRK) surge when corporate debt
+        // syndication booms (tight credit spreads + positive output gap). Market data API feeds (TICK) carry more
+        // transaction volume when volatility runs above its anchor, less below.
         $transactionMacroBonus = $this->resolveTransactionMacroShift($stock, $macroState);
 
         $subscriptionRevenue = max(0.0, $expectedRevenue * $subscriptionWeight * (1.0 + ($subscriptionZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR))));
@@ -179,8 +202,8 @@ class FinancialDataBusinessModel extends StandardCorporateBusinessModel
         $actualRevenue = max(0.0, array_sum($streamRevenues));
         $streams->recordStreamShares($streamRevenues);
 
-        // Rating Issuance Operating Leverage:
-        // High transaction/rating volume ($transactionZ) provides strong positive operating leverage because incremental debt ratings have near-zero marginal cost.
+        // Rating Issuance Operating Leverage: High transaction/rating volume ($transactionZ) provides strong positive
+        // operating leverage because incremental debt ratings have near-zero marginal cost.
         $operatingLeverageShift = -self::TRANSACTION_LEVERAGE_SENSITIVITY * $transactionZ * $transactionWeight;
 
         // Data and platform engineering payroll follows wage growth; subscription repricing recovers most of it.

@@ -12,7 +12,10 @@ enum ModelParam: string
 {
     // --- Pricing Power & Macro Scalars ---
     case PricingPowerIndex = 'pricing_power_index';
-    /** Operating cyclicality: elasticity of the firm's volumes and costs to the macro cycle (replaces equity beta inside operating physics). */
+    /**
+     * Operating cyclicality: elasticity of the firm's volumes and costs to the macro cycle (replaces equity beta inside
+     * operating physics).
+     */
     case OperatingCyclicality = 'operating_cyclicality';
     case RateSensitivityScalar = 'rate_sensitivity_scalar';
     case VixArbitrageScalar = 'vix_arbitrage_scalar';
@@ -82,7 +85,10 @@ enum ModelParam: string
     case ProprietaryDividendWeight = 'proprietary_dividend_weight';
     case MortgageOriginationWeight = 'mortgage_origination_weight';
     case DirectLendingWeight = 'direct_lending_weight';
-    /** Book equity-to-assets ratio the institution manages its capital toward: its seeded ratio, since bank leverage converges to bank-specific, time-invariant targets (Gropp & Heider 2010). */
+    /**
+     * Book equity-to-assets ratio the institution manages its capital toward: its seeded ratio, since bank leverage
+     * converges to bank-specific, time-invariant targets (Gropp & Heider 2010).
+     */
     case TargetCapitalRatio = 'target_capital_ratio';
 
     // --- Clearinghouse ---
@@ -100,11 +106,15 @@ enum ModelParam: string
     case CommercialRealEstateWeight = 'commercial_real_estate_weight';
 
     // --- Commodities, Energy & Heavy Industry ---
-    /** Share of an oil and gas producer's revenue at baseline prices that is crude and liquids rather than natural gas. */
+    /**
+     * Share of an oil and gas producer's revenue at baseline prices that is crude and liquids rather than natural gas.
+     */
     case LiquidsRevenueShare = 'liquids_revenue_share';
     /** Share of a producer's oil volume sold forward through its rolling four-quarter swap ladder. */
     case OilHedgeRatio = 'oil_hedge_ratio';
-    /** Share of a miner's revenue at baseline prices from base and ferrous metals (copper, iron ore, nickel, aluminium). */
+    /**
+     * Share of a miner's revenue at baseline prices from base and ferrous metals (copper, iron ore, nickel, aluminium).
+     */
     case BaseMetalsWeight = 'base_metals_weight';
     /** Share of a miner's revenue at baseline prices from precious metals, primary or by-product (gold, silver). */
     case PreciousMetalsWeight = 'precious_metals_weight';
@@ -160,7 +170,9 @@ enum ModelParam: string
     case Warehousing3plWeight = 'warehousing_3pl_weight';
     /** A terminal operator's share of revenue from handling the District's own imports and exports. */
     case GatewayHandlingWeight = 'gateway_handling_weight';
-    /** A terminal operator's share of revenue from relaying boxes between ships, cargo that never enters the District. */
+    /**
+     * A terminal operator's share of revenue from relaying boxes between ships, cargo that never enters the District.
+     */
     case TransshipmentWeight = 'transshipment_weight';
     /** A terminal operator's share of revenue from storage, dwell charges and services on boxes in its yards. */
     case StorageServicesWeight = 'storage_services_weight';
@@ -185,9 +197,15 @@ enum ModelParam: string
     case BrandedStaplesWeight = 'branded_staples_weight';
     case VolumeCommodityWeight = 'volume_commodity_weight';
     case CommodityTradingWeight = 'commodity_trading_weight';
-    /** Share of a staples firm's bulk-volume revenue sold at the agricultural exchange price rather than a list price (a grower's crop); zero for a processor. */
+    /**
+     * Share of a staples firm's bulk-volume revenue sold at the agricultural exchange price rather than a list price (a
+     * grower's crop); zero for a processor.
+     */
     case AgriculturalOutputShare = 'agricultural_output_share';
-    /** Stock a staples brand holds while it matures (spirits in cask), as a share of its branded revenue; zero for goods sold as made. */
+    /**
+     * Stock a staples brand holds while it matures (spirits in cask), as a share of its branded revenue; zero for goods
+     * sold as made.
+     */
     case MaturingStockShare = 'maturing_stock_share';
     case CommercialWeight = 'commercial_weight';
     case ThirdPartyWeight = 'third_party_weight';
@@ -229,9 +247,15 @@ enum ModelParam: string
     // --- Utilities & Waste Management ---
     case RegulatedBaseWeight = 'regulated_base_weight';
     case UnregulatedMerchantWeight = 'unregulated_merchant_weight';
-    /** Share of a utility's unregulated stream sold at the wholesale power price rather than as market-based contract work. */
+    /**
+     * Share of a utility's unregulated stream sold at the wholesale power price rather than as market-based contract
+     * work.
+     */
     case MerchantPowerShare = 'merchant_power_share';
-    /** Share of a generator's merchant output whose fuel is gas bought at spot (it earns the spark spread; the rest keeps the whole price). */
+    /**
+     * Share of a generator's merchant output whose fuel is gas bought at spot (it earns the spark spread; the rest
+     * keeps the whole price).
+     */
     case MerchantGasFleetShare = 'merchant_gas_fleet_share';
     /** An independent generator's share of revenue from power sold into the wholesale market. */
     case WholesaleGenerationWeight = 'wholesale_generation_weight';

@@ -16,7 +16,9 @@ use PHPUnit\Framework\TestCase;
  */
 class PoliticsStateTest extends TestCase
 {
-    /** PoliticsStateDTO::fromState() carries every field across by name, so both classes must describe the same state. */
+    /**
+     * PoliticsStateDTO::fromState() carries every field across by name, so both classes must describe the same state.
+     */
     public function testTheWorkingStateDeclaresEveryFieldTheSnapshotDoes(): void
     {
         $snapshot = [];
@@ -37,7 +39,10 @@ class PoliticsStateTest extends TestCase
         $this->assertSame(Diet::SEED_SEATS, (new PoliticsState())->dietSeats);
     }
 
-    /** What Redis keeps comes back as it was written: nested positions, bloc leaders, the talks log, the headline, and the Council's, the Authority's and the Regulator's people, candidates and former holders. */
+    /**
+     * What Redis keeps comes back as it was written: nested positions, bloc leaders, the talks log, the headline, and
+     * the Council's, the Authority's and the Regulator's people, candidates and former holders.
+     */
     public function testTheStateSurvivesTheRoundTripThroughRedis(): void
     {
         $state = new PoliticsState();

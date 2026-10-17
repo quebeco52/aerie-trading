@@ -55,7 +55,8 @@ class FinancialSummaryBuilderTest extends TestCase
         $report = new CorporateReport();
         $report->setCapitalRatio('0.2500');
         $report->setReturnOnEquity('0.0900');
-        // An operating margin that also carries depreciation and one-off charges: the combined ratio is not read off it.
+        // An operating margin that also carries depreciation and one-off charges: the combined ratio is not read off
+        // it.
         $report->setOperatingMargin('0.0300');
         $report->setReportedKpis(['loss_ratio' => 0.62, 'expense_ratio' => 0.31]);
 

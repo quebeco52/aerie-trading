@@ -116,7 +116,8 @@ class EducationBusinessModelTest extends TestCase
         // Fresh tuition book: only training moves, 0.30 x (-0.03 x 1.50 x 0.70) = -0.00945.
         $this->assertEqualsWithDelta(-0.00945, $this->model->resolveSectorActivityShift($stock, $recession), 1e-9);
 
-        // A recession-filled tuition book at 1.4 quarters: 0.50 x 2.4 = 1.20 of normal, 0.50 x 0.20 - 0.00945 = 0.09055.
+        // A recession-filled tuition book at 1.4 quarters: 0.50 x 2.4 = 1.20 of normal, 0.50 x 0.20 - 0.00945 =
+        // 0.09055.
         $stock->setEarningsMomentumZ([StreamContext::BACKLOG_STATE_PREFIX . 'degree_tuition_enrollment' => 1.4]);
         $this->assertEqualsWithDelta(0.09055, $this->model->resolveSectorActivityShift($stock, $recession), 1e-9);
     }

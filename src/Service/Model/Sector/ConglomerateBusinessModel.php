@@ -45,21 +45,39 @@ use App\Service\Model\ModelParameters;
 class ConglomerateBusinessModel extends StandardCorporateBusinessModel
 {
     // --- Firm-Level Common Factor ---
-    /** One-factor loading of each stream on the firm-wide demand innovation (rho^2 = 12%). Unrelated subsidiaries share management and brand but not customers, so a segment's quarter says little about its siblings. */
+    /**
+     * One-factor loading of each stream on the firm-wide demand innovation (rho^2 = 12%). Unrelated subsidiaries share
+     * management and brand but not customers, so a segment's quarter says little about its siblings.
+     */
     public const FIRM_FACTOR_LOADING = 0.35;
-    /** Two-factor loading on the persistent demand factor of the holding company's reported sector (rho_s^2 = 6%). A conglomerate spans sectors, so its own sector's cycle explains less of any one segment than it would for a focused peer. */
+    /**
+     * Two-factor loading on the persistent demand factor of the holding company's reported sector (rho_s^2 = 6%). A
+     * conglomerate spans sectors, so its own sector's cycle explains less of any one segment than it would for a
+     * focused peer.
+     */
     public const SECTOR_FACTOR_LOADING = 0.25;
 
     // --- Operating Cyclicality & Demand Structure ---
-    /** Elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). Diversified subsidiaries dampen the cycle. */
+    /**
+     * Elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). Diversified
+     * subsidiaries dampen the cycle.
+     */
     public const OPERATING_CYCLICALITY = 0.90;
     /** Own-price elasticity of demand: volume lost per unit of real price increase. */
     public const PRICE_ELASTICITY_OF_DEMAND = 0.50;
-    /** Share of an idiosyncratic revenue gain taken from same-industry peers rather than won from a larger market. "Conglomerates" is a listing convention, not a product market: a rail-and-insurance group and a staples group sell nothing the other buys, so a group's gain is won in its segments' end markets, none of it from its listed peers. */
+    /**
+     * Share of an idiosyncratic revenue gain taken from same-industry peers rather than won from a larger market.
+     * "Conglomerates" is a listing convention, not a product market: a rail-and-insurance group and a staples group
+     * sell nothing the other buys, so a group's gain is won in its segments' end markets, none of it from its listed
+     * peers.
+     */
     public const INDUSTRY_SUBSTITUTABILITY = 0.00;
 
     // --- Input Cost Basket ---
-    /** Shares of the variable cost base by input channel, measured from the BEA input-output accounts with supply-chain content (labor still the model's own). */
+    /**
+     * Shares of the variable cost base by input channel, measured from the BEA input-output accounts with supply-chain
+     * content (labor still the model's own).
+     */
     public const INPUT_COST_EXPOSURES = InputOutputExposures::CONGLOMERATE;
 
     // --- Price Pass-Through ---
@@ -67,7 +85,8 @@ class ConglomerateBusinessModel extends StandardCorporateBusinessModel
     public const PRICE_PASS_THROUGH_LAG_YEARS = 1.00;
 
     /**
-     * Calendar-quarter revenue seasonality [Q1, Q2, Q3, Q4] summing to 4.0: industrial spring deliveries and year-end shipments.
+     * Calendar-quarter revenue seasonality [Q1, Q2, Q3, Q4] summing to 4.0: industrial spring deliveries and year-end
+     * shipments.
      *
      * @return array<int, float>
      */
@@ -110,7 +129,9 @@ class ConglomerateBusinessModel extends StandardCorporateBusinessModel
     /** Sensitivity of industrial manufacturing to broader GDP output gap expansion. */
     public const INDUSTRIAL_MACRO_SCALAR = 1.20;
 
-    /** Beta floor for cyclical stream sensitivity; a reported beta near zero is a data artifact, not true acyclicality. */
+    /**
+     * Beta floor for cyclical stream sensitivity; a reported beta near zero is a data artifact, not true acyclicality.
+     */
     public const MIN_CYCLICAL_BETA_FLOOR = 0.35;
 
     /** Residual output gap sensitivity of staples volume and tollbooth throughput (defensive, but not macro-immune). */
@@ -129,13 +150,22 @@ class ConglomerateBusinessModel extends StandardCorporateBusinessModel
     /** Distress intensity signal at which half the maximum contrarian float expansion is realized. */
     public const CONTRARIAN_HALF_SATURATION_POINT = 0.50;
 
-    /** Revenue elasticity of the float segment to the policy rate's gap from neutral. About 40% of the float is cash and short sovereign paper earning the front rate; the denominator is the BOOK's blended yield, not the neutral policy rate, because the other 60% is high-yield and catastrophe paper yielding well above it. Blending 40% at ~3.5% with 60% at ~7% gives ~5.6%, so a 1pp gap moves segment revenue by 0.40 / 0.056 ~ 7%. Dry powder is not free money in a ZIRP decade, but it is not a pure rates bet either. */
+    /**
+     * Revenue elasticity of the float segment to the policy rate's gap from neutral. About 40% of the float is cash and
+     * short sovereign paper earning the front rate; the denominator is the BOOK's blended yield, not the neutral policy
+     * rate, because the other 60% is high-yield and catastrophe paper yielding well above it. Blending 40% at ~3.5%
+     * with 60% at ~7% gives ~5.6%, so a 1pp gap moves segment revenue by 0.40 / 0.056 ~ 7%. Dry powder is not free
+     * money in a ZIRP decade, but it is not a pure rates bet either.
+     */
     public const FLOAT_RATE_CARRY_ELASTICITY = 7.00;
 
     /** Spread duration (years) of the float credit book: short corporates, preferreds, and cat bonds. */
     public const FLOAT_SPREAD_DURATION = 4.00;
 
-    /** Realized credit loss on float revenue per unit of the corporate default rate over its measured trend, relative, both ways. */
+    /**
+     * Realized credit loss on float revenue per unit of the corporate default rate over its measured trend, relative,
+     * both ways.
+     */
     public const FLOAT_CREDIT_LOSS_SCALAR = 0.08;
 
     // --- Tail Risk & Shock Events ---
@@ -356,7 +386,8 @@ class ConglomerateBusinessModel extends StandardCorporateBusinessModel
             + ($defensiveMacroBoost * $defensiveWeight)
             + ($contrarianSurge * $floatWeight * self::CONTRARIAN_OBSERVABLE_DISCOUNT);
 
-        // The one-off charge is booked as a special item: in EBIT, out of the run rate, the Street figure and the cost ratio.
+        // The one-off charge is booked as a special item: in EBIT, out of the run rate, the Street figure and the cost
+        // ratio.
         $specialCharge = $restructuringPenalty * $actualRevenue;
 
         return new SectorPhysicsResult(

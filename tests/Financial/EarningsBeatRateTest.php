@@ -41,7 +41,8 @@ class EarningsBeatRateTest extends TestCase
             [$squares, $weight] = MarketConsensusEngine::recordSurprise($squares, $weight, $surprise, 0.25);
         }
 
-        // Phi(0.674) = 0.75; a record of about a dozen reports measures the sd a little low, so the share sits just under.
+        // Phi(0.674) = 0.75; a record of about a dozen reports measures the sd a little low, so the share sits just
+        // under.
         $this->assertEqualsWithDelta(0.74, $beats / $reports, 0.03);
     }
 

@@ -42,13 +42,22 @@ use App\Service\Model\StreamContext;
 class BiotechBusinessModel extends StandardCorporateBusinessModel
 {
     // --- Firm-Level Common Factor ---
-    /** One-factor loading of each stream on the firm-wide demand innovation (rho^2 = 56%). A concentrated pipeline is one scientific bet: a readout, a label change or a safety signal moves marketed franchise and pipeline together. */
+    /**
+     * One-factor loading of each stream on the firm-wide demand innovation (rho^2 = 56%). A concentrated pipeline is
+     * one scientific bet: a readout, a label change or a safety signal moves marketed franchise and pipeline together.
+     */
     public const FIRM_FACTOR_LOADING = 0.75;
-    /** Two-factor loading on the persistent sector demand factor (rho_s^2 = 9%). Prescription demand is set by the molecule and its label, not by the therapeutics cycle. */
+    /**
+     * Two-factor loading on the persistent sector demand factor (rho_s^2 = 9%). Prescription demand is set by the
+     * molecule and its label, not by the therapeutics cycle.
+     */
     public const SECTOR_FACTOR_LOADING = 0.30;
 
     // --- Operating Cyclicality & Demand Structure ---
-    /** Elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). Prescriptions are non-discretionary; therapies rarely substitute. */
+    /**
+     * Elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). Prescriptions are
+     * non-discretionary; therapies rarely substitute.
+     */
     public const OPERATING_CYCLICALITY = 0.60;
     /** Own-price elasticity of demand: volume lost per unit of real price increase. */
     public const PRICE_ELASTICITY_OF_DEMAND = 0.20;
@@ -56,23 +65,41 @@ class BiotechBusinessModel extends StandardCorporateBusinessModel
     public const INDUSTRY_SUBSTITUTABILITY = 0.20;
 
     // --- Input Cost Basket ---
-    /** Shares of the variable cost base by input channel, measured from the BEA input-output accounts with supply-chain content (labor still the model's own). */
+    /**
+     * Shares of the variable cost base by input channel, measured from the BEA input-output accounts with supply-chain
+     * content (labor still the model's own).
+     */
     public const INPUT_COST_EXPOSURES = InputOutputExposures::BIOTECH;
-    /** Multi-year API supply agreements and validated second sources hold the purchase price steady well past a spot move. */
+    /**
+     * Multi-year API supply agreements and validated second sources hold the purchase price steady well past a spot
+     * move.
+     */
     public const INPUT_COST_LAG_YEARS = 1.00;
 
     // --- Reporting Incentives ---
-    /** Propensity to steer reported earnings toward consensus with accruals. Little marketed revenue to shift and milestone income is contractually dated, so there is not much to reclassify even when the incentive is there. */
+    /**
+     * Propensity to steer reported earnings toward consensus with accruals. Little marketed revenue to shift and
+     * milestone income is contractually dated, so there is not much to reclassify even when the incentive is there.
+     */
     public const EARNINGS_MANAGEMENT_PROPENSITY = 0.25;
 
     // --- Pricing Power ---
-    /** Exclusivity is administered pricing: a patented therapy on-label has no substitute, so list prices are set rather than met. Generic and specialty archetypes are tuned down per ticker. */
+    /**
+     * Exclusivity is administered pricing: a patented therapy on-label has no substitute, so list prices are set rather
+     * than met. Generic and specialty archetypes are tuned down per ticker.
+     */
     public const PRICING_POWER_INDEX = 0.85;
 
     // --- Balance Sheet Realism ---
-    /** Stock-based compensation (ASC 718) on a marketed book: 1.71% of revenue, US pharmaceutical drugs (Damodaran, Employee data by industry, 228 firms). */
+    /**
+     * Stock-based compensation (ASC 718) on a marketed book: 1.71% of revenue, US pharmaceutical drugs (Damodaran,
+     * Employee data by industry, 228 firms).
+     */
     public const MARKETED_STOCK_COMPENSATION_INTENSITY = 0.0171;
-    /** Stock-based compensation on pipeline and collaboration revenue, whose science teams are paid in equity: 7.20%, US biotechnology (Damodaran, 496 firms). */
+    /**
+     * Stock-based compensation on pipeline and collaboration revenue, whose science teams are paid in equity: 7.20%, US
+     * biotechnology (Damodaran, 496 firms).
+     */
     public const PIPELINE_STOCK_COMPENSATION_INTENSITY = 0.0720;
 
     // --- Analyst Visibility & Error ---
@@ -88,7 +115,9 @@ class BiotechBusinessModel extends StandardCorporateBusinessModel
     public const EVENT_MIN_VISIBILITY = 0.70;
 
     // --- Dual-Stream Biotech Portfolio Architecture ---
-    /** Baseline fraction of revenue derived from commercially marketed, patent-protected established pharmaceuticals. */
+    /**
+     * Baseline fraction of revenue derived from commercially marketed, patent-protected established pharmaceuticals.
+     */
     public const ESTABLISHED_DRUG_WEIGHT = 0.70;
     /** Baseline fraction of revenue derived from recently launched assets plus collaboration and milestone income. */
     public const PIPELINE_DRUG_WEIGHT    = 0.30;
@@ -102,31 +131,58 @@ class BiotechBusinessModel extends StandardCorporateBusinessModel
     public const PIPELINE_PERSISTENCE_PHI = 0.10;
 
     // --- Persisted Structural State Keys ---
-    /** Marketed commercial book in franchise units (1.0 = the seeded book): every cohort on its launch, exclusivity and erosion path. */
+    /**
+     * Marketed commercial book in franchise units (1.0 = the seeded book): every cohort on its launch, exclusivity and
+     * erosion path.
+     */
     public const STATE_FRANCHISE_INDEX = 'state:commercial_franchise';
-    /** Next quarter's structural revenue multiplier, 1 + weight x (launched book - 1): the approved book the firm's capital now earns on. */
+    /**
+     * Next quarter's structural revenue multiplier, 1 + weight x (launched book - 1): the approved book the firm's
+     * capital now earns on.
+     */
     public const STATE_STRUCTURAL_MULTIPLIER = 'state:structural_franchise_multiplier';
     /** Live share of marketed revenue still under patent or regulatory exclusivity protection. */
     public const STATE_PROTECTED_SHARE = 'state:patent_protected_share';
-    /** Next quarter's known erosion of the marketed book as a share of structural revenue: what the exclusivity dates already say, handed to expected revenue. */
+    /**
+     * Next quarter's known erosion of the marketed book as a share of structural revenue: what the exclusivity dates
+     * already say, handed to expected revenue.
+     */
     public const STATE_KNOWN_COMMERCIAL_SHIFT = 'state:known_commercial_shift';
-    /** Prior-quarter R&D reinvestment relative to what keeps the book level: replacement plus capital growth with the firm's market. */
+    /**
+     * Prior-quarter R&D reinvestment relative to what keeps the book level: replacement plus capital growth with the
+     * firm's market.
+     */
     public const STATE_RND_REPLACEMENT_RATIO = 'state:rnd_replacement_ratio';
     /** Late-stage (Phase III) programmes in the pipeline: every readout draws it down, R&D refills it. */
     public const STATE_LATE_STAGE_ASSETS = 'state:late_stage_assets';
     /** Prefix of the cohort ledger, one slot per marketed drug: state:cohort:{slot}:{peak|adoption|exclusivity}. */
     public const STATE_COHORT_PREFIX = 'state:cohort:';
-    /** Off-patent biologic revenue moved out of the ledger after its erosion window, still decaying on the biosimilar hazard. */
+    /**
+     * Off-patent biologic revenue moved out of the ledger after its erosion window, still decaying on the biosimilar
+     * hazard.
+     */
     public const STATE_OFF_PATENT_BIOLOGIC = 'state:off_patent_biologic';
-    /** Off-patent small-molecule revenue moved out of the ledger after its erosion window, still decaying on the generic hazard. */
+    /**
+     * Off-patent small-molecule revenue moved out of the ledger after its erosion window, still decaying on the generic
+     * hazard.
+     */
     public const STATE_OFF_PATENT_SMALL_MOLECULE = 'state:off_patent_small_molecule';
-    /** Mature established-products book the lore seeds as already off patent: its exclusivity rents are gone and it is held like a generic line. */
+    /**
+     * Mature established-products book the lore seeds as already off patent: its exclusivity rents are gone and it is
+     * held like a generic line.
+     */
     public const STATE_ESTABLISHED_PRODUCTS = 'state:established_products';
 
     // --- Late-Stage Pipeline (phase-transition rates) ---
-    /** Mean Phase III duration in years (DiMasi, Grabowski & Hansen 2016, ~30.5 months): each late-stage programme reads out at a hazard of one over it. */
+    /**
+     * Mean Phase III duration in years (DiMasi, Grabowski & Hansen 2016, ~30.5 months): each late-stage programme reads
+     * out at a hazard of one over it.
+     */
     public const PHASE_III_DURATION_YEARS = 2.54;
-    /** Probability a pivotal Phase III trial meets its primary endpoint (BIO/Informa/QLS 2021, programmes 2011-2020: 57.8%). */
+    /**
+     * Probability a pivotal Phase III trial meets its primary endpoint (BIO/Informa/QLS 2021, programmes 2011-2020:
+     * 57.8%).
+     */
     public const PHASE_III_SUCCESS_RATE = 0.578;
     /** Probability a filed NDA/BLA clears regulatory review (BIO/Informa/QLS 2021, programmes 2011-2020: 90.6%). */
     public const REGULATORY_APPROVAL_RATE = 0.906;
@@ -140,23 +196,41 @@ class BiotechBusinessModel extends StandardCorporateBusinessModel
     public const MAX_PIPELINE_REFILL_MULTIPLIER = 2.00;
 
     // --- Launch Ramp (Bass diffusion) ---
-    /** Imitation-to-innovation ratio q/p of the Bass adoption curve (Sultan, Farley & Lehmann 1990 meta-analysis: q 0.38, p 0.03). */
+    /**
+     * Imitation-to-innovation ratio q/p of the Bass adoption curve (Sultan, Farley & Lehmann 1990 meta-analysis: q
+     * 0.38, p 0.03).
+     */
     public const BASS_IMITATION_RATIO = 12.667;
-    /** Years from launch to peak sales: ~8 for first-in-class, 3-4 for followers (Robey & David 2018), about a third of approvals first-in-class (Lanthier et al. 2013). */
+    /**
+     * Years from launch to peak sales: ~8 for first-in-class, 3-4 for followers (Robey & David 2018), about a third of
+     * approvals first-in-class (Lanthier et al. 2013).
+     */
     public const LAUNCH_YEARS_TO_PEAK = 5.0;
     /** Share of plateau adoption reached at peak sales on the cumulative Bass curve. */
     public const LAUNCH_PEAK_ADOPTION = 0.90;
 
     // --- Approved Cohorts ---
-    /** Slots in the marketed-drug ledger: ~10 protected launches and ~3 in their erosion window at steady state, plus room for the seeded book. */
+    /**
+     * Slots in the marketed-drug ledger: ~10 protected launches and ~3 in their erosion window at steady state, plus
+     * room for the seeded book.
+     */
     public const MAX_COHORTS = 24;
     /** Protected cohorts the lore book is seeded as: the lead franchise plus followers on evenly staggered expiries. */
     public const SEED_PROTECTED_COHORTS = 4;
-    /** Lower bound on the structural franchise multiplier, so the revenue base a quarter is stripped back to stays finite. */
+    /**
+     * Lower bound on the structural franchise multiplier, so the revenue base a quarter is stripped back to stays
+     * finite.
+     */
     public const MIN_FRANCHISE_INDEX = 0.15;
-    /** Market exclusivity granted to a newly approved asset, in quarters (~12.6 years for NMEs above $100m in sales, Grabowski, Long, Mortimer & Boyo 2016). */
+    /**
+     * Market exclusivity granted to a newly approved asset, in quarters (~12.6 years for NMEs above $100m in sales,
+     * Grabowski, Long, Mortimer & Boyo 2016).
+     */
     public const NEW_APPROVAL_EXCLUSIVITY_QUARTERS = 50.0;
-    /** Swing in collaboration and milestone revenue between a pivotal success and a miss, centred on the odds (+29% / -31% at a 52% approval rate) so the stream stays unbiased. */
+    /**
+     * Swing in collaboration and milestone revenue between a pivotal success and a miss, centred on the odds (+29% /
+     * -31% at a 52% approval rate) so the stream stays unbiased.
+     */
     public const READOUT_MILESTONE_SWING = 0.60;
     /** Launch-quarter variable cost penalty from commercial build-out and payer access spending. */
     public const APPROVAL_LAUNCH_COST_MARGIN_PENALTY = 0.03;
@@ -174,9 +248,14 @@ class BiotechBusinessModel extends StandardCorporateBusinessModel
     public const DEFAULT_PATENT_PROTECTED_SHARE = 0.85;
     /** Default share of the commercial book made up of biologics rather than small molecules. */
     public const DEFAULT_BIOLOGIC_REVENUE_SHARE = 0.50;
-    /** Quarterly erosion hazard for small-molecule brands at generic entry: -ln(0.15)/4, ~85% volume loss in one year (Grabowski, Long & Mortimer 2014: 16% brand share at one year). */
+    /**
+     * Quarterly erosion hazard for small-molecule brands at generic entry: -ln(0.15)/4, ~85% volume loss in one year
+     * (Grabowski, Long & Mortimer 2014: 16% brand share at one year).
+     */
     public const SMALL_MOLECULE_LOE_HAZARD = 0.4742;
-    /** Quarterly erosion hazard for biologics under biosimilar entry: -ln(0.60)/10, ~40% loss over two and a half years. */
+    /**
+     * Quarterly erosion hazard for biologics under biosimilar entry: -ln(0.60)/10, ~40% loss over two and a half years.
+     */
     public const BIOLOGIC_LOE_HAZARD = 0.0511;
     /** Quarters an expired cohort's erosion runs through utilization before the capacity base follows it down. */
     public const LOE_EROSION_WINDOW_QUARTERS = 12.0;
@@ -192,7 +271,11 @@ class BiotechBusinessModel extends StandardCorporateBusinessModel
     public const UNDERLEVERAGED_DEBT_RATIO = 0.50;
 
     // --- Secular Growth Rails ---
-    /** US retail prescription drug spending as a share of nominal GDP in 2000: $122.0B of $10,251B (CMS National Health Expenditure, Health, United States 2020-2021, Table HExpType). Brands hold a share of spending that is largely unchanged over two decades (IQVIA), so they grow at the total's rate. */
+    /**
+     * US retail prescription drug spending as a share of nominal GDP in 2000: $122.0B of $10,251B (CMS National Health
+     * Expenditure, Health, United States 2020-2021, Table HExpType). Brands hold a share of spending that is largely
+     * unchanged over two decades (IQVIA), so they grow at the total's rate.
+     */
     public const PATENTED_SHARE_2000 = 0.01190;
     /** The same share in 2019: $369.7B of $21,381B. */
     public const PATENTED_SHARE_2019 = 0.01729;
@@ -200,7 +283,10 @@ class BiotechBusinessModel extends StandardCorporateBusinessModel
     public const PATENTED_SHARE_WINDOW_YEARS = 19.0;
     /** US generic drug spending as a share of nominal GDP in 2010: ~$78B (IMS, second-hand) of $15,049B. */
     public const GENERIC_SHARE_2010 = 0.00518;
-    /** The same share in 2018: $103B, 21.3% of $482B invoice spending (IQVIA, Medicine Use and Spending in the U.S.), of $20,533B. */
+    /**
+     * The same share in 2018: $103B, 21.3% of $482B invoice spending (IQVIA, Medicine Use and Spending in the U.S.), of
+     * $20,533B.
+     */
     public const GENERIC_SHARE_2018 = 0.00502;
     /** Years between the two generic benchmarks. */
     public const GENERIC_SHARE_WINDOW_YEARS = 8.0;

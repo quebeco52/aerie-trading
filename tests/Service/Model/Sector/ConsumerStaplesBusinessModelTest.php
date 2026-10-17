@@ -78,7 +78,10 @@ class ConsumerStaplesBusinessModelTest extends TestCase
         $this->assertEquals(0.015, $this->model->getMoatSpread());
     }
 
-    /** Engel's law: volume follows income at the sector's elasticity; a brand's pricing power does not change how much people eat. */
+    /**
+     * Engel's law: volume follows income at the sector's elasticity; a brand's pricing power does not change how much
+     * people eat.
+     */
     public function testDemandFollowsIncomeAtTheSectorElasticity(): void
     {
         $slump = new MacroStateDTO(outputGapEma: -0.04);
@@ -175,7 +178,10 @@ class ConsumerStaplesBusinessModelTest extends TestCase
         $this->assertLessThan($processorCalm->ebit, $processorDear->ebit, 'LARK only buys the crop');
     }
 
-    /** A recall or a fine is a one-off charge on the quarter's branded sales, outside the cost ratio the run rate is built from. */
+    /**
+     * A recall or a fine is a one-off charge on the quarter's branded sales, outside the cost ratio the run rate is
+     * built from.
+     */
     public function testARecallIsAOneOffChargeOutsideTheCostRatio(): void
     {
         $macro = new MacroStateDTO();

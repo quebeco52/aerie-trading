@@ -37,29 +37,50 @@ class MarketEngine
      * gaps readable while leaving a slow enough pull for momentum.
      */
     public const FAIR_VALUE_PULL_HALF_LIFE_YEARS = 1.0;
-    /** The pull's base speed per year, ln 2 over the half-life; funding stress slows it (Brunnermeier & Pedersen 2009). */
+    /**
+     * The pull's base speed per year, ln 2 over the half-life; funding stress slows it (Brunnermeier & Pedersen 2009).
+     */
     public const FAIR_VALUE_PULL_SPEED = M_LN2 / self::FAIR_VALUE_PULL_HALF_LIFE_YEARS;
 
     // --- Variance Process Calibration ---
-    /** Speed the idiosyncratic variance reverts to its long-run level, in reversions per year; a shock is most of the way gone inside two months. */
+    /**
+     * Speed the idiosyncratic variance reverts to its long-run level, in reversions per year; a shock is most of the
+     * way gone inside two months.
+     */
     public const BASE_VARIANCE_REVERSION_SPEED = 6.0;
 
     // --- Variance Budget ---
-    /** Ceiling on the share of a name's long-run IDIOSYNCRATIC variance its OWN jump process may supply; the jump component of single-stock return variance is a minority of the total (Huang & Tauchen 2005). */
+    /**
+     * Ceiling on the share of a name's long-run IDIOSYNCRATIC variance its OWN jump process may supply; the jump
+     * component of single-stock return variance is a minority of the total (Huang & Tauchen 2005).
+     */
     private const MAX_IDIOSYNCRATIC_JUMP_VARIANCE_SHARE = 0.25;
 
     // --- Common Idiosyncratic Volatility (Herskovic, Kelly, Lustig & Van Nieuwerburgh 2016) ---
-    /** Loading of a firm's residual variance on the common idiosyncratic factor: 0.71-1.54 by size quintile, about one (HKLV, calibration table). Market variance stands in for the factor, which tracks it (correlation 0.64, annual levels 1926-2010). */
+    /**
+     * Loading of a firm's residual variance on the common idiosyncratic factor: 0.71-1.54 by size quintile, about one
+     * (HKLV, calibration table). Market variance stands in for the factor, which tracks it (correlation 0.64, annual
+     * levels 1926-2010).
+     */
     public const IDIOSYNCRATIC_COMMON_FACTOR_LOADING = 1.0;
-    /** Years the market variance trend averages over: one postwar business cycle, 58.4 months of expansion plus 11.1 of contraction (NBER, 1945-2009). */
+    /**
+     * Years the market variance trend averages over: one postwar business cycle, 58.4 months of expansion plus 11.1 of
+     * contraction (NBER, 1945-2009).
+     */
     public const MARKET_VARIANCE_TREND_YEARS = (58.4 + 11.1) / 12.0;
-    /** Floor on the share of a name's configured variance that stays idiosyncratic, for a configuration whose beta alone already consumes the whole of its stated volatility. */
+    /**
+     * Floor on the share of a name's configured variance that stays idiosyncratic, for a configuration whose beta alone
+     * already consumes the whole of its stated volatility.
+     */
     private const MIN_IDIOSYNCRATIC_VARIANCE_SHARE = 0.20;
 
     // --- Volatility Process ---
     /** Mean of the contemporaneous variance jump, as a share of the name's current variance. */
     private const VARIANCE_JUMP_MEAN_SHARE = 0.50;
-    /** Sensitivity of the variance reversion speed to jump intensity; a jumpier name pulls back to its long-run level faster rather than having its target clamped. */
+    /**
+     * Sensitivity of the variance reversion speed to jump intensity; a jumpier name pulls back to its long-run level
+     * faster rather than having its target clamped.
+     */
     private const JUMP_REGIME_KAPPA_SENSITIVITY = 0.15;
     /** Ratio of the down-jump scale to the up-jump scale, the Kou left-tail skew a single name carries. */
     private const JUMP_DOWNSIDE_SCALE_RATIO = 1.25;
@@ -67,7 +88,10 @@ class MarketEngine
     private const MIN_JUMP_SCALE = 0.01;
 
     // --- Revenue Floor (Margin-Adjusted Price-to-Sales) ---
-    /** Floor on the P/E anchor the price-to-sales multiple is struck from, so a distressed multiple does not erase the revenue floor entirely. */
+    /**
+     * Floor on the P/E anchor the price-to-sales multiple is struck from, so a distressed multiple does not erase the
+     * revenue floor entirely.
+     */
     private const MIN_PS_ANCHOR_PE = 10.0;
     /** Bounds on the implied net margin the price-to-sales multiple is built on. */
     private const MIN_IMPLIED_NET_MARGIN = 0.01;
@@ -88,7 +112,10 @@ class MarketEngine
     public const FUNDING_LIQUIDITY_STRESS_FACTOR = 2.0;
 
     // --- Institutional & Market Architecture ---
-    /** Circuit breaker on the continuous diffusion, as the largest move of a single trading DAY; scaled by the square root of the step actually taken. */
+    /**
+     * Circuit breaker on the continuous diffusion, as the largest move of a single trading DAY; scaled by the square
+     * root of the step actually taken.
+     */
     public const MAX_DAILY_PRICE_CIRCUIT_BREAKER = 0.40;
 
     // --- Market Microstructure: Order Flow Variance Budget ---
@@ -106,11 +133,11 @@ class MarketEngine
      * the stochastic volatility process carries only what is left. The market-wide jump reaches the name through
      * the same beta, so it is systematic variance too and is paid for here, not out of the name's own budget.
      *
-     * Deriving the loading the other way round — from an implied correlation clamped below one — truncated the beta of any name whose volatility fell
-     * short of what its beta demanded: measured against the market factor a configured 1.3 realized 1.19 and
-     * a 2.8 realized 2.30, and in a crisis, when market volatility triples and the truncation binds on
-     * everything at once, a 1.3 realized 0.45. The CAPM drift and the systemic jump were paid on the full
-     * beta throughout, so high-beta names were handed the premium without the risk.
+     * Deriving the loading the other way round — from an implied correlation clamped below one — truncated the beta of
+     * any name whose volatility fell short of what its beta demanded: measured against the market factor a configured
+     * 1.3 realized 1.19 and a 2.8 realized 2.30, and in a crisis, when market volatility triples and the truncation
+     * binds on everything at once, a 1.3 realized 0.45. The CAPM drift and the systemic jump were paid on the full beta
+     * throughout, so high-beta names were handed the premium without the risk.
      *
      * The target is struck against the market's BASELINE volatility, so the configured figure is the name's
      * total volatility in normal conditions and total volatility then rises with the market's through beta,
@@ -650,7 +677,8 @@ class MarketEngine
      * @param float $outputGap           The macroeconomic output gap (boom vs bust).
      * @param float $inflation           The current inflation rate, read as stress; growth carries the breakeven.
      * @param float $beta                The stock's sensitivity to systemic market moves.
-     * @param float|null $costOfDebt     The firm's pre-tax marginal borrowing rate; null prices it at the 10Y plus the IG spread.
+     * @param float|null $costOfDebt     The firm's pre-tax marginal borrowing rate; null prices it at the 10Y plus the
+     *                                   IG spread.
      * @param float $reversionSpeed      The baseline speed at which the stock reverts to fair value.
      * @param float $roicTtm             The Trailing Twelve Month ROIC (or ROE).
      * @param float $riskFreeRate        The central bank's policy rate.
@@ -659,17 +687,21 @@ class MarketEngine
      * @param float $baselineIndustryPE  The standard P/E multiple for this industry.
      * @param float $revenuePerShare     The total revenue per share.
      * @param string $businessModel      The type of business (e.g., 'tech', 'bank', 'retail').
-     * @param float $liveCostOfEquity    The Cost of Equity (CAPM on the 10Y), the hurdle every equity leg is discounted at.
+     * @param float $liveCostOfEquity    The Cost of Equity (CAPM on the 10Y), the hurdle every equity leg is discounted
+     *                                   at.
      * @param float $netDebtPerShare     The net debt per share.
      * @param float $secularGrowth       The long-term growth rate of the sector/economy.
      * @param float $baselineRoic        The historical average ROIC.
      * @param float $baselineMargin      The historical average net margin.
      * @param float $accrualsRatio       The accruals-to-assets ratio.
-     * @param float|null $tangibleBookValuePerShare Book equity less goodwill per share; a financial's P/B leg is struck on it.
+     * @param float|null $tangibleBookValuePerShare Book equity less goodwill per share; a financial's P/B leg is struck
+     *                                              on it.
      * @param float $targetPayoutRatio   The payout ratio the firm's dividend policy steers to.
      * @param float $dividendAdjustmentSpeed Share of the gap to its target dividend the firm closes each quarter.
-     * @param array<string, float> $policyBasesPerShare What each law the firm's accounts answer to is charged on or moves, per share, keyed by lever.
-     * @param float|null $longRunReturn  The firm's measured long-run return; the trailing return's gap to it is valued as it fades.
+     * @param array<string, float> $policyBasesPerShare What each law the firm's accounts answer to is charged on or
+     *                                                  moves, per share, keyed by lever.
+     * @param float|null $longRunReturn  The firm's measured long-run return; the trailing return's gap to it is valued
+     *                                   as it fades.
      * @param float $excessCashPerShare  Cash beyond what the business needs to run, valued at face beside it.
      * @return array{perceived_fair_value: float, dynamic_reversion: float, policy_repricing: float, analyst_targets: array}
      */
@@ -705,14 +737,15 @@ class MarketEngine
         $strategy = \App\Data\Company\Sectors::getBusinessModelStrategy($businessModel);
         $macro = $macroState ?? new MacroStateDTO();
 
-        // Cash beyond what the business needs is worth its face: every leg below values the business on the book it runs
-        // on, and the surplus is added back after. Capitalised through the interest it saved, a surplus dollar was worth
-        // the after-tax rate times the multiple, about forty cents, and nothing at all to a firm already net of debt.
+        // Cash beyond what the business needs is worth its face: every leg below values the business on the book it
+        // runs on, and the surplus is added back after. Capitalised through the interest it saved, a surplus dollar was
+        // worth the after-tax rate times the multiple, about forty cents, and nothing at all to a firm already net of
+        // debt.
         $bookValuePerShare = max(0.0, $bookValuePerShare - $excessCashPerShare);
 
-        // Every leg below values EQUITY: levered earnings on a P/E, book equity on a P/B, the dividends its policy pays.
-        // All are discounted at the cost of equity on the return the firm earns on its equity
-        // (Damodaran 2012, ch. 18-20); WACC belongs to unlevered cash flows, which nothing here capitalises.
+        // Every leg below values EQUITY: levered earnings on a P/E, book equity on a P/B, the dividends its policy
+        // pays. All are discounted at the cost of equity on the return the firm earns on its equity (Damodaran 2012,
+        // ch. 18-20); WACC belongs to unlevered cash flows, which nothing here capitalises.
         $hurdleRate = $liveCostOfEquity;
         $afterTaxCostOfDebt = ($costOfDebt ?? ($macro->yield10yEma + $macro->macroCreditSpread))
             * (1.0 - $strategy->getEffectiveTaxRate($macro->corporateTaxRate));
@@ -802,8 +835,8 @@ class MarketEngine
 
             $peFairValue = max(0.00, $normalizedEps * $fairValuePE);
 
-            // THE ZOMBIE FIX: Revenue Floor (Margin-Adjusted Price-to-Sales)
-            // High-turnover physical corporations (retail, grocers) have thin net margins and cannot support software-like P/S multiples.
+            // THE ZOMBIE FIX: Revenue Floor (Margin-Adjusted Price-to-Sales) High-turnover physical corporations
+            // (retail, grocers) have thin net margins and cannot support software-like P/S multiples.
             $trueMargin = $structuralEps > 0
                 ? $structuralEps / max(0.01, $revenuePerShare)
                 : self::MIN_IMPLIED_NET_MARGIN;
@@ -819,11 +852,12 @@ class MarketEngine
             // The earnings leg: the value-driver P/E value, never below what the model's revenue floor is worth.
             $earningsValue = $strategy->calculateEarningsValue($revenueFloorEquityValue, $peFairValue);
 
-            // Dividend Discount Model (Gordon 1962) on the dividends the firm's own policy will pay: its target payout of
-            // normalized earnings, growing at the rate its retained earnings compound at (Higgins 1977), plus the present
-            // value of today's gap to that target while partial adjustment closes it (Lintner 1956). Struck on the policy
-            // rather than the last cheque, a cut costs what is missed while the dividend recovers, and there is no step at
-            // zero. Only the models that price on income read it; an operating company's value does not turn on its payout.
+            // Dividend Discount Model (Gordon 1962) on the dividends the firm's own policy will pay: its target payout
+            // of normalized earnings, growing at the rate its retained earnings compound at (Higgins 1977), plus the
+            // present value of today's gap to that target while partial adjustment closes it (Lintner 1956). Struck on
+            // the policy rather than the last cheque, a cut costs what is missed while the dividend recovers, and there
+            // is no step at zero. Only the models that price on income read it; an operating company's value does not
+            // turn on its payout.
             $dividendSupportValue = 0.0;
             if ($targetPayoutRatio > 0.0 && $normalizedEps > 0.0) {
                 $requiredYield = max(self::MIN_DIVIDEND_REQUIRED_YIELD, $hurdleRate);
@@ -875,13 +909,15 @@ class MarketEngine
 
         $legs = $strikeLegs($equityReturn, $trueStructuralEps);
 
-        // The laws the market expects rather than the ones the trailing earnings carry (PolicyCapitalization), struck into
-        // the earnings every leg is valued on, so a firm held at its book floor loses no more than the floor gives up. A
-        // forecast revised this tick moves the price with the target, as news does, rather than leaving it to drift there.
+        // The laws the market expects rather than the ones the trailing earnings carry (PolicyCapitalization), struck
+        // into the earnings every leg is valued on, so a firm held at its book floor loses no more than the floor gives
+        // up. A forecast revised this tick moves the price with the target, as news does, rather than leaving it to
+        // drift there.
         $policyRepricing = 1.0;
         if ($macroState !== null) {
             // Capitalized on the same perpetual growth the multiple is struck on: the raw outlook can sit within a few
-            // basis points of the hurdle in an inflationary boom, and a policy gap spread over that would wipe out value.
+            // basis points of the hurdle in an inflationary boom, and a policy gap spread over that would wipe out
+            // value.
             $capRate = max(PolicyCapitalization::MIN_CAP_RATE, $hurdleRate - Valuation::perpetualGrowthRate($hurdleRate, $legs['expected_growth']));
             // The dividend its policy pays, as the income leg strikes it, over the value before the laws: the yield its
             // holders' tax is charged on. A dividend omitted for a quarter is still the policy's, and still taxed.

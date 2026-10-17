@@ -18,7 +18,8 @@ use App\Service\Model\ModelParam;
  *
  * Financial Physics:
  * - Dual-Desk Architecture: Advisory (M&A/underwriting) and Sales & Trading are structurally decorrelated.
- * - Cost of Capital Deal Flow: M&A and ECM scale with the output gap and the deal activity index; DCM with credit spreads and yield curve slope.
+ * - Cost of Capital Deal Flow: M&A and ECM scale with the output gap and the deal activity index; DCM with credit
+ *   spreads and yield curve slope.
  * - Basel FRTB VaR Volatility Targeting: S&T desk captures volatility arbitrage up to regulatory capital limits.
  * - Options Gamma Hedging: High market volatility boosts top-line options premium but incurs localized gamma friction.
  * - Compensation-Driven Cost Structure: IB variable costs are dominated by discretionary bonuses (40–85%).
@@ -30,11 +31,15 @@ class InvestmentBankBusinessModel extends BrokerageBusinessModel
     public const PAYS_BANK_LEVY = true;
 
     // --- Operating Cyclicality & Demand Structure ---
-    /** Elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). Deal flow is among the most cyclical fee pools. */
+    /**
+     * Elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). Deal flow is among
+     * the most cyclical fee pools.
+     */
     public const OPERATING_CYCLICALITY = 1.40;
 
     /**
-     * Calendar-quarter revenue seasonality [Q1, Q2, Q3, Q4] summing to 4.0: Q4 deal-closing surge before year end; summer lull.
+     * Calendar-quarter revenue seasonality [Q1, Q2, Q3, Q4] summing to 4.0: Q4 deal-closing surge before year end;
+     * summer lull.
      *
      * @return array<int, float>
      */
@@ -44,11 +49,17 @@ class InvestmentBankBusinessModel extends BrokerageBusinessModel
     }
 
     // --- Balance Sheet Realism ---
-    /** Stock-based compensation (ASC 718) as a share of revenue: Brokerage & Investment Banking, 2.51% of revenue, 32 firms (Damodaran, Employee data by industry, US, January 2026). */
+    /**
+     * Stock-based compensation (ASC 718) as a share of revenue: Brokerage & Investment Banking, 2.51% of revenue, 32
+     * firms (Damodaran, Employee data by industry, US, January 2026).
+     */
     public const STOCK_COMPENSATION_INTENSITY = 0.0251;
 
     // --- Labor Intensity ---
-    /** Labor share of the fixed cost base exposed to the Beveridge wage squeeze. Banker and trader compensation is the dominant overhead line of an investment bank. */
+    /**
+     * Labor share of the fixed cost base exposed to the Beveridge wage squeeze. Banker and trader compensation is the
+     * dominant overhead line of an investment bank.
+     */
     public const FIXED_COST_LABOR_SHARE = 0.70;
 
     // --- Dual-Desk Revenue Architecture ---
@@ -60,7 +71,10 @@ class InvestmentBankBusinessModel extends BrokerageBusinessModel
     public const TRADING_VARIANCE_SCALAR    = 0.35;
 
     // --- Deal Flow Cost of Capital & Macro Elasticity ---
-    /** Neutral 5Y-over-policy term structure slope (~80bps: the five-year share of the term premium plus the usual policy discount). DCM stimulus is measured as deviation from this. */
+    /**
+     * Neutral 5Y-over-policy term structure slope (~80bps: the five-year share of the term premium plus the usual
+     * policy discount). DCM stimulus is measured as deviation from this.
+     */
     public const DCM_NEUTRAL_CURVE_SLOPE     = 0.008;
     /** Sensitivity of M&A deal flow to corporate expansion (output gap). */
     public const MNA_OUTPUT_GAP_ELASTICITY   = 3.00;
@@ -68,13 +82,19 @@ class InvestmentBankBusinessModel extends BrokerageBusinessModel
     public const DCM_CREDIT_SPREAD_ELASTICITY = 10.0;
     /** Sensitivity of DCM bond issuance to yield curve steepness. */
     public const DCM_CURVE_SLOPE_ELASTICITY  = 2.50;
-    /** Sensitivity of M&A and ECM deal flow to the capital markets deal activity index (Jovanovic-Rousseau 2002), which carries their ERP, spread, volatility and EPU response. */
+    /**
+     * Sensitivity of M&A and ECM deal flow to the capital markets deal activity index (Jovanovic-Rousseau 2002), which
+     * carries their ERP, spread, volatility and EPU response.
+     */
     public const DEAL_ACTIVITY_INDEX_ELASTICITY = 0.40;
     /** Sensitivity of DCM debt syndication and equity underwriting absorption to M2 money supply growth. */
     public const M2_SYNDICATION_LIQUIDITY_SENSITIVITY = 0.30;
 
     // --- Advisory Fee Pool Mix ---
-    /** M&A advisory share of the advisory and underwriting fee pool (Goldman Sachs 2019 10-K: advisory $3,197M of $6,798M, 47%). */
+    /**
+     * M&A advisory share of the advisory and underwriting fee pool (Goldman Sachs 2019 10-K: advisory $3,197M of
+     * $6,798M, 47%).
+     */
     public const MNA_ADVISORY_SHARE             = 0.47;
     /** ECM equity underwriting share of the advisory and underwriting fee pool (GS 2019: $1,482M, 22%). */
     public const ECM_ADVISORY_SHARE             = 0.22;
@@ -90,17 +110,28 @@ class InvestmentBankBusinessModel extends BrokerageBusinessModel
     public const IPO_FREEZE_PENALTY             = 2.00;
 
     // --- Leveraged Finance (LevFin) & Hung Bridge Loan Marks ---
-    /** Variable cost per unit of the quarter's high-yield spread move: bridge commitments marked down as spreads widen, written back as they tighten. */
+    /**
+     * Variable cost per unit of the quarter's high-yield spread move: bridge commitments marked down as spreads widen,
+     * written back as they tighten.
+     */
     public const HUNG_DEBT_WRITEDOWN_SCALAR     = 1.50;
 
-    // --- FICC Rates Volatility (Ho & Stoll 1981: dealer spreads and flow scale with the volatility of what is dealt) ---
-    /** Elasticity of FICC desk revenue to realized ten-year yield volatility over its trend: 0.44 (se 0.27), yearly log changes of Goldman Sachs FICC net revenues (10-K, 2009-2022, within each reporting basis) on those of the realized volatility of daily FRED DGS10 changes. */
+    // --- FICC Rates Volatility (Ho & Stoll 1981: dealer spreads and flow scale with the volatility of what is dealt)
+    // ---
+    /**
+     * Elasticity of FICC desk revenue to realized ten-year yield volatility over its trend: 0.44 (se 0.27), yearly log
+     * changes of Goldman Sachs FICC net revenues (10-K, 2009-2022, within each reporting basis) on those of the
+     * realized volatility of daily FRED DGS10 changes.
+     */
     public const FICC_RATES_VOLATILITY_ELASTICITY = 0.44;
     /** Policy rate shock threshold (~200bps) above which fixed-income inventory marks down. */
     public const FICC_RATES_INVENTORY_SHOCK_THRESHOLD = 0.02;
     /** Variable inventory markdown scalar penalizing trading revenue for violent policy rate dislocations. */
     public const FICC_INVENTORY_MARKDOWN_SCALAR = 2.00;
-    /** FICC's share of sales and trading, the desk mix the volatility and FICC terms are struck at: Goldman Sachs 2019, FICC $7,388M of $14,779M (10-K). */
+    /**
+     * FICC's share of sales and trading, the desk mix the volatility and FICC terms are struck at: Goldman Sachs 2019,
+     * FICC $7,388M of $14,779M (10-K).
+     */
     public const FICC_TRADING_SHARE = 0.50;
 
     // --- Institutional Prime Financing & Matched-Book Repo ---
@@ -116,7 +147,10 @@ class InvestmentBankBusinessModel extends BrokerageBusinessModel
     public const ARCHEGOS_LOSS_PENALTY          = 0.12;
 
     // --- S&T Volatility Arbitrage & Basel FRTB VaR Limits ---
-    /** Volatility at which the S&T, vega and gamma terms are neutral: the sim's volatility anchor, where marketVolatilityEma lives. */
+    /**
+     * Volatility at which the S&T, vega and gamma terms are neutral: the sim's volatility anchor, where
+     * marketVolatilityEma lives.
+     */
     public const VIX_ARBITRAGE_FLOOR        = MacroEngine::MACRO_VOL_BASE_ANCHOR;
     /** S&T desk gross trading revenue capture scalar per point of excess VIX. */
     public const VIX_ARBITRAGE_SCALAR       = 1.20;
@@ -204,7 +238,8 @@ class InvestmentBankBusinessModel extends BrokerageBusinessModel
         // every closed primary market migrated another slice of the book from earning to non-earning.
         $fundedBook = $this->resolveEarningAssets($stock);
 
-        // Benchmark client asset yield to realized wholesale rate (liability borrowing cost) to preserve spread economics.
+        // Benchmark client asset yield to realized wholesale rate (liability borrowing cost) to preserve spread
+        // economics.
         $fundingBenchmark = max(0.0, $realizedWholesaleRate ?? $this->calculateBlendedWholesaleRate($stock, $macroState));
 
         // 1. Institutional Prime Brokerage & Secured Financing (Securities Lending & Margin Debits):
@@ -383,7 +418,8 @@ class InvestmentBankBusinessModel extends BrokerageBusinessModel
             $optionsRevenue = max(0.0, $expectedRevenue * $optionsWeight * (1.0 + ($optionsZ * $baselineVol * self::REVENUE_VARIANCE_SCALAR) + $optionsVegaBonus));
             $streamRevenues['options_premium_income'] = $optionsRevenue;
 
-            // 2. Bottom-Line Gamma Friction: Scaled by options desk weight so it does not contaminate non-options desks.
+            // 2. Bottom-Line Gamma Friction: Scaled by options desk weight so it does not contaminate non-options
+            //    desks.
             if ($vixGap > 0.0) {
                 $gammaHedgingCost = ($vixGap * self::OPTIONS_GAMMA_FRICTION) * $optionsWeight;
             }
@@ -429,7 +465,8 @@ class InvestmentBankBusinessModel extends BrokerageBusinessModel
                 + $tradingZ * $tradingWeight * self::TRADING_ANALYST_VISIBILITY)
                 * $baselineVol * self::REVENUE_VARIANCE_SCALAR;
 
-        // The one-off charge is booked as a special item: in EBIT, out of the run rate, the Street figure and the cost ratio.
+        // The one-off charge is booked as a special item: in EBIT, out of the run rate, the Street figure and the cost
+        // ratio.
         $specialCharge = ($regulatoryPenalty + $counterpartyDefaultPenalty) * $actualRevenue;
 
         return new SectorPhysicsResult(

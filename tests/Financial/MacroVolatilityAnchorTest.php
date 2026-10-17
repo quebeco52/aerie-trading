@@ -53,7 +53,9 @@ class MacroVolatilityAnchorTest extends TestCase
      */
     private const ANCHOR_TOLERANCE = 0.08;
 
-    /** @var array{rms: float, floorShare: float, leverage: float, jumpTickVarianceRise: float, calmTickVarianceRise: float}|null Memoized: one run serves every measurement. */
+    /**
+     * @var array{rms: float, floorShare: float, leverage: float, jumpTickVarianceRise: float, calmTickVarianceRise: float}|null Memoized: one run serves every measurement.
+     */
     private static ?array $measured = null;
 
     /**

@@ -363,9 +363,9 @@ class ApparelManufacturingBusinessModelTest extends TestCase
         $neutralResult = $run(0.0);
         $shockResult = $run(0.05);
 
-        // Payroll is the apparel maker's material tracked input. Only 1 - exp(-0.25 / INPUT_COST_LAG_YEARS) of a real wage
-        // 5% above its productivity path reaches the cost base in the first quarter, and SHER (pricing power 0.60) starts
-        // recovering 0.60 x 0.80 of it.
+        // Payroll is the apparel maker's material tracked input. Only 1 - exp(-0.25 / INPUT_COST_LAG_YEARS) of a real
+        // wage 5% above its productivity path reaches the cost base in the first quarter, and SHER (pricing power 0.60)
+        // starts recovering 0.60 x 0.80 of it.
         $spotDeviation = 0.05 * ApparelManufacturingBusinessModel::INPUT_COST_EXPOSURES['labor'];
         $hedgedShare = 1.0 - exp(-0.25 / ApparelManufacturingBusinessModel::INPUT_COST_LAG_YEARS);
         $recoveryShare = 1.0 - exp(-0.25 / FinancialConstants::DEFAULT_INPUT_PASS_THROUGH_LAG_YEARS);

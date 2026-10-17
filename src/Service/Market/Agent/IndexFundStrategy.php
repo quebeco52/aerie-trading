@@ -25,9 +25,16 @@ use App\DTO\AgentMarketViewDTO;
 final class IndexFundStrategy implements AgentStrategyInterface
 {
     // --- Agent Signals ---
-    /** Fractional change in the passive book per unit of the financial conditions index (a z-score composite): money leaves passive vehicles when conditions tighten. A two-sigma tightening takes 30% of the book, the order of a bad year of equity fund outflows. */
+    /**
+     * Fractional change in the passive book per unit of the financial conditions index (a z-score composite): money
+     * leaves passive vehicles when conditions tighten. A two-sigma tightening takes 30% of the book, the order of a bad
+     * year of equity fund outflows.
+     */
     public const AGENT_INDEX_FLOW_SENSITIVITY = 0.15;
-    /** Most the passive book moves from its base in either direction, as a fraction. Passive flows are slow money even in a crisis; a tilt that could empty the book turned an index fund into a macro trader. */
+    /**
+     * Most the passive book moves from its base in either direction, as a fraction. Passive flows are slow money even
+     * in a crisis; a tilt that could empty the book turned an index fund into a macro trader.
+     */
     public const AGENT_INDEX_MAX_FLOW_TILT = 0.30;
     /** Baseline share of agent capital that indexes rather than picking. */
     public const AGENT_INDEX_BASE_SHARE = 0.30;

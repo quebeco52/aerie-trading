@@ -69,7 +69,8 @@ class RestaurantBusinessModelTest extends TestCase
 
     public function testOperatorBlendIsUnchangedBelowTheCeiling(): void
     {
-        // BREW: 70% company stores, whose implied cost ratio sits under the ceiling, keeps the relative-intensity blend.
+        // BREW: 70% company stores, whose implied cost ratio sits under the ceiling, keeps the relative-intensity
+        // blend.
         [$w, $f, $l, $vm] = [0.70, 0.10, 0.20, 0.37];
         $divisor = $w + (RestaurantBusinessModel::FRANCHISE_COST_INTENSITY * $f) + (RestaurantBusinessModel::LEASE_COST_INTENSITY * $l);
         $ratios = RestaurantBusinessModel::resolveStreamCostRatios($w, $f, $l, $vm);
@@ -81,8 +82,9 @@ class RestaurantBusinessModelTest extends TestCase
 
     public function testFoodCommodityDragIncreasesVariableCostAndKitchenFuelIsImmaterial(): void
     {
-        // BEA 2017: farm products through the supply chain are 3.8% of a restaurant's variable costs (the USDA food-dollar farm
-        // share away from home is ~4-5 cents); oil and gas content sits under InputOutputExposures::MATERIALITY_FLOOR.
+        // BEA 2017: farm products through the supply chain are 3.8% of a restaurant's variable costs (the USDA
+        // food-dollar farm share away from home is ~4-5 cents); oil and gas content sits under
+        // InputOutputExposures::MATERIALITY_FLOOR.
         $stock = new Stock();
         $stock->setTicker('MCD');
         $stock->setBeta('1.0');

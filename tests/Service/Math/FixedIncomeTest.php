@@ -267,7 +267,8 @@ class FixedIncomeTest extends TestCase
         $yield10y = FixedIncome::calculateSvenssonYield($level, $slope, $curvature1, $curvature2, 10.0, 0.5, $lambda2);
         $yield100y = FixedIncome::calculateSvenssonYield($level, $slope, $curvature1, $curvature2, 100.0, 0.5, $lambda2);
 
-        // Curvature 2 should be small near 0, reach hump in intermediate tenors, and decay asymptotically to level at infinite maturity
+        // Curvature 2 should be small near 0, reach hump in intermediate tenors, and decay asymptotically to level at
+        // infinite maturity
         $this->assertGreaterThan($yieldShort, $yield10y, 'Secondary curvature should create a hump in the yield curve.');
         $this->assertEqualsWithDelta($level, $yield100y, 0.005, 'Very long maturities should decay back toward long-term level.');
     }
@@ -298,7 +299,8 @@ class FixedIncomeTest extends TestCase
     }
 
     /**
-     * Vayanos-Vila duration extraction: the premium shift follows the ACM duration scale and flips sign between QE and QT.
+     * Vayanos-Vila duration extraction: the premium shift follows the ACM duration scale and flips sign between QE and
+     * QT.
      */
     public function testPreferredHabitatShiftScalesWithTenorAndFlipsBetweenQeAndQt(): void
     {
@@ -326,7 +328,9 @@ class FixedIncomeTest extends TestCase
         $this->assertLessThan($twos, $thirties, 'QE must bite hardest at the long end.');
     }
 
-    /** The forward premium is the derivative of tau x S(tau): what a constant-maturity zero earns, yield plus roll-down. */
+    /**
+     * The forward premium is the derivative of tau x S(tau): what a constant-maturity zero earns, yield plus roll-down.
+     */
     public function testTheTermPremiumForwardScaleIsTheForwardOfTheDurationScale(): void
     {
         foreach ([0.5, 2.0, 6.17, 10.0, 30.0] as $tau) {
@@ -340,14 +344,19 @@ class FixedIncomeTest extends TestCase
         $this->assertSame(0.0, FixedIncome::calculateTermPremiumForwardScale(0.0), 'Overnight money earns no term premium.');
     }
 
-    /** Nine treasuries price idle cash off this one rate; two of them used to earn a negative yield at the lower bound. */
+    /**
+     * Nine treasuries price idle cash off this one rate; two of them used to earn a negative yield at the lower bound.
+     */
     public function testMoneyMarketCashEarnsThePolicyRateLessTheSpreadAndNeverBelowZero(): void
     {
         $this->assertEqualsWithDelta(0.04 - MacroEngine::CASH_YIELD_SPREAD, FixedIncome::moneyMarketYield(0.04), 1e-15);
         $this->assertSame(0.0, FixedIncome::moneyMarketYield(0.0), 'At the lower bound the funds waive fees rather than charge for holding cash.');
     }
 
-    /** Floating mortgages: the rate paid is the policy rate plus the spread, the rate a home is priced on the expected path plus the same spread, and both meet at the neutral. */
+    /**
+     * Floating mortgages: the rate paid is the policy rate plus the spread, the rate a home is priced on the expected
+     * path plus the same spread, and both meet at the neutral.
+     */
     public function testTheMortgageRateFloatsOverThePolicyRate(): void
     {
         $this->assertEqualsWithDelta(0.045 + MacroEngine::RESIDENTIAL_MORTGAGE_SPREAD, FixedIncome::mortgageRate(0.045), 1e-15);

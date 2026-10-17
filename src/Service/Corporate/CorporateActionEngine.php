@@ -24,11 +24,17 @@ class CorporateActionEngine
     private const REVERSE_SPLIT_THRESHOLD = 2.0;
     /** The divisor (10x) for shares during a reverse split. */
     private const REVERSE_SPLIT_FACTOR = 10.0;
-    /** Shares a listing must still have after a reverse split (Nasdaq Rule 5550(a)(4): 500,000 publicly held shares for continued listing); a consolidation that would go below it is not done. */
+    /**
+     * Shares a listing must still have after a reverse split (Nasdaq Rule 5550(a)(4): 500,000 publicly held shares for
+     * continued listing); a consolidation that would go below it is not done.
+     */
     public const MIN_SHARES_AFTER_REVERSE_SPLIT = 500_000.0;
     /** The maximum absolute multiplier allowed in a single recursive split action. */
     private const MAX_SPLIT_MULTIPLIER = 1_000_000;
-    /** Simulated years before a stock can split again: a split is a board action, and under Nasdaq Rule 5810(c)(3)(A)(iv) a company that reverse split within the past year gets no compliance period to do it again. */
+    /**
+     * Simulated years before a stock can split again: a split is a board action, and under Nasdaq Rule
+     * 5810(c)(3)(A)(iv) a company that reverse split within the past year gets no compliance period to do it again.
+     */
     public const SPLIT_COOLDOWN_YEARS = 1.0;
 
     /**
@@ -59,7 +65,8 @@ class CorporateActionEngine
      * @param float $newPrice          The proposed new price.
      * @param float $sharesOutstanding The current number of shares outstanding.
      * @param float $simTime           Simulated time (years) of this tick.
-     * @return array{price: float, shares: float, event: array|null} The adjusted price, shares, and any generated event.
+     * @return array{price: float, shares: float, event: array|null} The adjusted price, shares, and any generated
+     *                                                               event.
      */
     public function processSplits(Stock $stock, float $newPrice, float $sharesOutstanding, float $simTime): array
     {
@@ -229,7 +236,8 @@ class CorporateActionEngine
      *
      * @param string $ticker The stock ticker symbol.
      * @param float $factor The split factor.
-     * @param string $operation The mathematical operation to apply ('divide' for forward splits, 'multiply' for reverse splits).
+     * @param string $operation The mathematical operation to apply ('divide' for forward splits, 'multiply' for reverse
+     *                          splits).
      */
     private function adjustRedisBuffer(string $ticker, float $factor, string $operation): void
     {

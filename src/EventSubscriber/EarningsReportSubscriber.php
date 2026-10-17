@@ -16,7 +16,10 @@ class EarningsReportSubscriber implements EventSubscriberInterface
 {
     // --- Driver Attribution Display Bands ---
 
-    /** Share of the stream's revenue at or above which a macro driver prints at full (3-pip) strength: the SEC SAB 99 5% rule of thumb. */
+    /**
+     * Share of the stream's revenue at or above which a macro driver prints at full (3-pip) strength: the SEC SAB 99 5%
+     * rule of thumb.
+     */
     private const DRIVER_STRENGTH_HIGH = 0.05;
 
     /** Share of the stream's revenue at or above which a macro driver prints at moderate (2-pip) strength. */
@@ -60,16 +63,17 @@ class EarningsReportSubscriber implements EventSubscriberInterface
         $report->setNetIncome(Decimal::format($ctx->reportedActualNetIncome, 4));
         $report->setOperatingMargin(Decimal::format($ctx->trueOperatingMargin, 4));
         $report->setRevenueStreams($ctx->streamRevenue);
-        // The managed accrual sits in the operating lines with its tax deferred (EarningsEngine::manageReportedEarnings()),
-        // so the filed statement steps down to the net income it files.
+        // The managed accrual sits in the operating lines with its tax deferred
+        // (EarningsEngine::manageReportedEarnings()), so the filed statement steps down to the net income it files.
         $accrual = $ctx->managedAccrualPretax;
         $accrualTax = $accrual - $ctx->managedAccrual;
         $report->setOperatingCosts(Decimal::format($ctx->operatingCosts - $accrual, 4));
         $report->setEbit(Decimal::format($ctx->ebit + $accrual, 4));
         $report->setPreTaxIncome(Decimal::format($ctx->preTaxIncome + $accrual, 4));
         $report->setTaxPaid(Decimal::format($ctx->taxPaid + $accrualTax, 4));
-        // The consensus the surprise was struck against, and the EPS it was struck on (EarningsEngine::calculateEPSAndSurprise()):
-        // adjusted for special items. GAAP EPS is the filed net income over the share count.
+        // The consensus the surprise was struck against, and the EPS it was struck on
+        // (EarningsEngine::calculateEPSAndSurprise()): adjusted for special items. GAAP EPS is the filed net income
+        // over the share count.
         $report->setReportedEps(Decimal::format($ctx->streetQuarterlyEps, 6));
         $report->setConsensusEps(Decimal::format($ctx->expectedQuarterlyEps, 6));
         $report->setConsensusRevenue(Decimal::format($ctx->analystExpectedRevenue, 4));

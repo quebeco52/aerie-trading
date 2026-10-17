@@ -31,7 +31,10 @@ class TradeExecutionService
     /** Lowest limit price an order may rest at, matching the $0.01 floor the price process itself clamps to. */
     public const MIN_LIMIT_PRICE = '0.01';
 
-    /** Ceiling on a limit price. Escrow is stored at DECIMAL(18,4), so the price times the 1e9 quantity cap has to stay inside it. */
+    /**
+     * Ceiling on a limit price. Escrow is stored at DECIMAL(18,4), so the price times the 1e9 quantity cap has to stay
+     * inside it.
+     */
     public const MAX_LIMIT_PRICE = '100000000.0000';
 
     /**

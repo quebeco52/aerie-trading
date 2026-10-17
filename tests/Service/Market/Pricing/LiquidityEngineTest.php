@@ -299,7 +299,9 @@ class LiquidityEngineTest extends TestCase
         $this->assertEqualsWithDelta($whole->impactCost, $impactCost, $whole->impactCost * 1e-9);
     }
 
-    /** An order against the tick's flow fills on the far side of it: a buy into queued selling pays less than mid would. */
+    /**
+     * An order against the tick's flow fills on the far side of it: a buy into queued selling pays less than mid would.
+     */
     public function testAnOrderAgainstTheTicksFlowFillsOnTheFarSideOfIt(): void
     {
         $stock = $this->stock();

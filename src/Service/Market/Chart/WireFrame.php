@@ -19,11 +19,17 @@ use App\Data\District\DistrictMap;
 final class WireFrame
 {
     // --- Cadence ---
-    /** Frames published per real second. The page coalesces DOM writes to 4 Hz; 10 Hz keeps the live chart tail moving smoothly ahead of that. */
+    /**
+     * Frames published per real second. The page coalesces DOM writes to 4 Hz; 10 Hz keeps the live chart tail moving
+     * smoothly ahead of that.
+     */
     public const FRAMES_PER_SECOND = 10;
 
     // --- Macro Fields ---
-    /** The macro fields a page repaints from the frame: the home cycle tile, the economy header and the reserve page. The district map's stress fields are added from DistrictMap. */
+    /**
+     * The macro fields a page repaints from the frame: the home cycle tile, the economy header and the reserve page.
+     * The district map's stress fields are added from DistrictMap.
+     */
     public const LIVE_MACRO_FIELDS = [
         'total_time', 'output_gap', 'inflation_ema', 'policy_rate', 'yield_10y', 'qe_active', 'qe_intensity',
         'nominal_gdp_index', 'foreign_bond_yield', 'sovereign_debt_to_gdp', 'sovereign_net_debt_to_gdp',
@@ -37,7 +43,10 @@ final class WireFrame
     /** @var array<string, array<string, mixed>> Latest quote per ticker. */
     private array $quotes = [];
 
-    /** @var array<string, list<array{0: int, 1: float, 2: float|null}>> Per-tick [tick, price, volume] per ticker, in tick order. */
+    /**
+     * @var array<string, list<array{0: int, 1: float, 2: float|null}>> Per-tick [tick, price, volume] per ticker, in
+     *                                                                  tick order.
+     */
     private array $points = [];
 
     /** @var list<mixed> Every event since the last frame. */

@@ -215,7 +215,8 @@ class StockTrackerTest extends TestCase
     // --- Post-Report Fair Value ---
 
     /**
-     * @return array{0: array<string, mixed>, 1: int} The tick's update row, and how many times fair value was re-struck.
+     * @return array{0: array<string, mixed>, 1: int} The tick's update row, and how many times fair value was
+     *                                                re-struck.
      */
     private function tickWithReport(?array $report): array
     {

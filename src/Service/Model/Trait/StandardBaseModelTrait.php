@@ -69,7 +69,9 @@ trait StandardBaseModelTrait
         return $this->activeStreamContext = new StreamContext($momentum, $mathUtility, $this->getFirmFactorLoading(), $sectorInnovation, $this->getSectorFactorLoading());
     }
 
-    /** The stream context of the physics call in progress, kept for the actuals bridge to read the sector split from. */
+    /**
+     * The stream context of the physics call in progress, kept for the actuals bridge to read the sector split from.
+     */
     private ?StreamContext $activeStreamContext = null;
 
     /**
@@ -106,7 +108,8 @@ trait StandardBaseModelTrait
      * the same way; what differs between models is only what the return is struck on and what it is required to earn.
      *
      * The moat is worn down by market saturation (Penrose limit to growth), and the pull is scaled by the trailing
-     * figure's weight in the model's blended return target, so that target moves at exactly the model's reversion speed.
+     * figure's weight in the model's blended return target, so that target moves at exactly the model's reversion
+     * speed.
      *
      * @param float $trailing            The trailing return before this quarter; zero before the first report.
      * @param float $realised            This quarter's return, annualised.

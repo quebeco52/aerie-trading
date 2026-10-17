@@ -31,7 +31,10 @@ use App\Service\Model\ModelParam;
 class WasteManagementBusinessModel extends StandardCorporateBusinessModel
 {
     // --- Operating Cyclicality & Demand Structure ---
-    /** Elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). Residential collection is contracted; commercial roll-offs follow construction. */
+    /**
+     * Elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). Residential
+     * collection is contracted; commercial roll-offs follow construction.
+     */
     public const OPERATING_CYCLICALITY = 0.60;
     /** Own-price elasticity of demand: volume lost per unit of real price increase. */
     public const PRICE_ELASTICITY_OF_DEMAND = 0.30;
@@ -39,7 +42,10 @@ class WasteManagementBusinessModel extends StandardCorporateBusinessModel
     public const INDUSTRY_SUBSTITUTABILITY = 0.50;
 
     // --- Input Cost Basket ---
-    /** Shares of the variable cost base by input channel, measured from the BEA input-output accounts with supply-chain content (labor still the model's own). */
+    /**
+     * Shares of the variable cost base by input channel, measured from the BEA input-output accounts with supply-chain
+     * content (labor still the model's own).
+     */
     public const INPUT_COST_EXPOSURES = InputOutputExposures::WASTE_MANAGEMENT;
     /** Municipal contracts carry CPI escalators: pricing tracks most of expected inflation. */
     public const PRICING_ELASTICITY = 0.85;
@@ -51,7 +57,8 @@ class WasteManagementBusinessModel extends StandardCorporateBusinessModel
     public const PRICING_POWER_INDEX = 0.70;
 
     /**
-     * Calendar-quarter revenue seasonality [Q1, Q2, Q3, Q4] summing to 4.0: spring and summer construction and yard volumes.
+     * Calendar-quarter revenue seasonality [Q1, Q2, Q3, Q4] summing to 4.0: spring and summer construction and yard
+     * volumes.
      *
      * @return array<int, float>
      */
@@ -98,7 +105,10 @@ class WasteManagementBusinessModel extends StandardCorporateBusinessModel
     }
 
     // --- Secular Demand ---
-    /** Waste management and remediation services value added as a share of US nominal GDP in 1997 (BEA GDP by Industry, value added). */
+    /**
+     * Waste management and remediation services value added as a share of US nominal GDP in 1997 (BEA GDP by Industry,
+     * value added).
+     */
     public const SECULAR_SHARE_1997 = 0.0025;
     /** The same share in 2019. */
     public const SECULAR_SHARE_2019 = 0.0027;
@@ -261,7 +271,8 @@ class WasteManagementBusinessModel extends StandardCorporateBusinessModel
             + ($recyclingZ * $recyclingWeight * self::RECYCLING_VARIANCE_SCALAR * 0.80);
         $observableShockZ *= $baselineVol;
 
-        // The one-off charge is booked as a special item: in EBIT, out of the run rate, the Street figure and the cost ratio.
+        // The one-off charge is booked as a special item: in EBIT, out of the run rate, the Street figure and the cost
+        // ratio.
         $specialCharge = $disasterPenalty * max(0.0, $actualRevenue - $priceRevenue);
 
         return new SectorPhysicsResult(

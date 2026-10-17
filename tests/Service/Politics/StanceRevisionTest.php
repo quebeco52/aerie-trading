@@ -96,8 +96,8 @@ class StanceRevisionTest extends TestCase
     }
 
     /**
-     * A Council and committee read from a payload that held swing votes at the middle keep their people; each swing vote
-     * now leans to a camp and is marked as one, and everyone else keeps their camp.
+     * A Council and committee read from a payload that held swing votes at the middle keep their people; each swing
+     * vote now leans to a camp and is marked as one, and everyone else keeps their camp.
      */
     public function testSwingVotesHeldAtTheMiddleAreGivenACamp(): void
     {

@@ -18,9 +18,15 @@ class DistrictPlotDTO
         public readonly int $width,
         public readonly float $height,
         public readonly float $y,
-        /** Which frontage row this plot stands on, 0 being the upper one. A grouping key only — every coordinate here is already absolute. */
+        /**
+         * Which frontage row this plot stands on, 0 being the upper one. A grouping key only — every coordinate here is
+         * already absolute.
+         */
         public readonly int $row,
-        /** Absolute y of this row's kerb line. Carried rather than re-derived so nothing downstream has to consult the canvas. */
+        /**
+         * Absolute y of this row's kerb line. Carried rather than re-derived so nothing downstream has to consult the
+         * canvas.
+         */
         public readonly float $groundLine,
         public readonly int $floors,
         /** Window columns that fit across the facade — see DistrictMap::WINDOW_PITCH. */
@@ -34,20 +40,25 @@ class DistrictPlotDTO
          */
         public readonly array $litWindows,
         /**
-         * Each window's lighting priority in [0, 1), indexed [floor][column]; lit when it falls under the lit share. Shipped so a live tick can relight the facade client-side.
+         * Each window's lighting priority in [0, 1), indexed [floor][column]; lit when it falls under the lit share.
+         * Shipped so a live tick can relight the facade client-side.
          *
          * @var list<list<float>>
          */
         public readonly array $windowKeys,
         /**
-         * Non-null for each window drawn a step brighter while lit (`data-twinkle`), null where it burns steady, indexed [floor][column] — see DistrictMap::WINDOW_TWINKLE_SHARE. The value is a stable hash in [0, 1); only its presence is rendered now that the flicker animation is gone.
+         * Non-null for each window drawn a step brighter while lit (`data-twinkle`), null where it burns steady,
+         * indexed [floor][column] — see DistrictMap::WINDOW_TWINKLE_SHARE. The value is a stable hash in [0, 1); only
+         * its presence is rendered now that the flicker animation is gone.
          *
          * @var list<list<float|null>>
          */
         public readonly array $twinklePhases,
         /** Fraction of windows lit, the figure the lighting was drawn from. */
         public readonly float $litShare,
-        /** Live payload field the lit share is read from on a tick: current_roe for financials, current_roic otherwise. */
+        /**
+         * Live payload field the lit share is read from on a tick: current_roe for financials, current_roic otherwise.
+         */
         public readonly string $returnField,
         /** Rooftop symbol for the tenant's business model — see DistrictMap::ROOF_FURNITURE. */
         public readonly string $roofFurniture,
@@ -56,7 +67,9 @@ class DistrictPlotDTO
         /** Market-cap position on the street, 1 being the largest tenant. */
         public readonly int $rank,
         public readonly ?string $sector = null,
-        /** Block of the street the tenant trades in — see DistrictMap::FRONTAGE_DISTRICTS. What the kerb bracket names. */
+        /**
+         * Block of the street the tenant trades in — see DistrictMap::FRONTAGE_DISTRICTS. What the kerb bracket names.
+         */
         public readonly ?string $district = null,
         public readonly ?string $industry = null,
         public readonly ?string $systemicImportance = null,
@@ -65,7 +78,10 @@ class DistrictPlotDTO
         public readonly float $price = 0.0,
         public readonly float $marketCap = 0.0,
         public readonly float $returnOnCapital = 0.0,
-        /** The return the tenant is expected to earn at rest (baseline ROIC, or ROE for financials); what lights the windows. */
+        /**
+         * The return the tenant is expected to earn at rest (baseline ROIC, or ROE for financials); what lights the
+         * windows.
+         */
         public readonly float $baselineReturnOnCapital = 0.0,
         /** Fractional price change over the district's lookback window, or null when no history is buffered yet. */
         public readonly ?float $changePercent = null,
@@ -73,7 +89,8 @@ class DistrictPlotDTO
         /** @var list<string> institution ids this tenant draws a macro conduit from */
         public readonly array $conduits = [],
         /**
-         * Absolute x where each conduit's drop lands on the roof, keyed by institution id; spread across the roof so they never overlay.
+         * Absolute x where each conduit's drop lands on the roof, keyed by institution id; spread across the roof so
+         * they never overlay.
          *
          * @var array<string, float>
          */

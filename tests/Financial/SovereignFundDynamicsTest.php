@@ -44,7 +44,10 @@ class SovereignFundDynamicsTest extends TestCase
     /** Dividend yield of the synthetic board, near the S&P 500's long-run average. */
     private const DIVIDEND_YIELD = 0.02;
 
-    /** Log capitalisation-to-GDP per unit of ERP, fitted on the live engine's own reports (log(eq/GDP) = 31.35 - 5.475 ERP, R^2 0.66, 2026-09-20). */
+    /**
+     * Log capitalisation-to-GDP per unit of ERP, fitted on the live engine's own reports (log(eq/GDP) = 31.35 - 5.475
+     * ERP, R^2 0.66, 2026-09-20).
+     */
     private const ERP_VALUATION_SLOPE = 5.475;
 
     /** Half-life of the transitory price component around fundamentals (Poterba & Summers 1988: a few years). */
@@ -72,10 +75,10 @@ class SovereignFundDynamicsTest extends TestCase
         $this->assertGreaterThan(-1.16, $meanLogChange, 'The fund must not bleed away; it keeps half its compound return.');
         $this->assertLessThan(1.48, $meanLogChange, 'Nor compound without bound; it pays the other half.');
 
-        // Rebalancing holds the domestic sleeve at its policy weight: the band trips at a quarter's relative move and the
-        // market carries on while a programme trades. The board footprint is that weight times the fund's size, so it
-        // is bounded below by the size check above, not here: a fund run down by a slump it paid for owns less. A fund
-        // grown large against the board meets the ownership ceiling first, and the ceiling overrides the weight by
+        // Rebalancing holds the domestic sleeve at its policy weight: the band trips at a quarter's relative move and
+        // the market carries on while a programme trades. The board footprint is that weight times the fund's size, so
+        // it is bounded below by the size check above, not here: a fund run down by a slump it paid for owns less. A
+        // fund grown large against the board meets the ownership ceiling first, and the ceiling overrides the weight by
         // design, so the weight is judged only in the years the ceiling leaves it free.
         $ownership = array_merge(...array_values(array_map(static fn(array $run): array => $run['ownership'], $withFund)));
         $weights = array_merge(...array_values(array_map(static fn(array $run): array => $run['weights'], $withFund)));

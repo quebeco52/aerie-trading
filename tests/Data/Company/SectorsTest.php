@@ -125,7 +125,10 @@ class SectorsTest extends TestCase
         $this->assertInstanceOf(Sectors::BUSINESS_MODELS[$metrics['business_model']], Sectors::strategyFor($industry));
     }
 
-    /** One fallback for every parameter: an industry the table does not list reads the General row, whichever field is asked for. */
+    /**
+     * One fallback for every parameter: an industry the table does not list reads the General row, whichever field is
+     * asked for.
+     */
     public function testAnUnlistedIndustryReadsTheGeneralRow(): void
     {
         $general = Sectors::INDUSTRY_METRICS['General'];

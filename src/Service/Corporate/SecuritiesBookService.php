@@ -28,7 +28,9 @@ use App\Service\Math\FixedIncome;
 final class SecuritiesBookService
 {
     // --- Investment Securities & AOCI (ASC 320 / Basel III) ---
-    /** Floor on the carrying yield, so a book struck at the zero bound still discounts rather than dividing by nothing. */
+    /**
+     * Floor on the carrying yield, so a book struck at the zero bound still discounts rather than dividing by nothing.
+     */
     public const MIN_SECURITIES_CARRYING_YIELD = 0.001;
 
     public function __construct(
@@ -51,7 +53,8 @@ final class SecuritiesBookService
      *
      * @param float             $bookValue     Amortized cost of the duration-bearing securities book.
      * @param float             $openingMark   Total mark carried out of the previous quarter; negative is a loss.
-     * @param float|null        $carryingYield Yield the book was struck at; null opens it at today's curve, marked flat.
+     * @param float|null        $carryingYield Yield the book was struck at; null opens it at today's curve, marked
+     *                                         flat.
      * @param SovereignCurveDTO $curve         The fitted term structure as of this report.
      * @param float             $duration      Portfolio Macaulay duration in years, before the floating-rate share.
      * @param float             $floatingShare Share of the book that reprices with the curve and carries no duration.
@@ -60,7 +63,8 @@ final class SecuritiesBookService
      *                                         the bond desk for the same reason: an unfitted curve evaluates near
      *                                         zero, and marking a book against zero prints an enormous phantom gain
      *                                         on every financial in the market.
-     * @param float             $htmShare      Share carried as held-to-maturity, disclosed rather than marked to equity.
+     * @param float             $htmShare      Share carried as held-to-maturity, disclosed rather than marked to
+     *                                         equity.
      */
     public function roll(
         float $bookValue,

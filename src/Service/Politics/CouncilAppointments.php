@@ -16,18 +16,18 @@ use App\Service\Math\MathUtility;
  * Everyone the Council seats or appoints holds a stance on each question a department of the Council answers, on a
  * scale from -1 to +1: on money (App\Service\Politics\MonetaryAuthority), a dove at -1 or a hawk at +1; on the banks
  * (App\Service\Politics\FinancialRegulator), light-touch at -1 or strict at +1; on the reserves
- * (App\Service\Politics\SovereignReserveFund), cautious at -1 or bold at +1; on the debt (App\Service\Politics\Exchequer),
- * short at -1 or long at +1; on competition (App\Service\Politics\FairTradingBoard) and on the markets
- * (App\Service\Politics\SecuritiesCommission), light at -1 or strict at +1. A candidate's stances are drawn from the record of the real office-holders each department is modelled on, and their
- * age from the Federal Reserve Board's. Council seats are filled on the first three questions; the debt weighs only in
- * naming the Exchequer's head, competition only in naming the Fair Trading Board's and the markets only in naming
- * the Securities Commission's.
- * A vacant Council seat goes to the candidate nearest the sitting members' median on every question together (the
- * coordinate-wise median, as a majority vote picks on each), from a shortlist the Council Appointment Board puts
- * forward: the three applicants nearest the board's own median, out of the field that applied. The board's members are
- * named by outside bodies, never by the Council, so a Council cannot renew itself in its own image for good, as it did
- * when it drew its own shortlists. A department head goes to the candidate nearest the whole Council's median on that
- * department's question, from a shortlist drawn as it comes.
+ * (App\Service\Politics\SovereignReserveFund), cautious at -1 or bold at +1; on the debt
+ * (App\Service\Politics\Exchequer), short at -1 or long at +1; on competition (App\Service\Politics\FairTradingBoard)
+ * and on the markets (App\Service\Politics\SecuritiesCommission), light at -1 or strict at +1. A candidate's stances
+ * are drawn from the record of the real office-holders each department is modelled on, and their age from the Federal
+ * Reserve Board's. Council seats are filled on the first three questions; the debt weighs only in naming the
+ * Exchequer's head, competition only in naming the Fair Trading Board's and the markets only in naming the Securities
+ * Commission's. A vacant Council seat goes to the candidate nearest the sitting members' median on every question
+ * together (the coordinate-wise median, as a majority vote picks on each), from a shortlist the Council Appointment
+ * Board puts forward: the three applicants nearest the board's own median, out of the field that applied. The board's
+ * members are named by outside bodies, never by the Council, so a Council cannot renew itself in its own image for
+ * good, as it did when it drew its own shortlists. A department head goes to the candidate nearest the whole Council's
+ * median on that department's question, from a shortlist drawn as it comes.
  *
  * Every draw is hashed from a salt the Council draws once, the vacancy and the candidate's place on the shortlist, so
  * the appointments replay exactly and take nothing more from the politics engine's random stream.
@@ -49,31 +49,60 @@ final class CouncilAppointments
     public const AXIS_MARKETS = 'markets';
 
     // --- Candidates ---
-    /** Candidates on each shortlist: from three, a dovish appointer names a dove 60% of the time (else a swing vote leaning dovish, or no one leaning their way), as the Democratic presidents' nominees to the Federal Reserve Board were 65% doves, 17 of 26 (Bordo & Istrefi 2023, Fig. 4). */
+    /**
+     * Candidates on each shortlist: from three, a dovish appointer names a dove 60% of the time (else a swing vote
+     * leaning dovish, or no one leaning their way), as the Democratic presidents' nominees to the Federal Reserve Board
+     * were 65% doves, 17 of 26 (Bordo & Istrefi 2023, Fig. 4).
+     */
     public const SHORTLIST = 3;
     /** Mean age at appointment, in years: the Federal Reserve Board's 101 governors at their first oath, 1914-2026. */
     public const APPOINTMENT_AGE_MEAN = 52.56;
-    /** Standard deviation of age at appointment; the Board's percentiles fit a normal (10th 43.7, median 52.9, 90th 60.5). */
+    /**
+     * Standard deviation of age at appointment; the Board's percentiles fit a normal (10th 43.7, median 52.9, 90th
+     * 60.5).
+     */
     public const APPOINTMENT_AGE_SD = 7.32;
-    /** Youngest age the charter allows at appointment, where the draw is truncated: forty, as for a judge of Germany's Federal Constitutional Court (BVerfGG s. 3); the Board's record runs from 35.9, its 10th percentile 43.7. */
+    /**
+     * Youngest age the charter allows at appointment, where the draw is truncated: forty, as for a judge of Germany's
+     * Federal Constitutional Court (BVerfGG s. 3); the Board's record runs from 35.9, its 10th percentile 43.7.
+     */
     public const APPOINTMENT_AGE_MIN = 40.0;
-    /** Oldest age the charter allows at appointment, so no councillor sits past 72; the Board's record runs to 71.7, its 90th percentile 60.5. */
+    /**
+     * Oldest age the charter allows at appointment, so no councillor sits past 72; the Board's record runs to 71.7, its
+     * 90th percentile 60.5.
+     */
     public const APPOINTMENT_AGE_MAX = 60.0;
 
     // --- The Council Appointment Board (after Canada's Independent Advisory Board for Supreme Court Appointments) ---
     /** Members of the board, each named by an outside body: seven, as on Canada's advisory board. */
     public const BOARD_SEATS = 7;
-    /** Length of a board member's term, in years, staggered across the seats: Canada's board members serve terms of up to five years (Terms of Reference, quoted in the board's 2019-2023 reports). */
+    /**
+     * Length of a board member's term, in years, staggered across the seats: Canada's board members serve terms of up
+     * to five years (Terms of Reference, quoted in the board's 2019-2023 reports).
+     */
     public const BOARD_TERM_YEARS = 5.0;
-    /** Applicants for each Council seat, from whom the board puts forward SHORTLIST: Canada's board received 12 to 18 applications a vacancy, 2017-2023, median 13.5 (2016's first call drew 31). */
+    /**
+     * Applicants for each Council seat, from whom the board puts forward SHORTLIST: Canada's board received 12 to 18
+     * applications a vacancy, 2017-2023, median 13.5 (2016's first call drew 31).
+     */
     public const BOARD_FIELD = 14;
 
     // --- Vacancies ---
-    /** Gompertz level of the yearly death hazard at age 0, fitted with MORTALITY_SLOPE through ages 50 and 70 of the US life table, both sexes averaged (q 0.0053 and 0.0222; CDC/NCHS, United States Life Tables 2021, NVSR 72-12, Tables 2-3). */
+    /**
+     * Gompertz level of the yearly death hazard at age 0, fitted with MORTALITY_SLOPE through ages 50 and 70 of the US
+     * life table, both sexes averaged (q 0.0053 and 0.0222; CDC/NCHS, United States Life Tables 2021, NVSR 72-12,
+     * Tables 2-3).
+     */
     public const MORTALITY_LEVEL = 1.457e-4;
-    /** Gompertz slope: the death hazard's growth per year of age, 7.2% (doubling every 9.6 years), from the same fit; it reads 0.0109 at 60 against the table's 0.0116. */
+    /**
+     * Gompertz slope: the death hazard's growth per year of age, 7.2% (doubling every 9.6 years), from the same fit; it
+     * reads 0.0109 at 60 against the table's 0.0116.
+     */
     public const MORTALITY_SLOPE = 0.0720;
-    /** Yearly hazard a councillor resigns before their term ends, at any age: the ECB Executive Board's 6 early departures in 169 member-years, 1998-2026 (to other posts, in protest, or by political deal), none by death. */
+    /**
+     * Yearly hazard a councillor resigns before their term ends, at any age: the ECB Executive Board's 6 early
+     * departures in 169 member-years, 1998-2026 (to other posts, in protest, or by political deal), none by death.
+     */
     public const RESIGNATION_RATE = 0.035;
 
     /**
@@ -107,8 +136,8 @@ final class CouncilAppointments
         }
         self::backfillDepartures($state, $salt, $roster, $time);
 
-        // Seats due this tick, a board member's term, a councillor's term or a vacancy, filled in the order they fell due,
-        // so a long tick fills them as a short one would.
+        // Seats due this tick, a board member's term, a councillor's term or a vacancy, filled in the order they fell
+        // due, so a long tick fills them as a short one would.
         $due = [];
         foreach (self::boardTermStarts($time) as $seat => $since) {
             if (abs(($state->boardSince[$seat] ?? -INF) - $since) > 1e-9) {
@@ -179,10 +208,12 @@ final class CouncilAppointments
     }
 
     /**
-     * A vacancy filled: a shortlist drawn, and the candidate whose stances stand nearest the appointer's on the questions
-     * the target names named, by straight-line distance; the first drawn of any tied.
+     * A vacancy filled: a shortlist drawn, and the candidate whose stances stand nearest the appointer's on the
+     * questions the target names named, by straight-line distance; the first drawn of any tied.
      *
-     * @param string               $seat   The office and seat, e.g. "council:4", "governor", "member:2", "regulator", "fund", "fair-trading", "securities", "security", "coast-guard", "state-guard".
+     * @param string               $seat   The office and seat, e.g. "council:4", "governor", "member:2", "regulator",
+     *                                     "fund", "fair-trading", "securities", "security", "coast-guard",
+     *                                     "state-guard".
      * @param float                $since  When the term begins.
      * @param array<string, float> $target The appointer's stance on each question it weighs, by axis.
      * @param list<string>         $taken  Names already sitting, which no candidate shares.
@@ -216,8 +247,8 @@ final class CouncilAppointments
     }
 
     /**
-     * The Council Appointment Board's shortlist for a Council seat: of the BOARD_FIELD who applied, the SHORTLIST nearest
-     * the board's median on every question, the first drawn of any tied, in the order they applied.
+     * The Council Appointment Board's shortlist for a Council seat: of the BOARD_FIELD who applied, the SHORTLIST
+     * nearest the board's median on every question, the first drawn of any tied, in the order they applied.
      *
      * @param array<string, float> $boardMedians
      * @param list<string>         $taken
@@ -282,8 +313,8 @@ final class CouncilAppointments
     }
 
     /**
-     * When each board seat's term in progress began: the seats fall vacant evenly over one term, half a spacing off Year
-     * 1, as the Council's do.
+     * When each board seat's term in progress began: the seats fall vacant evenly over one term, half a spacing off
+     * Year 1, as the Council's do.
      *
      * @return list<float>
      */
@@ -319,11 +350,12 @@ final class CouncilAppointments
     }
 
     /**
-     * A candidate for a vacancy: their stance on money (App\Service\Politics\MonetaryAuthority::drawStance(), a swing vote
-     * leaning to a camp drawn alike either way, MonetaryAuthority::swingLean()), on the
-     * banks (App\Service\Politics\FinancialRegulator::drawStance()), on the reserves
-     * (App\Service\Politics\SovereignReserveFund::drawStance()), on the debt (App\Service\Politics\Exchequer::drawStance())
-     * on competition (App\Service\Politics\FairTradingBoard::drawStance()) and on the markets
+     * A candidate for a vacancy: their stance on money (App\Service\Politics\MonetaryAuthority::drawStance(), a swing
+     * vote leaning to a camp drawn alike either way, MonetaryAuthority::swingLean()), on the banks
+     * (App\Service\Politics\FinancialRegulator::drawStance()), on the reserves
+     * (App\Service\Politics\SovereignReserveFund::drawStance()), on the debt
+     * (App\Service\Politics\Exchequer::drawStance()) on competition
+     * (App\Service\Politics\FairTradingBoard::drawStance()) and on the markets
      * (App\Service\Politics\SecuritiesCommission::drawStance()), their age at the term's start from the Board's record
      * (a normal truncated to the youngest and oldest on it, by inverse transform), and a name for their birth decade
      * (App\Data\Politics\AerieNames) that no one in $taken holds.
@@ -390,8 +422,8 @@ final class CouncilAppointments
 
     /**
      * Everyone sitting: councillors, the governor, the rate committee, the heads of the Financial Regulator, the
-     * Sovereign Reserve Fund, the Exchequer, the Fair Trading Board and the Securities Commission, the Security Bureau's
-     * director, the commanders of the Coast Guard and the State Guard, and the Council Appointment Board.
+     * Sovereign Reserve Fund, the Exchequer, the Fair Trading Board and the Securities Commission, the Security
+     * Bureau's director, the commanders of the Coast Guard and the State Guard, and the Council Appointment Board.
      *
      * @return list<string>
      */
@@ -405,8 +437,9 @@ final class CouncilAppointments
 
     /**
      * Every name a new appointee or party leader may not take: everyone sitting on the Council, at the Monetary
-     * Authority, the Financial Regulator, the Sovereign Reserve Fund, the Exchequer, the Fair Trading Board, the Securities Commission, the Security Bureau, the Coast Guard or the State Guard or leading a party, everyone who ever did, and
-     * the people seated before Year 1.
+     * Authority, the Financial Regulator, the Sovereign Reserve Fund, the Exchequer, the Fair Trading Board, the
+     * Securities Commission, the Security Bureau, the Coast Guard or the State Guard or leading a party, everyone who
+     * ever did, and the people seated before Year 1.
      *
      * @return list<string>
      */
@@ -463,9 +496,10 @@ final class CouncilAppointments
     }
 
     /**
-     * When someone seated at $seatedAt leaves before $termEnds, by death or resignation, or -1 if they serve the term out:
-     * one hashed draw of the wait under a Gompertz-Makeham hazard (Distributions::gompertzMakehamWait()), age-related
-     * mortality plus a resignation rate that does not rise with age, counted from $aliveAt, when they are known to sit.
+     * When someone seated at $seatedAt leaves before $termEnds, by death or resignation, or -1 if they serve the term
+     * out: one hashed draw of the wait under a Gompertz-Makeham hazard (Distributions::gompertzMakehamWait()),
+     * age-related mortality plus a resignation rate that does not rise with age, counted from $aliveAt, when they are
+     * known to sit.
      */
     public static function departure(int $salt, int $seat, float $seatedAt, float $birth, float $aliveAt, float $termEnds): float
     {

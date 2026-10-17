@@ -23,7 +23,8 @@ final class RestingOrderWatch
 
     /**
      * @param array<int, array<string, mixed>> $quotes      Stock and fund quotes this tick.
-     * @param array<int, array<string, mixed>> $struckBonds Bonds valued this tick: between marks a bond's quote cannot have crossed.
+     * @param array<int, array<string, mixed>> $struckBonds Bonds valued this tick: between marks a bond's quote cannot
+     *                                                      have crossed.
      * @return array{limit_orders: array<string, mixed>, alerts: array<string, float>} Last price per ticker to check.
      */
     public function collect(array $quotes, array $struckBonds, int $tickCount): array

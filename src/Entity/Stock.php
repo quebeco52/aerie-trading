@@ -23,7 +23,10 @@ class Stock
     // --- Sell-Side Price Targets (Brav & Lehavy 2003) ---
     /** Target-over-price above which the published rating reads Outperform. */
     public const ANALYST_RATING_OUTPERFORM = 1.15;
-    /** Target-over-price below which it reads Underperform. Asymmetric against the threshold above on purpose: the sell side downgrades late and reluctantly. */
+    /**
+     * Target-over-price below which it reads Underperform. Asymmetric against the threshold above on purpose: the sell
+     * side downgrades late and reluctantly.
+     */
     public const ANALYST_RATING_UNDERPERFORM = 0.98;
 
     #[ORM\Id]
@@ -307,7 +310,10 @@ class Stock
     #[ORM\Column(type: Types::DECIMAL, precision: 12, scale: 4, nullable: true)]
     private ?string $analystPriceTarget = null;
 
-    /** @var string|null What a sphere's listed anchor stakes sit at on the balance sheet, remarked at every report. Null for the firms that hold none. */
+    /**
+     * @var string|null What a sphere's listed anchor stakes sit at on the balance sheet, remarked at every report. Null
+     *                  for the firms that hold none.
+     */
     #[ORM\Column(type: Types::DECIMAL, precision: 30, scale: 4, nullable: true)]
     private ?string $listedStakesCarrying = null;
 
@@ -455,7 +461,8 @@ class Stock
     private string $roicTtm = '0.0000';
 
     /**
-     * @var string|null The firm's measured long-run return (an EMA of its trailing ROIC, or ROE for a balance-sheet firm),
+     * @var string|null The firm's measured long-run return (an EMA of its trailing ROIC, or ROE for a balance-sheet
+     *                  firm),
      *                  the level its profitability reverts to and fair value anchors on; null until it has one.
      */
     #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
@@ -500,7 +507,8 @@ class Stock
     private ?float $accrualsRatio = 0.0;
 
     /**
-     * @var float|null Earnings shortfall management has already warned the market about, awaiting the report that confirms it; cleared once reported.
+     * @var float|null Earnings shortfall management has already warned the market about, awaiting the report that
+     *                 confirms it; cleared once reported.
      */
     #[ORM\Column(type: 'float', nullable: true)]
     private ?float $preAnnouncedShortfall = null;
@@ -513,13 +521,15 @@ class Stock
     private ?float $preAnnouncedEconomicShortfall = null;
 
     /**
-     * @var string|null Persistent management style biasing payout, reinvestment and the hurdle rate applied to growth (Bertrand & Schoar 2003); null is the balanced default.
+     * @var string|null Persistent management style biasing payout, reinvestment and the hurdle rate applied to growth
+     *                  (Bertrand & Schoar 2003); null is the balanced default.
      */
     #[ORM\Column(type: 'string', length: 32, nullable: true)]
     private ?string $managementStyle = null;
 
     /**
-     * @var float|null Years the incumbent management has been in post, used for the succession hazard; null on a firm that has never had a turnover evaluated.
+     * @var float|null Years the incumbent management has been in post, used for the succession hazard; null on a firm
+     *                 that has never had a turnover evaluated.
      *
      * A per-tick clock, and therefore written by StockTickColumns rather than by the unit of work: the
      * succession engine ages the incumbent on every firm on every tick, which made every company a dirty
@@ -530,31 +540,36 @@ class Stock
     private ?float $ceoTenureYears = 0.0;
 
     /**
-     * @var float|null How firmly the incumbent holds their style, scaling every dial's distance from neutral; null is the archetype's published strength.
+     * @var float|null How firmly the incumbent holds their style, scaling every dial's distance from neutral; null is
+     *                 the archetype's published strength.
      */
     #[ORM\Column(type: 'float', nullable: true)]
     private ?float $managementIntensity = null;
 
     /**
-     * @var float|null Book-to-bill disclosed in the last report (orders booked over revenue billed); null when the firm discloses no order book.
+     * @var float|null Book-to-bill disclosed in the last report (orders booked over revenue billed); null when the firm
+     *                 discloses no order book.
      */
     #[ORM\Column(type: 'float', nullable: true)]
     private ?float $lastBookToBill = null;
 
     /**
-     * @var float|null Accruals borrowed from future quarters to hit consensus and not yet reversed (Burgstahler & Dichev 1997). Positive = earnings pulled forward and still owed back.
+     * @var float|null Accruals borrowed from future quarters to hit consensus and not yet reversed (Burgstahler &
+     *                 Dichev 1997). Positive = earnings pulled forward and still owed back.
      */
     #[ORM\Column(type: 'float', nullable: true)]
     private ?float $managedAccrualBank = 0.0;
 
     /**
-     * @var float|null Seasonally adjusted operating margin actually realized in the last report; null until the first report.
+     * @var float|null Seasonally adjusted operating margin actually realized in the last report; null until the first
+     *                 report.
      */
     #[ORM\Column(type: 'float', nullable: true)]
     private ?float $reportedOperatingMargin = null;
 
     /**
-     * @var float|null Exponentially weighted sum of log price returns (Jegadeesh-Titman formation trend); null until the first tick.
+     * @var float|null Exponentially weighted sum of log price returns (Jegadeesh-Titman formation trend); null until
+     *                 the first tick.
      */
     #[ORM\Column(type: 'float', nullable: true, updatable: false)]
     private ?float $priceMomentumTrend = 0.0;
@@ -594,7 +609,8 @@ class Stock
     private ?float $impactVarianceEma = 0.0;
 
     /**
-     * @var float|null Exponentially weighted variance of the name's announcement returns (reports and warnings), annualized.
+     * @var float|null Exponentially weighted variance of the name's announcement returns (reports and warnings),
+     *                 annualized.
      *
      * An announcement is a scheduled jump, so the diffusion gives back what the name's own announcements
      * actually moved it by (Dubinsky, Johannes, Kaeck & Seeger 2019).
@@ -641,13 +657,15 @@ class Stock
     private string $shortInterestShares = '0.00';
 
     /**
-     * @var float|null Lagged pass-through of expected inflation into selling prices; null until the first report seeds it.
+     * @var float|null Lagged pass-through of expected inflation into selling prices; null until the first report seeds
+     *                 it.
      */
     #[ORM\Column(type: 'float', nullable: true)]
     private ?float $inflationPassThrough = null;
 
     /**
-     * @var array<int, float>|null Reported net income of the last four quarters, oldest first, summed into the trailing twelve month figure.
+     * @var array<int, float>|null Reported net income of the last four quarters, oldest first, summed into the trailing
+     *                             twelve month figure.
      */
     #[ORM\Column(type: Types::JSON, nullable: true)]
     private ?array $quarterlyNetIncomeHistory = [];
@@ -673,7 +691,10 @@ class Stock
     #[ORM\Column(length: 255, nullable: true)]
     private ?string $industry = null;
 
-    /** Dickinson (2011) life-cycle stage classified from last quarter's cash-flow signs (App\Data\Company\LifecycleStage value). */
+    /**
+     * Dickinson (2011) life-cycle stage classified from last quarter's cash-flow signs (App\Data\Company\LifecycleStage
+     * value).
+     */
     #[ORM\Column(length: 16, nullable: true)]
     private ?string $lifecycleStage = null;
 
@@ -1019,7 +1040,10 @@ class Stock
         return $this;
     }
 
-    /** The payout ratio the dividend policy steers to: the target, carrying the manager's payout fixed effect (Bertrand & Schoar 2003). */
+    /**
+     * The payout ratio the dividend policy steers to: the target, carrying the manager's payout fixed effect (Bertrand
+     * & Schoar 2003).
+     */
     public function getPolicyPayoutRatio(): float
     {
         return (float) $this->targetPayoutRatio * $this->getManagementProfile()->payoutBias();

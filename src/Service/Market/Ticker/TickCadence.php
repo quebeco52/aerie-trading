@@ -15,15 +15,25 @@ use App\Service\Math\TimeSeries;
 final class TickCadence
 {
     // --- History Sampling ---
-    /** Target history bars per simulated year (~4.8 a trading day), each paying the flush, the tick-column write and a history row; the actual rate is this or one per tick, whichever is coarser. */
+    /**
+     * Target history bars per simulated year (~4.8 a trading day), each paying the flush, the tick-column write and a
+     * history row; the actual rate is this or one per tick, whichever is coarser.
+     */
     public const TARGET_HISTORY_POINTS_PER_YEAR = 1200;
 
     // --- Chart Buffer ---
-    /** Most entries a stock or fund chart buffer takes per simulated year (~240 a trading day); above it the buffer keeps every k-th tick, so a slow wall clock with a fine tick grid does not grow Redis by a month of ticks per name. */
+    /**
+     * Most entries a stock or fund chart buffer takes per simulated year (~240 a trading day); above it the buffer
+     * keeps every k-th tick, so a slow wall clock with a fine tick grid does not grow Redis by a month of ticks per
+     * name.
+     */
     public const MAX_BUFFER_ENTRIES_PER_YEAR = 60480;
 
     // --- Working Set ---
-    /** Times per simulated year the identity map is cleared and the working set re-read from the database: once a trading day. */
+    /**
+     * Times per simulated year the identity map is cleared and the working set re-read from the database: once a
+     * trading day.
+     */
     public const WORKING_SET_RELOADS_PER_YEAR = 252;
 
     // --- Bond Marking ---
@@ -109,7 +119,10 @@ final class TickCadence
         return max(1, (int) ceil($ticksPerYear / self::MAX_BUFFER_ENTRIES_PER_YEAR));
     }
 
-    /** Entries a stock or fund chart buffer receives per simulated year, which is the rate its short ranges are counted in. */
+    /**
+     * Entries a stock or fund chart buffer receives per simulated year, which is the rate its short ranges are counted
+     * in.
+     */
     public static function equityBufferEntriesPerYear(int $ticksPerYear): float
     {
         return max(1, $ticksPerYear) / self::equityBufferStride($ticksPerYear);

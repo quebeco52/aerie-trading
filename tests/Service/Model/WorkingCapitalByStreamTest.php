@@ -110,7 +110,8 @@ class WorkingCapitalByStreamTest extends TestCase
         $strategy = Sectors::strategyFor('Beverages - Wineries & Distilleries');
         $pint = self::firm('PINT', 'Beverages - Wineries & Distilleries');
 
-        // The ledger strikes inventory days on cost; at the 25% margin the fixture runs, a share of revenue is days x 0.75 / 365.
+        // The ledger strikes inventory days on cost; at the 25% margin the fixture runs, a share of revenue is days x
+        // 0.75 / 365.
         $inventory = $strategy->getWorkingCapitalDays($pint)['dio'] / FinancialConstants::DAYS_PER_YEAR * (1.0 - 0.25);
         $this->assertGreaterThan(0.40, $inventory);
         $this->assertLessThan(0.60, $inventory);

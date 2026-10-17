@@ -41,7 +41,10 @@ use Doctrine\ORM\EntityManagerInterface;
 final class IndexFundAccountant
 {
     // --- Index Fund Accounting ---
-    /** Smallest distribution worth paying, per share. Below this the income stays accrued into the next quarter rather than writing a ledger row per holder that rounds to nothing. */
+    /**
+     * Smallest distribution worth paying, per share. Below this the income stays accrued into the next quarter rather
+     * than writing a ledger row per holder that rounds to nothing.
+     */
     public const FUND_MINIMUM_DISTRIBUTION = 0.005;
 
     public function __construct(

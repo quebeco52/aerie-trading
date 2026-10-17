@@ -23,14 +23,18 @@ use App\Service\Model\StreamContext;
  *
  * Financial Physics:
  * - High Moat: Specialty products mean higher margins and pricing power.
- * - Backlog-Buffered Cyclicality: Equipment sales are driven by the macro output gap, cushioned by multi-quarter order backlogs.
+ * - Backlog-Buffered Cyclicality: Equipment sales are driven by the macro output gap, cushioned by multi-quarter order
+ *   backlogs.
  * - Sticky Demand: Once integrated, customers rarely switch, reducing idiosyncratic volatility.
  * - The Razor/Razorblade: High-margin aftermarket services cushion recessions organically.
  */
 class SpecialtyIndustrialMachineryBusinessModel extends HeavyManufacturingBusinessModel
 {
     // --- Operating Cyclicality & Demand Structure ---
-    /** Elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). Backlog-cushioned capital equipment demand. */
+    /**
+     * Elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). Backlog-cushioned
+     * capital equipment demand.
+     */
     public const OPERATING_CYCLICALITY = 1.30;
     /** Own-price elasticity of demand: volume lost per unit of real price increase. */
     public const PRICE_ELASTICITY_OF_DEMAND = 0.50;
@@ -38,17 +42,29 @@ class SpecialtyIndustrialMachineryBusinessModel extends HeavyManufacturingBusine
     public const INDUSTRY_SUBSTITUTABILITY = 0.50;
 
     // --- Input Cost Basket ---
-    /** Shares of the variable cost base by input channel, measured from the BEA input-output accounts with supply-chain content (labor still the model's own). */
+    /**
+     * Shares of the variable cost base by input channel, measured from the BEA input-output accounts with supply-chain
+     * content (labor still the model's own).
+     */
     public const INPUT_COST_EXPOSURES = InputOutputExposures::SPECIALTY_INDUSTRIAL_MACHINERY;
 
     // --- FX Exposure ---
-    /** Share of revenue whose competitiveness moves with the trade-weighted exchange rate. Capital equipment is quoted internationally and competes with European and Japanese builders on price. */
+    /**
+     * Share of revenue whose competitiveness moves with the trade-weighted exchange rate. Capital equipment is quoted
+     * internationally and competes with European and Japanese builders on price.
+     */
     public const FX_REVENUE_EXPOSURE = 0.10;
 
     // --- Demand Transmission Lag ---
-    /** Years for a move in the output gap to reach the order book. A capex budget is approved a year before the order is placed and longer before it ships. */
+    /**
+     * Years for a move in the output gap to reach the order book. A capex budget is approved a year before the order is
+     * placed and longer before it ships.
+     */
     public const DEMAND_LAG_YEARS = 1.25;
-    /** An installed base tied to consumable and spare-parts revenue prices close to a monopoly on the aftermarket, which is where the margin sits. */
+    /**
+     * An installed base tied to consumable and spare-parts revenue prices close to a monopoly on the aftermarket, which
+     * is where the margin sits.
+     */
     public const PRICING_POWER_INDEX = 0.70;
 
     /**
@@ -74,7 +90,10 @@ class SpecialtyIndustrialMachineryBusinessModel extends HeavyManufacturingBusine
     // --- Macro & Backlog Physics ---
     /** Macro sensitivity multiplier for equipment demand to the broader output gap. */
     public const MACRO_GDP_SENSITIVITY = 1.50;
-    /** Fraction of the equipment order backlog (opening backlog plus new orders) executed and recognized each quarter (~1.9 quarters of coverage). */
+    /**
+     * Fraction of the equipment order backlog (opening backlog plus new orders) executed and recognized each quarter
+     * (~1.9 quarters of coverage).
+     */
     public const EQUIPMENT_BACKLOG_BURN_RATE = 0.35;
     /** Volatility multiplier for equipment sales variance. */
     public const REVENUE_VARIANCE_SCALAR = 0.25;
@@ -122,7 +141,10 @@ class SpecialtyIndustrialMachineryBusinessModel extends HeavyManufacturingBusine
     }
 
     // --- Secular Demand ---
-    /** Business investment in industrial equipment as a share of US nominal GDP in 1997 (BEA NIPA Table 5.3.5, private fixed investment). */
+    /**
+     * Business investment in industrial equipment as a share of US nominal GDP in 1997 (BEA NIPA Table 5.3.5, private
+     * fixed investment).
+     */
     public const SECULAR_SHARE_1997 = 0.0164;
     /** The same share in 2019. */
     public const SECULAR_SHARE_2019 = 0.0122;
@@ -219,8 +241,8 @@ class SpecialtyIndustrialMachineryBusinessModel extends HeavyManufacturingBusine
             $eventType = ShockEvent::INFRASTRUCTURE_BILL_WIN;
         }
 
-        // --- Clamped Stream Revenue Calculation ---
-        // Equipment orders enter a multi-quarter backlog and are recognized at the burn rate (percentage of completion).
+        // --- Clamped Stream Revenue Calculation --- Equipment orders enter a multi-quarter backlog and are recognized
+        // at the burn rate (percentage of completion).
         $equipmentShock = $equipmentZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR);
         $servicesShock  = $servicesZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR * self::SERVICES_VARIANCE_RATIO);
         $equipmentOrderMultiplier = max(0.0, (1.0 + $equipmentShock + $macroEquipmentBoost + $this->resolveFxDemandShift($macroState)) * $dealMultiplier);

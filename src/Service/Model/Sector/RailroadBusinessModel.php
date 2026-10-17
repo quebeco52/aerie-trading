@@ -31,7 +31,10 @@ use App\Service\Model\ModelParam;
 class RailroadBusinessModel extends StandardCorporateBusinessModel
 {
     // --- Operating Cyclicality & Demand Structure ---
-    /** Elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). Carloads track industrial output; captive track networks limit switching. */
+    /**
+     * Elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). Carloads track
+     * industrial output; captive track networks limit switching.
+     */
     public const OPERATING_CYCLICALITY = 1.00;
     /** Own-price elasticity of demand: volume lost per unit of real price increase. */
     public const PRICE_ELASTICITY_OF_DEMAND = 0.40;
@@ -39,7 +42,10 @@ class RailroadBusinessModel extends StandardCorporateBusinessModel
     public const INDUSTRY_SUBSTITUTABILITY = 0.20;
 
     // --- Input Cost Basket ---
-    /** Shares of the variable cost base by input channel, measured from the BEA input-output accounts with supply-chain content (labor still the model's own). */
+    /**
+     * Shares of the variable cost base by input channel, measured from the BEA input-output accounts with supply-chain
+     * content (labor still the model's own).
+     */
     public const INPUT_COST_EXPOSURES = InputOutputExposures::RAILROAD;
     /** Fuel surcharge programs reprice within a quarter or two of the diesel move. */
     public const INPUT_PASS_THROUGH_LAG_YEARS = 0.25;
@@ -47,7 +53,8 @@ class RailroadBusinessModel extends StandardCorporateBusinessModel
     public const PRICING_POWER_INDEX = 0.80;
 
     /**
-     * Calendar-quarter revenue seasonality [Q1, Q2, Q3, Q4] summing to 4.0: harvest grain carloads in the second half, winter weather in Q1.
+     * Calendar-quarter revenue seasonality [Q1, Q2, Q3, Q4] summing to 4.0: harvest grain carloads in the second half,
+     * winter weather in Q1.
      *
      * @return array<int, float>
      */
@@ -57,7 +64,10 @@ class RailroadBusinessModel extends StandardCorporateBusinessModel
     }
 
     // --- Balance Sheet Realism ---
-    /** Capitalized operating lease liabilities as a fraction of annual revenue (IFRS 16 / ASC 842). Leased locomotives and rolling stock. */
+    /**
+     * Capitalized operating lease liabilities as a fraction of annual revenue (IFRS 16 / ASC 842). Leased locomotives
+     * and rolling stock.
+     */
     public const LEASE_LIABILITY_INTENSITY = 0.10;
 
     // --- Analyst Visibility & Error ---
@@ -95,7 +105,10 @@ class RailroadBusinessModel extends StandardCorporateBusinessModel
     // --- Manufacturing PMI & Trade Transmission ---
     /** Sensitivity of industrial carload volumes to manufacturing PMI shifts. */
     public const PMI_CARLOAD_SENSITIVITY = 0.50;
-    /** Export volume per unit of the foreign bloc's output gap: the customers abroad. The import side rides on the domestic cycle. */
+    /**
+     * Export volume per unit of the foreign bloc's output gap: the customers abroad. The import side rides on the
+     * domestic cycle.
+     */
     public const FOREIGN_DEMAND_SENSITIVITY = 0.80;
 
     public function getWholesaleLeverageLimit(): float

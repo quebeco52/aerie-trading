@@ -21,13 +21,18 @@ final class TimeSeries
     public const REVERSION_DISTRESS_GAMMA = 1.00;
 
     // --- Exponential Smoothing of a Known Signal ---
-    /** Time constants of the past an exponential average is integrated over: the kernel's tail beyond is e^-8, 0.03%. */
+    /**
+     * Time constants of the past an exponential average is integrated over: the kernel's tail beyond is e^-8, 0.03%.
+     */
     public const SMOOTHING_KERNEL_SPAN = 8.0;
     /** Midpoint-rule steps across that span: the error on a seasonal cosine smoothed over a quarter is under 1e-6. */
     public const SMOOTHING_KERNEL_STEPS = 256;
 
     // --- Profitability Persistence (Fama & French 2000; Ohlson 1995) ---
-    /** Share of a firm's gap between its return on capital and its own long-run level that closes each year: about 38% (Fama & French 2000, J. Business, partial-adjustment model). */
+    /**
+     * Share of a firm's gap between its return on capital and its own long-run level that closes each year: about 38%
+     * (Fama & French 2000, J. Business, partial-adjustment model).
+     */
     public const PROFITABILITY_MEAN_REVERSION_RATE = 0.38;
 
     /**
@@ -180,9 +185,9 @@ final class TimeSeries
 
     /**
      * The constant growth rate worth the same as a growth rate whose excess over the long-run rate fades at the secular
-     * half-life: the H-model of Fuller & Hsia (1984) with an exponential fade. A dividend growing at g_L plus an excess e
-     * decaying at lambda is worth D/(r-g_L) x (1 + e/(r-g_L+lambda)) to first order, so the perpetual equivalent keeps
-     * (r-g_L)/(r-g_L+lambda) of the excess. Rates are real: the real discount rate against real trend growth.
+     * half-life: the H-model of Fuller & Hsia (1984) with an exponential fade. A dividend growing at g_L plus an excess
+     * e decaying at lambda is worth D/(r-g_L) x (1 + e/(r-g_L+lambda)) to first order, so the perpetual equivalent
+     * keeps (r-g_L)/(r-g_L+lambda) of the excess. Rates are real: the real discount rate against real trend growth.
      */
     public static function persistentEquivalentGrowth(float $growth, float $longRunGrowth, float $realDiscountRate): float
     {
@@ -374,7 +379,8 @@ final class TimeSeries
     }
 
     /**
-     * Calculates the mean-reverting exponential moving average (Ornstein-Uhlenbeck mix drift) for dynamic portfolio/revenue weights.
+     * Calculates the mean-reverting exponential moving average (Ornstein-Uhlenbeck mix drift) for dynamic
+     * portfolio/revenue weights.
      *
      * Formula: w_{t+1} = w_t + alpha * (realized_t - w_t) + kappa * (target - w_t)
      *

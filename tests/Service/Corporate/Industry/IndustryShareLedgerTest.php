@@ -512,7 +512,9 @@ class IndustryShareLedgerTest extends TestCase
         $this->assertEqualsWithDelta(0.60, $market['fringe_share'], 1e-12);
     }
 
-    /** A deal adds the revenue it bought at the market's size and a sale gives its fraction up, before the next report. */
+    /**
+     * A deal adds the revenue it bought at the market's size and a sale gives its fraction up, before the next report.
+     */
     public function testDealsAndSalesMoveARevenueMeasuredShare(): void
     {
         $ledger = new IndustryShareLedger(new InMemoryIndustryShareStore());
@@ -590,7 +592,9 @@ class IndustryShareLedgerTest extends TestCase
         $this->assertSame(['start_tick' => 400, 'end_tick' => 490], $store->readRegimes('Telecom Services')['price_war']);
     }
 
-    /** Members are the firms still selling into the industry: a failed firm's record and one a year stale do not count. */
+    /**
+     * Members are the firms still selling into the industry: a failed firm's record and one a year stale do not count.
+     */
     public function testMembersAreTheLiveRivalsAndTheFirmItself(): void
     {
         $ledger = new IndustryShareLedger(new InMemoryIndustryShareStore());

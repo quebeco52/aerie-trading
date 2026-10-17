@@ -228,7 +228,8 @@ class MacroTransmissionTest extends TestCase
         $this->assertLessThan(100.0, $slumpStarts, 'High mortgage rates and tight bank lending must depress housing starts.');
         $this->assertGreaterThanOrEqual(40.0, $slumpStarts);
 
-        // Credit gap availability: positive credit expansion stimulates housing starts at the sensitivity the caller sets
+        // Credit gap availability: positive credit expansion stimulates housing starts at the sensitivity the caller
+        // sets
         $params['creditGapSens'] = \App\Service\Macro\Subsystem\AssetMarketSubsystem::HOUSING_STARTS_CREDIT_GAP_SENSITIVITY;
         $creditBoomStarts = MacroTransmission::calculateTobinsQHousingStarts(
             currentStarts: 100.0,
@@ -265,8 +266,8 @@ class MacroTransmissionTest extends TestCase
     }
 
     /**
-     * Stock-flow: a loan creates its deposit, so money over income moves by the credit and purchases over income, and money
-     * grows at income's rate plus that move over the stock, whatever households already owe.
+     * Stock-flow: a loan creates its deposit, so money over income moves by the credit and purchases over income, and
+     * money grows at income's rate plus that move over the stock, whatever households already owe.
      */
     public function testNewCreditAddsAsMuchMoneyAsPurchasesDo(): void
     {
@@ -403,7 +404,10 @@ class MacroTransmissionTest extends TestCase
         self::assertSame(0.0, MacroTransmission::gdpShareDrift(0.0, 0.02, 22.0));
     }
 
-    /** The firm-wide shift lands on the cyclical streams by loading; the adjustments weight to zero, so the firm's total holds. */
+    /**
+     * The firm-wide shift lands on the cyclical streams by loading; the adjustments weight to zero, so the firm's total
+     * holds.
+     */
     public function testAllocateDemandShiftMovesTheShiftOntoTheCyclicalStreams(): void
     {
         $weights = ['orders' => 0.60, 'aftermarket' => 0.40];

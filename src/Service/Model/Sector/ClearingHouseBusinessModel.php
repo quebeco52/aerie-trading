@@ -26,11 +26,17 @@ use App\Service\Model\ModelParam;
 class ClearingHouseBusinessModel extends BaseFinancialBusinessModel
 {
     // --- Operating Cyclicality & Demand Structure ---
-    /** Elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). Clearing volumes rise in stress; only pool growth follows the cycle. */
+    /**
+     * Elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). Clearing volumes rise
+     * in stress; only pool growth follows the cycle.
+     */
     public const OPERATING_CYCLICALITY = 0.80;
 
     // --- Labor Intensity ---
-    /** Labor share of the fixed cost base exposed to the Beveridge wage squeeze. A matching engine is capital, not payroll, but risk, compliance and member-services staff carry the rest of the overhead. */
+    /**
+     * Labor share of the fixed cost base exposed to the Beveridge wage squeeze. A matching engine is capital, not
+     * payroll, but risk, compliance and member-services staff carry the rest of the overhead.
+     */
     public const FIXED_COST_LABOR_SHARE = 0.55;
 
     public function getMinIcr(): float
@@ -103,11 +109,17 @@ class ClearingHouseBusinessModel extends BaseFinancialBusinessModel
     public const MARGIN_POOL_YIELD_RETENTION_SHARE = 0.15;
 
     // --- VIX & Transaction Volume Bonus ---
-    /** Absolute 2s10s slope at which rates-clearing volumes are normal (~70bps, the neutral curve); a curve steepening or inverting past it brings swap hedging flow. */
+    /**
+     * Absolute 2s10s slope at which rates-clearing volumes are normal (~70bps, the neutral curve); a curve steepening
+     * or inverting past it brings swap hedging flow.
+     */
     public const RATES_VOL_NEUTRAL_SLOPE = 0.007;
     /** Clearing-fee revenue per unit of 2s10s slope beyond the neutral slope (+2% per 100bp of swap hedging flow). */
     public const RATES_VOL_REVENUE_SCALAR = 2.0;
-    /** Clearing-fee revenue per unit of volatility over MacroEngine::MACRO_VOL_BASE_ANCHOR, both ways (+0.4% per vol point); the only volatility channel into fees. */
+    /**
+     * Clearing-fee revenue per unit of volatility over MacroEngine::MACRO_VOL_BASE_ANCHOR, both ways (+0.4% per vol
+     * point); the only volatility channel into fees.
+     */
     public const VIX_REVENUE_SCALAR     = 0.40;
     /** Extreme VIX threshold triggering record clearing volume event lore. */
     public const VIX_EXTREME_THRESHOLD  = 0.30;
@@ -119,7 +131,10 @@ class ClearingHouseBusinessModel extends BaseFinancialBusinessModel
     public const CATASTROPHE_Z_THRESHOLD = -2.50;
     /** Loss multiplier applied to default severity when systemic breaches occur. */
     public const CATASTROPHE_LOSS_SCALAR = 0.25;
-    /** Member default stress per unit of the corporate default rate over its measured trend, relative; margin absorbs the usual run of failures. */
+    /**
+     * Member default stress per unit of the corporate default rate over its measured trend, relative; margin absorbs
+     * the usual run of failures.
+     */
     public const MACRO_DEFAULT_STRESS_SCALAR = 0.10;
     /** Healthy credit environment z-score threshold triggering minor margin write-backs. */
     public const HEALTHY_CREDIT_Z_FLOOR  = 1.00;
@@ -140,7 +155,10 @@ class ClearingHouseBusinessModel extends BaseFinancialBusinessModel
     public const MIN_OPERATING_BUFFER    = 0.02;
 
     // --- Passive Margin Pool Growth ---
-    /** Elasticity of initial margin to the volatility it is struck on: IM is a VaR over the liquidation period, so at fixed positions it scales one-for-one with sigma (EMIR RTS 153/2013 Arts. 24-26; CFTC 17 CFR 39.13(g)). */
+    /**
+     * Elasticity of initial margin to the volatility it is struck on: IM is a VaR over the liquidation period, so at
+     * fixed positions it scales one-for-one with sigma (EMIR RTS 153/2013 Arts. 24-26; CFTC 17 CFR 39.13(g)).
+     */
     public const MARGIN_VOLATILITY_ELASTICITY = 1.0;
     /** Persisted smoothed volatility the margin pool was last struck on. */
     public const STATE_MARGIN_VOLATILITY = 'state:margin_volatility';
@@ -257,9 +275,10 @@ class ClearingHouseBusinessModel extends BaseFinancialBusinessModel
         // The CCP Default Waterfall (Catastrophic Tail Risk)
         $defaultZ = $streams->generateExogenousZ('default', 0.05);
 
-        // Under the Default Waterfall, routine member defaults ($defaultZ >= CATASTROPHE_Z_THRESHOLD) are fully absorbed
-        // by the defaulting member's posted Initial Margin and Guaranty Fund contribution ($0 loss to CCP equity).
-        // Only a severe systemic failure pierces the waterfall to hit the CCP's Skin-in-the-Game (SITG) capital tranche.
+        // Under the Default Waterfall, routine member defaults ($defaultZ >= CATASTROPHE_Z_THRESHOLD) are fully
+        // absorbed by the defaulting member's posted Initial Margin and Guaranty Fund contribution ($0 loss to CCP
+        // equity). Only a severe systemic failure pierces the waterfall to hit the CCP's Skin-in-the-Game (SITG)
+        // capital tranche.
         $corporateDefaultShift = max(0.0, $macroState->corporateDefaultDeviation());
         $macroMemberStress = $corporateDefaultShift * self::MACRO_DEFAULT_STRESS_SCALAR * 0.05;
 
@@ -367,8 +386,9 @@ class ClearingHouseBusinessModel extends BaseFinancialBusinessModel
         $corporateInterest = ($corporateDebt * (1.0 - $floatingRatio) * $blendedFixedRate) + ($corporateDebt * $floatingRatio * $floatingInterestRate);
         $wholesaleRate = $corporateDebt > 0 ? ($corporateInterest / $corporateDebt) : $currentMarketFixedRate;
 
-        // Note: Margin pool custody rebates are pass-through distributions netted against custody yield in calculateInterestIncome.
-        // Returning only corporate debt interest ensures ICR and solvency metrics measure true corporate debt servicing capacity.
+        // Note: Margin pool custody rebates are pass-through distributions netted against custody yield in
+        // calculateInterestIncome. Returning only corporate debt interest ensures ICR and solvency metrics measure true
+        // corporate debt servicing capacity.
         return new InterestExpenseDTO(interestExpense: $corporateInterest, wholesaleRate: $wholesaleRate);
     }
 
@@ -459,10 +479,10 @@ class ClearingHouseBusinessModel extends BaseFinancialBusinessModel
 
     public function isUnderLeveraged(float $currentDebtRatio, float $targetDebtTolerance, float $interestCoverage, float $minIcr): bool
     {
-        // For a Central Counterparty Clearing House (CCP), Customer Deposits represent member initial margin collateral.
-        // These deposits scale exogenously with clearing member trading volume and open interest rather than discretionary
-        // balance sheet recapitalization. A clearinghouse should never trigger "underleveraged" buyback/debt spirals
-        // just because its customer margin pool ratio fluctuates.
+        // For a Central Counterparty Clearing House (CCP), Customer Deposits represent member initial margin
+        // collateral. These deposits scale exogenously with clearing member trading volume and open interest rather
+        // than discretionary balance sheet recapitalization. A clearinghouse should never trigger "underleveraged"
+        // buyback/debt spirals just because its customer margin pool ratio fluctuates.
         return false;
     }
 

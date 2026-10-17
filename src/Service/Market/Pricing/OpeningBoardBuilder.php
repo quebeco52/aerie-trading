@@ -34,7 +34,11 @@ class OpeningBoardBuilder
     public const MAX_OPENING_PRICE_PASSES = 6;
 
     // --- Investment Securities & AOCI (ASC 320 / Basel III) ---
-    /** Balance-sheet size above which an institution loses the AOCI filter and marks its capital to the curve. The advanced-approaches rule in form, set to this district's scale rather than a US figure: it takes the systemically important lenders and leaves the mid-tier the election. */
+    /**
+     * Balance-sheet size above which an institution loses the AOCI filter and marks its capital to the curve. The
+     * advanced-approaches rule in form, set to this district's scale rather than a US figure: it takes the systemically
+     * important lenders and leaves the mid-tier the election.
+     */
     public const AOCI_FILTER_SIZE_THRESHOLD = 750_000_000_000.0;
 
     public function __construct(
@@ -74,7 +78,8 @@ class OpeningBoardBuilder
         $stock->setSharesOutstanding((string) $stockData['shares_outstanding']);
         $stock->setVolatility((string) $stockData['volatility']);
         $stock->setCurrentVolatility((string) $stockData['volatility']);
-        // The industry's beta, Hamada-levered by DebtEngine at the firm's own net debt, plus the lore's position in its band.
+        // The industry's beta, Hamada-levered by DebtEngine at the firm's own net debt, plus the lore's position in its
+        // band.
         $stock->setBeta((string) IndustryBetas::seedBetaFor($stockData));
         $stock->setJumpIntensity((string) $stockData['jump_intensity']);
         $stock->setJumpVol((string) $stockData['jump_vol']);

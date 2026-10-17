@@ -225,10 +225,12 @@ class MerchantHouseBusinessModelTest extends TestCase
 
         $this->assertEqualsWithDelta(0.0, $this->model->getMacroPhysics($stock, $recession)['macro_demand_shift'], 1e-12);
 
-        // A domestic gap alone reaches only the terminals: 0.30 x (-0.03 x 0.15). Tonnage reads PMI, trade and the foreign gap.
+        // A domestic gap alone reaches only the terminals: 0.30 x (-0.03 x 0.15). Tonnage reads PMI, trade and the
+        // foreign gap.
         $this->assertEqualsWithDelta(0.30 * (-0.03 * 0.15), $this->model->resolveSectorActivityShift($stock, $recession), 1e-9);
 
-        // A global slump: tonnage 0.55 x ((-0.06 x 0.25) + (-0.02 x 2.0)) plus the same terminal leg; a metals crash adds nothing.
+        // A global slump: tonnage 0.55 x ((-0.06 x 0.25) + (-0.02 x 2.0)) plus the same terminal leg; a metals crash
+        // adds nothing.
         $global = new MacroStateDTO(
             outputGapEma: -0.03,
             foreignOutputGapEma: -0.02,

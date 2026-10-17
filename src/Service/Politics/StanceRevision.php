@@ -19,7 +19,10 @@ use App\Service\Math\TimeSeries;
 final class StanceRevision
 {
     // --- Changes of Mind (Bordo & Istrefi 2023; Istrefi 2019) ---
-    /** Yearly rate at which a swing vote changes camp: one switch over a swing vote's median FOMC tenure, 10.8 years, 1960-2015 (Bordo & Istrefi 2023, Table 1); some switch more than once (Istrefi 2019, fn. 25). */
+    /**
+     * Yearly rate at which a swing vote changes camp: one switch over a swing vote's median FOMC tenure, 10.8 years,
+     * 1960-2015 (Bordo & Istrefi 2023, Table 1); some switch more than once (Istrefi 2019, fn. 25).
+     */
     public const SWITCH_RATE = 1.0 / 10.8;
 
     /**
@@ -28,7 +31,8 @@ final class StanceRevision
      *
      * @param PoliticsState $state The politics, revised in place; its totalTime already set to this tick's.
      * @param float         $dt    Time increment in years.
-     * @return bool Whether the governor or a committee member changed camp, so the committee's balance needs refreshing.
+     * @return bool Whether the governor or a committee member changed camp, so the committee's balance needs
+     *              refreshing.
      */
     public static function revise(PoliticsState $state, float $dt): bool
     {

@@ -25,17 +25,33 @@ class DebtEngine
     private const MAX_LEVERAGE_RATIO = 15.0;
 
     // --- Issuer Credit Spread: Equity Volatility Premium ---
-    /** Equity volatility below which bondholders charge no idiosyncratic premium (20%, about the VIX's long-run mean of 19.5); a firm whose own configured volatility is higher is charged only above that, since its rating class already prices its normal risk. */
+    /**
+     * Equity volatility below which bondholders charge no idiosyncratic premium (20%, about the VIX's long-run mean of
+     * 19.5); a firm whose own configured volatility is higher is charged only above that, since its rating class
+     * already prices its normal risk.
+     */
     private const VOLATILITY_PREMIUM_THRESHOLD = 0.20;
-    /** Spread per unit of equity volatility above that threshold, 2 bps per point: Campbell & Taksler (2003) firm volatility channel, magnitude not re-pinned. */
+    /**
+     * Spread per unit of equity volatility above that threshold, 2 bps per point: Campbell & Taksler (2003) firm
+     * volatility channel, magnitude not re-pinned.
+     */
     private const VOLATILITY_PREMIUM_SENSITIVITY = 0.02;
-    /** Loss given default the class curves are quoted at: the ICE BofA indices are senior unsecured notes, recovering 48% (CorporateDefaultService; Moody's ultimate recoveries 1987-2021, 47.4%). */
+    /**
+     * Loss given default the class curves are quoted at: the ICE BofA indices are senior unsecured notes, recovering
+     * 48% (CorporateDefaultService; Moody's ultimate recoveries 1987-2021, 47.4%).
+     */
     private const CLASS_CURVE_LOSS_GIVEN_DEFAULT = 1.0 - \App\Service\Market\Bond\CorporateDefaultService::RECOVERY_SENIOR_UNSECURED;
-    /** Floor on a firm's baseline spread (15 bps), so a tight credit market never prices a cash-rich issuer's debt through the riskless curve. */
+    /**
+     * Floor on a firm's baseline spread (15 bps), so a tight credit market never prices a cash-rich issuer's debt
+     * through the riskless curve.
+     */
     private const MIN_BASELINE_CREDIT_SPREAD = 0.0015;
 
     // --- Leverage Covenant (Net Debt / EBITDA) ---
-    /** Sector limits at or above this are a no-test sentinel: financials are bound by regulatory capital, not cash-flow leverage. */
+    /**
+     * Sector limits at or above this are a no-test sentinel: financials are bound by regulatory capital, not cash-flow
+     * leverage.
+     */
     public const EBITDA_COVENANT_EXEMPT_LIMIT = 999.0;
     /** Fallback Net Debt / EBITDA covenant for an industry carrying no calibrated limit. */
     public const DEFAULT_EBITDA_COVENANT_LIMIT = 3.0;
@@ -51,13 +67,21 @@ class DebtEngine
     private const ACCELERATED_DEBT_TURNOVER = 0.15;
 
     // --- Merton Default Horizon ---
-    /** Horizon the structural default model is struck on; 5 years is the standard tenor for corporate credit spreads. */
+    /**
+     * Horizon the structural default model is struck on; 5 years is the standard tenor for corporate credit spreads.
+     */
     private const MERTON_HORIZON_YEARS = 5.0;
-    /** Floor on the asset volatility the Merton model is struck at; below it a distance to default stops meaning anything. */
+    /**
+     * Floor on the asset volatility the Merton model is struck at; below it a distance to default stops meaning
+     * anything.
+     */
     private const MIN_ASSET_VOLATILITY = 0.02;
 
     // --- Maturity Wall & Primary Market Access ---
-    /** Spread of the credit index an issuer's class trades off at which its primary market shuts: the HY index reached it in 2008 and 2020; the IG index never does, so an investment-grade issuer refinances through any recession. */
+    /**
+     * Spread of the credit index an issuer's class trades off at which its primary market shuts: the HY index reached
+     * it in 2008 and 2020; the IG index never does, so an investment-grade issuer refinances through any recession.
+     */
     private const PRIMARY_MARKET_CLOSURE_SPREAD = 0.10;
     /** Lowest credit rating that can still refinance a maturity at any price. */
     public const REFINANCING_RATING_FLOOR = 'CCC';
@@ -65,15 +89,24 @@ class DebtEngine
     private const REFINANCING_MIN_COVERAGE = 1.0;
 
     // --- Through-the-Cycle Leverage ---
-    /** Key on the newest operating-history quarter holding the net debt and EBITDA each rating review read, newest first (CreditRatingAgency::timeWeightedLeverage()). */
+    /**
+     * Key on the newest operating-history quarter holding the net debt and EBITDA each rating review read, newest first
+     * (CreditRatingAgency::timeWeightedLeverage()).
+     */
     public const RATED_LEVERAGE_KEY = 'rated_leverage';
 
     // --- Altman Z'' (Altman 1995) ---
-    /** Equity over total liabilities for a firm that owes nothing: the 10x cap Altman applies to the ratio, a firm with no claims ahead of its equity. */
+    /**
+     * Equity over total liabilities for a firm that owes nothing: the 10x cap Altman applies to the ratio, a firm with
+     * no claims ahead of its equity.
+     */
     private const ALTMAN_X4_UNLEVERED_CAP = 10.0;
 
     // --- Committed Revolving Credit Facility ---
-    /** Drawn-revolver spread (+100 bps) over the issuer's market rate; a pre-negotiated facility prices inside emergency paper. */
+    /**
+     * Drawn-revolver spread (+100 bps) over the issuer's market rate; a pre-negotiated facility prices inside emergency
+     * paper.
+     */
     public const REVOLVER_DRAW_SPREAD_PENALTY = 0.01;
 
     public function __construct(
@@ -250,13 +283,14 @@ class DebtEngine
      *
      * Its rating class's spread today (CreditRisk::calculateRatingClassSpread: Jarrow, Lando & Turnbull 1997 rating
      * pricing, each class proportional to the market's IG or HY index, Ben Dor et al. 2007), its default part restated
-     * at the recovery the firm's own debt carries (calculateRecoveryAdjustedSpread), times the firm's own
-     * multiple of its class, read off the spread it was seeded at (calculateIssuerSpreadMultiple), plus the premium
-     * bondholders charge when the firm's equity volatility runs above its norm (Campbell & Taksler 2003). The common credit cycle
+     * at the recovery the firm's own debt carries (calculateRecoveryAdjustedSpread), times the firm's own multiple of
+     * its class, read off the spread it was seeded at (calculateIssuerSpreadMultiple), plus the premium bondholders
+     * charge when the firm's equity volatility runs above its norm (Campbell & Taksler 2003). The common credit cycle
      * arrives through the indices; leverage and default risk through the rating.
      *
      * @param string|null $rating          Rating to price at; the firm's own when null (a pro-forma one for a deal).
-     * @param bool        $throughTheCycle The spread with the indices at their measured trend and no volatility premium.
+     * @param bool        $throughTheCycle The spread with the indices at their measured trend and no volatility
+     *                                     premium.
      */
     public function resolveCreditSpread(Stock $stock, MacroStateDTO $macroState, ?string $rating = null, bool $throughTheCycle = false): float
     {
@@ -321,9 +355,9 @@ class DebtEngine
     }
 
     /**
-     * The rating a debt-funded deal carries on the pro-forma balance sheet, as an agency rates an acquisition financing:
-     * the worse of the issuer's current rating, the grade its pro-forma distance to default reads, and the anchor its
-     * pro-forma leverage sets. Borrowing never upgrades the issuer.
+     * The rating a debt-funded deal carries on the pro-forma balance sheet, as an agency rates an acquisition
+     * financing: the worse of the issuer's current rating, the grade its pro-forma distance to default reads, and the
+     * anchor its pro-forma leverage sets. Borrowing never upgrades the issuer.
      */
     public function resolveProFormaRating(Stock $stock, float $proFormaDistanceToDefault, float $proFormaNetDebt, float $proFormaEbitda): string
     {
@@ -578,9 +612,9 @@ class DebtEngine
         // Hamada levered beta: preserves signed beta magnitude while adjusting for capital structure leverage.
         $baseBeta = (float) $stock->getBeta();
 
-        // The beta is levered on the equity the fundamentals support, not on the price: the price carries market noise the
-        // fair value pulls back out, and levering on it let a fall raise the beta that deepened the fall. Net debt, so
-        // cash hoarders aren't penalized with fake risk. The WACC below still weighs the claims at market value.
+        // The beta is levered on the equity the fundamentals support, not on the price: the price carries market noise
+        // the fair value pulls back out, and levering on it let a fall raise the beta that deepened the fall. Net debt,
+        // so cash hoarders aren't penalized with fake risk. The WACC below still weighs the claims at market value.
         $fairEquityValue = (float) $stock->getFairEquityValue();
         $leveredEquity = $fairEquityValue > 0.0 ? $fairEquityValue : $marketCap;
         $debtToEquity = $leveredEquity > 0 ? ($netDebtCapital / $leveredEquity) : self::MAX_BETA_DEBT_TO_EQUITY;
@@ -592,10 +626,10 @@ class DebtEngine
 
         // Cost of Equity (CAPM) on the long government yield: the riskless rate matched to the duration of the cash
         // flows being valued (Damodaran 2008, "What is the riskfree rate?"), which is also the rate the premium is
-        // measured over. The policy rate is the return on bills; discounting a perpetuity at it understates the
-        // hurdle by the term spread and swings every valuation with the short end of the monetary cycle. It is today's
-        // yield, the one an investor can lock in now, not an average of past ones: a smoothed rate moves for months after
-        // the yield has, so every valuation built on it could be forecast.
+        // measured over. The policy rate is the return on bills; discounting a perpetuity at it understates the hurdle
+        // by the term spread and swings every valuation with the short end of the monetary cycle. It is today's yield,
+        // the one an investor can lock in now, not an average of past ones: a smoothed rate moves for months after the
+        // yield has, so every valuation built on it could be forecast.
         $equityRiskPremium = $macroState->equityRiskPremium;
         $costOfEquity = Valuation::calculateCAPM($macroState->yield10y, $leveredBeta, $equityRiskPremium);
 
@@ -617,11 +651,11 @@ class DebtEngine
 
         $minIcr = $strategy->getMinIcr();
 
-        // Interest income generated by a company's cash treasury is a core component of Cash Flow Available for Debt Service (CFADS).
-        // By adding it to EBIT before calculating the ICR, we prevent massive cash fortresses from suffering false liquidity crises.
-        // Pass the realized wholesale rate (already carrying dynamic Merton/BGG spread widening) so strategies
-        // whose earning assets reprice off their own funding cost cannot price income off a stale calm-market
-        // benchmark while this same tick charges the distressed rate on the liability side.
+        // Interest income generated by a company's cash treasury is a core component of Cash Flow Available for Debt
+        // Service (CFADS). By adding it to EBIT before calculating the ICR, we prevent massive cash fortresses from
+        // suffering false liquidity crises. Pass the realized wholesale rate (already carrying dynamic Merton/BGG
+        // spread widening) so strategies whose earning assets reprice off their own funding cost cannot price income
+        // off a stale calm-market benchmark while this same tick charges the distressed rate on the liability side.
         $interestIncome = $strategy->calculateInterestIncome($stock, $macroState, $this->mathUtility, $debtMetrics->wholesaleRate);
         $ebit += $interestIncome;
 
@@ -633,8 +667,8 @@ class DebtEngine
         // Fetch the CFO's target Debt-to-Equity limit
         $equityLimit = $metrics['equity_limit'];
 
-        // Scale the negative carry panic threshold by the sector's structural equity leverage tolerance.
-        // A normal company (1.0) = 1.0x multiplier. Financials (9.0) = 9.0x multiplier (Banks do not care about negative carry!)
+        // Scale the negative carry panic threshold by the sector's structural equity leverage tolerance. A normal
+        // company (1.0) = 1.0x multiplier. Financials (9.0) = 9.0x multiplier (Banks do not care about negative carry!)
         $hurdleMultiplier = max(1.0, $equityLimit / 1.0);
         $hurdle = self::ARBITRAGE_HURDLE * $hurdleMultiplier;
 
@@ -646,9 +680,9 @@ class DebtEngine
         $isSevereNegativeCarry = $effectiveCostOfDebt > ($effectiveYieldOnCash + $hurdle);
         $isNegativeCarry = $effectiveCostOfDebt > $effectiveYieldOnCash;
 
-        // A company should only execute an Arbitrage Paydown if the debt is bleeding them via negative carry.
-        // A drop in earnings (low ICR) should NEVER cause a company to burn its precious liquidity buffer to pay off cheap principal!
-        // They must hold the cash to weather the recession.
+        // A company should only execute an Arbitrage Paydown if the debt is bleeding them via negative carry. A drop in
+        // earnings (low ICR) should NEVER cause a company to burn its precious liquidity buffer to pay off cheap
+        // principal! They must hold the cash to weather the recession.
         $wantsToPaydownDebt = ($wholesaleDebt > 0) && $isSevereNegativeCarry;
 
         $icrBuffer = $strategy->getRequiredIcrBuffer();
@@ -785,7 +819,8 @@ class DebtEngine
         if ($strategy->requiresAlternativeZScore()) {
             $capitalBase = $this->resolveTangibleCapitalBase($stock, $revenue);
             $capitalRatio = $capitalBase['capital'] / $capitalBase['assets'];
-            $zScore = max(-100.0, min(100.0, $capitalRatio * 100.0)); // Convert to percentage points (e.g., 8% capital = 8.0 score)
+            // Convert to percentage points (e.g., 8% capital = 8.0 score)
+            $zScore = max(-100.0, min(100.0, $capitalRatio * 100.0));
 
             $distressThreshold = $strategy->getDistressEquityThreshold();
             $warningThreshold = $strategy->getWarningEquityThreshold();
@@ -896,7 +931,8 @@ class DebtEngine
         }
 
         if ($this->hasPrimaryMarketAccess($stock, $health->rawMetrics, $health->interestCoverage)) {
-            // Refinanced in the primary market: the principal survives and the refinanced share reprices to today's rate.
+            // Refinanced in the primary market: the principal survives and the refinanced share reprices to today's
+            // rate.
             $stock->setHistoricalFixedRate((string) self::refinancedCoupon($stock, $strategy, $health->rawMetrics->currentMarketRate, $maturing / $wholesaleDebt));
             $stock->setPrincipalArrears('0');
 
@@ -915,10 +951,11 @@ class DebtEngine
 
     /**
      * The fixed coupon after a refinanced roll: the share of the book refinanced reprices to today's rate (the business
-     * model's quarterly roll, plus any arrears rolled with it). Refinancing ahead of maturity when rates fall pays only for a speculative-grade issuer, whose bonds
-     * turn callable at a fixed premium after their non-call period; investment-grade bonds carry make-whole calls, which
-     * price the call at the Treasury curve plus a small spread, so retiring them early saves nothing (Powers &
-     * Tsyplakov 2008). Letting every issuer refinance down gave coupons a free option on falling rates.
+     * model's quarterly roll, plus any arrears rolled with it). Refinancing ahead of maturity when rates fall pays only
+     * for a speculative-grade issuer, whose bonds turn callable at a fixed premium after their non-call period;
+     * investment-grade bonds carry make-whole calls, which price the call at the Treasury curve plus a small spread, so
+     * retiring them early saves nothing (Powers & Tsyplakov 2008). Letting every issuer refinance down gave coupons a
+     * free option on falling rates.
      */
     private static function refinancedCoupon(Stock $stock, \App\Service\Model\BusinessModelInterface $strategy, float $marketFixedRate, float $refinancedShare): float
     {
@@ -933,7 +970,10 @@ class DebtEngine
         return ($historicalRate * (1.0 - $turnover)) + ($marketFixedRate * $turnover);
     }
 
-    /** A lender, an insurer, or any institution steering to a capital ratio, is underwritten and rated on its capital, not its cash flow. */
+    /**
+     * A lender, an insurer, or any institution steering to a capital ratio, is underwritten and rated on its capital,
+     * not its cash flow.
+     */
     private static function isUnderwrittenOnCapital(Stock $stock, \App\Service\Model\BusinessModelInterface $strategy): bool
     {
         return $strategy instanceof \App\Service\Model\Sector\CommercialBankBusinessModel
@@ -942,9 +982,9 @@ class DebtEngine
     }
 
     /**
-     * The score the agency's distress caps read: the Altman Z'' (or a financial's capital ratio in its place), except for
-     * an asset manager, which S&P rates on the corporate methodology's business and financial risk alone ("Key Credit
-     * Factors For Asset Managers", 2014); Altman's sample held no financials.
+     * The score the agency's distress caps read: the Altman Z'' (or a financial's capital ratio in its place), except
+     * for an asset manager, which S&P rates on the corporate methodology's business and financial risk alone ("Key
+     * Credit Factors For Asset Managers", 2014); Altman's sample held no financials.
      *
      * @return array{z_score: float|null, zone: string|null, is_bankrupt?: bool}
      */
@@ -966,7 +1006,10 @@ class DebtEngine
         return $scored;
     }
 
-    /** An asset manager investing its own balance sheet (S&P's hybrid model): private equity, a hedge fund, a distressed-debt investor. */
+    /**
+     * An asset manager investing its own balance sheet (S&P's hybrid model): private equity, a hedge fund, a
+     * distressed-debt investor.
+     */
     private static function investsItsBalanceSheet(\App\Service\Model\BusinessModelInterface $strategy): bool
     {
         return $strategy instanceof \App\Service\Model\Sector\PrivateEquityBusinessModel
@@ -976,13 +1019,13 @@ class DebtEngine
 
     /**
      * The ceiling on a firm's rating before its market-implied grade: for an operating firm the one its leverage sets
-     * (CreditRatingAgency::financialRiskAnchor()), on S&P's real estate bands for a REIT; for an asset manager investing
-     * its balance sheet, debt to adjusted total equity (adjustedEquityLeverageAnchor()); for an institution rated on its
-     * capital the bank methodology's (CreditRatingAgency::CAPITAL_RATED_RATING_CEILING). A rate-regulated utility
-     * carries S&P's excellent business risk profile, read on the medial volatility table. Debt to EBITDA is rated on
-     * S&P's time-weighted years (CreditRatingAgency::timeWeightedLeverage()) when the review has them, $ratedQuarters
-     * and the $baseCase forecast, else on the figures given; a pro-forma deal is rated on its own year, as S&P weights a
-     * transformational event.
+     * (CreditRatingAgency::financialRiskAnchor()), on S&P's real estate bands for a REIT; for an asset manager
+     * investing its balance sheet, debt to adjusted total equity (adjustedEquityLeverageAnchor()); for an institution
+     * rated on its capital the bank methodology's (CreditRatingAgency::CAPITAL_RATED_RATING_CEILING). A rate-regulated
+     * utility carries S&P's excellent business risk profile, read on the medial volatility table. Debt to EBITDA is
+     * rated on S&P's time-weighted years (CreditRatingAgency::timeWeightedLeverage()) when the review has them,
+     * $ratedQuarters and the $baseCase forecast, else on the figures given; a pro-forma deal is rated on its own year,
+     * as S&P weights a transformational event.
      *
      * @param list<array{net_debt: float, ebitda: float}> $ratedQuarters Reviews' net debt and EBITDA, newest first.
      * @param array{net_debt: float, ebitda: float}|null $baseCase The forecast years (baseCaseLeverage()).
@@ -1024,10 +1067,11 @@ class DebtEngine
     }
 
     /**
-     * Records the net debt and trailing EBITDA this review rates on against the quarter the report has just added to the
-     * operating history, after those the previous quarter's review recorded, and returns them newest first, as many as
-     * CreditRatingAgency::timeWeightedLeverage() reads. The record travels with the history, so a deal that restates it
-     * pro forma (MergerAndAcquisitionEngine) starts the window over; a quarter reviewed twice rewrites its own entry.
+     * Records the net debt and trailing EBITDA this review rates on against the quarter the report has just added to
+     * the operating history, after those the previous quarter's review recorded, and returns them newest first, as many
+     * as CreditRatingAgency::timeWeightedLeverage() reads. The record travels with the history, so a deal that restates
+     * it pro forma (MergerAndAcquisitionEngine) starts the window over; a quarter reviewed twice rewrites its own
+     * entry.
      *
      * @return list<array{net_debt: float, ebitda: float}>
      */
@@ -1061,7 +1105,8 @@ class DebtEngine
 
         // Coverage is how a lender underwrites an operating borrower, whose interest is a charge on its cash flow. A
         // lender, or any institution steering to a capital ratio, is underwritten on its capital instead: its interest
-        // expense is its cost of goods, and a provisioning quarter is not a missed coupon. Its rating reads the capital.
+        // expense is its cost of goods, and a provisioning quarter is not a missed coupon. Its rating reads the
+        // capital.
         $strategy = \App\Data\Company\Sectors::strategyFor($stock->getIndustry());
         if (!self::isUnderwrittenOnCapital($stock, $strategy) && $interestCoverage < self::REFINANCING_MIN_COVERAGE) {
             return false;

@@ -41,9 +41,16 @@ use App\Service\Math\FinancialConstants;
 final class DealerGammaEngine
 {
     // --- Dealer Gamma Hedging (Barbon & Buraschi 2020; Baltussen, Da, Lammers & Radeva 2021) ---
-    /** Share of the desk's delta exposure that actually reaches the market as a hedge. A desk nets customer flow against itself first and only hedges the residual, so the whole of its book never trades. */
+    /**
+     * Share of the desk's delta exposure that actually reaches the market as a hedge. A desk nets customer flow against
+     * itself first and only hedges the residual, so the whole of its book never trades.
+     */
     public const DEALER_HEDGE_RATIO = 0.80;
-    /** Ceiling on the desk's hedging flow per trading day as a share of the name's average daily volume, the Rule 10b-18 pacing corporate flow uses. Past it the impact law is extrapolation; the clipped remainder carries to the next pass. */
+    /**
+     * Ceiling on the desk's hedging flow per trading day as a share of the name's average daily volume, the Rule 10b-18
+     * pacing corporate flow uses. Past it the impact law is extrapolation; the clipped remainder carries to the next
+     * pass.
+     */
     public const MAX_DEALER_HEDGE_ADV_MULTIPLE = 0.25;
     /** Gap to its target the desk treats as already hedged: numerical dust in the book, not a trade. */
     public const MIN_HEDGE_SHARES = 1e-6;

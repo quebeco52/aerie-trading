@@ -175,7 +175,10 @@ class MarketEngineTest extends TestCase
         );
     }
 
-    /** Perpetual growth carries the inflation the hurdle's 10Y does: a hot print with expectations anchored leaves the fair value where it stood. */
+    /**
+     * Perpetual growth carries the inflation the hurdle's 10Y does: a hot print with expectations anchored leaves the
+     * fair value where it stood.
+     */
     public function testAnInflationPrintWithAnchoredExpectationsLeavesTheFairValue(): void
     {
         $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
@@ -321,7 +324,10 @@ class MarketEngineTest extends TestCase
         }
     }
 
-    /** An expected rise in the tax on dividends costs a payer the taxable holders' share of it on its dividends, and a firm paying none nothing. */
+    /**
+     * An expected rise in the tax on dividends costs a payer the taxable holders' share of it on its dividends, and a
+     * firm paying none nothing.
+     */
     public function testAnExpectedDividendTaxCostsPayersOnly(): void
     {
         $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);

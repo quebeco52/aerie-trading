@@ -156,7 +156,9 @@ class EventPresenterTest extends TestCase
         $this->assertSame('GOVERNMENT', $this->presenter->present(['type' => 'GOVERNMENT', 'description' => 'x'])['badge'], 'A topic with no badge reads as its desk.');
     }
 
-    /** A story is dated in the District's calendar; a row from before it carried a simulation time keeps its clock time. */
+    /**
+     * A story is dated in the District's calendar; a row from before it carried a simulation time keeps its clock time.
+     */
     public function testAStoryIsDatedInTheDistrictsCalendar(): void
     {
         $stamped = (new StockEvent())->setEventType('SPLIT')->setDescription('2-for-1 split.')->setSimTime(13.25);

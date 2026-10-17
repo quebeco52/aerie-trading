@@ -16,13 +16,19 @@ namespace App\Data\Politics;
 final class UsNameFrequencies
 {
     // --- Groups ---
-    /** The race and ethnicity groups both sources report, in column order: non-Hispanic white, Black, Asian or Pacific Islander, American Indian or Alaska Native, two or more races; Hispanic. */
+    /**
+     * The race and ethnicity groups both sources report, in column order: non-Hispanic white, Black, Asian or Pacific
+     * Islander, American Indian or Alaska Native, two or more races; Hispanic.
+     */
     public const GROUPS = ['white', 'black', 'api', 'aian', 'multiracial', 'hispanic'];
     /** Each group's share of everyone the 2010 Census counted, the surnames below the top 2,000 included (%). */
     public const POPULATION_SHARES = [64.26, 12.01, 4.9, 0.74, 1.8, 16.29];
 
     // --- Surnames ---
-    /** The 2,000 most common surnames in the 2010 Census, most common first: the people bearing it, then each group's share of them (%). */
+    /**
+     * The 2,000 most common surnames in the 2010 Census, most common first: the people bearing it, then each group's
+     * share of them (%).
+     */
     public const SURNAMES = [
         'Smith' => [2442977, 70.9, 23.11, 0.5, 0.89, 2.19, 2.4],
         'Johnson' => [1932812, 58.97, 34.63, 0.54, 0.94, 2.56, 2.36],
@@ -2027,7 +2033,10 @@ final class UsNameFrequencies
     ];
 
     // --- Given names ---
-    /** The 300 most common given names of each sex among Social Security card applicants born in each decade, by decade: applicants bearing it. */
+    /**
+     * The 300 most common given names of each sex among Social Security card applicants born in each decade, by decade:
+     * applicants bearing it.
+     */
     public const GIVEN = [
         1890 => [
             'M' => [
@@ -3645,7 +3654,9 @@ final class UsNameFrequencies
         ],
     ];
 
-    /** Each group's share of mortgage applicants bearing a given name above (%), for the names Tzioumis (2018) reports. */
+    /**
+     * Each group's share of mortgage applicants bearing a given name above (%), for the names Tzioumis (2018) reports.
+     */
     public const GIVEN_SHARES = [
         'Aaron' => [91.61, 3.26, 2.06, 0.06, 0.14, 2.88],
         'Abbie' => [95.95, 2.7, 0, 0, 0, 1.35],
@@ -5039,11 +5050,17 @@ final class UsNameFrequencies
         'Zane' => [95.83, 1.04, 2.08, 0, 0, 1.04],
         'Zoe' => [87.25, 4.9, 3.92, 0, 0, 3.92],
     ];
-    /** Each group's share of all the mortgage applicants Tzioumis (2018) reports (%): the shares for a given name it does not list. */
+    /**
+     * Each group's share of all the mortgage applicants Tzioumis (2018) reports (%): the shares for a given name it
+     * does not list.
+     */
     public const GIVEN_UNLISTED_SHARES = [82.33, 4.2, 6.27, 0.17, 0.16, 6.88];
 
     // --- Famous people ---
-    /** Names the tables above can make that a famous person holds (25+ Wikidata sitelinks), so no public figure is drawn under one. */
+    /**
+     * Names the tables above can make that a famous person holds (25+ Wikidata sitelinks), so no public figure is drawn
+     * under one.
+     */
     public const FAMOUS = [
         'Aaron Beck', 'Aaron Brooks', 'Aaron Brown', 'Aaron Carter', 'Aaron Gordon', 'Aaron Hickey', 'Aaron Hughes',
         'Aaron Hunt', 'Aaron Paul', 'Aaron Ramsey', 'Aaron Rodgers', 'Aaron Stanford', 'Aaron Swartz', 'Aaron Wolf',

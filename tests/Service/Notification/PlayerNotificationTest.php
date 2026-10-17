@@ -21,7 +21,9 @@ use Psr\Log\NullLogger;
  */
 final class PlayerNotificationTest extends TestCase
 {
-    /** @return array{0: PlayerNotifier, 1: Connection&\PHPUnit\Framework\MockObject\MockObject, 2: \Redis&\PHPUnit\Framework\MockObject\MockObject} */
+    /**
+     * @return array{0: PlayerNotifier, 1: Connection&\PHPUnit\Framework\MockObject\MockObject, 2: \Redis&\PHPUnit\Framework\MockObject\MockObject}
+     */
     private function notifier(): array
     {
         $connection = $this->createMock(Connection::class);

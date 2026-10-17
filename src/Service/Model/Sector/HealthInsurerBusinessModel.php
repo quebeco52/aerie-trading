@@ -29,13 +29,22 @@ use App\Service\Math\TimeSeries;
 class HealthInsurerBusinessModel extends StandardCorporateBusinessModel
 {
     // --- Operating Cyclicality & Demand Structure ---
-    /** Elasticity of volumes and costs to the macro cycle. The cycle reaches a health plan through enrollment and the medical cost trend this model reads, so the engine's output-gap terms would count it twice (band floor). */
+    /**
+     * Elasticity of volumes and costs to the macro cycle. The cycle reaches a health plan through enrollment and the
+     * medical cost trend this model reads, so the engine's output-gap terms would count it twice (band floor).
+     */
     public const OPERATING_CYCLICALITY = 0.20;
 
     // --- Pricing ---
-    /** Premiums are priced off the medical cost trend and claims are paid at the administered reimbursement rate, so both inflate with it. */
+    /**
+     * Premiums are priced off the medical cost trend and claims are paid at the administered reimbursement rate, so
+     * both inflate with it.
+     */
     public const PRICING_INFLATION_BASIS = 'reimbursement_rate_growth';
-    /** Premium filings cover projected claims at the target loss ratio, so medical inflation passes into premium one for one; the lag is the underwriting cycle below. */
+    /**
+     * Premium filings cover projected claims at the target loss ratio, so medical inflation passes into premium one for
+     * one; the lag is the underwriting cycle below.
+     */
     public const PRICING_ELASTICITY = 1.00;
 
     // --- Labor Intensity ---
@@ -43,7 +52,10 @@ class HealthInsurerBusinessModel extends StandardCorporateBusinessModel
     public const FIXED_COST_LABOR_SHARE = InsuranceBusinessModel::FIXED_COST_LABOR_SHARE;
 
     // --- Underwriting Cycle ---
-    /** Years from the midpoint of the claims experience a premium is priced on to the midpoint of the period it is charged for: 24 months (Medica 2022 individual filing; UnitedHealthcare 2018 small-group filing). */
+    /**
+     * Years from the midpoint of the claims experience a premium is priced on to the midpoint of the period it is
+     * charged for: 24 months (Medica 2022 individual filing; UnitedHealthcare 2018 small-group filing).
+     */
     public const RATING_LAG_YEARS = 2.0;
     /** Years over which the book is repriced to its target loss ratio: group policies renew annually. */
     public const POLICY_TERM_YEARS = 1.0;
@@ -53,23 +65,38 @@ class HealthInsurerBusinessModel extends StandardCorporateBusinessModel
     public const STATE_PRICED_TREND = 'state:priced_trend';
 
     // --- Medical Loss Ratio Floor (45 CFR 158) ---
-    /** Minimum medical loss ratio in the large group market (45 CFR 158.210); small group and individual plans are held to 80%. */
+    /**
+     * Minimum medical loss ratio in the large group market (45 CFR 158.210); small group and individual plans are held
+     * to 80%.
+     */
     public const MLR_FLOOR = 0.85;
-    /** Points the floor's own definition adds to the reported medical cost ratio in the large group market: taxes and fees taken out of premium 2.0, quality spending added to claims 0.7 (Herbold, Milliman 2012, on 2010 statements). */
+    /**
+     * Points the floor's own definition adds to the reported medical cost ratio in the large group market: taxes and
+     * fees taken out of premium 2.0, quality spending added to claims 0.7 (Herbold, Milliman 2012, on 2010 statements).
+     */
     public const MLR_ADJUSTMENT = 0.027;
-    /** Mean age in years of the ratio the floor is tested on: the reporting year and the two before it, weighed alike (45 CFR 158.220(b)), so an average carrying the same mean age. */
+    /**
+     * Mean age in years of the ratio the floor is tested on: the reporting year and the two before it, weighed alike
+     * (45 CFR 158.220(b)), so an average carrying the same mean age.
+     */
     public const MLR_AVERAGING_YEARS = 1.5;
     /** Stream-state key: the averaged medical cost ratio the floor is tested on. */
     public const STATE_AVERAGE_LOSS_RATIO = 'state:average_loss_ratio';
 
     // --- Enrollment ---
-    /** Employer-sponsored enrollment lost per unit of unemployment above its natural rate: own-employer coverage falls 1.97% per point (Cawley, Moriya & Simon 2015, men; women and children showed no significant change). */
+    /**
+     * Employer-sponsored enrollment lost per unit of unemployment above its natural rate: own-employer coverage falls
+     * 1.97% per point (Cawley, Moriya & Simon 2015, men; women and children showed no significant change).
+     */
     public const ENROLLMENT_UNEMPLOYMENT_ELASTICITY = 1.97;
     /** Quarterly persistence of the plan's own membership shock (the standard corporate default). */
     public const MEMBERSHIP_SHOCK_PERSISTENCE = 0.25;
 
     // --- Claims Float ---
-    /** Days of medical costs owed as claims payable: UnitedHealth 50.6 in 2019 (medical costs payable over annual medical costs, 10-K). */
+    /**
+     * Days of medical costs owed as claims payable: UnitedHealth 50.6 in 2019 (medical costs payable over annual
+     * medical costs, 10-K).
+     */
     public const DAYS_CLAIMS_PAYABLE = 50.6;
 
     public function getMacroPhysics(Stock $stock, MacroStateDTO $macroState): array
@@ -158,8 +185,8 @@ class HealthInsurerBusinessModel extends StandardCorporateBusinessModel
         $streams->registerState(self::STATE_PRICED_TREND, TimeSeries::calculateDistributedLag($pricedTrend, $costTrend, $dt, self::RATING_LAG_YEARS));
         $lossRatio = $realizedVariableMargin * exp($gap);
 
-        // --- Medical Loss Ratio Floor ---
-        // The rebate is the shortfall of the averaged ratio under the floor, paid on the year's premium (45 CFR 158.240).
+        // --- Medical Loss Ratio Floor --- The rebate is the shortfall of the averaged ratio under the floor, paid on
+        // the year's premium (45 CFR 158.240).
         $averageLossRatio = TimeSeries::calculateDistributedLag(
             currentLaggedValue: $streams->getPersistedState(self::STATE_AVERAGE_LOSS_RATIO, $lossRatio),
             targetValue: $lossRatio,

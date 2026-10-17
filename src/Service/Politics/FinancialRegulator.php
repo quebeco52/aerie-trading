@@ -29,13 +29,22 @@ use App\Service\Math\MathUtility;
 final class FinancialRegulator
 {
     // --- The Stance's Range ---
-    /** CET1 requirement of the lightest-touch head, countercyclical buffer aside (8%): Basel III's 4.5% minimum and 2.5% conservation buffer, and a 1% charge on the District's systemic banks. */
+    /**
+     * CET1 requirement of the lightest-touch head, countercyclical buffer aside (8%): Basel III's 4.5% minimum and 2.5%
+     * conservation buffer, and a 1% charge on the District's systemic banks.
+     */
     public const LIGHTEST_REQUIREMENT = 0.08;
-    /** CET1 requirement of the strictest head (13%), about where the strictest supervisors of the advanced economies hold their largest banks. */
+    /**
+     * CET1 requirement of the strictest head (13%), about where the strictest supervisors of the advanced economies
+     * hold their largest banks.
+     */
     public const STRICTEST_REQUIREMENT = 0.13;
     /** Mortgage loan-to-value cap of the strictest head (80%): a fifth of a home's price from the buyer's own funds. */
     public const STRICTEST_LTV_CAP = 0.80;
-    /** Neutral countercyclical buffer of the strictest head (2%), held while credit is calm so there is capital to release in a bust. */
+    /**
+     * Neutral countercyclical buffer of the strictest head (2%), held while credit is calm so there is capital to
+     * release in a bust.
+     */
     public const STRICTEST_NEUTRAL_BUFFER = 0.02;
     /** Requirement below which a head reads as light-touch: the lightest third of the range. */
     public const LIGHT_TOUCH_BELOW = self::LIGHTEST_REQUIREMENT + ((self::STRICTEST_REQUIREMENT - self::LIGHTEST_REQUIREMENT) / 3.0);
@@ -43,19 +52,26 @@ final class FinancialRegulator
     public const STRICT_ABOVE = self::STRICTEST_REQUIREMENT - ((self::STRICTEST_REQUIREMENT - self::LIGHTEST_REQUIREMENT) / 3.0);
 
     // --- The Head ---
-    /** Length of the head's single term, in years: the five-year, non-renewable term of the chair of the ECB's Supervisory Board (Regulation 1024/2013, Art. 26(3)), the commonest term among bank supervisors that have one. */
+    /**
+     * Length of the head's single term, in years: the five-year, non-renewable term of the chair of the ECB's
+     * Supervisory Board (Regulation 1024/2013, Art. 26(3)), the commonest term among bank supervisors that have one.
+     */
     public const HEAD_TERM_YEARS = 5.0;
     /** When the term of the head sitting at Year 1 ends, in years after Year 1 began. */
     public const OPENING_HEAD_TERM_END = 2.0;
 
     // --- The Requirement Taking Effect (Basel III countercyclical buffer) ---
-    /** Years over which a rise in the requirement is phased in: a higher countercyclical buffer applies up to 12 months after it is announced, a lower one at once (BCBS 2010, Guidance for national authorities operating the countercyclical capital buffer). */
+    /**
+     * Years over which a rise in the requirement is phased in: a higher countercyclical buffer applies up to 12 months
+     * after it is announced, a lower one at once (BCBS 2010, Guidance for national authorities operating the
+     * countercyclical capital buffer).
+     */
     public const PHASE_IN_YEARS = 1.0;
 
     /**
      * One tick, after the Council's own: the head seated on the first read of a state without one; a new head at each
-     * term's end, from a shortlist, the candidate nearest the Council's median stance on the banks; and the requirement in
-     * force moved toward the head's.
+     * term's end, from a shortlist, the candidate nearest the Council's median stance on the banks; and the requirement
+     * in force moved toward the head's.
      *
      * @param PoliticsState $state The politics, advanced in place; its totalTime already set to this tick's.
      */
@@ -132,7 +148,10 @@ final class FinancialRegulator
         return $state->regulatorLtvCap;
     }
 
-    /** The cap a stance runs: none up to the opening stance, then tightening linearly from a cap no buyer reaches to the strictest. */
+    /**
+     * The cap a stance runs: none up to the opening stance, then tightening linearly from a cap no buyer reaches to the
+     * strictest.
+     */
     public static function ltvCapForStance(float $stance): ?float
     {
         $strictness = self::strictnessPastOpening($stance);
@@ -144,13 +163,18 @@ final class FinancialRegulator
         return $looseCap - ($strictness * ($looseCap - self::STRICTEST_LTV_CAP));
     }
 
-    /** The positive neutral countercyclical buffer a stance holds, as a share of risk-weighted assets: none up to the opening stance. */
+    /**
+     * The positive neutral countercyclical buffer a stance holds, as a share of risk-weighted assets: none up to the
+     * opening stance.
+     */
     public static function neutralBufferForStance(float $stance): float
     {
         return self::strictnessPastOpening($stance) * self::STRICTEST_NEUTRAL_BUFFER;
     }
 
-    /** How far a stance stands from the District's opening one toward the strictest, 0 to 1; 0 at or below the opening. */
+    /**
+     * How far a stance stands from the District's opening one toward the strictest, 0 to 1; 0 at or below the opening.
+     */
     private static function strictnessPastOpening(float $stance): float
     {
         $opening = self::stance(FinancialConstants::OPENING_BANK_CAPITAL_REQUIREMENT);
@@ -165,8 +189,8 @@ final class FinancialRegulator
     }
 
     /**
-     * The requirement in force: a cut, or a rise once phased in, is the head's; part way through a rise's year it stands
-     * that share of the way up from where it began.
+     * The requirement in force: a cut, or a rise once phased in, is the head's; part way through a rise's year it
+     * stands that share of the way up from where it began.
      */
     public static function requirementInForce(float $target, float $from, float $sincePhaseStart): float
     {
@@ -201,7 +225,9 @@ final class FinancialRegulator
         return self::STRICTEST_REQUIREMENT;
     }
 
-    /** @param array{name: string, birth: float, stance: float, regulation: float, fund: float, debt: float, competition: float, markets: float, swing?: float} $person */
+    /**
+     * @param array{name: string, birth: float, stance: float, regulation: float, fund: float, debt: float, competition: float, markets: float, swing?: float} $person
+     */
     private static function seatHead(PoliticsState $state, array $person, float $termStart): void
     {
         CouncilAppointments::retire($state, $state->regulatorName);

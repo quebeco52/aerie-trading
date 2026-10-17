@@ -74,12 +74,17 @@ class DivestitureContext
     public float $lostDebt = 0.0;
     public float $lostEquity = 0.0;
 
-    /** Market value of what is handed over: the slice of the firm's value without the cash and listed stakes it keeps. */
+    /**
+     * Market value of what is handed over: the slice of the firm's value without the cash and listed stakes it keeps.
+     */
     public float $soldValue = 0.0;
     public float $salePrice = 0.0;
     public float $newTreasury = 0.0;
     public float $gainOnSale = 0.0;
-    /** Tax the gain on sale costs, current tax paid from the proceeds plus the carryforward asset it uses; a loss's benefit is negative. */
+    /**
+     * Tax the gain on sale costs, current tax paid from the proceeds plus the carryforward asset it uses; a loss's
+     * benefit is negative.
+     */
     public float $taxOnSale = 0.0;
 
     // Results

@@ -82,8 +82,8 @@ final class OutputGapChannels
             'colour' => '#9085e9',
             'channels' => ['netExports'],
         ],
-        // The gap's own pull back to trend (stabilisers and income smoothing) sits with its own momentum: both are demand
-        // answering the gap it is in, not a decision anyone took.
+        // The gap's own pull back to trend (stabilisers and income smoothing) sits with its own momentum: both are
+        // demand answering the gap it is in, not a decision anyone took.
         'capacity' => [
             'label' => 'Pull to trend & capacity',
             'colour' => '#e66767',

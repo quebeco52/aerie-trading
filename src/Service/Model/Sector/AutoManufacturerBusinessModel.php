@@ -35,7 +35,10 @@ use App\Service\Model\ModelParam;
 class AutoManufacturerBusinessModel extends HeavyManufacturingBusinessModel
 {
     // --- Operating Cyclicality & Demand Structure ---
-    /** Elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). Big-ticket, credit-financed purchases with model-to-model substitution. */
+    /**
+     * Elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). Big-ticket,
+     * credit-financed purchases with model-to-model substitution.
+     */
     public const OPERATING_CYCLICALITY = 1.50;
     /** Own-price elasticity of demand: volume lost per unit of real price increase. */
     public const PRICE_ELASTICITY_OF_DEMAND = 1.20;
@@ -43,17 +46,24 @@ class AutoManufacturerBusinessModel extends HeavyManufacturingBusinessModel
     public const INDUSTRY_SUBSTITUTABILITY = 0.70;
 
     // --- FX Exposure ---
-    /** Share of revenue whose competitiveness moves with the trade-weighted exchange rate. Vehicles are the archetypal traded good: half the book is exported or meets a landed import on the same forecourt. */
+    /**
+     * Share of revenue whose competitiveness moves with the trade-weighted exchange rate. Vehicles are the archetypal
+     * traded good: half the book is exported or meets a landed import on the same forecourt.
+     */
     public const FX_REVENUE_EXPOSURE = 0.50;
 
     // --- Input Cost Basket ---
-    /** Shares of the variable cost base by input channel, measured from the BEA input-output accounts with supply-chain content (labor still the model's own). */
+    /**
+     * Shares of the variable cost base by input channel, measured from the BEA input-output accounts with supply-chain
+     * content (labor still the model's own).
+     */
     public const INPUT_COST_EXPOSURES = InputOutputExposures::AUTO_MANUFACTURER;
     /** Tier-one supplier contracts fix component prices for about a quarter before spot moves reach the line. */
     public const INPUT_COST_LAG_YEARS = 0.25;
 
     /**
-     * Calendar-quarter revenue seasonality [Q1, Q2, Q3, Q4] summing to 4.0: spring selling season and model-year launches; weak Q1.
+     * Calendar-quarter revenue seasonality [Q1, Q2, Q3, Q4] summing to 4.0: spring selling season and model-year
+     * launches; weak Q1.
      *
      * @return array<int, float>
      */
@@ -87,7 +97,9 @@ class AutoManufacturerBusinessModel extends HeavyManufacturingBusinessModel
     /** Baseline fraction of revenue derived from mass-market consumer vehicle manufacturing. */
     public const AUTO_SALES_WEIGHT = 0.60;
 
-    /** Baseline fraction of revenue derived from hyper-exclusive Apex luxury hypercars (Veblen margin cross-subsidy). */
+    /**
+     * Baseline fraction of revenue derived from hyper-exclusive Apex luxury hypercars (Veblen margin cross-subsidy).
+     */
     public const APEX_LUXURY_WEIGHT = 0.20;
 
     /** Baseline fraction of revenue derived from connected telematics and software tolls. */
@@ -119,7 +131,10 @@ class AutoManufacturerBusinessModel extends HeavyManufacturingBusinessModel
     public const CAPTIVE_FINANCE_VARIANCE_SCALAR = 0.10;
 
     // --- Cycle Loadings by Stream ---
-    /** Telematics subscriptions follow the fleet on the road, a stock about a dozen years of sales deep: 0.20 of the purchase swing. */
+    /**
+     * Telematics subscriptions follow the fleet on the road, a stock about a dozen years of sales deep: 0.20 of the
+     * purchase swing.
+     */
     public const SOFTWARE_CYCLE_LOADING = 0.20;
     /** The loan book is about three years of originations, so it carries about a third of the purchase swing. */
     public const CAPTIVE_FINANCE_CYCLE_LOADING = 0.30;
@@ -140,21 +155,33 @@ class AutoManufacturerBusinessModel extends HeavyManufacturingBusinessModel
     /** Auto loan provisions per unit of the household default rate over its measured trend, relative, both ways. */
     public const RETAIL_DEFAULT_PROVISION_SCALAR = 0.05;
 
-    /** Dealer floor-plan provisions per unit of the corporate default rate over its measured trend, relative, both ways. */
+    /**
+     * Dealer floor-plan provisions per unit of the corporate default rate over its measured trend, relative, both ways.
+     */
     public const CORPORATE_DEFAULT_PROVISION_SCALAR = 0.02;
 
-    /** CECL reserve built per unit of the credit spread over its trend, both ways: the lifetime-loss estimate it moves. */
+    /**
+     * CECL reserve built per unit of the credit spread over its trend, both ways: the lifetime-loss estimate it moves.
+     */
     public const CECL_SPREAD_SCALAR = 0.50;
 
-    /** Auto loan provisions per unit of household debt service over its trend, relative to the neutral ratio, both ways. */
+    /**
+     * Auto loan provisions per unit of household debt service over its trend, relative to the neutral ratio, both ways.
+     */
     public const SHOCK_WEIGHT_DSR_DEFAULT = 0.08;
 
     // --- Demand Transmission Lag ---
-    /** Years for a move in the output gap to reach the assembly line: dealer stock runs about two to three months of sales, so build schedules follow showroom demand within a quarter. */
+    /**
+     * Years for a move in the output gap to reach the assembly line: dealer stock runs about two to three months of
+     * sales, so build schedules follow showroom demand within a quarter.
+     */
     public const DEMAND_LAG_YEARS = 0.25;
 
     // --- Durable Demand, Interest Rate & Sentiment Sensitivity ---
-    /** Vehicle purchases per unit of the gap beyond cyclicality: purchases are the flow that adjusts a durable stock, so they swing a multiple of income (Chow 1957 stock adjustment); ~3.75x the gap at cyclicality 1.5. */
+    /**
+     * Vehicle purchases per unit of the gap beyond cyclicality: purchases are the flow that adjusts a durable stock, so
+     * they swing a multiple of income (Chow 1957 stock adjustment); ~3.75x the gap at cyclicality 1.5.
+     */
     public const DURABLE_STOCK_ADJUSTMENT_MULTIPLIER = 2.50;
 
     /** Scalar for demand destruction per 100bps of real policy rate above r*. */
@@ -163,7 +190,10 @@ class AutoManufacturerBusinessModel extends HeavyManufacturingBusinessModel
     /** Ceiling on the volume an easy real-rate stance can add (10%). */
     public const MAX_RATE_EASING_BOOST = 0.10;
 
-    /** Vehicle volume per unit of confidence beyond what the output gap explains, before cyclicality (Lemmon & Portniaguina 2006 residual). */
+    /**
+     * Vehicle volume per unit of confidence beyond what the output gap explains, before cyclicality (Lemmon &
+     * Portniaguina 2006 residual).
+     */
     public const CONSUMER_SENTIMENT_SENSITIVITY = 0.40;
 
     // --- Apex Luxury & Veblen Wealth Effect ---
@@ -177,13 +207,19 @@ class AutoManufacturerBusinessModel extends HeavyManufacturingBusinessModel
     /** Relative variable cost intensity of mass-market commuter fleet (low margin / predatory baseline). */
     public const MASS_MARKET_COST_INTENSITY = 1.15;
 
-    /** Relative variable cost intensity of Apex Division ultra-luxury hypercars (high gross profit margin cross-subsidy). */
+    /**
+     * Relative variable cost intensity of Apex Division ultra-luxury hypercars (high gross profit margin
+     * cross-subsidy).
+     */
     public const APEX_LUXURY_COST_INTENSITY = 0.65;
 
     /** Relative variable cost intensity of connected telematics and software services (pure digital tollbooth). */
     public const SOFTWARE_SERVICES_COST_INTENSITY = 0.30;
 
-    /** Relative variable cost intensity of the captive finance arm (funding and servicing), the rate the combined stream carried. */
+    /**
+     * Relative variable cost intensity of the captive finance arm (funding and servicing), the rate the combined stream
+     * carried.
+     */
     public const CAPTIVE_FINANCE_COST_INTENSITY = 0.30;
 
     // --- Tail Risk & Event Physics ---
@@ -307,8 +343,8 @@ class AutoManufacturerBusinessModel extends HeavyManufacturingBusinessModel
         $inflationCostPenalty = ($inputCostDrag / max(0.05, $salesWeight)) + ($gscpiShift * self::SUPPLY_CHAIN_PRESSURE_COST_SCALAR * (1.0 - ($pricingPower * 0.50)));
 
         // Captive Finance NIM Squeeze & Subprime Provisioning, charged to the loan book that earns the interest: the
-        // provision over the through-the-cycle loss the cost base carries, both ways, so a calm credit year releases what
-        // a bad one builds. The default rates carry the cycle, so confidence enters as its residual over the gap.
+        // provision over the through-the-cycle loss the cost base carries, both ways, so a calm credit year releases
+        // what a bad one builds. The default rates carry the cycle, so confidence enters as its residual over the gap.
         $dsrShift = $macroState->householdDebtServiceGap / MacroEngine::HOUSEHOLD_DSR_NEUTRAL;
         $macroDefaultDrag = (-$macroState->sentimentResidual() * self::MACRO_DEFAULT_SCALAR)
             + ($macroState->retailDefaultDeviation() * self::RETAIL_DEFAULT_PROVISION_SCALAR)
@@ -393,7 +429,8 @@ class AutoManufacturerBusinessModel extends HeavyManufacturingBusinessModel
             + ((($softwareShock * $softwareWeight) + ($captiveShock * $captiveWeight)) * 0.20)
             + ($strikeShock * 0.80);
 
-        // The one-off charge is booked as a special item: in EBIT, out of the run rate, the Street figure and the cost ratio.
+        // The one-off charge is booked as a special item: in EBIT, out of the run rate, the Street figure and the cost
+        // ratio.
         $specialCharge = $recallPenalty * $salesRevenue;
 
         return new SectorPhysicsResult(

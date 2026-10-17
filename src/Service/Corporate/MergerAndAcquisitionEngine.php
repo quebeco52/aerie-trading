@@ -58,7 +58,10 @@ class MergerAndAcquisitionEngine
     public const MA_STOCK_DILUTION_FRACTION = 0.10;
     /** Stock underpricing discount. */
     public const MA_STOCK_UNDERPRICING = 0.10;
-    /** Largest deal a financial may fund, as a fraction of its equity; applies to every financial acquirer whatever its style. */
+    /**
+     * Largest deal a financial may fund, as a fraction of its equity; applies to every financial acquirer whatever its
+     * style.
+     */
     public const MA_FINANCIAL_EQUITY_CAP = 0.15;
     /** Most of a target's net identifiable assets that can be trade cycle rather than plant. */
     public const MA_MAX_WORKING_CAPITAL_SHARE = 0.90;
@@ -67,15 +70,26 @@ class MergerAndAcquisitionEngine
     public const MA_MERTON_MATURITY = 5.0;
 
     // --- Horizontal Merger Review (2023 Merger Guidelines §2.1; 2010 Horizontal Merger Guidelines §5.3) ---
-    /** HHI increase above which a merger significantly increases concentration under the 2023 guidelines (100 points). */
+    /**
+     * HHI increase above which a merger significantly increases concentration under the 2023 guidelines (100 points).
+     */
     public const MERGER_REVIEW_HHI_DELTA = 0.0100;
     /** Post-merger HHI above which the market is highly concentrated under the 2023 guidelines (1,800 points). */
     public const MERGER_REVIEW_CONCENTRATED_HHI = 0.1800;
-    /** Merged market share above which a deal that also passes the HHI delta is presumed illegal under the 2023 guidelines (Philadelphia National Bank, 1963). */
+    /**
+     * Merged market share above which a deal that also passes the HHI delta is presumed illegal under the 2023
+     * guidelines (Philadelphia National Bank, 1963).
+     */
     public const MERGER_REVIEW_SHARE_CEILING = 0.30;
-    /** HHI increase a merger into a highly concentrated market must pass to be presumed to enhance market power under the 2010 guidelines (200 points). */
+    /**
+     * HHI increase a merger into a highly concentrated market must pass to be presumed to enhance market power under
+     * the 2010 guidelines (200 points).
+     */
     public const MERGER_REVIEW_LENIENT_HHI_DELTA = 0.0200;
-    /** Post-merger HHI above which the market is highly concentrated under the 2010 guidelines (2,500 points); they carry no market-share presumption. */
+    /**
+     * Post-merger HHI above which the market is highly concentrated under the 2010 guidelines (2,500 points); they
+     * carry no market-share presumption.
+     */
     public const MERGER_REVIEW_LENIENT_CONCENTRATED_HHI = 0.2500;
 
     // --- Deal Sizing Limits (named in the deal announcement) ---
@@ -91,7 +105,10 @@ class MergerAndAcquisitionEngine
     public const LIMIT_CAPITAL_TEST = 'the largest deal that keeps it well capitalized';
 
     // --- M&A Synergy & Target Returns (Log-Normal) ---
-    /** Median log synergy: zero, so a bidder paying no premium is as likely to destroy value as create it (bidder announcement returns average near zero, about half negative; Betton, Eckbo & Thorburn 2008). */
+    /**
+     * Median log synergy: zero, so a bidder paying no premium is as likely to destroy value as create it (bidder
+     * announcement returns average near zero, about half negative; Betton, Eckbo & Thorburn 2008).
+     */
     public const MA_SYNERGY_MU = 0.0;
     /** Sigma of log-normal synergy. */
     public const MA_SYNERGY_SIGMA = 0.10;
@@ -103,7 +120,10 @@ class MergerAndAcquisitionEngine
     public const MA_TARGET_ROIC_FLOOR = 0.02;
     /** Ceiling for target ROIC. */
     public const MA_TARGET_ROIC_CEILING = 0.25;
-    /** Lowest operating margin of a target as a share of the acquirer's own (70%): a private bolt-on runs leaner than its buyer. */
+    /**
+     * Lowest operating margin of a target as a share of the acquirer's own (70%): a private bolt-on runs leaner than
+     * its buyer.
+     */
     public const MA_TARGET_MARGIN_SHARE_MIN = 0.70;
     /** Highest operating margin of a target as a share of the acquirer's own (95%). */
     public const MA_TARGET_MARGIN_SHARE_MAX = 0.95;
@@ -156,9 +176,15 @@ class MergerAndAcquisitionEngine
     /** Cash fortress ratio to prevent divestitures. */
     public const DIV_CASH_FORTRESS_RATIO = 0.10;
 
-    /** Discount a distressed seller takes to the market value of the assets it sells (~14%; Pulvino 1998, aircraft fire sales). */
+    /**
+     * Discount a distressed seller takes to the market value of the assets it sells (~14%; Pulvino 1998, aircraft fire
+     * sales).
+     */
     public const DIV_FIRE_SALE_DISCOUNT = 0.14;
-    /** Carried stream-state key: the time of the distress sale the firm's current episode has had; cleared once its return has recovered. */
+    /**
+     * Carried stream-state key: the time of the distress sale the firm's current episode has had; cleared once its
+     * return has recovered.
+     */
     public const STATE_DISTRESS_SALE_EPISODE = EarningsEngine::CARRIED_STATE_PREFIX . 'distress_sale_episode';
     /** Ceiling on the acquisition hazard, cached: the styles and constants it is built from never change. */
     private static ?float $acquisitionHazardCeiling = null;

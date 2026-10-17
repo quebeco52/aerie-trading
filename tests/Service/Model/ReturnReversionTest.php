@@ -36,7 +36,9 @@ class ReturnReversionTest extends TestCase
         yield 'private equity folds it in at the same weight' => [new PrivateEquityBusinessModel(), FinancialConstants::TTM_SMOOTHING_NEW_WEIGHT];
     }
 
-    /** The quarter is blended into the trailing ROE at the model's weight, then pulled toward cost of equity plus moat. */
+    /**
+     * The quarter is blended into the trailing ROE at the model's weight, then pulled toward cost of equity plus moat.
+     */
     #[DataProvider('quarterWeightProvider')]
     public function testTheTrailingReturnTakesTheQuarterAtTheModelsWeight(BaseFinancialBusinessModel $model, float $quarterWeight): void
     {

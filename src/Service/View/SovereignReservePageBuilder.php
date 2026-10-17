@@ -30,7 +30,9 @@ use App\Service\Politics\SovereignReserveFund;
 class SovereignReservePageBuilder
 {
     // --- Dividend Annualisation ---
-    /** Dividends a year: Stock::lastDividend is the quarterly payment, annualised as the screener and option desk do. */
+    /**
+     * Dividends a year: Stock::lastDividend is the quarterly payment, annualised as the screener and option desk do.
+     */
     private const DIVIDENDS_PER_YEAR = 4.0;
 
     public function __construct(
@@ -88,7 +90,8 @@ class SovereignReservePageBuilder
                 'grossDebtToGdp' => $macro->sovereignDebtToGdp,
                 'netDebtToGdp' => $macro->sovereignNetDebtToGdp,
             ],
-            // The index levels only: trailing returns need the recorded history, which the page reads from macro_report.
+            // The index levels only: trailing returns need the recorded history, which the page reads from
+            // macro_report.
             'returns' => [
                 'index' => $macro->sovereignFundReturnIndex,
                 'realIndex' => $macro->sovereignFundRealReturnIndex,
@@ -151,9 +154,9 @@ class SovereignReservePageBuilder
     }
 
     /**
-     * The policy weights and bands as they stood at each recorded quarter, keyed by the quarter's total_time, so the band
-     * charts hold each quarter to the policy then in force: a new head's mix moves the policy, and a band is a function
-     * of its policy weight alone. A quarter before the fund opened has no policy and is left out.
+     * The policy weights and bands as they stood at each recorded quarter, keyed by the quarter's total_time, so the
+     * band charts hold each quarter to the policy then in force: a new head's mix moves the policy, and a band is a
+     * function of its policy weight alone. A quarter before the fund opened has no policy and is left out.
      *
      * @return array<string, array{domesticPolicy: float, domesticBand: float, equityPolicy: float, equityBand: float}>
      */

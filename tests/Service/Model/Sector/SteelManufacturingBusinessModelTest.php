@@ -75,8 +75,8 @@ class SteelManufacturingBusinessModelTest extends TestCase
 
     public function testScrapAndOreCostsFollowMetalsWhileFuelAndFreightAreImmaterial(): void
     {
-        // BEA 2017: scrap, ore and alloying metals are 23.6% of a mill's variable cost base (its own steel trade excluded);
-        // oil and ocean freight sit under InputOutputExposures::MATERIALITY_FLOOR.
+        // BEA 2017: scrap, ore and alloying metals are 23.6% of a mill's variable cost base (its own steel trade
+        // excluded); oil and ocean freight sit under InputOutputExposures::MATERIALITY_FLOOR.
         $stock = new Stock();
         $stock->setTicker('STLD');
         $stock->setBeta('1.2');

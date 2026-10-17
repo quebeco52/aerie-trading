@@ -83,7 +83,9 @@ class StochasticProcessesTest extends TestCase
     }
 
     /** The compensator is the part calculateCompensatedKouJump subtracts, so adding it back recovers the jump drawn. */
-    /** A stationary OU factor stepped over a horizon by its exact transition changes by the sd the sigma was solved for. */
+    /**
+     * A stationary OU factor stepped over a horizon by its exact transition changes by the sd the sigma was solved for.
+     */
     public function testOuSigmaForIncrementSdGivesTheHorizonChangeTheExactTransitionDelivers(): void
     {
         foreach ([[0.6, 0.25, 0.02], [2.0, 1.0, 0.05], [0.05, 0.25, 0.03]] as [$kappa, $horizon, $incrementSd]) {

@@ -166,7 +166,8 @@ class SovereignReservePageBuilderTest extends TestCase
     /**
      * The band charts hold each quarter to the policy then in force: a head who set a bolder mix moves the policy and
      * its band from that quarter on, each band the fund's own rule on the policy of its day; an equity policy recorded
-     * before the head's mix was kept is the opening split on the board target; a quarter before the fund opened is left out.
+     * before the head's mix was kept is the opening split on the board target; a quarter before the fund opened is left
+     * out.
      */
     public function testBandHistoryFollowsThePolicyOfEachQuarter(): void
     {

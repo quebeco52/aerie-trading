@@ -23,7 +23,9 @@ class CompanyResearchTest extends TestCase
     /** A beta quoted to one decimal is the seeded beta rounded: within half a unit of the last digit. */
     private const BETA_ROUNDING = 0.05;
 
-    /** @return iterable<string, array{string, array{headline: string, standfirst: string, sections: list<array{heading: string, body: string}>, related: list<string>}}> */
+    /**
+     * @return iterable<string, array{string, array{headline: string, standfirst: string, sections: list<array{heading: string, body: string}>, related: list<string>}}>
+     */
     public static function articleProvider(): iterable
     {
         foreach (CompanyResearch::ARTICLES as $ticker => $article) {

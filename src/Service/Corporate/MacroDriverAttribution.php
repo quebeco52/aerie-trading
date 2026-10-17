@@ -20,13 +20,17 @@ use App\Service\Model\BusinessModelInterface;
 final class MacroDriverAttribution
 {
     // --- Neutral Readings ---
-    /** Trending level series and the trend each is neutral at: nominal output at potential, equity wealth at its trend. */
+    /**
+     * Trending level series and the trend each is neutral at: nominal output at potential, equity wealth at its trend.
+     */
     public const NEUTRAL_TREND = [
         'nominal_gdp_index' => 'potential_gdp_index',
         'equity_wealth_ratio' => 'equity_wealth_trend',
     ];
 
-    /** Trend series and the price level: references other readings are measured against, never a driver of their own. */
+    /**
+     * Trend series and the price level: references other readings are measured against, never a driver of their own.
+     */
     public const TREND_FIELDS = ['equity_wealth_trend', 'residential_wealth_trend', 'consumer_price_level'];
 
     /** @var array<string, mixed>|null */

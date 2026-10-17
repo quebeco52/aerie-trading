@@ -99,7 +99,10 @@ class GovernmentPolicyTest extends TestCase
         $this->assertEqualsWithDelta($index, $state->totalFactorProductivityIndex, 1e-9);
     }
 
-    /** The Securities Commission's rules go in as handed over, and with none from it the founding ones stand, not the last in force. */
+    /**
+     * The Securities Commission's rules go in as handed over, and with none from it the founding ones stand, not the
+     * last in force.
+     */
     public function testTheCommissionsRulesGoIntoForceAndNoneMeansTheFoundingOnes(): void
     {
         $state = new MacroState();
@@ -133,7 +136,10 @@ class GovernmentPolicyTest extends TestCase
         $this->assertSame(1.0, $state->earningsManagementScale);
     }
 
-    /** The market's forecast goes in as handed over, the one before it kept for the tick, so a revision can be seen; with no forecast none is carried. */
+    /**
+     * The market's forecast goes in as handed over, the one before it kept for the tick, so a revision can be seen;
+     * with no forecast none is carried.
+     */
     public function testTheMarketsForecastGoesInWithTheOneBefore(): void
     {
         $state = new MacroState();

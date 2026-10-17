@@ -247,8 +247,8 @@ class DefenseContractorBusinessModelTest extends TestCase
         );
 
         $this->assertSame(ShockEvent::PROJECT_DELAY, $result->eventType);
-        // Fixed price weight is 0.20 for GRIP: the reach-forward loss, FORWARD_LOSS_PENALTY 0.08 * 0.20 = 0.016 of revenue,
-        // is provisioned once as a special item, not carried in the cost ratio.
+        // Fixed price weight is 0.20 for GRIP: the reach-forward loss, FORWARD_LOSS_PENALTY 0.08 * 0.20 = 0.016 of
+        // revenue, is provisioned once as a special item, not carried in the cost ratio.
         $this->assertEqualsWithDelta(DefenseContractorBusinessModel::FORWARD_LOSS_PENALTY * 0.20 * $result->actualRevenue, $result->specialCharge, 0.01);
         // Wage basket: the measured labor share x the 2% gap; 80% of contracts (cost-plus, FMS) recover 0.80 of it
         // with the repricing lag, so the first-quarter drag is
@@ -332,7 +332,8 @@ class DefenseContractorBusinessModelTest extends TestCase
 
         $macroState = $this->createMacroState();
         $resFailure = $model->computeActualFinancials($stock, 10_000.0, 0.30, 3000.0, 0.15, $macroState, $mathMock1);
-        // Cost-Plus weight is 0.60 for GRIP -> the cancellation charge is 0.10 * 0.60 = 0.06 of revenue, a special item.
+        // Cost-Plus weight is 0.60 for GRIP -> the cancellation charge is 0.10 * 0.60 = 0.06 of revenue, a special
+        // item.
         $this->assertEqualsWithDelta(0.30, $resFailure->clampedMargin, 0.001);
         $this->assertEqualsWithDelta(DefenseContractorBusinessModel::FLAGSHIP_FAILURE_PENALTY * 0.60 * $resFailure->actualRevenue, $resFailure->specialCharge, 0.01);
 

@@ -42,7 +42,10 @@ final class BondPricingEngine
     public const PILLAR_MAX_TENOR_YEARS = 31.0;
 
     // --- Sovereign Bond Desk ---
-    /** Coupons are struck in eighths of a percent, the auction convention, so the issue prices near par rather than exactly at it. */
+    /**
+     * Coupons are struck in eighths of a percent, the auction convention, so the issue prices near par rather than
+     * exactly at it.
+     */
     public const BOND_COUPON_RATE_INCREMENT = 0.00125;
     /** Floor on a struck coupon. A zero-coupon issue is legitimate at the lower bound; a negative one is not. */
     public const BOND_MIN_COUPON_RATE = 0.0;

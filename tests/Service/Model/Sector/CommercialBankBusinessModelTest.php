@@ -133,7 +133,10 @@ class CommercialBankBusinessModelTest extends TestCase
         return $mock;
     }
 
-    /** A 2009-scale cycle (Moody's all-rated 5.4%, retail defaults more than doubled) is a massive provision quarter, at the multiple of normal losses US banks took. */
+    /**
+     * A 2009-scale cycle (Moody's all-rated 5.4%, retail defaults more than doubled) is a massive provision quarter, at
+     * the multiple of normal losses US banks took.
+     */
     public function testCreditStressFromTheMacroCycleSurgesChargeOffsAndTriggersTheEvent(): void
     {
         $stock = $this->creditTestBank('LAKE');
@@ -182,7 +185,8 @@ class CommercialBankBusinessModelTest extends TestCase
     {
         $macro = new MacroStateDTO(outputGapEma: -0.02, retailDefaultRateEma: 0.04, corporateDefaultRateEma: 0.035);
         $rates = [];
-        foreach ([[0.0, 0.0, 2.5], [0.0, 0.0, -2.5], [1.0, -1.0, 0.0]] as $i => $draws) { // the third draw was the old idiosyncratic default Z
+        // the third draw was the old idiosyncratic default Z
+        foreach ([[0.0, 0.0, 2.5], [0.0, 0.0, -2.5], [1.0, -1.0, 0.0]] as $i => $draws) {
             $stock = $this->creditTestBank('SYS' . $i);
             $result = $this->model->computeActualFinancials($stock, 1_000_000_000.0, 0.50, 200_000_000.0, 0.10, $macro, $this->createMathUtilityMock($draws));
             $rates[] = $result->netChargeOffs / $this->model->resolveEarningAssets($stock);
@@ -288,7 +292,8 @@ class CommercialBankBusinessModelTest extends TestCase
         );
         $this->assertEqualsWithDelta($lossRate($businessLender, 100.0), $lossRate($businessLender, 70.0), 1e-15);
 
-        // The reference walks toward today's price over the book's age, so a fall that persists is slowly written into new loans.
+        // The reference walks toward today's price over the book's age, so a fall that persists is slowly written into
+        // new loans.
         $stock = $this->creditTestBank('MIX');
         $stock->setEarningsMomentumZ([CommercialBankBusinessModel::STATE_RESIDENTIAL_ORIGINATION_PRICE => 100.0]);
         $result = $mortgageLender->computeActualFinancials($stock, 1_000_000_000.0, 0.50, 200_000_000.0, 0.0, new MacroStateDTO(residentialPropertyIndexEma: 70.0), $this->mathUtility);
@@ -349,7 +354,10 @@ class CommercialBankBusinessModelTest extends TestCase
         );
     }
 
-    /** Runs the bank's physics for a number of quarters at one macro state, carrying the book forward as the engine does. */
+    /**
+     * Runs the bank's physics for a number of quarters at one macro state, carrying the book forward as the engine
+     * does.
+     */
     private function carryBook(CommercialBankBusinessModel $model, Stock $stock, MacroStateDTO $macro, int $quarters): void
     {
         for ($quarter = 0; $quarter < $quarters; $quarter++) {
@@ -391,7 +399,8 @@ class CommercialBankBusinessModelTest extends TestCase
      */
     public function testAParallelPointReachesInterestYieldAtTheBooksRepricingSpeed(): void
     {
-        // The US funding mix: deposits ~80% of assets and wholesale ~10%, the wholesale short-term and repricing in full.
+        // The US funding mix: deposits ~80% of assets and wholesale ~10%, the wholesale short-term and repricing in
+        // full.
         $stock = $this->creditTestBank('NEUTRAL');
         $stock->setFloatingDebtRatio('1.0');
         $this->carryBook($this->model, $stock, new MacroStateDTO(), 1);
@@ -440,7 +449,10 @@ class CommercialBankBusinessModelTest extends TestCase
         $this->assertLessThan($model->pricing($untuned)['loan_spread'], $model->pricing($international)['loan_spread']);
     }
 
-    /** The District's mortgages float: a mortgage book reprices within the year, faster than a business book with its fixed term loans. */
+    /**
+     * The District's mortgages float: a mortgage book reprices within the year, faster than a business book with its
+     * fixed term loans.
+     */
     public function testAFloatingMortgageBookRepricesFasterThanABusinessBook(): void
     {
         $mortgageLender = new class extends CommercialBankBusinessModel {
@@ -975,7 +987,9 @@ class CommercialBankBusinessModelTest extends TestCase
         $this->assertEqualsWithDelta(80e9 * 0.0046, $paid() - $before, 1e3);
     }
 
-    /** The cash beside the book earns its own interest below the line, so the franchise's revenue target leaves it out. */
+    /**
+     * The cash beside the book earns its own interest below the line, so the franchise's revenue target leaves it out.
+     */
     public function testTheFranchiseCalibrationCountsTheCashBesideTheBook(): void
     {
         $calibration = static fn(CommercialBankBusinessModel $model, Stock $stock): float => (new \ReflectionMethod($model, 'resolveCalibrationYield'))->invoke($model, $stock, new MacroStateDTO());

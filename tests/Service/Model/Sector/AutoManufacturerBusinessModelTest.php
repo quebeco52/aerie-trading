@@ -124,7 +124,8 @@ class AutoManufacturerBusinessModelTest extends TestCase
         $baselineResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.20, 25_000_000.0, 0.0, $baselineMacro, $mathMock);
         $inflationResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.20, 25_000_000.0, 0.0, $inflationMacro, $mathMock);
 
-        // Apex luxury hypercars exert Veblen pricing power when inflation runs over the 2% breakevens (0.04 * 0.80 = +3.2%)
+        // Apex luxury hypercars exert Veblen pricing power when inflation runs over the 2% breakevens (0.04 * 0.80 =
+        // +3.2%)
         $this->assertGreaterThan(
             $baselineResult->streamRevenue['apex_luxury'],
             $inflationResult->streamRevenue['apex_luxury'],
@@ -221,7 +222,8 @@ class AutoManufacturerBusinessModelTest extends TestCase
         $baseMacro = new MacroStateDTO(exchangeRateIndexEma: 100.0);
         $strongDollarMacro = new MacroStateDTO(exchangeRateIndexEma: 100.0 * exp(0.20));
 
-        // A currency twenty log points over its trend takes the declared exposure off every stream through the root shift...
+        // A currency twenty log points over its trend takes the declared exposure off every stream through the root
+        // shift...
         $rootDrag = $this->model->getMacroPhysics($stock(), $strongDollarMacro)['macro_demand_shift']
             - $this->model->getMacroPhysics($stock(), $baseMacro)['macro_demand_shift'];
         $this->assertEqualsWithDelta(-0.20 * AutoManufacturerBusinessModel::FX_REVENUE_EXPOSURE, $rootDrag, 1e-9);
@@ -237,8 +239,8 @@ class AutoManufacturerBusinessModelTest extends TestCase
 
     public function testMetalsAreTheInputThatMovesAndOceanFreightIsImmaterial(): void
     {
-        // BEA 2017: steel, aluminium and copper through the supply chain are 11.9% of an assembler's variable costs; ocean
-        // freight is under 0.2%, below InputOutputExposures::MATERIALITY_FLOOR.
+        // BEA 2017: steel, aluminium and copper through the supply chain are 11.9% of an assembler's variable costs;
+        // ocean freight is under 0.2%, below InputOutputExposures::MATERIALITY_FLOOR.
         $stock = new Stock();
         $stock->setTicker('GEN_AUTO');
         $stock->setBeta('1.0');
@@ -271,7 +273,8 @@ class AutoManufacturerBusinessModelTest extends TestCase
      */
     public function testMildSlowdownCutsVolumeByAnEleventhNotAQuarterAndPmiDoesNotStack(): void
     {
-        // Each scenario's gap has stood long enough to reach the order book: a state given no lags opens them at its gap.
+        // Each scenario's gap has stood long enough to reach the order book: a state given no lags opens them at its
+        // gap.
         $shift = function (MacroStateDTO $macroState): float {
             $stock = new Stock();
             $stock->setTicker('AUTO');
@@ -301,8 +304,8 @@ class AutoManufacturerBusinessModelTest extends TestCase
 
     /**
      * The gap reaches vehicle demand once, through the stock-adjustment multiplier. Confidence used to be read whole
-     * beside the gap, and it carries SentimentOnTheCycle::POINTS_PER_GAP points of gap, so a second ~2.3x the gap rode in on it
-     * unpriced. With confidence at the level its gap implies, sentiment adds nothing and nothing else moves.
+     * beside the gap, and it carries SentimentOnTheCycle::POINTS_PER_GAP points of gap, so a second ~2.3x the gap rode
+     * in on it unpriced. With confidence at the level its gap implies, sentiment adds nothing and nothing else moves.
      */
     public function testTheGapReachesVehicleDemandOnceThroughTheDurableMultiplier(): void
     {

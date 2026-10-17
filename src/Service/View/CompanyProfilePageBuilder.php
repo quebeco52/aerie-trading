@@ -36,7 +36,8 @@ class CompanyProfilePageBuilder
     ) {}
 
     /**
-     * @return array<string, mixed>|null The template payload for stock/profile.html.twig; null when no profile is written.
+     * @return array<string, mixed>|null The template payload for stock/profile.html.twig; null when no profile is
+     *                                   written.
      */
     public function build(Stock $stock): ?array
     {

@@ -262,7 +262,8 @@ class SovereignFundSubsystemTest extends TestCase
 
         $this->assertSame(0.0, $state->sovereignFundRebalanceMonthsLeft);
         $this->assertSame(0.0, $state->sovereignFundTrade, 'The programme is over.');
-        // The last month's draw comes out of the foreign sleeves after the final tranche is set, lifting the weight by about w x draw / 12F.
+        // The last month's draw comes out of the foreign sleeves after the final tranche is set, lifting the weight by
+        // about w x draw / 12F.
         $monthOfDraw = $state->sovereignFundTargetWeight * $state->sovereignFundAnnualDraw / (12.0 * $fund->fundValue($state));
         $this->assertEqualsWithDelta($state->sovereignFundTargetWeight, $state->sovereignFundDomesticWeight, 1.5 * $monthOfDraw, 'Back at the policy weight, give or take a month of the draw.');
     }
@@ -274,7 +275,8 @@ class SovereignFundSubsystemTest extends TestCase
         $fund = $this->stillFund();
         $state = $this->openFund($fund, $tpy);
 
-        // The board collapses against everything else the fund holds: restoring the weight would mean owning most of it.
+        // The board collapses against everything else the fund holds: restoring the weight would mean owning most of
+        // it.
         $this->crashDomestic($state, 0.80);
         $this->runToMonthEnd($fund, $state, $dt);
         $this->assertGreaterThan(0.0, $state->sovereignFundTrade, 'It still buys the fall.');
@@ -422,7 +424,10 @@ class SovereignFundSubsystemTest extends TestCase
         $this->assertEqualsWithDelta(SovereignFundSubsystem::DOMESTIC_OWNERSHIP_OPENING * 1.0e9, $fund->foreignHomeValue($state) - $before, 1e-3);
     }
 
-    /** The District's strategic stake is not the fund's, so its dividends arrive whole, as cash, and touch no board holding. */
+    /**
+     * The District's strategic stake is not the fund's, so its dividends arrive whole, as cash, and touch no board
+     * holding.
+     */
     public function testStrategicDividendsArriveWholeAsCashWithoutChangingTheBoardHolding(): void
     {
         $tpy = 720;
@@ -442,7 +447,9 @@ class SovereignFundSubsystemTest extends TestCase
         $this->assertSame($ownership, $state->sovereignFundOwnershipShare);
     }
 
-    /** A budget surplus the debt floor leaves nothing to retire lands in the paper sleeve once, and is not performance. */
+    /**
+     * A budget surplus the debt floor leaves nothing to retire lands in the paper sleeve once, and is not performance.
+     */
     public function testABudgetSurplusIsPaidIntoThePaperOnceAndIsNotPerformance(): void
     {
         $tpy = 720;
@@ -475,7 +482,10 @@ class SovereignFundSubsystemTest extends TestCase
         $this->assertEqualsWithDelta(0.98 * $before, $state->sovereignFundDomesticEquity, 1e-6);
     }
 
-    /** Money paid in and the budget's draw are not performance: with every market still, the nominal index does not move. */
+    /**
+     * Money paid in and the budget's draw are not performance: with every market still, the nominal index does not
+     * move.
+     */
     public function testTheReturnIndexIgnoresTheMoneyPaidInAndDrawnOut(): void
     {
         $tpy = 720;
@@ -537,7 +547,10 @@ class SovereignFundSubsystemTest extends TestCase
         $this->assertEqualsWithDelta($index, $state->sovereignFundReturnIndex, 1e-9, 'Buying the board with paper at market is not.');
     }
 
-    /** A fund incepted before the index existed opens it at the base on the first tick it is seen, booking nothing for it. */
+    /**
+     * A fund incepted before the index existed opens it at the base on the first tick it is seen, booking nothing for
+     * it.
+     */
     public function testAFundWithNoIndexOpensItAtTheBase(): void
     {
         $dt = 1.0 / 720.0;
@@ -568,7 +581,8 @@ class SovereignFundSubsystemTest extends TestCase
         $state->foreignPolicyRate = $neutral;
         $this->assertEqualsWithDelta($neutral + $premium, $fund->foreignZeroYield($state, $tau), 1e-14, 'At neutral the curve is the level plus the premium.');
 
-        // A cut is expected to unwind at the slope decay, so the long yield takes the Vasicek loading of it, not all of it.
+        // A cut is expected to unwind at the slope decay, so the long yield takes the Vasicek loading of it, not all of
+        // it.
         $state->foreignPolicyRate = $neutral - 0.01;
         $lambda = MacroEngine::SVENSSON_SLOPE_LAMBDA;
         $loading = (1.0 - exp(-$lambda * $tau)) / ($lambda * $tau);
@@ -599,8 +613,8 @@ class SovereignFundSubsystemTest extends TestCase
     }
 
     /**
-     * On a curve that does not move, a constant-maturity zero earns the forward rate at its maturity, the yield plus its
-     * roll-down, and the same over a year whether the year is 72 ticks or 7,200.
+     * On a curve that does not move, a constant-maturity zero earns the forward rate at its maturity, the yield plus
+     * its roll-down, and the same over a year whether the year is 72 ticks or 7,200.
      */
     public function testOnASteadyCurveThePaperEarnsTheForwardRateAtAnyTickRate(): void
     {
@@ -629,9 +643,9 @@ class SovereignFundSubsystemTest extends TestCase
     }
 
     /**
-     * One year of the paper sleeve's own return, in log terms, on a scripted foreign rate path. Every other market stands
-     * still and the draw is off; a draw or a rebalance would take both foreign sleeves down by the same factor, so the
-     * paper's growth is read against the equity sleeve's, which the still market leaves untouched.
+     * One year of the paper sleeve's own return, in log terms, on a scripted foreign rate path. Every other market
+     * stands still and the draw is off; a draw or a rebalance would take both foreign sleeves down by the same factor,
+     * so the paper's growth is read against the equity sleeve's, which the still market leaves untouched.
      *
      * @param callable(float): float $foreignRate The foreign policy rate at a time since inception.
      */
@@ -698,9 +712,10 @@ class SovereignFundSubsystemTest extends TestCase
     }
 
     /**
-     * The Diet's home share sets the board's part of the policy equities: the fund opens on its own holding with no trade,
-     * a new law moves the board's weight to the share times the equity share over the transition, and a head's later
-     * mandate keeps the Diet's share. A share of none sells the board, as far as Norway's fund holds none at home.
+     * The Diet's home share sets the board's part of the policy equities: the fund opens on its own holding with no
+     * trade, a new law moves the board's weight to the share times the equity share over the transition, and a head's
+     * later mandate keeps the Diet's share. A share of none sells the board, as far as Norway's fund holds none at
+     * home.
      */
     public function testTheDietsHomeShareSetsTheBoardsPartOfTheEquities(): void
     {
@@ -736,7 +751,9 @@ class SovereignFundSubsystemTest extends TestCase
         $this->assertEqualsWithDelta(0.0, $state->sovereignFundOwnershipShare, 1e-6, 'It ends holding none of the board.');
     }
 
-    /** Without a mandate the fund keeps the mix it opened with, and a fund saved before it published one reads it back. */
+    /**
+     * Without a mandate the fund keeps the mix it opened with, and a fund saved before it published one reads it back.
+     */
     public function testWithoutAMandateTheFundKeepsItsOpeningMix(): void
     {
         $tpy = 360;

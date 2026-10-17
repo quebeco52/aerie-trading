@@ -20,7 +20,9 @@ use PHPUnit\Framework\TestCase;
 
 class InvestmentCompanyBusinessModelTest extends TestCase
 {
-    /** Capitalisation given to every holding in the fixture board; lands the portfolio within 1% of live seed prices. */
+    /**
+     * Capitalisation given to every holding in the fixture board; lands the portfolio within 1% of live seed prices.
+     */
     private const FIXTURE_HOLDING_CAP = 300_000_000_000.0;
 
     private InvestmentCompanyBusinessModel $model;
@@ -147,7 +149,10 @@ class InvestmentCompanyBusinessModelTest extends TestCase
         };
     }
 
-    /** A sphere whose stakes have never been priced: its books cannot be opened, and the model says so rather than guessing. */
+    /**
+     * A sphere whose stakes have never been priced: its books cannot be opened, and the model says so rather than
+     * guessing.
+     */
     private function bareBrkw(float $treasury = 250_000_000_000.0): Stock
     {
         $stock = new Stock();

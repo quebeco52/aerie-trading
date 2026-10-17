@@ -33,7 +33,9 @@ class FailureSweep
         private ?CorporateDefaultService $corporateDefault = null,
         /** Puts a confirmed Chapter 11 plan into effect; stateless, so a unit test gets the real one. */
         private ReorganizationEngine $reorganizationEngine = new ReorganizationEngine(),
-        /** Cash-settles the options on shares a plan cancels; null (unit tests without an options layer) leaves them. */
+        /**
+         * Cash-settles the options on shares a plan cancels; null (unit tests without an options layer) leaves them.
+         */
         private ?OptionSettlementEngine $optionSettlement = null,
         /** Refunds buy escrow the way a player's own cancel does: the margin loan is repaid first. */
         private CashLedger $cashLedger = new CashLedger(),
@@ -277,7 +279,10 @@ class FailureSweep
         ];
     }
 
-    /** @return list<array{user_id: int|string, quantity: int|string}> Every open position in the shares, shorts included. */
+    /**
+     * @return list<array{user_id: int|string, quantity: int|string}> Every open position in the shares, shorts
+     *                                                                included.
+     */
     private function holdersOf(Stock $stock): array
     {
         /** @var list<array{user_id: int|string, quantity: int|string}> */
@@ -315,7 +320,8 @@ class FailureSweep
      * Cancels the old equity: open orders are cancelled with buy escrow refunded, and every position is wiped. Each
      * position closes on a settlement order at nothing, so the loss (or a short's gain) is realised like any sale.
      *
-     * @return list<array{user_id: int, quantity: int}> The positions wiped, shares escrowed behind a resting sell included.
+     * @return list<array{user_id: int, quantity: int}> The positions wiped, shares escrowed behind a resting sell
+     *                                                  included.
      */
     private function cancelEquity(Stock $stock): array
     {

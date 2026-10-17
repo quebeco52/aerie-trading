@@ -99,13 +99,14 @@ class SemiconductorBusinessModelTest extends TestCase
         $run = fn(array $macro) => $this->model->computeActualFinancials($stock, 1000.0, 0.30, 200.0, 0.20, MacroStateDTO::fromArray(['output_gap_ema' => 0.0] + $macro), $this->mathUtilityMock);
 
         $baseline = $run([]);
-        // Fab power is 2.3% of output, but industrial tariffs pass a wholesale move through at only 0.106 (EIA), which puts
-        // it under InputOutputExposures::MATERIALITY_FLOOR; oil is under 0.5%.
+        // Fab power is 2.3% of output, but industrial tariffs pass a wholesale move through at only 0.106 (EIA), which
+        // puts it under InputOutputExposures::MATERIALITY_FLOOR; oil is under 0.5%.
         $powerSpike = $run(['wholesale_power_price_index_ema' => 150.0, 'energy_price_index_ema' => 120.0, 'energy_cost_push_lag' => 0.20 * MacroEngine::ENERGY_COST_PUSH_TRANSMISSION]);
         $this->assertEqualsWithDelta($baseline->clampedMargin, $powerSpike->clampedMargin, 1e-12);
 
-        // Metals (copper, gold, specialty metals) through the supply chain are the device maker's material commodity input.
-        // The basket buys at spot and scarce wafer capacity recovers pricingPower x MAX_INPUT_COST_PASS_THROUGH with the lag.
+        // Metals (copper, gold, specialty metals) through the supply chain are the device maker's material commodity
+        // input. The basket buys at spot and scarce wafer capacity recovers pricingPower x MAX_INPUT_COST_PASS_THROUGH
+        // with the lag.
         $metalsSpike = $run(['industrial_metals_index_ema' => 120.0]);
         $metalsDeviation = 0.20 * SemiconductorBusinessModel::INPUT_COST_EXPOSURES['metals'];
         $recoveryWeight = 1.0 - exp(-EarningsEngine::QUARTERLY_TIME_STEP / FinancialConstants::DEFAULT_INPUT_PASS_THROUGH_LAG_YEARS);

@@ -13,9 +13,10 @@ use App\Service\Math\StochasticProcesses;
 use PHPUnit\Framework\TestCase;
 
 /**
- * A log-OU price stepped with StochasticProcesses::calculateSchwartz1Factor() averages theta x e^(-sigma^2 / 4 kappa) in
- * Schwartz's (1997) own parameterisation, so a caller whose target is the level the price should average goes through
- * schwartzThetaForMean(), and one with Merton jumps also nets out logOuJumpLevelShift(). These pin both on long runs.
+ * A log-OU price stepped with StochasticProcesses::calculateSchwartz1Factor() averages theta x e^(-sigma^2 / 4 kappa)
+ * in Schwartz's (1997) own parameterisation, so a caller whose target is the level the price should average goes
+ * through schwartzThetaForMean(), and one with Merton jumps also nets out logOuJumpLevelShift(). These pin both on long
+ * runs.
  */
 class SchwartzMeanLevelTest extends TestCase
 {

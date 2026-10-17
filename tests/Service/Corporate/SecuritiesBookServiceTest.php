@@ -135,7 +135,8 @@ class SecuritiesBookServiceTest extends TestCase
         self::assertGreaterThan(0.0, $gain);
         self::assertGreaterThan(abs($loss), $gain, 'A convex book gains more on a rally than it loses on the same selloff.');
 
-        // The asymmetry is the ladder's own, at the move left after the quarter's roll-down: about 4D^2/3 dy^2, 2.4% here.
+        // The asymmetry is the ladder's own, at the move left after the quarter's roll-down: about 4D^2/3 dy^2, 2.4%
+        // here.
         $dyAfterRoll = $dyUp * (1.0 - (1.0 / (4.0 * 7.0)));
         $asymmetry = FixedIncome::calculateLadderPriceChange(7.0, $dyAfterRoll) + FixedIncome::calculateLadderPriceChange(7.0, -$dyAfterRoll);
         self::assertEqualsWithDelta($asymmetry, ($gain + $loss) / self::BOOK, 1e-9);
@@ -242,7 +243,10 @@ class SecuritiesBookServiceTest extends TestCase
         );
     }
 
-    /** Repriced exactly, a long book can lose most of its value to a huge selloff, never more, and a bigger one always costs more. */
+    /**
+     * Repriced exactly, a long book can lose most of its value to a huge selloff, never more, and a bigger one always
+     * costs more.
+     */
     public function testAHugeSelloffTakesMostOfALongBookButNeverMoreThanAllOfIt(): void
     {
         $huge = $this->roll($this->macro(0.30, 0.32), 30.0, carryingYield: 0.001)->totalMark;
@@ -324,7 +328,8 @@ class SecuritiesBookServiceTest extends TestCase
 
         $mark = $this->roll($stressedMacro, $duration, carryingYield: $opened->carryingYield);
 
-        // For a 5y duration book, a ~100bps term premium widening generates a ~-3% markdown after NS duration weighting and quarterly rolldown
+        // For a 5y duration book, a ~100bps term premium widening generates a ~-3% markdown after NS duration weighting
+        // and quarterly rolldown
         $ratio = $mark->totalMark / self::BOOK;
         self::assertLessThan(0.0, $ratio, 'Sovereign spread widening must mark the sovereign securities book down.');
         self::assertLessThan(-0.02, $ratio, 'A 100bps widening on a 5y duration book must mark down more than 2%.');

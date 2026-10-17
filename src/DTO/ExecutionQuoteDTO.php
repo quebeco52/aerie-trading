@@ -18,7 +18,8 @@ final readonly class ExecutionQuoteDTO
      * @param float $executionPrice    What the order fills at.
      * @param float $spreadCost        Total currency paid crossing the bid-ask spread.
      * @param float $impactCost        Total currency paid to the order's own temporary impact.
-     * @param float $peakImpact        Log return the fill moves the published price by; PERMANENT_IMPACT_SHARE of it stays.
+     * @param float $peakImpact        Log return the fill moves the published price by; PERMANENT_IMPACT_SHARE of it
+     *                                 stays.
      * @param float $participationRate Order size as a fraction of average daily volume.
      */
     public function __construct(

@@ -37,7 +37,9 @@ class ElectionOdds
     #[ORM\Column(type: Types::JSON)]
     private array $leaders = [];
 
-    /** @var list<array{cabinet: list<string>, support: list<string>, chance: float}> The likeliest governments, likeliest first. */
+    /**
+     * @var list<array{cabinet: list<string>, support: list<string>, chance: float}> The likeliest governments, likeliest first.
+     */
     #[ORM\Column(type: Types::JSON)]
     private array $cabinets = [];
 

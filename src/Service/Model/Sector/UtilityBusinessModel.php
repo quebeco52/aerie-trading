@@ -25,15 +25,22 @@ use App\Service\Model\StreamContext;
  *
  * Financial Physics:
  * - Legal Monopolies: "Rate Base" regulation guarantees ROIC, but caps upside.
- * - Weather-Driven Volume: Demand is highly inelastic to the economy but highly elastic to severe weather (heatwaves/freezes).
- * - Regulatory Lag: Authorized rate hikes lag behind inflation, causing temporary margin compression during high CPI regimes.
- * - The Bond Proxy: Massive debt loads make them highly vulnerable to rising 10Y Treasury yields (refinancing friction).
- * - Tail Risk: Aging infrastructure and climate events lead to catastrophic liability shocks (wildfires, grid failures).
+ * - Weather-Driven Volume: Demand is highly inelastic to the economy but highly elastic to severe weather
+ *   (heatwaves/freezes).
+ * - Regulatory Lag: Authorized rate hikes lag behind inflation, causing temporary margin compression during high CPI
+ *   regimes.
+ * - The Bond Proxy: Massive debt loads make them highly vulnerable to rising 10Y Treasury yields (refinancing
+ *   friction).
+ * - Tail Risk: Aging infrastructure and climate events lead to catastrophic liability shocks (wildfires, grid
+ *   failures).
  */
 class UtilityBusinessModel extends StandardCorporateBusinessModel
 {
     // --- Operating Cyclicality & Demand Structure ---
-    /** Elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). Essential service under regulated monopoly: no peer to take share from. */
+    /**
+     * Elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). Essential service
+     * under regulated monopoly: no peer to take share from.
+     */
     public const OPERATING_CYCLICALITY = 0.30;
     /** Own-price elasticity of demand: volume lost per unit of real price increase. */
     public const PRICE_ELASTICITY_OF_DEMAND = 0.10;
@@ -41,23 +48,38 @@ class UtilityBusinessModel extends StandardCorporateBusinessModel
     public const INDUSTRY_SUBSTITUTABILITY = 0.00;
 
     // --- Input Cost Basket ---
-    /** Shares of the variable cost base by input channel, measured from the BEA input-output accounts with supply-chain content (labor still the model's own). */
+    /**
+     * Shares of the variable cost base by input channel, measured from the BEA input-output accounts with supply-chain
+     * content (labor still the model's own).
+     */
     public const INPUT_COST_EXPOSURES = InputOutputExposures::UTILITY;
-    /** Fuel adjustment clauses and rate cases eventually recover costs in full: unit elasticity, but only after the regulatory lag. */
+    /**
+     * Fuel adjustment clauses and rate cases eventually recover costs in full: unit elasticity, but only after the
+     * regulatory lag.
+     */
     public const PRICING_ELASTICITY = 1.00;
     /** Rate cases take 12 to 24 months: authorized tariffs follow costs with a long lag. */
     public const PRICE_PASS_THROUGH_LAG_YEARS = 1.50;
-    /** Fuel and purchased-power costs are recoverable under fuel adjustment clauses, so pricing power on the basket is high. */
+    /**
+     * Fuel and purchased-power costs are recoverable under fuel adjustment clauses, so pricing power on the basket is
+     * high.
+     */
     public const PRICING_POWER_INDEX = 0.90;
     /** Fuel adjustment clauses true up quarterly to annually. */
     public const INPUT_PASS_THROUGH_LAG_YEARS = 0.75;
 
     // --- Balance Sheet Realism ---
-    /** Capitalized operating lease liabilities as a fraction of annual revenue (IFRS 16 / ASC 842). Rate-base assets are owned; leases are immaterial. */
+    /**
+     * Capitalized operating lease liabilities as a fraction of annual revenue (IFRS 16 / ASC 842). Rate-base assets are
+     * owned; leases are immaterial.
+     */
     public const LEASE_LIABILITY_INTENSITY = 0.03;
 
     // --- Reporting Incentives ---
-    /** Propensity to steer reported earnings toward consensus with accruals. Cost-of-service regulation puts the books in front of a rate regulator every cycle, and the allowed return caps what a managed beat is even worth. */
+    /**
+     * Propensity to steer reported earnings toward consensus with accruals. Cost-of-service regulation puts the books
+     * in front of a rate regulator every cycle, and the allowed return caps what a managed beat is even worth.
+     */
     public const EARNINGS_MANAGEMENT_PROPENSITY = 0.30;
 
     // --- Analyst Visibility & Error ---
@@ -82,9 +104,15 @@ class UtilityBusinessModel extends StandardCorporateBusinessModel
     }
 
     // --- Seasonality (calendar-quarter revenue over its annual mean, ratio to a centred 4-quarter moving average) ---
-    /** Electric: US retail electricity revenue, all sectors, 2015-2019 (EIA-861M, the data behind Electric Power Monthly Table 5.3); summer cooling load at summer tariffs, Q3 +18%. */
+    /**
+     * Electric: US retail electricity revenue, all sectors, 2015-2019 (EIA-861M, the data behind Electric Power Monthly
+     * Table 5.3); summer cooling load at summer tariffs, Q3 +18%.
+     */
     public const ELECTRIC_SEASONALITY = [0.953, 0.938, 1.183, 0.926];
-    /** Water: American Water Works operating revenues, 2015-2019 (10-K/10-Q via SEC XBRL); outdoor irrigation lifts Q2-Q3 with no winter heating load, Q3 +12%, Q1 -9%. */
+    /**
+     * Water: American Water Works operating revenues, 2015-2019 (10-K/10-Q via SEC XBRL); outdoor irrigation lifts
+     * Q2-Q3 with no winter heating load, Q3 +12%, Q1 -9%.
+     */
     public const WATER_SEASONALITY = [0.908, 0.998, 1.121, 0.973];
     /** Industries on this model whose calendar is not the electric one. */
     public const SEASONALITY_BY_INDUSTRY = ['Utilities - Regulated Water' => self::WATER_SEASONALITY];
@@ -124,11 +152,20 @@ class UtilityBusinessModel extends StandardCorporateBusinessModel
     public const UNREGULATED_MERCHANT_WEIGHT = 0.15;
 
     // --- Merchant Generation Economics (merit-order pricing) ---
-    /** Share of the unregulated stream sold at the wholesale power price; the rest is market-based contract work priced like the regulated book. */
+    /**
+     * Share of the unregulated stream sold at the wholesale power price; the rest is market-based contract work priced
+     * like the regulated book.
+     */
     public const MERCHANT_POWER_SHARE = 1.00;
-    /** Share of merchant generation whose fuel is gas bought at spot: 43.1% of U.S. utility-scale generation in 2023 (EIA). Nuclear, renewables, hydro and contracted coal make up the rest, whose fuel does not move with gas. */
+    /**
+     * Share of merchant generation whose fuel is gas bought at spot: 43.1% of U.S. utility-scale generation in 2023
+     * (EIA). Nuclear, renewables, hydro and contracted coal make up the rest, whose fuel does not move with gas.
+     */
     public const MERCHANT_GAS_FLEET_SHARE = 0.431;
-    /** Heat rate of the merchant gas fleet (MMBtu/MWh): the U.S. gas-fired operating average, 2017-2024 (EIA Electric Power Annual, Table 8.1). */
+    /**
+     * Heat rate of the merchant gas fleet (MMBtu/MWh): the U.S. gas-fired operating average, 2017-2024 (EIA Electric
+     * Power Annual, Table 8.1).
+     */
     public const MERCHANT_GAS_HEAT_RATE = MacroEngine::GAS_FLEET_HEAT_RATE;
 
     // --- Regulatory Lag & Macro Physics ---
@@ -144,7 +181,10 @@ class UtilityBusinessModel extends StandardCorporateBusinessModel
     // --- Tail Risk & Refinancing Physics ---
     /** Z-score threshold indicating a catastrophic grid failure, pipeline explosion, or wildfire liability. */
     public const GRID_FAILURE_Z_SCORE       = -2.50;
-    /** District catastrophe burden (average-year units, smoothed) at which the grid is damaged badly enough to open the liability and hardening regime without any failure of the utility's own. */
+    /**
+     * District catastrophe burden (average-year units, smoothed) at which the grid is damaged badly enough to open the
+     * liability and hardening regime without any failure of the utility's own.
+     */
     public const CATASTROPHE_GRID_DAMAGE_THRESHOLD = 4.0;
     /** Variable cost penalty applied to fund massive environmental liabilities or emergency grid repairs. */
     public const GRID_FAILURE_PENALTY       = 0.15;
@@ -154,46 +194,83 @@ class UtilityBusinessModel extends StandardCorporateBusinessModel
     public const INFRASTRUCTURE_LIABILITY_EXIT_HAZARD = 0.125;
     /** Ongoing quarterly claims, litigation and hardening cost while the liability regime persists. */
     public const INFRASTRUCTURE_LIABILITY_ONGOING_PENALTY = 0.04;
-    /** Quarterly system-hardening and rebuild CapEx as a fraction of annual revenue while the liability regime persists. */
+    /**
+     * Quarterly system-hardening and rebuild CapEx as a fraction of annual revenue while the liability regime persists.
+     */
     public const GRID_HARDENING_CAPEX_RATIO = 0.03;
 
     // --- Rate Case Cycle (regulatory lag and earnings attrition) ---
     /** Regime key for a general rate case filed with the commission and awaiting an order. */
     public const REGIME_RATE_CASE = 'rate_case';
-    /** Persisted state key: how far the authorized tariff lags the non-fuel cost base it is chasing, as a fraction of the tariff. */
+    /**
+     * Persisted state key: how far the authorized tariff lags the non-fuel cost base it is chasing, as a fraction of
+     * the tariff.
+     */
     public const STATE_TARIFF_SHORTFALL = 'state:tariff_shortfall';
     /** Unrecovered non-fuel cost at which management files a general rate case rather than absorb further attrition. */
     public const RATE_CASE_FILING_THRESHOLD = 0.02;
     /** Quarterly probability a pending case is decided (~5 quarters, the 12 to 18 month regulatory lag). */
     public const RATE_CASE_EXIT_HAZARD = 0.20;
-    /** The same hazard as a rate a year, -4 ln(1 - 0.20): the speed a change in what commissions grant reaches the tariff. */
+    /**
+     * The same hazard as a rate a year, -4 ln(1 - 0.20): the speed a change in what commissions grant reaches the
+     * tariff.
+     */
     public const RATE_CASE_DECISION_RATE = 0.8926;
-    /** The average tariff shortfall the founding commission's grant leaves (steadyTariffShortfall() at it, 3.7%), where the District's trailing earnings open. */
+    /**
+     * The average tariff shortfall the founding commission's grant leaves (steadyTariffShortfall() at it, 3.7%), where
+     * the District's trailing earnings open.
+     */
     public const FOUNDING_TARIFF_SHORTFALL = 0.0372;
-    /** What an elected commission grants of a request, as a share of what an appointed one grants: their pass-through of fuel-cost increases into residential prices, 0.22 against 0.62 (Besley & Coate 2003, Table 4, with controls, 1960-97), read across from cost pass-through to rate requests. */
+    /**
+     * What an elected commission grants of a request, as a share of what an appointed one grants: their pass-through of
+     * fuel-cost increases into residential prices, 0.22 against 0.62 (Besley & Coate 2003, Table 4, with controls,
+     * 1960-97), read across from cost pass-through to rate requests.
+     */
     public const ELECTED_COMMISSION_GRANT_RATIO = 0.22 / 0.62;
-    /** Share of a request an appointed commission grants, the District's at its founding; the disallowed remainder is still a real cost, so it rolls into the next filing. The US average, 58% of the net electric increases requested January 2023 to August 2024 (S&P Global data via EIA, Today in Energy, August 2024), is held by 40 appointed commissions and 10 elected ones. */
+    /**
+     * Share of a request an appointed commission grants, the District's at its founding; the disallowed remainder is
+     * still a real cost, so it rolls into the next filing. The US average, 58% of the net electric increases requested
+     * January 2023 to August 2024 (S&P Global data via EIA, Today in Energy, August 2024), is held by 40 appointed
+     * commissions and 10 elected ones.
+     */
     public const APPOINTED_COMMISSION_GRANTED_SHARE = 0.58 / (0.8 + (0.2 * self::ELECTED_COMMISSION_GRANT_RATIO));
-    /** Allowed return on equity with long Treasuries at zero: RRA average authorised electric ROE on the 30-year Treasury, 1992Q1-2023Q2 (Bulkley, SD PUC EL23-020 Schedule 8: risk premium 8.60% - 0.562 x T30). */
+    /**
+     * Allowed return on equity with long Treasuries at zero: RRA average authorised electric ROE on the 30-year
+     * Treasury, 1992Q1-2023Q2 (Bulkley, SD PUC EL23-020 Schedule 8: risk premium 8.60% - 0.562 x T30).
+     */
     public const ALLOWED_ROE_INTERCEPT = 0.0860;
-    /** Allowed return on equity per unit of 30-year Treasury yield: 1 - 0.562 from the same regression (slope s.e. 0.023, R-squared 0.82). */
+    /**
+     * Allowed return on equity per unit of 30-year Treasury yield: 1 - 0.562 from the same regression (slope s.e.
+     * 0.023, R-squared 0.82).
+     */
     public const ALLOWED_ROE_YIELD_SLOPE = 0.438;
-    /** Persisted state key: the allowed return on equity the current tariff was set on, moved toward the market-implied one at each order. */
+    /**
+     * Persisted state key: the allowed return on equity the current tariff was set on, moved toward the market-implied
+     * one at each order.
+     */
     public const STATE_AUTHORISED_ROE = 'state:authorised_roe';
-    /** Persisted state key: the authorised return the seeded margin was built on, the level the capital charge is measured against. */
+    /**
+     * Persisted state key: the authorised return the seeded margin was built on, the level the capital charge is
+     * measured against.
+     */
     public const STATE_OPENING_ROE = 'state:opening_roe';
     /** Lag at which interim relief is granted rather than leave the utility earning below its cost of service. */
     public const MAX_TARIFF_SHORTFALL = 0.10;
 
     // --- Bond Proxy Capital Structure ---
-    /** Quarterly share of the fixed-rate bond stock that matures and reprices (~12-year average tenor of first mortgage bonds). */
+    /**
+     * Quarterly share of the fixed-rate bond stock that matures and reprices (~12-year average tenor of first mortgage
+     * bonds).
+     */
     public const DEBT_MATURITY_ROLLOVER_RATE = 0.02;
 
     // --- Margin Reversion ---
     public const REGULATED_REVERSION_SPEED    = 2.0;
 
     // --- Rate-Base CapEx & Capital Structure Rails ---
-    /** Interest coverage a regulated utility needs before it recapitalizes: rate-base cash flows carry thin coverage. */
+    /**
+     * Interest coverage a regulated utility needs before it recapitalizes: rate-base cash flows carry thin coverage.
+     */
     public const MIN_RECAP_ICR_FLOOR          = 2.5;
     /** Target leverage as a share of the debt tolerance; below it the firm is under-levered. */
     public const UNDERLEVERAGED_DEBT_RATIO    = 0.70;
@@ -235,12 +312,13 @@ class UtilityBusinessModel extends StandardCorporateBusinessModel
 
         // Independent stream Z-scores
         $weatherZ     = $streams->generateZ('regulated_weather_load', 0.05); // Weather is random, low persistence
-        $unregulatedZ = $streams->generateZ('unregulated_merchant', 0.20); // Merchant generation: wind and solar resource, availability
+        // Merchant generation: wind and solar resource, availability
+        $unregulatedZ = $streams->generateZ('unregulated_merchant', 0.20);
         $eventZ       = $streams->generateExogenousZ('event', 0.10); // Infrastructure tail risks
 
-        // --- Clamped Revenue Streams ---
-        // Weather deviations drive regulated volume. High Z = Heatwaves/Freezes (high load). Low Z = Mild weather (low load).
-        // Merchant generation is sold at the wholesale price the market clears, gas at the margin in most hours.
+        // --- Clamped Revenue Streams --- Weather deviations drive regulated volume. High Z = Heatwaves/Freezes (high
+        // load). Low Z = Mild weather (low load). Merchant generation is sold at the wholesale price the market clears,
+        // gas at the margin in most hours.
         $regulatedRevenue = max(0.0, $expectedRevenue * $regulatedWeight * (1.0 + ($weatherZ * ($baselineVol * self::WEATHER_VARIANCE_SCALAR))));
         $merchantVolumeRevenue = max(0.0, $expectedRevenue * $unregulatedWeight * (1.0 + ($unregulatedZ * ($baselineVol * self::MERCHANT_VARIANCE_SCALAR))));
         $merchantPriceRelative = $this->resolveMerchantPriceRelative($params[ModelParam::MerchantPowerShare], $macroState);
@@ -322,7 +400,8 @@ class UtilityBusinessModel extends StandardCorporateBusinessModel
         $observableShockZ *= $baselineVol;
         $observableShockZ += ($priceRelative - 1.0) / self::BASE_COVERAGE_VISIBILITY;
 
-        // The one-off charge is booked as a special item: in EBIT, out of the run rate, the Street figure and the cost ratio.
+        // The one-off charge is booked as a special item: in EBIT, out of the run rate, the Street figure and the cost
+        // ratio.
         $specialCharge = $gridFailureCharge * $volumeRevenue;
 
         return new SectorPhysicsResult(
@@ -475,12 +554,12 @@ class UtilityBusinessModel extends StandardCorporateBusinessModel
     }
 
     /**
-     * The tariff shortfall a commission granting this share of each request leaves on average, as a share of the tariff:
-     * the cycle advanceRateCase() runs, in expectation. Costs outrun the frozen tariff at the inflation rate; a case is
-     * filed at the threshold, or at once if the last order left the shortfall above it, and decided at the decision rate;
-     * the order removes the granted share. With D the case's exponential length, the time-weighted shortfall while it
-     * is pending is its starting level plus inflation over the decision rate, and the start settles where an order
-     * leaves it (the expectation of D in place of D, so the spread of case lengths is not carried).
+     * The tariff shortfall a commission granting this share of each request leaves on average, as a share of the
+     * tariff: the cycle advanceRateCase() runs, in expectation. Costs outrun the frozen tariff at the inflation rate; a
+     * case is filed at the threshold, or at once if the last order left the shortfall above it, and decided at the
+     * decision rate; the order removes the granted share. With D the case's exponential length, the time-weighted
+     * shortfall while it is pending is its starting level plus inflation over the decision rate, and the start settles
+     * where an order leaves it (the expectation of D in place of D, so the spread of case lengths is not carried).
      *
      * @param float $grantShare Share of each request the commission grants.
      * @param float $inflation  Inflation the cost base rises at, a year.
@@ -490,7 +569,8 @@ class UtilityBusinessModel extends StandardCorporateBusinessModel
         $grant = max(0.01, min(1.0, $grantShare));
         $drift = max(0.0, $inflation) / self::RATE_CASE_DECISION_RATE;
         $threshold = self::RATE_CASE_FILING_THRESHOLD;
-        // Where a case starts: the threshold, or the shortfall an order leaves if that is above it (s = (1 - g)(s + drift)).
+        // Where a case starts: the threshold, or the shortfall an order leaves if that is above it (s = (1 - g)(s +
+        // drift)).
         $start = max($threshold, (1.0 - $grant) * $drift / $grant);
         $pendingMean = $start + $drift;
         $afterOrder = (1.0 - $grant) * $pendingMean;
@@ -501,7 +581,9 @@ class UtilityBusinessModel extends StandardCorporateBusinessModel
         return min(self::MAX_TARIFF_SHORTFALL, $mean);
     }
 
-    /** The utility's revenue a year: what a point of average tariff shortfall takes from earnings before tax, per point. */
+    /**
+     * The utility's revenue a year: what a point of average tariff shortfall takes from earnings before tax, per point.
+     */
     public function annualUtilityTariffBase(Stock $stock): float
     {
         return max(0.0, (float) $stock->getTotalRevenue());

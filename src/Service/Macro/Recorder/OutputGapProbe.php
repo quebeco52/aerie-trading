@@ -37,7 +37,9 @@ final class OutputGapProbe
 {
     // --- Wire ---
 
-    /** Redis key the ticker publishes the OPEN window under; the admin view runs in another process and reads it there. */
+    /**
+     * Redis key the ticker publishes the OPEN window under; the admin view runs in another process and reads it there.
+     */
     public const REDIS_KEY = 'macro_gap_debug';
 
     private bool $enabled = false;
@@ -60,7 +62,9 @@ final class OutputGapProbe
     /** Gap the ±bound took off the drift since the window opened; non-zero only against the clamp. */
     private float $clamp = 0.0;
 
-    /** Gap movement no recorded channel accounts for; zero unless the drift and the decomposition have drifted apart. */
+    /**
+     * Gap movement no recorded channel accounts for; zero unless the drift and the decomposition have drifted apart.
+     */
     private float $unexplained = 0.0;
 
     /** Gap moved between ticks, by something other than the drift equation; zero while it is the gap's only writer. */

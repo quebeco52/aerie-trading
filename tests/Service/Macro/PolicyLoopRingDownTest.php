@@ -31,7 +31,10 @@ class PolicyLoopRingDownTest extends TestCase
     private const KICK = 0.016;
     /** A slump's overshoot must be smaller than a boom's: easing pushes on a string. */
     private const SLUMP_OVERSHOOT_RATIO = 1.0;
-    /** How far from settled the tail may sit: decisions move in 25bp steps, so kicked and control runs can sit a step apart for a few meetings (~0.1pp of gap). */
+    /**
+     * How far from settled the tail may sit: decisions move in 25bp steps, so kicked and control runs can sit a step
+     * apart for a few meetings (~0.1pp of gap).
+     */
     private const SETTLED_TOLERANCE = 0.06;
 
     public function testAnOpeningGapFadesWithoutAPendulum(): void

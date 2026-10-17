@@ -180,7 +180,8 @@ final class MiningBusinessModelTest extends TestCase
 
     public function testCostsFollowTheTonnesAcrossTheWholeMix(): void
     {
-        // Every stream up 50%: the same tonnes cost the same dollars (less the grinding-media leg, priced off the metals complex).
+        // Every stream up 50%: the same tonnes cost the same dollars (less the grinding-media leg, priced off the
+        // metals complex).
         $boom = $this->report($this->macro(150.0, ['goldPriceIndexEma' => 150.0, 'naturalGasPriceIndexEma' => 150.0, 'agriculturalCommodityIndexEma' => 150.0]), ticker: 'CNDR');
         $cost = 0.15 * (1.0 + (MiningBusinessModel::INPUT_COST_EXPOSURES['metals'] * 0.5));
 
@@ -213,7 +214,10 @@ final class MiningBusinessModelTest extends TestCase
         $this->assertEqualsWithDelta(log($deck), $this->model->getCapexCycleSignal($this->miner('CNDR'), $downturn), 1e-12);
     }
 
-    /** The fitted elasticity of US mine investment to the real metals cycle: a 30% slump trims the budget by about a fifth. */
+    /**
+     * The fitted elasticity of US mine investment to the real metals cycle: a 30% slump trims the budget by about a
+     * fifth.
+     */
     public function testAThirtyPercentMetalsSlumpTrimsTheCapitalBudgetByAboutAFifth(): void
     {
         $modifier = 1.0 + ($this->model->getCapexCycleSignal($this->miner(), $this->macro(70.0)) * $this->model->getCapexCyclicality());
@@ -222,7 +226,10 @@ final class MiningBusinessModelTest extends TestCase
         $this->assertEqualsWithDelta(0.786, $modifier, 0.001);
     }
 
-    /** The strictest rules on extraction cost Greenstone, List & Syverson's 4.8% of productivity: every tonne costs 1 / 0.952 as much to mine. */
+    /**
+     * The strictest rules on extraction cost Greenstone, List & Syverson's 4.8% of productivity: every tonne costs 1 /
+     * 0.952 as much to mine.
+     */
     public function testStrictExtractionRulesRaiseTheCostOfEveryTonne(): void
     {
         $founding = $this->report($this->macro(100.0));

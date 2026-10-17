@@ -35,7 +35,9 @@ final class PriceFormationInvariantTest extends TestCase
     private const TICKS_PER_YEAR = 1200;
     private const YEARS = 20;
     private const BURN_IN_YEARS = 2;
-    /** The fixture's cost of equity: the name pays no dividend, so a fairly priced one compounds its fundamentals at it. */
+    /**
+     * The fixture's cost of equity: the name pays no dividend, so a fairly priced one compounds its fundamentals at it.
+     */
     private const COST_OF_EQUITY = 0.10;
 
     private MathUtility $math;

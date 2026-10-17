@@ -53,7 +53,10 @@ class ExchequerTest extends TestCase
         return $state;
     }
 
-    /** A stance is an average maturity on the Treasury's record: -1 the 48 months of 2008, +1 the 71 of 2017, linear between; the founding book reads balanced. */
+    /**
+     * A stance is an average maturity on the Treasury's record: -1 the 48 months of 2008, +1 the 71 of 2017, linear
+     * between; the founding book reads balanced.
+     */
     public function testAStanceIsAnAverageMaturityOnRecord(): void
     {
         $this->assertSame(4.0, Exchequer::SHORTEST_AVERAGE_MATURITY);
@@ -68,7 +71,10 @@ class ExchequerTest extends TestCase
         $this->assertSame('long', Exchequer::stanceName(5.8));
     }
 
-    /** At Year 1 the head seated before it keeps the book the debt opened with, so the economy is handed no target; every councillor holds a stance on the debt. */
+    /**
+     * At Year 1 the head seated before it keeps the book the debt opened with, so the economy is handed no target;
+     * every councillor holds a stance on the debt.
+     */
     public function testTheHeadAtYearOneKeepsTheOpeningBook(): void
     {
         $state = self::opened();
@@ -85,7 +91,10 @@ class ExchequerTest extends TestCase
         $this->assertNull((new PoliticsStateDTO())->policy()->debtAverageMaturity);
     }
 
-    /** At the opening head's term end the Council names the candidate nearest its median on the debt, who hands the economy their maturity; nothing changes until the next term ends. */
+    /**
+     * At the opening head's term end the Council names the candidate nearest its median on the debt, who hands the
+     * economy their maturity; nothing changes until the next term ends.
+     */
     public function testAtTermEndTheCouncilNamesTheCandidateNearestItsMedian(): void
     {
         foreach ([3, 7, 11, 19] as $seed) {
@@ -113,7 +122,10 @@ class ExchequerTest extends TestCase
         $this->assertSame(ShockEvent::EXCHEQUER_HEAD_APPOINTED, PoliticsEngine::headline($headline));
     }
 
-    /** The debt stance weighs only in naming the Exchequer's head: the Council fills its own seats on the other three questions. */
+    /**
+     * The debt stance weighs only in naming the Exchequer's head: the Council fills its own seats on the other three
+     * questions.
+     */
     public function testCouncilSeatsAreNotChosenOnTheDebt(): void
     {
         $state = self::opened();

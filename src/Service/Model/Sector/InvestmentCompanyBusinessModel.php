@@ -49,17 +49,29 @@ use App\Service\Math\MathUtility;
 class InvestmentCompanyBusinessModel extends ConglomerateBusinessModel
 {
     // --- Net Asset Value Anchoring ---
-    /** Intrinsic multiple on book. One, because a trust's book is a portfolio carried at value — so pbFairValue becomes net asset value per share. */
+    /**
+     * Intrinsic multiple on book. One, because a trust's book is a portfolio carried at value — so pbFairValue becomes
+     * net asset value per share.
+     */
     public const INTRINSIC_PB_MULTIPLE = 1.00;
 
     // --- Holding-Company Discount ---
-    /** Long-run discount to NAV at a neutral cycle: control blocks are unsaleable at the screen price and a realised stake is taxed on exit. */
+    /**
+     * Long-run discount to NAV at a neutral cycle: control blocks are unsaleable at the screen price and a realised
+     * stake is taxed on exit.
+     */
     public const NAV_DISCOUNT_BASE = 0.30;
 
-    /** Widening per unit of output gap below neutral. The discount is a sentiment index, so it gaps out in a contraction while the assets underneath do not. */
+    /**
+     * Widening per unit of output gap below neutral. The discount is a sentiment index, so it gaps out in a contraction
+     * while the assets underneath do not.
+     */
     public const NAV_DISCOUNT_CYCLE_SCALAR = 4.00;
 
-    /** Narrowing per unit of RESIDUAL consumer confidence — the half the cycle above does not already explain (Lemmon & Portniaguina 2006). Confidence mean-reverts slowly, which is what makes the discount persistent. */
+    /**
+     * Narrowing per unit of RESIDUAL consumer confidence — the half the cycle above does not already explain (Lemmon &
+     * Portniaguina 2006). Confidence mean-reverts slowly, which is what makes the discount persistent.
+     */
     public const NAV_DISCOUNT_SENTIMENT_SCALAR = 0.60;
 
     /** Floor: even at a cyclical peak a control block cannot be sold at the screen price. */
@@ -69,45 +81,72 @@ class InvestmentCompanyBusinessModel extends ConglomerateBusinessModel
     public const MAX_NAV_DISCOUNT = 0.50;
 
     // --- Industry Structure ---
-    /** Share of an idiosyncratic gain taken from peers. Zero: "Investment Companies" is a filing category, not a product market — no rival trust could have won that dividend. */
+    /**
+     * Share of an idiosyncratic gain taken from peers. Zero: "Investment Companies" is a filing category, not a product
+     * market — no rival trust could have won that dividend.
+     */
     public const INDUSTRY_SUBSTITUTABILITY = 0.00;
 
     // --- Analyst Visibility & Error ---
-    /** A trust's holdings are published and separately listed, so its assets read more easily than a conglomerate's — which is why the discount is visible enough to trade. */
+    /**
+     * A trust's holdings are published and separately listed, so its assets read more easily than a conglomerate's —
+     * which is why the discount is visible enough to trade.
+     */
     public const BASE_COVERAGE_VISIBILITY = 0.55;
 
     // --- NAV to Revenue Conversion ---
-    /** Revenue a controlled subsidiary books per unit of carrying value. Consolidation takes the whole top line, so a fifth of the book can be most of the income statement. */
+    /**
+     * Revenue a controlled subsidiary books per unit of carrying value. Consolidation takes the whole top line, so a
+     * fifth of the book can be most of the income statement.
+     */
     public const WHOLLY_OWNED_ASSET_TURNOVER = 0.30;
 
-    /** Revenue a listed stake books per unit of market value: its dividend yield, and nothing else, however much the company earns. */
+    /**
+     * Revenue a listed stake books per unit of market value: its dividend yield, and nothing else, however much the
+     * company earns.
+     */
     public const LISTED_DIVIDEND_YIELD = 0.035;
 
-    /** Revenue the treasury books per unit of its value: blended yield on cash, short sovereign paper and the credit book. */
+    /**
+     * Revenue the treasury books per unit of its value: blended yield on cash, short sovereign paper and the credit
+     * book.
+     */
     public const TREASURY_INCOME_YIELD = 0.040;
 
     // --- Stream Volatility Scalars ---
     /** Volatility multiplier for consolidated subsidiary sales: real operating businesses, priced as such. */
     public const WHOLLY_OWNED_VARIANCE_SCALAR = 0.30;
 
-    /** Volatility multiplier for dividends received. Set from trailing earnings then smoothed again, so this is the quietest line in the group. */
+    /**
+     * Volatility multiplier for dividends received. Set from trailing earnings then smoothed again, so this is the
+     * quietest line in the group.
+     */
     public const LISTED_DIVIDEND_VARIANCE_SCALAR = 0.06;
 
     // --- Macro Sensitivities ---
     /** Output gap sensitivity of subsidiary volume. Niche manufacturers sell replacement demand, not new-build. */
     public const WHOLLY_OWNED_MACRO_SCALAR = 0.70;
 
-    /** Sensitivity of upstreamed dividends to the LAGGED cycle. Small on purpose: the board's smoothing damps on top of the delay. */
+    /**
+     * Sensitivity of upstreamed dividends to the LAGGED cycle. Small on purpose: the board's smoothing damps on top of
+     * the delay.
+     */
     public const LISTED_DIVIDEND_MACRO_SCALAR = 0.25;
 
     /** Years between the cycle and the dividend it eventually pays, via the parent's distributed-lag helper. */
     public const DEMAND_LAG_YEARS = 1.50;
 
     // --- Analyst Observability ---
-    /** Fraction of the dividend line visible to consensus. A holding declares publicly BEFORE the trust reports receiving it, so the receipt is nearly solved arithmetic. */
+    /**
+     * Fraction of the dividend line visible to consensus. A holding declares publicly BEFORE the trust reports
+     * receiving it, so the receipt is nearly solved arithmetic.
+     */
     public const LISTED_DIVIDEND_OBSERVABLE_DISCOUNT = 0.95;
 
-    /** Fraction of subsidiary performance visible ahead of the filing; these are unlisted and report only through the group. */
+    /**
+     * Fraction of subsidiary performance visible ahead of the filing; these are unlisted and report only through the
+     * group.
+     */
     public const WHOLLY_OWNED_OBSERVABLE_DISCOUNT = 0.45;
 
     /**
@@ -242,7 +281,8 @@ class InvestmentCompanyBusinessModel extends ConglomerateBusinessModel
             + ($listedMacroBoost * $listedWeight * self::LISTED_DIVIDEND_OBSERVABLE_DISCOUNT)
             + ($contrarianSurge * $floatWeight * self::CONTRARIAN_OBSERVABLE_DISCOUNT);
 
-        // The one-off charge is booked as a special item: in EBIT, out of the run rate, the Street figure and the cost ratio.
+        // The one-off charge is booked as a special item: in EBIT, out of the run rate, the Street figure and the cost
+        // ratio.
         $specialCharge = $restructuringPenalty * $actualRevenue;
 
         return new SectorPhysicsResult(
@@ -289,7 +329,10 @@ class InvestmentCompanyBusinessModel extends ConglomerateBusinessModel
         return AnchorHoldings::forHolder($stock->getTicker()) === [] ? 0.0 : null;
     }
 
-    /** A trust depreciates the plant its subsidiaries own and nothing else. No capital-proxy fallback: here that proxy IS the portfolio, so a sphere consolidating nothing would depreciate its shareholdings. */
+    /**
+     * A trust depreciates the plant its subsidiaries own and nothing else. No capital-proxy fallback: here that proxy
+     * IS the portfolio, so a sphere consolidating nothing would depreciate its shareholdings.
+     */
     public function getDepreciableBase(Stock $stock): float
     {
         return max(0.0, $stock->getNetPpe());
@@ -334,7 +377,10 @@ class InvestmentCompanyBusinessModel extends ConglomerateBusinessModel
         return 0.0;
     }
 
-    /** A trust's book is a portfolio carried at value, not plant earning a spread, so the multiple is one and the valuation term becomes NAV per share itself. */
+    /**
+     * A trust's book is a portfolio carried at value, not plant earning a spread, so the multiple is one and the
+     * valuation term becomes NAV per share itself.
+     */
     public function getIntrinsicPbMultiple(float $structuralRoic, float $hurdleRate): float
     {
         return self::INTRINSIC_PB_MULTIPLE;

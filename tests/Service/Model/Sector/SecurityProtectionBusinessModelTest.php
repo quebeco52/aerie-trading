@@ -205,8 +205,8 @@ class SecurityProtectionBusinessModelTest extends TestCase
 
         $this->assertEqualsWithDelta(0.0, $this->model->getMacroPhysics($stock, $recession)['macro_demand_shift'], 1e-12);
 
-        // Gov 0.40 x 0.02 x 0.30 + retainers 0 (boom side only) + expeditionary 0.20 x (0.10 x 0.8 + 0.01 x 4) = 0.0264;
-        // the cost-plus inflation escalator is price and stays out.
+        // Gov 0.40 x 0.02 x 0.30 + retainers 0 (boom side only) + expeditionary 0.20 x (0.10 x 0.8 + 0.01 x 4) =
+        // 0.0264; the cost-plus inflation escalator is price and stays out.
         $expected = (SecurityProtectionBusinessModel::GOVERNMENT_CONTRACT_WEIGHT * 0.02 * SecurityProtectionBusinessModel::APPROPRIATIONS_VOLUME_SCALAR)
             + (SecurityProtectionBusinessModel::EXPEDITIONARY_WEIGHT * (
                 ((0.30 - SecurityProtectionBusinessModel::VIX_FEAR_THRESHOLD) * SecurityProtectionBusinessModel::FEAR_PREMIUM_SCALAR)

@@ -11,7 +11,10 @@ use App\Service\Macro\Subsystem\CreditFiscalSubsystem;
 use App\Service\Math\MathUtility;
 use PHPUnit\Framework\TestCase;
 
-/** The Financial Regulator's mortgage loan-to-value cap in the household credit cycle (Iacoviello 2005; Richter, Schularick & Shim 2019). */
+/**
+ * The Financial Regulator's mortgage loan-to-value cap in the household credit cycle (Iacoviello 2005; Richter,
+ * Schularick & Shim 2019).
+ */
 class MortgageLtvCapTest extends TestCase
 {
     private CreditFiscalSubsystem $subsystem;
@@ -31,7 +34,9 @@ class MortgageLtvCapTest extends TestCase
         $this->subsystem = new CreditFiscalSubsystem($math);
     }
 
-    /** Household rates at the engine's neutral, so leverage holds at its baseline unless the term under test moves it. */
+    /**
+     * Household rates at the engine's neutral, so leverage holds at its baseline unless the term under test moves it.
+     */
     private static function household(?float $cap = null): MacroState
     {
         $state = new MacroState();
@@ -72,8 +77,9 @@ class MortgageLtvCapTest extends TestCase
     }
 
     /**
-     * The cut is the mortgage share of the part of NMDB's purchase-loan distribution above the cap over its mean: 2.77pp
-     * of 82.2% above 90%, 5.13pp above 85%, 7.82pp above 80%; and each point of tightening cuts more than the last.
+     * The cut is the mortgage share of the part of NMDB's purchase-loan distribution above the cap over its mean:
+     * 2.77pp of 82.2% above 90%, 5.13pp above 85%, 7.82pp above 80%; and each point of tightening cuts more than the
+     * last.
      */
     public function testTheCutPinsTheMortgageDistribution(): void
     {
@@ -105,7 +111,10 @@ class MortgageLtvCapTest extends TestCase
         }
     }
 
-    /** Held for thirty years, the cap holds leverage at its full cut: reversion pulls toward the baseline the cap allows. */
+    /**
+     * Held for thirty years, the cap holds leverage at its full cut: reversion pulls toward the baseline the cap
+     * allows.
+     */
     public function testTheCutHoldsAgainstReversion(): void
     {
         $state = $this->advance(self::household(0.85), 30.0, 4);
@@ -134,7 +143,9 @@ class MortgageLtvCapTest extends TestCase
         $this->assertLessThan(0.1, $recovered);
     }
 
-    /** The cap binds borrowers, not lenders: it moves neither the capital banks must hold nor their lending standards. */
+    /**
+     * The cap binds borrowers, not lenders: it moves neither the capital banks must hold nor their lending standards.
+     */
     public function testTheCapIsNotLenderCapital(): void
     {
         $free = $this->advance(self::household(), 1.0, 52);

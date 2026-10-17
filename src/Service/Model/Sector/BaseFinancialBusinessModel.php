@@ -54,23 +54,41 @@ abstract class BaseFinancialBusinessModel implements BusinessModelInterface
     public const TTM_ROE_WEIGHT = 0.50;
 
     // --- Bank Levy ---
-    /** Whether the institution is a bank the levy is charged on: deposit-takers and investment banks are; brokers, clearinghouses, insurers, asset managers and non-bank lenders are not. */
+    /**
+     * Whether the institution is a bank the levy is charged on: deposit-takers and investment banks are; brokers,
+     * clearinghouses, insurers, asset managers and non-bank lenders are not.
+     */
     public const PAYS_BANK_LEVY = false;
 
     // --- Industry Share Dynamics ---
-    /** Share of a financial institution's idiosyncratic gain taken from peers: deposits, mandates and AUM move between houses, but much of the swing is market volume. */
+    /**
+     * Share of a financial institution's idiosyncratic gain taken from peers: deposits, mandates and AUM move between
+     * houses, but much of the swing is market volume.
+     */
     public const DEFAULT_FINANCIAL_INDUSTRY_SUBSTITUTABILITY = 0.35;
-    /** Share of an idiosyncratic gain taken from same-industry peers; funds, mandates and deposits move between houses only in part. */
+    /**
+     * Share of an idiosyncratic gain taken from same-industry peers; funds, mandates and deposits move between houses
+     * only in part.
+     */
     public const INDUSTRY_SUBSTITUTABILITY = self::DEFAULT_FINANCIAL_INDUSTRY_SUBSTITUTABILITY;
 
     // --- Firm-Level Common Factor ---
-    /** One-factor loading of fee and spread streams on the institution-wide franchise innovation (rho^2 = 16% shared variance). */
+    /**
+     * One-factor loading of fee and spread streams on the institution-wide franchise innovation (rho^2 = 16% shared
+     * variance).
+     */
     public const FIRM_FACTOR_LOADING = 0.40;
-    /** Two-factor loading of fee and spread streams on the persistent macro-sector demand factor (rho_s^2 = 12% variance shared with sector peers). */
+    /**
+     * Two-factor loading of fee and spread streams on the persistent macro-sector demand factor (rho_s^2 = 12% variance
+     * shared with sector peers).
+     */
     public const SECTOR_FACTOR_LOADING = 0.35;
 
     // --- Bank Levy (UK Finance Act 2011, Schedule 19; FDIC) ---
-    /** Share of deposits a deposit-insurance scheme covers, which the levy leaves out: 60.4% of US domestic deposits in 2024 (FDIC, estimated insured deposits). */
+    /**
+     * Share of deposits a deposit-insurance scheme covers, which the levy leaves out: 60.4% of US domestic deposits in
+     * 2024 (FDIC, estimated insured deposits).
+     */
     public const INSURED_DEPOSIT_SHARE = 0.604;
 
     public function getFirmFactorLoading(): float

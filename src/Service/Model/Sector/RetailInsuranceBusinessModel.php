@@ -14,7 +14,8 @@ use App\Service\Model\ModelParam;
  *
  * Financial Physics:
  * - Insulates tail-risk by passing it up to Reinsurance.
- * - Revenue is split between short-tail Property & Casualty premiums and highly sticky, long-duration Life Insurance premiums.
+ * - Revenue is split between short-tail Property & Casualty premiums and highly sticky, long-duration Life Insurance
+ *   premiums.
  * - P&C carries the catastrophe claims and the competitive pricing cycle.
  * - Life & Annuities is long-duration and immune to weather catastrophes.
  * - Inherits all standard insurance physics (float, Kenney Rule) from InsuranceBusinessModel.
@@ -22,7 +23,10 @@ use App\Service\Model\ModelParam;
 class RetailInsuranceBusinessModel extends InsuranceBusinessModel
 {
     // --- Operating Cyclicality & Demand Structure ---
-    /** Elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). Personal lines are renewed regardless of the cycle. */
+    /**
+     * Elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). Personal lines are
+     * renewed regardless of the cycle.
+     */
     public const OPERATING_CYCLICALITY = 0.70;
 
     // --- Analyst Visibility & Error ---
@@ -42,7 +46,10 @@ class RetailInsuranceBusinessModel extends InsuranceBusinessModel
     public const LIFE_VARIANCE_SCALAR = 0.05;
 
     // --- Loss Reserves ---
-    /** Policy reserves per unit of annual life premium: ACLI Fact Book 2025, individual life reserves $1.72T on direct premium $175B (2024). */
+    /**
+     * Policy reserves per unit of annual life premium: ACLI Fact Book 2025, individual life reserves $1.72T on direct
+     * premium $175B (2024).
+     */
     public const LIFE_RESERVE_TO_PREMIUM_RATIO = 9.9;
 
     protected function calculateSectorPhysics(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, \App\DTO\MacroStateDTO $macroState, MathUtility $mathUtility): SectorPhysicsResult
@@ -97,11 +104,12 @@ class RetailInsuranceBusinessModel extends InsuranceBusinessModel
         $surplusDeficitRatio = $this->resolveSurplusDeficitRatio($stock, $macroState, $mathUtility);
         $this->advanceUnderwritingCycle($streams, $stock, $macroState, $mathUtility, $surplusDeficitRatio, $recovery > 0.0);
 
-        // Claims inflation the filed rates have not caught up with lands on the P&C losses; life benefits are fixed in the policy.
+        // Claims inflation the filed rates have not caught up with lands on the P&C losses; life benefits are fixed in
+        // the policy.
         $unrecoveredClaims = $realizedVariableMargin * (1.0 - self::BASE_EXPENSE_RATIO_SHARE) * $pcWeight * $this->resolveUnrecoveredClaimsCost($streams, $macroState);
         $clampedMargin = $this->clampMargin($realizedVariableMargin + $unrecoveredClaims + $claims['excess'] - $recovery + $reinstatementPremium);
-        // The baseline cost ratio splits as the parent's does; the claims above it are losses.
-        // Life policies carry a policy reserve, not unearned premium, and the catastrophe draw falls on the P&C book alone.
+        // The baseline cost ratio splits as the parent's does; the claims above it are losses. Life policies carry a
+        // policy reserve, not unearned premium, and the catastrophe draw falls on the P&C book alone.
         $lifeBenefits = $lifeRevenue * $this->resolveBaselineLossRatio($realizedVariableMargin, $fixedCosts, $actualRevenue);
         $kpis = $this->bookUnderwritingResult($streams, $actualRevenue, $clampedMargin, $realizedVariableMargin * self::BASE_EXPENSE_RATIO_SHARE, $reinstatementPremium, $fixedCosts, $pcRevenue, $lifeBenefits);
 

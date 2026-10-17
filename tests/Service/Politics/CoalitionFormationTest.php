@@ -27,7 +27,8 @@ class CoalitionFormationTest extends TestCase
 
         $right = [Diet::VANGUARD, Diet::EXCHANGE, Diet::CHARTISTS, Diet::NEW_HORIZON];
         $this->assertTrue(Formation::isMinimalWinning($right, $seats));
-        // Distances from the Council median: the Exchange Party 0.1, the Chartists 0.5, the Vanguard and New Horizon none.
+        // Distances from the Council median: the Exchange Party 0.1, the Chartists 0.5, the Vanguard and New Horizon
+        // none.
         $majority = Formation::FORMATION_MINIMAL_WINNING_UTILITY + (4 * Formation::FORMATION_PARTY_UTILITY) + Formation::FORMATION_LARGEST_PARTY_UTILITY
             + (Formation::FORMATION_RANGE_UTILITY * Formation::ideologicalRange($right, $positions))
             + Formation::FORMATION_PACT_UTILITY + (Formation::FORMATION_ANTISYSTEM_UTILITY * 0.6);
@@ -74,9 +75,9 @@ class CoalitionFormationTest extends TestCase
     }
 
     /**
-     * The Diet behind a 6-seat party governing alone: the Vanguard bloc holds 166 seats and the Vanguard 85 of them. The
-     * bloc puts its leader in office; a cabinet of its smallest party, the others propping it up, almost never forms
-     * (real hung parliaments seat a cabinet under 10% of the seats in under 1% of formations; ParlGov).
+     * The Diet behind a 6-seat party governing alone: the Vanguard bloc holds 166 seats and the Vanguard 85 of them.
+     * The bloc puts its leader in office; a cabinet of its smallest party, the others propping it up, almost never
+     * forms (real hung parliaments seat a cabinet under 10% of the seats in under 1% of formations; ParlGov).
      */
     public function testABlocPutsItsLeaderInOfficeNotItsSmallestParty(): void
     {
@@ -94,7 +95,10 @@ class CoalitionFormationTest extends TestCase
 
     // --- The blocs ---
 
-    /** The founding Diet splits around its two largest parties, the Vanguard and the Civic Front, into the blocs it opens with. */
+    /**
+     * The founding Diet splits around its two largest parties, the Vanguard and the Civic Front, into the blocs it
+     * opens with.
+     */
     public function testTheFoundingDietSplitsAroundItsTwoLargestParties(): void
     {
         $this->assertSame(Diet::SEED_BLOCS, Formation::declareBlocs(Diet::SEED_SEATS, Diet::HOME_POSITIONS, []));
@@ -111,7 +115,10 @@ class CoalitionFormationTest extends TestCase
         $this->assertSame(Diet::CIVIC, Formation::declareBlocs(Diet::SEED_SEATS, $positions, Diet::SEED_BLOCS)[Diet::CHARTISTS], 'The Chartists drift toward big government and a closed economy.');
     }
 
-    /** Each bloc is led by its largest party: Iron Harbor, grown past the Civic Front, leads the left, and the rivalry is its. */
+    /**
+     * Each bloc is led by its largest party: Iron Harbor, grown past the Civic Front, leads the left, and the rivalry
+     * is its.
+     */
     public function testABlocIsLedByItsLargestParty(): void
     {
         $seats = Diet::SEED_SEATS;
@@ -129,8 +136,9 @@ class CoalitionFormationTest extends TestCase
 
     /**
      * A radical party never leads a bloc, however large: the Common Lot, grown past the Civic Front going into the vote
-     * (as in the Diet that seated Iron Harbor and the Accord), stays behind the Front, as the Danish People's Party stayed
-     * behind Venstre in 2015; the Chartists likewise behind the Vanguard. The radical parties are the Council axis's ends.
+     * (as in the Diet that seated Iron Harbor and the Accord), stays behind the Front, as the Danish People's Party
+     * stayed behind Venstre in 2015; the Chartists likewise behind the Vanguard. The radical parties are the Council
+     * axis's ends.
      */
     public function testARadicalPartyNeverLeadsABloc(): void
     {
@@ -173,7 +181,10 @@ class CoalitionFormationTest extends TestCase
         $this->assertSame($openAgainstClosed, Formation::declareBlocs(Diet::SEED_SEATS, Diet::HOME_POSITIONS, $openAgainstClosed));
     }
 
-    /** However the Diet stands, the declarations settle in two blocs, each party nearer its own bloc's centre and each bloc led by its largest party. */
+    /**
+     * However the Diet stands, the declarations settle in two blocs, each party nearer its own bloc's centre and each
+     * bloc led by its largest party.
+     */
     public function testEveryPartyEndsNearerItsOwnBlocsCentre(): void
     {
         $stream = MathUtility::ownStream(11);
@@ -235,7 +246,8 @@ class CoalitionFormationTest extends TestCase
         $positions = Diet::HOME_POSITIONS;
 
         $this->assertEqualsWithDelta(
-            // Vanguard and the Chartists: 0.25 apart on the state, 0.5 on openness, 0.5 on the Council, 0.28 on the environment.
+            // Vanguard and the Chartists: 0.25 apart on the state, 0.5 on openness, 0.5 on the Council, 0.28 on the
+            // environment.
             sqrt((0.25 ** 2) + (0.5 ** 2) + (0.5 ** 2) + (0.28 ** 2)),
             Formation::ideologicalRange([Diet::VANGUARD, Diet::CHARTISTS], $positions),
             1e-12,
@@ -255,8 +267,8 @@ class CoalitionFormationTest extends TestCase
     // --- What is on offer ---
 
     /**
-     * Every set of parties is on offer, as Martin & Stevenson estimated over: a majority alone, a minority with support,
-     * and never supported by a party that ruled out governing with one of its members.
+     * Every set of parties is on offer, as Martin & Stevenson estimated over: a majority alone, a minority with
+     * support, and never supported by a party that ruled out governing with one of its members.
      */
     public function testEveryCabinetIsOnOffer(): void
     {
@@ -316,7 +328,10 @@ class CoalitionFormationTest extends TestCase
         $this->assertSame(Diet::CHARTISTS, Formation::leader([Diet::COMMON_LOT, Diet::CHARTISTS], $order));
     }
 
-    /** The founding government is the likeliest the founding Diet would seat, so the constant cannot drift from the calculus. */
+    /**
+     * The founding government is the likeliest the founding Diet would seat, so the constant cannot drift from the
+     * calculus.
+     */
     public function testTheFoundingGovernmentIsTheFoundingDietsLikeliest(): void
     {
         $options = Formation::options(Diet::SEED_SEATS, Diet::HOME_POSITIONS, Diet::SEED_BLOCS);
@@ -420,9 +435,9 @@ class CoalitionFormationTest extends TestCase
     }
 
     /**
-     * The firewall: the Council axis's two ends seldom sit in cabinet and far more often carry one from outside. The two
-     * bloc leaders, whichever parties lead, seldom serve together (Scandinavia since 1945: 1 cabinet in 68) and never prop
-     * each other up.
+     * The firewall: the Council axis's two ends seldom sit in cabinet and far more often carry one from outside. The
+     * two bloc leaders, whichever parties lead, seldom serve together (Scandinavia since 1945: 1 cabinet in 68) and
+     * never prop each other up.
      */
     public function testTheFirewallKeepsTheCouncilAxissEndsInSupport(): void
     {

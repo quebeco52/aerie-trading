@@ -18,13 +18,23 @@ use App\Service\Math\Valuation;
 class TreasuryEngine
 {
     // --- Seasoned Equity Offering ---
-    /** Announcement return of a seasoned equity offering, in percent: about -3% over two days for industrial issuers (Asquith & Mullins 1986), the adverse-selection signal (Myers & Majluf 1984). Distress is not added on top: fair value already prices it. */
+    /**
+     * Announcement return of a seasoned equity offering, in percent: about -3% over two days for industrial issuers
+     * (Asquith & Mullins 1986), the adverse-selection signal (Myers & Majluf 1984). Distress is not added on top: fair
+     * value already prices it.
+     */
     public const SEASONED_EQUITY_OFFERING_ANNOUNCEMENT_PCT = -3.0;
-    /** Offer price discount to the last close on a seasoned equity offering: 2.2% on average (Corwin 2003, US SEOs 1980-1998). */
+    /**
+     * Offer price discount to the last close on a seasoned equity offering: 2.2% on average (Corwin 2003, US SEOs
+     * 1980-1998).
+     */
     public const SEASONED_EQUITY_OFFER_DISCOUNT = 0.022;
 
     // --- Financing News ---
-    /** A financing action is news at 1% of the firm's total assets, the top of the 0.5-1% of total assets auditors take as materiality (practitioner guidance; second-hand). */
+    /**
+     * A financing action is news at 1% of the firm's total assets, the top of the 0.5-1% of total assets auditors take
+     * as materiality (practitioner guidance; second-hand).
+     */
     public const FINANCING_NEWS_MATERIALITY = 0.01;
 
     // --- CapEx & Deployment Rates ---
@@ -34,7 +44,10 @@ class TreasuryEngine
     private const VARIABLE_ORGANIC_SPEND_RATE = 0.35;
 
     // --- Lender Funding Deployment ---
-    /** Cash held above the operating target before a lender treats the rest as deployable funding (same buffer the expansion path uses). */
+    /**
+     * Cash held above the operating target before a lender treats the rest as deployable funding (same buffer the
+     * expansion path uses).
+     */
     private const LIQUIDITY_BUFFER_MULTIPLIER = 1.20;
 
     // --- Institutional & Market Architecture ---
@@ -54,9 +67,15 @@ class TreasuryEngine
     public const MAX_CIP_EXPANSION_THRESHOLD_RATIO = 0.25;
 
     // --- Earning Asset Ledger (Financials) ---
-    /** Haircut taken when earning assets are sold in a hurry to meet withdrawals or a maturity: securities marked below par, loans sold at a discount. */
+    /**
+     * Haircut taken when earning assets are sold in a hurry to meet withdrawals or a maturity: securities marked below
+     * par, loans sold at a discount.
+     */
     public const EARNING_ASSET_FIRE_SALE_HAIRCUT = 0.05;
-    /** Largest share of the earning-asset book that can be sold in one quarter; the rest is illiquid loans nobody bids for on the day. */
+    /**
+     * Largest share of the earning-asset book that can be sold in one quarter; the rest is illiquid loans nobody bids
+     * for on the day.
+     */
     public const MAX_QUARTERLY_ASSET_LIQUIDATION_RATIO = 0.25;
 
     // --- Equity Issuance & TAM Scaling Limits ---
@@ -68,7 +87,9 @@ class TreasuryEngine
         private DebtEngine $debtEngine,
         private CapExEngine $capExEngine,
         private MathUtility $mathUtility,
-        /** Investment securities mark. Defaulted so a harness or a unit test builds an engine without wiring the curve. */
+        /**
+         * Investment securities mark. Defaulted so a harness or a unit test builds an engine without wiring the curve.
+         */
         private SecuritiesBookService $securitiesBook = new SecuritiesBookService(new \App\Service\Market\Bond\BondPricingEngine()),
     ) {}
 

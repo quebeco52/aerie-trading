@@ -384,7 +384,10 @@ class CreditRiskTest extends TestCase
         $this->assertEqualsWithDelta($boom['ig'] * MacroEngine::HY_BASE_SPREAD_MULTIPLIER, $boom['hy'], 1e-12, 'HY floors with IG at its multiple.');
     }
 
-    /** A capital buffer is an add-on to the equity share a leverage cap implies, so it lowers the cap and never raises it. */
+    /**
+     * A capital buffer is an add-on to the equity share a leverage cap implies, so it lowers the cap and never raises
+     * it.
+     */
     public function testABufferedLeverageLimitIsTheCapTheRaisedEquityShareAllows(): void
     {
         $this->assertEqualsWithDelta(10.0, CreditRisk::calculateBufferedLeverageLimit(10.0, 0.0), 1e-12, 'No buffer, no change.');
@@ -439,7 +442,9 @@ class CreditRiskTest extends TestCase
         $this->assertSame($curve[6], CreditRisk::calculateRatingClassSpread('D', $ig, $hy));
     }
 
-    /** DTS (Ben Dor et al. 2007): a class spread is proportional to its index, so a crisis multiplies every grade alike. */
+    /**
+     * DTS (Ben Dor et al. 2007): a class spread is proportional to its index, so a crisis multiplies every grade alike.
+     */
     public function testAClassSpreadIsProportionalToItsIndex(): void
     {
         foreach (['AAA', 'A', 'BBB'] as $rating) {
@@ -461,8 +466,8 @@ class CreditRiskTest extends TestCase
     }
 
     /**
-     * A seeded spread is split into the class it sits nearest and the multiple of that class it trades at: a firm seeded
-     * exactly on a class carries a multiple of one, a firm between two classes is read against the nearer in log
+     * A seeded spread is split into the class it sits nearest and the multiple of that class it trades at: a firm
+     * seeded exactly on a class carries a multiple of one, a firm between two classes is read against the nearer in log
      * distance, and a firm seeded inside AAA keeps the whole of its distance from the AAA spread.
      */
     public function testASeededSpreadIsReadAsAMultipleOfTheNearestClass(): void
@@ -483,8 +488,9 @@ class CreditRiskTest extends TestCase
     }
 
     /**
-     * Only the default part of a class spread scales with recovery (Duffie & Singleton 1999): at the class's own LGD the
-     * spread is unchanged, at half of it the default part halves while the non-default 40 bp (Longstaff, Mithal & Neis
+     * Only the default part of a class spread scales with recovery (Duffie & Singleton 1999): at the class's own LGD
+     * the spread is unchanged, at half of it the default part halves while the non-default 40 bp (Longstaff, Mithal &
+     * Neis
      * 2005) stays, and a class trading inside its non-default part has nothing to restate.
      */
     public function testARecoveryAdjustedSpreadScalesOnlyItsDefaultPart(): void

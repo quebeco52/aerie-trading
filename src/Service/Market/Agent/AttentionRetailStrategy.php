@@ -34,13 +34,26 @@ final class AttentionRetailStrategy implements AgentStrategyInterface
     // --- Attention-Driven Retail (Barber & Odean 2008, "All That Glitters") ---
     /** Share of agent capital retail holds in a name nobody is talking about; the book it sits on between episodes. */
     public const AGENT_RETAIL_BASE_SHARE = 0.10;
-    /** Most retail adds to a name on top of the base share when its attention score saturates. Bounded because attention buying is an episode, not a regime. */
+    /**
+     * Most retail adds to a name on top of the base share when its attention score saturates. Bounded because attention
+     * buying is an episode, not a regime.
+     */
     public const AGENT_RETAIL_MAX_ATTENTION_TILT = 0.35;
-    /** Standard deviations of one tick's move at which the extreme-return leg of attention saturates. Barber & Odean rank on the previous day's return, at either sign. */
+    /**
+     * Standard deviations of one tick's move at which the extreme-return leg of attention saturates. Barber & Odean
+     * rank on the previous day's return, at either sign.
+     */
     public const AGENT_RETAIL_RETURN_SIGMA = 2.50;
-    /** Multiple of expected volume at which the abnormal-volume leg saturates; the paper's own sort is on volume far above a name's normal. Must stay above one: at or below it, every ordinary tick would read as an attention episode. */
+    /**
+     * Multiple of expected volume at which the abnormal-volume leg saturates; the paper's own sort is on volume far
+     * above a name's normal. Must stay above one: at or below it, every ordinary tick would read as an attention
+     * episode.
+     */
     public const AGENT_RETAIL_VOLUME_MULTIPLE = 3.00;
-    /** Attention contributed by a name being in the news at all, before any move or volume. News is the third of the paper's three sorts and the only one that is not a market statistic. */
+    /**
+     * Attention contributed by a name being in the news at all, before any move or volume. News is the third of the
+     * paper's three sorts and the only one that is not a market statistic.
+     */
     public const AGENT_RETAIL_NEWS_ATTENTION = 0.50;
 
     public function identifier(): string

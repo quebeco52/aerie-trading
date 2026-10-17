@@ -27,7 +27,9 @@ final readonly class ManagementProfile
 {
     /** Median of the intensity draw: the archetype's published dials are the typical manager of that kind. */
     public const INTENSITY_MEDIAN = 1.0;
-    /** Log-scale dispersion of the draw, the spread Bertrand & Schoar find within a style rather than between styles. */
+    /**
+     * Log-scale dispersion of the draw, the spread Bertrand & Schoar find within a style rather than between styles.
+     */
     public const INTENSITY_SIGMA = 0.28;
     /** Floor: below this a manager is indistinguishable from a neutral operator wearing the label. */
     public const MIN_INTENSITY = 0.35;
@@ -121,7 +123,10 @@ final readonly class ManagementProfile
         return $backing + (($targetOperatingCash - $backing) * $this->cashTargetBias());
     }
 
-    /** The cash balance this manager runs the firm at, from the strategy's own target and the liability backing inside it. */
+    /**
+     * The cash balance this manager runs the firm at, from the strategy's own target and the liability backing inside
+     * it.
+     */
     public function managedTargetCash(TreasuryStrategyInterface $strategy, float $operatingBase, float $customerDeposits, float $wholesaleDebt): float
     {
         return $this->appliedTargetCash(

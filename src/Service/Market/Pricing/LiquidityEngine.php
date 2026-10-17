@@ -43,62 +43,111 @@ final class LiquidityEngine
     private const BUY_SIDE_ACTIONS = ['BUY', 'COVER'];
 
     // --- Corporate Flow Pacing (SEC Rule 10b-18) ---
-    /** Share of a day's average volume a repurchase program (or a placed offering's flowback) may execute per day under the 10b-18 volume condition. */
+    /**
+     * Share of a day's average volume a repurchase program (or a placed offering's flowback) may execute per day under
+     * the 10b-18 volume condition.
+     */
     public const CORPORATE_FLOW_MAX_ADV_SHARE_PER_DAY = 0.25;
 
     // --- Market Microstructure: Volume & Liquidity ---
-    /** Baseline annual share turnover as a fraction of the public float; the median large cap turns over a little more than its float each year. */
+    /**
+     * Baseline annual share turnover as a fraction of the public float; the median large cap turns over a little more
+     * than its float each year.
+     */
     public const BASELINE_ANNUAL_TURNOVER = 1.20;
-    /** Floor on average daily volume in shares. sqrt(Q/ADV) diverges as ADV approaches zero, so a dead name must be illiquid rather than untradable. */
+    /**
+     * Floor on average daily volume in shares. sqrt(Q/ADV) diverges as ADV approaches zero, so a dead name must be
+     * illiquid rather than untradable.
+     */
     public const MIN_ADV_SHARES = 1000.0;
     /** Shares in a typical print, used to turn daily volume into the trade count the spread relation needs. */
     public const TYPICAL_TRADE_SIZE_SHARES = 200.0;
-    /** Elasticity of traded volume to volatility (Karpoff 1987): both are driven by the same information arrivals, so a volatile tape is a busy one. */
+    /**
+     * Elasticity of traded volume to volatility (Karpoff 1987): both are driven by the same information arrivals, so a
+     * volatile tape is a busy one.
+     */
     public const VOLUME_VOLATILITY_ELASTICITY = 0.70;
     /** Lower bound on the volatility-driven activity multiplier applied to structural ADV. */
     public const MIN_ADV_ACTIVITY_MULTIPLIER = 0.40;
     /** Upper bound on that multiplier, so a crash does not manufacture unlimited liquidity. */
     public const MAX_ADV_ACTIVITY_MULTIPLIER = 3.00;
-    /** Lognormal dispersion of realized volume around its conditional mean (Clark 1973 mixture-of-distributions): the stationary sd of the log volume shock. */
+    /**
+     * Lognormal dispersion of realized volume around its conditional mean (Clark 1973 mixture-of-distributions): the
+     * stationary sd of the log volume shock.
+     */
     public const VOLUME_LOGNORMAL_SIGMA = 0.45;
-    /** Mean life of a volume shock in trading days: a busy day is followed by a busy one, log daily volume's first-order autocorrelation running ~0.6 (Lo & Wang 2000). */
+    /**
+     * Mean life of a volume shock in trading days: a busy day is followed by a busy one, log daily volume's first-order
+     * autocorrelation running ~0.6 (Lo & Wang 2000).
+     */
     public const VOLUME_SHOCK_PERSISTENCE_DAYS = 2.0;
     /** Reference single-name annual volatility that BASELINE_ANNUAL_TURNOVER is quoted against. */
     public const TURNOVER_REFERENCE_VOLATILITY = 0.18;
     /** Cross-sectional elasticity of turnover to volatility: volatile names change hands more often than quiet ones. */
     public const TURNOVER_VOLATILITY_ELASTICITY = 0.60;
-    /** Bounds on the structural turnover ratio, keeping even the quietest utility and the wildest speculative name inside a plausible range. */
+    /**
+     * Bounds on the structural turnover ratio, keeping even the quietest utility and the wildest speculative name
+     * inside a plausible range.
+     */
     public const MIN_ANNUAL_TURNOVER = 0.35;
     public const MAX_ANNUAL_TURNOVER = 4.00;
 
     // --- Market Microstructure: Spread (Wyart, Bouchaud, Kockelkoren, Potters & Vettorazzo 2008) ---
-    /** Coefficient c in S = c * sigma_daily / sqrt(N), the observed relation between spread, volatility and trade count. Near unity in real order-driven markets. */
+    /**
+     * Coefficient c in S = c * sigma_daily / sqrt(N), the observed relation between spread, volatility and trade count.
+     * Near unity in real order-driven markets.
+     */
     public const SPREAD_VOLATILITY_COEFFICIENT = 1.00;
     /** Ceiling on the quoted half-spread (2%), so even a distressed name stays tradable at a price. */
     public const MAX_HALF_SPREAD = 0.02;
 
     // --- Market Microstructure: Impact (Almgren, Thum, Hauptmann & Li 2005) ---
-    /** Linear peak impact coefficient. At 1.0 trading one full day's volume moves the price by one daily standard deviation; linear so the mark is additive across ticks and independent of the tick rate (Huberman & Stanzl 2004). */
+    /**
+     * Linear peak impact coefficient. At 1.0 trading one full day's volume moves the price by one daily standard
+     * deviation; linear so the mark is additive across ticks and independent of the tick rate (Huberman & Stanzl 2004).
+     */
     public const PEAK_IMPACT_GAMMA = 1.00;
-    /** Half-life of the transient part of impact, in years: NYSE price pressures decay with a 0.92-trading-day half-life (Hendershott & Menkveld 2014, JFE). */
+    /**
+     * Half-life of the transient part of impact, in years: NYSE price pressures decay with a 0.92-trading-day half-life
+     * (Hendershott & Menkveld 2014, JFE).
+     */
     public const TRANSIENT_IMPACT_HALF_LIFE_YEARS = 0.92 / FinancialConstants::TRADING_DAYS_PER_YEAR;
-    /** Temporary impact as a share of the peak move. The price walks to its new level while the order fills, so the taker's average fill is the midpoint of that walk: exactly one half. */
+    /**
+     * Temporary impact as a share of the peak move. The price walks to its new level while the order fills, so the
+     * taker's average fill is the midpoint of that walk: exactly one half.
+     */
     public const TEMPORARY_IMPACT_ETA = 0.50;
-    /** Largest multiple of average daily volume a single order may consume. Past it the impact law is extrapolation, and a capped impact would be a free lunch for size. */
+    /**
+     * Largest multiple of average daily volume a single order may consume. Past it the impact law is extrapolation, and
+     * a capped impact would be a free lunch for size.
+     */
     public const MAX_ORDER_ADV_MULTIPLE = 2.00;
     /** Flat half-spread on a sovereign bond, the deepest instrument on the desk. */
     public const BOND_HALF_SPREAD = 0.00005;
-    /** Half-spread on a CORPORATE issue. Wider than the sovereign by an order of magnitude and then some: a company's bonds trade in a fraction of the size, against a fraction of the buyers, and most of them sit in portfolios that never sell. Quoting them at the sovereign's depth would make credit risk free to get into and out of, which is the opposite of what makes it risky. */
+    /**
+     * Half-spread on a CORPORATE issue. Wider than the sovereign by an order of magnitude and then some: a company's
+     * bonds trade in a fraction of the size, against a fraction of the buyers, and most of them sit in portfolios that
+     * never sell. Quoting them at the sovereign's depth would make credit risk free to get into and out of, which is
+     * the opposite of what makes it risky.
+     */
     public const CORPORATE_BOND_HALF_SPREAD = 0.0015;
 
     // --- ETF Creation, Redemption and the Arbitrage Band (Petajisto 2017; Madhavan 2016) ---
-    /** Share of the arbitrage band a market maker quotes the fund inside. Below one because a maker sits inside the arbitrage, not at it — quoting AT the band would mean the creation trade never pays. */
+    /**
+     * Share of the arbitrage band a market maker quotes the fund inside. Below one because a maker sits inside the
+     * arbitrage, not at it — quoting AT the band would mean the creation trade never pays.
+     */
     public const ETF_QUOTE_BAND_SHARE = 0.35;
 
-    /** The stamp duty in force on each side of a share trade, which thins turnover; the ticker and the trade desk set it from the economy. */
+    /**
+     * The stamp duty in force on each side of a share trade, which thins turnover; the ticker and the trade desk set it
+     * from the economy.
+     */
     private float $stampDutyRate = FinancialConstants::STAMP_DUTY_RATE;
 
-    /** @var array<string, float> Each name's log volume shock, carried from tick to tick; lives as long as the process. */
+    /**
+     * @var array<string, float> Each name's log volume shock, carried from tick to tick; lives as long as the process.
+     */
     private array $volumeShock = [];
 
     public function __construct(
@@ -166,9 +215,9 @@ final class LiquidityEngine
     }
 
     /**
-     * Float times turnover, thinned by a stamp duty above the founding rate (MacroTransmission::calculateStampDutyVolumeFactor):
-     * spreads, impact and every order cap read volume, so a dearer round trip leaves a less liquid market, as France's
-     * 2012 tax did (Colliard & Hoffmann 2017).
+     * Float times turnover, thinned by a stamp duty above the founding rate
+     * (MacroTransmission::calculateStampDutyVolumeFactor): spreads, impact and every order cap read volume, so a dearer
+     * round trip leaves a less liquid market, as France's 2012 tax did (Colliard & Hoffmann 2017).
      */
     private function rawStructuralDailyVolume(Stock $stock): float
     {

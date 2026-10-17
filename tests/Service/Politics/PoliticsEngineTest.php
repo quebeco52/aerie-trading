@@ -110,17 +110,18 @@ class PoliticsEngineTest extends TestCase
     }
 
     /**
-     * Vote after vote at a trend economy, each cabinet taking office after its talks: the outgoing cabinet's parties lose
-     * about what the record's governments lose, the Diet is as volatile as the Nordic vote process makes a parliament of
-     * eight parties (13; Scandinavia 11 with four or five effective parties, ParlGov), the two big parties hold their
-     * seats across the 76 years the record covers, no party drifts into a majority of its own, and the talks run close to real ones. In the
-     * full loop about a third need a second attempt (Golder 2010) and they last about a month (Bäck, Hellström, Lindvall
-     * & Teorell 2023: 33.7 days, sd 33.9), 32% and 33.5 days (var/harness/politics/formation_report.py); at a trend
-     * economy they come easier, 27% and 32 days. They seat the governments Scandinavia's bloc parliaments have since 1945
-     * (ParlGov, 68 cabinets): minority cabinets 76% (84%), one party alone 46% (47%), and the parties at the Council
-     * axis's ends supporting far more often than they govern. A bloc puts its leader in office, so the largest party
-     * sits in 77% of cabinets, above Scandinavia's 63%, where the largest party leads the losing bloc more often; the two
-     * largest govern together in 4% (1.5%), as the core votes walk.
+     * Vote after vote at a trend economy, each cabinet taking office after its talks: the outgoing cabinet's parties
+     * lose about what the record's governments lose, the Diet is as volatile as the Nordic vote process makes a
+     * parliament of eight parties (13; Scandinavia 11 with four or five effective parties, ParlGov), the two big
+     * parties hold their seats across the 76 years the record covers, no party drifts into a majority of its own, and
+     * the talks run close to real ones. In the full loop about a third need a second attempt (Golder 2010) and they
+     * last about a month (Bäck, Hellström, Lindvall & Teorell 2023: 33.7 days, sd 33.9), 32% and 33.5 days
+     * (var/harness/politics/formation_report.py); at a trend economy they come easier, 27% and 32 days. They seat the
+     * governments Scandinavia's bloc parliaments have since 1945 (ParlGov, 68 cabinets): minority cabinets 76% (84%),
+     * one party alone 46% (47%), and the parties at the Council axis's ends supporting far more often than they govern.
+     * A bloc puts its leader in office, so the largest party sits in 77% of cabinets, above Scandinavia's 63%, where
+     * the largest party leads the losing bloc more often; the two largest govern together in 4% (1.5%), as the core
+     * votes walk.
      */
     public function testTheDietStaysBalancedAtItsCalibratedVolatility(): void
     {
@@ -201,7 +202,10 @@ class PoliticsEngineTest extends TestCase
         }
     }
 
-    /** A party's swings scale with its size as real vote shares' do: the Common Lot, 8 seats to the Civic Front's 94, swings the square root of 94/8, 3.4 times, as far in log share. */
+    /**
+     * A party's swings scale with its size as real vote shares' do: the Common Lot, 8 seats to the Civic Front's 94,
+     * swings the square root of 94/8, 3.4 times, as far in log share.
+     */
     public function testSmallPartiesSwingFurtherInLogShare(): void
     {
         $large = Politics::swingSd(Politics::ELECTION_SHORT_TERM_SWING_VARIANCE, Diet::SEED_VOTE_SHARES[Diet::CIVIC]);
@@ -249,7 +253,10 @@ class PoliticsEngineTest extends TestCase
         $this->assertEqualsWithDelta($seed[Diet::VANGUARD] / $seed[Diet::EXCHANGE], $shares[Diet::VANGUARD] / $shares[Diet::EXCHANGE], 1e-12);
     }
 
-    /** A party supporting the cabinet from outside shares the government's swing by the accountability voters hold it to. */
+    /**
+     * A party supporting the cabinet from outside shares the government's swing by the accountability voters hold it
+     * to.
+     */
     public function testASupportPartySharesTheSwingByItsAccountability(): void
     {
         $seed = Diet::SEED_VOTE_SHARES;
@@ -332,7 +339,9 @@ class PoliticsEngineTest extends TestCase
 
     // --- The calendar and the talks ---
 
-    /** The vote is held on the tick a term ends only; it opens the talks, and the outgoing cabinet stays on meanwhile. */
+    /**
+     * The vote is held on the tick a term ends only; it opens the talks, and the outgoing cabinet stays on meanwhile.
+     */
     public function testTheVoteIsHeldOnlyOnTheCalendarsElectionTick(): void
     {
         $engine = $this->engine($this->quietMath());
@@ -361,7 +370,10 @@ class PoliticsEngineTest extends TestCase
 
     // --- Falls between votes ---
 
-    /** A coalition can lose a partner and a minority cabinet its supporters; a party governing alone on its own majority has neither. */
+    /**
+     * A coalition can lose a partner and a minority cabinet its supporters; a party governing alone on its own majority
+     * has neither.
+     */
     public function testAFallsHazardFollowsTheCabinetsKind(): void
     {
         $seats = [Diet::CIVIC => 160.0, Diet::VANGUARD => 60.0, Diet::IRON_HARBOR => 40.0, Diet::EXCHANGE => 40.0];
@@ -373,8 +385,9 @@ class PoliticsEngineTest extends TestCase
     }
 
     /**
-     * On its day the cabinet falls: it stays on as caretaker, passes no budget, and the parties talk on the same seats for
-     * any cabinet but the one that fell; the government the talks produce takes office on its day and draws a day of its own.
+     * On its day the cabinet falls: it stays on as caretaker, passes no budget, and the parties talk on the same seats
+     * for any cabinet but the one that fell; the government the talks produce takes office on its day and draws a day
+     * of its own.
      */
     public function testACabinetFallsOnItsDayAndTheTalksSeatAnother(): void
     {
@@ -446,7 +459,10 @@ class PoliticsEngineTest extends TestCase
         $this->assertGreaterThan(0, $again, 'The parties that fell can govern together again.');
     }
 
-    /** A cabinet's day is an exponential wait at its kind's hazard, drawn once when it has none: the waits average the hazard's inverse. */
+    /**
+     * A cabinet's day is an exponential wait at its kind's hazard, drawn once when it has none: the waits average the
+     * hazard's inverse.
+     */
     public function testTheFallDayIsDrawnAtTheCabinetsHazard(): void
     {
         $engine = $this->engine(MathUtility::ownStream(5));
@@ -499,7 +515,10 @@ class PoliticsEngineTest extends TestCase
         $this->assertSame(-1.0, $state->coalitionTakesOfficeAt);
     }
 
-    /** The talks weigh the outgoing cabinet's incumbency: a cabinet going into the vote re-forms far more often than it forms after another. */
+    /**
+     * The talks weigh the outgoing cabinet's incumbency: a cabinet going into the vote re-forms far more often than it
+     * forms after another.
+     */
     public function testTheTalksWeighTheOutgoingCabinet(): void
     {
         mt_srand(11);
@@ -537,7 +556,10 @@ class PoliticsEngineTest extends TestCase
         $this->assertSame(-1.0, $state->coalitionTakesOfficeAt);
     }
 
-    /** A caretaker passes no budget, however long the talks run; the new cabinet legislates at the round after it takes office. */
+    /**
+     * A caretaker passes no budget, however long the talks run; the new cabinet legislates at the round after it takes
+     * office.
+     */
     public function testTheCaretakerPassesNoBudget(): void
     {
         $engine = $this->engine($this->quietMath());
@@ -579,7 +601,8 @@ class PoliticsEngineTest extends TestCase
 
     /**
      * Beside the engine, as the ticker runs them: a vote every term, each cabinet the talks produce takes office on its
-     * day, and the economy runs each tick on the levers and the election pulse the government handed it the tick before.
+     * day, and the economy runs each tick on the levers and the election pulse the government handed it the tick
+     * before.
      */
     public function testTheEngineAndThePoliticsRunSideBySide(): void
     {
@@ -688,7 +711,10 @@ class PoliticsEngineTest extends TestCase
         $this->assertNull(Politics::headline($state), 'Yesterday\'s election is not today\'s news.');
     }
 
-    /** A cabinet falling is news on its day, above a party taking office the same day; a cabinet taking office after talks is news on its day. */
+    /**
+     * A cabinet falling is news on its day, above a party taking office the same day; a cabinet taking office after
+     * talks is news on its day.
+     */
     public function testAFallAndAGovernmentAreReportedOnTheirDays(): void
     {
         $on = static function (array $marks): ?string {
@@ -734,7 +760,10 @@ class PoliticsEngineTest extends TestCase
 
     // --- The election pulse ---
 
-    /** Nearness to the vote ramps in over the final year of the term, from nothing at mid-term to the full lift on the eve. */
+    /**
+     * Nearness to the vote ramps in over the final year of the term, from nothing at mid-term to the full lift on the
+     * eve.
+     */
     public function testThePulseBuildsIntoAScheduledElection(): void
     {
         $midTerm = Politics::electionPulse(1.5, -1.0, -1.0);
@@ -759,8 +788,8 @@ class PoliticsEngineTest extends TestCase
     }
 
     /**
-     * Over a term with the average talks after the vote and after falls, the pulse averages nothing, so the calendar moves
-     * policy uncertainty through the term and leaves its mean where it was.
+     * Over a term with the average talks after the vote and after falls, the pulse averages nothing, so the calendar
+     * moves policy uncertainty through the term and leaves its mean where it was.
      */
     public function testThePulseAveragesNothingOverATermOfAverageTalks(): void
     {
@@ -856,7 +885,10 @@ class PoliticsEngineTest extends TestCase
         $this->assertSame($state->laborForceGrowthRate, $policy->laborForceGrowthRate);
     }
 
-    /** The closed end of the openness axis taxes foreign home buyers at Singapore's 60%; the open end and the middle tax none. */
+    /**
+     * The closed end of the openness axis taxes foreign home buyers at Singapore's 60%; the open end and the middle tax
+     * none.
+     */
     public function testTheClosedEndTaxesForeignHomeBuyers(): void
     {
         $this->assertSame(Politics::POLICY_PROTECTIONIST_FOREIGN_BUYER_TAX, Politics::platform(Diet::position(Diet::IRON_HARBOR, []))['foreignBuyerTax']);
@@ -865,7 +897,10 @@ class PoliticsEngineTest extends TestCase
         $this->assertEqualsWithDelta(Politics::POLICY_PROTECTIONIST_FOREIGN_BUYER_TAX / 2.0, Politics::platform([Diet::AXIS_OPENNESS => Diet::FIXED_POSITIONS[Diet::IRON_HARBOR][Diet::AXIS_OPENNESS] / 2.0])['foreignBuyerTax'], 1e-15);
     }
 
-    /** The ends of the size-of-state axis raise a debt repair's share by tax the 2010 UK manifestos apart, the neutral position keeping the average plan's mix; no revenue the brake guards. */
+    /**
+     * The ends of the size-of-state axis raise a debt repair's share by tax the 2010 UK manifestos apart, the neutral
+     * position keeping the average plan's mix; no revenue the brake guards.
+     */
     public function testTheConsolidationMixPlatformsSpanTheManifestoGap(): void
     {
         $civic = Politics::platform(Diet::position(Diet::CIVIC, []))['consolidationTaxShare'];
@@ -877,9 +912,9 @@ class PoliticsEngineTest extends TestCase
     }
 
     /**
-     * The technocratic half of the Council axis keeps the appointed commission, which grants two thirds of a request; the
-     * populist end grants as an elected one, about a third of that, so that ten elected commissions among fifty hold the
-     * US average of 58%.
+     * The technocratic half of the Council axis keeps the appointed commission, which grants two thirds of a request;
+     * the populist end grants as an elected one, about a third of that, so that ten elected commissions among fifty
+     * hold the US average of 58%.
      */
     public function testTheUtilityCommissionGrantsLessTowardThePopulistEnd(): void
     {
@@ -894,7 +929,10 @@ class PoliticsEngineTest extends TestCase
         $this->assertSame($appointed, (new PoliticsStateDTO())->utilityRateCaseGrantShare);
     }
 
-    /** The big-state end and the middle keep the founding 15%, no financial centre's left proposing more; the small-state end exempts dividends, as Singapore's one-tier system does. */
+    /**
+     * The big-state end and the middle keep the founding 15%, no financial centre's left proposing more; the
+     * small-state end exempts dividends, as Singapore's one-tier system does.
+     */
     public function testTheDividendTaxPlatformsRunFromExemptionToTheFoundingRate(): void
     {
         $half = Diet::FIXED_POSITIONS[Diet::CIVIC][Diet::AXIS_STATE] / 2.0;
@@ -907,7 +945,10 @@ class PoliticsEngineTest extends TestCase
         $this->assertSame(Diet::AXIS_STATE, Politics::LEVER_AXES['dividendTax']);
     }
 
-    /** The closed end keeps half the reserve fund's shares at home, as GPIF has since 2014; the open end none, as Norway's fund; the middle a quarter. */
+    /**
+     * The closed end keeps half the reserve fund's shares at home, as GPIF has since 2014; the open end none, as
+     * Norway's fund; the middle a quarter.
+     */
     public function testTheReserveHomeSharePlatformsRunFromNorwayToGpif(): void
     {
         $this->assertEqualsWithDelta(0.5, Politics::platform(Diet::position(Diet::IRON_HARBOR, []))['reserveHomeShare'], 1e-12);
@@ -917,7 +958,10 @@ class PoliticsEngineTest extends TestCase
         $this->assertSame(Diet::AXIS_OPENNESS, Politics::LEVER_AXES['reserveHomeShare']);
     }
 
-    /** The two ends of the size-of-state axis plan public spending 0.7% of GDP apart, the budget Singapore's parties argue over, the neutral position keeping the founding share. */
+    /**
+     * The two ends of the size-of-state axis plan public spending 0.7% of GDP apart, the budget Singapore's parties
+     * argue over, the neutral position keeping the founding share.
+     */
     public function testThePublicSpendingPlatformsSpanTheManifestoGap(): void
     {
         $civic = Politics::platform(Diet::position(Diet::CIVIC, []))['publicSpending'];
@@ -1010,7 +1054,8 @@ class PoliticsEngineTest extends TestCase
     /**
      * Politics between votes with the given cabinet and supporters on the given seats and the founding positions.
      *
-     * @param array<string, float> $seats   Seats of the cabinet's parties; the rest of the Diet holds none unless supporting.
+     * @param array<string, float> $seats   Seats of the cabinet's parties; the rest of the Diet holds none unless
+     *                                      supporting.
      * @param array<string, float> $support Seats of the support parties.
      */
     private function governedBy(array $seats, array $support = []): PoliticsState
@@ -1029,7 +1074,10 @@ class PoliticsEngineTest extends TestCase
         return $state;
     }
 
-    /** The day after the first vote, with the talks settled on a Vanguard cabinet the Exchange Party and the Chartists support. */
+    /**
+     * The day after the first vote, with the talks settled on a Vanguard cabinet the Exchange Party and the Chartists
+     * support.
+     */
     private function pendingGovernment(float $takesOfficeAt): PoliticsState
     {
         $economy = $this->economy(self::ELECTION_AT);
@@ -1124,7 +1172,10 @@ class PoliticsEngineTest extends TestCase
         $this->assertSame(0.0, $founding['extractionStringency']);
     }
 
-    /** A party's programme, the standing levers and the state fields all list the levers in one order, so a budget that changes nothing compares equal. */
+    /**
+     * A party's programme, the standing levers and the state fields all list the levers in one order, so a budget that
+     * changes nothing compares equal.
+     */
     public function testEveryLeverListIsInPlatformOrder(): void
     {
         $order = array_keys(Politics::partyProgramme(Diet::CIVIC, Diet::HOME_POSITIONS));
@@ -1174,8 +1225,9 @@ class PoliticsEngineTest extends TestCase
     }
 
     /**
-     * The stamp duty runs along the size-of-state axis from the founding 0.05% a side at the Vanguard's end to Hong Kong's
-     * 2021 duty, 0.13% a side, at the Civic Front's; it goes to the reserve fund, so the Council does not guard it.
+     * The stamp duty runs along the size-of-state axis from the founding 0.05% a side at the Vanguard's end to Hong
+     * Kong's 2021 duty, 0.13% a side, at the Civic Front's; it goes to the reserve fund, so the Council does not guard
+     * it.
      */
     public function testTheStampDutyRunsFromTheFoundingRateToHongKongsDuty(): void
     {
@@ -1186,7 +1238,10 @@ class PoliticsEngineTest extends TestCase
         $this->assertEqualsWithDelta((FinancialConstants::STAMP_DUTY_RATE + Politics::POLICY_BIG_STATE_STAMP_DUTY) / 2.0, Politics::platform([Diet::AXIS_STATE => 0.0])['stampDutyRate'], 1e-15);
     }
 
-    /** The bank levy runs from none at the Vanguard's end to Ireland's levy at the Civic Front's; net taxes give back what it raises, so the Council does not guard it. */
+    /**
+     * The bank levy runs from none at the Vanguard's end to Ireland's levy at the Civic Front's; net taxes give back
+     * what it raises, so the Council does not guard it.
+     */
     public function testTheBankLevyRunsFromNoneToTheUksPeak(): void
     {
         $positions = Diet::HOME_POSITIONS;
@@ -1196,9 +1251,9 @@ class PoliticsEngineTest extends TestCase
     }
 
     /**
-     * The share of the reserve fund's return spent runs from the founding half at the Vanguard's end to 60% at the Civic
-     * Front's. The fund holds the second key on anything above half: it consents only while unemployment shows a recession under way,
-     * and out of one the share above lapses, whatever the Council would say of the revenue.
+     * The share of the reserve fund's return spent runs from the founding half at the Vanguard's end to 60% at the
+     * Civic Front's. The fund holds the second key on anything above half: it consents only while unemployment shows a
+     * recession under way, and out of one the share above lapses, whatever the Council would say of the revenue.
      */
     public function testTheFundHoldsTheSecondKeyOnTheDrawAboveHalf(): void
     {

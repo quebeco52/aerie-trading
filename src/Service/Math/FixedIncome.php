@@ -28,13 +28,19 @@ final class FixedIncome
         return max(0.0, $policyRate - MacroEngine::CASH_YIELD_SPREAD);
     }
 
-    /** The floating mortgage rate a borrower expects over a decade: the expected path of the policy rate, the ten-year without its term premium, plus the mortgage spread. */
+    /**
+     * The floating mortgage rate a borrower expects over a decade: the expected path of the policy rate, the ten-year
+     * without its term premium, plus the mortgage spread.
+     */
     public static function expectedMortgageRate(float $riskNeutralTenYear): float
     {
         return $riskNeutralTenYear + MacroEngine::RESIDENTIAL_MORTGAGE_SPREAD;
     }
 
-    /** The District's floating mortgage rate: the policy rate, as a quarter's resets have passed it on, plus the mortgage spread. */
+    /**
+     * The District's floating mortgage rate: the policy rate, as a quarter's resets have passed it on, plus the
+     * mortgage spread.
+     */
     public static function mortgageRate(float $policyRateEma): float
     {
         return $policyRateEma + MacroEngine::RESIDENTIAL_MORTGAGE_SPREAD;
@@ -131,9 +137,9 @@ final class FixedIncome
     }
 
     /**
-     * The ten-year term premium a debt's maturity adds against a reference book: the duration private holders must absorb
-     * rises with debt times its average maturity (Greenwood & Vayanos 2014's maturity-weighted debt to GDP), and the
-     * premium with it, linearly about the reference (Hamilton & Wu 2012).
+     * The ten-year term premium a debt's maturity adds against a reference book: the duration private holders must
+     * absorb rises with debt times its average maturity (Greenwood & Vayanos 2014's maturity-weighted debt to GDP), and
+     * the premium with it, linearly about the reference (Hamilton & Wu 2012).
      *
      * @param float $debtToGdp          Debt held by the public, over GDP.
      * @param float $averageMaturity    Its average maturity, in years.
@@ -146,8 +152,8 @@ final class FixedIncome
     }
 
     /**
-     * The ten-year term premium the stock of debt adds against a reference stock at the reference maturity: more debt at
-     * an unchanged maturity is more duration for private holders to absorb (Greenwood & Vayanos 2014). With
+     * The ten-year term premium the stock of debt adds against a reference stock at the reference maturity: more debt
+     * at an unchanged maturity is more duration for private holders to absorb (Greenwood & Vayanos 2014). With
      * calculateMaturitySupplyTermPremium() it prices the whole book against the reference one, D·M − D0·M0.
      *
      * @param float $debtToGdp           Debt held by the public, over GDP.
@@ -398,9 +404,9 @@ final class FixedIncome
 
     /**
      * Price change of a book laddered evenly out to twice its duration when its yield moves by dy, as a fraction: equal
-     * present values on maturities spread evenly over [0, 2D] each reprice by exp(-dy t), which averages to
-     * (1 - exp(-2D dy)) / (2D dy) - 1 (continuously compounded). Exact for the ladder at any move; to second order it is
-     * -D dy + 0.5 C dy^2 with the ladder's convexity C = 4D^2/3, a third more than a bullet of the same duration.
+     * present values on maturities spread evenly over [0, 2D] each reprice by exp(-dy t), which averages to (1 -
+     * exp(-2D dy)) / (2D dy) - 1 (continuously compounded). Exact for the ladder at any move; to second order it is -D
+     * dy + 0.5 C dy^2 with the ladder's convexity C = 4D^2/3, a third more than a bullet of the same duration.
      */
     public static function calculateLadderPriceChange(float $duration, float $yieldChange): float
     {

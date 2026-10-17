@@ -81,8 +81,8 @@ class FinancialRegulatorTest extends TestCase
     }
 
     /**
-     * At Year 1 the head seated before it runs the requirement the banks opened under, chosen over no one on record; the
-     * economy is handed that requirement, and nothing before the Regulator has a head.
+     * At Year 1 the head seated before it runs the requirement the banks opened under, chosen over no one on record;
+     * the economy is handed that requirement, and nothing before the Regulator has a head.
      */
     public function testTheHeadAtYearOneRunsTheOpeningRequirement(): void
     {
@@ -103,8 +103,9 @@ class FinancialRegulatorTest extends TestCase
     }
 
     /**
-     * The mortgage cap and the neutral buffer tighten together with the stance: none at or below the stance the District
-     * opened under, then linearly to the strictest, the cap starting where no buyer borrows, so it moves continuously.
+     * The mortgage cap and the neutral buffer tighten together with the stance: none at or below the stance the
+     * District opened under, then linearly to the strictest, the cap starting where no buyer borrows, so it moves
+     * continuously.
      */
     public function testTheCapAndBufferTightenFromTheOpeningStance(): void
     {
@@ -194,7 +195,8 @@ class FinancialRegulatorTest extends TestCase
 
     /**
      * A running game that predates the Regulator gains a head on its next tick, chosen as they would have been for the
-     * term in progress, whose requirement is taken as already in force; its Council, governor and committee are untouched.
+     * term in progress, whose requirement is taken as already in force; its Council, governor and committee are
+     * untouched.
      */
     public function testARunningGameGainsAHeadForTheTermInProgress(): void
     {

@@ -68,7 +68,9 @@ class AcquisitionContext
     public float $costOfNewBorrowing = 0.0;
 
     // Deal Config
-    /** @var array{prob: float, spend: float, type: string, use_leverage: bool, use_stock: bool, style_priced?: bool} Set when a deal is struck; nothing reads it before. */
+    /**
+     * @var array{prob: float, spend: float, type: string, use_leverage: bool, use_stock: bool, style_priced?: bool} Set when a deal is struck; nothing reads it before.
+     */
     public array $config;
     public bool $dealExecuted = false;
     public float $availableCapital = 0.0;

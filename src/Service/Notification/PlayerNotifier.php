@@ -85,7 +85,8 @@ class PlayerNotifier
      * Queues one message to each holder of a position an issuer's action changed. The holders are read by the caller,
      * at the action, because the action that closes a position deletes the rows publish() would otherwise read.
      *
-     * @param iterable<array<string, mixed>> $holders Rows carrying user_id and the signed quantity, often straight from SQL.
+     * @param iterable<array<string, mixed>> $holders Rows carrying user_id and the signed quantity, often straight from
+     *                                                SQL.
      * @param callable(float): string        $body    The message for a holding of that signed size.
      */
     public function queueForHolders(iterable $holders, string $ticker, string $title, callable $body, string $link): void
@@ -189,7 +190,9 @@ class PlayerNotifier
         return $messages;
     }
 
-    /** @param list<array{user: int, kind: string, title: string, body: ?string, ticker: ?string, link: ?string}> $messages */
+    /**
+     * @param list<array{user: int, kind: string, title: string, body: ?string, ticker: ?string, link: ?string}> $messages
+     */
     private function insert(array $messages, ?float $simTime): void
     {
         $conn = $this->entityManager->getConnection();
@@ -220,7 +223,9 @@ class PlayerNotifier
         }
     }
 
-    /** @param list<array{user: int, kind: string, title: string, body: ?string, ticker: ?string, link: ?string}> $messages */
+    /**
+     * @param list<array{user: int, kind: string, title: string, body: ?string, ticker: ?string, link: ?string}> $messages
+     */
     private function push(array $messages, ?float $simTime): void
     {
         $dateline = $simTime === null ? null : DistrictCalendar::dateline($simTime);

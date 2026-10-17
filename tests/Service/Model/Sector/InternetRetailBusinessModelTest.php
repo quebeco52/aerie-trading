@@ -200,7 +200,10 @@ class InternetRetailBusinessModelTest extends TestCase
         $this->assertEqualsWithDelta($expected, $this->model->resolveSectorActivityShift($stock, $recession), 1e-9);
     }
 
-    /** Online's drift is the District's own adoption, 4% of retail to 6.5% over a decade, net of retail's own drift: about half the mainland's. */
+    /**
+     * Online's drift is the District's own adoption, 4% of retail to 6.5% over a decade, net of retail's own drift:
+     * about half the mainland's.
+     */
     public function testTheSecularExcessIsTheDistrictsOnlineAdoption(): void
     {
         $excess = $this->model->getSecularGrowthRate(new Stock()) - MacroEngine::TREND_REAL_GROWTH;

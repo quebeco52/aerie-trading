@@ -30,15 +30,24 @@ use App\Service\Model\ModelParameters;
 class AssetManagementBusinessModel extends BaseFinancialBusinessModel
 {
     // --- Operating Cyclicality & Demand Structure ---
-    /** Elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). AUM and flows amplify the market cycle. */
+    /**
+     * Elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). AUM and flows amplify
+     * the market cycle.
+     */
     public const OPERATING_CYCLICALITY = 1.20;
 
     // --- Balance Sheet Realism ---
-    /** Stock-based compensation (ASC 718) as a share of revenue: Investments & Asset Management, 5.08% of revenue, 283 firms (Damodaran, Employee data by industry, US, January 2026). */
+    /**
+     * Stock-based compensation (ASC 718) as a share of revenue: Investments & Asset Management, 5.08% of revenue, 283
+     * firms (Damodaran, Employee data by industry, US, January 2026).
+     */
     public const STOCK_COMPENSATION_INTENSITY = 0.0508;
 
     // --- Labor Intensity ---
-    /** Labor share of the fixed cost base exposed to the Beveridge wage squeeze. Portfolio manager and distribution compensation dominates asset manager overhead. */
+    /**
+     * Labor share of the fixed cost base exposed to the Beveridge wage squeeze. Portfolio manager and distribution
+     * compensation dominates asset manager overhead.
+     */
     public const FIXED_COST_LABOR_SHARE = 0.70;
 
     // --- Analyst Visibility & Error ---
@@ -65,7 +74,10 @@ class AssetManagementBusinessModel extends BaseFinancialBusinessModel
     }
 
     // --- Secular Demand ---
-    /** Securities, commodity contracts and investments value added as a share of US nominal GDP in 1997 (BEA GDP by Industry, value added). */
+    /**
+     * Securities, commodity contracts and investments value added as a share of US nominal GDP in 1997 (BEA GDP by
+     * Industry, value added).
+     */
     public const SECULAR_SHARE_1997 = 0.0141;
     /** The same share in 2019. */
     public const SECULAR_SHARE_2019 = 0.0130;
@@ -107,11 +119,21 @@ class AssetManagementBusinessModel extends BaseFinancialBusinessModel
     public const PERFORMANCE_FEE_WEIGHT    = 0.20;
 
     // --- AUM Market Beta & Performance Fees ---
-    /** Sensitivity of AUM management fee base to the output gap: the net-flow half of AUM, since clients add money in expansions and redeem in slumps. */
+    /**
+     * Sensitivity of AUM management fee base to the output gap: the net-flow half of AUM, since clients add money in
+     * expansions and redeem in slumps.
+     */
     public const AUM_MARKET_BETA_SCALAR    = 0.40;
-    /** AUM beta to the equity market's level against its three-year trend: the mark-to-market half. Under one because a manager's book is only part equities (roughly half at the large diversified houses per their AUM-mix disclosures). */
+    /**
+     * AUM beta to the equity market's level against its three-year trend: the mark-to-market half. Under one because a
+     * manager's book is only part equities (roughly half at the large diversified houses per their AUM-mix
+     * disclosures).
+     */
     public const AUM_MARKET_LEVEL_BETA     = 0.60;
-    /** Cap on the market-level deviation the fee base reacts to, the same clamp the household wealth channel applies in the IS curve. */
+    /**
+     * Cap on the market-level deviation the fee base reacts to, the same clamp the household wealth channel applies in
+     * the IS curve.
+     */
     public const AUM_MARKET_LEVEL_DEVIATION_CAP = 0.60;
     /** Z-score threshold above which strong fund alpha crystallizes outsized performance fees / carried interest. */
     public const PERFORMANCE_FEE_Z_FLOOR   = 1.50;
@@ -127,13 +149,19 @@ class AssetManagementBusinessModel extends BaseFinancialBusinessModel
     public const PERF_BONUS_POOL_PAYOUT    = 0.40;
 
     // --- Structural Efficiency Floor ---
-    /** Minimum cost-to-revenue ratio: high operating leverage ensures variable margin does not collapse below structural platform overhead. */
+    /**
+     * Minimum cost-to-revenue ratio: high operating leverage ensures variable margin does not collapse below structural
+     * platform overhead.
+     */
     public const MIN_EFFICIENCY_RATIO      = 0.35;
 
     // --- Broad Money Supply & AUM Inflows ---
     /** Sensitivity of institutional and retail AUM fund inflows to broad money supply (M2) expansion. */
     public const M2_AUM_INFLOW_SENSITIVITY = 0.35;
-    /** Base-fee lift per unit of money-market share gained this quarter: the migrating cash lands in the manager's money funds (2022-23: +5 points of share, +27% money-fund assets). */
+    /**
+     * Base-fee lift per unit of money-market share gained this quarter: the migrating cash lands in the manager's money
+     * funds (2022-23: +5 points of share, +27% money-fund assets).
+     */
     public const MMF_AUM_INFLOW_SENSITIVITY = 1.5;
 
     // --- Seed Capital & Co-Investment Volatility ---
@@ -251,7 +279,8 @@ class AssetManagementBusinessModel extends BaseFinancialBusinessModel
         // but we MUST cap the turnover. If margins compress due to market saturation,
         // uncapped reverse-engineering will cause top-line revenue hyperinflation!
         $unboundedRevenue = max(0.0, $targetEbit) / $stableMargin;
-        $targetRevenue = min($unboundedRevenue, $earningAssets * self::MAX_TURNOVER_CAP); // Hard cap turnover at 2.0x annually
+        // Hard cap turnover at 2.0x annually
+        $targetRevenue = min($unboundedRevenue, $earningAssets * self::MAX_TURNOVER_CAP);
 
         $impliedTurnover = $targetRevenue / max(1.0, $earningAssets);
 
@@ -485,7 +514,8 @@ class AssetManagementBusinessModel extends BaseFinancialBusinessModel
 
     public function calculateOrganicCapexSpend(float $organicSpend, float $debtIssued): float
     {
-        // Asset managers and brokerages use capital to seed new funds, acquire advisory firms, and build trading platforms.
+        // Asset managers and brokerages use capital to seed new funds, acquire advisory firms, and build trading
+        // platforms.
         return max($organicSpend, $debtIssued * self::DEBT_CAPEX_DEPLOYMENT);
     }
 

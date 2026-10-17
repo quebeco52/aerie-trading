@@ -143,7 +143,8 @@ class ShippingBusinessModelTest extends TestCase
         $after = $run($ongoing->streamZ, true);
         $this->assertSame(0.0, $after->streamZ[$regimeKey]);
         $this->assertLessThan($ongoing->actualRevenue, $after->actualRevenue, 'spot rates normalize once berths clear');
-        // The charter book and the mix have moved on meanwhile, so the baseline is the same firm with no regime on its books.
+        // The charter book and the mix have moved on meanwhile, so the baseline is the same firm with no regime on its
+        // books.
         $sameBookNoRegime = $ongoing->streamZ;
         unset($sameBookNoRegime[$regimeKey]);
         $baseline = $run($sameBookNoRegime, false);
@@ -169,7 +170,8 @@ class ShippingBusinessModelTest extends TestCase
         $neutral = new MacroStateDTO(outputGapEma: 0.0, exchangeRateIndexEma: 100.0, freightRateIndexEma: MacroEngine::FREIGHT_BASELINE);
         $slump = new MacroStateDTO(outputGapEma: $gap, exchangeRateIndexEma: 100.0, freightRateIndexEma: MacroEngine::FREIGHT_BASELINE);
 
-        // The root carries no cycle; the spot book takes the cargo elasticity, and a fresh charter book its burn rate of it.
+        // The root carries no cycle; the spot book takes the cargo elasticity, and a fresh charter book its burn rate
+        // of it.
         $this->assertEqualsWithDelta(0.0, $model->getMacroPhysics($stock, $slump)['macro_demand_shift'], 1e-12);
         $base = $run($neutral);
         $low = $run($slump);
@@ -207,7 +209,8 @@ class ShippingBusinessModelTest extends TestCase
         $spotHome = $model->computeActualFinancials($stock, 1000.0, 0.40, 50.0, 0.15, $home, $quiet)->streamRevenue['spot'];
         $spotAbroad = $model->computeActualFinancials($stock, 1000.0, 0.40, 50.0, 0.15, $abroad, $quiet)->streamRevenue['spot'];
 
-        // Cargo volume, once: the spot book carries the foreign gap at FOREIGN_DEMAND_SENSITIVITY, the root shift none of it.
+        // Cargo volume, once: the spot book carries the foreign gap at FOREIGN_DEMAND_SENSITIVITY, the root shift none
+        // of it.
         $this->assertEqualsWithDelta(0.03 * ShippingBusinessModel::FOREIGN_DEMAND_SENSITIVITY, ($spotAbroad / $spotHome) - 1.0, 1e-9);
         $this->assertEqualsWithDelta(
             $model->getMacroPhysics($stock, $home)['macro_demand_shift'],

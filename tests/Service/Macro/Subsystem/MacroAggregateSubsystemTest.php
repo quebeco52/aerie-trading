@@ -159,7 +159,8 @@ class MacroAggregateSubsystemTest extends TestCase
         // 2. Supply chain shock scenario: neutral wage growth, high freight
         $stateSupply = new MacroState();
         $stateSupply->wageGrowth = 0.035; // Neutral wage growth
-        $stateSupply->freightRateIndex = 2.0 * MacroEngine::FREIGHT_BASELINE; // Freight doubled, its quarter average still catching up
+        // Freight doubled, its quarter average still catching up
+        $stateSupply->freightRateIndex = 2.0 * MacroEngine::FREIGHT_BASELINE;
         $stateSupply->freightRateIndexEma = MacroEngine::FREIGHT_BASELINE;
         $stateSupply->inflation = 0.02;
 
@@ -536,8 +537,8 @@ class MacroAggregateSubsystemTest extends TestCase
 
     /**
      * The coefficients are MPCs on stocks, entered as drifts at the demand equation's own pull (Mian, Rao & Sufi 2013;
-     * Chodorow-Reich, Nenov & Simsek 2021). Held, a wealth gain settles domestic demand where that pull balances it: the
-     * MPC on the stock, before policy answers any of it. A held state holds no sales surprise, so inventories add
+     * Chodorow-Reich, Nenov & Simsek 2021). Held, a wealth gain settles domestic demand where that pull balances it:
+     * the MPC on the stock, before policy answers any of it. A held state holds no sales surprise, so inventories add
      * nothing. Measured in slack, below the capacity ceiling.
      */
     public function testAHeldWealthGainSettlesSpendingAtTheMpcOnTheStock(): void
@@ -856,7 +857,9 @@ class MacroAggregateSubsystemTest extends TestCase
         $this->assertEqualsWithDelta($gapCalm, $gapSpiked, 1e-12, 'Headline inflation has no place in the ex-ante real rate.');
     }
 
-    /** A rise in short-horizon expectations lowers the real policy leg and lifts demand; the fixed-rate leg is unmoved. */
+    /**
+     * A rise in short-horizon expectations lowers the real policy leg and lifts demand; the fixed-rate leg is unmoved.
+     */
     public function testHigherExpectedInflationLowersTheRealPolicyLegOnly(): void
     {
         // Two fresh states: one call mutates the demand disturbance it is handed, so reusing a single
@@ -875,8 +878,9 @@ class MacroAggregateSubsystemTest extends TestCase
 
     /**
      * The mirror of the case above on the restrictive side: from a stance already restrictive, lower expected inflation
-     * raises the real policy leg further, and drags at the restrictive rate. (The neutral fixture's five-year sits a term
-     * premium under its neutral, so the fixture itself is slightly accommodative; starting from it would cross the kink.)
+     * raises the real policy leg further, and drags at the restrictive rate. (The neutral fixture's five-year sits a
+     * term premium under its neutral, so the fixture itself is slightly accommodative; starting from it would cross the
+     * kink.)
      */
     public function testLowerExpectedInflationTightensAtTheRestrictiveRate(): void
     {
@@ -935,7 +939,10 @@ class MacroAggregateSubsystemTest extends TestCase
         $this->assertEqualsWithDelta(0.0, $run($favorable) - $gapNeutral, 1e-12, 'Easy credit does not lift demand.');
     }
 
-    /** Capital the banks must hold but have not built is credit premium: a 1pp shortfall drags as 0.22pp of premium does. */
+    /**
+     * Capital the banks must hold but have not built is credit premium: a 1pp shortfall drags as 0.22pp of premium
+     * does.
+     */
     public function testUnbuiltCapitalDragsDemandAsPremium(): void
     {
         $built = $this->neutralBorrowingState();
@@ -955,7 +962,10 @@ class MacroAggregateSubsystemTest extends TestCase
         $this->assertEqualsWithDelta(0.0, $run($over) - $gapBuilt, 1e-12, 'Capital held beyond the requirement rations nothing.');
     }
 
-    /** The fixed-rate leg is the real five-year: the breakeven deflates it, so a higher breakeven at the same nominal yield is easier money. */
+    /**
+     * The fixed-rate leg is the real five-year: the breakeven deflates it, so a higher breakeven at the same nominal
+     * yield is easier money.
+     */
     public function testAHigherBreakevenAtTheSameNominalFiveYearIsEasierMoney(): void
     {
         $anchored = $this->neutralBorrowingState();
@@ -1000,7 +1010,10 @@ class MacroAggregateSubsystemTest extends TestCase
         return (1.0 - exp(-$dt / MacroAggregateSubsystem::MONETARY_TRANSMISSION_LAG_YEARS)) ** 2;
     }
 
-    /** Demand answers a change in the tax stance, not its level: a rate held for a decade is in potential (Blanchard 1990). */
+    /**
+     * Demand answers a change in the tax stance, not its level: a rate held for a decade is in potential (Blanchard
+     * 1990).
+     */
     public function testTheTaxChannelReadsTheRateAgainstItsTrend(): void
     {
         $neutral = $this->neutralBorrowingState();
@@ -1018,7 +1031,10 @@ class MacroAggregateSubsystemTest extends TestCase
     }
 
     /** A state with every demand channel at its baseline, so only the borrowing-cost terms can move the gap. */
-    /** The overhang is kept in the inventory-to-sales ratio its readers take it in: a miss worth a share of output, over the ratio. */
+    /**
+     * The overhang is kept in the inventory-to-sales ratio its readers take it in: a miss worth a share of output, over
+     * the ratio.
+     */
     public function testADemandMissBuildsAnOverhangInTheInventoryToSalesRatio(): void
     {
         $state = $this->neutralBorrowingState();
@@ -1066,7 +1082,9 @@ class MacroAggregateSubsystemTest extends TestCase
         $this->assertEqualsWithDelta(MacroEngine::TARGET_INFLATION, $this->breakeven($this->onTargetInflationState()), 1e-15);
     }
 
-    /** The ten-year moves by the fitted loadings: per point of core over target, and per point of headline over core. */
+    /**
+     * The ten-year moves by the fitted loadings: per point of core over target, and per point of headline over core.
+     */
     public function testTheBreakevenMovesByItsLoadingsOnCoreAndOnHeadlineOverCore(): void
     {
         $base = $this->onTargetInflationState();
@@ -1113,7 +1131,10 @@ class MacroAggregateSubsystemTest extends TestCase
         $this->assertLessThan(0.20, $share);
     }
 
-    /** The gap adds nothing once inflation is held (CBO gap 0.02, se 0.02), and neither headline noise nor equity panic is an expectation. */
+    /**
+     * The gap adds nothing once inflation is held (CBO gap 0.02, se 0.02), and neither headline noise nor equity panic
+     * is an expectation.
+     */
     public function testTheBreakevenIgnoresTheGapHeadlineNoiseAndEquityVolatility(): void
     {
         $hot = $this->onTargetInflationState();
@@ -1127,8 +1148,8 @@ class MacroAggregateSubsystemTest extends TestCase
     }
 
     /**
-     * The quote dips with the excess bond premium by the fitted -0.356 a point, the TIPS liquidity squeeze; the expected
-     * inflation the economy reads does not move with it.
+     * The quote dips with the excess bond premium by the fitted -0.356 a point, the TIPS liquidity squeeze; the
+     * expected inflation the economy reads does not move with it.
      */
     public function testTheQuotedBreakevenDipsWithTheBondPremiumButExpectationsDoNot(): void
     {
@@ -1157,7 +1178,10 @@ class MacroAggregateSubsystemTest extends TestCase
         return $state;
     }
 
-    /** Baker, Bloom & Davis (2016): spikes in policy uncertainty cost output (Bloom 2009 wait-and-see), but calm does not stimulate. */
+    /**
+     * Baker, Bloom & Davis (2016): spikes in policy uncertainty cost output (Bloom 2009 wait-and-see), but calm does
+     * not stimulate.
+     */
     public function testPolicyUncertaintyDragsDemandInLogs(): void
     {
         $neutral = new MacroState();
@@ -1209,7 +1233,8 @@ class MacroAggregateSubsystemTest extends TestCase
         $gapHome = $this->subsystem->calculateOutputGap($home, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, $dt, 1.0);
         $gapAbroad = $this->subsystem->calculateOutputGap($abroad, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, $dt, 1.0);
 
-        // The mainland's demand buys the civilian exports, of which the District's own value added is output; the arms makers sell into allied budgets instead.
+        // The mainland's demand buys the civilian exports, of which the District's own value added is output; the arms
+        // makers sell into allied budgets instead.
         $longRun = (MacroAggregateSubsystem::DISTRICT_EXPORT_SHARE - MacroAggregateSubsystem::DISTRICT_DEFENSE_EXPORT_SHARE) * (1.0 - MacroAggregateSubsystem::FOREIGN_VALUE_ADDED_SHARE_OF_EXPORTS) * MacroAggregateSubsystem::EXPORT_DEMAND_ELASTICITY * 0.03;
         $firstQuarter = 1.0 - exp(-$dt / MacroAggregateSubsystem::exportDemandAdjustmentYears());
         $this->assertEqualsWithDelta($firstQuarter * $longRun, $abroad->netExportGap, 1e-12, 'A quarter brings the first slice of the response, not all of it.');
@@ -1223,7 +1248,8 @@ class MacroAggregateSubsystemTest extends TestCase
         }
         $this->assertEqualsWithDelta((1.0 - MacroAggregateSubsystem::EXPORT_DEMAND_PERSISTENCE) * $longRun, $abroad->netExportGap, 1e-12, 'A year brings the short-run elasticity.');
 
-        // The domestic-demand equation does not pull the export level back: held, it builds to the long-run size and stays.
+        // The domestic-demand equation does not pull the export level back: held, it builds to the long-run size and
+        // stays.
         for ($i = 0; $i < 120; $i++) {
             $home->outputGap = $gapHome = $this->subsystem->calculateOutputGap($home, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, $dt, 1.0);
             $abroad->outputGap = $gapAbroad = $this->subsystem->calculateOutputGap($abroad, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, $dt, 1.0);
@@ -1232,7 +1258,9 @@ class MacroAggregateSubsystemTest extends TestCase
         $this->assertEqualsWithDelta($longRun, $gapAbroad - $gapHome, 1e-6);
     }
 
-    /** The UK equation's own numbers: 0.48 within the year, 1.43 in the long run, lambda 0.66 on last year's exports. */
+    /**
+     * The UK equation's own numbers: 0.48 within the year, 1.43 in the long run, lambda 0.66 on last year's exports.
+     */
     public function testExportPartialAdjustmentIsTheUkEquation(): void
     {
         $this->assertEqualsWithDelta(MacroAggregateSubsystem::EXPORT_DEMAND_PERSISTENCE, exp(-1.0 / MacroAggregateSubsystem::exportDemandAdjustmentYears()), 1e-12, 'A year of the lag leaves lambda of the gap to close.');
@@ -1303,7 +1331,10 @@ class MacroAggregateSubsystemTest extends TestCase
         $this->assertLessThan(0.0, MacroAggregateSubsystem::goodsExportVolumeGap(0.0, 0.1, 0.0), 'And prices exports out.');
     }
 
-    /** Drehmann, Juselius & Korinek (2018): borrowed income is spent as it is borrowed, and income repaid out of the stock is not spent. */
+    /**
+     * Drehmann, Juselius & Korinek (2018): borrowed income is spent as it is borrowed, and income repaid out of the
+     * stock is not spent.
+     */
     public function testNewHouseholdBorrowingMovesDemandBothWays(): void
     {
         $neutral = new MacroState();
@@ -1322,7 +1353,9 @@ class MacroAggregateSubsystemTest extends TestCase
         $this->assertEqualsWithDelta(-MacroAggregateSubsystem::DOMESTIC_GAP_WEIGHT * MacroAggregateSubsystem::KALDOR_HOUSEHOLD_NEW_BORROWING * 0.03 * $dt, $gapRepaying - $gapNeutral, 1e-9, 'Paying the stock down is the same flow the other way.');
     }
 
-    /** Drehmann, Juselius & Korinek (2018): service below its average leaves income to spend; above it, repayment drags. */
+    /**
+     * Drehmann, Juselius & Korinek (2018): service below its average leaves income to spend; above it, repayment drags.
+     */
     public function testHouseholdDebtServiceMovesDemandBothWaysAroundItsAverage(): void
     {
         $neutral = new MacroState();
@@ -1936,9 +1969,10 @@ class MacroAggregateSubsystemTest extends TestCase
     }
 
     /**
-     * Market-based finance is counted with the domestic economy: national accounts do not measure fund managers' output at
-     * the value of what they manage (BEA 2026: portfolio management volume follows the industry's employment), so a bear
-     * market is no District recession on the day it happens. It reaches demand through household wealth, a year on.
+     * Market-based finance is counted with the domestic economy: national accounts do not measure fund managers' output
+     * at the value of what they manage (BEA 2026: portfolio management volume follows the industry's employment), so a
+     * bear market is no District recession on the day it happens. It reaches demand through household wealth, a year
+     * on.
      */
     public function testABearMarketIsNoFinanceRecessionOnTheDay(): void
     {
@@ -2338,7 +2372,10 @@ class MacroAggregateSubsystemTest extends TestCase
         return $calls;
     }
 
-    /** Two quarters of falling real GDP declare a recession, the same quarters at any tick rate, and two of growth end it. */
+    /**
+     * Two quarters of falling real GDP declare a recession, the same quarters at any tick rate, and two of growth end
+     * it.
+     */
     public function testTwoFallingQuartersDeclareARecessionAndTwoRisingEndIt(): void
     {
         // Flat for two years, falling 1% a quarter for a year, then recovering 3% a quarter.
@@ -2349,14 +2386,20 @@ class MacroAggregateSubsystemTest extends TestCase
         }
     }
 
-    /** A single falling quarter is no recession, and growth in a deep slump ends one: the call reads the change, not the level. */
+    /**
+     * A single falling quarter is no recession, and growth in a deep slump ends one: the call reads the change, not the
+     * level.
+     */
     public function testOneFallingQuarterIsNoRecession(): void
     {
         $dip = static fn(float $t): float => ($t > 1.05 && $t < 1.2) ? -0.02 : 0.0;
         $this->assertNotContains(true, $this->recessionCalls(48, $dip, 12));
     }
 
-    /** The default rates and commercial property are read against the levels they settle at: years at a new level make it the trend. */
+    /**
+     * The default rates and commercial property are read against the levels they settle at: years at a new level make
+     * it the trend.
+     */
     public function testDefaultAndCommercialPropertyTrendsSettleOnTheLevelsTheyHold(): void
     {
         $state = new MacroState();

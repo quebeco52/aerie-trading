@@ -21,7 +21,10 @@ class BiotechPipelineBuilder
 {
     // --- Patent Expiry Ladder ---
 
-    /** Upper edges of the ladder's rungs, in years of exclusivity left: the horizons a pharma filing's patent schedule is read in. */
+    /**
+     * Upper edges of the ladder's rungs, in years of exclusivity left: the horizons a pharma filing's patent schedule
+     * is read in.
+     */
     public const EXPIRY_RUNG_EDGES_YEARS = [1.0, 3.0, 5.0, 10.0];
 
     public function __construct(

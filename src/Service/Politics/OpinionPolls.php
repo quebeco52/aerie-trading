@@ -36,34 +36,54 @@ use App\Service\Math\TimeSeries;
  * Within a term, support so built moves in the polls as real parties' do: German monthly polls since 1998 spread over
  * one to four years as the lasting drift does (var/harness/polls).
  *
- * The polls are monthly samples of that support, off the politics stream (CouncilAppointments::uniform()), so publishing
- * them changes nothing else in the game.
+ * The polls are monthly samples of that support, off the politics stream (CouncilAppointments::uniform()), so
+ * publishing them changes nothing else in the game.
  */
 final class OpinionPolls
 {
     // --- After the Vote (Germany, 8 terms 1998-2025, wahlrecht.de polls; var/harness/polls/fit_cabinet_path.py) ---
-    /** Half-life of the governing parties' fall from their result, in years: 9.5 months (7.3-13.3), against a straight line over the term that fits far worse; also the pace the vote's short-term swing fades, which the polls show keeping for at least three months. */
+    /**
+     * Half-life of the governing parties' fall from their result, in years: 9.5 months (7.3-13.3), against a straight
+     * line over the term that fits far worse; also the pace the vote's short-term swing fades, which the polls show
+     * keeping for at least three months.
+     */
     public const POST_VOTE_HALF_LIFE_YEARS = 9.5 / 12.0;
 
-    // --- The Campaign (Jennings & Wlezien 2018 data, PR legislative elections, single polls; var/harness/polls/fit_campaign.py) ---
-    /** Days before the vote in which the short-term swing builds: a poll's error on the result falls fastest over the final 20 days (30 fits nearly as well). */
+    // --- The Campaign (Jennings & Wlezien 2018 data, PR legislative elections, single polls;
+    // var/harness/polls/fit_campaign.py) ---
+    /**
+     * Days before the vote in which the short-term swing builds: a poll's error on the result falls fastest over the
+     * final 20 days (30 fits nearly as well).
+     */
     public const CAMPAIGN_SWING_DAYS = 20.0;
 
     // --- Unsettled Opinion (Jennings & Wlezien 2018 data; Germany 1998-2026) ---
-    /** Error in a poll's read of the result, beyond its sampling error and the vote's short-term swing, that settles over the campaign as undecided voters decide: the 52 units (poll - vote)^2 / p(1 - p) x 1e4 a poll's error falls by over the final 20 days, less the 15 the short-term swing moves (same fit), so 37e-4 of p(1 - p). Opinion the vote never shows, so it enters the polls alone. */
+    /**
+     * Error in a poll's read of the result, beyond its sampling error and the vote's short-term swing, that settles
+     * over the campaign as undecided voters decide: the 52 units (poll - vote)^2 / p(1 - p) x 1e4 a poll's error falls
+     * by over the final 20 days, less the 15 the short-term swing moves (same fit), so 37e-4 of p(1 - p). Opinion the
+     * vote never shows, so it enters the polls alone.
+     */
     public const UNSETTLED_VARIANCE = (52.0 - 15.0) * 1.0e-4;
-    /** Half-life of that unsettled opinion, in years: the 28 months of a single Ornstein-Uhlenbeck fitted to German monthly poll averages, 1998-2026, which show no faster component of any size (var/harness/polls/de_poll_dynamics.out). */
+    /**
+     * Half-life of that unsettled opinion, in years: the 28 months of a single Ornstein-Uhlenbeck fitted to German
+     * monthly poll averages, 1998-2026, which show no faster component of any size
+     * (var/harness/polls/de_poll_dynamics.out).
+     */
     public const UNSETTLED_HALF_LIFE_YEARS = 28.0 / 12.0;
 
     // --- Published Polls ---
     /** Polls published a year: one a month. */
     public const POLLS_PER_YEAR = 12.0;
-    /** Sample size a published poll's error on the truth amounts to: 440 from the same fit, so a poll of 1,000 (the record's median) misses by 1.5 times its sampling error, the excess an error every poll of the election shares. */
+    /**
+     * Sample size a published poll's error on the truth amounts to: 440 from the same fit, so a poll of 1,000 (the
+     * record's median) misses by 1.5 times its sampling error, the excess an error every poll of the election shares.
+     */
     public const EFFECTIVE_SAMPLE_SIZE = 440.0;
 
     /**
-     * One tick: at each month's turn, support is brought up to date and a poll published. The vote publishes none; it is
-     * the result.
+     * One tick: at each month's turn, support is brought up to date and a poll published. The vote publishes none; it
+     * is the result.
      *
      * @param PoliticsState $state The politics, advanced in place; its totalTime already set to this tick's.
      */
@@ -264,9 +284,9 @@ final class OpinionPolls
 
     /**
      * Each party's years of lasting drift over a span: of the drift its term has left, a governing party takes the part
-     * of the term clock the span covers (termClock()), any other the part of the calendar, so a party governing from vote
-     * to vote falls from its result mostly in the first year, and every party has drifted exactly a term's worth by the
-     * vote however its standing changed.
+     * of the term clock the span covers (termClock()), any other the part of the calendar, so a party governing from
+     * vote to vote falls from its result mostly in the first year, and every party has drifted exactly a term's worth
+     * by the vote however its standing changed.
      *
      * @return array<string, float>
      */
@@ -293,7 +313,9 @@ final class OpinionPolls
         return $years;
     }
 
-    /** Years into the term at a moment, as the drift counted them before parties kept their own (a state saved earlier). */
+    /**
+     * Years into the term at a moment, as the drift counted them before parties kept their own (a state saved earlier).
+     */
     private static function elapsedInTerm(PoliticsState $state, float $at): float
     {
         return $state->termStartedAt < 0.0 ? 0.0 : max(0.0, min(PoliticsEngine::ELECTION_TERM_YEARS, $at - $state->termStartedAt));
@@ -319,8 +341,8 @@ final class OpinionPolls
     }
 
     /**
-     * Growth per head over the campaign so far, less its trend, as a share of the growth the vote will weigh: zero before
-     * the campaign opens, the vote's growth gap on the day (PoliticsEngine::holdElection()).
+     * Growth per head over the campaign so far, less its trend, as a share of the growth the vote will weigh: zero
+     * before the campaign opens, the vote's growth gap on the day (PoliticsEngine::holdElection()).
      */
     public static function growthCounted(PoliticsState $state, MacroStateDTO $macro): float
     {
@@ -334,8 +356,8 @@ final class OpinionPolls
     }
 
     /**
-     * Inflation over the term so far above the target, as a share of the inflation the vote will weigh: zero as the term
-     * opens, the vote's inflation gap on the day.
+     * Inflation over the term so far above the target, as a share of the inflation the vote will weigh: zero as the
+     * term opens, the vote's inflation gap on the day.
      */
     public static function inflationCounted(PoliticsState $state, MacroStateDTO $macro): float
     {

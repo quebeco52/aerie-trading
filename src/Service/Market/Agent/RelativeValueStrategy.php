@@ -21,9 +21,14 @@ use App\DTO\AgentMarketViewDTO;
 final class RelativeValueStrategy implements AgentStrategyInterface
 {
     // --- Relative-Value Funds (Barberis & Shleifer 2003 cross-sectional style) ---
-    /** Share of agent capital a market-neutral book can put long or short in one name against the rest of the market. */
+    /**
+     * Share of agent capital a market-neutral book can put long or short in one name against the rest of the market.
+     */
     public const AGENT_RELATIVE_VALUE_SHARE = 0.15;
-    /** Conviction per unit of log mispricing RELATIVE to the market's average mispricing; on the fundamentalist's scale, fully committed at roughly a 40% gap to the average name. */
+    /**
+     * Conviction per unit of log mispricing RELATIVE to the market's average mispricing; on the fundamentalist's scale,
+     * fully committed at roughly a 40% gap to the average name.
+     */
     public const AGENT_RELATIVE_VALUE_GAIN = 2.50;
 
     public function identifier(): string

@@ -41,7 +41,10 @@ class SeasonService
         private readonly PlayerNotifier $notifier,
     ) {}
 
-    /** Starting cash at a given consumer price level, so a Year-40 account starts with the same purchasing power as a Year-1 one. */
+    /**
+     * Starting cash at a given consumer price level, so a Year-40 account starts with the same purchasing power as a
+     * Year-1 one.
+     */
     public static function startingCapital(float $consumerPriceLevel): string
     {
         return number_format(self::STARTING_CAPITAL_YEAR_ONE * max(0.0, $consumerPriceLevel ?: 1.0), 2, '.', '');
@@ -84,7 +87,10 @@ class SeasonService
         }
     }
 
-    /** Enters an account into the open season at its current net worth: on registration and after a fresh start's season. */
+    /**
+     * Enters an account into the open season at its current net worth: on registration and after a fresh start's
+     * season.
+     */
     public function join(User $user, float $simTime, float $value): void
     {
         $season = $this->seasons->findOpen();

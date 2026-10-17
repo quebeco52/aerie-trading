@@ -158,7 +158,9 @@ class BankruptcyTest extends TestCase
         $this->assertEquals('570.0000', (string) $buyer->getCashBalance());
     }
 
-    /** A liquidation closes every position, long or short, on a settlement order and tells its holder, before the wipe. */
+    /**
+     * A liquidation closes every position, long or short, on a settlement order and tells its holder, before the wipe.
+     */
     public function testALiquidationSettlesAndTellsEachHolderBeforeThePositionsAreWiped(): void
     {
         $stock = $this->buildDefaulter('DEAD', 'Dead Corp', quartersInDefault: 2);
@@ -369,8 +371,9 @@ class BankruptcyTest extends TestCase
         $operator = new FailureSweep($this->entityManagerMock, $this->loggerMock, $this->marketEventMock, $this->debtEngineMock, $ledger);
         $operator->sweep([$stock], new MacroStateDTO(yield5yEma: 0.04, highYieldCreditSpreadEma: 0.01));
 
-        // Exit notes at the 4% five-year plus a 1% high-yield spread. Exit debt is the tightest of: coverage 50M / (5% x (2.0 + 1.5)) = 285.7M, the airline 3.5x covenant
-        // 3.5 x 80M + 20M = 300M, and the 320M the assets are worth. The other 1.71B became the equity.
+        // Exit notes at the 4% five-year plus a 1% high-yield spread. Exit debt is the tightest of: coverage 50M / (5%
+        // x (2.0 + 1.5)) = 285.7M, the airline 3.5x covenant 3.5 x 80M + 20M = 300M, and the 320M the assets are worth.
+        // The other 1.71B became the equity.
         $exitDebt = 50_000_000.0 / (0.05 * 3.5);
         $this->assertFalse($stock->isBankrupt());
         $this->assertEqualsWithDelta($exitDebt, (float) $stock->getWholesaleDebt(), 1.0);
@@ -672,9 +675,9 @@ class BankruptcyTest extends TestCase
         $this->assertNull($resultZero['event']);
     }
     /**
-     * Consolidation is the capacity balance's job now: the failed firm's plant leaves the industry ledger
-     * the moment it fails (its demand stays), so survivors sell into a tighter market at their next report. The old rule
-     * handed peers a slice of the failed firm's addressable market instead; nothing touches samRatio.
+     * Consolidation is the capacity balance's job now: the failed firm's plant leaves the industry ledger the moment it
+     * fails (its demand stays), so survivors sell into a tighter market at their next report. The old rule handed peers
+     * a slice of the failed firm's addressable market instead; nothing touches samRatio.
      */
     public function testAFailedFirmIsRetiredFromTheIndustryLedgerAndPeersKeepTheirOwnMarket(): void
     {

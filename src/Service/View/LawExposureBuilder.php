@@ -34,13 +34,16 @@ final class LawExposureBuilder
         'publicSpending' => ['Public spending, share of GDP', 'What the budget buys from the District\'s contractors, hospitals, colleges and guard firms. Measured against spending at its Year 1 share.'],
         'utilityRateGrant' => ['Utility rate requests granted', 'How much of each rate increase the utilities ask for the commission allows. The less it grants, the further their prices lag their costs. Measured against the Year 1 commission\'s grant.'],
     ];
-    /** The law each is measured against: none, but for public spending and the utility grant, measured against Year 1's. */
+    /**
+     * The law each is measured against: none, but for public spending and the utility grant, measured against Year 1's.
+     */
     private const NO_LAW = ['publicSpending' => MacroEngine::PUBLIC_PURCHASES_TO_GDP, 'utilityRateGrant' => UtilityBusinessModel::APPOINTED_COMMISSION_GRANTED_SHARE];
 
     /**
      * @param iterable<Stock>      $stocks   The listed board.
      * @param array<string, float> $standing The laws in force, keyed as PoliticsEngine::LEVER_FIELDS.
-     * @param array<string, float> $expected The laws the market expects from the next budget it forecasts; empty without a forecast.
+     * @param array<string, float> $expected The laws the market expects from the next budget it forecasts; empty
+     *                                       without a forecast.
      * @return array{laws: list<array<string, mixed>>, corporateTax: array{inForce: float, expected: float, earnings: float, moves: bool}|null}
      */
     public static function build(iterable $stocks, MacroStateDTO $macro, array $standing, array $expected): array
@@ -94,7 +97,8 @@ final class LawExposureBuilder
             ];
         }
 
-        // Every firm taxed at the full rate keeps the same share of its earnings, so the tax gets one figure, not a table.
+        // Every firm taxed at the full rate keeps the same share of its earnings, so the tax gets one figure, not a
+        // table.
         $corporateTax = null;
         if (isset($expected['corporateTax'])) {
             $inForce = MacroEngine::BASE_CORPORATE_TAX_RATE + $standing['corporateTax'];

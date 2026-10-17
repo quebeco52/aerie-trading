@@ -298,7 +298,8 @@ class TelecomBusinessModelTest extends TestCase
 
         $this->assertEqualsWithDelta(0.0, $this->model->getMacroPhysics($stock, $recession)['macro_demand_shift'], 1e-12);
 
-        // Equipment share x (device sensitivity x cyclicality x gap); the ARPU downgrade on subscriptions is price and stays out.
+        // Equipment share x (device sensitivity x cyclicality x gap); the ARPU downgrade on subscriptions is price and
+        // stays out.
         $expected = TelecomBusinessModel::EQUIPMENT_WEIGHT * (TelecomBusinessModel::EQUIPMENT_CYCLE_SENSITIVITY * TelecomBusinessModel::OPERATING_CYCLICALITY * -0.03);
         $this->assertEqualsWithDelta($expected, $this->model->resolveSectorActivityShift($stock, $recession), 1e-9);
     }

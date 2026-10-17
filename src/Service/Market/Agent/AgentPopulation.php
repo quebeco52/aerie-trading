@@ -26,17 +26,36 @@ use App\Service\Math\TimeSeries;
 final class AgentPopulation
 {
     // --- Agent Population (Brock & Hommes 1997, 1998 Adaptive Belief System) ---
-    /** Intensity of choice: how sharply capital chases whichever belief has been paying. At zero the population never moves; raising it is what tips the market from anchored to trending. */
+    /**
+     * Intensity of choice: how sharply capital chases whichever belief has been paying. At zero the population never
+     * moves; raising it is what tips the market from anchored to trending.
+     */
     public const AGENT_INTENSITY_OF_CHOICE = 3.00;
-    /** Memory in the fitness estimate, in years. Capital chases performance over months, not over the last print, and a horizon in time rather than in ticks keeps that true at any tick rate. */
+    /**
+     * Memory in the fitness estimate, in years. Capital chases performance over months, not over the last print, and a
+     * horizon in time rather than in ticks keeps that true at any tick rate.
+     */
     public const AGENT_FITNESS_HORIZON_YEARS = 0.50;
-    /** Floor on any belief's population share, so a strategy that has been wrong for a long time can still come back when conditions turn. */
+    /**
+     * Floor on any belief's population share, so a strategy that has been wrong for a long time can still come back
+     * when conditions turn.
+     */
     public const AGENT_MIN_POPULATION_SHARE = 0.05;
-    /** Risk aversion in the mean-variance fitness U = pi - (a/2) sigma^2 z^2 (Brock & Hommes 1998). Standard relative risk aversion; without it raw profit rewards whichever belief simply carries more exposure. */
+    /**
+     * Risk aversion in the mean-variance fitness U = pi - (a/2) sigma^2 z^2 (Brock & Hommes 1998). Standard relative
+     * risk aversion; without it raw profit rewards whichever belief simply carries more exposure.
+     */
     public const AGENT_RISK_AVERSION = 2.00;
-    /** Share of switching capital that chooses at the STYLE level, on how a belief has paid across the whole market, rather than name by name (Barberis & Shleifer 2003). Zero is a market of unrelated single-name populations; one is a single market-wide population. */
+    /**
+     * Share of switching capital that chooses at the STYLE level, on how a belief has paid across the whole market,
+     * rather than name by name (Barberis & Shleifer 2003). Zero is a market of unrelated single-name populations; one
+     * is a single market-wide population.
+     */
     public const AGENT_STYLE_CROWDING_WEIGHT = 0.50;
-    /** Memory of the realized-variance estimate the agents see, in years (~1 month). RiskMetrics-style EWMA of observed returns; vol-control mandates (Harvey et al. 2018) and maker risk desks size on a window of that order. */
+    /**
+     * Memory of the realized-variance estimate the agents see, in years (~1 month). RiskMetrics-style EWMA of observed
+     * returns; vol-control mandates (Harvey et al. 2018) and maker risk desks size on a window of that order.
+     */
     public const AGENT_REALIZED_VOLATILITY_HORIZON_YEARS = 0.083;
 
     /**
@@ -178,10 +197,12 @@ final class AgentPopulation
      *
      * @param array<string, float> $fitness      Accumulated scores.
      * @param array<string, float> $exposures    Exposure one agent of each belief held into the return, in [-1, 1].
-     * @param float                $logReturn    The total return that followed, dividends included, measured before any split.
+     * @param float                $logReturn    The total return that followed, dividends included, measured before any
+     *                                           split.
      * @param float                $dt           Elapsed simulated time in years.
      * @param float                $riskFreeRate Annual rate cash earns.
-     * @param float                $variance     Annualized return variance the exposure is charged for, as it was known when the exposure was taken.
+     * @param float                $variance     Annualized return variance the exposure is charged for, as it was known
+     *                                           when the exposure was taken.
      * @return array<string, float> Updated scores.
      */
     public function updateFitness(

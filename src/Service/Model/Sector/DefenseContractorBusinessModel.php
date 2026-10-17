@@ -23,7 +23,8 @@ use App\Service\Model\StreamContext;
  *
  * Financial Physics:
  * - Tri-Stream Defense Engine:
- *      1. Cost-Plus Allied Procurement: the mainland's and its allies' orders, protected by FAR 16.3 inflation escalators.
+ *      1. Cost-Plus Allied Procurement: the mainland's and its allies' orders, protected by FAR 16.3 inflation
+ *         escalators.
  *      2. Fixed-Price Development (EMD): ASC 606 reach-forward losses; vulnerable to general inflation.
  *      3. Foreign Military Sales (FMS): High-margin exports where Wright's Law drives margin expansion.
  * - Allied Fiscal Physics: the District fields no army, so its makers export into allied defence budgets; immune to
@@ -34,7 +35,10 @@ use App\Service\Model\StreamContext;
 class DefenseContractorBusinessModel extends StandardCorporateBusinessModel
 {
     // --- Operating Cyclicality & Demand Structure ---
-    /** Elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). Appropriations, not GDP, set volume; sole-source programs rarely switch. */
+    /**
+     * Elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). Appropriations, not
+     * GDP, set volume; sole-source programs rarely switch.
+     */
     public const OPERATING_CYCLICALITY = 0.50;
     /** Own-price elasticity of demand: volume lost per unit of real price increase. */
     public const PRICE_ELASTICITY_OF_DEMAND = 0.10;
@@ -42,19 +46,29 @@ class DefenseContractorBusinessModel extends StandardCorporateBusinessModel
     public const INDUSTRY_SUBSTITUTABILITY = 0.30;
 
     // --- Input Cost Basket ---
-    /** Shares of the variable cost base by input channel, measured from the BEA input-output accounts with supply-chain content (labor still the model's own). */
+    /**
+     * Shares of the variable cost base by input channel, measured from the BEA input-output accounts with supply-chain
+     * content (labor still the model's own).
+     */
     public const INPUT_COST_EXPOSURES = InputOutputExposures::DEFENSE_CONTRACTOR;
     /** Cost-plus and FMS contracts reprice through FAR escalators within the year; fixed-price EMD never does. */
     public const INPUT_PASS_THROUGH_LAG_YEARS = 0.75;
 
     // --- FX Exposure ---
-    /** Share of revenue whose competitiveness moves with the trade-weighted exchange rate. Foreign military sales compete against European and Israeli primes on delivered price; domestic procurement does not. */
+    /**
+     * Share of revenue whose competitiveness moves with the trade-weighted exchange rate. Foreign military sales
+     * compete against European and Israeli primes on delivered price; domestic procurement does not.
+     */
     public const FX_REVENUE_EXPOSURE = 0.15;
-    /** Cost-plus and FMS work recovers allowable cost by contract; only the fixed-price development share eats an overrun, and fixed-price-heavy primes are tuned down per ticker. */
+    /**
+     * Cost-plus and FMS work recovers allowable cost by contract; only the fixed-price development share eats an
+     * overrun, and fixed-price-heavy primes are tuned down per ticker.
+     */
     public const PRICING_POWER_INDEX = 0.70;
 
     /**
-     * Calendar-quarter revenue seasonality [Q1, Q2, Q3, Q4] summing to 4.0: federal fiscal year-end obligation flush in September, continuing resolutions in Q4.
+     * Calendar-quarter revenue seasonality [Q1, Q2, Q3, Q4] summing to 4.0: federal fiscal year-end obligation flush in
+     * September, continuing resolutions in Q4.
      *
      * @return array<int, float>
      */
@@ -96,7 +110,10 @@ class DefenseContractorBusinessModel extends StandardCorporateBusinessModel
     public const FORWARD_LOSS_PENALTY = 0.08;
 
     // --- Order Backlog (funded and unfunded) ---
-    /** Fraction of the cost-plus procurement backlog executed each quarter (multi-year appropriations, ~5.7 quarters of coverage). */
+    /**
+     * Fraction of the cost-plus procurement backlog executed each quarter (multi-year appropriations, ~5.7 quarters of
+     * coverage).
+     */
     public const COST_PLUS_BACKLOG_BURN_RATE = 0.15;
     /** Fraction of the fixed-price development backlog executed each quarter (~4 quarters of coverage). */
     public const FIXED_PRICE_BACKLOG_BURN_RATE = 0.20;
@@ -136,7 +153,10 @@ class DefenseContractorBusinessModel extends StandardCorporateBusinessModel
     public const MEGA_CONTRACT_WIN_MULT = 1.18;
 
     // --- Capital Budget ---
-    /** Investment's elasticity to its own demand cycle: US private nonresidential investment on real GDP (FRED PNFI/GDPDEF, GDPC1), HP(1600) cycles 1953-2019, peak 2.52 at a one-quarter lag. */
+    /**
+     * Investment's elasticity to its own demand cycle: US private nonresidential investment on real GDP (FRED
+     * PNFI/GDPDEF, GDPC1), HP(1600) cycles 1953-2019, peak 2.52 at a one-quarter lag.
+     */
     public const CAPEX_CYCLICALITY = 2.52;
 
     // --- Working Capital & FAR Progress Payment Withholding ---
@@ -177,7 +197,10 @@ class DefenseContractorBusinessModel extends StandardCorporateBusinessModel
     }
 
     // --- Secular Demand ---
-    /** Other transportation equipment (aerospace and defense) value added as a share of US nominal GDP in 1997 (BEA GDP by Industry, value added). */
+    /**
+     * Other transportation equipment (aerospace and defense) value added as a share of US nominal GDP in 1997 (BEA GDP
+     * by Industry, value added).
+     */
     public const SECULAR_SHARE_1997 = 0.0073;
     /** The same share in 2019. */
     public const SECULAR_SHARE_2019 = 0.0077;
@@ -389,7 +412,8 @@ class DefenseContractorBusinessModel extends StandardCorporateBusinessModel
 
         $observableShockZ = ($costPlusShock * $costPlusWeight) + ($fixedPriceShock * $fixedPriceWeight) + ($fmsShock * $fmsWeight);
 
-        // The one-off charge is booked as a special item: in EBIT, out of the run rate, the Street figure and the cost ratio.
+        // The one-off charge is booked as a special item: in EBIT, out of the run rate, the Street figure and the cost
+        // ratio.
         $specialCharge = (($forwardLossProvision * $fixedPriceWeight) + ($flagshipPenalty * $costPlusWeight)) * $actualRevenue;
 
         return new SectorPhysicsResult(

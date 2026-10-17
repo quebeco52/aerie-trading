@@ -70,7 +70,8 @@ class ReportCalendarTest extends TestCase
 
     public function testDatedReportsNeedNotBeOneAQuarter(): void
     {
-        // A firm that skipped Year 4 Q2's filing: each dated report keeps its own quarter, with no count-back across the gap.
+        // A firm that skipped Year 4 Q2's filing: each dated report keeps its own quarter, with no count-back across
+        // the gap.
         $labels = ReportCalendar::reportLabels([3.35, 3.85, 4.1], ['wrong', 'wrong', 'wrong']);
 
         $this->assertSame(['Year 4 Q1', 'Year 4 Q3', 'Year 4 Q4'], $labels);

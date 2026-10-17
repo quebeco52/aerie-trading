@@ -33,7 +33,10 @@ use App\Service\Model\ModelParam;
 class MedicalCareFacilityBusinessModel extends StandardCorporateBusinessModel
 {
     // --- Operating Cyclicality & Demand Structure ---
-    /** Elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). Acute care is inelastic; elective procedures carry the cyclicality. */
+    /**
+     * Elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). Acute care is
+     * inelastic; elective procedures carry the cyclicality.
+     */
     public const OPERATING_CYCLICALITY = 0.60;
     /** Own-price elasticity of demand: volume lost per unit of real price increase. */
     public const PRICE_ELASTICITY_OF_DEMAND = 0.10;
@@ -41,11 +44,17 @@ class MedicalCareFacilityBusinessModel extends StandardCorporateBusinessModel
     public const INDUSTRY_SUBSTITUTABILITY = 0.40;
 
     // --- Input Cost Basket ---
-    /** Shares of the variable cost base by input channel, measured from the BEA input-output accounts with supply-chain content (labor still the model's own). */
+    /**
+     * Shares of the variable cost base by input channel, measured from the BEA input-output accounts with supply-chain
+     * content (labor still the model's own).
+     */
     public const INPUT_COST_EXPOSURES = InputOutputExposures::MEDICAL_CARE_FACILITY;
 
     // --- Services Pricing ---
-    /** Elasticity of fee and rate pricing to services (supercore) inflation. Reimbursement follows medical services inflation, capped by payer contracts. */
+    /**
+     * Elasticity of fee and rate pricing to services (supercore) inflation. Reimbursement follows medical services
+     * inflation, capped by payer contracts.
+     */
     public const PRICING_ELASTICITY = 0.60;
     /** Administered reimbursement updates govern selling prices under CMS and commercial payer schedules. */
     public const PRICING_INFLATION_BASIS = 'reimbursement_rate_growth';
@@ -63,15 +72,27 @@ class MedicalCareFacilityBusinessModel extends StandardCorporateBusinessModel
     }
 
     // --- Balance Sheet Realism ---
-    /** Capitalized operating lease liabilities as a fraction of annual revenue (IFRS 16 / ASC 842). Hospital campuses and clinics under long-term leases. */
+    /**
+     * Capitalized operating lease liabilities as a fraction of annual revenue (IFRS 16 / ASC 842). Hospital campuses
+     * and clinics under long-term leases.
+     */
     public const LEASE_LIABILITY_INTENSITY = 0.30;
 
     // --- Coverage Sensitivity ---
-    /** Elective outpatient volume lost per unit of unemployment above the natural rate (2.0 = -2% volume per point): job loss ends employer coverage and elective procedures are deferred. */
+    /**
+     * Elective outpatient volume lost per unit of unemployment above the natural rate (2.0 = -2% volume per point): job
+     * loss ends employer coverage and elective procedures are deferred.
+     */
     public const UNEMPLOYMENT_ELECTIVE_SENSITIVITY = 2.0;
-    /** Elective outpatient volume per unit of output gap before cyclicality: discretionary procedures follow household wealth. */
+    /**
+     * Elective outpatient volume per unit of output gap before cyclicality: discretionary procedures follow household
+     * wealth.
+     */
     public const ELECTIVE_GDP_SENSITIVITY = 1.20;
-    /** Inpatient admissions per unit of government spending above its index base: publicly funded coverage brings patients to the bed. */
+    /**
+     * Inpatient admissions per unit of government spending above its index base: publicly funded coverage brings
+     * patients to the bed.
+     */
     public const INPATIENT_GOVERNMENT_SPENDING_SENSITIVITY = 0.30;
 
     // --- Analyst Visibility & Error ---
@@ -105,7 +126,9 @@ class MedicalCareFacilityBusinessModel extends StandardCorporateBusinessModel
     public const ARBITRAGE_VARIANCE_SCALAR = 0.20;
 
     // --- Clinical Labor & Inflation Squeeze ---
-    /** Payer contracts reprice on multi-year cycles, so clinical wage moves take longer to reach reimbursement rates. */
+    /**
+     * Payer contracts reprice on multi-year cycles, so clinical wage moves take longer to reach reimbursement rates.
+     */
     public const INPUT_PASS_THROUGH_LAG_YEARS = 1.25;
 
     /** Insurance arbitrage revenue per point of inflation over what was expected, both ways: +1pp adds 1.5%. */
@@ -323,7 +346,8 @@ class MedicalCareFacilityBusinessModel extends StandardCorporateBusinessModel
             + ($arbitrageZ * $arbitrageWeight * self::ARBITRAGE_VARIANCE_SCALAR * 0.15);
         $observableShockZ *= $baselineVol;
 
-        // The one-off charge is booked as a special item: in EBIT, out of the run rate, the Street figure and the cost ratio.
+        // The one-off charge is booked as a special item: in EBIT, out of the run rate, the Street figure and the cost
+        // ratio.
         $specialCharge = $auditPenalty * max(0.0, $actualRevenue - $priceRevenue);
 
         return new SectorPhysicsResult(

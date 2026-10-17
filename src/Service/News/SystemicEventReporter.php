@@ -67,7 +67,8 @@ class SystemicEventReporter
      * Every story the tick carries: the economy's, the government's, and a rate decision that made news when the
      * government's lead story is another, since the meetings share their calendar with the budget rounds.
      *
-     * @return list<array<string, mixed>> The wire copy of each published story, in that order; empty when the tick carries none.
+     * @return list<array<string, mixed>> The wire copy of each published story, in that order; empty when the tick
+     *                                    carries none.
      */
     public function report(MacroStateDTO $macro, PoliticsStateDTO $politics, Etf $benchmark): array
     {
@@ -148,9 +149,8 @@ class SystemicEventReporter
     /**
      * The vote's result for an election headline: the largest party, the biggest mover, and either the party that won a
      * majority outright or the party that opens the talks, which leads their first attempt and need not be the largest,
-     * and the larger bloc's leader and seats.
-     * The talks' outcome is never named here: it is settled on the day of the vote but not known until the cabinet takes
-     * office. Empty before the first vote has moved anything.
+     * and the larger bloc's leader and seats. The talks' outcome is never named here: it is settled on the day of the
+     * vote but not known until the cabinet takes office. Empty before the first vote has moved anything.
      *
      * @return array<string, string>
      */
@@ -196,9 +196,9 @@ class SystemicEventReporter
     }
 
     /**
-     * The cabinet that fell, for the headline on the day it falls: its parties and supporters, how long it governed, and
-     * the party that leads the first attempt at the next cabinet. As after a vote, the talks' outcome is never named.
-     * Empty when a party with its own majority takes office on the same day, leaving no caretaker to name.
+     * The cabinet that fell, for the headline on the day it falls: its parties and supporters, how long it governed,
+     * and the party that leads the first attempt at the next cabinet. As after a vote, the talks' outcome is never
+     * named. Empty when a party with its own majority takes office on the same day, leaving no caretaker to name.
      *
      * @return array<string, string>
      */
@@ -256,7 +256,8 @@ class SystemicEventReporter
     /**
      * The Monetary Authority for its headlines: the governor, their age and stance, when their term ends and whom the
      * Council passed over for them; the councillor seated this tick and whom they beat; the committee's make-up and the
-     * supermajority it holds; and the last meeting, its rate, its move and its vote. Empty before the Authority has formed.
+     * supermajority it holds; and the last meeting, its rate, its move and its vote. Empty before the Authority has
+     * formed.
      *
      * @return array<string, string>
      */
@@ -359,8 +360,8 @@ class SystemicEventReporter
 
     /**
      * The Exchequer's head for their headline: who they are, their stance on the debt, the average maturity they steer
-     * the book toward against today's, and what that does to the ten-year once the book has turned over. Empty before the
-     * Exchequer has a head.
+     * the book toward against today's, and what that does to the ten-year once the book has turned over. Empty before
+     * the Exchequer has a head.
      *
      * @return array<string, string>
      */
@@ -393,9 +394,9 @@ class SystemicEventReporter
     }
 
     /**
-     * The Sovereign Reserve Fund's head for their headline: who they are, their stance on the reserves, the policy equity
-     * share they set against the fund's present one, and what moving the board to its new weight comes to as a share of
-     * the float, over the fund's transition. Empty before the fund has a head.
+     * The Sovereign Reserve Fund's head for their headline: who they are, their stance on the reserves, the policy
+     * equity share they set against the fund's present one, and what moving the board to its new weight comes to as a
+     * share of the float, over the fund's transition. Empty before the fund has a head.
      *
      * @return array<string, string>
      */
@@ -435,9 +436,9 @@ class SystemicEventReporter
     }
 
     /**
-     * The Fair Trading Board's head for their headline: who they are, their stance on competition, the concentration line
-     * and share presumption they set against their predecessor's, when their term ends and whom the Council passed over.
-     * Empty before the Board has a head.
+     * The Fair Trading Board's head for their headline: who they are, their stance on competition, the concentration
+     * line and share presumption they set against their predecessor's, when their term ends and whom the Council passed
+     * over. Empty before the Board has a head.
      *
      * @return array<string, string>
      */
@@ -470,9 +471,9 @@ class SystemicEventReporter
     }
 
     /**
-     * The Securities Commission's head for their headline: who they are, their stance on the markets, the margin and the
-     * room they leave companies to steer their results against those in force, when those take effect, when their term ends and whom the
-     * Council passed over. Empty before the Commission has a head.
+     * The Securities Commission's head for their headline: who they are, their stance on the markets, the margin and
+     * the room they leave companies to steer their results against those in force, when those take effect, when their
+     * term ends and whom the Council passed over. Empty before the Commission has a head.
      *
      * @return array<string, string>
      */

@@ -68,7 +68,8 @@ class PrivateEquityBusinessModelTest extends TestCase
         $normalPhysics = $this->model->getMacroPhysics($stock, $normalMacro);
         $this->assertEqualsWithDelta(1.0, $normalPhysics['pricing_power_multiplier'], 0.001);
 
-        // High cost of debt macro: policy 100 bps above the freeze threshold, spread 100 bps above baseline -> CoD +200 bps over baseline
+        // High cost of debt macro: policy 100 bps above the freeze threshold, spread 100 bps above baseline -> CoD +200
+        // bps over baseline
         $highCoDMacro = MacroStateDTO::fromArray([
             'policy_rate_ema' => PrivateEquityBusinessModel::LBO_RATE_FREEZE_THRESHOLD + 0.010,
             'high_yield_credit_spread_ema' => PrivateEquityBusinessModel::LBO_CREDIT_SPREAD_BASELINE + 0.010,
@@ -93,7 +94,8 @@ class PrivateEquityBusinessModelTest extends TestCase
         ]);
         $this->assertEqualsWithDelta(1.0, $this->model->getMacroPhysics($stock, $igOnlyMacro)['pricing_power_multiplier'], 0.001);
 
-        // The same 150 bps on the HY tranche, above a policy rate already at the freeze threshold, compresses multiples.
+        // The same 150 bps on the HY tranche, above a policy rate already at the freeze threshold, compresses
+        // multiples.
         $hyMacro = MacroStateDTO::fromArray([
             'policy_rate_ema' => PrivateEquityBusinessModel::LBO_RATE_FREEZE_THRESHOLD,
             'macro_credit_spread_ema' => MacroEngine::BASE_CREDIT_SPREAD,
@@ -341,7 +343,9 @@ class PrivateEquityBusinessModelTest extends TestCase
         $this->assertFalse($this->model->isUnderLeveraged(2.4, $sectorTolerance, 5.0, 1.05));
     }
 
-    /** At trend with a flat draw, carry is the target grossed up by the share of trend quarters that clear the hurdle. */
+    /**
+     * At trend with a flat draw, carry is the target grossed up by the share of trend quarters that clear the hurdle.
+     */
     public function testTrendCarryIsGrossedUpForTheHurdleCliff(): void
     {
         $stock = new Stock();

@@ -30,7 +30,10 @@ class MacroDriverAttributionTest extends TestCase
         $this->assertNull(MacroDriverAttribution::neutralReading('equity_wealth_trend', $actual), 'A trend is a reference, never a driver.');
     }
 
-    /** Only the inputs the model reads, and only those the quarter has moved, get a counterfactual; each moves just its own input. */
+    /**
+     * Only the inputs the model reads, and only those the quarter has moved, get a counterfactual; each moves just its
+     * own input.
+     */
     public function testEachCounterfactualNeutralisesOneMovedInput(): void
     {
         $model = Sectors::getBusinessModelStrategy('tech');

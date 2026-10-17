@@ -13,17 +13,29 @@ namespace App\Service\Math;
 final class StochasticProcesses
 {
     // --- SVJJ Jump Process ---
-    /** Mean variance jump on an UP price jump, as a share of the mean on a down jump; crashes spike volatility harder than rallies. */
+    /**
+     * Mean variance jump on an UP price jump, as a share of the mean on a down jump; crashes spike volatility harder
+     * than rallies.
+     */
     public const VARIANCE_JUMP_UPSIDE_MEAN_SHARE = 0.50;
-    /** Ceiling on a single variance jump, as a multiple of its mean, so one draw cannot permanently corrupt the volatility state. */
+    /**
+     * Ceiling on a single variance jump, as a multiple of its mean, so one draw cannot permanently corrupt the
+     * volatility state.
+     */
     public const MAX_VARIANCE_JUMP_MEAN_MULTIPLE = 10.0;
 
     // --- Kou Compensator ---
-    /** Exponent rate at which the closed-form compensator switches to its removable-singularity limit, where eta approaches one. */
+    /**
+     * Exponent rate at which the closed-form compensator switches to its removable-singularity limit, where eta
+     * approaches one.
+     */
     public const COMPENSATOR_UNIT_RATE_TOLERANCE = 1.0e-6;
 
     // --- Levy-Driven OU Compensator ---
-    /** Even number of Simpson intervals on [0, 1] for the jump level shift; the integrand is smooth, so 32 is exact to ~1e-9. */
+    /**
+     * Even number of Simpson intervals on [0, 1] for the jump level shift; the integrand is smooth, so 32 is exact to
+     * ~1e-9.
+     */
     public const LEVY_OU_COMPENSATOR_SIMPSON_INTERVALS = 32;
 
     /**
@@ -122,8 +134,8 @@ final class StochasticProcesses
     }
 
     /**
-     * E[J] of a truncated Kou jump (each tail capped where the draw is clamped). With kouTruncatedCompensator, E[e^J - 1],
-     * it gives a jump's log loss under Merton compensation: E[e^J - 1 - J].
+     * E[J] of a truncated Kou jump (each tail capped where the draw is clamped). With kouTruncatedCompensator, E[e^J -
+     * 1], it gives a jump's log loss under Merton compensation: E[e^J - 1 - J].
      */
     public static function kouTruncatedMean(
         float $pUp,
@@ -279,7 +291,8 @@ final class StochasticProcesses
         $currentPrice = max(0.0001, $currentPrice);
         $currentLogPrice = log($currentPrice);
 
-        // Schwartz (1997) eq. 3: alpha = mu - sigma^2 / 2 kappa, the drift of ln S under dS = kappa (mu - ln S) S dt + sigma S dz.
+        // Schwartz (1997) eq. 3: alpha = mu - sigma^2 / 2 kappa, the drift of ln S under dS = kappa (mu - ln S) S dt +
+        // sigma S dz.
         $alpha = log($theta) - ($sigma * $sigma) / (2.0 * max(0.0001, $kappa));
 
         // Exact solution for OU process to prevent Euler discretization errors for large kappa * dt
@@ -297,7 +310,8 @@ final class StochasticProcesses
 
     /**
      * The theta calculateSchwartz1Factor() needs for its stationary mean to be `$mean`: the log-OU's stationary log
-     * variance is sigma^2 / 2 kappa, so E[S] = theta x e^(-sigma^2 / 4 kappa) and theta is the mean lifted by the inverse.
+     * variance is sigma^2 / 2 kappa, so E[S] = theta x e^(-sigma^2 / 4 kappa) and theta is the mean lifted by the
+     * inverse.
      *
      * @param float $mean  Level the price is to average.
      * @param float $kappa Speed of mean reversion of the log price.
@@ -322,8 +336,8 @@ final class StochasticProcesses
     }
 
     /**
-     * How much compound-Poisson log jumps lift the stationary mean LEVEL of a log-OU, as a log shift: the OU driven by a
-     * Levy process has stationary cumulant K(u) = integral_0^inf psi(u e^(-kappa s)) ds (Barndorff-Nielsen & Shephard
+     * How much compound-Poisson log jumps lift the stationary mean LEVEL of a log-OU, as a log shift: the OU driven by
+     * a Levy process has stationary cumulant K(u) = integral_0^inf psi(u e^(-kappa s)) ds (Barndorff-Nielsen & Shephard
      * 2001), which for Merton (1976) normal jumps at u = 1 is (lambda / kappa) integral_0^1 (E[e^(wJ)] - 1) / w dw.
      * Dividing a target by e^(this) puts the jump-diffusion's mean level back on it.
      *
@@ -369,8 +383,9 @@ final class StochasticProcesses
     }
 
     /**
-     * The diffusion of a stationary Ornstein-Uhlenbeck factor whose change over a horizon has a given standard deviation:
-     * the stationary variance is sigma^2 / 2 kappa and the autocovariance at h is that times e^(-kappa h), so
+     * The diffusion of a stationary Ornstein-Uhlenbeck factor whose change over a horizon has a given standard
+     * deviation: the stationary variance is sigma^2 / 2 kappa and the autocovariance at h is that times e^(-kappa h),
+     * so
      *
      *   Var(x(t + h) - x(t)) = (sigma^2 / kappa) (1 - e^(-kappa h))
      *
@@ -415,11 +430,12 @@ final class StochasticProcesses
     }
 
     /**
-     * Calculates the non-linear convenience yield under the Theory of Storage (Working 1949, Litzenberger & Rabinowitz 1995).
+     * Calculates the non-linear convenience yield under the Theory of Storage (Working 1949, Litzenberger & Rabinowitz
+     * 1995).
      *
-     * When physical inventory levels are ample (above baseline), the market is in contango and convenience yield is near zero.
-     * When physical inventories drop toward a critical buffer threshold, convenience yield spikes asymptotically,
-     * inducing extreme spot price inelasticity and backwardation.
+     * When physical inventory levels are ample (above baseline), the market is in contango and convenience yield is
+     * near zero. When physical inventories drop toward a critical buffer threshold, convenience yield spikes
+     * asymptotically, inducing extreme spot price inelasticity and backwardation.
      *
      * @param float $inventoryLevel Normalized inventory index (100 = neutral, < 80 = tight, < 55 = critical).
      * @param float $minBufferStock Critical structural minimum buffer stock floor.
@@ -508,7 +524,8 @@ final class StochasticProcesses
         float $sectorZ = 0.0,
         float $sectorVarianceShare = 0.0,
     ): float {
-        // Three-way orthogonal variance decomposition: systematic market factor, sector factor, and idiosyncratic residual.
+        // Three-way orthogonal variance decomposition: systematic market factor, sector factor, and idiosyncratic
+        // residual.
         $boundedShare = max(0.0, min(1.0, $sectorVarianceShare));
         $residualVol = max(0.0, $idiosyncraticVolatility);
         $sectorLoading = $residualVol * sqrt($boundedShare);

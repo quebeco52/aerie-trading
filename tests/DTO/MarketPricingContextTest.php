@@ -70,7 +70,9 @@ class MarketPricingContextTest extends TestCase
         $this->assertEqualsWithDelta($before - (1_000_000_000.0 / $capital), $after, 1e-12);
     }
 
-    /** A lender's baselineRoic column is a placeholder: it is priced on the return on equity its model measures it by. */
+    /**
+     * A lender's baselineRoic column is a placeholder: it is priced on the return on equity its model measures it by.
+     */
     public function testALenderIsPricedOnItsReturnOnEquity(): void
     {
         $macroState = new MacroStateDTO();
@@ -106,7 +108,10 @@ class MarketPricingContextTest extends TestCase
         $this->assertNotEqualsWithDelta((float) $sphere->getBookValuePerShare(), $context->bookValuePerShare, 1.0);
     }
 
-    /** The step and the deal shock are the caller's; the common factors are the macro state's, the sector's by the firm's sector. */
+    /**
+     * The step and the deal shock are the caller's; the common factors are the macro state's, the sector's by the
+     * firm's sector.
+     */
     public function testTheStepIsTheCallersAndTheFactorsAreTheMacroStates(): void
     {
         $firm = $this->firm('SOFT', 'Software - Infrastructure');
@@ -122,7 +127,10 @@ class MarketPricingContextTest extends TestCase
         $this->assertSame(0.7, $context->sectorZ);
     }
 
-    /** Net debt is the model's own: deposits fund a lender's book rather than finance it, so they are no claim ahead of equity. */
+    /**
+     * Net debt is the model's own: deposits fund a lender's book rather than finance it, so they are no claim ahead of
+     * equity.
+     */
     public function testALendersDepositsAreNotDebtAheadOfItsEquity(): void
     {
         $macroState = new MacroStateDTO();

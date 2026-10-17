@@ -411,9 +411,10 @@ class EarningsEngineReportTest extends TestCase
 
         $this->engine->calculate($stock, $macroState, $reportingTick, 252);
 
-        // Before the bug fix, $100M was treated as quarterly, generating an implied annualized previous revenue of $400M.
-        // If current revenue was flat at $100M annualized, this caused a $300M negative delta, massively inflating FCF.
-        // With the fix, the delta should be minimal, and FCF should be a reasonable portion of net income.
+        // Before the bug fix, $100M was treated as quarterly, generating an implied annualized previous revenue of
+        // $400M. If current revenue was flat at $100M annualized, this caused a $300M negative delta, massively
+        // inflating FCF. With the fix, the delta should be minimal, and FCF should be a reasonable portion of net
+        // income.
         $fcfPerShare = (float) $stock->getFreeCashFlowPerShare();
         $totalFcf = $fcfPerShare * (float) $stock->getSharesOutstanding();
 

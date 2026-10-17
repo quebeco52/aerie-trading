@@ -22,7 +22,10 @@ trait StandardCapitalAllocationTrait
         return max($organicSpend, $debtIssued * FinancialConstants::ORGANIC_CAPEX_DEBT_RATIO);
     }
 
-    /** Capital a firm cannot deploy is the saturation severity the allocation engine already measures; nothing further to add. */
+    /**
+     * Capital a firm cannot deploy is the saturation severity the allocation engine already measures; nothing further
+     * to add.
+     */
     public function getUndeployableCapitalShare(Stock $stock, MacroStateDTO $macroState, \App\Service\Math\MathUtility $mathUtility): float
     {
         return 0.0;

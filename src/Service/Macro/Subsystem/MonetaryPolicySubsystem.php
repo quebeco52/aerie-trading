@@ -23,41 +23,81 @@ use App\Service\Math\TimeSeries;
 class MonetaryPolicySubsystem
 {
     // --- Long-Rate Offset (Bernanke 2006) ---
-    /** Bernanke (2006) / Rudebusch-Sack-Swanson (2007) long-rate offset: the central bank leans against the part of the ten-year it does not set (term premium away from baseline, the market's drifted view of neutral). FRB/US puts a 100bps term premium move at roughly 50bps of policy; without it a high-premium era is a decade-long slump. */
+    /**
+     * Bernanke (2006) / Rudebusch-Sack-Swanson (2007) long-rate offset: the central bank leans against the part of the
+     * ten-year it does not set (term premium away from baseline, the market's drifted view of neutral). FRB/US puts a
+     * 100bps term premium move at roughly 50bps of policy; without it a high-premium era is a decade-long slump.
+     */
     public const TAYLOR_LONG_RATE_OFFSET = 0.50;
 
     // --- Nelson-Siegel-Svensson Term Structure Dynamics (Svensson 1994) ---
-    /** Kozicki-Tinsley (2001) shifting endpoint: weight on the market's adaptive long-run policy rate in the curve's anchor, against the model-consistent r* plus expected inflation. A decade at 5% lifts the anchor so the curve flattens like 1995-1999 instead of staying inverted; a decade at the floor drags the ten-year toward the 2% of 2012-2016. */
+    /**
+     * Kozicki-Tinsley (2001) shifting endpoint: weight on the market's adaptive long-run policy rate in the curve's
+     * anchor, against the model-consistent r* plus expected inflation. A decade at 5% lifts the anchor so the curve
+     * flattens like 1995-1999 instead of staying inverted; a decade at the floor drags the ten-year toward the 2% of
+     * 2012-2016.
+     */
     public const KOZICKI_TINSLEY_ENDPOINT_WEIGHT = 0.50;
-    /** Speed at which the perceived long-run policy rate learns from the realized rate (half-life ~5 years): slow enough that a two-year hiking cycle still inverts the curve, fast enough that a decade-long era reprices the long end, the slow adaptive expectations of Kozicki-Tinsley. */
+    /**
+     * Speed at which the perceived long-run policy rate learns from the realized rate (half-life ~5 years): slow enough
+     * that a two-year hiking cycle still inverts the curve, fast enough that a decade-long era reprices the long end,
+     * the slow adaptive expectations of Kozicki-Tinsley.
+     */
     public const KOZICKI_TINSLEY_ADAPTATION_SPEED = 0.14;
     /** Diebold-Li (2006) curvature sensitivity to central bank target-policy rate gap (forward guidance channel). */
     public const SVENSSON_CURVATURE1_TARGET_SCALE = 0.85;
     /** Cyclical curvature sensitivity to output gap (positive gap leads to steeper belly). */
     public const SVENSSON_CURVATURE1_GAP_SCALE = 0.15;
-    /** Wright (2011) IRP: term premium sensitivity to excess inflation expectations above target. Kept modest: the 2022 episode showed breakevens near 3% adding little premium once expectations are anchored. */
+    /**
+     * Wright (2011) IRP: term premium sensitivity to excess inflation expectations above target. Kept modest: the 2022
+     * episode showed breakevens near 3% adding little premium once expectations are anchored.
+     */
     public const TERM_PREMIUM_IRP_EXPECTATION_SCALE = 0.20;
-    /** Floor on the ten-year term premium (-75bps): ACM ran between -50 and -100bps from 2016 to 2021, so flight to safety and QE may push the long end below the expected policy path. */
+    /**
+     * Floor on the ten-year term premium (-75bps): ACM ran between -50 and -100bps from 2016 to 2021, so flight to
+     * safety and QE may push the long end below the expected policy path.
+     */
     public const MIN_TERM_PREMIUM_10Y = -0.0075;
 
     // --- Term Premium Dynamics (ACM 2013 persistence, Campbell-Pflueger-Viceira 2020 regimes) ---
-    /** Mean reversion of transitory term premium shocks (half-life ~8 months): ACM show the premium is persistent but not permanent. */
+    /**
+     * Mean reversion of transitory term premium shocks (half-life ~8 months): ACM show the premium is persistent but
+     * not permanent.
+     */
     public const TERM_PREMIUM_SHOCK_KAPPA = 1.0;
-    /** Loading of the District term premium on the mainland's (one global factor; Jotikasthira, Le & Lundblad 2015: long yields co-move across currencies mostly through risk compensation), the own factors scaled by sqrt(1 - b^2) so the premium's variance is unchanged. Calibrated to a District-on-mainland 10-year pass-through of 0.40, between Switzerland's 0.43 and Singapore's 0.35 (Bayoumi, Gagnon et al. 2015, daily, second-hand). */
+    /**
+     * Loading of the District term premium on the mainland's (one global factor; Jotikasthira, Le & Lundblad 2015: long
+     * yields co-move across currencies mostly through risk compensation), the own factors scaled by sqrt(1 - b^2) so
+     * the premium's variance is unchanged. Calibrated to a District-on-mainland 10-year pass-through of 0.40, between
+     * Switzerland's 0.43 and Singapore's 0.35 (Bayoumi, Gagnon et al. 2015, daily, second-hand).
+     */
     public const GLOBAL_TERM_PREMIUM_LOADING = 0.45;
     /** Cap on the transitory shock (200bps either way), the largest ACM swing on record. */
     public const TERM_PREMIUM_SHOCK_CAP = 0.02;
-    /** Mean reversion of the structural term premium regime (half-life ~8 years): eras such as the 1990s at 2% and the 2010s near zero, set by the bond-stock correlation. */
+    /**
+     * Mean reversion of the structural term premium regime (half-life ~8 years): eras such as the 1990s at 2% and the
+     * 2010s near zero, set by the bond-stock correlation.
+     */
     public const TERM_PREMIUM_REGIME_KAPPA = 0.087;
     /** Ceiling of the structural term premium regime (the early 1990s era). */
     public const MAX_TERM_PREMIUM_REGIME = 0.025;
 
     // --- Diebold-Li (2006) Expected-Path Innovation ---
-    /** Mean reversion of the curvature factor's own innovation (half-life ~7 months): Diebold-Li estimate curvature as the least persistent Nelson-Siegel factor, a monthly AR(1) near 0.9. */
+    /**
+     * Mean reversion of the curvature factor's own innovation (half-life ~7 months): Diebold-Li estimate curvature as
+     * the least persistent Nelson-Siegel factor, a monthly AR(1) near 0.9.
+     */
     public const EXPECTED_PATH_SHOCK_KAPPA = 1.2;
-    /** Annual volatility of that innovation, in curvature units: the 2Y carries 0.29 of it, the 10Y 0.14. Measured over 8 seeds x 60y it takes the 2Y's quarterly change from 24 to 48bps (real ~50) and the 10Y's from 35 to 40, so the vol term structure slopes down past the belly as every real curve does. */
+    /**
+     * Annual volatility of that innovation, in curvature units: the 2Y carries 0.29 of it, the 10Y 0.14. Measured over
+     * 8 seeds x 60y it takes the 2Y's quarterly change from 24 to 48bps (real ~50) and the 10Y's from 35 to 40, so the
+     * vol term structure slopes down past the belly as every real curve does.
+     */
     public const EXPECTED_PATH_SHOCK_SIGMA = 0.030;
-    /** Cap on the innovation (~2 stationary sd, ~120bps at the 2Y): a repricing of the next few years of policy, never a regime change, so the 2Y stays within the band it holds at the lower bound. */
+    /**
+     * Cap on the innovation (~2 stationary sd, ~120bps at the 2Y): a repricing of the next few years of policy, never a
+     * regime change, so the 2Y stays within the band it holds at the lower bound.
+     */
     public const EXPECTED_PATH_SHOCK_CAP = 0.04;
 
     // --- Central Bank Balance Sheet (QE & QT) ---
@@ -65,31 +105,57 @@ class MonetaryPolicySubsystem
     public const BALANCE_SHEET_REINVESTMENT_HOLD_YEARS = 1.5;
 
     // --- The Authority's Published Rule (Taylor 1993) ---
-    /** Rate per point of inflation over target beyond the point that keeps the real rate level: 1.5, so the rate answers inflation two and a half for one, an activist Authority well past the Taylor principle. */
+    /**
+     * Rate per point of inflation over target beyond the point that keeps the real rate level: 1.5, so the rate answers
+     * inflation two and a half for one, an activist Authority well past the Taylor principle.
+     */
     public const TAYLOR_INFLATION_WEIGHT = 1.5;
-    /** Rate per point of projected output gap: 1.5, leaning hard on slack, as this economy's slow transmission needs to keep its cycles readable. */
+    /**
+     * Rate per point of projected output gap: 1.5, leaning hard on slack, as this economy's slow transmission needs to
+     * keep its cycles readable.
+     */
     public const TAYLOR_OUTPUT_GAP_WEIGHT = 1.5;
     /** Bernanke (2015) blend: weight on realized core inflation (EMA) in the Taylor Rule inflation measure. */
     public const TAYLOR_INFLATION_CORE_WEIGHT = 0.70;
-    /** Bernanke (2015) blend: weight on forward inflation expectations (TIPS breakeven) in the Taylor Rule inflation measure. */
+    /**
+     * Bernanke (2015) blend: weight on forward inflation expectations (TIPS breakeven) in the Taylor Rule inflation
+     * measure.
+     */
     public const TAYLOR_INFLATION_ANCHOR_WEIGHT = 0.30;
 
     // --- The Rate Committee's Camps (Bordo & Istrefi 2023) ---
     /** Points of rate a dovish camp sets less per point of inflation over target; under target it follows the rule. */
     public const DOVISH_MAJORITY_INFLATION_RESPONSE = 0.35;
-    /** Points of rate a hawkish camp sets above the rule per point of negative output gap, cutting less into a slump; in a boom it follows the rule. */
+    /**
+     * Points of rate a hawkish camp sets above the rule per point of negative output gap, cutting less into a slump; in
+     * a boom it follows the rule.
+     */
     public const HAWKISH_MAJORITY_GAP_RESPONSE = 0.17;
 
     // --- Shifting Inflation Endpoint (Kozicki & Tinsley 2001; Orphanides & Williams 2005) ---
-    /** Constant gain, per year, at which the public learns long-run inflation from realized inflation: Orphanides & Williams' baseline 0.05 a half-year period, about twenty years of data (FRB FEDS 2003-41); on US T10YIE 2003-2026 the breakeven fit's R2 peaks at 0.10-0.14. */
+    /**
+     * Constant gain, per year, at which the public learns long-run inflation from realized inflation: Orphanides &
+     * Williams' baseline 0.05 a half-year period, about twenty years of data (FRB FEDS 2003-41); on US T10YIE 2003-2026
+     * the breakeven fit's R2 peaks at 0.10-0.14.
+     */
     public const INFLATION_ENDPOINT_LEARNING_GAIN = 0.10;
 
     // --- Forward-Looking Policy Horizon (Clarida, Gali & Gertler 2000; Batini & Haldane 1999) ---
-    /** Quarters of gap momentum the rule projects forward. One quarter is what a staff projection actually carries; the longer horizons swept here read as foresight but act as gain, buying a broader spectrum with the left tail (0.75y halves the share of quarters below -3%). */
+    /**
+     * Quarters of gap momentum the rule projects forward. One quarter is what a staff projection actually carries; the
+     * longer horizons swept here read as foresight but act as gain, buying a broader spectrum with the left tail (0.75y
+     * halves the share of quarters below -3%).
+     */
     public const TAYLOR_GAP_FORECAST_YEARS = 0.25;
-    /** Cap on that projection in gap units: a quarter's momentum extrapolated a year out is a forecast, not a measurement, and an uncapped derivative hands the rule the diffusion term. */
+    /**
+     * Cap on that projection in gap units: a quarter's momentum extrapolated a year out is a forecast, not a
+     * measurement, and an uncapped derivative hands the rule the diffusion term.
+     */
     public const TAYLOR_GAP_FORECAST_CAP = 0.020;
-    /** Speed (a year) at which the Authority's view of the right rate, its shadow rate, closes on the rule: 0.65, 15% of the distance a quarter. */
+    /**
+     * Speed (a year) at which the Authority's view of the right rate, its shadow rate, closes on the rule: 0.65, 15% of
+     * the distance a quarter.
+     */
     public const CB_SMOOTHING_SPEED = 0.65;
 
     // --- Rate Meetings ---
@@ -99,9 +165,15 @@ class MonetaryPolicySubsystem
     public const POLICY_RATE_STEP = 0.0025;
 
     // --- Treasury Rate Volatility (RiskMetrics 1996 EWMA of ten-year yield changes) ---
-    /** Window (years) of the realized ten-year yield volatility: one quarter, the period a dealer's rates revenue is booked over. */
+    /**
+     * Window (years) of the realized ten-year yield volatility: one quarter, the period a dealer's rates revenue is
+     * booked over.
+     */
     public const TREASURY_VOLATILITY_WINDOW_YEARS = 0.25;
-    /** Opening realized ten-year yield volatility, annualized: 87bp, the mean of the 2005-2024 calendar-year realized volatilities of daily FRED DGS10 changes (55bp in 2018 to 140bp in 2008). */
+    /**
+     * Opening realized ten-year yield volatility, annualized: 87bp, the mean of the 2005-2024 calendar-year realized
+     * volatilities of daily FRED DGS10 changes (55bp in 2018 to 140bp in 2008).
+     */
     public const OPENING_TREASURY_VOLATILITY = 0.0087;
 
     // --- Nelson-Siegel-Svensson Term Structure Dynamics (Svensson 1994) ---
@@ -111,11 +183,19 @@ class MonetaryPolicySubsystem
     public const SVENSSON_CURVATURE2_FISCAL_SCALE = 0.02;
     /** Safe-haven flight to safety: financial market panic compresses sovereign term premium (Campbell et al. 2020). */
     public const FLIGHT_TO_SAFETY_SENSITIVITY = 0.015;
-    /** Liability-driven long-end demand (Vayanos & Vila 2021 habitat investors; Greenwood & Vissing-Jorgensen 2018): pensions and insurers buy duration once the thirty-year clears the hurdle their liabilities are discounted at, and that demand comes out of the long-end premium. Loads through the half-again duration scale, so a quarter of the excess reaches the thirty-year; read one tick stale off the smoothed thirty-year. */
+    /**
+     * Liability-driven long-end demand (Vayanos & Vila 2021 habitat investors; Greenwood & Vissing-Jorgensen 2018):
+     * pensions and insurers buy duration once the thirty-year clears the hurdle their liabilities are discounted at,
+     * and that demand comes out of the long-end premium. Loads through the half-again duration scale, so a quarter of
+     * the excess reaches the thirty-year; read one tick stale off the smoothed thirty-year.
+     */
     public const HABITAT_LONG_END_DEMAND_SENSITIVITY = 0.50;
 
     // --- Term Premium Dynamics (ACM 2013 persistence, Campbell-Pflueger-Viceira 2020 regimes) ---
-    /** Annual volatility of transitory term premium shocks: a stationary spread of ~50bps and ~35bps quarterly moves (ACM 2013 quarterly changes run 30-35bps), so a taper tantrum is a two-sigma quarter. */
+    /**
+     * Annual volatility of transitory term premium shocks: a stationary spread of ~50bps and ~35bps quarterly moves
+     * (ACM 2013 quarterly changes run 30-35bps), so a taper tantrum is a two-sigma quarter.
+     */
     public const TERM_PREMIUM_SHOCK_SIGMA = 0.0070;
     /** Annual volatility of the structural regime: a stationary spread of ~50bps around the baseline. */
     public const TERM_PREMIUM_REGIME_SIGMA = 0.0021;
@@ -123,9 +203,15 @@ class MonetaryPolicySubsystem
     public const MIN_TERM_PREMIUM_REGIME = 0.0;
 
     // --- Central Bank Balance Sheet (QE & QT) ---
-    /** Ten-year yield suppression under full-scale QE (~100bps): Gagnon et al. (2011) and Bonis-Ihrig-Wei (2017) put the whole QE1-QE3 stock near 100bps at its 2013 peak. */
+    /**
+     * Ten-year yield suppression under full-scale QE (~100bps): Gagnon et al. (2011) and Bonis-Ihrig-Wei (2017) put the
+     * whole QE1-QE3 stock near 100bps at its 2013 peak.
+     */
     public const QE_MAX_SUPPRESSION = 0.01;
-    /** Cut the floor forbids that the full programme stands in for: the Wu-Xia (2016) shadow rate bottomed near -3% in 2014 with the QE1-QE3 stock at its peak. */
+    /**
+     * Cut the floor forbids that the full programme stands in for: the Wu-Xia (2016) shadow rate bottomed near -3% in
+     * 2014 with the QE1-QE3 stock at its peak.
+     */
     public const QE_FULL_PROGRAM_SHORTFALL = 0.03;
     /** Annual ramp speed of central bank balance sheet expansion and contraction. */
     public const BALANCE_SHEET_RAMP_SPEED = 1.0;
@@ -133,23 +219,40 @@ class MonetaryPolicySubsystem
     public const QT_ACTIVATION_GAP_THRESHOLD = 0.010;
     /** Inflation threshold above which central bank initiates Quantitative Tightening */
     public const QT_ACTIVATION_INFLATION_THRESHOLD = 0.022;
-    /** Overheating pressure at which runoff reaches full speed; QT is a runoff RATE, not a yield target, because the bank can only return the duration it holds. */
+    /**
+     * Overheating pressure at which runoff reaches full speed; QT is a runoff RATE, not a yield target, because the
+     * bank can only return the duration it holds.
+     */
     public const QT_MAX_INTENSITY = 0.005;
     /** Sensitivity multiplier scaling QT bond runoff with economic overheating. */
     public const QT_SEVERITY_MULTIPLIER = 0.40;
-    /** Extra runoff speed at full overheating pressure (Fed 2017-19 then 2022 roughly doubled its monthly caps), on top of the passive BALANCE_SHEET_RAMP_SPEED. */
+    /**
+     * Extra runoff speed at full overheating pressure (Fed 2017-19 then 2022 roughly doubled its monthly caps), on top
+     * of the passive BALANCE_SHEET_RAMP_SPEED.
+     */
     public const QT_RUNOFF_ACCELERATION = 1.0;
 
     // --- The Authority's Income ---
-    /** Currency in circulation over GDP, the Authority's interest-free funding: 7.8%, the US in 2018Q4 (St. Louis Fed, On the Economy, May 2019). */
+    /**
+     * Currency in circulation over GDP, the Authority's interest-free funding: 7.8%, the US in 2018Q4 (St. Louis Fed,
+     * On the Economy, May 2019).
+     */
     public const CURRENCY_TO_GDP = 0.078;
-    /** Bonds the full programme holds, over GDP: 19.5%, the Fed's securities held outright at QE3's end ($4.21T, H.4.1 22 Oct 2014) less the ~$0.79T held before the crisis, on 2014's $17.5T GDP. */
+    /**
+     * Bonds the full programme holds, over GDP: 19.5%, the Fed's securities held outright at QE3's end ($4.21T, H.4.1
+     * 22 Oct 2014) less the ~$0.79T held before the crisis, on 2014's $17.5T GDP.
+     */
     public const QE_HOLDINGS_TO_GDP_AT_FULL_PROGRAM = 0.195;
 
     // --- Deposits Channel (Drechsler, Savov & Schnabl 2017) ---
-    /** Money-market share per unit of deposit spread beyond the neutral spread (the neutral rate less the base beta's share of it): the 2022-23 cycle moved ~5 points of share on ~100 bps of extra spread. */
+    /**
+     * Money-market share per unit of deposit spread beyond the neutral spread (the neutral rate less the base beta's
+     * share of it): the 2022-23 cycle moved ~5 points of share on ~100 bps of extra spread.
+     */
     public const MMF_SPREAD_SENSITIVITY = 5.0;
-    /** Time constant (years) of household migration between deposits and money funds: a slow reallocation, not a run. */
+    /**
+     * Time constant (years) of household migration between deposits and money funds: a slow reallocation, not a run.
+     */
     public const MMF_MIGRATION_YEARS = 1.0;
     /** Floor on the money-market share: a residual institutional base survives a decade at the lower bound. */
     public const MIN_MMF_SHARE = 0.05;
@@ -157,16 +260,26 @@ class MonetaryPolicySubsystem
     public const MAX_MMF_SHARE = 0.40;
 
     // --- Broad Money (loans create deposits; McLeay, Radia & Thomas 2014) ---
-    /** Broad money over GDP, the stock the Authority's purchases add reserves to: about a year of output in a deposit-funded economy. */
+    /**
+     * Broad money over GDP, the stock the Authority's purchases add reserves to: about a year of output in a
+     * deposit-funded economy.
+     */
     public const BROAD_MONEY_TO_GDP = 1.0;
     /** Horizon (years) money growth is read over, as a year-on-year rate. */
     public const MONEY_GROWTH_HORIZON_YEARS = 1.0;
-    /** Time constant (years) of M2 growth's measured trend: a decade, past the 2-4 year QE programmes and credit swings its readers respond to, so the trend is the medium-term growth a reference value is set on (ECB 1998's M3 reference value). */
+    /**
+     * Time constant (years) of M2 growth's measured trend: a decade, past the 2-4 year QE programmes and credit swings
+     * its readers respond to, so the trend is the medium-term growth a reference value is set on (ECB 1998's M3
+     * reference value).
+     */
     public const M2_TREND_YEARS = 10.0;
 
     public function __construct(
         private readonly MathUtility $mathUtility,
-        /** Records what set the target and what held the rate. Null in a test or a headless harness, off everywhere the ticker is not. */
+        /**
+         * Records what set the target and what held the rate. Null in a test or a headless harness, off everywhere the
+         * ticker is not.
+         */
         private readonly ?MacroDiagnosticsProbe $diagnostics = null,
     ) {}
 
@@ -444,10 +557,9 @@ class MonetaryPolicySubsystem
     /**
      * The Authority's net interest income, a share of GDP a year: the Exchequer's paper backing the currency earns what
      * the debt pays (CreditFiscalSubsystem::sovereignEffectiveRate()), and the bonds its purchases hold earn their own
-     * coupon, the yields they were bought at (rollAuthorityBookCoupon()), less the policy rate paid on the reserves that
-     * bought them. It reproduces the Fed's remittances: 0.24% of GDP in
-     * 2007, about 0.57% in 2015 (0.54% paid) and 0.23% in 2019 (0.26%). Negative when the policy rate rises past the
-     * coupon on a large book, as in 2022-23.
+     * coupon, the yields they were bought at (rollAuthorityBookCoupon()), less the policy rate paid on the reserves
+     * that bought them. It reproduces the Fed's remittances: 0.24% of GDP in 2007, about 0.57% in 2015 (0.54% paid) and
+     * 0.23% in 2019 (0.26%). Negative when the policy rate rises past the coupon on a large book, as in 2022-23.
      */
     public static function authorityNetIncomeToGdp(MacroState|MacroStateDTO $state): float
     {
@@ -458,10 +570,10 @@ class MonetaryPolicySubsystem
     }
 
     /**
-     * Rolls the coupon the Authority's bond book earns over a tick of its balance sheet: purchases come in at the market
-     * yield, runoff takes bonds out pro rata and leaves the coupon, and while the book is not running off its maturing
-     * bonds are reinvested at the market yield over the debt's repricing horizon. The whole stock's coupon carries debt
-     * issued before the programme; a book bought at the lower bound earns what it paid.
+     * Rolls the coupon the Authority's bond book earns over a tick of its balance sheet: purchases come in at the
+     * market yield, runoff takes bonds out pro rata and leaves the coupon, and while the book is not running off its
+     * maturing bonds are reinvested at the market yield over the debt's repricing horizon. The whole stock's coupon
+     * carries debt issued before the programme; a book bought at the lower bound earns what it paid.
      *
      * @param MacroState $state           State whose balance sheet intensity has just been set.
      * @param float      $holdingsBefore  The book over GDP before this tick's operations.
@@ -481,7 +593,9 @@ class MonetaryPolicySubsystem
         $state->authorityBookCouponRate = (($keptCoupon * $kept) + ($state->yield10y * max(0.0, $holdings - $holdingsBefore))) / $holdings;
     }
 
-    /** Bonds the Authority's purchases hold, over GDP: the full programme's holdings at the balance sheet's intensity. */
+    /**
+     * Bonds the Authority's purchases hold, over GDP: the full programme's holdings at the balance sheet's intensity.
+     */
     public static function authorityHoldingsToGdp(MacroState|MacroStateDTO $state): float
     {
         return self::QE_HOLDINGS_TO_GDP_AT_FULL_PROGRAM * max(0.0, $state->balanceSheetIntensity) / self::QE_MAX_SUPPRESSION;
@@ -511,8 +625,8 @@ class MonetaryPolicySubsystem
      */
     public function calculateBalanceSheetOperations(MacroState $state, float $dt): array
     {
-        // Purchases stand in for the cut the floor forbids (Wu & Xia 2016): none while the rule's own rate is reachable,
-        // the full programme once the rule asks for the shadow rate the 2014 stock delivered.
+        // Purchases stand in for the cut the floor forbids (Wu & Xia 2016): none while the rule's own rate is
+        // reachable, the full programme once the rule asks for the shadow rate the 2014 stock delivered.
         $floorShortfall = max(0.0, MacroEngine::EFFECTIVE_LOWER_BOUND - $state->targetRate);
         $qeYieldSuppressionTarget = min(self::QE_MAX_SUPPRESSION, self::QE_MAX_SUPPRESSION * $floorShortfall / self::QE_FULL_PROGRAM_SHORTFALL);
 
@@ -879,7 +993,8 @@ class MonetaryPolicySubsystem
      */
     public function calculateSvenssonTenor(float $t, float $level, float $nsBeta1, float $nsBeta2, float $nsBeta3, MacroState $state, float $termPremium10y = 0.0, float $longEndPremium = 0.0): float
     {
-        // Vayanos & Vila (2021) Preferred-Habitat Model: duration extraction under QE/QT compresses term premium by tenor duration
+        // Vayanos & Vila (2021) Preferred-Habitat Model: duration extraction under QE/QT compresses term premium by
+        // tenor duration
         return FixedIncome::calculateSovereignZeroYield(
             tau: $t,
             level: $level,

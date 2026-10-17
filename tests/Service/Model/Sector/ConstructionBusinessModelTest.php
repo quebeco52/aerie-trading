@@ -158,7 +158,10 @@ class ConstructionBusinessModelTest extends TestCase
         $this->assertGreaterThan($baseResult->streamRevenue['commercial_epc'], $boostResult->streamRevenue['commercial_epc']);
     }
 
-    /** Office values that have settled 10% higher are no boom: commercial orders read them against their trend, as starts read houses. */
+    /**
+     * Office values that have settled 10% higher are no boom: commercial orders read them against their trend, as
+     * starts read houses.
+     */
     public function testCommercialOrdersReadPropertyAgainstItsTrend(): void
     {
         $stock = new Stock();
@@ -239,7 +242,9 @@ class ConstructionBusinessModelTest extends TestCase
         $this->assertEqualsWithDelta($clean->clampedMargin, $after->clampedMargin, 1e-9, 'costs return to baseline once the regime exits');
     }
 
-    /** Hallegatte (2008): reconstruction after a storm season is civil work, booked through the infrastructure backlog. */
+    /**
+     * Hallegatte (2008): reconstruction after a storm season is civil work, booked through the infrastructure backlog.
+     */
     public function testRateDragIsStruckAgainstTheNominalNeutralNotRealRStar(): void
     {
         $neutral = \App\Service\Macro\MacroEngine::BASE_NATURAL_RATE + 0.02;

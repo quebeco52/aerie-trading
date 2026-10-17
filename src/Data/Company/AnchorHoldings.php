@@ -21,7 +21,10 @@ namespace App\Data\Company;
 final class AnchorHoldings
 {
     // --- Configuration Bounds ---
-    /** Least capital employed a sphere must keep OUTSIDE its portfolio. The subsidiaries are the residual, so a stake list that swallows the book stops their stream being drawn at all. */
+    /**
+     * Least capital employed a sphere must keep OUTSIDE its portfolio. The subsidiaries are the residual, so a stake
+     * list that swallows the book stops their stream being drawn at all.
+     */
     public const MIN_CONSOLIDATED_SHARE = 0.20;
 
     /** Least tradable float a listing must keep once every anchor block is subtracted, or nobody can trade it. */
@@ -40,7 +43,8 @@ final class AnchorHoldings
             'CBIL' => AnchorStake::Control,   // Precision toolmakers, the oldest holding in the sphere
             'ALCA' => AnchorStake::Control,   // Specialty industrial machinery, the engineering champion of the roster
             'KSTL' => AnchorStake::Anchor,   // Rail corridors, held for the right of way rather than the rolling stock
-            'BIRD' => AnchorStake::Anchor,   // Regulated electric: the municipal concession the Trust was chartered around
+            // Regulated electric: the municipal concession the Trust was chartered around
+            'BIRD' => AnchorStake::Anchor,
             'ERNE' => AnchorStake::Anchor,   // Communication equipment, the grid's nervous system
         ],
     ];
@@ -69,7 +73,10 @@ final class AnchorHoldings
         return self::STAKES[$ticker] ?? [];
     }
 
-    /** Fraction of a company locked away by anchor holders and the District's strategic stake, and so absent from its free float. */
+    /**
+     * Fraction of a company locked away by anchor holders and the District's strategic stake, and so absent from its
+     * free float.
+     */
     public static function closelyHeldShare(string $ticker): float
     {
         $held = StrategicHoldings::stake($ticker);
@@ -93,7 +100,10 @@ final class AnchorHoldings
         return max(0.0, min(1.0, $declaredFloat) - self::closelyHeldShare($ticker));
     }
 
-    /** Share of capital employed that is NOT the portfolio, and so is the subsidiaries. Checked against MIN_CONSOLIDATED_SHARE by whoever has the board priced. */
+    /**
+     * Share of capital employed that is NOT the portfolio, and so is the subsidiaries. Checked against
+     * MIN_CONSOLIDATED_SHARE by whoever has the board priced.
+     */
     public static function consolidatedShare(float $portfolioValue, float $investedCapital): float
     {
         if ($investedCapital <= 0.0) {

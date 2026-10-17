@@ -10,7 +10,10 @@ class ShockEvent
     public const REGULATORY_FINE = 'regulatory_fine';
     public const SEVERE_CHURN = 'severe_churn';
     public const BANK_RUN = 'bank_run';
-    /** A bank's CET1 ratio fell below the Pillar 1 minimum: payouts are barred and a capital plan is ordered, but it keeps trading. */
+    /**
+     * A bank's CET1 ratio fell below the Pillar 1 minimum: payouts are barred and a capital plan is ordered, but it
+     * keeps trading.
+     */
     public const CAPITAL_BELOW_MINIMUM = 'capital_below_minimum';
     public const MASSIVE_CREDIT_PROVISION = 'massive_credit_provision';
     public const ELEVATED_LOAN_DEFAULTS = 'elevated_loan_defaults';
@@ -24,12 +27,18 @@ class ShockEvent
     /** Central bank emergency Quantitative Easing and asset purchases during contraction near zero lower bound. */
     public const TITAN_INTERVENTION = 'titan_intervention';
 
-    /** The sovereign reserve fund starts buying the board: its domestic weight fell through the band and it trades back to target. */
+    /**
+     * The sovereign reserve fund starts buying the board: its domestic weight fell through the band and it trades back
+     * to target.
+     */
     public const SOVEREIGN_WEALTH_DEPLOYMENT = 'sovereign_wealth_deployment';
     /** The sovereign reserve fund starts selling down the board: its domestic weight rose through the band. */
     public const SOVEREIGN_WEALTH_TRIM = 'sovereign_wealth_trim';
 
-    /** A credit boom has gone bust (Schularick & Taylor): lenders are failing, households deleverage and wholesale funding runs. */
+    /**
+     * A credit boom has gone bust (Schularick & Taylor): lenders are failing, households deleverage and wholesale
+     * funding runs.
+     */
     public const BANKING_CRISIS = 'banking_crisis';
 
     /** Wholesale interbank lending freeze driven by severe counterparty liquidity spread blowout. */
@@ -46,33 +55,58 @@ class ShockEvent
     public const HOUSEHOLD_DELEVERAGING = 'household_deleveraging';
     /** A storm or other physical catastrophe large enough to make district news has struck. */
     public const NATURAL_CATASTROPHE = 'natural_catastrophe';
-    /** A scheduled district election has been held; the talks for the next government begin, unless one party won a majority. */
+    /**
+     * A scheduled district election has been held; the talks for the next government begin, unless one party won a
+     * majority.
+     */
     public const ELECTION_HELD = 'election_held';
-    /** The cabinet has lost the Diet between votes and stays on as caretaker while the parties talk; no election is called. */
+    /**
+     * The cabinet has lost the Diet between votes and stays on as caretaker while the parties talk; no election is
+     * called.
+     */
     public const GOVERNMENT_FELL = 'government_fell';
     /** A cabinet has taken office after the talks that followed a vote or a fall. */
     public const GOVERNMENT_FORMED = 'government_formed';
     /** A budget round changed the government's levers; the headline says what the Council held back, if anything. */
     public const BUDGET_ENACTED = 'budget_enacted';
-    /** The Council has named a new governor of the Monetary Authority, who will fill the rate committee with people of their stance. */
+    /**
+     * The Council has named a new governor of the Monetary Authority, who will fill the rate committee with people of
+     * their stance.
+     */
     public const GOVERNOR_APPOINTED = 'governor_appointed';
-    /** The Council has named a new head of the Financial Regulator, who sets the capital the District's banks must hold. */
+    /**
+     * The Council has named a new head of the Financial Regulator, who sets the capital the District's banks must hold.
+     */
     public const REGULATOR_APPOINTED = 'regulator_appointed';
     /** The Council has named a new head of the Sovereign Reserve Fund, who sets how much of it is in equities. */
     public const FUND_HEAD_APPOINTED = 'fund_head_appointed';
     /** The Council has named a new head of the Exchequer, who sets how long the District borrows for. */
     public const EXCHEQUER_HEAD_APPOINTED = 'exchequer_head_appointed';
-    /** The Council has named a new head of the Fair Trading Board, who sets how much of its market a merger may take. */
+    /**
+     * The Council has named a new head of the Fair Trading Board, who sets how much of its market a merger may take.
+     */
     public const FAIR_TRADING_HEAD_APPOINTED = 'fair_trading_head_appointed';
-    /** The Council has named a new head of the Securities Commission, who sets the margin investors put up and what listed firms must disclose. */
+    /**
+     * The Council has named a new head of the Securities Commission, who sets the margin investors put up and what
+     * listed firms must disclose.
+     */
     public const SECURITIES_HEAD_APPOINTED = 'securities_head_appointed';
-    /** The Council has named a new director of the Security Bureau, who leads the District's fight against organised crime and foreign agents. */
+    /**
+     * The Council has named a new director of the Security Bureau, who leads the District's fight against organised
+     * crime and foreign agents.
+     */
     public const SECURITY_DIRECTOR_APPOINTED = 'security_director_appointed';
     /** The Council has named a new commandant of the Coast Guard, which holds the District's waters on its orders. */
     public const COAST_GUARD_COMMANDANT_APPOINTED = 'coast_guard_commandant_appointed';
-    /** The Council has named a new commander of the State Guard, the District's standing land force, which only the Council can call out. */
+    /**
+     * The Council has named a new commander of the State Guard, the District's standing land force, which only the
+     * Council can call out.
+     */
     public const STATE_GUARD_COMMANDER_APPOINTED = 'state_guard_commander_appointed';
-    /** An appointment has tipped the rate committee into or out of a hawkish or dovish supermajority, which leans the policy rule. */
+    /**
+     * An appointment has tipped the rate committee into or out of a hawkish or dovish supermajority, which leans the
+     * policy rule.
+     */
     public const AUTHORITY_MAJORITY_SHIFT = 'authority_majority_shift';
     /** The prime minister's party has a new leader, who is prime minister without an election. */
     public const PRIME_MINISTER_CHANGED = 'prime_minister_changed';

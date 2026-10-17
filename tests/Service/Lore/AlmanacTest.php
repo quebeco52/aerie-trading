@@ -32,7 +32,10 @@ class AlmanacTest extends TestCase
         }
     }
 
-    /** Every file in content/almanac/ is published, the README and the underscored drafts aside, under a slug its address can carry. */
+    /**
+     * Every file in content/almanac/ is published, the README and the underscored drafts aside, under a slug its
+     * address can carry.
+     */
     public function testEveryFileIsAnEntry(): void
     {
         $files = array_map(static fn(string $path): string => basename($path, '.md'), glob(dirname(__DIR__, 3) . '/' . Almanac::DIRECTORY . '/*.md') ?: []);
@@ -69,7 +72,10 @@ class AlmanacTest extends TestCase
         $this->assertDoesNotMatchRegularExpression('/\bYear\s+-?\d+\b/i', $text, "{$entry->slug}: the Almanac dates nothing against the game's calendar.");
     }
 
-    /** A link renders as the target's title, or the words given; a page links an entry through almanac_url(), which refuses one that does not exist. */
+    /**
+     * A link renders as the target's title, or the words given; a page links an entry through almanac_url(), which
+     * refuses one that does not exist.
+     */
     public function testLinksRenderAndPagesCannotLinkNowhere(): void
     {
         $affair = self::almanac()->get('drainrock-affair');

@@ -25,23 +25,39 @@ use App\Service\Model\ModelParam;
 class CustodyBankBusinessModel extends CommercialBankBusinessModel
 {
     // --- Operating Cyclicality & Demand Structure ---
-    /** Elasticity of volumes and costs to the macro cycle. The cycle reaches custody fees through the asset values this model reads, so the engine's output-gap terms would count it twice (band floor). */
+    /**
+     * Elasticity of volumes and costs to the macro cycle. The cycle reaches custody fees through the asset values this
+     * model reads, so the engine's output-gap terms would count it twice (band floor).
+     */
     public const OPERATING_CYCLICALITY = 0.20;
 
     // --- Franchise Pricing (State Street, 2019) ---
-    /** Fee revenue per unit of earning assets: $9.15B of fees in 2019 on $179.1B of average interest-earning assets (State Street 4Q19 release; 1Q19 10-Q). */
+    /**
+     * Fee revenue per unit of earning assets: $9.15B of fees in 2019 on $179.1B of average interest-earning assets
+     * (State Street 4Q19 release; 1Q19 10-Q).
+     */
     public const NON_INTEREST_INCOME_TO_EARNING_ASSETS = 0.0511;
     /** Operating cost per unit of earning assets: $9.03B of expenses in 2019 on the same base. */
     public const OPERATING_COST_TO_EARNING_ASSETS = 0.0504;
-    /** Loans as a share of loans and securities: 9.2% and 41.5% of average assets in 4Q19 (State Street 4Q19 presentation). */
+    /**
+     * Loans as a share of loans and securities: 9.2% and 41.5% of average assets in 4Q19 (State Street 4Q19
+     * presentation).
+     */
     public const LOAN_SHARE_OF_EARNING_ASSETS = 0.18;
 
     // --- Institutional Deposits ---
-    /** Deposit beta of institutional cash: about 75% on US interest-bearing deposits over the 2022-23 cycle (State Street 4Q23 call), on the 82.3% of deposits that bear interest (4Q19 averages). */
+    /**
+     * Deposit beta of institutional cash: about 75% on US interest-bearing deposits over the 2022-23 cycle (State
+     * Street 4Q23 call), on the 82.3% of deposits that bear interest (4Q19 averages).
+     */
     public const CUSTODY_DEPOSIT_BETA = 0.75 * 0.823;
 
     // --- Assets Under Custody ---
-    /** Servicing fees per unit of equity-market value: a 10% move in world equity valuations moves total revenue about 2% (State Street 10-K, 2010-2013), on servicing and management fees of about 60% of revenue. Fixed-income valuations move it half as much; the macro carries no measured trend for bond prices, so that leg is left out. */
+    /**
+     * Servicing fees per unit of equity-market value: a 10% move in world equity valuations moves total revenue about
+     * 2% (State Street 10-K, 2010-2013), on servicing and management fees of about 60% of revenue. Fixed-income
+     * valuations move it half as much; the macro carries no measured trend for bond prices, so that leg is left out.
+     */
     public const EQUITY_FEE_ELASTICITY = 0.33;
     /** Default share of servicing fees earned on the Sovereign Reserve Fund's book. */
     public const FUND_CUSTODY_SHARE = 0.0;

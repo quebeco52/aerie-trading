@@ -201,7 +201,9 @@ class LaborMarketSubsystemTest extends TestCase
         $this->assertEqualsWithDelta($balance, $state->nairu, 0.0005);
     }
 
-    /** A recovery from above, unemployment still a little over the NAIRU but inside the scarring threshold, heals it. */
+    /**
+     * A recovery from above, unemployment still a little over the NAIRU but inside the scarring threshold, heals it.
+     */
     public function testScarringHealsWhileUnemploymentApproachesFromAbove(): void
     {
         $state = new MacroState();

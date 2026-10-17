@@ -54,21 +54,37 @@ use App\Service\Math\FinancialConstants;
  */
 final class IndexCommittee
 {
-    /** Passes the diversification cap is worked over. Each pass is a fixed point of one rule that may break the other; it converges in two or three. */
+    /**
+     * Passes the diversification cap is worked over. Each pass is a fixed point of one rule that may break the other;
+     * it converges in two or three.
+     */
     private const CAP_ITERATIONS = 12;
 
     // --- Market Index Membership (Shleifer 1986) ---
-    /** Banding around the cut, as a fraction of the constituent count. A sitting member is not evicted the first time a marginal name edges past it: real indices band precisely because ranking noise at the boundary would otherwise churn the whole passive book twice a year for nothing. */
+    /**
+     * Banding around the cut, as a fraction of the constituent count. A sitting member is not evicted the first time a
+     * marginal name edges past it: real indices band precisely because ranking noise at the boundary would otherwise
+     * churn the whole passive book twice a year for nothing.
+     */
     public const INDEX_MEMBERSHIP_BUFFER = 0.20;
-    /** Floor on the trailing volatility an inverse-volatility weighting divides by. A name that has gone quiet enough to divide by nothing would otherwise take the whole fund. */
+    /**
+     * Floor on the trailing volatility an inverse-volatility weighting divides by. A name that has gone quiet enough to
+     * divide by nothing would otherwise take the whole fund.
+     */
     public const INDEX_MINIMUM_WEIGHT_VOLATILITY = 0.04;
 
     // --- Passive Assets by Index (share of the indexed book each published index carries) ---
-    /** Ceiling on how much passive ownership a single name can carry relative to its weight in the market. A name held by every fund at once is still only so much of anyone's book. */
+    /**
+     * Ceiling on how much passive ownership a single name can carry relative to its weight in the market. A name held
+     * by every fund at once is still only so much of anyone's book.
+     */
     public const INDEX_MAX_PASSIVE_OWNERSHIP_MULTIPLE = 4.0;
 
     // --- Index Fund Accounting ---
-    /** Smallest rebalance worth charging for, as a fraction of the fund. Below this the trade is the rounding on a weight that barely moved, and charging it would write a cost row every quarter for nothing. */
+    /**
+     * Smallest rebalance worth charging for, as a fraction of the fund. Below this the trade is the rounding on a
+     * weight that barely moved, and charging it would write a cost row every quarter for nothing.
+     */
     public const FUND_MINIMUM_REBALANCE_TURNOVER = 0.0005;
 
     public function __construct(
@@ -587,7 +603,8 @@ final class IndexCommittee
             return $nothing;
         }
 
-        // Drifted portfolio weights: calculate weights from current market prices to measure turnover from actual holdings.
+        // Drifted portfolio weights: calculate weights from current market prices to measure turnover from actual
+        // holdings.
         $held = [];
         $heldTotal = 0.0;
 

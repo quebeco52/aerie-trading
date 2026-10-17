@@ -38,7 +38,10 @@ class BusinessCycleRealismTest extends TestCase
     private const TICKS_PER_YEAR = 252;
     private const SEEDS = [20260918, 4711, 90210, 1, 2, 3, 5, 8];
 
-    /** @var array<string, list<float>> Pooled quarterly gap paths, keyed by seed list; the run is the whole cost of this class. */
+    /**
+     * @var array<string, list<float>> Pooled quarterly gap paths, keyed by seed list; the run is the whole cost of this
+     *                                 class.
+     */
     private static array $pathCache = [];
 
     public function testTheOutputGapIsLeftSkewedWithARealLeftTail(): void

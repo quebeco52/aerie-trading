@@ -25,7 +25,10 @@ class MathUtility
     private ?float $spareNormal = null;
 
     // --- Draw Replay ---
-    /** Uniform a replay hands out once its recording runs out: the median, so a branch the recording never reached draws nothing extreme. */
+    /**
+     * Uniform a replay hands out once its recording runs out: the median, so a branch the recording never reached draws
+     * nothing extreme.
+     */
     public const REPLAY_EXHAUSTED_DRAW = 0.5;
 
     private float $randMaxInverse;
@@ -112,7 +115,8 @@ class MathUtility
 
     /**
      * An instance with a Mersenne Twister of its own, so what it draws neither takes from nor shifts the simulation's
-     * global stream: a subsystem drawing here can be added to or left out of a seeded run without moving any other draw.
+     * global stream: a subsystem drawing here can be added to or left out of a seeded run without moving any other
+     * draw.
      *
      * @param int|null $seed Seed for a reproducible stream; null seeds it from the system's entropy.
      */

@@ -30,11 +30,17 @@ class CorporateMetrics
     public const LIFE_CYCLE_MAX_PAYOUT_RATIO = 0.85;
 
     // --- CapEx & Construction in Progress (CIP) ---
-    /** Maximum fraction of physical/invested capital that can be deferred as unplaced Construction in Progress (25%). */
+    /**
+     * Maximum fraction of physical/invested capital that can be deferred as unplaced Construction in Progress (25%).
+     */
     public const MAX_CIP_CAPITAL_DEDUCTION_RATIO = 0.25;
 
     // --- Fixed Asset Ledger (PP&E) ---
-    /** Viability floor on net PP&E as a share of invested capital. Kept minimal on purpose: a distributor's or staffing firm's capital genuinely IS its working capital, and a larger floor would invent plant the balance sheet cannot fund. */
+    /**
+     * Viability floor on net PP&E as a share of invested capital. Kept minimal on purpose: a distributor's or staffing
+     * firm's capital genuinely IS its working capital, and a larger floor would invent plant the balance sheet cannot
+     * fund.
+     */
     public const MIN_PPE_SHARE_OF_CAPITAL = 0.02;
 
     private static ?self $instance = null;
@@ -71,7 +77,10 @@ class CorporateMetrics
         return $this->calculateScaleRatio($capital, $macroState->nominalGdpIndex, (float) $stock->getSamRatio(), self::secularMarketGrowth($stock, $macroState->totalTime));
     }
 
-    /** How far the firm's sector has grown past (or fallen behind) the economy since the open: exp of its faded secular excess. */
+    /**
+     * How far the firm's sector has grown past (or fallen behind) the economy since the open: exp of its faded secular
+     * excess.
+     */
     public static function secularMarketGrowth(Stock $stock, float $totalTime): float
     {
         $excess = IndustryShareLedger::secularExcessGrowth(\App\Data\Company\Sectors::strategyFor($stock->getIndustry()), $stock);
@@ -86,7 +95,8 @@ class CorporateMetrics
 
     /**
      * Treasury the business does not need: cash over the model's own target on its operating base, without a manager's
-     * taste for more. None for a financial, whose cash is its balance sheet. Valued at face wherever the firm is valued.
+     * taste for more. None for a financial, whose cash is its balance sheet. Valued at face wherever the firm is
+     * valued.
      */
     public static function excessOperatingCash(Stock $stock): float
     {
@@ -125,7 +135,8 @@ class CorporateMetrics
      * and Hayashi (1982) Q-Theory with Quadratic Adjustment Costs.
      *
      * As a company pushes its capital footprint ($investedCapital) beyond optimal market share ($optimalThreshold),
-     * administrative bloat, coordination friction, and SG&A costs increase quadratically above threshold ($excessRatio^2).
+     * administrative bloat, coordination friction, and SG&A costs increase quadratically above threshold
+     * ($excessRatio^2).
      */
     public function calculateMarketSaturationPenalty(Stock $stock, float $investedCapital, \App\DTO\MacroStateDTO $macroState): float
     {
@@ -148,9 +159,9 @@ class CorporateMetrics
      * Calculates diminishing marginal return on capital above optimal market scale, following the
      * Cobb-Douglas Marginal Productivity Model: ROIC_marginal = ROIC_base * (K / K_optimal)^(-α).
      *
-     * In neoclassical investment theory (Tobin's Q / Hayashi 1982), marginal productivity of capital (MP_K)
-     * decays power-law asymptotically as capital accumulation (K) outpaces serviceable demand (K_optimal).
-     * The elasticity parameter α is scaled by the firm's economic moat ($moatFactor) to reflect resistance to saturation.
+     * In neoclassical investment theory (Tobin's Q / Hayashi 1982), marginal productivity of capital (MP_K) decays
+     * power-law asymptotically as capital accumulation (K) outpaces serviceable demand (K_optimal). The elasticity
+     * parameter α is scaled by the firm's economic moat ($moatFactor) to reflect resistance to saturation.
      */
     public function calculateMarginalReturn(Stock $stock, float $trueReturn, float $saturationPenalty, float $investedCapital, \App\DTO\MacroStateDTO $macroState): float
     {

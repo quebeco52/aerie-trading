@@ -49,7 +49,10 @@ class ElectionForecastTest extends TestCase
         $this->assertEqualsWithDelta((1.0 - $stepGain) * $stepPrior, $drifted[Diet::CIVIC], 1e-15, 'The normal vote\'s walk adds to what a year leaves uncertain.');
     }
 
-    /** The odds are the cabinets the talks seat, as often as they seat them; a party with a majority governs alone for certain. */
+    /**
+     * The odds are the cabinets the talks seat, as often as they seat them; a party with a majority governs alone for
+     * certain.
+     */
     public function testTheOddsAreTheTalksOwn(): void
     {
         $seats = Politics::dHondt(Diet::SEED_VOTE_SHARES, Diet::SEATS);
@@ -127,7 +130,10 @@ class ElectionForecastTest extends TestCase
         $this->assertEqualsWithDelta(4.5, ElectionForecast::sittingTakesEffect($state), 1e-9);
     }
 
-    /** The laws forecast take effect at the first budget after their government takes office: half a year after a vote, its talks being shorter than a round. */
+    /**
+     * The laws forecast take effect at the first budget after their government takes office: half a year after a vote,
+     * its talks being shorter than a round.
+     */
     public function testTheLawsTakeEffectAtTheNewGovernmentsFirstBudget(): void
     {
         $state = new PoliticsState();
@@ -191,7 +197,10 @@ class ElectionForecastTest extends TestCase
         $this->assertLessThan(1.0, $state->forecastCabinets[0]['chance'], 'Four years out, no government is certain.');
     }
 
-    /** What the politics hands the economy carries the forecast laws and when they take effect; nothing before a forecast. */
+    /**
+     * What the politics hands the economy carries the forecast laws and when they take effect; nothing before a
+     * forecast.
+     */
     public function testThePolicyCarriesTheExpectedLaws(): void
     {
         $state = new PoliticsState();

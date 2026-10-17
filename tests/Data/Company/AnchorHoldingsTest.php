@@ -23,7 +23,10 @@ use PHPUnit\Framework\TestCase;
  */
 class AnchorHoldingsTest extends TestCase
 {
-    /** Market-to-book at seed, used to size the portfolio without replaying it. The holdings run 2.5x-8.1x, average 3.98x. Seed and reset check the REAL prices, so they are the authority and this is the early warning. */
+    /**
+     * Market-to-book at seed, used to size the portfolio without replaying it. The holdings run 2.5x-8.1x, average
+     * 3.98x. Seed and reset check the REAL prices, so they are the authority and this is the early warning.
+     */
     private const REFERENCE_MARKET_TO_BOOK = 4.0;
 
     /** @return array<string, array<string, mixed>> ticker => seed row */
@@ -52,7 +55,9 @@ class AnchorHoldingsTest extends TestCase
         }
     }
 
-    /** A sphere holding itself or another sphere needs look-through: a cap that already contains the mark is circular. */
+    /**
+     * A sphere holding itself or another sphere needs look-through: a cap that already contains the mark is circular.
+     */
     public function testNoSphereHoldsItselfOrAnotherSphere(): void
     {
         foreach (AnchorHoldings::STAKES as $holder => $stakes) {
@@ -87,7 +92,10 @@ class AnchorHoldingsTest extends TestCase
         }
     }
 
-    /** Ownership and `public_float` are one fact, and the float is derived so they cannot drift. What is left to guard is that the subtraction leaves a real company behind. */
+    /**
+     * Ownership and `public_float` are one fact, and the float is derived so they cannot drift. What is left to guard
+     * is that the subtraction leaves a real company behind.
+     */
     public function testEveryHoldingKeepsATradableFloatAfterTheAnchorBlocksAreRemoved(): void
     {
         $anchored = [];

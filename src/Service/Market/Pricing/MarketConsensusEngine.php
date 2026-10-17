@@ -23,19 +23,30 @@ use App\Service\Math\Valuation;
 class MarketConsensusEngine
 {
     // --- Analyst Bias & Noise ---
-    /** Walk-down of the published revenue consensus below the unbiased estimate: 1.5%, the average S&P 500 revenue surprise (FactSet Earnings Insight, 10-year average; Richardson, Teoh & Wysocki 2004). */
+    /**
+     * Walk-down of the published revenue consensus below the unbiased estimate: 1.5%, the average S&P 500 revenue
+     * surprise (FactSet Earnings Insight, 10-year average; Richardson, Teoh & Wysocki 2004).
+     */
     public const ANALYST_WALKDOWN_BIAS = 0.015;
-    /** Walk-down of the published EPS consensus in standard deviations of the firm's own measured surprise: 0.674, so three reports in four beat (the S&P 500's 75% 10-year beat rate, FactSet Earnings Insight). */
+    /**
+     * Walk-down of the published EPS consensus in standard deviations of the firm's own measured surprise: 0.674, so
+     * three reports in four beat (the S&P 500's 75% 10-year beat rate, FactSet Earnings Insight).
+     */
     public const ANALYST_EPS_WALKDOWN_SURPRISE_SDS = 0.674;
     /** Time constant of the surprise record the walk-down is sized from: 1.5 years, about six reports. */
     public const SURPRISE_RECORD_MEMORY_YEARS = 1.5;
     /** Weight of the typical firm's surprise before a firm has a record of its own, in reports: two. */
     public const SURPRISE_RECORD_PRIOR_REPORTS = 2.0;
-    /** The typical firm's quarterly earnings surprise sd as a share of its quarterly revenue: 2.5%, the board's median. */
+    /**
+     * The typical firm's quarterly earnings surprise sd as a share of its quarterly revenue: 2.5%, the board's median.
+     */
     public const TYPICAL_EARNINGS_SURPRISE_SD = 0.025;
 
     // --- Bayesian Analyst Consensus ---
-    /** Widest one-quarter change in the structural base the analyst anchor is rolled forward by (x0.5 to x2.0). A capacity cap binding or a collapse is not a growth rate analysts extrapolate. */
+    /**
+     * Widest one-quarter change in the structural base the analyst anchor is rolled forward by (x0.5 to x2.0). A
+     * capacity cap binding or a collapse is not a growth rate analysts extrapolate.
+     */
     public const ANALYST_ANCHOR_MAX_ROLL_FORWARD = 2.0;
     /** Baseline prior uncertainty variance in market analyst earnings consensus formation (~0.06^2). */
     public const BAYESIAN_BASE_PRIOR_VARIANCE = 0.0036;
@@ -43,7 +54,10 @@ class MarketConsensusEngine
     public const BAYESIAN_VIX_SCALING_FACTOR = 0.02;
 
     // --- Reported KPIs in Consensus ---
-    /** Share of a disclosed book-to-bill deviation from parity that analysts carry into the next quarter's revenue estimate. Orders convert to revenue, so a disclosed order book is a forecast the market already holds. */
+    /**
+     * Share of a disclosed book-to-bill deviation from parity that analysts carry into the next quarter's revenue
+     * estimate. Orders convert to revenue, so a disclosed order book is a forecast the market already holds.
+     */
     public const BOOK_TO_BILL_CONSENSUS_SENSITIVITY = 0.35;
     /** Bound on the resulting forward revenue tilt, so a single blowout order quarter cannot run the estimate away. */
     public const MAX_BOOK_TO_BILL_CONSENSUS_TILT = 0.15;
@@ -104,10 +118,13 @@ class MarketConsensusEngine
      * @param MathUtility            $mathUtility            PRNG for analyst estimation noise.
      * @param \App\Entity\Stock      $stock                  The stock entity for anchor history.
      * @param float                  $marketVolatility       Prevailing market volatility (VIX proxy).
-     * @param float|null             $expectedVariableMargin Ex-ante variable cost ratio before the sector physics move it.
+     * @param float|null             $expectedVariableMargin Ex-ante variable cost ratio before the sector physics move
+     *                                                       it.
      * @param float                  $seasonalRatio          Seasonality adjustment ratio (Factor_t / Factor_{t-1}).
-     * @param float                  $priorExpectedRevenue   Pre-shock expected revenue the anchor was formed against; 0 when unknown.
-     * @param float|null             $expectedRevenueBeforeShocks The quarter's expected revenue without the firm's own demand
+     * @param float                  $priorExpectedRevenue   Pre-shock expected revenue the anchor was formed against; 0
+     *                                                       when unknown.
+     * @param float|null             $expectedRevenueBeforeShocks The quarter's expected revenue without the firm's own
+     *                                                            demand
      *                                                     shock and jump; null when the caller has none to separate.
      */
     public function generateConsensus(
@@ -164,7 +181,8 @@ class MarketConsensusEngine
             * (1.0 + $actuals->publishedRevenueShift)
             * (1.0 + $actuals->observableShockZ * $dynamicVisibility);
 
-        // Bayesian Updating: Analysts blend structural baseline capacity / anchored prior with noisy channel signals (fresh estimate)
+        // Bayesian Updating: Analysts blend structural baseline capacity / anchored prior with noisy channel signals
+        // (fresh estimate)
         $priorVariance = self::BAYESIAN_BASE_PRIOR_VARIANCE
             + ($marketVolatility * self::BAYESIAN_VIX_SCALING_FACTOR);
 

@@ -161,7 +161,10 @@ class DebtEngineTest extends TestCase
         $this->assertSame('AA', $rating);
     }
 
-    /** An operating firm at 3-4x net debt to EBITDA with an Altman Z'' in the safe zone and a distance to default above AAA. */
+    /**
+     * An operating firm at 3-4x net debt to EBITDA with an Altman Z'' in the safe zone and a distance to default above
+     * AAA.
+     */
     private function leveredOperatingFirm(string $rating): Stock
     {
         $stock = new Stock();
@@ -256,7 +259,10 @@ class DebtEngineTest extends TestCase
         $this->assertSame($metrics->ebitda, $rated[0]['ebitda'], 'the record keeps the year as it was, not the base case');
     }
 
-    /** A regulated utility is read on S&P's medial volatility table: 4.0-4.5x is significant there and keeps its A, where the standard table's aggressive band would anchor it at BBB. */
+    /**
+     * A regulated utility is read on S&P's medial volatility table: 4.0-4.5x is significant there and keeps its A,
+     * where the standard table's aggressive band would anchor it at BBB.
+     */
     public function testAUtilityIsReadOnTheMedialVolatilityTable(): void
     {
         $macroState = new MacroStateDTO(policyRateEma: 0.04, corporateTaxRate: 0.21, yield5yEma: 0.04);
@@ -629,7 +635,8 @@ class DebtEngineTest extends TestCase
         $this->assertFalse($resultBankSafe['is_bankrupt']);
         $this->assertEqualsWithDelta(10.0, $resultBankSafe['z_score'], 0.1);
 
-        // Insolvent Bank below statutory minimum (Equity = $10M / Assets = $1000M = 1% -> score 1.0 < 4.0 Bankrupt threshold)
+        // Insolvent Bank below statutory minimum (Equity = $10M / Assets = $1000M = 1% -> score 1.0 < 4.0 Bankrupt
+        // threshold)
         $bankInsolvent = new Stock();
         $bankInsolvent->setTicker('BNK_DEAD');
         $bankInsolvent->setIndustry('Banks - Diversified');
@@ -753,7 +760,8 @@ class DebtEngineTest extends TestCase
 
     /**
      * A bank is underwritten on its capital, not its interest coverage: a loss quarter that leaves a single-A savings
-     * bank's coverage under one still rolls its covered bonds. An operating firm at the same rating and coverage does not.
+     * bank's coverage under one still rolls its covered bonds. An operating firm at the same rating and coverage does
+     * not.
      */
     public function testACapitalTargetingBankRefinancesThroughALossQuarter(): void
     {
@@ -805,8 +813,8 @@ class DebtEngineTest extends TestCase
      */
     /**
      * A missed maturity stays due until paid. Shut out two quarters running, a firm that pays the second quarter's own
-     * slice still owes the first quarter's: it has not cured, and the grace clock keeps running. A reopened market rolls
-     * the arrears with the slice, and only that refinanced share reprices.
+     * slice still owes the first quarter's: it has not cured, and the grace clock keeps running. A reopened market
+     * rolls the arrears with the slice, and only that refinanced share reprices.
      */
     public function testAMissedMaturityStaysDueUntilPaid(): void
     {
@@ -1301,9 +1309,9 @@ class DebtEngineTest extends TestCase
     }
 
     /**
-     * Borrowing reaches the spread through the rating: each step up in debt on an unchanged business is reviewed by
-     * the agency, which reads the leverage against the business, and the issue then prices at the class it lands in.
-     * The spread never narrows as debt is added and is a junk-bond spread away once the firm is levered into high yield.
+     * Borrowing reaches the spread through the rating: each step up in debt on an unchanged business is reviewed by the
+     * agency, which reads the leverage against the business, and the issue then prices at the class it lands in. The
+     * spread never narrows as debt is added and is a junk-bond spread away once the firm is levered into high yield.
      */
     public function testTheCreditSpreadWidensAsDebtPushesTheRatingDown(): void
     {
@@ -1975,8 +1983,8 @@ class DebtEngineTest extends TestCase
     }
 
     /**
-     * The class curves are quoted at senior unsecured recoveries. A hedge fund borrows from its prime broker against its
-     * portfolio, a secured claim. Seeded alike as a top credit and both rated B, the fund pays less than a sponsor
+     * The class curves are quoted at senior unsecured recoveries. A hedge fund borrows from its prime broker against
+     * its portfolio, a secured claim. Seeded alike as a top credit and both rated B, the fund pays less than a sponsor
      * whose notes are unsecured: the default part of its spread is scaled to the secured recovery. A seeded spread is
      * read against the issuer's own recovery-adjusted curve, so the same seeding at the same class prices the same.
      */
@@ -2005,10 +2013,10 @@ class DebtEngineTest extends TestCase
     }
 
     /**
-     * Each firm type is anchored on the table S&P rates it with: a REIT on the real estate debt/EBITDA bands, a reinsurer
-     * on its capital (the capital-rated ceiling, not the corporate matrix), private equity and a hedge fund on debt to
-     * adjusted total equity. Read through the pro-forma rating, which takes the worse of the rating, the distance to
-     * default (here AAA) and the anchor.
+     * Each firm type is anchored on the table S&P rates it with: a REIT on the real estate debt/EBITDA bands, a
+     * reinsurer on its capital (the capital-rated ceiling, not the corporate matrix), private equity and a hedge fund
+     * on debt to adjusted total equity. Read through the pro-forma rating, which takes the worse of the rating, the
+     * distance to default (here AAA) and the anchor.
      */
     public function testEachFirmTypeIsAnchoredOnItsOwnTable(): void
     {

@@ -697,7 +697,10 @@ class OrderFlowImpactWiringTest extends TestCase
         $this->assertSame(0.0, $this->tracker()->updateStocks([$this->stock()->setTicker('ACC')], 1.0 / 14400.0, false, new MacroStateDTO())['strategic_stake_cash'], 'No dividend, no cash.');
     }
 
-    /** The District keeps its percentage by tendering into a buyback and subscribing to an issue, and is paid or pays for it. */
+    /**
+     * The District keeps its percentage by tendering into a buyback and subscribing to an issue, and is paid or pays
+     * for it.
+     */
     public function testTheDistrictsStakeTendersIntoABuybackAndSubscribesToAnIssue(): void
     {
         $retire = static function (Stock $stock): void {

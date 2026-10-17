@@ -29,7 +29,10 @@ use App\Service\Model\ModelParam;
 class SteelManufacturingBusinessModel extends StandardCorporateBusinessModel
 {
     // --- Operating Cyclicality & Demand Structure ---
-    /** Elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). Construction and auto steel demand swings with the cycle. */
+    /**
+     * Elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). Construction and auto
+     * steel demand swings with the cycle.
+     */
     public const OPERATING_CYCLICALITY = 1.50;
     /** Own-price elasticity of demand: volume lost per unit of real price increase. */
     public const PRICE_ELASTICITY_OF_DEMAND = 0.40;
@@ -37,13 +40,21 @@ class SteelManufacturingBusinessModel extends StandardCorporateBusinessModel
     public const INDUSTRY_SUBSTITUTABILITY = 0.60;
 
     // --- Input Cost Basket ---
-    /** Shares of the variable cost base by input channel, measured from the BEA input-output accounts with supply-chain content (labor still the model's own). */
+    /**
+     * Shares of the variable cost base by input channel, measured from the BEA input-output accounts with supply-chain
+     * content (labor still the model's own).
+     */
     public const INPUT_COST_EXPOSURES = InputOutputExposures::STEEL_MANUFACTURING;
-    /** Blast furnaces and electric arc furnaces are price takers on ore, scrap and power: raw inputs reprice at spot. */
+    /**
+     * Blast furnaces and electric arc furnaces are price takers on ore, scrap and power: raw inputs reprice at spot.
+     */
     public const PRICING_POWER_INDEX = 0.40;
 
     // --- Demand Transmission Lag ---
-    /** Years for a move in the output gap to reach the order book. Contracted tonnage and mill scheduling carry the order book well past a turn in demand. */
+    /**
+     * Years for a move in the output gap to reach the order book. Contracted tonnage and mill scheduling carry the
+     * order book well past a turn in demand.
+     */
     public const DEMAND_LAG_YEARS = 0.75;
 
     // --- Analyst Visibility & Error ---
@@ -65,15 +76,23 @@ class SteelManufacturingBusinessModel extends StandardCorporateBusinessModel
     public const SPOT_VARIANCE_SCALAR     = 0.60;
     /** Sensitivity of steel mill order demand to manufacturing PMI survey shifts. */
     public const PMI_DEMAND_SENSITIVITY   = 0.50;
-    /** Tonnage per unit of the lagged output gap beyond cyclicality: steel goes into investment goods, which swing harder than output (Clark 1917 accelerator). */
+    /**
+     * Tonnage per unit of the lagged output gap beyond cyclicality: steel goes into investment goods, which swing
+     * harder than output (Clark 1917 accelerator).
+     */
     public const INVESTMENT_ACCELERATOR_MULTIPLIER = 1.50;
-    /** Spot tonnage per unit of the foreign bloc's output gap: export orders, which fall away first when the world slows. */
+    /**
+     * Spot tonnage per unit of the foreign bloc's output gap: export orders, which fall away first when the world
+     * slows.
+     */
     public const FOREIGN_DEMAND_SENSITIVITY = 1.50;
     /** Share of spot order volume exposed to foreign currency competition and overseas steel dumping. */
     public const FX_REVENUE_EXPOSURE = 0.20;
 
     // --- Trade Protection (USITC 2023, Section 232 and 301 Tariffs, Pub. 5405) ---
-    /** Domestic tonnage per unit of import tariff: the 25% Section 232 duty raised US steel production 1.9% (2018-21). */
+    /**
+     * Domestic tonnage per unit of import tariff: the 25% Section 232 duty raised US steel production 1.9% (2018-21).
+     */
     public const TARIFF_VOLUME_ELASTICITY = 0.019 / 0.25;
     /** Domestic steel price per unit of import tariff: the same duty raised US steel prices 2.4%. */
     public const TARIFF_PRICE_ELASTICITY = 0.024 / 0.25;
@@ -81,7 +100,9 @@ class SteelManufacturingBusinessModel extends StandardCorporateBusinessModel
     public const CU_MARGIN_ABSORPTION_SENSITIVITY = 0.12;
 
     // --- Valuation ---
-    /** Book (replacement cost) weight in fair value when normalised EPS is negative: trough cyclicals trade on assets. */
+    /**
+     * Book (replacement cost) weight in fair value when normalised EPS is negative: trough cyclicals trade on assets.
+     */
     public const TROUGH_BOOK_WEIGHT = 0.70;
     /** Book weight in fair value through the rest of the cycle. */
     public const MID_CYCLE_BOOK_WEIGHT = 0.40;
@@ -204,8 +225,8 @@ class SteelManufacturingBusinessModel extends StandardCorporateBusinessModel
         $contractWeight = $activeWeights['contracted_oem_steel'];
         $spotWeight     = $activeWeights['spot_hrc_market'];
 
-        // The cycle reaches both books once, at the same tonnage elasticity; spot adds export orders and import dumping.
-        // A tariff moves tonnage on both books and lifts the domestic price on all of it.
+        // The cycle reaches both books once, at the same tonnage elasticity; spot adds export orders and import
+        // dumping. A tariff moves tonnage on both books and lifts the domestic price on all of it.
         $cycleShift = $this->resolveCycleVolumeShift($stock, $macroState) + $this->resolveTariffVolumeShift($macroState);
         $tariffPriceShift = $macroState->tariffTradeLag * self::TARIFF_PRICE_ELASTICITY;
         $importDumpingShift = $this->resolveImportDumpingShift($macroState);
@@ -254,7 +275,9 @@ class SteelManufacturingBusinessModel extends StandardCorporateBusinessModel
         );
     }
 
-    /** Steelmakers anchor to book (replacement cost) at trough earnings and to mid-cycle earnings through expansions. */
+    /**
+     * Steelmakers anchor to book (replacement cost) at trough earnings and to mid-cycle earnings through expansions.
+     */
     protected function getFairValueBookWeight(float $normalizedEps): float
     {
         return $normalizedEps < 0 ? self::TROUGH_BOOK_WEIGHT : self::MID_CYCLE_BOOK_WEIGHT;

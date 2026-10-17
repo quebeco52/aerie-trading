@@ -26,7 +26,10 @@ final class MacroConfigFingerprint
 {
     // --- Parameter Classes ---
 
-    /** The classes whose constants are the macro economy's parameters, the government's among them, since the levers it sets move the economy. */
+    /**
+     * The classes whose constants are the macro economy's parameters, the government's among them, since the levers it
+     * sets move the economy.
+     */
     private const PARAMETER_CLASSES = [
         MacroEngine::class,
         MonetaryPolicySubsystem::class,

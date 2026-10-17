@@ -37,7 +37,8 @@ final class MacroFieldCatalog
     // --- Field Catalog ---
 
     /**
-     * Macro field name => [label, unit] for every input a business model declares it reads, which is every input a stream driver can name.
+     * Macro field name => [label, unit] for every input a business model declares it reads, which is every input a
+     * stream driver can name.
      *
      * @var array<string, array{label: string, unit: string}>
      */

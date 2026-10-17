@@ -23,7 +23,8 @@ use App\Service\Model\StreamContext;
  *
  * Financial Physics:
  * - High Barrier to Entry / Oligopoly: Revenue is dominated by ultra-sticky recurring subscriptions.
- * - The Churn Wars: Because the market is saturated, growth only comes from stealing competitors' customers via margin-crushing promotions.
+ * - The Churn Wars: Because the market is saturated, growth only comes from stealing competitors' customers via
+ *   margin-crushing promotions.
  *   A price war is the industry's: when any carrier starts one, every carrier in the industry fights it until it ends.
  * - Subscriber Stock-Flow: service revenue is subscribers x ARPU; the base carries every quarter's net adds
  *   forward, churn wars erode it and promotional gross adds defend it at a subscriber acquisition cost.
@@ -35,7 +36,10 @@ use App\Service\Model\StreamContext;
 class TelecomBusinessModel extends StandardCorporateBusinessModel
 {
     // --- Operating Cyclicality & Demand Structure ---
-    /** Elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). Subscriptions are defensive; every net add is a rival's loss in a saturated market. */
+    /**
+     * Elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). Subscriptions are
+     * defensive; every net add is a rival's loss in a saturated market.
+     */
     public const OPERATING_CYCLICALITY = 0.60;
     /** Own-price elasticity of demand: volume lost per unit of real price increase. */
     public const PRICE_ELASTICITY_OF_DEMAND = 0.30;
@@ -43,17 +47,28 @@ class TelecomBusinessModel extends StandardCorporateBusinessModel
     public const INDUSTRY_SUBSTITUTABILITY = 0.85;
 
     // --- Input Cost Basket ---
-    /** Shares of the variable cost base by input channel, measured from the BEA input-output accounts with supply-chain content (labor still the model's own). */
+    /**
+     * Shares of the variable cost base by input channel, measured from the BEA input-output accounts with supply-chain
+     * content (labor still the model's own).
+     */
     public const INPUT_COST_EXPOSURES = InputOutputExposures::TELECOM;
-    /** Annual CPI-linked plan hikes with regulatory and churn pushback: about half of expected inflation reaches ARPU. */
+    /**
+     * Annual CPI-linked plan hikes with regulatory and churn pushback: about half of expected inflation reaches ARPU.
+     */
     public const PRICING_ELASTICITY = 0.50;
     /** Plans reprice once a year. */
     public const PRICE_PASS_THROUGH_LAG_YEARS = 1.00;
-    /** Wireless carriers hold real pricing power on a captive base; network power and handset costs are partly recovered. */
+    /**
+     * Wireless carriers hold real pricing power on a captive base; network power and handset costs are partly
+     * recovered.
+     */
     public const PRICING_POWER_INDEX = 0.30;
 
     // --- Device Upgrade Season ---
-    /** Wireless equipment revenue by calendar quarter [Q1, Q2, Q3, Q4], mean 1.0 (Verizon 2022-23 10-Q/10-K): the holiday upgrade peak. */
+    /**
+     * Wireless equipment revenue by calendar quarter [Q1, Q2, Q3, Q4], mean 1.0 (Verizon 2022-23 10-Q/10-K): the
+     * holiday upgrade peak.
+     */
     public const EQUIPMENT_SEASONALITY = [0.94, 0.92, 0.96, 1.18];
 
     /**
@@ -85,7 +100,10 @@ class TelecomBusinessModel extends StandardCorporateBusinessModel
     }
 
     // --- Balance Sheet Realism ---
-    /** Capitalized operating lease liabilities as a fraction of annual revenue (IFRS 16 / ASC 842). Tower, rooftop and retail store leases. */
+    /**
+     * Capitalized operating lease liabilities as a fraction of annual revenue (IFRS 16 / ASC 842). Tower, rooftop and
+     * retail store leases.
+     */
     public const LEASE_LIABILITY_INTENSITY = 0.30;
 
     // --- Analyst Visibility & Error ---
@@ -114,7 +132,10 @@ class TelecomBusinessModel extends StandardCorporateBusinessModel
     }
 
     // --- Secular Demand ---
-    /** Broadcasting and telecommunications value added as a share of US nominal GDP in 1997 (BEA GDP by Industry, value added). */
+    /**
+     * Broadcasting and telecommunications value added as a share of US nominal GDP in 1997 (BEA GDP by Industry, value
+     * added).
+     */
     public const SECULAR_SHARE_1997 = 0.0264;
     /** The same share in 2019. */
     public const SECULAR_SHARE_2019 = 0.0233;
@@ -137,7 +158,10 @@ class TelecomBusinessModel extends StandardCorporateBusinessModel
     public const EQUIPMENT_WEIGHT    = 0.17;
 
     // --- Stream Cost Structure ---
-    /** Cost of wireless equipment over wireless equipment revenue (Verizon 10-K 2022-24: 1.10-1.12): devices are sold below cost to win the plan. */
+    /**
+     * Cost of wireless equipment over wireless equipment revenue (Verizon 10-K 2022-24: 1.10-1.12): devices are sold
+     * below cost to win the plan.
+     */
     public const EQUIPMENT_VARIABLE_COST_RATIO = 1.12;
 
     // --- Cycle Sensitivities ---
@@ -152,17 +176,30 @@ class TelecomBusinessModel extends StandardCorporateBusinessModel
     // --- Subscriber Base (stock-flow) ---
     /** Persisted subscriber index; 1.0 is the base implied by expected service revenue. */
     public const STATE_SUBSCRIBER_INDEX = 'state:subscriber_index';
-    /** Baseline quarterly postpaid churn (~1% a month), the default a carrier's own BaseQuarterlyChurn overrides; steady-state gross adds replace exactly this. */
+    /**
+     * Baseline quarterly postpaid churn (~1% a month), the default a carrier's own BaseQuarterlyChurn overrides;
+     * steady-state gross adds replace exactly this.
+     */
     public const BASE_QUARTERLY_CHURN = 0.03;
-    /** Volatility multiplier on gross adds relative to the replacement rate (one sigma ~ +-0.9% of the base at 20% vol). */
+    /**
+     * Volatility multiplier on gross adds relative to the replacement rate (one sigma ~ +-0.9% of the base at 20% vol).
+     */
     public const GROSS_ADDS_VARIANCE_SCALAR = 1.50;
-    /** Extra quarterly churn per unit of unemployment above the natural rate (0.10 = +10bps of churn per point of excess unemployment): involuntary disconnects and non-payment rise with job losses. */
+    /**
+     * Extra quarterly churn per unit of unemployment above the natural rate (0.10 = +10bps of churn per point of excess
+     * unemployment): involuntary disconnects and non-payment rise with job losses.
+     */
     public const UNEMPLOYMENT_CHURN_SENSITIVITY = 0.10;
 
     // --- The Churn & Price War Physics ---
-    /** Margin cost per unit of gross adds above the replacement rate (device subsidies, marketing, dealer commissions). */
+    /**
+     * Margin cost per unit of gross adds above the replacement rate (device subsidies, marketing, dealer commissions).
+     */
     public const SUBSCRIBER_ACQUISITION_COST_ELASTICITY = 0.025;
-    /** Z-score threshold for a price war to start in the District's market (~2.3% a quarter), shared among the listed carriers that could start it. */
+    /**
+     * Z-score threshold for a price war to start in the District's market (~2.3% a quarter), shared among the listed
+     * carriers that could start it.
+     */
     public const PRICE_WAR_Z_SCORE   = -2.00;
     /** Regime key for a price war: industry-wide through the ledger, the carrier's own two-state Markov without one. */
     public const REGIME_PRICE_WAR = 'price_war';
@@ -337,8 +374,8 @@ class TelecomBusinessModel extends StandardCorporateBusinessModel
             : 0.0;
 
         // Note: the network debt load reaches earnings through DebtEngine's maturity wall (see
-        // getDebtMaturityRolloverRate), never as an operating margin drag. Interest sits below EBIT.
-        // Network power, handset procurement and field payroll reach the cost base at spot; annual plan hikes recover part of it.
+        // getDebtMaturityRolloverRate), never as an operating margin drag. Interest sits below EBIT. Network power,
+        // handset procurement and field payroll reach the cost base at spot; annual plan hikes recover part of it.
         $inputCostDrag = $this->resolveInputCostDrag($stock, $macroState, $streams, $this->resolvePricingPower($stock), $realizedVariableMargin);
         $rawMargin = $effectiveMargin + $sacDrag + $inputCostDrag;
         $clampedMargin = $this->clampMargin($rawMargin);
@@ -368,7 +405,8 @@ class TelecomBusinessModel extends StandardCorporateBusinessModel
     }
 
     /**
-     * The quarter's price war: quarters it has run including this one (0 when none) and whether this carrier started it.
+     * The quarter's price war: quarters it has run including this one (0 when none) and whether this carrier started
+     * it.
      *
      * With the industry ledger the war is the industry's: a carrier that draws the onset starts it for every carrier
      * in the industry, its length drawn once from the exit hazard, and the rest are in it from their next report.

@@ -30,7 +30,10 @@ readonly class MacroStateDTO
 
     // --- Openings ---
 
-    /** Policy rate at the opening: the Taylor rule's own target with output at trend (3.42%), so the first tick does not move it. */
+    /**
+     * Policy rate at the opening: the Taylor rule's own target with output at trend (3.42%), so the first tick does not
+     * move it.
+     */
     public const OPENING_POLICY_RATE = 0.034;
 
     /** Ten-year at the opening: the engine's curve evaluated at the opening state. */
@@ -56,7 +59,10 @@ readonly class MacroStateDTO
 
     // --- Demand Transmission Lags ---
 
-    /** The output gap as it reaches order books 3 to 18 months behind the economy (MacroAggregateSubsystem::demandTransmissionLagField). */
+    /**
+     * The output gap as it reaches order books 3 to 18 months behind the economy
+     * (MacroAggregateSubsystem::demandTransmissionLagField).
+     */
     public float $outputGapLag3m;
     public float $outputGapLag6m;
     public float $outputGapLag9m;
@@ -91,10 +97,19 @@ readonly class MacroStateDTO
         public float $capitalStockOverhangEma = 0.0,
         public float $unemploymentRate = MacroEngine::NATURAL_UNEMPLOYMENT,
         public float $unemploymentRateEma = MacroEngine::NATURAL_UNEMPLOYMENT,
-        /** @var list<float> The unemployment rate at each of the last month ends, oldest first, as many as the Sahm rule reads. */
+        /**
+         * @var list<float> The unemployment rate at each of the last month ends, oldest first, as many as the Sahm rule
+         *                  reads.
+         */
         public array $unemploymentMonthly = [],
-        /** The Sahm rule's reading: the three-month average unemployment rate above its lowest of the twelve months before (App\Service\Macro\Subsystem\LaborMarketSubsystem::recordSahmIndicator()). */
-        /** Real GDP summed over the quarter so far, and the years it covers: the statistics office's quarterly average (MacroAggregateSubsystem::recordQuarterlyRealGdp()). */
+        /**
+         * The Sahm rule's reading: the three-month average unemployment rate above its lowest of the twelve months
+         * before (App\Service\Macro\Subsystem\LaborMarketSubsystem::recordSahmIndicator()).
+         */
+        /**
+         * Real GDP summed over the quarter so far, and the years it covers: the statistics office's quarterly average
+         * (MacroAggregateSubsystem::recordQuarterlyRealGdp()).
+         */
         public float $realGdpQuarterAccrued = 0.0,
         public float $realGdpQuarterElapsed = 0.0,
         /** The last full quarter's average real GDP; zero before the first. */
@@ -103,7 +118,10 @@ readonly class MacroStateDTO
         public float $gdpQuarterStreak = 0.0,
         /** The last full quarter's real GDP change over the one before. */
         public float $realGdpQuarterlyGrowth = 0.0,
-        /** Whether the statistics office has a recession declared: two quarters of falling real GDP, ended by two of growth. */
+        /**
+         * Whether the statistics office has a recession declared: two quarters of falling real GDP, ended by two of
+         * growth.
+         */
         public bool $recessionDeclared = false,
         public float $jobVacanciesRate = MacroEngine::NATURAL_UNEMPLOYMENT * MacroEngine::NATURAL_LABOR_TIGHTNESS,
         public float $jobVacanciesRateEma = MacroEngine::NATURAL_UNEMPLOYMENT * MacroEngine::NATURAL_LABOR_TIGHTNESS,
@@ -132,7 +150,10 @@ readonly class MacroStateDTO
         public float $domesticInflation = MacroEngine::TARGET_INFLATION,
         public float $consumerSentimentIndex = MacroEngine::SENTIMENT_TREND_LEVEL,
         public float $consumerSentimentIndexEma = MacroEngine::SENTIMENT_TREND_LEVEL,
-        /** The part of confidence its fundamentals do not explain, in index points (AssetMarketSubsystem::calculateConsumerSentiment()). */
+        /**
+         * The part of confidence its fundamentals do not explain, in index points
+         * (AssetMarketSubsystem::calculateConsumerSentiment()).
+         */
         public float $consumerSentimentMood = 0.0,
         public float $exchangeRateIndex = 100.0,
         public float $exchangeRateIndexEma = 100.0,
@@ -145,13 +166,19 @@ readonly class MacroStateDTO
         public float $metalsXi = 4.60517,
         public float $governmentSpendingIndex = 100.0,
         public float $governmentSpendingIndexEma = 100.0,
-        /** Purchases' decade trend, which a level the Diet holds that long joins (CreditFiscalSubsystem::discretionarySpendingShift()). */
+        /**
+         * Purchases' decade trend, which a level the Diet holds that long joins
+         * (CreditFiscalSubsystem::discretionarySpendingShift()).
+         */
         public float $governmentSpendingIndexTrend = 100.0,
         public float $alliedDefenseSpendingIndex = MacroEngine::ALLIED_DEFENSE_BASELINE,
         public float $alliedDefenseSpendingIndexEma = MacroEngine::ALLIED_DEFENSE_BASELINE,
         public float $commercialPropertyIndex = 100.0,
         public float $commercialPropertyIndexEma = 100.0,
-        /** Real market rent per occupied square foot of District commercial space, 1 at neutral: the DiPasquale-Wheaton rent level the price index capitalises. */
+        /**
+         * Real market rent per occupied square foot of District commercial space, 1 at neutral: the DiPasquale-Wheaton
+         * rent level the price index capitalises.
+         */
         public float $commercialMarketRent = 1.0,
         public float $residentialPropertyIndex = 100.0,
         public float $residentialPropertyIndexEma = 100.0,
@@ -172,18 +199,27 @@ readonly class MacroStateDTO
         public float $inflationEma = MacroEngine::TARGET_INFLATION,
         public float $tipsBreakeven = MacroEngine::TARGET_INFLATION,
         public float $tipsBreakevenEma = MacroEngine::TARGET_INFLATION,
-        /** The breakeven the market quotes, net of the TIPS liquidity premium (MacroAggregateSubsystem::quotedTipsBreakeven()); for display. */
+        /**
+         * The breakeven the market quotes, net of the TIPS liquidity premium
+         * (MacroAggregateSubsystem::quotedTipsBreakeven()); for display.
+         */
         public float $tipsBreakevenQuoted = MacroEngine::TARGET_INFLATION,
         public float $tipsBreakevenQuotedEma = MacroEngine::TARGET_INFLATION,
         public float $policyRate = self::OPENING_POLICY_RATE,
         public float $policyRateEma = self::OPENING_POLICY_RATE,
-        /** The Authority's view of the right rate, which closes on the rule between meetings; a meeting rounds it to the step (MonetaryPolicySubsystem::updatePolicyRate()). */
+        /**
+         * The Authority's view of the right rate, which closes on the rule between meetings; a meeting rounds it to the
+         * step (MonetaryPolicySubsystem::updatePolicyRate()).
+         */
         public float $policyRateShadow = self::OPENING_POLICY_RATE,
         /** The decision the market expects at the next meeting. */
         public float $policyRateExpected = self::OPENING_POLICY_RATE,
         /** The last meeting's decision less what the market expected of it; zero between meetings. */
         public float $policySurprise = 0.0,
-        /** The inflation over target and the output gap the rule answered, which each camp on the committee weighs its own way. */
+        /**
+         * The inflation over target and the output gap the rule answered, which each camp on the committee weighs its
+         * own way.
+         */
         public float $ruleInflationGap = 0.0,
         public float $ruleOutputGap = 0.0,
         public float $targetRate = self::OPENING_POLICY_RATE,
@@ -202,7 +238,10 @@ readonly class MacroStateDTO
         public float $termPremiumShock = 0.0,
         public float $expectedPathShock = 0.0,
         public float $termPremiumRegime = MacroEngine::NS_BASE_TERM_PREMIUM,
-        /** The mainland's ten-year term premium factors, the global factor the District's loads on (App\Service\Macro\Subsystem\MonetaryPolicySubsystem::updateTermPremiumDynamics()). */
+        /**
+         * The mainland's ten-year term premium factors, the global factor the District's loads on
+         * (App\Service\Macro\Subsystem\MonetaryPolicySubsystem::updateTermPremiumDynamics()).
+         */
         public float $foreignTermPremiumShock = 0.0,
         public float $foreignTermPremiumRegime = MacroEngine::NS_BASE_TERM_PREMIUM,
         public float $perceivedNeutralRate = MacroEngine::BASE_NATURAL_RATE + MacroEngine::TARGET_INFLATION,
@@ -213,33 +252,57 @@ readonly class MacroStateDTO
         public float $marketJumpMultiplier = 1.0,
         /** @var array<string, float> Per-macro-sector shock, keyed by Sectors::MACRO_SECTORS. */
         public array $sectorZ = [],
-        /** @var array<string, float> Persistent per-macro-sector demand factor shared by every firm's earnings physics in the sector. */
+        /**
+         * @var array<string, float> Persistent per-macro-sector demand factor shared by every firm's earnings physics
+         *                           in the sector.
+         */
         public array $sectorDemandZ = [],
         public float $corporateTaxRate = MacroEngine::BASE_CORPORATE_TAX_RATE,
-        /** The tax rate's measured structural level, a decade's exponential average (App\Service\Macro\Subsystem\CreditFiscalSubsystem::calculateDynamicFiscalPolicy()). */
+        /**
+         * The tax rate's measured structural level, a decade's exponential average
+         * (App\Service\Macro\Subsystem\CreditFiscalSubsystem::calculateDynamicFiscalPolicy()).
+         */
         public float $corporateTaxRateTrend = MacroEngine::BASE_CORPORATE_TAX_RATE,
-        /** The budget's take outside the corporate tax, net of transfers, as a share of GDP: what carries the automatic stabilisers and the fiscal stance. */
+        /**
+         * The budget's take outside the corporate tax, net of transfers, as a share of GDP: what carries the automatic
+         * stabilisers and the fiscal stance.
+         */
         public float $netTaxRate = CreditFiscalSubsystem::FOUNDING_NET_TAX_RATE,
-        /** The discretionary part of net taxes: the founding share plus the structural stance, without the automatic stabilisers' swing. */
+        /**
+         * The discretionary part of net taxes: the founding share plus the structural stance, without the automatic
+         * stabilisers' swing.
+         */
         public float $netTaxStanceRate = CreditFiscalSubsystem::FOUNDING_NET_TAX_RATE,
         /** Its decade trend, as corporateTaxRateTrend is the corporate rate's. */
         public float $netTaxStanceRateTrend = CreditFiscalSubsystem::FOUNDING_NET_TAX_RATE,
         public float $sovereignDebtToGdp = MacroEngine::INITIAL_DEBT_TO_GDP,
-        /** Interest rate the coupon stock of the debt pays, repricing toward the 10-year as it rolls (App\Service\Macro\Subsystem\CreditFiscalSubsystem::calculateSovereignDebt()). */
+        /**
+         * Interest rate the coupon stock of the debt pays, repricing toward the 10-year as it rolls
+         * (App\Service\Macro\Subsystem\CreditFiscalSubsystem::calculateSovereignDebt()).
+         */
         public float $sovereignCouponRate = self::OPENING_YIELD_10Y,
         public float $sovereignDebtToGdpEma = MacroEngine::INITIAL_DEBT_TO_GDP,
         public float $sovereignNetDebtToGdp = MacroEngine::INITIAL_DEBT_TO_GDP,
         public float $sovereignNetDebtToGdpEma = MacroEngine::INITIAL_DEBT_TO_GDP,
-        /** Gross debt less the whole fund and the rescue holdings, minus net financial worth: what the fiscal reaction and the spread read (CreditFiscalSubsystem::calculateSovereignDebt()). */
+        /**
+         * Gross debt less the whole fund and the rescue holdings, minus net financial worth: what the fiscal reaction
+         * and the spread read (CreditFiscalSubsystem::calculateSovereignDebt()).
+         */
         public float $sovereignNetFinancialLiabilitiesToGdp = MacroEngine::INITIAL_DEBT_TO_GDP,
         public float $sovereignNetFinancialLiabilitiesToGdpEma = MacroEngine::INITIAL_DEBT_TO_GDP,
-        /** Average maturity of the debt, in years, and the one the Exchequer's head steers it toward as it rolls over (CreditFiscalSubsystem). */
+        /**
+         * Average maturity of the debt, in years, and the one the Exchequer's head steers it toward as it rolls over
+         * (CreditFiscalSubsystem).
+         */
         public float $sovereignDebtAverageMaturity = CreditFiscalSubsystem::FOUNDING_DEBT_AVERAGE_MATURITY,
         public float $sovereignDebtMaturityTarget = CreditFiscalSubsystem::FOUNDING_DEBT_AVERAGE_MATURITY,
         public float $equityRiskPremium = MacroEngine::BASE_EQUITY_RISK_PREMIUM,
         public float $macroCreditSpread = MacroEngine::BASE_CREDIT_SPREAD,
         public float $macroCreditSpreadEma = MacroEngine::BASE_CREDIT_SPREAD,
-        /** The IG spread's measured through-the-cycle level, a decade's exponential average (App\Service\Macro\Subsystem\CreditFiscalSubsystem::updateCreditSpreadTrend()). */
+        /**
+         * The IG spread's measured through-the-cycle level, a decade's exponential average
+         * (App\Service\Macro\Subsystem\CreditFiscalSubsystem::updateCreditSpreadTrend()).
+         */
         public float $macroCreditSpreadTrend = MacroEngine::BASE_CREDIT_SPREAD,
         public float $interbankLiquiditySpread = MacroEngine::INTERBANK_BASELINE_SPREAD,
         public float $interbankLiquiditySpreadEma = MacroEngine::INTERBANK_BASELINE_SPREAD,
@@ -253,7 +316,10 @@ readonly class MacroStateDTO
         public float $crisisScarPending = 0.0,
         /** Scar potential took this tick (log level, negative). */
         public float $crisisScarStep = 0.0,
-        /** Labour-force growth migration adds on top of the law's as it answers the labour market, a year (LaborMarketSubsystem::calculateCyclicalMigration()). */
+        /**
+         * Labour-force growth migration adds on top of the law's as it answers the labour market, a year
+         * (LaborMarketSubsystem::calculateCyclicalMigration()).
+         */
         public float $cyclicalMigrationRate = 0.0,
         public float $tfpOutputStage1 = 0.0,
         public float $tfpOutputStage2 = 0.0,
@@ -302,9 +368,15 @@ readonly class MacroStateDTO
         public array $consumerPriceMonthly = [],
         public ?string $eventType = null,
         public float $eventCooldownTimer = 0.0,
-        /** @var array<string, float> Level alarms reported this episode, ShockEvent => the time each fired; one clears once its condition does (MacroEngine::evaluateSystemicEvent()). */
+        /**
+         * @var array<string, float> Level alarms reported this episode, ShockEvent => the time each fired; one clears
+         *                           once its condition does (MacroEngine::evaluateSystemicEvent()).
+         */
         public array $systemicAlarmLatches = [],
-        /** Highest three-month average unemployment rate since the recession headline last reported; the episode ends RECESSION_RECOVERY_MARGIN below it (MacroEngine::evaluateSystemicEvent()). */
+        /**
+         * Highest three-month average unemployment rate since the recession headline last reported; the episode ends
+         * RECESSION_RECOVERY_MARGIN below it (MacroEngine::evaluateSystemicEvent()).
+         */
         public float $supercoreInflation = MacroEngine::TARGET_INFLATION,
         public float $supercoreInflationEma = MacroEngine::TARGET_INFLATION,
         public float $coreGoodsInflation = MacroEngine::TARGET_INFLATION,
@@ -334,9 +406,15 @@ readonly class MacroStateDTO
         public float $refiningCrackSpreadEma = MacroEngine::CRACK_SPREAD_BASELINE,
         public float $dealActivityIndex = MacroEngine::DEAL_ACTIVITY_BASELINE,
         public float $dealActivityIndexEma = MacroEngine::DEAL_ACTIVITY_BASELINE,
-        /** Deal flow's measured through-the-cycle level, a decade's exponential average (App\Service\Macro\Subsystem\AssetMarketSubsystem::calculateCapitalMarketsDealIndex()). */
+        /**
+         * Deal flow's measured through-the-cycle level, a decade's exponential average
+         * (App\Service\Macro\Subsystem\AssetMarketSubsystem::calculateCapitalMarketsDealIndex()).
+         */
         public float $dealActivityIndexTrend = MacroEngine::DEAL_ACTIVITY_BASELINE,
-        /** Realized ten-year yield volatility, annualized, over the last quarter (App\Service\Macro\Subsystem\MonetaryPolicySubsystem::applyYieldCurve()). */
+        /**
+         * Realized ten-year yield volatility, annualized, over the last quarter
+         * (App\Service\Macro\Subsystem\MonetaryPolicySubsystem::applyYieldCurve()).
+         */
         public float $treasuryVolatility = MonetaryPolicySubsystem::OPENING_TREASURY_VOLATILITY,
         /** That volatility's measured through-the-cycle level, a decade's exponential average. */
         public float $treasuryVolatilityTrend = MonetaryPolicySubsystem::OPENING_TREASURY_VOLATILITY,
@@ -367,12 +445,18 @@ readonly class MacroStateDTO
         public float $creditCrisisHazard = 0.0,
         public float $creditCrisisDrag = 0.0,
         public float $lastCreditCrisisAt = -1.0,
-        /** Losses the Monetary Authority carries, paid down before it remits (CreditFiscalSubsystem::centralBankRemittance()). */
+        /**
+         * Losses the Monetary Authority carries, paid down before it remits
+         * (CreditFiscalSubsystem::centralBankRemittance()).
+         */
         public float $centralBankDeferredAssetToGdp = 0.0,
         public float $foreignOutputGap = 0.0,
         public float $foreignOutputGapEma = 0.0,
         public float $foreignOutputGapLag = 0.0,
-        /** Output gap of the world beyond the mainland and the District, the demand that clears most commodities and freight. */
+        /**
+         * Output gap of the world beyond the mainland and the District, the demand that clears most commodities and
+         * freight.
+         */
         public float $worldActivityGap = 0.0,
         /** The part of the world gap the mainland's cycle does not carry, an AR(1) latent. */
         public float $worldActivityIdiosyncratic = 0.0,
@@ -398,13 +482,19 @@ readonly class MacroStateDTO
         public float $powerHeatRateLog = 0.0,
         public float $moneyMarketFundShare = MacroEngine::MMF_SHARE_BASE,
         public float $moneyMarketFundShareEma = MacroEngine::MMF_SHARE_BASE,
-        /** The market's sovereign default premium: none at the opening, where net liabilities sit far below the fiscal limit (CreditRisk::sovereignDefaultPremium()). */
+        /**
+         * The market's sovereign default premium: none at the opening, where net liabilities sit far below the fiscal
+         * limit (CreditRisk::sovereignDefaultPremium()).
+         */
         public float $sovereignRiskSpread = 0.0,
         public float $sovereignRiskSpreadEma = 0.0,
         public float $primaryDeficitToGdp = -0.0025,
         public float $policyUncertaintyIndex = MacroEngine::EPU_BASELINE,
         public float $policyUncertaintyIndexEma = MacroEngine::EPU_BASELINE,
-        /** The election calendar's pull on policy uncertainty, as the government last handed it (App\DTO\GovernmentPolicyDTO). */
+        /**
+         * The election calendar's pull on policy uncertainty, as the government last handed it
+         * (App\DTO\GovernmentPolicyDTO).
+         */
         public float $electionPulse = 0.0,
         /** Government purchases as a share of GDP, the level the Diet's last budget has them revert to. */
         public float $publicSpendingShare = MacroEngine::PUBLIC_PURCHASES_TO_GDP,
@@ -421,7 +511,10 @@ readonly class MacroStateDTO
         public float $extractionStringency = 0.0,
         public float $stampDutyRate = FinancialConstants::STAMP_DUTY_RATE,
         public float $bankLevyRate = 0.0,
-        /** Share of the reserve fund's expected long-term real return the budget spends, as the Diet passed it with the fund's consent above the ceiling. */
+        /**
+         * Share of the reserve fund's expected long-term real return the budget spends, as the Diet passed it with the
+         * fund's consent above the ceiling.
+         */
         public float $reserveDrawShare = MacroEngine::RESERVE_DRAW_CEILING,
         /** Share of the Bohn reaction's surplus the Diet raises by tax rather than by cutting purchases. */
         public float $consolidationTaxShare = CreditFiscalSubsystem::FOUNDING_CONSOLIDATION_TAX_SHARE,
@@ -433,37 +526,75 @@ readonly class MacroStateDTO
         public float $dividendTaxRate = Valuation::FOUNDING_DIVIDEND_TAX_RATE,
         /** Gross debt to GDP the Diet's budget steers toward, as the Diet has it set. */
         public float $debtTarget = CreditFiscalSubsystem::FOUNDING_DEBT_TARGET,
-        /** Points of GDP a year the budget moves debt toward that target, as the Diet has it set (CreditFiscalSubsystem::requiredPrimaryBalance()). */
+        /**
+         * Points of GDP a year the budget moves debt toward that target, as the Diet has it set
+         * (CreditFiscalSubsystem::requiredPrimaryBalance()).
+         */
         public float $debtPace = CreditFiscalSubsystem::FOUNDING_DEBT_PACE,
-        /** The rate committee's supermajority, 1 hawkish, -1 dovish, 0 neither (App\Service\Politics\MonetaryAuthority). */
+        /**
+         * The rate committee's supermajority, 1 hawkish, -1 dovish, 0 neither (App\Service\Politics\MonetaryAuthority).
+         */
         public float $authorityMajority = 0.0,
-        /** 1 while politics hands the macro a rate committee, else 0: the policy rule reads the supermajority only then. */
+        /**
+         * 1 while politics hands the macro a rate committee, else 0: the policy rule reads the supermajority only then.
+         */
         public float $authorityCommitteeSeated = 0.0,
-        /** The corporate tax shift as the tax rate has taken it in so far: the shift in force through the rate's own adjustment (App\Service\Macro\Subsystem\CreditFiscalSubsystem::calculateDynamicFiscalPolicy()). */
+        /**
+         * The corporate tax shift as the tax rate has taken it in so far: the shift in force through the rate's own
+         * adjustment (App\Service\Macro\Subsystem\CreditFiscalSubsystem::calculateDynamicFiscalPolicy()).
+         */
         public float $corporateTaxShiftRealized = 0.0,
-        /** The shift as the trailing year's earnings carry it: the realized shift through a first-order lag of the year's mean lag. */
+        /**
+         * The shift as the trailing year's earnings carry it: the realized shift through a first-order lag of the
+         * year's mean lag.
+         */
         public float $corporateTaxShiftEmbodied = 0.0,
         /** The bank levy as the trailing year's earnings carry it, the same lag. */
         public float $bankLevyEmbodied = 0.0,
-        /** The extraction rules' cost factor as the trailing year's earnings carry it, the same lag (FirmEconomics::calculateExtractionCostFactor()). */
+        /**
+         * The extraction rules' cost factor as the trailing year's earnings carry it, the same lag
+         * (FirmEconomics::calculateExtractionCostFactor()).
+         */
         public float $extractionCostFactorEmbodied = 1.0,
-        /** The stamp duty's share turnover factor as the trailing year's earnings carry it, the same lag (MacroTransmission::calculateStampDutyVolumeFactor()). */
+        /**
+         * The stamp duty's share turnover factor as the trailing year's earnings carry it, the same lag
+         * (MacroTransmission::calculateStampDutyVolumeFactor()).
+         */
         public float $stampDutyVolumeFactorEmbodied = 1.0,
-        /** The carbon price's uplift on the power price as the trailing year's earnings carry it, the same lag (CommodityLogisticsSubsystem::carbonPowerPriceUplift()). */
+        /**
+         * The carbon price's uplift on the power price as the trailing year's earnings carry it, the same lag
+         * (CommodityLogisticsSubsystem::carbonPowerPriceUplift()).
+         */
         public float $carbonPowerUpliftEmbodied = 0.0,
-        /** The average tariff shortfall the commission's grant leaves, as the rate cases and the trailing year have brought it (App\Service\Model\Sector\UtilityBusinessModel::steadyTariffShortfall()). */
+        /**
+         * The average tariff shortfall the commission's grant leaves, as the rate cases and the trailing year have
+         * brought it (App\Service\Model\Sector\UtilityBusinessModel::steadyTariffShortfall()).
+         */
         public float $utilityTariffShortfallEmbodied = UtilityBusinessModel::FOUNDING_TARIFF_SHORTFALL,
-        /** Government purchases above the founding level, as a fraction, as the trailing year's earnings carry them, the same lag. */
+        /**
+         * Government purchases above the founding level, as a fraction, as the trailing year's earnings carry them, the
+         * same lag.
+         */
         public float $governmentSpendingShiftEmbodied = 0.0,
-        /** @var array<string, float> The levers the sitting government will pass at its next budget round, keyed as App\Service\Politics\PoliticsEngine::LEVER_FIELDS; empty before they have been read. */
+        /**
+         * @var array<string, float> The levers the sitting government will pass at its next budget round, keyed as
+         *                           App\Service\Politics\PoliticsEngine::LEVER_FIELDS; empty before they have been
+         *                           read.
+         */
         public array $sittingLevers = [],
         /** When that round falls (-1: not yet read). */
         public float $sittingPolicyFrom = -1.0,
-        /** @var array<string, float> The levers the market expects from the next government's first budget, keyed the same way (App\Service\Politics\ElectionForecast); empty before a forecast. */
+        /**
+         * @var array<string, float> The levers the market expects from the next government's first budget, keyed the
+         *                           same way (App\Service\Politics\ElectionForecast); empty before a forecast.
+         */
         public array $expectedLevers = [],
         /** When that budget falls (-1: no forecast yet). */
         public float $expectedPolicyFrom = -1.0,
-        /** @var array<string, float> The sitting government's levers as they stood the tick before, so a revision reprices at once (App\Service\Market\Pricing\PolicyCapitalization). */
+        /**
+         * @var array<string, float> The sitting government's levers as they stood the tick before, so a revision
+         *                           reprices at once (App\Service\Market\Pricing\PolicyCapitalization).
+         */
         public array $previousSittingLevers = [],
         /** When that round fell, as read the tick before. */
         public float $previousSittingPolicyFrom = -1.0,
@@ -471,44 +602,87 @@ readonly class MacroStateDTO
         public array $previousExpectedLevers = [],
         /** When those took effect, as forecast the tick before. */
         public float $previousExpectedPolicyFrom = -1.0,
-        /** The long-run inflation the public has learned from realized inflation over that anchor, the Kozicki-Tinsley shifting endpoint the ten-year breakeven prices (App\Service\Macro\Subsystem\MonetaryPolicySubsystem::updateInflationEndpoint()). */
+        /**
+         * The long-run inflation the public has learned from realized inflation over that anchor, the Kozicki-Tinsley
+         * shifting endpoint the ten-year breakeven prices
+         * (App\Service\Macro\Subsystem\MonetaryPolicySubsystem::updateInflationEndpoint()).
+         */
         public float $inflationEndpointGap = 0.0,
-        /** The CET1 requirement on the District's banks in force, as a share of risk-weighted assets, countercyclical buffer aside (App\Service\Politics\FinancialRegulator). */
+        /**
+         * The CET1 requirement on the District's banks in force, as a share of risk-weighted assets, countercyclical
+         * buffer aside (App\Service\Politics\FinancialRegulator).
+         */
         public float $bankCapitalRequirement = FinancialConstants::OPENING_BANK_CAPITAL_REQUIREMENT,
-        /** The capital the banks have built so far against the requirement and the countercyclical buffer together, lagged by the years they take (App\Service\Macro\Subsystem\CreditFiscalSubsystem). */
+        /**
+         * The capital the banks have built so far against the requirement and the countercyclical buffer together,
+         * lagged by the years they take (App\Service\Macro\Subsystem\CreditFiscalSubsystem).
+         */
         public float $bankCapitalBuilt = FinancialConstants::OPENING_BANK_CAPITAL_REQUIREMENT,
-        /** The requirement and the buffer together as the last tick required them: a rise from it cuts household lending. */
+        /**
+         * The requirement and the buffer together as the last tick required them: a rise from it cuts household
+         * lending.
+         */
         public float $bankCapitalRequiredLast = FinancialConstants::OPENING_BANK_CAPITAL_REQUIREMENT,
-        /** The mortgage loan-to-value cap on the District's lenders in force, as a share of the property's value; null for none (App\Service\Politics\FinancialRegulator). */
+        /**
+         * The mortgage loan-to-value cap on the District's lenders in force, as a share of the property's value; null
+         * for none (App\Service\Politics\FinancialRegulator).
+         */
         public ?float $mortgageLtvCap = null,
-        /** The initial margin an investor must put up to buy or short on credit (App\Service\Politics\SecuritiesCommission); maintenance keeps its founding ratio to it. */
+        /**
+         * The initial margin an investor must put up to buy or short on credit
+         * (App\Service\Politics\SecuritiesCommission); maintenance keeps its founding ratio to it.
+         */
         public float $initialMarginRequirement = FinancialConstants::INITIAL_MARGIN_REQUIREMENT,
-        /** The multiplier the Securities Commission's enforcement puts on each firm's propensity to manage its reported earnings. */
+        /**
+         * The multiplier the Securities Commission's enforcement puts on each firm's propensity to manage its reported
+         * earnings.
+         */
         public float $earningsManagementScale = 1.0,
-        /** The countercyclical buffer the regulator holds when credit is not running ahead (App\DTO\GovernmentPolicyDTO). */
+        /**
+         * The countercyclical buffer the regulator holds when credit is not running ahead
+         * (App\DTO\GovernmentPolicyDTO).
+         */
         public float $neutralCountercyclicalBuffer = 0.0,
-        /** How far the cap has so far held household debt below where it would stand without one, in logs (App\Service\Macro\Subsystem\CreditFiscalSubsystem::mortgageLtvCreditCut()). */
+        /**
+         * How far the cap has so far held household debt below where it would stand without one, in logs
+         * (App\Service\Macro\Subsystem\CreditFiscalSubsystem::mortgageLtvCreditCut()).
+         */
         public float $ltvCutBuilt = 0.0,
         public float $electricityCarbonPriceLevel = 0.0,
         public float $moneySupplyGrowth = MacroEngine::M2_BASE_GROWTH,
         public float $moneySupplyGrowthEma = MacroEngine::M2_BASE_GROWTH,
-        /** M2 growth's measured trend, the level its cyclical readers compare it with (App\Service\Macro\Subsystem\MonetaryPolicySubsystem::calculateMoneySupplyGrowth()). */
+        /**
+         * M2 growth's measured trend, the level its cyclical readers compare it with
+         * (App\Service\Macro\Subsystem\MonetaryPolicySubsystem::calculateMoneySupplyGrowth()).
+         */
         public float $moneySupplyGrowthTrend = MacroEngine::M2_BASE_GROWTH,
-        /** The Authority's bond holdings over GDP, averaged over a year: what turns its purchases into a flow of new money (MonetaryPolicySubsystem::calculateMoneySupplyGrowth()). */
+        /**
+         * The Authority's bond holdings over GDP, averaged over a year: what turns its purchases into a flow of new
+         * money (MonetaryPolicySubsystem::calculateMoneySupplyGrowth()).
+         */
         public float $authorityHoldingsToGdpEma = 0.0,
         public float $sovereignFundDomesticEquity = 0.0,
         public float $sovereignFundForeignEquity = 0.0,
         public float $sovereignFundForeignBonds = 0.0,
         public float $sovereignFundTargetWeight = 0.0,
-        /** The fund's policy equity share: the board's policy weight plus the foreign sleeves' equity at their policy split, as the fund opened or as its head has since set it (App\Service\Politics\SovereignReserveFund). */
+        /**
+         * The fund's policy equity share: the board's policy weight plus the foreign sleeves' equity at their policy
+         * split, as the fund opened or as its head has since set it (App\Service\Politics\SovereignReserveFund).
+         */
         public float $sovereignFundPolicyEquityShare = 0.0,
-        /** The policy equity share the fund's head has handed the fund, 0 while the head sitting at Year 1 keeps the opening mix. */
+        /**
+         * The policy equity share the fund's head has handed the fund, 0 while the head sitting at Year 1 keeps the
+         * opening mix.
+         */
         public float $sovereignFundMandateEquityShare = 0.0,
         /** The share of its equities the fund's policy mix keeps on the board, as last adopted from the Diet's law. */
         public float $sovereignFundHomeEquityShare = SovereignFundSubsystem::OPENING_HOME_EQUITY_SHARE,
         public float $sovereignFundDollarsPerGdp = 0.0,
         public float $sovereignFundAnnualDraw = 0.0,
-        /** The share of the expected return this budget year's draw was set at; a budget that moves the share rescales the draw from its round. */
+        /**
+         * The share of the expected return this budget year's draw was set at; a budget that moves the share rescales
+         * the draw from its round.
+         */
         public float $sovereignFundDrawShare = MacroEngine::RESERVE_DRAW_CEILING,
         public float $sovereignFundRebalanceBacklog = 0.0,
         public float $sovereignFundRebalanceRate = 0.0,
@@ -541,17 +715,31 @@ readonly class MacroStateDTO
         public float $boardBankLevy = 0.0,
         public float $strategicStakeCash = 0.0,
         public float $sovereignFundBudgetInflow = 0.0,
-        /** The corporate default rate's measured trend, its decade-long average: where its cyclical readers measure an excess from. */
+        /**
+         * The corporate default rate's measured trend, its decade-long average: where its cyclical readers measure an
+         * excess from.
+         */
         public float $corporateDefaultRateTrend = MacroEngine::CORPORATE_DEFAULT_BASELINE,
         /** The household default rate's measured trend, its decade-long average. */
         public float $retailDefaultRateTrend = MacroEngine::RETAIL_DEFAULT_BASELINE,
-        /** Commercial property's measured trend, the level a developer reads a boom in office and retail values against. */
+        /**
+         * Commercial property's measured trend, the level a developer reads a boom in office and retail values against.
+         */
         public float $commercialPropertyIndexTrend = MacroEngine::CRE_BASELINE,
-        /** The financial conditions composite's decade-long average before it is centred: financialConditionsIndex is the composite net of it. */
+        /**
+         * The financial conditions composite's decade-long average before it is centred: financialConditionsIndex is
+         * the composite net of it.
+         */
         public float $financialConditionsTrend = 0.0,
-        /** The coupon the Authority's own bond book earns: the yields its purchases and reinvestments were struck at (MonetaryPolicySubsystem::rollAuthorityBookCoupon()). */
+        /**
+         * The coupon the Authority's own bond book earns: the yields its purchases and reinvestments were struck at
+         * (MonetaryPolicySubsystem::rollAuthorityBookCoupon()).
+         */
         public float $authorityBookCouponRate = self::OPENING_YIELD_10Y,
-        /** The recession probability's measured trend, its decade-long average: what a reserving committee reads the outlook against. */
+        /**
+         * The recession probability's measured trend, its decade-long average: what a reserving committee reads the
+         * outlook against.
+         */
         public float $recessionProbabilityTrend = MacroEngine::RECESSION_BASE_RATE,
     ) {
         // A state given its gap but not its lags is one where the gap has stood long enough to reach every order book.
@@ -662,14 +850,15 @@ readonly class MacroStateDTO
             );
         }
 
-        // The open-economy levels open where the currency and the mainland already stand, as MacroState::fromArray has them.
+        // The open-economy levels open where the currency and the mainland already stand, as MacroState::fromArray has
+        // them.
         $args['importPriceLevel'] ??= MacroAggregateSubsystem::importPriceLevelTarget($resolve('exchangeRateIndexEma'), $resolve('importTariffRate'));
         $args['realExchangeRateTradeLag'] ??= MacroAggregateSubsystem::realExchangeRateGap($resolve('exchangeRateIndexEma'), $resolve('exchangeRateTrend'));
         $args['alliedDefenseDeliveryLag'] ??= MacroAggregateSubsystem::alliedDefenseGap($resolve('alliedDefenseSpendingIndexEma'));
         $args['mainlandDemandExportLag'] ??= $resolve('foreignOutputGapEma');
         $args['netExportGap'] ??= MacroAggregateSubsystem::netExportGapAt($resolve('mainlandDemandExportLag'), $resolve('realExchangeRateTradeLag'), $resolve('alliedDefenseDeliveryLag'), $resolve('tariffTradeLag'));
-        // Finance output opens on the credit balances and deal flow, and a payload valuing fund managers at the market is rebuilt on
-        // credit alone with domestic demand keeping the difference, as MacroState::fromArray has it.
+        // Finance output opens on the credit balances and deal flow, and a payload valuing fund managers at the market
+        // is rebuilt on credit alone with domestic demand keeping the difference, as MacroState::fromArray has it.
         if (!isset($args['financeOutputGap']) || isset($data[MacroState::RETIRED_FINANCE_MARKET_TREND_KEY])) {
             $carriedFinance = $resolve('financeOutputGap');
             $args['financeOutputGap'] = MacroAggregateSubsystem::financeOutputGapAt(
@@ -772,8 +961,8 @@ readonly class MacroStateDTO
      * The currency against its own trend, in logs; positive is an appreciation.
      *
      * EXCHANGE_RATE_BASELINE is the nominal anchor the index is built on, and it settles away from it on either side
-     * depending on the fund and the safe-haven bid, so a reader of it against the anchor books a standing competitiveness
-     * gain or loss no move produced. The macro's own net exports read this same gap.
+     * depending on the fund and the safe-haven bid, so a reader of it against the anchor books a standing
+     * competitiveness gain or loss no move produced. The macro's own net exports read this same gap.
      */
     public function exchangeRateGap(): float
     {
@@ -782,7 +971,8 @@ readonly class MacroStateDTO
 
     /**
      * Landed import prices against the level the currency's trend sets, in logs: the lagged exchange-rate pass-through
-     * of the currency's move off trend, plus the tariff. Read against the trend for the same reason as exchangeRateGap().
+     * of the currency's move off trend, plus the tariff. Read against the trend for the same reason as
+     * exchangeRateGap().
      */
     public function importPriceDeviation(): float
     {
@@ -819,7 +1009,10 @@ readonly class MacroStateDTO
         return $this->equityWealthTrend > 0.0 ? ($this->equityWealthRatio / $this->equityWealthTrend) - 1.0 : 0.0;
     }
 
-    /** Corporate defaults over their measured trend, as a share of it, both ways: +0.5 is half again the usual rate of failures. */
+    /**
+     * Corporate defaults over their measured trend, as a share of it, both ways: +0.5 is half again the usual rate of
+     * failures.
+     */
     public function corporateDefaultDeviation(): float
     {
         return $this->corporateDefaultRateTrend > 0.0 ? ($this->corporateDefaultRateEma / $this->corporateDefaultRateTrend) - 1.0 : 0.0;
@@ -860,7 +1053,9 @@ readonly class MacroStateDTO
         return FixedIncome::moneyMarketYield($this->policyRateEma);
     }
 
-    /** The cost of equity at a beta of one: the smoothed ten-year plus the equity risk premium (Sharpe-Lintner CAPM). */
+    /**
+     * The cost of equity at a beta of one: the smoothed ten-year plus the equity risk premium (Sharpe-Lintner CAPM).
+     */
     public function marketCostOfEquity(): float
     {
         return $this->yield10yEma + $this->equityRiskPremium;

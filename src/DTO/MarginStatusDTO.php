@@ -10,7 +10,8 @@ namespace App\DTO;
 final readonly class MarginStatusDTO
 {
     /**
-     * @param float $cash                   Settled cash, short sale proceeds and cash escrowed on resting buys included.
+     * @param float $cash                   Settled cash, short sale proceeds and cash escrowed on resting buys
+     *                                      included.
      * @param float $longMarketValue        Market value of long positions, shares escrowed on resting sells included.
      * @param float $shortMarketValue       Market value owed on short positions, as a positive number.
      * @param float $marginDebit            Cash borrowed from the broker.

@@ -82,8 +82,8 @@ class SovereignReserveFundTest extends TestCase
     }
 
     /**
-     * At Year 1 the head seated before it keeps the mix the fund opened with, so the economy is handed no share; nothing
-     * before the fund has a head.
+     * At Year 1 the head seated before it keeps the mix the fund opened with, so the economy is handed no share;
+     * nothing before the fund has a head.
      */
     public function testTheHeadAtYearOneKeepsTheOpeningMix(): void
     {

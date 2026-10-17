@@ -31,7 +31,10 @@ use App\Service\Model\ModelParam;
 class RestaurantBusinessModel extends StandardCorporateBusinessModel
 {
     // --- Operating Cyclicality & Demand Structure ---
-    /** Elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). Dining out is cut in downturns; restaurants substitute freely. */
+    /**
+     * Elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). Dining out is cut in
+     * downturns; restaurants substitute freely.
+     */
     public const OPERATING_CYCLICALITY = 1.00;
     /** Own-price elasticity of demand: volume lost per unit of real price increase. */
     public const PRICE_ELASTICITY_OF_DEMAND = 0.80;
@@ -39,13 +42,22 @@ class RestaurantBusinessModel extends StandardCorporateBusinessModel
     public const INDUSTRY_SUBSTITUTABILITY = 0.70;
 
     // --- Input Cost Basket ---
-    /** Shares of the variable cost base by input channel, measured from the BEA input-output accounts with supply-chain content (labor still the model's own). */
+    /**
+     * Shares of the variable cost base by input channel, measured from the BEA input-output accounts with supply-chain
+     * content (labor still the model's own).
+     */
     public const INPUT_COST_EXPOSURES = InputOutputExposures::RESTAURANT;
-    /** Menu prices move freely but the diner's next-best meal is one storefront away, so a chain recovers only part of a food or wage move before traffic answers. */
+    /**
+     * Menu prices move freely but the diner's next-best meal is one storefront away, so a chain recovers only part of a
+     * food or wage move before traffic answers.
+     */
     public const PRICING_POWER_INDEX = 0.45;
 
     // --- Balance Sheet Realism ---
-    /** Capitalized operating lease liabilities as a fraction of annual revenue (IFRS 16 / ASC 842). Franchisor real estate and store leases are the largest obligation on a restaurant balance sheet. */
+    /**
+     * Capitalized operating lease liabilities as a fraction of annual revenue (IFRS 16 / ASC 842). Franchisor real
+     * estate and store leases are the largest obligation on a restaurant balance sheet.
+     */
     public const LEASE_LIABILITY_INTENSITY = 0.60;
 
     // --- Tri-Stream Architecture ---
@@ -55,11 +67,15 @@ class RestaurantBusinessModel extends StandardCorporateBusinessModel
     public const FRANCHISE_WEIGHT       = 0.30;
     /** Baseline fraction of revenue derived from franchise real estate rental leases. */
     public const FRANCHISE_LEASE_WEIGHT = 0.20;
-    /** Franchise rent's exposure to store traffic against sales': base rent plus a percentage of sales, half the swing. */
+    /**
+     * Franchise rent's exposure to store traffic against sales': base rent plus a percentage of sales, half the swing.
+     */
     public const FRANCHISE_LEASE_CYCLE_LOADING = 0.50;
 
     // --- Working Capital by Stream (shares of the stream's revenue) ---
-    /** Company stores: card takings in ~4 days, ~5 days of sales in food and paper, suppliers and crew owed ~26 days. */
+    /**
+     * Company stores: card takings in ~4 days, ~5 days of sales in food and paper, suppliers and crew owed ~26 days.
+     */
     public const COMPANY_STORES_WORKING_CAPITAL = ['receivables' => 0.01, 'inventory' => 0.015, 'payables' => 0.07];
     /** Royalties: billed monthly on franchisees' sales and collected in ~22 days. */
     public const FRANCHISE_ROYALTIES_WORKING_CAPITAL = ['receivables' => 0.06, 'inventory' => 0.0, 'payables' => 0.01];
@@ -95,7 +111,9 @@ class RestaurantBusinessModel extends StandardCorporateBusinessModel
     public const FRANCHISE_COST_INTENSITY = 0.05;
     /** Franchise rent variable cost per dollar, relative to a company-store dollar. */
     public const LEASE_COST_INTENSITY     = 0.02;
-    /** Most a company-store sales dollar can cost: food & paper 31.2% plus crew payroll 29.6% (McDonald's 2023 10-K). */
+    /**
+     * Most a company-store sales dollar can cost: food & paper 31.2% plus crew payroll 29.6% (McDonald's 2023 10-K).
+     */
     public const COMPANY_STORE_VARIABLE_COST_CEILING = 0.608;
 
     // --- Tail Risk & Shock Events ---
@@ -129,7 +147,10 @@ class RestaurantBusinessModel extends StandardCorporateBusinessModel
     }
 
     // --- Secular Demand ---
-    /** Food services and drinking places value added as a share of US nominal GDP in 1997 (BEA GDP by Industry, value added). */
+    /**
+     * Food services and drinking places value added as a share of US nominal GDP in 1997 (BEA GDP by Industry, value
+     * added).
+     */
     public const SECULAR_SHARE_1997 = 0.0176;
     /** The same share in 2019. */
     public const SECULAR_SHARE_2019 = 0.0228;
@@ -250,7 +271,8 @@ class RestaurantBusinessModel extends StandardCorporateBusinessModel
 
         $observableShockZ = ($corporateZ * $corporateWeight * self::REVENUE_VARIANCE_SCALAR * $baselineVol) + ($rentEscalator * $leaseWeight);
 
-        // The one-off charge is booked as a special item: in EBIT, out of the run rate, the Street figure and the cost ratio.
+        // The one-off charge is booked as a special item: in EBIT, out of the run rate, the Street figure and the cost
+        // ratio.
         $specialCharge = $scandalWriteOff * max(0.0, $actualRevenue - $priceRevenue);
 
         return new SectorPhysicsResult(
@@ -268,8 +290,8 @@ class RestaurantBusinessModel extends StandardCorporateBusinessModel
 
     /**
      * Variable cost ratio of each stream, weighted to the firm's variable cost ratio at plan. A company-store dollar
-     * costs at most a company store's food, paper and crew; what a franchisor's cost base holds beyond that is
-     * system cost (ad funds, field support) that scales with franchisee sales, so it rides the royalty and rent streams.
+     * costs at most a company store's food, paper and crew; what a franchisor's cost base holds beyond that is system
+     * cost (ad funds, field support) that scales with franchisee sales, so it rides the royalty and rent streams.
      *
      * @return array{company: float, franchise: float, lease: float}
      */

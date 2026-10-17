@@ -70,12 +70,14 @@ class PoliticsHistoryRecorderTest extends TestCase
 
     /**
      * A year and a half of the politics engine, its snapshot recorded every tick as the ticker does: one decision per
-     * meeting on the eight-a-year grid, each with the votes that meeting cast, and one row per forecast the market made.
+     * meeting on the eight-a-year grid, each with the votes that meeting cast, and one row per forecast the market
+     * made.
      */
     public function testEveryMeetingAndEveryForecastIsWrittenOnce(): void
     {
-        // Eight ticks a meeting, so every meeting lands on a tick: time here is set as tick / rate rather than accumulated
-        // as the engine does, and at a rate putting a meeting exactly half a tick past a tick that tie can fire twice.
+        // Eight ticks a meeting, so every meeting lands on a tick: time here is set as tick / rate rather than
+        // accumulated as the engine does, and at a rate putting a meeting exactly half a tick past a tick that tie can
+        // fire twice.
         $ticksPerYear = 64;
         $engine = new PoliticsEngine(MathUtility::ownStream(23), $this->inMemoryRedis());
         $recorder = $this->recorder();

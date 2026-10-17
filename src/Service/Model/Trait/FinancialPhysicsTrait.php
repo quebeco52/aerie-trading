@@ -168,7 +168,10 @@ trait FinancialPhysicsTrait
         return min($wholesaleCapacity, $totalCapacity);
     }
 
-    /** A financial's wholesale notes are senior unsecured like anyone's (CorporateDefaultService::RECOVERY_SENIOR_UNSECURED); central bank support is liquidity, not recovery. */
+    /**
+     * A financial's wholesale notes are senior unsecured like anyone's
+     * (CorporateDefaultService::RECOVERY_SENIOR_UNSECURED); central bank support is liquidity, not recovery.
+     */
     public function getLossGivenDefault(): float
     {
         return 1.0 - \App\Service\Market\Bond\CorporateDefaultService::RECOVERY_SENIOR_UNSECURED;
@@ -325,7 +328,10 @@ trait FinancialPhysicsTrait
         return $bookValuePerShare * $structuralRoic;
     }
 
-    /** A financial's return is already struck on equity (getTrueReturn() is ROE); its debt is its inventory, not its financing. */
+    /**
+     * A financial's return is already struck on equity (getTrueReturn() is ROE); its debt is its inventory, not its
+     * financing.
+     */
     public function getEquityReturn(float $returnOnCapital, float $investedCapital, float $equity, float $afterTaxCostOfDebt): float
     {
         return $returnOnCapital;

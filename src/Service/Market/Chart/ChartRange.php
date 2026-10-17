@@ -39,7 +39,9 @@ final class ChartRange
     public const MAX_ROWS = 500000;
 
     // --- Redis Buffer ---
-    /** Simulated years a chart_buffer list holds; a range no longer than this is drawn from it instead of from history. */
+    /**
+     * Simulated years a chart_buffer list holds; a range no longer than this is drawn from it instead of from history.
+     */
     public const BUFFERED_YEARS = 1.0 / 12.0;
 
     /** Simulated years a range spans, or null for the unbounded one. */

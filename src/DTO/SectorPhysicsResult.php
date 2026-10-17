@@ -13,10 +13,12 @@ readonly class SectorPhysicsResult
     /**
      * @param float                $actualRevenue     Realized revenue after sector-specific shocks.
      * @param float                $rawVariableMargin Raw variable cost ratio before template-method clamping.
-     * @param float                $observableShockZ  The shock component visible to public data (passed to MarketConsensusEngine).
+     * @param float                $observableShockZ  The shock component visible to public data (passed to
+     *                                                MarketConsensusEngine).
      * @param string|null          $eventType         Named tail-risk event type, or null.
      * @param array<string, mixed> $eventContext      Key-value lore context for NarrativeEngine.
-     * @param bool|null            $isPublicEvent     For event-conditional models: true when a binary public event fired.
+     * @param bool|null            $isPublicEvent     For event-conditional models: true when a binary public event
+     *                                                fired.
      * @param array<string, float> $streamZ           Dictionary of individual AR(1) stream Z-scores to persist.
      * @param array<string, float> $streamRevenue     Dictionary of absolute dollar revenue generated per stream.
      * @param float                $scheduledCapex    Mandatory quarterly CapEx the physics itself commits (spectrum
@@ -36,21 +38,43 @@ readonly class SectorPhysicsResult
         public array $streamRevenue = [],
         public float $scheduledCapex = 0.0,
         public array $kpis = [],
-        /** Dollar provision for credit losses the physics charged this quarter beyond the through-the-cycle loss already in the cost base (negative for a reserve release). */
+        /**
+         * Dollar provision for credit losses the physics charged this quarter beyond the through-the-cycle loss already
+         * in the cost base (negative for a reserve release).
+         */
         public float $creditLossProvision = 0.0,
         /** Dollar loans and securities that went bad this quarter and are written off against the allowance. */
         public float $netChargeOffs = 0.0,
-        /** Dollars of funding cost the duration squeeze added to the variable cost ratio this quarter (negative when a steep curve lowered it): net interest income the margin disclosure deducts. */
+        /**
+         * Dollars of funding cost the duration squeeze added to the variable cost ratio this quarter (negative when a
+         * steep curve lowered it): net interest income the margin disclosure deducts.
+         */
         public float $netInterestSqueeze = 0.0,
-        /** Dollars of actual revenue that are price over the expected level, negative when under it (escalators, Veblen hikes, spot rates on a fixed fleet, a rent roll below market). Price carries no variable cost, so the template method applies the cost ratio to volume revenue only. */
+        /**
+         * Dollars of actual revenue that are price over the expected level, negative when under it (escalators, Veblen
+         * hikes, spot rates on a fixed fleet, a rent roll below market). Price carries no variable cost, so the
+         * template method applies the cost ratio to volume revenue only.
+         */
         public float $priceRevenue = 0.0,
-        /** Dollar write-down of long-lived assets the model's own impairment test found this quarter (a builder's land, ASC 360-10). */
+        /**
+         * Dollar write-down of long-lived assets the model's own impairment test found this quarter (a builder's land,
+         * ASC 360-10).
+         */
         public float $plantImpairment = 0.0,
-        /** Change in the variable cost ratio from the last calendar quarter's season to this one: a known mix shift analysts build in, not a surprise. */
+        /**
+         * Change in the variable cost ratio from the last calendar quarter's season to this one: a known mix shift
+         * analysts build in, not a surprise.
+         */
         public float $seasonalCostRatioShift = 0.0,
-        /** Dollar one-off operating charge the physics booked this quarter (a recall's destroyed stock, a regulator's fine): in EBIT, kept out of the run rate and the Street figure. */
+        /**
+         * Dollar one-off operating charge the physics booked this quarter (a recall's destroyed stock, a regulator's
+         * fine): in EBIT, kept out of the run rate and the Street figure.
+         */
         public float $specialCharge = 0.0,
-        /** Revenue move, as a share of expected revenue, that analysts read in full from published figures (a benchmark price, a disclosed rent roll) rather than at coverage visibility. */
+        /**
+         * Revenue move, as a share of expected revenue, that analysts read in full from published figures (a benchmark
+         * price, a disclosed rent roll) rather than at coverage visibility.
+         */
         public float $publishedRevenueShift = 0.0,
     ) {}
 }

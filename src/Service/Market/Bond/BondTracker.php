@@ -231,7 +231,8 @@ class BondTracker
 
     /**
      * The last coupon falls on the redemption date and is paid with the face, as the price discounts it: the schedule
-     * above stops short of maturity, and a redemption of face alone kept the final coupon from every holder to maturity.
+     * above stops short of maturity, and a redemption of face alone kept the final coupon from every holder to
+     * maturity.
      */
     private function payFinalCoupon(Bond $bond, \DateTimeInterface $now): void
     {

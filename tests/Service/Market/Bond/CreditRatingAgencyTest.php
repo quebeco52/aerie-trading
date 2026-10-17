@@ -304,7 +304,10 @@ class CreditRatingAgencyTest extends TestCase
         $this->assertSame(['net_debt' => 0.0, 'ebitda' => 0.0], CreditRatingAgency::timeWeightedLeverage([]));
     }
 
-    /** The base case for S&P's two forecast years weighs 50%, against 25/15/10 for the observed years, and keeps its share when fewer years are observed. */
+    /**
+     * The base case for S&P's two forecast years weighs 50%, against 25/15/10 for the observed years, and keeps its
+     * share when fewer years are observed.
+     */
     public function testTheForecastYearsWeighHalfOfTheTimeWeightedBasis(): void
     {
         $year = static fn(float $netDebt, float $ebitda): array => ['net_debt' => $netDebt, 'ebitda' => $ebitda];
@@ -320,7 +323,10 @@ class CreditRatingAgencyTest extends TestCase
         $this->assertSame($baseCase, CreditRatingAgency::timeWeightedLeverage([], $baseCase));
     }
 
-    /** A loss year leaves the weighted basis defined: two good years outweigh one with no EBITDA, which alone reads highly leveraged. */
+    /**
+     * A loss year leaves the weighted basis defined: two good years outweigh one with no EBITDA, which alone reads
+     * highly leveraged.
+     */
     public function testATimeWeightedLossYearIsNotHighlyLeveragedOnItsOwn(): void
     {
         $good = ['net_debt' => 200.0, 'ebitda' => 100.0];
@@ -334,7 +340,8 @@ class CreditRatingAgencyTest extends TestCase
 
     /**
      * S&P's medial volatility table, on which a regulated utility is read: its bands sit 0.25x-0.5x wider than the
-     * standard table's, so 4.2x is still significant (A on the excellent row) where the standard table calls it aggressive.
+     * standard table's, so 4.2x is still significant (A on the excellent row) where the standard table calls it
+     * aggressive.
      */
     public function testTheMedialVolatilityTableWidensTheBands(): void
     {

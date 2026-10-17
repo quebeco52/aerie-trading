@@ -90,8 +90,9 @@ class ComputerHardwareBusinessModelTest extends TestCase
 
     public function testMetalsAreBelowMaterialityForASystemsAssembler(): void
     {
-        // BEA 2017: a computer maker buys boards, chips and drives as components; metals through the whole supply chain are
-        // 1.3% of its variable costs, under InputOutputExposures::MATERIALITY_FLOOR, so a metals spike is no margin event.
+        // BEA 2017: a computer maker buys boards, chips and drives as components; metals through the whole supply chain
+        // are 1.3% of its variable costs, under InputOutputExposures::MATERIALITY_FLOOR, so a metals spike is no margin
+        // event.
         $stock = new Stock();
         $stock->setTicker('HPE');
         $stock->setBeta('1.0');

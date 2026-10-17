@@ -74,7 +74,10 @@ class SecurityBureauTest extends TestCase
         $this->assertEquals($without->policy(), PoliticsStateDTO::fromState($state)->policy(), 'Who directs the Bureau moves nothing in the economy.');
     }
 
-    /** At the opening director's term end the Council names the candidate nearest its median on its own questions, for one ten-year term. */
+    /**
+     * At the opening director's term end the Council names the candidate nearest its median on its own questions, for
+     * one ten-year term.
+     */
     public function testAtTermEndTheCouncilNamesTheCandidateNearestItsMedians(): void
     {
         foreach ([3, 11] as $seed) {

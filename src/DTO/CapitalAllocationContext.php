@@ -93,9 +93,15 @@ class CapitalAllocationContext
     /** Cash actually received from shares issued this quarter, net of any offering discount. */
     public float $equityRaised = 0.0;
     public float $newShares = 0.0;
-    /** Book equity over total assets as the quarter opened: the base a capital target's partial adjustment is struck from. */
+    /**
+     * Book equity over total assets as the quarter opened: the base a capital target's partial adjustment is struck
+     * from.
+     */
     public ?float $openingCapitalRatio = null;
-    /** What a regulator's distribution ceiling leaves this quarter for repurchases once the dividend is paid; null when none applies. */
+    /**
+     * What a regulator's distribution ceiling leaves this quarter for repurchases once the dividend is paid; null when
+     * none applies.
+     */
     public ?float $distributionRoom = null;
 
     // Market Events

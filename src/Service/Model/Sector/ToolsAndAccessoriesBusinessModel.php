@@ -24,7 +24,10 @@ use App\Service\Model\ModelParam;
 class ToolsAndAccessoriesBusinessModel extends StandardCorporateBusinessModel
 {
     // --- Operating Cyclicality & Demand Structure ---
-    /** Elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). Industrial tooling and prosumer hardware. */
+    /**
+     * Elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). Industrial tooling
+     * and prosumer hardware.
+     */
     public const OPERATING_CYCLICALITY = 1.00;
     /** Own-price elasticity of demand: volume lost per unit of real price increase. */
     public const PRICE_ELASTICITY_OF_DEMAND = 0.60;
@@ -32,9 +35,15 @@ class ToolsAndAccessoriesBusinessModel extends StandardCorporateBusinessModel
     public const INDUSTRY_SUBSTITUTABILITY = 0.50;
 
     // --- Input Cost Basket ---
-    /** Shares of the variable cost base by input channel, measured from the BEA input-output accounts with supply-chain content (labor still the model's own). */
+    /**
+     * Shares of the variable cost base by input channel, measured from the BEA input-output accounts with supply-chain
+     * content (labor still the model's own).
+     */
     public const INPUT_COST_EXPOSURES = InputOutputExposures::TOOLS_AND_ACCESSORIES;
-    /** Professional trade brands hold shelf and channel power on a sticky commercial base; the retail secondary market does not. */
+    /**
+     * Professional trade brands hold shelf and channel power on a sticky commercial base; the retail secondary market
+     * does not.
+     */
     public const PRICING_POWER_INDEX = 0.65;
 
     /**
@@ -48,7 +57,10 @@ class ToolsAndAccessoriesBusinessModel extends StandardCorporateBusinessModel
     }
 
     // --- Balance Sheet Realism ---
-    /** Capitalized operating lease liabilities as a fraction of annual revenue (IFRS 16 / ASC 842). Leased plants and distribution warehouses. */
+    /**
+     * Capitalized operating lease liabilities as a fraction of annual revenue (IFRS 16 / ASC 842). Leased plants and
+     * distribution warehouses.
+     */
     public const LEASE_LIABILITY_INTENSITY = 0.10;
 
     // --- Dual-Stream Architecture ---
@@ -82,13 +94,19 @@ class ToolsAndAccessoriesBusinessModel extends StandardCorporateBusinessModel
     public const PMI_COMMERCIAL_SENSITIVITY = 0.40;
     /** Sensitivity of retail and prosumer tool sales to residential housing starts. */
     public const HOUSING_STARTS_SENSITIVITY = 0.35;
-    /** Prosumer volume per unit of confidence beyond what the output gap explains, before cyclicality (Lemmon & Portniaguina 2006 residual; Carroll, Fuhrer & Wilcox 1994). */
+    /**
+     * Prosumer volume per unit of confidence beyond what the output gap explains, before cyclicality (Lemmon &
+     * Portniaguina 2006 residual; Carroll, Fuhrer & Wilcox 1994).
+     */
     public const CONSUMER_SENTIMENT_SENSITIVITY = 0.50;
     /** Alloy and carbide supply contracts fix input prices for about a quarter. */
     public const INPUT_COST_LAG_YEARS = 0.25;
 
     // --- FX Exposure ---
-    /** Share of revenue whose competitiveness moves with the trade-weighted exchange rate. Hand and power tools are sourced and sold across borders against import-competing brands. */
+    /**
+     * Share of revenue whose competitiveness moves with the trade-weighted exchange rate. Hand and power tools are
+     * sourced and sold across borders against import-competing brands.
+     */
     public const FX_REVENUE_EXPOSURE = 0.10;
 
     public function getReversionSpeed(): float
@@ -236,7 +254,8 @@ class ToolsAndAccessoriesBusinessModel extends StandardCorporateBusinessModel
         $rawMargin = ($actualVariableCosts / max(1.0, $actualRevenue)) + $supplyChainPenalty + $inputCostDrag + $elasticityShift;
         $clampedMargin = $this->clampMargin($rawMargin);
 
-        // Each stream's own shock at its revenue weight, and what a public congestion or super-cycle does to commercial.
+        // Each stream's own shock at its revenue weight, and what a public congestion or super-cycle does to
+        // commercial.
         $observableShockZ = ((($commercialShock * $cycleMultiplier) + ($cycleMultiplier - 1.0)) * $commercialWeight)
             + ($consumerShock * $consumerWeight);
 

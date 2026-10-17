@@ -8,7 +8,8 @@ namespace App\Service\Lore;
 final readonly class AlmanacEntry
 {
     /**
-     * @param list<string> $about The institutions (Institutions::PUBLISHERS ids) and listed companies (tickers) the entry is about.
+     * @param list<string> $about The institutions (Institutions::PUBLISHERS ids) and listed companies (tickers) the
+     *                            entry is about.
      * @param list<string> $links The entries its body links to, by slug.
      */
     public function __construct(
@@ -16,7 +17,9 @@ final readonly class AlmanacEntry
         public string $title,
         public string $summary,
         public string $category,
-        /** Where the entry's events fall in the District's history, for ordering only: smaller is earlier. Never shown. */
+        /**
+         * Where the entry's events fall in the District's history, for ordering only: smaller is earlier. Never shown.
+         */
         public int $sequence,
         public array $about,
         public array $links,

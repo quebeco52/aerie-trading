@@ -34,25 +34,44 @@ use App\Service\Model\StreamContext;
 class OilGasProducerBusinessModel extends StandardCorporateBusinessModel
 {
     // --- Operating Cyclicality & Demand Structure ---
-    /** Elasticity of volumes and costs to the macro cycle. A producer sells every barrel it lifts into a global pool at the going price, so the domestic output gap does not move its volume (band floor). */
+    /**
+     * Elasticity of volumes and costs to the macro cycle. A producer sells every barrel it lifts into a global pool at
+     * the going price, so the domestic output gap does not move its volume (band floor).
+     */
     public const OPERATING_CYCLICALITY = 0.20;
-    /** Own-price elasticity of the firm's demand: a small share of a global market faces residual demand far more elastic than the market's (Landes & Posner 1981), so any premium over the benchmark loses the sale. Inert while the price is pinned to the index. */
+    /**
+     * Own-price elasticity of the firm's demand: a small share of a global market faces residual demand far more
+     * elastic than the market's (Landes & Posner 1981), so any premium over the benchmark loses the sale. Inert while
+     * the price is pinned to the index.
+     */
     public const PRICE_ELASTICITY_OF_DEMAND = 2.50;
-    /** Share of an idiosyncratic revenue gain taken from same-industry peers rather than won from a larger market. Peers barely notice a rival barrel in a global market. */
+    /**
+     * Share of an idiosyncratic revenue gain taken from same-industry peers rather than won from a larger market. Peers
+     * barely notice a rival barrel in a global market.
+     */
     public const INDUSTRY_SUBSTITUTABILITY = 0.15;
 
     // --- Input Cost Basket ---
-    /** Shares of the variable cost base by input channel, measured from the BEA input-output accounts with supply-chain content (labor still the model's own). */
+    /**
+     * Shares of the variable cost base by input channel, measured from the BEA input-output accounts with supply-chain
+     * content (labor still the model's own).
+     */
     public const INPUT_COST_EXPOSURES = InputOutputExposures::OIL_GAS_PRODUCER;
     /** Price takers recover none of their own input inflation through pricing: the market sets the quote. */
     public const PRICING_POWER_INDEX = 0.00;
 
     // --- FX Exposure ---
-    /** Share of revenue whose home-currency realization moves with the trade-weighted exchange rate: crude and gas are priced in the world market. */
+    /**
+     * Share of revenue whose home-currency realization moves with the trade-weighted exchange rate: crude and gas are
+     * priced in the world market.
+     */
     public const FX_REVENUE_EXPOSURE = 0.30;
 
     // --- Analyst Visibility & Error ---
-    /** Base coverage visibility of the field's own production; the published crude and gas prices are read in full beside it. */
+    /**
+     * Base coverage visibility of the field's own production; the published crude and gas prices are read in full
+     * beside it.
+     */
     public const BASE_COVERAGE_VISIBILITY = 0.80;
     /** Base coverage forecasting error given the swings in the benchmark prices. */
     public const BASE_COVERAGE_ERROR = 0.10;
@@ -60,9 +79,15 @@ class OilGasProducerBusinessModel extends StandardCorporateBusinessModel
     // --- Production Mix & Hedging ---
     /** Default share of revenue at baseline prices from crude and liquids; the remainder is natural gas. */
     public const LIQUIDS_REVENUE_SHARE = 0.70;
-    /** Default share of next-year oil volume sold forward through the swap ladder (a typical E&P programme hedges about half of year-one production). */
+    /**
+     * Default share of next-year oil volume sold forward through the swap ladder (a typical E&P programme hedges about
+     * half of year-one production).
+     */
     public const OIL_HEDGE_RATIO = 0.50;
-    /** Quarterly tranches in the rolling swap ladder: each quarter one quarter of the hedged volume is locked for each of the next four quarters. */
+    /**
+     * Quarterly tranches in the rolling swap ladder: each quarter one quarter of the hedged volume is locked for each
+     * of the next four quarters.
+     */
     public const HEDGE_LADDER_TRANCHES = 4;
     /** Persisted state key prefix: sum of the strikes already locked for delivery 0-3 quarters ahead. */
     public const STATE_HEDGE_STRIKE_SUM_PREFIX = 'state:hedge_strike_sum_';
@@ -70,17 +95,29 @@ class OilGasProducerBusinessModel extends StandardCorporateBusinessModel
     // --- Revenue Shock Physics ---
     /** Volatility multiplier on the baseline volatility for field production (uptime, well performance) shocks. */
     public const REVENUE_VARIANCE_SCALAR = 0.25;
-    /** Firm-specific basis differential noise as a fraction of the production variance scalar (price itself is a market variable). */
+    /**
+     * Firm-specific basis differential noise as a fraction of the production variance scalar (price itself is a market
+     * variable).
+     */
     public const BASIS_DIFFERENTIAL_VOL_SCALAR = 0.40;
-    /** Quarterly persistence of field production shocks (a field outage or well underperformance takes a few quarters to recover). */
+    /**
+     * Quarterly persistence of field production shocks (a field outage or well underperformance takes a few quarters to
+     * recover).
+     */
     public const PRODUCTION_SHOCK_PERSISTENCE = 0.35;
-    /** Quarterly persistence of the basis differential (pipeline takeaway constraints and quality spreads clear within a few quarters). */
+    /**
+     * Quarterly persistence of the basis differential (pipeline takeaway constraints and quality spreads clear within a
+     * few quarters).
+     */
     public const BASIS_SHOCK_PERSISTENCE = 0.15;
     /** Quarterly persistence of the firm's own tail-event draw. */
     public const EVENT_SHOCK_PERSISTENCE = 0.10;
 
     // --- Tail Risk & Shock Events ---
-    /** Negative Z-score threshold indicating sanctions on a jurisdiction the firm produces in, shutting in its output there. */
+    /**
+     * Negative Z-score threshold indicating sanctions on a jurisdiction the firm produces in, shutting in its output
+     * there.
+     */
     public const GEOPOLITICAL_SANCTIONS_Z_SCORE = -2.20;
     /** Production multiplier applied while sanctioned output is shut in. */
     public const SANCTIONS_PRODUCTION_MULT = 0.75;
@@ -92,7 +129,10 @@ class OilGasProducerBusinessModel extends StandardCorporateBusinessModel
     public const DISASTER_PRODUCTION_MULT = 0.85;
 
     // --- Capital Reinvestment & Asset Depreciation Physics ---
-    /** Upstream CapEx follows the price deck: US oil & gas drilling (FRED IPN213111S) on the real WTI cycle (WTISPLC/CPIAUCSL), HP(1600) quarterly 1972-2024, peak elasticity 0.58 at a 1-2 quarter lag. */
+    /**
+     * Upstream CapEx follows the price deck: US oil & gas drilling (FRED IPN213111S) on the real WTI cycle
+     * (WTISPLC/CPIAUCSL), HP(1600) quarterly 1972-2024, peak elasticity 0.58 at a 1-2 quarter lag.
+     */
     public const CAPEX_CYCLICALITY = 0.58;
     /** Share of construction in progress completed each quarter (about two years from sanction to first production). */
     public const CAPEX_COMPLETION_RATE = 0.125;
@@ -102,7 +142,9 @@ class OilGasProducerBusinessModel extends StandardCorporateBusinessModel
     public const WORKING_CAPITAL_INTENSITY = 0.15;
 
     // --- Valuation ---
-    /** Book (replacement cost) weight in fair value when normalized EPS is negative: trough producers trade on assets. */
+    /**
+     * Book (replacement cost) weight in fair value when normalized EPS is negative: trough producers trade on assets.
+     */
     public const TROUGH_BOOK_WEIGHT = 0.70;
     /** Book weight in fair value through the rest of the cycle. */
     public const MID_CYCLE_BOOK_WEIGHT = 0.40;
@@ -248,7 +290,8 @@ class OilGasProducerBusinessModel extends StandardCorporateBusinessModel
         $productionShock = $expectedRevenue > 0.0 ? ($volumeRevenue / $expectedRevenue) - 1.0 : 0.0;
         $observableShockZ = $productionShock;
 
-        // The one-off charge is booked as a special item: in EBIT, out of the run rate, the Street figure and the cost ratio.
+        // The one-off charge is booked as a special item: in EBIT, out of the run rate, the Street figure and the cost
+        // ratio.
         $specialCharge = $disasterPenalty * $volumeRevenue;
 
         return new SectorPhysicsResult(
@@ -298,13 +341,19 @@ class OilGasProducerBusinessModel extends StandardCorporateBusinessModel
         return $ladder['strike'];
     }
 
-    /** Producers anchor to book (replacement cost of reserves and plant) at trough earnings and to mid-cycle earnings otherwise. */
+    /**
+     * Producers anchor to book (replacement cost of reserves and plant) at trough earnings and to mid-cycle earnings
+     * otherwise.
+     */
     protected function getFairValueBookWeight(float $normalizedEps): float
     {
         return $normalizedEps < 0 ? self::TROUGH_BOOK_WEIGHT : self::MID_CYCLE_BOOK_WEIGHT;
     }
 
-    /** Stricter rules on extraction cost the whole operation productivity, so the committed base costs that much more per unit of capacity too (Greenstone, List & Syverson 2012 measure the loss on all inputs). */
+    /**
+     * Stricter rules on extraction cost the whole operation productivity, so the committed base costs that much more
+     * per unit of capacity too (Greenstone, List & Syverson 2012 measure the loss on all inputs).
+     */
     public function getFixedCostFactor(MacroStateDTO $macroState): float
     {
         return FirmEconomics::calculateExtractionCostFactor($macroState->extractionStringency);

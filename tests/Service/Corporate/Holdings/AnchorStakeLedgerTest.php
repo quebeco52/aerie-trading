@@ -329,7 +329,10 @@ class AnchorStakeLedgerTest extends TestCase
         $this->assertSame(0.0, $this->ledger->markToMarket($sphere));
     }
 
-    /** A holding that goes under takes its whole stake with it. Read from isBankrupt(), not from the zeroed price: this is the largest single move a sphere's book can make. */
+    /**
+     * A holding that goes under takes its whole stake with it. Read from isBankrupt(), not from the zeroed price: this
+     * is the largest single move a sphere's book can make.
+     */
     public function testAHoldingsBankruptcyIsBookedAsTheLossItIs(): void
     {
         $capEach = 200_000_000_000.0;

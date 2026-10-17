@@ -22,16 +22,24 @@ use App\Service\Model\ModelParam;
  * - Feedstock Cost Curve: base chemicals are priced off the marginal (naphtha, oil-linked) cracker while the firm pays
  *   its own gas/oil slate, so a gas-advantaged cracker gains when oil rises against gas.
  * - Tri-Stream Demand Architecture:
- *      1. Base Petrochemicals: Highly cyclical, volume price takers driven geometrically by output gap and industrial metals.
- *      2. Specialty Chemicals: Defensive, high-margin, patent-protected electronic materials and catalysts with asymmetric cost pass-through.
- *      3. Agrochemicals: Uncorrelated to standard macro cycles; driven by agricultural commodity indices and weather jump diffusion.
- * - Feedstock Pass-Through: specialty chemicals pass their own feedstock cost through with pricing power; agrochemicals as far as farm prices move with it. Symmetric in sign.
- * - Capital Intensity & Plant Turnarounds: Continuous chemical corrosion requires strict maintenance CapEx; underinvestment causes compounding margin decay and turnaround downtime.
+ *      1. Base Petrochemicals: Highly cyclical, volume price takers driven geometrically by output gap and industrial
+ *         metals.
+ *      2. Specialty Chemicals: Defensive, high-margin, patent-protected electronic materials and catalysts with
+ *         asymmetric cost pass-through.
+ *      3. Agrochemicals: Uncorrelated to standard macro cycles; driven by agricultural commodity indices and weather
+ *         jump diffusion.
+ * - Feedstock Pass-Through: specialty chemicals pass their own feedstock cost through with pricing power; agrochemicals
+ *   as far as farm prices move with it. Symmetric in sign.
+ * - Capital Intensity & Plant Turnarounds: Continuous chemical corrosion requires strict maintenance CapEx;
+ *   underinvestment causes compounding margin decay and turnaround downtime.
  */
 class ChemicalBusinessModel extends StandardCorporateBusinessModel
 {
     // --- Operating Cyclicality & Demand Structure ---
-    /** Elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). Volume follows industrial production; grades substitute within limits. */
+    /**
+     * Elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). Volume follows
+     * industrial production; grades substitute within limits.
+     */
     public const OPERATING_CYCLICALITY = 1.20;
     /** Own-price elasticity of demand: volume lost per unit of real price increase. */
     public const PRICE_ELASTICITY_OF_DEMAND = 0.60;
@@ -39,11 +47,20 @@ class ChemicalBusinessModel extends StandardCorporateBusinessModel
     public const INDUSTRY_SUBSTITUTABILITY = 0.50;
 
     // --- Input Cost Basket ---
-    /** Shares of the variable cost base by input channel, measured from the BEA input-output accounts with supply-chain content (labor still the model's own). */
+    /**
+     * Shares of the variable cost base by input channel, measured from the BEA input-output accounts with supply-chain
+     * content (labor still the model's own).
+     */
     public const INPUT_COST_EXPOSURES = InputOutputExposures::CHEMICAL;
-    /** Share of the firm's own cracker feedstock that is gas-linked (ethane) rather than oil-linked (naphtha); ~0.5 for a US-Gulf mixed slate. */
+    /**
+     * Share of the firm's own cracker feedstock that is gas-linked (ethane) rather than oil-linked (naphtha); ~0.5 for
+     * a US-Gulf mixed slate.
+     */
     public const GAS_FEEDSTOCK_SHARE = 0.50;
-    /** Base petrochemicals clear at the marginal cracker's cost and take the price they are given; the specialty and agrochemical books carry the formulation power. */
+    /**
+     * Base petrochemicals clear at the marginal cracker's cost and take the price they are given; the specialty and
+     * agrochemical books carry the formulation power.
+     */
     public const PRICING_POWER_INDEX = 0.40;
 
     /**
@@ -57,11 +74,17 @@ class ChemicalBusinessModel extends StandardCorporateBusinessModel
     }
 
     // --- Demand Transmission Lag ---
-    /** Years for a move in the output gap to reach the order book. Offtake contracts and plant scheduling hold volumes steady for a couple of quarters after the cycle turns. */
+    /**
+     * Years for a move in the output gap to reach the order book. Offtake contracts and plant scheduling hold volumes
+     * steady for a couple of quarters after the cycle turns.
+     */
     public const DEMAND_LAG_YEARS = 0.50;
 
     // --- FX Exposure ---
-    /** Share of revenue whose competitiveness moves with the trade-weighted exchange rate. Base chemicals trade on delivered price against foreign crackers; specialties and agrochemicals are largely sold abroad. */
+    /**
+     * Share of revenue whose competitiveness moves with the trade-weighted exchange rate. Base chemicals trade on
+     * delivered price against foreign crackers; specialties and agrochemicals are largely sold abroad.
+     */
     public const FX_REVENUE_EXPOSURE = 0.15;
 
     // --- Analyst Visibility & Error ---
@@ -115,15 +138,27 @@ class ChemicalBusinessModel extends StandardCorporateBusinessModel
     public const AGRI_DEMAND_WEIGHT = 0.30;
 
     // --- Feedstock Cost Curve & Pass-Through ---
-    /** Hydrocarbon feedstock cost as a share of revenue (~35%): the variable cost ratio moves by this times the relative feedstock price move. */
+    /**
+     * Hydrocarbon feedstock cost as a share of revenue (~35%): the variable cost ratio moves by this times the relative
+     * feedstock price move.
+     */
     public const ENERGY_FEEDSTOCK_INTENSITY = 0.35;
     /** Proportion of own feedstock cost specialty chemicals pass through via pricing power (~95% at full power). */
     public const SPECIALTY_PASS_THROUGH_RATIO = 0.95;
-    /** Share of the marginal naphtha cracker's cost move passed into base chemical prices (~0.7, Ganapati, Shapiro & Walker 2020). */
+    /**
+     * Share of the marginal naphtha cracker's cost move passed into base chemical prices (~0.7, Ganapati, Shapiro &
+     * Walker 2020).
+     */
     public const BASE_PETRO_MARGINAL_PASS_THROUGH = 0.70;
-    /** Fertilizer price support per unit of farm price move, recovering feedstock cost only as far as farm prices move with it (~0.6). */
+    /**
+     * Fertilizer price support per unit of farm price move, recovering feedstock cost only as far as farm prices move
+     * with it (~0.6).
+     */
     public const AGRI_PASS_THROUGH_SCALAR = 0.60;
-    /** Variable cost ratio move per unit cracker-spread Z per unit of baseline vol (~0.45pp of revenue a sigma at vol 0.15). */
+    /**
+     * Variable cost ratio move per unit cracker-spread Z per unit of baseline vol (~0.45pp of revenue a sigma at vol
+     * 0.15).
+     */
     public const FEEDSTOCK_DRAG_SCALAR = 0.03;
 
     // --- Manufacturing PMI Transmission ---

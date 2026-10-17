@@ -10,10 +10,10 @@ use Doctrine\ORM\Mapping as ORM;
 /**
  * One vote for the Aerie Diet: the result, the economy it was cast on, and the talks and government that followed.
  *
- * Written by App\Service\Politics\ElectionRecorder on the tick the vote is held, when the talks are already
- * settled; the government takes office formationDays later, and nothing shown before then may give it away. A cabinet
- * that falls before the next vote is added to the vote's record on the day it falls, with the talks that follow. Party-keyed
- * maps are stored whole, keyed by App\Data\Politics\AerieDiet::PARTIES.
+ * Written by App\Service\Politics\ElectionRecorder on the tick the vote is held, when the talks are already settled;
+ * the government takes office formationDays later, and nothing shown before then may give it away. A cabinet that falls
+ * before the next vote is added to the vote's record on the day it falls, with the talks that follow. Party-keyed maps
+ * are stored whole, keyed by App\Data\Politics\AerieDiet::PARTIES.
  */
 #[ORM\Entity(repositoryClass: \App\Repository\DietElectionRepository::class)]
 #[ORM\Table(name: 'diet_election')]
@@ -53,7 +53,9 @@ class DietElection
     #[ORM\Column(type: Types::JSON)]
     private array $support = [];
 
-    /** @var list<array{day: float, formateur: string, formed: bool, cabinet: list<string>, support: list<string>}> The talks, attempt by attempt. */
+    /**
+     * @var list<array{day: float, formateur: string, formed: bool, cabinet: list<string>, support: list<string>}> The talks, attempt by attempt.
+     */
     #[ORM\Column(type: Types::JSON)]
     private array $formation = [];
 
@@ -65,7 +67,9 @@ class DietElection
     #[ORM\Column(type: Types::JSON)]
     private array $outgoingCoalition = [];
 
-    /** @var list<array{fellAt: float, fallen: list<string>, cabinet: list<string>, support: list<string>, formation: list<array{day: float, formateur: string, formed: bool, cabinet: list<string>, support: list<string>}>, formationDays: float}> Cabinets that fell before the next vote, each with the talks and the government that followed. */
+    /**
+     * @var list<array{fellAt: float, fallen: list<string>, cabinet: list<string>, support: list<string>, formation: list<array{day: float, formateur: string, formed: bool, cabinet: list<string>, support: list<string>}>, formationDays: float}> Cabinets that fell before the next vote, each with the talks and the government that followed.
+     */
     #[ORM\Column(type: Types::JSON)]
     private array $falls = [];
 
@@ -180,13 +184,17 @@ class DietElection
         return $this;
     }
 
-    /** @return list<array{day: float, formateur: string, formed: bool, cabinet: list<string>, support: list<string>}> */
+    /**
+     * @return list<array{day: float, formateur: string, formed: bool, cabinet: list<string>, support: list<string>}>
+     */
     public function getFormation(): array
     {
         return $this->formation;
     }
 
-    /** @param list<array{day: float, formateur: string, formed: bool, cabinet: list<string>, support: list<string>}> $formation */
+    /**
+     * @param list<array{day: float, formateur: string, formed: bool, cabinet: list<string>, support: list<string>}> $formation
+     */
     public function setFormation(array $formation): static
     {
         $this->formation = $formation;
@@ -226,7 +234,9 @@ class DietElection
         return $this;
     }
 
-    /** @return list<array{fellAt: float, fallen: list<string>, cabinet: list<string>, support: list<string>, formation: list<array{day: float, formateur: string, formed: bool, cabinet: list<string>, support: list<string>}>, formationDays: float}> */
+    /**
+     * @return list<array{fellAt: float, fallen: list<string>, cabinet: list<string>, support: list<string>, formation: list<array{day: float, formateur: string, formed: bool, cabinet: list<string>, support: list<string>}>, formationDays: float}>
+     */
     public function getFalls(): array
     {
         return $this->falls;
@@ -255,7 +265,8 @@ class DietElection
     }
 
     /**
-     * The cabinets in office over this Diet, in order: the one the vote's talks produced, then each that followed a fall.
+     * The cabinets in office over this Diet, in order: the one the vote's talks produced, then each that followed a
+     * fall.
      *
      * @return non-empty-list<list<string>>
      */

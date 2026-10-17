@@ -147,7 +147,8 @@ class DistressedDebtBusinessModelTest extends TestCase
             outputGapEma: 0.0,
             macroCreditSpread: MacroEngine::BASE_CREDIT_SPREAD,
             macroCreditSpreadEma: MacroEngine::BASE_CREDIT_SPREAD,
-            highYieldCreditSpreadEma: MacroEngine::BASE_CREDIT_SPREAD * MacroEngine::HY_BASE_SPREAD_MULTIPLIER, // Baseline HY
+            // Baseline HY
+            highYieldCreditSpreadEma: MacroEngine::BASE_CREDIT_SPREAD * MacroEngine::HY_BASE_SPREAD_MULTIPLIER,
             corporateDefaultRateEma: 0.020,   // Baseline 2.0%
         );
 
@@ -221,7 +222,8 @@ class DistressedDebtBusinessModelTest extends TestCase
 
         $this->assertEqualsWithDelta(0.0, $this->model->getMacroPhysics($stock, $recession)['macro_demand_shift'], 1e-12);
 
-        // Signal (0.013 - 0.015) x 20 + 0.03 x 5 = 0.11 -> 1.25 x 0.11 / 1.11; recovery 0.60 of the mix, advisory 0.40 carries none.
+        // Signal (0.013 - 0.015) x 20 + 0.03 x 5 = 0.11 -> 1.25 x 0.11 / 1.11; recovery 0.60 of the mix, advisory 0.40
+        // carries none.
         $expected = 0.60 * (1.25 * 0.11 / 1.11);
         $this->assertEqualsWithDelta($expected, $this->model->resolveSectorActivityShift($stock, $recession), 1e-9);
     }

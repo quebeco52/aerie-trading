@@ -152,7 +152,8 @@ final class FirmEconomics
      * strictest rules on record cost polluting plants (Greenstone, List & Syverson 2012), in proportion to how far the
      * rules stand toward them.
      *
-     * @param float $extractionStringency How far the rules stand between the founding ones (0) and the strictest on record (1).
+     * @param float $extractionStringency How far the rules stand between the founding ones (0) and the strictest on
+     *                                    record (1).
      */
     public static function calculateExtractionCostFactor(float $extractionStringency): float
     {
@@ -239,7 +240,8 @@ final class FirmEconomics
      * a slump's overhang is the miss itself, not a higher target. Exact over the step for a flow held through it.
      * The miss is a share of a year's output; over the stock-to-sales ratio it is the overhang in that ratio.
      *
-     * @param float $currentInventoryGap Current overhang in the inventory-to-sales ratio (+gap is excess stock, -gap is depleted).
+     * @param float $currentInventoryGap Current overhang in the inventory-to-sales ratio (+gap is excess stock, -gap is
+     *                                   depleted).
      * @param float $outputGap           Current output gap level.
      * @param float $outputGapEma        Smoothed output gap trend.
      * @param float $speed               Annual speed of inventory adjustment toward desired stock.
@@ -293,7 +295,8 @@ final class FirmEconomics
      * ago. A ladder with no history opens as though it had always been struck on today's curve, so its first quarter
      * books no phantom hedge gain.
      *
-     * @param list<float>          $strikeSums Opening sums of the strikes already locked for delivery 0..n-1 quarters ahead (zeros for a new ladder).
+     * @param list<float>          $strikeSums Opening sums of the strikes already locked for delivery 0..n-1 quarters
+     *                                         ahead (zeros for a new ladder).
      * @param callable(int): float $forward    Forward price for delivery that many quarters ahead.
      * @return array{strike: float, sums: list<float>} The average strike delivered this quarter and the rolled sums.
      */
@@ -355,9 +358,10 @@ final class FirmEconomics
     }
 
     /**
-     * What the carbon price's power uplift adds to a merchant fleet's earnings per unit of it and of revenue sold at the
-     * wholesale price: the uplift on every MWh, less the carbon the gas-fired share pays, which the uplift carries at its
-     * pass-through. A zero-fuel fleet keeps it all; an all-gas fleet loses the fifth the market does not pass on.
+     * What the carbon price's power uplift adds to a merchant fleet's earnings per unit of it and of revenue sold at
+     * the wholesale price: the uplift on every MWh, less the carbon the gas-fired share pays, which the uplift carries
+     * at its pass-through. A zero-fuel fleet keeps it all; an all-gas fleet loses the fifth the market does not pass
+     * on.
      *
      * @param float $gasFleetShare Share of the merchant output that burns gas.
      */

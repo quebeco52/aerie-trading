@@ -76,7 +76,10 @@ class CoastGuardTest extends TestCase
         $this->assertEquals($without->policy(), PoliticsStateDTO::fromState($state)->policy(), 'Who commands the Coast Guard moves nothing in the economy.');
     }
 
-    /** At the opening commandant's term end the Council names the candidate nearest its median on its own questions, for one five-year term. */
+    /**
+     * At the opening commandant's term end the Council names the candidate nearest its median on its own questions, for
+     * one five-year term.
+     */
     public function testAtTermEndTheCouncilNamesTheCandidateNearestItsMedians(): void
     {
         foreach ([3, 11] as $seed) {

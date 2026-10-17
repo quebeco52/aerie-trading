@@ -66,7 +66,8 @@ class LawFirmBusinessModelTest extends TestCase
         $stock->setBeta('0.3');
 
         $normalMacro = new MacroStateDTO(outputGapEma: 0.0, macroCreditSpread: 0.015);
-        $distressMacro = new MacroStateDTO(outputGapEma: -0.03, macroCreditSpread: 0.045); // 450bps credit spread blowout
+        // 450bps credit spread blowout
+        $distressMacro = new MacroStateDTO(outputGapEma: -0.03, macroCreditSpread: 0.045);
 
         $normalResult = $this->model->computeActualFinancials(
             $stock,

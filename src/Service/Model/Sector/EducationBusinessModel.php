@@ -31,7 +31,10 @@ use App\Service\Model\StreamContext;
 class EducationBusinessModel extends StandardCorporateBusinessModel
 {
     // --- Operating Cyclicality & Demand Structure ---
-    /** Elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). Counter-cyclical enrollment offsets pro-cyclical corporate training. */
+    /**
+     * Elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). Counter-cyclical
+     * enrollment offsets pro-cyclical corporate training.
+     */
     public const OPERATING_CYCLICALITY = 0.70;
     /** Own-price elasticity of demand: volume lost per unit of real price increase. */
     public const PRICE_ELASTICITY_OF_DEMAND = 0.40;
@@ -39,13 +42,22 @@ class EducationBusinessModel extends StandardCorporateBusinessModel
     public const INDUSTRY_SUBSTITUTABILITY = 0.50;
 
     // --- Input Cost Basket ---
-    /** Shares of the variable cost base by input channel, measured from the BEA input-output accounts with supply-chain content (labor still the model's own). */
+    /**
+     * Shares of the variable cost base by input channel, measured from the BEA input-output accounts with supply-chain
+     * content (labor still the model's own).
+     */
     public const INPUT_COST_EXPOSURES = InputOutputExposures::EDUCATION;
 
     // --- Services Pricing ---
-    /** Elasticity of fee and rate pricing to services (supercore) inflation. Tuition follows services inflation with a lag from annual rate setting. */
+    /**
+     * Elasticity of fee and rate pricing to services (supercore) inflation. Tuition follows services inflation with a
+     * lag from annual rate setting.
+     */
     public const PRICING_ELASTICITY = 0.70;
-    /** Tuition is administered annually against subsidized, credential-driven demand: sticker increases stick, and the enrolment response is slow. */
+    /**
+     * Tuition is administered annually against subsidized, credential-driven demand: sticker increases stick, and the
+     * enrolment response is slow.
+     */
     public const PRICING_POWER_INDEX = 0.70;
     /** Services price off core services inflation ex-housing, not goods breakevens. */
     public const PRICING_INFLATION_BASIS = 'supercore_inflation_ema';
@@ -61,7 +73,10 @@ class EducationBusinessModel extends StandardCorporateBusinessModel
     }
 
     // --- Balance Sheet Realism ---
-    /** Capitalized operating lease liabilities as a fraction of annual revenue (IFRS 16 / ASC 842). Campus and classroom leases. */
+    /**
+     * Capitalized operating lease liabilities as a fraction of annual revenue (IFRS 16 / ASC 842). Campus and classroom
+     * leases.
+     */
     public const LEASE_LIABILITY_INTENSITY = 0.25;
 
     // --- Analyst Visibility & Error ---
@@ -133,13 +148,25 @@ class EducationBusinessModel extends StandardCorporateBusinessModel
     public const TUITION_RECOGNITION_RATE   = 0.50;
     public const ENTERPRISE_VARIANCE_SCALAR = 0.40; // Pro-cyclical corporate training
     public const LMS_VARIANCE_SCALAR        = 0.08; // Highly sticky software ARR
-    /** Degree enrollment per unit of output gap, against the cycle and both ways: a -2% gap fills 2.4% more places at beta 1. */
+    /**
+     * Degree enrollment per unit of output gap, against the cycle and both ways: a -2% gap fills 2.4% more places at
+     * beta 1.
+     */
     public const ENROLLMENT_GAP_SENSITIVITY = 1.20;
-    /** Degree enrollment per point of unemployment over its natural rate, both ways (retraining): +1pp fills 0.8% more places at beta 1. */
+    /**
+     * Degree enrollment per point of unemployment over its natural rate, both ways (retraining): +1pp fills 0.8% more
+     * places at beta 1.
+     */
     public const UNEMPLOYMENT_RETRAINING_SCALAR = 0.80;
-    /** Degree enrollment per unit of government purchases above the founding level, as a fraction: 0.40, a 10% rise in purchases funds 4% more places. */
+    /**
+     * Degree enrollment per unit of government purchases above the founding level, as a fraction: 0.40, a 10% rise in
+     * purchases funds 4% more places.
+     */
     public const TUITION_GOVERNMENT_SPENDING_SENSITIVITY = 0.40;
-    /** Corporate training volume per unit of output gap before cyclicality: training budgets are among the first discretionary cuts. */
+    /**
+     * Corporate training volume per unit of output gap before cyclicality: training budgets are among the first
+     * discretionary cuts.
+     */
     public const ENTERPRISE_TRAINING_GDP_SENSITIVITY = 1.50;
 
     public function getMacroPhysics(Stock $stock, MacroStateDTO $macroState): array

@@ -45,7 +45,10 @@ class CorporateReport
     #[ORM\Column(type: 'json', nullable: true)]
     private ?array $streamDetails = null;
 
-    /** @var array<string, float>|null Operating KPIs the firm disclosed alongside the financials (book-to-bill, backlog quarters, subscriber index). */
+    /**
+     * @var array<string, float>|null Operating KPIs the firm disclosed alongside the financials (book-to-bill, backlog
+     *                                quarters, subscriber index).
+     */
     #[ORM\Column(type: 'json', nullable: true)]
     private ?array $reportedKpis = null;
 
@@ -265,7 +268,10 @@ class CorporateReport
     #[ORM\Column(type: Types::DECIMAL, precision: 6, scale: 4, nullable: true)]
     private ?string $assetAge = null;
 
-    /** Quarterly EPS the market's consensus held going into the report: the figure the earnings surprise is struck against. */
+    /**
+     * Quarterly EPS the market's consensus held going into the report: the figure the earnings surprise is struck
+     * against.
+     */
     #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 6, nullable: true)]
     private ?string $consensusEps = null;
 

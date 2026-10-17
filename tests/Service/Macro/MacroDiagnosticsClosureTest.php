@@ -26,7 +26,9 @@ class MacroDiagnosticsClosureTest extends TestCase
     private const TICKS_PER_YEAR = 72;
     private const QUARTERS = 12;
 
-    /** @var list<array{gap: array<string, mixed>, diagnostics: array<string, mixed>, gaps: list<float>, unemployment: float, nairu: float}> */
+    /**
+     * @var list<array{gap: array<string, mixed>, diagnostics: array<string, mixed>, gaps: list<float>, unemployment: float, nairu: float}>
+     */
     private static array $quarters = [];
 
     public static function setUpBeforeClass(): void
@@ -158,7 +160,10 @@ class MacroDiagnosticsClosureTest extends TestCase
         }
     }
 
-    /** The disasters, their compensator and the one credit drag are reported as channels of their own on the wired engine. */
+    /**
+     * The disasters, their compensator and the one credit drag are reported as channels of their own on the wired
+     * engine.
+     */
     public function testTheSplitChannelsAreReported(): void
     {
         foreach (self::$quarters as $index => $quarter) {

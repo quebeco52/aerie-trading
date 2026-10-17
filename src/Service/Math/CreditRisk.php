@@ -15,28 +15,56 @@ use App\Service\Macro\MacroEngine;
 final class CreditRisk
 {
     // --- Corporate Credit: Recovery Given Default (Altman, Brady, Resti & Sironi 2005) ---
-    /** Aggregate corporate default rate the base recoveries above are quoted at: the long-run average year of the series the macro publishes. */
+    /**
+     * Aggregate corporate default rate the base recoveries above are quoted at: the long-run average year of the series
+     * the macro publishes.
+     */
     public const RECOVERY_BASELINE_DEFAULT_RATE = MacroEngine::CORPORATE_DEFAULT_BASELINE;
-    /** Fall in recovery per unit of log excess in the aggregate default rate. Recovery and default are NEGATIVELY correlated: defaults cluster in bad years, distressed assets are sold into a market with no buyers, and the same claim is worth less precisely when more of them are being settled. Ignoring it prices the tail of a credit portfolio far too kindly. */
+    /**
+     * Fall in recovery per unit of log excess in the aggregate default rate. Recovery and default are NEGATIVELY
+     * correlated: defaults cluster in bad years, distressed assets are sold into a market with no buyers, and the same
+     * claim is worth less precisely when more of them are being settled. Ignoring it prices the tail of a credit
+     * portfolio far too kindly.
+     */
     public const RECOVERY_DEFAULT_RATE_ELASTICITY = 0.12;
-    /** Bounds on recovery. Nothing recovers everything once it has defaulted, and even a wiped-out claim usually salvages something. */
+    /**
+     * Bounds on recovery. Nothing recovers everything once it has defaulted, and even a wiped-out claim usually
+     * salvages something.
+     */
     public const MIN_RECOVERY_RATE = 0.05;
     public const MAX_RECOVERY_RATE = 0.90;
 
     // --- Corporate Credit: Spread Composition (Longstaff, Mithal & Neis 2005) ---
-    /** Non-default component of a corporate spread: what a buyer charges for holding a claim they cannot sell as readily as a sovereign. Measured to be a material minority of an investment-grade spread, so a bond priced on default risk alone quotes through the market. */
+    /**
+     * Non-default component of a corporate spread: what a buyer charges for holding a claim they cannot sell as readily
+     * as a sovereign. Measured to be a material minority of an investment-grade spread, so a bond priced on default
+     * risk alone quotes through the market.
+     */
     public const CORPORATE_ILLIQUIDITY_SPREAD = 0.0040;
-    /** Ceiling on the credit spread a listed issue may be discounted at, matching the cap the Merton spread itself carries. */
+    /**
+     * Ceiling on the credit spread a listed issue may be discounted at, matching the cap the Merton spread itself
+     * carries.
+     */
     public const MAX_CORPORATE_SPREAD = 1.00;
 
     // --- Corporate Credit: Rating-Class Spread Curve (Jarrow, Lando & Turnbull 1997; Ben Dor et al. 2007) ---
-    /** Investment-grade class spreads as multiples of the IG index: ICE BofA AAA/AA/A/BBB over US Corporate OAS (FRED BAMLC0A1CAAA..BAMLC0A4CBBB on BAMLC0A0CM), median daily ratio Oct 2023-Oct 2026. */
+    /**
+     * Investment-grade class spreads as multiples of the IG index: ICE BofA AAA/AA/A/BBB over US Corporate OAS (FRED
+     * BAMLC0A1CAAA..BAMLC0A4CBBB on BAMLC0A0CM), median daily ratio Oct 2023-Oct 2026.
+     */
     public const IG_CLASS_SPREAD_MULTIPLES = ['AAA' => 0.41, 'AA' => 0.57, 'A' => 0.84, 'BBB' => 1.25];
-    /** Speculative-grade class spreads as multiples of the HY index: ICE BofA BB/B/CCC & lower over US High Yield OAS (FRED BAMLH0A1HYBB..BAMLH0A3HYC on BAMLH0A0HYM2), same window. */
+    /**
+     * Speculative-grade class spreads as multiples of the HY index: ICE BofA BB/B/CCC & lower over US High Yield OAS
+     * (FRED BAMLH0A1HYBB..BAMLH0A3HYC on BAMLH0A0HYM2), same window.
+     */
     public const HY_CLASS_SPREAD_MULTIPLES = ['BB' => 0.61, 'B' => 1.03, 'CCC' => 2.87];
 
     // --- Default Correlation (Vasicek 2002 single factor) ---
-    /** Asset correlation of the all-rated default rate: ~0.1 puts the Vasicek median at the post-1983 record's ~1.2% against its 1.6% mean (0.2 gives 0.8%); fits over 1920-2008 reach 0.2 on the 1930s, a tail this macro index already generates itself. */
+    /**
+     * Asset correlation of the all-rated default rate: ~0.1 puts the Vasicek median at the post-1983 record's ~1.2%
+     * against its 1.6% mean (0.2 gives 0.8%); fits over 1920-2008 reach 0.2 on the 1930s, a tail this macro index
+     * already generates itself.
+     */
     public const CORPORATE_DEFAULT_RHO = 0.10;
     /** Basel II/III consumer asset correlation factor for retail exposures. */
     public const RETAIL_ASRF_RHO = 0.12;
@@ -316,8 +344,8 @@ final class CreditRisk
     }
 
     /**
-     * Expected loss a year on a sovereign's bonds under an uncertain fiscal limit (Bi 2012; Ghosh, Kim, Mendoza, Ostry &
-     * Qureshi 2013): the chance net liabilities lie past a normally distributed limit, times the loss given default.
+     * Expected loss a year on a sovereign's bonds under an uncertain fiscal limit (Bi 2012; Ghosh, Kim, Mendoza, Ostry
+     * & Qureshi 2013): the chance net liabilities lie past a normally distributed limit, times the loss given default.
      * Monotone in liabilities and bounded by the loss given default.
      *
      * @param float $netLiabilitiesToGdp Net financial liabilities over GDP.
@@ -440,7 +468,8 @@ final class CreditRisk
     }
 
     /**
-     * Calculates the mark-to-market revaluation of a credit portfolio under a spread move (first-order duration approximation).
+     * Calculates the mark-to-market revaluation of a credit portfolio under a spread move (first-order duration
+     * approximation).
      *
      * Standard fixed income sensitivity: \Delta P / P \approx -D_s * \Delta s, where D_s is the spread duration
      * of the book. Spreads gapping wider reprice held bonds and preferreds downward in the current period,

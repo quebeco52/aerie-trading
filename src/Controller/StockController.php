@@ -80,7 +80,8 @@ class StockController extends AbstractController
     /**
      * API endpoint to retrieve historical price data for charting.
      *
-     * @param Request                $request       The HTTP request carrying 'ticker', 'range' and the 'style' being drawn.
+     * @param Request                $request       The HTTP request carrying 'ticker', 'range' and the 'style' being
+     *                                              drawn.
      * @param EntityManagerInterface $entityManager The entity manager.
      * @param Redis                 $redis         The Redis instance for caching short-term data.
      *

@@ -55,7 +55,10 @@ class BiotechBusinessModelTest extends TestCase
         return $stock;
     }
 
-    /** Share of an expired cohort eroded after `quarters` off exclusivity: the 50/50 mixture of the two modality survival curves. */
+    /**
+     * Share of an expired cohort eroded after `quarters` off exclusivity: the 50/50 mixture of the two modality
+     * survival curves.
+     */
     private function loeErodedShare(float $quarters): float
     {
         $biologic = BiotechBusinessModel::DEFAULT_BIOLOGIC_REVENUE_SHARE;
@@ -88,7 +91,9 @@ class BiotechBusinessModelTest extends TestCase
         self::assertLessThan(0.03, $model->getStockCompensationIntensity($ibis), 'a big pharma does not pay like a clinical-stage biotech');
     }
 
-    /** R&D pays off through the readout hazard alone: the shared reinvestment margin drift would pay it a second time. */
+    /**
+     * R&D pays off through the readout hazard alone: the shared reinvestment margin drift would pay it a second time.
+     */
     public function testRndReinvestmentNeverMovesTheOperatingMargin(): void
     {
         $model = new BiotechBusinessModel();
@@ -114,7 +119,10 @@ class BiotechBusinessModelTest extends TestCase
         $this->assertEqualsWithDelta(0.40 / $trend, $state[BiotechBusinessModel::STATE_RND_REPLACEMENT_RATIO], 1e-12);
     }
 
-    /** Capital growing with the firm's market spends (g + delta) / delta of depreciation; only spend above that refills faster. */
+    /**
+     * Capital growing with the firm's market spends (g + delta) / delta of depreciation; only spend above that refills
+     * faster.
+     */
     public function testTrendGrowthCapexIsNotReadAsPipelineOverInvestment(): void
     {
         $model = new BiotechBusinessModel();
@@ -209,7 +217,10 @@ class BiotechBusinessModelTest extends TestCase
         return BiotechBusinessModel::PHASE_III_SUCCESS_RATE * BiotechBusinessModel::REGULATORY_APPROVAL_RATE;
     }
 
-    /** The lore book: the lead franchise on the lore clock, followers staggered out to a new approval's life, the rest mature. */
+    /**
+     * The lore book: the lead franchise on the lore clock, followers staggered out to a new approval's life, the rest
+     * mature.
+     */
     public function testTheLoreIsSeededAsAStaggeredCohortLedger(): void
     {
         $result = $this->quarter(new BiotechBusinessModel(), $this->makeStock(), $this->mockMath([0.0, 0.0]));
@@ -233,7 +244,10 @@ class BiotechBusinessModelTest extends TestCase
         $this->assertEqualsWithDelta(1.0, $state[BiotechBusinessModel::STATE_STRUCTURAL_MULTIPLIER], 1e-12);
     }
 
-    /** A firm that reported under the old franchise state keeps its size, so the switch does not move revenue; the split is the lore's. */
+    /**
+     * A firm that reported under the old franchise state keeps its size, so the switch does not move revenue; the split
+     * is the lore's.
+     */
     public function testAFirmCarryingTheOldFranchiseStateKeepsItsBook(): void
     {
         $stock = $this->makeStock([
@@ -501,7 +515,9 @@ class BiotechBusinessModelTest extends TestCase
         }
     }
 
-    /** Each late-stage programme reads out at one over the Phase III duration; R&D sets how fast the pipeline refills. */
+    /**
+     * Each late-stage programme reads out at one over the Phase III duration; R&D sets how fast the pipeline refills.
+     */
     public function testReadoutsScaleWithThePipelineAndRndRefillsIt(): void
     {
         $model = new BiotechBusinessModel();

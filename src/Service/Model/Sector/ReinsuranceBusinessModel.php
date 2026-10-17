@@ -24,15 +24,24 @@ use App\Service\Model\ModelParam;
 class ReinsuranceBusinessModel extends InsuranceBusinessModel
 {
     // --- District Catastrophe Exposure ---
-    /** Expected catastrophe claims as a share of treaty premium in an average district year: Swiss Re's 2024 large nat cat budget of $1.8B against ~$22.9B of P&C Re premiums earned (~8%). */
+    /**
+     * Expected catastrophe claims as a share of treaty premium in an average district year: Swiss Re's 2024 large nat
+     * cat budget of $1.8B against ~$22.9B of P&C Re premiums earned (~8%).
+     */
     public const DISTRICT_CATASTROPHE_LOAD = 0.08;
 
     // --- Loss Reserves ---
-    /** Loss and LAE reserves per unit of treaty premium earned: Swiss Re P&C Re 2023 unpaid claims $58.6B on premiums earned $22.9B. */
+    /**
+     * Loss and LAE reserves per unit of treaty premium earned: Swiss Re P&C Re 2023 unpaid claims $58.6B on premiums
+     * earned $22.9B.
+     */
     public const TREATY_LOSS_RESERVE_TO_PREMIUM_RATIO = 2.56;
 
     // --- Operating Cyclicality & Demand Structure ---
-    /** Elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). Treaty volume follows primary premiums with a lag. */
+    /**
+     * Elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). Treaty volume follows
+     * primary premiums with a lag.
+     */
     public const OPERATING_CYCLICALITY = 0.80;
 
     // --- Analyst Visibility & Error ---
@@ -56,7 +65,10 @@ class ReinsuranceBusinessModel extends InsuranceBusinessModel
     public const CAT_BOND_ATTACHMENT_SHIELD_SHARE = 0.40;
 
     // --- Margin Clamps ---
-    /** Maximum variable margin clamp for reinsurers to allow extreme tail-risk claim payouts within 1-in-250 year PML limits. */
+    /**
+     * Maximum variable margin clamp for reinsurers to allow extreme tail-risk claim payouts within 1-in-250 year PML
+     * limits.
+     */
     public const MAX_REINSURANCE_MARGIN_CLAMP = 1.65;
 
     public function clampMargin(float $rawMargin, float $minMargin = 0.01, float $maxMargin = self::MAX_REINSURANCE_MARGIN_CLAMP): float
@@ -120,7 +132,8 @@ class ReinsuranceBusinessModel extends InsuranceBusinessModel
         $actualRevenue = max(0.0, array_sum($streamRevenues));
         $streams->recordStreamShares($streamRevenues);
 
-        // Treaty losses are the cedants' claims, inflating with theirs while the treaty rate was set at the last renewal.
+        // Treaty losses are the cedants' claims, inflating with theirs while the treaty rate was set at the last
+        // renewal.
         $unrecoveredClaims = $realizedVariableMargin * (1.0 - self::BASE_EXPENSE_RATIO_SHARE) * $treatyWeight * $this->resolveUnrecoveredClaimsCost($streams, $macroState);
         $clampedMargin = $this->clampMargin($realizedVariableMargin + $unrecoveredClaims + $claims['excess'] - $catBondShield);
         // The baseline cost ratio splits as the parent's does; the claims above it are losses.

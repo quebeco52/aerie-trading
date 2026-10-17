@@ -23,21 +23,32 @@ use App\Service\Model\ModelParam;
  * - Base revenue comes from sticky AUM management fees.
  * - Massive volatility comes from "Carried Interest" (performance fees) and deal exits.
  * - LBO Cost of Debt Elasticity: Deal flow and multiples compress as total debt financing costs rise.
- * - Mark-to-Market (MTM): Principal balance sheet investments suffer unrealized markdown penalties during credit freezes.
- * - Rescue Capital Drag: High policy rates force the GP to inject capital into distressed portfolio companies, inflating variable costs.
+ * - Mark-to-Market (MTM): Principal balance sheet investments suffer unrealized markdown penalties during credit
+ *   freezes.
+ * - Rescue Capital Drag: High policy rates force the GP to inject capital into distressed portfolio companies,
+ *   inflating variable costs.
  */
 class PrivateEquityBusinessModel extends AssetManagementBusinessModel
 {
     // --- Operating Cyclicality & Demand Structure ---
-    /** Elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). Exit windows and LBO financing open and shut with the cycle. */
+    /**
+     * Elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). Exit windows and LBO
+     * financing open and shut with the cycle.
+     */
     public const OPERATING_CYCLICALITY = 1.40;
 
     // --- Balance Sheet Realism ---
-    /** Stock-based compensation (ASC 718) as a share of revenue: Investments & Asset Management, 5.08% of revenue, 283 firms (Damodaran, Employee data by industry, US, January 2026). */
+    /**
+     * Stock-based compensation (ASC 718) as a share of revenue: Investments & Asset Management, 5.08% of revenue, 283
+     * firms (Damodaran, Employee data by industry, US, January 2026).
+     */
     public const STOCK_COMPENSATION_INTENSITY = 0.0508;
 
     // --- Labor Intensity ---
-    /** Labor share of the fixed cost base exposed to the Beveridge wage squeeze. Deal team compensation dominates private equity overhead. */
+    /**
+     * Labor share of the fixed cost base exposed to the Beveridge wage squeeze. Deal team compensation dominates
+     * private equity overhead.
+     */
     public const FIXED_COST_LABOR_SHARE = 0.70;
 
     public function getWholesaleLeverageLimit(): float
@@ -54,13 +65,22 @@ class PrivateEquityBusinessModel extends AssetManagementBusinessModel
     public const CARRY_LEVERAGE_AMPLIFIER_SCALAR = 0.80;
 
     // --- Cost of Debt & LBO Elasticity ---
-    /** Through-the-cycle high-yield spread (~430 bps): LBO debt is leveraged loans and HY bonds, priced off HY not IG (Axelson, Jenkinson, Stromberg & Weisbach 2013). */
+    /**
+     * Through-the-cycle high-yield spread (~430 bps): LBO debt is leveraged loans and HY bonds, priced off HY not IG
+     * (Axelson, Jenkinson, Stromberg & Weisbach 2013).
+     */
     public const LBO_CREDIT_SPREAD_BASELINE = MacroEngine::BASE_CREDIT_SPREAD * MacroEngine::HY_BASE_SPREAD_MULTIPLIER;
-    /** The sponsor's OWN through-the-cycle funding spread (IG): the management company borrows as a corporate, not as a buyout target. */
+    /**
+     * The sponsor's OWN through-the-cycle funding spread (IG): the management company borrows as a corporate, not as a
+     * buyout target.
+     */
     public const SPONSOR_CREDIT_SPREAD_BASELINE = MacroEngine::BASE_CREDIT_SPREAD;
     /** Baseline policy rate (~4.5%) threshold above which LBO financing becomes distressed. */
     public const LBO_RATE_FREEZE_THRESHOLD  = 0.045;
-    /** Elasticity scalar: How LBO multiples compress and exits freeze as total Cost of Debt rises. Rescaled from 7.50 for high-yield spread moves (~3.3x IG). */
+    /**
+     * Elasticity scalar: How LBO multiples compress and exits freeze as total Cost of Debt rises. Rescaled from 7.50
+     * for high-yield spread moves (~3.3x IG).
+     */
     public const LBO_COST_OF_DEBT_ELASTICITY = 2.27;
     /** Z-score cliff where economic conditions trigger a complete miss of the hurdle rate, wiping out carry. */
     public const HURDLE_RATE_Z_CLIFF = -1.00;
@@ -68,7 +88,10 @@ class PrivateEquityBusinessModel extends AssetManagementBusinessModel
     public const HURDLE_CREDIT_SPREAD_SCALAR = 10.0;
     /** Multiplier for variable costs (rescue capital) when policy rates choke portfolio companies. */
     public const RESCUE_CAPITAL_COST_SCALAR = 1.00;
-    /** LBO financing per unit of net tightening in bank lending standards, both ways: +0.2 shrinks carry-deal multiples 5%. */
+    /**
+     * LBO financing per unit of net tightening in bank lending standards, both ways: +0.2 shrinks carry-deal multiples
+     * 5%.
+     */
     public const SLOOS_LBO_GATING_SCALAR = 0.25;
 
     // --- Macro & Stream Physics ---
@@ -291,7 +314,10 @@ class PrivateEquityBusinessModel extends AssetManagementBusinessModel
         return $targetWeights;
     }
 
-    /** GDP and capital-markets deal flow, asymmetric across the cycle: exits and new deals dry up faster in a bust than they surge in a boom. */
+    /**
+     * GDP and capital-markets deal flow, asymmetric across the cycle: exits and new deals dry up faster in a bust than
+     * they surge in a boom.
+     */
     private function resolveDealFlowMultiplier(\App\DTO\MacroStateDTO $macroState): float
     {
         $outputGap = $macroState->outputGapEma;
@@ -312,7 +338,9 @@ class PrivateEquityBusinessModel extends AssetManagementBusinessModel
         return (1.0 - Distributions::standardNormalCdf($cliff)) + ($carryShockScale * Distributions::standardNormalPdf($cliff));
     }
 
-    /** Revenue per unit of carry economic condition: the stream's volatility, amplified by the sponsor's own leverage. */
+    /**
+     * Revenue per unit of carry economic condition: the stream's volatility, amplified by the sponsor's own leverage.
+     */
     private function resolveCarryShockScale(Stock $stock, float $baselineVol): float
     {
         $actualLeverage = (float) $stock->getTotalEquity() > 0 ? ((float) $stock->getWholesaleDebt() / (float) $stock->getTotalEquity()) : 0.0;
@@ -400,8 +428,8 @@ class PrivateEquityBusinessModel extends AssetManagementBusinessModel
         $actualRevenue = max(0.0, array_sum($streamRevenues));
         $streams->recordStreamShares($streamRevenues);
 
-        // --- 7. Cost & Margin Physics ---
-        // Rescue Capital Drag: High policy rates choke highly levered portfolio companies, requiring costly capital injections.
+        // --- 7. Cost & Margin Physics --- Rescue Capital Drag: High policy rates choke highly levered portfolio
+        // companies, requiring costly capital injections.
         $rescueCapitalDrag = max(0.0, ($policyRate - self::LBO_RATE_FREEZE_THRESHOLD) * self::RESCUE_CAPITAL_COST_SCALAR) * $carryWeight;
 
         $minVariableMargin = max(0.01, self::MIN_EFFICIENCY_RATIO - ($fixedCosts / max(1.0, $actualRevenue)));
@@ -500,7 +528,8 @@ class PrivateEquityBusinessModel extends AssetManagementBusinessModel
         $bondReturn = $yield10y;
         $equityReturn = self::BASE_EQUITY_RETURN + ($outputGap * self::EQUITY_RETURN_GAP_MULT * 1.5);
 
-        // PE firms deploy excess cash into safe short-term sovereign debt and sponsor commitments (80% Bonds / 20% Equities)
+        // PE firms deploy excess cash into safe short-term sovereign debt and sponsor commitments (80% Bonds / 20%
+        // Equities)
         return max(0.0, (self::PORTFOLIO_BOND_ALLOCATION * $bondReturn) + (self::PORTFOLIO_EQUITY_ALLOCATION * $equityReturn));
     }
 

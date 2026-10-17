@@ -92,9 +92,9 @@ class ToolsAndAccessoriesBusinessModelTest extends TestCase
     }
 
     /**
-     * The gap reaches each stream once, at the firm's cyclicality. It used to arrive three times: a root shift at
-     * half cyclicality, the commercial stream at (0.90 + pricing power) x cyclicality, and the consumer stream again
-     * through confidence, which carries SentimentOnTheCycle::POINTS_PER_GAP points of gap: ~1.4x the gap for Crossbill, whose
+     * The gap reaches each stream once, at the firm's cyclicality. It used to arrive three times: a root shift at half
+     * cyclicality, the commercial stream at (0.90 + pricing power) x cyclicality, and the consumer stream again through
+     * confidence, which carries SentimentOnTheCycle::POINTS_PER_GAP points of gap: ~1.4x the gap for Crossbill, whose
      * tuning means 0.55x.
      */
     #[DataProvider('cyclicalities')]

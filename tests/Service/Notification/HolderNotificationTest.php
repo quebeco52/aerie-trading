@@ -76,7 +76,10 @@ final class HolderNotificationTest extends TestCase
         $this->assertSame('/bond/EXQ-30', $notifier->queued[0]['link']);
     }
 
-    /** A closed issue writes each holder's settlement sale at what it paid, before the resting sells it counts are cancelled. */
+    /**
+     * A closed issue writes each holder's settlement sale at what it paid, before the resting sells it counts are
+     * cancelled.
+     */
     public function testAClosedIssueSettlesEachHoldingBeforeItsOrdersAreCancelled(): void
     {
         [$entityManager, $connection] = $this->database([]);

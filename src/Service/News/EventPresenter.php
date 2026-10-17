@@ -116,7 +116,8 @@ class EventPresenter
             default => $this->presentGeneral($rawType, $rawDesc, $changePct, $recordedAt),
         };
 
-        // Dated in the District's calendar; a row from before events carried their simulation time keeps its clock time.
+        // Dated in the District's calendar; a row from before events carried their simulation time keeps its clock
+        // time.
         $card['simTime'] = $simTime;
         $card['dateline'] = $simTime !== null ? DistrictCalendar::dateline($simTime) : $recordedAt->format('Y-m-d H:i');
 

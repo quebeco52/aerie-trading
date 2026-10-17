@@ -174,8 +174,8 @@ class CorporateLedgerServiceTest extends TestCase
         $this->connectionMock->expects($this->once())->method('beginTransaction');
         $this->connectionMock->expects($this->once())->method('commit');
 
-        // Mock 2 users: user 1 has 15 shares (15 / 10 = 1 share, 5 remnant -> cashout), user 2 has 20 shares (0 remnant).
-        // The other fetches are the name's listed options and the event feed, both empty here.
+        // Mock 2 users: user 1 has 15 shares (15 / 10 = 1 share, 5 remnant -> cashout), user 2 has 20 shares (0
+        // remnant). The other fetches are the name's listed options and the event feed, both empty here.
         $this->connectionMock->expects($this->exactly(3))
             ->method('fetchAllAssociative')
             ->willReturnCallback(static fn(string $sql): array => str_contains($sql, 'stock_events') || str_contains($sql, 'option_contracts') ? [] : [
@@ -276,7 +276,9 @@ class CorporateLedgerServiceTest extends TestCase
      * shares short rather than ten — half a share of extra exposure the borrower never sold and was never
      * paid for. The cashout loop beside it only looked at quantity > 0, so nothing compensated them either.
      */
-    /** @var list<array{sql: string, params: array<string, mixed>}> Every statement a split sent, with its parameters. */
+    /**
+     * @var list<array{sql: string, params: array<string, mixed>}> Every statement a split sent, with its parameters.
+     */
     private array $statements = [];
 
     /**
@@ -338,9 +340,9 @@ class CorporateLedgerServiceTest extends TestCase
     }
 
     /**
-     * One-for-ten multiplies strikes by ten and divides the contracts by ten, toward zero as the shares are; the fraction
-     * left over is old contracts at the old mark, so a holder is paid for its own and a writer pays for what it no longer
-     * owes. Renamed in falling strike order, the way the strikes move.
+     * One-for-ten multiplies strikes by ten and divides the contracts by ten, toward zero as the shares are; the
+     * fraction left over is old contracts at the old mark, so a holder is paid for its own and a writer pays for what
+     * it no longer owes. Renamed in falling strike order, the way the strikes move.
      */
     public function testAReverseSplitRestatesTheListedOptionsAndSettlesTheFraction(): void
     {
@@ -375,7 +377,10 @@ class CorporateLedgerServiceTest extends TestCase
         $this->assertSame(['TINY-12C30', 'TINY-12C15'], array_map(static fn(array $s): string => $s['params']['ticker'], $renames), 'Renamed in falling strike order.');
     }
 
-    /** A split restates the name's own share counts: the stock it still has to put through the market, and its short interest read back from the restated positions. */
+    /**
+     * A split restates the name's own share counts: the stock it still has to put through the market, and its short
+     * interest read back from the restated positions.
+     */
     public function testASplitRestatesTheBacklogAndShortInterest(): void
     {
         $stock = (new Stock())->setTicker('TALL')->setCorporateFlowBacklog(1500.0)->setShortInterestShares('100.00');

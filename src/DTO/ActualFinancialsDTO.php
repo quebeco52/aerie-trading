@@ -15,10 +15,12 @@ readonly class ActualFinancialsDTO
      * @param float                $actualVariableCosts   Realized variable costs after margin clamping.
      * @param float                $clampedMargin         The margin ratio used (needed by MarketConsensusEngine).
      * @param float                $ebit                  Earnings Before Interest & Tax.
-     * @param float                $observableShockZ      The fraction of the shock exposed to public data (used by MarketConsensusEngine).
+     * @param float                $observableShockZ      The fraction of the shock exposed to public data (used by
+     *                                                    MarketConsensusEngine).
      * @param string|null          $eventType             Named event type if a tail-risk event fired, otherwise null.
      * @param array<string, mixed> $eventContext          Optional key-value lore context for the NarrativeEngine.
-     * @param bool|null            $isPublicEvent         For event-conditional models: true when a binary public event occurred.
+     * @param bool|null            $isPublicEvent         For event-conditional models: true when a binary public event
+     *                                                    occurred.
      * @param array<string, float> $streamZ               Dictionary of individual AR(1) stream Z-scores to persist.
      * @param array<string, float> $streamRevenue         Dictionary of absolute dollar revenue generated per stream.
      * @param float                $scheduledCapex        Mandatory quarterly CapEx committed by the sector physics.
@@ -37,19 +39,34 @@ readonly class ActualFinancialsDTO
         public array $streamRevenue = [],
         public float $scheduledCapex = 0.0,
         public array $kpis = [],
-        /** Dollar provision for credit losses charged beyond the through-the-cycle loss in the cost base (negative for a release). */
+        /**
+         * Dollar provision for credit losses charged beyond the through-the-cycle loss in the cost base (negative for a
+         * release).
+         */
         public float $creditLossProvision = 0.0,
         /** Dollar earning assets that went bad this quarter, written off against the allowance. */
         public float $netChargeOffs = 0.0,
-        /** Dollars of funding cost the duration squeeze added to the variable cost ratio this quarter (negative when a steep curve lowered it): net interest income the margin disclosure deducts. */
+        /**
+         * Dollars of funding cost the duration squeeze added to the variable cost ratio this quarter (negative when a
+         * steep curve lowered it): net interest income the margin disclosure deducts.
+         */
         public float $netInterestSqueeze = 0.0,
-        /** Dollars of actual revenue that are price over the expected level (negative under it) and moved no variable cost. */
+        /**
+         * Dollars of actual revenue that are price over the expected level (negative under it) and moved no variable
+         * cost.
+         */
         public float $priceRevenue = 0.0,
         /** Dollar write-down of long-lived assets from the model's own impairment test (ASC 360-10). */
         public float $plantImpairment = 0.0,
-        /** Change in the variable cost ratio from the last calendar quarter's season to this one: a known mix shift analysts build in, not a surprise. */
+        /**
+         * Change in the variable cost ratio from the last calendar quarter's season to this one: a known mix shift
+         * analysts build in, not a surprise.
+         */
         public float $seasonalCostRatioShift = 0.0,
-        /** Dollar one-off operating charge from the physics (a recall, a fine): a special item, not in the cost ratio or ebit above. */
+        /**
+         * Dollar one-off operating charge from the physics (a recall, a fine): a special item, not in the cost ratio or
+         * ebit above.
+         */
         public float $specialCharge = 0.0,
         /** Revenue move, as a share of expected revenue, that analysts read in full from published figures. */
         public float $publishedRevenueShift = 0.0,

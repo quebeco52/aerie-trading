@@ -36,14 +36,14 @@ use App\Service\Math\TimeSeries;
  * the domestic weight through its band, and after a global one because the crash drops the equity share through its
  * band; that is how a fixed-weight rebalancer behaves in the record (GPFG in 2008-09 and 2020).
  *
- * It holds the float as an index holder does: it tenders its share into buybacks and takes up its share of issues, so
- * a company's own flow never moves its ownership. Its inflows are the District's stamp duty on share trading, paid
- * to the fund rather than the budget, the cash from the District's strategic stakes (App\Data\Company\StrategicHoldings),
+ * It holds the float as an index holder does: it tenders its share into buybacks and takes up its share of issues, so a
+ * company's own flow never moves its ownership. Its inflows are the District's stamp duty on share trading, paid to the
+ * fund rather than the budget, the cash from the District's strategic stakes (App\Data\Company\StrategicHoldings),
  * which the fund does not hold but is paid, and any budget surplus the sovereign debt floor leaves no debt to retire.
- * The budget spends the draw (CreditFiscalSubsystem::calculateSovereignDebt), so that last one is rare. Its performance is a time-weighted return index, nominal and real, that
- * none of that money moves. The fund incepts on the first tick that carries a board and books no
- * trade doing so: a structural holder opens at its holding. A run with no market (the simulate command, the macro
- * harnesses, unit tests) never has a fund.
+ * The budget spends the draw (CreditFiscalSubsystem::calculateSovereignDebt), so that last one is rare. Its performance
+ * is a time-weighted return index, nominal and real, that none of that money moves. The fund incepts on the first tick
+ * that carries a board and books no trade doing so: a structural holder opens at its holding. A run with no market (the
+ * simulate command, the macro harnesses, unit tests) never has a fund.
  */
 class SovereignFundSubsystem
 {
@@ -52,15 +52,30 @@ class SovereignFundSubsystem
     public const DRAW_RESET_PERIOD_YEARS = 1.0;
 
     // --- Reference Portfolio (GIC, 2013) ---
-    /** Global equity share of the foreign sleeves, the rest foreign sovereign paper (GIC Reference Portfolio, 65/35 since 2013). */
+    /**
+     * Global equity share of the foreign sleeves, the rest foreign sovereign paper (GIC Reference Portfolio, 65/35
+     * since 2013).
+     */
     public const FOREIGN_EQUITY_SHARE = 0.65;
-    /** Local-currency volatility of developed ex-home equities (Ken French Developed ex US vs US, 1990-2026: 16.4% in USD, net of this engine's 8% FX noise). */
+    /**
+     * Local-currency volatility of developed ex-home equities (Ken French Developed ex US vs US, 1990-2026: 16.4% in
+     * USD, net of this engine's 8% FX noise).
+     */
     public const FOREIGN_EQUITY_VOLATILITY = 0.144;
-    /** Correlation of foreign equities with the home market factor (same sample: 0.773 in home currency, 0.885 in local currency). */
+    /**
+     * Correlation of foreign equities with the home market factor (same sample: 0.773 in home currency, 0.885 in local
+     * currency).
+     */
     public const FOREIGN_EQUITY_MARKET_CORRELATION = 0.885;
-    /** Duration of the foreign paper, held as a constant-maturity zero of that term (Bloomberg Global Aggregate effective duration 6.17y, SPDR GLAD factsheet 31 Aug 2026). */
+    /**
+     * Duration of the foreign paper, held as a constant-maturity zero of that term (Bloomberg Global Aggregate
+     * effective duration 6.17y, SPDR GLAD factsheet 31 Aug 2026).
+     */
     public const FOREIGN_BOND_DURATION = 6.17;
-    /** Annual volatility of the trade-weighted currency, the quarterly one over four quarters (5.4%); the reserve portfolio carries it in home terms. */
+    /**
+     * Annual volatility of the trade-weighted currency, the quarterly one over four quarters (5.4%); the reserve
+     * portfolio carries it in home terms.
+     */
     public const EXCHANGE_RATE_VOLATILITY = 2.0 * MacroEngine::EXCHANGE_RATE_QUARTERLY_VOLATILITY;
 
     // --- Deviation Limits (GPIF policy asset mix, 5th medium-term period, FY2025) ---
@@ -68,29 +83,50 @@ class SovereignFundSubsystem
     public const DOMESTIC_OWNERSHIP_OPENING = 0.058;
     /** GPIF's policy weight for domestic equities. */
     public const GPIF_DOMESTIC_EQUITY_TARGET = 0.25;
-    /** GPIF's deviation limit on that weight (±6pp; ±8pp in the 4th period); carried to this fund's weight by the relative move that breaches it. */
+    /**
+     * GPIF's deviation limit on that weight (±6pp; ±8pp in the 4th period); carried to this fund's weight by the
+     * relative move that breaches it.
+     */
     public const GPIF_DOMESTIC_EQUITY_DEVIATION_LIMIT = 0.06;
     /** GPIF's policy weight for equities as a whole, domestic plus foreign. */
     public const GPIF_GLOBAL_EQUITY_TARGET = 0.50;
-    /** GPIF's deviation limit on the whole equity share (±9pp; ±11pp in the 4th period); carried across the same way. */
+    /**
+     * GPIF's deviation limit on the whole equity share (±9pp; ±11pp in the 4th period); carried across the same way.
+     */
     public const GPIF_GLOBAL_EQUITY_DEVIATION_LIMIT = 0.09;
-    /** Most of the float the fund may own; holding the same share of every name's float, that keeps it under 10% of any company's voting shares (GPFG mandate). */
+    /**
+     * Most of the float the fund may own; holding the same share of every name's float, that keeps it under 10% of any
+     * company's voting shares (GPFG mandate).
+     */
     public const MAX_OWNERSHIP_SHARE = 0.10;
 
     // --- The Opening Mix ---
-    /** Policy equity share the fund opens at, measured on the fund harness (var/harness/FundHarnessTest.php, seeds 1-3): a 16.25% board weight (5.8% of the $14.5T opening float in a $5.2T fund) plus GIC's 65% on the rest. */
+    /**
+     * Policy equity share the fund opens at, measured on the fund harness (var/harness/FundHarnessTest.php, seeds 1-3):
+     * a 16.25% board weight (5.8% of the $14.5T opening float in a $5.2T fund) plus GIC's 65% on the rest.
+     */
     public const OPENING_POLICY_EQUITY_SHARE = 0.7069;
-    /** Share of the fund's equities held on the board at its opening, the home share the Diet founds it with: the same harness's 16.25% board weight over that equity share. */
+    /**
+     * Share of the fund's equities held on the board at its opening, the home share the Diet founds it with: the same
+     * harness's 16.25% board weight over that equity share.
+     */
     public const OPENING_HOME_EQUITY_SHARE = 0.1625 / self::OPENING_POLICY_EQUITY_SHARE;
 
     // --- A New Policy Mix (Norway's Ministry of Finance, 2017) ---
-    /** Months over which the board is traded to the weight a new policy mix sets: the published phase-in of the Norwegian fund's 62.5% to 70%, September 2017 to April 2019. Its 40% to 60% took 24 months, GPIF's 2014 move closed three quarters of its gap in eight. */
+    /**
+     * Months over which the board is traded to the weight a new policy mix sets: the published phase-in of the
+     * Norwegian fund's 62.5% to 70%, September 2017 to April 2019. Its 40% to 60% took 24 months, GPIF's 2014 move
+     * closed three quarters of its gap in eight.
+     */
     public const POLICY_TRANSITION_MONTHS = 20.0;
 
     // --- Rebalancing Execution (Norges Bank 2018) ---
     /** Month-end check; trading starts the month after the breach (NBIM rebalancing rule, 2018). */
     public const REBALANCE_CHECK_PERIOD_YEARS = 1.0 / 12.0;
-    /** Months over which the board is traded back to its policy weight; NBIM trades gradually but does not publish the pace. */
+    /**
+     * Months over which the board is traded back to its policy weight; NBIM trades gradually but does not publish the
+     * pace.
+     */
     public const REBALANCE_EXECUTION_MONTHS = 3.0;
 
     // --- Performance Reporting (GIPS time-weighted return) ---
@@ -102,9 +138,15 @@ class SovereignFundSubsystem
     private const ROOM_TOLERANCE = 1.0e-9;
 
     // --- Currency Bridge (World Bank) ---
-    /** The seeded board's value at the opening: its first-quarter mean on the full-market harness, $20.3T (se 0.22T) over seeds 1-16 (var/harness/opening_cap). */
+    /**
+     * The seeded board's value at the opening: its first-quarter mean on the full-market harness, $20.3T (se 0.22T)
+     * over seeds 1-16 (var/harness/opening_cap).
+     */
     public const BOARD_OPENING_CAP_USD = 20.3e12;
-    /** Listed-company capitalisation over GDP at inception: the board over District GDP, 1.69, a financial centre's (World Bank CM.MKT.LCAP.GD.ZS 2015-22: Singapore 1.2-2.3, US 1.4-2.1, Switzerland 2.0-2.8). */
+    /**
+     * Listed-company capitalisation over GDP at inception: the board over District GDP, 1.69, a financial centre's
+     * (World Bank CM.MKT.LCAP.GD.ZS 2015-22: Singapore 1.2-2.3, US 1.4-2.1, Switzerland 2.0-2.8).
+     */
     public const MARKET_CAP_TO_GDP = self::BOARD_OPENING_CAP_USD / MacroEngine::DISTRICT_GDP_USD;
 
     public function __construct(
@@ -279,9 +321,10 @@ class SovereignFundSubsystem
 
     /**
      * The foreign sovereign zero-coupon yield at a maturity, on the domestic curve's own building blocks: the foreign
-     * policy rate's expected path back to its neutral level at the Bliss slope decay (the Vasicek expectations loading),
-     * plus the Adrian-Crump-Moench term premium scaled for duration: the mainland's own premium, the global factor the
-     * District's loads on (MonetaryPolicySubsystem::districtTermPremiumFactors()), so the paper carries duration risk.
+     * policy rate's expected path back to its neutral level at the Bliss slope decay (the Vasicek expectations
+     * loading), plus the Adrian-Crump-Moench term premium scaled for duration: the mainland's own premium, the global
+     * factor the District's loads on (MonetaryPolicySubsystem::districtTermPremiumFactors()), so the paper carries
+     * duration risk.
      */
     public function foreignZeroYield(MacroState $state, float $maturity): float
     {
@@ -329,7 +372,9 @@ class SovereignFundSubsystem
         $state->sovereignFundRealReturnIndex *= $growth * exp(-$state->inflation * $dt);
     }
 
-    /** The money paid in from outside the fund over the last tick, parked in the paper sleeve like any cash it receives. */
+    /**
+     * The money paid in from outside the fund over the last tick, parked in the paper sleeve like any cash it receives.
+     */
     private function receiveInflows(MacroState $state): void
     {
         // The stamp duty on the board's trading is paid into the fund rather than the budget, as Singapore's land-sale
@@ -337,8 +382,8 @@ class SovereignFundSubsystem
         $state->sovereignFundForeignBonds += $state->boardStampDuty * $state->exchangeRateIndex;
         $state->sovereignFundStampDutyYearToDate += $state->boardStampDuty;
 
-        // The District's strategic stakes sit outside the fund, but their cash is paid into it (and a subscription to an
-        // issue paid out of it), as the dividends on Norway's 67% of Equinor reach the GPFG.
+        // The District's strategic stakes sit outside the fund, but their cash is paid into it (and a subscription to
+        // an issue paid out of it), as the dividends on Norway's 67% of Equinor reach the GPFG.
         $state->sovereignFundForeignBonds += $state->strategicStakeCash * $state->exchangeRateIndex;
 
         // A budget surplus with no debt left to retire above the floor is paid in, as Singapore's surpluses accrue to
@@ -437,17 +482,20 @@ class SovereignFundSubsystem
         return $arithmetic - (0.5 * $variance);
     }
 
-    /** The compound return of the fund at its policy mix for a given domestic weight: the foreign sleeves on their policy split. */
+    /**
+     * The compound return of the fund at its policy mix for a given domestic weight: the foreign sleeves on their
+     * policy split.
+     */
     public function policyCompoundRealReturn(MacroState $state, float $domesticWeight): float
     {
         return $this->expectedCompoundRealReturn($state, $domesticWeight, $this->foreignEquityShare($state) * (1.0 - $domesticWeight));
     }
 
     /**
-     * A new mandate from the fund's head, or a new home share from the Diet: the board's weight is the home share of the
-     * policy equities (until the Diet first moves it, the share the fund opened with); the foreign sleeves go onto the
-     * split that makes up the rest at once; and the board is traded to its new weight over the transition, re-measured
-     * at each month end as any programme is. The ownership ceiling caps what the fund may buy.
+     * A new mandate from the fund's head, or a new home share from the Diet: the board's weight is the home share of
+     * the policy equities (until the Diet first moves it, the share the fund opened with); the foreign sleeves go onto
+     * the split that makes up the rest at once; and the board is traded to its new weight over the transition,
+     * re-measured at each month end as any programme is. The ownership ceiling caps what the fund may buy.
      */
     private function adoptMandate(MacroState $state): void
     {
@@ -472,8 +520,8 @@ class SovereignFundSubsystem
     }
 
     /**
-     * The foreign sleeves' policy split: the equity share of the policy mix outside the board, over the part of the fund
-     * outside it. Before the fund has a mix, GIC's reference split.
+     * The foreign sleeves' policy split: the equity share of the policy mix outside the board, over the part of the
+     * fund outside it. Before the fund has a mix, GIC's reference split.
      */
     public function foreignEquityShare(MacroState $state): float
     {
@@ -599,7 +647,10 @@ class SovereignFundSubsystem
         return $domesticTargetWeight + (self::FOREIGN_EQUITY_SHARE * (1.0 - $domesticTargetWeight));
     }
 
-    /** The relative fall of a sleeve against the rest of the fund that breaches GPIF's limit L on weight T: L / (T(1 - T) + TL). */
+    /**
+     * The relative fall of a sleeve against the rest of the fund that breaches GPIF's limit L on weight T: L / (T(1 -
+     * T) + TL).
+     */
     public static function breachingMove(float $gpifTarget, float $gpifLimit): float
     {
         return $gpifLimit / (($gpifTarget * (1.0 - $gpifTarget)) + ($gpifTarget * $gpifLimit));
@@ -631,7 +682,10 @@ class SovereignFundSubsystem
         $state->sovereignFundForeignBonds = (1.0 - $split) * $units;
     }
 
-    /** Takes a home-currency amount out of the foreign sleeves in proportion to their size (a negative amount puts it back). */
+    /**
+     * Takes a home-currency amount out of the foreign sleeves in proportion to their size (a negative amount puts it
+     * back).
+     */
     private function withdrawForeign(MacroState $state, float $homeAmount): void
     {
         $units = $state->sovereignFundForeignEquity + $state->sovereignFundForeignBonds;
@@ -668,7 +722,10 @@ class SovereignFundSubsystem
         return $state->sovereignFundDomesticEquity + $this->foreignHomeValue($state);
     }
 
-    /** Both foreign sleeves in home currency: foreign units at today's exchange rate, a stronger home currency buying more of them. */
+    /**
+     * Both foreign sleeves in home currency: foreign units at today's exchange rate, a stronger home currency buying
+     * more of them.
+     */
     public function foreignHomeValue(MacroState $state): float
     {
         return $state->exchangeRateIndex > 0.0

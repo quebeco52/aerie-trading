@@ -89,9 +89,12 @@ class StockModelTuning
             ModelParam::ResidentialMortgageShare->value  => 0.30, // The District's main mortgage lender
             ModelParam::ConsumerLoanShare->value         => 0.15,
             ModelParam::CommercialRealEstateShare->value => 0.15, // Leads the syndicated corporate book instead
-            ModelParam::TargetCapitalRatio->value        => 0.084, // Its seeded book equity/assets (JPMorgan 8.6% at end-2024)
-            ModelParam::OperatingCostToEarningAssets->value => 0.0279, // US international banks, 2019: 2.45% of assets, 87.9% earning (FDIC QBP)
-            ModelParam::NonInterestIncomeToEarningAssets->value => 0.0207, // US international banks, 2019: 1.82% of assets (FDIC QBP)
+            // Its seeded book equity/assets (JPMorgan 8.6% at end-2024)
+            ModelParam::TargetCapitalRatio->value        => 0.084,
+            // US international banks, 2019: 2.45% of assets, 87.9% earning (FDIC QBP)
+            ModelParam::OperatingCostToEarningAssets->value => 0.0279,
+            // US international banks, 2019: 1.82% of assets (FDIC QBP)
+            ModelParam::NonInterestIncomeToEarningAssets->value => 0.0207,
         ],
 
         // --- Riverstone Financial (RIVR) ---
@@ -103,8 +106,10 @@ class StockModelTuning
             ModelParam::ConsumerLoanShare->value         => 0.00,
             ModelParam::CommercialRealEstateShare->value => 0.45, // Commercial mortgages for contractors and developers
             ModelParam::TargetCapitalRatio->value        => 0.1031, // Its seeded book equity/assets
-            ModelParam::OperatingCostToEarningAssets->value => 0.0282, // US commercial lenders, 2019: 2.56% of assets, 90.7% earning (FDIC QBP)
-            ModelParam::NonInterestIncomeToEarningAssets->value => 0.0117, // US commercial lenders, 2019: 1.06% of assets (FDIC QBP)
+            // US commercial lenders, 2019: 2.56% of assets, 90.7% earning (FDIC QBP)
+            ModelParam::OperatingCostToEarningAssets->value => 0.0282,
+            // US commercial lenders, 2019: 1.06% of assets (FDIC QBP)
+            ModelParam::NonInterestIncomeToEarningAssets->value => 0.0117,
         ],
 
         // --- Plover Savings Bank (PLVR) ---
@@ -116,24 +121,31 @@ class StockModelTuning
             ModelParam::ConsumerLoanShare->value         => 0.10,
             ModelParam::CommercialRealEstateShare->value => 0.10, // Small landlords; business loans take the last 15%
             ModelParam::TargetCapitalRatio->value        => 0.084, // Its seeded book equity/assets
-            ModelParam::OperatingCostToEarningAssets->value => 0.0267, // US mortgage lenders, 2019: 2.54% of assets, 95.1% earning (FDIC QBP)
-            ModelParam::NonInterestIncomeToEarningAssets->value => 0.0147, // US mortgage lenders, 2019: 1.40% of assets (FDIC QBP)
+            // US mortgage lenders, 2019: 2.54% of assets, 95.1% earning (FDIC QBP)
+            ModelParam::OperatingCostToEarningAssets->value => 0.0267,
+            // US mortgage lenders, 2019: 1.40% of assets (FDIC QBP)
+            ModelParam::NonInterestIncomeToEarningAssets->value => 0.0147,
         ],
 
         // --- Talon Credit (TALN) ---
         // Prime credit card & digital merchant payment rail network. Substantial swipe interchange fee tollbooth (45%).
         'TALN' => [
             ModelParam::CeclSpreadSensitivity->value => 1.40,
-            ModelParam::CreditRiskAppetite->value    => 0.375, // Prime cardholders: three quarters of the industry's card losses, ~3.5% a year
+            // Prime cardholders: three quarters of the industry's card losses, ~3.5% a year
+            ModelParam::CreditRiskAppetite->value    => 0.375,
         ],
 
         // --- Stork Consumer Credit (STRK) ---
         // Subprime consumer finance & installment loan originator. Highly exposed to credit spread widening.
         'STRK' => [
             ModelParam::CeclSpreadSensitivity->value => 2.20,
-            ModelParam::CreditRiskAppetite->value    => 0.80, // Subprime instalment book: 1.6x the card industry, as OneMain's 6.02% against it in 2019 (~7.5% a year)
-            ModelParam::OperatingCostToEarningAssets->value => 0.059, // OneMain consumer lending, 2019: $1,290M on $17,055M average receivables (7.6%), on the 78% loan share
-            ModelParam::NonInterestIncomeToEarningAssets->value => 0.0285, // OneMain, 2019: $622M of insurance and other revenue on $17,055M average receivables (3.65%), on the 78% loan share
+            // Subprime instalment book: 1.6x the card industry, as OneMain's 6.02% against it in 2019 (~7.5% a year)
+            ModelParam::CreditRiskAppetite->value    => 0.80,
+            // OneMain consumer lending, 2019: $1,290M on $17,055M average receivables (7.6%), on the 78% loan share
+            ModelParam::OperatingCostToEarningAssets->value => 0.059,
+            // OneMain, 2019: $622M of insurance and other revenue on $17,055M average receivables (3.65%), on the 78%
+            // loan share
+            ModelParam::NonInterestIncomeToEarningAssets->value => 0.0285,
         ],
 
         // =====================================================================
@@ -225,8 +237,10 @@ class StockModelTuning
         'OWLS' => [
             ModelParam::IndustrialConglomerateWeight->value => 0.45, // Heavy rail and industrial manufacturing
             ModelParam::DefensiveStaplesWeight->value       => 0.35, // Utility infrastructure and consumer goods
-            ModelParam::ContrarianFloatWeight->value        => 0.20, // Cash and short-term sovereign paper awaiting a panic
-            ModelParam::PricingPowerIndex->value            => 0.80, // Buys structural moats by mandate, never price takers
+            // Cash and short-term sovereign paper awaiting a panic
+            ModelParam::ContrarianFloatWeight->value        => 0.20,
+            // Buys structural moats by mandate, never price takers
+            ModelParam::PricingPowerIndex->value            => 0.80,
         ],
 
         // --- Crowfall Capital (CROW) ---
@@ -276,9 +290,12 @@ class StockModelTuning
             ModelParam::SubscriptionRevenueWeight->value => 0.15,
             ModelParam::AdvertisingRevenueWeight->value  => 0.45,
             ModelParam::CloudInfrastructureWeight->value => 0.40,
-            ModelParam::AdvertisingCyclicality->value    => 1.20, // Performance ads on an open auction: budgets cut first and hardest
-            ModelParam::MonopolyAggression->value        => 0.90, // Ruthless data monopoly, high margins, existential regulatory risk
-            ModelParam::PricingPowerIndex->value         => 0.60, // Auction-cleared ad inventory prices itself; only the subscription and cloud books are set by the seller
+            // Performance ads on an open auction: budgets cut first and hardest
+            ModelParam::AdvertisingCyclicality->value    => 1.20,
+            // Ruthless data monopoly, high margins, existential regulatory risk
+            ModelParam::MonopolyAggression->value        => 0.90,
+            // Auction-cleared ad inventory prices itself; only the subscription and cloud books are set by the seller
+            ModelParam::PricingPowerIndex->value         => 0.60,
         ],
 
         // --- Silicon Creek Foundries (SILC) ---
@@ -296,18 +313,21 @@ class StockModelTuning
             ModelParam::ConsumerWeight->value    => 0.15,
         ],
 
-        // --- Erne Network Systems (ERNE) ---
-        // Cellular radio access equipment, massive MIMO base stations & standard-essential patent licensing (Ericsson archetype).
-        // Heavily weighted to long-term carrier infrastructure contracts with high SEP royalty tollbooths.
+        // --- Erne Network Systems (ERNE) --- Cellular radio access equipment, massive MIMO base stations &
+        // standard-essential patent licensing (Ericsson archetype). Heavily weighted to long-term carrier
+        // infrastructure contracts with high SEP royalty tollbooths.
         'ERNE' => [
-            ModelParam::EnterpriseWeight->value       => 0.75, // Carrier radio access, core network routing & optimization software
-            ModelParam::PatentLicensingWeight->value  => 0.15, // Standard-essential patent royalties on every device shipped under the standard
-            ModelParam::ConsumerWeight->value         => 0.10, // Broadband consumer terminal hardware & IoT micro-modules
+            // Carrier radio access, core network routing & optimization software
+            ModelParam::EnterpriseWeight->value       => 0.75,
+            // Standard-essential patent royalties on every device shipped under the standard
+            ModelParam::PatentLicensingWeight->value  => 0.15,
+            // Broadband consumer terminal hardware & IoT micro-modules
+            ModelParam::ConsumerWeight->value         => 0.10,
             ModelParam::PricingPowerIndex->value      => 0.75, // Standard-essential patent (SEP) monopoly leverage
         ],
 
-        // --- Weaver Marketplace (WEAV) ---
-        // Massive third-party ecosystem (the profit engine) blended with volatile first-party retail (the scale engine).
+        // --- Weaver Marketplace (WEAV) --- Massive third-party ecosystem (the profit engine) blended with volatile
+        // first-party retail (the scale engine).
         'WEAV' => [
             ModelParam::ThirdPartyWeight->value         => 0.45,
             ModelParam::FirstPartyWeight->value         => 0.30,
@@ -333,8 +353,8 @@ class StockModelTuning
             ModelParam::TransactionRevenueWeight->value  => 0.40,
         ],
 
-        // --- Tickbird Data Systems (TICK) ---
-        // Terminal, financial analytics & data feed monopoly. Overwhelmingly recurring subscription seat contracts (90%).
+        // --- Tickbird Data Systems (TICK) --- Terminal, financial analytics & data feed monopoly. Overwhelmingly
+        // recurring subscription seat contracts (90%).
         'TICK' => [
             ModelParam::SubscriptionRevenueWeight->value => 0.90,
             ModelParam::TransactionRevenueWeight->value  => 0.10,
@@ -349,10 +369,11 @@ class StockModelTuning
         // OIL, GAS & MINING ARCHETYPES
         // =====================================================================
 
-        // --- Sinking Shore Extraction (SINK) ---
-        // Pure-play upstream offshore deepwater oil & gas E&P. Violently leveraged to spot commodity prices & global energy cycles.
+        // --- Sinking Shore Extraction (SINK) --- Pure-play upstream offshore deepwater oil & gas E&P. Violently
+        // leveraged to spot commodity prices & global energy cycles.
         'SINK' => [
-            ModelParam::LiquidsRevenueShare->value => 0.85, // Deepwater fields are oil-weighted; associated gas is the remainder
+            // Deepwater fields are oil-weighted; associated gas is the remainder
+            ModelParam::LiquidsRevenueShare->value => 0.85,
             ModelParam::OilHedgeRatio->value       => 0.15, // Aggressive unhedged price-taker: a token swap ladder
         ],
 
@@ -378,15 +399,16 @@ class StockModelTuning
         // --- Benthos Fiduciary & Trust (BNTH) ---
         // Private bank for foreign wealth. Its loans are Lombard credit against client portfolios, plus mortgages.
         'BNTH' => [
-            ModelParam::CreditRiskAppetite->value        => 0.15, // Margin-called Lombard lending: under a third of the neutral segment loss rate
+            // Margin-called Lombard lending: under a third of the neutral segment loss rate
+            ModelParam::CreditRiskAppetite->value        => 0.15,
             ModelParam::ResidentialMortgageShare->value  => 0.18, // Julius Baer 2019: CHF 8.9B of CHF 48.4B of loans
             ModelParam::ConsumerLoanShare->value         => 0.00,
             ModelParam::CommercialRealEstateShare->value => 0.00, // Lombard loans take the other 82%
             ModelParam::TargetCapitalRatio->value        => 0.06, // Its seeded book equity/assets
         ],
 
-        // --- Egret Trust (EGRT) ---
-        // Custodian of the Sovereign Reserve Fund. Its loans are lines to funds secured on their investors' commitments.
+        // --- Egret Trust (EGRT) --- Custodian of the Sovereign Reserve Fund. Its loans are lines to funds secured on
+        // their investors' commitments.
         'EGRT' => [
             ModelParam::FundCustodyShare->value          => 0.20, // A fifth of servicing fees come from the Fund's book
             ModelParam::CreditRiskAppetite->value        => 0.25, // Fund finance: half the neutral segment loss rate
@@ -406,16 +428,16 @@ class StockModelTuning
         // HEAVY INDUSTRY & MANUFACTURING ARCHETYPES
         // =====================================================================
 
-        // --- Steel Wings Smelting & Corp (WING) ---
-        // Industrial steel smelting & metallurgical production. Heavy contracted OEM supply (70%) with spot HRC spread (30%).
+        // --- Steel Wings Smelting & Corp (WING) --- Industrial steel smelting & metallurgical production. Heavy
+        // contracted OEM supply (70%) with spot HRC spread (30%).
         'WING' => [
             ModelParam::ContractOemWeight->value  => 0.70,
             ModelParam::SpotHrcWeight->value      => 0.30,
             ModelParam::PricingPowerIndex->value  => 0.65,
         ],
 
-        // --- Iron Beak Heavy Industries (IBHI) ---
-        // Massive physical architect. Captive builder for district civic megaprojects, commercial dry docks, and port infrastructure.
+        // --- Iron Beak Heavy Industries (IBHI) --- Massive physical architect. Captive builder for district civic
+        // megaprojects, commercial dry docks, and port infrastructure.
         'IBHI' => [
             ModelParam::CivilInfrastructureWeight->value   => 0.60, // Captive builder for LAKE/SWAN civic projects
             ModelParam::CommercialEpcWeight->value         => 0.25, // Corporate commercial towers & fabrication yards
@@ -431,34 +453,45 @@ class StockModelTuning
             ModelParam::ServicesWeight->value    => 0.60,
         ],
 
-        // --- Sanderling Rock Dynamics (SNDR) ---
-        // Subterranean rock drill rigs, continuous hard-rock tunneling borers & cemented carbide tooling (Sandvik archetype).
-        // Dual-stream razor-and-blade model: multi-quarter equipment backlogs paired with high-margin consumable wear-parts tollbooth.
+        // --- Sanderling Rock Dynamics (SNDR) --- Subterranean rock drill rigs, continuous hard-rock tunneling borers &
+        // cemented carbide tooling (Sandvik archetype). Dual-stream razor-and-blade model: multi-quarter equipment
+        // backlogs paired with high-margin consumable wear-parts tollbooth.
         'SNDR' => [
-            ModelParam::EquipmentWeight->value     => 0.55, // Heavy automated drilling rigs, subterranean continuous miners & crushing units
-            ModelParam::ServicesWeight->value      => 0.45, // Cemented carbide rotary bits, wear-resistant liners & telemetry maintenance
-            ModelParam::PricingPowerIndex->value   => 0.80, // Proprietary sintered carbide metallurgy; essential uptime tollbooth
+            // Heavy automated drilling rigs, subterranean continuous miners & crushing units
+            ModelParam::EquipmentWeight->value     => 0.55,
+            // Cemented carbide rotary bits, wear-resistant liners & telemetry maintenance
+            ModelParam::ServicesWeight->value      => 0.45,
+            // Proprietary sintered carbide metallurgy; essential uptime tollbooth
+            ModelParam::PricingPowerIndex->value   => 0.80,
             ModelParam::OperatingCyclicality->value => 1.15, // Buffered by consumable wear-part replacement cycles
         ],
 
-        // --- Alca Compression Dynamics (ALCA) ---
-        // Industrial air compressors, turbomolecular vacuum pumps & precision assembly systems (Atlas Copco archetype).
-        // Essential 'Fourth Utility' of manufacturing: catastrophic cost of downtime creates immense pricing power and 40% high-margin service tollbooth.
+        // --- Alca Compression Dynamics (ALCA) --- Industrial air compressors, turbomolecular vacuum pumps & precision
+        // assembly systems (Atlas Copco archetype). Essential 'Fourth Utility' of manufacturing: catastrophic cost of
+        // downtime creates immense pricing power and 40% high-margin service tollbooth.
         'ALCA' => [
-            ModelParam::EquipmentWeight->value     => 0.60, // Oil-free rotary screw compressors, cleanroom turbomolecular vacuum pumps & robotic tools
-            ModelParam::ServicesWeight->value      => 0.40, // Predictive maintenance telemetry, replacement rotor elements & clean-air filter consumables
-            ModelParam::PricingPowerIndex->value   => 0.85, // Critical operational uptime necessity; shutting down a wafer fab or bottling line costs millions
-            ModelParam::OperatingCyclicality->value => 1.05, // Heavy aftermarket service revenue strongly insulates from industrial capex contractions
+            // Oil-free rotary screw compressors, cleanroom turbomolecular vacuum pumps & robotic tools
+            ModelParam::EquipmentWeight->value     => 0.60,
+            // Predictive maintenance telemetry, replacement rotor elements & clean-air filter consumables
+            ModelParam::ServicesWeight->value      => 0.40,
+            // Critical operational uptime necessity; shutting down a wafer fab or bottling line costs millions
+            ModelParam::PricingPowerIndex->value   => 0.85,
+            // Heavy aftermarket service revenue strongly insulates from industrial capex contractions
+            ModelParam::OperatingCyclicality->value => 1.05,
         ],
 
-        // --- Nuthatch Climate Systems (NUTH) ---
-        // Geothermal ground-source heat pumps, hydronic climate control & industrial thermal elements (NIBE archetype).
-        // Highly exposed to building permit cycles and dealer inventory destocking, buffered by aftermarket retrofit/service parts.
+        // --- Nuthatch Climate Systems (NUTH) --- Geothermal ground-source heat pumps, hydronic climate control &
+        // industrial thermal elements (NIBE archetype). Highly exposed to building permit cycles and dealer inventory
+        // destocking, buffered by aftermarket retrofit/service parts.
         'NUTH' => [
-            ModelParam::OemEquipmentWeight->value  => 0.70, // Heat pumps, geothermal ground loops, air handlers & ventilation systems
-            ModelParam::AftermarketMroWeight->value => 0.30, // Replacement compressors, heat exchangers, glycol loops & service contracts
-            ModelParam::PricingPowerIndex->value   => 0.70, // Strong Nordic energy-efficiency standards and statutory decarbonization capture
-            ModelParam::OperatingCyclicality->value => 1.25, // Moderately high cyclicality driven by mortgage rates and building permits
+            // Heat pumps, geothermal ground loops, air handlers & ventilation systems
+            ModelParam::OemEquipmentWeight->value  => 0.70,
+            // Replacement compressors, heat exchangers, glycol loops & service contracts
+            ModelParam::AftermarketMroWeight->value => 0.30,
+            // Strong Nordic energy-efficiency standards and statutory decarbonization capture
+            ModelParam::PricingPowerIndex->value   => 0.70,
+            // Moderately high cyclicality driven by mortgage rates and building permits
+            ModelParam::OperatingCyclicality->value => 1.25,
         ],
 
         // --- Wren Access Systems (WREN) ---
@@ -468,10 +501,15 @@ class StockModelTuning
         // which waits for a construction cycle, so the aftermarket carries the majority of the book and
         // the cyclicality sits below the sector rather than above it.
         'WREN' => [
-            ModelParam::OemEquipmentWeight->value   => 0.45, // Entrance automation, door hardware & access control fitted into new build
-            ModelParam::AftermarketMroWeight->value => 0.55, // Cylinders, credentials, rekeying & service on a century of installed doors
-            ModelParam::PricingPowerIndex->value    => 0.85, // Specified into building codes and insurance terms; the hardware is a rounding error against the opening it secures
-            ModelParam::OperatingCyclicality->value => 0.85, // Replacement-driven and non-discretionary: security spend survives the downturn that stops the build
+            // Entrance automation, door hardware & access control fitted into new build
+            ModelParam::OemEquipmentWeight->value   => 0.45,
+            // Cylinders, credentials, rekeying & service on a century of installed doors
+            ModelParam::AftermarketMroWeight->value => 0.55,
+            // Specified into building codes and insurance terms; the hardware is a rounding error against the opening
+            // it secures
+            ModelParam::PricingPowerIndex->value    => 0.85,
+            // Replacement-driven and non-discretionary: security spend survives the downturn that stops the build
+            ModelParam::OperatingCyclicality->value => 0.85,
         ],
 
         // --- Chough Mining Systems (CHUF) ---
@@ -482,9 +520,12 @@ class StockModelTuning
         // what keeps the stream running through a cycle that stops new rig orders outright.
         'CHUF' => [
             ModelParam::OemEquipmentWeight->value   => 0.35, // Teleremote drill rigs, underground loaders & haulage
-            ModelParam::AftermarketMroWeight->value => 0.65, // Rock drilling consumables, rebuilds & automation service on the installed fleet
-            ModelParam::PricingPowerIndex->value    => 0.80, // An idle stope costs more per shift than the rig; availability is priced, not iron
-            ModelParam::OperatingCyclicality->value => 0.95, // Consumption-led rather than capex-led, so it tracks ore output instead of mine investment
+            // Rock drilling consumables, rebuilds & automation service on the installed fleet
+            ModelParam::AftermarketMroWeight->value => 0.65,
+            // An idle stope costs more per shift than the rig; availability is priced, not iron
+            ModelParam::PricingPowerIndex->value    => 0.80,
+            // Consumption-led rather than capex-led, so it tracks ore output instead of mine investment
+            ModelParam::OperatingCyclicality->value => 0.95,
         ],
 
         // --- Crossbill Precision Tooling (CBIL) ---
@@ -605,12 +646,11 @@ class StockModelTuning
             ModelParam::PricingPowerIndex->value    => 0.70,
         ],
 
-        // --- Kestrel Civic Lines (KSTL) ---
-        // Class 1 freight & municipal rail transit operator. Preemptive track monopoly with intermodal & industrial carload focus.
-        // Half the network is the commuter monopoly its description is actually about: punitive single
-        // fares herding millions onto auto-renewing 'Kestrel Link' subscriptions. The other half is the
-        // freight that shares the same preemptively laid track. It was tuned 100% freight, so none of the
-        // inescapable baseline tax reached the physics.
+        // --- Kestrel Civic Lines (KSTL) --- Class 1 freight & municipal rail transit operator. Preemptive track
+        // monopoly with intermodal & industrial carload focus. Half the network is the commuter monopoly its
+        // description is actually about: punitive single fares herding millions onto auto-renewing 'Kestrel Link'
+        // subscriptions. The other half is the freight that shares the same preemptively laid track. It was tuned 100%
+        // freight, so none of the inescapable baseline tax reached the physics.
         'KSTL' => [
             ModelParam::SubscriptionWeight->value       => 0.50, // Kestrel Link commuter subscriptions
             ModelParam::IntermodalFreightWeight->value  => 0.25,
@@ -626,11 +666,13 @@ class StockModelTuning
         // board's one railway whose revenue answers to mining output rather than to employment, and the
         // rail leg of the same cycle WING, CNDR and FULM are already exposed to.
         'REDW' => [
-            ModelParam::SubscriptionWeight->value       => 0.00, // No passenger franchise: the line exists for the orefields
+            // No passenger franchise: the line exists for the orefields
+            ModelParam::SubscriptionWeight->value       => 0.00,
             ModelParam::BulkCommoditiesWeight->value    => 0.60, // Unit ore trains under long-term tonnage agreements
             ModelParam::IndustrialCarloadsWeight->value => 0.30, // Timber, pellets and finished steel
             ModelParam::IntermodalFreightWeight->value  => 0.10, // Containerised backhaul on otherwise empty returns
-            ModelParam::PricingPowerIndex->value        => 0.75, // A single-track monopoly on the corridor, bounded by what the mine can bear
+            // A single-track monopoly on the corridor, bounded by what the mine can bear
+            ModelParam::PricingPowerIndex->value        => 0.75,
         ],
 
         // =====================================================================
@@ -648,15 +690,18 @@ class StockModelTuning
             ModelParam::LoeExposureShare->value            => 0.35, // Share of revenue exposed to the next cliff
             ModelParam::ExclusivityQuarters->value         => 26.0, // ~6.5 years until lead franchise LOE
             ModelParam::BiologicRevenueShare->value        => 0.55, // Biologics erode slowly under biosimilars
-            ModelParam::LateStageAssetCount->value         => 4.0,  // Value-weighted Phase III programmes: ~1.6 readouts and ~0.8 launches a year
+            // Value-weighted Phase III programmes: ~1.6 readouts and ~0.8 launches a year
+            ModelParam::LateStageAssetCount->value         => 4.0,
         ],
 
-        // --- Crane Medical Network (CRAN) ---
-        // Ubiquitous healthcare provider and hospital network. Masters of algorithmic billing, insurance arbitrage, and inelastic acute care.
+        // --- Crane Medical Network (CRAN) --- Ubiquitous healthcare provider and hospital network. Masters of
+        // algorithmic billing, insurance arbitrage, and inelastic acute care.
         'CRAN' => [
             ModelParam::InpatientCareWeight->value        => 0.50, // Inelastic trauma and acute inpatient admissions
-            ModelParam::ElectiveOutpatientWeight->value   => 0.30, // High-margin elective surgical & ambulatory procedures
-            ModelParam::InsuranceArbitrageWeight->value   => 0.20, // Algorithmic DRG coding optimization & insurer arbitration
+            // High-margin elective surgical & ambulatory procedures
+            ModelParam::ElectiveOutpatientWeight->value   => 0.30,
+            // Algorithmic DRG coding optimization & insurer arbitration
+            ModelParam::InsuranceArbitrageWeight->value   => 0.20,
             ModelParam::PricingPowerIndex->value          => 0.80, // Regional hospital network monopoly leverage
         ],
 
@@ -676,7 +721,9 @@ class StockModelTuning
         'PHIL' => [
             ModelParam::BrandedStaplesWeight->value  => 0.85,
             ModelParam::VolumeCommodityWeight->value => 0.15,
-            ModelParam::PricingPowerIndex->value     => 0.90, // Addictive, habit-formed demand: decades of above-inflation list price increases with minimal volume response
+            // Addictive, habit-formed demand: decades of above-inflation list price increases with minimal volume
+            // response
+            ModelParam::PricingPowerIndex->value     => 0.90,
         ],
 
         // --- Lark & Crest Brands (LARK) ---
@@ -687,8 +734,8 @@ class StockModelTuning
             ModelParam::VolumeCommodityWeight->value => 0.20,
         ],
 
-        // --- Sugarbird Confectionery (SGRB) ---
-        // Confectionery giant & commodities cartel. Weaponizes raw cocoa/sugar physical storage to orchestrate short squeezes against hedge funds.
+        // --- Sugarbird Confectionery (SGRB) --- Confectionery giant & commodities cartel. Weaponizes raw cocoa/sugar
+        // physical storage to orchestrate short squeezes against hedge funds.
         'SGRB' => [
             ModelParam::BrandedStaplesWeight->value   => 0.55,
             ModelParam::VolumeCommodityWeight->value  => 0.10,
@@ -696,28 +743,32 @@ class StockModelTuning
             ModelParam::PricingPowerIndex->value      => 0.90,
         ],
 
-        // --- Poultry Crop Operations (CROP) ---
-        // Integrated poultry & agricultural producer. Skewed toward commodity volume agriculture (65%, its farmland income included).
+        // --- Poultry Crop Operations (CROP) --- Integrated poultry & agricultural producer. Skewed toward commodity
+        // volume agriculture (65%, its farmland income included).
         'CROP' => [
             ModelParam::BrandedStaplesWeight->value    => 0.20,
             ModelParam::VolumeCommodityWeight->value   => 0.65,
             ModelParam::CommodityTradingWeight->value  => 0.15,
-            ModelParam::PricingPowerIndex->value       => 0.30, // Bulk agricultural output clears at the exchange price, not a list price
-            ModelParam::AgriculturalOutputShare->value => 0.40, // Crops sell at the exchange; contract poultry at a list price that follows feed
+            // Bulk agricultural output clears at the exchange price, not a list price
+            ModelParam::PricingPowerIndex->value       => 0.30,
+            // Crops sell at the exchange; contract poultry at a list price that follows feed
+            ModelParam::AgriculturalOutputShare->value => 0.40,
         ],
 
-        // --- Pintail Beverage Group (PINT) ---
-        // Industrial ethanol syndicate & heritage alcohol cartel. Deploys the 'Proof Desk' to corner agricultural futures and packaging supply.
+        // --- Pintail Beverage Group (PINT) --- Industrial ethanol syndicate & heritage alcohol cartel. Deploys the
+        // 'Proof Desk' to corner agricultural futures and packaging supply.
         'PINT' => [
             ModelParam::BrandedStaplesWeight->value   => 0.60,
             ModelParam::VolumeCommodityWeight->value  => 0.20,
-            ModelParam::CommodityTradingWeight->value => 0.20, // Internal 'Proof Desk' agricultural futures & silica hoarding
+            // Internal 'Proof Desk' agricultural futures & silica hoarding
+            ModelParam::CommodityTradingWeight->value => 0.20,
             ModelParam::PricingPowerIndex->value      => 0.85,
-            ModelParam::MaturingStockShare->value     => 0.55, // Heritage spirits age in cask: ~200 days of branded sales held maturing, ~45% of revenue in stock all told
+            // Heritage spirits age in cask: ~200 days of branded sales held maturing, ~45% of revenue in stock all told
+            ModelParam::MaturingStockShare->value     => 0.55,
         ],
 
-        // --- Copperhead Coffee Roasters (BREW) ---
-        // Retail coffee cafes & prime real estate holdings. High company-owned store footprint (70%) and prime leases (20%).
+        // --- Copperhead Coffee Roasters (BREW) --- Retail coffee cafes & prime real estate holdings. High
+        // company-owned store footprint (70%) and prime leases (20%).
         'BREW' => [
             ModelParam::CompanyStoresWeight->value      => 0.70,
             ModelParam::FranchiseRoyaltiesWeight->value => 0.10,
@@ -725,8 +776,8 @@ class StockModelTuning
             ModelParam::PricingPowerIndex->value        => 0.85,
         ],
 
-        // --- Golden Swift Holdings (SWFT) ---
-        // Massive global fast-food franchise network. Master-franchise model with royalties (55%) and property leases (40%).
+        // --- Golden Swift Holdings (SWFT) --- Massive global fast-food franchise network. Master-franchise model with
+        // royalties (55%) and property leases (40%).
         'SWFT' => [
             ModelParam::CompanyStoresWeight->value      => 0.05,
             ModelParam::FranchiseRoyaltiesWeight->value => 0.55,
@@ -739,10 +790,12 @@ class StockModelTuning
         // VIP casino acting as bait for an apex commercial real estate and landlord empire.
         // Massive skew towards non-gaming (extortionate revenue-sharing leases) as the primary engine.
         'GULL' => [
-            ModelParam::PricingPowerIndex->value           => 1.00, // Absolute monopoly pricing power over captive tenants
+            // Absolute monopoly pricing power over captive tenants
+            ModelParam::PricingPowerIndex->value           => 1.00,
             ModelParam::GamingRevenueWeight->value         => 0.20, // Casino floors are just the bait for foot traffic
             ModelParam::NonGamingRevenueWeight->value     => 0.10,
-            ModelParam::CommercialRealEstateWeight->value => 0.70, // The real engine: extortionate commercial real estate leases
+            // The real engine: extortionate commercial real estate leases
+            ModelParam::CommercialRealEstateWeight->value => 0.70,
         ],
 
         // --- Shearwater Mills (SHER) ---
@@ -768,8 +821,8 @@ class StockModelTuning
             ModelParam::PricingPowerIndex->value        => 0.70,
         ],
 
-        // --- Lyrebird Media (LYRE) ---
-        // Premier advertising and perception management conglomerate. Floods airwaves with corporate crisis retainers & martech data ops.
+        // --- Lyrebird Media (LYRE) --- Premier advertising and perception management conglomerate. Floods airwaves
+        // with corporate crisis retainers & martech data ops.
         'LYRE' => [
             ModelParam::BrandRetainerWeight->value     => 0.50,
             ModelParam::MartechConsultingWeight->value => 0.30,
@@ -785,8 +838,10 @@ class StockModelTuning
         // Elite white-shoe litigation predator, corporate governance retainers & bankruptcy restructuring counsel.
         'CLAW' => [
             ModelParam::CorporateRetainerWeight->value     => 0.40, // Elite M&A and corporate governance retainers
-            ModelParam::LitigationContingencyWeight->value  => 0.35, // High-stakes corporate warfare & predatory settlements
-            ModelParam::RestructuringAdvisoryWeight->value  => 0.25, // Counter-cyclical corporate restructuring & workout fees
+            // High-stakes corporate warfare & predatory settlements
+            ModelParam::LitigationContingencyWeight->value  => 0.35,
+            // Counter-cyclical corporate restructuring & workout fees
+            ModelParam::RestructuringAdvisoryWeight->value  => 0.25,
             ModelParam::PricingPowerIndex->value            => 0.90,
         ],
 
@@ -800,7 +855,8 @@ class StockModelTuning
         // Extreme pricing power, but terrifyingly sensitive to macroeconomic liquidity crises.
         'FALC' => [
             ModelParam::AutoSalesWeight->value        => 0.55, // Predatory mass-market commuter fleet Trojan horse
-            ModelParam::ApexLuxuryWeight->value       => 0.25, // Hyper-exclusive Veblen hypercars (Apex Division cross-subsidy)
+            // Hyper-exclusive Veblen hypercars (Apex Division cross-subsidy)
+            ModelParam::ApexLuxuryWeight->value       => 0.25,
             ModelParam::SoftwareServicesWeight->value => 0.08, // Inescapable telemetry & subscription tolls
             ModelParam::CaptiveFinanceWeight->value   => 0.12, // Captive finance on the fleet it sells
             ModelParam::PricingPowerIndex->value      => 0.65,
@@ -813,28 +869,30 @@ class StockModelTuning
         'EIDR' => [
             ModelParam::AutoSalesWeight->value        => 0.70, // Fortified commercial haulers & municipal fleet sales
             ModelParam::ApexLuxuryWeight->value       => 0.15, // Armored executive wagons & discrete VIP transports
-            ModelParam::SoftwareServicesWeight->value => 0.15, // Certified telematics, collision avoidance & maintenance tolls
+            // Certified telematics, collision avoidance & maintenance tolls
+            ModelParam::SoftwareServicesWeight->value => 0.15,
             ModelParam::CaptiveFinanceWeight->value   => 0.00, // Fleets finance through their own banks
             ModelParam::PricingPowerIndex->value      => 0.75, // Backed by insurance underwriting standards
-            ModelParam::RateSensitivityScalar->value  => 0.85, // Institutional fleet renewals less rate-sensitive than retail auto loans
+            // Institutional fleet renewals less rate-sensitive than retail auto loans
+            ModelParam::RateSensitivityScalar->value  => 0.85,
         ],
 
         // =====================================================================
         // UTILITY & MUNICIPAL INFRASTRUCTURE ARCHETYPES
         // =====================================================================
 
-        // --- Bird Power Inc (BIRD) ---
-        // Integrated electric utility. Heavily regulated rate base transmission & distribution (80%), merchant renewables (20%).
-        // Renewables burn no fuel, so the merchant fleet keeps the whole wholesale price.
+        // --- Bird Power Inc (BIRD) --- Integrated electric utility. Heavily regulated rate base transmission &
+        // distribution (80%), merchant renewables (20%). Renewables burn no fuel, so the merchant fleet keeps the whole
+        // wholesale price.
         'BIRD' => [
             ModelParam::RegulatedBaseWeight->value       => 0.80,
             ModelParam::UnregulatedMerchantWeight->value => 0.20,
             ModelParam::MerchantGasFleetShare->value     => 0.00,
         ],
 
-        // --- Heron Regional Water (WADE) ---
-        // Regulated municipal water & wastewater utility. Pure regulated rate base monopoly (95%); the market-based 5% is
-        // contract operations for municipal and industrial systems, not power sales.
+        // --- Heron Regional Water (WADE) --- Regulated municipal water & wastewater utility. Pure regulated rate base
+        // monopoly (95%); the market-based 5% is contract operations for municipal and industrial systems, not power
+        // sales.
         'WADE' => [
             ModelParam::RegulatedBaseWeight->value       => 0.95,
             ModelParam::UnregulatedMerchantWeight->value => 0.05,

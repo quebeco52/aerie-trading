@@ -98,7 +98,8 @@ class BaseFinancialBusinessModelTest extends TestCase
 
     public function testThePayoutGateTightensOnTheBufferInForce(): void
     {
-        // Leverage at the sector cap: inside it with no buffer, over the first tier once the full buffer lowers the cap.
+        // Leverage at the sector cap: inside it with no buffer, over the first tier once the full buffer lowers the
+        // cap.
         $equityLimit = \App\Data\Company\Sectors::equityLimit(null);
         $stock = $this->createStub(Stock::class);
         $stock->method('getIndustry')->willReturn(null);

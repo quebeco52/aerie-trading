@@ -24,7 +24,10 @@ use App\Service\Math\FinancialConstants;
 final class IndexFundPhase
 {
     // --- Index Reconstitution ---
-    /** Tickers named per side of a reconstitution event before the rest are counted; an event description holds 255 characters. */
+    /**
+     * Tickers named per side of a reconstitution event before the rest are counted; an event description holds 255
+     * characters.
+     */
     public const RECONSTITUTION_TICKERS_SHOWN = 8;
 
     public function __construct(

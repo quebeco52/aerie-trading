@@ -140,7 +140,8 @@ class StockPageBuilder
                 'peers' => $this->peerTable->build($stock),
                 // What a permanent-capital sphere actually owns; null for every firm that owns no stakes.
                 'anchorPortfolio' => $this->anchorPortfolio->build($stock),
-                // The District's own stake in this company, held off the float; zero for every company but its clearinghouse.
+                // The District's own stake in this company, held off the float; zero for every company but its
+                // clearinghouse.
                 'strategicStake' => StrategicHoldings::stake($stock->getTicker()),
                 'corporateBonds' => $corporateBonds,
                 'allAssets' => [],

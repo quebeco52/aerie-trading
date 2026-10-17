@@ -33,15 +33,27 @@ use App\Service\Model\StreamContext;
 class IndependentPowerBusinessModel extends StandardCorporateBusinessModel
 {
     // --- Operating Cyclicality & Demand Structure ---
-    /** Electricity load per unit of output gap: industry and commerce follow activity, households barely (short-run income elasticities of electricity demand mostly run 0.2-0.7). */
+    /**
+     * Electricity load per unit of output gap: industry and commerce follow activity, households barely (short-run
+     * income elasticities of electricity demand mostly run 0.2-0.7).
+     */
     public const OPERATING_CYCLICALITY = 0.50;
-    /** Own-price elasticity of the firm's demand: a generator bidding above the pool price is simply not dispatched, so residual demand is very elastic. Inert while the price is the pool's. */
+    /**
+     * Own-price elasticity of the firm's demand: a generator bidding above the pool price is simply not dispatched, so
+     * residual demand is very elastic. Inert while the price is the pool's.
+     */
     public const PRICE_ELASTICITY_OF_DEMAND = 2.50;
-    /** Share of an idiosyncratic revenue gain taken from same-industry peers: a generator's extra MWh displaces the marginal plant in the pool, most of it the fringe's and imports. */
+    /**
+     * Share of an idiosyncratic revenue gain taken from same-industry peers: a generator's extra MWh displaces the
+     * marginal plant in the pool, most of it the fringe's and imports.
+     */
     public const INDUSTRY_SUBSTITUTABILITY = 0.30;
 
     // --- Input Cost Basket ---
-    /** Shares of the variable cost base by input channel, measured from the BEA input-output accounts; fuel, carbon and purchased power are priced in the physics below. */
+    /**
+     * Shares of the variable cost base by input channel, measured from the BEA input-output accounts; fuel, carbon and
+     * purchased power are priced in the physics below.
+     */
     public const INPUT_COST_EXPOSURES = InputOutputExposures::INDEPENDENT_POWER;
     /** The pool sets the price: none of the firm's own input inflation is recovered in what it charges. */
     public const PRICING_POWER_INDEX = 0.00;
@@ -53,45 +65,77 @@ class IndependentPowerBusinessModel extends StandardCorporateBusinessModel
     public const PRICING_INFLATION_BASIS = 'inflation_ema';
 
     // --- Analyst Visibility & Error ---
-    /** Base coverage visibility of the fleet's own output; the published prices and the disclosed hedge book are read in full beside it. */
+    /**
+     * Base coverage visibility of the fleet's own output; the published prices and the disclosed hedge book are read in
+     * full beside it.
+     */
     public const BASE_COVERAGE_VISIBILITY = 0.70;
     /** Base coverage forecasting error given the swings in the power price. */
     public const BASE_COVERAGE_ERROR = 0.08;
 
     // --- Balance Sheet Realism ---
-    /** Capitalized operating lease liabilities as a fraction of annual revenue: the stations and the sites under them are owned. */
+    /**
+     * Capitalized operating lease liabilities as a fraction of annual revenue: the stations and the sites under them
+     * are owned.
+     */
     public const LEASE_LIABILITY_INTENSITY = 0.03;
-    /** Working capital intensity: a month of receivables, fuel stocks and the collateral posted against the hedge book. */
+    /**
+     * Working capital intensity: a month of receivables, fuel stocks and the collateral posted against the hedge book.
+     */
     public const WORKING_CAPITAL_INTENSITY = 0.10;
-    /** Share of construction in progress completed each quarter: a gas station or a turbine refit takes two to three years from financial close to service. */
+    /**
+     * Share of construction in progress completed each quarter: a gas station or a turbine refit takes two to three
+     * years from financial close to service.
+     */
     public const CAPEX_COMPLETION_RATE = 0.10;
-    /** Quarterly share of the fixed-rate debt that matures and reprices: term loans and high-yield notes of about seven years. */
+    /**
+     * Quarterly share of the fixed-rate debt that matures and reprices: term loans and high-yield notes of about seven
+     * years.
+     */
     public const DEBT_MATURITY_ROLLOVER_RATE = 0.035;
 
     // --- Revenue Mix ---
     /** Default share of revenue from power sold into the wholesale market. */
     public const WHOLESALE_GENERATION_WEIGHT = 0.80;
-    /** Default share of revenue from capacity payments for keeping plant available, about a fifth in a market that pays for capacity. */
+    /**
+     * Default share of revenue from capacity payments for keeping plant available, about a fifth in a market that pays
+     * for capacity.
+     */
     public const CAPACITY_PAYMENT_WEIGHT = 0.20;
 
     // --- Fleet & Load ---
     /** Default share of output from gas-fired plant: the US utility-scale share, 43.1% in 2023 (EIA). */
     public const GAS_FLEET_SHARE = UtilityBusinessModel::MERCHANT_GAS_FLEET_SHARE;
-    /** Share of the system's generation from gas, the plant that follows load: the zero-fuel fleet runs whatever the load, so a load swing reaches gas output divided by this share (US utility-scale, 43.1% in 2023, EIA). */
+    /**
+     * Share of the system's generation from gas, the plant that follows load: the zero-fuel fleet runs whatever the
+     * load, so a load swing reaches gas output divided by this share (US utility-scale, 43.1% in 2023, EIA).
+     */
     public const SYSTEM_GAS_GENERATION_SHARE = UtilityBusinessModel::MERCHANT_GAS_FLEET_SHARE;
 
     // --- Hedge Book ---
-    /** Default share of next year's wholesale output sold forward; merchant generators commonly sell well over half of the coming year. */
+    /**
+     * Default share of next year's wholesale output sold forward; merchant generators commonly sell well over half of
+     * the coming year.
+     */
     public const POWER_HEDGE_RATIO = 0.60;
-    /** Quarterly tranches in the rolling forward ladder: each quarter one tranche is locked for each of the next four quarters. */
+    /**
+     * Quarterly tranches in the rolling forward ladder: each quarter one tranche is locked for each of the next four
+     * quarters.
+     */
     public const HEDGE_LADDER_TRANCHES = 4;
     /** Persisted state key prefix: sum of the power strikes already locked for delivery 0-3 quarters ahead. */
     public const STATE_POWER_STRIKE_SUM_PREFIX = 'state:power_hedge_strike_sum_';
-    /** Persisted state key prefix: sum of the gas strikes already locked for delivery 0-3 quarters ahead, bought with the gas-fired power sold. */
+    /**
+     * Persisted state key prefix: sum of the gas strikes already locked for delivery 0-3 quarters ahead, bought with
+     * the gas-fired power sold.
+     */
     public const STATE_GAS_STRIKE_SUM_PREFIX = 'state:gas_hedge_strike_sum_';
 
     // --- Revenue Shock Physics ---
-    /** Volatility multiplier on the baseline volatility for zero-fuel output: one sigma is about 7.5% of it at 30% volatility, as US hydro generation swings about a tenth from year to year. */
+    /**
+     * Volatility multiplier on the baseline volatility for zero-fuel output: one sigma is about 7.5% of it at 30%
+     * volatility, as US hydro generation swings about a tenth from year to year.
+     */
     public const RESOURCE_VARIANCE_SCALAR = 0.25;
     /** Quarterly persistence of the water and tide resource: dry and wet spells last seasons. */
     public const RESOURCE_PERSISTENCE = 0.50;
@@ -130,9 +174,9 @@ class IndependentPowerBusinessModel extends StandardCorporateBusinessModel
     }
 
     /**
-     * The wholesale price lives in the index the physics reads and carries no inflation of its own, so only the capacity
-     * contracts take the engine's escalator: both multipliers carry it on the capacity share alone, and the physics
-     * hands it back to that stream in full.
+     * The wholesale price lives in the index the physics reads and carries no inflation of its own, so only the
+     * capacity contracts take the engine's escalator: both multipliers carry it on the capacity share alone, and the
+     * physics hands it back to that stream in full.
      */
     public function getMacroPhysics(Stock $stock, MacroStateDTO $macroState): array
     {
@@ -162,7 +206,8 @@ class IndependentPowerBusinessModel extends StandardCorporateBusinessModel
     }
 
     /**
-     * Revenue mix, fleet and hedge ratio for this firm, ticker override first; the two streams are normalised to a whole.
+     * Revenue mix, fleet and hedge ratio for this firm, ticker override first; the two streams are normalised to a
+     * whole.
      *
      * @return array{wholesale: float, capacity: float, gas_fleet: float, hedge_ratio: float}
      */
@@ -249,7 +294,8 @@ class IndependentPowerBusinessModel extends StandardCorporateBusinessModel
         $fuelAtBase = $baseRevenue * $wholesaleWeight * $gasOutput * $fuelShare;
         $fuelChange = $baseRevenue * $wholesaleWeight * $gasOutput * FirmEconomics::gasFiredFuelCostChange($gasPaid, $macroState->carbonPrice);
 
-        // Station crews, maintenance parts and imported spares reach the cost base at spot; the pool recovers none of it.
+        // Station crews, maintenance parts and imported spares reach the cost base at spot; the pool recovers none of
+        // it.
         $inputCostDrag = $this->resolveInputCostDrag($stock, $macroState, $streams, $this->resolvePricingPower($stock), $nonFuelCostRatio);
         $costRatioAtBase = $volumeRevenue > 0.0
             ? (($nonFuelCostRatio * $volumeRevenue) + $fuelAtBase + $fuelChange) / $volumeRevenue + $inputCostDrag + $repairCost
@@ -290,7 +336,10 @@ class IndependentPowerBusinessModel extends StandardCorporateBusinessModel
         );
     }
 
-    /** The gas stations' output against expected: load follows the cycle, and the zero-fuel plant leaves the whole swing to gas. */
+    /**
+     * The gas stations' output against expected: load follows the cycle, and the zero-fuel plant leaves the whole swing
+     * to gas.
+     */
     private function resolveGasDispatchShift(Stock $stock, MacroStateDTO $macroState): float
     {
         return $macroState->outputGapEma * $this->getOperatingCyclicality($stock) / self::SYSTEM_GAS_GENERATION_SHARE;
@@ -327,13 +376,19 @@ class IndependentPowerBusinessModel extends StandardCorporateBusinessModel
             + CommodityLogisticsSubsystem::carbonPowerPriceUplift($macroState->carbonPrice);
     }
 
-    /** Gas's forward relative to its baseline for delivery `$years` ahead, carrying the delivery date's season as the smoothed index will. */
+    /**
+     * Gas's forward relative to its baseline for delivery `$years` ahead, carrying the delivery date's season as the
+     * smoothed index will.
+     */
     private function gasForward(MacroStateDTO $macroState, float $years): float
     {
         return $this->deseasonedGasForward($macroState, $years) * CommodityLogisticsSubsystem::smoothedGasSeason($macroState->totalTime + $years);
     }
 
-    /** Gas's forward out of season: oil's Schwartz forward times the gas-to-oil ratio's, the ratio read before the season goes on. */
+    /**
+     * Gas's forward out of season: oil's Schwartz forward times the gas-to-oil ratio's, the ratio read before the
+     * season goes on.
+     */
     private function deseasonedGasForward(MacroStateDTO $macroState, float $years): float
     {
         $oil = CommodityLogisticsSubsystem::energyForwardPrice(

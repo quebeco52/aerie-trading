@@ -21,7 +21,10 @@ use App\Service\Math\MacroTransmission;
  */
 class MacroState
 {
-    /** Wire key of the market-value trend finance output was read against before market-based finance joined the domestic economy: a payload carrying it predates that. */
+    /**
+     * Wire key of the market-value trend finance output was read against before market-based finance joined the
+     * domestic economy: a payload carrying it predates that.
+     */
     public const RETIRED_FINANCE_MARKET_TREND_KEY = 'finance_market_trend';
 
     public float $totalTime;
@@ -29,7 +32,8 @@ class MacroState
     public float $inflationEma;
     public float $outputGap;
     public float $outputGapEma;
-    // The output gap as it reaches order books 3 to 18 months behind the economy (MacroAggregateSubsystem::demandTransmissionLagField).
+    // The output gap as it reaches order books 3 to 18 months behind the economy
+    // (MacroAggregateSubsystem::demandTransmissionLagField).
     public float $outputGapLag3m;
     public float $outputGapLag6m;
     public float $outputGapLag9m;
@@ -133,7 +137,8 @@ class MacroState
 
     public float $tipsBreakeven;
     public float $tipsBreakevenEma;
-    // The breakeven the market quotes, expected inflation less the TIPS liquidity premium; pages read it, the economy does not.
+    // The breakeven the market quotes, expected inflation less the TIPS liquidity premium; pages read it, the economy
+    // does not.
     public float $tipsBreakevenQuoted;
     public float $tipsBreakevenQuotedEma;
     public float $energyCostPushLag;
@@ -243,7 +248,10 @@ class MacroState
     public float $marketJumpMultiplier;
     /** @var array<string, float> Per-macro-sector shock, keyed by Sectors::MACRO_SECTORS. */
     public array $sectorZ;
-    /** @var array<string, float> Persistent per-macro-sector demand factor (OU process, unit variance), keyed by Sectors::MACRO_SECTORS. */
+    /**
+     * @var array<string, float> Persistent per-macro-sector demand factor (OU process, unit variance), keyed by
+     *                           Sectors::MACRO_SECTORS.
+     */
     public array $sectorDemandZ;
     public float $financialConditionsIndex;
     public float $financialConditionsIndexEma;
@@ -271,9 +279,11 @@ class MacroState
     public float $tfpPotentialAbsorbed;
     public float $productivitySupplyGap;
     // Open economy: net exports away from the structural trade balance (a share of GDP, a level part of the gap), the
-    // real exchange rate gap as trade volumes have absorbed it, and the log import price level relative to domestic prices.
+    // real exchange rate gap as trade volumes have absorbed it, and the log import price level relative to domestic
+    // prices.
     public float $netExportGap;
-    // Domestic demand's part of the gap, smoothed like the gap: what the inventory cycle's sales surprise is read against.
+    // Domestic demand's part of the gap, smoothed like the gap: what the inventory cycle's sales surprise is read
+    // against.
     public float $domesticDemandGapEma;
     // The banks' credit-driven output (a share of GDP, a level part of the gap): loan balances against their trend.
     public float $financeOutputGap;
@@ -282,7 +292,8 @@ class MacroState
     public float $realExchangeRateTradeLag;
     // The mainland gap as civilian export volumes have adjusted to it (partial adjustment, Senhadji & Montenegro 1999).
     public float $mainlandDemandExportLag;
-    // The log allied defence shift the District's arms exports have delivered, orders reaching exports through the backlog.
+    // The log allied defence shift the District's arms exports have delivered, orders reaching exports through the
+    // backlog.
     public float $alliedDefenseDeliveryLag;
     public float $importPriceLevel;
     // The import-price part of core goods inflation's sticky path; the rest is the goods the District makes.
@@ -303,7 +314,8 @@ class MacroState
     public float $inventoryStockGapEma;
 
     public float $demandShock;
-    // The parts of demandShock the Kou disasters and their compensator put there, reverting with it; demandShock stays the total.
+    // The parts of demandShock the Kou disasters and their compensator put there, reverting with it; demandShock stays
+    // the total.
     public float $demandDisasterShock;
     public float $demandDisasterCompensation;
 
@@ -376,7 +388,8 @@ class MacroState
     public float $creditToGdpGap;
     public float $creditToGdpGapEma;
     public float $countercyclicalBufferRate;
-    // The credit cycle's crisis channel: this year's hazard, the deleveraging drag a crisis leaves on demand, and when the last one struck.
+    // The credit cycle's crisis channel: this year's hazard, the deleveraging drag a crisis leaves on demand, and when
+    // the last one struck.
     public float $creditCrisisHazard;
     public float $creditCrisisDrag;
     public float $lastCreditCrisisAt;
@@ -436,9 +449,9 @@ class MacroState
 
     // The levers the government has in force (App\DTO\GovernmentPolicyDTO): the corporate rate's shift from the neutral
     // 21%, the average tariff on imports and the net export response building toward it, labour force growth with the
-    // immigration regime in it and the population that regime has added against the structural path (log), where
-    // merger review stands between the 2023 guidelines (0) and the 2010 guidelines (1), how far the green belt and the
-    // rules on extraction stand between the founding regime (0) and the strictest (1), the carbon price ($/t CO2), and the
+    // immigration regime in it and the population that regime has added against the structural path (log), where merger
+    // review stands between the 2023 guidelines (0) and the 2010 guidelines (1), how far the green belt and the rules
+    // on extraction stand between the founding regime (0) and the strictest (1), the carbon price ($/t CO2), and the
     // stamp duty on each side of a share trade, and the bank levy on short-term funding; purchases as a share of GDP.
     public float $publicSpendingShare;
     public float $corporateTaxPolicyShift;
@@ -460,14 +473,15 @@ class MacroState
     public float $dividendTaxRate;
     public float $debtTarget;
     public float $debtPace;
-    // The debt anchor the budget in force plans against, phased down toward a lower legislated one; below zero before any plan has run.
-    // The Monetary Authority's rate committee: its supermajority, and whether politics hands one over at all.
+    // The debt anchor the budget in force plans against, phased down toward a lower legislated one; below zero before
+    // any plan has run. The Monetary Authority's rate committee: its supermajority, and whether politics hands one over
+    // at all.
     public float $authorityMajority;
     public float $authorityCommitteeSeated;
     // The long-run inflation the public has learned from what inflation did, over the Authority's target.
     public float $inflationEndpointGap;
-    // The laws as the tax rate and the trailing year's earnings carry them, and the laws the sitting government's coming
-    // budget and the next government's first will pass, by lever, this tick and the tick before.
+    // The laws as the tax rate and the trailing year's earnings carry them, and the laws the sitting government's
+    // coming budget and the next government's first will pass, by lever, this tick and the tick before.
     public float $corporateTaxShiftRealized;
     public float $corporateTaxShiftEmbodied;
     public float $bankLevyEmbodied;
@@ -488,8 +502,8 @@ class MacroState
     /** @var array<string, float> */
     public array $previousExpectedLevers;
     public float $previousExpectedPolicyFrom;
-    // The CET1 requirement the Financial Regulator has in force on the District's banks, the capital built toward it and
-    // the buffer, and the two together as the last tick required them.
+    // The CET1 requirement the Financial Regulator has in force on the District's banks, the capital built toward it
+    // and the buffer, and the two together as the last tick required them.
     public float $bankCapitalRequirement;
     public float $bankCapitalBuilt;
     public float $bankCapitalRequiredLast;
@@ -506,8 +520,9 @@ class MacroState
     public float $electricityCarbonPriceLevel;
 
     // Sovereign reserve fund (App\Service\Macro\Subsystem\SovereignFundSubsystem). The three sleeves: a slice of the
-    // board in currency, and foreign equities and foreign paper in FOREIGN units (home value is units / exchangeRateIndex).
-    // Zero until the fund incepts on the first tick that carries a board; a run with no market never has one.
+    // board in currency, and foreign equities and foreign paper in FOREIGN units (home value is units /
+    // exchangeRateIndex). Zero until the fund incepts on the first tick that carries a board; a run with no market
+    // never has one.
     public float $sovereignFundDomesticEquity;
     public float $sovereignFundForeignEquity;
     public float $sovereignFundForeignBonds;
@@ -535,9 +550,9 @@ class MacroState
     public float $sovereignFundDrawToGdp;
     // Fund-financed stabilisation spending above the rule draw, over GDP (negative: saved into the fund), set at the
     // budget rounds and answered by demand at that rate; and the budget year's opening level and last year's change,
-    // which the rule steps from.
-    // The budget's long-run average of the output gap, the level its cycle is measured from.
-    // The District's stamp duty on share trading, paid into the fund: this budget year so far, and last year's over GDP.
+    // which the rule steps from. The budget's long-run average of the output gap, the level its cycle is measured from.
+    // The District's stamp duty on share trading, paid into the fund: this budget year so far, and last year's over
+    // GDP.
     public float $sovereignFundStampDutyYearToDate;
     public float $sovereignFundStampDutyToGdp;
     // The paper sleeve over GDP, the fund's holding of debt instruments that net debt deducts.
@@ -555,7 +570,8 @@ class MacroState
     public float $foreignEquityRiskPremium;
     public float $foreignEquityValuation;
     public float $foreignEquityValuationChange;
-    // Yield on the foreign sovereign index the paper sleeve holds, at its duration, at the last close. Zero until priced.
+    // Yield on the foreign sovereign index the paper sleeve holds, at its duration, at the last close. Zero until
+    // priced.
     public float $foreignBondYield;
 
     // The board as the ticker measured it on the PREVIOUS tick, like equityMarketCap: its float-adjusted
@@ -566,11 +582,12 @@ class MacroState
     public float $boardDividendCash;
     public float $boardNetIssuance;
     public float $boardStampDuty;
-    // The bank levy the board's banks owe a year at the rate in force, in currency; kept until the board is priced again.
+    // The bank levy the board's banks owe a year at the rate in force, in currency; kept until the board is priced
+    // again.
     public float $boardBankLevy;
-    // What the board's deposit-taking banks have lent at home, in currency; kept until the board is priced again.
-    // Cash the District's strategic stakes (App\Data\Company\StrategicHoldings) paid it on the previous tick, a flow like the
-    // board's: dividends, plus its share of buybacks less its share of issues. Held outside the fund, paid into it.
+    // What the board's deposit-taking banks have lent at home, in currency; kept until the board is priced again. Cash
+    // the District's strategic stakes (App\Data\Company\StrategicHoldings) paid it on the previous tick, a flow like
+    // the board's: dividends, plus its share of buybacks less its share of issues. Held outside the fund, paid into it.
     public float $strategicStakeCash;
     // Currency the budget paid into the fund on the last tick: the surplus below the sovereign debt floor, with no debt
     // left to retire. Set by the fiscal accounts after the fund's update, so the fund takes it in on the next tick.
@@ -707,9 +724,9 @@ class MacroState
             $state->exchangeRateDeviation = $state->exchangeRateIndex / AssetMarketSubsystem::exchangeRateFundamental($state);
         }
 
-        // The open-economy levels a payload predating them omits open where the currency and the mainland already stand,
-        // so their arrival reprices nothing: import prices have absorbed the currency, trade volumes too, and the net
-        // export level is already part of the gap the payload carries.
+        // The open-economy levels a payload predating them omits open where the currency and the mainland already
+        // stand, so their arrival reprices nothing: import prices have absorbed the currency, trade volumes too, and
+        // the net export level is already part of the gap the payload carries.
         if (!isset($carried['importPriceLevel'])) {
             $state->importPriceLevel = MacroAggregateSubsystem::importPriceLevelTarget($state->exchangeRateIndexEma, $state->importTariffRate);
         }
@@ -725,10 +742,10 @@ class MacroState
         if (!isset($carried['netExportGap'])) {
             $state->netExportGap = MacroAggregateSubsystem::netExportGapAt($state->mainlandDemandExportLag, $state->realExchangeRateTradeLag, $state->alliedDefenseDeliveryLag, $state->tariffTradeLag);
         }
-        // Finance output opens on the credit balances and deal flow as they stand. A state that still carries the retired market-value
-        // trend (finance_market_trend) valued fund managers' output at the market: its finance level is rebuilt on credit
-        // alone and domestic demand, smoothed reading included, keeps the part of the carried gap the market leg held, so
-        // the upgrade moves no GDP.
+        // Finance output opens on the credit balances and deal flow as they stand. A state that still carries the
+        // retired market-value trend (finance_market_trend) valued fund managers' output at the market: its finance
+        // level is rebuilt on credit alone and domestic demand, smoothed reading included, keeps the part of the
+        // carried gap the market leg held, so the upgrade moves no GDP.
         if (!isset($carried['financeOutputGap']) || isset($data[self::RETIRED_FINANCE_MARKET_TREND_KEY])) {
             $carriedFinance = $state->financeOutputGap;
             $state->financeOutputGap = MacroAggregateSubsystem::financeOutputGapAt(
@@ -739,8 +756,9 @@ class MacroState
                 $state->domesticDemandGapEma += MacroAggregateSubsystem::domesticDemandGapAt(0.0, 0.0, 0.0, $state->financeOutputGap - $carriedFinance);
             }
         }
-        // The capital built counted the requirement alone in a payload predating the last tick's requirement; the buffer
-        // in force was held all the same, so the upgrade finds no shortfall and no rise the banks have not already met.
+        // The capital built counted the requirement alone in a payload predating the last tick's requirement; the
+        // buffer in force was held all the same, so the upgrade finds no shortfall and no rise the banks have not
+        // already met.
         if (!isset($carried['bankCapitalRequiredLast'])) {
             $state->bankCapitalBuilt += $state->countercyclicalBufferRate;
             $state->bankCapitalRequiredLast = $state->bankCapitalRequirement + $state->countercyclicalBufferRate;

@@ -101,9 +101,10 @@ final class Distributions
     }
 
     /**
-     * Years until someone aged $age leaves under a Gompertz-Makeham hazard, background + level * exp(slope * age) a year
-     * (Makeham 1860), drawn by inverse transform: the wait whose cumulative hazard equals -ln(uniform). The cumulative
-     * hazard is convex in the wait, so Newton's method from its first-order bound falls onto the root from above.
+     * Years until someone aged $age leaves under a Gompertz-Makeham hazard, background + level * exp(slope * age) a
+     * year (Makeham 1860), drawn by inverse transform: the wait whose cumulative hazard equals -ln(uniform). The
+     * cumulative hazard is convex in the wait, so Newton's method from its first-order bound falls onto the root from
+     * above.
      *
      * @param float $uniform    A uniform draw on (0, 1).
      * @param float $age        Age now, in years.
@@ -146,7 +147,9 @@ final class Distributions
         return self::standardNormalQuantile($p);
     }
 
-    /** Standard normal quantile (Acklam's rational approximation), static so model code reads it without the sampler. */
+    /**
+     * Standard normal quantile (Acklam's rational approximation), static so model code reads it without the sampler.
+     */
     public static function standardNormalQuantile(float $p): float
     {
         $p = max(1e-12, min(1.0 - 1e-12, $p));

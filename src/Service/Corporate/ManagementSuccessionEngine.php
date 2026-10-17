@@ -44,7 +44,10 @@ class ManagementSuccessionEngine
     // --- Departure Hazards (annual) ---
     /** Baseline annual departure rate (~6%): retirement, health and outside offers, independent of performance. */
     public const BASE_DEPARTURE_HAZARD = 0.06;
-    /** Probit intercept: Phi(-1.85) is a ~3.2% annual forced-turnover rate for a firm earning exactly its cost of capital. */
+    /**
+     * Probit intercept: Phi(-1.85) is a ~3.2% annual forced-turnover rate for a firm earning exactly its cost of
+     * capital.
+     */
     public const FORCED_TURNOVER_INTERCEPT = -1.85;
     /** Probit loading on the EVA spread. At -800bps of economic profit the forced hazard reaches ~15% a year. */
     public const FORCED_TURNOVER_EVA_LOADING = 10.0;

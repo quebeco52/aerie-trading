@@ -147,7 +147,8 @@ final class InputOutputExposuresTest extends TestCase
 
     public function testRetailPassThroughIsWhatBusinessesActuallyPay(): void
     {
-        // Industrial tariffs barely follow wholesale power (cost-of-service rates, contracts); delivered gas mostly does.
+        // Industrial tariffs barely follow wholesale power (cost-of-service rates, contracts); delivered gas mostly
+        // does.
         $this->assertLessThan(0.25, InputOutputExposures::RETAIL_POWER_PASS_THROUGH);
         $this->assertGreaterThan(0.5, InputOutputExposures::RETAIL_GAS_PASS_THROUGH);
         $this->assertLessThan(1.0, InputOutputExposures::RETAIL_GAS_PASS_THROUGH);

@@ -36,27 +36,45 @@ use App\Service\Model\StreamContext;
 class ResortsCasinosBusinessModel extends StandardCorporateBusinessModel
 {
     // --- Operating Cyclicality & Demand Structure ---
-    /** Elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). Ultra-discretionary leisure spending. */
+    /**
+     * Elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). Ultra-discretionary
+     * leisure spending.
+     */
     public const OPERATING_CYCLICALITY = 1.50;
     /** Own-price elasticity of demand: volume lost per unit of real price increase. */
     public const PRICE_ELASTICITY_OF_DEMAND = 0.90;
     /** Share of an idiosyncratic revenue gain taken from same-industry peers rather than won from a larger market. */
     public const INDUSTRY_SUBSTITUTABILITY = 0.60;
-    /** Rooms, food and beverage, entertainment and shop rents are services: selling prices track supercore, not goods breakevens. */
+    /**
+     * Rooms, food and beverage, entertainment and shop rents are services: selling prices track supercore, not goods
+     * breakevens.
+     */
     public const PRICING_INFLATION_BASIS = 'supercore_inflation_ema';
 
     // --- Input Cost Basket ---
-    /** Shares of the variable cost base by input channel, measured from the BEA input-output accounts with supply-chain content (labor still the model's own). */
+    /**
+     * Shares of the variable cost base by input channel, measured from the BEA input-output accounts with supply-chain
+     * content (labor still the model's own).
+     */
     public const INPUT_COST_EXPOSURES = InputOutputExposures::RESORTS_CASINOS;
 
     // --- FX Exposure ---
-    /** Share of revenue whose competitiveness moves with the trade-weighted exchange rate. Inbound tourism is priced in the visitor's currency: a strong home currency prices the destination out. */
+    /**
+     * Share of revenue whose competitiveness moves with the trade-weighted exchange rate. Inbound tourism is priced in
+     * the visitor's currency: a strong home currency prices the destination out.
+     */
     public const FX_REVENUE_EXPOSURE = 0.15;
-    /** Yield-managed room and table pricing captures a boom, but the whole spend is discretionary and travel substitutes readily. */
+    /**
+     * Yield-managed room and table pricing captures a boom, but the whole spend is discretionary and travel substitutes
+     * readily.
+     */
     public const PRICING_POWER_INDEX = 0.55;
 
     // --- Balance Sheet Realism ---
-    /** Capitalized operating lease liabilities as a fraction of annual revenue (IFRS 16 / ASC 842). Ground leases and OpCo/PropCo structures. */
+    /**
+     * Capitalized operating lease liabilities as a fraction of annual revenue (IFRS 16 / ASC 842). Ground leases and
+     * OpCo/PropCo structures.
+     */
     public const LEASE_LIABILITY_INTENSITY = 0.25;
 
     // --- Analyst Visibility & Error ---
@@ -92,29 +110,46 @@ class ResortsCasinosBusinessModel extends StandardCorporateBusinessModel
     public const NON_GAMING_COST_INTENSITY = 2.0;
 
     // --- Hold Luck ---
-    /** Share of gaming win from high-limit baccarat, the only play whose hold varies by luck (Las Vegas Strip ~20%, UNLV Center for Gaming Research). */
+    /**
+     * Share of gaming win from high-limit baccarat, the only play whose hold varies by luck (Las Vegas Strip ~20%, UNLV
+     * Center for Gaming Research).
+     */
     public const HIGH_LIMIT_SHARE_OF_GAMING = 0.20;
-    /** Quarterly s.d. of high-limit win from hold luck: Macau rolling-chip win runs 2.5-3.5% around a 2.85% theoretical, read as +/-2 s.d. */
+    /**
+     * Quarterly s.d. of high-limit win from hold luck: Macau rolling-chip win runs 2.5-3.5% around a 2.85% theoretical,
+     * read as +/-2 s.d.
+     */
     public const HIGH_LIMIT_HOLD_VOLATILITY = 0.088;
 
     // --- Regulatory Regimes (Markov switching) ---
-    /** Annual arrival intensity of a crackdown on high-limit play (junket bans, licence conditions): about one in eighteen years. */
+    /**
+     * Annual arrival intensity of a crackdown on high-limit play (junket bans, licence conditions): about one in
+     * eighteen years.
+     */
     public const GAMING_CRACKDOWN_INTENSITY = 0.056;
     /** Share of gaming revenue lost while a crackdown regime lasts. */
     public const GAMING_REGULATION_HAIRCUT = 0.25;
-    /** Mean years a crackdown regime lasts (Macau GGR 2013 MOP 360bn, back to 303bn by 2018 after the 2014 campaign). */
+    /**
+     * Mean years a crackdown regime lasts (Macau GGR 2013 MOP 360bn, back to 303bn by 2018 after the 2014 campaign).
+     */
     public const GAMING_CRACKDOWN_MEAN_YEARS = 3.0;
     /** Regime key for an active crackdown. */
     public const CRACKDOWN_REGIME = 'gaming_crackdown';
 
     // --- Resort Landlord (CRE) ---
-    /** Percentage rent on tenants' gross receipts as a share of rent (Simon Property Group 2018: overage $162m on minimum rent $3,489m). */
+    /**
+     * Percentage rent on tenants' gross receipts as a share of rent (Simon Property Group 2018: overage $162m on
+     * minimum rent $3,489m).
+     */
     public const OVERAGE_RENT_SHARE = 0.044;
     /** Weighted average lease term of the shop and restaurant roll, as the REIT model's. */
     public const CRE_LEASE_WALT_YEARS = ReitBusinessModel::LEASE_WALT_YEARS;
     /** Bound on the gap between in-place and market rents, as the REIT model's. */
     public const CRE_MAX_RELEASING_SPREAD = ReitBusinessModel::MAX_RELEASING_SPREAD;
-    /** Rent lost per unit of the retail default rate over its measured trend, relative, both ways, as the REIT model's retail tenant channel. */
+    /**
+     * Rent lost per unit of the retail default rate over its measured trend, relative, both ways, as the REIT model's
+     * retail tenant channel.
+     */
     public const RETAIL_TENANT_DEFAULT_RENT_LOSS = ReitBusinessModel::RETAIL_DEFAULT_VACANCY_SCALAR;
     /** Volatility dampener applied to commercial real estate leases due to long-term lockups. */
     public const CRE_VOLATILITY_SCALAR = 0.20;
@@ -134,7 +169,10 @@ class ResortsCasinosBusinessModel extends StandardCorporateBusinessModel
     public const CAPEX_COMPLETION_RATE = 0.15;
     /** Capex response to the cycle: resort expansions are deferred in slumps and launched in booms. */
     public const CAPEX_CYCLICALITY = 2.50;
-    /** Calendar-quarter seasonality of a coastal resort: Atlantic City land-based casino win 2015 (NJ DGE) by quarter over its mean. */
+    /**
+     * Calendar-quarter seasonality of a coastal resort: Atlantic City land-based casino win 2015 (NJ DGE) by quarter
+     * over its mean.
+     */
     public const SEASONALITY_FACTORS = [0.90, 0.99, 1.18, 0.93];
 
     public function getReversionSpeed(): float
@@ -160,7 +198,10 @@ class ResortsCasinosBusinessModel extends StandardCorporateBusinessModel
     }
 
     // --- Secular Demand ---
-    /** Amusements, gambling and recreation plus accommodation value added as a share of US nominal GDP in 1997 (BEA GDP by Industry, value added). */
+    /**
+     * Amusements, gambling and recreation plus accommodation value added as a share of US nominal GDP in 1997 (BEA GDP
+     * by Industry, value added).
+     */
     public const SECULAR_SHARE_1997 = 0.0132;
     /** The same share in 2019. */
     public const SECULAR_SHARE_2019 = 0.0135;
@@ -179,7 +220,8 @@ class ResortsCasinosBusinessModel extends StandardCorporateBusinessModel
 
     /**
      * The root shift is the revenue-weighted shift of every stream as the quarter opens: what analysts can see in
-     * visitor demand, a crackdown in force and the rent roll. Each stream takes its own back in calculateSectorPhysics().
+     * visitor demand, a crackdown in force and the rent roll. Each stream takes its own back in
+     * calculateSectorPhysics().
      */
     public function getMacroPhysics(Stock $stock, MacroStateDTO $macroState): array
     {

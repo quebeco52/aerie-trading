@@ -19,17 +19,23 @@ use App\Data\Macro\OutputGapChannels;
 final class MacroHistoryPresenter
 {
     // --- Row Hygiene ---
-    /** Columns that are not observables: the probes' nested accounts and the run identity (Admin\MacroController serves the accounts). */
+    /**
+     * Columns that are not observables: the probes' nested accounts and the run identity (Admin\MacroController serves
+     * the accounts).
+     */
     private const INTERNAL_COLUMNS = ['gap_channels', 'quarter_diagnostics', 'config_fingerprint', 'ticks_per_year'];
 
     // --- Quarter Dating ---
-    /** Half a quarter, in years: a row is written as its quarter closes, so it is dated half a quarter back to land inside the quarter it describes. */
+    /**
+     * Half a quarter, in years: a row is written as its quarter closes, so it is dated half a quarter back to land
+     * inside the quarter it describes.
+     */
     public const HALF_QUARTER_YEARS = 0.125;
 
     // --- Output Gap Groups ---
     /**
-     * Family key (App\Data\Macro\OutputGapChannels, whose test keeps the channels current) => the label the page prints, in
-     * the families' palette order, then 'other' for what the drift does not explain.
+     * Family key (App\Data\Macro\OutputGapChannels, whose test keeps the channels current) => the label the page
+     * prints, in the families' palette order, then 'other' for what the drift does not explain.
      */
     public const GAP_GROUP_LABELS = [
         'monetary' => 'Interest rates',

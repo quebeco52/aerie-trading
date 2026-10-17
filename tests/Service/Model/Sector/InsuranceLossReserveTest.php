@@ -223,7 +223,9 @@ final class InsuranceLossReserveTest extends TestCase
         $this->assertCount(1, $state['events']);
     }
 
-    /** The reinsurer's reserves sit on its treaty book alone; a retail carrier's split between its P&C and life books. */
+    /**
+     * The reinsurer's reserves sit on its treaty book alone; a retail carrier's split between its P&C and life books.
+     */
     public function testReserveRatiosFollowTheBooksThatCarryReserves(): void
     {
         $stock = $this->carrier(0.0, 0.0);
@@ -316,7 +318,8 @@ final class InsuranceLossReserveTest extends TestCase
                 $adjusting = $fixedCosts * InsuranceBusinessModel::FIXED_COST_LAE_SHARE;
                 $variableExpenses = $result->kpis['expense_ratio'] * $premium - ($fixedCosts - $adjusting);
                 $incurred = $momentum[InsuranceBusinessModel::STATE_INCURRED_CLAIMS];
-                // The retail cover is sized on the P&C book's target weight, which the realized stream share only approximates.
+                // The retail cover is sized on the P&C book's target weight, which the realized stream share only
+                // approximates.
                 $tolerance = $model instanceof RetailInsuranceBusinessModel && $reinstatement > 0.0 ? $premium * 1e-3 : $premium * 1e-9;
 
                 $this->assertEqualsWithDelta($result->kpis['loss_ratio'] * $premium - $reinstatement, $incurred, $tolerance, $label);

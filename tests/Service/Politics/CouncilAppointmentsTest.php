@@ -39,10 +39,9 @@ class CouncilAppointmentsTest extends TestCase
     }
 
     /**
-     * Candidates come in the FOMC's mix on money, 51 hawks, 31 swing votes and 39 doves in 121; uniformly across the range
-     * on the banks; at the Board's ages at appointment (a normal around 52.56, sd 7.32), cut at
-     * the charter's window of 40 to 60; a swing vote leaning to either camp alike; and the same vacancy always draws the
-     * same people.
+     * Candidates come in the FOMC's mix on money, 51 hawks, 31 swing votes and 39 doves in 121; uniformly across the
+     * range on the banks; at the Board's ages at appointment (a normal around 52.56, sd 7.32), cut at the charter's
+     * window of 40 to 60; a swing vote leaning to either camp alike; and the same vacancy always draws the same people.
      */
     public function testCandidatesAreDrawnFromTheRecord(): void
     {
@@ -90,9 +89,10 @@ class CouncilAppointmentsTest extends TestCase
     }
 
     /**
-     * From three candidates the appointer names the one nearest their stances on the questions they weigh, the first drawn
-     * of any tied; a dovish appointer weighing money alone names someone leaning dovish whenever the shortlist holds one,
-     * a dove or a swing vote leaning their way, and a dove (39 of the 54.5 leaning dovish in 121) 60% of the time.
+     * From three candidates the appointer names the one nearest their stances on the questions they weigh, the first
+     * drawn of any tied; a dovish appointer weighing money alone names someone leaning dovish whenever the shortlist
+     * holds one, a dove or a swing vote leaning their way, and a dove (39 of the 54.5 leaning dovish in 121) 60% of the
+     * time.
      */
     public function testTheAppointerNamesTheNearestCandidate(): void
     {
@@ -137,9 +137,9 @@ class CouncilAppointmentsTest extends TestCase
     }
 
     /**
-     * At Year 1 every councillor was seated before it, under their own name, with a stance on money and one on the banks;
-     * a vacant seat later goes to the candidate nearest the sitting twelve's medians on both, from the shortlist the
-     * Council Appointment Board puts forward, and the two passed over are kept.
+     * At Year 1 every councillor was seated before it, under their own name, with a stance on money and one on the
+     * banks; a vacant seat later goes to the candidate nearest the sitting twelve's medians on both, from the shortlist
+     * the Council Appointment Board puts forward, and the two passed over are kept.
      */
     public function testAVacantCouncilSeatGoesToTheCandidateNearestTheSittingMedians(): void
     {
@@ -223,8 +223,9 @@ class CouncilAppointmentsTest extends TestCase
     }
 
     /**
-     * A Council seated on an earlier term length keeps every councillor when the charter's term changes: their seats are
-     * dated on the new schedule, no seat is filled for it, and the seats then fall vacant on the new term's calendar.
+     * A Council seated on an earlier term length keeps every councillor when the charter's term changes: their seats
+     * are dated on the new schedule, no seat is filled for it, and the seats then fall vacant on the new term's
+     * calendar.
      */
     public function testATermChangeKeepsTheSittingCouncillors(): void
     {
@@ -332,7 +333,9 @@ class CouncilAppointmentsTest extends TestCase
         $this->assertSame($histories[0], $histories[1]);
     }
 
-    /** A Council read from a payload that predates mid-term vacancies keeps its councillors and gains their departures. */
+    /**
+     * A Council read from a payload that predates mid-term vacancies keeps its councillors and gains their departures.
+     */
     public function testCouncillorsSeatedBeforeVacanciesGainADeparture(): void
     {
         $state = self::runTo(self::opened(3), 20.0);

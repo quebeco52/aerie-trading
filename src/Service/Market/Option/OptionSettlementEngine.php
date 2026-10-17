@@ -45,11 +45,18 @@ final class OptionSettlementEngine
     /** Contracts stamped per statement. A shared monthly grid retires the whole market's front month at once. */
     public const EXPIRY_ROWS_PER_STATEMENT = 250;
 
-    /** What an expired contract's greeks are worth, ordered as the expiry statement sets them: delta, gamma, vega, theta. */
+    /**
+     * What an expired contract's greeks are worth, ordered as the expiry statement sets them: delta, gamma, vega,
+     * theta.
+     */
     private const EXPIRY_GREEKS = ['0.00000000', '0.000000000000', '0.00000000', '0.00000000'];
 
     // --- Option Exercise & Settlement ---
-    /** Intrinsic value per share at which a contract is exercised by exception at expiry. The clearing house exercises anything in the money by a tick unless the holder says otherwise, so a contract a cent in the money is delivered, not abandoned. */
+    /**
+     * Intrinsic value per share at which a contract is exercised by exception at expiry. The clearing house exercises
+     * anything in the money by a tick unless the holder says otherwise, so a contract a cent in the money is delivered,
+     * not abandoned.
+     */
     public const OPTION_EXERCISE_THRESHOLD = 0.01;
 
     /** @var array<string, true> Accounts and holdings read fresh this pass (readFresh()). */

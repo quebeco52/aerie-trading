@@ -110,7 +110,8 @@ class BiotechPipelineBuilderTest extends TestCase
         $this->assertSame(0.71, $pipeline['protectedShare']);
         $this->assertEqualsWithDelta(0.08, $pipeline['franchiseChange'], 1e-12);
         $this->assertSame(0.92, $pipeline['rndReplacement']);
-        // The new approval and the one at 40% of plateau are both below peak adoption; expired cohorts are not launches.
+        // The new approval and the one at 40% of plateau are both below peak adoption; expired cohorts are not
+        // launches.
         $this->assertSame(2, $pipeline['ramping']);
     }
 

@@ -189,7 +189,10 @@ class TimeSeriesTest extends TestCase
         $this->assertEqualsWithDelta(0.12, TimeSeries::persistentEquivalentReturn(0.30, 0.12, 0.0), 1e-15);
     }
 
-    /** A level EMA forgets per unit of time: four quarters at a time leave what one year does, and a first reading starts it. */
+    /**
+     * A level EMA forgets per unit of time: four quarters at a time leave what one year does, and a first reading
+     * starts it.
+     */
     public function testALevelAverageForgetsAtTheSameRateAtAnyStep(): void
     {
         $quarterly = 0.08;
@@ -202,7 +205,10 @@ class TimeSeriesTest extends TestCase
         $this->assertSame(0.20, TimeSeries::ewmaLevel(null, 0.20, 0.25, 5.0));
     }
 
-    /** Harvey & Jaeger (1993): the one-sided HP trend as a Kalman recursion splits each surprise between level and slope by the gains. */
+    /**
+     * Harvey & Jaeger (1993): the one-sided HP trend as a Kalman recursion splits each surprise between level and slope
+     * by the gains.
+     */
     public function testOneSidedHpStepSplitsTheSurpriseByItsGains(): void
     {
         $step = TimeSeries::calculateOneSidedHpStep(1.0, 0.01, 1.11, 0.05, 0.002);
@@ -226,7 +232,9 @@ class TimeSeriesTest extends TestCase
         }
     }
 
-    /** The memory is a span of simulated time: after one tau of quiet the estimate has decayed by e at any tick rate. */
+    /**
+     * The memory is a span of simulated time: after one tau of quiet the estimate has decayed by e at any tick rate.
+     */
     public function testEwmaAnnualizedVarianceMemoryIsInYears(): void
     {
         foreach ([1.0 / 252.0, 1.0 / 14400.0] as $dt) {

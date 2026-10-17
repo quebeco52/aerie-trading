@@ -112,7 +112,10 @@ class ResortsCasinosBusinessModelTest extends TestCase
         return $stock;
     }
 
-    /** The firm's cycle shift before confidence and the foreign bloc: lagged gap x (0.5 + pricing power) x cyclicality + FX. */
+    /**
+     * The firm's cycle shift before confidence and the foreign bloc: lagged gap x (0.5 + pricing power) x cyclicality +
+     * FX.
+     */
     private function cycleShift(ResortsCasinosBusinessModel $model, Stock $stock, MacroStateDTO $macro): float
     {
         return (float) (new \ReflectionMethod(StandardCorporateBusinessModel::class, 'resolveCycleDemandShift'))->invoke($model, $stock, $macro);
@@ -167,7 +170,8 @@ class ResortsCasinosBusinessModelTest extends TestCase
         $visitor = $this->cycleShift($model, $this->stock('GULL'), $macro);
         $root = $visitor * $this->gullVisitorShare();
 
-        // In-place rents opened at trend last quarter; all draws zero. Expected revenue holds the root shift, as the engine builds it.
+        // In-place rents opened at trend last quarter; all draws zero. Expected revenue holds the root shift, as the
+        // engine builds it.
         $result = $model->computeActualFinancials($this->stock('GULL', ['state:in_place_rent' => 0.0]), 10_000.0 * (1.0 + $root), 0.33, 2000.0, 0.15, $macro, $this->createMathUtilityMock([0.0, 0.0, 0.0, 0.0, 0.0]));
         $w = $result->streamZ;
 
@@ -275,10 +279,10 @@ class ResortsCasinosBusinessModelTest extends TestCase
     {
         $model = new ResortsCasinosBusinessModel();
 
-        // The real wage runs 10% over its productivity path. Payroll is the resort's material tracked input (BEA puts its
-        // fuel and food content under the materiality floor). The basket buys at spot, so the full move lands in the cost
-        // base this quarter; room and menu pricing recovers pricingPower x MAX_INPUT_COST_PASS_THROUGH of it with the
-        // pass-through lag.
+        // The real wage runs 10% over its productivity path. Payroll is the resort's material tracked input (BEA puts
+        // its fuel and food content under the materiality floor). The basket buys at spot, so the full move lands in
+        // the cost base this quarter; room and menu pricing recovers pricingPower x MAX_INPUT_COST_PASS_THROUGH of it
+        // with the pass-through lag.
         $wageDeviation = 0.10 * ResortsCasinosBusinessModel::INPUT_COST_EXPOSURES['labor'];
         $recoveryWeight = 1.0 - exp(-EarningsEngine::QUARTERLY_TIME_STEP / FinancialConstants::DEFAULT_INPUT_PASS_THROUGH_LAG_YEARS);
         $macroBase = $this->createMacroState();

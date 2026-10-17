@@ -384,7 +384,8 @@ class EtfTracker
         float $preSplitPrice,
     ): void {
         if ($isReverse) {
-            // Reverse split fractional remnant refund: cash out limit-BUY and SELL escrow remnants before quantity flooring (a buy stop escrowed none).
+            // Reverse split fractional remnant refund: cash out limit-BUY and SELL escrow remnants before quantity
+            // flooring (a buy stop escrowed none).
             $conn->executeStatement(
                 "UPDATE users u
                  INNER JOIN (

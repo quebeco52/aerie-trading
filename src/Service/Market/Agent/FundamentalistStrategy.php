@@ -17,7 +17,9 @@ use App\DTO\AgentMarketViewDTO;
 final class FundamentalistStrategy implements AgentStrategyInterface
 {
     // --- Agent Signals ---
-    /** Fundamentalist conviction per unit of log mispricing: fully committed at roughly a 40% discount to fair value. */
+    /**
+     * Fundamentalist conviction per unit of log mispricing: fully committed at roughly a 40% discount to fair value.
+     */
     public const AGENT_FUNDAMENTALIST_GAIN = 2.50;
 
     public function identifier(): string

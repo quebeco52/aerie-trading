@@ -37,33 +37,57 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
     public const PAYS_BANK_LEVY = true;
 
     // --- Prudential Regulation ---
-    /** A deposit-taking bank holds the CET1 requirement the District's Financial Regulator sets (MacroStateDTO::bankCapitalRequirement). */
+    /**
+     * A deposit-taking bank holds the CET1 requirement the District's Financial Regulator sets
+     * (MacroStateDTO::bankCapitalRequirement).
+     */
     public const PRUDENTIALLY_REGULATED = true;
 
     // --- Operating Cyclicality & Demand Structure ---
-    /** Elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). Loan demand and deposit growth track nominal activity. */
+    /**
+     * Elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). Loan demand and
+     * deposit growth track nominal activity.
+     */
     public const OPERATING_CYCLICALITY = 1.00;
 
     // --- Labor Intensity ---
-    /** Labor share of the fixed cost base exposed to the Beveridge wage squeeze. Branch and back-office payroll is the largest non-interest expense of a bank. */
+    /**
+     * Labor share of the fixed cost base exposed to the Beveridge wage squeeze. Branch and back-office payroll is the
+     * largest non-interest expense of a bank.
+     */
     public const FIXED_COST_LABOR_SHARE = 0.60;
 
     // --- Demand Transmission Lag ---
-    /** Years for a move in the output gap to reach the order book. Credit formation lags activity: loan demand builds after the expansion is underway and drawn balances persist into the downturn. */
+    /**
+     * Years for a move in the output gap to reach the order book. Credit formation lags activity: loan demand builds
+     * after the expansion is underway and drawn balances persist into the downturn.
+     */
     public const DEMAND_LAG_YEARS = 0.75;
 
     // --- Reporting Incentives ---
-    /** Propensity to steer reported earnings toward consensus with accruals. The loan loss provision is a judgement call reviewed quarterly, which is why provisioning is the most documented earnings-smoothing lever in banking. */
+    /**
+     * Propensity to steer reported earnings toward consensus with accruals. The loan loss provision is a judgement call
+     * reviewed quarterly, which is why provisioning is the most documented earnings-smoothing lever in banking.
+     */
     public const EARNINGS_MANAGEMENT_PROPENSITY = 0.65;
 
     // --- Model Thresholds ---
     /** Minimum Interest Coverage Ratio (ICR) required before distress. */
     public const THRESHOLD_MIN_ICR = 1.05;
-    /** Tangible capital over assets, in percentage points, below which the lender has failed: 2%, the critically undercapitalized line at which US prompt corrective action puts a bank into receivership (12 CFR 324.403). */
+    /**
+     * Tangible capital over assets, in percentage points, below which the lender has failed: 2%, the critically
+     * undercapitalized line at which US prompt corrective action puts a bank into receivership (12 CFR 324.403).
+     */
     public const THRESHOLD_BANKRUPT_EQUITY = 2.0;
-    /** Tangible capital over assets, in percentage points, below which the lender is in distress: 4%, the leverage ratio under which prompt corrective action rates a bank undercapitalized. */
+    /**
+     * Tangible capital over assets, in percentage points, below which the lender is in distress: 4%, the leverage ratio
+     * under which prompt corrective action rates a bank undercapitalized.
+     */
     public const THRESHOLD_DISTRESS_EQUITY = 4.0;
-    /** Tangible capital over assets, in percentage points, below which the lender is on watch: a point above the 5% well-capitalized leverage ratio. */
+    /**
+     * Tangible capital over assets, in percentage points, below which the lender is on watch: a point above the 5%
+     * well-capitalized leverage ratio.
+     */
     public const THRESHOLD_WARNING_EQUITY = 6.0;
     /** Maximum allowed wholesale leverage multiplier. */
     public const THRESHOLD_WHOLESALE_LEVERAGE_LIMIT = 2.0;
@@ -126,61 +150,102 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
     }
 
     // --- Non-Interest Revenue Mix ---
-    /** Fee income's weight in the non-interest revenue (custodial, wealth, payments); the lore may add captive stake dividends beside it. */
+    /**
+     * Fee income's weight in the non-interest revenue (custodial, wealth, payments); the lore may add captive stake
+     * dividends beside it.
+     */
     public const FEE_REVENUE_WEIGHT      = 0.25;
 
     // --- Revenue & Shock Physics ---
     /** Baseline volatility multiplier for loan origination and fee revenue shocks. */
     public const REVENUE_VARIANCE_SCALAR = 0.15;
 
-    // --- Vasicek ASRF Credit Model (segment PDs and correlations are the macro's: MacroEngine, CreditFiscalSubsystem) ---
+    // --- Vasicek ASRF Credit Model (segment PDs and correlations are the macro's: MacroEngine, CreditFiscalSubsystem)
+    // ---
     /** Baseline Loss Given Default (LGD) for senior secured / collateralized bank credit facilities. */
     public const LGD_BASELINE                  = 0.45;
 
     // --- Loan Book Segments (Fed H.8, all commercial banks, Dec 2019: $10.03T of loans) ---
-    /** Residential real estate share of loans ($2.30T): households, defaulting at the macro retail rate, secured on homes. */
+    /**
+     * Residential real estate share of loans ($2.30T): households, defaulting at the macro retail rate, secured on
+     * homes.
+     */
     public const RESIDENTIAL_MORTGAGE_SHARE    = 0.23;
-    /** Consumer loan share ($1.59T: cards, autos, student): households, defaulting at the macro retail rate, recovery not tied to property. */
+    /**
+     * Consumer loan share ($1.59T: cards, autos, student): households, defaulting at the macro retail rate, recovery
+     * not tied to property.
+     */
     public const CONSUMER_LOAN_SHARE           = 0.16;
-    /** Commercial real estate share ($2.32T): firms, defaulting at the macro corporate rate, secured on commercial property. The C&I and other remainder (38%) defaults at the corporate rate with no property collateral. */
+    /**
+     * Commercial real estate share ($2.32T): firms, defaulting at the macro corporate rate, secured on commercial
+     * property. The C&I and other remainder (38%) defaults at the corporate rate with no property collateral.
+     */
     public const COMMERCIAL_REAL_ESTATE_SHARE  = 0.23;
-    /** Years the collateral reference price averages over: the weighted-average age of a seasoned loan book (~4 years), so LGD reads the price fall since the loans were written, not since a fixed baseline. */
+    /**
+     * Years the collateral reference price averages over: the weighted-average age of a seasoned loan book (~4 years),
+     * so LGD reads the price fall since the loans were written, not since a fixed baseline.
+     */
     public const COLLATERAL_ORIGINATION_YEARS  = 4.0;
 
-    // --- Segment Charge-Off Rates (FRED, all commercial banks, 1991-2019 means; each segment's PD is its rate over LGD_BASELINE) ---
+    // --- Segment Charge-Off Rates (FRED, all commercial banks, 1991-2019 means; each segment's PD is its rate over
+    // LGD_BASELINE) ---
     /** Single-family residential mortgages: 0.43% a year (CORSFRMACBS, peak 2.80%). */
     public const RESIDENTIAL_CHARGE_OFF_RATE = 0.0043;
     /** Consumer loans, cards and autos together: 2.61% a year (CORCACBS, peak 6.60%). */
     public const CONSUMER_CHARGE_OFF_RATE = 0.0261;
     /** Commercial real estate excluding farmland: 0.53% a year (CORCREXFACBS, peak 2.85%). */
     public const COMMERCIAL_REAL_ESTATE_CHARGE_OFF_RATE = 0.0053;
-    /** Business (C&I) loans: 0.73% a year (CORBLACBS, peak 2.57%). The H.8 mix of the four gives 0.92%, all loans 0.89% (CORALACBS). */
+    /**
+     * Business (C&I) loans: 0.73% a year (CORBLACBS, peak 2.57%). The H.8 mix of the four gives 0.92%, all loans 0.89%
+     * (CORALACBS).
+     */
     public const BUSINESS_CHARGE_OFF_RATE = 0.0073;
-    /** Persisted origination reference for residential collateral, in money: the real index at that day's price level. */
+    /**
+     * Persisted origination reference for residential collateral, in money: the real index at that day's price level.
+     */
     public const STATE_RESIDENTIAL_ORIGINATION_PRICE = 'state:collateral_origination_residential_nominal';
-    /** Persisted origination reference for commercial collateral, in money: the real index at that day's price level. */
+    /**
+     * Persisted origination reference for commercial collateral, in money: the real index at that day's price level.
+     */
     public const STATE_COMMERCIAL_ORIGINATION_PRICE  = 'state:collateral_origination_commercial_nominal';
 
     // --- Underwriting Risk Appetite ---
-    /** Neutral appetite: a bank here loses each segment's US charge-off rate, and its defaults move with the economy's. */
+    /**
+     * Neutral appetite: a bank here loses each segment's US charge-off rate, and its defaults move with the economy's.
+     */
     public const NEUTRAL_CREDIT_RISK_APPETITE  = 0.50;
-    /** Appetite floor (0.2x the segment PDs, ~0.2% a year on the H.8 mix): a book this clean is sovereign paper wearing a loan's clothes. */
+    /**
+     * Appetite floor (0.2x the segment PDs, ~0.2% a year on the H.8 mix): a book this clean is sovereign paper wearing
+     * a loan's clothes.
+     */
     public const MIN_CREDIT_RISK_APPETITE      = 0.10;
-    /** Appetite ceiling (2x the segment PDs, ~1.8% a year on the H.8 mix): the edge of a viable commercial book before it is subprime lending. */
+    /**
+     * Appetite ceiling (2x the segment PDs, ~1.8% a year on the H.8 mix): the edge of a viable commercial book before
+     * it is subprime lending.
+     */
     public const MAX_CREDIT_RISK_APPETITE      = 1.00;
 
     // --- CECL Forward Reserve (ASC 326 lifetime allowance conditioned on the macro forecast) ---
     /** Lifetime-loss multiplier per unit of IG spread widening: +300bps lifts the reserve target ~0.36x. */
     public const CECL_RESERVE_SPREAD_SENSITIVITY = 12.0;
-    /** Lifetime-loss multiplier per unit of recession probability away from the base rate: a near-certain recession lifts the target ~0.85x (large-bank allowances went 1.4% -> 3.3% of loans in 2020 with spreads). */
+    /**
+     * Lifetime-loss multiplier per unit of recession probability away from the base rate: a near-certain recession
+     * lifts the target ~0.85x (large-bank allowances went 1.4% -> 3.3% of loans in 2020 with spreads).
+     */
     public const CECL_RESERVE_RECESSION_SENSITIVITY = 1.00;
-    /** Floor on the forecast multiplier: a benign outlook releases part of the through-the-cycle reserve, never most of it. */
+    /**
+     * Floor on the forecast multiplier: a benign outlook releases part of the through-the-cycle reserve, never most of
+     * it.
+     */
     public const CECL_RESERVE_MULTIPLIER_FLOOR = 0.75;
 
     // --- SLOOS Lending Standards & Credit Boom ---
     /** Sensitivity of NII loan origination volume to net percentage of domestic banks tightening standards (SLOOS). */
     public const SLOOS_NII_ORIGINATION_SENSITIVITY = 0.20;
-    /** Origination volume per unit of the household credit-to-GDP gap: a credit boom writes its own loans (Borio & Lowe 2002). */
+    /**
+     * Origination volume per unit of the household credit-to-GDP gap: a credit boom writes its own loans (Borio & Lowe
+     * 2002).
+     */
     public const CREDIT_GAP_ORIGINATION_SENSITIVITY = 0.50;
 
     // --- Housing Mortgage & M2 Money Supply Transmission ---
@@ -194,19 +259,30 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
     public const ASSET_DURATION_YEARS          = 4.5;
     /** Share of the floating-rate funding mix that offsets the securities' duration when they are marked. */
     public const FLOATING_HEDGE_EFFICIENCY     = 0.50;
-    /** Years of expected loss the CECL allowance covers. At the through-the-cycle loss rate (~0.9% of loans) this puts the reserve near 1.8% of loans, where large US banks have run since CECL adoption. */
+    /**
+     * Years of expected loss the CECL allowance covers. At the through-the-cycle loss rate (~0.9% of loans) this puts
+     * the reserve near 1.8% of loans, where large US banks have run since CECL adoption.
+     */
     public const CECL_LIFETIME_HORIZON_YEARS   = 2.0;
 
     // --- Asset Repricing (Drechsler, Savov & Schnabl 2021, Table A.2: US commercial banks 1997-2017, aggregate) ---
-    /** Repricing maturity of residential loans: a quarter, the District's mortgages floating over the policy rate. The residential book reprices off the curve at this tenor. */
+    /**
+     * Repricing maturity of residential loans: a quarter, the District's mortgages floating over the policy rate. The
+     * residential book reprices off the curve at this tenor.
+     */
     public const RESIDENTIAL_REPRICING_YEARS   = 0.25;
     /** Repricing maturity of all other loans: 2.4 years, floating and fixed together. */
     public const OTHER_LOAN_REPRICING_YEARS    = 2.4;
     /** Repricing maturity of the securities portfolio: 8.4 years, most of it mortgage-linked. */
     public const SECURITIES_REPRICING_YEARS    = 8.4;
-    /** Share of the system's non-residential loans at floating rates: about half ($3.5T floating against ~$6T of non-residential loans at end-2014; Kirti 2017, IMF WP/17/3). Fixes the fixed part's repricing maturity. */
+    /**
+     * Share of the system's non-residential loans at floating rates: about half ($3.5T floating against ~$6T of
+     * non-residential loans at end-2014; Kirti 2017, IMF WP/17/3). Fixes the fixed part's repricing maturity.
+     */
     public const FLOATING_RATE_LOAN_SHARE      = 0.50;
-    /** Average time to a floating-rate loan's next reset: half a quarter, between monthly and quarterly index resets. */
+    /**
+     * Average time to a floating-rate loan's next reset: half a quarter, between monthly and quarterly index resets.
+     */
     public const FLOATING_RESET_YEARS          = 0.125;
     /** Persisted yield on the residential book (loan spread included). */
     public const STATE_BOOK_YIELD_RESIDENTIAL  = 'state:book_yield_residential';
@@ -220,7 +296,10 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
     public const STATE_FEE_YIELD               = 'state:fee_yield';
 
     // --- Operating Cost Base ---
-    /** Annual noninterest expense per unit of earning assets: 2.85%, US insured institutions in 2019 (2.58% of assets, earning assets 90.5% of assets; FDIC Quarterly Banking Profile, Table III-A). */
+    /**
+     * Annual noninterest expense per unit of earning assets: 2.85%, US insured institutions in 2019 (2.58% of assets,
+     * earning assets 90.5% of assets; FDIC Quarterly Banking Profile, Table III-A).
+     */
     public const OPERATING_COST_TO_EARNING_ASSETS = 0.0285;
 
     // --- Analyst Visibility & Error ---
@@ -242,13 +321,20 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
     public const DEPOSIT_BETA_NORMALIZATION_BASELINE = MacroEngine::SYSTEM_DEPOSIT_BETA_BASE;
     /** Floor on any deposit rate: banks always pay some yield. */
     public const MIN_DEPOSIT_RATE              = 0.001;
-    /** Years over which the rate paid on deposits adjusts to the policy rate: 0.75, which with the 0.46 long-run pass-through gives the US funding mix (deposits 78%, wholesale ~10% of assets) a four-quarter interest expense beta of 0.36 (Drechsler, Savov & Schnabl 2021). */
+    /**
+     * Years over which the rate paid on deposits adjusts to the policy rate: 0.75, which with the 0.46 long-run
+     * pass-through gives the US funding mix (deposits 78%, wholesale ~10% of assets) a four-quarter interest expense
+     * beta of 0.36 (Drechsler, Savov & Schnabl 2021).
+     */
     public const DEPOSIT_REPRICING_YEARS       = 0.75;
     /** Persisted rate paid on the deposit base as it has repriced. */
     public const STATE_DEPOSIT_RATE            = 'state:deposit_rate';
 
     // --- Rate-Risk Matching (Drechsler, Savov & Schnabl 2021: all US commercial banks, 1984-2017) ---
-    /** Slope of banks' interest income betas on their interest expense betas: 0.768. A bank holds the asset repricing its deposit franchise hedges. */
+    /**
+     * Slope of banks' interest income betas on their interest expense betas: 0.768. A bank holds the asset repricing
+     * its deposit franchise hedges.
+     */
     public const INCOME_EXPENSE_BETA_MATCHING_SLOPE = 0.768;
     /** Average interest income beta, the matching line's anchor: 0.379. */
     public const MEAN_INCOME_BETA              = 0.379;
@@ -260,9 +346,15 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
     public const STATE_FLOATING_LOAN_SHARE     = 'state:floating_loan_share';
 
     // --- Non-Interest Income ---
-    /** Annual non-interest income per unit of earning assets: 1.62%, US insured institutions in 2019 (1.47% of assets, earning assets 90.5% of assets; FDIC Quarterly Banking Profile, Table III-A). */
+    /**
+     * Annual non-interest income per unit of earning assets: 1.62%, US insured institutions in 2019 (1.47% of assets,
+     * earning assets 90.5% of assets; FDIC Quarterly Banking Profile, Table III-A).
+     */
     public const NON_INTEREST_INCOME_TO_EARNING_ASSETS = 0.0162;
-    /** Deposit flow per unit of money-market share moved this quarter: share gained leaves the deposit base and share lost returns to it (Drechsler, Savov & Schnabl 2017). */
+    /**
+     * Deposit flow per unit of money-market share moved this quarter: share gained leaves the deposit base and share
+     * lost returns to it (Drechsler, Savov & Schnabl 2017).
+     */
     public const MMF_MIGRATION_DEPOSIT_DRAG = 1.2;
 
     // --- Hoarding & Deposit Flight ---
@@ -318,7 +410,10 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
     public const BUYBACK_MEGA_HOARDER_LIMIT = 0.30;
     /** Maximum buyback spend ratio of excess cash for hoarders. */
     public const BUYBACK_HOARDER_LIMIT = 0.10;
-    /** Minimum ratio of target leverage before the bank is considered under-leveraged and triggers aggressive buybacks to defend ROE. */
+    /**
+     * Minimum ratio of target leverage before the bank is considered under-leveraged and triggers aggressive buybacks
+     * to defend ROE.
+     */
     public const UNDER_LEVERAGED_TOLERANCE = 0.35;
 
     // --- Macro & Shock Thresholds ---
@@ -341,11 +436,20 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
 
     /** Output gap multiplier for fee revenue. */
     public const SECTOR_SHOCK_FEE_OUTPUT_GAP_MULT = 0.35;
-    /** Charge-offs over the through-the-cycle rate above which defaults are elevated: US banks ran 1.08x their 1985-2019 mean in 2001-02, peaking at 1.39x (FRED CORALACBN). */
+    /**
+     * Charge-offs over the through-the-cycle rate above which defaults are elevated: US banks ran 1.08x their 1985-2019
+     * mean in 2001-02, peaking at 1.39x (FRED CORALACBN).
+     */
     public const SECTOR_SHOCK_ELEVATED_LOSS_MULTIPLE = 1.3;
-    /** Charge-offs over the through-the-cycle rate above which provisions are massive: 2.85x in 2009-10, peaking at 3.4x. */
+    /**
+     * Charge-offs over the through-the-cycle rate above which provisions are massive: 2.85x in 2009-10, peaking at
+     * 3.4x.
+     */
     public const SECTOR_SHOCK_MASSIVE_LOSS_MULTIPLE = 2.5;
-    /** Charge-offs over the through-the-cycle rate below which reserves are released: 0.55x in 2004-06, when US banks drew their allowances down. */
+    /**
+     * Charge-offs over the through-the-cycle rate below which reserves are released: 0.55x in 2004-06, when US banks
+     * drew their allowances down.
+     */
     public const SECTOR_SHOCK_RESERVE_RELEASE_LOSS_MULTIPLE = 0.6;
 
     // --- Basel III Capital Adequacy & CCB ---
@@ -353,13 +457,26 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
     public const BASEL_RISK_WEIGHT_TREASURY = 0.0;
     /** Risk weight on a first-lien residential mortgage under the US standardized approach: 50% (12 CFR 217.32(g)). */
     public const BASEL_RISK_WEIGHT_RESIDENTIAL_MORTGAGE = 0.50;
-    /** Risk weight on business, commercial real estate and consumer loans: 100% (12 CFR 217.32(f), (l)). High-volatility construction lending at 150% is not split out. */
+    /**
+     * Risk weight on business, commercial real estate and consumer loans: 100% (12 CFR 217.32(f), (l)). High-volatility
+     * construction lending at 150% is not split out.
+     */
     public const BASEL_RISK_WEIGHT_LOANS = 1.00;
-    /** Risk weight on the securities sleeve: 20%, the weight on agency MBS and GSE debt, the bulk of a US bank's securities (12 CFR 217.32(c)). On the H.8 loan mix the three weights give 0.73 of earning assets; US insured banks held $14.90T of RWA on $20.69T of non-cash assets at end-2024, 0.72 (FDIC Call Reports). */
+    /**
+     * Risk weight on the securities sleeve: 20%, the weight on agency MBS and GSE debt, the bulk of a US bank's
+     * securities (12 CFR 217.32(c)). On the H.8 loan mix the three weights give 0.73 of earning assets; US insured
+     * banks held $14.90T of RWA on $20.69T of non-cash assets at end-2024, 0.72 (FDIC Call Reports).
+     */
     public const BASEL_RISK_WEIGHT_SECURITIES = 0.20;
-    /** Basel III Pillar 1 minimum Common Equity Tier 1 (CET1) ratio, below which the bank is undercapitalized and under supervisory restriction (BCBS 2011, para. 50); it fails only at THRESHOLD_BANKRUPT_EQUITY. */
+    /**
+     * Basel III Pillar 1 minimum Common Equity Tier 1 (CET1) ratio, below which the bank is undercapitalized and under
+     * supervisory restriction (BCBS 2011, para. 50); it fails only at THRESHOLD_BANKRUPT_EQUITY.
+     */
     public const BASEL_MIN_CET1_RATIO = 0.045;
-    /** Basel III minimum plus the 2.5% capital conservation buffer: the payout stop for a lender outside the District's bank requirement. */
+    /**
+     * Basel III minimum plus the 2.5% capital conservation buffer: the payout stop for a lender outside the District's
+     * bank requirement.
+     */
     public const BASEL_CCB_CET1_RATIO = 0.070;
 
     // --- Passive Liability Growth ---
@@ -374,7 +491,11 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
     public const LIABILITY_CAPTURE_THRESHOLD = 0.005;
 
     // --- Investment Securities & AOCI (ASC 320 / Basel III) ---
-    /** Share of a lender's earning assets held as investment securities rather than loans. Only this part is marked: ASC 320 remarks securities, while ASC 310 carries loans at amortized cost, and the loan book's own rate risk is already charged as the NIM squeeze. */
+    /**
+     * Share of a lender's earning assets held as investment securities rather than loans. Only this part is marked: ASC
+     * 320 remarks securities, while ASC 310 carries loans at amortized cost, and the loan book's own rate risk is
+     * already charged as the NIM squeeze.
+     */
     public const SECURITIES_SHARE_OF_EARNING_ASSETS = 0.22;
 
     /**
@@ -480,7 +601,9 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
         ];
     }
 
-    /** This lender's non-interest income per unit of earning assets: its sector's unless its lore sets its peer group's. */
+    /**
+     * This lender's non-interest income per unit of earning assets: its sector's unless its lore sets its peer group's.
+     */
     protected function resolveNonInterestIncomeToEarningAssets(Stock $stock): float
     {
         return max(0.0, (float) $this->resolveModelParameters($stock, [
@@ -670,8 +793,10 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
         $beta = $this->getOperatingCyclicality($stock);
 
         return [
-            'macro_demand_shift' => $outputGap * $beta * self::MACRO_DEMAND_BETA_SENSITIVITY, // Less demand destruction than physical goods
-            'pricing_power_multiplier' => self::MACRO_PRICING_POWER_MULT, // Passes structural yield adjustments to the expectation engine
+            // Less demand destruction than physical goods
+            'macro_demand_shift' => $outputGap * $beta * self::MACRO_DEMAND_BETA_SENSITIVITY,
+            // Passes structural yield adjustments to the expectation engine
+            'pricing_power_multiplier' => self::MACRO_PRICING_POWER_MULT,
         ];
     }
 
@@ -702,8 +827,10 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
         $this->advanceBookYields($stock, $macroState, $streams, $mathUtility);
 
         // Independent stream Z-scores with AR(1) persistence
-        $revenueZ = $streams->generateZ('net_interest_income', self::STREAM_Z_PERSISTENCE_NII); // NII loan origination volume
-        $feeZ     = $streams->generateZ('fee_income', self::STREAM_Z_PERSISTENCE_FEE); // Non-interest custodial / payment fee volume
+        // NII loan origination volume
+        $revenueZ = $streams->generateZ('net_interest_income', self::STREAM_Z_PERSISTENCE_NII);
+        // Non-interest custodial / payment fee volume
+        $feeZ     = $streams->generateZ('fee_income', self::STREAM_Z_PERSISTENCE_FEE);
 
         $outputGap = $macroState->outputGapEma;
 
@@ -846,11 +973,12 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
     }
 
     /**
-     * This quarter's annual loss rate on earning assets, read off the loan book segment by segment. Each segment reads the systematic factor
-     * the macro default rate implies (households the retail rate, firms the corporate rate) and applies it at the
-     * macro's own correlation to the segment's long-run PD, so every lender in the District takes the same credit
-     * cycle through its own book; the low-PD segments (mortgages, CRE) swing furthest, as they did in 2009-10.
-     * Property-secured segments lose more as collateral falls below the price the loans were written at (Frye 2000).
+     * This quarter's annual loss rate on earning assets, read off the loan book segment by segment. Each segment reads
+     * the systematic factor the macro default rate implies (households the retail rate, firms the corporate rate) and
+     * applies it at the macro's own correlation to the segment's long-run PD, so every lender in the District takes the
+     * same credit cycle through its own book; the low-PD segments (mortgages, CRE) swing furthest, as they did in
+     * 2009-10. Property-secured segments lose more as collateral falls below the price the loans were written at (Frye
+     * 2000).
      *
      * @return array{loss_rate: float, systematic_z: float}
      */
@@ -938,7 +1066,8 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
     }
 
     /**
-     * Three named segment shares, scaled back to a whole book if they overrun it, with business lending as the remainder.
+     * Three named segment shares, scaled back to a whole book if they overrun it, with business lending as the
+     * remainder.
      *
      * @return array{residential: float, consumer: float, commercial_real_estate: float, business: float}
      */
@@ -1057,7 +1186,8 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
         $excessCash = max(0.0, $treasury - $targetCashReserves);
         return [
             'excess_cash'     => $excessCash,
-            // Banks operate on fractional reserves. Holding more than HOARDING_THRESHOLD_DEBT_RATIO of their total debt in purely IDLE excess cash is hoarding.
+            // Banks operate on fractional reserves. Holding more than HOARDING_THRESHOLD_DEBT_RATIO of their total debt
+            // in purely IDLE excess cash is hoarding.
             'is_hoarder'      => $excessCash > ($totalDebt * self::HOARDING_THRESHOLD_DEBT_RATIO),
             'is_mega_hoarder' => $excessCash > ($totalDebt * self::MEGA_HOARDING_THRESHOLD_DEBT_RATIO),
         ];
@@ -1139,7 +1269,10 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
         return $peFairValue;
     }
 
-    /** Banks trade heavily on book; when earnings collapse, investors look almost entirely to the loan book's liquidation value. */
+    /**
+     * Banks trade heavily on book; when earnings collapse, investors look almost entirely to the loan book's
+     * liquidation value.
+     */
     protected function getFairValueBookWeight(float $normalizedEps): float
     {
         return $normalizedEps > 0 ? self::FAIR_VALUE_BOOK_WEIGHT_PROFIT : self::FAIR_VALUE_BOOK_WEIGHT_LOSS;
@@ -1340,9 +1473,9 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
 
     /**
      * A regulated bank's capital target moves with the requirement point for point on its risk-weighted assets, so it
-     * keeps the buffer over the requirement it was built with: after a 1pp rise UK banks' capital ratios had risen 0.41pp
-     * a year on and 0.95pp three years on (Bridges et al. 2014, BoE WP 486, Table C), the target's partial adjustment
-     * doing the rest.
+     * keeps the buffer over the requirement it was built with: after a 1pp rise UK banks' capital ratios had risen
+     * 0.41pp a year on and 0.95pp three years on (Bridges et al. 2014, BoE WP 486, Table C), the target's partial
+     * adjustment doing the rest.
      */
     public function getTargetCapitalRatio(Stock $stock, ?MacroStateDTO $macroState = null): ?float
     {

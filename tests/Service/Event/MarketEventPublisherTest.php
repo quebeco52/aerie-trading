@@ -193,7 +193,10 @@ class MarketEventPublisherTest extends TestCase
         $this->assertFalse($small['headline']);
     }
 
-    /** Every event published after the ticker stamps a tick carries that tick's simulation time, persisted and on the wire. */
+    /**
+     * Every event published after the ticker stamps a tick carries that tick's simulation time, persisted and on the
+     * wire.
+     */
     public function testEventsCarryTheStampedSimulationTime(): void
     {
         $persisted = [];
@@ -212,7 +215,9 @@ class MarketEventPublisherTest extends TestCase
         $this->assertSame('1 Apr, Year 14', $district['presented']['dateline']);
     }
 
-    /** A deal's size decides its headline, and the verdict is stored with the row so a page load agrees with the wire. */
+    /**
+     * A deal's size decides its headline, and the verdict is stored with the row so a page load agrees with the wire.
+     */
     public function testADealsVerdictIsJudgedOnItsSizeAndStored(): void
     {
         $persisted = [];

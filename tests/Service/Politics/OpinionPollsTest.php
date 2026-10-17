@@ -66,7 +66,10 @@ class OpinionPollsTest extends TestCase
         $this->assertLessThan(0.15, $moved, 'But only as far as a term of the walk takes them.');
     }
 
-    /** A lasting lead on the normal vote decays by a term's persistence over a term, a draw moves the party by a term's lasting swing, and the Diet at its normal votes stays there. */
+    /**
+     * A lasting lead on the normal vote decays by a term's persistence over a term, a draw moves the party by a term's
+     * lasting swing, and the Diet at its normal votes stays there.
+     */
     public function testALastingLeadDriftsBackTowardTheNormalVote(): void
     {
         $math = new MathUtility();
@@ -123,7 +126,10 @@ class OpinionPollsTest extends TestCase
         $this->assertEqualsWithDelta($expected, $variance, 0.08 * $expected);
     }
 
-    /** A short-term swing halves over the post-vote half-life; the campaign's final days build the vote's swing however they are cut, and a span outside them builds none. */
+    /**
+     * A short-term swing halves over the post-vote half-life; the campaign's final days build the vote's swing however
+     * they are cut, and a span outside them builds none.
+     */
     public function testTheShortTermSwingBuildsInTheCampaignAndFadesAfter(): void
     {
         $math = new MathUtility();
@@ -141,7 +147,9 @@ class OpinionPollsTest extends TestCase
         $this->assertEqualsWithDelta($whole ** 2, ($carried ** 2) + ($half ** 2), 1e-12);
     }
 
-    /** The campaign's final days are those before the vote a span runs toward, even when the clock lands a hair past it. */
+    /**
+     * The campaign's final days are those before the vote a span runs toward, even when the clock lands a hair past it.
+     */
     public function testTheCampaignIsTheFinalDaysBeforeTheVote(): void
     {
         $campaign = OpinionPolls::CAMPAIGN_SWING_DAYS / FinancialConstants::DAYS_PER_YEAR;
@@ -152,7 +160,9 @@ class OpinionPollsTest extends TestCase
         $this->assertSame(0.0, OpinionPolls::campaignOverlap(self::ELECTION_AT, self::ELECTION_AT + (1.0 / 12.0)), 'The next campaign is a term away.');
     }
 
-    /** The government pays half its term's cost of ruling within the half-life of the vote and all of it by the next. */
+    /**
+     * The government pays half its term's cost of ruling within the half-life of the vote and all of it by the next.
+     */
     public function testTheGovernmentPaysMostOfItsCostEarly(): void
     {
         $half = OpinionPolls::POST_VOTE_HALF_LIFE_YEARS;
@@ -164,8 +174,8 @@ class OpinionPollsTest extends TestCase
     }
 
     /**
-     * A party governing from vote to vote drifts toward its normal vote on the term clock, mostly in the first year; any
-     * other on the calendar; and every party has drifted exactly a term by the vote, a party that joins the cabinet
+     * A party governing from vote to vote drifts toward its normal vote on the term clock, mostly in the first year;
+     * any other on the calendar; and every party has drifted exactly a term by the vote, a party that joins the cabinet
      * mid-term included.
      */
     public function testTheGovernmentsDriftComesEarlyAndEveryPartyDriftsATerm(): void
@@ -196,9 +206,9 @@ class OpinionPollsTest extends TestCase
     }
 
     /**
-     * The polls misread opinion yet to settle: the whole misreading until the campaign's final days, nothing on the day;
-     * across many polls a poll's error on support is its sampling error and that misreading together, and the vote never
-     * carries it.
+     * The polls misread opinion yet to settle: the whole misreading until the campaign's final days, nothing on the
+     * day; across many polls a poll's error on support is its sampling error and that misreading together, and the vote
+     * never carries it.
      */
     public function testThePollsMisreadUnsettledOpinion(): void
     {
@@ -227,7 +237,10 @@ class OpinionPollsTest extends TestCase
         $this->assertEqualsWithDelta(0.0, array_sum($misread) / count($misread), 0.003, 'The misreading favours no party: a large one is not read low on average.');
     }
 
-    /** The voters count none of the campaign's growth before it opens, and on the day count the growth and inflation the vote weighs. */
+    /**
+     * The voters count none of the campaign's growth before it opens, and on the day count the growth and inflation the
+     * vote weighs.
+     */
     public function testTheEconomyIsCountedAsTheVoteWillWeighIt(): void
     {
         $state = new PoliticsState();
@@ -246,7 +259,10 @@ class OpinionPollsTest extends TestCase
         $this->assertEqualsWithDelta((log(1.12) / self::ELECTION_AT) - MacroEngine::TARGET_INFLATION, OpinionPolls::inflationCounted($state, $economy), 1e-12);
     }
 
-    /** With nothing drawn, a term walked a month at a time votes as a term in one step: the cabinet pays the cost of ruling either way. */
+    /**
+     * With nothing drawn, a term walked a month at a time votes as a term in one step: the cabinet pays the cost of
+     * ruling either way.
+     */
     public function testAMonthlyTermVotesAsATermInOneStep(): void
     {
         $quiet = $this->quietMath();
@@ -291,7 +307,9 @@ class OpinionPollsTest extends TestCase
         $this->assertCount(47, $state->polls);
     }
 
-    /** The polls are drawn off the politics stream: a game polled on another salt votes the same, on different polls. */
+    /**
+     * The polls are drawn off the politics stream: a game polled on another salt votes the same, on different polls.
+     */
     public function testPublishingThePollsChangesNothingElse(): void
     {
         $results = [];
@@ -365,7 +383,10 @@ class OpinionPollsTest extends TestCase
         $this->assertCount(6, $state->polls);
     }
 
-    /** The founding Diet a coalition of two governs, at the start of the first term, the term counted from Year 1 and the game's salt drawn. */
+    /**
+     * The founding Diet a coalition of two governs, at the start of the first term, the term counted from Year 1 and
+     * the game's salt drawn.
+     */
     private function termStart(): PoliticsState
     {
         $state = new PoliticsState();
@@ -376,7 +397,8 @@ class OpinionPollsTest extends TestCase
         $state->termStartDeflator = $this->economy(0.0)->consumerPriceLevel;
         $state->campaignStartedAt = 0.0;
         $state->campaignStartRealGdp = Politics::realGdp($this->economy(0.0));
-        // The game's salt, which a fresh game draws on its first tick, after that tick's poll would have been published.
+        // The game's salt, which a fresh game draws on its first tick, after that tick's poll would have been
+        // published.
         $state->authoritySalt = 7.0;
 
         return $state;

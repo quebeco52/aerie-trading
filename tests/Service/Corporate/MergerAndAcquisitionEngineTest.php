@@ -604,8 +604,8 @@ class MergerAndAcquisitionEngineTest extends TestCase
      * and that book value as the gain or loss. A fire sale below book is a real loss charged in full.
      */
     /**
-     * The cash a seller keeps is not sold. Two sellers alike but for $5B more cash, which the market prices at face, sell
-     * the same quarter of the same business: the buyer pays the same for it, and the announcement prices the same
+     * The cash a seller keeps is not sold. Two sellers alike but for $5B more cash, which the market prices at face,
+     * sell the same quarter of the same business: the buyer pays the same for it, and the announcement prices the same
      * gain or loss, whatever sits in the treasury that stays behind.
      */
     public function testDivestitureDoesNotPayForTheCashTheSellerKeeps(): void
@@ -1345,7 +1345,9 @@ class MergerAndAcquisitionEngineTest extends TestCase
         $this->assertSame(8_000_000_000.0, $stock->getNetPpe());
     }
 
-    /** A quarter's mixed cash-flow pattern is not decline either: a shake-out firm earning its keep keeps its divisions. */
+    /**
+     * A quarter's mixed cash-flow pattern is not decline either: a shake-out firm earning its keep keeps its divisions.
+     */
     public function testAShakeOutQuarterDoesNotTriggerADistressSale(): void
     {
         $stock = $this->buildLedgeredAcquirer('SHAKE', treasury: 1_000_000_000.0, debt: 4_000_000_000.0, shares: 10_000_000.0);

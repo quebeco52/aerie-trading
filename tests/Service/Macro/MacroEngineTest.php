@@ -86,7 +86,8 @@ class MacroEngineTest extends TestCase
 
         $this->assertInstanceOf(\App\DTO\MacroStateDTO::class, $result);
 
-        // A cold start opens at trend, where the rule's target is the opening policy rate: a year's step barely moves it.
+        // A cold start opens at trend, where the rule's target is the opening policy rate: a year's step barely moves
+        // it.
         $opening = new \App\DTO\MacroStateDTO();
         $this->assertEqualsWithDelta($opening->policyRate, $result->targetRate, 0.005, 'At trend the rule asks for the rate it opens at.');
         $this->assertEqualsWithDelta($opening->policyRate, $result->policyRate, 0.005, 'So the first year does not jolt the policy rate.');
@@ -203,8 +204,14 @@ class MacroEngineTest extends TestCase
         $this->assertGreaterThan(MacroEngine::BASE_EQUITY_RISK_PREMIUM, $result->equityRiskPremium, 'ERP should rise during a recession.');
     }
 
-    /** A productivity level shock opens a supply gap but leaves r* alone: it moves potential, not its trend growth (HLW's sigma_y*). */
-    /** Trend growth is the US's 1985-2019 potential: the labour force grows by its residents and the average party's newcomers. */
+    /**
+     * A productivity level shock opens a supply gap but leaves r* alone: it moves potential, not its trend growth
+     * (HLW's sigma_y*).
+     */
+    /**
+     * Trend growth is the US's 1985-2019 potential: the labour force grows by its residents and the average party's
+     * newcomers.
+     */
     public function testTrendGrowthIsTheUsLongRunPotential(): void
     {
         $this->assertEqualsWithDelta(MacroEngine::NATURAL_LABOR_FORCE_GROWTH + MacroEngine::STRUCTURAL_NET_MIGRATION_RATE, MacroEngine::STRUCTURAL_LABOR_GROWTH_RATE, 1e-15);
@@ -226,7 +233,10 @@ class MacroEngineTest extends TestCase
         $this->assertSame($withoutShock->naturalRate, $withShock->naturalRate);
     }
 
-    /** The tick quotes the breakeven off the premium it ends on, and the quote rides beside the expectation, never into it. */
+    /**
+     * The tick quotes the breakeven off the premium it ends on, and the quote rides beside the expectation, never into
+     * it.
+     */
     public function testTheTickQuotesTheBreakevenNetOfTheBondPremium(): void
     {
         $this->redisMock->method('get')->willReturn(json_encode(['excess_bond_premium' => 0.02]));
@@ -356,7 +366,8 @@ class MacroEngineTest extends TestCase
         $existingState = [
             'output_gap' => 0.04,
             'output_gap_ema' => 0.04,
-            // Metals clear on world demand; the district's boom is its weighted share of it, as the EMA barrier will publish it.
+            // Metals clear on world demand; the district's boom is its weighted share of it, as the EMA barrier will
+            // publish it.
             'global_demand_gap' => 0.04 * MacroEngine::DOMESTIC_DEMAND_WEIGHT,
             'global_demand_gap_ema' => 0.04 * MacroEngine::DOMESTIC_DEMAND_WEIGHT,
             'industrial_metals_index' => 100.0,
@@ -563,7 +574,8 @@ class MacroEngineTest extends TestCase
 
     public function testFreightRateIndexDepressedDuringFleetCapacityGlut(): void
     {
-        // When fleet capacity exceeds demand (e.g. following post-boom shipbuilding deliveries), utilization drops and rates fall
+        // When fleet capacity exceeds demand (e.g. following post-boom shipbuilding deliveries), utilization drops and
+        // rates fall
         $glutState = [
             'output_gap' => -0.02,
             'output_gap_ema' => -0.02,
@@ -631,7 +643,8 @@ class MacroEngineTest extends TestCase
             'nairu_ema' => MacroEngine::NATURAL_UNEMPLOYMENT,
             'yield_10y' => 0.0504,
             'yield_10y_ema' => 0.0504,
-            // The cap rate at its neutral: 5.04% less 2% expected rent inflation, plus a 1.36% spread and the 2% premium.
+            // The cap rate at its neutral: 5.04% less 2% expected rent inflation, plus a 1.36% spread and the 2%
+            // premium.
             'macro_credit_spread' => 0.0136,
             'macro_credit_spread_ema' => 0.0136,
             'tips_breakeven' => MacroEngine::TARGET_INFLATION,
@@ -1527,7 +1540,8 @@ class MacroEngineTest extends TestCase
         $dt = 1.0 / 3600.0;
         $trendRate = $this->aggregateSubsystem->calculateTotalFactorProductivity($neutralState, $dt);
 
-        // The trend growth rate returned for economic models must be the true structural drift (1.5%), unaffected by tick diffusion
+        // The trend growth rate returned for economic models must be the true structural drift (1.5%), unaffected by
+        // tick diffusion
         $this->assertEqualsWithDelta(MacroEngine::TFP_DRIFT, $trendRate, 0.0001, 'TFP trend growth rate must equal structural secular drift at neutral output gap.');
     }
 
@@ -1543,7 +1557,8 @@ class MacroEngineTest extends TestCase
         $peakState->inflationEma = 0.035;
         $peakState->tipsBreakeven = 0.026;
         $peakState->marketVolatilityEma = 0.16;
-        $peakState->termPremiumRegime = 0.0; // a low-premium era, as 2006 and 2023 were; at a 2% premium (1995) the peak stayed positive
+        // a low-premium era, as 2006 and 2023 were; at a 2% premium (1995) the peak stayed positive
+        $peakState->termPremiumRegime = 0.0;
 
         $curvePeak = $this->monetarySubsystem->calculateYieldCurveAndQE($peakState, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE, 0.25);
 
@@ -1946,7 +1961,9 @@ class MacroEngineTest extends TestCase
         $this->assertEqualsWithDelta(MacroEngine::SENTIMENT_TREND_LEVEL - 6.84 - 4.54 - 4.59, $stagflation->consumerSentimentIndex, 1e-9);
     }
 
-    /** The terms are two-sided: a tight labour market, low inflation and falling joblessness lift the index above trend. */
+    /**
+     * The terms are two-sided: a tight labour market, low inflation and falling joblessness lift the index above trend.
+     */
     public function testConsumerSentimentRisesAboveTrendInABoom(): void
     {
         $assetSubsystem = new AssetMarketSubsystem($this->mathUtilityMock);

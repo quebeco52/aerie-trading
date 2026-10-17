@@ -173,7 +173,9 @@ final class PriceFactorTransmissionTest extends TestCase
         $this->assertEqualsWithDelta(M_LN2 / MarketEngine::FAIR_VALUE_PULL_HALF_LIFE_YEARS, MarketEngine::FAIR_VALUE_PULL_SPEED, 1e-12);
     }
 
-    /** No dividend, no jump and a calm macro, so the funding-stress dampener is one and the pull runs at its base speed. */
+    /**
+     * No dividend, no jump and a calm macro, so the funding-stress dampener is one and the pull runs at its base speed.
+     */
     private function pullContext(float $dt, float $currentPrice): MarketPricingContext
     {
         return new MarketPricingContext(

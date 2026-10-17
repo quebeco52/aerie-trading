@@ -46,7 +46,10 @@ final class AerieDiet
         self::TIDELINE => 'The Tideline Accord',
         self::NEW_HORIZON => 'New Horizon',
     ];
-    /** The questions the blocs divide on, the economic ones: the Council question cuts across both blocs, as populism does across Scandinavia's red and blue. */
+    /**
+     * The questions the blocs divide on, the economic ones: the Council question cuts across both blocs, as populism
+     * does across Scandinavia's red and blue.
+     */
     public const BLOC_AXES = [self::AXIS_STATE, self::AXIS_OPENNESS];
 
     // --- Policy Space ---
@@ -54,13 +57,22 @@ final class AerieDiet
     public const AXIS_STATE = 'state';
     /** Openness axis: +1 is fully open to trade, capital and labour, -1 fully closed. */
     public const AXIS_OPENNESS = 'openness';
-    /** Council axis, the people-vs-elite scale of the Chapel Hill expert survey: +1 defers to the technocrats, -1 is populist. */
+    /**
+     * Council axis, the people-vs-elite scale of the Chapel Hill expert survey: +1 defers to the technocrats, -1 is
+     * populist.
+     */
     public const AXIS_COUNCIL = 'council';
-    /** Environment axis, the Chapel Hill expert survey's environment-versus-growth scale: +1 puts the environment first, -1 growth. */
+    /**
+     * Environment axis, the Chapel Hill expert survey's environment-versus-growth scale: +1 puts the environment first,
+     * -1 growth.
+     */
     public const AXIS_ENVIRONMENT = 'environment';
     /** The axes of the policy space, in the order every position is written. */
     public const AXES = [self::AXIS_STATE, self::AXIS_OPENNESS, self::AXIS_COUNCIL, self::AXIS_ENVIRONMENT];
-    /** Each party's fixed position on the axes it is defined by, where it never moves: the two big parties moderate, the others at the ends of theirs, New Horizon on the diagonal between them. */
+    /**
+     * Each party's fixed position on the axes it is defined by, where it never moves: the two big parties moderate, the
+     * others at the ends of theirs, New Horizon on the diagonal between them.
+     */
     public const FIXED_POSITIONS = [
         self::CIVIC => [self::AXIS_STATE => 0.65],
         self::VANGUARD => [self::AXIS_STATE => -0.65],
@@ -71,7 +83,13 @@ final class AerieDiet
         self::TIDELINE => [self::AXIS_ENVIRONMENT => 0.8],
         self::NEW_HORIZON => [self::AXIS_STATE => -0.5, self::AXIS_OPENNESS => 0.7],
     ];
-    /** Each party's home, where it stood at the founding and is pulled back toward between elections; openness and the Council axis run together as they do in Western Europe (Chapel Hill 2014-2024: corr +0.84), so the Chartists stand open and the Common Lot, the Harbor and the Accord lean populist. On the environment each party stands where its other three places put it in Western Europe (Chapel Hill 2014-2024, 378 parties against their country's mean: environment = 0.694 state + 0.355 openness - 0.075 Council, R-squared 0.67). */
+    /**
+     * Each party's home, where it stood at the founding and is pulled back toward between elections; openness and the
+     * Council axis run together as they do in Western Europe (Chapel Hill 2014-2024: corr +0.84), so the Chartists
+     * stand open and the Common Lot, the Harbor and the Accord lean populist. On the environment each party stands
+     * where its other three places put it in Western Europe (Chapel Hill 2014-2024, 378 parties against their country's
+     * mean: environment = 0.694 state + 0.355 openness - 0.075 Council, R-squared 0.67).
+     */
     public const HOME_POSITIONS = [
         self::CIVIC => [self::AXIS_STATE => 0.65, self::AXIS_OPENNESS => -0.1, self::AXIS_COUNCIL => -0.1, self::AXIS_ENVIRONMENT => 0.34],
         self::VANGUARD => [self::AXIS_STATE => -0.65, self::AXIS_OPENNESS => 0.1, self::AXIS_COUNCIL => 0.3, self::AXIS_ENVIRONMENT => -0.48],
@@ -116,7 +134,10 @@ final class AerieDiet
         self::TIDELINE => 5.0,
         self::NEW_HORIZON => 30.0,
     ];
-    /** Vote shares at the founding, the founding seats over the Diet: each party's normal vote, the share its lasting support is pulled back toward (Converse 1966). */
+    /**
+     * Vote shares at the founding, the founding seats over the Diet: each party's normal vote, the share its lasting
+     * support is pulled back toward (Converse 1966).
+     */
     public const SEED_VOTE_SHARES = [
         self::CIVIC => 84.0 / 300.0,
         self::VANGUARD => 90.0 / 300.0,
@@ -127,7 +148,10 @@ final class AerieDiet
         self::TIDELINE => 5.0 / 300.0,
         self::NEW_HORIZON => 30.0 / 300.0,
     ];
-    /** The blocs the founding Diet votes in, by the leader of each party's bloc: the parties split around the two largest (App\Service\Politics\CoalitionFormation::declareBlocs). */
+    /**
+     * The blocs the founding Diet votes in, by the leader of each party's bloc: the parties split around the two
+     * largest (App\Service\Politics\CoalitionFormation::declareBlocs).
+     */
     public const SEED_BLOCS = [
         self::CIVIC => self::CIVIC,
         self::VANGUARD => self::VANGUARD,
@@ -138,7 +162,10 @@ final class AerieDiet
         self::TIDELINE => self::CIVIC,
         self::NEW_HORIZON => self::VANGUARD,
     ];
-    /** The founding cabinet, 1.0 for a member: the likeliest government of the founding Diet (CoalitionFormation), the Vanguard alone, its bloc carrying it from outside. */
+    /**
+     * The founding cabinet, 1.0 for a member: the likeliest government of the founding Diet (CoalitionFormation), the
+     * Vanguard alone, its bloc carrying it from outside.
+     */
     public const SEED_COALITION = [
         self::CIVIC => 0.0,
         self::VANGUARD => 1.0,

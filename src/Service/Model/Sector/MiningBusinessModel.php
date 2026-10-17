@@ -34,21 +34,37 @@ use App\Service\Model\ModelParam;
 class MiningBusinessModel extends StandardCorporateBusinessModel
 {
     // --- Operating Cyclicality & Demand Structure ---
-    /** Elasticity of volumes and costs to the macro cycle. A mine sells every tonne into a global pool at the going price, so the domestic output gap does not move its volume (band floor). */
+    /**
+     * Elasticity of volumes and costs to the macro cycle. A mine sells every tonne into a global pool at the going
+     * price, so the domestic output gap does not move its volume (band floor).
+     */
     public const OPERATING_CYCLICALITY = 0.20;
-    /** Own-price elasticity of the firm's demand: a small share of a global market faces residual demand far more elastic than the market's (Landes & Posner 1981), so any premium over the benchmark loses the sale. Inert while the price is pinned to the index. */
+    /**
+     * Own-price elasticity of the firm's demand: a small share of a global market faces residual demand far more
+     * elastic than the market's (Landes & Posner 1981), so any premium over the benchmark loses the sale. Inert while
+     * the price is pinned to the index.
+     */
     public const PRICE_ELASTICITY_OF_DEMAND = 2.50;
-    /** Share of an idiosyncratic revenue gain taken from same-industry peers rather than won from a larger market. Peers barely notice a rival's tonne in a global market. */
+    /**
+     * Share of an idiosyncratic revenue gain taken from same-industry peers rather than won from a larger market. Peers
+     * barely notice a rival's tonne in a global market.
+     */
     public const INDUSTRY_SUBSTITUTABILITY = 0.15;
 
     // --- Input Cost Basket ---
-    /** Shares of the variable cost base by input channel, measured from the BEA input-output accounts with supply-chain content (labor still the model's own). */
+    /**
+     * Shares of the variable cost base by input channel, measured from the BEA input-output accounts with supply-chain
+     * content (labor still the model's own).
+     */
     public const INPUT_COST_EXPOSURES = InputOutputExposures::MINING;
     /** Price takers recover none of their own input inflation through pricing: the market sets the quote. */
     public const PRICING_POWER_INDEX = 0.00;
 
     // --- FX Exposure ---
-    /** Share of revenue whose home-currency realization moves with the trade-weighted exchange rate: metals are priced in the world market. */
+    /**
+     * Share of revenue whose home-currency realization moves with the trade-weighted exchange rate: metals are priced
+     * in the world market.
+     */
     public const FX_REVENUE_EXPOSURE = 0.30;
 
     // --- Analyst Visibility & Error ---
@@ -68,19 +84,32 @@ class MiningBusinessModel extends StandardCorporateBusinessModel
     public const FERTILIZER_MINERALS_WEIGHT = 0.00;
 
     // --- Revenue Shock Physics ---
-    /** Volatility multiplier on the baseline volatility for mine output (grade, recovery, equipment availability) shocks. */
+    /**
+     * Volatility multiplier on the baseline volatility for mine output (grade, recovery, equipment availability)
+     * shocks.
+     */
     public const REVENUE_VARIANCE_SCALAR = 0.25;
-    /** Realization differential noise as a fraction of the output variance scalar (price itself is a market variable). */
+    /**
+     * Realization differential noise as a fraction of the output variance scalar (price itself is a market variable).
+     */
     public const REALIZATION_DIFFERENTIAL_VOL_SCALAR = 0.40;
-    /** Quarterly persistence of mine output shocks (a pit wall slip or a mill outage takes a few quarters to recover). */
+    /**
+     * Quarterly persistence of mine output shocks (a pit wall slip or a mill outage takes a few quarters to recover).
+     */
     public const OUTPUT_SHOCK_PERSISTENCE = 0.35;
-    /** Quarterly persistence of the realization differential (treatment charges and grade premia reset with annual contracts). */
+    /**
+     * Quarterly persistence of the realization differential (treatment charges and grade premia reset with annual
+     * contracts).
+     */
     public const REALIZATION_SHOCK_PERSISTENCE = 0.15;
     /** Quarterly persistence of the firm's own tail-event draw. */
     public const EVENT_SHOCK_PERSISTENCE = 0.10;
 
     // --- Tail Risk & Shock Events ---
-    /** Negative Z-score threshold indicating resource nationalism (an export ban or a revoked concession) shutting in part of the output. */
+    /**
+     * Negative Z-score threshold indicating resource nationalism (an export ban or a revoked concession) shutting in
+     * part of the output.
+     */
     public const GEOPOLITICAL_SANCTIONS_Z_SCORE = -2.20;
     /** Output multiplier applied while the affected operation is shut in. */
     public const SANCTIONS_OUTPUT_MULT = 0.75;
@@ -92,7 +121,10 @@ class MiningBusinessModel extends StandardCorporateBusinessModel
     public const DISASTER_OUTPUT_MULT = 0.85;
 
     // --- Capital Reinvestment & Asset Depreciation Physics ---
-    /** Mine CapEx follows the price deck: US mining structures investment (BEA B320RA3A086NBEA) on the real IMF metals cycle (PMETAINDEXM/CPIAUCSL), HP(6.25) annual 1992-2024, elasticity 0.60. */
+    /**
+     * Mine CapEx follows the price deck: US mining structures investment (BEA B320RA3A086NBEA) on the real IMF metals
+     * cycle (PMETAINDEXM/CPIAUCSL), HP(6.25) annual 1992-2024, elasticity 0.60.
+     */
     public const CAPEX_CYCLICALITY = 0.60;
     /** Share of construction in progress completed each quarter (about two years for a brownfield expansion). */
     public const CAPEX_COMPLETION_RATE = 0.125;
@@ -258,7 +290,8 @@ class MiningBusinessModel extends StandardCorporateBusinessModel
         $outputShock = $expectedRevenue > 0.0 ? ($volumeRevenue / $expectedRevenue) - 1.0 : 0.0;
         $observableShockZ = $outputShock;
 
-        // The one-off charge is booked as a special item: in EBIT, out of the run rate, the Street figure and the cost ratio.
+        // The one-off charge is booked as a special item: in EBIT, out of the run rate, the Street figure and the cost
+        // ratio.
         $specialCharge = $disasterPenalty * $volumeRevenue;
 
         return new SectorPhysicsResult(
@@ -277,13 +310,19 @@ class MiningBusinessModel extends StandardCorporateBusinessModel
         );
     }
 
-    /** Miners anchor to book (replacement cost of the mine and mill) at trough earnings and to mid-cycle earnings otherwise. */
+    /**
+     * Miners anchor to book (replacement cost of the mine and mill) at trough earnings and to mid-cycle earnings
+     * otherwise.
+     */
     protected function getFairValueBookWeight(float $normalizedEps): float
     {
         return $normalizedEps < 0 ? self::TROUGH_BOOK_WEIGHT : self::MID_CYCLE_BOOK_WEIGHT;
     }
 
-    /** Stricter rules on extraction cost the whole operation productivity, so the committed base costs that much more per unit of capacity too (Greenstone, List & Syverson 2012 measure the loss on all inputs). */
+    /**
+     * Stricter rules on extraction cost the whole operation productivity, so the committed base costs that much more
+     * per unit of capacity too (Greenstone, List & Syverson 2012 measure the loss on all inputs).
+     */
     public function getFixedCostFactor(MacroStateDTO $macroState): float
     {
         return FirmEconomics::calculateExtractionCostFactor($macroState->extractionStringency);

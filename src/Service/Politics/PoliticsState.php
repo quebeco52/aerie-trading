@@ -34,12 +34,14 @@ class PoliticsState
     public array $supportParties;
     /** @var array<string, string> */
     public array $dietBlocs;
-    // Each party's short-term swing at the last vote, in log share: candidates and campaigns that do not outlast the vote.
+    // Each party's short-term swing at the last vote, in log share: candidates and campaigns that do not outlast the
+    // vote.
     /** @var array<string, float> */
     public array $partyShortTermShocks;
     public float $coalitionFormedAt;
-    // The talks after a vote or a fall (CoalitionFormation): the cabinet and supporters they produced, the day they take
-    // office (-1: no talks pending, the government sits), when a cabinet last took office, and the talks attempt by attempt.
+    // The talks after a vote or a fall (CoalitionFormation): the cabinet and supporters they produced, the day they
+    // take office (-1: no talks pending, the government sits), when a cabinet last took office, and the talks attempt
+    // by attempt.
     /** @var array<string, float> */
     public array $pendingCoalition;
     /** @var array<string, float> */
@@ -48,15 +50,16 @@ class PoliticsState
     public float $lastGovernmentFormedAt;
     /** @var list<array{day: float, formateur: string, formed: bool, cabinet: list<string>, support: list<string>}> */
     public array $formationLog;
-    // When the last talks began (-1: none yet), when the sitting cabinet will fall (-1: it sees out the term or talks are
-    // pending), and when a cabinet last fell.
+    // When the last talks began (-1: none yet), when the sitting cabinet will fall (-1: it sees out the term or talks
+    // are pending), and when a cabinet last fell.
     public float $talksStartedAt;
     public float $cabinetFallsAt;
     public float $lastCabinetFellAt;
     // The cabinet that went into the last vote, the talks' status quo.
     /** @var array<string, float> */
     public array $electionOutgoingCabinet;
-    // What the vote reads: the deflator where the term began and real GDP where the campaign began (-1: not yet marked).
+    // What the vote reads: the deflator where the term began and real GDP where the campaign began (-1: not yet
+    // marked).
     public float $termStartedAt;
     public float $termStartDeflator;
     public float $campaignStartedAt;
@@ -87,13 +90,13 @@ class PoliticsState
     public float $debtPace;
     public float $lastBudgetEnactedAt;
 
-    // The Council and its departments (CouncilAppointments, MonetaryAuthority, FinancialRegulator): the salt their draws
-    // are hashed from; each councillor's, the governor's and each committee member's name, birth, seat date and stance on
-    // money, and each councillor's on the banks; when each councillor took their seat and when they will leave it early,
-    // if they will; the candidates passed over at the last Council vacancy and for the governorship; the committee's
-    // balance and supermajority; the last rate meeting; when a governor or councillor was last seated, a councillor last
-    // left early and the majority last shifted; the Financial Regulator's head, the requirement in force and the head's
-    // mortgage cap; and the Sovereign Reserve Fund's head.
+    // The Council and its departments (CouncilAppointments, MonetaryAuthority, FinancialRegulator): the salt their
+    // draws are hashed from; each councillor's, the governor's and each committee member's name, birth, seat date and
+    // stance on money, and each councillor's on the banks; when each councillor took their seat and when they will
+    // leave it early, if they will; the candidates passed over at the last Council vacancy and for the governorship;
+    // the committee's balance and supermajority; the last rate meeting; when a governor or councillor was last seated,
+    // a councillor last left early and the majority last shifted; the Financial Regulator's head, the requirement in
+    // force and the head's mortgage cap; and the Sovereign Reserve Fund's head.
     public float $authoritySalt;
     /** @var array<int, string> */
     public array $councilNames;
@@ -120,9 +123,13 @@ class PoliticsState
     public array $councilCompetitionStances;
     /** @var array<int, float> */
     public array $councilMarketsStances;
-    /** @var list<array{name: string, birth: float, stance: float, regulation: float, fund: float, debt: float, competition: float, markets: float, swing?: float}> */
+    /**
+     * @var list<array{name: string, birth: float, stance: float, regulation: float, fund: float, debt: float, competition: float, markets: float, swing?: float}>
+     */
     public array $councillorPassedOver;
-    /** @var array<int, array{name: string, birth: float, stance: float, regulation: float, fund: float, debt: float, competition: float, markets: float, swing?: float}> */
+    /**
+     * @var array<int, array{name: string, birth: float, stance: float, regulation: float, fund: float, debt: float, competition: float, markets: float, swing?: float}>
+     */
     public array $boardMembers;
     /** @var array<int, float> */
     public array $boardSince;
@@ -131,7 +138,9 @@ class PoliticsState
     public float $governorTermStart;
     public float $governorStance;
     public float $governorSwinger;
-    /** @var list<array{name: string, birth: float, stance: float, regulation: float, fund: float, debt: float, competition: float, markets: float, swing?: float}> */
+    /**
+     * @var list<array{name: string, birth: float, stance: float, regulation: float, fund: float, debt: float, competition: float, markets: float, swing?: float}>
+     */
     public array $governorPassedOver;
     /** @var array<int, string> */
     public array $memberNames;
@@ -160,7 +169,9 @@ class PoliticsState
     public float $regulatorBirth;
     public float $regulatorTermStart;
     public float $regulatorStance;
-    /** @var list<array{name: string, birth: float, stance: float, regulation: float, fund: float, debt: float, competition: float, markets: float, swing?: float}> */
+    /**
+     * @var list<array{name: string, birth: float, stance: float, regulation: float, fund: float, debt: float, competition: float, markets: float, swing?: float}>
+     */
     public array $regulatorPassedOver;
     public float $bankCapitalRequirement;
     public float $requirementPhaseFrom;
@@ -172,14 +183,18 @@ class PoliticsState
     public float $fundHeadBirth;
     public float $fundHeadTermStart;
     public float $fundHeadStance;
-    /** @var list<array{name: string, birth: float, stance: float, regulation: float, fund: float, debt: float, competition: float, markets: float, swing?: float}> */
+    /**
+     * @var list<array{name: string, birth: float, stance: float, regulation: float, fund: float, debt: float, competition: float, markets: float, swing?: float}>
+     */
     public array $fundHeadPassedOver;
     public float $lastFundHeadAppointedAt;
     public string $exchequerHeadName;
     public float $exchequerHeadBirth;
     public float $exchequerHeadTermStart;
     public float $exchequerHeadStance;
-    /** @var list<array{name: string, birth: float, stance: float, regulation: float, fund: float, debt: float, competition: float, markets: float, swing?: float}> */
+    /**
+     * @var list<array{name: string, birth: float, stance: float, regulation: float, fund: float, debt: float, competition: float, markets: float, swing?: float}>
+     */
     public array $exchequerHeadPassedOver;
     public float $lastExchequerHeadAppointedAt;
     public string $fairTradingHeadName;
@@ -187,7 +202,9 @@ class PoliticsState
     public float $fairTradingHeadTermStart;
     public float $fairTradingHeadStance;
     public float $fairTradingPriorStance;
-    /** @var list<array{name: string, birth: float, stance: float, regulation: float, fund: float, debt: float, competition: float, markets: float, swing?: float}> */
+    /**
+     * @var list<array{name: string, birth: float, stance: float, regulation: float, fund: float, debt: float, competition: float, markets: float, swing?: float}>
+     */
     public array $fairTradingHeadPassedOver;
     public float $lastFairTradingHeadAppointedAt;
     public string $securitiesHeadName;
@@ -195,25 +212,33 @@ class PoliticsState
     public float $securitiesHeadTermStart;
     public float $securitiesHeadStance;
     public ?float $securitiesPriorStance;
-    /** @var list<array{name: string, birth: float, stance: float, regulation: float, fund: float, debt: float, competition: float, markets: float, swing?: float}> */
+    /**
+     * @var list<array{name: string, birth: float, stance: float, regulation: float, fund: float, debt: float, competition: float, markets: float, swing?: float}>
+     */
     public array $securitiesHeadPassedOver;
     public float $lastSecuritiesHeadAppointedAt;
     public string $securityDirectorName;
     public float $securityDirectorBirth;
     public float $securityDirectorTermStart;
-    /** @var list<array{name: string, birth: float, stance: float, regulation: float, fund: float, debt: float, competition: float, markets: float, swing?: float}> */
+    /**
+     * @var list<array{name: string, birth: float, stance: float, regulation: float, fund: float, debt: float, competition: float, markets: float, swing?: float}>
+     */
     public array $securityDirectorPassedOver;
     public float $lastSecurityDirectorAppointedAt;
     public string $coastGuardCommandantName;
     public float $coastGuardCommandantBirth;
     public float $coastGuardCommandantTermStart;
-    /** @var list<array{name: string, birth: float, stance: float, regulation: float, fund: float, debt: float, competition: float, markets: float, swing?: float}> */
+    /**
+     * @var list<array{name: string, birth: float, stance: float, regulation: float, fund: float, debt: float, competition: float, markets: float, swing?: float}>
+     */
     public array $coastGuardCommandantPassedOver;
     public float $lastCoastGuardCommandantAppointedAt;
     public string $stateGuardCommanderName;
     public float $stateGuardCommanderBirth;
     public float $stateGuardCommanderTermStart;
-    /** @var list<array{name: string, birth: float, stance: float, regulation: float, fund: float, debt: float, competition: float, markets: float, swing?: float}> */
+    /**
+     * @var list<array{name: string, birth: float, stance: float, regulation: float, fund: float, debt: float, competition: float, markets: float, swing?: float}>
+     */
     public array $stateGuardCommanderPassedOver;
     public float $lastStateGuardCommanderAppointedAt;
     /** @var list<string> */
@@ -346,8 +371,8 @@ class PoliticsState
     }
 
     /**
-     * Candidates off the wire: each one's name, birth date, stance on money and, once candidates held them, on the banks
-     * and on the reserves.
+     * Candidates off the wire: each one's name, birth date, stance on money and, once candidates held them, on the
+     * banks and on the reserves.
      *
      * @param array<mixed> $candidates Candidates as decoded.
      * @return list<array{name: string, birth: float, stance: float, regulation: float, fund: float, debt: float, competition: float, markets: float, swing?: float}>

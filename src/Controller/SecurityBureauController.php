@@ -11,7 +11,10 @@ use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Attribute\Route;
 
-/** The Security Bureau's page: its mandate, its director and the Almanac's record of its cases. Linked from the Council page only. */
+/**
+ * The Security Bureau's page: its mandate, its director and the Almanac's record of its cases. Linked from the Council
+ * page only.
+ */
 class SecurityBureauController extends AbstractController
 {
     #[Route('/security-bureau', name: 'app_security_bureau', methods: ['GET'])]

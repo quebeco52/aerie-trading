@@ -15,17 +15,22 @@ use App\Service\Math\MathUtility;
 use App\Service\Model\ModelParam;
 
 /**
- * Earnings strategy for Heavy Manufacturing and Heavy Industry (e.g. Autos, Heavy Machinery, Specialty Chemicals, Steel).
+ * Earnings strategy for Heavy Manufacturing and Heavy Industry (e.g. Autos, Heavy Machinery, Specialty Chemicals,
+ * Steel).
  *
  * Financial Physics:
- * - High Operating Leverage: Massive fixed costs mean margins compress violently during recessions but explode during booms.
+ * - High Operating Leverage: Massive fixed costs mean margins compress violently during recessions but explode during
+ *   booms.
  * - Pro-Cyclical: Highly sensitive to the macro output gap (GDP).
  * - High CapEx Cyclicality: Huge reinvestment requirements that scale with cycles.
  */
 class HeavyManufacturingBusinessModel extends StandardCorporateBusinessModel
 {
     // --- Operating Cyclicality & Demand Structure ---
-    /** Elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). Capital equipment orders are among the most cyclical volumes. */
+    /**
+     * Elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). Capital equipment
+     * orders are among the most cyclical volumes.
+     */
     public const OPERATING_CYCLICALITY = 1.40;
     /** Own-price elasticity of demand: volume lost per unit of real price increase. */
     public const PRICE_ELASTICITY_OF_DEMAND = 0.70;
@@ -33,25 +38,41 @@ class HeavyManufacturingBusinessModel extends StandardCorporateBusinessModel
     public const INDUSTRY_SUBSTITUTABILITY = 0.50;
 
     // --- Input Cost Basket ---
-    /** Shares of the variable cost base by input channel, measured from the BEA input-output accounts with supply-chain content (labor still the model's own). */
+    /**
+     * Shares of the variable cost base by input channel, measured from the BEA input-output accounts with supply-chain
+     * content (labor still the model's own).
+     */
     public const INPUT_COST_EXPOSURES = InputOutputExposures::HEAVY_MANUFACTURING;
 
     // --- FX Exposure ---
-    /** Share of revenue whose competitiveness moves with the trade-weighted exchange rate. Heavy equipment is a globally traded good bid against foreign builders on delivered price. */
+    /**
+     * Share of revenue whose competitiveness moves with the trade-weighted exchange rate. Heavy equipment is a globally
+     * traded good bid against foreign builders on delivered price.
+     */
     public const FX_REVENUE_EXPOSURE = 0.15;
 
     // --- Demand Transmission Lag ---
-    /** Years for a move in the output gap to reach the order book. Capital equipment is ordered against next year's capacity plan, not this quarter's demand. */
+    /**
+     * Years for a move in the output gap to reach the order book. Capital equipment is ordered against next year's
+     * capacity plan, not this quarter's demand.
+     */
     public const DEMAND_LAG_YEARS = 1.00;
-    /** Engineered equipment carries spec lock-in and steel escalator clauses on long builds, but competes bid-by-bid on new orders. */
+    /**
+     * Engineered equipment carries spec lock-in and steel escalator clauses on long builds, but competes bid-by-bid on
+     * new orders.
+     */
     public const PRICING_POWER_INDEX = 0.55;
 
     // --- Inventory Cycle ---
-    /** Order sensitivity to the economy-wide inventory-to-sales gap (Metzler cycle): overhangs trigger destocking, shortfalls restocking. Dealer and fleet inventories gate OEM equipment orders. */
+    /**
+     * Order sensitivity to the economy-wide inventory-to-sales gap (Metzler cycle): overhangs trigger destocking,
+     * shortfalls restocking. Dealer and fleet inventories gate OEM equipment orders.
+     */
     public const INVENTORY_CYCLE_SENSITIVITY = 0.80;
 
     /**
-     * Calendar-quarter revenue seasonality [Q1, Q2, Q3, Q4] summing to 4.0: spring construction and farm machinery deliveries.
+     * Calendar-quarter revenue seasonality [Q1, Q2, Q3, Q4] summing to 4.0: spring construction and farm machinery
+     * deliveries.
      *
      * @return array<int, float>
      */
@@ -85,7 +106,10 @@ class HeavyManufacturingBusinessModel extends StandardCorporateBusinessModel
         return 4.0;
     } // Much higher than standard 1.5
     // --- Secular Demand ---
-    /** Business investment in industrial equipment as a share of US nominal GDP in 1997 (BEA NIPA Table 5.3.5, private fixed investment). */
+    /**
+     * Business investment in industrial equipment as a share of US nominal GDP in 1997 (BEA NIPA Table 5.3.5, private
+     * fixed investment).
+     */
     public const SECULAR_SHARE_1997 = 0.0164;
     /** The same share in 2019. */
     public const SECULAR_SHARE_2019 = 0.0122;
@@ -104,7 +128,10 @@ class HeavyManufacturingBusinessModel extends StandardCorporateBusinessModel
     public const AFTERMARKET_MRO_WEIGHT = 0.35;
 
     // --- Backlog & Variance Physics ---
-    /** Fraction of the OEM order backlog (opening backlog plus new orders) executed and recognized each quarter (~1.9 quarters of coverage). */
+    /**
+     * Fraction of the OEM order backlog (opening backlog plus new orders) executed and recognized each quarter (~1.9
+     * quarters of coverage).
+     */
     public const OEM_BACKLOG_BURN_RATE = 0.35;
     /** Volatility multiplier for OEM capital equipment sales shocks. */
     public const OEM_VARIANCE_SCALAR = 0.40;
@@ -112,7 +139,10 @@ class HeavyManufacturingBusinessModel extends StandardCorporateBusinessModel
     public const MRO_VARIANCE_SCALAR = 0.10;
     /** Structural variable cost ratio of high-margin aftermarket MRO parts. */
     public const MRO_VARIABLE_COST_RATIO = 0.20;
-    /** Aftermarket exposure to the cycle against new equipment's: parts follow the fleet's running hours, 0.40 of the order swing. */
+    /**
+     * Aftermarket exposure to the cycle against new equipment's: parts follow the fleet's running hours, 0.40 of the
+     * order swing.
+     */
     public const MRO_CYCLE_LOADING = 0.40;
 
     // --- Pricing Power & Macro Physics ---
@@ -131,7 +161,9 @@ class HeavyManufacturingBusinessModel extends StandardCorporateBusinessModel
     public const GSCPI_COST_PENALTY_SCALAR        = 0.0095;
 
     // --- Valuation ---
-    /** Book (replacement cost) weight in fair value when normalised EPS is negative: trough cyclicals trade on assets. */
+    /**
+     * Book (replacement cost) weight in fair value when normalised EPS is negative: trough cyclicals trade on assets.
+     */
     public const TROUGH_BOOK_WEIGHT = 0.70;
     /** Book weight in fair value through the rest of the cycle. */
     public const MID_CYCLE_BOOK_WEIGHT = 0.40;
@@ -238,7 +270,10 @@ class HeavyManufacturingBusinessModel extends StandardCorporateBusinessModel
         );
     }
 
-    /** Heavy manufacturers anchor to book (replacement cost) at trough earnings and to mid-cycle earnings through expansions. */
+    /**
+     * Heavy manufacturers anchor to book (replacement cost) at trough earnings and to mid-cycle earnings through
+     * expansions.
+     */
     protected function getFairValueBookWeight(float $normalizedEps): float
     {
         return $normalizedEps < 0 ? self::TROUGH_BOOK_WEIGHT : self::MID_CYCLE_BOOK_WEIGHT;

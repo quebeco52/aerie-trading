@@ -17,7 +17,10 @@ enum AnchorStake: string
     case Anchor = 'anchor';
     case Minority = 'minority';
 
-    /** Fraction of the held company owned at this conviction. Control stops at a half: past that a holding is consolidated line by line and stops being a stake at all. */
+    /**
+     * Fraction of the held company owned at this conviction. Control stops at a half: past that a holding is
+     * consolidated line by line and stops being a stake at all.
+     */
     public function fraction(): float
     {
         return match ($this) {

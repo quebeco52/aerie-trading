@@ -28,18 +28,24 @@ final class Exchequer
     // --- The Treasury's Record (US Treasury, weighted average maturity of marketable debt) ---
     /** Shortest average maturity on the record, in years: 48 months, in 2008. */
     public const SHORTEST_AVERAGE_MATURITY = 4.0;
-    /** Longest average maturity on the record, in years: 71 months, in 2017, near the modern high after the 2009-2016 extension. */
+    /**
+     * Longest average maturity on the record, in years: 71 months, in 2017, near the modern high after the 2009-2016
+     * extension.
+     */
     public const LONGEST_AVERAGE_MATURITY = 71.0 / 12.0;
 
     // --- The Head ---
-    /** Length of the head's single term, in years: the five years of the Council's other department heads (SovereignReserveFund::HEAD_TERM_YEARS). */
+    /**
+     * Length of the head's single term, in years: the five years of the Council's other department heads
+     * (SovereignReserveFund::HEAD_TERM_YEARS).
+     */
     public const HEAD_TERM_YEARS = 5.0;
     /** When the term of the head sitting at Year 1 ends, in years after Year 1 began. */
     public const OPENING_HEAD_TERM_END = 3.0;
 
     /**
-     * One tick, after the Council's own: the head seated on the first read of a state without one, and a new head at each
-     * term's end, from a shortlist, the candidate nearest the Council's median stance on the debt.
+     * One tick, after the Council's own: the head seated on the first read of a state without one, and a new head at
+     * each term's end, from a shortlist, the candidate nearest the Council's median stance on the debt.
      *
      * @param PoliticsState $state The politics, advanced in place; its totalTime already set to this tick's.
      */

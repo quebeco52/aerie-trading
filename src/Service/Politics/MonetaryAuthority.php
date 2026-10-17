@@ -16,33 +16,42 @@ use App\Service\Math\TimeSeries;
  * picks, who set the policy rate by the Authority's published rule.
  *
  * Everyone involved -- councillors, the governor, the committee -- holds a stance on money: a hawk, who would rather
- * fight inflation, a dove, who would rather spare jobs, or a swing vote, who leans to one camp at a time and changes camp
- * now and then (App\Service\Politics\StanceRevision), in the mix the Fed watchers found on the FOMC (Bordo & Istrefi
- * 2023). A councillor does not set the rate; the Council's say runs through whom it appoints.
+ * fight inflation, a dove, who would rather spare jobs, or a swing vote, who leans to one camp at a time and changes
+ * camp now and then (App\Service\Politics\StanceRevision), in the mix the Fed watchers found on the FOMC (Bordo &
+ * Istrefi 2023). A councillor does not set the rate; the Council's say runs through whom it appoints.
  *
  * Every vacancy is filled from a shortlist of three candidates (App\Service\Politics\CouncilAppointments), and the
- * appointer names the one whose stance on money stands nearest their own: the governorship goes to the candidate nearest
- * the whole Council's median, a committee seat to the one nearest the governor. The people sitting at Year 1 were chosen
- * the same way before it.
+ * appointer names the one whose stance on money stands nearest their own: the governorship goes to the candidate
+ * nearest the whole Council's median, a committee seat to the one nearest the governor. The people sitting at Year 1
+ * were chosen the same way before it.
  *
  * The committee's balance, its members' stances averaged with the governor's counting as one, a swing vote counted in
- * the camp they lean to (as Bordo & Istrefi's HD0.5
- * weighs the chair), marks a hawkish or a dovish supermajority when it stands where the FOMC's top or bottom quarter of
- * meetings did; the supermajority is what the economy reads (App\DTO\GovernmentPolicyDTO). At each of its eight meetings a year
- * the governor puts the decision and every other member votes on it: a member whose camp would set the rate two
- * steps from where the committee's leans it (MonetaryPolicySubsystem::campTilt()) dissents toward their own. In a neutral
- * economy no camp leans and the committee votes as one; dissents come when inflation or slack opens the camps apart.
+ * the camp they lean to (as Bordo & Istrefi's HD0.5 weighs the chair), marks a hawkish or a dovish supermajority when
+ * it stands where the FOMC's top or bottom quarter of meetings did; the supermajority is what the economy reads
+ * (App\DTO\GovernmentPolicyDTO). At each of its eight meetings a year the governor puts the decision and every other
+ * member votes on it: a member whose camp would set the rate two steps from where the committee's leans it
+ * (MonetaryPolicySubsystem::campTilt()) dissents toward their own. In a neutral economy no camp leans and the committee
+ * votes as one; dissents come when inflation or slack opens the camps apart.
  */
 final class MonetaryAuthority
 {
     // --- Stances (Bordo & Istrefi 2023; Hack, Istrefi & Meier 2023) ---
-    /** Each type's stance, on the scale the Fed watchers' record is scored on: +1 a hawk, -1 a dove, a swing vote scored in the camp they lean to that year (Hack, Istrefi & Meier 2023); 0 marks the type before a lean is drawn. */
+    /**
+     * Each type's stance, on the scale the Fed watchers' record is scored on: +1 a hawk, -1 a dove, a swing vote scored
+     * in the camp they lean to that year (Hack, Istrefi & Meier 2023); 0 marks the type before a lean is drawn.
+     */
     public const STANCES = ['hawk' => 1.0, 'swing' => 0.0, 'dove' => -1.0];
-    /** FOMC members of each type, 1960-2015, of the 121 the press placed (Bordo & Istrefi 2023, Table 1): the mix candidates are drawn from. */
+    /**
+     * FOMC members of each type, 1960-2015, of the 121 the press placed (Bordo & Istrefi 2023, Table 1): the mix
+     * candidates are drawn from.
+     */
     public const TYPE_COUNTS = ['hawk' => 51, 'swing' => 31, 'dove' => 39];
 
     // --- The Governor ---
-    /** Length of the governor's single term, in years: one non-renewable term, as at the ECB and, since 2013, the Bank of England. */
+    /**
+     * Length of the governor's single term, in years: one non-renewable term, as at the ECB and, since 2013, the Bank
+     * of England.
+     */
     public const GOVERNOR_TERM_YEARS = 8.0;
     /** When the term of the governor sitting at Year 1 ends, in years after Year 1 began. */
     public const OPENING_GOVERNOR_TERM_END = 3.0;
@@ -56,13 +65,20 @@ final class MonetaryAuthority
     public const MEETINGS_PER_YEAR = MonetaryPolicySubsystem::MEETINGS_PER_YEAR;
 
     // --- The Committee's Balance (Bordo & Istrefi 2023; Hack, Istrefi & Meier 2023) ---
-    /** Average stance at or above which the committee holds a hawkish supermajority: the FOMC's 75th percentile, its balance per meeting normal around a median of 0.10 with an sd of 0.34 (Hack, Istrefi & Meier 2023, 1960-2023), as Bordo & Istrefi cut theirs at its quartiles. */
+    /**
+     * Average stance at or above which the committee holds a hawkish supermajority: the FOMC's 75th percentile, its
+     * balance per meeting normal around a median of 0.10 with an sd of 0.34 (Hack, Istrefi & Meier 2023, 1960-2023), as
+     * Bordo & Istrefi cut theirs at its quartiles.
+     */
     public const HAWKISH_MAJORITY_STANCE = 0.33;
     /** Average stance at or below which it holds a dovish supermajority: the FOMC's 25th percentile. */
     public const DOVISH_MAJORITY_STANCE = -0.13;
 
     // --- Dissent ---
-    /** How far a member's camp must set the rate from the committee's before they dissent: two steps, 50bp, so a committee splits a few times a year and only when inflation or slack has opened the camps well apart. */
+    /**
+     * How far a member's camp must set the rate from the committee's before they dissent: two steps, 50bp, so a
+     * committee splits a few times a year and only when inflation or slack has opened the camps well apart.
+     */
     public const DISSENT_THRESHOLD = 2 * MonetaryPolicySubsystem::POLICY_RATE_STEP;
 
     // --- News ---
@@ -72,8 +88,8 @@ final class MonetaryAuthority
     /**
      * One tick, after the Council's own (App\Service\Politics\CouncilAppointments::advance()): the governor and the
      * committee seated on the first read of a state without them, then seats that have fallen vacant refilled, the
-     * governor first; the committee's balance and supermajority whenever it changed; and a meeting's votes when one falls
-     * due.
+     * governor first; the committee's balance and supermajority whenever it changed; and a meeting's votes when one
+     * falls due.
      *
      * @param PoliticsState $state The politics, advanced in place; its totalTime already set to this tick's.
      * @param MacroStateDTO $macro The economy as this tick left it.
@@ -120,8 +136,9 @@ final class MonetaryAuthority
     }
 
     /**
-     * The Authority as it stood at Year 1, or as it stands when a state that predates it is first read: the governor and
-     * the committee chosen from shortlists as they would have been, the governor sitting at Year 1 under their own name.
+     * The Authority as it stood at Year 1, or as it stands when a state that predates it is first read: the governor
+     * and the committee chosen from shortlists as they would have been, the governor sitting at Year 1 under their own
+     * name.
      */
     private static function open(PoliticsState $state, float $time, MathUtility $math): void
     {
@@ -143,7 +160,10 @@ final class MonetaryAuthority
         $state->committeeMajority = self::rebalance($state);
     }
 
-    /** A stance on money drawn from a uniform: hawk, swing vote or dove in the FOMC's mix (Bordo & Istrefi 2023, Table 1). */
+    /**
+     * A stance on money drawn from a uniform: hawk, swing vote or dove in the FOMC's mix (Bordo & Istrefi 2023, Table
+     * 1).
+     */
     public static function drawStance(float $uniform): float
     {
         $draw = $uniform * array_sum(self::TYPE_COUNTS);
@@ -174,8 +194,9 @@ final class MonetaryAuthority
     }
 
     /**
-     * The committee's balance: its members' stances averaged, the governor's counting as one, which is Bordo & Istrefi's
-     * HD0.5 (half the chair's stance and half each other voter's) over the seats, the hawks less the doves per seat.
+     * The committee's balance: its members' stances averaged, the governor's counting as one, which is Bordo &
+     * Istrefi's HD0.5 (half the chair's stance and half each other voter's) over the seats, the hawks less the doves
+     * per seat.
      *
      * @param list<float> $memberStances
      */
@@ -184,7 +205,10 @@ final class MonetaryAuthority
         return ($governorStance + array_sum($memberStances)) / (1 + count($memberStances));
     }
 
-    /** The supermajority a balance makes: 1 hawkish at or above the FOMC's top quarter's edge, -1 dovish at or below its bottom's, 0 neither. */
+    /**
+     * The supermajority a balance makes: 1 hawkish at or above the FOMC's top quarter's edge, -1 dovish at or below its
+     * bottom's, 0 neither.
+     */
     public static function majority(float $balance): float
     {
         return $balance >= self::HAWKISH_MAJORITY_STANCE ? 1.0 : ($balance <= self::DOVISH_MAJORITY_STANCE ? -1.0 : 0.0);
@@ -212,7 +236,10 @@ final class MonetaryAuthority
         return $votes;
     }
 
-    /** A member's vote given how far their camp's rate stands from the committee's: a dissent that way past the threshold, else with the decision. */
+    /**
+     * A member's vote given how far their camp's rate stands from the committee's: a dissent that way past the
+     * threshold, else with the decision.
+     */
     public static function vote(float $gap): float
     {
         return $gap > self::DISSENT_THRESHOLD ? 1.0 : ($gap < -self::DISSENT_THRESHOLD ? -1.0 : 0.0);
@@ -228,7 +255,10 @@ final class MonetaryAuthority
         return $stance >= 0.5 ? 'hawk' : ($stance <= -0.5 ? 'dove' : 'swing');
     }
 
-    /** When the term of committee seat m's member sitting at Year 1 ends: the seats fall vacant a year apart, half a year off Year 1, so all were seated before it. */
+    /**
+     * When the term of committee seat m's member sitting at Year 1 ends: the seats fall vacant a year apart, half a
+     * year off Year 1, so all were seated before it.
+     */
     public static function memberOpeningTermEnd(int $member): float
     {
         return ($member + 0.5) * self::MEMBER_TERM_YEARS / self::COMMITTEE_MEMBERS;
@@ -269,7 +299,9 @@ final class MonetaryAuthority
         return self::majority($state->committeeBalance);
     }
 
-    /** @param array{name: string, birth: float, stance: float, regulation: float, fund: float, debt: float, competition: float, markets: float, swing?: float} $person */
+    /**
+     * @param array{name: string, birth: float, stance: float, regulation: float, fund: float, debt: float, competition: float, markets: float, swing?: float} $person
+     */
     private static function seatGovernor(PoliticsState $state, array $person, float $termStart): void
     {
         CouncilAppointments::retire($state, $state->governorName);
@@ -280,7 +312,9 @@ final class MonetaryAuthority
         $state->governorSwinger = $person['swing'] ?? 0.0;
     }
 
-    /** @param array{name: string, birth: float, stance: float, regulation: float, fund: float, debt: float, competition: float, markets: float, swing?: float} $person */
+    /**
+     * @param array{name: string, birth: float, stance: float, regulation: float, fund: float, debt: float, competition: float, markets: float, swing?: float} $person
+     */
     private static function seatMember(PoliticsState $state, int $member, array $person, float $since): void
     {
         CouncilAppointments::retire($state, $state->memberNames[$member] ?? '');

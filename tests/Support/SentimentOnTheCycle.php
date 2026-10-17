@@ -12,7 +12,10 @@ use App\Service\Macro\MacroEngine;
  */
 final class SentimentOnTheCycle
 {
-    /** Index points per unit of output gap the engine's sentiment carries through its fundamentals (slope of the sentiment EMA on the gap EMA, 48 seeds, no fund). */
+    /**
+     * Index points per unit of output gap the engine's sentiment carries through its fundamentals (slope of the
+     * sentiment EMA on the gap EMA, 48 seeds, no fund).
+     */
     public const POINTS_PER_GAP = 288.0;
 
     public static function at(float $outputGap): float

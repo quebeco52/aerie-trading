@@ -22,9 +22,16 @@ final class SecuritiesLendingDesk
     // --- Securities Lending ---
     /** General collateral borrow fee: what an easy-to-borrow name costs to short, annualized. */
     public const GENERAL_COLLATERAL_BORROW_FEE = 0.0030;
-    /** Borrow fee on a name whose lendable supply is fully consumed. Hard-to-borrow specials really do reach these levels. */
+    /**
+     * Borrow fee on a name whose lendable supply is fully consumed. Hard-to-borrow specials really do reach these
+     * levels.
+     */
     public const MAX_BORROW_FEE = 1.00;
-    /** Convexity of the fee curve in utilization. Flat while supply is ample, then steepening sharply as the last of it is taken: general collateral holds past half utilization, and a name only turns special above roughly eighty-five percent. */
+    /**
+     * Convexity of the fee curve in utilization. Flat while supply is ample, then steepening sharply as the last of it
+     * is taken: general collateral holds past half utilization, and a name only turns special above roughly eighty-five
+     * percent.
+     */
     public const BORROW_FEE_CONVEXITY = 8.00;
     /** Share of an outstanding short position recalled per buy-in. */
     public const BUY_IN_FRACTION = 0.20;

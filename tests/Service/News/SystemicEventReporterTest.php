@@ -36,7 +36,9 @@ class SystemicEventReporterTest extends TestCase
         ob_end_clean();
     }
 
-    /** The card carries what the benchmark did over the month its chart buffer holds, not a size assumed for the event. */
+    /**
+     * The card carries what the benchmark did over the month its chart buffer holds, not a size assumed for the event.
+     */
     public function testTheHeadlineCarriesTheBenchmarksRealMonthMove(): void
     {
         $headline = $this->reporter(bufferedPrice: 100.0)->report($this->macroWith(ShockEvent::BANKING_CRISIS), new PoliticsStateDTO(), $this->benchmarkAt('94'))[0] ?? null;
@@ -63,7 +65,9 @@ class SystemicEventReporterTest extends TestCase
         $this->assertSame(['BANKING CRISIS', 'BUDGET'], [$crisis['presented']['badge'], $budget['presented']['badge']]);
     }
 
-    /** A rescue is reported with the move the market made, so a programme launched into a falling market reads as one. */
+    /**
+     * A rescue is reported with the move the market made, so a programme launched into a falling market reads as one.
+     */
     public function testALaunchIntoAFallingMarketIsNotLabelledARally(): void
     {
         $headline = $this->reporter(bufferedPrice: 100.0)->report($this->macroWith(ShockEvent::TITAN_INTERVENTION), new PoliticsStateDTO(), $this->benchmarkAt('91.5'))[0] ?? null;
@@ -131,7 +135,10 @@ class SystemicEventReporterTest extends TestCase
         $this->assertGreaterThan(0, $opened);
     }
 
-    /** The bloc count names the larger bloc, which need not be the largest party's: Civic leads on seats, the Vanguard's side on blocs. */
+    /**
+     * The bloc count names the larger bloc, which need not be the largest party's: Civic leads on seats, the Vanguard's
+     * side on blocs.
+     */
     public function testTheElectionHeadlineCountsTheLargerBloc(): void
     {
         $politics = new PoliticsStateDTO(
@@ -199,7 +206,10 @@ class SystemicEventReporterTest extends TestCase
         $this->assertGreaterThan(1, count($seen));
     }
 
-    /** The day a cabinet falls, its headline names the caretaker, the supporters it lost and the party opening the talks, never the cabinet they will seat. */
+    /**
+     * The day a cabinet falls, its headline names the caretaker, the supporters it lost and the party opening the
+     * talks, never the cabinet they will seat.
+     */
     public function testTheFallHeadlineNamesTheCabinetThatFell(): void
     {
         $log = [['day' => 30.0, 'formateur' => Diet::CIVIC, 'formed' => true, 'cabinet' => [Diet::CIVIC, Diet::TIDELINE], 'support' => [Diet::IRON_HARBOR]]];
@@ -412,7 +422,9 @@ class SystemicEventReporterTest extends TestCase
         $this->assertSame([], $this->persisted);
     }
 
-    /** Each desk files its own story: a crisis on the day of the vote leads, and the vote is still reported beside it. */
+    /**
+     * Each desk files its own story: a crisis on the day of the vote leads, and the vote is still reported beside it.
+     */
     public function testTheEconomysStoryLeadsAndTheGovernmentsIsStillFiled(): void
     {
         $vote = new PoliticsStateDTO(

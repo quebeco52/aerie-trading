@@ -11,11 +11,10 @@ use App\Service\Math\FinancialConstants;
  * Files each story under a newswire section and decides which stories are headlines.
  *
  * A district story, a failure and a rating move across investment grade are headlines by kind. A deal is a headline
- * when it is significant to the company, and a price shock beyond a 10% move. An earnings or analyst story is a headline when its move is significant against the
- * stock's own volatility: the standardised abnormal return of an event study (Brown & Warner 1985; MacKinlay 1997),
- * over a one-day window.
- * The page load, the live wire and the headline strip all ask this class, so a story never reads as a headline
- * in one place and not another.
+ * when it is significant to the company, and a price shock beyond a 10% move. An earnings or analyst story is a
+ * headline when its move is significant against the stock's own volatility: the standardised abnormal return of an
+ * event study (Brown & Warner 1985; MacKinlay 1997), over a one-day window. The page load, the live wire and the
+ * headline strip all ask this class, so a story never reads as a headline in one place and not another.
  */
 final class NewsDesk
 {
@@ -52,13 +51,19 @@ final class NewsDesk
     /** Cards that are headlines only when the price move they report is significant. */
     private const MOVE_TESTED_CATEGORIES = ['earnings', 'analyst'];
 
-    /** A price shock is a headline beyond a 10% move either way: the single-stock circuit-breaker size (SEC Rule 201; LULD Tier 2 band). */
+    /**
+     * A price shock is a headline beyond a 10% move either way: the single-stock circuit-breaker size (SEC Rule 201;
+     * LULD Tier 2 band).
+     */
     public const HEADLINE_SHOCK_MOVE = 0.10;
 
     /** Two-sided 1% critical value of a standardised abnormal return (|SAR| ≥ 2.576; MacKinlay 1997). */
     public const HEADLINE_ABNORMAL_RETURN_Z = 2.576;
 
-    /** A deal is a headline at 10% of the company's market value: the SEC's significance test (Regulation S-X Rule 1-02(w)). */
+    /**
+     * A deal is a headline at 10% of the company's market value: the SEC's significance test (Regulation S-X Rule
+     * 1-02(w)).
+     */
     public const HEADLINE_DEAL_SHARE = 0.10;
 
     /** A rating change as the debt engine words it: "from BBB to BB". */

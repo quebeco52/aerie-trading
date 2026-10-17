@@ -82,7 +82,10 @@ class EventCategoryTest extends TestCase
         }
     }
 
-    /** @return iterable<string, array{string, string}> The deal type each business model gives each default the M&A engine offers it. */
+    /**
+     * @return iterable<string, array{string, string}> The deal type each business model gives each default the M&A
+     *                                                 engine offers it.
+     */
     public static function dealTypes(): iterable
     {
         $source = (string) file_get_contents(dirname(__DIR__, 3) . '/src/Service/Corporate/MergerAndAcquisitionEngine.php');

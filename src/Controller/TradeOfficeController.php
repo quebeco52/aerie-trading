@@ -11,7 +11,10 @@ use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Attribute\Route;
 
-/** The Trade & Migration Office's page: the tariff, the migration regime and the tax on foreign home buyers it administers. */
+/**
+ * The Trade & Migration Office's page: the tariff, the migration regime and the tax on foreign home buyers it
+ * administers.
+ */
 class TradeOfficeController extends AbstractController
 {
     #[Route('/trade-office', name: 'app_trade_office', methods: ['GET'])]

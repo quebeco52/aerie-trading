@@ -102,7 +102,10 @@ final class AuthorizedParticipantTest extends TestCase
         self::assertLessThan($band * 0.8, $settled['premium']);
     }
 
-    /** The decay is a rate in time, not per tick: a day of no flow leaves the same premium however finely the day is cut. */
+    /**
+     * The decay is a rate in time, not per tick: a day of no flow leaves the same premium however finely the day is
+     * cut.
+     */
     public function testPremiumDecayIsNeutralToTheTickGrid(): void
     {
         $band = $this->ap->band(0.002);

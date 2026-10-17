@@ -23,7 +23,10 @@ final class InsuranceFloatReserveInvariantTest extends TestCase
     private const QUARTERS = 4_000;
     private const QUARTERLY_PREMIUM = 10_000_000_000.0;
     private const MARGIN = 0.10;
-    /** Fixed share that puts the structural variable cost ratio (1 − margin)(1 − fixed) on the cost ratio the physics is handed. */
+    /**
+     * Fixed share that puts the structural variable cost ratio (1 − margin)(1 − fixed) on the cost ratio the physics is
+     * handed.
+     */
     private const FIXED_COST_RATIO = 1.0 / 3.0;
     private const STRUCTURAL_COST_RATIO = 0.60;
     /** The fixed costs that go with it: (1 − margin) × fixed share of a quarter's premium. */

@@ -87,7 +87,8 @@ class FinancialDataBusinessModelTest extends TestCase
             marketVolatilityEma: 0.15,
         );
 
-        // Boom & Volatility macro: tight credit spreads (0.010 = +100bps DCM syndication boom), positive output gap (+2%), and high VIX (0.35)
+        // Boom & Volatility macro: tight credit spreads (0.010 = +100bps DCM syndication boom), positive output gap
+        // (+2%), and high VIX (0.35)
         $boomMacro = new MacroStateDTO(
             outputGapEma: 0.02,
             macroCreditSpreadEma: 0.010,

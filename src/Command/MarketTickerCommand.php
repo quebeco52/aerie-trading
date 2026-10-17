@@ -71,7 +71,9 @@ use Symfony\Component\Messenger\MessageBusInterface;
 class MarketTickerCommand extends Command implements SignalableCommandInterface
 {
     // --- Diagnostics ---
-    /** Simulated years the tick counter may imply away from the clock before the start-up reports it as a divergence. */
+    /**
+     * Simulated years the tick counter may imply away from the clock before the start-up reports it as a divergence.
+     */
     public const CLOCK_DIVERGENCE_TOLERANCE_YEARS = 0.01;
 
     private bool $keepRunning = true;
@@ -336,7 +338,8 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
                 $policy,
                 boardBankLevy: $lastBoardBankLevy,
             );
-            // The Diet votes on the calendar's election tick, on this tick's economy; the economy reads what it decides next tick.
+            // The Diet votes on the calendar's election tick, on this tick's economy; the economy reads what it decides
+            // next tick.
             $politics = $this->politicsEngine->updatePolitics($macroState, $dt);
             $policy = $politics->policy();
             // Flows are consumed once; a tick that prices no board must not replay the last one's return.
