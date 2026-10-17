@@ -75,7 +75,7 @@
                                 {{ not stock.isBankrupt and stock.peRatio is not null ? stock.peRatio|number_format(2) ~ 'x' : '-' }}
                             </td>
                             <td class="px-4 py-2.5 font-mono tabular-nums text-right text-on-surface" data-value="{{ stock.dividendYield ?? 0 }}">
-                                {{ not stock.isBankrupt and stock.dividendYield > 0 ? (stock.dividendYield)|number_format(2) ~ '%' : '-' }}
+                                {{ not stock.isBankrupt and stock.dividendYield > 0 ? stock.dividendYield|pct(2) : '-' }}
                             </td>
                             <td class="px-4 py-2.5 font-mono tabular-nums text-right text-on-surface" data-value="{{ stock.eps }}">{{ stock.eps|money(2) }}</td>
                             <td class="px-4 py-2.5 font-mono tabular-nums text-right font-bold {{ stock.currentRoic|signed_class }}" data-value="{{ stock.currentRoic }}">

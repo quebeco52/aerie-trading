@@ -70,7 +70,7 @@ class PriceChangeFeedTest extends TestCase
 
     private function buffered(float $price): string
     {
-        return json_encode(['price' => $price, 'recorded_at' => '2026-03-14 09:30:00']);
+        return json_encode(['price' => $price, 'recorded_at' => '2026-03-14 09:30:00'], JSON_THROW_ON_ERROR);
     }
 
     public function testReturnsEmptyArrayForNoStocks(): void

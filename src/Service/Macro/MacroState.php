@@ -27,6 +27,15 @@ class MacroState
      */
     public const RETIRED_FINANCE_MARKET_TREND_KEY = 'finance_market_trend';
 
+    /**
+     * Readings a payload predating them opens from another reading: the breakeven at inflation, the slope at its quote.
+     */
+    private const OPENING_SEEDS = [
+        'tipsBreakeven' => 'inflation',
+        'tipsBreakevenQuoted' => 'tipsBreakeven',
+        'structuralSlope' => 'nsSlope',
+    ];
+
     public float $totalTime;
     public float $inflation;
     public float $inflationEma;
@@ -609,7 +618,10 @@ class MacroState
     }
 
     /**
-     * Initializes the MacroState from a decoded JSON array payload.
+     * Initializes the MacroState from a decoded JSON array payload or a macro_report row.
+     *
+     * The one reader that upgrades a payload predating a field: MacroStateDTO::fromArray() reads through it, so the
+     * engine and every snapshot open the same economy from the same payload.
      *
      * The field list comes from App\Data\Macro\MacroFieldRegistry, so a newly declared observable is read
      * back off the wire the moment it exists. It used to be named here a second time, and a field
@@ -641,6 +653,24 @@ class MacroState
                 'eventType' => (string) $data[$key],
                 default => (float) $data[$key],
             };
+        }
+
+        // The smoothed 5y was recorded under the macro_report column spelling before the wire key existed, and a
+        // payload carrying both is a database row, so the column spelling wins.
+        if (isset($data['yield5y_ema'])) {
+            $state->yield5yEma = (float) $data['yield5y_ema'];
+            $carried['yield5yEma'] = true;
+        }
+        // A payload that carries a policy rate but no curve gets the opening curve's term spreads on top of that rate,
+        // so the tenors stay consistent with the rate the payload does report.
+        if (isset($carried['policyRate'])) {
+            $opening = MacroFieldRegistry::defaults();
+            foreach (['yield2y', 'yield5y', 'yield10y', 'yield30y'] as $tenor) {
+                if (!isset($carried[$tenor])) {
+                    $state->$tenor = $state->policyRate + ($opening[$tenor] - $opening['policyRate']);
+                    $carried[$tenor] = true;
+                }
+            }
         }
 
         // Openings derived from the values above, for the fields a payload predating them omits.
@@ -704,6 +734,10 @@ class MacroState
             // Nelson-Siegel beta1 is the short-end spread of the curve, not a free parameter.
             $state->nsBeta1 = $state->policyRate - $state->nsLevel;
         }
+        if (!isset($carried['nsSlope'])) {
+            // The quoted slope is the 10y-over-policy term spread, read off the curve the way the engine reads it.
+            $state->nsSlope = $state->yield10y - $state->policyRate;
+        }
         if (!isset($carried['potentialGdpIndex'])) {
             $state->potentialGdpIndex = $state->nominalGdpIndex / (1.0 + $state->outputGap);
         }
@@ -711,10 +745,12 @@ class MacroState
             $state->highYieldCreditSpread = $state->macroCreditSpread * MacroEngine::HY_BASE_SPREAD_MULTIPLIER;
         }
 
-        // A smoothed series with no reading of its own opens level with the series it smooths.
-        foreach (MacroFieldRegistry::seeds() as $field => $source) {
-            if (!isset($carried[$field])) {
-                $state->$field = $state->$source;
+        // A smoothed series with no reading of its own opens level with the series it smooths. Walked in field order,
+        // so a series seeded from one that is itself seeded resolves in one pass.
+        $seeds = MacroFieldRegistry::seeds() + self::OPENING_SEEDS;
+        foreach (array_keys($fields) as $field) {
+            if (!isset($carried[$field]) && isset($seeds[$field])) {
+                $state->$field = $state->{$seeds[$field]};
             }
         }
 

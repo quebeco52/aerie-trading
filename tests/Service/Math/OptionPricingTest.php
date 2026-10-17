@@ -392,6 +392,7 @@ class OptionPricingTest extends TestCase
         for ($strike = 20.0; $strike <= 260.0; $strike += 0.5) {
             $isCall = $strike > $forward;
             $deviates = OptionPricing::calculateBlackScholesDeviates($spot, $strike, $atmVol, $rate, 0.0, $tenor);
+            $this->assertNotNull($deviates, "K={$strike}");
             $smileVol = OptionPricing::calculateGramCharlierImpliedVolatility(
                 $atmVol,
                 $deviates['d1'],

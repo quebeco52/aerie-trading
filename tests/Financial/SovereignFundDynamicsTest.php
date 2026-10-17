@@ -89,6 +89,9 @@ class SovereignFundDynamicsTest extends TestCase
             ARRAY_FILTER_USE_KEY,
         ));
         $this->assertGreaterThan(count($weights) / 2, count($freeWeights), 'The ceiling binds in the tail, not as a rule.');
+        $this->assertNotEmpty($freeWeights, 'The runs record the domestic weight in some year.');
+        $this->assertNotEmpty($weights, 'The runs record the domestic weight.');
+        $this->assertNotEmpty($ownership, 'The runs record the fund\'s board ownership.');
         $this->assertGreaterThan(0.6, min($freeWeights), 'Rebalancing keeps the fund on the board at its policy weight.');
         $this->assertLessThan(1.5, max($weights), 'And off it when the board runs up.');
         // A fund that bought a fall to the 10% ceiling can drift past it only by the board falling further.

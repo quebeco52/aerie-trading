@@ -1029,7 +1029,9 @@ class MergerAndAcquisitionEngineTest extends TestCase
         $this->assertLessThan(100_000_000_000.0 * MergerAndAcquisitionEngine::MA_FINANCIAL_EQUITY_CAP, (float) $deal['spent'], 'review, not the capital cap, sized it');
         $this->assertStringEndsWith('Sized to ' . MergerAndAcquisitionEngine::LIMIT_MERGER_REVIEW . '.', $deal['event']['description']);
         $cleared = MergerAndAcquisitionEngine::maxClearedTargetShare(0.40, 0.16);
-        $this->assertEqualsWithDelta(0.40 + $cleared, $ledger->describeMergerMarket($bank, $this->healthyMacro(), 0.0, 300, 252)['acquirer_share'], 1e-9);
+        $market = $ledger->describeMergerMarket($bank, $this->healthyMacro(), 0.0, 300, 252);
+        $this->assertNotNull($market);
+        $this->assertEqualsWithDelta(0.40 + $cleared, $market['acquirer_share'], 1e-9);
     }
 
     /** A steward bank with cash well past its target, so the cash-funded strategic acquisition trades. */
@@ -1171,6 +1173,7 @@ class MergerAndAcquisitionEngineTest extends TestCase
         $this->assertStringNotContainsString('Sized to', $unreviewedDeal['event']['description'], 'a deal its buyer sized states no rule');
         $this->assertLessThan((float) $unreviewedDeal['spent'], (float) $deal['spent'], 'and the price follows the target');
         $market = $ledger->describeMergerMarket($leader, $this->healthyMacro(), 0.0, 30, 252);
+        $this->assertNotNull($market);
         $this->assertEqualsWithDelta(0.30 + $cleared, $market['acquirer_share'], 1e-9);
         $this->assertEqualsWithDelta(0.0100, $market['herfindahl'] - 0.09 - ($cleared * $cleared), 1e-9);
     }
@@ -1220,7 +1223,9 @@ class MergerAndAcquisitionEngineTest extends TestCase
         $ledger->resolveIndustryCapacityRatio($acquirer, 20_000_000_000.0, 0.05, 1.0, 0.0, 0.0, 10, 252);
         $rival = (new Stock())->setTicker('HOLD')->setIndustry('Technology');
         $ledger->resolveIndustryCapacityRatio($rival, 380_000_000_000.0, 0.95, 1.0, 0.0, 0.0, 12, 252);
-        $this->assertEqualsWithDelta(0.0, $ledger->describeMergerMarket($acquirer, $this->healthyMacro(), 0.0, 20, 252)['fringe_share'], 1e-12);
+        $market = $ledger->describeMergerMarket($acquirer, $this->healthyMacro(), 0.0, 20, 252);
+        $this->assertNotNull($market);
+        $this->assertEqualsWithDelta(0.0, $market['fringe_share'], 1e-12);
 
         $this->assertNull($engine->evaluatePrivateAcquisition($acquirer, $this->healthyMacro(), 1.0, 20, 252));
         $this->assertSame('4000000000', $acquirer->getCorporateTreasury());
@@ -1274,6 +1279,7 @@ class MergerAndAcquisitionEngineTest extends TestCase
         $acquiredRevenue = (float) $stock->getTotalRevenue() - $revenueBefore;
         $this->assertGreaterThan(0.0, $acquiredRevenue);
         $restated = $stock->getQuarterlyOperatingHistory();
+        $this->assertNotNull($restated);
         $this->assertCount(4, $restated);
         $ebitAdded = $restated[0]['ebit'] - $history[0]['ebit'];
         $this->assertGreaterThan(0.0, $ebitAdded);
@@ -1304,7 +1310,10 @@ class MergerAndAcquisitionEngineTest extends TestCase
 
         $this->assertIsArray($this->engine->evaluateCorporateDivestiture($stock, new MacroStateDTO(policyRateEma: 0.04, corporateTaxRate: 0.20, yield5yEma: 0.04, nominalGdpIndex: 1.0), 1.0));
 
-        foreach ($stock->getQuarterlyOperatingHistory() as $i => $quarter) {
+        $restated = $stock->getQuarterlyOperatingHistory();
+        $this->assertNotNull($restated);
+        $this->assertCount(4, $restated);
+        foreach ($restated as $i => $quarter) {
             $this->assertEqualsWithDelta($history[$i]['revenue'] * 0.75, $quarter['revenue'], 1.0);
             $this->assertEqualsWithDelta($history[$i]['ebit'] * 0.75, $quarter['ebit'], 1.0);
         }
@@ -1378,7 +1387,9 @@ class MergerAndAcquisitionEngineTest extends TestCase
         $macro = new MacroStateDTO(policyRateEma: 0.04, corporateTaxRate: 0.20, yield5yEma: 0.04, nominalGdpIndex: 1.0, totalTime: 3.0);
 
         $this->assertIsArray($this->engine->evaluateCorporateDivestiture($stock, $macro, 1.0));
-        $this->assertSame(3.0, $stock->getEarningsMomentumZ()[MergerAndAcquisitionEngine::STATE_DISTRESS_SALE_EPISODE]);
+        $state = $stock->getEarningsMomentumZ();
+        $this->assertNotNull($state);
+        $this->assertSame(3.0, $state[MergerAndAcquisitionEngine::STATE_DISTRESS_SALE_EPISODE]);
         $plantAfterSale = $stock->getNetPpe();
         // The proceeds are spent, so no cash buffer stands between the firm and a second sale but the episode.
         $spendProceeds = static fn() => $stock->setCorporateTreasury('1000000000');
@@ -1391,7 +1402,9 @@ class MergerAndAcquisitionEngineTest extends TestCase
         $stock->setLongRunReturn('0.15');
         $stock->setTotalNetIncome('500000000');
         $this->assertNull($this->engine->evaluateCorporateDivestiture($stock, $macro, 1.0));
-        $this->assertArrayNotHasKey(MergerAndAcquisitionEngine::STATE_DISTRESS_SALE_EPISODE, $stock->getEarningsMomentumZ(), 'a recovered return closes the episode');
+        $state = $stock->getEarningsMomentumZ();
+        $this->assertNotNull($state);
+        $this->assertArrayNotHasKey(MergerAndAcquisitionEngine::STATE_DISTRESS_SALE_EPISODE, $state, 'a recovered return closes the episode');
 
         $distressed($stock);
         $spendProceeds();
@@ -1477,7 +1490,9 @@ class MergerAndAcquisitionEngineTest extends TestCase
             $stock->setTotalNetIncome('-1000000000');
             $stock->setRoicTtm('0.00');
             $cashBefore = (float) $stock->getCorporateTreasury();
-            $shock = $this->engine->evaluateCorporateDivestiture($stock, new MacroStateDTO(policyRateEma: 0.04, corporateTaxRate: 0.20, yield5yEma: 0.04, nominalGdpIndex: 1.0), 1.0)['shock'];
+            $sale = $this->engine->evaluateCorporateDivestiture($stock, new MacroStateDTO(policyRateEma: 0.04, corporateTaxRate: 0.20, yield5yEma: 0.04, nominalGdpIndex: 1.0), 1.0);
+            $this->assertIsArray($sale);
+            $shock = $sale['shock'];
             $salePrice = 0.25 * $price * 10_000_000.0 * (1.0 - MergerAndAcquisitionEngine::DIV_FIRE_SALE_DISCOUNT);
 
             return ['shock' => $shock, 'tax' => $salePrice - ((float) $stock->getCorporateTreasury() - $cashBefore), 'marketCap' => $price * 10_000_000.0];

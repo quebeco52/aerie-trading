@@ -104,6 +104,7 @@ final class DecimalArithmeticTest extends TestCase
     {
         $this->expectException(\ValueError::class);
 
+        // @phpstan-ignore argument.type (the point: bcmath rejects what is not a number)
         bcadd($malformed, '0', 4);
     }
 
@@ -128,6 +129,7 @@ final class DecimalArithmeticTest extends TestCase
         $this->assertSame('-12.5000', bcadd('-12.5', '0', 4));
         $this->assertSame('0.5000', bcadd('.5', '0', 4));
         $this->assertSame('5.0000', bcadd('5.', '0', 4));
+        // @phpstan-ignore argument.type (the point: bcmath reads an empty string as zero)
         $this->assertSame('0.0000', bcadd('', '0', 4));
     }
 }

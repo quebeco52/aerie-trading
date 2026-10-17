@@ -313,6 +313,7 @@ class IndustryShareLedgerTest extends TestCase
         $this->assertSame(0.0, $ledger->resolveRosterTrendShare($this->stock('', 1.0), 300, 252));
 
         $described = $ledger->describeIndustry($leader, ['trend_nominal_gdp' => 1.0, 'total_time' => 0.0, 'secular_excess_growth' => 0.0], 300, 252);
+        $this->assertNotNull($described);
         $this->assertEqualsWithDelta(1.0, $described['roster_trend_share'], 1e-9);
     }
 
@@ -343,6 +344,7 @@ class IndustryShareLedgerTest extends TestCase
 
         // The market rides trend nominal GDP and the industry's secular excess, as the anchor's trend demand does.
         $later = $ledger->describeMergerMarket($leader, new MacroStateDTO(potentialGdpIndex: 1.2, gdpDeflator: 1.1, totalTime: 5.0), 0.02, 40, 252);
+        $this->assertNotNull($later);
         $this->assertEqualsWithDelta(
             10_000.0 * 1.2 * 1.1 * exp(TimeSeries::fadedExcessIntegral(0.02, 0.0, 5.0, FinancialConstants::SECULAR_EXCESS_HALF_LIFE_YEARS)),
             $later['market_revenue'],
@@ -351,6 +353,7 @@ class IndustryShareLedgerTest extends TestCase
 
         // A peer whose record has aged out is off the roster: its share is back in the fringe.
         $stale = $ledger->describeMergerMarket($leader, $macro, 0.0, 20 + 253, 252);
+        $this->assertNotNull($stale);
         $this->assertEqualsWithDelta(0.09, $stale['herfindahl'], 1e-12);
         $this->assertEqualsWithDelta(0.70, $stale['fringe_share'], 1e-12);
     }
@@ -367,6 +370,7 @@ class IndustryShareLedgerTest extends TestCase
         $ledger->recordAcquiredCapacity($leader, 500.0, $macro, 0.0);
 
         $market = $ledger->describeMergerMarket($leader, $macro, 0.0, 30, 252);
+        $this->assertNotNull($market);
         $this->assertEqualsWithDelta(10_000.0, $market['market_revenue'], 1e-6, 'a deal changes who owns the market, not its size');
         $this->assertEqualsWithDelta(0.35, $market['acquirer_share'], 1e-12);
         $this->assertEqualsWithDelta((0.35 ** 2) + (0.10 ** 2), $market['herfindahl'], 1e-12);
@@ -466,6 +470,7 @@ class IndustryShareLedgerTest extends TestCase
 
         $trend = ['trend_nominal_gdp' => 1.0, 'total_time' => 0.0, 'secular_excess_growth' => 0.0];
         $description = $ledger->describeIndustry($peer, $trend, 30, 252);
+        $this->assertNotNull($description);
 
         $this->assertEqualsWithDelta(0.25, $description['revenue_share'], 1e-9);
         $this->assertEqualsWithDelta(0.75, $description['peers']['LDR']['revenue_share'], 1e-9);
@@ -483,6 +488,7 @@ class IndustryShareLedgerTest extends TestCase
         $ledger->recordIdiosyncraticGain($known, 1_000.0, 0.0, 0.5, 10);
 
         $description = $ledger->describeIndustry($fresh, ['trend_nominal_gdp' => 1.0, 'total_time' => 0.0, 'secular_excess_growth' => 0.0], 20, 252);
+        $this->assertNotNull($description);
 
         $this->assertEqualsWithDelta(0.5, $description['revenue_share'], 1e-9);
         $this->assertNull($description['capacity_ratio']);
@@ -523,11 +529,14 @@ class IndustryShareLedgerTest extends TestCase
 
         $ledger->recordAcquiredCapacity($bank, 250.0, new MacroStateDTO(), 0.0);
         $bought = $ledger->describeMergerMarket($bank, new MacroStateDTO(), 0.0, 300, 252);
+        $this->assertNotNull($bought);
         $this->assertEqualsWithDelta(5_000.0, $bought['market_revenue'], 1e-9, 'the market is where it was');
         $this->assertEqualsWithDelta(0.15, $bought['acquirer_share'], 1e-12);
 
         $ledger->recordDivestedFraction($bank, 0.20, new MacroStateDTO(), 0.0);
-        $this->assertEqualsWithDelta(0.12, $ledger->describeMergerMarket($bank, new MacroStateDTO(), 0.0, 300, 252)['acquirer_share'], 1e-12);
+        $sold = $ledger->describeMergerMarket($bank, new MacroStateDTO(), 0.0, 300, 252);
+        $this->assertNotNull($sold);
+        $this->assertEqualsWithDelta(0.12, $sold['acquirer_share'], 1e-12);
     }
 
     public function testAFirmThatHasNotReportedHasNoRevenueMarket(): void

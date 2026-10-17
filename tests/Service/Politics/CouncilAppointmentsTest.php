@@ -127,6 +127,7 @@ class CouncilAppointmentsTest extends TestCase
                 }
             }
             if ($i % 4 === 3) {
+                $this->assertArrayHasKey('swing', $named, 'A drawn candidate carries their swing.');
                 $doves += $named['stance'] === -1.0 && $named['swing'] === 0.0 ? 1 : 0;
             }
         }

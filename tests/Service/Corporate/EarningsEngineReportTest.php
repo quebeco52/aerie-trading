@@ -721,6 +721,8 @@ class EarningsEngineReportTest extends TestCase
         $first = $context;
         $opened = $stock->getQuarterlyOperatingHistory();
 
+        $this->assertNotNull($first, 'the opening quarter must report');
+        $this->assertNotNull($opened);
         $this->assertCount(4, $opened);
         $this->assertNotEqualsWithDelta($first->actualRevenue, $first->seasonallyAdjustedRevenue, 1.0, 'the opening quarter must be seasonal for the seed to matter');
         foreach (array_slice($opened, 0, 3) as $seed) {
@@ -733,6 +735,8 @@ class EarningsEngineReportTest extends TestCase
         $this->engine->calculate($stock, $macro, $reportingTick + 63, 252);
         $rolled = $stock->getQuarterlyOperatingHistory();
 
+        $this->assertNotNull($context, 'the rolled quarter must report');
+        $this->assertNotNull($rolled);
         $this->assertCount(4, $rolled);
         $this->assertSame(array_slice($opened, 1), array_slice($rolled, 0, 3), 'the oldest quarter drops out');
         $this->assertEqualsWithDelta($context->actualRevenue, $rolled[3]['revenue'], 1e-6);
@@ -805,6 +809,8 @@ class EarningsEngineReportTest extends TestCase
         $engine->calculate($stock, new \App\DTO\MacroStateDTO(), $this->getReportingTick('TTM_CRED'), 252);
 
         $window = $stock->getQuarterlyOperatingHistory();
+        $this->assertNotNull($context, 'the quarter must report');
+        $this->assertNotNull($window);
         $this->assertCount(4, $window);
         $this->assertCount(1, $debt->trailingHealth);
         $this->assertSame($debt->trailingHealth[0], $context->health);

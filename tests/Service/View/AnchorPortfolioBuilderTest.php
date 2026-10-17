@@ -74,6 +74,7 @@ class AnchorPortfolioBuilderTest extends TestCase
     public function testHoldingsAreOrderedLargestFirstAndSharesSumToOne(): void
     {
         $portfolio = $this->builder($this->board())->build($this->sphere());
+        $this->assertNotNull($portfolio);
 
         $values = array_column($portfolio['holdings'], 'value');
         $sorted = $values;
@@ -90,6 +91,7 @@ class AnchorPortfolioBuilderTest extends TestCase
         $board[0]->setIsBankrupt(true);
 
         $portfolio = $this->builder($board)->build($this->sphere());
+        $this->assertNotNull($portfolio);
         $dead = array_values(array_filter($portfolio['holdings'], static fn(array $h): bool => $h['isBankrupt']));
 
         $this->assertCount(1, $dead);

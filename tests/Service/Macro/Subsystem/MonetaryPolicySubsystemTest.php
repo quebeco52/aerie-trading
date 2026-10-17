@@ -14,6 +14,7 @@ use App\Service\Macro\Subsystem\SovereignFundSubsystem;
 use App\Service\Math\FixedIncome;
 use App\Service\Math\MathUtility;
 use App\Service\Math\TimeSeries;
+use App\Tests\Support\YieldCurveProbe;
 use PHPUnit\Framework\TestCase;
 
 class MonetaryPolicySubsystemTest extends TestCase
@@ -54,7 +55,9 @@ class MonetaryPolicySubsystemTest extends TestCase
         $state->tipsBreakeven = MacroEngine::TARGET_INFLATION + 0.03;
 
         $target = $subsystem->calculateTargetRate($state, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE, 0.25);
-        $policy = $probe->snapshot()['current']['policy'];
+        $window = $probe->snapshot()['current'];
+        $this->assertNotNull($window, 'Setting the target opens a window.');
+        $policy = $window['policy'];
 
         $this->assertEqualsWithDelta($target, $policy['averageTarget'], 1e-15);
         $this->assertEqualsWithDelta($target, array_sum($policy['terms']), 1e-12);
@@ -363,7 +366,7 @@ class MonetaryPolicySubsystemTest extends TestCase
         $state->tipsBreakeven = 0.02;
         $state->outputGap = 0.01;
 
-        $curve = $this->subsystem->calculateYieldCurveAndQE($state, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE, 0.25);
+        $curve = YieldCurveProbe::balanceSheetAndCurve($this->subsystem, $state, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE, 0.25);
 
         $this->assertArrayHasKey('yield_2y', $curve);
         $this->assertArrayHasKey('yield_5y', $curve);
@@ -388,8 +391,8 @@ class MonetaryPolicySubsystemTest extends TestCase
         $stateHighTarget = clone $stateLowTarget;
         $stateHighTarget->targetRate = 0.06; // Aggressive hiking path expected
 
-        $curveLow = $this->subsystem->calculateYieldCurveAndQE($stateLowTarget, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE, 0.25);
-        $curveHigh = $this->subsystem->calculateYieldCurveAndQE($stateHighTarget, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE, 0.25);
+        $curveLow = YieldCurveProbe::balanceSheetAndCurve($this->subsystem, $stateLowTarget, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE, 0.25);
+        $curveHigh = YieldCurveProbe::balanceSheetAndCurve($this->subsystem, $stateHighTarget, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE, 0.25);
 
         $this->assertGreaterThan(
             $curveLow['risk_neutral_10y'],
@@ -411,13 +414,13 @@ class MonetaryPolicySubsystemTest extends TestCase
         $state->inflation = 0.020;
 
         // Step 1: dt = 1.0 year -> hold timer becomes 1.0 (< BALANCE_SHEET_REINVESTMENT_HOLD_YEARS)
-        $curveYear1 = $this->subsystem->calculateYieldCurveAndQE($state, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE, 1.0);
+        $curveYear1 = YieldCurveProbe::balanceSheetAndCurve($this->subsystem, $state, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE, 1.0);
         $this->assertEqualsWithDelta(1.0, $curveYear1['new_hold_timer'], 0.01);
         $this->assertEqualsWithDelta(0.008, $curveYear1['new_balance_sheet_intensity'], 0.001, 'Balance sheet must remain held during reinvestment phase.');
 
         // Step 2: the clock crosses the hold window and passive runoff starts
         $state->balanceSheetHoldTimer = 1.0;
-        $curveYear2 = $this->subsystem->calculateYieldCurveAndQE($state, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE, 1.1);
+        $curveYear2 = YieldCurveProbe::balanceSheetAndCurve($this->subsystem, $state, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE, 1.1);
         $this->assertGreaterThanOrEqual(MonetaryPolicySubsystem::BALANCE_SHEET_REINVESTMENT_HOLD_YEARS, $curveYear2['new_hold_timer']);
         $this->assertLessThan(0.008, $curveYear2['new_balance_sheet_intensity'], 'Balance sheet runoff (QT) must begin once hold timer expires.');
         $this->assertGreaterThanOrEqual(0.0, $curveYear2['new_balance_sheet_intensity'], 'Runoff stops at zero; the bank cannot go net short.');
@@ -449,7 +452,7 @@ class MonetaryPolicySubsystemTest extends TestCase
         $state->tipsBreakeven = 0.02;
         $state->outputGap = 0.02;
 
-        $curve = $this->subsystem->calculateYieldCurveAndQE($state, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE, 0.25);
+        $curve = YieldCurveProbe::balanceSheetAndCurve($this->subsystem, $state, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE, 0.25);
 
         // Curvature beta2 = target scale x (terminal rate less the short rate the market prices, floored at the lower
         // bound) + gap scale x gap
@@ -516,7 +519,7 @@ class MonetaryPolicySubsystemTest extends TestCase
         $stateWithRoom->policyRate = 0.015;
         $stateWithRoom->targetRate = 0.010;
         $stateWithRoom->outputGap = -0.020;
-        $roomCurve = $this->subsystem->calculateYieldCurveAndQE($stateWithRoom, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE, $dt);
+        $roomCurve = YieldCurveProbe::balanceSheetAndCurve($this->subsystem, $stateWithRoom, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE, $dt);
         $this->assertEquals(0.0, $roomCurve['new_qe_intensity'], 'QE must not activate while the rule\'s rate is reachable.');
 
         // At the floor with the rule asking for less: purchases begin.
@@ -524,7 +527,7 @@ class MonetaryPolicySubsystemTest extends TestCase
         $stateAtFloor->policyRate = MacroEngine::EFFECTIVE_LOWER_BOUND;
         $stateAtFloor->targetRate = -0.015;
         $stateAtFloor->outputGap = -0.020;
-        $floorCurve = $this->subsystem->calculateYieldCurveAndQE($stateAtFloor, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE, $dt);
+        $floorCurve = YieldCurveProbe::balanceSheetAndCurve($this->subsystem, $stateAtFloor, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE, $dt);
         $this->assertGreaterThan(0.0, $floorCurve['new_qe_intensity'], 'QE must activate once the rule asks for a rate below the floor.');
     }
 
@@ -1541,7 +1544,10 @@ class MonetaryPolicySubsystemTest extends TestCase
         $probe->enable();
         (new MonetaryPolicySubsystem(new MathUtility(), $probe))->updatePolicyRate($state, $targetRate, 0.25);
 
-        return $probe->snapshot()['current']['policy']['constraints'];
+        $window = $probe->snapshot()['current'];
+        $this->assertNotNull($window, 'Setting the rate opens a window.');
+
+        return $window['policy']['constraints'];
     }
 
     public function testAMidCycleRateMovesUnconstrained(): void

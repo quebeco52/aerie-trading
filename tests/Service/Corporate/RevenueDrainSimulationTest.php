@@ -82,8 +82,12 @@ class RevenueDrainSimulationTest extends TestCase
         $seededTurnover = 0.13 / (0.09 * (1.0 - $hiked['tax_rate']));
         $this->assertEqualsWithDelta($seededTurnover, $hiked['turnover'], 0.001, 'turnover is seeded once by the DuPont identity and held');
 
-        $peak = max(array_slice($hiked['revenues'], 0, 4, true));
-        $troughAfterHikes = min(array_slice($hiked['revenues'], 4, null, true));
+        $openingYear = array_slice($hiked['revenues'], 0, 4, true);
+        $afterHikes = array_slice($hiked['revenues'], 4, null, true);
+        $this->assertNotEmpty($openingYear, 'The run files its opening year.');
+        $this->assertNotEmpty($afterHikes, 'The run files quarters after the hikes begin.');
+        $peak = max($openingYear);
+        $troughAfterHikes = min($afterHikes);
         $this->assertGreaterThan($peak * 0.60, $troughAfterHikes, 'a margin squeeze must not collapse physical revenue capacity');
 
         $seeds = [1, 2, 3, 4, 5, 6, 7, 8];

@@ -40,7 +40,17 @@ class OutputGapChannelsTest extends TestCase
 
         $subsystem->calculateOutputGap($state, 0.03, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, 1.0 / 3600.0, 1.0);
 
-        return array_keys($probe->snapshot()['current']['contributions']);
+        $window = $probe->snapshot()['current'];
+        $this->assertNotNull($window, 'a production tick opens the probe window');
+        $this->assertIsArray($window['contributions']);
+
+        $channels = [];
+        foreach (array_keys($window['contributions']) as $channel) {
+            $this->assertIsString($channel);
+            $channels[] = $channel;
+        }
+
+        return $channels;
     }
 
     public function testEveryChannelTheEngineRecordsBelongsToExactlyOneFamily(): void

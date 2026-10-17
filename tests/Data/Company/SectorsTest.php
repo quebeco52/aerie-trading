@@ -110,6 +110,7 @@ class SectorsTest extends TestCase
 
         foreach (glob(dirname(__DIR__, 3) . '/src/Service/Model/Sector/*BusinessModel.php') ?: [] as $file) {
             $class = 'App\\Service\\Model\\Sector\\' . basename($file, '.php');
+            $this->assertTrue(class_exists($class), "{$file} must declare {$class}");
             if ((new \ReflectionClass($class))->isAbstract()) {
                 continue;
             }

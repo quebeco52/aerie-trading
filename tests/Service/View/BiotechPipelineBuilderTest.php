@@ -29,6 +29,28 @@ class BiotechPipelineBuilderTest extends TestCase
         return new BiotechPipelineBuilder($reports);
     }
 
+    /**
+     * The standard biotech's pipeline panel, which its marketed book always gives it.
+     *
+     * @return array{
+     *     lateStageAssets: float,
+     *     readoutsPerYear: float,
+     *     protectedShare: float,
+     *     franchiseChange: float,
+     *     rndReplacement: float,
+     *     ramping: int,
+     *     ladder: list<array{label: string, share: float, count: int|null}>,
+     *     runway: array{years: float|null, quarterlyBurn: float}|null,
+     * }
+     */
+    private function pipeline(?CorporateReport $latest = null): array
+    {
+        $pipeline = $this->builder($latest)->build(self::biotech())['pipeline'];
+        $this->assertNotNull($pipeline, 'a biotech with a marketed book has a pipeline panel');
+
+        return $pipeline;
+    }
+
     private static function cohort(int $slot, float $peak, float $adoption, float $exclusivity): array
     {
         $prefix = BiotechBusinessModel::STATE_COHORT_PREFIX . $slot . ':';
@@ -76,8 +98,7 @@ class BiotechPipelineBuilderTest extends TestCase
 
     public function testTheLadderAccountsForTheWholeMarketedBook(): void
     {
-        $pipeline = $this->builder()->build(self::biotech())['pipeline'];
-        $this->assertNotNull($pipeline);
+        $pipeline = $this->pipeline();
 
         $this->assertEqualsWithDelta(1.0, array_sum(array_column($pipeline['ladder'], 'share')), 1e-12);
         $counts = array_column($pipeline['ladder'], 'count', 'label');
@@ -93,7 +114,7 @@ class BiotechPipelineBuilderTest extends TestCase
     /** An expired cohort counts at what generics have left of it, not at its pre-expiry level. */
     public function testAnExpiredMedicineCountsNetOfItsErosion(): void
     {
-        $pipeline = $this->builder()->build(self::biotech())['pipeline'];
+        $pipeline = $this->pipeline();
         $shares = array_column($pipeline['ladder'], 'share', 'label');
 
         // The lead cohort and the expired one had the same peak level before expiry (0.30 vs 0.20 x 1.0).
@@ -103,7 +124,7 @@ class BiotechPipelineBuilderTest extends TestCase
 
     public function testTheHeadlineFiguresAreTheLedgers(): void
     {
-        $pipeline = $this->builder()->build(self::biotech())['pipeline'];
+        $pipeline = $this->pipeline();
 
         $this->assertSame(self::LATE_STAGE_ASSETS, $pipeline['lateStageAssets']);
         $this->assertEqualsWithDelta(self::LATE_STAGE_ASSETS / BiotechBusinessModel::PHASE_III_DURATION_YEARS, $pipeline['readoutsPerYear'], 1e-12);
@@ -118,13 +139,16 @@ class BiotechPipelineBuilderTest extends TestCase
     public function testTheRunwayIsCashOverTheQuarterlyBurn(): void
     {
         $report = (new CorporateReport())->setTreasury('1000.0000')->setFreeCashFlow('-50.0000');
-        $runway = $this->builder($report)->build(self::biotech())['pipeline']['runway'];
+        $runway = $this->pipeline($report)['runway'];
 
+        $this->assertNotNull($runway);
         $this->assertEqualsWithDelta(5.0, $runway['years'], 1e-12);
         $this->assertSame(50.0, $runway['quarterlyBurn']);
 
         $generating = (new CorporateReport())->setTreasury('1000.0000')->setFreeCashFlow('20.0000');
-        $this->assertNull($this->builder($generating)->build(self::biotech())['pipeline']['runway']['years']);
-        $this->assertNull($this->builder()->build(self::biotech())['pipeline']['runway']);
+        $generatingRunway = $this->pipeline($generating)['runway'];
+        $this->assertNotNull($generatingRunway);
+        $this->assertNull($generatingRunway['years']);
+        $this->assertNull($this->pipeline()['runway']);
     }
 }

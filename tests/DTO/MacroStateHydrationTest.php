@@ -295,27 +295,31 @@ class MacroStateHydrationTest extends TestCase
     }
 
     /**
-     * The engine's state and the snapshot are hydrated by separate readers, so the same payload has
-     * to mean the same thing to both.
+     * @return array<string, array{array<string, mixed>}>
      */
-    public function testEngineStateAndSnapshotAgreeOnTheSamePayload(): void
+    public static function legacyPayloadProvider(): array
     {
-        $payload = [
-            'policy_rate' => 0.055,
-            'inflation' => 0.031,
-            'macro_credit_spread' => 0.018,
-            'ns_level' => 0.041,
-            'nominal_gdp_index' => 1.35,
-            'qe_intensity' => 0.002,
+        return [
+            'rates only' => [['policy_rate' => 0.055, 'inflation' => 0.031, 'macro_credit_spread' => 0.018, 'ns_level' => 0.041, 'nominal_gdp_index' => 1.35, 'qe_intensity' => 0.002]],
+            'saved currency' => [['exchange_rate_index' => 104.0, 'policy_rate' => 0.05, 'foreign_policy_rate' => 0.03, 'tips_breakeven' => 0.025]],
+            'database row' => [['yield5y_ema' => 0.041, 'yield_5y_ema' => 0.039, 'policy_rate' => 0.045]],
+            'laws before their lags' => [['bank_levy_rate' => 0.004, 'corporate_tax_policy_shift' => 0.02, 'carbon_price' => 80.0, 'stamp_duty_rate' => 0.003]],
         ];
+    }
 
-        $viaState = MacroStateDTO::fromMacroState(MacroState::fromArray($payload));
-        $viaSnapshot = MacroStateDTO::fromArray($payload);
-
-        foreach (['policyRate', 'inflation', 'inflationEma', 'macroCreditSpread', 'highYieldCreditSpread',
-            'nsBeta1', 'qeActive', 'qeIntensity', 'qtIntensity', 'balanceSheetIntensity'] as $field) {
-            $this->assertSame($viaState->$field, $viaSnapshot->$field, "Readers disagree on {$field}.");
-        }
+    /**
+     * The engine's state and a snapshot of the same payload are one economy in every field, an old payload included:
+     * two readers that each upgraded some fields once disagreed on up to 17 of them.
+     *
+     * @param array<string, mixed> $payload
+     */
+    #[\PHPUnit\Framework\Attributes\DataProvider('legacyPayloadProvider')]
+    public function testEngineStateAndSnapshotAgreeOnTheSamePayload(array $payload): void
+    {
+        $this->assertSame(
+            MacroStateDTO::fromMacroState(MacroState::fromArray($payload))->toArray(),
+            MacroStateDTO::fromArray($payload)->toArray(),
+        );
     }
 
     /**

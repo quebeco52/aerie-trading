@@ -381,6 +381,7 @@ class OrderFlowImpactWiringTest extends TestCase
         // what the flow supplied.
         $tracker->updateStocks([$stock], 1.0 / 14400.0, false, new MacroStateDTO());
 
+        $this->assertNotNull($captured);
         $this->assertEqualsWithDelta($measured, $captured->orderFlowVariance, 1e-12);
     }
 
@@ -532,6 +533,7 @@ class OrderFlowImpactWiringTest extends TestCase
 
         $tracker->updateStocks([$stock], 1.0 / 14400.0, false, new MacroStateDTO());
 
+        $this->assertNotNull($captured);
         $this->assertSame(0.0, $captured->orderFlowVariance);
         $this->assertSame(0.0, $stock->getImpactVarianceEma());
         $this->assertEqualsWithDelta(100.0, (float) $stock->getPrice(), 1e-12);

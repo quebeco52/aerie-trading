@@ -13,6 +13,7 @@ use App\Service\Macro\Subsystem\LaborMarketSubsystem;
 use App\Service\Macro\Subsystem\MacroAggregateSubsystem;
 use App\Service\Macro\Subsystem\MonetaryPolicySubsystem;
 use App\Service\Math\MathUtility;
+use App\Tests\Support\YieldCurveProbe;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
@@ -1145,8 +1146,8 @@ class MacroEngineTest extends TestCase
         $stateNeutralFiscal->governmentSpendingIndexEma = 100.0; // Neutral baseline
         $stateNeutralFiscal->outputGap = 0.0;
 
-        $yieldDataHighDeficit = $this->monetarySubsystem->calculateYieldCurveAndQE($stateHighDeficit, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE, 0.25);
-        $yieldDataNeutral = $this->monetarySubsystem->calculateYieldCurveAndQE($stateNeutralFiscal, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE, 0.25);
+        $yieldDataHighDeficit = YieldCurveProbe::balanceSheetAndCurve($this->monetarySubsystem, $stateHighDeficit, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE, 0.25);
+        $yieldDataNeutral = YieldCurveProbe::balanceSheetAndCurve($this->monetarySubsystem, $stateNeutralFiscal, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE, 0.25);
 
         $this->assertGreaterThan($yieldDataNeutral['curvature2'], $yieldDataHighDeficit['curvature2'], 'Secondary Svensson curvature beta3 must increase with fiscal debt issuance.');
         $this->assertGreaterThan($yieldDataNeutral['yield_30y'], $yieldDataHighDeficit['yield_30y'], 'Long-end 30Y Treasury yield should steepen under fiscal supply expansion.');
@@ -1324,7 +1325,7 @@ class MacroEngineTest extends TestCase
         $state->policyRate = 0.025;
         $state->tipsBreakeven = 0.02;
 
-        $yieldData = $this->monetarySubsystem->calculateYieldCurveAndQE($state, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE, 0.25);
+        $yieldData = YieldCurveProbe::balanceSheetAndCurve($this->monetarySubsystem, $state, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE, 0.25);
 
         $yield10y = $yieldData['yield_10y'];
         $riskNeutral10y = $yieldData['risk_neutral_10y'];
@@ -1357,9 +1358,9 @@ class MacroEngineTest extends TestCase
         $easingState->outputGap = 0.0;
         $easingState->tipsBreakeven = 0.02;
 
-        $yieldDataHiking = $this->monetarySubsystem->calculateYieldCurveAndQE($hikingState, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE, 0.25);
-        $yieldDataNeutral = $this->monetarySubsystem->calculateYieldCurveAndQE($neutralState, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE, 0.25);
-        $yieldDataEasing = $this->monetarySubsystem->calculateYieldCurveAndQE($easingState, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE, 0.25);
+        $yieldDataHiking = YieldCurveProbe::balanceSheetAndCurve($this->monetarySubsystem, $hikingState, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE, 0.25);
+        $yieldDataNeutral = YieldCurveProbe::balanceSheetAndCurve($this->monetarySubsystem, $neutralState, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE, 0.25);
+        $yieldDataEasing = YieldCurveProbe::balanceSheetAndCurve($this->monetarySubsystem, $easingState, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE, 0.25);
 
         // β₂ (curvature) must hump upward during a hiking cycle and dip during an easing cycle
         $this->assertGreaterThan($yieldDataNeutral['curvature'], $yieldDataHiking['curvature'], 'Curvature beta2 must rise during a central bank rate hike cycle.');
@@ -1387,8 +1388,8 @@ class MacroEngineTest extends TestCase
         $stateUnanchored->marketVolatilityEma = 0.28;
         $stateUnanchored->outputGap = 0.0;
 
-        $yieldDataAnchored = $this->monetarySubsystem->calculateYieldCurveAndQE($stateAnchored, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE, 0.25);
-        $yieldDataUnanchored = $this->monetarySubsystem->calculateYieldCurveAndQE($stateUnanchored, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE, 0.25);
+        $yieldDataAnchored = YieldCurveProbe::balanceSheetAndCurve($this->monetarySubsystem, $stateAnchored, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE, 0.25);
+        $yieldDataUnanchored = YieldCurveProbe::balanceSheetAndCurve($this->monetarySubsystem, $stateUnanchored, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE, 0.25);
 
         // Term premium must expand when inflation expectations un-anchor and volatility spikes (Wright 2011 IRP)
         $this->assertGreaterThan(
@@ -1416,8 +1417,8 @@ class MacroEngineTest extends TestCase
         $stateRecession->marketVolatilityEma = 0.15;
         $stateRecession->outputGap = -0.05;
 
-        $yieldDataNeutral = $this->monetarySubsystem->calculateYieldCurveAndQE($stateNeutral, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE, 0.25);
-        $yieldDataRecession = $this->monetarySubsystem->calculateYieldCurveAndQE($stateRecession, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE, 0.25);
+        $yieldDataNeutral = YieldCurveProbe::balanceSheetAndCurve($this->monetarySubsystem, $stateNeutral, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE, 0.25);
+        $yieldDataRecession = YieldCurveProbe::balanceSheetAndCurve($this->monetarySubsystem, $stateRecession, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE, 0.25);
 
         // Flight-to-safety: recessions compress sovereign term premium as investors seek safe duration
         $this->assertLessThan(
@@ -1560,7 +1561,7 @@ class MacroEngineTest extends TestCase
         // a low-premium era, as 2006 and 2023 were; at a 2% premium (1995) the peak stayed positive
         $peakState->termPremiumRegime = 0.0;
 
-        $curvePeak = $this->monetarySubsystem->calculateYieldCurveAndQE($peakState, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE, 0.25);
+        $curvePeak = YieldCurveProbe::balanceSheetAndCurve($this->monetarySubsystem, $peakState, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE, 0.25);
 
         // 2s10s spread must invert at the peak of monetary policy tightening
         $spreadPeak = $curvePeak['yield_10y'] - $curvePeak['yield_2y'];
@@ -1581,7 +1582,7 @@ class MacroEngineTest extends TestCase
         $easingState->tipsBreakeven = 0.018;
         $easingState->marketVolatilityEma = 0.22;
 
-        $curveEasing = $this->monetarySubsystem->calculateYieldCurveAndQE($easingState, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE, 0.25);
+        $curveEasing = YieldCurveProbe::balanceSheetAndCurve($this->monetarySubsystem, $easingState, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE, 0.25);
 
         // 2s10s spread must exhibit strong bull steepening (> +100 bps) during emergency rate cutting
         $spreadEasing = $curveEasing['yield_10y'] - $curveEasing['yield_2y'];
@@ -1782,8 +1783,8 @@ class MacroEngineTest extends TestCase
         $stateHighDebt->sovereignDebtToGdpEma = 1.20;
         $stateHighDebt->sovereignRiskSpreadEma = 0.01;
 
-        $curveLow  = $monetarySubsystem->calculateYieldCurveAndQE($stateLowDebt, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE, $dt);
-        $curveHigh = $monetarySubsystem->calculateYieldCurveAndQE($stateHighDebt, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE, $dt);
+        $curveLow  = YieldCurveProbe::balanceSheetAndCurve($monetarySubsystem, $stateLowDebt, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE, $dt);
+        $curveHigh = YieldCurveProbe::balanceSheetAndCurve($monetarySubsystem, $stateHighDebt, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE, $dt);
 
         $this->assertGreaterThan(
             $curveLow['yield_30y'],
@@ -1855,7 +1856,7 @@ class MacroEngineTest extends TestCase
         $normalState->tipsBreakeven = MacroEngine::TARGET_INFLATION;
         $normalState->marketVolatilityEma = MacroEngine::MACRO_VOL_BASE_ANCHOR;
 
-        $curveNormal = $monetarySubsystem->calculateYieldCurveAndQE($normalState, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE, $dt);
+        $curveNormal = YieldCurveProbe::balanceSheetAndCurve($monetarySubsystem, $normalState, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE, $dt);
 
         // In a normal economy, the yield curve must be upward sloping (2Y < 5Y < 10Y < 30Y)
         $this->assertLessThan($curveNormal['yield_5y'], $curveNormal['yield_2y'], 'In a normal economy, 2Y yield must be below 5Y yield.');
@@ -1878,7 +1879,7 @@ class MacroEngineTest extends TestCase
         $tightState->marketVolatilityEma = 0.18;
         $tightState->termPremiumRegime = 0.0; // a low-premium late cycle, as 2006-07 was
 
-        $curveTight = $monetarySubsystem->calculateYieldCurveAndQE($tightState, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE, $dt);
+        $curveTight = YieldCurveProbe::balanceSheetAndCurve($monetarySubsystem, $tightState, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE, $dt);
 
         // 2s10s yield spread must invert during late-cycle overtightening
         $spread2s10sTight = $curveTight['yield_10y'] - $curveTight['yield_2y'];
@@ -1898,7 +1899,7 @@ class MacroEngineTest extends TestCase
         $recessionState->inflation = 0.012;
         $recessionState->tipsBreakeven = 0.015;
 
-        $yieldData = $monetarySubsystem->calculateYieldCurveAndQE($recessionState, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE, $dt);
+        $yieldData = YieldCurveProbe::balanceSheetAndCurve($monetarySubsystem, $recessionState, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE, $dt);
 
         $this->assertGreaterThan(0.0, $yieldData['new_balance_sheet_intensity'], 'QE intensity must expand when the rule asks for a rate below the floor.');
         $this->assertGreaterThan(0.0, $yieldData['new_qe_intensity'], 'QE asset purchase intensity must be positive.');

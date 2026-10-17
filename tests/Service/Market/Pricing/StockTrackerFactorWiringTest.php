@@ -334,6 +334,7 @@ final class StockTrackerFactorWiringTest extends TestCase
         $stock = $this->stock();
         $tracker->updateStocks([$stock], 1.0 / 252.0, false, new MacroStateDTO());
 
+        $this->assertNotNull($seen, 'the agents were shown the tick');
         $this->assertEqualsWithDelta(log(1.10), $seen->logReturn, 1e-9);
         $this->assertEqualsWithDelta(log(1.10), (float) $stock->getPriceMomentumTrend(), 1e-9);
         $this->assertEqualsWithDelta(log(1.10), $seen->momentumTrend, 1e-9);
@@ -347,6 +348,7 @@ final class StockTrackerFactorWiringTest extends TestCase
 
         $tracker->updateStocks([$this->stock()], 1.0 / 252.0, false, new MacroStateDTO());
 
+        $this->assertNotNull($seen, 'the agents were shown the tick');
         $this->assertEqualsWithDelta(log(1.10), $seen->logReturn, 1e-9);
     }
 
@@ -372,6 +374,7 @@ final class StockTrackerFactorWiringTest extends TestCase
 
         $tracker->updateStocks([$stock], 1.0 / 252.0, false, new MacroStateDTO());
 
+        $this->assertNotNull($seen, 'the agents were shown the tick');
         $this->assertEqualsWithDelta($liquidity->structuralDailyVolume($stock), $seen->averageDailyVolume, 1e-6);
         $this->assertLessThan($stressedDepth, $seen->averageDailyVolume);
     }

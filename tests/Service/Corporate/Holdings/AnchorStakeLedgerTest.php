@@ -41,7 +41,11 @@ class AnchorStakeLedgerTest extends TestCase
         return $stocks;
     }
 
-    /** Every holding at one capitalisation, so the stake value is checkable by hand. */
+    /**
+     * Every holding at one capitalisation, so the stake value is checkable by hand.
+     *
+     * @return list<Stock>
+     */
     private function flatBoard(float $capEach): array
     {
         $caps = [];
@@ -344,6 +348,7 @@ class AnchorStakeLedgerTest extends TestCase
         $equityBefore = (float) $sphere->getTotalEquity();
 
         $failed = array_key_first(AnchorHoldings::forHolder('BRKW'));
+        $this->assertNotNull($failed, 'BRKW declares its holdings');
         $board = [];
 
         foreach (array_keys(AnchorHoldings::forHolder('BRKW')) as $ticker) {
@@ -374,6 +379,7 @@ class AnchorStakeLedgerTest extends TestCase
     {
         $capEach = 200_000_000_000.0;
         $failed = array_key_first(AnchorHoldings::forHolder('BRKW'));
+        $this->assertNotNull($failed, 'BRKW declares its holdings');
         $board = [];
 
         foreach (array_keys(AnchorHoldings::forHolder('BRKW')) as $ticker) {

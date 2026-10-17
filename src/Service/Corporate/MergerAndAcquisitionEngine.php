@@ -385,20 +385,7 @@ class MergerAndAcquisitionEngine
         $ctx->hurdleRate = $ctx->strategy->getHurdleRate($ctx->health);
         $ctx->economicSpread = $ctx->trueReturn - $ctx->hurdleRate;
 
-        // Struck as the market strikes it: cost of equity on the return on equity (MarketEngine).
-        $valuationReturn = $ctx->strategy->getValuationReturn($ctx->trueReturn, $stock->getLongRunReturn() !== null ? (float) $stock->getLongRunReturn() : null, $ctx->health->costOfEquity);
-        $equityRates = $ctx->strategy->getEquityValuationRates($stock, $valuationReturn, $ctx->health, $ctx->macroState->corporateTaxRate);
-        $ctx->fairValuePE = Valuation::calculateManagementFairValuePE(
-            $equityRates['costOfEquity'],
-            $equityRates['equityReturn'],
-            $ctx->strategy->getFadedSecularGrowthRate($stock, $ctx->macroState->totalTime),
-            $ctx->macroState->outputGap,
-            $ctx->health->leveredBeta,
-            $ctx->macroState->tipsBreakeven,
-            \App\Data\Company\Sectors::baselineIndustryPe($stock->getIndustry()),
-            (float) ($stock->getAccrualsRatio() ?? 0.0),
-            $stock->getPolicyPayoutRatio(),
-        );
+        $ctx->fairValuePE = ManagementValuation::fairValuePE($ctx->strategy, $stock, $ctx->trueReturn, $ctx->health, $ctx->macroState);
         $ctx->bookValuePerShare = max(0.01, $ctx->equity / max(1.0, $ctx->shares));
         $ctx->priceToBook = $ctx->price / $ctx->bookValuePerShare;
         $ctx->isOvervalued = $ctx->economicSpread > 0.0 && $ctx->currentPE > ($ctx->fairValuePE * 1.5) && $ctx->currentPE > 25.0 && $ctx->priceToBook > 2.0;

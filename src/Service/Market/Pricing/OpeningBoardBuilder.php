@@ -17,6 +17,7 @@ use App\Service\Corporate\CorporateMetrics;
 use App\Service\Corporate\DebtEngine;
 use App\Service\Corporate\Holdings\AnchorStakeLedger;
 use App\Service\Corporate\ManagementSuccessionEngine;
+use App\Service\Math\Decimal;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\MathUtility;
 
@@ -134,10 +135,10 @@ class OpeningBoardBuilder
             $stockData['ticker'],
             (float) ($stockData['public_float'] ?? 0.90),
         ));
-        $stock->setTotalEquity((string) ($stockData['total_equity'] ?? 0.00));
+        $stock->setTotalEquity(Decimal::of($stockData['total_equity'] ?? 0.0));
         $stock->setWholesaleDebt((string) ($stockData['wholesale_debt'] ?? 0.00));
         $stock->setCustomerDeposits((string) ($stockData['customer_deposits'] ?? 0.00));
-        $stock->setRetainedEarnings((string) ($stockData['retained_earnings'] ?? 0.00));
+        $stock->setRetainedEarnings(Decimal::of($stockData['retained_earnings'] ?? 0.0));
         $stock->setCreditSpread((string) ($stockData['credit_spread'] ?? 0.0100));
         $stock->setHistoricalFixedRate((string) ($stockData['historical_fixed_rate'] ?? 0.04));
         // Provisional, at book, until the market strikes the opening price below: the debt analysis sizes the

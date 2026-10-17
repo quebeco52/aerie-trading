@@ -650,6 +650,7 @@ class TradeExecutionServiceTest extends TestCase
         $before = (float) $user->getCashBalance();
         $this->service->executeOrder($user, 'APEX', 'BUY', 'MARKET', 100);
         $order = end($captured);
+        $this->assertNotFalse($order, 'the trade persisted an order');
         $consideration = (float) $order->getExecutionPrice() * 100.0;
 
         $this->assertEqualsWithDelta($consideration * FinancialConstants::STAMP_DUTY_RATE, (float) $order->getStampDuty(), 0.0001);
@@ -679,6 +680,7 @@ class TradeExecutionServiceTest extends TestCase
 
         $this->service->executeOrder($user, 'APEX', 'BUY', 'MARKET', 100);
         $order = end($captured);
+        $this->assertNotFalse($order, 'the trade persisted an order');
 
         $this->assertEqualsWithDelta((float) $order->getExecutionPrice() * 100.0 * 0.002, (float) $order->getStampDuty(), 0.0001);
     }
@@ -709,6 +711,7 @@ class TradeExecutionServiceTest extends TestCase
 
         $this->service->executeOrder($user, 'APEX', 'SELL', 'MARKET', 100);
         $order = end($captured);
+        $this->assertNotFalse($order, 'the trade persisted an order');
         $consideration = (float) $order->getExecutionPrice() * 100.0;
 
         $this->assertEqualsWithDelta($consideration * (1.0 - FinancialConstants::STAMP_DUTY_RATE), (float) $user->getCashBalance(), 0.0001, 'A seller receives the consideration less the duty.');
@@ -757,7 +760,7 @@ class TradeExecutionServiceTest extends TestCase
     private function marginUser(string $cash = '100000.00'): User
     {
         $user = new User();
-        $user->setCashBalance($cash);
+        $user->setCashBalance(\App\Service\Math\Decimal::of($cash));
         $user->setMarginEnabled(true);
 
         return $user;
@@ -1099,6 +1102,7 @@ class TradeExecutionServiceTest extends TestCase
         $user->setCashBalance('100000.00');
         $this->service->executeOrder($user, 'G10-001', 'BUY', 'MARKET', 10);
         $order = end($captured);
+        $this->assertNotFalse($order, 'the trade persisted an order');
 
         $this->assertEqualsWithDelta($live * (1.0 + LiquidityEngine::BOND_HALF_SPREAD), (float) $order->getExecutionPrice(), 0.01);
         $this->assertEqualsWithDelta(LiquidityEngine::BOND_HALF_SPREAD, $this->service->previewCosts('G10-001', 'BUY', 10)['spread'] ?? null, 1e-9);
@@ -1346,7 +1350,9 @@ class TradeExecutionServiceTest extends TestCase
         $connection->method('isTransactionActive')->willReturn(true);
         $connection->method('executeQuery')->willReturnCallback(
             function (string $sql) use (&$queries, $result) {
-                $queries[] = preg_replace('/\s+/', ' ', $sql);
+                $query = preg_replace('/\s+/', ' ', $sql);
+                self::assertIsString($query);
+                $queries[] = $query;
 
                 return $result;
             },

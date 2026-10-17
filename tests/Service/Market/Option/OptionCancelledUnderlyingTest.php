@@ -114,7 +114,7 @@ final class OptionCancelledUnderlyingTest extends TestCase
     private function holder(string $cash): User
     {
         $user = new User();
-        $user->setCashBalance($cash);
+        $user->setCashBalance(\App\Service\Math\Decimal::of($cash));
 
         return $user;
     }

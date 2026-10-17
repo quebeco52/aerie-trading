@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Entity;
 
+use App\Service\Math\Decimal;
 use Doctrine\DBAL\Types\Types;
 use Doctrine\ORM\Mapping as ORM;
 
@@ -154,13 +155,13 @@ class Stock
     private ?string $totalFreeCashFlow = null;
 
     /**
-     * @var string Absolute total equity (Book Value).
+     * @var numeric-string Absolute total equity (Book Value).
      */
     #[ORM\Column(type: Types::DECIMAL, precision: 30, scale: 4, options: ['default' => '0.0000'])]
     private string $totalEquity = '0.0000';
 
     /**
-     * @var string Accumulated retained earnings over the company's lifespan.
+     * @var numeric-string Accumulated retained earnings over the company's lifespan.
      */
     #[ORM\Column(type: Types::DECIMAL, precision: 30, scale: 4, options: ['default' => '0.0000'])]
     private string $retainedEarnings = '0.0000';
@@ -311,7 +312,8 @@ class Stock
     private ?string $analystPriceTarget = null;
 
     /**
-     * @var string|null What a sphere's listed anchor stakes sit at on the balance sheet, remarked at every report. Null
+     * @var numeric-string|null What a sphere's listed anchor stakes sit at on the balance sheet, remarked at every
+     *                          report. Null
      *                  for the firms that hold none.
      */
     #[ORM\Column(type: Types::DECIMAL, precision: 30, scale: 4, nullable: true)]
@@ -771,19 +773,10 @@ class Stock
     #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 6, options: ['default' => '1.000000'])]
     private string $committedCostScale = '1.000000';
 
+    /** @return numeric-string */
     public static function cleanBcStr(int|float|string|null $val, int $scale = 4): string
     {
-        if ($val === null || $val === '') {
-            return '0.' . str_repeat('0', $scale);
-        }
-        if (is_int($val) || is_float($val)) {
-            return number_format((float) $val, $scale, '.', '');
-        }
-        $str = trim((string) $val);
-        if (stripos($str, 'e') !== false) {
-            return number_format((float) $str, $scale, '.', '');
-        }
-        return $str;
+        return Decimal::of($val, $scale);
     }
 
     public function getId(): ?int
@@ -876,10 +869,12 @@ class Stock
         return $this;
     }
 
+    /** @return numeric-string */
     public function getTotalEquity(): string
     {
         return $this->totalEquity;
     }
+    /** @param numeric-string $totalEquity */
     public function setTotalEquity(string $totalEquity): static
     {
         $this->totalEquity = self::cleanBcStr($totalEquity, 4);
@@ -896,10 +891,12 @@ class Stock
         return $this;
     }
 
+    /** @return numeric-string */
     public function getRetainedEarnings(): string
     {
         return $this->retainedEarnings;
     }
+    /** @param numeric-string $retainedEarnings */
     public function setRetainedEarnings(string $retainedEarnings): static
     {
         $this->retainedEarnings = self::cleanBcStr($retainedEarnings, 4);
@@ -1319,6 +1316,7 @@ class Stock
         return $this;
     }
 
+    /** @return numeric-string|null */
     public function getListedStakesCarrying(): ?string
     {
         return $this->listedStakesCarrying;

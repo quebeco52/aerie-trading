@@ -69,7 +69,7 @@ class RetailInsuranceBusinessModelTest extends TestCase
             $stock = new Stock();
             $stock->setTicker('DOVE');
             $stock->setBeta('0.8');
-            $stock->setTotalEquity($equity);
+            $stock->setTotalEquity(\App\Service\Math\Decimal::of($equity));
             // 40B of annual premium demand on a unit serviceable market: 26.7B of surplus covers it.
             $stock->setSamRatio('1.0');
             $stock->setEarningsMomentumZ([

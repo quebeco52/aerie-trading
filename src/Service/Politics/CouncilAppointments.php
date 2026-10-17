@@ -252,7 +252,7 @@ final class CouncilAppointments
      *
      * @param array<string, float> $boardMedians
      * @param list<string>         $taken
-     * @return list<array{name: string, birth: float, stance: float, regulation: float, fund: float, debt: float, competition: float, markets: float, swing?: float}>
+     * @return list<array{name: string, birth: float, stance: float, regulation: float, fund: float, debt: float, competition: float, markets: float, swing: float}>
      */
     public static function boardShortlist(int $salt, string $seat, float $since, array $boardMedians, array $taken, MathUtility $math): array
     {
@@ -283,7 +283,7 @@ final class CouncilAppointments
      * Candidates for a vacancy, drawn one after another with names none of the others or anyone in $taken holds.
      *
      * @param list<string> $taken
-     * @return list<array{name: string, birth: float, stance: float, regulation: float, fund: float, debt: float, competition: float, markets: float, swing?: float}>
+     * @return list<array{name: string, birth: float, stance: float, regulation: float, fund: float, debt: float, competition: float, markets: float, swing: float}>
      */
     private static function field(int $salt, string $vacancy, int $count, float $since, array $taken, MathUtility $math): array
     {
@@ -361,7 +361,7 @@ final class CouncilAppointments
      * (App\Data\Politics\AerieNames) that no one in $taken holds.
      *
      * @param list<string> $taken
-     * @return array{name: string, birth: float, stance: float, regulation: float, fund: float, debt: float, competition: float, markets: float, swing?: float}
+     * @return array{name: string, birth: float, stance: float, regulation: float, fund: float, debt: float, competition: float, markets: float, swing: float}
      */
     public static function candidate(int $salt, string $vacancy, int $slot, float $since, array $taken, MathUtility $math): array
     {

@@ -49,13 +49,19 @@ class NewestPerStockTraitTest extends TestCase
         return (new EntityManager($connection, $config))->getClassMetadata($class);
     }
 
-    /** @param ClassMetadata<object> $metadata */
-    private function repository(ClassMetadata $metadata, Connection $connection): object
+    /**
+     * The trait's newest ids for these stocks, from a repository mapped by $metadata that queries $connection.
+     *
+     * @param  ClassMetadata<object> $metadata
+     * @param  list<Stock>           $stocks
+     * @return list<int>
+     */
+    private function newestIds(ClassMetadata $metadata, Connection $connection, array $stocks, int $perStock): array
     {
         $em = $this->createStub(EntityManagerInterface::class);
         $em->method('getConnection')->willReturn($connection);
 
-        return new class ($metadata, $em) {
+        $repository = new class ($metadata, $em) {
             use NewestPerStockTrait;
 
             /** @param ClassMetadata<object> $metadata */
@@ -81,6 +87,8 @@ class NewestPerStockTraitTest extends TestCase
                 return $this->newestIdsPerStock($stocks, $perStock);
             }
         };
+
+        return $repository->ids($stocks, $perStock);
     }
 
     private function stock(int $id): Stock
@@ -114,7 +122,7 @@ class NewestPerStockTraitTest extends TestCase
             )
             ->willReturn([]);
 
-        $this->repository($this->metadata($class), $connection)->ids([$this->stock(3), $this->stock(9)], 5);
+        $this->newestIds($this->metadata($class), $connection, [$this->stock(3), $this->stock(9)], 5);
     }
 
     public function testReturnsTheIdsAsIntegers(): void
@@ -122,7 +130,7 @@ class NewestPerStockTraitTest extends TestCase
         $connection = $this->createStub(Connection::class);
         $connection->method('fetchFirstColumn')->willReturn(['12', '7']);
 
-        $ids = $this->repository($this->metadata(CorporateReport::class), $connection)->ids([$this->stock(3)], 5);
+        $ids = $this->newestIds($this->metadata(CorporateReport::class), $connection, [$this->stock(3)], 5);
 
         $this->assertSame([12, 7], $ids);
     }

@@ -92,10 +92,24 @@ class DistrictMapBuilderTest extends TestCase
         ];
     }
 
-    /** @param Stock[] $stocks */
+    /**
+     * @param  Stock[] $stocks
+     * @return list<DistrictPlotDTO>
+     */
     private function buildPlots(array $stocks): array
     {
         return $this->compose($stocks)['plots'];
+    }
+
+    /** The top of a row's sky: the lane band over the upper row, else the kerb of the row above it. */
+    private function skyTopOver(DistrictCanvasDTO $canvas, int $row): float
+    {
+        if ($row === 0) {
+            return $canvas->laneBandBottom;
+        }
+        $this->assertArrayHasKey($row - 1, $canvas->rowGroundLines, "row {$row} has a row above it");
+
+        return $canvas->rowGroundLines[$row - 1] + DistrictMap::KERB_DEPTH;
     }
 
     /** A one-row canvas with sky enough for the full envelope, for gridline tests that need no street. */
@@ -385,7 +399,7 @@ class DistrictMapBuilderTest extends TestCase
         $largest = array_reduce($plots, static fn(?DistrictPlotDTO $carry, DistrictPlotDTO $p) => $carry === null || $p->height > $carry->height ? $p : $carry);
         $this->assertNotNull($largest);
 
-        $skyTop = $largest->row === 0 ? $canvas->laneBandBottom : $canvas->rowGroundLines[$largest->row - 1] + DistrictMap::KERB_DEPTH;
+        $skyTop = $this->skyTopOver($canvas, $largest->row);
 
         $this->assertEqualsWithDelta(
             $skyTop + DistrictMap::ROW_GAP + DistrictMap::MAX_FACADE_HEIGHT,
@@ -399,7 +413,7 @@ class DistrictMapBuilderTest extends TestCase
         ['canvas' => $canvas, 'plots' => $plots] = $this->compose($this->fullStreet());
 
         foreach ($plots as $plot) {
-            $skyTop = $plot->row === 0 ? $canvas->laneBandBottom : $canvas->rowGroundLines[$plot->row - 1] + DistrictMap::KERB_DEPTH;
+            $skyTop = $this->skyTopOver($canvas, $plot->row);
             // The roof furniture, on the 7-unit roofline, is the highest thing that rides it.
             $this->assertGreaterThanOrEqual($skyTop, $plot->y - 7 - DistrictMap::ROOF_FURNITURE_HEIGHT, sprintf('%s pokes into the sky above its row', $plot->ticker));
         }

@@ -45,6 +45,7 @@ class StockPagePantherTest extends BasePantherTestCase
         $crawler = $client->waitFor('table tbody tr a[href^="/stock/"]', 3);
         $stockLink = $crawler->filter('table tbody tr a[href^="/stock/"]:not([href="/stock/LBI"]):not([href="/stock/LSD"])')->first();
         $stockUrl = $stockLink->count() > 0 ? $stockLink->attr('href') : '/stock/SWAN';
+        $this->assertNotNull($stockUrl, 'the screener link carries an href');
 
         $client->request('GET', $stockUrl);
 

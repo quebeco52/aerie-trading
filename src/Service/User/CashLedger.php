@@ -33,7 +33,7 @@ final class CashLedger
     /**
      * Pays cash out, borrowing whatever the settled balance does not cover.
      *
-     * @param string $amount Positive consideration, as a bcmath string.
+     * @param numeric-string $amount Positive consideration, as a bcmath string.
      */
     public function debit(User $user, string $amount): void
     {
@@ -52,7 +52,7 @@ final class CashLedger
     /**
      * Takes cash in, paying down any borrowing first.
      *
-     * @param string $amount Positive consideration, as a bcmath string.
+     * @param numeric-string $amount Positive consideration, as a bcmath string.
      */
     public function credit(User $user, string $amount): void
     {

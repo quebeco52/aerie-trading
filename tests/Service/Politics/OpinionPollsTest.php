@@ -226,8 +226,8 @@ class OpinionPollsTest extends TestCase
             $state->totalTime = $month / 12.0 + 1e-6;
             $publish->invoke(null, $state, 7, new MathUtility());
             $share = OpinionPolls::support($state)[$party];
-            $poll = $state->polls[array_key_last($state->polls)] ?? null;
-            $this->assertNotNull($poll);
+            $poll = end($state->polls);
+            $this->assertNotFalse($poll, 'every month publishes a poll');
             $z2[] = (($poll['shares'][$party] - $share) ** 2) / ($share * (1.0 - $share));
             $misread[] = $poll['shares'][Diet::VANGUARD] - OpinionPolls::support($state)[Diet::VANGUARD];
         }
@@ -321,7 +321,9 @@ class OpinionPollsTest extends TestCase
             for ($month = 1; $month <= 48; ++$month) {
                 $engine->advance($state, $this->economy($month / 12.0), 1.0 / 12.0);
                 if ($month === 47) {
-                    $polls[] = end($state->polls)['shares'];
+                    $poll = end($state->polls);
+                    $this->assertNotFalse($poll, 'four years in, the polls have been published');
+                    $polls[] = $poll['shares'];
                 }
             }
             $results[] = $state->dietVoteShares;

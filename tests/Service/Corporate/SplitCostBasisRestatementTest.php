@@ -306,9 +306,9 @@ final class SplitCostBasisRestatementTest extends TestCase
 
         $this->assertStringContainsString("o.status = 'OPEN'", $statement['sql']);
         $this->assertStringContainsString('COALESCE(o.limit_price, 0) * (o.quantity % :factor)', $statement['sql']);
-        $this->assertStringContainsString('(o.quantity % :factor) * :old_price', $statement['sql']);
+        $this->assertStringContainsString('(o.quantity % :factor) * :pre_split_price', $statement['sql']);
         $this->assertSame(10, $statement['params']['factor']);
-        $this->assertSame(2.50, $statement['params']['old_price']);
+        $this->assertSame(2.50, $statement['params']['pre_split_price']);
         $this->assertSame('REV_CORP', $statement['params']['ticker']);
     }
 

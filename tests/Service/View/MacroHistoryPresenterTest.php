@@ -36,7 +36,10 @@ class MacroHistoryPresenterTest extends TestCase
         }
         $probe->rollWindow();
 
-        return $probe->snapshot()['previous'];
+        $window = $probe->snapshot()['previous'];
+        $this->assertNotNull($window, 'rolling an open window keeps it as the previous one');
+
+        return $window;
     }
 
     public function testEveryFamilyHasAPageLabelAndTheResidualIsLast(): void

@@ -66,7 +66,9 @@ class DashboardControllerTest extends WebTestCase
         $this->assertResponseIsSuccessful();
         $this->assertResponseHeaderSame('content-type', 'application/json');
 
-        $data = json_decode($client->getResponse()->getContent(), true);
+        $content = $client->getResponse()->getContent();
+        $this->assertIsString($content);
+        $data = json_decode($content, true);
         $this->assertIsArray($data);
     }
 }

@@ -339,7 +339,7 @@ class FailureSweep
             // A buy stop (plain or stop-limit) escrowed nothing, so only a resting limit buy has cash to return.
             if ($order->getAction() === 'BUY' && !$order->isStop() && $order->getLimitPrice()) {
                 if ($user) {
-                    $this->cashLedger->credit($user, \bcmul((string) $order->getLimitPrice(), (string) $order->getQuantity(), 4));
+                    $this->cashLedger->credit($user, \bcmul($order->getLimitPrice() ?? throw new \LogicException('A resting limit BUY carries its limit price.'), (string) $order->getQuantity(), 4));
                     $this->entityManager->persist($user);
                 }
             }

@@ -1403,7 +1403,7 @@ class MacroAggregateSubsystemTest extends TestCase
 
             public function script(float ...$draws): void
             {
-                $this->draws = $draws;
+                $this->draws = array_values($draws);
                 $this->calls = 0;
             }
 
@@ -1522,6 +1522,19 @@ class MacroAggregateSubsystemTest extends TestCase
         $this->assertEqualsWithDelta(0.004 * 0.25, $state->immigrationPopulationShift, 1e-15, 'The regime adds its excess inflow to the population.');
     }
 
+    /**
+     * The window a probe has open; any tick on an enabled probe opens one.
+     *
+     * @return array<string, mixed>
+     */
+    private function openWindow(OutputGapProbe $probe): array
+    {
+        $window = $probe->snapshot()['current'];
+        $this->assertNotNull($window, 'A recorded tick opens a window.');
+
+        return $window;
+    }
+
     private function probedSubsystem(OutputGapProbe $probe, float $normal): MacroAggregateSubsystem
     {
         $math = new class ($normal) extends MathUtility {
@@ -1568,7 +1581,7 @@ class MacroAggregateSubsystemTest extends TestCase
             $state->sovereignFundDrawShare = $share;
             $this->probedSubsystem($probe, 0.0)->calculateOutputGap($state, 0.03, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, $dt, 1.0);
 
-            return $probe->snapshot()['current']['contributions']['fundDraw'] / $dt;
+            return $this->openWindow($probe)['contributions']['fundDraw'] / $dt;
         };
 
         $this->assertSame(0.0, $contribution(MacroEngine::RESERVE_DRAW_CEILING), 'The founding draw adds nothing to the baseline it is in.');
@@ -1619,15 +1632,17 @@ class MacroAggregateSubsystemTest extends TestCase
         );
 
         // Every channel in the drift is named, so the panel cannot silently drop one.
-        $this->assertCount(26, $window['contributions']);
-        $this->assertArrayHasKey('productivitySupply', $window['contributions']);
-        $this->assertArrayHasKey('fundDraw', $window['contributions']);
-        $this->assertArrayHasKey('creditPremiumDrag', $window['contributions']);
-        $this->assertArrayHasKey('demandDisaster', $window['contributions']);
-        $this->assertArrayHasKey('disasterCompensator', $window['contributions']);
-        $this->assertArrayHasKey('monetaryDrag', $window['contributions']);
-        $this->assertArrayHasKey('automaticStabiliser', $window['contributions']);
-        $this->assertEqualsWithDelta(array_sum($window['contributions']), $window['drift'], 1e-15);
+        $contributions = $window['contributions'];
+        $this->assertIsArray($contributions);
+        $this->assertCount(26, $contributions);
+        $this->assertArrayHasKey('productivitySupply', $contributions);
+        $this->assertArrayHasKey('fundDraw', $contributions);
+        $this->assertArrayHasKey('creditPremiumDrag', $contributions);
+        $this->assertArrayHasKey('demandDisaster', $contributions);
+        $this->assertArrayHasKey('disasterCompensator', $contributions);
+        $this->assertArrayHasKey('monetaryDrag', $contributions);
+        $this->assertArrayHasKey('automaticStabiliser', $contributions);
+        $this->assertEqualsWithDelta(array_sum($contributions), $window['drift'], 1e-15);
     }
 
     /**
@@ -1679,7 +1694,7 @@ class MacroAggregateSubsystemTest extends TestCase
             $noise = ($noise * $decay) + (MacroAggregateSubsystem::DEMAND_SHOCK_SIGMA * sqrt($dt) * 0.3);
         }
         $this->assertEqualsWithDelta($noise, $state->demandShock - $state->demandDisasterShock + $state->demandDisasterCompensation, 1e-12);
-        $this->assertLessThan(0.0, $probe->snapshot()['current']['contributions']['demandDisaster']);
+        $this->assertLessThan(0.0, $this->openWindow($probe)['contributions']['demandDisaster']);
     }
 
     // --- Productivity Shocks ---
@@ -1707,8 +1722,8 @@ class MacroAggregateSubsystemTest extends TestCase
         $scarred->crisisScarPending = -0.03;
         $this->subsystem->absorbProductivityShocks($scarred, MacroEngine::TFP_DRIFT, 0.25);
         $this->probedSubsystem($probe, 0.0)->calculateOutputGap($scarred, 0.03, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, 0.25, 1.0);
-        $this->assertEqualsWithDelta(-$scarred->crisisScarStep, $probe->snapshot()['current']['contributions']['crisisScar'], 1e-15, 'The part potential took is booked in the gap, at full weight.');
-        $this->assertGreaterThan(0.0, $probe->snapshot()['current']['contributions']['crisisScar']);
+        $this->assertEqualsWithDelta(-$scarred->crisisScarStep, $this->openWindow($probe)['contributions']['crisisScar'], 1e-15, 'The part potential took is booked in the gap, at full weight.');
+        $this->assertGreaterThan(0.0, $this->openWindow($probe)['contributions']['crisisScar']);
     }
 
     /**
@@ -1817,7 +1832,7 @@ class MacroAggregateSubsystemTest extends TestCase
             $state->outputGap = $subsystem->calculateOutputGap($state, 0.03, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, $dt, 1.0);
         }
 
-        $window = $probe->snapshot()['current'];
+        $window = $this->openWindow($probe);
 
         // A 2pp/yr drag held for a quarter delivers its direct share of half a point of gap, and delivers it negative.
         $this->assertEqualsWithDelta(-MacroAggregateSubsystem::DOMESTIC_GAP_WEIGHT * CreditFiscalSubsystem::crisisDirectDrag(0.02) * 0.25, $window['contributions']['crisisDeleveragingDrag'], 1e-12);
@@ -1838,7 +1853,7 @@ class MacroAggregateSubsystemTest extends TestCase
         $state = $this->probedState();
         $state->creditCrisisDrag = 0.0;
         $this->probedSubsystem($probe, 0.0)->calculateOutputGap($state, 0.03, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, 0.25, 1.0);
-        $contributions = $probe->snapshot()['current']['contributions'];
+        $contributions = $this->openWindow($probe)['contributions'];
 
         $this->assertSame(0.0, $contributions['crisisDeleveragingDrag']);
         $this->assertArrayNotHasKey('crisisCompensator', $contributions);
@@ -1860,7 +1875,7 @@ class MacroAggregateSubsystemTest extends TestCase
         $state->demandShock = 0.0;
 
         $newGap = $subsystem->calculateOutputGap($state, 0.03, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, 0.25, 1.0);
-        $window = $probe->snapshot()['current'];
+        $window = $this->openWindow($probe);
 
         $this->assertSame(MacroAggregateSubsystem::OUTPUT_GAP_FLOOR, $newGap, 'The floor holds');
         $this->assertGreaterThan(0.0, $window['clamp'], 'The floor gave back the gap the drift took past it');
@@ -1901,12 +1916,13 @@ class MacroAggregateSubsystemTest extends TestCase
         $state = $this->probedState();
 
         $subsystem->calculateOutputGap($state, 0.03, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, 0.25, 1.0);
-        $closing = $probe->snapshot()['current']['closing_gap'];
+        $closing = $this->openWindow($probe)['closing_gap'];
 
         $probe->rollWindow();
         $snapshot = $probe->snapshot();
 
         $this->assertNull($snapshot['current'], 'The new quarter has not seen a tick yet');
+        $this->assertNotNull($snapshot['previous'], 'Rolling keeps the closed quarter');
         $this->assertSame(1, $snapshot['previous']['ticks']);
         $this->assertSame($closing, $snapshot['previous']['closing_gap']);
     }

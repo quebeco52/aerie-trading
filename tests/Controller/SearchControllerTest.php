@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Tests\Controller;
 
+use Symfony\Bundle\FrameworkBundle\KernelBrowser;
 use Symfony\Bundle\FrameworkBundle\Test\WebTestCase;
 
 class SearchControllerTest extends WebTestCase
@@ -15,7 +16,7 @@ class SearchControllerTest extends WebTestCase
 
         $this->assertResponseIsSuccessful();
         $this->assertResponseHeaderSame('content-type', 'application/json');
-        $this->assertJsonStringEqualsJsonString('[]', $client->getResponse()->getContent());
+        $this->assertJsonStringEqualsJsonString('[]', $this->responseBody($client));
     }
 
     public function testAutocompleteReturnsMatchingStocks(): void
@@ -26,7 +27,7 @@ class SearchControllerTest extends WebTestCase
         $this->assertResponseIsSuccessful();
         $this->assertResponseHeaderSame('content-type', 'application/json');
 
-        $data = json_decode($client->getResponse()->getContent(), true);
+        $data = json_decode($this->responseBody($client), true);
         $this->assertIsArray($data);
         $this->assertNotEmpty($data);
         $this->assertEquals('WING', $data[0]['ticker']);
@@ -56,5 +57,14 @@ class SearchControllerTest extends WebTestCase
         $this->assertResponseRedirects('/');
         $client->followRedirect();
         $this->assertSelectorExists('div:contains("No stock found")');
+    }
+
+    /** The response body; a JSON endpoint sends it as a string, never as a stream. */
+    private function responseBody(KernelBrowser $client): string
+    {
+        $content = $client->getResponse()->getContent();
+        $this->assertIsString($content);
+
+        return $content;
     }
 }

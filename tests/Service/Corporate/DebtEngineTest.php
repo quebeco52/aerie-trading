@@ -231,6 +231,7 @@ class DebtEngineTest extends TestCase
 
         $through = $this->leveredOperatingFirm('BBB');
         $history = $through->getQuarterlyOperatingHistory() ?? [];
+        self::assertArrayHasKey(2, $history, 'the fixture files a third trailing quarter');
         $history[2][DebtEngine::RATED_LEVERAGE_KEY] = array_fill(0, 8, ['net_debt' => 80_000_000.0, 'ebitda' => 80_000_000.0]);
         $through->setQuarterlyOperatingHistory($history);
         $this->engine->calculateInterestExpense($through, $macroState, true);
@@ -557,7 +558,7 @@ class DebtEngineTest extends TestCase
             $stock = new Stock();
             $stock->setTicker('ZBOOK');
             $stock->setIndustry('Technology');
-            $stock->setTotalEquity($equity);
+            $stock->setTotalEquity(\App\Service\Math\Decimal::of($equity));
             $stock->setWholesaleDebt('50000000');
             $stock->setCorporateTreasury('0');
             $stock->setRetainedEarnings('0');
@@ -2025,7 +2026,7 @@ class DebtEngineTest extends TestCase
             $stock->setTicker('ANCH');
             $stock->setIndustry($industry);
             $stock->setCreditRating('AAA');
-            $stock->setTotalEquity($equity);
+            $stock->setTotalEquity(\App\Service\Math\Decimal::of($equity));
 
             return $this->engine->resolveProFormaRating($stock, 10.0, $netDebt, $ebitda);
         };

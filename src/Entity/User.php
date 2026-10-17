@@ -26,6 +26,7 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
     #[ORM\Column(length: 255, unique: true, nullable: true)]
     private ?string $username = null;
 
+    /** @var numeric-string */
     #[ORM\Column(type: Types::DECIMAL, precision: 15, scale: 2)]
     private string $cashBalance = '10000.00';
 
@@ -35,6 +36,8 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
      * Held separately from cashBalance rather than netted into it. Netting would make a leveraged account
      * indistinguishable from a smaller unleveraged one at exactly the moment the difference matters, and
      * there would be no balance to charge interest on.
+     *
+     * @var numeric-string
      */
     #[ORM\Column(type: Types::DECIMAL, precision: 15, scale: 2, options: ['default' => '0.00'])]
     private string $marginDebit = '0.00';
@@ -48,16 +51,19 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
 
     private ?string $plainPassword = null;
 
+    /** @return numeric-string */
     public function getCashBalance(): string
     {
         return $this->cashBalance;
     }
 
+    /** @return numeric-string */
     public function getMarginDebit(): string
     {
         return $this->marginDebit;
     }
 
+    /** @param numeric-string $marginDebit */
     public function setMarginDebit(string $marginDebit): static
     {
         $this->marginDebit = $marginDebit;
@@ -77,6 +83,7 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
         return $this;
     }
 
+    /** @param numeric-string $cashBalance */
     public function setCashBalance(string $cashBalance): static
     {
         $this->cashBalance = $cashBalance;

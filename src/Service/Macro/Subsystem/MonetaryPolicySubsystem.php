@@ -926,48 +926,6 @@ class MonetaryPolicySubsystem
     }
 
     /**
-     * Nelson-Siegel-Svensson Term Structure & Balance Sheet Composite Wrapper.
-     *
-     * Preserves backward compatibility by evaluating both central bank balance sheet
-     * operations and the resulting sovereign term structure decomposition in a single call.
-     *
-     * @param MacroState $state           Current macroeconomic state.
-     * @param float      $targetInflation Central bank inflation target.
-     * @param float      $naturalRate     Dynamic natural real rate of interest (r*).
-     * @param float      $dt              Time increment in years.
-     * @return array{
-     *     new_balance_sheet_intensity: float,
-     *     new_hold_timer: float,
-     *     new_qe_intensity: float,
-     *     new_qt_intensity: float,
-     *     level: float,
-     *     curvature: float,
-     *     curvature2: float,
-     *     beta1: float,
-     *     base_term_premium: float,
-     *     long_end_premium: float,
-     *     structural_10y: float,
-     *     yield_2y: float,
-     *     yield_5y: float,
-     *     yield_10y: float,
-     *     yield_30y: float,
-     *     risk_neutral_10y: float,
-     *     term_premium_10y: float
-     * } Decomposition containing yields, NSS factors, and QE/QT intensities.
-     */
-    public function calculateYieldCurveAndQE(MacroState $state, float $targetInflation, float $naturalRate, float $dt): array
-    {
-        $bsData = $this->calculateBalanceSheetOperations($state, $dt);
-
-        $evalState = clone $state;
-        $evalState->balanceSheetIntensity = $bsData['new_balance_sheet_intensity'];
-
-        $yieldData = $this->calculateYieldCurve($evalState, $targetInflation, $naturalRate);
-
-        return array_merge($bsData, $yieldData);
-    }
-
-    /**
      * Svensson (1994) Zero-Coupon Yield with Wright (2011) Inflation Risk Premium.
      *
      * Evaluates the nominal yield for maturity t using the Svensson four-parameter formula.

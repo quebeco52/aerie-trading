@@ -12,6 +12,7 @@ use App\Entity\SeasonEntry;
 use App\Entity\User;
 use App\Repository\SeasonEntryRepository;
 use App\Repository\SeasonRepository;
+use App\Service\Math\Decimal;
 use App\Service\Notification\PlayerNotifier;
 use App\Service\User\Portfolio;
 use Doctrine\ORM\EntityManagerInterface;
@@ -44,10 +45,12 @@ class SeasonService
     /**
      * Starting cash at a given consumer price level, so a Year-40 account starts with the same purchasing power as a
      * Year-1 one.
+     *
+     * @return numeric-string
      */
     public static function startingCapital(float $consumerPriceLevel): string
     {
-        return number_format(self::STARTING_CAPITAL_YEAR_ONE * max(0.0, $consumerPriceLevel ?: 1.0), 2, '.', '');
+        return Decimal::format(self::STARTING_CAPITAL_YEAR_ONE * max(0.0, $consumerPriceLevel ?: 1.0), 2);
     }
 
     /**

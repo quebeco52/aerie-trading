@@ -214,8 +214,7 @@ final class PortfolioEscrowTest extends TestCase
     {
         $sources = [
             'src/Service/User/Portfolio.php',
-            'src/Service/Corporate/CorporateLedgerService.php',
-            'src/Service/Market/Index/EtfTracker.php',
+            'src/Service/Market/Trading/SplitOrderBook.php',
         ];
 
         $checked = 0;
@@ -230,7 +229,7 @@ final class PortfolioEscrowTest extends TestCase
             }
         }
 
-        $this->assertGreaterThanOrEqual(3, $checked, 'The buy-side valuations have moved; this guard is no longer reaching them.');
+        $this->assertGreaterThanOrEqual(2, $checked, 'The buy-side valuations have moved; this guard is no longer reaching them.');
         $this->assertStringContainsString(
             'Portfolio::OPEN_ORDER_ESCROW_DETAIL_SQL',
             $this->read('src/Controller/DashboardController.php'),
@@ -258,8 +257,7 @@ final class PortfolioEscrowTest extends TestCase
     {
         $sources = [
             'src/Service/User/Portfolio.php',
-            'src/Service/Corporate/CorporateLedgerService.php',
-            'src/Service/Market/Index/EtfTracker.php',
+            'src/Service/Market/Trading/SplitOrderBook.php',
         ];
 
         $checked = 0;
@@ -272,6 +270,7 @@ final class PortfolioEscrowTest extends TestCase
             foreach ($matches[0] as $case) {
                 $checked++;
                 $flat = preg_replace('/\s+/', ' ', $case);
+                $this->assertIsString($flat);
 
                 $this->assertMatchesRegularExpression(
                     '/ELSE 0 END$/',
@@ -281,6 +280,6 @@ final class PortfolioEscrowTest extends TestCase
             }
         }
 
-        $this->assertGreaterThanOrEqual(4, $checked, 'The open-order valuations have moved; this guard is no longer reaching them.');
+        $this->assertGreaterThanOrEqual(3, $checked, 'The open-order valuations have moved; this guard is no longer reaching them.');
     }
 }

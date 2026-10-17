@@ -79,6 +79,7 @@ class TwigExtensionsTest extends TestCase
         $this->assertSame('sim_date', $filters[0]->getName());
 
         $simDate = $filters[0]->getCallable();
+        $this->assertIsCallable($simDate);
         $this->assertSame('Year 1 Q1', $simDate(0.0));
         $this->assertSame('Year 13 Q2', $simDate(12.25));
         $this->assertSame('Year 13 Q4', $simDate(12.99));

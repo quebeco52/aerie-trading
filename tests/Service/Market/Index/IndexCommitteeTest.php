@@ -68,6 +68,26 @@ class IndexCommitteeTest extends TestCase
     }
 
     /**
+     * The roster an index stands on once it has been reconstituted.
+     *
+     * @return array{
+     *     tick: int,
+     *     tickers: list<string>,
+     *     added: list<string>,
+     *     deleted: list<string>,
+     *     weights: array<string, float>,
+     *     factors: array<string, float>,
+     * }
+     */
+    private function storedRoster(IndexCommittee $committee, MarketIndex $index): array
+    {
+        $roster = $committee->currentRoster($index);
+        $this->assertNotNull($roster, "{$index->name} has a roster on record");
+
+        return $roster;
+    }
+
+    /**
      * @param array<string, float> $caps ticker => float-adjusted capitalisation
      * @return array<int, Stock>
      */
@@ -835,7 +855,7 @@ class IndexCommitteeTest extends TestCase
         }
 
         $multiples = $committee->passiveOwnership();
-        $market = $committee->currentRoster(MarketIndex::market())['weights'];
+        $market = $this->storedRoster($committee, MarketIndex::market())['weights'];
 
         $average = 0.0;
         foreach ($market as $ticker => $weight) {
@@ -873,8 +893,8 @@ class IndexCommitteeTest extends TestCase
         $this->assertGreaterThan(0.0, $multiples['TWIN']);
 
         // And the difference is exactly the sector fund's contribution, not a side effect of anything else.
-        $staples = $committee->currentRoster(MarketIndex::Staples)['weights'];
-        $market = $committee->currentRoster(MarketIndex::market())['weights'];
+        $staples = $this->storedRoster($committee, MarketIndex::Staples)['weights'];
+        $market = $this->storedRoster($committee, MarketIndex::market())['weights'];
 
         $this->assertEqualsWithDelta(
             (MarketIndex::Staples->passiveShare() * $staples['SODA']) / $market['SODA'],
@@ -964,7 +984,7 @@ class IndexCommitteeTest extends TestCase
         $first = $committee->reconstitute(MarketIndex::Headline, $this->rankedUniverse(60), 0);
 
         $this->assertSame([], $first['added']);
-        $this->assertSame([], $committee->currentRoster(MarketIndex::Headline)['added']);
+        $this->assertSame([], $this->storedRoster($committee, MarketIndex::Headline)['added']);
     }
 
     public function testTheRosterRecordsWhatTheLastReviewChanged(): void
@@ -976,7 +996,7 @@ class IndexCommitteeTest extends TestCase
         $stocks[] = StockBuilder::create('NEWCO')->withPrice(9.0e11)->withSharesOutstanding(1)->withPublicFloatPercentage(1.0)->build();
         $committee->reconstitute(MarketIndex::Headline, $stocks, 3600);
 
-        $roster = $committee->currentRoster(MarketIndex::Headline);
+        $roster = $this->storedRoster($committee, MarketIndex::Headline);
 
         $this->assertSame(3600, $roster['tick']);
         $this->assertSame(['NEWCO'], $roster['added']);

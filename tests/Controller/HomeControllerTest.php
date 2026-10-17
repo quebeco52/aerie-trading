@@ -45,7 +45,9 @@ class HomeControllerTest extends WebTestCase
         $this->assertResponseIsSuccessful();
         $this->assertResponseHeaderSame('content-type', 'application/json');
 
-        $data = json_decode($client->getResponse()->getContent(), true);
+        $content = $client->getResponse()->getContent();
+        $this->assertIsString($content);
+        $data = json_decode($content, true);
         $this->assertArrayHasKey('etf', $data);
         $this->assertArrayHasKey('stocks', $data);
         $this->assertIsArray($data['stocks']);

@@ -9,7 +9,6 @@ use App\Entity\Stock;
 use App\Service\Math\Decimal;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\MathUtility;
-use App\Service\Math\Valuation;
 
 /**
  * Service responsible for managing the internal corporate balance sheet.
@@ -287,9 +286,6 @@ class TreasuryEngine
         $liveInvestedCapital = $this->corporateMetrics->calculateLiveInvestedCapital($preBuybackEquity, $totalDebt, $ctx->newTreasury);
 
         $trueReturn = $ctx->strategy->getTrueReturn($stock);
-        if ($trueReturn === 0.0) {
-            $trueReturn = $ctx->strategy->calculateEconomicReturn($stock, $ctx->quarterlyNopat, $liveInvestedCapital);
-        }
         // The hurdle a capital-deployment gate tests against is the one MANAGEMENT applies, not the firm's
         // true cost of capital — the same hurdle the earnings engine's growth-capex gate uses. Borrowing to
         // build is the same decision as building from cash, so one manager has to bring one hurdle to both;
@@ -408,9 +404,6 @@ class TreasuryEngine
         $totalDebt = $ctx->wholesaleDebt + $ctx->customerDeposits;
         $liveInvestedCapital = $this->corporateMetrics->calculateLiveInvestedCapital($preBuybackEquity, $totalDebt, $ctx->newTreasury);
         $trueReturn = $ctx->strategy->getTrueReturn($stock);
-        if ($trueReturn === 0.0) {
-            $trueReturn = $ctx->strategy->calculateEconomicReturn($stock, $ctx->quarterlyNopat, $liveInvestedCapital);
-        }
         // Management's own hurdle again, the same one the debt-funded gate above and the earnings engine's
         // growth-capex gate apply.
         $manager = $stock->getManagementProfile();
@@ -656,20 +649,7 @@ class TreasuryEngine
         $hurdleRate = $ctx->strategy->getHurdleRate($ctx->health);
         $economicSpread = $trueReturn - $hurdleRate;
 
-        // Struck as the market strikes it: cost of equity on the return on equity (MarketEngine).
-        $valuationReturn = $ctx->strategy->getValuationReturn($trueReturn, $stock->getLongRunReturn() !== null ? (float) $stock->getLongRunReturn() : null, $ctx->health->costOfEquity);
-        $equityRates = $ctx->strategy->getEquityValuationRates($stock, $valuationReturn, $ctx->health, $ctx->macroState->corporateTaxRate);
-        $fairValuePE = Valuation::calculateManagementFairValuePE(
-            $equityRates['costOfEquity'],
-            $equityRates['equityReturn'],
-            $ctx->strategy->getFadedSecularGrowthRate($stock, $ctx->macroState->totalTime),
-            $ctx->macroState->outputGap,
-            $ctx->health->leveredBeta,
-            $ctx->macroState->tipsBreakeven,
-            \App\Data\Company\Sectors::baselineIndustryPe($stock->getIndustry()),
-            (float) ($stock->getAccrualsRatio() ?? 0.0),
-            $stock->getPolicyPayoutRatio(),
-        );
+        $fairValuePE = ManagementValuation::fairValuePE($ctx->strategy, $stock, $trueReturn, $ctx->health, $ctx->macroState);
 
         // The shares outstanding now, after any buyback this quarter; the context's count is the opening one.
         $sharesNow = max(1.0, (float) $stock->getSharesOutstanding());
@@ -1133,21 +1113,9 @@ class TreasuryEngine
         $ctx->events = $state['events'];
     }
 
+    /** @return numeric-string */
     private function formatBc(int|float|string|null $val, int $scale = 4): string
     {
-        if ($val === null || $val === '') {
-            return '0.' . str_repeat('0', $scale);
-        }
-        if (is_string($val)) {
-            if (stripos($val, 'e') !== false && is_numeric($val)) {
-                $val = (float) $val;
-            } else {
-                return $val;
-            }
-        }
-        if (!is_finite((float) $val)) {
-            return '0.' . str_repeat('0', $scale);
-        }
-        return sprintf('%.' . $scale . 'F', (float) $val);
+        return Decimal::of($val, $scale);
     }
 }

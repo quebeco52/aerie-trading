@@ -44,7 +44,7 @@ class ScreenerController extends AbstractController
 
             $marketCap = $price * $shares;
             $peRatio = $eps > 0 ? $price / $eps : null;
-            $dividendYield = $price > 0 ? (((float) $stock->getLastDividend() * 4) / $price) * 100 : 0.0;
+            $dividendYield = $price > 0 ? ((float) $stock->getLastDividend() * 4) / $price : 0.0;
             $equity = (float) $stock->getTotalEquity();
             $debtToEquity = $equity > 0 ? ((float) $stock->getTotalDebt() / $equity) : null;
 

@@ -244,6 +244,7 @@ class DistrictWardComposerTest extends TestCase
             $edges[$slot['row']] = $slot['x'] + $slot['width'];
         }
 
+        $this->assertNotEmpty($edges);
         $widest = max($edges);
         $narrowest = min($edges);
 

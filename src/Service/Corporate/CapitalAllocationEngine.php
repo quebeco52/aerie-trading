@@ -156,10 +156,7 @@ class CapitalAllocationEngine
         $customDepreciation = (float) $stock->getDepreciationRate();
         $depRate = $customDepreciation > 0.0 ? $customDepreciation : $this->corporateMetrics->getIndustryDepreciationRate($ctx->industry);
 
-        $trueReturn = (float) $ctx->strategy->getTrueReturn($stock);
-        if ($trueReturn === 0.0) {
-            $trueReturn = $ctx->strategy->calculateEconomicReturn($stock, $ctx->strategy->getReturnBasisIncome($stock, $ctx->quarterlyNopat, $ctx->actualTotalNetIncome), $ctx->investedCapital);
-        }
+        $trueReturn = $ctx->strategy->getTrueReturn($stock);
 
         // Life-Cycle Payout Target Expansion (DeAngelo & DeAngelo 2006 / Jensen 1986) As a firm approaches market
         // saturation, internal reinvestment slows and target payout scales toward cash cow levels.
@@ -405,10 +402,7 @@ class CapitalAllocationEngine
             }
         }
 
-        $trueReturn = (float) $ctx->strategy->getTrueReturn($stock);
-        if ($trueReturn === 0.0) {
-            $trueReturn = $ctx->strategy->calculateEconomicReturn($stock, $ctx->strategy->getReturnBasisIncome($stock, $ctx->quarterlyNopat, $ctx->actualTotalNetIncome), $ctx->investedCapital);
-        }
+        $trueReturn = $ctx->strategy->getTrueReturn($stock);
         $hurdleRate = $ctx->strategy->getHurdleRate($ctx->health);
         $economicSpread = $trueReturn - $hurdleRate;
 
@@ -416,19 +410,7 @@ class CapitalAllocationEngine
 
         // The multiple values equity, so it is struck at the cost of equity on the return on equity, as the
         // market strikes it (MarketEngine); the spread above stays ROIC against the hurdle, an EVA test.
-        $valuationReturn = $ctx->strategy->getValuationReturn($trueReturn, $stock->getLongRunReturn() !== null ? (float) $stock->getLongRunReturn() : null, $ctx->health->costOfEquity);
-        $equityRates = $ctx->strategy->getEquityValuationRates($stock, $valuationReturn, $ctx->health, $ctx->macroState->corporateTaxRate);
-        $fairValuePE = Valuation::calculateManagementFairValuePE(
-            $equityRates['costOfEquity'],
-            $equityRates['equityReturn'],
-            $ctx->strategy->getFadedSecularGrowthRate($stock, $ctx->macroState->totalTime),
-            $ctx->macroState->outputGap,
-            $ctx->health->leveredBeta,
-            $ctx->macroState->tipsBreakeven,
-            \App\Data\Company\Sectors::baselineIndustryPe($stock->getIndustry()),
-            (float) ($stock->getAccrualsRatio() ?? 0.0),
-            $stock->getPolicyPayoutRatio(),
-        );
+        $fairValuePE = ManagementValuation::fairValuePE($ctx->strategy, $stock, $trueReturn, $ctx->health, $ctx->macroState);
 
         $ctx->newShares = $ctx->sharesOutstanding;
 

@@ -153,6 +153,7 @@ class PoliticsEngineTest extends TestCase
                 if ($vote > 0) {
                     $volatility[] = Politics::pedersenVolatility($state->dietVoteSwings);
                     $cabinetLosses[] = array_sum(array_map(static fn(string $party): float => $before[$party] - $state->dietVoteShares[$party], $outgoing));
+                    $this->assertNotEmpty($state->dietSeats);
                     $singlePartyMajority += max($state->dietSeats) >= Diet::MAJORITY_SEATS ? 1 : 0;
                     $talkDays[] = $state->formationLog === [] ? 0.0 : $state->formationLog[array_key_last($state->formationLog)]['day'];
                     $retried += count($state->formationLog) > 1 ? 1 : 0;
@@ -219,20 +220,12 @@ class PoliticsEngineTest extends TestCase
     public function testGrowthAndInflationMoveTheGovernmentsVote(): void
     {
         $engine = $this->engine($this->quietMath());
-        $voted = function (array $cabinet, float $growthGap = 0.0, float $inflationGap = 0.0) use ($engine): PoliticsState {
-            $state = $this->electionTick($growthGap, $inflationGap);
-            $state->governingCoalition = Diet::membership($cabinet);
-            $state->supportParties = Diet::membership([]);
-            $this->vote($engine, $state);
 
-            return $state;
-        };
-
-        $alone = $voted([Diet::VANGUARD]);
-        $boomAlone = $voted([Diet::VANGUARD], growthGap: 0.03);
-        $coalition = $voted(self::RIGHT_BLOC);
-        $boomCoalition = $voted(self::RIGHT_BLOC, growthGap: 0.03);
-        $inflation = $voted(self::RIGHT_BLOC, inflationGap: 0.03);
+        $alone = $this->votedUnder($engine, [Diet::VANGUARD]);
+        $boomAlone = $this->votedUnder($engine, [Diet::VANGUARD], growthGap: 0.03);
+        $coalition = $this->votedUnder($engine, self::RIGHT_BLOC);
+        $boomCoalition = $this->votedUnder($engine, self::RIGHT_BLOC, growthGap: 0.03);
+        $inflation = $this->votedUnder($engine, self::RIGHT_BLOC, inflationGap: 0.03);
 
         $this->assertEqualsWithDelta(0.03, $boomAlone->electionGrowthGap, 1e-9);
         $this->assertEqualsWithDelta(0.03, $inflation->electionInflationGap, 1e-9);
@@ -524,19 +517,11 @@ class PoliticsEngineTest extends TestCase
         mt_srand(11);
         $engine = $this->engine(new MathUtility());
         $cabinet = [Diet::VANGUARD, Diet::EXCHANGE];
-        $formedAfter = function (array $outgoing) use ($engine, $cabinet): int {
-            $count = 0;
-            for ($trial = 0; $trial < 300; ++$trial) {
-                $state = $this->electionTick();
-                $state->governingCoalition = Diet::membership($outgoing);
-                $this->vote($engine, $state);
-                $count += Diet::governingParties($state->pendingCoalition) === $cabinet ? 1 : 0;
-            }
 
-            return $count;
-        };
-
-        $this->assertGreaterThan(2 * $formedAfter([Diet::VANGUARD, Diet::NEW_HORIZON]), $formedAfter($cabinet));
+        $this->assertGreaterThan(
+            2 * $this->timesFormedAfter($engine, [Diet::VANGUARD, Diet::NEW_HORIZON], $cabinet),
+            $this->timesFormedAfter($engine, $cabinet, $cabinet),
+        );
     }
 
     /** The cabinet the talks produced takes office on the first tick at or past its day, supporters with it. */
@@ -831,11 +816,12 @@ class PoliticsEngineTest extends TestCase
      */
     public function testEachSideOfTheStateAxisIsScaledToItsOwnEnd(): void
     {
-        $halfway = static fn(string $party): array => Politics::platform([Diet::AXIS_STATE => Diet::FIXED_POSITIONS[$party][Diet::AXIS_STATE] / 2.0]);
-        $this->assertEqualsWithDelta(Politics::POLICY_MANIFESTO_CORPORATE_TAX_GAP / 4.0, $halfway(Diet::CIVIC)['corporateTax'], 1e-12);
-        $this->assertEqualsWithDelta(-Politics::POLICY_MANIFESTO_CORPORATE_TAX_GAP / 4.0, $halfway(Diet::VANGUARD)['corporateTax'], 1e-12);
-        $this->assertEqualsWithDelta(MacroEngine::PUBLIC_PURCHASES_TO_GDP * exp(Politics::POLICY_MANIFESTO_PUBLIC_SPENDING_LOG_GAP / 4.0), $halfway(Diet::CIVIC)['publicSpending'], 1e-12);
-        $this->assertEqualsWithDelta(CreditFiscalSubsystem::FOUNDING_CONSOLIDATION_TAX_SHARE - (Politics::POLICY_MANIFESTO_CONSOLIDATION_TAX_SHARE_GAP / 4.0), $halfway(Diet::VANGUARD)['consolidationTaxShare'], 1e-12);
+        $civic = Politics::platform([Diet::AXIS_STATE => Diet::FIXED_POSITIONS[Diet::CIVIC][Diet::AXIS_STATE] / 2.0]);
+        $vanguard = Politics::platform([Diet::AXIS_STATE => Diet::FIXED_POSITIONS[Diet::VANGUARD][Diet::AXIS_STATE] / 2.0]);
+        $this->assertEqualsWithDelta(Politics::POLICY_MANIFESTO_CORPORATE_TAX_GAP / 4.0, $civic['corporateTax'], 1e-12);
+        $this->assertEqualsWithDelta(-Politics::POLICY_MANIFESTO_CORPORATE_TAX_GAP / 4.0, $vanguard['corporateTax'], 1e-12);
+        $this->assertEqualsWithDelta(MacroEngine::PUBLIC_PURCHASES_TO_GDP * exp(Politics::POLICY_MANIFESTO_PUBLIC_SPENDING_LOG_GAP / 4.0), $civic['publicSpending'], 1e-12);
+        $this->assertEqualsWithDelta(CreditFiscalSubsystem::FOUNDING_CONSOLIDATION_TAX_SHARE - (Politics::POLICY_MANIFESTO_CONSOLIDATION_TAX_SHARE_GAP / 4.0), $vanguard['consolidationTaxShare'], 1e-12);
         $this->assertSame(Politics::platform([Diet::AXIS_STATE => -2.0])['corporateTax'], Politics::platform([Diet::AXIS_STATE => Diet::FIXED_POSITIONS[Diet::VANGUARD][Diet::AXIS_STATE]])['corporateTax'], 'Past its end a government enacts the end party\'s law and no more.');
     }
 
@@ -1043,6 +1029,41 @@ class PoliticsEngineTest extends TestCase
     private function vote(Politics $engine, PoliticsState $state): void
     {
         $engine->advance($state, $this->economy(self::ELECTION_AT), 0.01);
+    }
+
+    /**
+     * The first vote with this cabinet in office and no support parties, growth and inflation the given gaps off
+     * trend and target.
+     *
+     * @param list<string> $cabinet
+     */
+    private function votedUnder(Politics $engine, array $cabinet, float $growthGap = 0.0, float $inflationGap = 0.0): PoliticsState
+    {
+        $state = $this->electionTick($growthGap, $inflationGap);
+        $state->governingCoalition = Diet::membership($cabinet);
+        $state->supportParties = Diet::membership([]);
+        $this->vote($engine, $state);
+
+        return $state;
+    }
+
+    /**
+     * In how many of 300 first votes the talks after the outgoing cabinet form this one.
+     *
+     * @param list<string> $outgoing
+     * @param list<string> $cabinet
+     */
+    private function timesFormedAfter(Politics $engine, array $outgoing, array $cabinet): int
+    {
+        $count = 0;
+        for ($trial = 0; $trial < 300; ++$trial) {
+            $state = $this->electionTick();
+            $state->governingCoalition = Diet::membership($outgoing);
+            $this->vote($engine, $state);
+            $count += Diet::governingParties($state->pendingCoalition) === $cabinet ? 1 : 0;
+        }
+
+        return $count;
     }
 
     /** The economy as the macro hands it over: at its openings, on the given tick, debt and labour force growth. */

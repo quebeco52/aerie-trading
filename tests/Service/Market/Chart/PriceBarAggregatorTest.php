@@ -66,7 +66,11 @@ class PriceBarAggregatorTest extends TestCase
         return $this->aggregator->aggregate($rows, $rowCount / $rowsPerYear, $rowsPerYear, $targetBars, $minRowsPerBar)['bars'];
     }
 
-    /** A sawtooth walk: every step reverses, so a bar spanning several of them must show a real range. */
+    /**
+     * A sawtooth walk: every step reverses, so a bar spanning several of them must show a real range.
+     *
+     * @return list<float>
+     */
     private function sawtooth(int $count): array
     {
         $prices = [];
@@ -143,12 +147,13 @@ class PriceBarAggregatorTest extends TestCase
 
     public function testAnIsolatedSpikeSurvivesAggregationIntoTheHigh(): void
     {
-        $prices = array_fill(0, 1000, 100.0);
-        $prices[437] = 180.0;
+        $prices = array_map(static fn(int $row): float => $row === 437 ? 180.0 : 100.0, range(0, 999));
 
         $bars = $this->bars($this->rows($prices), 1000);
 
-        $highest = max(array_column($bars, 'high_price'));
+        $highs = array_column($bars, 'high_price');
+        self::assertNotEmpty($highs);
+        $highest = max($highs);
         self::assertEqualsWithDelta(180.0, $highest, 1e-9, 'The spike must reach the high of the bar containing it.');
     }
 

@@ -183,9 +183,9 @@ class CorporateLedgerServiceTest extends TestCase
                 ['id' => 2, 'user_id' => 102, 'quantity' => 20],
             ]);
 
-        // 1 holdings cashout + 10 bulk updates (escrow remnant refund, the eight rewrites, the last of which
-        // restates filled trade_orders, then the price alerts) = 11 calls
-        $this->connectionMock->expects($this->exactly(11))
+        // 1 holdings cashout + 9 bulk updates (the order book's escrow refund, open orders, cancellations and filled
+        // history; the four stock tables; the price alerts) = 10 calls
+        $this->connectionMock->expects($this->exactly(10))
             ->method('executeStatement');
 
         $this->service->processStockSplit($stock, 10.0, true, 2.50);
@@ -241,7 +241,7 @@ class CorporateLedgerServiceTest extends TestCase
         $this->assertCount(1, $refund);
         $this->assertStringContainsString("o.action = 'BUY' AND o.order_type NOT IN ('STOP', 'STOP_LIMIT')", $refund[0][0]);
 
-        $restate = array_values(array_filter($statements, static fn(array $s): bool => str_contains($s[0], 'SET limit_price = ROUND(limit_price * :factor, 4)')));
+        $restate = array_values(array_filter($statements, static fn(array $s): bool => str_contains($s[0], "status = 'OPEN'") && str_contains($s[0], 'limit_price = ROUND(limit_price * :factor, 4)')));
         $this->assertCount(1, $restate);
         $this->assertStringContainsString('stop_price = ROUND(stop_price * :factor, 4)', $restate[0][0]);
 

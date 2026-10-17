@@ -74,10 +74,10 @@ final class SolvencyLiquidationInvariantTest extends TestCase
         $stock->setCurrentVolatility((string) $row['volatility']);
         $stock->setBeta((string) IndustryBetas::seedBetaFor($row));
         $stock->setOperatingMargin((string) $row['operating_margin']);
-        $stock->setTotalEquity((string) $row['total_equity']);
+        $stock->setTotalEquity(\App\Service\Math\Decimal::of($row['total_equity']));
         $stock->setWholesaleDebt((string) $row['wholesale_debt']);
         $stock->setCustomerDeposits((string) $row['customer_deposits']);
-        $stock->setRetainedEarnings((string) $row['retained_earnings']);
+        $stock->setRetainedEarnings(\App\Service\Math\Decimal::of($row['retained_earnings']));
         $stock->setCorporateTreasury((string) $row['corporate_treasury']);
         $stock->setFloatingDebtRatio((string) $row['floating_debt_ratio']);
         $stock->setHistoricalFixedRate((string) $row['historical_fixed_rate']);

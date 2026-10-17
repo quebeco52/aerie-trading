@@ -72,6 +72,7 @@ class TradeOrder
     #[ORM\Column(type: Types::BIGINT, options: ['default' => 0])]
     private int $filledQuantity = 0;
 
+    /** @var numeric-string|null */
     #[ORM\Column(type: Types::DECIMAL, precision: 18, scale: 4, nullable: true)]
     private ?string $limitPrice = null;
 
@@ -256,11 +257,13 @@ class TradeOrder
         return $this;
     }
 
+    /** @return numeric-string|null */
     public function getLimitPrice(): ?string
     {
         return $this->limitPrice;
     }
 
+    /** @param numeric-string|null $limitPrice */
     public function setLimitPrice(?string $limitPrice): static
     {
         $this->limitPrice = $limitPrice;

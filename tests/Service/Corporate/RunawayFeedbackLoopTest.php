@@ -323,7 +323,7 @@ class RunawayFeedbackLoopTest extends TestCase
             $stock->setIndustry('Banks - Diversified');
             $stock->setPrice('100.00000000');
             $stock->setSharesOutstanding('1000000000');
-            $stock->setTotalEquity($equity);
+            $stock->setTotalEquity(\App\Service\Math\Decimal::of($equity));
             $stock->setWholesaleDebt('0.00');
             $stock->setCorporateTreasury('0.00');
             $stock->setOperatingMargin('0.40');

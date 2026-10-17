@@ -59,7 +59,7 @@ class TreasuryAuctionService
      * @param SovereignCurveDTO $curve       The fitted term structure the coupons are struck off.
      * @param float             $currentTime Simulation time in years.
      * @param array<int, Bond>  $outstanding The caller's working set, so its entities are demoted too.
-     * @return array<int, Bond> The issues created, in tenor order.
+     * @return list<Bond> The issues created, in tenor order.
      */
     public function conductAuction(SovereignCurveDTO $curve, float $currentTime, array $outstanding = []): array
     {

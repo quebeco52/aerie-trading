@@ -83,6 +83,7 @@ class YieldCurveRealismTest extends TestCase
             }
         }
 
+        $this->assertNotEmpty($spreads, 'The runs record the slope after burn-in.');
         $count = count($spreads);
         $mean = array_sum($spreads) / $count;
         $variance = 0.0;

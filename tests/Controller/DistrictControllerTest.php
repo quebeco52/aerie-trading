@@ -385,7 +385,9 @@ class DistrictControllerTest extends WebTestCase
             trim($crawler->filter('[data-district-target="summaryReconstitution"]')->text()),
         );
 
-        $schedule = json_decode($crawler->filter('[data-controller="district"]')->attr('data-district-reconstitution-value'), true);
+        $scheduleJson = $crawler->filter('[data-controller="district"]')->attr('data-district-reconstitution-value');
+        $this->assertNotNull($scheduleJson);
+        $schedule = json_decode($scheduleJson, true);
         $this->assertIsArray($schedule);
         $this->assertGreaterThan(0, $schedule['nextTick']);
         $this->assertGreaterThan(0, $schedule['ticksPerYear']);

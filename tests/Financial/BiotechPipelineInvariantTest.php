@@ -38,6 +38,8 @@ class BiotechPipelineInvariantTest extends TestCase
             $stock = new Stock();
             $stock->setTicker('IBIS');
             $stock->setBeta('1.0');
+            $franchisePath = [];
+            $protectedPath = [];
 
             for ($q = 0; $q < self::YEARS * 4; $q++) {
                 $state = $stock->getEarningsMomentumZ() ?? [];
@@ -52,10 +54,12 @@ class BiotechPipelineInvariantTest extends TestCase
                 $setbacks += $result->eventType === \App\Service\Event\ShockEvent::BIOTECH_TRIAL_SETBACK ? 1 : 0;
 
                 if ($q % 4 === 3) {
-                    $franchise[$seed][] = $result->streamZ[BiotechBusinessModel::STATE_FRANCHISE_INDEX];
-                    $protected[$seed][] = $result->streamZ[BiotechBusinessModel::STATE_PROTECTED_SHARE];
+                    $franchisePath[] = $result->streamZ[BiotechBusinessModel::STATE_FRANCHISE_INDEX];
+                    $protectedPath[] = $result->streamZ[BiotechBusinessModel::STATE_PROTECTED_SHARE];
                 }
             }
+            $franchise[] = $franchisePath;
+            $protected[] = $protectedPath;
         }
 
         return ['franchise' => $franchise, 'protected' => $protected, 'approvals' => $approvals, 'setbacks' => $setbacks];

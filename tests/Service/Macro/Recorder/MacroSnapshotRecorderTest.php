@@ -53,20 +53,44 @@ class MacroSnapshotRecorderTest extends TestCase
      */
     private function capture(MacroStateDTO $dto, ?array $gapChannels = null, ?QuarterRecord $quarter = null): array
     {
-        $captured = [];
+        return $this->captureStatement(
+            static fn(Connection $conn) => (new MacroSnapshotRecorder())->recordSnapshot(
+                $dto,
+                $conn,
+                $quarter ?? new QuarterRecord(gapChannels: $gapChannels),
+            ),
+        );
+    }
+
+    /**
+     * Runs a recording against a connection that captures the one statement it executes, bound by position.
+     *
+     * @param  callable(Connection): void $record
+     * @return array{sql: string, params: list<mixed>, types: list<ParameterType|string>}
+     */
+    private function captureStatement(callable $record): array
+    {
+        $sql = null;
+        $params = [];
+        $types = [];
 
         $connMock = $this->createMock(Connection::class);
         $connMock->expects($this->once())
             ->method('executeStatement')
-            ->willReturnCallback(function (string $sql, array $params, array $types) use (&$captured): int {
-                $captured = ['sql' => $sql, 'params' => $params, 'types' => $types];
+            ->willReturnCallback(function (string $statement, array $values, array $valueTypes) use (&$sql, &$params, &$types): int {
+                [$sql, $params, $types] = [$statement, $values, $valueTypes];
 
                 return 1;
             });
 
-        (new MacroSnapshotRecorder())->recordSnapshot($dto, $connMock, $quarter ?? new QuarterRecord(gapChannels: $gapChannels));
+        $record($connMock);
 
-        return $captured;
+        $this->assertIsString($sql, 'The recorder executes its statement.');
+        $this->assertTrue(array_is_list($params), 'Values are bound by position.');
+        $bound = array_values(array_filter($types, static fn(mixed $type): bool => $type instanceof ParameterType || is_string($type)));
+        $this->assertSame($types, $bound, 'Every value is bound by position with a DBAL type.');
+
+        return ['sql' => $sql, 'params' => $params, 'types' => $bound];
     }
 
     /**
@@ -338,15 +362,9 @@ class MacroSnapshotRecorderTest extends TestCase
     /** A quarter recorded without a QuarterRecord leaves every recorder-owned column NULL. */
     public function testAVectorAloneLeavesTheRecorderColumnsNull(): void
     {
-        $captured = [];
-        $connMock = $this->createMock(Connection::class);
-        $connMock->expects($this->once())->method('executeStatement')->willReturnCallback(function (string $sql, array $params) use (&$captured): int {
-            $captured = ['sql' => $sql, 'params' => $params];
-
-            return 1;
-        });
-
-        (new MacroSnapshotRecorder())->recordSnapshot(MacroStateDTO::fromMacroState(new MacroState()), $connMock);
+        $captured = $this->captureStatement(
+            static fn(Connection $conn) => (new MacroSnapshotRecorder())->recordSnapshot(MacroStateDTO::fromMacroState(new MacroState()), $conn),
+        );
         $byColumn = array_combine($this->columnsOf($captured['sql']), $captured['params']);
 
         foreach (['gap_channels', 'quarter_diagnostics', 'config_fingerprint', 'ticks_per_year'] as $column) {

@@ -143,6 +143,7 @@ class SovereignReservePageBuilderTest extends TestCase
         $this->assertEqualsWithDelta(0.50 - self::TARGET_WEIGHT, $sleeves['foreign-equities']['policy'], 1e-12);
         $this->assertEqualsWithDelta(0.50, $page['bands'][1]['policy'], 1e-12);
         $this->assertEqualsWithDelta((0.50 - self::TARGET_WEIGHT) / (1.0 - self::TARGET_WEIGHT), $page['mandate']['foreignEquityShare'], 1e-12);
+        $this->assertNotNull($page['head']);
         $this->assertSame('Ines Varga', $page['head']['name']);
         $this->assertSame(55, $page['head']['age']);
         $this->assertSame('cautious', $page['head']['stance']);

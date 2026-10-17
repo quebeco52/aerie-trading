@@ -94,7 +94,7 @@ class StockBuilder
 
     public function withTotalEquity(float|string $equity): self
     {
-        $this->stock->setTotalEquity(is_float($equity) ? number_format($equity, 4, '.', '') : $equity);
+        $this->stock->setTotalEquity(\App\Service\Math\Decimal::of($equity, 4));
         return $this;
     }
 

@@ -6,6 +6,7 @@ namespace App\Service\Corporate\Holdings;
 
 use App\Data\Company\AnchorHoldings;
 use App\Entity\Stock;
+use App\Service\Math\Decimal;
 
 /**
  * Marks a permanent-capital sphere's listed anchor stakes at what the market says they are worth.
@@ -194,9 +195,13 @@ final class AnchorStakeLedger
         return ((float) $holder->getTotalEquity() + $marketValue - (float) $carrying) / $shares;
     }
 
-    /** Fixed-point at the balance sheet's scale, so bcmath never sees an exponent. */
+    /**
+     * Fixed-point at the balance sheet's scale, so bcmath never sees an exponent.
+     *
+     * @return numeric-string
+     */
     private static function decimal(float $value): string
     {
-        return number_format($value, 4, '.', '');
+        return Decimal::format($value, 4);
     }
 }

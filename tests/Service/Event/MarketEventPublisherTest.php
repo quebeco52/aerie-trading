@@ -109,6 +109,7 @@ class MarketEventPublisherTest extends TestCase
         ob_start();
         $result = $this->publisher->publish($stock, 'SHOCK', 'Market shock occurred.', -12.5);
         $output = ob_get_clean();
+        $this->assertIsString($output);
 
         $this->assertStringContainsString('MARKET SHOCK on SHOCK_CORP: -12.50%', $output);
         $this->assertSame(-12.5, $result['change_percent']);
@@ -127,6 +128,7 @@ class MarketEventPublisherTest extends TestCase
         ob_start();
         $result = $this->publisher->publish($etf, 'SHOCK', 'Systemic liquidity freeze.', null);
         $output = ob_get_clean();
+        $this->assertIsString($output);
 
         $this->assertNull($result['change_percent']);
         $this->assertNull($result['presented']['changePercent']);
@@ -200,7 +202,7 @@ class MarketEventPublisherTest extends TestCase
     public function testEventsCarryTheStampedSimulationTime(): void
     {
         $persisted = [];
-        $this->emMock->method('persist')->willReturnCallback(function (object $entity) use (&$persisted): void {
+        $this->emMock->method('persist')->willReturnCallback(function (StockEvent|DistrictNews $entity) use (&$persisted): void {
             $persisted[] = $entity;
         });
 
@@ -211,7 +213,7 @@ class MarketEventPublisherTest extends TestCase
 
         $this->assertNull($unstamped['sim_time']);
         $this->assertSame([13.25, 13.25], [$stock['sim_time'], $district['sim_time']]);
-        $this->assertSame([null, 13.25, 13.25], array_map(fn(object $e): ?float => $e->getSimTime(), $persisted));
+        $this->assertSame([null, 13.25, 13.25], array_map(fn(StockEvent|DistrictNews $e): ?float => $e->getSimTime(), $persisted));
         $this->assertSame('1 Apr, Year 14', $district['presented']['dateline']);
     }
 
@@ -221,7 +223,7 @@ class MarketEventPublisherTest extends TestCase
     public function testADealsVerdictIsJudgedOnItsSizeAndStored(): void
     {
         $persisted = [];
-        $this->emMock->method('persist')->willReturnCallback(function (object $entity) use (&$persisted): void {
+        $this->emMock->method('persist')->willReturnCallback(function (StockEvent|DistrictNews $entity) use (&$persisted): void {
             $persisted[] = $entity;
         });
         $stock = (new Stock())->setTicker('WEAV')->setVolatility('0.20');
@@ -231,6 +233,6 @@ class MarketEventPublisherTest extends TestCase
         $district = $this->publisher->publishDistrict(DistrictNews::DESK_ECONOMY, 'recession_declared', 'A recession has been declared.', null);
 
         $this->assertSame([true, false, true], [$large['headline'], $small['headline'], $district['headline']]);
-        $this->assertSame([true, false, true], array_map(fn(object $e): ?bool => $e->getHeadline(), $persisted));
+        $this->assertSame([true, false, true], array_map(fn(StockEvent|DistrictNews $e): ?bool => $e->getHeadline(), $persisted));
     }
 }

@@ -8,6 +8,7 @@ use App\Entity\OptionContract;
 use App\Entity\Stock;
 use App\Service\Market\Option\OptionChainService;
 use App\Service\Market\Ticker\NestedTransaction;
+use App\Service\Market\Trading\SplitOrderBook;
 use App\Service\Math\Decimal;
 use App\Service\Math\FinancialConstants;
 use App\Service\Notification\PlayerNotifier;
@@ -165,11 +166,9 @@ class CorporateLedgerService
     {
         $conn = $this->entityManager->getConnection();
 
-        // Split factors are whole (4^k, 10^k) and bound as integers. Bound as a string, MariaDB evaluates the
-        // arithmetic in DOUBLE, and IF(volume > max / factor, max, volume * factor) returns the BIGINT ceiling
-        // as a double one past the column's range: the overflow guard itself failed the statement.
+        // Split factors are whole and bound as integers (SplitOrderBook).
         $factor = (int) round($splitFactor);
-        $factorType = ['factor' => ParameterType::INTEGER];
+        $factorType = SplitOrderBook::FACTOR_TYPES;
         $optionHolders = [];
 
         $conn->beginTransaction();
@@ -203,33 +202,7 @@ class CorporateLedgerService
                     }
                 }
 
-                // Refund fractional escrow remnants: cash behind resting limit BUYs (a buy stop escrowed none) and
-                // shares behind SELLs.
-                $conn->executeStatement(
-                    "UPDATE users u
-                     INNER JOIN (
-                         SELECT o.user_id,
-                                SUM(CASE WHEN o.action = 'BUY' AND o.order_type NOT IN ('STOP', 'STOP_LIMIT')
-                                         THEN COALESCE(o.limit_price, 0) * (o.quantity % :factor)
-                                         WHEN o.action = 'SELL'
-                                         THEN (o.quantity % :factor) * :old_price
-                                         ELSE 0
-                                    END) AS remnant_value
-                         FROM trade_orders o
-                         WHERE o.ticker = :ticker AND o.status = 'OPEN'
-                         GROUP BY o.user_id
-                     ) remnants ON remnants.user_id = u.id
-                     SET u.cash_balance = u.cash_balance + remnants.remnant_value",
-                    ['factor' => $factor, 'ticker' => $stock->getTicker(), 'old_price' => $oldPrice ?? 0.0],
-                    $factorType,
-                );
-
-                // 4. Perform bulk SQL updates for quantities and prices
-                $conn->executeStatement(
-                    "UPDATE trade_orders SET limit_price = ROUND(limit_price * :factor, 4), stop_price = ROUND(stop_price * :factor, 4) WHERE ticker = :ticker AND status = 'OPEN'",
-                    ['factor' => $factor, 'ticker' => $stock->getTicker()],
-                    $factorType,
-                );
+                SplitOrderBook::restate($conn, $stock->getTicker(), $factor, true, $oldPrice ?? 0.0);
 
                 // TRUNCATE, not FLOOR: it rounds toward zero for both signs, so a long keeps the behaviour it
                 // always had and a short is no longer rounded AWAY from zero into exposure it was never sold.
@@ -243,17 +216,6 @@ class CorporateLedgerService
                 $conn->executeStatement(
                     'DELETE FROM user_stocks WHERE stock_id = :stock_id AND quantity = 0',
                     ['stock_id' => $stock->getId()],
-                );
-
-                $conn->executeStatement(
-                    "UPDATE trade_orders SET quantity = FLOOR(quantity / :factor) WHERE ticker = :ticker AND status = 'OPEN'",
-                    ['factor' => $factor, 'ticker' => $stock->getTicker()],
-                    $factorType,
-                );
-
-                $conn->executeStatement(
-                    "UPDATE trade_orders SET status = 'CANCELLED' WHERE ticker = :ticker AND status = 'OPEN' AND quantity = 0",
-                    ['ticker' => $stock->getTicker()],
                 );
 
                 // The whole bar is restated, not just the close. Leaving open, high and low in pre-split
@@ -278,21 +240,9 @@ class CorporateLedgerService
                     ['factor' => $factor, 'stock_id' => $stock->getId()],
                     $factorType,
                 );
-
-                // Restate executed order history to maintain cost basis consistency post-split.
-                $conn->executeStatement(
-                    "UPDATE trade_orders
-                     SET quantity = GREATEST(FLOOR(quantity / :factor), 1),
-                         filled_quantity = GREATEST(FLOOR(filled_quantity / :factor), 1),
-                         execution_price = ROUND(execution_price * :factor, 4),
-                         limit_price = ROUND(limit_price * :factor, 4)
-                     WHERE ticker = :ticker AND status = 'FILLED'",
-                    ['factor' => $factor, 'ticker' => $stock->getTicker()],
-                    $factorType,
-                );
             } else {
                 $conn->executeStatement(
-                    'UPDATE user_stocks SET quantity = IF(quantity > 9223372036854775807 / :factor, 9223372036854775807, quantity * :factor), version = version + 1 WHERE stock_id = :stock_id',
+                    'UPDATE user_stocks SET quantity = ' . SplitOrderBook::scaledUp('quantity') . ', version = version + 1 WHERE stock_id = :stock_id',
                     ['factor' => $factor, 'stock_id' => $stock->getId()],
                     $factorType,
                 );
@@ -303,35 +253,19 @@ class CorporateLedgerService
                          open_price = GREATEST(open_price / :factor, 0.00000001),
                          high_price = GREATEST(high_price / :factor, 0.00000001),
                          low_price = GREATEST(low_price / :factor, 0.00000001),
-                         volume = IF(volume > 9223372036854775807 / :factor, 9223372036854775807, volume * :factor)
+                         volume = ' . SplitOrderBook::scaledUp('volume') . '
                      WHERE stock_id = :stock_id',
                     ['factor' => $factor, 'stock_id' => $stock->getId()],
                     $factorType,
                 );
 
                 $conn->executeStatement(
-                    'UPDATE corporate_report SET shares = IF(shares > 9223372036854775807 / :factor, 9223372036854775807, shares * :factor) WHERE stock_id = :stock_id',
+                    'UPDATE corporate_report SET shares = ' . SplitOrderBook::scaledUp('shares') . ' WHERE stock_id = :stock_id',
                     ['factor' => $factor, 'stock_id' => $stock->getId()],
                     $factorType,
                 );
 
-                $conn->executeStatement(
-                    "UPDATE trade_orders SET quantity = IF(quantity > 9223372036854775807 / :factor, 9223372036854775807, quantity * :factor), limit_price = ROUND(limit_price / :factor, 4), stop_price = ROUND(stop_price / :factor, 4) WHERE ticker = :ticker AND status = 'OPEN'",
-                    ['factor' => $factor, 'ticker' => $stock->getTicker()],
-                    $factorType,
-                );
-
-                // Restate executed order history to maintain cost basis consistency post-split.
-                $conn->executeStatement(
-                    "UPDATE trade_orders
-                     SET quantity = IF(quantity > 9223372036854775807 / :factor, 9223372036854775807, quantity * :factor),
-                         filled_quantity = IF(filled_quantity > 9223372036854775807 / :factor, 9223372036854775807, filled_quantity * :factor),
-                         execution_price = ROUND(execution_price / :factor, 4),
-                         limit_price = ROUND(limit_price / :factor, 4)
-                     WHERE ticker = :ticker AND status = 'FILLED'",
-                    ['factor' => $factor, 'ticker' => $stock->getTicker()],
-                    $factorType,
-                );
+                SplitOrderBook::restate($conn, $stock->getTicker(), $factor, false, $oldPrice ?? 0.0);
             }
 
             $optionHolders = $this->restateOptionsForSplit($conn, $stock, $factor, $isReverse);

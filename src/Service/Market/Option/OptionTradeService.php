@@ -274,6 +274,8 @@ final class OptionTradeService
      * loan value in an asset that can expire worthless — so a BUY is measured against settled cash and never
      * borrows. A COVER is the closing leg of a position the account is already collateralizing, so it is
      * allowed to draw on the margin loan, exactly as covering a short stock position is.
+     *
+     * @param numeric-string $consideration
      */
     private function payPremium(User $user, string $action, string $consideration): void
     {

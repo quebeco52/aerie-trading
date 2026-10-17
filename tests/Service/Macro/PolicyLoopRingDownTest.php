@@ -42,10 +42,13 @@ class PolicyLoopRingDownTest extends TestCase
         $response = $this->ringDown(self::KICK);
         $trough = min($response);
         $troughAt = array_search($trough, $response, true);
+        $this->assertIsInt($troughAt);
+        $fromTrough = array_slice($response, $troughAt);
+        $this->assertNotEmpty($fromTrough, 'The trough is a quarter of the window.');
 
         $this->assertLessThan(0.5, $response[3], 'Most of a demand kick is gone within a year.');
         $this->assertGreaterThan(-0.25, $trough, 'The swing past zero stays under a quarter of the kick.');
-        $this->assertLessThan(0.05, max(array_slice($response, (int) $troughAt)), 'No second swing: after the trough the gap does not come back above trend.');
+        $this->assertLessThan(0.05, max($fromTrough), 'No second swing: after the trough the gap does not come back above trend.');
         // An inertial rule (15% of the distance a quarter) lengthens the climb back from the single trough without a
         // second swing, so the tail is settled from year six rather than five, to within the decisions' step.
         foreach (array_slice($response, 24) as $quarter => $value) {
@@ -71,7 +74,7 @@ class PolicyLoopRingDownTest extends TestCase
         }
     }
 
-    /** @return list<float> Kicked minus control gap, per unit of kick, at each quarter end. */
+    /** @return non-empty-list<float> Kicked minus control gap, per unit of kick, at each quarter end. */
     private function ringDown(float $kickSize): array
     {
         $dt = 1.0 / self::TICKS_PER_YEAR;
@@ -121,7 +124,10 @@ class PolicyLoopRingDownTest extends TestCase
             $paths[] = $path;
         }
 
-        return array_map(static fn(float $kicked, float $control): float => ($kicked - $control) / $kickSize, $paths[1], $paths[0]);
+        $response = array_map(static fn(float $kicked, float $control): float => ($kicked - $control) / $kickSize, $paths[1], $paths[0]);
+        self::assertNotEmpty($response, 'The observation window records at least one quarter.');
+
+        return $response;
     }
 
     /** The bootstrap's Redis stand-in forgets everything; the engine needs its state back each tick. */

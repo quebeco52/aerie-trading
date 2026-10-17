@@ -60,6 +60,7 @@ class MacroFieldCatalogTest extends TestCase
     {
         $reading = MacroFieldCatalog::readingFor('output_gap_ema', ['output_gap_ema' => -0.0081234]);
 
+        $this->assertNotNull($reading);
         $this->assertSame('output_gap_ema', $reading['field']);
         $this->assertSame('Output gap', $reading['label']);
         $this->assertSame(MacroFieldCatalog::UNIT_PERCENT, $reading['unit']);

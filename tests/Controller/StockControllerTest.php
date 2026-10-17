@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Tests\Controller;
 
+use Symfony\Bundle\FrameworkBundle\KernelBrowser;
 use Symfony\Bundle\FrameworkBundle\Test\WebTestCase;
 
 class StockControllerTest extends WebTestCase
@@ -14,7 +15,7 @@ class StockControllerTest extends WebTestCase
         $client->request('GET', '/api/history');
 
         $this->assertResponseIsSuccessful();
-        $this->assertJsonStringEqualsJsonString('[]', $client->getResponse()->getContent());
+        $this->assertJsonStringEqualsJsonString('[]', $this->responseBody($client));
     }
 
     public function testHistoryApiWithValidTicker(): void
@@ -25,7 +26,7 @@ class StockControllerTest extends WebTestCase
         $this->assertResponseIsSuccessful();
         $this->assertResponseHeaderSame('content-type', 'application/json');
 
-        $data = json_decode($client->getResponse()->getContent(), true);
+        $data = json_decode($this->responseBody($client), true);
         $this->assertIsArray($data);
     }
 
@@ -97,7 +98,7 @@ class StockControllerTest extends WebTestCase
         $this->assertResponseIsSuccessful();
         $this->assertResponseHeaderSame('content-type', 'application/json');
 
-        $data = json_decode($client->getResponse()->getContent(), true);
+        $data = json_decode($this->responseBody($client), true);
         $this->assertIsArray($data);
     }
 
@@ -109,7 +110,16 @@ class StockControllerTest extends WebTestCase
         $this->assertResponseIsSuccessful();
         $this->assertResponseHeaderSame('content-type', 'application/json');
 
-        $data = json_decode($client->getResponse()->getContent(), true);
+        $data = json_decode($this->responseBody($client), true);
         $this->assertIsArray($data);
+    }
+
+    /** The response body; a JSON endpoint sends it as a string, never as a stream. */
+    private function responseBody(KernelBrowser $client): string
+    {
+        $content = $client->getResponse()->getContent();
+        $this->assertIsString($content);
+
+        return $content;
     }
 }

@@ -17,6 +17,7 @@ use App\Service\Math\MathUtility;
 use App\Service\Math\StochasticProcesses;
 use App\Tests\Support\MacroStateBuilder;
 use App\Tests\Support\StockBuilder;
+use App\Tests\Support\YieldCurveProbe;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -350,7 +351,7 @@ class FinancialInvariantTest extends TestCase
             ->withInflation(0.02)
             ->build();
         $easingState->targetRate = 0.020;
-        $easingCurve = $monetary->calculateYieldCurveAndQE($easingState, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE, 0.25);
+        $easingCurve = YieldCurveProbe::balanceSheetAndCurve($monetary, $easingState, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE, 0.25);
 
         $this->assertGreaterThan(0.0, $easingCurve['yield_2y']);
         $this->assertGreaterThan($easingCurve['yield_2y'], $easingCurve['yield_10y'], 'Normal expansion must exhibit an upward-sloping yield curve (10Y > 2Y)');
@@ -363,7 +364,7 @@ class FinancialInvariantTest extends TestCase
             ->withInflation(0.060)
             ->build();
         $hikingState->targetRate = 0.065;
-        $hikingCurve = $monetary->calculateYieldCurveAndQE($hikingState, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE, 0.25);
+        $hikingCurve = YieldCurveProbe::balanceSheetAndCurve($monetary, $hikingState, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE, 0.25);
 
         // When short rates are driven to 5.5% while long-term expectations are anchored, the curve inverts
         $this->assertGreaterThan(0.0, $hikingCurve['yield_10y']);
@@ -496,8 +497,8 @@ class FinancialInvariantTest extends TestCase
         $crisisState = clone $calmState;
         $crisisState->marketVolatilityEma = 0.45;
 
-        $calmCurve = $monetary->calculateYieldCurveAndQE($calmState, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE, 0.25);
-        $crisisCurve = $monetary->calculateYieldCurveAndQE($crisisState, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE, 0.25);
+        $calmCurve = YieldCurveProbe::balanceSheetAndCurve($monetary, $calmState, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE, 0.25);
+        $crisisCurve = YieldCurveProbe::balanceSheetAndCurve($monetary, $crisisState, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE, 0.25);
 
         // Invariant: Safe-haven demand during equity panic must compress sovereign term premium (Campbell et al. 2020)
         $this->assertLessThan(
@@ -519,7 +520,7 @@ class FinancialInvariantTest extends TestCase
             ->build();
         $stressState->targetRate = -0.05;
 
-        $curve = $monetary->calculateYieldCurveAndQE($stressState, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE, 0.25);
+        $curve = YieldCurveProbe::balanceSheetAndCurve($monetary, $stressState, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE, 0.25);
 
         // Invariant 1: ACM identity holds exactly (10Y Yield = Risk-Neutral 10Y + 10Y Term Premium)
         $this->assertEqualsWithDelta(
@@ -605,8 +606,7 @@ class FinancialInvariantTest extends TestCase
             }
         };
 
-        $gaps = [];
-        foreach (['tight' => [0.045, 0.045], 'eased' => [0.015, 0.025], 'tighter' => [0.075, 0.065]] as $name => [$policyRate, $yield5y]) {
+        $gapAt = static function (float $policyRate, float $yield5y) use ($deterministicMath): float {
             $aggregate = new MacroAggregateSubsystem($deterministicMath);
             // Recession state with blown-out credit spreads (450 bps IG, 60 bps interbank)
             $state = MacroStateBuilder::create()
@@ -618,11 +618,15 @@ class FinancialInvariantTest extends TestCase
             $state->interbankLiquiditySpreadEma = 0.006;
             $state->energyPriceIndexEma = MacroEngine::ENERGY_BASELINE;
             $state->freightRateIndexEma = MacroEngine::FREIGHT_BASELINE;
-            $gaps[$name] = $aggregate->calculateOutputGap($state, $yield5y, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, 0.25, 1.0);
-        }
 
-        $this->assertGreaterThan($gaps['tight'], $gaps['eased'], 'Rate cuts during a downturn must still lift the output gap despite credit spreads.');
-        $this->assertLessThan($gaps['tight'] - $gaps['tighter'], $gaps['eased'] - $gaps['tight'], 'A 300bp cut must lift demand by less than a 300bp hike cuts it.');
+            return $aggregate->calculateOutputGap($state, $yield5y, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, 0.25, 1.0);
+        };
+        $tight = $gapAt(0.045, 0.045);
+        $eased = $gapAt(0.015, 0.025);
+        $tighter = $gapAt(0.075, 0.065);
+
+        $this->assertGreaterThan($tight, $eased, 'Rate cuts during a downturn must still lift the output gap despite credit spreads.');
+        $this->assertLessThan($tight - $tighter, $eased - $tight, 'A 300bp cut must lift demand by less than a 300bp hike cuts it.');
     }
 
     public function testFinancialConditionsIndexEmpiricalBalanceAcrossRegimes(): void
@@ -706,8 +710,8 @@ class FinancialInvariantTest extends TestCase
         $stateHighExp = clone $stateLowExp;
         $stateHighExp->tipsBreakeven = 0.028;
 
-        $curveLow = $monetary->calculateYieldCurveAndQE($stateLowExp, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE, 0.25);
-        $curveHigh = $monetary->calculateYieldCurveAndQE($stateHighExp, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE, 0.25);
+        $curveLow = YieldCurveProbe::balanceSheetAndCurve($monetary, $stateLowExp, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE, 0.25);
+        $curveHigh = YieldCurveProbe::balanceSheetAndCurve($monetary, $stateHighExp, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE, 0.25);
 
         // Invariant: Higher forward-looking inflation expectations must lift Nelson-Siegel level beta0
         $this->assertGreaterThan(
@@ -738,7 +742,7 @@ class FinancialInvariantTest extends TestCase
             ->build();
         $neutralState->tipsBreakeven = MacroEngine::TARGET_INFLATION;
 
-        $curveNeutral = $monetary->calculateYieldCurveAndQE($neutralState, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE, 0.25);
+        $curveNeutral = YieldCurveProbe::balanceSheetAndCurve($monetary, $neutralState, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE, 0.25);
         $spreadNeutral = $curveNeutral['yield_10y'] - $curveNeutral['yield_2y'];
 
         // Invariant 1: In neutral equilibrium, 2s10s spread must be positive and healthy (>= +35 bps)
@@ -757,7 +761,7 @@ class FinancialInvariantTest extends TestCase
         $easingState->targetRate = 0.005;
         $easingState->tipsBreakeven = 0.018;
 
-        $curveEasing = $monetary->calculateYieldCurveAndQE($easingState, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE, 0.25);
+        $curveEasing = YieldCurveProbe::balanceSheetAndCurve($monetary, $easingState, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE, 0.25);
         $spreadEasing = $curveEasing['yield_10y'] - $curveEasing['yield_2y'];
 
         // Invariant 2: In monetary easing cycles, the yield curve must bull-steepen significantly (>= +100 bps)
@@ -779,7 +783,7 @@ class FinancialInvariantTest extends TestCase
         // positive.
         $peakState->termPremiumRegime = 0.0;
 
-        $curvePeak = $monetary->calculateYieldCurveAndQE($peakState, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE, 0.25);
+        $curvePeak = YieldCurveProbe::balanceSheetAndCurve($monetary, $peakState, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE, 0.25);
         $spreadPeak = $curvePeak['yield_10y'] - $curvePeak['yield_2y'];
 
         // Invariant 3: At the peak of monetary policy tightening in a low-premium era, 2s10s spread must invert (< 0.0)
@@ -812,8 +816,8 @@ class FinancialInvariantTest extends TestCase
             }
         };
 
-        $paths = [];
-        foreach (['tight' => [0.050, 0.045], 'tighter' => [0.060, 0.055]] as $name => [$policyRate, $yield5y]) {
+        /** @return non-empty-list<float> The output gap each quarter for three years under a held stance. */
+        $pathAt = static function (float $policyRate, float $yield5y) use ($deterministicMath): array {
             $aggregate = new MacroAggregateSubsystem($deterministicMath);
             // Contractionary onset: restrictive policy, inventory overhang (3%), starting negative gap (-0.5%)
             $state = MacroStateBuilder::create()
@@ -827,24 +831,29 @@ class FinancialInvariantTest extends TestCase
             $state->excessBondPremium = $state->excessBondPremiumTrend;
             $state->creditCrisisDrag = 0.0;
 
+            $path = [];
             for ($quarter = 0; $quarter < 12; $quarter++) {
                 $newGap = $aggregate->calculateOutputGap($state, $yield5y, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, 0.25, 1.0);
                 $state->outputGap = $newGap;
                 $state->outputGapEma += 0.25 * ($newGap - $state->outputGapEma);
-                $paths[$name][] = $newGap;
+                $path[] = $newGap;
             }
-        }
+
+            return $path;
+        };
+        $tight = $pathAt(0.050, 0.045);
+        $tighter = $pathAt(0.060, 0.055);
 
         // Invariant 1: while policy stays restrictive the economy does not recover above potential.
-        $this->assertLessThan(0.0, max($paths['tight']), 'A contraction held under restrictive policy must stay open for three years.');
+        $this->assertLessThan(0.0, max($tight), 'A contraction held under restrictive policy must stay open for three years.');
 
         // Invariant 2: a tighter stance holds the gap deeper in every quarter.
-        foreach ($paths['tighter'] as $quarter => $gap) {
-            $this->assertLessThan($paths['tight'][$quarter], $gap, "A tighter stance must hold the gap deeper (quarter {$quarter}).");
+        foreach ($tighter as $quarter => $gap) {
+            $this->assertLessThan($tight[$quarter], $gap, "A tighter stance must hold the gap deeper (quarter {$quarter}).");
         }
 
         // Invariant 3: even the tighter stance, held three years, stays short of a depression and clear of the -12%
         // clamp.
-        $this->assertGreaterThan(-0.080, min($paths['tighter']), 'Held policy alone must not dig a depression.');
+        $this->assertGreaterThan(-0.080, min($tighter), 'Held policy alone must not dig a depression.');
     }
 }

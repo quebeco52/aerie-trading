@@ -7,10 +7,12 @@ namespace App\Tests\Service\Market\Agent;
 use App\DTO\AgentMarketViewDTO;
 use App\Service\Market\Agent\AgentFlowEngine;
 use App\Service\Market\Agent\AgentPopulation;
+use App\Service\Market\Agent\AgentStrategyInterface;
 use App\Service\Market\Agent\AttentionRetailStrategy;
 use App\Service\Market\Agent\FundamentalistStrategy;
 use App\Service\Market\Agent\IndexFundStrategy;
 use App\Service\Market\Agent\InMemoryAgentStateStore;
+use App\Service\Market\Agent\LiquidityProviderInterface;
 use App\Service\Market\Agent\MarketMakerStrategy;
 use App\Service\Market\Agent\MomentumStrategy;
 use App\Service\Market\Agent\RelativeValueStrategy;
@@ -38,8 +40,11 @@ class AgentFlowEngineTest extends TestCase
     }
 
     /**
-     * @param list<object>|null $strategies Null for the full population; an explicit list, empty or not, otherwise.
-     * @param list<object>|null $providers  Null for the full set of intermediaries; an explicit list otherwise.
+     * Null takes the full population of strategies, or the full set of intermediaries; an explicit list, empty or
+     * not, is used as given.
+     *
+     * @param list<AgentStrategyInterface>|null     $strategies
+     * @param list<LiquidityProviderInterface>|null $providers
      */
     private function engine(?array $strategies = null, ?array $providers = null): AgentFlowEngine
     {
@@ -56,6 +61,36 @@ class AgentFlowEngineTest extends TestCase
             ],
             $providers ?? [new MarketMakerStrategy()],
         );
+    }
+
+    /**
+     * The agents' stored book for a name the engine has traded.
+     *
+     * @return array{
+     *     positions: array<string, float>,
+     *     fitness: array<string, float>,
+     *     exposures?: array<string, float>,
+     *     variance?: float,
+     *     attention?: array{move: float, volume: float, news: float},
+     *     skip?: float,
+     * }
+     */
+    private function storedBook(string $ticker = 'TEST'): array
+    {
+        $book = $this->stateStore->read($ticker);
+        $this->assertNotNull($book, "the engine stores a book for {$ticker} once it trades it");
+
+        return $book;
+    }
+
+    /** One belief's stored unit exposure on the test name. */
+    private function exposureOf(string $identifier): float
+    {
+        $book = $this->storedBook();
+        $this->assertArrayHasKey('exposures', $book);
+        $this->assertArrayHasKey($identifier, $book['exposures']);
+
+        return $book['exposures'][$identifier];
     }
 
     private function view(
@@ -182,14 +217,14 @@ class AgentFlowEngineTest extends TestCase
             $engine->trade($this->view(price: 200.0, fairValue: 300.0, momentum: 0.2, logReturn: 0.001));
         }
 
-        $before = $this->stateStore->read('TEST');
+        $before = $this->storedBook();
         $this->orderFlow->drain();
 
         // The tick of the split: the return handed in is measured pre-split and is flat, the price
         // arrives quartered, volume in shares arrives quadrupled, and the ratio says why.
         $engine->trade($this->view(price: 50.0, fairValue: 75.0, momentum: 0.2, logReturn: 0.0, adv: 4000000.0, splitRatio: 4.0));
 
-        $after = $this->stateStore->read('TEST');
+        $after = $this->storedBook();
         $flow = $this->orderFlow->drain()['TEST'] ?? 0.0;
 
         foreach ($before['fitness'] as $identifier => $score) {
@@ -377,7 +412,7 @@ class AgentFlowEngineTest extends TestCase
     {
         $this->engine()->trade($this->view());
 
-        $stored = $this->stateStore->read('TEST');
+        $stored = $this->storedBook();
 
         $this->assertArrayHasKey('fundamentalist', $stored['fitness']);
         $this->assertArrayHasKey('momentum', $stored['fitness']);
@@ -420,7 +455,9 @@ class AgentFlowEngineTest extends TestCase
         $ignored = $engine->trade($this->view(volatility: 0.90, logReturn: 0.0, dt: 1.0 / 240.0));
 
         $this->assertGreaterThanOrEqual(0.0, $ignored['flow'], 'A volatility the agents never observed cannot make them sell.');
-        $this->assertEqualsWithDelta(0.25 ** 2, $this->stateStore->read('TEST')['variance'], 0.25 ** 2 * 0.05);
+        $book = $this->storedBook();
+        $this->assertArrayHasKey('variance', $book);
+        $this->assertEqualsWithDelta(0.25 ** 2, $book['variance'], 0.25 ** 2 * 0.05);
     }
 
     public function testABeliefIsScoredOnItsOwnConvictionNotOnTheCapitalThatHoldsIt(): void
@@ -438,7 +475,7 @@ class AgentFlowEngineTest extends TestCase
 
         $engine->trade($this->view(price: 101.0, fairValue: 200.0, momentum: 0.4, logReturn: 0.01));
 
-        $fitness = $this->stateStore->read('TEST')['fitness'];
+        $fitness = $this->storedBook()['fitness'];
 
         $this->assertGreaterThan(0.0, $fitness['momentum']);
         $this->assertEqualsWithDelta($fitness['momentum'], $fitness['fundamentalist'], 1e-12);
@@ -452,9 +489,9 @@ class AgentFlowEngineTest extends TestCase
         $adjustment = 1.0 - exp(-(1.0 / 14400.0) / AgentFlowEngine::AGENT_POSITION_HORIZON_YEARS);
 
         $engine->trade($this->view(price: 50.0, fairValue: 100.0));
-        $first = $this->stateStore->read('TEST')['exposures']['fundamentalist'];
+        $first = $this->exposureOf('fundamentalist');
         $engine->trade($this->view(price: 50.0, fairValue: 100.0));
-        $second = $this->stateStore->read('TEST')['exposures']['fundamentalist'];
+        $second = $this->exposureOf('fundamentalist');
 
         $this->assertEqualsWithDelta($adjustment, $first, 1e-12, 'Fully convinced, one step in.');
         $this->assertEqualsWithDelta($first + ((1.0 - $first) * $adjustment), $second, 1e-12);
@@ -470,7 +507,7 @@ class AgentFlowEngineTest extends TestCase
 
         $engine->trade($this->view(price: 50.0, fairValue: 100.0, logReturn: 0.02));
 
-        $book = $this->stateStore->read('TEST');
+        $book = $this->storedBook();
         $decay = exp(-(1.0 / 14400.0) / AgentPopulation::AGENT_FITNESS_HORIZON_YEARS);
 
         $this->assertEqualsWithDelta(0.3 * $decay, $book['fitness']['fundamentalist'], 1e-12, 'No exposure on record, nothing to score.');

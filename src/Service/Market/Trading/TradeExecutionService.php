@@ -358,7 +358,7 @@ class TradeExecutionService
                 } else {
                     // Escrow and save as OPEN
                     if ($action === 'BUY' && !$order->isStop()) {
-                        $escrowCashStr = \bcmul((string) $limitPrice, $quantityStr, 4);
+                        $escrowCashStr = \bcmul($limitPrice ?? throw new \LogicException('A resting limit BUY carries its limit price.'), $quantityStr, 4);
                         $this->requireFunding($user, (float) $escrowCashStr, $action);
                         $this->cashLedger->debit($user, $escrowCashStr);
                     } elseif ($action === 'BUY') {
@@ -430,9 +430,10 @@ class TradeExecutionService
      * Stamp duty is paid on top whichever way the stock moves: a buyer needs the consideration and the duty, a
      * seller receives the consideration and pays the duty out of it.
      *
-     * @param string $totalValue Consideration for the fill, as a bcmath string.
+     * @param numeric-string $totalValue Consideration for the fill, as a bcmath string.
      * @param Stock|null $stock  The instrument when it is an equity; short selling exists only for equities.
-     * @param string $stampDuty  Duty on the consideration, as a bcmath string; zero for anything but listed shares.
+     * @param numeric-string $stampDuty Duty on the consideration, as a bcmath string; zero for anything but listed
+     *                                  shares.
      */
     private function settlePosition(
         User $user,
@@ -516,7 +517,8 @@ class TradeExecutionService
      * Funds are exempt, as Hong Kong exempts ETF transfers, and bonds and options carry none, so only an equity
      * fill is charged. The tax is levied on each side of the trade, so buyer and seller each pay it.
      *
-     * @return string The duty, as a bcmath string.
+     * @param numeric-string $consideration
+     * @return numeric-string The duty, as a bcmath string.
      */
     private function stampDuty(?Stock $stock, string $consideration): string
     {
@@ -527,7 +529,11 @@ class TradeExecutionService
         return \bcmul($consideration, Decimal::format($this->liveStampDutyRate(), 6), 4);
     }
 
-    /** Pays the duty out of the account, borrowing any part the settled balance does not cover like any payment. */
+    /**
+     * Pays the duty out of the account, borrowing any part the settled balance does not cover like any payment.
+     *
+     * @param numeric-string $stampDuty
+     */
     private function payStampDuty(User $user, string $stampDuty): void
     {
         if (\bccomp($stampDuty, '0.0000', 4) > 0) {
@@ -649,6 +655,7 @@ class TradeExecutionService
      * -5 minted cash. A non-numeric one reached bcmath, which throws a ValueError — an Error, not an
      * Exception, so neither this class nor the controller caught it and the open transaction leaked.
      */
+    /** @return numeric-string */
     private function validateLimitPrice(?string $limitPrice): string
     {
         if ($limitPrice === null || !is_numeric(trim($limitPrice))) {
@@ -657,7 +664,7 @@ class TradeExecutionService
 
         // Rendered rather than passed through: is_numeric accepts "1e5", and bcmath rejects exponent
         // notation outright. %F never emits one, so this is the form the escrow arithmetic can consume.
-        $normalized = sprintf('%.4F', (float) trim($limitPrice));
+        $normalized = Decimal::format((float) trim($limitPrice), 4);
 
         if (\bccomp($normalized, self::MIN_LIMIT_PRICE, 4) < 0) {
             throw new \Exception('Limit price must be at least $' . self::MIN_LIMIT_PRICE . '.');
@@ -689,7 +696,7 @@ class TradeExecutionService
                 // Refund cash, paying down the borrowing it was drawn from first. A BUY STOP is excluded
                 // because it never escrowed any: refunding a limit price it does not carry would credit the
                 // account for an order it was never charged for, and on a plain stop that price is null.
-                $this->cashLedger->credit($user, \bcmul((string) $order->getLimitPrice(), (string) $quantity, 4));
+                $this->cashLedger->credit($user, \bcmul($order->getLimitPrice() ?? throw new \LogicException('A resting limit BUY carries its limit price.'), (string) $quantity, 4));
             } elseif ($order->getAction() === 'SELL') {
                 // Refund the escrowed shares. A resting SHORT, a resting COVER and a buy stop escrowed
                 // nothing, so there is nothing to give back and no branch for any of them.

@@ -175,8 +175,12 @@ class OptionDeskCadenceTest extends TestCase
 
         $store->recordAll(['VANE' => ['gamma' => 1200.0, 'delta' => 0.0, 'reference_price' => 105.0, 'held' => 0.0]]);
 
-        $this->assertEqualsWithDelta(105.0, $store->read('VANE')['reference_price'], 1e-9);
-        $this->assertEqualsWithDelta(40.0, $store->read('OWLS')['reference_price'], 1e-9);
+        $vane = $store->read('VANE');
+        $owls = $store->read('OWLS');
+        $this->assertNotNull($vane);
+        $this->assertNotNull($owls);
+        $this->assertEqualsWithDelta(105.0, $vane['reference_price'], 1e-9);
+        $this->assertEqualsWithDelta(40.0, $owls['reference_price'], 1e-9);
     }
 
     public function testABankruptNameIsNotHedged(): void

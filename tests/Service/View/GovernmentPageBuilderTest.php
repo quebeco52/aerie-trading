@@ -282,6 +282,8 @@ class GovernmentPageBuilderTest extends TestCase
         $page = $this->builder()->buildDiet(new MacroStateDTO(), new PoliticsStateDTO());
         $leftmost = array_reduce($page['hemicycle'], static fn(?array $carry, array $seat): array => $carry === null || $seat['x'] < $carry['x'] ? $seat : $carry);
         $rightmost = array_reduce($page['hemicycle'], static fn(?array $carry, array $seat): array => $carry === null || $seat['x'] > $carry['x'] ? $seat : $carry);
+        $this->assertNotNull($leftmost);
+        $this->assertNotNull($rightmost);
 
         $this->assertContains($leftmost['color'], [GovernmentPageBuilder::PARTY_COLORS[Diet::CIVIC]]);
         $this->assertContains($rightmost['color'], [GovernmentPageBuilder::PARTY_COLORS[Diet::VANGUARD]]);
@@ -1201,6 +1203,7 @@ class GovernmentPageBuilderTest extends TestCase
         $this->assertLessThan($right, $chart['meetings'][3]['x'], 'The axis runs on to today, past the last meeting.');
         $this->assertLessThan($chart['meetings'][0]['y'], $chart['meetings'][3]['y'], 'A higher rate sits higher.');
         $rates = array_column($chart['gridlines'], 'rate');
+        $this->assertNotEmpty($rates);
         $this->assertLessThanOrEqual(0.03 + 1e-12, min($rates));
         $this->assertGreaterThanOrEqual(0.035 - 1e-12, max($rates));
         foreach ($chart['meetings'] as $meeting) {
@@ -1232,6 +1235,7 @@ class GovernmentPageBuilderTest extends TestCase
 
         [, , $top, $bottom] = $chart['plot'];
         $gridRates = array_column($chart['gridlines'], 'rate');
+        $this->assertNotEmpty($gridRates);
         $this->assertLessThanOrEqual(0.012 + 1e-12, min($gridRates), 'The axis reaches down to the lowest inflation.');
         $this->assertGreaterThanOrEqual(0.045 - 1e-12, max($gridRates), 'And up to the highest.');
         foreach ([...$chart['inflation']['quarters'], ['y' => $chart['inflation']['targetY']]] as $point) {
@@ -1320,6 +1324,10 @@ class GovernmentPageBuilderTest extends TestCase
         return (new ElectionOdds())->setSimTime($at)->setVoteAt(8.0)->setLeaders($leaders);
     }
 
+    /**
+     * @param list<string> $coalition
+     * @param list<string> $outgoing
+     */
     private function election(float $at, array $coalition, array $outgoing): DietElection
     {
         return (new DietElection())

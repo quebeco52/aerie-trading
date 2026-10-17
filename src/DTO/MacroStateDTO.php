@@ -39,24 +39,6 @@ readonly class MacroStateDTO
     /** Ten-year at the opening: the engine's curve evaluated at the opening state. */
     public const OPENING_YIELD_10Y = 0.0462;
 
-    /**
-     * Seeds this snapshot adds to the shared set, for openings only a snapshot needs.
-     *
-     * App\Data\Macro\MacroFieldRegistry::seeds() already carries the seeds both readers share — every
-     * `*Ema` pair, plus the pairs declared in its SEED_OVERRIDES that the naming convention does not
-     * describe. These
-     * two are on top of those, and are not seeded when the engine's own state is hydrated: a
-     * snapshot is read by the pricing surfaces, which cannot be handed a stale breakeven or structural
-     * slope just because the payload predates that field.
-     *
-     * @var array<string, string>
-     */
-    private const HYDRATION_SEEDS = [
-        'tipsBreakeven' => 'inflation',
-        'tipsBreakevenQuoted' => 'tipsBreakeven',
-        'structuralSlope' => 'nsSlope',
-    ];
-
     // --- Demand Transmission Lags ---
 
     /**
@@ -752,131 +734,16 @@ readonly class MacroStateDTO
     }
 
     /**
-     * Constructs a MacroStateDTO from the snake_case payload Redis carries.
+     * Constructs a MacroStateDTO from the snake_case payload Redis carries, or a macro_report row.
      *
-     * The field list comes from App\Data\Macro\MacroFieldRegistry rather than being named here a second
-     * time, so an observable added to the constructor is read back off the wire immediately. A field
-     * this method forgot used to hydrate its opening value on every load with nothing failing — the
-     * caller still got a plausible number, just not the recorded one.
-     *
-     * Three passes, in order: the values the payload carries, the openings computed from those
-     * values, then the series that start level with the series they smooth.
+     * Read through MacroState::fromArray(), the one reader that upgrades a payload predating a field, so the engine
+     * and every snapshot of the same payload are the same economy.
      *
      * @param array<string, mixed> $data Decoded payload keyed by wire key.
      */
     public static function fromArray(array $data): self
     {
-        $fields = MacroFieldRegistry::wireKeys();
-        $defaults = MacroFieldRegistry::defaults();
-
-        // A field the payload omits keeps the opening value the constructor declares for it.
-        $args = [];
-        foreach ($fields as $field => $key) {
-            if (!isset($data[$key])) {
-                continue;
-            }
-
-            $args[$field] = match ($field) {
-                'sectorZ', 'sectorDemandZ', 'sittingLevers', 'previousSittingLevers', 'expectedLevers', 'previousExpectedLevers', 'systemicAlarmLatches' => is_array($data[$key]) ? array_map('floatval', $data[$key]) : [],
-                'unemploymentMonthly', 'consumerPriceMonthly' => is_array($data[$key]) ? array_values(array_map('floatval', $data[$key])) : [],
-                'qeActive', 'qtActive', 'recessionDeclared' => (bool) $data[$key],
-                'eventType' => (string) $data[$key],
-                default => (float) $data[$key],
-            };
-        }
-
-        // By reference: the passes below read openings the earlier passes have already computed.
-        $resolve = static function (string $field) use (&$args, $defaults): mixed {
-            return $args[$field] ?? $defaults[$field];
-        };
-
-        // The smoothed 5y was recorded under the macro_report column spelling before the wire key
-        // existed, and a payload carrying both is a database row, so the column spelling wins.
-        if (isset($data['yield5y_ema'])) {
-            $args['yield5yEma'] = (float) $data['yield5y_ema'];
-        }
-
-        // Balance sheet intensity was recorded as a one-sided qe_intensity before QT existed.
-        $balanceSheetIntensity = (float) ($args['balanceSheetIntensity'] ?? $data['qe_intensity'] ?? 0.0);
-        $args['balanceSheetIntensity'] = $balanceSheetIntensity;
-
-        $args['qeActive'] ??= $balanceSheetIntensity > MacroEngine::BALANCE_SHEET_ACTIVE_THRESHOLD;
-        $args['qeIntensity'] ??= max(0.0, $balanceSheetIntensity);
-        $args['qtActive'] ??= $balanceSheetIntensity < -MacroEngine::BALANCE_SHEET_ACTIVE_THRESHOLD;
-        $args['qtIntensity'] ??= max(0.0, -$balanceSheetIntensity);
-
-        // A payload that carries a policy rate but no curve gets the opening curve's term spreads on top of
-        // that rate, so the tenors stay consistent with the rate the payload does report.
-        if (isset($args['policyRate'])) {
-            $policyRate = (float) $args['policyRate'];
-            foreach (['yield2y', 'yield5y', 'yield10y', 'yield30y'] as $tenor) {
-                $args[$tenor] ??= $policyRate + ($defaults[$tenor] - $defaults['policyRate']);
-            }
-        }
-
-        // Nelson-Siegel beta1 is the short-end spread of the curve, not a free parameter.
-        $args['nsBeta1'] ??= $resolve('policyRate') - $resolve('nsLevel');
-
-        // The quoted slope is the 10y-over-policy term spread, read off the curve the same way the engine
-        // reads it, so a rehydrated snapshot does not report a flat curve over yields that are not flat.
-        $args['nsSlope'] ??= $resolve('yield10y') - $resolve('policyRate');
-        $args['potentialGdpIndex'] ??= $resolve('nominalGdpIndex') / (1.0 + $resolve('outputGap'));
-        $args['highYieldCreditSpread'] ??= $resolve('macroCreditSpread') * MacroEngine::HY_BASE_SPREAD_MULTIPLIER;
-
-        // A smoothed series with no reading of its own opens level with the series it smooths. Walked
-        // in constructor order so a series seeded from one that is itself seeded resolves in one pass.
-        $seeds = MacroFieldRegistry::seeds() + self::HYDRATION_SEEDS;
-        foreach (array_keys($fields) as $field) {
-            if (isset($args[$field]) || !isset($seeds[$field])) {
-                continue;
-            }
-
-            $args[$field] = $resolve($seeds[$field]);
-        }
-
-        // A saved currency that predates the split into fundamental and deviation keeps its level: the deviation is
-        // whatever it sits away from its fundamental. As MacroState::fromArray has it.
-        if (isset($data[$fields['exchangeRateIndex']]) && !isset($args['exchangeRateDeviation'])) {
-            $args['exchangeRateDeviation'] = $resolve('exchangeRateIndex') / AssetMarketSubsystem::exchangeRateFundamentalAt(
-                $resolve('policyRate'),
-                $resolve('tipsBreakeven'),
-                $resolve('foreignPolicyRate'),
-                AssetMarketSubsystem::mainlandBreakeven(($resolve('foreignCoreInflation') + $resolve('foreignCoreInflationLag1')
-                    + $resolve('foreignCoreInflationLag2') + $resolve('foreignCoreInflationLag3')) / 4.0),
-                $resolve('energyPriceIndexEma'),
-                $resolve('industrialMetalsIndexEma'),
-                $resolve('marketVolatilityEma'),
-                $resolve('sovereignRiskSpreadEma'),
-            );
-        }
-
-        // The open-economy levels open where the currency and the mainland already stand, as MacroState::fromArray has
-        // them.
-        $args['importPriceLevel'] ??= MacroAggregateSubsystem::importPriceLevelTarget($resolve('exchangeRateIndexEma'), $resolve('importTariffRate'));
-        $args['realExchangeRateTradeLag'] ??= MacroAggregateSubsystem::realExchangeRateGap($resolve('exchangeRateIndexEma'), $resolve('exchangeRateTrend'));
-        $args['alliedDefenseDeliveryLag'] ??= MacroAggregateSubsystem::alliedDefenseGap($resolve('alliedDefenseSpendingIndexEma'));
-        $args['mainlandDemandExportLag'] ??= $resolve('foreignOutputGapEma');
-        $args['netExportGap'] ??= MacroAggregateSubsystem::netExportGapAt($resolve('mainlandDemandExportLag'), $resolve('realExchangeRateTradeLag'), $resolve('alliedDefenseDeliveryLag'), $resolve('tariffTradeLag'));
-        // Finance output opens on the credit balances and deal flow, and a payload valuing fund managers at the market
-        // is rebuilt on credit alone with domestic demand keeping the difference, as MacroState::fromArray has it.
-        if (!isset($args['financeOutputGap']) || isset($data[MacroState::RETIRED_FINANCE_MARKET_TREND_KEY])) {
-            $carriedFinance = $resolve('financeOutputGap');
-            $args['financeOutputGap'] = MacroAggregateSubsystem::financeOutputGapAt(
-                MacroAggregateSubsystem::creditBalanceGap($resolve('creditToGdpGap'), $resolve('creditToGdpTrend')),
-                MacroAggregateSubsystem::dealActivityGap($resolve('dealActivityIndexEma'), $resolve('dealActivityIndexTrend')),
-            );
-            if (isset($data[$fields['financeOutputGap']], $args['domesticDemandGapEma'])) {
-                $args['domesticDemandGapEma'] += MacroAggregateSubsystem::domesticDemandGapAt(0.0, 0.0, 0.0, $args['financeOutputGap'] - $carriedFinance);
-            }
-        }
-        $args['domesticDemandGapEma'] ??= MacroAggregateSubsystem::domesticDemandGapAt($resolve('outputGapEma'), $resolve('productivitySupplyGap'), $resolve('netExportGap'), $resolve('financeOutputGap'));
-        // The capital built counts the buffer beside the requirement, as MacroState::fromArray has it.
-        if (!isset($args['bankCapitalRequiredLast'])) {
-            $args['bankCapitalBuilt'] = $resolve('bankCapitalBuilt') + $resolve('countercyclicalBufferRate');
-            $args['bankCapitalRequiredLast'] = $resolve('bankCapitalRequirement') + $resolve('countercyclicalBufferRate');
-        }
-
-        return new self(...$args);
+        return self::fromMacroState(MacroState::fromArray($data));
     }
     /**
      * The fitted term structure, ready for the bond desk to discount an arbitrary maturity against.

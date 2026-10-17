@@ -66,9 +66,13 @@ class MacroDiagnosticsClosureTest extends TestCase
             }
             $gapProbe->rollWindow();
             $diagnostics->rollWindow();
+            $gapWindow = $gapProbe->snapshot()['previous'];
+            $diagnosticsWindow = $diagnostics->snapshot()['previous'];
+            self::assertNotNull($gapWindow, "The gap probe closed quarter {$quarter}.");
+            self::assertNotNull($diagnosticsWindow, "The diagnostics probe closed quarter {$quarter}.");
             self::$quarters[] = [
-                'gap' => $gapProbe->snapshot()['previous'],
-                'diagnostics' => $diagnostics->snapshot()['previous'],
+                'gap' => $gapWindow,
+                'diagnostics' => $diagnosticsWindow,
                 'gaps' => $gaps,
                 'unemployment' => $unemployment,
                 'nairu' => $nairu,

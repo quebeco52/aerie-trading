@@ -28,8 +28,8 @@ class CashLedgerTest extends TestCase
     private function account(string $cash, string $debit = '0.00'): User
     {
         $user = new User();
-        $user->setCashBalance($cash);
-        $user->setMarginDebit($debit);
+        $user->setCashBalance(\App\Service\Math\Decimal::of($cash));
+        $user->setMarginDebit(\App\Service\Math\Decimal::of($debit));
 
         return $user;
     }

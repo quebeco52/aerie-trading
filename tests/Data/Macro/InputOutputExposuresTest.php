@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Tests\Data\Macro;
 
 use App\Data\Macro\InputOutputExposures;
+use App\Service\Model\BusinessModelInterface;
 use App\Service\Model\Sector\ChemicalBusinessModel;
 use App\Service\Model\Sector\RefiningBusinessModel;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -130,6 +131,7 @@ final class InputOutputExposuresTest extends TestCase
         $this->assertGreaterThan(0.10, $exposures['labor'], $class);
         $this->assertLessThan(0.70, $exposures['labor'], $class);
         // One share per industry: the fixed-cost wage factor and severance read the same number the basket does.
+        $this->assertTrue(is_subclass_of($class, BusinessModelInterface::class), "{$class} is not a business model");
         $model = (new \ReflectionClass($class))->newInstanceWithoutConstructor();
         $this->assertSame($exposures['labor'], $model->getLaborCostShare(), $class);
     }

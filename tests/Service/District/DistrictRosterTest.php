@@ -78,7 +78,9 @@ class DistrictRosterTest extends TestCase
 
         $tickers = array_column($frontage['slots'], 'ticker');
         $this->assertNotContains($riser->getTicker(), $tickers, 'A riser waits below the cut');
-        $this->assertSame($this->roster->current()['tickers'], $tickers, 'Stored order is honoured exactly');
+        $stored = $this->roster->current();
+        $this->assertNotNull($stored, 'The first reconstitution stores a roster');
+        $this->assertSame($stored['tickers'], $tickers, 'Stored order is honoured exactly');
 
         // At the boundary it is admitted and the smallest incumbent is evicted.
         $result = $this->roster->reconstitute($stocks, DistrictRoster::intervalTicks(self::TICKS_PER_YEAR));
@@ -109,7 +111,9 @@ class DistrictRosterTest extends TestCase
         $frontage = $this->roster->frontageFor($this->makeStocks(4), 3);
 
         $this->assertCount(4, $frontage['slots']);
-        $this->assertSame(3, $this->roster->current()['tick']);
+        $taken = $this->roster->current();
+        $this->assertNotNull($taken, 'The render stores the roster it took');
+        $this->assertSame(3, $taken['tick']);
     }
 
     public function testStreetRankStaysLiveWhileTheOrderIsFrozen(): void

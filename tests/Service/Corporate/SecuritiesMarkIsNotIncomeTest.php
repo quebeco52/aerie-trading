@@ -8,6 +8,7 @@ use App\DTO\EarningsSimulationContext;
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use App\Service\Corporate\EarningsEngine;
+use App\Service\Model\BusinessModelInterface;
 use App\Service\Model\Sector\CommercialBankBusinessModel;
 use App\Service\Model\Sector\InsuranceBusinessModel;
 use App\Service\Model\Sector\StandardCorporateBusinessModel;
@@ -73,7 +74,7 @@ final class SecuritiesMarkIsNotIncomeTest extends TestCase
         return $stock;
     }
 
-    private function context(Stock $stock, MacroStateDTO $macro, object $strategy): EarningsSimulationContext
+    private function context(Stock $stock, MacroStateDTO $macro, BusinessModelInterface $strategy): EarningsSimulationContext
     {
         $ctx = new EarningsSimulationContext($stock, $macro, $strategy, 'insurance');
         $ctx->ebit = 5_000_000_000.0;

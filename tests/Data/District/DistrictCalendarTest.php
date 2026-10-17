@@ -38,7 +38,7 @@ class DistrictCalendarTest extends TestCase
         $quarterOfMonth = ['Jan' => 1, 'Feb' => 1, 'Mar' => 1, 'Apr' => 2, 'May' => 2, 'Jun' => 2, 'Jul' => 3, 'Aug' => 3, 'Sep' => 3, 'Oct' => 4, 'Nov' => 4, 'Dec' => 4];
 
         for ($t = 0.0; $t < 3.0; $t += 1.0 / 1000.0) {
-            preg_match('/^(\d+) (\w{3}), Year (\d+)$/', DistrictCalendar::dateline($t), $date);
+            $this->assertSame(1, preg_match('/^(\d+) (\w{3}), Year (\d+)$/', DistrictCalendar::dateline($t), $date), "t={$t}");
             $this->assertSame(sprintf('Year %d Q%d', $date[3], $quarterOfMonth[$date[2]]), DistrictCalendar::quarter($t), "t={$t}");
             $this->assertGreaterThanOrEqual(1, (int) $date[1]);
             $this->assertLessThanOrEqual(31, (int) $date[1]);

@@ -29,7 +29,7 @@ class MacroDiagnosticsProbeTest extends TestCase
         $probe->recordInflation(['target' => 0.02, 'demandPull' => 0.004], 0.024, 0.75);
         $probe->recordInflation(['target' => 0.02, 'demandPull' => -0.008], 0.012, 0.25);
 
-        $inflation = $probe->snapshot()['current']['inflation'];
+        $inflation = $this->openWindow($probe)['inflation'];
 
         $this->assertEqualsWithDelta(0.021, $inflation['average'], 1e-15);
         $this->assertEqualsWithDelta(0.001, $inflation['terms']['demandPull'], 1e-15);
@@ -44,7 +44,7 @@ class MacroDiagnosticsProbeTest extends TestCase
         $probe->recordPolicyRate(0.01, ['lowerBound' => true, 'evansHold' => false], 0.1);
         $probe->recordPolicyRate(0.02, ['lowerBound' => false, 'evansHold' => false], 0.3);
 
-        $policy = $probe->snapshot()['current']['policy'];
+        $policy = $this->openWindow($probe)['policy'];
 
         $this->assertEqualsWithDelta(0.25, $policy['constraints']['lowerBound'], 1e-15);
         $this->assertSame(0.0, $policy['constraints']['evansHold'], 'A constraint that never bound is reported, at zero.');
@@ -62,7 +62,7 @@ class MacroDiagnosticsProbeTest extends TestCase
         $state->outputGap = 0.03;
         $probe->recordAverages($state, 0.5);
 
-        $window = $probe->snapshot()['current'];
+        $window = $this->openWindow($probe);
 
         $this->assertSame(2, $window['ticks']);
         $this->assertEqualsWithDelta(1.0, $window['years'], 1e-15);
@@ -79,7 +79,7 @@ class MacroDiagnosticsProbeTest extends TestCase
         $probe->recordShock('tfpInnovation', 0.001);
         $probe->recordShock('tfpInnovation', -0.003);
 
-        $window = $probe->snapshot()['current'];
+        $window = $this->openWindow($probe);
 
         $this->assertSame(['count' => 2, 'sum' => -0.3, 'maxAbs' => 0.5], $window['events']['energy']);
         $this->assertEqualsWithDelta(-0.002, $window['shocks']['tfpInnovation'], 1e-15);
@@ -95,10 +95,24 @@ class MacroDiagnosticsProbeTest extends TestCase
         $snapshot = $probe->snapshot();
 
         $this->assertNull($snapshot['current'], 'Nothing recorded since the roll, so no window is open.');
+        $this->assertNotNull($snapshot['previous'], 'The roll keeps the closed window.');
         $this->assertSame(1, $snapshot['previous']['events']['catastrophe']['count']);
 
         $probe->recordEvent('energy', 0.1);
-        $this->assertArrayNotHasKey('catastrophe', $probe->snapshot()['current']['events']);
+        $this->assertArrayNotHasKey('catastrophe', $this->openWindow($probe)['events']);
+    }
+
+    /**
+     * The window a probe has open; any recording on an enabled probe opens one.
+     *
+     * @return array<string, mixed>
+     */
+    private function openWindow(MacroDiagnosticsProbe|OutputGapProbe $probe): array
+    {
+        $window = $probe->snapshot()['current'];
+        $this->assertNotNull($window, 'A recording opens a window.');
+
+        return $window;
     }
 
     // --- Satellite sections ---
@@ -115,7 +129,7 @@ class MacroDiagnosticsProbeTest extends TestCase
         $probe->recordValues('labour', ['firingShare' => 1.0], 0.75);
         $probe->recordValues('labour', ['firingShare' => 0.0], 0.25);
 
-        $labour = $probe->snapshot()['current']['labour'];
+        $labour = $this->openWindow($probe)['labour'];
 
         $this->assertEqualsWithDelta(0.0225, $labour['wageGrowth']['average'], 1e-15);
         $this->assertEqualsWithDelta(0.0025, $labour['wageGrowth']['terms']['tightness'], 1e-15);
@@ -138,6 +152,8 @@ class MacroDiagnosticsProbeTest extends TestCase
 
         $snapshot = $probe->snapshot();
 
+        $this->assertNotNull($snapshot['previous'], 'The roll keeps the closed window.');
+        $this->assertNotNull($snapshot['current'], 'A recording after the roll opens a window.');
         $this->assertSame(0.001, $snapshot['previous']['labour']['nairu']['change']);
         $this->assertArrayNotHasKey('labour', $snapshot['current']);
         $this->assertEqualsWithDelta(0.02, $snapshot['current']['households']['housePriceToFundamental'], 1e-15);
@@ -154,7 +170,7 @@ class MacroDiagnosticsProbeTest extends TestCase
         // The next tick opens 0.5pp above where the last closed: something moved the gap in between.
         $probe->record(['momentum' => 0.04], 0.0, 0.016, 0.017, 0.017, 0.025);
 
-        $window = $probe->snapshot()['current'];
+        $window = $this->openWindow($probe);
 
         $this->assertEqualsWithDelta(0.005, $window['external'], 1e-15);
         $this->assertEqualsWithDelta(
@@ -173,7 +189,7 @@ class MacroDiagnosticsProbeTest extends TestCase
         $probe->rollWindow();
         $probe->record([], 0.0, 0.012, 0.012, 0.012, 0.25);
 
-        $window = $probe->snapshot()['current'];
+        $window = $this->openWindow($probe);
 
         $this->assertSame(0.010, $window['opening_gap']);
         $this->assertEqualsWithDelta(0.002, $window['external'], 1e-15);
