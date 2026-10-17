@@ -541,6 +541,16 @@ readonly class MacroStateDTO
         public float $boardBankLevy = 0.0,
         public float $strategicStakeCash = 0.0,
         public float $sovereignFundBudgetInflow = 0.0,
+        /** The corporate default rate's measured trend, its decade-long average: where its cyclical readers measure an excess from. */
+        public float $corporateDefaultRateTrend = MacroEngine::CORPORATE_DEFAULT_BASELINE,
+        /** The household default rate's measured trend, its decade-long average. */
+        public float $retailDefaultRateTrend = MacroEngine::RETAIL_DEFAULT_BASELINE,
+        /** Commercial property's measured trend, the level a developer reads a boom in office and retail values against. */
+        public float $commercialPropertyIndexTrend = MacroEngine::CRE_BASELINE,
+        /** The financial conditions composite's decade-long average before it is centred: financialConditionsIndex is the composite net of it. */
+        public float $financialConditionsTrend = 0.0,
+        /** The coupon the Authority's own bond book earns: the yields its purchases and reinvestments were struck at (MonetaryPolicySubsystem::rollAuthorityBookCoupon()). */
+        public float $authorityBookCouponRate = self::OPENING_YIELD_10Y,
     ) {
         // A state given its gap but not its lags is one where the gap has stood long enough to reach every order book.
         $this->outputGapLag3m = $outputGapLag3m ?? $outputGapEma;
@@ -804,6 +814,24 @@ readonly class MacroStateDTO
     public function equityWealthDeviation(): float
     {
         return $this->equityWealthTrend > 0.0 ? ($this->equityWealthRatio / $this->equityWealthTrend) - 1.0 : 0.0;
+    }
+
+    /** Corporate defaults over their measured trend, as a share of it, both ways: +0.5 is half again the usual rate of failures. */
+    public function corporateDefaultDeviation(): float
+    {
+        return $this->corporateDefaultRateTrend > 0.0 ? ($this->corporateDefaultRateEma / $this->corporateDefaultRateTrend) - 1.0 : 0.0;
+    }
+
+    /** Household defaults over their measured trend, as a share of it, both ways. */
+    public function retailDefaultDeviation(): float
+    {
+        return $this->retailDefaultRateTrend > 0.0 ? ($this->retailDefaultRateEma / $this->retailDefaultRateTrend) - 1.0 : 0.0;
+    }
+
+    /** Commercial property values over their measured trend, as a fraction. */
+    public function commercialPropertyDeviation(): float
+    {
+        return $this->commercialPropertyIndexTrend > 0.0 ? ($this->commercialPropertyIndexEma / $this->commercialPropertyIndexTrend) - 1.0 : 0.0;
     }
 
     /**

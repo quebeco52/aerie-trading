@@ -251,6 +251,8 @@ class JointHarnessTest extends KernelTestCase
                         'sloos' => $m->sloosTighteningIndexEma, 'sloos_raw' => $m->sloosTighteningIndex, 'ebp' => $m->excessBondPremium, 'ebp_trend' => $m->excessBondPremiumTrend,
                         'cap_req' => $m->bankCapitalRequirement, 'ccyb' => $m->countercyclicalBufferRate, 'cap_built' => $m->bankCapitalBuilt,
                         'infl_ema' => $m->inflationEma, 'bei' => $m->tipsBreakevenEma, 'supercore' => $m->supercoreInflationEma,
+                        'corp_dr' => $m->corporateDefaultRateEma, 'retail_dr' => $m->retailDefaultRateEma, 'starts' => $m->housingStartsIndex,
+                        'fci' => $m->financialConditionsIndex, 'cre' => $m->commercialPropertyIndexEma, 'freight' => $m->freightRateIndex,
                     ] : [])) . "\n", FILE_APPEND);
             }
         }

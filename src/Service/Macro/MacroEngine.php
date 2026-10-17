@@ -624,7 +624,9 @@ class MacroEngine
 
         // 6. Central bank balance sheet unconventional QE/QT operations (Bernanke & Reinhart 2004).
         $balanceSheetData = $this->monetarySubsystem->calculateBalanceSheetOperations($state, $dt);
+        $holdingsBefore = MonetaryPolicySubsystem::authorityHoldingsToGdp($state);
         $state->balanceSheetIntensity = $balanceSheetData['new_balance_sheet_intensity'];
+        MonetaryPolicySubsystem::rollAuthorityBookCoupon($state, $holdingsBefore, $dt);
         $state->balanceSheetHoldTimer = $balanceSheetData['new_hold_timer'];
         $state->qeIntensity = $balanceSheetData['new_qe_intensity'];
         $qeWasActive = $state->qeActive;
@@ -708,7 +710,7 @@ class MacroEngine
         $this->creditFiscalSubsystem->calculateSovereignRiskSpread($state, $dt);
         $this->creditFiscalSubsystem->calculateReimbursementRate($state, $dt);
         $this->assetSubsystem->calculateEquityRiskPremium($state);
-        $this->assetSubsystem->calculateFinancialConditionsIndex($state);
+        $this->assetSubsystem->calculateFinancialConditionsIndex($state, $dt);
         $this->assetSubsystem->calculateConsumerSentiment($state, $dt);
         $this->monetarySubsystem->calculateRecessionProbability($state);
         $this->assetSubsystem->calculateCapitalMarketsDealIndex($state, $dt);

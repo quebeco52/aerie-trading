@@ -2343,4 +2343,25 @@ class MacroAggregateSubsystemTest extends TestCase
         $dip = static fn (float $t): float => ($t > 1.05 && $t < 1.2) ? -0.02 : 0.0;
         $this->assertNotContains(true, $this->recessionCalls(48, $dip, 12));
     }
+
+    /** The default rates and commercial property are read against the levels they settle at: years at a new level make it the trend. */
+    public function testDefaultAndCommercialPropertyTrendsSettleOnTheLevelsTheyHold(): void
+    {
+        $state = new MacroState();
+        $state->corporateDefaultRate = 0.012;
+        $state->corporateDefaultRateEma = 0.012;
+        $state->retailDefaultRate = 0.020;
+        $state->retailDefaultRateEma = 0.020;
+        $state->commercialPropertyIndex = 110.0;
+        $state->commercialPropertyIndexEma = 110.0;
+
+        // Four of the longer horizons.
+        for ($i = 0; $i < 4 * 12; $i++) {
+            $this->subsystem->updateExponentialMovingAverages($state, MacroAggregateSubsystem::DEFAULT_RATE_TREND_YEARS / 12.0);
+        }
+
+        $this->assertEqualsWithDelta(0.012, $state->corporateDefaultRateTrend, 0.0002);
+        $this->assertEqualsWithDelta(0.020, $state->retailDefaultRateTrend, 0.0002);
+        $this->assertEqualsWithDelta(110.0, $state->commercialPropertyIndexTrend, 0.1);
+    }
 }

@@ -293,6 +293,8 @@ class AssetMarketSubsystem
     public const FCI_SLOOS_MEAN = 0.0;
     /** Historical standard deviation for SLOOS net tightening index in FCI normalization. */
     public const FCI_SLOOS_STD = 0.20;
+    /** Years the composite is centred over: a decade, as published indices standardise each indicator on its sample mean (Brave & Butters 2011), so conditions that last become the norm and a credit event still reads about +3. */
+    public const FCI_TREND_YEARS = 10.0;
 
     // --- Jovanovic-Rousseau (2002) Capital Markets & M&A Deal Flow ---
     /** Mean-reversion speed (kappa) of deal activity toward fundamental valuation capacity. */
@@ -684,8 +686,8 @@ class AssetMarketSubsystem
         return self::exchangeRateFundamentalAt(
             MonetaryPolicySubsystem::marketShortRate($state),
             $state->tipsBreakeven,
-            $state->foreignPolicyRate,
-            self::mainlandBreakeven(self::mainlandCoreYearOnYear($state)),
+            self::mainlandMarketRate($state),
+            self::mainlandBreakeven(self::mainlandMarketCoreYearOnYear($state)),
             $state->energyPriceIndexEma,
             $state->industrialMetalsIndexEma,
             $state->marketVolatilityEma,
@@ -810,10 +812,13 @@ class AssetMarketSubsystem
      * the composite: a 2008-type credit event reads ~+3 sigma, a mild recession ~+1.4, a boom ~-0.6 (Chicago Fed NFCI ranges).
      * The currency is read against its own trend, since the index settles away from its nominal baseline. Like the NFCI,
      * the index is a same-period reading of its components, which are already quarterly averages, so no lag is added.
+     * The other components are scored against the constants they are built on, and they do not all settle there, so
+     * the composite is published net of its own decade-long average, as the NFCI is centred on its sample's.
      *
      * @param MacroState $state Current macroeconomic state.
+     * @param float      $dt    Time increment in years.
      */
-    public function calculateFinancialConditionsIndex(MacroState $state): void
+    public function calculateFinancialConditionsIndex(MacroState $state, float $dt): void
     {
         $creditZ = ($state->macroCreditSpreadEma - self::FCI_CREDIT_MEAN) / self::FCI_CREDIT_STD;
         $erpZ = ($state->equityRiskPremium - self::FCI_ERP_MEAN) / self::FCI_ERP_STD;
@@ -822,12 +827,14 @@ class AssetMarketSubsystem
         $volZ = ($state->marketVolatilityEma - self::FCI_VOL_MEAN) / self::FCI_VOL_STD;
         $sloosZ = ($state->sloosTighteningIndexEma - self::FCI_SLOOS_MEAN) / self::FCI_SLOOS_STD;
 
-        $state->financialConditionsIndex = (self::FCI_CREDIT_SPREAD_WEIGHT * $creditZ)
+        $composite = (self::FCI_CREDIT_SPREAD_WEIGHT * $creditZ)
             + (self::FCI_ERP_WEIGHT * $erpZ)
             + (self::FCI_EXCHANGE_RATE_WEIGHT * $fxZ)
             + (self::FCI_YIELD_SLOPE_WEIGHT * $slopeZ)
             + (self::FCI_VOLATILITY_WEIGHT * $volZ)
             + (self::FCI_SLOOS_WEIGHT * $sloosZ);
+        $state->financialConditionsTrend += (1.0 - exp(-$dt / self::FCI_TREND_YEARS)) * ($composite - $state->financialConditionsTrend);
+        $state->financialConditionsIndex = $composite - $state->financialConditionsTrend;
     }
 
     /**
@@ -938,42 +945,92 @@ class AssetMarketSubsystem
      */
     private function stepMainlandQuarter(MacroState $state): void
     {
+        $gapShock = self::MAINLAND_GAP_SIGMA * $this->mathUtility->generateStandardNormal();
+        $inflationShock = self::MAINLAND_INFLATION_SIGMA * $this->mathUtility->generateStandardNormal();
+        $rateShock = self::FED_RULE_SIGMA * $this->mathUtility->generateStandardNormal();
+        $next = self::mainlandNextQuarter($state, $gapShock, $inflationShock, $rateShock);
+
+        $state->foreignOutputGapLag = $state->foreignOutputGap;
+        $state->foreignOutputGap = $next['gap'];
+
+        $state->foreignCoreInflationLag3 = $state->foreignCoreInflationLag2;
+        $state->foreignCoreInflationLag2 = $state->foreignCoreInflationLag1;
+        $state->foreignCoreInflationLag1 = $state->foreignCoreInflation;
+        $state->foreignCoreInflation = $next['inflation'];
+
+        $state->foreignPolicyRate = $next['rate'];
+
+        // The rest of the world: a one-factor model, the mainland's cycle at its loading plus an AR(1) of its own.
+        $state->worldActivityIdiosyncratic = (self::WORLD_GAP_AR1 * $state->worldActivityIdiosyncratic)
+            + (self::WORLD_GAP_SIGMA * $this->mathUtility->generateStandardNormal());
+        $state->worldActivityGap = max(-self::MAX_WORLD_GAP, min(self::MAX_WORLD_GAP, (self::WORLD_MAINLAND_LOADING * $state->foreignOutputGap) + $state->worldActivityIdiosyncratic));
+    }
+
+    /**
+     * The mainland's next quarter on given shocks: the gap, core inflation and the policy rate the step above sets.
+     * Zero shocks give the quarter the market expects.
+     *
+     * @return array{gap: float, inflation: float, rate: float}
+     */
+    private static function mainlandNextQuarter(MacroState $state, float $gapShock, float $inflationShock, float $rateShock): array
+    {
         $spilloverMean = self::FOREIGN_IMPORT_SPILLOVER * $state->outputGapEma;
         $lastGap = $state->foreignOutputGap;
         $gap = ((1.0 - self::MAINLAND_GAP_AR1 - self::MAINLAND_GAP_AR2) * $spilloverMean)
             + (self::MAINLAND_GAP_AR1 * $lastGap)
             + (self::MAINLAND_GAP_AR2 * $state->foreignOutputGapLag)
-            + (self::MAINLAND_GAP_SIGMA * $this->mathUtility->generateStandardNormal());
+            + $gapShock;
+        $gap = max(-self::MAX_FOREIGN_GAP, min(self::MAX_FOREIGN_GAP, $gap));
 
         $lags = [$state->foreignCoreInflation, $state->foreignCoreInflationLag1, $state->foreignCoreInflationLag2, $state->foreignCoreInflationLag3];
         $inflation = (1.0 - array_sum(self::MAINLAND_INFLATION_LAGS)) * MacroEngine::TARGET_INFLATION;
         foreach (self::MAINLAND_INFLATION_LAGS as $j => $coefficient) {
             $inflation += $coefficient * $lags[$j];
         }
-        $inflation += (self::MAINLAND_INFLATION_GAP_SLOPE * $lastGap) + (self::MAINLAND_INFLATION_SIGMA * $this->mathUtility->generateStandardNormal());
-
-        $state->foreignOutputGapLag = $lastGap;
-        $state->foreignOutputGap = max(-self::MAX_FOREIGN_GAP, min(self::MAX_FOREIGN_GAP, $gap));
-
-        $state->foreignCoreInflationLag3 = $state->foreignCoreInflationLag2;
-        $state->foreignCoreInflationLag2 = $state->foreignCoreInflationLag1;
-        $state->foreignCoreInflationLag1 = $state->foreignCoreInflation;
-        $state->foreignCoreInflation = $inflation;
+        $inflation += (self::MAINLAND_INFLATION_GAP_SLOPE * $lastGap) + $inflationShock;
 
         // Four quarters of annualized log inflation average to the year-on-year rate the rule is fitted on.
-        $yearOnYear = self::mainlandCoreYearOnYear($state);
+        $yearOnYear = ($inflation + $state->foreignCoreInflation + $state->foreignCoreInflationLag1 + $state->foreignCoreInflationLag2) / 4.0;
         $ruleRate = MacroEngine::MAINLAND_NEUTRAL_RATE
             + (self::FED_RULE_INFLATION_RESPONSE * ($yearOnYear - MacroEngine::TARGET_INFLATION))
-            + (self::FED_RULE_GAP_RESPONSE * $state->foreignOutputGap);
+            + (self::FED_RULE_GAP_RESPONSE * $gap);
         $rate = (self::FED_RULE_SMOOTHING * $state->foreignPolicyRate)
             + ((1.0 - self::FED_RULE_SMOOTHING) * $ruleRate)
-            + (self::FED_RULE_SIGMA * $this->mathUtility->generateStandardNormal());
-        $state->foreignPolicyRate = max(MacroEngine::EFFECTIVE_LOWER_BOUND, min(self::MAX_FOREIGN_POLICY_RATE, $rate));
+            + $rateShock;
 
-        // The rest of the world: a one-factor model, the mainland's cycle at its loading plus an AR(1) of its own.
-        $state->worldActivityIdiosyncratic = (self::WORLD_GAP_AR1 * $state->worldActivityIdiosyncratic)
-            + (self::WORLD_GAP_SIGMA * $this->mathUtility->generateStandardNormal());
-        $state->worldActivityGap = max(-self::MAX_WORLD_GAP, min(self::MAX_WORLD_GAP, (self::WORLD_MAINLAND_LOADING * $state->foreignOutputGap) + $state->worldActivityIdiosyncratic));
+        return [
+            'gap' => $gap,
+            'inflation' => $inflation,
+            'rate' => max(MacroEngine::EFFECTIVE_LOWER_BOUND, min(self::MAX_FOREIGN_POLICY_RATE, $rate)),
+        ];
+    }
+
+    /** Share of the mainland's current quarter already gone: zero at its turn, approaching one before the next. */
+    private static function mainlandQuarterElapsed(float $totalTime): float
+    {
+        return max(0.0, min(1.0, ($totalTime * self::MAINLAND_QUARTERS_PER_YEAR) - self::quarterCount($totalTime)));
+    }
+
+    /**
+     * The mainland short rate the market prices at this moment: the last decision moving across the quarter toward the
+     * one it expects at the turn, so the expected step is in the currency before it is taken and only the surprise moves
+     * it on the day, as marketShortRate() reads the District's.
+     */
+    public static function mainlandMarketRate(MacroState $state): float
+    {
+        $expected = self::mainlandNextQuarter($state, 0.0, 0.0, 0.0)['rate'];
+
+        return $state->foreignPolicyRate + (self::mainlandQuarterElapsed($state->totalTime) * ($expected - $state->foreignPolicyRate));
+    }
+
+    /** The mainland's year-on-year core inflation as the market reads it between releases: moving toward the print it expects. */
+    public static function mainlandMarketCoreYearOnYear(MacroState $state): float
+    {
+        $now = self::mainlandCoreYearOnYear($state);
+        $expectedInflation = self::mainlandNextQuarter($state, 0.0, 0.0, 0.0)['inflation'];
+        $expected = ($expectedInflation + $state->foreignCoreInflation + $state->foreignCoreInflationLag1 + $state->foreignCoreInflationLag2) / 4.0;
+
+        return $now + (self::mainlandQuarterElapsed($state->totalTime) * ($expected - $now));
     }
 
     /**

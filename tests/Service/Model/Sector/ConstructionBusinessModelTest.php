@@ -159,6 +159,24 @@ class ConstructionBusinessModelTest extends TestCase
         $this->assertGreaterThan($baseResult->streamRevenue['commercial_epc'], $boostResult->streamRevenue['commercial_epc']);
     }
 
+    /** Office values that have settled 10% higher are no boom: commercial orders read them against their trend, as starts read houses. */
+    public function testCommercialOrdersReadPropertyAgainstItsTrend(): void
+    {
+        $stock = new Stock();
+        $stock->setTicker('IBHI');
+        $stock->setBeta('1.0');
+        $mathMock = $this->createStub(MathUtility::class);
+        $mathMock->method('generatePersistentZ')->willReturn(0.0);
+        $commercial = fn (float $index, float $trend): float => $this->model->computeActualFinancials(
+            $stock, 100_000_000.0, 0.20, 10_000_000.0, 0.0,
+            new MacroStateDTO(commercialPropertyIndexEma: $index, commercialPropertyIndexTrend: $trend),
+            $mathMock
+        )->streamRevenue['commercial_epc'];
+
+        $this->assertEqualsWithDelta($commercial(100.0, 100.0), $commercial(110.0, 110.0), 1e-6);
+        $this->assertGreaterThan($commercial(100.0, 100.0), $commercial(110.0, 100.0));
+    }
+
     public function testSeasonalityFactorsAndBreakEvenClearance(): void
     {
         $factors = $this->model->getSeasonalityFactors();

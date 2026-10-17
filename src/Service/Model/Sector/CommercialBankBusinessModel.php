@@ -827,14 +827,15 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
     {
         ['residential' => $residentialShare, 'consumer' => $consumerShare, 'commercial_real_estate' => $creShare, 'business' => $businessShare] = $this->resolveLoanBookMix($stock);
 
+        // The factor is read against the rates' measured trends, the long-run average year the book's PDs describe.
         $householdZ = CreditRisk::calculateVasicekSystematicFactor(
             $macroState->retailDefaultRateEma,
-            MacroEngine::RETAIL_DEFAULT_BASELINE,
+            $macroState->retailDefaultRateTrend,
             CreditRisk::RETAIL_ASRF_RHO
         );
         $corporateZ = CreditRisk::calculateVasicekSystematicFactor(
             $macroState->corporateDefaultRateEma,
-            MacroEngine::CORPORATE_DEFAULT_BASELINE,
+            $macroState->corporateDefaultRateTrend,
             CreditRisk::CORPORATE_DEFAULT_RHO
         );
 

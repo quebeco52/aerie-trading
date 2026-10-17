@@ -10,7 +10,6 @@ use App\DTO\DebtExpansionAppetiteDTO;
 use App\Service\Math\Distributions;
 use App\Service\Math\FirmEconomics;
 use App\Service\Math\MacroTransmission;
-use App\Service\Math\ResponseCurves;
 use App\Service\Model\BusinessModelInterface;
 
 use App\Service\Model\ModelParam;
@@ -138,11 +137,11 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
     // --- Housing Supply & Tenant Default Transmission ---
     /** Sensitivity of new building supply competition to residential housing starts. */
     public const HOUSING_SUPPLY_COMPETITION_SENSITIVITY = 0.25;
-    /** Rent roll lost per unit of relative excess in the corporate default rate. */
+    /** Rent roll lost per unit of the corporate default rate over its measured trend, relative, both ways. */
     public const CORP_DEFAULT_VACANCY_SCALAR = 0.04;
-    /** Rent roll lost per unit of relative excess in the retail default rate. */
+    /** Rent roll lost per unit of the retail default rate over its measured trend, relative, both ways. */
     public const RETAIL_DEFAULT_VACANCY_SCALAR = 0.03;
-    /** Rent roll lost per unit of household debt-service stress on residential and retail tenants. */
+    /** Rent roll lost per unit of household debt service over its trend, relative to the neutral ratio, both ways. */
     public const DSR_TENANT_DEFAULT_SCALAR = 0.15;
 
     // --- Event Lore Thresholds ---
@@ -283,12 +282,10 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
 
         // --- Vacancy ---
         // Failing tenants hand back space and a strong leasing market fills it, net of the loss the roll was built
-        // at; rising business and household defaults empty space across the market.
-        $corpDefaultShift = ResponseCurves::excessOverBaseline($macroState->corporateDefaultRateEma, MacroEngine::CORPORATE_DEFAULT_BASELINE);
-        $retailDefaultShift = ResponseCurves::excessOverBaseline($macroState->retailDefaultRateEma, MacroEngine::RETAIL_DEFAULT_BASELINE);
-        $dsrShift = max(0.0, $macroState->householdDebtServiceGap) / MacroEngine::HOUSEHOLD_DSR_NEUTRAL;
-        $macroTenantVacancy = ($corpDefaultShift * self::CORP_DEFAULT_VACANCY_SCALAR)
-            + ($retailDefaultShift * self::RETAIL_DEFAULT_VACANCY_SCALAR)
+        // at; business and household defaults above their trends empty space across the market, and fewer fill it.
+        $dsrShift = $macroState->householdDebtServiceGap / MacroEngine::HOUSEHOLD_DSR_NEUTRAL;
+        $macroTenantVacancy = ($macroState->corporateDefaultDeviation() * self::CORP_DEFAULT_VACANCY_SCALAR)
+            + ($macroState->retailDefaultDeviation() * self::RETAIL_DEFAULT_VACANCY_SCALAR)
             + ($dsrShift * self::DSR_TENANT_DEFAULT_SCALAR);
         $vacancy = self::tenantVacancy($tenantDefaultZ) - self::expectedTenantVacancy() + $macroTenantVacancy;
         // Storm damage takes space off the rent roll until it is repaired.

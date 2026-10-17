@@ -15,7 +15,6 @@ use App\Service\Macro\MacroEngine;
 use App\Service\Math\CreditRisk;
 use App\Service\Math\MacroTransmission;
 use App\Service\Math\MathUtility;
-use App\Service\Math\ResponseCurves;
 
 /**
  * Earnings strategy for Multi-Industry Conglomerates & Industrial Holding Trusts.
@@ -136,7 +135,7 @@ class ConglomerateBusinessModel extends StandardCorporateBusinessModel
     /** Spread duration (years) of the float credit book: short corporates, preferreds, and cat bonds. */
     public const FLOAT_SPREAD_DURATION = 4.00;
 
-    /** Realized credit loss drag on float revenue per unit of relative corporate default rate excess. */
+    /** Realized credit loss on float revenue per unit of the corporate default rate over its measured trend, relative, both ways. */
     public const FLOAT_CREDIT_LOSS_SCALAR = 0.08;
 
     // --- Tail Risk & Shock Events ---
@@ -392,8 +391,7 @@ class ConglomerateBusinessModel extends StandardCorporateBusinessModel
         );
 
         // Credit losses: spreads compensate for defaults, they are not free yield. Net carry = spread - expected loss.
-        $corporateDefaultShift = ResponseCurves::excessOverBaseline($macroState->corporateDefaultRateEma, MacroEngine::CORPORATE_DEFAULT_BASELINE);
-        $creditLossDrag = $corporateDefaultShift * self::FLOAT_CREDIT_LOSS_SCALAR;
+        $creditLossDrag = $macroState->corporateDefaultDeviation() * self::FLOAT_CREDIT_LOSS_SCALAR;
 
         // Mark-to-market: spreads gapping wider reprice the held book downward this quarter (dP/P ~ -D_s * ds).
         $floatMarkToMarket = CreditRisk::calculateCreditSpreadMarkToMarket($spreadImpulse, self::FLOAT_SPREAD_DURATION);

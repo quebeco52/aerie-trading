@@ -1518,4 +1518,46 @@ class MonetaryPolicySubsystemTest extends TestCase
         $state->sovereignDebtToGdpEma = MacroEngine::INITIAL_DEBT_TO_GDP;
         $state->sovereignRiskSpreadEma = 0.0;
     }
+
+    /**
+     * The Authority's book earns the yields it was bought at: purchases at the market, runoff pro rata, maturities
+     * reinvested at the market while it holds. It used to earn the coupon of the whole debt stock, issued years before.
+     */
+    public function testTheAuthoritysBookEarnsWhatItBoughtAt(): void
+    {
+        $state = new MacroState();
+        $state->sovereignDebtAverageMaturity = CreditFiscalSubsystem::FOUNDING_DEBT_AVERAGE_MATURITY;
+        $state->sovereignCouponRate = 0.045;
+        $state->policyRate = 0.0025;
+        $state->yield10y = 0.02;
+        $state->balanceSheetIntensity = 0.0;
+
+        // A programme bought from nothing at 2% earns 2%, whatever the stock it was bought from pays.
+        $before = MonetaryPolicySubsystem::authorityHoldingsToGdp($state);
+        $state->balanceSheetIntensity = MonetaryPolicySubsystem::QE_MAX_SUPPRESSION;
+        MonetaryPolicySubsystem::rollAuthorityBookCoupon($state, $before, 0.25);
+        $this->assertEqualsWithDelta(0.02, $state->authorityBookCouponRate, 1e-12);
+
+        // Half as much again bought at 3%; the held half's maturities reinvested at 3% too.
+        $state->yield10y = 0.03;
+        $before = MonetaryPolicySubsystem::authorityHoldingsToGdp($state);
+        $state->balanceSheetIntensity = 1.5 * MonetaryPolicySubsystem::QE_MAX_SUPPRESSION;
+        MonetaryPolicySubsystem::rollAuthorityBookCoupon($state, $before, 0.25);
+        $reinvested = 1.0 - exp(-0.25 / CreditFiscalSubsystem::couponRepricingYears($state));
+        $this->assertEqualsWithDelta(((0.02 + ($reinvested * 0.01)) + (0.5 * 0.03)) / 1.5, $state->authorityBookCouponRate, 1e-12);
+
+        // Runoff hands bonds back pro rata: the coupon stays.
+        $held = $state->authorityBookCouponRate;
+        $before = MonetaryPolicySubsystem::authorityHoldingsToGdp($state);
+        $state->balanceSheetIntensity = 0.5 * MonetaryPolicySubsystem::QE_MAX_SUPPRESSION;
+        MonetaryPolicySubsystem::rollAuthorityBookCoupon($state, $before, 0.25);
+        $this->assertSame($held, $state->authorityBookCouponRate);
+
+        $this->assertEqualsWithDelta(
+            (MonetaryPolicySubsystem::CURRENCY_TO_GDP * CreditFiscalSubsystem::sovereignEffectiveRate($state))
+                + (MonetaryPolicySubsystem::authorityHoldingsToGdp($state) * ($held - 0.0025)),
+            MonetaryPolicySubsystem::authorityNetIncomeToGdp($state),
+            1e-15
+        );
+    }
 }

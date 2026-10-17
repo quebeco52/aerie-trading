@@ -1129,12 +1129,12 @@ class AssetMarketSubsystemTest extends TestCase
         // A currency settled at 108 is its own neutral: the index was built on 100, but the rate differential holds it
         // above that for decades, and scoring the level read a strong-but-settled currency as standing tightness.
         $state = self::neutralFinancialConditions(108.0);
-        $this->subsystem->calculateFinancialConditionsIndex($state);
+        $this->subsystem->calculateFinancialConditionsIndex($state, 0.0);
         $this->assertEqualsWithDelta(0.0, $state->financialConditionsIndex, 1e-12, 'A currency on its trend adds no tightness, wherever the trend sits.');
 
         // One standard deviation (in logs) above that trend is one unit of the FX component.
         $state->exchangeRateIndexEma = 108.0 * exp(AssetMarketSubsystem::FCI_FX_STD);
-        $this->subsystem->calculateFinancialConditionsIndex($state);
+        $this->subsystem->calculateFinancialConditionsIndex($state, 0.0);
         $this->assertEqualsWithDelta(AssetMarketSubsystem::FCI_EXCHANGE_RATE_WEIGHT, $state->financialConditionsIndex, 1e-12);
     }
 
@@ -1146,10 +1146,60 @@ class AssetMarketSubsystemTest extends TestCase
         $state->financialConditionsIndex = -0.5;
         $state->macroCreditSpreadEma = AssetMarketSubsystem::FCI_CREDIT_MEAN + (2.0 * AssetMarketSubsystem::FCI_CREDIT_STD);
 
-        $this->subsystem->calculateFinancialConditionsIndex($state);
+        $this->subsystem->calculateFinancialConditionsIndex($state, 0.0);
         $this->assertEqualsWithDelta(2.0 * AssetMarketSubsystem::FCI_CREDIT_SPREAD_WEIGHT, $state->financialConditionsIndex, 1e-12);
 
-        $this->subsystem->calculateFinancialConditionsIndex($state);
+        $this->subsystem->calculateFinancialConditionsIndex($state, 0.0);
         $this->assertEqualsWithDelta(2.0 * AssetMarketSubsystem::FCI_CREDIT_SPREAD_WEIGHT, $state->financialConditionsIndex, 1e-12, 'The same inputs give the same reading: no path dependence.');
+    }
+
+    /**
+     * Conditions that last become the norm: the composite is published net of its decade-long average, as the NFCI is
+     * centred on its sample's, and a credit event on top of the new norm still reads tight.
+     */
+    public function testFinancialConditionsAreReadAgainstTheirOwnDecade(): void
+    {
+        $state = new MacroState();
+        $this->subsystem->calculateFinancialConditionsIndex($state, 0.0);
+        $opening = $state->financialConditionsIndex;
+
+        // Spreads half a standard deviation wide for good: a quarter-weighted 0.5 on the composite.
+        $state->macroCreditSpreadEma = MacroEngine::BASE_CREDIT_SPREAD + (0.5 * AssetMarketSubsystem::FCI_CREDIT_STD);
+        $this->subsystem->calculateFinancialConditionsIndex($state, 0.0);
+        $this->assertEqualsWithDelta($opening + (0.5 * AssetMarketSubsystem::FCI_CREDIT_SPREAD_WEIGHT), $state->financialConditionsIndex, 1e-9);
+
+        for ($i = 0; $i < 4 * 40; $i++) {
+            $this->subsystem->calculateFinancialConditionsIndex($state, 0.25);
+        }
+        $this->assertEqualsWithDelta(0.0, $state->financialConditionsIndex, 0.005, 'Four decades on, the wider spread is the norm.');
+
+        $state->macroCreditSpreadEma += 3.0 * AssetMarketSubsystem::FCI_CREDIT_STD;
+        $this->subsystem->calculateFinancialConditionsIndex($state, 0.0);
+        $this->assertGreaterThan(0.7, $state->financialConditionsIndex, 'A three-sigma credit event still reads tight.');
+    }
+
+    /**
+     * The currency prices the mainland's expected decision before its quarter turns: with no surprise, the turn moves
+     * the fundamental no more than a tick does. It used to read the decision itself, so every quarter stepped it.
+     */
+    public function testTheMainlandsExpectedStepIsInTheCurrencyBeforeTheTurn(): void
+    {
+        $state = new MacroState();
+        // A hot mainland whose rule asks for well over the rate it has.
+        $state->foreignCoreInflation = 0.045;
+        $state->foreignCoreInflationLag1 = 0.045;
+        $state->foreignCoreInflationLag2 = 0.045;
+        $state->foreignCoreInflationLag3 = 0.045;
+        $state->foreignOutputGap = 0.02;
+        $state->foreignOutputGapLag = 0.02;
+        $state->foreignPolicyRate = 0.02;
+
+        $state->totalTime = 1.0 - 0.0005;
+        $before = AssetMarketSubsystem::exchangeRateFundamental($state);
+        $state->totalTime = 1.0 + 0.0005;
+        $this->subsystem->calculateForeignEconomy($state, 0.001);
+
+        $this->assertGreaterThan(0.0225, $state->foreignPolicyRate, 'The rule raised the mainland rate at the turn.');
+        $this->assertEqualsWithDelta($before, AssetMarketSubsystem::exchangeRateFundamental($state), $before * 0.0005);
     }
 }

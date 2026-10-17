@@ -719,7 +719,7 @@ class CreditFiscalSubsystem
             - (self::CREDIT_MEAN_REVERSION * $relativeExcess)
             - (self::DELEVERAGING_SPEED * $excessDsr)
             - $crisisRepayment
-            - ($this->householdChargeOffRate($state->retailDefaultRate) - $this->householdChargeOffRate(MacroEngine::RETAIL_DEFAULT_BASELINE));
+            - ($this->householdChargeOffRate($state->retailDefaultRate) - $this->householdChargeOffRate($state->retailDefaultRateTrend));
         $noise = self::CREDIT_GROWTH_SIGMA * sqrt($dt) * $this->mathUtility->generateStandardNormal();
         // Bridges et al. (2014): banks cut lending to households as the capital they must hold rises, secured and unsecured
         // in the stock's proportions, and do not lend it back when it falls.

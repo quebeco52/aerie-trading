@@ -574,6 +574,13 @@ class MacroState
     // Currency the budget paid into the fund on the last tick: the surplus below the sovereign debt floor, with no debt
     // left to retire. Set by the fiscal accounts after the fund's update, so the fund takes it in on the next tick.
     public float $sovereignFundBudgetInflow;
+    // Measured trends the default rates and commercial property are read against, the financial conditions
+    // composite's before it is centred, and the coupon the Authority's own bond book earns.
+    public float $corporateDefaultRateTrend;
+    public float $retailDefaultRateTrend;
+    public float $commercialPropertyIndexTrend;
+    public float $financialConditionsTrend;
+    public float $authorityBookCouponRate;
 
     public function __construct()
     {

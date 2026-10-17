@@ -415,4 +415,24 @@ class MacroTransmissionTest extends TestCase
         self::assertEqualsWithDelta(0.0, $even['orders'], 1e-12, 'Equal loadings leave the shift where the engine put it.');
         self::assertSame(['orders' => 0.0, 'aftermarket' => 0.0], MacroTransmission::allocateDemandShift($weights, ['orders' => 0.0, 'aftermarket' => 0.0], -0.06));
     }
+
+    /** Lending standards move starts both ways: loose standards let as many more through as tight ones hold back. */
+    public function testLendingStandardsMoveHousingStartsBothWays(): void
+    {
+        $starts = static fn (float $sloos): float => MacroTransmission::calculateTobinsQHousingStarts(
+            currentStarts: 100.0,
+            residentialPriceRatio: 1.0,
+            replacementCostRatio: 1.0,
+            userCost: 0.05,
+            neutralUserCost: 0.05,
+            sloosTightening: $sloos,
+            dt: 0.25,
+            dW: 0.0,
+            params: ['baseline' => 100.0, 'qSens' => 45.0, 'costSens' => 550.0, 'sloosSens' => 30.0, 'kappa' => 1.20, 'sigma' => 0.03, 'min' => 40.0, 'max' => 180.0]
+        );
+
+        $held = 100.0 - $starts(0.20);
+        $this->assertGreaterThan(0.0, $held);
+        $this->assertEqualsWithDelta($held, $starts(-0.20) - 100.0, 1e-9);
+    }
 }

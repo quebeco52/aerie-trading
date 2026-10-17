@@ -688,4 +688,17 @@ class CommodityLogisticsSubsystemTest extends TestCase
 
         $this->assertSame(CommodityLogisticsSubsystem::carbonPowerPriceUplift(40.0), MacroState::fromArray($payload)->carbonPowerUpliftEmbodied);
     }
+
+    /** Tonnage follows world demand, not the metals price: a mine outage that lifts copper ships less ore, not more. */
+    public function testShippingDemandIgnoresTheMetalsPrice(): void
+    {
+        $state = new MacroState();
+        $calm = CommodityLogisticsSubsystem::shippingTightness($state);
+
+        $state->industrialMetalsIndexEma = 140.0;
+        $this->assertSame($calm, CommodityLogisticsSubsystem::shippingTightness($state));
+
+        $state->globalDemandGapEma = 0.02;
+        $this->assertGreaterThan($calm, CommodityLogisticsSubsystem::shippingTightness($state));
+    }
 }

@@ -6,7 +6,6 @@ namespace App\Service\Model\Sector;
 
 use App\DTO\InterestExpenseDTO;
 
-use App\Service\Math\ResponseCurves;
 use App\Service\Model\BusinessModelInterface;
 
 use App\Service\Model\ModelParam;
@@ -89,7 +88,7 @@ class ClearingHouseBusinessModel extends BaseFinancialBusinessModel
     public const CATASTROPHE_Z_THRESHOLD = -2.50;
     /** Loss multiplier applied to default severity when systemic breaches occur. */
     public const CATASTROPHE_LOSS_SCALAR = 0.25;
-    /** Sensitivity of clearinghouse member default stress to elevated macroeconomic corporate default rates. */
+    /** Member default stress per unit of the corporate default rate over its measured trend, relative; margin absorbs the usual run of failures. */
     public const MACRO_DEFAULT_STRESS_SCALAR = 0.10;
     /** Healthy credit environment z-score threshold triggering minor margin write-backs. */
     public const HEALTHY_CREDIT_Z_FLOOR  = 1.00;
@@ -230,7 +229,7 @@ class ClearingHouseBusinessModel extends BaseFinancialBusinessModel
         // Under the Default Waterfall, routine member defaults ($defaultZ >= CATASTROPHE_Z_THRESHOLD) are fully absorbed
         // by the defaulting member's posted Initial Margin and Guaranty Fund contribution ($0 loss to CCP equity).
         // Only a severe systemic failure pierces the waterfall to hit the CCP's Skin-in-the-Game (SITG) capital tranche.
-        $corporateDefaultShift = ResponseCurves::excessOverBaseline($macroState->corporateDefaultRateEma, MacroEngine::CORPORATE_DEFAULT_BASELINE);
+        $corporateDefaultShift = max(0.0, $macroState->corporateDefaultDeviation());
         $macroMemberStress = $corporateDefaultShift * self::MACRO_DEFAULT_STRESS_SCALAR * 0.05;
 
         $catastropheShock = ($defaultZ < self::CATASTROPHE_Z_THRESHOLD

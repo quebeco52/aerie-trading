@@ -625,7 +625,7 @@ class FinancialInvariantTest extends TestCase
         $stateNormal->nsSlopeEma = 0.012; // Normal upward slope (+120 bps)
         $stateNormal->exchangeRateIndexEma = 100.0;
 
-        $assetSubsystem->calculateFinancialConditionsIndex($stateNormal);
+        $assetSubsystem->calculateFinancialConditionsIndex($stateNormal, 0.0);
 
         // Invariant 1: Normal expansion conditions must be accommodative (negative Z-score, green)
         $this->assertLessThan(
@@ -642,7 +642,7 @@ class FinancialInvariantTest extends TestCase
         $stateCrisis->nsSlopeEma = -0.010; // Inverted curve
         $stateCrisis->exchangeRateIndexEma = 110.0;
 
-        $assetSubsystem->calculateFinancialConditionsIndex($stateCrisis);
+        $assetSubsystem->calculateFinancialConditionsIndex($stateCrisis, 0.0);
 
         // Invariant 2: Crisis conditions must be restrictive (positive Z-score, red)
         $this->assertGreaterThan(

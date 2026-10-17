@@ -6,7 +6,6 @@ namespace App\Service\Model\Sector;
 
 use App\Data\Macro\InputOutputExposures;
 use App\Service\Math\MacroTransmission;
-use App\Service\Math\ResponseCurves;
 use App\Service\Model\BusinessModelInterface;
 
 use App\Service\Model\ModelParam;
@@ -137,10 +136,19 @@ class AutoManufacturerBusinessModel extends HeavyManufacturingBusinessModel
     /** Quadratic penalty for yield curve inversion. */
     public const NIM_QUADRATIC_COEFF = 0.15;
 
-    /** Drag on auto loans during negative consumer sentiment regimes. */
+    /** Auto loan provisions per unit of confidence below what the gap explains, both ways. */
     public const MACRO_DEFAULT_SCALAR = 0.25;
 
-    /** Credit provision loss weight for elevated household debt service ratio stress on auto financing. */
+    /** Auto loan provisions per unit of the household default rate over its measured trend, relative, both ways. */
+    public const RETAIL_DEFAULT_PROVISION_SCALAR = 0.05;
+
+    /** Dealer floor-plan provisions per unit of the corporate default rate over its measured trend, relative, both ways. */
+    public const CORPORATE_DEFAULT_PROVISION_SCALAR = 0.02;
+
+    /** CECL reserve built per unit of the credit spread over its trend, both ways: the lifetime-loss estimate it moves. */
+    public const CECL_SPREAD_SCALAR = 0.50;
+
+    /** Auto loan provisions per unit of household debt service over its trend, relative to the neutral ratio, both ways. */
     public const SHOCK_WEIGHT_DSR_DEFAULT = 0.08;
 
 
@@ -298,21 +306,16 @@ class AutoManufacturerBusinessModel extends HeavyManufacturingBusinessModel
         $gscpiShift = max(0.0, $macroState->supplyChainPressureIndexEma - MacroEngine::GSCPI_BASELINE);
         $inflationCostPenalty = ($inputCostDrag / max(0.05, $salesWeight)) + ($gscpiShift * self::SUPPLY_CHAIN_PRESSURE_COST_SCALAR * (1.0 - ($pricingPower * 0.50)));
 
-        // Captive Finance NIM Squeeze & Subprime Provisioning, charged to the loan book that earns the interest. The
-        // default rates carry the cycle, so confidence enters as its residual over the gap.
-        $sentimentShift = $macroState->sentimentResidual();
-        $retailDefaultShift = ResponseCurves::excessOverBaseline($macroState->retailDefaultRateEma, MacroEngine::RETAIL_DEFAULT_BASELINE);
-        $corporateDefaultShift = ResponseCurves::excessOverBaseline($macroState->corporateDefaultRateEma, MacroEngine::CORPORATE_DEFAULT_BASELINE);
-        $dsrShift = max(0.0, $macroState->householdDebtServiceGap) / MacroEngine::HOUSEHOLD_DSR_NEUTRAL;
-        $macroDefaultDrag = ($sentimentShift < 0.0 ? abs($sentimentShift) * self::MACRO_DEFAULT_SCALAR : 0.0)
-            + ($retailDefaultShift * 0.05)
-            + ($corporateDefaultShift * 0.02)
+        // Captive Finance NIM Squeeze & Subprime Provisioning, charged to the loan book that earns the interest: the
+        // provision over the through-the-cycle loss the cost base carries, both ways, so a calm credit year releases what
+        // a bad one builds. The default rates carry the cycle, so confidence enters as its residual over the gap.
+        $dsrShift = $macroState->householdDebtServiceGap / MacroEngine::HOUSEHOLD_DSR_NEUTRAL;
+        $macroDefaultDrag = (-$macroState->sentimentResidual() * self::MACRO_DEFAULT_SCALAR)
+            + ($macroState->retailDefaultDeviation() * self::RETAIL_DEFAULT_PROVISION_SCALAR)
+            + ($macroState->corporateDefaultDeviation() * self::CORPORATE_DEFAULT_PROVISION_SCALAR)
             + ($dsrShift * self::SHOCK_WEIGHT_DSR_DEFAULT);
 
-        $creditSpread = $macroState->macroCreditSpread;
-        $ceclDrag = $creditSpread > $macroState->macroCreditSpreadTrend
-            ? ($creditSpread - $macroState->macroCreditSpreadTrend) * 0.50
-            : 0.0;
+        $ceclDrag = ($macroState->macroCreditSpread - $macroState->macroCreditSpreadTrend) * self::CECL_SPREAD_SCALAR;
 
         $yield10y = $macroState->yield10yEma;
         $yield2y  = $macroState->yield2yEma;

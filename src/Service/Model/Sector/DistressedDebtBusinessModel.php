@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace App\Service\Model\Sector;
 
 use App\Service\Math\CreditRisk;
-use App\Service\Math\ResponseCurves;
 use App\Service\Model\BusinessModelInterface;
 
 use App\Service\Model\ModelParam;
@@ -60,7 +59,7 @@ class DistressedDebtBusinessModel extends AssetManagementBusinessModel
     public const HY_SPREAD_BLOWOUT_BASELINE     = MacroEngine::BASE_CREDIT_SPREAD * MacroEngine::HY_BASE_SPREAD_MULTIPLIER;
     /** Sensitivity multiplier translating excess high-yield credit spreads into turnaround recovery revenue. */
     public const HY_SPREAD_SURGE_SCALAR         = 10.00;
-    /** Sensitivity multiplier translating corporate default rate surges into turnaround acquisition opportunities. */
+    /** Turnaround opportunities per unit of the corporate default rate over its measured trend, relative; a quiet year leaves the dry powder idle. */
     public const DEFAULT_RATE_SURGE_SCALAR      = 1.50;
     /** Maximum capacity-constrained revenue expansion multiplier during severe credit distress (+125%). */
     public const MAX_DISTRESS_REVENUE_EXPANSION = 1.25;
@@ -137,7 +136,7 @@ class DistressedDebtBusinessModel extends AssetManagementBusinessModel
         $outputGap = $macroState->outputGapEma;
 
         $hySpreadSurge = max(0.0, $macroState->highYieldCreditSpreadEma - self::HY_SPREAD_BLOWOUT_BASELINE) * self::HY_SPREAD_SURGE_SCALAR;
-        $corporateDefaultShift = ResponseCurves::excessOverBaseline($macroState->corporateDefaultRateEma, MacroEngine::CORPORATE_DEFAULT_BASELINE);
+        $corporateDefaultShift = max(0.0, $macroState->corporateDefaultDeviation());
         $defaultRateSurge = $corporateDefaultShift * self::DEFAULT_RATE_SURGE_SCALAR;
 
         if ($creditSpread > self::SPREAD_BLOWOUT_THRESHOLD || $outputGap < self::RECESSION_GAP_THRESHOLD || $hySpreadSurge > 0.0 || $defaultRateSurge > 0.0) {

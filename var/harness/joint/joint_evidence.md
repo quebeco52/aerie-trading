@@ -115,3 +115,14 @@ Unpaired seeds 1-8, base = git archive HEAD (b487382b), live = checkout, `CREDIT
 - Per model (1-4): REIT revenue over expected -2.0pp (t -1.3), the macro default vacancy moving from cost to rent
   (~-1.1pp, EBIT-neutral) plus the roll's level; commodity beats move +4..+9pp both ways with t~1 (price paths;
   the change only touched what analysts see).
+
+## Macro batch: default-rate trends, FCI centred, CRE trend, two-sided starts, freight, QE coupon, mainland FX (10-17)
+Unpaired seeds 1-4, base = git archive HEAD (1e02187c; reproduces batchB-live 1-4 exactly), live = checkout,
+`CREDIT=1` (now also corp_dr, retail_dr, starts, fci, cre, freight). Out: macroD-{base,live}.out.
+- Board: EW index 7.32 -> 8.58 %/y (t 3.0), CW 5.60 -> 6.71 (t 2.5), P/E end 12.3 -> 14.9 (t 2.6). Not the FCI
+  tilt alone: the passive book moves 0.15 per unit FCI, so base's +0.09 mean (live +0.03) is ~1.4% of it. Unpaired
+  paths; base sits at the low end of earlier runs (EW 7.2-8.5, CW 5.5-6.8, P/E 13.7-16.3) and live inside them.
+- Macro: gap -0.41 -> -0.65, unemp 4.73 -> 4.99, policy 3.46 -> 3.15 (all |t| < 1). Default EMA means corp 1.53 ->
+  1.60%, retail 2.31 -> 2.51% (seed sd ~0.4pp); CRE mean 98.8 -> 104.6 (seed range 95-113); starts 98.9 -> 99.7;
+  freight 102.3 -> 100.2.
+- Distress: payment defaults 0.25 -> 1.5/seed (t 1.8; history 0.6-2.0), Ch11 0.25 -> 0.75, failures 0.5 -> 0.25.

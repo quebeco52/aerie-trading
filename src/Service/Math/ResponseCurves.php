@@ -27,16 +27,6 @@ final class ResponseCurves
     }
 
     /**
-     * Relative excess of a cyclical macro series over its through-the-cycle baseline, floored at zero:
-     * (value - baseline) / baseline. The one normalization every sector model applies to a default rate
-     * before scaling its own provision or demand response off it.
-     */
-    public static function excessOverBaseline(float $value, float $baseline): float
-    {
-        return max(0.0, ($value - $baseline) / max(1e-9, abs($baseline)));
-    }
-
-    /**
      * Kinked linear response to a signed driver: one slope above zero, another below.
      *
      * The reduced form of an occasionally binding constraint (Mendoza 2010; Guerrieri & Iacoviello 2017): tight

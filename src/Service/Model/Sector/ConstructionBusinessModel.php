@@ -248,7 +248,8 @@ class ConstructionBusinessModel extends StandardCorporateBusinessModel
         $outputGap = $this->resolveLaggedOutputGap($macroState);
         $policyRate = $macroState->policyRateEma;
         $residentialShift = $macroState->housePriceDeviation();
-        $commercialPropertyShift = ($macroState->commercialPropertyIndexEma - MacroEngine::CRE_BASELINE) / MacroEngine::CRE_BASELINE;
+        // Office and retail values against the level they have measurably settled at, as housing starts read houses.
+        $commercialPropertyShift = $macroState->commercialPropertyDeviation();
         $housingStartsShift = MacroTransmission::calculateHousingStartsShift($macroState->housingStartsIndexEma, sensitivity: self::HOUSING_STARTS_SENSITIVITY);
         // Lending standards both ways: tighter than neutral holds orders back, looser lets them through.
         $sloosDrag = $macroState->sloosTighteningIndexEma * self::SLOOS_CREDIT_TIGHTENING_SCALAR;

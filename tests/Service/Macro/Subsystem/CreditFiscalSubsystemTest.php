@@ -2478,6 +2478,7 @@ class CreditFiscalSubsystemTest extends TestCase
 
         $state->policyRate = 0.0025;
         $state->sovereignCouponRate = 0.023;
+        $state->authorityBookCouponRate = 0.023; // the coupon the bought book carries, as SOMA's did in 2015
         $state->sovereignDebtAverageMaturity = 1.0e9; // the whole book at its coupon, as 2015's average rate was
         $state->balanceSheetIntensity = MonetaryPolicySubsystem::QE_MAX_SUPPRESSION;
         $this->assertEqualsWithDelta(0.0057, MonetaryPolicySubsystem::authorityNetIncomeToGdp($state), 0.0005);
@@ -2502,6 +2503,7 @@ class CreditFiscalSubsystemTest extends TestCase
         $state->sovereignDebtAverageMaturity = 1.0e9;
         $state->sovereignDebtMaturityTarget = 1.0e9;
         $state->sovereignCouponRate = 0.02;
+        $state->authorityBookCouponRate = 0.02;
         $state->yield10y = 0.02;
         $state->policyRate = 0.05;
         $state->balanceSheetIntensity = MonetaryPolicySubsystem::QE_MAX_SUPPRESSION;

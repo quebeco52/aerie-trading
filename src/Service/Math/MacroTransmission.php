@@ -230,7 +230,8 @@ final class MacroTransmission
         $qExcess = $tobinsQ - 1.0;
 
         $userCostExcess = $userCost - $neutralUserCost;
-        $creditDrag = max(0.0, $sloosTightening);
+        // Both ways: standards tighter than neutral hold starts back and looser ones let more through.
+        $creditDrag = $sloosTightening;
         $creditGapSens = $params['creditGapSens'] ?? 0.0;
 
         $targetStarts = $params['baseline']

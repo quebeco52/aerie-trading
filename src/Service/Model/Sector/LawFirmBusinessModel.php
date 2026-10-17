@@ -107,7 +107,7 @@ class LawFirmBusinessModel extends StandardCorporateBusinessModel
     public const RESTRUCTURING_SPREAD_SCALAR = 15.00;
     /** Sensitivity of corporate legal retainers and M&A compliance to aggregate deal activity. */
     public const DEAL_ACTIVITY_RETAINER_SCALAR = 0.20;
-    /** Restructuring billing per unit of the corporate default rate over its long-run average, relative, both ways: double the average adds 30%. */
+    /** Restructuring billing per unit of the corporate default rate over its measured trend, relative, both ways: double the trend adds 30%. */
     public const CORPORATE_DEFAULT_RESTRUCTURING_SCALAR = 0.30;
 
     // --- Associate Wage Inflation ---
@@ -204,7 +204,7 @@ class LawFirmBusinessModel extends StandardCorporateBusinessModel
 
         $dealActivityShift = $macroState->dealActivityDeviation();
         $spreadShift = $creditSpread - $macroState->macroCreditSpreadTrend;
-        $corporateDefaultShift = ($macroState->corporateDefaultRateEma - MacroEngine::CORPORATE_DEFAULT_BASELINE) / MacroEngine::CORPORATE_DEFAULT_BASELINE;
+        $corporateDefaultShift = $macroState->corporateDefaultDeviation();
 
         return [
             'corporate_retainers'    => ($outputGap * self::RETAINER_MACRO_SCALAR * $beta)

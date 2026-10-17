@@ -535,6 +535,8 @@ class MacroEngineTest extends TestCase
         $existingState = [
             'output_gap' => 0.05,
             'output_gap_ema' => 0.05,
+            'global_demand_gap' => 0.05,
+            'global_demand_gap_ema' => 0.05,
             'industrial_metals_index' => 120.0,
             'industrial_metals_index_ema' => 120.0,
             'freight_rate_index' => 100.0,
@@ -556,7 +558,7 @@ class MacroEngineTest extends TestCase
 
         $result = $this->engine->updateMacroState(0.25);
 
-        $this->assertGreaterThan(MacroEngine::FREIGHT_BASELINE, $result->freightRateIndex, 'Strong output gap and metals demand should push freight rates above baseline.');
+        $this->assertGreaterThan(MacroEngine::FREIGHT_BASELINE, $result->freightRateIndex, 'Strong world demand should push freight rates above baseline.');
     }
 
     public function testFreightRateIndexDepressedDuringFleetCapacityGlut(): void
@@ -1798,7 +1800,7 @@ class MacroEngineTest extends TestCase
         $stateCrisis->nsSlopeEma = -0.015;         // Inverted curve
         $stateCrisis->exchangeRateIndexEma = 115.0; // Strong dollar
 
-        $assetSubsystem->calculateFinancialConditionsIndex($stateCrisis);
+        $assetSubsystem->calculateFinancialConditionsIndex($stateCrisis, 0.0);
 
         $this->assertGreaterThan(
             0.20,
@@ -1818,7 +1820,7 @@ class MacroEngineTest extends TestCase
         $stateGoldilocks->nsSlopeEma = 0.020;          // Steep healthy curve
         $stateGoldilocks->exchangeRateIndexEma = 95.0; // Mildly soft currency
 
-        $assetSubsystem->calculateFinancialConditionsIndex($stateGoldilocks);
+        $assetSubsystem->calculateFinancialConditionsIndex($stateGoldilocks, 0.0);
 
         $this->assertLessThan(
             -0.10,

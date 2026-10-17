@@ -442,8 +442,9 @@ class MonetaryPolicySubsystem
 
     /**
      * The Authority's net interest income, a share of GDP a year: the Exchequer's paper backing the currency earns what
-     * the debt pays (CreditFiscalSubsystem::sovereignEffectiveRate()), and the bonds its purchases hold earn their coupon
-     * less the policy rate paid on the reserves that bought them. It reproduces the Fed's remittances: 0.24% of GDP in
+     * the debt pays (CreditFiscalSubsystem::sovereignEffectiveRate()), and the bonds its purchases hold earn their own
+     * coupon, the yields they were bought at (rollAuthorityBookCoupon()), less the policy rate paid on the reserves that
+     * bought them. It reproduces the Fed's remittances: 0.24% of GDP in
      * 2007, about 0.57% in 2015 (0.54% paid) and 0.23% in 2019 (0.26%). Negative when the policy rate rises past the
      * coupon on a large book, as in 2022-23.
      */
@@ -452,7 +453,31 @@ class MonetaryPolicySubsystem
         $holdings = self::authorityHoldingsToGdp($state);
 
         return (self::CURRENCY_TO_GDP * CreditFiscalSubsystem::sovereignEffectiveRate($state))
-            + ($holdings * ($state->sovereignCouponRate - $state->policyRate));
+            + ($holdings * ($state->authorityBookCouponRate - $state->policyRate));
+    }
+
+    /**
+     * Rolls the coupon the Authority's bond book earns over a tick of its balance sheet: purchases come in at the market
+     * yield, runoff takes bonds out pro rata and leaves the coupon, and while the book is not running off its maturing
+     * bonds are reinvested at the market yield over the debt's repricing horizon. The whole stock's coupon carries debt
+     * issued before the programme; a book bought at the lower bound earns what it paid.
+     *
+     * @param MacroState $state           State whose balance sheet intensity has just been set.
+     * @param float      $holdingsBefore  The book over GDP before this tick's operations.
+     * @param float      $dt              Time increment in years.
+     */
+    public static function rollAuthorityBookCoupon(MacroState $state, float $holdingsBefore, float $dt): void
+    {
+        $holdings = self::authorityHoldingsToGdp($state);
+        if ($holdings <= 0.0) {
+            return;
+        }
+
+        $kept = min($holdingsBefore, $holdings);
+        $keptCoupon = $holdings >= $holdingsBefore
+            ? $state->authorityBookCouponRate + ((1.0 - exp(-$dt / CreditFiscalSubsystem::couponRepricingYears($state))) * ($state->yield10y - $state->authorityBookCouponRate))
+            : $state->authorityBookCouponRate;
+        $state->authorityBookCouponRate = (($keptCoupon * $kept) + ($state->yield10y * max(0.0, $holdings - $holdingsBefore))) / $holdings;
     }
 
     /** Bonds the Authority's purchases hold, over GDP: the full programme's holdings at the balance sheet's intensity. */

@@ -18,7 +18,6 @@ use App\Service\Math\FirmEconomics;
 use App\Service\Math\MacroTransmission;
 use App\Service\Math\MathUtility;
 use App\Service\Math\FinancialConstants;
-use App\Service\Math\ResponseCurves;
 
 /**
  * Earnings strategy for Integrated Resorts & Casinos.
@@ -115,7 +114,7 @@ class ResortsCasinosBusinessModel extends StandardCorporateBusinessModel
     public const CRE_LEASE_WALT_YEARS = ReitBusinessModel::LEASE_WALT_YEARS;
     /** Bound on the gap between in-place and market rents, as the REIT model's. */
     public const CRE_MAX_RELEASING_SPREAD = ReitBusinessModel::MAX_RELEASING_SPREAD;
-    /** Rent lost per unit of relative excess retail default rate, as the REIT model's retail tenant channel. */
+    /** Rent lost per unit of the retail default rate over its measured trend, relative, both ways, as the REIT model's retail tenant channel. */
     public const RETAIL_TENANT_DEFAULT_RENT_LOSS = ReitBusinessModel::RETAIL_DEFAULT_VACANCY_SCALAR;
     /** Volatility dampener applied to commercial real estate leases due to long-term lockups. */
     public const CRE_VOLATILITY_SCALAR = 0.20;
@@ -356,11 +355,10 @@ class ResortsCasinosBusinessModel extends StandardCorporateBusinessModel
         return $rootShift / max(1e-9, array_sum($weights));
     }
 
-    /** Rent lost to retail tenant failures, from the excess retail default rate. */
+    /** Rent lost to retail tenant failures above their measured trend; fewer failures than usual fill the mall. */
     private function resolveTenantDefaultLoss(MacroStateDTO $macroState): float
     {
-        return ResponseCurves::excessOverBaseline($macroState->retailDefaultRateEma, MacroEngine::RETAIL_DEFAULT_BASELINE)
-            * self::RETAIL_TENANT_DEFAULT_RENT_LOSS;
+        return $macroState->retailDefaultDeviation() * self::RETAIL_TENANT_DEFAULT_RENT_LOSS;
     }
 
     /** @return array<string, float> */

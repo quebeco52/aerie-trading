@@ -154,8 +154,6 @@ class CommodityLogisticsSubsystem
     // --- COBWEB THEOREM FREIGHT RATE INDEX (BALTIC DRY) ---
     /** Elasticity of instantaneous shipping demand to macroeconomic output gap. */
     public const FREIGHT_DEMAND_GAP_SENSITIVITY = 3.5;
-    /** Sensitivity of bulk shipping demand to industrial metals production and raw material flows. */
-    public const FREIGHT_DEMAND_METALS_SENSITIVITY = 0.30;
     /** Elasticity of desired fleet capacity orders to prevailing freight charter profitability. */
     public const FREIGHT_SUPPLY_ORDER_ELASTICITY = 0.80;
     /** Time constant in years for multi-year shipyard shipbuilding capacity adjustments. */
@@ -677,11 +675,13 @@ class CommodityLogisticsSubsystem
         $state->freightRateIndex = max(20.0, min(500.0, $newFreight));
     }
 
-    /** Seaborne trade demand over the fleet in service: the utilization the charter market clears on. */
+    /**
+     * Seaborne trade demand over the fleet in service: the utilization the charter market clears on. Tonnage follows
+     * world demand; the metals price is not a volume, and a mine outage that lifts it ships less ore, not more.
+     */
     public static function shippingTightness(MacroState $state): float
     {
-        $metalsShift = ($state->industrialMetalsIndexEma - MacroEngine::METALS_BASELINE) / 100.0;
-        $demandFactor = 1.0 + ($state->globalDemandGapEma * self::FREIGHT_DEMAND_GAP_SENSITIVITY) + ($metalsShift * self::FREIGHT_DEMAND_METALS_SENSITIVITY);
+        $demandFactor = 1.0 + ($state->globalDemandGapEma * self::FREIGHT_DEMAND_GAP_SENSITIVITY);
         $demand = MacroEngine::FREIGHT_BASELINE * max(0.20, $demandFactor);
 
         return $demand / max(20.0, $state->freightSupplyEma);

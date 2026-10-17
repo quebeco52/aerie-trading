@@ -334,9 +334,10 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
      */
     protected function resolveConditionalCreditLossRate(Stock $stock, \App\DTO\MacroStateDTO $macroState, \App\Service\Model\StreamContext $streams, MathUtility $mathUtility): array
     {
+        // Read against the household rate's measured trend, the long-run average year the book's charge-off rate describes.
         $householdZ = CreditRisk::calculateVasicekSystematicFactor(
             $macroState->retailDefaultRateEma,
-            MacroEngine::RETAIL_DEFAULT_BASELINE,
+            $macroState->retailDefaultRateTrend,
             \App\Service\Math\CreditRisk::RETAIL_ASRF_RHO
         );
         $pd = static::CONSUMER_CHARGE_OFF_RATE * $this->resolveCreditRiskScale($stock) / self::LGD_BASELINE;

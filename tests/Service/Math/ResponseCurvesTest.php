@@ -33,11 +33,4 @@ class ResponseCurvesTest extends TestCase
         // Continuous through the kink: no jump where the driver changes sign.
         $this->assertEqualsWithDelta(0.0, ResponseCurves::calculateAsymmetricResponse(1e-12, 3.0, 0.5) - ResponseCurves::calculateAsymmetricResponse(-1e-12, 3.0, 0.5), 1e-11);
     }
-
-    public function testExcessOverBaselineIsTheFlooredRelativeExcess(): void
-    {
-        $this->assertEqualsWithDelta(0.5, ResponseCurves::excessOverBaseline(0.03, 0.02), 1e-12);
-        $this->assertSame(0.0, ResponseCurves::excessOverBaseline(0.01, 0.02));
-        $this->assertSame(0.0, ResponseCurves::excessOverBaseline(0.02, 0.02));
-    }
 }

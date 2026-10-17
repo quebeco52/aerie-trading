@@ -44,6 +44,10 @@ class MacroAggregateSubsystem
     public const EQUITY_WEALTH_TREND_HORIZON_YEARS = 3.0;
     /** The same horizon for houses, longer because housing wealth is revalued by sales that are years apart (Carroll, Otsuka & Slacalek 2011); a house price cycle runs about twice this, so the cycle still reads as deviation. */
     public const RESIDENTIAL_WEALTH_TREND_HORIZON_YEARS = 5.0;
+    /** Office and retail values over the same horizon: their cycle runs about a decade too, so it still reads as deviation. */
+    public const COMMERCIAL_PROPERTY_TREND_YEARS = self::RESIDENTIAL_WEALTH_TREND_HORIZON_YEARS;
+    /** Time constant (years) of the default rates' measured trends: a decade, past the credit cycle their readers answer, as the credit spread's. */
+    public const DEFAULT_RATE_TREND_YEARS = CreditFiscalSubsystem::CREDIT_SPREAD_TREND_YEARS;
     /** Horizon of the real exchange rate's own normal, well beyond the ~12y swing the UIP differential and the sovereign risk discount drive: a first-order lag this long follows under a tenth of that swing, so PPP deviations (Rogoff 1996: 3-5y half-life) survive intact while a standing level does not. */
     public const EXCHANGE_RATE_TREND_HORIZON_YEARS = 20.0;
 
@@ -1298,6 +1302,8 @@ class MacroAggregateSubsystem
         $state->governmentSpendingIndexTrend += (1.0 - exp(-$dt / CreditFiscalSubsystem::GOVT_SPENDING_TREND_YEARS)) * ($state->governmentSpendingIndexEma - $state->governmentSpendingIndexTrend);
         $state->alliedDefenseSpendingIndexEma += $emaWeight * ($state->alliedDefenseSpendingIndex - $state->alliedDefenseSpendingIndexEma);
         $state->retailDefaultRateEma += $emaWeight * ($state->retailDefaultRate - $state->retailDefaultRateEma);
+        $defaultTrendWeight = 1.0 - exp(-$dt / self::DEFAULT_RATE_TREND_YEARS);
+        $state->retailDefaultRateTrend += $defaultTrendWeight * ($state->retailDefaultRateEma - $state->retailDefaultRateTrend);
         $state->agriculturalCommodityIndexEma += $emaWeight * ($state->agriculturalCommodityIndex - $state->agriculturalCommodityIndexEma);
         $state->agriculturalCommodityIndexTrend = $state->agriculturalCommodityIndexTrend > 0.0
             ? $state->agriculturalCommodityIndexTrend + ($commodityTrendWeight * ($state->agriculturalCommodityIndex - $state->agriculturalCommodityIndexTrend))
@@ -1312,6 +1318,7 @@ class MacroAggregateSubsystem
         $residentialTrendWeight = 1.0 - exp(-$dt / self::RESIDENTIAL_WEALTH_TREND_HORIZON_YEARS);
         $state->residentialWealthTrend += $residentialTrendWeight * ($state->residentialPropertyIndexEma - $state->residentialWealthTrend);
         $state->commercialPropertyIndexEma += $emaWeight * ($state->commercialPropertyIndex - $state->commercialPropertyIndexEma);
+        $state->commercialPropertyIndexTrend += (1.0 - exp(-$dt / self::COMMERCIAL_PROPERTY_TREND_YEARS)) * ($state->commercialPropertyIndexEma - $state->commercialPropertyIndexTrend);
         $state->nairuEma += $emaWeight * ($state->nairu - $state->nairuEma);
         $state->sovereignDebtToGdpEma += $emaWeight * ($state->sovereignDebtToGdp - $state->sovereignDebtToGdpEma);
         $state->sovereignNetDebtToGdpEma += $emaWeight * ($state->sovereignNetDebtToGdp - $state->sovereignNetDebtToGdpEma);
@@ -1326,6 +1333,7 @@ class MacroAggregateSubsystem
         $state->capacityUtilizationRateEma += $emaWeight * ($state->capacityUtilizationRate - $state->capacityUtilizationRateEma);
         $state->recessionProbabilityEma += $emaWeight * ($state->recessionProbability - $state->recessionProbabilityEma);
         $state->corporateDefaultRateEma += $emaWeight * ($state->corporateDefaultRate - $state->corporateDefaultRateEma);
+        $state->corporateDefaultRateTrend += $defaultTrendWeight * ($state->corporateDefaultRateEma - $state->corporateDefaultRateTrend);
         $state->sloosTighteningIndexEma += $emaWeight * ($state->sloosTighteningIndex - $state->sloosTighteningIndexEma);
         $state->supplyChainPressureIndexEma += $emaWeight * ($state->supplyChainPressureIndex - $state->supplyChainPressureIndexEma);
         $state->supplierDeliveryTimesEma += $emaWeight * ($state->supplierDeliveryTimes - $state->supplierDeliveryTimesEma);
