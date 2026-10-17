@@ -85,11 +85,12 @@ class OrderFlowImpactWiringTest extends TestCase
     private function tracker(
         ?MarketPricingContext &$captured = null,
         ?\App\Service\Market\Agent\AgentStateStoreInterface $agentStateStore = null,
-        ?\Closure $onEarnings = null
+        ?\Closure $onEarnings = null,
+        ?\Closure $policyRepricing = null
     ): StockTracker {
         $marketEngine = $this->createStub(MarketEngine::class);
         $marketEngine->method('calculateNextPrice')->willReturnCallback(
-            static function (MarketPricingContext $context) use (&$captured): array {
+            static function (MarketPricingContext $context) use (&$captured, $policyRepricing): array {
                 $captured = $context;
 
                 // The diffusion is a flat line here, so the only thing that can move the price is flow.
@@ -100,6 +101,7 @@ class OrderFlowImpactWiringTest extends TestCase
                     'analyst_targets' => [],
                     'perceived_fair_value' => $context->currentPrice,
                     'dynamic_reversion' => 0.0,
+                    'policy_repricing' => $policyRepricing !== null ? $policyRepricing() : 1.0,
                 ];
             }
         );
@@ -383,6 +385,27 @@ class OrderFlowImpactWiringTest extends TestCase
         $this->assertEqualsWithDelta($measured, $captured->orderFlowVariance, 1e-12);
     }
 
+    /**
+     * News of a law the market now expects moves the price outside its diffusion as order flow does, so it is measured
+     * into the same budget and the diffusion gives it back. It used to sit on top of the configured volatility.
+     */
+    public function testPolicyNewsIsMeasuredIntoTheBudgetTheDiffusionGivesBack(): void
+    {
+        $stock = $this->stock();
+        $news = [1.03];
+        $tracker = $this->tracker(policyRepricing: static function () use (&$news): float {
+            return array_shift($news) ?? 1.0;
+        });
+
+        $elapsed = $this->runTradingDay($tracker, $stock, 1.0 / 14400.0);
+
+        $this->assertEqualsWithDelta(
+            TimeSeries::ewmaAnnualizedVariance(0.0, log(1.03), $elapsed, StockTracker::IMPACT_VARIANCE_EMA_YEARS),
+            $stock->getImpactVarianceEma(),
+            1e-12
+        );
+    }
+
     public function testTheVarianceEstimateDecaysOnceTheFlowStops(): void
     {
         // A name heavily traded a year ago must not keep reclaiming variance it no longer supplies.
@@ -476,7 +499,11 @@ class OrderFlowImpactWiringTest extends TestCase
         );
     }
 
-    public function testPlayerFillsAreCountedInTheTicksPrintedVolume(): void
+    /**
+     * A tick prints at least the net flow it cleared, so a large order shows in the volume; the flow is part of the
+     * volume rather than added on top of it, which counted the agents' ordinary trading twice.
+     */
+    public function testATicksPrintsCarryAtLeastTheFlowItCleared(): void
     {
         $stock = $this->stock();
         $flow = $this->liquidity->averageDailyVolume($stock) * 0.50;
@@ -484,7 +511,7 @@ class OrderFlowImpactWiringTest extends TestCase
         $this->orderFlow->record('APEX', $flow);
         $result = $this->tracker()->updateStocks([$stock], 1.0 / 14400.0, false, new MacroStateDTO());
 
-        $this->assertGreaterThan($flow, $result['updates'][0]['volume']);
+        $this->assertEqualsWithDelta($flow, $result['updates'][0]['volume'], 1.0, 'Published in whole shares.');
     }
 
     public function testHistoryRowsCarryTheTickerTheBarIsKeyedBy(): void

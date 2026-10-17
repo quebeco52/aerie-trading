@@ -581,6 +581,7 @@ class MacroState
     public float $commercialPropertyIndexTrend;
     public float $financialConditionsTrend;
     public float $authorityBookCouponRate;
+    public float $recessionProbabilityTrend;
 
     public function __construct()
     {

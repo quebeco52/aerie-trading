@@ -147,6 +147,10 @@ class FinancialConstants
     /** Share of the realized variable cost ratio analysts forecast correctly: input prices are published series (commodity indices, PPI, wage prints) and pass-through terms disclosed, so only firm-specific execution is left unseen. */
     public const ANALYST_COST_BASE_VISIBILITY = 0.75;
 
+    // --- Monetary Stance Transmission ---
+    /** Share of the tightening slope an easy real-rate stance gives back to rate-sensitive orders: policy pushes on a string below neutral (Tenreyro & Thwaites 2016). */
+    public const RATE_EASING_SLOPE_SHARE = 0.50;
+
     // --- Own-Price Demand Response ---
     /** Default own-price elasticity of demand for a producing firm (volume lost per unit of real price increase); mid-range of empirical estimates for differentiated goods. */
     public const DEFAULT_PRICE_ELASTICITY_OF_DEMAND = 0.50;

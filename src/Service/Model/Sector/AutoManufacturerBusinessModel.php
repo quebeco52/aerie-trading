@@ -16,6 +16,7 @@ use App\Service\Model\StreamContext;
 use App\Entity\Stock;
 use App\Service\Event\ShockEvent;
 use App\Service\Macro\MacroEngine;
+use App\Service\Math\FinancialConstants;
 use App\Service\Math\MathUtility;
 
 /**
@@ -163,9 +164,6 @@ class AutoManufacturerBusinessModel extends HeavyManufacturingBusinessModel
     /** Scalar for demand destruction per 100bps of real policy rate above r*. */
     public const RATE_SENSITIVITY_SCALAR = 1.25;
 
-    /** Share of the tightening slope an easy stance gives back: policy pushes on a string below neutral (Tenreyro & Thwaites 2016). */
-    public const RATE_EASING_SLOPE_SHARE = 0.50;
-
     /** Ceiling on the volume an easy real-rate stance can add (10%). */
     public const MAX_RATE_EASING_BOOST = 0.10;
 
@@ -230,7 +228,7 @@ class AutoManufacturerBusinessModel extends HeavyManufacturingBusinessModel
         $realRateGap = $macroState->policyRateEma - $macroState->tipsBreakevenEma - $macroState->naturalRateEma;
         $ratePenalty = $realRateGap > 0.0
             ? $realRateGap * $beta * $rateScalar
-            : max(-self::MAX_RATE_EASING_BOOST, $realRateGap * $beta * $rateScalar * self::RATE_EASING_SLOPE_SHARE);
+            : max(-self::MAX_RATE_EASING_BOOST, $realRateGap * $beta * $rateScalar * FinancialConstants::RATE_EASING_SLOPE_SHARE);
 
         // The gap is priced above, so confidence enters as its residual over the gap.
         return $shift - $ratePenalty + ($macroState->sentimentResidual() * $beta * self::CONSUMER_SENTIMENT_SENSITIVITY);

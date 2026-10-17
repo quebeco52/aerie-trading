@@ -321,7 +321,7 @@ class MarketEngine
      * @param float $creditSpread       The company's baseline credit spread (borrowing premium).
      * @param float $dividendPerShare   The absolute quarterly dividend per share.
      *
-     * @return array{price: float, shock: float|null, next_volatility: float, analyst_targets: array<string, float>, perceived_fair_value: float, dynamic_reversion: float} The calculated next price, shock percentage, updated TOTAL volatility, analyst targets, fair value and the reversion speed that was applied.
+     * @return array{price: float, shock: float|null, next_volatility: float, analyst_targets: array<string, float>, perceived_fair_value: float, dynamic_reversion: float, policy_repricing: float} The calculated next price, shock percentage, updated TOTAL volatility, analyst targets, fair value, the reversion speed that was applied and the policy news multiplier the price took.
      */
     public function calculateNextPrice(\App\DTO\MarketPricingContext $ctx): array {
         $currentPrice = $ctx->currentPrice;
@@ -335,25 +335,12 @@ class MarketEngine
         $sectorZ = $ctx->sectorZ;
         $marketJumpMultiplier = $ctx->marketJumpMultiplier;
         $marketVol = $ctx->marketVol;
-        $reversionSpeed = $ctx->reversionSpeed;
         $kappa = $ctx->kappa;
         $volOfVol = $ctx->volOfVol;
         $macroState = $ctx->macroState;
-        $bookValuePerShare = $ctx->bookValuePerShare;
-        $investedCapitalPerShare = $ctx->investedCapitalPerShare;
         $maShock = $ctx->maShock;
-        $currentRoic = $ctx->currentRoic;
-        $roicTtm = $ctx->roicTtm;
         $dividendPerShare = $ctx->dividendPerShare;
-        $baselineIndustryPE = $ctx->baselineIndustryPE;
-        $revenuePerShare = $ctx->revenuePerShare;
-        $businessModel = $ctx->businessModel;
         $liveCostOfEquity = $ctx->liveCostOfEquity;
-        $netDebtPerShare = $ctx->netDebtPerShare;
-        $secularGrowth = $ctx->secularGrowth;
-        $baselineRoic = $ctx->baselineRoic;
-        $baselineMargin = $ctx->baselineMargin;
-        $accrualsRatio = $ctx->accrualsRatio;
         $orderFlowVariance = $ctx->orderFlowVariance;
 
         // CAPM & MACRO TRANSMISSION MECHANISM
@@ -598,6 +585,7 @@ class MarketEngine
             'analyst_targets'   => $analystTargets,
             'perceived_fair_value' => $perceivedFairValue,
             'dynamic_reversion' => $dynamicReversion,
+            'policy_repricing' => $fundamentalState['policy_repricing'],
         ];
     }
 
@@ -627,7 +615,6 @@ class MarketEngine
             $ctx->beta,
             $ctx->costOfDebt,
             $ctx->reversionSpeed,
-            $ctx->currentRoic,
             $ctx->roicTtm,
             $ctx->macroState->policyRate ?? 0.04,
             $ctx->bookValuePerShare,
@@ -636,7 +623,6 @@ class MarketEngine
             $ctx->revenuePerShare,
             $ctx->businessModel,
             $ctx->liveCostOfEquity,
-            $ctx->currentVolatility,
             $ctx->netDebtPerShare,
             $ctx->secularGrowth,
             $ctx->baselineRoic,
@@ -663,7 +649,6 @@ class MarketEngine
      * @param float $beta                The stock's sensitivity to systemic market moves.
      * @param float|null $costOfDebt     The firm's pre-tax marginal borrowing rate; null prices it at the 10Y plus the IG spread.
      * @param float $reversionSpeed      The baseline speed at which the stock reverts to fair value.
-     * @param float $currentRoic         The current Return on Invested Capital (or ROE for banks).
      * @param float $roicTtm             The Trailing Twelve Month ROIC (or ROE).
      * @param float $riskFreeRate        The central bank's policy rate.
      * @param float $bookValuePerShare   The equity value per share.
@@ -672,7 +657,6 @@ class MarketEngine
      * @param float $revenuePerShare     The total revenue per share.
      * @param string $businessModel      The type of business (e.g., 'tech', 'bank', 'retail').
      * @param float $liveCostOfEquity    The Cost of Equity (CAPM on the 10Y), the hurdle every equity leg is discounted at.
-     * @param float $currentVolatility   The current asset volatility.
      * @param float $netDebtPerShare     The net debt per share.
      * @param float $secularGrowth       The long-term growth rate of the sector/economy.
      * @param float $baselineRoic        The historical average ROIC.
@@ -692,7 +676,6 @@ class MarketEngine
         float $beta,
         ?float $costOfDebt,
         float $reversionSpeed,
-        float $currentRoic,
         float $roicTtm,
         float $riskFreeRate,
         float $bookValuePerShare,
@@ -701,7 +684,6 @@ class MarketEngine
         float $revenuePerShare = 0.0,
         string $businessModel = 'none',
         float $liveCostOfEquity = 0.10,
-        float $currentVolatility = 0.20,
         float $netDebtPerShare = 0.0,
         float $secularGrowth = 0.02,
         float $baselineRoic = 0.10,

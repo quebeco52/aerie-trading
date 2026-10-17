@@ -48,6 +48,8 @@ class MacroAggregateSubsystem
     public const COMMERCIAL_PROPERTY_TREND_YEARS = self::RESIDENTIAL_WEALTH_TREND_HORIZON_YEARS;
     /** Time constant (years) of the default rates' measured trends: a decade, past the credit cycle their readers answer, as the credit spread's. */
     public const DEFAULT_RATE_TREND_YEARS = CreditFiscalSubsystem::CREDIT_SPREAD_TREND_YEARS;
+    /** The same decade for the recession probability's trend, the average a reserving committee reads the outlook against. */
+    public const RECESSION_PROBABILITY_TREND_YEARS = CreditFiscalSubsystem::CREDIT_SPREAD_TREND_YEARS;
     /** Horizon of the real exchange rate's own normal, well beyond the ~12y swing the UIP differential and the sovereign risk discount drive: a first-order lag this long follows under a tenth of that swing, so PPP deviations (Rogoff 1996: 3-5y half-life) survive intact while a standing level does not. */
     public const EXCHANGE_RATE_TREND_HORIZON_YEARS = 20.0;
 
@@ -1332,6 +1334,7 @@ class MacroAggregateSubsystem
         $state->energyInventoryIndexEma += $emaWeight * ($state->energyInventoryIndex - $state->energyInventoryIndexEma);
         $state->capacityUtilizationRateEma += $emaWeight * ($state->capacityUtilizationRate - $state->capacityUtilizationRateEma);
         $state->recessionProbabilityEma += $emaWeight * ($state->recessionProbability - $state->recessionProbabilityEma);
+        $state->recessionProbabilityTrend += (1.0 - exp(-$dt / self::RECESSION_PROBABILITY_TREND_YEARS)) * ($state->recessionProbabilityEma - $state->recessionProbabilityTrend);
         $state->corporateDefaultRateEma += $emaWeight * ($state->corporateDefaultRate - $state->corporateDefaultRateEma);
         $state->corporateDefaultRateTrend += $defaultTrendWeight * ($state->corporateDefaultRateEma - $state->corporateDefaultRateTrend);
         $state->sloosTighteningIndexEma += $emaWeight * ($state->sloosTighteningIndex - $state->sloosTighteningIndexEma);

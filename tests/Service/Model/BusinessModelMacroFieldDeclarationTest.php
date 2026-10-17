@@ -66,6 +66,7 @@ final class BusinessModelMacroFieldDeclarationTest extends TestCase
         'corporate_default_rate_trend' => ['corporate_default_rate_ema'],
         'retail_default_rate_trend' => ['retail_default_rate_ema'],
         'commercial_property_deviation' => ['commercial_property_index_ema'],
+        'recession_probability_trend' => ['recession_probability_ema'],
     ];
 
     /** Macro field each input-cost basket channel reads (StandardOperatingPhysicsTrait::resolveInputPriceDeviations). */

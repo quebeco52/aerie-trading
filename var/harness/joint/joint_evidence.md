@@ -134,3 +134,9 @@ The harness has no option desk, dealer or player fills; it exercises only the da
   Still under 1% of each name's variance (CASC 0.37% vs 0.05%), so the diffusion's give-back barely moves.
 - Board, unpaired seeds 1-4, 5 years at TPY=3600 (marketC-{base,live}-tpy3600.out): vol excess vs configured mean
   -0.9 -> +1.3pp (t 0.9), EW vol 14.1 -> 15.0 (t 0.5); paths diverge (gap means -2.4..+1.8%), nothing |t| >= 2.
+
+## Cleanup D: Construction rate stance, bank recession trend, volume shock, policy news in budget (10-17)
+4 seeds live only, `CREDIT=1` with the new `recp` field (out: cleanupD-live.out).
+- Recession probability, years 2-20: 12.3% pooled (seed means 8.8, 14.1, 16.0, 10.2%; within-run sd 17pp), so the
+  13.8% the probit intercept was fitted to is inside the noise (t ~ -1); not refitted. FCI seed means -0.07..+0.16.
+- Board inside earlier runs: EW 7.4%/y, CW 5.8, P/E end 13.7, gap -0.72, vol excess vs configured +1.15pp.

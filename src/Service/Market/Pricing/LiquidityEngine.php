@@ -59,8 +59,10 @@ final class LiquidityEngine
     public const MIN_ADV_ACTIVITY_MULTIPLIER = 0.40;
     /** Upper bound on that multiplier, so a crash does not manufacture unlimited liquidity. */
     public const MAX_ADV_ACTIVITY_MULTIPLIER = 3.00;
-    /** Lognormal dispersion of realized volume around its conditional mean (Clark 1973 mixture-of-distributions). */
+    /** Lognormal dispersion of realized volume around its conditional mean (Clark 1973 mixture-of-distributions): the stationary sd of the log volume shock. */
     public const VOLUME_LOGNORMAL_SIGMA = 0.45;
+    /** Mean life of a volume shock in trading days: a busy day is followed by a busy one, log daily volume's first-order autocorrelation running ~0.6 (Lo & Wang 2000). */
+    public const VOLUME_SHOCK_PERSISTENCE_DAYS = 2.0;
     /** Reference single-name annual volatility that BASELINE_ANNUAL_TURNOVER is quoted against. */
     public const TURNOVER_REFERENCE_VOLATILITY = 0.18;
     /** Cross-sectional elasticity of turnover to volatility: volatile names change hands more often than quiet ones. */
@@ -95,6 +97,9 @@ final class LiquidityEngine
 
     /** The stamp duty in force on each side of a share trade, which thins turnover; the ticker and the trade desk set it from the economy. */
     private float $stampDutyRate = FinancialConstants::STAMP_DUTY_RATE;
+
+    /** @var array<string, float> Each name's log volume shock, carried from tick to tick; lives as long as the process. */
+    private array $volumeShock = [];
 
     public function __construct(
         private readonly MathUtility $mathUtility,
@@ -397,24 +402,34 @@ final class LiquidityEngine
      * Clark's (1973) mixture-of-distributions hypothesis: volume and return variance are both driven by the
      * same latent information arrivals, which is why the two move together in every market anyone has
      * measured. The activity multiplier already carries that link, so what remains is the dispersion around
-     * it, drawn lognormally and mean-corrected so the expected volume is the conditional mean rather than
-     * something a half-sigma above it.
+     * it: a lognormal shock that persists over a couple of trading days, mean-corrected so the expected volume
+     * is the conditional mean rather than something a half-sigma above it. Carried as a process rather than
+     * drawn fresh each tick, a day's volume disperses the same at any tick rate, and so does what reads it as
+     * abnormal.
      *
-     * @param Stock $stock        The name.
-     * @param float $dt           Elapsed simulated time in years.
-     * @param float $playerVolume Shares the players themselves traded this tick, which are prints too.
+     * The tick's net order flow is part of that volume, not on top of it: the prints are at least the
+     * imbalance the tick cleared, which a large order can take past the ordinary flow.
+     *
+     * @param Stock $stock       The name.
+     * @param float $dt          Elapsed simulated time in years.
+     * @param float $clearedFlow Net shares the tick's orders cleared, unsigned.
      */
-    public function simulateTickVolume(Stock $stock, float $dt, float $playerVolume = 0.0): float
+    public function simulateTickVolume(Stock $stock, float $dt, float $clearedFlow = 0.0): float
     {
         if ($dt <= 0.0) {
-            return max(0.0, $playerVolume);
+            return max(0.0, $clearedFlow);
         }
 
         $expected = $this->averageDailyVolume($stock) * $dt * FinancialConstants::TRADING_DAYS_PER_YEAR;
 
         $sigma = self::VOLUME_LOGNORMAL_SIGMA;
-        $noise = exp(($sigma * $this->mathUtility->generateStandardNormal()) - (($sigma * $sigma) / 2.0));
+        $decay = exp(-$dt * FinancialConstants::TRADING_DAYS_PER_YEAR / self::VOLUME_SHOCK_PERSISTENCE_DAYS);
+        $ticker = $stock->getTicker();
+        $shock = (($this->volumeShock[$ticker] ?? 0.0) * $decay)
+            + ($sigma * sqrt(1.0 - ($decay * $decay)) * $this->mathUtility->generateStandardNormal());
+        $this->volumeShock[$ticker] = $shock;
+        $noise = exp($shock - (($sigma * $sigma) / 2.0));
 
-        return max(0.0, $expected * $noise) + max(0.0, $playerVolume);
+        return max($expected * $noise, max(0.0, $clearedFlow));
     }
 }

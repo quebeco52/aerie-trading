@@ -193,6 +193,7 @@ final class MacroFieldRegistry
         'commercialPropertyIndexTrend' => 'commercialPropertyIndexEma',
         'financialConditionsTrend' => 'financialConditionsIndexEma',
         'authorityBookCouponRate' => 'sovereignCouponRate',
+        'recessionProbabilityTrend' => 'recessionProbabilityEma',
         'outputGapLag3m' => 'outputGapEma',
         'outputGapLag6m' => 'outputGapEma',
         'outputGapLag9m' => 'outputGapEma',

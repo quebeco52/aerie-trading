@@ -253,6 +253,7 @@ class JointHarnessTest extends KernelTestCase
                         'infl_ema' => $m->inflationEma, 'bei' => $m->tipsBreakevenEma, 'supercore' => $m->supercoreInflationEma,
                         'corp_dr' => $m->corporateDefaultRateEma, 'retail_dr' => $m->retailDefaultRateEma, 'starts' => $m->housingStartsIndex,
                         'fci' => $m->financialConditionsIndex, 'cre' => $m->commercialPropertyIndexEma, 'freight' => $m->freightRateIndex,
+                        'recp' => $m->recessionProbability,
                     ] : [])) . "\n", FILE_APPEND);
             }
         }

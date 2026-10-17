@@ -123,7 +123,6 @@ final class PriceFormationInvariantTest extends TestCase
                 bookValuePerShare: 40.0 * $growth,
                 currentRoic: 0.125,
                 roicTtm: 0.125,
-                liveWacc: 0.085,
                 baselineIndustryPE: 20.0,
                 revenuePerShare: 50.0 * $growth,
                 liveCostOfEquity: self::COST_OF_EQUITY,

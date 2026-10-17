@@ -359,10 +359,13 @@ class StockTracker
             if ($dt > 0.0) {
                 $ticker = $stock->getTicker();
                 $empty = ['sum' => 0.0, 'elapsed' => 0.0];
+                // Policy news moves the price outside its diffusion as order flow does, so the diffusion gives it back
+                // from the same measured budget.
+                $policyLogReturn = log(max(1e-12, (float) ($calculation['policy_repricing'] ?? 1.0)));
                 $flowRead = TimeSeries::ewmaWindowedVariance(
                     $stock->getImpactVarianceEma() ?? 0.0,
                     $this->impactDay[$ticker]['flow'] ?? $empty,
-                    $budgetedImpactLogReturn,
+                    $budgetedImpactLogReturn + $policyLogReturn,
                     $dt,
                     self::IMPACT_MEASUREMENT_YEARS,
                     self::IMPACT_VARIANCE_EMA_YEARS
@@ -533,8 +536,7 @@ class StockTracker
             // rather than the whole board.
             $floatAdjustedCaps[$stock->getTicker()] = IndexCommittee::floatAdjustedCap($stock);
 
-            // Shares printed this tick. The players' own fills are prints too, so they are added rather than
-            // assumed away: a name nobody but the players trades still shows the volume they generated.
+            // Shares printed this tick, at least the net flow the tick cleared: a name a large order hits shows it.
             // What it costs to get in and out of this name. Published per ticker as well as on the wire,
             // because a fund's arbitrage band is the weighted average of its constituents' — an expensive
             // basket is what lets a fund drift from it.

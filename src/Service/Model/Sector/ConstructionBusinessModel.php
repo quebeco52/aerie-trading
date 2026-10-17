@@ -17,6 +17,7 @@ use App\Service\Event\ShockEvent;
 use App\Service\Macro\MacroEngine;
 use App\Service\Math\MathUtility;
 use App\Service\Math\FinancialConstants;
+use App\Service\Math\ResponseCurves;
 
 /**
  * Earnings strategy for Heavy Engineering, Procurement & Construction (EPC).
@@ -98,7 +99,7 @@ class ConstructionBusinessModel extends StandardCorporateBusinessModel
 
     /** Commercial orders per unit of net tightening in bank lending standards, both ways: +0.2 cuts orders 6%. */
     public const SLOOS_CREDIT_TIGHTENING_SCALAR = 0.30;
-    /** Private EPC orders lost per unit of restrictive real policy rate above r*: 100bp of tight stance takes 2% off awards before cyclicality. */
+    /** Private EPC orders lost per unit of real policy rate above r*: 100bp of tight stance takes 2% off awards before cyclicality, and an easy one adds back its share (FinancialConstants::RATE_EASING_SLOPE_SHARE). */
     public const RATE_STANCE_ORDER_SENSITIVITY = 2.0;
     /** Sensitivity of private development EPC orders to the credit-to-GDP gap. */
     public const CREDIT_GAP_ORDER_SENSITIVITY = 0.50;
@@ -257,7 +258,9 @@ class ConstructionBusinessModel extends StandardCorporateBusinessModel
         $commercialMacroBoost = ($outputGap * 1.5 * $beta) + ($commercialPropertyShift * 0.30) + ($residentialShift * 0.20) + $housingStartsShift + ($macroState->creditToGdpGapEma * self::CREDIT_GAP_ORDER_SENSITIVITY);
         // Policy stance is the real rate gap, nominal policy less expected inflation less r* (Laubach & Williams 2003).
         $realRateGap = $policyRate - $macroState->tipsBreakevenEma - $macroState->naturalRateEma;
-        $commercialCreditDrag = max(0.0, $realRateGap * self::RATE_STANCE_ORDER_SENSITIVITY * $beta) + $sloosDrag;
+        // Both ways, unevenly: tight money holds awards back at the full slope, easy money lets some more through.
+        $rateDrag = ResponseCurves::calculateAsymmetricResponse($realRateGap * self::RATE_STANCE_ORDER_SENSITIVITY * $beta, 1.0, FinancialConstants::RATE_EASING_SLOPE_SHARE);
+        $commercialCreditDrag = $rateDrag + $sloosDrag;
         $maintenanceMacroBoost = $this->resolveMaintenanceVolumeShift($stock, $macroState);
         $govSpendShift = ($macroState->governmentSpendingIndexEma - 100.0) / 100.0;
         // Reconstruction after a storm season is civil work booked into the backlog (Hallegatte 2008 on post-disaster reconstruction demand).

@@ -120,7 +120,6 @@ class OrderFlowVarianceBudgetTest extends TestCase
                 bookValuePerShare: 40.0,
                 currentRoic: 0.12,
                 roicTtm: 0.12,
-                liveWacc: 0.08,
                 baselineIndustryPE: 15.0,
                 revenuePerShare: 50.0,
                 businessModel: 'none',

@@ -70,7 +70,6 @@ final class PriceFactorTransmissionTest extends TestCase
             bookValuePerShare: 40.0,
             currentRoic: 0.15,
             roicTtm: 0.15,
-            liveWacc: 0.08,
             revenuePerShare: 50.0,
             liveCostOfEquity: 0.10,
             baselineRoic: 0.15
@@ -188,7 +187,6 @@ final class PriceFactorTransmissionTest extends TestCase
             bookValuePerShare: 40.0,
             currentRoic: 0.15,
             roicTtm: 0.15,
-            liveWacc: 0.08,
             revenuePerShare: 50.0,
             liveCostOfEquity: 0.10,
             baselineRoic: 0.15
@@ -219,7 +217,6 @@ final class PriceFactorTransmissionTest extends TestCase
                 bookValuePerShare: 40.0,
                 currentRoic: 0.15,
                 roicTtm: 0.15,
-                liveWacc: 0.08,
                 revenuePerShare: 50.0,
                 liveCostOfEquity: 0.10,
                 baselineRoic: 0.15
@@ -267,7 +264,6 @@ final class PriceFactorTransmissionTest extends TestCase
                 bookValuePerShare: 40.0,
                 currentRoic: 0.15,
                 roicTtm: 0.15,
-                liveWacc: 0.08,
                 revenuePerShare: 50.0,
                 liveCostOfEquity: 0.10,
                 baselineRoic: 0.15
@@ -328,7 +324,6 @@ final class PriceFactorTransmissionTest extends TestCase
                 bookValuePerShare: 40.0,
                 currentRoic: 0.15,
                 roicTtm: 0.15,
-                liveWacc: 0.08,
                 revenuePerShare: 50.0,
                 liveCostOfEquity: 0.10,
                 baselineRoic: 0.15

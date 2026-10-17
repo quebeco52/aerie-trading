@@ -34,7 +34,6 @@ class MarketPricingContext
         public float $currentRoic = 0.10,
         public float $roicTtm = 0.10,
         public float $dividendPerShare = 0.0,
-        public float $liveWacc = 0.08,
         public float $baselineIndustryPE = 20.0,
         public float $revenuePerShare = 0.0,
         public string $businessModel = 'none',
@@ -129,7 +128,6 @@ class MarketPricingContext
             // in the same warning move only the reported number, which the true return never carried.
             roicTtm: $strategy->getTrueReturn($stock) - ($stock->getPreAnnouncedEconomicShortfall() / max(1.0, $strategy->getEvaluationCapital((float) $stock->getTotalEquity(), $stock->getInvestedCapital()))),
             dividendPerShare: (float) $stock->getLastDividend(),
-            liveWacc: $health->wacc,
             baselineIndustryPE: Sectors::baselineIndustryPe($stock->getIndustry()),
             revenuePerShare: (float) $stock->getTotalRevenue() / $shares,
             businessModel: Sectors::businessModelFor($stock->getIndustry()),

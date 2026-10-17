@@ -68,6 +68,7 @@ class MacroFieldRegistryTest extends TestCase
         'retailDefaultRateTrend' => 'Decade-long average of retail_default_rate, which is recorded.',
         'commercialPropertyIndexTrend' => 'Five-year average of commercial_property_index, which is recorded.',
         'financialConditionsTrend' => 'Decade-long average of the composite before centring; financial_conditions_index is recorded net of it.',
+        'recessionProbabilityTrend' => 'Decade-long average of recession_probability, which is recorded.',
         'authorityBookCouponRate' => 'Coupon of the Authority\'s bond book, inside its net income and the remittance the budget carries.',
         'reimbursementAusterityShare' => 'Cut the last price update priced in, inside reimbursement_rate_index and reimbursement_rate_growth, both recorded.',
         'cyclicalMigrationRate' => 'Inside potential_gdp_index and output_gap, both recorded, and immigrationPopulationShift.',

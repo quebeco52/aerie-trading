@@ -125,7 +125,6 @@ class MarketEngineTest extends TestCase
             bookValuePerShare: 25.0,
             currentRoic: 0.08,
             roicTtm: 0.08,
-            liveWacc: 0.15,
             revenuePerShare: 32.0,  // high revenue
             businessModel: 'standard'
         );
@@ -537,7 +536,6 @@ class MarketEngineTest extends TestCase
             bookValuePerShare: 2.0, // Negligible book value
             currentRoic: 0.25,
             roicTtm: 0.25,
-            liveWacc: 0.09,
             liveCostOfEquity: 0.09, // All equity: the WACC is the cost of equity.
             revenuePerShare: 50.0,
             businessModel: 'tech'
@@ -619,7 +617,6 @@ class MarketEngineTest extends TestCase
             currentRoic: $roe,
             roicTtm: $roe,
             liveCostOfEquity: 0.10,
-            liveWacc: 0.10,
             businessModel: $model,
             tangibleBookValuePerShare: $tangibleBook
         ))['analyst_targets']['value_analyst'];
@@ -636,15 +633,15 @@ class MarketEngineTest extends TestCase
     }
 
     /**
-     * Fair value prices equity, so it is discounted at the cost of equity and the WACC does not enter it:
-     * two firms differing only in their WACC price identically, and a dearer equity is worth less.
+     * Fair value prices equity, so it is discounted at the cost of equity (the pricing context carries no WACC at
+     * all): a dearer equity is worth less.
      */
-    public function testFairValueIsDiscountedAtTheCostOfEquityNotTheWacc(): void
+    public function testFairValueIsDiscountedAtTheCostOfEquity(): void
     {
         $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
         $this->mathUtilityMock->method('checkProbability')->willReturn(false);
 
-        $priced = fn (float $wacc, float $costOfEquity): array => $this->engine->calculateNextPrice(new MarketPricingContext(
+        $priced = fn (float $costOfEquity): array => $this->engine->calculateNextPrice(new MarketPricingContext(
             currentPrice: 80.0,
             currentVolatility: 0.25,
             longTermVolatility: 0.25,
@@ -653,17 +650,13 @@ class MarketEngineTest extends TestCase
             bookValuePerShare: 30.0,
             currentRoic: 0.12,
             roicTtm: 0.12,
-            liveWacc: $wacc,
             revenuePerShare: 60.0,
             liveCostOfEquity: $costOfEquity,
             investedCapitalPerShare: 50.0,
             costOfDebt: 0.05,
         ));
 
-        $base = $priced(0.08, 0.10);
-        $this->assertEqualsWithDelta($base['perceived_fair_value'], $priced(0.06, 0.10)['perceived_fair_value'], 1e-9, 'The WACC moved an equity value.');
-        $this->assertEqualsWithDelta($base['price'], $priced(0.06, 0.10)['price'], 1e-9);
-        $this->assertLessThan($base['perceived_fair_value'], $priced(0.08, 0.12)['perceived_fair_value'], 'A dearer equity must be worth less.');
+        $this->assertLessThan($priced(0.10)['perceived_fair_value'], $priced(0.12)['perceived_fair_value'], 'A dearer equity must be worth less.');
     }
 
     /**
@@ -685,7 +678,6 @@ class MarketEngineTest extends TestCase
             bookValuePerShare: 30.0,
             currentRoic: $trailing,
             roicTtm: $trailing,
-            liveWacc: 0.08,
             revenuePerShare: 60.0,
             liveCostOfEquity: 0.10,
             investedCapitalPerShare: 50.0,

@@ -1159,4 +1159,20 @@ class CommercialBankBusinessModelTest extends TestCase
         $this->assertSame(0.0, (new \App\Service\Model\Sector\ClearingHouseBusinessModel())->calculateAnnualBankLevy($bank, $macro));
         $this->assertGreaterThan(0.0, (new \App\Service\Model\Sector\InvestmentBankBusinessModel())->calculateAnnualBankLevy($bank, $macro));
     }
+
+    /**
+     * The reserving committee reads the recession outlook against its own average, as it reads spreads: a probability
+     * that has settled at 20% builds nothing. It used to read it against the 13.8% the probit was fitted to, so an
+     * economy whose forecast settled elsewhere carried a standing build or release.
+     */
+    public function testTheRecessionOutlookIsReadAgainstItsOwnAverage(): void
+    {
+        $bank = $this->creditTestBank('COMM_BANK');
+        $usual = $this->model->getForwardCreditLossMultiplier($bank, new MacroStateDTO(recessionProbabilityEma: 0.138, recessionProbabilityTrend: 0.138));
+        $settled = $this->model->getForwardCreditLossMultiplier($bank, new MacroStateDTO(recessionProbabilityEma: 0.20, recessionProbabilityTrend: 0.20));
+        $rising = $this->model->getForwardCreditLossMultiplier($bank, new MacroStateDTO(recessionProbabilityEma: 0.20, recessionProbabilityTrend: 0.138));
+
+        $this->assertEqualsWithDelta($usual, $settled, 1e-12);
+        $this->assertGreaterThan($usual, $rising);
+    }
 }

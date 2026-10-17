@@ -551,6 +551,8 @@ readonly class MacroStateDTO
         public float $financialConditionsTrend = 0.0,
         /** The coupon the Authority's own bond book earns: the yields its purchases and reinvestments were struck at (MonetaryPolicySubsystem::rollAuthorityBookCoupon()). */
         public float $authorityBookCouponRate = self::OPENING_YIELD_10Y,
+        /** The recession probability's measured trend, its decade-long average: what a reserving committee reads the outlook against. */
+        public float $recessionProbabilityTrend = MacroEngine::RECESSION_BASE_RATE,
     ) {
         // A state given its gap but not its lags is one where the gap has stood long enough to reach every order book.
         $this->outputGapLag3m = $outputGapLag3m ?? $outputGapEma;

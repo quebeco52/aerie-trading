@@ -775,7 +775,7 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
     public function getForwardCreditLossMultiplier(?Stock $stock, MacroStateDTO $macroState): float
     {
         $spreadGap = $macroState->macroCreditSpreadEma - $macroState->macroCreditSpreadTrend;
-        $recessionGap = $macroState->recessionProbabilityEma - MacroEngine::RECESSION_BASE_RATE;
+        $recessionGap = $macroState->recessionProbabilityEma - $macroState->recessionProbabilityTrend;
 
         $multiplier = 1.0
             + ($spreadGap * static::CECL_RESERVE_SPREAD_SENSITIVITY * $this->resolveSpreadReserveBeta($stock))

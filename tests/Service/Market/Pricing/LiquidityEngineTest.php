@@ -312,6 +312,42 @@ class LiquidityEngineTest extends TestCase
         );
     }
 
+    /**
+     * A day's volume disperses the same at any tick rate, around the volume expected: the shock persists over a
+     * couple of days. Drawn fresh every tick, it averaged away inside the day, so the finer the ticks the flatter the
+     * tape, and the more often a single tick read as abnormal to the retail traders who chase volume.
+     */
+    public function testADaysVolumeDispersesTheSameAtAnyTickRate(): void
+    {
+        $dispersion = function (int $ticksPerDay): array {
+            mt_srand(77);
+            $engine = new LiquidityEngine(new MathUtility());
+            $stock = $this->stock();
+            $dt = 1.0 / (FinancialConstants::TRADING_DAYS_PER_YEAR * $ticksPerDay);
+            $expectedDay = $engine->averageDailyVolume($stock);
+            $logs = [];
+            $sum = 0.0;
+            for ($day = 0; $day < 3000; $day++) {
+                $volume = 0.0;
+                for ($tick = 0; $tick < $ticksPerDay; $tick++) {
+                    $volume += $engine->simulateTickVolume($stock, $dt);
+                }
+                $logs[] = log($volume / $expectedDay);
+                $sum += $volume / $expectedDay;
+            }
+            $mean = array_sum($logs) / count($logs);
+            $variance = array_sum(array_map(static fn (float $x): float => ($x - $mean) ** 2, $logs)) / (count($logs) - 1);
+
+            return ['sd' => sqrt($variance), 'mean_ratio' => $sum / count($logs)];
+        };
+
+        $coarse = $dispersion(5);
+        $fine = $dispersion(50);
+        $this->assertEqualsWithDelta($coarse['sd'], $fine['sd'], 0.06 * $coarse['sd']);
+        $this->assertGreaterThan(0.30, $fine['sd']);
+        $this->assertEqualsWithDelta(1.0, $fine['mean_ratio'], 0.05);
+    }
+
     public function testARoundTripAtAnUnchangedPriceLosesMoney(): void
     {
         $stock = $this->stock();
