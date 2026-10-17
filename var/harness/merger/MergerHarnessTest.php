@@ -129,7 +129,7 @@ final class MergerHarnessTest extends KernelTestCase
         }
 
         for ($tick = 1; $tick <= $ticks; $tick++) {
-            $m = $replay !== null ? $this->withDemandLags($replay[$tick - 1], $dt) : $macro->updateMacroState($dt, $lastCap);
+            $m = $replay !== null ? $this->withDemandLags($replay[$tick - 1], $dt) : $macro->updateMacroState($dt, new \App\DTO\BoardReadingDTO($lastCap));
             if ($recordPath !== null) {
                 $recorded[] = $m;
             }

@@ -42,7 +42,7 @@ $fx = ['meet' => [0.0, 0, 0], 'other' => [0.0, 0, 0], 'meetQ' => [0.0, 0, 0], 'm
 $prevFx = null; $prevRate = null;
 for ($i = 1; $i <= (int) $years * $tpy; ++$i) {
     $cap = $fund ? SovereignFundSubsystem::BOARD_OPENING_CAP_USD * $nominal : null;
-    $macro = $engine->updateMacroState(1.0 / $tpy, equityMarketCap: $cap, boardFloatCap: $cap === null ? null : 0.8 * $cap, policy: $policy);
+    $macro = $engine->updateMacroState(1.0 / $tpy, new \App\DTO\BoardReadingDTO($cap, $cap === null ? null : 0.8 * $cap), $policy);
     $nominal = $macro->nominalGdpIndex;
     $k = \App\Service\Math\TimeSeries::crossedSimulatedBoundary($macro->totalTime, 1.0 / $tpy, 1.0 / 8) ? 'meet' : 'other';
     if ($prevFx !== null && $prevFx > 0 && $macro->exchangeRateIndex > 0) {

@@ -56,8 +56,8 @@ $floatCap = OPENING_FLOAT_CAP;
 $openingGdp = null;
 $transitory = 0.0;
 $reversion = exp(-$dt * log(2.0) / TRANSITORY_HALF_LIFE_YEARS);
-$priceReturn = null;
-$dividends = null;
+$priceReturn = 0.0;
+$dividends = 0.0;
 $lateDebt = [];
 $dPrev = null;
 
@@ -74,7 +74,7 @@ $realIdxEnd = null;
 $d0 = null;
 
 for ($tick = 1; $tick <= YEARS * TPY; ++$tick) {
-    $macro = $engine->updateMacroState($dt, $floatCap / FLOAT_SHARE, $floatCap, $priceReturn, $dividends);
+    $macro = $engine->updateMacroState($dt, new \App\DTO\BoardReadingDTO($floatCap / FLOAT_SHARE, $floatCap, $priceReturn, $dividends));
     $openingGdp ??= $macro->nominalGdpIndex;
 
     $transitory = ($reversion * $transitory) + ($macro->marketVolatility * sqrt($dt) * $macro->marketZ);

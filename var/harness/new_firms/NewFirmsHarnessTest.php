@@ -112,7 +112,8 @@ final class NewFirmsHarnessTest extends KernelTestCase
         $operatorInterval = getenv('SIMCMD') ? 100 : (int) max(1, $tpy / 24);
         $replay = $replayPath !== null ? unserialize((string) gzuncompress((string) file_get_contents($replayPath))) : null;
         $recorded = [];
-        $lastCap = $lastFloat = $lastReturn = $lastDividends = $lastIssuance = $lastDuty = $lastStake = $lastLevy = $lastCredit = null;
+        $reading = new \App\DTO\BoardReadingDTO();
+        $lastCredit = null;
         $dead = [];
         $reorgs = [];
         $defaults = [];
@@ -132,7 +133,7 @@ final class NewFirmsHarnessTest extends KernelTestCase
 
         for ($tick = 1; $tick <= $ticks; $tick++) {
             $m = $replay !== null ? $this->withDemandLags($replay[$tick - 1], $dt)
-                : $macro->updateMacroState($dt, $lastCap, $lastFloat, $lastReturn, $lastDividends, $lastIssuance, $lastDuty, $lastStake, $policy, boardBankLevy: $lastLevy);
+                : $macro->updateMacroState($dt, $reading, $policy);
             if ($politicsEngine !== null) {
                 $policy = $politicsEngine->updatePolitics($m, $dt)->policy();
             }
@@ -188,21 +189,14 @@ final class NewFirmsHarnessTest extends KernelTestCase
             // SIMCMD mirrors app:market-simulate, which feeds the macro no board at all. Levels stand when not
             // reported (as the ticker keeps the last); flows are this tick's.
             if (!getenv('SIMCMD')) {
-                $lastCap = (float) $result['total_cap'] > 0.0 ? (float) $result['total_cap'] : $lastCap;
-                $lastFloat = (float) $result['board_float_cap'] > 0.0 ? (float) $result['board_float_cap'] : $lastFloat;
-                $lastReturn = (float) $result['board_price_return'];
-                $lastDividends = (float) $result['board_dividend_cash'];
-                $lastIssuance = (float) $result['board_net_issuance'];
-                $lastDuty = (float) $result['board_stamp_duty'];
-                $lastStake = (float) $result['strategic_stake_cash'];
-                $lastLevy = (float) $result['board_bank_levy'];
+                $reading = $reading->after($result);
                 $lastCredit = (float) ($result['board_bank_credit'] ?? 0.0);
             }
             // MACRO_OUT: one macro row a quarter, for the macro-market loop.
             // FISCAL=1 adds the primary deficit and the net-tax rate, and a founding row at tick 1.
             if (getenv('MACRO_OUT') && ($tick % max(1, intdiv($tpy, 4)) === 0 || ($tick === 1 && getenv('FISCAL')))) {
                 file_put_contents((string) getenv('MACRO_OUT'), json_encode([
-                    'seed' => $seed, 't' => round($tick / $tpy, 3), 'gap' => $m->outputGap, 'cap' => $lastCap,
+                    'seed' => $seed, 't' => round($tick / $tpy, 3), 'gap' => $m->outputGap, 'cap' => $reading->equityMarketCap,
                     'nominal_gdp' => $m->nominalGdpIndex, 'ewr' => $m->equityWealthRatio, 'ewt' => $m->equityWealthTrend,
                     'fin' => $m->financeOutputGap ?? 0.0, 'nx' => $m->netExportGap ?? 0.0, 'supply' => $m->productivitySupplyGap,
                     'credit_gap' => $m->creditToGdpGap, 'policy' => $m->policyRate, 'infl' => $m->inflation, 'u' => $m->unemploymentRate,

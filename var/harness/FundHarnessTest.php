@@ -71,14 +71,7 @@ final class FundHarnessTest extends KernelTestCase
         $ticks = (int) round($years * $tpy);
         $operatorInterval = (int) max(1, $tpy / 24);
         $quarterEvery = intdiv($tpy, 4);
-        $lastCap = null;
-        $lastFloat = null;
-        $lastReturn = null;
-        $lastDividends = null;
-        $lastIssuance = null;
-        $lastDuty = null;
-        $lastStake = null;
-        $lastLevy = null;
+        $reading = new \App\DTO\BoardReadingDTO();
         $boardIndex = 1.0;
         $board = [];
         $quarters = [];
@@ -88,12 +81,8 @@ final class FundHarnessTest extends KernelTestCase
         $t0 = microtime(true);
 
         for ($tick = 1; $tick <= $ticks; $tick++) {
-            $m = $macro->updateMacroState($dt, $lastCap, $lastFloat, $lastReturn, $lastDividends, $lastIssuance, $lastDuty, $lastStake, null, boardBankLevy: $lastLevy);
-            $lastReturn = null;
-            $lastDividends = null;
-            $lastIssuance = null;
-            $lastDuty = null;
-            $lastStake = null;
+            $m = $macro->updateMacroState($dt, $reading);
+            $reading = $reading->spent();
 
             if ($m->lastSovereignRebalanceAt > $lastProgramme) {
                 $lastProgramme = $m->lastSovereignRebalanceAt;
@@ -109,14 +98,7 @@ final class FundHarnessTest extends KernelTestCase
             }
 
             $result = $tracker->updateStocks($stocks, $dt, false, $m, $tick, $tpy);
-            $lastCap = (float) $result['total_cap'] > 0.0 ? (float) $result['total_cap'] : $lastCap;
-            $lastFloat = (float) $result['board_float_cap'] > 0.0 ? (float) $result['board_float_cap'] : $lastFloat;
-            $lastReturn = (float) $result['board_price_return'];
-            $lastDividends = (float) $result['board_dividend_cash'];
-            $lastIssuance = (float) $result['board_net_issuance'];
-            $lastDuty = (float) $result['board_stamp_duty'];
-            $lastStake = (float) $result['strategic_stake_cash'];
-            $lastLevy = (float) $result['board_bank_levy'];
+            $reading = $reading->after($result);
 
             if ($tick === 3 && getenv('SIZEPROBE')) {
                 $gdpDollars = $m->sovereignFundDollarsPerGdp * $m->nominalGdpIndex;
@@ -128,7 +110,7 @@ final class FundHarnessTest extends KernelTestCase
                 arsort($caps);
                 fwrite(STDERR, 'SIZEPROBE top: ' . json_encode(array_map(static fn ($c) => sprintf('%.3g', $c), array_slice($caps, 0, 8, true))) . "\n");
             }
-            $boardIndex *= 1.0 + $lastReturn;
+            $boardIndex *= 1.0 + $reading->priceReturn;
             $board[] = round($boardIndex, 6);
 
             if ($tick % $quarterEvery === 0) {
@@ -164,7 +146,7 @@ final class FundHarnessTest extends KernelTestCase
                     'spread' => $m->sovereignRiskSpread,
                     'bond_y' => $m->foreignBondYield,
                     'fpol' => $m->foreignPolicyRate,
-                    'board_gdp' => ($lastFloat ?? 0.0) / max(1e-9, $m->nominalGdpIndex),
+                    'board_gdp' => ($reading->floatCap ?? 0.0) / max(1e-9, $m->nominalGdpIndex),
                 ];
             }
         }

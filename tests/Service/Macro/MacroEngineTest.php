@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Tests\Service\Macro;
 
+use App\DTO\BoardReadingDTO;
 use App\Service\Macro\MacroEngine;
 use App\Service\Macro\Recorder\MacroSnapshotRecorder;
 use App\Service\Macro\Subsystem\AssetMarketSubsystem;
@@ -168,7 +169,7 @@ class MacroEngineTest extends TestCase
         });
         $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
 
-        $paid = $this->engine->updateMacroState(1.0 / 360.0, strategicStakeCash: 2.5e8);
+        $paid = $this->engine->updateMacroState(1.0 / 360.0, new BoardReadingDTO(strategicStakeCash: 2.5e8));
         $this->assertSame(2.5e8, $paid->strategicStakeCash);
 
         $next = $this->engine->updateMacroState(1.0 / 360.0);

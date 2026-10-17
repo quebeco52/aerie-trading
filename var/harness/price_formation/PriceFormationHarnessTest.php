@@ -177,7 +177,7 @@ final class PriceFormationHarnessTest extends KernelTestCase
         for ($tick = 1; $tick <= $ticks; $tick++) {
             $this->reportedThisTick = [];
             $this->beatThisTick = [];
-            $m = $replay !== null ? $this->withDemandLags($replay[$tick - 1], $dt) : $macro->updateMacroState($dt, $lastCap);
+            $m = $replay !== null ? $this->withDemandLags($replay[$tick - 1], $dt) : $macro->updateMacroState($dt, new \App\DTO\BoardReadingDTO($lastCap));
             if ($recordPath !== null) {
                 $recorded[] = $m;
             }

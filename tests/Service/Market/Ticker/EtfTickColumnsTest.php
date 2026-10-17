@@ -44,7 +44,7 @@ class EtfTickColumnsTest extends TestCase
         $source = (string) file_get_contents(\dirname(__DIR__, 4) . '/src/Command/MarketTickerCommand.php');
 
         $this->assertMatchesRegularExpression(
-            '/elseif \(\$isFrameTick\) \{(?:(?!\n {16}\}).)*StockTickColumns::write\(\$conn, \$stocks\);(?:(?!\n {16}\}).)*EtfTickColumns::write\(\$conn, \$indexFunds\);/s',
+            '/elseif \(\$isFrameTick\) \{(?:(?!\n {8}\}).)*StockTickColumns::write\(\$conn, \$run->stocks\);(?:(?!\n {8}\}).)*EtfTickColumns::write\(\$conn, \$run->indexFunds\);/s',
             $source,
         );
     }

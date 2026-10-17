@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Tests\Financial;
 
+use App\DTO\BoardReadingDTO;
 use App\Service\Macro\MacroEngine;
 use App\Service\Macro\Recorder\MacroSnapshotRecorder;
 use App\Service\Macro\Subsystem\AssetMarketSubsystem;
@@ -141,8 +142,8 @@ class SovereignFundDynamicsTest extends TestCase
         $openingGdp = null;
         $transitory = 0.0;
         $reversion = exp(-$dt * log(2.0) / self::TRANSITORY_HALF_LIFE_YEARS);
-        $priceReturn = null;
-        $dividends = null;
+        $priceReturn = 0.0;
+        $dividends = 0.0;
         $sizes = [];
         $ownership = [];
         $weights = [];
@@ -153,7 +154,7 @@ class SovereignFundDynamicsTest extends TestCase
         $lastRebalance = -1.0;
 
         for ($tick = 1; $tick <= self::YEARS * self::TICKS_PER_YEAR; ++$tick) {
-            $macro = $engine->updateMacroState($dt, $floatCap / self::FLOAT_SHARE, $floatCap, $priceReturn, $dividends);
+            $macro = $engine->updateMacroState($dt, new BoardReadingDTO($floatCap / self::FLOAT_SHARE, $floatCap, $priceReturn, $dividends));
             $openingGdp ??= $macro->nominalGdpIndex;
 
             // A board anchored the way the engine's is: it scales with nominal GDP, re-rates against the equity risk

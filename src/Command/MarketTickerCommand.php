@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Command;
 
 use App\DTO\MacroStateDTO;
+use App\DTO\PoliticsStateDTO;
 use App\Entity\Bond;
 use App\Entity\Etf;
 use App\Entity\Stock;
@@ -33,10 +34,9 @@ use App\Service\Market\Ticker\IndexFundPhase;
 use App\Service\Market\Ticker\NestedTransaction;
 use App\Service\Market\Ticker\RestingOrderWatch;
 use App\Service\Market\Ticker\SimulationClockService;
-use App\Service\Market\Ticker\StockBarBook;
 use App\Service\Market\Ticker\StockTickColumns;
 use App\Service\Market\Ticker\TickCadence;
-use App\Service\Market\Ticker\TickProfiler;
+use App\Service\Market\Ticker\TickerRun;
 use App\Service\Market\Trading\ForcedLiquidationService;
 use App\Service\News\SystemicEventReporter;
 use App\Service\Notification\PlayerNotifier;
@@ -65,8 +65,9 @@ use Symfony\Component\Messenger\MessageBusInterface;
  * The market's daemon: one tick advances the economy, the Diet, the board, the funds, the bond ladder and the
  * option chain, writes what changed inside one transaction, and puts a frame on the wire.
  *
- * The phases live in App\Service\Market\Ticker; this class holds their order, the transaction around them, the
- * cadences that gate them and the recovery when a tick is lost.
+ * The phases live in App\Service\Market\Ticker; this class holds their order (runTick()), the transaction around
+ * them and the recovery when a tick is lost. What carries from one tick to the next, the cadences among it, is a
+ * TickerRun.
  */
 class MarketTickerCommand extends Command implements SignalableCommandInterface
 {
@@ -252,20 +253,46 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
     {
         $output->writeln("<info>Market Ticker Started...</info>");
 
-        [$stocks, $indexFunds, $bonds] = $this->loadWorkingSet();
-
-        $dt = 1.0 / $this->ticksPerYear;
-
+        $workingSet = $this->loadWorkingSet();
         [$tickCount, $simTime] = $this->resumeClock($input, $output);
+        $this->announceSampling($output);
 
-        $operatorInterval = (int) max(1, $this->ticksPerYear / 24);  // Operator audits once a game "month"
-        $snapshotInterval = (int) max(1, $this->ticksPerYear / 52);  // Snapshots once a game "week"
-        $quarterlyInterval = (int) max(1, $this->ticksPerYear / 4);   // Snapshots once a game "quarter"
-        $optionSweepInterval = OptionDeskService::sweepIntervalTicks($this->ticksPerYear);
+        // Alert bounds live in Redis as a cache of the table; rebuilt here so a flushed Redis loses no alert.
+        $this->priceAlerts->rebuildAll();
 
-        // What the configured tick rate buys, said once rather than inferred from the overrun rate. A bar carries
-        // the flush, the bond mark, the tick-column write and the reload, so the share of ticks that close one is
-        // the share that cannot finish inside the budget; at or below the bar rate every tick closes one.
+        $this->enableInstruments($input, $output);
+
+        $run = new TickerRun(
+            $tickCount,
+            $simTime,
+            $this->ticksPerYear,
+            $this->politicsEngine->liveState()->policy(),
+            new ChartBufferWriter($this->redis),
+        );
+        [$run->stocks, $run->indexFunds, $run->bonds] = $workingSet;
+
+        while ($this->keepRunning) {
+            $tickStartTime = microtime(true);
+            $this->startTick($run, $output);
+
+            if (!$this->runTick($run, $output)) {
+                return Command::FAILURE;
+            }
+
+            $this->closeTick($run, $tickStartTime, $output);
+        }
+
+        $output->writeln("<comment> Market Ticker shut down.</comment>");
+        return Command::SUCCESS;
+    }
+
+    /**
+     * What the configured tick rate buys, said once rather than inferred from the overrun rate. A bar carries the
+     * flush, the bond mark, the tick-column write and the reload, so the share of ticks that close one is the share
+     * that cannot finish inside the budget; at or below the bar rate every tick closes one.
+     */
+    private function announceSampling(OutputInterface $output): void
+    {
         $barsPerYear = TickCadence::historyPointsPerYear($this->ticksPerYear);
         $output->writeln(sprintf(
             'Sampling: %d bars/sim-year over %d ticks (%.0f%% of ticks close a bar), %.1f ms budget.',
@@ -274,17 +301,11 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
             100.0 * $barsPerYear / max(1, $this->ticksPerYear),
             $this->tickIntervalUs / 1000.0,
         ));
+    }
 
-        $conn = $this->entityManager->getConnection();
-
-        // Alert bounds live in Redis as a cache of the table; rebuilt here so a flushed Redis loses no alert.
-        $this->priceAlerts->rebuildAll();
-
-        $bars = new StockBarBook();
-        $chartBuffers = new ChartBufferWriter($this->redis);
-        $profiler = new TickProfiler();
-        $wireFrame = new WireFrame();
-
+    /** The diagnostics only the ticker turns on: flush attribution, the write audit and the macro probes. */
+    private function enableInstruments(InputInterface $input, OutputInterface $output): void
+    {
         // The tick is the only place a flush is timed, so it is the only place that wants the attribution.
         $this->flushProfiler->enable();
 
@@ -296,384 +317,461 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
         // The gap is only ever moved here, so this is the only process that can say what moved it.
         $this->gapProbe->enable();
         $this->diagnosticsProbe->enable();
+    }
 
-        // Lag equity market cap across ticks to avoid simultaneous feedback loops in macro step.
-        $lastEquityMarketCap = null;
-        // What the sovereign fund reads of the board, on the same one-tick lag as the capitalisation.
-        $lastBoardFloatCap = null;
-        $lastBoardPriceReturn = null;
-        $lastBoardDividendCash = null;
-        $lastBoardNetIssuance = null;
-        $lastBoardStampDuty = null;
-        $lastStrategicStakeCash = null;
-        // The banks' levy bill is a standing amount, not a flow, so it is kept until the board is priced again.
-        $lastBoardBankLevy = null;
-        // What the government hands the economy, on the same lag: the levers in force and the election pulse.
-        $policy = $this->politicsEngine->liveState()->policy();
+    private function startTick(TickerRun $run, OutputInterface $output): void
+    {
+        $run->profiler->startTick();
+        $this->flushProfiler->reset();
+        $this->writeAudit->reset();
 
-        while ($this->keepRunning) {
+        pcntl_signal_dispatch();
 
-            $tickStartTime = microtime(true);
-            $profiler->startTick();
-            $this->flushProfiler->reset();
-            $this->writeAudit->reset();
+        if ($run->tickCount % 10 === 0) {
+            // Dated off the simulation clock, never off the tick count: the counter is a loop position whose
+            // absolute value only has to be consistent with itself.
+            $output->writeln("Updating Market Prices... (Day: " . number_format($run->simTime * 365.0, 1) . ") [Tick: {$run->tickCount}]");
+        }
+    }
 
-            pcntl_signal_dispatch();
+    /**
+     * One tick. The economy, the Diet and the operator's sweep run first, outside the transaction; the board and
+     * everything priced off it run inside one, which commits with the clock; what waits on the commit goes out
+     * after it.
+     *
+     * @return bool False when the EntityManager has closed and the daemon must restart.
+     */
+    private function runTick(TickerRun $run, OutputInterface $output): bool
+    {
+        [$macroState, $politics] = $this->stepEconomy($run);
+        $isHistoryTick = TickCadence::isHistoryTick($run->tickCount, $this->ticksPerYear);
+        $operatorEvents = $this->sweepBeforeTransaction($run, $macroState, $isHistoryTick);
 
-            if ($tickCount % 10 === 0) {
-                // Dated off the simulation clock, never off the tick count: the counter is a loop position whose
-                // absolute value only has to be consistent with itself.
-                $output->writeln("Updating Market Prices... (Day: " . number_format($simTime * 365.0, 1) . ") [Tick: $tickCount]");
+        try {
+            $this->entityManager->beginTransaction();
+
+            $pending = $this->tradeTick($run, $macroState, $politics, $operatorEvents, $isHistoryTick, $output);
+
+            // The clock goes in with the tick, on the tick's own connection: a tick that rolls back rolls its
+            // clock back too, and one that commits cannot lose the fact that it happened.
+            $this->simulationClock->advance($this->entityManager->getConnection(), $run->tickCount, $macroState->totalTime);
+
+            $this->entityManager->commit();
+            $run->profiler->lap('commit');
+
+            $this->afterCommit($run, $macroState, $pending);
+        } catch (RetryableException $e) {
+            // A deadlock or a lock-wait timeout is not a fault in the tick: InnoDB rolled one transaction back
+            // and left a consistent state. It costs THIS tick, and the next recomputes from the rows on disk,
+            // so the ticker takes the loss and carries on without the generic path's pause. The tick is not
+            // re-run in place: the operator pass and the hedge ran before the transaction opened, against the
+            // entity graph the clear() below discards.
+            return $this->recoverLostTick($run, $output, "<comment>Tick {$run->tickCount} lost to lock contention: " . $e->getMessage() . "</comment>");
+        } catch (\Exception $e) {
+            if (!$this->recoverLostTick($run, $output, "<error>Error: " . $e->getMessage() . "</error>")) {
+                return false;
             }
 
-            $macroState = $this->macroEngine->updateMacroState(
-                $dt,
-                $lastEquityMarketCap,
-                $lastBoardFloatCap,
-                $lastBoardPriceReturn,
-                $lastBoardDividendCash,
-                $lastBoardNetIssuance,
-                $lastBoardStampDuty,
-                $lastStrategicStakeCash,
-                $policy,
-                boardBankLevy: $lastBoardBankLevy,
-            );
-            // The Diet votes on the calendar's election tick, on this tick's economy; the economy reads what it decides
-            // next tick.
-            $politics = $this->politicsEngine->updatePolitics($macroState, $dt);
-            $policy = $politics->policy();
-            // Flows are consumed once; a tick that prices no board must not replay the last one's return.
-            $lastBoardPriceReturn = null;
-            $lastBoardDividendCash = null;
-            $lastBoardNetIssuance = null;
-            $lastBoardStampDuty = null;
-            $lastStrategicStakeCash = null;
-            $simTime = $macroState->totalTime;
-            $this->marketEvent->stampSimTime($simTime);
-            $this->notifier->stampSimTime($simTime);
-            $profiler->lap('macro');
-
-            // Retention, on the clock its cutoffs are measured against: true exactly once per simulated-year
-            // crossing whatever the tick rate. The pass is idempotent, so it needs no gate or persisted marker,
-            // and the work goes to the worker; only the dispatch happens here.
-            if (TickCadence::crossedSimulatedBoundary($simTime, $dt, HistoryPruner::PRUNE_INTERVAL_YEARS)) {
-                $this->messageBus->dispatch(new \App\Message\PruneHistoryMessage(
-                    HistoryPruner::DEFAULT_YEARS_KEPT,
-                    HistoryPruner::THINNED_ROWS_PER_YEAR,
-                ));
-            }
-
-            $isFrameTick = WireFrame::isFrameTick($tickCount, $this->tickIntervalUs);
-
-            $operatorEvents = $tickCount % $operatorInterval === 0
-                ? $this->failureSweep->sweep($stocks, $macroState)
-                : [];
-
-            $isHistoryTick = TickCadence::isHistoryTick($tickCount, $this->ticksPerYear);
-
-            // Re-hedge option inventory on history bar cadence before draining order flow.
-            if ($isHistoryTick) {
-                $this->optionDesk->hedge($stocks, 1.0 / TickCadence::historyPointsPerYear($this->ticksPerYear));
-            }
-
-            try {
-                $this->entityManager->beginTransaction();
-
-                $profiler->lap('operator+hedge');
-                $result = $this->stockTracker->updateStocks($stocks, $dt, $isHistoryTick, $macroState, $tickCount, $this->ticksPerYear);
-                $profiler->lap('stocks');
-                $stockUpdates = $result['updates'];
-                $totalMarketCap = $result['total_cap'];
-
-                // Household equity wealth is what the board is worth, so it is read here, off the board. The index
-                // funds' levels are quotes restated on a split; capitalisation is the quantity itself.
-                $lastEquityMarketCap = $totalMarketCap > 0.0 ? $totalMarketCap : $lastEquityMarketCap;
-                $lastBoardFloatCap = $result['board_float_cap'] > 0.0 ? $result['board_float_cap'] : $lastBoardFloatCap;
-                $lastBoardPriceReturn = $result['board_price_return'];
-                $lastBoardDividendCash = $result['board_dividend_cash'];
-                $lastBoardNetIssuance = $result['board_net_issuance'];
-                $lastBoardStampDuty = $result['board_stamp_duty'];
-                $lastBoardBankLevy = $result['board_bank_levy'];
-                $lastStrategicStakeCash = $result['strategic_stake_cash'];
-                $marketVol = $result['market_vol'];
-                $events = $result['events'];
-
-                $benchmarkFund = $indexFunds[MarketIndex::benchmark()->value] ?? null;
-                if ($benchmarkFund !== null) {
-                    $events = array_merge($events, $this->systemicEvents->report($macroState, $politics, $benchmarkFund));
-                }
-                $this->electionRecorder->record($politics);
-                $this->politicsHistory->record($politics);
-
-                if (!empty($operatorEvents)) {
-                    $events = array_merge($events, $operatorEvents);
-                }
-
-                $profiler->lap('events');
-
-                $indexPhase = $this->indexFundPhase->run($indexFunds, $stocks, $result, $macroState, $tickCount, $this->ticksPerYear, $dt, $isHistoryTick);
-                foreach ($indexPhase['log'] as $line) {
-                    $output->writeln($line);
-                }
-                $events = array_merge($events, $indexPhase['events']);
-                $etfUpdates = $indexPhase['updates'];
-                $profiler->lap('etfs');
-
-                $bondPhase = $this->bondDeskPhase->run($bonds, $stocks, $macroState, $tickCount, $this->ticksPerYear);
-                $bonds = $bondPhase['bonds'];
-                $bondResult = $bondPhase['result'];
-                $profiler->lap('bonds');
-
-                // Sweep option chain in staggered slices to settle expiries, list strikes, and update Greeks.
-                if (OptionDeskService::isSweepTick($tickCount, $optionSweepInterval)) {
-                    $this->sweepOptions($stocks, $macroState, $dt, $tickCount, $optionSweepInterval, $profiler, $output);
-                }
-
-                $quotes = array_merge($stockUpdates, $etfUpdates);
-
-                // Publish changed asset quotes to websocket wire, omitting static bond quotes between history ticks.
-                $published = $isHistoryTick
-                    ? array_merge($quotes, $bondResult['updates'])
-                    : $quotes;
-
-                $bars->accumulate($stockUpdates);
-
-                // Collected inside the tick, dispatched after the commit below: see RestingOrderWatch.
-                $pending = $this->restingOrders->collect($quotes, $bondResult['struck'], $tickCount);
-                $profiler->lap('limit orders');
-
-                if ($isHistoryTick) {
-                    // The per-tick columns go to the database as data, before the flush: they are mapped
-                    // non-updatable, so the flush carries only what else changed on a company and a quiet tick
-                    // writes no stock row at all.
-                    StockTickColumns::write($conn, $stocks);
-                    $profiler->lap('stock marks');
-
-                    $this->entityManager->flush();
-                    $profiler->lap('flush');
-
-                    $bars->write($conn, $result['history'], $macroState->totalTime);
-
-                    // Empty except on the day's mark: see BOND_MARKS_PER_YEAR.
-                    $this->bondTracker->recordHistory($bondResult['history']);
-
-                    // The funds' own rows, accrued during the fund phase and written here as data: see
-                    // EtfTracker::recordHistory().
-                    $this->etfTracker->recordHistory();
-                    $profiler->lap('history rows');
-
-                    // Once a trading day, not every bar: see reloadIntervalBars(). Everything the tick changed has
-                    // just been flushed, so nothing is lost to the clear.
-                    if (TickCadence::isReloadTick($tickCount, $this->ticksPerYear)) {
-                        $this->entityManager->clear();
-                        [$stocks, $indexFunds, $bonds] = $this->loadWorkingSet();
-                        $profiler->lap('reload');
-                    }
-                } elseif ($isFrameTick) {
-                    // A frame shows this tick's prices, so the rows fills and net worth are struck at carry them too:
-                    // written on bars alone, a desk filled at a price the screens had moved past.
-                    StockTickColumns::write($conn, $stocks);
-                    EtfTickColumns::write($conn, $indexFunds);
-                    $profiler->lap('stock marks');
-                }
-
-                // A frame carries each quote's past-month change, read back from the buffers just written.
-                $changes = $chartBuffers->write($quotes, $bondResult['updates'], $tickCount, $this->ticksPerYear, $isFrameTick);
-                if ($changes !== []) {
-                    $published = ChartBufferWriter::withChanges($published, $changes);
-                }
-                $profiler->lap('chart buffers');
-
-                $districtReconstitution = $this->reconstituteDistrict($stocks, $tickCount, $events);
-
-                // The wire carries frames, not ticks: the latest quote per instrument plus the per-tick points the
-                // live chart draws. The scalars are absorbed on frame ticks only, and a frame carries the last tick's
-                // value whichever tick it was read on; of the macro state only what the live pages read goes out.
-                $wireFrame->absorb(
-                    $tickCount,
-                    $published,
-                    $events,
-                    $districtReconstitution,
-                    $isFrameTick ? [
-                        'market_vol' => $marketVol,
-                        'economic_cycle' => $macroState->economicCycleLabel(),
-                        'council_rate' => $macroState->policyRate,
-                        'macro' => WireFrame::liveMacro($macroState->toArray()),
-                        'bond_curve' => $bondResult['curve'],
-                    ] : [],
-                );
-                if ($isFrameTick) {
-                    $this->redis->publish('market_updates', json_encode($wireFrame->flush($tickCount, time())));
-
-                    // The gap decomposition goes to its own key rather than into the frame: the admin panel is the
-                    // only reader, and a frame is on every open browser's wire.
-                    $this->redis->set(OutputGapProbe::REDIS_KEY, (string) json_encode($this->gapProbe->snapshot()));
-                    $this->redis->set(MacroDiagnosticsProbe::REDIS_KEY, (string) json_encode($this->diagnosticsProbe->snapshot()));
-                }
-
-                // A cache of the committed clock, for the web process. Never the authority: see SimulationClock.
-                $this->redis->set('simulation_tick_count', $tickCount);
-                $profiler->lap('publish');
-
-                // Save Portfolio Snapshots once a "Simulation Week"
-                if ($tickCount % $snapshotInterval === 0) {
-                    // Write the live prices first, so recordBulkSnapshots' raw SQL values holdings at them.
-                    if (!$isHistoryTick) {
-                        StockTickColumns::write($conn, $stocks);
-                        $this->entityManager->flush();
-                    }
-
-                    // Idle brokerage cash is swept overnight and earns the policy rate net of the intermediary's
-                    // spread, accrued before the snapshot so its net asset value includes the week's interest.
-                    $this->portfolio->accrueCashInterest(
-                        Portfolio::cashSweepRate($macroState->policyRateEma),
-                        $snapshotInterval * $dt,
-                    );
-
-                    $this->portfolio->recordBulkSnapshots();
-                    $profiler->lap('snapshots');
-                }
-
-                if ($tickCount % $quarterlyInterval === 0) {
-                    $this->recordQuarter($macroState, $conn, $quarterlyInterval);
-                }
-
-                // The clock goes in with the tick, on the tick's own connection: a tick that rolls back rolls its
-                // clock back too, and one that commits cannot lose the fact that it happened.
-                $this->simulationClock->advance($conn, $tickCount, $macroState->totalTime);
-
-                $this->entityManager->commit();
-                $profiler->lap('commit');
-
-                // Expiries and watched-name news raised inside the tick go out only now it has committed.
-                $this->notifier->publish();
-
-                // Drained here, with the tick's locks released: the worker is free to take the rows it needs.
-                foreach ($pending['limit_orders'] as $pendingTicker => $pendingPrice) {
-                    $this->messageBus->dispatch(new \App\Message\ProcessLimitOrdersMessage($pendingTicker, $pendingPrice));
-                }
-                foreach ($pending['alerts'] as $pendingTicker => $pendingPrice) {
-                    $this->messageBus->dispatch(new \App\Message\ProcessPriceAlertsMessage($pendingTicker, $pendingPrice));
-                }
-                $profiler->lap('limit dispatch');
-
-                // The margin sweep runs AFTER the tick commits, never inside it: a forced sale goes through the
-                // ordinary execution path, which opens its own transaction.
-                if ($tickCount % $snapshotInterval === 0) {
-                    $this->liquidationService->sweep($macroState->policyRate, $snapshotInterval * $dt);
-                    $profiler->lap('margin sweep');
-
-                    // The season's week, on the snapshot's cadence and after the sweep, so a forced sale is in it.
-                    $this->seasons->recordWeek(
-                        $macroState->totalTime,
-                        $snapshotInterval * $dt,
-                        Portfolio::cashSweepRate($macroState->policyRateEma),
-                    );
-                    $profiler->lap('season');
-                }
-            } catch (RetryableException $e) {
-                // A deadlock or a lock-wait timeout is not a fault in the tick: InnoDB rolled one transaction back
-                // and left a consistent state. It costs THIS tick, and the next recomputes from the rows on disk,
-                // so the ticker takes the loss and carries on without the generic path's pause. The tick is not
-                // re-run in place: the operator pass and the hedge ran before the transaction opened, against the
-                // entity graph the clear() below discards.
-                NestedTransaction::unwindAll($this->entityManager->getConnection());
-                $this->notifier->discard();
-
-                $output->writeln("<comment>Tick {$tickCount} lost to lock contention: " . $e->getMessage() . "</comment>");
-
-                if (!$this->entityManager->isOpen()) {
-                    $output->writeln("<error>EntityManager is closed. Exiting Ticker to reboot...</error>");
-                    return Command::FAILURE;
-                }
-
-                $this->entityManager->clear();
-                [$stocks, $indexFunds, $bonds] = $this->loadWorkingSet();
-            } catch (\Exception $e) {
-                NestedTransaction::unwindAll($this->entityManager->getConnection());
-                $this->notifier->discard();
-                $output->writeln("<error>Error: " . $e->getMessage() . "</error>");
-
-                // If the EntityManager has closed entirely, exit to let Supervisor restart the daemon
-                if (!$this->entityManager->isOpen()) {
-                    $output->writeln("<error>EntityManager is closed. Exiting Ticker to reboot...</error>");
-                    return Command::FAILURE;
-                }
-
-                // Clear detached entities and reload fresh ones so the next tick has a valid state
-                $this->entityManager->clear();
-                [$stocks, $indexFunds, $bonds] = $this->loadWorkingSet();
-
-                sleep(5);
-            }
-
-            // The tick that just ran, kept before the counter moves on, so every diagnostic below names it.
-            $ranTick = $tickCount;
-            $tickCount++;
-
-            // Its own line rather than part of the lag warning: a dropped write has nothing to do with how long
-            // the tick took, and the warning only fires on an overrun.
-            $unpersisted = $this->writeAudit->summary();
-
-            if ($unpersisted !== '') {
-                $output->writeln("<error>⚠️ Unpersisted writes on tick {$ranTick}: {$unpersisted} — repaired, but a mutation is missing its persist().</error>");
-            }
-
-            $executionTimeSec = microtime(true) - $tickStartTime;
-            $executionTimeUs = (int) ($executionTimeSec * 1000000);
-            $overran = $executionTimeUs > $this->tickIntervalUs;
-
-            if ($overran) {
-                $overtimeMs = ($executionTimeUs - $this->tickIntervalUs) / 1000;
-
-                // The identity map's size separates flush overhead from write volume.
-                $managed = $this->entityManager->getUnitOfWork()->size();
-                $written = $this->flushProfiler->summary();
-                $wrote = $written === '' ? 'wrote nothing' : $written;
-
-                $output->writeln("<comment>⚠️ Lag Spike: Tick {$ranTick} took too long! Dropped behind by " . round($overtimeMs, 2) . "ms ({$profiler->breakdown()} | map {$managed} | {$wrote})</comment>");
-            }
-
-            foreach ($profiler->closeTick($executionTimeSec * 1000.0, $overran, $tickCount, $this->tickIntervalUs / 1000.0) as $line) {
-                $output->writeln($line);
-            }
-
-            $timeToSleepUs = $this->tickIntervalUs - $executionTimeUs;
-
-            if ($timeToSleepUs > 0) {
-                usleep($timeToSleepUs);
-            }
+            sleep(5);
         }
 
-        $output->writeln("<comment> Market Ticker shut down.</comment>");
-        return Command::SUCCESS;
+        return true;
+    }
+
+    /**
+     * The economy advances on the board and the laws as of the last tick, and the Diet on the economy just stepped.
+     *
+     * @return array{0: MacroStateDTO, 1: PoliticsStateDTO}
+     */
+    private function stepEconomy(TickerRun $run): array
+    {
+        $macroState = $this->macroEngine->updateMacroState($run->dt, $run->board, $run->policy);
+        // The Diet votes on the calendar's election tick, on this tick's economy; the economy reads what it decides
+        // next tick.
+        $politics = $this->politicsEngine->updatePolitics($macroState, $run->dt);
+        $run->policy = $politics->policy();
+        // Flows are consumed once; a tick that prices no board must not replay the last one's return.
+        $run->board = $run->board->spent();
+        $run->simTime = $macroState->totalTime;
+        $this->marketEvent->stampSimTime($run->simTime);
+        $this->notifier->stampSimTime($run->simTime);
+        $run->profiler->lap('macro');
+
+        return [$macroState, $politics];
+    }
+
+    /**
+     * The work that runs before the tick's transaction opens: the retention dispatch, the operator's failure sweep and
+     * the option desk's hedge.
+     *
+     * @return list<mixed> What the operator's sweep raised.
+     */
+    private function sweepBeforeTransaction(TickerRun $run, MacroStateDTO $macroState, bool $isHistoryTick): array
+    {
+        // Retention, on the clock its cutoffs are measured against: true exactly once per simulated-year
+        // crossing whatever the tick rate. The pass is idempotent, so it needs no gate or persisted marker,
+        // and the work goes to the worker; only the dispatch happens here.
+        if (TickCadence::crossedSimulatedBoundary($run->simTime, $run->dt, HistoryPruner::PRUNE_INTERVAL_YEARS)) {
+            $this->messageBus->dispatch(new \App\Message\PruneHistoryMessage(
+                HistoryPruner::DEFAULT_YEARS_KEPT,
+                HistoryPruner::THINNED_ROWS_PER_YEAR,
+            ));
+        }
+
+        $operatorEvents = $run->tickCount % $run->operatorInterval === 0
+            ? $this->failureSweep->sweep($run->stocks, $macroState)
+            : [];
+
+        // Re-hedge option inventory on history bar cadence before draining order flow.
+        if ($isHistoryTick) {
+            $this->optionDesk->hedge($run->stocks, 1.0 / TickCadence::historyPointsPerYear($this->ticksPerYear));
+        }
+
+        return $operatorEvents;
+    }
+
+    /**
+     * The tick inside its transaction: the board steps on the economy just advanced, the funds, the bond ladder and
+     * the option chain on the board, and what changed is written and put on the wire.
+     *
+     * @param list<mixed> $operatorEvents What the operator's sweep raised before the transaction opened.
+     *
+     * @return array{limit_orders: array<string, mixed>, alerts: array<string, float>} The resting orders and alerts
+     *                                                                                 the tick's quotes may have
+     *                                                                                 reached, dispatched once it
+     *                                                                                 commits.
+     */
+    private function tradeTick(
+        TickerRun $run,
+        MacroStateDTO $macroState,
+        PoliticsStateDTO $politics,
+        array $operatorEvents,
+        bool $isHistoryTick,
+        OutputInterface $output,
+    ): array {
+        $profiler = $run->profiler;
+        $isFrameTick = WireFrame::isFrameTick($run->tickCount, $this->tickIntervalUs);
+        $profiler->lap('operator+hedge');
+
+        $result = $this->stockTracker->updateStocks($run->stocks, $run->dt, $isHistoryTick, $macroState, $run->tickCount, $this->ticksPerYear);
+        $profiler->lap('stocks');
+
+        // Household equity wealth is what the board is worth, so it is read here, off the board. The index
+        // funds' levels are quotes restated on a split; capitalisation is the quantity itself.
+        $run->board = $run->board->after($result);
+
+        $events = $result['events'];
+        $benchmarkFund = $run->indexFunds[MarketIndex::benchmark()->value] ?? null;
+        if ($benchmarkFund !== null) {
+            $events = array_merge($events, $this->systemicEvents->report($macroState, $politics, $benchmarkFund));
+        }
+        $this->electionRecorder->record($politics);
+        $this->politicsHistory->record($politics);
+
+        if (!empty($operatorEvents)) {
+            $events = array_merge($events, $operatorEvents);
+        }
+
+        $profiler->lap('events');
+
+        $indexPhase = $this->indexFundPhase->run($run->indexFunds, $run->stocks, $result, $macroState, $run->tickCount, $this->ticksPerYear, $run->dt, $isHistoryTick);
+        foreach ($indexPhase['log'] as $line) {
+            $output->writeln($line);
+        }
+        $events = array_merge($events, $indexPhase['events']);
+        $profiler->lap('etfs');
+
+        $bondPhase = $this->bondDeskPhase->run($run->bonds, $run->stocks, $macroState, $run->tickCount, $this->ticksPerYear);
+        $run->bonds = $bondPhase['bonds'];
+        $bondResult = $bondPhase['result'];
+        $profiler->lap('bonds');
+
+        // Sweep option chain in staggered slices to settle expiries, list strikes, and update Greeks.
+        if (OptionDeskService::isSweepTick($run->tickCount, $run->optionSweepInterval)) {
+            $this->sweepOptions($run, $macroState, $output);
+        }
+
+        $quotes = array_merge($result['updates'], $indexPhase['updates']);
+
+        // Publish changed asset quotes to websocket wire, omitting static bond quotes between history ticks.
+        $published = $isHistoryTick
+            ? array_merge($quotes, $bondResult['updates'])
+            : $quotes;
+
+        $run->bars->accumulate($result['updates']);
+
+        // Collected inside the tick, dispatched after the commit below: see RestingOrderWatch.
+        $pending = $this->restingOrders->collect($quotes, $bondResult['struck'], $run->tickCount);
+        $profiler->lap('limit orders');
+
+        $this->writeMarks($run, $result['history'], $bondResult['history'], $macroState, $isHistoryTick, $isFrameTick);
+
+        // A frame carries each quote's past-month change, read back from the buffers just written.
+        $changes = $run->chartBuffers->write($quotes, $bondResult['updates'], $run->tickCount, $this->ticksPerYear, $isFrameTick);
+        if ($changes !== []) {
+            $published = ChartBufferWriter::withChanges($published, $changes);
+        }
+        $profiler->lap('chart buffers');
+
+        $districtReconstitution = $this->reconstituteDistrict($run->stocks, $run->tickCount, $events);
+
+        $this->putOnWire($run, $published, $events, $districtReconstitution, $result['market_vol'], $bondResult['curve'], $macroState, $isFrameTick);
+        $this->closePeriods($run, $macroState, $isHistoryTick);
+
+        return $pending;
+    }
+
+    /**
+     * What the tick leaves on disk. A bar writes every name's marks and flushes, then the history rows; a frame
+     * between bars writes the marks alone, so the fills and net worth struck at it carry the prices on the screens.
+     *
+     * @param array<mixed>             $stockHistory The board's history rows.
+     * @param array<int, array<mixed>> $bondHistory  The ladder's history rows.
+     */
+    private function writeMarks(
+        TickerRun $run,
+        array $stockHistory,
+        array $bondHistory,
+        MacroStateDTO $macroState,
+        bool $isHistoryTick,
+        bool $isFrameTick,
+    ): void {
+        $conn = $this->entityManager->getConnection();
+        $profiler = $run->profiler;
+
+        if ($isHistoryTick) {
+            // The per-tick columns go to the database as data, before the flush: they are mapped
+            // non-updatable, so the flush carries only what else changed on a company and a quiet tick
+            // writes no stock row at all.
+            StockTickColumns::write($conn, $run->stocks);
+            $profiler->lap('stock marks');
+
+            $this->entityManager->flush();
+            $profiler->lap('flush');
+
+            $run->bars->write($conn, $stockHistory, $macroState->totalTime);
+
+            // Empty except on the day's mark: see BOND_MARKS_PER_YEAR.
+            $this->bondTracker->recordHistory($bondHistory);
+
+            // The funds' own rows, accrued during the fund phase and written here as data: see
+            // EtfTracker::recordHistory().
+            $this->etfTracker->recordHistory();
+            $profiler->lap('history rows');
+
+            // Once a trading day, not every bar: see reloadIntervalBars(). Everything the tick changed has
+            // just been flushed, so nothing is lost to the clear.
+            if (TickCadence::isReloadTick($run->tickCount, $this->ticksPerYear)) {
+                $this->reloadWorkingSet($run);
+                $profiler->lap('reload');
+            }
+        } elseif ($isFrameTick) {
+            // A frame shows this tick's prices, so the rows fills and net worth are struck at carry them too:
+            // written on bars alone, a desk filled at a price the screens had moved past.
+            StockTickColumns::write($conn, $run->stocks);
+            EtfTickColumns::write($conn, $run->indexFunds);
+            $profiler->lap('stock marks');
+        }
+    }
+
+    /**
+     * The wire carries frames, not ticks: the latest quote per instrument plus the per-tick points the live chart
+     * draws. The scalars are absorbed on frame ticks only, and a frame carries the last tick's value whichever tick it
+     * was read on; of the macro state only what the live pages read goes out.
+     *
+     * @param list<array<string, mixed>>                               $published
+     * @param list<mixed>                                              $events
+     * @param array{tick: int, tickers: list<string>, promoted: list<string>, evicted: list<string>}|null $districtReconstitution
+     * @param array<int, array{tenor: float, yield: float}>            $bondCurve
+     */
+    private function putOnWire(
+        TickerRun $run,
+        array $published,
+        array $events,
+        ?array $districtReconstitution,
+        float $marketVol,
+        array $bondCurve,
+        MacroStateDTO $macroState,
+        bool $isFrameTick,
+    ): void {
+        $run->wireFrame->absorb(
+            $run->tickCount,
+            $published,
+            $events,
+            $districtReconstitution,
+            $isFrameTick ? [
+                'market_vol' => $marketVol,
+                'economic_cycle' => $macroState->economicCycleLabel(),
+                'council_rate' => $macroState->policyRate,
+                'macro' => WireFrame::liveMacro($macroState->toArray()),
+                'bond_curve' => $bondCurve,
+            ] : [],
+        );
+        if ($isFrameTick) {
+            $this->redis->publish('market_updates', json_encode($run->wireFrame->flush($run->tickCount, time())));
+
+            // The gap decomposition goes to its own key rather than into the frame: the admin panel is the
+            // only reader, and a frame is on every open browser's wire.
+            $this->redis->set(OutputGapProbe::REDIS_KEY, (string) json_encode($this->gapProbe->snapshot()));
+            $this->redis->set(MacroDiagnosticsProbe::REDIS_KEY, (string) json_encode($this->diagnosticsProbe->snapshot()));
+        }
+
+        // A cache of the committed clock, for the web process. Never the authority: see SimulationClock.
+        $this->redis->set('simulation_tick_count', $run->tickCount);
+        $run->profiler->lap('publish');
+    }
+
+    /** The week's portfolio snapshots and the quarter's macro report, on their cadences, inside the tick. */
+    private function closePeriods(TickerRun $run, MacroStateDTO $macroState, bool $isHistoryTick): void
+    {
+        $conn = $this->entityManager->getConnection();
+
+        if ($run->tickCount % $run->snapshotInterval === 0) {
+            // Write the live prices first, so recordBulkSnapshots' raw SQL values holdings at them.
+            if (!$isHistoryTick) {
+                StockTickColumns::write($conn, $run->stocks);
+                $this->entityManager->flush();
+            }
+
+            // Idle brokerage cash is swept overnight and earns the policy rate net of the intermediary's
+            // spread, accrued before the snapshot so its net asset value includes the week's interest.
+            $this->portfolio->accrueCashInterest(
+                Portfolio::cashSweepRate($macroState->policyRateEma),
+                $run->snapshotInterval * $run->dt,
+            );
+
+            $this->portfolio->recordBulkSnapshots();
+            $run->profiler->lap('snapshots');
+        }
+
+        if ($run->tickCount % $run->quarterlyInterval === 0) {
+            $this->recordQuarter($macroState, $conn, $run->quarterlyInterval);
+        }
+    }
+
+    /**
+     * What waits on the commit: the messages raised inside the tick, the resting orders and alerts its quotes
+     * reached, and on the week's tick the margin sweep and the season's week.
+     *
+     * @param array{limit_orders: array<string, mixed>, alerts: array<string, float>} $pending
+     */
+    private function afterCommit(TickerRun $run, MacroStateDTO $macroState, array $pending): void
+    {
+        // Expiries and watched-name news raised inside the tick go out only now it has committed.
+        $this->notifier->publish();
+
+        // Drained here, with the tick's locks released: the worker is free to take the rows it needs.
+        foreach ($pending['limit_orders'] as $pendingTicker => $pendingPrice) {
+            $this->messageBus->dispatch(new \App\Message\ProcessLimitOrdersMessage($pendingTicker, $pendingPrice));
+        }
+        foreach ($pending['alerts'] as $pendingTicker => $pendingPrice) {
+            $this->messageBus->dispatch(new \App\Message\ProcessPriceAlertsMessage($pendingTicker, $pendingPrice));
+        }
+        $run->profiler->lap('limit dispatch');
+
+        // The margin sweep runs AFTER the tick commits, never inside it: a forced sale goes through the
+        // ordinary execution path, which opens its own transaction.
+        if ($run->tickCount % $run->snapshotInterval === 0) {
+            $this->liquidationService->sweep($macroState->policyRate, $run->snapshotInterval * $run->dt);
+            $run->profiler->lap('margin sweep');
+
+            // The season's week, on the snapshot's cadence and after the sweep, so a forced sale is in it.
+            $this->seasons->recordWeek(
+                $macroState->totalTime,
+                $run->snapshotInterval * $run->dt,
+                Portfolio::cashSweepRate($macroState->policyRateEma),
+            );
+            $run->profiler->lap('season');
+        }
+    }
+
+    /**
+     * Rolls a lost tick back whole and reloads the working set, so the next tick starts from the rows on disk.
+     *
+     * @return bool False when the EntityManager has closed and the daemon must restart.
+     */
+    private function recoverLostTick(TickerRun $run, OutputInterface $output, string $message): bool
+    {
+        NestedTransaction::unwindAll($this->entityManager->getConnection());
+        $this->notifier->discard();
+
+        $output->writeln($message);
+
+        // If the EntityManager has closed entirely, exit to let Supervisor restart the daemon.
+        if (!$this->entityManager->isOpen()) {
+            $output->writeln("<error>EntityManager is closed. Exiting Ticker to reboot...</error>");
+            return false;
+        }
+
+        $this->reloadWorkingSet($run);
+
+        return true;
+    }
+
+    /** Clears the detached entities and reloads fresh ones, so the next tick has a valid working set. */
+    private function reloadWorkingSet(TickerRun $run): void
+    {
+        $this->entityManager->clear();
+        [$run->stocks, $run->indexFunds, $run->bonds] = $this->loadWorkingSet();
+    }
+
+    /** Counts the tick, reports what it cost, and sleeps out the rest of its interval. */
+    private function closeTick(TickerRun $run, float $tickStartTime, OutputInterface $output): void
+    {
+        // The tick that just ran, kept before the counter moves on, so every diagnostic below names it.
+        $ranTick = $run->tickCount;
+        $run->tickCount++;
+
+        // Its own line rather than part of the lag warning: a dropped write has nothing to do with how long
+        // the tick took, and the warning only fires on an overrun.
+        $unpersisted = $this->writeAudit->summary();
+
+        if ($unpersisted !== '') {
+            $output->writeln("<error>⚠️ Unpersisted writes on tick {$ranTick}: {$unpersisted} — repaired, but a mutation is missing its persist().</error>");
+        }
+
+        $executionTimeSec = microtime(true) - $tickStartTime;
+        $executionTimeUs = (int) ($executionTimeSec * 1000000);
+        $overran = $executionTimeUs > $this->tickIntervalUs;
+
+        if ($overran) {
+            $overtimeMs = ($executionTimeUs - $this->tickIntervalUs) / 1000;
+
+            // The identity map's size separates flush overhead from write volume.
+            $managed = $this->entityManager->getUnitOfWork()->size();
+            $written = $this->flushProfiler->summary();
+            $wrote = $written === '' ? 'wrote nothing' : $written;
+
+            $output->writeln("<comment>⚠️ Lag Spike: Tick {$ranTick} took too long! Dropped behind by " . round($overtimeMs, 2) . "ms ({$run->profiler->breakdown()} | map {$managed} | {$wrote})</comment>");
+        }
+
+        foreach ($run->profiler->closeTick($executionTimeSec * 1000.0, $overran, $run->tickCount, $this->tickIntervalUs / 1000.0) as $line) {
+            $output->writeln($line);
+        }
+
+        $timeToSleepUs = $this->tickIntervalUs - $executionTimeUs;
+
+        if ($timeToSleepUs > 0) {
+            usleep($timeToSleepUs);
+        }
     }
 
     /**
      * One staggered slice of the option chain: settles expiries, lists strikes and refreshes the Greeks.
-     *
-     * @param array<int, Stock> $stocks
      */
-    private function sweepOptions(
-        array $stocks,
-        MacroStateDTO $macroState,
-        float $dt,
-        int $tickCount,
-        int $optionSweepInterval,
-        TickProfiler $profiler,
-        OutputInterface $output,
-    ): void {
+    private function sweepOptions(TickerRun $run, MacroStateDTO $macroState, OutputInterface $output): void
+    {
         $sweepResult = $this->optionDesk->sweep(
-            $stocks,
+            $run->stocks,
             $macroState,
-            $dt * $optionSweepInterval * OptionDeskService::SWEEP_SLICES,
-            OptionDeskService::sweepSlice($tickCount, $optionSweepInterval),
+            $run->dt * $run->optionSweepInterval * OptionDeskService::SWEEP_SLICES,
+            OptionDeskService::sweepSlice($run->tickCount, $run->optionSweepInterval),
         );
-        $profiler->lap('options');
+        $run->profiler->lap('options');
 
         // The sweep's own stages, so an overrun names the statement rather than the service.
         foreach ($sweepResult['timing'] as $stage => $ms) {
-            $profiler->record('opt:' . $stage, $ms);
+            $run->profiler->record('opt:' . $stage, $ms);
         }
 
         // What the pass moved, so a slow settle can be told from a large one. Marking is every sweep's routine
@@ -688,7 +786,7 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
                 $sweepResult['exercised'],
                 $sweepResult['listed'],
                 $held,
-                $tickCount,
+                $run->tickCount,
             ));
         }
     }

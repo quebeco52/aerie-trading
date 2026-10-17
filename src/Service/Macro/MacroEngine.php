@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Service\Macro;
 
+use App\DTO\BoardReadingDTO;
 use App\DTO\GovernmentPolicyDTO;
 use App\DTO\MacroStateDTO;
 use App\Service\Event\ShockEvent;
@@ -155,18 +156,18 @@ class MacroEngine
      * Calculates Inflation, Output Gap, Taylor Rule (Short Rate), and the Yield Curve.
      *
      * Everything here runs forward, from the economy to the prices it sets, with one exception: household
-     * equity wealth. The board's CAPITALISATION comes back in through $equityMarketCap so that a bull market
-     * can spend and a crash can save, which is a loop, and it is closed deliberately and visibly -- the
-     * caller hands over what it measured on the PREVIOUS tick, never anything from this one.
+     * equity wealth. The board's CAPITALISATION comes back in through $board so that a bull market can spend and a
+     * crash can save, which is a loop, and it is closed deliberately and visibly -- the caller hands over what it
+     * measured on the PREVIOUS tick, never anything from this one.
      *
      * Capitalisation, not an index level. A level is a tradable instrument's scale: the district's funds
      * split themselves whenever their price runs away, and the index divisor is restated to match, so a
      * level re-bases on a share-count cosmetic. Household wealth does not. Reading the level once cost this
      * engine a 73% phantom crash and years of demand drag behind it.
      *
-     * Passing null leaves the last observation standing, and a caller that never reports a market (the
-     * simulate command, the headless harness, the unit tests) leaves the capitalisation at zero, which the
-     * wealth channel reads as "no market" and contributes exactly nothing for.
+     * A null level leaves the last observation standing, and a caller that never reports a market (the headless
+     * harness, the unit tests) leaves the capitalisation at zero, which the wealth channel reads as "no market" and
+     * contributes exactly nothing for.
      *
      * The sovereign fund reads the board the same way and on the same lag: its float-adjusted capitalisation (a
      * level, which stands when not reported) and the float-weighted price return, dividend cash and net issuance of
@@ -177,32 +178,15 @@ class MacroEngine
      * tick, and null leaves both where they stand, so a caller with no politics runs on the opening levers and no
      * calendar.
      *
-     * @param float      $dt                Time increment in years.
-     * @param float|null $equityMarketCap   Whole-board capitalisation as of the previous tick, or null.
-     * @param float|null $boardFloatCap     Whole-board float-adjusted capitalisation as of the previous tick, or null.
-     * @param float|null $boardPriceReturn  The previous tick's float-weighted price return of the board, or null.
-     * @param float|null $boardDividendCash Dividend cash the board's float was paid on the previous tick, or null.
-     * @param float|null $boardNetIssuance  Float the companies' own issuance added on the previous tick (buybacks
-     *                                      negative), or null.
-     * @param float|null $boardStampDuty    Stamp duty the board's trading paid on the previous tick, or null.
-     * @param float|null $strategicStakeCash Cash the District's strategic stakes paid it on the previous tick
-     *                                       (dividends, buybacks less issues), or null.
+     * @param float                    $dt     Time increment in years.
+     * @param BoardReadingDTO|null     $board  The board as of the previous tick, or null for no market.
      * @param GovernmentPolicyDTO|null $policy The government's levers and election pulse as of the previous tick, or
      *                                         null.
-     * @param float|null $boardBankLevy     Bank levy the board's banks owe a year at the rate in force, as of the
-     *                                      previous tick, or null to keep the last.
      */
     public function updateMacroState(
         float $dt,
-        ?float $equityMarketCap = null,
-        ?float $boardFloatCap = null,
-        ?float $boardPriceReturn = null,
-        ?float $boardDividendCash = null,
-        ?float $boardNetIssuance = null,
-        ?float $boardStampDuty = null,
-        ?float $strategicStakeCash = null,
+        ?BoardReadingDTO $board = null,
         ?GovernmentPolicyDTO $policy = null,
-        ?float $boardBankLevy = null,
     ): MacroStateDTO {
         $state = $this->loadState();
 
@@ -210,19 +194,20 @@ class MacroEngine
             $this->enactPolicy($state, $policy);
         }
 
-        if ($equityMarketCap !== null && $equityMarketCap > 0.0) {
-            $state->equityMarketCap = $equityMarketCap;
+        $board ??= new BoardReadingDTO();
+        if ($board->equityMarketCap !== null && $board->equityMarketCap > 0.0) {
+            $state->equityMarketCap = $board->equityMarketCap;
         }
-        if ($boardFloatCap !== null && $boardFloatCap > 0.0) {
-            $state->boardFloatCap = $boardFloatCap;
+        if ($board->floatCap !== null && $board->floatCap > 0.0) {
+            $state->boardFloatCap = $board->floatCap;
         }
-        $state->boardPriceReturn = $boardPriceReturn ?? 0.0;
-        $state->boardDividendCash = $boardDividendCash ?? 0.0;
-        $state->boardNetIssuance = $boardNetIssuance ?? 0.0;
-        $state->boardStampDuty = $boardStampDuty ?? 0.0;
-        $state->strategicStakeCash = $strategicStakeCash ?? 0.0;
-        if ($boardBankLevy !== null) {
-            $state->boardBankLevy = $boardBankLevy;
+        $state->boardPriceReturn = $board->priceReturn;
+        $state->boardDividendCash = $board->dividendCash;
+        $state->boardNetIssuance = $board->netIssuance;
+        $state->boardStampDuty = $board->stampDuty;
+        $state->strategicStakeCash = $board->strategicStakeCash;
+        if ($board->bankLevy !== null) {
+            $state->boardBankLevy = $board->bankLevy;
         }
 
         // Advance physical simulation time in years

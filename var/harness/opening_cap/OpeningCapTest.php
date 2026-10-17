@@ -78,7 +78,7 @@ final class OpeningCapTest extends KernelTestCase
         $firmQ = [];
 
         for ($tick = 1; $tick <= $ticks; $tick++) {
-            $m = $macro->updateMacroState($dt, $lastCap);
+            $m = $macro->updateMacroState($dt, new \App\DTO\BoardReadingDTO($lastCap));
             $result = $tracker->updateStocks($list, $dt, false, $m, $tick, $tpy);
             $lastCap = (float) $result['total_cap'];
             $caps[] = $lastCap;
