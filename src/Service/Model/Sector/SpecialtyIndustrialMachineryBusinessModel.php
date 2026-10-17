@@ -213,10 +213,12 @@ class SpecialtyIndustrialMachineryBusinessModel extends HeavyManufacturingBusine
 
         // --- Clamped Stream Revenue Calculation ---
         // Equipment orders enter a multi-quarter backlog and are recognized at the burn rate (percentage of completion).
-        $equipmentOrderMultiplier = max(0.0, (1.0 + ($equipmentZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)) + $macroEquipmentBoost + $this->resolveFxDemandShift($macroState)) * $dealMultiplier);
+        $equipmentShock = $equipmentZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR);
+        $servicesShock  = $servicesZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR * self::SERVICES_VARIANCE_RATIO);
+        $equipmentOrderMultiplier = max(0.0, (1.0 + $equipmentShock + $macroEquipmentBoost + $this->resolveFxDemandShift($macroState)) * $dealMultiplier);
         $equipmentBook = $streams->recognizeBacklog('equipment_sales', $expectedRevenue * $equipmentWeight, $equipmentOrderMultiplier, self::EQUIPMENT_BACKLOG_BURN_RATE);
         $equipmentRevenue = $equipmentBook['revenue'];
-        $servicesRevenue  = max(0.0, $expectedRevenue * $servicesWeight * (1.0 + ($servicesZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR * self::SERVICES_VARIANCE_RATIO))));
+        $servicesRevenue  = max(0.0, $expectedRevenue * $servicesWeight * (1.0 + $servicesShock));
 
         $streamRevenues = [
             'equipment_sales'      => $equipmentRevenue,
@@ -249,15 +251,14 @@ class SpecialtyIndustrialMachineryBusinessModel extends HeavyManufacturingBusine
         $rawMargin = $effectiveMargin + $supplyChainPenalty + $inputCostDrag + $gscpiCostDrag;
         $clampedMargin = $this->clampMargin($rawMargin);
 
-        // Primary shock is whichever stream deviated the most, overridden by tail events
-        $primaryShockZ = $streams->resolveDominantShockZ([$equipmentZ, $servicesZ], $eventZ);
-
-        $observableShockZ = $primaryShockZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR);
+        // Each stream's own shock at its revenue weight; equipment orders and a public deal reach this quarter's
+        // revenue at the backlog burn rate.
+        $observableShockZ = ((($equipmentShock * $dealMultiplier) + ($dealMultiplier - 1.0)) * $equipmentWeight * self::EQUIPMENT_BACKLOG_BURN_RATE)
+            + ($servicesShock * $servicesWeight);
 
         return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,
             rawVariableMargin: $clampedMargin,
-            primaryShockZ: $primaryShockZ,
             observableShockZ: $observableShockZ,
             eventType: $eventType,
             isPublicEvent: $eventType !== null ? true : null,

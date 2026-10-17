@@ -65,7 +65,6 @@ class BareStandardModel
         return new SectorPhysicsResult(
             actualRevenue: $expectedRevenue,
             rawVariableMargin: $realizedVariableMargin,
-            primaryShockZ: 0.0,
             observableShockZ: 0.0,
             streamRevenue: ['core_business' => $expectedRevenue],
             priceRevenue: $this->stubPriceRevenue,

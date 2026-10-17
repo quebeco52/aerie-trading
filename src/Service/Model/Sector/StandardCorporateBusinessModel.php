@@ -222,7 +222,6 @@ class StandardCorporateBusinessModel implements BusinessModelInterface
         return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,
             rawVariableMargin: $clampedMargin,
-            primaryShockZ: $revenueZ,
             observableShockZ: $revenueZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR),
             eventType: null,
             streamZ: $streams->getStreamZ(),

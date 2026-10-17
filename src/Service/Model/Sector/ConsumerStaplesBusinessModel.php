@@ -252,19 +252,16 @@ class ConsumerStaplesBusinessModel extends StandardCorporateBusinessModel
         $priceRelative = $revenueAtBasePrice > 0.0 ? $actualRevenue / $revenueAtBasePrice : 1.0;
         $clampedMargin = $this->clampMargin(FirmEconomics::calculatePerUnitCostRatio($realizedVariableMargin + $inputCostDrag, $priceRelative));
 
-        $primaryShockZ = $streams->resolveDominantShockZ([$brandedZ], $eventZ);
-
-        // The exchange price is public: dividing its leg by the base visibility lets consensus price it in full.
+        // The exchange price is public and read in full; the firm's own volumes are seen at coverage visibility.
         $observableShockZ = ($brandedZ * $brandedWeight * $baselineVol * self::REVENUE_VARIANCE_SCALAR)
             + ($volumeZ * $volumeWeight * $baselineVol * self::REVENUE_VARIANCE_SCALAR)
-            + ($commodityZ * $commodityWeight * $baselineVol * self::REVENUE_VARIANCE_SCALAR * self::COMMODITY_TRADING_VOL_SCALAR)
-            + (($priceRelative - 1.0) / self::BASE_COVERAGE_VISIBILITY);
+            + ($commodityZ * $commodityWeight * $baselineVol * self::REVENUE_VARIANCE_SCALAR * self::COMMODITY_TRADING_VOL_SCALAR);
 
         return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,
             rawVariableMargin: $clampedMargin,
-            primaryShockZ: $primaryShockZ,
             observableShockZ: $observableShockZ,
+            publishedRevenueShift: $priceRelative - 1.0,
             eventType: $eventType,
             isPublicEvent: $eventType !== null ? true : null,
             streamZ: $streams->getStreamZ(),

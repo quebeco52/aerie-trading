@@ -293,12 +293,9 @@ class ResortsCasinosBusinessModel extends StandardCorporateBusinessModel
         $rawMargin = ($actualVariableCosts / max(1.0, $actualRevenue)) + $effectiveInputCostDrag;
         $clampedMargin = $this->clampMargin($rawMargin);
 
-        $primaryShockZ = $streams->resolveDominantShockZ([$gamingZ, $nonGamingZ, $holdZ, $creZ], $eventZ);
-
         return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,
             rawVariableMargin: $clampedMargin,
-            primaryShockZ: $primaryShockZ,
             // Monthly gaming filings and the rent roll reveal the quarter's revenue against expectations.
             observableShockZ: ($actualRevenue / max(1.0, $expectedRevenue)) - 1.0,
             eventType: $eventType,

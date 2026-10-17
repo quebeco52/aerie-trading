@@ -13,6 +13,9 @@ use PHPUnit\Framework\TestCase;
 
 class AutoManufacturerBusinessModelTest extends TestCase
 {
+    /** A policy rate at the natural real rate plus expected inflation, so the real stance moves no purchases. */
+    private const NEUTRAL_POLICY_RATE = MacroEngine::TARGET_INFLATION + MacroEngine::BASE_NATURAL_RATE;
+
     private AutoManufacturerBusinessModel $model;
     private MathUtility $mathUtility;
 
@@ -52,12 +55,9 @@ class AutoManufacturerBusinessModelTest extends TestCase
         $this->assertGreaterThan(0.0, $result->streamRevenue['mass_market_sales']);
         $this->assertGreaterThan(0.0, $result->streamRevenue['apex_luxury']);
         $this->assertGreaterThan(0.0, $result->streamRevenue['software_telematics']);
+        $this->assertGreaterThan(0.0, $result->streamRevenue['captive_finance']);
 
-        $sumStreams = $result->streamRevenue['mass_market_sales']
-            + $result->streamRevenue['apex_luxury']
-            + $result->streamRevenue['software_telematics'];
-
-        $this->assertEqualsWithDelta($result->actualRevenue, $sumStreams, 1.0);
+        $this->assertEqualsWithDelta($result->actualRevenue, array_sum($result->streamRevenue), 1.0);
     }
 
     public function testFalcTickerParameterResolution(): void
@@ -66,7 +66,8 @@ class AutoManufacturerBusinessModelTest extends TestCase
         $stock->setTicker('FALC');
         $stock->setBeta('1.75');
 
-        $macro = new MacroStateDTO(outputGapEma: 0.0, inflationEma: 0.02, policyRateEma: 0.03, yield10yEma: 0.04, yield2yEma: 0.03);
+        // A neutral real rate as well as a closed gap, so no purchase swing moves the mix.
+        $macro = new MacroStateDTO(outputGapEma: 0.0, inflationEma: 0.02, policyRateEma: self::NEUTRAL_POLICY_RATE, yield10yEma: 0.04, yield2yEma: 0.03);
 
         $mathMock = $this->createStub(MathUtility::class);
         $mathMock->method('generatePersistentZ')->willReturn(0.0);
@@ -81,10 +82,11 @@ class AutoManufacturerBusinessModelTest extends TestCase
             mathUtility: $mathMock
         );
 
-        // FALC tuned: 55% Mass Market Fleet, 25% Apex Luxury, 20% Software Telematics
+        // FALC tuned: 55% Mass Market Fleet, 25% Apex Luxury, 8% Software Telematics, 12% Captive Finance
         $this->assertEqualsWithDelta(55_000_000.0, $result->streamRevenue['mass_market_sales'], 1.0);
         $this->assertEqualsWithDelta(25_000_000.0, $result->streamRevenue['apex_luxury'], 1.0);
-        $this->assertEqualsWithDelta(20_000_000.0, $result->streamRevenue['software_telematics'], 1.0);
+        $this->assertEqualsWithDelta(8_000_000.0, $result->streamRevenue['software_telematics'], 1.0);
+        $this->assertEqualsWithDelta(12_000_000.0, $result->streamRevenue['captive_finance'], 1.0);
     }
 
     public function testApexLuxuryFollowsEquityWealthAgainstItsTrend(): void
@@ -96,8 +98,8 @@ class AutoManufacturerBusinessModelTest extends TestCase
         $mathMock = $this->createStub(MathUtility::class);
         $mathMock->method('generatePersistentZ')->willReturn(0.0);
 
-        $neutralMacro = new MacroStateDTO(outputGapEma: 0.0, inflationEma: 0.02, policyRateEma: 0.03, equityWealthRatio: 2.0e13, equityWealthTrend: 2.0e13);
-        $wealthBoomMacro = new MacroStateDTO(outputGapEma: 0.0, inflationEma: 0.02, policyRateEma: 0.03, equityWealthRatio: 2.5e13, equityWealthTrend: 2.0e13);
+        $neutralMacro = new MacroStateDTO(outputGapEma: 0.0, inflationEma: 0.02, policyRateEma: self::NEUTRAL_POLICY_RATE, equityWealthRatio: 2.0e13, equityWealthTrend: 2.0e13);
+        $wealthBoomMacro = new MacroStateDTO(outputGapEma: 0.0, inflationEma: 0.02, policyRateEma: self::NEUTRAL_POLICY_RATE, equityWealthRatio: 2.5e13, equityWealthTrend: 2.0e13);
 
         $neutralResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.20, 25_000_000.0, 0.0, $neutralMacro, $mathMock);
         $wealthBoomResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.20, 25_000_000.0, 0.0, $wealthBoomMacro, $mathMock);
@@ -116,8 +118,8 @@ class AutoManufacturerBusinessModelTest extends TestCase
         $mathMock = $this->createStub(MathUtility::class);
         $mathMock->method('generatePersistentZ')->willReturn(0.0);
 
-        $baselineMacro = new MacroStateDTO(outputGapEma: 0.0, inflationEma: 0.02, policyRateEma: 0.03);
-        $inflationMacro = new MacroStateDTO(outputGapEma: 0.0, inflationEma: 0.06, policyRateEma: 0.03);
+        $baselineMacro = new MacroStateDTO(outputGapEma: 0.0, inflationEma: 0.02, policyRateEma: self::NEUTRAL_POLICY_RATE);
+        $inflationMacro = new MacroStateDTO(outputGapEma: 0.0, inflationEma: 0.06, policyRateEma: self::NEUTRAL_POLICY_RATE);
 
         $baselineResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.20, 25_000_000.0, 0.0, $baselineMacro, $mathMock);
         $inflationResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.20, 25_000_000.0, 0.0, $inflationMacro, $mathMock);
@@ -224,10 +226,13 @@ class AutoManufacturerBusinessModelTest extends TestCase
             - $this->model->getMacroPhysics($stock(), $baseMacro)['macro_demand_shift'];
         $this->assertEqualsWithDelta(-0.20 * AutoManufacturerBusinessModel::FX_REVENUE_EXPOSURE, $rootDrag, 1e-9);
 
-        // ...so the sector physics must not take it off mass-market sales a second time.
+        // ...so the sector physics must not take it off the firm a second time: it only moves it from the fleet's
+        // subscriptions and the loan book onto vehicle sales.
         $baseResult = $this->model->computeActualFinancials($stock(), 100_000_000.0, 0.20, 20_000_000.0, 0.0, $baseMacro, $mathMock);
         $strongDollarResult = $this->model->computeActualFinancials($stock(), 100_000_000.0, 0.20, 20_000_000.0, 0.0, $strongDollarMacro, $mathMock);
-        $this->assertEqualsWithDelta($baseResult->streamRevenue['mass_market_sales'], $strongDollarResult->streamRevenue['mass_market_sales'], 1.0);
+        $this->assertEqualsWithDelta($baseResult->actualRevenue, $strongDollarResult->actualRevenue, 1.0);
+        $this->assertLessThan($baseResult->streamRevenue['mass_market_sales'], $strongDollarResult->streamRevenue['mass_market_sales']);
+        $this->assertGreaterThan($baseResult->streamRevenue['captive_finance'], $strongDollarResult->streamRevenue['captive_finance']);
     }
 
     public function testMetalsAreTheInputThatMovesAndOceanFreightIsImmaterial(): void
@@ -472,5 +477,50 @@ class AutoManufacturerBusinessModelTest extends TestCase
 
         $this->assertGreaterThan($resultNormal->streamRevenue['mass_market_sales'], $resultBoom->streamRevenue['mass_market_sales'], 'High industrial capacity utilization must increase vehicle assembly revenue.');
     }
-}
 
+    /**
+     * Credit losses and the funding squeeze are the loan book's: a maker with no finance arm feels none of them, and
+     * one with an arm pays them on the book's interest income. They used to be charged to the telematics line.
+     */
+    public function testCreditCostsLandOnTheLoanBookNotTheTelematicsLine(): void
+    {
+        $mathMock = $this->createStub(MathUtility::class);
+        $mathMock->method('generatePersistentZ')->willReturn(0.0);
+        $run = function (string $ticker, MacroStateDTO $macro) use ($mathMock) {
+            $stock = new Stock();
+            $stock->setTicker($ticker);
+            $stock->setBeta('1.2');
+
+            return $this->model->computeActualFinancials($stock, 100_000_000.0, 0.20, 20_000_000.0, 0.0, $macro, $mathMock);
+        };
+
+        $calm = new MacroStateDTO(policyRateEma: self::NEUTRAL_POLICY_RATE, yield10yEma: 0.04, yield2yEma: 0.03);
+        // Defaults at twice their through-the-cycle rates, an inverted curve and spreads 2pp over trend.
+        $stress = new MacroStateDTO(
+            policyRateEma: self::NEUTRAL_POLICY_RATE,
+            yield10yEma: 0.03,
+            yield2yEma: 0.045,
+            retailDefaultRateEma: 2.0 * MacroEngine::RETAIL_DEFAULT_BASELINE,
+            corporateDefaultRateEma: 2.0 * MacroEngine::CORPORATE_DEFAULT_BASELINE,
+            macroCreditSpread: MacroEngine::BASE_CREDIT_SPREAD + 0.02,
+        );
+
+        // EIDR's fleets finance through their own banks.
+        $this->assertEqualsWithDelta($run('EIDR', $calm)->actualVariableCosts, $run('EIDR', $stress)->actualVariableCosts, 1e-3);
+
+        // FALC's book: +0.05 retail and +0.02 corporate provisions, the curve from a 0.3pp gain to a 2.96pp squeeze,
+        // and +1pp of CECL reserve, all on its 12M of finance income.
+        $nimCalm = AutoManufacturerBusinessModel::NIM_SPREAD_BUFFER - 0.01;
+        $nimStress = (AutoManufacturerBusinessModel::NIM_SPREAD_BUFFER + 0.015)
+            + ((0.015 * AutoManufacturerBusinessModel::YIELD_CURVE_INVERSION_SENSITIVITY) ** 2) * AutoManufacturerBusinessModel::NIM_QUADRATIC_COEFF;
+        $creditCost = 0.05 + 0.02 + ($nimStress - $nimCalm) + 0.01;
+        $falcCalm = $run('FALC', $calm);
+        $falcStress = $run('FALC', $stress);
+        $this->assertEqualsWithDelta($falcCalm->streamRevenue['captive_finance'], $falcStress->streamRevenue['captive_finance'], 1e-3);
+        $this->assertEqualsWithDelta(
+            $falcCalm->streamRevenue['captive_finance'] * $creditCost,
+            $falcStress->actualVariableCosts - $falcCalm->actualVariableCosts,
+            1.0
+        );
+    }
+}

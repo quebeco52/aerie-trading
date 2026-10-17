@@ -53,7 +53,7 @@ class IndependentPowerBusinessModel extends StandardCorporateBusinessModel
     public const PRICING_INFLATION_BASIS = 'inflation_ema';
 
     // --- Analyst Visibility & Error ---
-    /** Base coverage visibility: power and gas prices are published daily and the hedge book is disclosed, so the sell side sees most of the quarter. */
+    /** Base coverage visibility of the fleet's own output; the published prices and the disclosed hedge book are read in full beside it. */
     public const BASE_COVERAGE_VISIBILITY = 0.70;
     /** Base coverage forecasting error given the swings in the power price. */
     public const BASE_COVERAGE_ERROR = 0.08;
@@ -265,17 +265,17 @@ class IndependentPowerBusinessModel extends StandardCorporateBusinessModel
                 : 0.0
         );
 
-        // Prices are public and the hedge book is disclosed; the water is not. Dividing the price leg by the base
-        // visibility lets a persistent price level converge to an unbiased consensus.
+        // Prices are public and the hedge book is disclosed, so analysts read them in full; the water is seen at
+        // coverage visibility.
         $outputShock = $output - 1.0;
-        $observableShockZ = (($priceRelative - 1.0) / self::BASE_COVERAGE_VISIBILITY) + ($wholesaleWeight * $outputShock);
+        $observableShockZ = $wholesaleWeight * $outputShock;
         $hedgeGain = $baseRevenue * $wholesaleWeight * $hedgeRatio * ($powerStrike - $powerSpot);
 
         return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,
             rawVariableMargin: $clampedMargin,
-            primaryShockZ: $streams->resolveDominantShockZ([$resourceZ, $capacityZ], $eventZ),
             observableShockZ: $observableShockZ,
+            publishedRevenueShift: $priceRelative - 1.0,
             eventType: $eventType,
             isPublicEvent: $eventType !== null ? true : null,
             streamZ: $streams->getStreamZ(),

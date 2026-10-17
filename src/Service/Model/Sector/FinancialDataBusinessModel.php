@@ -159,14 +159,12 @@ class FinancialDataBusinessModel extends StandardCorporateBusinessModel
         $inputCostDrag = $this->resolveInputCostDrag($stock, $macroState, $streams, $this->resolvePricingPower($stock), $realizedVariableMargin);
         $clampedMargin = $this->clampMargin($realizedVariableMargin + $operatingLeverageShift + $inputCostDrag);
 
-        $primaryShockZ = $streams->resolveDominantShockZ([$transactionZ, $subscriptionZ]);
         $observableShockZ = (($subscriptionZ * $subscriptionWeight + $transactionZ * $transactionWeight) * ($baselineVol * self::REVENUE_VARIANCE_SCALAR))
             + ($transactionMacroBonus * $transactionWeight);
 
         return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,
             rawVariableMargin: $clampedMargin,
-            primaryShockZ: $primaryShockZ,
             observableShockZ: $observableShockZ,
             eventType: null,
             streamZ: $streams->getStreamZ(),

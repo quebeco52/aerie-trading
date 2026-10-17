@@ -198,7 +198,7 @@ class RestaurantBusinessModel extends StandardCorporateBusinessModel
         $franchiseRevenue = max(0.0, $expectedRevenue * $franchiseWeight * (1.0 + ($franchiseZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR * 0.15)) + $cycleShares['franchise_royalties']));
         $leaseRevenue     = max(0.0, $expectedRevenue * $leaseWeight     * (1.0 + ($leaseZ     * ($baselineVol * self::REVENUE_VARIANCE_SCALAR * 0.05)) + $rentEscalator + $cycleShares['franchise_real_estate_leases']));
         // CPI escalators reprice existing franchise leases: pure price revenue with no incremental cost.
-        $priceRevenue     = max(0.0, $expectedRevenue * $leaseWeight * $rentEscalator);
+        $priceRevenue     = $expectedRevenue * $leaseWeight * $rentEscalator;
 
         $streamRevenues = [
             'company_operated_stores'      => $corporateRevenue,
@@ -223,10 +223,6 @@ class RestaurantBusinessModel extends StandardCorporateBusinessModel
         $rawMargin = ($actualVariableCosts / max(1.0, $actualRevenue)) + $foodSafetyPenalty + $inputCostDrag + $elasticityShift;
         $clampedMargin = $this->clampMargin($rawMargin);
 
-        $primaryShockZ = $streams->resolveDominantShockZ([
-            ($corporateZ * $corporateWeight) + ($franchiseZ * $franchiseWeight),
-        ], $eventZ);
-
         $observableShockZ = ($corporateZ * $corporateWeight * self::REVENUE_VARIANCE_SCALAR * $baselineVol) + ($rentEscalator * $leaseWeight);
 
         // The one-off charge is booked as a special item: in EBIT, out of the run rate, the Street figure and the cost ratio.
@@ -235,7 +231,6 @@ class RestaurantBusinessModel extends StandardCorporateBusinessModel
         return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,
             rawVariableMargin: $clampedMargin,
-            primaryShockZ: $primaryShockZ,
             observableShockZ: $observableShockZ,
             eventType: $eventType,
             isPublicEvent: $eventType !== null ? true : null,

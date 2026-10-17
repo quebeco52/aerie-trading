@@ -297,8 +297,6 @@ class LawFirmBusinessModel extends StandardCorporateBusinessModel
         $rawMargin = $realizedVariableMargin + $inputCostDrag;
         $clampedMargin = $this->clampMargin($rawMargin);
 
-        $primaryShockZ = $streams->resolveDominantShockZ([$retainerZ, $litigationZ, $restructuringZ], $eventZ);
-
         // Blended observable shock
         $observableShockZ = ($retainerShock * $retainerWeight) +
             ($litigationShock * $litigationWeight * 0.50) +
@@ -308,7 +306,6 @@ class LawFirmBusinessModel extends StandardCorporateBusinessModel
         return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,
             rawVariableMargin: $clampedMargin,
-            primaryShockZ: $primaryShockZ,
             observableShockZ: $observableShockZ,
             eventType: $eventType,
             isPublicEvent: $eventType !== null ? true : null,

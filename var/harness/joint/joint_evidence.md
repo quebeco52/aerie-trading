@@ -104,3 +104,14 @@ Unpaired seeds 1-8, base = git archive HEAD (21bc0997), live = checkout. Out: ba
   the same 1.75 and identical paths in seeds 2-4, so the carry rarely binds and the 1-4 rise was path noise.
 - EW index vol 21t 15.7 -> 16.8% (live higher in 7/8, unpaired t~1.9), inside the 14-19% earlier code drew.
   Inflation sd, unemployment, gap mean, P/E end, beat share: overlapping (gap -0.57 vs -0.52, infl sd 0.97 vs 1.08).
+
+## Batch B: REIT ladder, vacancy, published prices, CU, Defence, Auto captive, primaryShockZ (10-17, on main)
+Unpaired seeds 1-8, base = git archive HEAD (b487382b), live = checkout, `CREDIT=1`. Out: batchB-{base,live}-8s.out
+(and -1-4 .out); per model `model_an.py 1-4 base live`.
+- Board: nothing |t| >= 2 but unemployment max 6.1 -> 7.2 (t 2.4). CW index 7.66 -> 6.28 %/y (t -2.0), EW 9.20 ->
+  8.05 (t -1.7), P/E end 17.2 -> 14.1 (t -1.9), gap mean +0.08 -> -0.30. Live sits on batchA-live-8s (CW 5.98, EW
+  7.85, P/E 14.7, gap -0.52); base is the outlier at the benign top of every earlier run (CW 5.5-6.8, P/E 13.7-16.3).
+- FALC Ch11 0/8 -> 2/8; earlier arms 1/4 (pre), 2/4 (rev-48), 3/8 (wt), 2/4 (wt-noarrears): base is the outlier.
+- Per model (1-4): REIT revenue over expected -2.0pp (t -1.3), the macro default vacancy moving from cost to rent
+  (~-1.1pp, EBIT-neutral) plus the roll's level; commodity beats move +4..+9pp both ways with t~1 (price paths;
+  the change only touched what analysts see).

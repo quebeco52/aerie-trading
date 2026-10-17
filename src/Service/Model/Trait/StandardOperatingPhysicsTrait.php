@@ -781,8 +781,9 @@ trait StandardOperatingPhysicsTrait
 
         $clampedMargin = $this->clampMargin($physics->rawVariableMargin);
         // Price is not produced: a rent escalator or a spot-rate spike on a fixed fleet adds revenue without
-        // adding a unit of cost, so the variable cost ratio applies to the volume part of revenue only.
-        $priceRevenue = max(0.0, min($physics->actualRevenue, $physics->priceRevenue));
+        // adding a unit of cost, so the variable cost ratio applies to the volume part of revenue only. A price
+        // below the expected level saves none either: the volume still costs what it did.
+        $priceRevenue = min($physics->actualRevenue, $physics->priceRevenue);
         $actualVariableCosts = ($physics->actualRevenue - $priceRevenue) * $clampedMargin;
         $ebit = $physics->actualRevenue - $fixedCosts - $actualVariableCosts;
 
@@ -791,7 +792,6 @@ trait StandardOperatingPhysicsTrait
             actualVariableCosts: $actualVariableCosts,
             clampedMargin: $clampedMargin,
             ebit: $ebit,
-            primaryShockZ: $physics->primaryShockZ,
             observableShockZ: $physics->observableShockZ,
             eventType: $physics->eventType,
             eventContext: $physics->eventContext,
@@ -807,6 +807,7 @@ trait StandardOperatingPhysicsTrait
             plantImpairment: $physics->plantImpairment,
             seasonalCostRatioShift: $physics->seasonalCostRatioShift,
             specialCharge: max(0.0, $physics->specialCharge),
+            publishedRevenueShift: $physics->publishedRevenueShift,
         );
     }
 

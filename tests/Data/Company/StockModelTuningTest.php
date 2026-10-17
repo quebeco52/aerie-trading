@@ -210,7 +210,7 @@ class StockModelTuningTest extends TestCase
             'mining' => [ModelParam::BaseMetalsWeight, ModelParam::PreciousMetalsWeight, ModelParam::EnergyMineralsWeight, ModelParam::FertilizerMineralsWeight],
             'conglomerate' => [ModelParam::IndustrialConglomerateWeight, ModelParam::DefensiveStaplesWeight, ModelParam::ContrarianFloatWeight],
             'law_firm' => [ModelParam::CorporateRetainerWeight, ModelParam::LitigationContingencyWeight, ModelParam::RestructuringAdvisoryWeight],
-            'auto_manufacturer' => [ModelParam::AutoSalesWeight, ModelParam::ApexLuxuryWeight, ModelParam::SoftwareServicesWeight],
+            'auto_manufacturer' => [ModelParam::AutoSalesWeight, ModelParam::ApexLuxuryWeight, ModelParam::SoftwareServicesWeight, ModelParam::CaptiveFinanceWeight],
             'hedge_fund' => [ModelParam::HfManagementFeeWeight, ModelParam::HfDirectionalBetsWeight, ModelParam::HfQuantAlphaWeight],
             'chemical' => [ModelParam::BasePetrochemicalsWeight, ModelParam::SpecialtyChemicalsWeight, ModelParam::AgrochemicalsWeight],
             'independent_power' => [ModelParam::WholesaleGenerationWeight, ModelParam::CapacityPaymentWeight],
@@ -279,12 +279,14 @@ class StockModelTuningTest extends TestCase
         // Falconet Motor Group (FALC)
         $this->assertSame(0.55, StockModelTuning::get('FALC', ModelParam::AutoSalesWeight, 0.0));
         $this->assertSame(0.25, StockModelTuning::get('FALC', ModelParam::ApexLuxuryWeight, 0.0));
-        $this->assertSame(0.20, StockModelTuning::get('FALC', ModelParam::SoftwareServicesWeight, 0.0));
+        $this->assertSame(0.08, StockModelTuning::get('FALC', ModelParam::SoftwareServicesWeight, 0.0));
+        $this->assertSame(0.12, StockModelTuning::get('FALC', ModelParam::CaptiveFinanceWeight, 0.0));
 
         // Eider Motor Group (EIDR)
         $this->assertSame(0.70, StockModelTuning::get('EIDR', ModelParam::AutoSalesWeight, 0.0));
         $this->assertSame(0.15, StockModelTuning::get('EIDR', ModelParam::ApexLuxuryWeight, 0.0));
         $this->assertSame(0.15, StockModelTuning::get('EIDR', ModelParam::SoftwareServicesWeight, 0.0));
+        $this->assertSame(0.00, StockModelTuning::get('EIDR', ModelParam::CaptiveFinanceWeight, -1.0));
         $this->assertSame(0.75, StockModelTuning::get('EIDR', ModelParam::PricingPowerIndex, 0.0));
         $this->assertSame(0.85, StockModelTuning::get('EIDR', ModelParam::RateSensitivityScalar, 0.0));
 

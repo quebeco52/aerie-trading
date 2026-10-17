@@ -204,8 +204,6 @@ class DistressedDebtBusinessModel extends AssetManagementBusinessModel
 
         $clampedMargin = $this->clampMargin($realizedVariableMargin);
 
-        $primaryShockZ = $streams->resolveDominantShockZ([$recoveryZ, $advisoryZ, $loanToOwnWeight > 0.0 ? $loanToOwnZ : 0.0]);
-
         $observableShockZ = ($advisoryZ * $advisoryWeight * self::ADVISORY_VARIANCE_SCALAR * $baselineVol) +
             ($recoveryZ * $recoveryWeight * self::RECOVERY_VARIANCE_SCALAR * $baselineVol) +
             ($distressMultiplier * $recoveryWeight);
@@ -213,7 +211,6 @@ class DistressedDebtBusinessModel extends AssetManagementBusinessModel
         return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,
             rawVariableMargin: $clampedMargin,
-            primaryShockZ: $primaryShockZ,
             observableShockZ: $observableShockZ,
             eventType: $eventType,
             isPublicEvent: $eventType !== null ? true : null,

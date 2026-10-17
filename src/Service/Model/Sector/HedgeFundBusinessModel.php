@@ -421,8 +421,6 @@ class HedgeFundBusinessModel extends AssetManagementBusinessModel
             $eventType = ShockEvent::HF_DIRECTIONAL_BLOWUP;
         }
 
-        $primaryShockZ = $streams->resolveDominantShockZ([$dirZ, $quantZ, $mgmtZ]);
-
         // Analyst Observable Shock (Hedge funds are highly opaque)
         $observableShockZ = (($dirZ * $dirWeight * self::DIR_ANALYST_VISIBILITY)
             + ($quantZ * $quantWeight * self::QUANT_ANALYST_VISIBILITY))
@@ -431,7 +429,6 @@ class HedgeFundBusinessModel extends AssetManagementBusinessModel
         return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,
             rawVariableMargin: $clampedMargin,
-            primaryShockZ: $primaryShockZ,
             observableShockZ: $observableShockZ,
             eventType: $eventType,
             isPublicEvent: $eventType !== null ? true : null,

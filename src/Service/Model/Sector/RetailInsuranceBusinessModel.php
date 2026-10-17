@@ -110,7 +110,6 @@ class RetailInsuranceBusinessModel extends InsuranceBusinessModel
         $eventType = $this->resolveClaimEvent($claims['gross'], $pcWeight, $recovery > 0.0);
 
         $structuralClaimShock = $claims['claimZ'] < $catThreshold ? $claims['claimZ'] : 0.0;
-        $primaryShockZ = $streams->resolveDominantShockZ([$structuralClaimShock, $pcZ, $lifeZ]);
 
         $pcBase = max(1.0, $expectedRevenue * $pcWeight);
         $pcShock = ($pcRevenue - $pcBase) / $pcBase;
@@ -123,7 +122,6 @@ class RetailInsuranceBusinessModel extends InsuranceBusinessModel
         return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,
             rawVariableMargin: $clampedMargin,
-            primaryShockZ: $primaryShockZ,
             observableShockZ: $observableShockZ,
             eventType: $eventType,
             isPublicEvent: $eventType !== null ? true : null,

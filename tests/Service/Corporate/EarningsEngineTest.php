@@ -685,6 +685,7 @@ class EarningsEngineTest extends TestCase
             $dispatcher->addListener(EarningsReportedEvent::class, function (EarningsReportedEvent $event) use (&$captured): void {
                 $captured = $event->getContext();
             });
+            $this->mathUtility = new MathUtility(); // fresh Box-Muller state so both runs see identical draws
             $engine = $this->buildEngine($dispatcher);
 
             mt_srand(4242);
@@ -3035,6 +3036,7 @@ class EarningsEngineTest extends TestCase
             $dispatcher->addListener(EarningsReportedEvent::class, function (EarningsReportedEvent $event) use (&$captured): void {
                 $captured = $event->getContext();
             });
+            $this->mathUtility = new MathUtility(); // fresh Box-Muller state so every run sees identical draws
             $engine = $this->buildEngine($dispatcher);
 
             mt_srand(2222);

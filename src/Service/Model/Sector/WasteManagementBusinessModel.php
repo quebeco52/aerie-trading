@@ -210,7 +210,7 @@ class WasteManagementBusinessModel extends StandardCorporateBusinessModel
         // --- Clamped Tri-Stream Revenue Calculation ---
         $residentialRevenue = max(0.0, $expectedRevenue * $residentialWeight * (1.0 + ($residentialZ * $baselineVol * self::RESIDENTIAL_VARIANCE_SCALAR) + $cpiEscalatorBoost));
         // Municipal CPI escalators reprice the same collection routes: pure price revenue.
-        $priceRevenue       = max(0.0, $expectedRevenue * $residentialWeight * $cpiEscalatorBoost);
+        $priceRevenue       = $expectedRevenue * $residentialWeight * $cpiEscalatorBoost;
         $commercialRevenue  = max(0.0, $expectedRevenue * $commercialWeight  * (1.0 + ($commercialZ * $baselineVol * self::COMMERCIAL_VARIANCE_SCALAR) + $macroBoost));
         $recyclingRevenue   = max(0.0, $expectedRevenue * $recyclingWeight   * (1.0 + ($recyclingZ * $baselineVol * self::RECYCLING_VARIANCE_SCALAR) + $recyclingCommodityBoost));
 
@@ -232,9 +232,6 @@ class WasteManagementBusinessModel extends StandardCorporateBusinessModel
         $rawMargin = $realizedVariableMargin + $inputCostDrag;
         $clampedMargin = $this->clampMargin($rawMargin);
 
-        // Primary shock is whichever stream deviated the most, overridden by tail events
-        $primaryShockZ = $streams->resolveDominantShockZ([$commercialZ, $residentialZ, $recyclingZ], $eventZ);
-
         // Residential is highly visible, Commercial correlates to GDP, Recycling is visible via commodities
         $observableShockZ = ($residentialZ * $residentialWeight * self::RESIDENTIAL_VARIANCE_SCALAR * 0.90) +
             ($commercialZ * $commercialWeight * self::COMMERCIAL_VARIANCE_SCALAR * 0.50) +
@@ -247,7 +244,6 @@ class WasteManagementBusinessModel extends StandardCorporateBusinessModel
         return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,
             rawVariableMargin: $clampedMargin,
-            primaryShockZ: $primaryShockZ,
             observableShockZ: $observableShockZ,
             eventType: $eventType,
             isPublicEvent: $eventType !== null ? true : null,

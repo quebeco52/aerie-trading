@@ -226,8 +226,10 @@ class ComputerHardwareBusinessModel extends StandardCorporateBusinessModel
 
         // Consumer revenue gets a massive variance scalar (boom/bust upgrade cycles)
         // Enterprise revenue gets a dampened variance scalar (sticky B2B contracts)
-        $enterpriseRevenue = max(0.0, $expectedRevenue * $enterpriseWeight * (1.0 + ($enterpriseZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR * 0.5)) + $enterpriseMacroVolumeShock) * $enterpriseMultiplier);
-        $consumerRevenue   = max(0.0, $expectedRevenue * $consumerWeight * (1.0 + ($consumerZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR * 1.5)) + $consumerMacroVolumeShock) * $consumerMultiplier);
+        $enterpriseShock = $enterpriseZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR * 0.5);
+        $consumerShock   = $consumerZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR * 1.5);
+        $enterpriseRevenue = max(0.0, $expectedRevenue * $enterpriseWeight * (1.0 + $enterpriseShock + $enterpriseMacroVolumeShock) * $enterpriseMultiplier);
+        $consumerRevenue   = max(0.0, $expectedRevenue * $consumerWeight * (1.0 + $consumerShock + $consumerMacroVolumeShock) * $consumerMultiplier);
 
         $streamRevenues = [
             'enterprise_hardware' => $enterpriseRevenue,
@@ -259,17 +261,13 @@ class ComputerHardwareBusinessModel extends StandardCorporateBusinessModel
         $rawMargin = $effectiveMargin + $shortagePenalty + $inputCostDrag + $elasticityShift;
         $clampedMargin = $this->clampMargin($rawMargin);
 
-        // Blended primary shock for standard model integration
-        $primaryShockZ = $streams->resolveDominantShockZ([
-            ($enterpriseZ * $enterpriseWeight) + ($consumerZ * $consumerWeight),
-        ], $eventZ);
-
-        $observableShockZ = $primaryShockZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR);
+        // Each stream's own shock at its revenue weight, and what a public shortage or super-cycle does to it.
+        $observableShockZ = ((($enterpriseShock * $enterpriseMultiplier) + ($enterpriseMultiplier - 1.0)) * $enterpriseWeight)
+            + ((($consumerShock * $consumerMultiplier) + ($consumerMultiplier - 1.0)) * $consumerWeight);
 
         return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,
             rawVariableMargin: $clampedMargin,
-            primaryShockZ: $primaryShockZ,
             observableShockZ: $observableShockZ,
             eventType: $eventType,
             isPublicEvent: $eventType !== null ? true : null,

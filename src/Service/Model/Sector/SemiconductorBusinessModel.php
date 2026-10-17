@@ -243,7 +243,6 @@ class SemiconductorBusinessModel extends StandardCorporateBusinessModel
 
         $clampedMargin = $this->clampMargin($realizedVariableMargin + $yieldModifier + $inputCostDrag);
 
-        $primaryShockZ = $streams->resolveDominantShockZ([$cycleZ, $foundryZ, $designZ]);
         // observableShockZ: foundry and design demand visible via shipment lead times and supply chain checks
         $foundryBase = max(1.0, $expectedRevenue * $foundryWeight);
         $foundryShock = ($foundryRevenue - $foundryBase) / $foundryBase;
@@ -254,7 +253,6 @@ class SemiconductorBusinessModel extends StandardCorporateBusinessModel
         return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,
             rawVariableMargin: $clampedMargin,
-            primaryShockZ: $primaryShockZ,
             observableShockZ: $observableShockZ,
             eventType: $eventType,
             isPublicEvent: $eventType !== null ? true : null,

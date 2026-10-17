@@ -11,6 +11,7 @@ use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use App\Service\Event\ShockEvent;
 use App\Service\Macro\MacroEngine;
+use App\Service\Math\Distributions;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\ReitBusinessModel;
 use App\Service\Model\Sector\StandardCorporateBusinessModel;
@@ -167,11 +168,13 @@ class ReitBusinessModelTest extends TestCase
         // Defaults: 85% lease, 15% hospitality
         // leaseShock = 1.0 * (0.20 * 0.05) = 0.01
         // rentEscalator = 0.024
-        // leaseRevenue = 1,000,000 * 0.85 * (1 + 0.01 + 0.024) = 850,000 * 1.034 = 878,900
+        // a quiet tenant draw leaves the roll fuller than the average quarter by the expected vacancy v (~0.9%)
+        // leaseRevenue = 1,000,000 * 0.85 * (1 + 0.01 + 0.024 + v) = 878,900 + 850,000 v
         // hospitalityShock = 0.5 * (0.20 * 1.50) = 0.15
         // hospitalityRevenue = 1,000,000 * 0.15 * (1 + 0.15) = 150,000 * 1.15 = 172,500
-        // totalRevenue = 878,900 + 172,500 = 1,051,400
-        $this->assertEqualsWithDelta(1051400.0, $defaultResult->actualRevenue, 1.0);
+        // totalRevenue = 1,051,400 + 850,000 v
+        $vacancy = ReitBusinessModel::expectedTenantVacancy();
+        $this->assertEqualsWithDelta(1051400.0 + (850000.0 * $vacancy), $defaultResult->actualRevenue, 1.0);
 
         // Observable shock Z: ((leaseShock + rentEscalator) * leaseWeight) + (hospitalityShock * hospitalityWeight)
         // = (0.034 * 0.85) + (0.15 * 0.15) = 0.0289 + 0.0225 = 0.0514
@@ -192,10 +195,10 @@ class ReitBusinessModelTest extends TestCase
             mathUtility: $mathMockPlza
         );
 
-        // leaseRevenue = 800,000 * 1.034 = 827,200
+        // leaseRevenue = 800,000 * (1.034 + v) = 827,200 + 800,000 v
         // hospitalityRevenue = 200,000 * 1.15 = 230,000
-        // totalRevenue = 1,057,200
-        $this->assertEqualsWithDelta(1057200.0, $plzaResult->actualRevenue, 1.0);
+        // totalRevenue = 1,057,200 + 800,000 v
+        $this->assertEqualsWithDelta(1057200.0 + (800000.0 * $vacancy), $plzaResult->actualRevenue, 1.0);
         // observableShockZ = (0.034 * 0.80) + (0.15 * 0.20) = 0.0272 + 0.0300 = 0.0572
         $this->assertEqualsWithDelta(0.0572, $plzaResult->observableShockZ, 0.0001);
     }
@@ -258,61 +261,69 @@ class ReitBusinessModelTest extends TestCase
         $this->assertEqualsWithDelta(-0.0075, $result->observableShockZ, 0.0001);
     }
 
-    public function testTenantDefaultAndVacancyMarginPenalties(): void
+    /**
+     * Failing tenants hand back space and a strong leasing market fills it. Vacancy is rent lost, not a cost: the
+     * building runs and costs what it did. It used to be booked as a higher cost ratio, which also left a 0.9pp
+     * standing drag because the loss tail outweighs the leasing gains.
+     */
+    public function testTenantFailuresTakeRentOffTheRollAndTheBuildingStillCosts(): void
     {
         $model = new ReitBusinessModel();
         $stock = new Stock();
         $stock->setTicker('REIT_VACANCY');
-
-        $macroState = $this->createMacroState(yield10y: 0.04); // Default 10y yield -> no refinancing drag
-
-        // 1. Severe tenant bankruptcies (tenantDefaultZ = -2.50)
-        $bankruptcyMock = $this->createMathUtilityMock([0.0, 0.0, -2.50]);
-        $bankruptcyResult = $model->computeActualFinancials(
+        $macroState = $this->createMacroState(yield10y: 0.04);
+        $run = fn (float $tenantZ) => $model->computeActualFinancials(
             $stock,
             expectedRevenue: 1000000.0,
             realizedVariableMargin: 0.30,
             fixedCosts: 100000.0,
             baselineVol: 0.10,
             macroState: $macroState,
-            mathUtility: $bankruptcyMock
+            mathUtility: $this->createMathUtilityMock([0.0, 0.0, $tenantZ])
         );
+        $lease = 1000000.0 * 0.85;
+        // Net of the vacancy an average draw takes: 0.08 phi(1.5) - 0.015 E[max(0, Z - 1)], about 0.9% of the roll.
+        $vacancy = (ReitBusinessModel::VACANCY_LOSS_SCALAR * Distributions::calculateNormalPDF(1.5))
+            - (ReitBusinessModel::LEASING_BONUS_SCALE * Distributions::calculateNormalLowerPartialMoment(-1.0));
+        $this->assertEqualsWithDelta($vacancy, ReitBusinessModel::expectedTenantVacancy(), 1e-12);
+        $this->assertEqualsWithDelta(0.0091, $vacancy, 0.0001);
 
-        // Penalty = 2.50 * 0.08 = +0.20 margin penalty (cost increase)
-        // Variable margin = 0.30 + 0.20 = 0.50
-        $this->assertEqualsWithDelta(0.50, $bankruptcyResult->clampedMargin, 0.001);
-        $this->assertEquals(ShockEvent::REIT_TENANT_BANKRUPTCIES, $bankruptcyResult->eventType);
-        $this->assertTrue($bankruptcyResult->isPublicEvent);
+        $calm = $run(0.0);
+        $this->assertEqualsWithDelta($lease * (1.0 + $vacancy), $calm->streamRevenue['lease'], 1e-6);
 
-        // 2. Moderate vacancies (tenantDefaultZ = -1.60)
-        $vacancyMock = $this->createMathUtilityMock([0.0, 0.0, -1.60]);
-        $vacancyResult = $model->computeActualFinancials(
-            $stock,
-            expectedRevenue: 1000000.0,
-            realizedVariableMargin: 0.30,
-            fixedCosts: 100000.0,
-            baselineVol: 0.10,
-            macroState: $macroState,
-            mathUtility: $vacancyMock
-        );
+        // Severe tenant bankruptcies: 2.5 x 0.08 = 20% of the roll handed back.
+        $bankrupt = $run(-2.50);
+        $this->assertEqualsWithDelta($lease * (1.0 - 0.20 + $vacancy), $bankrupt->streamRevenue['lease'], 1e-6);
+        $this->assertEquals(ShockEvent::REIT_TENANT_BANKRUPTCIES, $bankrupt->eventType);
+        $this->assertTrue($bankrupt->isPublicEvent);
+        $this->assertEqualsWithDelta(0.30, $bankrupt->clampedMargin, 1e-12);
+        $this->assertEqualsWithDelta($calm->actualVariableCosts, $bankrupt->actualVariableCosts, 1e-6);
 
-        $this->assertEquals(ShockEvent::REIT_ELEVATED_VACANCIES, $vacancyResult->eventType);
+        $this->assertEquals(ShockEvent::REIT_ELEVATED_VACANCIES, $run(-1.60)->eventType);
 
-        // 3. Benign leasing boom (tenantDefaultZ = +2.00)
-        $leasingBonusMock = $this->createMathUtilityMock([0.0, 0.0, 2.00]);
-        $leasingBonusResult = $model->computeActualFinancials(
-            $stock,
-            expectedRevenue: 1000000.0,
-            realizedVariableMargin: 0.30,
-            fixedCosts: 100000.0,
-            baselineVol: 0.10,
-            macroState: $macroState,
-            mathUtility: $leasingBonusMock
-        );
+        // A strong leasing market: (2.0 - 1.0) x 0.015 = +1.5% of the roll.
+        $this->assertEqualsWithDelta($lease * (1.0 + 0.015 + $vacancy), $run(2.00)->streamRevenue['lease'], 1e-6);
+    }
 
-        // Bonus = - (2.00 - 1.00) * 0.015 = -0.015 margin cost reduction
-        // Clamped margin = 0.30 - 0.015 = 0.285
-        $this->assertEqualsWithDelta(0.285, $leasingBonusResult->clampedMargin, 0.001);
+    /**
+     * Over the tenant draw's distribution the roll averages what it was built at and the trust earns its built-in
+     * EBIT, 1.0M less 0.3M of operating cost and 0.1M fixed: no standing drag either way.
+     */
+    public function testTenantVacancyAveragesOutOverTheDraw(): void
+    {
+        $model = new ReitBusinessModel();
+        $stock = new Stock();
+        $stock->setTicker('REIT_VACANCY');
+        $macroState = $this->createMacroState(yield10y: 0.04);
+
+        $step = 0.005;
+        $mean = 0.0;
+        for ($z = -8.0 + ($step / 2.0); $z < 8.0; $z += $step) {
+            $result = $model->computeActualFinancials($stock, 1000000.0, 0.30, 100000.0, 0.10, $macroState, $this->createMathUtilityMock([0.0, 0.0, $z]));
+            $mean += $result->ebit * Distributions::calculateNormalPDF($z) * $step;
+        }
+
+        $this->assertEqualsWithDelta(600000.0, $mean, 200.0);
     }
 
     public function testTenYearYieldDoesNotTouchPropertyOperatingMargin(): void

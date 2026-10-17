@@ -196,8 +196,6 @@ class LogisticsBusinessModel extends StandardCorporateBusinessModel
 
         $clampedMargin = $this->clampMargin($realizedVariableMargin + $fuelLagDrag);
 
-        $primaryShockZ = $streams->resolveDominantShockZ([$spotZ, $fleetZ, $whZ]);
-
         $observableShockZ = ($fleetZ * $fleetWeight * self::DEDICATED_VARIANCE_SCALAR * $baselineVol) +
             ($spotZ * $spotWeight * self::SPOT_VARIANCE_SCALAR * $baselineVol) +
             ($spotFreightBoost * $spotWeight) -
@@ -206,7 +204,6 @@ class LogisticsBusinessModel extends StandardCorporateBusinessModel
         return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,
             rawVariableMargin: $clampedMargin,
-            primaryShockZ: $primaryShockZ,
             observableShockZ: $observableShockZ,
             eventType: $eventType,
             isPublicEvent: $eventType !== null ? true : null,

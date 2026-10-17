@@ -157,8 +157,9 @@ class ConsumerStaplesBusinessModelTest extends TestCase
         $this->assertEqualsWithDelta($priceGain, $dear->streamRevenue['volume'] - $calm->streamRevenue['volume'], 1e-3);
         $this->assertEqualsWithDelta(($dear->actualRevenue - $priceGain) * (0.60 + self::bookedDrag($dear)), $dear->actualVariableCosts, 1e-3, 'price is not produced: costs run on units');
         $this->assertGreaterThan($calm->ebit, $dear->ebit, 'CROP is net long the harvest');
-        $this->assertEqualsWithDelta(0.0, $calm->observableShockZ, 1e-12);
-        $this->assertEqualsWithDelta(($dear->actualRevenue / ($dear->actualRevenue - $priceGain) - 1.0) / ConsumerStaplesBusinessModel::BASE_COVERAGE_VISIBILITY, $dear->observableShockZ, 1e-12);
+        $this->assertEqualsWithDelta(0.0, $calm->publishedRevenueShift, 1e-12);
+        $this->assertEqualsWithDelta(0.0, $dear->observableShockZ, 1e-12);
+        $this->assertEqualsWithDelta($dear->actualRevenue / ($dear->actualRevenue - $priceGain) - 1.0, $dear->publishedRevenueShift, 1e-12);
 
         $processorCalm = $this->report(self::stock('LARK'), $calmMacro);
         $processorDear = $this->report(self::stock('LARK'), $harvestMacro);

@@ -30,8 +30,9 @@ use App\Service\Math\MathUtility;
  *      sentiment driven, exposed to UAW labor strikes and supply chain inflation).
  *   2. Apex Division Luxury Hypercars: Hyper-exclusive Veblen hypercars sold to corporate oligarchs and the elite
  *      at astronomical profit margins, cross-subsidizing the mass-market fleet.
- *   3. Connected Telematics & Captive Finance: Sticky recurring software tolls, telemetry subscriptions,
- *      and captive automotive financing (subject to CECL credit provisioning and Net Interest Margin curve spreads).
+ *   3. Connected Telematics: Sticky recurring software tolls and telemetry subscriptions on the fleet on the road.
+ *   4. Captive Finance: interest on the dealer and retail loan book, subject to CECL credit provisioning and Net
+ *      Interest Margin curve spreads.
  */
 class AutoManufacturerBusinessModel extends HeavyManufacturingBusinessModel
 {
@@ -91,8 +92,11 @@ class AutoManufacturerBusinessModel extends HeavyManufacturingBusinessModel
     /** Baseline fraction of revenue derived from hyper-exclusive Apex luxury hypercars (Veblen margin cross-subsidy). */
     public const APEX_LUXURY_WEIGHT = 0.20;
 
-    /** Baseline fraction of revenue derived from captive financing and connected telematics/software tolls. */
-    public const SOFTWARE_SERVICES_WEIGHT = 0.20;
+    /** Baseline fraction of revenue derived from connected telematics and software tolls. */
+    public const SOFTWARE_SERVICES_WEIGHT = 0.10;
+
+    /** Baseline fraction of revenue the captive finance arm earns as interest on its dealer and retail loan book. */
+    public const CAPTIVE_FINANCE_WEIGHT = 0.10;
 
     /** Baseline pricing power across OEM vehicle model lines. */
     public const PRICING_POWER_INDEX = 0.65;
@@ -111,8 +115,17 @@ class AutoManufacturerBusinessModel extends HeavyManufacturingBusinessModel
     /** Volatility multiplier for ultra-luxury hypercar deliveries. */
     public const APEX_VARIANCE_SCALAR = 0.40;
 
-    /** Volatility multiplier for captive finance and software subscription recurring tolls. */
+    /** Volatility multiplier for software subscription recurring tolls. */
     public const SOFTWARE_VARIANCE_SCALAR = 0.12;
+
+    /** Volatility multiplier for the interest a seasoned loan book earns. */
+    public const CAPTIVE_FINANCE_VARIANCE_SCALAR = 0.10;
+
+    // --- Cycle Loadings by Stream ---
+    /** Telematics subscriptions follow the fleet on the road, a stock about a dozen years of sales deep: 0.20 of the purchase swing. */
+    public const SOFTWARE_CYCLE_LOADING = 0.20;
+    /** The loan book is about three years of originations, so it carries about a third of the purchase swing. */
+    public const CAPTIVE_FINANCE_CYCLE_LOADING = 0.30;
 
     // --- Financing Arm & Credit Physics ---
     /** Break-even Net Interest Margin floor for the captive finance arm (~70bps, the neutral 2s10s slope). */
@@ -165,8 +178,11 @@ class AutoManufacturerBusinessModel extends HeavyManufacturingBusinessModel
     /** Relative variable cost intensity of Apex Division ultra-luxury hypercars (high gross profit margin cross-subsidy). */
     public const APEX_LUXURY_COST_INTENSITY = 0.65;
 
-    /** Relative variable cost intensity of connected telematics and software services (pure digital/financing tollbooth). */
+    /** Relative variable cost intensity of connected telematics and software services (pure digital tollbooth). */
     public const SOFTWARE_SERVICES_COST_INTENSITY = 0.30;
+
+    /** Relative variable cost intensity of the captive finance arm (funding and servicing), the rate the combined stream carried. */
+    public const CAPTIVE_FINANCE_COST_INTENSITY = 0.30;
 
     // --- Tail Risk & Event Physics ---
     /** Negative Z-score threshold indicating a massive vehicle safety recall and litigation liability. */
@@ -188,10 +204,9 @@ class AutoManufacturerBusinessModel extends HeavyManufacturingBusinessModel
         public function getReversionSpeed(): float { return 0.08; }
     public function getMoatSpread(): float { return 0.015; }
 
-    public function getMacroPhysics(Stock $stock, MacroStateDTO $macroState): array
+    /** Vehicle purchases: the durable stock-adjustment response to the gap, the real rate stance and confidence. */
+    protected function resolveCycleDemandShift(Stock $stock, MacroStateDTO $macroState): float
     {
-        $physics = parent::getMacroPhysics($stock, $macroState);
-
         $params = $this->resolveModelParameters($stock, [
             ModelParam::RateSensitivityScalar->value => self::RATE_SENSITIVITY_SCALAR,
         ]);
@@ -199,7 +214,7 @@ class AutoManufacturerBusinessModel extends HeavyManufacturingBusinessModel
         $beta = $this->getOperatingCyclicality($stock);
 
         // A vehicle is a durable: the gap reaches purchases once, through the stock-adjustment multiplier.
-        $physics['macro_demand_shift'] = ($this->resolveLaggedOutputGap($macroState) * $beta * self::DURABLE_STOCK_ADJUSTMENT_MULTIPLIER)
+        $shift = ($this->resolveLaggedOutputGap($macroState) * $beta * self::DURABLE_STOCK_ADJUSTMENT_MULTIPLIER)
             + $this->resolveFxDemandShift($macroState);
 
         // Debt-financed purchases read the real policy stance, nominal policy less expected inflation less r*
@@ -208,12 +223,9 @@ class AutoManufacturerBusinessModel extends HeavyManufacturingBusinessModel
         $ratePenalty = $realRateGap > 0.0
             ? $realRateGap * $beta * $rateScalar
             : max(-self::MAX_RATE_EASING_BOOST, $realRateGap * $beta * $rateScalar * self::RATE_EASING_SLOPE_SHARE);
-        $physics['macro_demand_shift'] -= $ratePenalty;
 
         // The gap is priced above, so confidence enters as its residual over the gap.
-        $physics['macro_demand_shift'] += $macroState->sentimentResidual() * $beta * self::CONSUMER_SENTIMENT_SENSITIVITY;
-
-        return $physics;
+        return $shift - $ratePenalty + ($macroState->sentimentResidual() * $beta * self::CONSUMER_SENTIMENT_SENSITIVITY);
     }
 
     protected function calculateSectorPhysics(
@@ -229,6 +241,7 @@ class AutoManufacturerBusinessModel extends HeavyManufacturingBusinessModel
             ModelParam::AutoSalesWeight->value        => self::AUTO_SALES_WEIGHT,
             ModelParam::ApexLuxuryWeight->value       => self::APEX_LUXURY_WEIGHT,
             ModelParam::SoftwareServicesWeight->value => self::SOFTWARE_SERVICES_WEIGHT,
+            ModelParam::CaptiveFinanceWeight->value   => self::CAPTIVE_FINANCE_WEIGHT,
         ]);
 
         $pricingPower = $this->resolvePricingPower($stock);
@@ -237,21 +250,27 @@ class AutoManufacturerBusinessModel extends HeavyManufacturingBusinessModel
         $streams = $this->createStreamContext($momentum, $mathUtility, $macroState, $stock);
 
         // --- Dynamic Revenue Mix Drift with Strategic Mean Reversion ---
-        $activeWeights = $streams->resolveActiveStreamWeights([
+        $targetWeights = [
             'mass_market_sales'   => $params[ModelParam::AutoSalesWeight],
             'apex_luxury'         => $params[ModelParam::ApexLuxuryWeight],
             'software_telematics' => $params[ModelParam::SoftwareServicesWeight],
-        ]);
+        ];
+        if ($params[ModelParam::CaptiveFinanceWeight] > 0.0) {
+            $targetWeights['captive_finance'] = $params[ModelParam::CaptiveFinanceWeight];
+        }
+        $activeWeights = $streams->resolveActiveStreamWeights($targetWeights);
 
         $salesWeight    = $activeWeights['mass_market_sales'];
         $apexWeight     = $activeWeights['apex_luxury'];
         $softwareWeight = $activeWeights['software_telematics'];
+        $captiveWeight  = $activeWeights['captive_finance'] ?? 0.0;
 
         // Independent stream Z-scores with persistent AR(1) momentum
         $salesZ    = $streams->generateZ('mass_market_sales', 0.25);
         $apexZ     = $streams->generateZ('apex_luxury', 0.35);
         $softwareZ = $streams->generateZ('software_telematics', 0.40);
         $eventZ    = $streams->generateExogenousZ('event', 0.10);
+        $captiveZ  = $captiveWeight > 0.0 ? $streams->generateZ('captive_finance', 0.40) : 0.0;
 
         // --- Tail Risk & Labor Events ---
         $eventType = null;
@@ -279,8 +298,8 @@ class AutoManufacturerBusinessModel extends HeavyManufacturingBusinessModel
         $gscpiShift = max(0.0, $macroState->supplyChainPressureIndexEma - MacroEngine::GSCPI_BASELINE);
         $inflationCostPenalty = ($inputCostDrag / max(0.05, $salesWeight)) + ($gscpiShift * self::SUPPLY_CHAIN_PRESSURE_COST_SCALAR * (1.0 - ($pricingPower * 0.50)));
 
-        // Captive Finance NIM Squeeze & Subprime Provisioning. The default rates carry the cycle, so confidence
-        // enters as its residual over the gap.
+        // Captive Finance NIM Squeeze & Subprime Provisioning, charged to the loan book that earns the interest. The
+        // default rates carry the cycle, so confidence enters as its residual over the gap.
         $sentimentShift = $macroState->sentimentResidual();
         $retailDefaultShift = ResponseCurves::excessOverBaseline($macroState->retailDefaultRateEma, MacroEngine::RETAIL_DEFAULT_BASELINE);
         $corporateDefaultShift = ResponseCurves::excessOverBaseline($macroState->corporateDefaultRateEma, MacroEngine::CORPORATE_DEFAULT_BASELINE);
@@ -310,18 +329,30 @@ class AutoManufacturerBusinessModel extends HeavyManufacturingBusinessModel
         $salesShock    = $salesZ    * ($baselineVol * self::SALES_VARIANCE_SCALAR);
         $apexShock     = $apexZ     * ($baselineVol * self::APEX_VARIANCE_SCALAR);
         $softwareShock = $softwareZ * ($baselineVol * self::SOFTWARE_VARIANCE_SCALAR);
+        $captiveShock  = $captiveZ  * ($baselineVol * self::CAPTIVE_FINANCE_VARIANCE_SCALAR);
         $cuShift = MacroTransmission::calculateCapacityUtilizationShift($macroState->capacityUtilizationRateEma, MacroEngine::CU_BASELINE, self::CAPACITY_UTILIZATION_THROUGHPUT_SCALAR);
 
-        // FX reaches every stream once through the root macro_demand_shift.
-        $salesRevenue    = max(0.0, $expectedRevenue * $salesWeight    * (1.0 + $salesShock + $cuShift) * $salesMultiplier);
-        $apexRevenue     = max(0.0, $expectedRevenue * $apexWeight     * (1.0 + $apexShock + $apexMacroBoost));
-        $softwareRevenue = max(0.0, $expectedRevenue * $softwareWeight * (1.0 + $softwareShock));
+        // The firm-wide purchase swing lands on all of expected revenue; vehicle sales carry it, while the fleet's
+        // subscriptions and the loan book, stocks built from years of sales, carry their loading of it.
+        $cycleShares = MacroTransmission::allocateDemandShift(
+            ['mass_market_sales' => $salesWeight, 'apex_luxury' => $apexWeight, 'software_telematics' => $softwareWeight, 'captive_finance' => $captiveWeight],
+            ['mass_market_sales' => 1.0, 'apex_luxury' => 1.0, 'software_telematics' => self::SOFTWARE_CYCLE_LOADING, 'captive_finance' => self::CAPTIVE_FINANCE_CYCLE_LOADING],
+            $this->resolveCycleDemandShift($stock, $macroState)
+        );
+
+        $salesRevenue    = max(0.0, $expectedRevenue * $salesWeight    * (1.0 + $salesShock + $cuShift + $cycleShares['mass_market_sales']) * $salesMultiplier);
+        $apexRevenue     = max(0.0, $expectedRevenue * $apexWeight     * (1.0 + $apexShock + $apexMacroBoost + $cycleShares['apex_luxury']));
+        $softwareRevenue = max(0.0, $expectedRevenue * $softwareWeight * (1.0 + $softwareShock + $cycleShares['software_telematics']));
+        $captiveRevenue  = max(0.0, $expectedRevenue * $captiveWeight  * (1.0 + $captiveShock + $cycleShares['captive_finance']));
 
         $streamRevenues = [
             'mass_market_sales'   => $salesRevenue,
             'apex_luxury'         => $apexRevenue,
             'software_telematics' => $softwareRevenue,
         ];
+        if ($captiveWeight > 0.0) {
+            $streamRevenues['captive_finance'] = $captiveRevenue;
+        }
 
         $actualRevenue = array_sum($streamRevenues);
         $streams->recordStreamShares($streamRevenues);
@@ -329,33 +360,34 @@ class AutoManufacturerBusinessModel extends HeavyManufacturingBusinessModel
         // --- Cross-Subsidization Variable Cost Architecture ---
         $blendedIntensity = ($salesWeight * self::MASS_MARKET_COST_INTENSITY)
             + ($apexWeight * self::APEX_LUXURY_COST_INTENSITY)
-            + ($softwareWeight * self::SOFTWARE_SERVICES_COST_INTENSITY);
+            + ($softwareWeight * self::SOFTWARE_SERVICES_COST_INTENSITY)
+            + ($captiveWeight * self::CAPTIVE_FINANCE_COST_INTENSITY);
         $blendedIntensity = max(0.01, $blendedIntensity);
 
         $salesBaseMargin    = $realizedVariableMargin * (self::MASS_MARKET_COST_INTENSITY / $blendedIntensity);
         $apexBaseMargin     = $realizedVariableMargin * (self::APEX_LUXURY_COST_INTENSITY / $blendedIntensity);
         $softwareBaseMargin = $realizedVariableMargin * (self::SOFTWARE_SERVICES_COST_INTENSITY / $blendedIntensity);
+        $captiveBaseMargin  = $realizedVariableMargin * (self::CAPTIVE_FINANCE_COST_INTENSITY / $blendedIntensity);
 
         $salesCosts    = $salesRevenue    * ($salesBaseMargin + $inflationCostPenalty);
         // Veblen price hikes reprice the same hypercar deliveries: no incremental build cost on that slice.
-        $apexPriceRevenue = max(0.0, $expectedRevenue * $apexWeight * $veblenInflationPower);
+        $apexPriceRevenue = $expectedRevenue * $apexWeight * $veblenInflationPower;
         $apexCosts     = max(0.0, $apexRevenue - $apexPriceRevenue) * $apexBaseMargin;
-        $softwareCosts = $softwareRevenue * ($softwareBaseMargin + $macroDefaultDrag + $nimSqueeze + $ceclDrag);
+        $softwareCosts = $softwareRevenue * $softwareBaseMargin;
+        $captiveCosts  = $captiveRevenue * ($captiveBaseMargin + $macroDefaultDrag + $nimSqueeze + $ceclDrag);
 
-        $totalVariableCosts = $salesCosts + $apexCosts + $softwareCosts;
+        $totalVariableCosts = $salesCosts + $apexCosts + $softwareCosts + $captiveCosts;
         // The blended ratio is struck on volume revenue so the template method reproduces these dollar costs exactly.
         $volumeRevenue = max(1.0, $actualRevenue - $apexPriceRevenue);
         $effectiveMargin = $actualRevenue > 0 ? ($totalVariableCosts / $volumeRevenue) : $realizedVariableMargin;
         $clampedMargin = $this->clampMargin($effectiveMargin);
-
-        $primaryShockZ = $streams->resolveDominantShockZ([$salesZ, $apexZ, $softwareZ], $eventZ);
 
         // Observable shock blending
         $strikeShock = ($salesMultiplier - 1.0) * $salesWeight;
 
         $observableShockZ = ($salesShock * $salesWeight * 0.60) +
             ($apexShock * $apexWeight * 0.40) +
-            ($softwareShock * $softwareWeight * 0.20) +
+            ((($softwareShock * $softwareWeight) + ($captiveShock * $captiveWeight)) * 0.20) +
             ($strikeShock * 0.80);
 
         // The one-off charge is booked as a special item: in EBIT, out of the run rate, the Street figure and the cost ratio.
@@ -364,7 +396,6 @@ class AutoManufacturerBusinessModel extends HeavyManufacturingBusinessModel
         return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,
             rawVariableMargin: $clampedMargin,
-            primaryShockZ: $primaryShockZ,
             observableShockZ: $observableShockZ,
             eventType: $eventType,
             isPublicEvent: $eventType !== null ? true : null,
@@ -396,7 +427,6 @@ class AutoManufacturerBusinessModel extends HeavyManufacturingBusinessModel
             'inflation_ema',
             'macro_credit_spread',
             'macro_credit_spread_ema',
-            'manufacturing_pmi_ema',
             'natural_rate_ema',
             'output_gap_lag_3m',
             'policy_rate_ema',

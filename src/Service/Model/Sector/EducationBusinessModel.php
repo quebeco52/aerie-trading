@@ -220,8 +220,6 @@ class EducationBusinessModel extends StandardCorporateBusinessModel
         $clampedMargin = $this->clampMargin($realizedVariableMargin + $inputCostDrag);
         $this->registerPublicSpendingExposure($streams, $expectedRevenue * $tuitionWeight * self::TUITION_GOVERNMENT_SPENDING_SENSITIVITY, $clampedMargin, $actualRevenue);
 
-        $primaryShockZ = $streams->resolveDominantShockZ([$enterpriseZ, $tuitionZ, $lmsZ]);
-
         $observableShockZ = ($tuitionZ * $tuitionWeight * self::TUITION_VARIANCE_SCALAR * $baselineVol) +
             ($enterpriseZ * $enterpriseWeight * self::ENTERPRISE_VARIANCE_SCALAR * $baselineVol) +
             ($counterCyclicalEnrollmentBoost * $tuitionWeight) +
@@ -230,7 +228,6 @@ class EducationBusinessModel extends StandardCorporateBusinessModel
         return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,
             rawVariableMargin: $clampedMargin,
-            primaryShockZ: $primaryShockZ,
             observableShockZ: $observableShockZ,
             eventType: null,
             isPublicEvent: null,

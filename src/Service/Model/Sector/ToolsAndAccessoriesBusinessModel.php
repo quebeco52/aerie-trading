@@ -192,8 +192,10 @@ class ToolsAndAccessoriesBusinessModel extends StandardCorporateBusinessModel
             $eventType = ShockEvent::DEFENSE_CONTRACT_WIN; // Proxy for mega industrial boom
         }
 
-        $commercialRevenue = max(0.0, $expectedRevenue * $commercialWeight * (1.0 + ($commercialZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR * 0.1)) + $commercialMacroVolumeShock) * $cycleMultiplier);
-        $consumerRevenue   = max(0.0, $expectedRevenue * $consumerWeight * (1.0 + ($consumerZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR * 2.5)) + $consumerMacroVolumeShock));
+        $commercialShock = $commercialZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR * 0.1);
+        $consumerShock   = $consumerZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR * 2.5);
+        $commercialRevenue = max(0.0, $expectedRevenue * $commercialWeight * (1.0 + $commercialShock + $commercialMacroVolumeShock) * $cycleMultiplier);
+        $consumerRevenue   = max(0.0, $expectedRevenue * $consumerWeight * (1.0 + $consumerShock + $consumerMacroVolumeShock));
 
         $streamRevenues = [
             'commercial' => $commercialRevenue,
@@ -229,17 +231,13 @@ class ToolsAndAccessoriesBusinessModel extends StandardCorporateBusinessModel
         $rawMargin = ($actualVariableCosts / max(1.0, $actualRevenue)) + $supplyChainPenalty + $inputCostDrag + $elasticityShift;
         $clampedMargin = $this->clampMargin($rawMargin);
 
-        // Blended primary shock for standard model integration
-        $primaryShockZ = $streams->resolveDominantShockZ([
-            ($commercialZ * $commercialWeight) + ($consumerZ * $consumerWeight),
-        ], $eventZ);
-
-        $observableShockZ = $primaryShockZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR);
+        // Each stream's own shock at its revenue weight, and what a public congestion or super-cycle does to commercial.
+        $observableShockZ = ((($commercialShock * $cycleMultiplier) + ($cycleMultiplier - 1.0)) * $commercialWeight)
+            + ($consumerShock * $consumerWeight);
 
         return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,
             rawVariableMargin: $clampedMargin,
-            primaryShockZ: $primaryShockZ,
             observableShockZ: $observableShockZ,
             eventType: $eventType,
             isPublicEvent: $eventType !== null ? true : null,

@@ -228,7 +228,6 @@ class MerchantHouseBusinessModel extends ConglomerateBusinessModel
         return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,
             rawVariableMargin: $clampedMargin,
-            primaryShockZ: $streams->resolveDominantShockZ([$merchantZ, $tollboothZ, $floatZ], $eventZ),
             observableShockZ: $observableShockZ,
             eventType: $eventType,
             isPublicEvent: $eventType !== null ? true : null,

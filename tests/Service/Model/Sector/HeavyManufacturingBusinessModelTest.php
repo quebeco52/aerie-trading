@@ -93,7 +93,11 @@ class HeavyManufacturingBusinessModelTest extends TestCase
         );
     }
 
-    public function testCapacityUtilizationOverheadAbsorptionExpandsMargins(): void
+    /**
+     * A fuller plant spreads the fixed cost base over more units; the variable cost of each unit does not move.
+     * The model used to cut the variable ratio on high utilisation as well, counting operating leverage twice.
+     */
+    public function testCapacityUtilizationLeavesTheUnitCostToTheFixedCostBase(): void
     {
         $stock = new Stock();
         $stock->setTicker('CATP');
@@ -108,11 +112,7 @@ class HeavyManufacturingBusinessModelTest extends TestCase
         $lowCuResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.35, 20_000_000.0, 0.0, $lowCuMacro, $mathMock);
         $highCuResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.35, 20_000_000.0, 0.0, $highCuMacro, $mathMock);
 
-        $this->assertLessThan(
-            $lowCuResult->clampedMargin,
-            $highCuResult->clampedMargin,
-            'High industrial capacity utilization improves factory fixed overhead absorption, reducing variable cost margin.'
-        );
+        $this->assertEqualsWithDelta($lowCuResult->clampedMargin, $highCuResult->clampedMargin, 1e-12);
     }
 
     public function testGscpiBottlenecksIncreaseVariableCostDrag(): void

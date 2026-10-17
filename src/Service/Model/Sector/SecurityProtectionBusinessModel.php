@@ -290,9 +290,6 @@ class SecurityProtectionBusinessModel extends StandardCorporateBusinessModel
         $clampedMargin = $this->clampMargin($rawMargin);
         $this->registerPublicSpendingExposure($streams, $expectedRevenue * $govWeight * self::APPROPRIATIONS_VOLUME_SCALAR, $clampedMargin, $actualRevenue);
 
-        // Primary shock is whichever stream deviated the most, overridden by tail events
-        $primaryShockZ = $streams->resolveDominantShockZ([$expeditionaryZ, $retainerZ, $govZ], $eventZ);
-
         // Visibility: Government cost-plus inflation is fully public, Retainers are moderately public, Expeditionary Black Ops are opaque.
         $observableShockZ = ($govZ * $govWeight * self::GOVERNMENT_VARIANCE_SCALAR * 1.0) +
             ($retainerZ * $retainerWeight * self::RETAINER_VARIANCE_SCALAR * 0.50) +
@@ -306,7 +303,6 @@ class SecurityProtectionBusinessModel extends StandardCorporateBusinessModel
         return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,
             rawVariableMargin: $clampedMargin,
-            primaryShockZ: $primaryShockZ,
             observableShockZ: $observableShockZ,
             eventType: $eventType,
             isPublicEvent: $eventType !== null ? true : null,

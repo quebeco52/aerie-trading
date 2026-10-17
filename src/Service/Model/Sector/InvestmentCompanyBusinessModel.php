@@ -251,7 +251,6 @@ class InvestmentCompanyBusinessModel extends ConglomerateBusinessModel
         return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,
             rawVariableMargin: $clampedMargin,
-            primaryShockZ: $streams->resolveDominantShockZ([$ownedZ, $listedZ, $floatZ], $eventZ),
             observableShockZ: $observableShockZ,
             eventType: $eventType,
             isPublicEvent: $eventType !== null ? true : null,

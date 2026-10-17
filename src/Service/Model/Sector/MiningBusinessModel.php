@@ -52,7 +52,7 @@ class MiningBusinessModel extends StandardCorporateBusinessModel
     public const FX_REVENUE_EXPOSURE = 0.30;
 
     // --- Analyst Visibility & Error ---
-    /** Base coverage visibility: metals prices are published daily, so the sell side sees most of the quarter. */
+    /** Base coverage visibility of the mine's own output; the published metals prices are read in full beside it. */
     public const BASE_COVERAGE_VISIBILITY = 0.80;
     /** Base coverage forecasting error given the swings in the benchmark price. */
     public const BASE_COVERAGE_ERROR = 0.10;
@@ -254,10 +254,9 @@ class MiningBusinessModel extends StandardCorporateBusinessModel
         $perTonneCostRatio = $this->underExtractionRules($streams, $macroState, $realizedVariableMargin + $inputCostDrag, $priceRelative, $fixedCosts, $actualRevenue);
         $clampedMargin = $this->clampMargin(FirmEconomics::calculatePerUnitCostRatio($perTonneCostRatio, $priceRelative));
 
-        // The benchmark is public; the mine's own output is not. Dividing the price leg by the base visibility
-        // lets a persistent price level converge to an unbiased consensus.
+        // The benchmark is public and read in full; the mine's own output is seen at coverage visibility.
         $outputShock = $expectedRevenue > 0.0 ? ($volumeRevenue / $expectedRevenue) - 1.0 : 0.0;
-        $observableShockZ = (($priceRelative - 1.0) / self::BASE_COVERAGE_VISIBILITY) + $outputShock;
+        $observableShockZ = $outputShock;
 
         // The one-off charge is booked as a special item: in EBIT, out of the run rate, the Street figure and the cost ratio.
         $specialCharge = $disasterPenalty * $volumeRevenue;
@@ -265,8 +264,8 @@ class MiningBusinessModel extends StandardCorporateBusinessModel
         return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,
             rawVariableMargin: $clampedMargin,
-            primaryShockZ: $streams->resolveDominantShockZ([...array_values($outputZ), $realizationZ], $eventZ),
             observableShockZ: $observableShockZ,
+            publishedRevenueShift: $priceRelative - 1.0,
             eventType: $eventType,
             isPublicEvent: $eventType !== null ? true : null,
             streamZ: $streams->getStreamZ(),

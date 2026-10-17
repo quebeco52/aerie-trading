@@ -52,7 +52,7 @@ class OilGasProducerBusinessModel extends StandardCorporateBusinessModel
     public const FX_REVENUE_EXPOSURE = 0.30;
 
     // --- Analyst Visibility & Error ---
-    /** Base coverage visibility: realized crude and gas prices are published daily, so the sell side sees most of the quarter. */
+    /** Base coverage visibility of the field's own production; the published crude and gas prices are read in full beside it. */
     public const BASE_COVERAGE_VISIBILITY = 0.80;
     /** Base coverage forecasting error given the swings in the benchmark prices. */
     public const BASE_COVERAGE_ERROR = 0.10;
@@ -243,10 +243,10 @@ class OilGasProducerBusinessModel extends StandardCorporateBusinessModel
 
         $hedgeGain = $expectedRevenue * $liquidsShare * $oilVolume * $hedgeRatio * ($hedgedStrike - $oilSpot) * (1.0 + $basisShift);
 
-        // The benchmark prices are public; the field's production is not. Dividing the price leg by the base
-        // visibility lets a persistent price level converge to an unbiased consensus.
+        // The benchmark prices and the hedge book are public and read in full; the field's production is seen at
+        // coverage visibility.
         $productionShock = $expectedRevenue > 0.0 ? ($volumeRevenue / $expectedRevenue) - 1.0 : 0.0;
-        $observableShockZ = (($priceRelative - 1.0) / self::BASE_COVERAGE_VISIBILITY) + $productionShock;
+        $observableShockZ = $productionShock;
 
         // The one-off charge is booked as a special item: in EBIT, out of the run rate, the Street figure and the cost ratio.
         $specialCharge = $disasterPenalty * $volumeRevenue;
@@ -254,8 +254,8 @@ class OilGasProducerBusinessModel extends StandardCorporateBusinessModel
         return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,
             rawVariableMargin: $clampedMargin,
-            primaryShockZ: $streams->resolveDominantShockZ([$oilZ, $gasZ, $basisZ], $eventZ),
             observableShockZ: $observableShockZ,
+            publishedRevenueShift: $priceRelative - 1.0,
             eventType: $eventType,
             isPublicEvent: $eventType !== null ? true : null,
             streamZ: $streams->getStreamZ(),

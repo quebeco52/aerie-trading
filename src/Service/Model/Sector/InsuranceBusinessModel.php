@@ -718,14 +718,9 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
 
         $eventType = $this->resolveClaimEvent($claims['gross'], 1.0, $recovery > 0.0);
 
-        // Only a draw inside the large-loss layer is a structural shock to the firm.
-        $structuralClaimShock = $claims['claimZ'] < $catThreshold ? $claims['claimZ'] : 0.0;
-        $primaryShockZ = $streams->resolveDominantShockZ([$structuralClaimShock, $revenueZ]);
-
         return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,
             rawVariableMargin: $clampedMargin,
-            primaryShockZ: $primaryShockZ,
             observableShockZ: 0.0,
             eventType: $eventType,
             streamZ: $streams->getStreamZ(),

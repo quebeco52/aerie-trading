@@ -131,7 +131,6 @@ class ReinsuranceBusinessModel extends InsuranceBusinessModel
         $eventType = $this->resolveClaimEvent($claims['gross'], $treatyWeight, $coverAttached);
 
         $structuralClaimShock = $claims['claimZ'] < $catThreshold ? $claims['claimZ'] : 0.0;
-        $primaryShockZ = $streams->resolveDominantShockZ([$structuralClaimShock, $treatyZ, $catBondZ]);
 
         $treatyBase = max(1.0, $expectedRevenue * $treatyWeight);
         $treatyShock = ($treatyRevenue - $treatyBase) / $treatyBase;
@@ -142,7 +141,6 @@ class ReinsuranceBusinessModel extends InsuranceBusinessModel
         return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,
             rawVariableMargin: $clampedMargin,
-            primaryShockZ: $primaryShockZ,
             observableShockZ: $observableShockZ,
             eventType: $eventType,
             isPublicEvent: $eventType !== null ? true : null,

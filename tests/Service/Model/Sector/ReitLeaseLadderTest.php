@@ -23,7 +23,7 @@ use PHPUnit\Framework\TestCase;
 final class ReitLeaseLadderTest extends TestCase
 {
     /**
-     * @return array{0: array<string, float>, 1: array<string, float>} final stream state and final KPIs
+     * @return array{0: array<string, float>, 1: array<string, float>, 2: ?\App\DTO\ActualFinancialsDTO} final stream state, final KPIs and the last quarter
      */
     private function runQuarters(int $quarters, float $marketRentIndex, array $openingState = [], float $propertyIndex = 100.0): array
     {
@@ -47,6 +47,7 @@ final class ReitLeaseLadderTest extends TestCase
 
         $state = $openingState;
         $kpis = [];
+        $result = null;
         for ($q = 0; $q < $quarters; $q++) {
             $stock->setEarningsMomentumZ($state);
             $result = $model->computeActualFinancials($stock, 1_000_000_000.0, 0.40, 200_000_000.0, 0.10, $macro, $math);
@@ -54,7 +55,7 @@ final class ReitLeaseLadderTest extends TestCase
             $kpis = $result->kpis;
         }
 
-        return [$state, $kpis];
+        return [$state, $kpis, $result];
     }
 
     /** In a flat market, in-place rents sit at market and the spread is nil. */
@@ -133,5 +134,23 @@ final class ReitLeaseLadderTest extends TestCase
         [, $kpis] = $this->runQuarters(1, 500.0, [ReitBusinessModel::STATE_IN_PLACE_RENT => 0.0]);
 
         $this->assertLessThanOrEqual(ReitBusinessModel::MAX_RELEASING_SPREAD, $kpis['releasing_spread']);
+    }
+
+    /**
+     * The book bills its level: a roll that has climbed 10% over the old market keeps billing 10% more every quarter
+     * until it rolls down again, and the disclosed roll is read in full. Revenue used to add only the quarter's change
+     * in the roll, so a lease signed above market lifted one quarter's revenue and then nothing.
+     */
+    public function testTheRollBillsItsLevelNotItsQuarterlyChange(): void
+    {
+        // One quarter, so the stream mix still sits at its target weights.
+        [, $kpis, $result] = $this->runQuarters(1, 110.0, [ReitBusinessModel::STATE_IN_PLACE_RENT => 0.10]);
+
+        $this->assertEqualsWithDelta(0.10, $kpis['in_place_rent_index'], 1e-9);
+        $lease = 1_000_000_000.0 * 0.85;
+        $this->assertEqualsWithDelta($lease * (1.0 + 0.10 + ReitBusinessModel::expectedTenantVacancy()), $result->streamRevenue['lease'], 1.0);
+        $this->assertEqualsWithDelta(0.10 * 0.85, $result->publishedRevenueShift, 1e-9);
+        // Same space, dearer: the extra rent carries no extra operating cost.
+        $this->assertEqualsWithDelta($lease * (0.10 + ReitBusinessModel::expectedTenantVacancy()), $result->priceRevenue, 1.0);
     }
 }

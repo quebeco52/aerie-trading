@@ -800,7 +800,8 @@ class StockModelTuning
         'FALC' => [
             ModelParam::AutoSalesWeight->value        => 0.55, // Predatory mass-market commuter fleet Trojan horse
             ModelParam::ApexLuxuryWeight->value       => 0.25, // Hyper-exclusive Veblen hypercars (Apex Division cross-subsidy)
-            ModelParam::SoftwareServicesWeight->value => 0.20, // Inescapable telemetry, subscription tolls & captive finance
+            ModelParam::SoftwareServicesWeight->value => 0.08, // Inescapable telemetry & subscription tolls
+            ModelParam::CaptiveFinanceWeight->value   => 0.12, // Captive finance on the fleet it sells
             ModelParam::PricingPowerIndex->value      => 0.65,
             ModelParam::RateSensitivityScalar->value  => 1.25,
         ],
@@ -812,6 +813,7 @@ class StockModelTuning
             ModelParam::AutoSalesWeight->value        => 0.70, // Fortified commercial haulers & municipal fleet sales
             ModelParam::ApexLuxuryWeight->value       => 0.15, // Armored executive wagons & discrete VIP transports
             ModelParam::SoftwareServicesWeight->value => 0.15, // Certified telematics, collision avoidance & maintenance tolls
+            ModelParam::CaptiveFinanceWeight->value   => 0.00, // Fleets finance through their own banks
             ModelParam::PricingPowerIndex->value      => 0.75, // Backed by insurance underwriting standards
             ModelParam::RateSensitivityScalar->value  => 0.85, // Institutional fleet renewals less rate-sensitive than retail auto loans
         ],

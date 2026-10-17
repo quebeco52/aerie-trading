@@ -172,13 +172,11 @@ class BrokerageBusinessModel extends BaseFinancialBusinessModel
         }
 
         // observableShockZ: volatility, M2 and deal flow are all published, so analysts anticipate their terms fully.
-        $primaryShockZ = $streams->resolveDominantShockZ([$tradingZ, $advisoryZ]);
         $observableShockZ = (($volatilityBonus + $m2Shift) * $tradingWeight) + ($advisoryDealBonus * $advisoryWeight);
 
         return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,
             rawVariableMargin: $clampedMargin,
-            primaryShockZ: $primaryShockZ,
             observableShockZ: $observableShockZ,
             eventType: $eventType,
             streamZ: $streams->getStreamZ(),

@@ -50,7 +50,6 @@ final class ConsensusCostBaseVisibilityTest extends TestCase
             actualVariableCosts: (self::REVENUE - $priceRevenue) * $realizedCostRatio,
             clampedMargin: $realizedCostRatio,
             ebit: 0.0,
-            primaryShockZ: 0.0,
             observableShockZ: 0.0,
             priceRevenue: $priceRevenue,
         );
@@ -182,7 +181,6 @@ final class ConsensusCostBaseVisibilityTest extends TestCase
             actualVariableCosts: self::REVENUE * ($lastQuarter + $shift),
             clampedMargin: $lastQuarter + $shift,
             ebit: 0.0,
-            primaryShockZ: 0.0,
             observableShockZ: 0.0,
             seasonalCostRatioShift: $shift,
         );

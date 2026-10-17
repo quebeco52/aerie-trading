@@ -112,8 +112,10 @@ class MarketConsensusEngine
             )
             : 0.0;
 
+        // A benchmark price or a disclosed rent roll is read in full, whatever the coverage.
         $freshEstimate = $baseExpectedRevenue * (1.0 + $orderBookTilt)
             * (1.0 + $ownShock * $dynamicVisibility)
+            * (1.0 + $actuals->publishedRevenueShift)
             * (1.0 + $actuals->observableShockZ * $dynamicVisibility);
 
         // Bayesian Updating: Analysts blend structural baseline capacity / anchored prior with noisy channel signals (fresh estimate)
@@ -164,8 +166,9 @@ class MarketConsensusEngine
         // Price is not produced, so the cost ratio bites on the volume part of revenue only — exactly as the
         // physics applies it. Charging the ratio against the whole estimate instead left every firm with a
         // price-driven revenue stream looking permanently cheaper to run than the analysts assumed.
+        // A price below the expected level leaves the volume costing more than the revenue it now brings in.
         $volumeShare = $actuals->actualRevenue > 0.0
-            ? max(0.0, min(1.0, ($actuals->actualRevenue - $actuals->priceRevenue) / $actuals->actualRevenue))
+            ? max(0.0, ($actuals->actualRevenue - $actuals->priceRevenue) / $actuals->actualRevenue)
             : 1.0;
         // On the unshaded revenue: the walk-down is a shading of the published figures (Richardson, Teoh & Wysocki
         // 2004), not a view that the firm will sell less and so spend less.

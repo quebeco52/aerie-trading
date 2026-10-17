@@ -40,7 +40,6 @@ final class ReportedKpiConsensusTest extends TestCase
             actualVariableCosts: 600_000_000.0,
             clampedMargin: 0.60,
             ebit: 200_000_000.0,
-            primaryShockZ: 0.0,
             observableShockZ: 0.0,
         );
     }

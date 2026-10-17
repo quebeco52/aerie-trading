@@ -430,12 +430,9 @@ class PrivateEquityBusinessModel extends AssetManagementBusinessModel
 
         $observableShockZ = $expectedRevenue > 0.0 ? (($actualRevenue - $expectedRevenue) / $expectedRevenue) : 0.0;
 
-        $primaryShockZ = $streams->resolveDominantShockZ([$carryZ, $mgmtZ, $principalWeight > 0.0 ? $principalZ : 0.0]);
-
         return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,
             rawVariableMargin: $clampedMargin,
-            primaryShockZ: $primaryShockZ,
             observableShockZ: $observableShockZ,
             eventType: $eventType,
             streamZ: $streams->getStreamZ(),

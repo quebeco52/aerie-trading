@@ -329,9 +329,6 @@ class TelecomBusinessModel extends StandardCorporateBusinessModel
         $rawMargin = $effectiveMargin + $sacDrag + $inputCostDrag;
         $clampedMargin = $this->clampMargin($rawMargin);
 
-        // Primary shock is whichever stream deviated the most, overridden by tail events
-        $primaryShockZ = $streams->resolveDominantShockZ([$equipmentZ, $subscriptionZ], $eventZ);
-
         // Net adds are reported every quarter and tracked closely; equipment sales carry standard retail visibility.
         $subscriberMove = ($subscribers / max(0.01, $openingSubscribers)) - 1.0;
         $observableShockZ = ($subscriberMove * $subscriptionWeight * self::NET_ADDS_VISIBILITY) +
@@ -340,7 +337,6 @@ class TelecomBusinessModel extends StandardCorporateBusinessModel
         return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,
             rawVariableMargin: $clampedMargin,
-            primaryShockZ: $primaryShockZ,
             observableShockZ: $observableShockZ,
             eventType: $eventType,
             isPublicEvent: $eventType !== null ? true : null,

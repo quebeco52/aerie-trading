@@ -243,8 +243,6 @@ class PortTerminalBusinessModel extends StandardCorporateBusinessModel
         $volumeCostScale = $actualRevenue > 0.0 ? ($actualRevenue + $unearnedStorage) / $actualRevenue : 1.0;
         $clampedMargin = $this->clampMargin(($realizedVariableMargin + $inputCostDrag) * $volumeCostScale);
 
-        $primaryShockZ = $streams->resolveDominantShockZ([$gatewayZ, $transshipmentZ, $storageZ], $eventZ);
-
         // Monthly box counts are public; yard revenue is half seen through the reported dwell times.
         $observableShockZ = $expectedRevenue > 0.0
             ? (($gatewayRevenue - $gatewayBase) + ($transshipmentRevenue - $transshipmentBase) + (self::STORAGE_VISIBILITY * ($storageRevenue - $storageBase))) / $expectedRevenue
@@ -253,7 +251,6 @@ class PortTerminalBusinessModel extends StandardCorporateBusinessModel
         return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,
             rawVariableMargin: $clampedMargin,
-            primaryShockZ: $primaryShockZ,
             observableShockZ: $observableShockZ,
             eventType: $eventType,
             isPublicEvent: $eventType !== null ? true : null,

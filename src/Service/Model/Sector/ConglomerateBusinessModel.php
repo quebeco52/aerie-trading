@@ -329,8 +329,6 @@ class ConglomerateBusinessModel extends StandardCorporateBusinessModel
             + $ppiCostDrag;
         $clampedMargin = $this->clampMargin($rawMargin);
 
-        $primaryShockZ = $streams->resolveDominantShockZ([$industrialZ, $defensiveZ, $floatZ], $eventZ);
-
         // Blended observable shock
         $observableShockZ = ($industrialShock * $industrialWeight) +
             ($defensiveShock * $defensiveWeight) +
@@ -345,7 +343,6 @@ class ConglomerateBusinessModel extends StandardCorporateBusinessModel
         return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,
             rawVariableMargin: $clampedMargin,
-            primaryShockZ: $primaryShockZ,
             observableShockZ: $observableShockZ,
             eventType: $eventType,
             isPublicEvent: $eventType !== null ? true : null,

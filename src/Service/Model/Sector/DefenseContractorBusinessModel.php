@@ -28,7 +28,7 @@ use App\Service\Math\FinancialConstants;
  *      2. Fixed-Price Development (EMD): ASC 606 reach-forward losses; vulnerable to general inflation.
  *      3. Foreign Military Sales (FMS): High-margin exports where Wright's Law drives margin expansion.
  * - Allied Fiscal Physics: the District fields no army, so its makers export into allied defence budgets; immune to
- *   consumer recessions, exposed to mobilisations and to Continuing Resolution (CR) budget freezes.
+ *   consumer recessions, exposed to mobilisations and to the allies' budget cycles.
  * - FAR Progress Payment Withholding: Program overruns/defects trigger working capital expansion (FAR 32.503-6).
  * - Classified Tooling & Platform Modernization: Multi-decade tooling tech debt vs next-gen franchise margin expansion.
  */
@@ -89,12 +89,6 @@ class DefenseContractorBusinessModel extends StandardCorporateBusinessModel
     // --- Sovereign Procurement & Cost-Plus Physics ---
     /** Cost-plus revenue per point of inflation over what was expected, both ways: +1pp adds 1.5%. */
     public const COST_PLUS_BONUS_SCALAR = 1.50;
-    /** Sovereign credit spread threshold triggering Continuing Resolution (CR) budget freeze drag. */
-    public const SOVEREIGN_STRESS_THRESHOLD = 0.030;
-    /** Revenue drag scalar applied to cost-plus lot allocations during debt ceiling freezes. */
-    public const CR_BUDGET_DRAG_SCALAR = 2.50;
-    /** Maximum allowable revenue multiplier drag during a severe Continuing Resolution freeze. */
-    public const MAX_CR_BUDGET_DRAG = 0.50;
 
     // --- Fixed-Price ASC 606 & Production Physics ---
     /** Negative Z-score threshold indicating development program overruns and reach-forward losses. */
@@ -283,14 +277,8 @@ class DefenseContractorBusinessModel extends StandardCorporateBusinessModel
         // Cost-plus contracts pass the inflation surprise through as nominal revenue, both ways.
         $costPlusBonus = $macroState->inflationSurprise() * self::COST_PLUS_BONUS_SCALAR;
 
-        // Sovereign credit spreads indicate debt ceiling crises triggering Continuing Resolutions (CRs)
-        $creditSpread = $macroState->macroCreditSpreadEma;
-        $crDrag = $creditSpread > self::SOVEREIGN_STRESS_THRESHOLD
-            ? ($creditSpread - self::SOVEREIGN_STRESS_THRESHOLD) * self::CR_BUDGET_DRAG_SCALAR
-            : 0.0;
-
         // --- Program Execution, Forward Losses & Tail Shocks ---
-        $costPlusMultiplier   = max(self::MAX_CR_BUDGET_DRAG, 1.0 - $crDrag);
+        $costPlusMultiplier   = 1.0;
         $fixedPriceMultiplier = 1.0;
         $fmsMultiplier        = 1.0;
         $eventType            = null;
@@ -335,7 +323,7 @@ class DefenseContractorBusinessModel extends StandardCorporateBusinessModel
         $inputCostDrag = $this->resolveInputCostDrag($stock, $macroState, $streams, 1.0 - $fixedPriceWeight, $realizedVariableMargin);
 
         // Contract awards fund a multi-year backlog; revenue is recognized on percentage of completion, so
-        // appropriations, continuing resolutions and export bans hit ORDERS in full and revenue gradually.
+        // appropriations and export bans hit ORDERS in full and revenue gradually.
         // Foreign military sales are bought out of the same allied budgets, so they take the same award term.
         $costPlusBook = $streams->recognizeBacklog('cost_plus_procurement', $expectedRevenue * $costPlusWeight,
             max(0.0, (1.0 + ($costPlusZ * $baselineVol * self::COST_PLUS_VARIANCE_SCALAR) + $costPlusBonus + $alliedOrders) * $costPlusMultiplier), self::COST_PLUS_BACKLOG_BURN_RATE);
@@ -371,8 +359,6 @@ class DefenseContractorBusinessModel extends StandardCorporateBusinessModel
         $clampedMargin = $this->clampMargin($rawMargin);
 
         // --- Shock Determination ---
-        $primaryShockZ = $streams->resolveDominantShockZ([$costPlusZ, $fixedPriceZ, $fmsZ], $eventZ);
-
         // Analysts see awards and book-to-bill, but this quarter's revenue only moves at the burn rate.
         $costPlusShock   = ((($costPlusZ * $baselineVol * self::COST_PLUS_VARIANCE_SCALAR) + $costPlusBonus) * $costPlusMultiplier + ($costPlusMultiplier - 1.0)) * self::COST_PLUS_BACKLOG_BURN_RATE;
         $fixedPriceShock = (($fixedPriceZ * $baselineVol * self::FIXED_PRICE_DEV_VARIANCE_SCALAR) * $fixedPriceMultiplier + ($fixedPriceMultiplier - 1.0)) * self::FIXED_PRICE_BACKLOG_BURN_RATE;
@@ -386,7 +372,6 @@ class DefenseContractorBusinessModel extends StandardCorporateBusinessModel
         return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,
             rawVariableMargin: $clampedMargin,
-            primaryShockZ: $primaryShockZ,
             observableShockZ: $observableShockZ,
             eventType: $eventType,
             isPublicEvent: $eventType !== null ? true : null,
@@ -411,7 +396,6 @@ class DefenseContractorBusinessModel extends StandardCorporateBusinessModel
             'import_price_level',
             'industrial_metals_index_ema',
             'inflation_ema',
-            'macro_credit_spread_ema',
             'real_wage_gap',
             'tips_breakeven_ema',
         ];

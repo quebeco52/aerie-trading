@@ -167,7 +167,7 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
         $networkRevenue = max(0.0, $expectedRevenue * $networkWeight
             * (1.0 + ($swipeZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)) + $inflationBonus));
         // Interchange on a bigger ticket is the same swipe: the inflation bonus is price, not processing volume.
-        $priceRevenue = max(0.0, $expectedRevenue * $networkWeight * $inflationBonus);
+        $priceRevenue = $expectedRevenue * $networkWeight * $inflationBonus;
         
         $streamRevenues = [
             'lending' => $lendingRevenue,
@@ -198,7 +198,6 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
             $eventType = ShockEvent::RESERVE_RELEASE;
         }
 
-        $primaryShockZ = $streams->resolveDominantShockZ([$credit['systematic_z'], $lendingZ]);
         // observableShockZ: inflation bonus and swipe volume are visible, lending is partially visible
         $lendingBase = max(1.0, $expectedRevenue * $lendingWeight);
         $lendingShock = ($lendingRevenue - $lendingBase) / $lendingBase;
@@ -209,7 +208,6 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
         return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,
             rawVariableMargin: $clampedMargin,
-            primaryShockZ: $primaryShockZ,
             observableShockZ: $observableShockZ,
             eventType: $eventType,
             streamZ: $streams->getStreamZ(),

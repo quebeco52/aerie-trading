@@ -196,9 +196,6 @@ class RailroadBusinessModel extends StandardCorporateBusinessModel
 
         $clampedMargin = $this->clampMargin($realizedVariableMargin + $inputCostDrag);
 
-        // Max magnitude shock
-        $primaryShockZ = $streams->resolveDominantShockZ([$intermodalZ, $bulkZ, $industrialZ]);
-
         $observableShockZ = ($intermodalZ * $intermodalWeight * self::INTERMODAL_VARIANCE_SCALAR) +
             ($bulkZ * $bulkWeight * self::BULK_VARIANCE_SCALAR) +
             ($intermodalMacroShift * $intermodalWeight);
@@ -207,7 +204,6 @@ class RailroadBusinessModel extends StandardCorporateBusinessModel
         return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,
             rawVariableMargin: $clampedMargin,
-            primaryShockZ: $primaryShockZ,
             observableShockZ: $observableShockZ,
             eventType: null,
             isPublicEvent: null,

@@ -15,7 +15,6 @@ readonly class ActualFinancialsDTO
      * @param float                $actualVariableCosts   Realized variable costs after margin clamping.
      * @param float                $clampedMargin         The margin ratio used (needed by MarketConsensusEngine).
      * @param float                $ebit                  Earnings Before Interest & Tax.
-     * @param float                $primaryShockZ         The dominant idiosyncratic Z-score driving this quarter's shock.
      * @param float                $observableShockZ      The fraction of the shock exposed to public data (used by MarketConsensusEngine).
      * @param string|null          $eventType             Named event type if a tail-risk event fired, otherwise null.
      * @param array<string, mixed> $eventContext          Optional key-value lore context for the NarrativeEngine.
@@ -30,7 +29,6 @@ readonly class ActualFinancialsDTO
         public float $actualVariableCosts,
         public float $clampedMargin,
         public float $ebit,
-        public float $primaryShockZ,
         public float $observableShockZ,
         public ?string $eventType = null,
         public array $eventContext = [],
@@ -45,7 +43,7 @@ readonly class ActualFinancialsDTO
         public float $netChargeOffs = 0.0,
         /** Dollars of funding cost the duration squeeze added to the variable cost ratio this quarter (negative when a steep curve lowered it): net interest income the margin disclosure deducts. */
         public float $netInterestSqueeze = 0.0,
-        /** Dollars of actual revenue that are pure price above the expected level and carried no variable cost. */
+        /** Dollars of actual revenue that are price over the expected level (negative under it) and moved no variable cost. */
         public float $priceRevenue = 0.0,
         /** Dollar write-down of long-lived assets from the model's own impairment test (ASC 360-10). */
         public float $plantImpairment = 0.0,
@@ -53,5 +51,7 @@ readonly class ActualFinancialsDTO
         public float $seasonalCostRatioShift = 0.0,
         /** Dollar one-off operating charge from the physics (a recall, a fine): a special item, not in the cost ratio or ebit above. */
         public float $specialCharge = 0.0,
+        /** Revenue move, as a share of expected revenue, that analysts read in full from published figures. */
+        public float $publishedRevenueShift = 0.0,
     ) {}
 }

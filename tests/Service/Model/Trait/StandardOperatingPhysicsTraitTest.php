@@ -69,8 +69,8 @@ final class StandardOperatingPhysicsTraitTest extends TestCase
     }
 
     /**
-     * A sector cannot report more price than it reported revenue, nor negative price: either would make the
-     * volume base negative and hand the firm a variable cost credit.
+     * A sector cannot report more price than it reported revenue: that would make the volume base negative and hand
+     * the firm a variable cost credit. A price below the expected level saves no cost: the volume costs what it did.
      */
     public function testPriceRevenueIsClampedIntoTheRevenueItCameFrom(): void
     {
@@ -84,8 +84,8 @@ final class StandardOperatingPhysicsTraitTest extends TestCase
 
         $this->model->stubPriceRevenue = -400_000.0;
         $negative = $this->model->computeActualFinancials($stock, 1_000_000.0, 0.60, 0.0, 0.10, $macro, $this->math);
-        $this->assertSame(0.0, $negative->priceRevenue, 'Negative price revenue floors at zero.');
-        $this->assertEqualsWithDelta(600_000.0, $negative->actualVariableCosts, 0.0001, 'It must not inflate the volume base beyond revenue.');
+        $this->assertSame(-400_000.0, $negative->priceRevenue, 'A price cut is reported as negative price revenue.');
+        $this->assertEqualsWithDelta(840_000.0, $negative->actualVariableCosts, 0.0001, 'The volume behind it costs what it did at the expected price.');
     }
 
     public function testMarginClampBoundsTheCostRatioOnBothSides(): void

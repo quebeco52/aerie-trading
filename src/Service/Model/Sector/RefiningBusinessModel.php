@@ -54,7 +54,7 @@ class RefiningBusinessModel extends StandardCorporateBusinessModel
     public const FIXED_COST_LABOR_SHARE = 0.30;
 
     // --- Analyst Visibility & Error ---
-    /** Base coverage visibility: crude and crack spreads are published daily, so analysts see most of a refiner's quarter. */
+    /** Base coverage visibility of the plant's own runs; the published crude price and crack are read in full beside it. */
     public const BASE_COVERAGE_VISIBILITY = 0.80;
     /** Base coverage forecasting error on capture rates and crude differentials. */
     public const BASE_COVERAGE_ERROR = 0.10;
@@ -229,9 +229,9 @@ class RefiningBusinessModel extends StandardCorporateBusinessModel
         $opexPerBarrel = ($opexShare + $inputCostDrag) * $baselineRealization;
         $clampedMargin = $this->clampMargin($realization > 0.0 ? ($crudePrice + $opexPerBarrel) / $realization : $realizedVariableMargin);
 
-        // Crude and the crack are published daily; the plant's own runs are not. Dividing the price leg by the
-        // base visibility lets a persistent price level converge to an unbiased consensus.
-        $observableShockZ = ((($realization / $baselineRealization) - 1.0) / self::BASE_COVERAGE_VISIBILITY) + ($throughput - 1.0);
+        // Crude and the crack are published daily and read in full; the plant's own runs are seen at coverage
+        // visibility.
+        $observableShockZ = $throughput - 1.0;
         $benchmarkCrack = $macroState->refiningCrackSpreadEma;
 
         // The one-off charge is booked as a special item: in EBIT, out of the run rate, the Street figure and the cost ratio.
@@ -240,8 +240,8 @@ class RefiningBusinessModel extends StandardCorporateBusinessModel
         return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,
             rawVariableMargin: $clampedMargin,
-            primaryShockZ: $streams->resolveDominantShockZ([$throughputZ, $captureZ], $eventZ),
             observableShockZ: $observableShockZ,
+            publishedRevenueShift: ($realization / $baselineRealization) - 1.0,
             eventType: $eventType,
             isPublicEvent: $eventType !== null ? true : null,
             streamZ: $streams->getStreamZ(),

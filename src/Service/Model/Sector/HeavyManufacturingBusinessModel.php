@@ -115,9 +115,7 @@ class HeavyManufacturingBusinessModel extends StandardCorporateBusinessModel
     // --- Revenue & Shock Physics ---
     public const REVENUE_VARIANCE_SCALAR = 0.35; // Volatile sales
 
-    // --- Capacity Utilization & Global Supply Chain Physics ---
-    /** Sensitivity of heavy factory fixed overhead absorption and variable margin to capacity utilization deviations. */
-    public const CU_MARGIN_ABSORPTION_SENSITIVITY = 0.15;
+    // --- Global Supply Chain Physics ---
     /** Variable margin cost drag per standard deviation of supply-chain pressure above normal (0.95pp). */
     public const GSCPI_COST_PENALTY_SCALAR        = 0.0095;
 
@@ -209,15 +207,11 @@ class HeavyManufacturingBusinessModel extends StandardCorporateBusinessModel
         $gscpiShift = max(0.0, $macroState->supplyChainPressureIndexEma);
         $gscpiCostDrag = $gscpiShift * self::GSCPI_COST_PENALTY_SCALAR;
 
-        // Capacity Utilization Overhead Absorption:
-        // High industrial capacity utilization improves factory fixed overhead absorption, expanding margins.
-        $cuDeviation = $macroState->capacityUtilizationRateEma - MacroEngine::CU_BASELINE;
-        $cuMarginAdjustment = - ($cuDeviation * self::CU_MARGIN_ABSORPTION_SENSITIVITY);
-
+        // Overhead absorption is the fixed cost base itself: a fuller plant spreads it over more units without the
+        // variable cost per unit moving, and running past capacity is the engine's overtime premium.
         $effectiveMargin = $actualRevenue > 0 ? ($actualVariableCosts / $actualRevenue) : $realizedVariableMargin;
-        $clampedMargin = $this->clampMargin($effectiveMargin + $inputCostDrag + $gscpiCostDrag + $cuMarginAdjustment);
+        $clampedMargin = $this->clampMargin($effectiveMargin + $inputCostDrag + $gscpiCostDrag);
 
-        $primaryShockZ = $streams->resolveDominantShockZ([$oemZ, $mroZ]);
         $observableShockZ = ($oemZ * $oemWeight * self::OEM_VARIANCE_SCALAR * self::OEM_BACKLOG_BURN_RATE) +
             ($mroZ * $mroWeight * self::MRO_VARIANCE_SCALAR);
         $observableShockZ *= $baselineVol;
@@ -225,7 +219,6 @@ class HeavyManufacturingBusinessModel extends StandardCorporateBusinessModel
         return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,
             rawVariableMargin: $clampedMargin,
-            primaryShockZ: $primaryShockZ,
             observableShockZ: $observableShockZ,
             eventType: null,
             streamZ: $streams->getStreamZ(),
@@ -249,7 +242,6 @@ class HeavyManufacturingBusinessModel extends StandardCorporateBusinessModel
     public function getOperatingMacroFields(): array
     {
         return [
-            'capacity_utilization_rate_ema',
             'capital_stock_overhang_ema',
             'exchange_rate_index_ema',
             'import_price_level',

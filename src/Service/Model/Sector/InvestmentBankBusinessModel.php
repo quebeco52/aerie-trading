@@ -423,8 +423,6 @@ class InvestmentBankBusinessModel extends BrokerageBusinessModel
             }
         }
 
-        $primaryShockZ = $streams->resolveDominantShockZ([$advisoryWeight > 0.0 ? $advisoryZ : 0.0, $tradingZ], $eventZ);
-
         $observableShockZ = ($advisoryMacroFactor * $advisoryWeight)
             + ($tradingMacroShift * $tradingWeight)
             + ($optionsVegaBonus * $optionsWeight)
@@ -438,7 +436,6 @@ class InvestmentBankBusinessModel extends BrokerageBusinessModel
         return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,
             rawVariableMargin: $clampedVariableMargin,
-            primaryShockZ: $primaryShockZ,
             observableShockZ: $observableShockZ,
             eventType: $eventType,
             isPublicEvent: $eventType !== null ? true : null,

@@ -7,6 +7,7 @@ namespace App\Service\Model\Sector;
 use App\Data\Macro\InputOutputExposures;
 use App\DTO\DebtExpansionAppetiteDTO;
 
+use App\Service\Math\Distributions;
 use App\Service\Math\FirmEconomics;
 use App\Service\Math\MacroTransmission;
 use App\Service\Math\ResponseCurves;
@@ -112,20 +113,20 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
     public const LONGEVITY_VARIANCE_SCALAR      = 0.25;
     /** Room rates move more than leased rents: US ADR fell 8.8% in 2009 (STR) against a DiPasquale-Wheaton rent fall of ~3% at that year's -5.9% CBO gap. */
     public const HOSPITALITY_RATE_LEVERAGE      = 3.0;
-    /** Share of the new-supply competition shift that comes off market rents each quarter; carried over from the value-based model, not separately fitted. */
+    /** Market rent given up per unit of the new-supply competition shift, as new buildings bid for the same tenants; carried over from the value-based model, not separately fitted. */
     public const NEW_SUPPLY_RENT_DRAG           = 0.03;
 
     /** Share of an inflation surprise contractual rent escalators pass through, both ways: 0.80. */
     public const RENT_ESCALATOR_CAPTURE         = 0.80;
     /** Rent roll lost per unit of district catastrophe burden above an average year: damaged space earns nothing until repaired. */
     public const CATASTROPHE_VACANCY_SENSITIVITY = 0.02;
-    /** Z-score threshold below which elevated tenant defaults and vacancies trigger margin penalties. */
+    /** Tenant-default Z-score below which failing tenants hand back space. */
     public const VACANCY_Z_THRESHOLD            = -1.50;
-    /** Scalar applied to tenant default Z-score severity to determine vacancy margin loss. */
+    /** Rent roll lost per unit of tenant-default Z-score past the threshold: 12% at the threshold. */
     public const VACANCY_LOSS_SCALAR            = 0.08;
-    /** Z-score floor above which strong leasing demand generates operational efficiency bonuses. */
+    /** Tenant-default Z-score above which a strong leasing market fills vacant space. */
     public const BENIGN_LEASING_Z_FLOOR         = 1.00;
-    /** Scalar applied to leasing bonus Z-score above floor. */
+    /** Rent roll won per unit of tenant-default Z-score above the floor. */
     public const LEASING_BONUS_SCALE            = 0.015;
     /** Sensitivity of market cap rates to macroeconomic credit spread fluctuations. */
     public const CAP_RATE_SPREAD_SENSITIVITY    = 1.20;
@@ -137,11 +138,11 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
     // --- Housing Supply & Tenant Default Transmission ---
     /** Sensitivity of new building supply competition to residential housing starts. */
     public const HOUSING_SUPPLY_COMPETITION_SENSITIVITY = 0.25;
-    /** Vacancy and rent loss drag from excess corporate default rate spikes. */
+    /** Rent roll lost per unit of relative excess in the corporate default rate. */
     public const CORP_DEFAULT_VACANCY_SCALAR = 0.04;
-    /** Vacancy and rent loss drag from excess retail default rate spikes. */
+    /** Rent roll lost per unit of relative excess in the retail default rate. */
     public const RETAIL_DEFAULT_VACANCY_SCALAR = 0.03;
-    /** Vacancy and rent loss drag from elevated household debt service ratio stress on residential/retail tenants. */
+    /** Rent roll lost per unit of household debt-service stress on residential and retail tenants. */
     public const DSR_TENANT_DEFAULT_SCALAR = 0.15;
 
     // --- Event Lore Thresholds ---
@@ -256,75 +257,63 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
 
         $revenueZ     = $streams->generateZ('lease', 0.25);
         $hospitalityZ = $streams->generateZ('hospitality', 0.25);
+        $securitizationZ = $securitizationWeight > 0.0 ? $streams->generateZ('securitization_income', 0.40) : 0.0;
+        $longevityZ      = $longevityWeight > 0.0 ? $streams->generateZ('longevity_bond_yield', 0.60) : 0.0;
+        $tenantDefaultZ  = $streams->generateExogenousZ('tenant_default', 0.20);
 
         // Core Revenue Shocks
-        $leaseShock       = $revenueZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR);
-        $hospitalityShock = $hospitalityZ * ($baselineVol * self::HOSPITALITY_VARIANCE_SCALAR);
+        $leaseShock          = $revenueZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR);
+        $hospitalityShock    = $hospitalityZ * ($baselineVol * self::HOSPITALITY_VARIANCE_SCALAR);
+        $securitizationShock = $securitizationZ * $baselineVol * self::SECURITIZATION_VARIANCE_SCALAR;
+        $longevityShock      = $longevityZ * $baselineVol * self::LONGEVITY_VARIANCE_SCALAR;
 
         // The inflation hedge: CPI rent escalators pass the inflation surprise, both ways.
         $rentEscalator = $macroState->inflationSurprise() * self::RENT_ESCALATOR_CAPTURE;
         // Market rent is the space market (DiPasquale & Wheaton 1996), not the asset price: a lower cap rate lifts what
         // a building is worth, not what a tenant pays. Apartment rents follow jobs and income the same way.
         $marketRent = $macroState->commercialMarketRent - 1.0;
+        // New buildings bid for the same tenants, which takes their share off the rent a new lease signs at.
         $housingSupplyShift = MacroTransmission::calculateHousingStartsShift($macroState->housingStartsIndexEma, sensitivity: self::HOUSING_SUPPLY_COMPETITION_SENSITIVITY);
-        // Lease ladder: roll in-place rents toward market at the quarterly rollover rate implied by WALT.
-        $inPlaceRent = $streams->getPersistedState(self::STATE_IN_PLACE_RENT, $marketRent);
-        [$rolledInPlaceRent, $releasingSpread] = FirmEconomics::rollLeaseLadder($inPlaceRent, $marketRent, self::LEASE_WALT_YEARS, self::MAX_RELEASING_SPREAD, EarningsEngine::QUARTERLY_TIME_STEP);
+        $leasingMarketRent = $marketRent - ($housingSupplyShift * self::NEW_SUPPLY_RENT_DRAG);
+        // Lease ladder: roll in-place rents toward market at the quarterly rollover rate implied by WALT. The roll's
+        // level, not its quarterly change, is what the book of leases bills.
+        $inPlaceRent = $streams->getPersistedState(self::STATE_IN_PLACE_RENT, $leasingMarketRent);
+        [$rolledInPlaceRent, $releasingSpread] = FirmEconomics::rollLeaseLadder($inPlaceRent, $leasingMarketRent, self::LEASE_WALT_YEARS, self::MAX_RELEASING_SPREAD, EarningsEngine::QUARTERLY_TIME_STEP);
         $streams->registerState(self::STATE_IN_PLACE_RENT, $rolledInPlaceRent);
 
-        // Only the mark-to-market captured on the expiring slice reaches revenue this quarter.
-        $marketLeaseReversion = ($rolledInPlaceRent - $inPlaceRent) - ($housingSupplyShift * self::NEW_SUPPLY_RENT_DRAG);
+        // --- Vacancy ---
+        // Failing tenants hand back space and a strong leasing market fills it, net of the loss the roll was built
+        // at; rising business and household defaults empty space across the market.
+        $corpDefaultShift = ResponseCurves::excessOverBaseline($macroState->corporateDefaultRateEma, MacroEngine::CORPORATE_DEFAULT_BASELINE);
+        $retailDefaultShift = ResponseCurves::excessOverBaseline($macroState->retailDefaultRateEma, MacroEngine::RETAIL_DEFAULT_BASELINE);
+        $dsrShift = max(0.0, $macroState->householdDebtServiceGap) / MacroEngine::HOUSEHOLD_DSR_NEUTRAL;
+        $macroTenantVacancy = ($corpDefaultShift * self::CORP_DEFAULT_VACANCY_SCALAR)
+            + ($retailDefaultShift * self::RETAIL_DEFAULT_VACANCY_SCALAR)
+            + ($dsrShift * self::DSR_TENANT_DEFAULT_SCALAR);
+        $vacancy = self::tenantVacancy($tenantDefaultZ) - self::expectedTenantVacancy() + $macroTenantVacancy;
         // Storm damage takes space off the rent roll until it is repaired.
         $catastropheVacancy = max(0.0, $macroState->catastropheLossIndexEma - 1.0) * self::CATASTROPHE_VACANCY_SENSITIVITY;
 
         // --- Clamped Revenue Streams ---
-        $leaseRevenue       = max(0.0, $expectedRevenue * $leaseWeight * (1.0 + $leaseShock + $rentEscalator + $marketLeaseReversion - $catastropheVacancy));
-        // Contractual escalators and market rent reversion reprice the same square footage: pure price, no operating cost.
-        $priceRevenue       = max(0.0, $expectedRevenue * $leaseWeight * ($rentEscalator + $marketLeaseReversion));
+        $leaseRevenue       = max(0.0, $expectedRevenue * $leaseWeight * (1.0 + $leaseShock + $rentEscalator + $rolledInPlaceRent - $vacancy - $catastropheVacancy));
+        // Escalators, the roll's rent level and empty space reprice the same square footage: the building's
+        // operating cost runs whatever it bills.
+        $priceRevenue       = $expectedRevenue * $leaseWeight * ($rentEscalator + $rolledInPlaceRent - $vacancy);
         $hospitalityRevenue = max(0.0, $expectedRevenue * $hospitalityWeight * (1.0 + $hospitalityShock + ($marketRent * self::HOSPITALITY_RATE_LEVERAGE)));
 
         $streamRevenues = [
             'lease'       => $leaseRevenue,
             'hospitality' => $hospitalityRevenue,
         ];
-
-        $securitizationRevenue = 0.0;
-        $securitizationZ       = 0.0;
-        $securitizationShock   = 0.0;
         if ($securitizationWeight > 0.0) {
-            $securitizationZ       = $streams->generateZ('securitization_income', 0.40);
-            $securitizationShock   = $securitizationZ * $baselineVol * self::SECURITIZATION_VARIANCE_SCALAR;
-            $securitizationRevenue = max(0.0, $expectedRevenue * $securitizationWeight * (1.0 + $securitizationShock));
-            $streamRevenues['securitization_income'] = $securitizationRevenue;
+            $streamRevenues['securitization_income'] = max(0.0, $expectedRevenue * $securitizationWeight * (1.0 + $securitizationShock));
         }
-
-        $longevityRevenue = 0.0;
-        $longevityZ       = 0.0;
-        $longevityShock   = 0.0;
         if ($longevityWeight > 0.0) {
-            $longevityZ       = $streams->generateZ('longevity_bond_yield', 0.60);
-            $longevityShock   = $longevityZ * $baselineVol * self::LONGEVITY_VARIANCE_SCALAR;
-            $longevityRevenue = max(0.0, $expectedRevenue * $longevityWeight * (1.0 + $longevityShock));
-            $streamRevenues['longevity_bond_yield'] = $longevityRevenue;
+            $streamRevenues['longevity_bond_yield'] = max(0.0, $expectedRevenue * $longevityWeight * (1.0 + $longevityShock));
         }
 
         $actualRevenue = max(0.0, array_sum($streamRevenues));
         $streams->recordStreamShares($streamRevenues);
-
-        // --- Margin Penalties ---
-        $tenantDefaultZ = $streams->generateExogenousZ('tenant_default', 0.20);
-        $vacancyShock = $tenantDefaultZ < self::VACANCY_Z_THRESHOLD
-            ? abs($tenantDefaultZ) * self::VACANCY_LOSS_SCALAR
-            : ($tenantDefaultZ > self::BENIGN_LEASING_Z_FLOOR
-                ? - ($tenantDefaultZ - self::BENIGN_LEASING_Z_FLOOR) * self::LEASING_BONUS_SCALE
-                : 0.0);
-
-        $corpDefaultShift = ResponseCurves::excessOverBaseline($macroState->corporateDefaultRateEma, MacroEngine::CORPORATE_DEFAULT_BASELINE);
-        $retailDefaultShift = ResponseCurves::excessOverBaseline($macroState->retailDefaultRateEma, MacroEngine::RETAIL_DEFAULT_BASELINE);
-        $dsrShift = max(0.0, $macroState->householdDebtServiceGap) / MacroEngine::HOUSEHOLD_DSR_NEUTRAL;
-        $macroTenantDefaultDrag = ($corpDefaultShift * self::CORP_DEFAULT_VACANCY_SCALAR)
-            + ($retailDefaultShift * self::RETAIL_DEFAULT_VACANCY_SCALAR)
-            + ($dsrShift * self::DSR_TENANT_DEFAULT_SCALAR);
 
         // Mortgage and unsecured note costs reach FFO through DebtEngine's maturity wall
         // (getDebtMaturityRolloverRate), below NOI. They are not a property operating cost.
@@ -333,7 +322,7 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
         // CAM and opex reconciliations that bill a year in arrears.
         $inputCostDrag = $this->resolveInputCostDrag($stock, $macroState, $streams, $this->resolvePricingPower($stock), $realizedVariableMargin);
 
-        $clampedMargin = $this->clampMargin($realizedVariableMargin + $vacancyShock + $macroTenantDefaultDrag + $inputCostDrag, $minVariableMargin);
+        $clampedMargin = $this->clampMargin($realizedVariableMargin + $inputCostDrag, $minVariableMargin);
 
         $eventType = null;
         if ($tenantDefaultZ < self::LORE_ANCHOR_BANKRUPTCY_Z) {
@@ -342,31 +331,24 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
             $eventType = ShockEvent::REIT_ELEVATED_VACANCIES;
         }
 
-        // Aggregate observable revenue shock percentage across active streams (MarketConsensusEngine applies coverage visibility)
-        $observableShockZ = 
-            (($leaseShock + $rentEscalator) * $leaseWeight) +
+        // Aggregate observable revenue shock percentage across active streams (MarketConsensusEngine applies coverage
+        // visibility). Default rates are published; which tenants fail is not. The rent roll is disclosed in full.
+        $observableShockZ =
+            (($leaseShock + $rentEscalator - $macroTenantVacancy) * $leaseWeight) +
             ($hospitalityShock * $hospitalityWeight) +
             ($securitizationShock * $securitizationWeight) +
             ($longevityShock * $longevityWeight);
 
-        $primaryShockZ = $streams->resolveDominantShockZ([
-            $revenueZ,
-            $hospitalityZ,
-            $securitizationWeight > 0.0 ? $securitizationZ : 0.0,
-            $longevityWeight > 0.0 ? $longevityZ : 0.0,
-            $tenantDefaultZ,
-        ]);
-
         return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,
             rawVariableMargin: $clampedMargin,
-            primaryShockZ: $primaryShockZ,
             observableShockZ: $observableShockZ,
             eventType: $eventType,
             isPublicEvent: $eventType !== null ? true : null,
             streamZ: $streams->getStreamZ(),
             streamRevenue: $streamRevenues,
             priceRevenue: $priceRevenue,
+            publishedRevenueShift: $rolledInPlaceRent * $leaseWeight,
             // The two numbers a real estate analyst reads first: how long the roll is contracted for, and
             // what the space coming up is worth against what it currently earns.
             kpis: [
@@ -375,6 +357,28 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
                 'in_place_rent_index' => $rolledInPlaceRent,
             ],
         );
+    }
+
+    /** Rent roll a tenant-default draw takes off (positive) or a strong leasing market adds (negative). */
+    private static function tenantVacancy(float $tenantDefaultZ): float
+    {
+        if ($tenantDefaultZ < self::VACANCY_Z_THRESHOLD) {
+            return abs($tenantDefaultZ) * self::VACANCY_LOSS_SCALAR;
+        }
+
+        return $tenantDefaultZ > self::BENIGN_LEASING_Z_FLOOR
+            ? -($tenantDefaultZ - self::BENIGN_LEASING_Z_FLOOR) * self::LEASING_BONUS_SCALE
+            : 0.0;
+    }
+
+    /**
+     * The vacancy an average quarter's draw takes off the roll (0.9%): the loss tail past the threshold,
+     * E[|Z|; Z < t] = phi(t), less the leasing gains above the floor, E[max(0, Z - f)].
+     */
+    public static function expectedTenantVacancy(): float
+    {
+        return (self::VACANCY_LOSS_SCALAR * Distributions::calculateNormalPDF(self::VACANCY_Z_THRESHOLD))
+            - (self::LEASING_BONUS_SCALE * Distributions::calculateNormalLowerPartialMoment(-self::BENIGN_LEASING_Z_FLOOR));
     }
 
     public function updateDynamicRoic(Stock $stock, float $actualTotalNetIncome, float $investedCapital, float $ebit, float $corporateTaxRate, float $wacc = 0.08, float $costOfEquity = 0.10, ?\App\DTO\MacroStateDTO $macroState = null, float $depreciation = 0.0): float

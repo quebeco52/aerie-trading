@@ -207,6 +207,7 @@ enum ModelParam: string
     // --- Automotive ---
     case AutoSalesWeight = 'auto_sales_weight';
     case SoftwareServicesWeight = 'software_services_weight';
+    case CaptiveFinanceWeight = 'captive_finance_weight';
     case ApexLuxuryWeight = 'apex_luxury_weight';
 
     // --- Conglomerates ---

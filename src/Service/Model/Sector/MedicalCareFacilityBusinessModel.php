@@ -278,7 +278,7 @@ class MedicalCareFacilityBusinessModel extends StandardCorporateBusinessModel
         $outpatientRevenue = max(0.0, $expectedRevenue * $outpatientWeight * (1.0 + $outpatientShock + $outpatientMacroBoost));
         $arbitrageRevenue  = max(0.0, $expectedRevenue * $arbitrageWeight * (1.0 + $arbitrageShock + $arbitrageInflationBoost));
         // Coding and reimbursement uplift bills the same procedures at higher rates: price, not care delivered.
-        $priceRevenue      = max(0.0, $expectedRevenue * $arbitrageWeight * $arbitrageInflationBoost);
+        $priceRevenue      = $expectedRevenue * $arbitrageWeight * $arbitrageInflationBoost;
 
         $streamRevenues = [
             'inpatient_care'      => $inpatientRevenue,
@@ -298,8 +298,6 @@ class MedicalCareFacilityBusinessModel extends StandardCorporateBusinessModel
         $clampedMargin = $this->clampMargin($rawMargin);
         $this->registerPublicSpendingExposure($streams, $expectedRevenue * $inpatientWeight * self::INPATIENT_GOVERNMENT_SPENDING_SENSITIVITY * $spendingMultiplier, $clampedMargin, $actualRevenue);
 
-        $primaryShockZ = $streams->resolveDominantShockZ([$inpatientZ, $outpatientZ, $arbitrageZ], $eventZ);
-
         // Inpatient care and mandatory spending packages are publicly visible; billing arbitrage is opaque
         $observableShockZ = ($inpatientZ * $inpatientWeight * self::INPATIENT_VARIANCE_SCALAR * 0.70) +
             ($outpatientZ * $outpatientWeight * self::OUTPATIENT_VARIANCE_SCALAR * 0.40) +
@@ -312,7 +310,6 @@ class MedicalCareFacilityBusinessModel extends StandardCorporateBusinessModel
         return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,
             rawVariableMargin: $clampedMargin,
-            primaryShockZ: $primaryShockZ,
             observableShockZ: $observableShockZ,
             eventType: $eventType,
             isPublicEvent: $eventType !== null ? true : null,

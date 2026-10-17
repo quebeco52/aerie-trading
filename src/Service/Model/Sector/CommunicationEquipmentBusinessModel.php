@@ -364,12 +364,6 @@ class CommunicationEquipmentBusinessModel extends StandardCorporateBusinessModel
         $rawMargin = $effectiveMargin + $inputCostDrag + $gscpiCostDrag + $attachShift;
         $clampedMargin = $this->clampMargin($rawMargin);
 
-        // Primary shock is whichever stream deviated the most, overridden by tail events (supply or litigation).
-        $primaryShockZ = $streams->resolveDominantShockZ(
-            [$networkZ, $licensingZ, $consumerZ],
-            abs($litigationZ) > abs($eventZ) ? $litigationZ : $eventZ
-        );
-
         // What the market sees is the revenue the stream draws moved: the order shock at the share of it the
         // backlog delivers this quarter, royalties and terminals in full. The event and litigation draws move
         // revenue only through the regimes they trigger, which are public events of their own.
@@ -382,7 +376,6 @@ class CommunicationEquipmentBusinessModel extends StandardCorporateBusinessModel
         return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,
             rawVariableMargin: $clampedMargin,
-            primaryShockZ: $primaryShockZ,
             observableShockZ: $observableShockZ,
             eventType: $eventType,
             isPublicEvent: $eventType !== null ? true : null,

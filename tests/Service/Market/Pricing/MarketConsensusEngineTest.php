@@ -37,7 +37,6 @@ class MarketConsensusEngineTest extends TestCase
             actualVariableCosts: 440.0,
             clampedMargin: 0.40,
             ebit: 360.0,
-            primaryShockZ: 1.0,
             observableShockZ: 0.10, // 10% positive observable shock
             eventType: null,
             eventContext: [],
@@ -71,7 +70,6 @@ class MarketConsensusEngineTest extends TestCase
             actualVariableCosts: 300.0,
             clampedMargin: 0.30,
             ebit: 400.0,
-            primaryShockZ: 0.0,
             observableShockZ: 0.20,
             eventType: null
         );
@@ -99,7 +97,6 @@ class MarketConsensusEngineTest extends TestCase
             actualVariableCosts: 300.0,
             clampedMargin: 0.30,
             ebit: 400.0,
-            primaryShockZ: 0.0,
             observableShockZ: 0.10,
             eventType: null
         );
@@ -126,7 +123,6 @@ class MarketConsensusEngineTest extends TestCase
             actualVariableCosts: 400.0,
             clampedMargin: 0.20,
             ebit: 1000.0,
-            primaryShockZ: 3.0,
             observableShockZ: 1.0,
             eventType: 'CLINICAL_TRIAL_SUCCESS',
             eventContext: [],
@@ -158,7 +154,6 @@ class MarketConsensusEngineTest extends TestCase
             actualVariableCosts: 210.0,
             clampedMargin: 0.20,
             ebit: 600.0,
-            primaryShockZ: 0.5,
             observableShockZ: 0.1,
             eventType: null,
             eventContext: [],
@@ -189,7 +184,6 @@ class MarketConsensusEngineTest extends TestCase
             actualVariableCosts: $revenue * 0.4,
             clampedMargin: 0.40,
             ebit: $revenue * 0.3,
-            primaryShockZ: 0.0,
             observableShockZ: 0.0,
             eventType: null,
             eventContext: [],
@@ -260,5 +254,29 @@ class MarketConsensusEngineTest extends TestCase
 
         $this->assertEqualsWithDelta(1000.0 * (1.0 - MarketConsensusEngine::ANALYST_WALKDOWN_BIAS), $estimate, 0.5);
         $this->assertEqualsWithDelta(1000.0, (float) $stock->getLastAnalystRevenue(), 0.5, 'The anchor itself carries no walkdown.');
+    }
+
+    /**
+     * A benchmark price is public, so a titan's analysts and a small name's hear the same move. The models used to
+     * scale it by one over the sector's base visibility, which overshot by the titan's extra coverage (1.19x).
+     */
+    public function testAPublishedPriceIsHeardInFullWhateverTheCoverage(): void
+    {
+        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
+        $actuals = new ActualFinancialsDTO(
+            actualRevenue: 1500.0,
+            actualVariableCosts: 600.0,
+            clampedMargin: 0.40,
+            ebit: 500.0,
+            observableShockZ: 0.0,
+            publishedRevenueShift: 0.50,
+        );
+
+        $estimate = fn (float $visibility): float => $this->engine
+            ->generateConsensus($actuals, new SectorCoverageProfile(baseVisibility: $visibility, errorStdDev: 0.05), 1000.0, $this->mathUtilityMock, new Stock())
+            ->analystUnbiasedRevenue;
+
+        $this->assertEqualsWithDelta($estimate(0.80), $estimate(0.95), 1e-9);
+        $this->assertGreaterThan(1000.0, $estimate(0.80));
     }
 }

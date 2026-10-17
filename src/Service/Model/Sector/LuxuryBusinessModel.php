@@ -191,7 +191,6 @@ class LuxuryBusinessModel extends StandardCorporateBusinessModel
         $clampedMargin = $this->clampMargin($realizedVariableMargin + $veblenMarginBenefit + $brandModifier + $brandCachetShift);
 
         // Analyst Visibility
-        $primaryShockZ = $streams->resolveDominantShockZ([$hauteZ], $eventZ);
         $hauteBase = max(1.0, $expectedRevenue * $hauteWeight);
         $hauteShock = ($hauteRevenue - $hauteBase) / $hauteBase;
         $accessibleShock = $accessibleZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR);
@@ -200,7 +199,6 @@ class LuxuryBusinessModel extends StandardCorporateBusinessModel
         return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,
             rawVariableMargin: $clampedMargin,
-            primaryShockZ: $primaryShockZ,
             observableShockZ: $observableShockZ,
             eventType: $eventType,
             isPublicEvent: $eventType !== null ? true : null,

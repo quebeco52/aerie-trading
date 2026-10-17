@@ -194,7 +194,11 @@ class DefenseContractorBusinessModelTest extends TestCase
         $this->assertGreaterThan((1.0 - $burn) / $burn * 0.6, $result->kpis['backlog_quarters']);
     }
 
-    public function testSovereignFiscalStressAndContinuingResolutionDrag(): void
+    /**
+     * The customers are allied ministries, whose budgets reach the order book through the allied spending index. A
+     * District credit squeeze is not a budget freeze: the model used to read a 5% corporate spread as one.
+     */
+    public function testDistrictCreditStressLeavesAlliedOrdersAlone(): void
     {
         $model = new DefenseContractorBusinessModel();
         $stock = new Stock();
@@ -202,7 +206,6 @@ class DefenseContractorBusinessModelTest extends TestCase
 
         $mathUtilityMock = $this->createMathUtilityMock([0.0, 0.0, 0.0, 0.0]);
 
-        // Sovereign credit spread elevated to 5.0% (2.0% above 3.0% threshold)
         $macroState = $this->createMacroState(macroCreditSpread: 0.05);
 
         $expectedRevenue = 10_000.0;
@@ -216,12 +219,8 @@ class DefenseContractorBusinessModelTest extends TestCase
             $mathUtilityMock
         );
 
-        // CR drag = (0.05 - 0.03) * 2.50 = 0.05 drag on cost-plus ORDERS (multiplier = 0.95).
-        // Orders fund a backlog burned at 15% a quarter, so recognized cost-plus revenue only slips by
-        // 5% x 0.15 = 0.75%: 6,000 -> 5,955, total 9,955. The unfunded gap shows up as book-to-bill < 1.
-        $burn = DefenseContractorBusinessModel::COST_PLUS_BACKLOG_BURN_RATE;
-        $this->assertEqualsWithDelta(10_000.0 - (6_000.0 * 0.05 * $burn), $result->actualRevenue, 1.0);
-        $this->assertLessThan(1.0, $result->kpis['book_to_bill']);
+        $this->assertEqualsWithDelta(10_000.0, $result->actualRevenue, 1e-6);
+        $this->assertEqualsWithDelta(1.0, $result->kpis['book_to_bill'], 1e-9);
     }
 
     public function testFixedPriceForwardLossAndInflationSqueeze(): void

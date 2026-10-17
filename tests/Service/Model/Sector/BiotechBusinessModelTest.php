@@ -364,9 +364,6 @@ class BiotechBusinessModelTest extends TestCase
         $p = $this->successRate();
         $expected = ($p * $success->streamRevenue['pipeline_licensing_milestones']) + ((1.0 - $p) * $failure->streamRevenue['pipeline_licensing_milestones']);
         $this->assertEqualsWithDelta(self::EXPECTED_REVENUE * BiotechBusinessModel::PIPELINE_DRUG_WEIGHT, $expected, 1e-3);
-        // A success is good news and a miss bad news in the event score.
-        $this->assertGreaterThan(0.0, $success->primaryShockZ);
-        $this->assertLessThan(0.0, $failure->primaryShockZ);
     }
 
     public function testFailedPivotalTrialLeavesMarketedRevenueIntact(): void
@@ -447,7 +444,7 @@ class BiotechBusinessModelTest extends TestCase
         // Only the cohort still under patent is protected.
         $this->assertEqualsWithDelta(0.5 / (1.0 - $eroded), $result->streamZ[BiotechBusinessModel::STATE_PROTECTED_SHARE], 1e-12);
         // The expiry was dated and already in expected revenue: it is no news.
-        $this->assertEqualsWithDelta(0.0, $result->primaryShockZ, 1e-12);
+        $this->assertEqualsWithDelta(0.0, $result->observableShockZ, 1e-12);
     }
 
     /** An expired cohort is never folded back into a protected base: the protected share runs on with no snap-back. */

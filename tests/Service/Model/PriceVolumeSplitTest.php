@@ -31,7 +31,6 @@ class PriceVolumeSplitTest extends TestCase
                 return new SectorPhysicsResult(
                     actualRevenue: 110.0,
                     rawVariableMargin: 0.50,
-                    primaryShockZ: 0.0,
                     observableShockZ: 0.0,
                     priceRevenue: 10.0,
                 );
@@ -51,7 +50,7 @@ class PriceVolumeSplitTest extends TestCase
         $model = new class extends StandardCorporateBusinessModel {
             protected function calculateSectorPhysics(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, MacroStateDTO $macroState, MathUtility $mathUtility): SectorPhysicsResult
             {
-                return new SectorPhysicsResult(actualRevenue: 50.0, rawVariableMargin: 0.40, primaryShockZ: 0.0, observableShockZ: 0.0, priceRevenue: 500.0);
+                return new SectorPhysicsResult(actualRevenue: 50.0, rawVariableMargin: 0.40, observableShockZ: 0.0, priceRevenue: 500.0);
             }
         };
 
@@ -75,7 +74,8 @@ class PriceVolumeSplitTest extends TestCase
         $macro = new MacroStateDTO(inflationEma: 0.04);
         $result = $model->computeActualFinancials($stock, 100_000_000.0, 0.40, 10_000_000.0, 0.0, $macro, $math);
 
-        $escalatorRevenue = 100_000_000.0 * 0.85 * 0.02 * ReitBusinessModel::RENT_ESCALATOR_CAPTURE;
+        // The quiet tenant draw leaves the roll fuller than average, which is price on the same space too.
+        $escalatorRevenue = 100_000_000.0 * 0.85 * ((0.02 * ReitBusinessModel::RENT_ESCALATOR_CAPTURE) + ReitBusinessModel::expectedTenantVacancy());
         $this->assertEqualsWithDelta($escalatorRevenue, $result->priceRevenue, 1.0);
         $this->assertEqualsWithDelta(($result->actualRevenue - $escalatorRevenue) * $result->clampedMargin, $result->actualVariableCosts, 1.0);
     }
