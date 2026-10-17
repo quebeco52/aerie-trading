@@ -136,7 +136,11 @@ class MarketPricingContextTest extends TestCase
         $this->assertEqualsWithDelta(20.0, $context->netDebtPerShare, 1e-9);
     }
 
-    public function testAnIndustrialsDebtIsNettedAgainstItsCash(): void
+    /**
+     * An industrial's debt is netted against the cash its business runs on, the model's 5% of its operating base, and
+     * the rest of its cash is surplus, valued at face beside the business: $5B of cash on a $50B base is $2.5B of each.
+     */
+    public function testAnIndustrialsDebtIsNettedAgainstItsOperatingCashAndTheRestIsSurplus(): void
     {
         $macroState = new MacroStateDTO();
         $software = $this->firm('SOFT', 'Software - Infrastructure');
@@ -145,6 +149,17 @@ class MarketPricingContextTest extends TestCase
 
         $context = MarketPricingContext::forStock($software, $macroState, $this->health($software, $macroState), new AnchorStakeLedger());
 
-        $this->assertEqualsWithDelta(15.0, $context->netDebtPerShare, 1e-9);
+        $this->assertEqualsWithDelta(17.5, $context->netDebtPerShare, 1e-9);
+        $this->assertEqualsWithDelta(2.5, $context->excessCashPerShare, 1e-9);
+    }
+
+    /** A lender's cash is its business, so none of it is surplus. */
+    public function testALenderHasNoSurplusCash(): void
+    {
+        $macroState = new MacroStateDTO();
+        $bank = $this->firm('BANK', 'Banks - Diversified');
+        $bank->setCorporateTreasury('40000000000');
+
+        $this->assertSame(0.0, MarketPricingContext::forStock($bank, $macroState, $this->health($bank, $macroState), new AnchorStakeLedger())->excessCashPerShare);
     }
 }

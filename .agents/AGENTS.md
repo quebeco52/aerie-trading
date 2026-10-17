@@ -55,7 +55,9 @@ Known traps, each shipped as a bug before:
   price (order-flow impact, a sector factor) draws its variance from a measured quantity, not an assumed one.
 - Order-flow impact is linear (Huberman-Stanzl); square-root impact blew bubbles.
 - Brock-Hommes fitness is annualized before strategies are compared.
-- `roicTtm` is a trailing average; gates on it saturate.
+- `roicTtm` is the firm's operating return state, not a measured average: each quarter blends in the realised return
+  and pulls toward the required return plus moat, which is how its own excess returns fade. Gates on it saturate. The
+  measured trailing return is the mean of the last four filings.
 - The sentiment index sits near 100 with its fundamentals neutral: read `sentimentDeviation()`, not the level, and
   `sentimentResidual()` (the mood) where the cycle is priced beside it.
 - Silent integration: a computed field nobody reads, or an input read the tick before its driver updates. Trace the
