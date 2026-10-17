@@ -56,6 +56,16 @@ final class HomebuilderBusinessModelTest extends TestCase
         return new MacroStateDTO(residentialPropertyIndexEma: 100.0 * $price, residentialWealthTrend: 100.0, housingStartsIndexEma: $starts);
     }
 
+    /** Land cost per unit of house price that the builder carries forward on the stock. */
+    private function landCost(Stock $stock): float
+    {
+        $state = $stock->getEarningsMomentumZ();
+        $this->assertNotNull($state);
+        $this->assertArrayHasKey(HomebuilderBusinessModel::STATE_LAND_COST, $state);
+
+        return $state[HomebuilderBusinessModel::STATE_LAND_COST];
+    }
+
     /** One report, carrying the stream state forward on the stock the way the engine does. */
     private function report(Stock $stock, MacroStateDTO $macro): ActualFinancialsDTO
     {
@@ -119,7 +129,7 @@ final class HomebuilderBusinessModelTest extends TestCase
         $residual = HomebuilderBusinessModel::residualLandValue(1.10, self::VARIABLE_COST_RATIO, self::CONSTRUCTION_SHARE);
         $turnover = 1.0 - exp(-EarningsEngine::QUARTERLY_TIME_STEP / HomebuilderBusinessModel::LAND_BANK_YEARS);
         $expected = HomebuilderBusinessModel::LAND_SHARE_OF_PRICE + ($turnover * ($residual - HomebuilderBusinessModel::LAND_SHARE_OF_PRICE));
-        $this->assertEqualsWithDelta($expected, $fresh->getEarningsMomentumZ()[HomebuilderBusinessModel::STATE_LAND_COST], 1e-12);
+        $this->assertEqualsWithDelta($expected, $this->landCost($fresh), 1e-12);
     }
 
     public function testLandIsWrittenDownOnlyWhenTheHomeCannotRecoverIt(): void
@@ -136,7 +146,7 @@ final class HomebuilderBusinessModelTest extends TestCase
         $residual = HomebuilderBusinessModel::residualLandValue(0.75, self::VARIABLE_COST_RATIO, self::CONSTRUCTION_SHARE);
         $bankScale = HomebuilderBusinessModel::LAND_BANK_YEARS * 4.0 * self::EXPECTED_REVENUE;
         $this->assertEqualsWithDelta((HomebuilderBusinessModel::LAND_SHARE_OF_PRICE - $residual) * $bankScale, $bust->plantImpairment, 1e-9);
-        $this->assertEqualsWithDelta($residual, $stock->getEarningsMomentumZ()[HomebuilderBusinessModel::STATE_LAND_COST], 1e-12);
+        $this->assertEqualsWithDelta($residual, $this->landCost($stock), 1e-12);
 
         // The lots sold that quarter still went out at what they cost; written-down land prices the next one.
         $this->assertEqualsWithDelta(self::VARIABLE_COST_RATIO / 0.75, $bust->clampedMargin, 1e-9);
@@ -193,7 +203,7 @@ final class HomebuilderBusinessModelTest extends TestCase
             $last = $this->report($stock, $dearer);
         }
         $this->assertEqualsWithDelta(self::VARIABLE_COST_RATIO, $last->clampedMargin, 1e-4);
-        $this->assertEqualsWithDelta(HomebuilderBusinessModel::LAND_SHARE_OF_PRICE - (self::CONSTRUCTION_SHARE * $deviation), $stock->getEarningsMomentumZ()[HomebuilderBusinessModel::STATE_LAND_COST], 1e-4);
+        $this->assertEqualsWithDelta(HomebuilderBusinessModel::LAND_SHARE_OF_PRICE - (self::CONSTRUCTION_SHARE * $deviation), $this->landCost($stock), 1e-4);
     }
 
     public function testTheTradeCycleIsTheHomesUnderConstruction(): void

@@ -8,7 +8,8 @@ use App\Entity\Stock;
 use App\Service\Model\BusinessModelInterface;
 
 /**
- * Context object used to pass state through the corporate divestiture pipeline.
+ * Context object used to pass state through the corporate divestiture pipeline. The engine's initialize step sets
+ * $health and $strategy before any later step reads them.
  */
 class DivestitureContext
 {
@@ -24,11 +25,11 @@ class DivestitureContext
     public float $shares = 0.0;
     public float $netIncome = 0.0;
 
-    public ?DebtHealthDTO $health = null;
+    public DebtHealthDTO $health;
     public float $wacc = 0.0;
     public string $industry = 'General';
     public string $businessModel = 'none';
-    public ?BusinessModelInterface $strategy = null;
+    public BusinessModelInterface $strategy;
 
     public float $currentReturn = 0.0;
     /** The firm's long-run return, the one the sale test reads; the trailing return when none is measured yet. */

@@ -34,7 +34,7 @@ class UserStock
      * are owed rather than received, and net asset value has to subtract the margin debit.
      */
     #[ORM\Column(type: Types::BIGINT, options: ['default' => 0])]
-    private int|string $quantity = 0;
+    private int $quantity = 0;
 
     /** Borrow fee accrued on this short and not yet charged, in currency. Always zero on a long. */
     #[ORM\Column(type: Types::DECIMAL, precision: 15, scale: 4, options: ['default' => '0.0000'])]
@@ -66,36 +66,36 @@ class UserStock
         return (int) $this->quantity < 0;
     }
 
-    public function getQuantity(): int|string
+    public function getQuantity(): int
     {
         return $this->quantity;
     }
 
-    public function setQuantity(int|string $quantity): static
+    public function setQuantity(int $quantity): static
     {
         $this->quantity = $quantity;
 
         return $this;
     }
 
-    public function getUser(): ?User
+    public function getUser(): User
     {
         return $this->user;
     }
 
-    public function setUser(?User $user): static
+    public function setUser(User $user): static
     {
         $this->user = $user;
 
         return $this;
     }
 
-    public function getStock(): ?Stock
+    public function getStock(): Stock
     {
         return $this->stock;
     }
 
-    public function setStock(?Stock $stock): static
+    public function setStock(Stock $stock): static
     {
         $this->stock = $stock;
 

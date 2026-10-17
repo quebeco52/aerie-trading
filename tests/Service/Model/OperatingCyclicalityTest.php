@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace App\Tests\Service\Model;
 
-use App\Data\Company\StockModelTuning;
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use App\Service\Model\ModelParam;
@@ -47,7 +46,7 @@ class OperatingCyclicalityTest extends TestCase
         $model = new class extends HeavyManufacturingBusinessModel {
             protected function resolveModelParameters(Stock $stock, array $defaults = []): ModelParameters
             {
-                return StockModelTuning::resolve($stock->getTicker(), [ModelParam::OperatingCyclicality->value => 0.55] + $defaults);
+                return parent::resolveModelParameters($stock, [ModelParam::OperatingCyclicality->value => 0.55] + $defaults);
             }
         };
         $stock = new Stock();

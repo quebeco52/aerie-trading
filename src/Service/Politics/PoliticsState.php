@@ -95,18 +95,18 @@ class PoliticsState
     // left early and the majority last shifted; the Financial Regulator's head, the requirement in force and the head's
     // mortgage cap; and the Sovereign Reserve Fund's head.
     public float $authoritySalt;
-    /** @var list<string> */
+    /** @var array<int, string> */
     public array $councilNames;
-    /** @var list<float> */
+    /** @var array<int, float> */
     public array $councilBirths;
-    /** @var list<float> */
+    /** @var array<int, float> */
     public array $councilSince;
     /** @var array<int, float> */
     public array $councilSeatedAt;
     /** @var array<int, float> */
     public array $councilLeavesAt;
     public float $councilTermYears;
-    /** @var list<float> */
+    /** @var array<int, float> */
     public array $councilStances;
     /** @var array<int, float> */
     public array $councilSwingers;
@@ -133,13 +133,13 @@ class PoliticsState
     public float $governorSwinger;
     /** @var list<array{name: string, birth: float, stance: float, regulation: float, fund: float, debt: float, competition: float, markets: float, swing?: float}> */
     public array $governorPassedOver;
-    /** @var list<string> */
+    /** @var array<int, string> */
     public array $memberNames;
-    /** @var list<float> */
+    /** @var array<int, float> */
     public array $memberBirths;
-    /** @var list<float> */
+    /** @var array<int, float> */
     public array $memberSince;
-    /** @var list<float> */
+    /** @var array<int, float> */
     public array $memberStances;
     /** @var array<int, float> */
     public array $memberSwingers;

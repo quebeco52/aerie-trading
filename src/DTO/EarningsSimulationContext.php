@@ -199,7 +199,8 @@ class EarningsSimulationContext
     public float $quarterlyDepreciation = 0.0;
     public float $trueOperatingMargin = 0.0;
     public float $operatingCosts = 0.0;
-    public ?DebtMetricsDTO $debtMetrics = null;
+    /** Set by calculateInterestAndRunRates, before any later step reads it. */
+    public DebtMetricsDTO $debtMetrics;
 
     // Net Income
     public float $preTaxIncome = 0.0;
@@ -235,7 +236,8 @@ class EarningsSimulationContext
     public string $corporateActionDescriptions = "";
 
     // Health & Value
-    public ?DebtHealthDTO $health = null;
+    /** Set by reconcileTaxesAndNetIncome, before any later step reads it. */
+    public DebtHealthDTO $health;
     public float $wacc = 0.0;
     public float $quarterlyEconomicProfit = 0.0;
 }

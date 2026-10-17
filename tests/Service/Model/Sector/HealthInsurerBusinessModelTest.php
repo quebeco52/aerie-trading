@@ -120,7 +120,10 @@ final class HealthInsurerBusinessModelTest extends TestCase
         $average = 0.83 + ((1.0 - exp(-EarningsEngine::QUARTERLY_TIME_STEP / HealthInsurerBusinessModel::MLR_AVERAGING_YEARS)) * (0.80 - 0.83));
 
         $this->assertGreaterThan(HealthInsurerBusinessModel::reportedLossRatioFloor(), $average);
-        $this->assertEqualsWithDelta($average, $stock->getEarningsMomentumZ()[HealthInsurerBusinessModel::STATE_AVERAGE_LOSS_RATIO], 1e-12);
+        $state = $stock->getEarningsMomentumZ();
+        $this->assertNotNull($state);
+        $this->assertArrayHasKey(HealthInsurerBusinessModel::STATE_AVERAGE_LOSS_RATIO, $state);
+        $this->assertEqualsWithDelta($average, $state[HealthInsurerBusinessModel::STATE_AVERAGE_LOSS_RATIO], 1e-12);
         $this->assertSame(0.0, $actuals->kpis['premium_rebate']);
     }
 

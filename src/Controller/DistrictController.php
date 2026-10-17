@@ -64,7 +64,7 @@ class DistrictController extends AbstractController
 
         // Only the tenants that actually took frontage need their change/events/revenue mix fetched.
         $rosterTickers = array_column($frontage['slots'], 'ticker');
-        $onStreet = array_filter($stocks, static fn(Stock $s) => in_array($s->getTicker(), $rosterTickers, true));
+        $onStreet = array_values(array_filter($stocks, static fn(Stock $s) => in_array($s->getTicker(), $rosterTickers, true)));
 
         $changeByTicker = $priceChangeFeed->changeByTicker($onStreet);
 

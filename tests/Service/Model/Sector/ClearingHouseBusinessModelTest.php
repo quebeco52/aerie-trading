@@ -267,7 +267,7 @@ class ClearingHouseBusinessModelTest extends TestCase
 
     /**
      * @param array<string, float> $momentum
-     * @return array{customerDeposits: float, treasury: float, events: list<array<string, mixed>>}
+     * @return array{customerDeposits: float, treasury: float}
      */
     private function rollMarginPool(float $deposits, array $momentum, MacroStateDTO $macro): array
     {
@@ -275,8 +275,10 @@ class ClearingHouseBusinessModelTest extends TestCase
         $stock->setEarningsMomentumZ($momentum);
         $state = ['customerDeposits' => $deposits, 'treasury' => $deposits, 'events' => []];
         $this->model->processPassiveLiabilityGrowth($stock, $macro, $state, $this->quietDraws());
+        $this->assertIsFloat($state['customerDeposits']);
+        $this->assertIsFloat($state['treasury']);
 
-        return $state;
+        return ['customerDeposits' => $state['customerDeposits'], 'treasury' => $state['treasury']];
     }
 
     private function quietDraws(): MathUtility

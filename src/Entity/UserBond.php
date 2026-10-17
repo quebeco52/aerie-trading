@@ -29,7 +29,7 @@ class UserBond
     private Bond $bond;
 
     #[ORM\Column(type: Types::BIGINT, options: ['default' => 0])]
-    private int|string $quantity = 0;
+    private int $quantity = 0;
 
     #[ORM\Version]
     #[ORM\Column(type: 'integer')]
@@ -64,12 +64,12 @@ class UserBond
         return $this;
     }
 
-    public function getQuantity(): int|string
+    public function getQuantity(): int
     {
         return $this->quantity;
     }
 
-    public function setQuantity(int|string $quantity): static
+    public function setQuantity(int $quantity): static
     {
         $this->quantity = $quantity;
 

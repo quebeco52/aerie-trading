@@ -192,6 +192,7 @@ final class RefiningBusinessModelTest extends TestCase
     {
         $factors = $this->model->getSeasonalityFactors();
 
+        $this->assertCount(4, $factors);
         $this->assertEqualsWithDelta(4.0, array_sum($factors), 1e-9);
         $this->assertSame(min($factors), $factors[0], 'Spring turnarounds make Q1 the lightest quarter.');
         $this->assertSame(max($factors), $factors[2], 'The summer driving season makes Q3 the heaviest.');

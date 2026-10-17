@@ -30,6 +30,7 @@ class ShortPositionAccountingTest extends TestCase
     {
         $order = new TradeOrder();
         $order->setTicker($ticker);
+        $order->setAssetType('STOCK');
         $order->setAction($action);
         $order->setOrderType('MARKET');
         $order->setQuantity($quantity);

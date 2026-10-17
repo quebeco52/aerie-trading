@@ -199,6 +199,7 @@ class SteelManufacturingBusinessModelTest extends TestCase
     {
         $factors = $this->model->getSeasonalityFactors();
 
+        $this->assertCount(4, $factors);
         $this->assertEqualsWithDelta(4.0, array_sum($factors), 1e-9);
         $this->assertLessThan(0.05, max($factors) - min($factors));
     }

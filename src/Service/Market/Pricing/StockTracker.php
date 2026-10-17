@@ -114,7 +114,7 @@ class StockTracker
      * @param bool    $recordHistory Whether to persist the new prices to the stock history table.
      * @param MacroStateDTO|null $macroState    The current state of the macroeconomic cycle.
      *
-     * @return array{updates: array<mixed>, total_cap: float, float_caps: array<string, float>, half_spreads: array<string, float>, fund_flow: array<string, float>, dividend_points: array<string, float>, board_float_cap: float, board_price_return: float, board_dividend_cash: float, board_net_issuance: float, board_stamp_duty: float, board_bank_levy: float, strategic_stake_cash: float, events: array<mixed>, market_vol: float, history: array<mixed>}
+     * @return array{updates: list<array<string, mixed>>, total_cap: float, float_caps: array<string, float>, half_spreads: array<string, float>, fund_flow: array<string, float>, dividend_points: array<string, float>, board_float_cap: float, board_price_return: float, board_dividend_cash: float, board_net_issuance: float, board_stamp_duty: float, board_bank_levy: float, strategic_stake_cash: float, events: list<mixed>, market_vol: float, history: array<mixed>}
      */
     public function updateStocks(array $stocks, float $dt, bool $recordHistory, ?MacroStateDTO $macroState = null, int $tickCount = 0, int $ticksPerYear = 252): array
     {

@@ -108,10 +108,10 @@ final class ChartBufferWriter
     /**
      * Puts each read-back change on its quote as `change_percent`, rounded to what a page prints.
      *
-     * @param array<int, array<string, mixed>> $quotes
-     * @param array<string, float|null>        $changes ChartBufferWriter::write()'s return.
+     * @param list<array<string, mixed>> $quotes
+     * @param array<string, float|null>  $changes ChartBufferWriter::write()'s return.
      *
-     * @return array<int, array<string, mixed>>
+     * @return list<array<string, mixed>>
      */
     public static function withChanges(array $quotes, array $changes): array
     {

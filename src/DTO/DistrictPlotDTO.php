@@ -27,11 +27,23 @@ class DistrictPlotDTO
         public readonly int $windowColumns,
         /** Inset from the facade's west edge to the first window column, centring the band. */
         public readonly float $windowInset,
-        /** Which windows are lit, indexed [floor][column]; see DistrictMap::WINDOW_LIT_SHARE_AT_BASELINE. @var list<list<bool>> */
+        /**
+         * Which windows are lit, indexed [floor][column]; see DistrictMap::WINDOW_LIT_SHARE_AT_BASELINE.
+         *
+         * @var list<list<bool>>
+         */
         public readonly array $litWindows,
-        /** Each window's lighting priority in [0, 1), indexed [floor][column]; lit when it falls under the lit share. Shipped so a live tick can relight the facade client-side. @var list<list<float>> */
+        /**
+         * Each window's lighting priority in [0, 1), indexed [floor][column]; lit when it falls under the lit share. Shipped so a live tick can relight the facade client-side.
+         *
+         * @var list<list<float>>
+         */
         public readonly array $windowKeys,
-        /** Non-null for each window drawn a step brighter while lit (`data-twinkle`), null where it burns steady, indexed [floor][column] — see DistrictMap::WINDOW_TWINKLE_SHARE. The value is a stable hash in [0, 1); only its presence is rendered now that the flicker animation is gone. @var list<list<float|null>> */
+        /**
+         * Non-null for each window drawn a step brighter while lit (`data-twinkle`), null where it burns steady, indexed [floor][column] — see DistrictMap::WINDOW_TWINKLE_SHARE. The value is a stable hash in [0, 1); only its presence is rendered now that the flicker animation is gone.
+         *
+         * @var list<list<float|null>>
+         */
         public readonly array $twinklePhases,
         /** Fraction of windows lit, the figure the lighting was drawn from. */
         public readonly float $litShare,
@@ -60,7 +72,11 @@ class DistrictPlotDTO
         public readonly ?string $blurb = null,
         /** @var list<string> institution ids this tenant draws a macro conduit from */
         public readonly array $conduits = [],
-        /** Absolute x where each conduit's drop lands on the roof, keyed by institution id; spread across the roof so they never overlay. @var array<string, float> */
+        /**
+         * Absolute x where each conduit's drop lands on the roof, keyed by institution id; spread across the roof so they never overlay.
+         *
+         * @var array<string, float>
+         */
         public readonly array $conduitDropX = [],
     ) {}
 }

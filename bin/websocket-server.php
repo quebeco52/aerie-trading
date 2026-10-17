@@ -62,7 +62,7 @@ $worker->onWebSocketConnect = function ($connection, $http_buffer) use ($appSecr
 };
 
 // SUBSCRIBE TO REDIS TO BROADCAST MARKET TICKS
-$worker->onWorkerStart = function ($worker) {
+$worker->onWorkerStart = function (Worker $worker) {
     // Ensure correct scheme for Async Redis
     $redisUrl = $_ENV['REDIS_URL'] ?? 'redis://127.0.0.1:6379';
     $redisUrl = str_replace('tcp://', 'redis://', $redisUrl);

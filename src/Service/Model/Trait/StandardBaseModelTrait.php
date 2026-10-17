@@ -141,7 +141,7 @@ trait StandardBaseModelTrait
     /**
      * Resolves model tuning parameters merging baseline defaults with ticker overrides.
      *
-     * @param array<ModelParam|string, float> $defaults
+     * @param array<string, float> $defaults Keyed by ModelParam values.
      */
     protected function resolveModelParameters(Stock $stock, array $defaults = []): ModelParameters
     {

@@ -609,8 +609,8 @@ readonly class MacroStateDTO
         }
 
         // Balance sheet intensity was recorded as a one-sided qe_intensity before QT existed.
-        $args['balanceSheetIntensity'] ??= (float) ($data['qe_intensity'] ?? 0.0);
-        $balanceSheetIntensity = $args['balanceSheetIntensity'];
+        $balanceSheetIntensity = (float) ($args['balanceSheetIntensity'] ?? $data['qe_intensity'] ?? 0.0);
+        $args['balanceSheetIntensity'] = $balanceSheetIntensity;
 
         $args['qeActive'] ??= $balanceSheetIntensity > MacroEngine::BALANCE_SHEET_ACTIVE_THRESHOLD;
         $args['qeIntensity'] ??= max(0.0, $balanceSheetIntensity);
@@ -620,8 +620,9 @@ readonly class MacroStateDTO
         // A payload that carries a policy rate but no curve gets the opening curve's term spreads on top of
         // that rate, so the tenors stay consistent with the rate the payload does report.
         if (isset($args['policyRate'])) {
+            $policyRate = (float) $args['policyRate'];
             foreach (['yield2y', 'yield5y', 'yield10y', 'yield30y'] as $tenor) {
-                $args[$tenor] ??= $args['policyRate'] + ($defaults[$tenor] - $defaults['policyRate']);
+                $args[$tenor] ??= $policyRate + ($defaults[$tenor] - $defaults['policyRate']);
             }
         }
 

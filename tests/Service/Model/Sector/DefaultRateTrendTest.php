@@ -9,6 +9,7 @@ use App\Entity\Stock;
 use App\Service\Macro\MacroEngine;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector;
+use App\Service\Model\Strategy\OperatingStrategyInterface;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
@@ -20,7 +21,7 @@ use PHPUnit\Framework\TestCase;
 final class DefaultRateTrendTest extends TestCase
 {
     /**
-     * @return iterable<string, array{0: class-string, 1: string, 2: bool}> Model, ticker, whether the term reads both ways.
+     * @return iterable<string, array{0: class-string<OperatingStrategyInterface>, 1: string, 2: bool}> Model, ticker, whether the term reads both ways.
      */
     public static function readers(): iterable
     {
@@ -39,6 +40,8 @@ final class DefaultRateTrendTest extends TestCase
      * At its trend a default rate is no news, wherever the trend sits against the constant: a rate that has settled
      * 40% over the constant moves earnings far less than the same rate read as 40% over its trend. (A lender's Vasicek
      * factor maps an average year to a slightly different loss at each level, so lenders are not exactly at zero.)
+     *
+     * @param class-string<OperatingStrategyInterface> $model
      */
     #[DataProvider('readers')]
     public function testARateAtItsTrendIsNoNewsWhereverTheTrendSits(string $model, string $ticker, bool $twoSided): void
@@ -51,7 +54,11 @@ final class DefaultRateTrendTest extends TestCase
         $this->assertLessThan(0.25 * abs($excess), abs($settled));
     }
 
-    /** Each rate above its trend costs or pays; below it the term gives that back, unless it is an option on distress. */
+    /**
+     * Each rate above its trend costs or pays; below it the term gives that back, unless it is an option on distress.
+     *
+     * @param class-string<OperatingStrategyInterface> $model
+     */
     #[DataProvider('readers')]
     public function testTheTermReadsTheExcessOverTheTrend(string $model, string $ticker, bool $twoSided): void
     {
@@ -77,7 +84,7 @@ final class DefaultRateTrendTest extends TestCase
      * Operating earnings after a lender's charge-offs and any provision beyond them, with both default rates at a
      * multiple of their constants (each scaled again on its own) and their trends at another.
      *
-     * @param class-string $model
+     * @param class-string<OperatingStrategyInterface> $model
      */
     private function ebit(string $model, string $ticker, float $rateMultiple, float $trendMultiple, float $corporateScale = 1.0, float $retailScale = 1.0): float
     {

@@ -448,10 +448,18 @@ final class CouncilAppointments
         return (hexdec(substr(hash('sha256', "{$salt}:{$key}"), 0, 13)) + 0.5) / (2 ** 52);
     }
 
-    /** The key a candidate's stance on a question is kept under. */
+    /**
+     * The key a candidate's stance on a question is kept under.
+     *
+     * @return 'stance'|'regulation'|'fund'|'debt'|'competition'|'markets'
+     */
     private static function stanceKey(string $axis): string
     {
-        return $axis === self::AXIS_MONEY ? 'stance' : $axis;
+        return match ($axis) {
+            self::AXIS_MONEY => 'stance',
+            self::AXIS_REGULATION, self::AXIS_FUND, self::AXIS_DEBT, self::AXIS_COMPETITION, self::AXIS_MARKETS => $axis,
+            default => throw new \InvalidArgumentException("No stance is kept on '{$axis}'."),
+        };
     }
 
     /**

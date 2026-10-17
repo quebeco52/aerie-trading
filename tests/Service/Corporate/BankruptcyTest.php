@@ -39,6 +39,7 @@ class BankruptcyTest extends TestCase
     protected function setUp(): void
     {
         $this->entityManagerMock = $this->createMock(EntityManagerInterface::class);
+        $this->entityManagerMock->method('getReference')->willReturnCallback(static fn(string $class, mixed $id): User => new User());
         $this->loggerMock = $this->createStub(LoggerInterface::class);
         $this->marketEventMock = $this->createMock(MarketEventPublisher::class);
         $this->debtEngineMock = $this->createMock(DebtEngine::class);

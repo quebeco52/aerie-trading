@@ -75,7 +75,8 @@ final class CorporateBondDesk
         $issued = [];
 
         foreach ($stocks as $stock) {
-            $listed = $outstanding[$stock->getId()] ?? ['face' => 0.0, 'count' => 0];
+            $id = $stock->getId();
+            $listed = ($id === null ? null : $outstanding[$id] ?? null) ?? ['face' => 0.0, 'count' => 0];
             if ($listed['face'] > $this->listedFaceCeiling($stock)) {
                 $issues = $this->em->getRepository(Bond::class)->findBy(['issuer' => $stock, 'status' => Bond::STATUS_ACTIVE], ['maturesAtTime' => 'ASC']);
                 // A firm buying its paper back does not bring a new deal the same quarter.

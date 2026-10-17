@@ -627,7 +627,7 @@ class MergerAndAcquisitionEngine
 
             // The deal's notes price at the rating the pro-forma balance sheet carries: the combined EBITDA is the
             // acquirer's trailing figure plus the operating income the target is bought for.
-            $proFormaEbitda = ($ctx->health?->rawMetrics->ebitda ?? 0.0) + $this->valueTarget($ctx, $ctx->purchasePrice)['operating_income'];
+            $proFormaEbitda = $ctx->health->rawMetrics->ebitda + $this->valueTarget($ctx, $ctx->purchasePrice)['operating_income'];
             $proFormaRating = $this->debtEngine->resolveProFormaRating($stock, $distanceToDefault, $newNetDebt, $proFormaEbitda);
 
             $ctx->costOfNewDebt = $ctx->yield5y + $this->debtEngine->resolveCreditSpread($stock, $ctx->macroState, $proFormaRating);
@@ -1093,7 +1093,7 @@ class MergerAndAcquisitionEngine
         $nol = (float) $stock->getNetOperatingLoss();
         // A loss carries no asset while the firm's recent pre-tax income, the sale's included, is a cumulative loss.
         $allowanceRequired = array_sum($stock->getPretaxIncomeHistory() ?? []) + $ctx->gainOnSale < 0.0;
-        $tax = EarningsEngine::resolveIncomeTax($ctx->gainOnSale, $nol, $openingDta, $allowanceRequired, $ctx->strategy?->getEffectiveTaxRate($ctx->macroState->corporateTaxRate) ?? $ctx->macroState->corporateTaxRate);
+        $tax = EarningsEngine::resolveIncomeTax($ctx->gainOnSale, $nol, $openingDta, $allowanceRequired, $ctx->strategy->getEffectiveTaxRate($ctx->macroState->corporateTaxRate));
         $ctx->taxOnSale = $tax['current'] + $tax['deferred'];
         $stock->setNetOperatingLoss((string) $tax['nol']);
         $stock->setDeferredTaxAsset($tax['dta']);

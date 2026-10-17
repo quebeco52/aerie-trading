@@ -52,7 +52,7 @@ class StockEvent
         return $this->id;
     }
 
-    public function getEventType(): ?string
+    public function getEventType(): string
     {
         return $this->eventType;
     }
@@ -64,7 +64,7 @@ class StockEvent
         return $this;
     }
 
-    public function getDescription(): ?string
+    public function getDescription(): string
     {
         return $this->description;
     }
@@ -105,7 +105,7 @@ class StockEvent
         return $this->stock;
     }
 
-    public function setStock(?Stock $stock): static
+    public function setStock(Stock $stock): static
     {
         $this->stock = $stock;
 

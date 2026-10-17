@@ -8,6 +8,7 @@ use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector;
+use App\Service\Model\Strategy\OperatingStrategyInterface;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
@@ -18,7 +19,7 @@ use PHPUnit\Framework\TestCase;
  */
 final class OneOffChargeTest extends TestCase
 {
-    /** @return iterable<string, array{0: class-string, 1: float, 2: float}> Model, every draw, the uniform draw. */
+    /** @return iterable<string, array{0: class-string<OperatingStrategyInterface>, 1: float, 2: float}> Model, every draw, the uniform draw. */
     public static function events(): iterable
     {
         yield 'investment bank fine' => [Sector\InvestmentBankBusinessModel::class, 0.0, 0.0];
@@ -39,6 +40,7 @@ final class OneOffChargeTest extends TestCase
         yield 'defence programme failure' => [Sector\DefenseContractorBusinessModel::class, -2.7, 1.0];
     }
 
+    /** @param class-string<OperatingStrategyInterface> $model */
     #[DataProvider('events')]
     public function testTheChargeIsASpecialItemAndNotACost(string $model, float $z, float $uniform): void
     {
@@ -50,6 +52,7 @@ final class OneOffChargeTest extends TestCase
         $this->assertGreaterThan(0.0, $event->specialCharge, 'The charge reaches the special-item channel.');
     }
 
+    /** @param class-string<OperatingStrategyInterface> $model */
     private function report(string $model, float $z, float $uniform): \App\DTO\ActualFinancialsDTO
     {
         $math = $this->createStub(MathUtility::class);

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Tests\Service\Model;
 
+use App\Service\Model\BusinessModelInterface;
 use App\Service\Model\Sector\ConstructionBusinessModel;
 use App\Service\Model\Sector\ConsumerStaplesBusinessModel;
 use App\Service\Model\Sector\DefenseContractorBusinessModel;
@@ -62,16 +63,18 @@ final class SectorCalibrationMatrixTest extends TestCase
     ];
 
     /**
-     * @return array<string, array{class-string}>
+     * @return array<string, array{class-string<BusinessModelInterface>}>
      */
     public static function sectorModelProvider(): array
     {
+        $dir = dirname(__DIR__, 3) . '/src/Service/Model/Sector';
+        $files = glob($dir . '/*BusinessModel.php');
+        self::assertNotFalse($files, "Could not list the sector models in {$dir}.");
+
         $models = [];
-        foreach (glob(dirname(__DIR__, 3) . '/src/Service/Model/Sector/*BusinessModel.php') ?: [] as $file) {
+        foreach ($files as $file) {
             $className = 'App\\Service\\Model\\Sector\\' . basename($file, '.php');
-            if (!class_exists($className)) {
-                continue;
-            }
+            self::assertTrue(is_subclass_of($className, BusinessModelInterface::class), "{$className} is not a business model.");
 
             $reflection = new ReflectionClass($className);
             if ($reflection->isAbstract()) {
@@ -87,14 +90,18 @@ final class SectorCalibrationMatrixTest extends TestCase
     /**
      * The financial models, whose earnings are a spread on a balance sheet rather than a price on a product.
      *
-     * @return array<string, array{class-string}>
+     * @return array<string, array{class-string<BusinessModelInterface>}>
      */
     public static function financialModelProvider(): array
     {
-        return array_filter(
-            self::sectorModelProvider(),
-            static fn(array $row): bool => (new $row[0]())->isFinancial(),
-        );
+        $models = [];
+        foreach (self::sectorModelProvider() as $name => [$modelClass]) {
+            if ((new $modelClass())->isFinancial()) {
+                $models[$name] = [$modelClass];
+            }
+        }
+
+        return $models;
     }
 
     /**

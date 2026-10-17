@@ -63,7 +63,7 @@ class EtfHistory
         return $this->id;
     }
 
-    public function getPrice(): ?string
+    public function getPrice(): string
     {
         return $this->price;
     }
@@ -104,7 +104,7 @@ class EtfHistory
         return $this->etf;
     }
 
-    public function setEtf(?Etf $etf): static
+    public function setEtf(Etf $etf): static
     {
         $this->etf = $etf;
 

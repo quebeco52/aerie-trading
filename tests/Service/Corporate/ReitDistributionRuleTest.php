@@ -88,12 +88,9 @@ final class ReitDistributionRuleTest extends TestCase
         $stock->setTotalRevenue('8000000000');
         $stock->setCapexRatio('0.65');
 
-        $ctx = new EarningsSimulationContext(
-            $stock,
-            new MacroStateDTO(corporateTaxRate: 0.21),
-            Sectors::getBusinessModelStrategy('reit'),
-            'reit',
-        );
+        $macro = new MacroStateDTO(corporateTaxRate: 0.21);
+        $ctx = new EarningsSimulationContext($stock, $macro, Sectors::getBusinessModelStrategy('reit'), 'reit');
+        $ctx->health = (new DebtEngine(new MathUtility(), new CorporateMetrics()))->analyzeTrailingDebtHealth($stock, $macro);
         $ctx->baselineRoic = 0.20;
         $ctx->investedCapital = 85_000_000_000.0;
         $ctx->actualQuarterlyNetIncome = self::QUARTERLY_NET_INCOME;

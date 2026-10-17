@@ -102,7 +102,7 @@ class OptionContract
      * what the desk's hedge is computed from, so it has to carry the sign rather than a gross count.
      */
     #[ORM\Column(type: Types::BIGINT, options: ['default' => 0])]
-    private int|string $openInterest = 0;
+    private int $openInterest = 0;
 
     /**
      * The public's net position in this contract, held by everyone who is not a player.
@@ -113,7 +113,7 @@ class OptionContract
      * would look to it like public demand falling.
      */
     #[ORM\Column(type: Types::BIGINT, options: ['default' => 0])]
-    private int|string $structuralOpenInterest = 0;
+    private int $structuralOpenInterest = 0;
 
     #[ORM\Column(type: Types::DATETIME_MUTABLE)]
     private \DateTimeInterface $updatedAt;
@@ -308,24 +308,24 @@ class OptionContract
         return $this;
     }
 
-    public function getOpenInterest(): int|string
+    public function getOpenInterest(): int
     {
         return $this->openInterest;
     }
 
-    public function setOpenInterest(int|string $openInterest): static
+    public function setOpenInterest(int $openInterest): static
     {
         $this->openInterest = $openInterest;
 
         return $this;
     }
 
-    public function getStructuralOpenInterest(): int|string
+    public function getStructuralOpenInterest(): int
     {
         return $this->structuralOpenInterest;
     }
 
-    public function setStructuralOpenInterest(int|string $structuralOpenInterest): static
+    public function setStructuralOpenInterest(int $structuralOpenInterest): static
     {
         $this->structuralOpenInterest = $structuralOpenInterest;
 

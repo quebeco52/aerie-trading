@@ -7,6 +7,7 @@ namespace App\Tests\Service\Model;
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use App\Service\Math\MathUtility;
+use App\Service\Model\Strategy\OperatingStrategyInterface;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use ReflectionClass;
@@ -22,20 +23,22 @@ class BusinessModelStreamContractTest extends TestCase
         $this->mathUtility = new MathUtility();
     }
 
+    /**
+     * @return array<string, array{class-string<OperatingStrategyInterface>}>
+     */
     public static function businessModelProvider(): array
     {
         $dir = dirname(__DIR__, 3) . '/src/Service/Model/Sector';
         $files = glob($dir . '/*BusinessModel.php');
+        self::assertNotFalse($files, "Could not list the sector models in {$dir}.");
         $models = [];
 
         foreach ($files as $file) {
             $className = 'App\\Service\\Model\\Sector\\' . basename($file, '.php');
-            if (!class_exists($className)) {
-                continue;
-            }
+            self::assertTrue(is_subclass_of($className, OperatingStrategyInterface::class), "{$className} has no operating strategy.");
 
             $ref = new ReflectionClass($className);
-            if ($ref->isAbstract() || $ref->isTrait() || $ref->isInterface()) {
+            if ($ref->isAbstract() || $ref->isInterface()) {
                 continue;
             }
 
@@ -45,6 +48,7 @@ class BusinessModelStreamContractTest extends TestCase
         return $models;
     }
 
+    /** @param class-string<OperatingStrategyInterface> $modelClass */
     #[DataProvider('businessModelProvider')]
     public function testStreamKeyConsistencyAndPersistence(string $modelClass): void
     {
@@ -90,6 +94,7 @@ class BusinessModelStreamContractTest extends TestCase
         }
     }
 
+    /** @param class-string<OperatingStrategyInterface> $modelClass */
     #[DataProvider('businessModelProvider')]
     public function testStreamStationarityAcrossHorizons(string $modelClass): void
     {

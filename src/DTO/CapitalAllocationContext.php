@@ -8,7 +8,8 @@ use App\Entity\Stock;
 use App\Service\Model\BusinessModelInterface;
 
 /**
- * Context object used to pass capital allocation state through the CapitalAllocationEngine pipeline.
+ * Context object used to pass capital allocation state through the CapitalAllocationEngine pipeline. The engine's
+ * initialize step sets $health and $strategy before any later step reads them.
  */
 class CapitalAllocationContext
 {
@@ -35,7 +36,7 @@ class CapitalAllocationContext
     // Core Business Traits
     public string $industry = 'General';
     public string $businessModel = 'none';
-    public ?BusinessModelInterface $strategy = null;
+    public BusinessModelInterface $strategy;
     public bool $isFinancial = false;
 
     // Computed Operational Metrics
@@ -48,7 +49,7 @@ class CapitalAllocationContext
     public float $investedCapital = 0.0;
 
     // Profit & Health
-    public ?DebtHealthDTO $health = null;
+    public DebtHealthDTO $health;
     public float $quarterlyNopat = 0.0;
     public float $retainedEarningsThisQuarter = 0.0;
 

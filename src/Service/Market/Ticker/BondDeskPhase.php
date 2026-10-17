@@ -27,7 +27,7 @@ final class BondDeskPhase
     /**
      * @param array<int, Bond>  $bonds  The active ladder; returned with matured issues dropped and new ones added.
      * @param array<int, Stock> $stocks
-     * @return array{bonds: list<Bond>, result: array{updates: array<int, array<string, mixed>>, struck: array<int, array<string, mixed>>, history: array<int, array<string, mixed>>, matured: array<int, Bond>, curve: array<int, array{tenor: float, yield: float}>}}
+     * @return array{bonds: list<Bond>, result: array{updates: list<array<string, mixed>>, struck: array<int, array<string, mixed>>, history: array<int, array<string, mixed>>, matured: array<int, Bond>, curve: array<int, array{tenor: float, yield: float}>}}
      */
     public function run(array $bonds, array $stocks, MacroStateDTO $macroState, int $tickCount, int $ticksPerYear): array
     {

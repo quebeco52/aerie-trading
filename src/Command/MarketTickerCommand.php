@@ -694,7 +694,7 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
      * Glasswater Row's quarterly reconstitution: re-ranks the roster and publishes each promotion and eviction.
      *
      * @param array<int, Stock>        $stocks
-     * @param array<int|string, mixed> $events The tick's events, appended to.
+     * @param list<mixed>              $events The tick's events, appended to.
      * @return array{tick: int, tickers: list<string>, promoted: list<string>, evicted: list<string>}|null Null off the reconstitution tick.
      */
     private function reconstituteDistrict(array $stocks, int $tickCount, array &$events): ?array

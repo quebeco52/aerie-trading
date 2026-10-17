@@ -139,7 +139,7 @@ class EarningsReportSubscriber implements EventSubscriberInterface
         if ($hasEarningAssets && isset($ctx->streamRevenue['net_interest_income']) && $stock->getNetEarningAssets() > 0.0) {
             // Interest earned less interest paid this quarter, annualized over the book that earned it. The duration
             // squeeze is funding cost the model carries in the cost ratio, so it comes off here as well.
-            $quarterlyInterestExpense = $ctx->debtMetrics instanceof \App\DTO\DebtMetricsDTO ? $ctx->debtMetrics->interestExpense / 4.0 : 0.0;
+            $quarterlyInterestExpense = $ctx->debtMetrics->interestExpense / 4.0;
             $netInterestMargin = (((float) $ctx->streamRevenue['net_interest_income'] - $quarterlyInterestExpense - $ctx->netInterestSqueeze) / $stock->getNetEarningAssets()) * 4.0;
         }
         $report->setNetInterestMargin($netInterestMargin === null ? null : Decimal::format($netInterestMargin, 4));
@@ -163,10 +163,8 @@ class EarningsReportSubscriber implements EventSubscriberInterface
         $report->setDividendPaid(Decimal::format((float) ($ctx->allocation['total_paid'] ?? 0.0), 4));
         $report->setStockBuybacks(Decimal::format((float) ($ctx->allocation['total_cash_spent'] ?? 0.0), 4));
 
-        if ($ctx->health) {
-            $report->setCashYield(Decimal::format($ctx->health->cashYield, 4));
-            $report->setCostOfEquity(Decimal::format((float) ($ctx->health->costOfEquity ?? 0.10), 4));
-        }
+        $report->setCashYield(Decimal::format($ctx->health->cashYield, 4));
+        $report->setCostOfEquity(Decimal::format($ctx->health->costOfEquity, 4));
 
         $report->setDepositApy(isset($ctx->allocation['bank_apy']) ? Decimal::format((float) $ctx->allocation['bank_apy'], 4) : null);
 

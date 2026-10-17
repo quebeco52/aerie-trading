@@ -37,6 +37,8 @@ use App\Service\Model\Strategy\OperatingStrategyInterface;
  * strategy's substitutability scales how much of a gain is share taken from peers rather than a larger
  * market (a branded good is mostly share; an oil producer's extra barrels are sold into a global pool and
  * barely touch a domestic peer). Both the booked gain and the absorbed drain are bounded per report.
+ *
+ * @phpstan-import-type ShareRecord from IndustryShareStoreInterface
  */
 class IndustryShareLedger
 {
@@ -456,7 +458,7 @@ class IndustryShareLedger
      * every rival that has reported within the year holds its revenue's share of it (the same sizing the
      * rival drain reads, fringeRevenue). Null until the firm has reported a share and a revenue.
      *
-     * @param array<string, mixed> $own
+     * @param ShareRecord $own
      * @return array{market_revenue: float, acquirer_share: float, herfindahl: float, fringe_share: float}|null
      */
     private function describeRevenueMarket(Stock $stock, array $own, int $tick, int $ticksPerYear): ?array
@@ -665,7 +667,7 @@ class IndustryShareLedger
      * A market measured in revenue moves with the revenue a deal buys or a sale gives up, at the market's
      * size, so a second deal before the next report is reviewed at the share the first one left.
      *
-     * @param array<string, mixed> $own
+     * @param ShareRecord $own
      */
     private function transferRevenue(Stock $stock, array $own, float $revenueDelta): void
     {
@@ -682,6 +684,7 @@ class IndustryShareLedger
         $this->store->writeRecord((string) $stock->getIndustry(), $stock->getTicker(), $own);
     }
 
+    /** @return ShareRecord|null */
     private function readOwnRecord(Stock $stock): ?array
     {
         $industry = $stock->getIndustry();

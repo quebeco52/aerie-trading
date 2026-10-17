@@ -14,6 +14,7 @@ use App\Service\Math\FinancialConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\ConglomerateBusinessModel;
 use App\Service\Model\Sector\InvestmentCompanyBusinessModel;
+use App\Service\Model\Strategy\ValuationStrategyInterface;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
@@ -670,13 +671,18 @@ class InvestmentCompanyBusinessModelTest extends TestCase
      * that did not ask for its own must still compute the expression that used to be inline, or the
      * extraction silently repriced the board.
      *
-     * @return array<string, array{class-string}>
+     * @return array<string, array{class-string<ValuationStrategyInterface>}>
      */
     public static function standardModelProvider(): array
     {
+        $dir = dirname(__DIR__, 4) . '/src/Service/Model/Sector';
+        $files = glob($dir . '/*BusinessModel.php');
+        self::assertNotFalse($files, "Could not list the sector models in {$dir}.");
+
         $models = [];
-        foreach (glob(dirname(__DIR__, 4) . '/src/Service/Model/Sector/*BusinessModel.php') ?: [] as $file) {
+        foreach ($files as $file) {
             $class = 'App\\Service\\Model\\Sector\\' . basename($file, '.php');
+            self::assertTrue(is_subclass_of($class, ValuationStrategyInterface::class), "{$class} has no valuation strategy.");
             if ((new \ReflectionClass($class))->isAbstract() || $class === InvestmentCompanyBusinessModel::class) {
                 continue;
             }
@@ -686,7 +692,7 @@ class InvestmentCompanyBusinessModelTest extends TestCase
         return $models;
     }
 
-    /** @param class-string $modelClass */
+    /** @param class-string<ValuationStrategyInterface> $modelClass */
     #[DataProvider('standardModelProvider')]
     public function testExtractionLeftEveryOtherModelOnTheOriginalMultiple(string $modelClass): void
     {

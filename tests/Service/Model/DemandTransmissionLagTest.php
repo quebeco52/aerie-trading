@@ -107,14 +107,20 @@ final class DemandTransmissionLagTest extends TestCase
     }
 
     /**
-     * @return array<string, array{class-string<OperatingStrategyInterface>}>
+     * The trait stack's own composer (which implements no strategy interface) and every sector model that declares a lag.
+     *
+     * @return array<string, array{class-string<OperatingStrategyInterface|ConfiguredStandardModel>}>
      */
     public static function laggedModelProvider(): array
     {
+        $dir = dirname(__DIR__, 3) . '/src/Service/Model/Sector';
+        $files = glob($dir . '/*BusinessModel.php');
+        self::assertNotFalse($files, "Could not list the sector models in {$dir}.");
+
         $models = ['ConfiguredStandardModel' => [ConfiguredStandardModel::class]];
-        foreach (glob(dirname(__DIR__, 3) . '/src/Service/Model/Sector/*BusinessModel.php') ?: [] as $file) {
-            /** @var class-string<OperatingStrategyInterface> $className */
+        foreach ($files as $file) {
             $className = 'App\\Service\\Model\\Sector\\' . basename($file, '.php');
+            self::assertTrue(is_subclass_of($className, OperatingStrategyInterface::class), "{$className} has no operating strategy.");
             $ref = new ReflectionClass($className);
             if ($ref->isAbstract() || !$ref->hasConstant('DEMAND_LAG_YEARS')) {
                 continue;
@@ -129,7 +135,7 @@ final class DemandTransmissionLagTest extends TestCase
      * A declared lag has to be one the macro publishes, and has to reach the demand path: the model reads the gap at
      * its own delay, not the gap as it stands.
      *
-     * @param class-string<OperatingStrategyInterface> $modelClass
+     * @param class-string<OperatingStrategyInterface|ConfiguredStandardModel> $modelClass
      */
     #[DataProvider('laggedModelProvider')]
     public function testDeclaredLagIsPublishedAndReadByTheModel(string $modelClass): void

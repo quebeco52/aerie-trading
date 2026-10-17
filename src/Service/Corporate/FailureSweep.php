@@ -48,7 +48,7 @@ class FailureSweep
      *
      * @param Stock[]       $stocks     List of all active stock entities.
      * @param MacroStateDTO $macroState The current macroeconomic state.
-     * @return array List of generated market events to broadcast.
+     * @return list<array<string, mixed>> The generated market events to broadcast.
      */
     public function sweep(array $stocks, MacroStateDTO $macroState): array
     {
@@ -100,7 +100,7 @@ class FailureSweep
      * lapsed, when the lenders accelerate. What follows is Chapter 11 for a business worth more alive than
      * broken up, and Chapter 7 for one that no longer covers its cash operating costs.
      *
-     * @return array|null Market events if the company failed this pass, otherwise null.
+     * @return list<array<string, mixed>>|null Market events if the company failed this pass, otherwise null.
      */
     private function applyRestructuringRule(Stock $stock, float $marketCap, string $name, MacroStateDTO $macroState): ?array
     {
@@ -148,7 +148,7 @@ class FailureSweep
      * - The listed debt is settled at its recovery.
      * - All historical quarters, financial reports, lore events, and charts remain frozen in place.
      *
-     * @return array Market events.
+     * @return list<array<string, mixed>> Market events.
      */
     private function liquidate(Stock $stock, MacroStateDTO $macroState, string $filing): array
     {
@@ -204,7 +204,7 @@ class FailureSweep
      * the old holders are out of the money their shares are cancelled — positions, open orders and the listed
      * options written on them go with them — and the creditors own the reorganized company.
      *
-     * @return array Market events.
+     * @return list<array<string, mixed>> Market events.
      */
     private function reorganize(Stock $stock, string $name, MacroStateDTO $macroState, \App\DTO\GoingConcernDTO $going): array
     {
@@ -352,7 +352,7 @@ class FailureSweep
             }
             $holders[] = ['user_id' => $userId, 'quantity' => $quantity];
             $this->entityManager->persist(\App\Entity\TradeOrder::settlement(
-                $this->entityManager->getReference(\App\Entity\User::class, $userId),
+                $this->entityManager->getReference(\App\Entity\User::class, $userId) ?? throw new \LogicException("Holder {$userId} is not a user."),
                 'STOCK',
                 $stock->getTicker(),
                 $quantity > 0 ? 'SELL' : 'COVER',

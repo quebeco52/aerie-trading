@@ -7,6 +7,7 @@ namespace App\Tests\Service\Model;
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use App\Service\Math\MathUtility;
+use App\Service\Model\BusinessModelInterface;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use ReflectionClass;
@@ -23,20 +24,22 @@ class BusinessModelContractMatrixTest extends TestCase
         $this->mathUtility = new MathUtility();
     }
 
+    /**
+     * @return array<string, array{class-string<BusinessModelInterface>}>
+     */
     public static function businessModelProvider(): array
     {
         $dir = dirname(__DIR__, 3) . '/src/Service/Model/Sector';
         $files = glob($dir . '/*BusinessModel.php');
+        self::assertNotFalse($files, "Could not list the sector models in {$dir}.");
         $models = [];
 
         foreach ($files as $file) {
             $className = 'App\\Service\\Model\\Sector\\' . basename($file, '.php');
-            if (!class_exists($className)) {
-                continue;
-            }
+            self::assertTrue(is_subclass_of($className, BusinessModelInterface::class), "{$className} is not a business model.");
 
             $ref = new ReflectionClass($className);
-            if ($ref->isAbstract() || $ref->isTrait() || $ref->isInterface()) {
+            if ($ref->isAbstract() || $ref->isInterface()) {
                 continue;
             }
 
@@ -46,6 +49,7 @@ class BusinessModelContractMatrixTest extends TestCase
         return $models;
     }
 
+    /** @param class-string<BusinessModelInterface> $modelClass */
     #[DataProvider('businessModelProvider')]
     public function testExtremeMacroStressInvariants(string $modelClass): void
     {

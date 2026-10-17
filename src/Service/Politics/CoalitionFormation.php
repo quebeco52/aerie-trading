@@ -127,7 +127,7 @@ final class CoalitionFormation
      * @param array<string, int|float>            $seats     Seats by party.
      * @param array<string, array<string, float>> $positions Positions by party and axis.
      * @param array<string, string>               $blocs     The leader of the bloc each party declared for (declareBlocs()).
-     * @return list<array{cabinet: list<string>, support: list<string>}>
+     * @return non-empty-list<array{cabinet: list<string>, support: list<string>}>
      */
     public static function options(array $seats, array $positions, array $blocs): array
     {
@@ -142,6 +142,9 @@ final class CoalitionFormation
             if ($support !== null) {
                 $options[] = ['cabinet' => $cabinet, 'support' => $support];
             }
+        }
+        if ($options === []) {
+            throw new \InvalidArgumentException('The parties together hold no majority, so no cabinet is on offer.');
         }
 
         return $options;
@@ -236,13 +239,13 @@ final class CoalitionFormation
      * Every cabinet's log-odds (utility()), with the distances between the parties and the Council median struck once
      * for them all.
      *
-     * @param list<array{cabinet: list<string>, support: list<string>}> $options   The cabinets on offer (options()).
-     * @param array<string, int|float>                                 $seats     Seats by party.
-     * @param array<string, array<string, float>>                      $positions Positions by party and axis.
-     * @param list<string>                                             $statusQuo The outgoing cabinet.
-     * @param string                                                   $largest   The Diet's largest party.
-     * @param array<string, string>                                    $blocs     The leader of the bloc each party declared for.
-     * @return list<float>
+     * @param non-empty-list<array{cabinet: list<string>, support: list<string>}> $options   The cabinets on offer (options()).
+     * @param array<string, int|float>                                            $seats     Seats by party.
+     * @param array<string, array<string, float>>                                 $positions Positions by party and axis.
+     * @param list<string>                                                        $statusQuo The outgoing cabinet.
+     * @param string                                                              $largest   The Diet's largest party.
+     * @param array<string, string>                                               $blocs     The leader of the bloc each party declared for.
+     * @return non-empty-list<float>
      */
     public static function utilities(array $options, array $seats, array $positions, array $statusQuo, string $largest, array $blocs): array
     {
@@ -420,7 +423,7 @@ final class CoalitionFormation
     /**
      * The chance an attempt forms a government: its best cabinet, Gumbel draws on every one, beats the bar of no deal.
      *
-     * @param list<float> $utilities The log-odds of the cabinets on offer.
+     * @param non-empty-list<float> $utilities The log-odds of the cabinets on offer.
      */
     public static function successProbability(array $utilities, float $bar): float
     {
@@ -542,7 +545,7 @@ final class CoalitionFormation
     /**
      * Draws a cabinet in proportion to the exponential of its log-odds.
      *
-     * @param list<float> $utilities
+     * @param non-empty-list<float> $utilities
      */
     private static function drawOption(array $utilities, MathUtility $draws): int
     {

@@ -52,7 +52,7 @@ class DistrictEventFeed
     }
 
     /**
-     * @param  Stock[] $stocks
+     * @param  list<Stock> $stocks
      * @return array<string, list<array<string, mixed>>> ticker => presented events, newest first
      */
     public function recentEventsByTicker(array $stocks): array

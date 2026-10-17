@@ -50,7 +50,7 @@ final class InsuranceLossReserveTest extends TestCase
     }
 
     /**
-     * @return array{treasury: float, customerDeposits: float, wholesaleDebt: float, events: list<array<string, mixed>>}
+     * @return array{treasury: float, customerDeposits: float, wholesaleDebt: float, events: array<mixed>}
      */
     private function runQuarter(InsuranceBusinessModel $model, Stock $stock): array
     {
@@ -61,9 +61,18 @@ final class InsuranceLossReserveTest extends TestCase
             'events' => [],
         ];
         $model->processPassiveLiabilityGrowth($stock, new MacroStateDTO(), $state, new MathUtility());
+        $this->assertIsFloat($state['treasury']);
+        $this->assertIsFloat($state['customerDeposits']);
+        $this->assertIsFloat($state['wholesaleDebt']);
+        $this->assertIsArray($state['events']);
         $stock->setCorporateTreasury((string) $state['treasury']);
 
-        return $state;
+        return [
+            'treasury' => $state['treasury'],
+            'customerDeposits' => $state['customerDeposits'],
+            'wholesaleDebt' => $state['wholesaleDebt'],
+            'events' => $state['events'],
+        ];
     }
 
     /**

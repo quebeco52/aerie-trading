@@ -48,14 +48,14 @@ class TradeController extends AbstractController
             return $this->redirectToRoute('app_login');
         }
 
-        $ticker = $request->request->get('ticker');
-        $action = $request->request->get('action');
-        $orderType = $request->request->get('orderType', 'MARKET');
+        $ticker = $request->request->getString('ticker');
+        $action = $request->request->getString('action');
+        $orderType = $request->request->getString('orderType', 'MARKET');
         $quantity = (int) $request->request->get('quantity');
-        $limitPrice = $request->request->get('limitPrice') ?: null;
-        $stopPrice = $request->request->get('stopPrice') ?: null;
+        $limitPrice = $request->request->getString('limitPrice') ?: null;
+        $stopPrice = $request->request->getString('stopPrice') ?: null;
 
-        $csrfToken = $request->request->get('_token');
+        $csrfToken = $request->request->getString('_token');
         if (!$this->isCsrfTokenValid('execute_trade', $csrfToken)) {
             $this->addFlash('error', 'Invalid security token. Please try again.');
             return $this->redirect($request->headers->get('referer') ?? '/');
@@ -109,7 +109,7 @@ class TradeController extends AbstractController
             return $this->redirectToRoute('app_login');
         }
 
-        if (!$this->isCsrfTokenValid('toggle_margin', $request->request->get('_token'))) {
+        if (!$this->isCsrfTokenValid('toggle_margin', $request->request->getString('_token'))) {
             $this->addFlash('error', 'Invalid security token. Please try again.');
 
             return $this->redirect($request->headers->get('referer') ?? '/dashboard');
@@ -158,7 +158,7 @@ class TradeController extends AbstractController
             return $this->redirectToRoute('app_login');
         }
 
-        $csrfToken = $request->request->get('_token');
+        $csrfToken = $request->request->getString('_token');
 
         if (!$this->isCsrfTokenValid('cancel_trade_' . $id, $csrfToken)) {
             $this->addFlash('error', 'Invalid security token.');

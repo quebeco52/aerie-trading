@@ -8,7 +8,8 @@ use App\Entity\Stock;
 use App\Service\Model\BusinessModelInterface;
 
 /**
- * Context object used to pass state through the private acquisition pipeline.
+ * Context object used to pass state through the private acquisition pipeline. The engine's initialize step sets
+ * $health and $strategy before any later step reads them.
  */
 class AcquisitionContext
 {
@@ -35,10 +36,10 @@ class AcquisitionContext
     public float $policyRate = 0.0;
     public float $yield5y = 0.0;
 
-    public ?DebtHealthDTO $health = null;
+    public DebtHealthDTO $health;
     public string $industry = 'General';
     public string $businessModel = 'none';
-    public ?BusinessModelInterface $strategy = null;
+    public BusinessModelInterface $strategy;
 
     // Buying Power & Cash
     public float $borrowingCapacity = 0.0;
@@ -67,7 +68,8 @@ class AcquisitionContext
     public float $costOfNewBorrowing = 0.0;
 
     // Deal Config
-    public ?array $config = null;
+    /** @var array{prob: float, spend: float, type: string, use_leverage: bool, use_stock: bool, style_priced?: bool} Set when a deal is struck; nothing reads it before. */
+    public array $config;
     public bool $dealExecuted = false;
     public float $availableCapital = 0.0;
     public float $spendFraction = 0.0;

@@ -38,7 +38,7 @@ class UserOption
     private OptionContract $contract;
 
     #[ORM\Column(type: Types::BIGINT, options: ['default' => 0])]
-    private int|string $quantity = 0;
+    private int $quantity = 0;
 
     /** Average premium paid or received per share, always positive. */
     #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 8, options: ['default' => '0.00000000'])]
@@ -77,12 +77,12 @@ class UserOption
         return $this;
     }
 
-    public function getQuantity(): int|string
+    public function getQuantity(): int
     {
         return $this->quantity;
     }
 
-    public function setQuantity(int|string $quantity): static
+    public function setQuantity(int $quantity): static
     {
         $this->quantity = $quantity;
 

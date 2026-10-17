@@ -84,10 +84,10 @@ final class AssetResolver
     public function addToHolding(User $user, ResolvedAssetDTO $asset, UserStock|UserEtf|UserBond|null $holding, int $quantity): UserStock|UserEtf|UserBond
     {
         if ($holding === null) {
-            $holding = match ($asset->type) {
-                'STOCK' => (new UserStock())->setUser($user)->setStock($asset->entity),
-                'ETF' => (new UserEtf())->setUser($user)->setEtf($asset->entity),
-                'BOND' => (new UserBond())->setUser($user)->setBond($asset->entity),
+            $holding = match (true) {
+                $asset->type === 'STOCK' && $asset->entity instanceof Stock => (new UserStock())->setUser($user)->setStock($asset->entity),
+                $asset->type === 'ETF' && $asset->entity instanceof Etf => (new UserEtf())->setUser($user)->setEtf($asset->entity),
+                $asset->type === 'BOND' && $asset->entity instanceof Bond => (new UserBond())->setUser($user)->setBond($asset->entity),
                 default => throw new \InvalidArgumentException("Unknown asset type {$asset->type}."),
             };
 

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Tests\Service\User;
 
 use App\Entity\TradeOrder;
+use App\Entity\User;
 use App\Service\User\CostBasisCalculator;
 use PHPUnit\Framework\TestCase;
 
@@ -28,6 +29,7 @@ final class CostBasisCalculatorTest extends TestCase
     {
         $order = new TradeOrder();
         $order->setTicker($ticker);
+        $order->setAssetType('STOCK');
         $order->setAction($action);
         $order->setOrderType('MARKET');
         $order->setStatus('FILLED');
@@ -180,13 +182,13 @@ final class CostBasisCalculatorTest extends TestCase
     {
         $realised = $this->calculator->realisedByTicker([
             $this->order('BUY', 10, '50.00'),
-            TradeOrder::settlement(null, 'STOCK', 'APEX', 'SELL', 10, '0.0000'),
+            TradeOrder::settlement(new User(), 'STOCK', 'APEX', 'SELL', 10, '0.0000'),
             $this->order('SHORT', 4, '20.00', 'DEAD'),
-            TradeOrder::settlement(null, 'STOCK', 'DEAD', 'COVER', 4, '0.0000'),
+            TradeOrder::settlement(new User(), 'STOCK', 'DEAD', 'COVER', 4, '0.0000'),
         ]);
 
         $this->assertEqualsWithDelta(-500.0, $realised['APEX'], 1e-9);
         $this->assertEqualsWithDelta(80.0, $realised['DEAD'], 1e-9);
-        $this->assertSame([], $this->calculator->calculate([$this->order('BUY', 10, '50.00'), TradeOrder::settlement(null, 'STOCK', 'APEX', 'SELL', 10, '0.0000')]));
+        $this->assertSame([], $this->calculator->calculate([$this->order('BUY', 10, '50.00'), TradeOrder::settlement(new User(), 'STOCK', 'APEX', 'SELL', 10, '0.0000')]));
     }
 }

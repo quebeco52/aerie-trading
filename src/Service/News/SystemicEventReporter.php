@@ -608,7 +608,7 @@ class SystemicEventReporter
     /**
      * Names joined as prose: "a", "a and b", "a, b and c".
      *
-     * @param list<string> $names
+     * @param array<string> $names
      */
     private static function listNames(array $names): string
     {

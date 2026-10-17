@@ -36,7 +36,7 @@ class SimulationClock
 
     /** Ticks executed. The unit the ticker counts cadences in. */
     #[ORM\Column(type: Types::BIGINT, options: ['default' => 0])]
-    private int|string $tickCount = 0;
+    private int $tickCount = 0;
 
     /** Simulation time in years. The unit every model is written in. */
     #[ORM\Column(type: Types::FLOAT, options: ['default' => 0.0])]
@@ -57,7 +57,7 @@ class SimulationClock
 
     public function getTickCount(): int
     {
-        return (int) $this->tickCount;
+        return $this->tickCount;
     }
 
     public function setTickCount(int $tickCount): self

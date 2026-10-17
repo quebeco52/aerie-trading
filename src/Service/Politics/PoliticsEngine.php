@@ -538,7 +538,7 @@ class PoliticsEngine
         $platform = self::platform(self::coalitionPosition(AerieDiet::membership($cabinet), $seats, $positions)) + self::debtPlanks($cabinet, $seats);
         $supporterPlatforms = array_map(static fn(string $party): array => self::partyProgramme($party, $positions), $support);
 
-        $levers = [];
+        $levers = array_fill_keys(array_keys(self::LEVER_FIELDS), 0.0);
         $supportHeld = [];
         foreach (array_keys(self::LEVER_FIELDS) as $lever) {
             $low = -INF;

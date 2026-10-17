@@ -176,12 +176,6 @@ class EarningsEngine
     /** Goodwill impairment smaller than this fraction of the goodwill balance is immaterial and not booked. */
     public const MIN_GOODWILL_IMPAIRMENT_FRACTION = 0.01;
 
-    // --- Debt Physics ---
-    /** Fallback weighted average cost of capital used as the investment hurdle when no live debt health exists. */
-    public const DEFAULT_WACC_FALLBACK = 0.08;
-    /** Fallback cost of equity the return update discounts at when no live debt health exists (~10%). */
-    public const DEFAULT_COST_OF_EQUITY_FALLBACK = 0.10;
-
     // --- Corporate Taxation ---
     /** Max % of taxable income that can be shielded by NOLs (e.g. 80% post-TCJA). */
     public const NOL_MAX_SHIELD_RATIO = 0.80;
@@ -266,6 +260,7 @@ class EarningsEngine
         private MarketEngine $marketEngine = new MarketEngine(new MathUtility()),
     ) {}
 
+    /** @return list<array<string, mixed>>|null The published earnings event, or null for a bankrupt firm or a tick that is not its reporting date. */
     public function calculate(Stock $stock, \App\DTO\MacroStateDTO $macroState, int $tickCount = 0, int $ticksPerYear = 252): ?array
     {
         if ($stock->isBankrupt() || !$this->checkReportingEligibility($stock, $tickCount, $ticksPerYear)) {
@@ -1442,8 +1437,8 @@ class EarningsEngine
             $ctx->investedCapital,
             $ctx->seasonallyAdjustedEbit,
             $ctx->corporateTaxRate,
-            $ctx->health->wacc ?? self::DEFAULT_WACC_FALLBACK,
-            $ctx->health->costOfEquity ?? self::DEFAULT_COST_OF_EQUITY_FALLBACK,
+            $ctx->health->wacc,
+            $ctx->health->costOfEquity,
             $ctx->macroState,
             $ctx->quarterlyDepreciation,
         );
@@ -2344,9 +2339,7 @@ class EarningsEngine
         $stock = $ctx->stock;
         $manager = $stock->getManagementProfile();
         $reinvestmentRate = max(0.0, (float) $stock->getCapexRatio()) * $manager->reinvestmentBias();
-        $hurdleRate = $ctx->health instanceof \App\DTO\DebtHealthDTO
-            ? $ctx->strategy->getHurdleRate($ctx->health)
-            : self::DEFAULT_WACC_FALLBACK;
+        $hurdleRate = $ctx->strategy->getHurdleRate($ctx->health);
 
         // Jensen (1986): the agency cost of free cash flow is not spending more, it is accepting projects
         // that do not clear the cost of capital. The style bends the hurdle management applies, so an
@@ -2512,6 +2505,7 @@ class EarningsEngine
         $this->recordAnnouncementVariance($stock, log(1.0 + $ctx->totalShockPct), true);
     }
 
+    /** @return list<array<string, mixed>> */
     private function publishEventAndReport(EarningsSimulationContext $ctx): array
     {
         $stock = $ctx->stock;

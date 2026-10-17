@@ -46,7 +46,7 @@ class StockHistory
 
     /** Shares traded across the bar, summed from the per-tick prints. */
     #[ORM\Column(type: Types::BIGINT, nullable: true)]
-    private int|string|null $volume = null;
+    private ?int $volume = null;
 
     #[ORM\Column(type: Types::DATETIME_MUTABLE)]
     private \DateTime $recordedAt;
@@ -76,7 +76,7 @@ class StockHistory
         return $this->id;
     }
 
-    public function getPrice(): ?string
+    public function getPrice(): string
     {
         return $this->price;
     }
@@ -124,12 +124,12 @@ class StockHistory
         return $this;
     }
 
-    public function getVolume(): int|string|null
+    public function getVolume(): ?int
     {
         return $this->volume;
     }
 
-    public function setVolume(int|string|null $volume): static
+    public function setVolume(?int $volume): static
     {
         $this->volume = $volume;
 
@@ -153,7 +153,7 @@ class StockHistory
         return $this->stock;
     }
 
-    public function setStock(?Stock $stock): static
+    public function setStock(Stock $stock): static
     {
         $this->stock = $stock;
 

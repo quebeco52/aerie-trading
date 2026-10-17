@@ -35,7 +35,7 @@ class RegistrationController extends AbstractController
         }
 
         if ($request->isMethod('POST')) {
-            $csrfToken = $request->request->get('_csrf_token');
+            $csrfToken = $request->request->getString('_csrf_token');
             if (!$this->isCsrfTokenValid('register_form', $csrfToken)) {
                 $this->addFlash('error', 'Invalid security token.');
                 return $this->redirectToRoute('app_register');

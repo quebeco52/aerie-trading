@@ -50,6 +50,7 @@ class ViewerPositionBuilderTest extends TestCase
     {
         $order = new TradeOrder();
         $order->setTicker($ticker);
+        $order->setAssetType('STOCK');
         $order->setAction($action);
         $order->setQuantity($quantity);
         $order->setFilledQuantity($quantity);

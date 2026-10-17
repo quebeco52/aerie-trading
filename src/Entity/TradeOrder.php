@@ -52,25 +52,25 @@ class TradeOrder
 
     #[ORM\ManyToOne(targetEntity: User::class)]
     #[ORM\JoinColumn(nullable: false)]
-    private ?User $user = null;
+    private User $user;
 
     #[ORM\Column(length: 10)]
-    private ?string $assetType = null; // 'STOCK', 'ETF' or 'BOND'
+    private string $assetType; // 'STOCK', 'ETF' or 'BOND'
 
     #[ORM\Column(length: 20)]
-    private ?string $ticker = null;
+    private string $ticker;
 
     #[ORM\Column(length: 10)]
-    private ?string $action = null; // 'BUY' or 'SELL'
+    private string $action; // 'BUY' or 'SELL'
 
     #[ORM\Column(length: 20)]
-    private ?string $orderType = null; // one of the TYPE_* constants
+    private string $orderType; // one of the TYPE_* constants
 
     #[ORM\Column(type: Types::BIGINT)]
-    private int|string|null $quantity = null;
+    private int $quantity;
 
     #[ORM\Column(type: Types::BIGINT, options: ['default' => 0])]
-    private int|string $filledQuantity = 0;
+    private int $filledQuantity = 0;
 
     #[ORM\Column(type: Types::DECIMAL, precision: 18, scale: 4, nullable: true)]
     private ?string $limitPrice = null;
@@ -125,7 +125,7 @@ class TradeOrder
     }
 
     /** The filled order an issuer's settlement closes a position with, at the price per unit it paid out. */
-    public static function settlement(?User $user, string $assetType, string $ticker, string $action, int $quantity, string $price): self
+    public static function settlement(User $user, string $assetType, string $ticker, string $action, int $quantity, string $price): self
     {
         return (new self())
             ->setUser($user)
@@ -177,18 +177,18 @@ class TradeOrder
         return $this->orderType === self::TYPE_LIMIT || $this->orderType === self::TYPE_STOP_LIMIT;
     }
 
-    public function getUser(): ?User
+    public function getUser(): User
     {
         return $this->user;
     }
 
-    public function setUser(?User $user): static
+    public function setUser(User $user): static
     {
         $this->user = $user;
         return $this;
     }
 
-    public function getAssetType(): ?string
+    public function getAssetType(): string
     {
         return $this->assetType;
     }
@@ -199,7 +199,7 @@ class TradeOrder
         return $this;
     }
 
-    public function getTicker(): ?string
+    public function getTicker(): string
     {
         return $this->ticker;
     }
@@ -210,7 +210,7 @@ class TradeOrder
         return $this;
     }
 
-    public function getAction(): ?string
+    public function getAction(): string
     {
         return $this->action;
     }
@@ -221,7 +221,7 @@ class TradeOrder
         return $this;
     }
 
-    public function getOrderType(): ?string
+    public function getOrderType(): string
     {
         return $this->orderType;
     }
@@ -232,23 +232,23 @@ class TradeOrder
         return $this;
     }
 
-    public function getQuantity(): int|string|null
+    public function getQuantity(): int
     {
         return $this->quantity;
     }
 
-    public function setQuantity(int|string $quantity): static
+    public function setQuantity(int $quantity): static
     {
         $this->quantity = $quantity;
         return $this;
     }
 
-    public function getFilledQuantity(): int|string
+    public function getFilledQuantity(): int
     {
         return $this->filledQuantity;
     }
 
-    public function setFilledQuantity(int|string $filledQuantity): static
+    public function setFilledQuantity(int $filledQuantity): static
     {
         $this->filledQuantity = $filledQuantity;
         return $this;

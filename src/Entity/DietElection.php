@@ -254,7 +254,11 @@ class DietElection
         return $this;
     }
 
-    /** The cabinets in office over this Diet, in order: the one the vote's talks produced, then each that followed a fall. @return list<list<string>> */
+    /**
+     * The cabinets in office over this Diet, in order: the one the vote's talks produced, then each that followed a fall.
+     *
+     * @return non-empty-list<list<string>>
+     */
     public function getCabinets(): array
     {
         return [$this->coalition, ...array_map(static fn(array $fall): array => $fall['cabinet'], $this->falls)];

@@ -77,7 +77,7 @@ class BondTracker
      * @param array<int, Bond> $bonds         Outstanding issues.
      * @param MacroStateDTO    $macroState    Live macro state carrying the fitted curve.
      * @param bool             $recordHistory Whether this tick writes a history point.
-     * @return array{updates: array<int, array<string, mixed>>, struck: array<int, array<string, mixed>>, history: array<int, array<string, mixed>>, matured: array<int, Bond>, curve: array<int, array{tenor: float, yield: float}>}
+     * @return array{updates: list<array<string, mixed>>, struck: array<int, array<string, mixed>>, history: array<int, array<string, mixed>>, matured: array<int, Bond>, curve: array<int, array{tenor: float, yield: float}>}
      *         `updates` quotes every active issue; `struck` is the subset valued this pass, the only quotes
      *         that can have moved since the last one.
      * @param array<int, float> $issuerSpreads Live credit spread per issuer id, so marking the corporate

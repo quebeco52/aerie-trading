@@ -26,7 +26,7 @@ class UserEtf
     private Etf $etf;
 
     #[ORM\Column(type: Types::BIGINT, options: ['default' => 0])]
-    private int|string $quantity = 0;
+    private int $quantity = 0;
 
     #[ORM\Version]
     #[ORM\Column(type: 'integer')]
@@ -37,36 +37,36 @@ class UserEtf
         return $this->id;
     }
 
-    public function getQuantity(): int|string
+    public function getQuantity(): int
     {
         return $this->quantity;
     }
 
-    public function setQuantity(int|string $quantity): static
+    public function setQuantity(int $quantity): static
     {
         $this->quantity = $quantity;
 
         return $this;
     }
 
-    public function getUser(): ?User
+    public function getUser(): User
     {
         return $this->user;
     }
 
-    public function setUser(?User $user): static
+    public function setUser(User $user): static
     {
         $this->user = $user;
 
         return $this;
     }
 
-    public function getEtf(): ?Etf
+    public function getEtf(): Etf
     {
         return $this->etf;
     }
 
-    public function setEtf(?Etf $etf): static
+    public function setEtf(Etf $etf): static
     {
         $this->etf = $etf;
 

@@ -37,12 +37,12 @@ class BaseFinancialBusinessModelTest extends TestCase
 
             protected function calculateSectorPhysics(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, \App\DTO\MacroStateDTO $macroState, \App\Service\Math\MathUtility $mathUtility): \App\DTO\SectorPhysicsResult
             {
-                return new \App\DTO\SectorPhysicsResult($expectedRevenue, $realizedVariableMargin, $fixedCosts, $baselineVol);
+                return new \App\DTO\SectorPhysicsResult(actualRevenue: $expectedRevenue, rawVariableMargin: $realizedVariableMargin, observableShockZ: 0.0);
             }
 
             public function computeActualFinancials(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, \App\DTO\MacroStateDTO $macroState, \App\Service\Math\MathUtility $mathUtility, ?int $calendarQuarter = null): \App\DTO\ActualFinancialsDTO
             {
-                return new \App\DTO\ActualFinancialsDTO(100.0, 50.0, 20.0, 30.0, 30.0, 30.0);
+                return new \App\DTO\ActualFinancialsDTO(actualRevenue: 100.0, actualVariableCosts: 50.0, clampedMargin: 0.50, ebit: 30.0, observableShockZ: 0.0);
             }
 
             public function getTargetMetrics(Stock $stock, \App\DTO\MacroStateDTO $macroState, \App\Service\Math\MathUtility $mathUtility): array

@@ -99,7 +99,7 @@ class PriceVolumeSplitTest extends TestCase
         $setterPhysics = (new class extends StandardCorporateBusinessModel {
             protected function resolveModelParameters(Stock $stock, array $defaults = []): \App\Service\Model\ModelParameters
             {
-                return \App\Data\Company\StockModelTuning::resolve($stock->getTicker(), [\App\Service\Model\ModelParam::PricingPowerIndex->value => 1.0] + $defaults);
+                return parent::resolveModelParameters($stock, [\App\Service\Model\ModelParam::PricingPowerIndex->value => 1.0] + $defaults);
             }
         })->getMacroPhysics($setter, $macro);
         $realPricing = $setterPhysics['pricing_power_multiplier'] - $setterPhysics['input_cost_multiplier'];

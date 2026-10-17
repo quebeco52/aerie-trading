@@ -606,7 +606,7 @@ class EventPresenter
         }
 
         // Split by newlines or bullet markers (•, -, *)
-        $rawLines = preg_split('/(?:\r\n|\r|\n)+|\s*[•*·]\s*/u', $text, -1, PREG_SPLIT_NO_EMPTY);
+        $rawLines = preg_split('/(?:\r\n|\r|\n)+|\s*[•*·]\s*/u', $text, -1, PREG_SPLIT_NO_EMPTY) ?: [];
         $pills = [];
 
         foreach ($rawLines as $line) {

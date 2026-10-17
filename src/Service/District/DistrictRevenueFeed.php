@@ -59,7 +59,7 @@ class DistrictRevenueFeed
     ) {}
 
     /**
-     * @param  Stock[] $stocks
+     * @param  list<Stock> $stocks
      * @return array<string, array<string, mixed>> ticker => revenue mix
      */
     public function latestRevenueMixByTicker(array $stocks): array

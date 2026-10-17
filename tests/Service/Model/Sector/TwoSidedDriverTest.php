@@ -8,6 +8,7 @@ use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector;
+use App\Service\Model\Strategy\OperatingStrategyInterface;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
@@ -19,7 +20,7 @@ use PHPUnit\Framework\TestCase;
 final class TwoSidedDriverTest extends TestCase
 {
     /**
-     * @return iterable<string, array{0: class-string, 1: string, 2: array<string, float>, 3: array<string, float>, 4: array<string, float>, 5: bool}>
+     * @return iterable<string, array{0: class-string<OperatingStrategyInterface>, 1: string, 2: array<string, float>, 3: array<string, float>, 4: array<string, float>, 5: bool}>
      *         Model, stream, driver above neutral, at neutral, below neutral, whether the response is linear.
      */
     public static function drivers(): iterable
@@ -57,10 +58,10 @@ final class TwoSidedDriverTest extends TestCase
     }
 
     /**
-     * @param class-string         $model
-     * @param array<string, float> $above
-     * @param array<string, float> $neutral
-     * @param array<string, float> $below
+     * @param class-string<OperatingStrategyInterface> $model
+     * @param array<string, float>                     $above
+     * @param array<string, float>                     $neutral
+     * @param array<string, float>                     $below
      */
     #[DataProvider('drivers')]
     public function testTheDriverPaysOneWayAndTakesBackTheOther(string $model, string $stream, array $above, array $neutral, array $below, bool $linear): void
@@ -77,7 +78,10 @@ final class TwoSidedDriverTest extends TestCase
         }
     }
 
-    /** @param array<string, float> $macro */
+    /**
+     * @param class-string<OperatingStrategyInterface> $model
+     * @param array<string, float>                     $macro
+     */
     private function revenue(string $model, string $stream, array $macro): float
     {
         $math = $this->createStub(MathUtility::class);

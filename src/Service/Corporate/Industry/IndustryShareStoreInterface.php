@@ -9,16 +9,18 @@ namespace App\Service\Corporate\Industry;
  * A record is small — revenue, the firm's own gain, installed capacity, its capacity anchor (its plant and
  * the market it sells into per unit of trend nominal GDP, and when that was struck), its addressable share,
  * report tick — and is read by every peer at its own report.
+ *
+ * @phpstan-type ShareRecord array{revenue: float, gain: float, capacity: float, anchor_capacity_share: float, anchor_demand_share: float, anchor_time: float, addressable_share: float, tick: int, consumed_tick: int}
  */
 interface IndustryShareStoreInterface
 {
     /**
-     * @return array<string, array{revenue: float, gain: float, capacity: float, anchor_capacity_share: float, anchor_demand_share: float, anchor_time: float, addressable_share: float, tick: int, consumed_tick: int}> Ticker-keyed records.
+     * @return array<string, ShareRecord> Ticker-keyed records.
      */
     public function readIndustry(string $industry): array;
 
     /**
-     * @param array{revenue: float, gain: float, capacity: float, anchor_capacity_share: float, anchor_demand_share: float, anchor_time: float, addressable_share: float, tick: int, consumed_tick: int} $record
+     * @param ShareRecord $record
      */
     public function writeRecord(string $industry, string $ticker, array $record): void;
 

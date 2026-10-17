@@ -199,14 +199,20 @@ class MacroGapDumpCommand extends Command
     public static function segments(array $fingerprints): array
     {
         $segments = [];
+        $run = null;
         foreach ($fingerprints as $index => $fingerprint) {
-            $last = array_key_last($segments);
-            if ($last !== null && $segments[$last]['fingerprint'] === $fingerprint) {
-                $segments[$last]['to'] = $index + 1;
+            if ($run !== null && $run['fingerprint'] === $fingerprint) {
+                $run['to'] = $index + 1;
 
                 continue;
             }
-            $segments[] = ['fingerprint' => $fingerprint, 'from' => $index + 1, 'to' => $index + 1];
+            if ($run !== null) {
+                $segments[] = $run;
+            }
+            $run = ['fingerprint' => $fingerprint, 'from' => $index + 1, 'to' => $index + 1];
+        }
+        if ($run !== null) {
+            $segments[] = $run;
         }
 
         return $segments;

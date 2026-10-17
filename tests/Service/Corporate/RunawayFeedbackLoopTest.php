@@ -162,7 +162,7 @@ class RunawayFeedbackLoopTest extends TestCase
             ebitda: 11_000_000_000.0,
         );
         $debtEngine->method('calculateInterestExpense')->willReturn($debtMetrics);
-        $debtEngine->method('analyzeDebtHealth')->willReturn(new DebtHealthDTO(
+        $health = new DebtHealthDTO(
             grossCost: 0.05,
             effectiveCost: 0.04,
             cashYield: 0.02,
@@ -179,7 +179,9 @@ class RunawayFeedbackLoopTest extends TestCase
             isLiquidityCrisis: false,
             isLiquidityWarning: false,
             isUnderLeveraged: false,
-        ));
+        );
+        $debtEngine->method('analyzeDebtHealth')->willReturn($health);
+        $debtEngine->method('analyzeTrailingDebtHealth')->willReturn($health);
 
         $marketEventPublisher = $this->createStub(\App\Service\Event\MarketEventPublisher::class);
         $narrativeEngine = $this->createStub(\App\Service\News\NarrativeEngine::class);
@@ -265,7 +267,7 @@ class RunawayFeedbackLoopTest extends TestCase
             ebitda: 10_000_000_000.0,
         );
         $debtEngine->method('calculateInterestExpense')->willReturn($debtMetrics);
-        $debtEngine->method('analyzeDebtHealth')->willReturn(new DebtHealthDTO(
+        $health = new DebtHealthDTO(
             grossCost: 0.05,
             effectiveCost: 0.04,
             cashYield: 0.02,
@@ -282,7 +284,9 @@ class RunawayFeedbackLoopTest extends TestCase
             isLiquidityCrisis: false,
             isLiquidityWarning: false,
             isUnderLeveraged: false,
-        ));
+        );
+        $debtEngine->method('analyzeDebtHealth')->willReturn($health);
+        $debtEngine->method('analyzeTrailingDebtHealth')->willReturn($health);
 
         $marketEventPublisher = $this->createStub(\App\Service\Event\MarketEventPublisher::class);
         $narrativeEngine = $this->createStub(\App\Service\News\NarrativeEngine::class);

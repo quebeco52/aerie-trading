@@ -116,7 +116,7 @@ class MonetaryAuthorityTest extends TestCase
         $names = array_merge($state->councilNames, [$state->governorName], $state->memberNames);
         $this->assertSame($names, array_values(array_unique($names)), 'No two people sitting share a name.');
 
-        $this->assertEqualsWithDelta(Authority::balance($state->governorStance, $state->memberStances), $state->committeeBalance, 1e-12);
+        $this->assertEqualsWithDelta(Authority::balance($state->governorStance, array_values($state->memberStances)), $state->committeeBalance, 1e-12);
         $this->assertSame(Authority::majority($state->committeeBalance), $state->committeeMajority);
         $this->assertSame(-1.0, $state->lastGovernorAppointedAt);
         $this->assertSame(-1.0, $state->lastMajorityShiftAt);

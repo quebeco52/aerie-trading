@@ -37,7 +37,7 @@ class PortfolioHistory
         return $this->id;
     }
 
-    public function getTotalValue(): ?string
+    public function getTotalValue(): string
     {
         return $this->totalValue;
     }
@@ -66,7 +66,7 @@ class PortfolioHistory
         return $this->user;
     }
 
-    public function setUser(?User $user): static
+    public function setUser(User $user): static
     {
         $this->user = $user;
 

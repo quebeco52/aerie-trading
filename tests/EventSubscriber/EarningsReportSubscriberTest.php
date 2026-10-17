@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Tests\EventSubscriber;
 
+use App\DTO\DebtHealthDTO;
+use App\DTO\DebtMetricsDTO;
 use App\DTO\EarningsSimulationContext;
 use App\DTO\MacroStateDTO;
 use App\Entity\CorporateReport;
@@ -88,7 +90,7 @@ class EarningsReportSubscriberTest extends TestCase
         $ctx->ebit = 2000000.0;
         $ctx->preTaxIncome = 1900000.0;
         $ctx->taxPaid = 400000.0;
-        $ctx->debtMetrics = new \App\DTO\DebtMetricsDTO(
+        $ctx->debtMetrics = new DebtMetricsDTO(
             interestExpense: 400000.0,
             blendedRate: 0.04,
             historicalFixedRate: 0.04,
@@ -100,6 +102,7 @@ class EarningsReportSubscriberTest extends TestCase
             depreciation: 200000.0,
             ebitda: 2200000.0,
         );
+        $ctx->health = $this->health($ctx->debtMetrics);
 
         // No previous report exists in DB
         $this->reportRepository
@@ -203,7 +206,7 @@ class EarningsReportSubscriberTest extends TestCase
         $ctx->investingCashFlow = -900000.0;
         $ctx->financingCashFlow = -400000.0;
         $ctx->lifecycleStage = \App\Data\Company\LifecycleStage::Mature;
-        $ctx->debtMetrics = new \App\DTO\DebtMetricsDTO(
+        $ctx->debtMetrics = new DebtMetricsDTO(
             interestExpense: 400000.0,
             blendedRate: 0.04,
             historicalFixedRate: 0.04,
@@ -215,6 +218,7 @@ class EarningsReportSubscriberTest extends TestCase
             depreciation: 500000.0,
             ebitda: 2500000.0,
         );
+        $ctx->health = $this->health($ctx->debtMetrics);
 
         $this->reportRepository->method('findLatestFor')->willReturn(null);
 
@@ -329,7 +333,8 @@ class EarningsReportSubscriberTest extends TestCase
         $ctx->actualRevenue = 10000000.0;
         $ctx->streamRevenue = ['net_interest_income' => 10000000.0];
         $ctx->operatingCashFlow = 1000000.0;
-        $ctx->debtMetrics = new \App\DTO\DebtMetricsDTO(1.0, 0.04, 0.04, 0.01, 0.04, 0.04, 1.0, 1.0, 0.0, 1.0);
+        $ctx->debtMetrics = new DebtMetricsDTO(1.0, 0.04, 0.04, 0.01, 0.04, 0.04, 1.0, 1.0, 0.0, 1.0);
+        $ctx->health = $this->health($ctx->debtMetrics);
 
         $this->reportRepository->method('findLatestFor')->willReturn(null);
         $persisted = null;
@@ -376,7 +381,8 @@ class EarningsReportSubscriberTest extends TestCase
         $ctx->netChargeOffs = 500000.0;
         $ctx->netLoanOriginations = 3000000.0;
         $ctx->netInterestSqueeze = 400000.0;
-        $ctx->debtMetrics = new \App\DTO\DebtMetricsDTO(4000000.0, 0.04, 0.04, 0.01, 0.04, 0.04, 1.0, 1.0, 0.0, 1.0);
+        $ctx->debtMetrics = new DebtMetricsDTO(4000000.0, 0.04, 0.04, 0.01, 0.04, 0.04, 1.0, 1.0, 0.0, 1.0);
+        $ctx->health = $this->health($ctx->debtMetrics);
 
         $this->reportRepository->method('findLatestFor')->willReturn(null);
         $persisted = null;
@@ -424,6 +430,29 @@ class EarningsReportSubscriberTest extends TestCase
         $this->assertNull($this->reportCapitalRatio($this->bankWithGoodwill(40000000.0), $this->createStub(BusinessModelInterface::class)));
     }
 
+    /** A firm in good standing: the report files its cash yield and cost of equity off this. */
+    private function health(DebtMetricsDTO $metrics): DebtHealthDTO
+    {
+        return new DebtHealthDTO(
+            grossCost: 0.05,
+            effectiveCost: 0.04,
+            cashYield: 0.02,
+            isNegativeCarry: false,
+            isSevereNegativeCarry: false,
+            interestCoverage: 5.0,
+            wantsToPaydownDebt: false,
+            canIssueDebt: true,
+            debtTolerance: 2.0,
+            wacc: 0.08,
+            costOfEquity: 0.10,
+            leveredBeta: 1.0,
+            rawMetrics: $metrics,
+            isLiquidityCrisis: false,
+            isLiquidityWarning: false,
+            isUnderLeveraged: false,
+        );
+    }
+
     private function bankWithGoodwill(float $goodwill): Stock
     {
         $stock = new Stock();
@@ -448,7 +477,8 @@ class EarningsReportSubscriberTest extends TestCase
         $ctx->actualRevenue = 10000000.0;
         $ctx->streamRevenue = ['net_interest_income' => 10000000.0];
         $ctx->operatingCashFlow = 1000000.0;
-        $ctx->debtMetrics = new \App\DTO\DebtMetricsDTO(4000000.0, 0.04, 0.04, 0.01, 0.04, 0.04, 1.0, 1.0, 0.0, 1.0);
+        $ctx->debtMetrics = new DebtMetricsDTO(4000000.0, 0.04, 0.04, 0.01, 0.04, 0.04, 1.0, 1.0, 0.0, 1.0);
+        $ctx->health = $this->health($ctx->debtMetrics);
 
         $entityManager = $this->createStub(EntityManagerInterface::class);
         $repository = $this->createStub(CorporateReportRepository::class);
@@ -513,7 +543,7 @@ class EarningsReportSubscriberTest extends TestCase
         $ctx->ebit = 105000000.0;
         $ctx->preTaxIncome = 100000000.0;
         $ctx->taxPaid = 20000000.0;
-        $ctx->debtMetrics = new \App\DTO\DebtMetricsDTO(
+        $ctx->debtMetrics = new DebtMetricsDTO(
             interestExpense: 5000000.0,
             blendedRate: 0.03,
             historicalFixedRate: 0.03,
@@ -525,6 +555,7 @@ class EarningsReportSubscriberTest extends TestCase
             depreciation: 0.0,
             ebitda: 105000000.0,
         );
+        $ctx->health = $this->health($ctx->debtMetrics);
 
         $this->reportRepository
             ->method('findLatestFor')
@@ -542,6 +573,7 @@ class EarningsReportSubscriberTest extends TestCase
 
         $this->assertInstanceOf(CorporateReport::class, $persistedReport);
         $streamDetails = $persistedReport->getStreamDetails();
+        $this->assertNotNull($streamDetails);
         $this->assertArrayHasKey('net_interest_income', $streamDetails);
         $nii = $streamDetails['net_interest_income'];
 
@@ -599,7 +631,7 @@ class EarningsReportSubscriberTest extends TestCase
         $ctx->ebit = 2200000.0;
         $ctx->preTaxIncome = 2100000.0;
         $ctx->taxPaid = 100000.0;
-        $ctx->debtMetrics = new \App\DTO\DebtMetricsDTO(
+        $ctx->debtMetrics = new DebtMetricsDTO(
             interestExpense: 100000.0,
             blendedRate: 0.03,
             historicalFixedRate: 0.03,
@@ -611,6 +643,7 @@ class EarningsReportSubscriberTest extends TestCase
             depreciation: 300000.0,
             ebitda: 2500000.0,
         );
+        $ctx->health = $this->health($ctx->debtMetrics);
         $ctx->eventType = ShockEvent::VIRAL_GROWTH;
 
         // Previous report with prior quarter streams
@@ -637,6 +670,7 @@ class EarningsReportSubscriberTest extends TestCase
 
         $this->assertInstanceOf(CorporateReport::class, $persistedReport);
         $streamDetails = $persistedReport->getStreamDetails();
+        $this->assertNotNull($streamDetails);
 
         // 1P Retail: 5M to 6M is +20% QoQ
         $this->assertEquals(0.20, $streamDetails['first_party_retail']['qoq_delta']);
@@ -677,7 +711,7 @@ class EarningsReportSubscriberTest extends TestCase
         $ctx->reportedActualNetIncome = 1_500_000.0;
         $ctx->reportedExpectedNetIncome = 1_380_000.0;
         $ctx->streamRevenue = ['core_business' => 10_000_000.0];
-        $ctx->debtMetrics = new \App\DTO\DebtMetricsDTO(
+        $ctx->debtMetrics = new DebtMetricsDTO(
             interestExpense: 0.0,
             blendedRate: 0.04,
             historicalFixedRate: 0.04,
@@ -689,6 +723,7 @@ class EarningsReportSubscriberTest extends TestCase
             depreciation: 0.0,
             ebitda: 0.0,
         );
+        $ctx->health = $this->health($ctx->debtMetrics);
 
         $engine = (new \ReflectionClass(\App\Service\Corporate\EarningsEngine::class))->newInstanceWithoutConstructor();
         (new \ReflectionMethod($engine, 'calculateEPSAndSurprise'))->invoke($engine, $ctx);
@@ -750,7 +785,7 @@ class EarningsReportSubscriberTest extends TestCase
         $ctx->specialItems = 2_000_000.0;
         $ctx->reportedActualNetIncome = 24_000_000.0 - 5_040_000.0 - 2_000_000.0;
         $ctx->reportedExpectedNetIncome = 19_000_000.0;
-        $ctx->debtMetrics = new \App\DTO\DebtMetricsDTO(
+        $ctx->debtMetrics = new DebtMetricsDTO(
             interestExpense: 4_000_000.0,
             blendedRate: 0.04,
             historicalFixedRate: 0.04,
@@ -762,6 +797,7 @@ class EarningsReportSubscriberTest extends TestCase
             depreciation: 20_000_000.0,
             ebitda: 120_000_000.0,
         );
+        $ctx->health = $this->health($ctx->debtMetrics);
 
         // Draws pinned at a quarter of the unit interval: the near miss is closed with a quarter-cent cushion.
         $engine = (new \ReflectionClass(\App\Service\Corporate\EarningsEngine::class))->newInstanceWithoutConstructor();

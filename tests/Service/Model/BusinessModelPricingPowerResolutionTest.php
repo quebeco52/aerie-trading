@@ -36,11 +36,13 @@ final class BusinessModelPricingPowerResolutionTest extends TestCase
     public static function pricingPowerModelProvider(): array
     {
         $dir = dirname(__DIR__, 3) . '/src/Service/Model/Sector';
+        $files = glob($dir . '/*BusinessModel.php');
+        self::assertNotFalse($files, "Could not list the sector models in {$dir}.");
         $models = [];
 
-        foreach (glob($dir . '/*BusinessModel.php') ?: [] as $file) {
-            /** @var class-string $className */
+        foreach ($files as $file) {
             $className = 'App\\Service\\Model\\Sector\\' . basename($file, '.php');
+            self::assertTrue(class_exists($className), "{$file} declares no class {$className}.");
             $ref = new ReflectionClass($className);
             if ($ref->isAbstract() || !$ref->hasConstant('PRICING_POWER_INDEX')) {
                 continue;
@@ -53,6 +55,8 @@ final class BusinessModelPricingPowerResolutionTest extends TestCase
 
     /**
      * A declared PRICING_POWER_INDEX must survive resolution rather than being replaced by the median.
+     *
+     * @param class-string $modelClass
      */
     #[DataProvider('pricingPowerModelProvider')]
     public function testDeclaredPricingPowerReachesResolution(string $modelClass): void

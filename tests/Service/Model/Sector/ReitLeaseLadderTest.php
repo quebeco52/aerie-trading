@@ -145,6 +145,7 @@ final class ReitLeaseLadderTest extends TestCase
     {
         // One quarter, so the stream mix still sits at its target weights.
         [, $kpis, $result] = $this->runQuarters(1, 110.0, [ReitBusinessModel::STATE_IN_PLACE_RENT => 0.10]);
+        $this->assertNotNull($result);
 
         $this->assertEqualsWithDelta(0.10, $kpis['in_place_rent_index'], 1e-9);
         $lease = 1_000_000_000.0 * 0.85;

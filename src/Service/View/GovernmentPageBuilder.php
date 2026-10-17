@@ -407,7 +407,7 @@ class GovernmentPageBuilder
      * the copy quotes (the page part); and the Diet as it sits, the parties and the votes on record, which the pages
      * build their own sections from (the context part).
      *
-     * @return array{page: array<string, mixed>, context: array{history: list<DietElection>, seats: array<string, int>, coalition: list<string>, support: list<string>, coalitionPosition: array<string, float>, talking: bool, parties: list<array<string, mixed>>, nextElection: float}}
+     * @return array{page: array<string, mixed>, context: array{history: list<DietElection>, seats: array<string, int>, coalition: list<string>, support: list<string>, coalitionPosition: array{state: float, openness: float, council: float, environment: float}, talking: bool, parties: non-empty-list<array<string, mixed>>, nextElection: float}}
      */
     private function frame(MacroStateDTO $macro, PoliticsStateDTO $politics): array
     {
@@ -696,15 +696,9 @@ class GovernmentPageBuilder
 
         $periods = [];
         foreach ($terms as [$start, $cabinet, $seats]) {
-            if ($cabinet === []) {
-                continue;
-            }
             $last = array_key_last($periods);
-            if ($last !== null && $periods[$last]['cabinet'] === $cabinet) {
+            if ($cabinet === [] || ($last !== null && $periods[$last]['cabinet'] === $cabinet)) {
                 continue;
-            }
-            if ($last !== null) {
-                $periods[$last]['to'] = $start;
             }
             $leader = $cabinet[0];
             foreach ($cabinet as $party) {
@@ -713,6 +707,10 @@ class GovernmentPageBuilder
                 }
             }
             $periods[] = ['from' => $start, 'to' => INF, 'cabinet' => $cabinet, 'leader' => $leader];
+        }
+        // Each period runs until the next begins.
+        foreach ($periods as $i => $period) {
+            $periods[$i]['to'] = $periods[$i + 1]['from'] ?? INF;
         }
 
         return $periods;
@@ -818,8 +816,8 @@ class GovernmentPageBuilder
      * The rate chart's span in a row: the change over the last year, the range, the largest move and the widest split,
      * and the rate less the latest inflation.
      *
-     * @param list<RateDecision> $decisions
-     * @param list<array<string, mixed>> $meetings rateChart()'s meetings, in the same order.
+     * @param non-empty-list<RateDecision> $decisions
+     * @param non-empty-list<array{x: float, y: float, date: string, rate: float, moveBp: int, split: string, higher: int, lower: int}> $meetings rateChart()'s meetings, in the same order.
      * @return array<string, mixed>
      */
     private static function rateSummary(array $decisions, array $meetings, ?float $inflation): array
@@ -989,7 +987,9 @@ class GovernmentPageBuilder
             }
         }
         foreach ($politics->polls as $poll) {
-            $top = max($top, max($poll['shares']));
+            foreach ($poll['shares'] as $share) {
+                $top = max($top, $share);
+            }
         }
         $step = $top > 0.3 ? 0.1 : 0.05;
         $scale = ceil(($top + 0.01) / $step) * $step;
@@ -1186,7 +1186,7 @@ class GovernmentPageBuilder
      * Every party as both pages list it: its seats and vote, its part in the government, its bloc, and where it stands.
      *
      * @param list<DietElection> $history Votes, oldest first.
-     * @return list<array<string, mixed>>
+     * @return non-empty-list<array<string, mixed>>
      */
     private function partyRows(PoliticsStateDTO $politics, array $history): array
     {
@@ -1641,10 +1641,10 @@ class GovernmentPageBuilder
      * mark across the line where it governs from (its parties weighted by seats), drawn behind the dots so it hides none
      * of them.
      *
-     * @param list<array<string, mixed>>  $parties    Party rows.
-     * @param list<DietElection>          $history    Votes, oldest first.
+     * @param non-empty-list<array<string, mixed>> $parties    Party rows.
+     * @param list<DietElection>                   $history    Votes, oldest first.
      * @param array{state: float, openness: float, council: float, environment: float} $government The cabinet's seat-weighted position.
-     * @param list<string>                $coalition  The cabinet.
+     * @param list<string>                         $coalition  The cabinet.
      * @return array<string, mixed>
      */
     private function compass(array $parties, array $history, array $government, array $coalition): array
@@ -1898,7 +1898,7 @@ class GovernmentPageBuilder
     /**
      * The dots' indexes from the most seats to the fewest, ties in party order.
      *
-     * @param list<array<string, mixed>> $dots
+     * @param array<int, array<string, mixed>> $dots
      * @return list<int>
      */
     private static function bySeats(array $dots): array

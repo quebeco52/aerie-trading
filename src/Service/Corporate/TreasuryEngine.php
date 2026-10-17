@@ -553,10 +553,6 @@ class TreasuryEngine
      */
     private function processDebtMaturities(CapitalAllocationContext $ctx): void
     {
-        if ($ctx->health === null) {
-            return;
-        }
-
         $roll = $this->debtEngine->rollMaturities(
             $ctx->stock,
             $ctx->health,
@@ -832,10 +828,7 @@ class TreasuryEngine
     /** The rate past the committed line: the firm's market rate plus the distress penalty. */
     private function emergencyRate(CapitalAllocationContext $ctx): float
     {
-        $currentMarketRate = $ctx->health?->rawMetrics->currentMarketRate
-            ?? ($ctx->macroState->yield5yEma + (float) $ctx->stock->getCreditSpread());
-
-        return $currentMarketRate + self::EMERGENCY_DEBT_SPREAD_PENALTY;
+        return $ctx->health->rawMetrics->currentMarketRate + self::EMERGENCY_DEBT_SPREAD_PENALTY;
     }
 
     /**
@@ -858,7 +851,7 @@ class TreasuryEngine
     /** Net debt over EBITDA is past the sector's maintenance covenant; exempt sectors never breach. */
     private function isInCovenantBreach(CapitalAllocationContext $ctx): bool
     {
-        return $ctx->health !== null && !$ctx->health->hasLeverageHeadroom;
+        return !$ctx->health->hasLeverageHeadroom;
     }
 
     /**

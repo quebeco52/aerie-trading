@@ -174,7 +174,7 @@ class Etf
         return $this->id;
     }
 
-    public function getTicker(): ?string
+    public function getTicker(): string
     {
         return $this->ticker;
     }
@@ -186,7 +186,7 @@ class Etf
         return $this;
     }
 
-    public function getName(): ?string
+    public function getName(): string
     {
         return $this->name;
     }

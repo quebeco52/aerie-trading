@@ -163,7 +163,11 @@ final class MonetaryAuthority
         return $uniform < 0.5 ? self::STANCES['hawk'] : self::STANCES['dove'];
     }
 
-    /** Someone's type on money: 'swing' for a swing vote, whichever camp they lean to, else their camp. */
+    /**
+     * Someone's type on money: 'swing' for a swing vote, whichever camp they lean to, else their camp.
+     *
+     * @return 'hawk'|'swing'|'dove'
+     */
     public static function typeName(float $stance, float $swing): string
     {
         return $swing > 0.0 ? 'swing' : self::stanceName($stance);
@@ -214,7 +218,11 @@ final class MonetaryAuthority
         return $gap > self::DISSENT_THRESHOLD ? 1.0 : ($gap < -self::DISSENT_THRESHOLD ? -1.0 : 0.0);
     }
 
-    /** The type a stance belongs to: 'hawk', 'swing' or 'dove'. */
+    /**
+     * The type a stance belongs to.
+     *
+     * @return 'hawk'|'swing'|'dove'
+     */
     public static function stanceName(float $stance): string
     {
         return $stance >= 0.5 ? 'hawk' : ($stance <= -0.5 ? 'dove' : 'swing');
