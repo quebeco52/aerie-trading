@@ -135,7 +135,23 @@ trait StandardOperatingPhysicsTrait
 
     public function getWorkingCapitalIntensity(Stock $stock): float
     {
-        return 0.10;
+        $shares = $this->resolveWorkingCapitalShares($stock);
+
+        return $shares === null
+            ? FinancialConstants::DEFAULT_WORKING_CAPITAL_INTENSITY
+            : $shares['receivables'] + $shares['inventory'] - $shares['payables'];
+    }
+
+    /**
+     * The trade cycle's three balances as shares of revenue, for a model that knows them apart: a firm whose
+     * suppliers fund more than its stock and receivables still holds both. Null leaves the balances split from the
+     * net intensity alone.
+     *
+     * @return array{receivables: float, inventory: float, payables: float}|null
+     */
+    protected function resolveWorkingCapitalShares(Stock $stock): ?array
+    {
+        return null;
     }
 
     /** An operating company's cost base follows its revenue: the operating margin's complement. */
@@ -618,15 +634,19 @@ trait StandardOperatingPhysicsTrait
     }
 
     /**
-     * Derives the cycle's day counts from the intensity a sector model already declares, so none of the
-     * existing overrides have to change. A positive cycle splits into receivables and inventory with a
-     * trade-credit offset; a negative one (subscriptions, marketplaces collecting before they pay
-     * suppliers) is a payables float with almost nothing tied up on the asset side.
+     * The cycle's day counts: from the balances a model declares, or else derived from its net intensity. A
+     * positive cycle splits into receivables and inventory with a trade-credit offset; a negative one with no
+     * declared balances is a payables float with nothing tied up on the asset side.
      *
      * @return array{dso: float, dio: float, dpo: float}
      */
     public function getWorkingCapitalDays(Stock $stock): array
     {
+        $shares = $this->resolveWorkingCapitalShares($stock);
+        if ($shares !== null) {
+            return FirmEconomics::workingCapitalDays($shares, 1.0 - (float) $stock->getOperatingMargin());
+        }
+
         $intensity = $this->getWorkingCapitalIntensity($stock);
         $cycleDays = $intensity * FinancialConstants::DAYS_PER_YEAR;
 
@@ -645,7 +665,7 @@ trait StandardOperatingPhysicsTrait
         ];
     }
 
-    public function getLeaseIntensity(): float
+    public function getLeaseIntensity(Stock $stock): float
     {
         return defined('static::LEASE_LIABILITY_INTENSITY')
             ? (float) static::LEASE_LIABILITY_INTENSITY

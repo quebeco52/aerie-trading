@@ -158,11 +158,11 @@ final class CapitalSaturationInvariantTest extends TestCase
      */
     private function runMatureHalf(array $row, int $seed): array
     {
-        mt_srand($seed);
         // The shared MathUtility caches Box-Muller's second normal, which a reseed does not clear: each run would
         // start on the spare the previous firm's run left, and a firm's paths would depend on the order they ran in.
         (new \ReflectionProperty(MathUtility::class, 'instance'))->setValue(null, null);
         $engine = $this->buildEngine();
+        mt_srand($seed); // seeded once the engine's mocks are built: PHPUnit names a new mock class from the same generator
         $stock = $this->seedFromRow($row);
         $industryPe = (float) (Sectors::INDUSTRY_METRICS[$row['industry']]['pe'] ?? 18.0);
 

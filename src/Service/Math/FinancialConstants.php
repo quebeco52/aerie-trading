@@ -210,6 +210,8 @@ class FinancialConstants
     public const DEFAULT_EARNINGS_MANAGEMENT_PROPENSITY = 0.50;
 
     // --- Working Capital Ledger ---
+    /** Net working capital over revenue for a firm whose model declares no cycle of its own (~36 days). */
+    public const DEFAULT_WORKING_CAPITAL_INTENSITY = 0.10;
     /** Share of a positive working capital cycle carried as receivables; the rest is inventory (Compustat medians). */
     public const WORKING_CAPITAL_RECEIVABLE_SHARE = 0.55;
     /** Payables carried as a fraction of the gross receivable-plus-inventory cycle, the standard trade-credit offset. */

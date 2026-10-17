@@ -99,7 +99,7 @@ class EarningsReportSubscriber implements EventSubscriberInterface
         $leaseLiability = \App\Service\Corporate\CorporateMetrics::getInstance()->resolveLeaseLiability(
             $stock,
             (float) $stock->getTotalRevenue(),
-            $ctx->strategy->getLeaseIntensity()
+            $ctx->strategy->getLeaseIntensity($stock)
         );
         $report->setCip($stock->getCipBalance());
         $report->setGoodwill($stock->getGoodwill());

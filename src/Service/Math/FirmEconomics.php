@@ -474,4 +474,60 @@ final class FirmEconomics
             'dpo' => - ($interbankLiquiditySpread - MacroEngine::INTERBANK_BASELINE_SPREAD) * self::CCC_DPO_LIQUIDITY_SENSITIVITY,
         ];
     }
+
+    /**
+     * A firm-wide ratio to revenue built from each stream's own ratio, weighted by the stream's share of revenue.
+     * The weights need not sum to one; with none positive there is no revenue to weight and the ratio is zero.
+     *
+     * @param list<float> $weights Each stream's revenue weight.
+     * @param list<float> $ratios  Each stream's ratio to its own revenue, in the same order.
+     */
+    public static function revenueWeightedRatio(array $weights, array $ratios): float
+    {
+        $total = 0.0;
+        $weighted = 0.0;
+        foreach ($weights as $i => $weight) {
+            $total += max(0.0, $weight);
+            $weighted += max(0.0, $weight) * $ratios[$i];
+        }
+
+        return $total > 0.0 ? $weighted / $total : 0.0;
+    }
+
+    /**
+     * The trade cycle of a firm made of streams, each balance blended by revenue weight. The balances stay apart
+     * because their risks differ: a marketplace's sellers' float does not cancel the stock its own shop holds.
+     *
+     * @param list<float> $weights Each stream's revenue weight.
+     * @param list<array{receivables: float, inventory: float, payables: float}> $streamShares Each stream's balances as shares of its own revenue.
+     * @return array{receivables: float, inventory: float, payables: float}
+     */
+    public static function blendWorkingCapitalShares(array $weights, array $streamShares): array
+    {
+        $blend = [];
+        foreach (['receivables', 'inventory', 'payables'] as $balance) {
+            $blend[$balance] = self::revenueWeightedRatio($weights, array_map(static fn (array $shares): float => $shares[$balance], $streamShares));
+        }
+
+        return $blend;
+    }
+
+    /**
+     * The ledger's day counts for balances given as shares of revenue. Receivables are billed sales, so their days
+     * are the share of a year; inventory and payables are carried at cost, so their days are struck on the cost base
+     * and the share is grossed up by revenue over cost.
+     *
+     * @param array{receivables: float, inventory: float, payables: float} $shares
+     * @return array{dso: float, dio: float, dpo: float}
+     */
+    public static function workingCapitalDays(array $shares, float $costRatio): array
+    {
+        $costRatio = max(0.01, $costRatio);
+
+        return [
+            'dso' => $shares['receivables'] * FinancialConstants::DAYS_PER_YEAR,
+            'dio' => $shares['inventory'] * FinancialConstants::DAYS_PER_YEAR / $costRatio,
+            'dpo' => $shares['payables'] * FinancialConstants::DAYS_PER_YEAR / $costRatio,
+        ];
+    }
 }

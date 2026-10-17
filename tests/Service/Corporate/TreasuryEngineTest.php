@@ -36,11 +36,13 @@ class TreasuryEngineTest extends TestCase
 
     protected function setUp(): void
     {
-        mt_srand(42);
         $this->corporateMetrics = $this->createStub(CorporateMetrics::class);
         $this->debtEngine = $this->createMock(DebtEngine::class);
         $this->capExEngine = $this->createStub(CapExEngine::class);
         $this->mathUtility = new MathUtility();
+        // Seeded after the mocks: PHPUnit draws from the same generator to name a mock class the first time it builds
+        // one, so a seed set before them gave each test a sequence that depended on which tests had run first.
+        mt_srand(42);
 
         // These tests are not about the maturity wall, so no principal comes due in them.
         $this->debtEngine->method('rollMaturities')->willReturn(new MaturityRollDTO());
@@ -1257,7 +1259,6 @@ class TreasuryEngineTest extends TestCase
     public function testAFirmBorrowsForExpansionOnlyWhatItsPlantBudgetLeavesUnfunded(): void
     {
         $borrow = function (?float $expansionBudget): float {
-            mt_srand(3);
             $stock = new Stock();
             $stock->setTicker('PECK');
             $stock->setTotalEquity('1000000000.00');
@@ -1278,7 +1279,9 @@ class TreasuryEngineTest extends TestCase
             $debtEngine->method('issueDebt')->willReturnCallback(static function (Stock $issuer, float $amount) use (&$issued): void {
                 $issued += $amount;
             });
-            (new TreasuryEngine($this->corporateMetrics, $debtEngine, $this->createStub(CapExEngine::class), $this->mathUtility))->executeCorporateStrategy($ctx);
+            $engine = new TreasuryEngine($this->corporateMetrics, $debtEngine, $this->createStub(CapExEngine::class), $this->mathUtility);
+            mt_srand(3); // seeded once every mock is built (see setUp)
+            $engine->executeCorporateStrategy($ctx);
 
             return $issued;
         };
@@ -1295,7 +1298,6 @@ class TreasuryEngineTest extends TestCase
     public function testOrganicCapexStopsAtThePlantBudgetEvenWhenDebtWasRaised(): void
     {
         $deploy = function (?float $expansionBudget, bool $debtRaised): CapitalAllocationContext {
-            mt_srand(7);
             $stock = new Stock();
             $stock->setTicker('ACCL');
             $stock->setTotalEquity('1000000000.00');
@@ -1317,7 +1319,9 @@ class TreasuryEngineTest extends TestCase
             $this->corporateMetrics->method('calculateMarketSaturationPenalty')->willReturn(0.0);
             $this->corporateMetrics->method('calculateMarginalReturn')->willReturn(0.40);
 
-            (new TreasuryEngine($this->corporateMetrics, $this->debtEngine, $this->createStub(CapExEngine::class), $this->mathUtility))->executeCorporateStrategy($ctx);
+            $engine = new TreasuryEngine($this->corporateMetrics, $this->debtEngine, $this->createStub(CapExEngine::class), $this->mathUtility);
+            mt_srand(7); // seeded once every mock is built (see setUp)
+            $engine->executeCorporateStrategy($ctx);
 
             return $ctx;
         };
@@ -1454,7 +1458,6 @@ class TreasuryEngineTest extends TestCase
     public function testOrganicCapexIsGatedOnTheMarginalReturnNotTheAverage(): void
     {
         $deploy = function (float $hurdle): CapitalAllocationContext {
-            mt_srand(7);
             $stock = new Stock();
             $stock->setTicker('SAT');
             $stock->setTotalEquity('1000000000.00');
@@ -1480,6 +1483,7 @@ class TreasuryEngineTest extends TestCase
             $capExEngine->expects($hurdle > 0.40 ? $this->never() : $this->once())->method('allocateGrowthCapEx');
             $engine = new TreasuryEngine($this->corporateMetrics, $this->debtEngine, $capExEngine, $this->mathUtility);
 
+            mt_srand(7); // seeded once every mock is built (see setUp)
             $engine->executeCorporateStrategy($ctx);
 
             return $ctx;
@@ -1504,7 +1508,6 @@ class TreasuryEngineTest extends TestCase
     public function testOrganicCapexGateAppliesTheHurdleManagementHoldsNotTheRawCostOfCapital(): void
     {
         $deploy = function (?ManagementStyle $style): CapitalAllocationContext {
-            mt_srand(7);
             $stock = new Stock();
             $stock->setTicker('AGCY');
             $stock->setTotalEquity('1000000000.00');
@@ -1528,6 +1531,7 @@ class TreasuryEngineTest extends TestCase
             $this->corporateMetrics->method('calculateMarginalReturn')->willReturn(0.40);
 
             $engine = new TreasuryEngine($this->corporateMetrics, $this->debtEngine, $this->createStub(CapExEngine::class), $this->mathUtility);
+            mt_srand(7); // seeded once every mock is built (see setUp)
             $engine->executeCorporateStrategy($ctx);
 
             return $ctx;

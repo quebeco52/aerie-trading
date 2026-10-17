@@ -13,6 +13,7 @@ use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
 use App\Service\Math\MathUtility;
 use App\Service\Math\FinancialConstants;
+use App\Service\Math\FirmEconomics;
 use App\Service\Macro\MacroEngine;
 use App\Service\Event\ShockEvent;
 
@@ -74,7 +75,6 @@ class TechBusinessModel extends StandardCorporateBusinessModel
     public const BASE_COVERAGE_ERROR = 0.05;
         public function getReversionSpeed(): float { return 0.1; }
     public function getMoatSpread(): float { return 0.025; }
-    public function getWorkingCapitalIntensity(Stock $stock): float { return -0.05; }
     public function getCapExCompletionRate(Stock $stock): float { return 0.5; }
     // --- Secular Demand ---
     /** Business and household spending on software as a share of US nominal GDP in 1997 (BEA NIPA Table 5.3.5, private fixed investment and Table 2.4.5). */
@@ -106,6 +106,29 @@ class TechBusinessModel extends StandardCorporateBusinessModel
     public const CLOUD_CYCLE_LOADING = 0.70;
     /** Fraction of deferred subscription bookings recognized as revenue each quarter (annual contracts, ASC 606 ratable). */
     public const SUBSCRIPTION_RECOGNITION_RATE = 0.25;
+
+    // --- Working Capital by Stream (shares of the stream's revenue) ---
+    /** Subscriptions: invoices on ~44-day terms against seats billed ahead, ~91 days of revenue held as deferred revenue and payables. */
+    public const SUBSCRIPTION_WORKING_CAPITAL = ['receivables' => 0.12, 'inventory' => 0.0, 'payables' => 0.25];
+    /** Advertising: advertisers pay in ~55 days; publishers' revenue share and suppliers are owed ~22 days of sales. */
+    public const ADVERTISING_WORKING_CAPITAL = ['receivables' => 0.15, 'inventory' => 0.0, 'payables' => 0.06];
+    /** Cloud: usage billed monthly in arrears, paid in ~55 days; data-centre suppliers owed ~29 days of sales. */
+    public const CLOUD_WORKING_CAPITAL = ['receivables' => 0.15, 'inventory' => 0.0, 'payables' => 0.08];
+
+    /** Software holds no stock: each stream is owed by its customers, and subscriptions are paid for ahead of the service. */
+    protected function resolveWorkingCapitalShares(Stock $stock): array
+    {
+        $params = $this->resolveModelParameters($stock, [
+            ModelParam::SubscriptionRevenueWeight->value => self::SUBSCRIPTION_REVENUE_WEIGHT,
+            ModelParam::AdvertisingRevenueWeight->value  => self::ADVERTISING_REVENUE_WEIGHT,
+            ModelParam::CloudInfrastructureWeight->value => 0.00,
+        ]);
+
+        return FirmEconomics::blendWorkingCapitalShares(
+            [$params[ModelParam::SubscriptionRevenueWeight], $params[ModelParam::AdvertisingRevenueWeight], $params[ModelParam::CloudInfrastructureWeight]],
+            [self::SUBSCRIPTION_WORKING_CAPITAL, self::ADVERTISING_WORKING_CAPITAL, self::CLOUD_WORKING_CAPITAL]
+        );
+    }
 
     // --- Revenue Volatility ---
     /** Volatility multiplier for top-line revenue shocks reflecting rapid software user scaling and churn. */

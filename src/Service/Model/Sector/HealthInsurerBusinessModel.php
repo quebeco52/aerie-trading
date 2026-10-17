@@ -94,22 +94,14 @@ class HealthInsurerBusinessModel extends StandardCorporateBusinessModel
 
     /**
      * The claims float is the whole trade cycle: premiums arrive before the care they pay for, and claims are paid
-     * DAYS_CLAIMS_PAYABLE after it. As a share of revenue it is negative.
+     * DAYS_CLAIMS_PAYABLE after it, on the claims' share of revenue.
      */
-    public function getWorkingCapitalIntensity(Stock $stock): float
+    protected function resolveWorkingCapitalShares(Stock $stock): array
     {
-        return -self::DAYS_CLAIMS_PAYABLE / FinancialConstants::DAYS_PER_YEAR * $this->resolveSeededLossRatio($stock);
-    }
-
-    /** Payables days are struck on total cost, so the claims days are scaled by the claims' share of it. */
-    public function getWorkingCapitalDays(Stock $stock): array
-    {
-        $costRatio = max(0.01, 1.0 - (float) $stock->getOperatingMargin());
-
         return [
-            'dso' => 0.0,
-            'dio' => 0.0,
-            'dpo' => self::DAYS_CLAIMS_PAYABLE * $this->resolveSeededLossRatio($stock) / $costRatio,
+            'receivables' => 0.0,
+            'inventory' => 0.0,
+            'payables' => self::DAYS_CLAIMS_PAYABLE / FinancialConstants::DAYS_PER_YEAR * $this->resolveSeededLossRatio($stock),
         ];
     }
 

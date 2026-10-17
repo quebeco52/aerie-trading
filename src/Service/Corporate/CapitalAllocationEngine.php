@@ -598,7 +598,7 @@ class CapitalAllocationEngine
             return 0.0;
         }
 
-        $leaseLiability = $this->corporateMetrics->resolveLeaseLiability($ctx->stock, $ctx->health->rawMetrics->revenue, $ctx->strategy->getLeaseIntensity());
+        $leaseLiability = $this->corporateMetrics->resolveLeaseLiability($ctx->stock, $ctx->health->rawMetrics->revenue, $ctx->strategy->getLeaseIntensity($ctx->stock));
 
         // Net of the cash left above the operating balance once the dividend is paid, as the opening ratio is: a
         // repurchase from that cash raises net debt by what it spends, so the same R ends the quarter on the ratio

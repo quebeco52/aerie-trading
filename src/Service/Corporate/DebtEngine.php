@@ -665,7 +665,7 @@ class DebtEngine
 
         // Capitalized operating leases (IFRS 16 / ASC 842) are debt-like obligations for leverage purposes;
         // their rent is already inside fixed costs, so they add no interest here.
-        $leaseLiability = $this->corporateMetrics->resolveLeaseLiability($stock, $debtMetrics->revenue, $strategy->getLeaseIntensity());
+        $leaseLiability = $this->corporateMetrics->resolveLeaseLiability($stock, $debtMetrics->revenue, $strategy->getLeaseIntensity($stock));
         // An operating company's leverage is struck net of the cash it holds above its manager's operating balance,
         // so a repurchase paid from idle cash moves it as far as one paid with new debt. A financial's treasury is
         // its trading and liquidity buffer, not idle cash, and its ratio stays gross.
@@ -742,7 +742,7 @@ class DebtEngine
     public function resolveTangibleCapitalBase(Stock $stock, float $revenue): array
     {
         $strategy = \App\Data\Company\Sectors::strategyFor($stock->getIndustry());
-        $leaseLiability = $this->corporateMetrics->resolveLeaseLiability($stock, $revenue, $strategy->getLeaseIntensity());
+        $leaseLiability = $this->corporateMetrics->resolveLeaseLiability($stock, $revenue, $strategy->getLeaseIntensity($stock));
 
         $totalAssets = $stock->hasBalanceSheetLedger()
             ? $stock->getTotalAssets($leaseLiability)
@@ -774,7 +774,7 @@ class DebtEngine
         $strategy = \App\Data\Company\Sectors::strategyFor($stock->getIndustry());
 
         // IFRS 16 / ASC 842: the capitalized lease liability sits with debt and the right-of-use asset with assets.
-        $leaseLiability = $this->corporateMetrics->resolveLeaseLiability($stock, $revenue, $strategy->getLeaseIntensity());
+        $leaseLiability = $this->corporateMetrics->resolveLeaseLiability($stock, $revenue, $strategy->getLeaseIntensity($stock));
         $debt = (float) $stock->getTotalDebt() + $leaseLiability;
 
         // Accounting Proxy: Assets = Liabilities + Equity

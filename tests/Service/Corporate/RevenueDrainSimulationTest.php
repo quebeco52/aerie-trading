@@ -41,8 +41,8 @@ class RevenueDrainSimulationTest extends TestCase
         // differently, so the squeeze is asserted as the mean over several seeds against a control left at
         // the starting rate rather than against a fixed level on one draw path.
         $simulate = function (bool $hiking, int $seed) use ($ticksPerYear, $ticksPerQuarter, $reportingTick): array {
-            mt_srand($seed);
             $earningsEngine = $this->createEngine();
+            mt_srand($seed); // seeded once the engine's mocks are built: PHPUnit names a new mock class from the same generator
             $stock = $this->createStockFromInitialMarket('IBHI', 'Engineering & Construction');
 
             $revenues = [];
@@ -111,8 +111,8 @@ class RevenueDrainSimulationTest extends TestCase
         // One path's closing quarter lands anywhere within fifteen points of its opening one, and real revenue
         // only just holds its value, so the claim is asserted on the mean over enough draw paths to resolve it.
         $simulate = function (int $seed) use ($ticksPerYear, $ticksPerQuarter, $reportingTick, $quarters): array {
-            mt_srand($seed);
             $earningsEngine = $this->createEngine();
+            mt_srand($seed); // seeded once the engine's mocks are built: PHPUnit names a new mock class from the same generator
             $stock = $this->createStockFromInitialMarket('IBHI', 'Engineering & Construction');
 
             $openingCapital = null;

@@ -1129,8 +1129,8 @@ class DebtEngineTest extends TestCase
         $plain = $engine->calculateAltmanZScore($build('General'), 120_000_000.0, 2_000_000_000.0);
 
         $this->assertGreaterThan(
-            \App\Data\Company\Sectors::getBusinessModelStrategy('none')->getLeaseIntensity(),
-            \App\Data\Company\Sectors::getBusinessModelStrategy('restaurant')->getLeaseIntensity()
+            \App\Data\Company\Sectors::getBusinessModelStrategy('none')->getLeaseIntensity($build('General')),
+            \App\Data\Company\Sectors::getBusinessModelStrategy('restaurant')->getLeaseIntensity($build('Restaurants'))
         );
         $this->assertLessThan($plain['z_score'], $restaurant['z_score']);
     }
@@ -1707,7 +1707,7 @@ class DebtEngineTest extends TestCase
         $engine = new DebtEngine(new MathUtility(), new CorporateMetrics(), $this->creditRatingAgency, $this->marketEventPublisherMock);
         $macro = $this->leverageMacro();
         $strategy = \App\Data\Company\Sectors::strategyFor('Conglomerates');
-        $lease = (new CorporateMetrics())->calculateLeaseLiability(100000000.0, $strategy->getLeaseIntensity());
+        $lease = (new CorporateMetrics())->calculateLeaseLiability(100000000.0, $strategy->getLeaseIntensity(new Stock()));
 
         $lean = $this->leverageFixture('Conglomerates', '100000000', '0');
         $targetCash = $lean->getManagementProfile()->appliedTargetCash($strategy->calculateTargetOperatingCash(100000000.0, 0.0, 100000000.0));
@@ -1727,7 +1727,7 @@ class DebtEngineTest extends TestCase
     {
         $engine = new DebtEngine(new MathUtility(), new CorporateMetrics(), $this->creditRatingAgency, $this->marketEventPublisherMock);
         $strategy = \App\Data\Company\Sectors::strategyFor('Investment Banking');
-        $lease = (new CorporateMetrics())->calculateLeaseLiability(100000000.0, $strategy->getLeaseIntensity());
+        $lease = (new CorporateMetrics())->calculateLeaseLiability(100000000.0, $strategy->getLeaseIntensity(new Stock()));
 
         $health = $engine->analyzeDebtHealth($this->leverageFixture('Investment Banking', '240000000', '90000000'), $this->leverageMacro());
         $this->assertEqualsWithDelta((240000000.0 + $lease) / 80000000.0, $health->debtToEquity, 1e-9);

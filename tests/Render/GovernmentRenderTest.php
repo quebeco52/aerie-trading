@@ -62,7 +62,6 @@ final class GovernmentRenderTest extends KernelTestCase
         $years = (float) (getenv('YEARS') ?: 41.3);
         $seed = (int) (getenv('SEED') ?: 7);
 
-        mt_srand($seed);
         $math = new MathUtility();
         $redis = new class extends \Redis {
             /** @var array<string, string> */
@@ -105,6 +104,8 @@ final class GovernmentRenderTest extends KernelTestCase
         $politics = new PoliticsStateDTO();
         $laws = [];
         $inflation = [];
+        // Seeded once the mocks are built: PHPUnit names a new mock class from the same generator.
+        mt_srand($seed);
         for ($tick = 0; $tick < (int) round($years * self::TICKS_PER_YEAR); ++$tick) {
             $macro = $economy->updateMacroState(1.0 / self::TICKS_PER_YEAR, policy: $policy);
             $politics = $engine->updatePolitics($macro, 1.0 / self::TICKS_PER_YEAR);

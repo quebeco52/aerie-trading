@@ -115,24 +115,16 @@ class HomebuilderBusinessModel extends StandardCorporateBusinessModel
         return max(0.0, ($priceRelative * $variableCostRatio) - $constructionCost);
     }
 
-    /** Inventory over revenue: the homes under construction, half built on average over the build. The lots are plant. */
-    public function getWorkingCapitalIntensity(Stock $stock): float
-    {
-        return (self::BUILD_TIME_MONTHS / 12.0) * $this->resolveSeededConstructionShare($stock) / 2.0;
-    }
-
     /**
-     * The cycle is the homes under construction: a home is paid for at closing and the trades as they work. Inventory
-     * days are struck on total cost, so the intensity is grossed up by revenue over cost.
+     * The cycle is the homes under construction, half built on average over the build: a home is paid for at closing
+     * and the trades as they work. The lots are plant.
      */
-    public function getWorkingCapitalDays(Stock $stock): array
+    protected function resolveWorkingCapitalShares(Stock $stock): array
     {
-        $costRatio = max(0.01, 1.0 - (float) $stock->getOperatingMargin());
-
         return [
-            'dso' => 0.0,
-            'dio' => $this->getWorkingCapitalIntensity($stock) * FinancialConstants::DAYS_PER_YEAR / $costRatio,
-            'dpo' => 0.0,
+            'receivables' => 0.0,
+            'inventory' => (self::BUILD_TIME_MONTHS / 12.0) * $this->resolveSeededConstructionShare($stock) / 2.0,
+            'payables' => 0.0,
         ];
     }
 

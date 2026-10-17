@@ -18,6 +18,7 @@ use App\Service\Math\MacroTransmission;
 use App\Service\Math\MathUtility;
 use App\Service\Macro\MacroEngine;
 use App\Service\Math\FinancialConstants;
+use App\Service\Math\FirmEconomics;
 
 /**
  * Earnings strategy for Apparel Manufacturing, Garment Producers, and Industrial Textile Mills.
@@ -63,8 +64,8 @@ class ApparelManufacturingBusinessModel extends StandardCorporateBusinessModel
     public const INVENTORY_CYCLE_SENSITIVITY = 0.50;
 
     // --- Balance Sheet Realism ---
-    /** Capitalized operating lease liabilities as a fraction of annual revenue (IFRS 16 / ASC 842). Direct-to-consumer store leases. */
-    public const LEASE_LIABILITY_INTENSITY = 0.30;
+    /** The direct-to-consumer stream's capitalized leases over its revenue (IFRS 16 / ASC 842): store leases at an apparel retailer's 0.30. Wholesale and the mills lease little, at the default. */
+    public const DTC_LEASE_INTENSITY = 0.30;
 
     // --- Analyst Visibility & Error ---
     /** Base coverage visibility for apparel manufacturing analysts. */
@@ -190,21 +191,35 @@ class ApparelManufacturingBusinessModel extends StandardCorporateBusinessModel
 
     public function getWorkingCapitalIntensity(Stock $stock): float
     {
+        return FirmEconomics::revenueWeightedRatio(
+            $this->resolveTargetStreamWeights($stock),
+            [self::DTC_NWC_INTENSITY, self::WHOLESALE_NWC_INTENSITY, self::CONTRACT_NWC_INTENSITY]
+        );
+    }
+
+    /** Only the stores lease floor space; the wholesale book and the mills carry the default. */
+    public function getLeaseIntensity(Stock $stock): float
+    {
+        return FirmEconomics::revenueWeightedRatio(
+            $this->resolveTargetStreamWeights($stock),
+            [self::DTC_LEASE_INTENSITY, FinancialConstants::DEFAULT_LEASE_LIABILITY_INTENSITY, FinancialConstants::DEFAULT_LEASE_LIABILITY_INTENSITY]
+        );
+    }
+
+    /**
+     * The firm's target mix, direct-to-consumer, wholesale and contract supply in that order.
+     *
+     * @return list<float>
+     */
+    private function resolveTargetStreamWeights(Stock $stock): array
+    {
         $params = $this->resolveModelParameters($stock, [
             ModelParam::DtcRetailWeight->value             => self::DTC_RETAIL_WEIGHT,
             ModelParam::WholesaleChannelWeight->value      => self::WHOLESALE_CHANNEL_WEIGHT,
             ModelParam::ContractTextileSupplyWeight->value => self::CONTRACT_TEXTILE_SUPPLY_WEIGHT,
         ]);
 
-        $dtcWeight       = $params[ModelParam::DtcRetailWeight];
-        $wholesaleWeight = $params[ModelParam::WholesaleChannelWeight];
-        $contractWeight  = $params[ModelParam::ContractTextileSupplyWeight];
-        
-        $totalWeight = max(0.01, $dtcWeight + $wholesaleWeight + $contractWeight);
-
-        return (($dtcWeight * self::DTC_NWC_INTENSITY) + 
-                ($wholesaleWeight * self::WHOLESALE_NWC_INTENSITY) + 
-                ($contractWeight * self::CONTRACT_NWC_INTENSITY)) / $totalWeight;
+        return [$params[ModelParam::DtcRetailWeight], $params[ModelParam::WholesaleChannelWeight], $params[ModelParam::ContractTextileSupplyWeight]];
     }
 
     public function getSeasonalityFactors(): array

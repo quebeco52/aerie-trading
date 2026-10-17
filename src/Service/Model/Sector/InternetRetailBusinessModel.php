@@ -6,6 +6,7 @@ namespace App\Service\Model\Sector;
 
 use App\Data\Macro\InputOutputExposures;
 use App\Service\Math\FinancialConstants;
+use App\Service\Math\FirmEconomics;
 
 use App\Service\Math\MacroTransmission;
 use App\Service\Model\BusinessModelInterface;
@@ -52,8 +53,10 @@ class InternetRetailBusinessModel extends StandardCorporateBusinessModel
     public const IMPORT_SOURCING_FX_SCALAR = 0.15;
 
     // --- Balance Sheet Realism ---
-    /** Capitalized operating lease liabilities as a fraction of annual revenue (IFRS 16 / ASC 842). Fulfilment and data-centre footprints are largely leased. */
-    public const LEASE_LIABILITY_INTENSITY = 0.35;
+    /** First-party retail's capitalized leases over its revenue (IFRS 16 / ASC 842): leased fulfilment centres at a warehouse retailer's 0.30. */
+    public const FIRST_PARTY_LEASE_INTENSITY = 0.30;
+    /** The ad and cloud book's leases over its revenue: leased data-centre halls at a platform's 0.10. The marketplace leases offices only, at the default. */
+    public const DIGITAL_ADS_LEASE_INTENSITY = 0.10;
     /** Stock-based compensation (ASC 718) as a share of revenue: 4.18% at the lead US marketplace, $24.0B of $574.8B (Amazon 10-K, FY2023); Damodaran files online retail inside Retail (General). */
     public const STOCK_COMPENSATION_INTENSITY = 0.0418;
 
@@ -67,7 +70,6 @@ class InternetRetailBusinessModel extends StandardCorporateBusinessModel
     public function getBuybackMinIcr(): float { return 2.5; }
     public function getReversionSpeed(): float { return 0.15; }
     public function getMoatSpread(): float { return 0.02; }
-    public function getWorkingCapitalIntensity(Stock $stock): float { return -0.05; }
     public function getCapExCompletionRate(Stock $stock): float { return 0.5; }
 
     public function getSeasonalityFactors(): array
@@ -104,6 +106,48 @@ class InternetRetailBusinessModel extends StandardCorporateBusinessModel
     public const FIRST_PARTY_WEIGHT  = 0.45;
     public const THIRD_PARTY_WEIGHT  = 0.40;
     public const DIGITAL_ADS_WEIGHT  = 0.15;
+
+    // --- Working Capital by Stream (shares of the stream's revenue) ---
+    /** First-party retail: card takings in ~7 days, ~44 days of sales in stock, suppliers paid in ~73 days of sales. */
+    public const FIRST_PARTY_WORKING_CAPITAL = ['receivables' => 0.02, 'inventory' => 0.12, 'payables' => 0.20];
+    /** Marketplace: no stock; the sellers' takings held about two weeks, ~44 days of the fees it keeps. */
+    public const THIRD_PARTY_WORKING_CAPITAL = ['receivables' => 0.02, 'inventory' => 0.0, 'payables' => 0.12];
+    /** Ads and cloud: advertisers and tenants billed on ~55-day terms, suppliers paid in ~18 days of sales. */
+    public const DIGITAL_ADS_WORKING_CAPITAL = ['receivables' => 0.15, 'inventory' => 0.0, 'payables' => 0.05];
+
+    /** The shop holds stock and owes its suppliers, the marketplace owes its sellers, and the ad book is owed by advertisers. */
+    protected function resolveWorkingCapitalShares(Stock $stock): array
+    {
+        return FirmEconomics::blendWorkingCapitalShares(
+            $this->resolveTargetStreamWeights($stock),
+            [self::FIRST_PARTY_WORKING_CAPITAL, self::THIRD_PARTY_WORKING_CAPITAL, self::DIGITAL_ADS_WORKING_CAPITAL]
+        );
+    }
+
+    /** Leases follow the streams that run on leased space: the first-party warehouses and the data halls, not the marketplace. */
+    public function getLeaseIntensity(Stock $stock): float
+    {
+        return FirmEconomics::revenueWeightedRatio(
+            $this->resolveTargetStreamWeights($stock),
+            [self::FIRST_PARTY_LEASE_INTENSITY, FinancialConstants::DEFAULT_LEASE_LIABILITY_INTENSITY, self::DIGITAL_ADS_LEASE_INTENSITY]
+        );
+    }
+
+    /**
+     * The firm's target mix, first party, marketplace and ads in that order.
+     *
+     * @return list<float>
+     */
+    private function resolveTargetStreamWeights(Stock $stock): array
+    {
+        $params = $this->resolveModelParameters($stock, [
+            ModelParam::FirstPartyWeight->value => self::FIRST_PARTY_WEIGHT,
+            ModelParam::ThirdPartyWeight->value => self::THIRD_PARTY_WEIGHT,
+            ModelParam::DigitalAdsWeight->value => self::DIGITAL_ADS_WEIGHT,
+        ]);
+
+        return [$params[ModelParam::FirstPartyWeight], $params[ModelParam::ThirdPartyWeight], $params[ModelParam::DigitalAdsWeight]];
+    }
 
     // --- Stream Variance Scalars ---
     public const FIRST_PARTY_VARIANCE = 0.35; // Highly cyclical (consumers stop buying TVs in a recession)

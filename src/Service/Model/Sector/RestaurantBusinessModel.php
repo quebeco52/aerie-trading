@@ -16,6 +16,7 @@ use App\Service\Math\MathUtility;
 use App\Service\Event\ShockEvent;
 use App\Service\Macro\MacroEngine;
 use App\Service\Math\FinancialConstants;
+use App\Service\Math\FirmEconomics;
 
 /**
  * Earnings strategy for Restaurant Franchisors & Fast Food Giants.
@@ -58,6 +59,29 @@ class RestaurantBusinessModel extends StandardCorporateBusinessModel
     /** Franchise rent's exposure to store traffic against sales': base rent plus a percentage of sales, half the swing. */
     public const FRANCHISE_LEASE_CYCLE_LOADING = 0.50;
 
+    // --- Working Capital by Stream (shares of the stream's revenue) ---
+    /** Company stores: card takings in ~4 days, ~5 days of sales in food and paper, suppliers and crew owed ~26 days. */
+    public const COMPANY_STORES_WORKING_CAPITAL = ['receivables' => 0.01, 'inventory' => 0.015, 'payables' => 0.07];
+    /** Royalties: billed monthly on franchisees' sales and collected in ~22 days. */
+    public const FRANCHISE_ROYALTIES_WORKING_CAPITAL = ['receivables' => 0.06, 'inventory' => 0.0, 'payables' => 0.01];
+    /** Franchise rent: billed monthly ahead and collected in ~11 days. */
+    public const FRANCHISE_LEASES_WORKING_CAPITAL = ['receivables' => 0.03, 'inventory' => 0.0, 'payables' => 0.01];
+
+    /** The stores carry a few days of food and owe their suppliers; the franchisor is owed its royalties and rent. */
+    protected function resolveWorkingCapitalShares(Stock $stock): array
+    {
+        $params = $this->resolveModelParameters($stock, [
+            ModelParam::CompanyStoresWeight->value      => self::CORPORATE_WEIGHT,
+            ModelParam::FranchiseRoyaltiesWeight->value => self::FRANCHISE_WEIGHT,
+            ModelParam::FranchiseLeaseWeight->value     => self::FRANCHISE_LEASE_WEIGHT,
+        ]);
+
+        return FirmEconomics::blendWorkingCapitalShares(
+            [$params[ModelParam::CompanyStoresWeight], $params[ModelParam::FranchiseRoyaltiesWeight], $params[ModelParam::FranchiseLeaseWeight]],
+            [self::COMPANY_STORES_WORKING_CAPITAL, self::FRANCHISE_ROYALTIES_WORKING_CAPITAL, self::FRANCHISE_LEASES_WORKING_CAPITAL]
+        );
+    }
+
     // --- Pricing Power & Macro Physics ---
     /** Menu boards reprice within a couple of quarters; franchisors pass food and wage inflation to guests quickly. */
     public const INPUT_PASS_THROUGH_LAG_YEARS = 0.50;
@@ -96,7 +120,6 @@ class RestaurantBusinessModel extends StandardCorporateBusinessModel
     public const FRANCHISE_SCALE_ELASTICITY = 0.015;
 
         public function getMoatSpread(): float { return 0.015; }
-    public function getWorkingCapitalIntensity(Stock $stock): float { return -0.05; }
 
     public function getSeasonalityFactors(): array
     {

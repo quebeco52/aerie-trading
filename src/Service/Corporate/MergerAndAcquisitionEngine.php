@@ -549,7 +549,7 @@ class MergerAndAcquisitionEngine
 
         $perDollar = $this->valueTarget($ctx, 1.0);
         $goodwillPerDollar = max(0.0, 1.0 - $perDollar['net_assets']);
-        $leasePerDollar = $this->corporateMetrics->calculateLeaseLiability($perDollar['revenue'], $ctx->strategy->getLeaseIntensity());
+        $leasePerDollar = $this->corporateMetrics->calculateLeaseLiability($perDollar['revenue'], $ctx->strategy->getLeaseIntensity($ctx->acquirer));
 
         // Cash-funded: (C − gP) / (A − gP + ℓP) ≥ f.
         $cashFundedRate = ($goodwillPerDollar * (1.0 - $floor)) + ($floor * $leasePerDollar);

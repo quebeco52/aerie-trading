@@ -303,8 +303,8 @@ final class OperatingCostFlexTest extends TestCase
     public function testADeepSlumpResizesTheCostBaseOnTheRealPipeline(): void
     {
         $run = function (MacroStateDTO $macroState): array {
-            mt_srand(11);
             $engine = $this->buildEngine();
+            mt_srand(11); // seeded once the engine's mocks are built: PHPUnit names a new mock class from the same generator
             $stock = $this->buildMatureIndustrial('FLEX');
             $reportingTick = EarningsEngine::resolveReportingTick('FLEX', 252);
             $scales = [];

@@ -38,12 +38,6 @@ class MultiQuarterCorporateSimulationTest extends TestCase
 
     protected function setUp(): void
     {
-        // These are stochastic multi-year simulations checked against hard collapse thresholds. Left unseeded
-        // they inherit whatever global mt_rand state ran before them, so adding a test anywhere earlier in the
-        // suite silently reshuffles every path here and can trip a threshold that has nothing to do with the
-        // change. Seeding makes each case reproducible and independent of test ordering.
-        mt_srand(20260908);
-
         $this->mathUtility = new MathUtility();
         $corporateMetrics = new CorporateMetrics();
         $debtEngine = new DebtEngine($this->mathUtility, $corporateMetrics);
@@ -81,6 +75,13 @@ class MultiQuarterCorporateSimulationTest extends TestCase
             $narrativeEngineMock,
             $marketConsensusEngine
         );
+
+        // These are stochastic multi-year simulations checked against hard collapse thresholds. Left unseeded
+        // they inherit whatever global mt_rand state ran before them, so adding a test anywhere earlier in the
+        // suite silently reshuffles every path here and can trip a threshold that has nothing to do with the
+        // change. Seeding makes each case reproducible and independent of test ordering; it comes after the mocks,
+        // because PHPUnit draws from the same generator to name a mock class the first time it builds one.
+        mt_srand(20260908);
     }
 
     public static function allIndustriesProvider(): array
@@ -262,7 +263,7 @@ class MultiQuarterCorporateSimulationTest extends TestCase
             $this->earningsEngine->calculate($stock, $neutralMacro, (($quarter - 1) * $ticksPerQuarter) + $reportingTick, 252);
 
             $strategy = Sectors::getBusinessModelStrategy($businessModel);
-            $lease = (new CorporateMetrics())->resolveLeaseLiability($stock, (float) $stock->getTotalRevenue(), $strategy->getLeaseIntensity());
+            $lease = (new CorporateMetrics())->resolveLeaseLiability($stock, (float) $stock->getTotalRevenue(), $strategy->getLeaseIntensity($stock));
 
             if (Sectors::isFinancial($businessModel)) {
                 // A balance-sheet business keeps no plant ledger; its asset side is the earning-asset book,

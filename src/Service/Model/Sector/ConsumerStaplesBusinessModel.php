@@ -50,10 +50,6 @@ class ConsumerStaplesBusinessModel extends StandardCorporateBusinessModel
     /** Brand equity is shelf-price power: a branded FMCG list price rises with input costs and the volume loss is small. Bulk commodity producers are tuned down per ticker. */
     public const PRICING_POWER_INDEX = 0.75;
 
-    // --- Balance Sheet Realism ---
-    /** Capitalized operating lease liabilities as a fraction of annual revenue (IFRS 16 / ASC 842). Store and distribution-centre leases behind grocery and discount formats. */
-    public const LEASE_LIABILITY_INTENSITY = 0.30;
-
     // --- Analyst Visibility & Error ---
     /** Base coverage visibility for consumer staples analysts. */
     public const BASE_COVERAGE_VISIBILITY = 0.30;
@@ -66,11 +62,13 @@ class ConsumerStaplesBusinessModel extends StandardCorporateBusinessModel
     /** Operating margin mean reversion speed: fast speed reflects intense retail shelf-space price competition. */
     public const STAPLES_REVERSION_SPEED = 5.0;
 
-    // --- Working Capital Intensity Physics ---
-    /** Working capital intensity for branded consumer staples with negative cash conversion cycle float. */
-    public const BRANDED_NWC_INTENSITY = -0.05;
-    /** Working capital intensity for bulk agricultural commodity storage and processing. */
-    public const VOLUME_NWC_INTENSITY = 0.05;
+    // --- Working Capital by Stream (shares of the stream's revenue) ---
+    /** Branded goods: retailers pay in ~29 days, ~37 days of sales in stock, suppliers paid on long terms in ~84 days of sales. */
+    public const BRANDED_WORKING_CAPITAL = ['receivables' => 0.08, 'inventory' => 0.10, 'payables' => 0.23];
+    /** Bulk processing: buyers pay in ~22 days, grain and meat in storage ~29 days of sales, growers paid in ~33. */
+    public const VOLUME_WORKING_CAPITAL = ['receivables' => 0.06, 'inventory' => 0.08, 'payables' => 0.09];
+    /** The trading desk: physical stocks held behind its positions, ~91 days of its sales. */
+    public const COMMODITY_TRADING_WORKING_CAPITAL = ['receivables' => 0.06, 'inventory' => 0.25, 'payables' => 0.06];
 
     // --- Dual-Stream Consumer Staples Architecture ---
     /** Baseline fraction of revenue derived from premium packaged branded staples and inelastic consumer goods. */
@@ -133,19 +131,19 @@ class ConsumerStaplesBusinessModel extends StandardCorporateBusinessModel
         return self::STAPLES_REVERSION_SPEED;
     }
 
-    public function getWorkingCapitalIntensity(Stock $stock): float
+    /** A brand owner's suppliers fund its stock and more; bulk processing and the trading desk tie cash up in what they store. */
+    protected function resolveWorkingCapitalShares(Stock $stock): array
     {
         $params = $this->resolveModelParameters($stock, [
-            ModelParam::BrandedStaplesWeight->value  => self::BRANDED_STAPLES_WEIGHT,
-            ModelParam::VolumeCommodityWeight->value => self::VOLUME_COMMODITY_WEIGHT,
+            ModelParam::BrandedStaplesWeight->value   => self::BRANDED_STAPLES_WEIGHT,
+            ModelParam::VolumeCommodityWeight->value  => self::VOLUME_COMMODITY_WEIGHT,
+            ModelParam::CommodityTradingWeight->value => 0.00,
         ]);
 
-        $brandedWeight = $params[ModelParam::BrandedStaplesWeight];
-        $volumeWeight  = $params[ModelParam::VolumeCommodityWeight];
-        $totalWeight   = max(0.01, $brandedWeight + $volumeWeight);
-
-        // Branded FMCG generates float (-5%); bulk commodity storage ties up cash (+5%)
-        return (($brandedWeight * self::BRANDED_NWC_INTENSITY) + ($volumeWeight * self::VOLUME_NWC_INTENSITY)) / $totalWeight;
+        return FirmEconomics::blendWorkingCapitalShares(
+            [$params[ModelParam::BrandedStaplesWeight], $params[ModelParam::VolumeCommodityWeight], $params[ModelParam::CommodityTradingWeight]],
+            [self::BRANDED_WORKING_CAPITAL, self::VOLUME_WORKING_CAPITAL, self::COMMODITY_TRADING_WORKING_CAPITAL]
+        );
     }
 
     /**

@@ -31,7 +31,6 @@ class RunawayFeedbackLoopTest extends TestCase
 
     protected function setUp(): void
     {
-        mt_srand(42);
         $this->corporateMetrics = CorporateMetrics::getInstance();
         $this->debtEngine = $this->createMock(DebtEngine::class);
         // These tests are not about the maturity wall, so no principal comes due in them.
@@ -45,6 +44,9 @@ class RunawayFeedbackLoopTest extends TestCase
             $this->capExEngine,
             $this->mathUtility
         );
+        // Seeded after the mocks: PHPUnit draws from the same generator to name a mock class the first time it builds
+        // one, so a seed set before them gave each test a sequence that depended on which tests had run first.
+        mt_srand(42);
     }
 
     public function testEmergencyEquityIssuanceIsBoundedByMarketCap(): void

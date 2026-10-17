@@ -1298,7 +1298,7 @@ class EarningsEngine
         $stock->setLeaseLiability(CorporateMetrics::rollLeaseLiability(
             $stock->getLeaseLiability(),
             $ctx->structuralRevenue * self::TTM_QUARTERS,
-            $ctx->strategy->getLeaseIntensity(),
+            $ctx->strategy->getLeaseIntensity($stock),
             $ctx->dt
         ));
 
@@ -1555,7 +1555,7 @@ class EarningsEngine
     {
         $stock = $ctx->stock;
         $totalAssets = $stock->hasBalanceSheetLedger()
-            ? $stock->getTotalAssets($this->corporateMetrics->resolveLeaseLiability($stock, (float) $stock->getTotalRevenue(), $ctx->strategy->getLeaseIntensity()))
+            ? $stock->getTotalAssets($this->corporateMetrics->resolveLeaseLiability($stock, (float) $stock->getTotalRevenue(), $ctx->strategy->getLeaseIntensity($stock)))
             : (float) $stock->getTotalEquity() + (float) $stock->getTotalDebt();
 
         return max(FinancialConstants::MIN_OPERATING_BASE_CASH, $totalAssets);

@@ -140,3 +140,17 @@ The harness has no option desk, dealer or player fills; it exercises only the da
 - Recession probability, years 2-20: 12.3% pooled (seed means 8.8, 14.1, 16.0, 10.2%; within-run sd 17pp), so the
   13.8% the probit intercept was fitted to is inside the noise (t ~ -1); not refitted. FCI seed means -0.07..+0.16.
 - Board inside earlier runs: EW 7.4%/y, CW 5.8, P/E end 13.7, gap -0.72, vol excess vs configured +1.15pp.
+
+## Trade cycle and leases by stream; seeding after mocks (10-17)
+Unpaired seeds 1-8, base = git archive HEAD (193ed81f; seeds 1-4 reproduce cleanupD-live), live = checkout. Out:
+wcLease-{base,live}-8s.out, wcLease-firms-8s.out (`wc_an.py`; balances as % of annual revenue, mean over reports).
+- Balances base -> live: receivables 0 -> 4.6-14.7% on all twelve negative-cycle firms (CROP 2.3 -> 6.5); inventory
+  0 -> WEAV 3.4, BREW 1.0, LARK 9.0, PHIL 8.6, SGRB 14.4, PINT 11.9 (CROP 1.7 -> 10.7); JDAW, HUMM, TICK, SHRK stay 0.
+- Leases: WEAV 36.2 -> 14.2, JDAW 36.5 -> 6.2, SHER 30.6 -> 12.8, staples 30 -> 5.0; HUMM, TICK, SHRK, BREW, SWFT flat.
+- Credit: the freed lease room is borrowed as bonds: ND/EBITDA LARK 0.61 -> 0.99, PINT 1.02 -> 1.51, CROP 0.88 ->
+  1.91; end rating CROP A -> BBB/BBB+ (+2.25 notches, SE 0.49), PINT +1.1 (0.97), PHIL +0.75 (0.75). None of the 13 fails.
+- Write-downs now reach stock holders: BREW 2.2 bp of revenue, SGRB 1.2, LARK/PHIL/PINT 0.3-0.5; receivable
+  provisions 0.2-1.0 bp.
+- Board and macro, 8 seeds: nothing |t| >= 1.4. Gap -0.93 -> -0.86 (t 0.15; at 4 seeds it read -0.72 -> -1.52,
+  t -1.4, seed noise), recession share 11.1 -> 13.6% (t 0.6), EW 8.05 -> 7.99%/y, payment defaults 1.0 -> 1.6 a seed
+  (t 1.1; none among the 13), median ND/EBITDA 1.33 -> 1.44 (t 1.3).

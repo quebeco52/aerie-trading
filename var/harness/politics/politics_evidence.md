@@ -89,3 +89,15 @@ taking what the walk adds over a term out of the lasting swing.
 
 **Beyond the data:** by year 200 the effective number of parties falls from 4.53 to 4.26. The largest party averages 0.39, and in
 one game of 16 it reaches 0.72. Party entry (deferred) is what refills a real system.
+
+## Who carries the economic vote in a coalition (vote_pm_fit.py, 2026-10-17)
+ParlGov established PR democracies 1971-2020 (WB growth per head and deflator, as vote_europe_fit.py), outcome split by
+the outgoing cabinet's prime-minister party (ParlGov `prime_minister` flag). CR1 errors clustered by country.
+- Replication: single-party growth +0.508 (0.318), as ELECTION_SINGLE_PARTY_GROWTH_SLOPE.
+- Coalitions, 109 votes / 18 countries, the 2008-2020 consolidations apart: PM party growth +0.17 (0.30) pooled,
+  +0.32 (0.31) country FE; partners -0.32 (0.24) / +0.02 (0.20); 2008-2020 PM party -0.86 (0.30). Duch & Stevenson's
+  PM-party concentration is not visible at conventional levels; the single-party slope is also not ruled out.
+- Unemployment change over the year to the vote (WB ILO, 1991-): single-party cabinets -1.91 (0.55) on 41 votes, and
+  it takes growth's place (growth -0.01); coalitions +1.84 (1.40), wrong-signed noise on 65 votes. By Okun the
+  unemployment and growth terms carry one signal (-1.9 x du ~ +0.8 x g), so adding it beside growth double counts.
+- Kept the Diet's form pending the user's call: a PM-party growth slope would be a design choice inside the CI.

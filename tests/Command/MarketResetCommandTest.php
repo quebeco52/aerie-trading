@@ -75,6 +75,9 @@ final class MarketResetCommandTest extends TestCase
             static fn (string $class): EntityRepository => $class === Stock::class ? $stocks : $users
         );
 
+        $hasher = $this->createMock(UserPasswordHasherInterface::class);
+        $auctions = $this->createMock(TreasuryAuctionService::class);
+        // Seeded once the mocks are built: PHPUnit names a new mock class from the same generator.
         mt_srand(20260929);
         $math = new MathUtility();
         $command = new MarketResetCommand(
@@ -85,8 +88,8 @@ final class MarketResetCommandTest extends TestCase
                     return true;
                 }
             },
-            $this->createMock(UserPasswordHasherInterface::class),
-            $this->createMock(TreasuryAuctionService::class),
+            $hasher,
+            $auctions,
             new OpeningBoardBuilder($math, new DebtEngine($math, CorporateMetrics::getInstance()), new MarketEngine($math), new AnchorStakeLedger())
         );
 

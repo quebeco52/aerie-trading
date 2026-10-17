@@ -58,8 +58,9 @@ class CompanySnapshotValuationTest extends TestCase
     {
         $macroState = new MacroStateDTO();
 
-        mt_srand(11);
-        $snapshot = $this->builder()->build($this->lender(), $macroState);
+        $builder = $this->builder();
+        mt_srand(11); // seeded once the builder's mock is built: PHPUnit names a new mock class from the same generator
+        $snapshot = $builder->build($this->lender(), $macroState);
 
         mt_srand(11);
         $math = new MathUtility();

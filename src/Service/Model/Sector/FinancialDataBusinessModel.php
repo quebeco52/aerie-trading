@@ -14,6 +14,7 @@ use App\Entity\Stock;
 use App\Service\Macro\MacroEngine;
 use App\Service\Math\MathUtility;
 use App\Service\Math\FinancialConstants;
+use App\Service\Math\FirmEconomics;
 
 /**
  * Earnings strategy for Financial Data & Stock Exchanges (Rating Agencies, Market Data).
@@ -51,7 +52,6 @@ class FinancialDataBusinessModel extends StandardCorporateBusinessModel
     public const BASE_COVERAGE_ERROR = 0.10;
         public function getReversionSpeed(): float { return 0.1; }
     public function getMoatSpread(): float { return 0.025; }
-    public function getWorkingCapitalIntensity(Stock $stock): float { return -0.05; }
     public function getCapExCompletionRate(Stock $stock): float { return 1.0; }
     // --- Secular Demand ---
     /** Data processing, internet publishing and other information services value added as a share of US nominal GDP in 1997 (BEA GDP by Industry, value added). */
@@ -75,6 +75,26 @@ class FinancialDataBusinessModel extends StandardCorporateBusinessModel
     public const SUBSCRIPTION_REVENUE_WEIGHT = 0.85;
     /** Baseline fraction of revenue derived from capital markets issuance ratings & transaction feed volume. */
     public const TRANSACTION_REVENUE_WEIGHT  = 0.15;
+
+    // --- Working Capital by Stream (shares of the stream's revenue) ---
+    /** Subscriptions: seats invoiced quarterly to yearly and paid in ~55 days, ~80 days of revenue held as deferred revenue and payables. */
+    public const SUBSCRIPTION_WORKING_CAPITAL = ['receivables' => 0.15, 'inventory' => 0.0, 'payables' => 0.22];
+    /** Transactions: rating and trading fees billed on issue or monthly, paid in ~44 days; ~11 days of sales owed out. */
+    public const TRANSACTION_WORKING_CAPITAL = ['receivables' => 0.12, 'inventory' => 0.0, 'payables' => 0.03];
+
+    /** Data holds no stock: subscribers pay ahead of the service and issuers after the rating. */
+    protected function resolveWorkingCapitalShares(Stock $stock): array
+    {
+        $params = $this->resolveModelParameters($stock, [
+            ModelParam::SubscriptionRevenueWeight->value => self::SUBSCRIPTION_REVENUE_WEIGHT,
+            ModelParam::TransactionRevenueWeight->value  => self::TRANSACTION_REVENUE_WEIGHT,
+        ]);
+
+        return FirmEconomics::blendWorkingCapitalShares(
+            [$params[ModelParam::SubscriptionRevenueWeight], $params[ModelParam::TransactionRevenueWeight]],
+            [self::SUBSCRIPTION_WORKING_CAPITAL, self::TRANSACTION_WORKING_CAPITAL]
+        );
+    }
 
     // --- Revenue & Shock Physics ---
     /** Volatility multiplier for top-line revenue shocks in subscription data models. */

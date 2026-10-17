@@ -177,8 +177,9 @@ interface OperatingStrategyInterface
      * Capitalized operating lease liabilities (IFRS 16 / ASC 842) as a fraction of annual revenue. Rent is
      * already inside fixed costs, so leases add NO interest; they add debt-like obligations to leverage,
      * coverage and solvency metrics (restaurants, retailers, airlines and hospitals look unlevered otherwise).
+     * Per firm, because a firm only partly in stores leases floor space for that part.
      */
-    public function getLeaseIntensity(): float;
+    public function getLeaseIntensity(Stock $stock): float;
     /**
      * Stock-based compensation (ASC 718) as a fraction of revenue. It is already inside the cost base, so it
      * changes no margin; it is a non-cash expense added back to free cash flow and settled in new shares,

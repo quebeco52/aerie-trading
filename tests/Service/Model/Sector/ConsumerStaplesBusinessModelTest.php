@@ -57,14 +57,22 @@ class ConsumerStaplesBusinessModelTest extends TestCase
             * ((float) $state[FinancialConstants::STATE_INPUT_COST_LEVEL] - (float) $state[FinancialConstants::STATE_INPUT_COST_RECOVERY]);
     }
 
-    public function testDynamicWorkingCapitalIntensity(): void
+    /**
+     * Net, a brand owner's suppliers fund more than it ties up, yet it still holds stock and is owed by the retailers
+     * it ships to. The trading desk's physical stocks sit in the cycle beside the processing book.
+     */
+    public function testWorkingCapitalBlendsEachStreamsBalances(): void
     {
-        // Default mix (65% branded, 35% volume)
+        // Default mix (65% branded, 35% volume): branded nets -5% of its sales, volume +5%.
         $this->assertEqualsWithDelta(0.65 * -0.05 + 0.35 * 0.05, $this->model->getWorkingCapitalIntensity(self::stock('DEFAULT_STAPLE')), 0.0001);
-        // LARK: 80% branded, 20% volume
-        $this->assertEqualsWithDelta(0.80 * -0.05 + 0.20 * 0.05, $this->model->getWorkingCapitalIntensity(self::stock('LARK')), 0.0001);
-        // CROP: 20% branded, 65% volume, the desk outside the two
-        $this->assertEqualsWithDelta((0.20 * -0.05 + 0.65 * 0.05) / 0.85, $this->model->getWorkingCapitalIntensity(self::stock('CROP')), 0.0001);
+        // LARK: 80% branded, 20% volume.
+        $lark = self::stock('LARK');
+        $this->assertEqualsWithDelta(0.80 * -0.05 + 0.20 * 0.05, $this->model->getWorkingCapitalIntensity($lark), 0.0001);
+        $days = $this->model->getWorkingCapitalDays($lark);
+        $this->assertGreaterThan(20.0, $days['dso'], 'A brand owner is owed by the retailers it ships to.');
+        $this->assertGreaterThan(20.0, $days['dio'], 'And holds the stock it ships, though its suppliers fund more.');
+        // CROP: 20% branded, 65% volume, 15% desk netting a quarter of its sales in physical stock.
+        $this->assertEqualsWithDelta(0.20 * -0.05 + 0.65 * 0.05 + 0.15 * 0.25, $this->model->getWorkingCapitalIntensity(self::stock('CROP')), 0.0001);
 
         $this->assertEquals(0.15, $this->model->getReversionSpeed());
         $this->assertEquals(0.015, $this->model->getMoatSpread());

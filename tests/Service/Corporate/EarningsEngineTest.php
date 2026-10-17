@@ -96,10 +96,10 @@ class EarningsEngineTest extends TestCase
     public function testARivalsCapacityBuildLowersTheIndustryPriceForAFirmThatBuiltNothing(): void
     {
         $report = function (float $rivalCapacityMultiple): array {
-            mt_srand(7);
             $ledger = new IndustryShareLedger(new InMemoryIndustryShareStore());
             $this->mathUtility = new MathUtility();
             $engine = $this->buildEngine($this->createStub(EventDispatcherInterface::class), $ledger);
+            mt_srand(7); // seeded once every mock is built: PHPUnit names a new mock class from the same generator
 
             $firm = $this->buildMatureIndustrial('HOLD');
             $rival = $this->buildMatureIndustrial('BULD');
@@ -139,9 +139,9 @@ class EarningsEngineTest extends TestCase
     public function testGrowthPlantFollowsDemandNotHowSmallTheFirmLooksInItsMarket(): void
     {
         $capitalGrowth = function (string $samRatio): float {
-            mt_srand(5);
             $this->mathUtility = new MathUtility();
             $engine = $this->buildEngine($this->createStub(EventDispatcherInterface::class), new IndustryShareLedger(new InMemoryIndustryShareStore()));
+            mt_srand(5); // seeded once every mock is built: PHPUnit names a new mock class from the same generator
             $stock = $this->buildMatureIndustrial('GROW');
             $stock->setSamRatio($samRatio);
             $stock->setCapexRatio('0.90');
@@ -179,10 +179,10 @@ class EarningsEngineTest extends TestCase
     public function testAFirmBehindItsShareOfTrendDemandBuildsFasterThanOneOnIt(): void
     {
         $capitalGrowth = function (float $anchorOverCapacity): float {
-            mt_srand(5);
             $this->mathUtility = new MathUtility();
             $ledger = new IndustryShareLedger(new InMemoryIndustryShareStore());
             $engine = $this->buildEngine($this->createStub(EventDispatcherInterface::class), $ledger);
+            mt_srand(5); // seeded once every mock is built: PHPUnit names a new mock class from the same generator
             $stock = $this->buildMatureIndustrial('BHND');
             $stock->setCapexRatio('0.90');
             $macro = new MacroStateDTO(corporateTaxRate: 0.21, policyRateEma: 0.04, yield5yEma: 0.045, inflationEma: 0.02);
@@ -219,11 +219,11 @@ class EarningsEngineTest extends TestCase
     public function testASectorWideGoodQuarterIsNotBookedAsShareTakenFromRivals(): void
     {
         $bookedGain = function (float $sectorZ): array {
-            mt_srand(11);
             $store = new InMemoryIndustryShareStore();
             $ledger = new IndustryShareLedger($store);
             $this->mathUtility = new MathUtility();
             $engine = $this->buildEngine($this->createStub(EventDispatcherInterface::class), $ledger);
+            mt_srand(11); // seeded once every mock is built: PHPUnit names a new mock class from the same generator
 
             $firm = $this->buildMatureIndustrial('SECT');
             $macro = new MacroStateDTO(
@@ -255,7 +255,6 @@ class EarningsEngineTest extends TestCase
     public function testABiotechsKnownCommercialShiftReachesExpectedRevenue(): void
     {
         $expectedRevenue = function (float $knownShift): float {
-            mt_srand(5);
             $this->mathUtility = new MathUtility();
 
             $stock = $this->buildMatureIndustrial('PHRM');
@@ -270,6 +269,7 @@ class EarningsEngineTest extends TestCase
                 return $event;
             });
             $engine = $this->buildEngine($dispatcher);
+            mt_srand(5); // seeded once every mock is built: PHPUnit names a new mock class from the same generator
             $engine->calculate($stock, $macro, EarningsEngine::resolveReportingTick('PHRM', 252), 252);
 
             return $captured->expectedRevenue;
@@ -1651,7 +1651,7 @@ class EarningsEngineTest extends TestCase
         $this->assertGreaterThan(0.21 * 1_000_000_000.0, $stock->getDeferredTaxAsset());
 
         $strategy = \App\Data\Company\Sectors::getBusinessModelStrategy(\App\Data\Company\Sectors::businessModelFor('Auto Manufacturers'));
-        $lease = (new CorporateMetrics())->resolveLeaseLiability($stock, (float) $stock->getTotalRevenue(), $strategy->getLeaseIntensity());
+        $lease = (new CorporateMetrics())->resolveLeaseLiability($stock, (float) $stock->getTotalRevenue(), $strategy->getLeaseIntensity($stock));
         $this->assertEqualsWithDelta(
             $stock->getTotalAssets($lease),
             $stock->getTotalLiabilities($lease) + (float) $stock->getTotalEquity(),
@@ -1958,7 +1958,7 @@ class EarningsEngineTest extends TestCase
         $engine->calculate($stock, new MacroStateDTO(corporateTaxRate: 0.21, policyRateEma: 0.04, yield5yEma: 0.04), EarningsEngine::resolveReportingTick('SLOA', 252), 252);
 
         $this->assertNotNull($captured);
-        $lease = (new CorporateMetrics())->resolveLeaseLiability($stock, (float) $stock->getTotalRevenue(), $captured->strategy->getLeaseIntensity());
+        $lease = (new CorporateMetrics())->resolveLeaseLiability($stock, (float) $stock->getTotalRevenue(), $captured->strategy->getLeaseIntensity($stock));
         // Sloan measures REPORTED earnings against operating cash, so the managed entry belongs in the
         // numerator alongside net income — steering the headline with accruals is precisely the low-quality
         // earnings the anomaly detects. It is only ever zero on a quarter the firm had no reason to steer.
@@ -2036,7 +2036,7 @@ class EarningsEngineTest extends TestCase
 
         $businessModel = \App\Data\Company\Sectors::INDUSTRY_METRICS['Auto Manufacturers']['business_model'] ?? 'none';
         $strategy = \App\Data\Company\Sectors::getBusinessModelStrategy($businessModel);
-        $lease = (new CorporateMetrics())->resolveLeaseLiability($stock, (float) $stock->getTotalRevenue(), $strategy->getLeaseIntensity());
+        $lease = (new CorporateMetrics())->resolveLeaseLiability($stock, (float) $stock->getTotalRevenue(), $strategy->getLeaseIntensity($stock));
         $assets = $stock->getTotalAssets($lease);
         $claims = $stock->getTotalLiabilities($lease) + (float) $stock->getTotalEquity();
         $this->assertEqualsWithDelta($assets, $claims, max(1.0, $assets * 1e-6), 'the balance sheet still balances after the write-off');
@@ -2249,7 +2249,7 @@ class EarningsEngineTest extends TestCase
         $this->assertNotNull($captured);
 
         $strategy = \App\Data\Company\Sectors::getBusinessModelStrategy(\App\Data\Company\Sectors::INDUSTRY_METRICS['Auto Manufacturers']['business_model']);
-        $lease = (new CorporateMetrics())->resolveLeaseLiability($stock, (float) $stock->getTotalRevenue(), $strategy->getLeaseIntensity());
+        $lease = (new CorporateMetrics())->resolveLeaseLiability($stock, (float) $stock->getTotalRevenue(), $strategy->getLeaseIntensity($stock));
         $assets = $stock->getTotalAssets($lease);
         $claims = $stock->getTotalLiabilities($lease) + (float) $stock->getTotalEquity();
         $this->assertEqualsWithDelta($assets, $claims, max(1.0, $assets * 1e-9), 'the released working capital must land in cash');
@@ -2518,7 +2518,7 @@ class EarningsEngineTest extends TestCase
         $this->assertLessThan($book, $captured->netChargeOffs);
         $this->assertTrue(is_finite($captured->netLoanOriginations));
 
-        $lease = (new CorporateMetrics())->resolveLeaseLiability($stock, (float) $stock->getTotalRevenue(), $strategy->getLeaseIntensity());
+        $lease = (new CorporateMetrics())->resolveLeaseLiability($stock, (float) $stock->getTotalRevenue(), $strategy->getLeaseIntensity($stock));
         $assets = $stock->getTotalAssets($lease);
         $claims = $stock->getTotalLiabilities($lease) + (float) $stock->getTotalEquity();
         $this->assertEqualsWithDelta($assets, $claims, max(1.0, $assets * 1e-6), 'a bank balance sheet balances');

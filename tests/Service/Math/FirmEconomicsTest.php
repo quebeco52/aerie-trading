@@ -2,6 +2,8 @@
 
 namespace App\Tests\Service\Math;
 
+use App\Entity\Stock;
+use App\Service\Corporate\CorporateMetrics;
 use App\Service\Macro\MacroEngine;
 use App\Service\Math\FirmEconomics;
 use PHPUnit\Framework\TestCase;
@@ -387,5 +389,35 @@ class FirmEconomicsTest extends TestCase
         $this->assertSame(1.5, FirmEconomics::merchantPowerPriceRelative(0.5, 2.0));
         $this->assertSame(1.0, FirmEconomics::carbonUpliftEarningsPerUnit(0.0));
         $this->assertEqualsWithDelta(1.0 - (1.0 / MacroEngine::CARBON_POWER_PASS_THROUGH), FirmEconomics::carbonUpliftEarningsPerUnit(1.0), 1e-12);
+    }
+
+    /** Each balance is the revenue-weighted mean of the streams' own, so weights need not sum to one. */
+    public function testWorkingCapitalSharesBlendEachBalanceByRevenueWeight(): void
+    {
+        $blend = FirmEconomics::blendWorkingCapitalShares(
+            [3.0, 1.0],
+            [['receivables' => 0.04, 'inventory' => 0.08, 'payables' => 0.0], ['receivables' => 0.0, 'inventory' => 0.0, 'payables' => 0.12]]
+        );
+
+        $this->assertEqualsWithDelta(0.03, $blend['receivables'], 1e-12);
+        $this->assertEqualsWithDelta(0.06, $blend['inventory'], 1e-12, 'The shop\'s stock is not netted against the marketplace\'s float.');
+        $this->assertEqualsWithDelta(0.03, $blend['payables'], 1e-12);
+        $this->assertSame(0.0, FirmEconomics::revenueWeightedRatio([0.0, 0.0], [0.30, 0.05]), 'No revenue, no ratio.');
+    }
+
+    /**
+     * The ledger strikes receivables on revenue and inventory and payables on cost, so the days a share converts to
+     * must give the share of revenue back at the firm's cost ratio.
+     */
+    public function testWorkingCapitalDaysRebuildTheSharesThroughTheLedger(): void
+    {
+        $shares = ['receivables' => 0.10, 'inventory' => 0.12, 'payables' => 0.20];
+        $stock = new Stock();
+
+        (new CorporateMetrics())->buildWorkingCapitalBalances($stock, FirmEconomics::workingCapitalDays($shares, 0.70), 1_000.0, 700.0);
+
+        $this->assertEqualsWithDelta(100.0, (float) $stock->getReceivables(), 1e-9);
+        $this->assertEqualsWithDelta(120.0, (float) $stock->getInventory(), 1e-9);
+        $this->assertEqualsWithDelta(200.0, (float) $stock->getPayables(), 1e-9);
     }
 }

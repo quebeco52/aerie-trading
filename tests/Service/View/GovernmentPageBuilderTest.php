@@ -547,7 +547,8 @@ class GovernmentPageBuilderTest extends TestCase
     /** Diets drawn at random -- seats, positions, cabinet and supporters -- lay out as cleanly as the hand-picked ones. */
     public function testRandomDietsLayOutCleanly(): void
     {
-        mt_srand(20261001);
+        $builder = $this->builder();
+        mt_srand(20261001); // seeded once the builder's mock is built: PHPUnit names a new mock class from the same generator
         $uniform = static fn(): float => (mt_rand() / mt_getrandmax() * 2.0) - 1.0;
         for ($draw = 0; $draw < 500; ++$draw) {
             $weights = array_map(static fn(): float => -log(max(1e-9, mt_rand() / mt_getrandmax())), Diet::PARTIES);
@@ -563,7 +564,7 @@ class GovernmentPageBuilderTest extends TestCase
             $cabinet = array_slice($shuffled, 0, mt_rand(1, 4));
             $support = array_slice($shuffled, count($cabinet), mt_rand(0, 3));
 
-            $page = $this->builder()->buildDiet(new MacroStateDTO(), new PoliticsStateDTO(
+            $page = $builder->buildDiet(new MacroStateDTO(), new PoliticsStateDTO(
                 dietSeats: $seats,
                 partyPositions: $positions,
                 governingCoalition: Diet::membership($cabinet),
